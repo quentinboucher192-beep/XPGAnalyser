@@ -155,6 +155,8 @@ bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool ty
     const Id owner = h.owner;
     const auto snapshot = h.snapshot;
     keysDown_[chord.key] = std::move(h);
+    // 1.13.1 : sans raccourci de la vue pour elle, F, C ou Debut sur une courbe pilotable (figer, curseurs, tout voir).
+    if (owner == kNoId && !suspended && trendKey(chord)) return true;
     if (owner == kNoId) return wasAsleep;                   // personne : l'hote garde ses raccourcis
     runKeyActions(*snapshot, Trigger::KeyPress, chord, now);
     return true;

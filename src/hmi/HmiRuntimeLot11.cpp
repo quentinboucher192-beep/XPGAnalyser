@@ -939,7 +939,63 @@ bool Runtime::exportTable(std::string_view sourceText, ExportTable& t, std::stri
         }
         return true;
     }
-    if (word.rfind("objet:", 0) != 0) return fail("source inconnue : " + source + " (alarmes, historique, \xC3\xA9v\xC3\xA9nements, syst\xC3\xA8me, mesures, audit, recette:Nom, objet:Nom)");
+    // 1.13.1 : LA ZONE D'UNE COURBE - les mesures entre ses deux curseurs : l'heure, l'ecart au curseur A, chaque plume
+    // (une case vide : pas de mesure a cet instant, une valeur pas encore lue). Les instants de toutes les plumes.
+    if (word.rfind("zone:", 0) == 0) {
+        const std::string name = trimmedText(source.substr(5));
+        std::vector<Id> order(popups_.rbegin(), popups_.rend());
+        order.push_back(current_);
+        const View* view = nullptr;
+        const Object* o = nullptr;
+        for (const Id id : order) {
+            const auto* v = viewOf(id);
+            if (!v) continue;
+            for (const auto& x : v->objects)
+                if (x.name == name && x.kind == Kind::Trend) { view = v; o = &x; break; }
+            if (o) break;
+        }
+        if (!o) return fail("courbe '" + name + "' introuvable dans la vue affich\xC3\xA9" "e");
+        const auto* st = trendState(view->id, o->id);
+        const auto* series = trend(view->id, o->id);
+        if (!st || !st->cursors()) return fail("courbe '" + name + "' : pose d'abord les deux curseurs (le bouton Curseurs)");
+        const double a = *st->cursorA, b = *st->cursorB;
+        const double from = std::min(a, b), to = std::max(a, b);
+        const auto precise = [](double v, const char* fmt) {
+            char buf[64];
+            std::snprintf(buf, sizeof buf, fmt, v);
+            std::string out = buf;
+            if (out.find('.') != std::string::npos && out.find('e') == std::string::npos) {
+                while (!out.empty() && out.back() == '0') out.pop_back();
+                if (!out.empty() && out.back() == '.') out.pop_back();
+            }
+            return out == "-0" ? std::string("0") : out;
+        };
+        t.title = o->name + " - zone entre les curseurs";
+        t.subtitle += " - A " + clockText(a) + ", B " + clockText(b) + " (\xCE\x94t = " + trendDuration(b - a) + ")";
+        t.headers = {"Heure", "t - A (s)"};
+        const auto names = splitSemicolons(o->text("names"));
+        std::vector<double> times;
+        if (series)
+            for (std::size_t i = 0; i < series->size(); ++i) {
+                const auto& sr = (*series)[i];
+                t.headers.push_back(i < names.size() && !trimmedText(names[i]).empty() ? trimmedText(names[i]) : sr.expression);
+                for (const auto& p : sr.points)
+                    if (p.first >= from - 1e-9 && p.first <= to + 1e-9) times.push_back(p.first);
+            }
+        std::sort(times.begin(), times.end());
+        times.erase(std::unique(times.begin(), times.end(), [](double x, double y) { return std::fabs(x - y) < 1e-9; }), times.end());
+        for (const double time : times) {
+            std::vector<std::string> row{dateStampOf(time), precise(time - a, "%.6f")};
+            for (const auto& sr : *series) {
+                const auto it = std::lower_bound(sr.points.begin(), sr.points.end(), time - 1e-9,
+                                                 [](const std::pair<double, double>& p, double v) { return p.first < v; });
+                row.push_back(it != sr.points.end() && std::fabs(it->first - time) < 1e-9 ? precise(it->second, "%.10g") : std::string{});
+            }
+            t.rows.push_back(std::move(row));
+        }
+        return true;
+    }
+    if (word.rfind("objet:", 0) != 0) return fail("source inconnue : " + source + " (alarmes, historique, \xC3\xA9v\xC3\xA9nements, syst\xC3\xA8me, mesures, audit, recette:Nom, objet:Nom, zone:Courbe)");
     const std::string name = trimmedText(source.substr(6));
     // L'objet : dans la popup du dessus d'abord, puis la vue.
     const View* view = nullptr;

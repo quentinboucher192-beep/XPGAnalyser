@@ -2347,6 +2347,300 @@ void courbesPilotables11216() {
     }
 }
 
+// 1.13.1 (« dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs ») : avant
+// d'ajouter le gel, la pause de la 1.12.16 - elle fige l'affichage, les mesures continuent... et les plus vieilles
+// tombaient a 1,2 fois la duree : en pause plus longtemps que la duree, la fenetre montree se vidait.
+void pauseGardeSaFenetre1131() {
+    std::printf("== 1.13.1 : une courbe en pause garde les mesures de la fenetre qu'elle montre ==\n");
+    Supervision s;
+    const Id trend = edit::add(s.p, s.v(), Kind::Trend, 0, 0);
+    s.v().object(trend)->set("variables", "Pression");
+    s.v().object(trend)->setNumber("duration", 2);
+    s.v().object(trend)->setFlag("pilotable", true);
+    s.start();
+    s.run(2.0);
+    check(s.rt.setTrendPaused(s.view, trend, true), "la pause");
+    const double at = s.rt.trendPausedAt(s.view, trend).value_or(-1);
+    s.run(6.0);   // trois fois la duree affichee
+    const auto* series = s.rt.trend(s.view, trend);
+    std::size_t inWindow = 0;
+    if (series && !series->empty())
+        for (const auto& p : (*series)[0].points) inWindow += p.first >= at - 2 && p.first <= at ? 1 : 0;
+    // Un cycle IHM toutes les 100 ms : une vingtaine de mesures dans les 2 s montrees.
+    check(inWindow >= 18, "en pause depuis 6 s (3 fois la dur\xC3\xA9" "e) : la fen\xC3\xAAtre montr\xC3\xA9" "e garde ses mesures ("
+                              + std::to_string(inWindow) + " sur 20)");
+    s.rt.objectPart(trend, "pause", s.t);
+    s.run(6.0);
+    check(series && !series->empty() && (*series)[0].points.front().first >= s.t - 3.5,
+          "Continuer : la fen\xC3\xAAtre glisse de nouveau, les mesures trop vieilles tombent");
+}
+
+// 1.13.1 : le modele de la courbe en marche (HmiControls) - la barre, la fenetre, le zoom, les curseurs, la valeur a un
+// instant, les textes des durees. Sans moteur, sans ecran.
+void courbeModele1131() {
+    std::printf("== 1.13.1 : le mod\xC3\xA8le de la courbe en marche (barre, fen\xC3\xAAtre, zoom, curseurs) ==\n");
+    Object o = makeObject(Kind::Trend, 1, "Courbe", 0, 0, kNoId);
+    o.set("variables", "Pression;Debit");
+    o.setNumber("w", 400);
+    o.setNumber("h", 200);
+    // La barre : rien sans Pilotable ; pilotable, Pause (la 1.12.16), Figer, Curseurs, Tout voir de droite a gauche.
+    check(hmi::trendLayout(o, 400, 200).buttons.empty() && hmi::trendHit(o, 400, 200, 385, 10).empty(), "pas pilotable : pas de barre");
+    o.setFlag("pilotable", true);
+    const auto l = hmi::trendLayout(o, 400, 200);
+    const auto box = [&](std::string_view part) {
+        for (const auto& b : l.buttons) if (b.part == part) return b.box;
+        return hmi::Box{};
+    };
+    check(l.buttons.size() == 4 && box("pause").x == 370 && box("figer").right() < box("pause").x && box("curseurs").right() < box("figer").x
+              && box("toutvoir").right() < box("curseurs").x && l.legendRight < box("toutvoir").x,
+          "pilotable : Pause, Figer, Curseurs, Tout voir de droite \xC3\xA0 gauche ; la l\xC3\xA9gende s'arr\xC3\xAAte avant");
+    check(l.plot.x == 46 && l.plot.y == 24 && l.plot.w == 344 && l.plot.h == 156, "la zone de trace (sous la barre)");
+    check(hmi::trendHit(o, 400, 200, box("figer").cx(), box("figer").cy()) == "figer"
+              && hmi::trendHit(o, 400, 200, box("toutvoir").cx(), box("toutvoir").cy()) == "toutvoir"
+              && hmi::trendHit(o, 400, 200, box("pause").cx(), box("pause").cy()) == "pause" && hmi::trendHit(o, 400, 200, 200, 100).empty(),
+          "chaque bouton se clique l\xC3\xA0 o\xC3\xB9 il est dessin\xC3\xA9 ; la zone de trace n'est pas un bouton");
+    check(hmi::trendLayout(o, 150, 120).buttons.size() == 2, "une courbe \xC3\xA9troite : les boutons qui ne tiennent pas n'y sont pas");
+    {
+        const auto lc = hmi::trendLayout(o, 400, 200, true);
+        check(lc.exportCsv.w > 0 && hmi::trendHit(o, 400, 200, lc.exportCsv.cx(), lc.exportCsv.cy(), true) == "zone:csv"
+                  && hmi::trendHit(o, 400, 200, lc.exportExcel.cx(), lc.exportExcel.cy(), true) == "zone:excel"
+                  && hmi::trendHit(o, 400, 200, lc.exportCsv.cx(), lc.exportCsv.cy(), false).empty(),
+              "les curseurs pos\xC3\xA9s : leurs boutons CSV et Excel (seulement alors)");
+    }
+    // La fenetre : la duree, finie au bord direct.
+    hmi::TrendState st;
+    auto w = hmi::trendWindow(&st, 10, 100);
+    check(w.first == 90 && w.second == 100 && hmi::trendWindow(nullptr, 10, 100) == w, "la fen\xC3\xAAtre : 10 s finies au bord");
+    // En direct, la molette garde le bord droit au present.
+    hmi::trendZoomTime(st, 0.5, 95, 10, 100, true);
+    w = hmi::trendWindow(&st, 10, 101);
+    check(std::fabs(st.span - 5) < 1e-12 && !st.pinned && w.second == 101 && w.first == 96, "en direct : 5 s, le bord droit suit le pr\xC3\xA9sent");
+    // Figee (ou en pause) : l'instant sous la souris y reste.
+    st = {};
+    hmi::trendZoomTime(st, 0.5, 92, 10, 100, false);
+    w = hmi::trendWindow(&st, 10, 100);
+    check(st.pinned && std::fabs((92 - w.first) / (w.second - w.first) - 0.2) < 1e-9 && std::fabs(w.second - w.first - 5) < 1e-12,
+          "fig\xC3\xA9" "e : 92 reste \xC3\xA0 20 % de la largeur, 5 s montr\xC3\xA9" "es");
+    // Hyper zoom : jusqu'a 0,1 ms, pas de limite genante.
+    for (int k = 0; k < 60; ++k) hmi::trendZoomTime(st, 0.8, 92, 10, 100, false);
+    w = hmi::trendWindow(&st, 10, 100);
+    check(std::fabs(w.second - w.first - hmi::kTrendMinSpan) < 1e-12 && w.first <= 92 && w.second >= 92,
+          "60 crans : 0,1 ms \xC3\xA0 l'\xC3\xA9" "cran, toujours autour de 92 (" + hmi::trendDuration(w.second - w.first) + ")");
+    for (int k = 0; k < 80; ++k) hmi::trendZoomTime(st, 1.25, 92, 10, 100, false);
+    check(st.span == 0 && hmi::trendSpan(&st, 10) == 10, "d\xC3\xA9zoomer s'arr\xC3\xAAte \xC3\xA0 la dur\xC3\xA9" "e de l'objet");
+    // Glisser : vers le passe, pas apres le bord ; revenue au bord, la fenetre le suit.
+    st = {};
+    hmi::trendPan(st, -3, 0, 10, 100, 50);
+    w = hmi::trendWindow(&st, 10, 100);
+    check(st.pinned && w.second == 97 && w.first == 87, "glisser de 3 s vers le pass\xC3\xA9 : 87 \xC3\xA0 97");
+    hmi::trendPan(st, -100, 0, 10, 100, 50);
+    check(hmi::trendWindow(&st, 10, 100).second == 55, "pas plus loin que la plus vieille mesure (une demi-fen\xC3\xAAtre vide)");
+    hmi::trendPan(st, 1000, 0, 10, 100, 50);
+    check(!st.pinned && hmi::trendWindow(&st, 10, 120).second == 120, "revenue au bord : elle le suit de nouveau");
+    // L'axe des valeurs.
+    check(hmi::trendZoomValues(st, 0.5, 40, 0, 100) && st.valueZoom && std::fabs(st.lo - 20) < 1e-12 && std::fabs(st.hi - 70) < 1e-12,
+          "Maj+molette : 0..100 autour de 40 -> 20..70");
+    hmi::trendPan(st, 0, 5, 10, 100, 50);
+    check(std::fabs(st.lo - 25) < 1e-12 && std::fabs(st.hi - 75) < 1e-12, "glisser en hauteur d\xC3\xA9place l'axe zoom\xC3\xA9");
+    check(hmi::trendScale(o, nullptr, 0, 1, &st) == std::make_pair(st.lo, st.hi), "l'\xC3\xA9" "chelle montr\xC3\xA9" "e : celle du zoom");
+    hmi::trendShowAll(st);
+    check(!st.zoomed() && hmi::trendScale(o, nullptr, 0, 1, &st) == std::make_pair(0.0, 100.0), "Tout voir : la dur\xC3\xA9" "e et Axe Y de l'objet");
+    // Les curseurs.
+    hmi::trendToggleCursors(st, 90, 120);
+    check(st.cursors() && *st.cursorA == 100 && *st.cursorB == 110, "le bouton : A et B au tiers et aux deux tiers");
+    hmi::trendToggleCursors(st, 90, 120);
+    check(!st.cursorA && !st.cursorB, "le bouton encore : ils partent");
+    hmi::trendPlaceCursor(st, 95);
+    hmi::trendPlaceCursor(st, 105);
+    hmi::trendPlaceCursor(st, 104);
+    check(*st.cursorA == 95 && *st.cursorB == 104, "un clic pose A, puis B, puis d\xC3\xA9place le plus proche");
+    const hmi::Box plot{0, 0, 300, 100};
+    check(hmi::trendCursorNear(st, 75 + 3, plot, 90, 110) == 1 && hmi::trendCursorNear(st, 210, plot, 90, 110) == 2
+              && hmi::trendCursorNear(st, 150, plot, 90, 110) == 0,
+          "la souris \xC3\xA0 moins de 6 px d'un curseur l'attrape");
+    // La valeur a un instant : lineaire, en escalier, pas dans un trou.
+    std::deque<std::pair<double, double>> pts{{0, 0}, {1, 10}, {2, 20}, {5, 50}, {6, 60}};
+    check(hmi::trendValueAt(pts, 0.5, false).value_or(-1) == 5 && hmi::trendValueAt(pts, 0.5, true).value_or(-1) == 0,
+          "entre deux mesures : 5 (lin\xC3\xA9" "aire), 0 (escalier)");
+    const std::vector<std::pair<double, double>> gaps{{2.2, 4.9}};
+    check(!hmi::trendValueAt(pts, 3, false, gaps) && hmi::trendValueAt(pts, 2.1, false, gaps).value_or(-1) == 20,
+          "dans le trou d'un gel : pas de valeur ; juste avant, la derni\xC3\xA8re mesure (pas de pente \xC3\xA0 travers le trou)");
+    check(!hmi::trendValueAt(pts, -1, false) && hmi::trendValueAt(pts, 7, false).value_or(-1) == 60 && !hmi::trendValueAt(pts, 9, false),
+          "avant la premi\xC3\xA8re : rien ; deux p\xC3\xA9riodes apr\xC3\xA8s la derni\xC3\xA8re : tenue, au-del\xC3\xA0 : rien");
+    // Les textes.
+    check(hmi::trendDuration(2.35) == "2.35 s" && hmi::trendDuration(0.0125) == "12.5 ms" && hmi::trendDuration(-0.00025) == "-250 \xC2\xB5s",
+          "les \xC3\xA9" "carts : 2.35 s, 12.5 ms, -250 \xC2\xB5s");
+    check(hmi::trendTick(-0.0025, 0.01) == "-2.5 ms" && hmi::trendTick(-15, 60) == "-15 s" && hmi::trendTick(-0.00005, 0.0002) == "-50 \xC2\xB5s",
+          "les graduations d'une fen\xC3\xAAtre zoom\xC3\xA9" "e : dans son unit\xC3\xA9 (" + hmi::trendTick(-0.0025, 0.01) + ")");
+    check(hmi::trendNumber(7.123456789) == "7.12346" && hmi::trendNumber(-0.0) == "0", "une valeur lue : six chiffres");
+}
+
+// 1.13.1 (« dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir ajouter
+// des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de maniere hyper zoomee,
+// pouvoir exporter que la zone dans une balise de lignes verticales ») : le moteur.
+void courbesEnMarche1131() {
+    std::printf("== 1.13.1 : la courbe en marche - figer, zoom, curseurs, export de la zone ==\n");
+    Supervision s;
+    const Id trend = edit::add(s.p, s.v(), Kind::Trend, 0, 0);
+    const Id libre = edit::add(s.p, s.v(), Kind::Trend, 0, 300);
+    for (const Id id : {trend, libre}) {
+        auto* o = s.v().object(id);
+        o->set("variables", "Pression; Debit");
+        o->set("names", "Pression;D\xC3\xA9" "bit");
+        o->setNumber("duration", 10);
+        o->setNumber("w", 400);
+        o->setNumber("h", 200);
+    }
+    s.v().object(trend)->setFlag("pilotable", true);
+    s.v().object(trend)->name = "Courbe_1";
+    std::vector<ExportRequest> written;
+    Runtime::Hooks hooks;
+    hooks.exportFile = [&](const ExportRequest& rq, std::string* where) {
+        written.push_back(rq);
+        if (where) *where = "exports/" + rq.fileName;
+        return true;
+    };
+    s.rt.setHooks(hooks);
+    s.start();
+    s.run(2.0);
+    const auto* series = s.rt.trend(s.view, trend);
+    check(series && series->size() == 2, "deux plumes");
+    if (!series || series->size() != 2) return;
+    // Pas pilotable : ni gel, ni zoom, ni curseurs.
+    s.rt.objectPart(libre, "figer", s.t);
+    check(!s.rt.setTrendFrozen(s.view, libre, true) && !s.rt.trendState(s.view, libre) && !s.rt.trendZoom(s.view, libre, 0.5, s.t),
+          "pas pilotable : ni Figer, ni zoom");
+    // FIGER : aucune mesure n'entre, aucune ne tombe.
+    s.rt.objectPart(trend, "figer", s.t);
+    const auto* st = s.rt.trendState(s.view, trend);
+    const double frozenAt = s.t;
+    check(st && st->frozen && st->frozenAt == frozenAt && eventHas(s.rt, "Courbe fig\xC3\xA9" "e", "Vue_Gaz."), "Figer : la courbe fig\xC3\xA9" "e (dit au journal)");
+    const auto count = (*series)[0].points.size();
+    const double first = (*series)[0].points.front().first;
+    s.plc.values["Pression"] = sim::Value::real(9.5);
+    s.run(25.0);   // plus de deux fois la duree
+    check((*series)[0].points.size() == count && (*series)[0].points.front().first == first
+              && std::fabs((*series)[0].points.back().second - 6.0) < 1e-9,
+          "fig\xC3\xA9" "e 25 s : pas une mesure de plus, pas une de moins, la valeur d'avant le gel (6)");
+    check(s.rt.trendEdge(s.view, trend) == frozenAt && s.rt.trendWindowOf(s.view, trend, 10).second == frozenAt,
+          "fig\xC3\xA9" "e : la fen\xC3\xAAtre finit \xC3\xA0 l'instant du gel");
+    // La pause, elle, laisse les mesures continuer (1.12.16) : deux gestes differents.
+    // Le zoom fige : la molette autour de la souris (x = 218 : le milieu de la zone de trace, 46 + 344 / 2).
+    const auto timeAt = [&](double x) {
+        const auto w = s.rt.trendWindowOf(s.view, trend, 10);
+        return w.first + (x - 46) / 344 * (w.second - w.first);
+    };
+    const double under = timeAt(218);
+    s.rt.objectPart(trend, "trend:wheel:3:218:100:0", s.t);
+    const auto w1 = s.rt.trendWindowOf(s.view, trend, 10);
+    check(st->pinned && std::fabs(w1.second - w1.first - 10 * 0.512) < 1e-9 && std::fabs(timeAt(218) - under) < 1e-9,
+          "trois crans : 5,12 s \xC3\xA0 l'\xC3\xA9" "cran, l'instant sous la souris n'a pas boug\xC3\xA9");
+    for (int k = 0; k < 12; ++k) s.rt.objectPart(trend, "trend:wheel:4:218:100:0", s.t);
+    const auto w2 = s.rt.trendWindowOf(s.view, trend, 10);
+    std::size_t shown = 0;
+    for (const auto& p : (*series)[0].points) shown += p.first >= w2.first && p.first <= w2.second ? 1 : 0;
+    check(w2.second - w2.first < 1e-3 && shown <= 2, "hyper zoom\xC3\xA9" "e : moins d'une ms \xC3\xA0 l'\xC3\xA9" "cran (" + hmi::trendDuration(w2.second - w2.first)
+                                                          + ", " + std::to_string(shown) + " mesure(s))");
+    s.rt.objectPart(trend, "toutvoir", s.t);
+    check(!st->zoomed(), "Tout voir : la dur\xC3\xA9" "e de l'objet");
+    // Maj+molette : l'axe des valeurs, autour de la valeur sous la souris (y = 102 : le milieu de 24..180 -> 50 sur 0..100).
+    s.rt.objectPart(trend, "trend:wheel:1:200:102:1:0:100", s.t);
+    check(st->valueZoom && std::fabs(st->lo - 10) < 1e-9 && std::fabs(st->hi - 90) < 1e-9, "Maj+molette : 0..100 -> 10..90 autour de 50");
+    // REPRENDRE : l'acquisition repart, le temps du gel reste un trou.
+    s.rt.objectPart(trend, "figer", s.t);
+    check(!st->frozen && st->gaps.size() == 1 && st->gaps[0].first == frozenAt && st->gaps[0].second == s.t
+              && eventHas(s.rt, "Courbe d\xC3\xA9" "fig\xC3\xA9" "e", "Vue_Gaz."),
+          "Reprendre : un trou pour le temps du gel");
+    const double resumed = s.t;
+    s.run(1.0);
+    check((*series)[0].points.back().first > resumed && std::fabs((*series)[0].points.back().second - 9.5) < 1e-9,
+          "les mesures reprennent (9.5)");
+    check(!hmi::trendValueAt((*series)[0].points, (frozenAt + resumed) / 2, false, st->gaps), "pendant le gel : pas de valeur");
+    s.rt.objectPart(trend, "toutvoir", s.t);
+    // LES CURSEURS : le bouton, un clic, tirer.
+    s.run(9.0);   // le trou est sorti de la fenetre
+    s.plc.values["Pression"] = sim::Value::real(4.0);
+    const double changed = s.t;
+    s.run(2.0);
+    s.rt.objectPart(trend, "figer", s.t);   // figee pour mesurer
+    check(st->frozen, "figee de nouveau");
+    s.rt.objectPart(trend, "curseurs", s.t);
+    const auto w3 = s.rt.trendWindowOf(s.view, trend, 10);
+    check(st->cursors() && std::fabs(*st->cursorA - (w3.first + 10.0 / 3)) < 1e-9, "Curseurs : A au tiers, B aux deux tiers");
+    s.rt.objectPart(trend, "curseurs", s.t);
+    check(!st->cursorA && !st->cursorB, "Curseurs encore : ils partent");
+    const double xa = 46 + (changed - 1.0 - w3.first) / 10 * 344, xb = 46 + (changed + 1.0 - w3.first) / 10 * 344;
+    s.rt.objectPart(trend, "trend:press:" + hmi::formatNumber(xa) + ":100", s.t);
+    s.rt.objectPart(trend, "trend:release:" + hmi::formatNumber(xa) + ":100", s.t);
+    s.rt.objectPart(trend, "trend:press:" + hmi::formatNumber(xb) + ":100", s.t);
+    s.rt.objectPart(trend, "trend:release:" + hmi::formatNumber(xb) + ":100", s.t);
+    check(st->cursors() && std::fabs(*st->cursorA - (changed - 1)) < 1e-3 && std::fabs(*st->cursorB - (changed + 1)) < 1e-3,
+          "deux clics : A une seconde avant le changement, B une seconde apr\xC3\xA8s");
+    auto readings = s.rt.trendCursorReadings(s.view, trend);
+    check(readings.size() == 2 && readings[0].name == "Pression" && readings[1].name == "D\xC3\xA9" "bit"
+              && std::fabs(readings[0].a.value_or(-1) - 9.5) < 1e-9 && std::fabs(readings[0].b.value_or(-1) - 4.0) < 1e-9,
+          "les mesures : Pression 9.5 en A, 4 en B (la diff\xC3\xA9rence : -5.5)");
+    // Tirer B (pres de sa ligne) d'une demi-seconde vers la gauche.
+    const double dx = 0.5 / 10 * 344;
+    s.rt.objectPart(trend, "trend:press:" + hmi::formatNumber(xb + 2) + ":120", s.t);
+    s.rt.objectPart(trend, "trend:drag:" + hmi::formatNumber(xb + 2 - dx) + ":120", s.t);
+    s.rt.objectPart(trend, "trend:release:" + hmi::formatNumber(xb + 2 - dx) + ":120", s.t);
+    check(std::fabs(*st->cursorB - (changed + 0.5)) < 0.01 && std::fabs(*st->cursorA - (changed - 1)) < 1e-3,
+          "tirer B d'une demi-seconde : il suit la souris, A ne bouge pas (et rien ne se pose au l\xC3\xA2" "cher)");
+    // Glisser ailleurs : la fenetre se deplace (vers le passe), aucun curseur ne se pose.
+    s.rt.objectPart(trend, "trend:press:300:60", s.t);
+    s.rt.objectPart(trend, "trend:drag:334.4:60", s.t);
+    s.rt.objectPart(trend, "trend:release:334.4:60", s.t);
+    const auto w4 = s.rt.trendWindowOf(s.view, trend, 10);
+    check(st->pinned && std::fabs(w4.second - (w3.second - 1)) < 1e-9 && std::fabs(*st->cursorB - (changed + 0.5)) < 0.01,
+          "glisser de 34,4 px vers la droite : une seconde plus t\xC3\xB4t, les curseurs restent");
+    // L'EXPORT DE LA ZONE : seulement les mesures entre A et B, l'heure et toutes les plumes.
+    std::string why;
+    check(s.rt.exportTrendZone(s.view, trend, "CSV", s.t, false, &why), "export de la zone (CSV) - " + why);
+    check(written.size() == 1 && written[0].format == "CSV" && written[0].source == "zone:Courbe_1"
+              && written[0].fileName.rfind("Courbe_1_zone", 0) == 0,
+          "le fichier : Courbe_1_zone.csv, source zone:Courbe_1");
+    if (written.size() == 1) {
+        const std::string csv(written[0].data->begin(), written[0].data->end());
+        std::size_t expected = 0;
+        for (const auto& p : (*series)[0].points) expected += p.first >= *st->cursorA - 1e-9 && p.first <= *st->cursorB + 1e-9 ? 1 : 0;
+        check(written[0].rows == expected && expected >= 13 && expected <= 17,   // 1,5 s, une mesure par cycle de 100 ms
+              "les lignes : les mesures entre A et B seulement (" + std::to_string(written[0].rows) + ")");
+        check(csv.find("Heure;t - A (s);Pression;D\xC3\xA9" "bit") != std::string::npos && csv.find(";9.5;") != std::string::npos
+                  && csv.find(";4;") != std::string::npos,
+              "les colonnes : Heure, t - A (s), puis chaque plume (9.5 avant, 4 apr\xC3\xA8s)");
+    }
+    s.rt.objectPart(trend, "zone:excel", s.t);
+    check(written.size() == 2 && written[1].format == "Excel" && written[1].fileName.find(".xlsx") != std::string::npos,
+          "le bouton Excel du cadre : la m\xC3\xAAme zone en .xlsx");
+    s.rt.objectPart(trend, "curseurs", s.t);
+    check(!s.rt.exportTrendZone(s.view, trend, "CSV", s.t, false, &why) && why.find("curseurs") != std::string::npos,
+          "sans curseurs : pas de zone (" + why + ")");
+    // LE CLAVIER : F, C, Debut sur la courbe sous la souris.
+    s.rt.pointerMoved(s.view, 100, 100, trend, true);
+    hmi::keys::Chord f;
+    f.key = "F";
+    check(s.rt.keyDown(f, s.t) && !st->frozen, "F : d\xC3\xA9" "fig\xC3\xA9" "e");
+    (void)s.rt.keyUp("F", s.t);
+    check(s.rt.keyDown(f, s.t) && st->frozen, "F encore : fig\xC3\xA9" "e");
+    (void)s.rt.keyUp("F", s.t);
+    hmi::keys::Chord c;
+    c.key = "C";
+    check(s.rt.keyDown(c, s.t) && st->cursors(), "C : les curseurs");
+    (void)s.rt.keyUp("C", s.t);
+    hmi::keys::Chord home;
+    home.key = "Home";
+    check(s.rt.keyDown(home, s.t) && !st->zoomed(), "D\xC3\xA9" "but : tout voir");
+    (void)s.rt.keyUp("Home", s.t);
+    hmi::keys::Chord ctrlF = f;
+    ctrlF.ctrl = true;
+    check(!s.rt.keyDown(ctrlF, s.t), "Ctrl+F : pas pour la courbe");
+    (void)s.rt.keyUp("F", s.t);
+    // Un nouveau lancement : rien ne reste.
+    s.rt.start(s.t);
+    check(!s.rt.trendState(s.view, trend), "un nouveau lancement : ni gel, ni zoom, ni curseurs");
+}
+
 // 1.12.16 (« dans Courbe (contenu en general, actions aussi) pouvoir dupliquer une plume, une action - le meme principe
 // que dupliquer un symbole ») : le moteur de Dupliquer d'un element - ses indices suivis, son nom numerote, la palette.
 void dupliquerElement11216() {
@@ -29809,6 +30103,14 @@ int main(int argc, char** argv) {
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
+    // 1.13.1 : HMI_TEST_1131=1 - les courbes en marche (figer, curseurs, zoom, export de la zone), seules.
+    if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
+        pauseGardeSaFenetre1131();
+        courbeModele1131();
+        courbesEnMarche1131();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.16 : HMI_TEST_11216=1 - les courbes pilotables, Dupliquer (X et Y), seuls.
     if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
         courbesPilotables11216();
@@ -29923,6 +30225,9 @@ int main(int argc, char** argv) {
     securite();
     courbes();
     courbesPilotables11216();         // 1.12.16 : pause / continuer, Visible si par plume
+    pauseGardeSaFenetre1131();        // 1.13.1 : la pause garde sa fenetre (avant : vide apres 1,2 fois la duree)
+    courbeModele1131();               // 1.13.1 : la barre, la fenetre, le zoom, les curseurs (le modele)
+    courbesEnMarche1131();            // 1.13.1 : figer, zoom, curseurs, export de la zone (le moteur)
     dupliquerElement11216();          // 1.12.16 : Dupliquer une plume, une action, une ligne
     modeleConstantes11216();          // 1.12.16 (T6) : l'exemple anime et le modele Constantes et fonctions
     persistanceLot4();

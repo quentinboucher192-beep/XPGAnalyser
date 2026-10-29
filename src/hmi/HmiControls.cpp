@@ -549,10 +549,265 @@ std::array<double, 4> trendPauseBox(double w, double h) {
     return {std::max(0.0, w - 30.0), 4.0, 24.0, 18.0};
 }
 
-std::string trendHit(const Object& o, double w, double h, double x, double y) {
+std::string trendHit(const Object& o, double w, double h, double x, double y, bool cursors) {
     if (o.kind != Kind::Trend || !o.flag("pilotable", false)) return {};
-    const auto b = trendPauseBox(w, h);
-    return x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3] ? std::string("pause") : std::string{};
+    const auto l = trendLayout(o, w, h, cursors);
+    for (const auto& b : l.buttons)
+        if (b.box.w > 0 && b.box.contains(x, y)) return b.part;
+    if (cursors && l.exportCsv.w > 0 && l.exportCsv.contains(x, y)) return "zone:csv";
+    if (cursors && l.exportExcel.w > 0 && l.exportExcel.contains(x, y)) return "zone:excel";
+    return {};
+}
+
+// ---- 1.13.1 : la courbe en marche (figer, curseurs, zoom, export de la zone) ------------------------------
+namespace {
+
+// Comme le dessin (HmiPropertySource::number) : le texte de la propriete lu par le lecteur du role.
+double trendNumberProp(const Object& o, std::string_view key, double fallback) {
+    double v = fallback;
+    const std::string t = o.text(key);
+    if (!t.empty() && roles::readNumber(t, v)) return v;
+    return fallback;
+}
+bool trendFlagProp(const Object& o, std::string_view key, bool fallback) {
+    const std::string t = o.text(key);
+    return t.empty() ? fallback : roles::readBool(t, fallback);
+}
+std::size_t trendPenCount(const Object& o) {
+    std::size_t n = 0;
+    for (const auto& p : splitKeep(o.text("variables"), ';'))
+        if (!p.empty()) ++n;
+    return n;
+}
+
+} // namespace
+
+TrendLayout trendLayout(const Object& o, double w, double h, bool cursors) {
+    TrendLayout l;
+    const bool pilotable = trendFlagProp(o, "pilotable", false);
+    const bool legend = trendFlagProp(o, "legend", true) && trendPenCount(o) > 0;
+    // La legende en haut (et la barre d'une courbe pilotable), les graduations a gauche et en bas.
+    const double top = legend || pilotable ? 24 : 8, left = 46, bottom = 20, right = 10;
+    l.plot = {left, top, std::max(10.0, w - left - right), std::max(10.0, h - top - bottom)};
+    l.legendRight = w;
+    if (pilotable) {
+        const auto p = trendPauseBox(w, h);
+        l.buttons.push_back({"pause", {p[0], p[1], p[2], p[3]}});
+        double next = p[0] - 4;
+        // De droite a gauche : celui qui ne tient plus (une courbe etroite) et ceux d'apres n'y sont pas.
+        for (const auto& [part, width] : {std::pair<const char*, double>{"figer", 66}, {"curseurs", 62}, {"toutvoir", 62}}) {
+            const double x0 = next - width;
+            if (x0 < 4) break;
+            l.buttons.push_back({part, {x0, 4, width, 18}});
+            next = x0 - 4;
+        }
+        l.legendRight = l.buttons.back().box.x - 4;
+    }
+    if (cursors) {
+        l.readout = {l.plot.x + 4, l.plot.y + 4, std::min(l.plot.w - 8, 340.0), 0};
+        if (l.readout.w >= 150) {
+            l.exportExcel = {l.readout.x + l.readout.w - 4 - 46, l.readout.y + 2, 46, 16};
+            l.exportCsv = {l.exportExcel.x - 4 - 40, l.readout.y + 2, 40, 16};
+        }
+    }
+    return l;
+}
+
+double trendSpan(const TrendState* st, double duration) {
+    const double d = std::max(kTrendMinSpan, duration);
+    return st && st->span > 0 ? st->span : d;
+}
+
+std::pair<double, double> trendWindow(const TrendState* st, double duration, double edge) {
+    const double span = trendSpan(st, duration);
+    const double end = st && st->pinned ? st->end : edge;
+    return {end - span, end};
+}
+
+void trendZoomTime(TrendState& st, double factor, double at, double duration, double edge, bool moving) {
+    if (!(factor > 0) || !std::isfinite(factor) || !std::isfinite(at)) return;
+    const double full = std::max(kTrendMinSpan, duration);
+    const double span = trendSpan(&st, duration);
+    const double next = std::clamp(span * factor, kTrendMinSpan, full);
+    const auto [start, end] = trendWindow(&st, duration, edge);
+    (void)start;
+    if (moving && !st.pinned) {
+        st.span = std::fabs(next - full) < 1e-12 ? 0.0 : next;   // le bord droit reste le present
+        return;
+    }
+    // L'instant sous la souris y reste : la fin s'en rapproche (ou s'en eloigne) d'autant.
+    const double anchor = std::clamp(at, end - span, end);
+    double newEnd = anchor + (end - anchor) * (next / span);
+    newEnd = std::min(newEnd, edge);
+    st.span = std::fabs(next - full) < 1e-12 ? 0.0 : next;
+    st.end = newEnd;
+    st.pinned = newEnd < edge - 1e-12;   // revenue au bord : elle le suit
+}
+
+bool trendZoomValues(TrendState& st, double factor, double at, double lo, double hi) {
+    if (!(factor > 0) || !std::isfinite(factor) || !std::isfinite(at)) return false;
+    if (st.valueZoom) { lo = st.lo; hi = st.hi; }
+    if (!(hi > lo)) return false;
+    const double a = std::clamp(at, lo, hi);
+    const double nlo = a - (a - lo) * factor, nhi = a + (hi - a) * factor;
+    if (!(nhi - nlo > 1e-12 * std::max(1.0, std::fabs(a)))) return false;   // au plus pres : douze chiffres
+    st.valueZoom = true;
+    st.lo = nlo;
+    st.hi = nhi;
+    return true;
+}
+
+void trendPan(TrendState& st, double dt, double dv, double duration, double edge, double oldest) {
+    if (std::isfinite(dt) && dt != 0) {
+        const auto [start, end] = trendWindow(&st, duration, edge);
+        const double span = end - start;
+        // Pas apres le bord direct ; vers le passe, jusqu'a la plus vieille mesure (une demi-fenetre vide au plus).
+        const double lowest = std::min(edge, oldest + span * 0.5);
+        const double newEnd = std::clamp(end + dt, lowest, edge);
+        st.end = newEnd;
+        st.pinned = newEnd < edge - 1e-12;
+    }
+    if (std::isfinite(dv) && dv != 0 && st.valueZoom) {
+        st.lo += dv;
+        st.hi += dv;
+    }
+}
+
+void trendShowAll(TrendState& st) {
+    st.span = 0;
+    st.pinned = false;
+    st.end = 0;
+    st.valueZoom = false;
+    st.lo = st.hi = 0;
+}
+
+void trendToggleCursors(TrendState& st, double start, double end) {
+    if (st.cursorA || st.cursorB) {
+        st.cursorA.reset();
+        st.cursorB.reset();
+        return;
+    }
+    st.cursorA = start + (end - start) / 3.0;
+    st.cursorB = start + (end - start) * 2.0 / 3.0;
+}
+
+void trendPlaceCursor(TrendState& st, double t) {
+    if (!st.cursorA) { st.cursorA = t; return; }
+    if (!st.cursorB) { st.cursorB = t; return; }
+    if (std::fabs(*st.cursorA - t) <= std::fabs(*st.cursorB - t)) st.cursorA = t;
+    else st.cursorB = t;
+}
+
+int trendCursorNear(const TrendState& st, double x, const Box& plot, double start, double end, double reach) {
+    if (!(end > start)) return 0;
+    const auto px = [&](double t) { return plot.x + (t - start) / (end - start) * plot.w; };
+    double best = reach + 1e-9;
+    int which = 0;
+    if (st.cursorA && std::fabs(px(*st.cursorA) - x) <= best) { best = std::fabs(px(*st.cursorA) - x); which = 1; }
+    if (st.cursorB && std::fabs(px(*st.cursorB) - x) < best) which = 2;
+    return which;
+}
+
+std::optional<double> trendValueAt(const std::deque<std::pair<double, double>>& points, double t, bool step,
+                                   const std::vector<std::pair<double, double>>& gaps) {
+    if (points.empty() || !std::isfinite(t)) return std::nullopt;
+    constexpr double eps = 1e-9;
+    if (t < points.front().first - eps) return std::nullopt;
+    for (const auto& g : gaps)
+        if (t > g.first + eps && t < g.second - eps) return std::nullopt;   // dans un gel : rien de mesure
+    const auto next = std::upper_bound(points.begin(), points.end(), t,
+                                       [](double v, const std::pair<double, double>& p) { return v < p.first; });
+    if (next == points.begin()) return points.front().second;
+    const auto prev = std::prev(next);
+    if (next == points.end()) {
+        // Apres la derniere : tenue deux periodes (le cycle qui n'est pas encore passe), pas au-dela.
+        double period = 0.5;
+        if (points.size() >= 2) period = points.back().first - points[points.size() - 2].first;
+        return t - prev->first <= std::max(2 * period, 1e-3) + eps ? std::optional<double>(prev->second) : std::nullopt;
+    }
+    // Un gel entre les deux mesures : pas de pente a travers le trou.
+    for (const auto& g : gaps)
+        if (g.first >= prev->first - eps && g.second <= next->first + eps) return t <= g.first + eps ? prev->second : next->second;
+    if (step || next->first - prev->first <= 0) return prev->second;
+    const double f = (t - prev->first) / (next->first - prev->first);
+    return prev->second + (next->second - prev->second) * f;
+}
+
+std::pair<double, double> trendScale(const Object& o, const std::vector<TrendSeries>* series, double start, double end, const TrendState* st) {
+    if (st && st->valueZoom && st->hi > st->lo) return {st->lo, st->hi};
+    double lo = trendNumberProp(o, "ymin", 0), hi = trendNumberProp(o, "ymax", 100);
+    if (o.text("scale", "fixe") == "auto" && series) {
+        bool any = false;
+        double mn = 0, mx = 0;
+        for (const auto& s : *series)
+            for (const auto& [t, v] : s.points) {
+                if (t < start || t > end + 1e-9) continue;
+                if (!any) { mn = mx = v; any = true; }
+                mn = std::min(mn, v);
+                mx = std::max(mx, v);
+            }
+        if (any) {
+            const double pad = std::max(1e-6, (mx - mn) * 0.08);
+            lo = mn - pad;
+            hi = mx + pad;
+            if (mx - mn < 1e-9) { lo = mn - 1; hi = mx + 1; }
+        }
+    }
+    if (hi <= lo) hi = lo + 1;
+    return {lo, hi};
+}
+
+std::vector<TrendReading> trendReadings(const Object& o, const std::vector<TrendSeries>& series, const TrendState& st) {
+    std::vector<TrendReading> out;
+    const auto names = splitKeep(o.text("names"), ';');
+    const bool step = o.text("interpolation") == "escalier";
+    for (std::size_t i = 0; i < series.size(); ++i) {
+        TrendReading r;
+        r.name = i < names.size() && !names[i].empty() ? names[i] : series[i].expression;
+        if (st.cursorA) r.a = trendValueAt(series[i].points, *st.cursorA, step, st.gaps);
+        if (st.cursorB) r.b = trendValueAt(series[i].points, *st.cursorB, step, st.gaps);
+        r.visible = series[i].visible;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+namespace {
+std::string trimmedFixed(double v, int decimals) {
+    char b[64];
+    std::snprintf(b, sizeof b, "%.*f", std::clamp(decimals, 0, 9), v);
+    std::string s = b;
+    if (s.find('.') != std::string::npos) {
+        while (!s.empty() && s.back() == '0') s.pop_back();
+        if (!s.empty() && s.back() == '.') s.pop_back();
+    }
+    if (s == "-0") s = "0";
+    return s;
+}
+} // namespace
+
+std::string trendDuration(double seconds) {
+    if (!std::isfinite(seconds)) return "-";
+    const double a = std::fabs(seconds);
+    if (a >= 1.0 || a == 0.0) return trimmedFixed(seconds, 3) + " s";
+    if (a >= 1e-3) return trimmedFixed(seconds * 1e3, 3) + " ms";
+    return trimmedFixed(seconds * 1e6, 1) + " \xC2\xB5s";
+}
+
+std::string trendNumber(double v) {
+    if (!std::isfinite(v)) return "-";
+    char b[64];
+    std::snprintf(b, sizeof b, "%.6g", v);
+    std::string s = b;
+    if (s == "-0") s = "0";
+    return s;
+}
+
+std::string trendTick(double offset, double span) {
+    // L'unite de la fenetre : la seconde au-dela de 10 s, la milliseconde au-dela de 10 ms, sinon la microseconde.
+    if (span >= 10.0) return trimmedFixed(offset, span >= 100 ? 0 : 1) + " s";
+    if (span >= 0.01) return trimmedFixed(offset * 1e3, span >= 1 ? 0 : span >= 0.1 ? 1 : 2) + " ms";
+    return trimmedFixed(offset * 1e6, span >= 1e-3 ? 1 : 2) + " \xC2\xB5s";
 }
 
 std::string tableHit(const Object& o, double w, double h, double x, double y, std::size_t count, std::size_t first) {
