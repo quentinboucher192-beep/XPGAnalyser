@@ -3442,6 +3442,8 @@ void MainAnalysisScreen::onEnter() {
     // Double-clicking an engine instance opens its chart, drawn.
     // Double-clicking a macro runs it - in preview first, always.
     links_ += explorer_->activated->connect([this](NodeId n) {
+        // 1.13.1 (lot K4) : le double-clic sur un type IHM (ou ses Methodes, ses Valeurs...) l'ouvre dans son onglet.
+        if (isHmiNode(n) && openHmiTypeNodeTab(n)) return;
         if (isHmiNode(n)) { openHmiNode(n); return; }
         if (treeModel_ && treeModel_->kindOf(n) == ProjectTreeModel::NodeKind::Macro) {
             // Lot macros 1 : un double-clic LANCE (le formulaire de l'onglet

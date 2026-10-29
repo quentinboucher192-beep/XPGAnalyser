@@ -81,6 +81,8 @@ void MainAnalysisScreen::describePlace(core::CommandInfo& info) const {
         if (hmiKey.rfind("vue:", 0) == 0) {
             info.place = "IHM" + kSep + "Vues" + kSep + title;
             return;                                  // l'inspecteur n'est pas un endroit
+        } else if (hmiKey.rfind("type:", 0) == 0) {  // 1.13.1 (lot K4) : un type dans son onglet (puis son sous-onglet)
+            info.place = "IHM" + kSep + "Types IHM" + kSep + title;
         } else {
             std::string rest = title.rfind(kIhmDot, 0) == 0 ? title.substr(kIhmDot.size()) : title;
             info.place = "IHM" + kSep + rest;
@@ -119,6 +121,11 @@ void MainAnalysisScreen::goToPlace(const std::string& key) {
             auto doc = app_.hmi();
             if (!doc || !doc->project.view(static_cast<hmi::Id>(id))) return;   // la vue n'existe plus
             openHmiView(id);
+        } else if (rest.rfind("type:", 0) == 0) {   // 1.13.1 (lot K4) : un type dans son onglet
+            const auto id = std::strtoull(rest.c_str() + 5, nullptr, 10);
+            auto doc = app_.hmi();
+            if (!doc || !doc->project.hmiType(static_cast<hmi::Id>(id))) return;   // le type n'existe plus
+            openHmiTypeTab(id);
         } else {
             openHmiPane(rest);
         }

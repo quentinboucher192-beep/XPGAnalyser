@@ -22,6 +22,21 @@
 //
 //  TYPES IHM : les structures (un tableau des types, un tableau de leurs
 //  membres, la grille), comme les DDT de l'automate.
+//  1.13.1 (lot K4) : le type choisi se regle dans SES ONGLETS (comme une fonction
+//  IHM : Code | Parametres | Locales...), chacun sur toute la hauteur :
+//
+//    +------------------------------ outils -------------------------------+
+//    | TYPES IHM   | STRUCTURE . T_POMPE                                     |
+//    |  la liste   | Membres 4 | Methodes 5 | Operateurs | Heritage et       |
+//    |  (dossiers) | interfaces 1 | Proprietes | Emplois 2                   |
+//    |             |  la page de l'onglet choisi                            |
+//    +------------------------------- etat --------------------------------+
+//
+//  Une interface : Signatures | Implementeurs | Proprietes ; une enumeration :
+//  Valeurs | Operateurs | Proprietes | Emplois ; un rappel : Signature |
+//  Operateurs | Proprietes | Emplois. L'onglet choisi reste d'un type a l'autre.
+//  Le meme volet, FIGE SUR UN TYPE (sans la liste), est l'onglet de document d'un
+//  type (double-clic dans la liste ou dans l'arbre, clic droit Ouvrir dans un onglet).
 // =============================================================================
 #pragma once
 
@@ -314,7 +329,9 @@ private:
 class HmiTypesPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
-    HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply);
+    // 1.13.1 (lot K4) : `document` - le volet est l'onglet de document de ce type (fige sur lui, sans la liste) ;
+    // kNoId : la page Types IHM (la liste, le type choisi).
+    HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, hmi::Id document = hmi::kNoId);
 
     void refresh();
 
@@ -354,6 +371,62 @@ public:
     void selectType(hmi::Id);
     void selectMember(int index);
 
+    // ---- 1.13.1 (lot K4) : LES ONGLETS D'UN TYPE ----
+    //  Leurs rangs ne changent pas ; ceux qui n'ont pas de sens pour le genre du type se cachent
+    //  (TabControl::setTabHidden) et le titre suit le genre :
+    //    structure   : Membres, Methodes, Operateurs, Heritage et interfaces, Proprietes, Emplois ;
+    //    interface   : Signatures (le rang des Methodes), Implementeurs, Proprietes ;
+    //    enumeration : Valeurs, Operateurs, Proprietes, Emplois ;
+    //    rappel      : Signature (le rang des Membres), Operateurs, Proprietes, Emplois.
+    //  Le titre compte ce que l'onglet montre (Membres 4, Methodes 5 ; rouge : une faute). L'onglet choisi
+    //  par l'utilisateur reste d'un type a l'autre ; un type qui ne l'a pas montre son equivalent (Methodes
+    //  <-> Signatures, Membres <-> Valeurs <-> Signature, Heritage et interfaces <-> Implementeurs).
+    enum TypeTab : std::size_t { TabMembers = 0, TabValues, TabMethods, TabImplementers, TabOperators, TabInheritance,
+                                 TabProperties, TabUses, TabCount };
+    void showTypeTab(std::size_t tab);                       // l'onglet (s'il est montre pour ce type) ; devient le prefere
+    [[nodiscard]] std::size_t currentTypeTab() const noexcept;
+    [[nodiscard]] std::size_t preferredTypeTab() const noexcept { return preferredTab_; }
+    [[nodiscard]] bool typeTabShown(std::size_t tab) const;  // cet onglet est-il montre pour le type choisi ?
+    [[nodiscard]] ui::TabControl&   typeTabs() noexcept { return *typeTabs_; }
+    [[nodiscard]] ui::PropertyGrid& memberProperties() noexcept { return *memberProps_; }   // Membres : le membre choisi
+    [[nodiscard]] ui::PropertyGrid& inheritance() noexcept { return *inheritProps_; }       // Heritage et interfaces
+    [[nodiscard]] ui::TableView&    implementersTable() noexcept { return *implementers_; } // une interface : Implementeurs
+    [[nodiscard]] ui::TableView&    usesTable() noexcept { return *usesTable_; }            // Emplois
+    // Le sujet de l'aide (F1) de l'onglet ouvert : objets-types (Methodes, Signatures, Implementeurs, Heritage), operateurs,
+    // enum-types (Valeurs), rappels (un rappel), sinon types-ihm.
+    [[nodiscard]] std::string helpTopic() const;
+    // ---- les emplois du type (l'onglet Emplois) : ou il se sert, d'apres le projet ----
+    struct TypeUse {
+        enum class Kind : std::uint8_t { Variable, Member, Subtype, Function, Method, Script, Operator, ViewParam, ViewConstant,
+                                         ViewFunction, ViewScript };
+        Kind        kind{Kind::Variable};
+        std::string where;              // "Pompe1", "T_Ligne.Pompe", "Plus_Grand", "T_Pompe.Demarrer", "Vue_A"
+        std::string what;               // "variable IHM", "membre de T_Ligne", "parametre a", "retour"...
+        std::string type;               // le type ecrit la : "ARRAY[1..3] OF T_Pompe"
+        hmi::Id     item{hmi::kNoId};   // la variable, le type (membre, sous-type, methode, operateur), la fonction, le script, la vue
+        hmi::Id     sub{hmi::kNoId};    // la methode, la fonction ou le script d'une vue ; l'operateur
+    };
+    [[nodiscard]] static std::vector<TypeUse> usesOf(const hmi::Project&, const hmi::HmiType&);
+    [[nodiscard]] const std::vector<TypeUse>& uses() const noexcept { return uses_; }
+    // Aller a un emploi (le double-clic sur sa ligne) : un type (membre, sous-type, methode) se montre ici (dans un
+    // onglet de document : le sien), le reste par l'hote (openUse). Faux : rien a montrer.
+    bool goToUse(std::size_t index);
+
+    // ---- 1.13.1 (lot K4) : L'ONGLET DE DOCUMENT D'UN TYPE ----
+    //  Fige sur son type : ni la liste ni ses gestes (Nouveau type, Dossier, Dupliquer, Importer) ; le reste est le
+    //  meme (les onglets, les membres, Ctrl+C / Ctrl+V, le clic droit, Ctrl+Z). Son titre est le nom complet du
+    //  type (il suit un renommage) ; un type supprime : documentGone() - l'hote ferme l'onglet.
+    [[nodiscard]] hmi::Id documentType() const noexcept { return document_; }
+    [[nodiscard]] bool isDocument() const noexcept { return document_ != hmi::kNoId; }
+    [[nodiscard]] std::string documentTitle() const;          // "T_Pompe", "Gaz.T_Detecteur" ; vide : plus de type
+    [[nodiscard]] bool documentGone() const;
+    // Le clic droit sur la liste des types : Ouvrir dans un onglet, Renommer, Dupliquer, Exporter, Supprimer - en tete
+    // du menu de la table (Copier, Tout choisir, les filtres suivent) ; un titre de colonne garde le sien.
+    void openTypeMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* typeMenu() const noexcept { return typeMenu_; }
+    // Le double-clic sur un type de la liste (ou Entree) : l'hote l'ouvre dans son onglet (openTypeTab). Faux : pas d'hote.
+    bool openInTab(hmi::Id type);
+
     struct Hosts {
         std::function<void(const std::string&)> showVariable;                                         // Utilise par : la variable
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
@@ -362,6 +435,12 @@ public:
         // 1.13.0 (correctifs F2) : un type cree ici (Nouveau type : structure, enumeration, rappel, interface) - l'arbre du
         // projet le montre et le choisit (sans rien rouvrir).
         std::function<void(hmi::Id)>            typeCreated;
+        // 1.13.1 (lot K4) : ouvrir un type dans son propre onglet de document (le double-clic dans la liste, le clic
+        // droit Ouvrir dans un onglet, un emploi dans un autre type depuis un onglet de document) ; `tab` : le sous-onglet.
+        // Rend le volet de cet onglet (nul : pas d'onglet) : un emploi y est choisi, sur sa ligne.
+        std::function<HmiTypesPane*(hmi::Id, std::size_t)> openTypeTab;
+        // 1.13.1 : aller a un emploi du type (l'onglet Emplois) hors des types - une variable, une fonction, un script, une vue.
+        std::function<void(const TypeUse&)>     openUse;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 
@@ -444,15 +523,41 @@ private:
     bool change(hmi::Id, std::string label, const std::function<bool(hmi::HmiType&, std::string*)>& edit, std::string* why);
     bool commitMemberCell(std::size_t row, std::size_t col, const std::string& text);
     void showPreview();                       // 1.10 : l'apercu du collage (ou le cacher)
+    // ---- 1.13.1 (lot K4) : les onglets du type ----
+    void refreshTypePages(const hmi::HmiType* t);       // Implementeurs, Emplois, puis les onglets (rebuildProperties : les grilles)
+    void rebuildImplementers(const hmi::HmiType* t);
+    void rebuildUses(const hmi::HmiType* t);
+    void syncTypeTabs(const hmi::HmiType* t);           // montres, titres, comptes ; l'onglet prefere (ou son equivalent)
+    [[nodiscard]] std::size_t tabFor(std::size_t wanted, const hmi::HmiType* t) const;
+    [[nodiscard]] bool tabMakesSense(std::size_t tab, const hmi::HmiType* t) const;
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> typeMenuItems() const;   // les entrees du type (clic droit de la liste)
+    void fitTypeColumns();                    // Nom suit le plus long nom, Utilise par prend la place qui reste
+    float             nameFit_{0.f}, listFit_{0.f};   // ... ce qu'elle a vu la derniere fois
+    void revealUse(const TypeUse& u, std::size_t tab);   // un emploi sur sa ligne, dans ce volet (son type deja montre)
 
     hmi::DocumentPtr  doc_;
     Apply             apply_;
     Hosts             hosts_;
+    hmi::Id           document_{hmi::kNoId};   // 1.13.1 (lot K4) : l'onglet de document de ce type (kNoId : la page)
     HmiToolStrip*     tools_{nullptr};
     ui::Splitter*     split_{nullptr};
     ui::TableView*    types_{nullptr};
     ui::TableView*    members_{nullptr};
-    ui::PropertyGrid* props_{nullptr};
+    ui::PropertyGrid* props_{nullptr};        // 1.13.1 : l'onglet Proprietes (avant : la colonne de droite)
+    // ---- 1.13.1 (lot K4) : les onglets du type ----
+    HmiTitledPanel*   typePanel_{nullptr};    // "STRUCTURE . T_POMPE", les onglets dessous
+    ui::TabControl*   typeTabs_{nullptr};
+    ui::Splitter*     membersSplit_{nullptr}; // Membres : la table, puis les proprietes du membre choisi
+    ui::PropertyGrid* memberProps_{nullptr};
+    ui::PropertyGrid* inheritProps_{nullptr};
+    HmiTitledPanel*   implementersPanel_{nullptr};
+    ui::TableView*    implementers_{nullptr};
+    HmiTitledPanel*   usesPanel_{nullptr};
+    ui::TableView*    usesTable_{nullptr};
+    std::vector<TypeUse> uses_;
+    std::size_t       preferredTab_{TabMembers};   // l'onglet choisi par l'utilisateur (garde d'un type a l'autre)
+    bool              tabSyncing_{false};
+    ui::PopupMenu*    typeMenu_{nullptr};          // le clic droit sur la liste des types
     HmiOperatorsPane* operators_{nullptr};   // 1.10 (chantier S2) : la section Operateurs du type
     HmiMethodsPane*   methods_{nullptr};     // 1.13.0 (J1b) : la section Methodes du type
     HmiMethodDialog*  methodDialog_{nullptr};   // 1.13.0 (J1b) : la fenetre "Ajouter une methode..."

@@ -153,6 +153,13 @@ const std::vector<Note>& table() {
         note("1.13.1", "Vues", Kind::New,
          "COPIER ET COLLER LE CODE BRUT PARTOUT : le clic droit d'un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue - propose Copier le code brut, Coller le code brut (il remplace l'objet) et Code brut\xE2\x80\xA6 (l'onglet) ; sur la vue en marche en Simulation, Copier et Coller le code brut ; dans l'onglet Expressions, sur un objet d\xC3\xA9" "ball\xC3\xA9, Copier le code brut. Ctrl+V d'un code brut dans une vue (ou Coller ici) en pose les objets, neufs, avec des noms libres.",
          "editeur", ""),
+        // 1.13.1 (lot K4) : une meilleure gestion des types IHM - leurs onglets, leur propre onglet de document.
+        note("1.13.1", "Types", Kind::Changed,
+         "LES TYPES IHM DANS LEURS ONGLETS : le type choisi dans Types IHM se r\xC3\xA8gle dans ses onglets, comme une fonction IHM, chacun sur toute la hauteur de la page - Membres (la grille, puis les propri\xC3\xA9t\xC3\xA9s du membre choisi), M\xC3\xA9thodes, Op\xC3\xA9rateurs, H\xC3\xA9ritage et interfaces (H\xC3\xA9rite de\xE2\x80\xA6, la lign\xC3\xA9" "e, les sous-types, Impl\xC3\xA9mente), Propri\xC3\xA9t\xC3\xA9s et Emplois ; une interface : Signatures, Impl\xC3\xA9menteurs et Propri\xC3\xA9t\xC3\xA9s ; une \xC3\xA9num\xC3\xA9ration : Valeurs, Op\xC3\xA9rateurs, Propri\xC3\xA9t\xC3\xA9s, Emplois. Le titre de chaque onglet compte ce qu'il montre (Membres 4, M\xC3\xA9thodes 5), et l'onglet choisi reste quand on passe d'un type \xC3\xA0 l'autre. Emplois dit o\xC3\xB9 le type sert (variables, membres, sous-types, param\xC3\xA8tres et locales, popups) et un double-clic y m\xC3\xA8ne. Avant, tout s'empilait sur une seule page : des textes coup\xC3\xA9s, une liste de m\xC3\xA9thodes d'une demi-ligne.",
+         "types-ihm", ""),
+        note("1.13.1", "Types", Kind::New,
+         "UN TYPE DANS SON PROPRE ONGLET : un double-clic sur un type (dans la liste des Types IHM ou dans l'arbre du projet), ou le clic droit \xE2\x80\xBA Ouvrir dans un onglet, l'ouvre dans son onglet de document, comme une vue - le nom du type, les m\xC3\xAAmes onglets, sans la liste. Plusieurs types s'ouvrent \xC3\xA0 la fois ; renommer le type renomme l'onglet, le supprimer le ferme. L'arbre suit l'onglet actif, Afficher dans l'arbre et Aller \xC3\xA0 (Ctrl+K, qui propose aussi les types IHM) font le va-et-vient.",
+         "types-ihm", ""),
         // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
         // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
         note("1.13.0", "Projet", Kind::Changed,

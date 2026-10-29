@@ -549,6 +549,7 @@ void MainAnalysisScreen::applyTreeFilter(const std::string& raw) {
     for (auto& r : content.results) {
         bool hmi = false;
         if (!wantedGroup(r.group, hmi)) continue;
+        if (r.key.rfind("hmitype:", 0) == 0) hmi = true;   // 1.13.1 (lot K4) : un type IHM (le groupe Types est celui des DDT)
         if (found.count(r.title) != 0) continue;
         ProjectTreeModel::FilterHitRow row;
         row.title = r.title;
@@ -959,9 +960,14 @@ ui::NodeId pageTreeNode(const std::map<std::string, ui::Widget*>& apiTabs, const
                 if (key == k) return ProjectTreeModel::pack(kind, 0);
     if (hasHmi)
         for (const auto& [key, w] : hmiTabs)
-            if (w == page)
+            if (w == page) {
                 for (const auto& [k, kind] : hmiKeys)
                     if (key == k) return ProjectTreeModel::pack(kind, 0);
+                // 1.13.1 (lot K4) : un type dans son onglet - sa ligne de l'arbre (comme hmilists::itemNode).
+                if (key.rfind("type:", 0) == 0)
+                    return ProjectTreeModel::pack(Kind::HmiTypeNode,
+                                                  static_cast<domain::Index>(std::strtoull(key.c_str() + 5, nullptr, 10) & ((1ull << 28) - 1)));
+            }
     return ui::kInvalidNode;
 }
 }

@@ -17382,6 +17382,7 @@ void v1101_operateurs() {
               "au-dessus du script : la l\xC3\xA9gende");
     same_text(ops->exampleText(), "Resultat.x := a.x + b.x;", "... et l'exemple d'une ligne");
     {
+        types.showTypeTab(app::HmiTypesPane::TabOperators);   // 1.13.1 (lot K4) : les operateurs ont leur onglet
         types.layout();
         auto* legend = ops->findById(ops->id() + ".legend");
         check(legend && legend->visible() && legend->bounds().h > 30.f && legend->bounds().y < ops->editor().bounds().y,
@@ -18452,7 +18453,7 @@ void centreAide111() {
               && rel[51].version == "1.11.7" && rel[52].version == "1.11.6" && rel[53].version == "1.11.5"
               && rel[54].version == "1.11.4" && rel[55].version == "1.11.3" && rel[56].version == "1.11.2"
               && rel[57].version == "1.11.1" && rel[58].version == "1.11" && rel[59].version == "1.10.4",
-          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lots K1, K3), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lots K1, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18723,7 +18724,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 442,   // 1.13.1 : + 4 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 444,   // 1.13.1 : + 6 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -38627,8 +38628,9 @@ void correctifsF2_113() {
         }
         types.setBounds({0, 0, 1800, 1000});
         types.layout();
+        // 1.13.1 (lot K4) : Implemente (IMPLEMENTS) est dans l'onglet Heritage et interfaces (avant : les proprietes du type).
         const auto findProp = [&types](const std::string& category, const std::string& name) -> const PG::Property* {
-            for (const auto& c : types.properties().categories())
+            for (const auto& c : types.inheritance().categories())
                 if (c.name == category)
                     for (const auto& pr : c.properties)
                         if (pr.name == name) return &pr;
@@ -38691,14 +38693,21 @@ void correctifsF2_113() {
         // d) la page de l'interface : la Declaration sur une ligne (son infobulle entiere), pas d'Operateurs, "de la signature".
         methods->methodTable().setColumnVisible(3, false);   // relecture F2 : l'utilisateur a masque Origine sur une structure
         types.selectType(ifaceId);
-        check(types.operators() && types.operators()->visibility() == ui::Visibility::Collapsed,
+        // 1.13.1 (lot K4) : pas d'onglet Operateurs (cache), et sa page n'est pas montree.
+        check(types.operators() && types.operators()->visibility() == ui::Visibility::Collapsed
+                  && !types.typeTabShown(app::HmiTypesPane::TabOperators),
               "une interface : pas de section Op\xC3\xA9rateurs (ni \xC2\xAB Ajouter un op\xC3\xA9rateur \xC2\xBB)");
         Recorder rec;
         types.render(ui::PaintContext{rec, theme, {0, 0, 1800, 1000}, 0.0, nullptr});
         check(rec.wrote("PROPRI\xC3\x89T\xC3\x89S DE LA SIGNATURE") && !rec.wrote("PROPRI\xC3\x89T\xC3\x89S DE LA M\xC3\x89THODE"),
               "le volet des signatures : \xC2\xAB Propri\xC3\xA9t\xC3\xA9s de la signature \xC2\xBB");
+        // 1.13.1 (lot K4) : la Declaration est dans l'onglet Proprietes de l'interface (avant : la colonne de droite).
+        types.showTypeTab(app::HmiTypesPane::TabProperties);
+        types.layout();
+        Recorder recProps;
+        types.render(ui::PaintContext{recProps, theme, {0, 0, 1800, 1000}, 0.0, nullptr});
         bool newline = false, flat = false;
-        for (const auto& t : rec.texts) {
+        for (const auto& t : recProps.texts) {
             newline = newline || (t.find("INTERFACE") != std::string::npos && t.find('\n') != std::string::npos);
             flat = flat || t.rfind("TYPE I_Demarrable INTERFAC", 0) == 0;
         }
@@ -38729,7 +38738,9 @@ void correctifsF2_113() {
         const auto* made = p.hmiTypeByName("I_Interface");
         check(made && !created.empty() && created.back() == made->id, "Nouveau type \xE2\x80\xBA Interface\xE2\x80\xA6 : l'arbre est pr\xC3\xA9venu (I_Interface)");
         types.selectType(pompeId);
-        check(types.operators()->visibility() == ui::Visibility::Visible, "une structure : la section Op\xC3\xA9rateurs revient");
+        types.showTypeTab(app::HmiTypesPane::TabOperators);   // 1.13.1 (lot K4) : son onglet
+        check(types.typeTabShown(app::HmiTypesPane::TabOperators) && types.operators()->visibility() == ui::Visibility::Visible,
+              "une structure : la section Op\xC3\xA9rateurs revient");
         {
             const auto& cols = methods->methodTable().columns();
             check(cols.size() == 6 && cols[1].visible && cols[2].visible && !cols[3].visible && cols[4].visible,
@@ -39172,6 +39183,435 @@ void formulesK1_1131() {
     app::hmiparams::setAssistView(kNoId);
 }
 // ---- fin 1.13.1 (lot K1) ----
+// =============================================================================
+//  1.13.1 (lot K4) : UNE MEILLEURE GESTION DES TYPES IHM - les onglets d'un type
+//  (Membres | Methodes | Operateurs | Heritage et interfaces | Proprietes |
+//  Emplois ; une interface : Signatures | Implementeurs | Proprietes ; une
+//  enumeration : Valeurs... ; un rappel : Signature...), chacun sur toute la
+//  hauteur, leurs comptes, l'onglet garde d'un type a l'autre ; l'onglet de
+//  document d'un type (fige sur lui, son titre suit le nom, il dit quand le type
+//  n'existe plus) ; la liste : le double-clic et le clic droit Ouvrir dans un onglet.
+//  HMI_TEST_K4=1 : ces essais seuls (et ceux des types qu'ils touchent).
+// =============================================================================
+void typesOnglets1131() {
+    std::printf("1.13.1 (lot K4) : les types IHM dans leurs onglets, et dans leur propre onglet de document\n");
+    using TP = app::HmiTypesPane;
+    struct EditionIhm {
+        core::Edition before = core::edition();
+        EditionIhm() { core::setEdition(core::Edition::Ihm); }
+        ~EditionIhm() { core::setEdition(before); }
+    } editionIhm;
+    const auto theme = ui::Theme::dark();
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    // Le projet : une interface, une structure qui l'implemente (3 methodes), son sous-type, une structure qui l'emploie
+    // en membre, une enumeration, un rappel ; une variable, une fonction et un parametre de popup de type T_Pompe.
+    HmiType iface;
+    iface.id = p.allocate();
+    iface.name = "I_Demarrable";
+    iface.kind = hmi::HmiTypeKind::Interface;
+    iface.methods = {makeFunction(p, "Demarrer", "", "")};
+    const Id ifaceId = iface.id;
+    p.programs.types.push_back(iface);
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe";
+    pompe.members = {{"Debit", "REAL", "", ""}, {"Marche", "BOOL", "", ""}};
+    pompe.interfaces = {"I_Demarrable"};
+    pompe.methods = {makeFunction(p, "Demarrer", "", "Marche := TRUE;"), makeFunction(p, "EnDefaut", "BOOL", "EnDefaut := Debit < 1.0;"),
+                     makeFunction(p, "Journal", "", "IHM_JOURNAL('pompe');")};
+    pompe.methods[1].isVirtual = true;
+    const Id pompeId = pompe.id, endefautId = pompe.methods[1].id;
+    p.programs.types.push_back(pompe);
+    HmiType dbl;
+    dbl.id = p.allocate();
+    dbl.name = "T_PompeDoublee";
+    dbl.base = "T_Pompe";
+    dbl.members = {{"Secours", "BOOL", "", ""}};
+    const Id dblId = dbl.id;
+    p.programs.types.push_back(dbl);
+    HmiType ligne;
+    ligne.id = p.allocate();
+    ligne.name = "T_Ligne";
+    ligne.members = {{"Nom", "STRING", "", ""}, {"Pompes", "ARRAY[1..3] OF T_Pompe", "", ""}};
+    {
+        HmiFunction m = makeFunction(p, "Arreter", "", "");
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = hmi::DeclKind::Parameter;
+        d.name = "P";
+        d.type = "T_Pompe";
+        m.decls.push_back(d);
+        ligne.methods = {m};
+    }
+    const Id ligneId = ligne.id, arreterLigneId = ligne.methods[0].id;
+    p.programs.types.push_back(ligne);
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_MODE";
+    mode.kind = hmi::HmiTypeKind::Enumeration;
+    mode.values = {{"Arret", 0, ""}, {"Auto", 1, ""}, {"Manu", 2, ""}};
+    const Id modeId = mode.id;
+    p.programs.types.push_back(mode);
+    HmiType rappel;
+    rappel.id = p.allocate();
+    rappel.name = "T_Filtre";
+    rappel.kind = hmi::HmiTypeKind::Callback;
+    rappel.signature = "CALLBACK (x : REAL) : BOOL";
+    const Id rappelId = rappel.id;
+    p.programs.types.push_back(rappel);
+    Id pompe1 = kNoId;
+    {
+        Variable v;
+        v.id = p.allocate();
+        v.name = "Pompe1";
+        v.type = "T_Pompe";
+        pompe1 = v.id;
+        p.programs.variables.push_back(v);
+    }
+    Id arreterId = kNoId;
+    {
+        HmiFunction f = makeFunction(p, "Arreter_Pompe", "BOOL", "Arreter_Pompe := TRUE;\n");
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = hmi::DeclKind::Parameter;
+        d.mode = hmi::PassMode::InOut;
+        d.name = "P";
+        d.type = "T_Pompe";
+        f.decls.push_back(d);
+        arreterId = f.id;
+        p.programs.functions.push_back(f);
+    }
+    View popup = makeView(p, "Popup_Pompe");
+    popup.params.push_back({"Cible", "", "la pompe montree", "T_Pompe"});
+    const Id popupId = popup.id;
+    p.views.push_back(popup);
+
+    app::HmiTypesPane types("ty1131", doc, apply);
+    std::vector<std::pair<Id, std::size_t>> opened;
+    std::vector<TP::TypeUse> went;
+    {
+        TP::Hosts h;
+        h.openTypeTab = [&opened](Id id, std::size_t tab) -> TP* {
+            opened.emplace_back(id, tab);
+            return nullptr;
+        };
+        h.openUse = [&went](const TP::TypeUse& u) { went.push_back(u); };
+        types.setHosts(std::move(h));
+    }
+    types.setBounds({0, 0, 1700, 900});
+    types.layout();
+    auto& tabs = types.typeTabs();
+    const auto title = [&tabs](std::size_t i) { return tabs.tab(i) ? tabs.tab(i)->title : std::string("?"); };
+    const auto badge = [&tabs](std::size_t i) { return tabs.tab(i) ? tabs.tab(i)->badge : std::string("?"); };
+    const auto shown = [&types] {
+        std::string out;
+        for (std::size_t i = 0; i < TP::TabCount; ++i)
+            if (types.typeTabShown(i)) out += (out.empty() ? "" : " | ") + types.typeTabs().tab(i)->title;
+        return out;
+    };
+
+    // ---- 1. Une structure : ses six onglets, leurs comptes, chacun sur toute la hauteur ----
+    types.selectType(pompeId);
+    same_text(shown(), "Membres | M\xC3\xA9thodes | Op\xC3\xA9rateurs | H\xC3\xA9ritage et interfaces | Propri\xC3\xA9t\xC3\xA9s | Emplois",
+              "T_Pompe : Membres | M\xC3\xA9thodes | Op\xC3\xA9rateurs | H\xC3\xA9ritage et interfaces | Propri\xC3\xA9t\xC3\xA9s | Emplois");
+    check(badge(TP::TabMembers) == "2" && badge(TP::TabMethods) == "3" && badge(TP::TabInheritance) == "1" && badge(TP::TabOperators).empty(),
+          "les comptes dans les titres : Membres 2, M\xC3\xA9thodes 3, H\xC3\xA9ritage et interfaces 1 (I_Demarrable), Op\xC3\xA9rateurs (aucun) ["
+              + badge(TP::TabMembers) + ", " + badge(TP::TabMethods) + ", " + badge(TP::TabInheritance) + "]");
+    check(types.currentTypeTab() == TP::TabMembers && types.memberTable().model() && types.memberTable().model()->rowCount() == 2,
+          "l'onglet Membres d'abord : Debit et Marche");
+    types.layout();
+    {
+        Recorder rec;
+        types.render(ui::PaintContext{rec, theme, {0, 0, 1700, 900}, 0.0, nullptr});
+        check(rec.wrote("STRUCTURE \xC2\xB7 T_Pompe") && rec.wrote("MEMBRES DE T_POMPE") && rec.wrote("PROPRI\xC3\x89T\xC3\x89S DU MEMBRE"),
+              "le titre de la page : STRUCTURE \xC2\xB7 T_Pompe ; l'onglet Membres : la table, puis les propri\xC3\xA9t\xC3\xA9s du membre choisi");
+    }
+    // Chaque onglet a toute la hauteur (avant : les methodes avaient un tiers de la colonne du milieu).
+    const float full = types.typeTabs().bounds().h;
+    types.showTypeTab(TP::TabMethods);
+    types.layout();
+    check(types.methods() && types.methods()->visible() && types.methods()->bounds().h >= full - 40.f && full > 700.f,
+          "M\xC3\xA9thodes : toute la hauteur (" + std::to_string(static_cast<int>(types.methods() ? types.methods()->bounds().h : 0.f)) + " px sur "
+              + std::to_string(static_cast<int>(full)) + ")");
+    check(types.methods()->bounds().w >= 1100.f, "et presque toute la largeur (" + std::to_string(static_cast<int>(types.methods()->bounds().w)) + " px)");
+    types.showTypeTab(TP::TabOperators);
+    types.layout();
+    check(types.operators() && types.operators()->visible() && types.operators()->bounds().h >= full - 40.f, "Op\xC3\xA9rateurs : toute la hauteur");
+    // Les grilles : Proprietes (le type), Heritage et interfaces (EXTENDS, IMPLEMENTS), le membre choisi.
+    check(gridValue(types.properties().categories(), "Nom") == "T_Pompe" && gridValue(types.properties().categories(), "Poids") != "?"
+              && gridValue(types.properties().categories(), "H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)") == "?",
+          "Propri\xC3\xA9t\xC3\xA9s : le nom, le poids ; H\xC3\xA9rite de\xE2\x80\xA6 n'y est plus");
+    {
+        bool extends = false, implemented = false;
+        for (const auto& c : types.inheritance().categories())
+            for (const auto& pr : c.properties) {
+                extends = extends || (c.name == "H\xC3\xA9ritage" && pr.name == "H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)" && pr.value == "(aucun)" && pr.commit);
+                implemented = implemented || (c.name == "Impl\xC3\xA9mente (IMPLEMENTS)" && pr.name == "I_Demarrable" && pr.value == "TRUE" && pr.commit);
+            }
+        check(extends && implemented && gridValue(types.inheritance().categories(), "Sous-types") == "T_PompeDoublee",
+              "H\xC3\xA9ritage et interfaces : H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS), la case I_Demarrable coch\xC3\xA9" "e, le sous-type T_PompeDoublee");
+    }
+    types.selectMember(0);
+    check(gridValue(types.memberProperties().categories(), "Nom") == "Debit" && gridValue(types.memberProperties().categories(), "Type") == "REAL",
+          "le membre choisi (Debit) : ses propri\xC3\xA9t\xC3\xA9s sous la table des membres");
+
+    // ---- 2. Emplois : ou se sert T_Pompe ; le double-clic y mene ----
+    {
+        const auto& uses = types.uses();
+        const auto has = [&uses](TP::TypeUse::Kind k, const std::string& where) {
+            return std::any_of(uses.begin(), uses.end(), [&](const TP::TypeUse& u) { return u.kind == k && u.where == where; });
+        };
+        check(has(TP::TypeUse::Kind::Variable, "Pompe1") && has(TP::TypeUse::Kind::Member, "T_Ligne.Pompes")
+                  && has(TP::TypeUse::Kind::Subtype, "T_PompeDoublee") && has(TP::TypeUse::Kind::Function, "Arreter_Pompe")
+                  && has(TP::TypeUse::Kind::ViewParam, "Popup_Pompe.Cible"),
+              "Emplois de T_Pompe : la variable Pompe1, le membre T_Ligne.Pompes, le sous-type, le param\xC3\xA8tre P d'Arreter_Pompe, "
+              "celui de Popup_Pompe (" + std::to_string(uses.size()) + ")");
+        check(badge(TP::TabUses) == std::to_string(uses.size()) && types.usesTable().model() && types.usesTable().model()->rowCount() == uses.size(),
+              "l'onglet Emplois les compte (" + badge(TP::TabUses) + ") et les liste");
+        std::size_t member = uses.size(), variable = uses.size();
+        for (std::size_t k = 0; k < uses.size(); ++k) {
+            if (uses[k].kind == TP::TypeUse::Kind::Member) member = k;
+            if (uses[k].kind == TP::TypeUse::Kind::Variable) variable = k;
+        }
+        types.showTypeTab(TP::TabUses);
+        check(types.goToUse(variable) && went.size() == 1 && went[0].kind == TP::TypeUse::Kind::Variable && went[0].item == pompe1,
+              "Emplois \xE2\x80\xBA Pompe1 : l'h\xC3\xB4te va \xC3\xA0 la variable (Variables IHM)");
+        check(types.goToUse(member) && types.selectedType() == ligneId && types.currentTypeTab() == TP::TabMembers && types.selectedMember() == 1,
+              "Emplois \xE2\x80\xBA T_Ligne.Pompes : T_Ligne choisi, son onglet Membres, Pompes choisi");
+        check(!types.goToUse(999), "un emploi inconnu : rien");
+    }
+
+    // ---- 3. L'onglet choisi reste d'un type a l'autre ; un type qui ne l'a pas montre son equivalent ----
+    types.selectType(pompeId);
+    types.showTypeTab(TP::TabMethods);
+    types.selectType(dblId);
+    check(types.currentTypeTab() == TP::TabMethods && types.methods()->type() == dblId, "M\xC3\xA9thodes, puis T_PompeDoublee : toujours M\xC3\xA9thodes");
+    types.selectType(ifaceId);
+    check(types.currentTypeTab() == TP::TabMethods && title(TP::TabMethods) == "Signatures" && types.showsInterface(),
+          "une interface : le m\xC3\xAAme onglet, nomm\xC3\xA9 Signatures");
+    same_text(shown(), "Signatures | Impl\xC3\xA9menteurs | Propri\xC3\xA9t\xC3\xA9s", "une interface : Signatures | Impl\xC3\xA9menteurs | Propri\xC3\xA9t\xC3\xA9s");
+    {
+        const auto m = types.implementersTable().model();
+        check(m && m->rowCount() == 2 && m->cellText(0, 0) == "T_Pompe" && m->cellText(0, 1) == "conforme" && m->cellText(0, 2) == "IMPLEMENTS"
+                  && m->cellText(1, 0) == "T_PompeDoublee" && m->cellText(1, 2) == "h\xC3\xA9rit\xC3\xA9" "e de T_Pompe" && badge(TP::TabImplementers) == "2",
+              "Impl\xC3\xA9menteurs 2 : T_Pompe (conforme, IMPLEMENTS), T_PompeDoublee (h\xC3\xA9rit\xC3\xA9" "e de T_Pompe)");
+    }
+    types.showTypeTab(TP::TabImplementers);
+    types.selectType(pompeId);
+    check(types.currentTypeTab() == TP::TabInheritance, "Impl\xC3\xA9menteurs, puis une structure : H\xC3\xA9ritage et interfaces");
+    types.selectType(modeId);
+    same_text(shown(), "Valeurs | Op\xC3\xA9rateurs | Propri\xC3\xA9t\xC3\xA9s | Emplois", "une \xC3\xA9num\xC3\xA9ration : Valeurs | Op\xC3\xA9rateurs | Propri\xC3\xA9t\xC3\xA9s | Emplois");
+    check(types.currentTypeTab() == TP::TabValues && types.showsEnumeration() && types.enumValues() && types.enumValues()->type() == modeId
+              && types.enumValues()->visible() && badge(TP::TabValues) == "3",
+          "T_MODE : l'onglet Valeurs (3), ses valeurs");
+    types.selectType(pompeId);
+    check(types.currentTypeTab() == TP::TabInheritance, "et T_Pompe ensuite : H\xC3\xA9ritage et interfaces (le choix est gard\xC3\xA9)");
+    types.selectType(rappelId);
+    same_text(shown(), "Signature | Op\xC3\xA9rateurs | Propri\xC3\xA9t\xC3\xA9s | Emplois", "un rappel : Signature | Op\xC3\xA9rateurs | Propri\xC3\xA9t\xC3\xA9s | Emplois");
+    check(types.showsCallback() && types.currentTypeTab() == TP::TabMembers && types.memberTable().model()
+              && types.memberTable().model()->headerText(0) == "Rappel",
+          "T_Filtre : sa page (la signature, les fonctions qui conviennent) dans l'onglet Signature");
+    // L'aide F1 suit l'onglet ouvert.
+    types.selectType(pompeId);
+    types.showTypeTab(TP::TabMethods);
+    const std::string helpMethods = types.helpTopic();
+    types.showTypeTab(TP::TabMembers);
+    check(helpMethods == "objets-types" && types.helpTopic() == "types-ihm", "F1 : M\xC3\xA9thodes \xE2\x86\x92 objets-types, Membres \xE2\x86\x92 types-ihm");
+    // Les outils des membres : seulement pour une structure ; Membre (Inser) ouvre l'onglet Membres sur le nouveau.
+    types.showTypeTab(TP::TabMethods);
+    types.tools().triggered->emit(2);
+    check(p.hmiType(pompeId)->members.size() == 3 && types.currentTypeTab() == TP::TabMembers && types.selectedMember() == 2
+              && types.memberTable().cellEditing(),
+          "Membre depuis l'onglet M\xC3\xA9thodes : le membre ajout\xC3\xA9, l'onglet Membres, son nom \xC3\xA0 \xC3\xA9" "crire");
+    types.memberTable().finishCellEdit(false, {});
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->members.size() == 2 && badge(TP::TabMembers) == "2", "Ctrl+Z : deux membres, le compte suit");
+    types.selectType(modeId);
+    check(types.tools().rectOf(2).w == 0.f && types.tools().rectOf(1).w > 0.f, "une \xC3\xA9num\xC3\xA9ration : pas d'outil Membre (Nouveau type reste)");
+
+    // ---- 4. La liste : le double-clic (ou Entree) et le clic droit ouvrent le type dans son onglet ----
+    types.selectType(pompeId);
+    types.showTypeTab(TP::TabMethods);
+    const int row = [&] {
+        const auto m = types.typeTable().model();
+        for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+            if (m->cellText(static_cast<ui::RowIndex>(r), 0) == "T_Pompe") return static_cast<int>(r);
+        return -1;
+    }();
+    check(row >= 0, "T_Pompe dans la liste");
+    if (row >= 0) types.typeTable().activated->emit(static_cast<ui::RowIndex>(row));
+    check(opened.size() == 1 && opened[0].first == pompeId && opened[0].second == TP::TabMethods,
+          "le double-clic sur T_Pompe : l'h\xC3\xB4te l'ouvre dans son onglet, sur M\xC3\xA9thodes (l'onglet montr\xC3\xA9)");
+    types.openTypeMenu({20, 120});
+    const auto* menu = types.typeMenu();
+    const auto* openItem = menu ? findItem(menu->items(), "Ouvrir dans un onglet") : nullptr;
+    check(openItem && openItem->enabled && findItem(menu->items(), "Supprimer le type") && findItem(menu->items(), "Dupliquer"),
+          "le clic droit sur un type : Ouvrir dans un onglet, Dupliquer, Supprimer le type");
+    // Contre-relecture K4 (1) : les entrees de la table restent (Copier, Copier sans les titres) apres celles du type.
+    check(menu && findItem(menu->items(), "Copier") && findItem(menu->items(), "Copier sans les titres"),
+          "le clic droit sur un type garde Copier et Copier sans les titres de la table");
+    if (openItem) menu->itemChosen->emit(openItem->id);
+    check(opened.size() == 2 && opened[1].first == pompeId, "Ouvrir dans un onglet : l'h\xC3\xB4te l'ouvre");
+    {
+        // Contre-relecture K4 (1) : un vrai clic droit - sur une ligne : le menu du type et celui de la table ; sur un
+        // titre de colonne : le menu du titre (trier, largeur, masquer...), sans les entrees du type.
+        auto& list = types.typeTable();
+        types.layout();
+        gfx::Rect rr;
+        const bool hasRow = row >= 0 && list.rowRect(static_cast<std::size_t>(row), rr);
+        if (hasRow) (void)list.dispatch(ui::MouseDown{{rr.x + 30.f, rr.y + rr.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        check(hasRow && menu && menu->isOpen() && findItem(menu->items(), "Ouvrir dans un onglet") && findItem(menu->items(), "Copier"),
+              "clic droit sur la ligne T_Pompe : Ouvrir dans un onglet, puis Copier");
+        if (auto* m = types.typeMenu()) m->close();
+        const auto lb = list.bounds();
+        (void)list.dispatch(ui::MouseDown{{lb.x + 40.f, lb.y + 6.f}, ui::MouseButton::Right, 1, {}});
+        check(menu && menu->isOpen() && findItem(menu->items(), "Trier de A \xC3\xA0 Z") && !findItem(menu->items(), "Ouvrir dans un onglet"),
+              "clic droit sur le titre Nom : le menu du titre (Trier de A \xC3\xA0 Z...), pas celui du type");
+        if (auto* m = types.typeMenu()) m->close();
+        // Contre-relecture K4 (2) : Entree sur un type l'ouvre dans son onglet (le menu l'affiche).
+        list.takeFocus();
+        if (row >= 0) list.selectModelRows({static_cast<ui::RowIndex>(row)}, false);
+        const auto before = opened.size();
+        (void)list.dispatch(ui::KeyDown{ui::Key::Return, ui::KeyMods{}, false});
+        check(opened.size() == before + 1 && opened.back().first == pompeId, "Entr\xC3\xA9" "e sur T_Pompe : l'h\xC3\xB4te l'ouvre dans son onglet");
+    }
+
+    // ---- 5. L'onglet de document : fige sur son type, son titre suit le nom, il sait quand le type n'est plus ----
+    app::HmiTypesPane own("ty1131.doc", doc, apply, pompeId);
+    app::HmiTypesPane other("ty1131.doc2", doc, apply, ligneId);
+    own.setBounds({0, 0, 1500, 800});
+    own.layout();
+    other.setBounds({0, 0, 1500, 800});
+    other.layout();
+    check(own.isDocument() && own.documentType() == pompeId && own.documentTitle() == "T_Pompe" && own.selectedType() == pompeId
+              && other.documentTitle() == "T_Ligne" && other.selectedType() == ligneId,
+          "deux types ouverts \xC3\xA0 la fois : T_Pompe et T_Ligne, chacun dans son onglet");
+    check(own.typeTable().parent() && !own.typeTable().parent()->visible() && own.tools().rectOf(1).w == 0.f && own.tools().rectOf(6).w == 0.f && own.tools().rectOf(8).w == 0.f
+              && own.tools().rectOf(2).w > 0.f && own.tools().rectOf(7).w > 0.f,
+          "l'onglet d'un type : ni la liste ni Nouveau type, Dupliquer, Dossier ; Membre et Supprimer le type restent");
+    same_text([&] {
+        std::string out;
+        for (std::size_t i = 0; i < TP::TabCount; ++i)
+            if (own.typeTabShown(i)) out += (out.empty() ? "" : " | ") + own.typeTabs().tab(i)->title;
+        return out;
+    }(), "Membres | M\xC3\xA9thodes | Op\xC3\xA9rateurs | H\xC3\xA9ritage et interfaces | Propri\xC3\xA9t\xC3\xA9s | Emplois",
+              "il montre les m\xC3\xAAmes onglets");
+    check(own.typeTabs().bounds().x < 20.f && own.typeTabs().bounds().w > 1400.f, "ses onglets prennent toute la largeur (pas de liste)");
+    own.selectType(modeId);
+    check(own.selectedType() == pompeId, "il reste sur son type (choisir un autre type n'y change rien)");
+    own.layout();
+    {
+        Recorder rec;
+        own.render(ui::PaintContext{rec, theme, {0, 0, 1500, 800}, 0.0, nullptr});
+        check(rec.wrote("STRUCTURE \xC2\xB7 T_Pompe") && !rec.wrote("TYPES IHM"), "\xC3\xA0 l'\xC3\xA9" "cran : STRUCTURE \xC2\xB7 T_Pompe, sans la liste TYPES IHM");
+    }
+    // Un geste dans l'onglet : une commande comme dans la page (Ctrl+Z), la page le voit aussi.
+    own.showTypeTab(TP::TabMethods);
+    own.tools().triggered->emit(2);
+    check(p.hmiType(pompeId)->members.size() == 3 && own.currentTypeTab() == TP::TabMembers && own.typeTabs().tab(TP::TabMembers)->badge == "3",
+          "Membre dans l'onglet de T_Pompe : un troisi\xC3\xA8me membre (Membres 3)");
+    own.memberTable().finishCellEdit(false, {});
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->members.size() == 2 && own.typeTabs().tab(TP::TabMembers)->badge == "2", "Ctrl+Z : il repart, dans l'onglet aussi");
+    // Les emplois d'un autre type, depuis l'onglet de document : son onglet a lui (par l'hote).
+    {
+        // Contre-relecture K4 (3) : l'hote rend l'onglet ouvert (ici, celui de T_Ligne) ; l'emploi y est choisi, sur sa ligne.
+        std::vector<std::pair<Id, std::size_t>> asked;
+        TP::Hosts h;
+        h.openTypeTab = [&asked, &other](Id id, std::size_t tab) -> TP* {
+            asked.emplace_back(id, tab);
+            return id == other.documentType() ? &other : nullptr;
+        };
+        own.setHosts(std::move(h));
+        std::size_t member = own.uses().size(), method = own.uses().size();
+        for (std::size_t k = 0; k < own.uses().size(); ++k) {
+            if (own.uses()[k].kind == TP::TypeUse::Kind::Member) member = k;
+            if (own.uses()[k].kind == TP::TypeUse::Kind::Method && own.uses()[k].item == ligneId) method = k;
+        }
+        other.showTypeTab(TP::TabProperties);
+        check(own.goToUse(member) && own.selectedType() == pompeId && asked.size() == 1 && asked[0].first == ligneId
+                  && asked[0].second == TP::TabMembers && other.currentTypeTab() == TP::TabMembers && other.selectedMember() == 1,
+              "Emplois \xE2\x80\xBA T_Ligne.Pompes depuis l'onglet de T_Pompe : l'onglet de T_Ligne, sur Membres, Pompes choisi");
+        check(method < own.uses().size() && own.goToUse(method) && asked.size() == 2 && other.currentTypeTab() == TP::TabMethods
+                  && other.methods() && other.methods()->selectedMethod() == arreterLigneId,
+              "Emplois \xE2\x80\xBA T_Ligne.Arreter (param\xC3\xA8tre P) : l'onglet de T_Ligne, sur M\xC3\xA9thodes, Arreter choisie");
+    }
+    // Renommer : le titre suit ; supprimer : l'onglet sait que son type n'est plus (l'hote le ferme).
+    std::string why;
+    check(own.renameType(pompeId, "T_Pompe2", &why) && own.documentTitle() == "T_Pompe2" && !own.documentGone(),
+          "renomm\xC3\xA9 T_Pompe2 : le titre de l'onglet suit");
+    (void)stack.undo();
+    check(own.documentTitle() == "T_Pompe", "Ctrl+Z : T_Pompe \xC3\xA0 nouveau");
+    check(other.deleteType(ligneId, &why) && other.documentGone() && other.documentTitle().empty(),
+          "T_Ligne supprim\xC3\xA9 : son onglet le sait (l'h\xC3\xB4te le ferme) " + why);
+    (void)stack.undo();
+    check(!other.documentGone() && other.documentTitle() == "T_Ligne", "Ctrl+Z : T_Ligne revient (son onglet se rouvre de l'arbre)");
+    // ---- 6. Les largeurs (captures d'apercu 1.13.1) : la colonne Nom suit le plus long nom, les titres se lisent, Utilise
+    // par prend la place qui reste ; l'onglet Signatures : Retour se lit, la legende tient (et son infobulle la donne) ----
+    {
+        types.selectType(pompeId);
+        types.layout();
+        auto& list = types.typeTable();
+        const auto m = list.model();
+        bool names = list.columns().size() == 4 && m != nullptr;
+        std::string court;
+        for (std::size_t r = 0; names && r < m->rowCount(); ++r) {
+            const auto st = m->cellStyle(static_cast<ui::RowIndex>(r), 0);
+            const float need = (st.indent > 0.f || st.expander >= 0 ? st.indent + 16.f : 0.f) + (st.icon != ui::Icon::None ? 21.f : 0.f)
+                             + ui::measureWidth(m->cellText(static_cast<ui::RowIndex>(r), 0), gfx::FontId{16}) * (st.bold ? 1.08f : 1.f) + 12.f;
+            if (list.columns()[0].width < need) {
+                names = false;
+                court = m->cellText(static_cast<ui::RowIndex>(r), 0);
+            }
+        }
+        check(names, "la colonne Nom suit le plus long nom (T_PompeDoublee, I_Demarrable entiers, leur retrait et leur ic\xC3\xB4ne compris) " + court);
+        bool titles = true;
+        for (const auto& c : list.columns())
+            if (c.width - 54.f < ui::measureWidth(c.title, gfx::FontId{16})) {
+                titles = false;
+                court = c.title;
+            }
+        check(titles, "les titres Nom, Membres, Mots, Utilis\xC3\xA9 par se lisent (le tri compris) " + court);
+        const auto sum = [&list] {
+            float w = 0.f;
+            for (const auto& c : list.columns())
+                if (c.visible) w += c.width;
+            return w;
+        };
+        const float name0 = list.columns()[0].width, used0 = list.columns()[3].width;
+        check(sum() >= list.bounds().w - 17.f, "pas de place vide \xC3\xA0 droite de la liste");
+        types.setBounds({0, 0, 3400, 900});
+        types.layout();
+        check(list.columns()[0].width == name0 && list.columns()[3].width > used0 + 20.f && std::abs(sum() - (list.bounds().w - 16.f)) <= 1.5f,
+              "la liste \xC3\xA9largie : Utilis\xC3\xA9 par prend la place libre (" + std::to_string(static_cast<int>(used0)) + " \xE2\x86\x92 "
+                  + std::to_string(static_cast<int>(list.columns()[3].width)) + " px), Nom garde la sienne");
+        types.setBounds({0, 0, 1700, 900});
+        types.layout();
+    }
+    {
+        types.selectType(ifaceId);
+        types.showTypeTab(TP::TabMethods);
+        types.layout();
+        auto* methods = types.methods();
+        float retour = 0.f;
+        if (methods)
+            for (const auto& c : methods->methodTable().columns())
+                if (c.title == "Retour") retour = c.width;
+        check(retour - 54.f >= ui::measureWidth("Retour", gfx::FontId{16}), "Signatures : le titre Retour se lit (" + std::to_string(static_cast<int>(retour)) + " px)");
+        const std::string legend = methods ? methods->legendText() : std::string{};
+        const auto* bar = methods ? methods->findById(methods->id() + ".legende") : nullptr;
+        check(!legend.empty() && legend.size() <= 70 && bar && bar->tooltip().rfind(legend, 0) == 0,
+              "Signatures : la l\xC3\xA9gende courte (" + legend + "), son infobulle la donne enti\xC3\xA8re");
+    }
+    (void)arreterId;
+    (void)popupId;
+    (void)endefautId;
+    core::CommandGroupScope::registerStack(nullptr);
+}
 
 int main(int argc, char** argv) {
     // 1.13.1 (lot K1) : HMI_TEST_K1=1 - les deux bugs des formules, seuls.
@@ -39184,6 +39624,14 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_RF1"); only && *only == '1') {
         relectureF1_113();
         natives1200();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.13.1 (lot K4) : HMI_TEST_K4=1 - les types dans leurs onglets et leur onglet de document, avec les essais des types.
+    if (const char* only = std::getenv("HMI_TEST_K4"); only && *only == '1') {
+        typesOnglets1131();
+        objets113();
+        correctifsF2_113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -39753,6 +40201,7 @@ int main(int argc, char** argv) {
     formulesK1_1131();                      // 1.13.1 (lot K1) : constantes globales en formule, aide dans les reperes
     codeBrut1131();                         // 1.13.1 (lot K3) : l'onglet Code brut, le clic droit, Ctrl+V d'un code brut
     codeBrutSimulation1131();               // 1.13.1 (lot K3) : le code brut dans le menu de la vue en marche
+    typesOnglets1131();                     // 1.13.1 (lot K4) : les types dans leurs onglets, et dans leur onglet de document
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
