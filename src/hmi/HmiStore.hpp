@@ -159,6 +159,28 @@ using FileReader = std::function<bool(const std::string& relativePath, std::stri
 [[nodiscard]] core::Result<View>     parseView(std::string_view text, LoadReport* report = nullptr);
 [[nodiscard]] std::string            viewFileName(const View&);
 
+// ---- 1.13.1 : LE CODE BRUT D'UN OBJET ----
+//  "dans tous les objets des pages/vues avoir un onglet 'code brut' que l'on peut copier coller" :
+//  le texte complet d'un objet - ses lignes du fichier de sa vue, telles que l'enregistrement les
+//  ecrit (objet, prop, redefinition et ses declarations, surcharge_alarme, action objet=...), ses
+//  enfants a la suite s'il en a (un groupe), sous un en-tete, jusqu'a "fin". Rien d'invente : il se
+//  relit par le lecteur des vues (parseView), sans perte. Les ids n'y servent qu'a relier les lignes
+//  (le parent d'un enfant, l'objet d'une action) : ce qui l'applique ou le colle en donne de neufs.
+inline constexpr std::string_view kObjectCodeHeader = "# IHM Studio - code brut d'un objet";
+// Le code des objets `ids` de la vue (un groupe : ses enfants avec lui ; un enfant dont le groupe est
+// aussi demande : une seule fois). Vide : aucun de ces objets.
+[[nodiscard]] std::string serializeObjectCode(const View&, const std::vector<Id>& ids);
+// Ce texte est-il un code brut d'objet (son en-tete, ou une premiere ligne "objet ...") ?
+[[nodiscard]] bool isObjectCode(std::string_view text);
+struct ObjectCode {
+    std::vector<Object> objects;   // dans l'ordre du code (l'ordre de dessin d'origine)
+    std::vector<Id>     roots;     // ceux du haut : ni enfant d'un autre objet du code
+};
+// Relire un code brut. Une faute fait echouer, rien n'est rendu a moitie : la ligne et ce qui ne va
+// pas ("ligne 3 : 'cle' sans '='", "ligne 7 : genre d'objet inconnu 'boutton'", "la ligne 'fin'
+// manque : le code est coupe ?").
+[[nodiscard]] core::Result<ObjectCode> parseObjectCode(std::string_view text);
+
 // Une ligne "mot cle=valeur ...", decoupee. Expose pour les tests.
 struct Record {
     std::string word;

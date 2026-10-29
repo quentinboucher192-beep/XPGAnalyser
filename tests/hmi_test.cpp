@@ -29790,7 +29790,286 @@ void formulesTapees11231() {
     }
 }
 
+// ---- 1.13.1 (lot K3) : LE CODE BRUT D'UN OBJET ---------------------------------------------
+//  "dans tous les objets des pages/vues avoir un onglet 'code brut' que l'on peut copier coller" :
+//  le texte d'un objet (les lignes de son fichier de vue), relu sans perte, applique a un autre
+//  objet du meme genre (nom et position gardes), pose comme un objet neuf ; les fautes se disent.
+namespace {
+// Les proprietes d'un objet sans x et y : ce que garde l'objet qui recoit un code.
+std::vector<Prop> propsSansPlace(const Object& o) {
+    std::vector<Prop> out;
+    for (const auto& pr : o.props)
+        if (pr.key != "x" && pr.key != "y") out.push_back(pr);
+    return out;
+}
+}   // namespace
+
+void codeBrut1131() {
+    std::printf("code brut 1.13.1\n");
+    auto doc = std::make_shared<Document>();
+    Project& p = doc->project;
+    // Un symbole (une fonction a redefinir, une alarme a surcharger), pour une instance.
+    View sym = makeView(p, "S_Pompe");
+    sym.role = "symbole";
+    HmiFunction regler;
+    regler.id = p.allocate();
+    regler.name = "Regler";
+    regler.returnType = "REAL";
+    regler.body = "Regler := 1.0;";
+    regler.isVirtual = true;
+    sym.functions.push_back(regler);
+    p.views.push_back(sym);
+    View v = makeView(p, "Synoptique");
+    // Un bouton : un texte, une formule, des reperes ($Vanne$, $$ qui ecrit un vrai $), deux actions.
+    Object& b = addButton(p, v, "BtnMarche", 40, 30);
+    b.set("text", "Marche $$ 5");
+    b.setExpr("fill", "Defaut ? 'red' : 'green'");
+    b.set("tooltip", "Commande de $Vanne$");
+    b.actions.push_back(act(Trigger::Click, Operation::Set, "$Vanne$.CMD", "1"));
+    b.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, "x := \"a b\";\nIHM_LOG('ok');"));
+    const Id btn = b.id;
+    // Un afficheur numerique (une formule), une courbe (ses plumes), un tableau.
+    const Id disp = edit::add(p, v, Kind::NumericDisplay, 300, 30);
+    v.object(disp)->name = "Debit";
+    v.object(disp)->setExpr("value", "Ligne[2].Debit * 3.6");
+    const Id trend = edit::add(p, v, Kind::Trend, 40, 200);
+    v.object(trend)->name = "Courbe1";
+    v.object(trend)->set("variables", "Ligne[0].Debit; Ligne[1].Debit");
+    const Id table = edit::add(p, v, Kind::Table, 500, 200);
+    v.object(table)->name = "Tab1";
+    // Une instance du symbole : sa fonction redefinie (et ses declarations), une alarme surchargee.
+    const Id inst = placeSymbol(p, v, "S_Pompe", 700, 30);
+    v.object(inst)->name = "P1";
+    FunctionOverride fo{"Regler", "Regler := 9.0 + SUPER.Regler();"};
+    Declaration local;
+    local.name = "k";
+    local.type = "REAL";
+    fo.decls.push_back(local);
+    v.object(inst)->functionOverrides.push_back(fo);
+    AlarmOverride ov;
+    ov.alarm = "Debit_Haut";
+    ov.condition = "Debit > 20.0";
+    ov.priority = 2;
+    v.object(inst)->alarmOverrides.push_back(ov);
+    // Un groupe de deux objets, l'un avec une action.
+    const Id t1 = edit::add(p, v, Kind::Text, 40, 420);
+    const Id r1 = edit::add(p, v, Kind::Rectangle, 120, 420);
+    v.object(t1)->name = "Libelle";
+    v.object(r1)->name = "Fond";
+    v.object(r1)->actions.push_back(act(Trigger::Click, Operation::Navigate, "Vue_2"));
+    const Id grp = edit::group(p, v, {t1, r1});
+    const Id vid = v.id;
+    p.views.push_back(v);
+    const View& vv = *p.view(vid);
+
+    // 1. L'aller-retour : chaque famille relue a l'identique, et le texte est stable.
+    for (const Id id : {btn, disp, trend, table, inst, grp}) {
+        const auto* o = vv.object(id);
+        const std::string code = serializeObjectCode(vv, {id});
+        const std::string who = std::string(kindLabel(o->kind)) + " " + o->name;
+        check(code.rfind(kObjectCodeHeader, 0) == 0, who + " : le code commence par son en-tete");
+        check(isObjectCode(code), who + " : reconnu comme un code brut");
+        auto back = parseObjectCode(code);
+        check(static_cast<bool>(back), who + " : le code se relit" + (back ? std::string{} : " (" + back.error().context + ")"));
+        if (!back) continue;
+        std::vector<Object> want{*o};
+        for (const Id d : vv.descendantsOf(id)) want.push_back(*vv.object(d));
+        check(back->objects.size() == want.size(), who + " : autant d'objets (" + std::to_string(want.size()) + ")");
+        bool same = back->objects.size() == want.size();
+        for (std::size_t i = 0; same && i < want.size(); ++i) {
+            const auto it = std::find_if(back->objects.begin(), back->objects.end(), [&](const Object& x) { return x.id == want[i].id; });
+            same = it != back->objects.end() && *it == want[i];
+        }
+        check(same, who + " : relu sans perte (proprietes, formules, actions, redefinitions, alarmes)");
+        check(back->roots.size() == 1 && back->roots.front() == id, who + " : un seul objet du haut, lui");
+    }
+    {
+        // Le texte relu puis reecrit est le meme (stable), pour un groupe aussi.
+        const std::string code = serializeObjectCode(vv, {grp});
+        auto back = parseObjectCode(code);
+        View again = vv;
+        again.objects = back ? back->objects : std::vector<Object>{};
+        same(serializeObjectCode(again, {grp}), code, "groupe : le code relu se reecrit a l'identique");
+        check(code.find("objet id=" + std::to_string(t1)) != std::string::npos
+                  && code.find("objet id=" + std::to_string(r1)) != std::string::npos,
+              "groupe : ses deux enfants sont dans son code");
+        check(code.find("action objet=" + std::to_string(r1)) != std::string::npos, "groupe : l'action d'un enfant le designe");
+        const std::string bcode = serializeObjectCode(vv, {btn});
+        check(bcode.find("$$ 5") != std::string::npos && bcode.find("$Vanne$.CMD") != std::string::npos,
+              "bouton : les reperes et le $$ restent tels qu'ecrits");
+        check(bcode.find("expr=\"Defaut ? 'red' : 'green'\"") != std::string::npos, "bouton : la formule (fx) est dans le code");
+    }
+
+    // 2. Le code d'un objet applique a un autre du meme genre : les memes proprietes, sauf nom et position.
+    {
+        View w = vv;
+        const Id other = edit::add(p, w, Kind::Button, 600, 500);
+        w.object(other)->name = "BtnArret";
+        w.object(other)->set("text", "Arret");
+        const Object before = *w.object(other);
+        auto code = parseObjectCode(serializeObjectCode(w, {btn}));
+        std::string why, note;
+        const bool ok = code && edit::applyCode(p, w, other, code->objects, false, &why, &note);
+        check(ok, "appliquer le code du bouton a un autre bouton" + (why.empty() ? std::string{} : " (" + why + ")"));
+        const auto* after = w.object(other);
+        check(after && after->name == "BtnArret", "le nom est garde");
+        check(after && after->number("x") == 600 && after->number("y") == 500, "la position est gardee");
+        check(after && propsSansPlace(*after) == propsSansPlace(*w.object(btn)), "les proprietes et formules sont celles du code");
+        check(after && after->actions == w.object(btn)->actions, "les actions sont celles du code");
+        check(after && after->id == before.id && after->layer == before.layer && after->parent == before.parent,
+              "l'id, le calque et le groupe sont gardes");
+        check(w.indexOf(other) == static_cast<int>(w.objects.size()) - 1, "la place dans l'ordre de dessin est gardee");
+        // La case : prendre aussi le nom et la position - le nom est pris (le bouton d'origine est la) : un nom libre.
+        View w2 = vv;
+        const Id other2 = edit::add(p, w2, Kind::Button, 600, 500);
+        why.clear();
+        note.clear();
+        check(code && edit::applyCode(p, w2, other2, code->objects, true, &why, &note), "appliquer en prenant le nom et la position");
+        const auto* a2 = w2.object(other2);
+        check(a2 && a2->name == "BtnMarche_1" && note.find("BtnMarche_1") != std::string::npos,
+              "le nom du code, deja pris, devient libre et la note le dit (" + note + ")");
+        check(a2 && a2->number("x") == 40 && a2->number("y") == 30, "la position du code est prise");
+        // Dans une autre vue (le nom est libre) : le nom du code tel quel.
+        View w3 = makeView(p, "Autre");
+        const Id other3 = edit::add(p, w3, Kind::Button, 5, 5);
+        check(code && edit::applyCode(p, w3, other3, code->objects, true, &why, &note) && w3.object(other3)->name == "BtnMarche",
+              "dans une autre vue, le nom du code est pris tel quel");
+    }
+
+    // 3. Un autre genre : refuse, rien ne change.
+    {
+        View w = vv;
+        auto code = parseObjectCode(serializeObjectCode(w, {btn}));
+        const View before = w;
+        std::string why;
+        check(code && !edit::applyCode(p, w, disp, code->objects, false, &why), "le code d'un bouton sur un afficheur : refuse");
+        check(why.find("m\xC3\xAAme genre") != std::string::npos && why.find(std::string(kindLabel(Kind::Button))) != std::string::npos,
+              "le refus dit les deux genres (" + why + ")");
+        check(w == before, "rien n'a change");
+    }
+
+    // 4. Les fautes de syntaxe : la ligne et ce qui ne va pas.
+    {
+        const std::string code = serializeObjectCode(vv, {btn});
+        const auto fails = [&](const std::string& text, const std::string& want, const std::string& what) {
+            auto r = parseObjectCode(text);
+            check(!r, what + " : refuse");
+            if (!r) check(r.error().context.find(want) != std::string::npos, what + " : dit [" + want + "] (" + r.error().context + ")");
+        };
+        std::string broken = code;
+        const auto at = broken.find("prop cle=");
+        broken.replace(at, 9, "prop cle");
+        int line = 1;
+        for (std::size_t i = 0; i < at; ++i) line += broken[i] == '\n';
+        fails(broken, "ligne " + std::to_string(line) + " : ", "une cle sans '='");
+        std::string quote = code;
+        quote.replace(quote.find("valeur=\"") + 7, 1, "");   // un guillemet de moins...
+        auto rq = parseObjectCode(quote);
+        check(!rq || rq->objects.size() == 1, "un guillemet de moins : refuse ou lu sans rien inventer");
+        fails(code.substr(0, code.rfind("fin")), "'fin' manque", "un code coupe (sans 'fin')");
+        fails(code + "objet id=99 type=Button nom=X\n", "apr\xC3\xA8s 'fin'", "une ligne apres 'fin'");
+        fails("objet id=5 type=Boutton nom=X\nfin\n", "ligne 1 : genre d'objet inconnu 'Boutton'", "un genre inconnu");
+        fails("vue id=1 nom=X\nfin\n", "ligne 1 : 'vue' n'est pas une ligne du code d'un objet", "une ligne de vue");
+        fails("prop cle=x valeur=1\nfin\n", "ligne 1 : 'prop' avant la premi\xC3\xA8re ligne 'objet'", "une propriete sans objet");
+        fails("objet id=5 type=Button nom=X\naction objet=6 declencheur=Clic operation=\"Mettre \xC3\xA0 1\"\nfin\n", "ligne 2 : l'action d\xC3\xA9signe l'objet 6",
+              "une action d'un objet absent");
+        fails("objet id=5 type=Button nom=X\nobjet id=5 type=Text nom=Y\nfin\n", "ligne 2 : deux objets ont l'id 5", "deux fois le meme id");
+        fails("bonjour\n", "ligne 1", "un texte quelconque");
+        fails("objet id=5 type=Group nom=G parent=6\nobjet id=6 type=Group nom=H parent=5\nfin\n", "boucle",
+              "deux groupes l'un dans l'autre");
+        check(!isObjectCode("Nom\tGenre\nBtn\tBouton\n") && !isObjectCode("fin\n"), "une liste d'Excel n'est pas un code brut");
+    }
+
+    // 5. Un groupe applique a un autre groupe : ses enfants remplacent les siens (ids neufs, decales).
+    {
+        View w = vv;
+        const Id a = edit::add(p, w, Kind::Ellipse, 600, 400);
+        const Id c = edit::add(p, w, Kind::Ellipse, 650, 400);
+        const Id d = edit::add(p, w, Kind::Ellipse, 700, 400);
+        const Id g2 = edit::group(p, w, {a, c, d});
+        const Box gb = w.object(g2)->box();
+        auto code = parseObjectCode(serializeObjectCode(w, {grp}));
+        std::string why, note;
+        check(code && edit::applyCode(p, w, g2, code->objects, false, &why, &note), "un groupe sur un groupe" + (why.empty() ? std::string{} : " (" + why + ")"));
+        const auto kids = w.childrenOf(g2);
+        check(kids.size() == 2, "le groupe a les deux enfants du code (" + std::to_string(kids.size()) + ")");
+        check(!w.object(a) && !w.object(c) && !w.object(d), "ses anciens enfants sont partis");
+        bool fresh = true, moved = true;
+        for (const Id k : kids) {
+            fresh = fresh && k != t1 && k != r1;
+            const auto* o = w.object(k);
+            const Id src = o->kind == Kind::Text ? t1 : r1;
+            moved = moved && std::fabs(o->number("x") - (vv.object(src)->number("x") + gb.x - vv.object(grp)->number("x"))) < 0.01;
+        }
+        check(fresh, "les enfants ont des ids neufs");
+        check(moved, "les enfants suivent la position gardee du groupe");
+        check(w.object(g2)->number("x") == gb.x && w.object(g2)->number("y") == gb.y, "le groupe garde sa position");
+        check(note.find("Libelle_1") != std::string::npos, "les noms deja pris des enfants en prennent un libre (" + note + ")");
+        bool action = false;
+        for (const Id k : kids)
+            if (const auto* o = w.object(k); o->kind == Kind::Rectangle) action = o->actions.size() == 1 && o->actions[0].target == "Vue_2";
+        check(action, "l'action de l'enfant suit");
+    }
+
+    // 6. Ctrl+Z : une commande, annulee d'un coup.
+    {
+        core::CommandStack stack;
+        const View before = *p.view(vid);
+        auto code = parseObjectCode(serializeObjectCode(before, {btn}));
+        Id other = kNoId;
+        (void)stack.push(changeView(doc, vid, "Ajouter", [&](Project& pp, View& w) { other = edit::add(pp, w, Kind::Button, 900, 500); }));
+        const View added = *p.view(vid);
+        bool ok = false;
+        auto cmd = changeView(doc, vid, "Code brut", [&](Project& pp, View& w) { ok = edit::applyCode(pp, w, other, code->objects, false); });
+        check(ok && cmd != nullptr, "appliquer le code : une commande");
+        (void)stack.push(std::move(cmd));
+        check(p.view(vid)->object(other)->text("text") == "Marche $$ 5", "le code est applique");
+        (void)stack.undo();
+        check(*p.view(vid) == added, "Ctrl+Z rend l'objet tel qu'il etait");
+        (void)stack.redo();
+        check(p.view(vid)->object(other)->text("text") == "Marche $$ 5", "Ctrl+Y le refait");
+        (void)stack.undo();
+        (void)stack.undo();
+        check(*p.view(vid) == before, "et la vue revient a son depart");
+    }
+
+    // 7. Coller un code dans une vue : des objets neufs, des noms libres, decales s'ils tomberaient dessus.
+    {
+        View w = vv;
+        const std::size_t n = w.objects.size();
+        auto code = parseObjectCode(serializeObjectCode(w, {grp, btn}));
+        check(code && code->roots.size() == 2, "le code de deux objets : deux objets du haut");
+        std::string why;
+        const auto top = code ? edit::pasteCode(p, w, code->objects, kNoId, &why) : std::vector<Id>{};
+        check(top.size() == 2 && w.objects.size() == n + 4, "colle : le groupe (et ses deux enfants) et le bouton");
+        const auto buttonOf = [](const View& in, const std::vector<Id>& ids) -> const Object* {
+            for (const Id id : ids)
+                if (const auto* o = in.object(id); o && o->kind == Kind::Button) return o;
+            return nullptr;
+        };
+        const auto* nb = buttonOf(w, top);
+        check(nb && nb->kind == Kind::Button && nb->name == "BtnMarche_1", "le bouton colle prend un nom libre");
+        check(nb && nb->number("x") == 60 && nb->number("y") == 50, "decale de 20 px : il ne tombe pas sur l'original");
+        check(nb && nb->actions == vv.object(btn)->actions && nb->id != btn, "ses actions suivent, son id est neuf");
+        View empty = makeView(p, "Vide");
+        const auto top2 = code ? edit::pasteCode(p, empty, code->objects) : std::vector<Id>{};
+        const auto* eb = buttonOf(empty, top2);
+        check(top2.size() == 2 && eb && eb->name == "BtnMarche" && eb->number("x") == 40,
+              "dans une vue vide : le nom et la place du code");
+        auto one = parseObjectCode(serializeObjectCode(w, {grp, btn}));
+        std::string why2;
+        check(one && !edit::applyCode(p, w, btn, one->objects, false, &why2) && why2.find("un seul") != std::string::npos,
+              "deux objets du haut ne remplacent pas un objet (" + why2 + ")");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.13.1 (lot K3) : HMI_TEST_1131=1 - le code brut des objets, seul.
+    if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
+        codeBrut1131();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.31 : HMI_TEST_11231=1 - les formules tapees dans l'inspecteur, a l'ecran en marche, seules.
     if (const char* only = std::getenv("HMI_TEST_11231"); only && *only == '1') {
         formulesTapees11231();
@@ -30101,6 +30380,7 @@ int main(int argc, char** argv) {
     validerSaisies11123();            // 1.11.23 : Valider les saisies (le bouton Valider de la popup consigne)
     enumsProprietes1121();            // 1.12.1 : les enumerations natives des proprietes des objets
     pourquoi11227();                  // 1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)
+    codeBrut1131();                   // 1.13.1 (lot K3) : le code brut des objets
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

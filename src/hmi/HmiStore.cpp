@@ -440,6 +440,41 @@ std::string serializeAction(Id owner, const Action& a) {
     return s + "\n";
 }
 
+// Les lignes d'un objet dans le fichier de sa vue (objet, prop, redefinition et ses declarations,
+// surcharge_alarme) - sans ses actions, ecrites apres tous les objets. 1.13.1 : aussi le code brut.
+std::string serializeObjectLines(const Object& o) {
+    std::string s;
+    s += "objet" + fieldInt("id", o.id) + fieldBare("type", kindKey(o.kind)) + field("nom", o.name)
+       + fieldInt("calque", o.layer) + fieldInt("parent", o.parent) + fieldBool("verrou", o.locked)
+       + fieldBool("cache", o.hidden) + "\n";
+    for (const auto& p : o.props) {
+        s += "prop" + fieldBare("cle", p.key) + field("valeur", p.value);
+        if (!p.expr.empty()) s += field("expr", p.expr);
+        s += "\n";
+    }
+    // 1.11.10 : ses fonctions redefinies (une instance).
+    for (const auto& fo : o.functionOverrides)
+        s += "redefinition" + field("fonction", fo.function) + field("corps", fo.body) + "\n"
+           + serializeDeclarations(fo.decls);                                   // 1.11.18 (lot 3)
+    // 1.9 : ses alarmes surchargees - seulement les champs surcharges.
+    for (const auto& ov : o.alarmOverrides) {
+        s += "surcharge_alarme" + field("alarme", ov.alarm);
+        if (!ov.path.empty()) s += field("chemin", ov.path);
+        if (ov.active) s += fieldBool("active", *ov.active);
+        if (ov.condition) s += field("condition", *ov.condition);
+        if (ov.message) s += field("message", *ov.message);
+        if (ov.priority) s += fieldInt("priorite", *ov.priority);
+        if (ov.category) s += field("categorie", *ov.category);
+        if (ov.group) s += field("groupe", *ov.group);
+        if (ov.delayMs) s += fieldInt("delai", *ov.delayMs);
+        if (ov.ackRequired) s += fieldBool("acquittement", *ov.ackRequired);
+        if (ov.instruction) s += field("consigne", *ov.instruction);
+        if (ov.description) s += field("description", *ov.description);
+        s += "\n";
+    }
+    return s;
+}
+
 std::string serializeView(const View& v) {
     std::string s;
     s += "# IHM Studio - vue IHM (format " + std::to_string(kFormatVersion) + ")\n";
@@ -515,36 +550,7 @@ std::string serializeView(const View& v) {
     for (const auto& l : v.layers)
         s += "calque" + fieldInt("id", l.id) + field("nom", l.name) + fieldBool("visible", l.visible)
            + fieldBool("verrou", l.locked) + "\n";
-    for (const auto& o : v.objects) {
-        s += "objet" + fieldInt("id", o.id) + fieldBare("type", kindKey(o.kind)) + field("nom", o.name)
-           + fieldInt("calque", o.layer) + fieldInt("parent", o.parent) + fieldBool("verrou", o.locked)
-           + fieldBool("cache", o.hidden) + "\n";
-        for (const auto& p : o.props) {
-            s += "prop" + fieldBare("cle", p.key) + field("valeur", p.value);
-            if (!p.expr.empty()) s += field("expr", p.expr);
-            s += "\n";
-        }
-        // 1.11.10 : ses fonctions redefinies (une instance).
-        for (const auto& fo : o.functionOverrides)
-            s += "redefinition" + field("fonction", fo.function) + field("corps", fo.body) + "\n"
-               + serializeDeclarations(fo.decls);                                   // 1.11.18 (lot 3)
-        // 1.9 : ses alarmes surchargees - seulement les champs surcharges.
-        for (const auto& ov : o.alarmOverrides) {
-            s += "surcharge_alarme" + field("alarme", ov.alarm);
-            if (!ov.path.empty()) s += field("chemin", ov.path);
-            if (ov.active) s += fieldBool("active", *ov.active);
-            if (ov.condition) s += field("condition", *ov.condition);
-            if (ov.message) s += field("message", *ov.message);
-            if (ov.priority) s += fieldInt("priorite", *ov.priority);
-            if (ov.category) s += field("categorie", *ov.category);
-            if (ov.group) s += field("groupe", *ov.group);
-            if (ov.delayMs) s += fieldInt("delai", *ov.delayMs);
-            if (ov.ackRequired) s += fieldBool("acquittement", *ov.ackRequired);
-            if (ov.instruction) s += field("consigne", *ov.instruction);
-            if (ov.description) s += field("description", *ov.description);
-            s += "\n";
-        }
-    }
+    for (const auto& o : v.objects) s += serializeObjectLines(o);
     for (const auto& sc : v.scripts)
         s += "script" + fieldInt("id", sc.id) + field("nom", sc.name) + fieldBare("langage", scriptLangKey(sc.lang))
            + fieldBare("evenement", sc.event.empty() ? "-" : sc.event) + field("corps", sc.body) + "\n"
@@ -879,6 +885,151 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
         }
     if (!v.layer(v.activeLayer)) v.activeLayer = v.layers.front().id;
     return v;
+}
+
+// ------------------------------------------------- 1.13.1 : le code brut ---
+std::string serializeObjectCode(const View& v, const std::vector<Id>& ids) {
+    std::set<Id> wanted;
+    const Object* first = nullptr;
+    for (Id id : ids) {
+        const auto* o = v.object(id);
+        if (!o) continue;
+        if (!first) first = o;
+        wanted.insert(id);
+        for (Id d : v.descendantsOf(id)) wanted.insert(d);
+    }
+    if (wanted.empty()) return {};
+    std::string s = std::string(kObjectCodeHeader) + " (format " + std::to_string(kFormatVersion) + ")\n";
+    // Une ligne pour le lecteur (un commentaire : la relecture l'ignore).
+    s += "# " + std::string(kindLabel(first->kind)) + " " + first->name + " - vue " + v.name;
+    if (const std::size_t more = wanted.size() - 1) s += " (+ " + std::to_string(more) + (more > 1 ? " objets)" : " objet)");
+    s += "\n";
+    for (const auto& o : v.objects)
+        if (wanted.count(o.id)) s += serializeObjectLines(o);
+    // Les actions apres les objets, comme dans le fichier de la vue : chacune designe le sien.
+    for (const auto& o : v.objects)
+        if (wanted.count(o.id))
+            for (const auto& a : o.actions) s += serializeAction(o.id, a);
+    s += "fin\n";
+    return s;
+}
+
+namespace {
+// La premiere ligne utile d'un texte (ni vide, ni commentaire), sans les blancs du bord.
+std::string_view firstRecordLine(std::string_view text, bool& header) {
+    header = false;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const std::size_t eol = text.find('\n', pos);
+        std::string_view line = text.substr(pos, eol == std::string_view::npos ? std::string_view::npos : eol - pos);
+        pos = eol == std::string_view::npos ? text.size() : eol + 1;
+        while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front()))) line.remove_prefix(1);
+        while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back()))) line.remove_suffix(1);
+        if (line.empty()) continue;
+        if (line.front() == '#') {
+            if (line.rfind(kObjectCodeHeader, 0) == 0) header = true;
+            continue;
+        }
+        return line;
+    }
+    return {};
+}
+}   // namespace
+
+bool isObjectCode(std::string_view text) {
+    bool header = false;
+    const auto line = firstRecordLine(text, header);
+    if (header) return true;
+    return line.rfind("objet ", 0) == 0 || line.rfind("objet\t", 0) == 0;
+}
+
+core::Result<ObjectCode> parseObjectCode(std::string_view text) {
+    const auto bad = [](std::size_t lineNo, const std::string& what) {
+        return core::fail(core::ErrorCode::XmlMalformed,
+                          lineNo ? "ligne " + std::to_string(lineNo) + " : " + what : what);
+    };
+    // 1. Chaque ligne se lit, et c'est une ligne d'objet : sinon, la ligne et la faute.
+    std::string body;                  // le code jusqu'a "fin" (exclue) : les numeros de ligne restent les siens
+    std::set<Id> ids, layers;
+    std::vector<std::pair<std::size_t, Id>> owners;   // les actions : leur ligne, leur objet
+    bool sawObject = false, sawEnd = false;
+    std::size_t lineNo = 0, pos = 0;
+    while (pos < text.size()) {
+        const std::size_t eol = text.find('\n', pos);
+        std::string_view line = text.substr(pos, eol == std::string_view::npos ? std::string_view::npos : eol - pos);
+        pos = eol == std::string_view::npos ? text.size() : eol + 1;
+        ++lineNo;
+        if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+        std::size_t k = 0;
+        while (k < line.size() && std::isspace(static_cast<unsigned char>(line[k]))) ++k;
+        if (k >= line.size() || line[k] == '#') {
+            body += std::string(line) + "\n";
+            continue;
+        }
+        if (sawEnd) return bad(lineNo, "une ligne apr\xC3\xA8s 'fin' (le code s'arr\xC3\xAAte \xC3\xA0 'fin')");
+        Record r;
+        std::string error;
+        if (!parseRecord(line, r, error)) return bad(lineNo, error);
+        if (r.word == "fin") {
+            sawEnd = true;
+            continue;
+        }
+        if (r.word == "objet") {
+            const long long id = toInt(r.get("id"), 0);
+            if (id <= 0) return bad(lineNo, "objet sans id (id=12 : un nombre, qui relie ses lignes)");
+            if (!ids.insert(static_cast<Id>(id)).second) return bad(lineNo, "deux objets ont l'id " + std::to_string(id));
+            if (!kindFromKey(toStr(r.get("type"))))
+                return bad(lineNo, "genre d'objet inconnu '" + toStr(r.get("type")) + "'");
+            layers.insert(static_cast<Id>(toInt(r.get("calque"), 0)));
+            sawObject = true;
+        } else if (r.word == "prop" || r.word == "redefinition" || r.word == "surcharge_alarme") {
+            if (!sawObject) return bad(lineNo, "'" + r.word + "' avant la premi\xC3\xA8re ligne 'objet'");
+            if (r.word == "prop" && toStr(r.get("cle")).empty()) return bad(lineNo, "propri\xC3\xA9t\xC3\xA9 sans cl\xC3\xA9 (cle=...)");
+        } else if (r.word == "action") {
+            Action a;
+            std::string why;
+            if (!parseAction(r, a, why)) return bad(lineNo, "action illisible (" + why + ")");
+            owners.emplace_back(lineNo, static_cast<Id>(toInt(r.get("objet"), 0)));
+        } else if (r.word != "declaration" && r.word != "locale") {
+            return bad(lineNo, "'" + r.word + "' n'est pas une ligne du code d'un objet (objet, prop, action, red\xC3\xA9" "finition, "
+                               "declaration, surcharge_alarme, fin)");
+        }
+        body += std::string(line) + "\n";
+    }
+    if (!sawObject) return bad(0, "aucune ligne 'objet' : ce n'est pas le code brut d'un objet");
+    if (!sawEnd) return bad(lineNo + 1, "la ligne 'fin' manque (le code est coup\xC3\xA9 ?)");
+    for (const auto& [at, owner] : owners)
+        if (!ids.count(owner))
+            return bad(at, "l'action d\xC3\xA9signe l'objet " + std::to_string(owner) + ", absent du code");
+    // 2. Le lecteur des vues relit le tout (les memes regles que l'ouverture d'un projet) : une vue
+    //    de passage, ses calques (ceux que citent les objets), le code, puis "fin".
+    std::string text2 = body + "vue id=1 nom=code\n";
+    for (Id l : layers) text2 += "calque" + fieldInt("id", l) + " nom=c\n";
+    text2 += "fin\n";
+    LoadReport report;
+    auto view = parseView(text2, &report);
+    if (!view) return bad(0, view.error().context);
+    // Ce que l'ouverture d'un projet ne fait qu'avertir est une faute ici : rien n'est change.
+    for (const auto& w : report.warnings)
+        if (w.rfind("ligne ", 0) == 0) return bad(0, w);
+    ObjectCode out;
+    out.objects = std::move(view->objects);
+    // Chaque objet remonte a un objet du haut : un parent qui boucle (A dans B, B dans A) est une faute.
+    std::map<Id, Id> parentOf;
+    for (const auto& o : out.objects) parentOf[o.id] = o.parent;
+    for (const auto& o : out.objects) {
+        Id at = o.id;
+        std::size_t steps = 0;
+        while (ids.count(at) && steps <= out.objects.size()) {
+            at = parentOf[at];
+            ++steps;
+        }
+        if (steps > out.objects.size())
+            return bad(0, "l'objet " + o.name + " (id " + std::to_string(o.id) + ") est dans son propre groupe : parent= fait une boucle");
+    }
+    for (const auto& o : out.objects)
+        if (!ids.count(o.parent)) out.roots.push_back(o.id);
+    return out;
 }
 
 // ------------------------------------------------------------ projet ------
