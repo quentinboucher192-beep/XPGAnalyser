@@ -393,6 +393,9 @@ bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const 
     int order = 0;
     if (!spec.array())
         for (const auto& m : ty::membersOf(hp, type)) {
+            // 1.13.1 : un membre PRIVE (1.13.0) ne se lit que des methodes de son type - jamais d'une case fx ni
+            // d'un champ : ne pas le proposer, la case le refuserait ("Heures est prive dans T_Pompe").
+            if (!ty::privateMemberUse(hp, type, m.name).empty()) continue;
             const int r = matchRank(m.name, needle);
             if (r < 0) continue;
             Item it;

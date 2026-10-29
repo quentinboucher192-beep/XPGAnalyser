@@ -39260,6 +39260,9 @@ void formulesK1_1131() {
         tv.id = p.allocate();
         tv.name = "T_Vanne";
         tv.members = {{"OUV", "BOOL", "", ""}, {"Position", "REAL", "", ""}};
+        TypeMember usure{"Usure", "REAL", "", ""};      // 1.13.1 (captures finales) : un membre prive
+        usure.visibility = Visibility::Private;
+        tv.members.push_back(usure);
         p.programs.types.push_back(tv);
     }
     p.programs.variables.push_back(Variable{p.allocate(), "Marche", "BOOL", "FALSE", {}});
@@ -39397,6 +39400,11 @@ void formulesK1_1131() {
         check(k1::has(element, "OUV") && k1::has(element, "Position"), "dans un rep\xC3\xA8re ($V[0].) : les membres (" + k1::names(element) + ")");
         const auto after = suggestions("$V[0]$.");
         check(k1::has(after, "OUV") && k1::has(after, "Position"), "apr\xC3\xA8s un rep\xC3\xA8re ($V[0]$.) : les membres de V[0] (" + k1::names(after) + ")");
+        // 1.13.1 (captures finales) : un membre prive ne se propose pas - la case le refuserait.
+        check(!k1::has(after, "Usure") && !k1::has(element, "Usure"),
+              "un membre priv\xC3\xA9 (Usure) ne se propose ni dans ni apr\xC3\xA8s le rep\xC3\xA8re (" + k1::names(after) + ")");
+        const auto plain = suggestions("V[0].");
+        check(k1::has(plain, "OUV") && !k1::has(plain, "Usure"), "sans rep\xC3\xA8re (V[0].) : OUV, pas le membre priv\xC3\xA9 Usure (" + k1::names(plain) + ")");
         const auto partial = suggestions("$V[0]$.Pos");
         check(k1::has(partial, "Position") && !k1::has(partial, "OUV"), "apr\xC3\xA8s un rep\xC3\xA8re ($V[0]$.Pos) : Position (" + k1::names(partial) + ")");
         const auto rest = suggestions("NOT $V[0]$.OUV AND Mar");
