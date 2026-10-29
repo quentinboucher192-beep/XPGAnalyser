@@ -1302,6 +1302,8 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "au centre, la **vue** et sa barre d'outils ;", {}},
              {K::Bullet, "\xC3\xA0 droite, l'**inspecteur** (onglets Propri\xC3\xA9t\xC3\xA9s, Actions, "
                          "Contenu) et la **biblioth\xC3\xA8que** des composants.", {}},
+             {K::Bullet, "un seul objet choisi : l'onglet **Code brut** de l'inspecteur, son texte complet "
+                         "(voir \xC2\xAB Le code brut d'un objet \xC2\xBB plus bas).", {}, "1.13.1"},
              {K::Heading, "Poser et d\xC3\xA9placer", {}},
              {K::Step, "Dans la biblioth\xC3\xA8que, clique sur un composant (ou cherche-le par son nom).", "1"},
              {K::Step, "Clique dans la vue : l'objet se pose \xC3\xA0 cet endroit, avec un nom libre "
@@ -1351,6 +1353,39 @@ const std::vector<Topic>& topics() {
                          "glisser (Alt : sans magn\xC3\xA9tisme), double-clic sur un segment pour ajouter, "
                          "clic droit \xE2\x80\xBA Retirer le sommet ou Suppr. Chaque geste s'annule d'un "
                          "Ctrl+Z.", {}, "1.12.12"},
+             {K::Heading, "Le code brut d'un objet", {}, "1.13.1"},
+             {K::Paragraph, "Chaque objet a son **texte complet**, qui se copie d'un objet \xC3\xA0 l'autre : "
+                         "l'onglet **Code brut** de l'inspecteur (un seul objet choisi). Ce sont ses lignes "
+                         "telles que l'enregistrement les \xC3\xA9" "crit : `objet` (son genre, son nom, son "
+                         "calque), une ligne `prop` par propri\xC3\xA9t\xC3\xA9 (sa valeur, et `expr=` pour "
+                         "une formule fx), ses actions (`action objet=\xE2\x80\xA6`), son contenu (les "
+                         "plumes d'une courbe, les lignes d'un tableau, les \xC3\xA9tats : des "
+                         "propri\xC3\xA9t\xC3\xA9s), ses fonctions red\xC3\xA9" "finies et ses alarmes "
+                         "surcharg\xC3\xA9" "es (une instance de symbole), puis, pour un groupe, ses objets. "
+                         "Les rep\xC3\xA8res (`$Vanne$`, `$$`) et les formules restent tels "
+                         "qu'\xC3\xA9" "crits, comme avec Dupliquer.", {}, "1.13.1"},
+             {K::Bullet, "**Copier** : le code part dans le presse-papiers.", {}, "1.13.1"},
+             {K::Bullet, "**Coller** : le code du presse-papiers **remplace** l'objet choisi (le code d'un "
+                         "autre objet, d'une autre vue, d'un autre projet).", {}, "1.13.1"},
+             {K::Bullet, "**Modifier** le texte puis **Appliquer** ; **Revenir** reprend le code de l'objet.", {}, "1.13.1"},
+             {K::Bullet, "Par d\xC3\xA9" "faut l'objet **garde son nom et sa position** ; coche **Prendre "
+                         "aussi le nom et la position** pour prendre ceux du code (un nom d\xC3\xA9j\xC3\xA0 "
+                         "pris dans la vue en re\xC3\xA7oit un libre, le message le dit). Il garde toujours "
+                         "son calque, son groupe, sa place dans l'ordre de dessin, son verrou.", {}, "1.13.1"},
+             {K::Bullet, "Un code ne remplace qu'un objet **du m\xC3\xAAme genre** (un bouton par un bouton) "
+                         ": un autre genre est refus\xC3\xA9, rien ne change. Un groupe prend les objets du "
+                         "code \xC3\xA0 la place des siens.", {}, "1.13.1"},
+             {K::Bullet, "Une faute de frappe : le message dit **la ligne** et ce qui ne va pas (\xC2\xAB "
+                         "ligne 7 : 'cle' sans '=' \xC2\xBB), la ligne est marqu\xC3\xA9" "e en rouge, rien "
+                         "ne change.", {}, "1.13.1"},
+             {K::Bullet, "Coller et Appliquer sont **une modification** : **Ctrl+Z** l'annule.", {}, "1.13.1"},
+             {K::Bullet, "**Clic droit** sur un objet - sur la vue, dans l'Explorateur d'objets, dans "
+                         "l'arbre du projet sous une vue, sur la vue en marche en Simulation : **Copier le "
+                         "code brut**, **Coller le code brut**, **Code brut\xE2\x80\xA6** (l'onglet). "
+                         "Plusieurs objets choisis : Copier le code brut les prend tous.", {}, "1.13.1"},
+             {K::Bullet, "**Ctrl+V** d'un code brut dans une vue (ou clic droit \xE2\x80\xBA **Coller ici**) "
+                         "en pose les objets, **neufs** : des noms libres, d\xC3\xA9" "cal\xC3\xA9s de 20 px "
+                         "s'ils tombaient sur l'original.", {}, "1.13.1"},
              {K::Heading, "L'historique des modifications des objets", {}, "1.12.26"},
              {K::Paragraph, "\xC3\x80 chaque **Enregistrer**, chaque objet cr\xC3\xA9\xC3\xA9, modifi\xC3\xA9 "
                          "ou supprim\xC3\xA9 depuis le dernier enregistrement est not\xC3\xA9 dans le projet "
@@ -1377,7 +1412,7 @@ const std::vector<Topic>& topics() {
                          "l'infobulle de suivi, ou le point.", {}, "1.12.26"},
          },
          {"objets", "proprietes", "actions", "contenu"},
-         {},
+         {"Code brut", "Copier le code brut", "Coller le code brut", "Prendre aussi le nom et la position"},
          {"vue"},
          {{"PNG_005_calques_et_fond.png", "L'\xC3\xA9" "diteur : explorateur d'objets, calques, la vue, l'inspecteur et la biblioth\xC3\xA8que."}, {"PNG_009_alignes_distribues.png", "Trois boutons align\xC3\xA9s et distribu\xC3\xA9s."}},
          "",

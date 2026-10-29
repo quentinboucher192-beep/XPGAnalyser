@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.13.1", "29/10/2026", "\xC3\xA0 venir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
     {"1.12.30", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la nuit"},
@@ -136,6 +137,13 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.13.1 (lot K3) : le code brut des objets - l'onglet de l'inspecteur, le clic droit, Ctrl+V.
+        note("1.13.1", "Vues", Kind::New,
+         "LE CODE BRUT D'UN OBJET : un seul objet choisi, l'onglet Code brut de l'inspecteur montre son texte complet, celui que l'enregistrement \xC3\xA9" "crit - ses propri\xC3\xA9t\xC3\xA9s et formules (fx), ses actions, son contenu (plumes, lignes, \xC3\xA9tats), ses fonctions red\xC3\xA9" "finies, ses alarmes surcharg\xC3\xA9" "es et, pour un groupe, ses objets. Copier le met dans le presse-papiers ; Coller remplace l'objet par le code copi\xC3\xA9 (d'un objet du m\xC3\xAAme genre, d'une autre vue, d'un autre projet) ; le texte se modifie puis s'Applique. L'objet garde son nom et sa position (la case Prendre aussi le nom et la position prend ceux du code). Une faute dit sa ligne et ne change rien ; un code d'un autre genre d'objet est refus\xC3\xA9 ; Ctrl+Z annule.",
+         "editeur", ""),
+        note("1.13.1", "Vues", Kind::New,
+         "COPIER ET COLLER LE CODE BRUT PARTOUT : le clic droit d'un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue, sur la vue en marche en Simulation - propose Copier le code brut, Coller le code brut (il remplace l'objet) et Code brut\xE2\x80\xA6 (l'onglet). Ctrl+V d'un code brut dans une vue (ou Coller ici) en pose les objets, neufs, avec des noms libres.",
+         "editeur", ""),
         // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
         // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
         note("1.13.0", "Projet", Kind::Changed,
