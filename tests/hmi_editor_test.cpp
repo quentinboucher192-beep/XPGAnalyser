@@ -38901,6 +38901,63 @@ void typesOnglets1131() {
           "T_Ligne supprim\xC3\xA9 : son onglet le sait (l'h\xC3\xB4te le ferme) " + why);
     (void)stack.undo();
     check(!other.documentGone() && other.documentTitle() == "T_Ligne", "Ctrl+Z : T_Ligne revient (son onglet se rouvre de l'arbre)");
+    // ---- 6. Les largeurs (captures d'apercu 1.13.1) : la colonne Nom suit le plus long nom, les titres se lisent, Utilise
+    // par prend la place qui reste ; l'onglet Signatures : Retour se lit, la legende tient (et son infobulle la donne) ----
+    {
+        types.selectType(pompeId);
+        types.layout();
+        auto& list = types.typeTable();
+        const auto m = list.model();
+        bool names = list.columns().size() == 4 && m != nullptr;
+        std::string court;
+        for (std::size_t r = 0; names && r < m->rowCount(); ++r) {
+            const auto st = m->cellStyle(static_cast<ui::RowIndex>(r), 0);
+            const float need = (st.indent > 0.f || st.expander >= 0 ? st.indent + 16.f : 0.f) + (st.icon != ui::Icon::None ? 21.f : 0.f)
+                             + ui::measureWidth(m->cellText(static_cast<ui::RowIndex>(r), 0), gfx::FontId{16}) * (st.bold ? 1.08f : 1.f) + 12.f;
+            if (list.columns()[0].width < need) {
+                names = false;
+                court = m->cellText(static_cast<ui::RowIndex>(r), 0);
+            }
+        }
+        check(names, "la colonne Nom suit le plus long nom (T_PompeDoublee, I_Demarrable entiers, leur retrait et leur ic\xC3\xB4ne compris) " + court);
+        bool titles = true;
+        for (const auto& c : list.columns())
+            if (c.width - 54.f < ui::measureWidth(c.title, gfx::FontId{16})) {
+                titles = false;
+                court = c.title;
+            }
+        check(titles, "les titres Nom, Membres, Mots, Utilis\xC3\xA9 par se lisent (le tri compris) " + court);
+        const auto sum = [&list] {
+            float w = 0.f;
+            for (const auto& c : list.columns())
+                if (c.visible) w += c.width;
+            return w;
+        };
+        const float name0 = list.columns()[0].width, used0 = list.columns()[3].width;
+        check(sum() >= list.bounds().w - 17.f, "pas de place vide \xC3\xA0 droite de la liste");
+        types.setBounds({0, 0, 3400, 900});
+        types.layout();
+        check(list.columns()[0].width == name0 && list.columns()[3].width > used0 + 20.f && std::abs(sum() - (list.bounds().w - 16.f)) <= 1.5f,
+              "la liste \xC3\xA9largie : Utilis\xC3\xA9 par prend la place libre (" + std::to_string(static_cast<int>(used0)) + " \xE2\x86\x92 "
+                  + std::to_string(static_cast<int>(list.columns()[3].width)) + " px), Nom garde la sienne");
+        types.setBounds({0, 0, 1700, 900});
+        types.layout();
+    }
+    {
+        types.selectType(ifaceId);
+        types.showTypeTab(TP::TabMethods);
+        types.layout();
+        auto* methods = types.methods();
+        float retour = 0.f;
+        if (methods)
+            for (const auto& c : methods->methodTable().columns())
+                if (c.title == "Retour") retour = c.width;
+        check(retour - 54.f >= ui::measureWidth("Retour", gfx::FontId{16}), "Signatures : le titre Retour se lit (" + std::to_string(static_cast<int>(retour)) + " px)");
+        const std::string legend = methods ? methods->legendText() : std::string{};
+        const auto* bar = methods ? methods->findById(methods->id() + ".legende") : nullptr;
+        check(!legend.empty() && legend.size() <= 70 && bar && bar->tooltip().rfind(legend, 0) == 0,
+              "Signatures : la l\xC3\xA9gende courte (" + legend + "), son infobulle la donne enti\xC3\xA8re");
+    }
     (void)arreterId;
     (void)popupId;
     (void)endefautId;

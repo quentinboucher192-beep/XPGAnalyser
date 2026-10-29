@@ -531,6 +531,8 @@ private:
     [[nodiscard]] std::size_t tabFor(std::size_t wanted, const hmi::HmiType* t) const;
     [[nodiscard]] bool tabMakesSense(std::size_t tab, const hmi::HmiType* t) const;
     [[nodiscard]] std::vector<ui::PopupMenu::Item> typeMenuItems() const;   // les entrees du type (clic droit de la liste)
+    void fitTypeColumns();                    // Nom suit le plus long nom, Utilise par prend la place qui reste
+    float             nameFit_{0.f}, listFit_{0.f};   // ... ce qu'elle a vu la derniere fois
     void revealUse(const TypeUse& u, std::size_t tab);   // un emploi sur sa ligne, dans ce volet (son type deja montre)
 
     hmi::DocumentPtr  doc_;

@@ -329,6 +329,19 @@ protected:
     }
 };
 
+// 1.13.1 (lot K4, captures d'apercu) : une table qui dit quand sa largeur change (le separateur tire, le volet
+// elargi) - la liste des types y refait ses colonnes (fitTypeColumns).
+class FittedTable final : public ui::TableView {
+public:
+    using ui::TableView::TableView;
+    std::function<void()> onResized;
+protected:
+    void onLayout() override {
+        ui::TableView::onLayout();
+        if (onResized) onResized();
+    }
+};
+
 // L'apercu d'un collage de membres : ce qui sera ajoute, remplace, refuse, et
 // les boutons Appliquer / Annuler.
 class PastePreview final : public ui::Widget {
@@ -3484,9 +3497,11 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".typesPanel", "TYPES IHM");
-        auto table = std::make_unique<ui::TableView>(base + ".types");
-        table->setColumns({{"Nom", 150.f}, {"Membres", 80.f, 40.f, true, true, true, ui::Align::End}, {"Mots", 60.f, 40.f, true, true, true, ui::Align::End},
-                           {"Utilis\xC3\xA9 par", 170.f}});
+        // 1.13.1 (lot K4, captures) : Nom suit le plus long nom, Utilise par prend la place qui reste (fitTypeColumns).
+        auto table = std::make_unique<FittedTable>(base + ".types");
+        table->setColumns({{"Nom", titled("Nom", 150.f)}, {"Membres", titled("Membres", 80.f), 40.f, true, true, true, ui::Align::End},
+                           {"Mots", titled("Mots", 60.f), 40.f, true, true, true, ui::Align::End}, {"Utilis\xC3\xA9 par", titled("Utilis\xC3\xA9 par", 170.f)}});
+        table->onResized = [this] { fitTypeColumns(); };
         table->setSelectionMode(ui::SelectionMode::Single);
         // 1.13.1 (lot K4) : le double-clic ouvre le type dans son onglet (F2 renomme, comme avant ; un dossier : son nom).
         // Entree aussi (le clic droit l'affiche). Le clic droit sur une ligne : les entrees du type, en tete du menu de la
@@ -3903,6 +3918,7 @@ void HmiTypesPane::refresh() {
                       });
     if (current_ != kNoId && folders_->selectedItem() != current_) folders_->selectItem(current_);
     syncing_ = false;
+    fitTypeColumns();   // 1.13.1 (lot K4) : un nom plus long, un type de plus
     refreshMembers();
     rebuildProperties();
     status_->setMessage(message_.empty() ? std::to_string(p.programs.types.size())
@@ -5483,6 +5499,37 @@ std::vector<HmiTypesPane::TypeUse> HmiTypesPane::usesOf(const hmi::Project& p, c
                         declWord(d.kind) + d.name + " d'un script de " + v.name, d.type, v.id, sc.id);
     }
     return out;
+}
+
+// 1.13.1 (lot K4, captures d'apercu) : LES COLONNES DE LA LISTE DES TYPES. Nom suit le plus long nom montre (son retrait,
+// la fleche d'un dossier, l'icone, le gras compris : plus de "T_Po..." ni de "I_Dem...") ; Membres et Mots, courts, gardent
+// leur titre lisible ; Utilise par prend la place qui reste quand la liste s'elargit. Refait seulement quand le plus long nom
+// ou la largeur de la liste change : une colonne elargie a la main garde sa largeur d'ici la.
+void HmiTypesPane::fitTypeColumns() {
+    if (!types_) return;
+    const auto model = types_->model();
+    auto cols = types_->columns();
+    if (cols.size() < 4) return;
+    float name = titled("Nom", 150.f);
+    for (std::size_t r = 0; model && r < model->rowCount(); ++r) {
+        const auto st = model->cellStyle(static_cast<ui::RowIndex>(r), 0);
+        const float lead = (st.indent > 0.f || st.expander >= 0 ? st.indent + 16.f : 0.f) + (st.icon != ui::Icon::None ? 21.f : 0.f);
+        const float text = ui::measureWidth(model->cellText(static_cast<ui::RowIndex>(r), 0), gfx::FontId{16}) * (st.bold ? 1.08f : 1.f);
+        name = std::max(name, std::ceil(lead + text + 12.f + 6.f));
+    }
+    name = std::min(name, 420.f);
+    const float avail = std::max(0.f, types_->bounds().w - 16.f);   // la barre de defilement
+    if (name == nameFit_ && avail == listFit_) return;
+    nameFit_ = name;
+    listFit_ = avail;
+    cols[0].width = name;
+    cols[1].width = titled("Membres", 80.f);
+    cols[2].width = titled("Mots", 60.f);
+    float others = 0.f;
+    for (std::size_t c = 0; c < 3; ++c)
+        if (cols[c].visible) others += cols[c].width;
+    cols[3].width = std::max(titled("Utilis\xC3\xA9 par", 170.f), avail - others);
+    types_->setColumns(std::move(cols));
 }
 
 void HmiTypesPane::refreshTypePages(const hmi::HmiType* t) {

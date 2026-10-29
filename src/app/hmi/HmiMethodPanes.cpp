@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <set>
 
 namespace app {
@@ -22,6 +23,9 @@ using hmi::Id;
 using hmi::kNoId;
 
 namespace {
+
+// L'infobulle de la legende au-dessus du corps (1.13.1 : la legende du moment la precede).
+constexpr const char* kLegendTip = "Ce que le corps d'une m\xC3\xA9thode conna\xC3\xAEt : SELF (l'instance), ses membres par leur nom, ses param\xC3\xA8tres, son retour.";
 
 std::string upperOf(std::string_view s) {
     std::string out(s);
@@ -348,8 +352,10 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".listPanel", "M\xC3\x89THODES");
         auto table = std::make_unique<ui::TableView>(base + ".methods");
+        // 1.13.1 (lot K4, captures) : Retour se lit (le gras, les marges, le tri) - avant : "Re..." sur une interface.
+        const float retour = std::max(70.f, std::ceil(ui::measureWidth("Retour", gfx::FontId{16}) * 1.08f) + 58.f);
         table->setColumns({{"M\xC3\xA9thode", 120.f, 60.f}, {"", 30.f, 24.f}, {"Genre", 72.f, 40.f}, {"Origine", 170.f, 60.f},
-                           {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", 70.f, 40.f}});
+                           {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", retour, 40.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_, HmiToolStrip::ListKeys{ADelete, ADuplicate, AAdd, AUp, ADown, 0});
@@ -370,7 +376,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         auto panel = std::make_unique<HmiTitledPanel>(base + ".editorPanel", "CORPS");
         auto column = std::make_unique<CodeColumn>(base + ".code");
         auto legend = std::make_unique<ui::StatusBar>(base + ".legende");
-        legend->setTooltip("Ce que le corps d'une m\xC3\xA9thode conna\xC3\xAEt : SELF (l'instance), ses membres par leur nom, ses param\xC3\xA8tres, son retour.");
+        legend->setTooltip(kLegendTip);
         legend_ = &static_cast<ui::StatusBar&>(column->addChild(std::move(legend)));
         auto ed = std::make_unique<ui::MultiLineText>(base + ".editor");
         ed->setLanguage(ui::Language::StructuredText);
@@ -659,7 +665,7 @@ std::string HmiMethodsPane::legendText() const {
     const auto* m = current();
     if (!t) return {};
     if (t->kind == hmi::HmiTypeKind::Interface)
-        return "Une interface n'a pas de corps : ses signatures seules - chaque type qui l'impl\xC3\xA9mente \xC3\xA9" "crit la m\xC3\xA9thode.";
+        return "Pas de corps : chaque type qui l'impl\xC3\xA9mente \xC3\xA9" "crit la m\xC3\xA9thode.";   // 1.13.1 : tient sur la ligne
     if (!m) return "SELF : l'instance de " + t->name + " (THIS vaut SELF) \xC2\xB7 ses membres se lisent par leur nom ou SELF.X";
     const hmi::HmiType* where = nullptr;
     (void)hmi::methodById(doc_->project, m->id, &where);
@@ -700,6 +706,8 @@ void HmiMethodsPane::showSelected() {
     syncing_ = false;
     editorPanel_->setTitle(editorTitle());
     legend_->setMessage(legendText());
+    // 1.13.1 (lot K4, captures) : une legende coupee ("...") se lit entiere dans son infobulle.
+    legend_->setTooltip(legendText().empty() ? std::string(kLegendTip) : legendText() + "\n" + kLegendTip);
     rebuildProperties();
     updateDiagnostics();
 }
