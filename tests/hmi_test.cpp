@@ -2650,6 +2650,80 @@ void courbesEnMarche1131() {
     check(!s.rt.trendState(s.view, trend), "un nouveau lancement : ni gel, ni zoom, ni curseurs");
 }
 
+// 1.13.1 (contre-verification du lot K2) : la source zone:Courbe d'un export a Generer ; une courbe pilotable en mode
+// historique n'a ni barre ni gestes (elle relit un fichier : rien a figer, ni curseurs, ni zoom).
+void courbeContreVerif1131() {
+    std::printf("== 1.13.1 (contre-v\xC3\xA9rification) : zone:Courbe \xC3\xA0 G\xC3\xA9n\xC3\xA9rer, la courbe historique sans barre ==\n");
+    using S = Issue::Severity;
+    // ---- Generer : l'action Exporter et le bouton d'export acceptent zone:Courbe (la note et l'aide F1 le disent).
+    {
+        Project g;
+        View w = makeView(g, "V");
+        const Id trend = edit::add(g, w, Kind::Trend, 10, 10);
+        w.object(trend)->name = "Courbe_1";
+        w.object(trend)->set("variables", "Pression");
+        w.object(trend)->setFlag("pilotable", true);
+        const Id texte = edit::add(g, w, Kind::Text, 10, 400);
+        w.object(texte)->name = "Txt";
+        const auto button = [&](const char* name, double y, const char* source) {
+            const Id b = edit::add(g, w, Kind::Button, 600, y);
+            w.object(b)->name = name;
+            Action a;
+            a.operation = Operation::Export;
+            a.target = source;
+            w.object(b)->actions.push_back(a);
+            return b;
+        };
+        const Id ok = button("Btn_Zone", 10, "zone:Courbe_1");
+        const Id absent = button("Btn_Absente", 100, "zone:Courbe_9");
+        const Id pasCourbe = button("Btn_Texte", 200, "zone:Txt");
+        const Id exp = edit::add(g, w, Kind::ExportButton, 900, 10);
+        w.object(exp)->set("exportSource", "zone:Courbe_1");
+        g.views = {w};
+        g.config.startView = w.id;
+        const auto issues = generate(g, [](std::string_view) { return false; });
+        const auto has = [&](Id object, std::string_view text) {
+            for (const auto& i : issues)
+                if (i.object == object && i.severity == S::Error && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        check(!has(ok, "exporter") && !has(exp, "donn\xC3\xA9" "es export\xC3\xA9" "es"),
+              "G\xC3\xA9n\xC3\xA9rer : zone:Courbe_1 (action Exporter, bouton d'export) est une source valable (avant : source inconnue)");
+        check(has(absent, "courbe 'Courbe_9' introuvable"), "zone:Courbe_9 : une courbe introuvable, une erreur");
+        check(has(pasCourbe, "'Txt' n'est pas une courbe"), "zone:Txt : pas une courbe, une erreur");
+    }
+    // ---- Une courbe pilotable en mode historique : ni barre, ni gel, ni pause, ni curseurs, ni zoom.
+    {
+        Supervision s;
+        const Id trend = edit::add(s.p, s.v(), Kind::Trend, 0, 0);
+        auto* o = s.v().object(trend);
+        o->set("variables", "Pression");
+        o->setNumber("duration", 10);
+        o->setNumber("w", 400);
+        o->setNumber("h", 200);
+        o->setFlag("pilotable", true);
+        s.start();
+        s.run(1.0);
+        // En temps reel, figee : puis le mode passe a historique (une formule, un reglage change en marche).
+        s.rt.objectPart(trend, "figer", s.t);
+        check(s.rt.trendState(s.view, trend) && s.rt.trendState(s.view, trend)->frozen, "temps r\xC3\xA9" "el : fig\xC3\xA9" "e");
+        s.v().object(trend)->set("mode", "historique");
+        s.run(0.2);
+        check(!s.rt.trendState(s.view, trend), "pass\xC3\xA9" "e en historique : le gel, le zoom, les curseurs partent");
+        const Object& h = *s.v().object(trend);
+        check(hmi::trendLayout(h, 400, 200).buttons.empty() && hmi::trendHit(h, 400, 200, 385, 10).empty() && !hmi::trendPilotable(h),
+              "historique : pas de barre (ni Pause, ni Figer, ni Curseurs, ni Tout voir)");
+        s.rt.objectPart(trend, "figer", s.t);
+        s.rt.objectPart(trend, "curseurs", s.t);
+        s.rt.objectPart(trend, "trend:wheel:2:200:100:0", s.t);
+        check(!s.rt.trendState(s.view, trend) && !s.rt.setTrendFrozen(s.view, trend, true) && !s.rt.setTrendPaused(s.view, trend, true)
+                  && !s.rt.trendZoom(s.view, trend, 0.5, s.t) && !s.rt.toggleTrendCursors(s.view, trend),
+              "historique : Figer, Curseurs, la molette, la pause n'agissent pas (avant : un gel au journal, des curseurs invisibles)");
+        s.v().object(trend)->set("mode", "temps r\xC3\xA9" "el");
+        check(hmi::trendPilotable(*s.v().object(trend)) && s.rt.setTrendFrozen(s.view, trend, true), "de retour en temps r\xC3\xA9" "el : pilotable");
+    }
+}
+
 // 1.12.16 (« dans Courbe (contenu en general, actions aussi) pouvoir dupliquer une plume, une action - le meme principe
 // que dupliquer un symbole ») : le moteur de Dupliquer d'un element - ses indices suivis, son nom numerote, la palette.
 void dupliquerElement11216() {
@@ -30117,6 +30191,7 @@ int main(int argc, char** argv) {
         pauseGardeSaFenetre1131();
         courbeModele1131();
         courbesEnMarche1131();
+        courbeContreVerif1131();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -30237,6 +30312,7 @@ int main(int argc, char** argv) {
     pauseGardeSaFenetre1131();        // 1.13.1 : la pause garde sa fenetre (avant : vide apres 1,2 fois la duree)
     courbeModele1131();               // 1.13.1 : la barre, la fenetre, le zoom, les curseurs (le modele)
     courbesEnMarche1131();            // 1.13.1 : figer, zoom, curseurs, export de la zone (le moteur)
+    courbeContreVerif1131();          // 1.13.1 : zone:Courbe a Generer, la courbe historique sans barre
     dupliquerElement11216();          // 1.12.16 : Dupliquer une plume, une action, une ligne
     modeleConstantes11216();          // 1.12.16 (T6) : l'exemple anime et le modele Constantes et fonctions
     persistanceLot4();

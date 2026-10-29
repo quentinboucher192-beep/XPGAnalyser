@@ -168,6 +168,13 @@ struct TableLayout {
 // 1.13.1 : toute sa barre - "figer", "curseurs", "toutvoir" ; `cursors` : les deux curseurs sont poses, le cadre de
 // leurs mesures porte les deux boutons d'export de la zone, "zone:csv" et "zone:excel" (trendLayout).
 [[nodiscard]] std::string trendHit(const Object&, double w, double h, double x, double y, bool cursors = false);
+// 1.13.1 : une courbe dont la barre et les gestes agissent - sa case Pilotable cochee ET en temps reel. En mode
+// historique, elle relit un fichier : rien a mettre en pause ni a figer, ni curseurs ni zoom - pas de barre (l'objet
+// tel que l'ecran le montre : son mode peut suivre une formule).
+[[nodiscard]] bool trendPilotable(const Object&);
+// 1.13.1 : une courbe qui a des actions au pointeur (Clic, Double clic, Appui long). Sans curseurs, un clic sur sa zone
+// de trace part vers elles (comme en 1.13.0) ; ses curseurs montres, la zone de trace sert a la mesure.
+[[nodiscard]] bool trendKeepsClick(const Object&);
 // ... et ou il est, dans le repere de l'objet (x, y, largeur, hauteur).
 [[nodiscard]] std::array<double, 4> trendPauseBox(double w, double h);
 
@@ -224,6 +231,7 @@ struct TrendLayout {
         Box         box;
     };
     Box                 plot;
+    bool                pilotable{false};  // Pilotable cochee et en temps reel : la barre (trendPilotable)
     std::vector<Button> buttons;
     double              legendRight{0};    // la legende s'arrete avant la barre
     Box                 readout;           // x, y, largeur (h : 0)

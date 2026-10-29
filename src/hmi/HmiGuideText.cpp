@@ -8045,7 +8045,9 @@ const std::vector<Topic>& topics() {
                          "**zone** entre A et B : une ligne par mesure - l'heure, l'\xC3\xA9" "cart \xC3\xA0 "
                          "A en secondes, puis chaque plume ; le fichier Courbe_1_zone.csv (ou .xlsx) va "
                          "l\xC3\xA0 o\xC3\xB9 l'on choisit, comme les autres exports de l'op\xC3\xA9rateur. "
-                         "L'action Exporter et IHM_EXPORTER le font aussi, la source `zone:Courbe_1`.", {}, "1.13.1"},
+                         "L'action Exporter, le bouton d'export et IHM_EXPORTER le font aussi, la source "
+                         "`zone:Courbe_1` (propos\xC3\xA9" "e dans leur liste Donn\xC3\xA9" "es ; "
+                         "G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'elle nomme une courbe de la vue).", {}, "1.13.1"},
              {K::Tip, "Pause ou Figer ? Pause pour regarder un instant pendant que tout continue "
                          "d'\xC3\xAAtre enregistr\xC3\xA9 ; Figer pour garder intacte la fen\xC3\xAAtre "
                          "qu'on \xC3\xA9tudie, aussi longtemps qu'il faut, au prix d'un trou dans la courbe.", {}, "1.13.1"},
@@ -8053,7 +8055,16 @@ const std::vector<Topic>& topics() {
                          "la seule courbe pilotable de la vue), quand aucun raccourci de la vue ne prend la "
                          "touche. En simulation, le clic droit sur la courbe propose aussi Figer, Curseurs, "
                          "Tout voir et Exporter la zone (CSV, Excel). D\xC3\xA9" "cocher Pilotable retire la "
-                         "barre et les gestes : la courbe reste celle d'avant.", {}, "1.13.1"},
+                         "barre et les gestes : la courbe reste celle d'avant. Une courbe qui a ses propres "
+                         "actions **Clic**, **Double clic** ou **Appui long** (onglet Actions) les garde : "
+                         "sans curseurs, un clic sur le trac\xC3\xA9 les d\xC3\xA9" "clenche, comme avant. "
+                         "Pour mesurer, appuyer d'abord sur **Curseurs** (ou C) : tant que les curseurs sont "
+                         "l\xC3\xA0, le trac\xC3\xA9 sert \xC3\xA0 la mesure (un clic d\xC3\xA9place le "
+                         "curseur le plus proche, glisser d\xC3\xA9place la fen\xC3\xAAtre) et les actions "
+                         "attendent ; retirer les curseurs les rend. La barre, la molette et les touches "
+                         "marchent dans les deux cas. En mode **historique**, la courbe relit un fichier : "
+                         "il n'y a rien \xC3\xA0 mettre en pause ni \xC3\xA0 figer, Pilotable n'y met pas de "
+                         "barre et la molette reste \xC3\xA0 la vue.", {}, "1.13.1"},
          },
          {"objet-communs", "historiques", "contenu"},
          {},

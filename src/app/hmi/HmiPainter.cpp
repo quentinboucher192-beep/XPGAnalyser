@@ -674,7 +674,8 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     const std::string mode = c.src.text(c.o, "mode", "temps r\xC3\xA9" "el");
     const bool historyMode = mode.rfind("historique", 0) == 0;
     const bool legend = c.src.flag(c.o, "legend", true);
-    const bool pilotable = c.src.flag(c.o, "pilotable", false);   // 1.12.16 : le bouton Pause / Continuer
+    // 1.12.16 : le bouton Pause / Continuer. 1.13.1 (contre-verification) : en mode historique, rien a piloter - pas de barre.
+    const bool pilotable = c.src.flag(c.o, "pilotable", false) && !historyMode;
     const auto penColor = [&](std::size_t i) {
         const auto& pal = hmiTrendPalette();
         const bool own = i < colorList.size() && !trimmedPen(colorList[i]).empty();

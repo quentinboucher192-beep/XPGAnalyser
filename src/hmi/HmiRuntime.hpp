@@ -1736,6 +1736,9 @@ private:
     void trendObjectPart(const View&, const Object&, std::string_view part, double now);
     bool trendKey(const keys::Chord&);
     [[nodiscard]] std::string trendKeyOf(Id view, Id object) const;
+    // Une courbe pilotable de la vue (nulle : pas une courbe, pas pilotable, ou en mode historique - son mode tel que
+    // l'ecran le montre : rien a piloter, pas de barre ; hmi::trendPilotable).
+    [[nodiscard]] const Object* pilotableTrend(const View*, Id object) const;
     void docTypeText(const View&, const Object&, std::string_view text, double now);
     void docTypeKey(const View&, const Object&, EditKey, double now);
     void docApply(const View&, const Object&, DocViewer&, const docview::Effect&, double now);

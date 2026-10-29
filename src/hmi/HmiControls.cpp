@@ -549,8 +549,18 @@ std::array<double, 4> trendPauseBox(double w, double h) {
     return {std::max(0.0, w - 30.0), 4.0, 24.0, 18.0};
 }
 
+bool trendPilotable(const Object& o) {
+    return o.kind == Kind::Trend && trendLayout(o, 100, 100).pilotable;
+}
+
+bool trendKeepsClick(const Object& o) {
+    return std::any_of(o.actions.begin(), o.actions.end(), [](const Action& a) {
+        return a.trigger == Trigger::Click || a.trigger == Trigger::DoubleClick || a.trigger == Trigger::LongPress;
+    });
+}
+
 std::string trendHit(const Object& o, double w, double h, double x, double y, bool cursors) {
-    if (o.kind != Kind::Trend || !o.flag("pilotable", false)) return {};
+    if (!trendPilotable(o)) return {};
     const auto l = trendLayout(o, w, h, cursors);
     for (const auto& b : l.buttons)
         if (b.box.w > 0 && b.box.contains(x, y)) return b.part;
@@ -573,6 +583,9 @@ bool trendFlagProp(const Object& o, std::string_view key, bool fallback) {
     const std::string t = o.text(key);
     return t.empty() ? fallback : roles::readBool(t, fallback);
 }
+bool trendHistoryMode(const Object& o) {
+    return trim(o.text("mode", "temps r\xC3\xA9" "el")).rfind("historique", 0) == 0;
+}
 std::size_t trendPenCount(const Object& o) {
     std::size_t n = 0;
     for (const auto& p : splitKeep(o.text("variables"), ';'))
@@ -584,7 +597,9 @@ std::size_t trendPenCount(const Object& o) {
 
 TrendLayout trendLayout(const Object& o, double w, double h, bool cursors) {
     TrendLayout l;
-    const bool pilotable = trendFlagProp(o, "pilotable", false);
+    // 1.13.1 : en mode historique (la courbe relit un fichier), Pilotable n'a rien a piloter : pas de barre.
+    const bool pilotable = trendFlagProp(o, "pilotable", false) && !trendHistoryMode(o);
+    l.pilotable = pilotable;
     const bool legend = trendFlagProp(o, "legend", true) && trendPenCount(o) > 0;
     // La legende en haut (et la barre d'une courbe pilotable), les graduations a gauche et en bas.
     const double top = legend || pilotable ? 24 : 8, left = 46, bottom = 20, right = 10;

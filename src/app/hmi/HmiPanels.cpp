@@ -2391,7 +2391,8 @@ const std::vector<KeyInfo>& keyInfos() {
         {"compare", "Comparer avec l'installation", PG::ValueType::Boolean, {}, "Les colonnes Installation et \xC3\x89" "cart."},
         {"exportSource", "Donn\xC3\xA9" "es export\xC3\xA9" "es", PG::ValueType::Enum, {},
          "Les alarmes en cours, l'historique des alarmes, les \xC3\xA9v\xC3\xA9nements, le journal syst\xC3\xA8me, les mesures "
-         "archiv\xC3\xA9" "es, les jeux d'une recette, ou le contenu d'un objet de la vue (courbe, tableau, graphique...)."},
+         "archiv\xC3\xA9" "es, les jeux d'une recette, le contenu d'un objet de la vue (courbe, tableau, graphique...), ou la "
+         "zone d'une courbe (zone:Courbe : les mesures entre ses deux curseurs)."},
         {"fileFormat", "Format du fichier", PG::ValueType::Enum, {"CSV", "Excel", "PDF"}, ""},
         {"fileName", "Nom du fichier", PG::ValueType::Text, {},
          "Texte \xC3\xA0 trous : alarmes_{SYS.Date}. Propos\xC3\xA9 dans le dossier exports du projet ; l'extension suit le format."},
@@ -3663,6 +3664,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                         || other.kind == hmi::Kind::VariableTable || other.kind == hmi::Kind::ProductionCounter
                         || other.kind == hmi::Kind::AlarmStats || other.kind == hmi::Kind::History)
                         p.enumValues.push_back("objet:" + other.name);
+                for (const auto& other : view.objects)   // 1.13.1 : la zone d'une courbe (entre ses deux curseurs)
+                    if (other.kind == hmi::Kind::Trend) p.enumValues.push_back("zone:" + other.name);
             } else if (prop.key == "tab" && o->kind == hmi::Kind::LoginMenuButton) {
                 // Lot 12 : les onglets du menu de connexion (celui qu'ouvre le clic).
                 p.type = PG::ValueType::Enum;

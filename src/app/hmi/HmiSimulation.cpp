@@ -1981,7 +1981,10 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         // 1.12.16 : une courbe pilotable - son bouton Pause / Continuer.
         // 1.13.1 : toute sa barre (Figer, Curseurs, Tout voir) et les boutons d'export de la zone ; sur la zone de trace,
         // un geste que le moteur suit (glisser deplace, un clic pose un curseur, tirer un curseur le deplace).
-        if (o->kind == hmi::Kind::Trend && runtime_ && o->flag("pilotable", false)) {
+        // 1.13.1 (contre-verification) : pas en mode historique (hmi::trendPilotable : pas de barre) ; une courbe qui a
+        // des actions au pointeur (Clic, Double clic, Appui long) les garde - sans curseurs, sa zone de trace suit le
+        // chemin general (ses actions, comme en 1.13.0) ; ses curseurs montres, elle sert a la mesure.
+        if (o->kind == hmi::Kind::Trend && runtime_ && hmi::trendPilotable(*o)) {
             const auto* st = runtime_->trendState(layers_[layer].view.id, id);
             const bool cursors = st && st->cursors();
             if (const std::string part = hmi::trendHit(*o, box.w, box.h, lx, ly, cursors); !part.empty()) {
@@ -1989,7 +1992,8 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 partClicked->emit(id, part);
                 return;
             }
-            if (hmi::trendLayout(*o, box.w, box.h, cursors).plot.contains(lx, ly)) {
+            const bool measuring = cursors || (st && (st->cursorA || st->cursorB));
+            if ((measuring || !hmi::trendKeepsClick(*o)) && hmi::trendLayout(*o, box.w, box.h, cursors).plot.contains(lx, ly)) {
                 if (runtime_->focusedObject() != kNoId) clickedAway->emit(id);
                 trendDrag_ = id;
                 trendDragLayer_ = layer;
@@ -2311,7 +2315,7 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                     if (!o->flag("visible", true) || !o->box().contains(x, y) || hmi::clippedAt(layers_[li].view, *o, x, y)) continue;
                     // 1.13.1 : sur une courbe pilotable, la molette zoome le temps autour de la souris, Maj+molette les
                     // valeurs ; Ctrl+molette reste le zoom de la vue.
-                    if (o->kind == hmi::Kind::Trend && o->flag("pilotable", false) && !w->mods.ctrl) {
+                    if (o->kind == hmi::Kind::Trend && hmi::trendPilotable(*o) && !w->mods.ctrl) {   // pas en historique
                         const double notches = std::clamp(static_cast<double>(w->dy != 0 ? w->dy : w->dx), -4.0, 4.0);
                         const double tlx = x - o->box().x, tly = y - o->box().y;
                         if (notches != 0)
@@ -5522,8 +5526,10 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
             const auto pens = hmi::roles::splitList(o->text("variables"));
             items.push_back(ui::cmd::heading(o->name, std::to_string(pens.size()) + (pens.size() > 1 ? " plumes" : " plume")));
             const bool paused = runtime_.trendPausedAt(view, obj).has_value();
-            const bool pil = o->flag("pilotable", false);
-            const std::string notPil = "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)";
+            // 1.13.1 (contre-verification) : en mode historique, rien a piloter (la courbe relit un fichier).
+            const bool pil = hmi::trendPilotable(*o);
+            const std::string notPil = o->flag("pilotable", false) ? "en mode historique : rien \xC3\xA0 piloter"
+                                                                   : "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)";
             const std::string ids = std::to_string(view) + ":" + std::to_string(obj);
             add(entry(paused ? "Continuer" : "Pause", pil, notPil), "pause:" + ids);
             // 1.13.1 : figer (l'acquisition), les curseurs, tout voir, l'export de la zone entre les curseurs.

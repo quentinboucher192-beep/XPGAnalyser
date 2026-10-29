@@ -5960,8 +5960,8 @@ void Runtime::addTrendMarker(std::string variable, std::string text, bool forced
 
 bool Runtime::setTrendPaused(Id view, Id object, bool paused) {
     const View* v = viewOf(view);
-    const Object* o = v ? v->object(object) : nullptr;
-    if (!o || o->kind != Kind::Trend || !o->flag("pilotable", false)) return false;
+    const Object* o = pilotableTrend(v, object);   // 1.13.1 : pas en mode historique
+    if (!o) return false;
     const std::string key = trendKeyOf(view, object);
     if (paused) {
         if (!trendPaused_.count(key)) trendPaused_[key] = now_;
@@ -5979,13 +5979,14 @@ std::string Runtime::trendKeyOf(Id view, Id object) const {
     return std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view);
 }
 
-namespace {
-// Une courbe pilotable de la vue (nulle : pas une courbe, ou pas pilotable).
-const Object* pilotableTrend(const View* v, Id object) {
+// Une courbe pilotable de la vue (nulle : pas une courbe, pas pilotable, ou - 1.13.1, la contre-verification - en mode
+// historique : elle relit un fichier, ni pause ni gel ni curseurs ni zoom ; son mode tel que l'ecran le montre).
+const Object* Runtime::pilotableTrend(const View* v, Id object) const {
     const Object* o = v ? v->object(object) : nullptr;
-    return o && o->kind == Kind::Trend && o->flag("pilotable", false) ? o : nullptr;
+    if (!o || o->kind != Kind::Trend || !o->flag("pilotable", false)) return nullptr;
+    if (trimText(shownText(v->id, *o, "mode", "temps r\xC3\xA9" "el")).rfind("historique", 0) == 0) return nullptr;
+    return o;
 }
-} // namespace
 
 bool Runtime::setTrendFrozen(Id view, Id object, bool frozen) {
     const View* v = viewOf(view);
@@ -6127,7 +6128,7 @@ bool Runtime::exportTrendZone(Id view, Id object, std::string_view format, doubl
 
 // La barre et les gestes d'une courbe pilotable : x, y dans l'objet (pixels de la vue).
 void Runtime::trendObjectPart(const View& v, const Object& raw, std::string_view part, double now) {
-    if (!raw.flag("pilotable", false)) return;
+    if (!pilotableTrend(&v, raw.id)) return;   // 1.13.1 : ni pas pilotable, ni en mode historique
     if (part == "figer" || part == "curseurs" || part == "toutvoir") {
         GestureGuard gesture(*this, where(v, &raw), "Clic sur");
         const std::string key = trendKeyOf(v.id, raw.id);
@@ -6321,13 +6322,18 @@ void Runtime::sampleTrends(double now) {
             // selon leurs formules (avant : les valeurs fixes).
             Object o = so;
             evaluateProps(id, o);
+            const std::string key = std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id);   // 1.12.3 : par jeu d'arguments
             const std::string mode = o.text("mode", "temps r\xC3\xA9" "el");
-            if (mode.rfind("historique", 0) == 0) continue;
+            if (trimText(mode).rfind("historique", 0) == 0) {
+                // 1.13.1 (contre-verification) : passee en historique, rien a piloter - ni gel, ni pause, ni zoom ne restent.
+                trendStates_.erase(key);
+                trendPaused_.erase(key);
+                continue;
+            }
             // 1.12.6 (lot C) : le decoupeur unique - une plume M['a;b'] ou $A;B$ reste entiere.
             std::vector<std::string> pens;
             for (auto& pen : roles::splitList(o.text("variables")))
                 if (!pen.empty()) pens.push_back(std::move(pen));
-            const std::string key = std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id);   // 1.12.3 : par jeu d'arguments
             auto& series = trends_[key];
             bool same = series.size() == pens.size();
             for (std::size_t i = 0; same && i < pens.size(); ++i) same = series[i].expression == pens[i];

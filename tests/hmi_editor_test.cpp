@@ -33976,6 +33976,101 @@ void courbesEnMarche1131() {
     }
 }
 
+// 1.13.1 (contre-verification du lot K2) : une courbe pilotable qui a une action Clic la garde (sans curseurs, un clic
+// sur la zone de trace part vers ses actions, comme en 1.13.0) ; ses curseurs montres, la zone de trace sert a la mesure.
+// En mode historique : ni barre, ni molette prise (la molette reste au panneau, a la vue).
+void courbeActionsHistorique1131() {
+    std::printf("== 1.13.1 (contre-v\xC3\xA9rification) : la courbe pilotable garde ses actions de clic ; en historique, pas de barre ==\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    for (const auto& [name, type, initial] : {std::tuple<const char*, const char*, const char*>{"Niveau", "REAL", "42"}, {"Clics", "INT", "0"}}) {
+        Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = type;
+        var.initial = initial;
+        p.programs.variables.push_back(var);
+    }
+    View v = makeView(p, "Vue_Courbe");
+    v.width = 1000;
+    v.height = 900;
+    const Id trend = edit::add(p, v, Kind::Trend, 100, 100);
+    const Id histo = edit::add(p, v, Kind::Trend, 100, 500);
+    for (const Id id : {trend, histo}) {
+        auto* o = v.object(id);
+        o->setNumber("w", 600);
+        o->setNumber("h", 300);
+        o->set("variables", "Niveau");
+        o->setNumber("duration", 10);
+        o->setFlag("pilotable", true);
+    }
+    v.object(trend)->name = "Courbe";
+    v.object(histo)->name = "Archive";
+    v.object(histo)->set("mode", "historique");
+    {
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = Operation::Increment;
+        a.target = "Clics";
+        v.object(trend)->actions.push_back(a);
+    }
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    app::HmiSimulationHost host;
+    app::HmiSimulationPane pane("sim1131b", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    for (double t = 0; t <= 3.01; t += 0.1) paintAt(t);
+    auto& rt = pane.runtime();
+    const Id view = p.views[0].id;
+    const auto clicks = [&] {
+        const auto* x = rt.variable("Clics");
+        return x ? formatValue(*x) : std::string("?");
+    };
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+    const auto click = [&](gfx::Point at) {
+        pane.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+    };
+    gfx::Rect plot{}, bCur{};
+    check(pane.canvas().partRect("Courbe", "trace", plot) && pane.canvas().partRect("Courbe", "curseurs", bCur), "la courbe : sa barre, sa zone de trace");
+    // Sans curseurs : le clic sur la zone de trace part vers l'action Clic (Clics + 1), aucun curseur ne se pose.
+    click(centre(plot));
+    paintAt(3.1);
+    const auto* st = rt.trendState(view, trend);
+    same_text(clicks(), "1", "un clic sur la zone de trace : l'action Clic de la courbe part (avant : un curseur, pas d'action)");
+    check(!st || !st->cursorA, "... et ne pose pas de curseur");
+    // Les boutons de la barre restent a la barre (pas d'action Clic).
+    click(centre(bCur));
+    paintAt(3.2);
+    st = rt.trendState(view, trend);
+    check(st && st->cursors() && clicks() == "1", "le bouton Curseurs : les curseurs, sans l'action Clic");
+    // Curseurs montres : la zone de trace mesure (un clic deplace le curseur le plus proche), l'action attend.
+    const double before = st ? *st->cursorA : 0;
+    click({plot.x + plot.w * 0.1f, plot.y + plot.h * 0.5f});
+    paintAt(3.3);
+    check(st && *st->cursorA < before - 0.5 && clicks() == "1", "curseurs montr\xC3\xA9s : un clic d\xC3\xA9place A, l'action Clic ne part pas");
+    // Curseurs retires : le clic repart vers l'action.
+    click(centre(bCur));
+    click(centre(plot));
+    paintAt(3.4);
+    same_text(clicks(), "2", "curseurs retir\xC3\xA9s : le clic repart vers l'action");
+    // La courbe historique : pas de barre, la molette ne la zoome pas.
+    gfx::Rect none{}, archive{};
+    check(!pane.canvas().partRect("Archive", "figer", none) && !pane.canvas().partRect("Archive", "pause", none),
+          "historique : ni Pause, ni Figer, ni Curseurs, ni Tout voir dessin\xC3\xA9s");
+    check(pane.canvas().objectRect("Archive", archive), "la courbe historique est dessin\xC3\xA9" "e");
+    pane.canvas().dispatch(ui::MouseWheel{centre(archive), 0.f, 2.f, {}});
+    click(centre(archive));
+    check(!rt.trendState(view, histo), "historique : la molette et le clic ne la zooment pas, n'y posent rien");
+}
+
 // ---- 1.12.16 (T2) : les sous-onglets Dessin | Constantes | Fonctions d'une vue, d'une popup ----
 // 1.12.16 (« sur les courbes ... une option 'Pilotable' dans Proprietes / pouvoir ajouter une condition dynamique pour
 // afficher/cacher une plume ») : la case Pilotable de l'inspecteur, la case « Visible si » d'une plume dans Contenu.
@@ -38709,6 +38804,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
         courbes11216();
         courbesEnMarche1131();
+        courbeActionsHistorique1131();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -39259,6 +39355,7 @@ int main(int argc, char** argv) {
     vueOnglets11216();                      // 1.12.16 (T2) : les sous-onglets Constantes et Fonctions d'une vue
     courbes11216();                         // 1.12.16 : Pilotable, Visible si par plume
     courbesEnMarche1131();                  // 1.13.1 : la courbe en marche (figer, zoom, curseurs, export de la zone)
+    courbeActionsHistorique1131();          // 1.13.1 : la courbe garde ses actions de clic ; en historique, pas de barre
     dupliquerElements11216();               // 1.12.16 : Dupliquer... une plume, une ligne, une action
     assistVue11216();                       // 1.12.16 (T1) : l'aide a la saisie des constantes et fonctions d'une vue
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
