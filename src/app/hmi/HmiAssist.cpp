@@ -24,6 +24,8 @@
 #include "../../ui/widgets/ColorPalette.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "../../hmi/HmiNames.hpp"          // 1.13.0 (lot J8) : Gaz. - les items d'un espace de noms
+#include "../../hmi/HmiDuplicate.hpp"      // 1.13.1 : les reperes deja employes dans la vue (et ce qui les suit)
+#include "../../hmi/HmiMarkers.hpp"        // 1.13.1 : les reperes $...$, transparents pour l'aide
 #include "HmiFunctionPicker.hpp"                // 1.12.16 : Choisir une fonction...
 
 #include <algorithm>
@@ -106,13 +108,42 @@ std::size_t pathStart(std::string_view text, std::size_t end) {
     return i;
 }
 
-// 1.10.2 (chantier A, demande de D) : le mot en cours suit-il un repere de
-// Dupliquer ($Vanne$.F0, $Vanne$[1].F0, $Vanne$.) ou est-il dedans ($Van) ?
-// Un '$' colle au chemin qui finit au curseur, ou dans le mot lui-meme.
-bool afterMarker(std::string_view before, std::string_view prefix) {
-    if (prefix.find('$') != std::string_view::npos) return true;
-    const std::size_t start = pathStart(before, before.size());
-    return start > 0 && before[start - 1] == '$';
+// 1.13.1 : LES REPERES $...$ SONT TRANSPARENTS POUR L'AIDE, COMME POUR LE CALCUL (HmiMarkers.hpp). Depuis la
+// 1.11, un repere entoure un morceau d'expression ($V[1].Ouv$, $V[0]$.Nom, $Cuve$.IN_Percent dans un symbole) ;
+// l'aide, elle, en etait restee a la 1.10.2 (un repere n'etait qu'un nom a remplir par Dupliquer) : rien n'etait
+// propose dans un repere ni apres lui ("quand je mets des $$ les aides a la saisie ne fonctionnent plus dans les
+// balises", le 29/10). Elle lit maintenant le texte sans les $ des reperes - fermes, et le dernier ouvert (celui
+// ou l'on tape) : dans $V[0. ou apres $V[0]$., les membres de V[0] ; dans $Van, les noms (le parametre Vanne d'un
+// symbole) ; hors des reperes, comme sans $. Un repere qui n'est pas un chemin connu ($Vanne$. quand Vanne n'est
+// ni une variable ni un parametre) n'a pas de membres a proposer : le cas de D (=$Vanne$.F0 devenait
+// =$Vanne$.Commands_TOR16_I4_F0 a Entree) reste regle - seul ce qui suit deja ce repere dans la vue est propose.
+struct Unmarked {
+    std::string text;              // le texte qui precede le mot, sans les $ de ses reperes
+    bool        opening{false};    // le mot suit le $ d'un repere ouvert ($Van|) : les reperes de la vue se proposent aussi
+    bool        glued{false};      // le texte finit par le $ qui ferme un repere ($Vanne$|) : rien ne s'y colle
+    std::string closed;            // "$Vanne$." : le repere ferme juste avant le point (Vanne) ; vide sinon
+};
+Unmarked unmarked(std::string_view before, bool templateText) {
+    Unmarked u;
+    if (before.find('$') == std::string_view::npos) {
+        u.text = std::string(before);
+        return u;
+    }
+    const auto mode = templateText ? hmi::markers::Mode::Text : hmi::markers::Mode::Expression;
+    std::vector<bool> drop(before.size(), false);
+    for (const auto& span : hmi::markers::find(before, mode)) {
+        drop[span.at] = true;
+        drop[span.end() - 1] = true;
+        if (span.end() == before.size()) u.glued = true;
+        if (span.end() + 1 == before.size() && before.back() == '.') u.closed = std::string(span.content(before));
+    }
+    const auto lone = hmi::markers::lone(before, mode);
+    for (const auto at : lone) drop[at] = true;
+    u.opening = !lone.empty() && lone.back() + 1 == before.size();
+    u.text.reserve(before.size());
+    for (std::size_t i = 0; i < before.size(); ++i)
+        if (!drop[i]) u.text += before[i];
+    return u;
 }
 
 // "Armoires[0].ana" -> {"Armoires", indexe}, {"ana", non}
@@ -1898,13 +1929,14 @@ bool templateItems(std::string_view before, const std::string& needle, const std
     return true;
 }
 
-static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Project* plc, std::string_view before,
+static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Project* plc, std::string_view marked,
                                       std::string_view prefix, bool code, bool templateText, hmi::Id op) {
     std::vector<Item> out;
-    // 1.10.2 (chantier A, demande de D) : un repere ($Vanne$) n'est pas un nom.
-    // Rien n'est propose - donc rien n'est remplace a Entree - apres lui ni
-    // dedans : $Vanne$.F0 devenait $Vanne$.Commands_TOR16_I4_F0.
-    if (afterMarker(before, prefix)) return out;
+    // 1.13.1 : les reperes $...$ sont transparents (unmarked) ; rien ne se colle a un repere ferme ($Vanne$Fo).
+    if (prefix.find('$') != std::string_view::npos) return out;
+    const Unmarked um = unmarked(marked, templateText);
+    if (um.glued) return out;
+    const std::string_view before = um.text;
     const auto where = locate(before, templateText);
     const auto needle = lower(prefix);
     if (!code) op = hmi::kNoId;
@@ -2383,6 +2415,28 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     it.chain = true;
                     push(std::move(it));
                 }
+            // 1.13.1 : les scripts generaux qui ont des constantes publiques - les constantes globales (Reglages.Seuil),
+            // dans un champ comme dans un script ; le point pose, la liste se rouvre sur elles (une variable IHM du meme
+            // nom passe avant : c'est elle qu'on lit).
+            if (!needle.empty())
+                for (const auto& sc : hp.programs.scripts) {
+                    const std::string scName = hmi::fullName(sc);
+                    if (hp.variable(scName)) continue;
+                    std::size_t constants = 0;
+                    for (const auto& d : sc.decls)
+                        if (d.kind == hmi::DeclKind::Constant && d.visibility == hmi::Visibility::Public) ++constants;
+                    const int r = constants ? matchRank(scName, needle) : -1;
+                    if (r < 0) continue;
+                    Item it;
+                    it.text = scName;
+                    it.detail = "script g\xC3\xA9n\xC3\xA9ral" + std::string(kDot) + std::to_string(constants)
+                              + (constants > 1 ? " constantes publiques : " : " constante publique : ") + scName + ".<constante>";
+                    it.kind = Kind::Script;
+                    it.rank = r * 2 + 1;
+                    it.insert = scName + ".";
+                    it.chain = true;
+                    push(std::move(it));
+                }
             if (full)
                 for (const auto& f : functions()) {
                     const int r = matchRank(f.name, needle);
@@ -2507,6 +2561,57 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 }
             }
             break;
+        }
+    }
+
+    // 1.13.1 : dans un repere ouvert ($Po|), les reperes deja employes dans la vue editee (Pompe : on garde le meme
+    // nom d'un objet a l'autre) ; apres un repere ferme et son point ($Pompe$.|), ce qui le suit deja dans la vue
+    // (OUV, DEF) - un repere qui n'est pas un chemin connu n'a que ceux-la.
+    if ((um.opening || !um.closed.empty()) && (where.context == Context::Code || where.context == Context::Member
+                                              || where.context == Context::Placeholder)) {
+        // Juste apres le $ qui ouvre un repere, rien encore de tape : les reperes de la vue seuls (pas toute la liste).
+        if (um.opening && prefix.empty() && where.context != Context::Member) out.clear();
+        if (const hmi::View* av = hmiparams::editedView(hp)) {
+            std::vector<std::pair<std::string, std::size_t>> seen;   // le nom, ses emplois
+            std::vector<std::string> follow;                          // ce qui suit le repere ferme
+            for (const auto& o : av->objects)
+                for (const auto& m : hmi::dup::ownMarkers(o)) {
+                    const auto at = std::find_if(seen.begin(), seen.end(), [&](const auto& x) { return iequals(x.first, m.name); });
+                    if (at == seen.end()) seen.emplace_back(m.name, m.uses);
+                    else at->second += m.uses;
+                    if (!um.closed.empty() && iequals(m.name, um.closed))
+                        for (const auto& after : m.members) {
+                            const std::string first = after.substr(0, after.find_first_of(".["));
+                            if (!first.empty() && std::none_of(follow.begin(), follow.end(), [&](const std::string& f) { return iequals(f, first); }))
+                                follow.push_back(first);
+                        }
+                }
+            const auto offered = [&](const std::string& t) {
+                return std::any_of(out.begin(), out.end(), [&](const Item& it) { return iequals(it.text, t); });
+            };
+            if (um.opening && where.context != Context::Member)
+                for (const auto& [name, uses] : seen) {
+                    const int r = matchRank(name, needle);
+                    if (r < 0 || iequals(name, prefix) || offered(name)) continue;
+                    Item it;
+                    it.text = name;
+                    it.detail = "rep\xC3\xA8re d\xC3\xA9j\xC3\xA0 employ\xC3\xA9 dans " + av->name + kDot + std::to_string(uses)
+                              + (uses > 1 ? " emplois" : " emploi");
+                    it.kind = Kind::Member;
+                    it.rank = r * 2 - 10;
+                    push(std::move(it));
+                }
+            if (where.context == Context::Member)
+                for (const auto& f : follow) {
+                    const int r = matchRank(f, needle);
+                    if (r < 0 || offered(f)) continue;
+                    Item it;
+                    it.text = f;
+                    it.detail = "d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit apr\xC3\xA8s $" + um.closed + "$ dans " + av->name;
+                    it.kind = Kind::Member;
+                    it.rank = r;
+                    push(std::move(it));
+                }
         }
     }
 
@@ -2932,10 +3037,11 @@ std::vector<Item> suggest(const hmi::Project& hp, const domain::Project* plc, st
                           std::string_view prefix, bool code, bool templateText, hmi::Id op) {
     auto items = suggestItems(hp, plc, before, prefix, code, templateText, op);
     if (items.empty()) return items;
-    const auto where = locate(before, templateText);
+    const std::string bare = unmarked(before, templateText).text;   // 1.13.1 : les reperes, transparents
+    const auto where = locate(bare, templateText);
     for (auto& it : items) classify(it, hp, plc, where);
     // 1.12.14 : le type attendu - ce qui convient, puis ce qui y mene (a toute profondeur).
-    if (code && (where.context == Context::Code || where.context == Context::Member)) rankByExpected(hp, items, before, where, op);
+    if (code && (where.context == Context::Code || where.context == Context::Member)) rankByExpected(hp, items, bare, where, op);
     return items;
 }
 
@@ -3640,7 +3746,7 @@ void attach(ui::MultiLineText& editor, Sources src) {
                       out);
         tAfterCaret = {};
         // 1.12.16 : la derniere ligne, "Choisir une fonction..." (du code, pas apres un point).
-        if (functionpicker::available() && locate(std::string_view(text).substr(0, start), false).context == Context::Code) {
+        if (functionpicker::available() && locate(unmarked(std::string_view(text).substr(0, start), false).text, false).context == Context::Code) {
             ui::MultiLineText::Completion c;
             c.text = functionpicker::kChoose;
             c.detail = "Ctrl+I";
@@ -3684,7 +3790,8 @@ ui::InputText::Assist fieldAssist(Sources src, bool templateText) {
         while (start > 0 && identChar(before[start - 1])) --start;
         const auto prefix = before.substr(start);
         const auto head = before.substr(0, start);
-        const auto where = locate(head, templateText);
+        const Unmarked um = unmarked(head, templateText);   // 1.13.1 : les reperes $...$, transparents
+        const auto where = locate(um.text, templateText);
         // Une liste des la premiere lettre (un champ est court), apres un point
         // (les membres), ou dans une accolade ouverte ; 1.10 (K2) : apres "T_MODE#".
         const bool literal = head.size() > 1 && head.back() == '#' && identChar(head[head.size() - 2]);
@@ -3701,7 +3808,9 @@ ui::InputText::Assist fieldAssist(Sources src, bool templateText) {
             from = std::min(from, start);
             out.push_back(std::move(a));
         };
-        if (prefix.empty() && !literal && where.context != Context::Member && where.context != Context::Placeholder) {
+        // 1.13.1 : un $ qui ouvre un repere ouvre aussi la liste (ses reperes, ce qu'on peut y mettre).
+        if (prefix.empty() && !literal && where.context != Context::Member && where.context != Context::Placeholder
+            && !(um.opening && !head.empty() && head.back() == '$')) {
             from = start;
             action();
             return;

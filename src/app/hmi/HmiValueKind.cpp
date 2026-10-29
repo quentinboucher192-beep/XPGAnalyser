@@ -7,7 +7,9 @@
 #include "HmiAssist.hpp"
 #include "HmiPanels.hpp"
 #include "../../domain/ProjectModel.hpp"
+#include "../../hmi/HmiCalc.hpp"          // 1.13.1 : les constantes globales (Reglages.Seuil)
 #include "../../hmi/HmiDuplicate.hpp"
+#include "../../hmi/HmiUnits.hpp"         // 1.13.1 : les unites des constantes
 #include "../../hmi/HmiEnums.hpp"
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiExprCheck.hpp"
@@ -119,6 +121,17 @@ bool knownRoot(const Env& env, std::string_view root) {
     if (env.project) {
         if (env.project->variable(root) || env.project->functionByName(root) || env.project->hmiTypeByName(root)) return true;
         if (hmi::pub::viewNamed(*env.project, root)) return true;
+        // 1.13.1 : une constante globale (Reglages.Seuil : la constante publique d'un script general ; le chemin entier
+        // est juge par exprcheck), un espace de noms (Gaz.T_Vanne) - comme Compiler et Generer. Avant, la case fx disait
+        // "Reglages n'existe pas" (le carre rouge) alors que la simulation la lisait.
+        if (env.project->generalScript(root) || env.project->isNamespace(root)) return true;
+    }
+    if (env.view) {
+        // 1.13.1 : une constante ou une fonction de la vue elle-meme (Seuil_Haut, sans le nom de la vue : 1.12.16).
+        if (hmi::viewmembers::constant(*env.view, root) || !hmi::viewmembers::functions(*env.view, root).empty()) return true;
+        // ... et dans une popup d'un symbole, les parametres du symbole (Vanne.OUV dans Pop_Vanne de S_Vanne).
+        if (env.project)
+            if (const hmi::View* owner = hmi::popupOwner(*env.project, *env.view); owner && owner->param(root)) return true;
     }
     if (isObjectOfView(env, root)) return true;
     if (!env.plc) return true;   // sans automate : un autre nom est peut-etre a lui (comme hmiExpressionError)
@@ -326,6 +339,34 @@ ui::PropertyGrid::Legend legendOf(Style s) {
 }
 
 // ---------------------------------------------------------------- les chemins ---
+// 1.13.1 : LA CONSTANTE D'UN CHEMIN - une constante de la vue de la case (Seuil_Haut, Seuil_Haut.Max : 1.12.16) ou une
+// constante globale (Reglages.Seuil, Reglages.Four.Temp, Reglages.Table[1] : la constante publique d'un script general,
+// 1.12.7) ; `rest` : ce qui suit son nom (".Temp", "[1]") ; `owner` : la vue ou le script qui la porte. Nulle : pas une
+// constante (une variable IHM du meme nom passe avant, comme dans le moteur).
+const hmi::Declaration* constantOfPath(const Env& env, std::string_view p, std::string_view& rest, std::string* owner = nullptr) {
+    if (!env.project) return nullptr;
+    const auto ident = [](char ch) { return std::isalnum(uc(ch)) != 0 || ch == '_'; };
+    std::size_t n = 0;
+    while (n < p.size() && ident(p[n])) ++n;
+    const std::string_view root = p.substr(0, n);
+    if (root.empty() || env.project->variable(root)) return nullptr;
+    if (env.view)
+        if (const hmi::Declaration* c = hmi::viewmembers::constant(*env.view, root)) {
+            rest = p.substr(n);
+            if (owner) *owner = env.view->name;
+            return c;
+        }
+    if (n >= p.size() || p[n] != '.' || !env.project->generalScript(root)) return nullptr;
+    std::size_t m = n + 1;
+    while (m < p.size() && ident(p[m])) ++m;
+    const hmi::Script* script = nullptr;
+    const hmi::Declaration* c = hmi::calc::qualified(*env.project, p.substr(0, m), &script);
+    if (!c) return nullptr;
+    rest = p.substr(m);
+    if (owner && script) *owner = script->name;
+    return c;
+}
+
 bool pathInfo(const Env& env, std::string_view path, Style& zone, std::string& type, std::string* detail) {
     const std::string p = trimmed(path);
     const std::string root = rootOf(p);
@@ -374,6 +415,21 @@ bool pathInfo(const Env& env, std::string_view path, Style& zone, std::string& t
                 if (!v->description.empty()) *detail += " \xC2\xB7 " + v->description;
             }
             if (type.empty()) (void)describe();
+            return true;
+        }
+        // 1.13.1 : une constante globale (Reglages.Seuil) ou de la vue (Seuil_Haut) - son type le long du chemin, sa valeur.
+        std::string_view rest;
+        std::string owner;
+        if (const hmi::Declaration* c = constantOfPath(env, p, rest, &owner)) {
+            const bool global = !env.view || !hmi::viewmembers::constant(*env.view, root);
+            zone = global ? Style::Hmi : Style::Local;
+            type = hmi::viewmembers::typeAlong(*env.project, c->type, rest);
+            if (detail) {
+                *detail = std::string(global ? "constante de " : "constante de la vue ") + owner;
+                if (!c->computed && !c->value.empty() && rest.empty()) *detail += " = " + c->value;
+                if (c->computed) *detail += " \xC2\xB7 calcul\xC3\xA9" "e au d\xC3\xA9marrage";
+                if (const std::string u = hmi::units::unitAlong(*env.project, c->type, c->unit, rest); !u.empty()) *detail += " [" + u + "]";
+            }
             return true;
         }
         if (hmi::pub::viewNamed(*env.project, root)) {
@@ -695,7 +751,9 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
             }
             r.style = markers ? Style::Markers : z;
             if (markers) addSource(z);
-            r.info = zoneLong(z) + " : " + clean + (type.empty() ? "" : " \xC2\xB7 " + type) + (detail.empty() ? "" : " \xC2\xB7 " + detail);
+            std::string_view constRest;
+            const bool constant = constantOfPath(env, clean, constRest) != nullptr;   // 1.13.1 : "Constante : Reglages.Seuil"
+            r.info = (constant ? std::string("Constante") : zoneLong(z)) + " : " + clean + (type.empty() ? "" : " \xC2\xB7 " + type) + (detail.empty() ? "" : " \xC2\xB7 " + detail);
             return r;
         }
     }

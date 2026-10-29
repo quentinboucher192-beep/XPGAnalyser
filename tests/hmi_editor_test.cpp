@@ -20055,9 +20055,12 @@ void aideSaisie1102() {
         const auto m3 = as::suggest(hp, nullptr, "x := $Armoire$[1].", "F0");
         check(m1.empty() && m2.empty() && m3.empty(),
               "apr\xC3\xA8s un rep\xC3\xA8re ($Vanne$.F0, $Vanne$., $Armoire$[1].F0) : rien (" + names(m1) + names(m2) + names(m3) + ")");
+        // 1.13.1 : dans un repere ouvert ($Van), ce qu'on peut y mettre se propose (le repere entoure un morceau
+        // d'expression depuis la 1.11) ; colle a un repere ferme ($Vanne$|), rien.
         const auto m4 = as::suggest(hp, nullptr, "x := $", "Van");
         const auto m5 = as::suggest(hp, nullptr, "x := $Vanne$", "");
-        check(m4.empty() && m5.empty(), "dans un rep\xC3\xA8re ($Van, $Vanne$) : rien (" + names(m4) + names(m5) + ")");
+        check(has(m4, "Vanne_1") != nullptr && m5.empty(),
+              "dans un rep\xC3\xA8re ouvert ($Van) : Vanne_1 ; coll\xC3\xA9 \xC3\xA0 $Vanne$ : rien (" + names(m4) + " / " + names(m5) + ")");
         const auto m6 = as::suggest(hp, nullptr, "Alarme {$Vanne$.", "F0", false, true);
         check(m6.empty(), "un texte \xC3\xA0 trous ({$Vanne$.F0) : rien (" + names(m6) + ")");
         const auto m7 = as::suggest(hp, nullptr, "x := $Vanne$.F0 AND ", "Van", false);
@@ -20067,8 +20070,9 @@ void aideSaisie1102() {
         std::vector<ui::InputText::Suggestion> out;
         std::size_t from = 0;
         a("$Vanne$.F0", from, out);
+        check(out.empty(), "un champ : $Vanne$.F0 ne propose rien (Vanne n'est pas une variable)");
         a("$Van", from, out);
-        check(out.empty(), "un champ : $Vanne$.F0 et $Van ne proposent rien");
+        check(!out.empty() && out.front().text == "Vanne_1", "un champ : $Van propose Vanne_1 (1.13.1 : dans un rep\xC3\xA8re aussi)");
         auto rule = as::gridAssist(as::sourcesFor(doc));
         using PG = ui::PropertyGrid;
         PG::Property px;
@@ -38523,7 +38527,208 @@ void relectureF1_113() {
           "F1-2 : un script de vue, la Saisie avertit 'script de vue'" + all(vpane.diagnostics()));
 }
 
+// ---- 1.13.1 (lot K1) : LES DEUX BUGS DES FORMULES ----
+// La demande du 29/10 : "dans les formules des proprietes si je mets des constantes globales ca met erreur,
+// ensuite quand je mets des $$ les aides a la saisie ne fonctionne plus dans les balises".
+namespace k1 {
+Declaration constante(std::string name, std::string type, std::string value, std::string unit = {}) {
+    Declaration d;
+    d.kind = DeclKind::Constant;
+    d.name = std::move(name);
+    d.type = std::move(type);
+    d.value = std::move(value);
+    d.unit = std::move(unit);
+    d.visibility = Visibility::Public;
+    return d;
+}
+bool has(const std::vector<ui::InputText::Suggestion>& out, std::string_view text) {
+    return std::any_of(out.begin(), out.end(), [&](const auto& s) { return s.text == text; });
+}
+std::string names(const std::vector<ui::InputText::Suggestion>& out) {
+    std::string n;
+    for (const auto& s : out) n += (n.empty() ? "" : ", ") + s.text;
+    return n.empty() ? std::string("rien") : n;
+}
+} // namespace k1
+
+void formulesK1_1131() {
+    std::printf("1.13.1 (K1) : les constantes globales dans les formules, l'aide \xC3\xA0 la saisie dans les rep\xC3\xA8res $...$\n");
+    namespace as = app::assist;
+    namespace vk = app::valuekind;
+    using LS = ui::PropertyGrid::LegendStyle;
+    auto doc = std::make_shared<Document>();
+    Project& p = doc->project;
+    {
+        HmiType tf;
+        tf.id = p.allocate();
+        tf.name = "T_Four";
+        tf.members = {{"Temp", "REAL", "", ""}, {"Porte", "BOOL", "", ""}};
+        p.programs.types.push_back(tf);
+        HmiType tv;
+        tv.id = p.allocate();
+        tv.name = "T_Vanne";
+        tv.members = {{"OUV", "BOOL", "", ""}, {"Position", "REAL", "", ""}};
+        p.programs.types.push_back(tv);
+    }
+    p.programs.variables.push_back(Variable{p.allocate(), "Marche", "BOOL", "FALSE", {}});
+    p.programs.variables.push_back(Variable{p.allocate(), "V", "ARRAY[0..3] OF T_Vanne", "", {}});
+    p.programs.variables.push_back(Variable{p.allocate(), "Commands_TOR16_I4_F0", "BOOL", "FALSE", {}});
+    Script r;
+    r.id = p.allocate();
+    r.name = "Reglages";
+    r.lang = ScriptLang::ST;
+    r.event = "Appel";
+    r.decls = {k1::constante("Seuil", "INT", "5"),          k1::constante("Pression", "REAL", "2.5", "bar"),
+               k1::constante("Actif", "BOOL", "TRUE"),       k1::constante("Libelle", "STRING", "'Four A'"),
+               k1::constante("Table", "ARRAY[0..2] OF INT", "[10, 20, 30]"),
+               k1::constante("Four", "T_Four", "(Temp := 20.0, Porte := TRUE)")};
+    p.programs.scripts.push_back(r);
+    View v = makeView(p, "Vue_Four");
+    v.constants.push_back(k1::constante("Seuil_Vue", "REAL", "12.5"));   // 1.12.16 : une constante de la vue
+    const Id bloc = edit::add(p, v, Kind::Rectangle, 10, 10);
+    v.object(bloc)->name = "Bloc";
+    v.object(bloc)->set("fill", "$Pompe$.OUV");                          // un repere deja employe (et ce qui le suit)
+    const Id vueId = v.id;
+    p.views.push_back(v);
+    View pop = makeView(p, "Pop_Four");
+    pop.role = "popup";
+    const Id popId = pop.id;
+    p.views.push_back(pop);
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    sym.params = {{"Vanne", "", "", "T_Vanne", ParamMode::Reference}};
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    uniqueDeclarationIds(p);
+    const domain::Project plc;   // IHM Studio : un automate vide (aucun nom n'est a lui)
+    const std::set<std::string, std::less<>> plcNames;
+
+    // ---- BUG 1 : la case fx de l'inspecteur (son carre, sa raison), le controle de l'inspecteur, l'aide ----
+    const std::pair<const char*, const char*> formulas[] = {
+        {"Reglages.Seuil * 10", "NOMBRE"},    {"Reglages.Pression * 4.0", "NOMBRE"}, {"Reglages.Actif", "BOOL"},
+        {"Reglages.Libelle", "STRING"},       {"Reglages.Table[1]", "NOMBRE"},     {"Reglages.Four.Temp", "NOMBRE"},
+        {"NOT Reglages.Four.Porte", "BOOL"},  {"EN(Reglages.Pression, 'mbar')", "NOMBRE"}};
+    for (const Id where : {vueId, popId, symId}) {
+        const View* in = p.view(where);
+        const vk::Env env{&p, in, &plc};
+        for (const auto& [f, expected] : formulas) {
+            const auto res = vk::classify(env, f, true, expected);
+            check(!res.error(), std::string("le carr\xC3\xA9 de la case fx (") + in->name + ") : " + f + " - " + vk::summary(res) + " " + vk::firstProblem(res));
+            const std::string_view kind(expected);
+            const char* key = kind == "BOOL" ? "visible" : kind == "STRING" ? "text" : "x";   // la case du type attendu
+            const std::string said = app::hmiExpressionError(*in, key, f, &plc, &p, &plcNames);
+            check(said.empty(), std::string("le contr\xC3\xB4le de l'inspecteur (") + in->name + ") : " + f + " - " + said);
+        }
+        const auto one = vk::classify(env, "Reglages.Seuil", true, "NOMBRE");
+        check(!one.error() && one.type == "INT", std::string("Reglages.Seuil seule : un INT (") + in->name + ") - " + vk::summary(one));
+        const auto four = vk::classify(env, "Reglages.Four.Temp", true, "NOMBRE");
+        check(!four.error() && four.type == "REAL", std::string("Reglages.Four.Temp seule : un REAL (") + in->name + ") - " + vk::summary(four));
+        // Son type compte : un texte n'est pas un nombre ; une constante inconnue est dite.
+        check(vk::classify(env, "Reglages.Libelle", true, "NOMBRE").error(), std::string("Reglages.Libelle n'est pas un nombre (") + in->name + ")");
+        const auto unknown = vk::classify(env, "Reglages.Seul * 2", true, "NOMBRE");
+        check(unknown.error() && vk::firstProblem(unknown).find("Seul") != std::string::npos,
+              std::string("Reglages.Seul : inconnue, dite (") + in->name + ") - " + vk::firstProblem(unknown));
+    }
+    {
+        const vk::Env env{&p, p.view(vueId), &plc};
+        const auto c = vk::classify(env, "Seuil_Vue * 2", true, "NOMBRE");
+        check(!c.error(), "une constante de la vue sans son nom de vue (Seuil_Vue * 2) - " + vk::summary(c) + " " + vk::firstProblem(c));
+    }
+    // L'aide a la saisie : Reglages se propose, puis ses constantes publiques avec leur type.
+    app::hmiparams::setAssistView(vueId);
+    {
+        auto a = as::fieldAssist(as::sourcesFor(doc));
+        std::vector<ui::InputText::Suggestion> out, members;
+        std::size_t from = 0;
+        a("Regl", from, out);
+        check(k1::has(out, "Reglages"), "l'aide : Regl propose le script Reglages (" + k1::names(out) + ")");
+        a("Reglages.", from, members);
+        check(k1::has(members, "Seuil") && k1::has(members, "Pression") && k1::has(members, "Four"),
+              "l'aide : Reglages. propose ses constantes (" + k1::names(members) + ")");
+    }
+
+    // ---- BUG 2 : l'aide a la saisie dans les reperes $...$ ----
+    const auto suggestions = [&](std::string_view typed, bool templateText = false) {
+        auto a = as::fieldAssist(as::sourcesFor(doc), templateText);
+        std::vector<ui::InputText::Suggestion> out;
+        std::size_t from = 0;
+        a(typed, from, out);
+        return out;
+    };
+    // Dans une vue : un repere entoure un morceau d'expression - ce qu'on y tape se propose.
+    {
+        const auto inside = suggestions("$Mar");
+        check(k1::has(inside, "Marche"), "dans un rep\xC3\xA8re ouvert ($Mar) : Marche (" + k1::names(inside) + ")");
+        const auto element = suggestions("$V[0].");
+        check(k1::has(element, "OUV") && k1::has(element, "Position"), "dans un rep\xC3\xA8re ($V[0].) : les membres (" + k1::names(element) + ")");
+        const auto after = suggestions("$V[0]$.");
+        check(k1::has(after, "OUV") && k1::has(after, "Position"), "apr\xC3\xA8s un rep\xC3\xA8re ($V[0]$.) : les membres de V[0] (" + k1::names(after) + ")");
+        const auto partial = suggestions("$V[0]$.Pos");
+        check(k1::has(partial, "Position") && !k1::has(partial, "OUV"), "apr\xC3\xA8s un rep\xC3\xA8re ($V[0]$.Pos) : Position (" + k1::names(partial) + ")");
+        const auto rest = suggestions("NOT $V[0]$.OUV AND Mar");
+        check(k1::has(rest, "Marche"), "hors des rep\xC3\xA8res, la liste comme sans $ (" + k1::names(rest) + ")");
+        const auto glued = suggestions("$V[0]$Ma");
+        check(glued.empty(), "rien de coll\xC3\xA9 \xC3\xA0 un rep\xC3\xA8re ferm\xC3\xA9 ($V[0]$Ma) (" + k1::names(glued) + ")");
+        const auto constant = suggestions("$Reglages.Se");
+        check(k1::has(constant, "Seuil"), "dans un rep\xC3\xA8re : les constantes globales aussi ($Reglages.Se) (" + k1::names(constant) + ")");
+        // Le cas de D (1.10.2) : un repere qui n'est pas une variable ($Vanne$) - rien de la liste ne remplace F0.
+        const auto d = suggestions("$Vanne$.F0");
+        check(!k1::has(d, "Commands_TOR16_I4_F0"), "$Vanne$.F0 : Commands_TOR16_I4_F0 n'est pas propos\xC3\xA9 (" + k1::names(d) + ")");
+        // Les reperes deja employes dans la vue, et ce qui les suit.
+        const auto bare = suggestions("$");
+        check(k1::has(bare, "Pompe") && !k1::has(bare, "Marche"),
+              "juste apr\xC3\xA8s le $ : les rep\xC3\xA8res de la vue seuls, pas toute la liste (" + k1::names(bare) + ")");
+        const auto known = suggestions("$Po");
+        check(k1::has(known, "Pompe"), "dans un rep\xC3\xA8re ouvert ($Po) : le rep\xC3\xA8re Pompe d\xC3\xA9j\xC3\xA0 employ\xC3\xA9 (" + k1::names(known) + ")");
+        const auto follow = suggestions("$Pompe$.");
+        check(k1::has(follow, "OUV"), "apr\xC3\xA8s $Pompe$. : OUV, d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit apr\xC3\xA8s lui (" + k1::names(follow) + ")");
+        // Un texte a trous : {$V[0]$.} comme une expression.
+        const auto tpl = suggestions("Vanne {$V[0]$.", true);
+        check(k1::has(tpl, "OUV"), "un texte \xC3\xA0 trous ({$V[0]$.) : les membres (" + k1::names(tpl) + ")");
+        const auto tplOpen = suggestions("Vanne {$Mar", true);
+        check(k1::has(tplOpen, "Marche"), "un texte \xC3\xA0 trous ({$Mar) : Marche (" + k1::names(tplOpen) + ")");
+        // La grille : une case pilotee (=...) et une case tout expression.
+        auto rule = as::gridAssist(as::sourcesFor(doc));
+        using PG = ui::PropertyGrid;
+        PG::Property px;
+        px.name = "X";
+        px.type = PG::ValueType::Real;
+        px.commit = [](std::string_view) { return true; };
+        PG::Property pv = px;
+        pv.name = "Visibilit\xC3\xA9 (expression)";
+        pv.type = PG::ValueType::Text;
+        std::vector<ui::InputText::Suggestion> gx, gv;
+        std::size_t from = 0;
+        if (auto g = rule("", px)) g("=$V[1]$.", from, gx);
+        if (auto g = rule("", pv)) g("NOT $V[1]$.", from, gv);
+        check(k1::has(gx, "Position") && k1::has(gv, "OUV"), "la grille : =$V[1]$. et NOT $V[1]$. proposent les membres (" + k1::names(gx) + " / " + k1::names(gv) + ")");
+        // Un script : $V[0]$. dans le code.
+        const auto code = as::suggest(p, nullptr, "x := $V[0]$.", "", true);
+        check(std::any_of(code.begin(), code.end(), [](const as::Item& it) { return it.text == "OUV"; }), "un script : x := $V[0]$. propose les membres");
+    }
+    // Dans un symbole : ses parametres et leurs membres, dans le repere et apres lui.
+    app::hmiparams::setAssistView(symId);
+    {
+        const auto param = suggestions("$Van");
+        check(k1::has(param, "Vanne"), "un symbole ($Van) : le param\xC3\xA8tre Vanne (" + k1::names(param) + ")");
+        const auto members = suggestions("$Vanne$.");
+        check(k1::has(members, "OUV") && k1::has(members, "Position"), "un symbole ($Vanne$.) : les membres de T_Vanne (" + k1::names(members) + ")");
+        const auto open = suggestions("$Vanne.Po");
+        check(k1::has(open, "Position"), "un symbole ($Vanne.Po) : Position (" + k1::names(open) + ")");
+        const auto field = suggestions("$Vanne$.OUV AND $Van");
+        check(k1::has(field, "Vanne"), "un symbole, un second rep\xC3\xA8re ($Vanne$.OUV AND $Van) : Vanne (" + k1::names(field) + ")");
+    }
+    app::hmiparams::setAssistView(kNoId);
+}
+// ---- fin 1.13.1 (lot K1) ----
+
 int main(int argc, char** argv) {
+    // 1.13.1 (lot K1) : HMI_TEST_K1=1 - les deux bugs des formules, seuls.
+    if (const char* only = std::getenv("HMI_TEST_K1"); only && *only == '1') {
+        formulesK1_1131();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.0 (relecture F1) : HMI_TEST_RF1=1 - la relecture du lot F1 (WAIT_UNTIL a la Saisie, les fiches des natives), seule.
     if (const char* only = std::getenv("HMI_TEST_RF1"); only && *only == '1') {
         relectureF1_113();
@@ -39094,6 +39299,7 @@ int main(int argc, char** argv) {
     lotF3_113();                            // 1.13.0 (lot F3) : les defauts vus aux captures (unites, tests, aide F1)
     correctifsF2_113();                     // 1.13.0 (correctifs F2) : ce que les captures des objets et des espaces ont montre
     relectureF1_113();                      // 1.13.0 (relecture F1) : WAIT_UNTIL a la Saisie comme Compiler
+    formulesK1_1131();                      // 1.13.1 (lot K1) : constantes globales en formule, aide dans les reperes
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
