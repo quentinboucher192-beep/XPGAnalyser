@@ -3434,8 +3434,8 @@ void HmiVariablesPane::runMenu(int action) {
 // =============================================================================
 //  Types IHM
 // =============================================================================
-HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
-    : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
+HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id document)
+    : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)), document_(document), current_(document) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(TAdd, HmiGlyph::Plus, core::hasApi() ? "Nouveau type IHM : une structure (comme un DDT de l'automate), une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...), "
@@ -3482,13 +3482,16 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".typesPanel", "TYPES IHM");
-        auto table = std::make_unique<ui::TableView>(base + ".types");
+        auto table = std::make_unique<MemberTable>(base + ".types");   // 1.13.1 (lot K4) : son clic droit (Ouvrir dans un onglet...)
         table->setColumns({{"Nom", 150.f}, {"Membres", 80.f, 40.f, true, true, true, ui::Align::End}, {"Mots", 60.f, 40.f, true, true, true, ui::Align::End},
                            {"Utilis\xC3\xA9 par", 170.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
+        // 1.13.1 (lot K4) : le double-clic ouvre le type dans son onglet (F2 renomme, comme avant ; un dossier : son nom).
+        table->setDoubleClickEdits(false);
+        table->onContextMenu = [this](gfx::Point at) { openTypeMenu(at); };
         types_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*types_, {TDelete, TDuplicate, TAdd});   // 1.12.27 : Suppr, Ctrl+D, Inser
-        split->addPane(std::move(panel), 0.30f, 220.f);
+        split->addPane(std::move(panel), 0.27f, 200.f);
         // Lot 21 : les types ranges en dossiers ; le nom d'un type se change dans sa case.
         folders_ = std::make_unique<HmiFolderTable>(*types_, doc_, apply_);
         folders_->setItemEditing([](Id, std::size_t c) { return c == 0; },
@@ -3501,55 +3504,109 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                                  });
     }
     {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".membersPanel", "MEMBRES");
-        membersPanel_ = panel.get();                                        // 1.10 (chantier U)
-        auto table = std::make_unique<MemberTable>(base + ".members");     // 1.10 : Ctrl+C, le clic droit
-        table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
-                           {"Initiale", 90.f, 40.f, true, false},
-                           {"D\xC3\xA9" "calage", 110.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false},
-                           {"Visibilit\xC3\xA9", 90.f, 50.f, true, false}});   // 1.13.0 (J1b) : Public / Prive
-        table->setF2ClickedColumns({2});   // 1.13.0 (D3b) : un clic sur la case Unite d'un membre, puis F2 : son champ
-        table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
-        table->onCopy = [this] {
-            (void)copyMembers();
-            return true;
-        };
-        table->onContextMenu = [this](gfx::Point at) { openMemberMenu(at); };
-        table->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)pasteMembers(rq.text); });
-        // 1.13.0 (lot J6b) : la case Unite tapee - Ctrl+Espace propose les unites, puis " Choisir une unite... ".
-        table->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
-            const auto* t = doc_->project.hmiType(current_);
-            if (col != 2 || !t || r >= t->members.size() || callbackPage_) return {};
-            const Id tid = t->id;
-            const std::size_t index = r;
-            return unitui::fieldAssist([doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; },
-                                       "Unit\xC3\xA9 de " + t->name + "." + t->members[r].name, t->members[r].type,
-                                       [this, tid, index, alive = std::weak_ptr<int>(alive_)](const std::string& unit) {
-                                           if (alive.expired()) return;
-                                           const auto* t2 = doc_->project.hmiType(tid);
-                                           if (!t2 || index >= t2->members.size()) return;
-                                           hmi::TypeMember m2 = t2->members[index];
-                                           m2.unit = unit;
-                                           std::string w;
-                                           if (!setMember(tid, index, m2, &w)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
-                                       });
-        });
-        members_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        // 1.10 (chantier S2) : sous les membres, la section Operateurs du type.
-        auto mid = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".mid");
-        mid->addPane(std::move(panel), 0.40f, 120.f);
-        // 1.13.0 (J1b) : sous les membres, la section Methodes ; puis les Operateurs.
-        methods_ = &static_cast<HmiMethodsPane&>(mid->addPane(std::make_unique<HmiMethodsPane>(base + ".methods", doc_, apply_), 0.32f, 160.f));
-        operators_ = &static_cast<HmiOperatorsPane&>(mid->addPane(std::make_unique<HmiOperatorsPane>(base + ".operators", doc_, apply_), 0.28f, 160.f));
-        split->addPane(std::move(mid), 0.46f, 320.f);
-    }
-    {
-        auto grid = std::make_unique<ui::PropertyGrid>(base + ".props");
-        grid->setShowDescriptionPane(true);
-        grid->setNameColumnRatio(0.42f);
-        props_ = &static_cast<ui::PropertyGrid&>(split->addPane(std::move(grid), 0.24f, 220.f));
+        // 1.13.1 (lot K4) : LE TYPE CHOISI, DANS SES ONGLETS (comme une fonction IHM : Code | Parametres | Locales...),
+        // chacun sur toute la hauteur. Avant : les membres, les methodes, les operateurs et les proprietes empiles.
+        auto panel = std::make_unique<HmiTitledPanel>(base + ".typePanel", "TYPE");
+        typePanel_ = panel.get();
+        auto tabs = std::make_unique<ui::TabControl>(base + ".typeTabs");
+        {   // Membres : la table, puis les proprietes du membre choisi (sous elle, comme les methodes).
+            auto msplit = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".membersSplit");
+            auto mpanel = std::make_unique<HmiTitledPanel>(base + ".membersPanel", "MEMBRES");
+            membersPanel_ = mpanel.get();                                       // 1.10 (chantier U)
+            auto table = std::make_unique<MemberTable>(base + ".members");     // 1.10 : Ctrl+C, le clic droit
+            table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
+                               {"Initiale", 90.f, 40.f, true, false},
+                               {"D\xC3\xA9" "calage", 110.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false},
+                               {"Visibilit\xC3\xA9", 90.f, 50.f, true, false}});   // 1.13.0 (J1b) : Public / Prive
+            table->setF2ClickedColumns({2});   // 1.13.0 (D3b) : un clic sur la case Unite d'un membre, puis F2 : son champ
+            table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
+            table->onCopy = [this] {
+                (void)copyMembers();
+                return true;
+            };
+            table->onContextMenu = [this](gfx::Point at) { openMemberMenu(at); };
+            table->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)pasteMembers(rq.text); });
+            // 1.13.0 (lot J6b) : la case Unite tapee - Ctrl+Espace propose les unites, puis " Choisir une unite... ".
+            table->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+                const auto* t = doc_->project.hmiType(current_);
+                if (col != 2 || !t || r >= t->members.size() || callbackPage_) return {};
+                const Id tid = t->id;
+                const std::size_t index = r;
+                return unitui::fieldAssist([doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; },
+                                           "Unit\xC3\xA9 de " + t->name + "." + t->members[r].name, t->members[r].type,
+                                           [this, tid, index, alive = std::weak_ptr<int>(alive_)](const std::string& unit) {
+                                               if (alive.expired()) return;
+                                               const auto* t2 = doc_->project.hmiType(tid);
+                                               if (!t2 || index >= t2->members.size()) return;
+                                               hmi::TypeMember m2 = t2->members[index];
+                                               m2.unit = unit;
+                                               std::string w;
+                                               if (!setMember(tid, index, m2, &w)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
+                                           });
+            });
+            members_ = &static_cast<ui::TableView&>(mpanel->setBody(std::move(table)));
+            msplit->addPane(std::move(mpanel), 0.68f, 120.f);
+            auto ppanel = std::make_unique<HmiTitledPanel>(base + ".memberPropsPanel", "PROPRI\xC3\x89T\xC3\x89S DU MEMBRE");
+            auto grid = std::make_unique<ui::PropertyGrid>(base + ".memberProps");
+            grid->setShowDescriptionPane(true);
+            grid->setNameColumnRatio(0.30f);
+            memberProps_ = &static_cast<ui::PropertyGrid&>(ppanel->setBody(std::move(grid)));
+            msplit->addPane(std::move(ppanel), 0.32f, 90.f);
+            membersSplit_ = msplit.get();
+            tabs->addTab({"Membres", ui::Icon::Variable}, std::move(msplit));
+        }
+        {   // Valeurs : une enumeration (1.10, chantier U : avant, posees par-dessus les membres).
+            auto values = std::make_unique<HmiEnumValuesPane>(base + ".valeurs", doc_, apply_);
+            enums_ = values.get();
+            tabs->addTab({"Valeurs", ui::Icon::Constant}, std::move(values));
+        }
+        {   // Methodes (une structure) ou Signatures (une interface) : 1.13.0 (J1b).
+            auto m = std::make_unique<HmiMethodsPane>(base + ".methods", doc_, apply_);
+            methods_ = m.get();
+            tabs->addTab({"M\xC3\xA9thodes", ui::Icon::Function}, std::move(m));
+        }
+        {   // Implementeurs : les types qui implementent l'interface, conformes ou ce qui leur manque.
+            auto ipanel = std::make_unique<HmiTitledPanel>(base + ".implementersPanel", "TYPES QUI L'IMPL\xC3\x89MENTENT");
+            implementersPanel_ = ipanel.get();
+            auto table = std::make_unique<ui::TableView>(base + ".implementers");
+            table->setColumns({{"Type", 220.f}, {"Conformit\xC3\xA9", 460.f}, {"Par", 200.f}});
+            table->setSelectionMode(ui::SelectionMode::Single);
+            implementers_ = &static_cast<ui::TableView&>(ipanel->setBody(std::move(table)));
+            tabs->addTab({"Impl\xC3\xA9menteurs", ui::Icon::Link}, std::move(ipanel));
+        }
+        {   // Operateurs : 1.10 (chantier S2).
+            auto o = std::make_unique<HmiOperatorsPane>(base + ".operators", doc_, apply_);
+            operators_ = o.get();
+            tabs->addTab({"Op\xC3\xA9rateurs", ui::Icon::CodeCalc}, std::move(o));
+        }
+        {   // Heritage et interfaces : Herite de... (EXTENDS), les parents, les sous-types, Implemente (IMPLEMENTS).
+            auto grid = std::make_unique<ui::PropertyGrid>(base + ".heritage");
+            grid->setShowDescriptionPane(true);
+            grid->setNameColumnRatio(0.36f);
+            inheritProps_ = grid.get();
+            tabs->addTab({"H\xC3\xA9ritage et interfaces", ui::Icon::DerivedType}, std::move(grid));
+        }
+        {   // Proprietes : le nom, la description, l'espace de noms, les generiques, le poids ; les verifications.
+            auto grid = std::make_unique<ui::PropertyGrid>(base + ".props");
+            grid->setShowDescriptionPane(true);
+            grid->setNameColumnRatio(0.36f);
+            props_ = grid.get();
+            tabs->addTab({"Propri\xC3\xA9t\xC3\xA9s", ui::Icon::Settings}, std::move(grid));
+        }
+        {   // Emplois : ou se sert le type (variables, membres, sous-types, declarations, retours...) ; double-clic : y aller.
+            auto upanel = std::make_unique<HmiTitledPanel>(base + ".usesPanel", "EMPLOIS");
+            usesPanel_ = upanel.get();
+            auto table = std::make_unique<ui::TableView>(base + ".uses");
+            table->setColumns({{"Emploi", 240.f}, {"Genre", 280.f}, {"Type \xC3\xA9" "crit", 280.f}});
+            table->setSelectionMode(ui::SelectionMode::Single);
+            usesTable_ = &static_cast<ui::TableView&>(upanel->setBody(std::move(table)));
+            tabs->addTab({"Emplois", ui::Icon::GoTo}, std::move(upanel));
+        }
+        typeTabs_ = &static_cast<ui::TabControl&>(panel->setBody(std::move(tabs)));
+        split->addPane(std::move(panel), 0.73f, 420.f);
     }
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
+    ui::cmd::wireSubTabMenu(*typeTabs_, *this, links_);   // le clic droit choisit l'onglet, puis Disposition...
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
 
     // 1.10 (chantier O) : l'apercu d'un collage, le menu du clic droit des membres.
@@ -3594,11 +3651,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         });
     }
 
-    // 1.10 (chantier U) : les valeurs d'une enumeration (a la place des membres), la
+    // 1.10 (chantier U) : les valeurs d'une enumeration (1.13.1 : leur onglet, Valeurs), la
     // fenetre des valeurs, la fenetre << Nouvelle enumeration >>, le menu Nouveau type.
     {
-        enums_ = &static_cast<HmiEnumValuesPane&>(addChild(std::make_unique<HmiEnumValuesPane>(base + ".valeurs", doc_, apply_)));
-        enums_->setVisibility(ui::Visibility::Collapsed);
         links_ += enums_->message->connect([this](const std::string& text) { say(text); });
         enumDialog_ = &static_cast<HmiEnumDialog&>(addChild(std::make_unique<HmiEnumDialog>(base + ".valeurs.fenetre")));
         enums_->setDialogWidget(enumDialog_);
@@ -3641,7 +3696,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         std::string why;
         switch (a) {
             case TCopy: (void)copyMembers(); break;
-            case TPaste: (void)pasteMembers(ui::clipboardText()); break;
+            case TPaste:                                              // 1.13.1 (lot K4) : l'apercu se lit devant les membres
+                if (pasteMembers(ui::clipboardText())) showTypeTab(TabMembers);
+                break;
             case TAdd: openNewTypeMenu(); break;                      // 1.10 (chantier U)
             case kMenuBase: {                                         // une structure
                 std::string name = "T_Type";
@@ -3673,7 +3730,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 };
                 for (int i = 2; taken(name) && i < 1000; ++i) name = "Membre" + std::to_string(i);
                 if (addMember(t, name, "INT", &why)) {
+                    showTypeTab(TabMembers);                          // 1.13.1 (lot K4) : son nom s'ecrit dans l'onglet Membres
                     selectMember(static_cast<int>(doc_->project.hmiType(t)->members.size()) - 1);
+                    if (typeTabs_) typeTabs_->layout();               // la table a sa place avant d'ouvrir la case
                     (void)members_->beginCellEdit(static_cast<ui::RowIndex>(member_), 0);
                 } else {
                     say("Refus\xC3\xA9 : " + why, true);
@@ -3703,6 +3762,62 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     });
     links_ += folders_->message->connect([this](const std::string& text) { say(text); });
     links_ += folders_->relayout->connect([this] { refresh(); });
+    // ---- 1.13.1 (lot K4) : les onglets du type, la liste, l'onglet de document ----
+    // L'onglet que l'utilisateur choisit reste d'un type a l'autre (celui qu'un type impose, non).
+    links_ += typeTabs_->currentChanged->connect([this](std::size_t i) {
+        if (!tabSyncing_) preferredTab_ = i;
+    });
+    // Le double-clic sur un type (ou Entree) l'ouvre dans son onglet ; sur un dossier : son nom, comme avant.
+    links_ += types_->activated->connect([this](ui::RowIndex r) {
+        const auto* row = folders_->row(r);
+        if (row && row->folder) {
+            (void)types_->beginCellEdit(r, 0);
+            return;
+        }
+        if (const Id t = folders_->itemAt(r); t != kNoId && !openInTab(t)) say("Ouvrir dans un onglet : rien pour l'ouvrir ici.", true);
+    });
+    if (auto* tm = types_->contextMenu()) {
+        typeMenu_ = tm;
+        links_ += tm->itemChosen->connect([this](int a) {
+            const Id t = selectedType();
+            std::string why;
+            switch (a) {
+                case kMenuBase - 1: if (t != kNoId) (void)openInTab(t); break;                         // Ouvrir dans un onglet
+                case kMenuBase - 2: {                                                                  // Renommer (F2) : un type, un dossier
+                    const auto rows = types_->selectedModelRows();
+                    if (!rows.empty()) (void)types_->beginCellEdit(rows.front(), 0);
+                    break;
+                }
+                case kMenuBase - 3: tools_->triggered->emit(TDuplicate); break;
+                case kMenuBase - 4: tools_->triggered->emit(TExport); break;
+                case kMenuBase - 5: tools_->triggered->emit(TDelete); break;
+                default: break;
+            }
+        });
+    }
+    // Emplois : le double-clic va a l'emploi ; Implementeurs : au type qui implemente.
+    links_ += usesTable_->activated->connect([this](ui::RowIndex r) { (void)goToUse(static_cast<std::size_t>(r)); });
+    links_ += implementers_->activated->connect([this](ui::RowIndex r) {
+        const auto model = implementers_->model();
+        if (!model || r >= model->rowCount()) return;
+        const auto* t = doc_->project.hmiTypeByName(model->cellText(r, 0));
+        if (!t) return;
+        if (isDocument()) (void)openInTab(t->id);
+        else selectType(t->id);
+    });
+    // L'onglet de document : ni la liste, ni ce qui cree ou range des types.
+    if (isDocument()) {
+        split_->collapsePane(0, true);
+        for (const int a : {static_cast<int>(TAdd), static_cast<int>(TDuplicate), static_cast<int>(TFolder), static_cast<int>(TImport)})
+            tools_->setVisibleWhen(a, [] { return false; });
+    }
+    // Les outils des membres : seulement pour un type qui en a (une structure).
+    for (const int a : {static_cast<int>(TMember), static_cast<int>(TUp), static_cast<int>(TDown), static_cast<int>(TRemoveMember),
+                        static_cast<int>(TCopy), static_cast<int>(TPaste)})
+        tools_->setVisibleWhen(a, [this] {
+            const auto* t = doc_->project.hmiType(selectedType());
+            return !t || t->kind == hmi::HmiTypeKind::Structure;
+        });
     links_ += doc_->changed->connect([this](Id) {
         refresh();
         // 1.10 : un apercu en attente se refait sur le projet du moment.
@@ -3722,7 +3837,8 @@ void HmiTypesPane::say(std::string text, bool warning) {
 
 void HmiTypesPane::refresh() {
     const auto& p = doc_->project;
-    if (!p.hmiType(current_)) current_ = p.programs.types.empty() ? kNoId : p.programs.types.front().id;
+    if (isDocument()) current_ = document_;     // 1.13.1 (lot K4) : l'onglet de document reste sur son type
+    else if (!p.hmiType(current_)) current_ = p.programs.types.empty() ? kNoId : p.programs.types.front().id;
     typeOrder_.clear();
     std::map<Id, std::vector<std::string>> cells;
     std::map<Id, bool> broken;
@@ -3796,23 +3912,19 @@ void HmiTypesPane::refresh() {
 void HmiTypesPane::refreshMembers() {
     if (operators_)   // 1.10 (chantier S2) : les operateurs du type choisi
         if (const auto* t = doc_->project.hmiType(current_)) operators_->setOwner(hmi::ownerOfType(*t));
-    // 1.13.0 (correctifs F2) : une interface n'a ni membre ni corps - pas de section Operateurs (ni "Ajouter un operateur").
-    if (operators_)
-        if (auto* mid = dynamic_cast<ui::Splitter*>(operators_->parent()))
-            mid->collapsePane(2, showsInterface());
     const auto& p = doc_->project;
     const auto* t = p.hmiType(current_);
     // 1.13.0 (J1b) : la section Methodes suit le type choisi (une structure, une interface).
     if (methods_)
         methods_->setType(t && (t->kind == hmi::HmiTypeKind::Structure || t->kind == hmi::HmiTypeKind::Interface) ? t->id : kNoId);
-    // 1.10 (chantier U) : une enumeration montre ses valeurs a la place des membres.
+    // 1.13.1 (lot K4) : les onglets du type (montres, titres, comptes) ; Heritage, Implementeurs, Emplois. 1.13.0 (correctifs
+    // F2) : une interface n'a ni membre ni corps - pas d'onglet Operateurs (ni "Ajouter un operateur").
+    refreshTypePages(t);
+    // 1.10 (chantier U) : une enumeration montre ses valeurs (1.13.1 : l'onglet Valeurs, a la place de Membres).
     if (enums_) {
         const bool en = t && hmi::isEnumeration(*t);
         if (en) enums_->setType(t->id);
         else if (enums_->dialog() != HmiEnumValuesPane::Dialog::None) enums_->closeDialog();
-        enums_->setVisibility(en ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        if (membersPanel_) membersPanel_->setVisibility(en ? ui::Visibility::Hidden : ui::Visibility::Visible);
-        invalidateLayout();
         if (en) t = nullptr;   // pas de membres
     }
     // 1.12.20 (lot T) : un type rappel montre sa page a la place des membres.
@@ -3828,8 +3940,12 @@ void HmiTypesPane::refreshMembers() {
                                   {"Description", 240.f, 60.f, true, false}, {"Visibilit\xC3\xA9", 90.f, 50.f, true, false}});
         // 1.13.0 (D3b) : un clic sur la case Unite d'un membre (2), puis F2 : son champ ; un rappel n'en a pas.
         members_->setF2ClickedColumns(cb ? std::vector<std::size_t>{} : std::vector<std::size_t>{2});
-        if (membersPanel_) static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? "RAPPEL" : "MEMBRES");
+        if (membersSplit_) membersSplit_->collapsePane(1, cb);   // 1.13.1 : un rappel n'a pas de membre choisi
     }
+    // 1.13.1 (lot K4) : le titre dit de quel type (la page d'un rappel : RAPPEL).
+    if (membersPanel_)
+        static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? std::string("RAPPEL")
+                                                                 : t ? "MEMBRES DE " + upper(t->name) : std::string("MEMBRES"));
     if (cb) {
         refreshCallbackPage(*t);
         return;
@@ -4225,7 +4341,7 @@ Id HmiTypesPane::addInterfaceType(const std::string& raw, std::string* why) {
     current_ = made;
     member_ = -1;
     refresh();
-    say("Interface cr\xC3\xA9\xC3\xA9" "e : " + name + " (une signature d'exemple, Demarrer) \xC2\xB7 ses signatures dans la section du dessous ; "
+    say("Interface cr\xC3\xA9\xC3\xA9" "e : " + name + " (une signature d'exemple, Demarrer) \xC2\xB7 ses signatures dans son onglet Signatures ; "
         "une structure l'impl\xC3\xA9mente par sa case Impl\xC3\xA9mente \xC2\xB7 Ctrl+Z annule");
     // 1.13.0 (correctifs F2) : l'arbre du projet montre la nouvelle interface (avant : il gardait le type d'avant choisi).
     if (hosts_.typeCreated) hosts_.typeCreated(made);
@@ -4380,7 +4496,7 @@ bool HmiTypesPane::addMember(Id id, const std::string& raw, const std::string& t
         if (t.kind == hmi::HmiTypeKind::Callback)   // 1.12.20 (lot T)
             return fail(w, "un type rappel n'a pas de membres : sa signature dit ses entr\xC3\xA9" "es et son retour");
         if (t.kind == hmi::HmiTypeKind::Interface)   // 1.13.0 (J1b)
-            return fail(w, "une interface ne porte pas de membre : des signatures (la section du dessous)");
+            return fail(w, "une interface ne porte pas de membre : des signatures (son onglet Signatures)");
         if (std::any_of(t.members.begin(), t.members.end(), [&](const hmi::TypeMember& m) { return sameText(m.name, name); }))
             return fail(w, "le membre " + name + " existe d\xC3\xA9j\xC3\xA0");
         t.members.push_back({name, ty::normalized(type)});
@@ -4483,6 +4599,13 @@ bool HmiTypesPane::moveMember(Id id, std::size_t index, int delta) {
 void HmiTypesPane::rebuildProperties() {
     const auto& p = doc_->project;
     std::vector<PG::Category> cats;
+    // 1.13.1 (lot K4) : trois grilles - Proprietes (le type), Heritage et interfaces, les proprietes du membre choisi.
+    std::vector<PG::Category> inherit, member;
+    const auto finish = [&](std::vector<PG::Category>& own) {
+        props_->setCategories(std::move(own));
+        if (inheritProps_) inheritProps_->setCategories(std::move(inherit));
+        if (memberProps_) memberProps_->setCategories(std::move(member));
+    };
     const auto* t = p.hmiType(current_);
     if (!t) {
         PG::Category c;
@@ -4490,7 +4613,7 @@ void HmiTypesPane::rebuildProperties() {
         c.properties.push_back(prop("Types", std::to_string(p.programs.types.size()), PG::ValueType::ReadOnly, {}, {},
                                     "+ Type : une structure (Four : Temperature, Consigne, Vannes...). Une variable de ce type a tous ses membres."));
         cats.push_back(std::move(c));
-        props_->setCategories(std::move(cats));
+        finish(cats);
         return;
     }
     const Id id = t->id;
@@ -4537,7 +4660,7 @@ void HmiTypesPane::rebuildProperties() {
                 vars.properties.push_back(prop(v.name, v.initial.empty() ? std::string("NULL") : v.initial));
         if (vars.properties.empty()) vars.properties.push_back(prop("Aucune", "aucune variable de ce type"));
         cats.push_back(std::move(vars));
-        props_->setCategories(std::move(cats));
+        finish(cats);
         return;
     }
     if (t->kind == hmi::HmiTypeKind::Interface) {   // 1.13.0 (J1b) : la fiche d'une interface
@@ -4555,25 +4678,17 @@ void HmiTypesPane::rebuildProperties() {
                                     "Elle ne s'emploie que derri\xC3\xA8re une r\xC3\xA9" "f\xC3\xA9rence : REF_TO " + t->name + ", LIST OF REF_TO " + t->name + "."));
         c.properties.push_back(prop("Signatures", std::to_string(t->methods.size())));
         c.properties.push_back(prop("D\xC3\xA9" "claration", hmi::interfaceDeclaration(*t), PG::ValueType::ReadOnly, {}, {},
-                                    "L'aper\xC3\xA7u : TYPE " + t->name + " INTERFACE ... END_TYPE (les signatures de la section du dessous)."));
-        cats.push_back(std::move(c));
-        PG::Category by;
-        by.name = "Types qui l'impl\xC3\xA9mentent";
-        for (const auto& name : hmi::implementersOf(p, *t)) {
-            const auto* impl = p.hmiTypeByName(name);
-            const auto misses = impl ? hmi::interfaceMisses(p, *impl) : std::vector<std::string>{};
-            std::string state = "conforme";
-            for (const auto& miss : misses)
-                if (miss.find(t->name) != std::string::npos) {
-                    state = miss;
-                    break;
-                }
-            by.properties.push_back(prop(name, state));
+                                    "L'aper\xC3\xA7u : TYPE " + t->name + " INTERFACE ... END_TYPE (les signatures de l'onglet Signatures)."));
+        // 1.13.1 (lot K4) : les types qui l'implementent ont leur onglet (Implementeurs) ; ici, leur nombre.
+        {
+            const auto by = hmi::implementersOf(p, *t);
+            c.properties.push_back(prop("Impl\xC3\xA9menteurs", by.empty() ? std::string("aucun type ne l'impl\xC3\xA9mente")
+                                                                       : std::to_string(by.size()) + " type(s) : l'onglet Impl\xC3\xA9menteurs",
+                                        PG::ValueType::ReadOnly, {}, {},
+                                        "Une structure l'impl\xC3\xA9mente par l'onglet H\xC3\xA9ritage et interfaces, la case " + t->name + "."));
         }
-        if (by.properties.empty())
-            by.properties.push_back(prop("Aucun", "aucun type ne l'impl\xC3\xA9mente (une structure : Impl\xC3\xA9mente, la case " + t->name + ")"));
-        cats.push_back(std::move(by));
-        props_->setCategories(std::move(cats));
+        cats.push_back(std::move(c));
+        finish(cats);
         return;
     }
     if (hmi::isEnumeration(*t)) {   // 1.10 (chantier U) : la fiche d'une enumeration
@@ -4645,7 +4760,7 @@ void HmiTypesPane::rebuildProperties() {
         }
         if (total == 0) uses.properties.push_back(prop("Scripts", "aucun emploi"));
         cats.push_back(std::move(uses));
-        props_->setCategories(std::move(cats));
+        finish(cats);
         return;
     }
     {
@@ -4689,6 +4804,21 @@ void HmiTypesPane::rebuildProperties() {
             for (std::size_t k = 0; k < t->generics.size(); ++k) sample += (k ? ", " : "") + hmi::genericSample(t->generics[k].constraint);
             sample += ">";
         }
+        const auto w = ty::weightOf(p, sample);
+        c.properties.push_back(prop("Poids", (t->generics.empty() ? std::string{} : sample + " : ") + std::to_string(w.words) + " mots, "
+                                                 + std::to_string(w.bytes) + " octets", PG::ValueType::ReadOnly, {}, {},
+                                    "La place Modbus d'une variable de ce type (.Words, .Bytes dans les scripts)."));
+        const auto users = ty::usersOf(p, hmi::fullName(*t));
+        std::string used;
+        for (const auto& u : users) used += (used.empty() ? "" : ", ") + u;
+        c.properties.push_back(prop("Utilis\xC3\xA9 par", used.empty() ? std::string("aucune variable") : used));
+        cats.push_back(std::move(c));
+    }
+    // 1.13.1 (lot K4) : L'ONGLET HERITAGE ET INTERFACES - le parent (Herite de... (EXTENDS), avant dans les proprietes du
+    // type), la lignee, les sous-types, ce qui est herite ; puis Implemente (IMPLEMENTS).
+    {
+        PG::Category c;
+        c.name = "H\xC3\xA9ritage";
         // 1.13.0 (J1b) : l'heritage - le parent (une structure, sans cycle : ni lui-meme ni un de ses descendants).
         c.properties.push_back(prop("H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)", t->base.empty() ? std::string("(aucun)") : t->base, PG::ValueType::Enum,
                                     [this, id](std::string_view text) {
@@ -4699,15 +4829,26 @@ void HmiTypesPane::rebuildProperties() {
                                     }, hmi::baseChoices(p, *t),
                                     "Le parent : le sous-type a tous ses membres (sa place Modbus d'abord) et ses m\xC3\xA9thodes ; une virtuelle s'y "
                                     "red\xC3\xA9" "finit (M\xC3\xA9thodes, Red\xC3\xA9" "finir). (aucun) : pas de parent."));
-        const auto w = ty::weightOf(p, sample);
-        c.properties.push_back(prop("Poids", (t->generics.empty() ? std::string{} : sample + " : ") + std::to_string(w.words) + " mots, "
-                                                 + std::to_string(w.bytes) + " octets", PG::ValueType::ReadOnly, {}, {},
-                                    "La place Modbus d'une variable de ce type (.Words, .Bytes dans les scripts)."));
-        const auto users = ty::usersOf(p, hmi::fullName(*t));
-        std::string used;
-        for (const auto& u : users) used += (used.empty() ? "" : ", ") + u;
-        c.properties.push_back(prop("Utilis\xC3\xA9 par", used.empty() ? std::string("aucune variable") : used));
-        cats.push_back(std::move(c));
+        const auto chain = hmi::baseChain(p, hmi::fullName(*t));
+        std::string line;
+        for (const auto* b : chain) line += (line.empty() ? "" : " \xE2\x80\xBA ") + hmi::fullName(*b);
+        c.properties.push_back(prop("Lign\xC3\xA9" "e", line.empty() ? std::string("(aucun parent)") : hmi::fullName(*t) + " \xE2\x80\xBA " + line,
+                                    PG::ValueType::ReadOnly, {}, {}, "Le parent, puis le parent du parent... (le plus proche d'abord)."));
+        std::size_t inheritedMembers = 0, inheritedMethods = 0;
+        for (const auto* b : chain) {
+            inheritedMembers += b->members.size();
+            inheritedMethods += b->methods.size();
+        }
+        if (!chain.empty())
+            c.properties.push_back(prop("H\xC3\xA9rit\xC3\xA9", std::to_string(inheritedMembers) + " membre(s), " + std::to_string(inheritedMethods)
+                                                                 + " m\xC3\xA9thode(s)", PG::ValueType::ReadOnly, {}, {},
+                                        "Montr\xC3\xA9s gris\xC3\xA9s \xC3\xA0 la suite des siens dans les onglets Membres et M\xC3\xA9thodes : ils se changent dans leur type."));
+        std::string subs;
+        for (const auto& o : p.programs.types)
+            if (o.id != t->id && o.kind == hmi::HmiTypeKind::Structure && ty::baseOf(p, o) == t) subs += (subs.empty() ? "" : ", ") + hmi::fullName(o);
+        c.properties.push_back(prop("Sous-types", subs.empty() ? std::string("aucun type n'h\xC3\xA9rite de ") + t->name : subs, PG::ValueType::ReadOnly,
+                                    {}, {}, "Les structures dont le parent (EXTENDS) est " + t->name + "."));
+        inherit.push_back(std::move(c));
     }
     // 1.13.0 (J1b) : les interfaces du projet, une case chacune (cochee : le type l'implemente - Generer verifie qu'il
     // a chaque signature, et nomme ce qui manque).
@@ -4761,7 +4902,7 @@ void HmiTypesPane::rebuildProperties() {
         }
         if (c.properties.empty())
             c.properties.push_back(prop("Aucune interface", "Nouveau type \xE2\x96\xBE \xE2\x80\xBA Interface\xE2\x80\xA6 en cr\xC3\xA9" "e une"));
-        cats.push_back(std::move(c));
+        inherit.push_back(std::move(c));
     }
     if (member_ >= 0 && member_ < static_cast<int>(t->members.size())) {
         PG::Category c;
@@ -4810,7 +4951,15 @@ void HmiTypesPane::rebuildProperties() {
             const std::string s(text);
             return edit([s](hmi::TypeMember& x) { x.description = s; })(text);
         }));
-        cats.push_back(std::move(c));
+        member.push_back(std::move(c));
+    } else {
+        // 1.13.1 (lot K4) : rien de choisi - ce que la grille montrera.
+        PG::Category c;
+        c.name = "Membre choisi";
+        c.properties.push_back(prop("Aucun", t->members.empty() ? std::string("Membre (Inser) en ajoute un")
+                                                                : std::string("choisis un membre dans la table : son nom, son type, son unit\xC3\xA9, "
+                                                                              "sa valeur initiale et sa description se r\xC3\xA8glent ici aussi")));
+        member.push_back(std::move(c));
     }
     {
         PG::Category c;
@@ -4823,7 +4972,7 @@ void HmiTypesPane::rebuildProperties() {
                                                   : std::string("aucun conflit avec les propri\xC3\xA9t\xC3\xA9s")));
         cats.push_back(std::move(c));
     }
-    props_->setCategories(std::move(cats));
+    finish(cats);
 }
 
 // ---- 1.10 (chantier O) : les membres <-> Excel ---------------------------------------
@@ -5225,6 +5374,363 @@ bool HmiTypesPane::duplicateMember(Id id, std::size_t index) {
 }
 // ---- fin 1.10 ----
 
+// =============================================================================
+//  1.13.1 (lot K4) : LES ONGLETS D'UN TYPE, L'ONGLET DE DOCUMENT
+// =============================================================================
+namespace {
+
+// Un texte de type nomme-t-il `target`, lu depuis l'espace `ns` ? T_Pompe dans ARRAY[1..3] OF T_Pompe, LIST OF REF_TO
+// I_Organe, MAP[STRING] OF T_Pompe, T_Mesure<T_Pompe> ; un nom complet (Gaz.T_Vanne) se lit d'un bloc, comme le depliage.
+bool namesType(const hmi::Project& p, std::string_view ns, std::string_view text, const hmi::HmiType& target) {
+    for (std::size_t i = 0; i < text.size();) {
+        if (!(std::isalpha(static_cast<unsigned char>(text[i])) || text[i] == '_')) {
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < text.size() && (std::isalnum(static_cast<unsigned char>(text[j])) || text[j] == '_'
+                                   || (text[j] == '.' && j + 1 < text.size()
+                                       && (std::isalpha(static_cast<unsigned char>(text[j + 1])) || text[j + 1] == '_'))))
+            ++j;
+        if (ty::typeFrom(p, ns, text.substr(i, j - i)) == &target) return true;
+        i = j;
+    }
+    return false;
+}
+
+std::string declWord(hmi::DeclKind k) {
+    switch (k) {
+        case hmi::DeclKind::Parameter: return "param\xC3\xA8tre ";
+        case hmi::DeclKind::Constant:  return "constante ";
+        default:                       return "locale ";
+    }
+}
+
+// Le genre d'un type, pour le titre de sa page : "STRUCTURE", "INTERFACE"...
+std::string kindTitle(const hmi::HmiType& t) {
+    if (t.kind == hmi::HmiTypeKind::Interface) return "INTERFACE";
+    if (t.kind == hmi::HmiTypeKind::Callback) return "RAPPEL";
+    if (hmi::isEnumeration(t)) return "\xC3\x89NUM\xC3\x89RATION";
+    return "STRUCTURE";
+}
+
+} // namespace
+
+std::vector<HmiTypesPane::TypeUse> HmiTypesPane::usesOf(const hmi::Project& p, const hmi::HmiType& t) {
+    using K = TypeUse::Kind;
+    std::vector<TypeUse> out;
+    const auto add = [&out](K k, std::string where, std::string what, std::string type, Id item, Id sub = kNoId) {
+        TypeUse u;
+        u.kind = k;
+        u.where = std::move(where);
+        u.what = std::move(what);
+        u.type = std::move(type);
+        u.item = item;
+        u.sub = sub;
+        out.push_back(std::move(u));
+    };
+    // Une fonction (de projet, de vue, une methode) : son retour, ses parametres, ses locales, ses constantes.
+    const auto code = [&](K k, const std::string& where, const std::string& owner, std::string_view ns, const std::string& result,
+                          const std::vector<hmi::Declaration>& decls, Id item, Id sub) {
+        if (!result.empty() && namesType(p, ns, result, t)) add(k, where, "retour" + owner, result, item, sub);
+        for (const auto& d : decls)
+            if (namesType(p, ns, d.type, t)) add(k, where, declWord(d.kind) + d.name + owner, d.type, item, sub);
+    };
+    for (const auto& v : p.programs.variables)
+        if (namesType(p, {}, v.type, t)) add(K::Variable, v.name, "variable IHM", v.type, v.id);
+    for (const auto& o : p.programs.types) {
+        const std::string owner = hmi::fullName(o);
+        for (const auto& m : o.members)
+            if (namesType(p, o.ns, m.type, t)) add(K::Member, owner + "." + m.name, "membre de " + owner, m.type, o.id);
+        if (o.id != t.id && o.kind == hmi::HmiTypeKind::Structure && ty::baseOf(p, o) == &t)
+            add(K::Subtype, owner, "sous-type : h\xC3\xA9rite de " + t.name + " (EXTENDS)", o.base, o.id);
+        for (const auto& m : o.methods)
+            code(K::Method, owner + "." + m.name, " de la m\xC3\xA9thode", o.ns, m.returnType, m.decls, o.id, m.id);
+        if (o.id == t.id) continue;   // ses propres operateurs : son onglet Operateurs
+        for (const auto& op : o.operators) {
+            const std::string sig = hmi::operatorSignature(op);
+            if (namesType(p, o.ns, op.left, t) || namesType(p, o.ns, op.right, t) || namesType(p, o.ns, op.result, t))
+                add(K::Operator, sig, "op\xC3\xA9rateur de " + owner, sig, o.id, op.id);
+            for (const auto& d : op.decls)
+                if (namesType(p, o.ns, d.type, t)) add(K::Operator, sig, declWord(d.kind) + d.name + " d'un op\xC3\xA9rateur de " + owner, d.type, o.id, op.id);
+        }
+    }
+    for (const auto& f : p.programs.functions) code(K::Function, f.name, " de la fonction", f.ns, f.returnType, f.decls, f.id, kNoId);
+    for (const auto& sc : p.programs.scripts)
+        for (const auto& d : sc.decls)
+            if (namesType(p, sc.ns, d.type, t)) add(K::Script, sc.name, declWord(d.kind) + d.name + " du script", d.type, sc.id);
+    for (const auto& v : p.views) {
+        for (const auto& pa : v.params)
+            if (namesType(p, {}, pa.type, t)) add(K::ViewParam, v.name + "." + pa.name, "param\xC3\xA8tre de " + v.name, pa.type, v.id);
+        for (const auto& c : v.constants)
+            if (namesType(p, {}, c.type, t)) add(K::ViewConstant, v.name + "." + c.name, "constante de " + v.name, c.type, v.id);
+        for (const auto& f : v.functions)
+            code(K::ViewFunction, v.name + "." + f.name, " de la fonction de " + v.name, {}, f.returnType, f.decls, v.id, f.id);
+        for (const auto& sc : v.scripts)
+            for (const auto& d : sc.decls)
+                if (namesType(p, {}, d.type, t))
+                    add(K::ViewScript, v.name + "." + (sc.name.empty() ? std::string(hmi::eventLabel(sc.event)) : sc.name),
+                        declWord(d.kind) + d.name + " d'un script de " + v.name, d.type, v.id, sc.id);
+    }
+    return out;
+}
+
+void HmiTypesPane::refreshTypePages(const hmi::HmiType* t) {
+    rebuildImplementers(t);
+    rebuildUses(t);
+    syncTypeTabs(t);
+}
+
+void HmiTypesPane::rebuildImplementers(const hmi::HmiType* t) {
+    if (!implementers_) return;
+    const auto& p = doc_->project;
+    std::vector<std::vector<std::string>> rows;
+    std::vector<int> tones;   // 0 : conforme, 1 : ce qui manque, 2 : rien
+    if (t && t->kind == hmi::HmiTypeKind::Interface) {
+        for (const auto& name : hmi::implementersOf(p, *t)) {
+            const auto* impl = p.hmiTypeByName(name);
+            const auto misses = impl ? hmi::interfaceMisses(p, *impl) : std::vector<std::string>{};
+            std::string state = "conforme";
+            for (const auto& miss : misses)
+                if (miss.find(t->name) != std::string::npos) {
+                    state = miss;
+                    break;
+                }
+            // Par : sa case Implemente, ou celle d'un parent (EXTENDS).
+            std::string by = "IMPLEMENTS";
+            if (impl) {
+                const auto declares = [&](const hmi::HmiType& x) {
+                    return std::any_of(x.interfaces.begin(), x.interfaces.end(),
+                                       [&](const std::string& n) { return ty::typeFrom(p, x.ns, n, &x) == t; });
+                };
+                if (!declares(*impl))
+                    for (const auto* b : hmi::baseChain(p, hmi::fullName(*impl)))
+                        if (declares(*b)) {
+                            by = "h\xC3\xA9rit\xC3\xA9" "e de " + hmi::fullName(*b);
+                            break;
+                        }
+            }
+            rows.push_back({name, state, by});
+            tones.push_back(state == "conforme" ? 0 : 1);
+        }
+        if (rows.empty()) {
+            rows.push_back({"(aucun)", "aucun type ne l'impl\xC3\xA9mente : une structure le fait par son onglet H\xC3\xA9ritage et interfaces, la case "
+                                           + hmi::fullName(*t), ""});
+            tones.push_back(2);
+        }
+    }
+    const auto count = static_cast<std::size_t>(std::count_if(tones.begin(), tones.end(), [](int tone) { return tone != 2; }));
+    implementers_->setModel(std::make_shared<Rows>(
+        std::vector<std::string>{"Type", "Conformit\xC3\xA9", "Par"}, std::move(rows), [tones](ui::RowIndex r, std::size_t c) {
+            ui::CellStyle st;
+            const int tone = r < tones.size() ? tones[r] : 0;
+            if (c == 0) {
+                st.bold = tone != 2;
+                st.icon = tone == 2 ? ui::Icon::None : ui::Icon::DerivedType;
+            }
+            if (c == 1) st.fgTone = tone == 0 ? ui::Tone::Ok : tone == 1 ? ui::Tone::Error : ui::Tone::Muted;
+            if (c == 2 || tone == 2) st.fgTone = ui::Tone::Muted;
+            return st;
+        }));
+    if (implementersPanel_)
+        implementersPanel_->setTitle(t ? "TYPES QUI IMPL\xC3\x89MENTENT " + upper(t->name) + " (" + std::to_string(count) + ")"
+                                       : std::string("TYPES QUI L'IMPL\xC3\x89MENTENT"));
+}
+
+void HmiTypesPane::rebuildUses(const hmi::HmiType* t) {
+    if (!usesTable_) return;
+    uses_ = t && t->kind != hmi::HmiTypeKind::Interface ? usesOf(doc_->project, *t) : std::vector<TypeUse>{};
+    std::vector<std::vector<std::string>> rows;
+    for (const auto& u : uses_) rows.push_back({u.where, u.what, u.type});
+    const bool none = rows.empty();
+    if (none && t) rows.push_back({"(aucun)", "rien ne l'emploie encore : une variable, un membre, un param\xC3\xA8tre de ce type le feront", ""});
+    usesTable_->setModel(std::make_shared<Rows>(std::vector<std::string>{"Emploi", "Genre", "Type \xC3\xA9" "crit"}, std::move(rows),
+                                                [none](ui::RowIndex, std::size_t c) {
+                                                    ui::CellStyle st;
+                                                    if (c == 0) st.bold = !none;
+                                                    if (c != 0 || none) st.fgTone = ui::Tone::Muted;
+                                                    if (c == 2) st.monospace = true;
+                                                    return st;
+                                                }));
+    if (usesPanel_)
+        usesPanel_->setTitle(t ? "EMPLOIS DE " + upper(t->name) + " (" + std::to_string(uses_.size()) + ") \xC2\xB7 double-clic : y aller"
+                               : std::string("EMPLOIS"));
+}
+
+bool HmiTypesPane::tabMakesSense(std::size_t tab, const hmi::HmiType* t) const {
+    if (tab >= TabCount) return false;
+    if (t && t->kind == hmi::HmiTypeKind::Interface) return tab == TabMethods || tab == TabImplementers || tab == TabProperties;
+    if (t && hmi::isEnumeration(*t)) return tab == TabValues || tab == TabOperators || tab == TabProperties || tab == TabUses;
+    if (t && t->kind == hmi::HmiTypeKind::Callback) return tab == TabMembers || tab == TabOperators || tab == TabProperties || tab == TabUses;
+    return tab != TabValues && tab != TabImplementers;   // une structure (ou rien de choisi)
+}
+
+std::size_t HmiTypesPane::tabFor(std::size_t wanted, const hmi::HmiType* t) const {
+    if (tabMakesSense(wanted, t)) return wanted;
+    // L'equivalent : Heritage et interfaces <-> Implementeurs ; Emplois -> Implementeurs ; sinon le contenu du type.
+    if (wanted == TabInheritance && tabMakesSense(TabImplementers, t)) return TabImplementers;
+    if (wanted == TabImplementers && tabMakesSense(TabInheritance, t)) return TabInheritance;
+    if (wanted == TabUses && tabMakesSense(TabImplementers, t)) return TabImplementers;
+    for (const std::size_t content : {static_cast<std::size_t>(TabMembers), static_cast<std::size_t>(TabValues), static_cast<std::size_t>(TabMethods)})
+        if (tabMakesSense(content, t)) return content;
+    return TabProperties;
+}
+
+void HmiTypesPane::syncTypeTabs(const hmi::HmiType* t) {
+    if (!typeTabs_) return;
+    const auto& p = doc_->project;
+    const bool iface = t && t->kind == hmi::HmiTypeKind::Interface;
+    const bool en = t && hmi::isEnumeration(*t);
+    const bool cb = t && t->kind == hmi::HmiTypeKind::Callback;
+    const bool st = t && !iface && !en && !cb;
+    tabSyncing_ = true;
+    typeTabs_->setTabTitle(TabMembers, cb ? "Signature" : "Membres");
+    typeTabs_->setTabIcon(TabMembers, cb ? ui::Icon::Function : ui::Icon::Variable);
+    typeTabs_->setTabTitle(TabMethods, iface ? "Signatures" : "M\xC3\xA9thodes");
+    const auto badge = [this](std::size_t tab, std::size_t n, bool fault = false) {
+        typeTabs_->setTabBadge(tab, n ? std::to_string(n) : std::string{}, n && fault ? ui::Tone::Error : ui::Tone::None);
+    };
+    badge(TabMembers, st ? t->members.size() : 0, st && !ty::cycleOf(p, hmi::fullName(*t)).empty());
+    badge(TabValues, en ? t->values.size() : 0, en && !hmi::enumIssues(*t).empty());
+    badge(TabMethods, st || iface ? t->methods.size() : 0);
+    {
+        std::size_t n = 0;
+        bool fault = false;
+        if (implementers_ && iface)
+            if (const auto model = implementers_->model())
+                for (std::size_t r = 0; r < model->rowCount(); ++r) {
+                    if (model->cellText(static_cast<ui::RowIndex>(r), 0) == "(aucun)") continue;
+                    ++n;
+                    fault = fault || model->cellText(static_cast<ui::RowIndex>(r), 1) != "conforme";
+                }
+        badge(TabImplementers, n, fault);
+    }
+    badge(TabOperators, t ? t->operators.size() : 0);
+    badge(TabInheritance, st ? (t->base.empty() ? 0u : 1u) + t->interfaces.size() : 0, st && !hmi::interfaceMisses(p, *t).empty());
+    badge(TabUses, uses_.size());
+    for (std::size_t i = 0; i < TabCount; ++i) typeTabs_->setTabHidden(i, !tabMakesSense(i, t));
+    // L'onglet prefere (celui que l'utilisateur a choisi), sinon son equivalent pour ce genre de type.
+    if (const std::size_t want = tabFor(preferredTab_, t); want != typeTabs_->currentIndex()) typeTabs_->setCurrentIndex(want);
+    tabSyncing_ = false;
+    if (typePanel_) {
+        std::string title = "TYPE";
+        if (t) {
+            title = kindTitle(*t) + " \xC2\xB7 " + hmi::fullName(*t);
+            if (!t->generics.empty()) title += "<" + hmi::genericsText(t->generics) + ">";
+            if (st && !t->base.empty()) title += "  \xE2\x96\xB8 h\xC3\xA9rite de " + t->base;
+        }
+        typePanel_->setTitle(std::move(title));
+    }
+}
+
+void HmiTypesPane::showTypeTab(std::size_t tab) {
+    if (!typeTabs_ || tab >= TabCount) return;
+    const std::size_t at = tabFor(tab, doc_->project.hmiType(current_));
+    tabSyncing_ = true;
+    typeTabs_->setCurrentIndex(at);
+    tabSyncing_ = false;
+    preferredTab_ = tab;
+}
+
+std::size_t HmiTypesPane::currentTypeTab() const noexcept { return typeTabs_ ? typeTabs_->currentIndex() : TabMembers; }
+
+bool HmiTypesPane::typeTabShown(std::size_t tab) const { return typeTabs_ && tab < typeTabs_->tabCount() && !typeTabs_->tabHidden(tab); }
+
+std::string HmiTypesPane::helpTopic() const {
+    const auto* t = doc_->project.hmiType(current_);
+    switch (currentTypeTab()) {
+        case TabMethods: case TabImplementers: case TabInheritance: return "objets-types";
+        case TabOperators: return "operateurs";
+        case TabValues: return "enum-types";
+        default: break;
+    }
+    if (t && t->kind == hmi::HmiTypeKind::Callback) return "rappels";
+    if (t && t->kind == hmi::HmiTypeKind::Interface) return "objets-types";
+    if (t && hmi::isEnumeration(*t)) return "enum-types";
+    return "types-ihm";
+}
+
+bool HmiTypesPane::goToUse(std::size_t index) {
+    if (index >= uses_.size()) return false;
+    const TypeUse u = uses_[index];   // une copie : la page se refait en chemin
+    using K = TypeUse::Kind;
+    if (u.kind == K::Member || u.kind == K::Subtype || u.kind == K::Method || u.kind == K::Operator) {
+        const std::size_t tab = u.kind == K::Method ? TabMethods : u.kind == K::Operator ? TabOperators : TabMembers;
+        if (isDocument() && u.item != document_) {
+            if (!hosts_.openTypeTab || !doc_->project.hmiType(u.item)) return false;
+            hosts_.openTypeTab(u.item, tab);
+            return true;
+        }
+        if (!doc_->project.hmiType(u.item)) return false;
+        selectType(u.item);
+        showTypeTab(tab);
+        if (u.kind == K::Member)
+            if (const auto* o = doc_->project.hmiType(u.item)) {
+                const std::string name = u.where.substr(u.where.rfind('.') + 1);
+                for (std::size_t k = 0; k < o->members.size(); ++k)
+                    if (o->members[k].name == name) selectMember(static_cast<int>(k));
+            }
+        if (u.kind == K::Method && methods_) methods_->selectMethod(u.sub);
+        if (u.kind == K::Operator && operators_) operators_->goTo(u.sub, 0);
+        say("Emploi de " + doc_->project.hmiType(current_)->name + " : " + u.where + " (" + u.what + ")");
+        return true;
+    }
+    if (!hosts_.openUse) return false;
+    hosts_.openUse(u);
+    return true;
+}
+
+std::string HmiTypesPane::documentTitle() const {
+    const auto* t = doc_->project.hmiType(document_);
+    return t ? hmi::fullName(*t) : std::string{};
+}
+
+bool HmiTypesPane::documentGone() const { return isDocument() && !doc_->project.hmiType(document_); }
+
+bool HmiTypesPane::openInTab(Id type) {
+    if (!hosts_.openTypeTab || !doc_->project.hmiType(type)) return false;
+    // L'onglet ouvert : celui que montre ce volet (une structure ouverte depuis Methodes s'ouvre sur Methodes).
+    hosts_.openTypeTab(type, preferredTab_);
+    return true;
+}
+
+void HmiTypesPane::openTypeMenu(gfx::Point at) {
+    if (!typeMenu_ || !types_) return;
+    namespace cmd = ui::cmd;
+    types_->openContextMenu(at);
+    const Id id = selectedType();
+    const auto* t = doc_->project.hmiType(id);
+    const bool folder = !t && folders_ && !folders_->selectedFolder().empty();
+    const auto entry = [](std::string label, int itemId, std::string key, bool enabled, std::string why, ui::Icon icon) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = itemId;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.icon = icon;
+        return it;
+    };
+    const std::string noType = "choisis un type";
+    std::vector<ui::PopupMenu::Item> items;
+    if (t) items.push_back(cmd::heading(hmi::fullName(*t), kindTitle(*t) == "STRUCTURE" ? std::string("structure")
+                                                         : t->kind == hmi::HmiTypeKind::Interface ? std::string("interface")
+                                                         : t->kind == hmi::HmiTypeKind::Callback ? std::string("rappel")
+                                                                                                  : std::string("\xC3\xA9num\xC3\xA9ration")));
+    else if (folder) items.push_back(cmd::heading(folders_->selectedFolder(), "dossier"));
+    items.push_back(entry("Ouvrir dans un onglet", kMenuBase - 1, "Entr\xC3\xA9" "e", t && static_cast<bool>(hosts_.openTypeTab),
+                          t ? std::string("pas d'onglet de document ici") : noType, ui::Icon::Window));
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - 2, t || folder, noType));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - 3, t != nullptr, noType));
+    items.push_back(cmd::separator());
+    items.push_back(entry("Exporter le type\xE2\x80\xA6", kMenuBase - 4, {}, t && static_cast<bool>(hosts_.exportItems),
+                          t ? std::string("pas d'export ici") : noType, ui::Icon::Export));
+    items.push_back(cmd::separator());
+    items.push_back(entry(folder ? "Supprimer le dossier" : "Supprimer le type", kMenuBase - 5, "Suppr", t || folder, noType, ui::Icon::Delete));
+    typeMenu_->setItems(std::move(items));
+}
+
 void HmiTypesPane::onLayout() {
     const auto b = bounds();
     tools_->setBounds({b.x, b.y, b.w, 38.f});
@@ -5233,12 +5739,7 @@ void HmiTypesPane::onLayout() {
     const float ph = preview_ && pending_ ? static_cast<PastePreview*>(preview_)->wantedHeight() : 0.f;
     if (preview_) preview_->setBounds({b.x, b.y + b.h - 24.f - ph, b.w, ph});
     split_->setBounds({b.x, b.y + 38.f, b.w, std::max(0.f, b.h - 62.f - ph)});
-    // 1.10 (chantier U) : les valeurs d'une enumeration a la place des membres ; les
-    // fenetres sur tout le volet.
-    if (enums_ && enums_->visible() && membersPanel_) {
-        split_->layout();
-        enums_->setBounds(membersPanel_->bounds());
-    }
+    // 1.10 (chantier U) : les fenetres sur tout le volet (1.13.1 : les valeurs d'une enumeration ont leur onglet).
     if (enumDialog_) enumDialog_->setBounds(b);
     if (create_) create_->setBounds(b);
     if (methodDialog_) methodDialog_->setBounds(b);   // 1.13.0 (J1b) : la fenetre Ajouter une methode...
@@ -5276,7 +5777,11 @@ Id HmiTypesPane::createEnumerationFromPanel(std::string* why) {
     return made;
 }
 
-bool HmiTypesPane::showsEnumeration() const { return enums_ && enums_->visible(); }
+// 1.13.1 (lot K4) : une enumeration choisie (son onglet Valeurs montre) - avant : ses valeurs posees sur les membres.
+bool HmiTypesPane::showsEnumeration() const {
+    const auto* t = doc_->project.hmiType(current_);
+    return t && hmi::isEnumeration(*t);
+}
 
 void HmiTypesPane::onPaint(const ui::PaintContext& ctx) { ctx.r.fillRect(bounds(), ctx.theme.color.panelBg); }
 
