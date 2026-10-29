@@ -864,6 +864,16 @@ public:
         const Declaration* c = viewmembers::constant(*v, r.substr(dot + 1, n - dot - 1));
         return c ? units::unitAlong(*rt_.project_, c->type, c->unit, r.substr(n)) : std::string{};
     }
+    // 1.13.1 : une constante globale - la constante publique d'un script general, Reglages.Pression[.membre...] ;
+    // vide : pas une telle constante (ou sans unite). Avant, EN(Reglages.Pression, 'mbar') ne convertissait rien.
+    std::string globalConstantUnit(std::string_view r) const {
+        const auto dot = r.find('.');
+        if (dot == std::string_view::npos || !rt_.project_->generalScript(r.substr(0, dot))) return {};
+        std::size_t n = dot + 1;
+        while (n < r.size() && (std::isalnum(static_cast<unsigned char>(r[n])) || r[n] == '_')) ++n;
+        const Declaration* c = calc::qualified(*rt_.project_, r.substr(0, n));
+        return c ? units::unitAlong(*rt_.project_, c->type, c->unit, r.substr(n)) : std::string{};
+    }
     std::string declaredUnit(std::string_view n) override {
         if (!rt_.project_) return {};
         if (anyUnit < 0) readAnyUnit();
@@ -880,6 +890,7 @@ public:
         if (const Variable* var = rt_.project_->variable(r)) u = var->unit;
         else u = units::unitOfPath(*rt_.project_, r);
         if (u.empty() && !rt_.project_->variable(r.substr(0, r.find_first_of(".["))) ) u = viewConstantUnit(r);
+        if (u.empty() && !rt_.project_->variable(r.substr(0, r.find_first_of(".[")))) u = globalConstantUnit(r);   // 1.13.1
         unitCache.emplace(r, u);
         return u;
     }

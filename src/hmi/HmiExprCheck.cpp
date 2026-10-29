@@ -1134,7 +1134,14 @@ private:
         if (p && p->generalScript(root) && !segs.empty() && !segs.front().index) {
             std::string why;
             if (const Declaration* q = calc::qualified(*p, root + "." + segs.front().member, nullptr, &why)) {
-                if (segs.size() == 1) typed(v, q->type);
+                // 1.13.1 : le type et l'unite le long du chemin (Reglages.Four.Temp, Reglages.Table[1]), comme une
+                // constante de vue - avant, seul Reglages.Seuil avait son type, et aucune son unite : EN(Reglages.P, 'mbar')
+                // disait "Reglages.P n'a pas d'unite". Le moteur lit la meme (declaredUnit).
+                const std::string_view rest =
+                    std::string_view(text).substr(std::min(text.size(), root.size() + 1 + segs.front().member.size()));
+                if (const std::string t = viewmembers::typeAlong(*p, q->type, rest); !t.empty()) typed(v, t);
+                v.unit = units::unitAlong(*p, q->type, q->unit, rest);
+                v.plain = true;
                 return v;
             }
             Problem pb;
