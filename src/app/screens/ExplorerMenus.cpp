@@ -1811,6 +1811,8 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     case NK::HmiTypesFolder:
     case NK::HmiTypeNode: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        // 1.13.1 (lot K4) : le type dans son propre onglet de document (comme une vue) - aussi le double-clic.
+        if (kind == NK::HmiTypeNode) m.add("Ouvrir dans un onglet", Icon::Window, [this, node] { (void)openHmiTypeNodeTab(node); });
         if (kind == NK::HmiTypeNode) {                                   // 1.12.18 (planche 19)
             const auto tid = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
             const auto* type = hmiDoc ? hmiDoc->project.hmiType(static_cast<hmi::Id>(tid)) : nullptr;

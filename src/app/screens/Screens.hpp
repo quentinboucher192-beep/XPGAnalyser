@@ -54,6 +54,7 @@ class MacrosPane;   // lot macros 1 : l'onglet Macros
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
 class HmiLiveSource;        // 1.11.21 : un volet de code montre (hmi/HmiLive.hpp)
+class HmiTypesPane;         // 1.13.1 (lot K4) : un type dans son onglet de document (hmi/HmiVariablePanes.hpp)
 struct TestLine;            // 1.13.0 (lot J4b) : une ligne d'un verdict de test (hmi/HmiFunctionTestsPage.hpp)
 struct ConsoleEntry;        // 1.11.14 : une ligne de la Console (hmi/HmiConsole.hpp)
 class MacroEditorView;         // lot API 6 : le mode Modifier d'une macro
@@ -902,6 +903,14 @@ private:
     // d'un type IHM (Types IHM) ou d'un DDT (les types derives de l'API).
     void askHmiType(HmiTypePicker::Spec spec, typepicker::Done done);
     void openHmiTypeDefinition(const std::string& key);
+    // 1.13.1 (lot K4) : UN TYPE IHM DANS SON PROPRE ONGLET de document (cle "type:<id>"), comme une vue : ses onglets
+    // (Membres, Methodes...), `tab` : le sous-onglet (-1 : celui du volet) ; plusieurs types ouverts a la fois ; le titre
+    // suit un renommage, l'onglet se ferme avec le type (HmiTabsCheck). showHmiType : le volet ou montrer un type - son
+    // onglet de document s'il est ouvert, sinon la page Types IHM (ouverte, sur lui) ; nul : pas d'IHM.
+    void openHmiTypeTab(std::uint64_t typeId, int tab = -1);
+    HmiTypesPane* showHmiType(std::uint64_t typeId);
+    bool openHmiTypeNodeTab(ui::NodeId n);         // l'arbre : le double-clic, Ouvrir dans un onglet (faux : pas un type)
+    void wireHmiTypesHosts(HmiTypesPane& types);   // les hotes de la page Types IHM et d'un onglet de type
     void askHmiViewFromType();                           // lot 12 : "Depuis un type" (DDT, DFB)
     // Les dialogues des volets Ressources et Fichiers externes (HmiWorkspace.cpp).
     void askHmiImportResource();

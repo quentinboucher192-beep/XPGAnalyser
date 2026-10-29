@@ -52,6 +52,7 @@
 #include "../hmi/HmiSupervisionPanes.hpp"
 #include "../hmi/HmiTreeData.hpp"
 #include "../hmi/HmiVariablePanes.hpp"
+#include "../../hmi/HmiEnums.hpp"          // 1.13.1 (lot K4) : le genre d'un type IHM (Aller a)
 #include "../../hmi/HmiGuide.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../../hmi/HmiTemplates.hpp"
@@ -391,6 +392,21 @@ void MainAnalysisScreen::refreshGoToIndex() {
             if (!v.description.empty()) sub += kDot + v.description;
             push(ix.entries, GHmiVar, v.name, std::move(sub), "hmivar:" + v.name, ui::Icon::Variable);
         }
+        // 1.13.1 (lot K4) : les types IHM - Aller a ouvre le type dans son onglet ; ses membres se cherchent aussi.
+        for (const auto& t : p.programs.types) {
+            const bool en = hmi::isEnumeration(t);
+            std::string sub = std::string("Type IHM") + kDot
+                              + (t.kind == hmi::HmiTypeKind::Interface ? "interface"
+                                 : t.kind == hmi::HmiTypeKind::Callback ? "rappel"
+                                 : en ? "\xC3\xA9num\xC3\xA9ration" : "structure");
+            if (!t.base.empty()) sub += kDot + std::string("h\xC3\xA9rite de ") + t.base;
+            if (!t.description.empty()) sub += kDot + t.description;
+            std::string extra;
+            for (const auto& m : t.members) extra += m.name + " ";
+            for (const auto& m : t.methods) extra += m.name + " ";
+            for (const auto& x : t.values) extra += x.name + " ";
+            push(ix.entries, GType, hmi::fullName(t), std::move(sub), "hmitype:" + std::to_string(t.id), ui::Icon::DerivedType, std::move(extra));
+        }
         for (const auto& v : p.views) {
             push(ix.entries, GView, v.name, std::string(hmi::viewRoleLabel(v.role)) + kDot + std::to_string(v.objects.size()) + " objets"
                                                 + (v.description.empty() ? std::string{} : kDot + v.description),
@@ -613,6 +629,8 @@ void MainAnalysisScreen::goToResult(const GoToPanel::Result& r) {
         }
     } else if (kind == "hmiview") {
         openHmiView(std::strtoull(what.c_str(), nullptr, 10));
+    } else if (kind == "hmitype") {             // 1.13.1 (lot K4) : un type IHM, dans son onglet
+        openHmiTypeTab(std::strtoull(what.c_str(), nullptr, 10));
     } else if (kind == "hmiobj") {
         std::string view, object;
         split(what, view, object);

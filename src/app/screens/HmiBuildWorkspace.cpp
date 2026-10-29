@@ -718,11 +718,7 @@ void MainAnalysisScreen::openHmiElement(const std::string& key) {
         openHmiPane("scripts");
         if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) pane->selectVariable(static_cast<hmi::Id>(id));
     } else if (kind == "type") {
-        openHmiPane("scripts");
-        if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-            pane->showTab(HmiScriptsPane::TabTypes);
-            if (auto* types = pane->typesPane()) types->selectType(static_cast<hmi::Id>(id));
-        }
+        (void)showHmiType(id);   // 1.13.1 (lot K4) : son onglet de document s'il est ouvert, sinon Types IHM
     } else if (kind == "alarme" || kind == "alarmes-reglages") openHmiPane("alarmes");
     else if (kind == "recette") openHmiPane("recettes");
     else if (kind == "securite") openHmiPane("utilisateurs");

@@ -220,6 +220,15 @@ struct HmiTabsCheck {};
 
 // L'arbre et l'ecran parlent en 64 bits (NodeId) ; le modele IHM en hmi::Id.
 hmi::Id asId(std::uint64_t v) { return static_cast<hmi::Id>(v); }
+// 1.13.1 (lot K4) : le sous-onglet d'un type que designe une ligne de l'arbre (Methodes (5), une valeur...) ; -1 : aucun.
+int hmiTypeTabOfNode(NK kind) {
+    switch (kind) {
+        case NK::HmiTypeValues: case NK::HmiTypeValue:       return static_cast<int>(HmiTypesPane::TabValues);
+        case NK::HmiTypeOperators: case NK::HmiTypeOperator: return static_cast<int>(HmiTypesPane::TabOperators);
+        case NK::HmiTypeMethods: case NK::HmiTypeMethod:     return static_cast<int>(HmiTypesPane::TabMethods);
+        default:                                             return -1;
+    }
+}
 // 1.10.4 : les copies du prochain "Dupliquer..." (3 ; 0 : "Remplacer..." de Compiler).
 int& nextDuplicateCopies() {
     static int copies = 3;
@@ -595,6 +604,12 @@ void MainAnalysisScreen::bindHmi() {
             for (const auto& [key, page] : hmiTabs_) {
                 const int at = centre_->indexOf(page);
                 if (at < 0) continue;
+                // 1.13.1 (lot K4) : un type dans son onglet - le titre suit son nom complet ; supprime, l'onglet se ferme.
+                if (auto* type = dynamic_cast<HmiTypesPane*>(page); type && type->isDocument()) {
+                    if (type->documentGone()) gone.push_back(page);
+                    else centre_->setTabTitle(static_cast<std::size_t>(at), type->documentTitle());
+                    continue;
+                }
                 hmi::Id view = hmi::kNoId;
                 std::string prefix;
                 if (auto* editor = dynamic_cast<HmiEditor*>(page)) view = editor->viewId();
@@ -870,23 +885,22 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiTypeNode:
         case NK::HmiTypeValues: case NK::HmiTypeValue:            // 1.10 (chantier O) : le type choisi
         case NK::HmiTypeOperators: case NK::HmiTypeOperator:
-        case NK::HmiTypeMethods: case NK::HmiTypeMethod:          // 1.13.0 (J1b) : la section Methodes, la methode choisie
-            openHmiPane("scripts");
-            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-                pane->showTab(HmiScriptsPane::TabTypes);
-                if (ProjectTreeModel::kindOf(n) != NK::HmiTypesFolder)
-                    if (auto* types = pane->typesPane()) {
-                        types->selectType(asId(treeModel_->hmiIdOf(n)));
-                        // 1.10 (chantier U) : un clic sur << Arret = 0 >> choisit la valeur dans la grille.
-                        if (ProjectTreeModel::kindOf(n) == NK::HmiTypeValue && types->enumValues())
-                            types->enumValues()->selectValue(static_cast<int>(ProjectTreeModel::subOf(n)));
-                        if (ProjectTreeModel::kindOf(n) == NK::HmiTypeMethod && types->methods())
-                            if (const auto* ty = app_.hmi() ? app_.hmi()->project.hmiType(asId(treeModel_->hmiIdOf(n))) : nullptr;
-                                ty && ProjectTreeModel::subOf(n) < ty->methods.size())
-                                types->methods()->selectMethod(ty->methods[ProjectTreeModel::subOf(n)].id);
-                    }
-            }
+        case NK::HmiTypeMethods: case NK::HmiTypeMethod: {        // 1.13.0 (J1b) : la section Methodes, la methode choisie
+            // 1.13.1 (lot K4) : un type ouvert dans son onglet de document y mene ; sinon la page Types IHM, sur lui. Ce que
+            // la ligne designe ouvre son onglet (Valeurs, Operateurs, Methodes).
+            const auto kind = ProjectTreeModel::kindOf(n);
+            auto* types = showHmiType(kind == NK::HmiTypesFolder ? 0 : treeModel_->hmiIdOf(n));
+            if (!types || kind == NK::HmiTypesFolder) break;
+            if (const int tab = hmiTypeTabOfNode(kind); tab >= 0) types->showTypeTab(static_cast<std::size_t>(tab));
+            // 1.10 (chantier U) : un clic sur << Arret = 0 >> choisit la valeur dans la grille.
+            if (kind == NK::HmiTypeValue && types->enumValues())
+                types->enumValues()->selectValue(static_cast<int>(ProjectTreeModel::subOf(n)));
+            if (kind == NK::HmiTypeMethod && types->methods())
+                if (const auto* ty = app_.hmi() ? app_.hmi()->project.hmiType(asId(treeModel_->hmiIdOf(n))) : nullptr;
+                    ty && ProjectTreeModel::subOf(n) < ty->methods.size())
+                    types->methods()->selectMethod(ty->methods[ProjectTreeModel::subOf(n)].id);
             break;
+        }
         case NK::HmiUsedFolder:
             // R1111-5 (decision 104, reponse 2) : « Variables employees » s'est
             // fondue dans l'arbre de la Configuration : son filtre « Employees ».
@@ -1585,22 +1599,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             // ---- fin 1.10 ----
             vars->setHosts(std::move(vh));
         }
-        if (auto* types = pane->typesPane()) {
-            HmiTypesPane::Hosts th;
-            th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
-            th.importAny = [this] { askHmiImport(); };
-            // 1.13.0 (correctifs F2) : un type cree par Nouveau type : l'arbre le montre et le choisit (setCurrentNode n'ouvre
-            // rien) - avant, apres Nouveau type > Interface..., l'arbre gardait I_Demarrable choisi.
-            th.typeCreated = [this](hmi::Id id) {
-                if (!treeModel_ || !explorer_ || id == hmi::kNoId) return;
-                const auto node = ProjectTreeModel::pack(ProjectTreeModel::NodeKind::HmiTypeNode, static_cast<domain::Index>(id & ((1ull << 28) - 1)));   // comme hmilists::itemNode
-                if (revealTreeNode(node)) explorer_->setCurrentNode(node);
-            };
-            types->setHosts(std::move(th));
-            // 1.11.17 (refonte, lot 1) : Compiler les operateurs d'un type - le build du type.
-            if (auto* ops = types->operators())
-                ops->build = [this](hmi::pipeline::Mode mode, const std::string& k) { runHmiBuildFor(mode, k); };
-        }
+        if (auto* types = pane->typesPane()) wireHmiTypesHosts(*types);   // 1.13.1 (lot K4) : les memes qu'un onglet de type
         wireAssist(*pane, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
         page = std::move(pane);
         title = "IHM \xC2\xB7 Programmation g\xC3\xA9n\xC3\xA9rale";
@@ -3038,13 +3037,10 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
         hmi::OperatorOwner owner;
         if (!hmi::operatorById(doc->project, issue.item, &owner)) return;
         if (owner.kind == hmi::OperatorOwner::Kind::Type) {
-            openHmiPane("scripts");
-            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-                pane->showTab(HmiScriptsPane::TabTypes);
-                if (auto* types = pane->typesPane()) {
-                    types->selectType(owner.id);
-                    if (auto* ops = types->operators()) ops->goTo(issue.item, issue.line);
-                }
+            // 1.13.1 (lot K4) : son onglet de document s'il est ouvert, sinon Types IHM ; l'onglet Operateurs.
+            if (auto* types = showHmiType(owner.id)) {
+                types->showTypeTab(HmiTypesPane::TabOperators);
+                if (auto* ops = types->operators()) ops->goTo(issue.item, issue.line);
             }
         } else if (owner.kind == hmi::OperatorOwner::Kind::Symbol) {
             openHmiView(owner.id);
@@ -3058,15 +3054,12 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
     // 1.13.0 (J1b) : un constat d'un type IHM (Generer, Compiler) - le type dans Types IHM ; celui d'une methode (object) :
     // sa section Methodes, la methode choisie, son corps a la ligne.
     if (issue.category == "Type IHM" && issue.item != hmi::kNoId && doc->project.hmiType(issue.item)) {
-        openHmiPane("scripts");
-        if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-            pane->showTab(HmiScriptsPane::TabTypes);
-            if (auto* types = pane->typesPane()) {
-                types->selectType(issue.item);
-                if (issue.object != hmi::kNoId && hmi::methodById(doc->project, issue.object))
-                    if (auto* methods = types->methods()) methods->goTo(issue.object, issue.line);
+        // 1.13.1 (lot K4) : son onglet de document s'il est ouvert, sinon Types IHM ; une methode : l'onglet Methodes.
+        if (auto* types = showHmiType(issue.item))
+            if (issue.object != hmi::kNoId && hmi::methodById(doc->project, issue.object)) {
+                types->showTypeTab(HmiTypesPane::TabMethods);
+                if (auto* methods = types->methods()) methods->goTo(issue.object, issue.line);
             }
-        }
         return;
     }
     if (issue.script != hmi::kNoId && doc->project.script(issue.script)) {
@@ -3724,18 +3717,112 @@ void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done d
     });
 }
 
+// ---- 1.13.1 (lot K4) : UN TYPE IHM DANS SON PROPRE ONGLET -------------------------------------------------------
+// Les hotes de la page Types IHM et d'un onglet de type : les memes (Exporter, Importer, l'arbre qui montre un type cree,
+// le build des operateurs) ; plus l'ouverture d'un type dans son onglet, et les emplois hors des types.
+void MainAnalysisScreen::wireHmiTypesHosts(HmiTypesPane& types) {
+    HmiTypesPane::Hosts th;
+    th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
+    th.importAny = [this] { askHmiImport(); };
+    // 1.13.0 (correctifs F2) : un type cree par Nouveau type : l'arbre le montre et le choisit (setCurrentNode n'ouvre
+    // rien) - avant, apres Nouveau type > Interface..., l'arbre gardait I_Demarrable choisi.
+    th.typeCreated = [this](hmi::Id id) {
+        if (!treeModel_ || !explorer_ || id == hmi::kNoId) return;
+        const auto node = ProjectTreeModel::pack(ProjectTreeModel::NodeKind::HmiTypeNode, static_cast<domain::Index>(id & ((1ull << 28) - 1)));   // comme hmilists::itemNode
+        if (revealTreeNode(node)) explorer_->setCurrentNode(node);
+    };
+    th.openTypeTab = [this](hmi::Id id, std::size_t tab) { openHmiTypeTab(id, static_cast<int>(tab)); };
+    th.openUse = [this](const HmiTypesPane::TypeUse& u) {
+        using K = HmiTypesPane::TypeUse::Kind;
+        switch (u.kind) {
+            case K::Variable:
+                openHmiPane("scripts");
+                if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
+                    pane->showTab(HmiScriptsPane::TabVariables);
+                    if (auto* vars = pane->variablesPane()) vars->selectVariable(u.item);
+                }
+                break;
+            case K::Function: openHmiFunctions(u.item); break;
+            case K::Script: openHmiScripts(0, u.item); break;
+            case K::ViewScript: openHmiScripts(u.item, u.sub); break;
+            case K::ViewFunction: openHmiFunctionDefinition(u.item, u.sub); break;
+            case K::ViewConstant:
+                openHmiView(u.item);
+                if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(u.item))); editor && editor->viewTabs())
+                    editor->viewTabs()->setCurrent(HmiSymbolTabs::Constants);
+                break;
+            case K::ViewParam: openHmiView(u.item); break;
+            default: break;   // un type (membre, sous-type, methode, operateur) : le volet le montre lui-meme
+        }
+    };
+    types.setHosts(std::move(th));
+    // 1.11.17 (refonte, lot 1) : Compiler les operateurs d'un type - le build du type.
+    if (auto* ops = types.operators())
+        ops->build = [this](hmi::pipeline::Mode mode, const std::string& k) { runHmiBuildFor(mode, k); };
+}
+
+void MainAnalysisScreen::openHmiTypeTab(std::uint64_t typeId, int tab) {
+    auto doc = app_.hmi();
+    if (!doc || !centre_ || !doc->project.hmiType(asId(typeId))) return;
+    setHmiProjectFolder(app_.projectFolder());
+    const std::string key = "type:" + std::to_string(typeId);
+    auto* pane = dynamic_cast<HmiTypesPane*>(hmiTab(key));
+    if (!pane) {
+        auto apply = [this](core::CommandPtr c) { if (c) app_.apply(std::move(c), /*refreshViews=*/false); };
+        auto made = std::make_unique<HmiTypesPane>("hmi.type." + std::to_string(typeId), doc, apply, asId(typeId));
+        wireHmiTypesHosts(*made);
+        pane = made.get();
+        const std::string title = pane->documentTitle();
+        const auto at = centre_->addTab(TabControl::Tab{title, Icon::DerivedType, true, false}, std::move(made));
+        hmiTabs_[key] = pane;
+        centre_->setCurrentIndex(at);
+        if (status_)
+            status_->setTransientMessage(title + " ouvert dans son onglet : ses onglets Membres, M\xC3\xA9thodes\xE2\x80\xA6 "
+                                         "(Afficher dans l'arbre : le clic droit sur l'onglet)", 6.0);
+    } else {
+        (void)showPage(pane);
+    }
+    if (tab >= 0) pane->showTypeTab(static_cast<std::size_t>(tab));
+}
+
+HmiTypesPane* MainAnalysisScreen::showHmiType(std::uint64_t typeId) {
+    if (typeId != 0)
+        if (auto* own = dynamic_cast<HmiTypesPane*>(hmiTab("type:" + std::to_string(typeId)))) {
+            (void)showPage(own);
+            return own;
+        }
+    openHmiPane("scripts");
+    auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
+    if (!pane) return nullptr;
+    pane->showTab(HmiScriptsPane::TabTypes);
+    auto* types = pane->typesPane();
+    if (types && typeId != 0) types->selectType(asId(typeId));
+    return types;
+}
+
+bool MainAnalysisScreen::openHmiTypeNodeTab(ui::NodeId n) {
+    if (!treeModel_ || !app_.hmi()) return false;
+    const auto kind = ProjectTreeModel::kindOf(n);
+    if (kind != NK::HmiTypeNode && hmiTypeTabOfNode(kind) < 0) return false;
+    const auto id = treeModel_->hmiIdOf(n);
+    if (!app_.hmi()->project.hmiType(asId(id))) return false;
+    openHmiTypeTab(id, hmiTypeTabOfNode(kind));
+    auto* pane = dynamic_cast<HmiTypesPane*>(hmiTab("type:" + std::to_string(id)));
+    if (pane && kind == NK::HmiTypeMethod && pane->methods())
+        if (const auto* ty = app_.hmi()->project.hmiType(asId(id)); ty && ProjectTreeModel::subOf(n) < ty->methods.size())
+            pane->methods()->selectMethod(ty->methods[ProjectTreeModel::subOf(n)].id);
+    if (pane && kind == NK::HmiTypeValue && pane->enumValues())
+        pane->enumValues()->selectValue(static_cast<int>(ProjectTreeModel::subOf(n)));
+    return pane != nullptr;
+}
+
 void MainAnalysisScreen::openHmiTypeDefinition(const std::string& key) {
     if (key.rfind("aide:", 0) == 0) {                    // 1.12.18 : Aide sur MAP (le selecteur de types, F1)
         (void)openNative(natives::keyOfWord(key.substr(5)));
         return;
     }
-    if (key.rfind("ihm:", 0) == 0) {                     // un type IHM : l'onglet Types IHM, sur lui
-        const auto id = static_cast<hmi::Id>(std::strtoull(key.c_str() + 4, nullptr, 10));
-        openHmiPane("scripts");
-        if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-            pane->showTab(HmiScriptsPane::TabTypes);
-            if (auto* types = pane->typesPane()) types->selectType(id);
-        }
+    if (key.rfind("ihm:", 0) == 0) {                     // un type IHM : l'onglet Types IHM, sur lui (1.13.1 : ou son onglet)
+        (void)showHmiType(std::strtoull(key.c_str() + 4, nullptr, 10));
         return;
     }
     if (key.rfind("api:", 0) == 0) {                     // un DDT : les types derives de l'API
@@ -3819,6 +3906,7 @@ namespace {
 std::string placeOfTab(const std::string& key) {
     if (key.rfind("vue:", 0) == 0) return "vue";
     if (key.rfind("scripts:", 0) == 0) return "scripts-vue";
+    if (key.rfind("type:", 0) == 0) return "types-ihm";   // 1.13.1 (lot K4) : un type dans son onglet
     return key;
 }
 
@@ -3922,10 +4010,18 @@ bool MainAnalysisScreen::openHmiHelpNow() {
         if (auto* general = dynamic_cast<HmiScriptsPane*>(hmiTab(key)); general && general->tabs()) {
             const auto tab = general->currentTab();
             if (tab == HmiScriptsPane::TabVariables || tab == HmiScriptsPane::TabTypes) {
-                const auto own = help::f1::keyForPlace(help::f1::placeOfProgrammingTab(tab));
+                auto own = help::f1::keyForPlace(help::f1::placeOfProgrammingTab(tab));
+                // 1.13.1 (lot K4) : Types IHM - le sujet du sous-onglet ouvert (Methodes : objets-types ; Operateurs...).
+                if (tab == HmiScriptsPane::TabTypes)
+                    if (auto* types = general->typesPane()) own = types->helpTopic();
                 openHmiHelp(own.empty() ? std::string("ihm") : own);
                 return true;
             }
+        }
+        // 1.13.1 (lot K4) : un type dans son onglet de document - le sujet de son sous-onglet ouvert.
+        if (auto* type = dynamic_cast<HmiTypesPane*>(hmiTab(key))) {
+            openHmiHelp(type->helpTopic());
+            return true;
         }
         // 1.13.0 (lot F3) : l'onglet Tests d'une fonction (le volet Fonctions, ou les fonctions d'une vue, d'une popup, d'un
         // symbole) : son sujet, Les tests unitaires d'une fonction - et non le mot sous le curseur du code, cache derriere.
