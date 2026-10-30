@@ -11,14 +11,16 @@
 //  Les gestes : Ouvrir (ici ; un fichier de l'autre application la lance avec
 //  lui), Importer selon le genre (un paquet IHM par la fenetre Importer, un
 //  modele par la galerie, une bibliotheque IHM par Relier, un .XPG / .XHW par la
-//  question du depot, un bloc ou une macro dans la bibliotheque, un theme dans
-//  les themes), Ajouter aux recents (un projet).
+//  question du depot, un enregistrement .xrec dans Ressources > Enregistrements,
+//  un bloc ou une macro dans la bibliotheque, un theme dans les themes), Ajouter
+//  aux recents (un projet).
 // =============================================================================
 #include "Screens.hpp"
 
 #include "../App.hpp"
 #include "../FileFinder.hpp"
 #include "../FileFinderPane.hpp"
+#include "../hmi/HmiAssetPanes.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../project/SharedLibrary.hpp"
 #include "../../ui/Layout.hpp"
@@ -48,7 +50,7 @@ FileFinderPane::Hosts commonHosts(App& app, FileFinderPane* pane, bool workspace
         c.workspace = workspace;
         c.hmiProject = core::hasIhm() && app.hmi() != nullptr;
         c.plcProject = core::hasApi() && app.project() != nullptr;
-        c.recordings = false;   // Ressources > Enregistrements : pas dans cette version
+        c.recordings = core::hasIhm();   // 1.14.0 (lot M4) : un .xrec va dans Ressources > Enregistrements
         return c;
     };
     h.open = [&app, pane](const finder::Hit& hit) {
@@ -173,6 +175,20 @@ void MainAnalysisScreen::finderImport(const finder::Hit& hit) {
         case finder::ImportKind::PlcExport:
             filesDropped({hit.path});       // la question du depot : le MAST, la configuration
             return;
+        case finder::ImportKind::Recording: {
+            // Copie dans Ressources > Enregistrements (un nom pris devient "Nom (2)"), le volet montre le dossier.
+            openHmiPane("enregistrements");
+            auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+            std::string why;
+            if (!pane) why = "le dossier des enregistrements n'est pas ouvert";
+            else if (pane->importPath(hit.path, &why)) why.clear();
+            else if (why.empty()) why = "copie impossible";
+            const std::string said = why.empty() ? hit.name + " importÃ© dans Ressources âº Enregistrements."
+                                                 : "Importer " + hit.name + " : " + why + ".";
+            if (auto* finderPane = fileFinder()) finderPane->tell(said);
+            if (status_) status_->setTransientMessage(said, 8.0);
+            return;
+        }
         default:
             if (status_) status_->setTransientMessage("Importer " + hit.name + " : rien \xC3\xA0 importer pour ce genre ici.", 6.0);
             return;

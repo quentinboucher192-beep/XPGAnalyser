@@ -942,8 +942,9 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9p\xC3\xB4t (le MAST, la configuration). Partout : un bloc .dfb / .ddt ou "
                          "une macro .mac **\xC3\xA0 la biblioth\xC3\xA8que** d'API Studio (libs/Importes, "
                          "libs/Macros ; un nom d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est refus\xC3\xA9), un "
-                         "th\xC3\xA8me **aux th\xC3\xA8mes** (il s'applique). Un enregistrement (.xrec) n'a "
-                         "pas encore de place dans cette version : l'entr\xC3\xA9" "e est gris\xC3\xA9" "e.", {}},
+                         "th\xC3\xA8me **aux th\xC3\xA8mes** (il s'applique). Un enregistrement (.xrec) va "
+                         "dans **Ressources \xE2\x80\xBA Enregistrements** (un nom d\xC3\xA9j\xC3\xA0 pris "
+                         "devient \xC2\xAB Nom (2) \xC2\xBB) : il se rejoue de l\xC3\xA0.", {}},
              {K::Bullet, "**Ajouter aux r\xC3\xA9" "cents** : un projet de l'application, en t\xC3\xAAte de "
                          "l'accueil.", {}},
              {K::Paragraph, "Le **clic droit** sur une ligne propose les m\xC3\xAAmes gestes, le fichier en "
