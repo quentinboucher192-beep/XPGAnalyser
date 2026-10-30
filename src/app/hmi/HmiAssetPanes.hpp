@@ -78,6 +78,11 @@ public:
     // Ecouter le son choisi ; encore : l'arreter. Faux (et le message) sans
     // sortie audio ou si ce n'est pas un son.
     bool togglePlay();
+    // 1.14.1 (lot N6) : AJOUTER A MA BIBLIOTHEQUE D'IMAGES - une copie de l'image rejoint Mes images (l'onglet Images
+    // de la bibliotheque des vues), hors du projet : elle se pose ensuite dans d'autres projets. Faux et `why` : pas une
+    // image, pas de dossier pour Mes images, ecriture impossible.
+    bool addToImageLibrary(hmi::Id resource, std::string* why = nullptr);
+    bool addSelectedToImageLibrary(std::string* why = nullptr) { return addToImageLibrary(selectedResource(), why); }
 
     struct Hosts {
         std::function<void()>        importFile;            // demande un chemin

@@ -28,6 +28,7 @@
 #include "../../project/RenamePlan.hpp"   // ---- Lot API 8 : les expressions impossibles (PlcTypes) ----
 #include "../../hmi/HmiApiVars.hpp"     // 1.11.1 (API-M) : les variables de l'automate sous API.
 #include "HmiApiVarsPane.hpp"            // 1.11.1 (API-V, R1111-6) : l'arbre dans la bibliotheque
+#include "HmiImages.hpp"                 // 1.14.1 (lot N6) : les vignettes de l'onglet Images
 #include "HmiValueKind.hpp"              // 1.11.3 : le carre de legende de chaque case
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : les variables qui ont des elements (Elements depuis)
 #include "../../hmi/HmiEnums.hpp"       // 1.12.2 : les enumerations, sources d'elements
@@ -1589,6 +1590,7 @@ void HmiPalette::setFilter(std::string text) {
         for (const auto k : hmi::kPlaceableKinds)
             if (hmiPaletteWordMatch(k, filter_)) wordHits_.insert(k);
     scrollY_ = 0;
+    imageScrollY_ = 0;      // 1.14.1 (lot N6) : l'onglet Images aussi
     invalidate();
 }
 
@@ -1730,9 +1732,11 @@ void HmiPalette::revealKind(hmi::Kind kind) {
 }
 
 bool HmiPalette::modeRect(Mode m, gfx::Rect& out) const {
+    // 1.14.1 (lot N6) : trois onglets, Objets | Images | Variables.
     const auto b = bounds();
-    const float w = (b.w - 12.f) / 2.f;
-    out = {b.x + 6.f + (m == Mode::Variables ? w : 0.f), b.y + 4.f, w, kModeH - 8.f};
+    const float w = (b.w - 12.f) / 3.f;
+    const float at = m == Mode::Objects ? 0.f : m == Mode::Images ? 1.f : 2.f;
+    out = {b.x + 6.f + w * at, b.y + 4.f, w, kModeH - 8.f};
     return b.w > 20.f;
 }
 
@@ -1742,7 +1746,9 @@ void HmiPalette::setMode(Mode m) {
     hoverKind_.reset();
     hoverSymbol_.clear();
     hoverVariable_.clear();
+    hoverImage_.clear();
     if (m == Mode::Variables) variablesWanted->emit();
+    if (m == Mode::Images && !mineLoaded_) reloadMyImages();   // 1.14.1 (lot N6) : Mes images, lues a l'ouverture
     invalidateLayout();      // R1111-6 : l'arbre se montre (ou s'en va) avec l'onglet
     invalidate();
 }
@@ -1839,17 +1845,23 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
     const auto b = bounds();
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(b, c.panelBg);
-    // Lot 12 : les onglets Objets | Variables.
-    for (const Mode m : {Mode::Objects, Mode::Variables}) {
+    // Lot 12 : les onglets Objets | Variables ; 1.14.1 (lot N6) : Objets | Images | Variables.
+    for (const Mode m : {Mode::Objects, Mode::Images, Mode::Variables}) {
         gfx::Rect r;
         if (!modeRect(m, r)) continue;
         const bool on = m == mode_;
         ctx.r.fillRoundedRect(r, on ? c.accent.withAlpha(60) : c.inputBg, 4);
         if (on) ctx.r.fillRect({r.x + 4, r.y + r.h - 2, r.w - 8, 2}, c.accent);
-        const std::string label = m == Mode::Objects ? "Objets" : "Variables";
+        const std::string label = fit(ctx.r, m == Mode::Objects ? "Objets" : m == Mode::Images ? "Images" : "Variables",
+                                      ctx.theme.font.smallUi, r.w - 4);
         const float lw = ctx.r.measure(label, ctx.theme.font.smallUi).width;
         ctx.r.drawText({r.x + (r.w - lw) / 2, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.smallUi)) / 2}, label, ctx.theme.font.smallUi,
                        on ? c.text : c.textMuted);
+    }
+    if (mode_ == Mode::Images) {           // 1.14.1 (lot N6)
+        if (!hovered()) hoverImage_.clear();
+        paintImages(ctx);
+        return;
     }
     if (mode_ == Mode::Variables) {
         if (!hovered()) hoverVariable_.clear();
@@ -1969,9 +1981,9 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
 }
 
 ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
-    // Lot 12 : les onglets Objets | Variables, puis la liste des variables.
+    // Lot 12 : les onglets Objets | Variables, puis la liste des variables ; 1.14.1 (lot N6) : et Images.
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
-        for (const Mode mode : {Mode::Objects, Mode::Variables}) {
+        for (const Mode mode : {Mode::Objects, Mode::Images, Mode::Variables}) {
             gfx::Rect r;
             if (modeRect(mode, r) && r.contains(m->pos)) {
                 setMode(mode);
@@ -1979,6 +1991,7 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
             }
         }
     }
+    if (mode_ == Mode::Images) return imageEvent(ev);
     if (mode_ == Mode::Variables) {
         if (treeShown()) return ui::EventResult::Ignored;   // R1111-6 : l'arbre (un enfant) a deja vu l'evenement
         layoutVariables();
@@ -2083,6 +2096,463 @@ std::string hmiPaletteFamily(hmi::Kind kind) {
     for (const auto& c : categories())
         if (std::find(c.kinds.begin(), c.kinds.end(), kind) != c.kinds.end()) return c.name;
     return {};
+}
+
+// ================================================== 1.14.1 (lot N6) : l'onglet Images ===
+namespace {
+namespace il = hmi::imagelib;
+// Les reglages de l'onglet : communs aux editeurs ouverts (ouvrir une autre vue les garde).
+struct ImagePrefs {
+    int                   swatch{0};      // 0 : Auto
+    int                   size{1};        // des vignettes moyennes
+    std::set<std::string> open;           // les sections ouvertes
+};
+ImagePrefs& imagePrefs() {
+    static ImagePrefs p = [] {
+        ImagePrefs q;
+        q.open.insert(std::string(il::kMine));
+        if (!il::builtInCategories().empty()) q.open.insert(il::builtInCategories().front());
+        return q;
+    }();
+    return p;
+}
+gfx::Color colorOfHex(std::string_view hex, gfx::Color fallback) {
+    if (hex.size() < 7 || hex[0] != '#') return fallback;
+    std::uint32_t v = 0;
+    for (std::size_t i = 1; i < 7; ++i) {
+        const char ch = hex[i];
+        const int d = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+        if (d < 0) return fallback;
+        v = v * 16u + static_cast<std::uint32_t>(d);
+    }
+    return gfx::Color::rgb(v);
+}
+gfx::Color colorOfRgb(std::uint32_t rgb) { return gfx::Color::rgb(rgb & 0xFFFFFFu); }
+constexpr float kImageCells[3] = {38.f, 54.f, 80.f};
+constexpr const char* kImageSizeNames[3] = {"Petites vignettes", "Vignettes moyennes", "Grandes vignettes, avec leur nom"};
+} // namespace
+
+void HmiPalette::setImageBackdrop(std::string background) {
+    if (background == backdrop_) return;
+    backdrop_ = std::move(background);
+    invalidate();
+}
+
+int HmiPalette::imageSwatch() const noexcept { return imagePrefs().swatch; }
+
+void HmiPalette::setImageSwatch(int index) {
+    imagePrefs().swatch = std::clamp(index, 0, static_cast<int>(il::swatches().size()));
+    invalidate();
+}
+
+std::uint32_t HmiPalette::imageInk() const {
+    const int k = imagePrefs().swatch;
+    if (k > 0 && k <= static_cast<int>(il::swatches().size())) return il::swatches()[static_cast<std::size_t>(k - 1)].rgb;
+    return il::autoInk(backdrop_);
+}
+
+int HmiPalette::imageSize() const noexcept { return imagePrefs().size; }
+
+void HmiPalette::setImageSize(int size) {
+    imagePrefs().size = std::clamp(size, 0, 2);
+    invalidate();
+}
+
+void HmiPalette::setImageCategoryOpen(const std::string& category, bool open) {
+    if (open) imagePrefs().open.insert(category);
+    else imagePrefs().open.erase(category);
+    invalidate();
+}
+
+bool HmiPalette::imageCategoryOpen(const std::string& category) const { return imagePrefs().open.count(category) > 0; }
+
+void HmiPalette::reloadMyImages() {
+    mine_ = il::userImages();
+    mineLoaded_ = true;
+    for (auto it = tileRes_.begin(); it != tileRes_.end();)
+        it = it->first.first.rfind("mes/", 0) == 0 ? tileRes_.erase(it) : std::next(it);
+    if (!currentImage_.empty() && !imageById(currentImage_)) currentImage_.clear();
+    invalidate();
+}
+
+const il::Image* HmiPalette::imageById(std::string_view id) const {
+    if (id.empty()) return nullptr;
+    for (const auto& i : mine_)
+        if (i.id == id) return &i;
+    return il::findBuiltIn(id);
+}
+
+std::uint32_t HmiPalette::inkFor(const il::Image& img) const { return img.ink ? imageInk() : il::kInk; }
+
+const hmi::Resource& HmiPalette::tileResource(const il::Image& img, std::uint32_t ink) const {
+    auto& r = tileRes_[{img.id, ink}];
+    if (!r.data) {
+        r.name = img.id;
+        r.format = img.format;
+        r.width = img.width;
+        r.height = img.height;
+        r.data = il::contentFor(img, ink);
+    }
+    return r;
+}
+
+std::vector<std::pair<std::string, std::vector<const il::Image*>>> HmiPalette::imageGroups() const {
+    std::vector<std::pair<std::string, std::vector<const il::Image*>>> out;
+    const bool searching = !filter_.empty();
+    std::vector<const il::Image*> mine;
+    for (const auto& i : mine_)
+        if (!searching || il::matches(i, filter_)) mine.push_back(&i);
+    if (!mine.empty() || !searching) out.emplace_back(std::string(il::kMine), std::move(mine));
+    for (const auto& i : il::builtIn()) {
+        if (searching && !il::matches(i, filter_)) continue;
+        if (out.empty() || out.back().first != i.category) out.emplace_back(i.category, std::vector<const il::Image*>{});
+        out.back().second.push_back(&i);
+    }
+    return out;
+}
+
+std::vector<HmiPalette::ImageSection> HmiPalette::imageSections() const {
+    std::vector<ImageSection> out;
+    const bool searching = !filter_.empty();
+    for (const auto& [cat, imgs] : imageGroups()) out.push_back({cat, imgs.size(), searching || imageCategoryOpen(cat)});
+    return out;
+}
+
+float HmiPalette::imageCell() const noexcept { return kImageCells[std::clamp(imageSize(), 0, 2)]; }
+
+void HmiPalette::layoutImages() const {
+    imageTiles_.clear();
+    imageHeads_.clear();
+    mineInviteY_ = -1.f;
+    const auto b = bounds();
+    const float cell = imageCell(), gap = 4.f;
+    const float cellH = imageSize() == 2 ? cell + 16.f : cell;
+    const int perRow = std::max(1, static_cast<int>((b.w - 12.f + gap) / (cell + gap)));
+    // La place qui reste se partage entre les colonnes (pas de bande vide a droite).
+    const float gapX = perRow > 1 ? std::clamp((b.w - 12.f - static_cast<float>(perRow) * cell) / static_cast<float>(perRow - 1), gap, 14.f) : gap;
+    const bool searching = !filter_.empty();
+    float y = b.y + kModeH + kImageBarH + 2.f - imageScrollY_;
+    for (const auto& [cat, imgs] : imageGroups()) {
+        const bool open = searching || imageCategoryOpen(cat);
+        imageHeads_.push_back({cat, imgs.size(), open, {b.x + 4.f, y, b.w - 8.f, 22.f}});
+        y += 25.f;
+        if (!open) continue;
+        if (imgs.empty()) {
+            if (cat == il::kMine) {
+                mineInviteY_ = y;         // Mes images, vide : deux lignes d'aide
+                y += 36.f;
+            }
+            continue;
+        }
+        for (std::size_t i = 0; i < imgs.size(); ++i) {
+            const int col = static_cast<int>(i % static_cast<std::size_t>(perRow));
+            if (i > 0 && col == 0) y += cellH + gap;
+            imageTiles_.push_back({imgs[i], {b.x + 6.f + static_cast<float>(col) * (cell + gapX), y, cell, cellH}});
+        }
+        y += cellH + 10.f;
+    }
+}
+
+bool HmiPalette::imageTileRect(std::string_view id, gfx::Rect& out) const {
+    if (mode_ != Mode::Images) return false;
+    layoutImages();
+    const auto b = bounds();
+    for (const auto& t : imageTiles_)
+        if (t.image->id == id && t.rect.y >= b.y + kModeH + kImageBarH && t.rect.y + t.rect.h <= b.y + b.h - kImageHelpH) {
+            out = t.rect;
+            return true;
+        }
+    return false;
+}
+
+bool HmiPalette::imageHeadingRect(std::string_view category, gfx::Rect& out) const {
+    if (mode_ != Mode::Images) return false;
+    layoutImages();
+    const auto b = bounds();
+    for (const auto& h : imageHeads_)
+        if (h.category == category && h.rect.y >= b.y + kModeH + kImageBarH && h.rect.y + h.rect.h <= b.y + b.h - kImageHelpH) {
+            out = h.rect;
+            return true;
+        }
+    return false;
+}
+
+void HmiPalette::revealImage(std::string_view id) {
+    const auto* img = imageById(id);
+    if (!img) return;
+    if (filter_.empty()) setImageCategoryOpen(img->category, true);
+    gfx::Rect r;
+    if (imageTileRect(id, r)) return;
+    layoutImages();
+    const auto b = bounds();
+    for (const auto& t : imageTiles_)
+        if (t.image->id == id) {
+            imageScrollY_ = std::max(0.f, imageScrollY_ + (t.rect.y - b.y) - (kModeH + kImageBarH + 30.f));
+            invalidate();
+            return;
+        }
+}
+
+bool HmiPalette::imageSwatchRect(int index, gfx::Rect& out) const {
+    const auto b = bounds();
+    const int n = static_cast<int>(il::swatches().size()) + 1;
+    if (index < 0 || index >= n || b.w < 60.f) return false;
+    const float step = std::min(20.f, (b.w - 16.f) / static_cast<float>(n));
+    const float side = std::max(8.f, step - 5.f);
+    out = {b.x + 9.f + step * static_cast<float>(index), b.y + kModeH + 5.f, side, side};
+    return true;
+}
+
+bool HmiPalette::imageSizeRect(int size, gfx::Rect& out) const {
+    const auto b = bounds();
+    if (size < 0 || size > 2 || b.w < 60.f) return false;
+    out = {b.x + 8.f + 24.f * static_cast<float>(size), b.y + kModeH + 27.f, 22.f, 20.f};
+    return true;
+}
+
+bool HmiPalette::imageAddRect(gfx::Rect& out) const {
+    const auto b = bounds();
+    out = {b.x + b.w - 8.f - 22.f, b.y + kModeH + 27.f, 22.f, 20.f};
+    return b.w >= 130.f;
+}
+
+bool HmiPalette::imageImportRect(gfx::Rect& out) const {
+    const auto b = bounds();
+    const float w = 74.f;
+    const float x0 = b.x + 8.f + 24.f * 3.f + 4.f;          // apres les tailles
+    const float x1 = b.x + b.w - 8.f - 22.f - 4.f;          // avant +
+    out = {x1 - w, b.y + kModeH + 27.f, w, 20.f};
+    return x1 - w >= x0;
+}
+
+std::string HmiPalette::imageTooltip(std::string_view id) const {
+    const auto* img = imageById(id);
+    if (!img) return {};
+    std::string t = img->label + "\n" + img->category + " \xC2\xB7 " + il::sizeText(*img);
+    if (img->mono) t += "\nMonochrome : elle prend la couleur choisie en haut (Auto : celle qui se lit sur le fond de la vue).";
+    else if (img->ink) t += "\nEn couleurs ; ses traits prennent la couleur choisie en haut.";
+    else if (!img->mine()) t += "\nEn couleurs : elle garde les siennes.";
+    if (img->mine()) t += "\nMes images : " + img->file;
+    t += "\nClique-la puis clique dans la vue (ou glisse-la) : elle s'y pose et entre dans les ressources du projet. "
+         "Double-clic : au centre de la vue. Clic droit : l'importer dans les ressources sans la poser.";
+    return t;
+}
+
+bool HmiPalette::addImageFile(const std::string& path, std::string* why) {
+    std::string stored, error;
+    bool existed = false;
+    if (!il::addUserFile(path, &stored, &existed, &error)) {
+        if (why) *why = error;
+        return false;
+    }
+    reloadMyImages();
+    setImageCategoryOpen(std::string(il::kMine), true);
+    currentImage_ = "mes/" + stored;
+    imageMessage->emit(existed ? "D\xC3\xA9j\xC3\xA0 dans Mes images : " + stored : "Ajout\xC3\xA9" "e \xC3\xA0 Mes images : " + stored);
+    return true;
+}
+
+void HmiPalette::paintImages(const ui::PaintContext& ctx) {
+    const auto b = bounds();
+    const auto& c = ctx.theme.color;
+    const auto f = ctx.theme.font.smallUi;
+    // La barre : la couleur de l'encre (Auto, puis les couleurs), la taille, Importer et +.
+    const int nSw = static_cast<int>(il::swatches().size()) + 1;
+    for (int k = 0; k < nSw; ++k) {
+        gfx::Rect r;
+        if (!imageSwatchRect(k, r)) break;
+        if (k == 0) {              // Auto : clair et sombre, coupes en diagonale
+            ctx.r.fillRect(r, colorOfRgb(il::kDarkInk));
+            ui::shapes::fillPolygon(ctx.r, {{r.x, r.y}, {r.x + r.w, r.y}, {r.x, r.y + r.h}}, colorOfRgb(il::kInk));
+        } else {
+            ctx.r.fillRect(r, colorOfRgb(il::swatches()[static_cast<std::size_t>(k - 1)].rgb));
+        }
+        const bool on = imageSwatch() == k;
+        const float m = on ? 2.f : 0.f;
+        ctx.r.strokeRect({r.x - m, r.y - m, r.w + 2 * m, r.h + 2 * m}, on ? c.accent : c.border, on ? 2.f : 1.f);
+    }
+    for (int sz = 0; sz < 3; ++sz) {
+        gfx::Rect r;
+        if (!imageSizeRect(sz, r)) break;
+        const bool on = imageSize() == sz;
+        ctx.r.fillRoundedRect(r, on ? c.accent.withAlpha(60) : c.inputBg, 3);
+        const float q = 6.f + 3.f * static_cast<float>(sz);   // un carre de plus en plus grand
+        ctx.r.strokeRect({r.x + (r.w - q) / 2, r.y + (r.h - q) / 2, q, q}, on ? c.text : c.textMuted, 1.5f);
+    }
+    gfx::Rect imp, add;
+    if (imageImportRect(imp)) {
+        const bool can = imageById(currentImage_) != nullptr;
+        ctx.r.fillRoundedRect(imp, can ? c.accent.withAlpha(55) : c.inputBg, 3);
+        const std::string t = "Importer";
+        const float tw = ctx.r.measure(t, f).width;
+        ctx.r.drawText({imp.x + (imp.w - tw) / 2, imp.y + (imp.h - ctx.r.lineHeight(f)) / 2}, t, f, can ? c.text : c.textMuted);
+    }
+    if (imageAddRect(add)) {
+        ctx.r.fillRoundedRect(add, c.inputBg, 3);
+        drawHmiGlyph(ctx.r, HmiGlyph::Plus, {add.x + 4, add.y + 3, 14, 14}, c.text);
+    }
+    layoutImages();
+    const float top = b.y + kModeH + kImageBarH, bottom = b.y + b.h - kImageHelpH;
+    // Pas de defilement au-dela de la derniere vignette.
+    float last = top;
+    for (const auto& h : imageHeads_) last = std::max(last, h.rect.y + h.rect.h + 4.f);
+    for (const auto& t : imageTiles_) last = std::max(last, t.rect.y + t.rect.h + 10.f);
+    if (mineInviteY_ >= 0.f) last = std::max(last, mineInviteY_ + 36.f);
+    if (const float over = bottom - last; over > 0.f && imageScrollY_ > 0.f) {
+        imageScrollY_ = std::max(0.f, imageScrollY_ - over);
+        layoutImages();
+    }
+    ctx.r.pushClip({b.x, top, b.w, std::max(0.f, bottom - top)});
+    for (const auto& h : imageHeads_) {
+        if (h.rect.y + h.rect.h < top || h.rect.y > bottom) continue;
+        ctx.r.fillRoundedRect(h.rect, c.headerBg, 3);
+        const float tx = h.rect.x + 7.f, ty = h.rect.y + h.rect.h / 2;
+        if (h.open) ui::shapes::fillPolygon(ctx.r, {{tx, ty - 2.5f}, {tx + 8.f, ty - 2.5f}, {tx + 4.f, ty + 2.5f}}, c.textMuted);
+        else ui::shapes::fillPolygon(ctx.r, {{tx + 2.f, ty - 4.f}, {tx + 6.5f, ty}, {tx + 2.f, ty + 4.f}}, c.textMuted);
+        const std::string count = std::to_string(h.count);
+        const float cw = ctx.r.measure(count, f).width;
+        const float ly = h.rect.y + (h.rect.h - ctx.r.lineHeight(f)) / 2;
+        ctx.r.drawText({h.rect.x + 20.f, ly}, fit(ctx.r, h.category, f, h.rect.w - 34.f - cw), f, c.text);
+        ctx.r.drawText({h.rect.x + h.rect.w - 7.f - cw, ly}, count, f, c.textMuted);
+    }
+    if (mineInviteY_ >= 0.f) {
+        ctx.r.drawText({b.x + 10, mineInviteY_}, "Aucune : + (ou un fichier PNG, SVG l\xC3\xA2" "ch\xC3\xA9 ici),", f, c.textMuted.withAlpha(170));
+        ctx.r.drawText({b.x + 10, mineInviteY_ + 15}, "ou Ressources \xE2\x80\xBA Ma biblioth\xC3\xA8que.", f, c.textMuted.withAlpha(170));
+    }
+    auto& cache = HmiImageCache::instance();
+    const bool labels = imageSize() == 2;
+    const gfx::Color back = colorOfHex(backdrop_, gfx::Color::rgb(0x20242B));
+    for (const auto& t : imageTiles_) {
+        const auto& r = t.rect;
+        if (r.y + r.h < top || r.y > bottom) continue;
+        const auto& img = *t.image;
+        const bool cur = img.id == currentImage_, hot = img.id == hoverImage_;
+        ctx.r.fillRoundedRect(r, back, 4);
+        ctx.r.strokeRect(r, cur ? c.accent : hot ? c.text.withAlpha(150) : c.border, cur ? 2.f : 1.f);
+        const float pad = std::round(r.w * 0.14f);
+        const gfx::Rect box{r.x + pad, r.y + pad, r.w - 2 * pad, (labels ? r.h - 16.f : r.h) - 2 * pad};
+        const auto& res = tileResource(img, inkFor(img));
+        const float iw = static_cast<float>(std::max(1, img.width)), ih = static_cast<float>(std::max(1, img.height));
+        const float scale = std::min(box.w / iw, box.h / ih);
+        const float w = iw * scale, h = ih * scale;
+        const gfx::Rect dst{box.x + (box.w - w) / 2, box.y + (box.h - h) / 2, w, h};
+        HmiImageCache::Image tex;
+        if (img.format == "SVG")
+            tex = cache.svg(ctx.r, res, std::max(4, static_cast<int>(std::ceil(w))), std::max(4, static_cast<int>(std::ceil(h))), {});
+        else
+            tex = cache.resource(ctx.r, res);
+        if (tex.valid()) ctx.r.drawImage(tex.tex, dst);
+        if (labels) {
+            const std::string l = fit(ctx.r, img.label, f, r.w - 6.f);
+            const float lw = ctx.r.measure(l, f).width;
+            ctx.r.drawText({r.x + (r.w - lw) / 2, r.y + r.h - 18.f}, l, f, cur ? c.accent : c.textMuted);
+        }
+    }
+    ctx.r.popClip();
+    // En bas : l'image survolee (ou choisie), sinon le mode d'emploi.
+    const gfx::Rect pr{b.x, bottom, b.w, kImageHelpH};
+    ctx.r.fillRect(pr, c.headerBg);
+    ctx.r.fillRect({pr.x, pr.y, pr.w, 1}, c.border);
+    const auto* shown = imageById(hoverImage_.empty() ? currentImage_ : hoverImage_);
+    std::string l1 = "Clique une image puis clique dans la vue", l2 = "(ou glisse-la) ; double-clic : au centre.";
+    if (shown) {
+        l1 = shown->label + " \xC2\xB7 " + shown->category;
+        l2 = il::sizeText(*shown) + (shown->mono ? " \xC2\xB7 monochrome" : shown->ink ? " \xC2\xB7 traits teint\xC3\xA9s" : "");
+    }
+    ctx.r.drawText({pr.x + 8, pr.y + 5}, fit(ctx.r, l1, f, pr.w - 16), f, c.text);
+    ctx.r.drawText({pr.x + 8, pr.y + 21}, fit(ctx.r, l2, f, pr.w - 16), f, c.textMuted);
+}
+
+ui::EventResult HmiPalette::imageEvent(const ui::InputEvent& ev) {
+    if (const auto* d = std::get_if<ui::FileDropped>(&ev)) {
+        std::string why;
+        if (!addImageFile(d->path, &why)) imageMessage->emit("Mes images : " + why);
+        return ui::EventResult::Consumed;
+    }
+    layoutImages();
+    const auto b = bounds();
+    const float top = b.y + kModeH + kImageBarH, bottom = b.y + b.h - kImageHelpH;
+    auto tileAt = [&](gfx::Point p) -> const ImageTile* {
+        if (p.y < top || p.y > bottom) return nullptr;
+        for (const auto& t : imageTiles_)
+            if (t.rect.contains(p)) return &t;
+        return nullptr;
+    };
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+        const auto* t = tileAt(m->pos);
+        const std::string id = t ? t->image->id : std::string{};
+        std::string tip = t ? imageTooltip(id) : std::string{};
+        if (!t) {
+            gfx::Rect r;
+            for (int k = 0; k <= static_cast<int>(il::swatches().size()); ++k)
+                if (imageSwatchRect(k, r) && r.contains(m->pos))
+                    tip = k == 0 ? std::string("Auto : la couleur des dessins monochromes qui se lit sur le fond de la vue (claire sur un fond sombre)")
+                                 : "Les dessins monochromes en " + std::string(il::swatches()[static_cast<std::size_t>(k - 1)].label)
+                                       + " (les images en couleurs gardent les leurs)";
+            for (int sz = 0; sz < 3; ++sz)
+                if (imageSizeRect(sz, r) && r.contains(m->pos)) tip = kImageSizeNames[sz];
+            if (imageImportRect(r) && r.contains(m->pos))
+                tip = "Importer l'image choisie dans les ressources du projet, sans la poser (la m\xC3\xAAme image d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est r\xC3\xA9utilis\xC3\xA9" "e)";
+            if (imageAddRect(r) && r.contains(m->pos)) tip = "Ajouter une image du disque (PNG, SVG...) \xC3\xA0 Mes images";
+        }
+        setTooltip(tip);
+        if (id != hoverImage_) {
+            hoverImage_ = id;
+            invalidate();
+        }
+        return ui::EventResult::Ignored;
+    }
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        imageScrollY_ = std::max(0.f, imageScrollY_ - w->dy * 40);
+        invalidate();
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
+        gfx::Rect r;
+        for (int k = 0; k <= static_cast<int>(il::swatches().size()); ++k)
+            if (imageSwatchRect(k, r) && r.contains(m->pos)) {
+                setImageSwatch(k);
+                return ui::EventResult::Consumed;
+            }
+        for (int sz = 0; sz < 3; ++sz)
+            if (imageSizeRect(sz, r) && r.contains(m->pos)) {
+                setImageSize(sz);
+                return ui::EventResult::Consumed;
+            }
+        if (imageImportRect(r) && r.contains(m->pos)) {
+            if (const auto* img = imageById(currentImage_)) {
+                const il::Image copy = *img;
+                importImageRequested->emit(copy);
+            } else {
+                imageMessage->emit("Choisis d'abord une image (un clic), puis Importer.");
+            }
+            return ui::EventResult::Consumed;
+        }
+        if (imageAddRect(r) && r.contains(m->pos)) {
+            addImageFileRequested->emit();
+            return ui::EventResult::Consumed;
+        }
+        if (m->pos.y >= top && m->pos.y <= bottom)
+            for (const auto& h : imageHeads_)
+                if (h.rect.contains(m->pos)) {
+                    if (filter_.empty()) setImageCategoryOpen(h.category, !h.open);
+                    return ui::EventResult::Consumed;
+                }
+        const auto* t = tileAt(m->pos);
+        if (!t) return ui::EventResult::Ignored;
+        const il::Image img = *t->image;      // une copie : le signal peut relire Mes images
+        currentImage_ = img.id;
+        invalidate();
+        if (m->button == ui::MouseButton::Right) {
+            imageContextRequested->emit(img, toSurface(m->pos));
+            return ui::EventResult::Consumed;
+        }
+        if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
+        if (m->clickCount >= 2) imageActivated->emit(img);
+        else chosenImage->emit(img);
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
 }
 
 // ============================================================= proprietes ===

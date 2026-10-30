@@ -293,7 +293,8 @@ void HmiResourcePreview::onPaint(const ui::PaintContext& ctx) {
 // ============================================================ Ressources ==
 namespace {
 enum ResourceAction : int { RImport = 1, RReplace, RRename, RDelete, RUnused, RPurge, RPlay,
-                            RFolder };        // lot 21 : un dossier de ressources
+                            RFolder,          // lot 21 : un dossier de ressources
+                            RLibrary };       // 1.14.1 (lot N6) : ajouter a ma bibliotheque d'images
 }
 
 HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
@@ -309,6 +310,11 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
                "Supprimer");
     tools->add(RFolder, HmiGlyph::Plus, "Nouveau dossier de ressources (sans effet sur les noms) : glisse des ressources dessus", "Dossier");
     tools->add(RPlay, HmiGlyph::Play, "\xC3\x89" "couter le son (encore une fois : l'arr\xC3\xAAter)", "\xC3\x89" "couter");
+    // 1.14.1 (lot N6) : l'image choisie rejoint Mes images (la bibliotheque d'images de l'editeur de vues).
+    tools->add(RLibrary, HmiGlyph::Image,
+               "Ajouter \xC3\xA0 ma biblioth\xC3\xA8que d'images : une copie de l'image choisie rejoint Mes images (l'onglet Images "
+               "de la biblioth\xC3\xA8que, dans l'\xC3\xA9" "diteur de vues), gard\xC3\xA9" "e hors du projet pour la poser ailleurs",
+               "Ma biblioth\xC3\xA8que");
     tools->separator();
     tools->add(RUnused, HmiGlyph::Search, "Montrer seulement les ressources inutilis\xC3\xA9" "es", "Inutilis\xC3\xA9" "es");
     tools->add(RPurge, HmiGlyph::Delete, "Retirer toutes les ressources inutilis\xC3\xA9" "es", "Retirer les inutilis\xC3\xA9" "es");
@@ -326,6 +332,10 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
         return r && r->data && HmiSoundPlayer::instance().current() == r->data.get();
     });
     tools_->setEnabledWhen(RPurge, [this] { return !hmi::unusedResources(doc_->project).empty(); });
+    tools_->setEnabledWhen(RLibrary, [this] {          // 1.14.1 (lot N6)
+        const auto* r = doc_->project.resource(selectedResource());
+        return r && r->kind() == MediaKind::Image && r->data;
+    });
 
     auto kind = std::make_unique<ui::DropDown>(base + ".kind");
     kind->setItems({{"Toutes", "", {}, true}, {"Images", "", {}, true}, {"Sons", "", {}, true},
@@ -371,6 +381,7 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
             case RUnused: setUnusedOnly(!unusedOnly_); break;
             case RPurge: (void)removeUnused(); break;
             case RPlay: (void)togglePlay(); break;
+            case RLibrary: (void)addSelectedToImageLibrary(); break;   // 1.14.1 (lot N6)
             default: break;
         }
     });
@@ -589,6 +600,24 @@ bool HmiResourcesPane::togglePlay() {
     if (!player.play(*r, &why)) { say("Lecture impossible : " + why, true); return false; }
     say("Lecture : " + r->name + " (" + hmi::formatDuration(player.duration()) + ")");
     invalidate();
+    return true;
+}
+
+// 1.14.1 (lot N6) : une copie de l'image dans Mes images (hors du projet : rien a annuler ici).
+bool HmiResourcesPane::addToImageLibrary(Id id, std::string* why) {
+    const auto* r = doc_->project.resource(id);
+    const auto fail = [&](std::string m) {
+        if (why) *why = m;
+        say("Ma biblioth\xC3\xA8que d'images : " + m, true);
+        return false;
+    };
+    if (!r) return fail("aucune ressource choisie");
+    if (r->kind() != MediaKind::Image || !r->data) return fail(r->name + " n'est pas une image (ou son fichier manque)");
+    std::string stored, error;
+    bool existed = false;
+    if (!hmi::imagelib::addUserImage(r->name, *r->data, &stored, &existed, &error)) return fail(error);
+    say(existed ? "D\xC3\xA9j\xC3\xA0 dans Mes images : " + stored
+                : "Ajout\xC3\xA9" "e \xC3\xA0 Mes images : " + stored + " (l'onglet Images de la biblioth\xC3\xA8que, dans l'\xC3\xA9" "diteur de vues)");
     return true;
 }
 

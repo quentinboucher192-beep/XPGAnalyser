@@ -918,6 +918,8 @@ private:
     void askHmiViewFromType();                           // lot 12 : "Depuis un type" (DDT, DFB)
     // Les dialogues des volets Ressources et Fichiers externes (HmiWorkspace.cpp).
     void askHmiImportResource();
+    // 1.14.1 (lot N6) : le bouton + de l'onglet Images de la bibliotheque (un editeur de vue) : un fichier dans Mes images.
+    void askHmiAddMyImage(std::uint64_t viewId);
     // 1.14.0 (M4) : Ressources > Enregistrements (HmiWorkspace.cpp) - importer, exporter, renommer, le mot de passe,
     // supprimer (vers la corbeille), ouvrir le dossier ; rejouer : l'onglet Simulation . IHM, la relecture dedans.
     void askHmiRecordingImport();

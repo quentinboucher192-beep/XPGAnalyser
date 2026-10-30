@@ -1,4 +1,6 @@
 #include "HmiCanvas.hpp"
+#include "HmiImages.hpp"           // 1.14.1 (lot N6) : le dessin de l'image a poser
+#include "../../hmi/HmiGuide.hpp"   // 1.14.1 (lot N6) : fold (le nom de l'Image posee)
 #include "HmiPartage.hpp"   // 1.12.27 : copier dans une fenetre, coller dans l'autre
 #include "../TablePaste.hpp"
 #include "../../hmi/HmiNavigation.hpp"
@@ -226,6 +228,7 @@ void HmiCanvas::setPlaceKind(std::optional<hmi::Kind> kind) {
     placeKind_ = kind;
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeImage_.reset();          // 1.14.1 (lot N6)
     invalidate();
 }
 
@@ -233,14 +236,113 @@ void HmiCanvas::setPlaceSymbol(std::string symbol) {
     placeSymbol_ = std::move(symbol);
     placeKind_ = placeSymbol_.empty() ? std::nullopt : std::optional<hmi::Kind>(hmi::Kind::SymbolInstance);
     placeVariable_.reset();
+    placeImage_.reset();          // 1.14.1 (lot N6)
     invalidate();
 }
 
 void HmiCanvas::setPlaceVariable(std::optional<hmi::design::VarInfo> variable) {
     placeSymbol_.clear();
+    placeImage_.reset();          // 1.14.1 (lot N6)
     placeVariable_ = std::move(variable);
     placeKind_ = placeVariable_ ? std::optional<hmi::Kind>(hmi::design::kindForVariable(*placeVariable_)) : std::nullopt;
     invalidate();
+}
+
+// 1.14.1 (lot N6) : une image de la bibliotheque d'images, au clic suivant (ou la ou on la lache).
+void HmiCanvas::setPlaceImage(std::optional<PlaceImage> image) {
+    placeSymbol_.clear();
+    placeVariable_.reset();
+    placeImage_ = std::move(image);
+    placeKind_ = placeImage_ ? std::optional<hmi::Kind>(hmi::Kind::Image) : std::nullopt;
+    invalidate();
+}
+
+hmi::Id HmiCanvas::placeImageNow(const hmi::imagelib::Image& image, std::uint32_t ink, std::optional<hmi::edit::Pt> at) {
+    const auto* v = view();
+    if (!v) return kNoId;
+    double x = 0, y = 0;
+    if (at) {
+        x = at->x;
+        y = at->y;
+    } else {
+        // Centree sur ce qu'on voit de la vue (dans la vue).
+        const auto b = bounds();
+        const Pt mid = toView({b.x + b.w / 2, b.y + b.h / 2});
+        x = std::clamp(mid.x, 0.0, std::max(0.0, static_cast<double>(v->width))) - image.width / 2.0;
+        y = std::clamp(mid.y, 0.0, std::max(0.0, static_cast<double>(v->height))) - image.height / 2.0;
+        x = std::max(0.0, x);
+        y = std::max(0.0, y);
+        if (v->grid.snapGrid) {
+            x = hmi::edit::snapToGrid(x, v->grid.step);
+            y = hmi::edit::snapToGrid(y, v->grid.step);
+        }
+    }
+    setPlaceImage(std::nullopt);
+    const Id made = placeImageAt({image, ink}, x, y);
+    placed->emit();
+    return made;
+}
+
+// L'Image et sa ressource, dans UNE commande du projet (Ctrl+Z retire les deux ; une ressource deja la reste).
+hmi::Id HmiCanvas::placeImageAt(const PlaceImage& pi, double x, double y) {
+    const auto* v = view();
+    if (!v) return kNoId;
+    Id made = kNoId;
+    hmi::imagelib::Imported imported;
+    const Id vid = viewId_;
+    const Id parent = insideGroup_ != kNoId ? insideGroup_ : hmi::holderAt(*v, x, y);
+    // Sa taille d'origine ; une photo de Mes images, ramenee a 320 pixels de cote au plus.
+    double w = std::max(8, pi.image.width), h = std::max(8, pi.image.height);
+    if (const double big = std::max(w, h); big > 320.0) {
+        w = std::round(w * 320.0 / big);
+        h = std::round(h * 320.0 / big);
+    }
+    auto cmd = hmi::changeProject(doc_, "Poser l'image " + pi.image.label, [&](hmi::Project& p) {
+        imported = hmi::imagelib::importImage(p, pi.image, pi.ink);
+        hmi::View* vv = p.view(vid);
+        if (!vv || imported.name.empty()) return;
+        made = hmi::edit::add(p, *vv, hmi::Kind::Image, x, y);
+        if (auto* o = vv->object(made)) {
+            // Son nom dit son image (Pompe, Danger_electrique), pas Image_12 : l'explorateur d'objets se lit.
+            std::string base = hmi::guide::fold(pi.image.label);
+            for (auto& ch : base)
+                if (!std::isalnum(static_cast<unsigned char>(ch))) ch = '_';
+            while (base.find("__") != std::string::npos) base.erase(base.find("__"), 1);
+            while (!base.empty() && base.back() == '_') base.pop_back();
+            if (!base.empty() && std::isalpha(static_cast<unsigned char>(base.front()))) {
+                base.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(base.front())));
+                o->name = hmi::uniqueObjectName(*vv, base);
+            }
+            o->set("image", imported.name);
+            o->setNumber("w", w);
+            o->setNumber("h", h);
+        }
+        // Posee sur un conteneur a onglets, un cadre ou un panneau : elle y entre (comme les autres objets).
+        if (made != kNoId && parent != kNoId && vv->object(parent)) {
+            if (hmi::kindHoldsChildren(vv->object(parent)->kind)) {
+                (void)hmi::adopt(*vv, made, parent);
+            } else {
+                vv->object(made)->parent = parent;
+                vv->object(made)->layer = vv->object(parent)->layer;
+            }
+            hmi::edit::refreshGroupBounds(*vv);
+        }
+    });
+    if (cmd) {
+        apply_(std::move(cmd));
+        documentChanged();
+    }
+    const auto* v2 = view();
+    const auto* o = made != kNoId && v2 ? v2->object(made) : nullptr;
+    if (!o) {
+        status->emit("Image " + pi.image.label + " : rien n'a \xC3\xA9t\xC3\xA9 pos\xC3\xA9");
+        return kNoId;
+    }
+    setSelection({made});
+    status->emit("Image " + pi.image.label + " pos\xC3\xA9" "e (" + o->name + ") ; ressource " + imported.name
+                 + (imported.reused ? " r\xC3\xA9utilis\xC3\xA9" "e (d\xC3\xA9j\xC3\xA0 dans le projet). Ctrl+Z la retire."
+                                    : " import\xC3\xA9" "e dans Ressources. Ctrl+Z retire les deux."));
+    return made;
 }
 
 void HmiCanvas::documentChanged() {
@@ -354,6 +456,7 @@ void HmiCanvas::startZoneTrace(Id map) {
     placeKind_.reset();
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeImage_.reset();          // 1.14.1 (lot N6)
     grabFocus();
     status->emit("Tracer une zone : un clic par point ; un double-clic, ou un clic sur le premier point, la ferme ; "
                  "\xC3\x89" "chap l'abandonne.");
@@ -764,6 +867,7 @@ void HmiCanvas::cancelPlacement() {
     placeKind_.reset();
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeImage_.reset();          // 1.14.1 (lot N6) : l'image a poser aussi
     invalidate();
     if (was) {
         placed->emit();   // la bibliotheque ne montre plus l'outil
@@ -943,6 +1047,7 @@ void HmiCanvas::insertAt(hmi::Kind kind, gfx::Point screen) {
     placeKind_ = kind;
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeImage_.reset();          // 1.14.1 (lot N6)
     placeAt(screen, false);
 }
 
@@ -1075,7 +1180,9 @@ void HmiCanvas::emitStatus(gfx::Point s) {
         }
     }
     if (insideGroup_ != kNoId) if (const auto* g = v->object(insideGroup_)) text += "   |   dans " + g->name;
-    if (placeKind_)
+    if (placeImage_)              // 1.14.1 (lot N6)
+        text += "   |   clic : poser l'image " + placeImage_->image.label;
+    else if (placeKind_)
         text += placeSymbol_.empty() ? "   |   clic : poser un(e) " + std::string(hmi::kindLabel(*placeKind_))
                                      : "   |   clic : poser une instance de " + placeSymbol_;
     status->emit(text);
@@ -1376,6 +1483,21 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         }
         // Lot 12 : une variable - l'objet qui lui va, et son nom.
         if (placeVariable_) ghostLabel = placeVariable_->name + " \xE2\x86\x92 " + std::string(hmi::kindLabel(*placeKind_));
+        // 1.14.1 (lot N6) : une image de la bibliotheque - a sa taille, son dessin estompe, son nom.
+        if (placeImage_) {
+            ghost.setNumber("w", std::max(8, placeImage_->image.width));
+            ghost.setNumber("h", std::max(8, placeImage_->image.height));
+            ghostLabel = "Image : " + placeImage_->image.label;
+            hmi::Resource res;
+            res.format = placeImage_->image.format;
+            res.data = hmi::imagelib::contentFor(placeImage_->image, placeImage_->ink);
+            const gfx::Point s0 = vp.toScreen(x, y);
+            const float gw = static_cast<float>(placeImage_->image.width) * vp.zoom, gh = static_cast<float>(placeImage_->image.height) * vp.zoom;
+            auto& cache = HmiImageCache::instance();
+            const auto img = res.format == "SVG" ? cache.svg(ctx.r, res, std::max(4, static_cast<int>(gw)), std::max(4, static_cast<int>(gh)), {})
+                                                 : cache.resource(ctx.r, res);
+            if (img.valid()) ctx.r.drawImage(img.tex, {s0.x, s0.y, gw, gh}, 0.f, false, false, {255, 255, 255, 150});
+        }
         const Box gb = ghost.box();
         const gfx::Point g0 = vp.toScreen(gb.x, gb.y);
         const gfx::Rect gr{g0.x, g0.y, std::max(8.f, static_cast<float>(gb.w) * vp.zoom),
@@ -1609,6 +1731,14 @@ void HmiCanvas::placeAt(gfx::Point screen, bool keep) {
     Id made = kNoId;
     // Lot 12 : pose sur un conteneur a onglets, un cadre ou un panneau, l'objet y
     // entre (dans la page montree).
+    // 1.14.1 (lot N6) : une image de la bibliotheque d'images - l'Image et sa ressource.
+    if (placeImage_) {
+        const PlaceImage pi = *placeImage_;
+        if (!keep) setPlaceImage(std::nullopt);
+        (void)placeImageAt(pi, x, y);
+        placed->emit();
+        return;
+    }
     const Id parent = insideGroup_ != kNoId ? insideGroup_ : hmi::holderAt(*v, x, y);
     const auto adoptIn = [&](hmi::View& vv) {
         if (made == kNoId || parent == kNoId || !vv.object(parent)) return;
