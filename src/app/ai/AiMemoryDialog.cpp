@@ -1005,8 +1005,8 @@ public:
         model = std::make_shared<Rows>();
         model->headers = {"Cat\xC3\xA9gorie", "Emplacement (sous IA/)", "Fichiers", "Taille", "Part"};
         table = &makeTable(*this, base + "liste", model,
-                           {col("Cat\xC3\xA9gorie", 260.f), col("Emplacement (sous IA/)", 225.f), col("Fichiers", 85.f, ui::Align::End),
-                            col("Taille", 90.f, ui::Align::End), col("Part", 75.f, ui::Align::End)});
+                           {col("Cat\xC3\xA9gorie", 300.f), col("Emplacement (sous IA/)", 230.f), col("Fichiers", 80.f, ui::Align::End),
+                            col("Taille", 95.f, ui::Align::End), col("Part", 75.f, ui::Align::End)});
         where = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + "emplacement")));
         where->setReadOnly(true);
         copy = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Copier l'emplacement", base + "copier")));
@@ -1028,7 +1028,7 @@ protected:
         const float bottomH = 92.f;
         const float top = r.y + 12.f;
         const float h = r.bottom() - 10.f - bottomH - top;
-        const float lw = std::floor(W * 0.62f);
+        const float lw = std::floor(W * 0.66f);
         table->setBounds({x0, top, lw, h - 30.f});
         summaryY_ = top + h - 22.f;
         summaryX_ = x0;
