@@ -172,6 +172,12 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"damperActuator", Role::Choice}, {"limitOpen", Role::Formula, Role::Boolean}, {"limitClosed", Role::Formula, Role::Boolean},
     {"blades", Role::Number, Role::Text, Unit::None, "INT"}, {"bladeMode", Role::Choice},
     {"tripped", Role::Formula, Role::Boolean}, {"fireRelease", Role::Choice},
+    // 1.14.1 : la commande par les fins de course (la vanne, la vanne 3 voies, les registres) - le choix, l'Ordre
+    // (d'ouverture : un booleen ; de position : une voie), le temps de manoeuvre (secondes), les voyants, les fins de
+    // course des voies d'une vanne 3 voies.
+    {"stateMode", Role::Choice}, {"openOrder", Role::Formula, Role::Boolean}, {"positionOrder", Role::Formula, Role::State},
+    {"travelTime", Role::Duration, Role::Text, Unit::Seconds, "REAL"}, {"showLimits", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"limit12", Role::Formula, Role::Boolean}, {"limit13", Role::Formula, Role::Boolean}, {"limit23", Role::Formula, Role::Boolean},
     // 1.12.30 : le variateur de vitesse - pret, arriere, local (des booleens), la frequence, sa consigne, le
     // courant, la vitesse (des nombres) ; une variable tapee seule y devient sa formule, comme pour l'ouverture.
     {"ready", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"reverse", Role::Boolean, Role::Text, Unit::None, "BOOL"},

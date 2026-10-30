@@ -1557,6 +1557,12 @@ std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind) {
         {hmi::Kind::VolumeMixer, {"son", "volume", "mixage", "m\xC3\xA9langeur", "canal", "mute"}},
         {hmi::Kind::Recorder, {"enregistrement", "enregistrer", "film", "replay", "relecture"}},
         {hmi::Kind::RecordingPlayer, {"enregistrement", "rejouer", "relecture", "replay"}},
+        // 1.14.1 : la variante commandee par les fins de course (Commande de l'etat dans l'inspecteur).
+        {hmi::Kind::Valve, {"fin de course", "fins de course", "FCO", "FCF", "discordance"}},
+        {hmi::Kind::ThreeWayValve, {"fin de course", "fins de course", "discordance"}},
+        {hmi::Kind::Damper, {"fin de course", "fins de course", "FCO", "FCF", "discordance"}},
+        {hmi::Kind::MultiBladeDamper, {"fin de course", "fins de course", "FCO", "FCF", "discordance"}},
+        {hmi::Kind::FireDamper, {"fin de course", "fins de course", "FCO", "FCF"}},
     };
     std::vector<std::string_view> out;
     if (const auto* t = hmi::guide::topicForKind(hmi::kindKey(kind)))
@@ -2477,9 +2483,11 @@ const std::vector<KeyInfo>& keyInfos() {
         {"valve3Bore", "Boisseau", PG::ValueType::Enum, {"T", "L"},
          "En T : il relie 1-2, 1-3 ou 2-3 (dessin\xC3\xA9 avec une branche de plus vers le haut). En L : 1-3 et 2-3 seulement (1-2 n'existe pas). "
          "Toujours : ferm\xC3\xA9" "e."},
-        {"positionMode", "Commande de la position", PG::ValueType::Enum, {"entier", "deux bool\xC3\xA9" "ens"},
+        {"positionMode", "Commande de la position", PG::ValueType::Enum, {"entier", "deux bool\xC3\xA9" "ens", "fins de course"},
          "Entier (une variable enti\xC3\xA8re) : la Position donne la voie active - 0 ferm\xC3\xA9" "e, 1 (ou 12) la voie 1-2, 2 (ou 13) la voie 1-3, 3 (ou 23) la voie 2-3. "
-         "Deux bool\xC3\xA9" "ens : A seul, 1-2 ; B seul, 1-3 ; A et B, 2-3 ; aucun, ferm\xC3\xA9" "e."},
+         "Deux bool\xC3\xA9" "ens : A seul, 1-2 ; B seul, 1-3 ; A et B, 2-3 ; aucun, ferm\xC3\xA9" "e. "
+         "Fins de course (1.14.1) : une fin de course par voie (FC voie 1-2, 1-3, 2-3, et FC ferm\xC3\xA9" "e) - la seule vraie donne la voie, "
+         "aucune : le boisseau tourne, plusieurs : discordance."},
         {"positionA", "Bool\xC3\xA9" "en A (expression)", PG::ValueType::Text, {},
          "Position par deux bool\xC3\xA9" "ens : A seul, la voie 1-2 ; avec B, la voie 2-3. Une expression : =V3_A."},
         {"positionB", "Bool\xC3\xA9" "en B (expression)", PG::ValueType::Text, {},
@@ -2490,10 +2498,33 @@ const std::vector<KeyInfo>& keyInfos() {
         {"damperActuator", "Actionneur", PG::ValueType::Enum, {"servomoteur", "manuel", "pneumatique"},
          "Dessin\xC3\xA9 au bout de l'axe : un servomoteur (M), un levier, un v\xC3\xA9rin pneumatique."},
         {"limitOpen", "Fin de course ouvert", PG::ValueType::Text, {},
-         "Vraie : le registre est ouvert (FCO, une expression : =RG_FCO). Avec Fin de course ferm\xC3\xA9 : deux voyants O et F ; "
-         "\xC3\xA0 l'arr\xC3\xAAt, ni l'une ni l'autre, ou les deux \xC3\xA0 la fois : une discordance, et le registre se dessine en d\xC3\xA9" "faut."},
+         "Vraie : il est ouvert (FCO, une expression : =RG_FCO). Avec Fin de course ferm\xC3\xA9 : deux voyants O et F ; "
+         "\xC3\xA0 l'arr\xC3\xAAt, ni l'une ni l'autre, ou les deux \xC3\xA0 la fois : une discordance, et il se dessine en d\xC3\xA9" "faut. "
+         "Commande de l'\xC3\xA9tat par les fins de course (1.14.1) : seule vraie, ouvert ; aucune des deux, en mouvement."},
         {"limitClosed", "Fin de course ferm\xC3\xA9", PG::ValueType::Text, {},
-         "Vraie : le registre est ferm\xC3\xA9 (FCF, une expression : =RG_FCF). Voir Fin de course ouvert."},
+         "Vraie : il est ferm\xC3\xA9 (FCF, une expression : =RG_FCF). Voir Fin de course ouvert. Une vanne 3 voies : vraie, ferm\xC3\xA9" "e (facultative)."},
+        // ---- 1.14.1 : la commande par les fins de course (vanne, vanne 3 voies, registres)
+        {"stateMode", "Commande de l'\xC3\xA9tat", PG::ValueType::Enum, {"une valeur", "fins de course"},
+         "Une valeur (par d\xC3\xA9" "faut) : la Valeur dit ouvert ou ferm\xC3\xA9. Fins de course : l'\xC3\xA9tat vient de Fin de course ouvert et "
+         "Fin de course ferm\xC3\xA9 (comme sur le terrain) - FC ouvert seule, ouvert ; FC ferm\xC3\xA9 seule, ferm\xC3\xA9 ; aucune, en mouvement "
+         "(l'ambre qui clignote) ; les deux, ou l'Ordre pas suivi apr\xC3\xA8s le Temps de man\xC5\x93uvre : discordance (le rouge, \xE2\x89\xA0). "
+         "La Valeur n'y sert plus."},
+        {"openOrder", "Ordre d'ouverture", PG::ValueType::Text, {},
+         "Facultatif : la commande de l'automate (vraie : ouvrir, fausse : fermer), une expression : =V101_Cde. Donn\xC3\xA9" "e, la fin de course "
+         "attendue pas encore atteinte : en mouvement vers l'ordre ; toujours pas atteinte apr\xC3\xA8s le Temps de man\xC5\x93uvre : discordance."},
+        {"positionOrder", "Ordre de position", PG::ValueType::Text, {},
+         "Facultatif : la voie command\xC3\xA9" "e par l'automate (0 ferm\xC3\xA9" "e, 1 la voie 1-2, 2 la voie 1-3, 3 la voie 2-3 ; ou 12, 13, 23), "
+         "une expression : =V3_Cde. Sa fin de course pas encore vraie : le boisseau tourne vers elle ; apr\xC3\xA8s le Temps de man\xC5\x93uvre : discordance."},
+        {"travelTime", "Temps de man\xC5\x93uvre", PG::ValueType::Text, {},
+         "Avec l'Ordre : le temps qu'il lui faut pour atteindre sa fin de course (10 s, T#30s, 1 min ; un nombre seul : des secondes). "
+         "Pass\xC3\xA9, la fin de course attendue toujours pas l\xC3\xA0 : discordance. Vide : jamais. Le chrono suit l'heure de la marche."},
+        {"showLimits", "Voyants des fins de course", PG::ValueType::Boolean, {},
+         "Coch\xC3\xA9 (par d\xC3\xA9" "faut) : les voyants O et F (une vanne 3 voies : un par voie) montrent chaque fin de course reli\xC3\xA9" "e. "
+         "D\xC3\xA9" "coch\xC3\xA9 : le symbole seul."},
+        {"limit12", "FC voie 1-2", PG::ValueType::Text, {},
+         "Vraie : la vanne 3 voies est sur la voie 1-2 (une expression : =V3_FC12). Boisseau en L : sans objet (1-2 n'existe pas)."},
+        {"limit13", "FC voie 1-3", PG::ValueType::Text, {}, "Vraie : la vanne 3 voies est sur la voie 1-3 (une expression : =V3_FC13)."},
+        {"limit23", "FC voie 2-3", PG::ValueType::Text, {}, "Vraie : la vanne 3 voies est sur la voie 2-3 (une expression : =V3_FC23)."},
         {"blades", "Nombre de lames", PG::ValueType::Integer, {}, "De 2 \xC3\xA0 8 lames, qui tournent ensemble."},
         {"bladeMode", "Disposition des lames", PG::ValueType::Enum, {"oppos\xC3\xA9" "es", "parall\xC3\xA8les"},
          "Oppos\xC3\xA9" "es : une lame sur deux tourne dans l'autre sens (le r\xC3\xA9glage le plus fin) ; parall\xC3\xA8les : toutes dans le m\xC3\xAAme sens."},
@@ -3125,6 +3156,54 @@ std::shared_ptr<const std::set<std::string, std::less<>>> hmiPlcUpperNames(const
 }
 // ---- fin Lot API 8 ----
 
+// ---- 1.14.1 : la commande par les fins de course (vanne, vanne 3 voies, registres) ----
+namespace {
+// Ses proprietes qu'un objet n'a pas encore (un objet neuf, un projet d'avant : rien ne change dans son fichier
+// tant qu'on ne les regle pas) : le choix (Commande de l'etat ; la vanne 3 voies l'a deja, Commande de la
+// position) et, choisies les fins de course, ses fins de course, l'Ordre, le Temps de manoeuvre, les voyants.
+void limitsOffered(const hmi::Object& o, std::vector<hmi::Prop>& props) {
+    const auto offer = [&](std::string_view key, std::string value) {
+        for (const auto& pr : props)
+            if (pr.key == key) return;
+        props.push_back({std::string(key), std::move(value), ""});
+    };
+    const bool on = hmi::limits::limitMode(o);
+    if (o.kind == hmi::Kind::ThreeWayValve) {
+        if (!on) return;
+        for (const char* key : {"limit12", "limit13", "limit23", "limitClosed", "positionOrder", "travelTime"}) offer(key, "");
+        offer("showLimits", "TRUE");
+        return;
+    }
+    offer(hmi::limits::kModeKey, std::string(hmi::limits::kValueMode));
+    if (o.kind != hmi::Kind::Valve) offer("showLimits", "TRUE");   // les registres : leurs voyants O et F, dans les deux modes
+    if (!on) return;
+    if (o.kind == hmi::Kind::Valve) {
+        offer("limitOpen", "");
+        offer("limitClosed", "");
+    }
+    offer("openOrder", "");
+    offer("travelTime", "");
+    offer("showLimits", "TRUE");
+}
+// Ce qui ne sert pas dans le mode choisi : vide, rien ; sinon la phrase de l'inspecteur.
+std::string limitsUnused(const hmi::Object& o, std::string_view key) {
+    if (!hmi::limits::kindHasLimits(o.kind)) return {};
+    const bool three = o.kind == hmi::Kind::ThreeWayValve;
+    const bool byLimits = hmi::limits::limitMode(o);
+    const bool limitOnly = key == "openOrder" || key == "positionOrder" || key == "travelTime" || key == "limit12" || key == "limit13"
+                        || key == "limit23" || (o.kind == hmi::Kind::Valve && key == "limitOpen")
+                        || ((o.kind == hmi::Kind::Valve || three) && (key == "limitClosed" || key == "showLimits"));
+    const bool valueOnly = key == "value" || key == "moving" || (three && (key == "positionA" || key == "positionB"));
+    if (byLimits && valueOnly)
+        return three ? "Sans effet : la position se lit par les fins de course (Commande de la position)."
+                     : "Sans effet : l'\xC3\xA9tat se lit par les fins de course (Commande de l'\xC3\xA9tat).";
+    if (!byLimits && limitOnly)
+        return three ? "Sans effet : la position ne se lit pas par les fins de course (Commande de la position)."
+                     : "Sans effet : l'\xC3\xA9tat se lit par la Valeur (Commande de l'\xC3\xA9tat : une valeur).";
+    return {};
+}
+} // namespace
+
 // ---- 1.12.12 (lot H) : l'horloge liee, le texte defilant depuis une source, la video, le code QR ----
 namespace {
 // Les proprietes du lot H qu'un objet n'a pas encore (un objet neuf, un projet d'avant) : montrees a leur valeur
@@ -3642,6 +3721,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // regle (Contenu le regle).
         if (hmi::kindIsSynoptic(o->kind) && !o->find("equipment")) allProps.push_back({"equipment", "", ""});
         if (o->kind == hmi::Kind::Cylinder && !o->find("cylinderMode")) allProps.push_back({"cylinderMode", "position", ""});
+        // 1.14.1 : la commande par les fins de course (absente d'un objet neuf : rien ne change dans son fichier tant
+        // qu'on ne la regle pas) - le choix, puis, choisies, les fins de course, l'Ordre, le temps, les voyants.
+        if (hmi::limits::kindHasLimits(o->kind) && !many) limitsOffered(*o, allProps);
         // 1.12.13 : le Tableau, un mode a la fois - le mode (deduit pour un tableau d'avant : celui qu'il montrait) et,
         // en lignes dynamiques, les colonnes, le tri, la ligne choisie, le texte sans ligne (absents d'un objet neuf :
         // rien ne change dans son fichier tant qu'on ne les regle pas).
@@ -3680,6 +3762,22 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     // La variable : en tete de la section du genre (celle qu'ecrit une commande),
     // juste apres la Valeur pour un objet qui montre une valeur.
     const double variableRank = freshRank("value") >= 0 ? freshRank("value") + 0.5 : -1.0;
+    // 1.14.1 : la commande par les fins de course - le choix juste avant la Valeur, ses cases juste apres (la vanne 3
+    // voies : apres ses booleens A et B ; un registre : apres ses fins de course, qu'il avait deja).
+    const auto limitRank = [&](std::string_view key) -> double {
+        if (!hmi::limits::kindHasLimits(o->kind)) return -1e9;
+        if (key == hmi::limits::kModeKey) return freshRank("value") - 0.5;
+        if (freshRank(key) >= 0) return -1e9;
+        static constexpr std::string_view kTwo[] = {"limitOpen", "limitClosed", "openOrder", "travelTime", "showLimits"};
+        static constexpr std::string_view kThree[] = {"limit12", "limit13", "limit23", "limitClosed", "positionOrder", "travelTime", "showLimits"};
+        const bool three = o->kind == hmi::Kind::ThreeWayValve;
+        const double base = three ? freshRank("positionB") : o->kind == hmi::Kind::Valve ? variableRank : freshRank("limitClosed");
+        const auto* first = three ? std::begin(kThree) : std::begin(kTwo);
+        const auto* last = three ? std::end(kThree) : std::end(kTwo);
+        for (const auto* k = first; k != last; ++k)
+            if (*k == key) return base + 0.05 * static_cast<double>(k - first + 1);
+        return -1e9;
+    };
 
     std::shared_ptr<const hmi::exprcheck::PlcPaths> exprPaths;   // ---- Lot API 8 : les expressions impossibles (une fois) ----
     // 1.12.11 (lot G) : ce que la liaison Equipement remplit (une ligne le dit dans son aide).
@@ -4080,7 +4178,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::GasBottle && prop.key == "gasColor")
             p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::gasColorOf(s)); };
         // 1.12.11 (lot G) : la vanne 3 voies - les cases du mode de position qui ne sert pas, grisees.
-        if (o->kind == hmi::Kind::ThreeWayValve) {
+        if (o->kind == hmi::Kind::ThreeWayValve && !hmi::limits::limitMode(*o)) {
             const bool twoBools = o->text("positionMode", "entier").rfind("deux", 0) == 0;
             if ((twoBools && prop.key == "value") || (!twoBools && (prop.key == "positionA" || prop.key == "positionB"))) {
                 p.valueTone = ui::Tone::Muted;
@@ -4088,6 +4186,12 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                                                      : "Sans effet : la position se lit par la Position (un entier ; Position par).")
                               + "\n" + p.description;
             }
+        }
+        // 1.14.1 : la commande par les fins de course - ce qui ne sert pas dans le mode choisi (la Valeur et le mouvement
+        // par les fins de course ; l'Ordre, le temps, les fins de course d'une vanne par sa Valeur), grise.
+        if (const std::string unused = limitsUnused(*o, prop.key); !unused.empty()) {
+            p.valueTone = ui::Tone::Muted;
+            p.description = unused + "\n" + p.description;
         }
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::TabContainer && prop.key == "page") {
             const auto labels = hmi::tabLabels(*o);
@@ -4199,6 +4303,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         else if (prop.key == "variable") rank = variableRank;
         else if (prop.key == "equipment") rank = -1.0;   // 1.12.11 (lot G) : en tete de la section du symbole
         else if (o->kind == hmi::Kind::Table && prop.key == hmi::table::kModeKey) rank = -3.0;   // 1.12.13 : en tete de la section du tableau
+        else if (const double lr = limitRank(prop.key); lr > -1e8) rank = lr;   // 1.14.1 : les fins de course
         else if (const double fr = freshRank(prop.key); fr >= 0) rank = fr;
         else rank = 1000.0 + static_cast<double>(propIndex);
         // 1.11.2 (SYM, decision 240 ; la capture du client « Arguments : fx Voiture;50 ») : une instance

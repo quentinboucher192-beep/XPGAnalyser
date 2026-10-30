@@ -30,6 +30,7 @@
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiForms.hpp"
 #include "../../hmi/HmiLive.hpp"
+#include "../../hmi/HmiWidgets.hpp"             // 1.14.1 : le chrono des fins de course
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiScenarios.hpp"          // lot 13 : les essais
 #include "../../hmi/HmiWhy.hpp"                // 1.12.27 : Pourquoi ?
@@ -605,6 +606,12 @@ public:
         live_.clear();
         originals_.clear();
         paths_.clear();
+        travel_.clear();
+    }
+    // 1.14.1 : le chrono des fins de course d'une vue (l'Ordre pas suivi a temps) pose sur une autre copie de la
+    // vue evaluee (Pourquoi ?), sans le faire avancer.
+    void markOverdue(hmi::Id view, hmi::View& shown) const {
+        if (const auto it = travel_.find(view); it != travel_.end()) it->second.mark(shown);
     }
     // Les objets que l'utilisateur connecte ne peut pas actionner (vue du dessus).
     [[nodiscard]] const std::vector<hmi::Id>& locked() const noexcept { return locked_; }
@@ -624,6 +631,9 @@ private:
     std::vector<hmi::VariableDisplay>                            displays_;
     // Lot 14 : les chemins de l'automate que lit chaque expression (la qualite).
     std::map<std::string, std::vector<std::string>>              paths_;
+    // 1.14.1 : le chrono des fins de course de chaque vue (depuis quand l'Ordre attend sa fin de course), a
+    // l'heure de la marche : pose limitOverdue sur la vue evaluee.
+    std::map<hmi::Id, hmi::limits::TravelClock>                  travel_;
 };
 
 class HmiSimulationPane final : public ui::Widget {

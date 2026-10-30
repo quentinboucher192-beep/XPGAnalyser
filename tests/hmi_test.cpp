@@ -8712,7 +8712,7 @@ void exemplesLot11() {
     check(thresholds, "cuve, silo, tr\xC3\xA9mie, bouteille : quatre seuils (vides), leurs couleurs");
     auto ex = examples::exampleFor(Kind::Valve);
     const Object* ev = nullptr;
-    if (ex) for (const auto& o : ex->project.views[0].objects) if (o.kind == Kind::Valve) ev = &o;
+    if (ex) for (const auto& o : ex->project.views[0].objects) if (o.kind == Kind::Valve && !ev) ev = &o;   // 1.14.1 : la premiere (V-102 suit)
     check(ev && ev->text("valveType") == "r\xC3\xA9glante" && !ev->find("opening")->expr.empty() && !ev->find("moving")->expr.empty(),
           "l'exemple de la vanne : r\xC3\xA9glante, son ouverture et son mouvement pilot\xC3\xA9s");
     auto tex = examples::exampleFor(Kind::Tank);
@@ -30979,6 +30979,377 @@ void son1140() {
     }
 }
 
+// =============================================================================
+//  1.14.1 (lot N1) : LES VANNES ET LES REGISTRES COMMANDES PAR LEURS FINS DE COURSE
+//  La regle (deux voies, trois voies), le chrono a l'heure de la marche, une vue
+//  en marche, Pourquoi ?, Generer, l'alarme Discordance, le fichier (un projet
+//  d'avant s'ecrit comme avant), le code brut, Dupliquer, les exemples animes.
+// =============================================================================
+void finsDeCourse1141() {
+    std::printf("1.14.1 (lot N1) : vannes et registres commandes par leurs fins de course\n");
+    namespace L = hmi::limits;
+    using St = L::State;
+    const L::Input none{}, on{true, true}, off{true, false};
+    const auto npos = std::string::npos;
+    // ---- 1. deux voies : chaque cas des fins de course, l'Ordre, le chrono
+    {
+        auto r = L::decide(on, off, none, false);
+        check(r.state == St::Open && r.why.find("FC ouvert seule") != npos, "FC ouvert seule : ouverte (" + r.why + ")");
+        r = L::decide(off, on, none, false);
+        check(r.state == St::Closed && r.why.find("ferm\xC3\xA9 seule") != npos, "FC ferm\xC3\xA9 seule : ferm\xC3\xA9" "e (" + r.why + ")");
+        r = L::decide(off, off, none, false);
+        check(r.state == St::Moving && r.toward == 0, "aucune : en mouvement, sans sens (pas d'ordre)");
+        r = L::decide(on, on, none, false);
+        check(r.state == St::Discord && r.both && !r.overdue, "les deux : discordance (les deux \xC3\xA0 la fois)");
+        check(L::decide(none, none, none, false).state == St::None, "aucune reli\xC3\xA9" "e : rien \xC3\xA0 dire (None)");
+        check(L::decide(on, none, none, false).state == St::Open && L::decide(off, none, none, false).state == St::Closed
+                  && L::decide(none, on, none, false).state == St::Closed && L::decide(none, off, none, false).state == St::Open,
+              "une seule reli\xC3\xA9" "e : l'autre position s'en d\xC3\xA9" "duit");
+        r = L::decide(off, on, on, false);
+        check(r.state == St::Moving && r.toward == 1 && r.order == 1 && !r.reached, "ordre d'ouverture, FCF encore l\xC3\xA0 : en mouvement vers l'ouverture");
+        r = L::decide(off, off, on, false);
+        check(r.state == St::Moving && r.toward == 1, "ordre d'ouverture, entre les deux : en ouverture");
+        r = L::decide(off, off, on, true);
+        check(r.state == St::Discord && r.overdue && r.why.find("man\xC5\x93uvre") != npos, "ordre d'ouverture pas suivi \xC3\xA0 temps : discordance (" + r.why + ")");
+        r = L::decide(on, off, on, true);
+        check(r.state == St::Open && r.reached && !r.overdue, "atteinte : ouverte, le chrono ne compte plus");
+        r = L::decide(on, off, off, false);
+        check(r.state == St::Moving && r.toward == -1 && r.order == 0, "ordre de fermeture, FCO encore l\xC3\xA0 : en fermeture");
+        r = L::decide(off, on, off, false);
+        check(r.state == St::Closed && r.reached, "ordre de fermeture et FCF : ferm\xC3\xA9" "e");
+        check(L::decide(on, on, on, false).state == St::Discord, "les deux, ordre donn\xC3\xA9 : discordance");
+        r = L::decide(off, off, none, false, true);
+        check(r.state == St::Open && r.between, "r\xC3\xA9glante entre les deux : \xC3\xA0 son ouverture (pas en mouvement)");
+        check(L::stateLabel(St::Closed, true) == "ferm\xC3\xA9" "e" && L::stateLabel(St::Closed, false) == "ferm\xC3\xA9", "les mots de l'\xC3\xA9tat (vanne, registre)");
+    }
+    // ---- 2. la vanne 3 voies
+    {
+        L::Input p[4] = {off, on, off, off};
+        auto r = L::decide3(p, false, -1, false);
+        check(r.state == St::Open && r.way == 1 && r.why.find("1-2") != npos, "FC 1-2 seule : la voie 1-2 (" + r.why + ")");
+        L::Input p2[4] = {off, off, off, off};
+        r = L::decide3(p2, false, -1, false);
+        check(r.state == St::Moving && r.way == -1, "aucune : le boisseau tourne, vers on ne sait o\xC3\xB9");
+        L::Input p3[4] = {off, off, on, on};
+        r = L::decide3(p3, false, -1, false);
+        check(r.state == St::Discord && r.on == std::vector<int>{2, 3} && r.why.find("1-3 et FC voie 2-3") != npos,
+              "1-3 et 2-3 \xC3\xA0 la fois : discordance (" + r.why + ")");
+        L::Input p4[4] = {on, off, off, off};
+        r = L::decide3(p4, false, -1, false);
+        check(r.state == St::Closed && r.way == 0, "FC ferm\xC3\xA9" "e seule : ferm\xC3\xA9" "e");
+        L::Input p5[4] = {none, on, off, off};
+        check(L::decide3(p5, true, -1, false).state == St::Moving, "boisseau en L : FC 1-2 n'est pas lue");
+        L::Input p6[4] = {off, on, off, off};
+        r = L::decide3(p6, false, 2, false);
+        check(r.state == St::Moving && r.way == 2, "ordre 1-3, FC 1-2 encore vraie : le boisseau tourne vers 1-3");
+        r = L::decide3(p6, false, 2, true);
+        check(r.state == St::Discord && r.overdue && r.way == 2, "ordre 1-3 pas atteint \xC3\xA0 temps : discordance");
+        L::Input p7[4] = {off, off, on, off};
+        check(L::decide3(p7, false, 2, false).state == St::Open && L::decide3(p7, false, 2, false).reached, "ordre 1-3 et FC 1-3 : la voie 1-3");
+        L::Input p8[4] = {none, off, off, off};
+        check(L::decide3(p8, false, 0, false).state == St::Closed, "ordre de fermeture, sans FC ferm\xC3\xA9" "e : aucune voie, ferm\xC3\xA9" "e");
+        check(L::wayOf("13") == 2 && L::wayOf("2-3") == 3 && L::wayOf("0") == 0 && L::wayOf("1") == 1 && L::wayOf("7") == -1 && L::wayOf("") == -1,
+              "la voie d'un texte (13, 2-3, 0, 1 ; 7 et vide : illisibles)");
+    }
+    // ---- 3. le chrono : l'heure qu'on lui donne (celle de la marche), pas l'horloge du PC
+    {
+        L::TravelClock::Track t;
+        check(!L::TravelClock::step(t, 1, false, 0.0, 10.0) && !L::TravelClock::step(t, 1, false, 9.9, 10.0)
+                  && L::TravelClock::step(t, 1, false, 10.0, 10.0),
+              "ordre donn\xC3\xA9 \xC3\xA0 0 s, fin de course pas atteinte : en retard \xC3\xA0 10 s, pas avant");
+        check(!L::TravelClock::step(t, 1, true, 11.0, 10.0), "atteinte : plus en retard");
+        check(!L::TravelClock::step(t, 1, false, 12.0, 10.0) && !L::TravelClock::step(t, 1, false, 21.9, 10.0)
+                  && L::TravelClock::step(t, 1, false, 22.0, 10.0),
+              "perdue \xC3\xA0 12 s : le chrono repart de l\xC3\xA0");
+        check(!L::TravelClock::step(t, 0, false, 23.0, 10.0) && L::TravelClock::step(t, 0, false, 33.0, 10.0), "l'ordre change : il repart");
+        check(!L::TravelClock::step(t, 0, false, 5.0, 10.0), "l'heure recule (un exemple qui recommence) : il repart");
+        check(!L::TravelClock::step(t, -1, false, 100.0, 10.0) && !L::TravelClock::step(t, 1, false, 200.0, 0.0),
+              "sans ordre, ou sans temps de man\xC5\x93uvre : jamais en retard");
+        check(L::travelSeconds("10 s") == 10.0 && L::travelSeconds("T#1m30s") == 90.0 && L::travelSeconds("2,5") == 2.5 && L::travelSeconds("") == 0.0,
+              "le temps de man\xC5\x93uvre : 10 s, T#1m30s, 2,5 (des secondes), vide");
+        check(L::travelTimeOk("") && L::travelTimeOk("00:30") && !L::travelTimeOk("dix secondes"), "lisible ou non");
+    }
+    // ---- 4. une vue en marche : la vanne, le registre (des noms tapes sans =), la vanne 3 voies, le chrono
+    Project p;
+    View v = makeView(p, "Vue_FC");
+    const Id vid = edit::add(p, v, Kind::Valve, 10, 10);
+    Object* vo = v.object(vid);
+    vo->name = "V101";
+    vo->set("stateMode", "fins de course");
+    vo->setExpr("limitOpen", "FCO");
+    vo->setExpr("limitClosed", "FCF");
+    vo->setExpr("openOrder", "CDE");
+    vo->set("travelTime", "10 s");
+    const Id rid = edit::add(p, v, Kind::Damper, 200, 10);
+    Object* ro = v.object(rid);
+    ro->name = "RG1";
+    ro->set("stateMode", "fins de course");
+    ro->set("limitOpen", "RG_FCO");
+    ro->set("limitClosed", "RG_FCF");
+    const Id tid = edit::add(p, v, Kind::ThreeWayValve, 400, 10);
+    Object* to = v.object(tid);
+    to->name = "V3V";
+    to->set("positionMode", "fins de course");
+    to->setExpr("limit12", "V3_12");
+    to->setExpr("limit13", "V3_13");
+    to->setExpr("limit23", "V3_23");
+    to->setExpr("positionOrder", "V3_CDE");
+    to->set("travelTime", "T#5s");
+    FakePlc plc;
+    for (const char* n : {"FCO", "CDE", "RG_FCO", "V3_13", "V3_23"}) plc.values[n] = sim::Value::boolean(false);
+    for (const char* n : {"FCF", "RG_FCF", "V3_12"}) plc.values[n] = sim::Value::boolean(true);
+    plc.values["V3_CDE"] = sim::Value::integer(sim::Type::Int, 1);
+    LiveView live;
+    live.bind(v);
+    L::TravelClock clock;
+    const auto at = [&](double now) {
+        View shown = live.evaluate(plc);
+        clock.observe(shown, now);
+        return shown;
+    };
+    {
+        View s0 = at(0.0);
+        check(L::read(*s0.object(vid)).state == St::Closed, "en marche : FCF (une formule) - la vanne est ferm\xC3\xA9" "e");
+        check(L::read(*s0.object(rid)).state == St::Closed, "le registre : RG_FCF tap\xC3\xA9 sans = est une formule - ferm\xC3\xA9");
+        check(L::read3(*s0.object(tid)).state == St::Open && L::read3(*s0.object(tid)).way == 1, "la vanne 3 voies : FC 1-2 - la voie 1-2");
+        plc.values["CDE"] = sim::Value::boolean(true);
+        plc.values["V3_CDE"] = sim::Value::integer(sim::Type::Int, 13);
+        View s1 = at(1.0);
+        const auto r1 = L::read(*s1.object(vid));
+        check(r1.state == St::Moving && r1.toward == 1, "l'ordre d'ouverture \xC3\xA0 1 s : en mouvement vers l'ouverture");
+        check(L::read3(*s1.object(tid)).state == St::Moving && L::read3(*s1.object(tid)).way == 2, "l'ordre 13 : le boisseau tourne vers 1-3");
+        plc.values["FCF"] = sim::Value::boolean(false);
+        plc.values["V3_12"] = sim::Value::boolean(false);
+        check(L::read3(*at(5.9).object(tid)).state == St::Moving, "1-3 \xC3\xA0 4,9 s de son ordre : encore en mouvement");
+        View s2 = at(6.0);
+        check(L::read3(*s2.object(tid)).state == St::Discord && L::read3(*s2.object(tid)).overdue, "1-3 pas l\xC3\xA0 apr\xC3\xA8s T#5s : discordance");
+        check(L::read(*at(10.9).object(vid)).state == St::Moving, "la vanne \xC3\xA0 9,9 s de son ordre : encore en mouvement");
+        View s3 = at(11.0);
+        check(s3.object(vid)->text("limitOverdue") == "TRUE" && L::read(*s3.object(vid)).state == St::Discord,
+              "\xC3\xA0 10 s de son ordre (le temps de man\xC5\x93uvre), FCO pas atteinte : discordance (le chrono pose limitOverdue)");
+        check(clock.overdue(vid) && !clock.overdue(rid), "le chrono : la vanne en retard, pas le registre (sans ordre)");
+        View again = live.evaluate(plc);
+        clock.mark(again);
+        check(again.object(vid)->text("limitOverdue") == "TRUE", "mark : une autre copie de la vue (Pourquoi ?) le re\xC3\xA7oit, sans avancer");
+        plc.values["FCO"] = sim::Value::boolean(true);
+        plc.values["V3_13"] = sim::Value::boolean(true);
+        View s4 = at(12.0);
+        check(L::read(*s4.object(vid)).state == St::Open && s4.object(vid)->text("limitOverdue").empty(), "FCO arrive : ouverte, plus de discordance");
+        check(L::read3(*s4.object(tid)).state == St::Open && L::read3(*s4.object(tid)).way == 2, "FC 1-3 arrive : la voie 1-3");
+        plc.values["RG_FCO"] = sim::Value::boolean(true);
+        check(L::read(*at(13.0).object(rid)).state == St::Discord, "le registre : RG_FCO et RG_FCF \xC3\xA0 la fois - discordance");
+        plc.values["RG_FCF"] = sim::Value::boolean(false);
+        plc.values["V3_23"] = sim::Value::boolean(true);
+        View s5 = at(14.0);
+        check(L::read(*s5.object(rid)).state == St::Open, "puis RG_FCO seule : ouvert");
+        check(L::read3(*s5.object(tid)).state == St::Discord && L::read3(*s5.object(tid)).on.size() == 2, "FC 1-3 et FC 2-3 : discordance");
+        // ---- 5. Pourquoi ? dit quelle fin de course decide (en tete)
+        std::vector<LiveValue> values;
+        View s6 = live.evaluate(plc, &values);
+        clock.mark(s6);
+        const auto rep = hmi::why::explain(*s6.object(vid), values, plc);
+        check(!rep.items.empty() && rep.items.front().key == "stateMode" && rep.items.front().value == "ouverte"
+                  && rep.items.front().state.find("FC ouvert") != npos,
+              "Pourquoi ? : en t\xC3\xAAte, l'\xC3\xA9tat par les fins de course et ce qui le d\xC3\xA9" "cide (" + (rep.items.empty() ? std::string() : rep.items.front().state) + ")");
+        const auto rep3 = hmi::why::explain(*s6.object(tid), values, plc);
+        check(!rep3.items.empty() && rep3.items.front().key == "positionMode" && rep3.items.front().value == "discordance"
+                  && rep3.items.front().state.find("FC voie 1-3 et FC voie 2-3") != npos,
+              "Pourquoi ? sur la vanne 3 voies : les deux fins de course en cause (" + (rep3.items.empty() ? std::string() : rep3.items.front().state) + ")");
+        Project q;
+        View w = makeView(q, "W");
+        const Id plain = edit::add(q, w, Kind::Valve, 0, 0);
+        w.object(plain)->setExpr("value", "FCO");
+        LiveView lw;
+        lw.bind(w);
+        std::vector<LiveValue> vals2;
+        const View sw = lw.evaluate(plc, &vals2);
+        const auto repPlain = hmi::why::explain(*sw.object(plain), vals2, plc);
+        check(!repPlain.items.empty() && repPlain.items.front().key == "value", "une vanne \xC3\xA0 une valeur : Pourquoi ? comme avant (sa valeur en t\xC3\xAAte)");
+    }
+    // ---- 6. Generer
+    {
+        Project g;
+        for (const auto& [n, t] : std::vector<std::pair<const char*, const char*>>{{"FCO", "BOOL"}, {"FCF", "BOOL"}, {"CDE", "BOOL"}, {"Mesure", "REAL"}, {"Cde3", "INT"}})
+            g.programs.variables.push_back(hmiVar(g, n, t));
+        View gv = makeView(g, "Vue_G");
+        const auto addValve = [&](const char* name) {
+            const Id id = edit::add(g, gv, Kind::Valve, 0, 0);
+            gv.object(id)->name = name;
+            gv.object(id)->set("stateMode", "fins de course");
+            return id;
+        };
+        const Id a = addValve("Sans_FC");
+        const Id b = addValve("Une_FC");
+        gv.object(b)->setExpr("limitOpen", "FCO");
+        const Id c = addValve("Mesure_FC");
+        gv.object(c)->setExpr("limitOpen", "Mesure");
+        gv.object(c)->setExpr("limitClosed", "FCF");
+        const Id d = addValve("Temps_Faux");
+        gv.object(d)->setExpr("limitOpen", "FCO");
+        gv.object(d)->setExpr("limitClosed", "FCF");
+        gv.object(d)->setExpr("openOrder", "CDE");
+        gv.object(d)->set("travelTime", "dix secondes");
+        const Id e = addValve("Sans_Ordre");
+        gv.object(e)->setExpr("limitOpen", "FCO");
+        gv.object(e)->setExpr("limitClosed", "FCF");
+        gv.object(e)->set("travelTime", "10 s");
+        const Id ok = addValve("Bonne");
+        gv.object(ok)->setExpr("limitOpen", "FCO");
+        gv.object(ok)->setExpr("limitClosed", "FCF");
+        gv.object(ok)->setExpr("openOrder", "CDE");
+        gv.object(ok)->set("travelTime", "10 s");
+        gv.object(ok)->set("value", "");   // la Valeur n'est plus demandee
+        const Id t3 = edit::add(g, gv, Kind::ThreeWayValve, 0, 0);
+        gv.object(t3)->name = "V3_Vide";
+        gv.object(t3)->set("positionMode", "fins de course");
+        const Id tl = edit::add(g, gv, Kind::ThreeWayValve, 0, 0);
+        gv.object(tl)->name = "V3_L";
+        gv.object(tl)->set("positionMode", "fins de course");
+        gv.object(tl)->set("valve3Bore", "L");
+        gv.object(tl)->setExpr("limit12", "FCO");
+        gv.object(tl)->setExpr("limit13", "FCF");
+        gv.object(tl)->set("positionOrder", "7");
+        const Id rg = edit::add(g, gv, Kind::Damper, 0, 0);
+        gv.object(rg)->name = "RG_Une";
+        gv.object(rg)->set("stateMode", "fins de course");
+        gv.object(rg)->setExpr("limitClosed", "FCF");
+        const Id old = edit::add(g, gv, Kind::Valve, 0, 0);
+        gv.object(old)->name = "Valeur";
+        g.views.push_back(gv);
+        const auto issues = generate(g, [](std::string_view) { return false; });
+        const auto said = [&](Id obj, const char* key, const char* part, Issue::Severity sev) {
+            for (const auto& i : issues)
+                if (i.object == obj && i.property == key && i.message.find(part) != npos && i.severity == sev) return true;
+            return false;
+        };
+        const auto any = [&](Id obj, const char* key) {
+            for (const auto& i : issues)
+                if (i.object == obj && i.property == key) return true;
+            return false;
+        };
+        using Sv = Issue::Severity;
+        check(said(a, "limitOpen", "ni Fin de course ouvert ni", Sv::Warning), "G\xC3\xA9n\xC3\xA9rer : par les fins de course, aucune reli\xC3\xA9" "e - un avertissement");
+        check(said(b, "limitClosed", "une seule fin de course", Sv::Info), "une seule reli\xC3\xA9" "e : une information");
+        check(any(c, "limitOpen"), "une fin de course qui n'est pas un bool\xC3\xA9" "en (Mesure, un REAL) : dite");
+        check(said(d, "travelTime", "illisible", Sv::Warning), "un temps de man\xC5\x93uvre illisible : un avertissement");
+        check(said(e, "travelTime", "sans Ordre", Sv::Info), "un temps sans ordre : il ne sert pas (une information)");
+        check(!any(ok, "value") && !any(ok, "limitOpen") && !any(ok, "travelTime") && !any(ok, "openOrder"),
+              "une vanne bien reli\xC3\xA9" "e, sans Valeur : rien \xC3\xA0 dire (la Valeur n'est pas r\xC3\xA9" "clam\xC3\xA9" "e)");
+        check(said(t3, "limit13", "aucune n'est reli\xC3\xA9" "e", Sv::Warning) && !any(t3, "positionMode"),
+              "la vanne 3 voies : \xC2\xAB fins de course \xC2\xBB est un mode connu, sans fin de course : un avertissement");
+        check(said(tl, "limit12", "boisseau en L", Sv::Info) && said(tl, "positionOrder", "inconnu", Sv::Warning),
+              "boisseau en L et FC 1-2 ; un ordre de position 7 inconnu");
+        check(said(rg, "limitOpen", "une seule fin de course reli\xC3\xA9" "e : l'autre position", Sv::Info)
+                  && !said(rg, "limitOpen", "aucune des deux \xC3\xA0 l'arr\xC3\xAAt", Sv::Info),
+              "le registre par ses fins de course : la nouvelle phrase (pas celle d'une valeur)");
+        check(!any(old, "limitOpen") && !any(old, "travelTime") && !any(old, "stateMode"), "une vanne \xC3\xA0 une valeur : rien de nouveau");
+    }
+    // ---- 7. l'alarme par defaut Discordance
+    {
+        const auto find = [](const std::vector<LibraryAlarm>& la, const char* name) -> const LibraryAlarm* {
+            for (const auto& a : la) if (a.def.name == name) return &a;
+            return nullptr;
+        };
+        const auto la = libraryAlarms(*v.object(vid));
+        const auto* dv = find(la, "Discordance");
+        check(dv && dv->applicable && dv->def.delayMs == 10000 && dv->def.condition.find("(FCO) AND (FCF)") != npos
+                  && dv->def.condition.find("(CDE) AND NOT (FCO)") != npos && dv->def.condition.find("NOT (CDE) AND NOT (FCF)") != npos,
+              "la vanne : Discordance - les deux, ou l'ordre pas suivi ; son d\xC3\xA9lai, le temps de man\xC5\x93uvre (10 s)"
+                  + (dv ? " : " + dv->def.condition : std::string()));
+        check(libraryAlarms(makeObject(Kind::Valve, 3, "V", 0, 0, 1)).size() == 2, "une vanne \xC3\xA0 une valeur : ses deux alarmes, comme avant");
+        const auto la3 = libraryAlarms(*v.object(tid));
+        const auto* d3 = find(la3, "Discordance");
+        check(d3 && d3->applicable && d3->def.condition.find("(V3_12) AND (V3_13)") != npos && d3->def.condition.find("(V3_CDE) = 2 OR (V3_CDE) = 13") != npos
+                  && d3->def.delayMs == 5000,
+              "la vanne 3 voies : deux \xC3\xA0 la fois, ou l'ordre de position pas suivi (5 s)" + (d3 ? " : " + d3->def.condition : std::string()));
+        Object one = makeObject(Kind::Damper, 4, "RG", 0, 0, 1);
+        one.set("stateMode", "fins de course");
+        one.set("limitOpen", "RG_FCO");
+        const auto la1 = libraryAlarms(one);
+        const auto* d1 = find(la1, "Discordance");
+        check(d1 && !d1->applicable && d1->why.find("une seule") != npos, "une seule fin de course, sans ordre : sans objet (dit pourquoi)");
+        const auto lar = libraryAlarms(*v.object(rid));
+        const auto* dr = find(lar, "Discordance");
+        check(dr && dr->applicable && dr->def.delayMs == 30000 && dr->def.condition.find("NOT (RG_FCO) AND NOT (RG_FCF)") != npos,
+              "le registre sans ordre : aucune trop longtemps aussi (30 s sans temps de man\xC5\x93uvre)");
+    }
+    // ---- 8. le fichier : un projet sans les nouvelles proprietes s'ecrit comme avant ; elles suivent sinon
+    {
+        Project f;
+        View fv = makeView(f, "Vue_Avant");
+        for (const Kind k : {Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper}) (void)edit::add(f, fv, k, 0, 0);
+        const std::string text = serializeView(fv);
+        bool clean = true;
+        for (const char* key : {"stateMode", "openOrder", "positionOrder", "travelTime", "showLimits", "limit12", "limitOverdue"})
+            clean = clean && text.find(std::string("cle=") + key) == npos && text.find(std::string("\"") + key + "\"") == npos && text.find(key) == npos;
+        check(clean, "des vannes et des registres neufs : aucune cl\xC3\xA9 nouvelle dans le fichier");
+        const auto back = parseView(text);
+        check(back && serializeView(*back) == text, "relu puis r\xC3\xA9\xC3\xA9" "crit : le m\xC3\xAAme texte");
+        bool valueMode = static_cast<bool>(back);
+        if (back) for (const auto& o : back->objects) valueMode = valueMode && !L::limitMode(o);
+        check(valueMode, "un projet d'avant : \xC3\xA0 une valeur (le mode par d\xC3\xA9" "faut)");
+        const std::string withLimits = serializeView(v);
+        const auto back2 = parseView(withLimits);
+        check(back2 && back2->object(vid) && *back2->object(vid) == *v.object(vid) && *back2->object(tid) == *v.object(tid)
+                  && *back2->object(rid) == *v.object(rid),
+              "par les fins de course : relues sans perte (le mode, les fins de course, l'ordre, le temps)");
+        const std::string code = serializeObjectCode(v, {vid, tid});
+        const auto pc = parseObjectCode(code);
+        check(pc && pc->objects.size() == 2 && pc->objects[0] == *v.object(vid) && pc->objects[1] == *v.object(tid),
+              "le code brut : les nouvelles propri\xC3\xA9t\xC3\xA9s suivent");
+    }
+    // ---- 9. Dupliquer avec un repere
+    {
+        Project dp;
+        View dv = makeView(dp, "Vue_D");
+        const Id id = edit::add(dp, dv, Kind::Valve, 20, 20);
+        Object* o = dv.object(id);
+        o->name = "V_101";
+        o->set("stateMode", "fins de course");
+        o->set("limitOpen", "$Vanne$.FCO");
+        o->setExpr("limitClosed", "$Vanne$.FCF");
+        o->setExpr("openOrder", "$Vanne$.CDE");
+        o->set("travelTime", "10 s");
+        const auto sc = hmi::dup::scan(dv, {id});
+        auto plan = hmi::dup::defaultPlan(dv, sc, 2);
+        if (plan.rows.size() == 3) {
+            plan.rows[0].markers[hmi::dup::markerKey("Vanne")] = "V101";
+            plan.rows[1].markers[hmi::dup::markerKey("Vanne")] = "V102";
+            plan.rows[2].markers[hmi::dup::markerKey("Vanne")] = "V103";
+        }
+        const auto res = hmi::dup::apply(dp, dv, plan);
+        const Object* c2 = res.created.size() == 2 ? dv.object(res.created[1]) : nullptr;
+        check(c2 && c2->text("limitOpen") == "$V103$.FCO" && c2->expr("limitClosed").find("$V103$.FCF") != npos
+                  && c2->expr("openOrder").find("$V103$.CDE") != npos && L::limitMode(*c2) && c2->text("travelTime") == "10 s",
+              "Dupliquer : les fins de course et l'ordre suivent leur rep\xC3\xA8re ($V103$), le mode et le temps aussi");
+    }
+    // ---- 10. les exemples animes : chacun passe par ouvert, mouvement, ferme, discordance
+    for (const Kind k : {Kind::Valve, Kind::ThreeWayValve, Kind::Damper}) {
+        auto ex = examples::exampleFor(k);
+        if (!ex) { check(false, std::string(kindKey(k)) + " : son exemple"); continue; }
+        Runtime rt;
+        rt.bind(&ex->project, nullptr);
+        rt.start(0.0);
+        L::TravelClock tc;
+        std::set<St> seen;
+        std::size_t limited = 0;
+        for (double t = 0.05; t <= ex->period + 1e-9; t += 0.05) {
+            rt.tick(t);
+            LiveView lv;
+            lv.bind(*rt.composedView(rt.currentView()));
+            View shown = lv.evaluate(rt.environment(), nullptr, rt.viewScope(rt.currentView()), t);
+            tc.observe(shown, t);
+            for (const auto& o : shown.objects) {
+                if (o.kind != k || !L::limitMode(o)) continue;
+                ++limited;
+                seen.insert(k == Kind::ThreeWayValve ? L::read3(o).state : L::read(o).state);
+            }
+        }
+        check(limited > 0 && seen.count(St::Open) && seen.count(St::Closed) && seen.count(St::Moving) && seen.count(St::Discord),
+              std::string(kindLabel(k)) + " : son exemple montre la variante, ouverte, ferm\xC3\xA9" "e, en mouvement et en discordance");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.13.1 (lot K3) : HMI_TEST_1131=1 - le code brut des objets, seul.
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
@@ -31313,6 +31684,7 @@ int main(int argc, char** argv) {
     pourquoi11227();                  // 1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)
     codeBrut1131();                   // 1.13.1 (lot K3) : le code brut des objets
     son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
+    finsDeCourse1141();               // 1.14.1 (lot N1) : vannes et registres commandes par leurs fins de course
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

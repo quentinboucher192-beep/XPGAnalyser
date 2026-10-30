@@ -3292,7 +3292,7 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     const auto* fo = o.find("limitOpen");
                     const auto* ff = o.find("limitClosed");
                     const auto set = [&](const Prop* pr) { return pr && (!pr->expr.empty() || !trimmedCopy(pr->value).empty()); };
-                    if (set(fo) != set(ff))
+                    if (set(fo) != set(ff) && !limits::limitMode(o))   // 1.14.1 : par ses fins de course, dit plus bas
                         issue(S::Info, set(fo) ? "limitClosed" : "limitOpen",
                               "une seule fin de course reli\xC3\xA9" "e : la discordance (aucune des deux \xC3\xA0 l'arr\xC3\xAAt) ne se voit pas");
                     break;
@@ -3340,9 +3340,12 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 case Kind::ThreeWayValve: {
                     const std::string mode = o.text("positionMode", "entier");
                     const bool twoBools = mode.rfind("deux", 0) == 0;
-                    if (!twoBools && mode != "entier")
-                        issue(S::Warning, "positionMode", "position par '" + mode + "' inconnue : entier ou deux bool\xC3\xA9" "ens (entier est pris)");
-                    if (twoBools) {
+                    const bool byLimits = limits::limitMode(o);   // 1.14.1 : par ses fins de course (dit plus bas)
+                    if (!twoBools && !byLimits && mode != "entier")
+                        issue(S::Warning, "positionMode", "position par '" + mode + "' inconnue : entier, deux bool\xC3\xA9" "ens ou fins de course (entier est pris)");
+                    if (byLimits) {
+                        // la Position, A et B n'y servent plus : rien a en dire
+                    } else if (twoBools) {
                         const auto* a = o.find("positionA");
                         const auto* b = o.find("positionB");
                         const auto empty = [&](const Prop* pr) { return !pr || (pr->expr.empty() && trimmedCopy(pr->value).empty()); };
@@ -3381,6 +3384,68 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                 }
                 default:
                     break;
+            }
+            // 1.14.1 : LA COMMANDE PAR LES FINS DE COURSE (la vanne, la vanne 3 voies, les registres) - des fins de
+            // course reliees, l'Ordre, le Temps de manoeuvre lisible. La Valeur n'est plus demandee.
+            if (limits::kindHasLimits(o.kind) && limits::limitMode(o)) {
+                const bool three = o.kind == Kind::ThreeWayValve;
+                const auto given = [&](std::string_view key) {
+                    const Prop* pr = o.find(key);
+                    return pr && (!trimmedCopy(pr->expr).empty() || !trimmedCopy(markers::strip(pr->value)).empty());
+                };
+                // Une fin de course, un Ordre tapes sans = : des formules (des variables inconnues, une formule fausse).
+                for (const char* key : {"limitOpen", "limitClosed", "limit12", "limit13", "limit23", "openOrder", "positionOrder"}) {
+                    if (kindIsDamper(o.kind) && (std::string_view(key) == "limitOpen" || std::string_view(key) == "limitClosed")) continue;   // deja vues
+                    if (const auto* pr = o.find(key); pr && pr->expr.empty() && !trimmedCopy(pr->value).empty()) {
+                        double x = 0;
+                        if (!parseNumber(trimmedCopy(pr->value), x)) exprCheck(key, trimmedCopy(pr->value), key);
+                    }
+                }
+                // Une fin de course, un Ordre d'ouverture : un booleen - une variable d'un autre type se dit (un REAL non
+                // nul serait vrai : une mesure n'est pas une fin de course).
+                for (const char* key : {"limitOpen", "limitClosed", "limit12", "limit13", "limit23", "openOrder"}) {
+                    const Prop* pr = o.find(key);
+                    if (!pr) continue;
+                    const std::string e = trimmedCopy(markers::strip(!trimmedCopy(pr->expr).empty() ? pr->expr : pr->value));
+                    double x = 0;
+                    if (e.empty() || (trimmedCopy(pr->expr).empty() && (parseNumber(e, x) || roles::readBool(e, false) == roles::readBool(e, true))))
+                        continue;   // une constante
+                    const std::string type = params::expressionType(p, &v, e);
+                    if (!type.empty() && typereg::simTypeOf(type) != sim::Type::Bool)
+                        issue(S::Warning, key, "'" + e + "' est un " + type + " : une fin de course, un ordre se lisent vrai ou faux - un BOOL, ou une "
+                                                   "comparaison (" + e + " > 0)");
+                }
+                if (three) {
+                    const bool lBore = trimmedCopy(o.text("valve3Bore", "T")) == "L";
+                    bool any = false;
+                    for (const auto key : limits::kWayKeys) any = any || (given(key) && !(lBore && key == "limit12"));
+                    if (!any)
+                        issue(S::Warning, "limit13", "commande par les fins de course, mais aucune n'est reli\xC3\xA9" "e (FC voie 1-2, 1-3, 2-3, FC ferm\xC3\xA9" "e) : "
+                                                     "la vanne ne montre pas sa voie");
+                    if (lBore && given("limit12"))
+                        issue(S::Info, "limit12", "FC voie 1-2 sur un boisseau en L (il ne relie que 1-3 et 2-3) : elle n'est pas lue");
+                    if (const auto* pr = o.find("positionOrder"); pr && pr->expr.empty()) {
+                        const std::string t = trimmedCopy(pr->value);
+                        double x = 0;
+                        if (parseNumber(t, x) && limits::wayOf(t) < 0)
+                            issue(S::Warning, "positionOrder", "ordre de position '" + t + "' inconnu : 0 ferm\xC3\xA9" "e, 1 (ou 12) 1-2, 2 (ou 13) 1-3, 3 (ou 23) 2-3");
+                    }
+                } else {
+                    const bool fo = given("limitOpen"), ff = given("limitClosed");
+                    if (!fo && !ff)
+                        issue(S::Warning, "limitOpen", "commande par les fins de course, mais ni Fin de course ouvert ni Fin de course ferm\xC3\xA9 ne sont reli\xC3\xA9" "es : "
+                                                       "son \xC3\xA9tat ne se voit pas");
+                    else if (fo != ff)
+                        issue(S::Info, fo ? "limitClosed" : "limitOpen",
+                              "une seule fin de course reli\xC3\xA9" "e : l'autre position s'en d\xC3\xA9" "duit, et les deux \xC3\xA0 la fois (une discordance) ne se voient pas");
+                }
+                if (const auto* tp = o.find("travelTime"); tp && trimmedCopy(tp->expr).empty() && !limits::travelTimeOk(markers::strip(tp->value))
+                    && params::expressionType(p, &v, trimmedCopy(markers::strip(tp->value))).empty())
+                    issue(S::Warning, "travelTime", "temps de man\xC5\x93uvre illisible : '" + trimmedCopy(tp->value) + "' (10 s, T#30s, 1 min ; un nombre seul : des "
+                                                    "secondes) - la discordance par le temps ne se verra pas");
+                if (given("travelTime") && !given(three ? "positionOrder" : "openOrder"))
+                    issue(S::Info, "travelTime", std::string("temps de man\xC5\x93uvre sans ") + (three ? "Ordre de position" : "Ordre d'ouverture")
+                                                     + " : il ne sert pas (la discordance par le temps suit l'Ordre)");
             }
             // Les actions du lot 11.
             for (std::size_t i = 0; i < o.actions.size(); ++i) {

@@ -4,6 +4,7 @@
 #include "HmiWhy.hpp"
 
 #include "HmiControls.hpp"
+#include "HmiWidgets.hpp"   // 1.14.1 : les fins de course
 
 #include <algorithm>
 #include <cctype>
@@ -337,6 +338,25 @@ Report explain(const Object& shown, const std::vector<LiveValue>& values, sim::E
         }
         it.state = stateOf(shown, it, conditions);
         r.items.push_back(std::move(it));
+    }
+    // 1.14.1 : COMMANDE PAR LES FINS DE COURSE - l'etat retenu et ce qui le decide (quelle fin de course, l'Ordre,
+    // le temps de manoeuvre), en tete : la couleur de l'objet vient de la.
+    if (limits::kindHasLimits(shown.kind) && limits::limitMode(shown)) {
+        Item it;
+        it.key = shown.kind == Kind::ThreeWayValve ? "positionMode" : std::string(limits::kModeKey);
+        it.formula = std::string(limits::kLimitsMode);
+        it.text = true;
+        const bool feminine = shown.kind == Kind::Valve || shown.kind == Kind::ThreeWayValve;
+        if (shown.kind == Kind::ThreeWayValve) {
+            const auto r3 = limits::read3(shown);
+            it.value = r3.state == limits::State::Open ? "voie " + std::string(limits::wayLabel(r3.way)) : limits::stateLabel(r3.state, true);
+            it.state = r3.why;
+        } else {
+            const auto r2 = limits::read(shown);
+            it.value = limits::stateLabel(r2.state, feminine);
+            it.state = r2.why;
+        }
+        r.items.insert(r.items.begin(), std::move(it));
     }
     return r;
 }

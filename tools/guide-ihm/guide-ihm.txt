@@ -4442,11 +4442,22 @@ Dans la famille Synoptique de la bibliothèque, chaque objet porte une cloche et
 @voir synoptique, objet-communs, proprietes, simulation
 @capture EX_Valve.png | L'exemple animé : vanne
 @objet Valve
-@exemple La vanne réglante V-101 : de 1 à 8,5 s, son ouverture va et vient de 0 à 100 % (la jauge suit, la tige clignote quand elle bouge) ; en défaut de 5,5 à 7 s, elle clignote en rouge.
+@exemple La vanne réglante V-101 : de 1 à 8,5 s, son ouverture va et vient de 0 à 100 % (la jauge suit, la tige clignote quand elle bouge) ; en défaut de 5,5 à 7 s, elle clignote en rouge. À côté, V-102 par ses fins de course : l'ordre l'ouvre à 1 s (ambre en mouvement, puis verte), la ferme à 4 s, la rouvre à 7 s ; FCO ne vient pas : discordance à 9 s.
 ### À quoi il sert
 Le symbole ISO d'une vanne : deux triangles tête-bêche, et au-dessus son actionneur - un volant (manuelle), un moteur M (motorisée) ou une membrane (pneumatique). On la pose sur une tuyauterie ; on la tourne de 90° pour une conduite verticale.
 ### La vanne réglante
 Une vanne de régulation n'est pas ouverte ou fermée : elle est ouverte à 35 %. Donne-lui une **ouverture** (`=Vanne_Position`, de 0 à 100) : une jauge sous le corps la montre, le pourcentage s'écrit près de la tige et un repère monte le long de celle-ci ; le corps est vert dès qu'elle s'ouvre. **En mouvement** (une expression vraie quand elle bouge) fait clignoter la tige. La commande « réglante » dessine sa membrane et son positionneur.
+@nouveau 1.14.1
+### Commande par les fins de course
+Sur le terrain, une vanne dit où elle est par ses **fins de course** : FCO quand elle est ouverte, FCF quand elle est fermée. **Commande de l'état : fins de course** (au lieu de « une valeur ») lit son état sur elles, sans Valeur :
+- **Fin de course ouvert** seule vraie : **ouverte** (la couleur ouverte) ; **Fin de course fermé** seule vraie : **fermée** (la couleur fermée) ;
+- aucune des deux : **en mouvement** - la couleur de mouvement (ambre) clignote, la tige aussi ;
+- les deux à la fois : **discordance** - la couleur de défaut clignote, et une pastille ≠ en haut à droite ;
+- deux voyants **O** et **F**, à gauche de l'actionneur, disent chaque fin de course ; **Voyants des fins de course** décoché les cache.
+- Facultatifs, **Ordre d'ouverture** (la commande de l'automate : `=V101_Cde`) et **Temps de manœuvre** (10 s, T#30s ; un nombre seul : des secondes) : l'ordre donné, la vanne est en mouvement vers lui (une flèche le long de la tige) tant que sa fin de course n'est pas atteinte ; toujours pas atteinte après le temps de manœuvre : discordance. Le chrono suit l'heure de la marche (la simulation, le poste d'exploitation).
+- Une seule fin de course reliée : l'autre position s'en déduit. Réglante : l'ouverture reste montrée, les fins de course donnent les bouts (0 % fermée, 100 % ouverte) ; entre les deux, elle est à son ouverture.
+- Le **Défaut** passe avant tout. La Valeur et En mouvement n'y servent plus (grisés dans l'inspecteur). Reliées, les fins de course donnent l'alarme par défaut **Discordance** (son délai : le temps de manœuvre, 30 s sans lui) ; **Pourquoi ?** dit quelle fin de course décide.
+> Dans la bibliothèque, chercher « fins de course » trouve la vanne, la vanne 3 voies et les registres ; un projet 1.14.0 reste à « une valeur ».
 ### Ses paramètres
 @param value | Valeur | FALSE | Vraie : ouverte ; fausse : fermée. Une expression la relie : =V_101.Ouv.
 @param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote. Une expression : =Pompe_Defaut.
@@ -4462,10 +4473,18 @@ Une vanne de régulation n'est pas ouverte ou fermée : elle est ouverte à 35 %
 @param valveType | Commande de la vanne | manuelle | manuelle (un volant), motorisée (un moteur M), pneumatique (une membrane), réglante (une membrane et son positionneur).
 @param opening | Ouverture (%) | (vide) | Vanne réglante : de 0 à 100 % (une expression : =Vanne_Position). Vide : tout ou rien.
 @param moving | En mouvement (expression) | (vide) | Vraie : la tige clignote (la vanne bouge) : =Vanne_Ouvre OR Vanne_Ferme.
+@param stateMode | Commande de l'état | une valeur | une valeur (la Valeur : ouverte ou fermée) ou fins de course (Fin de course ouvert et fermé, sans Valeur).
+@param limitOpen | Fin de course ouvert | (vide) | Fins de course : vraie, elle est ouverte (FCO : =V101_FCO). Le voyant O.
+@param limitClosed | Fin de course fermé | (vide) | Fins de course : vraie, elle est fermée (FCF : =V101_FCF). Le voyant F.
+@param openOrder | Ordre d'ouverture | (vide) | Fins de course, facultatif : la commande (vraie : ouvrir) ; pas suivie après le temps de manœuvre, discordance.
+@param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s ; un nombre : des secondes). Vide : jamais en retard.
+@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F à gauche de l'actionneur.
 ### En marche
-- sa valeur, évaluée à chaque cycle, dessine son état ;
+- sa valeur, évaluée à chaque cycle, dessine son état ; par ses fins de course, elles le dessinent, et le chrono de l'ordre suit l'heure de la marche ;
 - en défaut, il prend la couleur de défaut et clignote ; Générer signale une variable inconnue dans sa valeur ou son défaut ;
 - réglante, son ouverture est bornée entre 0 et 100 % ; Générer signale une ouverture illisible ou fixée hors de ces bornes.
+@nouveau 1.14.1
+- par ses fins de course, Générer signale qu'aucune n'est reliée, qu'une seule l'est (une information), un temps de manœuvre illisible ou sans ordre, et une fin de course qui n'est pas un booléen.
 @nouveau 1.12.10
 1.12.10 : Ouverture : min et max - la valeur qui vaut 0 % et celle qui vaut 100 % (27648, 1) ; vides, la plage de la variable de l'ouverture dans Unités et formats, sinon 0..100.
 
@@ -4474,7 +4493,7 @@ Une vanne de régulation n'est pas ouverte ou fermée : elle est ouverte à 35 %
 @voir objet-vanne, synoptique, objet-communs, proprietes, simulation
 @capture EX_ThreeWayValve.png | L'exemple animé : vanne 3 voies
 @objet ThreeWayValve
-@exemple La vanne V3V-201 : voie 1-2 au départ, 1-3 à 2,5 s, 2-3 à 4,5 s, fermée à 6,5 s (une croix rouge sur le boisseau) ; entre deux, son boisseau tourne (le passage clignote en ambre) ; en défaut de 7,5 à 9 s, son passage est rouge, dans un cadre tireté.
+@exemple La vanne V3V-201 : voie 1-2 au départ, 1-3 à 2,5 s, 2-3 à 4,5 s, fermée à 6,5 s (une croix rouge sur le boisseau) ; entre deux, son boisseau tourne (le passage clignote en ambre) ; en défaut de 7,5 à 9 s, son passage est rouge, dans un cadre tireté. À côté, V3V-202 par ses fins de course : son ordre de position la mène de 1-2 à 1-3, 2-3 puis fermée (le passage visé clignote en ambre tant que sa fin de course ne vient pas) ; à 9 s, FC 1-3 revient avec FC fermée : discordance.
 ### À quoi il sert
 Le symbole d'une vanne 3 voies : trois triangles qui se rejoignent au centre - la voie 1 à gauche, la voie 2 à droite, la voie 3 en bas - et, au centre, son boisseau qui tourne vers la voie active. Au-dessus, son actionneur, comme la vanne : un volant, un moteur M, une membrane. Elle est dans la bibliothèque à côté de la vanne, dans la famille Synoptique ; on la tourne et on la retourne (miroir) comme la vanne.
 ### La voie active
@@ -4486,6 +4505,12 @@ Le symbole d'une vanne 3 voies : trois triangles qui se rejoignent au centre - l
 - **Mélangeuse** : les voies 1 et 2 entrent, la voie 3 sort. **Répartitrice** : la voie 3 entre, les voies 1 et 2 sortent. Une flèche sur chaque voie du passage le montre.
 - **Boisseau en T** : il relie 1-2, 1-3 ou 2-3 ; dessiné, il a une branche de plus, vers le haut. **En L** : 1-3 et 2-3 seulement (1-2 n'existe pas). Toujours : fermée.
 - **En mouvement** (une expression vraie quand le boisseau tourne) fait clignoter le passage en ambre, et la tige comme la vanne ; reliée, elle donne l'alarme par défaut **Course_Trop_Longue**.
+@nouveau 1.14.1
+### Commande par les fins de course
+- **Commande de la position : fins de course** : une fin de course par voie - **FC voie 1-2**, **FC voie 1-3**, **FC voie 2-3** (boisseau en L : 1-3 et 2-3 seulement) - et, facultative, **FC fermée**. La seule vraie donne la voie (ou fermée) ; aucune : **en mouvement**, le boisseau tourne (son bord clignote en ambre) ; plusieurs à la fois : **discordance** - les passages de chacune en rouge, le cadre tireté, la pastille ≠ en bas à gauche.
+- Un petit **voyant par voie**, entre ses deux voies : 1-3 en bas à gauche, 2-3 en bas à droite, 1-2 en haut ; **Voyants des fins de course** décoché les cache.
+- Facultatifs, **Ordre de position** (0 fermée, 1 la voie 1-2, 2 la voie 1-3, 3 la voie 2-3 ; ou 12, 13, 23) et **Temps de manœuvre** : l'ordre donné, le passage visé clignote en ambre tant que sa fin de course n'est pas la seule vraie ; toujours pas après le temps de manœuvre : discordance.
+- La Position, les booléens A et B et En mouvement n'y servent plus (grisés) ; l'alarme par défaut **Discordance** part de deux fins de course à la fois, ou de l'ordre pas suivi ; **Pourquoi ?** dit laquelle décide.
 ### Ses paramètres
 @param value | Position | 2 | La voie active : 0 fermée, 1 (ou 12) 1-2, 2 (ou 13) 1-3, 3 (ou 23) 2-3. Une expression : =V3[0].Pos.
 @param fault | Défaut (expression) | FALSE | Vrai : le passage en rouge, dans un cadre tireté. Une expression : =V3V_Defaut.
@@ -4501,14 +4526,21 @@ Le symbole d'une vanne 3 voies : trois triangles qui se rejoignent au centre - l
 @param textColor | Couleur du texte | #C8D0DC | La couleur du libellé et des numéros des voies.
 @param valve3Function | Variante | mélangeuse | mélangeuse (1 et 2 entrent, 3 sort) ou répartitrice (3 entre, 1 et 2 sortent).
 @param valve3Bore | Boisseau | T | T (1-2, 1-3, 2-3 ; une branche de plus vers le haut) ou L (1-3 et 2-3).
-@param positionMode | Commande de la position | entier | entier (une variable entière : la Position) ou deux booléens (A et B).
+@param positionMode | Commande de la position | entier | entier (une variable entière : la Position), deux booléens (A et B) ou fins de course (une par voie).
 @param positionA | Booléen A (expression) | (vide) | Commande par deux booléens : A seul, la voie 1-2 ; avec B, la voie 2-3.
 @param positionB | Booléen B (expression) | (vide) | Commande par deux booléens : B seul, la voie 1-3 ; avec A, la voie 2-3.
 @param valveType | Commande de la vanne | motorisée | manuelle (un volant), motorisée (un moteur M), pneumatique (une membrane), réglante (une membrane et son positionneur).
 @param moving | En mouvement (expression) | (vide) | Vraie : le passage clignote en ambre, et la tige (le boisseau tourne) : =V3V_Bouge.
 @param showPorts | Numéros des voies | TRUE | Coché : 1, 2 et 3 écrits près des voies.
+@param limit12 | FC voie 1-2 | (vide) | Fins de course : vraie, la vanne est sur la voie 1-2 (=V3_FC12). Boisseau en L : sans objet.
+@param limit13 | FC voie 1-3 | (vide) | Fins de course : vraie, la vanne est sur la voie 1-3 (=V3_FC13).
+@param limit23 | FC voie 2-3 | (vide) | Fins de course : vraie, la vanne est sur la voie 2-3 (=V3_FC23).
+@param limitClosed | Fin de course fermé | (vide) | Fins de course, facultative : vraie, la vanne est fermée.
+@param positionOrder | Ordre de position | (vide) | Fins de course, facultatif : la voie commandée (0 à 3, ou 12, 13, 23) ; pas atteinte après le temps de manœuvre, discordance.
+@param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s). Vide : jamais en retard.
+@param showLimits | Voyants des fins de course | TRUE | Coché : un voyant par voie, entre ses deux voies.
 ### En marche
-- sa voie active, évaluée à chaque cycle, colore les deux voies du passage, y met les flèches du sens et tourne le boisseau ;
+- sa voie active, évaluée à chaque cycle, colore les deux voies du passage, y met les flèches du sens et tourne le boisseau ; par ses fins de course, la seule vraie la donne ;
 - en mouvement, le passage clignote en ambre ; en défaut, il est rouge, dans un cadre tireté ; Générer signale une variable inconnue dans sa position, ses booléens ou son défaut ;
 - Compiler signale une voie active écrite à la main qui n'existe pas (elle se dessine fermée), et une commande par deux booléens sans A ni B.
 ### Avec une version plus ancienne
@@ -4519,6 +4551,9 @@ Une version 1.10.3 ou plus ancienne ne connaît pas la vanne 3 voies : à l'ouve
 @nouveau 1.12.11
 
 1.12.11 : les cases du mode de position qui ne sert pas sont grisées ; Générer dit une position 1-2 sur un boisseau en L (il ne relie que 1-3 et 2-3).
+@nouveau 1.14.1
+
+1.14.1 : la commande par les fins de course (une par voie), l'ordre de position et le temps de manœuvre ; Générer dit qu'aucune n'est reliée, une FC voie 1-2 sur un boisseau en L, un ordre de position inconnu, un temps illisible.
 
 == objet-registre | Registre
 : Un registre à une lame (papillon), tout ou rien ou modulant : la lame tourne avec son ouverture ; ses fins de course (O et F) se voient, une discordance le met en défaut.
@@ -4526,7 +4561,7 @@ Une version 1.10.3 ou plus ancienne ne connaît pas la vanne 3 voies : à l'ouve
 @voir objet-registre-multi-lames, objet-clapet-coupe-feu, objet-vanne, synoptique, objet-communs, proprietes, simulation
 @capture EX_Damper.png | L'exemple animé : registre
 @objet Damper
-@exemple Le registre RG-3212 s'ouvre à 1 s (sa lame se couche, l'axe clignote pendant la course), module de 100 à 30 % de 3 à 6 s, se ferme à 7 s ; de 8 à 9,5 s, sa fin de course fermé ne revient pas alors qu'il est fermé : discordance, il clignote en rouge.
+@exemple Le registre RG-3212 s'ouvre à 1 s (sa lame se couche, l'axe clignote pendant la course), module de 100 à 30 % de 3 à 6 s, se ferme à 7 s ; de 8 à 9,5 s, sa fin de course fermé ne revient pas alors qu'il est fermé : discordance, il clignote en rouge. À côté, RG-3213 par ses fins de course : l'ordre l'ouvre à 1 s, le ferme à 5 s (entre deux, sa lame ambre clignote) ; à 8 s, O et F à la fois : discordance.
 ### À quoi il sert
 Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une gaine (deux parois, une bride à chaque bout) et sa lame qui tourne sur son axe, au centre. **Ouvert**, la lame est à plat, dans le sens du flux ; **fermé**, elle est debout et barre la gaine. L'axe monte à son actionneur : un servomoteur (M), un levier, un vérin pneumatique. Il est dans la famille Synoptique, à côté des vannes ; on le tourne (une gaine verticale) et on le retourne comme elles.
 ### Tout ou rien ou modulant
@@ -4536,6 +4571,9 @@ Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une 
 ### Les fins de course
 - **Fin de course ouvert** et **Fin de course fermé** (deux expressions : =RG_FCO, =RG_FCF) allument deux voyants **O** et **F** à gauche de l'actionneur ; la lame suit ce qu'ils disent (l'état réel, pas la commande).
 - **Discordance** : les deux à la fois, ou aucune hors mouvement, les deux étant reliées : le registre se dessine en défaut et clignote. Reliées toutes les deux, elles donnent l'alarme par défaut **Discordance** (10 s).
+@nouveau 1.14.1
+### Commande par les fins de course
+**Commande de l'état : fins de course** (au lieu de « une valeur ») : l'état vient de **Fin de course ouvert** et **Fin de course fermé** seules, sans Valeur, avec les règles de la vanne - FCO seule, **ouvert** (la lame à plat) ; FCF seule, **fermé** (debout) ; aucune, **en mouvement** (la lame à mi-course, en ambre, qui clignote, et l'axe) ; les deux, ou l'**Ordre d'ouverture** pas suivi après le **Temps de manœuvre** : **discordance** (le rouge qui clignote, la pastille ≠ en haut à droite). Modulant : son ouverture entre les deux, 0 et 100 % aux fins de course. Une seule reliée : l'autre position s'en déduit. La Valeur et En mouvement n'y servent plus (grisés) ; l'alarme **Discordance** prend l'ordre et le temps de manœuvre (30 s sans lui). **Voyants des fins de course** décoché cache les voyants O et F, dans les deux modes.
 ### Ses paramètres
 @param value | Ouvert | FALSE | Vrai : ouvert (la lame à plat) ; faux : fermé. Une expression : =RG3212_Ouvert.
 @param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote. Une expression : =RG3212_Defaut.
@@ -4554,8 +4592,12 @@ Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une 
 @param moving | En mouvement (expression) | (vide) | Vraie : l'axe clignote (le registre bouge) : =RG_Ouvre OR RG_Ferme.
 @param limitOpen | Fin de course ouvert | (vide) | Vraie : il est ouvert (FCO). Le voyant O ; la lame se couche.
 @param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé (FCF). Le voyant F ; la lame se dresse.
+@param stateMode | Commande de l'état | une valeur | une valeur (Ouvert) ou fins de course (l'état vient de FCO et FCF seules).
+@param openOrder | Ordre d'ouverture | (vide) | Fins de course, facultatif : la commande (vraie : ouvrir) ; pas suivie après le temps de manœuvre, discordance.
+@param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s). Vide : jamais en retard.
+@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F à gauche de l'actionneur.
 ### En marche
-- sa valeur, son ouverture et ses fins de course, évaluées à chaque cycle, tournent la lame ; le défaut et la discordance le font clignoter en rouge ;
+- sa valeur, son ouverture et ses fins de course, évaluées à chaque cycle, tournent la lame ; le défaut et la discordance le font clignoter en rouge ; par ses fins de course, elles seules décident ;
 - Générer signale une variable inconnue dans ses expressions, une ouverture hors de 0 à 100 %, une seule fin de course reliée (la discordance ne se verrait pas).
 
 == objet-registre-multi-lames | Registre multi-lames
@@ -4567,6 +4609,8 @@ Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une 
 @exemple Le registre RG-260 (quatre lames opposées) s'ouvre de 0 à 100 % en 4 s puis revient à 40 %, ses lames tournent ensemble ; à 8 s, il se ferme.
 ### À quoi il sert
 Le registre des grandes sections : de 2 à 8 lames, l'une au-dessus de l'autre, liées par une tringle. **Opposées**, une lame sur deux tourne dans l'autre sens (le réglage le plus fin du débit) ; **parallèles**, toutes dans le même sens. Le reste - ouvert ou fermé, l'ouverture, le mouvement, les fins de course O et F, la discordance - comme le registre.
+@nouveau 1.14.1
+**Commande de l'état : fins de course** : l'état vient de ses fins de course seules, l'Ordre d'ouverture et le Temps de manœuvre en plus, comme le registre (voir « Registre »).
 ### Ses paramètres
 @param value | Ouvert | FALSE | Vrai : ouvert (les lames à plat) ; faux : fermé.
 @param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote.
@@ -4587,6 +4631,10 @@ Le registre des grandes sections : de 2 à 8 lames, l'une au-dessus de l'autre, 
 @param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé (FCF). Le voyant F.
 @param blades | Nombre de lames | 4 | De 2 à 8 lames, qui tournent ensemble.
 @param bladeMode | Disposition des lames | opposées | opposées (une sur deux dans l'autre sens) ou parallèles.
+@param stateMode | Commande de l'état | une valeur | une valeur (Ouvert) ou fins de course (l'état vient de FCO et FCF seules).
+@param openOrder | Ordre d'ouverture | (vide) | Fins de course, facultatif : la commande ; pas suivie après le temps de manœuvre, discordance.
+@param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s).
+@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F.
 ### En marche
 - ses lames suivent sa valeur, son ouverture et ses fins de course ; le défaut et la discordance le font clignoter en rouge ;
 - Générer signale un nombre de lames hors de 2 à 8 (il en dessine 2 ou 8).
@@ -4617,6 +4665,13 @@ Le clapet coupe-feu (CF) d'une traversée de paroi : une gaine, sa lame, la marq
 @param fireRelease | Déclencheur | fusible | fusible (thermique), électro-aimant (à rupture) ou moteur (réarmable à distance).
 @param limitOpen | Fin de course ouvert | (vide) | Vraie : il est ouvert. Le voyant O.
 @param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé. Le voyant F.
+@param stateMode | Commande de l'état | une valeur | une valeur (Ouvert) ou fins de course (l'état vient de FCO et FCF seules ; le déclenchement passe avant).
+@param openOrder | Ordre d'ouverture | (vide) | Fins de course, facultatif : la commande (le réarmement) ; pas suivie après le temps de manœuvre, discordance.
+@param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s).
+@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F.
+@nouveau 1.14.1
+### Commande par les fins de course
+**Commande de l'état : fins de course** : l'état vient de ses fins de course seules, comme le registre (voir « Registre ») ; déclenché, il reste fermé, rouge et clignotant, avant tout le reste.
 ### En marche
 - déclenché, il se ferme, rouge et clignotant, et l'alarme **Declenche** part ; ses fins de course corrigent la lame et disent la discordance comme le registre ;
 - Générer signale une variable inconnue dans ses expressions.

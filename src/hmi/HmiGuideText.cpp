@@ -10228,6 +10228,38 @@ const std::vector<Topic>& topics() {
                          "celle-ci ; le corps est vert d\xC3\xA8s qu'elle s'ouvre. **En mouvement** (une "
                          "expression vraie quand elle bouge) fait clignoter la tige. La commande \xC2\xAB "
                          "r\xC3\xA9glante \xC2\xBB dessine sa membrane et son positionneur.", {}},
+             {K::Heading, "Commande par les fins de course", {}, "1.14.1"},
+             {K::Paragraph, "Sur le terrain, une vanne dit o\xC3\xB9 elle est par ses **fins de course** : FCO "
+                         "quand elle est ouverte, FCF quand elle est ferm\xC3\xA9" "e. **Commande de "
+                         "l'\xC3\xA9tat : fins de course** (au lieu de \xC2\xAB une valeur \xC2\xBB) lit son "
+                         "\xC3\xA9tat sur elles, sans Valeur :", {}, "1.14.1"},
+             {K::Bullet, "**Fin de course ouvert** seule vraie : **ouverte** (la couleur ouverte) ; **Fin de "
+                         "course ferm\xC3\xA9** seule vraie : **ferm\xC3\xA9" "e** (la couleur "
+                         "ferm\xC3\xA9" "e) ;", {}, "1.14.1"},
+             {K::Bullet, "aucune des deux : **en mouvement** - la couleur de mouvement (ambre) clignote, la "
+                         "tige aussi ;", {}, "1.14.1"},
+             {K::Bullet, "les deux \xC3\xA0 la fois : **discordance** - la couleur de d\xC3\xA9" "faut "
+                         "clignote, et une pastille \xE2\x89\xA0 en haut \xC3\xA0 droite ;", {}, "1.14.1"},
+             {K::Bullet, "deux voyants **O** et **F**, \xC3\xA0 gauche de l'actionneur, disent chaque fin de "
+                         "course ; **Voyants des fins de course** d\xC3\xA9" "coch\xC3\xA9 les cache.", {}, "1.14.1"},
+             {K::Bullet, "Facultatifs, **Ordre d'ouverture** (la commande de l'automate : `=V101_Cde`) et "
+                         "**Temps de man\xC5\x93uvre** (10 s, T#30s ; un nombre seul : des secondes) : "
+                         "l'ordre donn\xC3\xA9, la vanne est en mouvement vers lui (une fl\xC3\xA8" "che le "
+                         "long de la tige) tant que sa fin de course n'est pas atteinte ; toujours pas "
+                         "atteinte apr\xC3\xA8s le temps de man\xC5\x93uvre : discordance. Le chrono suit "
+                         "l'heure de la marche (la simulation, le poste d'exploitation).", {}, "1.14.1"},
+             {K::Bullet, "Une seule fin de course reli\xC3\xA9" "e : l'autre position s'en d\xC3\xA9" "duit. "
+                         "R\xC3\xA9glante : l'ouverture reste montr\xC3\xA9" "e, les fins de course donnent "
+                         "les bouts (0 % ferm\xC3\xA9" "e, 100 % ouverte) ; entre les deux, elle est "
+                         "\xC3\xA0 son ouverture.", {}, "1.14.1"},
+             {K::Bullet, "Le **D\xC3\xA9" "faut** passe avant tout. La Valeur et En mouvement n'y servent "
+                         "plus (gris\xC3\xA9s dans l'inspecteur). Reli\xC3\xA9" "es, les fins de course "
+                         "donnent l'alarme par d\xC3\xA9" "faut **Discordance** (son d\xC3\xA9lai : le temps "
+                         "de man\xC5\x93uvre, 30 s sans lui) ; **Pourquoi ?** dit quelle fin de course "
+                         "d\xC3\xA9" "cide.", {}, "1.14.1"},
+             {K::Tip, "Dans la biblioth\xC3\xA8que, chercher \xC2\xAB fins de course \xC2\xBB trouve la "
+                         "vanne, la vanne 3 voies et les registres ; un projet 1.14.0 reste \xC3\xA0 "
+                         "\xC2\xAB une valeur \xC2\xBB.", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
                          "r\xC3\xA8gle\nValeur\tFALSE\tVraie : ouverte ; fausse : ferm\xC3\xA9" "e. Une "
@@ -10247,16 +10279,31 @@ const std::vector<Topic>& topics() {
                          "(une membrane et son positionneur).\nOuverture (%)\t(vide)\tVanne r\xC3\xA9glante "
                          ": de 0 \xC3\xA0 100 % (une expression : =Vanne_Position). Vide : tout ou rien.\nEn "
                          "mouvement (expression)\t(vide)\tVraie : la tige clignote (la vanne bouge) : "
-                         "=Vanne_Ouvre OR Vanne_Ferme.", {}},
+                         "=Vanne_Ouvre OR Vanne_Ferme.\nCommande de l'\xC3\xA9tat\tune valeur\tune valeur "
+                         "(la Valeur : ouverte ou ferm\xC3\xA9" "e) ou fins de course (Fin de course ouvert "
+                         "et ferm\xC3\xA9, sans Valeur).\nFin de course ouvert\t(vide)\tFins de course : "
+                         "vraie, elle est ouverte (FCO : =V101_FCO). Le voyant O.\nFin de course "
+                         "ferm\xC3\xA9\t(vide)\tFins de course : vraie, elle est ferm\xC3\xA9" "e (FCF : "
+                         "=V101_FCF). Le voyant F.\nOrdre d'ouverture\t(vide)\tFins de course, facultatif : "
+                         "la commande (vraie : ouvrir) ; pas suivie apr\xC3\xA8s le temps de "
+                         "man\xC5\x93uvre, discordance.\nTemps de man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le "
+                         "temps pour atteindre sa fin de course (10 s, T#30s ; un nombre : des secondes). "
+                         "Vide : jamais en retard.\nVoyants des fins de course\tTRUE\tCoch\xC3\xA9 : les "
+                         "voyants O et F \xC3\xA0 gauche de l'actionneur.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "sa valeur, \xC3\xA9valu\xC3\xA9" "e \xC3\xA0 chaque cycle, dessine son \xC3\xA9tat "
-                         ";", {}},
+                         "; par ses fins de course, elles le dessinent, et le chrono de l'ordre suit l'heure "
+                         "de la marche ;", {}},
              {K::Bullet, "en d\xC3\xA9" "faut, il prend la couleur de d\xC3\xA9" "faut et clignote ; "
                          "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans sa valeur ou son "
                          "d\xC3\xA9" "faut ;", {}},
              {K::Bullet, "r\xC3\xA9glante, son ouverture est born\xC3\xA9" "e entre 0 et 100 % ; "
                          "G\xC3\xA9n\xC3\xA9rer signale une ouverture illisible ou fix\xC3\xA9" "e hors de "
                          "ces bornes.", {}},
+             {K::Bullet, "par ses fins de course, G\xC3\xA9n\xC3\xA9rer signale qu'aucune n'est "
+                         "reli\xC3\xA9" "e, qu'une seule l'est (une information), un temps de "
+                         "man\xC5\x93uvre illisible ou sans ordre, et une fin de course qui n'est pas un "
+                         "bool\xC3\xA9" "en.", {}, "1.14.1"},
              {K::Paragraph, "1.12.10 : Ouverture : min et max - la valeur qui vaut 0 % et celle qui vaut 100 % "
                          "(27648, 1) ; vides, la plage de la variable de l'ouverture dans Unit\xC3\xA9s et "
                          "formats, sinon 0..100.", {}, "1.12.10"},
@@ -10295,10 +10342,27 @@ const std::vector<Topic>& topics() {
             "Vanne r\xC3\xA9glante : de 0 \xC3\xA0 100 % (une expression : =Vanne_Position). Vide : tout ou "
             "rien."},
            {"moving", "En mouvement (expression)", "(vide)",
-            "Vraie : la tige clignote (la vanne bouge) : =Vanne_Ouvre OR Vanne_Ferme."}},
+            "Vraie : la tige clignote (la vanne bouge) : =Vanne_Ouvre OR Vanne_Ferme."},
+           {"stateMode", "Commande de l'\xC3\xA9tat", "une valeur",
+            "une valeur (la Valeur : ouverte ou ferm\xC3\xA9" "e) ou fins de course (Fin de course ouvert et "
+            "ferm\xC3\xA9, sans Valeur)."},
+           {"limitOpen", "Fin de course ouvert", "(vide)",
+            "Fins de course : vraie, elle est ouverte (FCO : =V101_FCO). Le voyant O."},
+           {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
+            "Fins de course : vraie, elle est ferm\xC3\xA9" "e (FCF : =V101_FCF). Le voyant F."},
+           {"openOrder", "Ordre d'ouverture", "(vide)",
+            "Fins de course, facultatif : la commande (vraie : ouvrir) ; pas suivie apr\xC3\xA8s le temps de "
+            "man\xC5\x93uvre, discordance."},
+           {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
+            "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s ; un nombre : des "
+            "secondes). Vide : jamais en retard."},
+           {"showLimits", "Voyants des fins de course", "TRUE",
+            "Coch\xC3\xA9 : les voyants O et F \xC3\xA0 gauche de l'actionneur."}},
          "La vanne r\xC3\xA9glante V-101 : de 1 \xC3\xA0 8,5 s, son ouverture va et vient de 0 \xC3\xA0 100 "
          "% (la jauge suit, la tige clignote quand elle bouge) ; en d\xC3\xA9" "faut de 5,5 \xC3\xA0 7 s, "
-         "elle clignote en rouge.",
+         "elle clignote en rouge. \xC3\x80 c\xC3\xB4t\xC3\xA9, V-102 par ses fins de course : l'ordre "
+         "l'ouvre \xC3\xA0 1 s (ambre en mouvement, puis verte), la ferme \xC3\xA0 4 s, la rouvre \xC3\xA0 7 "
+         "s ; FCO ne vient pas : discordance \xC3\xA0 9 s.",
          {}},
         // ---- La bibliotheque d'objets  Synoptique / objet-vanne-3-voies
         {"objet-vanne-3-voies", "Vanne 3 voies", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
@@ -10340,6 +10404,26 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**En mouvement** (une expression vraie quand le boisseau tourne) fait clignoter le "
                          "passage en ambre, et la tige comme la vanne ; reli\xC3\xA9" "e, elle donne "
                          "l'alarme par d\xC3\xA9" "faut **Course_Trop_Longue**.", {}},
+             {K::Heading, "Commande par les fins de course", {}, "1.14.1"},
+             {K::Bullet, "**Commande de la position : fins de course** : une fin de course par voie - **FC "
+                         "voie 1-2**, **FC voie 1-3**, **FC voie 2-3** (boisseau en L : 1-3 et 2-3 "
+                         "seulement) - et, facultative, **FC ferm\xC3\xA9" "e**. La seule vraie donne la "
+                         "voie (ou ferm\xC3\xA9" "e) ; aucune : **en mouvement**, le boisseau tourne (son "
+                         "bord clignote en ambre) ; plusieurs \xC3\xA0 la fois : **discordance** - les "
+                         "passages de chacune en rouge, le cadre tiret\xC3\xA9, la pastille \xE2\x89\xA0 en "
+                         "bas \xC3\xA0 gauche.", {}, "1.14.1"},
+             {K::Bullet, "Un petit **voyant par voie**, entre ses deux voies : 1-3 en bas \xC3\xA0 gauche, "
+                         "2-3 en bas \xC3\xA0 droite, 1-2 en haut ; **Voyants des fins de course** "
+                         "d\xC3\xA9" "coch\xC3\xA9 les cache.", {}, "1.14.1"},
+             {K::Bullet, "Facultatifs, **Ordre de position** (0 ferm\xC3\xA9" "e, 1 la voie 1-2, 2 la voie "
+                         "1-3, 3 la voie 2-3 ; ou 12, 13, 23) et **Temps de man\xC5\x93uvre** : l'ordre "
+                         "donn\xC3\xA9, le passage vis\xC3\xA9 clignote en ambre tant que sa fin de course "
+                         "n'est pas la seule vraie ; toujours pas apr\xC3\xA8s le temps de man\xC5\x93uvre : "
+                         "discordance.", {}, "1.14.1"},
+             {K::Bullet, "La Position, les bool\xC3\xA9" "ens A et B et En mouvement n'y servent plus "
+                         "(gris\xC3\xA9s) ; l'alarme par d\xC3\xA9" "faut **Discordance** part de deux fins "
+                         "de course \xC3\xA0 la fois, ou de l'ordre pas suivi ; **Pourquoi ?** dit laquelle "
+                         "d\xC3\xA9" "cide.", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nPosition\t2\tLa "
                          "voie active : 0 ferm\xC3\xA9" "e, 1 (ou 12) 1-2, 2 (ou 13) 1-3, 3 (ou 23) 2-3. Une "
@@ -10359,8 +10443,8 @@ const std::vector<Topic>& topics() {
                          "(1 et 2 entrent, 3 sort) ou r\xC3\xA9partitrice (3 entre, 1 et 2 "
                          "sortent).\nBoisseau\tT\tT (1-2, 1-3, 2-3 ; une branche de plus vers le haut) ou L "
                          "(1-3 et 2-3).\nCommande de la position\tentier\tentier (une variable "
-                         "enti\xC3\xA8re : la Position) ou deux bool\xC3\xA9" "ens (A et "
-                         "B).\nBool\xC3\xA9" "en A (expression)\t(vide)\tCommande par deux "
+                         "enti\xC3\xA8re : la Position), deux bool\xC3\xA9" "ens (A et B) ou fins de course "
+                         "(une par voie).\nBool\xC3\xA9" "en A (expression)\t(vide)\tCommande par deux "
                          "bool\xC3\xA9" "ens : A seul, la voie 1-2 ; avec B, la voie 2-3.\nBool\xC3\xA9" "en "
                          "B (expression)\t(vide)\tCommande par deux bool\xC3\xA9" "ens : B seul, la voie 1-3 "
                          "; avec A, la voie 2-3.\nCommande de la vanne\tmotoris\xC3\xA9" "e\tmanuelle (un "
@@ -10368,10 +10452,21 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9glante (une membrane et son positionneur).\nEn mouvement "
                          "(expression)\t(vide)\tVraie : le passage clignote en ambre, et la tige (le "
                          "boisseau tourne) : =V3V_Bouge.\nNum\xC3\xA9ros des voies\tTRUE\tCoch\xC3\xA9 : 1, "
-                         "2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies.", {}},
+                         "2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies.\nFC voie 1-2\t(vide)\tFins de "
+                         "course : vraie, la vanne est sur la voie 1-2 (=V3_FC12). Boisseau en L : sans "
+                         "objet.\nFC voie 1-3\t(vide)\tFins de course : vraie, la vanne est sur la voie 1-3 "
+                         "(=V3_FC13).\nFC voie 2-3\t(vide)\tFins de course : vraie, la vanne est sur la voie "
+                         "2-3 (=V3_FC23).\nFin de course ferm\xC3\xA9\t(vide)\tFins de course, facultative : "
+                         "vraie, la vanne est ferm\xC3\xA9" "e.\nOrdre de position\t(vide)\tFins de course, "
+                         "facultatif : la voie command\xC3\xA9" "e (0 \xC3\xA0 3, ou 12, 13, 23) ; pas "
+                         "atteinte apr\xC3\xA8s le temps de man\xC5\x93uvre, discordance.\nTemps de "
+                         "man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le temps pour atteindre sa fin de course "
+                         "(10 s, T#30s). Vide : jamais en retard.\nVoyants des fins de "
+                         "course\tTRUE\tCoch\xC3\xA9 : un voyant par voie, entre ses deux voies.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "sa voie active, \xC3\xA9valu\xC3\xA9" "e \xC3\xA0 chaque cycle, colore les deux "
-                         "voies du passage, y met les fl\xC3\xA8" "ches du sens et tourne le boisseau ;", {}},
+                         "voies du passage, y met les fl\xC3\xA8" "ches du sens et tourne le boisseau ; par "
+                         "ses fins de course, la seule vraie la donne ;", {}},
              {K::Bullet, "en mouvement, le passage clignote en ambre ; en d\xC3\xA9" "faut, il est rouge, "
                          "dans un cadre tiret\xC3\xA9 ; G\xC3\xA9n\xC3\xA9rer signale une variable inconnue "
                          "dans sa position, ses bool\xC3\xA9" "ens ou son d\xC3\xA9" "faut ;", {}},
@@ -10390,6 +10485,10 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.11 : les cases du mode de position qui ne sert pas sont gris\xC3\xA9" "es ; "
                          "G\xC3\xA9n\xC3\xA9rer dit une position 1-2 sur un boisseau en L (il ne relie que "
                          "1-3 et 2-3).", {}, "1.12.11"},
+             {K::Paragraph, "1.14.1 : la commande par les fins de course (une par voie), l'ordre de position et "
+                         "le temps de man\xC5\x93uvre ; G\xC3\xA9n\xC3\xA9rer dit qu'aucune n'est "
+                         "reli\xC3\xA9" "e, une FC voie 1-2 sur un boisseau en L, un ordre de position "
+                         "inconnu, un temps illisible.", {}, "1.14.1"},
          },
          {"objet-vanne", "synoptique", "objet-communs", "proprietes", "simulation"},
          {},
@@ -10426,7 +10525,8 @@ const std::vector<Topic>& topics() {
            {"valve3Bore", "Boisseau", "T",
             "T (1-2, 1-3, 2-3 ; une branche de plus vers le haut) ou L (1-3 et 2-3)."},
            {"positionMode", "Commande de la position", "entier",
-            "entier (une variable enti\xC3\xA8re : la Position) ou deux bool\xC3\xA9" "ens (A et B)."},
+            "entier (une variable enti\xC3\xA8re : la Position), deux bool\xC3\xA9" "ens (A et B) ou fins de "
+            "course (une par voie)."},
            {"positionA", "Bool\xC3\xA9" "en A (expression)", "(vide)",
             "Commande par deux bool\xC3\xA9" "ens : A seul, la voie 1-2 ; avec B, la voie 2-3."},
            {"positionB", "Bool\xC3\xA9" "en B (expression)", "(vide)",
@@ -10437,11 +10537,29 @@ const std::vector<Topic>& topics() {
            {"moving", "En mouvement (expression)", "(vide)",
             "Vraie : le passage clignote en ambre, et la tige (le boisseau tourne) : =V3V_Bouge."},
            {"showPorts", "Num\xC3\xA9ros des voies", "TRUE",
-            "Coch\xC3\xA9 : 1, 2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies."}},
+            "Coch\xC3\xA9 : 1, 2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies."},
+           {"limit12", "FC voie 1-2", "(vide)",
+            "Fins de course : vraie, la vanne est sur la voie 1-2 (=V3_FC12). Boisseau en L : sans objet."},
+           {"limit13", "FC voie 1-3", "(vide)",
+            "Fins de course : vraie, la vanne est sur la voie 1-3 (=V3_FC13)."},
+           {"limit23", "FC voie 2-3", "(vide)",
+            "Fins de course : vraie, la vanne est sur la voie 2-3 (=V3_FC23)."},
+           {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
+            "Fins de course, facultative : vraie, la vanne est ferm\xC3\xA9" "e."},
+           {"positionOrder", "Ordre de position", "(vide)",
+            "Fins de course, facultatif : la voie command\xC3\xA9" "e (0 \xC3\xA0 3, ou 12, 13, 23) ; pas "
+            "atteinte apr\xC3\xA8s le temps de man\xC5\x93uvre, discordance."},
+           {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
+            "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s). Vide : jamais en retard."},
+           {"showLimits", "Voyants des fins de course", "TRUE",
+            "Coch\xC3\xA9 : un voyant par voie, entre ses deux voies."}},
          "La vanne V3V-201 : voie 1-2 au d\xC3\xA9part, 1-3 \xC3\xA0 2,5 s, 2-3 \xC3\xA0 4,5 s, "
          "ferm\xC3\xA9" "e \xC3\xA0 6,5 s (une croix rouge sur le boisseau) ; entre deux, son boisseau "
          "tourne (le passage clignote en ambre) ; en d\xC3\xA9" "faut de 7,5 \xC3\xA0 9 s, son passage est "
-         "rouge, dans un cadre tiret\xC3\xA9.",
+         "rouge, dans un cadre tiret\xC3\xA9. \xC3\x80 c\xC3\xB4t\xC3\xA9, V3V-202 par ses fins de course : "
+         "son ordre de position la m\xC3\xA8ne de 1-2 \xC3\xA0 1-3, 2-3 puis ferm\xC3\xA9" "e (le passage "
+         "vis\xC3\xA9 clignote en ambre tant que sa fin de course ne vient pas) ; \xC3\xA0 9 s, FC 1-3 "
+         "revient avec FC ferm\xC3\xA9" "e : discordance.",
          {}},
         // ---- La bibliotheque d'objets  Synoptique / objet-registre
         {"objet-registre", "Registre", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
@@ -10477,6 +10595,20 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9tant reli\xC3\xA9" "es : le registre se dessine en d\xC3\xA9" "faut et "
                          "clignote. Reli\xC3\xA9" "es toutes les deux, elles donnent l'alarme par "
                          "d\xC3\xA9" "faut **Discordance** (10 s).", {}},
+             {K::Heading, "Commande par les fins de course", {}, "1.14.1"},
+             {K::Paragraph, "**Commande de l'\xC3\xA9tat : fins de course** (au lieu de \xC2\xAB une valeur "
+                         "\xC2\xBB) : l'\xC3\xA9tat vient de **Fin de course ouvert** et **Fin de course "
+                         "ferm\xC3\xA9** seules, sans Valeur, avec les r\xC3\xA8gles de la vanne - FCO "
+                         "seule, **ouvert** (la lame \xC3\xA0 plat) ; FCF seule, **ferm\xC3\xA9** (debout) ; "
+                         "aucune, **en mouvement** (la lame \xC3\xA0 mi-course, en ambre, qui clignote, et "
+                         "l'axe) ; les deux, ou l'**Ordre d'ouverture** pas suivi apr\xC3\xA8s le **Temps de "
+                         "man\xC5\x93uvre** : **discordance** (le rouge qui clignote, la pastille "
+                         "\xE2\x89\xA0 en haut \xC3\xA0 droite). Modulant : son ouverture entre les deux, 0 "
+                         "et 100 % aux fins de course. Une seule reli\xC3\xA9" "e : l'autre position s'en "
+                         "d\xC3\xA9" "duit. La Valeur et En mouvement n'y servent plus (gris\xC3\xA9s) ; "
+                         "l'alarme **Discordance** prend l'ordre et le temps de man\xC5\x93uvre (30 s sans "
+                         "lui). **Voyants des fins de course** d\xC3\xA9" "coch\xC3\xA9 cache les voyants O "
+                         "et F, dans les deux modes.", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert\tFALSE\tVrai "
                          ": ouvert (la lame \xC3\xA0 plat) ; faux : ferm\xC3\xA9. Une expression : "
@@ -10499,11 +10631,18 @@ const std::vector<Topic>& topics() {
                          "mouvement (expression)\t(vide)\tVraie : l'axe clignote (le registre bouge) : "
                          "=RG_Ouvre OR RG_Ferme.\nFin de course ouvert\t(vide)\tVraie : il est ouvert (FCO). "
                          "Le voyant O ; la lame se couche.\nFin de course ferm\xC3\xA9\t(vide)\tVraie : il "
-                         "est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse.", {}},
+                         "est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse.\nCommande de "
+                         "l'\xC3\xA9tat\tune valeur\tune valeur (Ouvert) ou fins de course (l'\xC3\xA9tat "
+                         "vient de FCO et FCF seules).\nOrdre d'ouverture\t(vide)\tFins de course, "
+                         "facultatif : la commande (vraie : ouvrir) ; pas suivie apr\xC3\xA8s le temps de "
+                         "man\xC5\x93uvre, discordance.\nTemps de man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le "
+                         "temps pour atteindre sa fin de course (10 s, T#30s). Vide : jamais en "
+                         "retard.\nVoyants des fins de course\tTRUE\tCoch\xC3\xA9 : les voyants O et F "
+                         "\xC3\xA0 gauche de l'actionneur.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "sa valeur, son ouverture et ses fins de course, \xC3\xA9valu\xC3\xA9" "es \xC3\xA0 "
                          "chaque cycle, tournent la lame ; le d\xC3\xA9" "faut et la discordance le font "
-                         "clignoter en rouge ;", {}},
+                         "clignoter en rouge ; par ses fins de course, elles seules d\xC3\xA9" "cident ;", {}},
              {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans ses expressions, une "
                          "ouverture hors de 0 \xC3\xA0 100 %, une seule fin de course reli\xC3\xA9" "e (la "
                          "discordance ne se verrait pas).", {}},
@@ -10548,11 +10687,22 @@ const std::vector<Topic>& topics() {
            {"limitOpen", "Fin de course ouvert", "(vide)",
             "Vraie : il est ouvert (FCO). Le voyant O ; la lame se couche."},
            {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
-            "Vraie : il est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse."}},
+            "Vraie : il est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse."},
+           {"stateMode", "Commande de l'\xC3\xA9tat", "une valeur",
+            "une valeur (Ouvert) ou fins de course (l'\xC3\xA9tat vient de FCO et FCF seules)."},
+           {"openOrder", "Ordre d'ouverture", "(vide)",
+            "Fins de course, facultatif : la commande (vraie : ouvrir) ; pas suivie apr\xC3\xA8s le temps de "
+            "man\xC5\x93uvre, discordance."},
+           {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
+            "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s). Vide : jamais en retard."},
+           {"showLimits", "Voyants des fins de course", "TRUE",
+            "Coch\xC3\xA9 : les voyants O et F \xC3\xA0 gauche de l'actionneur."}},
          "Le registre RG-3212 s'ouvre \xC3\xA0 1 s (sa lame se couche, l'axe clignote pendant la course), "
          "module de 100 \xC3\xA0 30 % de 3 \xC3\xA0 6 s, se ferme \xC3\xA0 7 s ; de 8 \xC3\xA0 9,5 s, sa fin "
          "de course ferm\xC3\xA9 ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en "
-         "rouge.",
+         "rouge. \xC3\x80 c\xC3\xB4t\xC3\xA9, RG-3213 par ses fins de course : l'ordre l'ouvre \xC3\xA0 1 s, "
+         "le ferme \xC3\xA0 5 s (entre deux, sa lame ambre clignote) ; \xC3\xA0 8 s, O et F \xC3\xA0 la fois "
+         ": discordance.",
          {}, "1.12.24"},
         // ---- La bibliotheque d'objets  Synoptique / objet-registre-multi-lames
         {"objet-registre-multi-lames", "Registre multi-lames", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
@@ -10566,6 +10716,9 @@ const std::vector<Topic>& topics() {
                          "**parall\xC3\xA8les**, toutes dans le m\xC3\xAAme sens. Le reste - ouvert ou "
                          "ferm\xC3\xA9, l'ouverture, le mouvement, les fins de course O et F, la discordance "
                          "- comme le registre.", {}},
+             {K::Paragraph, "**Commande de l'\xC3\xA9tat : fins de course** : l'\xC3\xA9tat vient de ses fins "
+                         "de course seules, l'Ordre d'ouverture et le Temps de man\xC5\x93uvre en plus, "
+                         "comme le registre (voir \xC2\xAB Registre \xC2\xBB).", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert\tFALSE\tVrai "
                          ": ouvert (les lames \xC3\xA0 plat) ; faux : ferm\xC3\xA9.\nD\xC3\xA9" "faut "
@@ -10589,7 +10742,13 @@ const std::vector<Topic>& topics() {
                          "il est ferm\xC3\xA9 (FCF). Le voyant F.\nNombre de lames\t4\tDe 2 \xC3\xA0 8 "
                          "lames, qui tournent ensemble.\nDisposition des "
                          "lames\toppos\xC3\xA9" "es\toppos\xC3\xA9" "es (une sur deux dans l'autre sens) ou "
-                         "parall\xC3\xA8les.", {}},
+                         "parall\xC3\xA8les.\nCommande de l'\xC3\xA9tat\tune valeur\tune valeur (Ouvert) ou "
+                         "fins de course (l'\xC3\xA9tat vient de FCO et FCF seules).\nOrdre "
+                         "d'ouverture\t(vide)\tFins de course, facultatif : la commande ; pas suivie "
+                         "apr\xC3\xA8s le temps de man\xC5\x93uvre, discordance.\nTemps de "
+                         "man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le temps pour atteindre sa fin de course "
+                         "(10 s, T#30s).\nVoyants des fins de course\tTRUE\tCoch\xC3\xA9 : les voyants O et "
+                         "F.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "ses lames suivent sa valeur, son ouverture et ses fins de course ; le "
                          "d\xC3\xA9" "faut et la discordance le font clignoter en rouge ;", {}},
@@ -10639,7 +10798,16 @@ const std::vector<Topic>& topics() {
            {"blades", "Nombre de lames", "4",
             "De 2 \xC3\xA0 8 lames, qui tournent ensemble."},
            {"bladeMode", "Disposition des lames", "oppos\xC3\xA9" "es",
-            "oppos\xC3\xA9" "es (une sur deux dans l'autre sens) ou parall\xC3\xA8les."}},
+            "oppos\xC3\xA9" "es (une sur deux dans l'autre sens) ou parall\xC3\xA8les."},
+           {"stateMode", "Commande de l'\xC3\xA9tat", "une valeur",
+            "une valeur (Ouvert) ou fins de course (l'\xC3\xA9tat vient de FCO et FCF seules)."},
+           {"openOrder", "Ordre d'ouverture", "(vide)",
+            "Fins de course, facultatif : la commande ; pas suivie apr\xC3\xA8s le temps de man\xC5\x93uvre, "
+            "discordance."},
+           {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
+            "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s)."},
+           {"showLimits", "Voyants des fins de course", "TRUE",
+            "Coch\xC3\xA9 : les voyants O et F."}},
          "Le registre RG-260 (quatre lames oppos\xC3\xA9" "es) s'ouvre de 0 \xC3\xA0 100 % en 4 s puis "
          "revient \xC3\xA0 40 %, ses lames tournent ensemble ; \xC3\xA0 8 s, il se ferme.",
          {}, "1.12.24"},
@@ -10680,7 +10848,19 @@ const std::vector<Topic>& topics() {
                          "1).\nD\xC3\xA9" "clencheur\tfusible\tfusible (thermique), \xC3\xA9lectro-aimant "
                          "(\xC3\xA0 rupture) ou moteur (r\xC3\xA9" "armable \xC3\xA0 distance).\nFin de "
                          "course ouvert\t(vide)\tVraie : il est ouvert. Le voyant O.\nFin de course "
-                         "ferm\xC3\xA9\t(vide)\tVraie : il est ferm\xC3\xA9. Le voyant F.", {}},
+                         "ferm\xC3\xA9\t(vide)\tVraie : il est ferm\xC3\xA9. Le voyant F.\nCommande de "
+                         "l'\xC3\xA9tat\tune valeur\tune valeur (Ouvert) ou fins de course (l'\xC3\xA9tat "
+                         "vient de FCO et FCF seules ; le d\xC3\xA9" "clenchement passe avant).\nOrdre "
+                         "d'ouverture\t(vide)\tFins de course, facultatif : la commande (le "
+                         "r\xC3\xA9" "armement) ; pas suivie apr\xC3\xA8s le temps de man\xC5\x93uvre, "
+                         "discordance.\nTemps de man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le temps pour "
+                         "atteindre sa fin de course (10 s, T#30s).\nVoyants des fins de "
+                         "course\tTRUE\tCoch\xC3\xA9 : les voyants O et F.", {}},
+             {K::Heading, "Commande par les fins de course", {}, "1.14.1"},
+             {K::Paragraph, "**Commande de l'\xC3\xA9tat : fins de course** : l'\xC3\xA9tat vient de ses fins "
+                         "de course seules, comme le registre (voir \xC2\xAB Registre \xC2\xBB) ; "
+                         "d\xC3\xA9" "clench\xC3\xA9, il reste ferm\xC3\xA9, rouge et clignotant, avant tout "
+                         "le reste.", {}, "1.14.1"},
              {K::Heading, "En marche", {}},
              {K::Bullet, "d\xC3\xA9" "clench\xC3\xA9, il se ferme, rouge et clignotant, et l'alarme "
                          "**Declenche** part ; ses fins de course corrigent la lame et disent la discordance "
@@ -10727,7 +10907,17 @@ const std::vector<Topic>& topics() {
            {"limitOpen", "Fin de course ouvert", "(vide)",
             "Vraie : il est ouvert. Le voyant O."},
            {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
-            "Vraie : il est ferm\xC3\xA9. Le voyant F."}},
+            "Vraie : il est ferm\xC3\xA9. Le voyant F."},
+           {"stateMode", "Commande de l'\xC3\xA9tat", "une valeur",
+            "une valeur (Ouvert) ou fins de course (l'\xC3\xA9tat vient de FCO et FCF seules ; le "
+            "d\xC3\xA9" "clenchement passe avant)."},
+           {"openOrder", "Ordre d'ouverture", "(vide)",
+            "Fins de course, facultatif : la commande (le r\xC3\xA9" "armement) ; pas suivie apr\xC3\xA8s le "
+            "temps de man\xC5\x93uvre, discordance."},
+           {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
+            "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s)."},
+           {"showLimits", "Voyants des fins de course", "TRUE",
+            "Coch\xC3\xA9 : les voyants O et F."}},
          "Le clapet CF-12 est ouvert (en veille) ; \xC3\xA0 3 s, il est d\xC3\xA9" "clench\xC3\xA9 : il se "
          "ferme, rouge et clignotant, son fusible aussi ; r\xC3\xA9" "arm\xC3\xA9 \xC3\xA0 8 s, il rouvre.",
          {}, "1.12.24"},

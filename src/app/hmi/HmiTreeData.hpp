@@ -60,7 +60,10 @@ inline std::string_view animatedLabel(std::string_view key) {
         {"label", "Libell\xC3\xA9"}, {"opening", "Ouverture"}, {"moving", "En mouvement"}, {"fault", "D\xC3\xA9" "faut"},
         {"title", "Titre"}, {"tooltip", "Infobulle"}, {"unit", "Unit\xC3\xA9"},
         // 1.10.4 (K2) : les deux booleens d'une vanne 3 voies.
-        {"positionA", "Bool\xC3\xA9" "en A"}, {"positionB", "Bool\xC3\xA9" "en B"}};
+        {"positionA", "Bool\xC3\xA9" "en A"}, {"positionB", "Bool\xC3\xA9" "en B"},
+        // 1.14.1 : les fins de course (la vanne, la vanne 3 voies, les registres) et l'Ordre.
+        {"limitOpen", "Fin de course ouvert"}, {"limitClosed", "Fin de course ferm\xC3\xA9"}, {"limit12", "FC voie 1-2"},
+        {"limit13", "FC voie 1-3"}, {"limit23", "FC voie 2-3"}, {"openOrder", "Ordre d'ouverture"}, {"positionOrder", "Ordre de position"}};
     for (const auto& [key2, label] : k) if (key == key2) return label;
     return key;
 }
