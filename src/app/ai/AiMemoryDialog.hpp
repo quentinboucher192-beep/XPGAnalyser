@@ -61,6 +61,9 @@ public:
         // Ouvrir un dossier dans l'explorateur du systeme ; rend "" ou pourquoi pas. Vide :
         // app::dossiers::ouvrirDansLeSysteme.
         std::function<std::string(const std::string&)> openFolder;
+        // 1.14.2 (captures) : ouverte par-dessus une autre fenetre modale qui assombrit deja le fond (les
+        // parametres de l'Assistant) : pas de second voile, le fond n'est assombri qu'une fois (traits).
+        bool overModal{false};
     };
 
     enum class Tab : std::uint8_t { Overview, Learning, Memory, Storage, Cleaning, Activity };

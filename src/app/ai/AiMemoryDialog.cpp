@@ -1468,7 +1468,7 @@ menu::MenuTraits AiMemoryDialog::traits() const {
     t.kind = menu::MenuKind::Dialog;
     t.rendersBelow = true;
     t.blocksInput = true;
-    t.dimsBelow = true;
+    t.dimsBelow = !spec_.overModal;   // sur une autre fenetre modale : son voile suffit
     return t;
 }
 

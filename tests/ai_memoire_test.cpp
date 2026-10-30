@@ -686,6 +686,15 @@ void dialog() {
         d.setUnderstood(false);
         check(erase && !erase->enabled() && erase->tooltip().find("Je comprends") != std::string::npos, "decochee : de nouveau grise");
     }
+    // 1.14.2 (captures) : ouverte par-dessus une autre fenetre modale (les parametres de l'Assistant), elle
+    // n'assombrit pas le fond une seconde fois.
+    {
+        check(d.traits().dimsBelow, "seule : son voile assombrit le fond");
+        app::AiMemoryDialog::Spec over;
+        over.overModal = true;
+        const app::AiMemoryDialog d2(std::move(over));
+        check(!d2.traits().dimsBelow && d2.traits().blocksInput, "sur une autre fenetre modale : pas de second voile (toujours modale)");
+    }
     // 1.14.2 (captures) : la memoire vive dite en mots de l'utilisateur ; le detail technique a part (l'infobulle)
     check(!d.ram().by.empty() && d.ram().by.find("/proc") == std::string::npos && d.ram().by.find("Get") == std::string::npos,
           "la memoire vive : mesuree par " + d.ram().by);
