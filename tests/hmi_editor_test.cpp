@@ -43494,6 +43494,55 @@ void sonsRelecture1141() {
         check(a == "Sons" && b == "Coup\xC3\xA9s" && c == "Alarmes" && d == "?",
               "1600 px : Sons, Coup\xC3\xA9s, Alarmes ; 893 px : le haut-parleur seul (" + a + ", " + b + ", " + c + ", " + d + ")");
     }
+    // 1.14.1 (captures finales) : UN ENREGISTREMENT D'UN PROJET QUI A CHANGE DEPUIS (un .xrec de la 1.14.0) - sa note se lit
+    // dans la barre, a la place de la legende : la plus longue de ses formes qui tient (jamais coupee au milieu, avant :
+    // "Le projet a change depuis l'enregistre..."), le detail en infobulle ; le bouton Sons garde sa place et son libelle.
+    {
+        const std::string note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : il se rejoue quand m\xC3\xAAme";
+        const auto noteAt = [&](float w, std::string& said, std::string& sons, std::string& tip) {
+            Recorder br;
+            hmi::ReplayInfo ri;
+            ri.active = true;
+            ri.length = 25.0;
+            ri.position = 3.0;
+            ri.header.name = "Demarrage station";
+            ri.note = note;
+            const auto ch = app::paintReplayChrome(br, ui::Theme::dark(), {0.f, 0.f, w, 600.f}, ri, {}, {-1.f, -1.f});
+            said.clear();
+            sons = ch.part("sons").w > 0 ? "?" : "-";
+            for (const auto& t : br.texts) {
+                if (t.rfind("\xE2\x9A\xA0", 0) == 0) said = t;
+                if (t == "Sons") sons = t;
+            }
+            tip = ch.helpTip;
+        };
+        for (const float w : {1145.f, 1300.f, 1600.f, 2000.f}) {
+            std::string said, sons, tip;
+            noteAt(w, said, sons, tip);
+            check(said.find("rojet") != std::string::npos && said.find("\xE2\x80\xA6") == std::string::npos && tip.find(note) != std::string::npos
+                      && sons != "-",
+                  std::to_string(static_cast<int>(w)) + " px : la note se lit enti\xC3\xA8re (" + said + "), le d\xC3\xA9tail en infobulle, le bouton Sons ("
+                      + sons + ")");
+        }
+        std::string said, sons, tip;
+        noteAt(2000.f, said, sons, tip);
+        check(said == "\xE2\x9A\xA0 " + note && sons == "Sons", "2000 px : la note compl\xC3\xA8te, et Sons");
+        Recorder mr;
+        const gfx::FontId small = ui::Theme::dark().font.smallUi;
+        const std::string sign = "\xE2\x9A\xA0 ";
+        const std::string many = note + " \xC2\xB7 enregistr\xC3\xA9 sans les sons (Configuration \xE2\x80\xBA Enregistrements \xE2\x80\xBA Sons d\xC3\xA9" "coch\xC3\xA9" "e) : "
+                                 "aucun son ne se rejoue";
+        const auto w = [&](const std::string& t) { return mr.measure(t, small).width; };
+        check(app::replayNote(mr, small, note, 5000.f) == sign + note
+                  && app::replayNote(mr, small, note, w(sign + "Le projet a chang\xC3\xA9 depuis l'enregistrement")) == sign + "Le projet a chang\xC3\xA9 depuis l'enregistrement"
+                  && app::replayNote(mr, small, note, w(sign + "Projet chang\xC3\xA9 depuis l'enregistrement")) == sign + "Projet chang\xC3\xA9 depuis l'enregistrement"
+                  && app::replayNote(mr, small, note, w(sign + "Projet chang\xC3\xA9")) == sign + "Projet chang\xC3\xA9"
+                  && app::replayNote(mr, small, note, w("\xE2\x9A\xA0")) == "\xE2\x9A\xA0" && app::replayNote(mr, small, note, 2.f).empty(),
+              "la note : enti\xC3\xA8re, sa t\xC3\xAAte, en bref, le plus bref, le signe seul, rien");
+        check(app::replayNote(mr, small, many, w(sign + "Projet chang\xC3\xA9 \xC2\xB7 Sans les sons")) == sign + "Projet chang\xC3\xA9 \xC2\xB7 Sans les sons"
+                  && app::replayNote(mr, small, many, w(sign + "Projet chang\xC3\xA9 (+1)")) == sign + "Projet chang\xC3\xA9 (+1)",
+              "deux notes : chacune en bref, puis la premi\xC3\xA8re et le nombre des autres");
+    }
     pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
     check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte");
     fs::remove_all(dir, ec);

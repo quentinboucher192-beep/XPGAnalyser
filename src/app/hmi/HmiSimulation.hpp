@@ -248,6 +248,10 @@ ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const 
                                const std::vector<hmi::rec::Player::Marker>& markers, gfx::Point mouse);
 // 1.14.0 (captures finales) : la legende de la barre, la plus longue de ses formes qui tient dans `width` ("" : aucune).
 [[nodiscard]] std::string replayLegend(gfx::IRenderer& r, gfx::FontId font, float width);
+// 1.14.1 (captures finales) : la note de la relecture (le projet a change depuis l'enregistrement, des fleches de tendance
+// figees, un enregistrement sans les sons), de meme - le signe attention et la plus longue de ses formes qui tient (entiere,
+// sa tete, en bref, le plus bref) ; "" : aucune (l'infobulle de la place la dit toujours en entier).
+[[nodiscard]] std::string replayNote(gfx::IRenderer& r, gfx::FontId font, const std::string& note, float width);
 // Le pointeur de l'operateur (une fleche fantome) ; un clic : un cercle qui grandit et s'efface (age 0 a 1).
 void paintReplayPointer(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, bool pressed);
 void paintReplayRipple(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, float age);
