@@ -964,6 +964,33 @@
     <ClCompile Include="src\app\FileFinderPane.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiAssistant.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiDemo.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiJson.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiOperations.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiPanel.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiPreviewDialog.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiSettingsDialog.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiStore.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiWorkspace.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\screens\FinderWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
@@ -2460,6 +2487,30 @@
     </ClInclude>
     <ClInclude Include="src\app\FileFinderPane.hpp">
       <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiAssistant.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiDemo.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiJson.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiOperations.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiPanel.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiPreviewDialog.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiSettingsDialog.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiStore.hpp">
+      <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\FilePreview.hpp">
       <Filter>app</Filter>

@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "ai/AiPaths.hpp"   // 1.14.2 : la racine IA/ de l'Assistant
 #include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
 #include "../sim/ValueText.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
@@ -269,7 +270,8 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         hmi::imagelib::setUserFolder(std::string(u8.begin(), u8.end()));
     }
     // 1.14.2 (Assistant IA) : LE DOSSIER IA/ (app/ai/AiPaths.hpp, le contrat de l'Assistant et du centre de
-    // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet.
+    // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet : conversations,
+    // pieces jointes, parametres, connaissances, cache.
     {
         const auto iaDir = std::filesystem::path(Settings::sharedFolder()) / "IA";
         const auto u8 = iaDir.u8string();
@@ -724,6 +726,15 @@ void App::registerActions() {
                             }
                             if (dynamic_cast<FileFinderScreen*>(top)) return;
                             menus_->PushMenu(std::make_unique<FileFinderScreen>(*this));
+                        }});
+    // 1.14.2 : L'ASSISTANT IA (Ctrl+Maj+I) - le volet de l'ecran du projet, dans IHM Studio.
+    actions_.add(Action{"ia.assistant", "Assistant IA", help::keys::bindingOf("ia.assistant"), {}, {}, nullptr,
+                        [this] {
+                            if (auto* screen = dynamic_cast<MainAnalysisScreen*>(menus_->top())) {
+                                screen->toggleAssistant();
+                                return;
+                            }
+                            bus_.publish(StatusNotice{"L'Assistant IA s'ouvre dans l'\xC3\xA9" "cran du projet (IHM Studio).", 5.0});
                         }});
     // 1.8.0 : les dossiers de l'application (app/Dossiers.hpp) - l'accueil en a le
     // lien, le menu Projet l'entree.

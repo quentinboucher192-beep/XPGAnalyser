@@ -729,6 +729,19 @@ void drawIcon(gfx::IRenderer& r, Icon icon, const gfx::Rect& box, gfx::Color col
             g.line(7.f, 12.5f, 5.f, 12.5f);
             g.line(5.f, 12.5f, 5.f, 10.5f);
             break;
+        case Icon::Assistant:                  // 1.14.2 : une bulle de dialogue, une etincelle a quatre branches
+            g.line(2.f, 3.f, 14.f, 3.f);
+            g.line(14.f, 3.f, 14.f, 11.f);
+            g.line(14.f, 11.f, 7.f, 11.f);
+            g.line(7.f, 11.f, 4.f, 14.f);
+            g.line(4.f, 14.f, 4.f, 11.f);
+            g.line(4.f, 11.f, 2.f, 11.f);
+            g.line(2.f, 11.f, 2.f, 3.f);
+            g.line(8.f, 4.6f, 8.f, 9.4f);
+            g.line(5.6f, 7.f, 10.4f, 7.f);
+            g.line(7.f, 6.f, 9.f, 8.f);
+            g.line(9.f, 6.f, 7.f, 8.f);
+            break;
 
         case Icon::None: break;
         // 1.8.0 : les icones au choix sont tracees plus haut (codeGlyph).

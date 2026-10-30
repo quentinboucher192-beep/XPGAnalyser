@@ -3869,7 +3869,8 @@ void disposition1123() {
     check(d.set("explorateur", "ou", "droite") && d.set("vue.actions", "quand", "cache") && d.set("insp", "choisi", "vue.actions")
               && !d.set("explorateur", "ou", "dessus") && !d.set("page.vue", "quand", "cache"),
           "la fen\xC3\xAAtre : l'explorateur \xC3\xA0 droite, Actions cach\xC3\xA9, choisi au d\xC3\xA9part ; un choix inconnu refus\xC3\xA9");
-    check(d.summary().find("3 changement(s)") != std::string::npos && d.summary().find("1 \xC3\xA9l\xC3\xA9ment(s) cach\xC3\xA9(s)") != std::string::npos,
+    // 1.14.2 : + l'Assistant IA, cache par defaut (IHM) : 2 elements caches.
+    check(d.summary().find("3 changement(s)") != std::string::npos && d.summary().find("2 \xC3\xA9l\xC3\xA9ment(s) cach\xC3\xA9(s)") != std::string::npos,
           "le r\xC3\xA9sum\xC3\xA9 : " + d.summary());
     d.applyNow();
     check(applied.item("explorateur").where == "droite" && !applied.item("vue.actions").shown && d.summary().find("Rien \xC3\xA0 appliquer") != std::string::npos,
@@ -19345,13 +19346,14 @@ void centreAide111() {
     // 1.12.30 : + le zoom des pages (Ctrl+plus / Ctrl+moins / Ctrl+0, Ctrl+molette : General) ; Ctrl+R,
     // Ctrl+; / Ctrl+Alt+; et Alt+survol (l'editeur de vues : les regles, les guides, les cotes).
     // 1.14.0 (lot M5) : + Ctrl+Maj+P (Chercher des fichiers sur ce PC, General).
-    check(hk::all().size() == 109 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.14.2 : + Ctrl+Maj+I (l'Assistant IA, General).
+    check(hk::all().size() == 110 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
           "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18), "
-          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30), Ctrl+Maj+P (1.14.0)");
-    check(hk::ofContext(hk::Context::General).size() == 33 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 33 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
-          "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom ; 1.14.0 : Ctrl+Maj+P), Aide 7");
+          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30), Ctrl+Maj+P (1.14.0), Ctrl+Maj+I (1.14.2)");
+    check(hk::ofContext(hk::Context::General).size() == 34 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 34 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
+          "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom ; 1.14.0 : Ctrl+Maj+P ; 1.14.2 : Ctrl+Maj+I), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {

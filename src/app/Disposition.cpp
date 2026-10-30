@@ -55,6 +55,7 @@ Catalog build(bool api, bool ihm) {
         add("resume", "R\xC3\xA9sum\xC3\xA9 de l'analyse", "fenetre", Kind::Panel);
         add("etatProjet", "\xC3\x89tat du projet", "fenetre", Kind::Panel);
     }
+    if (core::hasIhm()) add("assistant", "Assistant IA (Ctrl+Maj+I)", "fenetre", Kind::Panel);   // 1.14.2 : a droite de l'editeur
     add("etat", "Bande d'\xC3\xA9tat (en bas)", "fenetre", Kind::Panel);
     add("alternees", "Lignes altern\xC3\xA9" "es dans les listes", "fenetre", Kind::Option);
 
@@ -192,6 +193,8 @@ Layout defaults() {
     }
     // La vue de demarrage s'ouvre avec le projet (ce que fait l'application depuis la 1.12.0).
     if (const auto it = l.items.find("page.vue"); it != l.items.end()) it->second.when = "projet";
+    // 1.14.2 : l'Assistant IA est replie au depart (Ctrl+Maj+I le montre).
+    if (const auto it = l.items.find("assistant"); it != l.items.end()) it->second.shown = false;
     for (const auto& g : groups()) {
         if (!g.tabs) continue;
         for (const auto& r : rows())
@@ -468,7 +471,14 @@ std::vector<SketchBox> sketch(const Layout& l, bool simulating) {
         if (docs) box("documents", "Documents ouverts", colX, y, colW, bottom - y).modeOnly = modeOnly("documents");
     }
     if (!centre) return out;
-    const float cx = right || colW >= 1.f ? 0.f : colW, cw = 1.f - colW;
+    const float cx = right || colW >= 1.f ? 0.f : colW;
+    float cw = 1.f - colW;
+    // 1.14.2 : l'Assistant IA, colle a droite du centre (avant l'explorateur s'il est a droite).
+    if (on("assistant")) {
+        const float aw = cw * 0.26f;
+        box("assistant", "Assistant IA", cx + cw - aw, top, aw, bottom - top).modeOnly = modeOnly("assistant");
+        cw -= aw;
+    }
     // Le panneau du bas : sous l'editeur ou a sa droite ; replie au depart, une barre (Ctrl+J).
     float px = cx, pw = cw, ph = bottom - top;
     if (on("bas")) {

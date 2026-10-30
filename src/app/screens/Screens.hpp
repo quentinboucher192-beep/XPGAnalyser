@@ -54,6 +54,7 @@ namespace app {
 
 class MacrosPane;   // lot macros 1 : l'onglet Macros
 class FileFinderPane;       // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (FileFinderPane.hpp)
+namespace ai { class AiPanel; }   // 1.14.2 : l'Assistant IA (app/ai/AiPanel.hpp)
 namespace finder { struct Hit; }
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
@@ -1204,6 +1205,20 @@ public:
     void finderImport(const finder::Hit& hit);
 private:
     void tickFileFinder();
+
+    // ---- 1.14.2 : L'ASSISTANT IA (app/ai/AiWorkspace.cpp) ----
+    //  Un volet a droite de l'editeur (le quatrieme de analysis.upper), IHM Studio : Ctrl+Maj+I,
+    //  Affichage > Panneaux, Projet > Disposition, Aller a / Faire (Ctrl+K). Il propose des
+    //  modifications de la vue de l'onglet ouvert ; elles passent par la pile (un Ctrl+Z).
+public:
+    void toggleAssistant();
+    void showAssistant(bool show);
+    [[nodiscard]] bool assistantShown() const;
+    [[nodiscard]] ai::AiPanel* assistantPanel() const noexcept { return aiPanel_; }
+private:
+    [[nodiscard]] ui::WidgetPtr buildAssistantPanel();
+    void tickAssistant(double now);
+    ai::AiPanel* aiPanel_{nullptr};
 
     // ---- Lot API 8 : glisser n'importe quel fichier (DropFilesWorkspace.cpp) ----
     //  Un depot qui n'est pas fait que de .XPG / .XHW : le dialogue "Que faire

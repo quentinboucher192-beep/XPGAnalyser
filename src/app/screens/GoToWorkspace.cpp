@@ -189,6 +189,7 @@ const ActionEntry kActions[] = {
     {"act:historique", "Historique", "Ctrl+H"},
     {"act:annuler", "Annuler", "Ctrl+Z"},
     {"act:retablir", "R\xC3\xA9tablir", "Ctrl+Y"},
+    {"act:assistant-ia", "Assistant IA (montrer ou replier)", "Ctrl+Maj+I"},   // 1.14.2
 };
 
 // Les parties de la barre du haut qui sont des actions (les menus s'y ajoutent).
@@ -758,6 +759,7 @@ void MainAnalysisScreen::goToResult(const GoToPanel::Result& r) {
         else if (what == "historique") toggleHistory();
         else if (what == "annuler") app_.undo();
         else if (what == "retablir") app_.redo();
+        else if (what == "assistant-ia") showAssistant(true);   // 1.14.2 : l'Assistant IA
     }
     if (status_) status_->setTransientMessage("Aller \xC3\xA0 : " + r.title + (r.subtitle.empty() ? std::string{} : " (" + r.subtitle + ")"), 5.0);
 }

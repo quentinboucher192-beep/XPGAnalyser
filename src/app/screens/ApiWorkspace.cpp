@@ -137,6 +137,7 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
     // ---- fin Lot API 8 : bandeau haut ----
     if (id.rfind("bar.pin:", 0) == 0 || id.rfind("bar.unpin:", 0) == 0) { pinBarAction(id); return; }   // 1.12.27
     if (id == "edit.history") { toggleHistory(); return; }
+    if (id == "ia.assistant") { toggleAssistant(); return; }   // 1.14.2 : Affichage > Assistant IA
     if (id.rfind("version.", 0) == 0) { onVersionAction(std::string(id)); return; }   // lot API 6
     if (id == "project.icon") { showIconEditor(); return; }                            // lot API 6
     if (id == "macros.open") { openMacros(); return; }   // lot macros 1

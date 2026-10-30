@@ -93,6 +93,10 @@
 //                                 propriete:Nom, biblio:Vanne, vue:320,190, ecran:640,400) ;
 //                                 introuvable : compte comme un echec. Sans cible : l'efface.
 //    dire "texte"                 la bulle du tutoriel, en bas de l'image ("" : l'efface)
+//    --- 1.14.2 : l'Assistant IA (le detail en tete de la commande, ScriptRunner.cpp) ---
+//    ia ouvrir|replier|nouvelle|conversation "t"|renommer "t"|supprimer|saisir "t"|envoyer ["t"]|
+//       suggestion N|attendre|arreter|joindre "f"|apercu|appliquer|refuser|variable N|
+//       mode previsualisation|direct|parametres|defiler N|etat
 //    capture fichier.png          l'image courante (le dossier --captures, sinon
 //                                 celui du script)
 //    quitter

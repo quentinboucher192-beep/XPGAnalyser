@@ -39,6 +39,7 @@ constexpr PanelRow kPanelRows[] = {
     {"explorateur", "view.projectExplorer"}, {"documents", "view.openDocuments"},  {"bas", "view.outputPanel"},
     {"configuration", "view.plcConfiguration"}, {"rangee", "view.bottomRow"},    {"diagnostics", "view.diagnostics"},
     {"resume", "view.analysisSummary"},      {"etatProjet", "view.projectStatus"},
+    {"assistant", "view.assistant"},         // 1.14.2 : l'Assistant IA
 };
 const char* rowOfPanel(std::string_view key) {
     for (const auto& p : kPanelRows)
@@ -58,7 +59,7 @@ void MainAnalysisScreen::loadDisposition() {
         for (const auto& p : kPanelRows)
             if (l.items.count(p.row)) {
                 const std::string_view key = p.key;
-                l.items[p.row].shown = s.getBool(p.key, key != "view.bottomRow" && key != "view.openDocuments");
+                l.items[p.row].shown = s.getBool(p.key, key != "view.bottomRow" && key != "view.openDocuments" && key != "view.assistant");
             }
         if (l.items.count("alternees")) l.items["alternees"].shown = s.getBool("view.alternatingRows", true);
     }
@@ -105,8 +106,12 @@ void MainAnalysisScreen::applyDisposition(DispositionMode mode) {
         std::vector<std::size_t> order;
         if (l.item("explorateur").where == "droite") {
             // Le centre, puis l'explorateur ; ce qui suivait (la colonne repliee) reste au bout.
-            order = {1, 0};
-            for (std::size_t k = 2; k < upper_->paneCount(); ++k) order.push_back(k);
+            // 1.14.2 : l'Assistant IA (le volet 3) reste colle au centre, avant l'explorateur.
+            order = {1};
+            if (upper_->paneCount() > 3) order.push_back(3);
+            order.push_back(0);
+            for (std::size_t k = 2; k < upper_->paneCount(); ++k)
+                if (k != 3) order.push_back(k);
         }
         upper_->setOrder(std::move(order));
     }

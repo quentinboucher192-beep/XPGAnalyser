@@ -45,6 +45,8 @@ const std::vector<Shortcut> kTable = {
     {Context::General, "Ctrl+Maj+P",
      "Chercher des fichiers sur ce PC : les projets, archives, exports, paquets et biblioth\xC3\xA8ques de l'appli",
      "1.14.0", "app.findFiles"},
+    // 1.14.2 : l'Assistant IA, a droite de l'editeur de vues (IHM Studio).
+    {Context::General, "Ctrl+Maj+I", "Assistant IA : le montrer ou le replier (IHM Studio)", "1.14.2", "ia.assistant"},
     {Context::General, "Ctrl+N",
      "Nouveau projet",
      "", "project.new"},
