@@ -23,6 +23,8 @@
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiSystemMenu.hpp"   // 1.14.0 : le Coupe-son, le Melangeur de volume
 #include "../../hmi/HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice
+#include "../../hmi/HmiLibrary.hpp"      // 1.14.1 (lot N5) : biblio::unitConfig (le Convertisseur dans l'editeur)
+#include "../../hmi/HmiUnits.hpp"        // 1.14.1 (lot N5) : le Convertisseur d'unites
 
 #include <cmath>
 #include <cstdio>
@@ -1338,6 +1340,140 @@ void drawCalculator(const Ctx& c) {
     for (const auto& k : l.keys) drawKey(k, std::min(l.keyFont, fsOf(c, 20)), false);
 }
 
+// 1.14.1 (lot N5) : LE CONVERTISSEUR D'UNITES - la case Valeur (le curseur quand elle a le clavier), les cases De et
+// Vers (leur fleche), le bouton inverser, le resultat en grand (ou le refus, en rouge), la formule en petit (ou la
+// reponse d'Ecrire), le bouton Ecrire ; la liste ouverte par-dessus. Les rectangles sont ceux de
+// units::converterLayout : ce qui se dessine est ce qui se clique. Dans l'editeur : la conversion des proprietes.
+hmi::Box convBox(const hmi::units::ConverterBox& b) { return hmi::Box{b.x, b.y, b.w, b.h}; }
+
+void drawUnitConverter(const Ctx& c) {
+    namespace hu = hmi::units;
+    const double w = c.w(), h = c.h(), rad = c.src.number(c.o, "radius", 6);
+    const double fs = std::clamp(fsOf(c, 14), 7.0, 40.0);
+    const gfx::Color bg = colorOf(c, "fill", 0x1F252E);
+    const gfx::Color tc = colorOf(c, "textColor", 0xE6EAF0);
+    const gfx::Color accent = colorOf(c, "accent", 0x2F6FD6);
+    const gfx::Color border = colorOf(c, "stroke", 0x3A4556);
+    const auto shape = rectLocal(w, h, rad);
+    fillLocal(c, shape, bg);
+    strokeLocal(c, shape, true, border, 1);
+    const bool live = c.opt.runtime && !c.opt.editor;
+    const auto* st = live ? c.opt.runtime->unitConverter(c.o.id) : nullptr;
+    std::string valueText, from, to;
+    hu::Conversion conv;
+    int open = 0, decimals = 3;
+    std::size_t first = 0;
+    std::vector<std::string> choices;
+    bool writes = false, pilotable = c.src.flag(c.o, "pilotable", true);
+    if (st) {
+        valueText = st->valueText;
+        from = st->from;
+        to = st->to;
+        conv = st->conv;
+        open = st->open;
+        first = st->first;
+        choices = st->choices;
+        writes = st->writes;
+        pilotable = st->pilotable;
+        decimals = st->decimals;
+    } else {
+        // L'editeur (ou avant le premier cycle) : les proprietes, converties par le meme calcul.
+        const hu::Catalog cat = c.opt.project ? hu::Catalog(hmi::biblio::unitConfig(*c.opt.project)) : hu::Catalog();
+        from = cat.unit(c.src.text(c.o, "unitFrom")) ? cat.canonical(c.src.text(c.o, "unitFrom")) : c.src.text(c.o, "unitFrom");
+        to = cat.unit(c.src.text(c.o, "unitTo")) ? cat.canonical(c.src.text(c.o, "unitTo")) : c.src.text(c.o, "unitTo");
+        decimals = std::clamp(static_cast<int>(std::lround(c.src.number(c.o, "decimals", 3))), 0, 12);
+        double v = 0;
+        valueText = c.src.text(c.o, "value");
+        if (!hu::parseValue(valueText, v)) v = 1;
+        else valueText = hu::formatResult(v, 12);   // a la francaise, comme en marche (37.5 -> 37,5)
+        conv = hu::convertValue(cat, v, from, to);
+        writes = !c.src.text(c.o, "resultTo").empty();
+    }
+    const std::string title = c.src.text(c.o, "title");
+    const auto l = hu::converterLayout(w, h, fs, !title.empty(), writes, open, choices.size(), first);
+    if (!title.empty()) text(c, fitted(c, title, l.title.w, fs * 1.05), l.title.x, l.title.y, l.title.w, l.title.h, tc, fs * 1.05, "gauche");
+    // La case Valeur : ce qui est tape (le curseur), sinon la valeur suivie.
+    const hmi::FormState* form = live ? c.opt.runtime->formState(c.o.id) : nullptr;
+    const bool typing = live && form && c.opt.runtime->focusedObject() == c.o.id && form->focus == "valeur";
+    std::string shown = valueText, before;
+    if (typing) {
+        const auto t = form->text.find("valeur");
+        shown = t != form->text.end() ? t->second : std::string{};
+        const auto k = form->caret.find("valeur");
+        before = shown.substr(0, std::min(shown.size(), k != form->caret.end() ? k->second : shown.size()));
+    }
+    drawField(c, convBox(l.value), shown, typing ? &before : nullptr, fs, "droite", tc);
+    // De et Vers : le symbole (lu comme on le lit : degC -> degre C), la fleche ; la case de la liste ouverte en accent.
+    const auto unitBox = [&](const hu::ConverterBox& b, const std::string& sym, bool isOpen) {
+        const auto box = boxLocal(convBox(b), 4);
+        fillLocal(c, box, mix(bg, tc, 0.10f));
+        strokeLocal(c, box, true, isOpen ? accent : withAlpha(tc, 0.35f), isOpen ? 2 : 1);
+        const double arrowW = pilotable ? std::min(b.h, 22.0) : 0.0;
+        text(c, fitted(c, sym.empty() ? std::string("?") : hmi::unitLabel(sym), b.w - arrowW - 8, fs), b.x + 6, b.y, b.w - arrowW - 8, b.h, tc,
+             fs, "gauche");
+        if (arrowW > 0) {
+            const double ax = b.x + b.w - arrowW / 2, ay = b.y + b.h / 2, sz = arrowW * 0.2;
+            if (isOpen) triangle(c, ax - sz, ay + sz * 0.5, ax + sz, ay + sz * 0.5, ax, ay - sz * 0.6, tc);
+            else triangle(c, ax - sz, ay - sz * 0.5, ax + sz, ay - sz * 0.5, ax, ay + sz * 0.6, tc);
+        }
+    };
+    unitBox(l.from, from, open == 1);
+    unitBox(l.to, to, open == 2);
+    // Le bouton inverser : deux fleches opposees.
+    {
+        const auto& b = l.swap;
+        const auto box = boxLocal(convBox(b), 4);
+        fillLocal(c, box, mix(bg, tc, pilotable ? 0.16f : 0.06f));
+        const double cx = b.x + b.w / 2, cy = b.y + b.h / 2, aw = b.w * 0.26, ah = b.h * 0.12;
+        const gfx::Color ink = pilotable ? tc : withAlpha(tc, 0.4f);
+        lineLocal(c, cx - aw, cy - ah, cx + aw, cy - ah, ink, 1.6);
+        triangle(c, cx + aw + ah * 1.2, cy - ah, cx + aw - ah * 0.4, cy - ah * 2.3, cx + aw - ah * 0.4, cy + ah * 0.3, ink);
+        lineLocal(c, cx - aw, cy + ah, cx + aw, cy + ah, ink, 1.6);
+        triangle(c, cx - aw - ah * 1.2, cy + ah, cx - aw + ah * 0.4, cy - ah * 0.3, cx - aw + ah * 0.4, cy + ah * 2.3, ink);
+    }
+    // Le resultat en grand (la couleur d'accent), ou le refus dit clairement (en rouge, plus petit).
+    if (conv.ok) {
+        const std::string res = "= " + hu::formatResult(conv.result, decimals) + " " + hmi::unitLabel(conv.to);
+        text(c, fitted(c, res, l.result.w, fs * 1.6), l.result.x, l.result.y, l.result.w, l.result.h, mix(accent, tc, 0.35f), fs * 1.6, "gauche");
+    } else {
+        std::string why = conv.error.empty() ? std::string("conversion impossible") : conv.error;
+        why[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(why[0])));
+        text(c, why, l.result.x, l.result.y, l.result.w, l.result.h, c.fixedText(0xFF6B6B), fs * 0.85, "gauche", true);
+    }
+    // La formule en petit ; la reponse d'Ecrire (ou un refus) a sa place quelques secondes.
+    const bool said = form && !form->message.empty() && c.opt.runtime && c.opt.runtime->now() - form->messageAt <= 8.0;
+    if (said)
+        text(c, fitted(c, form->message, l.formula.w, fs * 0.85), l.formula.x, l.formula.y, l.formula.w, l.formula.h,
+             form->error ? c.fixedText(0xFF6B6B) : c.fixedText(0x4CD08A), fs * 0.85, "gauche");
+    else if (conv.ok && !conv.formula.empty())
+        text(c, fitted(c, conv.formula, l.formula.w, fs * 0.85), l.formula.x, l.formula.y, l.formula.w, l.formula.h, withAlpha(tc, 0.65f), fs * 0.85,
+             "gauche");
+    if (writes) drawButtonBox(c, convBox(l.write), "\xC3\x89" "crire", pilotable ? accent : mix(bg, tc, 0.2f), c.fixedOn(0xFFFFFF), fs * 0.95);
+    // La liste ouverte, par-dessus : ses lignes (l'unite choisie surlignee), ses fleches.
+    if (open && l.list.w > 0) {
+        const auto box = boxLocal(convBox(l.list), 3);
+        fillLocal(c, box, mix(bg, tc, 0.07f));
+        strokeLocal(c, box, true, accent, 1);
+        const std::string& cur = open == 1 ? from : to;
+        for (std::size_t i = 0; i < l.rows.size(); ++i) {
+            const auto& r = l.rows[i];
+            const std::size_t k = l.rowIndex[i];
+            if (k >= choices.size()) break;
+            const bool on = choices[k] == cur;
+            if (on) fillLocal(c, boxLocal(convBox(r)), withAlpha(accent, 0.55f));
+            text(c, fitted(c, hmi::unitLabel(choices[k]), r.w - 12, fs * 0.95), r.x + 8, r.y, r.w - 12, r.h, tc, fs * 0.95, "gauche");
+        }
+        const auto arrow = [&](const hu::ConverterBox& b, bool up) {
+            if (b.w <= 0) return;
+            const double ax = b.x + b.w / 2, ay = b.y + b.h / 2, sz = std::min(b.h * 0.22, 6.0);
+            if (up) triangle(c, ax - sz, ay + sz * 0.5, ax + sz, ay + sz * 0.5, ax, ay - sz * 0.6, withAlpha(tc, 0.8f));
+            else triangle(c, ax - sz, ay - sz * 0.5, ax + sz, ay - sz * 0.5, ax, ay + sz * 0.6, withAlpha(tc, 0.8f));
+        };
+        arrow(l.up, true);
+        arrow(l.down, false);
+    }
+}
+
 } // namespace
 
 bool drawLot9(const Ctx& c) {
@@ -1370,6 +1506,7 @@ bool drawLot9(const Ctx& c) {
         case Kind::SoundMute:           drawSoundMute(c); return true;        // 1.14.0
         case Kind::VolumeMixer:         drawVolumeMixer(c); return true;
         case Kind::Calculator:          drawCalculator(c); return true;       // 1.14.1 (N4)
+        case Kind::UnitConverter:       drawUnitConverter(c); return true;    // 1.14.1 (lot N5)
         default:                        return false;
     }
 }

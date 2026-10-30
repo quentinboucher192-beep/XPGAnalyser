@@ -454,4 +454,242 @@ bool drawDocumentViewer(const Ctx& c) {
     return true;
 }
 
+// =============================================================================
+//  1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS A L'ECRAN - la barre (remonter, le
+//  fil d'Ariane, Nom contient, Rafraichir, Extraire), les titres des colonnes (la
+//  fleche du tri), la ligne "..", les lignes (l'icone du genre, le nom, la taille,
+//  la date ; la ligne choisie surlignee), la ligne d'etat (le compte, le filtre, la
+//  reponse d'un geste ou ce qui ne se lit pas). Les rectangles sont ceux de
+//  hmi::explorer::layoutOf : ce qui se dessine est ce qui se clique. Dans
+//  l'editeur : quelques lignes d'exemple.
+// =============================================================================
+namespace {
+
+namespace ex = hmi::explorer;
+
+// L'icone d'une ligne : un dossier (jaune), ou une page avec l'etiquette de son genre (ZIP, PDF, CSV...).
+void entryIcon(const Ctx& c, ex::Genre g, double x, double y, double s) {
+    if (g == ex::Genre::Folder) {
+        const gfx::Color f = c.fixed(0xE8B84A);
+        box(c, {x, y + s * 0.12, s * 0.46, s * 0.22}, mix(f, gfx::Color{0, 0, 0, f.a}, 0.15f), 1.5);
+        box(c, {x, y + s * 0.26, s, s * 0.62}, f, 2);
+        return;
+    }
+    std::uint32_t band = 0x8A94A6;
+    switch (g) {
+        case ex::Genre::Zip:     band = 0xA77BD6; break;
+        case ex::Genre::Image:   band = 0x3FA7D6; break;
+        case ex::Genre::Text:    band = 0x7D8796; break;
+        case ex::Genre::Pdf:     band = 0xE5484D; break;
+        case ex::Genre::Sound:   band = 0x2E9E5B; break;
+        case ex::Genre::Video:   band = 0xE08A1E; break;
+        case ex::Genre::Csv:     band = 0x37A35F; break;
+        case ex::Genre::Project: band = 0x2F6FD6; break;
+        default: break;
+    }
+    const double pw = s * 0.8, px = x + (s - pw) / 2;
+    box(c, {px, y, pw, s}, c.fixed(0xEEF1F5), 1.5);
+    box(c, {px, y + s * 0.52, pw, s * 0.48}, c.fixed(band), 1.5);
+    const std::string_view tag = ex::genreTag(g);
+    if (!tag.empty()) text(c, std::string(tag), px, y + s * 0.52, pw, s * 0.48, c.fixedOn(0xFFFFFF), s * 0.3, "centre");
+}
+
+// Remonter : une fleche vers le haut ; Rafraichir : un cercle ouvert et sa pointe.
+void upGlyph(const Ctx& c, const hmi::Box& b, gfx::Color col) {
+    const double cx = b.cx(), cy = b.cy(), s = std::min(b.w, b.h) * 0.24;
+    tri(c, {{static_cast<float>(cx), static_cast<float>(cy - s * 1.2)}, {static_cast<float>(cx + s), static_cast<float>(cy - s * 0.1)},
+            {static_cast<float>(cx - s), static_cast<float>(cy - s * 0.1)}},
+        col);
+    seg(c, cx, cy - s * 0.2, cx, cy + s * 1.2, col, std::max(1.5, s * 0.35));
+}
+void refreshGlyph(const Ctx& c, const hmi::Box& b, gfx::Color col) {
+    const double cx = b.cx(), cy = b.cy(), r = std::min(b.w, b.h) * 0.26;
+    std::vector<gfx::Point> arc;
+    for (int k = 0; k <= 20; ++k) {
+        const double a = 0.6 + 4.9 * k / 20.0;
+        arc.push_back({static_cast<float>(cx + r * std::cos(a)), static_cast<float>(cy + r * std::sin(a))});
+    }
+    shapes::strokePolyline(c.r, c.map(arc), false, col, std::max(1.5f, static_cast<float>(r * 0.28 * c.vp.zoom)));
+    const double ax = cx + r * std::cos(5.5), ay = cy + r * std::sin(5.5);
+    tri(c, {{static_cast<float>(ax + r * 0.5), static_cast<float>(ay - r * 0.1)}, {static_cast<float>(ax - r * 0.2), static_cast<float>(ay - r * 0.55)},
+            {static_cast<float>(ax - r * 0.15), static_cast<float>(ay + r * 0.4)}},
+        col);
+}
+
+} // namespace
+
+bool drawFileExplorer(const Ctx& c) {
+    if (c.o.kind != hmi::Kind::FileExplorer) return false;
+    const double w = c.w(), h = c.h();
+    if (w < 4 || h < 4) return true;
+    const double fs = std::clamp(c.src.number(c.o, "fontSize", 13), 7.0, 40.0);
+    const double rad = c.src.number(c.o, "radius", 6);
+    const gfx::Color bg = c.color("fill", gfx::Color::rgb(0x1F252E));
+    const gfx::Color tc = c.color("textColor", gfx::Color::rgb(0xDDE3EA));
+    const gfx::Color accent = c.color("accent", gfx::Color::rgb(0x2F6FD6));
+    const gfx::Color stroke = c.color("stroke", gfx::Color::rgb(0x3A4556));
+    const gfx::Color muted = withAlpha(tc, 0.62f);
+    box(c, {0, 0, w, h}, bg, rad);
+    frameOf(c, {0, 0, w, h}, stroke, 1, rad);
+
+    // ---- l'etat : celui du moteur (en marche) ; dans l'editeur, des lignes d'exemple
+    const auto* live = !c.opt.editor && c.opt.runtime ? c.opt.runtime->fileExplorer(c.o.id) : nullptr;
+    std::vector<ex::Entry> rows;
+    std::vector<std::string> crumbs;
+    bool search = c.src.flag(c.o, "showSearch", true), refresh = c.src.flag(c.o, "allowRefresh", true);
+    bool extract = c.src.flag(c.o, "allowExtract", false), showSize = c.src.flag(c.o, "showSize", true), showDate = c.src.flag(c.o, "showDate", true);
+    bool parent = false, descending = false, error = false;
+    ex::SortKey sortBy = ex::sortKeyFrom(c.src.text(c.o, "sortBy", "nom"));
+    int selected = -1;
+    std::size_t first = 0;
+    std::string status, searchText;
+    bool typing = false;
+    if (live) {
+        rows = live->shown;
+        crumbs = c.opt.runtime->explorerCrumbs(c.o.id);
+        search = live->showSearch;
+        refresh = live->allowRefresh;
+        extract = live->allowExtract;
+        showSize = live->showSize;
+        showDate = live->showDate;
+        parent = !live->loc.at.empty();
+        sortBy = live->sortBy;
+        descending = live->descending;
+        selected = live->selected;
+        first = live->first;
+        searchText = live->search;
+        const auto* f = c.opt.runtime->formState(c.o.id);
+        typing = f && c.opt.runtime->focusedObject() == c.o.id && f->focus == "recherche";
+        if (typing)
+            if (const auto t = f->text.find("recherche"); t != f->text.end()) searchText = t->second;
+        if (!live->message.empty()) {
+            status = live->message;
+            error = live->error;
+        } else if (!live->listing.error.empty()) {
+            status = live->listing.error;
+            error = true;
+        } else {
+            std::size_t folders = 0;
+            for (const auto& e : rows) folders += e.folder;
+            status = std::to_string(rows.size()) + (rows.size() > 1 ? " \xC3\xA9l\xC3\xA9ments" : " \xC3\xA9l\xC3\xA9ment");
+            if (folders > 0) status += " (dont " + std::to_string(folders) + (folders > 1 ? " dossiers)" : " dossier)");
+            if (live->listing.inZip) status += " \xC2\xB7 dans un zip";
+            if (!live->filter.empty()) status += " \xC2\xB7 filtre " + live->filter;
+            if (!live->search.empty()) status += " \xC2\xB7 nom contient \xC2\xAB " + live->search + " \xC2\xBB";
+            if (live->listing.truncated) status += " \xC2\xB7 les " + std::to_string(live->listing.entries.size()) + " premiers (il y en a plus)";
+        }
+    } else {
+        const std::string src = c.src.text(c.o, "folder");
+        crumbs = {src.empty() ? std::string("Ressources") : src};
+        const auto sample = [&](const char* name, bool folder, std::uint64_t size, std::int64_t date) {
+            ex::Entry e;
+            e.name = name;
+            e.folder = folder;
+            e.genre = ex::genreOf(name, folder);
+            e.size = size;
+            e.modified = date;
+            rows.push_back(e);
+        };
+        sample("Photos", true, 0, 1793350000);
+        sample("Rapports", true, 0, 1793260000);
+        sample("archive_2026.zip", false, 1258291, 1793340000);
+        sample("mesures_ligne1.csv", false, 48210, 1793330000);
+        sample("notice_vanne.pdf", false, 734003, 1793120000);
+        sample("synoptique.png", false, 91320, 1793100000);
+        sample("lisezmoi.txt", false, 2048, 1793050000);
+        ex::sort(rows, sortBy, false);
+        status = std::to_string(rows.size()) + " \xC3\xA9l\xC3\xA9ments (exemple : la liste se lit en marche)";
+    }
+    // Le fil d'Ariane mesure avec la police dessinee (rawWidth) ; la souris (HmiLiveCanvas) mesure de meme.
+    const auto l = ex::layoutOf(w, h, fs, crumbs, search, refresh, extract, parent, showSize, showDate, rows.size(), first,
+                                [&c](std::string_view s, double px) { return rawWidth(c, s, px); });
+
+    // ---- la barre : remonter, le fil d'Ariane, la recherche, Rafraichir, Extraire
+    box(c, l.bar, mix(bg, tc, 0.06f), rad);
+    seg(c, 0, l.bar.bottom(), w, l.bar.bottom(), withAlpha(stroke, 0.9f), 1);
+    box(c, l.up, mix(bg, tc, parent ? 0.16f : 0.07f), 4);
+    upGlyph(c, l.up, parent ? tc : withAlpha(tc, 0.35f));
+    if (l.firstCrumb > 0 && l.firstCrumb < l.crumbs.size())
+        text(c, "\xE2\x80\xA6", l.crumbs[l.firstCrumb].x - fs * 1.6, l.up.y, fs * 1.4, l.up.h, muted, fs, "centre");
+    for (std::size_t i = l.firstCrumb; i < l.crumbs.size(); ++i) {
+        const auto& b = l.crumbs[i];
+        if (b.w <= 0) continue;
+        const bool last = i + 1 == l.crumbs.size();
+        text(c, fitted(c, crumbs[i], b.w, fs), b.x, b.y, b.w, b.h, last ? tc : accent, fs, "gauche");
+        if (!last) text(c, "\xE2\x80\xBA", b.right(), b.y, fs * 1.1, b.h, muted, fs, "centre");
+    }
+    if (l.search.w > 0) {
+        box(c, l.search, c.fixed(0x141820), 4);
+        frameOf(c, l.search, typing ? accent : c.fixed(0x4A5568), typing ? 2 : 1, 4);
+        const bool empty = searchText.empty();
+        text(c, fitted(c, empty ? std::string("Nom contient\xE2\x80\xA6") : searchText, l.search.w - 12, fs * 0.95), l.search.x + 6, l.search.y,
+             l.search.w - 12, l.search.h, empty ? withAlpha(tc, 0.45f) : tc, fs * 0.95, "gauche");
+    }
+    if (l.refresh.w > 0) {
+        box(c, l.refresh, mix(bg, tc, 0.12f), 4);
+        refreshGlyph(c, l.refresh, tc);
+    }
+    if (l.extract.w > 0) drawButtonBox(c, l.extract, "Extraire", accent, c.fixedOn(0xFFFFFF), fs * 0.95);
+
+    // ---- les titres des colonnes, la fleche du tri
+    box(c, l.header, mix(bg, tc, 0.03f));
+    const auto title = [&](const hmi::Box& b, const char* label, ex::SortKey key, const char* align) {
+        if (b.w <= 0) return;
+        const bool on = sortBy == key;
+        text(c, label, b.x + 26, b.y, b.w - 30, b.h, on ? tc : muted, fs * 0.9, align);
+        if (on) {
+            const double ax = std::string_view(align) == "droite" ? b.x + 10 : b.x + 14, ay = b.cy(), s = fs * 0.28;
+            if (descending)
+                tri(c, {{static_cast<float>(ax - s), static_cast<float>(ay - s * 0.5)}, {static_cast<float>(ax + s), static_cast<float>(ay - s * 0.5)},
+                        {static_cast<float>(ax), static_cast<float>(ay + s * 0.6)}},
+                    accent);
+            else
+                tri(c, {{static_cast<float>(ax - s), static_cast<float>(ay + s * 0.5)}, {static_cast<float>(ax + s), static_cast<float>(ay + s * 0.5)},
+                        {static_cast<float>(ax), static_cast<float>(ay - s * 0.6)}},
+                    accent);
+        }
+    };
+    title(l.colName, "Nom", ex::SortKey::Name, "gauche");
+    title(l.colSize, "Taille", ex::SortKey::Size, "droite");
+    title(l.colDate, "Date", ex::SortKey::Date, "gauche");
+
+    // ---- la ligne "..", les lignes, les fleches
+    const double iconS = std::min(l.rowHeight - 6, fs * 1.35);
+    if (l.parent.w > 0) {
+        entryIcon(c, ex::Genre::Folder, l.colName.x + 4, l.parent.cy() - iconS / 2, iconS);
+        text(c, "..", l.colName.x + iconS + 12, l.parent.y, 60, l.parent.h, tc, fs, "gauche");
+        text(c, "dossier parent", l.colName.x + iconS + 40, l.parent.y, l.colName.w, l.parent.h, muted, fs * 0.85, "gauche");
+    }
+    for (std::size_t i = 0; i < l.rows.size(); ++i) {
+        const std::size_t k = l.first + i;
+        if (k >= rows.size()) break;
+        const auto& r = l.rows[i];
+        const auto& e = rows[k];
+        if (static_cast<int>(k) == selected) box(c, r, withAlpha(accent, 0.45f));
+        else if (k % 2 == 1) box(c, r, withAlpha(tc, 0.04f));
+        entryIcon(c, e.genre, l.colName.x + 4, r.cy() - iconS / 2, iconS);
+        const double nx = l.colName.x + iconS + 12;
+        text(c, fitted(c, e.name, l.colName.right() - nx, fs), nx, r.y, l.colName.right() - nx, r.h, e.suspicious ? c.fixedText(0xF5A623) : tc, fs,
+             "gauche");
+        if (l.colSize.w > 0 && !e.folder) text(c, ex::sizeText(e.size), l.colSize.x, r.y, l.colSize.w - 6, r.h, muted, fs * 0.9, "droite");
+        if (l.colDate.w > 0) text(c, ex::dateText(e.modified), l.colDate.x + 6, r.y, l.colDate.w - 6, r.h, muted, fs * 0.9, "gauche");
+    }
+    if (l.upArrow.w > 0)
+        text(c, "\xE2\x96\xB2  " + std::to_string(l.first) + " au-dessus", l.upArrow.x, l.upArrow.y, l.upArrow.w, l.upArrow.h, muted, fs * 0.85, "centre");
+    if (l.downArrow.w > 0) {
+        const std::size_t below = rows.size() > l.first + l.rows.size() ? rows.size() - l.first - l.rows.size() : 0;
+        text(c, "\xE2\x96\xBC  " + std::to_string(below) + " en dessous", l.downArrow.x, l.downArrow.y, l.downArrow.w, l.downArrow.h, muted, fs * 0.85,
+             "centre");
+    }
+    if (rows.empty() && !error && live)
+        text(c, live->search.empty() && live->filter.empty() ? "Dossier vide" : "Rien ne correspond", l.list.x, l.list.y + (l.parent.w > 0 ? l.rowHeight : 0),
+             l.list.w, l.rowHeight * 2, muted, fs, "centre");
+
+    // ---- la ligne d'etat
+    seg(c, 0, l.status.y - 1, w, l.status.y - 1, withAlpha(stroke, 0.7f), 1);
+    text(c, fitted(c, status, l.status.w, fs * 0.85), l.status.x, l.status.y, l.status.w, l.status.h,
+         error ? c.fixedText(0xFF6B6B) : (live && !live->message.empty() ? c.fixedText(0x4CD08A) : muted), fs * 0.85, "gauche");
+    return true;
+}
+
 } // namespace app::paint

@@ -562,6 +562,8 @@ private:
     std::size_t               mixDragLayer_{0};
     std::string               mixDragChannel_;
     [[nodiscard]] std::string mixDragPart(std::string_view verb, gfx::Point p) const;
+    // 1.14.1 (lot N5) : l'infobulle de la ligne d'un Explorateur de fichiers sous ce point (titre vide : aucune).
+    [[nodiscard]] hmi::explorer::Tip explorerTipAt(gfx::Point p) const;
     std::size_t               trendDragLayer_{0};
     bool                      swipeArmed_{false};
     gfx::Point                swipeFrom_{};

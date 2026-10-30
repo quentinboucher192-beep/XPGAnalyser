@@ -7546,6 +7546,138 @@ const std::vector<Topic>& topics() {
          "12 + 3 \xC3\x97 4 donne 24 (l'ordre des op\xC3\xA9rations) ; M+ le garde, C efface, 7*6 "
          "Entr\xC3\xA9" "e tap\xC3\xA9s au clavier donnent 42, + MR = ajoute la m\xC3\xA9moire (66).",
          {}, "1.14.1"},
+        // ---- La bibliotheque d'objets  Commandes / objet-convertisseur-unites
+        {"objet-convertisseur-unites", "Convertisseur d'unit\xC3\xA9s", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes",
+         "Convertir une valeur d'une unit\xC3\xA9 dans une autre, en marche : la case Valeur, l'unit\xC3\xA9 "
+         "de d\xC3\xA9part, l'unit\xC3\xA9 d'arriv\xC3\xA9" "e (de la m\xC3\xAAme dimension), le "
+         "r\xC3\xA9sultat et sa formule - le m\xC3\xAAme calcul que EN(\xE2\x80\xA6) dans un script.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Donner \xC3\xA0 l'op\xC3\xA9rateur une table de conversion sur le poste : combien "
+                         "font 2,5 bar en psi, 20 \xC2\xB0" "C en \xC2\xB0" "F, 12 m3/h en L/min. Il tape "
+                         "une valeur, choisit **De** et **Vers**, et lit le r\xC3\xA9sultat ; sans rien "
+                         "taper, il montre une mesure de l'IHM dans une autre unit\xC3\xA9.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "**la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel "
+                         "num\xC3\xA9rique du poste), la premi\xC3\xA8re frappe remplace la valeur "
+                         "montr\xC3\xA9" "e ; 1,5 ou 1.5, -40, 2,5E3. Le r\xC3\xA9sultat suit chaque frappe "
+                         "; Entr\xC3\xA9" "e garde la valeur, **\xC3\x89" "chap** l'oublie : la case revient "
+                         "\xC3\xA0 la Valeur de d\xC3\xA9part ;", {}},
+             {K::Bullet, "**De** et **Vers** : un clic ouvre la liste des unit\xC3\xA9s (la **Dimension** "
+                         "choisie, ou toutes) ; Vers ne propose que la dimension de De, et une "
+                         "arriv\xC3\xA9" "e d'une autre dimension devient l'unit\xC3\xA9 de "
+                         "r\xC3\xA9" "f\xC3\xA9rence (Pa, K, m3/h\xE2\x80\xA6) ; la molette ou les "
+                         "fl\xC3\xA8" "ches de la liste la font d\xC3\xA9" "filer ;", {}},
+             {K::Bullet, "**le bouton aux deux fl\xC3\xA8" "ches** inverse De et Vers ;", {}},
+             {K::Bullet, "**le r\xC3\xA9sultat** en grand, \xC3\xA0 **D\xC3\xA9" "cimales** "
+                         "d\xC3\xA9" "cimales (les z\xC3\xA9ros inutiles ne s'\xC3\xA9" "crivent pas ; un "
+                         "tr\xC3\xA8s petit nombre garde ses chiffres significatifs), et **la formule** en "
+                         "petit : \xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "F -> \xC2\xB0" "C "
+                         ": x \xC3\x97 0,555556 - 17,7778 \xC2\xBB ; les nombres montr\xC3\xA9s "
+                         "s'\xC3\xA9" "crivent \xC3\xA0 la fran\xC3\xA7" "aise (36,259 psi), comme dans la "
+                         "Calculatrice ;", {}},
+             {K::Bullet, "**\xC3\x89" "crire** (si **R\xC3\xA9sultat vers** est pos\xC3\xA9) \xC3\xA9" "crit "
+                         "le r\xC3\xA9sultat dans la variable, convertie vers son type ; l'objet le dit "
+                         "(\xC2\xAB \xC3\x89" "crit : Pression_mbar = 1500,5 mbar \xC2\xBB) et la Console "
+                         "aussi, la valeur \xC3\xA9" "crite en nombre comme ses autres lignes (\xC2\xAB "
+                         "Pression_mbar := 1500.5 mbar (1.5005 bar) \xC2\xBB).", {}},
+             {K::Paragraph, "Un refus se dit dans l'objet, en rouge : \xC2\xAB unit\xC3\xA9 inconnue \xC2\xAB "
+                         "bars \xC2\xBB \xC2\xBB, \xC2\xAB dimensions diff\xC3\xA9rentes : bar est une "
+                         "pression, \xC2\xB0" "C une temp\xC3\xA9rature \xC2\xBB (les unit\xC3\xA9s comme "
+                         "les listes les montrent), \xC2\xAB valeur illisible \xC2\xBB.", {}},
+             {K::Heading, "La Valeur de d\xC3\xA9part", {}},
+             {K::Paragraph, "Un nombre, ou une **expression** (=Pression) relue \xC3\xA0 chaque cycle tant que "
+                         "l'op\xC3\xA9rateur n'a rien tap\xC3\xA9. Une variable qui a une **unit\xC3\xA9** "
+                         "(voir \xC2\xAB Les unit\xC3\xA9s de mesure dans les types \xC2\xBB) donne "
+                         "l'unit\xC3\xA9 de d\xC3\xA9part, comme UNITE(Pression) : une mesure en mbar se "
+                         "montre en mbar ; si l'op\xC3\xA9rateur choisit bar dans De, la case montre la "
+                         "mesure convertie en bar - la valeur reste vraie.", {}},
+             {K::Code, "(* Ce que fait le convertisseur, dans un script *)\nPression_mbar := EN(Pression, "
+                         "'mbar');       (* bar -> mbar : x 1000 *)\nTemp_F        := EN(Temperature, "
+                         "'degF');    (* degC -> degF : x 1.8 + 32 *)", "ST"},
+             {K::Code, "/* le C n'a pas d'unit\xC3\xA9 : la conversion se fait \xC3\xA0 la main "
+                         "*/\npression_mbar = pression * 1000.0f;\ntemp_f = temperature * 1.8f + 32.0f;", "C"},
+             {K::Code, "// le C++ n'a pas d'unit\xC3\xA9 native : la conversion se fait \xC3\xA0 la "
+                         "main\npression_mbar = pression * 1000.0;\ntemp_f = temperature * 1.8 + 32.0;", "C++"},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nTitre\t(vide)\tUn "
+                         "titre au-dessus de la case ; vide : pas de titre.\nValeur de d\xC3\xA9part\t1\tUn "
+                         "nombre, ou une expression (=Pression) ; une variable avec une unit\xC3\xA9 donne "
+                         "l'unit\xC3\xA9 de d\xC3\xA9part.\nDimension\ttoutes\tLes unit\xC3\xA9s "
+                         "propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
+                         "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6).\nUnit\xC3\xA9 de "
+                         "d\xC3\xA9part\tbar\tLe symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; "
+                         "l'op\xC3\xA9rateur la change dans De.\nUnit\xC3\xA9 d'arriv\xC3\xA9" "e\tmbar\tLe "
+                         "symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme "
+                         "dimension.\nD\xC3\xA9" "cimales\t3\tDe 0 \xC3\xA0 12.\nR\xC3\xA9sultat "
+                         "vers\t(vide)\tUne variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le "
+                         "r\xC3\xA9sultat ; vide : pas de bouton.\nPolice\tSans\tLa police de "
+                         "l'objet.\nTaille du texte\t14\tEn pixels de la vue ; le r\xC3\xA9sultat est plus "
+                         "grand.\nCouleur du texte\t#E6EAF0\tLes unit\xC3\xA9s, la valeur, la "
+                         "formule.\nFond\t#1F252E\tLe fond de l'objet.\nContour\t#3A4556\tSon bord.\nCouleur "
+                         "d'accent\t#2F6FD6\tLe r\xC3\xA9sultat, la liste ouverte, le bouton "
+                         "\xC3\x89" "crire.\nRayon des coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable "
+                         "(saisie, listes, \xC3\x89" "crire)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre la "
+                         "conversion sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "\xC3\x80 savoir", {}},
+             {K::Bullet, "le calcul est celui de **EN** : la biblioth\xC3\xA8que des unit\xC3\xA9s du projet "
+                         "(fournies, celles du projet et des biblioth\xC3\xA8ques reli\xC3\xA9" "es) ; une "
+                         "unit\xC3\xA9 ajout\xC3\xA9" "e dans Configuration \xE2\x80\xBA Unit\xC3\xA9s de "
+                         "mesure appara\xC3\xAEt dans ses listes ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
+                         "ses gestes ; \xC3\x89" "crire demande aussi la permission **Piloter** quand la "
+                         "s\xC3\xA9" "curit\xC3\xA9 est active ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une unit\xC3\xA9 inconnue, deux unit\xC3\xA9s de "
+                         "dimensions diff\xC3\xA9rentes (la Valeur de d\xC3\xA9part comprise, quand c'est "
+                         "une variable qui a une unit\xC3\xA9), une dimension inconnue, une Valeur de "
+                         "d\xC3\xA9part qui n'est pas un nombre, une variable inconnue dans R\xC3\xA9sultat "
+                         "vers ;", {}},
+             {K::Bullet, "pour tester une conversion pendant la conception : l'onglet **Convertir** de "
+                         "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure.", {}},
+         },
+         {"unites-mesure", "objet-champ-de-saisie", "objet-communs", "actions"},
+         {"Convertisseur d'unit\xC3\xA9s", "convertisseur", "UnitConverter", "Unit\xC3\xA9 de d\xC3\xA9part", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "R\xC3\xA9sultat vers", "Valeur de d\xC3\xA9part", "inverser"},
+         {},
+         {{"EX_UnitConverter.png", "L'exemple anim\xC3\xA9 : la mesure Pression suivie en mbar, puis en psi ; une valeur tap\xC3\xA9" "e, des \xC2\xB0" "C en \xC2\xB0" "F, invers\xC3\xA9" "e."}},
+         "UnitConverter",
+         {{"title", "Titre", "(vide)",
+            "Un titre au-dessus de la case ; vide : pas de titre."},
+           {"value", "Valeur de d\xC3\xA9part", "1",
+            "Un nombre, ou une expression (=Pression) ; une variable avec une unit\xC3\xA9 donne "
+            "l'unit\xC3\xA9 de d\xC3\xA9part."},
+           {"dimension", "Dimension", "toutes",
+            "Les unit\xC3\xA9s propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
+            "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6)."},
+           {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", "bar",
+            "Le symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; l'op\xC3\xA9rateur la change dans "
+            "De."},
+           {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "mbar",
+            "Le symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension."},
+           {"decimals", "D\xC3\xA9" "cimales", "3",
+            "De 0 \xC3\xA0 12."},
+           {"resultTo", "R\xC3\xA9sultat vers", "(vide)",
+            "Une variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le r\xC3\xA9sultat ; vide : pas de "
+            "bouton."},
+           {"font", "Police", "Sans",
+            "La police de l'objet."},
+           {"fontSize", "Taille du texte", "14",
+            "En pixels de la vue ; le r\xC3\xA9sultat est plus grand."},
+           {"textColor", "Couleur du texte", "#E6EAF0",
+            "Les unit\xC3\xA9s, la valeur, la formule."},
+           {"fill", "Fond", "#1F252E",
+            "Le fond de l'objet."},
+           {"stroke", "Contour", "#3A4556",
+            "Son bord."},
+           {"accent", "Couleur d'accent", "#2F6FD6",
+            "Le r\xC3\xA9sultat, la liste ouverte, le bouton \xC3\x89" "crire."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (saisie, listes, \xC3\x89" "crire)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre la conversion sans r\xC3\xA9" "agir."}},
+         "La Valeur de d\xC3\xA9part suit la mesure Pression (en bar), convertie en mbar puis en psi ; 20 "
+         "est tap\xC3\xA9, converti de \xC2\xB0" "C en \xC2\xB0" "F, puis invers\xC3\xA9 ; tout revient "
+         "\xC3\xA0 la fin.",
+         {}, "1.14.1"},
         // ---- La bibliotheque d'objets  Affichage / objet-voyant
         {"objet-voyant", "Voyant", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Affichage",
          "Un voyant allum\xC3\xA9 ou \xC3\xA9teint selon une valeur bool\xC3\xA9" "enne : marche, "
@@ -14156,6 +14288,146 @@ const std::vector<Topic>& topics() {
            {12.5, "Btn_Jouer", "\xC3\x80 toi",
             "\xC3\x80 toi : Jouer, Pause, Arr\xC3\xAAter, 3 tours - le vrai moteur r\xC3\xA9pond comme en "
             "marche. `IHM_GIF_JOUER('Ventilateur')` fait la m\xC3\xAAme chose dans un script."}}},
+        // ---- La bibliotheque d'objets  Medias / objet-explorateur-fichiers
+        {"objet-explorateur-fichiers", "Explorateur de fichiers", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA M\xC3\xA9" "dias",
+         "Le contenu d'un dossier ou d'un fichier .zip, en marche : une ligne par \xC3\xA9l\xC3\xA9ment (son "
+         "genre, son nom, sa taille, sa date), triable, avec un fil d'Ariane, une recherche, un filtre "
+         "d'extensions et une infobulle qui dit tout d'une ligne.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les "
+                         "rapports export\xC3\xA9s, les notices, les photos d'une intervention, les "
+                         "enregistrements d'un essai. L'op\xC3\xA9rateur parcourt, lit les informations au "
+                         "survol, choisit un fichier (pour le montrer dans une **Visionneuse de documents**, "
+                         "par exemple) - sans rien pouvoir effacer.", {}},
+             {K::Heading, "La source", {}},
+             {K::Bullet, "**Source** : un dossier ou un fichier **.zip** - une expression, avec les "
+                         "rep\xC3\xA8res `$...$` comme les autres chemins. **Relative**, elle part du "
+                         "dossier du projet (`Echanges/rapports`, `archives/2026.zip`) ; compl\xC3\xA8te, "
+                         "elle va o\xC3\xB9 elle dit (`D:\\Rapports`). **Vide** : le dossier des ressources "
+                         "du projet (ihm/ressources) ; tant que le projet n'est pas enregistr\xC3\xA9, ses "
+                         "ressources en m\xC3\xA9moire.", {}},
+             {K::Bullet, "La source se lit \xC3\xA0 l'ouverture de la vue, quand elle change, et sur "
+                         "**Rafra\xC3\xAE" "chir** - jamais \xC3\xA0 chaque cycle (un dossier relu dix fois "
+                         "par seconde ralentirait le poste). Un dossier \xC3\xA9norme : la liste "
+                         "s'arr\xC3\xAAte \xC3\xA0 **\xC3\x89l\xC3\xA9ments au plus** (2000) et le dit.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "**une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) "
+                         "re\xC3\xA7oit son chemin complet ;", {}},
+             {K::Bullet, "**un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un "
+                         "dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les "
+                         "**actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de "
+                         "documents sur Choix vers ;", {}},
+             {K::Bullet, "**remonter** : le bouton de la barre, la ligne **..**, ou une \xC3\xA9tape du "
+                         "**fil d'Ariane** ; jamais au-dessus de la source - le poste n'ouvre pas tout le "
+                         "disque ;", {}},
+             {K::Bullet, "**les titres** Nom, Taille, Date trient la liste (un second clic inverse) ; les "
+                         "dossiers restent devant ;", {}},
+             {K::Bullet, "**Nom contient** : la case de la barre filtre les lignes \xC3\xA0 chaque frappe "
+                         "(sans casse ni accents) ; \xC3\x89" "chap l'efface ;", {}},
+             {K::Bullet, "**Extraire** (si **Extraire permis** est coch\xC3\xA9) : le fichier choisi d'un "
+                         "zip va dans le **Dossier d'extraction** (donnees/extraits du projet par "
+                         "d\xC3\xA9" "faut), sous son nom seul ; un fichier qui existe d\xC3\xA9j\xC3\xA0 "
+                         "n'est jamais \xC3\xA9" "cras\xC3\xA9 ;", {}},
+             {K::Bullet, "la molette fait d\xC3\xA9" "filer les lignes.", {}},
+             {K::Heading, "L'infobulle", {}},
+             {K::Paragraph, "Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, "
+                         "image, texte, document PDF, son, vid\xC3\xA9o, tableau CSV, fichier de "
+                         "l'application), la **taille** (dans un zip : la taille compress\xC3\xA9" "e et le "
+                         "taux), les **dates** de modification (et de cr\xC3\xA9" "ation quand le "
+                         "syst\xC3\xA8me la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et "
+                         "leur taille totale (le compte s'arr\xC3\xAAte \xC3\xA0 5000 "
+                         "\xC3\xA9l\xC3\xA9ments, et le dit) ; pour un **zip**, ses entr\xC3\xA9" "es ; pour "
+                         "une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses "
+                         "premi\xC3\xA8res lignes.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nSource (dossier ou "
+                         ".zip)\t(vide)\tUn dossier ou un .zip ; relative : au dossier du projet ; vide : "
+                         "les ressources du projet.\nFiltre d'extensions\t(vide)\t*.csv;*.pdf : seulement "
+                         "ces fichiers (les dossiers et les zips restent) ; vide : tout.\nRecherche (Nom "
+                         "contient)\tTRUE\tLa case de recherche dans la barre.\nTrier par\tnom\tnom, taille, "
+                         "date ou genre ; l'op\xC3\xA9rateur change le tri d'un clic sur un titre.\nOrdre du "
+                         "tri\tcroissant\tcroissant ou d\xC3\xA9" "croissant.\nColonne Taille\tTRUE\tLa "
+                         "taille de chaque fichier.\nColonne Date\tTRUE\tLa date de modification.\nChoix "
+                         "vers\t(vide)\tUne variable STRING : le chemin complet de la ligne "
+                         "choisie.\nRafra\xC3\xAE" "chir permis\tTRUE\tLe bouton qui relit la "
+                         "source.\nExtraire permis\tFALSE\tLe bouton Extraire (un fichier d'un "
+                         "zip).\nDossier d'extraction\tdonnees/extraits\tRelatif : au dossier du projet ; "
+                         "jamais dans le projet lui-m\xC3\xAAme (ihm/).\n\xC3\x89l\xC3\xA9ments au "
+                         "plus\t2000\tLa liste s'arr\xC3\xAAte l\xC3\xA0, et le dit.\nPolice\tSans\tLa "
+                         "police de l'objet.\nTaille du texte\t13\tEn pixels de la vue.\nCouleur du "
+                         "texte\t#DDE3EA\tLes noms, les titres.\nFond\t#1F252E\tLe fond de "
+                         "l'objet.\nContour\t#3A4556\tSon bord, ses s\xC3\xA9parations.\nCouleur "
+                         "d'accent\t#2F6FD6\tLa ligne choisie, le fil d'Ariane, le bouton Extraire.\nRayon "
+                         "des coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable (parcourir, choisir, "
+                         "trier)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "S\xC3\xA9" "curit\xC3\xA9", {}},
+             {K::Bullet, "**lecture seule** : l'explorateur n'efface rien, ne renomme rien, "
+                         "n'\xC3\xA9" "crase rien ; Extraire est d\xC3\xA9" "coch\xC3\xA9 d'office et "
+                         "n'\xC3\xA9" "crit jamais dans le projet (ihm/) ;", {}},
+             {K::Bullet, "**un zip hostile ne casse rien** : un nom qui remonte (`../`), un chemin absolu ou "
+                         "une lettre de lecteur sont ramen\xC3\xA9s dans le zip (la ligne en orange, "
+                         "l'infobulle et la Console le disent) ; une taille annonc\xC3\xA9" "e \xC3\xA9norme "
+                         "est montr\xC3\xA9" "e, jamais d\xC3\xA9" "compress\xC3\xA9" "e (Extraire "
+                         "s'arr\xC3\xAAte \xC3\xA0 256 Mo) ; un zip de plus de 100000 entr\xC3\xA9" "es "
+                         "n'est lu qu'en partie ;", {}},
+             {K::Bullet, "un lien du dossier qui m\xC3\xA8ne hors de la source ne s'ouvre pas ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
+                         "ses gestes ; Choix vers et Extraire demandent aussi la permission **Piloter** "
+                         "quand la s\xC3\xA9" "curit\xC3\xA9 est active.", {}},
+             {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
+             {K::Paragraph, "G\xC3\xA9n\xC3\xA9rer signale une source introuvable, une source qui n'est ni un "
+                         "dossier ni un .zip, un filtre illisible, une variable inconnue dans Choix vers, "
+                         "\xC3\x89l\xC3\xA9ments au plus inf\xC3\xA9rieur \xC3\xA0 1.", {}},
+         },
+         {"objet-visionneuse-de-documents", "ressources", "fichiers", "actions", "objet-communs"},
+         {"Explorateur de fichiers", "explorateur", "FileExplorer", "zip", "dossier", "fil d'Ariane", "Choix vers", "Extraire", "Filtre d'extensions", "Nom contient"},
+         {},
+         {{"EX_FileExplorer.png", "L'exemple anim\xC3\xA9 : les ressources du projet, tri\xC3\xA9" "es, cherch\xC3\xA9" "es, une ligne choisie."}},
+         "FileExplorer",
+         {{"folder", "Source (dossier ou .zip)", "(vide)",
+            "Un dossier ou un .zip ; relative : au dossier du projet ; vide : les ressources du projet."},
+           {"filter", "Filtre d'extensions", "(vide)",
+            "*.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent) ; vide : tout."},
+           {"showSearch", "Recherche (Nom contient)", "TRUE",
+            "La case de recherche dans la barre."},
+           {"sortBy", "Trier par", "nom",
+            "nom, taille, date ou genre ; l'op\xC3\xA9rateur change le tri d'un clic sur un titre."},
+           {"sortOrder", "Ordre du tri", "croissant",
+            "croissant ou d\xC3\xA9" "croissant."},
+           {"showSize", "Colonne Taille", "TRUE",
+            "La taille de chaque fichier."},
+           {"showDate", "Colonne Date", "TRUE",
+            "La date de modification."},
+           {"pickTo", "Choix vers", "(vide)",
+            "Une variable STRING : le chemin complet de la ligne choisie."},
+           {"allowRefresh", "Rafra\xC3\xAE" "chir permis", "TRUE",
+            "Le bouton qui relit la source."},
+           {"allowExtract", "Extraire permis", "FALSE",
+            "Le bouton Extraire (un fichier d'un zip)."},
+           {"extractTo", "Dossier d'extraction", "donnees/extraits",
+            "Relatif : au dossier du projet ; jamais dans le projet lui-m\xC3\xAAme (ihm/)."},
+           {"maxItems", "\xC3\x89l\xC3\xA9ments au plus", "2000",
+            "La liste s'arr\xC3\xAAte l\xC3\xA0, et le dit."},
+           {"font", "Police", "Sans",
+            "La police de l'objet."},
+           {"fontSize", "Taille du texte", "13",
+            "En pixels de la vue."},
+           {"textColor", "Couleur du texte", "#DDE3EA",
+            "Les noms, les titres."},
+           {"fill", "Fond", "#1F252E",
+            "Le fond de l'objet."},
+           {"stroke", "Contour", "#3A4556",
+            "Son bord, ses s\xC3\xA9parations."},
+           {"accent", "Couleur d'accent", "#2F6FD6",
+            "La ligne choisie, le fil d'Ariane, le bouton Extraire."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (parcourir, choisir, trier)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir."}},
+         "L'explorateur montre les ressources de l'exemple : il les trie par taille, puis par nom, cherche "
+         "\xC2\xAB vanne \xC2\xBB, choisit une ligne, puis revient \xC3\xA0 la liste enti\xC3\xA8re.",
+         {}, "1.14.1"},
         // ---- La bibliotheque d'objets  Enregistrements / objet-enregistreur
         {"objet-enregistreur", "Enregistreur", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Enregistrements",
          "Un bouton rond pour enregistrer l'IHM qui tourne : rouge, il d\xC3\xA9marre ; l'enregistrement en "
@@ -16111,6 +16383,33 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clarations et retours compris.", {}},
              {K::Bullet, "La case **Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige "
                          "EN(\xE2\x80\xA6)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.", {}},
+             {K::Heading, "L'onglet Convertir : tester une conversion", {}, "1.14.1"},
+             {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets : "
+                         "**Biblioth\xC3\xA8que** (les familles et les unit\xC3\xA9s, ci-dessus) et "
+                         "**Convertir**, un banc d'essai.", {}, "1.14.1"},
+             {K::Bullet, "**Valeur** : le nombre \xC3\xA0 convertir (1,5 ou 1.5, -40, 2,5E3) ; **De** et "
+                         "**Vers** : les unit\xC3\xA9s, choisies dans des listes ; Vers ne propose que la "
+                         "dimension de De. **Dimension** restreint De \xC3\xA0 une dimension ; "
+                         "**Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : "
+                         "`psi`, `milli`, `d\xC3\xA9" "bit`) et y prend la premi\xC3\xA8re unit\xC3\xA9 "
+                         "trouv\xC3\xA9" "e ;", {}, "1.14.1"},
+             {K::Bullet, "le r\xC3\xA9sultat suit chaque frappe, \xC3\xA0 **D\xC3\xA9" "cimales** "
+                         "d\xC3\xA9" "cimales (0 \xC3\xA0 12 ; les z\xC3\xA9ros inutiles ne "
+                         "s'\xC3\xA9" "crivent pas) ; le bouton **\xE2\x87\x84** inverse De et Vers ;", {}, "1.14.1"},
+             {K::Bullet, "dessous : la **formule** (\xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB "
+                         "\xC2\xB0" "C -> K : x + 273,15 \xC2\xBB ; les nombres \xC3\xA0 la "
+                         "fran\xC3\xA7" "aise, comme le r\xC3\xA9sultat) et l'expression \xC3\xA0 mettre "
+                         "dans un script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au "
+                         "presse-papiers (Valeur : ta variable) ;", {}, "1.14.1"},
+             {K::Bullet, "l'**historique de la s\xC3\xA9" "ance** garde les douze derni\xC3\xA8res "
+                         "conversions (une valeur valid\xC3\xA9" "e par Entr\xC3\xA9" "e, une unit\xC3\xA9 "
+                         "choisie, \xE2\x87\x84, Copier) : un clic sur une ligne y revient ;", {}, "1.14.1"},
+             {K::Bullet, "un refus se dit en rouge : une valeur illisible, une unit\xC3\xA9 inconnue (une "
+                         "unit\xC3\xA9 du projet retir\xC3\xA9" "e depuis), deux dimensions "
+                         "diff\xC3\xA9rentes.", {}, "1.14.1"},
+             {K::Paragraph, "Le calcul est celui du moteur (EN dans un script, l'objet **Convertisseur "
+                         "d'unit\xC3\xA9s**) : aucune table \xC3\xA0 part, les unit\xC3\xA9s du projet et "
+                         "des biblioth\xC3\xA8ques reli\xC3\xA9" "es comprises.", {}, "1.14.1"},
              {K::Heading, "Deux r\xC3\xA8gles, voulues diff\xC3\xA9rentes", {}},
              {K::Paragraph, "L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) "
                          "exigent la **m\xC3\xAAme unit\xC3\xA9 exacte** : bar et mbar ne s'additionnent "
@@ -16201,7 +16500,7 @@ const std::vector<Topic>& topics() {
                          "la valeur de l'objet et tape mbar dans son unit\xC3\xA9.", {}},
          },
          {"types-ihm", "variables-ihm", "unites-formats", "retours-fonctions", "operateurs", "erreurs-scripts", "reference"},
-         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure"},
+         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure", "Convertir", "Copier l'expression"},
          {"unites-mesure", "types-ihm", "variables-ihm", "unites-formats"},
          {},
          "",

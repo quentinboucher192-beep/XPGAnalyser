@@ -3328,6 +3328,62 @@ Un clic sur la calculatrice lui donne le clavier (son cadre prend la couleur de 
 - Générer signale un mode, une taille de mot, une base ou des angles inconnus, une calculatrice trop petite pour se lire (au moins 170 × 270 en standard, 260 × 300 en scientifique, 280 × 470 en programmeur), un nom inconnu dans Valeur de départ ou Résultat vers, et un Résultat vers qui n'est pas un nombre (un BOOL, une STRING : un avertissement ; une structure : une erreur) ;
 - le contrôle d'ergonomie mesure ses touches, celles du haut et les bits du programmeur (au doigt : 32 pixels par défaut).
 
+== objet-convertisseur-unites | Convertisseur d'unités
+: Convertir une valeur d'une unité dans une autre, en marche : la case Valeur, l'unité de départ, l'unité d'arrivée (de la même dimension), le résultat et sa formule - le même calcul que EN(…) dans un script.
+@depuis 1.14.1
+@mots Convertisseur d'unités, convertisseur, UnitConverter, Unité de départ, Unité d'arrivée, Résultat vers, Valeur de départ, inverser
+@voir unites-mesure, objet-champ-de-saisie, objet-communs, actions
+@capture EX_UnitConverter.png | L'exemple animé : la mesure Pression suivie en mbar, puis en psi ; une valeur tapée, des °C en °F, inversée.
+@objet UnitConverter
+@exemple La Valeur de départ suit la mesure Pression (en bar), convertie en mbar puis en psi ; 20 est tapé, converti de °C en °F, puis inversé ; tout revient à la fin.
+### À quoi il sert
+Donner à l'opérateur une table de conversion sur le poste : combien font 2,5 bar en psi, 20 °C en °F, 12 m3/h en L/min. Il tape une valeur, choisit **De** et **Vers**, et lit le résultat ; sans rien taper, il montre une mesure de l'IHM dans une autre unité.
+### En marche
+- **la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel numérique du poste), la première frappe remplace la valeur montrée ; 1,5 ou 1.5, -40, 2,5E3. Le résultat suit chaque frappe ; Entrée garde la valeur, **Échap** l'oublie : la case revient à la Valeur de départ ;
+- **De** et **Vers** : un clic ouvre la liste des unités (la **Dimension** choisie, ou toutes) ; Vers ne propose que la dimension de De, et une arrivée d'une autre dimension devient l'unité de référence (Pa, K, m3/h…) ; la molette ou les flèches de la liste la font défiler ;
+- **le bouton aux deux flèches** inverse De et Vers ;
+- **le résultat** en grand, à **Décimales** décimales (les zéros inutiles ne s'écrivent pas ; un très petit nombre garde ses chiffres significatifs), et **la formule** en petit : « 1 bar = 1000 mbar », « °F -> °C : x × 0,555556 - 17,7778 » ; les nombres montrés s'écrivent à la française (36,259 psi), comme dans la Calculatrice ;
+- **Écrire** (si **Résultat vers** est posé) écrit le résultat dans la variable, convertie vers son type ; l'objet le dit (« Écrit : Pression_mbar = 1500,5 mbar ») et la Console aussi, la valeur écrite en nombre comme ses autres lignes (« Pression_mbar := 1500.5 mbar (1.5005 bar) »).
+Un refus se dit dans l'objet, en rouge : « unité inconnue « bars » », « dimensions différentes : bar est une pression, °C une température » (les unités comme les listes les montrent), « valeur illisible ».
+### La Valeur de départ
+Un nombre, ou une **expression** (=Pression) relue à chaque cycle tant que l'opérateur n'a rien tapé. Une variable qui a une **unité** (voir « Les unités de mesure dans les types ») donne l'unité de départ, comme UNITE(Pression) : une mesure en mbar se montre en mbar ; si l'opérateur choisit bar dans De, la case montre la mesure convertie en bar - la valeur reste vraie.
+```ST
+(* Ce que fait le convertisseur, dans un script *)
+Pression_mbar := EN(Pression, 'mbar');       (* bar -> mbar : x 1000 *)
+Temp_F        := EN(Temperature, 'degF');    (* degC -> degF : x 1.8 + 32 *)
+```
+```C
+/* le C n'a pas d'unité : la conversion se fait à la main */
+pression_mbar = pression * 1000.0f;
+temp_f = temperature * 1.8f + 32.0f;
+```
+```C++
+// le C++ n'a pas d'unité native : la conversion se fait à la main
+pression_mbar = pression * 1000.0;
+temp_f = temperature * 1.8 + 32.0;
+```
+### Ses paramètres
+@param title | Titre | (vide) | Un titre au-dessus de la case ; vide : pas de titre.
+@param value | Valeur de départ | 1 | Un nombre, ou une expression (=Pression) ; une variable avec une unité donne l'unité de départ.
+@param dimension | Dimension | toutes | Les unités proposées dans De : toutes, ou une dimension (Pression, Température, Débit…).
+@param unitFrom | Unité de départ | bar | Le symbole de l'unité de la valeur (bar, degC, m3/h) ; l'opérateur la change dans De.
+@param unitTo | Unité d'arrivée | mbar | Le symbole de l'unité du résultat, de la même dimension.
+@param decimals | Décimales | 3 | De 0 à 12.
+@param resultTo | Résultat vers | (vide) | Une variable où le bouton Écrire pose le résultat ; vide : pas de bouton.
+@param font | Police | Sans | La police de l'objet.
+@param fontSize | Taille du texte | 14 | En pixels de la vue ; le résultat est plus grand.
+@param textColor | Couleur du texte | #E6EAF0 | Les unités, la valeur, la formule.
+@param fill | Fond | #1F252E | Le fond de l'objet.
+@param stroke | Contour | #3A4556 | Son bord.
+@param accent | Couleur d'accent | #2F6FD6 | Le résultat, la liste ouverte, le bouton Écrire.
+@param radius | Rayon des coins | 6 | 0 : coins carrés.
+@param pilotable | Pilotable (saisie, listes, Écrire) | TRUE | Décoché : il montre la conversion sans réagir.
+### À savoir
+- le calcul est celui de **EN** : la bibliothèque des unités du projet (fournies, celles du projet et des bibliothèques reliées) ; une unité ajoutée dans Configuration › Unités de mesure apparaît dans ses listes ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent à tous ses gestes ; Écrire demande aussi la permission **Piloter** quand la sécurité est active ;
+- Générer signale une unité inconnue, deux unités de dimensions différentes (la Valeur de départ comprise, quand c'est une variable qui a une unité), une dimension inconnue, une Valeur de départ qui n'est pas un nombre, une variable inconnue dans Résultat vers ;
+- pour tester une conversion pendant la conception : l'onglet **Convertir** de Configuration › Unités de mesure.
+
 = La bibliothèque d'objets › Affichage
 
 == objet-voyant | Voyant
@@ -5965,6 +6021,58 @@ Ils se lisent dans un texte à trous, une expression, un script.
 - dans l'éditeur, il montre sa première image et un badge : GIF, ses images, sa lecture.
 > Pour des images à toi qui défilent selon des états (marche, défaut), prends l'**Image animée**.
 
+== objet-explorateur-fichiers | Explorateur de fichiers
+: Le contenu d'un dossier ou d'un fichier .zip, en marche : une ligne par élément (son genre, son nom, sa taille, sa date), triable, avec un fil d'Ariane, une recherche, un filtre d'extensions et une infobulle qui dit tout d'une ligne.
+@depuis 1.14.1
+@mots Explorateur de fichiers, explorateur, FileExplorer, zip, dossier, fil d'Ariane, Choix vers, Extraire, Filtre d'extensions, Nom contient
+@voir objet-visionneuse-de-documents, ressources, fichiers, actions, objet-communs
+@capture EX_FileExplorer.png | L'exemple animé : les ressources du projet, triées, cherchées, une ligne choisie.
+@objet FileExplorer
+@exemple L'explorateur montre les ressources de l'exemple : il les trie par taille, puis par nom, cherche « vanne », choisit une ligne, puis revient à la liste entière.
+### À quoi il sert
+Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les rapports exportés, les notices, les photos d'une intervention, les enregistrements d'un essai. L'opérateur parcourt, lit les informations au survol, choisit un fichier (pour le montrer dans une **Visionneuse de documents**, par exemple) - sans rien pouvoir effacer.
+### La source
+- **Source** : un dossier ou un fichier **.zip** - une expression, avec les repères `$...$` comme les autres chemins. **Relative**, elle part du dossier du projet (`Echanges/rapports`, `archives/2026.zip`) ; complète, elle va où elle dit (`D:\Rapports`). **Vide** : le dossier des ressources du projet (ihm/ressources) ; tant que le projet n'est pas enregistré, ses ressources en mémoire.
+- La source se lit à l'ouverture de la vue, quand elle change, et sur **Rafraîchir** - jamais à chaque cycle (un dossier relu dix fois par seconde ralentirait le poste). Un dossier énorme : la liste s'arrête à **Éléments au plus** (2000) et le dit.
+### En marche
+- **une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) reçoit son chemin complet ;
+- **un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les **actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de documents sur Choix vers ;
+- **remonter** : le bouton de la barre, la ligne **..**, ou une étape du **fil d'Ariane** ; jamais au-dessus de la source - le poste n'ouvre pas tout le disque ;
+- **les titres** Nom, Taille, Date trient la liste (un second clic inverse) ; les dossiers restent devant ;
+- **Nom contient** : la case de la barre filtre les lignes à chaque frappe (sans casse ni accents) ; Échap l'efface ;
+- **Extraire** (si **Extraire permis** est coché) : le fichier choisi d'un zip va dans le **Dossier d'extraction** (donnees/extraits du projet par défaut), sous son nom seul ; un fichier qui existe déjà n'est jamais écrasé ;
+- la molette fait défiler les lignes.
+### L'infobulle
+Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, image, texte, document PDF, son, vidéo, tableau CSV, fichier de l'application), la **taille** (dans un zip : la taille compressée et le taux), les **dates** de modification (et de création quand le système la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et leur taille totale (le compte s'arrête à 5000 éléments, et le dit) ; pour un **zip**, ses entrées ; pour une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses premières lignes.
+### Ses paramètres
+@param folder | Source (dossier ou .zip) | (vide) | Un dossier ou un .zip ; relative : au dossier du projet ; vide : les ressources du projet.
+@param filter | Filtre d'extensions | (vide) | *.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent) ; vide : tout.
+@param showSearch | Recherche (Nom contient) | TRUE | La case de recherche dans la barre.
+@param sortBy | Trier par | nom | nom, taille, date ou genre ; l'opérateur change le tri d'un clic sur un titre.
+@param sortOrder | Ordre du tri | croissant | croissant ou décroissant.
+@param showSize | Colonne Taille | TRUE | La taille de chaque fichier.
+@param showDate | Colonne Date | TRUE | La date de modification.
+@param pickTo | Choix vers | (vide) | Une variable STRING : le chemin complet de la ligne choisie.
+@param allowRefresh | Rafraîchir permis | TRUE | Le bouton qui relit la source.
+@param allowExtract | Extraire permis | FALSE | Le bouton Extraire (un fichier d'un zip).
+@param extractTo | Dossier d'extraction | donnees/extraits | Relatif : au dossier du projet ; jamais dans le projet lui-même (ihm/).
+@param maxItems | Éléments au plus | 2000 | La liste s'arrête là, et le dit.
+@param font | Police | Sans | La police de l'objet.
+@param fontSize | Taille du texte | 13 | En pixels de la vue.
+@param textColor | Couleur du texte | #DDE3EA | Les noms, les titres.
+@param fill | Fond | #1F252E | Le fond de l'objet.
+@param stroke | Contour | #3A4556 | Son bord, ses séparations.
+@param accent | Couleur d'accent | #2F6FD6 | La ligne choisie, le fil d'Ariane, le bouton Extraire.
+@param radius | Rayon des coins | 6 | 0 : coins carrés.
+@param pilotable | Pilotable (parcourir, choisir, trier) | TRUE | Décoché : il montre la source sans réagir.
+### Sécurité
+- **lecture seule** : l'explorateur n'efface rien, ne renomme rien, n'écrase rien ; Extraire est décoché d'office et n'écrit jamais dans le projet (ihm/) ;
+- **un zip hostile ne casse rien** : un nom qui remonte (`../`), un chemin absolu ou une lettre de lecteur sont ramenés dans le zip (la ligne en orange, l'infobulle et la Console le disent) ; une taille annoncée énorme est montrée, jamais décompressée (Extraire s'arrête à 256 Mo) ; un zip de plus de 100000 entrées n'est lu qu'en partie ;
+- un lien du dossier qui mène hors de la source ne s'ouvre pas ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent à tous ses gestes ; Choix vers et Extraire demandent aussi la permission **Piloter** quand la sécurité est active.
+### Générer
+Générer signale une source introuvable, une source qui n'est ni un dossier ni un .zip, un filtre illisible, une variable inconnue dans Choix vers, Éléments au plus inférieur à 1.
+
 = La bibliothèque d'objets › Enregistrements
 
 == objet-enregistreur | Enregistreur
@@ -7160,7 +7268,7 @@ if (dernieres.size() > 100) dernieres.pop_front();
 == unites-mesure | Les unités de mesure dans les types
 : Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, l'affectation d'une variable convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
 @depuis 1.13.0
-@mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes, Unités strictes, Choisir une unité, sélecteur d'unités, Unités de mesure
+@mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes, Unités strictes, Choisir une unité, sélecteur d'unités, Unités de mesure, Convertir, Copier l'expression
 @lieux unites-mesure, types-ihm, variables-ihm, unites-formats
 @voir types-ihm, variables-ihm, unites-formats, retours-fonctions, operateurs, erreurs-scripts, reference
 ### Poser une unité : la colonne Unité
@@ -7202,6 +7310,15 @@ Dans l'arbre, sous Configuration : la bibliothèque des unités du projet.
 - Les unités et familles **fournies** sont verrouillées (un cadenas). **+ Famille** crée une famille du projet : son nom (des minuscules, des chiffres et _), son unité de référence (créée avec elle) et son libellé. **+ Unité** ajoute une unité à la famille choisie : son symbole, son facteur et son décalage vers la référence (valeur de référence = valeur × facteur + décalage). La fiche modifie le nom, le facteur et le décalage d'une unité du projet ; la référence garde facteur 1 et décalage 0.
 - **Retirer** : une unité du projet que rien n'emploie (la colonne Emplois dit où elle sert : variables, membres, déclarations des fonctions et des scripts, constantes de vue, opérateurs, redéfinitions d'une instance, retours), ou une famille du projet dont aucune unité n'est employée ; **Renommer** aussi. Une unité fournie ne se retire pas. Générer dit une unité inconnue (ou sur un type non numérique) partout où elle est écrite, déclarations et retours compris.
 - La case **Unités strictes : une affectation de même famille exige EN(…)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.
+@nouveau 1.14.1
+### L'onglet Convertir : tester une conversion
+Configuration › Unités de mesure a deux onglets : **Bibliothèque** (les familles et les unités, ci-dessus) et **Convertir**, un banc d'essai.
+- **Valeur** : le nombre à convertir (1,5 ou 1.5, -40, 2,5E3) ; **De** et **Vers** : les unités, choisies dans des listes ; Vers ne propose que la dimension de De. **Dimension** restreint De à une dimension ; **Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : `psi`, `milli`, `débit`) et y prend la première unité trouvée ;
+- le résultat suit chaque frappe, à **Décimales** décimales (0 à 12 ; les zéros inutiles ne s'écrivent pas) ; le bouton **⇄** inverse De et Vers ;
+- dessous : la **formule** (« 1 bar = 1000 mbar », « °C -> K : x + 273,15 » ; les nombres à la française, comme le résultat) et l'expression à mettre dans un script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au presse-papiers (Valeur : ta variable) ;
+- l'**historique de la séance** garde les douze dernières conversions (une valeur validée par Entrée, une unité choisie, ⇄, Copier) : un clic sur une ligne y revient ;
+- un refus se dit en rouge : une valeur illisible, une unité inconnue (une unité du projet retirée depuis), deux dimensions différentes.
+Le calcul est celui du moteur (EN dans un script, l'objet **Convertisseur d'unités**) : aucune table à part, les unités du projet et des bibliothèques reliées comprises.
 ### Deux règles, voulues différentes
 L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)** (la correction d'un clic l'insère, à l'occurrence en faute). Dans un script comme dans une expression, c'est une **erreur**, jusque dans un RETURN, le sélecteur d'un CASE et les bornes d'un FOR : la simulation ne démarre pas. L'**affectation** := d'une **variable ou d'un membre lu tel quel** (Pression := PressionBasse, Pression := Ligne.Vannes[2]) de la même famille **se convertit d'office** en marche (une info). Le reste ne se convertit pas tout seul, et la compilation demande EN(…) : un **calcul** (Pression := PressionBasse * 2.0), un **RETURN** (ou l'affectation au nom de la fonction) vers l'unité du retour, un **argument** passé à un paramètre qui a une unité (par sa place ou par son nom, `Consigne := x`, un appel de fonction d'instance compris ; un VAR_IN_OUT, une référence, ne se convertit pas : passe une variable dans son unité), un **tableau entier** (Pressions := Mesures : affecte case par case, chaque case se convertit). La case « Unités strictes » (Configuration › Unités de mesure) exige EN(…) partout, l'affectation d'une variable comprise. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue, une variable locale ou un paramètre sans unité, même s'il porte le nom d'une variable IHM) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
 ```ST

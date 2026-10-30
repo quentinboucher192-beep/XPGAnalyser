@@ -36,6 +36,23 @@
 //     projet se modifient. Une unite employee ne se retire pas (comme un type).
 //     La case " Unites strictes " : une affectation de meme famille exige alors
 //     EN(...). Chaque geste est une commande (Ctrl+Z).
+//
+//  4) 1.14.1 (lot N5) : L'ONGLET CONVERTIR (HmiUnitConvertPage), a cote de la
+//     bibliotheque (onglet Bibliotheque) - un banc d'essai des conversions :
+//
+//    Rechercher [psi______]        Dimension [Toutes les dimensions v]
+//    Valeur [1.5___]  De [bar - bar  v] [<=>] Vers [mbar - millibar v]  Decimales [6 v]
+//        1.5 bar = 1500 mbar
+//        Formule : 1 bar = 1000 mbar
+//        Dans un script ou une fx : EN(Valeur, 'mbar')            [Copier]
+//    HISTORIQUE DE LA SEANCE (un clic y revient)
+//    | Valeur | De | Vers | Resultat |
+//
+//     Le resultat suit chaque frappe ; Vers ne propose que la dimension de De ;
+//     la recherche (symbole, nom, dimension, sans casse ni accents) filtre De et
+//     y prend la premiere unite trouvee. Le calcul est celui du moteur
+//     (hmi::units::convertValue : Catalog::convert, comme EN) ; les refus (unite
+//     inconnue, dimensions differentes, valeur illisible) se disent en rouge.
 // =============================================================================
 #pragma once
 
@@ -45,6 +62,7 @@
 #include "../../hmi/HmiUnits.hpp"
 #include "../../menu/IMenu.hpp"
 #include "../../ui/Widget.hpp"
+#include "../../ui/widgets/Containers.hpp"   // 1.14.1 (lot N5) : les onglets Bibliotheque, Convertir
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
@@ -157,6 +175,84 @@ void remember(const std::string& symbol);
 [[nodiscard]] const std::vector<std::string>& recents();
 } // namespace unitpicker
 
+// ------------------------------------------------- 1.14.1 (lot N5) : l'onglet Convertir ---
+class HmiUnitConvertPage final : public ui::Widget {
+public:
+    HmiUnitConvertPage(std::string id, hmi::DocumentPtr doc);
+    void refresh();                                   // le catalogue relu (une unite du projet ajoutee, retiree)
+
+    // ---- ce que ferait l'utilisateur (la souris, le clavier ; les essais) ----
+    void setValueText(const std::string& text);       // la case Valeur (le resultat suit chaque frappe)
+    void setSearch(const std::string& text);          // la recherche : filtre De, y prend la premiere trouvee
+    bool setDimension(std::string_view labelOrName);  // "Toutes les dimensions", "Pression", "temperature"
+    void setFrom(std::string_view symbol);            // une unite inconnue est gardee : le refus le dit
+    void setTo(std::string_view symbol);              // ... une autre dimension aussi
+    void setDecimals(int decimals);                   // 0..12
+    void swap();                                      // le bouton inverser : De <-> Vers (la valeur garde son nombre)
+    std::string copyExpression();                     // Copier : EN(Valeur, 'mbar') au presse-papiers (et le rend)
+    void remember();                                  // la conversion du moment, en tete de l'historique
+    bool recall(std::size_t row);                     // un clic sur une ligne de l'historique : la conversion revient
+
+    // ---- ce qui est montre ----
+    [[nodiscard]] std::vector<std::string> fromChoices() const;   // les symboles de la liste De (filtree)
+    [[nodiscard]] std::vector<std::string> toChoices() const;     // ceux de Vers : la dimension de De
+    [[nodiscard]] std::vector<std::string> dimensionChoices() const;
+    [[nodiscard]] const std::string& from() const noexcept { return from_; }
+    [[nodiscard]] const std::string& to() const noexcept { return to_; }
+    [[nodiscard]] int decimals() const noexcept { return decimals_; }
+    [[nodiscard]] const hmi::units::Conversion& conversion() const noexcept { return conv_; }
+    [[nodiscard]] std::string resultText() const;     // "1.5 bar = 1500 mbar" ; vide : refus
+    [[nodiscard]] std::string formulaLine() const;    // "Formule : 1 bar = 1000 mbar"
+    [[nodiscard]] std::string expression() const;     // "EN(Valeur, 'mbar')"
+    [[nodiscard]] const std::string& errorText() const noexcept { return error_; }
+    struct Entry {
+        std::string value, from, to, result;
+        bool operator==(const Entry&) const = default;
+    };
+    [[nodiscard]] static const std::vector<Entry>& history();   // la seance (douze au plus, la plus recente d'abord)
+    static void clearHistory();
+
+    [[nodiscard]] ui::InputText&  valueField() noexcept { return *value_; }
+    [[nodiscard]] ui::InputText&  searchField() noexcept { return *search_; }
+    [[nodiscard]] ui::DropDown&   dimensionBox() noexcept { return *dimension_; }
+    [[nodiscard]] ui::DropDown&   fromBox() noexcept { return *fromBox_; }
+    [[nodiscard]] ui::DropDown&   toBox() noexcept { return *toBox_; }
+    [[nodiscard]] ui::DropDown&   decimalsBox() noexcept { return *decimalsBox_; }
+    [[nodiscard]] ui::Button&     swapButton() noexcept { return *swap_; }
+    [[nodiscard]] ui::Button&     copyButton() noexcept { return *copy_; }
+    [[nodiscard]] ui::TableView&  historyTable() noexcept { return *history_; }
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext&) override;
+
+private:
+    [[nodiscard]] hmi::units::Catalog catalog() const;
+    void fillLists();                                 // De (dimension, recherche), Vers (la dimension de De)
+    void recompute();                                 // le resultat, la formule, le refus
+    void followFrom();                                // Vers suit la dimension de De
+    void refillHistory();
+    hmi::DocumentPtr doc_;
+    std::string      valueText_{"1"}, searchText_, family_, from_{"bar"}, to_{"mbar"}, error_;
+    int              decimals_{6};
+    hmi::units::Conversion conv_;
+    std::vector<std::string> fromSymbols_, toSymbols_;
+    ui::InputText* value_{nullptr};
+    ui::InputText* search_{nullptr};
+    ui::DropDown*  dimension_{nullptr};
+    ui::DropDown*  fromBox_{nullptr};
+    ui::DropDown*  toBox_{nullptr};
+    ui::DropDown*  decimalsBox_{nullptr};
+    ui::Button*    swap_{nullptr};
+    ui::Button*    copy_{nullptr};
+    ui::TableView* history_{nullptr};
+    gfx::Rect      labels_[5]{};                      // Rechercher, Dimension, Valeur, De, Vers (les etiquettes)
+    gfx::Rect      decimalsLabel_{};
+    gfx::Rect      resultArea_{}, historyTitle_{};
+    bool           syncing_{false};
+    core::ConnectionScope links_;
+};
+
 // ------------------------------------------- Configuration > Unites de mesure ---
 class HmiMeasureUnitsPane final : public ui::Widget {
 public:
@@ -188,6 +284,13 @@ public:
     [[nodiscard]] static bool builtinUnit(std::string_view symbol);
     [[nodiscard]] static bool builtinFamily(std::string_view name);
 
+    // 1.14.1 (lot N5) : deux onglets - Bibliotheque (ce qui precede) et Convertir (le banc d'essai).
+    enum Tab : std::size_t { TabLibrary = 0, TabConvert = 1 };
+    void showTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentTab() const noexcept;
+    [[nodiscard]] ui::TabControl&     tabs() noexcept { return *tabs_; }
+    [[nodiscard]] HmiUnitConvertPage& convertPage() noexcept { return *convert_; }
+
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&     families() noexcept { return *families_; }
     [[nodiscard]] ui::TableView&     units() noexcept { return *units_; }
@@ -202,6 +305,7 @@ protected:
     void onPaint(const ui::PaintContext&) override;
 
 private:
+    void layoutLibrary(const gfx::Rect&);              // 1.14.1 (lot N5) : la page Bibliotheque (son contenu d'avant)
     void refreshUnits();
     void rebuildProperties();
     void say(std::string text, bool error = false);
@@ -216,6 +320,8 @@ private:
     ui::StatusBar*    status_{nullptr};
     HmiTitledPanel*   familiesPanel_{nullptr};
     HmiTitledPanel*   unitsPanel_{nullptr};
+    ui::TabControl*     tabs_{nullptr};                // 1.14.1 (lot N5)
+    HmiUnitConvertPage* convert_{nullptr};
     std::vector<std::string> familyNames_;   // dans l'ordre des lignes
     std::vector<std::string> unitSymbols_;
     std::string       family_;               // la famille choisie (son nom)

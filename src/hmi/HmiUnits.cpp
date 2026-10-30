@@ -5,9 +5,13 @@
 #include "HmiTypeRegistry.hpp"   // typereg::isNumber
 #include "HmiTypes.hpp"          // types::membersOf (les membres herites)
 #include "../project/MemberTree.hpp"   // project::members::parseArray (l'element d'un ARRAY)
+#include "HmiDisplay.hpp"        // 1.14.1 (lot N5) : hmi::unitLabel (degC se lit avec le signe degre dans une formule)
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 namespace hmi::units {
 
@@ -361,6 +365,251 @@ std::string unitAlong(const Project& project, std::string_view type, std::string
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.front()))) u.erase(0, 1);
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
     return follow(project, std::string(type), u, p, 0);
+}
+
+// =============================================================================
+//  1.14.1 (lot N5) : CONVERTIR UNE VALEUR (l'onglet Convertir, l'objet Convertisseur d'unites)
+// =============================================================================
+namespace {
+
+// Un nombre a lire dans une formule : 6 chiffres significatifs au plus, sans exposant ni zeros inutiles (comme la
+// colonne Conversion de Configuration > Unites de mesure).
+std::string shortNumber(double v) {
+    char b[64];
+    std::snprintf(b, sizeof b, "%.6g", v);
+    const double r = std::strtod(b, nullptr);
+    const double a = std::fabs(r);
+    if (a == 0.0) return "0";
+    if (a < 1e-9 || a >= 1e12) return b;
+    const int decimals = std::max(0, 5 - static_cast<int>(std::floor(std::log10(a))));
+    std::snprintf(b, sizeof b, "%.*f", decimals, r);
+    std::string s(b);
+    if (s.find('.') != std::string::npos) {
+        while (!s.empty() && s.back() == '0') s.pop_back();
+        if (!s.empty() && s.back() == '.') s.pop_back();
+    }
+    return s;
+}
+
+// 1.14.1 (lot N5, retouche) : un nombre MONTRE a la francaise, la regle de la Calculatrice et de l'outil Modbus
+// (mbtool::frenchNumber) : la virgule decimale ("21,755656", "x \xC3\x97 1,8 + 32") ; l'exposant d'un tres petit ou tres
+// grand nombre en E ("1,15741E-8", comme la Calculatrice). Pas de separateur de milliers : "1500 mbar" se relit et se
+// retape tel quel dans la case Valeur. `s` : le meme nombre ecrit avec un point (printf).
+std::string frenchShown(const std::string& s) {
+    const auto e = s.find_first_of("eE");
+    std::string mantissa = s.substr(0, e);
+    for (auto& ch : mantissa)
+        if (ch == '.') ch = ',';
+    if (e == std::string::npos) return mantissa;
+    const int exponent = std::atoi(s.c_str() + e + 1);
+    return mantissa + "E" + (exponent < 0 ? "-" : "+") + std::to_string(std::abs(exponent));
+}
+
+std::string trimmedText(std::string_view s) {
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
+    return std::string(s);
+}
+
+} // namespace
+
+Conversion convertValue(const Catalog& cat, double value, std::string_view from, std::string_view to) {
+    Conversion c;
+    c.value = value;
+    const std::string a = trimmedText(from), b = trimmedText(to);
+    const UnitDef* ua = cat.unit(a);
+    const UnitDef* ub = cat.unit(b);
+    if (ua) c.from = ua->symbol;
+    if (ub) c.to = ub->symbol;
+    if (a.empty() || b.empty()) {
+        c.error = a.empty() ? "choisis l'unit\xC3\xA9 de d\xC3\xA9part" : "choisis l'unit\xC3\xA9 d'arriv\xC3\xA9" "e";
+        return c;
+    }
+    if (!ua || !ub) {
+        const std::string& bad = !ua ? a : b;
+        c.error = "unit\xC3\xA9 inconnue \xC2\xAB " + bad + " \xC2\xBB (ni fournie, ni du projet)";
+        return c;
+    }
+    if (ua->family != ub->family) {
+        // Les unites citees comme les listes les montrent (degC : avec le signe degre).
+        const std::string la = unitLabel(ua->symbol), lb = unitLabel(ub->symbol);
+        c.error = "dimensions diff\xC3\xA9rentes : " + la + " est " + cat.familyPhrase(ua->symbol) + ", " + lb + " "
+                + cat.familyPhrase(ub->symbol) + " \xE2\x80\x94 on ne convertit pas des " + la + " en " + lb;
+        return c;
+    }
+    const auto aff = cat.convert(ua->symbol, ub->symbol);
+    if (!aff) {
+        c.error = "conversion impossible de " + unitLabel(ua->symbol) + " en " + unitLabel(ub->symbol) + " (facteur nul)";
+        return c;
+    }
+    if (!std::isfinite(value)) {
+        c.error = "valeur illisible";
+        return c;
+    }
+    c.result = aff->apply(value);
+    c.ok = std::isfinite(c.result);
+    if (!c.ok) c.error = "r\xC3\xA9sultat hors des nombres (trop grand)";
+    c.formula = formulaText(cat, ua->symbol, ub->symbol);
+    return c;
+}
+
+std::string formulaText(const Catalog& cat, std::string_view from, std::string_view to) {
+    const UnitDef* ua = cat.unit(from);
+    const UnitDef* ub = cat.unit(to);
+    if (!ua || !ub || ua->family != ub->family) return {};
+    const auto aff = cat.convert(ua->symbol, ub->symbol);
+    if (!aff) return {};
+    const std::string a = unitLabel(ua->symbol), b = unitLabel(ub->symbol);
+    if (aff->offset == 0.0) return "1 " + a + " = " + frenchShown(shortNumber(aff->factor)) + " " + b;
+    std::string f = "x";
+    if (shortNumber(aff->factor) != "1") f += " \xC3\x97 " + frenchShown(shortNumber(aff->factor));
+    f += (aff->offset >= 0 ? " + " : " - ") + frenchShown(shortNumber(std::fabs(aff->offset)));
+    return a + " -> " + b + " : " + f;
+}
+
+std::string enExpression(std::string_view value, std::string_view to) {
+    std::string v = trimmedText(value);
+    if (v.empty()) v = "Valeur";
+    return "EN(" + v + ", '" + trimmedText(to) + "')";
+}
+
+std::string formatResult(double v, int decimals) {
+    return frenchShown(resultNumber(v, decimals));
+}
+
+std::string resultNumber(double v, int decimals) {
+    if (!std::isfinite(v)) return "?";
+    decimals = std::clamp(decimals, 0, 12);
+    if (v == 0.0) return "0";
+    const double a = std::fabs(v);
+    char b[96];
+    // Tres petit (sous la derniere decimale montree) ou tres grand : les chiffres significatifs, pas un 0 trompeur.
+    if (a >= 1e15 || a < std::pow(10.0, -decimals) * 0.5) {
+        std::snprintf(b, sizeof b, "%.*g", std::max(decimals, 4), v);
+        return b;
+    }
+    std::snprintf(b, sizeof b, "%.*f", decimals, v);
+    std::string s(b);
+    if (s.find('.') != std::string::npos) {
+        while (!s.empty() && s.back() == '0') s.pop_back();
+        if (!s.empty() && s.back() == '.') s.pop_back();
+    }
+    if (s == "-0") s = "0";
+    return s;
+}
+
+bool parseValue(std::string_view text, double& out) {
+    std::string t = trimmedText(text);
+    for (auto& c : t)
+        if (c == ',') c = '.';
+    if (t.empty()) return false;
+    char* end = nullptr;
+    const double v = std::strtod(t.c_str(), &end);
+    if (!end || *end != '\0' || !std::isfinite(v)) return false;
+    out = v;
+    return true;
+}
+
+std::string familyFrom(const Catalog& cat, std::string_view text) {
+    const std::string t = fold(text);
+    if (t.empty() || t == "toutes" || t == "tous" || t == "*") return {};
+    for (const auto& f : cat.families())
+        if (fold(f.name) == t || fold(f.label) == t) return f.name;
+    return {};
+}
+
+std::vector<const UnitDef*> unitsOf(const Catalog& cat, std::string_view family) {
+    const std::string fam = familyFrom(cat, family);
+    std::vector<const UnitDef*> out;
+    for (const auto& u : cat.units())
+        if (fam.empty() || u.family == fam) out.push_back(&u);
+    return out;
+}
+
+ConverterLayout converterLayout(double w, double h, double fontSize, bool titled, bool writes, int open, std::size_t count,
+                                std::size_t first) {
+    ConverterLayout l;
+    const double fs = std::clamp(fontSize, 7.0, 40.0);
+    const double pad = std::max(6.0, fs * 0.5), gap = std::max(4.0, fs * 0.35);
+    const double rh = std::max(32.0, fs * 2.2);       // des cibles de 32 pixels au moins (le doigt, Generer)
+    double y = pad;
+    if (titled) {
+        l.title = {pad, 2, std::max(0.0, w - 2 * pad), fs * 1.6};
+        y = l.title.y + l.title.h + gap * 0.5;
+    }
+    // La ligne de saisie : la valeur (40 %), De (30 %), le bouton inverser, Vers (30 %).
+    const double avail = std::max(0.0, w - 2 * pad - 3 * gap - rh);
+    l.value = {pad, y, avail * 0.4, rh};
+    l.from = {l.value.x + l.value.w + gap, y, avail * 0.3, rh};
+    l.swap = {l.from.x + l.from.w + gap, y, rh, rh};
+    l.to = {l.swap.x + l.swap.w + gap, y, std::max(0.0, w - pad - (l.swap.x + l.swap.w + gap)), rh};
+    y += rh + gap;
+    const double resultH = std::max(rh, fs * 2.2);
+    l.result = {pad, y, std::max(0.0, w - 2 * pad), resultH};
+    y += resultH + gap * 0.5;
+    const double writeW = writes ? std::max(70.0, fs * 6.0) : 0.0;
+    const double lineH = std::max(fs * 1.5, writes ? rh : 0.0);
+    l.formula = {pad, y, std::max(0.0, w - 2 * pad - (writes ? writeW + gap : 0.0)), lineH};
+    if (writes) l.write = {w - pad - writeW, y, writeW, rh};
+    // La liste ouverte : sous sa case, dans l'objet ; des fleches quand tout ne tient pas.
+    if ((open == 1 || open == 2) && count > 0) {
+        const ConverterBox& box = open == 1 ? l.from : l.to;
+        l.rowHeight = std::max(26.0, fs * 1.9);
+        const double top = box.y + box.h;
+        const double room = std::max(0.0, h - top - 2.0);
+        auto slots = static_cast<std::size_t>(std::max(1.0, std::floor(room / l.rowHeight)));
+        const double listW = std::min(std::max(box.w, fs * 11.0), w - 4.0);
+        const double listX = std::clamp(box.x, 2.0, std::max(2.0, w - 2.0 - listW));
+        bool up = false, down = false;
+        std::size_t shown = count;
+        if (count <= slots) {
+            first = 0;
+        } else {
+            // La derniere page : une fleche en haut, plus rien en bas ; avant elle, une fleche en bas aussi.
+            const std::size_t lastFirst = count - std::max<std::size_t>(1, slots - 1);
+            first = std::min(first, lastFirst);
+            up = first > 0;
+            const std::size_t room2 = slots - (up ? 1 : 0);
+            if (first + room2 >= count) {
+                shown = count - first;
+            } else {
+                down = true;
+                shown = std::max<std::size_t>(1, room2 - 1);
+            }
+        }
+        l.first = first;
+        const double listH = static_cast<double>(shown + (up ? 1 : 0) + (down ? 1 : 0)) * l.rowHeight;
+        l.list = {listX, top, listW, listH};
+        double ry = top;
+        if (up) {
+            l.up = {listX, ry, listW, l.rowHeight};
+            ry += l.rowHeight;
+        }
+        for (std::size_t i = 0; i < shown && first + i < count; ++i) {
+            l.rows.push_back({listX, ry, listW, l.rowHeight});
+            l.rowIndex.push_back(first + i);
+            ry += l.rowHeight;
+        }
+        if (down) l.down = {listX, ry, listW, l.rowHeight};
+    }
+    return l;
+}
+
+std::string converterHit(const ConverterLayout& l, double x, double y) {
+    // La liste ouverte d'abord : elle est par-dessus le reste.
+    if (l.list.contains(x, y)) {
+        if (l.up.contains(x, y)) return "liste:haut";
+        if (l.down.contains(x, y)) return "liste:bas";
+        for (std::size_t i = 0; i < l.rows.size(); ++i)
+            if (l.rows[i].contains(x, y)) return "choix:" + std::to_string(l.rowIndex[i]);
+        return {};
+    }
+    if (l.value.contains(x, y)) return "valeur";
+    if (l.from.contains(x, y)) return "de";
+    if (l.to.contains(x, y)) return "vers";
+    if (l.swap.contains(x, y)) return "inverser";
+    if (l.write.contains(x, y)) return "ecrire";
+    return {};
 }
 
 } // namespace hmi::units

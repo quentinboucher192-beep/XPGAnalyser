@@ -79,6 +79,10 @@ enum class HmiGlyph : std::uint8_t {
     SoundMute, VolumeMixer,
     // 1.14.1 (N4) : la Calculatrice et ses deux variantes de la bibliotheque (scientifique, programmeur)
     Calculator, CalculatorScientific, CalculatorProgrammer,
+    // 1.14.1 (lot N5) : le Convertisseur d'unites (deux fleches opposees entre deux cases)
+    UnitConverter,
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers (un dossier ouvert et ses lignes)
+    FileExplorer,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

@@ -3,11 +3,34 @@
 //                       Voir HmiDocView.hpp.
 // =============================================================================
 #include "HmiDocView.hpp"
+#include "HmiMedia.hpp"     // 1.14.1 (lot N5) : l'explorateur - les dimensions d'une image, les tailles lisibles
+#include "../../third_party/miniz.h"   // 1.14.1 (lot N5) : un zip se parcourt comme un dossier
+
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>   // 1.14.1 (lot N5) : la date de creation d'un fichier
+#else
+#  include <fcntl.h>
+#  include <sys/stat.h>  // 1.14.1 (lot N5) : statx (la date de creation, quand le systeme la donne)
+#endif
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <set>
 
 namespace hmi::docview {
 
@@ -659,3 +682,922 @@ Effect typeKey(State& st, const Layout& l, const std::vector<doc::Size>& sizes, 
 }
 
 } // namespace hmi::docview
+
+// =============================================================================
+//  1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS (voir HmiDocView.hpp, hmi::explorer)
+// =============================================================================
+namespace hmi::explorer {
+
+namespace {
+
+namespace fs = std::filesystem;
+
+fs::path P(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+std::string U(const fs::path& p) {
+    const auto u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+std::FILE* openRead(const std::string& path) {
+#if defined(_WIN32)
+    return _wfopen(P(path).wstring().c_str(), L"rb");
+#else
+    return std::fopen(P(path).string().c_str(), "rb");
+#endif
+}
+std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+// Minuscules, sans accents (les lettres accentuees du Latin-1), pour la recherche Nom contient.
+std::string folded(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (std::size_t i = 0; i < s.size();) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c == 0xC3 && i + 1 < s.size()) {
+            const auto d = static_cast<unsigned char>(s[i + 1]);
+            static const char* const base = "aaaaaaaceeeeiiiidnooooo.ouuuuy.y";
+            out += base[(d >= 0xA0 ? d - 0xA0 : d - 0x80) & 0x1F];
+            i += 2;
+            continue;
+        }
+        out += static_cast<char>(std::tolower(c));
+        ++i;
+    }
+    return out;
+}
+std::string extensionOf(std::string_view name) {
+    const auto dot = name.rfind('.');
+    if (dot == std::string_view::npos || dot + 1 >= name.size()) return {};
+    return lowerAscii(std::string(name.substr(dot + 1)));
+}
+std::size_t codepoints(std::string_view s) {
+    std::size_t n = 0;
+    for (const char c : s) n += (static_cast<unsigned char>(c) & 0xC0) != 0x80;
+    return n;
+}
+std::int64_t secondsOf(fs::file_time_type t) {
+    const auto sys = std::chrono::system_clock::now()
+                   + std::chrono::duration_cast<std::chrono::system_clock::duration>(t - fs::file_time_type::clock::now());
+    return static_cast<std::int64_t>(std::chrono::system_clock::to_time_t(sys));
+}
+// La date de creation, quand le systeme la donne (0 : inconnue).
+std::int64_t createdOf(const fs::path& p) {
+#if defined(_WIN32)
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(p.wstring().c_str(), GetFileExInfoStandard, &data)) return 0;
+    const std::uint64_t t = (static_cast<std::uint64_t>(data.ftCreationTime.dwHighDateTime) << 32) | data.ftCreationTime.dwLowDateTime;
+    return t > 116444736000000000ull ? static_cast<std::int64_t>((t - 116444736000000000ull) / 10000000ull) : 0;
+#elif defined(STATX_BTIME)
+    struct statx sx{};
+    if (statx(AT_FDCWD, p.c_str(), AT_STATX_SYNC_AS_STAT, STATX_BTIME, &sx) != 0 || !(sx.stx_mask & STATX_BTIME)) return 0;
+    return static_cast<std::int64_t>(sx.stx_btime.tv_sec);
+#else
+    (void)p;
+    return 0;
+#endif
+}
+std::string sep() { return std::string(1, static_cast<char>(fs::path::preferred_separator)); }
+
+// Un nom d'entree de zip ramene dans le zip : / et \ separent ; les etapes vides, . et .. tombent, comme un "C:"
+// en tete. `suspicious` : le nom disait de sortir (un zip hostile, ou mal fait).
+std::string cleanName(std::string_view raw, bool& suspicious) {
+    suspicious = false;
+    std::string out;
+    std::size_t i = 0;
+    bool firstStep = true;
+    if (!raw.empty() && (raw.front() == '/' || raw.front() == '\\')) suspicious = true;
+    while (i <= raw.size()) {
+        std::size_t j = i;
+        while (j < raw.size() && raw[j] != '/' && raw[j] != '\\') ++j;
+        std::string step(raw.substr(i, j - i));
+        i = j + 1;
+        if (step.empty() || step == ".") continue;
+        if (step == ".." || (firstStep && step.size() == 2 && step[1] == ':')) {
+            suspicious = true;
+            firstStep = false;
+            continue;
+        }
+        firstStep = false;
+        for (auto& c : step)
+            if (static_cast<unsigned char>(c) < 0x20) {
+                c = '_';
+                suspicious = true;
+            }
+        if (!out.empty()) out += '/';
+        out += step;
+    }
+    return out;
+}
+
+// Un zip ouvert (un fichier du disque, ou les octets d'un zip interieur) : sa table seulement est lue.
+struct Archive {
+    mz_zip_archive zip{};
+    std::FILE*     file{nullptr};
+    std::vector<unsigned char> memory;
+    bool ok{false};
+    Archive() { std::memset(&zip, 0, sizeof zip); }
+    Archive(const Archive&) = delete;
+    Archive& operator=(const Archive&) = delete;
+    ~Archive() {
+        if (ok) mz_zip_reader_end(&zip);
+        if (file) std::fclose(file);
+    }
+    bool openFile(const std::string& path) {
+        file = openRead(path);
+        if (!file) return false;
+        ok = mz_zip_reader_init_cfile(&zip, file, 0, 0);
+        return ok;
+    }
+    bool openMemory(std::vector<unsigned char> bytes) {
+        memory = std::move(bytes);
+        ok = !memory.empty() && mz_zip_reader_init_mem(&zip, memory.data(), memory.size(), 0);
+        return ok;
+    }
+    [[nodiscard]] std::size_t count() const { return ok ? std::min<std::size_t>(mz_zip_reader_get_num_files(const_cast<mz_zip_archive*>(&zip)), kMaxZipEntries) : 0; }
+    [[nodiscard]] bool truncated() const { return ok && mz_zip_reader_get_num_files(const_cast<mz_zip_archive*>(&zip)) > kMaxZipEntries; }
+    bool stat(std::size_t i, mz_zip_archive_file_stat& st) { return mz_zip_reader_file_stat(&zip, static_cast<mz_uint>(i), &st); }
+    // Une entree en memoire, bornee : la taille annoncee d'abord, puis celle lue.
+    bool read(std::size_t i, std::uint64_t limit, std::vector<unsigned char>& out) {
+        mz_zip_archive_file_stat st;
+        if (!stat(i, st) || st.m_is_directory || st.m_uncomp_size > limit) return false;
+        std::size_t n = 0;
+        void* data = mz_zip_reader_extract_to_heap(&zip, static_cast<mz_uint>(i), &n, 0);
+        if (!data) return false;
+        const bool fits = n <= limit;
+        if (fits) out.assign(static_cast<unsigned char*>(data), static_cast<unsigned char*>(data) + n);
+        mz_free(data);
+        return fits;
+    }
+};
+
+bool isZipName(std::string_view name) { return extensionOf(name) == "zip"; }
+
+// Un chemin long, coupe a ses separateurs pour l'infobulle (elle ne coupe qu'aux espaces) : des lignes de 44 caracteres.
+std::string wrappedPath(const std::string& path) {
+    std::string out, line;
+    std::size_t count = 0;
+    std::string piece;
+    const auto flush = [&] {
+        const std::size_t n = codepoints(piece);
+        if (count > 0 && count + n > 44) {
+            out += line + "\n  ";
+            line.clear();
+            count = 2;
+        }
+        line += piece;
+        count += n;
+        piece.clear();
+    };
+    for (const char c : path) {
+        piece += c;
+        if (c == '/' || c == '\\') flush();
+    }
+    flush();
+    return out + line;
+}
+
+// Ou en est-on : le dossier du disque, ou le dossier d'un zip (son prefixe) - et le chemin montre.
+struct Place {
+    bool                     zip{false};
+    fs::path                 disk;      // le dossier courant (hors zip), ou le fichier zip ouvert
+    std::unique_ptr<Archive> archive;
+    std::string              prefix;    // le dossier dans le zip : "docs/notices/" ; vide : sa racine
+    std::string              shown;     // le chemin montre du dossier courant
+};
+
+bool within(const fs::path& child, const fs::path& root) {
+    std::error_code ec;
+    const fs::path c = fs::weakly_canonical(child, ec);
+    if (ec) return false;
+    const fs::path r = fs::weakly_canonical(root, ec);
+    if (ec) return false;
+    auto ci = c.begin();
+    for (auto ri = r.begin(); ri != r.end(); ++ri, ++ci) {
+        if (ri->empty()) continue;
+        if (ci == c.end() || *ci != *ri) return false;
+    }
+    return true;
+}
+
+// Le rang de l'entree `name` (un fichier) du zip, ramene ; -1 : aucune.
+long findEntry(Archive& a, const std::string& name) {
+    mz_zip_archive_file_stat st;
+    for (std::size_t i = 0, n = a.count(); i < n; ++i) {
+        if (!a.stat(i, st) || st.m_is_directory) continue;
+        bool s = false;
+        if (cleanName(st.m_filename, s) == name) return static_cast<long>(i);
+    }
+    return -1;
+}
+bool zipHasFolder(Archive& a, const std::string& folder) {
+    const std::string want = folder + "/";
+    mz_zip_archive_file_stat st;
+    for (std::size_t i = 0, n = a.count(); i < n; ++i) {
+        if (!a.stat(i, st)) continue;
+        bool s = false;
+        const std::string name = cleanName(st.m_filename, s);
+        if (name.rfind(want, 0) == 0 || (st.m_is_directory && name == folder)) return true;
+    }
+    return false;
+}
+
+bool resolve(const Location& loc, Place& pl, std::string& why) {
+    const std::string root = loc.root;
+    if (root.empty()) {
+        why = "aucune source";
+        return false;
+    }
+    std::error_code ec;
+    const fs::path r = P(root);
+    pl.shown = U(r);
+    if (fs::is_directory(r, ec)) {
+        pl.disk = r;
+    } else if (fs::is_regular_file(r, ec) && isZipName(root)) {
+        pl.disk = r;
+        pl.zip = true;
+        pl.archive = std::make_unique<Archive>();
+        if (!pl.archive->openFile(root)) {
+            why = "zip illisible : " + root;
+            return false;
+        }
+    } else if (fs::exists(r, ec)) {
+        why = "ni un dossier ni un .zip : " + root;
+        return false;
+    } else {
+        why = "source introuvable : " + root;
+        return false;
+    }
+    for (const auto& step : loc.at) {
+        if (!validStep(step)) {
+            why = "chemin refus\xC3\xA9 \xC2\xAB " + step + " \xC2\xBB (on ne remonte pas au-dessus de la source)";
+            return false;
+        }
+        if (!pl.zip) {
+            const fs::path next = pl.disk / P(step);
+            if (fs::is_directory(next, ec)) {
+                if (!within(next, r)) {
+                    why = "\xC2\xAB " + step + " \xC2\xBB m\xC3\xA8ne hors de la source (un lien) : refus\xC3\xA9";
+                    return false;
+                }
+                pl.disk = next;
+            } else if (fs::is_regular_file(next, ec) && isZipName(step)) {
+                pl.archive = std::make_unique<Archive>();
+                if (!pl.archive->openFile(U(next))) {
+                    why = "zip illisible : " + step;
+                    return false;
+                }
+                pl.disk = next;
+                pl.zip = true;
+                pl.prefix.clear();
+            } else {
+                why = "introuvable : " + step;
+                return false;
+            }
+            pl.shown += sep() + step;
+            continue;
+        }
+        const std::string want = pl.prefix + step;
+        if (zipHasFolder(*pl.archive, want)) {
+            pl.prefix = want + "/";
+        } else if (isZipName(step)) {
+            const long at = findEntry(*pl.archive, want);
+            std::vector<unsigned char> bytes;
+            if (at < 0 || !pl.archive->read(static_cast<std::size_t>(at), kMaxNestedZip, bytes)) {
+                why = at < 0 ? "introuvable : " + step : "zip int\xC3\xA9rieur trop gros (plus de 32 Mo) : " + step;
+                return false;
+            }
+            auto inner = std::make_unique<Archive>();
+            if (!inner->openMemory(std::move(bytes))) {
+                why = "zip illisible : " + step;
+                return false;
+            }
+            pl.archive = std::move(inner);
+            pl.prefix.clear();
+        } else {
+            why = "introuvable dans le zip : " + step;
+            return false;
+        }
+        pl.shown += sep() + step;
+    }
+    return true;
+}
+
+bool passes(const Entry& e, const Options& opt) {
+    if (!e.folder && e.genre != Genre::Zip && !opt.extensions.empty()) {
+        const std::string ext = extensionOf(e.name);
+        if (std::find(opt.extensions.begin(), opt.extensions.end(), ext) == opt.extensions.end()) return false;
+    }
+    if (!opt.search.empty() && folded(e.name).find(folded(opt.search)) == std::string::npos) return false;
+    return true;
+}
+
+// Les premiers octets d'une entree (disque ou zip), bornes : pour les dimensions d'une image, les premieres lignes.
+bool headOf(const Location& loc, const Entry& e, std::size_t max, std::vector<unsigned char>& out) {
+    if (!e.inZip) {
+        std::FILE* f = openRead(e.path);
+        if (!f) return false;
+        out.resize(max);
+        out.resize(std::fread(out.data(), 1, max, f));
+        std::fclose(f);
+        return true;
+    }
+    if (e.size > 4u * 1024u * 1024u) return false;   // dans un zip : seulement ce qui se decompresse vite
+    Place pl;
+    std::string why;
+    if (!resolve(loc, pl, why) || !pl.zip) return false;
+    const long at = findEntry(*pl.archive, pl.prefix + e.name);
+    if (at < 0 || !pl.archive->read(static_cast<std::size_t>(at), 4u * 1024u * 1024u, out)) return false;
+    if (out.size() > max) out.resize(max);
+    return true;
+}
+
+} // namespace
+
+Genre genreOf(std::string_view name, bool folder) {
+    if (folder) return Genre::Folder;
+    const std::string ext = extensionOf(name);
+    static const std::pair<const char*, Genre> kTable[] = {
+        {"zip", Genre::Zip}, {"png", Genre::Image}, {"jpg", Genre::Image}, {"jpeg", Genre::Image}, {"bmp", Genre::Image},
+        {"gif", Genre::Image}, {"svg", Genre::Image}, {"ico", Genre::Image}, {"webp", Genre::Image},
+        {"txt", Genre::Text}, {"log", Genre::Text}, {"ini", Genre::Text}, {"json", Genre::Text}, {"xml", Genre::Text},
+        {"md", Genre::Text}, {"st", Genre::Text}, {"cfg", Genre::Text}, {"pdf", Genre::Pdf},
+        {"wav", Genre::Sound}, {"mp3", Genre::Sound}, {"ogg", Genre::Sound}, {"flac", Genre::Sound},
+        {"mp4", Genre::Video}, {"avi", Genre::Video}, {"webm", Genre::Video}, {"mkv", Genre::Video}, {"mov", Genre::Video},
+        {"csv", Genre::Csv}, {"tsv", Genre::Csv}, {"xls", Genre::Csv}, {"xlsx", Genre::Csv},
+        {"xpgproj", Genre::Project}, {"xpg", Genre::Project}, {"xpgihm", Genre::Project}, {"xpgbib", Genre::Project},
+        {"xrec", Genre::Project}, {"xpgscripts", Genre::Project},
+    };
+    for (const auto& [e, g] : kTable)
+        if (ext == e) return g;
+    return Genre::Other;
+}
+
+std::string genreLabel(Genre g, std::string_view name) {
+    const std::string ext = extensionOf(name);
+    std::string up;
+    for (const char c : ext) up += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    switch (g) {
+        case Genre::Folder:  return "Dossier";
+        case Genre::Zip:     return "Archive zip";
+        case Genre::Image:   return "Image " + up;
+        case Genre::Text:    return "Texte " + up;
+        case Genre::Pdf:     return "Document PDF";
+        case Genre::Sound:   return "Son " + up;
+        case Genre::Video:   return "Vid\xC3\xA9o " + up;
+        case Genre::Csv:     return "Tableau " + up;
+        case Genre::Project: return "Fichier de l'application (" + up + ")";
+        case Genre::Other:   break;
+    }
+    return up.empty() ? std::string("Fichier") : "Fichier " + up;
+}
+
+std::string_view genreTag(Genre g) {
+    switch (g) {
+        case Genre::Folder:  return "";
+        case Genre::Zip:     return "ZIP";
+        case Genre::Image:   return "IMG";
+        case Genre::Text:    return "TXT";
+        case Genre::Pdf:     return "PDF";
+        case Genre::Sound:   return "SON";
+        case Genre::Video:   return "VID";
+        case Genre::Csv:     return "CSV";
+        case Genre::Project: return "XPG";
+        case Genre::Other:   break;
+    }
+    return "";
+}
+
+bool nameContains(std::string_view name, std::string_view search) {
+    return search.empty() || folded(name).find(folded(search)) != std::string::npos;
+}
+
+bool validStep(std::string_view name) {
+    if (name.empty() || name == "." || name == ".." || name.size() > 255) return false;
+    for (const char c : name)
+        if (c == '/' || c == '\\' || c == ':' || static_cast<unsigned char>(c) < 0x20) return false;
+    return true;
+}
+
+bool splitSteps(std::string_view path, std::vector<std::string>& out) {
+    out.clear();
+    std::size_t i = 0;
+    while (i <= path.size()) {
+        std::size_t j = i;
+        while (j < path.size() && path[j] != '/' && path[j] != '\\') ++j;
+        const std::string_view step = path.substr(i, j - i);
+        i = j + 1;
+        if (step.empty()) continue;
+        if (!validStep(step)) return false;
+        out.emplace_back(step);
+    }
+    return true;
+}
+
+Listing list(const Location& loc, const Options& opt) {
+    Listing out;
+    Place pl;
+    if (!resolve(loc, pl, out.error)) return out;
+    out.inZip = pl.zip;
+    const std::size_t maxItems = std::max<std::size_t>(1, opt.maxItems);
+    const auto take = [&](Entry e) {
+        ++out.total;
+        if (!passes(e, opt)) return;
+        if (out.entries.size() >= maxItems) {
+            out.truncated = true;
+            return;
+        }
+        out.entries.push_back(std::move(e));
+    };
+    if (!pl.zip) {
+        std::error_code ec;
+        fs::directory_iterator it(pl.disk, fs::directory_options::skip_permission_denied, ec);
+        if (ec) {
+            out.error = "dossier illisible : " + U(pl.disk) + " (" + ec.message() + ")";
+            return out;
+        }
+        std::size_t seen = 0;
+        for (const fs::directory_iterator end; it != end; it.increment(ec)) {
+            if (ec) break;
+            if (++seen > 200000) {   // un dossier demesure : on cesse de compter
+                out.truncated = true;
+                break;
+            }
+            Entry e;
+            const fs::path p = it->path();
+            e.name = U(p.filename());
+            e.path = U(p);
+            std::error_code e2;
+            e.folder = it->is_directory(e2);
+            e.genre = genreOf(e.name, e.folder);
+            if (!e.folder) {
+                const auto sz = it->file_size(e2);
+                if (!e2) e.size = sz;
+            }
+            std::error_code e3;
+            const auto t = it->last_write_time(e3);
+            if (!e3) e.modified = secondsOf(t);
+            take(std::move(e));
+        }
+        return out;
+    }
+    // Dans un zip : les entrees directement sous le prefixe ; un nom plus profond fait naitre son dossier.
+    Archive& a = *pl.archive;
+    out.truncated = a.truncated();
+    std::set<std::string> folders;
+    mz_zip_archive_file_stat st;
+    for (std::size_t i = 0, n = a.count(); i < n; ++i) {
+        if (!a.stat(i, st)) continue;
+        bool suspicious = false;
+        const std::string name = cleanName(st.m_filename, suspicious);
+        out.suspicious += suspicious;   // tout le zip : ce qu'il disait de sortir (la Console le dit)
+        if (name.empty() || name.size() <= pl.prefix.size() || name.rfind(pl.prefix, 0) != 0) continue;
+        const std::string rest = name.substr(pl.prefix.size());
+        const auto slash = rest.find('/');
+        if (slash != std::string::npos || st.m_is_directory) {
+            const std::string folder = slash == std::string::npos ? rest : rest.substr(0, slash);
+            if (!folders.insert(folder).second) continue;
+            Entry e;
+            e.name = folder;
+            e.path = pl.shown + sep() + folder;
+            e.folder = true;
+            e.inZip = true;
+            e.genre = Genre::Folder;
+            if (st.m_is_directory && slash == std::string::npos) e.modified = static_cast<std::int64_t>(st.m_time);
+            take(std::move(e));
+            continue;
+        }
+        Entry e;
+        e.name = rest;
+        e.path = pl.shown + sep() + rest;
+        e.inZip = true;
+        e.genre = genreOf(rest, false);
+        e.size = st.m_uncomp_size;
+        e.packed = st.m_comp_size;
+        e.modified = static_cast<std::int64_t>(st.m_time);
+        e.suspicious = suspicious;
+        take(std::move(e));
+    }
+    return out;
+}
+
+SortKey sortKeyFrom(std::string_view w) {
+    const std::string s = lowerAscii(std::string(w));
+    if (s.rfind("taille", 0) == 0 || s == "size") return SortKey::Size;
+    if (s.rfind("date", 0) == 0) return SortKey::Date;
+    if (s.rfind("genre", 0) == 0 || s.rfind("type", 0) == 0) return SortKey::Genre;
+    return SortKey::Name;
+}
+
+std::string_view sortKeyWord(SortKey k) {
+    switch (k) {
+        case SortKey::Size:  return "taille";
+        case SortKey::Date:  return "date";
+        case SortKey::Genre: return "genre";
+        case SortKey::Name:  break;
+    }
+    return "nom";
+}
+
+void sort(std::vector<Entry>& v, SortKey key, bool descending) {
+    std::stable_sort(v.begin(), v.end(), [&](const Entry& a, const Entry& b) {
+        if (a.folder != b.folder) return a.folder;    // les dossiers d'abord, dans les deux sens
+        const auto byName = [&] {
+            const std::string fa = folded(a.name), fb = folded(b.name);
+            return fa != fb ? fa < fb : a.name < b.name;
+        };
+        bool less = false;
+        switch (key) {
+            case SortKey::Size:
+                if (a.size == b.size) return byName();
+                less = a.size < b.size;
+                break;
+            case SortKey::Date:
+                if (a.modified == b.modified) return byName();
+                less = a.modified < b.modified;
+                break;
+            case SortKey::Genre:
+                if (a.genre == b.genre) return byName();
+                less = a.genre < b.genre;
+                break;
+            case SortKey::Name: {
+                const std::string fa = folded(a.name), fb = folded(b.name);
+                if (fa == fb) return descending ? b.name < a.name : a.name < b.name;
+                less = fa < fb;
+                break;
+            }
+        }
+        return descending ? !less : less;
+    });
+}
+
+std::string filterProblem(std::string_view text) {
+    std::string item;
+    const auto check = [&](std::string it) -> std::string {
+        while (!it.empty() && std::isspace(static_cast<unsigned char>(it.back()))) it.pop_back();
+        std::size_t a = 0;
+        while (a < it.size() && std::isspace(static_cast<unsigned char>(it[a]))) ++a;
+        it = it.substr(a);
+        if (it.empty()) return {};
+        std::string e = it;
+        if (e.rfind("*.", 0) == 0) e = e.substr(2);
+        else if (e.rfind('.', 0) == 0) e = e.substr(1);
+        if (e.empty() || e.size() > 12) return "\xC2\xAB " + it + " \xC2\xBB n'est pas une extension (*.csv, *.pdf)";
+        for (const char c : e)
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-')
+                return "\xC2\xAB " + it + " \xC2\xBB n'est pas une extension (*.csv, *.pdf)";
+        return {};
+    };
+    for (const char c : text) {
+        if (c == ';' || c == ',') {
+            if (auto p = check(item); !p.empty()) return p;
+            item.clear();
+        } else {
+            item += c;
+        }
+    }
+    return check(item);
+}
+
+std::string sizeText(std::uint64_t bytes) {
+    if (bytes < 1024) return std::to_string(bytes) + " octet" + (bytes > 1 ? "s" : "");
+    return formatBytes(bytes);
+}
+
+std::string dateText(std::int64_t s) {
+    if (s <= 0) return {};
+    const std::time_t t = static_cast<std::time_t>(s);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char b[64];
+    std::snprintf(b, sizeof b, "%02d/%02d/%04d %02d:%02d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour, tm.tm_min);
+    return b;
+}
+
+Tip tipOf(const Location& loc, const Entry& e) {
+    Tip t;
+    t.title = e.name;
+    std::string body = wrappedPath(e.path);
+    const auto line = [&](const std::string& s) { body += "\n" + s; };
+    line(genreLabel(e.genre, e.name) + (e.inZip ? " \xC2\xB7 dans un zip" : ""));
+    if (!e.folder) {
+        std::string size = "Taille : " + sizeText(e.size);
+        if (e.size >= 1024) size += " (" + std::to_string(e.size) + " octets)";
+        if (e.inZip) {
+            size += " \xC2\xB7 compress\xC3\xA9" "e " + sizeText(e.packed);
+            if (e.size > 0) {
+                const double rate = 100.0 * (1.0 - static_cast<double>(e.packed) / static_cast<double>(e.size));
+                char b[32];
+                std::snprintf(b, sizeof b, "%.0f", std::max(0.0, rate));
+                size += " (taux " + std::string(b) + " %)";
+            }
+        }
+        line(size);
+    }
+    if (e.modified > 0) line("Modifi\xC3\xA9 le " + dateText(e.modified));
+    const std::int64_t created = e.inZip ? 0 : createdOf(P(e.path));
+    if (created > 0) line("Cr\xC3\xA9\xC3\xA9 le " + dateText(created));
+    // Un dossier : ses elements et sa taille totale, comptes jusqu'a kFolderCount (au-dela : arrete, dit).
+    if (e.folder) {
+        std::size_t files = 0, folders = 0;
+        std::uint64_t total = 0;
+        bool stopped = false;
+        if (!e.inZip) {
+            std::error_code ec;
+            fs::recursive_directory_iterator it(P(e.path), fs::directory_options::skip_permission_denied, ec);
+            for (const fs::recursive_directory_iterator end; !ec && it != end; it.increment(ec)) {
+                if (files + folders >= kFolderCount) {
+                    stopped = true;
+                    break;
+                }
+                std::error_code e2;
+                if (it->is_directory(e2)) {
+                    ++folders;
+                } else {
+                    ++files;
+                    const auto sz = it->file_size(e2);
+                    if (!e2) total += sz;
+                }
+            }
+        } else {
+            Place pl;
+            std::string why;
+            Location inner = loc;
+            if (resolve(inner, pl, why) && pl.zip) {
+                const std::string want = pl.prefix + e.name + "/";
+                std::set<std::string> dirs;
+                mz_zip_archive_file_stat st;
+                for (std::size_t i = 0, n = pl.archive->count(); i < n; ++i) {
+                    if (!pl.archive->stat(i, st)) continue;
+                    bool s = false;
+                    const std::string name = cleanName(st.m_filename, s);
+                    if (name.rfind(want, 0) != 0 || name.size() == want.size()) continue;
+                    const std::string rest = name.substr(want.size());
+                    for (std::size_t k = rest.find('/'); k != std::string::npos; k = rest.find('/', k + 1)) dirs.insert(rest.substr(0, k));
+                    if (st.m_is_directory) dirs.insert(rest);
+                    else {
+                        ++files;
+                        total += st.m_uncomp_size;
+                    }
+                }
+                folders = dirs.size();
+            }
+        }
+        std::string what = std::to_string(files) + " fichier" + (files > 1 ? "s" : "");
+        if (folders > 0) what += ", " + std::to_string(folders) + " dossier" + (folders > 1 ? "s" : "");
+        line(stopped ? "Contenu : plus de " + std::to_string(kFolderCount) + " \xC3\xA9l\xC3\xA9ments (compte arr\xC3\xAAt\xC3\xA9), au moins " + sizeText(total)
+                     : "Contenu : " + what + ", " + sizeText(total) + " en tout");
+    }
+    // Un zip sur le disque : ses entrees, ce qu'elles font une fois decompressees (sa table seule est lue).
+    if (e.genre == Genre::Zip && !e.inZip) {
+        Archive a;
+        if (a.openFile(e.path)) {
+            std::uint64_t total = 0;
+            mz_zip_archive_file_stat st;
+            std::size_t n = a.count(), files = 0;
+            for (std::size_t i = 0; i < n; ++i)
+                if (a.stat(i, st) && !st.m_is_directory) {
+                    ++files;
+                    total += st.m_uncomp_size;
+                }
+            line("Archive : " + std::to_string(files) + " fichier" + (files > 1 ? "s" : "") + ", " + sizeText(total) + " d\xC3\xA9" "compress\xC3\xA9s"
+                 + (a.truncated() ? " (plus de 100000 entr\xC3\xA9" "es : compte arr\xC3\xAAt\xC3\xA9)" : ""));
+        } else {
+            line("Archive illisible");
+        }
+    }
+    // Une image : ses dimensions (ses premiers octets) ; un texte : ses premieres lignes.
+    if (e.genre == Genre::Image) {
+        std::vector<unsigned char> head;
+        if (headOf(loc, e, 256u * 1024u, head)) {
+            const Bytes bytes(head.begin(), head.end());
+            const MediaInfo info = inspectMedia(bytes, e.name);
+            if (info.width > 0 && info.height > 0) line("Image : " + std::to_string(info.width) + " \xC3\x97 " + std::to_string(info.height) + " pixels");
+        }
+    }
+    if (e.genre == Genre::Text || e.genre == Genre::Csv) {
+        std::vector<unsigned char> head;
+        if (extensionOf(e.name) != "xls" && extensionOf(e.name) != "xlsx" && headOf(loc, e, 2048, head)) {
+            std::string text(head.begin(), head.end());
+            if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF && static_cast<unsigned char>(text[1]) == 0xBB
+                && static_cast<unsigned char>(text[2]) == 0xBF)
+                text.erase(0, 3);
+            int lines = 0;
+            std::size_t from = 0;
+            while (from < text.size() && lines < 4) {
+                auto to = text.find('\n', from);
+                if (to == std::string::npos) to = text.size();
+                std::string l = text.substr(from, to - from);
+                if (!l.empty() && l.back() == '\r') l.pop_back();
+                for (auto& c : l)
+                    if (static_cast<unsigned char>(c) < 0x20) c = ' ';
+                if (codepoints(l) > 70) {
+                    std::size_t cut = 0, n = 0;
+                    while (cut < l.size() && n < 70) {
+                        ++cut;
+                        while (cut < l.size() && (static_cast<unsigned char>(l[cut]) & 0xC0) == 0x80) ++cut;
+                        ++n;
+                    }
+                    l = l.substr(0, cut) + "\xE2\x80\xA6";
+                }
+                line((lines == 0 ? "\xC2\xAB " : "  ") + l);
+                ++lines;
+                from = to + 1;
+            }
+            if (lines > 0) body += " \xC2\xBB";
+        }
+    }
+    if (e.suspicious) line("Nom ramen\xC3\xA9 dans l'archive : le zip disait ../ ou un chemin absolu");
+    t.body = std::move(body);
+    return t;
+}
+
+bool extract(const Location& loc, const Entry& e, const std::string& folder, std::string& written, std::string& why) {
+    if (!e.inZip || e.folder) {
+        why = "seul un fichier d'un zip s'extrait";
+        return false;
+    }
+    if (!validStep(e.name)) {
+        why = "nom refus\xC3\xA9 : " + e.name;
+        return false;
+    }
+    if (e.size > kMaxExtract) {
+        why = "trop gros pour \xC3\xAAtre extrait (" + sizeText(e.size) + ", 256 Mo au plus)";
+        return false;
+    }
+    Place pl;
+    if (!resolve(loc, pl, why)) return false;
+    if (!pl.zip) {
+        why = "le dossier courant n'est pas dans un zip";
+        return false;
+    }
+    const long at = findEntry(*pl.archive, pl.prefix + e.name);
+    if (at < 0) {
+        why = "introuvable dans le zip : " + e.name;
+        return false;
+    }
+    std::error_code ec;
+    const fs::path dir = P(folder);
+    fs::create_directories(dir, ec);
+    if (!fs::is_directory(dir, ec)) {
+        why = "dossier d'extraction impossible : " + folder;
+        return false;
+    }
+    const fs::path target = dir / P(e.name);
+    if (fs::exists(target, ec)) {
+        why = U(target) + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9";
+        return false;
+    }
+    std::vector<unsigned char> data;
+    if (!pl.archive->read(static_cast<std::size_t>(at), kMaxExtract, data)) {
+        why = "entr\xC3\xA9" "e illisible ou trop grosse : " + e.name;
+        return false;
+    }
+    std::ofstream out(target, std::ios::binary);
+    if (!out) {
+        why = "\xC3\xA9" "criture impossible : " + U(target);
+        return false;
+    }
+    out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    out.close();
+    if (!out) {
+        why = "\xC3\xA9" "criture inachev\xC3\xA9" "e : " + U(target);
+        return false;
+    }
+    written = U(target);
+    return true;
+}
+
+Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh, bool extract,
+                bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first, const TextWidth& measure) {
+    Layout l;
+    const double fs = std::clamp(fontSize, 7.0, 40.0);
+    const double pad = 6;
+    const double barH = std::max(40.0, fs * 2.6);       // des cibles de 32 pixels au moins (le doigt)
+    const double bh = barH - 8, by = 4;
+    l.rowHeight = std::max(24.0, fs * 1.9);
+    l.bar = {0, 0, w, barH};
+    double x = pad, right = w - pad;
+    l.up = {x, by, bh, bh};
+    x += bh + 6;
+    if (extract) {
+        const double ew = std::max(84.0, fs * 7.0);
+        l.extract = {right - ew, by, ew, bh};
+        right -= ew + 4;
+    }
+    if (refresh) {
+        l.refresh = {right - bh, by, bh, bh};
+        right -= bh + 4;
+    }
+    if (searchBox) {
+        const double sw = std::clamp(w * 0.28, 110.0, 220.0);
+        if (right - x > sw + 90) {
+            l.search = {right - sw, by, sw, bh};
+            right -= sw + 6;
+        }
+    }
+    // Le fil d'Ariane : les dernieres etapes qui tiennent ; celles d'avant se resument en "..." devant. Une etape : son
+    // texte mesure avec la police (le peintre et la souris passent `measure`), plus 4 pixels devant (le texte "gauche")
+    // et 6 avant le separateur ; sans mesure (Generer), une estimation : 0,5 em par caractere.
+    // 1.14.1 (lot N5, retouche) : 0,56 em par caractere laissait un grand vide apres un nom long (archives_2026.zip).
+    const auto approx = [&](const std::string& s) {
+        const double text = measure ? measure(s, fs) : static_cast<double>(codepoints(s)) * fs * 0.5;
+        return std::max(0.0, text) + 10;
+    };
+    const double sepW = fs * 1.1, dots = fs * 1.6;
+    const double avail = std::max(0.0, right - x);
+    l.crumbs.assign(crumbs.size(), Box{});
+    std::size_t firstCrumb = crumbs.size();
+    double used = 0;
+    while (firstCrumb > 0) {
+        const double cw = approx(crumbs[firstCrumb - 1]) + (firstCrumb < crumbs.size() ? sepW : 0);
+        const double room = avail - (firstCrumb > 1 ? dots : 0);
+        if (used + cw > room && firstCrumb < crumbs.size()) break;
+        used += cw;
+        --firstCrumb;
+    }
+    l.firstCrumb = firstCrumb;
+    double cx = x + (firstCrumb > 0 ? dots : 0);
+    for (std::size_t i = firstCrumb; i < crumbs.size(); ++i) {
+        const double cw = std::max(0.0, std::min(approx(crumbs[i]), right - cx));
+        l.crumbs[i] = {cx, by, cw, bh};
+        cx += cw + sepW;
+    }
+    // Les titres des colonnes, puis les lignes ; la ligne d'etat en bas.
+    double y = barH;
+    const double sizeW = showSize ? std::max(76.0, fs * 6.2) : 0.0, dateW = showDate ? std::max(124.0, fs * 9.6) : 0.0;
+    l.header = {0, y, w, l.rowHeight};
+    if (showDate) l.colDate = {w - pad - dateW, y, dateW, l.rowHeight};
+    if (showSize) l.colSize = {w - pad - dateW - (showDate ? 8 : 0) - sizeW, y, sizeW, l.rowHeight};
+    const double nameRight = showSize ? l.colSize.x : showDate ? l.colDate.x : w - pad;
+    l.colName = {pad, y, std::max(0.0, nameRight - pad - 6), l.rowHeight};
+    y += l.rowHeight;
+    const double statusH = std::max(20.0, fs * 1.6);
+    l.status = {pad, std::max(y, h - statusH), std::max(0.0, w - 2 * pad), statusH};
+    l.list = {0, y, w, std::max(0.0, l.status.y - y)};
+    double ry = y;
+    if (parent) {
+        l.parent = {0, ry, w, l.rowHeight};
+        ry += l.rowHeight;
+    }
+    const auto slots = static_cast<std::size_t>(std::max(0.0, std::floor((l.status.y - ry) / l.rowHeight)));
+    bool up = false, down = false;
+    std::size_t shown = std::min(rows, slots);
+    if (rows <= slots) {
+        first = 0;
+    } else if (slots >= 1) {
+        const std::size_t lastFirst = rows - std::max<std::size_t>(1, slots - 1);
+        first = std::min(first, lastFirst);
+        up = first > 0;
+        const std::size_t room = slots - (up ? 1 : 0);
+        if (first + room >= rows) {
+            shown = rows - first;
+        } else {
+            down = true;
+            shown = room > 1 ? room - 1 : 0;
+        }
+    } else {
+        shown = 0;
+    }
+    l.first = first;
+    if (up) {
+        l.upArrow = {0, ry, w, l.rowHeight};
+        ry += l.rowHeight;
+    }
+    for (std::size_t i = 0; i < shown; ++i) {
+        l.rows.push_back({0, ry, w, l.rowHeight});
+        ry += l.rowHeight;
+    }
+    if (down) l.downArrow = {0, ry, w, l.rowHeight};
+    return l;
+}
+
+std::string hit(const Layout& l, double x, double y) {
+    const auto in = [&](const Box& b) { return b.w > 0 && b.h > 0 && b.contains(x, y); };
+    if (in(l.bar)) {
+        if (in(l.up)) return "monter";
+        if (in(l.search)) return "recherche";
+        if (in(l.refresh)) return "rafraichir";
+        if (in(l.extract)) return "extraire";
+        for (std::size_t i = 0; i < l.crumbs.size(); ++i)
+            if (in(l.crumbs[i])) return "ariane:" + std::to_string(i);
+        return {};
+    }
+    if (in(l.header)) {
+        if (in(l.colSize)) return "colonne:taille";
+        if (in(l.colDate)) return "colonne:date";
+        return "colonne:nom";
+    }
+    if (in(l.parent)) return "parent";
+    if (in(l.upArrow)) return "liste:haut";
+    if (in(l.downArrow)) return "liste:bas";
+    for (std::size_t i = 0; i < l.rows.size(); ++i)
+        if (in(l.rows[i])) return "ligne:" + std::to_string(l.first + i);
+    return {};
+}
+
+} // namespace hmi::explorer

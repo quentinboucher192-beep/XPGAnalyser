@@ -4,6 +4,7 @@
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
+#include <filesystem>   // 1.14.1 (lot N5) : la source d'un explorateur de fichiers
 #include "HmiPopupParams.hpp"
 #include "HmiObjectAlarms.hpp"
 #include "HmiAlarmGroups.hpp"
@@ -2231,6 +2232,43 @@ void checkRecordings(const Project& p, const std::string& projectFolder, std::ve
     }
 }
 
+// 1.14.1 (lot N5) : l'Explorateur de fichiers - sa source (introuvable, ni dossier ni zip ; relative : depuis le dossier du
+// projet, quand on le connait), son filtre d'extensions, Choix vers, Elements au plus.
+void checkExplorers1141(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    namespace fs = std::filesystem;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            if (o.kind != Kind::FileExplorer) continue;
+            const std::string label = std::string(kindLabel(o.kind));
+            const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
+            const Prop* fp = o.find("folder");
+            const std::string spec = fp && fp->expr.empty() ? trimmedCopy(roles::nameOf(fp->value)) : std::string{};
+            if (!spec.empty() && spec.find('$') == std::string::npos) {
+                fs::path path(std::u8string(spec.begin(), spec.end()));
+                const bool relative = path.is_relative();
+                if (relative && !folder.empty()) path = fs::path(std::u8string(folder.begin(), folder.end())) / path;
+                if (!relative || !folder.empty()) {
+                    std::error_code ec;
+                    std::string ext = path.extension().string();
+                    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    if (!fs::exists(path, ec))
+                        issue(S::Error, "folder", "source introuvable : " + spec);
+                    else if (!fs::is_directory(path, ec) && ext != ".zip")
+                        issue(S::Error, "folder", "\xC2\xAB " + spec + " \xC2\xBB n'est ni un dossier ni un .zip");
+                }
+            }
+            if (const std::string why = explorer::filterProblem(o.text("filter")); !why.empty())
+                issue(S::Error, "filter", "filtre illisible : " + why);
+            const std::string target = trimmedCopy(markers::strip(o.text("pickTo"), markers::Mode::Expression));
+            if (!target.empty())
+                for (const auto& r : scanRoots(target))
+                    if (!known(p, plc, r, &v)) issue(S::Error, "pickTo", "Choix vers : " + std::string(unknownVariablePrefix()) + r);
+            if (const Prop* mp = o.find("maxItems"); mp && mp->expr.empty() && o.number("maxItems", 2000) < 1)
+                issue(S::Warning, "maxItems", "\xC3\x89l\xC3\xA9ments au plus inf\xC3\xA9rieur \xC3\xA0 1 : la liste en montrera un seul");
+        }
+}
+
 void checkDocViewers11230(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
     using S = Issue::Severity;
     for (const auto& v : p.views)
@@ -2565,6 +2603,60 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                                                          "le bouton coupera tous les sons");
                     if (o.text("textOn").empty() != o.text("textOff").empty())
                         issue(S::Warning, "textOn", "un seul libell\xC3\xA9 : l'autre \xC3\xA9tat montrera l'ic\xC3\xB4ne seule");
+                    break;
+                }
+                // 1.14.1 (lot N5) : le Convertisseur d'unites - ses unites connues, de la meme dimension (celle de sa Valeur de
+                // depart comprise, quand c'est une variable qui a une unite), sa dimension connue, Resultat vers.
+                case Kind::UnitConverter: {
+                    const units::Catalog cat(biblio::unitConfig(p));
+                    const auto literal = [&](const char* key) {
+                        const Prop* pr = o.find(key);
+                        return pr && pr->expr.empty() ? trimmedCopy(pr->value) : std::string{};
+                    };
+                    const std::string dim = literal("dimension");
+                    std::string family;
+                    if (!dim.empty() && units::familyFrom(cat, dim).empty() && dim != "toutes" && dim != "Toutes")
+                        issue(S::Warning, "dimension", "dimension inconnue \xC2\xAB " + dim + " \xC2\xBB : les listes proposeront toutes les unit\xC3\xA9s");
+                    else
+                        family = units::familyFrom(cat, dim);
+                    const std::string from = literal("unitFrom"), to = literal("unitTo");
+                    for (const auto& [key, sym] : {std::pair<const char*, std::string>{"unitFrom", from}, {"unitTo", to}}) {
+                        if (sym.empty()) {
+                            const Prop* pr = o.find(key);
+                            if (!pr || pr->expr.empty())
+                                issue(S::Warning, key, std::string(std::string_view(key) == "unitFrom" ? "unit\xC3\xA9 de d\xC3\xA9part" : "unit\xC3\xA9 d'arriv\xC3\xA9" "e")
+                                                           + " vide : l'op\xC3\xA9rateur devra la choisir");
+                            continue;
+                        }
+                        if (!cat.unit(sym)) {
+                            issue(S::Error, key, "unit\xC3\xA9 inconnue \xC2\xAB " + sym + " \xC2\xBB (ni fournie, ni du projet)");
+                            continue;
+                        }
+                        if (!family.empty() && cat.familyOf(sym) != family)
+                            issue(S::Warning, key, hmi::unitLabel(cat.canonical(sym)) + " n'est pas de la dimension " + cat.familyLabel(family)
+                                                       + " : la liste ne la proposera pas");
+                    }
+                    // Les unites citees comme les listes les montrent (degC : avec le signe degre), le texte de l'objet.
+                    if (cat.unit(from) && cat.unit(to) && cat.familyOf(from) != cat.familyOf(to)) {
+                        const std::string la = hmi::unitLabel(cat.canonical(from)), lb = hmi::unitLabel(cat.canonical(to));
+                        issue(S::Error, "unitTo", "dimensions incompatibles : " + la + " est " + cat.familyPhrase(from) + ", " + lb + " "
+                                                      + cat.familyPhrase(to) + " \xE2\x80\x94 on ne convertit pas des " + la + " en " + lb);
+                    }
+                    // La Valeur de depart : une variable qui a une unite la donne ; elle doit aller vers l'arrivee.
+                    if (const Prop* vp = o.find("value"); vp && !vp->expr.empty()) {
+                        const std::string path = trimmedCopy(markers::strip(vp->expr, markers::Mode::Expression));
+                        const std::string su = units::unitOfPath(p, path);
+                        if (!su.empty() && cat.unit(su) && cat.unit(to) && cat.familyOf(su) != cat.familyOf(to))
+                            issue(S::Error, "value", "dimensions incompatibles : " + path + " est en " + hmi::unitLabel(cat.canonical(su)) + " ("
+                                                         + cat.familyPhrase(su) + "), l'arriv\xC3\xA9" "e " + hmi::unitLabel(cat.canonical(to)) + " "
+                                                         + cat.familyPhrase(to));
+                    } else if (const Prop* vp2 = o.find("value"); vp2 && numberOrExpr(trimmedCopy(vp2->value))) {
+                        issue(S::Error, "value", "Valeur de d\xC3\xA9part : '" + vp2->value + "' n'est pas un nombre (une expression s'\xC3\xA9" "crit avec =)");
+                    }
+                    const std::string target = trimmedCopy(markers::strip(o.text("resultTo"), markers::Mode::Expression));
+                    if (!target.empty())
+                        for (const auto& r : scanRoots(target))
+                            if (!known(p, plc, r, &v)) issue(S::Error, "resultTo", "R\xC3\xA9sultat vers : " + std::string(unknownVariablePrefix()) + r);
                     break;
                 }
                 case Kind::VolumeMixer: {
@@ -5657,6 +5749,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkMedias11212(p, plcHasName, out);   // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
     checkDocViewers11230(p, plcHasName, projectFolder, out);   // 1.12.30 : la visionneuse de documents
     checkRecordings(p, projectFolder, out);                    // 1.14.0 (M4) : les enregistrements
+    checkExplorers1141(p, plcHasName, projectFolder, out);     // 1.14.1 (lot N5) : l'explorateur de fichiers
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
     eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat

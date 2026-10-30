@@ -61,6 +61,7 @@
 #include "HmiDocView.hpp"              // 1.12.30 : la visionneuse de documents
 #include "HmiCalculator.hpp"           // 1.14.1 (N4) : la calculatrice
 #include "HmiRecording.hpp"            // 1.14.0 (M4) : les enregistrements
+#include "HmiUnits.hpp"                // 1.14.1 (lot N5) : le Convertisseur d'unites (le calcul de EN)
 
 #include <cstdint>
 #include <deque>
@@ -947,6 +948,67 @@ public:
         double                          checkedAt{-1e9}; // la derniere fois que le fichier a ete regarde
     };
     [[nodiscard]] const DocViewer* docViewer(Id object) const;
+    // ---- 1.14.1 (lot N5) : LE CONVERTISSEUR D'UNITES (HmiRuntimeControls.cpp) ----------------------------------
+    //  Sa valeur : ce que l'operateur tape dans la case Valeur (objectPart "valeur" puis typeText ; Echap l'oublie), sinon
+    //  sa Valeur de depart ("value" : un nombre, une expression relue a chaque cycle ; une variable qui a une unite donne
+    //  aussi l'unite de depart, comme UNITE(x)). De ("de", "choix:N") parmi la Dimension ; Vers ("vers") parmi celle
+    //  de De ; "inverser" ; "ecrire" pose le resultat dans Resultat vers (Piloter, le niveau d'acces, comme une saisie).
+    //  Le calcul est celui de EN (units::convertValue) ; un refus (unite inconnue, dimensions differentes, valeur
+    //  illisible) se dit dans l'objet. Pour un essai : "de:mbar", "vers:bar", "valeur:12.5", "dehors" (ferme la liste).
+    struct UnitConverter {
+        std::string from, to;               // les unites choisies
+        std::string propFrom, propTo;       // les proprietes vues au dernier cycle (changees : elles reprennent la main)
+        std::string sourceUnit;             // l'unite de la Valeur de depart (sa variable) ; vide : aucune
+        std::string family;                 // la Dimension (vide : toutes)
+        std::string valueText;              // ce que montre la case Valeur
+        bool        typed{false};           // l'operateur a tape sa valeur (la Valeur de depart ne la remplace plus)
+        units::Conversion conv;             // le resultat, ou le refus
+        int         open{0};                // la liste ouverte : 0 aucune, 1 De, 2 Vers
+        std::size_t first{0};               // ... sa premiere ligne montree
+        std::vector<std::string> choices;   // ... ses unites
+        bool        writes{false};          // Resultat vers est pose : le bouton Ecrire
+        bool        pilotable{true};
+        int         decimals{3};
+        std::string message;                // la reponse d'Ecrire (ou un refus)
+        bool        error{false};
+    };
+    [[nodiscard]] const UnitConverter* unitConverter(Id object) const;
+    // ---- 1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS (HmiRuntimeDocs.cpp, HmiDocView.hpp : hmi::explorer) -----------
+    //  Sa source (une propriete : un dossier ou un .zip ; relative, au dossier du projet ; vide, le dossier ressources
+    //  du projet - ou ses ressources en memoire tant qu'il n'est pas enregistre) se lit a l'ouverture de la vue, quand
+    //  elle change et sur Rafraichir - jamais a chaque cycle. Les gestes (objectPart) : "ligne:N" choisit (Choix vers
+    //  recoit son chemin), "ouvrir:N" entre dans un dossier ou un zip - un fichier lance les actions Double clic de
+    //  l'objet -, "monter", "parent", "ariane:N" (jamais au-dessus de la source), "colonne:nom|taille|date" trie,
+    //  "recherche" (la case Nom contient prend le clavier), "rafraichir", "extraire" (une entree de zip, si permis),
+    //  "liste:haut", "liste:bas". Pour un essai : "aller:a/b", "recherche:texte".
+    struct FileExplorer {
+        std::string              spec;            // la source demandee (evaluee, sans ses reperes) ; "\x01" : pas encore lue
+        explorer::Location       loc;             // la source resolue et le dossier courant
+        std::string              label;           // le nom de la source (la premiere etape du fil d'Ariane)
+        bool                     resources{false};// les ressources du projet, en memoire (pas de dossier sur le disque)
+        explorer::Listing        listing;         // le dossier courant (filtre d'extensions applique)
+        std::vector<explorer::Entry> shown;       // ... la recherche appliquee, trie : les lignes
+        std::string              filter;          // le filtre d'extensions (tel qu'ecrit)
+        std::string              search;          // Nom contient
+        explorer::SortKey        sortBy{explorer::SortKey::Name};
+        bool                     descending{false};
+        std::string              sortProp;        // le tri des proprietes au dernier cycle (change : il reprend)
+        int                      selected{-1};    // la ligne choisie (rang dans shown)
+        std::string              selectedPath;    // ... son chemin (elle reste choisie quand la liste se trie)
+        std::size_t              first{0};        // la premiere ligne montree
+        std::size_t              maxItems{2000};
+        bool                     allowRefresh{true}, allowExtract{false}, showSearch{true}, showSize{true}, showDate{true};
+        bool                     pilotable{true};
+        std::string              message;         // la reponse du dernier geste (vide : le compte)
+        bool                     error{false};
+        int                      loads{0};        // combien de fois la source a ete lue (les essais)
+        mutable std::map<std::string, explorer::Tip> tips;   // les infobulles calculees (au premier survol)
+    };
+    [[nodiscard]] const FileExplorer* fileExplorer(Id object) const;
+    // L'infobulle de la ligne `row` (rang dans shown) ; vide : aucune.
+    [[nodiscard]] explorer::Tip explorerTip(Id object, std::size_t row) const;
+    // Le fil d'Ariane : la source, puis chaque dossier ouvert.
+    [[nodiscard]] std::vector<std::string> explorerCrumbs(Id object) const;
     // Ce qui est sous un point local de la visionneuse ("doc:next", "doc:area"...) ; vide : rien.
     [[nodiscard]] std::string docPartAt(Id object, double lx, double ly) const;
     // La visionneuse a le clavier ; ... et un de ses champs (le numero de page, la recherche) est en saisie.
@@ -1860,6 +1922,23 @@ private:
     void mediasReset();
     void mediasOpenView(const View&, double now);
     void mediasCycle(double now);
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers (HmiRuntimeDocs.cpp).
+    std::map<Id, FileExplorer>                 explorers_;
+    void explorersCycle(double now);
+    void explorerRefresh(const View&, const Object& raw, const Object& shown, double now);
+    void explorerRecompute(Id object);
+    void explorerLoad(FileExplorer&, const View&, const Object&);   // la source relue (et le dossier courant)
+    void explorerShow(FileExplorer&);                                // la recherche, le tri, la ligne choisie
+    void explorerPick(FileExplorer&, const View&, const Object&, double now);   // Choix vers
+    void explorerTyped(Id object);                                   // la case Nom contient a change
+    void explorerPart(const View&, const Object&, std::string_view part, double now);
+    // 1.14.1 (lot N5) : le Convertisseur d'unites (HmiRuntimeControls.cpp).
+    std::map<Id, UnitConverter>                converters_;
+    void converterCycle(double now);
+    void converterRefresh(Id view, const Object& raw, const Object& shown);
+    void converterRecompute(Id object);     // apres un geste ou une frappe : la vue montree relue
+    void converterPart(const View&, const Object&, std::string_view part, double now);
+    void converterSubmit(const View&, const Object&, double now);
     // 1.12.30 : la visionneuse de documents (HmiRuntimeDocs.cpp).
     std::map<Id, DocViewer>                    docs_;
     void docsReset();

@@ -2182,6 +2182,52 @@ Example calculator() {
     return m.done(t + 8.0);
 }
 
+// ---- 1.14.1 (lot N5) : l'explorateur de fichiers - les ressources de l'exemple, triees, cherchees, choisies ----
+Example fileExplorer() {
+    Maker m;
+    m.svg("vanne_ouverte.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='#2E9E5B'/></svg>");
+    m.svg("vanne_fermee.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='#E5484D'/></svg>");
+    m.svg("pompe.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><circle cx='32' cy='32' r='30' fill='#2F6FD6'/>"
+                       "<rect x='20' y='28' width='24' height='8' fill='#FFFFFF'/></svg>");
+    m.svg("notice_vanne.txt", "Notice de la vanne V12\nOuvrir lentement.\n");
+    m.var("Choix", "STRING", "''");
+    auto& e = m.add(Kind::FileExplorer, "Explorateur", 20, 20, 400, 250);
+    e.set("pickTo", "Choix");
+    m.note("Explication", 440, 20, 150, 250,
+           "Vide, la Source est le dossier des ressources du projet. Un clic choisit (Choix re\xC3\xA7oit le chemin), un titre trie, la case "
+           "cherche ; au survol, l'infobulle dit tout de la ligne.");
+    m.step(1.5, "partie", "Explorateur", "colonne:taille");
+    m.step(3.0, "partie", "Explorateur", "colonne:nom");
+    m.step(4.5, "partie", "Explorateur", "recherche:vanne");
+    m.step(6.0, "partie", "Explorateur", "ligne:0");
+    m.step(8.0, "partie", "Explorateur", "recherche:");
+    return m.done(9.5);
+}
+
+// ---- 1.14.1 (lot N5) : le convertisseur d'unites - une mesure qui bouge, puis une valeur tapee ----
+Example unitConverter() {
+    Maker m;
+    m.var("Pression", "REAL", "1.5");
+    for (auto& var : m.project().programs.variables)
+        if (var.name == "Pression") var.unit = "bar";
+    m.cyclic("Pression := 1.5 + 0.25 * SIN(T * 0.7);");
+    auto& c = m.add(Kind::UnitConverter, "Convertisseur", 20, 20, 400, 150);
+    c.setExpr("value", "Pression");
+    c.set("unitTo", "mbar");
+    m.note("Explication", 440, 20, 150, 250,
+           "La Valeur de d\xC3\xA9part suit la mesure Pression (en bar). Tape une valeur, choisis De et Vers : le r\xC3\xA9sultat suit. "
+           "Le bouton aux deux fl\xC3\xA8" "ches inverse.");
+    m.step(2.0, "partie", "Convertisseur", "vers:psi");
+    m.step(3.5, "partie", "Convertisseur", "valeur:20");
+    m.step(4.0, "partie", "Convertisseur", "de:degC");
+    m.step(5.5, "partie", "Convertisseur", "vers:degF");
+    m.step(7.0, "partie", "Convertisseur", "inverser");
+    m.step(8.5, "partie", "Convertisseur", "valeur:");
+    m.step(8.6, "partie", "Convertisseur", "de:bar");
+    m.step(8.7, "partie", "Convertisseur", "vers:mbar");
+    return m.done(10.0);
+}
+
 // ---- 1.12.30 : la visionneuse de documents - la notice suit l'etape de la procedure ----
 Example documentViewer() {
     Maker m(420);
@@ -2819,6 +2865,8 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::SoundMute:           return soundMute();          // 1.14.0
         case Kind::VolumeMixer:         return volumeMixer();
         case Kind::Calculator:          return calculator();         // 1.14.1 (N4)
+        case Kind::UnitConverter:       return unitConverter();      // 1.14.1 (lot N5)
+        case Kind::FileExplorer:        return fileExplorer();
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

@@ -10,6 +10,7 @@
 #include "HmiSymbols.hpp"
 #include "HmiSystemMenu.hpp"   // 1.14.0 : le Melangeur de volume (ses pistes, ses M)
 #include "HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice (ses touches, ses bits)
+#include "HmiUnits.hpp"        // 1.14.1 (lot N5) : le Convertisseur d'unites (ses cases)
 
 #include <algorithm>
 #include <cctype>
@@ -566,6 +567,8 @@ bool clickableKind(Kind k) {
         case Kind::Recorder: case Kind::RecordingPlayer:   // 1.14.0 (M4) : son bouton, ses lignes
         case Kind::SoundMute: case Kind::VolumeMixer:   // 1.14.0 : couper le son, le melangeur (ses M, ses pistes)
         case Kind::Calculator:                          // 1.14.1 (N4) : ses touches
+        case Kind::UnitConverter:                       // 1.14.1 (lot N5) : sa case, ses listes, inverser, Ecrire
+        case Kind::FileExplorer:                        // 1.14.1 (lot N5) : sa barre, ses lignes
             return true;
         default:
             return false;
@@ -632,6 +635,21 @@ void checkTouch(Ctx& c, const View& v, const Object& o) {
             parts(keys, "les touches");
             parts(strip, "les touches du haut (m\xC3\xA9moire, Envoyer)");
             if (!l.bits.empty()) parts(l.bits, "les bits");
+            return;
+        }
+        case Kind::FileExplorer: {
+            // 1.14.1 (lot N5) : les boutons de sa barre (remonter, Rafraichir, Extraire) ; ses lignes se font defiler.
+            const auto l = explorer::layoutOf(w, h, o.number("fontSize", 13), {"source"}, o.flag("showSearch", true), o.flag("allowRefresh", true),
+                                              o.flag("allowExtract", false), false, true, true, 0, 0);
+            parts({l.up, l.refresh, l.extract}, "les boutons de la barre");
+            return;
+        }
+        case Kind::UnitConverter: {
+            // 1.14.1 (lot N5) : la case Valeur, De, Vers, le bouton inverser ; le bouton Ecrire.
+            const auto l = units::converterLayout(w, h, o.number("fontSize", 14), !o.text("title").empty(), !o.text("resultTo").empty(), 0, 0, 0);
+            const auto box = [](const units::ConverterBox& b) { return Box{b.x, b.y, b.w, b.h}; };
+            parts({box(l.value), box(l.from), box(l.to), box(l.swap)}, "la case et les listes");
+            if (l.write.w > 0) parts({box(l.write)}, "le bouton \xC3\x89" "crire");
             return;
         }
         case Kind::VolumeMixer: {

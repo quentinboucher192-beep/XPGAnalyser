@@ -30,11 +30,14 @@
 #include "HmiEnums.hpp"     // 1.12.2 : une enumeration, source d'elements
 #include "HmiTypes.hpp"     // 1.12.2 : un tableau IHM, source d'elements ou de lignes
 #include "HmiChoiceLists.hpp"   // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "HmiLibrary.hpp"       // 1.14.1 (lot N5) : biblio::unitConfig (les unites que voit EN)
+#include "HmiUnits.hpp"         // 1.14.1 (lot N5) : le Convertisseur d'unites
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <set>
 
 namespace hmi {
 
@@ -1051,6 +1054,278 @@ void Runtime::controlsCycle(double now) {
             }
         }
     }
+}
+
+// =============================================================================
+//  1.14.1 (lot N5) : LE CONVERTISSEUR D'UNITES - la case Valeur, les listes De et
+//  Vers, inverser, Ecrire (Resultat vers). Le calcul : units::convertValue, celui
+//  de EN dans un script (la bibliotheque du projet et de ses bibliotheques reliees).
+// =============================================================================
+namespace {
+
+units::Catalog converterCatalog(const Project* p) { return p ? units::Catalog(biblio::unitConfig(*p)) : units::Catalog(); }
+
+std::string foldedSymbol(std::string_view s) {
+    std::string out;
+    for (const char c : s)
+        if (!std::isspace(static_cast<unsigned char>(c))) out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// Les unites de la liste ouverte : De, celles de la Dimension ; Vers, celles de la dimension de De.
+std::vector<std::string> converterChoices(const units::Catalog& cat, const Runtime::UnitConverter& c, int open) {
+    std::string family = c.family;
+    if (open == 2)
+        if (const auto* u = cat.unit(c.from)) family = u->family;
+    std::vector<std::string> out;
+    for (const auto* u : units::unitsOf(cat, family)) out.push_back(u->symbol);
+    return out;
+}
+
+} // namespace
+
+const Runtime::UnitConverter* Runtime::unitConverter(Id object) const {
+    const auto it = converters_.find(object);
+    return it == converters_.end() ? nullptr : &it->second;
+}
+
+void Runtime::converterCycle(double) {
+    if (!project_) return;
+    std::set<Id> seen;
+    const auto visit = [&](Id viewId) {
+        const View* v = viewOf(viewId);
+        if (!v) return;
+        const auto aliases = viewAliases(viewId);
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::UnitConverter) continue;
+            seen.insert(so.id);
+            Object o = so;
+            evaluateProps(viewId, o);      // tel que l'ecran le montre (sa Valeur de depart relue)
+            converterRefresh(viewId, so, o);
+        }
+    };
+    visit(current_);
+    for (const Id p : popups_) visit(p);
+    // Ceux qui ne se montrent plus : oublies (rouverts, ils repartent de leurs proprietes).
+    for (auto it = converters_.begin(); it != converters_.end();) {
+        if (seen.count(it->first)) {
+            ++it;
+            continue;
+        }
+        if (focused_ == it->first) focused_ = kNoId;
+        forms_.erase(it->first);
+        it = converters_.erase(it);
+    }
+}
+
+void Runtime::converterRecompute(Id object) {
+    const View* v = shownViewOf(object);
+    const Object* raw = v ? v->object(object) : nullptr;
+    if (!raw || raw->kind != Kind::UnitConverter || !project_) return;
+    const auto aliases = viewAliases(v->id);
+    Object o = *raw;
+    evaluateProps(v->id, o);
+    converterRefresh(v->id, *raw, o);
+}
+
+void Runtime::converterRefresh(Id, const Object& raw, const Object& o) {
+    auto& c = converters_[raw.id];
+    const units::Catalog cat = converterCatalog(project_);
+    const auto canon = [&](const std::string& s) { return cat.unit(s) ? cat.canonical(s) : s; };
+    c.family = units::familyFrom(cat, o.text("dimension", "toutes"));
+    c.pilotable = o.flag("pilotable", true);
+    c.decimals = std::clamp(static_cast<int>(std::lround(o.number("decimals", 3))), 0, 12);
+    c.writes = !trimmedText(markers::strip(o.text("resultTo"), markers::Mode::Expression)).empty();
+    // L'unite de la Valeur de depart : celle de sa variable (une mesure en mbar), comme UNITE(x) ; un calcul n'en a pas.
+    c.sourceUnit.clear();
+    if (const Prop* vp = raw.find("value"); vp && !vp->expr.empty() && project_) {
+        const std::string unit = units::unitOfPath(*project_, trimmedText(markers::strip(vp->expr, markers::Mode::Expression)));
+        if (cat.unit(unit)) c.sourceUnit = cat.canonical(unit);
+    }
+    // Les proprietes reprennent la main quand elles changent (une formule) ; sinon le choix de l'operateur reste.
+    const std::string pFrom = trimmedText(o.text("unitFrom")), pTo = trimmedText(o.text("unitTo"));
+    if (c.from.empty() || pFrom != c.propFrom) c.from = !c.sourceUnit.empty() ? c.sourceUnit : canon(pFrom);
+    if (c.to.empty() || pTo != c.propTo) c.to = canon(pTo);
+    c.propFrom = pFrom;
+    c.propTo = pTo;
+    // La valeur : ce qui est tape (et garde), sinon la Valeur de depart - dans l'unite de De (une mesure en mbar
+    // montree en bar si l'operateur choisit bar : la valeur reste vraie).
+    double value = 0;
+    bool ok = false;
+    const auto fit = forms_.find(raw.id);
+    std::string typedText;
+    bool editing = false, fresh = false;
+    if (fit != forms_.end()) {
+        if (const auto t = fit->second.text.find("valeur"); t != fit->second.text.end()) typedText = trimmedText(t->second);
+        editing = !fit->second.focus.empty() && focused_ == raw.id;
+        fresh = fit->second.fresh;
+    }
+    c.typed = !typedText.empty() && !(editing && fresh);
+    if (c.typed) {
+        c.valueText = typedText;
+        ok = units::parseValue(typedText, value);
+    } else {
+        const double start = o.number("value", 0);
+        ok = std::isfinite(start);
+        value = start;
+        if (!c.sourceUnit.empty() && cat.unit(c.from) && foldedSymbol(c.from) != foldedSymbol(c.sourceUnit))
+            if (const auto aff = cat.convert(c.sourceUnit, c.from)) value = aff->apply(start);
+        c.valueText = ok ? units::formatResult(value, 6) : std::string("?");
+        // La case a le clavier mais rien n'est encore tape : elle suit (la premiere frappe remplacera).
+        if (editing && fresh) {
+            fit->second.text["valeur"] = c.valueText;
+            fit->second.caret["valeur"] = c.valueText.size();
+        }
+    }
+    if (ok) {
+        c.conv = units::convertValue(cat, value, c.from, c.to);
+    } else {
+        c.conv = units::Conversion{};
+        c.conv.from = cat.canonical(c.from);
+        c.conv.to = cat.canonical(c.to);
+        c.conv.error = "valeur illisible \xC2\xAB " + c.valueText + " \xC2\xBB";
+    }
+    c.choices = c.open ? converterChoices(cat, c, c.open) : std::vector<std::string>{};
+    if (c.open && c.choices.empty()) c.open = 0;
+}
+
+void Runtime::converterPart(const View& v, const Object& o, std::string_view part, double now) {
+    if (!converters_.count(o.id)) converterRecompute(o.id);   // avant le premier cycle
+    auto& c = converters_[o.id];
+    if (!o.flag("pilotable", true)) return;                     // il montre, il ne reagit pas
+    const units::Catalog cat = converterCatalog(project_);
+    const std::string source = where(v, &o);
+    auto& f = forms_[o.id];
+    const auto closeList = [&] {
+        c.open = 0;
+        c.first = 0;
+        c.choices.clear();
+    };
+    const auto leaveField = [&] {
+        if (focused_ == o.id && !f.focus.empty()) {
+            if (f.fresh) f.text.erase("valeur");    // rien tape : la Valeur de depart reste suivie
+            f.focus.clear();
+            f.fresh = false;
+            focused_ = kNoId;
+        }
+    };
+    const auto choose = [&](int list, std::string_view symbol) {
+        const std::string sym = cat.unit(symbol) ? cat.canonical(symbol) : trimmedText(symbol);
+        if (list == 2) {
+            c.to = sym;
+            return;
+        }
+        c.from = sym;
+        // Vers suit la dimension de De : une arrivee d'une autre dimension devient la reference (ou une autre unite).
+        const auto* fu = cat.unit(c.from);
+        const auto* tu = cat.unit(c.to);
+        if (fu && (!tu || tu->family != fu->family)) {
+            std::string next;
+            if (const auto* fam = cat.family(fu->family); fam && cat.unit(fam->reference) && foldedSymbol(fam->reference) != foldedSymbol(c.from))
+                next = cat.canonical(fam->reference);
+            for (const auto* u : units::unitsOf(cat, fu->family))
+                if (next.empty() && u->symbol != c.from) next = u->symbol;
+            c.to = next.empty() ? c.from : next;
+        }
+    };
+    f.message.clear();
+    f.error = false;
+    if (part == "valeur") {
+        closeList();
+        if (focused_ == o.id && f.focus == "valeur") return;   // deja en saisie
+        f.text["valeur"] = c.valueText;
+        f.focus = "valeur";
+        f.caret["valeur"] = c.valueText.size();
+        f.fresh = true;                                        // la premiere frappe remplace la valeur montree
+        focused_ = o.id;
+    } else if (part.rfind("valeur:", 0) == 0) {                // un essai : une valeur tapee d'un coup
+        closeList();
+        leaveField();
+        f.text["valeur"] = std::string(part.substr(7));
+    } else if (part == "de" || part == "vers") {
+        leaveField();
+        const int want = part == "de" ? 1 : 2;
+        if (c.open == want) {
+            closeList();
+        } else {
+            c.open = want;
+            c.choices = converterChoices(cat, c, want);
+            const std::string& cur = want == 1 ? c.from : c.to;
+            std::size_t at = 0;
+            for (std::size_t i = 0; i < c.choices.size(); ++i)
+                if (foldedSymbol(c.choices[i]) == foldedSymbol(cur)) at = i;
+            c.first = at > 1 ? at - 1 : 0;                     // l'unite choisie se voit, une au-dessus
+            if (c.choices.empty()) closeList();
+        }
+    } else if (part.rfind("choix:", 0) == 0) {
+        const std::string n(part.substr(6));
+        char* end = nullptr;
+        const unsigned long i = std::strtoul(n.c_str(), &end, 10);
+        if (c.open && end && *end == '\0' && i < c.choices.size()) choose(c.open, c.choices[i]);
+        closeList();
+    } else if (part.rfind("de:", 0) == 0 || part.rfind("vers:", 0) == 0) {   // un essai : l'unite par son symbole
+        leaveField();
+        const bool de = part.rfind("de:", 0) == 0;
+        choose(de ? 1 : 2, part.substr(de ? 3 : 5));
+        closeList();
+    } else if (part == "liste:haut" || part == "liste:bas") {
+        const auto l = units::converterLayout(o.number("w", 420), o.number("h", 170), o.number("fontSize", 14), !o.text("title").empty(),
+                                              c.writes, c.open, c.choices.size(), c.first);
+        const std::size_t step = std::max<std::size_t>(1, l.rows.size());
+        c.first = part == "liste:haut" ? (l.first > step ? l.first - step : 0) : std::min(l.first + step, c.choices.empty() ? 0 : c.choices.size() - 1);
+    } else if (part == "dehors") {
+        closeList();
+    } else if (part == "inverser") {
+        leaveField();
+        closeList();
+        std::swap(c.from, c.to);
+    } else if (part == "ecrire") {
+        leaveField();
+        closeList();
+        converterRecompute(o.id);
+        const std::string var = trimmedText(markers::strip(o.text("resultTo"), markers::Mode::Expression));
+        if (var.empty()) {
+            formMessage(o.id, "aucune variable dans R\xC3\xA9sultat vers", true, now);
+        } else if (!c.conv.ok) {
+            formMessage(o.id, "rien \xC3\xA0 \xC3\xA9" "crire : " + c.conv.error, true, now);
+        } else if (project_ && project_->security.enabled && !permitted("Piloter")) {
+            const std::string refused = std::string(kindLabel(o.kind)) + " : permission \xC2\xAB Piloter \xC2\xBB requise ("
+                                      + (user_.empty() ? std::string("personne n'est connect\xC3\xA9") : "utilisateur " + user_) + ")";
+            event("Acc\xC3\xA8s refus\xC3\xA9", source, refused);
+            formMessage(o.id, "permission Piloter requise", true, now);
+        } else {
+            const auto aliases = viewAliases(v.id);
+            // 1.14.1 (lot N5, retouche) : le message de l'objet montre le nombre a la francaise (1500,5 mbar) ; la Console
+            // garde la valeur ecrite, un nombre (Var := 1500.5), comme ses autres lignes Var := valeur. Les unites : comme
+            // les listes les montrent (le signe degre, pas degC).
+            const std::string toLabel = unitLabel(c.conv.to), fromLabel = unitLabel(c.conv.from);
+            if (writeConverted(var, sim::Value::real(c.conv.result), source, &o)) {
+                log("Action", source, var + " := " + units::resultNumber(c.conv.result, c.decimals) + " " + toLabel + " ("
+                                          + units::resultNumber(c.conv.value, 6) + " " + fromLabel + ")");
+                formMessage(o.id, "\xC3\x89" "crit : " + var + " = " + units::formatResult(c.conv.result, c.decimals) + " " + toLabel, false,
+                            now);
+            } else {
+                formMessage(o.id, "\xC3\xA9" "criture refus\xC3\xA9" "e : " + var + " (voir la Console)", true, now);
+            }
+        }
+        return;
+    }
+    converterRecompute(o.id);
+}
+
+void Runtime::converterSubmit(const View&, const Object& o, double now) {
+    auto& f = forms_[o.id];
+    const std::string text = trimmedText(f.text["valeur"]);
+    double x = 0;
+    if (!f.fresh && !text.empty() && !units::parseValue(text, x)) {
+        formMessage(o.id, "valeur illisible \xC2\xAB " + text + " \xC2\xBB : un nombre (1,5 ou 1.5, -40, 2,5E3)", true, now);
+        return;   // la case garde le clavier
+    }
+    if (f.fresh) f.text.erase("valeur");   // Entree sans rien taper : la Valeur de depart reste suivie
+    f.focus.clear();
+    f.fresh = false;
+    if (focused_ == o.id) focused_ = kNoId;
+    converterRecompute(o.id);
 }
 
 } // namespace hmi

@@ -198,6 +198,14 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"signedWord", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"keyColor", Role::Color}, {"opColor", Role::Color}, {"equalsColor", Role::Color}, {"displayColor", Role::Color},
     {"startValue", Role::Formula, Role::Number}, {"resultTo", Role::Formula, Role::Text},
+    // 1.14.1 (lot N5) : le Convertisseur d'unites - la dimension, les unites de depart et d'arrivee, ou ecrire le resultat
+    {"dimension", Role::Choice}, {"unitFrom", Role::Text}, {"unitTo", Role::Text},
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers - sa source (un chemin, ses reperes en texte), le filtre, la recherche, ce qu'il
+    // permet (rafraichir, extraire et ou), la ligne choisie ecrite, les colonnes, le nombre de lignes au plus
+    {"folder", Role::Name}, {"filter", Role::Text}, {"showSearch", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"pickTo", Role::Formula, Role::Text}, {"allowRefresh", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"allowExtract", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"extractTo", Role::Name},
+    {"showSize", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showDate", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},
@@ -378,6 +386,10 @@ inline constexpr KeyRole kKeyRoles[] = {
         if (k == Kind::AnimatedGif) { r.role = Role::Number; r.type = "INT"; }
     } else if (key == "page") {
         if (k == Kind::DocumentViewer) { r.role = Role::Number; r.type = "INT"; }   // 1.12.30 : la page d'un document
+    } else if (key == "resultTo") {
+        // 1.14.1 : la Calculatrice (N4) ecrit un nombre ou un texte (Role::Text, la table) ; le Convertisseur
+        // d'unites (N5) ecrit un nombre.
+        if (k == Kind::UnitConverter) r.item = Role::Number;
     } else if (rangeNameKey(k, key)) {
         // une borne, un seuil se tapent aussi en formule sans = (Consigne_Max) ; 1.12.10 : plus seulement
         // celles du champ de saisie

@@ -65,6 +65,7 @@
 #include "../src/hmi/HmiNavigation.hpp"
 #include "../src/hmi/HmiLoginMenu.hpp"
 #include "../src/hmi/HmiDesign.hpp"
+#include "../third_party/miniz.h"   // 1.14.1 (lot N5) : les zips des essais de l'explorateur
 #include "../src/hmi/HmiDuplicate.hpp"   // 1.10.2 (chantier D)
 #include "../src/hmi/HmiMarkers.hpp"     // 1.11 (REP) : le lecteur des reperes $...$
 #include "../src/hmi/HmiWhy.hpp"         // 1.12.27 : Pourquoi ?
@@ -114,6 +115,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>     // 1.14.1 (lot N5) : std::memset (les zips des essais)
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -31767,10 +31769,707 @@ void calculatrice1141() {
     }
 }
 
+// 1.14.1 (lot N5) : CONVERTIR DES UNITES - le calcul partage (units::convertValue : celui de EN), la formule, l'expression
+// a copier, les refus ; l'objet Convertisseur d'unites en marche (la case Valeur, De, Vers, inverser, Ecrire, la Valeur
+// de depart suivie, une variable qui a une unite, le niveau d'acces, Pilotable), Generer, Dupliquer, le code brut.
+void unites1141() {
+    std::printf("1.14.1 : convertir des unit\xC3\xA9s (le calcul, l'objet Convertisseur en marche, G\xC3\xA9n\xC3\xA9rer)\n");
+    namespace hu = units;
+    const hu::Catalog cat;
+    // ---- le calcul : celui de Catalog::convert (EN), dit avec sa formule
+    const auto conv = [&](double v, const char* a, const char* b) { return hu::convertValue(cat, v, a, b); };
+    const auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9 * std::max(1.0, std::fabs(b)); };
+    auto c1 = conv(1.5, "bar", "mbar");
+    check(c1.ok && near(c1.result, 1500) && c1.from == "bar" && c1.to == "mbar" && c1.formula == "1 bar = 1000 mbar",
+          "1.5 bar = 1500 mbar ; la formule 1 bar = 1000 mbar : " + c1.formula);
+    auto c2 = conv(20, "degc", "K");
+    check(c2.ok && near(c2.result, 293.15) && c2.from == "degC" && c2.formula == "\xC2\xB0" "C -> K : x + 273,15",
+          "20 degC = 293.15 K (degc reconnu) ; la formule \xC2\xB0" "C -> K : x + 273,15 (la virgule) : " + c2.formula);
+    auto c3 = conv(20, "degC", "degF");
+    check(c3.ok && near(c3.result, 68) && c3.formula.find("x \xC3\x97 1,8 + 32") != std::string::npos, "20 \xC2\xB0" "C = 68 \xC2\xB0" "F (x \xC3\x97 1,8 + 32) : " + c3.formula);
+    auto c4 = conv(-40, "degF", "degC");
+    check(c4.ok && near(c4.result, -40), "-40 \xC2\xB0" "F = -40 \xC2\xB0" "C (le d\xC3\xA9" "calage n\xC3\xA9gatif)");
+    auto c5 = conv(1, "m3/s", "m3/h");
+    auto c6 = conv(120, "L/min", "m3/h");
+    check(c5.ok && near(c5.result, 3600) && c6.ok && near(c6.result, 7.2) && c5.formula == "1 m\xC2\xB3/s = 3600 m\xC2\xB3/h",
+          "d\xC3\xA9" "bit : 1 m3/s = 3600 m3/h, 120 L/min = 7.2 m3/h (la formule lue \xC2\xB3) : " + c5.formula);
+    auto c7 = conv(2.5, "bar", "psi");
+    check(c7.ok && std::fabs(c7.result - 36.2594) < 1e-3 && hu::formatResult(c7.result, 3) == "36,259" && hu::formatResult(1500.0, 6) == "1500",
+          "2.5 bar en psi : 36,259 (3 d\xC3\xA9" "cimales, la virgule) ; 1500 sans z\xC3\xA9ros inutiles");
+    // 1.14.1 (lot N5, retouche) : montre a la francaise (la virgule, comme la Calculatrice) ; la valeur en nombre (le point)
+    // pour la Console ; pas de separateur de milliers.
+    check(hu::resultNumber(c7.result, 3) == "36.259" && hu::formatResult(-1234.5, 3) == "-1234,5" && hu::formatResult(1234567.25, 2) == "1234567,25",
+          "le m\xC3\xAA" "me nombre en valeur : 36.259 ; -1234,5 ; 1234567,25 (sans espace des milliers)");
+    check(hu::formatResult(1.0 / 86400000.0, 6).find("E-8") != std::string::npos && hu::formatResult(1.0 / 86400000.0, 6).find('.') == std::string::npos
+              && hu::resultNumber(1.0 / 86400000.0, 6).find("e-08") != std::string::npos && hu::formatResult(0.0, 3) == "0"
+              && hu::formatResult(-0.0001, 3) != "-0",
+          "un tr\xC3\xA8s petit r\xC3\xA9sultat garde ses chiffres (1 ms en jours : " + hu::formatResult(1.0 / 86400000.0, 6) + ") ; 0 ; pas de -0");
+    for (const auto& u : cat.units())
+        for (const auto& w : cat.units()) {
+            if (u.family != w.family) continue;
+            const auto aff = cat.convert(u.symbol, w.symbol);
+            const auto r = hu::convertValue(cat, 12.5, u.symbol, w.symbol);
+            if (!aff || !r.ok || r.result != aff->apply(12.5)) check(false, "le m\xC3\xAA" "me calcul que Catalog::convert : " + u.symbol + " -> " + w.symbol);
+        }
+    check(true, "chaque paire d'unit\xC3\xA9s d'une m\xC3\xAA" "me famille : le r\xC3\xA9sultat est celui de Catalog::convert (EN)");
+    auto e1 = conv(1, "bars", "mbar");
+    auto e2 = conv(1, "bar", "degC");
+    auto e3 = conv(1, "Nm3/h", "m3/h");
+    check(!e1.ok && e1.error.find("unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB") != std::string::npos, "unit\xC3\xA9 inconnue : " + e1.error);
+    check(!e2.ok && e2.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos && e2.error.find("une pression") != std::string::npos
+              && e2.error.find("une temp\xC3\xA9rature") != std::string::npos && e2.formula.empty(),
+          "dimensions diff\xC3\xA9rentes, dites avec leurs familles : " + e2.error);
+    // 1.14.1 (lot N5, retouche) : l'unite citee comme les listes la montrent (\xC2\xB0" "C), jamais le symbole brut degC.
+    check(e2.error.find("\xC2\xB0" "C une temp\xC3\xA9rature") != std::string::npos && e2.error.find("des bar en \xC2\xB0" "C") != std::string::npos
+              && e2.error.find("degC") == std::string::npos,
+          "le refus cite \xC2\xB0" "C, pas degC : " + e2.error);
+    check(!e3.ok && e3.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos, "Nm3/h et m3/h : deux dimensions (on ne ment pas sur les conditions normales)");
+    check(hu::enExpression("Pression", "mbar") == "EN(Pression, 'mbar')" && hu::enExpression("", "K") == "EN(Valeur, 'K')", "l'expression \xC3\xA0 copier");
+    double pv = 0;
+    check(hu::parseValue(" 1,5 ", pv) && pv == 1.5 && hu::parseValue("2.5e3", pv) && pv == 2500 && !hu::parseValue("abc", pv) && !hu::parseValue("", pv)
+              && !hu::parseValue("1.5 bar", pv),
+          "la valeur tap\xC3\xA9" "e : 1,5 et 2.5e3 ; refus\xC3\xA9" "s : du texte, rien, une unit\xC3\xA9 coll\xC3\xA9" "e");
+    check(hu::familyFrom(cat, "Temp\xC3\xA9rature") == "temperature" && hu::familyFrom(cat, "pression") == "pression" && hu::familyFrom(cat, "toutes").empty()
+              && hu::unitsOf(cat, "Temp\xC3\xA9rature").size() == 3 && hu::unitsOf(cat, "").size() == cat.units().size(),
+          "la dimension par son libell\xC3\xA9 ou son nom ; ses unit\xC3\xA9s (3 temp\xC3\xA9ratures) ; toutes");
+    // Le calcul du moteur : EN dans un script donne le meme nombre.
+    {
+        Project p;
+        View v = makeView(p, "Vue_EN");
+        Variable pr = hmiVar(p, "Pression", "REAL", "1.5");
+        pr.unit = "bar";
+        p.programs.variables.push_back(pr);
+        p.programs.variables.push_back(hmiVar(p, "Resultat", "REAL", "0.0"));
+        Variable t = hmiVar(p, "Temperature", "REAL", "20.0");
+        t.unit = "degC";
+        p.programs.variables.push_back(t);
+        p.programs.variables.push_back(hmiVar(p, "ResultatF", "REAL", "0.0"));
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Conv";
+        sc.event = "Appel";
+        sc.body = "Resultat := EN(Pression, 'psi');\nResultatF := EN(Temperature, 'degF');";
+        p.programs.scripts.push_back(sc);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0);
+        rt.tick(0.1);
+        std::string why;
+        check(rt.callScript("Conv", 0.2, &why), "EN dans un script " + why);
+        const auto* r = rt.variable("Resultat");
+        const auto* rf = rt.variable("ResultatF");
+        check(r && rf && r->asReal() == conv(1.5, "bar", "psi").result && rf->asReal() == conv(20, "degC", "degF").result,
+              "EN(Pression, 'psi') et EN(Temperature, 'degF') : le m\xC3\xAA" "me nombre que l'onglet Convertir et l'objet");
+    }
+
+    // ---- l'objet : registre, valeurs neuves, roles, exemple, sujet de l'aide
+    {
+        const Kind k = Kind::UnitConverter;
+        const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), k);
+        check(at != std::end(kPlaceableKinds) && kindFromKey(kindKey(k)) == k && kindLabel(k) == "Convertisseur d'unit\xC3\xA9s"
+                  && examples::exampleFor(k).has_value() && hmi::guide::topicForKind(kindKey(k)) != nullptr,
+              "Convertisseur d'unit\xC3\xA9s : dans la biblioth\xC3\xA8que, sa cl\xC3\xA9, son exemple, son sujet du guide");
+        const Object fo = makeObject(k, 7, "Conv_1", 0, 0, 1);
+        check(fo.text("unitFrom") == "bar" && fo.text("unitTo") == "mbar" && fo.text("value") == "1" && fo.text("dimension") == "toutes"
+                  && fo.number("decimals") == 3 && fo.text("resultTo").empty() && fo.flag("pilotable", false),
+              "Convertisseur neuf : 1 bar -> mbar, toutes les dimensions, 3 d\xC3\xA9" "cimales, sans R\xC3\xA9sultat vers, pilotable");
+        for (const auto& prop : fo.props) check(roles::keyRole(prop.key) != nullptr, "Convertisseur : le r\xC3\xB4le de " + prop.key);
+        const auto ex = examples::exampleFor(k);
+        bool hasConv = false;
+        for (const auto& o : ex->project.views.front().objects) hasConv = hasConv || o.kind == k;
+        check(hasConv && !ex->steps.empty(), "l'exemple anim\xC3\xA9 : un convertisseur et ses gestes");
+        const auto l = hu::converterLayout(420, 150, 14, false, true, 0, 0, 0);
+        check(l.value.w > 0 && l.from.x > l.value.x + l.value.w && l.swap.x > l.from.x && l.to.x > l.swap.x && l.write.w > 0
+                  && hu::converterHit(l, l.swap.x + 2, l.swap.y + 2) == "inverser" && hu::converterHit(l, l.write.x + 2, l.write.y + 2) == "ecrire"
+                  && hu::converterHit(l, l.value.x + 2, l.value.y + 2) == "valeur",
+              "la g\xC3\xA9om\xC3\xA9trie : Valeur, De, inverser, Vers sur une ligne ; \xC3\x89" "crire ; ce qui se clique");
+        const auto lo = hu::converterLayout(420, 150, 14, false, false, 1, 36, 0);
+        check(lo.list.w > 0 && !lo.rows.empty() && lo.down.w > 0 && lo.up.w == 0 && hu::converterHit(lo, lo.rows[0].x + 4, lo.rows[0].y + 2) == "choix:0"
+                  && hu::converterHit(lo, lo.down.x + 4, lo.down.y + 2) == "liste:bas",
+              "la liste De ouverte : ses lignes, la fl\xC3\xA8" "che du bas (36 unit\xC3\xA9s ne tiennent pas)");
+        const auto last = hu::converterLayout(420, 150, 14, false, false, 1, 36, 100);
+        check(last.up.w > 0 && last.down.w == 0 && !last.rowIndex.empty() && last.rowIndex.back() == 35, "au bout : la fl\xC3\xA8" "che du haut, la derni\xC3\xA8re unit\xC3\xA9");
+    }
+
+    // ---- en marche : la Valeur de depart suivie, la saisie, De, Vers, inverser, Ecrire, le niveau d'acces, Pilotable
+    {
+        Project op;
+        View ov = makeView(op, "Vue_Conv");
+        Variable pr = hmiVar(op, "Mesure", "REAL", "1500.0");
+        pr.unit = "mbar";
+        op.programs.variables.push_back(pr);
+        op.programs.variables.push_back(hmiVar(op, "Sortie", "REAL", "0.0"));
+        op.programs.variables.push_back(hmiVar(op, "SortieInt", "INT", "0"));
+        Script monte;
+        monte.id = op.allocate();
+        monte.name = "Monte";
+        monte.event = "Appel";
+        monte.body = "Mesure := 2000.0;";
+        op.programs.scripts.push_back(monte);
+        const Id cv = edit::add(op, ov, Kind::UnitConverter, 10, 10);
+        ov.object(cv)->name = "Conv";
+        ov.object(cv)->set("resultTo", "Sortie");
+        const Id cm = edit::add(op, ov, Kind::UnitConverter, 10, 200);
+        ov.object(cm)->name = "Conv_Mesure";
+        ov.object(cm)->setExpr("value", "Mesure");
+        ov.object(cm)->set("unitTo", "bar");
+        const Id fixe = edit::add(op, ov, Kind::UnitConverter, 10, 400);
+        ov.object(fixe)->name = "Conv_Fixe";
+        ov.object(fixe)->setFlag("pilotable", false);
+        const Id garde = edit::add(op, ov, Kind::UnitConverter, 10, 600);
+        ov.object(garde)->name = "Conv_Reserve";
+        ov.object(garde)->setNumber("access", 3);
+        ov.object(garde)->set("resultTo", "SortieInt");
+        const Id temp = edit::add(op, ov, Kind::UnitConverter, 500, 10);
+        ov.object(temp)->name = "Conv_Temp";
+        ov.object(temp)->set("dimension", "Temp\xC3\xA9rature");
+        ov.object(temp)->set("unitFrom", "degC");
+        ov.object(temp)->set("unitTo", "K");
+        op.views = {ov};
+        op.config.startView = ov.id;
+        Runtime rt;
+        rt.bind(&op, nullptr);
+        rt.start(0);
+        rt.tick(0.1);
+        const auto* c = rt.unitConverter(cv);
+        check(c && c->conv.ok && c->conv.result == 1000 && c->valueText == "1" && c->from == "bar" && c->to == "mbar" && c->writes,
+              "au d\xC3\xA9part : 1 bar = 1000 mbar (ses propri\xC3\xA9t\xC3\xA9s), le bouton \xC3\x89" "crire");
+        const auto* m = rt.unitConverter(cm);
+        check(m && m->sourceUnit == "mbar" && m->from == "mbar" && m->conv.ok && m->conv.result == 1.5 && m->valueText == "1500",
+              "la Valeur de d\xC3\xA9part = Mesure (REAL [mbar]) : l'unit\xC3\xA9 de d\xC3\xA9part est la sienne, 1500 mbar = 1.5 bar");
+        (void)rt.callScript("Monte", 0.15);
+        rt.tick(0.2);
+        check(rt.unitConverter(cm)->conv.result == 2.0, "la mesure change : le convertisseur suit (2000 mbar = 2 bar)");
+        rt.objectPart(cm, "de:bar", 0.25);
+        rt.objectPart(cm, "vers:mbar", 0.25);
+        check(rt.unitConverter(cm)->valueText == "2" && rt.unitConverter(cm)->conv.result == 2000,
+              "De = bar alors que la mesure est en mbar : la case montre la mesure en bar (2), la valeur reste vraie");
+        // 1.14.1 (lot N5, retouche) : la mesure suivie se montre a la francaise dans la case (29,007548 psi).
+        rt.objectPart(cm, "de:psi", 0.26);
+        check(rt.unitConverter(cm)->valueText.find(',') != std::string::npos && rt.unitConverter(cm)->valueText.find('.') == std::string::npos
+                  && near(rt.unitConverter(cm)->conv.result, 2000),
+              "De = psi : la case montre la mesure \xC3\xA0 la fran\xC3\xA7" "aise (" + rt.unitConverter(cm)->valueText + ")");
+        rt.objectPart(cm, "de:bar", 0.27);
+        // La saisie : la premiere frappe remplace, la virgule passe, le resultat suit chaque frappe.
+        rt.objectPart(cv, "valeur", 0.3);
+        check(rt.focusedObject() == cv && rt.keyboardMode().empty(), "un clic sur la case Valeur : le clavier (sans clavier virtuel par d\xC3\xA9" "faut)");
+        rt.typeText("2", 0.31);
+        check(rt.unitConverter(cv)->conv.result == 2000, "la premi\xC3\xA8re frappe remplace : 2 bar = 2000 mbar");
+        rt.typeText(",5x", 0.32);
+        check(rt.unitConverter(cv)->valueText == "2,5" && rt.unitConverter(cv)->conv.result == 2500, "2,5 (la lettre refus\xC3\xA9" "e) : 2500 mbar, \xC3\xA0 chaque frappe");
+        rt.typeKey(EditKey::Enter, 0.33);
+        rt.tick(0.4);
+        check(rt.focusedObject() == kNoId && rt.unitConverter(cv)->typed && rt.unitConverter(cv)->conv.result == 2500, "Entr\xC3\xA9" "e : la valeur tap\xC3\xA9" "e reste");
+        // De : la liste (toutes les unites), une ligne ; Vers suit la dimension de De.
+        rt.objectPart(cv, "de", 0.5);
+        const auto* oc = rt.unitConverter(cv);
+        check(oc->open == 1 && oc->choices.size() == cat.units().size(), "De : la liste de toutes les unit\xC3\xA9s s'ouvre");
+        std::size_t degC = 0;
+        for (std::size_t i = 0; i < oc->choices.size(); ++i)
+            if (oc->choices[i] == "degC") degC = i;
+        rt.objectPart(cv, "choix:" + std::to_string(degC), 0.51);
+        oc = rt.unitConverter(cv);
+        check(oc->open == 0 && oc->from == "degC" && oc->to == "K" && oc->conv.ok && near(oc->conv.result, 275.65),
+              "De = degC : Vers (mbar, une autre dimension) devient K, la r\xC3\xA9" "f\xC3\xA9rence ; 2,5 \xC2\xB0" "C = 275.65 K");
+        rt.objectPart(cv, "vers", 0.52);
+        check(rt.unitConverter(cv)->open == 2 && rt.unitConverter(cv)->choices == std::vector<std::string>{"K", "degC", "degF"},
+              "Vers : seulement la dimension de De (K, degC, degF)");
+        rt.objectPart(cv, "dehors", 0.53);
+        rt.objectPart(cv, "inverser", 0.54);
+        oc = rt.unitConverter(cv);
+        check(oc->from == "K" && oc->to == "degC" && near(oc->conv.result, -270.65), "inverser : 2,5 K = -270.65 \xC2\xB0" "C");
+        // Echap : la valeur tapee est oubliee, la Valeur de depart revient.
+        rt.objectPart(cv, "valeur", 0.6);
+        rt.typeText("9", 0.61);
+        rt.typeKey(EditKey::Escape, 0.62);
+        rt.tick(0.7);
+        check(!rt.unitConverter(cv)->typed && rt.unitConverter(cv)->valueText == "1", "\xC3\x89" "chap : la case revient \xC3\xA0 la Valeur de d\xC3\xA9part (1)");
+        // Une valeur illisible : dite, rien n'est ecrit.
+        rt.objectPart(cv, "valeur:abc", 0.8);
+        check(!rt.unitConverter(cv)->conv.ok && rt.unitConverter(cv)->conv.error.find("valeur illisible") != std::string::npos,
+              "une valeur illisible : dite dans l'objet");
+        rt.objectPart(cv, "ecrire", 0.81);
+        check(rt.variable("Sortie")->asReal() == 0.0 && rt.formState(cv) && rt.formState(cv)->error, "\xC3\x89" "crire refuse une conversion impossible");
+        // Ecrire : le resultat dans Resultat vers, la Console le dit.
+        rt.objectPart(cv, "valeur:1.5", 0.9);
+        rt.objectPart(cv, "de:bar", 0.9);
+        rt.objectPart(cv, "vers:mbar", 0.9);
+        rt.objectPart(cv, "ecrire", 0.91);
+        check(rt.variable("Sortie")->asReal() == 1500.0 && journalHas(rt, "Action", "Sortie := 1500 mbar (1.5 bar)") && !rt.formState(cv)->error,
+              "\xC3\x89" "crire : Sortie = 1500 (la Console : Sortie := 1500 mbar (1.5 bar))");
+        // 1.14.1 (lot N5, retouche) : un resultat a virgule - le message de l'objet a la francaise, la Console en nombre.
+        rt.objectPart(cv, "valeur:1,23456", 0.92);
+        rt.objectPart(cv, "ecrire", 0.93);
+        check(near(rt.variable("Sortie")->asReal(), 1234.56) && rt.formState(cv)->message == "\xC3\x89" "crit : Sortie = 1234,56 mbar"
+                  && journalHas(rt, "Action", "Sortie := 1234.56 mbar (1.23456 bar)"),
+              "\xC3\x89" "crire 1,23456 bar : l'objet dit 1234,56 mbar, la Console Sortie := 1234.56 mbar (1.23456 bar) : "
+                  + rt.formState(cv)->message);
+        // Les dimensions differentes (une unite tapee par un script ou une formule) : dites, rien d'ecrit.
+        rt.objectPart(cv, "vers:degC", 0.95);
+        check(!rt.unitConverter(cv)->conv.ok && rt.unitConverter(cv)->conv.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos,
+              "bar vers degC : dimensions diff\xC3\xA9rentes, dit");
+        check(rt.unitConverter(cv)->conv.error.find("\xC2\xB0" "C une temp\xC3\xA9rature") != std::string::npos,
+              "dans l'objet aussi, l'unit\xC3\xA9 cit\xC3\xA9" "e est \xC2\xB0" "C : " + rt.unitConverter(cv)->conv.error);
+        rt.objectPart(cv, "vers:bars", 0.96);
+        check(rt.unitConverter(cv)->conv.error.find("unit\xC3\xA9 inconnue") != std::string::npos, "une unit\xC3\xA9 inconnue : dite");
+        // La Dimension : De ne propose qu'elle.
+        rt.objectPart(temp, "de", 1.0);
+        check(rt.unitConverter(temp)->choices == std::vector<std::string>{"K", "degC", "degF"}, "Dimension Temp\xC3\xA9rature : De ne propose qu'elle");
+        // Pilotable decoche : il montre, il ne reagit pas.
+        rt.objectPart(fixe, "inverser", 1.1);
+        rt.objectPart(fixe, "valeur", 1.1);
+        check(rt.unitConverter(fixe)->from == "bar" && rt.focusedObject() != fixe, "non pilotable : ni inverser, ni la case");
+        // Le niveau d'acces (securite active) : refuse, l'evenement le dit.
+        op.security.enabled = true;
+        rt.objectPart(garde, "ecrire", 1.2);
+        check(rt.variable("SortieInt")->asInteger() == 0 && eventHas(rt, "Acc\xC3\xA8s refus\xC3\xA9", "niveau d'acc\xC3\xA8s 3"),
+              "sous s\xC3\xA9" "curit\xC3\xA9, le niveau d'acc\xC3\xA8s de l'objet : refus\xC3\xA9");
+        op.security.enabled = false;
+        rt.objectPart(garde, "ecrire", 1.3);
+        check(rt.variable("SortieInt")->asInteger() == 1000, "sans s\xC3\xA9" "curit\xC3\xA9 : 1000 \xC3\xA9" "crit dans un INT (converti vers son type)");
+    }
+
+    // ---- Generer : unites inconnues, dimensions incompatibles, dimension inconnue, Resultat vers inconnu
+    {
+        Project gp;
+        View gv = makeView(gp, "Vue_Gen");
+        Variable t = hmiVar(gp, "Temp", "REAL", "20.0");
+        t.unit = "degC";
+        gp.programs.variables.push_back(t);
+        const auto add = [&](const char* name) {
+            const Id id = edit::add(gp, gv, Kind::UnitConverter, 10, 10);
+            gv.object(id)->name = name;
+            return id;
+        };
+        const Id ok = add("Conv_Bon");
+        const Id unknownU = add("Conv_Inconnue");
+        gv.object(unknownU)->set("unitFrom", "bars");
+        const Id incompat = add("Conv_Incompatible");
+        gv.object(incompat)->set("unitTo", "degC");
+        const Id dimBad = add("Conv_Dimension");
+        gv.object(dimBad)->set("dimension", "Vitesse");
+        const Id src = add("Conv_Source");
+        gv.object(src)->setExpr("value", "Temp");
+        const Id target = add("Conv_Cible");
+        gv.object(target)->set("resultTo", "Inconnue_Var");
+        const Id notNum = add("Conv_PasNombre");
+        gv.object(notNum)->set("value", "deux");
+        gp.views = {gv};
+        gp.config.startView = gv.id;
+        const auto gen = generate(gp, [](std::string_view) { return false; });
+        const auto has = [&](Id id, const char* key, const char* text) {
+            for (const auto& i : gen)
+                if (i.object == id && i.property == key && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        bool okClean = true;
+        for (const auto& i : gen) okClean = okClean && i.object != ok;
+        check(okClean, "Generer : un convertisseur neuf ne dit rien");
+        check(has(unknownU, "unitFrom", "unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB"), "Generer : l'unit\xC3\xA9 inconnue bars");
+        check(has(incompat, "unitTo", "dimensions incompatibles") && has(incompat, "unitTo", "bar est une pression, \xC2\xB0" "C une temp\xC3\xA9rature"),
+              "Generer : bar vers degC, dimensions incompatibles (l'unit\xC3\xA9 cit\xC3\xA9" "e est \xC2\xB0" "C)");
+        check(has(dimBad, "dimension", "dimension inconnue \xC2\xAB Vitesse \xC2\xBB"), "Generer : la dimension inconnue Vitesse");
+        check(has(src, "value", "dimensions incompatibles : Temp est en \xC2\xB0" "C"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
+        check(has(target, "resultTo", "Inconnue_Var"), "Generer : une variable inconnue dans R\xC3\xA9sultat vers");
+        check(has(notNum, "value", "n'est pas un nombre"), "Generer : une Valeur de d\xC3\xA9part qui n'est pas un nombre");
+        // Dupliquer (copier-coller) et le code brut : les proprietes suivent.
+        const View& vv = *gp.view(gp.views[0].id);
+        const std::string code = serializeObjectCode(vv, {src});
+        auto back = parseObjectCode(code);
+        check(back && back->objects.size() == 1 && back->objects[0] == *vv.object(src), "Convertisseur : le code brut se relit \xC3\xA0 l'identique");
+        View dup = vv;
+        const auto copies = edit::duplicate(gp, dup, {incompat}, 20, 20);
+        check(copies.size() == 1 && dup.object(copies[0]) && dup.object(copies[0])->kind == Kind::UnitConverter
+                  && dup.object(copies[0])->text("unitTo") == "degC",
+              "Dupliquer le convertisseur : ses unit\xC3\xA9s suivent");
+    }
+    // ---- un projet 1.14.0 s'ouvre sans rien perdre ; l'objet neuf s'enregistre et se relit
+    {
+        Project q;
+        View qv = makeView(q, "Vue_Avant");
+        (void)edit::add(q, qv, Kind::Slider, 10, 10);
+        q.views = {qv};
+        const auto files = serializeProject(q);
+        std::string text;
+        for (const auto& f : files) if (f.data) text.append(f.data->begin(), f.data->end());
+        check(text.find("UnitConverter") == std::string::npos && text.find("resultTo") == std::string::npos,
+              "un projet sans convertisseur s'\xC3\xA9" "crit comme en 1.14.0");
+        View nv = qv;
+        const Id a1 = edit::add(q, nv, Kind::UnitConverter, 300, 10);
+        nv.object(a1)->set("unitFrom", "L/min");
+        nv.object(a1)->set("unitTo", "m3/h");
+        auto back = parseView(serializeView(nv));
+        check(back && back->object(a1) && *back->object(a1) == *nv.object(a1), "le convertisseur s'enregistre et se relit (L/min -> m3/h)");
+    }
+}
+
+// 1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS - un faux dossier dans un dossier temporaire (des fichiers de plusieurs
+// genres, un sous-dossier, un zip avec un sous-dossier et un zip dedans, un zip hostile) : la liste, le tri, la
+// navigation (et le refus de remonter au-dessus de la source), l'infobulle, le filtre, la recherche, Choix vers, le
+// double-clic (ses actions), l'extraction (permise, refusee, jamais d'ecrasement), le zip hostile, Generer, Dupliquer.
+namespace n5x {
+
+void writeFile(const fs::path& p, const std::string& data) {
+    fs::create_directories(p.parent_path());
+    std::ofstream out(p, std::ios::binary);
+    out.write(data.data(), static_cast<std::streamsize>(data.size()));
+}
+
+// Un zip en memoire (miniz) ; `names` et `datas` vont ensemble.
+std::string zipOf(const std::vector<std::pair<std::string, std::string>>& files) {
+    mz_zip_archive zip;
+    std::memset(&zip, 0, sizeof zip);
+    if (!mz_zip_writer_init_heap(&zip, 0, 0)) return {};
+    for (const auto& [name, data] : files)
+        (void)mz_zip_writer_add_mem(&zip, name.c_str(), data.data(), data.size(), MZ_DEFAULT_COMPRESSION);
+    void* buf = nullptr;
+    size_t size = 0;
+    (void)mz_zip_writer_finalize_heap_archive(&zip, &buf, &size);
+    std::string out(static_cast<const char*>(buf), size);
+    mz_zip_writer_end(&zip);
+    return out;
+}
+
+// Une PNG minimale (64 x 32) : la signature, IHDR (et son CRC), IEND.
+std::string tinyPng() {
+    std::string s("\x89PNG\r\n\x1A\n", 8);
+    const auto be32 = [](std::uint32_t v) {
+        std::string b(4, '\0');
+        b[0] = static_cast<char>(v >> 24);
+        b[1] = static_cast<char>(v >> 16);
+        b[2] = static_cast<char>(v >> 8);
+        b[3] = static_cast<char>(v);
+        return b;
+    };
+    std::string ihdr = "IHDR" + be32(64) + be32(32) + std::string("\x08\x06\x00\x00\x00", 5);
+    s += be32(13) + ihdr + be32(static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>(ihdr.data()), ihdr.size())));
+    s += be32(0) + "IEND" + be32(static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>("IEND"), 4)));
+    return s;
+}
+
+long rowOf(const Runtime::FileExplorer* e, const std::string& name) {
+    if (!e) return -1;
+    for (std::size_t i = 0; i < e->shown.size(); ++i)
+        if (e->shown[i].name == name) return static_cast<long>(i);
+    return -1;
+}
+std::string names(const Runtime::FileExplorer* e) {
+    std::string s;
+    if (e)
+        for (const auto& x : e->shown) s += x.name + (x.folder ? "/" : "") + " ";
+    return s;
+}
+
+} // namespace n5x
+
+void explorateur1141() {
+    std::printf("1.14.1 : l'explorateur de fichiers (dossier, zip, zip hostile, infobulle, extraction, G\xC3\xA9n\xC3\xA9rer)\n");
+    namespace ex = explorer;
+    using n5x::rowOf;
+    using n5x::names;
+    const fs::path root = fs::temp_directory_path() / ("n5_explorateur_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const fs::path src = root / "Echanges";
+    n5x::writeFile(src / "rapport.pdf", "%PDF-1.4\n% un faux PDF pour l'essai\n" + std::string(3000, 'x'));
+    n5x::writeFile(src / "mesures.csv", "Date;Pression\n2026-10-30 08:00;1.52\n2026-10-30 08:10;1.49\n");
+    n5x::writeFile(src / "notes.txt", "Premiere ligne des notes\nDeuxieme ligne\nTroisieme\n");
+    n5x::writeFile(src / "logo.png", n5x::tinyPng());
+    n5x::writeFile(src / "alarme.wav", std::string("RIFF\x24\x00\x00\x00WAVE", 12));
+    n5x::writeFile(src / "ligne.xpgproj", "<projet/>");
+    n5x::writeFile(src / "Sous-dossier" / "a.txt", "aaa");
+    n5x::writeFile(src / "Sous-dossier" / "b.txt", "bbbbbb");
+    const std::string inner = n5x::zipOf({{"dedans.txt", "dans le zip du zip"}});
+    n5x::writeFile(src / "archive.zip", n5x::zipOf({{"docs/notice.txt", std::string(4000, 'n')},
+                                                     {"docs/sous/plan.csv", "a;b\n1;2\n"},
+                                                     {"inner.zip", inner},
+                                                     {"lisez.txt", "Bonjour depuis le zip\nligne 2\n"}}));
+    // Le zip hostile : ../, une lettre de lecteur, des \ qui remontent, une taille annoncee enorme (4 Go).
+    std::string hostile = n5x::zipOf({{"../evil.txt", "evil"}, {"C:/win.txt", "win"}, {"a\\..\\..\\b.txt", "b"}, {"ok.txt", "ok"},
+                                      {"huge.txt", std::string(200, 'h')}});
+    {
+        // La taille decompressee de huge.txt (sa 5e entree du repertoire central) : 0xFFFFFF00.
+        std::size_t at = 0;
+        for (int k = 0; k < 5; ++k) at = hostile.find(std::string("PK\x01\x02", 4), k == 0 ? 0 : at + 4);
+        if (at != std::string::npos) {
+            hostile[at + 24] = '\x00';
+            hostile[at + 25] = '\xFF';
+            hostile[at + 26] = '\xFF';
+            hostile[at + 27] = '\xFF';
+        }
+    }
+    n5x::writeFile(src / "hostile.zip", hostile);
+
+    // ---- le moteur pur : la liste, les genres, le tri, l'infobulle
+    {
+        ex::Location loc{src.string(), {}};
+        const auto li = ex::list(loc, {});
+        check(li.error.empty() && li.total == 9 && li.entries.size() == 9 && !li.inZip, "la source : 9 \xC3\xA9l\xC3\xA9ments " + li.error);
+        auto v = li.entries;
+        ex::sort(v, ex::SortKey::Name, false);
+        check(v[0].name == "Sous-dossier" && v[0].folder && v[0].genre == ex::Genre::Folder, "tri par nom : les dossiers d'abord");
+        const auto genreOfName = [&](const char* n) {
+            for (const auto& e : v)
+                if (e.name == n) return e.genre;
+            return ex::Genre::Other;
+        };
+        check(genreOfName("rapport.pdf") == ex::Genre::Pdf && genreOfName("mesures.csv") == ex::Genre::Csv && genreOfName("notes.txt") == ex::Genre::Text
+                  && genreOfName("logo.png") == ex::Genre::Image && genreOfName("alarme.wav") == ex::Genre::Sound
+                  && genreOfName("archive.zip") == ex::Genre::Zip && genreOfName("ligne.xpgproj") == ex::Genre::Project,
+              "un genre par extension : pdf, csv, texte, image, son, zip, projet de l'appli");
+        ex::sort(v, ex::SortKey::Size, true);
+        check(v[0].folder && v[1].name == "rapport.pdf", "tri par taille d\xC3\xA9" "croissante : le dossier d'abord, puis le plus gros (rapport.pdf)");
+        check(ex::validStep("Sous-dossier") && !ex::validStep("..") && !ex::validStep("a/b") && !ex::validStep("C:") && !ex::validStep(""),
+              "une \xC3\xA9tape valable : ni .., ni /, ni lecteur");
+        std::vector<std::string> steps;
+        check(ex::splitSteps("archive.zip/docs", steps) && steps.size() == 2 && !ex::splitSteps("../x", steps) && !ex::splitSteps("a/../b", steps),
+              "un chemin sous la source ; ../ refus\xC3\xA9");
+        check(ex::filterProblem("*.csv;*.pdf").empty() && ex::filterProblem("csv, .PDF").empty() && !ex::filterProblem("*.c/v").empty()
+                  && !ex::filterProblem("**").empty(),
+              "le filtre : *.csv;*.pdf et csv, .PDF lisibles ; *.c/v et ** non");
+        check(ex::sizeText(900) == "900 octets" && ex::sizeText(12700) == "12,4 Ko" && !ex::dateText(1793350000).empty() && ex::dateText(0).empty(),
+              "les tailles et les dates lisibles");
+        // 1.14.1 (lot N5, retouche) : le fil d'Ariane mesure avec la police (le peintre et la souris passent la mesure) :
+        // une etape = son texte + 10 pixels (4 devant, 6 avant le separateur), pas 0,56 em par caractere.
+        const std::vector<std::string> fil{"archives_2026.zip", "docs"};
+        const ex::TextWidth sept = [](std::string_view t, double) { return 7.0 * static_cast<double>(t.size()); };
+        const auto lm = ex::layoutOf(700, 300, 13, fil, true, true, false, true, true, true, 0, 0, sept);
+        const double sep = 13 * 1.1;
+        check(lm.crumbs.size() == 2 && lm.firstCrumb == 0 && std::fabs(lm.crumbs[0].w - (7.0 * 17 + 10)) < 1e-9
+                  && std::fabs(lm.crumbs[1].x - (lm.crumbs[0].right() + sep)) < 1e-9 && std::fabs(lm.crumbs[1].w - (7.0 * 4 + 10)) < 1e-9,
+              "le fil mesur\xC3\xA9 : archives_2026.zip = 17 x 7 + 10 px, docs juste apr\xC3\xA8s le s\xC3\xA9parateur");
+        const auto le = ex::layoutOf(700, 300, 13, fil, true, true, false, true, true, true, 0, 0);
+        check(le.crumbs[0].w < 17 * 13 * 0.56 + 10 && le.crumbs[0].w > 17 * 13 * 0.4,
+              "sans mesure (G\xC3\xA9n\xC3\xA9rer) : une estimation resserr\xC3\xA9" "e (0,5 em par caract\xC3\xA8re)");
+        // Une mesure plus etroite garde plus d'etapes : le fil n'est resume ("...") que s'il ne tient pas.
+        const std::vector<std::string> long6{"Source_principale", "Dossier_numero_un", "Dossier_numero_deux", "Dossier_numero_trois", "Ici"};
+        const auto large = ex::layoutOf(420, 300, 13, long6, false, false, false, true, true, true, 0, 0,
+                                        [](std::string_view t, double) { return 12.0 * static_cast<double>(t.size()); });
+        const auto fin = ex::layoutOf(420, 300, 13, long6, false, false, false, true, true, true, 0, 0,
+                                      [](std::string_view t, double) { return 4.0 * static_cast<double>(t.size()); });
+        check(large.firstCrumb > fin.firstCrumb && large.crumbs.back().w > 0 && ex::hit(fin, fin.crumbs[fin.firstCrumb].cx(), fin.crumbs[fin.firstCrumb].cy())
+                                                                                     == "ariane:" + std::to_string(fin.firstCrumb),
+              "un texte plus large r\xC3\xA9sume plus t\xC3\xB4t (" + std::to_string(large.firstCrumb) + " contre " + std::to_string(fin.firstCrumb)
+                  + ") ; une \xC3\xA9tape mesur\xC3\xA9" "e se clique o\xC3\xB9 elle se dessine");
+    }
+
+    // ---- l'objet en marche
+    Project p;
+    View v = makeView(p, "Vue_Fichiers");
+    p.programs.variables.push_back(hmiVar(p, "Chemin", "STRING", "''"));
+    p.programs.variables.push_back(hmiVar(p, "Ouvert", "INT", "0"));
+    const auto addExp = [&](const char* name, const std::string& source) {
+        const Id id = edit::add(p, v, Kind::FileExplorer, 10, 10);
+        v.object(id)->name = name;
+        v.object(id)->set("folder", source);
+        return id;
+    };
+    const Id fx = addExp("Explorateur", src.string());
+    v.object(fx)->set("pickTo", "Chemin");
+    v.object(fx)->actions.push_back(act(Trigger::DoubleClick, Operation::Increment, "Ouvert"));
+    const Id filt = addExp("Filtre", src.string());
+    v.object(filt)->set("filter", "*.csv;*.pdf");
+    const Id rel = addExp("Relatif", "Echanges/archive.zip");
+    v.object(rel)->setFlag("allowExtract", true);
+    const Id few = addExp("Peu", src.string());
+    v.object(few)->setNumber("maxItems", 3);
+    const Id bad = addExp("Hostile", (src / "hostile.zip").string());
+    v.object(bad)->setFlag("allowExtract", true);
+    const Id fixe = addExp("Fixe", src.string());
+    v.object(fixe)->setFlag("pilotable", false);
+    p.views = {v};
+    p.config.startView = v.id;
+    Runtime rt;
+    Runtime::Hooks hooks;
+    hooks.projectFolder = [&] { return root.string(); };
+    rt.setHooks(hooks);
+    rt.bind(&p, nullptr);
+    rt.start(0);
+    rt.tick(0.1);
+    const auto* e = rt.fileExplorer(fx);
+    check(e && e->loads == 1 && e->shown.size() == 9 && e->label == "Echanges" && e->loc.at.empty(),
+          "\xC3\xA0 l'ouverture de la vue : la source lue une fois, 9 lignes, le fil : Echanges");
+    rt.tick(0.2);
+    rt.tick(0.3);
+    check(rt.fileExplorer(fx)->loads == 1, "pas relue \xC3\xA0 chaque cycle");
+    rt.objectPart(fx, "rafraichir", 0.4);
+    check(rt.fileExplorer(fx)->loads == 2 && rt.fileExplorer(fx)->message.find("Rafra\xC3\xAE" "chi : 9") == 0, "Rafra\xC3\xAE" "chir : relue, dit");
+    // Choisir une ligne : Choix vers recoit le chemin complet.
+    rt.objectPart(fx, "ligne:" + std::to_string(rowOf(rt.fileExplorer(fx), "notes.txt")), 0.5);
+    check(rt.variable("Chemin") && rt.variable("Chemin")->asString() == (src / "notes.txt").string(), "une ligne choisie : Chemin = son chemin complet");
+    // Le double-clic sur un fichier : ses actions Double clic ; sur un dossier : il s'ouvre.
+    rt.objectPart(fx, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(fx), "rapport.pdf")), 0.6);
+    check(rt.variable("Ouvert")->asInteger() == 1 && rt.variable("Chemin")->asString() == (src / "rapport.pdf").string(),
+          "double-clic sur rapport.pdf : Choix vers, puis l'action Double clic (Ouvert = 1)");
+    rt.objectPart(fx, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(fx), "Sous-dossier")), 0.7);
+    e = rt.fileExplorer(fx);
+    check(e->loc.at == std::vector<std::string>{"Sous-dossier"} && names(e) == "a.txt b.txt " && rt.explorerCrumbs(fx).size() == 2,
+          "double-clic sur Sous-dossier : il s'ouvre (a.txt, b.txt), le fil a deux \xC3\xA9tapes : " + names(e));
+    rt.objectPart(fx, "monter", 0.8);
+    rt.objectPart(fx, "monter", 0.81);
+    e = rt.fileExplorer(fx);
+    check(e->loc.at.empty() && e->error && e->message.find("on ne remonte pas au-dessus") != std::string::npos, "remonter \xC3\xA0 la source : refus\xC3\xA9, dit");
+    rt.objectPart(fx, "aller:../..", 0.82);
+    check(rt.fileExplorer(fx)->loc.at.empty() && rt.fileExplorer(fx)->error && journalHas(rt, "Erreur", "chemin refus\xC3\xA9"),
+          "aller:../.. (un script, un essai) : refus\xC3\xA9, jamais au-dessus de la source");
+    // Le tri par colonne : un clic trie, le second inverse.
+    rt.objectPart(fx, "colonne:taille", 0.9);
+    e = rt.fileExplorer(fx);
+    check(e->sortBy == ex::SortKey::Size && !e->descending && e->shown[1].name == "ligne.xpgproj", "Taille : croissante (le plus petit fichier apr\xC3\xA8s le dossier) " + names(e));
+    rt.objectPart(fx, "colonne:taille", 0.91);
+    check(rt.fileExplorer(fx)->descending && rt.fileExplorer(fx)->shown[1].name == "rapport.pdf", "Taille encore : d\xC3\xA9" "croissante");
+    rt.objectPart(fx, "colonne:nom", 0.92);
+    // La recherche Nom contient : au clavier (la case), puis Echap.
+    rt.objectPart(fx, "recherche", 1.0);
+    rt.typeText("NOT", 1.01);
+    check(names(rt.fileExplorer(fx)) == "notes.txt ", "Nom contient NOT (sans casse) : notes.txt " + names(rt.fileExplorer(fx)));
+    rt.typeKey(EditKey::Escape, 1.02);
+    check(rt.fileExplorer(fx)->shown.size() == 9 && rt.focusedObject() == kNoId, "\xC3\x89" "chap : la recherche s'efface");
+    // L'infobulle : le texte (premieres lignes), l'image (ses dimensions), le dossier (son contenu), le zip (sa table).
+    const auto tipOf = [&](const char* n) { return rt.explorerTip(fx, static_cast<std::size_t>(rowOf(rt.fileExplorer(fx), n))); };
+    const auto tNotes = tipOf("notes.txt"), tLogo = tipOf("logo.png"), tSous = tipOf("Sous-dossier"), tZip = tipOf("archive.zip");
+    check(tNotes.title == "notes.txt" && tNotes.body.find("\xC2\xAB Premiere ligne des notes") != std::string::npos && tNotes.body.find("Taille : 50 octets") != std::string::npos
+              && tNotes.body.find("Modifi\xC3\xA9 le") != std::string::npos && tNotes.body.find("notes.txt") != std::string::npos,
+          "l'infobulle d'un texte : le chemin, la taille, la date, ses premi\xC3\xA8res lignes :\n" + tNotes.body);
+    check(tLogo.body.find("64 \xC3\x97 32 pixels") != std::string::npos, "l'infobulle d'une image : ses dimensions\n" + tLogo.body);
+    check(tSous.body.find("Contenu : 2 fichiers, 9 octets en tout") != std::string::npos, "l'infobulle d'un dossier : ses \xC3\xA9l\xC3\xA9ments et sa taille\n" + tSous.body);
+    check(tZip.body.find("Archive : 4 fichiers") != std::string::npos, "l'infobulle d'un zip : ses entr\xC3\xA9" "es\n" + tZip.body);
+    // Le filtre d'extensions : les dossiers et les zips passent.
+    check(names(rt.fileExplorer(filt)) == "Sous-dossier/ archive.zip hostile.zip mesures.csv rapport.pdf ",
+          "le filtre *.csv;*.pdf : csv, pdf, les dossiers et les zips " + names(rt.fileExplorer(filt)));
+    // N elements au plus : la liste s'arrete et le dit.
+    check(rt.fileExplorer(few)->shown.size() == 3 && rt.fileExplorer(few)->listing.truncated, "maxItems 3 : 3 lignes, et la liste le dit");
+    // Pilotable decoche : il montre, il ne reagit pas.
+    rt.objectPart(fixe, "ouvrir:0", 1.1);
+    check(rt.fileExplorer(fixe)->loc.at.empty(), "non pilotable : le double-clic ne l'ouvre pas");
+
+    // ---- un zip : relatif au dossier du projet, un dossier dedans, un zip dans le zip, l'extraction
+    e = rt.fileExplorer(rel);
+    check(e && e->listing.inZip && names(e) == "docs/ inner.zip lisez.txt " && e->label == "archive.zip", "un zip (relatif au projet) : se parcourt comme un dossier " + names(e));
+    const auto tLisez = rt.explorerTip(rel, static_cast<std::size_t>(rowOf(e, "lisez.txt")));
+    check(tLisez.body.find("compress\xC3\xA9" "e") != std::string::npos && tLisez.body.find("taux") != std::string::npos
+              && tLisez.body.find("\xC2\xAB Bonjour depuis le zip") != std::string::npos && tLisez.body.find("dans un zip") != std::string::npos,
+          "l'infobulle d'une entr\xC3\xA9" "e de zip : la taille compress\xC3\xA9" "e et le taux, ses premi\xC3\xA8res lignes\n" + tLisez.body);
+    rt.objectPart(rel, "ouvrir:" + std::to_string(rowOf(e, "docs")), 1.2);
+    e = rt.fileExplorer(rel);
+    check(names(e) == "sous/ notice.txt " && e->loc.at == std::vector<std::string>{"docs"}, "docs, un dossier du zip : sous/, notice.txt " + names(e));
+    const auto tDocs = rt.explorerTip(rel, static_cast<std::size_t>(rowOf(e, "sous")));
+    check(tDocs.body.find("Contenu : 1 fichier") != std::string::npos, "l'infobulle d'un dossier du zip : son contenu\n" + tDocs.body);
+    rt.objectPart(rel, "ariane:0", 1.3);
+    rt.objectPart(rel, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(rel), "inner.zip")), 1.4);
+    check(names(rt.fileExplorer(rel)) == "dedans.txt ", "un zip dans le zip : il s'ouvre aussi (dedans.txt)");
+    rt.objectPart(rel, "ariane:0", 1.5);
+    rt.objectPart(rel, "ligne:" + std::to_string(rowOf(rt.fileExplorer(rel), "lisez.txt")), 1.6);
+    rt.objectPart(rel, "extraire", 1.7);
+    const fs::path out = root / "donnees" / "extraits" / "lisez.txt";
+    check(fs::exists(out) && fs::file_size(out) == 30 && !rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("Extrait") == 0,
+          "Extraire (permis) : lisez.txt dans donnees/extraits " + rt.fileExplorer(rel)->message);
+    rt.objectPart(rel, "extraire", 1.8);
+    check(rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("rien n'est \xC3\xA9" "cras\xC3\xA9") != std::string::npos,
+          "Extraire encore : refus\xC3\xA9 (jamais d'\xC3\xA9" "crasement) " + rt.fileExplorer(rel)->message);
+    rt.objectPart(fx, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(fx), "archive.zip")), 1.9);
+    rt.objectPart(fx, "ligne:" + std::to_string(rowOf(rt.fileExplorer(fx), "lisez.txt")), 1.91);
+    rt.objectPart(fx, "extraire", 1.92);
+    check(rt.fileExplorer(fx)->error && rt.fileExplorer(fx)->message.find("pas permis") != std::string::npos, "Extraire d\xC3\xA9" "coch\xC3\xA9 (par d\xC3\xA9" "faut) : refus\xC3\xA9");
+
+    // ---- le zip hostile : rien ne sort, rien ne casse
+    e = rt.fileExplorer(bad);
+    check(e && e->listing.error.empty() && e->listing.suspicious >= 3 && rowOf(e, "evil.txt") >= 0 && rowOf(e, "win.txt") >= 0 && rowOf(e, "a") >= 0
+              && rowOf(e, "..") < 0,
+          "le zip hostile : ../evil.txt, C:/win.txt, a\\..\\..\\b.txt ramen\xC3\xA9s dans le zip (" + std::to_string(e ? e->listing.suspicious : 0) + " noms) " + names(e));
+    check(journalHas(rt, "", "noms ramen\xC3\xA9s dans le zip"), "la Console le dit");
+    const auto tEvil = rt.explorerTip(bad, static_cast<std::size_t>(rowOf(e, "evil.txt")));
+    check(tEvil.body.find("Nom ramen\xC3\xA9 dans l'archive") != std::string::npos, "son infobulle le dit\n" + tEvil.body);
+    const auto hugeRow = static_cast<std::size_t>(rowOf(e, "huge.txt"));
+    check(e->shown[hugeRow].size == 0xFFFFFF00ull && rt.explorerTip(bad, hugeRow).body.find("Go") != std::string::npos,
+          "une taille annonc\xC3\xA9" "e de 4 Go : montr\xC3\xA9" "e, rien n'est d\xC3\xA9" "compress\xC3\xA9 pour l'infobulle");
+    rt.objectPart(bad, "ligne:" + std::to_string(hugeRow), 2.0);
+    rt.objectPart(bad, "extraire", 2.01);
+    check(rt.fileExplorer(bad)->error && rt.fileExplorer(bad)->message.find("trop gros") != std::string::npos, "extraire les 4 Go annonc\xC3\xA9s : refus\xC3\xA9 (trop gros)");
+    rt.objectPart(bad, "ligne:" + std::to_string(rowOf(rt.fileExplorer(bad), "evil.txt")), 2.1);
+    rt.objectPart(bad, "extraire", 2.11);
+    check(fs::exists(root / "donnees" / "extraits" / "evil.txt") && !fs::exists(root / "donnees" / "evil.txt") && !fs::exists(root / "evil.txt"),
+          "extraire ../evil.txt : il arrive dans donnees/extraits, jamais au-dessus");
+
+    // ---- vide : le dossier ressources du projet (pas encore enregistre : ses ressources en memoire)
+    {
+        Project q;
+        View qv = makeView(q, "Vue_Res");
+        for (const char* n : {"vanne.svg", "notice.pdf"}) {
+            Resource r;
+            r.id = q.allocate();
+            r.name = n;
+            r.data = std::make_shared<Bytes>(Bytes(120, 'x'));
+            q.assets.resources.push_back(r);
+        }
+        const Id rid = edit::add(q, qv, Kind::FileExplorer, 10, 10);
+        q.views = {qv};
+        q.config.startView = qv.id;
+        Runtime qr;
+        qr.bind(&q, nullptr);
+        qr.start(0);
+        qr.tick(0.1);
+        const auto* re = qr.fileExplorer(rid);
+        check(re && re->resources && re->shown.size() == 2 && re->label == "Ressources du projet"
+                  && qr.explorerTip(rid, 0).body.find("Ressource du projet") != std::string::npos,
+              "source vide, projet pas enregistr\xC3\xA9 : les ressources du projet (en m\xC3\xA9moire), leur infobulle");
+    }
+
+    // ---- registre, valeurs neuves, roles, exemple, aide ; Generer ; Dupliquer, code brut
+    {
+        const Kind k = Kind::FileExplorer;
+        const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), k);
+        check(at != std::end(kPlaceableKinds) && kindFromKey(kindKey(k)) == k && kindLabel(k) == "Explorateur de fichiers"
+                  && examples::exampleFor(k).has_value() && hmi::guide::topicForKind(kindKey(k)) != nullptr,
+              "Explorateur de fichiers : dans la biblioth\xC3\xA8que, sa cl\xC3\xA9, son exemple, son sujet du guide");
+        const Object fo = makeObject(k, 7, "Exp_1", 0, 0, 1);
+        check(fo.text("folder").empty() && !fo.flag("allowExtract", true) && fo.flag("allowRefresh", false) && fo.flag("showSearch", false)
+                  && fo.text("extractTo") == "donnees/extraits" && fo.number("maxItems") == 2000 && fo.flag("pilotable", false),
+              "Explorateur neuf : les ressources du projet, Extraire d\xC3\xA9" "coch\xC3\xA9, Rafra\xC3\xAE" "chir et la recherche, 2000 \xC3\xA9l\xC3\xA9ments au plus");
+        for (const auto& prop : fo.props) check(roles::keyRole(prop.key) != nullptr, "Explorateur : le r\xC3\xB4le de " + prop.key);
+        Project gp = p;
+        View& gv = gp.views[0];
+        gv.object(filt)->set("filter", "*.c/v");
+        gv.object(few)->set("folder", (root / "nulle_part").string());
+        gv.object(fixe)->set("folder", (src / "rapport.pdf").string());
+        gv.object(fx)->set("pickTo", "Inconnue_Var");
+        const auto gen = generate(gp, [](std::string_view) { return false; }, root.string());
+        const auto has = [&](Id id, const char* key, const char* text) {
+            for (const auto& i : gen)
+                if (i.object == id && i.property == key && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        check(has(filt, "filter", "filtre illisible"), "Generer : le filtre illisible *.c/v");
+        check(has(few, "folder", "source introuvable"), "Generer : la source introuvable");
+        check(has(fixe, "folder", "ni un dossier ni un .zip"), "Generer : une source qui n'est ni un dossier ni un zip");
+        check(has(fx, "pickTo", "Inconnue_Var"), "Generer : une variable inconnue dans Choix vers");
+        bool relOk = true;
+        for (const auto& i : gen) relOk = relOk && !(i.object == rel && i.property == "folder");
+        check(relOk, "Generer : une source relative au projet qui existe ne dit rien");
+        const std::string code = serializeObjectCode(gv, {fx});
+        auto back = parseObjectCode(code);
+        check(back && back->objects.size() == 1 && back->objects[0] == *gv.object(fx), "Explorateur : le code brut se relit \xC3\xA0 l'identique");
+        View dup = gv;
+        const auto copies = edit::duplicate(gp, dup, {filt}, 20, 20);
+        check(copies.size() == 1 && dup.object(copies[0])->kind == Kind::FileExplorer && dup.object(copies[0])->text("filter") == "*.c/v",
+              "Dupliquer l'explorateur : son filtre suit");
+    }
+    fs::remove_all(root, ec);
+}
+
 int main(int argc, char** argv) {
     // 1.14.1 (lot N4) : HMI_TEST_1141=1 - la Calculatrice, seule.
     if (const char* only = std::getenv("HMI_TEST_1141"); only && *only == '1') {
         calculatrice1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.14.1 (lot N5) : HMI_TEST_N5=1 - convertir des unites, l'explorateur de fichiers, seuls.
+    if (const char* only = std::getenv("HMI_TEST_N5"); only && *only == '1') {
+        unites1141();
+        explorateur1141();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -32109,6 +32808,8 @@ int main(int argc, char** argv) {
     son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     finsDeCourse1141();               // 1.14.1 (lot N1) : vannes et registres commandes par leurs fins de course
     calculatrice1141();               // 1.14.1 (lot N4) : la Calculatrice (standard, scientifique, programmeur)
+    unites1141();                     // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
+    explorateur1141();                // 1.14.1 (lot N5) : l'explorateur de fichiers (dossier, zip, zip hostile)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);
