@@ -44,6 +44,7 @@
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -133,7 +134,11 @@ public:
     [[nodiscard]] bool cacheChecked(ai::memory::Part p) const;
     [[nodiscard]] ai::memory::Usage cacheSelection() const;   // ce que Vider le cache liberera
     bool clearCache(bool now = false);
-    void setPersistentChecked(ai::memory::Persistent p, bool on);
+    void setPersistentChecked(ai::memory::Persistent p, bool on);   // une categorie vide ne se coche pas
+    [[nodiscard]] bool persistentChecked(ai::memory::Persistent p) const {
+        return std::find(persistentOn_.begin(), persistentOn_.end(), p) != persistentOn_.end();
+    }
+    [[nodiscard]] bool persistentEmpty(ai::memory::Persistent p) const;   // rien a supprimer (0 fichier)
     void setUnderstood(bool on);
     [[nodiscard]] bool understood() const noexcept { return understood_; }
     bool deletePersistent(bool now = false);            // refuse sans "Je comprends"

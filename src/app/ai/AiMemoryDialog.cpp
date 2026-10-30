@@ -1504,6 +1504,9 @@ void AiMemoryDialog::refresh() {
     conversations_ = mem::loadConversations();
     attachments_ = mem::attachmentFolders(conversations_);
     activity_ = mem::readActivity();
+    // la zone rouge : une categorie devenue vide se decoche (elle se grise, syncWidgets)
+    persistentOn_.erase(std::remove_if(persistentOn_.begin(), persistentOn_.end(), [&](mem::Persistent p) { return persistentEmpty(p); }),
+                        persistentOn_.end());
     hits_ = search_.empty() ? std::vector<mem::Hit>{} : mem::search(search_, conversations_, registry_.all());
     if (!selectedKnowledge_.empty() && !registry_.find(selectedKnowledge_)) selectedKnowledge_.clear();
     rebuildTables();
@@ -1877,16 +1880,25 @@ void AiMemoryDialog::syncWidgets() {
             box->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
             box->setTooltip(std::string(mem::cacheConsequence(p)));
         }
+        // 1.14.2 (captures) : UNE CATEGORIE VIDE NE SE COCHE PAS dans la zone rouge (grisee, son infobulle dit
+        // pourquoi) ; Supprimer definitivement reste grise tant qu'aucune categorie non vide n'est cochee.
+        const auto plan = mem::persistentPlan(measure_);
         bool any = false;
         for (auto& [p, box] : cleaning_->persistent) {
-            const bool on = std::find(persistentOn_.begin(), persistentOn_.end(), p) != persistentOn_.end();
+            const auto& line = plan[static_cast<std::size_t>(p)];
+            const bool empty = persistentEmpty(p);
+            const bool on = !empty && std::find(persistentOn_.begin(), persistentOn_.end(), p) != persistentOn_.end();
             any = any || on;
             box->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+            box->setEnabled(!empty);
+            box->setTooltip(empty ? "Vide (0 fichier) : rien \xC3\xA0 supprimer." : line.consequence);
         }
         cleaning_->understood->setState(understood_ ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
         cleaning_->clear->setEnabled(cacheSelection().files > 0);
         cleaning_->erase->setEnabled(understood_ && any);
-        cleaning_->erase->setTooltip(understood_ ? std::string{} : "Coche d'abord \xC2\xAB Je comprends \xC2\xBB.");
+        cleaning_->erase->setTooltip(!understood_ ? std::string("Coche d'abord \xC2\xAB Je comprends \xC2\xBB.")
+                                     : !any       ? std::string("Coche d'abord une cat\xC3\xA9gorie qui contient des donn\xC3\xA9" "es.")
+                                                  : std::string{});
         cleaning_->invalidateLayout();
         cleaning_->invalidate();
     }
@@ -2404,9 +2416,15 @@ bool AiMemoryDialog::doClearCache() {
     return true;
 }
 
+bool AiMemoryDialog::persistentEmpty(mem::Persistent p) const {
+    const auto plan = mem::persistentPlan(measure_);
+    const auto i = static_cast<std::size_t>(p);
+    return i >= plan.size() || plan[i].usage.files == 0;
+}
+
 void AiMemoryDialog::setPersistentChecked(mem::Persistent p, bool on) {
     persistentOn_.erase(std::remove(persistentOn_.begin(), persistentOn_.end(), p), persistentOn_.end());
-    if (on) persistentOn_.push_back(p);
+    if (on && !persistentEmpty(p)) persistentOn_.push_back(p);   // vide : rien a supprimer, elle ne se coche pas
     syncWidgets();
 }
 
@@ -2420,8 +2438,12 @@ bool AiMemoryDialog::deletePersistent(bool now) {
         say("Coche d'abord \xC2\xAB Je comprends \xC2\xBB : ces donn\xC3\xA9" "es ne se r\xC3\xA9" "cup\xC3\xA8rent pas.", true);
         return false;
     }
+    // une categorie devenue vide depuis (supprimee ailleurs) ne compte plus
+    persistentOn_.erase(std::remove_if(persistentOn_.begin(), persistentOn_.end(), [&](mem::Persistent p) { return persistentEmpty(p); }),
+                        persistentOn_.end());
     if (persistentOn_.empty()) {
-        say("Coche les donn\xC3\xA9" "es \xC3\xA0 supprimer.", true);
+        say("Coche les donn\xC3\xA9" "es \xC3\xA0 supprimer (une cat\xC3\xA9gorie vide n'a rien \xC3\xA0 supprimer).", true);
+        syncWidgets();
         return false;
     }
     if (now) return doDeletePersistent();

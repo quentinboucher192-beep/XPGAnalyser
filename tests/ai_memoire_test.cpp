@@ -24,6 +24,7 @@
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
+#include "../src/ui/widgets/Controls.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -660,6 +661,31 @@ void dialog() {
           "Oui : supprimees, les comptes et les jauges suivent");
     check(!d.understood(), "\xC2\xAB Je comprends \xC2\xBB se decoche apres");
     check(d.measured().of(mem::Part::Settings).files >= 1 && fs::exists(ia / "parametres.json"), "les parametres jamais touches");
+    // 1.14.2 (captures) : une categorie VIDE ne se coche pas dans la zone rouge (grisee, son infobulle dit
+    // pourquoi) ; Supprimer definitivement reste grise tant qu'aucune categorie non vide n'est cochee.
+    {
+        auto* box = dynamic_cast<ui::Checkbox*>(d.widgetRoot()->findById("ia.memoire.nettoyage.persistant.conversations"));
+        auto* erase = dynamic_cast<ui::Button*>(d.widgetRoot()->findById("ia.memoire.nettoyage.supprimer"));
+        check(box && erase, "la zone rouge : la case des conversations et le bouton");
+        d.setUnderstood(true);
+        d.setPersistentChecked(mem::Persistent::Conversations, true);
+        check(d.persistentEmpty(mem::Persistent::Conversations) && !d.persistentChecked(mem::Persistent::Conversations),
+              "une categorie vide (0 conversation) ne se coche pas");
+        check(box && !box->enabled() && !box->isChecked() && box->tooltip().find("rien \xC3\xA0 supprimer") != std::string::npos,
+              "sa case est grisee, son infobulle dit pourquoi (" + (box ? box->tooltip() : std::string{}) + ")");
+        check(erase && !erase->enabled() && !erase->tooltip().empty(), "\xC2\xAB Je comprends \xC2\xBB coche, rien de non vide : Supprimer reste grise ("
+                                                                     + (erase ? erase->tooltip() : std::string{}) + ")");
+        check(!d.deletePersistent() && !d.confirming(), "rien a supprimer : pas de confirmation (" + d.message() + ")");
+        check(!d.persistentEmpty(mem::Persistent::Activity), "le journal d'activite n'est pas vide");
+        d.setPersistentChecked(mem::Persistent::Activity, true);
+        check(d.persistentChecked(mem::Persistent::Activity) && erase && erase->enabled() && erase->tooltip().empty(),
+              "une categorie non vide cochee : Supprimer s'active");
+        auto* act = dynamic_cast<ui::Checkbox*>(d.widgetRoot()->findById("ia.memoire.nettoyage.persistant.activite"));
+        check(act && act->enabled() && act->isChecked(), "sa case est cochee et active");
+        d.setPersistentChecked(mem::Persistent::Activity, false);
+        d.setUnderstood(false);
+        check(erase && !erase->enabled() && erase->tooltip().find("Je comprends") != std::string::npos, "decochee : de nouveau grise");
+    }
     // 1.14.2 (captures) : la memoire vive dite en mots de l'utilisateur ; le detail technique a part (l'infobulle)
     check(!d.ram().by.empty() && d.ram().by.find("/proc") == std::string::npos && d.ram().by.find("Get") == std::string::npos,
           "la memoire vive : mesuree par " + d.ram().by);
