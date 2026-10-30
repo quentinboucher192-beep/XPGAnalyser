@@ -9782,12 +9782,12 @@ END_IF;
 ```
 ```C
 if (Demarrage && !IHM_ENREG_EN_COURS()) {
-    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", T#15m);
+    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", 900000);   /* TIME : des ms */
 }
 ```
 ```C++
 if (Demarrage && !IHM_ENREG_EN_COURS()) {
-    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", T#15m);
+    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", 15min);
 }
 ```
 Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la même suite d'actions que IHM_REJOUER, ou depuis une autre application. Les variables système du domaine **Enregistrements** (SYS.Recording, SYS.ReplayPosition...) disent où on en est (voir « Variables système : SYS. »).

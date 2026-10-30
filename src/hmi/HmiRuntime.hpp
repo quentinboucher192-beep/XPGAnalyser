@@ -1633,6 +1633,9 @@ public:
     [[nodiscard]] std::vector<rec::Item> recordings(bool fresh = false) const;
     // Le Lecteur d'enregistrements : la ligne choisie de cet objet.
     [[nodiscard]] int recordingPlayerRow(Id object) const;
+    // Le canal du son qui part, pendant l'appel de Hooks::playSound : "Scripts" (IHM_SON), "Relecture" (un son
+    // rejoue : sa source est la relecture - le melangeur du lot M3 le branche) ; vide : une action, une alarme.
+    [[nodiscard]] const std::string& soundChannel() const noexcept { return soundChannel_; }
     // Une commande d'une autre application (rec::Command) : son code de sortie (rec::kExit...) et ce qui est dit.
     // Refusee (5) si le projet ne coche pas Accepter les commandes d'une autre application.
     int runCommand(const rec::Command&, double now, std::string* message = nullptr);

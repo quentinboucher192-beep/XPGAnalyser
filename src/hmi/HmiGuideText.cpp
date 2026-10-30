@@ -20023,9 +20023,10 @@ const std::vector<Topic>& topics() {
              {K::Code, "IF Demarrage AND NOT IHM_ENREG_EN_COURS() THEN\n    "
                          "IHM_ENREG_DEMARRER('D\xC3\xA9marrage {SYS.Date}', T#15m);\nEND_IF;", "ST"},
              {K::Code, "if (Demarrage && !IHM_ENREG_EN_COURS()) {\n    "
-                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", T#15m);\n}", "C"},
+                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", 900000);   /* TIME : des ms "
+                         "*/\n}", "C"},
              {K::Code, "if (Demarrage && !IHM_ENREG_EN_COURS()) {\n    "
-                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", T#15m);\n}", "C++"},
+                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", 15min);\n}", "C++"},
              {K::Paragraph, "Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la "
                          "m\xC3\xAAme suite d'actions que IHM_REJOUER, ou depuis une autre application. Les "
                          "variables syst\xC3\xA8me du domaine **Enregistrements** (SYS.Recording, "

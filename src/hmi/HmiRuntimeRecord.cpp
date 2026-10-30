@@ -631,9 +631,13 @@ void Runtime::replayApply(bool force) {
 void Runtime::replaySounds(double from, double to) {
     if (!rec_ || !rec_->player || !hooks_.playSound || to <= from || to - from > 1.0 || rec_->speed > 2.0) return;
     for (const rec::Event* e : rec_->player->eventsIn(from, to))
-        if (e->kind == rec::EventKind::Sound && project_ && project_->resourceByName(e->a))
-            // M4 -> M3 : un son rejoue, de source "relecture" - il sort sur le canal Relecture du melangeur.
+        if (e->kind == rec::EventKind::Sound && project_ && project_->resourceByName(e->a)) {
+            // M4 -> M3 : un son rejoue, de source "relecture" - il sort sur le canal Relecture du melangeur. Le canal
+            // se lit pendant l'appel (soundChannel()) ; celui d'alors est dans l'evenement (e->b).
+            soundChannel_ = "Relecture";
             hooks_.playSound(e->a);
+            soundChannel_.clear();
+        }
 }
 
 void Runtime::replayTick(double wallNow) {
@@ -804,6 +808,8 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
     if (u == "IHM_ENREG_DEMARRER") {
         RecordingStart r;
         r.name = text(0);
+        // Un texte a trous, comme le Nom de l'Enregistreur et de l'action : 'Essai {SYS.Date}'.
+        if (r.name.find('{') != std::string::npos) r.name = trimOf(TextTemplate::compile(r.name).render(environment()));
         if (args.size() > 1) {
             const auto& d = args[1].second;
             r.maxSeconds = d.type() == sim::Type::Time ? static_cast<double>(d.asInteger()) / 1000.0 : d.asReal();

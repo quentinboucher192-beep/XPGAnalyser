@@ -735,6 +735,12 @@ void testNatives() {
     check(!rt.replayInfo().paused, "IHM_RELECTURE_PAUSE(FALSE)");
     rt.environment().call("IHM_RELECTURE_QUITTER", {}, {}, r);
     check(r.isTruthy() && !rt.replaying(), "IHM_RELECTURE_QUITTER");
+    // Le nom, un texte a trous : 'Trous {Compteur}' (comme le Nom de l'Enregistreur et de l'action).
+    sim::Value c;
+    (void)rt.environment().read("Compteur", c);
+    rt.environment().call("IHM_ENREG_DEMARRER", {}, {{"", sim::Value::text("Trous {Compteur}")}}, r);
+    check(r.isTruthy() && rt.recordingInfo().name == "Trous " + plainOf(c), "IHM_ENREG_DEMARRER : un nom a trous (" + rt.recordingInfo().name + ")");
+    (void)rt.stopRecording(false, now);
 }
 
 void testActions() {
@@ -940,7 +946,11 @@ void testLimits() {
     Runtime::Hooks h;
     const std::string f = st.folder;
     h.projectFolder = [f] { return f; };
-    h.playSound = [&](const std::string& r) { played.push_back(r); };
+    std::vector<std::string> channels;
+    h.playSound = [&](const std::string& r) {
+        played.push_back(r);
+        channels.push_back(rt.soundChannel());
+    };
     rt.setHooks(h);
     rt.bind(&st.p, nullptr);
     rt.start(0.0);
@@ -969,11 +979,14 @@ void testLimits() {
     check(journal, "les lignes du journal");
     // Le son se rejoue (source relecture) en lecture normale.
     played.clear();
+    channels.clear();
     (void)rt.startReplay(ReplayRequest{"Court", {}, 1.0, 0, {}, "essai"}, now, &why);
     double wall = 50;
     rt.replayTick(wall);
     for (int i = 0; i < 12; ++i) rt.replayTick(wall += 0.1);
     check(played.size() == 1 && played[0] == "Bip.wav", "le son se rejoue en passant dessus");
+    check(channels.size() == played.size() && !channels.empty() && channels.back() == "Relecture" && rt.soundChannel().empty(),
+          "le son rejoue part sur le canal Relecture (sa source : la relecture)");
     rt.replaySeek(0);
     rt.replaySeek(1.5);
     check(played.size() == 1, "pas en sautant");
