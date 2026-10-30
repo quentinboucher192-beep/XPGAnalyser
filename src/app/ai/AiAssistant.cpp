@@ -500,7 +500,7 @@ Preview Assistant::previewOf(int message) const {
         pv.why = "Pas de projet IHM ouvert.";
         return pv;
     }
-    return preview(doc->project, *p);
+    return preview(doc->project, *p, host_.env);
 }
 
 bool Assistant::needsConfirm(int message) const { return check(message).confirmRemoval; }
@@ -518,7 +518,7 @@ bool Assistant::apply(int message, std::string* why) {
     }
     const auto doc = host_.document ? host_.document() : nullptr;
     std::string w;
-    auto cmd = makeCommand(doc, *p, &w);
+    auto cmd = makeCommand(doc, *p, &w, host_.env);
     if (!cmd) {
         if (why) *why = w;
         notice_ = w;
@@ -690,11 +690,9 @@ std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
     // Encore proposee : la validation d'aujourd'hui dit si elle peut s'appliquer.
     if (const auto doc = host_.document ? host_.document() : nullptr) {
         const Check ck = validate(doc->project, p, host_.env);
-        if (!ck.ok()) {
-            std::string list;
-            for (const auto& e : ck.errors) list += (list.empty() ? "" : " ; ") + e;
-            return {"Erreur de validation, la proposition ne peut pas s'appliquer : " + list, true};
-        }
+        // Refusee par la validation : le texte ecrit pour le modele (les erreurs, le detail des
+        // genres en cause) - il corrige au tour suivant.
+        if (!ck.ok()) return {feedback(ck, p), true};
         if (ck.stale) return {"en attente : pas encore appliqu\xC3\xA9" "e, et la vue a chang\xC3\xA9 depuis (elle ne s'appliquera plus telle quelle).", false};
     }
     return {"en attente : pas encore appliqu\xC3\xA9" "e (l'utilisateur ne l'a ni appliqu\xC3\xA9" "e ni refus\xC3\xA9" "e).", false};
@@ -764,9 +762,14 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     in.settings = settings_;
     in.env = host_.env;
     in.projectName = host_.projectName ? host_.projectName() : std::string{};
+    in.request = request;   // les genres que la demande evoque ont le detail de leurs proprietes
     ProviderRequest req = requestFor(c, c.messages.size());
     req.apiKey = apiKey_;
-    req.system = systemPrompt(in);
+    // Sur le fil de l'interface (le registre se construit une fois) : les consignes en deux morceaux.
+    PromptParts parts = promptParts(in);
+    req.system = parts.stable + parts.dynamic;
+    req.systemStable = std::move(parts.stable);
+    req.systemDynamic = std::move(parts.dynamic);
     req.toolsJson = operationsTool();
     if (!prov->start(std::move(req), why)) return false;
     retire();
@@ -878,6 +881,7 @@ void Assistant::finishLive(const std::string& stopReason) {
             in.settings = settings_;
             in.env = host_.env;
             in.projectName = host_.projectName ? host_.projectName() : std::string{};
+            in.request = gen_.request;
             std::string why;
             auto p = proposalFromTool(m.tool->input, in, gen_.request, &why);
             if (!p) {

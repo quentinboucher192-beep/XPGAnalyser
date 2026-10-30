@@ -66,6 +66,10 @@ struct ProviderRequest {
     std::string system;           // les consignes et le contexte (AiPrompt.hpp)
     std::string toolsJson;        // le tableau "tools" en JSON ; vide : aucun outil
     std::vector<ProviderTurn> turns;
+    // 1.15.0 (RESEAU, a la fin) : les consignes en deux morceaux (AiPrompt.hpp : promptParts). Non
+    // vide : "system" part en deux blocs de texte - le stable (mis en cache chez le fournisseur),
+    // puis le dynamique - et `system` n'est pas lu ; vide : `system` part tel quel.
+    std::string systemStable, systemDynamic;
 };
 
 // Ce que poll() rend. Les textes destines a l'utilisateur sont en francais.

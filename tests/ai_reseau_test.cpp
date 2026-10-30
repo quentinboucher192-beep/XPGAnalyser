@@ -40,6 +40,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <deque>
 #include <filesystem>
@@ -515,6 +516,17 @@ void testBody() {
     const auto& last = v2.at("messages").items().back().at("content").items();
     check(!last.empty() && last[0].str("type") == "tool_result" && last[0].str("tool_use_id") == "toolu_01", "un tool_result manquant : ajoute");
     check(!v2.has("output_config"), "pas d'effort choisi : pas d'output_config");
+    // Les consignes en deux morceaux : le premier mis en cache chez le fournisseur.
+    ai::ProviderRequest r3 = r2;
+    r3.system = "ignore";
+    r3.systemStable = "Les consignes stables.";
+    r3.systemDynamic = "Le contexte de la vue.";
+    Value v3;
+    (void)ai::json::parse(ai::anthropicBody(r3), v3);
+    const auto& sys = v3.at("system").items();
+    check(sys.size() == 2 && sys[0].str("text") == "Les consignes stables." && sys[0].at("cache_control").str("type") == "ephemeral"
+              && sys[1].str("text") == "Le contexte de la vue." && !sys[1].has("cache_control"),
+          "system en deux blocs : le stable avec cache_control ephemeral, puis le dynamique");
 }
 
 // =============================================================================
@@ -1267,6 +1279,8 @@ void testAssistantLive() {
         check(r.model == "modele-essai" && r.apiKey == "cle-essai-SECRETE" && r.maxTokens == 16000 && r.timeoutSeconds == 60,
               "la requete : le modele, la cle (en memoire), 16000, le delai");
         check(!r.system.empty() && has(r.toolsJson, "proposer_operations"), "les consignes (systemPrompt) et l'outil (operationsTool)");
+        check(!r.systemStable.empty() && r.system == r.systemStable + r.systemDynamic && has(r.systemDynamic, "Vue_Station"),
+              "les consignes en deux morceaux : le stable (en cache), le dynamique (le contexte de la vue)");
         check(r.turns.size() == 1 && r.turns[0].text == "Ajoute une cuve" && r.turns[0].toolResultFor.empty(), "un tour : la demande");
     }
     f.step();
@@ -1316,7 +1330,7 @@ void testAssistantLive() {
     (void)f.panel->sendText("Pourquoi ?");
     f.step();
     check(!s.requests.empty() && s.requests.back().turns.back().toolResultFor == "toolu_2" && s.requests.back().turns.back().toolResultError
-              && has(s.requests.back().turns.back().toolResultText, "validation"),
+              && has(s.requests.back().turns.back().toolResultText, "refus\xC3\xA9" "e par le logiciel"),
           "le tour suivant : tool_result en erreur (" + s.requests.back().turns.back().toolResultText + ")");
 
     // Une entree illisible : pas de proposition, la note le dit, le tour suivant porte l'erreur.
@@ -1573,6 +1587,57 @@ void testSettingsDialog() {
     ai::setHttpFactory(nullptr);
 }
 
+// Le faux fournisseur Python (tests/fixtures/ia/faux_fournisseur.py), s'il tourne : XPG_FAUX_FOURNISSEUR=http://127.0.0.1:8765.
+// Sa station de pompage passe la validation du logiciel ; ses erreurs sont dites ; Reessayer apres une surcharge.
+void testFauxFournisseur() {
+    const char* url = std::getenv("XPG_FAUX_FOURNISSEUR");
+    if (!url || !*url) return;
+    std::printf("[faux fournisseur local : %s]\n", url);
+    ai::setHttpFactory(nullptr);
+    Fixture f("faux");
+    f.configure("modele-essai", "cle-essai", url);
+    const auto wait = [&] {
+        for (int k = 0; k < 5000 && f.as().generating(); ++k) {
+            f.step(0.002);
+            pause(2);
+        }
+        f.step();
+    };
+    (void)f.panel->sendText("Cr\xC3\xA9" "e-moi un synoptique de station de pompage");
+    wait();
+    const int m = f.lastIndex();
+    check(f.last().proposal && f.last().proposal->ops.size() == 31, "la station : 31 operations (" + f.last().note + ")");
+    const auto ck = f.as().check(m);
+    std::string errs;
+    for (const auto& e : ck.errors) errs += e + " ; ";
+    check(ck.ok() && ck.create == 31, "elle passe la validation (" + errs + ")");
+    check(f.as().apply(m) && f.object("Cuve_1") && f.object("Arret_P32"), "appliquee : les objets dans la vue");
+    (void)f.panel->sendText("Merci");
+    wait();
+    check(has(f.last().text, "appliqu"), "le faux fournisseur a recu \"appliquee\" : " + f.last().text);
+    (void)f.panel->sendText("une propriete inventee");
+    wait();
+    check(f.last().proposal && !f.as().check(f.lastIndex()).ok(), "une propriete inventee : refusee par la validation");
+    (void)f.panel->sendText("Et alors ?");
+    wait();
+    check(has(f.last().text, "refus"), "le faux fournisseur a recu le refus : " + f.last().text);
+    (void)f.panel->sendText("illisible");
+    wait();
+    check(!f.last().proposal && !f.last().note.empty(), "une operation inconnue : " + f.last().note);
+    (void)f.panel->sendText("coupure");
+    wait();
+    check(f.last().state == "erreur" && f.as().canRetry(), "la coupure : " + f.last().note);
+    (void)f.panel->sendText("refus");
+    wait();
+    check(has(f.last().note, "d\xC3\xA9" "clin"), "refusal : " + f.last().note);
+    ai::Settings st = f.as().settings();
+    st.model = "introuvable";
+    f.as().setSettings(st);
+    (void)f.panel->sendText("Bonjour");
+    wait();
+    check(has(f.last().note, "introuvable"), "404 : " + f.last().note);
+}
+
 } // namespace
 
 int main() {
@@ -1595,6 +1660,7 @@ int main() {
     testDirectAndDemo();
     testAssistantRealProvider();
     testSettingsDialog();
+    testFauxFournisseur();
     std::printf("ai_reseau_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

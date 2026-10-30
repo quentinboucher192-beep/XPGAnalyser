@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <initializer_list>
 
 namespace app::ai {
 
@@ -108,9 +109,18 @@ bool readFile(const std::string& path, std::string& out) {
 }
 
 // Le type reel d'une image d'apres ses premiers octets (une .jpg qui est un PNG part en PNG).
+// Les signatures en octets (pas en chaines : l'essai des glyphes lit chaque chaine des sources).
+bool startsWith(std::string_view bytes, std::initializer_list<unsigned> sig) {
+    if (bytes.size() < sig.size()) return false;
+    std::size_t i = 0;
+    for (const unsigned b : sig)
+        if (static_cast<unsigned char>(bytes[i++]) != b) return false;
+    return true;
+}
+
 std::string imageType(std::string_view bytes, const std::string& fallback) {
-    if (bytes.size() >= 8 && bytes.substr(0, 8) == std::string_view("\x89PNG\r\n\x1A\n", 8)) return "image/png";
-    if (bytes.size() >= 3 && bytes.substr(0, 3) == std::string_view("\xFF\xD8\xFF", 3)) return "image/jpeg";
+    if (startsWith(bytes, {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})) return "image/png";
+    if (startsWith(bytes, {0xFF, 0xD8, 0xFF})) return "image/jpeg";
     if (bytes.size() >= 4 && bytes.substr(0, 4) == "GIF8") return "image/gif";
     if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") return "image/webp";
     return fallback;
@@ -122,6 +132,12 @@ std::string kindLabel(std::string_view ext) {
     if (ext == "xapi") return "projet API .xapi";
     if (ext == "xpgproj") return "projet";
     return "fichier ." + std::string(ext);
+}
+
+json::Value obj(const char* key, std::string value) {
+    json::Value o = json::Value::object();
+    o.set(key, std::move(value));
+    return o;
 }
 
 json::Value textBlock(std::string text) {
@@ -341,7 +357,18 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
     body.set("model", req.model);
     body.set("max_tokens", req.maxTokens > 0 ? req.maxTokens : 16000);
     body.set("stream", true);
-    if (!req.system.empty()) body.set("system", req.system);
+    if (!req.systemStable.empty()) {
+        // Deux blocs : ce qui change peu (les consignes, le registre, les connaissances), mis en cache
+        // chez le fournisseur ; puis ce qui suit la demande (les genres utiles, le contexte de la vue).
+        json::Value sys = json::Value::array();
+        json::Value stable = textBlock(req.systemStable);
+        stable.set("cache_control", obj("type", "ephemeral"));
+        sys.push(std::move(stable));
+        if (!blank(req.systemDynamic)) sys.push(textBlock(req.systemDynamic));
+        body.set("system", std::move(sys));
+    } else if (!req.system.empty()) {
+        body.set("system", req.system);
+    }
     if (!req.toolsJson.empty()) {
         json::Value tools;
         if (json::parse(req.toolsJson, tools) && tools.isArray() && !tools.items().empty()) body.set("tools", std::move(tools));

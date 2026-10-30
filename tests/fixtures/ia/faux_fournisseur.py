@@ -125,10 +125,12 @@ def last_user(body):
     content = msgs[-1].get("content")
     if isinstance(content, str):
         return content, None
+    # La DERNIERE demande seulement : apres une erreur, deux demandes de suite arrivent jointes
+    # dans le meme tour de l'utilisateur (celle sans reponse, puis la nouvelle).
     text, result = "", None
     for block in content or []:
         if block.get("type") == "text":
-            text += block.get("text", "") + "\n"
+            text = block.get("text", "")
         elif block.get("type") == "tool_result":
             c = block.get("content")
             result = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)

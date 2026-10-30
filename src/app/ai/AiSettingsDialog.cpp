@@ -142,7 +142,7 @@ protected:
             const float tw = ui::measureWidth(d_.test_->text(), gfx::FontId{16}) + 34.f;
             d_.test_->setBounds({x, y, tw, kRow - 2.f});
             resultAt_ = {x + tw + 10.f, y + 1.f, colW - tw - 10.f, kRow * 2.f};
-            y += kRow + 2.f;
+            y += kRow + 20.f;   // le resultat peut passer a la ligne (une colonne : ce qui suit reste dessous)
         }
         // ---- la colonne de droite (ou la suite)
         if (twoCols) {

@@ -8,6 +8,11 @@
 //    {"model", "max_tokens", "stream": true, "system", "tools", "messages",
 //     "output_config": {"effort"} (seulement s'il est choisi)}
 //
+//  "system" part en deux blocs de texte quand la requete les donne (promptParts) :
+//  le stable (consignes, registre, connaissances) marque cache_control
+//  "ephemeral" - le fournisseur le garde en cache d'une demande a l'autre -, puis
+//  le dynamique (le detail des genres utiles, le contexte de la vue).
+//
 //  Rien d'autre dans le corps : ni temperature, ni thinking (les modeles recents
 //  pensent d'eux-memes), ni tool_choice force (refuse : la consigne demande
 //  l'appel de l'outil), ni "prefill" (le dernier tour est toujours celui de
