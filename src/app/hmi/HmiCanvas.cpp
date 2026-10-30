@@ -226,10 +226,17 @@ void HmiCanvas::setPlaceKind(std::optional<hmi::Kind> kind) {
     placeKind_ = kind;
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeVariant_.clear();
     invalidate();
 }
 
+void HmiCanvas::setPlaceVariant(hmi::Kind kind, std::string variant) {
+    setPlaceKind(kind);
+    placeVariant_ = std::move(variant);
+}
+
 void HmiCanvas::setPlaceSymbol(std::string symbol) {
+    placeVariant_.clear();
     placeSymbol_ = std::move(symbol);
     placeKind_ = placeSymbol_.empty() ? std::nullopt : std::optional<hmi::Kind>(hmi::Kind::SymbolInstance);
     placeVariable_.reset();
@@ -238,6 +245,7 @@ void HmiCanvas::setPlaceSymbol(std::string symbol) {
 
 void HmiCanvas::setPlaceVariable(std::optional<hmi::design::VarInfo> variable) {
     placeSymbol_.clear();
+    placeVariant_.clear();
     placeVariable_ = std::move(variable);
     placeKind_ = placeVariable_ ? std::optional<hmi::Kind>(hmi::design::kindForVariable(*placeVariable_)) : std::nullopt;
     invalidate();
@@ -354,6 +362,7 @@ void HmiCanvas::startZoneTrace(Id map) {
     placeKind_.reset();
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeVariant_.clear();
     grabFocus();
     status->emit("Tracer une zone : un clic par point ; un double-clic, ou un clic sur le premier point, la ferme ; "
                  "\xC3\x89" "chap l'abandonne.");
@@ -764,6 +773,7 @@ void HmiCanvas::cancelPlacement() {
     placeKind_.reset();
     placeSymbol_.clear();
     placeVariable_.reset();
+    placeVariant_.clear();
     invalidate();
     if (was) {
         placed->emit();   // la bibliotheque ne montre plus l'outil
@@ -942,6 +952,7 @@ void HmiCanvas::pasteAt(gfx::Point screen) {
 void HmiCanvas::insertAt(hmi::Kind kind, gfx::Point screen) {
     placeKind_ = kind;
     placeSymbol_.clear();
+    placeVariant_.clear();
     placeVariable_.reset();
     placeAt(screen, false);
 }
@@ -1362,6 +1373,10 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         const double y = v->grid.snapGrid ? hmi::edit::snapToGrid(p.y, v->grid.step) : p.y;
         auto ghost = hmi::makeObject(*placeKind_, 0, "", x, y, v->activeLayer);
         std::string ghostLabel(hmi::kindLabel(*placeKind_));
+        // 1.14.1 (N4) : une variante - sa taille, son nom.
+        if (!placeVariant_.empty() && hmi::applyKindVariant(ghost, placeVariant_))
+            for (const auto& kv : hmi::kindVariants(*placeKind_))
+                if (kv.key == placeVariant_) ghostLabel = std::string(kv.label);
         if (!placeSymbol_.empty()) {
             // Lot 10 : une instance a la taille de son symbole, et son dessin.
             if (const auto* sv = doc_->project.viewByName(placeSymbol_)) {
@@ -1724,14 +1739,20 @@ void HmiCanvas::placeAt(gfx::Point screen, bool keep) {
             return;
         }
     }
-    edit(symbol.empty() ? "Poser " + std::string(hmi::kindLabel(kind)) : "Poser le symbole " + symbol,
+    // 1.14.1 (N4) : une variante de la bibliotheque (la Calculatrice scientifique) - son nom, ses reglages.
+    std::string what(hmi::kindLabel(kind));
+    const std::string variant = symbol.empty() ? placeVariant_ : std::string{};
+    for (const auto& kv : hmi::kindVariants(kind))
+        if (kv.key == variant) what = std::string(kv.label);
+    edit(symbol.empty() ? "Poser " + what : "Poser le symbole " + symbol,
          [&](hmi::Project& p, hmi::View& vv) {
         made = symbol.empty() ? hmi::edit::add(p, vv, kind, x, y) : hmi::placeSymbol(p, vv, symbol, x, y);
+        if (auto* fresh = !variant.empty() ? vv.object(made) : nullptr) (void)hmi::applyKindVariant(*fresh, variant);
         // 1.12.10 (lot F) : un objet a echelle pose ici suit la plage de sa variable (Min, Max vides).
         if (auto* fresh = symbol.empty() ? vv.object(made) : nullptr) hmi::ranges::followVariable(*fresh);
         adoptIn(vv);
     });
-    if (!keep) { placeKind_.reset(); placeSymbol_.clear(); }
+    if (!keep) { placeKind_.reset(); placeSymbol_.clear(); placeVariant_.clear(); }
     if (made != kNoId) setSelection({made});
     placed->emit();
     emitStatus(screen);   // la barre d'etat oublie l'outil relache

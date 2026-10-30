@@ -59,6 +59,7 @@
 #include "HmiVideo.hpp"                // 1.12.12 (lot H) : la lecture d'une video
 #include "HmiTable.hpp"                // 1.12.13 : le Tableau, un mode a la fois
 #include "HmiDocView.hpp"              // 1.12.30 : la visionneuse de documents
+#include "HmiCalculator.hpp"           // 1.14.1 (N4) : la calculatrice
 #include "HmiRecording.hpp"            // 1.14.0 (M4) : les enregistrements
 
 #include <cstdint>
@@ -945,6 +946,14 @@ public:
     // La visionneuse a le clavier ; ... et un de ses champs (le numero de page, la recherche) est en saisie.
     [[nodiscard]] bool docFocused() const;
     [[nodiscard]] bool docTyping() const;
+    // 1.14.1 (N4) : LA CALCULATRICE EN MARCHE (HmiCalculator.hpp) - un etat par calculatrice montree (l'expression,
+    // la memoire, la base, le mot...), ne a l'ouverture de sa vue (sa Valeur de depart s'y charge), oublie a sa
+    // fermeture. Ses parties (objectPart) : "touche:<id>" (calculator::press), "base:HEX", "bit:12", "afficheur" ;
+    // "touche:load" relit la Valeur de depart, "touche:send" ecrit le resultat dans Resultat vers (le niveau d'acces
+    // de l'objet, la permission Piloter, les regles d'ecriture : le type, ses bornes). Un clic lui donne le clavier
+    // (typeText, typeKey) : chiffres, + - * / ^ ( ) . , = Entree, Echap (C), Retour arriere, Suppr (CE) ; A-F en
+    // programmeur. Pilotable decoche : elle montre sans reagir. Nul : pas montree.
+    [[nodiscard]] const calculator::State* calculatorState(Id object) const;
     [[nodiscard]] comm::Link*      equipmentLink(std::string_view equipment);
     [[nodiscard]] std::vector<EquipmentStatus> equipmentStatuses() const;
     [[nodiscard]] std::optional<EquipmentStatus> equipmentStatus(std::string_view name) const;
@@ -1863,6 +1872,16 @@ private:
     void docApply(const View&, const Object&, DocViewer&, const docview::Effect&, double now);
     [[nodiscard]] int docPageRead(const Object& shown);
     [[nodiscard]] bool docMemberValue(const Object&, std::string_view info, sim::Value& out) const;
+    // 1.14.1 (N4) : la Calculatrice (HmiRuntime.cpp, a la fin).
+    std::map<Id, calculator::State>            calcs_;
+    void calcsCycle(double now);
+    calculator::State& calcState(const View&, const Object& shown, double now);
+    void calcObjectPart(const View&, const Object& shown, std::string_view part, double now);
+    void calcTypeText(const View&, const Object& raw, std::string_view text, double now);
+    void calcTypeKey(const View&, const Object& raw, EditKey, double now);
+    bool calcLoad(const View&, const Object& shown, calculator::State&, bool gesture, double now);
+    bool calcSend(const View&, const Object& shown, calculator::State&, double now);
+    [[nodiscard]] bool calcMemberValue(const Object&, std::string_view info, sim::Value& out) const;
     [[nodiscard]] std::string docKeyboardMode() const;
     [[nodiscard]] std::vector<std::string> marqueeSource(std::string_view from, Id view) const;
     void reportsCycle(double now);                                      // lot 14 : les rapports a leur heure

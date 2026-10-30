@@ -585,6 +585,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiBuildState.cpp" />
     <ClCompile Include="src\hmi\HmiCallCheck.cpp" />
     <ClCompile Include="src\hmi\HmiCalc.cpp" />
+    <ClCompile Include="src\hmi\HmiCalculator.cpp" />
     <ClCompile Include="src\hmi\HmiDecl.cpp" />
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp" />
     <ClCompile Include="src\hmi\HmiDocument.cpp" />
@@ -1067,6 +1068,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiBuildState.hpp" />
     <ClInclude Include="src\hmi\HmiCallCheck.hpp" />
     <ClInclude Include="src\hmi\HmiCalc.hpp" />
+    <ClInclude Include="src\hmi\HmiCalculator.hpp" />
     <ClInclude Include="src\hmi\HmiChoiceLists.hpp" />
     <ClInclude Include="src\hmi\HmiDecl.hpp" />
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />

@@ -14,6 +14,7 @@
 #include "HmiScript.hpp"
 #include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"         // 1.12.7 : les valeurs calculees au demarrage, les constantes qualifiees
+#include "HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice (ses choix, sa taille minimale)
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
@@ -2589,6 +2590,66 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         issue(S::Warning, "orientation", "orientation inconnue \xC2\xAB " + orientation + " \xC2\xBB : les pistes seront verticales");
                     break;
                 }
+                // 1.14.1 (N4) : la Calculatrice - ses choix, sa taille, la variable du resultat (un nombre ; un nom
+                // inconnu, une variable en lecture seule : la verification des variables le dit).
+                case Kind::Calculator: {
+                    const auto fixed = [&](const char* key) {
+                        const Prop* pr = o.find(key);
+                        return !pr || pr->expr.empty();
+                    };
+                    const auto upperOf = [](std::string t) {
+                        for (auto& ch : t) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                        return t;
+                    };
+                    const std::string mode = trimmedCopy(o.text("calcMode", "standard"));
+                    if (fixed("calcMode") && !calculator::knownMode(mode))
+                        issue(S::Warning, "calcMode", "mode inconnu \xC2\xAB " + mode + " \xC2\xBB (standard, scientifique ou programmeur) : "
+                                                      "elle sera standard");
+                    const auto m = calculator::modeFrom(mode);
+                    const std::string angle = upperOf(trimmedCopy(o.text("angleUnit", "DEG")));
+                    if (fixed("angleUnit") && angle != "DEG" && angle != "RAD")
+                        issue(S::Warning, "angleUnit", "angles \xC2\xAB " + angle + " \xC2\xBB : DEG ou RAD (en degr\xC3\xA9s sinon)");
+                    if (m == calculator::Mode::Programmer) {
+                        const std::string word = trimmedCopy(o.text("wordSize", "WORD"));
+                        if (fixed("wordSize") && calculator::wordBits(word) == 0)
+                            issue(S::Warning, "wordSize", "taille du mot inconnue \xC2\xAB " + word + " \xC2\xBB (BYTE, WORD, DWORD ou LWORD) : WORD");
+                        calculator::Base b = calculator::Base::Dec;
+                        const std::string base = trimmedCopy(o.text("calcBase", "DEC"));
+                        if (fixed("calcBase") && !calculator::baseFrom(base, b))
+                            issue(S::Warning, "calcBase", "base inconnue \xC2\xAB " + base + " \xC2\xBB (HEX, DEC, OCT ou BIN) : DEC");
+                    }
+                    const Box least = calculator::minimumSize(m);
+                    if (fixed("w") && fixed("h") && (o.number("w", least.w) < least.w || o.number("h", least.h) < least.h))
+                        issue(S::Warning, "w", "trop petite pour se lire et se toucher : au moins " + std::to_string(static_cast<int>(least.w)) + " x "
+                                                   + std::to_string(static_cast<int>(least.h)) + " pour la calculatrice "
+                                                   + std::string(calculator::modeKey(m)));
+                    // Les noms de la Valeur de depart et de Resultat vers : connus.
+                    for (const char* key : {"startValue", "resultTo"}) {
+                        const Prop* pr = o.find(key);
+                        if (!pr || !pr->expr.empty()) continue;
+                        const std::string text = trimmedCopy(markers::strip(pr->value));
+                        for (const auto& root : text.empty() ? std::vector<std::string>{} : scanRoots(text))
+                            if (!known(p, plc, root, &v))
+                                issue(S::Error, key, std::string(std::string_view(key) == "resultTo" ? "R\xC3\xA9sultat vers" : "Valeur de d\xC3\xA9part")
+                                                         + " : " + std::string(unknownVariablePrefix()) + root);
+                    }
+                    const std::string target = trimmedCopy(markers::strip(o.text("resultTo")));
+                    if (!target.empty()) {
+                        if (!o.flag("pilotable", true))
+                            issue(S::Warning, "resultTo", "elle n'est pas pilotable : son bouton Envoyer ne r\xC3\xA9" "agira pas");
+                        bool allKnown = true;
+                        for (const auto& root : scanRoots(target)) allKnown = allKnown && known(p, plc, root, &v);
+                        const std::string type = allKnown ? params::expressionType(p, &v, target) : std::string{};
+                        const sim::Type st = type.empty() ? sim::Type::Unknown : typereg::simTypeOf(type);
+                        if (!type.empty() && st == sim::Type::Bool)
+                            issue(S::Warning, "resultTo", target + " (BOOL) : Envoyer y \xC3\xA9" "crira VRAI pour tout nombre non nul");
+                        else if (!type.empty() && st == sim::Type::String)
+                            issue(S::Warning, "resultTo", target + " (STRING) : Envoyer y \xC3\xA9" "crira le nombre en texte");
+                        else if (!type.empty() && (st == sim::Type::Unknown || st == sim::Type::Date || st == sim::Type::Tod || st == sim::Type::Dt))
+                            issue(S::Error, "resultTo", target + " (" + type + ") n'est pas un nombre : Envoyer sera refus\xC3\xA9");
+                    }
+                    break;
+                }
                 case Kind::SystemButton: {
                     // Lot 10 : l'onglet ouvert ; une action "Parametres systeme" au clic ferait double emploi.
                     const std::string tab = o.text("tab", "R\xC3\xA9glages");
@@ -2690,6 +2751,9 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
                 if (prop.key == "variable" && !prop.value.empty()) expr(prop.value, kindWritesVariable(o.kind), rep);
                 if (prop.key == "output" && !prop.value.empty()) expr(prop.value, true, rep);
                 if (prop.key == "state" || prop.key == "lamp" || prop.key == "condition") expr(prop.value, false, rep);
+                // 1.14.1 (N4) : la Calculatrice lit sa Valeur de depart, ecrit son Resultat vers.
+                if (o.kind == Kind::Calculator && (prop.key == "startValue" || prop.key == "resultTo") && !prop.value.empty())
+                    expr(prop.value, prop.key == "resultTo", rep);
             }
             for (std::size_t i = 0; i < o.actions.size(); ++i) {
                 const auto& a = o.actions[i];

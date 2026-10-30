@@ -126,6 +126,11 @@ enum class Kind : std::uint8_t {
     // canal) et le Melangeur de volume (le General, puis une piste par canal : curseur, pourcentage,
     // bouton M, vumetre) - dans les Commandes, apres Parametres systeme (HmiSystemMenu.hpp).
     SoundMute, VolumeMixer,
+    // 1.14.1 (N4), A LA FIN : la Calculatrice (HmiCalculator.hpp) - standard, scientifique ou
+    // programmeur (sa propriete Mode) : l'afficheur, le pave, la memoire ; les bases et la grille
+    // des bits du programmeur. Dans les Commandes, apres le Melangeur ; la bibliotheque propose
+    // les trois variantes (kindVariants).
+    Calculator,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -145,6 +150,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     // lot 10 : l'objet Parametres systeme, les symboles de synoptique
     Kind::SystemButton,
     Kind::SoundMute, Kind::VolumeMixer,   // 1.14.0 : couper le son, le melangeur de volume
+    Kind::Calculator,                     // 1.14.1 (N4) : la calculatrice
     Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor,
     Kind::SpeedDrive,   // 1.12.30 : le variateur de vitesse, apres le moteur
     Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
@@ -356,9 +362,10 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::RecordingPlayer,     "RecordingPlayer",     "Lecteur d'enregistrements"},
     {Kind::SoundMute,           "SoundMute",           "Coupe-son"},                               // 1.14.0
     {Kind::VolumeMixer,         "VolumeMixer",         "M\xC3\xA9langeur de volume"},
+    {Kind::Calculator,          "Calculator",          "Calculatrice"},                            // 1.14.1 (N4)
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::VolumeMixer) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::Calculator) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;
@@ -2373,6 +2380,19 @@ struct Project {
 // Un objet avec des valeurs par defaut raisonnables pour son genre : taille,
 // couleurs, texte. Pose en (x, y), dans le calque donne.
 [[nodiscard]] Object makeObject(Kind, Id id, std::string name, double x, double y, Id layer);
+// 1.14.1 (N4) : LES VARIANTES DE LA BIBLIOTHEQUE - un meme genre propose plusieurs fois, deja regle (la
+// Calculatrice : standard, scientifique, programmeur ; sa propriete Mode). `key` : ce que la bibliotheque
+// retient (le mode pose) ; `label` : son nom (l'apercu, la barre d'etat) ; `tile` : le nom court de sa tuile. Vide :
+// le genre n'a qu'une tuile.
+struct KindVariant {
+    Kind             kind;
+    std::string_view key;
+    std::string_view label;
+    std::string_view tile;
+};
+[[nodiscard]] std::vector<KindVariant> kindVariants(Kind);
+// Regle un objet neuf comme sa variante (ses proprietes, sa taille par defaut) ; faux : pas une variante de son genre.
+bool applyKindVariant(Object&, std::string_view key);
 // Une vue vide a la taille du projet, avec un premier calque actif.
 [[nodiscard]] View   makeView(Project&, std::string name);
 // "Rectangle_1", "Rectangle_2"... : le premier nom libre de la vue.

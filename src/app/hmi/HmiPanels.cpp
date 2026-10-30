@@ -1401,7 +1401,8 @@ const std::vector<Category>& categories() {
                        hmi::Kind::Selector, hmi::Kind::Slider, hmi::Kind::Knob, hmi::Kind::InputField, hmi::Kind::ComboBox,
                        hmi::Kind::CheckBox, hmi::Kind::RadioGroup, hmi::Kind::DateTimePicker, hmi::Kind::WeeklySchedule,
                        hmi::Kind::List, hmi::Kind::SystemButton,
-                       hmi::Kind::SoundMute, hmi::Kind::VolumeMixer}},   // 1.14.0 : couper le son, le melangeur
+                       hmi::Kind::SoundMute, hmi::Kind::VolumeMixer,     // 1.14.0 : couper le son, le melangeur
+                       hmi::Kind::Calculator}},                          // 1.14.1 (N4) : ses trois variantes
         {"Affichage", {hmi::Kind::Indicator, hmi::Kind::MultiStateIndicator, hmi::Kind::MultiStateText, hmi::Kind::NumericDisplay,
                        hmi::Kind::SevenSegment, hmi::Kind::ProgressBar, hmi::Kind::Bargraph, hmi::Kind::Gauge, hmi::Kind::Dial,
                        hmi::Kind::Thermometer, hmi::Kind::TrendArrow, hmi::Kind::Clock, hmi::Kind::HourMeter,
@@ -1551,10 +1552,21 @@ ui::SizeHint HmiPalette::sizeHint() const {
 // mene deja F1 a un autre sujet - "relecture", "enregistrement", "volume" - ne va pas dans @mots). Chaque mot se
 // compare par son debut (ou celui de l'un de ses mots), sans casse ni accents : "son" trouve le Coupe-son et le
 // Melangeur de volume, pas une "raison". Avant, seuls le libelle et la famille etaient lus.
+// 1.14.1 (N4) : le nom d'une tuile (court : `tile`) ou d'une variante (l'apercu, la bulle) ; sans variante, le genre.
+static std::string paletteTileLabel(hmi::Kind kind, std::string_view variant, bool tile) {
+    if (!variant.empty())
+        for (const auto& v : hmi::kindVariants(kind))
+            if (v.key == variant) return std::string(tile ? v.tile : v.label);
+    return std::string(hmi::kindLabel(kind));
+}
+
 std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind) {
     static const std::vector<std::pair<hmi::Kind, std::vector<std::string_view>>> kMore = {
         {hmi::Kind::SoundMute, {"son", "muet", "mute", "volume", "haut-parleur"}},
         {hmi::Kind::VolumeMixer, {"son", "volume", "mixage", "m\xC3\xA9langeur", "canal", "mute"}},
+        // 1.14.1 (N4) : la Calculatrice - ses trois variantes ensemble ("scientifique", "programmeur" : la leur seule,
+        // par son nom).
+        {hmi::Kind::Calculator, {"calcul", "calculette", "hexad\xC3\xA9" "cimal", "binaire", "bits", "modbus", "registre"}},
         {hmi::Kind::Recorder, {"enregistrement", "enregistrer", "film", "replay", "relecture"}},
         {hmi::Kind::RecordingPlayer, {"enregistrement", "rejouer", "relecture", "replay"}},
     };
@@ -1600,11 +1612,24 @@ void HmiPalette::layoutTiles(const ui::Theme*) const {
     const int perRow = std::max(1, static_cast<int>((b.w - 12 + gap) / (tileW + gap)));
     float y = b.y + 6 + kModeH - scrollY_;       // lot 12 : sous les onglets Objets | Variables
     auto section = [&](const std::string& title, const std::vector<hmi::Kind>& kinds) {
-        std::vector<hmi::Kind> shown;
-        for (auto k : kinds)
-            if (filter_.empty() || lower(std::string(hmi::kindLabel(k))).find(filter_) != std::string::npos
-                || lower(title).find(filter_) != std::string::npos || wordHits_.count(k) > 0)
-                shown.push_back(k);
+        std::vector<std::pair<hmi::Kind, std::string>> shown;
+        for (auto k : kinds) {
+            const bool hit = filter_.empty() || lower(std::string(hmi::kindLabel(k))).find(filter_) != std::string::npos
+                          || lower(title).find(filter_) != std::string::npos || wordHits_.count(k) > 0;
+            const auto variants = hmi::kindVariants(k);
+            if (variants.empty()) {
+                if (hit) shown.emplace_back(k, std::string{});
+                continue;
+            }
+            // 1.14.1 (N4) : une tuile par variante, deja reglee (la Calculatrice : standard, scientifique, programmeur) ;
+            // une recherche qui nomme des variantes ("scientifique") ne montre qu'elles, sinon toutes suivent leur genre.
+            const auto named = [&](const hmi::KindVariant& v) {
+                return !filter_.empty() && lower(std::string(v.label)).find(filter_) != std::string::npos;
+            };
+            const bool anyNamed = std::any_of(variants.begin(), variants.end(), named);
+            for (const auto& v : variants)
+                if (anyNamed ? named(v) : hit) shown.emplace_back(k, std::string(v.key));
+        }
         if (shown.empty()) return;
         headings_.emplace_back(title, y);
         y += 22;
@@ -1612,7 +1637,7 @@ void HmiPalette::layoutTiles(const ui::Theme*) const {
             const int col = static_cast<int>(i) % perRow;
             if (i > 0 && col == 0) y += tileH + gap;
             const gfx::Rect r{b.x + 6 + static_cast<float>(col) * (tileW + gap), y, tileW, tileH};
-            tiles_.push_back({shown[i], r, {r.x + r.w - 18, r.y + 3, 15, 15}, {}});
+            tiles_.push_back({shown[i].first, r, {r.x + r.w - 18, r.y + 3, 15, 15}, {}, shown[i].second});
         }
         y += tileH + 10;
     };
@@ -1708,6 +1733,19 @@ bool HmiPalette::tileRect(hmi::Kind kind, gfx::Rect& out) const {
     const auto b = bounds();
     for (const auto& t : tiles_)
         if (t.kind == kind && t.symbol.empty() && t.rect.y >= b.y + kModeH
+            && t.rect.y + t.rect.h <= b.y + b.h - previewRoom(b.h, t.rect.h, kModeH, kPreviewH)) {
+            out = t.rect;
+            return true;
+        }
+    return false;
+}
+
+// 1.14.1 (N4) : la tuile d'une variante (la Calculatrice scientifique...).
+bool HmiPalette::variantTileRect(hmi::Kind kind, std::string_view variant, gfx::Rect& out) const {
+    layoutTiles(nullptr);
+    const auto b = bounds();
+    for (const auto& t : tiles_)
+        if (t.kind == kind && t.symbol.empty() && t.variant == variant && t.rect.y >= b.y + kModeH
             && t.rect.y + t.rect.h <= b.y + b.h - previewRoom(b.h, t.rect.h, kModeH, kPreviewH)) {
             out = t.rect;
             return true;
@@ -1899,12 +1937,12 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
                 objalarms::paintBell(ctx, static_cast<int>(sa->alarms.size()), t.rect);
             continue;
         }
-        const bool cur = current_ && *current_ == t.kind;
-        const bool hot = hoverKind_ && *hoverKind_ == t.kind && hoverSymbol_.empty();
+        const bool cur = current_ && *current_ == t.kind && currentVariant_ == t.variant;
+        const bool hot = hoverKind_ && *hoverKind_ == t.kind && hoverSymbol_.empty() && hoverVariant_ == t.variant;
         ctx.r.fillRoundedRect(t.rect, cur ? c.accent.withAlpha(70) : hot ? c.text.withAlpha(22) : c.inputBg, 5);
         ctx.r.strokeRect(t.rect, cur ? c.accent : c.border, 1);
-        drawHmiGlyph(ctx.r, glyphFor(t.kind), {t.rect.x + t.rect.w / 2 - 13, t.rect.y + 8, 26, 26}, cur ? c.accent : c.text);
-        const std::string label = fit(ctx.r, std::string(hmi::kindLabel(t.kind)), ctx.theme.font.smallUi, t.rect.w - 6);
+        drawHmiGlyph(ctx.r, glyphFor(t.kind, t.variant), {t.rect.x + t.rect.w / 2 - 13, t.rect.y + 8, 26, 26}, cur ? c.accent : c.text);
+        const std::string label = fit(ctx.r, paletteTileLabel(t.kind, t.variant, true), ctx.theme.font.smallUi, t.rect.w - 6);
         const float lw = ctx.r.measure(label, ctx.theme.font.smallUi).width;
         ctx.r.drawText({t.rect.x + (t.rect.w - lw) / 2, t.rect.y + t.rect.h - 20}, label, ctx.theme.font.smallUi,
                        cur ? c.accent : c.text);
@@ -1944,7 +1982,7 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
         const gfx::Rect pr{b.x, b.y + b.h - previewH, b.w, previewH};
         ctx.r.fillRect(pr, c.headerBg);
         ctx.r.fillRect({pr.x, pr.y, pr.w, 1}, c.border);
-        ctx.r.drawText({pr.x + 8, pr.y + 6}, "Aper\xC3\xA7u : " + std::string(hmi::kindLabel(*hoverKind_)),
+        ctx.r.drawText({pr.x + 8, pr.y + 6}, "Aper\xC3\xA7u : " + paletteTileLabel(*hoverKind_, hoverVariant_, false),
                        ctx.theme.font.smallUi, c.textMuted);
         hmi::View v;
         v.width = 1;
@@ -1953,6 +1991,7 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
         l.id = 1;
         v.layers.push_back(l);
         auto o = hmi::makeObject(*hoverKind_, 2, "apercu", 0, 0, 1);
+        if (!hoverVariant_.empty()) (void)hmi::applyKindVariant(o, hoverVariant_);   // 1.14.1 (N4) : la variante survolee
         const hmi::Box ob = o.box();
         const double w = std::max(1.0, ob.w), h = std::max(1.0, ob.h);
         const float zoom = static_cast<float>(std::min((pr.w - 24) / w, (pr.h - 34) / h));
@@ -2024,15 +2063,17 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
         const auto* t = tileAt(m->pos);
         const std::optional<hmi::Kind> k = t ? std::optional<hmi::Kind>(t->kind) : std::nullopt;
         const std::string sym = t ? t->symbol : std::string{};
-        if (k != hoverKind_ || sym != hoverSymbol_) {
+        const std::string variant = t ? t->variant : std::string{};
+        if (k != hoverKind_ || sym != hoverSymbol_ || variant != hoverVariant_) {
             hoverKind_ = k;
             hoverSymbol_ = sym;
+            hoverVariant_ = variant;
             if (!sym.empty())
                 setTooltip("Clique puis clique dans la vue pour poser une instance de " + sym
                            + ". Ses arguments (propri\xC3\xA9t\xC3\xA9 Arguments) la relient \xC3\xA0 ses variables. "
                              "Double-clic sur une instance : ouvrir le symbole.");
             else
-                setTooltip(k ? "Clique puis clique dans la vue pour poser : " + std::string(hmi::kindLabel(*k))
+                setTooltip(k ? "Clique puis clique dans la vue pour poser : " + paletteTileLabel(*k, variant, false)
                                  + ". L'\xC3\xA9toile l'ajoute aux favoris. F1 : sa page d'aide, avec un exemple anim\xC3\xA9."
                              : std::string{});
             invalidate();
@@ -2066,7 +2107,15 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         current_ = t->kind;
-        chosen->emit(t->kind);
+        currentVariant_ = t->variant;
+        // 1.14.1 (N4) : une variante (la Calculatrice scientifique) se pose deja reglee.
+        if (!t->variant.empty()) {
+            const hmi::Kind kind = t->kind;
+            const std::string variant = t->variant;
+            chosenVariant->emit(kind, variant);
+        } else {
+            chosen->emit(t->kind);
+        }
         invalidate();
         return ui::EventResult::Consumed;
     }
@@ -2549,6 +2598,35 @@ const std::vector<KeyInfo>& keyInfos() {
          "Le niveau du canal, d'apr\xC3\xA8s les sons qui jouent (\xC3\xA0 leur volume) : vert, orange, puis rouge en haut. Celui du "
          "G\xC3\xA9n\xC3\xA9ral : le plus fort de tous."},
         {"muteColor", "Couleur du M allum\xC3\xA9", PG::ValueType::Color, {}, "Le bouton M d'un canal coup\xC3\xA9."},
+        // ---- 1.14.1 (N4) : la Calculatrice
+        {"calcMode", "Mode", PG::ValueType::Enum, {"standard", "scientifique", "programmeur"},
+         "Standard : les quatre op\xC3\xA9rations, %, 1/x, x\xC2\xB2, la racine, la m\xC3\xA9moire. Scientifique : en plus les "
+         "parenth\xC3\xA8ses, sin cos tan (2nde : leurs inverses), log, ln, 10^x, e^x, x^y, la racine y-i\xC3\xA8me, n!, \xCF\x80, e, "
+         "mod, |x|, Exp. Programmeur : un entier en HEX, DEC, OCT et BIN, la taille du mot, AND OR XOR NOT, les d\xC3\xA9" "calages, "
+         "la grille des bits. L'ordre des op\xC3\xA9rations est respect\xC3\xA9 (2 + 3 \xC3\x97 4 = 14)."},
+        {"angleUnit", "Angles", PG::ValueType::Enum, {"DEG", "RAD"},
+         "Scientifique : sin, cos, tan et leurs inverses en degr\xC3\xA9s ou en radians. En marche, la touche DEG / RAD bascule."},
+        {"wordSize", "Taille du mot", PG::ValueType::Enum, {"BYTE", "WORD", "DWORD", "LWORD"},
+         "Programmeur : 8, 16, 32 ou 64 bits. Les calculs d\xC3\xA9" "bordent dans le mot (compl\xC3\xA9ment \xC3\xA0 deux : 255 + 1 = 0 en "
+         "BYTE non sign\xC3\xA9). En marche, la touche du mot passe au suivant (la valeur est tronqu\xC3\xA9" "e en r\xC3\xA9tr\xC3\xA9" "cissant)."},
+        {"signedWord", "Sign\xC3\xA9", PG::ValueType::Boolean, {},
+         "Programmeur : coch\xC3\xA9, le mot se lit sign\xC3\xA9 (SINT, INT, DINT, LINT : FFFF vaut -1 en WORD) ; d\xC3\xA9" "coch\xC3\xA9, "
+         "non sign\xC3\xA9 (USINT, UINT, UDINT, ULINT : FFFF vaut 65535). En marche, la touche Sign\xC3\xA9 / Non sign\xC3\xA9 bascule."},
+        {"calcBase", "Base de d\xC3\xA9part", PG::ValueType::Enum, {"HEX", "DEC", "OCT", "BIN"},
+         "Programmeur : la base active \xC3\xA0 l'ouverture de la vue (les chiffres tap\xC3\xA9s y sont lus). En marche, un clic sur la "
+         "ligne HEX, DEC, OCT ou BIN la change."},
+        {"keyColor", "Touches des chiffres", PG::ValueType::Color, {}, "Les chiffres, la virgule, \xC2\xB1 (et A-F en programmeur)."},
+        {"opColor", "Touches des fonctions", PG::ValueType::Color, {}, "Les op\xC3\xA9rateurs, les fonctions, C, CE, la m\xC3\xA9moire."},
+        {"equalsColor", "Touche =", PG::ValueType::Color, {},
+         "= et Envoyer ; aussi la base active, les bits \xC3\xA0 1, la 2nde allum\xC3\xA9" "e et le cadre de la calculatrice qui a le clavier."},
+        {"displayColor", "Fond de l'afficheur", PG::ValueType::Color, {}, ""},
+        {"startValue", "Valeur de d\xC3\xA9part", PG::ValueType::Text, {},
+         "Une expression lue \xC3\xA0 l'ouverture de la vue : la calculatrice part de sa valeur (Consigne, Debit * 3.6). Le bouton "
+         "\xE2\x87\xA9 de la rang\xC3\xA9" "e du haut la relit. Vide : elle part de 0, sans bouton."},
+        {"resultTo", "R\xC3\xA9sultat vers", PG::ValueType::Text, {},
+         "La variable o\xC3\xB9 le bouton Envoyer \xC3\xA9" "crit le nombre affich\xC3\xA9, comme une commande : le niveau d'acc\xC3\xA8s de "
+         "l'objet, la permission Piloter, puis le type de la variable (arrondi pour un entier, ramen\xC3\xA9 dans ses bornes, la Console "
+         "le dit ; un texte re\xC3\xA7oit le nombre \xC3\xA9" "crit ; une structure est refus\xC3\xA9" "e). Vide : pas de bouton Envoyer."},
         // ---- 1.12.30 : la visionneuse de documents
         {"document", "Document", PG::ValueType::Text, {},
          "Une ressource du projet (un PDF, une image PNG, JPEG, BMP, GIF ou SVG, un texte TXT), un fichier externe du projet, "
@@ -2849,6 +2927,15 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "accent") return "Couleur de la course";
         if (key == "fill") return "Fond";
         if (key == "pilotable") return "Pilotable (curseurs, molette, M)";
+    }
+    // 1.14.1 (N4) : la Calculatrice.
+    if (kind == K::Calculator) {
+        if (key == "decimals") return "D\xC3\xA9" "cimales max";
+        if (key == "fill") return "Fond";
+        if (key == "stroke") return "Bordure";
+        if (key == "textColor") return "Couleur des textes";
+        if (key == "fontSize") return "Taille des touches (max)";
+        if (key == "pilotable") return "Pilotable (touches, clavier)";
     }
     // 1.12.30 : le variateur de vitesse - la Valeur dit s'il tourne ; le fond est celui de son cadre.
     if (kind == K::SpeedDrive) {
@@ -3224,6 +3311,28 @@ void soundProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p)
     else if (mute && prop.key == "colorOff") explain("Le fond du bouton quand le son est coup\xC3\xA9.");
     else if (!mute && prop.key == "orientation")
         explain("Verticale : une colonne par canal (le curseur monte) ; horizontale : une ligne par canal (le curseur va \xC3\xA0 droite).");
+}
+
+// 1.14.1 (N4) : la Calculatrice - l'aide de ses cles partagees (pilotable, decimals, fontSize) ; un mot tape hors de
+// ses choix (un mode, une taille de mot) reste propose.
+void calcProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p) {
+    if (o.kind != hmi::Kind::Calculator) return;
+    const auto explain = [&](std::string mine) {
+        const auto at = p.description.find("Tape =expression");
+        p.description = std::move(mine) + (at == std::string::npos ? std::string{} : "\n" + p.description.substr(at));
+    };
+    if ((prop.key == "calcMode" || prop.key == "angleUnit" || prop.key == "wordSize" || prop.key == "calcBase")
+        && std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end())
+        p.enumValues.push_back(prop.value);
+    else if (prop.key == "pilotable")
+        explain("Coch\xC3\xA9 : en marche (simulation, poste d'exploitation), les touches se cliquent et un clic lui donne le "
+                "clavier ; le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent (un cadenas sinon). D\xC3\xA9" "coch\xC3\xA9 : "
+                "elle montre sa Valeur de d\xC3\xA9part sans r\xC3\xA9" "agir.");
+    else if (prop.key == "decimals")
+        explain("Les d\xC3\xA9" "cimales montr\xC3\xA9" "es au plus (0 \xC3\xA0 15) ; les z\xC3\xA9ros de la fin tombent (0,3 et non "
+                "0,3000000000). Au-del\xC3\xA0 de 10^16 (ou trop petit) : la notation 1,2E+20.");
+    else if (prop.key == "fontSize")
+        explain("La taille des libell\xC3\xA9s des touches au plus : ils r\xC3\xA9tr\xC3\xA9" "cissent avec la calculatrice.");
 }
 
 // Les libelles et les choix des proprietes du lot H.
@@ -4152,6 +4261,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.30 : la visionneuse de documents - ses documents, ses zooms.
         docProperty(*o, prop, p, assets);
         soundProperty(*o, prop, p);   // 1.14.0 : le Coupe-son, le Melangeur de volume
+        calcProperty(*o, prop, p);    // 1.14.1 (N4) : la Calculatrice
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.

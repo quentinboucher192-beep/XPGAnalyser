@@ -128,8 +128,17 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::RecordingPlayer:      return HmiGlyph::RecordingPlayer;
         case hmi::Kind::SoundMute:            return HmiGlyph::SoundMute;        // 1.14.0
         case hmi::Kind::VolumeMixer:          return HmiGlyph::VolumeMixer;
+        case hmi::Kind::Calculator:           return HmiGlyph::Calculator;       // 1.14.1 (N4)
     }
     return HmiGlyph::None;
+}
+
+HmiGlyph glyphFor(hmi::Kind k, std::string_view variant) noexcept {
+    if (k == hmi::Kind::Calculator) {
+        if (variant == "scientifique") return HmiGlyph::CalculatorScientific;
+        if (variant == "programmeur") return HmiGlyph::CalculatorProgrammer;
+    }
+    return glyphFor(k);
 }
 
 void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color c) {
@@ -809,6 +818,31 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
         case HmiGlyph::VolumeMixer:     // 1.14.0 : trois courses, trois poignees a des hauteurs differentes
             L(3.5f, 2, 3.5f, 14, 1.0f); L(8, 2, 8, 14, 1.0f); L(12.5f, 2, 12.5f, 14, 1.0f);
             F(1.8f, 8.5f, 3.4f, 2.2f, c); F(6.3f, 4, 3.4f, 2.2f, c); F(10.8f, 10.5f, 3.4f, 2.2f, c);
+            break;
+        // 1.14.1 (N4) : la calculatrice - son boitier, son afficheur, puis ses touches (standard), une courbe
+        // (scientifique), des bits 1 0 1 1 (programmeur).
+        case HmiGlyph::Calculator:
+        case HmiGlyph::CalculatorScientific:
+        case HmiGlyph::CalculatorProgrammer:
+            R(3, 1.5f, 10, 13);
+            F(4.6f, 3, 6.8f, 2.6f, c);
+            if (g == HmiGlyph::Calculator) {
+                for (int row = 0; row < 3; ++row)
+                    for (int col = 0; col < 3; ++col) F(4.6f + col * 2.5f, 7 + row * 2.4f, 1.6f, 1.5f, row == 2 && col == 2 ? c : soft);
+            } else if (g == HmiGlyph::CalculatorScientific) {
+                std::vector<gfx::Point> wave;
+                for (int k = 0; k <= 12; ++k) {
+                    const float x = 4.6f + 6.8f * static_cast<float>(k) / 12.f;
+                    wave.push_back(P(x, 10.2f - 2.4f * std::sin(static_cast<float>(k) / 12.f * 6.2832f)));
+                }
+                shapes::strokePolyline(r, wave, false, c, std::max(1.f, 1.2f * s));
+            } else {
+                for (int k = 0; k < 4; ++k) {
+                    const bool one = k != 1;
+                    if (one) F(4.4f + k * 1.9f, 8, 1.3f, 4.5f, c);
+                    else R(4.4f + k * 1.9f, 8, 1.3f, 4.5f);
+                }
+            }
             break;
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);

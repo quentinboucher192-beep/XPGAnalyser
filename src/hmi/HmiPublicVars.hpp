@@ -416,6 +416,13 @@ inline constexpr InfoVar kDocInfo[] = {
     {"Loaded",        "BOOL",   Access::Read, "Le document est lu (ses pages se montrent)."},
     {"DocumentError", "STRING", Access::Read, "Pourquoi le document ne se montre pas (introuvable, lecteur PDF absent...) ; vide : il se montre."},
 };
+// 1.14.1 (N4) : ce que le moteur sait d'une calculatrice, en plus (Vue.Calc_1.Result...).
+inline constexpr InfoVar kCalcInfo[] = {
+    {"Result",     "LREAL",  Access::Read, "Le nombre montr\xC3\xA9 en grand (un r\xC3\xA9sultat, le nombre tap\xC3\xA9) ; en programmeur, l'entier lu selon le signe. 0 apr\xC3\xA8s une erreur."},
+    {"DisplayText", "STRING", Access::Read, "Le texte de l'afficheur, tel qu'il se lit (Erreur apr\xC3\xA8s une erreur ; en programmeur, dans la base active)."},
+    {"Expression", "STRING", Access::Read, "La petite ligne de l'afficheur : l'expression en cours (12 + 3 \xC3\x97), ou le calcul fait (12 + 3 =)."},
+    {"Memory",     "LREAL",  Access::Read, "Le nombre en m\xC3\xA9moire (M+, M\xE2\x88\x92 ; 0 : vide)."},
+};
 // 1.9 : le groupe d'alarmes interne d'un objet qui porte des alarmes (un objet du
 // synoptique, une instance de symbole : ses objets compris) - HmiObjectAlarms.hpp.
 inline constexpr InfoVar kAlarmInfo[] = {
@@ -503,6 +510,7 @@ inline constexpr InfoVar kViewInfo[] = {
     for (const auto& v : kObjectInfo) if (same(v.name, name)) return &v;
     for (const auto& v : kGifInfo) if (same(v.name, name)) return &v;      // lot 16 (un GIF anime)
     for (const auto& v : kDocInfo) if (same(v.name, name)) return &v;      // 1.12.30 (une visionneuse de documents)
+    for (const auto& v : kCalcInfo) if (same(v.name, name)) return &v;     // 1.14.1 (N4) (une calculatrice)
     for (const auto& v : kAlarmInfo) if (same(v.name, name)) return &v;    // 1.9 (un objet qui porte des alarmes)
     return nullptr;
 }
@@ -657,6 +665,7 @@ struct Member {
     std::vector<InfoVar> infos(std::begin(kObjectInfo), std::end(kObjectInfo));
     if (o.kind == Kind::AnimatedGif) infos.insert(infos.end(), std::begin(kGifInfo), std::end(kGifInfo));   // lot 16
     if (o.kind == Kind::DocumentViewer) infos.insert(infos.end(), std::begin(kDocInfo), std::end(kDocInfo));   // 1.12.30
+    if (o.kind == Kind::Calculator) infos.insert(infos.end(), std::begin(kCalcInfo), std::end(kCalcInfo));       // 1.14.1 (N4)
     for (const auto& i : infos) {
         Member m;
         m.name = std::string(i.name);

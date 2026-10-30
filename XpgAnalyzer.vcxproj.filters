@@ -1381,6 +1381,9 @@
     <ClCompile Include="src\hmi\HmiCalc.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiCalculator.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDecl.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2807,6 +2810,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiCalc.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiCalculator.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiChoiceLists.hpp">

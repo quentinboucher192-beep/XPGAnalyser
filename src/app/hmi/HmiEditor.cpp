@@ -634,8 +634,17 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         statusBar_->setMessage("Clique dans la vue pour poser : " + std::string(hmi::kindLabel(k))
                                + " (Maj : en poser plusieurs, \xC3\x89" "chap : annuler)");
     });
+    // 1.14.1 (N4) : une variante (la Calculatrice scientifique, programmeur) se pose deja reglee.
+    links_ += palette_->chosenVariant->connect([this](hmi::Kind k, const std::string& variant) {
+        canvas_->setPlaceVariant(k, variant);
+        std::string what(hmi::kindLabel(k));
+        for (const auto& kv : hmi::kindVariants(k))
+            if (kv.key == variant) what = std::string(kv.label);
+        statusBar_->setMessage("Clique dans la vue pour poser : " + what + " (Maj : en poser plusieurs, \xC3\x89" "chap : annuler)");
+    });
     links_ += canvas_->placed->connect([this] {
         palette_->setCurrent(canvas_->placeKind());
+        palette_->setCurrentVariant(canvas_->placeVariant());
         palette_->setCurrentSymbol(canvas_->placeSymbol());
         palette_->setCurrentVariable(canvas_->placeVariable() ? canvas_->placeVariable()->name : std::string{});
     });

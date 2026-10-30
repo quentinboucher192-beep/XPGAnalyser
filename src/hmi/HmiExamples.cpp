@@ -2097,6 +2097,30 @@ Example volumeMixer() {
     return m.done(9.5);
 }
 
+// ---- 1.14.1 (N4) : la calculatrice - l'ordre des operations, la memoire, le clavier ----------
+Example calculator() {
+    Maker m(500);
+    m.add(Kind::Calculator, "Calcul", 20, 16, 300, 466);
+    m.note("Explication", 340, 16, 240, 330,
+           "12 + 3 \xC3\x97 4 = 24 : l'ordre des op\xC3\xA9rations est respect\xC3\xA9. M+ garde le r\xC3\xA9sultat (le M "
+           "s'allume), MR le rappelle. Un clic sur la calculatrice lui donne le clavier : 7*6 puis Entr\xC3\xA9" "e. "
+           "La biblioth\xC3\xA8que propose aussi la scientifique et la programmeur (HEX, BIN, la grille des bits).");
+    double t = 0.8;
+    for (const char* k : {"1", "2", "+", "3", "*", "4", "="}) {
+        m.step(t, "partie", "Calcul", std::string("touche:") + k);
+        t += 0.55;
+    }
+    m.step(t + 0.5, "partie", "Calcul", "touche:M+");
+    m.step(t + 1.6, "partie", "Calcul", "touche:C");
+    m.step(t + 2.4, "texte", "", "7*6=");
+    m.step(t + 4.0, "partie", "Calcul", "touche:+");
+    m.step(t + 4.6, "partie", "Calcul", "touche:MR");
+    m.step(t + 5.2, "partie", "Calcul", "touche:=");
+    m.step(t + 6.6, "partie", "Calcul", "touche:MC");
+    m.step(t + 7.0, "partie", "Calcul", "touche:C");
+    return m.done(t + 8.0);
+}
+
 // ---- 1.12.30 : la visionneuse de documents - la notice suit l'etape de la procedure ----
 Example documentViewer() {
     Maker m(420);
@@ -2733,6 +2757,7 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::RecordingPlayer:     return recordingPlayer();
         case Kind::SoundMute:           return soundMute();          // 1.14.0
         case Kind::VolumeMixer:         return volumeMixer();
+        case Kind::Calculator:          return calculator();         // 1.14.1 (N4)
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

@@ -22,6 +22,7 @@
 #include "../../hmi/HmiQr.hpp"
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiSystemMenu.hpp"   // 1.14.0 : le Coupe-son, le Melangeur de volume
+#include "../../hmi/HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice
 
 #include <cmath>
 #include <cstdio>
@@ -1186,6 +1187,157 @@ void drawVolumeMixer(const Ctx& c) {
     }
 }
 
+// ------------------------------------------------------------------ 1.14.1 (N4) ----
+// La fin d'un texte trop long (le debut tombe : "...3 x (4 - 1") - l'expression qu'on tape se lit par sa fin.
+std::string calcTail(const Ctx& c, const std::string& s, double maxW, double fs) {
+    if (measureLocal(c, s, fs) <= maxW) return s;
+    const std::string dots = "\xE2\x80\xA6";
+    std::size_t at = 0;
+    while (at < s.size()) {
+        ++at;
+        while (at < s.size() && (static_cast<unsigned char>(s[at]) & 0xC0) == 0x80) ++at;
+        std::string t = dots + s.substr(at);
+        if (measureLocal(c, t, fs) <= maxW) return t;
+    }
+    return dots;
+}
+
+// Le libelle d'une touche : son exposant avant (le y de la racine y-ieme), le libelle, son exposant apres (x^y,
+// sin-1) ; il retrecit pour tenir dans la touche.
+void calcKeyLabel(const Ctx& c, const hmi::calculator::Key& k, double fs, gfx::Color col) {
+    double f = fs, sf = fs * 0.62;
+    double wPre = k.pre.empty() ? 0 : measureLocal(c, k.pre, sf);
+    double wMain = measureLocal(c, k.label, f);
+    double wSup = k.sup.empty() ? 0 : measureLocal(c, k.sup, sf);
+    const double room = std::max(4.0, k.box.w - 8);
+    if (const double total = wPre + wMain + wSup; total > room && total > 0) {
+        const double r = room / total;
+        f *= r;
+        sf *= r;
+        wPre *= r;
+        wMain *= r;
+        wSup *= r;
+    }
+    double x = k.box.cx() - (wPre + wMain + wSup) / 2;
+    const double rise = f * 0.36;
+    if (!k.pre.empty()) {
+        text(c, k.pre, x, k.box.y - rise, wPre + 4, k.box.h, col, sf, "gauche");
+        x += wPre;
+    }
+    text(c, k.label, x, k.box.y, wMain + 4, k.box.h, col, f, "gauche");
+    x += wMain;
+    if (!k.sup.empty()) text(c, k.sup, x, k.box.y - rise, wSup + 4, k.box.h, col, sf, "gauche");
+}
+
+// La Calculatrice : l'afficheur (l'expression en petit, le resultat en grand, cales a droite ; M quand la memoire
+// n'est pas vide ; un message d'Envoyer ou de Charger a la place de l'expression), les quatre bases et la grille des
+// bits (programmeur), la rangee du haut (bascules, memoire, Charger, Envoyer), le pave (chiffres, fonctions et
+// operateurs, =). En marche : l'etat du moteur - la touche enfoncee un instant, les touches grisees (A-F hors HEX,
+// MC vide...), le cadre de la calculatrice qui a le clavier. Dans l'editeur : la calculatrice neuve.
+void drawCalculator(const Ctx& c) {
+    namespace calc = hmi::calculator;
+    const double w = c.w(), h = c.h(), rad = c.src.number(c.o, "radius", 8);
+    const bool live = c.opt.runtime && !c.opt.editor;
+    const calc::State* st = live ? c.opt.runtime->calculatorState(c.o.id) : nullptr;
+    calc::State fresh;
+    if (!st) {
+        fresh = calc::initialState(calc::settingsOf(c.o));
+        st = &fresh;
+    }
+    const double now = live ? c.opt.runtime->now() : 0.0;
+    const auto l = calc::layoutOf(c.o, *st, w, h);
+    const gfx::Color bg = colorOf(c, "fill", 0x1B2028);
+    const gfx::Color txt = colorOf(c, "textColor", 0xF2F4F8);
+    const gfx::Color dispCol = colorOf(c, "displayColor", 0x10141A);
+    const gfx::Color keyCol = colorOf(c, "keyColor", 0x3B4351);
+    const gfx::Color opCol = colorOf(c, "opColor", 0x2A313C);
+    const gfx::Color eqCol = colorOf(c, "equalsColor", 0x2F6FD6);
+    const auto shape = rectLocal(w, h, rad);
+    fillLocal(c, shape, bg);
+    strokeLocal(c, shape, true, colorOf(c, "stroke", 0x323A46), 1);
+    // Elle a le clavier : son cadre a la couleur de =.
+    if (live && c.opt.runtime->focusedObject() == c.o.id) strokeLocal(c, rectLocal(w, h, rad), true, eqCol, 2);
+
+    // ---- l'afficheur
+    fillLocal(c, boxLocal(l.display, std::min(rad, 6.0)), dispCol);
+    const hmi::FormState* f = live ? c.opt.runtime->formState(c.o.id) : nullptr;
+    const bool message = f && !f->message.empty() && now - f->messageAt < 4.0;
+    double exprLeft = l.expression.x;
+    if (st->hasMemory) {
+        text(c, "M", l.indicators.x, l.indicators.y, l.indicators.w, l.indicators.h, withAlpha(txt, 0.8f), l.expressionFont, "gauche");
+        exprLeft += measureLocal(c, "M", l.expressionFont) + 8;
+    }
+    const double exprW = std::max(4.0, l.expression.right() - exprLeft);
+    if (message) {
+        const gfx::Color mc = f->error ? c.fixedText(0xFF6B6B) : c.fixedText(0x4CD08A);
+        text(c, calcTail(c, f->message, exprW, l.expressionFont), exprLeft, l.expression.y, exprW, l.expression.h, mc, l.expressionFont, "droite");
+    } else {
+        text(c, calcTail(c, calc::expressionText(*st), exprW, l.expressionFont), exprLeft, l.expression.y, exprW, l.expression.h,
+             withAlpha(txt, 0.62f), l.expressionFont, "droite");
+    }
+    const std::string shown = calc::displayText(*st);
+    double rfs = l.resultFont;
+    while (rfs > 9 && measureLocal(c, shown, rfs) > l.result.w) rfs *= 0.92;
+    text(c, shown, l.result.x, l.result.y, l.result.w, l.result.h, st->error.empty() ? txt : c.fixedText(0xFF6B6B), rfs, "droite");
+
+    // ---- programmeur : les quatre bases (la base active en evidence ; un clic la rend active)
+    const std::uint64_t word = calc::wordValue(*st);
+    for (std::size_t i = 0; i < l.baseRows.size(); ++i) {
+        const auto& r = l.baseRows[i];
+        const auto b = static_cast<calc::Base>(i);
+        const bool active = st->settings.base == b;
+        if (active) {
+            fillLocal(c, boxLocal(r, 3), mix(bg, eqCol, 0.2f));   // opaques : pas de couture entre les triangles
+            fillLocal(c, boxLocal({r.x, r.y + 2, 3, r.h - 4}), eqCol);
+        }
+        const double labelW = measureLocal(c, "HEX", l.baseFont) + 14;
+        text(c, std::string(calc::baseKey(b)), r.x + 8, r.y, labelW, r.h, active ? eqCol : withAlpha(txt, 0.6f), l.baseFont, "gauche");
+        const std::string v = st->error.empty() ? calc::baseText(word, b, st->settings.bits, st->settings.isSigned, true) : std::string{};
+        const double vw = r.w - labelW - 12;
+        double bfs = l.baseFont;
+        while (bfs > 7 && measureLocal(c, v, bfs) > vw) bfs *= 0.92;
+        text(c, calcTail(c, v, vw, bfs), r.x + 8 + labelW, r.y, vw, r.h, active ? txt : withAlpha(txt, 0.8f), bfs, "gauche");
+    }
+
+    // ---- la grille des bits (programmeur) : 1 allume, 0 estompe ; sous chaque groupe de 4, le numero de son bit 0
+    for (std::size_t i = 0; i < l.bits.size(); ++i) {
+        const auto& b = l.bits[i];
+        if (b.w <= 0) continue;
+        const bool on = st->error.empty() && ((word >> i) & 1u) != 0;
+        if (on) fillLocal(c, boxLocal({b.x + 1, b.y + 1, b.w - 2, b.h - 2}, 2), mix(bg, eqCol, 0.32f));
+        text(c, on ? "1" : "0", b.x, b.y, b.w, b.h, on ? txt : withAlpha(txt, 0.42f), l.bitFont, "centre");
+    }
+    for (std::size_t g = 0; g < l.bitGroups.size(); ++g) {
+        const auto& b = l.bitGroups[g];
+        text(c, std::to_string(l.bitGroupFirst[g]), b.x, b.y, b.w - 2, b.h, withAlpha(txt, 0.4f), l.bitFont * 0.8, "droite");
+    }
+
+    // ---- la rangee du haut et le pave
+    const auto keyFill = [&](const calc::Key& k) {
+        switch (k.role) {
+            case calc::Key::Role::Digit: return keyCol;
+            case calc::Key::Role::Equals: case calc::Key::Role::Send: return eqCol;
+            default: return opCol;
+        }
+    };
+    const auto drawKey = [&](const calc::Key& k, double fs, bool flat) {
+        const bool enabled = calc::keyEnabled(*st, k.id);
+        const bool down = live && st->lastKey == k.id && now - st->lastKeyAt < 0.18;
+        gfx::Color fill = keyFill(k);
+        if (flat && k.role == calc::Key::Role::Memory) fill = mix(bg, txt, 0.07f);
+        if (k.on) fill = eqCol;
+        if (down) fill = mix(fill, txt, 0.25f);
+        if (!enabled) fill = mix(fill, bg, 0.55f);
+        const auto kb = boxLocal(k.box, std::min(6.0, k.box.h * 0.2));
+        fillLocal(c, kb, fill);
+        if (k.role == calc::Key::Role::Toggle && !k.on) strokeLocal(c, kb, true, withAlpha(txt, 0.28f), 1);
+        const gfx::Color tc = k.role == calc::Key::Role::Equals || k.role == calc::Key::Role::Send || k.on ? c.fixedOn(0xFFFFFF) : txt;
+        calcKeyLabel(c, k, fs, enabled ? tc : withAlpha(tc, 0.32f));
+    };
+    for (const auto& k : l.stripKeys) drawKey(k, l.stripFont, true);
+    for (const auto& k : l.keys) drawKey(k, std::min(l.keyFont, fsOf(c, 20)), false);
+}
+
 } // namespace
 
 bool drawLot9(const Ctx& c) {
@@ -1217,6 +1369,7 @@ bool drawLot9(const Ctx& c) {
         case Kind::SystemButton:        drawSystemButton(c); return true;     // lot 10
         case Kind::SoundMute:           drawSoundMute(c); return true;        // 1.14.0
         case Kind::VolumeMixer:         drawVolumeMixer(c); return true;
+        case Kind::Calculator:          drawCalculator(c); return true;       // 1.14.1 (N4)
         default:                        return false;
     }
 }
