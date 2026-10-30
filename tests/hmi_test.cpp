@@ -6916,8 +6916,9 @@ void parametresSystemeLot10() {
         sim::Value out;
         if (!rt.publicRead("SYS." + std::string(sv->name), out)) unread += std::string(sv->name) + " ";
     }
-    check(pub::kSysDomains[11] == "Param\xC3\xA8tres syst\xC3\xA8me" && pub::sysVarsOf(11).size() == 16 && unread.empty(),
-          "SYS : le domaine Param\xC3\xA8tres syst\xC3\xA8me, ses 16 variables lisibles (lot 13 : l'affichage) " + unread);
+    check(pub::kSysDomains[11] == "Param\xC3\xA8tres syst\xC3\xA8me" && pub::sysVarsOf(11).size() == 26 && unread.empty(),
+          "SYS : le domaine Param\xC3\xA8tres syst\xC3\xA8me, ses 26 variables lisibles (lot 13 : l'affichage ; 1.14.0 : les volumes et les muets "
+          "des canaux du son) " + unread);
 
     // Les reglages restent au redemarrage ; le menu, lui, repart ferme.
     rt.openSystemMenu(0, t, "test");
@@ -30570,6 +30571,389 @@ void codeBrut1131() {
     }
 }
 
+// 1.14.0 (lot M3) : COUPER LE SON, LE MELANGEUR DE VOLUME - les canaux (table, gain), le muet general et par canal
+// (les voix en cours se taisent : le crochet ; les suivants ne partent pas), les sources (alarmes, IHM_SON, Jouer un
+// son), les natives, les actions, les variables SYS., les deux objets (clic, glisser, molette, M), Generer.
+void son1140() {
+    std::printf("1.14.0 : couper le son, le melangeur de volume\n");
+    // ---- la table des canaux, le gain
+    check(std::size(kSoundChannels) == kSoundChannelCount && kSoundChannels[0].channel == SoundChannel::General
+              && soundChannelSpec(SoundChannel::Replay).key == "Relecture" && soundChannelSpec(SoundChannel::Videos).sys == "Videos",
+          "les canaux : General, Alarmes, Scripts, Actions, Videos, Relecture (pour les sons rejou\xC3\xA9s)");
+    check(soundChannelFrom("Alarmes") == SoundChannel::Alarms && soundChannelFrom("alarms") == SoundChannel::Alarms
+              && soundChannelFrom("Vid\xC3\xA9os") == SoundChannel::Videos && soundChannelFrom("'Videos'") == SoundChannel::Videos
+              && soundChannelFrom("Tous") == SoundChannel::General && soundChannelFrom("G\xC3\xA9n\xC3\xA9ral") == SoundChannel::General
+              && soundChannelFrom("Replay") == SoundChannel::Replay && !soundChannelFrom("Alarmez") && !soundChannelFrom(""),
+          "un canal par son mot, son nom, sa variable (sans casse) ; Tous : le General ; inconnu : rien");
+    SystemSettings gs;
+    check(soundGain(gs, SoundChannel::Alarms) == 1.f && !soundSilenced(gs, SoundChannel::Videos), "au d\xC3\xA9part : tout \xC3\xA0 100 %, rien de muet");
+    gs.volume = 50;
+    setSoundVolume(gs, SoundChannel::Alarms, 80);
+    check(std::fabs(soundGain(gs, SoundChannel::Alarms) - 0.4f) < 1e-6 && std::fabs(soundGain(gs, SoundChannel::Scripts) - 0.5f) < 1e-6,
+          "le gain : volume g\xC3\xA9n\xC3\xA9ral x volume du canal (50 % x 80 % = 0,4)");
+    setSoundMuted(gs, SoundChannel::Alarms, true);
+    check(soundGain(gs, SoundChannel::Alarms) == 0.f && soundSilenced(gs, SoundChannel::Alarms) && soundGain(gs, SoundChannel::Scripts) > 0.f,
+          "le canal muet : rien pour lui, les autres jouent");
+    setSoundMuted(gs, SoundChannel::General, true);
+    check(!gs.soundOn && soundGain(gs, SoundChannel::Scripts) == 0.f && soundSilenced(gs, SoundChannel::Actions),
+          "le G\xC3\xA9n\xC3\xA9ral muet (soundOn faux) : plus rien");
+    setSoundVolume(gs, SoundChannel::Scripts, 250);
+    check(soundVolume(gs, SoundChannel::Scripts) == 100, "un volume born\xC3\xA9 \xC3\xA0 100");
+
+    // ---- le moteur : trois sources, trois canaux ; le muet coupe et bloque
+    Supervision s;
+    s.alarm("Fuite", "Pression < 5.0", 1, "Securite");
+    for (const char* n : {"sirene.wav", "bip.wav"}) {
+        Resource r;
+        r.id = s.p.allocate();
+        r.name = n;
+        r.format = "WAV";
+        s.p.assets.resources.push_back(r);
+    }
+    s.p.alarmSettings.sounds[0] = "sirene.wav";
+    s.p.alarmSettings.repeatS = 0;
+    Script sc;
+    sc.id = s.p.allocate();
+    sc.name = "Bip";
+    sc.event = "Appel";
+    sc.body = "IHM_SON('bip.wav');";
+    s.p.programs.scripts.push_back(sc);
+    const Id btn = edit::add(s.p, s.v(), Kind::Button, 10, 10);
+    s.v().object(btn)->name = "Btn_Son";
+    s.v().object(btn)->actions.push_back(act(Trigger::Click, Operation::PlaySound, "bip.wav"));
+    std::vector<std::string> played;      // "nom@canal"
+    int settingsCalls = 0;
+    Runtime::Hooks hooks;
+    hooks.playSound = [&](const std::string& name) { played.push_back(name + "@" + s.rt.soundChannel()); };
+    hooks.soundSettings = [&] { ++settingsCalls; };
+    hooks.soundLevel = [](int channel) { return channel == static_cast<int>(SoundChannel::Alarms) ? 0.7f : 0.f; };
+    s.rt.setHooks(hooks);
+    s.start();
+    s.run(0.2);
+    s.plc.values["Pression"] = sim::Value::real(4.0);
+    s.run(0.3);
+    std::string why;
+    check(s.rt.callScript("Bip", s.t, &why), "IHM_SON dans un script " + why);
+    s.rt.press(btn, s.t);
+    s.rt.release(btn, s.t, true);
+    std::string all;
+    for (const auto& x : played) all += x + " ";
+    same(all, "sirene.wav@Alarmes bip.wav@Scripts bip.wav@Actions ", "chaque son part sur son canal (le crochet lit soundChannel())");
+    check(s.rt.soundChannel().empty(), "hors d'un appel, soundChannel() est vide");
+    check(std::fabs(s.rt.soundLevel(SoundChannel::Alarms) - 0.7f) < 1e-6 && s.rt.soundLevel(SoundChannel::Scripts) == 0.f,
+          "le niveau d'un canal (le vum\xC3\xA8tre) : le crochet soundLevel");
+    // Le canal Scripts coupe : IHM_SON ne part plus, l'action oui ; le crochet a dit le changement (les voix se taisent).
+    played.clear();
+    const int before = settingsCalls;
+    check(s.rt.setChannelMuted(SoundChannel::Scripts, true, "essai") && settingsCalls == before + 1,
+          "couper un canal : le crochet soundSettings part (les voix du canal se taisent tout de suite)");
+    (void)s.rt.callScript("Bip", s.t, &why);
+    s.rt.press(btn, s.t);
+    s.rt.release(btn, s.t, true);
+    same(played.size() == 1 ? played[0] : std::to_string(played.size()), "bip.wav@Actions", "canal Scripts muet : IHM_SON ne part pas, l'action joue");
+    check(journalHas(s.rt, "Action", "(canal Scripts coup\xC3\xA9)"), "le journal dit le canal coup\xC3\xA9");
+    check(!s.rt.setChannelMuted(SoundChannel::Scripts, true, "essai"), "le couper encore : rien ne change");
+    (void)s.rt.setChannelMuted(SoundChannel::Scripts, false, "essai");
+    // Tout couper : rien ne part ; retabli, rien n'est rejoue.
+    played.clear();
+    check(s.rt.setChannelMuted(SoundChannel::General, true, "essai") && !s.rt.settings().soundOn, "tout couper : soundOn faux");
+    (void)s.rt.callScript("Bip", s.t, &why);
+    s.rt.press(btn, s.t);
+    s.rt.release(btn, s.t, true);
+    check(played.empty() && journalHas(s.rt, "Action", "(son coup\xC3\xA9)"), "tout coup\xC3\xA9 : ni IHM_SON ni l'action (journal : son coup\xC3\xA9)");
+    (void)s.rt.setChannelMuted(SoundChannel::General, false, "essai");
+    check(played.empty(), "r\xC3\xA9tabli : rien n'est rejou\xC3\xA9");
+    // Le volume : le crochet aussi (les voix prennent leur gain), une seule fois par changement.
+    const int c2 = settingsCalls;
+    check(s.rt.setChannelVolume(SoundChannel::Alarms, 35, "essai") && settingsCalls == c2 + 1 && !s.rt.setChannelVolume(SoundChannel::Alarms, 35, "essai")
+              && settingsCalls == c2 + 1,
+          "r\xC3\xA9gler un volume : le crochet une fois ; le m\xC3\xAAme volume : rien");
+
+    // ---- les variables SYS. (lecture et ecriture)
+    const auto sys = [&](const char* n) {
+        sim::Value v;
+        (void)s.rt.publicRead(std::string("SYS.") + n, v);
+        return v;
+    };
+    check(sys("VolumeAlarms").asInteger() == 35 && sys("Volume").asInteger() == 100 && !sys("MuteVideos").isTruthy() && sys("SoundEnabled").isTruthy(),
+          "SYS.VolumeAlarms = 35, SYS.Volume = 100, SYS.MuteVideos faux, SYS.SoundEnabled vrai");
+    check(s.rt.publicWrite("SYS.MuteVideos", sim::Value::boolean(true), &why) == 1 && soundMuted(s.rt.settings(), SoundChannel::Videos)
+              && sys("MuteVideos").isTruthy(),
+          "SYS.MuteVideos := TRUE coupe le canal Vid\xC3\xA9os");
+    check(s.rt.publicWrite("SYS.VolumeReplay", sim::Value::integer(sim::Type::Int, 40), &why) == 1 && sys("VolumeReplay").asInteger() == 40,
+          "SYS.VolumeReplay := 40 (le canal Relecture)");
+    check(s.rt.publicWrite("SYS.Volume", sim::Value::real(62.6), &why) == 1 && s.rt.settings().volume == 63, "SYS.Volume := 62.6 : 63 %");
+    check(s.rt.publicWrite("SYS.SoundEnabled", sim::Value::boolean(false), &why) == 1 && !s.rt.settings().soundOn
+              && s.rt.publicWrite("SYS.SoundEnabled", sim::Value::boolean(true), &why) == 1 && s.rt.settings().soundOn,
+          "SYS.SoundEnabled := FALSE coupe tout, TRUE le r\xC3\xA9tablit (compatible : vrai = le son est actif)");
+    for (const char* n : {"VolumeAlarms", "VolumeScripts", "VolumeActions", "VolumeVideos", "VolumeReplay", "MuteAlarms", "MuteScripts",
+                          "MuteActions", "MuteVideos", "MuteReplay"})
+        check(pub::sysVar(n) && pub::sysAccess(*pub::sysVar(n)) == pub::Access::ReadWrite, std::string("SYS.") + n + " : au catalogue, en \xC3\xA9" "criture");
+
+    // ---- les natives
+    Script nat;
+    nat.id = s.p.allocate();
+    nat.name = "Natives";
+    nat.event = "Appel";
+    nat.body = "IHM_SON_MUET(TRUE);\nIF IHM_SON_EST_MUET() THEN IHM_SON_VOLUME('Alarmes', 80); END_IF;\nIHM_SON_CANAL_MUET('Videos', FALSE);\n"
+               "IHM_SON_CANAL_MUET('Relecture', TRUE);\nIHM_SON_VOLUME('General', 70);\nIHM_SON_MUET(FALSE);";
+    s.p.programs.scripts.push_back(nat);
+    check(s.rt.callScript("Natives", s.t, &why), "les natives du son tournent " + why);
+    const auto& st = s.rt.settings();
+    check(st.soundOn && soundVolume(st, SoundChannel::Alarms) == 80 && !soundMuted(st, SoundChannel::Videos) && soundMuted(st, SoundChannel::Replay)
+              && st.volume == 70,
+          "IHM_SON_MUET, IHM_SON_EST_MUET, IHM_SON_VOLUME (Alarmes 80, General 70), IHM_SON_CANAL_MUET (Videos, Relecture)");
+    Script bad;
+    bad.id = s.p.allocate();
+    bad.name = "Inconnu";
+    bad.event = "Appel";
+    bad.body = "Ok := IHM_SON_VOLUME('Musique', 10);";
+    s.p.programs.scripts.push_back(bad);
+    s.p.programs.variables.push_back(hmiVar(s.p, "Ok", "BOOL", "TRUE"));
+    s.rt.stop(s.t);
+    s.start();
+    s.run(0.1);
+    (void)s.rt.callScript("Inconnu", s.t, &why);
+    check(s.rt.variable("Ok") && !s.rt.variable("Ok")->isTruthy() && journalHas(s.rt, "Erreur", "canal inconnu 'Musique'"),
+          "IHM_SON_VOLUME('Musique', 10) : FALSE, le journal le dit");
+    check(soundVolume(s.rt.settings(), SoundChannel::Alarms) == 80, "red\xC3\xA9marr\xC3\xA9" "e, l'IHM garde les r\xC3\xA9glages du son (ceux du poste)");
+    for (const char* n : {"IHM_SON_MUET", "IHM_SON_EST_MUET", "IHM_SON_VOLUME", "IHM_SON_CANAL_MUET"})
+        check(isHmiFunction(n) && natives::function(n) != nullptr, std::string(n) + " : connue de Compiler et du catalogue");
+    {
+        const auto f = n110::run(s.p, "IHM_SON_VOLUME('Alarmes');\nIHM_SON_MUET();\n");
+        check(n110::find(f, "IHM_SON_VOLUME prend 2 arguments, pas 1") != nullptr && n110::find(f, "IHM_SON_MUET prend 1 argument, pas 0") != nullptr
+                  && n110::run(s.p, "IHM_SON_VOLUME('Alarmes', 80);\nIHM_SON_CANAL_MUET('Videos', TRUE);\nOk := IHM_SON_EST_MUET();\n").empty(),
+              "Compiler : IHM_SON_VOLUME attend deux arguments, IHM_SON_MUET un ; les bons appels passent" + n110::dump(f));
+    }
+
+    // ---- les actions
+    Project ap;
+    View av = makeView(ap, "Vue_Son");
+    const auto addAct = [&](const char* name, Operation op, std::string target = {}, std::string value = {}) {
+        const Id id = edit::add(ap, av, Kind::Button, 10, 10);
+        av.object(id)->name = name;
+        av.object(id)->actions.push_back(act(Trigger::Click, op, std::move(target), std::move(value)));
+        return id;
+    };
+    const Id aMute = addAct("A_Couper", Operation::SoundMute);
+    const Id aRestore = addAct("A_Retablir", Operation::SoundRestore);
+    const Id aToggle = addAct("A_Basculer", Operation::SoundToggle);
+    const Id aVol = addAct("A_Volume", Operation::SoundVolume, "Alarmes", "45");
+    const Id aVolExpr = addAct("A_VolumeExpr", Operation::SoundVolume, "", "Nuit * 10");
+    const Id aChan = addAct("A_Canal", Operation::SoundChannelMute, "Videos", "couper");
+    const Id aChanBack = addAct("A_CanalRetablir", Operation::SoundChannelMute, "Vid\xC3\xA9os", "r\xC3\xA9tablir");
+    const Id aChanTog = addAct("A_CanalBasculer", Operation::SoundChannelMute, "Canal_Choisi", "basculer");
+    ap.programs.variables.push_back(hmiVar(ap, "Nuit", "INT", "3"));
+    ap.programs.variables.push_back(hmiVar(ap, "Canal_Choisi", "STRING", "'Scripts'"));
+    ap.views = {av};
+    ap.config.startView = av.id;
+    Runtime art;
+    art.bind(&ap, nullptr);
+    art.start(0);
+    art.tick(0.1);
+    const auto clickOn = [&](Id id) {
+        art.press(id, 0.2);
+        art.release(id, 0.2, true);
+    };
+    clickOn(aMute);
+    check(!art.settings().soundOn, "action Couper tout le son");
+    clickOn(aToggle);
+    check(art.settings().soundOn, "action Basculer le son (coup\xC3\xA9 : r\xC3\xA9tabli)");
+    clickOn(aToggle);
+    clickOn(aRestore);
+    check(art.settings().soundOn, "action R\xC3\xA9tablir le son");
+    clickOn(aVol);
+    clickOn(aVolExpr);
+    check(soundVolume(art.settings(), SoundChannel::Alarms) == 45 && art.settings().volume == 30,
+          "action R\xC3\xA9gler le volume : Alarmes 45 ; vide : le G\xC3\xA9n\xC3\xA9ral, \xC3\xA0 une expression (Nuit * 10 = 30)");
+    clickOn(aChan);
+    check(soundMuted(art.settings(), SoundChannel::Videos), "action Couper ou r\xC3\xA9tablir un canal : Videos coup\xC3\xA9");
+    clickOn(aChanBack);
+    check(!soundMuted(art.settings(), SoundChannel::Videos), "... Vid\xC3\xA9os r\xC3\xA9tabli (par son nom accentu\xC3\xA9)");
+    clickOn(aChanTog);
+    check(soundMuted(art.settings(), SoundChannel::Scripts), "... basculer le canal donn\xC3\xA9 par une expression (Canal_Choisi = 'Scripts')");
+    check(operationFromLabel("Couper tout le son") == Operation::SoundMute && operationFromLabel("R\xC3\xA9gler le volume") == Operation::SoundVolume
+              && actionkinds::groupOf(Operation::SoundChannelMute) == "Son",
+          "les op\xC3\xA9rations : leur libell\xC3\xA9 enregistr\xC3\xA9, le groupe Son");
+    // Generer : un canal inconnu, un volume illisible.
+    {
+        Project gp = ap;
+        gp.views[0].object(aVol)->actions[0].target = "Alarmez";
+        gp.views[0].object(aVolExpr)->actions[0].value = "((";
+        const auto gen = generate(gp, [](std::string_view) { return false; });
+        bool chan = false, vol = false, tog = false;
+        for (const auto& i : gen) {
+            chan = chan || i.message.find("canal du son 'Alarmez' inconnu") != std::string::npos;
+            vol = vol || i.message.find("volume illisible") != std::string::npos;
+            tog = tog || i.message.find("canal du son 'Canal_Choisi'") != std::string::npos;
+        }
+        check(chan && vol && !tog, "Generer : canal 'Alarmez' inconnu, volume illisible ; une variable qui donne le canal passe");
+    }
+
+    // ---- les objets : registre, valeurs neuves, exemple, sujet de l'aide
+    for (const Kind k : {Kind::SoundMute, Kind::VolumeMixer}) {
+        const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), k);
+        check(at != std::end(kPlaceableKinds) && kindFromKey(kindKey(k)) == k && examples::exampleFor(k).has_value()
+                  && hmi::guide::topicForKind(kindKey(k)) != nullptr,
+              std::string(kindLabel(k)) + " : dans la biblioth\xC3\xA8que, sa cl\xC3\xA9, son exemple, son sujet du guide");
+    }
+    check(kindLabel(Kind::SoundMute) == "Coupe-son" && kindLabel(Kind::VolumeMixer) == "M\xC3\xA9langeur de volume", "les libell\xC3\xA9s");
+    const Object fm = makeObject(Kind::SoundMute, 5, "Coupe_1", 0, 0, 1);
+    check(fm.text("soundChannel") == "Tous" && fm.text("textOn") == "Son actif" && fm.text("textOff") == "Son coup\xC3\xA9" && fm.flag("icon", false)
+              && fm.flag("pilotable", false) && fm.text("colorOff") == "#E5484D",
+          "Coupe-son neuf : Tous, Son actif / Son coup\xC3\xA9, l'ic\xC3\xB4ne, pilotable, fond rouge muet");
+    const Object fx = makeObject(Kind::VolumeMixer, 6, "Mel_1", 0, 0, 1);
+    check(fx.text("channels") == "tous" && fx.text("orientation") == "verticale" && fx.flag("showPercent", false) && fx.flag("showMute", false)
+              && fx.flag("showMeter", false) && fx.flag("pilotable", false),
+          "M\xC3\xA9langeur neuf : tous les canaux, vertical, pourcentage, M, vum\xC3\xA8tre, pilotable");
+    for (const auto& prop : fm.props) check(roles::keyRole(prop.key) != nullptr, "Coupe-son : le r\xC3\xB4le de " + prop.key);
+    for (const auto& prop : fx.props) check(roles::keyRole(prop.key) != nullptr, "M\xC3\xA9langeur : le r\xC3\xB4le de " + prop.key);
+
+    // ---- la geometrie du melangeur
+    {
+        check(mixerChannels("tous").size() == kSoundChannelCount && mixerChannels("").size() == kSoundChannelCount,
+              "Canaux affich\xC3\xA9s : tous (ou vide) = les six pistes");
+        std::vector<std::string> unknown;
+        const auto some = mixerChannels("Videos; General ,Alarmes;Musique", &unknown);
+        check(some.size() == 3 && some[0] == SoundChannel::General && some[1] == SoundChannel::Alarms && some[2] == SoundChannel::Videos
+                  && unknown == std::vector<std::string>{"Musique"},
+              "une liste : dans l'ordre du m\xC3\xA9langeur ; Musique inconnu");
+        Object o = fx;
+        const auto l = mixerLayout(o, 480, 250);
+        check(l.vertical && l.tracks.size() == 6 && l.tracks[0].channel == SoundChannel::General && l.tracks[0].mute.w > 0 && l.tracks[0].meter.w > 0
+                  && l.tracks[0].percent.w > 0 && l.tracks[0].track.h > 60,
+              "vertical : six pistes, chacune son M, son vum\xC3\xA8tre, son pourcentage, une course de plus de 60 px");
+        const auto& alarms = l.tracks[1];
+        check(mixerHit(o, 480, 250, alarms.mute.cx(), alarms.mute.cy()) == "muet:Alarmes", "un clic sur M : muet:Alarmes");
+        same(mixerHit(o, 480, 250, alarms.track.cx(), alarms.track.y + alarms.track.h * 0.25), "volume:Alarmes:0.75",
+             "un clic au quart haut de la course : 75 %");
+        check(mixerHit(o, 480, 250, alarms.frame.x + 2, alarms.track.bottom() + 1).rfind("volume:Alarmes:0", 0) == 0,
+              "toute la largeur de la piste se prend (au doigt), le bas : 0 %");
+        Box b;
+        check(mixerPartBox(o, 480, 250, "volume:Scripts:0.5", b) && std::fabs(b.cy() - l.tracks[2].track.cy()) < 1.0
+                  && mixerPartBox(o, 480, 250, "muet:Relecture", b) && b.w > 0,
+              "la boite d'une partie (scripts, essais)");
+        o.set("orientation", "horizontale");
+        o.set("channels", "General;Alarmes");
+        const auto lh = mixerLayout(o, 420, 120);
+        check(!lh.vertical && lh.tracks.size() == 2 && lh.tracks[1].track.w > 100 && lh.tracks[1].mute.x > lh.tracks[1].track.right(),
+              "horizontale : une ligne par canal, la course \xC3\xA0 droite du nom, M au bout");
+        same(mixerHit(o, 420, 120, lh.tracks[1].track.x + lh.tracks[1].track.w * 0.4, lh.tracks[1].track.cy()), "volume:Alarmes:0.4",
+             "horizontale : 40 % de la course");
+    }
+
+    // ---- les objets en marche : clic sur le Coupe-son, glisser, molette et M du melangeur
+    {
+        Project op;
+        View ov = makeView(op, "Vue_Son");
+        const Id cs = edit::add(op, ov, Kind::SoundMute, 10, 10);
+        ov.object(cs)->name = "Coupe";
+        const Id ca = edit::add(op, ov, Kind::SoundMute, 220, 10);
+        ov.object(ca)->name = "Coupe_Alarmes";
+        ov.object(ca)->set("soundChannel", "Alarmes");
+        const Id mx = edit::add(op, ov, Kind::VolumeMixer, 10, 80);
+        ov.object(mx)->name = "Melangeur";
+        const Id fixe = edit::add(op, ov, Kind::VolumeMixer, 10, 400);
+        ov.object(fixe)->name = "Lecture";
+        ov.object(fixe)->setFlag("pilotable", false);
+        const Id garde = edit::add(op, ov, Kind::SoundMute, 300, 10);
+        ov.object(garde)->name = "Reserve";
+        ov.object(garde)->setNumber("access", 3);
+        op.views = {ov};
+        op.config.startView = ov.id;
+        op.security.enabled = true;
+        Runtime ort;
+        int calls = 0;
+        Runtime::Hooks h;
+        h.soundSettings = [&] { ++calls; };
+        ort.setHooks(h);
+        ort.bind(&op, nullptr);
+        ort.start(0);
+        ort.tick(0.1);
+        const auto clickOn = [&](Id id) {
+            ort.press(id, 0.2);
+            ort.release(id, 0.2, true);
+        };
+        clickOn(cs);
+        check(!ort.settings().soundOn && calls == 1 && journalHas(ort, "Action", "son coup\xC3\xA9 (tous les sons)"),
+              "un clic sur le Coupe-son : tout se tait (le crochet, le journal)");
+        clickOn(cs);
+        check(ort.settings().soundOn && journalHas(ort, "Action", "son r\xC3\xA9tabli"), "un second clic : le son revient");
+        clickOn(ca);
+        check(soundMuted(ort.settings(), SoundChannel::Alarms) && ort.settings().soundOn, "le Coupe-son d'un canal : seulement les Alarmes");
+        clickOn(garde);
+        check(ort.settings().soundOn && eventHas(ort, "Acc\xC3\xA8s refus\xC3\xA9", "niveau d'acc\xC3\xA8s 3"), "sous s\xC3\xA9" "curit\xC3\xA9, le niveau d'acc\xC3\xA8s de l'objet : refus\xC3\xA9");
+        const int c0 = calls;
+        const std::size_t lines = ort.journal().size();
+        ort.objectPart(mx, "glisser:Scripts:0.5", 0.3);
+        ort.objectPart(mx, "glisser:Scripts:0.42", 0.35);
+        check(soundVolume(ort.settings(), SoundChannel::Scripts) == 42 && calls == c0 + 2 && ort.journal().size() == lines,
+              "glisser la piste Scripts : le volume suit (42 %), en silence dans le journal");
+        ort.objectPart(mx, "lacher:Scripts:0.4", 0.4);
+        check(soundVolume(ort.settings(), SoundChannel::Scripts) == 40 && journalHas(ort, "Action", "volume Scripts : 40 %"), "l\xC3\xA2" "cher : 40 %, dit au journal");
+        ort.objectPart(mx, "pas:Scripts:1", 0.5);
+        ort.objectPart(mx, "pas:General:-3", 0.5);
+        check(soundVolume(ort.settings(), SoundChannel::Scripts) == 45 && ort.settings().volume == 85, "la molette : +5 % (Scripts 45), -3 crans (G\xC3\xA9n\xC3\xA9ral 85)");
+        ort.objectPart(mx, "muet:Videos", 0.6);
+        check(soundMuted(ort.settings(), SoundChannel::Videos), "M de la piste Vid\xC3\xA9os : le canal se coupe");
+        ort.objectPart(mx, "muet:General", 0.6);
+        check(!ort.settings().soundOn, "M du G\xC3\xA9n\xC3\xA9ral : tout se coupe (comme le Coupe-son)");
+        ort.objectPart(mx, "muet:General", 0.6);
+        const int c1 = calls;
+        ort.objectPart(fixe, "glisser:Actions:0.1", 0.7);
+        ort.objectPart(fixe, "muet:Actions", 0.7);
+        check(calls == c1 && soundVolume(ort.settings(), SoundChannel::Actions) == 100 && !soundMuted(ort.settings(), SoundChannel::Actions),
+              "un m\xC3\xA9langeur non pilotable : il montre, il ne r\xC3\xA9git pas");
+        // Generer : un canal inconnu dans chaque objet.
+        Project gp = op;
+        gp.views[0].object(ca)->set("soundChannel", "Radio");
+        gp.views[0].object(mx)->set("channels", "General;Musique");
+        const auto gen = generate(gp, [](std::string_view) { return false; });
+        bool radio = false, musique = false;
+        for (const auto& i : gen) {
+            radio = radio || (i.property == "soundChannel" && i.message.find("Radio") != std::string::npos);
+            musique = musique || (i.property == "channels" && i.message.find("Musique") != std::string::npos);
+        }
+        check(radio && musique, "Generer : Coupe-son sur le canal Radio, M\xC3\xA9langeur avec Musique - des canaux inconnus");
+        // Dupliquer (copier-coller) et le code brut : les proprietes et les canaux suivent.
+        const View& vv = *gp.view(gp.views[0].id);
+        for (const Id id : {ca, mx}) {
+            const std::string code = serializeObjectCode(vv, {id});
+            auto back = parseObjectCode(code);
+            check(back && back->objects.size() == 1 && back->objects[0] == *vv.object(id),
+                  std::string(kindLabel(vv.object(id)->kind)) + " : le code brut se relit \xC3\xA0 l'identique");
+        }
+        View dup = vv;
+        const auto copies = edit::duplicate(gp, dup, {mx}, 20, 20);
+        check(copies.size() == 1 && dup.object(copies[0]) && dup.object(copies[0])->text("channels") == "General;Musique"
+                  && dup.object(copies[0])->kind == Kind::VolumeMixer,
+              "Dupliquer le m\xC3\xA9langeur : ses canaux suivent");
+    }
+
+    // ---- un projet 1.13.1 s'ouvre sans rien perdre : le format ne change pas ; les objets neufs s'enregistrent
+    {
+        Project q;
+        View qv = makeView(q, "Vue_Avant");
+        (void)edit::add(q, qv, Kind::Slider, 10, 10);
+        (void)edit::add(q, qv, Kind::SystemButton, 10, 100);
+        q.views = {qv};
+        q.config.startView = qv.id;
+        const auto files = serializeProject(q);
+        std::string text;
+        for (const auto& f : files) if (f.data) text.append(f.data->begin(), f.data->end());
+        check(text.find("soundChannel") == std::string::npos && text.find("SoundMute") == std::string::npos,
+              "un projet sans les objets neufs s'\xC3\xA9" "crit comme en 1.13.1 (rien de nouveau dans ses fichiers)");
+        View nv = qv;
+        const Id a1 = edit::add(q, nv, Kind::SoundMute, 300, 10);
+        const Id a2 = edit::add(q, nv, Kind::VolumeMixer, 300, 100);
+        nv.object(a2)->set("channels", "General;Relecture");
+        auto back = parseView(serializeView(nv));
+        check(back && back->object(a1) && back->object(a1)->kind == Kind::SoundMute && back->object(a2)
+                  && *back->object(a2) == *nv.object(a2),
+              "les deux objets s'enregistrent et se relisent \xC3\xA0 l'identique");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.13.1 (lot K3) : HMI_TEST_1131=1 - le code brut des objets, seul.
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
@@ -30903,6 +31287,7 @@ int main(int argc, char** argv) {
     enumsProprietes1121();            // 1.12.1 : les enumerations natives des proprietes des objets
     pourquoi11227();                  // 1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)
     codeBrut1131();                   // 1.13.1 (lot K3) : le code brut des objets
+    son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

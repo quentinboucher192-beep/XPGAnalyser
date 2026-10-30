@@ -893,6 +893,8 @@ Une **condition** (facultative) arrête l'action si elle est fausse.
 | Demander une ressource, Lier un tableau, Jouer un son | les ressources (voir ce sujet) |
 | Mettre de côté une alarme, Remettre une alarme en service | écarter une alarme (ou une zone) pour N minutes en disant pourquoi ; la reprendre plus tôt (voir « Les objets des alarmes ») |
 | Faire taire les alarmes | couper le son des alarmes jusqu'à la prochaine apparition, sans rien acquitter |
+@nouveau 1.14.0
+| Couper tout le son, Rétablir le son, Basculer le son, Régler le volume, Couper ou rétablir un canal | le groupe **Son** : tous les sons (SYS.SoundEnabled), le volume d'un canal (Général, Alarmes, Scripts, Actions, Vidéos, Relecture ; de 0 à 100 ou une expression), un canal coupé, rétabli ou basculé (voir « Le menu Paramètres système ») |
 | Exporter des données | écrire un fichier CSV, Excel ou PDF : les alarmes, l'historique, les mesures, une recette, un objet de la vue ; au clic, il demande où l'enregistrer (**Demander où enregistrer**, coché : exports/ proposé) ; les autres déclencheurs écrivent dans exports/ sans question (voir « La production ») |
 | Paramètres système | ouvre le menu natif des réglages du poste et du diagnostic, sur l'onglet choisi (voir « Le menu Paramètres système ») |
 | Vue précédente, Vue suivante, Vue d'accueil | l'historique de navigation et la vue du groupe de l'utilisateur (voir « La navigation en marche ») |
@@ -3114,6 +3116,87 @@ C'est l'accès, dans une vue, au menu natif **Paramètres système** (voir ce su
 - un clic ouvre le menu ; le niveau d'accès et l'autorisation de l'objet s'appliquent (un cadenas quand l'utilisateur ne peut pas l'actionner) ;
 - Générer signale un onglet inconnu, et une action « Paramètres système » au clic en plus de l'objet (elle ferait double emploi).
 > L'action « Paramètres système » fait la même chose depuis n'importe quel objet ; `IHM_PARAMETRES_SYSTEME()` depuis un script.
+
+== objet-coupe-son | Coupe-son
+: Un bouton à bascule qui coupe tous les sons de l'IHM, puis les rétablit : le haut-parleur, ou le haut-parleur barré. Il peut ne viser qu'un canal (les alarmes, les scripts...).
+@depuis 1.14.0
+@mots Coupe-son, couper le son, muet, mute, rétablir le son, SoundMute, haut-parleur, SYS.SoundEnabled
+@voir objet-melangeur-de-volume, parametres-systeme, actions, objet-communs, securite
+@capture EX_SoundMute.png | L'exemple animé : couper tout, rétablir ; le petit bouton ne coupe que les alarmes.
+@objet SoundMute
+@exemple Un clic coupe tous les sons (Son coupé, sur fond rouge), le suivant les rétablit ; le petit bouton, son icône seule, ne coupe que le canal Alarmes.
+### À quoi il sert
+Faire taire le poste d'un geste : pendant une intervention, une réunion devant l'écran, la nuit. Un clic coupe **tous les sons** : ce qui joue se tait tout de suite et les sons suivants ne partent pas (les alarmes, IHM_SON, l'action Jouer un son, les vidéos). Un second clic les **rétablit**, sans rejouer ce qui a été coupé. Il est dans la famille **Commandes**, après Paramètres système, avec le Mélangeur de volume.
+### Ce qu'il montre
+- le son actif : le haut-parleur et son libellé (**Son actif**) sur le fond bleu ;
+- coupé : le haut-parleur barré et **Son coupé** sur le fond rouge ;
+- les deux libellés vides : l'icône seule, pour un petit bouton dans un bandeau.
+L'état est celui du poste : un autre Coupe-son, le Mélangeur, une action, IHM_SON_MUET ou Paramètres système › Son le changent aussi, et il le montre.
+### Ses paramètres
+@param soundChannel | Canal visé | Tous | Tous : tous les sons (SYS.SoundEnabled). Un canal : Alarmes, Scripts, Actions, Vidéos ou Relecture - seulement ses sons (SYS.MuteAlarms...).
+@param textOn | Libellé son actif | Son actif | Le libellé quand le son est actif. Les deux libellés vides : l'icône seule.
+@param textOff | Libellé muet | Son coupé | Le libellé quand le son est coupé.
+@param icon | Icône haut-parleur | TRUE | Le haut-parleur (barré quand le son est coupé), à gauche du libellé.
+@param font | Police | Sans | La police du libellé.
+@param fontSize | Taille du texte | 15 | En pixels de la vue.
+@param textColor | Couleur du texte | #FFFFFF | Le libellé et l'icône.
+@param colorOn | Fond son actif | #2F6FB0 | Le bouton quand le son est actif.
+@param colorOff | Fond muet | #E5484D | Le bouton quand le son est coupé.
+@param radius | Rayon des coins | 6 | 0 : coins carrés.
+@param pilotable | Pilotable (un clic coupe, rétablit) | TRUE | Décoché : il montre l'état, sans réagir aux clics.
+### En marche
+- un clic coupe, le suivant rétablit ; le journal le dit (« son coupé (tous les sons) », « son rétabli », « canal Alarmes coupé ») ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent : sans eux, un cadenas le marque et le refus est dit ; couper le son est à tout le monde, comme dans Paramètres système ;
+- le réglage est celui du **poste** : il reste quand l'IHM redémarre, en simulation comme au poste d'exploitation, et ne va pas dans le projet ;
+- Générer signale un canal inconnu, et un seul des deux libellés donné.
+> Le même geste ailleurs : l'action « Couper tout le son » (ou Basculer le son), `IHM_SON_MUET(TRUE)`, `SYS.SoundEnabled := FALSE`.
+
+== objet-melangeur-de-volume | Mélangeur de volume
+: Un curseur de volume Général, puis une piste par canal du son (Alarmes, Scripts, Actions, Vidéos, Relecture) : son curseur, son pourcentage, son bouton M qui coupe le canal, et un vumètre qui suit ce qui joue.
+@depuis 1.14.0
+@mots Mélangeur de volume, mélangeur, mixer, VolumeMixer, volume, canal, canaux, piste, vumètre, bouton M, muet, SYS.Volume, SYS.VolumeAlarms
+@voir objet-coupe-son, parametres-systeme, actions, objet-curseur, objet-communs
+@capture EX_VolumeMixer.png | L'exemple animé : les alarmes baissées, les vidéos coupées, le général muet puis rétabli.
+@objet VolumeMixer
+@exemple Le volume des alarmes descend à 60 %, le canal Vidéos se coupe (M rouge), le Général baisse de 10 %, se coupe et revient ; tout reprend à la fin.
+### À quoi il sert
+Régler le son du poste canal par canal : garder les alarmes fortes et baisser les bips des scripts, couper les vidéos d'une formation, tout baisser la nuit. Le **Général** multiplie chaque canal : un son joue à volume général × volume de son canal, et ne joue pas si l'un des deux est muet.
+### Les pistes
+| Piste | Ses sons |
+| Général | tous (SYS.Volume ; son M : tout couper, comme le Coupe-son) |
+| Alarmes | les sons des alarmes et leur répétition (SYS.VolumeAlarms, SYS.MuteAlarms) |
+| Scripts | IHM_SON dans un script (SYS.VolumeScripts, SYS.MuteScripts) |
+| Actions | l'action Jouer un son (SYS.VolumeActions, SYS.MuteActions) |
+| Vidéos | le son des vidéos (SYS.VolumeVideos, SYS.MuteVideos) |
+| Relecture | les sons rejoués d'un enregistrement (SYS.VolumeReplay, SYS.MuteReplay) |
+Chaque piste a son **curseur** (vertical ou horizontal), son **pourcentage**, son **bouton M** (rouge : le canal est coupé) et son **vumètre** : le niveau des sons qui jouent sur le canal, à leur volume (vert, puis orange, rouge en haut) ; celui du Général, le plus fort de tous. Une piste que le Général muet fait taire s'estompe.
+> Les vidéos ne jouent pas encore de son (le lecteur ne lit que l'image) : la piste Vidéos est prête, son réglage est gardé.
+### Le geste
+- **la souris** : tirer la poignée (le volume suit, et le son qui joue avec lui), cliquer sur la course (le volume va là), la **molette** sur une piste (5 % par cran) ;
+- **le doigt**, sur l'écran tactile du poste : comme la souris, toute la largeur de la piste se prend ;
+- **M** : coupe le canal, ses sons qui jouent se taisent tout de suite ; un second clic le rétablit, sans rien rejouer.
+Le journal dit le volume une fois la poignée lâchée (« volume Alarmes : 60 % »), et chaque M.
+### Ses paramètres
+@param channels | Canaux affichés | tous | tous : le Général puis les cinq canaux. Sinon une liste : General;Alarmes;Videos (dans l'ordre du mélangeur).
+@param orientation | Orientation des curseurs | verticale | Verticale : une colonne par canal ; horizontale : une ligne par canal.
+@param showPercent | Pourcentage | TRUE | Le volume de chaque piste, en %.
+@param showMute | Bouton M (muet) | TRUE | Le bouton qui coupe et rétablit chaque canal.
+@param showMeter | Vumètre | TRUE | Le niveau du canal d'après les sons qui jouent.
+@param font | Police | Sans | La police des noms et des pourcentages.
+@param fontSize | Taille du texte | 12 | En pixels de la vue.
+@param textColor | Couleur du texte | #E6EAF0 | Les noms, les pourcentages, le M éteint.
+@param fill | Fond | #1F252E | Le fond du mélangeur.
+@param stroke | Contour | #3A4556 | Son bord.
+@param accent | Couleur de la course | #2F6FD6 | La partie réglée de chaque course.
+@param knobColor | Couleur de la poignée | #F4F6FA | La poignée des curseurs.
+@param muteColor | Couleur du M allumé | #E5484D | Le bouton M d'un canal coupé.
+@param radius | Rayon des coins | 6 | 0 : coins carrés.
+@param pilotable | Pilotable (curseurs, molette, M) | TRUE | Décoché : il montre les volumes, sans réagir.
+### En marche
+- les réglages sont ceux du **poste** : ils restent quand l'IHM redémarre (en simulation et au poste d'exploitation), ne vont pas dans le projet ; « Réglages par défaut » de Paramètres système les remet à 100 %, rien de coupé ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent ;
+- Générer signale un canal inconnu dans Canaux affichés, aucun canal, une course trop courte (moins de 30 pixels : agrandis l'objet ou montre moins de canaux) ;
+- les volumes se lisent et s'écrivent aussi en variables système (SYS.Volume, SYS.VolumeAlarms...), par les actions du groupe **Son** et par IHM_SON_VOLUME, IHM_SON_CANAL_MUET.
 
 = La bibliothèque d'objets › Affichage
 
@@ -8075,7 +8158,7 @@ Les **unités de mesure propres** du projet (ses familles et ses unités, Config
 
 == reference | Référence : les fonctions IHM_
 : Les fonctions IHM_ agissent sur l'IHM depuis un script : naviguer, ouvrir et gérer les popups, écrire au journal, appeler un script, jouer un son, mettre une alarme de côté, exporter, lire la vue courante, le temps de marche et l'utilisateur connecté.
-@mots IHM_NAVIGUER, IHM_POPUP, IHM_FERMER_POPUP, IHM_JOURNAL, IHM_LOG, NIVEAU_LOG, IHM_APPELER, IHM_SON, IHM_VUE, IHM_TEMPS, IHM_UTILISATEUR, IHM_NOM_UTILISATEUR, IHM_GROUPE, IHM_NIVEAU, IHM_DECONNECTER, IHM_PARAMETRES_SYSTEME, IHM_METTRE_DE_COTE, IHM_REMETTRE, IHM_FAIRE_TAIRE, IHM_EXPORTER, IHM_PRECEDENTE, IHM_SUIVANTE, IHM_ACCUEIL, IHM_MENU_CONNEXION, IHM_LANGUE, IHM_THEME, IHM_EQUIPEMENT_OK, IHM_EQUIPEMENT_PING, IHM_GIF_JOUER, IHM_GIF_PAUSE, IHM_GIF_ARRETER, IHM_GIF_REJOUER, IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT, IHM_ANNULER, IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER, WAIT, IHM_POINT_ARRET
+@mots IHM_NAVIGUER, IHM_POPUP, IHM_FERMER_POPUP, IHM_JOURNAL, IHM_LOG, NIVEAU_LOG, IHM_APPELER, IHM_SON, IHM_SON_MUET, IHM_SON_EST_MUET, IHM_SON_VOLUME, IHM_SON_CANAL_MUET, IHM_VUE, IHM_TEMPS, IHM_UTILISATEUR, IHM_NOM_UTILISATEUR, IHM_GROUPE, IHM_NIVEAU, IHM_DECONNECTER, IHM_PARAMETRES_SYSTEME, IHM_METTRE_DE_COTE, IHM_REMETTRE, IHM_FAIRE_TAIRE, IHM_EXPORTER, IHM_PRECEDENTE, IHM_SUIVANTE, IHM_ACCUEIL, IHM_MENU_CONNEXION, IHM_LANGUE, IHM_THEME, IHM_EQUIPEMENT_OK, IHM_EQUIPEMENT_PING, IHM_GIF_JOUER, IHM_GIF_PAUSE, IHM_GIF_ARRETER, IHM_GIF_REJOUER, IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT, IHM_ANNULER, IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER, WAIT, IHM_POINT_ARRET
 @voir scripts, fonctions, actions, navigation-marche, equipements, variables-esclaves, deboguer-scripts
 @capture PNG_133_st_fonction_ihm_signature_et_vues.png | IHM_NAVIGUER : sa signature, et les vues proposées entre les guillemets.
 @capture PNG_191_aide_reference_ihm.png | F1 sur IHM_JOURNAL, dans un script : la référence des fonctions IHM_.
@@ -8096,6 +8179,14 @@ Les **unités de mesure propres** du projet (ses familles et ses unités, Config
 @nouveau 1.13.0
 | IHM_POINT_ARRET([condition]) | BOOL | un point d'arrêt écrit dans le code : en simulation, le script s'arrête ici (avec un BOOL : seulement s'il est vrai) ; hors simulation, rien - voir « Déboguer les scripts IHM » |
 | IHM_SON('bip.wav') | BOOL | joue un son des ressources (WAV, MP3, OGG) |
+@nouveau 1.14.0
+| IHM_SON_MUET(muet) | BOOL | TRUE : tous les sons se taisent (ce qui joue aussi), les suivants ne partent pas ; FALSE : ils reviennent, rien n'est rejoué - voir « Le menu Paramètres système » |
+@nouveau 1.14.0
+| IHM_SON_EST_MUET() | BOOL | vrai si tout est coupé (NOT SYS.SoundEnabled ; en lecture, aussi dans une expression) |
+@nouveau 1.14.0
+| IHM_SON_VOLUME('canal', volume) | BOOL | le volume d'un canal du son, de 0 à 100 : 'General', 'Alarmes', 'Scripts', 'Actions', 'Videos', 'Relecture' ; faux si le canal est inconnu |
+@nouveau 1.14.0
+| IHM_SON_CANAL_MUET('canal', muet) | BOOL | coupe (TRUE) ou rétablit (FALSE) un canal : ses sons qui jouent se taisent tout de suite ; faux si le canal est inconnu |
 | IHM_VUE() | STRING | le nom de la vue affichée |
 | IHM_TEMPS() | TIME | le temps écoulé depuis le lancement de l'IHM |
 | IHM_UTILISATEUR(), IHM_NOM_UTILISATEUR(), IHM_GROUPE() | STRING | l'identifiant, le nom, le groupe de l'utilisateur connecté ('' sans) |
@@ -8503,8 +8594,30 @@ Programmation générale › **Variables système** les range par domaine : util
 | `SYS.Brightness` | INT | La luminosité de l'écran, de 20 à 100 %. |
 | `SYS.ScreenSaverMinutes` | INT | La mise en veille, en minutes sans toucher (0 : jamais). |
 | `SYS.ScreenSaverActive` | BOOL | L'écran est en veille. |
-| `SYS.SoundEnabled` | BOOL | Les sons de l'IHM sont activés. |
-| `SYS.Volume` | INT | Le volume des sons, de 0 à 100 %. |
+@nouveau 1.14.0
+| `SYS.SoundEnabled` | BOOL | Les sons de l'IHM sont activés (FALSE : tout est coupé - Coupe-son, IHM_SON_MUET) ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.Volume` | INT | Le volume des sons, de 0 à 100 % (le Général du mélangeur) ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.VolumeAlarms` | INT | Le volume du canal Alarmes (les sons des alarmes et leur répétition), de 0 à 100 % ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.VolumeScripts` | INT | Le volume du canal Scripts (IHM_SON), de 0 à 100 % ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.VolumeActions` | INT | Le volume du canal Actions (l'action Jouer un son), de 0 à 100 % ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.VolumeVideos` | INT | Le volume du canal Vidéos, de 0 à 100 % ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.VolumeReplay` | INT | Le volume du canal Relecture (les sons rejoués d'un enregistrement), de 0 à 100 % ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.MuteAlarms` | BOOL | Le canal Alarmes est coupé ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.MuteScripts` | BOOL | Le canal Scripts est coupé ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.MuteActions` | BOOL | Le canal Actions est coupé ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.MuteVideos` | BOOL | Le canal Vidéos est coupé ; s'écrit. |
+@nouveau 1.14.0
+| `SYS.MuteReplay` | BOOL | Le canal Relecture est coupé ; s'écrit. |
 | `SYS.AutoLogoutMinutes` | INT | La déconnexion automatique en vigueur, en minutes (0 : jamais) : celle du poste, sinon celle du projet. |
 | `SYS.AutoLogoutFromProject` | BOOL | Le poste suit la déconnexion automatique du projet (Configuration > Utilisateurs). |
 | `SYS.KeyboardMode` | STRING | Le clavier virtuel : automatique, toujours ou jamais. |
@@ -9105,8 +9218,10 @@ La croix, ou un clic hors du panneau, le ferme.
 | Réglage | Ce qu'il change | Protégé |
 | Luminosité | l'éclairage de l'écran, de 20 à 100 %, par pas de 10 | non |
 | Mise en veille | après ce temps sans toucher (de 1 min à 1 h, ou jamais), l'écran s'éteint ; le toucher qui le rallume n'actionne rien | oui |
-| Son | les sons de l'IHM (action Jouer un son, IHM_SON) : activés ou coupés | non |
-| Volume | le volume des sons, de 0 à 100 % | non |
+@nouveau 1.14.0
+| Son | les sons de l'IHM (les alarmes, l'action Jouer un son, IHM_SON) : activés ou coupés - le Général du mélangeur (voir « Le son, canal par canal ») | non |
+@nouveau 1.14.0
+| Volume | le volume général des sons, de 0 à 100 % ; chaque canal a le sien en plus | non |
 | Déconnexion automatique | après ce temps sans toucher, l'utilisateur est déconnecté ; « Selon le projet » garde celle de Configuration > Utilisateurs | oui |
 | Clavier virtuel | automatique (celui que demande chaque champ), toujours (un clavier pour chaque champ), jamais | oui |
 | Taille du texte | tous les textes de l'IHM : 100, 125, 150 ou 175 % | non |
@@ -9119,7 +9234,7 @@ Les **choix** (veille, déconnexion, clavier) avancent avec leurs flèches, ou d
 - **Éteindre l'écran** : tout de suite, jusqu'au prochain toucher (pour le nettoyer) ; à tout le monde ;
 - **Vider le journal** : le journal de l'IHM repart de zéro (l'historique des événements reste) ;
 - **Redémarrer l'IHM** : comme le bouton de la simulation ; les réglages restent ;
-- **Réglages par défaut** : luminosité 100 %, veille jamais, son activé, volume 100 %, déconnexion selon le projet, clavier automatique, l'heure du poste ; l'affichage (taille du texte, couleurs, symboles, thème) reprend celui du projet.
+- **Réglages par défaut** : luminosité 100 %, veille jamais, son activé, volume 100 % (1.14.0 : chaque canal aussi, rien de coupé), déconnexion selon le projet, clavier automatique, l'heure du poste ; l'affichage (taille du texte, couleurs, symboles, thème) reprend celui du projet.
 ### Qui peut régler quoi
 Sans sécurité, tout se règle. Sous sécurité (Configuration > Utilisateurs), la luminosité, le son, le volume et « Éteindre l'écran » sont à tout le monde ; la veille, la déconnexion, le clavier, l'heure et la maintenance demandent la permission **Administrer**. Ils portent alors un cadenas, et un essai est refusé : le menu le dit, le journal et l'historique des événements aussi (« Accès refusé »).
 ### L'onglet Diagnostic
@@ -9131,6 +9246,55 @@ En lecture seule, ce que l'IHM sait d'elle-même, en couleurs (vert : bien, oran
 | Alarmes | en cours, à acquitter, la priorité la plus forte, la dernière apparue |
 | Poste | la date et l'heure (et l'écart réglé), l'ordinateur, le système, les processeurs, l'application, les ressources |
 Chaque ligne se lit aussi en variable système (SYS.PlcStatus, SYS.UserName, SYS.AlarmUnackCount...). Sur un petit écran, des flèches (ou la molette) font défiler.
+@nouveau 1.14.0
+### Le son, canal par canal
+Depuis la 1.14.0, chaque son de l'IHM part sur un **canal** selon d'où il vient ; chaque canal a son volume et son muet, sous le **Général** (le Son et le Volume de cet onglet). Les objets **Coupe-son** et **Mélangeur de volume** de la bibliothèque les règlent d'un geste.
+| Canal | Ses sons | Volume | Muet |
+| General | tous : son volume multiplie celui des autres | SYS.Volume | NOT SYS.SoundEnabled |
+| Alarmes | les sons des alarmes et leur répétition | SYS.VolumeAlarms | SYS.MuteAlarms |
+| Scripts | IHM_SON dans un script | SYS.VolumeScripts | SYS.MuteScripts |
+| Actions | l'action Jouer un son | SYS.VolumeActions | SYS.MuteActions |
+| Videos | le son des vidéos | SYS.VolumeVideos | SYS.MuteVideos |
+| Relecture | les sons rejoués d'un enregistrement | SYS.VolumeReplay | SYS.MuteReplay |
+Le gain d'un son : **volume général × volume de son canal** ; rien si le Général ou le canal est muet. Couper un canal fait taire tout de suite ses sons qui jouent, et les suivants ne partent pas ; le rétablir ne rejoue rien. Le journal dit un son qui ne part pas (« son : bip.wav (canal Scripts coupé) »).
+@nouveau 1.14.0
+### Les régler
+- les objets **Coupe-son** et **Mélangeur de volume** (famille Commandes) ;
+- les actions du groupe **Son** : Couper tout le son, Rétablir le son, Basculer le son, Régler le volume (un canal, une valeur de 0 à 100 ou une expression), Couper ou rétablir un canal (couper, rétablir, basculer) ;
+- les variables système : elles se lisent et s'**écrivent** (`SYS.VolumeAlarms := 80;`, `SYS.MuteVideos := TRUE;`, `SYS.SoundEnabled := FALSE;`) ;
+- les fonctions IHM_ :
+| Fonction | Rend | Effet |
+| IHM_SON_MUET(muet) | BOOL | TRUE : tous les sons se taisent ; FALSE : ils reviennent (rien n'est rejoué) |
+| IHM_SON_EST_MUET() | BOOL | vrai si tout est coupé (en lecture : aussi dans une expression) |
+| IHM_SON_VOLUME('canal', volume) | BOOL | le volume d'un canal, de 0 à 100 ('General' : tous) ; faux si le canal est inconnu |
+| IHM_SON_CANAL_MUET('canal', muet) | BOOL | coupe (TRUE) ou rétablit (FALSE) un canal ; faux si le canal est inconnu |
+```ST
+IF SYS.Hour >= 22 OR SYS.Hour < 6 THEN
+    IHM_SON_VOLUME('General', 40);
+    IHM_SON_CANAL_MUET('Videos', TRUE);
+END_IF;
+IF IHM_SON_EST_MUET() AND Alarme_Critique THEN
+    IHM_SON_MUET(FALSE);
+END_IF;
+```
+```C
+if (SYS.Hour >= 22 || SYS.Hour < 6) {
+    IHM_SON_VOLUME("General", 40);
+    IHM_SON_CANAL_MUET("Videos", TRUE);
+}
+if (IHM_SON_EST_MUET() && Alarme_Critique)
+    IHM_SON_MUET(FALSE);
+```
+```C++
+if (SYS.Hour >= 22 || SYS.Hour < 6) {
+    IHM_SON_VOLUME("General", 40);
+    IHM_SON_CANAL_MUET("Videos", true);
+}
+if (IHM_SON_EST_MUET() && Alarme_Critique)
+    IHM_SON_MUET(false);
+```
+> Entre les guillemets de IHM_SON_VOLUME et IHM_SON_CANAL_MUET, l'aide à la saisie propose les canaux.
+Les volumes et les muets sont des réglages du **poste**, comme le volume de Paramètres système : ils restent quand l'IHM redémarre, en simulation comme au poste d'exploitation, et ne vont pas dans le projet. « Réglages par défaut » les remet à 100 %, rien de coupé. « Faire taire les alarmes » (IHM_FAIRE_TAIRE) reste ce qu'il était : il fait taire ce qui joue jusqu'à la prochaine alarme, sans rien couper.
 ### Des réglages du poste
 Les réglages sont ceux du **poste**, pas du projet : ils restent quand l'IHM redémarre et ne s'enregistrent pas avec le projet. L'affichage (la taille du texte, les couleurs) fait exception : au lancement, il reprend celui du projet (Configuration › Affichage au lancement). Ils se lisent en variables système, domaine **Paramètres système** : `SYS.Brightness`, `SYS.ScreenSaverActive`, `SYS.SoundEnabled`, `SYS.Volume`, `SYS.AutoLogoutMinutes`, `SYS.KeyboardMode`, `SYS.ClockOffset`, `SYS.SystemMenuOpen`...
 > Les horloges, SYS.Time, le programmateur horaire et le journal suivent l'heure de l'IHM réglée ici ; `SYS.DeviceDateTime` donne celle du poste.
@@ -9216,7 +9380,8 @@ CSV (séparateur, en-tête), Excel (onglets), SQLite (tables et types), JSON (ta
 | Opération | Effet |
 | Demander une ressource | ouvre le choix d'un fichier, filtré sur les extensions (`png;jpg`) ; le fichier est copié dans les ressources et son nom va dans une variable STRING (permission Administrer) |
 | Lier un tableau | affiche dans un Tableau les lignes d'un fichier externe ou d'une base (SQLite, Excel, CSV...) |
-| Jouer un son | joue une ressource son (WAV, MP3, OGG), au volume réglé dans Paramètres système (rien quand le son y est coupé) |
+@nouveau 1.14.0
+| Jouer un son | joue une ressource son (WAV, MP3, OGG) sur le canal Actions : au volume général fois celui du canal (rien quand le son, ou le canal, est coupé) |
 | Paramètres système | ouvre le menu natif (voir « Le menu Paramètres système ») : les réglages du poste, ou le diagnostic (propriété Onglet) |
 
 = Tester et livrer › Tester

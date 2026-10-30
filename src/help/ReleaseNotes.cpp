@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.14.0", "30/10/2026", "\xC3\xA0 venir"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
@@ -137,6 +138,19 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.0 (lot M3, demande du 30/10) : couper le son, le melangeur de volume, les canaux du son.
+        note("1.14.0", "Objets", Kind::New,
+         "LE COUPE-SON : un nouvel objet de la biblioth\xC3\xA8que (famille Commandes, apr\xC3\xA8s Param\xC3\xA8tres syst\xC3\xA8me), un bouton \xC3\xA0 bascule - un clic coupe tous les sons de l'IHM (ce qui joue se tait, les sons suivants ne partent pas), le suivant les r\xC3\xA9tablit sans rien rejouer. Il montre l'\xC3\xA9tat : le haut-parleur et Son actif sur fond bleu, le haut-parleur barr\xC3\xA9 et Son coup\xC3\xA9 sur fond rouge ; les deux libell\xC3\xA9s vides, l'ic\xC3\xB4ne seule. Il peut ne viser qu'un canal (les alarmes, les scripts...). Pilotable, niveau d'acc\xC3\xA8s et autorisation comme les autres commandes.",
+         "objet-coupe-son", ""),
+        note("1.14.0", "Objets", Kind::New,
+         "LE M\xC3\x89LANGEUR DE VOLUME : un curseur G\xC3\xA9n\xC3\xA9ral, puis une piste par canal du son - Alarmes, Scripts (IHM_SON), Actions (Jouer un son), Vid\xC3\xA9os, Relecture (les sons rejou\xC3\xA9s d'un enregistrement) -, chacune son curseur (vertical ou horizontal), son pourcentage, son bouton M qui coupe le canal et un vum\xC3\xA8tre qui suit ce qui joue. Le curseur se tire \xC3\xA0 la souris ou au doigt, la molette le r\xC3\xA8gle par 5 %. Canaux affich\xC3\xA9s : tous, ou une liste.",
+         "objet-melangeur-de-volume", ""),
+        note("1.14.0", "Simulation", Kind::New,
+         "LES CANAUX DU SON : chaque son part sur le canal de sa source (les alarmes et leur r\xC3\xA9p\xC3\xA9tition, IHM_SON, l'action Jouer un son, les vid\xC3\xA9os, la relecture), chaque canal a son volume et son muet ; un son joue \xC3\xA0 volume g\xC3\xA9n\xC3\xA9ral x volume de son canal, et pas du tout si l'un des deux est coup\xC3\xA9. Couper un canal fait taire tout de suite ses sons qui jouent ; un volume chang\xC3\xA9 s'entend sur le son en cours. Les r\xC3\xA9glages sont ceux du poste, comme le volume de Param\xC3\xA8tres syst\xC3\xA8me : ils restent au red\xC3\xA9marrage de l'IHM, en simulation et au poste d'exploitation.",
+         "parametres-systeme", ""),
+        note("1.14.0", "Scripts", Kind::New,
+         "COUPER LE SON PAR SCRIPT, PAR ACTION, PAR VARIABLE : les fonctions IHM_SON_MUET(TRUE), IHM_SON_EST_MUET(), IHM_SON_VOLUME('Alarmes', 80) et IHM_SON_CANAL_MUET('Videos', TRUE) (canaux : General, Alarmes, Scripts, Actions, Videos, Relecture) ; les actions du groupe Son - Couper tout le son, R\xC3\xA9tablir le son, Basculer le son, R\xC3\xA9gler le volume, Couper ou r\xC3\xA9tablir un canal ; les variables syst\xC3\xA8me SYS.VolumeAlarms, SYS.VolumeScripts, SYS.VolumeActions, SYS.VolumeVideos, SYS.VolumeReplay et SYS.MuteAlarms... SYS.MuteReplay, qui se lisent et s'\xC3\xA9" "crivent, comme d\xC3\xA9sormais SYS.SoundEnabled et SYS.Volume.",
+         "reference", ""),
         // 1.13.1 (lot K1, demande du 29/10) : les deux bugs des formules - les constantes globales dans une formule de
         // propriete (l'inspecteur les disait inconnues ; leur unite se perdait, EN ne convertissait rien en fx) et
         // l'aide a la saisie dans les reperes $...$ (rien n'etait propose dedans ni apres eux).
