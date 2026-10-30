@@ -183,7 +183,7 @@ void MainAnalysisScreen::finderImport(const finder::Hit& hit) {
             if (!pane) why = "le dossier des enregistrements n'est pas ouvert";
             else if (pane->importPath(hit.path, &why)) why.clear();
             else if (why.empty()) why = "copie impossible";
-            const std::string said = why.empty() ? hit.name + " importÃ© dans Ressources âº Enregistrements."
+            const std::string said = why.empty() ? hit.name + " import\xC3\xA9 dans Ressources \xE2\x80\xBA Enregistrements."
                                                  : "Importer " + hit.name + " : " + why + ".";
             if (auto* finderPane = fileFinder()) finderPane->tell(said);
             if (status_) status_->setTransientMessage(said, 8.0);

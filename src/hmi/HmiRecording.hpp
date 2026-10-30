@@ -1,8 +1,8 @@
 // =============================================================================
 //  hmi/HmiRecording.hpp - 1.14.0 (M4) : LES ENREGISTREMENTS DE L'IHM
 // -----------------------------------------------------------------------------
-//  « Un enregistrement fait comme si on avait filme l'application qui tournait,
-//  et ca rejoue le scenario. » Pendant que l'IHM tourne (en simulation ou au
+//  "Un enregistrement fait comme si on avait filme l'application qui tournait,
+//  et ca rejoue le scenario." Pendant que l'IHM tourne (en simulation ou au
 //  poste d'exploitation), un enregistrement garde, au rythme de ses prises (10
 //  par seconde par defaut, jamais moins que le cycle de l'IHM), SEULEMENT CE QUI
 //  CHANGE :
