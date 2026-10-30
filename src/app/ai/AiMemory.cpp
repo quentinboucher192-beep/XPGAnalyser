@@ -126,8 +126,25 @@ std::tm localNow() {
     return tm;
 }
 
-// Un extrait autour de la premiere plage trouvee, sur une ligne.
-std::string excerptOf(const std::string& text, const ui::SearchQuery& q) {
+// 1.14.2 (captures, seconde passe) : le texte lu, sans les marques de mise en forme des reponses (**gras**,
+// `nom`) - l'extrait les montrait telles quelles.
+std::string withoutMarks(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        if (raw[i] == '`') continue;
+        if (raw[i] == '*' && i + 1 < raw.size() && raw[i + 1] == '*') {
+            ++i;
+            continue;
+        }
+        out += raw[i];
+    }
+    return out;
+}
+
+// Un extrait autour de la premiere plage trouvee, sur une ligne, sans les marques de mise en forme.
+std::string excerptOf(const std::string& raw, const ui::SearchQuery& q) {
+    const std::string text = withoutMarks(raw);
     const auto ranges = q.ranges(text);
     std::size_t at = ranges.empty() ? 0 : ranges.front().first;
     std::size_t from = at > 40 ? at - 40 : 0;

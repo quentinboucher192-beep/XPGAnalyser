@@ -846,7 +846,10 @@ private:
         const float x = detail_.x + 12.f, w = detail_.w - 24.f;
         float y = detail_.y + 12.f;
         if (!k) {
-            ctx.r.drawText({x, y}, "Choisis une connaissance dans la liste.", kText, c.textMuted);
+            ctx.r.drawText({x, y},
+                           d_.shownKnowledge().empty() ? "Aucune connaissance avec ces filtres : change la cat\xC3\xA9gorie ou le projet."
+                                                       : "Choisis une connaissance dans la liste.",
+                           kText, c.textMuted);
             return;
         }
         ui::drawIcon(ctx.r, k->builtIn ? ui::Icon::Library : ui::Icon::Document, {x, y + 1.f, 16.f, 16.f}, c.textMuted);
@@ -1564,7 +1567,14 @@ void AiMemoryDialog::rebuildTables() {
     if (learning_) {
         auto& m = *learning_->model;
         m.rows.clear();
-        for (const auto* k : shownKnowledge()) {
+        const auto shown = shownKnowledge();
+        // 1.14.2 (captures, seconde passe) : LE DETAIL SUIT LA LISTE. Une selection que les filtres cachent passe a
+        // la premiere ligne visible (aucune : le detail le dit) - il montrait encore une connaissance absente de la
+        // liste, avec Consulter et Desactiver actifs.
+        if (!selectedKnowledge_.empty()
+            && std::none_of(shown.begin(), shown.end(), [&](const mem::Knowledge* k) { return k->id == selectedKnowledge_; }))
+            selectedKnowledge_ = shown.empty() ? std::string{} : shown.front()->id;
+        for (const auto* k : shown) {
             Rows::Row row;
             const auto here = mem::hereState(*k, spec_.project);
             row.key = k->id;
