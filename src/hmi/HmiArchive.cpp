@@ -2,6 +2,7 @@
 
 #include "HmiAssets.hpp"
 #include "HmiPipeline.hpp"      // 1.12.31 : les artefacts du cache de construction, refaits au deballage
+#include "HmiRecording.hpp"     // 1.14.0 (relecture M4b) : le dossier des enregistrements
 #include "../core/AtomicFile.hpp"
 #include "../project/ProjectArchive.hpp"
 #include "../core/Version.hpp"
@@ -146,6 +147,30 @@ std::string insideFolder(const std::string& resolved, const std::string& folder)
 
 } // namespace
 
+RecordingsShare recordingsShare(const RecordingSettings& settings, const std::string& projectFolder) {
+    RecordingsShare out;
+    const std::string native = rec::folderOf(RecordingSettings{}, projectFolder);
+    const std::string mine = rec::folderOf(settings, projectFolder);
+    if (mine != native) {
+        out.folder = mine;
+        out.outside = !mine.empty() && insideFolder(mine, projectFolder).empty();
+    }
+    std::set<std::string> seen;
+    for (const auto& dir : {native, mine}) {
+        if (dir.empty() || !seen.insert(dir).second) continue;
+        std::error_code ec;
+        for (fs::directory_iterator it(fs::path(std::u8string(dir.begin(), dir.end())), fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            const auto u = it->path().filename().u8string();
+            const std::string leaf(u.begin(), u.end());
+            if (!it->is_regular_file(ec) || leaf.size() < 5 || leaf.compare(leaf.size() - 5, 5, ".xrec") != 0) continue;
+            ++out.files;
+            out.bytes += static_cast<std::uint64_t>(it->file_size(ec));
+        }
+    }
+    return out;
+}
+
 std::vector<ArchiveCount> projectCounts(const Project& p, const History* h) {
     const auto st = p.statistics();
     long long jeux = 0;
@@ -240,7 +265,13 @@ core::Result<pa::Bytes> projectArchive(const std::string& folder, const ProjectA
     const History h = opt.history ? loadHistory(folder) : History{};
 
     std::vector<pa::Skipped> skipped;
-    auto items = pa::collectFolder(folder, pa::CollectOptions{opt.versions, opt.history, opt.recordings}, &skipped);
+    pa::CollectOptions co{opt.versions, opt.history, opt.recordings};
+    // 1.14.0 (relecture M4b) : le dossier des enregistrements de la configuration - dans le projet, la case le prend ou
+    // le laisse comme le natif ; ailleurs (un chemin absolu), ses .xrec sont joints dans le dossier natif de l'archive.
+    const std::string recFolder = rec::folderOf(project->recording, folder);
+    const std::string recInside = recFolder.empty() ? std::string{} : insideFolder(recFolder, folder);
+    co.recordingsDir = recInside;
+    auto items = pa::collectFolder(folder, co, &skipped);
     if (!items) return core::Err<core::Error>(items.error());
     for (const auto& s : skipped)
         rep.skipped.push_back(s.what + " : " + s.why + " (" + std::to_string(s.files) + " fichier(s), " + pa::sizeText(s.bytes) + ")");
@@ -248,6 +279,28 @@ core::Result<pa::Bytes> projectArchive(const std::string& folder, const ProjectA
     // Les fichiers externes : dans le dossier, ils y sont deja ; ailleurs, ils viennent avec.
     std::set<std::string> have;
     for (const auto& it : *items) have.insert(it.path);
+    if (opt.recordings && !recFolder.empty() && recInside.empty()) {
+        std::size_t joined = 0;
+        std::error_code ec;
+        for (fs::directory_iterator it(fs::path(std::u8string(recFolder.begin(), recFolder.end())), fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            const auto u = it->path().filename().u8string();
+            const std::string leaf(u.begin(), u.end());
+            if (!it->is_regular_file(ec) || leaf.size() < 5 || leaf.compare(leaf.size() - 5, 5, ".xrec") != 0) continue;
+            const std::string inside = std::string(co.nativeRecordings) + "/" + leaf;
+            if (have.count(inside)) continue;
+            pa::Item item;
+            const auto full = it->path().u8string();
+            if (!pa::readItem(std::string(full.begin(), full.end()), item)) continue;
+            item.path = inside;
+            have.insert(inside);
+            items->push_back(std::move(item));
+            ++joined;
+        }
+        if (joined > 0)
+            rep.notes.push_back(std::to_string(joined) + " enregistrement(s) joint(s) depuis " + recFolder
+                                + " (hors du projet) : dans l'archive, ils sont dans ihm/ressources/enregistrements");
+    }
     for (const auto& f : project->assets.files) {
         if (f.kind == ExternalKind::Database) continue;
         const std::string resolved = resolveExternalPath(f, folder);

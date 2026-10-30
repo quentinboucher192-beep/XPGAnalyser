@@ -937,6 +937,42 @@ std::string recDate(const std::string& iso) {
     if (iso.size() < 16 || iso[4] != '-' || iso[7] != '-') return iso;
     return iso.substr(8, 2) + "/" + iso.substr(5, 2) + "/" + iso.substr(0, 4) + " " + iso.substr(11, 5);
 }
+
+// 1.14.0 (relecture M4b) : RENOMMER UN ENREGISTREMENT, UN SEUL PAS - le fichier ET ce qui le cite. Ctrl+Z rend le nom
+// du fichier avec les citations (avant : les citations seules, qui ne designaient plus rien) ; Ctrl+Y le refait. Le
+// fichier est deja renomme quand la commande est empilee : sa premiere execution ne fait que les citations.
+class RecordingRenameCommand final : public core::ICommand {
+public:
+    RecordingRenameCommand(std::string folder, std::string from, std::string to, core::CommandPtr citations, std::function<void()> refresh)
+        : folder_(std::move(folder)), from_(std::move(from)), to_(std::move(to)), citations_(std::move(citations)), refresh_(std::move(refresh)) {}
+    core::Status execute() override {
+        if (!first_) {
+            std::string why;
+            if (!hmi::rec::renameFile(folder_, from_, to_, &why)) return core::fail(core::ErrorCode::FileUnreadable, "renommer " + from_ + " : " + why);
+        }
+        first_ = false;
+        if (citations_)
+            if (auto r = citations_->execute(); !r) return r;
+        if (refresh_) refresh_();
+        return core::ok();
+    }
+    core::Status undo() override {
+        if (citations_)
+            if (auto r = citations_->undo(); !r) return r;
+        std::string why;
+        const bool ok = hmi::rec::renameFile(folder_, to_, from_, &why);
+        if (refresh_) refresh_();
+        if (!ok) return core::fail(core::ErrorCode::FileUnreadable, "rendre le nom " + from_ + " : " + why);
+        return core::ok();
+    }
+    [[nodiscard]] std::string label() const override { return "Renommer l'enregistrement " + from_; }
+
+private:
+    std::string           folder_, from_, to_;
+    core::CommandPtr      citations_;
+    std::function<void()> refresh_;
+    bool                  first_{true};
+};
 } // namespace
 
 HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
@@ -1100,24 +1136,9 @@ void HmiRecordingsPane::showDetail() {
     c.name = it->name;
     const auto ro = [&c](std::string label, std::string value) { c.properties.push_back(hmikit::prop(std::move(label), std::move(value), PG::ValueType::ReadOnly)); };
     if (!it->problem.empty()) ro("Illisible", it->problem);
-    // L'ecran a 40 % de la duree : la vue (et les popups) d'alors - sans mot de passe, la piste se lit.
-    std::string at40 = "prot\xC3\xA9g\xC3\xA9 : il faut le mot de passe pour le voir";
-    if (!h.locked() && it->problem.empty()) {
-        hmi::rec::Header hh;
-        hmi::rec::Track track;
-        if (hmi::rec::readTrack(it->path, {}, hh, track) == hmi::rec::Status::Ok && !track.screens.empty()) {
-            const double t = h.duration * 0.4;
-            const hmi::rec::Screen* shown = &track.screens.front();
-            for (const auto& sc : track.screens) {
-                if (sc.t > t) break;
-                shown = &sc;
-            }
-            at40 = shown->view;
-            for (const auto& pp : shown->popups) at40 += " + " + pp.view;
-        } else {
-            at40 = h.startView;
-        }
-    }
+    // L'ecran a 40 % de la duree : la vue (et les popups) d'alors, gardee dans l'en-tete a l'arret (1.14.0, relecture
+    // M4b : avant, la piste entiere etait relue a chaque choix de ligne) ; un enregistrement d'avant : la vue de depart.
+    const std::string at40 = !h.at40.empty() ? h.at40 : h.startView;
     ro("\xC3\x89" "cran \xC3\xA0 40 %", at40);
     ro("Dur\xC3\xA9" "e", hmi::rec::clock(h.duration) + (h.cut ? " (coup\xC3\xA9 net : relu jusqu'au dernier bloc)" : ""));
     ro("Images", std::to_string(h.frames) + " (" + std::to_string(h.rateHz) + " / s)");
@@ -1159,13 +1180,28 @@ bool HmiRecordingsPane::importPath(const std::string& path, std::string* why) {
     return false;
 }
 
-bool HmiRecordingsPane::exportTo(const std::string& destination, std::string* why) {
+bool HmiRecordingsPane::exportTo(const std::string& destination, std::string* why, const ExportChoice& choice) {
     const auto* it = selectedItem();
     std::string written, reason = "aucun enregistrement choisi";
-    if (it && hmi::rec::exportFile(folder(), it->name, destination, &written, &reason)) {
-        say("Export\xC3\xA9 : " + written);
+    // 1.14.0 (relecture M4b) : la maquette (scene 3) - un fichier deja la n'est pas ecrase sans le demander (replace),
+    // et la copie d'un enregistrement protege garde son mot de passe, ou le perd si on donne le bon.
+    hmi::rec::ExportOptions eo;
+    eo.ifExists = choice.replace ? hmi::rec::ExportOptions::IfExists::Replace : hmi::rec::ExportOptions::IfExists::Refuse;
+    eo.unprotect = choice.keepPassword ? std::string{} : choice.password;
+    bool existed = false;
+    hmi::rec::Status st = hmi::rec::Status::Ok;
+    eo.exists = &existed;
+    eo.status = &st;
+    if (it && !it->header.locked() && !choice.keepPassword) eo.unprotect.clear();
+    if (it && it->header.locked() && !choice.keepPassword && choice.password.empty()) {
+        reason = "le mot de passe est demand\xC3\xA9 pour une copie sans protection";
+        st = hmi::rec::Status::PasswordNeeded;
+    } else if (it && hmi::rec::exportFile(folder(), it->name, destination, &written, &reason, eo)) {
+        say("Export\xC3\xA9 : " + written + (it->header.locked() && !choice.keepPassword ? " (sans mot de passe)" : std::string{}));
         return true;
     }
+    if (choice.existed) *choice.existed = existed;
+    if (choice.status) *choice.status = st;
     say("Exporter : " + reason, true);
     if (why) *why = reason;
     return false;
@@ -1178,10 +1214,11 @@ bool HmiRecordingsPane::renameTo(const std::string& wanted, std::string* why) {
     if (it && it->name == to) return true;
     if (it && hmi::rec::renameFile(folder(), it->name, to, &reason)) {
         const std::string from = it->name;
-        // Ce qui le cite en dur suit (une commande : Ctrl+Z rend les citations, pas le nom du fichier).
+        // Ce qui le cite en dur suit ; le fichier et les citations font UN pas (Ctrl+Z rend les deux).
         std::size_t count = 0;
-        auto cmd = hmi::changeProject(doc_, "Renommer l'enregistrement " + from, [&](hmi::Project& p) { count = hmi::rec::renameReferences(p, from, to); });
-        if (cmd && count > 0) apply_(std::move(cmd));
+        auto citations = hmi::changeProject(doc_, "Renommer l'enregistrement " + from, [&](hmi::Project& p) { count = hmi::rec::renameReferences(p, from, to); });
+        if (apply_)
+            apply_(std::make_unique<RecordingRenameCommand>(folder(), from, to, count > 0 ? std::move(citations) : nullptr, [this] { refresh(); }));
         refresh();
         (void)select(to);
         say("Renomm\xC3\xA9 : " + from + " \xE2\x86\x92 " + to + (count ? " (" + std::to_string(count) + " citation(s) suivent)" : std::string{}));
@@ -1390,7 +1427,9 @@ void HmiRecordingSettingsPane::refresh() {
     ext.properties.push_back(prop("Accepter les commandes d'une autre application", tf(r.external), PG::ValueType::Boolean, commit("commandes"),
                                   "IHM-Studio.exe --enregistrer \"Nom\", --arreter-enregistrement, --rejouer \"Nom\", --quitter-relecture : "
                                   "une autre application (un banc de test, un script) pilote les enregistrements de cette IHM. "
-                                  "D\xC3\xA9" "coch\xC3\xA9 (par d\xC3\xA9" "faut) : refus\xC3\xA9" "es (code 5)."));
+                                  "D\xC3\xA9" "coch\xC3\xA9 (par d\xC3\xA9" "faut) : refus\xC3\xA9" "es (code 5). Les codes de sortie : 0 fait, "
+                                  "2 aucune IHM en marche, 3 nom introuvable, 4 mot de passe faux, 5 refus\xC3\xA9, 6 occup\xC3\xA9" "e (d\xC3\xA9j\xC3\xA0 "
+                                  "un enregistrement ou une relecture), 7 fichier (\xC3\xA9" "criture impossible, illisible)."));
     cats.push_back(std::move(ext));
     grid_->setCategories(std::move(cats));
     status_->setMessage(dir.empty() ? std::string("Pas encore de dossier : enregistre le projet.")

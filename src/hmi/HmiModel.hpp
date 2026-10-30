@@ -507,6 +507,12 @@ inline constexpr Operation kOperations[] = {
 [[nodiscard]] constexpr bool operationIsRecording(Operation o) noexcept {
     return static_cast<int>(o) >= static_cast<int>(Operation::RecordStart) && static_cast<int>(o) <= static_cast<int>(Operation::RecordingDelete);
 }
+// 1.14.0 (relecture M4b) : le groupe Relecture (Rejouer, Pause, Avancer ou reculer, Vitesse, Quitter) - ce qui passe
+// encore dans la suite d'un clic apres Rejouer (le reste ne commande rien tant que la relecture est affichee).
+[[nodiscard]] constexpr bool operationIsReplay(Operation o) noexcept {
+    return o == Operation::ReplayStart || o == Operation::ReplayPause || o == Operation::ReplaySeek || o == Operation::ReplaySpeed
+        || o == Operation::ReplayQuit;
+}
 [[nodiscard]] constexpr bool operationNamesRecording(Operation o) noexcept {
     return o == Operation::ReplayStart || o == Operation::RecordingExport || o == Operation::RecordingDelete;
 }

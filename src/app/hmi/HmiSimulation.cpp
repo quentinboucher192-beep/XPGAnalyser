@@ -3615,10 +3615,11 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             (void)runtime_.finishRecording(true, ask.name, ask.description, {}, now_);
             return;
         }
-        host_.askRecordingStop(ask, [this, alive](bool keep, std::string name, std::string description, std::string password) {
+        host_.askRecordingStop(ask, [this, alive](bool keep, std::string name, std::string description, std::string password, bool unprotect) {
             if (alive.expired()) return;
             std::string why;
-            const std::string kept = runtime_.finishRecording(keep, name, description, password, now_, &why);
+            // 1.14.0 (relecture M4b) : un mot de passe vide garde celui du depart ; `unprotect` (la case) seul le retire.
+            const std::string kept = runtime_.finishRecording(keep, name, description, password, now_, &why, unprotect);
             if (!keep) status_->setTransientMessage("Enregistrement jet\xC3\xA9.", 5.0);
             else if (kept.empty()) status_->setTransientMessage("Enregistrement : " + why, 8.0, ui::StatusBar::Severity::Warning);
             else status_->setTransientMessage("Enregistr\xC3\xA9 : Ressources \xE2\x80\xBA Enregistrements \xE2\x80\xBA " + kept, 8.0,
@@ -4047,6 +4048,9 @@ bool HmiSimulationPane::applyRecipe(const std::string& recipe, const std::string
 HmiSimulationPane::~HmiSimulationPane() {
     auto& panes = simPanes();
     panes.erase(std::remove(panes.begin(), panes.end(), this), panes.end());
+    // 1.14.0 (relecture M4b) : une relecture encore affichee se quitte (l'ecran qui ferme l'onglet l'a deja fait par
+    // leaveReplay, l'API simulee a repris ; ici, l'hote est peut-etre deja parti : pas de commande de l'API).
+    if (started_ && runtime_.replaying()) (void)runtime_.quitReplay(now_, "fermeture de la simulation");
     if (HmiDebugSession::instance().runtime() == &runtime_) HmiDebugSession::instance().setRuntime(nullptr);   // 1.13.0 (lot J2)
     // 1.9 finale : en quittant l'application pendant la marche, l'automate (simule
     // ou relie) et les liaisons des equipements peuvent etre deja detruits ;
@@ -5107,10 +5111,18 @@ void HmiSimulationPane::syncReplay() {
     const double held = std::max(0.0, replayWall_ - now_);
     clockOffset_[0] -= held;
     clockOffset_[1] -= held;
+    // 1.14.0 (relecture M4b) : les temporisations reprennent ou elles en etaient (now_ ne saute pas), mais les DATES
+    // suivent le mur : SYS.Date, les horodatages, les rapports a leur heure ne retardent pas du temps tenu.
+    runtime_.holdClock(held);
     replayHeld_ = false;
     if (plcPausedForReplay_ && host_.transport && plcTone() == "paused") host_.transport("sim.run");
     plcPausedForReplay_ = false;
     if (status_) status_->setTransientMessage("Relecture quitt\xC3\xA9" "e : l'IHM reprend en direct, l\xC3\xA0 o\xC3\xB9 elle \xC3\xA9tait.", 6.0);
+}
+
+void HmiSimulationPane::leaveReplay(const std::string& source) {
+    if (started_ && runtime_.replaying()) (void)runtime_.quitReplay(now_, source);
+    syncReplay();
 }
 
 void HmiSimulationPane::toggleRecording(const std::string& source) {

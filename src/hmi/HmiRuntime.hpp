@@ -1626,8 +1626,10 @@ public:
     std::string stopRecording(bool keep, double now, const std::string* name = nullptr, const std::string* description = nullptr,
                               const std::string* password = nullptr, std::string* why = nullptr);
     void        askStopRecording(double now, const std::string& source);
+    // La reponse de la fenetre Arreter l'enregistrement. LE MOT DE PASSE : vide garde celui du depart (Valider sans
+    // le retaper, Annuler, Echap) ; `unprotect` seul (la case Retirer la protection) le retire.
     std::string finishRecording(bool keep, const std::string& name, const std::string& description, const std::string& password,
-                                double now, std::string* why = nullptr);
+                                double now, std::string* why = nullptr, bool unprotect = false);
     [[nodiscard]] bool          recording() const noexcept;
     [[nodiscard]] RecordingInfo recordingInfo() const;
     //  Rejouer : Ok, ou pourquoi pas (NotFound : nom introuvable ; PasswordNeeded, BadPassword ; Unreadable).
@@ -1641,6 +1643,10 @@ public:
     bool replaySpeed(double speed);                                // la plus proche de 0,25 0,5 1 2 4 8
     bool replaySpeedStep(int direction);                           // +1 : plus vite ; -1 : moins vite
     bool quitReplay(double now, const std::string& source = {});
+    // L'HEURE DE L'IHM A ETE TENUE `seconds` (une relecture : l'ecran ne fait plus avancer now) : les dates (SYS.Date,
+    // SYS.Time, les horodatages des alarmes, du journal, de l'audit, les rapports a leur heure) suivent le mur ; les
+    // temporisations, elles, reprennent ou elles en etaient. SYS.StartTime ne bouge pas.
+    void holdClock(double seconds);
     [[nodiscard]] ReplayInfo replayInfo() const;
     [[nodiscard]] const rec::Player* replayPlayer() const;
     // Les clics des `window` dernieres secondes de la relecture (l'onde a l'ecran) et le pointeur enregistre.
@@ -2459,6 +2465,13 @@ private:
     // Env::read : la valeur de la piste (nulle : pas dans la piste) ; une lecture de l'ecran a garder.
     [[nodiscard]] const sim::Value* replayValue(const std::string& upperKey) const;
     void noteRead(const std::string& upperKey, std::string_view shown, rec::KeyKind kind);
+    // 1.14.0 (relecture M4b) : une ecriture pendant une relecture (refusee : rien ne part) - dite une fois.
+    void replayWriteRefused(const std::string& name);
+    // 1.14.0 (relecture M4b) : les courbes et les graphiques a memoire rejoues - leurs series refaites depuis la piste
+    // jusqu'a la position (celles du direct sont mises de cote, et rendues en quittant).
+    void replayCharts();
+    long long                                       heldWallMs_{0};      // holdClock : le temps tenu, en tout
+    int                                             logMute_{0};         // replayCharts : les courbes refaites ne disent rien
     void recordTick(double now);                                        // une prise, a son heure
     void recordSample(double now);
     void recordEvent(rec::EventKind kind, std::string a, std::string b = {}, double x = 0, double y = 0);

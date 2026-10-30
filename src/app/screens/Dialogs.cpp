@@ -306,6 +306,10 @@ namespace app {
         return true;
     }
 
+    void FormDialog::secondary() {
+        manager().CloseDialog(menu::DialogResult{ menu::DialogResult::Button::No, core::joinFields(currentValues()) });
+    }
+
     void FormDialog::setCodeFields(std::vector<std::size_t> indices) {
         codeFields_ = std::move(indices);
     }
@@ -529,12 +533,18 @@ namespace app {
         buttons->setAlignment(Align::End);
         buttons->addChild(std::make_unique<Spacer>());
 
-        if (cancellable_) {
+        if (cancellable_ && showCancel_) {
             auto cancel = std::make_unique<Button>("Annuler", id() + ".cancel");
             auto& ref = static_cast<Button&>(buttons->addChild(std::move(cancel)));
             links_ += ref.clicked->connect([this] {
                 manager().CloseDialog(menu::DialogResult{ menu::DialogResult::Button::Cancel, {} });
                 });
+        }
+        // 1.14.0 (relecture M4b) : le second bouton (Jeter), a gauche de celui qui valide.
+        if (!secondaryLabel_.empty()) {
+            auto second = std::make_unique<Button>(secondaryLabel_, id() + ".secondary");
+            auto& ref = static_cast<Button&>(buttons->addChild(std::move(second)));
+            links_ += ref.clicked->connect([this] { secondary(); });
         }
         auto ok = std::make_unique<Button>(confirmLabel_, id() + ".ok");
         ok->setStyle(Button::Style::Primary);

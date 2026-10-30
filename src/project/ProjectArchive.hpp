@@ -126,6 +126,11 @@ struct CollectOptions {
     // 1.14.0 (M4) : ihm/ressources/enregistrements/ - les enregistrements de l'IHM (.xrec), seulement si on le coche
     // (ils peuvent peser lourd). Un enregistrement en cours (.xrec.part) ne part jamais.
     bool recordings{false};
+    // 1.14.0 (relecture M4b) : LA CASE DECIDE POUR TOUS - le dossier natif (tout son contenu) et, s'il est dans le
+    // projet, celui de Configuration > Enregistrements (ses .xrec seulement : il peut tenir autre chose). Relatifs au
+    // dossier du projet, avec des '/'. Un dossier hors du projet : l'archive les joint elle-meme (HmiArchive).
+    std::string nativeRecordings{"ihm/ressources/enregistrements"};
+    std::string recordingsDir;
 };
 // Ce que l'archive ne prend pas (chemin relatif au dossier, avec des '/') ;
 // `why` : pourquoi, pour le dire ("les artefacts du build, refaits au deballage...").

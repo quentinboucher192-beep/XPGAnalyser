@@ -299,7 +299,8 @@ int main(int argc, char** argv) {
     //    IHM-Studio.exe --rejouer "Nom" [--vitesse 2] [--mot-de-passe x]       --quitter-relecture
     //  IHM Studio deja ouvert : la commande lui est passee (l'instance unique) avec un fichier de reponse ; on attend sa
     //  reponse (60 s au plus), on l'ecrit, et on sort avec son code : 0 fait, 2 aucune IHM en marche, 3 nom introuvable,
-    //  4 mot de passe faux, 5 refuse par la configuration (1 : une option mal ecrite). Pas ouvert : avec --poste <projet>,
+    //  4 mot de passe faux, 5 refuse par la configuration, 6 occupee (deja un enregistrement ou une relecture), 7 fichier
+    //  (ecriture impossible, illisible, pas de dossier) ; 1 : une option mal ecrite. Pas ouvert : avec --poste <projet>,
     //  le poste s'ouvre et la commande part des que son IHM tourne ; sans, 2.
     const hmi::rec::Command recCommand = hmi::rec::parseCommand(std::vector<std::string>(argv + 1, argv + argc));
     if (recCommand.kind != hmi::rec::Command::Kind::None || !recCommand.error.empty()) {
@@ -335,11 +336,10 @@ int main(int argc, char** argv) {
                 // 1.14.0 (M4) : la commande et le fichier ou l'instance ouverte repond ; on attend la reponse.
                 namespace fs = std::filesystem;
                 std::error_code ec;
-                const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-                const fs::path reply = fs::temp_directory_path(ec) / ("xpg-enregistrement-" + std::to_string(stamp) + ".txt");
+                // 1.14.0 (relecture M4b) : un fichier neuf du dossier temporaire (l'instance n'ecrit que la).
                 auto command = recCommand;
-                const auto u8 = reply.u8string();
-                command.reply.assign(u8.begin(), u8.end());
+                command.reply = hmi::rec::newReplyPath();
+                const fs::path reply(std::u8string(command.reply.begin(), command.reply.end()));
                 std::string failed;
                 if (!instance->forward(hmi::rec::commandArgs(command), &failed)) {
                     std::fprintf(stderr, "IHM Studio ne r\xC3\xA9pond pas (%s)\n", failed.c_str());

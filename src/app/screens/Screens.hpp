@@ -1732,6 +1732,15 @@ public:
     // 1.12.30 : F1 dans le dialogue - son sujet de l'aide (l'appelant ouvre le centre ;
     // sans elle, F1 ne fait rien ici, comme avant).
     void setHelp(std::function<void()> open) { help_ = std::move(open); }
+    // 1.14.0 (relecture M4b) : UN SECOND BOUTON, a gauche de celui qui valide (Jeter / Enregistrer) : il ferme le
+    // dialogue avec DialogResult::Button::No et les valeurs tapees (sans la validation). `showCancel` faux : pas de
+    // bouton Annuler (Echap ferme quand meme, en Annuler, si le dialogue se ferme ainsi).
+    void setSecondary(std::string label, bool showCancel = true) {
+        secondaryLabel_ = std::move(label);
+        showCancel_ = showCancel;
+    }
+    // Essais et scripts : comme un clic sur le second bouton.
+    void secondary();
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override;
 
     [[nodiscard]] menu::MenuTraits traits() const override;
@@ -1764,6 +1773,8 @@ private:
     std::vector<ui::Widget*> notes_;                         // 1.12.19 (U4) : la ligne sous chaque champ
     ui::Widget*              ok_{nullptr};
     std::function<void()>    help_;                          // 1.12.30 : F1
+    std::string              secondaryLabel_;                // 1.14.0 (relecture M4b) : le second bouton
+    bool                     showCancel_{true};
 
     [[nodiscard]] std::vector<std::string> currentValues() const;
     void applyRules();
@@ -1882,7 +1893,7 @@ private:
 //  Le mot de passe d'un enregistrement protege a rejouer (`error` : le precedent n'allait pas) - done(rejouer, mdp).
 //  La simulation de l'editeur et le poste d'exploitation s'en servent.
 void askRecordingStopDialog(App& app, const hmi::RecordingStopAsk& ask,
-                            std::function<void(bool, std::string, std::string, std::string)> done);
+                            std::function<void(bool, std::string, std::string, std::string, bool)> done);
 void askReplayPasswordDialog(App& app, const hmi::ReplayRequest& request, const std::string& error,
                              std::function<void(bool, std::string)> done);
 

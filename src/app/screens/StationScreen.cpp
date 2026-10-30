@@ -161,7 +161,7 @@ core::Status StationScreen::buildUi() {
         return askExport(rq, std::move(done));
     };
     // 1.14.0 (M4) : la fenetre Arreter l'enregistrement, le mot de passe d'un enregistrement protege.
-    host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string)> done) {
+    host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string, bool)> done) {
         askRecordingStopDialog(app_, ask, std::move(done));
     };
     host.askReplayPassword = [this](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {

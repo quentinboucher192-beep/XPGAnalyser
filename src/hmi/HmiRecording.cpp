@@ -18,6 +18,13 @@
 //  UN BLOC : "XRB1", ses drapeaux (1 compresse, 2 chiffre), son numero, l'instant
 //  de sa fin (ms), la longueur des enregistrements, la longueur stockee, le CRC-32
 //  de ce qui est stocke ; puis ce qui est stocke.
+//
+//  LE FICHIER (format 2) : [en-tete local entete.json][JSON complete de blancs]
+//  [en-tete local piste.bin][blocs][repertoire du zip][fin du repertoire]. Le
+//  .part en cours a deja les deux en-tetes locaux (la piste a 0 octet) : l'arret
+//  ecrit l'en-tete final a sa place, la taille et le CRC de la piste, puis le
+//  repertoire a la fin. Le format 1 (le .part "XRECPART", la piste chiffree par
+//  le mot de passe lui-meme) se relit encore.
 // =============================================================================
 #include "HmiRecording.hpp"
 
@@ -25,6 +32,7 @@
 #include "../../third_party/miniz.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -34,9 +42,21 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <mutex>
+#include <new>
 #include <set>
 #include <sstream>
+
+#if defined(_WIN32)
+#  include <fcntl.h>
+#  include <io.h>
+#  include <sys/stat.h>
+#else
+#  include <fcntl.h>
+#  include <sys/file.h>
+#  include <unistd.h>
+#endif
 
 namespace hmi::rec {
 
@@ -49,6 +69,12 @@ constexpr std::size_t kBlockHead = 4 + 1 + 4 + 4 + 4 + 4 + 4;
 constexpr char        kPartMagic[8] = {'X', 'R', 'E', 'C', 'P', 'A', 'R', 'T'};
 constexpr std::uint8_t kDeflated = 1, kCiphered = 2;
 constexpr std::uint32_t kMaxBlock = 64u << 20;     // 64 Mio : au-dela, un bloc est faux
+constexpr std::size_t   kHeaderRoom = 16u << 10;   // la place de l'en-tete au debut du fichier (completee de blancs)
+constexpr std::uint64_t kMaxHeader = 1u << 20;     // 1 Mio : au-dela, un en-tete est faux
+constexpr std::uint64_t kMaxFile = 0xFFF00000ull;  // un zip sans zip64 : un peu moins de 4 Gio
+
+std::atomic<std::uint64_t> g_opens{0}, g_bytes{0};
+std::atomic<std::uint64_t> g_maxRaw{1ull << 30}, g_maxItems{12'000'000};
 
 enum Rec : std::uint8_t { RKey = 1, RValues = 2, RKeyframe = 3, RScreen = 4, ROverrides = 5, RAlarms = 6, RPointer = 7, REvent = 8, REnd = 9 };
 
@@ -186,7 +212,11 @@ std::string deflate(const std::string& raw) {
     mz_free(p);
     return out;
 }
+// Ce que deflate peut donner au plus a partir de `stored` octets (1032 pour 1, plus un peu) : une taille annoncee
+// au-dela est fausse - on ne l'alloue pas.
+std::uint64_t inflateBound(std::uint64_t stored) { return stored * 1032u + 1024u; }
 bool inflate(const std::string& z, std::size_t rawLen, std::string& out) {
+    if (rawLen > inflateBound(z.size())) return false;
     out.assign(rawLen, '\0');
     if (rawLen == 0) return true;
     const std::size_t n = tinfl_decompress_mem_to_mem(out.data(), rawLen, z.data(), z.size(), 0);
@@ -195,10 +225,18 @@ bool inflate(const std::string& z, std::size_t rawLen, std::string& out) {
 std::uint32_t crcOf(const std::string& data) {
     return static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>(data.data()), data.size()));
 }
-// La cle : SHA-256 itere (comme un mot de passe d'utilisateur) du mot de passe et du sel de la cle.
+// La cle tiree du mot de passe : SHA-256 itere (comme un mot de passe d'utilisateur) du mot de passe et du sel de la
+// cle. Format 1 : elle chiffre la piste ; format 2 : elle chiffre la cle du fichier.
 std::string deriveKey(const Header& h, const std::string& password) {
     if (password.empty() || h.keySalt.empty()) return {};
     return fromHex(passwordHash(h.keySalt, password));
+}
+// La cle du fichier chiffree (ou dechiffree) : XOR avec HMAC-SHA-256(cle du mot de passe, nombre unique | "cle").
+std::string wrapKey(const std::string& fileKey, const std::string& passwordKey, const std::string& nonce) {
+    const Digest d = hmacSha256(passwordKey, nonce + "|cle");
+    std::string out = fileKey;
+    for (std::size_t i = 0; i < out.size() && i < d.size(); ++i) out[i] = static_cast<char>(out[i] ^ d[i]);
+    return out;
 }
 // Le flux : HMAC-SHA-256(cle, nombre unique | numero du bloc | compteur), 32 octets a la fois, XOR.
 void xorStream(std::string& data, const std::string& key, const std::string& nonce, std::uint32_t seq) {
@@ -258,7 +296,8 @@ bool blockAt(const std::string& data, std::size_t at, BlockView& b) {
     b.size = kBlockHead + storedLen;
     return true;
 }
-// Les enregistrements d'un bloc (dechiffre, decompresse) ; faux : la cle ne va pas, ou abime.
+// Les enregistrements d'un bloc (dechiffre, decompresse) ; faux : la cle ne va pas, ou abime (une longueur que
+// deflate ne peut pas donner n'est pas allouee).
 bool openBlock(const BlockView& b, const std::string& key, const std::string& nonce, std::string& raw) {
     std::string stored = b.stored;
     if (b.flags & kCiphered) {
@@ -268,6 +307,19 @@ bool openBlock(const BlockView& b, const std::string& key, const std::string& no
     if (b.flags & kDeflated) return inflate(stored, b.rawLen, raw);
     raw = std::move(stored);
     return raw.size() == b.rawLen;
+}
+// La tete d'un bloc (kBlockHead octets) : faux si ce n'en est pas une.
+bool blockHead(const char* p, BlockView& b, std::uint32_t& storedLen, std::uint32_t& crc) {
+    if (std::memcmp(p, kBlockMagic, 4) != 0) return false;
+    b.flags = static_cast<std::uint8_t>(p[4]);
+    b.seq = get32(p + 5);
+    b.tEnd = get32(p + 9);
+    b.rawLen = get32(p + 13);
+    storedLen = get32(p + 17);
+    crc = get32(p + 21);
+    if (b.rawLen > kMaxBlock || storedLen > kMaxBlock) return false;
+    if ((b.flags & kDeflated) && b.rawLen > inflateBound(storedLen)) return false;
+    return true;
 }
 // Le meme bloc, chiffre autrement (ou plus).
 std::string recipher(const BlockView& b, const std::string& oldKey, const std::string& oldNonce, const std::string& newKey,
@@ -309,7 +361,44 @@ DosStamp dosNow() {
     d.date = static_cast<std::uint32_t>(((tm.tm_year - 80) << 9) | ((tm.tm_mon + 1) << 5) | tm.tm_mday);
     return d;
 }
-// Un zip a entrees stockees (la piste est deja compressee bloc par bloc).
+// Un en-tete local d'entree stockee (UTF-8).
+std::string localHeader(std::string_view name, std::uint32_t crc, std::uint32_t size, const DosStamp& d) {
+    std::string out;
+    put32(out, 0x04034b50u);
+    put16(out, 20); put16(out, 0x0800); put16(out, 0);
+    put16(out, d.time); put16(out, d.date);
+    put32(out, crc); put32(out, size); put32(out, size);
+    put16(out, static_cast<std::uint32_t>(name.size())); put16(out, 0);
+    out.append(name.data(), name.size());
+    return out;
+}
+// Le repertoire du zip (une ligne par entree : son nom, son CRC, sa taille, la place de son en-tete local) et sa fin.
+struct CentralItem {
+    std::string   name;
+    std::uint32_t crc{0}, size{0}, offset{0};
+};
+std::string centralAndEnd(const std::vector<CentralItem>& items, std::uint32_t at, const DosStamp& d) {
+    std::string central;
+    for (const auto& it : items) {
+        put32(central, 0x02014b50u);
+        put16(central, 20); put16(central, 20); put16(central, 0x0800); put16(central, 0);
+        put16(central, d.time); put16(central, d.date);
+        put32(central, it.crc); put32(central, it.size); put32(central, it.size);
+        put16(central, static_cast<std::uint32_t>(it.name.size())); put16(central, 0); put16(central, 0);
+        put16(central, 0); put16(central, 0); put32(central, 0); put32(central, it.offset);
+        central += it.name;
+    }
+    std::string out = central;
+    put32(out, 0x06054b50u);
+    put16(out, 0); put16(out, 0);
+    put16(out, static_cast<std::uint32_t>(items.size())); put16(out, static_cast<std::uint32_t>(items.size()));
+    put32(out, static_cast<std::uint32_t>(central.size())); put32(out, at);
+    put16(out, 0);
+    return out;
+}
+std::string padded(const std::string& json, std::size_t room) { return json.size() >= room ? json : json + std::string(room - json.size(), ' '); }
+
+// Un zip a entrees stockees (la piste est deja compressee bloc par bloc) - le format 1 (un .part d'avant).
 std::string zipStored(const std::vector<std::pair<std::string, std::string>>& files) {
     const DosStamp d = dosNow();
     std::string out, central;
@@ -340,57 +429,14 @@ std::string zipStored(const std::vector<std::pair<std::string, std::string>>& fi
     put16(out, 0);
     return out;
 }
-// Les entrees d'un zip, par leurs en-tetes locaux (un zip coupe se lit jusqu'ou il va : la derniere entree est
-// alors partielle) ; un zip refait par un autre outil (tailles apres les donnees) : par miniz.
-bool readZip(const std::string& bytes, std::map<std::string, std::string>& out, bool* cut) {
-    if (cut) *cut = false;
-    std::size_t at = 0;
-    bool any = false;
-    while (at + 30 <= bytes.size() && get32(bytes.data() + at) == 0x04034b50u) {
-        const char* p = bytes.data() + at;
-        const std::uint32_t flags = get16(p + 6), method = get16(p + 8);
-        const std::uint32_t csize = get32(p + 18), usize = get32(p + 22);
-        const std::uint32_t nlen = get16(p + 26), xlen = get16(p + 28);
-        if ((flags & 0x08) != 0) break;                    // les tailles sont apres les donnees : miniz
-        if (at + 30 + nlen + xlen > bytes.size()) { if (cut) *cut = true; return any; }
-        const std::string name(p + 30, nlen);
-        const std::size_t data = at + 30 + nlen + xlen;
-        const std::size_t avail = std::min<std::size_t>(csize, bytes.size() - data);
-        if (avail < csize && cut) *cut = true;
-        if (method == 0) {
-            out[name] = bytes.substr(data, avail);
-        } else if (method == 8 && avail == csize) {
-            std::string raw;
-            if (inflate(bytes.substr(data, csize), usize, raw)) out[name] = std::move(raw);
-        }
-        any = true;
-        if (avail < csize) return true;
-        at = data + csize;
-    }
-    if (any) return true;
-    mz_zip_archive zip;
-    std::memset(&zip, 0, sizeof zip);
-    if (bytes.size() < 22 || !mz_zip_reader_init_mem(&zip, bytes.data(), bytes.size(), 0)) return false;
-    const mz_uint n = mz_zip_reader_get_num_files(&zip);
-    for (mz_uint i = 0; i < n; ++i) {
-        mz_zip_archive_file_stat st;
-        if (!mz_zip_reader_file_stat(&zip, i, &st) || st.m_is_directory) continue;
-        std::size_t size = 0;
-        void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
-        if (!data) continue;
-        out[st.m_filename] = std::string(static_cast<const char*>(data), size);
-        mz_free(data);
-    }
-    mz_zip_reader_end(&zip);
-    return true;
-}
-
 bool readAll(const std::string& path, std::string& out) {
     std::ifstream in(P(path), std::ios::binary);
     if (!in) return false;
+    ++g_opens;
     std::ostringstream ss;
     ss << in.rdbuf();
     out = ss.str();
+    g_bytes += out.size();
     return true;
 }
 bool writeAll(const std::string& path, const std::string& data, std::string* why) {
@@ -420,6 +466,439 @@ bool writeAll(const std::string& path, const std::string& data, std::string* why
         return false;
     }
     return true;
+}
+
+// ---- les fichiers, par morceaux --------------------------------------------------------
+std::FILE* openFile(const std::string& path, const char* mode) {
+#if defined(_WIN32)
+    std::wstring m;
+    for (const char* c = mode; *c; ++c) m.push_back(static_cast<wchar_t>(*c));
+    return _wfopen(P(path).wstring().c_str(), m.c_str());
+#else
+    return std::fopen(P(path).string().c_str(), mode);
+#endif
+}
+bool seekTo(std::FILE* f, std::uint64_t at) {
+#if defined(_WIN32)
+    return _fseeki64(f, static_cast<long long>(at), SEEK_SET) == 0;
+#else
+    return fseeko(f, static_cast<off_t>(at), SEEK_SET) == 0;
+#endif
+}
+bool writeAt(std::FILE* f, std::uint64_t at, const std::string& data) {
+    return seekTo(f, at) && std::fwrite(data.data(), 1, data.size(), f) == data.size();
+}
+std::string le32(std::uint32_t v) {
+    std::string o;
+    put32(o, v);
+    return o;
+}
+
+// Un fichier lu par morceaux (rien n'est lu en entier) ; fileStats le compte.
+class InFile {
+public:
+    explicit InFile(const std::string& path) : in_(P(path), std::ios::binary) {
+        if (!in_) return;
+        ++g_opens;
+        in_.seekg(0, std::ios::end);
+        const auto end = in_.tellg();
+        size_ = end < 0 ? 0 : static_cast<std::uint64_t>(end);
+        ok_ = true;
+    }
+    [[nodiscard]] bool ok() const noexcept { return ok_; }
+    [[nodiscard]] std::uint64_t size() const noexcept { return size_; }
+    bool read(std::uint64_t at, std::uint64_t n, std::string& out) {
+        if (!ok_ || at > size_ || n > size_ - at) return false;
+        out.resize(static_cast<std::size_t>(n));
+        in_.clear();
+        in_.seekg(static_cast<std::streamoff>(at));
+        in_.read(out.data(), static_cast<std::streamsize>(n));
+        const bool done = static_cast<std::uint64_t>(in_.gcount()) == n;
+        g_bytes += static_cast<std::uint64_t>(in_.gcount());
+        return done;
+    }
+
+private:
+    std::ifstream in_;
+    std::uint64_t size_{0};
+    bool          ok_{false};
+};
+
+// Une entree du zip : ou sont ses donnees.
+struct ZipEntry {
+    std::string   name;
+    std::uint32_t method{0}, flags{0}, crc{0};
+    std::uint64_t csize{0}, usize{0}, local{0}, data{0};
+};
+// L'en-tete local a `at` (et son nom) ; faux : ce n'en est pas un.
+bool localAt(InFile& f, std::uint64_t at, ZipEntry& e) {
+    std::string h;
+    if (!f.read(at, 30, h) || get32(h.data()) != 0x04034b50u) return false;
+    e.flags = get16(h.data() + 6);
+    e.method = get16(h.data() + 8);
+    e.crc = get32(h.data() + 14);
+    e.csize = get32(h.data() + 18);
+    e.usize = get32(h.data() + 22);
+    const std::uint32_t nlen = get16(h.data() + 26), xlen = get16(h.data() + 28);
+    if (!f.read(at + 30, nlen, e.name)) return false;
+    e.local = at;
+    e.data = at + 30 + nlen + xlen;
+    return true;
+}
+// Ou sont l'en-tete et la piste. LES NOTRES : entete.json en premier, piste.bin juste apres (deux petites lectures) ;
+// un zip refait par un autre outil : son repertoire (a la fin). `cut` : la piste depasse la fin du fichier.
+struct Layout {
+    ZipEntry header, track;
+    bool     hasHeader{false}, hasTrack{false}, cut{false}, fast{false};
+    std::uint64_t centralAt{0};     // le repertoire (fast : derriere la piste)
+};
+bool layoutOf(InFile& f, Layout& L, std::string* why) {
+    const auto fail = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    ZipEntry first;
+    if (localAt(f, 0, first) && first.name == kHeaderEntry && (first.flags & 0x08) == 0) {
+        L.header = first;
+        L.hasHeader = true;
+        L.fast = true;
+        ZipEntry second;
+        const std::uint64_t at = first.data + first.csize;
+        if (at <= f.size() && localAt(f, at, second) && second.name == kTrackEntry && (second.flags & 0x08) == 0) {
+            L.track = second;
+            L.hasTrack = true;
+            L.cut = second.data + second.csize > f.size();
+            L.centralAt = second.data + second.csize;
+        } else {
+            L.cut = true;
+        }
+        if (first.data + first.csize > f.size()) return fail("en-t\xC3\xAAte coup\xC3\xA9");
+        return true;
+    }
+    // Le repertoire : la fin du repertoire dans les 64 derniers Kio.
+    const std::uint64_t tail = std::min<std::uint64_t>(f.size(), 22 + 65535);
+    std::string t;
+    if (tail < 22 || !f.read(f.size() - tail, tail, t)) return fail("pas un enregistrement (.xrec)");
+    std::size_t eocd = std::string::npos;
+    for (std::size_t i = t.size() - 22 + 1; i-- > 0;)
+        if (get32(t.data() + i) == 0x06054b50u) { eocd = i; break; }
+    if (eocd == std::string::npos) return fail("pas un enregistrement (.xrec)");
+    const std::uint32_t count = get16(t.data() + eocd + 10);
+    const std::uint64_t cdSize = get32(t.data() + eocd + 12), cdAt = get32(t.data() + eocd + 16);
+    if (cdSize > kMaxHeader || cdAt + cdSize > f.size()) return fail("r\xC3\xA9pertoire du zip faux");
+    std::string cd;
+    if (!f.read(cdAt, cdSize, cd)) return fail("r\xC3\xA9pertoire du zip illisible");
+    std::size_t p = 0;
+    for (std::uint32_t k = 0; k < count && p + 46 <= cd.size(); ++k) {
+        if (get32(cd.data() + p) != 0x02014b50u) break;
+        ZipEntry e;
+        e.flags = get16(cd.data() + p + 8);
+        e.method = get16(cd.data() + p + 10);
+        e.crc = get32(cd.data() + p + 16);
+        e.csize = get32(cd.data() + p + 20);
+        e.usize = get32(cd.data() + p + 24);
+        const std::uint32_t nlen = get16(cd.data() + p + 28), xlen = get16(cd.data() + p + 30), clen = get16(cd.data() + p + 32);
+        e.local = get32(cd.data() + p + 42);
+        if (p + 46 + nlen > cd.size()) break;
+        e.name.assign(cd.data() + p + 46, nlen);
+        p += 46 + nlen + xlen + clen;
+        if (e.name != kHeaderEntry && e.name != kTrackEntry) continue;
+        ZipEntry local;
+        if (!localAt(f, e.local, local)) continue;
+        e.data = local.data;
+        if (e.name == kHeaderEntry) {
+            L.header = e;
+            L.hasHeader = true;
+        } else {
+            L.track = e;
+            L.hasTrack = true;
+            L.cut = e.data + e.csize > f.size();
+        }
+    }
+    if (!L.hasHeader) return fail("sans en-t\xC3\xAAte");
+    if (L.header.data + L.header.csize > f.size()) return fail("en-t\xC3\xAAte coup\xC3\xA9");
+    return true;
+}
+// Le texte de l'en-tete (1 Mio au plus : un en-tete annonce plus gros est faux, rien n'est alloue).
+bool headerText(InFile& f, const ZipEntry& e, std::string& out, std::string* why) {
+    const auto fail = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (e.csize > kMaxHeader || (e.method == 8 && e.usize > kMaxHeader))
+        return fail("en-t\xC3\xAAte trop grand (plus de 1 Mio annonc\xC3\xA9) : ce n'est pas un enregistrement d'IHM Studio");
+    std::string stored;
+    if (!f.read(e.data, e.csize, stored)) return fail("en-t\xC3\xAAte illisible");
+    if (e.method == 0) {
+        out = std::move(stored);
+        return true;
+    }
+    if (e.method != 8 || !inflate(stored, static_cast<std::size_t>(e.usize), out)) return fail("en-t\xC3\xAAte illisible (compression)");
+    return true;
+}
+
+// CE QUE LA PISTE PEUT FAIRE ALLOUER : les octets decompresses et les elements (valeurs, images, evenements...).
+struct Budget {
+    std::uint64_t raw{0}, items{0};
+    std::uint64_t maxRaw{g_maxRaw.load()}, maxItems{g_maxItems.load()};
+    std::string   why;
+    bool takeRaw(std::uint64_t n) {
+        raw += n;
+        if (raw > maxRaw && why.empty())
+            why = "piste trop grande : plus de " + std::to_string(maxRaw >> 20) + " Mio d\xC3\xA9" "compress\xC3\xA9s - fichier refus\xC3\xA9";
+        return why.empty();
+    }
+    bool take(std::uint64_t n = 1) {
+        items += n;
+        if (items > maxItems && why.empty())
+            why = "piste trop grande : plus de " + std::to_string(maxItems) + " valeurs et \xC3\xA9v\xC3\xA9nements - fichier refus\xC3\xA9 "
+                  "(d\xC3\xA9" "coupe les longs enregistrements : Dur\xC3\xA9" "e maximale)";
+        return why.empty();
+    }
+};
+
+// ---- ecrire : l'en-tete final a sa place, le repertoire a la fin -----------------------------
+// `f` : le fichier ouvert en ecriture (l'en-tete local de entete.json a 0, sa place `room`, celui de piste.bin a
+// `trackLocalAt`, les blocs de `trackDataAt` a + `trackSize`). Ecrit l'en-tete et le repertoire, ferme, coupe ce
+// qui depasse, renomme `from` en `to` (vide : garde le nom). L'en-tete trop long pour sa place : tout est recopie
+// (par morceaux) dans un fichier neuf.
+bool finalizeFile(std::FILE* f, const std::string& from, const std::string& to, const std::string& json, std::size_t room,
+                  std::uint64_t trackLocalAt, std::uint64_t trackDataAt, std::uint64_t trackSize, std::uint32_t trackCrc,
+                  const DosStamp& d, std::string* why);
+bool copyRange(std::FILE* out, InFile& in, std::uint64_t at, std::uint64_t n, std::uint32_t* crc) {
+    std::string chunk;
+    while (n > 0) {
+        const std::uint64_t k = std::min<std::uint64_t>(n, 1u << 20);
+        if (!in.read(at, k, chunk)) return false;
+        if (crc) *crc = static_cast<std::uint32_t>(mz_crc32(*crc, reinterpret_cast<const unsigned char*>(chunk.data()), chunk.size()));
+        if (std::fwrite(chunk.data(), 1, chunk.size(), out) != chunk.size()) return false;
+        at += k;
+        n -= k;
+    }
+    return true;
+}
+bool replaceFile(const std::string& tmp, const std::string& target, std::string* why) {
+    std::error_code ec;
+    fs::rename(P(tmp), P(target), ec);
+    if (ec) {
+        fs::remove(P(target), ec);
+        fs::rename(P(tmp), P(target), ec);
+    }
+    if (ec) {
+        if (why) *why = "impossible de remplacer " + target + " (" + ec.message() + ")";
+        fs::remove(P(tmp), ec);
+        return false;
+    }
+    return true;
+}
+// Un enregistrement neuf a `target` (un .tmp renomme) : l'en-tete que `jsonOf` donne (la taille de la piste et si
+// elle est coupee, connues a la fin), puis la piste que `track` ecrit (elle rend faux si elle echoue) ; `crc`,
+// `size` : ce qu'elle a ecrit ; `cut` : elle s'est arretee sur un bloc abime.
+using TrackWriter = std::function<bool(std::FILE*, std::uint32_t& crc, std::uint64_t& size, bool& cut)>;
+using JsonOf = std::function<std::string(std::uint64_t size, bool cut)>;
+bool writeRecording(const std::string& target, const JsonOf& jsonOf, const TrackWriter& track, std::string* why) {
+    std::error_code ec;
+    if (P(target).has_parent_path()) fs::create_directories(P(target).parent_path(), ec);
+    const std::string tmp = target + ".tmp";
+    std::FILE* f = openFile(tmp, "wb");
+    if (!f) {
+        if (why) *why = "impossible d'\xC3\xA9" "crire " + target;
+        return false;
+    }
+    const DosStamp d = dosNow();
+    const std::string first = jsonOf(0, false);
+    const std::size_t room = std::max<std::size_t>(kHeaderRoom, first.size() + 1024);
+    const std::string head = localHeader(kHeaderEntry, crcOf(padded(first, room)), static_cast<std::uint32_t>(room), d) + padded(first, room);
+    const std::uint64_t trackLocalAt = head.size();
+    const std::string trackHead = localHeader(kTrackEntry, 0, 0, d);
+    const std::uint64_t trackDataAt = trackLocalAt + trackHead.size();
+    std::uint32_t crc = 0;
+    std::uint64_t size = 0;
+    bool cut = false;
+    if (std::fwrite(head.data(), 1, head.size(), f) != head.size() || std::fwrite(trackHead.data(), 1, trackHead.size(), f) != trackHead.size()
+        || !track(f, crc, size, cut) || trackDataAt + size > kMaxFile) {
+        std::fclose(f);
+        fs::remove(P(tmp), ec);
+        if (why && why->empty()) *why = "\xC3\xA9" "criture interrompue : " + target;
+        return false;
+    }
+    return finalizeFile(f, tmp, target, jsonOf(size, cut), room, trackLocalAt, trackDataAt, size, crc, d, why);
+}
+bool finalizeFile(std::FILE* f, const std::string& from, const std::string& to, const std::string& json, std::size_t room,
+                  std::uint64_t trackLocalAt, std::uint64_t trackDataAt, std::uint64_t trackSize, std::uint32_t trackCrc,
+                  const DosStamp& d, std::string* why) {
+    std::error_code ec;
+    if (json.size() > room) {
+        // L'en-tete ne tient pas a sa place (une description tres longue) : un fichier neuf, la piste recopiee.
+        std::fflush(f);
+        std::fclose(f);
+        const std::string target = to.empty() ? from : to;
+        bool ok = false;
+        {
+            InFile in(from);                         // ferme avant de retirer `from` (Windows)
+            ok = in.ok() && writeRecording(target + ".neuf", [&](std::uint64_t, bool) { return json; },
+                                           [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool&) {
+                                               size = trackSize;
+                                               return copyRange(out, in, trackDataAt, trackSize, &crc);
+                                           }, why);
+        }
+        if (!ok) return false;
+        fs::remove(P(from), ec);
+        return replaceFile(target + ".neuf", target, why);
+    }
+    const std::string head = padded(json, room);
+    const std::uint32_t headCrc = crcOf(head);
+    const std::uint64_t end = trackDataAt + trackSize;
+    const std::string central = centralAndEnd({{std::string(kHeaderEntry), headCrc, static_cast<std::uint32_t>(room), 0},
+                                               {std::string(kTrackEntry), trackCrc, static_cast<std::uint32_t>(trackSize),
+                                                static_cast<std::uint32_t>(trackLocalAt)}},
+                                              static_cast<std::uint32_t>(end), d);
+    bool ok = writeAt(f, 30 + kHeaderEntry.size(), head) && writeAt(f, 14, le32(headCrc))
+           && writeAt(f, trackLocalAt + 14, le32(trackCrc) + le32(static_cast<std::uint32_t>(trackSize)) + le32(static_cast<std::uint32_t>(trackSize)))
+           && writeAt(f, end, central);
+    ok = std::fflush(f) == 0 && ok;
+    std::fclose(f);
+    if (!ok) {
+        if (why) *why = "\xC3\xA9" "criture interrompue : " + from;
+        return false;
+    }
+    // Ce qui depassait (un .part coupe au milieu d'un bloc) part.
+    if (fs::file_size(P(from), ec) > end + central.size()) fs::resize_file(P(from), end + central.size(), ec);
+    if (to.empty() || to == from) return true;
+    fs::rename(P(from), P(to), ec);
+    if (ec) {
+        if (why) *why = "impossible de renommer en " + to + " (" + ec.message() + ")";
+        return false;
+    }
+    return true;
+}
+// L'en-tete d'un enregistrement change : sur place s'il tient (le CRC local et celui du repertoire suivent), sinon un
+// fichier neuf (la piste recopiee par morceaux).
+bool rewriteHeader(const std::string& path, const Header& h, std::string* why) {
+    const std::string json = toJson(h);
+    Layout L;
+    {
+        InFile in(path);
+        if (!in.ok()) {
+            if (why) *why = "introuvable : " + path;
+            return false;
+        }
+        if (!layoutOf(in, L, why)) return false;
+        if (L.fast && L.header.method == 0 && json.size() <= L.header.csize && !L.cut) {
+            // Le repertoire : la ligne de entete.json (son CRC).
+            std::uint64_t crcAt = 0;
+            std::string tail;
+            const std::uint64_t n = std::min<std::uint64_t>(in.size(), 22 + 65535);
+            if (in.read(in.size() - n, n, tail))
+                for (std::size_t i = tail.size() >= 22 ? tail.size() - 22 + 1 : 0; i-- > 0;)
+                    if (get32(tail.data() + i) == 0x06054b50u) {
+                        const std::uint64_t cdAt = get32(tail.data() + i + 16);
+                        std::string row;
+                        if (in.read(cdAt, 46 + kHeaderEntry.size(), row) && get32(row.data()) == 0x02014b50u
+                            && row.compare(46, kHeaderEntry.size(), kHeaderEntry) == 0 && get32(row.data() + 42) == 0)
+                            crcAt = cdAt + 16;
+                        break;
+                    }
+            if (crcAt > 0) {
+                std::FILE* f = openFile(path, "r+b");
+                if (!f) {
+                    if (why) *why = "impossible d'\xC3\xA9" "crire " + path;
+                    return false;
+                }
+                const std::string head = padded(json, static_cast<std::size_t>(L.header.csize));
+                const std::uint32_t crc = crcOf(head);
+                bool ok = writeAt(f, L.header.data, head) && writeAt(f, L.header.local + 14, le32(crc)) && writeAt(f, crcAt, le32(crc));
+                ok = std::fflush(f) == 0 && ok;
+                std::fclose(f);
+                if (!ok && why) *why = "\xC3\xA9" "criture interrompue : " + path;
+                return ok;
+            }
+        }
+    }
+    // Un fichier neuf : la piste recopiee telle quelle (une piste compressee par un autre outil : decompressee).
+    {
+    InFile in(path);
+    if (!in.ok()) {
+        if (why) *why = "introuvable : " + path;
+        return false;
+    }
+    std::string inflated;
+    if (L.hasTrack && L.track.method == 8) {
+        std::string z;
+        if (L.track.usize > g_maxRaw.load() || !in.read(L.track.data, L.track.csize, z) || !inflate(z, static_cast<std::size_t>(L.track.usize), inflated)) {
+            if (why) *why = "piste illisible : " + path;
+            return false;
+        }
+    }
+    const std::uint64_t avail = L.hasTrack ? std::min<std::uint64_t>(L.track.csize, in.size() - std::min(in.size(), L.track.data)) : 0;
+    if (!writeRecording(path + ".neuf", [&](std::uint64_t, bool) { return json; }, [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool&) {
+            if (L.hasTrack && L.track.method == 8) {
+                size = inflated.size();
+                crc = crcOf(inflated);
+                return std::fwrite(inflated.data(), 1, inflated.size(), out) == inflated.size();
+            }
+            size = avail;
+            return copyRange(out, in, L.track.data, avail, &crc);
+        }, why))
+        return false;
+    }
+    return replaceFile(path + ".neuf", path, why);
+}
+
+// Les blocs de [at, end) du fichier, un par un, jusqu'au premier abime ; `next` : la fin du dernier bloc entier.
+// Rend faux si `fn` a dit d'arreter.
+bool blocksIn(InFile& f, std::uint64_t at, std::uint64_t end, const std::function<bool(BlockView&)>& fn, std::uint64_t& next) {
+    std::string head;
+    next = at;
+    while (at + kBlockHead <= end) {
+        BlockView b;
+        std::uint32_t storedLen = 0, crc = 0;
+        if (!f.read(at, kBlockHead, head) || !blockHead(head.data(), b, storedLen, crc) || at + kBlockHead + storedLen > end) break;
+        if (!f.read(at + kBlockHead, storedLen, b.stored) || crcOf(b.stored) != crc) break;
+        b.size = kBlockHead + storedLen;
+        at += b.size;
+        next = at;
+        if (!fn(b)) return false;
+    }
+    return true;
+}
+// Les blocs de la piste d'un enregistrement (stockee : lue par morceaux ; compressee par un autre outil : sa taille
+// bornee, puis decompressee). 1 : lus (truncated : un bloc abime, ou coupe) ; 0 : `fn` a arrete ; -1 : refusee (why).
+int eachTrackBlock(InFile& f, const Layout& L, const Header& h, const std::function<bool(BlockView&)>& fn, bool& truncated, std::string* why) {
+    if (!L.hasTrack) {
+        truncated = true;
+        return 1;
+    }
+    if (L.track.method == 0) {
+        const std::uint64_t end = std::min<std::uint64_t>(L.track.data + L.track.csize, f.size());
+        std::uint64_t next = L.track.data;
+        if (!blocksIn(f, L.track.data, end, fn, next)) return 0;
+        truncated = truncated || L.cut || next < end;
+        return 1;
+    }
+    if (L.track.method != 8) {
+        if (why) *why = "piste : compression inconnue (" + std::to_string(L.track.method) + ")";
+        return -1;
+    }
+    if (L.track.usize > g_maxRaw.load() || L.track.usize > inflateBound(L.track.csize) || (h.trackBytes > 0 && L.track.usize > h.trackBytes)) {
+        if (why) *why = "piste annonc\xC3\xA9" "e trop grande (" + std::to_string(L.track.usize >> 20) + " Mio) : fichier refus\xC3\xA9";
+        return -1;
+    }
+    std::string z, track;
+    if (!f.read(L.track.data, L.track.csize, z) || !inflate(z, static_cast<std::size_t>(L.track.usize), track)) {
+        truncated = true;
+        return 1;
+    }
+    z.clear();
+    std::size_t at = 0;
+    BlockView b;
+    while (blockAt(track, at, b)) {
+        at += b.size;
+        if (!fn(b)) return 0;
+        b = BlockView{};
+    }
+    truncated = truncated || at < track.size();
+    return 1;
 }
 
 // ---- l'en-tete JSON -----------------------------------------------------------------
@@ -515,9 +994,11 @@ bool parseFlat(std::string_view s, std::map<std::string, std::string>& out, std:
 }
 
 // ---- la piste : lire les enregistrements ------------------------------------------------
-void parseRecords(const std::string& raw, Track& tr) {
+// `budget` : ce que la piste a deja fait allouer ; depasse, la lecture s'arrete (budget->why dit pourquoi).
+void parseRecords(const std::string& raw, Track& tr, Budget& budget) {
     In in(raw.data(), raw.data() + raw.size());
     while (in.more()) {
+        if (!budget.take()) return;
         const std::uint8_t kind = in.u8();
         switch (kind) {
             case RKey: {
@@ -538,6 +1019,7 @@ void parseRecords(const std::string& raw, Track& tr) {
                 f.keyframe = kind == RKeyframe;
                 const std::uint64_t n = in.var();
                 for (std::uint64_t k = 0; k < n && in.ok; ++k) {
+                    if (!budget.take()) return;
                     Change c;
                     c.key = static_cast<std::uint32_t>(in.var());
                     c.value = in.value();
@@ -556,6 +1038,7 @@ void parseRecords(const std::string& raw, Track& tr) {
                 sc.arguments = in.str();
                 const std::uint64_t n = in.var();
                 for (std::uint64_t k = 0; k < n && in.ok; ++k) {
+                    if (!budget.take()) return;
                     PopupState p;
                     p.view = in.str();
                     p.arguments = in.str();
@@ -576,6 +1059,7 @@ void parseRecords(const std::string& raw, Track& tr) {
                 o.t = in.time();
                 const std::uint64_t n = in.var();
                 for (std::uint64_t k = 0; k < n && in.ok; ++k) {
+                    if (!budget.take()) return;
                     Override e;
                     e.view = in.str();
                     e.object = in.str();
@@ -591,6 +1075,7 @@ void parseRecords(const std::string& raw, Track& tr) {
                 a.t = in.time();
                 const std::uint64_t n = in.var();
                 for (std::uint64_t k = 0; k < n && in.ok; ++k) {
+                    if (!budget.take()) return;
                     Alarm x;
                     x.name = in.str();
                     x.message = in.str();
@@ -730,6 +1215,21 @@ std::string folderOf(const RecordingSettings& s, const std::string& projectFolde
     return U((P(projectFolder) / P(std::string(kNativeFolder))).lexically_normal());
 }
 
+namespace {
+// Un nom reserve de Windows (CON, NUL.essai, com1...) : ce qui precede le premier point, blancs de fin retires.
+std::size_t reservedStem(std::string_view t) {
+    std::size_t n = t.find('.');
+    if (n == std::string_view::npos) n = t.size();
+    std::size_t e = n;
+    while (e > 0 && t[e - 1] == ' ') --e;
+    std::string stem(t.substr(0, e));
+    for (auto& c : stem) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL") return e;
+    if (stem.size() == 4 && (stem.rfind("COM", 0) == 0 || stem.rfind("LPT", 0) == 0) && stem[3] >= '0' && stem[3] <= '9') return e;
+    return 0;
+}
+} // namespace
+
 bool validName(std::string_view name, std::string* why) {
     const auto no = [why](std::string w) {
         if (why) *why = std::move(w);
@@ -744,6 +1244,8 @@ bool validName(std::string_view name, std::string* why) {
         if (static_cast<unsigned char>(c) < 0x20 || std::strchr("/\\:*?\"<>|", c))
             return no(std::string("le nom ne peut pas contenir ") + (static_cast<unsigned char>(c) < 0x20 ? std::string("de caract\xC3\xA8re de contr\xC3\xB4le") : std::string(1, c)));
     if (t.back() == '.') return no("le nom ne finit pas par un point");
+    if (reservedStem(t) > 0)
+        return no("\xC2\xAB " + t + " \xC2\xBB est un nom r\xC3\xA9serv\xC3\xA9 de Windows (CON, PRN, AUX, NUL, COM1 \xC3\xA0 COM9, LPT1 \xC3\xA0 LPT9)");
     return true;
 }
 
@@ -753,6 +1255,7 @@ std::string cleanName(std::string_view text) {
     while (!out.empty() && (std::isspace(static_cast<unsigned char>(out.back())) || out.back() == '.')) out.pop_back();
     while (!out.empty() && std::isspace(static_cast<unsigned char>(out.front()))) out.erase(0, 1);
     if (out.size() > 120) out.resize(120);
+    if (const std::size_t at = reservedStem(out); at > 0) out.insert(at, "_");   // CON -> CON_
     return out.empty() ? std::string("Enregistrement") : out;
 }
 
@@ -792,6 +1295,7 @@ std::string toJson(const Header& h) {
     s("empreinte", h.hash);
     s("sel_cle", h.keySalt);
     s("nonce", h.nonce);
+    s("cle", h.fileKey);
     n("images", static_cast<double>(h.frames));
     n("cles", static_cast<double>(h.keys));
     n("clics", static_cast<double>(h.clicks));
@@ -801,6 +1305,7 @@ std::string toJson(const Header& h) {
     n("journal", static_cast<double>(h.journal));
     n("evenements", static_cast<double>(h.events));
     s("vues_montrees", h.viewsShown);
+    s("ecran_40", h.at40);
     b("coupe", h.cut);
     o += "  " + jsonString("taille_piste") + ": " + number(static_cast<double>(h.trackBytes)) + "\n}\n";
     return o;
@@ -843,6 +1348,7 @@ bool fromJson(std::string_view text, Header& h, std::string* why) {
     h.hash = get("empreinte");
     h.keySalt = get("sel_cle");
     h.nonce = get("nonce");
+    h.fileKey = get("cle");
     h.frames = static_cast<std::size_t>(num("images", 0));
     h.keys = static_cast<std::size_t>(num("cles", 0));
     h.clicks = static_cast<std::size_t>(num("clics", 0));
@@ -852,23 +1358,26 @@ bool fromJson(std::string_view text, Header& h, std::string* why) {
     h.journal = static_cast<std::size_t>(num("journal", 0));
     h.events = static_cast<std::size_t>(num("evenements", 0));
     h.viewsShown = get("vues_montrees");
+    h.at40 = get("ecran_40");
     h.cut = get("coupe") == "true";
     h.trackBytes = static_cast<std::uint64_t>(num("taille_piste", 0));
     return true;
 }
 
-void protect(Header& h, const std::string& password) {
+void protect(Header& h, const std::string& password, const std::string& fileKey) {
+    if (h.nonce.empty()) h.nonce = randomHex(16);
     if (password.empty()) {
         h.salt.clear();
         h.hash.clear();
         h.keySalt.clear();
-        h.nonce.clear();
+        h.fileKey = toHex(reinterpret_cast<const std::uint8_t*>(fileKey.data()), fileKey.size());
         return;
     }
     h.salt = randomHex(16);
     h.hash = passwordHash(h.salt, password);
     h.keySalt = randomHex(16);
-    h.nonce = randomHex(16);
+    const std::string wrapped = wrapKey(fileKey, deriveKey(h, password), h.nonce);
+    h.fileKey = toHex(reinterpret_cast<const std::uint8_t*>(wrapped.data()), wrapped.size());
 }
 
 bool passwordOk(const Header& h, std::string_view password) {
@@ -876,10 +1385,18 @@ bool passwordOk(const Header& h, std::string_view password) {
     return passwordMatches(h.salt, h.hash, password);
 }
 
+std::string trackKey(const Header& h, const std::string& password) {
+    if (h.fileKey.empty()) return deriveKey(h, password);              // format 1 : la cle du mot de passe ; en clair : rien
+    const std::string stored = fromHex(h.fileKey);
+    if (!h.locked()) return stored;
+    if (password.empty() || !passwordOk(h, password)) return {};
+    return wrapKey(stored, deriveKey(h, password), h.nonce);
+}
+
 // ======================================================================= enregistrer ==
 Recorder::~Recorder() {
     if (file_) {
-        std::fclose(static_cast<std::FILE*>(file_));
+        std::fclose(static_cast<std::FILE*>(file_));     // un .part laisse tel quel : la prochaine liste le relit
         file_ = nullptr;
     }
     if (open_) markActive(options_.partPath, false);
@@ -889,29 +1406,48 @@ bool Recorder::open(RecorderOptions o, std::string* why) {
     options_ = std::move(o);
     if (options_.header.application.empty()) options_.header.application = "IHM Studio";
     if (options_.header.date.empty()) options_.header.date = stamp();
-    if (!options_.password.empty() && !options_.header.locked()) protect(options_.header, options_.password);
-    if (options_.password.empty() && options_.header.locked()) protect(options_.header, {});
-    key_ = deriveKey(options_.header, options_.password);
+    options_.header.format = kFormat;
+    // LA CLE DU FICHIER, tiree au sort : elle chiffre chaque bloc. Le mot de passe (s'il y en a un) la chiffre dans
+    // l'en-tete - le donner, le changer ou le retirer a l'arret ne touche que l'en-tete.
+    key_ = fromHex(randomHex(32));
+    options_.header.nonce = randomHex(16);
+    protect(options_.header, options_.password, key_);
     std::error_code ec;
     const fs::path part = P(options_.partPath);
     if (part.has_parent_path()) fs::create_directories(part.parent_path(), ec);
-#if defined(_WIN32)
-    std::FILE* f = _wfopen(part.wstring().c_str(), L"wb");
-#else
-    std::FILE* f = std::fopen(part.string().c_str(), "wb");
-#endif
+    std::FILE* f = openFile(options_.partPath, "wb");
     if (!f) {
         error_ = "impossible d'\xC3\xA9" "crire " + options_.partPath;
         if (why) *why = error_;
         return false;
     }
+#if !defined(_WIN32)
+    // Un autre programme qui liste le dossier ne le prend pas pour un .part abandonne (Windows : un fichier ouvert ne
+    // se renomme pas, c'est le meme verrou).
+    (void)::flock(::fileno(f), LOCK_EX | LOCK_NB);
+#endif
     file_ = f;
+    const DosStamp d = dosNow();
+    stampTime_ = d.time;
+    stampDate_ = d.date;
     const std::string json = toJson(options_.header);
-    std::string head(kPartMagic, 8);
-    put32(head, static_cast<std::uint32_t>(json.size()));
-    head += json;
-    std::fwrite(head.data(), 1, head.size(), f);
-    std::fflush(f);
+    room_ = std::max<std::size_t>(kHeaderRoom, json.size() + 4096);
+    const std::string head = localHeader(kHeaderEntry, crcOf(padded(json, room_)), static_cast<std::uint32_t>(room_), d) + padded(json, room_);
+    trackLocalAt_ = head.size();
+    const std::string trackHead = localHeader(kTrackEntry, 0, 0, d);
+    trackDataAt_ = trackLocalAt_ + trackHead.size();
+    trackCrc_ = 0;
+    written_ = 0;
+    const bool ok = std::fwrite(head.data(), 1, head.size(), f) == head.size() && std::fwrite(trackHead.data(), 1, trackHead.size(), f) == trackHead.size()
+                 && std::fflush(f) == 0;
+    if (!ok) {
+        std::fclose(f);
+        file_ = nullptr;
+        fs::remove(part, ec);
+        error_ = "\xC3\xA9" "criture interrompue : " + options_.partPath;
+        if (why) *why = error_;
+        return false;
+    }
     open_ = true;
     markActive(options_.partPath, true);
     return true;
@@ -1020,6 +1556,9 @@ void Recorder::screen(Screen s) {
     putStr(r, s.theme);
     record(std::move(r));
     last_ = std::max(last_, s.t);
+    std::string shown = s.view;
+    for (const auto& p : s.popups) shown += " + " + p.view;
+    if (shown_.empty() || shown_.back().second != shown) shown_.emplace_back(s.t, std::move(shown));
     screen_ = std::move(s);
 }
 
@@ -1117,6 +1656,7 @@ bool Recorder::flush(double t, bool force) {
     auto* f = static_cast<std::FILE*>(file_);
     const bool ok = std::fwrite(block.data(), 1, block.size(), f) == block.size() && std::fflush(f) == 0;
     if (!ok) error_ = "\xC3\xA9" "criture interrompue : " + options_.partPath;
+    trackCrc_ = static_cast<std::uint32_t>(mz_crc32(trackCrc_, reinterpret_cast<const unsigned char*>(block.data()), block.size()));
     written_ += block.size();
     pending_.clear();
     return ok;
@@ -1135,16 +1675,18 @@ bool Recorder::close(double t, bool keep, const std::string& finalPath, const st
         record(std::move(end));
     }
     (void)flush(last_, true);
-    std::fclose(static_cast<std::FILE*>(file_));
+    auto* f = static_cast<std::FILE*>(file_);
     file_ = nullptr;
     open_ = false;
     markActive(options_.partPath, false);
     std::error_code ec;
     if (!keep) {
+        std::fclose(f);
         fs::remove(P(options_.partPath), ec);
         return true;
     }
-    // L'en-tete final : la duree, les comptes, le nom et la description, le mot de passe donne a l'arret.
+    // L'en-tete final : la duree, les comptes, le nom et la description, le mot de passe donne a l'arret (seule la
+    // cle de l'en-tete change : la piste deja ecrite reste telle quelle).
     Header h = options_.header;
     h.name = name.empty() ? h.name : name;
     h.description = description;
@@ -1159,36 +1701,23 @@ bool Recorder::close(double t, bool keep, const std::string& finalPath, const st
     h.views = views_.size();
     h.viewsShown.clear();
     for (const auto& v : views_) h.viewsShown += (h.viewsShown.empty() ? "" : ";") + v;
+    h.at40.clear();
+    for (const auto& [at, shown] : shown_) {
+        if (at > last_ * 0.4 + 1e-9 && !h.at40.empty()) break;
+        h.at40 = shown;
+    }
     h.cut = false;
-    std::string blocks;
-    {
-        Header partHeader;
-        if (!readPart(options_.partPath, partHeader, blocks, why)) return false;
+    protect(h, password, key_);
+    h.trackBytes = written_;
+    if (trackDataAt_ + written_ > kMaxFile) {
+        std::fclose(f);
+        if (why) *why = "enregistrement trop gros pour un fichier .xrec (4 Go)";
+        return false;
     }
-    if (password != options_.password) {
-        Header fresh = h;
-        protect(fresh, password);
-        const std::string newKey = deriveKey(fresh, password);
-        std::string out;
-        bool truncated = false;
-        for (const auto& b : blocksOf(blocks, 0, &truncated)) {
-            bool ok = true;
-            out += recipher(b, key_, options_.header.nonce, newKey, fresh.nonce, &ok);
-            if (!ok) {
-                if (why) *why = "la piste ne se rechiffre pas";
-                return false;
-            }
-        }
-        blocks = std::move(out);
-        h.salt = fresh.salt;
-        h.hash = fresh.hash;
-        h.keySalt = fresh.keySalt;
-        h.nonce = fresh.nonce;
-    }
-    h.trackBytes = blocks.size();
-    const std::string zip = zipStored({{std::string(kHeaderEntry), toJson(h)}, {std::string(kTrackEntry), blocks}});
-    if (!writeAll(finalPath, zip, why)) return false;
-    fs::remove(P(options_.partPath), ec);
+    DosStamp d;
+    d.time = stampTime_;
+    d.date = stampDate_;
+    if (!finalizeFile(f, options_.partPath, finalPath, toJson(h), room_, trackLocalAt_, trackDataAt_, written_, trackCrc_, d, why)) return false;
     if (written) *written = h;
     return true;
 }
@@ -1318,84 +1847,149 @@ std::string_view statusText(Status s) noexcept {
     return {};
 }
 
-Status readHeader(const std::string& path, Header& out, std::string* why) {
+namespace {
+// LES EN-TETES DEJA LUS : par chemin, avec la taille et la date de modification du fichier - la liste du dossier
+// (toutes les 2 s a l'ecran, le Lecteur, IHM_ENREG_EXISTE) ne relit un en-tete que s'il a change.
+struct CachedHeader {
+    std::uint64_t bytes{0};
+    long long     stamp{0};
+    Header        header;
+    Status        status{Status::Ok};
+    std::string   problem;
+};
+std::mutex&                           cacheLock() { static std::mutex m; return m; }
+std::map<std::string, CachedHeader>& headerCache() { static std::map<std::string, CachedHeader> c; return c; }
+long long stampOf(const fs::path& p) {
     std::error_code ec;
-    if (!fs::is_regular_file(P(path), ec)) {
-        if (why) *why = "introuvable : " + path;
-        return Status::NotFound;
+    const auto t = fs::last_write_time(p, ec);
+    return ec ? 0 : static_cast<long long>(t.time_since_epoch().count());
+}
+Status cachedHeader(const std::string& path, std::uint64_t bytes, long long stamp, Header& out, std::string& problem) {
+    {
+        std::lock_guard<std::mutex> lock(cacheLock());
+        const auto it = headerCache().find(path);
+        if (it != headerCache().end() && it->second.bytes == bytes && it->second.stamp == stamp) {
+            out = it->second.header;
+            problem = it->second.problem;
+            return it->second.status;
+        }
     }
-    std::string data;
-    if (!readAll(path, data)) {
-        if (why) *why = "illisible : " + path;
+    CachedHeader c;
+    c.bytes = bytes;
+    c.stamp = stamp;
+    std::string why;
+    c.status = readHeader(path, c.header, &why);
+    if (c.status != Status::Ok) c.problem = why.empty() ? std::string("illisible") : why;
+    out = c.header;
+    problem = c.problem;
+    std::lock_guard<std::mutex> lock(cacheLock());
+    headerCache()[path] = std::move(c);
+    return problem.empty() ? Status::Ok : Status::Unreadable;
+}
+} // namespace
+
+Limits limits() noexcept {
+    Limits l;
+    l.trackRaw = g_maxRaw.load();
+    l.items = g_maxItems.load();
+    return l;
+}
+void setLimits(const Limits& l) noexcept {
+    g_maxRaw = l.trackRaw;
+    g_maxItems = l.items;
+}
+FileStats fileStats() noexcept {
+    FileStats s;
+    s.opens = g_opens.load();
+    s.bytes = g_bytes.load();
+    return s;
+}
+
+Status readHeader(const std::string& path, Header& out, std::string* why) {
+    try {
+        std::error_code ec;
+        if (!fs::is_regular_file(P(path), ec)) {
+            if (why) *why = "introuvable : " + path;
+            return Status::NotFound;
+        }
+        InFile f(path);
+        if (!f.ok()) {
+            if (why) *why = "illisible : " + path;
+            return Status::Unreadable;
+        }
+        Layout L;
+        std::string w, json;
+        if (!layoutOf(f, L, &w) || !headerText(f, L.header, json, &w) || !fromJson(json, out, &w)) {
+            if (why) *why = (w.empty() ? std::string("illisible") : w) + " : " + path;
+            return Status::Unreadable;
+        }
+        if (L.cut) out.cut = true;
+        return Status::Ok;
+    } catch (const std::bad_alloc&) {
+        if (why) *why = "m\xC3\xA9moire insuffisante pour lire l'en-t\xC3\xAAte : " + path;
         return Status::Unreadable;
     }
-    std::map<std::string, std::string> entries;
-    bool cut = false;
-    if (!readZip(data, entries, &cut)) {
-        if (why) *why = "pas un enregistrement (.xrec) : " + path;
-        return Status::Unreadable;
-    }
-    const auto it = entries.find(std::string(kHeaderEntry));
-    if (it == entries.end()) {
-        if (why) *why = "sans en-t\xC3\xAAte : " + path;
-        return Status::Unreadable;
-    }
-    if (!fromJson(it->second, out, why)) return Status::Unreadable;
-    if (cut) out.cut = true;
-    return Status::Ok;
 }
 
 Status readTrack(const std::string& path, const std::string& password, Header& header, Track& out, std::string* why) {
-    std::error_code ec;
-    if (!fs::is_regular_file(P(path), ec)) {
-        if (why) *why = "introuvable : " + path;
-        return Status::NotFound;
-    }
-    std::string data;
-    if (!readAll(path, data)) {
-        if (why) *why = "illisible : " + path;
+    try {
+        std::error_code ec;
+        if (!fs::is_regular_file(P(path), ec)) {
+            if (why) *why = "introuvable : " + path;
+            return Status::NotFound;
+        }
+        InFile f(path);
+        if (!f.ok()) {
+            if (why) *why = "illisible : " + path;
+            return Status::Unreadable;
+        }
+        Layout L;
+        std::string w, json;
+        if (!layoutOf(f, L, &w) || !headerText(f, L.header, json, &w) || !fromJson(json, header, &w)) {
+            if (why) *why = (w.empty() ? std::string("illisible") : w) + " : " + path;
+            return Status::Unreadable;
+        }
+        // Le mot de passe d'abord : un refus ne lit rien de la piste.
+        if (header.locked()) {
+            if (password.empty()) {
+                if (why) *why = "\xC2\xAB " + header.name + " \xC2\xBB est prot\xC3\xA9g\xC3\xA9 par un mot de passe";
+                return Status::PasswordNeeded;
+            }
+            if (!passwordOk(header, password)) {
+                if (why) *why = "mot de passe incorrect";
+                return Status::BadPassword;
+            }
+        }
+        const std::string key = trackKey(header, password);
+        out = Track{};
+        Budget budget;
+        bool truncated = false;
+        const int r = eachTrackBlock(f, L, header, [&](BlockView& b) {
+            std::string raw;
+            if (!openBlock(b, key, header.nonce, raw)) {
+                truncated = true;
+                return false;
+            }
+            if (!budget.takeRaw(raw.size())) return false;
+            parseRecords(raw, out, budget);
+            if (!budget.why.empty()) return false;
+            ++out.blocks;
+            out.end = std::max(out.end, b.tEnd / 1000.0);
+            return true;
+        }, truncated, &w);
+        if (r < 0 || !budget.why.empty()) {
+            out = Track{};
+            if (why) *why = (r < 0 ? w : budget.why) + " : " + path;
+            return Status::Unreadable;
+        }
+        out.truncated = truncated;
+        if (out.truncated) header.cut = true;
+        return Status::Ok;
+    } catch (const std::bad_alloc&) {
+        out = Track{};
+        if (why) *why = "m\xC3\xA9moire insuffisante pour relire la piste : " + path;
         return Status::Unreadable;
     }
-    std::map<std::string, std::string> entries;
-    bool cut = false;
-    if (!readZip(data, entries, &cut)) {
-        if (why) *why = "pas un enregistrement (.xrec) : " + path;
-        return Status::Unreadable;
-    }
-    const auto h = entries.find(std::string(kHeaderEntry));
-    if (h == entries.end() || !fromJson(h->second, header, why)) {
-        if (why && why->empty()) *why = "sans en-t\xC3\xAAte : " + path;
-        return Status::Unreadable;
-    }
-    if (header.locked()) {
-        if (password.empty()) {
-            if (why) *why = "\xC2\xAB " + header.name + " \xC2\xBB est prot\xC3\xA9g\xC3\xA9 par un mot de passe";
-            return Status::PasswordNeeded;
-        }
-        if (!passwordOk(header, password)) {
-            if (why) *why = "mot de passe incorrect";
-            return Status::BadPassword;
-        }
-    }
-    const auto t = entries.find(std::string(kTrackEntry));
-    const std::string none;
-    const std::string& track = t == entries.end() ? none : t->second;
-    const std::string key = deriveKey(header, password);
-    out = Track{};
-    bool truncated = false;
-    for (const auto& b : blocksOf(track, 0, &truncated)) {
-        std::string raw;
-        if (!openBlock(b, key, header.nonce, raw)) {
-            truncated = true;
-            break;
-        }
-        parseRecords(raw, out);
-        ++out.blocks;
-        out.end = std::max(out.end, b.tEnd / 1000.0);
-    }
-    out.truncated = truncated || cut || t == entries.end();
-    if (out.truncated) header.cut = true;
-    return Status::Ok;
 }
 
 void markActive(const std::string& partPath, bool active) {
@@ -1404,10 +1998,12 @@ void markActive(const std::string& partPath, bool active) {
     else activeParts().erase(partPath);
 }
 
-bool recoverPart(const std::string& partPath, std::string* finalPath, std::string* why) {
+namespace {
+// Le format 1 : "XRECPART", la longueur de l'en-tete, l'en-tete, puis les blocs ; recopie dans un zip.
+bool recoverLegacy(const std::string& claimed, const std::string& partPath, std::string* finalPath, std::string* why) {
     Header h;
     std::string blocks;
-    if (!readPart(partPath, h, blocks, why)) return false;
+    if (!readPart(claimed, h, blocks, why)) return false;
     bool truncated = false;
     const auto list = blocksOf(blocks, 0, &truncated);
     std::string kept;
@@ -1423,13 +2019,110 @@ bool recoverPart(const std::string& partPath, std::string* finalPath, std::strin
         kept += b.stored;
         end = std::max(end, b.tEnd / 1000.0);
     }
-    // Les comptes : depuis la piste quand elle est en clair.
-    if (!h.locked()) {
-        Track tr;
-        for (const auto& b : list) {
-            std::string raw;
-            if (openBlock(b, {}, {}, raw)) parseRecords(raw, tr);
+    h.duration = end;
+    h.cut = true;
+    h.trackBytes = kept.size();
+    const std::string folder = U(P(partPath).parent_path());
+    std::string name = nameOfPath(partPath);
+    std::error_code ec;
+    if (fs::exists(P(pathOf(folder, name)), ec)) name = uniqueName(folder, name);
+    h.name = name;
+    const std::string target = pathOf(folder, name);
+    if (!writeAll(target, zipStored({{std::string(kHeaderEntry), toJson(h)}, {std::string(kTrackEntry), kept}}), why)) return false;
+    fs::remove(P(claimed), ec);
+    if (finalPath) *finalPath = target;
+    return true;
+}
+} // namespace
+
+bool recoverPart(const std::string& partPath, std::string* finalPath, std::string* why) {
+    const auto fail = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    std::error_code ec;
+    // PRENDRE le .part d'abord : ouvert par un autre programme (un autre IHM Studio qui enregistre), on n'y touche pas ;
+    // renomme, une autre fenetre qui liste le meme dossier ne le trouve plus (deux .xrec du meme enregistrement).
+    const std::string claimed = partPath + ".recup-" + randomHex(4);
+    std::FILE* f = nullptr;
+#if defined(_WIN32)
+    fs::rename(P(partPath), P(claimed), ec);           // un fichier ouvert ailleurs ne se renomme pas
+    if (ec) return fail("en cours d'\xC3\xA9" "criture par un autre programme, ou introuvable (" + ec.message() + ")");
+    f = openFile(claimed, "r+b");
+    if (!f) {
+        fs::rename(P(claimed), P(partPath), ec);
+        return fail("illisible : " + partPath);
+    }
+#else
+    f = openFile(partPath, "r+b");
+    if (!f) return fail("introuvable : " + partPath);
+    if (::flock(::fileno(f), LOCK_EX | LOCK_NB) != 0) {
+        std::fclose(f);
+        return fail("en cours d'\xC3\xA9" "criture par un autre programme");
+    }
+    fs::rename(P(partPath), P(claimed), ec);
+    if (ec) {
+        std::fclose(f);
+        return fail("d\xC3\xA9j\xC3\xA0 pris par une autre fen\xC3\xAAtre (" + ec.message() + ")");
+    }
+#endif
+    const auto giveBack = [&](std::string w) {
+        if (f) std::fclose(f);
+        f = nullptr;
+        fs::rename(P(claimed), P(partPath), ec);
+        return fail(std::move(w));
+    };
+    // Le format 1.
+    {
+        char magic[8] = {};
+        if (std::fread(magic, 1, 8, f) == 8 && std::memcmp(magic, kPartMagic, 8) == 0) {
+            std::fclose(f);
+            f = nullptr;
+            if (!recoverLegacy(claimed, partPath, finalPath, why)) {
+                fs::rename(P(claimed), P(partPath), ec);
+                return false;
+            }
+            return true;
         }
+    }
+    Header h;
+    ZipEntry first, second;
+    std::uint64_t validEnd = 0;
+    std::uint32_t crc = 0;
+    Track tr;
+    bool counted = false;
+    double end = 0;
+    {
+        InFile in(claimed);
+        std::string json, w;
+        if (!in.ok() || !localAt(in, 0, first) || first.name != kHeaderEntry || !headerText(in, first, json, &w) || !fromJson(json, h, &w))
+            return giveBack("pas un enregistrement en cours lisible : " + partPath + (w.empty() ? std::string{} : " (" + w + ")"));
+        if (!localAt(in, first.data + first.csize, second) || second.name != kTrackEntry)
+            return giveBack("piste introuvable : " + partPath);
+        // Les blocs entiers, jusqu'au premier abime (la fin d'un bloc a moitie ecrit) ; les comptes, la piste en clair.
+        const std::string key = trackKey(h, {});
+        Budget budget;
+        validEnd = second.data;
+        (void)blocksIn(in, second.data, in.size(), [&](BlockView& b) {
+            std::string whole(kBlockMagic, 4);
+            whole.push_back(static_cast<char>(b.flags));
+            put32(whole, b.seq);
+            put32(whole, b.tEnd);
+            put32(whole, b.rawLen);
+            put32(whole, static_cast<std::uint32_t>(b.stored.size()));
+            put32(whole, crcOf(b.stored));
+            whole += b.stored;
+            crc = static_cast<std::uint32_t>(mz_crc32(crc, reinterpret_cast<const unsigned char*>(whole.data()), whole.size()));
+            end = std::max(end, b.tEnd / 1000.0);
+            std::string raw;
+            if (budget.why.empty() && openBlock(b, key, h.nonce, raw) && budget.takeRaw(raw.size())) {
+                parseRecords(raw, tr, budget);
+                counted = budget.why.empty();
+            }
+            return true;
+        }, validEnd);
+    }
+    if (counted) {
         h.frames = tr.frames.size();
         h.keys = tr.keys.size();
         h.events = tr.events.size();
@@ -1438,25 +2131,33 @@ bool recoverPart(const std::string& partPath, std::string* finalPath, std::strin
         }));
         h.alarms = static_cast<std::size_t>(std::count_if(tr.events.begin(), tr.events.end(), [](const Event& e) { return e.kind == EventKind::AlarmAppear; }));
         std::vector<std::string> views;
-        for (const auto& s : tr.screens)
-            if (std::find(views.begin(), views.end(), s.view) == views.end()) views.push_back(s.view);
+        for (const auto& sc : tr.screens)
+            if (std::find(views.begin(), views.end(), sc.view) == views.end()) views.push_back(sc.view);
         h.views = views.size();
         h.viewsShown.clear();
         for (const auto& v : views) h.viewsShown += (h.viewsShown.empty() ? "" : ";") + v;
         end = std::max(end, tr.end);
+        for (const auto& sc : tr.screens) {
+            if (sc.t > end * 0.4 + 1e-9 && !h.at40.empty()) break;
+            h.at40 = sc.view;
+            for (const auto& pp : sc.popups) h.at40 += " + " + pp.view;
+        }
     }
     h.duration = end;
     h.cut = true;
-    h.trackBytes = kept.size();
-    const fs::path part = P(partPath);
-    const std::string folder = U(part.parent_path());
+    h.trackBytes = validEnd - second.data;
+    const std::string folder = U(P(partPath).parent_path());
     std::string name = nameOfPath(partPath);
-    std::error_code ec;
     if (fs::exists(P(pathOf(folder, name)), ec)) name = uniqueName(folder, name);
     h.name = name;
     const std::string target = pathOf(folder, name);
-    if (!writeAll(target, zipStored({{std::string(kHeaderEntry), toJson(h)}, {std::string(kTrackEntry), kept}}), why)) return false;
-    fs::remove(part, ec);
+    std::FILE* out = f;
+    f = nullptr;
+    if (!finalizeFile(out, claimed, target, toJson(h), static_cast<std::size_t>(first.csize), second.local, second.data, validEnd - second.data, crc,
+                      dosNow(), why)) {
+        fs::rename(P(claimed), P(partPath), ec);
+        return false;
+    }
     if (finalPath) *finalPath = target;
     return true;
 }
@@ -1483,7 +2184,7 @@ std::vector<Item> listFolder(const std::string& folder, std::vector<std::string>
         std::string target, why;
         if (recoverPart(U(p), &target, &why)) {
             if (notes) notes->push_back("enregistrement coup\xC3\xA9 net relu jusqu'au dernier bloc : " + nameOfPath(target));
-        } else if (notes) {
+        } else if (notes && why.find("autre programme") == std::string::npos && why.find("autre fen") == std::string::npos) {
             notes->push_back("enregistrement en cours abandonn\xC3\xA9, illisible : " + U(p.filename()) + " (" + why + ")");
         }
     }
@@ -1497,8 +2198,8 @@ std::vector<Item> listFolder(const std::string& folder, std::vector<std::string>
         item.name = nameOfPath(item.path);
         item.bytes = static_cast<std::uint64_t>(it->file_size(ec));
         item.modified = mtimeOf(it->path());
-        std::string why;
-        if (readHeader(item.path, item.header, &why) != Status::Ok) item.problem = why.empty() ? "illisible" : why;
+        // Seul l'en-tete, et seulement s'il a change (taille, date du fichier).
+        (void)cachedHeader(item.path, item.bytes, stampOf(it->path()), item.header, item.problem);
         if (item.header.name.empty()) item.header.name = item.name;
         out.push_back(std::move(item));
     }
@@ -1549,43 +2250,83 @@ std::string uniqueName(const std::string& folder, std::string_view wanted) {
 bool importFile(const std::string& source, const std::string& folder, std::string& name, std::string* why) {
     Header h;
     if (const Status st = readHeader(source, h, why); st != Status::Ok) return false;
-    std::string data;
-    if (!readAll(source, data)) {
-        if (why) *why = "illisible : " + source;
-        return false;
-    }
     if (folder.empty()) {
         if (why) *why = "pas de dossier des enregistrements (le projet n'est pas enregistr\xC3\xA9)";
         return false;
     }
     std::string wanted = name.empty() ? nameOfPath(source) : name;
     name = uniqueName(folder, wanted);
-    return writeAll(pathOf(folder, name), data, why);
-}
-
-bool exportFile(const std::string& folder, std::string_view name, const std::string& destination, std::string* written, std::string* why) {
-    const std::string from = pathOf(folder, name);
+    const std::string target = pathOf(folder, name);
     std::error_code ec;
-    if (!fs::is_regular_file(P(from), ec)) {
-        if (why) *why = "enregistrement introuvable : " + std::string(name);
+    fs::create_directories(P(folder), ec);
+    fs::copy_file(P(source), P(target + ".tmp"), fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        if (why) *why = "copie impossible : " + ec.message();
+        fs::remove(P(target + ".tmp"), ec);
         return false;
     }
-    std::string target = destination;
+    return replaceFile(target + ".tmp", target, why);
+}
+
+bool exportFile(const std::string& folder, std::string_view name, const std::string& destination, std::string* written, std::string* why,
+                const ExportOptions& options) {
+    const auto fail = [&](std::string w, Status st) {
+        if (why) *why = std::move(w);
+        if (options.status) *options.status = st;
+        return false;
+    };
+    if (options.exists) *options.exists = false;
+    if (options.status) *options.status = Status::Ok;
+    std::string w;
+    if (!validName(name, &w)) return fail("nom d'enregistrement refus\xC3\xA9 : " + w, Status::NotFound);
+    const std::string from = pathOf(folder, name);
+    std::error_code ec;
+    if (!fs::is_regular_file(P(from), ec)) return fail("enregistrement introuvable : " + std::string(name), Status::NotFound);
     const fs::path dest = P(destination);
     const bool isFolder = destination.empty() || destination.back() == '/' || destination.back() == '\\' || fs::is_directory(dest, ec)
                        || !endsWith(destination, kExtension);
-    if (isFolder) target = U(dest / P(std::string(name) + std::string(kExtension)));
-    std::string data;
-    if (!readAll(from, data)) {
-        if (why) *why = "illisible : " + from;
-        return false;
+    fs::path target = isFolder ? dest / P(std::string(name) + std::string(kExtension)) : dest;
+    if (fs::exists(target, ec)) {
+        if (fs::equivalent(target, P(from), ec)) return fail("c'est le fichier lui-m\xC3\xAAme : " + U(target), Status::Unreadable);
+        if (options.ifExists == ExportOptions::IfExists::Refuse) {
+            if (options.exists) *options.exists = true;
+            return fail("\xC2\xAB " + U(target.filename()) + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 dans " + U(target.parent_path()), Status::Unreadable);
+        }
+        if (options.ifExists == ExportOptions::IfExists::FreeName) {
+            const std::string stem = nameOfPath(U(target));
+            for (int n = 2; n < 10000 && fs::exists(target, ec); ++n)
+                target = target.parent_path() / P(stem + " (" + std::to_string(n) + ")" + std::string(kExtension));
+        }
     }
-    if (!writeAll(target, data, why)) return false;
-    if (written) *written = target;
+    if (target.has_parent_path()) fs::create_directories(target.parent_path(), ec);
+    const std::string out = U(target);
+    fs::copy_file(P(from), P(out + ".tmp"), fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        fs::remove(P(out + ".tmp"), ec);
+        return fail("copie impossible : " + ec.message(), Status::Unreadable);
+    }
+    // Sans le mot de passe dans la copie : elle est rechiffree sans protection (il faut le bon).
+    if (!options.unprotect.empty()) {
+        Header h;
+        if (readHeader(out + ".tmp", h) == Status::Ok && h.locked()) {
+            const Status st = setPassword(out + ".tmp", options.unprotect, {}, &w);
+            if (st != Status::Ok) {
+                fs::remove(P(out + ".tmp"), ec);
+                return fail(w, st);
+            }
+        }
+    }
+    if (!replaceFile(out + ".tmp", out, why)) return false;
+    if (written) *written = out;
     return true;
 }
 
 bool renameFile(const std::string& folder, std::string_view from, std::string_view to, std::string* why) {
+    std::string w;
+    if (!validName(from, &w)) {
+        if (why) *why = "nom d'enregistrement refus\xC3\xA9 : " + w;
+        return false;
+    }
     if (!validName(to, why)) return false;
     const std::string a = pathOf(folder, from), b = pathOf(folder, to);
     std::error_code ec;
@@ -1597,20 +2338,13 @@ bool renameFile(const std::string& folder, std::string_view from, std::string_vi
         if (why) *why = "\xC2\xAB " + std::string(to) + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0";
         return false;
     }
-    std::string data;
+    // Le nom de l'en-tete suit le fichier (sur place : rien n'est recopie).
     Header h;
-    if (readAll(a, data) && readHeader(a, h) == Status::Ok) {
-        // Le nom de l'en-tete suit le fichier.
-        std::map<std::string, std::string> entries;
-        bool cut = false;
-        if (readZip(data, entries, &cut) && !cut) {
-            h.name = std::string(to);
-            const std::string track = entries[std::string(kTrackEntry)];
-            if (!writeAll(b, zipStored({{std::string(kHeaderEntry), toJson(h)}, {std::string(kTrackEntry), track}}), why)) return false;
-            if (lower(a) != lower(b)) fs::remove(P(a), ec);
-            return true;
-        }
+    if (readHeader(a, h) == Status::Ok && !h.cut) {
+        h.name = std::string(to);
+        if (!rewriteHeader(a, h, why)) return false;
     }
+    if (a == b) return true;
     fs::rename(P(a), P(b), ec);
     if (ec) {
         if (why) *why = "renommage impossible : " + ec.message();
@@ -1620,6 +2354,11 @@ bool renameFile(const std::string& folder, std::string_view from, std::string_vi
 }
 
 bool removeFile(const std::string& folder, std::string_view name, const std::string& trash, std::string* why) {
+    std::string w;
+    if (!validName(name, &w)) {
+        if (why) *why = "nom d'enregistrement refus\xC3\xA9 : " + w;
+        return false;
+    }
     const fs::path p = P(pathOf(folder, name));
     std::error_code ec;
     if (!fs::is_regular_file(p, ec)) {
@@ -1649,64 +2388,80 @@ bool removeFile(const std::string& folder, std::string_view name, const std::str
 }
 
 Status setPassword(const std::string& path, const std::string& current, const std::string& fresh, std::string* why) {
-    std::string data;
-    if (!readAll(path, data)) {
-        if (why) *why = "introuvable : " + path;
-        return Status::NotFound;
-    }
-    std::map<std::string, std::string> entries;
-    bool cut = false;
-    Header h;
-    if (!readZip(data, entries, &cut) || !entries.count(std::string(kHeaderEntry)) || !fromJson(entries[std::string(kHeaderEntry)], h, why)) {
-        if (why && why->empty()) *why = "illisible : " + path;
+    try {
+        Header h, n;
+        std::string w;
+        bool bad = false;
+        {
+            std::error_code ec;
+            if (!fs::is_regular_file(P(path), ec)) {
+                if (why) *why = "introuvable : " + path;
+                return Status::NotFound;
+            }
+            InFile in(path);
+            Layout L;
+            std::string json;
+            if (!in.ok() || !layoutOf(in, L, &w) || !headerText(in, L.header, json, &w) || !fromJson(json, h, &w)) {
+                if (why) *why = (w.empty() ? std::string("illisible") : w) + " : " + path;
+                return Status::Unreadable;
+            }
+            if (h.locked()) {
+                if (current.empty()) {
+                    if (why) *why = "le mot de passe actuel est demand\xC3\xA9";
+                    return Status::PasswordNeeded;
+                }
+                if (!passwordOk(h, current)) {
+                    if (why) *why = "mot de passe actuel incorrect";
+                    return Status::BadPassword;
+                }
+            }
+            // UNE CLE NEUVE : qui avait l'ancienne (l'ancien mot de passe) ne lit pas la piste rechiffree.
+            const std::string oldKey = trackKey(h, current);
+            const std::string oldNonce = h.nonce;
+            n = h;
+            n.format = kFormat;
+            n.nonce = randomHex(16);
+            const std::string newKey = fromHex(randomHex(32));
+            protect(n, fresh, newKey);
+            int r = 1;
+            const bool ok = writeRecording(path + ".neuf", [&](std::uint64_t size, bool cut) {
+                n.trackBytes = size;
+                if (cut) n.cut = true;
+                return toJson(n);
+            }, [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool& cut) {
+                bool truncated = false;
+                r = eachTrackBlock(in, L, h, [&](BlockView& b) {
+                    bool good = true;
+                    const std::string block = recipher(b, oldKey, oldNonce, newKey, n.nonce, &good);
+                    if (!good) {
+                        bad = true;
+                        return false;
+                    }
+                    crc = static_cast<std::uint32_t>(mz_crc32(crc, reinterpret_cast<const unsigned char*>(block.data()), block.size()));
+                    size += block.size();
+                    return std::fwrite(block.data(), 1, block.size(), out) == block.size();
+                }, truncated, &w);
+                cut = truncated;
+                return r > 0 && !bad;
+            }, &w);
+            if (!ok) {
+                if (why) *why = bad ? std::string("la piste ne se rechiffre pas") : (w.empty() ? std::string("\xC3\xA9" "criture impossible : ") + path : w);
+                return Status::Unreadable;
+            }
+        }
+        if (!replaceFile(path + ".neuf", path, why)) return Status::Unreadable;
+        return Status::Ok;
+    } catch (const std::bad_alloc&) {
+        if (why) *why = "m\xC3\xA9moire insuffisante : " + path;
         return Status::Unreadable;
     }
-    if (h.locked()) {
-        if (current.empty()) {
-            if (why) *why = "le mot de passe actuel est demand\xC3\xA9";
-            return Status::PasswordNeeded;
-        }
-        if (!passwordOk(h, current)) {
-            if (why) *why = "mot de passe actuel incorrect";
-            return Status::BadPassword;
-        }
-    }
-    const std::string oldKey = deriveKey(h, current);
-    const std::string oldNonce = h.nonce;
-    Header n = h;
-    protect(n, fresh);
-    const std::string newKey = deriveKey(n, fresh);
-    std::string out;
-    bool truncated = false;
-    for (const auto& b : blocksOf(entries[std::string(kTrackEntry)], 0, &truncated)) {
-        bool ok = true;
-        out += recipher(b, oldKey, oldNonce, newKey, n.nonce, &ok);
-        if (!ok) {
-            if (why) *why = "la piste ne se rechiffre pas";
-            return Status::Unreadable;
-        }
-    }
-    n.trackBytes = out.size();
-    if (truncated) n.cut = true;
-    if (!writeAll(path, zipStored({{std::string(kHeaderEntry), toJson(n)}, {std::string(kTrackEntry), out}}), why)) return Status::Unreadable;
-    return Status::Ok;
 }
 
 bool setDescription(const std::string& path, const std::string& description, std::string* why) {
-    std::string data;
-    if (!readAll(path, data)) {
-        if (why) *why = "introuvable : " + path;
-        return false;
-    }
-    std::map<std::string, std::string> entries;
-    bool cut = false;
     Header h;
-    if (!readZip(data, entries, &cut) || !entries.count(std::string(kHeaderEntry)) || !fromJson(entries[std::string(kHeaderEntry)], h, why)) {
-        if (why && why->empty()) *why = "illisible : " + path;
-        return false;
-    }
+    if (readHeader(path, h, why) != Status::Ok) return false;
     h.description = description;
-    return writeAll(path, zipStored({{std::string(kHeaderEntry), toJson(h)}, {std::string(kTrackEntry), entries[std::string(kTrackEntry)]}}), why);
+    return rewriteHeader(path, h, why);
 }
 
 std::uint64_t folderBytes(const std::string& folder) {
@@ -1722,22 +2477,43 @@ std::vector<std::string> prune(const std::string& folder, std::uint64_t maxBytes
     std::vector<std::string> removed;
     std::uint64_t total = folderBytes(folder);
     if (total <= maxBytes) return removed;
-    struct File { fs::path path; std::int64_t mtime; std::uint64_t bytes; };
+    // LES PLUS ANCIENS PAR LEUR DATE D'ENREGISTREMENT (l'en-tete) : une description changee touche le fichier, pas
+    // son age. Un en-tete illisible : la date du fichier.
+    struct File { fs::path path; std::string date, name; std::uint64_t bytes; };
     std::vector<File> files;
     std::error_code ec;
     for (fs::directory_iterator it(P(folder), fs::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
         if (!it->is_regular_file(ec) || !endsWith(U(it->path().filename()), kExtension)) continue;
-        files.push_back({it->path(), mtimeOf(it->path()), static_cast<std::uint64_t>(it->file_size(ec))});
+        File f;
+        f.path = it->path();
+        f.bytes = static_cast<std::uint64_t>(it->file_size(ec));
+        f.name = nameOfPath(U(f.path));
+        Header h;
+        std::string problem;
+        (void)cachedHeader(U(f.path), f.bytes, stampOf(f.path), h, problem);
+        f.date = h.date;
+        if (f.date.empty()) {
+            const std::time_t t = static_cast<std::time_t>(mtimeOf(f.path));
+            std::tm tm{};
+#if defined(_WIN32)
+            localtime_s(&tm, &t);
+#else
+            localtime_r(&t, &tm);
+#endif
+            char buf[32];
+            std::strftime(buf, sizeof buf, "%Y-%m-%d %H:%M:%S", &tm);
+            f.date = buf;
+        }
+        files.push_back(std::move(f));
     }
-    std::sort(files.begin(), files.end(), [](const File& a, const File& b) { return a.mtime < b.mtime; });
+    std::sort(files.begin(), files.end(), [](const File& a, const File& b) { return a.date != b.date ? a.date < b.date : a.name < b.name; });
     for (const auto& f : files) {
         if (total <= maxBytes) break;
-        const std::string name = nameOfPath(U(f.path));
-        if (!keep.empty() && name == keep) continue;
+        if (!keep.empty() && f.name == keep) continue;
         fs::remove(f.path, ec);
         if (ec) continue;
         total -= std::min(total, f.bytes);
-        removed.push_back(name);
+        removed.push_back(f.name);
     }
     return removed;
 }
@@ -1749,23 +2525,45 @@ bool namingCall(std::string_view upperName) {
     return upperName == "IHM_REJOUER" || upperName == "IHM_ENREG_EXISTE" || upperName == "IHM_ENREG_DUREE" || upperName == "IHM_ENREG_EXPORTER"
         || upperName == "IHM_ENREG_SUPPRIMER";
 }
-// Chaque litteral nommant un enregistrement : sa place (de l'apostrophe ouvrante a la fermante incluse), son texte.
-struct Literal { std::size_t at, end; std::string text; int line; };
+// Chaque litteral nommant un enregistrement : sa place (du guillemet ouvrant au fermant inclus), son texte, son
+// guillemet. ST : 'texte' ('' pour une apostrophe) ; C et C++ (1.14.0, relecture M4b) : "texte" (\" et \\).
+struct Literal { std::size_t at, end; std::string text; int line; char quote; };
 std::vector<Literal> literals(std::string_view code) {
     std::vector<Literal> out;
     int line = 1;
+    // Une chaine qui commence a `i` (son guillemet) : l'indice de son guillemet fermant (ou la fin de la ligne).
+    const auto skipString = [&](std::size_t i) {
+        const char q = code[i];
+        std::size_t j = i + 1;
+        while (j < code.size() && code[j] != '\n') {
+            if (q == '"' && code[j] == '\\' && j + 1 < code.size()) { j += 2; continue; }
+            if (code[j] == q) {
+                if (q == '\'' && j + 1 < code.size() && code[j + 1] == '\'') { j += 2; continue; }
+                break;
+            }
+            ++j;
+        }
+        return j;
+    };
     for (std::size_t i = 0; i < code.size(); ++i) {
         const char c = code[i];
         if (c == '\n') { ++line; continue; }
-        if (c == '\'') {                                   // une chaine hors d'un appel : sautee
-            std::size_t j = i + 1;
-            while (j < code.size() && code[j] != '\'' && code[j] != '\n') ++j;
-            i = j;
+        if (c == '\'' || c == '"') {                       // une chaine hors d'un appel : sautee
+            i = skipString(i);
             continue;
         }
         if (c == '(' && i + 1 < code.size() && code[i + 1] == '*') {     // (* un commentaire *)
             std::size_t j = i + 2;
             while (j + 1 < code.size() && !(code[j] == '*' && code[j + 1] == ')')) {
+                if (code[j] == '\n') ++line;
+                ++j;
+            }
+            i = j + 1;
+            continue;
+        }
+        if (c == '/' && i + 1 < code.size() && code[i + 1] == '*') {     // /* un commentaire C */
+            std::size_t j = i + 2;
+            while (j + 1 < code.size() && !(code[j] == '*' && code[j + 1] == '/')) {
                 if (code[j] == '\n') ++line;
                 ++j;
             }
@@ -1789,22 +2587,28 @@ std::vector<Literal> literals(std::string_view code) {
         if (k >= code.size() || code[k] != '(') continue;
         ++k;
         while (k < code.size() && (code[k] == ' ' || code[k] == '\t')) ++k;
-        if (k >= code.size() || code[k] != '\'') continue;
+        if (k >= code.size() || (code[k] != '\'' && code[k] != '"')) continue;
+        const char q = code[k];
         std::size_t e = k + 1;
         std::string text;
         while (e < code.size() && code[e] != '\n') {
-            if (code[e] == '\'') {
-                if (e + 1 < code.size() && code[e + 1] == '\'') { text += '\''; e += 2; continue; }
+            if (q == '"' && code[e] == '\\' && e + 1 < code.size()) {
+                text += code[e + 1];
+                e += 2;
+                continue;
+            }
+            if (code[e] == q) {
+                if (q == '\'' && e + 1 < code.size() && code[e + 1] == '\'') { text += '\''; e += 2; continue; }
                 break;
             }
             text += code[e++];
         }
-        if (e >= code.size() || code[e] != '\'') continue;
+        if (e >= code.size() || code[e] != q) continue;
         // Une chaine qui continue (concatenee : 'Essai ' + Ligne) n'est pas un nom en dur.
         std::size_t after = e + 1;
         while (after < code.size() && (code[after] == ' ' || code[after] == '\t')) ++after;
         if (after < code.size() && code[after] == '+') continue;
-        out.push_back(Literal{k, e + 1, text, line});
+        out.push_back(Literal{k, e + 1, text, line, q});
         i = e;
     }
     return out;
@@ -1821,16 +2625,20 @@ std::vector<NameUse> namesInCode(std::string_view code) {
 std::string renameInCode(std::string_view code, std::string_view from, std::string_view to, std::size_t* count) {
     std::string out;
     std::size_t last = 0, n = 0;
-    std::string quoted = "'";
-    for (const char c : to) {
-        if (c == '\'') quoted += '\'';
-        quoted += c;
-    }
-    quoted += "'";
+    // Le nouveau nom, ecrit comme l'ancien : 'ST' (apostrophe doublee) ou "C" (\" et \\).
+    const auto quoted = [&to](char q) {
+        std::string s(1, q);
+        for (const char c : to) {
+            if (q == '\'' && c == '\'') s += '\'';
+            if (q == '"' && (c == '"' || c == '\\')) s += '\\';
+            s += c;
+        }
+        return s + q;
+    };
     for (const auto& l : literals(code)) {
         if (!sameName(l.text, from)) continue;
         out.append(code.substr(last, l.at - last));
-        out += quoted;
+        out += quoted(l.quote);
         last = l.end;
         ++n;
     }
@@ -2059,15 +2867,80 @@ std::vector<std::string> commandArgs(const Command& c) {
     return out;
 }
 
-std::string replyText(int code, std::string_view message) { return std::to_string(code) + "\n" + std::string(message); }
+namespace {
+constexpr std::string_view kReplyEnd = "\n#fin\n";            // une reponse entiere finit ainsi
+constexpr std::string_view kReplyPrefix = "xpg-enregistrement-";
+} // namespace
+
+std::string replyText(int code, std::string_view message) { return std::to_string(code) + "\n" + std::string(message) + std::string(kReplyEnd); }
 
 bool readReply(std::string_view text, int& code, std::string& message) {
+    // Pas encore fini d'ecrire (la fin n'y est pas) : rien.
+    if (text.size() < kReplyEnd.size() || text.substr(text.size() - kReplyEnd.size()) != kReplyEnd) return false;
+    text.remove_suffix(kReplyEnd.size());
     const auto nl = text.find('\n');
     const std::string head(text.substr(0, nl));
     if (head.empty() || head.find_first_not_of("0123456789") != std::string::npos) return false;
     code = std::atoi(head.c_str());
     message = nl == std::string_view::npos ? std::string{} : std::string(text.substr(nl + 1));
     return true;
+}
+
+std::string newReplyPath() {
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path(ec);
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::string digits = std::to_string(stamp < 0 ? -stamp : stamp);
+    digits += std::to_string(std::strtoull(randomHex(4).c_str(), nullptr, 16));   // deux commandes dans la meme tranche
+    return U(dir / P(std::string(kReplyPrefix) + digits + ".txt"));
+}
+
+bool replyPathOk(const std::string& path, std::string* why) {
+    const auto no = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const fs::path p = P(path);
+    const std::string leaf = U(p.filename());
+    // Le nom : xpg-enregistrement-<chiffres>.txt, rien d'autre.
+    if (leaf.size() <= kReplyPrefix.size() + 4 || leaf.compare(0, kReplyPrefix.size(), kReplyPrefix) != 0 || !endsWith(leaf, ".txt"))
+        return no("--reponse : seulement un fichier xpg-enregistrement-<chiffres>.txt du dossier temporaire");
+    const std::string digits = leaf.substr(kReplyPrefix.size(), leaf.size() - kReplyPrefix.size() - 4);
+    if (digits.empty() || digits.size() > 40 || digits.find_first_not_of("0123456789") != std::string::npos)
+        return no("--reponse : seulement un fichier xpg-enregistrement-<chiffres>.txt du dossier temporaire");
+    // Le dossier : le dossier temporaire lui-meme (pas un lien, pas un sous-dossier).
+    std::error_code ec;
+    const fs::path temp = fs::temp_directory_path(ec);
+    if (ec || !p.has_parent_path() || !fs::equivalent(p.parent_path(), temp, ec) || ec)
+        return no("--reponse : seulement un fichier du dossier temporaire (" + U(temp) + ")");
+    // Un fichier NEUF : rien ne doit y etre deja (ni fichier, ni lien).
+    if (fs::exists(fs::symlink_status(p, ec))) return no("--reponse : le fichier existe d\xC3\xA9j\xC3\xA0 (" + path + ")");
+    return true;
+}
+
+bool writeReply(const std::string& path, int code, std::string_view message, std::string* why) {
+    if (!replyPathOk(path, why)) return false;
+    const std::string text = replyText(code, message);
+    // Cree en exclusivite : deja la (un autre l'a cree entre-temps), refuse.
+#if defined(_WIN32)
+    const int fd = _wopen(P(path).wstring().c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+    if (fd < 0) {
+        if (why) *why = "--reponse : cr\xC3\xA9" "ation impossible (" + path + ")";
+        return false;
+    }
+    const bool ok = _write(fd, text.data(), static_cast<unsigned>(text.size())) == static_cast<int>(text.size());
+    _close(fd);
+#else
+    const int fd = ::open(P(path).string().c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+        if (why) *why = "--reponse : cr\xC3\xA9" "ation impossible (" + path + ")";
+        return false;
+    }
+    const bool ok = ::write(fd, text.data(), text.size()) == static_cast<ssize_t>(text.size());
+    ::close(fd);
+#endif
+    if (!ok && why) *why = "--reponse : \xC3\xA9" "criture interrompue (" + path + ")";
+    return ok;
 }
 
 std::string clock(double seconds) {

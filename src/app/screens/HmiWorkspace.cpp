@@ -431,6 +431,9 @@ ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
 void MainAnalysisScreen::forgetHmiTab(std::size_t tabIndex) {
     if (!centre_) return;
     const auto* page = centre_->page(tabIndex);
+    // 1.14.0 (relecture M4b) : l'onglet Simulation se ferme pendant une relecture - elle se quitte proprement (l'API
+    // simulee mise en pause pour elle repart, l'heure de l'IHM rattrape le mur) tant que l'ecran est la.
+    if (auto* sim = dynamic_cast<HmiSimulationPane*>(const_cast<ui::Widget*>(page))) sim->leaveReplay("fermeture de l'onglet Simulation");
     for (auto it = hmiTabs_.begin(); it != hmiTabs_.end();) {
         if (it->second == page) it = hmiTabs_.erase(it);
         else ++it;
@@ -1418,7 +1421,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             return askHmiRuntimeExport(rq, std::move(done));
         };
         // 1.14.0 (M4) : la fenetre Arreter l'enregistrement, le mot de passe d'un enregistrement protege.
-        host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string)> done) {
+        host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string, bool)> done) {
             askRecordingStopDialog(app_, ask, std::move(done));
         };
         host.askReplayPassword = [this](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {
@@ -2845,21 +2848,63 @@ void MainAnalysisScreen::askHmiRecordingImport() {
 void MainAnalysisScreen::askHmiRecordingExport(const std::string& name) {
     auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
     if (!pane || !pane->select(name)) return;
+    bool locked = false;
+    for (const auto& it : pane->items())
+        if (it.name == name) locked = it.header.locked();
+    // 1.14.0 (relecture M4b) : la maquette (scene 3) - protege, la case Garder le mot de passe dans le fichier exporte
+    // (cochee : la copie reste protegee, rien a donner ; decochee : le mot de passe, et la copie est sans protection).
     std::vector<FormDialog::Field> fields;
     const std::string folder = app_.projectFolder().empty() ? std::string{} : app_.projectFolder() + "/exports";
     fields.push_back({"Vers", folder, "un dossier, ou un fichier .xrec", false, {}});
+    if (locked) {
+        fields.push_back({"Garder le mot de passe dans le fichier export\xC3\xA9", "Oui", {}, false, {"Oui", "Non"}});
+        fields.push_back({"Mot de passe", {}, "pour une copie sans protection", true, {}});
+    }
+    auto dialog = std::make_unique<FormDialog>("dialog.hmiExportRecording", "Exporter \xC2\xAB " + name + " \xC2\xBB",
+        std::string("Une copie du fichier .xrec ; elle se rejoue dans IHM Studio (simulation ou poste) avec le m\xC3\xAAme projet. "
+                    "Un fichier du m\xC3\xAAme nom d\xC3\xA9j\xC3\xA0 l\xC3\xA0 : la question est pos\xC3\xA9" "e avant de le remplacer.")
+            + (locked ? " Prot\xC3\xA9g\xC3\xA9 : la copie garde son mot de passe, ou le perd si on donne le bon." : ""),
+        std::move(fields), "Exporter");
+    if (locked)
+        dialog->setRules([](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+            const bool keep = v.size() < 2 || v[1] != "Non";
+            if (st.size() > 2) {
+                st[2].enabled = !keep;
+                st[2].hint = keep ? "la copie reste prot\xC3\xA9g\xC3\xA9" "e" : std::string{};
+            }
+        });
     app_.menus().ShowDialog(
-        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiExportRecording", "Exporter \xC2\xAB " + name + " \xC2\xBB",
-            "Une copie du fichier .xrec, tel quel : prot\xC3\xA9g\xC3\xA9, il le reste (il faudra le mot de passe pour le rejouer).",
-            std::move(fields), "Exporter"), 0,
-            ui::chooseFolder(folder, "Exporter un enregistrement")),
-        [this, name](const menu::DialogResult& r) {
+        FormDialog::withBrowse(std::move(dialog), 0, ui::chooseFolder(folder, "Exporter un enregistrement")),
+        [this, name, locked](const menu::DialogResult& r) {
             auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
             if (!r.accepted() || !current || !current->select(name)) return;
             const auto v = FormDialog::split(r.payload);
             if (v.empty() || cleanPath(v[0]).empty()) return;
+            const std::string dest = cleanPath(v[0]);
+            RecordingExportChoice choice;
+            choice.keepPassword = !locked || v.size() < 2 || v[1] != "Non";
+            choice.password = choice.keepPassword || v.size() < 3 ? std::string{} : v[2];
+            bool existed = false;
+            choice.existed = &existed;
             std::string why;
-            if (!current->exportTo(cleanPath(v[0]), &why)) status_->setTransientMessage("Export impossible : " + why, 8.0);
+            if (current->exportTo(dest, &why, choice)) return;
+            if (!existed) {
+                status_->setTransientMessage("Export impossible : " + why, 8.0, ui::StatusBar::Severity::Warning);
+                return;
+            }
+            // Un fichier deja la : on demande avant de l'ecraser.
+            choice.existed = nullptr;
+            app_.menus().ShowDialog(
+                std::make_unique<FormDialog>("dialog.hmiExportRecordingReplace", "Remplacer le fichier ?",
+                                             why + ".\nLe remplacer par la copie de \xC2\xAB " + name + " \xC2\xBB ?",
+                                             std::vector<FormDialog::Field>{}, "Remplacer"),
+                [this, name, dest, choice](const menu::DialogResult& rr) mutable {
+                    auto* again = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+                    if (!rr.accepted() || !again || !again->select(name)) return;
+                    choice.replace = true;
+                    std::string w;
+                    if (!again->exportTo(dest, &w, choice)) status_->setTransientMessage("Export impossible : " + w, 8.0, ui::StatusBar::Severity::Warning);
+                });
         });
 }
 

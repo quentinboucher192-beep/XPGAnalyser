@@ -177,10 +177,11 @@ struct HmiSimulationHost {
     std::function<void(hmi::Id script, hmi::Id function, int line)> goToCode;
     // ---- 1.14.0 (M4) : LES ENREGISTREMENTS ----
     //  askRecordingStop : la fenetre Arreter l'enregistrement (le nom, la description, le mot de passe ; Jeter ou
-    //  Enregistrer) - done(garder, nom, description, mot de passe). Nul : garde tel quel, sous le nom du depart.
+    //  Enregistrer) - done(garder, nom, description, mot de passe, retirer la protection). Un mot de passe vide garde
+    //  celui du depart ; seul `retirer` (la case) le retire. Nul : garde tel quel, sous le nom du depart.
     //  askReplayPassword : le mot de passe d'un enregistrement protege (`error` : celui d'avant etait faux) -
     //  done(rejouer, mot de passe). Nul : la relecture est refusee (la Console le dit).
-    std::function<void(const hmi::RecordingStopAsk&, std::function<void(bool, std::string, std::string, std::string)> done)>
+    std::function<void(const hmi::RecordingStopAsk&, std::function<void(bool, std::string, std::string, std::string, bool)> done)>
         askRecordingStop;
     std::function<void(const hmi::ReplayRequest&, const std::string& error, std::function<void(bool, std::string)> done)>
         askReplayPassword;
@@ -795,6 +796,9 @@ public:
     //  en pause (pas un automate reel) ; Quitter rend tout tel quel.
     void        toggleRecording(const std::string& source);
     hmi::rec::Status replay(const hmi::ReplayRequest& request, std::string* why = nullptr);
+    // 1.14.0 (relecture M4b) : quitter la relecture proprement (l'onglet se ferme, l'IHM s'arrete) - l'API simulee mise
+    // en pause pour elle repart, l'heure de l'IHM rattrape le mur (Runtime::holdClock). Rien a faire : rien.
+    void leaveReplay(const std::string& source);
     // Une commande d'une autre application (--enregistrer, --rejouer...) : son code de sortie (hmi::rec::kExit...).
     int         runRecordingCommand(const hmi::rec::Command& command, std::string* message = nullptr);
     // Une commande de la barre de relecture (HmiLiveCanvas::replayCommand) : "pause", "seek:12.5", "quit"...

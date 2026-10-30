@@ -2194,6 +2194,18 @@ void checkRecordings(const Project& p, const std::string& projectFolder, std::ve
             if (a.operation == Operation::RecordingExport && trimmedCopy(a.value).empty())
                 add(out, S::Error, "Action", v.id, o ? o->id : kNoId, where, "exporter : vers quel dossier ?");
             if (a.operation == Operation::RunScript) inCode(a.value, "Action", v.id, o ? o->id : kNoId, where, kNoId);
+            // 1.14.0 (relecture M4b) : Pause, Avancer ou reculer, Vitesse, Quitter la relecture SEULES (sans Rejouer avant
+            // elles, dans la meme suite) ne peuvent jamais agir : pendant une relecture, l'IHM ne recoit aucun clic et
+            // son moteur ne fait rien tourner. Elles servent apres Rejouer dans la meme suite, ou depuis un script.
+            if (operationIsReplay(a.operation) && a.operation != Operation::ReplayStart) {
+                bool started = false;
+                for (std::size_t k = 0; k < i && !started; ++k) started = list[k].trigger == a.trigger && list[k].operation == Operation::ReplayStart;
+                if (!started)
+                    add(out, S::Warning, "Action", v.id, o ? o->id : kNoId, where,
+                        "elle n'agira jamais seule : pendant une relecture, l'IHM ne re\xC3\xA7oit aucun clic et ne fait rien tourner - "
+                        "mets-la apr\xC3\xA8s Rejouer dans la m\xC3\xAAme suite, ou appelle IHM_RELECTURE_* depuis un script "
+                        "(la barre de relecture et ses touches font d\xC3\xA9j\xC3\xA0 tout cela)");
+            }
         }
     };
     for (const auto& sc : p.programs.scripts) inCode(sc.body, "Script", kNoId, kNoId, sc.name, sc.id);
