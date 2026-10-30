@@ -88,7 +88,7 @@ std::string viewName(const DemoContext& c) { return c.view ? std::string(kOpen) 
 
 DemoReply noView() {
     DemoReply r;
-    r.text = std::string("Ouvrez d'abord une vue dans l'") + kE + "diteur (double-clic sur une vue de l'arbre du projet) : "
+    r.text = std::string("Ouvre d'abord une vue dans l'") + kE + "diteur (double-clic sur une vue de l'arbre du projet) : "
              "je propose mes modifications sur la vue de l'onglet ouvert.";
     return r;
 }
@@ -138,7 +138,7 @@ DemoReply station(std::string_view request, const DemoContext& c) {
              "- **" + std::to_string(pumps) + " pompes**, deux par cuve (P11, P12, P21...) ;\n"
              "- **" + std::to_string(buttons) + " boutons \xC3\xA0 impulsion** : Marche et Arr\xC3\xAAt sous chaque pompe ;\n"
              "- un titre.\n"
-             "Je n'ai associ\xC3\xA9 **aucune variable** : je n'invente pas de nom. Ensuite, s\xC3\xA9lectionnez une pompe et demandez "
+             "Je n'ai associ\xC3\xA9 **aucune variable** : je n'invente pas de nom. Ensuite, s\xC3\xA9lectionne une pompe et demande "
              "par exemple `Associe cette pompe \xC3\xA0 la variable ...`.";
     r.proposal = std::move(p);
     return r;
@@ -177,7 +177,7 @@ DemoReply rightmostRed(std::string_view request, const DemoContext& c) {
     const auto sel = selected(c);
     DemoReply r;
     if (sel.empty()) {
-        r.text = "Je n'ai pas de s\xC3\xA9lection : choisissez les objets dans la vue (Ctrl+clic pour plusieurs), puis redemandez. "
+        r.text = "Je n'ai pas de s\xC3\xA9lection : choisis les objets dans la vue (Ctrl+clic pour plusieurs), puis redemande. "
                  "Je prendrai **celui qui est le plus \xC3\xA0 droite**.";
         return r;
     }
@@ -224,7 +224,7 @@ DemoReply alignButtons(std::string_view request, const DemoContext& c) {
     }
     if (buttons.size() != 4) {
         r.text = "Je vois **" + std::to_string(buttons.size()) + " boutons** " + (fromSelection ? "dans la s\xC3\xA9lection" : "dans la vue")
-                 + " : lesquels sont les quatre ? S\xC3\xA9lectionnez-les (Ctrl+clic), puis redemandez.";
+                 + " : lesquels sont les quatre ? S\xC3\xA9lectionne-les (Ctrl+clic), puis redemande.";
         return r;
     }
     double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
@@ -289,7 +289,7 @@ DemoReply bindPump(std::string_view request, const DemoContext& c) {
     DemoReply r;
     const std::string var = variableIn(request);
     if (var.empty()) {
-        r.text = "Quelle variable ? \xC3\x89" "crivez son nom exact, par exemple `Associe cette pompe \xC3\xA0 la variable Pompe_1_Marche`.";
+        r.text = "Quelle variable ? \xC3\x89" "cris son nom exact, par exemple `Associe cette pompe \xC3\xA0 la variable Pompe_1_Marche`.";
         return r;
     }
     const hmi::Object* pump = nullptr;
@@ -303,7 +303,7 @@ DemoReply bindPump(std::string_view request, const DemoContext& c) {
         else {
             r.text = all.empty() ? "Il n'y a pas de pompe dans " + viewName(c) + "."
                                  : "Il y a " + std::to_string(all.size()) + " pompes dans " + viewName(c)
-                                       + " : s\xC3\xA9lectionnez celle \xC3\xA0 associer, puis redemandez.";
+                                       + " : s\xC3\xA9lectionne celle \xC3\xA0 associer, puis redemande.";
             return r;
         }
     }
@@ -317,13 +317,23 @@ DemoReply bindPump(std::string_view request, const DemoContext& c) {
         r.text = "Je propose d'associer **" + pump->name + "** \xC3\xA0 la variable **" + var
                  + "** (sa propri\xC3\xA9t\xC3\xA9 `variable` : son \xC3\xA9tat de marche viendra de l\xC3\xA0).";
     } else {
-        std::string near;
-        if (c.project)
+        std::string near, others;
+        std::size_t count = 0;
+        if (c.project) {
             for (const auto& n : nearVariables(*c.project, var)) near += (near.empty() ? "" : ", ") + std::string("`") + n + "`";
+            // Aucune ne ressemble : l'apercu propose quand meme les variables du projet - la reponse le dit.
+            for (const auto& v : c.project->programs.variables) {
+                if (++count <= 3) others += (others.empty() ? "" : ", ") + std::string("`") + v.name + "`";
+            }
+        }
+        const std::string choose = !near.empty() ? " : les plus proches sont " + near
+                                 : count == 0    ? std::string(" (le projet n'en a encore aucune)")
+                                                 : " dans l'aper\xC3\xA7u (aucune ne ressemble \xC3\xA0 ce nom ; le projet en a " + std::to_string(count)
+                                                       + " : " + others + (count > 3 ? ", \xE2\x80\xA6" : "") + ")";
         r.text = "**La variable " + var + " n'existe pas** dans ce projet, et je ne l'invente pas : une variable fausse ne "
                  "s'allumerait jamais en exploitation.\n"
-                 "- choisissez une variable existante" + (near.empty() ? std::string(" (je n'en vois pas d'approchante)") : " : les plus proches sont " + near) + " ;\n"
-                 "- ou demandez **sa cr\xC3\xA9" "ation** dans les variables de l'IHM (BOOL).\n"
+                 "- choisis une variable existante" + choose + " ;\n"
+                 "- ou demande **sa cr\xC3\xA9" "ation** dans les variables de l'IHM (BOOL).\n"
                  "L'aper\xC3\xA7u le propose ; rien ne s'applique tant que ce n'est pas d\xC3\xA9" "cid\xC3\xA9.";
     }
     r.proposal = std::move(p);
@@ -348,7 +358,7 @@ DemoReply removeValves(std::string_view request, const DemoContext& c) {
     std::string list;
     for (const auto& n : names) list += (list.empty() ? "" : ", ") + std::string("`") + n + "`";
     r.text = "Je propose de supprimer **" + std::to_string(names.size()) + (names.size() > 1 ? " vannes**" : " vanne**") + " : " + list + ".\n"
-             + (names.size() > 1 ? "C'est une suppression multiple : **une confirmation** vous sera demand\xC3\xA9" "e avant d'appliquer. "
+             + (names.size() > 1 ? "C'est une suppression multiple : **une confirmation** te sera demand\xC3\xA9" "e avant d'appliquer. "
                                  : std::string{})
              + "Ctrl+Z la reprendra d'un coup.";
     r.proposal = std::move(p);
@@ -358,7 +368,7 @@ DemoReply removeValves(std::string_view request, const DemoContext& c) {
 DemoReply fallback(const DemoContext& c) {
     DemoReply r;
     r.text = "En d\xC3\xA9monstration, je reconnais seulement les demandes propos\xC3\xA9" "es ci-dessous. **Aucune IA n'est connect\xC3\xA9" "e** : "
-             "une demande libre ne peut pas encore \xC3\xAAtre comprise. Choisissez une suggestion, ou \xC3\xA9" "crivez-la telle quelle.";
+             "une demande libre ne peut pas encore \xC3\xAAtre comprise. Choisis une suggestion, ou \xC3\xA9" "cris-la telle quelle.";
     if (!c.attachments.empty()) {
         std::string files;
         for (const auto& a : c.attachments) files += (files.empty() ? "" : ", ") + std::string("**") + a.name + "** (" + formatBytes(a.bytes) + ")";
@@ -455,8 +465,10 @@ std::vector<Conversation> demoConversations() {
         c.id = newId("c");
         c.title = "D\xC3\xA9" "couvrir l'Assistant";
         c.demo = true;
-        c.created = isoDate(t - 2 * 86400);
-        c.modified = c.created;
+        // 1.14.2 : la plus recente des deux - la premiere ouverture la montre (pas la conversation
+        // perimee, et sa carte d'erreur, en premiere impression).
+        c.created = isoDate(t - 86400 - 3600);
+        c.modified = isoDate(t - 86400 - 3500);
         Message u;
         u.id = "m1";
         u.role = "utilisateur";
@@ -465,7 +477,7 @@ std::vector<Conversation> demoConversations() {
         Message a;
         a.id = "m2";
         a.role = "assistant";
-        a.date = isoDate(t - 2 * 86400 + 4);
+        a.date = isoDate(t - 86400 - 3596);
         a.state = "fini";
         a.text = "## Ce que montre cette d\xC3\xA9monstration\n"
                  "Je travaille sur **la vue ouverte** dans l'\xC3\xA9" "diteur, avec les vrais objets du logiciel (Cuve, Pompe, Vanne, "
@@ -486,8 +498,8 @@ std::vector<Conversation> demoConversations() {
         c.id = newId("c");
         c.title = "Station de pompage (ancienne vue)";
         c.demo = true;
-        c.created = isoDate(t - 86400 - 3600);
-        c.modified = isoDate(t - 86400 - 3500);
+        c.created = isoDate(t - 2 * 86400);
+        c.modified = isoDate(t - 2 * 86400 + 100);
         c.project.view = "Vue_Station_Essai";
         Message u;
         u.id = "m1";
@@ -497,12 +509,12 @@ std::vector<Conversation> demoConversations() {
         Message a;
         a.id = "m2";
         a.role = "assistant";
-        a.date = isoDate(t - 86400 - 3590);
+        a.date = isoDate(t - 2 * 86400 + 10);
         a.state = "fini";
         a.text = "## Synoptique de station de pompage\n"
                  "Je propose **31 objets** dans " + std::string(kOpen) + "Vue_Station_Essai" + kClose + " : 3 cuves et leurs bargraphes, "
                  "3 vannes, 3 tuyauteries, 6 pompes et 12 boutons \xC3\xA0 impulsion, et un titre.\n"
-                 "*(Conversation de d\xC3\xA9monstration : cette vue n'existe pas dans votre projet - la proposition ne s'applique donc pas, "
+                 "*(Conversation de d\xC3\xA9monstration : cette vue n'existe pas dans ton projet - la proposition ne s'applique donc pas, "
                  "l'aper\xC3\xA7u le dit et propose de la redemander.)*";
         Proposal p;
         p.id = "op1";
