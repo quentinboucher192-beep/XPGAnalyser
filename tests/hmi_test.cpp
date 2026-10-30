@@ -66,6 +66,7 @@
 #include "../src/hmi/HmiLoginMenu.hpp"
 #include "../src/hmi/HmiDesign.hpp"
 #include "../third_party/miniz.h"   // 1.14.1 (lot N5) : les zips des essais de l'explorateur
+#include "../src/hmi/HmiPipeline.hpp"   // 1.14.1 (captures finales) : la gravite du Convertisseur dans le build
 #include "../src/hmi/HmiDuplicate.hpp"   // 1.10.2 (chantier D)
 #include "../src/hmi/HmiMarkers.hpp"     // 1.11 (REP) : le lecteur des reperes $...$
 #include "../src/hmi/HmiWhy.hpp"         // 1.12.27 : Pourquoi ?
@@ -32074,6 +32075,46 @@ void unites1141() {
         check(has(src, "value", "dimensions incompatibles : Temp est en \xC2\xB0" "C"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
         check(has(target, "resultTo", "Inconnue_Var"), "Generer : une variable inconnue dans R\xC3\xA9sultat vers");
         check(has(notNum, "value", "n'est pas un nombre"), "Generer : une Valeur de d\xC3\xA9part qui n'est pas un nombre");
+        // 1.14.1 (captures finales) : LA GRAVITE DE EN() - le convertisseur fait le calcul de EN(valeur, 'unite') ; des
+        // dimensions incompatibles (ou une unite inconnue) y sont une erreur BLOQUANTE, comme EN() mal employe dans un script
+        // ou une fx. Avant, le controle les disait en erreur et Generer les comptait en avertissements (la simulation
+        // demarrait). La dimension inconnue reste un avertissement (les listes proposent toutes les unites).
+        const auto blocks = [&](Id id, const char* key, const char* text) {
+            for (const auto& i : gen)
+                if (i.object == id && i.property == key && i.message.find(text) != std::string::npos)
+                    return i.severity == Issue::Severity::Error && i.blocking;
+            return false;
+        };
+        check(blocks(incompat, "unitTo", "dimensions incompatibles") && blocks(src, "value", "dimensions incompatibles")
+                  && blocks(unknownU, "unitFrom", "unit\xC3\xA9 inconnue") && !blocks(dimBad, "dimension", "dimension inconnue"),
+              "Generer : dimensions incompatibles, unit\xC3\xA9 inconnue - des erreurs bloquantes (comme EN() dans un script) ; "
+              "la dimension inconnue, un avertissement");
+        {
+            // Le build de la simulation (Demarrer) : 1 erreur, il s'arrete - comme pour un script avec EN(Debit, 'mbar').
+            Project bp;
+            View bv = makeView(bp, "Vue_Build");
+            const Id c = edit::add(bp, bv, Kind::UnitConverter, 10, 10);
+            bv.object(c)->name = "Conv_Debit";
+            bv.object(c)->set("unitFrom", "m3/h");
+            bv.object(c)->set("unitTo", "mbar");
+            bp.views = {bv};
+            bp.config.startView = bv.id;
+            pipeline::Cache cache;
+            pipeline::Options o;
+            o.plcHasName = [](std::string_view) { return false; };
+            o.cache = &cache;
+            o.artifacts = [](const std::string&, const std::string&) { return false; };
+            o.writeArtifact = [](const std::string&, const std::string&) {};
+            o.removeArtifact = [](const std::string&) {};
+            pipeline::Request rq;
+            rq.mode = pipeline::Mode::Start;
+            const auto rep = pipeline::run(bp, {}, rq, o);
+            bool said = false;
+            for (const auto& d : rep.diagnostics) said = said || (d.blocking() && d.message.find("dimensions incompatibles") != std::string::npos);
+            check(!rep.ok && rep.errors == 1 && said,
+                  "D\xC3\xA9marrer avec m\xC2\xB3/h vers mbar : 1 erreur, le build s'arr\xC3\xAAte (" + std::to_string(rep.errors) + " erreur(s), "
+                      + std::to_string(rep.warnings) + " avertissement(s))");
+        }
         // Dupliquer (copier-coller) et le code brut : les proprietes suivent.
         const View& vv = *gp.view(gp.views[0].id);
         const std::string code = serializeObjectCode(vv, {src});

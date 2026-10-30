@@ -42,6 +42,7 @@
 #include "../../hmi/HmiClock.hpp"       // 1.12.12 (lot H) : les fuseaux de l'horloge
 #include "../../hmi/HmiLibrary.hpp"     // 1.14.1 (lot N5) : biblio::unitConfig (les unites du Convertisseur)
 #include "../../hmi/HmiUnits.hpp"       // 1.14.1 (lot N5) : les dimensions et les unites du Convertisseur
+#include "../../hmi/HmiDisplay.hpp"     // 1.14.1 (captures finales) : hmi::unitLabel, l'unite comme l'objet la montre
 #include "../../hmi/HmiMarquee.hpp"     // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../../hmi/HmiQr.hpp"          // 1.12.12 (lot H) : la place qui reste dans un code QR
 #include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
@@ -3166,7 +3167,8 @@ const std::vector<KeyInfo>& keyInfos() {
          "toutes : les listes De et Vers proposent toutes les unit\xC3\xA9s (Vers : celles de la dimension de De). Une dimension "
          "(Pression, Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6) : seulement les siennes."},
         {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", PG::ValueType::Enum, {},
-         "L'unit\xC3\xA9 de la valeur (le symbole : bar, degC, m3/h). Une Valeur de d\xC3\xA9part qui est une variable avec une unit\xC3\xA9 "
+         "L'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans l'objet (bar, \xC2\xB0" "C, m\xC2\xB3/h ; le projet garde son symbole : degC, "
+         "m3/h). Une Valeur de d\xC3\xA9part qui est une variable avec une unit\xC3\xA9 "
          "donne la sienne. En marche, l'op\xC3\xA9rateur la change dans la liste De."},
         {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", PG::ValueType::Enum, {},
          "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension que celle de d\xC3\xA9part (sinon le convertisseur le dit)."},
@@ -3983,9 +3985,28 @@ void converterProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property
         std::string family = hmi::units::familyFrom(cat, o.text("dimension", "toutes"));
         if (prop.key == "unitTo")
             if (const auto* u = cat.unit(o.text("unitFrom"))) family = u->family;
+        // 1.14.1 (captures finales) : l'unite montree comme l'objet et l'onglet Convertir la montrent (hmi::unitLabel : degC
+        // avec le signe degre, m3/h avec l'exposant) ; la case et la liste disent l'etiquette, le projet garde le symbole
+        // (un choix de la liste repasse par lui ; un symbole tape, une formule passent tels quels).
+        std::vector<std::pair<std::string, std::string>> shownSymbols;   // (etiquette, symbole)
         p.enumValues.clear();
-        for (const auto* u : hmi::units::unitsOf(cat, family)) p.enumValues.push_back(u->symbol);
-        keep();
+        for (const auto* u : hmi::units::unitsOf(cat, family)) {
+            shownSymbols.emplace_back(hmi::unitLabel(u->symbol), u->symbol);
+            p.enumValues.push_back(shownSymbols.back().first);
+        }
+        if (prop.expr.empty()) {
+            const std::string label = hmi::unitLabel(prop.value);
+            if (!prop.value.empty() && std::find(p.enumValues.begin(), p.enumValues.end(), label) == p.enumValues.end())
+                p.enumValues.push_back(label);
+            if (!prop.value.empty()) shownSymbols.emplace_back(label, prop.value);
+            p.value = label;
+        }
+        if (p.commit)
+            p.commit = [inner = p.commit, shownSymbols](std::string_view s) {
+                for (const auto& [label, symbol] : shownSymbols)
+                    if (label == s) return inner(symbol);
+                return inner(s);
+            };
     } else if (prop.key == "value") {
         explain("Le nombre \xC3\xA0 convertir au d\xC3\xA9part : un nombre, ou une expression (=Pression : une mesure de l'IHM). Une variable "
                 "qui a une unit\xC3\xA9 donne aussi l'unit\xC3\xA9 de d\xC3\xA9part (comme UNITE(Pression)). Tant que l'op\xC3\xA9rateur n'a "

@@ -7347,7 +7347,29 @@ void unites1141Ecran() {
               "l'inspecteur : Dimension, Unit\xC3\xA9 de d\xC3\xA9part et d'arriv\xC3\xA9" "e, R\xC3\xA9sultat vers, Valeur de d\xC3\xA9part, D\xC3\xA9" "cimales, Pilotable");
         check(from && from->enumValues == std::vector<std::string>{"Pa", "hPa", "kPa", "mbar", "bar", "psi"},
               "Unit\xC3\xA9 d'arriv\xC3\xA9" "e : seulement les pressions (la dimension de bar)");
-        (void)id;
+        // 1.14.1 (captures finales) : les listes Unite de depart et d'arrivee montrent l'unite comme l'objet et l'onglet
+        // Convertir (degC avec le signe degre, m3/h avec l'exposant) ; le symbole enregistre reste degC, degF.
+        check(commitIn(b.editor->properties(), "Unit\xC3\xA9 de d\xC3\xA9part", "degC") && b.v().object(id)->text("unitFrom") == "degC",
+              "Unit\xC3\xA9 de d\xC3\xA9part : degC (tap\xC3\xA9 en symbole)");
+        b.editor->refresh();
+        b.editor->layout();
+        const auto unitProp = [&](const char* key) {
+            ui::PropertyGrid::Property out;
+            const auto cats = b.editor->properties().categories();
+            for (const auto& c : cats)
+                for (const auto& pr : c.properties)
+                    if (pr.key == key) out = pr;
+            return out;
+        };
+        const auto listed = [](const std::vector<std::string>& l, const std::string& s) { return std::find(l.begin(), l.end(), s) != l.end(); };
+        const auto pf = unitProp("unitFrom"), pt = unitProp("unitTo");
+        check(pf.value == "\xC2\xB0" "C" && listed(pf.enumValues, "\xC2\xB0" "C") && listed(pf.enumValues, "m\xC2\xB3/h") && listed(pf.enumValues, "bar")
+                  && !listed(pf.enumValues, "degC") && !listed(pf.enumValues, "m3/h"),
+              "Unit\xC3\xA9 de d\xC3\xA9part : \xC2\xB0" "C montr\xC3\xA9 (et m\xC2\xB3/h dans la liste), pas degC (" + pf.value + ")");
+        check(listed(pt.enumValues, "\xC2\xB0" "F") && listed(pt.enumValues, "K") && !listed(pt.enumValues, "degF"),
+              "Unit\xC3\xA9 d'arriv\xC3\xA9" "e : les temp\xC3\xA9ratures, \xC2\xB0" "F lisible");
+        check(commitIn(b.editor->properties(), "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "\xC2\xB0" "F") && b.v().object(id)->text("unitTo") == "degF",
+              "choisir \xC2\xB0" "F dans la liste : le symbole degF est enregistr\xC3\xA9 (" + b.v().object(id)->text("unitTo") + ")");
     }
     // ---- le dessin dans l'editeur
     {
