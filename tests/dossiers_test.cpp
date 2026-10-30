@@ -152,6 +152,26 @@ int main() {
         const Ini vide = Ini::depuisTexte("[Installation]\nversion = 1.8.0\n");
         const Etat e3 = resoudre(&vide, nullptr, c, {}, {});
         check(e3[Cle::Donnees].source == Source::ParDefaut && e3[Cle::Donnees].chemin == data, "installation.ini sans dossier : Documents/XPGAnalyser");
+
+        // 1.14.0 (lot M2) : l'installation.ini que l'installateur ecrit maintenant (UTF-8 avec BOM, CRLF) - le profil,
+        // les applications installees, les raccourcis du Bureau, la copie de secours, la section [Poste] - se lit
+        // comme avant : les dossiers, la portee, la version, l'epinglage.
+        const Ini m2 = Ini::depuisTexte(
+            "\xEF\xBB\xBF; installation.ini - \xC3\xA9" "crit par l'installateur d'API IHM Studio 1.14.0. Ne pas modifier :\r\n"
+            "[Installation]\r\nnom = API IHM Studio\r\ncle = XPGAnalyser\r\nversion = 1.14.0\r\nportee = tous\r\nexe = IHM-Studio.exe\r\n"
+            "profil = poste\r\napplications = IHM-Studio.exe\r\nchaine = mingw\r\nraccourci_bureau = oui\r\n"
+            "raccourcis_bureau = Poste d'exploitation\r\nepingler_barre_taches = oui\r\n\r\n"
+            "[Dossiers]\r\ndonnees = {Documents}\\XPGAnalyser\r\n\r\n"
+            "[Maintenance]\r\njournaux = {LocalAppData}\\XpgAnalyzer\\Journaux\r\ncopie_de_secours = non\r\n\r\n"
+            "[Poste]\r\nprojet = D:\\Projets\\Armoire\r\ndemarrage = oui\r\nrelance = oui\r\n");
+        const Etat e4 = resoudre(&m2, nullptr, c, {}, (root / "reglages").string());
+        check(e4.installe && e4[Cle::Donnees].chemin == data && e4[Cle::Donnees].source == Source::Installation && e4.portee == "tous" &&
+                  e4.versionInstallee == "1.14.0" && e4.epinglerBarre &&
+                  e4.journaux == (root / "Local" / "XpgAnalyzer" / "Journaux").string(),
+              "1.14.0 : installation.ini avec profil, applications, copie_de_secours et [Poste] : les dossiers, la portee, l'epinglage lus comme avant");
+        check(m2.valeur("Installation", "profil") == std::optional<std::string>("poste") &&
+                  m2.valeur("Poste", "projet") == std::optional<std::string>("D:\\Projets\\Armoire"),
+              "1.14.0 : le profil et le projet du poste se lisent (la maintenance s'en sert)");
     }
 
     // ---- 4. copier sans ecraser ; contient ---------------------------------------
