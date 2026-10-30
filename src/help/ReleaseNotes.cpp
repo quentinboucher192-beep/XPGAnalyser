@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.14.1", "30/10/2026", "\xC3\xA0 venir"},
+    {"1.14.2", "30/10/2026", "\xC3\xA0 venir"},
+    {"1.14.1", "30/10/2026", "livr\xC3\xA9" "e le 30/10 dans l'apr\xC3\xA8s-midi"},
     {"1.14.0", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au matin"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
