@@ -749,7 +749,9 @@ void Runtime::explorerPart(const View& v, const Object& o, std::string_view part
         std::string written, why;
         const auto entry = e.shown[static_cast<std::size_t>(e.selected)];
         if (explorer::extract(e.loc, entry, explorerText(d.lexically_normal()), written, why)) {
-            say("Extrait : " + written, false);
+            // 1.14.1 (captures finales) : le nom du fichier d'abord, son dossier ensuite (la ligne d'etat coupe a sa largeur ;
+            // son infobulle dit tout).
+            say("Extrait : " + entry.name + " (dans " + explorerText(explorerPath(written).parent_path()) + ")", false);
             log("Action", source, "extrait " + entry.path + " vers " + written);
         } else {
             say(why, true);

@@ -32279,6 +32279,17 @@ void explorateur1141() {
     v.object(bad)->setFlag("allowExtract", true);
     const Id fixe = addExp("Fixe", src.string());
     v.object(fixe)->setFlag("pilotable", false);
+    // 1.14.1 (captures finales) : une source dont le chemin a des \ (sous Windows : C:\travaux\nouveau, Z:\tmp\...) ; ici,
+    // des \ dans le nom d'un dossier. Ses \t et \n ne sont pas des echappements : le chemin part tel quel.
+    const fs::path barres = root / "C:\\travaux\\nouveau";
+    n5x::writeFile(barres / "rapport.txt", "Rapport\n");
+    n5x::writeFile(barres / "archive.zip", n5x::zipOf({{"tableau.csv", "a;b\n1;2\n"}}));
+    p.programs.variables.push_back(hmiVar(p, "Chemin_Barres", "STRING", "''"));
+    const Id bars = addExp("Barres", barres.string());
+    v.object(bars)->set("pickTo", "Chemin_Barres");
+    const Id barsZip = addExp("Barres_Zip", (barres / "archive.zip").string());
+    v.object(barsZip)->setFlag("allowExtract", true);
+    v.object(barsZip)->set("extractTo", (root / "ex\\tr").string());
     p.views = {v};
     p.config.startView = v.id;
     Runtime rt;
@@ -32366,9 +32377,31 @@ void explorateur1141() {
     const fs::path out = root / "donnees" / "extraits" / "lisez.txt";
     check(fs::exists(out) && fs::file_size(out) == 30 && !rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("Extrait") == 0,
           "Extraire (permis) : lisez.txt dans donnees/extraits " + rt.fileExplorer(rel)->message);
+    // 1.14.1 (captures finales) : la ligne d'etat de l'objet coupe a sa largeur - l'essentiel d'abord : le nom du fichier,
+    // puis le dossier (avant : le chemin complet, et le nom tombait dans les points de suite).
+    check(rt.fileExplorer(rel)->message.rfind("Extrait : lisez.txt", 0) == 0
+              && rt.fileExplorer(rel)->message.find((root / "donnees" / "extraits").string()) != std::string::npos,
+          "Extrait : le nom du fichier en t\xC3\xAAte, puis son dossier (" + rt.fileExplorer(rel)->message + ")");
     rt.objectPart(rel, "extraire", 1.8);
     check(rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("rien n'est \xC3\xA9" "cras\xC3\xA9") != std::string::npos,
           "Extraire encore : refus\xC3\xA9 (jamais d'\xC3\xA9" "crasement) " + rt.fileExplorer(rel)->message);
+    // ... et le refus dit sa raison d'abord (avant : le chemin complet, puis la raison - coupee).
+    check(rt.fileExplorer(rel)->message.rfind("lisez.txt existe d\xC3\xA9j\xC3\xA0", 0) == 0
+              && rt.fileExplorer(rel)->message.find("rien n'est \xC3\xA9" "cras\xC3\xA9") < 80,
+          "Extraire encore : la raison en t\xC3\xAAte (" + rt.fileExplorer(rel)->message + ")");
+    // 1.14.1 (captures finales) : un chemin a \ (C:\travaux\nouveau) part tel quel dans Choix vers et dans le message.
+    {
+        const auto* eb = rt.fileExplorer(bars);
+        rt.objectPart(bars, "ligne:" + std::to_string(rowOf(eb, "rapport.txt")), 1.81);
+        const sim::Value* chosen = rt.variable("Chemin_Barres");
+        check(chosen && chosen->asString() == (barres / "rapport.txt").string(),
+              "un chemin \xC3\xA0 barres : Choix vers le re\xC3\xA7oit tel quel (" + (chosen ? chosen->asString() : std::string("?")) + ")");
+        rt.objectPart(barsZip, "ligne:" + std::to_string(rowOf(rt.fileExplorer(barsZip), "tableau.csv")), 1.82);
+        rt.objectPart(barsZip, "extraire", 1.83);
+        const std::string said = rt.fileExplorer(barsZip)->message;
+        check(fs::exists(root / "ex\\tr" / "tableau.csv") && !rt.fileExplorer(barsZip)->error && said.find((root / "ex\\tr").string()) != std::string::npos,
+              "extraire vers un dossier \xC3\xA0 barres (ex\\tr) : le fichier y est, le message cite le chemin tel quel (" + said + ")");
+    }
     rt.objectPart(fx, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(fx), "archive.zip")), 1.9);
     rt.objectPart(fx, "ligne:" + std::to_string(rowOf(rt.fileExplorer(fx), "lisez.txt")), 1.91);
     rt.objectPart(fx, "extraire", 1.92);

@@ -534,7 +534,7 @@ void drawStateChart(const Ctx& c, const hmi::View& view) {
             const double tw = 26.0 + static_cast<double>(st.text.size()) * fs * 0.55;
             if (x + tw > w - 6) break;
             fillLocal(c, box(x, ly + fs * 0.35, fs * 0.9, fs * 0.9), fade(parseColor(st.color, gfx::Color::rgb(0x4A5261)), c.alpha));
-            text(c, st.text, x + fs * 1.2, ly, tw, fs * 1.6, lab, fs * 0.9, "gauche");
+            text(c, hmi::unescapeText(st.text), x + fs * 1.2, ly, tw, fs * 1.6, lab, fs * 0.9, "gauche");   // 1.14.1 : un texte tape
             x += tw + 8;
         }
     }

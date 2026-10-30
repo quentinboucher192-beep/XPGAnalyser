@@ -1449,7 +1449,9 @@ bool extract(const Location& loc, const Entry& e, const std::string& folder, std
     }
     const fs::path target = dir / P(e.name);
     if (fs::exists(target, ec)) {
-        why = U(target) + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9";
+        // 1.14.1 (captures finales) : la raison d'abord, le dossier ensuite - la ligne d'etat de l'objet coupe a sa largeur
+        // (avant : le chemin complet en tete, et la raison tombait dans les points de suite).
+        why = e.name + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9 (dans " + U(dir) + ")";
         return false;
     }
     std::vector<unsigned char> data;

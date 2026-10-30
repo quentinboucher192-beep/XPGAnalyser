@@ -340,14 +340,15 @@ bool drawDocumentViewer(const Ctx& c) {
                 if (title[0] >= 'a' && title[0] <= 'z') title[0] = static_cast<char>(title[0] - 'a' + 'A');
             }
             const double tw = l.area.w - 24, bottom = l.area.y + l.area.h - 8;
+            // 1.14.1 (captures finales) : un message qui cite un chemin (introuvable : C:\docs\notice.pdf) se montre tel quel.
             if (title.empty() || ty + 24 + 20 > bottom) {
-                text(c, message, l.area.x + 12, ty, tw, std::max(20.0, bottom - ty), col, 13, "centre", true);
+                textAsIs(c, message, l.area.x + 12, ty, tw, std::max(20.0, bottom - ty), col, 13, "centre", true);
             } else {
-                text(c, title, l.area.x + 12, ty, tw, 22, col, 16, "centre");
+                textAsIs(c, title, l.area.x + 12, ty, tw, 22, col, 16, "centre");
                 // La hauteur du detail, ses lignes estimees : il suit le titre, sans trou.
                 const double lines = std::ceil(rawWidth(c, detail, 13) / std::max(40.0, tw - 16)) + 0.5;
                 const double dy = ty + 24;
-                text(c, detail, l.area.x + 12, dy, tw, std::min(bottom - dy, std::max(20.0, lines * 13 * 1.25)), col, 13, "centre", true);
+                textAsIs(c, detail, l.area.x + 12, dy, tw, std::min(bottom - dy, std::max(20.0, lines * 13 * 1.25)), col, 13, "centre", true);
             }
         }
         c.r.popClip();
@@ -615,14 +616,16 @@ bool drawFileExplorer(const Ctx& c) {
         const auto& b = l.crumbs[i];
         if (b.w <= 0) continue;
         const bool last = i + 1 == l.crumbs.size();
-        text(c, fitted(c, crumbs[i], b.w, fs), b.x, b.y, b.w, b.h, last ? tc : accent, fs, "gauche");
+        // 1.14.1 (captures finales) : un chemin, un nom de fichier, un message qui en cite : tels quels (textAsIs), dans
+        // l'editeur aussi - la Source C:\travaux\nouveau garde ses \t et \n.
+        textAsIs(c, fitted(c, crumbs[i], b.w, fs), b.x, b.y, b.w, b.h, last ? tc : accent, fs, "gauche");
         if (!last) text(c, "\xE2\x80\xBA", b.right(), b.y, fs * 1.1, b.h, muted, fs, "centre");
     }
     if (l.search.w > 0) {
         box(c, l.search, c.fixed(0x141820), 4);
         frameOf(c, l.search, typing ? accent : c.fixed(0x4A5568), typing ? 2 : 1, 4);
         const bool empty = searchText.empty();
-        text(c, fitted(c, empty ? std::string("Nom contient\xE2\x80\xA6") : searchText, l.search.w - 12, fs * 0.95), l.search.x + 6, l.search.y,
+        textAsIs(c, fitted(c, empty ? std::string("Nom contient\xE2\x80\xA6") : searchText, l.search.w - 12, fs * 0.95), l.search.x + 6, l.search.y,
              l.search.w - 12, l.search.h, empty ? withAlpha(tc, 0.45f) : tc, fs * 0.95, "gauche");
     }
     if (l.refresh.w > 0) {
@@ -669,7 +672,7 @@ bool drawFileExplorer(const Ctx& c) {
         else if (k % 2 == 1) box(c, r, withAlpha(tc, 0.04f));
         entryIcon(c, e.genre, l.colName.x + 4, r.cy() - iconS / 2, iconS);
         const double nx = l.colName.x + iconS + 12;
-        text(c, fitted(c, e.name, l.colName.right() - nx, fs), nx, r.y, l.colName.right() - nx, r.h, e.suspicious ? c.fixedText(0xF5A623) : tc, fs,
+        textAsIs(c, fitted(c, e.name, l.colName.right() - nx, fs), nx, r.y, l.colName.right() - nx, r.h, e.suspicious ? c.fixedText(0xF5A623) : tc, fs,
              "gauche");
         if (l.colSize.w > 0 && !e.folder) text(c, ex::sizeText(e.size), l.colSize.x, r.y, l.colSize.w - 6, r.h, muted, fs * 0.9, "droite");
         if (l.colDate.w > 0) text(c, ex::dateText(e.modified), l.colDate.x + 6, r.y, l.colDate.w - 6, r.h, muted, fs * 0.9, "gauche");
@@ -687,7 +690,7 @@ bool drawFileExplorer(const Ctx& c) {
 
     // ---- la ligne d'etat
     seg(c, 0, l.status.y - 1, w, l.status.y - 1, withAlpha(stroke, 0.7f), 1);
-    text(c, fitted(c, status, l.status.w, fs * 0.85), l.status.x, l.status.y, l.status.w, l.status.h,
+    textAsIs(c, fitted(c, status, l.status.w, fs * 0.85), l.status.x, l.status.y, l.status.w, l.status.h,
          error ? c.fixedText(0xFF6B6B) : (live && !live->message.empty() ? c.fixedText(0x4CD08A) : muted), fs * 0.85, "gauche");
     return true;
 }

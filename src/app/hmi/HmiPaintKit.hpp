@@ -79,8 +79,13 @@ struct Ctx {
 void fillAndStroke(const Ctx& c, const std::vector<gfx::Point>& local, bool closed = true);
 // Un texte dans une boite locale : aligne ("gauche", "centre", "droite"), centre
 // verticalement, tourne avec l'objet ; `sizePx` en pixels de vue.
+// Dans l'editeur, le texte tape (ses \n, ses \t) ; en marche, le texte final de la vue preparee, tel quel.
 void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, double bh, gfx::Color col,
           double sizePx, std::string_view align, bool wrap = false);
+// 1.14.1 (captures finales) : un texte tel quel, partout - un chemin, un nom de fichier, une valeur (leurs \ ne sont
+// jamais des echappements : C:\travaux\nouveau).
+void textAsIs(const Ctx& c, std::string_view shown, double bx, double by, double bw, double bh, gfx::Color col,
+              double sizePx, std::string_view align, bool wrap = false);
 // Ce qui tient dans la largeur (en pixels de vue), avec des points de suite.
 [[nodiscard]] std::string fitted(const Ctx& c, const std::string& s, double maxLocal, double sizePx);
 void placeholder(const Ctx& c, std::string_view label);

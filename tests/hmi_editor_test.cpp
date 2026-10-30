@@ -7608,6 +7608,117 @@ void explorateur1141Ecran() {
     const auto lum = [](gfx::Color c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; };
     check(lum(night) < 80 && lum(day) > 160, "le th\xC3\xA8me jour : le fond de l'explorateur s'\xC3\xA9" "claircit (" + std::to_string(static_cast<int>(lum(night)))
                                                  + " \xE2\x86\x92 " + std::to_string(static_cast<int>(lum(day))) + ")");
+    // 1.14.1 (captures finales) : UN CHEMIN SE MONTRE TEL QUEL. Sous Windows, Z:\tmp\... et C:\travaux\nouveau perdaient leur
+    // \t (une tabulation) et leur \n (un retour a la ligne) au dessin : dans le pied de l'objet (Extrait : ...) et dans un
+    // Texte qui montre la variable de Choix vers. Ici, des \ dans le nom d'un dossier (Linux les permet). Et le refus d'une
+    // seconde extraction se lit dans un objet etroit (la raison d'abord, le chemin ensuite).
+    {
+        const fs::path bars = root / "C:\\travaux\\nouveau";
+        put(bars / "rapport.txt", "Rapport\n");
+        {
+            mz_zip_archive zip;
+            std::memset(&zip, 0, sizeof zip);
+            (void)mz_zip_writer_init_heap(&zip, 0, 0);
+            const std::string csv = "a;b\n1;2\n";
+            (void)mz_zip_writer_add_mem(&zip, "tableau.csv", csv.data(), csv.size(), MZ_DEFAULT_COMPRESSION);
+            void* buf = nullptr;
+            size_t size = 0;
+            (void)mz_zip_writer_finalize_heap_archive(&zip, &buf, &size);
+            put(bars / "archive.zip", std::string(static_cast<const char*>(buf), size));
+            mz_zip_writer_end(&zip);
+        }
+        auto doc2 = std::make_shared<Document>();
+        auto& q = doc2->project;
+        View qv = makeView(q, "Vue_Barres");
+        qv.width = 1000;
+        qv.height = 720;
+        hmi::Variable chosenVar;
+        chosenVar.id = q.allocate();
+        chosenVar.name = "Fichier_Choisi";
+        chosenVar.type = "STRING";
+        chosenVar.initial = "''";
+        q.programs.variables.push_back(chosenVar);
+        const auto addExplorer = [&](const char* name, const std::string& source, double y, double w) {
+            const Id id = edit::add(q, qv, Kind::FileExplorer, 10, y);
+            qv.object(id)->name = name;
+            qv.object(id)->set("folder", source);
+            qv.object(id)->setNumber("w", w);
+            qv.object(id)->setNumber("h", 200);
+            return id;
+        };
+        const Id e1 = addExplorer("Exp_Barres", bars.string(), 10, 980);
+        qv.object(e1)->set("pickTo", "Fichier_Choisi");
+        const Id e2 = addExplorer("Zip_Large", (bars / "archive.zip").string(), 220, 980);
+        const Id e3 = addExplorer("Zip_Etroit", (bars / "archive.zip").string(), 430, 640);
+        for (const Id z : {e2, e3}) {
+            qv.object(z)->setFlag("allowExtract", true);
+            qv.object(z)->set("extractTo", (bars / "extraits").string());
+        }
+        const Id twoLines = edit::add(q, qv, Kind::Text, 680, 430);
+        qv.object(twoLines)->name = "Txt_Deux_Lignes";
+        qv.object(twoLines)->set("text", "Ligne 1\\nLigne 2");
+        qv.object(twoLines)->setNumber("w", 300);
+        qv.object(twoLines)->setNumber("h", 60);
+        const Id txt = edit::add(q, qv, Kind::Text, 10, 650);
+        qv.object(txt)->name = "Txt_Choisi";
+        qv.object(txt)->set("text", "Choix vers : {Fichier_Choisi}");
+        qv.object(txt)->setNumber("w", 980);
+        q.views = {qv};
+        q.config.startView = qv.id;
+        app::HmiSimulationPane pane2("n5bbarres", doc2, app::HmiSimulationHost{});
+        pane2.setBounds({0, 0, 1600, 900});
+        pane2.layout();
+        ColorRecorder r2;
+        const auto paint2 = [&](double t) {
+            r2.tris.clear();
+            r2.texts.clear();
+            r2.textX.clear();
+            pane2.layout();
+            pane2.render(ui::PaintContext{r2, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto rowIn = [&](Id id, const std::string& n) {
+            const auto* fe2 = pane2.runtime().fileExplorer(id);
+            for (std::size_t i = 0; fe2 && i < fe2->shown.size(); ++i)
+                if (fe2->shown[i].name == n) return std::to_string(i);
+            return std::string("99");
+        };
+        paint2(0.1);
+        auto& rt2 = pane2.runtime();
+        rt2.objectPart(e1, "ligne:" + rowIn(e1, "rapport.txt"), 0.2);
+        paint2(0.3);
+        const std::string chosen = (bars / "rapport.txt").string();
+        const sim::Value* got = rt2.variable("Fichier_Choisi");
+        check(got && got->asString() == chosen, "Choix vers : la variable re\xC3\xA7oit le chemin tel quel (" + (got ? got->asString() : std::string("?")) + ")");
+        check(r2.wrote("Choix vers : " + chosen), "un Texte {Fichier_Choisi} le montre tel quel : ses \\t et \\n ne sont pas des \xC3\xA9" "chappements");
+        bool lineOne = false, lineTwo = false;
+        for (const auto& t : r2.texts) {
+            lineOne = lineOne || t == "Ligne 1";
+            lineTwo = lineTwo || t == "Ligne 2";
+        }
+        check(lineOne && lineTwo, "un texte tap\xC3\xA9 Ligne 1\\nLigne 2 garde ses deux lignes en marche (lu une fois, \xC3\xA0 la liaison)");
+        rt2.objectPart(e2, "ligne:" + rowIn(e2, "tableau.csv"), 0.4);
+        rt2.objectPart(e2, "extraire", 0.41);
+        paint2(0.5);
+        check(fs::exists(bars / "extraits" / "tableau.csv") && r2.wrote((bars / "extraits").string()),
+              "le pied de l'objet, Extrait : le chemin tel quel (" + rt2.fileExplorer(e2)->message + ")");
+        rt2.objectPart(e3, "ligne:" + rowIn(e3, "tableau.csv"), 0.6);
+        rt2.objectPart(e3, "extraire", 0.61);
+        paint2(0.7);
+        std::string footer;
+        for (const auto& t : r2.texts)
+            if (t.rfind("tableau.csv existe", 0) == 0) footer = t;
+        gfx::Rect narrow;
+        (void)pane2.canvas().objectRect("Zip_Etroit", narrow);
+        check(rt2.fileExplorer(e3)->error && footer.find("rien n'est \xC3\xA9" "cras\xC3\xA9") != std::string::npos,
+              "la seconde extraction, dans un objet \xC3\xA9troit (" + std::to_string(static_cast<int>(narrow.w)) + " px) : le refus se lit (" + footer + ")");
+        gfx::Rect st;
+        check(pane2.canvas().partRect("Zip_Etroit", "etat", st), "la ligne d'\xC3\xA9tat de l'explorateur");
+        pane2.canvas().dispatch(ui::MouseMove{{st.x + st.w / 2, st.y + st.h / 2}, {0, 0}, {}});
+        paint2(0.8);
+        // Le pied coupe le dossier (ses points de suite) ; l'infobulle le dit jusqu'au bout.
+        check(footer.find("extraits)") == std::string::npos && r2.wrote("Zip_Etroit") && r2.wrote("extraits)"),
+              "au survol de la ligne d'\xC3\xA9tat : son infobulle dit tout le message, le dossier compris");
+    }
     fs::remove_all(root, ec);
 }
 
