@@ -694,7 +694,8 @@ void testNatives() {
     script("Duree", "R_Duree := IHM_ENREG_DUREE('Nat A');");
     script("Liste", "VAR L : LIST OF STRING; END_VAR\nL := IHM_ENREG_LISTE();\nR_Nombre := LIST_COUNT(L);\nR_Texte := L[0];");
     script("ListePrefixe", "VAR L : LIST OF STRING; END_VAR\nL := IHM_ENREG_LISTE('Zz');\nR_Nombre := LIST_COUNT(L);");
-    script("Rejouer", "R_Bool := IHM_REJOUER('Nat A', 2.0);\nIHM_RELECTURE_ALLER(T#1s);");
+    // 1.14.0 (relecture M4b) : pendant la relecture, rien ne s'ecrit (R_Bool := ... non plus) - le resultat se lit par IF.
+    script("Rejouer", "IF IHM_REJOUER('Nat A', 2.0) THEN\n  IHM_RELECTURE_ALLER(T#1s);\nEND_IF;");
     script("Exporter", "R_Bool := IHM_ENREG_EXPORTER('Nat A', '" + st.folder + "/dehors');");
     script("Importer", "R_Texte := IHM_ENREG_IMPORTER('" + st.folder + "/dehors/Nat A.xrec');");
     script("Supprimer", "R_Bool := IHM_ENREG_SUPPRIMER('Nat A (2)');");
@@ -737,7 +738,7 @@ void testNatives() {
     run("Jeter");
     check(var("R_Texte").empty() && !fs::exists(fs::path(rt.recordingsFolder()) / "Jete.xrec"), "IHM_ENREG_ARRETER(FALSE) : rien n'est garde");
     run("Rejouer");
-    check(var("R_Bool") == "TRUE" && rt.replaying(), "IHM_REJOUER : la relecture");
+    check(rt.replaying(), "IHM_REJOUER : la relecture");
     check(std::fabs(rt.replayInfo().speed - 2.0) < 1e-9 && std::fabs(rt.replayInfo().position - 1.0) < 1e-6,
           "IHM_REJOUER a x2, puis IHM_RELECTURE_ALLER(T#1s) dans le meme script");
     // Les autres commandes de relecture (comme dans la suite d'un meme script).
@@ -1149,6 +1150,115 @@ std::string trackBlock(const std::string& raw, std::uint32_t rawLenClaim = 0) {
 void testRelectureM4b() {
     std::printf("relecture contradictoire (M4b) : les defauts corriges\n");
     namespace R = rec;
+    // ---- 1. LE MOT DE PASSE NE SAUTE PAS A L'ARRET (la fenetre : Valider sans le retaper, Echap) ----------------------
+    {
+        Station st("m4b-motdepasse");
+        Runtime rt;
+        std::vector<RecordingStopAsk> asked;
+        Runtime::Hooks h;
+        const std::string f = st.folder;
+        h.projectFolder = [f] { return f; };
+        h.recordingStop = [&](const RecordingStopAsk& a) { asked.push_back(a); };
+        rt.setHooks(h);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string why;
+        check(rt.startRecording(RecordingStart{"Secret", {}, "secret", 0, true, "essai"}, now, &why), "un enregistrement protege au depart");
+        for (int step = 1; step <= 20; ++step) rt.tick(now = step / 10.0);
+        rt.askStopRecording(now, "essai");
+        check(asked.size() == 1 && asked[0].locked, "la fenetre dit qu'il est protege");
+        // L'arret ne relit ni ne recopie rien : l'en-tete final s'ecrit a sa place.
+        const auto before = R::fileStats();
+        check(rt.finishRecording(true, "Secret", "", "", now) == "Secret", "Valider sans retaper le mot de passe");
+        check(R::fileStats().bytes == before.bytes, "l'arret ne relit rien du fichier en cours (" + std::to_string(R::fileStats().bytes - before.bytes) + " octets)");
+        R::Header hh;
+        R::Track tr;
+        const std::string folder = rt.recordingsFolder();
+        check(R::readTrack(R::pathOf(folder, "Secret"), "", hh, tr) == R::Status::PasswordNeeded
+                  && R::readTrack(R::pathOf(folder, "Secret"), "secret", hh, tr) == R::Status::Ok && !tr.frames.empty(),
+              "un mot de passe vide garde celui du depart (avant : le .xrec etait en clair)");
+        // Echap (la fenetre rend un mot de passe vide, comme une fenetre absente).
+        (void)rt.startRecording(RecordingStart{"Echap", {}, "secret", 0, true, "essai"}, now, &why);
+        for (int step = 21; step <= 30; ++step) rt.tick(now = step / 10.0);
+        rt.askStopRecording(now, "essai");
+        (void)rt.finishRecording(true, "Echap", {}, {}, now);
+        check(R::readTrack(R::pathOf(folder, "Echap"), "", hh, tr) == R::Status::PasswordNeeded, "Echap : toujours protege");
+        // Retirer la protection : seulement par la case.
+        (void)rt.startRecording(RecordingStart{"Clair", {}, "secret", 0, true, "essai"}, now, &why);
+        for (int step = 31; step <= 40; ++step) rt.tick(now = step / 10.0);
+        rt.askStopRecording(now, "essai");
+        (void)rt.finishRecording(true, "Clair", {}, {}, now, nullptr, true);
+        check(R::readTrack(R::pathOf(folder, "Clair"), "", hh, tr) == R::Status::Ok && !hh.locked() && !tr.frames.empty(),
+              "Retirer la protection (la case) : en clair, et la piste se relit");
+        // Un autre mot de passe a l'arret : seule la cle de l'en-tete change.
+        (void)rt.startRecording(RecordingStart{"Autre", {}, "secret", 0, true, "essai"}, now, &why);
+        for (int step = 41; step <= 50; ++step) rt.tick(now = step / 10.0);
+        rt.askStopRecording(now, "essai");
+        (void)rt.finishRecording(true, "Autre", {}, "neuf", now);
+        check(R::readTrack(R::pathOf(folder, "Autre"), "secret", hh, tr) == R::Status::BadPassword
+                  && R::readTrack(R::pathOf(folder, "Autre"), "neuf", hh, tr) == R::Status::Ok && !tr.frames.empty(),
+              "un autre mot de passe a l'arret : l'ancien ne va plus, le nouveau relit la piste");
+    }
+    // ---- 2. RIEN NE PART VERS L'EQUIPEMENT PENDANT LE FILM -----------------------------------------------------------
+    {
+        Station st("m4b-ecritures");
+        FakePlc plc;
+        plc.values["MOTEUR_API"] = sim::Value::boolean(false);
+        View& v = st.p.views.front();
+        const Id bad = edit::add(st.p, v, Kind::Button, 10, 10);
+        v.object(bad)->name = "Btn_Film";
+        v.object(bad)->actions = {act(Trigger::Click, Operation::ReplayStart, "Base"), act(Trigger::Click, Operation::Set, "Pompe"),
+                                  act(Trigger::Click, Operation::Assign, "Compteur", "50"), act(Trigger::Click, Operation::Set, "MOTEUR_API"),
+                                  act(Trigger::Click, Operation::ReplaySeek, {}, "1")};
+        Script sc;
+        sc.id = st.p.allocate();
+        sc.name = "Film";
+        sc.event = "Appel";
+        sc.body = "IHM_REJOUER('Base');\nCompteur := 777;\nMOTEUR_API := TRUE;\nIHM_RELECTURE_ALLER(T#1500ms);\n";
+        st.p.programs.scripts.push_back(sc);
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, &plc);
+        rt.start(0.0);
+        double now = 0;
+        std::string why;
+        (void)rt.startRecording(RecordingStart{"Base", {}, {}, 0, false, "essai"}, now, &why);
+        for (int step = 1; step <= 30; ++step) rt.tick(now = step / 10.0);
+        (void)rt.stopRecording(true, now);
+        const std::string pompe = readText(rt, "Pompe"), compteur = readText(rt, "Compteur");
+        rt.press(bad, now);
+        rt.release(bad, now, true);
+        check(rt.replaying(), "le clic lance la relecture");
+        check(std::fabs(rt.replayInfo().position - 1.0) < 1e-6, "l'action Relecture qui suit passe (Avancer de 1 s)");
+        check(journalHas(rt, "3 actions de la suite non faites"), "les autres actions de la suite ne partent pas, et la Console le dit");
+        (void)rt.quitReplay(now);
+        check(readText(rt, "Pompe") == pompe && readText(rt, "Compteur") == compteur && plc.writes == 0,
+              "apres : Pompe, Compteur et l'automate tels qu'avant (avant : ecrits pendant le film)");
+        check(rt.callScript("Film", now, &why), "un script qui rejoue puis ecrit (" + why + ")");
+        check(rt.replaying() && std::fabs(rt.replayInfo().position - 1.5) < 1e-6, "IHM_RELECTURE_ALLER apres IHM_REJOUER passe");
+        std::size_t said = 0;
+        for (const auto& e : rt.journal()) said += e.message.find("criture refus") != std::string::npos ? 1 : 0;
+        check(said == 1, "les ecritures refusees, dites une fois (" + std::to_string(said) + ")");
+        std::string rw;
+        (void)rt.quitReplay(now);
+        check(readText(rt, "Compteur") == compteur && plc.writes == 0, "Compteur := 777 et MOTEUR_API := TRUE n'ont rien ecrit");
+    }
+    // ---- 3. L'HEURE DE L'IHM NE RETARDE PAS DU TEMPS TENU -------------------------------------------------------------
+    {
+        Station st("m4b-heure");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        sim::Value start0, start1;
+        (void)rt.environment().read("SYS.StartTime", start0);
+        const double e0 = rt.epochOf(1.0);
+        rt.holdClock(600.0);
+        check(std::fabs(rt.epochOf(1.0) - e0 - 600.0) < 1e-3, "10 min de relecture : les dates suivent le mur (+600 s)");
+        (void)rt.environment().read("SYS.StartTime", start1);
+        check(plainOf(start0) == plainOf(start1), "SYS.StartTime ne bouge pas (" + plainOf(start1) + ")");
+    }
     // ---- 4. UN .xrec HOSTILE NE FAIT PAS ALLOUER SANS FIN -------------------------------------------------------------
     {
         const std::string folder = freshFolder("m4b-hostile");
@@ -1250,6 +1360,87 @@ void testRelectureM4b() {
         check(seen, "... et il dit la nouvelle description");
         check(!h.at40.empty(), "l'ecran a 40 % est dans l'en-tete (le detail ne lit pas la piste) : " + h.at40);
     }
+    // ---- 6. LE FILM MONTRE TOUT : les parametres Copie des popups, les courbes ------------------------------------------
+    {
+        Station st("m4b-film");
+        View& pop = st.p.views.back();
+        pop.params.front().mode = ParamMode::Copy;
+        const Id label = edit::add(st.p, pop, Kind::Text, 10, 10);
+        pop.object(label)->setExpr("text", "Titre");
+        View& v = st.p.views.front();
+        const Id trend = edit::add(st.p, v, Kind::Trend, 600, 400);
+        v.object(trend)->set("variables", "Niveau");
+        v.object(trend)->set("duration", "10");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string why;
+        (void)rt.startRecording(RecordingStart{"Copie", {}, {}, 0, false, "essai"}, now, &why);
+        std::string shownLive;
+        double niveauAt4 = 0;
+        for (int step = 1; step <= 80; ++step) {
+            now = step / 10.0;
+            if (step == 10) (void)rt.openPopup(st.popup, Transition{}, now, "Titre := 'Pompe 7'", "centre");
+            if (step == 70) (void)rt.closePopup(Transition{}, now);
+            rt.tick(now);
+            if (step == 40) {
+                shownLive = rt.shownText(st.popup, *rt.project()->view(st.popup)->object(label), "text");
+                sim::Value nv;
+                (void)rt.environment().read("Niveau", nv);
+                niveauAt4 = nv.asReal();
+            }
+        }
+        (void)rt.stopRecording(true, now);
+        const auto* live = rt.trend(st.view, trend);
+        const std::size_t livePoints = live && !live->empty() ? live->front().points.size() : 0;
+        const double liveLast = live && !live->empty() && !live->front().points.empty() ? live->front().points.back().second : -1;
+        check(shownLive == "Pompe 7", "en direct, la popup montre son parametre Copie (Pompe 7)");
+        check(rt.startReplay(ReplayRequest{"Copie", {}, 1.0, 4.0, {}, "essai"}, now, &why) == R::Status::Ok, "la relecture a 4 s");
+        const std::string shownReplay = rt.shownText(st.popup, *rt.project()->view(st.popup)->object(label), "text");
+        check(shownReplay == "Pompe 7", "rejouee, la popup montre son parametre Copie (avant : vide) : " + shownReplay);
+        const auto* rp = rt.trend(st.view, trend);
+        const bool trendOk = rp && !rp->empty() && !rp->front().points.empty() && std::fabs(rp->front().points.back().second - niveauAt4) < 1e-6
+                          && rp->front().points.size() >= 30;
+        check(trendOk, "la courbe rejouee : refaite depuis la piste jusqu'a 4 s (" + std::to_string(rp && !rp->empty() ? rp->front().points.size() : 0)
+                           + " points, la derniere valeur " + (rp && !rp->empty() && !rp->front().points.empty() ? std::to_string(rp->front().points.back().second) : std::string("?"))
+                           + " au lieu de " + std::to_string(niveauAt4) + ")");
+        const double edge = rp && !rp->empty() && !rp->front().points.empty() ? rp->front().points.back().first : -1;
+        check(std::fabs(edge - rt.now()) < 0.11, "le dernier point de la courbe est au bord droit (l'heure tenue)");
+        const std::size_t at4 = rp && !rp->empty() ? rp->front().points.size() : 0;
+        double wall = 10;
+        rt.replayTick(wall);
+        rt.replayTick(wall += 1.0);
+        const auto* rp2 = rt.trend(st.view, trend);
+        check(rp2 && !rp2->empty() && !rp2->front().points.empty() && std::fabs(rp2->front().points.back().first - rt.now()) < 0.11
+                  && rp2->front().points.size() >= at4 + 9,
+              "en lecture, la courbe avance (les points glissent, les nouveaux s'ajoutent)");
+        (void)rt.quitReplay(now);
+        const auto* back = rt.trend(st.view, trend);
+        check(back && !back->empty() && back->front().points.size() == livePoints && std::fabs(back->front().points.back().second - liveLast) < 1e-9,
+              "en quittant, la courbe du direct revient telle quelle");
+    }
+    // ---- 7. LES CODES DE SORTIE : 6 occupee, 7 fichier ------------------------------------------------------------------
+    {
+        Station st("m4b-codes", true);
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string said;
+        check(rt.runCommand(R::parseCommand({"--enregistrer", "Un"}), now, &said) == R::kExitDone, "--enregistrer : 0");
+        check(rt.runCommand(R::parseCommand({"--enregistrer", "Deux"}), now, &said) == R::kExitBusy, "deja un enregistrement : 6 (" + said + ")");
+        check(rt.runCommand(R::parseCommand({"--rejouer", "Un"}), now, &said) == R::kExitBusy, "rejouer pendant un enregistrement : 6");
+        for (int step = 1; step <= 10; ++step) rt.tick(now = step / 10.0);
+        (void)rt.runCommand(R::parseCommand({"--arreter-enregistrement"}), now, &said);
+        writeBytes(rt.recordingsFolder() + "/Abime.xrec", "ceci n'est pas un zip");
+        check(rt.runCommand(R::parseCommand({"--rejouer", "Abime"}), now, &said) == R::kExitFile, "un fichier illisible : 7 (" + said + ")");
+        check(rt.runCommand(R::parseCommand({"--rejouer", "Un"}), now, &said) == R::kExitDone, "--rejouer : 0");
+        check(rt.runCommand(R::parseCommand({"--enregistrer", "Trois"}), now, &said) == R::kExitBusy, "enregistrer pendant une relecture : 6");
+        (void)rt.quitReplay(now);
+    }
     // ---- 8. --reponse : un fichier neuf du dossier temporaire, rien d'autre --------------------------------------------
     {
         std::string why;
@@ -1266,6 +1457,34 @@ void testRelectureM4b() {
         check(!R::readReply("4\nmot de pa", code, msg), "une reponse a moitie ecrite ne se lit pas");
         std::error_code ec;
         fs::remove(fs::path(std::u8string(good.begin(), good.end())), ec);
+    }
+    // ---- 9. LE MOT DE PASSE DE L'ENREGISTREUR N'EST PAS EN CLAIR DANS LE CODE BRUT ---------------------------------------
+    {
+        Station st("m4b-masque");
+        st.p.views.front().object(st.recorder)->set("password", "enigme42");
+        const std::string code = serializeObjectCode(st.p.views.front(), {st.recorder});
+        check(code.find("enigme42") == std::string::npos && code.find("m1:") != std::string::npos, "le code brut garde le mot de passe masque");
+        auto parsed = parseObjectCode(code);
+        check(parsed && !parsed->objects.empty() && notify::unmaskSecret(parsed->objects.front().text("password")) == "enigme42", "... et il se relit");
+    }
+    // ---- 10. C : un nombre est des millisecondes (comme la fiche, comme IHM_APRES) ----------------------------------------
+    {
+        Station st("m4b-ms");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        sim::Value r;
+        rt.environment().call("IHM_ENREG_DEMARRER", {}, {{"", sim::Value::text("C1")}, {"", sim::Value::integer(sim::Type::DInt, 60000)}}, r);
+        check(r.isTruthy() && std::fabs(rt.recordingInfo().maxSeconds - 60.0) < 1e-9, "IHM_ENREG_DEMARRER(\"C1\", 60000) : 60 s (avant : 60000 s)");
+        for (int step = 1; step <= 30; ++step) rt.tick(now = step / 10.0);
+        (void)rt.stopRecording(true, now);
+        std::string why;
+        (void)rt.startReplay(ReplayRequest{"C1", {}, 1.0, 0, {}, "essai"}, now, &why);
+        rt.environment().call("IHM_RELECTURE_ALLER", {}, {{"", sim::Value::integer(sim::Type::DInt, 1500)}}, r);
+        check(std::fabs(rt.replayInfo().position - 1.5) < 1e-6, "IHM_RELECTURE_ALLER(1500) : 1,5 s");
+        (void)rt.quitReplay(now);
     }
     // ---- 11. UN .part OUVERT PAR UN AUTRE PROGRAMME N'EST PAS RECUPERE ----------------------------------------------------
     {
@@ -1349,6 +1568,27 @@ void testRelectureM4b() {
               "remplacer, et la copie sans protection se rejoue sans mot de passe (" + why + ")");
         check(R::readTrack(R::pathOf(folder, "Prot"), "", h, tr) == R::Status::PasswordNeeded, "l'original reste protege");
     }
+    // ---- 14. UN NOM N'EST JAMAIS UN CHEMIN ------------------------------------------------------------------------------
+    {
+        Station st("m4b-noms");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        std::string why;
+        const std::string decoy = rt.recordingsFolder() + "/../Film.xrec";     // ihm/ressources/Film.xrec : hors du dossier
+        const std::string recFolder = rt.recordingsFolder();
+        fs::create_directories(fs::path(std::u8string(recFolder.begin(), recFolder.end())));
+        writeBytes(decoy, "dehors");
+        check(rt.startReplay(ReplayRequest{"..\\Film", {}, 1.0, 0, {}, "essai"}, 0, &why) == R::Status::NotFound && why.find("refus") != std::string::npos,
+              "rejouer ..\\Film : refuse (" + why + ")");
+        check(rt.startReplay(ReplayRequest{"../Film", {}, 1.0, 0, {}, "essai"}, 0, &why) == R::Status::NotFound, "rejouer ../Film : refuse");
+        check(!R::removeFile(rt.recordingsFolder(), "../Film", {}, &why) && fileBytes(decoy) == "dehors", "supprimer ../Film : refuse, le fichier d'a cote reste");
+        std::string written;
+        check(!R::exportFile(rt.recordingsFolder(), "../Film", st.folder, &written, &why), "exporter ../Film : refuse");
+        check(!R::renameFile(rt.recordingsFolder(), "../Film", "X", &why), "renommer ../Film : refuse");
+        check(R::cleanName("CON") == "CON_", "un nom reserve devient un nom propre");
+    }
     // ---- 15. Renommer dans un script C : "..." ----------------------------------------------------------------------------
     {
         const std::string c = "if (IHM_ENREG_EXISTE(\"Essai\")) IHM_REJOUER(\"Essai\", 2.0);\nauto x = \"IHM_REJOUER('Essai')\";\n";
@@ -1359,6 +1599,25 @@ void testRelectureM4b() {
         check(count == 2 && renamed.find("IHM_REJOUER(\"Nuit \\\"2\\\"\", 2.0)") != std::string::npos && renamed.find("'Essai'") != std::string::npos,
               "renommes entre guillemets (\\\" echappe) ; la chaine d'a cote ne bouge pas : " + renamed);
         check(R::namesInCode("IHM_REJOUER('L''essai');").front().name == "L'essai", "ST : toujours entre apostrophes");
+    }
+    // ---- 18. Generer : Pause, Avancer, Vitesse, Quitter seules sur un clic n'agiraient jamais ------------------------------
+    {
+        Station st("m4b-generer");
+        View& v = st.p.views.front();
+        const Id lone = edit::add(st.p, v, Kind::Button, 10, 10);
+        v.object(lone)->name = "Btn_Quitter";
+        v.object(lone)->actions = {act(Trigger::Click, Operation::ReplayQuit, {})};
+        const Id suite = edit::add(st.p, v, Kind::Button, 10, 60);
+        v.object(suite)->name = "Btn_Suite";
+        v.object(suite)->actions = {act(Trigger::Click, Operation::ReplayStart, "X"), act(Trigger::Click, Operation::ReplayPause, {})};
+        const auto issues = generate(st.p, [](std::string_view) { return true; }, st.folder);
+        std::size_t lonely = 0;
+        for (const auto& i : issues)
+            if (i.message.find("n'agira jamais seule") != std::string::npos) {
+                ++lonely;
+                check(i.object == lone && i.severity == Issue::Severity::Warning, "l'avertissement est sur Btn_Quitter");
+            }
+        check(lonely == 1, "Generer : Quitter la relecture seule sur un clic est signalee ; apres Rejouer, non (" + std::to_string(lonely) + ")");
     }
     // ---- 18. prune : par la date de l'en-tete ---------------------------------------------------------------------------
     {

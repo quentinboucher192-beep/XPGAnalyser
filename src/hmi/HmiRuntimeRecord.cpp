@@ -11,11 +11,16 @@
 //
 //  REJOUER. Le moteur est MIS DE COTE : tick() ne fait plus rien (ni scripts, ni
 //  actions, ni alarmes, ni equipements : les liaisons ne suivent plus rien), les
-//  gestes sont ignores. Ce qu'il montrait est mis de cote aussi (la vue, ses
-//  parametres, les popups, les alarmes, la langue, le theme, les proprietes
-//  ecrites, le pointeur) ; la vue et les popups suivent alors la piste, et
-//  Env::read lit les valeurs de la piste avant tout le reste. Quitter rend ce qui
-//  avait ete mis de cote tel quel : les variables, elles, n'ont pas bouge.
+//  gestes sont ignores, et AUCUNE ECRITURE ne part (Env::write : ni variable, ni
+//  automate, ni equipement, ni recette - dite une fois) ; la suite d'un clic qui a
+//  lance Rejouer ne garde que les actions Relecture. Ce qu'il montrait est mis de
+//  cote aussi (la vue, ses parametres, les popups, les alarmes, la langue, le
+//  theme, les proprietes ecrites, le pointeur, les courbes et les graphiques a
+//  memoire) ; la vue et les popups suivent alors la piste (avec leurs parametres
+//  Copie / Les deux), Env::read lit les valeurs de la piste avant tout le reste,
+//  et les courbes sont refaites depuis la piste jusqu'a l'instant rejoue. Quitter
+//  rend ce qui avait ete mis de cote tel quel : les variables, elles, n'ont pas
+//  bouge.
 //  En simulation, l'automate simule est mis en pause pendant la relecture (par
 //  l'ecran : HmiSimulation.cpp) ; au poste, l'automate reel continue : l'IHM
 //  reprend ses vraies valeurs en quittant.
@@ -73,6 +78,10 @@ double snapSpeed(double s) {
         }
     return best;
 }
+// 1.14.0 (relecture M4b) : la cle d'un parametre Copie / Les deux de la popup de rang `slot` dans la piste.
+std::string copyKeyOf(std::size_t slot, std::string_view param, std::string_view member) {
+    return "$P" + std::to_string(slot) + "_" + upperOf(param) + upperOf(member);
+}
 // La racine d'un chemin de variable ("FOUR1.VANNES[2].POS" -> "FOUR1").
 std::string rootOf(const std::string& key) {
     const auto cut = key.find_first_of(".[");
@@ -97,6 +106,7 @@ struct Runtime::RecordState {
     std::string                                                 name, description, password, source, folder;
     bool                                                        askAtStop{false};
     bool                                                        stopping{false};   // arrete : la question de l'arret attend
+    bool                                                        writeSaid{false};  // une ecriture refusee (relecture) : dite
     double                                                      startAt{0}, stopAt{0}, maxSeconds{0}, lastSample{-1e9};
     std::map<std::string, std::pair<rec::KeyKind, std::string>> reads;             // ce que l'ecran a lu (hors variables IHM)
     std::map<std::string, std::pair<Id, std::string>>           variables;         // racine -> (identifiant, type)
@@ -111,6 +121,11 @@ struct Runtime::RecordState {
     const rec::Overrides*                                       overrides{nullptr};
     const rec::Alarms*                                          alarms{nullptr};
     bool                                                        overridesApplied{false}, alarmsApplied{false};
+    // les courbes et graphiques refaits depuis la piste : un second lecteur, ou il en est, la base des instants
+    std::unique_ptr<rec::Player>                                chartPlayer;
+    const rec::Player*                                          reading{nullptr};  // replayValue lit celui-ci (nul : player)
+    double                                                      chartsAt{-1}, chartsBase{0}, chartStep{0.1};
+    std::string                                                 chartsShown;
     struct Live {
         Id                                   current{kNoId};
         std::string                          currentArgs;
@@ -120,6 +135,10 @@ struct Runtime::RecordState {
         std::string                          language, theme;
         std::map<std::pair<Id, Id>, std::map<std::string, std::string>> overrides;
         Id                                   pressed{kNoId}, focused{kNoId};
+        std::map<std::string, std::vector<TrendSeries>> trends, charts;      // les courbes du direct, mises de cote
+        std::map<std::string, double>        trendPaused, chartNext;
+        std::map<std::string, TrendState>    trendStates;
+        std::map<std::string, std::string>   chartResets;
     } live;
     // ---- la liste du dossier
     mutable std::vector<rec::Item>                              items;
@@ -242,6 +261,13 @@ void Runtime::recordTick(double now) {
         (void)stopRecording(true, now);
         return;
     }
+    // Un .xrec sans zip64 : il s'arrete (et se garde) avant 4 Go.
+    if (s.recorder->bytes() > 3'800'000'000ull) {
+        log("Enregistrement", s.source.empty() ? std::string("IHM") : s.source,
+            s.name + " : taille maximale d'un fichier .xrec atteinte (" + rec::sizeText(s.recorder->bytes()) + ") - il s'arr\xC3\xAAte et se garde");
+        (void)stopRecording(true, now);
+        return;
+    }
     const double rate = std::clamp(project_ ? project_->recording.rateHz : 10, 1, 50);
     const double cycle = project_ ? std::max(10, project_->config.cycleMs) / 1000.0 : 0.1;
     const double period = std::min(1.0 / rate, cycle);
@@ -267,6 +293,19 @@ void Runtime::recordSample(double now) {
         sim::Value v;
         if (environment().read(info.second, v)) r.value(key, v, info.first, info.second);
     }
+    // 1.14.0 (relecture M4b) : LES PARAMETRES COPIE ET LES DEUX des popups ouvertes - la copie que la popup lit (pas
+    // l'original) : "$P<rang>_<PARAMETRE><membre>" ($P0_TITRE, $P1_MOTEUR.VITESSE). Une copie d'objet (LIST, un membre
+    // objet d'une structure) ne se garde pas.
+    if (project_->recording.popups)
+        for (std::size_t i = 0; i < slots_.size(); ++i) {
+            const View* pv = viewOf(slots_[i].view);
+            for (const auto& c : slots_[i].copies)
+                for (const auto& [member, value] : c.values) {
+                    const auto path = c.paths.find(member);
+                    r.value(copyKeyOf(i, c.name, member), value, rec::KeyKind::Public,
+                            (pv ? pv->name + "." : std::string{}) + c.name + (path == c.paths.end() ? member : path->second));
+                }
+        }
     r.endSample();
     // ---- l'ecran
     rec::Screen sc;
@@ -410,8 +449,13 @@ void Runtime::askStopRecording(double now, const std::string& source) {
 }
 
 std::string Runtime::finishRecording(bool keep, const std::string& name, const std::string& description, const std::string& password,
-                                     double now, std::string* why) {
-    return stopRecording(keep, now, &name, &description, &password, why);
+                                     double now, std::string* why, bool unprotect) {
+    // 1.14.0 (relecture M4b) : LE MOT DE PASSE NE SAUTE JAMAIS EN SILENCE. Vide (Valider sans le retaper, Annuler,
+    // Echap, une fenetre absente) : celui du depart reste ; seule la case Retirer la protection le retire.
+    const std::string pwd = unprotect ? std::string{} : (password.empty() && rec_ ? rec_->password : password);
+    if (unprotect && rec_ && !rec_->password.empty())
+        log("Enregistrement", rec_->source.empty() ? std::string("IHM") : rec_->source, rec_->name + " : protection retir\xC3\xA9" "e \xC3\xA0 l'arr\xC3\xAAt");
+    return stopRecording(keep, now, &name, &description, &pwd, why);
 }
 
 // ======================================================================== rejouer ==
@@ -420,7 +464,22 @@ const rec::Player* Runtime::replayPlayer() const { return rec_ && replayOn_ ? re
 const sim::Value* Runtime::replayValue(const std::string& upperKey) const {
     if (!replayOn_ || !rec_ || !rec_->player) return nullptr;
     if (upperKey.rfind("SYS.RECORDING", 0) == 0 || upperKey.rfind("SYS.REPLAY", 0) == 0) return nullptr;
-    return rec_->player->valueOf(upperKey);
+    return (rec_->reading ? rec_->reading : rec_->player.get())->valueOf(upperKey);
+}
+
+void Runtime::replayWriteRefused(const std::string& name) {
+    if (!rec_ || rec_->writeSaid) return;
+    rec_->writeSaid = true;
+    logAt(LogLevel::Warning, "Relecture", source_.empty() ? std::string("IHM") : source_,
+          "\xC3\xA9" "criture refus\xC3\xA9" "e : " + name + " - une relecture est affich\xC3\xA9" "e, l'IHM ne commande rien (ni variable, ni "
+          "automate, ni \xC3\xA9quipement, ni recette) ; les suivantes ne sont pas dites");
+}
+
+void Runtime::holdClock(double seconds) {
+    if (!(seconds > 0)) return;
+    const long long ms = static_cast<long long>(std::llround(seconds * 1000.0));
+    startWallMs_ += ms;
+    heldWallMs_ += ms;
 }
 
 std::vector<rec::Item> Runtime::recordings(bool fresh) const {
@@ -452,6 +511,8 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
         const std::string folder = recordingsFolder();
         const std::string name = trimOf(req.name);
         if (name.empty()) return no(rec::Status::NotFound, "quel enregistrement rejouer ? (son nom)");
+        // UN NOM N'EST JAMAIS UN CHEMIN ({formule} rendue : ..\\Projet, CON...).
+        if (std::string w; !rec::validName(name, &w)) return no(rec::Status::NotFound, "nom d'enregistrement refus\xC3\xA9 : " + w);
         path = rec::pathOf(folder, name);
         if (!fileExists(path)) {
             path.clear();
@@ -478,6 +539,18 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     s.live.overrides = overrides_;
     s.live.pressed = pressed_;
     s.live.focused = focused_;
+    s.live.trends = std::move(trends_);
+    s.live.charts = std::move(charts_);
+    s.live.trendPaused = std::move(trendPaused_);
+    s.live.chartNext = std::move(chartNext_);
+    s.live.trendStates = std::move(trendStates_);
+    s.live.chartResets = std::move(chartResets_);
+    trends_.clear();
+    charts_.clear();
+    trendPaused_.clear();
+    chartNext_.clear();
+    trendStates_.clear();
+    chartResets_.clear();
     pressed_ = kNoId;
     focused_ = kNoId;
     animation_.reset();
@@ -496,6 +569,11 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     s.overrides = nullptr;
     s.alarms = nullptr;
     s.overridesApplied = s.alarmsApplied = false;
+    s.writeSaid = false;
+    s.chartPlayer.reset();
+    s.reading = nullptr;
+    s.chartsAt = -1;
+    s.chartsShown.clear();
     s.source2 = req.source;
     s.player->seek(std::max(0.0, req.from));
     // ---- ce qui n'existe plus dans le projet : ignore, dit une fois
@@ -543,6 +621,24 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
         s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : il se rejoue quand m\xC3\xAAme";
         logAt(LogLevel::Info, "Relecture", header.name, s.note);
     }
+    // 1.14.0 (relecture M4b) : CE QUI N'EST PAS DANS LA PISTE - une fleche de tendance, un compteur de production gardent
+    // leur memoire du direct (figee) : le bandeau le dit, quand une vue rejouee en a.
+    {
+        bool frozenKinds = false;
+        const auto look = [&](const std::string& name) {
+            const View* v = project_->viewByName(name);
+            if (const View* shown = v ? viewOf(v->id) : nullptr)
+                for (const auto& o : shown->objects)
+                    frozenKinds = frozenKinds || o.kind == Kind::TrendArrow || o.kind == Kind::ProductionCounter;
+        };
+        for (const auto& sc : track->screens) {
+            look(sc.view);
+            for (const auto& p : sc.popups) look(p.view);
+        }
+        if (frozenKinds)
+            s.note += std::string(s.note.empty() ? "" : " \xC2\xB7 ")
+                    + "les fl\xC3\xA8" "ches de tendance et les compteurs de production montrent l'\xC3\xA9tat du direct (ils ne sont pas dans la piste)";
+    }
     replayOn_ = true;
     composed_.clear();
     boundCalls_.clear();
@@ -572,7 +668,8 @@ void Runtime::replayApply(bool force) {
             currentScope_ = buildScope(*v, sc->arguments);
         }
         slots_.clear();
-        for (const auto& p : sc->popups) {
+        for (std::size_t rank = 0; rank < sc->popups.size(); ++rank) {
+            const auto& p = sc->popups[rank];
             const View* pv = project_->viewByName(p.view);
             if (!pv) continue;
             PopupSlot slot;
@@ -582,6 +679,22 @@ void Runtime::replayApply(bool force) {
             slot.placement = formatNumber(p.x) + "," + formatNumber(p.y);
             slot.arguments = p.arguments;
             slot.scope = buildScope(*pv, p.arguments);
+            // 1.14.0 (relecture M4b) : un parametre Copie / Les deux designe sa copie enregistree ($P<rang>_<PARAMETRE>).
+            if (std::any_of(pv->params.begin(), pv->params.end(), [](const ViewParam& vp) { return vp.mode != ParamMode::Reference; })) {
+                // Comme captureCopies : les parametres Reference tels quels, ceux en Copie / Les deux designent leur copie.
+                auto scope = std::make_shared<Scope>();
+                if (slot.scope)
+                    for (const auto& n : slot.scope->names()) {
+                        const auto* prm = pv->param(n);
+                        if (prm && prm->mode != ParamMode::Reference) continue;
+                        if (const auto* a = slot.scope->alias(n)) scope->setAlias(n, *a);
+                        else if (const auto* val = slot.scope->value(n)) scope->setValue(n, *val);
+                        else if (auto obj = slot.scope->object(n)) scope->setObject(n, std::move(obj));
+                    }
+                for (const auto& vp : pv->params)
+                    if (vp.mode != ParamMode::Reference) scope->setAlias(vp.name, copyKeyOf(rank, vp.name, {}));
+                slot.scope = std::move(scope);
+            }
             slots_.push_back(std::move(slot));
         }
         syncPopupIds();
@@ -626,6 +739,80 @@ void Runtime::replayApply(bool force) {
                 alarms_.push_back(std::move(x));
             }
     }
+    // ---- les courbes et les graphiques a memoire : refaits depuis la piste jusqu'a la position
+    replayCharts();
+}
+
+// LES COURBES REJOUEES. Une courbe (un chronogramme, un histogramme, une courbe XY) montre une memoire : en relecture,
+// elle se refait depuis la piste - un second lecteur la parcourt, de la largeur de la courbe avant la position jusqu'a
+// elle, au pas de l'enregistrement (au plus 3000 instants), et chaque instant passe par le meme echantillonnage qu'en
+// direct (sampleTrends, sampleCharts : les plumes sont des formules, lues dans la piste a cet instant). En lecture
+// continue, seuls les instants nouveaux s'ajoutent ; aller en arriere, sauter plus loin que la largeur ou changer de vue
+// refait tout. Les instants sont poses sur l'heure de l'IHM (tenue pendant la relecture) : la position est le bord droit.
+void Runtime::replayCharts() {
+    if (!replayOn_ || !rec_ || !rec_->player || !project_) return;
+    auto& s = *rec_;
+    std::vector<Id> shown{current_};
+    for (const Id p : popups_)
+        if (std::find(shown.begin(), shown.end(), p) == shown.end()) shown.push_back(p);
+    const double length = s.player->length();
+    double span = 0;
+    std::string sig;
+    for (const Id id : shown) {
+        sig += std::to_string(id) + argumentsKey(id) + ";";
+        const View* v = viewOf(id);
+        if (!v) continue;
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::Trend && so.kind != Kind::StateChart && so.kind != Kind::Histogram && so.kind != Kind::XYChart) continue;
+            Object o = so;
+            evaluateProps(id, o);
+            if (o.kind == Kind::Trend || o.kind == Kind::StateChart) span = std::max(span, std::max(1.0, o.number("duration", 60)) * 1.2 + 1.0);
+            else if (o.kind == Kind::Histogram) span = std::max(span, o.number("window", 600) > 0 ? o.number("window", 600) : length);
+            else span = length;                         // une courbe XY accumule depuis sa remise a zero
+        }
+    }
+    if (span <= 0) return;
+    const double pos = s.player->position();
+    const double base = now_ - pos;
+    const bool rebuild = s.chartsAt < 0 || pos + 1e-9 < s.chartsAt || sig != s.chartsShown || pos - s.chartsAt > span;
+    double from = 0;
+    if (rebuild) {
+        trends_.clear();
+        charts_.clear();
+        chartNext_.clear();
+        chartResets_.clear();
+        trendStates_.clear();
+        trendPaused_.clear();
+        from = std::max(0.0, pos - std::min(span, length));
+        s.chartStep = std::max(1.0 / std::clamp(s.header.rateHz, 1, 50), (pos - from) / 3000.0);
+        if (!s.chartPlayer) s.chartPlayer = std::make_unique<rec::Player>(s.track);
+        s.chartPlayer->seek(from);
+        s.chartsBase = base;
+        s.chartsShown = sig;
+    } else {
+        // La position a avance : les instants deja poses glissent vers la gauche d'autant.
+        const double delta = base - s.chartsBase;
+        if (delta != 0) {
+            for (auto* store : {&trends_, &charts_})
+                for (auto& [key, series] : *store)
+                    for (auto& one : series)
+                        for (auto& pt : one.points) pt.first += delta;
+            for (auto& [key, next] : chartNext_) next += delta;
+            s.chartsBase = base;
+        }
+        from = s.chartsAt + s.chartStep;
+    }
+    s.reading = s.chartPlayer.get();
+    ++logMute_;
+    for (double t = from; t <= pos + 1e-9; t += s.chartStep) {
+        s.chartPlayer->advanceTo(t);
+        sampleTrends(base + t);
+        sampleCharts(base + t);
+        s.chartsAt = t;
+    }
+    --logMute_;
+    s.reading = nullptr;
+    if (s.chartsAt < 0) s.chartsAt = pos;
 }
 
 void Runtime::replaySounds(double from, double to) {
@@ -721,8 +908,20 @@ bool Runtime::quitReplay(double now, const std::string& source) {
     overrides_ = s.live.overrides;
     pressed_ = kNoId;
     focused_ = s.live.focused;
+    // Les courbes du direct, telles qu'elles etaient (celles refaites depuis la piste partent).
+    trends_ = std::move(s.live.trends);
+    charts_ = std::move(s.live.charts);
+    trendPaused_ = std::move(s.live.trendPaused);
+    chartNext_ = std::move(s.live.chartNext);
+    trendStates_ = std::move(s.live.trendStates);
+    chartResets_ = std::move(s.live.chartResets);
+    s.live.trends.clear();
+    s.live.charts.clear();
     animation_.reset();
     replayOn_ = false;
+    s.reading = nullptr;
+    s.chartPlayer.reset();
+    s.chartsAt = -1;
     s.player.reset();
     s.track.reset();
     s.screen = nullptr;
@@ -810,9 +1009,10 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
         r.name = text(0);
         // Un texte a trous, comme le Nom de l'Enregistreur et de l'action : 'Essai {SYS.Date}'.
         if (r.name.find('{') != std::string::npos) r.name = trimOf(TextTemplate::compile(r.name).render(environment()));
+        // DUREE_MAX : un TIME, ou un nombre de millisecondes (C, C++ : comme IHM_APRES et la fiche).
         if (args.size() > 1) {
             const auto& d = args[1].second;
-            r.maxSeconds = d.type() == sim::Type::Time ? static_cast<double>(d.asInteger()) / 1000.0 : d.asReal();
+            r.maxSeconds = d.type() == sim::Type::Time ? static_cast<double>(d.asInteger()) / 1000.0 : d.asReal() / 1000.0;
         }
         r.password = text(2);
         r.source = source;
@@ -855,8 +1055,9 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
         return true;
     }
     if (u == "IHM_RELECTURE_ALLER") {
+        // POSITION : un TIME, ou un nombre de millisecondes (C, C++ : comme la fiche).
         const auto& v = args.empty() ? sim::Value{} : args[0].second;
-        const double s = v.type() == sim::Type::Time ? static_cast<double>(v.asInteger()) / 1000.0 : v.asReal();
+        const double s = v.type() == sim::Type::Time ? static_cast<double>(v.asInteger()) / 1000.0 : v.asReal() / 1000.0;
         result = sim::Value::boolean(replaySeek(s));
         return true;
     }
@@ -885,7 +1086,10 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
     if (u == "IHM_ENREG_EXPORTER") {
         std::string why, written;
         const auto it = item(trimOf(text(0)));
-        const bool ok = it && rec::exportFile(recordingsFolder(), it->name, text(1), &written, &why);
+        // Personne pour repondre a "Remplacer ?" : un fichier deja la garde le sien, la copie prend un nom libre.
+        rec::ExportOptions eo;
+        eo.ifExists = rec::ExportOptions::IfExists::FreeName;
+        const bool ok = it && rec::exportFile(recordingsFolder(), it->name, text(1), &written, &why, eo);
         if (!it) said("enregistrement introuvable : " + text(0));
         else if (!ok) said(why);
         else log("Enregistrement", source, it->name + " export\xC3\xA9 vers " + written);
@@ -950,14 +1154,18 @@ int Runtime::runCommand(const rec::Command& c, double now, std::string* message)
             r.maxSeconds = c.duration;
             r.password = c.password;
             r.source = source;
-            if (!startRecording(r, now, &why)) return say(rec::kExitNoHmi, why);
+            if (replayOn_ || recordOn_ || (rec_ && rec_->stopping))
+                return say(rec::kExitBusy, replayOn_ ? std::string("occup\xC3\xA9" "e : une relecture est affich\xC3\xA9" "e")
+                                                     : "occup\xC3\xA9" "e : un enregistrement tourne d\xC3\xA9j\xC3\xA0 (" + rec_->name + ")");
+            if (recordingsFolder().empty()) return say(rec::kExitFile, "pas de dossier des enregistrements : le projet n'est pas enregistr\xC3\xA9");
+            if (!startRecording(r, now, &why)) return say(rec::kExitFile, why);
             return say(rec::kExitDone, "enregistrement d\xC3\xA9marr\xC3\xA9 : " + rec_->name);
         }
         case rec::Command::Kind::Stop: {
             if (!recordOn_) return say(rec::kExitNotFound, "aucun enregistrement ne tourne");
             const std::string kept = stopRecording(!c.discard, now, nullptr, nullptr, nullptr, &why);
             if (c.discard) return say(rec::kExitDone, "enregistrement jet\xC3\xA9");
-            if (kept.empty()) return say(rec::kExitNoHmi, why);
+            if (kept.empty()) return say(rec::kExitFile, why);
             return say(rec::kExitDone, "enregistrement gard\xC3\xA9 : " + kept);
         }
         case rec::Command::Kind::Replay: {
@@ -966,11 +1174,12 @@ int Runtime::runCommand(const rec::Command& c, double now, std::string* message)
             r.speed = c.speed;
             r.password = c.password;
             r.source = source;
+            if (recordOn_ || (rec_ && rec_->stopping)) return say(rec::kExitBusy, "occup\xC3\xA9" "e : un enregistrement tourne (arr\xC3\xAAte-le d'abord)");
             const rec::Status st = startReplay(r, now, &why);
             if (st == rec::Status::Ok) return say(rec::kExitDone, "relecture de " + c.name);
             if (st == rec::Status::NotFound) return say(rec::kExitNotFound, why);
             if (st == rec::Status::BadPassword || st == rec::Status::PasswordNeeded) return say(rec::kExitBadPassword, why);
-            return say(rec::kExitNoHmi, why);
+            return say(rec::kExitFile, why);
         }
         case rec::Command::Kind::QuitReplay:
             if (!quitReplay(now, source)) return say(rec::kExitNotFound, "aucune relecture n'est affich\xC3\xA9" "e");
@@ -1073,7 +1282,10 @@ bool Runtime::recordingCommand(const View& v, const Object* o, const Action& a, 
         case Operation::RecordingExport: {
             const std::string name = rendered(a.target);
             std::string why, written;
-            if (rec::exportFile(recordingsFolder(), name, rendered(a.value), &written, &why)) log("Enregistrement", source, name + " export\xC3\xA9 vers " + written);
+            // Un nom rendu ({formule}) n'est jamais un chemin (exportFile le verifie) ; un fichier deja la : un nom libre.
+            rec::ExportOptions eo;
+            eo.ifExists = rec::ExportOptions::IfExists::FreeName;
+            if (rec::exportFile(recordingsFolder(), name, rendered(a.value), &written, &why, eo)) log("Enregistrement", source, name + " export\xC3\xA9 vers " + written);
             else log("Erreur", source, "exporter l'enregistrement : " + why);
             break;
         }

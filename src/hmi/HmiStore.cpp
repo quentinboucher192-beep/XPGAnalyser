@@ -1,4 +1,5 @@
 #include "HmiStore.hpp"
+#include "HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe d'un Enregistreur)
 #include "HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees (le cache, la resolution)
 #include "HmiKeys.hpp"            // 1.11.23 : la touche d'un raccourci
 #include "HmiEnums.hpp"            // 1.10 (E) : les enumerations IHM
@@ -448,7 +449,10 @@ std::string serializeObjectLines(const Object& o) {
        + fieldInt("calque", o.layer) + fieldInt("parent", o.parent) + fieldBool("verrou", o.locked)
        + fieldBool("cache", o.hidden) + "\n";
     for (const auto& p : o.props) {
-        s += "prop" + fieldBare("cle", p.key) + field("valeur", p.value);
+        // 1.14.0 (relecture M4b) : le mot de passe d'un Enregistreur n'est jamais ecrit en clair (le projet, le code
+        // brut, un export) : masque comme celui des actions (notify::maskSecret) ; deja masque, tel quel.
+        const bool secret = o.kind == Kind::Recorder && p.key == "password" && !p.value.empty() && p.value.rfind("m1:", 0) != 0;
+        s += "prop" + fieldBare("cle", p.key) + field("valeur", secret ? notify::maskSecret(p.value) : p.value);
         if (!p.expr.empty()) s += field("expr", p.expr);
         s += "\n";
     }

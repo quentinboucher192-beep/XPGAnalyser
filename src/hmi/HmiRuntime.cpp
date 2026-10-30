@@ -463,6 +463,15 @@ public:
         if (aliases)
             if (const auto* v = aliases->value(n)) { out = *v; return true; }
         const std::string r = resolved(n);
+        // 1.14.0 (relecture M4b) : une relecture - un parametre Copie / Les deux d'une popup rejouee se lit dans la piste
+        // ($P0_TITRE : la popup de rang 0, son parametre Titre).
+        if (rt_.replayOn_ && !r.empty() && r[0] == '$') {
+            if (const sim::Value* v = rt_.replayValue(upper(r))) {
+                out = *v;
+                return true;
+            }
+            return false;
+        }
         // 1.9 : un parametre Copie / Les deux - la copie de la popup, jamais l'original.
         if (!r.empty() && r[0] == '$') return rt_.copyRead(r, out);
         // 1.14.0 (M4) : UNE RELECTURE - la valeur de la piste passe avant tout le reste (variables IHM, automate,
@@ -522,6 +531,14 @@ public:
             return false;
         }
         const std::string r = resolved(n);
+        // 1.14.0 (relecture M4b) : UNE RELECTURE NE COMMANDE RIEN. Tant qu'elle est affichee, aucune ecriture ne part -
+        // ni variable IHM (liee a un equipement ou non), ni automate, ni propriete, ni recette ; les variables locales
+        // du code, oui (plus haut). Ignoree comme une variable forcee (le script continue : IHM_RELECTURE_ALLER apres
+        // IHM_REJOUER), et dite une fois dans la Console.
+        if (rt_.replayOn_) {
+            rt_.replayWriteRefused(r);
+            return true;
+        }
         // Une fonction appelee par une expression de vue calcule, elle n'ecrit
         // rien au-dehors (une expression ne modifie jamais le procede).
         if (rt_.readOnly_ > 0) {
@@ -628,6 +645,7 @@ public:
         if (aliases && (aliases->value(n) || aliases->object(n))) return true;     // 1.12.4 : un parametre objet
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') {   // 1.9 : la copie d'un parametre
+            if (rt_.replayOn_) return rt_.replayValue(upper(r)) != nullptr;   // 1.14.0 (relecture M4b) : celle de la piste
             sim::Value probe;
             return rt_.copyRead(r, probe) || rt_.copyObject(r) != nullptr;      // 1.12.4 : ou son objet
         }
@@ -2371,6 +2389,7 @@ void Runtime::log(std::string kind, std::string source, std::string message) {
 }
 
 void Runtime::logAt(LogLevel level, std::string kind, std::string source, std::string message, int line) {
+    if (logMute_ > 0) return;           // 1.14.0 (relecture M4b) : une relecture qui refait ses courbes (une remise a zero XY)
     JournalEntry e;
     e.time = now_ - startNow_;
     e.stamp = stampOf(now_);
@@ -4032,8 +4051,16 @@ void Runtime::runActions(const View& v, const Object* o, Trigger t, double now) 
     // plus alors ce que `v` designait.
     const std::vector<Action> copy = list;
     const auto origins = o ? std::vector<std::string>{} : actionOriginNames(v);
+    std::size_t notDone = 0;
     for (std::size_t i = 0; i < copy.size(); ++i) {
         if (copy[i].trigger != t) continue;
+        // 1.14.0 (relecture M4b) : UNE ACTION A LANCE UNE RELECTURE - la suite ne commande plus rien. Seules les actions
+        // du groupe Relecture (Rejouer, Pause, Avancer ou reculer, Vitesse, Quitter) passent encore ; apres Quitter la
+        // relecture, la suite reprend.
+        if (replayOn_ && !operationIsReplay(copy[i].operation)) {
+            ++notDone;
+            continue;
+        }
         actionOrigin_ = i < origins.size() ? origins[i] : std::string{};
         fire(v, o, copy[i], now, byUser);
         // 1.11.23 : une saisie refusee par Valider les saisies arrete le geste (la popup reste).
@@ -4043,6 +4070,10 @@ void Runtime::runActions(const View& v, const Object* o, Trigger t, double now) 
         }
     }
     actionOrigin_.clear();
+    if (notDone > 0)
+        log("Relecture", where(v, o),
+            std::to_string(notDone) + (notDone > 1 ? " actions" : " action") + " de la suite non faite" + (notDone > 1 ? "s" : "")
+                + " : une relecture est affich\xC3\xA9" "e, l'IHM ne commande rien (seules Pause, Avancer, Vitesse et Quitter passent)");
 }
 
 std::vector<std::string> Runtime::actionOriginNames(const View& v) const {
@@ -4485,6 +4516,7 @@ void Runtime::start(double now) {
     exchangeSampled_ = -1;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch()).count();
+    heldWallMs_ = 0;                    // 1.14.0 (relecture M4b) : le temps tenu par les relectures
     lastCycle_ = -1;
     journal_.clear();
     errorCount_ = 0;
@@ -4874,6 +4906,7 @@ void Runtime::prime(double now) {
     now_ = startNow_ = now;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch()).count();
+    heldWallMs_ = 0;
     journal_.clear();
     errorCount_ = 0;
     lastError_.clear();
@@ -5615,6 +5648,11 @@ bool Runtime::applyValues(const Recipe& recipe, const std::vector<std::string>& 
         if (why) *why = reason;
         return false;
     };
+    // 1.14.0 (relecture M4b) : une relecture affichee - une recette n'ecrit rien.
+    if (replayOn_) {
+        event("Recette", r->name, label + " refus\xC3\xA9 : une relecture est affich\xC3\xA9" "e (l'IHM ne commande rien) ; rien n'est \xC3\xA9" "crit");
+        return fail("une relecture est affich\xC3\xA9" "e : rien ne s'\xC3\xA9" "crit");
+    }
     // TOUT OU RIEN : chaque valeur est verifiee (lisible, dans ses bornes,
     // variable connue) avant d'en ecrire une seule. Un jeu a moitie applique
     // laisserait l'installation dans un etat qu'aucune recette ne decrit.
@@ -6344,6 +6382,14 @@ std::string Runtime::argumentsKey(Id view) const {
 }
 
 std::vector<Id> Runtime::samplingPlan(double now) {
+    // 1.14.0 (relecture M4b) : une relecture refait les courbes des vues montrees seulement (la piste ne dit rien des
+    // autres) - le plan du direct ne bouge pas.
+    if (replayOn_) {
+        std::vector<Id> shown{current_};
+        for (const Id p : popups_)
+            if (std::find(shown.begin(), shown.end(), p) == shown.end()) shown.push_back(p);
+        return shown;
+    }
     if (project_ && (now - samplePlanAt_ >= 1.0 || now < samplePlanAt_)) {
         samplePlanAt_ = now;
         samplePlan_.clear();

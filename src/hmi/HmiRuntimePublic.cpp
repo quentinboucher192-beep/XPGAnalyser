@@ -457,7 +457,8 @@ bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
         const auto st = hooks_.station ? hooks_.station() : std::pair<bool, int>{false, 1};
         return n == "StationMode" ? flag(st.first) : integer(st.first ? std::max(1, st.second) : 1);
     }
-    if (n == "StartTime") return text(running_ ? dateStampOf(startNow_).substr(0, 19) : std::string{});
+    // 1.14.0 (relecture M4b) : l'heure tenue par une relecture (holdClock) ne deplace pas le demarrage.
+    if (n == "StartTime") return text(running_ ? dateStampOf(startNow_ - static_cast<double>(heldWallMs_) / 1000.0).substr(0, 19) : std::string{});
     if (n == "Uptime") return duration(running_ ? now_ - startNow_ : 0.0);
     if (n == "UptimeSeconds") return dint(running_ ? static_cast<long long>(std::floor(now_ - startNow_)) : 0);
     if (n == "CycleTime") return integer(p ? p->config.cycleMs : 0);
