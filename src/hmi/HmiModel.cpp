@@ -1403,6 +1403,34 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.setNumber("radius", 6);
             o.setFlag("pilotable", true);
             break;
+        case Kind::FileExplorer:
+            // 1.14.1 (lot N5) : l'Explorateur de fichiers - "folder" : un dossier ou un .zip (relatif : au dossier du
+            // projet ; vide : ses ressources), lu a l'ouverture de la vue et sur Rafraichir ("allowRefresh") ; "filter"
+            // (*.csv;*.pdf), la recherche Nom contient ("showSearch"), le tri ("sortBy", "sortOrder"), les colonnes
+            // ("showSize", "showDate") ; "pickTo" : la variable qui recoit le chemin de la ligne choisie ; Extraire une
+            // entree de zip ("allowExtract", decoche : lecture seule) vers "extractTo" ; "maxItems" lignes au plus.
+            common(o, x, y, 560, 320);
+            o.set("folder", "");
+            o.set("filter", "");
+            o.setFlag("showSearch", true);
+            o.set("sortBy", "nom");
+            o.set("sortOrder", "croissant");
+            o.setFlag("showSize", true);
+            o.setFlag("showDate", true);
+            o.set("pickTo", "");
+            o.setFlag("allowRefresh", true);
+            o.setFlag("allowExtract", false);
+            o.set("extractTo", "donnees/extraits");
+            o.setNumber("maxItems", 2000);
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 13);
+            o.set("textColor", "#DDE3EA");
+            o.set("fill", "#1F252E");
+            o.set("stroke", "#3A4556");
+            o.set("accent", "#2F6FD6");
+            o.setNumber("radius", 6);
+            o.setFlag("pilotable", true);
+            break;
         case Kind::UnitConverter:
             // 1.14.1 (lot N5) : le Convertisseur d'unites - la case Valeur (ce que tape l'operateur ; sinon "value", la
             // Valeur de depart : un nombre ou une expression, une mesure dont l'unite devient celle de depart), les

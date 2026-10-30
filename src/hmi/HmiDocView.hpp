@@ -33,6 +33,7 @@
 #include "HmiModel.hpp"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -166,3 +167,123 @@ Effect typeKey(State&, const Layout&, const std::vector<doc::Size>& sizes, std::
 bool showHit(State&, const Layout&, const std::vector<doc::Size>& sizes, const std::vector<doc::Hit>& hits, int index);
 
 } // namespace hmi::docview
+
+// =============================================================================
+//  1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS, SANS ECRAN (l'objet FileExplorer)
+// -----------------------------------------------------------------------------
+//  Le contenu d'un dossier ou d'un .zip - un zip se parcourt comme un dossier, un
+//  zip dans un zip aussi (s'il est petit) -, une ligne par element : son genre,
+//  son nom, sa taille, sa date ; le tri par colonne ; le filtre d'extensions et
+//  la recherche ; l'infobulle d'une ligne ; l'extraction d'une entree de zip.
+//
+//  LECTURE SEULE : rien n'est efface, rien n'est ecrase. On ne remonte jamais
+//  au-dessus de la source (un nom qui sort, un lien qui mene ailleurs : refuses).
+//  UN ZIP HOSTILE NE CASSE RIEN : ses noms ../ ou absolus sont ramenes dans le
+//  zip (et le disent), ses tailles annoncees ne sont crues qu'apres lecture et
+//  bornees, ses entrees comptees au plus kMaxZipEntries.
+//
+//  LE REPERE de la geometrie : les coordonnees locales de l'objet (comme la
+//  visionneuse). Les gestes, des "parties" : monter, ariane:N, recherche,
+//  rafraichir, extraire, colonne:nom|taille|date, parent, ligne:N, ouvrir:N,
+//  liste:haut, liste:bas.
+// =============================================================================
+namespace hmi::explorer {
+
+inline constexpr std::size_t   kMaxZipEntries = 100000;          // au-dela, le zip n'est pas lu en entier (dit)
+inline constexpr std::uint64_t kMaxNestedZip = 32ull << 20;      // un zip dans un zip : 32 Mio au plus, en memoire
+inline constexpr std::uint64_t kMaxExtract = 256ull << 20;       // une entree extraite : 256 Mio au plus
+inline constexpr std::size_t   kFolderCount = 5000;              // l'infobulle d'un dossier : le compte s'arrete la
+
+enum class Genre : std::uint8_t { Folder, Zip, Image, Text, Pdf, Sound, Video, Csv, Project, Other };
+[[nodiscard]] Genre genreOf(std::string_view name, bool folder);
+[[nodiscard]] std::string genreLabel(Genre, std::string_view name = {});   // "Dossier", "Archive zip", "Image PNG"...
+[[nodiscard]] std::string_view genreTag(Genre);                            // l'etiquette de l'icone : "ZIP", "PDF", "CSV"...
+
+struct Entry {
+    std::string   name;              // le nom montre
+    std::string   path;              // le chemin complet (dans un zip : <le zip>\dossier\nom, comme l'Explorateur de Windows)
+    Genre         genre{Genre::Other};
+    bool          folder{false};     // un dossier (ou un dossier d'un zip)
+    bool          inZip{false};      // une entree d'un zip
+    std::uint64_t size{0};           // octets (un dossier : 0, non compte)
+    std::uint64_t packed{0};         // dans un zip : la taille compressee
+    std::int64_t  modified{0};       // millisecondes depuis 1970, a l'heure du poste ; 0 : inconnue
+    std::int64_t  created{0};        // ... la creation, quand le systeme la donne
+    bool          suspicious{false}; // un nom de zip ramene dans le zip (../, un chemin absolu)
+};
+
+// La source et le dossier courant : `root` un dossier ou un .zip (un chemin reel), `at` les noms sous lui.
+struct Location {
+    std::string              root;
+    std::vector<std::string> at;
+};
+
+struct Options {
+    std::vector<std::string> extensions;   // le filtre ("csv", "pdf") ; vide : tout. Les dossiers et les zips passent.
+    std::string              search;       // Nom contient (sans casse ni accents)
+    std::size_t              maxItems{2000};
+};
+
+struct Listing {
+    std::vector<Entry> entries;        // celles qui passent le filtre et la recherche (non triees)
+    std::size_t        total{0};       // ce que contient le dossier (avant le filtre)
+    bool               truncated{false};   // maxItems atteint : la liste s'arrete la, et le dit
+    bool               inZip{false};   // le dossier courant est dans un zip
+    std::size_t        suspicious{0};  // des noms ramenes dans le zip
+    std::string        error;          // la source ou le dossier ne se lit pas (vide : bon)
+};
+[[nodiscard]] Listing list(const Location&, const Options&);
+
+// Nom contient : sans casse ni accents (vide : tout).
+[[nodiscard]] bool nameContains(std::string_view name, std::string_view search);
+// Un nom d'etape valable (pas vide, ni . ni .., sans / \ : ni caractere de controle).
+[[nodiscard]] bool validStep(std::string_view name);
+// "a/b\\c" -> {"a","b","c"} ; faux : une etape invalide (.., un chemin absolu).
+bool splitSteps(std::string_view path, std::vector<std::string>& out);
+
+enum class SortKey : std::uint8_t { Name, Size, Date, Genre };
+[[nodiscard]] SortKey sortKeyFrom(std::string_view);   // "nom", "taille", "date", "genre"
+[[nodiscard]] std::string_view sortKeyWord(SortKey);
+void sort(std::vector<Entry>&, SortKey, bool descending);   // les dossiers toujours d'abord
+
+// Le filtre d'extensions ("*.csv;*.pdf", "csv, pdf") : "" lisible ; sinon la raison.
+[[nodiscard]] std::string filterProblem(std::string_view text);
+
+// L'infobulle d'une ligne : le titre (le nom) et ses lignes - le chemin complet, le genre, la taille (dans un zip : la
+// taille compressee et le taux), les dates, pour un dossier ses elements et sa taille totale (bornes), pour une image
+// ses dimensions, pour un texte ses premieres lignes (ce qui se lit vite).
+struct Tip {
+    std::string title, body;
+};
+[[nodiscard]] Tip tipOf(const Location&, const Entry&);
+
+// Extraire un fichier d'un zip vers `folder` : sous son nom seul (jamais ses dossiers : rien ne sort de `folder`),
+// sans ecraser un fichier, borne a kMaxExtract. Vrai : `written` dit ou ; faux : `why`.
+bool extract(const Location&, const Entry&, const std::string& folder, std::string& written, std::string& why);
+
+// "12,4 Ko", "980 octets", "3,1 Mo" ; "30/10/2026 14:02" (vide : inconnue).
+[[nodiscard]] std::string sizeText(std::uint64_t bytes);
+[[nodiscard]] std::string dateText(std::int64_t ms);
+
+// ---- la geometrie : le dessin et le clic la partagent ----
+struct Layout {
+    Box bar, up, search, refresh, extract;     // la barre : remonter, la recherche, Rafraichir, Extraire
+    std::vector<Box> crumbs;                    // le fil d'Ariane, une boite par etape (0 : la source)
+    std::size_t firstCrumb{0};                  // les premieres qui ne tiennent pas : "..." devant
+    Box header, colName, colSize, colDate;      // les titres des colonnes (un clic trie)
+    Box list;                                   // la zone des lignes
+    Box parent;                                 // la ligne ".." (vide : a la source)
+    std::vector<Box> rows;                      // les lignes montrees
+    std::size_t first{0};                       // le rang de la premiere
+    Box upArrow, downArrow;                     // defiler (vides : tout tient)
+    Box status;                                 // la ligne du bas : le compte, le filtre, le message
+    double rowHeight{24};
+};
+// `crumbs` : les libelles du fil ; `parent` : une ligne ".." (pas a la source) ; `rows` : les entrees.
+[[nodiscard]] Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh,
+                              bool extract, bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first);
+// "monter", "ariane:N", "recherche", "rafraichir", "extraire", "colonne:nom", "colonne:taille", "colonne:date", "parent",
+// "ligne:N" (N : le rang dans la liste), "liste:haut", "liste:bas" ; "" : rien.
+[[nodiscard]] std::string hit(const Layout&, double x, double y);
+
+} // namespace hmi::explorer

@@ -129,6 +129,9 @@ enum class Kind : std::uint8_t {
     // 1.14.1 (lot N5), A LA FIN : le Convertisseur d'unites (une valeur, l'unite de depart, celle
     // d'arrivee, le resultat - le calcul de EN ; HmiUnits.hpp), dans les Commandes apres le Melangeur.
     UnitConverter,
+    // 1.14.1 (lot N5), A LA FIN : l'Explorateur de fichiers (le contenu d'un dossier ou d'un .zip, une infobulle
+    // par ligne ; HmiDocView.hpp : hmi::explorer), dans les Medias apres la visionneuse de documents.
+    FileExplorer,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -138,6 +141,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Line,  Kind::Polygon,   Kind::Indicator,   Kind::ProgressBar, Kind::Gauge,
     Kind::Table, Kind::History,   Kind::Trend,       Kind::List,      Kind::Video,
     Kind::DocumentViewer,   // 1.12.30 : la visionneuse de documents, apres la video
+    Kind::FileExplorer,     // 1.14.1 (lot N5) : l'explorateur de fichiers, apres la visionneuse
     Kind::Container, Kind::RecipeManager, Kind::AnimatedImage,
     Kind::InputField, Kind::LoginPanel, Kind::LogoutButton, Kind::UserInfo, Kind::PasswordChange, Kind::UserManager,
     // lot 9
@@ -361,9 +365,10 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::SoundMute,           "SoundMute",           "Coupe-son"},                               // 1.14.0
     {Kind::VolumeMixer,         "VolumeMixer",         "M\xC3\xA9langeur de volume"},
     {Kind::UnitConverter,       "UnitConverter",       "Convertisseur d'unit\xC3\xA9s"},             // 1.14.1 (lot N5)
+    {Kind::FileExplorer,        "FileExplorer",        "Explorateur de fichiers"},
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::UnitConverter) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::FileExplorer) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;

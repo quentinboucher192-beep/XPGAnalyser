@@ -129,6 +129,7 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::SoundMute:            return HmiGlyph::SoundMute;        // 1.14.0
         case hmi::Kind::VolumeMixer:          return HmiGlyph::VolumeMixer;
         case hmi::Kind::UnitConverter:        return HmiGlyph::UnitConverter;   // 1.14.1 (lot N5)
+        case hmi::Kind::FileExplorer:         return HmiGlyph::FileExplorer;
     }
     return HmiGlyph::None;
 }
@@ -806,6 +807,10 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
         case HmiGlyph::SoundMute:       // 1.14.0 : le haut-parleur, barre d'une croix
             poly({{1.5f, 6}, {4.5f, 6}, {8.5f, 2.5f}, {8.5f, 13.5f}, {4.5f, 10}, {1.5f, 10}}, true);
             L(10.5f, 5.5f, 15, 10.5f, 1.5f); L(15, 5.5f, 10.5f, 10.5f, 1.5f);
+            break;
+        case HmiGlyph::FileExplorer:    // 1.14.1 (lot N5) : un dossier, et trois lignes de fichiers dessous
+            poly({{1.5f, 2}, {6, 2}, {7.5f, 3.5f}, {14.5f, 3.5f}, {14.5f, 7.5f}, {1.5f, 7.5f}}, false);
+            L(3, 10, 14.5f, 10, 1.1f); L(3, 12.5f, 12, 12.5f, 1.1f); L(3, 15, 13, 15, 1.1f);
             break;
         case HmiGlyph::UnitConverter:   // 1.14.1 (lot N5) : deux cases (De, Vers) et les deux fleches opposees entre elles
             R(1, 2, 5, 4); R(10, 10, 5, 4);

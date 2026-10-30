@@ -1978,6 +1978,7 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
     if (drawLot14(c)) return;
     if (drawPidTuner(c)) return;     // 1.12.24
     if (drawDocumentViewer(c)) return;   // 1.12.30
+    if (drawFileExplorer(c)) return;     // 1.14.1 (lot N5)
     if (drawRecordings(c)) return;       // 1.14.0 (M4)
 
     switch (o.kind) {

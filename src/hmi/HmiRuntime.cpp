@@ -5004,6 +5004,7 @@ void Runtime::prime(double now) {
     mediasReset();                      // 1.12.12 (lot H)
     docsReset();                        // 1.12.30
     converters_.clear();                // 1.14.1 (lot N5) : le Convertisseur d'unites
+    explorers_.clear();                 // 1.14.1 (lot N5) : l'Explorateur de fichiers
     initVariables();
     // 1.12.7 : l'essai d'une fonction, le banc des expressions lisent aussi les constantes calculees.
     (void)computeDeclarations();
@@ -5306,6 +5307,7 @@ void Runtime::cycle(double now) {
     mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
     docsCycle(now);                     // 1.12.30 : les visionneuses de documents (document, page)
     converterCycle(now);                // 1.14.1 (lot N5) : les convertisseurs d'unites (leur Valeur de depart)
+    explorersCycle(now);                // 1.14.1 (lot N5) : les explorateurs (leur source, lue quand elle change)
     double rest = lap();
     double scripted = 0;
     for (const auto& part : cycleParts_) scripted += part.ms;
@@ -7052,6 +7054,8 @@ std::string Runtime::keyboardMode() const {
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) return {};
     if (o->kind == Kind::DocumentViewer) return docKeyboardMode();   // 1.12.30 : son numero de page, sa recherche
+    if (o->kind == Kind::FileExplorer)                               // 1.14.1 (lot N5) : sa case Nom contient, des lettres
+        return settings_.keyboard == "toujours" ? std::string("complet") : std::string{};
     if (o->kind == Kind::UnitConverter)                              // 1.14.1 (lot N5) : sa case Valeur, des chiffres
         return settings_.keyboard == "jamais" || (settings_.keyboard != "toujours" && plain(o->text("keyboard", "aucun")).rfind("num", 0) != 0)
                    ? std::string{} : std::string("numerique");
@@ -7252,6 +7256,10 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
         case Kind::UnitConverter:
             converterPart(snapshot, o, part, now);
             return;
+        // 1.14.1 (lot N5) : l'Explorateur de fichiers - une ligne, un dossier, le fil, le tri, la recherche, Extraire.
+        case Kind::FileExplorer:
+            explorerPart(snapshot, o, part, now);
+            return;
         // Lot 11 : une ligne d'une liste d'alarmes, le bandeau, le resume par zone, les
         // compteurs de production, le tableau de variables, l'editeur de recette.
         case Kind::History: case Kind::AlarmBanner: case Kind::AlarmSummary: case Kind::ProductionCounter:
@@ -7327,6 +7335,7 @@ void Runtime::typeText(std::string_view text, double now) {
     caret += accepted.size();
     if (f.error) { f.message.clear(); f.error = false; }
     if (o->kind == Kind::UnitConverter) converterRecompute(focused_);   // 1.14.1 (lot N5) : le resultat suit chaque frappe
+    if (o->kind == Kind::FileExplorer) explorerTyped(focused_);         // 1.14.1 (lot N5) : Nom contient, a chaque frappe
 }
 
 void Runtime::typeKey(EditKey k, double now) {
@@ -7416,6 +7425,7 @@ void Runtime::typeKey(EditKey k, double now) {
         }
     }
     if (converters_.count(object)) converterRecompute(object);   // 1.14.1 (lot N5) : effacer, Echap (la Valeur de depart revient)
+    if (explorers_.count(object)) explorerTyped(object);         // 1.14.1 (lot N5) : effacer, Echap (la recherche s'efface)
 }
 
 bool Runtime::clickSubmits(Id object) const {
@@ -7629,6 +7639,9 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
             return;
         case Kind::UnitConverter:                              // 1.14.1 (lot N5) : Entree garde la valeur tapee
             converterSubmit(v, o, now);
+            return;
+        case Kind::FileExplorer:                               // 1.14.1 (lot N5) : Entree rend le clavier (la recherche reste)
+            done();
             return;
         default:
             return;

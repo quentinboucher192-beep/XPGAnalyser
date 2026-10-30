@@ -5878,6 +5878,58 @@ Ils se lisent dans un texte à trous, une expression, un script.
 - dans l'éditeur, il montre sa première image et un badge : GIF, ses images, sa lecture.
 > Pour des images à toi qui défilent selon des états (marche, défaut), prends l'**Image animée**.
 
+== objet-explorateur-fichiers | Explorateur de fichiers
+: Le contenu d'un dossier ou d'un fichier .zip, en marche : une ligne par élément (son genre, son nom, sa taille, sa date), triable, avec un fil d'Ariane, une recherche, un filtre d'extensions et une infobulle qui dit tout d'une ligne.
+@depuis 1.14.1
+@mots Explorateur de fichiers, explorateur, FileExplorer, zip, dossier, fil d'Ariane, Choix vers, Extraire, Filtre d'extensions, Nom contient
+@voir objet-visionneuse-de-documents, ressources, fichiers, actions, objet-communs
+@capture EX_FileExplorer.png | L'exemple animé : les ressources du projet, triées, cherchées, une ligne choisie.
+@objet FileExplorer
+@exemple L'explorateur montre les ressources de l'exemple : il les trie par taille, puis par nom, cherche « vanne », choisit une ligne, puis revient à la liste entière.
+### À quoi il sert
+Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les rapports exportés, les notices, les photos d'une intervention, les enregistrements d'un essai. L'opérateur parcourt, lit les informations au survol, choisit un fichier (pour le montrer dans une **Visionneuse de documents**, par exemple) - sans rien pouvoir effacer.
+### La source
+- **Source** : un dossier ou un fichier **.zip** - une expression, avec les repères `$...$` comme les autres chemins. **Relative**, elle part du dossier du projet (`Echanges/rapports`, `archives/2026.zip`) ; complète, elle va où elle dit (`D:\Rapports`). **Vide** : le dossier des ressources du projet (ihm/ressources) ; tant que le projet n'est pas enregistré, ses ressources en mémoire.
+- La source se lit à l'ouverture de la vue, quand elle change, et sur **Rafraîchir** - jamais à chaque cycle (un dossier relu dix fois par seconde ralentirait le poste). Un dossier énorme : la liste s'arrête à **Éléments au plus** (2000) et le dit.
+### En marche
+- **une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) reçoit son chemin complet ;
+- **un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les **actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de documents sur Choix vers ;
+- **remonter** : le bouton de la barre, la ligne **..**, ou une étape du **fil d'Ariane** ; jamais au-dessus de la source - le poste n'ouvre pas tout le disque ;
+- **les titres** Nom, Taille, Date trient la liste (un second clic inverse) ; les dossiers restent devant ;
+- **Nom contient** : la case de la barre filtre les lignes à chaque frappe (sans casse ni accents) ; Échap l'efface ;
+- **Extraire** (si **Extraire permis** est coché) : le fichier choisi d'un zip va dans le **Dossier d'extraction** (donnees/extraits du projet par défaut), sous son nom seul ; un fichier qui existe déjà n'est jamais écrasé ;
+- la molette fait défiler les lignes.
+### L'infobulle
+Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, image, texte, document PDF, son, vidéo, tableau CSV, fichier de l'application), la **taille** (dans un zip : la taille compressée et le taux), les **dates** de modification (et de création quand le système la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et leur taille totale (le compte s'arrête à 5000 éléments, et le dit) ; pour un **zip**, ses entrées ; pour une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses premières lignes.
+### Ses paramètres
+@param folder | Source (dossier ou .zip) | (vide) | Un dossier ou un .zip ; relative : au dossier du projet ; vide : les ressources du projet.
+@param filter | Filtre d'extensions | (vide) | *.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent) ; vide : tout.
+@param showSearch | Recherche (Nom contient) | TRUE | La case de recherche dans la barre.
+@param sortBy | Trier par | nom | nom, taille, date ou genre ; l'opérateur change le tri d'un clic sur un titre.
+@param sortOrder | Ordre du tri | croissant | croissant ou décroissant.
+@param showSize | Colonne Taille | TRUE | La taille de chaque fichier.
+@param showDate | Colonne Date | TRUE | La date de modification.
+@param pickTo | Choix vers | (vide) | Une variable STRING : le chemin complet de la ligne choisie.
+@param allowRefresh | Rafraîchir permis | TRUE | Le bouton qui relit la source.
+@param allowExtract | Extraire permis | FALSE | Le bouton Extraire (un fichier d'un zip).
+@param extractTo | Dossier d'extraction | donnees/extraits | Relatif : au dossier du projet ; jamais dans le projet lui-même (ihm/).
+@param maxItems | Éléments au plus | 2000 | La liste s'arrête là, et le dit.
+@param font | Police | Sans | La police de l'objet.
+@param fontSize | Taille du texte | 13 | En pixels de la vue.
+@param textColor | Couleur du texte | #DDE3EA | Les noms, les titres.
+@param fill | Fond | #1F252E | Le fond de l'objet.
+@param stroke | Contour | #3A4556 | Son bord, ses séparations.
+@param accent | Couleur d'accent | #2F6FD6 | La ligne choisie, le fil d'Ariane, le bouton Extraire.
+@param radius | Rayon des coins | 6 | 0 : coins carrés.
+@param pilotable | Pilotable (parcourir, choisir, trier) | TRUE | Décoché : il montre la source sans réagir.
+### Sécurité
+- **lecture seule** : l'explorateur n'efface rien, ne renomme rien, n'écrase rien ; Extraire est décoché d'office et n'écrit jamais dans le projet (ihm/) ;
+- **un zip hostile ne casse rien** : un nom qui remonte (`../`), un chemin absolu ou une lettre de lecteur sont ramenés dans le zip (la ligne en orange, l'infobulle et la Console le disent) ; une taille annoncée énorme est montrée, jamais décompressée (Extraire s'arrête à 256 Mo) ; un zip de plus de 100000 entrées n'est lu qu'en partie ;
+- un lien du dossier qui mène hors de la source ne s'ouvre pas ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent à tous ses gestes ; Choix vers et Extraire demandent aussi la permission **Piloter** quand la sécurité est active.
+### Générer
+Générer signale une source introuvable, une source qui n'est ni un dossier ni un .zip, un filtre illisible, une variable inconnue dans Choix vers, Éléments au plus inférieur à 1.
+
 = La bibliothèque d'objets › Enregistrements
 
 == objet-enregistreur | Enregistreur

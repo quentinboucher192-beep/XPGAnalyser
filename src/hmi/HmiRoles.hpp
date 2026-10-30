@@ -188,6 +188,12 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"showMeter", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"muteColor", Role::Color},
     // 1.14.1 (lot N5) : le Convertisseur d'unites - la dimension, les unites de depart et d'arrivee, ou ecrire le resultat
     {"dimension", Role::Choice}, {"unitFrom", Role::Text}, {"unitTo", Role::Text}, {"resultTo", Role::Formula, Role::Number},
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers - sa source (un chemin, ses reperes en texte), le filtre, la recherche, ce qu'il
+    // permet (rafraichir, extraire et ou), la ligne choisie ecrite, les colonnes, le nombre de lignes au plus
+    {"folder", Role::Name}, {"filter", Role::Text}, {"showSearch", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"pickTo", Role::Formula, Role::Text}, {"allowRefresh", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"allowExtract", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"extractTo", Role::Name},
+    {"showSize", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showDate", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},

@@ -139,6 +139,18 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.1 (lot N5) : l'objet Explorateur de fichiers.
+        note("1.14.1", "Vues", Kind::New,
+         "L'OBJET EXPLORATEUR DE FICHIERS (biblioth\xC3\xA8que, famille M\xC3\xA9" "dias) : le contenu d'un dossier ou d'un .zip en marche - un zip "
+         "se parcourt comme un dossier, un zip dans un zip aussi. Une ic\xC3\xB4ne par genre (dossier, zip, image, texte, PDF, son, vid\xC3\xA9o, "
+         "CSV, fichier de l'application), le nom, la taille, la date ; un clic sur un titre trie ; le fil d'Ariane et la ligne .. remontent, "
+         "jamais au-dessus de la source. Au survol d'une ligne, l'infobulle dit tout : le chemin complet, la taille (dans un zip : compress\xC3\xA9" "e "
+         "et le taux), les dates, le contenu d'un dossier, les dimensions d'une image, les premi\xC3\xA8res lignes d'un texte. Sa Source (relative : "
+         "au dossier du projet ; vide : ses ressources) se lit \xC3\xA0 l'ouverture de la vue et sur Rafra\xC3\xAE" "chir ; un filtre d'extensions, "
+         "Nom contient, Choix vers (le chemin de la ligne choisie), les actions Double clic d'un fichier, Extraire un fichier d'un zip (d\xC3\xA9" "coch\xC3\xA9 "
+         "d'office, jamais d'\xC3\xA9" "crasement). Lecture seule : rien ne s'efface ; un zip hostile (../, tailles \xC3\xA9normes) ne sort pas de "
+         "sa source.",
+         "objet-explorateur-fichiers", ""),
         // 1.14.1 (lot N5) : convertir des unites - l'onglet Convertir, l'objet Convertisseur d'unites.
         note("1.14.1", "Types", Kind::New,
          "TESTER UNE CONVERSION D'UNIT\xC3\x89S : Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets, Biblioth\xC3\xA8que (les familles "

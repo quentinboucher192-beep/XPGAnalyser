@@ -1253,15 +1253,22 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         const gfx::Rect area = station_ ? gfx::Rect{b.x, b.y, b.w, simmark::kRibbonH} : gfx::Rect{screen_.x, screen_.y - above, screen_.w, simmark::kRibbonH};
         simmark::drawRibbon(ctx.r, area, simRibbon_, simRibbonRight_);
     }
-    if (const std::string tip = simTipAt(mouse_); !tip.empty())
+    bool tipped = false;
+    if (const std::string tip = simTipAt(mouse_); !tip.empty()) {
         simmark::drawTip(ctx.r, mouse_, b, "Lue sur l'esclave simul\xC3\xA9", tip);
-    else
+        tipped = true;
+    } else {
         // 1.11.1 (decision 134, R1111-12) : l'infobulle d'une marque de qualite.
         for (auto it = qualityRects_.rbegin(); it != qualityRects_.rend(); ++it)
             if (it->rect.contains(mouse_)) {
                 simmark::drawTip(ctx.r, mouse_, b, it->title, it->body);
+                tipped = true;
                 break;
             }
+    }
+    // 1.14.1 (lot N5) : l'infobulle d'une ligne d'un Explorateur de fichiers (le chemin, la taille, les dates...).
+    if (!tipped)
+        if (const auto t = explorerTipAt(mouse_); !t.title.empty()) simmark::drawTip(ctx.r, mouse_, b, t.title, t.body);
     // Lot 13 : le doigt d'un essai - un cercle sur l'objet que le pas vient de
     // toucher, qui grandit et s'efface.
     if (touch_ != hmi::kNoId && touchStrength_ > 0.f) {
@@ -1784,6 +1791,33 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                     case hmi::Kind::VolumeMixer:      // 1.14.0 : "volume:Alarmes:0.5", "muet:Alarmes"
                         found = hmi::mixerPartBox(o, box.w, box.h, part, local);
                         break;
+                    case hmi::Kind::FileExplorer: {   // 1.14.1 (lot N5) : "ligne:N", "parent", "monter", "colonne:taille", "ariane:N"...
+                        const auto* fe = runtime_ ? runtime_->fileExplorer(o.id) : nullptr;
+                        if (!fe) break;
+                        const auto l = hmi::explorer::layoutOf(box.w, box.h, o.number("fontSize", 13), runtime_->explorerCrumbs(o.id), fe->showSearch,
+                                                               fe->allowRefresh, fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate,
+                                                               fe->shown.size(), fe->first);
+                        const auto take = [&](const hmi::Box& a) {
+                            local = a;
+                            found = a.w > 0;
+                        };
+                        if (part == "monter") take(l.up);
+                        else if (part == "parent") take(l.parent);
+                        else if (part == "recherche") take(l.search);
+                        else if (part == "rafraichir") take(l.refresh);
+                        else if (part == "extraire") take(l.extract);
+                        else if (part == "colonne:nom") take(l.colName);
+                        else if (part == "colonne:taille") take(l.colSize);
+                        else if (part == "colonne:date") take(l.colDate);
+                        else if (part.rfind("ariane:", 0) == 0) {
+                            const auto k = static_cast<std::size_t>(std::strtoul(std::string(part.substr(7)).c_str(), nullptr, 10));
+                            if (k < l.crumbs.size()) take(l.crumbs[k]);
+                        } else if (part.rfind("ligne:", 0) == 0) {
+                            const auto k = static_cast<std::size_t>(std::strtoul(std::string(part.substr(6)).c_str(), nullptr, 10));
+                            if (k >= l.first && k - l.first < l.rows.size()) take(l.rows[k - l.first]);
+                        }
+                        break;
+                    }
                     case hmi::Kind::UnitConverter: {  // 1.14.1 (lot N5) : "valeur", "de", "vers", "inverser", "ecrire", "choix:N"
                         const auto* cs = runtime_ ? runtime_->unitConverter(o.id) : nullptr;
                         const auto l = hmi::units::converterLayout(box.w, box.h, o.number("fontSize", 14), !o.text("title").empty(),
@@ -1990,6 +2024,25 @@ double HmiLiveCanvas::dragFraction(std::size_t layer, const hmi::Object& o, gfx:
     const auto box = o.box();
     const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
     return o.kind == hmi::Kind::Knob ? hmi::knobFractionAt(box.w, box.h, lx, ly) : hmi::sliderFractionAt(o, box.w, box.h, lx, ly);
+}
+
+// 1.14.1 (lot N5) : la ligne d'un Explorateur de fichiers sous la souris : son infobulle (calculee une fois par le moteur).
+hmi::explorer::Tip HmiLiveCanvas::explorerTipAt(gfx::Point p) const {
+    if (!runtime_ || layers_.empty() || vps_.size() != layers_.size()) return {};
+    const std::size_t li = liveTopLayer();
+    const Id id = objectAtLayer(li, p);
+    const auto* o = id ? layers_[li].view.object(id) : nullptr;
+    if (!o || o->kind != hmi::Kind::FileExplorer) return {};
+    const auto* fe = runtime_->fileExplorer(id);
+    if (!fe) return {};
+    const auto& vp = vps_[li];
+    const auto box = o->box();
+    const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
+    const auto l = hmi::explorer::layoutOf(box.w, box.h, o->number("fontSize", 13), runtime_->explorerCrumbs(id), fe->showSearch, fe->allowRefresh,
+                                           fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate, fe->shown.size(), fe->first);
+    const std::string part = hmi::explorer::hit(l, lx, ly);
+    if (part.rfind("ligne:", 0) != 0) return {};
+    return runtime_->explorerTip(id, static_cast<std::size_t>(std::strtoul(part.c_str() + 6, nullptr, 10)));
 }
 
 // 1.14.0 : la partie d'une piste du melangeur qu'on tire, au point p : "glisser:Alarmes:0.62" (ou "lacher:...").
@@ -2235,6 +2288,20 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             std::string hit = hmi::units::converterHit(l, lx, ly);
             if (hit.empty() && cs && cs->open) hit = "dehors";
             if (!hit.empty()) partClicked->emit(id, hit);
+            return;
+        }
+        // 1.14.1 (lot N5) : l'Explorateur de fichiers - la barre (remonter, le fil, la recherche, Rafraichir, Extraire),
+        // les titres (le tri), une ligne (la choisir ; un double-clic l'ouvre, ou lance les actions Double clic).
+        if (o->kind == hmi::Kind::FileExplorer) {
+            if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
+            const auto* fe = runtime_ ? runtime_->fileExplorer(id) : nullptr;
+            if (!fe) return;
+            const auto l = hmi::explorer::layoutOf(box.w, box.h, o->number("fontSize", 13), runtime_->explorerCrumbs(id), fe->showSearch,
+                                                   fe->allowRefresh, fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate,
+                                                   fe->shown.size(), fe->first);
+            std::string part = hmi::explorer::hit(l, lx, ly);
+            if (clickCount >= 2 && part.rfind("ligne:", 0) == 0) part = "ouvrir:" + part.substr(6);
+            if (!part.empty()) partClicked->emit(id, part);
             return;
         }
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
@@ -2555,6 +2622,12 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                             if (t.frame.contains(mlx, mly) && notches != 0 && o->flag("pilotable", true))
                                 partClicked->emit(o->id, "pas:" + std::string(hmi::soundChannelSpec(t.channel).key) + ":"
                                                              + hmi::formatNumber(std::round(notches)));
+                        return ui::EventResult::Consumed;
+                    }
+                    // 1.14.1 (lot N5) : sur un Explorateur de fichiers, la molette fait defiler ses lignes.
+                    if (o->kind == hmi::Kind::FileExplorer) {
+                        const double steps = w->dy != 0 ? w->dy : w->dx;
+                        if (steps != 0) partClicked->emit(o->id, steps > 0 ? "liste:haut" : "liste:bas");
                         return ui::EventResult::Consumed;
                     }
                     // 1.14.1 (lot N5) : sur la liste ouverte d'un convertisseur, la molette la fait defiler.
@@ -3706,7 +3779,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         if (o && o->actions.empty() && !hmi::kindWritesVariable(o->kind) && o->kind != hmi::Kind::SystemButton
             && o->kind != hmi::Kind::LoginMenuButton && o->kind != hmi::Kind::LanguageSelector && o->kind != hmi::Kind::ThemeSelector
             && o->kind != hmi::Kind::PlcDiagnostic && o->kind != hmi::Kind::SoundMute    // 1.14.0 : le Coupe-son agit seul
-            && o->kind != hmi::Kind::UnitConverter)                                     // 1.14.1 (lot N5) : ses parties
+            && o->kind != hmi::Kind::UnitConverter && o->kind != hmi::Kind::FileExplorer)   // 1.14.1 (lot N5) : leurs parties
             status_->setTransientMessage(o->name + " : aucune action sur cet objet", 4.0);
     });
     links_ += canvas_->released->connect([this](Id object, bool inside) { runtime_.release(object, now_, inside); });
@@ -5014,7 +5087,8 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
                                    || o.kind == hmi::Kind::LoginMenuButton                                       // lot 12
                                    || ((o.kind == hmi::Kind::SoundMute || o.kind == hmi::Kind::VolumeMixer)      // 1.14.0
                                        && o.flag("pilotable", true))
-                                   || (o.kind == hmi::Kind::UnitConverter && o.flag("pilotable", true));          // 1.14.1 (lot N5)
+                                   || ((o.kind == hmi::Kind::UnitConverter || o.kind == hmi::Kind::FileExplorer)  // 1.14.1 (lot N5)
+                                       && o.flag("pilotable", true));
                     if (acts && !runtime_.objectAllowed(o)) l.locked.push_back(o.id);
                     else if (writes && !runtime_.permitted("Piloter")) l.locked.push_back(o.id);
                 }

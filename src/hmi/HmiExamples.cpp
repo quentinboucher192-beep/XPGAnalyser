@@ -2097,6 +2097,28 @@ Example volumeMixer() {
     return m.done(9.5);
 }
 
+// ---- 1.14.1 (lot N5) : l'explorateur de fichiers - les ressources de l'exemple, triees, cherchees, choisies ----
+Example fileExplorer() {
+    Maker m;
+    m.svg("vanne_ouverte.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='#2E9E5B'/></svg>");
+    m.svg("vanne_fermee.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='#E5484D'/></svg>");
+    m.svg("pompe.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><circle cx='32' cy='32' r='30' fill='#2F6FD6'/>"
+                       "<rect x='20' y='28' width='24' height='8' fill='#FFFFFF'/></svg>");
+    m.svg("notice_vanne.txt", "Notice de la vanne V12\nOuvrir lentement.\n");
+    m.var("Choix", "STRING", "''");
+    auto& e = m.add(Kind::FileExplorer, "Explorateur", 20, 20, 400, 250);
+    e.set("pickTo", "Choix");
+    m.note("Explication", 440, 20, 150, 250,
+           "Vide, la Source est le dossier des ressources du projet. Un clic choisit (Choix re\xC3\xA7oit le chemin), un titre trie, la case "
+           "cherche ; au survol, l'infobulle dit tout de la ligne.");
+    m.step(1.5, "partie", "Explorateur", "colonne:taille");
+    m.step(3.0, "partie", "Explorateur", "colonne:nom");
+    m.step(4.5, "partie", "Explorateur", "recherche:vanne");
+    m.step(6.0, "partie", "Explorateur", "ligne:0");
+    m.step(8.0, "partie", "Explorateur", "recherche:");
+    return m.done(9.5);
+}
+
 // ---- 1.14.1 (lot N5) : le convertisseur d'unites - une mesure qui bouge, puis une valeur tapee ----
 Example unitConverter() {
     Maker m;
@@ -2758,6 +2780,7 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::SoundMute:           return soundMute();          // 1.14.0
         case Kind::VolumeMixer:         return volumeMixer();
         case Kind::UnitConverter:       return unitConverter();      // 1.14.1 (lot N5)
+        case Kind::FileExplorer:        return fileExplorer();
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

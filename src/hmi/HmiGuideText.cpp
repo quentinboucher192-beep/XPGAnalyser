@@ -13824,6 +13824,146 @@ const std::vector<Topic>& topics() {
            {12.5, "Btn_Jouer", "\xC3\x80 toi",
             "\xC3\x80 toi : Jouer, Pause, Arr\xC3\xAAter, 3 tours - le vrai moteur r\xC3\xA9pond comme en "
             "marche. `IHM_GIF_JOUER('Ventilateur')` fait la m\xC3\xAAme chose dans un script."}}},
+        // ---- La bibliotheque d'objets  Medias / objet-explorateur-fichiers
+        {"objet-explorateur-fichiers", "Explorateur de fichiers", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA M\xC3\xA9" "dias",
+         "Le contenu d'un dossier ou d'un fichier .zip, en marche : une ligne par \xC3\xA9l\xC3\xA9ment (son "
+         "genre, son nom, sa taille, sa date), triable, avec un fil d'Ariane, une recherche, un filtre "
+         "d'extensions et une infobulle qui dit tout d'une ligne.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les "
+                         "rapports export\xC3\xA9s, les notices, les photos d'une intervention, les "
+                         "enregistrements d'un essai. L'op\xC3\xA9rateur parcourt, lit les informations au "
+                         "survol, choisit un fichier (pour le montrer dans une **Visionneuse de documents**, "
+                         "par exemple) - sans rien pouvoir effacer.", {}},
+             {K::Heading, "La source", {}},
+             {K::Bullet, "**Source** : un dossier ou un fichier **.zip** - une expression, avec les "
+                         "rep\xC3\xA8res `$...$` comme les autres chemins. **Relative**, elle part du "
+                         "dossier du projet (`Echanges/rapports`, `archives/2026.zip`) ; compl\xC3\xA8te, "
+                         "elle va o\xC3\xB9 elle dit (`D:\\Rapports`). **Vide** : le dossier des ressources "
+                         "du projet (ihm/ressources) ; tant que le projet n'est pas enregistr\xC3\xA9, ses "
+                         "ressources en m\xC3\xA9moire.", {}},
+             {K::Bullet, "La source se lit \xC3\xA0 l'ouverture de la vue, quand elle change, et sur "
+                         "**Rafra\xC3\xAE" "chir** - jamais \xC3\xA0 chaque cycle (un dossier relu dix fois "
+                         "par seconde ralentirait le poste). Un dossier \xC3\xA9norme : la liste "
+                         "s'arr\xC3\xAAte \xC3\xA0 **\xC3\x89l\xC3\xA9ments au plus** (2000) et le dit.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "**une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) "
+                         "re\xC3\xA7oit son chemin complet ;", {}},
+             {K::Bullet, "**un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un "
+                         "dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les "
+                         "**actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de "
+                         "documents sur Choix vers ;", {}},
+             {K::Bullet, "**remonter** : le bouton de la barre, la ligne **..**, ou une \xC3\xA9tape du "
+                         "**fil d'Ariane** ; jamais au-dessus de la source - le poste n'ouvre pas tout le "
+                         "disque ;", {}},
+             {K::Bullet, "**les titres** Nom, Taille, Date trient la liste (un second clic inverse) ; les "
+                         "dossiers restent devant ;", {}},
+             {K::Bullet, "**Nom contient** : la case de la barre filtre les lignes \xC3\xA0 chaque frappe "
+                         "(sans casse ni accents) ; \xC3\x89" "chap l'efface ;", {}},
+             {K::Bullet, "**Extraire** (si **Extraire permis** est coch\xC3\xA9) : le fichier choisi d'un "
+                         "zip va dans le **Dossier d'extraction** (donnees/extraits du projet par "
+                         "d\xC3\xA9" "faut), sous son nom seul ; un fichier qui existe d\xC3\xA9j\xC3\xA0 "
+                         "n'est jamais \xC3\xA9" "cras\xC3\xA9 ;", {}},
+             {K::Bullet, "la molette fait d\xC3\xA9" "filer les lignes.", {}},
+             {K::Heading, "L'infobulle", {}},
+             {K::Paragraph, "Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, "
+                         "image, texte, document PDF, son, vid\xC3\xA9o, tableau CSV, fichier de "
+                         "l'application), la **taille** (dans un zip : la taille compress\xC3\xA9" "e et le "
+                         "taux), les **dates** de modification (et de cr\xC3\xA9" "ation quand le "
+                         "syst\xC3\xA8me la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et "
+                         "leur taille totale (le compte s'arr\xC3\xAAte \xC3\xA0 5000 "
+                         "\xC3\xA9l\xC3\xA9ments, et le dit) ; pour un **zip**, ses entr\xC3\xA9" "es ; pour "
+                         "une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses "
+                         "premi\xC3\xA8res lignes.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nSource (dossier ou "
+                         ".zip)\t(vide)\tUn dossier ou un .zip ; relative : au dossier du projet ; vide : "
+                         "les ressources du projet.\nFiltre d'extensions\t(vide)\t*.csv;*.pdf : seulement "
+                         "ces fichiers (les dossiers et les zips restent) ; vide : tout.\nRecherche (Nom "
+                         "contient)\tTRUE\tLa case de recherche dans la barre.\nTrier par\tnom\tnom, taille, "
+                         "date ou genre ; l'op\xC3\xA9rateur change le tri d'un clic sur un titre.\nOrdre du "
+                         "tri\tcroissant\tcroissant ou d\xC3\xA9" "croissant.\nColonne Taille\tTRUE\tLa "
+                         "taille de chaque fichier.\nColonne Date\tTRUE\tLa date de modification.\nChoix "
+                         "vers\t(vide)\tUne variable STRING : le chemin complet de la ligne "
+                         "choisie.\nRafra\xC3\xAE" "chir permis\tTRUE\tLe bouton qui relit la "
+                         "source.\nExtraire permis\tFALSE\tLe bouton Extraire (un fichier d'un "
+                         "zip).\nDossier d'extraction\tdonnees/extraits\tRelatif : au dossier du projet ; "
+                         "jamais dans le projet lui-m\xC3\xAAme (ihm/).\n\xC3\x89l\xC3\xA9ments au "
+                         "plus\t2000\tLa liste s'arr\xC3\xAAte l\xC3\xA0, et le dit.\nPolice\tSans\tLa "
+                         "police de l'objet.\nTaille du texte\t13\tEn pixels de la vue.\nCouleur du "
+                         "texte\t#DDE3EA\tLes noms, les titres.\nFond\t#1F252E\tLe fond de "
+                         "l'objet.\nContour\t#3A4556\tSon bord, ses s\xC3\xA9parations.\nCouleur "
+                         "d'accent\t#2F6FD6\tLa ligne choisie, le fil d'Ariane, le bouton Extraire.\nRayon "
+                         "des coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable (parcourir, choisir, "
+                         "trier)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "S\xC3\xA9" "curit\xC3\xA9", {}},
+             {K::Bullet, "**lecture seule** : l'explorateur n'efface rien, ne renomme rien, "
+                         "n'\xC3\xA9" "crase rien ; Extraire est d\xC3\xA9" "coch\xC3\xA9 d'office et "
+                         "n'\xC3\xA9" "crit jamais dans le projet (ihm/) ;", {}},
+             {K::Bullet, "**un zip hostile ne casse rien** : un nom qui remonte (`../`), un chemin absolu ou "
+                         "une lettre de lecteur sont ramen\xC3\xA9s dans le zip (la ligne en orange, "
+                         "l'infobulle et la Console le disent) ; une taille annonc\xC3\xA9" "e \xC3\xA9norme "
+                         "est montr\xC3\xA9" "e, jamais d\xC3\xA9" "compress\xC3\xA9" "e (Extraire "
+                         "s'arr\xC3\xAAte \xC3\xA0 256 Mo) ; un zip de plus de 100000 entr\xC3\xA9" "es "
+                         "n'est lu qu'en partie ;", {}},
+             {K::Bullet, "un lien du dossier qui m\xC3\xA8ne hors de la source ne s'ouvre pas ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
+                         "ses gestes ; Choix vers et Extraire demandent aussi la permission **Piloter** "
+                         "quand la s\xC3\xA9" "curit\xC3\xA9 est active.", {}},
+             {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
+             {K::Paragraph, "G\xC3\xA9n\xC3\xA9rer signale une source introuvable, une source qui n'est ni un "
+                         "dossier ni un .zip, un filtre illisible, une variable inconnue dans Choix vers, "
+                         "\xC3\x89l\xC3\xA9ments au plus inf\xC3\xA9rieur \xC3\xA0 1.", {}},
+         },
+         {"objet-visionneuse-de-documents", "ressources", "fichiers", "actions", "objet-communs"},
+         {"Explorateur de fichiers", "explorateur", "FileExplorer", "zip", "dossier", "fil d'Ariane", "Choix vers", "Extraire", "Filtre d'extensions", "Nom contient"},
+         {},
+         {{"EX_FileExplorer.png", "L'exemple anim\xC3\xA9 : les ressources du projet, tri\xC3\xA9" "es, cherch\xC3\xA9" "es, une ligne choisie."}},
+         "FileExplorer",
+         {{"folder", "Source (dossier ou .zip)", "(vide)",
+            "Un dossier ou un .zip ; relative : au dossier du projet ; vide : les ressources du projet."},
+           {"filter", "Filtre d'extensions", "(vide)",
+            "*.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent) ; vide : tout."},
+           {"showSearch", "Recherche (Nom contient)", "TRUE",
+            "La case de recherche dans la barre."},
+           {"sortBy", "Trier par", "nom",
+            "nom, taille, date ou genre ; l'op\xC3\xA9rateur change le tri d'un clic sur un titre."},
+           {"sortOrder", "Ordre du tri", "croissant",
+            "croissant ou d\xC3\xA9" "croissant."},
+           {"showSize", "Colonne Taille", "TRUE",
+            "La taille de chaque fichier."},
+           {"showDate", "Colonne Date", "TRUE",
+            "La date de modification."},
+           {"pickTo", "Choix vers", "(vide)",
+            "Une variable STRING : le chemin complet de la ligne choisie."},
+           {"allowRefresh", "Rafra\xC3\xAE" "chir permis", "TRUE",
+            "Le bouton qui relit la source."},
+           {"allowExtract", "Extraire permis", "FALSE",
+            "Le bouton Extraire (un fichier d'un zip)."},
+           {"extractTo", "Dossier d'extraction", "donnees/extraits",
+            "Relatif : au dossier du projet ; jamais dans le projet lui-m\xC3\xAAme (ihm/)."},
+           {"maxItems", "\xC3\x89l\xC3\xA9ments au plus", "2000",
+            "La liste s'arr\xC3\xAAte l\xC3\xA0, et le dit."},
+           {"font", "Police", "Sans",
+            "La police de l'objet."},
+           {"fontSize", "Taille du texte", "13",
+            "En pixels de la vue."},
+           {"textColor", "Couleur du texte", "#DDE3EA",
+            "Les noms, les titres."},
+           {"fill", "Fond", "#1F252E",
+            "Le fond de l'objet."},
+           {"stroke", "Contour", "#3A4556",
+            "Son bord, ses s\xC3\xA9parations."},
+           {"accent", "Couleur d'accent", "#2F6FD6",
+            "La ligne choisie, le fil d'Ariane, le bouton Extraire."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (parcourir, choisir, trier)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir."}},
+         "L'explorateur montre les ressources de l'exemple : il les trie par taille, puis par nom, cherche "
+         "\xC2\xAB vanne \xC2\xBB, choisit une ligne, puis revient \xC3\xA0 la liste enti\xC3\xA8re.",
+         {}, "1.14.1"},
         // ---- La bibliotheque d'objets  Enregistrements / objet-enregistreur
         {"objet-enregistreur", "Enregistreur", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Enregistrements",
          "Un bouton rond pour enregistrer l'IHM qui tourne : rouge, il d\xC3\xA9marre ; l'enregistrement en "

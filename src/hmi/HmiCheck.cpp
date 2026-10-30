@@ -4,6 +4,7 @@
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
+#include <filesystem>   // 1.14.1 (lot N5) : la source d'un explorateur de fichiers
 #include "HmiPopupParams.hpp"
 #include "HmiObjectAlarms.hpp"
 #include "HmiAlarmGroups.hpp"
@@ -2228,6 +2229,43 @@ void checkRecordings(const Project& p, const std::string& projectFolder, std::ve
                         "enregistrement fixe \xC2\xAB " + trimmedCopy(fp->value) + " \xC2\xBB introuvable" + hint);
         }
     }
+}
+
+// 1.14.1 (lot N5) : l'Explorateur de fichiers - sa source (introuvable, ni dossier ni zip ; relative : depuis le dossier du
+// projet, quand on le connait), son filtre d'extensions, Choix vers, Elements au plus.
+void checkExplorers1141(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    namespace fs = std::filesystem;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            if (o.kind != Kind::FileExplorer) continue;
+            const std::string label = std::string(kindLabel(o.kind));
+            const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
+            const Prop* fp = o.find("folder");
+            const std::string spec = fp && fp->expr.empty() ? trimmedCopy(roles::nameOf(fp->value)) : std::string{};
+            if (!spec.empty() && spec.find('$') == std::string::npos) {
+                fs::path path(std::u8string(spec.begin(), spec.end()));
+                const bool relative = path.is_relative();
+                if (relative && !folder.empty()) path = fs::path(std::u8string(folder.begin(), folder.end())) / path;
+                if (!relative || !folder.empty()) {
+                    std::error_code ec;
+                    std::string ext = path.extension().string();
+                    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    if (!fs::exists(path, ec))
+                        issue(S::Error, "folder", "source introuvable : " + spec);
+                    else if (!fs::is_directory(path, ec) && ext != ".zip")
+                        issue(S::Error, "folder", "\xC2\xAB " + spec + " \xC2\xBB n'est ni un dossier ni un .zip");
+                }
+            }
+            if (const std::string why = explorer::filterProblem(o.text("filter")); !why.empty())
+                issue(S::Error, "filter", "filtre illisible : " + why);
+            const std::string target = trimmedCopy(markers::strip(o.text("pickTo"), markers::Mode::Expression));
+            if (!target.empty())
+                for (const auto& r : scanRoots(target))
+                    if (!known(p, plc, r, &v)) issue(S::Error, "pickTo", "Choix vers : " + std::string(unknownVariablePrefix()) + r);
+            if (const Prop* mp = o.find("maxItems"); mp && mp->expr.empty() && o.number("maxItems", 2000) < 1)
+                issue(S::Warning, "maxItems", "\xC3\x89l\xC3\xA9ments au plus inf\xC3\xA9rieur \xC3\xA0 1 : la liste en montrera un seul");
+        }
 }
 
 void checkDocViewers11230(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
@@ -5578,6 +5616,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkMedias11212(p, plcHasName, out);   // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
     checkDocViewers11230(p, plcHasName, projectFolder, out);   // 1.12.30 : la visionneuse de documents
     checkRecordings(p, projectFolder, out);                    // 1.14.0 (M4) : les enregistrements
+    checkExplorers1141(p, plcHasName, projectFolder, out);     // 1.14.1 (lot N5) : l'explorateur de fichiers
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
     eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat

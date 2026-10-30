@@ -966,6 +966,42 @@ public:
         bool        error{false};
     };
     [[nodiscard]] const UnitConverter* unitConverter(Id object) const;
+    // ---- 1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS (HmiRuntimeDocs.cpp, HmiDocView.hpp : hmi::explorer) -----------
+    //  Sa source (une propriete : un dossier ou un .zip ; relative, au dossier du projet ; vide, le dossier ressources
+    //  du projet - ou ses ressources en memoire tant qu'il n'est pas enregistre) se lit a l'ouverture de la vue, quand
+    //  elle change et sur Rafraichir - jamais a chaque cycle. Les gestes (objectPart) : "ligne:N" choisit (Choix vers
+    //  recoit son chemin), "ouvrir:N" entre dans un dossier ou un zip - un fichier lance les actions Double clic de
+    //  l'objet -, "monter", "parent", "ariane:N" (jamais au-dessus de la source), "colonne:nom|taille|date" trie,
+    //  "recherche" (la case Nom contient prend le clavier), "rafraichir", "extraire" (une entree de zip, si permis),
+    //  "liste:haut", "liste:bas". Pour un essai : "aller:a/b", "recherche:texte".
+    struct FileExplorer {
+        std::string              spec;            // la source demandee (evaluee, sans ses reperes) ; "\x01" : pas encore lue
+        explorer::Location       loc;             // la source resolue et le dossier courant
+        std::string              label;           // le nom de la source (la premiere etape du fil d'Ariane)
+        bool                     resources{false};// les ressources du projet, en memoire (pas de dossier sur le disque)
+        explorer::Listing        listing;         // le dossier courant (filtre d'extensions applique)
+        std::vector<explorer::Entry> shown;       // ... la recherche appliquee, trie : les lignes
+        std::string              filter;          // le filtre d'extensions (tel qu'ecrit)
+        std::string              search;          // Nom contient
+        explorer::SortKey        sortBy{explorer::SortKey::Name};
+        bool                     descending{false};
+        std::string              sortProp;        // le tri des proprietes au dernier cycle (change : il reprend)
+        int                      selected{-1};    // la ligne choisie (rang dans shown)
+        std::string              selectedPath;    // ... son chemin (elle reste choisie quand la liste se trie)
+        std::size_t              first{0};        // la premiere ligne montree
+        std::size_t              maxItems{2000};
+        bool                     allowRefresh{true}, allowExtract{false}, showSearch{true}, showSize{true}, showDate{true};
+        bool                     pilotable{true};
+        std::string              message;         // la reponse du dernier geste (vide : le compte)
+        bool                     error{false};
+        int                      loads{0};        // combien de fois la source a ete lue (les essais)
+        mutable std::map<std::string, explorer::Tip> tips;   // les infobulles calculees (au premier survol)
+    };
+    [[nodiscard]] const FileExplorer* fileExplorer(Id object) const;
+    // L'infobulle de la ligne `row` (rang dans shown) ; vide : aucune.
+    [[nodiscard]] explorer::Tip explorerTip(Id object, std::size_t row) const;
+    // Le fil d'Ariane : la source, puis chaque dossier ouvert.
+    [[nodiscard]] std::vector<std::string> explorerCrumbs(Id object) const;
     // Ce qui est sous un point local de la visionneuse ("doc:next", "doc:area"...) ; vide : rien.
     [[nodiscard]] std::string docPartAt(Id object, double lx, double ly) const;
     // La visionneuse a le clavier ; ... et un de ses champs (le numero de page, la recherche) est en saisie.
@@ -1871,6 +1907,16 @@ private:
     void mediasReset();
     void mediasOpenView(const View&, double now);
     void mediasCycle(double now);
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers (HmiRuntimeDocs.cpp).
+    std::map<Id, FileExplorer>                 explorers_;
+    void explorersCycle(double now);
+    void explorerRefresh(const View&, const Object& raw, const Object& shown, double now);
+    void explorerRecompute(Id object);
+    void explorerLoad(FileExplorer&, const View&, const Object&);   // la source relue (et le dossier courant)
+    void explorerShow(FileExplorer&);                                // la recherche, le tri, la ligne choisie
+    void explorerPick(FileExplorer&, const View&, const Object&, double now);   // Choix vers
+    void explorerTyped(Id object);                                   // la case Nom contient a change
+    void explorerPart(const View&, const Object&, std::string_view part, double now);
     // 1.14.1 (lot N5) : le Convertisseur d'unites (HmiRuntimeControls.cpp).
     std::map<Id, UnitConverter>                converters_;
     void converterCycle(double now);

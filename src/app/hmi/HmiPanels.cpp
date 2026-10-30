@@ -1435,6 +1435,7 @@ const std::vector<Category>& categories() {
         // Lot 14 : la communication avec l'automate reel.
         {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans IHM Studio (retire plus bas)
         {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::DocumentViewer,   // 1.12.30 : la visionneuse de documents
+                     hmi::Kind::FileExplorer,                    // 1.14.1 (lot N5) : l'explorateur de fichiers
                      hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
         // 1.14.0 (M4) : enregistrer et rejouer l'IHM.
         {"Enregistrements", {hmi::Kind::Recorder, hmi::Kind::RecordingPlayer}},
@@ -1561,6 +1562,7 @@ std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind) {
         {hmi::Kind::Recorder, {"enregistrement", "enregistrer", "film", "replay", "relecture"}},
         {hmi::Kind::RecordingPlayer, {"enregistrement", "rejouer", "relecture", "replay"}},
         {hmi::Kind::UnitConverter, {"unit\xC3\xA9", "conversion", "convertir", "mesure", "bar", "degr\xC3\xA9"}},   // 1.14.1 (lot N5)
+        {hmi::Kind::FileExplorer, {"fichiers", "dossier", "zip", "archive", "explorateur", "parcourir", "liste"}},
     };
     std::vector<std::string_view> out;
     if (const auto* t = hmi::guide::topicForKind(hmi::kindKey(kind)))
@@ -2562,6 +2564,25 @@ const std::vector<KeyInfo>& keyInfos() {
          "donne la sienne. En marche, l'op\xC3\xA9rateur la change dans la liste De."},
         {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", PG::ValueType::Enum, {},
          "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension que celle de d\xC3\xA9part (sinon le convertisseur le dit)."},
+        // ---- 1.14.1 (lot N5) : l'Explorateur de fichiers
+        {"folder", "Source (dossier ou .zip)", PG::ValueType::Text, {},
+         "Un dossier ou un fichier .zip (les rep\xC3\xA8res $...$ comme les autres chemins). Relatif : il part du dossier du projet "
+         "(Echanges/rapports, archives/2026.zip). Vide : le dossier des ressources du projet. Lu \xC3\xA0 l'ouverture de la vue et sur "
+         "Rafra\xC3\xAE" "chir, jamais \xC3\xA0 chaque cycle."},
+        {"filter", "Filtre d'extensions", PG::ValueType::Text, {},
+         "*.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent, pour y entrer). Vide : tout."},
+        {"showSearch", "Recherche (Nom contient)", PG::ValueType::Boolean, {}, "La case de la barre : les lignes dont le nom contient ce qui est tap\xC3\xA9."},
+        {"showSize", "Colonne Taille", PG::ValueType::Boolean, {}, "La taille de chaque fichier."},
+        {"showDate", "Colonne Date", PG::ValueType::Boolean, {}, "La date de modification de chaque \xC3\xA9l\xC3\xA9ment."},
+        {"pickTo", "Choix vers", PG::ValueType::Text, {},
+         "Facultatif : une variable STRING qui re\xC3\xA7oit le chemin complet de la ligne choisie (un clic). Un double-clic sur un fichier "
+         "lance ensuite les actions Double clic de l'objet (une popup, la visionneuse de documents sur ce chemin)."},
+        {"allowRefresh", "Rafra\xC3\xAE" "chir permis", PG::ValueType::Boolean, {}, "Le bouton qui relit la source."},
+        {"allowExtract", "Extraire permis", PG::ValueType::Boolean, {},
+         "Le bouton Extraire : le fichier choisi d'un zip va dans le Dossier d'extraction (jamais d'\xC3\xA9" "crasement). D\xC3\xA9" "coch\xC3\xA9 "
+         "d'office : l'explorateur est en lecture seule."},
+        {"extractTo", "Dossier d'extraction", PG::ValueType::Text, {},
+         "O\xC3\xB9 Extraire pose les fichiers. Relatif : au dossier du projet (donnees/extraits). Jamais dans le projet lui-m\xC3\xAAme (ihm/)."},
         {"resultTo", "R\xC3\xA9sultat vers", PG::ValueType::Text, {},
          "Facultatif : une variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le r\xC3\xA9sultat (la permission Piloter et le niveau "
          "d'acc\xC3\xA8s de l'objet s'appliquent). Vide : pas de bouton \xC3\x89" "crire."},
@@ -2859,6 +2880,13 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "colorOff") return "Fond muet";
         if (key == "icon") return "Ic\xC3\xB4ne haut-parleur";
         if (key == "pilotable") return "Pilotable (un clic coupe, r\xC3\xA9tablit)";
+    }
+    // 1.14.1 (lot N5) : l'Explorateur de fichiers.
+    if (kind == K::FileExplorer) {
+        if (key == "maxItems") return "\xC3\x89l\xC3\xA9ments au plus";
+        if (key == "accent") return "Couleur d'accent";
+        if (key == "fill") return "Fond";
+        if (key == "pilotable") return "Pilotable (parcourir, choisir, trier)";
     }
     // 1.14.1 (lot N5) : le Convertisseur d'unites.
     if (kind == K::UnitConverter) {
@@ -3283,6 +3311,25 @@ void converterProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property
         explain("Coch\xC3\xA9 : en marche, l'op\xC3\xA9rateur tape une valeur, choisit De et Vers, inverse, \xC3\xA9" "crit le r\xC3\xA9sultat ; "
                 "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent. D\xC3\xA9" "coch\xC3\xA9 : il montre la conversion sans "
                 "r\xC3\xA9" "agir.");
+    }
+}
+
+// 1.14.1 (lot N5) : l'Explorateur de fichiers - le tri parmi ses colonnes, l'aide de ses cles partagees.
+void explorerProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p) {
+    if (o.kind != hmi::Kind::FileExplorer) return;
+    const auto explain = [&](std::string mine) {
+        const auto at = p.description.find("Tape =expression");
+        p.description = std::move(mine) + (at == std::string::npos ? std::string{} : "\n" + p.description.substr(at));
+    };
+    if (prop.key == "sortBy") {
+        p.enumValues = {"nom", "taille", "date", "genre"};
+        explain("Le tri de d\xC3\xA9part : nom, taille, date ou genre (les dossiers toujours devant). En marche, un clic sur un titre trie, "
+                "un second inverse.");
+    } else if (prop.key == "maxItems") {
+        explain("Un dossier \xC3\xA9norme : la liste s'arr\xC3\xAAte l\xC3\xA0 et le dit (le poste reste vif).");
+    } else if (prop.key == "pilotable") {
+        explain("Coch\xC3\xA9 : en marche, l'op\xC3\xA9rateur parcourt, choisit, trie, cherche ; le niveau d'acc\xC3\xA8s et l'autorisation de "
+                "l'objet s'appliquent. D\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir.");
     }
 }
 
@@ -4213,6 +4260,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         docProperty(*o, prop, p, assets);
         soundProperty(*o, prop, p);   // 1.14.0 : le Coupe-son, le Melangeur de volume
         converterProperty(*o, prop, p, project);   // 1.14.1 (lot N5) : le Convertisseur d'unites
+        explorerProperty(*o, prop, p);             // 1.14.1 (lot N5) : l'Explorateur de fichiers
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.

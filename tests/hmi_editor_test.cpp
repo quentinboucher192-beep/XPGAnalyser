@@ -7437,6 +7437,135 @@ void unites1141Ecran() {
     }
 }
 
+// 1.14.1 (lot N5) : L'EXPLORATEUR DE FICHIERS A L'ECRAN - la bibliotheque, l'inspecteur, le dessin dans l'editeur, en
+// marche : la souris (une ligne, le double-clic, les titres, remonter), l'infobulle au survol, le theme jour.
+void explorateur1141Ecran() {
+    std::printf("1.14.1 : l'explorateur de fichiers \xC3\xA0 l'\xC3\xA9" "cran (biblioth\xC3\xA8que, dessin, souris, infobulle)\n");
+    namespace fs = std::filesystem;
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        pal.setFilter("m\xC3\xA9" "dias");
+        gfx::Rect r;
+        if (!pal.tileRect(Kind::FileExplorer, r)) pal.revealKind(Kind::FileExplorer);
+        check(pal.tileRect(Kind::FileExplorer, r) && app::glyphFor(Kind::FileExplorer) == app::HmiGlyph::FileExplorer,
+              "la tuile Explorateur de fichiers dans la famille M\xC3\xA9" "dias, son ic\xC3\xB4ne");
+        for (const char* w : {"zip", "dossier", "fichiers"}) {
+            pal.setFilter(w);
+            gfx::Rect rr;
+            if (!pal.tileRect(Kind::FileExplorer, rr)) pal.revealKind(Kind::FileExplorer);
+            check(pal.tileRect(Kind::FileExplorer, rr), std::string("la recherche \xC2\xAB ") + w + " \xC2\xBB trouve l'Explorateur");
+        }
+        pal.setFilter("");
+        (void)b.place(Kind::FileExplorer, 100, 100);
+        b.editor->layout();
+        std::set<std::string> names;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) names.insert(pr.name);
+        check(names.count("Source (dossier ou .zip)") && names.count("Filtre d'extensions") && names.count("Choix vers") && names.count("Extraire permis")
+                  && names.count("Dossier d'extraction") && names.count("Rafra\xC3\xAE" "chir permis") && names.count("Recherche (Nom contient)")
+                  && names.count("Trier par") && names.count("\xC3\x89l\xC3\xA9ments au plus"),
+              "l'inspecteur : Source, Filtre, Choix vers, Extraire, Dossier d'extraction, Rafra\xC3\xAE" "chir, Recherche, Trier par, \xC3\x89l\xC3\xA9ments au plus");
+    }
+    {
+        Project p;
+        View v = makeView(p, "Vue_Fichiers");
+        const app::HmiViewport vp{};
+        const auto theme = ui::Theme::dark();
+        Object o = makeObject(Kind::FileExplorer, 900, "Exp", 10, 10, v.layers.front().id);
+        o.setNumber("w", 700);
+        o.setNumber("h", 340);
+        ColorRecorder r1;
+        app::paintHmiObject(r1, v, o, vp, app::HmiPropertySource{}, theme, {});
+        check(r1.wrote("Ressources") && r1.wrote("Nom") && r1.wrote("Taille") && r1.wrote("Date") && r1.wrote("archive_2026.zip") && r1.wrote("PDF")
+                  && r1.wrote("Nom contient") && !r1.wrote("Extraire"),
+              "dans l'\xC3\xA9" "diteur : le fil (Ressources), les colonnes, des lignes d'exemple et leurs ic\xC3\xB4nes, la recherche ; pas d'Extraire");
+    }
+    // ---- en marche : un vrai dossier temporaire
+    const fs::path root = fs::temp_directory_path() / ("n5_ecran_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const auto put = [](const fs::path& f, const std::string& data) {
+        fs::create_directories(f.parent_path());
+        std::ofstream out(f, std::ios::binary);
+        out << data;
+    };
+    put(root / "Donnees" / "mesures.csv", "Date;Debit\n2026-10-30;12.5\n");
+    put(root / "Donnees" / "notice.pdf", "%PDF-1.4 essai");
+    put(root / "Donnees" / "Archives" / "jan.csv", "a;b\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    View v = makeView(p, "Vue_Fichiers");
+    v.width = 900;
+    v.height = 520;
+    const Id ex = edit::add(p, v, Kind::FileExplorer, 20, 20);
+    v.object(ex)->name = "Exp";
+    v.object(ex)->set("folder", (root / "Donnees").string());
+    v.object(ex)->setNumber("w", 640);
+    v.object(ex)->setNumber("h", 320);
+    p.views = {v};
+    p.config.startView = v.id;
+    app::HmiSimulationPane pane("n5exp", doc, app::HmiSimulationHost{});
+    pane.setBounds({0, 0, 1600, 900});
+    pane.layout();
+    const auto theme = ui::Theme::dark();
+    ColorRecorder rec;
+    const auto paintAt = [&](double t) {
+        rec.tris.clear();
+        rec.texts.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+    paintAt(0.1);
+    const auto* fe = pane.runtime().fileExplorer(ex);
+    check(fe && fe->shown.size() == 3 && rec.wrote("Donnees") && rec.wrote("mesures.csv") && rec.wrote("notice.pdf") && rec.wrote("Archives")
+              && rec.wrote("3 \xC3\xA9l\xC3\xA9ments"),
+          "en marche : le fil (Donnees), les trois lignes, le compte");
+    // Une ligne au clic ; le double-clic sur le dossier l'ouvre.
+    gfx::Rect r0;
+    check(pane.canvas().partRect("Exp", "ligne:0", r0), "la premi\xC3\xA8re ligne (le dossier Archives)");
+    pane.canvas().dispatch(ui::MouseDown{centre(r0), ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{centre(r0), ui::MouseButton::Left, {}});
+    check(pane.runtime().fileExplorer(ex)->selected == 0, "un clic : la ligne est choisie");
+    // L'infobulle : la souris sur une ligne (les fichiers apres le dossier).
+    gfx::Rect r2;
+    check(pane.canvas().partRect("Exp", "ligne:1", r2), "la ligne de mesures.csv");
+    pane.canvas().dispatch(ui::MouseMove{centre(r2), {0, 0}, {}});
+    paintAt(0.2);
+    check(rec.wrote("Taille : 27 octets") && rec.wrote("Date;Debit"), "au survol : l'infobulle (la taille, la premi\xC3\xA8re ligne du CSV)");
+    pane.canvas().dispatch(ui::MouseDown{centre(r0), ui::MouseButton::Left, 2, {}});
+    pane.canvas().dispatch(ui::MouseUp{centre(r0), ui::MouseButton::Left, {}});
+    paintAt(0.3);
+    check(pane.runtime().fileExplorer(ex)->loc.at == std::vector<std::string>{"Archives"} && rec.wrote("jan.csv") && rec.wrote("..")
+              && rec.wrote("Archives"),
+          "un double-clic sur Archives : il s'ouvre (jan.csv), la ligne .. et le fil");
+    gfx::Rect up;
+    check(pane.canvas().partRect("Exp", "parent", up), "la ligne ..");
+    pane.canvas().dispatch(ui::MouseDown{centre(up), ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{centre(up), ui::MouseButton::Left, {}});
+    check(pane.runtime().fileExplorer(ex)->loc.at.empty(), "un clic sur .. : on revient \xC3\xA0 la source");
+    gfx::Rect col;
+    check(pane.canvas().partRect("Exp", "colonne:taille", col), "le titre Taille");
+    pane.canvas().dispatch(ui::MouseDown{centre(col), ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{centre(col), ui::MouseButton::Left, {}});
+    check(pane.runtime().fileExplorer(ex)->sortBy == hmi::explorer::SortKey::Size, "un clic sur Taille : la liste se trie par taille");
+    // Le theme jour : le fond s'eclaircit.
+    gfx::Rect er;
+    (void)pane.canvas().objectRect("Exp", er);
+    pane.canvas().dispatch(ui::MouseMove{{er.x - 30, er.y - 10}, {0, 0}, {}});
+    paintAt(0.4);
+    const gfx::Color night = rec.firstIn(er);
+    std::string why;
+    check(pane.runtime().setDisplay("theme", "jour", 0.5, "essai", &why), "le th\xC3\xA8me jour " + why);
+    paintAt(0.5);
+    const gfx::Color day = rec.firstIn(er);
+    const auto lum = [](gfx::Color c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; };
+    check(lum(night) < 80 && lum(day) > 160, "le th\xC3\xA8me jour : le fond de l'explorateur s'\xC3\xA9" "claircit (" + std::to_string(static_cast<int>(lum(night)))
+                                                 + " \xE2\x86\x92 " + std::to_string(static_cast<int>(lum(day))) + ")");
+    fs::remove_all(root, ec);
+}
+
 void visionneuse11230() {
     std::printf("1.12.30 : la visionneuse de documents \xC3\xA0 l'\xC3\xA9" "cran (biblioth\xC3\xA8que, inspecteur, dessin dans l'\xC3\xA9" "diteur)\n");
     {
@@ -19254,7 +19383,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 465,   // 1.14.1 : + 2 (N5 : l'onglet Convertir des Unites de mesure, le Convertisseur d'unites) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 466,   // 1.14.1 : + 3 (N5 : l'onglet Convertir des Unites de mesure, le Convertisseur d'unites, l'Explorateur de fichiers) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19401,7 +19530,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 236, "centre : L'IHM a les 236 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N5 : objet-convertisseur-unites)");
+    check(ix.count(hc::Chapter::Hmi) == 237, "centre : L'IHM a les 237 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 68, "centre : 11 expressions, 68 notes (1.14.1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -41824,6 +41953,7 @@ int main(int argc, char** argv) {
     // 1.14.1 (lot N5) : HMI_TEST_N5=1 - convertir des unites, l'explorateur de fichiers, a l'ecran, seuls.
     if (const char* only = std::getenv("HMI_TEST_N5"); only && *only == '1') {
         unites1141Ecran();
+        explorateur1141Ecran();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -42242,6 +42372,7 @@ int main(int argc, char** argv) {
     visionneuse11230();   // 1.12.30
     son1140Ecran();       // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     unites1141Ecran();    // 1.14.1 (lot N5) : convertir des unites (l'onglet, l'objet)
+    explorateur1141Ecran();   // 1.14.1 (lot N5) : l'explorateur de fichiers
     lot10_svg();
     lot10_symboles();
     lot11_bibliotheque();
