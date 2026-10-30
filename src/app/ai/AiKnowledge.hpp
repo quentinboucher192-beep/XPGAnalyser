@@ -8,10 +8,11 @@
 //
 //  DEUX SORTES :
 //    - les connaissances INTEGREES au logiciel (source "logiciel") : tirees de
-//      ses VRAIES tables, au demarrage - les 116 genres d'objets (hmi::kKindInfos,
-//      leur famille dans la bibliotheque, le role de leur valeur), les proprietes
-//      de chaque genre (la creation par defaut hmi::makeObject et la table des
-//      roles hmi::roles, le libelle de l'inspecteur), les actions (declencheurs et
+//      ses VRAIES tables, au demarrage - les 116 genres d'objets et les
+//      proprietes de chaque genre viennent du REGISTRE DES GENRES (1.15.0,
+//      AiRegistry.hpp : hmi::kKindInfos, la famille de la bibliotheque, la
+//      creation par defaut hmi::makeObject, les roles hmi::roles, le libelle de
+//      l'inspecteur) - le texte meme que l'Assistant envoie ; les actions (declencheurs et
 //      operations), le vocabulaire et les synonymes (les mots-cles de recherche de
 //      la bibliotheque d'objets), les regles de creation (l'objet pose pour une
 //      variable, hmi::design::kindForVariable ; les modeles de vues). Elles

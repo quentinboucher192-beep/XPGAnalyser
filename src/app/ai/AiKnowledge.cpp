@@ -5,6 +5,7 @@
 #include "AiKnowledge.hpp"
 #include "AiMemory.hpp"
 #include "AiPaths.hpp"
+#include "AiRegistry.hpp"
 #include "../Dossiers.hpp"
 #include "../hmi/HmiPanels.hpp"           // hmiPaletteFamily, hmiPaletteWords, hmiPropertyLabel
 #include "../../core/Version.hpp"
@@ -59,27 +60,6 @@ std::string hereLabel(Here h) {
 //  logiciel, une ligne par element, en francais.
 namespace {
 
-namespace roles = hmi::roles;
-
-const char* roleWord(roles::Role r) {
-    switch (r) {
-        case roles::Role::Number: return "nombre";
-        case roles::Role::Boolean: return "bool\xC3\xA9" "en";
-        case roles::Role::State: return "\xC3\xA9tat";
-        case roles::Role::Text: return "texte";
-        case roles::Role::Duration: return "dur\xC3\xA9" "e";
-        case roles::Role::Date: return "date";
-        case roles::Role::Color: return "couleur";
-        case roles::Role::Name: return "nom";
-        case roles::Role::Formula: return "formule";
-        case roles::Role::List: return "liste";
-        case roles::Role::Mini: return "petit langage";
-        case roles::Role::Choice: return "choix";
-        case roles::Role::Format: return "format";
-    }
-    return "texte";
-}
-
 std::size_t g_kinds = 0;   // les genres que porte la connaissance des genres
 
 Knowledge builtIn(std::string id, std::string name, std::string description, std::string category, std::string content) {
@@ -95,42 +75,14 @@ Knowledge builtIn(std::string id, std::string name, std::string description, std
     return k;
 }
 
+// 1.15.0 : LE REGISTRE DES GENRES (AiRegistry.hpp) les ecrit - le meme texte que celui envoye au
+// modele ; le compte des genres connus est celui des genres que le registre decrit.
 std::string kindsText(std::size_t& count) {
-    std::string s = "Genres d'objets d'IHM Studio : chaque objet d'une vue est un hmi::Object d'un de ces genres (Kind), "
-                    "avec des propri\xC3\xA9t\xC3\xA9s cl\xC3\xA9/valeur. Une ligne par genre : cl\xC3\xA9 enregistr\xC3\xA9" "e | libell\xC3\xA9 | "
-                    "famille de la biblioth\xC3\xA8que | ce que porte sa valeur.\n";
-    count = 0;
-    for (const auto& info : hmi::kKindInfos) {
-        if (info.key.empty()) continue;
-        const std::string family = hmiPaletteFamily(info.kind);
-        s += std::string(info.key) + " | " + std::string(info.label) + " | " + (family.empty() ? std::string("-") : family) + " | "
-             + roleWord(roles::valueRole(info.kind)) + "\n";
-        ++count;
-    }
-    return s;
+    count = registry().kinds().size();
+    return registry().kindsText();
 }
 
-std::string propertiesText() {
-    std::string s = "Propri\xC3\xA9t\xC3\xA9s de chaque genre, telles que la cr\xC3\xA9" "ation par d\xC3\xA9" "faut les pose (hmi::makeObject), "
-                    "avec leur r\xC3\xB4le (hmi::roles). Une ligne par genre : cl\xC3\xA9 (libell\xC3\xA9 de l'inspecteur) = valeur par d\xC3\xA9" "faut "
-                    "[r\xC3\xB4le].\n";
-    for (const auto& info : hmi::kKindInfos) {
-        const hmi::Object o = hmi::makeObject(info.kind, 1, std::string(info.key) + "_1", 0, 0, 0);
-        s += std::string(info.key) + " :";
-        bool first = true;
-        for (const auto& p : o.props) {
-            const std::string label = hmiPropertyLabel(info.kind, p.key);
-            s += first ? " " : " ; ";
-            first = false;
-            s += p.key;
-            if (!label.empty() && label != p.key) s += " (" + label + ")";
-            s += " = " + (p.value.empty() ? std::string("\"\"") : p.value);
-            s += std::string(" [") + roleWord(roles::roleOf(info.kind, p.key).role) + "]";
-        }
-        s += "\n";
-    }
-    return s;
-}
+std::string propertiesText() { return registry().propertiesText(); }
 
 std::string actionsText() {
     std::string s = "Actions des objets et des vues : un d\xC3\xA9" "clencheur et une op\xC3\xA9ration, ex\xC3\xA9" "cut\xC3\xA9" "es dans l'ordre de la liste.\n";
@@ -213,7 +165,7 @@ const std::vector<Knowledge>& builtIns() {
         std::string kindsContent = kindsText(kinds);
         g_kinds = kinds;
         v.push_back(builtIn(std::string(kKindsKnowledge), "Genres d'objets IHM",
-                            "Les " + std::to_string(kinds) + " genres d'objets des vues : cl\xC3\xA9, libell\xC3\xA9, famille de la biblioth\xC3\xA8que, valeur.",
+                            "Les " + std::to_string(kinds) + " genres d'objets des vues : cl\xC3\xA9, libell\xC3\xA9, famille de la biblioth\xC3\xA8que (le registre des genres).",
                             "objets", std::move(kindsContent)));
         v.push_back(builtIn("logiciel.proprietes", "Propri\xC3\xA9t\xC3\xA9s de chaque genre",
                             "Les propri\xC3\xA9t\xC3\xA9s pos\xC3\xA9" "es par la cr\xC3\xA9" "ation par d\xC3\xA9" "faut, leur libell\xC3\xA9 et leur r\xC3\xB4le.",
