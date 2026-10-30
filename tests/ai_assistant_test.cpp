@@ -250,6 +250,8 @@ void testFirstOpening() {
     check(std::all_of(list.begin(), list.end(), [](const ai::Conversation& c) { return c.demo; }), "marquees demo");
     check(f.files("conversations") == 2, "ecrites dans IA/conversations/");
     check(fs::exists(f.dir / "IA" / "parametres.json"), "IA/parametres.json ecrit");
+    check(f.as().current() && f.as().current()->title == "D\xC3\xA9" "couvrir l'Assistant",
+          "1.14.2 : la premiere ouverture montre Decouvrir l'Assistant, pas la conversation perimee");
     check(readAll(f.dir / "IA" / "activite.jsonl").find("\"type\":\"conversation\"") != std::string::npos, "une ligne dans activite.jsonl");
     // La seconde ouverture ne les recree pas.
     Fixture g("premiere", false);
@@ -367,7 +369,7 @@ void testScrollAndInput() {
     auto& chat = f.panel->chat();
     check(chat.contentHeight() > chat.bounds().h, "la discussion depasse : elle defile");
     const auto prompt = f.panel->promptRect();
-    check(prompt.bottom() <= f.panel->bounds().bottom() && prompt.h >= 50.f, "la saisie est en bas du panneau");
+    check(prompt.bottom() <= f.panel->bounds().bottom() && prompt.h >= 28.f, "la saisie est en bas du panneau");
     check(chat.bounds().bottom() <= prompt.y, "la discussion s'arrete au-dessus de la saisie");
     check(chat.atBottom(), "apres une reponse : en bas");
     chat.scrollBy(-600.f);
@@ -386,6 +388,44 @@ void testScrollAndInput() {
     (void)in.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
     check(f.as().generating() && in.text().empty(), "Entree : envoye, la saisie se vide");
     f.finish();
+    // 1.14.2 (les captures) : un champ de message - le texte passe a la ligne au mot, le champ
+    // grandit de 1 a 5 lignes puis defile ; l'indication du champ vide se lit, rien ne la recouvre.
+    {
+        in.setText({});
+        f.panel->layout();
+        const float h1 = f.panel->promptRect().h;
+        check(!in.placeholder().empty() && in.placeholder().find("D\xC3\xA9" "cris ta demande") == 0, "vide : l'indication (tutoyee)");
+        Recorder rec;
+        f.render(rec);
+        check(rec.saw("D\xC3\xA9" "cris ta demande") && !rec.saw("modifi\xC3\xA9"), "l'indication est dessinee, sans marque modifie");
+        const std::string longText = ai::demoSuggestions()[0];
+        for (const char ch : longText) (void)in.dispatch(ui::TextInput{std::string(1, ch)});
+        f.panel->layout();
+        check(in.text() == longText, "tape au clavier : le texte entier");
+        const auto rows = ai::AiPromptEdit::wrap(in.text(), in.bounds().w - 24.f);
+        check(rows.size() >= 2 && in.lineCount() >= 2, "la longue demande passe a la ligne (" + std::to_string(in.lineCount()) + " lignes)");
+        bool fits = true;
+        for (const auto& r : rows)
+            if (ui::measureWidth(std::string_view(in.text()).substr(r.begin, r.end - r.begin), gfx::FontId{14}) > in.bounds().w - 16.f + 8.f) fits = false;
+        check(fits, "aucune ligne ne depasse le champ (pas de defilement de cote)");
+        check(rows.size() > 1 && in.text()[rows[1].begin - 1] == ' ', "la coupure tombe entre deux mots");
+        check(f.panel->promptRect().h > h1, "le champ grandit avec le texte");
+        for (int k = 0; k < 6; ++k) (void)in.dispatch(ui::KeyDown{ui::Key::Return, {false, true, false, false}, false});
+        f.panel->layout();
+        const float h5 = f.panel->promptRect().h;
+        check(in.lineCount() > ai::AiPromptEdit::kMaxRows && std::abs(h5 - in.heightFor(in.bounds().w)) < 0.5f, "au-dela de 5 lignes : la hauteur s'arrete");
+        check(in.scrollOffset() > 0.f, "puis le champ defile (le curseur reste en vue)");
+        (void)in.dispatch(ui::KeyDown{ui::Key::A, {true, false, false, false}, false});
+        (void)in.dispatch(ui::KeyDown{ui::Key::Backspace, {}, false});
+        check(in.text().empty(), "Ctrl+A puis Retour arriere : vide");
+        f.panel->layout();
+        check(std::abs(f.panel->promptRect().h - h1) < 0.5f, "vide : la hauteur revient");
+        in.setText("une deux");
+        (void)in.dispatch(ui::KeyDown{ui::Key::Left, {true, false, false, false}, false});
+        (void)in.dispatch(ui::TextInput{"x"});
+        check(in.text() == "une xdeux", "Ctrl+Gauche : le mot precedent");
+        in.setText({});
+    }
     // Les suggestions : une conversation vide les montre ; un clic envoie.
     f.panel->newConversation();
     f.panel->layout();
@@ -585,13 +625,87 @@ void testApplyRefuseDirect() {
     check(f.stack.undoLabel().find("Assistant IA") != std::string::npos, "son libelle : Assistant IA : ...");
     check(f.as().proposal(m)->state == "appliquee", "la carte passe a appliquee");
     check(f.count(hmi::Kind::Pump) == 6 && f.object("Cuve_2") && f.object("Cuve_2")->text("label") == "Cuve 2", "les objets et leurs proprietes");
+    using A = ai::Assistant::Applied;
+    check(f.as().appliedState(m) == A::Applied && !f.as().proposal(m)->fingerprintAfter.empty(), "l'empreinte d'apres est gardee : appliquee");
     (void)f.stack.undo();
     check(f.v().objects.empty(), "un Ctrl+Z defait tout");
+    // 1.14.2 (les captures) : la carte ne dit plus "Appliquee" apres un Ctrl+Z.
+    f.step(0.3);
+    check(f.as().appliedState(m) == A::Undone, "apres Ctrl+Z : annulee");
+    {
+        Recorder rec;
+        f.render(rec);
+        check(rec.saw("Annul\xC3\xA9" "e") && !rec.saw("Appliqu\xC3\xA9" "e au projet"), "la carte dit Annulee (Ctrl+Z)");
+        auto* again = f.panel->chat().cardButton(m, 1);
+        check(again && again->text() == "R\xC3\xA9" "appliquer" && again->visible(), "et propose Reappliquer");
+    }
     (void)f.stack.redo();
     check(f.v().objects.size() == 31, "Ctrl+Y le refait");
+    f.step(0.3);
+    check(f.as().appliedState(m) == A::Applied, "apres Ctrl+Y : appliquee de nouveau");
+    {
+        Recorder rec;
+        f.render(rec);
+        check(rec.saw("Appliqu\xC3\xA9" "e au projet") && !rec.saw("Annul\xC3\xA9" "e"), "la carte le dit");
+    }
+    // Reappliquer apres Ctrl+Z : une NOUVELLE commande (la vue est celle de la proposition).
+    (void)f.stack.undo();
+    f.step(0.3);
+    if (auto* again = f.panel->chat().cardButton(m, 1)) again->clicked->emit();
+    f.step(0.3);
+    check(f.v().objects.size() == 31 && f.as().appliedState(m) == A::Applied, "Reappliquer : les 31 objets reviennent, appliquee");
+    (void)f.stack.undo();
+    check(f.v().objects.empty(), "et un Ctrl+Z la reprend");
+    (void)f.stack.redo();
+    {
+        // Le projet rouvert sans avoir ete enregistre (la vue d'avant) : la relecture dit annulee.
+        const std::string id = f.as().current()->id;
+        Fixture g("appliquer", false);
+        const int i = g.as().indexOf(id);
+        check(i >= 0 && g.panel->selectConversation(i), "la conversation relue (le projet rouvert, vide)");
+        int gm = -1;
+        if (const auto* gc = g.as().current())
+            for (std::size_t k = 0; k < gc->messages.size(); ++k)
+                if (gc->messages[k].proposal && gc->messages[k].proposal->id == f.as().proposal(m)->id) gm = static_cast<int>(k);
+        check(gm >= 0 && g.as().appliedState(gm) == A::Undone, "la vue est celle d'avant : annulee (pas Appliquee)");
+    }
+    {
+        // Un autre geste ensuite : appliquee, la vue a change depuis.
+        (void)f.stack.push(hmi::changeView(f.doc, f.view, "Ajouter un texte", [](hmi::Project& p, hmi::View& v) {
+            (void)hmi::edit::add(p, v, hmi::Kind::Text, 10, 10);
+        }));
+        f.step(0.3);
+        check(f.as().appliedState(m) == A::Changed, "un autre geste ensuite : la vue a change depuis");
+        Recorder rec;
+        f.render(rec);
+        check(rec.saw("la vue a chang\xC3\xA9 depuis"), "la carte le dit");
+        (void)f.stack.undo();
+        f.step(0.3);
+    }
     // Refuser.
     (void)f.sendAndWait("Ajoute une cuve avec un indicateur de niveau");
     const int r = f.lastProposal();
+    {
+        // 1.14.2 (les captures, 1280 x 800) : le volet etroit - les boutons ne debordent jamais de la carte.
+        f.panel->setBounds({0, 0, ai::defaultPanelWidth(1280.f), 760});
+        f.panel->layout();
+        f.panel->chat().scrollToBottom();
+        f.panel->layout();
+        const auto card = f.panel->chat().cardRect(r);
+        bool inside = card.w > 0.f;
+        int shown = 0;
+        for (int k = 0; k < 3; ++k)
+            if (auto* b = f.panel->chat().cardButton(r, k); b && b->visible()) {
+                ++shown;
+                inside = inside && b->bounds().x >= card.x && b->bounds().right() <= card.right() - 4.f && b->bounds().bottom() <= card.bottom();
+            }
+        check(inside && shown == 3, "a 282 px : Previsualiser, Appliquer, Refuser dans la carte");
+        check(std::abs(ai::defaultPanelWidth(1280.f) - 281.6f) < 0.5f && ai::defaultPanelWidth(1920.f) > 400.f && ai::defaultPanelWidth(4000.f) == 460.f
+                  && ai::defaultPanelWidth(800.f) == 280.f,
+              "la largeur par defaut : 22 % de la fenetre, entre 280 et 460");
+        f.panel->setBounds({0, 0, 440, 900});
+        f.panel->layout();
+    }
     auto* refuseBtn = f.panel->chat().cardButton(r, 2);
     check(refuseBtn && refuseBtn->text() == "Refuser", "la carte : Refuser");
     if (refuseBtn) refuseBtn->clicked->emit();
@@ -668,6 +782,9 @@ void testVariable() {
     auto ck = f.as().check(m);
     check(!ck.ok() && ck.missingVariable == "PUMP_01_RUN", "PUMP_01_RUN n'existe pas : une erreur, pas d'invention");
     check(f.as().current()->messages.back().text.find("n'existe pas") != std::string::npos, "la reponse le dit");
+    check(f.as().current()->messages.back().text.find("approchante") == std::string::npos
+              && f.as().current()->messages.back().text.find("Pompe_1_Marche") != std::string::npos,
+          "1.14.2 : la reponse cite les variables du projet que l'apercu propose");
     for (const auto& n : ck.nearVariables) check(f.doc->project.variable(n) != nullptr, "propose une variable qui existe : " + n);
     std::string why;
     check(!f.as().apply(m, &why) && f.object("Pompe_11")->text("variable").empty(), "Appliquer est refuse (" + why + ")");
@@ -687,6 +804,17 @@ void testVariable() {
     for (std::size_t i = 0; i < items.size(); ++i)
         if (items[i].rfind("Pompe_1_Marche", 0) == 0) idx = static_cast<int>(i);
     check(pv->chooseVariable(idx) && pv->check().ok() && pv->applyButton()->enabled(), "Pompe_1_Marche choisie : Appliquer possible");
+    {
+        // 1.14.2 (les captures) : le libelle garde le nom introuvable (plus de guillemets vides).
+        Recorder rec;
+        auto* root = pv->widgetRoot();
+        if (root) {
+            root->setBounds({0, 0, 1600, 900});
+            root->layout();
+            root->render(ui::PaintContext{rec, ui::Theme::dark(), root->bounds(), f.t, nullptr});
+        }
+        check(rec.saw("\xC2\xAB PUMP_01_RUN \xC2\xBB n'existe pas") && !rec.saw("\xC2\xAB  \xC2\xBB"), "le libelle : PUMP_01_RUN, remplacee par Pompe_1_Marche");
+    }
     check(pv->apply(), "Appliquer");
     f.mm.applyPending();
     check(f.object("Pompe_11")->text("variable") == "Pompe_1_Marche", "la pompe lit Pompe_1_Marche");
@@ -787,6 +915,16 @@ void testStale() {
     const auto dc = f.as().check(1);
     check(dc.viewMissing && !dc.ok(), "sa vue n'existe pas : rien ne s'applique");
     check(!f.as().apply(1, &why), "refusee (" + why + ")");
+    {
+        // 1.14.2 (les captures) : son texte annonce 31 objets, sa carte aussi (pas "Creer 0") ;
+        // la note se lit en entier (a la ligne), sans "...".
+        f.panel->layout();
+        Recorder rec;
+        f.render(rec);
+        check(rec.saw("Cr\xC3\xA9" "er 31") && !rec.saw("Cr\xC3\xA9" "er 0"), "la carte perimee : Creer 31, comme son texte");
+        check(!rec.saw("s'ap\xE2\x80\xA6"), "la note n'est pas coupee par ...");
+        check(rec.saw("appliquer."), "la note se lit jusqu'au bout");
+    }
 }
 
 // ------------------------------------------ l'apercu : les vrais painters ----
