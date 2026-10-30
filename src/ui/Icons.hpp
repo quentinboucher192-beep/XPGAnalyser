@@ -67,6 +67,8 @@ enum class Icon : std::uint8_t {
     Group, BringFront, Align, Rotate, Pin, Window, GoTo, Function, Eye, EyeOff, Unlock,
     Plus, ArrowUp, ArrowDown, Link, Help, Comment, Sort, Columns, Wrench, Breakpoint,
     RunTo, Release, Import, Clear,
+    // 1.14.2 : l'Assistant IA (une bulle de dialogue et son etincelle). A la FIN, toujours.
+    Assistant,
 };
 
 // 1.8.0 : l'icone du catalogue `index` (core::codeicons::info(index)) ; hors

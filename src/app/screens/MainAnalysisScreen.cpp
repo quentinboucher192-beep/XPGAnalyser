@@ -103,6 +103,7 @@ constexpr const char* kViewDiagnostics = "view.diagnostics";
 constexpr const char* kViewSummary     = "view.analysisSummary";
 constexpr const char* kViewStatus      = "view.projectStatus";
 constexpr const char* kViewOutputPanel = "view.outputPanel";        // 1.11.14 : le panneau du bas
+constexpr const char* kViewAssistant   = "view.assistant";          // 1.14.2 : l'Assistant IA (IHM Studio)
 
 constexpr const char* kLayoutOuter  = "layout.outer";
 constexpr const char* kLayoutUpper  = "layout.upper";
@@ -1078,6 +1079,9 @@ core::Status MainAnalysisScreen::buildUi() {
         variables_ = table.get();
         right->addChild(std::move(table));
         upper_->addPane(std::move(right), 0.30f, 260.f);
+        // 1.14.2 : L'ASSISTANT IA, le quatrieme volet (IHM Studio) - a droite de l'editeur, replie
+        // au depart ; Ctrl+Maj+I, Affichage > Panneaux, la Disposition (app/ai/AiWorkspace.cpp).
+        if (core::hasIhm()) upper_->addPane(buildAssistantPanel(), 0.26f, 340.f);
 
         outer_->addPane(std::move(upper), 0.56f, 200.f);
     }
@@ -1176,6 +1180,14 @@ WidgetPtr MainAnalysisScreen::buildViewPanel() {
         panels_.push_back(PanelToggle{&ref, e.key, e.owner, e.pane});
     }
 
+    // 1.14.2 : l'Assistant IA (le volet 3 de analysis.upper), dans IHM Studio.
+    if (core::hasIhm()) {
+        auto box = std::make_unique<Checkbox>("Assistant IA (Ctrl+Maj+I)");
+        auto& ref = static_cast<Checkbox&>(panel->addChild(std::move(box)));
+        ref.setTooltip("Montrer ou cacher l'Assistant IA, \xC3\xA0 droite de l'\xC3\xA9" "diteur (Ctrl+Maj+I). Le choix est retenu dans les r\xC3\xA9glages.");
+        panels_.push_back(PanelToggle{&ref, kViewAssistant, 1, 3});
+    }
+
     auto alt = std::make_unique<Checkbox>("Lignes altern\xC3\xA9" "es");
     altRowsBox_ = &static_cast<Checkbox&>(panel->addChild(std::move(alt)));
     return panel;
@@ -1245,7 +1257,8 @@ void MainAnalysisScreen::loadWorkspace() {
     // anciens volets Diagnostics, Resume, Etat) ni la liste des documents ouverts (les onglets
     // la donnent) ; Affichage > Panneaux les rend. Un reglage deja enregistre est garde.
     for (const auto& p : panels_)
-        wanted.push_back(s.getBool(p.key, std::string_view(p.key) != kViewBottomRow && std::string_view(p.key) != kViewDocuments));
+        wanted.push_back(s.getBool(p.key, std::string_view(p.key) != kViewBottomRow && std::string_view(p.key) != kViewDocuments
+                                              && std::string_view(p.key) != kViewAssistant));   // 1.14.2 : l'Assistant, replie au depart
     const bool wantAltRows = s.getBool("view.alternatingRows", true);
 
     std::vector<std::vector<float>> ratios;

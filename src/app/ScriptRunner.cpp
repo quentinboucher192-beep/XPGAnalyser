@@ -9,6 +9,8 @@
 #include "../help/TutorialVerify.hpp"   // 1.11 (T1, tranche 16) : l'A toi deja vrai avant ses gestes
 #include "hmi/HmiTutorialDeduce.hpp"    // 1.11 (T1, tranche 18) : tutoriel-compte, la raison du deducteur (whyNoTutorial)
 #include "HistoryPanel.hpp"
+#include "ai/AiPanel.hpp"            // 1.14.2 : l'Assistant IA (ia ...)
+#include "ai/AiPreviewDialog.hpp"
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les commandes nouveautes-*
 #include "../ui/NoveltyBoard.hpp"
 
@@ -615,6 +617,92 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     // ---- fin 1.8.0 ----
 
+    // ---- 1.14.2 : L'ASSISTANT IA (app/ai) ----
+    //  ia ouvrir | replier                 le volet (comme Ctrl+Maj+I)
+    //  ia nouvelle                         une nouvelle conversation
+    //  ia conversation "titre" | N         choisir une conversation (le debut du titre, ou son rang 1..)
+    //  ia renommer "titre"                 renommer celle qui est ouverte (le champ sur sa ligne, puis Entree)
+    //  ia supprimer                        la confirmation de sa suppression s'ouvre (bouton "Supprimer")
+    //  ia saisir "texte"                   le texte dans la saisie (sans l'envoyer)
+    //  ia envoyer ["texte"]                envoyer (la saisie, ou ce texte)
+    //  ia suggestion N                     la N-ieme suggestion (1..)
+    //  ia attendre                         jusqu'a la fin de la reponse et du traitement des pieces jointes
+    //  ia arreter                          arreter la generation
+    //  ia joindre "chemin"                 joindre un fichier (comme lache sur le panneau)
+    //  ia apercu | appliquer | refuser     la derniere proposition (dans la fenetre d'apercu : la sienne)
+    //  ia variable N                       dans l'apercu : la N-ieme variable de la liste (la derniere : la creer)
+    //  ia mode previsualisation | direct
+    //  ia parametres                       la fenetre des parametres
+    //  ia defiler N                        la discussion, de N pixels (negatif : vers le haut)
+    //  ia etat                             au journal du script : les conversations, l'ouverte, la generation
+    if (cmd == "ia") {
+        const std::string sub = lower(arg(1));
+        if (auto* pv = dynamic_cast<ai::AiPreviewDialog*>(app_.menus().top())) {
+            if (sub == "appliquer") { (void)pv->apply(); return Step::Yield; }
+            if (sub == "refuser" || sub == "annuler") { pv->cancel(); return Step::Yield; }
+            if (sub == "variable") { if (!pv->chooseVariable(std::atoi(arg(2).c_str()) - 1)) fail("ia variable " + arg(2) + " : hors de la liste"); return Step::Yield; }
+            if (sub == "fermer") { pv->close(); return Step::Yield; }
+        }
+        auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+        if (!screen) { fail("ia " + sub + " : pas d'\xC3\xA9" "cran du projet au-dessus"); return Step::Next; }
+        if (sub == "ouvrir" || sub == "replier") { screen->showAssistant(sub == "ouvrir"); return Step::Yield; }
+        auto* panel = screen->assistantPanel();
+        if (!panel) { fail("ia : pas d'Assistant (IHM Studio seulement)"); return Step::Next; }
+        panel->ensureLoaded();
+        auto& as = panel->assistant();
+        const auto lastProposal = [&] {
+            const auto* c = as.current();
+            if (!c) return -1;
+            for (int i = static_cast<int>(c->messages.size()) - 1; i >= 0; --i)
+                if (c->messages[static_cast<std::size_t>(i)].proposal) return i;
+            return -1;
+        };
+        if (sub == "nouvelle") { panel->newConversation(); return Step::Yield; }
+        if (sub == "conversation") {
+            const auto& list = as.conversations();
+            int found = -1;
+            if (isNumber(arg(2))) found = std::atoi(arg(2).c_str()) - 1;
+            else
+                for (std::size_t i = 0; i < list.size() && found < 0; ++i)
+                    if (list[i].title.rfind(arg(2), 0) == 0) found = static_cast<int>(i);
+            if (!panel->selectConversation(found)) fail("ia conversation " + arg(2) + " : introuvable");
+            return Step::Yield;
+        }
+        if (sub == "renommer") {
+            panel->startRename(as.currentIndex());
+            if (!panel->commitRename(arg(2))) fail("ia renommer : refus\xC3\xA9");
+            return Step::Yield;
+        }
+        if (sub == "supprimer") { panel->askDelete(as.currentIndex()); return Step::Yield; }
+        if (sub == "saisir") { panel->prompt().setText(arg(2)); panel->prompt().takeFocus(); return Step::Yield; }
+        if (sub == "envoyer") {
+            const bool ok = arg(2).empty() ? panel->send() : panel->sendText(arg(2));
+            if (!ok) fail("ia envoyer : " + panel->lastStatus());
+            return Step::Yield;
+        }
+        if (sub == "suggestion") { if (!panel->clickSuggestion(static_cast<std::size_t>(std::max(1, std::atoi(arg(2).c_str())) - 1))) fail("ia suggestion " + arg(2)); return Step::Yield; }
+        if (sub == "attendre") return as.generating() || as.processing() ? Step::Retry : Step::Yield;
+        if (sub == "arreter") { panel->stop(); return Step::Yield; }
+        if (sub == "joindre") { if (!panel->attachFile(arg(2))) fail("ia joindre : " + panel->lastStatus()); return Step::Yield; }
+        if (sub == "apercu") { panel->openPreview(lastProposal()); return Step::Yield; }
+        if (sub == "appliquer") { (void)panel->applyProposal(lastProposal()); return Step::Yield; }
+        if (sub == "refuser") { (void)panel->refuseProposal(lastProposal()); return Step::Yield; }
+        if (sub == "mode") { panel->setDirect(lower(arg(2)) == "direct"); return Step::Yield; }
+        if (sub == "parametres") { panel->openSettings(); return Step::Yield; }
+        if (sub == "defiler") { panel->chat().scrollBy(static_cast<float>(std::atof(arg(2).c_str()))); return Step::Yield; }
+        if (sub == "etat") {
+            const auto* c = as.current();
+            std::printf("[script] ia : %zu conversations ; ouverte : %s (%zu messages) ; %s\n", as.conversations().size(),
+                        c ? c->title.c_str() : "-", c ? c->messages.size() : std::size_t{0},
+                        as.generating() ? std::string(ai::phaseLabel(as.phase())).c_str() : "au repos");
+            if (const auto* p = as.proposal(lastProposal()))
+                std::printf("[script] ia : proposition %s (%s) : %d / %d / %d\n", p->summary.c_str(), p->state.c_str(), p->create, p->modify, p->remove);
+            std::fflush(stdout);
+            return Step::Next;
+        }
+        fail("ia " + sub + " : sous-commande inconnue");
+        return Step::Next;
+    }
     if (cmd == "attendre") {
         wait_ = std::max(0, std::atoi(arg(1).c_str()) - 1);
         return Step::Yield;

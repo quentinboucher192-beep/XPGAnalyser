@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "ai/AiPaths.hpp"   // 1.14.2 : la racine IA/ de l'Assistant
 #include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
 #include "../sim/ValueText.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
@@ -265,6 +266,13 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto imagesDir = std::filesystem::path(Settings::sharedFolder()) / "images";
         const auto u8 = imagesDir.u8string();
         hmi::imagelib::setUserFolder(std::string(u8.begin(), u8.end()));
+    }
+    // 1.14.2 : L'ASSISTANT IA - ses donnees dans "IA/", a cote de Mes images (conversations, pieces
+    // jointes, parametres, connaissances, cache : app/ai/AiPaths.hpp, le contrat), hors des projets.
+    {
+        const auto iaDir = std::filesystem::path(Settings::sharedFolder()) / "IA";
+        const auto u8 = iaDir.u8string();
+        ai::setRoot(std::string(u8.begin(), u8.end()));
     }
     // ---- fin Lot API 8 ----
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);
@@ -715,6 +723,15 @@ void App::registerActions() {
                             }
                             if (dynamic_cast<FileFinderScreen*>(top)) return;
                             menus_->PushMenu(std::make_unique<FileFinderScreen>(*this));
+                        }});
+    // 1.14.2 : L'ASSISTANT IA (Ctrl+Maj+I) - le volet de l'ecran du projet, dans IHM Studio.
+    actions_.add(Action{"ia.assistant", "Assistant IA", help::keys::bindingOf("ia.assistant"), {}, {}, nullptr,
+                        [this] {
+                            if (auto* screen = dynamic_cast<MainAnalysisScreen*>(menus_->top())) {
+                                screen->toggleAssistant();
+                                return;
+                            }
+                            bus_.publish(StatusNotice{"L'Assistant IA s'ouvre dans l'\xC3\xA9" "cran du projet (IHM Studio).", 5.0});
                         }});
     // 1.8.0 : les dossiers de l'application (app/Dossiers.hpp) - l'accueil en a le
     // lien, le menu Projet l'entree.

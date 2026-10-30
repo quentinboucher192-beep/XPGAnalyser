@@ -449,6 +449,11 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
             if (k.mods.shift && !core::hasApi()) return false;   // 1.12.0 : le .XHW est celui de l'automate
             (void)app_.actions().trigger(k.mods.shift ? "file.importHardware" : "file.open", app_.commands());
             return true;
+        // 1.14.2 : Ctrl+Maj+I - l'Assistant IA (IHM Studio) : le montrer, ou le replier.
+        case Key::I:
+            if (!k.mods.shift || k.repeat || !core::hasIhm()) return false;
+            toggleAssistant();
+            return true;
         // 1.14.0 (lot M5) : Ctrl+Maj+P - Chercher des fichiers sur ce PC (Ctrl+Maj+O est l'import du .XHW).
         case Key::P:
             if (!k.mods.shift || k.repeat) return false;
@@ -499,6 +504,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     // ---- fin Lot API 8 : le bandeau bas ----
     tickHmiBuild();                // 1.11.13 : le build de l'IHM (sa fin, la progression, l'analyse)
     tickFileFinder();              // 1.14.0 (lot M5) : Chercher des fichiers - ce que la recherche a trouve
+    tickAssistant(f.totalSeconds); // 1.14.2 : l'Assistant IA - la reponse qui s'ecrit, les pieces jointes
 }
 
 void MainAnalysisScreen::refreshHistoryButtons() {

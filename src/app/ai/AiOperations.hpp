@@ -1,0 +1,152 @@
+// =============================================================================
+//  app/ai/AiOperations.hpp - l'Assistant IA : les operations qu'il propose
+// -----------------------------------------------------------------------------
+//  CE QUE L'IA PEUT DEMANDER, ET RIEN D'AUTRE. Une proposition est une liste
+//  d'operations sur la vue active, ecrites avec les VRAIES structures du modele
+//  (l'audit, section 2.2) :
+//
+//    creer      un genre de kKindInfos ("Tank"), un nom voulu, des proprietes -
+//               seulement des cles que hmi::makeObject donne a ce genre ;
+//    modifier   un objet existant (par son nom), des proprietes ;
+//    associer   un objet, une variable - qui DOIT exister (variables IHM, noms
+//               de l'automate relie) : sinon une erreur, et c'est l'utilisateur
+//               qui choisit une variable existante ou de la creer ;
+//    aligner    des objets, un bord (hmi::edit::align) ;
+//    distribuer des objets, un sens (hmi::edit::distribute) ;
+//    supprimer  des objets (hmi::edit::remove) - plusieurs : une confirmation.
+//
+//  Jamais de code execute : une operation inconnue est refusee a la lecture.
+//
+//  VALIDER (validate) ne touche a rien : les comptes, les objets, les
+//  proprietes avant -> apres, les variables, les avertissements et les erreurs.
+//  APPLIQUER (makeCommand) fait tout dans UNE commande (hmi::changeView, ou
+//  hmi::changeProject quand une variable est creee) : un seul Ctrl+Z.
+//  L'APERCU (preview) fait la meme chose sur une COPIE de la vue : rien ne
+//  bouge dans le projet tant que l'utilisateur n'a pas dit Appliquer.
+//
+//  L'EMPREINTE d'une vue (fingerprint) est gardee avec la proposition : une
+//  proposition d'une ancienne conversation ne s'applique jamais sur une vue qui
+//  a change depuis.
+// =============================================================================
+#pragma once
+
+#include "AiJson.hpp"
+#include "../../core/Command.hpp"
+#include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiModel.hpp"
+
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace app::ai {
+
+struct Operation {
+    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove };
+    Action                                           action{Action::Create};
+    std::string                                      kind;      // creer : la cle du genre ("Tank")
+    std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
+    std::vector<std::string>                         objects;   // aligner, distribuer, supprimer
+    std::vector<std::pair<std::string, std::string>> props;     // creer, modifier : cle -> valeur
+    std::string                                      variable;  // associer
+    std::string                                      edge;      // aligner : haut, bas, gauche, droite, centre-h, centre-v ;
+                                                                // distribuer : horizontal, vertical
+};
+[[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
+[[nodiscard]] std::optional<Operation::Action> actionFromKey(std::string_view) noexcept;
+
+// Ce que l'utilisateur a choisi pour une variable introuvable (une operation associer).
+struct VariableChoice {
+    std::string use;              // une variable existante, a la place
+    bool        create{false};    // creer la variable demandee (dans les variables de l'IHM)
+    std::string type{"BOOL"};
+    bool operator==(const VariableChoice&) const = default;
+};
+
+struct Proposal {
+    std::string            id;                   // "op1"
+    std::string            state{"proposee"};    // proposee | appliquee | refusee
+    std::string            view;                 // le nom de la vue visee
+    hmi::Id                viewId{hmi::kNoId};
+    std::string            fingerprint;          // l'empreinte de la vue a la proposition
+    std::string            request;              // la demande (Modifier la demande la remet dans la saisie)
+    std::string            summary;              // le libelle de la commande ("Synoptique de station de pompage")
+    std::vector<Operation> ops;
+    VariableChoice         variable;
+    int                    create{0}, modify{0}, remove{0};   // les comptes (le contrat), refaits par validate
+    json::Value            extra;                // les champs inconnus, gardes
+};
+
+// ---- valider -------------------------------------------------------------------
+struct Change {
+    std::string key, before, after;
+};
+struct Item {
+    enum class What : std::uint8_t { Create, Modify, Remove };
+    What                what{What::Create};
+    hmi::Id             id{hmi::kNoId};   // un objet existant (modifier, supprimer)
+    std::string         name;
+    hmi::Kind           kind{hmi::Kind::Rectangle};
+    std::vector<Change> changes;          // creer : les proprietes donnees ; modifier : avant -> apres
+    std::string         variable;         // la variable associee (vide : aucune)
+};
+struct Check {
+    std::vector<Item>        items;
+    std::vector<std::string> warnings, errors;
+    std::vector<std::string> bindings;          // "Pompe_1 \xE2\x86\x92 PUMP_01_RUN"
+    int                      create{0}, modify{0}, remove{0};
+    std::string              missingVariable;   // une variable citee qui n'existe pas
+    std::vector<std::string> nearVariables;     // les noms existants les plus proches
+    bool                     stale{false};      // la vue a change depuis la proposition
+    bool                     viewMissing{false};
+    bool                     confirmRemoval{false};   // plusieurs suppressions : demander avant
+    [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
+};
+
+// Ce que l'appelant sait en plus de l'IHM : les noms de l'automate relie (vide : aucun).
+struct Env {
+    std::function<bool(std::string_view)> plcName;
+};
+
+[[nodiscard]] std::string fingerprint(const hmi::View&);
+[[nodiscard]] bool        variableExists(const hmi::Project&, std::string_view name, const Env& = {});
+// Les variables de l'IHM les plus proches d'un nom (les memes lettres, les memes mots).
+[[nodiscard]] std::vector<std::string> nearVariables(const hmi::Project&, std::string_view name, std::size_t max = 4);
+// La vue visee : par son identifiant, sinon par son nom (nul : plus la).
+[[nodiscard]] const hmi::View* targetView(const hmi::Project&, const Proposal&);
+[[nodiscard]] Check validate(const hmi::Project&, const Proposal&, const Env& = {});
+
+// ---- appliquer -------------------------------------------------------------------
+// Les operations sur `view` (une vue de `project`, ou sa copie) ; les identifiants neufs
+// viennent de `nextId`. `created`, `modified`, `removed` : les objets touches. Faux et `why`
+// si une operation ne peut pas se faire (rien n'est garanti sur la vue : travailler sur une copie).
+// `skipRemovals` : l'apercu garde les objets a supprimer (ils se dessinent barres).
+struct Touched {
+    std::vector<hmi::Id> created, modified, removed;
+};
+bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, const Proposal&, Touched* touched = nullptr,
+              std::string* why = nullptr, bool skipRemovals = false);
+// La commande d'une proposition validee : UN pas d'annulation. nullptr et `why` : rien a faire.
+[[nodiscard]] core::CommandPtr makeCommand(const hmi::DocumentPtr&, const Proposal&, std::string* why = nullptr);
+
+// L'apercu : la copie de la vue, modifiee (les objets a supprimer y sont encore).
+struct Preview {
+    bool        ok{false};
+    std::string why;
+    hmi::View   view;
+    Touched     touched;
+};
+[[nodiscard]] Preview preview(const hmi::Project&, const Proposal&);
+
+// ---- le JSON (le bloc "operations", et une proposition entiere) -----------------
+[[nodiscard]] json::Value operationsToJson(const std::vector<Operation>&);
+// Faux et `why` : une operation inconnue (refusee), ou un champ illisible.
+bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, std::string* why = nullptr);
+[[nodiscard]] json::Value toJson(const Proposal&);
+[[nodiscard]] Proposal    proposalFromJson(const json::Value&);
+
+} // namespace app::ai
