@@ -321,6 +321,71 @@ namespace project {
         return core::ok();
     }
 
+    // 1.14.0 (lot M5) : un .dfb, un .ddt ou une macro trouve sur le PC (Chercher des fichiers).
+    core::Result<LibraryItem> SharedLibrary::importFile(const std::string& path, std::string category) {
+        const fs::path source = fs::path(std::u8string(path.begin(), path.end()));
+        std::string ext = source.extension().string();
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        LibraryItem item;
+        if (ext == ".dfb") item.kind = LibraryItemKind::FunctionBlock;
+        else if (ext == ".ddt") item.kind = LibraryItemKind::DerivedType;
+        else if (ext == ".mac") item.kind = LibraryItemKind::Macro;
+        else return core::fail(core::ErrorCode::InvalidArgument, "ni un bloc DFB, ni un type DDT, ni une macro : " + path);
+        std::error_code ec;
+        if (!fs::is_regular_file(source, ec)) return core::fail(core::ErrorCode::FileNotFound, "fichier introuvable : " + path);
+        const std::string text = readAll(source);
+        if (text.empty()) return core::fail(core::ErrorCode::FileUnreadable, "fichier vide ou illisible : " + path);
+        // L'en-tete : "name = X", "version = 1.00", "#! summary = ..." (une macro : "#! version = 1.10").
+        const auto value = [&text](std::string_view key, bool spec) {
+            std::istringstream in(text);
+            std::string line;
+            for (int n = 0; n < 200 && std::getline(in, line); ++n) {
+                std::string l = trim(line);
+                if (spec) {
+                    if (l.rfind("#!", 0) != 0) continue;
+                    l = trim(std::string_view(l).substr(2));
+                }
+                if (l.compare(0, key.size(), key) != 0) continue;
+                const std::string rest = trim(std::string_view(l).substr(key.size()));
+                if (rest.empty() || rest.front() != '=') continue;
+                return trim(std::string_view(rest).substr(1));
+            }
+            return std::string{};
+        };
+        const auto stem = [&source] {
+            const auto u8 = source.stem().u8string();
+            return std::string(u8.begin(), u8.end());
+        };
+        if (item.kind == LibraryItemKind::Macro) {
+            const std::string name = stem();
+            if (const auto* existing = find(name))
+                return core::fail(core::ErrorCode::DuplicateSymbol,
+                                  "\xC2\xAB " + name + " \xC2\xBB est d\xC3\xA9j\xC3\xA0 dans la biblioth\xC3\xA8que (version " + existing->version
+                                      + ") : rien n'est remplac\xC3\xA9");
+            if (auto st = publishMacro(name, text, std::move(category)); !st) return core::Err<core::Error>(st.error());
+            if (const auto* added = find(name)) return *added;
+            return core::fail(core::ErrorCode::FileUnreadable, "la macro ne se relit pas dans l'index");
+        }
+        item.name = value("name", false);
+        if (item.name.empty()) item.name = stem();
+        item.version = value("version", false);
+        if (item.version.empty()) item.version = "0.01";
+        item.comment = value("summary", true);
+        std::replace(item.comment.begin(), item.comment.end(), ';', ',');
+        if (const auto* existing = find(item.name))
+            return core::fail(core::ErrorCode::DuplicateSymbol,
+                              "\xC2\xAB " + item.name + " \xC2\xBB est d\xC3\xA9j\xC3\xA0 dans la biblioth\xC3\xA8que (version " + existing->version
+                                  + ", " + existing->category + ") : rien n'est remplac\xC3\xA9");
+        item.category = category.empty() ? std::string("Importes") : std::move(category);
+        item.path = (fs::path(root_) / item.category / item.fileName()).string();
+        if (auto r = writeAll(item.path, text); !r) return core::Err<core::Error>(r.error());
+        auto updated = items_;
+        updated.push_back(item);
+        if (auto r = rewriteIndex(root_, updated); !r) return core::Err<core::Error>(r.error());
+        items_ = std::move(updated);
+        return item;
+    }
+
     core::Status SharedLibrary::ensureDefaultMacros() {
         auto updated = items_;
         bool changed = false;
