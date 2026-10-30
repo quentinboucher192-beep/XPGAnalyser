@@ -12,7 +12,7 @@
 //      sa selection - jamais un widget de l'editeur pour le modifier ;
 //    - empiler une commande : App::apply, comme l'editeur (un pas d'annulation) ;
 //    - les noms de l'automate relie (les globales) : une variable de l'automate
-//      existe aussi ;
+//      existe aussi ; 1.15.0 : leur liste et leur type, pour le contexte du modele ;
 //    - les fenetres (MenuManager::ShowDialog), la barre d'etat, la commande
 //      ia.memoire (le centre de memoire, s'il est la).
 // =============================================================================
@@ -102,6 +102,17 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
             if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return true;
         return false;
     };
+    // 1.15.0 : leur liste pour le contexte envoye au modele - le nom tel qu'une propriete l'ecrit
+    // ("API." + nom) et son type, comme plcName les reconnait.
+    core.env.plcVariables = [this] {
+        std::vector<std::pair<std::string, std::string>> out;
+        const auto plc = app_.project();
+        if (!plc) return out;
+        for (const auto& v : plc->variables)
+            if (v.scope == domain::VariableScope::Global)
+                out.emplace_back("API." + std::string(plc->strings.text(v.name)), std::string(plc->strings.text(v.type.name)));
+        return out;
+    };
 
     ai::AiPanel::UiHost ui;
     ui.showDialog = [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
@@ -138,8 +149,10 @@ void MainAnalysisScreen::showAssistant(bool show) {
         aiPanel_->prompt().takeFocus();
     }
     if (status_)
-        status_->setTransientMessage(show ? "Assistant IA (d\xC3\xA9monstration) : il propose des modifications de la vue ouverte. Ctrl+Maj+I le replie."
-                                          : "Assistant IA repli\xC3\xA9 (Ctrl+Maj+I le rouvre).", 4.0);
+        status_->setTransientMessage(show ? "Assistant IA (" + aiPanel_->assistant().connectionText()
+                                                + ") : il propose des modifications de la vue ouverte. Ctrl+Maj+I le replie."
+                                          : std::string("Assistant IA repli\xC3\xA9 (Ctrl+Maj+I le rouvre)."),
+                                     4.0);
 }
 
 void MainAnalysisScreen::toggleAssistant() { showAssistant(!assistantShown()); }

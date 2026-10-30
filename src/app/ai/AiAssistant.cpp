@@ -3,9 +3,14 @@
 // =============================================================================
 #include "AiAssistant.hpp"
 
+#include "AiHttp.hpp"
+#include "AiPrompt.hpp"
+#include "AiSecret.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <tuple>
 
 namespace app::ai {
 
@@ -46,6 +51,20 @@ std::string firstWords(std::string_view s, std::size_t n) {
 }
 
 const char* const kNewTitle = "Nouvelle conversation";
+const char* const kStoppedEmpty = "*(Arr\xC3\xAAt\xC3\xA9" "e avant la r\xC3\xA9ponse.)*";
+
+// Le libelle d'un fournisseur ("Anthropic (Claude)" -> "Anthropic").
+std::string providerName(std::string_view key) {
+    for (const auto& p : providers())
+        if (p.key == key) {
+            std::string l(p.label);
+            if (const auto par = l.find(" ("); par != std::string::npos) l.resize(par);
+            return l;
+        }
+    return std::string(key);
+}
+
+std::string plural(std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
 
 } // namespace
 
@@ -55,16 +74,27 @@ std::string_view phaseLabel(Assistant::Phase p) noexcept {
         case Assistant::Phase::Waiting: return "En attente\xE2\x80\xA6";
         case Assistant::Phase::Thinking: return "R\xC3\xA9" "flexion\xE2\x80\xA6";
         case Assistant::Phase::Writing: return "\xC3\x89" "criture\xE2\x80\xA6";
+        case Assistant::Phase::Proposing: return "Pr\xC3\xA9paration des op\xC3\xA9rations\xE2\x80\xA6";
     }
     return "";
 }
 
 Assistant::Assistant(Host host) : host_(std::move(host)) {}
 
+// Le fournisseur en cours est arrete et part finir sur son fil (son destructeur attend le fil :
+// jamais sur celui de l'interface tant qu'il travaille - tick le libere quand il a fini).
+Assistant::~Assistant() = default;
+
 // ---- le cycle de vie ------------------------------------------------------------------
 void Assistant::load(std::vector<std::string>* problems) {
     bool found = false;
     settings_ = loadSettings(&found);
+    // 1.15.0 : la cle memorisee (protegee par Windows) revient pour la seance.
+    if (apiKey_.empty() && hasStoredKey()) {
+        std::string why;
+        if (auto key = loadStoredKey(&why)) apiKey_ = std::move(*key);
+        else if (!why.empty()) notice_ = "Assistant IA : " + why;
+    }
     conversations_ = loadConversations(problems);
     if (!found && conversations_.empty()) {
         // La premiere ouverture : les conversations de demonstration (marquees "demo"), et les reglages.
@@ -86,6 +116,7 @@ void Assistant::load(std::vector<std::string>* problems) {
     std::stable_sort(conversations_.begin(), conversations_.end(),
                      [](const Conversation& a, const Conversation& b) { return a.modified > b.modified; });
     current_ = conversations_.empty() ? -1 : 0;
+    retire();
     gen_ = {};
     pending_.clear();
     ++revision_;
@@ -102,7 +133,13 @@ bool Assistant::tick(double now) {
             ++revision_;
         }
     }
-    if (gen_.phase != Phase::Idle) {
+    // 1.15.0 : les fournisseurs arretes qui ont fini leur fil ; la liste des modeles.
+    retiring_.erase(std::remove_if(retiring_.begin(), retiring_.end(), [](const std::unique_ptr<Provider>& p) { return !p || !p->busy(); }),
+                    retiring_.end());
+    (void)pollModels();
+    if (gen_.phase != Phase::Idle && gen_.live) {
+        pollLive();
+    } else if (gen_.phase != Phase::Idle) {
         if (gen_.start < 0) gen_.start = now;
         const double t = now - gen_.start;
         Phase ph = t < kWaiting ? Phase::Waiting : t < kWaiting + kThinking ? Phase::Thinking : Phase::Writing;
@@ -248,6 +285,51 @@ bool Assistant::send(std::string text, std::string* why) {
     if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
     if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
     if (text.empty() && pending_.empty()) return fail("Rien \xC3\xA0 envoyer.");
+    if (live()) {
+        // 1.15.0 : un vrai fournisseur. Rien ne change dans la conversation si l'envoi ne part pas.
+        std::string w;
+        if (!ready(&w)) return fail(w);
+        if (!cur()) newConversation();
+        Conversation& c = *cur();
+        const Conversation before = c;
+        Message u;
+        u.id = "m" + std::to_string(c.messages.size() + 1);
+        u.role = "utilisateur";
+        u.date = isoDate(now());
+        u.text = text;
+        for (const auto& p : pending_) u.attachments.push_back(p.attachment);
+        const bool first = c.messages.empty();
+        if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text);
+        if (first) {
+            c.project.name = host_.projectName ? host_.projectName() : std::string{};
+            c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
+        }
+        if (const DemoContext ctx = context(); ctx.view) c.project.view = ctx.view->name;
+        c.messages.push_back(std::move(u));
+        if (!startLive(c, text, &w)) {
+            c = before;
+            return fail(w);
+        }
+        // Les pieces qui ne partent pas entieres (un classeur, une image trop lourde) : dites.
+        std::string notes;
+        if (settings_.sendAttachments)
+            for (const auto& p : pending_) {
+                ProviderAttachment pa{p.attachment.name, mediaTypeOf(p.attachment.name), attachmentPath(p.attachment), p.attachment.bytes};
+                if (const auto plan = planAttachment(pa); !plan.note.empty()) notes += (notes.empty() ? "" : " ") + plan.note;
+            }
+        pending_.clear();
+        suggestionsAfter_ = false;
+        Conversation* cc = touch(c);
+        if (cc) {
+            if (first) appendActivity("conversation", "Nouvelle conversation : " + cc->title);
+            for (const auto& att : cc->messages[static_cast<std::size_t>(gen_.message) - 1].attachments)
+                appendActivity("fichier", "Pi\xC3\xA8" "ce jointe : " + att.name + " (" + formatBytes(att.bytes) + ")");
+            save(*cc);
+        }
+        if (!notes.empty()) notice_ = "Assistant IA : " + notes;
+        ++revision_;
+        return true;
+    }
     if (!cur()) newConversation();
     Conversation& c = *cur();
     const auto doc = host_.document ? host_.document() : nullptr;   // tenu le temps de la demande
@@ -298,6 +380,7 @@ bool Assistant::send(std::string text, std::string* why) {
 }
 
 std::string Assistant::shownText() const {
+    if (gen_.live) return gen_.text;   // un vrai fournisseur : ce qui est arrive
     if (gen_.phase != Phase::Writing) return {};
     return firstWords(gen_.full, gen_.shownWords);
 }
@@ -337,13 +420,17 @@ void Assistant::finish() {
 
 void Assistant::stop() {
     if (!generating()) return;
+    // Un vrai fournisseur : la connexion se ferme ; il finit sur son fil (retiring_), sans bloquer.
+    if (gen_.live) retire();
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
         const std::string shown = shownText();
-        m.text = shown.empty() ? std::string("*(Arr\xC3\xAAt\xC3\xA9" "e avant la r\xC3\xA9ponse.)*") : shown + " \xE2\x80\xA6";
+        m.text = shown.empty() ? std::string(kStoppedEmpty) : shown + " \xE2\x80\xA6";
         m.state = "arrete";
         m.date = isoDate(now());
+        m.provider = gen_.provider;
+        m.model = gen_.model;
         gen_ = {};
         save(*c);
     } else {
@@ -413,7 +500,7 @@ Preview Assistant::previewOf(int message) const {
         pv.why = "Pas de projet IHM ouvert.";
         return pv;
     }
-    return preview(doc->project, *p);
+    return preview(doc->project, *p, host_.env);
 }
 
 bool Assistant::needsConfirm(int message) const { return check(message).confirmRemoval; }
@@ -431,7 +518,7 @@ bool Assistant::apply(int message, std::string* why) {
     }
     const auto doc = host_.document ? host_.document() : nullptr;
     std::string w;
-    auto cmd = makeCommand(doc, *p, &w);
+    auto cmd = makeCommand(doc, *p, &w, host_.env);
     if (!cmd) {
         if (why) *why = w;
         notice_ = w;
@@ -453,7 +540,12 @@ bool Assistant::apply(int message, std::string* why) {
 
 Assistant::Applied Assistant::appliedState(int message) const {
     const Proposal* p = proposal(message);
-    if (!p || p->state != "appliquee") return Applied::NotApplied;
+    return p ? appliedOf(*p) : Applied::NotApplied;
+}
+
+Assistant::Applied Assistant::appliedOf(const Proposal& prop) const {
+    const Proposal* p = &prop;
+    if (p->state != "appliquee") return Applied::NotApplied;
     const auto doc = host_.document ? host_.document() : nullptr;
     if (!doc) return Applied::Applied;   // pas de projet ouvert : rien a comparer
     const auto* v = targetView(doc->project, *p);
@@ -526,8 +618,393 @@ void Assistant::setSettings(Settings s) {
 
 std::string Assistant::connectionText() const {
     if (!settings_.enabled) return "Assistant d\xC3\xA9sactiv\xC3\xA9";
-    if (settings_.provider == "demo") return "D\xC3\xA9monstration \xE2\x80\x93 aucune IA connect\xC3\xA9" "e";
-    return "Fournisseur pas encore branch\xC3\xA9 (d\xC3\xA9monstration)";
+    if (!live()) return "D\xC3\xA9monstration \xE2\x80\x93 aucune IA connect\xC3\xA9" "e";
+    std::string why;
+    if (!providerFactory_ && !httpAvailable(&why)) {
+        if (!why.empty()) why[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(why[0])));
+        return why;
+    }
+    if (needsSetup()) return "\xC3\x80 configurer : choisis un mod\xC3\xA8le et une cl\xC3\xA9";
+    return providerName(settings_.provider) + " \xE2\x80\x93 " + settings_.model + (settings_.endpoint.empty() ? std::string{} : std::string(" (relais)"));
+}
+
+// ---- la cle ------------------------------------------------------------------------------------
+bool Assistant::rememberKey(bool on, std::string* why) {
+    ++revision_;
+    if (!on) return forgetStoredKey();
+    if (apiKey_.empty()) {
+        if (why) *why = "Pas de cl\xC3\xA9 \xC3\xA0 m\xC3\xA9moriser.";
+        return false;
+    }
+    return storeKey(apiKey_, why);
+}
+
+bool Assistant::keyRemembered() const { return hasStoredKey(); }
+
+// ---- le fournisseur (1.15.0) ----------------------------------------------------------------------
+bool Assistant::needsSetup() const {
+    if (!live()) return false;
+    return trim(settings_.model).empty() || (apiKey_.empty() && trim(settings_.endpoint).empty());
+}
+
+bool Assistant::ready(std::string* why) const {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (!live()) return true;
+    bool available = providerFactory_ != nullptr;
+    for (const auto& p : providers())
+        if (p.key == settings_.provider) available = available || p.available;
+    if (!available) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9 : choisis Anthropic (Claude), ou la D\xC3\xA9monstration (Param\xC3\xA8tres).");
+    if (trim(settings_.model).empty())
+        return fail("\xC3\x80 configurer : choisis un mod\xC3\xA8le dans les Param\xC3\xA8tres de l'Assistant IA (\xC2\xAB Lister les mod\xC3\xA8les \xC2\xBB).");
+    if (apiKey_.empty() && trim(settings_.endpoint).empty())
+        return fail("\xC3\x80 configurer : entre ta cl\xC3\xA9 API dans les Param\xC3\xA8tres de l'Assistant IA.");
+    std::string w;
+    if (!providerFactory_ && !httpAvailable(&w)) return fail("Pas de connexion possible sur ce poste : " + w + ".");
+    return true;
+}
+
+void Assistant::retire() {
+    if (!provider_) return;
+    provider_->cancel();
+    if (provider_->busy()) retiring_.push_back(std::move(provider_));
+    provider_.reset();
+}
+
+std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
+    if (!m.tool) return {};
+    if (!m.tool->error.empty())
+        return {"Erreur : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9 \xC3\xA0 l'utilisateur, l'entr\xC3\xA9" "e de l'outil est invalide : " + m.tool->error, true};
+    if (!m.proposal) return {"Erreur : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9 \xC3\xA0 l'utilisateur.", true};
+    const Proposal& p = *m.proposal;
+    if (p.state == "refusee") return {"refus\xC3\xA9" "e par l'utilisateur : le projet n'a pas chang\xC3\xA9.", false};
+    if (p.state == "appliquee") {
+        switch (appliedOf(p)) {
+            case Applied::Undone: return {"annul\xC3\xA9" "e (Ctrl+Z) : appliqu\xC3\xA9" "e puis annul\xC3\xA9" "e par l'utilisateur, la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant.", false};
+            case Applied::Changed: return {"appliqu\xC3\xA9" "e ; la vue a chang\xC3\xA9 depuis (d'autres modifications de l'utilisateur).", false};
+            default: return {"appliqu\xC3\xA9" "e au projet.", false};
+        }
+    }
+    // Encore proposee : la validation d'aujourd'hui dit si elle peut s'appliquer.
+    if (const auto doc = host_.document ? host_.document() : nullptr) {
+        const Check ck = validate(doc->project, p, host_.env);
+        // Refusee par la validation : le texte ecrit pour le modele (les erreurs, le detail des
+        // genres en cause) - il corrige au tour suivant.
+        if (!ck.ok()) return {feedback(ck, p), true};
+        if (ck.stale) return {"en attente : pas encore appliqu\xC3\xA9" "e, et la vue a chang\xC3\xA9 depuis (elle ne s'appliquera plus telle quelle).", false};
+    }
+    return {"en attente : pas encore appliqu\xC3\xA9" "e (l'utilisateur ne l'a ni appliqu\xC3\xA9" "e ni refus\xC3\xA9" "e).", false};
+}
+
+ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) const {
+    ProviderRequest r;
+    r.model = trim(settings_.model);
+    r.endpoint = trim(settings_.endpoint);
+    r.timeoutSeconds = settings_.timeoutSeconds;
+    r.maxTokens = 16000;
+    r.effort = settings_.effort;
+    std::string pendingId, pendingText;
+    bool pendingError = false;
+    for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i) {
+        const Message& m = c.messages[i];
+        ProviderTurn t;
+        if (m.role == "utilisateur") {
+            t.role = ProviderTurn::Role::User;
+            t.text = m.text;
+            if (settings_.sendAttachments) {
+                for (const auto& a : m.attachments) t.attachments.push_back({a.name, mediaTypeOf(a.name), attachmentPath(a), a.bytes});
+            } else if (!m.attachments.empty()) {
+                t.text += "\n\n[" + plural(m.attachments.size(), "pi\xC3\xA8" "ce jointe", "pi\xC3\xA8" "ces jointes")
+                          + " : pas envoy\xC3\xA9" "e(s), les r\xC3\xA9glages de confidentialit\xC3\xA9 les gardent sur ce poste.]";
+            }
+            if (!pendingId.empty()) {
+                t.toolResultFor = pendingId;
+                t.toolResultText = pendingText;
+                t.toolResultError = pendingError;
+                pendingId.clear();
+            }
+        } else {
+            // Une erreur du logiciel n'est pas un tour du modele ; un arret sans texte non plus.
+            if (m.state == "erreur") continue;
+            if (m.state == "arrete" && m.text == kStoppedEmpty) continue;
+            t.role = ProviderTurn::Role::Assistant;
+            t.text = m.text;
+            if (m.tool) {
+                t.toolUseId = m.tool->id;
+                t.toolName = m.tool->name;
+                t.toolInputJson = m.tool->input;
+                pendingId = m.tool->id;
+                std::tie(pendingText, pendingError) = toolResult(m);
+            } else {
+                pendingId.clear();
+            }
+        }
+        r.turns.push_back(std::move(t));
+    }
+    return r;
+}
+
+bool Assistant::startLive(Conversation& c, std::string request, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    auto prov = providerFactory_ ? providerFactory_(settings_.provider) : makeProvider(settings_.provider);
+    if (!prov) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9.");
+    const auto doc = host_.document ? host_.document() : nullptr;   // tenu le temps de la preparation
+    const DemoContext ctx = context();
+    PromptInput in;
+    in.project = ctx.project;
+    in.view = ctx.view;
+    in.selection = ctx.selection;
+    in.settings = settings_;
+    in.env = host_.env;
+    in.projectName = host_.projectName ? host_.projectName() : std::string{};
+    in.request = request;   // les genres que la demande evoque ont le detail de leurs proprietes
+    ProviderRequest req = requestFor(c, c.messages.size());
+    req.apiKey = apiKey_;
+    // Sur le fil de l'interface (le registre se construit une fois) : les consignes en deux morceaux.
+    PromptParts parts = promptParts(in);
+    req.system = parts.stable + parts.dynamic;
+    req.systemStable = std::move(parts.stable);
+    req.systemDynamic = std::move(parts.dynamic);
+    req.toolsJson = operationsTool();
+    if (!prov->start(std::move(req), why)) return false;
+    retire();
+    provider_ = std::move(prov);
+    Message a;
+    a.id = "m" + std::to_string(c.messages.size() + 1);
+    a.role = "assistant";
+    a.date = isoDate(now());
+    c.messages.push_back(std::move(a));
+    gen_ = {};
+    gen_.live = true;
+    gen_.phase = Phase::Waiting;
+    gen_.message = static_cast<int>(c.messages.size()) - 1;
+    gen_.conversation = c.id;
+    gen_.request = std::move(request);
+    gen_.provider = settings_.provider;
+    gen_.model = trim(settings_.model);
+    if (ctx.view) {
+        gen_.viewId = ctx.view->id;
+        gen_.fingerprint = fingerprint(*ctx.view);
+    }
+    (void)doc;
+    ++revision_;
+    return true;
+}
+
+void Assistant::pollLive() {
+    if (!provider_) {
+        ProviderEvent e;
+        e.type = ProviderEvent::Type::Error;
+        e.text = "Le fournisseur s'est arr\xC3\xAAt\xC3\xA9 sans r\xC3\xA9ponse.";
+        e.retryable = true;
+        failLive(e);
+        return;
+    }
+    for (auto& e : provider_->poll()) {
+        switch (e.type) {
+            case ProviderEvent::Type::Status: {
+                Phase ph = gen_.phase;
+                if (e.text == "connexion") ph = Phase::Waiting;
+                else if (e.text == "reprise") ph = Phase::Waiting;
+                else if (e.text == "reflexion") ph = Phase::Thinking;
+                else if (e.text == "ecriture") ph = Phase::Writing;
+                else if (e.text == "operations") ph = Phase::Proposing;
+                const std::string detail = e.text == "reprise" ? e.detail : e.text == "connexion" ? gen_.detail : std::string{};
+                if (detail != gen_.detail) {
+                    gen_.detail = detail;
+                    ++revision_;
+                }
+                if (ph != gen_.phase) {
+                    gen_.phase = ph;
+                    ++revision_;
+                }
+                break;
+            }
+            case ProviderEvent::Type::Text:
+                gen_.text += e.text;
+                if (gen_.phase != Phase::Proposing) gen_.phase = Phase::Writing;
+                gen_.detail.clear();
+                ++revision_;
+                break;
+            case ProviderEvent::Type::ToolUse:
+                gen_.tool = ToolCall{e.toolUseId, e.toolName, e.toolInputJson, {}};
+                ++revision_;
+                break;
+            case ProviderEvent::Type::Done:
+                finishLive(e.stopReason);
+                return;
+            case ProviderEvent::Type::Error:
+                failLive(e);
+                return;
+        }
+    }
+}
+
+void Assistant::finishLive(const std::string& stopReason) {
+    retire();
+    Conversation* c = generatingConversation();
+    if (!c || gen_.message < 0 || gen_.message >= static_cast<int>(c->messages.size())) {
+        gen_ = {};
+        ++revision_;
+        return;
+    }
+    if (stopReason == "arrete") {   // arrete ailleurs (le fournisseur a ete coupe) : comme Arreter
+        stop();
+        return;
+    }
+    Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
+    m.text = trim(gen_.text);
+    m.state = "fini";
+    m.date = isoDate(now());
+    m.provider = gen_.provider;
+    m.model = gen_.model;
+    if (stopReason == "refusal") {
+        m.note = "La demande a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "clin\xC3\xA9" "e par le mod\xC3\xA8le : rien n'est propos\xC3\xA9.";
+    } else if (stopReason == "max_tokens") {
+        m.note = "La r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e (la limite de longueur est atteinte) : aucune op\xC3\xA9ration n'est propos\xC3\xA9" "e. "
+                 "Demande moins d'objets \xC3\xA0 la fois, ou d\xC3\xA9" "coupe la demande.";
+    }
+    if (gen_.tool) {
+        m.tool = *gen_.tool;
+        if (m.tool->name != kOperationsTool) {
+            m.tool->error = "outil inconnu : " + m.tool->name + " (seul " + std::string(kOperationsTool) + " existe)";
+        } else {
+            const auto doc = host_.document ? host_.document() : nullptr;
+            PromptInput in;
+            in.project = doc ? &doc->project : nullptr;
+            in.view = doc && gen_.viewId != hmi::kNoId ? doc->project.view(gen_.viewId) : nullptr;
+            in.settings = settings_;
+            in.env = host_.env;
+            in.projectName = host_.projectName ? host_.projectName() : std::string{};
+            in.request = gen_.request;
+            std::string why;
+            auto p = proposalFromTool(m.tool->input, in, gen_.request, &why);
+            if (!p) {
+                m.tool->error = why.empty() ? std::string("entr\xC3\xA9" "e illisible") : why;
+            } else {
+                // L'empreinte de la vue A L'ENVOI : si l'utilisateur l'a changee pendant la reponse,
+                // la proposition est perimee (elle ne s'applique jamais sur une vue changee).
+                if (!gen_.fingerprint.empty()) p->fingerprint = gen_.fingerprint;
+                if (p->summary.empty()) p->summary = "Proposition de l'Assistant";
+                if (p->request.empty()) p->request = gen_.request;
+                p->state = "proposee";
+                if (doc) {
+                    const Check ck = validate(doc->project, *p, host_.env);
+                    p->create = ck.create;
+                    p->modify = ck.modify;
+                    p->remove = ck.remove;
+                }
+                m.proposal = std::move(*p);
+            }
+        }
+        if (!m.tool->error.empty())
+            m.note = "La proposition re\xC3\xA7ue est illisible, rien n'est propos\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
+    }
+    if (m.text.empty() && !m.proposal && m.note.empty()) m.note = "R\xC3\xA9ponse vide.";
+    const int index = gen_.message;
+    const bool open = current() && current()->id == c->id;
+    const bool hasProposal = m.proposal.has_value();
+    gen_ = {};
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    if (hasProposal && open && directMode()) autoApply(index);
+}
+
+void Assistant::failLive(const ProviderEvent& e) {
+    retire();
+    Conversation* c = generatingConversation();
+    if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
+        Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
+        m.text = trim(gen_.text);
+        m.note = e.text.empty() ? std::string("Erreur inconnue.") : e.text;
+        m.state = "erreur";
+        m.date = isoDate(now());
+        m.provider = gen_.provider;
+        m.model = gen_.model;
+        gen_ = {};
+        if ((c = touch(*c)) != nullptr) save(*c);
+    } else {
+        gen_ = {};
+    }
+    notice_ = "Assistant IA : " + (e.text.empty() ? std::string("erreur") : e.text);
+    ++revision_;
+}
+
+bool Assistant::canRetry() const {
+    if (!live() || generating()) return false;
+    const auto* c = current();
+    if (!c || c->messages.size() < 2) return false;
+    const Message& last = c->messages.back();
+    if (last.role != "assistant") return false;
+    const bool failed = last.state == "erreur" || (last.state == "arrete" && !last.provider.empty());
+    return failed && c->messages[c->messages.size() - 2].role == "utilisateur";
+}
+
+bool Assistant::retry(std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (!canRetry()) return fail("Rien \xC3\xA0 r\xC3\xA9" "essayer.");
+    std::string w;
+    if (!ready(&w)) return fail(w);
+    Conversation& c = *cur();
+    const Message last = c.messages.back();
+    c.messages.pop_back();
+    const std::string request = c.messages.back().text;
+    if (!startLive(c, request, &w)) {
+        c.messages.push_back(last);
+        return fail(w);
+    }
+    suggestionsAfter_ = false;
+    if (Conversation* cc = touch(c)) save(*cc);
+    ++revision_;
+    return true;
+}
+
+std::string Assistant::outgoingSummary() const {
+    // Rien a dire : la demonstration, un envoi impossible (a configurer), ou une reponse en cours.
+    if (!settings_.enabled || !live() || generating() || !ready()) return {};
+    if (const auto* c = current())
+        for (const auto& m : c->messages)
+            if (!m.provider.empty()) return {};   // deja envoyee : dit une fois
+    const DemoContext ctx = context();
+    std::string s = "Partira chez " + providerName(settings_.provider) + " : ta demande";
+    if (settings_.sendView) {
+        if (ctx.view) s += ", la vue \xC2\xAB " + ctx.view->name + " \xC2\xBB (" + plural(ctx.view->objects.size(), "objet", "objets") + ")";
+    } else {
+        s += ", pas la vue";
+    }
+    if (settings_.sendSelection && !ctx.selection.empty()) s += ", la s\xC3\xA9lection (" + std::to_string(ctx.selection.size()) + ")";
+    if (settings_.sendVariables && ctx.project) s += ", " + plural(ctx.project->programs.variables.size(), "variable", "variables");
+    if (!pending_.empty())
+        s += settings_.sendAttachments ? ", " + plural(pending_.size(), "pi\xC3\xA8" "ce jointe", "pi\xC3\xA8" "ces jointes")
+                                       : std::string(", pas les pi\xC3\xA8" "ces jointes");
+    return s + ".";
+}
+
+// ---- la liste des modeles --------------------------------------------------------------------------
+bool Assistant::queryModels(const Settings& s, const std::string& key, std::string* why) {
+    if (!modelQuery_) modelQuery_ = std::make_unique<ModelQuery>();
+    if (!modelQuery_->start(s.endpoint, key, s.timeoutSeconds, why)) return false;
+    models_.reset();
+    ++revision_;
+    return true;
+}
+
+bool Assistant::pollModels() {
+    if (!modelQuery_) return false;
+    auto r = modelQuery_->poll();
+    if (!r) return false;
+    models_ = std::move(*r);
+    ++modelsRev_;
+    ++revision_;
+    return true;
 }
 
 } // namespace app::ai

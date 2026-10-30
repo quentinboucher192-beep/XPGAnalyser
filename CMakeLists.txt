@@ -191,6 +191,14 @@ target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
 # 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de l'export SVG (app/SvgRenderer) :
 # il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
 target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
+# 1.15.0 : l'Assistant IA branche (app/ai/AiHttp, AiSecret). Windows : WinHTTP (HTTPS, les proxys
+# et les certificats du systeme) et crypt32 (DPAPI, la cle API protegee) - livrees avec Windows.
+# Linux : libcurl est chargee a la demande (dlopen) : aucune dependance a la compilation.
+if(WIN32)
+    target_link_libraries(xpg_app PUBLIC winhttp crypt32)
+else()
+    target_link_libraries(xpg_app PUBLIC ${CMAKE_DL_LIBS})
+endif()
 
 if(XPG_WITH_SDL)
     find_package(SDL3 CONFIG REQUIRED)
@@ -686,6 +694,11 @@ if(XPG_BUILD_TESTS)
     # dossier IA/ jetable, sur un vrai document IHM et une vraie pile d'annulation (xpg_app : rien a recompiler).
     xpg_add_test_executable(ai_assistant_test tests/ai_assistant_test.cpp)
     xpg_target_link_libraries(ai_assistant_test PRIVATE xpg_app)
+    # 1.15.0 (Assistant IA, chantier RESEAU) : la connexion a l'IA - le lecteur SSE, le corps de la requete, le
+    # fournisseur Anthropic sur un faux transport (texte, outil, erreurs, coupure, Arreter, reprises), libcurl contre
+    # un serveur local, la cle (jamais en clair), l'Assistant branche (le tour suivant porte le resultat reel).
+    xpg_add_test_executable(ai_reseau_test tests/ai_reseau_test.cpp)
+    xpg_target_link_libraries(ai_reseau_test PRIVATE xpg_app)
     # 1.15.0 (la vraie IA, chantier du registre) : le registre des 116 genres tire du code, le contexte et ses
     # reglages de confidentialite, les consignes et les connaissances actives, le schema de l'outil, la lecture de
     # son entree, les nouvelles operations (dupliquer, code) en un Ctrl+Z (xpg_app : rien a recompiler).
@@ -834,6 +847,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----
     xpg_add_test(NAME aiassistant COMMAND ai_assistant_test)                 # 1.14.2 : l'Assistant IA (la maquette)
+    xpg_add_test(NAME aireseau COMMAND ai_reseau_test)                       # 1.15.0 : l'Assistant IA, la connexion (RESEAU)
     xpg_add_test(NAME airegistre COMMAND ai_registre_test)                   # 1.15.0 : le registre, le contexte, l'outil
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----

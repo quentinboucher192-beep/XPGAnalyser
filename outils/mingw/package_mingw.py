@@ -95,7 +95,8 @@ def imported_dlls(exe):
     return sorted(set(re.findall(r"DLL Name:\s*(\S+)", out)), key=str.lower)
 
 
-SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi32", "comdlg32", "ws2_32", "iphlpapi",
+# 1.15.0 : winhttp (l'Assistant IA : HTTPS par Windows) ; crypt32 (DPAPI, la cle API protegee) y etait deja.
+SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi32", "comdlg32", "ws2_32", "iphlpapi", "winhttp",
           "winmm", "imm32", "setupapi", "version", "dwmapi", "uxtheme", "shlwapi", "bcrypt", "winspool", "uuid", "msvcrt",
           "ucrtbase", "crypt32", "dbghelp", "hid", "cfgmgr32", "dinput8", "xinput1_4", "powrprof", "comctl32"}
 

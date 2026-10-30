@@ -95,7 +95,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(SDL3_DIR)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;mf.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;mf.lib;winhttp.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <!-- 1.8.0 : page de code UTF-8, chemins longs, versions de Windows (voir le fichier). -->
     <Manifest>
@@ -446,6 +446,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileFinder.cpp" />
     <ClCompile Include="src\app\FileFinderPane.cpp" />
     <ClCompile Include="src\app\ai\AiAssistant.cpp" />
+    <ClCompile Include="src\app\ai\AiAnthropic.cpp" />
+    <ClCompile Include="src\app\ai\AiHttp.cpp" />
+    <ClCompile Include="src\app\ai\AiProvider.cpp" />
+    <ClCompile Include="src\app\ai\AiSecret.cpp" />
+    <ClCompile Include="src\app\ai\AiSse.cpp" />
     <ClCompile Include="src\app\ai\AiDemo.cpp" />
     <ClCompile Include="src\app\ai\AiJson.cpp" />
     <ClCompile Include="src\app\ai\AiOperations.cpp" />
@@ -963,6 +968,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileFinder.hpp" />
     <ClInclude Include="src\app\FileFinderPane.hpp" />
     <ClInclude Include="src\app\ai\AiAssistant.hpp" />
+    <ClInclude Include="src\app\ai\AiAnthropic.hpp" />
+    <ClInclude Include="src\app\ai\AiHttp.hpp" />
+    <ClInclude Include="src\app\ai\AiSecret.hpp" />
+    <ClInclude Include="src\app\ai\AiSse.hpp" />
     <ClInclude Include="src\app\ai\AiDemo.hpp" />
     <ClInclude Include="src\app\ai\AiJson.hpp" />
     <ClInclude Include="src\app\ai\AiOperations.hpp" />

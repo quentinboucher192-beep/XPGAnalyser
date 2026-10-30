@@ -84,6 +84,20 @@ json::Value toJson(const Message& m) {
         o.set("pieces", std::move(list));
     }
     if (m.proposal) o.set("proposition", toJson(*m.proposal));
+    if (!m.note.empty()) o.set("note", m.note);
+    if (!m.provider.empty()) o.set("fournisseur", m.provider);
+    if (!m.model.empty()) o.set("modele", m.model);
+    if (m.tool) {
+        json::Value t = json::Value::object();
+        t.set("id", m.tool->id);
+        t.set("nom", m.tool->name);
+        // L'entree telle quelle : un objet JSON (lisible a l'oeil), sinon son texte brut.
+        json::Value input;
+        if (json::parse(m.tool->input, input) && input.isObject()) t.set("entree", std::move(input));
+        else t.set("entree", m.tool->input);
+        if (!m.tool->error.empty()) t.set("erreur", m.tool->error);
+        o.set("outil", std::move(t));
+    }
     json::addMembers(o, m.extra);
     return o;
 }
@@ -97,7 +111,19 @@ Message messageFromJson(const json::Value& o) {
     m.state = o.str("etat");
     for (const auto& a : o.at("pieces").items()) m.attachments.push_back(attachmentFromJson(a));
     if (const auto* p = o.find("proposition"); p && p->isObject()) m.proposal = proposalFromJson(*p);
-    m.extra = json::unknownMembers(o, {"id", "role", "date", "texte", "etat", "pieces", "proposition"});
+    m.note = o.str("note");
+    m.provider = o.str("fournisseur");
+    m.model = o.str("modele");
+    if (const auto* t = o.find("outil"); t && t->isObject() && !t->str("id").empty()) {
+        ToolCall call;
+        call.id = t->str("id");
+        call.name = t->str("nom");
+        const auto& input = t->at("entree");
+        call.input = input.isString() ? input.asString() : input.isNull() ? std::string("{}") : json::write(input, false);
+        call.error = t->str("erreur");
+        m.tool = std::move(call);
+    }
+    m.extra = json::unknownMembers(o, {"id", "role", "date", "texte", "etat", "pieces", "proposition", "note", "fournisseur", "modele", "outil"});
     return m;
 }
 
@@ -117,10 +143,11 @@ bool writeJsonFile(const std::string& path, const json::Value& v, std::string* w
 
 // ---- les fournisseurs -------------------------------------------------------------
 const std::vector<ProviderInfo>& providers() {
+    // 1.15.0 : Anthropic (Claude) est branche ; un relais d'entreprise passe par son adresse.
     static const std::vector<ProviderInfo> k = {
         {"demo", "D\xC3\xA9monstration (sans IA)", true},
-        {"service", "Service en ligne (\xC3\xA0 venir)", false},
-        {"entreprise", "Serveur de l'entreprise, relais (\xC3\xA0 venir)", false},
+        {"anthropic", "Anthropic (Claude)", true},
+        {"service", "Autre service en ligne (\xC3\xA0 venir)", false},
         {"local", "Mod\xC3\xA8le sur ce PC (\xC3\xA0 venir)", false},
     };
     return k;
@@ -232,6 +259,7 @@ json::Value toJson(const Settings& s) {
     o.set("modele", s.model);
     o.set("adresse", s.endpoint);
     o.set("delai", s.timeoutSeconds);
+    o.set("effort", s.effort);
     o.set("mode", s.mode);
     json::Value keep = json::Value::object();
     keep.set("jours", s.keepDays);
@@ -254,6 +282,8 @@ Settings settingsFromJson(const json::Value& o) {
     s.model = o.str("modele");
     s.endpoint = o.str("adresse");
     s.timeoutSeconds = static_cast<int>(std::clamp<std::int64_t>(o.integer("delai", 60), 5, 600));
+    s.effort = o.str("effort");
+    if (s.effort != "low" && s.effort != "medium" && s.effort != "high") s.effort.clear();
     s.mode = o.str("mode", "previsualisation") == "direct" ? "direct" : "previsualisation";
     s.keepDays = static_cast<int>(std::max<std::int64_t>(0, o.at("historique").integer("jours")));
     s.keepCount = static_cast<int>(std::max<std::int64_t>(0, o.at("historique").integer("nombre")));
@@ -263,7 +293,7 @@ Settings settingsFromJson(const json::Value& o) {
     s.sendVariables = priv.flag("variables", true);
     s.sendAttachments = priv.flag("pieces", true);
     // Une cle API ecrite par erreur (un fichier retouche a la main) n'est jamais relue ni reecrite.
-    s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "mode", "historique",
+    s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "effort", "mode", "historique",
                                        "confidentialite", "cle", "cleApi", "apiKey", "api_key"});
     return s;
 }

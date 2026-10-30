@@ -637,6 +637,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia parametres                       la fenetre des parametres
     //  ia defiler N                        la discussion, de N pixels (negatif : vers le haut)
     //  ia etat                             au journal du script : les conversations, l'ouverte, la generation
+    //  ---- 1.15.0 : la connexion (l'IA branchee ; enregistre comme Parametres > Enregistrer) ----
+    //  ia fournisseur demo | anthropic     le fournisseur
+    //  ia modele "id"                      le modele (rien en dur : celui que le script donne)
+    //  ia adresse "url" | ""               l'adresse : un relais, ou le faux fournisseur local
+    //                                      (tests/fixtures/ia/faux_fournisseur.py : http://127.0.0.1:PORT) ;
+    //                                      "" : celle du fournisseur
+    //  ia effort auto | bas | moyen | haut
+    //  ia delai N                          le delai d'inactivite (secondes, 5 a 600)
+    //  ia cle "texte"                      la cle API, pour la seance (jamais ecrite, ni au journal)
+    //  ia reessayer                        le bouton Reessayer (le dernier message : une erreur, un arret)
+    //  ia modeles                          la liste des modeles du fournisseur, au journal (attend la reponse)
+    //  ia tester                           tester la connexion, au journal (attend la reponse)
     if (cmd == "ia") {
         const std::string sub = lower(arg(1));
         if (auto* pv = dynamic_cast<ai::AiPreviewDialog*>(app_.menus().top())) {
@@ -660,6 +672,54 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return -1;
         };
         if (sub == "nouvelle") { panel->newConversation(); return Step::Yield; }
+        // ---- 1.15.0 : la connexion ----
+        if (sub == "fournisseur" || sub == "modele" || sub == "adresse" || sub == "effort" || sub == "delai") {
+            ai::Settings st = as.settings();
+            const std::string v = arg(2);
+            if (sub == "fournisseur") {
+                bool known = false;
+                for (const auto& p : ai::providers())
+                    if (p.key == lower(v) && p.available) known = true;
+                if (!known) { fail("ia fournisseur " + v + " : inconnu ou pas encore branch\xC3\xA9 (demo, anthropic)"); return Step::Next; }
+                st.provider = lower(v);
+            } else if (sub == "modele") {
+                st.model = v;
+            } else if (sub == "adresse") {
+                st.endpoint = v;
+            } else if (sub == "effort") {
+                const std::string e = lower(v);
+                st.effort = e == "bas" ? "low" : e == "moyen" ? "medium" : e == "haut" ? "high" : std::string{};
+            } else {
+                st.timeoutSeconds = std::clamp(std::atoi(v.c_str()), 5, 600);
+            }
+            as.setSettings(st);
+            panel->sync();
+            return Step::Yield;
+        }
+        if (sub == "cle") { as.setApiKey(arg(2)); panel->sync(); return Step::Yield; }   // jamais au journal
+        if (sub == "reessayer") { if (!panel->retry()) fail("ia reessayer : " + panel->lastStatus()); return Step::Yield; }
+        if (sub == "modeles" || sub == "tester") {
+            if (!iaQuery_) {
+                std::string why;
+                if (!as.queryModels(as.settings(), as.apiKey(), &why)) { fail("ia " + sub + " : " + why); return Step::Next; }
+                iaQuery_ = true;
+                return Step::Retry;
+            }
+            (void)as.pollModels();
+            if (as.modelsBusy() || !as.models()) return Step::Retry;
+            iaQuery_ = false;
+            const auto& r = *as.models();
+            if (!r.ok) {
+                std::printf("[script] ia %s : %s\n", sub.c_str(), r.error.c_str());
+                fail("ia " + sub + " : " + r.error);
+            } else if (sub == "tester") {
+                std::printf("[script] ia tester : connexion r\xC3\xA9ussie (%zu mod\xC3\xA8les)\n", r.models.size());
+            } else {
+                for (const auto& m : r.models) std::printf("[script] ia modele : %s (%s)\n", m.id.c_str(), m.name.c_str());
+            }
+            std::fflush(stdout);
+            return Step::Next;
+        }
         if (sub == "conversation") {
             const auto& list = as.conversations();
             int found = -1;
@@ -698,6 +758,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::printf("[script] ia : %zu conversations ; ouverte : %s (%zu messages) ; %s\n", as.conversations().size(),
                         c ? c->title.c_str() : "-", c ? c->messages.size() : std::size_t{0},
                         as.generating() ? std::string(ai::phaseLabel(as.phase())).c_str() : "au repos");
+            // 1.15.0 : l'etat de connexion, et le dernier message s'il est une erreur.
+            std::printf("[script] ia : %s\n", as.connectionText().c_str());
+            if (c && !c->messages.empty() && c->messages.back().state == "erreur")
+                std::printf("[script] ia : erreur : %s\n", c->messages.back().note.c_str());
             if (const auto* p = as.proposal(lastProposal())) {
                 // 1.14.2 : l'etat reel d'une proposition appliquee (Ctrl+Z, la vue changee depuis).
                 const auto real = as.appliedState(lastProposal());

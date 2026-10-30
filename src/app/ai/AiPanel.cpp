@@ -85,10 +85,13 @@ std::unordered_map<std::string, std::vector<AiChatView::Line>>& layoutCache() {
     return cache;
 }
 
-const std::string& welcomeText() {
-    static const std::string k = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel. "
-                                 "D\xC3\xA9monstration : je reconnais les demandes ci-dessous.";
-    return k;
+// 1.15.0 : branche sur un vrai fournisseur, l'accueil ne parle plus de demonstration.
+const std::string& welcomeText(bool live = false) {
+    static const std::string demo = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel. "
+                                    "D\xC3\xA9monstration : je reconnais les demandes ci-dessous.";
+    static const std::string real = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel : "
+                                    "d\xC3\xA9" "cris ce que tu veux, je propose, tu v\xC3\xA9rifies, tu appliques (Ctrl+Z reprend tout).";
+    return live ? real : demo;
 }
 
 // 1.14.2 : un texte simple a la ligne, au mot (un mot plus large que la place : coupe ; une
@@ -656,6 +659,12 @@ void AiPanel::tick(double now) {
                 if (c->messages[i].proposal && c->messages[i].proposal->state == "appliquee")
                     key += static_cast<char>('0' + static_cast<int>(assistant_->appliedState(static_cast<int>(i))));
         }
+        // 1.15.0 : "ce qui part" suit la vue et la selection (sans changement de la seance).
+        if (std::string out = assistant_->outgoingSummary(); out != outgoingText_) {
+            outgoingText_ = std::move(out);
+            invalidateLayout();
+            invalidate();
+        }
         if (key != appliedKey_) {
             const bool first = appliedKey_.empty();
             appliedKey_ = std::move(key);
@@ -977,6 +986,16 @@ void AiPanel::openSettings() {
     });
 }
 
+bool AiPanel::retry() {
+    std::string why;
+    const bool ok = assistant_->retry(&why);
+    if (!ok) say(why);
+    seen_ = 0;
+    sync();
+    if (ok) chat_->scrollToBottom();
+    return ok;
+}
+
 void AiPanel::setDirect(bool direct) {
     assistant_->setDirectMode(direct);
     refreshButtons();
@@ -1039,9 +1058,22 @@ void AiPanel::onLayout() {
     const float sw = std::max(w < 340.f ? 84.f : 110.f, ui::measureWidth(sendBtn_->text(), gfx::FontId{16}) + (w < 340.f ? 28.f : 40.f));
     sendBtn_->setBounds({bottomBar_.right() - kPad - sw, bottomBar_.y + 5.f, sw, kBottomH - 10.f});
     attachBtn_->setBounds({x + kPad - 4.f, bottomBar_.y + 5.f, 32.f, kBottomH - 10.f});
+    // 1.15.0 : CE QUI PART, sous la saisie, avant le premier envoi d'une conversation a un vrai
+    // fournisseur (deux lignes au plus ; le reste dans l'infobulle).
+    outgoingLines_.clear();
+    outgoing_ = {};
+    if (const std::string out = assistant_->outgoingSummary(); !out.empty()) {
+        outgoingLines_ = wrapPlain(out, kMeta, w - 2 * kPad - 20.f);
+        if (outgoingLines_.size() > 2) {
+            outgoingLines_.resize(2);
+            outgoingLines_.back() += " \xE2\x80\xA6";
+        }
+        const float oh = static_cast<float>(outgoingLines_.size()) * (ui::lineHeight(kMeta) + 2.f) + 4.f;
+        outgoing_ = {x + kPad, bottomBar_.y - oh, w - 2 * kPad, oh};
+    }
     // La saisie : de 1 a 5 lignes selon le texte (comme une messagerie), puis elle defile.
     const float ph = prompt_->heightFor(w - 2 * kPad);
-    promptArea_ = {x + kPad, bottomBar_.y - ph - 2.f, w - 2 * kPad, ph};
+    promptArea_ = {x + kPad, (outgoing_.h > 0.f ? outgoing_.y : bottomBar_.y) - ph - 2.f, w - 2 * kPad, ph};
     prompt_->setBounds(promptArea_);
     const float pendH = static_cast<float>(assistant_->pending().size()) * kPendingH;
     pendingArea_ = {x + kPad, promptArea_.y - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
@@ -1067,7 +1099,9 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     const bool on = a.settings().enabled;
     const float lhCap = ctx.r.lineHeight(f.caption);
     const float dotY = statusLine_.y + statusLine_.h / 2.f;
-    ctx.r.fillRoundedRect({statusLine_.x + kPad + 6.f, dotY - 4.f, 8.f, 8.f}, on ? c.warning : c.textDisabled, 4.f);
+    // 1.15.0 : vert, un vrai fournisseur pret ; orange, la demonstration ou a configurer ; gris, desactive.
+    const gfx::Color dot = !on ? c.textDisabled : a.live() && a.ready() ? c.ok : c.warning;
+    ctx.r.fillRoundedRect({statusLine_.x + kPad + 6.f, dotY - 4.f, 8.f, 8.f}, dot, 4.f);
     ctx.r.drawText({statusLine_.x + kPad + 22.f, statusLine_.y + (statusLine_.h - lhCap) / 2.f},
                    elideTip(ctx.r, a.connectionText(), f.caption, statusLine_.w - 2 * kPad - 24.f, statusLine_, tips_), f.caption, c.textMuted);
     // ---- le mode et la vue visee
@@ -1150,6 +1184,17 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
             ctx.r.fillRect({r.x + 1.f, r.bottom() - 3.f, (r.w - 2.f) * pend[i].progress, 2.f}, c.info);
         }
     }
+    // ---- 1.15.0 : ce qui part (avant le premier envoi a un vrai fournisseur)
+    if (outgoing_.h > 0.f) {
+        ui::drawIcon(ctx.r, ui::Icon::Info, {outgoing_.x, outgoing_.y + 2.f, 14.f, 14.f}, c.info);
+        float oy = outgoing_.y + 1.f;
+        for (const auto& l : outgoingLines_) {
+            ctx.r.drawText({outgoing_.x + 20.f, oy}, l, kMeta, c.textMuted);
+            oy += ctx.r.lineHeight(kMeta) + 2.f;
+        }
+        tips_.emplace_back(outgoing_, a.outgoingSummary());
+    }
+    tips_.emplace_back(statusLine_, a.connectionText() + " (un clic : les Param\xC3\xA8tres de l'Assistant IA)");
     // ---- la barre du bas : l'aide des touches entre Joindre et Envoyer
     ctx.r.fillRect({b.x + 1.f, bottomBar_.y, b.w - 1.f, 1.f}, c.border);
     const float hx = attachBtn_->bounds().right() + 8.f;
@@ -1223,6 +1268,11 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             } else {
                 (void)selectConversation(row);
             }
+            return ui::EventResult::Consumed;
+        }
+        // 1.15.0 : l'etat de connexion ouvre les parametres ("A configurer" : un clic).
+        if (statusLine_.contains(d->pos) && d->button == ui::MouseButton::Left) {
+            openSettings();
             return ui::EventResult::Consumed;
         }
         if (header_.contains(d->pos) || statusLine_.contains(d->pos) || modeRow_.contains(d->pos)) return ui::EventResult::Consumed;
@@ -1440,7 +1490,18 @@ void AiChatView::measure() {
                 float th = 0.f;
                 for (const auto& l : b.lines) th += l.h + l.gapBefore;
                 b.h = meta + th + 4.f;
-                if (live) b.h += 26.f;   // l'indicateur
+                if (live) {   // l'indicateur, et ce qu'il dit en plus (une nouvelle tentative)
+                    b.h += 26.f;
+                    if (!a.statusDetail().empty())
+                        b.h += static_cast<float>(std::min<std::size_t>(3, wrapPlain(a.statusDetail(), kMeta, inner - 30.f).size())) * kNoteH + 2.f;
+                }
+                // 1.15.0 : la note du logiciel (une erreur, une reponse coupee, une entree illisible).
+                if (!live && !m.note.empty()) {
+                    b.noteLines = wrapPlain(m.note, kMeta, inner - 30.f);
+                    b.noteError = m.state == "erreur" || (m.tool && !m.tool->error.empty());
+                    b.noteY = b.h + 2.f;
+                    b.h += static_cast<float>(b.noteLines.size()) * kNoteH + 6.f;
+                }
                 if (!live && m.proposal) {
                     // Une carte close (appliquee, refusee) n'a plus d'apercu : la vue a change depuis.
                     const bool open = m.proposal->state == "proposee";
@@ -1495,6 +1556,11 @@ void AiChatView::measure() {
                     b.card = {kPad + 2.f, b.h + 6.f, cw, ch};
                     b.h += ch + 10.f;
                 }
+                // 1.15.0 : Reessayer, sous le dernier message (une erreur, un arret).
+                if (!live && i + 1 == conv->messages.size() && a.canRetry()) {
+                    b.retryY = b.h + 4.f;
+                    b.h += 38.f;
+                }
             }
             y += b.h + 16.f;
             blocks_.push_back(std::move(b));
@@ -1505,7 +1571,7 @@ void AiChatView::measure() {
     if (empty || a.suggestionsAfterLast()) {
         if (empty) {   // l'accueil : "Bonjour." puis son texte
             y += 6.f + 30.f;
-            for (const auto& l : layoutText(welcomeText(), w - 2 * kPad - 12.f)) y += l.h;
+            for (const auto& l : layoutText(welcomeText(a.live()), w - 2 * kPad - 12.f)) y += l.h;
             y += 14.f;
         }
         suggestionsTop_ = y;
@@ -1588,6 +1654,15 @@ void AiChatView::rebuild() {
         cb.apply->setVisibility(cb.stale ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         cb.third->setVisibility(ui::Visibility::Visible);
     }
+    // 1.15.0 : Reessayer (un seul bouton, garde d'une fois sur l'autre comme ceux des cartes).
+    if (!retry_) {
+        auto btn = std::make_unique<ui::Button>("R\xC3\xA9" "essayer", id() + ".reessayer");
+        btn->setIcon(ui::Icon::Refresh);
+        btn->setTooltip("Renvoyer la m\xC3\xAAme demande (le message en erreur est retir\xC3\xA9).");
+        retry_ = &static_cast<ui::Button&>(addChild(std::move(btn)));
+        links_ += retry_->clicked->connect([this] { (void)panel_.retry(); });
+    }
+    retry_->setVisibility(ui::Visibility::Collapsed);
     if (wasBottom) offset_ = std::max(0.f, content_ - viewHeight());
     offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - viewHeight()));
     placeCards();
@@ -1667,6 +1742,17 @@ void AiChatView::placeCards() {
     // 1.14.2 (captures, 2e passe) : rappele a chaque changement du decalage (une reponse qui s'ecrit
     // fait defiler la discussion entre deux mises en page : le bouton restait a l'ancienne place).
     const auto b = bounds();
+    if (retry_) {
+        const Block* last = blocks_.empty() ? nullptr : &blocks_.back();
+        if (last && last->retryY > 0.f) {
+            const float bw = ui::measureWidth(retry_->text(), gfx::FontId{16}) + 46.f;
+            const float y = b.y + last->y - offset_ + last->retryY;
+            retry_->setBounds({b.x + kPad + 4.f, y, bw, kBtnH});
+            retry_->setVisibility(y >= b.y && y + kBtnH <= b.bottom() ? ui::Visibility::Visible : ui::Visibility::Hidden);
+        } else {
+            retry_->setVisibility(ui::Visibility::Collapsed);
+        }
+    }
     for (auto& cb : cards_) {
         if (cb.message < 0) continue;
         const Block* bl = nullptr;
@@ -1896,6 +1982,26 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
                 ctx.r.fillRect({endX, ly - b.lines.back().h + 2.f, 7.f, ctx.r.lineHeight(kBody) - 2.f}, alpha(c.accent, 160));
             }
             paintIndicator(ctx, {tx, ly + 2.f, bb.w - 2 * kPad, 22.f});
+            // 1.15.0 : une nouvelle tentative (la cause, l'attente), sous l'indicateur.
+            if (!a.statusDetail().empty()) {
+                auto lines = wrapPlain(a.statusDetail(), kMeta, std::max(80.f, bb.w - 2 * kPad - 12.f) - 30.f);
+                if (lines.size() > 3) lines.resize(3);
+                float dy = ly + 28.f;
+                ui::drawIcon(ctx.r, ui::Icon::Refresh, {tx, dy + 1.f, 14.f, 14.f}, c.warning);
+                for (const auto& l : lines) {
+                    ctx.r.drawText({tx + 20.f, dy}, l, kMeta, c.textMuted);
+                    dy += kNoteH;
+                }
+            }
+        }
+        // 1.15.0 : la note du logiciel (une erreur : en rouge ; une reponse coupee, refusee : en gris).
+        if (!b.noteLines.empty()) {
+            float ny = top + b.noteY;
+            ui::drawIcon(ctx.r, b.noteError ? ui::Icon::Error : ui::Icon::Info, {tx, ny + 1.f, 14.f, 14.f}, b.noteError ? c.error : c.textMuted);
+            for (const auto& l : b.noteLines) {
+                ctx.r.drawText({tx + 20.f, ny}, l, kMeta, b.noteError ? c.text : c.textMuted);
+                ny += kNoteH;
+            }
         }
         if (b.card.h > 0.f) paintCard(ctx, b, {bb.x + b.card.x, top + b.card.y, b.card.w, b.card.h});
     }
@@ -1907,7 +2013,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             ui::drawIcon(ctx.r, ui::Icon::Assistant, {bb.x + kPad + 2.f, y, 22.f, 22.f}, c.accent);   // le haut : 10 + 6 (measure)
             bold(ctx.r, {bb.x + kPad + 32.f, y + 2.f}, "Bonjour.", kHead, c.text);
             y += 30.f;
-            for (const auto& l : layoutText(welcomeText(), bb.w - 2 * kPad - 12.f)) {
+            for (const auto& l : layoutText(welcomeText(a.live()), bb.w - 2 * kPad - 12.f)) {
                 for (const auto& r : l.runs) {
                     if (r.style == 1) bold(ctx.r, {bb.x + kPad + 4.f + r.x, y}, r.text, kBody, c.textMuted);
                     else ctx.r.drawText({bb.x + kPad + 4.f + r.x, y}, r.text, kBody, c.textMuted);

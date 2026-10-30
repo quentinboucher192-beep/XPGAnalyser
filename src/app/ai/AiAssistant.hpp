@@ -14,17 +14,29 @@
 //      pile de l'application : un seul Ctrl+Z) ; une proposition perimee (la vue
 //      a change) ne s'applique jamais.
 //
-//  LE FOURNISSEUR. Aujourd'hui la demonstration (AiDemo.hpp), sans fil ni
-//  reseau : la reponse est calculee a l'envoi et "s'ecrit" au rythme de tick().
-//  Demain un fournisseur reseau aura la meme forme (start, poll, cancel), sur un
-//  fil de travail, lu a chaque image par tick() - l'audit, section 2.6.
+//  LE FOURNISSEUR. La demonstration (AiDemo.hpp, Settings::provider "demo"),
+//  sans fil ni reseau : la reponse est calculee a l'envoi et "s'ecrit" au rythme
+//  de tick() - son chemin n'a pas change. 1.15.0 : UN VRAI FOURNISSEUR
+//  (AiProvider.hpp : "anthropic") part sur son fil de travail ; tick() lit ses
+//  evenements a chaque image (poll) : les etats, le texte au fil de l'eau, l'appel
+//  d'outil -> proposalFromTool (AiPrompt.hpp) -> validate -> la carte, comme la
+//  demonstration. La requete porte les consignes et le contexte (systemPrompt),
+//  l'outil des operations, et les tours de la conversation : les textes, les
+//  pieces jointes, les appels d'outil precedents et leur RESULTAT REEL
+//  (appliquee, refusee, en attente, annulee par Ctrl+Z, ou l'erreur de
+//  validation). Une erreur (cle refusee, modele introuvable, hors ligne, delai)
+//  devient un message "erreur" de la conversation, et Reessayer le renvoie.
+//  Arreter ferme la connexion ; le fournisseur arrete finit sur son fil, sans
+//  bloquer l'interface (retiring_).
 //
 //  L'HORLOGE est celle qu'on passe a tick() (les secondes de l'application) :
 //  les essais et les seances de script sont reproductibles.
 // =============================================================================
 #pragma once
 
+#include "AiAnthropic.hpp"
 #include "AiDemo.hpp"
+#include "AiProvider.hpp"
 #include "AiStore.hpp"
 
 #include <cstdint>
@@ -48,12 +60,14 @@ public:
         Env                                   env;          // les noms de l'automate relie
     };
 
-    // Les etats de la generation, dans l'ordre.
-    enum class Phase : std::uint8_t { Idle, Waiting, Thinking, Writing };
+    // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un
+    // vrai fournisseur : les operations arrivent apres le texte).
+    enum class Phase : std::uint8_t { Idle, Waiting, Thinking, Writing, Proposing };
     // Les durees de la demonstration (secondes) ; l'ecriture : des mots par seconde.
     static constexpr double kWaiting = 0.6, kThinking = 1.2, kWordsPerSecond = 36.0, kAttachSeconds = 1.2;
 
     explicit Assistant(Host host);
+    ~Assistant();
 
     // ---- le cycle de vie -----------------------------------------------------------
     // Relit les reglages et les conversations (les demonstrations a la premiere ouverture) ;
@@ -125,11 +139,50 @@ public:
     void               setDirectMode(bool direct);
     [[nodiscard]] const Settings& settings() const noexcept { return settings_; }
     void               setSettings(Settings s);   // enregistre (parametres.json)
-    // La cle API : en memoire pour la seance, jamais ecrite (l'ecran le dit).
+    // La cle API : en memoire pour la seance, jamais ecrite en clair (l'ecran le dit). 1.15.0 :
+    // "Memoriser la cle" la protege par Windows (DPAPI, IA/cle.bin, AiSecret.hpp) ; load() la relit.
     void setApiKey(std::string key) { apiKey_ = std::move(key); ++revision_; }
     [[nodiscard]] const std::string& apiKey() const noexcept { return apiKey_; }
-    // L'etat de connexion, tel que l'en-tete le dit.
+    // Memoriser (protegee) ou oublier la cle de la seance. Faux et `why` : Linux (jamais ecrite),
+    // pas de cle, Windows n'a pas pu la proteger.
+    bool rememberKey(bool on, std::string* why = nullptr);
+    [[nodiscard]] bool keyRemembered() const;
+    // L'etat de connexion, tel que l'en-tete le dit : "Demonstration - aucune IA connectee",
+    // "Anthropic - <modele>", "A configurer : choisis un modele et une cle"...
     [[nodiscard]] std::string connectionText() const;
+
+    // ---- le fournisseur (1.15.0) ---------------------------------------------------------------
+    using ProviderFactory = std::function<std::unique_ptr<Provider>(std::string_view key)>;
+    // Un essai y met son faux fournisseur ; nul : makeProvider (AiProvider.hpp).
+    void setProviderFactory(ProviderFactory f) { providerFactory_ = std::move(f); }
+    // Le fournisseur des reglages n'est pas la demonstration.
+    [[nodiscard]] bool live() const noexcept { return settings_.provider != "demo"; }
+    // Il manque le modele ou la cle (l'en-tete dit "A configurer", un clic ouvre les parametres).
+    [[nodiscard]] bool needsSetup() const;
+    // Pret a envoyer ? Faux et `why` : ce qui manque, en francais.
+    [[nodiscard]] bool ready(std::string* why = nullptr) const;
+    // Ce que l'indicateur dit en plus de l'etat (une nouvelle tentative et son attente).
+    [[nodiscard]] const std::string& statusDetail() const noexcept { return gen_.detail; }
+    // Le dernier message de la conversation ouverte est une erreur (ou un arret) d'un vrai
+    // fournisseur : Reessayer le retire et renvoie la demande.
+    [[nodiscard]] bool canRetry() const;
+    bool retry(std::string* why = nullptr);
+    // "Ce qui part", avant le premier envoi d'une conversation a un vrai fournisseur (vide : rien
+    // a dire) : la demande, la vue et ses objets, la selection, les variables, les pieces jointes.
+    [[nodiscard]] std::string outgoingSummary() const;
+    // La requete d'une conversation, ses messages [0, upTo) (essais ; l'envoi s'en sert) : les
+    // tours, les resultats reels des appels d'outil. Ni consignes ni outil (ceux de l'envoi).
+    [[nodiscard]] ProviderRequest requestFor(const Conversation&, std::size_t upTo) const;
+    // Le resultat d'un appel d'outil tel que le tour suivant le dit au modele (texte, erreur ?).
+    [[nodiscard]] std::pair<std::string, bool> toolResult(const Message&) const;
+
+    // ---- la liste des modeles (Parametres : Lister les modeles, Tester la connexion) ----------
+    // Sur un fil ; le resultat arrive par pollModels (tick l'appelle aussi). Faux et `why`.
+    bool queryModels(const Settings& s, const std::string& key, std::string* why = nullptr);
+    [[nodiscard]] bool modelsBusy() const noexcept { return modelQuery_ && modelQuery_->busy(); }
+    bool               pollModels();   // vrai : un resultat vient d'arriver
+    [[nodiscard]] const std::optional<ModelsResult>& models() const noexcept { return models_; }
+    [[nodiscard]] std::uint64_t modelsRevision() const noexcept { return modelsRev_; }
 
     // Ce qui vient de se passer, pour la barre d'etat de l'ecran ("Proposition appliquee : ...").
     [[nodiscard]] std::string takeNotice() { auto n = std::move(notice_); notice_.clear(); return n; }
@@ -147,6 +200,13 @@ private:
     void save(Conversation& c);
     void finish();
     void autoApply(int message);
+    // 1.15.0 : un vrai fournisseur.
+    bool startLive(Conversation& c, std::string request, std::string* why);
+    void pollLive();
+    void finishLive(const std::string& stopReason);
+    void failLive(const ProviderEvent& e);
+    void retire();                                    // le fournisseur en cours part finir sur son fil
+    [[nodiscard]] Applied appliedOf(const Proposal&) const;
 
     struct Generation {
         Phase       phase{Phase::Idle};
@@ -158,6 +218,15 @@ private:
         std::size_t words{0}, shownWords{0};
         std::optional<Proposal> proposal;
         bool        suggestions{false};
+        // 1.15.0 : un vrai fournisseur.
+        bool                    live{false};
+        std::string             text;          // recu jusqu'ici
+        std::string             detail;        // une nouvelle tentative
+        std::optional<ToolCall> tool;          // l'appel d'outil recu (complet)
+        std::string             request;       // la demande de l'utilisateur
+        std::string             provider, model;
+        hmi::Id                 viewId{hmi::kNoId};
+        std::string             fingerprint;   // l'empreinte de la vue a l'envoi
     };
 
     Host                      host_;
@@ -172,6 +241,12 @@ private:
     int                       directConfirm_{-1};
     double                    lastNow_{0};
     std::uint64_t             revision_{1};
+    ProviderFactory                        providerFactory_;
+    std::unique_ptr<Provider>              provider_;
+    std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
+    std::unique_ptr<ModelQuery>            modelQuery_;
+    std::optional<ModelsResult>            models_;
+    std::uint64_t                          modelsRev_{0};
 };
 
 [[nodiscard]] std::string_view phaseLabel(Assistant::Phase) noexcept;   // "En attente", "R\xC3\xA9" "flexion"...
