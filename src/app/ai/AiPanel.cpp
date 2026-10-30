@@ -1809,7 +1809,9 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     else if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
     else if (p->state == "refusee") { st = "Refus\xC3\xA9" "e"; tone = c.textMuted; }
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
-    else if (!t.check.ok()) { st = "\xC3\x80 compl\xC3\xA9ter"; tone = c.error; }
+    // 1.15.0 : "A completer" seulement quand l'utilisateur peut completer (une variable a choisir dans
+    // l'apercu) ; une proposition que le logiciel refuse (une propriete inventee...) est "Non valide".
+    else if (!t.check.ok()) { st = t.check.missingVariable.empty() ? "Non valide" : "\xC3\x80 compl\xC3\xA9ter"; tone = c.error; }
     else st = "Propos\xC3\xA9" "e";
     const float sw = ctx.r.measure(st, kMeta).width + 14.f;
     const gfx::Rect chip{card.right() - 10.f - sw, y - 1.f, sw, 18.f};
@@ -1976,10 +1978,14 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
         }
         if (live) {
             // Le curseur d'ecriture au bout du texte, puis l'indicateur.
-            if (a.phase() == Assistant::Phase::Writing && std::fmod(ctx.time, 1.0) < 0.6) {
+            // 1.15.0 : un vrai fournisseur passe a l'ecriture avant le premier morceau de texte (le bloc
+            // de texte s'ouvre, les mots suivent) : sans ligne, pas de curseur (lire la derniere ligne
+            // d'une liste vide faisait planter l'application).
+            if (a.phase() == Assistant::Phase::Writing && !b.lines.empty() && std::fmod(ctx.time, 1.0) < 0.6) {
+                const auto& last = b.lines.back();
                 float endX = tx;
-                if (!b.lines.empty() && !b.lines.back().runs.empty()) endX = tx + b.lines.back().runs.back().x + b.lines.back().runs.back().w + 2.f;
-                ctx.r.fillRect({endX, ly - b.lines.back().h + 2.f, 7.f, ctx.r.lineHeight(kBody) - 2.f}, alpha(c.accent, 160));
+                if (!last.runs.empty()) endX = tx + last.runs.back().x + last.runs.back().w + 2.f;
+                ctx.r.fillRect({endX, ly - last.h + 2.f, 7.f, ctx.r.lineHeight(kBody) - 2.f}, alpha(c.accent, 160));
             }
             paintIndicator(ctx, {tx, ly + 2.f, bb.w - 2 * kPad, 22.f});
             // 1.15.0 : une nouvelle tentative (la cause, l'attente), sous l'indicateur.

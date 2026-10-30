@@ -1642,6 +1642,69 @@ void testFauxFournisseur() {
 
 } // namespace
 
+// 1.15.0 (captures sous Wine) : un vrai fournisseur passe a l'ecriture AVANT le premier mot (le bloc de
+// texte s'ouvre, les mots suivent ; un flux lent les espace). Le panneau dessinait alors le curseur
+// d'ecriture en lisant la derniere ligne d'une liste vide : l'application plantait (au premier envoi d'une
+// reponse lente, et a Reessayer apres Arreter).
+class SlowStartProvider final : public ai::Provider {
+public:
+    explicit SlowStartProvider(int& starts) : starts_(starts) {}
+    [[nodiscard]] std::string_view key() const noexcept override { return "anthropic"; }
+    bool start(ai::ProviderRequest, std::string*) override {
+        ++starts_;
+        sent_ = false;
+        busy_ = true;
+        return true;
+    }
+    std::vector<ai::ProviderEvent> poll() override {
+        std::vector<ai::ProviderEvent> out;
+        if (busy_ && !sent_) out.push_back(ev(ai::ProviderEvent::Type::Status, "ecriture"));
+        sent_ = true;
+        return out;
+    }
+    void cancel() override { busy_ = false; }
+    [[nodiscard]] bool busy() const noexcept override { return busy_; }
+
+private:
+    int& starts_;
+    bool sent_{false}, busy_{false};
+};
+
+void testWritingBeforeText() {
+    std::printf("[l'ecriture avant le premier mot]\n");
+    Fixture f("ecriture_vide");
+    int starts = 0;
+    f.as().setProviderFactory([&starts](std::string_view) { return std::make_unique<SlowStartProvider>(starts); });
+    f.configure();
+    check(f.panel->sendText("lent"), "envoyer");
+    f.step();
+    f.step();
+    check(f.as().phase() == ai::Assistant::Phase::Writing && f.as().shownText().empty(), "l'ecriture commence, aucun mot encore");
+    int frames = 0;
+    for (int k = 0; k < 24; ++k) {   // une seconde et plus : le curseur clignote (visible, puis cache)
+        f.step(0.05);
+        Recorder rec;
+        f.render(rec);
+        ++frames;
+    }
+    check(frames == 24, "le panneau se dessine pendant l'ecriture sans mot, curseur visible puis cache (" + std::to_string(frames) + " images)");
+    f.as().stop();
+    f.step();
+    check(!f.as().generating() && f.last().state == "arrete", "Arreter : la reponse vide est gardee, arretee");
+    check(f.panel->retry() && starts == 2, "Reessayer : la demande repart");
+    f.step();
+    f.step();
+    check(f.as().phase() == ai::Assistant::Phase::Writing && f.as().shownText().empty(), "Reessayer : l'ecriture recommence, aucun mot encore");
+    for (int k = 0; k < 24; ++k) {
+        f.step(0.05);
+        Recorder rec;
+        f.render(rec);
+    }
+    check(f.as().generating(), "apres Reessayer : le panneau se dessine, la reponse attend ses mots");
+    f.as().stop();
+    f.step();
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1659,6 +1722,7 @@ int main() {
     testCurl();
     testSecret();
     testAssistantLive();
+    testWritingBeforeText();
     testDirectAndDemo();
     testAssistantRealProvider();
     testSettingsDialog();

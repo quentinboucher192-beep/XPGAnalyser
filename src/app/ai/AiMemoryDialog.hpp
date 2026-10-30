@@ -203,6 +203,7 @@ private:
 
     Spec                                  spec_;
     ai::memory::Measure                   measure_;
+    std::string                           connection_;   // 1.15.0 : l'etat de l'IA (le fournisseur des parametres)
     ai::memory::Ram                       ram_;
     ai::memory::Registry                  registry_;
     std::vector<ai::memory::Conversation> conversations_;

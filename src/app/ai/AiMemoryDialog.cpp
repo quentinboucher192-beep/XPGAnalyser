@@ -9,6 +9,7 @@
 // =============================================================================
 #include "AiMemoryDialog.hpp"
 #include "AiPaths.hpp"
+#include "AiStore.hpp"
 #include "../Dossiers.hpp"
 #include "../../core/Edition.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -361,7 +362,7 @@ protected:
             const std::string head = "\xC3\x89tat de la m\xC3\xA9moire IA : ";
             drawBold(ctx, {x0 + 24.f, y}, head, kText, c.text);
             const float hx = x0 + 24.f + textW(ctx, head, kText) + 2.f;
-            const std::string right = "M\xC3\xA9moire locale de ce PC" + kDot + "aucune IA connect\xC3\xA9" "e (d\xC3\xA9monstration)";
+            const std::string right = "M\xC3\xA9moire locale de ce PC" + kDot + d_.connection_;
             const float rw = textW(ctx, right, kSmall);
             drawFit(ctx, {hx, y}, d_.stateText(), kText, x0 + W - rw - 24.f - hx, c.text);
             ctx.r.drawText({x0 + W - rw, y + 2.f}, right, kSmall, c.textMuted);
@@ -1501,6 +1502,17 @@ void AiMemoryDialog::refreshRam() {
 }
 
 void AiMemoryDialog::refresh() {
+    // 1.15.0 : l'etat reel de l'IA (les parametres de l'Assistant), pas toujours "demonstration".
+    {
+        const ai::Settings st = ai::loadSettings();
+        std::string label;
+        for (const auto& p : ai::providers())
+            if (p.key == st.provider) label = std::string(p.label);
+        if (!st.enabled || st.provider.empty() || st.provider == "demo")
+            connection_ = "aucune IA connect\xC3\xA9" "e (d\xC3\xA9monstration)";
+        else
+            connection_ = "IA : " + (label.empty() ? st.provider : label);
+    }
     measure_ = mem::measure();
     ram_ = mem::readRam();
     registry_.load();

@@ -117,10 +117,12 @@ protected:
         y += kRow;
         row("Fournisseur", d_.provider_);
         heading("CONNEXION");
-        {   // le modele : la case, puis "Lister les modeles"
+        {   // le modele : la case sur toute la largeur (l'indication grise se lit en entier), puis
+            // "Lister les modeles" dessous, a droite
             const float lw = ui::measureWidth(d_.listModels_->text(), gfx::FontId{16}) + 28.f;
-            row("Mod\xC3\xA8le", d_.model_, colW - labelW - lw - 6.f);
-            d_.listModels_->setBounds({x + colW - lw, y - kRow, lw, kRow - 4.f});
+            row("Mod\xC3\xA8le", d_.model_);
+            d_.listModels_->setBounds({x + colW - lw, y, lw, kRow - 4.f});
+            y += kRow;
         }
         row("Effort", d_.effort_);
         row("Adresse", d_.endpoint_);

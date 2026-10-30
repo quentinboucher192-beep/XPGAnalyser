@@ -400,7 +400,16 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         m.alt = has("alt");
         return m;
     };
-    std::printf("[script] %zu: %s\n", pc_ + 1, lines_[pc_].c_str());
+    {
+        // 1.15.0 : une cle API (ia cle, la case de la cle des parametres) ne s'ecrit jamais au journal.
+        std::string shown = lines_[pc_];
+        const std::size_t k = shown.find_first_not_of(" \t");
+        const bool keyCmd = k != std::string::npos && shown.compare(k, 6, "ia cle") == 0;
+        const std::size_t field = shown.find("parametres.cle\"");
+        if (keyCmd) shown = shown.substr(0, k + 6) + " \"***\"";
+        else if (field != std::string::npos) shown = shown.substr(0, field + 15) + " \"***\"";
+        std::printf("[script] %zu: %s\n", pc_ + 1, shown.c_str());
+    }
     std::fflush(stdout);
 
     // ---- Lot API 8 : Centre de simulation ----
