@@ -477,6 +477,20 @@ void ramActivitySearch() {
     for (const auto& h : hits) built = built || h.ref == mem::kKindsKnowledge;
     check(built, "une connaissance du logiciel");
     check(mem::search("", convs, reg.all()).empty() && mem::search("introuvablezz", convs, reg.all()).empty(), "rien : rien");
+    // 1.14.2 (captures, seconde passe) : l'extrait est le texte lu, sans les marques des reponses (** et `)
+    {
+        mem::Knowledge marked;
+        marked.name = "Essai des marques";
+        marked.content = "Une ligne avant.\nLe bouton **Marche** pilote `Pompe_1_Marche` et **6 pompes** en secours.";
+        check(reg.add(marked), "une connaissance aux marques de mise en forme");
+        std::string ex;
+        for (const auto& h : mem::search("pilote", convs, reg.all()))
+            if (h.ref == marked.id) ex = h.excerpt;
+        check(ex.find("Le bouton Marche pilote Pompe_1_Marche et 6 pompes en secours") != std::string::npos && ex.find("**") == std::string::npos
+                  && ex.find('`') == std::string::npos,
+              "l'extrait sans ** ni ` (" + ex + ")");
+        check(reg.remove(marked.id), "nettoyee");
+    }
     check(reg.remove(k.id), "nettoye");
 }
 
