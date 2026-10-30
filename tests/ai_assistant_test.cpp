@@ -1009,6 +1009,89 @@ void testMarkdown() {
 
 } // namespace
 
+// ------------------------- 1.14.2 : la seconde passe des captures reelles ----
+void testSecondPass() {
+    std::printf("[captures, seconde passe]\n");
+    Fixture f("seconde");
+    auto& chat = f.panel->chat();
+    // 2. La premiere ouverture : Decouvrir l'Assistant montre son DEBUT (pas sa fin) quand elle ne tient pas.
+    f.panel->setBounds({0, 0, 440, 520});
+    f.panel->layout();
+    check(f.panel->selectConversation(f.as().currentIndex()), "Decouvrir l'Assistant rouverte");
+    f.panel->layout();
+    check(chat.contentHeight() > chat.bounds().h && chat.scrollOffset() == 0.f, "elle ne tient pas : son debut (la question en haut)");
+    // Plusieurs echanges : la derniere demande en haut, pas la fin de la derniere reponse.
+    f.panel->newConversation();
+    (void)f.sendAndWait("Bonjour, peux-tu me faire un caf\xC3\xA9 ?");
+    (void)f.sendAndWait(ai::demoSuggestions()[0]);
+    const std::string id = f.as().current()->id;
+    (void)f.panel->selectConversation(f.as().currentIndex() == 0 ? 1 : 0);
+    check(f.panel->selectConversation(f.as().indexOf(id)) && f.as().current()->id == id, "la conversation rouverte");
+    f.panel->layout();
+    check(chat.scrollOffset() > 0.f && !chat.atBottom(), "rouverte : le debut du dernier echange, pas la fin");
+    // Une reponse qui s'ecrit : la discussion suit le bas.
+    (void)f.panel->sendText("Ajoute une cuve avec un indicateur de niveau");
+    f.step(0.05);
+    f.step(2.2);
+    check(chat.atBottom(), "pendant l'ecriture : le bas");
+    f.finish();
+    // 1. Une carte Annulee au-dessus d'une reponse qui s'ecrit : son bouton reste dans la carte,
+    //    meme quand la discussion defile entre deux mises en page (l'ordre d'une image : la mise en
+    //    page, puis tick, puis le dessin).
+    const int m = f.lastProposal();
+    (void)f.panel->applyProposal(m);
+    (void)f.stack.undo();
+    f.step(0.3);
+    auto* again = chat.cardButton(m, 1);
+    check(again && again->text() == "R\xC3\xA9" "appliquer", "la carte Annulee et son bouton");
+    (void)f.panel->sendText("Aligne les quatre boutons");
+    bool inside = true;
+    int seen = 0;
+    for (int k = 0; k < 120 && f.as().generating(); ++k) {
+        f.t += 0.05;
+        f.panel->tick(f.t);   // sans mise en page apres : comme dans l'appli
+        const auto card = chat.cardRect(m);
+        if (again && again->visible() && card.h > 0.f) {
+            ++seen;
+            inside = inside && again->bounds().y >= card.y && again->bounds().bottom() <= card.bottom();
+        }
+        f.panel->layout();
+    }
+    f.finish();
+    check(seen > 0 && inside, "pendant l'ecriture : Reappliquer reste dans sa carte (" + std::to_string(seen) + " images)");
+    // 3. A 282 px : un texte coupe se lit en entier dans son infobulle.
+    (void)f.as().rename(f.as().current()->id, "Station de pompage avec trois cuves et leurs pompes");
+    f.panel->setBounds({0, 0, ai::defaultPanelWidth(1280.f), 760});
+    f.panel->layout();
+    {
+        Recorder rec;
+        f.render(rec);
+        const auto row = f.panel->rowRect(f.as().currentIndex());
+        check(f.panel->liveTooltip({row.x + 60.f, row.y + row.h / 2.f}) == "Station de pompage avec trois cuves et leurs pompes",
+              "le titre coupe d'une conversation : en entier dans l'infobulle");
+        check(f.panel->liveTooltip({row.x + 60.f, row.y - 400.f}).empty(), "ailleurs : pas d'infobulle");
+        // (les mesures grossieres de l'essai coupent la fin : le debut suffit a dire le mot)
+        check(!rec.saw("nouvelle ligne") && rec.saw("Maj+Entr\xC3\xA9" "e : \xC3\xA0"), "4. l'aide : a la ligne (a 1280)");
+    }
+    (void)f.sendAndWait("Ajoute une cuve avec un indicateur de niveau");
+    chat.scrollToBottom();
+    f.panel->layout();
+    {
+        Recorder rec;
+        f.render(rec);
+        const auto card = chat.cardRect(f.lastProposal());
+        check(card.h > 0.f && chat.liveTooltip({card.x + 60.f, card.y + 14.f}) == "Op\xC3\xA9rations propos\xC3\xA9" "es",
+              "le titre coupe de la carte : en entier dans l'infobulle");
+    }
+    f.panel->setBounds({0, 0, 1000, 900});
+    f.panel->layout();
+    {
+        Recorder rec;
+        f.render(rec);
+        check(!rec.saw("nouvelle ligne") && rec.saw("Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne"), "4. l'aide : a la ligne (large aussi)");
+    }
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1032,6 +1115,7 @@ int main() {
     testStale();
     testPreviewPainters();
     testMarkdown();
+    testSecondPass();
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
