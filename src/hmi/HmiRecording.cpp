@@ -2031,7 +2031,7 @@ Command parseCommand(const std::vector<std::string>& args) {
         }
     }
     if (c.kind == Command::Kind::None && c.error.empty()
-        && (c.discard || c.duration > 0 || !c.password.empty()))
+        && (c.discard || c.duration > 0 || !c.password.empty() || c.speed != 1.0))
         c.error = "--duree, --vitesse, --mot-de-passe et --jeter accompagnent --enregistrer, --rejouer ou --arreter-enregistrement";
     return c;
 }

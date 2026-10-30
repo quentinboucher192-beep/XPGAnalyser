@@ -883,6 +883,10 @@ void testCommandLine() {
     check(!c.error.empty(), "--rejouer sans nom : une erreur (" + c.error + ")");
     c = rec::parseCommand({"--enregistrer", "X", "--duree", "dix"});
     check(!c.error.empty(), "--duree illisible : une erreur");
+    c = rec::parseCommand({"--vitesse", "2"});
+    check(!c.error.empty(), "--vitesse seule : une erreur (elle accompagne --rejouer)");
+    c = rec::parseCommand({"--jeter"});
+    check(!c.error.empty(), "--jeter seul : une erreur");
     c = rec::parseCommand({"projet.xpgproj", "--poste", "C:/IHM"});
     check(c.kind == K::None && c.error.empty(), "les autres options ne sont pas des commandes d'enregistrement");
     check(rec::parseCommand(rec::commandArgs(rec::parseCommand({"--rejouer", "A", "--vitesse", "0,5", "--reponse", "r.txt"}))).speed == 0.5,
