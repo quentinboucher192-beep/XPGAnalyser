@@ -30979,9 +30979,7 @@ void son1140() {
     }
 }
 
-// ======================================================================    }
-}
-
+// =============================================================================
 //  1.14.1 (lot N1) : LES VANNES ET LES REGISTRES COMMANDES PAR LEURS FINS DE COURSE
 //  La regle (deux voies, trois voies), le chrono a l'heure de la marche, une vue
 //  en marche, Pourquoi ?, Generer, l'alarme Discordance, le fichier (un projet
@@ -31349,7 +31347,9 @@ void finsDeCourse1141() {
         }
         check(limited > 0 && seen.count(St::Open) && seen.count(St::Closed) && seen.count(St::Moving) && seen.count(St::Discord),
               std::string(kindLabel(k)) + " : son exemple montre la variante, ouverte, ferm\xC3\xA9" "e, en mouvement et en discordance");
-=======
+    }
+}
+
 // ---- 1.14.1 (lot N4) : la Calculatrice - standard, scientifique, programmeur --------------------------------
 //  Le moteur de calcul de chaque mode (les priorites, les parentheses, les fonctions, les erreurs, la memoire, les
 //  bases, la taille du mot, le signe, le debordement, les bits), sa geometrie, puis l'objet en marche (la Valeur de
