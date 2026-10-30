@@ -158,6 +158,8 @@ public:
     bool refuseProposal(int message);
     void editRequest(int message);                 // Modifier la demande : le texte remis dans la saisie
     void openSettings();
+    // 1.15.0 : Reessayer (le dernier message est une erreur ou un arret d'un vrai fournisseur).
+    bool retry();
     void setDirect(bool direct);
     void setConversationsOpen(bool open);
     [[nodiscard]] bool conversationsOpen() const noexcept { return listOpen_; }
@@ -170,6 +172,9 @@ public:
     [[nodiscard]] ui::PopupMenu* menu() const noexcept { return menu_; }
     [[nodiscard]] gfx::Rect      rowRect(int index) const;     // une conversation, apres un dessin (vide : cachee)
     [[nodiscard]] gfx::Rect      promptRect() const;
+    // 1.15.0 : la ligne "ce qui part" sous la saisie (vide : pas montree), et l'etat de connexion.
+    [[nodiscard]] gfx::Rect      outgoingRect() const noexcept { return outgoing_; }
+    [[nodiscard]] gfx::Rect      statusRect() const noexcept { return statusLine_; }
     [[nodiscard]] gfx::Rect      chatRect() const;
     [[nodiscard]] std::string    lastStatus() const { return lastStatus_; }
     // Le menu du clic droit d'une conversation (Renommer, Supprimer...).
@@ -215,6 +220,9 @@ private:
 
     // La geometrie de la derniere mise en page.
     gfx::Rect              header_{}, statusLine_{}, modeRow_{}, listHead_{}, list_{}, pendingArea_{}, promptArea_{}, bottomBar_{};
+    gfx::Rect              outgoing_{};             // 1.15.0 : ce qui part (sous la saisie)
+    std::vector<std::string> outgoingLines_;
+    std::string            outgoingText_;
     std::vector<gfx::Rect> rows_;            // une par conversation montree
     std::vector<gfx::Rect> pendingRemove_;   // la croix de chaque piece en attente
     float                  listScroll_{0.f};
@@ -253,6 +261,8 @@ public:
     // La carte d'un message (vide : pas de carte, ou pas encore dessinee), ses boutons.
     [[nodiscard]] gfx::Rect cardRect(int message) const;
     [[nodiscard]] ui::Button* cardButton(int message, int which) const;   // 0 Previsualiser, 1 Appliquer, 2 Refuser / Redemander
+    // 1.15.0 : Reessayer, sous le dernier message (une erreur, un arret) ; nul : pas encore cree.
+    [[nodiscard]] ui::Button* retryButton() const noexcept { return retry_; }
     [[nodiscard]] gfx::Rect suggestionRect(std::size_t index) const;
     [[nodiscard]] std::size_t suggestionCount() const noexcept { return suggestionRects_.size(); }
     // Le texte d'un message tel qu'il est mis en page (essais) : ses lignes.
@@ -301,6 +311,11 @@ private:
         std::vector<gfx::Rect>   buttonRects;
         float                    buttonsH{0.f};
         Assistant::Applied       applied{Assistant::Applied::NotApplied};
+        // 1.15.0 : la note du logiciel (une erreur, une reponse coupee) a la ligne, et la place
+        // de Reessayer (relatif au haut du bloc ; 0 : pas de bouton).
+        std::vector<std::string> noteLines;
+        bool                     noteError{false};
+        float                    noteY{0.f}, retryY{0.f};
     };
     struct CardButtons {
         int         message{-1};
@@ -321,6 +336,7 @@ private:
     std::vector<Block>       blocks_;
     std::vector<CardButtons> cards_;
     std::vector<gfx::Rect>   suggestionRects_;
+    ui::Button*              retry_{nullptr};
     float                    suggestionsTop_{0.f};
     float                    offset_{0.f};
     float                    content_{0.f};

@@ -138,8 +138,10 @@ void MainAnalysisScreen::showAssistant(bool show) {
         aiPanel_->prompt().takeFocus();
     }
     if (status_)
-        status_->setTransientMessage(show ? "Assistant IA (d\xC3\xA9monstration) : il propose des modifications de la vue ouverte. Ctrl+Maj+I le replie."
-                                          : "Assistant IA repli\xC3\xA9 (Ctrl+Maj+I le rouvre).", 4.0);
+        status_->setTransientMessage(show ? "Assistant IA (" + aiPanel_->assistant().connectionText()
+                                                + ") : il propose des modifications de la vue ouverte. Ctrl+Maj+I le replie."
+                                          : std::string("Assistant IA repli\xC3\xA9 (Ctrl+Maj+I le rouvre)."),
+                                     4.0);
 }
 
 void MainAnalysisScreen::toggleAssistant() { showAssistant(!assistantShown()); }

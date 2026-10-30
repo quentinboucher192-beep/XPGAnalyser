@@ -97,6 +97,9 @@
 //    ia ouvrir|replier|nouvelle|conversation "t"|renommer "t"|supprimer|saisir "t"|envoyer ["t"]|
 //       suggestion N|attendre|arreter|joindre "f"|apercu|appliquer|refuser|variable N|
 //       mode previsualisation|direct|parametres|defiler N|etat
+//    --- 1.15.0 : la connexion de l'Assistant (l'IA branchee) ---
+//    ia fournisseur demo|anthropic|modele "id"|adresse "url"|effort auto|bas|moyen|haut|delai N|
+//       cle "texte"|reessayer|modeles|tester
 //    capture fichier.png          l'image courante (le dossier --captures, sinon
 //                                 celui du script)
 //    quitter
@@ -191,6 +194,8 @@ private:
     std::vector<std::string>   crawlNoted_;
     std::set<std::string>      crawlSeen_;
     int                        crawlStuck_{0};
+    // 1.15.0 : ia modeles | ia tester - la demande est partie (on attend sa reponse).
+    bool                       iaQuery_{false};
 };
 
 } // namespace app

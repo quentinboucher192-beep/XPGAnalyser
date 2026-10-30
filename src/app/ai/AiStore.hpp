@@ -46,6 +46,16 @@ struct Attachment {
     json::Value   extra;
 };
 
+// 1.15.0 : l'appel d'outil d'une reponse du modele, garde pour les tours suivants (l'API veut
+// revoir l'appel, puis son resultat reel en tete du tour de l'utilisateur qui suit).
+struct ToolCall {
+    std::string id;       // "toolu_..."
+    std::string name;     // kOperationsTool
+    std::string input;    // l'entree, en JSON (telle que recue)
+    std::string error;    // l'entree illisible ou invalide (vide : une proposition en est sortie)
+    bool operator==(const ToolCall&) const = default;
+};
+
 struct Message {
     std::string             id;            // "m1"
     std::string             role;          // "utilisateur" | "assistant"
@@ -54,6 +64,14 @@ struct Message {
     std::string             state;         // assistant : "fini" | "arrete" | "erreur"
     std::vector<Attachment> attachments;
     std::optional<Proposal> proposal;
+    // 1.15.0 : une reponse d'un vrai fournisseur - lequel, quel modele (vides : la demonstration),
+    // et son appel d'outil.
+    std::string             provider, model;
+    std::optional<ToolCall> tool;
+    // 1.15.0 : ce que le LOGICIEL ajoute sous la reponse (une reponse coupee, refusee, une entree
+    // d'outil illisible, l'erreur d'un envoi) : montre en retrait, jamais renvoye au modele comme
+    // s'il l'avait ecrit.
+    std::string             note;
     json::Value             extra;
 };
 
@@ -71,14 +89,15 @@ struct Conversation {
     json::Value          extra;
 };
 
-// Les reglages (parametres.json). La cle API n'en fait PAS partie : l'Assistant la garde en
-// memoire (Assistant::setApiKey) ; elle sera protegee par Windows (DPAPI) quand l'IA sera branchee.
+// Les reglages (parametres.json). La cle API n'en fait JAMAIS partie : l'Assistant la garde en
+// memoire (Assistant::setApiKey) ; "Memoriser la cle" la protege par Windows (DPAPI, AiSecret.hpp).
 struct Settings {
     bool        enabled{true};
-    std::string provider{"demo"};          // "demo", puis les fournisseurs a venir
-    std::string model;                     // une case libre : rien en dur
-    std::string endpoint;                  // l'adresse de connexion
-    int         timeoutSeconds{60};
+    std::string provider{"demo"};          // "demo", "anthropic" (1.15.0), puis ceux a venir
+    std::string model;                     // une case libre, vide par defaut : rien en dur
+    std::string endpoint;                  // l'adresse de connexion (vide : celle du fournisseur ; sinon un relais)
+    int         timeoutSeconds{60};        // l'inactivite : rien recu pendant ce delai, une erreur
+    std::string effort;                    // 1.15.0 : "" (celui du modele), "low", "medium", "high"
     std::string mode{"previsualisation"};  // "previsualisation" | "direct"
     int         keepDays{0};               // 0 : toujours
     int         keepCount{0};              // 0 : sans limite

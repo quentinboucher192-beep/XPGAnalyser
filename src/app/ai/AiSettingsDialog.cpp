@@ -5,6 +5,7 @@
 
 #include "AiPanel.hpp"
 #include "AiPaths.hpp"
+#include "AiSecret.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
 #include "../../ui/Icons.hpp"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <iterator>   // std::size
 
@@ -60,10 +62,16 @@ std::vector<std::string> wrap(const std::string& text, gfx::FontId f, float widt
     return out;
 }
 
-const char* const kKeyNote = "Gard\xC3\xA9" "e en m\xC3\xA9moire pour cette s\xC3\xA9" "ance seulement, jamais \xC3\xA9" "crite sur le disque. "
-                             "Quand l'IA sera branch\xC3\xA9" "e, elle sera prot\xC3\xA9g\xC3\xA9" "e par Windows (DPAPI), ou d\xC3\xA9tenue par un "
-                             "serveur relais de l'entreprise.";
-const char* const kPrivacyNote = "Ce qui partirait chez le fournisseur avec chaque demande. En d\xC3\xA9monstration, rien ne quitte ce PC.";
+// 1.15.0 : ce que devient la cle (Windows : DPAPI ; Linux : la seance seulement).
+std::string keyNote() {
+    std::string n = keyProtectionAvailable()
+                        ? "M\xC3\xA9moris\xC3\xA9" "e, elle est " + keyProtectionText() + " dans le dossier de l'Assistant ; sinon gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance. "
+                        : "Gard\xC3\xA9" "e en m\xC3\xA9moire pour cette s\xC3\xA9" "ance seulement : sous Linux, elle n'est jamais \xC3\xA9" "crite sur le disque. ";
+    return n + "Jamais en clair, ni dans un journal. Un relais d'entreprise (l'adresse) peut d\xC3\xA9tenir la cl\xC3\xA9 : laisse alors la case vide.";
+}
+const char* const kPrivacyNote = "Ce qui part chez le fournisseur avec chaque demande, en plus de la demande et de la conversation. "
+                                 "En d\xC3\xA9monstration, rien ne quitte ce PC.";
+const char* const kEfforts[][2] = {{"Auto (celui du mod\xC3\xA8le)", ""}, {"Bas", "low"}, {"Moyen", "medium"}, {"Haut", "high"}};
 
 } // namespace
 
@@ -77,7 +85,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(960.f, std::max(560.f, r.w - 40.f));
-        const float h = std::min(560.f, std::max(420.f, r.h - 40.f));
+        const float h = std::min(640.f, std::max(420.f, r.h - 40.f));
         panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         labels_.clear();
         notes_.clear();
@@ -98,7 +106,7 @@ protected:
             if (wgt) wgt->setBounds({x + labelW, y, fw, kRow - 4.f});
             y += kRow;
         };
-        const auto note = [&](const char* text, float indent = 0.f) {
+        const auto note = [&](const std::string& text, float indent = 0.f) {
             const auto lines = wrap(text, kSmall, colW - indent);
             notes_.push_back({{x + indent, y}, text, false, colW - indent});
             y += static_cast<float>(lines.size()) * (ui::lineHeight(kSmall) + 3.f) + 6.f;
@@ -109,7 +117,12 @@ protected:
         y += kRow;
         row("Fournisseur", d_.provider_);
         heading("CONNEXION");
-        row("Mod\xC3\xA8le", d_.model_);
+        {   // le modele : la case, puis "Lister les modeles"
+            const float lw = ui::measureWidth(d_.listModels_->text(), gfx::FontId{16}) + 28.f;
+            row("Mod\xC3\xA8le", d_.model_, colW - labelW - lw - 6.f);
+            d_.listModels_->setBounds({x + colW - lw, y - kRow, lw, kRow - 4.f});
+        }
+        row("Effort", d_.effort_);
         row("Adresse", d_.endpoint_);
         row("D\xC3\xA9lai (secondes)", d_.timeout_, 90.f);
         heading("CL\xC3\x89 API");
@@ -122,7 +135,15 @@ protected:
             d_.clearKey_->setBounds({x + kw + 12.f + bw1, y, bw2, kRow - 4.f});
             y += kRow + 2.f;
         }
-        note(kKeyNote);
+        d_.remember_->setBounds({x, y, colW, kRow - 6.f});
+        y += kRow - 4.f;
+        note(keyNote());
+        {   // Tester la connexion, et son resultat a cote (a la ligne)
+            const float tw = ui::measureWidth(d_.test_->text(), gfx::FontId{16}) + 34.f;
+            d_.test_->setBounds({x, y, tw, kRow - 2.f});
+            resultAt_ = {x + tw + 10.f, y + 1.f, colW - tw - 10.f, kRow * 2.f};
+            y += kRow + 2.f;
+        }
         // ---- la colonne de droite (ou la suite)
         if (twoCols) {
             x = x0 + colW + 20.f;
@@ -146,6 +167,7 @@ protected:
             y += kRow + 2.f;
         }
         // ---- le bas
+        d_.modelsMenu_->setBounds(panel_);
         float bx = panel_.right() - 20.f;
         for (ui::Button* b : {d_.ok_, d_.cancel_}) {
             const float bw = std::max(110.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 34.f);
@@ -163,8 +185,30 @@ protected:
         const float x = panel_.x + 20.f;
         ui::drawIcon(ctx.r, ui::Icon::Assistant, {x, panel_.y + 13.f, 20.f, 20.f}, c.accent);
         ctx.r.drawText({x + 28.f, panel_.y + 10.f}, "Param\xC3\xA8tres de l'Assistant IA", kTitleFont, c.text);
-        ctx.r.drawText({x + 28.f + ctx.r.measure("Param\xC3\xA8tres de l'Assistant IA", kTitleFont).width + 14.f, panel_.y + 17.f},
-                       "D\xC3\xA9monstration \xE2\x80\x93 aucune IA connect\xC3\xA9" "e", kSmall, c.textMuted);
+        {   // 1.15.0 : l'etat reel (celui des parametres enregistres)
+            const float tx = x + 28.f + ctx.r.measure("Param\xC3\xA8tres de l'Assistant IA", kTitleFont).width + 14.f;
+            ctx.r.drawText({tx, panel_.y + 17.f}, elide(ctx.r, d_.panel_.assistant().connectionText(), kSmall, panel_.right() - 20.f - tx), kSmall,
+                           c.textMuted);
+        }
+        // Le resultat de Lister / Tester (en cours, reussi, l'erreur).
+        {
+            std::string text = d_.result_;
+            gfx::Color tone = d_.resultOk_ ? c.ok : c.error;
+            if (d_.querying()) {
+                text = d_.query_ == AiSettingsDialog::Query::Listing ? "Demande de la liste des mod\xC3\xA8les\xE2\x80\xA6" : "Test de la connexion\xE2\x80\xA6";
+                tone = c.textMuted;
+            }
+            float ry = resultAt_.y;
+            auto lines = wrap(text, kSmall, resultAt_.w);
+            if (lines.size() > 3) {
+                lines.resize(3);
+                lines.back() += " \xE2\x80\xA6";
+            }
+            for (const auto& l : lines) {
+                ctx.r.drawText({resultAt_.x, ry}, l, kSmall, tone);
+                ry += ctx.r.lineHeight(kSmall) + 3.f;
+            }
+        }
         for (const auto& l : labels_) {
             if (l.heading) {
                 ctx.r.drawText(l.at, l.text, kSmall, c.textMuted);
@@ -188,6 +232,7 @@ protected:
 private:
     AiSettingsDialog&  d_;
     gfx::Rect          panel_{};
+    gfx::Rect          resultAt_{};
     std::vector<Label> labels_, notes_;
     float              footerW_{0.f};
 };
@@ -233,10 +278,27 @@ core::Status AiSettingsDialog::buildUi() {
         provider_->setItems(std::move(items));
         provider_->setSelectedIndex(sel);
     }
-    model_ = input(".modele", s.model, "donn\xC3\xA9 par le fournisseur");
-    model_->setTooltip("Le nom du mod\xC3\xA8le, tel que le fournisseur le donne : rien n'est impos\xC3\xA9 par le logiciel.");
-    endpoint_ = input(".adresse", s.endpoint, "https://\xE2\x80\xA6");
-    endpoint_->setTooltip("L'adresse du service, ou celle du serveur relais de l'entreprise (qui d\xC3\xA9tient alors la cl\xC3\xA9).");
+    // Le modele : une case libre, VIDE par defaut ; l'indication grise cite un exemple (rien en dur).
+    model_ = input(".modele", s.model, "ex. claude-opus-5-5");
+    model_->setTooltip("Le nom du mod\xC3\xA8le, tel que le fournisseur le donne (\xC2\xAB Lister les mod\xC3\xA8les \xC2\xBB) : rien n'est impos\xC3\xA9 par le logiciel.");
+    listModels_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Lister les mod\xC3\xA8les", base + ".lister")));
+    listModels_->setTooltip("Les mod\xC3\xA8les que ta cl\xC3\xA9 peut utiliser (la liste du fournisseur, gratuite) : un clic en choisit un.");
+    links_ += listModels_->clicked->connect([this] { (void)listModels(); });
+    effort_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".effort")));
+    {
+        std::vector<ui::DropDown::Item> items;
+        int sel = 0;
+        for (std::size_t i = 0; i < std::size(kEfforts); ++i) {
+            items.push_back({kEfforts[i][0], kEfforts[i][1]});
+            if (s.effort == kEfforts[i][1]) sel = static_cast<int>(i);
+        }
+        effort_->setItems(std::move(items));
+        effort_->setSelectedIndex(sel);
+        effort_->setTooltip("Combien le mod\xC3\xA8le r\xC3\xA9" "fl\xC3\xA9" "chit avant de r\xC3\xA9pondre : Haut est plus soign\xC3\xA9, Bas plus rapide et moins cher.");
+    }
+    endpoint_ = input(".adresse", s.endpoint, "vide : l'adresse du fournisseur");
+    endpoint_->setTooltip("Vide : l'adresse du fournisseur. Sinon, le relais de l'entreprise (https://\xE2\x80\xA6), qui d\xC3\xA9tient alors la cl\xC3\xA9 : "
+                          "la demande part \xC3\xA0 <adresse>/v1/messages. http:// seulement vers ce poste (127.0.0.1).");
     timeout_ = input(".delai", std::to_string(s.timeoutSeconds), "60");
     timeout_->setValidator([](std::string_view t) { return t.size() <= 3 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
     key_ = input(".cle", panel_.assistant().apiKey(), "la cl\xC3\xA9 du fournisseur");
@@ -244,7 +306,16 @@ core::Status AiSettingsDialog::buildUi() {
     showKey_ = &static_cast<ui::ToggleButton&>(b->addChild(std::make_unique<ui::ToggleButton>("Afficher", base + ".afficher")));
     links_ += showKey_->toggled->connect([this](bool on) { showKey(on); });
     clearKey_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Effacer", base + ".effacer")));
+    clearKey_->setTooltip("Effacer la cl\xC3\xA9 : de la s\xC3\xA9" "ance, et du PC si elle y \xC3\xA9tait m\xC3\xA9moris\xC3\xA9" "e.");
     links_ += clearKey_->clicked->connect([this] { clearKey(); });
+    remember_ = check("M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)", ".memoriser", panel_.assistant().keyRemembered());
+    remember_->setEnabled(keyProtectionAvailable());
+    remember_->setTooltip(keyProtectionAvailable()
+                              ? "La cl\xC3\xA9 est chiffr\xC3\xA9" "e par Windows (DPAPI), li\xC3\xA9" "e \xC3\xA0 ta session : un autre compte, ou un autre PC, ne la relit pas."
+                              : "Sous Linux, la cl\xC3\xA9 est gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance seulement : elle n'est jamais \xC3\xA9" "crite.");
+    test_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Tester la connexion", base + ".tester")));
+    test_->setTooltip("Demande la liste des mod\xC3\xA8les au fournisseur (gratuit, sans consommer de jetons) avec ces r\xC3\xA9glages et cette cl\xC3\xA9.");
+    links_ += test_->clicked->connect([this] { (void)testConnection(); });
     mode_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".mode")));
     mode_->setItems({{"Pr\xC3\xA9visualisation (l'aper\xC3\xA7u d'abord)", "previsualisation"}, {"Direct (appliquer d\xC3\xA8s la r\xC3\xA9ponse)", "direct"}});
     mode_->setSelectedIndex(s.mode == "direct" ? 1 : 0);
@@ -280,6 +351,11 @@ core::Status AiSettingsDialog::buildUi() {
     memory_->setTooltip(memory ? "Ce que l'IA conna\xC3\xAEt et m\xC3\xA9morise, et la place qu'elle occupe sur le PC."
                                : "Le centre \xC2\xAB M\xC3\xA9moire et apprentissage de l'IA \xC2\xBB n'est pas encore dans cette version.");
     links_ += memory_->clicked->connect([this] { openMemory(); });
+    {   // la liste des modeles rendue par Lister (par-dessus la fenetre)
+        auto menu = std::make_unique<ui::PopupMenu>(base + ".modeles");
+        modelsMenu_ = &static_cast<ui::PopupMenu&>(b->addChild(std::move(menu)));
+        links_ += modelsMenu_->itemChosen->connect([this](int item) { (void)chooseModel(static_cast<std::size_t>(std::max(0, item))); });
+    }
     cancel_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Annuler", base + ".annuler")));
     links_ += cancel_->clicked->connect([this] { cancel(); });
     ok_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Enregistrer", base + ".enregistrer")));
@@ -293,6 +369,10 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "actif") return enabled_;
     if (name == "fournisseur") return provider_;
     if (name == "modele") return model_;
+    if (name == "lister") return listModels_;
+    if (name == "effort") return effort_;
+    if (name == "memoriser") return remember_;
+    if (name == "tester") return test_;
     if (name == "adresse") return endpoint_;
     if (name == "delai") return timeout_;
     if (name == "cle") return key_;
@@ -314,6 +394,16 @@ Settings AiSettingsDialog::draft() const {
     s.model = model_->text();
     s.endpoint = endpoint_->text();
     s.timeoutSeconds = std::clamp(std::atoi(timeout_->text().c_str()), 5, 600);
+    if (const auto* it = effort_->selectedItem()) s.effort = it->value;
+    // Les blancs autour d'un nom copie-colle ne font pas partie du modele ni de l'adresse.
+    const auto trim = [](std::string t) {
+        while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+        std::size_t i = 0;
+        while (i < t.size() && std::isspace(static_cast<unsigned char>(t[i]))) ++i;
+        return t.substr(i);
+    };
+    s.model = trim(s.model);
+    s.endpoint = trim(s.endpoint);
     if (const auto* it = mode_->selectedItem()) s.mode = it->value;
     if (const auto* it = days_->selectedItem()) s.keepDays = std::atoi(it->value.c_str());
     if (const auto* it = count_->selectedItem()) s.keepCount = std::atoi(it->value.c_str());
@@ -334,6 +424,97 @@ void AiSettingsDialog::showKey(bool on) {
 void AiSettingsDialog::clearKey() {
     key_->setText({});
     panel_.assistant().setApiKey({});
+    (void)panel_.assistant().rememberKey(false);   // et du PC, si elle y etait
+    remember_->setState(ui::Checkbox::State::Unchecked);
+}
+
+// ---- 1.15.0 : lister les modeles, tester la connexion (sur un fil) -----------------------------
+bool AiSettingsDialog::querying() const { return query_ != Query::None && panel_.assistant().modelsBusy(); }
+
+bool AiSettingsDialog::startQuery(bool listing) {
+    const Settings s = draft();
+    resultOk_ = false;
+    if (s.provider == "demo") {
+        result_ = "La d\xC3\xA9monstration n'a pas de connexion : choisis le fournisseur Anthropic (Claude).";
+        query_ = Query::None;
+        return false;
+    }
+    std::string key = key_->text();
+    std::string why;
+    if (!panel_.assistant().queryModels(s, key, &why)) {
+        result_ = why;
+        query_ = Query::None;
+        return false;
+    }
+    query_ = listing ? Query::Listing : Query::Testing;
+    seenModels_ = panel_.assistant().modelsRevision();
+    result_.clear();
+    return true;
+}
+
+bool AiSettingsDialog::listModels() { return startQuery(true); }
+bool AiSettingsDialog::testConnection() { return startQuery(false); }
+
+bool AiSettingsDialog::pollQuery() {
+    auto& as = panel_.assistant();
+    (void)as.pollModels();
+    if (query_ == Query::None || as.modelsRevision() == seenModels_ || !as.models()) return false;
+    seenModels_ = as.modelsRevision();
+    const ModelsResult& r = *as.models();
+    const Query q = query_;
+    query_ = Query::None;
+    resultOk_ = r.ok;
+    if (!r.ok) {
+        result_ = r.error;
+        return true;
+    }
+    const std::string model = model_->text();
+    bool known = model.empty();
+    for (const auto& m : r.models) known = known || m.id == model;
+    if (q == Query::Testing) {
+        result_ = "Connexion r\xC3\xA9ussie : " + std::to_string(r.models.size()) + (r.models.size() > 1 ? " mod\xC3\xA8les" : " mod\xC3\xA8le") + ".";
+        if (!known) {
+            result_ += " Le mod\xC3\xA8le \xC2\xAB " + model + " \xC2\xBB n'est pas dans la liste.";
+            resultOk_ = false;
+        }
+        return true;
+    }
+    if (r.models.empty()) {
+        result_ = "Le fournisseur ne donne aucun mod\xC3\xA8le pour cette cl\xC3\xA9.";
+        resultOk_ = false;
+        return true;
+    }
+    result_ = std::to_string(r.models.size()) + (r.models.size() > 1 ? " mod\xC3\xA8les : choisis-en un." : " mod\xC3\xA8le : choisis-le.");
+    modelIds_.clear();
+    std::vector<ui::PopupMenu::Item> items;
+    for (std::size_t i = 0; i < r.models.size(); ++i) {
+        ui::PopupMenu::Item it;
+        it.label = r.models[i].name.empty() ? r.models[i].id : r.models[i].name;
+        if (r.models[i].name != r.models[i].id) it.note = r.models[i].id;
+        it.id = static_cast<int>(i);
+        it.radio = true;
+        it.checked = r.models[i].id == model;
+        items.push_back(std::move(it));
+        modelIds_.push_back(r.models[i].id);
+    }
+    modelsMenu_->setItems(std::move(items));
+    const auto at = listModels_->bounds();
+    modelsMenu_->openInWindow({at.x, at.bottom() + 2.f});
+    return true;
+}
+
+bool AiSettingsDialog::chooseModel(std::size_t index) {
+    if (index >= modelIds_.size()) return false;
+    model_->setText(modelIds_[index]);
+    if (modelsMenu_->isOpen()) modelsMenu_->close();
+    result_ = "Mod\xC3\xA8le choisi : " + modelIds_[index] + " (Enregistrer le garde).";
+    resultOk_ = true;
+    return true;
+}
+
+void AiSettingsDialog::Update(const menu::FrameContext& fc) {
+    menu::WidgetMenu::Update(fc);
+    (void)pollQuery();
 }
 
 void AiSettingsDialog::openMemory() {
@@ -341,8 +522,15 @@ void AiSettingsDialog::openMemory() {
 }
 
 void AiSettingsDialog::save() {
-    panel_.assistant().setSettings(draft());
-    panel_.assistant().setApiKey(key_->text());    // en memoire seulement
+    auto& as = panel_.assistant();
+    as.setSettings(draft());
+    as.setApiKey(key_->text());    // en memoire ; protegee par Windows si "Memoriser" est coche
+    std::string why;
+    if (remember_->isChecked() && keyProtectionAvailable() && !key_->text().empty()) {
+        if (!as.rememberKey(true, &why) && panel_.uiHost().status) panel_.uiHost().status("Assistant IA : " + why);
+    } else if (!remember_->isChecked() || key_->text().empty()) {
+        (void)as.rememberKey(false);
+    }
     panel_.sync();
     finish(true);
 }
@@ -358,8 +546,12 @@ void AiSettingsDialog::finish(bool ok) {
 ui::EventResult AiSettingsDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
         bool listOpen = false;
-        for (ui::DropDown* d : {provider_, mode_, days_, count_})
+        for (ui::DropDown* d : {provider_, effort_, mode_, days_, count_})
             if (d && d->isOpen()) listOpen = true;
+        if (modelsMenu_ && modelsMenu_->isOpen()) {
+            modelsMenu_->close();
+            return ui::EventResult::Consumed;
+        }
         if (!listOpen) {
             cancel();
             return ui::EventResult::Consumed;
