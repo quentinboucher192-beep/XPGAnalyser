@@ -173,7 +173,7 @@ ProviderEvent doneEvent(std::string reason) {
 
 std::string secondsText(double s) {
     const int n = std::max(1, static_cast<int>(std::lround(s)));
-    return std::to_string(n) + " s";
+    return std::to_string(n) + "\xC2\xA0s";   // insecable : "20 s" ne se coupe pas a la ligne
 }
 
 } // namespace

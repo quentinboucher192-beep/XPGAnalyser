@@ -968,7 +968,8 @@ bool Assistant::retry(std::string* why) {
 }
 
 std::string Assistant::outgoingSummary() const {
-    if (!settings_.enabled || !live()) return {};
+    // Rien a dire : la demonstration, un envoi impossible (a configurer), ou une reponse en cours.
+    if (!settings_.enabled || !live() || generating() || !ready()) return {};
     if (const auto* c = current())
         for (const auto& m : c->messages)
             if (!m.provider.empty()) return {};   // deja envoyee : dit une fois

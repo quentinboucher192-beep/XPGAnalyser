@@ -706,7 +706,7 @@ void testProvider() {
         (void)p.start(simpleRequest());
         const auto all3 = runToEnd(p);
         const auto* e = find(all3, ai::ProviderEvent::Type::Error);
-        check(g_net.count() == 1 && e && has(e->text, "300 s"), "un retry-after trop long : pas d'attente, dit (" + (e ? e->text : std::string{}) + ")");
+        check(g_net.count() == 1 && e && has(e->text, "300\xC2\xA0s"), "un retry-after trop long : pas d'attente, dit (" + (e ? e->text : std::string{}) + ")");
     }
     {
         g_net.reset();
@@ -1263,6 +1263,7 @@ void testAssistantLive() {
         f.panel->sync();
     }
     check(f.as().live() && f.as().needsSetup() && has(f.as().connectionText(), "configurer"), "Anthropic sans modele : " + f.as().connectionText());
+    check(f.as().outgoingSummary().empty(), "a configurer : ce qui part n'est pas dit (rien ne peut partir)");
     check(!f.panel->sendText("Une cuve") && has(f.panel->lastStatus(), "mod\xC3\xA8le") && s.requests.empty(), "envoyer : refuse, dit pourquoi");
     f.configure();
     check(!f.as().needsSetup() && f.as().connectionText() == "Anthropic \xE2\x80\x93 modele-essai", "configure : " + f.as().connectionText());
@@ -1274,6 +1275,7 @@ void testAssistantLive() {
                          ev(ai::ProviderEvent::Type::Text, "une cuve."), toolEv("toolu_1", kTankInput), doneEv("tool_use")});
     check(f.panel->sendText("Ajoute une cuve"), "envoyer : part");
     check(s.requests.size() == 1 && f.as().generating() && f.as().phase() == ai::Assistant::Phase::Waiting, "le fournisseur demarre ; en attente");
+    check(f.as().outgoingSummary().empty(), "pendant la reponse : ce qui part n'est plus dit");
     if (!s.requests.empty()) {
         const auto& r = s.requests[0];
         check(r.model == "modele-essai" && r.apiKey == "cle-essai-SECRETE" && r.maxTokens == 16000 && r.timeoutSeconds == 60,
