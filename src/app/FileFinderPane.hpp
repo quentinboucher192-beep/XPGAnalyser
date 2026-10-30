@@ -133,6 +133,8 @@ public:
     [[nodiscard]] ui::Button&    actionButton(Act a) noexcept;
     [[nodiscard]] ui::Button&    mineButton() noexcept;
     [[nodiscard]] ui::Checkbox*  extensionBox(std::string_view key) noexcept;
+    [[nodiscard]] ui::Checkbox*  optionBox(Option o) noexcept;   // 1.14.0 (captures finales) : une case des options
+    [[nodiscard]] gfx::Rect      chipRect(std::string_view key) const;   // 1.14.0 (captures finales) : la puce d'une extension
     // Le menu du clic droit sur la ligne choisie : ses entrees (le titre en tete).
     [[nodiscard]] std::vector<std::string> contextLabels() const;
     bool chooseContext(Act a);                            // une entree du menu
@@ -188,6 +190,7 @@ private:
     ui::TableView*                table_{nullptr};
     ui::Button*                   actions_[5]{};
     gfx::Rect                     barRect_{}, footRect_{}, sideRect_{};
+    float                         fittedWidth_{-1.f};   // 1.14.0 (captures finales) : la largeur ou le Dossier a ete ajuste
     core::ConnectionScope         links_;
 };
 

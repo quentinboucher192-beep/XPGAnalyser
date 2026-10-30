@@ -973,6 +973,91 @@ private:
     std::function<void()> refresh_;
     bool                  first_{true};
 };
+
+// 1.14.0 (captures finales) : LE DETAIL D'UN ENREGISTREMENT - la grille, la colonne des noms a la largeur du plus long
+// (avant : 45 % de la place, les valeurs coupees : "par Op...", le projet), et dessous, quand elle ne tient pas
+// dans sa case, LA DESCRIPTION ENTIERE, repliee (une grille ne passe pas a la ligne).
+constexpr gfx::FontId kDetailFont{16};
+std::vector<std::string> wrapWords(const std::string& text, gfx::FontId f, float maxW) {
+    std::vector<std::string> out;
+    std::string line;
+    std::size_t pos = 0;
+    while (pos <= text.size()) {
+        auto sp = text.find_first_of(" \n", pos);
+        if (sp == std::string::npos) sp = text.size();
+        const std::string word = text.substr(pos, sp - pos);
+        const std::string candidate = line.empty() ? word : line + " " + word;
+        if (!line.empty() && ui::measureWidth(candidate, f) > maxW) {
+            out.push_back(line);
+            line = word;
+        } else {
+            line = candidate;
+        }
+        if (sp < text.size() && text[sp] == '\n') {
+            out.push_back(line);
+            line.clear();
+        }
+        pos = sp + 1;
+    }
+    if (!line.empty()) out.push_back(line);
+    return out;
+}
+
+class RecordingDetail final : public ui::Widget {
+public:
+    explicit RecordingDetail(std::string id) : ui::Widget(std::move(id)) {
+        grid = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(this->id() + ".grille")));
+    }
+    ui::PropertyGrid* grid{nullptr};
+    // Les noms montres (la colonne des noms les tient) ; la description (repliee dessous si sa case est trop courte).
+    void setContent(const std::vector<std::string>& names, std::string description) {
+        nameW_ = 0.f;
+        for (const auto& n : names) nameW_ = std::max(nameW_, ui::measureWidth(n, kDetailFont));
+        description_ = std::move(description);
+        invalidateLayout();
+        invalidate();
+    }
+    [[nodiscard]] const std::vector<std::string>& noteLines() const noexcept { return lines_; }
+    [[nodiscard]] float valueWidth() const noexcept { return valueW_; }
+
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        // Le nom : depuis le retrait (4 + 12) et sa marge (6), jusqu'a 6 avant la separation ; la valeur : 6 apres elle,
+        // et la marge du bout (l'ascenseur au besoin).
+        const float split = std::clamp(nameW_ + 36.f, b.w * 0.18f, b.w * 0.45f);
+        grid->setNameColumnRatio(b.w > 1.f ? split / b.w : 0.45f);
+        valueW_ = std::max(0.f, b.w - split - 6.f - 22.f);
+        lines_.clear();
+        if (!description_.empty() && ui::measureWidth(description_, kDetailFont) > valueW_)
+            lines_ = wrapWords(description_, kDetailFont, std::max(80.f, b.w - 24.f));
+        const float lh = ui::lineHeight(kDetailFont);
+        const float noteH = lines_.empty() ? 0.f : 10.f + lh + 4.f + static_cast<float>(lines_.size()) * lh + 10.f;
+        const float gridH = lines_.empty() ? b.h : std::max(60.f, std::min(b.h - noteH, grid->contentHeight()));
+        grid->setBounds({b.x, b.y, b.w, gridH});
+        noteTop_ = b.y + gridH;
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto b = bounds();
+        ctx.r.fillRect(b, ctx.theme.color.panelBg);
+        if (lines_.empty()) return;
+        const auto& c = ctx.theme.color;
+        const float lh = ctx.r.lineHeight(ctx.theme.font.ui);
+        float y = noteTop_ + 10.f;
+        ctx.r.drawText({b.x + 12.f, y}, "Description", ctx.theme.font.smallUi, c.textMuted);
+        y += ctx.r.lineHeight(ctx.theme.font.smallUi) + 4.f;
+        for (const auto& line : lines_) {
+            if (y + lh > b.bottom()) break;
+            ctx.r.drawText({b.x + 12.f, y}, line, ctx.theme.font.ui, c.text);
+            y += lh;
+        }
+    }
+
+private:
+    float                    nameW_{0.f}, valueW_{0.f}, noteTop_{0.f};
+    std::string              description_;
+    std::vector<std::string> lines_;
+};
 } // namespace
 
 HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
@@ -998,14 +1083,19 @@ HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto table = std::make_unique<ui::TableView>(base + ".table");
-    table->setColumns({{"Nom", 220.f}, {"Dur\xC3\xA9" "e", 70.f, 50.f, true, true, true, ui::Align::End}, {"Vue de d\xC3\xA9part", 140.f},
-                       {"Enregistr\xC3\xA9 le", 130.f}, {"O\xC3\xB9", 110.f}, {"Par", 90.f},
-                       {"Taille", 80.f, 50.f, true, true, true, ui::Align::End}, {"Prot\xC3\xA9g\xC3\xA9", 84.f}});
+    // 1.14.0 (captures finales) : des largeurs qui tiennent - la date entiere ("30/10/2026 03:12"), un nom
+    // d'operateur ("Op\xC3\xA9rateur de conduite") ; le Nom, la Vue de depart, Ou et la Taille rendent ce qu'il faut
+    // (avant : "30/10/2026 0...", "Op\xC3\xA9rate...", le tableau ayant de la place).
+    table->setColumns({{"Nom", 180.f}, {"Dur\xC3\xA9" "e", 70.f, 50.f, true, true, true, ui::Align::End}, {"Vue de d\xC3\xA9part", 126.f},
+                       {"Enregistr\xC3\xA9 le", 140.f}, {"O\xC3\xB9", 92.f}, {"Par", 170.f},
+                       {"Taille", 72.f, 50.f, true, true, true, ui::Align::End}, {"Prot\xC3\xA9g\xC3\xA9", 84.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table->setEnterActivates(true);
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.64f, 320.f));
     tools_->bindListKeys(*table_, {RcDelete});
-    detail_ = &static_cast<ui::PropertyGrid&>(split->addPane(std::make_unique<ui::PropertyGrid>(base + ".detail"), 0.36f, 240.f));
+    auto box = std::make_unique<RecordingDetail>(base + ".detail");
+    detail_ = box->grid;
+    detailBox_ = &split->addPane(std::move(box), 0.36f, 240.f);
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
 
@@ -1128,6 +1218,7 @@ void HmiRecordingsPane::showDetail() {
                                                                : "Choisis un enregistrement.",
                                             PG::ValueType::ReadOnly));
         cats.push_back(std::move(c));
+        if (auto* box = dynamic_cast<RecordingDetail*>(detailBox_)) box->setContent({}, {});
         detail_->setCategories(std::move(cats));
         return;
     }
@@ -1145,10 +1236,19 @@ void HmiRecordingsPane::showDetail() {
     ro("Clics", std::to_string(h.clicks));
     ro("Alarmes", std::to_string(h.alarms));
     ro("Vues", h.viewsShown.empty() ? h.startView : h.viewsShown);
-    ro("Projet", h.project + (h.projectVersion.empty() ? std::string{} : " " + h.projectVersion));
-    ro("Enregistr\xC3\xA9", recDate(h.date) + " \xC2\xB7 " + h.where + (h.by.empty() ? std::string{} : " \xC2\xB7 par " + h.by));
+    // 1.14.0 (captures finales) : des lignes courtes, qui tiennent dans leur case (avant : "Enregistr\xC3\xA9" disait la
+    // date, le poste et l'operateur d'une traite, coupes ; le chemin entier du fichier) - le dossier est dans la barre
+    // du bas (et Ouvrir le dossier).
+    ro("Projet", h.project);
+    if (!h.projectVersion.empty()) ro("Version", h.projectVersion);
+    ro("Enregistr\xC3\xA9 le", recDate(h.date));
+    ro("O\xC3\xB9", h.where);
+    if (!h.by.empty()) ro("Par", h.by);
     ro("Prot\xC3\xA9g\xC3\xA9", h.locked() ? "oui, mot de passe" : "non");
-    ro("Fichier", it->path);
+    {
+        const auto slash = it->path.find_last_of("/\\");
+        ro("Fichier", slash == std::string::npos ? it->path : it->path.substr(slash + 1));
+    }
     const std::string path = it->path;
     c.properties.push_back(hmikit::prop("Description", h.description, PG::ValueType::Text,
                                         [this, path](std::string_view v) {
@@ -1162,8 +1262,21 @@ void HmiRecordingsPane::showDetail() {
                                             return true;
                                         },
                                         "Ce qu'on voit dans cet enregistrement (elle est lisible sans le mot de passe)."));
+    std::vector<std::string> names;
+    for (const auto& pr : c.properties) names.push_back(pr.name);
+    if (auto* box = dynamic_cast<RecordingDetail*>(detailBox_)) box->setContent(names, h.description);
     cats.push_back(std::move(c));
     detail_->setCategories(std::move(cats));
+}
+
+std::vector<std::string> HmiRecordingsPane::descriptionLines() const {
+    const auto* box = dynamic_cast<const RecordingDetail*>(detailBox_);
+    return box ? box->noteLines() : std::vector<std::string>{};
+}
+
+float HmiRecordingsPane::detailValueWidth() const {
+    const auto* box = dynamic_cast<const RecordingDetail*>(detailBox_);
+    return box ? box->valueWidth() : 0.f;
 }
 
 bool HmiRecordingsPane::importPath(const std::string& path, std::string* why) {

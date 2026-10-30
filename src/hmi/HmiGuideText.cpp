@@ -900,9 +900,9 @@ const std::vector<Topic>& topics() {
                          "**cl\xC3\xA9s USB et disques externes** selon leurs cases. **C: seulement** (le "
                          "disque de Windows), **Mes documents**, ou **Un dossier\xE2\x80\xA6** (le champ et "
                          "son bouton \xE2\x80\xA6).", {}},
-             {K::Bullet, "**Passer Windows, Program Files, la Corbeille, les dossiers cach\xC3\xA9s** "
-                         "(coch\xC3\xA9 au d\xC3\xA9part) : ni Windows, ni Program Files, ni ProgramData, ni "
-                         "la Corbeille, ni les dossiers syst\xC3\xA8me et cach\xC3\xA9s.", {}},
+             {K::Bullet, "**Passer les dossiers syst\xC3\xA8me et cach\xC3\xA9s** (coch\xC3\xA9 au "
+                         "d\xC3\xA9part) : ni Windows, ni Program Files, ni ProgramData, ni la Corbeille, ni "
+                         "les dossiers syst\xC3\xA8me et cach\xC3\xA9s.", {}},
              {K::Bullet, "**Dans les archives .zip aussi** : la table des mati\xC3\xA8res de chaque .zip est "
                          "lue ; ce qu'il contient se montre, son dossier dit \xC2\xAB sauvegarde.zip "
                          "\xE2\x80\xBA dossier \xC2\xBB. Pour l'ouvrir, extrais-le d'abord (Ouvrir le "
@@ -7099,6 +7099,12 @@ const std::vector<Topic>& topics() {
                          "bleu ;", {}},
              {K::Bullet, "coup\xC3\xA9 : le haut-parleur barr\xC3\xA9 et **Son coup\xC3\xA9** sur le fond "
                          "rouge ;", {}},
+             {K::Bullet, "un Coupe-son qui vise un canal, quand **tout est coup\xC3\xA9** (le "
+                         "G\xC3\xA9n\xC3\xA9ral muet) : son canal ne s'entend pas, il le montre - le "
+                         "haut-parleur barr\xC3\xA9 et **Son coup\xC3\xA9**, sur le fond rouge "
+                         "**estomp\xC3\xA9** (coup\xC3\xA9 par le G\xC3\xA9n\xC3\xA9ral, pas par lui). Son "
+                         "clic coupe ou r\xC3\xA9tablit toujours son canal ; le son r\xC3\xA9tabli, il redit "
+                         "l'\xC3\xA9tat de son canal ;", {}},
              {K::Bullet, "les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne seule, pour un petit bouton dans "
                          "un bandeau.", {}},
              {K::Paragraph, "L'\xC3\xA9tat est celui du poste : un autre Coupe-son, le M\xC3\xA9langeur, une "
@@ -20367,7 +20373,9 @@ const std::vector<Topic>& topics() {
                          "un changement de vue en gris), **D\xC3\xA9" "but**, **\xE2\x88\x92" "10 s**, "
                          "**Pause / Lecture**, **+10 s**, **Fin**, le temps (02:15 / 05:30), les vitesses "
                          "**\xC3\x97" "0,25 \xC3\x97" "0,5 \xC3\x97" "1 \xC3\x97" "2 \xC3\x97" "4 "
-                         "\xC3\x97" "8**, **Quitter**.", {}},
+                         "\xC3\x97" "8**, **Quitter** ; entre les deux, le rappel des touches, en bref quand "
+                         "la place manque (son infobulle dit tout : les touches, les couleurs des "
+                         "rep\xC3\xA8res).", {}},
              {K::Table, "Touche\tEffet\nEspace\tpause, lecture\n\xE2\x86\x90 \xE2\x86\x92\t10 s en "
                          "arri\xC3\xA8re, en avant\n+ \xE2\x88\x92\tplus vite, moins vite\nD\xC3\xA9" "but, "
                          "Fin\tau d\xC3\xA9" "but, \xC3\xA0 la fin\n\xC3\x89" "chap\tquitter la relecture", {}},
@@ -20393,7 +20401,9 @@ const std::vector<Topic>& topics() {
                          "de d\xC3\xA9part, Enregistr\xC3\xA9 le, O\xC3\xB9, Par, Taille, "
                          "Prot\xC3\xA9g\xC3\xA9 (et son cadenas) ; \xC3\xA0 droite, le d\xC3\xA9tail "
                          "(l'\xC3\xA9" "cran \xC3\xA0 40 % de la dur\xC3\xA9" "e, les clics, les alarmes, "
-                         "les vues, le projet) et la **description**, qui se modifie.", {}},
+                         "les vues, le projet, enregistr\xC3\xA9 le, o\xC3\xB9, par qui) et la "
+                         "**description**, qui se modifie ; trop longue pour sa case, elle se lit "
+                         "enti\xC3\xA8re sous le d\xC3\xA9tail.", {}},
              {K::Bullet, "**Importer\xE2\x80\xA6** copie un `.xrec` dans le dossier (un nom "
                          "d\xC3\xA9j\xC3\xA0 pris devient \xC2\xAB Nom (2) \xC2\xBB) ; "
                          "**Exporter\xE2\x80\xA6** en copie un ailleurs : un fichier du m\xC3\xAAme nom "

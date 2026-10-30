@@ -108,6 +108,11 @@ void setSoundMuted(SystemSettings&, SoundChannel, bool muted) noexcept;
 [[nodiscard]] float soundGain(const SystemSettings&, SoundChannel) noexcept;
 // Le canal se tait (lui ou le General est muet) : ses sons ne partent pas, ceux qui jouent s'arretent.
 [[nodiscard]] bool soundSilenced(const SystemSettings&, SoundChannel) noexcept;
+// 1.14.0 (captures finales) : CE QUE MONTRE UN COUPE-SON de ce canal. Actif ; coupe (son canal - Tous : tout) ; ou,
+// pour un canal, TU PAR LE GENERAL : rien n'est coupe pour lui, mais le General est muet - son canal ne s'entend pas
+// (il se montre coupe, estompe). Son clic garde son effet : il coupe ou retablit son canal.
+enum class MuteShown : std::uint8_t { Active, Muted, SilencedByGeneral };
+[[nodiscard]] MuteShown muteShown(const SystemSettings&, SoundChannel) noexcept;
 
 // ---- 1.14.0 : le Coupe-son et le Melangeur de volume (la geometrie) ---------------------
 //  Comme HmiControls : le dessin et le clic lisent la meme geometrie. Une partie cliquee

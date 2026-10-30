@@ -1053,14 +1053,21 @@ void speakerLocal(const Ctx& c, double x, double y, double size, gfx::Color col,
 
 // Le Coupe-son : un bouton a bascule - le haut-parleur et "Son actif" sur son fond, ou barre et "Son coupe" sur
 // le fond muet. L'etat est celui du poste (le moteur) ; dans l'editeur : le son actif.
+// 1.14.0 (captures finales) : un Coupe-son de canal, le General muet, ne montre plus "son actif" - son canal ne
+// s'entend pas : barre, le libelle muet, sur le fond muet ESTOMPE (vers le gris : "tu par le General", pas par lui).
+// Son clic coupe ou retablit toujours son canal ; le General retabli, il redit son propre etat.
 void drawSoundMute(const Ctx& c) {
     const double w = c.w(), h = c.h(), rad = c.src.number(c.o, "radius", 6);
     static const hmi::SystemSettings kEditor{};
     const bool live = c.opt.runtime && !c.opt.editor;
     const auto& st = live ? c.opt.runtime->settings() : kEditor;
-    const bool muted = hmi::soundMuted(st, hmi::muteChannelOf(c.src.text(c.o, "soundChannel", "Tous")));
+    const auto shown = hmi::muteShown(st, hmi::muteChannelOf(c.src.text(c.o, "soundChannel", "Tous")));
+    const bool muted = shown != hmi::MuteShown::Active;
     const bool down = pressedNow(c);
-    const gfx::Color base = muted ? colorOf(c, "colorOff", 0xE5484D) : colorOf(c, "colorOn", 0x2F6FB0);
+    const gfx::Color off = colorOf(c, "colorOff", 0xE5484D);
+    const gfx::Color base = shown == hmi::MuteShown::SilencedByGeneral ? mix(off, gfx::Color{0x80, 0x86, 0x90, off.a}, 0.55f)
+                            : muted                                       ? off
+                                                                          : colorOf(c, "colorOn", 0x2F6FB0);
     const gfx::Color fill = down ? mix(base, gfx::Color{0, 0, 0, base.a}, 0.25f) : base;
     const auto shape = rectLocal(w, h, rad);
     fillLocal(c, shape, fill);

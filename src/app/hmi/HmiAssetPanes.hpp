@@ -167,6 +167,10 @@ public:
     [[nodiscard]] ui::TableView&     table() noexcept { return *table_; }
     [[nodiscard]] ui::PropertyGrid&  detail() noexcept { return *detail_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
+    // 1.14.0 (captures finales) : la description repliee sous le detail (vide : elle tient dans sa case), et la place
+    // d'une valeur dans le detail (apres la colonne des noms).
+    [[nodiscard]] std::vector<std::string> descriptionLines() const;
+    [[nodiscard]] float detailValueWidth() const;
 
 protected:
     void onLayout() override;
@@ -183,6 +187,7 @@ private:
     ui::Splitter*                  split_{nullptr};
     ui::TableView*                 table_{nullptr};
     ui::PropertyGrid*              detail_{nullptr};
+    ui::Widget*                    detailBox_{nullptr};   // 1.14.0 (captures finales) : la grille et la description repliee
     ui::StatusBar*                 status_{nullptr};
     std::shared_ptr<ui::ITableModel> model_;
     std::vector<hmi::rec::Item>    items_;

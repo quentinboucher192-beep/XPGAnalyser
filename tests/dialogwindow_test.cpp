@@ -18,6 +18,10 @@
 //    5. la migration : la fenetre se ferme, le dialogue revient dans la
 //       principale, intact et remis en page ; les demandes en attente suivent ;
 //       une fenetre disparue sans le dire rend ses dialogues a la mise a jour.
+//    8. 1.14.0 (captures finales) : un formulaire (FormDialog, avec xpg_app) - ses champs commencent
+//       tous au meme x (la colonne des libelles), sa hauteur est celle de son contenu (pas de vide
+//       sous les champs : Arreter l'enregistrement, le mot de passe d'un enregistrement protege).
+#include "../src/app/screens/Screens.hpp"   // 1.14.0 (captures finales) : FormDialog
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/Widget.hpp"
 
@@ -28,6 +32,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 using menu::MenuManager;
 using WindowId = MenuManager::WindowId;
@@ -182,6 +187,49 @@ bool near(gfx::Rect r, float x, float y, float w, float h) {
 bool sameSize(gfx::Size a, float w, float h) { return std::fabs(a.w - w) < 0.5f && std::fabs(a.h - h) < 0.5f; }
 
 gfx::Point centreOf(gfx::Rect r) { return {r.x + r.w * 0.5f, r.y + r.h * 0.5f}; }
+
+// 1.14.0 (captures finales) : les widgets d'un id donne, dans l'ordre de l'arbre.
+void collect(ui::Widget& w, const std::string& id, std::vector<ui::Widget*>& out) {
+    if (w.id() == id) out.push_back(&w);
+    for (const auto& c : w.children()) collect(*c, id, out);
+}
+
+// Un formulaire montre dans sa propre pile : ses champs (leur x), le bas de la derniere ligne de raison, le haut du
+// bouton qui valide, la hauteur du corps et celle qu'il demande.
+struct FormShape {
+    std::vector<float> fieldX;
+    float lastNoteBottom{0}, okTop{0}, bodyH{0}, bodyWanted{0};
+};
+FormShape showForm(const std::string& id, std::vector<app::FormDialog::Field> fields, const std::string& explanation) {
+    FormShape shape;
+    MenuManager mm(factory());
+    mm.PushMenu("analysis");
+    mm.applyPending();
+    auto d = std::make_unique<app::FormDialog>(id, "Essai", explanation, std::move(fields), "Enregistrer");
+    app::FormDialog* form = d.get();
+    mm.ShowDialog(std::move(d), {});
+    mm.applyPending();
+    const ui::Theme theme = ui::Theme::light();
+    mm.Update(menu::FrameContext{1.0 / 30.0, 1.0, &theme, {1536.f, 1024.f}, 1.f});
+    ui::Widget* root = form->widgetRoot();
+    if (!root) return shape;
+    std::vector<ui::Widget*> found;
+    collect(*root, id + ".field", found);
+    for (auto* w : found) shape.fieldX.push_back(w->bounds().x);
+    found.clear();
+    collect(*root, id + ".note", found);
+    if (!found.empty()) shape.lastNoteBottom = found.back()->bounds().bottom();
+    found.clear();
+    collect(*root, id + ".ok", found);
+    if (!found.empty()) shape.okTop = found.front()->bounds().y;
+    found.clear();
+    collect(*root, id + ".body", found);
+    if (!found.empty()) {
+        shape.bodyH = found.front()->bounds().h;
+        shape.bodyWanted = found.front()->sizeHint().preferred.h;
+    }
+    return shape;
+}
 
 } // namespace
 
@@ -395,6 +443,33 @@ int main() {
         check(plain.routeFor(MenuManager::kMainWindow) == Route::Layers, "la question est a la principale");
         (void)plain.HandleEvent(ui::MouseDown{centreOf(message->card->panel), ui::MouseButton::Left, 1, {}});
         check(message->card->clicks == 1 && message->card->clickedIn == MenuManager::kMainWindow, "un clic : a lui, dans la principale");
+    }
+
+    std::printf("8. 1.14.0 (captures finales) : un formulaire - les champs alignes, la hauteur de son contenu\n");
+    {
+        std::vector<app::FormDialog::Field> fields;
+        fields.push_back({"Nom", "Essai nuit", "Enregistrement du jour", false, {}});
+        fields.push_back({"Description", "Marche de la pompe 1", "ce qu'on y voit (facultatif)", false, {}});
+        fields.push_back({"Mot de passe", "", "vide : pas de mot de passe", true, {}});
+        const auto stop = showForm("dialog.essaiArret", std::move(fields),
+                                   "Duree 00:07 - clics 1 - alarmes 6 - taille environ 28 Ko.\nGarde dans Ressources > Enregistrements. Avec "
+                                   "un mot de passe, il faut le donner pour le rejouer, l'exporter ou retirer la protection. Echap le "
+                                   "garde sous ce nom.");
+        bool aligned = stop.fieldX.size() == 3;
+        for (const float x : stop.fieldX) aligned = aligned && std::fabs(x - stop.fieldX.front()) < 0.5f;
+        check(aligned, "Nom, Description, Mot de passe : les trois champs commencent au meme x (avant : 864, 887, 893 px)");
+        check(stop.okTop > stop.lastNoteBottom && stop.okTop - stop.lastNoteBottom < 24.f,
+              "les boutons juste sous le dernier champ (" + std::to_string(static_cast<int>(stop.okTop - stop.lastNoteBottom))
+                  + " px ; avant : un grand vide)");
+        check(stop.bodyH > 0.f && stop.bodyH - stop.bodyWanted < 10.f && stop.bodyH >= stop.bodyWanted - 0.5f,
+              "le corps a la hauteur de son contenu (" + std::to_string(static_cast<int>(stop.bodyH)) + " pour "
+                  + std::to_string(static_cast<int>(stop.bodyWanted)) + ")");
+        std::vector<app::FormDialog::Field> one;
+        one.push_back({"Mot de passe", "", "", true, {}});
+        const auto ask = showForm("dialog.essaiMotDePasse", std::move(one), "\xC2\xAB Essai FAT client \xC2\xBB est prot\xC3\xA9g\xC3\xA9 par un mot de passe.\n"
+                                                                            "Mot de passe incorrect.");
+        check(ask.fieldX.size() == 1 && ask.okTop > ask.lastNoteBottom && ask.okTop - ask.lastNoteBottom < 24.f,
+              "la demande du mot de passe : Rejouer juste sous le champ (" + std::to_string(static_cast<int>(ask.okTop - ask.lastNoteBottom)) + " px)");
     }
 
     std::printf("\n%s : %d echec(s)\n", failures ? "ECHEC" : "OK", failures);

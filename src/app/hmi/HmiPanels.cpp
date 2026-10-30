@@ -1546,8 +1546,48 @@ ui::SizeHint HmiPalette::sizeHint() const {
     return h;
 }
 
+// 1.14.0 (captures finales) : LES MOTS DE LA BIBLIOTHEQUE. Une recherche lit aussi les mots-cles d'un objet : ceux
+// de son sujet d'aide (@mots, ce que F1 connait deja) et quelques mots de plus, propres a la bibliotheque (un mot qui
+// mene deja F1 a un autre sujet - "relecture", "enregistrement", "volume" - ne va pas dans @mots). Chaque mot se
+// compare par son debut (ou celui de l'un de ses mots), sans casse ni accents : "son" trouve le Coupe-son et le
+// Melangeur de volume, pas une "raison". Avant, seuls le libelle et la famille etaient lus.
+std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind) {
+    static const std::vector<std::pair<hmi::Kind, std::vector<std::string_view>>> kMore = {
+        {hmi::Kind::SoundMute, {"son", "muet", "mute", "volume", "haut-parleur"}},
+        {hmi::Kind::VolumeMixer, {"son", "volume", "mixage", "m\xC3\xA9langeur", "canal", "mute"}},
+        {hmi::Kind::Recorder, {"enregistrement", "enregistrer", "film", "replay", "relecture"}},
+        {hmi::Kind::RecordingPlayer, {"enregistrement", "rejouer", "relecture", "replay"}},
+    };
+    std::vector<std::string_view> out;
+    if (const auto* t = hmi::guide::topicForKind(hmi::kindKey(kind)))
+        for (const auto& w : t->words) out.emplace_back(w);
+    for (const auto& [k, words] : kMore)
+        if (k == kind) out.insert(out.end(), words.begin(), words.end());
+    return out;
+}
+
+bool hmiPaletteWordMatch(hmi::Kind kind, std::string_view text) {
+    std::string f = hmi::guide::fold(text);
+    while (!f.empty() && f.back() == ' ') f.pop_back();
+    while (!f.empty() && f.front() == ' ') f.erase(f.begin());
+    if (f.empty()) return false;
+    for (const auto word : hmiPaletteWords(kind)) {
+        const std::string w = hmi::guide::fold(word);
+        for (std::size_t at = 0; at + f.size() <= w.size(); ++at) {
+            const bool start = at == 0 || !std::isalnum(static_cast<unsigned char>(w[at - 1]));
+            if (start && w.compare(at, f.size(), f) == 0) return true;
+        }
+    }
+    return false;
+}
+
 void HmiPalette::setFilter(std::string text) {
     filter_ = lower(std::move(text));
+    // 1.14.0 (captures finales) : les genres que trouvent leurs mots-cles (une fois par recherche, pas a chaque dessin).
+    wordHits_.clear();
+    if (!filter_.empty())
+        for (const auto k : hmi::kPlaceableKinds)
+            if (hmiPaletteWordMatch(k, filter_)) wordHits_.insert(k);
     scrollY_ = 0;
     invalidate();
 }
@@ -1563,7 +1603,7 @@ void HmiPalette::layoutTiles(const ui::Theme*) const {
         std::vector<hmi::Kind> shown;
         for (auto k : kinds)
             if (filter_.empty() || lower(std::string(hmi::kindLabel(k))).find(filter_) != std::string::npos
-                || lower(title).find(filter_) != std::string::npos)
+                || lower(title).find(filter_) != std::string::npos || wordHits_.count(k) > 0)
                 shown.push_back(k);
         if (shown.empty()) return;
         headings_.emplace_back(title, y);
@@ -4132,6 +4172,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                               && (shown.empty() || (!hmi::isLiteralArgument(shown) && (!hmi::ranges::takesName(o->kind, prop.key) || hmi::ranges::isName(shown))));
             if (formula) ui::exprfield::markWhole(p, expect, true);
             else ui::exprfield::mark(p, expect, true);
+            // 1.14.0 (captures finales) : un secret vide ne propose pas "{variable}" (un texte a trous) : il dit ce
+            // que vide veut dire. Une invite reecrite se montre telle quelle (exprfield::shownInvite).
+            if (o->kind == hmi::Kind::Recorder && prop.key == "password") p.placeholder = kNoPasswordInvite;
         }
         if (differs) {
             p.value.clear();

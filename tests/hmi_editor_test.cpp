@@ -6997,6 +6997,26 @@ void son1140Ecran() {
             tiles = tiles && pal.tileRect(k, r) && app::glyphFor(k) != app::HmiGlyph::None;
         }
         check(tiles, "les tuiles Coupe-son et M\xC3\xA9langeur de volume dans la famille Commandes, chacune son ic\xC3\xB4ne");
+        // 1.14.0 (captures finales) : la recherche lit aussi les mots-cles (ceux du sujet d'aide, @mots, et ceux de la
+        // bibliotheque) - avant, \xC2\xAB son \xC2\xBB ne trouvait que le Coupe-son (son libelle).
+        const auto shownFor = [&](const char* text, Kind k) {
+            pal.setFilter(text);
+            gfx::Rect r;
+            if (!pal.tileRect(k, r)) pal.revealKind(k);
+            return pal.tileRect(k, r);
+        };
+        check(shownFor("son", Kind::SoundMute) && shownFor("son", Kind::VolumeMixer) && !shownFor("son", Kind::Button),
+              "\xC2\xAB son \xC2\xBB : le Coupe-son ET le M\xC3\xA9langeur de volume (ses mots-cl\xC3\xA9s), pas le bouton");
+        check(shownFor("volume", Kind::SoundMute) && shownFor("mixage", Kind::VolumeMixer) && shownFor("Haut-Parleur", Kind::SoundMute)
+                  && shownFor("melangeur", Kind::VolumeMixer) && shownFor("mute", Kind::VolumeMixer),
+              "volume, mixage, haut-parleur, m\xC3\xA9langeur sans accent, mute : leurs objets");
+        check(shownFor("replay", Kind::Recorder) && shownFor("replay", Kind::RecordingPlayer) && shownFor("film", Kind::Recorder)
+                  && shownFor("relecture", Kind::RecordingPlayer) && shownFor("rejouer", Kind::RecordingPlayer)
+                  && shownFor("enregistrement", Kind::Recorder) && !shownFor("film", Kind::RecordingPlayer),
+              "replay, film, relecture, rejouer, enregistrement : l'Enregistreur et le Lecteur d'enregistrements");
+        check(app::hmiPaletteWordMatch(Kind::SoundMute, "SON") && !app::hmiPaletteWordMatch(Kind::Button, "son")
+                  && !app::hmiPaletteWordMatch(Kind::SoundMute, "aison") && app::hmiPaletteWordMatch(Kind::DocumentViewer, "pdf"),
+              "un mot-cl\xC3\xA9 par son d\xC3\xA9" "but, sans casse ; ceux de l'aide aussi (pdf : la visionneuse)");
         pal.setFilter("");
         (void)b.place(Kind::VolumeMixer, 100, 100);
         b.editor->layout();
@@ -7055,6 +7075,9 @@ void son1140Ecran() {
         v.height = 480;
         const Id cs = edit::add(p, v, Kind::SoundMute, 20, 20);
         v.object(cs)->name = "Coupe";
+        const Id ca = edit::add(p, v, Kind::SoundMute, 300, 20);       // 1.14.0 (captures finales) : un canal
+        v.object(ca)->name = "Coupe_Alarmes";
+        v.object(ca)->set("soundChannel", "Alarmes");
         const Id mx = edit::add(p, v, Kind::VolumeMixer, 20, 100);
         v.object(mx)->name = "Melangeur";
         v.object(mx)->setNumber("w", 480);
@@ -7081,9 +7104,33 @@ void son1140Ecran() {
         pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
         paintAt(0.2);
         check(!pane.runtime().settings().soundOn && rec.wrote("Son coup\xC3\xA9"), "un clic sur le Coupe-son (la souris) : tout est coup\xC3\xA9, il le montre");
+        {
+            // 1.14.0 (captures finales) : tout coupe, le Coupe-son des Alarmes ne dit plus \xC2\xAB son actif \xC2\xBB - son canal
+            // ne s'entend pas : barre, Son coupe, sur le fond rouge estompe (tu par le General, pas par lui).
+            gfx::Rect ra;
+            check(pane.canvas().objectRect("Coupe_Alarmes", ra), "le Coupe-son des Alarmes est dessin\xC3\xA9");
+            const gfx::Color red = rec.firstIn(r), dim = rec.firstIn(ra);
+            check(rec.count("Son coup\xC3\xA9") == 2 && !rec.wrote("Son actif"),
+                  "tout coup\xC3\xA9 : le Coupe-son des Alarmes dit Son coup\xC3\xA9 aussi (avant : Son actif, le haut-parleur bleu)");
+            check(dim.r > dim.b && (dim.r - dim.b) * 2 < (red.r - red.b) && !(dim.r == red.r && dim.g == red.g && dim.b == red.b),
+                  "... sur le fond rouge estomp\xC3\xA9 (coup\xC3\xA9 par le G\xC3\xA9n\xC3\xA9ral) : r" + std::to_string(dim.r) + " b"
+                      + std::to_string(dim.b) + " pour r" + std::to_string(red.r) + " b" + std::to_string(red.b));
+            pane.canvas().dispatch(ui::MouseDown{centre(ra), ui::MouseButton::Left, 1, {}});
+            pane.canvas().dispatch(ui::MouseUp{centre(ra), ui::MouseButton::Left, {}});
+            check(hmi::soundMuted(pane.runtime().settings(), SoundChannel::Alarms) && !pane.runtime().settings().soundOn,
+                  "son clic garde son effet : il coupe son canal (les Alarmes)");
+            paintAt(0.25);
+            const gfx::Color own = rec.firstIn(ra);
+            check(own.r == red.r && own.g == red.g && own.b == red.b, "coup\xC3\xA9 par lui : le fond rouge plein");
+            pane.canvas().dispatch(ui::MouseDown{centre(ra), ui::MouseButton::Left, 1, {}});
+            pane.canvas().dispatch(ui::MouseUp{centre(ra), ui::MouseButton::Left, {}});
+            check(!hmi::soundMuted(pane.runtime().settings(), SoundChannel::Alarms), "... un second clic le r\xC3\xA9tablit");
+        }
         pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
         pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
         check(pane.runtime().settings().soundOn, "un second clic : le son revient");
+        paintAt(0.27);
+        check(rec.count("Son actif") == 2, "le son revenu : les deux Coupe-son disent Son actif");
         // Glisser la poignee des Alarmes de 30 % a 80 % ; le volume suit en direct.
         gfx::Rect a30, a80, a55;
         check(pane.canvas().partRect("Melangeur", "volume:Alarmes:0.3", a30) && pane.canvas().partRect("Melangeur", "volume:Alarmes:0.8", a80)
@@ -40180,6 +40227,18 @@ void enregistrements1140() {
     p.config.startView = v.id;
     p.views.push_back(v);
     const Id vid = v.id;
+    {
+        // 1.14.0 (captures finales) : le Mot de passe vide de l'Enregistreur dit ce que vide veut dire (avant :
+        // \xC2\xAB {variable} \xC2\xBB, l'invite d'un texte a trous).
+        Bench bp;
+        (void)bp.place(Kind::Recorder, 100, 100);
+        bp.editor->layout();
+        std::string invite = "?";
+        for (const auto& c : bp.editor->properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Mot de passe" && pr.value.empty()) invite = ui::exprfield::shownInvite(pr, true);
+        check(invite == app::kNoPasswordInvite, "l'inspecteur de l'Enregistreur : le Mot de passe vide montre \xC2\xAB " + invite + " \xC2\xBB");
+    }
     // ---- les deux objets dans l'editeur : un apercu
     {
         Recorder r0;
@@ -40254,6 +40313,47 @@ void enregistrements1140() {
     frame(0.05);
     check(rec.wrote("RELECTURE") && rec.wrote("Essai ecran") && rec.wrote("Quitter") && rec.wrote("Pause") && rec.wrote("+10 s"),
           "le bandeau RELECTURE et la barre de relecture");
+    {
+        // 1.14.0 (captures finales) : la legende des touches tient dans sa place (la plus longue de ses formes qui entre),
+        // le detail en infobulle sur elle - avant : \xC2\xAB ... rouge : alarme \xC2\xB7 co\xE2\x80\xA6 \xC2\xBB.
+        bool cut = false;
+        for (const auto& said : rec.texts)
+            if (said.rfind("Esp", 0) == 0) cut = cut || said.find("\xE2\x80\xA6") != std::string::npos || said.find("...") != std::string::npos;
+        check(!cut, "la l\xC3\xA9gende de la barre n'est jamais coup\xC3\xA9" "e (enti\xC3\xA8re, ou absente faute de place)");
+        // La barre seule, a la largeur de la vue des captures (1145 px) puis d'un grand ecran : la forme qui tient.
+        const auto legendAt = [&](float w) {
+            Recorder br;
+            hmi::ReplayInfo ri;
+            ri.active = true;
+            ri.length = 25.0;
+            ri.position = 3.0;
+            ri.header.name = "Demarrage station";
+            const auto chrome = app::paintReplayChrome(br, ui::Theme::dark(), {0.f, 0.f, w, 600.f}, ri, {}, {-1.f, -1.f});
+            std::string legend;
+            for (const auto& said : br.texts)
+                if (said.rfind("Esp", 0) == 0) legend = said;
+            return std::make_pair(legend, chrome.part("help").w > 0.f && !chrome.helpTip.empty());
+        };
+        const auto [mid, midTip] = legendAt(1200.f);
+        const auto [wide, wideTip] = legendAt(2000.f);
+        check(midTip && wideTip && mid.rfind("Espace pause", 0) == 0 && mid.find("rouge") == std::string::npos
+                  && mid.find("\xE2\x80\xA6") == std::string::npos && wide.find("rouge : alarme") != std::string::npos
+                  && wide.find("\xE2\x80\xA6") == std::string::npos,
+              "1200 px : les touches (" + mid + ") ; 2000 px : avec les couleurs des rep\xC3\xA8res (" + wide + ")");
+        const gfx::Rect help = pane.canvas().replayChrome().part("help");
+        const std::string tip = help.w > 0 ? pane.canvas().liveTooltip({help.x + help.w / 2, help.y + help.h / 2}) : std::string{};
+        check(help.w > 0 && pane.canvas().hasTooltip() && tip.find("rouge, une alarme") != std::string::npos && tip.find("Espace") != std::string::npos,
+              "son infobulle : les touches et les couleurs des rep\xC3\xA8res");
+        const gfx::Rect quit = pane.canvas().replayChrome().part("quit");
+        check(pane.canvas().liveTooltip({quit.x + quit.w / 2, quit.y + quit.h / 2}).find("rouge") == std::string::npos,
+              "... sur elle seule (pas sur Quitter)");
+        const gfx::FontId small = ui::Theme::dark().font.smallUi;
+        check(app::replayLegend(rec, small, 5000.f).find("rouge : alarme") != std::string::npos
+                  && app::replayLegend(rec, small, 380.f).rfind("Espace pause", 0) == 0
+                  && app::replayLegend(rec, small, 380.f).find("rouge") == std::string::npos
+                  && app::replayLegend(rec, small, 240.f).rfind("Espace \xC2\xB7", 0) == 0 && app::replayLegend(rec, small, 100.f).empty(),
+              "trois formes : avec les couleurs, les touches, les touches en bref ; rien quand aucune ne tient");
+    }
     const double held = pane.runtime().now();
     for (int i = 0; i < 10; ++i) frame(0.1);
     check(std::fabs(pane.runtime().now() - held) < 1e-9, "pendant la relecture, l'heure de l'IHM est tenue");
@@ -40337,6 +40437,50 @@ void enregistrements1140() {
     check(replayed.name == "Essai ecran", "un double-clic rejoue");
     check(rp.setDescription("Le d\xC3\xA9marrage du matin") && rp.items().front().header.description == "Le d\xC3\xA9marrage du matin",
           "la description se modifie");
+    {
+        // 1.14.0 (captures finales) : des colonnes qui tiennent - la date entiere, un nom d'operateur - avec une police
+        // comme celle de l'appli (DejaVu Sans 16 px : 7,3 px en moyenne par caractere), dans le tableau d'une fenetre de
+        // 1920 px (64 % de 1506 px) ; avant : \xC2\xAB 30/10/2026 0... \xC2\xBB, \xC2\xAB Op\xC3\xA9rate... \xC2\xBB.
+        const auto dejavu = [](std::string_view text) {
+            std::size_t n = 0;
+            for (const char ch : text) n += (static_cast<unsigned char>(ch) & 0xC0) != 0x80;
+            return 7.3f * static_cast<float>(n);
+        };
+        const auto& cols = rp.table().columns();
+        float total = 0.f;
+        for (const auto& c : cols) total += c.width;
+        check(cols.size() == 8 && cols[3].width - 12.f >= dejavu("30/10/2026 03:12") && cols[5].width - 12.f >= dejavu("Op\xC3\xA9rateur de conduite")
+                  && cols[2].width - 26.f >= dejavu("Vue de d\xC3\xA9part") && total <= 0.64f * 1506.f - 12.f,
+              "Enregistr\xC3\xA9 le et Par tiennent leur texte, les huit colonnes le tableau (" + std::to_string(static_cast<int>(total)) + " px)");
+        // Le detail : des lignes courtes (la date, ou, par : chacune la sienne ; le fichier sans son dossier).
+        std::map<std::string, std::string> shown;
+        for (const auto& c : rp.detail().categories())
+            for (const auto& row : c.properties) shown[row.name] = row.value;
+        check(shown.count("Enregistr\xC3\xA9 le") && shown["Enregistr\xC3\xA9 le"].size() == 16 && shown.count("O\xC3\xB9")
+                  && shown["Fichier"] == "Essai ecran.xrec" && shown["Projet"] == "Station",
+              "le d\xC3\xA9tail : Enregistr\xC3\xA9 le (" + shown["Enregistr\xC3\xA9 le"] + "), O\xC3\xB9, le Fichier sans son dossier, le Projet");
+        rp.layout();
+        bool fit = rp.detailValueWidth() > 0.f;
+        for (const auto& [name, value] : shown)
+            if (name != "Description") fit = fit && ui::measureWidth(value, gfx::FontId{16}) <= rp.detailValueWidth();
+        check(fit && rp.descriptionLines().empty(), "chaque valeur tient dans sa case (la colonne des noms, celle du plus long)");
+        const std::string longText = "Les deux pompes d\xC3\xA9marrent, un bip, puis P1 et P2 s'arr\xC3\xAAtent ; la consigne remonte, "
+                                     "l'alarme de niveau haut se l\xC3\xA8ve puis s'acquitte au poste.";
+        check(rp.setDescription(longText), "une longue description");
+        rp.layout();
+        const auto lines = rp.descriptionLines();
+        bool wrapped = lines.size() >= 2;
+        std::string joined;
+        for (const auto& l : lines) {
+            wrapped = wrapped && ui::measureWidth(l, gfx::FontId{16}) <= 1200.f * 0.36f;
+            joined += (joined.empty() ? "" : " ") + l;
+        }
+        check(wrapped && joined == longText, "trop longue pour sa case : enti\xC3\xA8re sous le d\xC3\xA9tail, repli\xC3\xA9" "e ("
+                                               + std::to_string(lines.size()) + " lignes)");
+        check(rp.setDescription("Le d\xC3\xA9marrage du matin"), "la description d'avant");
+        rp.layout();
+        check(rp.descriptionLines().empty(), "courte : dans sa case seulement");
+    }
     // Renommer : l'action qui le cite suit.
     {
         Action a;
@@ -40365,7 +40509,37 @@ void enregistrements1140() {
     (void)pane.replay(locked);
     check(pwdAsked.size() == 2 && pane.runtime().replaying(), "prot\xC3\xA9g\xC3\xA9 : le mot de passe demand\xC3\xA9, faux puis bon");
     check(pwdAsked.size() == 2 && pwdAsked[1].find("incorrect") != std::string::npos, "un faux mot de passe : la question revient et le dit");
+    check(pwdAsked.size() == 2 && pwdAsked[1] == "Essai renomme|Mot de passe incorrect", "... avec une majuscule (" + pwdAsked[1] + ")");
     pane.replayCommand("quit");
+    {
+        // 1.14.0 (captures finales) : protege, l'IHM ARRETEE (un double-clic dans Ressources) - le mot de passe est
+        // demande AVANT de la demarrer (avant : apres, par-dessus la fenetre du build restee ouverte). Faux : la
+        // question revient, l'IHM toujours arretee ; bon : elle demarre et la relecture part, sans autre question.
+        app::HmiSimulationHost host2;
+        host2.projectFolder = [dir] { return dir.string(); };
+        std::vector<std::string> asked2;
+        std::vector<bool> runningWhenAsked;
+        app::HmiSimulationPane* p2 = nullptr;
+        host2.askReplayPassword = [&](const hmi::ReplayRequest& which, const std::string& error, std::function<void(bool, std::string)> done) {
+            asked2.push_back(which.name + "|" + error);
+            runningWhenAsked.push_back(p2 && p2->runtime().running());
+            done(true, asked2.size() == 1 ? std::string("faux") : std::string("secret"));
+        };
+        app::HmiSimulationPane pane2("simM4b", doc, host2);
+        p2 = &pane2;
+        pane2.setBounds({0, 0, 1600, 900});
+        check(!pane2.runtime().running(), "un second volet : l'IHM arr\xC3\xAAt\xC3\xA9" "e");
+        hmi::ReplayRequest again;
+        again.name = "Essai renomme";
+        (void)pane2.replay(again);
+        check(asked2.size() == 2 && runningWhenAsked == std::vector<bool>{false, false},
+              "le mot de passe demand\xC3\xA9 avant de d\xC3\xA9marrer l'IHM (deux fois : un faux, puis le bon)");
+        check(asked2.size() == 2 && asked2[0] == "Essai renomme|" && asked2[1] == "Essai renomme|Mot de passe incorrect",
+              "le faux le dit, avec une majuscule");
+        check(pane2.runtime().running() && pane2.runtime().replaying(), "le bon : l'IHM d\xC3\xA9marre, la relecture part");
+        pane2.replayCommand("quit");
+        pane2.leaveReplay("essai");
+    }
     // Exporter, importer, supprimer (vers la corbeille).
     const fs::path out = dir / "sortie";
     fs::create_directories(out, ec);
@@ -40614,6 +40788,15 @@ void utilisationsM1_1140() {
     ed.layout();
     auto& grid = *ed.viewConstants();
     grid.refresh();
+    {
+        // 1.14.0 (captures finales) : le titre Utilisations tient dans sa colonne (avant, 92 px : \xC2\xAB Utilisa... \xC2\xBB) -
+        // la place que la table laisse au titre : la largeur moins 26 px (la fleche du tri).
+        float width = 0.f;
+        for (const auto& c : grid.table().columns())
+            if (c.title == "Utilisations") width = c.width;
+        check(width - 26.f >= ui::measureWidth("Utilisations", gfx::FontId{16}) + 1.f,
+              "le titre Utilisations entier (" + std::to_string(static_cast<int>(width)) + " px)");
+    }
     const std::string want = "VannesStr=3 Noms=2 NomsBis=1 Grille=1 Liste=1 Vect=1 Ens=1 Anneau=1 Dico=1 Paire=1 Vanne=1 Organes=1 "
                              "Imbrique=1 Jamais=0";
     const std::string got = m1::counts(grid);
@@ -40840,6 +41023,28 @@ void utilisationsM1_1140() {
 //  catalogue (en majuscules et en minuscules), un lien symbolique en boucle, un lien vers un fichier, un dossier
 //  interdit, des dossiers a passer (la Corbeille, un dossier cache), un .zip. Le moteur (finder), le volet
 //  (FileFinderPane) pilote sans ecran, les gestes, la bibliotheque.
+// 1.14.0 (captures finales) : les rectangles arrondis dessines et leur couleur (les puces du chercheur).
+struct RoundRecorder final : gfx::IRenderer {
+    std::vector<std::pair<gfx::Rect, gfx::Color>> rounds;
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect& r, gfx::Color c, float) override { rounds.emplace_back(r, c); }
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view, gfx::FontId, gfx::Color) override {}
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {7.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+    float lineHeight(gfx::FontId) const override { return 16.f; }
+    gfx::Size surfaceSize() const override { return {2000.f, 1000.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId, float maxWidth) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, maxWidth) / 7.f));
+    }
+};
+
 void chercheur1140() {
     std::printf("1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC\n");
     namespace fs = std::filesystem;
@@ -41090,6 +41295,49 @@ void chercheur1140() {
               "la fin : Termin\xC3\xA9 ..., Chercher de nouveau permis");
         check(pane.countOf("xpgproj") == 2 && pane.countOf("xpg") == 1 && pane.chipKeys().size() == 20,
               "le nombre trouv\xC3\xA9 par extension ; une puce par extension trouv\xC3\xA9" "e");
+        {
+            // 1.14.0 (captures finales) : les options tiennent dans la colonne de gauche (avant : \xC2\xAB Passer Windows,
+            // Program Files, la Cor... \xC2\xBB), les colonnes dans le tableau (avant : la Version coupee au bord droit),
+            // et une puce ne garde pas le bleu du survol quand la souris est partie.
+            check(pane.optionBox(Pane::Option::SkipSystem) && pane.optionBox(Pane::Option::SkipSystem)->label() == "Passer les dossiers syst\xC3\xA8me et cach\xC3\xA9s",
+                  "l'option : Passer les dossiers syst\xC3\xA8me et cach\xC3\xA9s (le d\xC3\xA9tail en infobulle)");
+            for (const float w : {1600.f, 1300.f}) {
+                pane.setBounds({0, 0, w, 900});
+                pane.layout();
+                bool fits = true;
+                for (const auto o : {Pane::Option::Network, Pane::Option::Removable, Pane::Option::SkipSystem, Pane::Option::Zips}) {
+                    const auto* box = pane.optionBox(o);
+                    fits = fits && box && box->bounds().w + 0.5f >= box->sizeHint().preferred.w;
+                }
+                float total = 0.f;
+                for (const auto& c : pane.table().columns()) total += c.width;
+                check(fits && total <= pane.table().bounds().w + 0.5f, "un volet de " + std::to_string(static_cast<int>(w))
+                                                                           + " px : les options enti\xC3\xA8res, les colonnes dans le tableau ("
+                                                                           + std::to_string(static_cast<int>(total)) + " / "
+                                                                           + std::to_string(static_cast<int>(pane.table().bounds().w)) + " px)");
+            }
+            pane.setBounds({0, 0, 1600, 900});
+            pane.layout();
+            const gfx::Rect chip = pane.chipRect("xpg");
+            RoundRecorder rr;
+            const auto theme = ui::Theme::dark();
+            const auto fillOf = [&rr](const gfx::Rect& r) {
+                gfx::Color c{};
+                for (const auto& [rect, col] : rr.rounds)
+                    if (std::fabs(rect.x - r.x) < 0.5f && std::fabs(rect.y - r.y) < 0.5f) c = col;
+                return c;
+            };
+            const auto same = [](gfx::Color a, gfx::Color b) { return a.r == b.r && a.g == b.g && a.b == b.b; };
+            (void)pane.dispatch(ui::MouseMove{{chip.x + chip.w / 2, chip.y + chip.h / 2}, {0, 0}, {}});
+            pane.render(ui::PaintContext{rr, theme, {0, 0, 1600, 900}, 1.0, nullptr});
+            const gfx::Color over = fillOf(chip);
+            rr.rounds.clear();
+            (void)pane.dispatch(ui::MouseMove{{800.f, 880.f}, {0, 0}, {}});      // le pied de page
+            pane.render(ui::PaintContext{rr, theme, {0, 0, 1600, 900}, 1.1, nullptr});
+            const gfx::Color away = fillOf(chip);
+            check(chip.w > 0 && same(over, theme.color.accentHover) && same(away, theme.color.accent),
+                  "la puce .xpg : survol\xC3\xA9" "e, le bleu du survol ; la souris partie, celui d'une puce montr\xC3\xA9" "e");
+        }
         // le nom
         pane.nameField().setText("station");
         check(pane.rows().size() == 2, "Nom contient \xC2\xAB station \xC2\xBB au fil de la frappe : le projet Station et Station.xihm");

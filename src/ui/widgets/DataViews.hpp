@@ -1041,6 +1041,9 @@ public:
 
     explicit PropertyGrid(std::string id = {});
     [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }   // 1.11.4
+    // 1.14.0 (captures finales) : la hauteur de ses lignes (celle du dernier dessin), marges comprises - un hote qui
+    // pose quelque chose juste dessous.
+    [[nodiscard]] float contentHeight() const noexcept { return static_cast<float>(rows_.size()) * rowHeight_ + 4.f; }
 
     void setCategories(std::vector<Category> cats);
     void clearProperties();

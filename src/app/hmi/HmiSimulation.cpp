@@ -45,6 +45,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <set>
 
 namespace app {
@@ -1370,6 +1371,15 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
 // ---- 1.14.0 (M4) : LA RELECTURE A L'ECRAN ------------------------------------------------------------------
 bool HmiLiveCanvas::replayShown() const noexcept {
     return runtime_ && runtime_->replaying() && stoppedNote_.empty() && !layers_.empty();
+}
+
+// 1.14.0 (captures finales) : la legende de la barre de relecture se raccourcit pour tenir ; son detail (les touches,
+// les couleurs des reperes) en infobulle, sur elle seule. Ailleurs : celle du canevas (aucune).
+bool HmiLiveCanvas::hasTooltip() const { return Widget::hasTooltip() || !replayChrome_.helpTip.empty(); }
+
+std::string HmiLiveCanvas::liveTooltip(gfx::Point mouse) const {
+    if (replayShown() && replayChrome_.partAt(mouse) == "help") return replayChrome_.helpTip;
+    return Widget::liveTooltip(mouse);
 }
 
 void HmiLiveCanvas::paintReplay(const ui::PaintContext& ctx, const gfx::Rect& whole) {
@@ -5147,8 +5157,68 @@ void HmiSimulationPane::toggleRecording(const std::string& source) {
     refreshNow();
 }
 
+namespace {
+// 1.14.0 (captures finales) : une raison montree en tete de phrase ("Mot de passe incorrect.") : sa premiere lettre
+// en capitale, accent compris (les lettres latines de l'UTF-8 : C3 A0..BE -> C3 80..9E).
+std::string sentenceCase(std::string s) {
+    if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
+    else if (s.size() > 1 && static_cast<unsigned char>(s[0]) == 0xC3) {
+        const auto next = static_cast<unsigned char>(s[1]);
+        if (next >= 0xA0 && next <= 0xBE && next != 0xB7) s[1] = static_cast<char>(next - 0x20);
+    }
+    return s;
+}
+// Le fichier d'une relecture demandee (comme Runtime::startReplay) : le chemin donne, sinon le nom dans le dossier
+// (sans la casse, ou le nom de son en-tete). "" : introuvable, ou un nom refuse.
+std::string replayFileOf(const hmi::ReplayRequest& rq, const std::string& folder) {
+    const auto trim = [](std::string s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+        return s;
+    };
+    if (std::string path = trim(rq.path); !path.empty()) return path;
+    const std::string name = trim(rq.name);
+    if (name.empty() || folder.empty() || !hmi::rec::validName(name)) return {};
+    std::error_code ec;
+    const std::string direct = hmi::rec::pathOf(folder, name);
+    if (std::filesystem::exists(std::filesystem::path(std::u8string(direct.begin(), direct.end())), ec)) return direct;
+    const auto low = [](std::string s) {
+        for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    for (const auto& it : hmi::rec::listFolder(folder))
+        if (low(it.name) == low(name) || low(it.header.name) == low(name)) return it.path;
+    return {};
+}
+} // namespace
+
 hmi::rec::Status HmiSimulationPane::replay(const hmi::ReplayRequest& request, std::string* why) {
     if (!started_) {
+        // 1.14.0 (captures finales) : PROTEGE, LE MOT DE PASSE D'ABORD - avant de demarrer l'IHM. Avant, la question
+        // venait une fois l'IHM en marche, par-dessus la fenetre du build ("Demarrer la simulation"), encore
+        // ouverte : deux fenetres empilees. Il se verifie sur l'en-tete (sans la piste) ; faux, la question revient
+        // et le dit ; bon, l'IHM demarre et la relecture part sans rien redemander.
+        if (host_.askReplayPassword) {
+            const std::string folder =
+                hmi::rec::folderOf(doc_->project.recording, host_.projectFolder ? host_.projectFolder() : std::string{});
+            const std::string path = replayFileOf(request, folder);
+            hmi::rec::Header header;
+            if (!path.empty() && hmi::rec::readHeader(path, header) == hmi::rec::Status::Ok && header.locked()
+                && !hmi::rec::passwordOk(header, request.password)) {
+                const auto st = request.password.empty() ? hmi::rec::Status::PasswordNeeded : hmi::rec::Status::BadPassword;
+                const std::weak_ptr<char> alive = recordAlive_;
+                host_.askReplayPassword(request,
+                                        st == hmi::rec::Status::BadPassword ? sentenceCase(std::string(hmi::rec::statusText(st))) : std::string{},
+                                        [this, alive, request](bool ok, std::string password) {
+                                            if (alive.expired() || !ok) return;
+                                            auto again = request;
+                                            again.password = std::move(password);
+                                            (void)replay(again);
+                                        });
+                if (why) *why = std::string(hmi::rec::statusText(st));
+                return st;
+            }
+        }
         // L'IHM arretee : elle demarre (son build d'abord) ; la relecture part des qu'elle tourne (refreshPane).
         autoStart_ = true;
         startHmi(request.source.empty() ? std::string("relecture") : request.source);
@@ -5167,7 +5237,7 @@ hmi::rec::Status HmiSimulationPane::replay(const hmi::ReplayRequest& request, st
     if ((asked || st == hmi::rec::Status::BadPassword) && host_.askReplayPassword) {
         // Protege : la question ; un mauvais mot de passe la repose (avec ce qui n'allait pas).
         const std::weak_ptr<char> alive = recordAlive_;
-        host_.askReplayPassword(request, st == hmi::rec::Status::BadPassword ? reason : std::string{},
+        host_.askReplayPassword(request, st == hmi::rec::Status::BadPassword ? sentenceCase(reason) : std::string{},
                                 [this, alive, request](bool ok, std::string password) {
                                     if (alive.expired() || !ok) return;
                                     auto again = request;

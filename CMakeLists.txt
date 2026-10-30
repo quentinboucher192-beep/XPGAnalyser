@@ -509,7 +509,9 @@ if(XPG_BUILD_TESTS)
     # dialogue, la route des evenements, chacun a sa taille, le retour dans la
     # principale quand sa fenetre se ferme) - la pile seule, sans ecran ----
     xpg_add_test_executable(dialogwindow_test tests/dialogwindow_test.cpp)
-    xpg_target_link_libraries(dialogwindow_test PRIVATE xpg_ui)
+    # 1.14.0 (captures finales) : xpg_app - un vrai formulaire (FormDialog), ses champs alignes, sa hauteur
+    # (deja construit pour les deux applications : rien a recompiler).
+    xpg_target_link_libraries(dialogwindow_test PRIVATE xpg_ui xpg_app)
     # 1.12.28 : la fenetre du plantage et du blocage, dessinee par l'appli
     xpg_add_test_executable(crashreport_test tests/crashreport_test.cpp)
     xpg_target_link_libraries(crashreport_test PRIVATE xpg_ui)

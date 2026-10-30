@@ -195,8 +195,10 @@ public:
         all->setTooltip("Cocher toutes les extensions");
         none->setTooltip("Tout d\xC3\xA9" "cocher (puis cocher celles qu'on veut)");
         mine->setTooltip("Les extensions dont " + core::productName() + " se sert");
+        // 1.14.0 (captures finales) : des libelles qui tiennent dans la colonne (avant : "Passer Windows, Program
+        // Files, la Cor...") ; le detail dans l'infobulle de chacun.
         static const char* const kOptions[] = {"Lecteurs r\xC3\xA9seau", "Cl\xC3\xA9s USB et disques externes",
-                                               "Passer Windows, Program Files, la Corbeille, les dossiers cach\xC3\xA9s",
+                                               "Passer les dossiers syst\xC3\xA8me et cach\xC3\xA9s",
                                                "Dans les archives .zip aussi"};
         static const char* const kTips[] = {
             "Tout le PC : les lecteurs r\xC3\xA9seau mapp\xC3\xA9s aussi (lus \xC3\xA0 leur rythme, sans charger le r\xC3\xA9seau)",
@@ -228,6 +230,13 @@ public:
     [[nodiscard]] ui::SizeHint sizeHint() const override {
         const float w = std::max(240.f, bounds().w);
         return ui::SizeHint{{w, heightFor(w)}, {200.f, 120.f}, 0.f, 0.f};
+    }
+    // 1.14.0 (captures finales) : la plus large des cases (une extension, une option) - la colonne la tient entiere.
+    [[nodiscard]] float widestRow() const {
+        float w = 0.f;
+        for (const auto* b : boxes) w = std::max(w, b->sizeHint().preferred.w + 44.f);   // + le nombre trouve, a droite
+        for (const auto* o : options) w = std::max(w, o->sizeHint().preferred.w);
+        return w;
     }
 
     std::vector<ui::Checkbox*> boxes;
@@ -375,7 +384,9 @@ protected:
         }
         for (const auto& [key, r] : rects_) {
             const bool on = pane_.extensionOn(key);
-            const bool hot = r.contains(hover_);
+            // 1.14.0 (captures finales) : survolee seulement si la souris est encore sur les puces (avant : la
+            // derniere position vue restait - la puce cliquee gardait le bleu du survol, la souris partie).
+            const bool hot = hovered() && r.contains(hover_);
             if (on) ctx.r.fillRoundedRect(r, hot ? c.accentHover : c.accent, 4.f);
             else {
                 ctx.r.fillRoundedRect(r, hot ? c.rowAltBg : c.inputBg, 4.f);
@@ -957,6 +968,17 @@ ui::Checkbox* FileFinderPane::extensionBox(std::string_view key) noexcept {
     return i < side_->boxes.size() ? side_->boxes[i] : nullptr;
 }
 
+gfx::Rect FileFinderPane::chipRect(std::string_view key) const {
+    for (const auto& [k, r] : chips_->chipRects())
+        if (k == key) return r;
+    return {};
+}
+
+ui::Checkbox* FileFinderPane::optionBox(Option o) noexcept {
+    const auto i = static_cast<std::size_t>(o);
+    return i < std::size(side_->options) ? side_->options[i] : nullptr;
+}
+
 std::vector<std::string> FileFinderPane::contextLabels() const {
     std::vector<std::string> out;
     const auto* h = selected();
@@ -1037,7 +1059,9 @@ void FileFinderPane::onLayout() {
     stop_->setBounds({x + goW + 6.f, y, stopW, 28.f});
 
     const float top = b.y + 66.f;
-    const float sideW = std::clamp(b.w * 0.24f, 260.f, 340.f);
+    // 1.14.0 (captures finales) : la colonne de gauche tient sa plus large case (les marges, l'ascenseur).
+    const float sideMin = std::clamp(side_->widestRow() + 24.f + 14.f, 260.f, 380.f);
+    const float sideW = std::clamp(b.w * 0.24f, sideMin, std::max(sideMin, 340.f));
     sideRect_ = {b.x, top, sideW, std::max(0.f, b.h - 66.f)};
     sidePanel_->setBounds(sideRect_);
     const float rx = b.x + sideW + 1.f, rw = std::max(100.f, b.w - sideW - 1.f);
@@ -1045,6 +1069,37 @@ void FileFinderPane::onLayout() {
     chips_->setBounds({rx, top, rw, chipsH});
     footRect_ = {rx, b.bottom() - 44.f, rw, 44.f};
     table_->setBounds({rx, top + chipsH, rw, std::max(40.f, footRect_.y - top - chipsH)});
+    // 1.14.0 (captures finales) : LES COLONNES DANS LA LARGEUR DU TABLEAU - le Dossier (un chemin, coupe de toute facon)
+    // prend ce que les autres laissent (160 px au moins) ; plus etroit, le Nom, le Type et la Version cedent jusqu'a
+    // leur minimum. Avant, la Version etait coupee au bord droit ("Control Expert V15..."). Refait quand la largeur
+    // change, depuis les largeurs de depart (une colonne tiree a la main reste telle quelle jusque-la).
+    if (std::fabs(rw - fittedWidth_) > 0.5f) {
+        fittedWidth_ = rw;
+        auto cols = table_->columns();
+        if (cols.size() == ColCount) {
+            static constexpr float kStart[ColCount] = {260.f, 170.f, 360.f, 96.f, 144.f, 200.f};
+            static constexpr float kLeast[ColCount] = {150.f, 110.f, 160.f, 96.f, 144.f, 160.f};
+            const float room = std::floor(rw - 18.f);                            // l'ascenseur, le cadre
+            float fixed = 0.f, give = 0.f;
+            for (std::size_t i = 0; i < ColCount; ++i) {
+                cols[i].width = kStart[i];
+                if (i != ColDir && cols[i].visible) fixed += kStart[i];
+                if ((i == ColName || i == ColType || i == ColVersion) && cols[i].visible) give += kStart[i] - kLeast[i];
+            }
+            float dir = room - fixed;
+            if (dir < kLeast[ColDir] && give > 0.f) {
+                const float take = std::min(give, kLeast[ColDir] - dir);
+                for (const std::size_t i : {std::size_t{ColName}, std::size_t{ColType}, std::size_t{ColVersion}})
+                    if (cols[i].visible) cols[i].width -= std::ceil(take * (kStart[i] - kLeast[i]) / give);
+                float used = 0.f;
+                for (std::size_t i = 0; i < ColCount; ++i)
+                    if (i != ColDir && cols[i].visible) used += cols[i].width;
+                dir = std::max(kLeast[ColDir], room - used);
+            }
+            cols[ColDir].width = std::floor(dir);
+            table_->setColumns(std::move(cols));
+        }
+    }
     float fx = rx + 8.f;
     for (auto* a : actions_) {
         const float aw = a->sizeHint().preferred.w + 8.f;

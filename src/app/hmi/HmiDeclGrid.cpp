@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <set>
 
 namespace app {
@@ -576,7 +577,10 @@ void HmiDeclGrid::rebuildColumns() {
         if (c == de::Column::Description) {               // Utilisations avant la documentation (la maquette)
             usesColumn_ = static_cast<int>(columns_.size());
             columns_.push_back(kUses);
-            view.push_back({"Utilisations", 92.f, 60.f, true, !order, true, ui::Align::End});
+            // 1.14.0 (captures finales) : la largeur ou son titre tient (avant 92 px : "Utilisa...") - le titre
+            // mesure (gras : une passe de plus), la marge que la table laisse au titre (26 px : le tri).
+            const float usesW = std::max(92.f, std::ceil(ui::measureWidth("Utilisations", gfx::FontId{16}) + 1.f + 26.f + 8.f));
+            view.push_back({"Utilisations", usesW, 60.f, true, !order, true, ui::Align::End});
         }
         columns_.push_back(static_cast<int>(c));
         float w = 120.f;

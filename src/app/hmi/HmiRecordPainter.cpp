@@ -218,6 +218,19 @@ void fitText(gfx::IRenderer& r, gfx::Point at, const std::string& text, gfx::Fon
 
 } // namespace
 
+// 1.14.0 (captures finales) : la legende de la barre de relecture, la plus longue qui tient dans `width` ; rien si
+// meme la plus courte n'entre pas (une legende coupee ne se lit pas : l'infobulle de la place reste).
+std::string replayLegend(gfx::IRenderer& r, gfx::FontId font, float width) {
+    static const char* const kForms[] = {
+        "Espace pause \xC2\xB7 \xE2\x86\x90 \xE2\x86\x92 10 s \xC2\xB7 + \xE2\x88\x92 vitesse \xC2\xB7 rouge : alarme \xC2\xB7 couleur d'accent : clic",
+        "Espace pause \xC2\xB7 \xE2\x86\x90 \xE2\x86\x92 10 s \xC2\xB7 + \xE2\x88\x92 vitesse",
+        "Espace \xC2\xB7 \xE2\x86\x90 \xE2\x86\x92 \xC2\xB7 + \xE2\x88\x92",
+    };
+    for (const char* form : kForms)
+        if (r.measure(form, font).width <= width) return form;
+    return {};
+}
+
 std::string ReplayChrome::partAt(gfx::Point p) const {
     for (const auto& [name, rect] : parts)
         if (rect.contains(p)) return name;
@@ -368,12 +381,22 @@ ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const 
         x += 10.f;
     }
     // L'aide des touches (ou ce qui a change dans le projet depuis l'enregistrement), dans ce qui reste.
-    const std::string help = !hover.empty() ? hover
-                             : !info.note.empty()
-                                 ? "\xE2\x9A\xA0 " + info.note
-                                 : "Espace pause \xC2\xB7 \xE2\x86\x90 \xE2\x86\x92 10 s \xC2\xB7 + \xE2\x88\x92 vitesse \xC2\xB7 rouge : alarme \xC2\xB7 couleur d'accent : clic";
-    fitText(r, {x, rowY + (rowH - r.lineHeight(f.smallUi)) / 2.f}, help, f.smallUi,
-            !hover.empty() ? col.text : !info.note.empty() ? col.warning : col.textMuted, right - x);
+    // 1.14.0 (captures finales) : LA LEGENDE TIENT DANS SA PLACE - la plus longue de ses formes qui y entre (les touches
+    // et les couleurs des reperes ; les touches seules ; les touches en bref) ; le tout, en infobulle sur elle (la
+    // partie "help"). Avant, une seule phrase, coupee au milieu ("... rouge : alarme - co...").
+    c.helpTip = "Les touches : Espace, pause ou lecture ; \xE2\x86\x90 \xE2\x86\x92, 10 s en arri\xC3\xA8re ou en avant ; D\xC3\xA9" "but, Fin ; "
+                "+ \xE2\x88\x92, la vitesse ; \xC3\x89" "chap quitte la relecture.\n"
+                "Les rep\xC3\xA8res de la barre : rouge, une alarme ; couleur d'accent, un clic ; gris, une autre vue "
+                "(survoler un rep\xC3\xA8re le d\xC3\xA9" "crit).";
+    std::string help;
+    if (!hover.empty()) help = hover;
+    else if (!info.note.empty()) help = "\xE2\x9A\xA0 " + info.note;
+    else help = replayLegend(r, f.smallUi, right - x);
+    if (!info.note.empty()) c.helpTip = "\xE2\x9A\xA0 " + info.note + "\n" + c.helpTip;
+    if (right - x > 4.f) c.parts.emplace_back("help", gfx::Rect{x, rowY, right - x, rowH});
+    if (!help.empty())
+        fitText(r, {x, rowY + (rowH - r.lineHeight(f.smallUi)) / 2.f}, help, f.smallUi,
+                !hover.empty() ? col.text : !info.note.empty() ? col.warning : col.textMuted, right - x);
     x = right + 6.f;
     button("quit", quitBtnW, false, false, label("Quitter"));
     return c;

@@ -30599,6 +30599,21 @@ void son1140() {
           "le G\xC3\xA9n\xC3\xA9ral muet (soundOn faux) : plus rien");
     setSoundVolume(gs, SoundChannel::Scripts, 250);
     check(soundVolume(gs, SoundChannel::Scripts) == 100, "un volume born\xC3\xA9 \xC3\xA0 100");
+    {
+        // 1.14.0 (captures finales) : ce que montre un Coupe-son - un canal que le General fait taire ne se dit plus
+        // actif (avant : tout coupe, le Coupe-son des Alarmes montrait encore le son actif).
+        SystemSettings ms;
+        check(muteShown(ms, SoundChannel::Alarms) == MuteShown::Active && muteShown(ms, SoundChannel::General) == MuteShown::Active,
+              "Coupe-son : au d\xC3\xA9part, actif (Tous comme un canal)");
+        setSoundMuted(ms, SoundChannel::General, true);
+        check(muteShown(ms, SoundChannel::General) == MuteShown::Muted && muteShown(ms, SoundChannel::Alarms) == MuteShown::SilencedByGeneral,
+              "tout coup\xC3\xA9 : Tous coup\xC3\xA9, un canal tu par le G\xC3\xA9n\xC3\xA9ral");
+        setSoundMuted(ms, SoundChannel::Alarms, true);
+        check(muteShown(ms, SoundChannel::Alarms) == MuteShown::Muted, "le canal coup\xC3\xA9 lui-m\xC3\xAAme : coup\xC3\xA9");
+        setSoundMuted(ms, SoundChannel::General, false);
+        check(muteShown(ms, SoundChannel::Alarms) == MuteShown::Muted && muteShown(ms, SoundChannel::Scripts) == MuteShown::Active,
+              "le G\xC3\xA9n\xC3\xA9ral r\xC3\xA9tabli : chaque canal redit son \xC3\xA9tat");
+    }
 
     // ---- le moteur : trois sources, trois canaux ; le muet coupe et bloque
     Supervision s;
@@ -30881,6 +30896,16 @@ void son1140() {
         check(ort.settings().soundOn && journalHas(ort, "Action", "son r\xC3\xA9tabli"), "un second clic : le son revient");
         clickOn(ca);
         check(soundMuted(ort.settings(), SoundChannel::Alarms) && ort.settings().soundOn, "le Coupe-son d'un canal : seulement les Alarmes");
+        // 1.14.0 (captures finales) : tout coupe, le Coupe-son des Alarmes garde son effet sur son canal.
+        clickOn(cs);
+        clickOn(ca);
+        check(!ort.settings().soundOn && !soundMuted(ort.settings(), SoundChannel::Alarms)
+                  && muteShown(ort.settings(), SoundChannel::Alarms) == MuteShown::SilencedByGeneral,
+              "tout coup\xC3\xA9, un clic sur le Coupe-son des Alarmes r\xC3\xA9tablit son canal - tu par le G\xC3\xA9n\xC3\xA9ral, il le montre");
+        clickOn(ca);
+        clickOn(cs);
+        check(ort.settings().soundOn && soundMuted(ort.settings(), SoundChannel::Alarms) && muteShown(ort.settings(), SoundChannel::Alarms) == MuteShown::Muted,
+              "le son r\xC3\xA9tabli : les Alarmes coup\xC3\xA9" "es par leur Coupe-son, il le dit");
         clickOn(garde);
         check(ort.settings().soundOn && eventHas(ort, "Acc\xC3\xA8s refus\xC3\xA9", "niveau d'acc\xC3\xA8s 3"), "sous s\xC3\xA9" "curit\xC3\xA9, le niveau d'acc\xC3\xA8s de l'objet : refus\xC3\xA9");
         const int c0 = calls;

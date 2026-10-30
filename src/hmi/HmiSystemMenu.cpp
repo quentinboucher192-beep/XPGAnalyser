@@ -57,6 +57,12 @@ bool soundSilenced(const SystemSettings& s, SoundChannel c) noexcept {
     return soundMuted(s, SoundChannel::General) || soundMuted(s, c);
 }
 
+MuteShown muteShown(const SystemSettings& s, SoundChannel c) noexcept {
+    if (soundMuted(s, c)) return MuteShown::Muted;
+    if (c != SoundChannel::General && soundMuted(s, SoundChannel::General)) return MuteShown::SilencedByGeneral;
+    return MuteShown::Active;
+}
+
 float soundGain(const SystemSettings& s, SoundChannel c) noexcept {
     if (soundSilenced(s, c)) return 0.f;
     const float general = static_cast<float>(std::clamp(s.volume, 0, 100)) / 100.f;

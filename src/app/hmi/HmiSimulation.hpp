@@ -226,10 +226,12 @@ struct HmiLiveLayer {
 //  Le bandeau en haut (RELECTURE, le nom, enregistre le ... par ..., Echap quitte), un lisere autour de la vue, la
 //  barre du bas : la progression et ses reperes (une alarme en rouge, un clic a la couleur d'accent, une autre vue en
 //  gris) qu'on clique ou qu'on tire ; Debut, -10 s, Pause / Lecture, +10 s, Fin ; le temps ; les vitesses ; Quitter.
-//  Les parties : "progress", "start", "back", "play", "fwd", "end", "speed:<v>", "quit".
+//  Les parties : "progress", "start", "back", "play", "fwd", "end", "speed:<v>", "quit" ; "help" (1.14.0, captures
+//  finales) : la legende des touches, qui tient dans sa place - le detail (helpTip) en infobulle sur elle.
 struct ReplayChrome {
     gfx::Rect banner, bar, view, progress;
     std::vector<std::pair<std::string, gfx::Rect>> parts;
+    std::string helpTip;
     [[nodiscard]] std::string partAt(gfx::Point p) const;
     [[nodiscard]] gfx::Rect   part(std::string_view name) const;
     [[nodiscard]] double      fractionAt(float x) const;   // 0..1 sur la progression
@@ -240,6 +242,8 @@ inline constexpr float kReplayBarH = 72.f;
 [[nodiscard]] gfx::Rect replayViewArea(const gfx::Rect& whole);
 ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const gfx::Rect& whole, const hmi::ReplayInfo& info,
                                const std::vector<hmi::rec::Player::Marker>& markers, gfx::Point mouse);
+// 1.14.0 (captures finales) : la legende de la barre, la plus longue de ses formes qui tient dans `width` ("" : aucune).
+[[nodiscard]] std::string replayLegend(gfx::IRenderer& r, gfx::FontId font, float width);
 // Le pointeur de l'operateur (une fleche fantome) ; un clic : un cercle qui grandit et s'efface (age 0 a 1).
 void paintReplayPointer(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, bool pressed);
 void paintReplayRipple(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, float age);
@@ -452,6 +456,9 @@ public:
     const core::SignalPtr<std::string> replayCommand = core::Signal<std::string>::create();
     [[nodiscard]] bool                replayShown() const noexcept;
     [[nodiscard]] const ReplayChrome& replayChrome() const noexcept { return replayChrome_; }
+    // 1.14.0 (captures finales) : l'infobulle de la legende de la barre de relecture (les touches, les reperes).
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool        hasTooltip() const override;
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;

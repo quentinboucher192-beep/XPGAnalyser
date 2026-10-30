@@ -38,9 +38,13 @@ namespace app {
                 : text_(std::move(text)), bold_(bold) {}
             [[nodiscard]] SizeHint sizeHint() const override {
                 const float line = lineHeight(gfx::FontId{ 16 });
+                // 1.14.0 (captures finales) : le libelle d'un champ de formulaire a la largeur de la
+                // colonne des libelles, sans s'etirer - les champs commencent tous au meme x.
+                if (column_ > 0.f) return SizeHint{ {column_, line + 6.f}, {std::min(column_, 40.f), line + 4.f}, 0.f, 0.f };
                 return SizeHint{ {measureWidth(text_, gfx::FontId{16}) + 8.f, line + 6.f},
                                 {40.f, line + 4.f}, 1.f, 0.f };
             }
+            void setColumn(float w) { column_ = w; invalidateLayout(); }
         protected:
             void onPaint(const PaintContext& ctx) override {
                 const auto r = contentRect();
@@ -51,6 +55,7 @@ namespace app {
         private:
             std::string text_;
             bool        bold_;
+            float       column_{ 0.f };
         };
 
         // 1.12.19 (U4, la regle des cases) : la ligne SOUS un champ - ce qui ne va pas (rouge) ou
@@ -378,23 +383,21 @@ namespace app {
         // detache) : le formulaire s'y tient, ses explications coupees a sa largeur.
         if (const gfx::Size s = surfaceSize(); s.w >= 1.f) width = std::min(width, std::max(480.f, s.w - 24.f));
 
-        // The explanation takes room too. It did not, so a long one pushed the
-        // fields off the bottom - and "Tableau a lire" has five lines of it, which
-        // is exactly how the path and the name ended up unreadable under the text
-        // that was supposed to help.
-        std::size_t explanationLines = explanation_.empty() ? 0 : 1;
-        std::size_t since = 0;
-        for (char c : explanation_) {
-            ++since;
-            if (c == '\n') { ++explanationLines; since = 0; }
-        }
-        explanationLines += explanation_.size() / 90;
-
-        float height = 130.f + static_cast<float>(explanationLines) * 20.f;
+        // 1.14.0 (captures finales) : LA HAUTEUR EST CELLE DU CONTENU, mesuree une fois le
+        // corps construit (plus bas) - l'explication repliee, chaque rangee, sa ligne de raison,
+        // les boutons. Avant, une estimation par champ (56 px, du temps ou le libelle etait sur
+        // sa propre ligne) laissait un grand vide sous les champs (Arreter l'enregistrement,
+        // le mot de passe d'un enregistrement protege).
+        //
+        // LA COLONNE DES LIBELLES : la largeur du plus long, la meme pour tous - chaque champ
+        // commence au meme x. Avant, le libelle s'etirait avec le champ (la moitie de la place
+        // en trop chacun) : un libelle plus long poussait son champ plus loin (864, 887, 893 px).
+        // Au plus la moitie de la rangee ; un libelle plus long garde sa largeur a lui.
+        const float rowW = std::max(120.f, width - 28.f);
+        float labelColumn = 0.f;
         for (std::size_t i = 0; i < fields_.size(); ++i)
-            height += (isCode(i) ? kCodeHeight + 34.f : 56.f) + 20.f;   // 1.12.19 (U4) : la ligne de la raison
-        height = std::min(height, 760.f);   // the label is its own line now
-        auto frame = std::make_unique<DialogFrame>(title_, width, height);
+            if (!isCode(i)) labelColumn = std::max(labelColumn, measureWidth(fields_[i].label, kDialogFont) + 8.f);
+        labelColumn = std::min(labelColumn, rowW * 0.5f);
 
         auto body = std::make_unique<BoxLayout>(Orientation::Vertical, id() + ".body");
         body->setSpacing(6.f);
@@ -442,7 +445,13 @@ namespace app {
         for (const auto& f : fields_) {
             auto row = std::make_unique<BoxLayout>(Orientation::Horizontal, id() + ".row");
             row->setSpacing(8.f);
-            row->addChild(std::make_unique<Label>(f.label, true));
+            {
+                auto label = std::make_unique<Label>(f.label, true);
+                // 1.14.0 (captures finales) : la colonne des libelles (un champ de code a sa ligne a lui).
+                if (!isCode(static_cast<std::size_t>(&f - fields_.data())))
+                    label->setColumn(std::max(labelColumn, measureWidth(f.label, kDialogFont) + 8.f));
+                row->addChild(std::move(label));
+            }
 
             if (!f.choices.empty()) {
                 auto drop = std::make_unique<DropDown>(id() + ".choice");
@@ -599,6 +608,11 @@ namespace app {
         }
 
         body->addChild(std::move(buttons));
+        // 1.14.0 (captures finales) : la hauteur du contenu (le corps mesure), plus le cadre : la barre
+        // de titre et la marge du haut (40), celle du bas (14), un souffle de 6. Au plus 760 : au-dela,
+        // les rangees se serrent comme avant (un code a sa hauteur, le reste a son minimum).
+        const float height = std::clamp(body->sizeHint().preferred.h + 40.f + 14.f + 6.f, 140.f, 760.f);
+        auto frame = std::make_unique<DialogFrame>(title_, width, height);
         frame->attachBody(std::move(body));
         setRoot(std::move(frame));
         return core::ok();

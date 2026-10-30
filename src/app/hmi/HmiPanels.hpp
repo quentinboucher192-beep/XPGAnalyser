@@ -300,6 +300,12 @@ private:
 [[nodiscard]] std::string hmiPaletteFamily(hmi::Kind kind);
 // 1.12.26 : le libelle d'une propriete d'un objet, celui de l'inspecteur (la fenetre Historique).
 [[nodiscard]] std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key);
+// 1.14.0 (captures finales) : les mots-cles d'un genre pour la recherche de la bibliotheque (ceux de son sujet d'aide,
+// @mots, et les siens), et s'ils trouvent `text` (le debut d'un mot, sans casse ni accents).
+[[nodiscard]] std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind);
+[[nodiscard]] bool hmiPaletteWordMatch(hmi::Kind kind, std::string_view text);
+// 1.14.0 (captures finales) : ce que montre, en gris, le Mot de passe vide de l'Enregistreur (avant : "{variable}").
+inline constexpr const char* kNoPasswordInvite = "aucun (en clair)";
 class HmiPalette final : public ui::Widget {
 public:
     explicit HmiPalette(std::string id = {});
@@ -377,6 +383,7 @@ private:
     struct Tile { hmi::Kind kind; gfx::Rect rect; gfx::Rect star; std::string symbol; };   // symbol : lot 10
     void layoutTiles(const ui::Theme*) const;
     std::string               filter_;
+    std::set<hmi::Kind>       wordHits_;              // 1.14.0 (captures finales) : trouves par leurs mots-cles
     const hmi::Project*       project_{nullptr};
     std::string               currentSymbol_, hoverSymbol_;
     mutable float             emptySymbolsY_{-1.f};   // la ligne "aucun symbole", sous son titre
