@@ -1383,14 +1383,14 @@ void HmiActionsPanel::rebuildGrid() {
         if (o == Operation::ReplayStart || o == Operation::RecordingExport || o == Operation::RecordingDelete) {
             std::vector<std::string> names = hmi::rec::fileNames(hmi::rec::folderOf(doc_->project.recording, doc_->savedFolder));
             std::sort(names.begin(), names.end());
-            std::string list;
-            for (std::size_t i = 0; i < names.size() && i < 8; ++i) list += (i ? ", " : "") + names[i];
-            if (names.size() > 8) list += "\xE2\x80\xA6";
+            std::string known;
+            for (std::size_t i = 0; i < names.size() && i < 8; ++i) known += (i ? ", " : "") + names[i];
+            if (names.size() > 8) known += "\xE2\x80\xA6";
             op.properties.push_back(prop("Enregistrement", a.target, PG::ValueType::Text, {},
                                          commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
                                          "Un enregistrement de Ressources \xE2\x80\xBA Enregistrements, ou un nom \xC3\xA0 trous ({Nom_Essai}). "
                                          "G\xC3\xA9n\xC3\xA9rer signale un nom \xC3\xA9" "crit en dur qui n'y est pas."
-                                             + (list.empty() ? std::string{} : " Dans le dossier : " + list + ".")));
+                                             + (known.empty() ? std::string{} : " Dans le dossier : " + known + ".")));
         }
         if (o == Operation::ReplayStart) {
             op.properties.push_back(prop("Vitesse", a.value.empty() ? std::string("1") : a.value, PG::ValueType::Enum,
