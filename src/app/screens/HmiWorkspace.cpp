@@ -1111,6 +1111,11 @@ void MainAnalysisScreen::askHmiBind(const std::string& equipment, const std::str
 }
 
 void MainAnalysisScreen::openHmiPane(const std::string& key) {
+    // 1.14.0 (lot M5) : Chercher des fichiers (Rouvrir le dernier ferme : "hmi:chercher") - sans IHM aussi.
+    if (key == "chercher") {
+        openFileFinder();
+        return;
+    }
     // 1.11.14 : les sorties du build vivent dans le panneau du bas.
     if (key == "sorties") {
         showBottomPanel(true, HmiBuildOutputPane::kSorties);

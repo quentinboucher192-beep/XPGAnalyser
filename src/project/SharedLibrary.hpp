@@ -147,6 +147,14 @@ namespace project {
         [[nodiscard]] core::Status publishFunctionBlock(const domain::Project&, std::string_view name,
             std::string category, bool replace = false);
 
+        // ---- 1.14.0 (lot M5) : un fichier trouve sur le PC, dans la bibliotheque ----
+        //  Chercher des fichiers sur ce PC : un .dfb, un .ddt (copie dans
+        //  <root>/<categorie>/<Nom>.<genre>, une ligne de l'index - le nom, la version
+        //  et le resume de son en-tete : name =, version =, #! summary =) ou une macro
+        //  (.mac, publishMacro). `path` est en UTF-8. Un nom deja dans la bibliotheque
+        //  est refuse : rien n'est remplace sans le dire.
+        [[nodiscard]] core::Result<LibraryItem> importFile(const std::string& path, std::string category = {});
+
         // ---- importing ---------------------------------------------------------
         enum class OnConflict : std::uint8_t {
             Refuse,      // stop and say the name is taken

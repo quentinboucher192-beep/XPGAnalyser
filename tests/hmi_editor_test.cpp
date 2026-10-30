@@ -177,6 +177,10 @@
 #include "../src/hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G)
 #include "../src/import/ProjectImporter.hpp"
 #include "../src/sim/Runtime.hpp"            // 1.10 : la simulation de l'API et de l'IHM independantes
+#include "../src/app/FileFinder.hpp"         // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC
+#include "../src/app/FileFinderPane.hpp"
+#include "../src/project/ProjectArchive.hpp"
+#include "../src/project/SharedLibrary.hpp"
 
 #include <algorithm>
 #include <array>
@@ -18350,13 +18354,14 @@ void centreAide111() {
     // 1.12.27 : + Ctrl+Maj+N (Nouvelle fenetre).
     // 1.12.30 : + le zoom des pages (Ctrl+plus / Ctrl+moins / Ctrl+0, Ctrl+molette : General) ; Ctrl+R,
     // Ctrl+; / Ctrl+Alt+; et Alt+survol (l'editeur de vues : les regles, les guides, les cotes).
-    check(hk::all().size() == 108 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.14.0 (lot M5) : + Ctrl+Maj+P (Chercher des fichiers sur ce PC, General).
+    check(hk::all().size() == 109 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
           "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18), "
-          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30)");
-    check(hk::ofContext(hk::Context::General).size() == 32 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 32 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
-          "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom), Aide 7");
+          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30), Ctrl+Maj+P (1.14.0)");
+    check(hk::ofContext(hk::Context::General).size() == 33 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 33 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
+          "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom ; 1.14.0 : Ctrl+Maj+P), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -18453,7 +18458,7 @@ void centreAide111() {
               && rel[52].version == "1.11.7" && rel[53].version == "1.11.6" && rel[54].version == "1.11.5"
               && rel[55].version == "1.11.4" && rel[56].version == "1.11.3" && rel[57].version == "1.11.2"
               && rel[58].version == "1.11.1" && rel[59].version == "1.11" && rel[60].version == "1.10.4",
-          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lots M1, M4), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lots M1, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18724,7 +18729,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 455,   // 1.14.0 : + 6 (M1 : la colonne Utilisations ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 457,   // 1.14.0 : + 8 (M1 : la colonne Utilisations ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18863,8 +18868,9 @@ void centreAide111() {
     // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
     // 1.12.28 : le didacticiel dans l'aide - Demarrer > Le didacticiel, sa page et les 6 des parcours (27).
     // 1.12.30 : + Le zoom des pages (28) ; L'automate gagne echanges-api (l'archive .xapi et la page web du programme) : 17.
-    check(ix.count(hc::Chapter::Start) == 28 && ix.count(hc::Chapter::Plc) == 17,
-          "centre : Demarrer 28 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28 ; le zoom, 1.12.30) et L'automate 17 (1.12.30 : echanges-api)");
+    // 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (29).
+    check(ix.count(hc::Chapter::Start) == 29 && ix.count(hc::Chapter::Plc) == 17,
+          "centre : Demarrer 29 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28 ; le zoom, 1.12.30 ; chercher des fichiers, 1.14.0) et L'automate 17 (1.12.30 : echanges-api)");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
@@ -18936,7 +18942,7 @@ void centreAide111() {
         check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 67
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lot M4) : la plus recente
+        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lots M4, M5) : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -36331,8 +36337,8 @@ void didacticielAide11228() {
     const auto start = ix.ofChapter(hc::Chapter::Start);
     std::size_t enBas = 0;
     for (std::size_t i = start.size() >= 7 ? start.size() - 7 : 0; i < start.size(); ++i) enBas += start[i]->sub == "Le didacticiel" ? 1u : 0u;
-    // 1.12.30 : + Le zoom des pages (14 pages).
-    check(start.size() == 21 && enBas == 7, "centre : IHM Studio, Demarrer a 14 pages et Le didacticiel (7), en bas ("
+    // 1.12.30 : + Le zoom des pages (14 pages). 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (15 pages).
+    check(start.size() == 22 && enBas == 7, "centre : IHM Studio, Demarrer a 15 pages et Le didacticiel (7), en bas ("
                                                 + std::to_string(start.size()) + ")");
     hc::TreeState st;
     st.current = "parcours-symbole";
@@ -40532,6 +40538,485 @@ void utilisationsM1_1140() {
     }
 }
 
+// ---- 1.14.0 (lot M5) : CHERCHER LES FICHIERS DE L'APPLI SUR LE PC ------------------------------------------
+//  "dans le menu principal ajoute un chercheur de fichiers compatibles sur TOUT le pc des extensions specifiques de
+//  l'application avec un filtre pour les extensions". Un faux arbre dans un dossier temporaire : chaque extension du
+//  catalogue (en majuscules et en minuscules), un lien symbolique en boucle, un lien vers un fichier, un dossier
+//  interdit, des dossiers a passer (la Corbeille, un dossier cache), un .zip. Le moteur (finder), le volet
+//  (FileFinderPane) pilote sans ecran, les gestes, la bibliotheque.
+void chercheur1140() {
+    std::printf("1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC\n");
+    namespace fs = std::filesystem;
+    namespace fd = app::finder;
+    namespace pa = project::archive;
+    using Pane = app::FileFinderPane;
+    struct EditionGuard {
+        core::Edition before = core::edition();
+        ~EditionGuard() { core::setEdition(before); }
+    } editionGuard;
+    std::string clipboard;
+    {
+        ui::PlatformServices s;
+        s.measureWidth = [](std::string_view t, gfx::FontId) { return 7.f * static_cast<float>(t.size()); };
+        s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+        s.clipboardGet = [&clipboard] { return clipboard; };
+        s.clipboardSet = [&clipboard](std::string_view t) { clipboard = std::string(t); };
+        ui::installPlatformServices(std::move(s));
+    }
+    const fs::path root = fs::temp_directory_path() / ("xpg-chercheur-" + std::to_string(static_cast<long>(::getpid())));
+    const fs::path big = fs::temp_directory_path() / ("xpg-chercheur-gros-" + std::to_string(static_cast<long>(::getpid())));
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::remove_all(big, ec);
+    const auto write = [](const fs::path& p, const std::string& text) {
+        std::error_code e;
+        fs::create_directories(p.parent_path(), e);
+        std::ofstream(p, std::ios::binary) << text;
+    };
+    const auto str = [](const fs::path& p) { return p.string(); };
+    const std::string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<PGMExchangeFile>\r\n\t<fileHeader company=\"Schneider Automation\" "
+                            "product=\"Control Expert V15.3 - 230214C\" dateTime=\"date_and_time#2026-9-3-14:18:52\" content=\"Fichier source\" "
+                            "DTDVersion=\"41\"></fileHeader>\r\n</PGMExchangeFile>\r\n";
+    // ---- le faux arbre ----
+    write(root / "Projets" / "Station" / "project.xpgproj", "# IHM Studio project. Safe to read; edit with care.\nformatVersion = 1\nname = Station\n"
+                                                           "version = 1.2.0\nstate = DEV\nedition = ihm\n");
+    write(root / "Projets" / "Ancien" / "PROJECT.XPGPROJ", "# 1.11\nname = Ancien\nversion = 0.9\nstate = FINISH\n");
+    write(root / "Exports" / "MAST.XPG", xml);
+    write(root / "Exports" / "config.xhw", xml);
+    write(root / "Exports" / "Base.Xdb", "<?xml version=\"1.0\"?><DDTExchangeFile><fileHeader company=\"Schneider\" product=\"Unity Pro XL V13.1 - 180823C\"></fileHeader>");
+    write(root / "Exports" / "Projet.XEF", "pas du XML");
+    {
+        pa::Manifest m;
+        m.kind = pa::Kind::Ihm;
+        m.kindKnown = true;
+        m.tool = "IHM Studio 1.13.1";
+        m.project = "Station";
+        m.folder = "Station";
+        pa::Item it;
+        it.path = "project.xpgproj";
+        const std::string body = "version = 1.2.0\n";
+        it.data = std::make_shared<const pa::Bytes>(body.begin(), body.end());
+        auto zip = pa::pack(m, {it});
+        check(static_cast<bool>(zip), "l'essai : une vraie archive .xihm");
+        if (zip) write(root / "Archives" / "Station.xihm", std::string(zip->begin(), zip->end()));
+        pa::Manifest z;
+        pa::Item inner;
+        inner.path = "dossier/Vue_Zip.xpgvues";
+        inner.data = std::make_shared<const pa::Bytes>(body.begin(), body.end());
+        pa::Item readme;
+        readme.path = "lisezmoi.txt";
+        readme.data = inner.data;
+        auto plain = pa::pack(z, {inner, readme});
+        if (plain) write(root / "Autres" / "sauvegarde.zip", std::string(plain->begin(), plain->end()));
+    }
+    write(root / "Archives" / "Automate.XAPI", "PK pas une archive");
+    for (const char* n : {"Vues.XPGVUES", "Sym.xpgsymboles", "Types.XPGTYPES", "Fonctions.xpgfonctions", "Scripts.xpgscripts", "Ops.xpgst", "Modele.XPGMODELE"})
+        write(root / "Paquets" / n, "paquet");
+    write(root / "Biblio" / "AlmUuid.dfb", "# Derived function block, shared.\nname = AlmUuid\nversion = 1.00\n#! summary = Compose l'identifiant ; d'une alarme.\n");
+    write(root / "Biblio" / "ST_Mesure.DDT", "# Derived data type, shared.\nname = ST_Mesure\nversion = 0.02\n");
+    write(root / "Biblio" / "Ma_Macro.mac", "(* Ma_Macro\n\n   #! summary = Une macro d'essai.\n   #! version = 1.10\n*)\n");
+    write(root / "Biblio" / "Gaz-1.4.0.XPGBIB", "PK");
+    write(root / "Autres" / "Bleu.xpgtheme", "theme");
+    write(root / "Autres" / "Essai.XREC", "rec");
+    write(root / "Autres" / "notes.txt", "rien");
+    write(root / "Autres" / "image.png", "rien");
+    write(root / "$Recycle.Bin" / "Vieux.xpg", xml);
+    write(root / ".cache" / "Cache.xpg", xml);
+    write(root / "interdit" / "Secret.xpg", xml);
+    fs::create_directory_symlink(root, root / "boucle", ec);
+    check(!ec, "l'essai : le lien symbolique en boucle (boucle -> la racine)");
+    fs::create_symlink(root / "Exports" / "MAST.XPG", root / "Exports" / "lien.xpg", ec);
+    fs::permissions(root / "interdit", fs::perms::none, ec);
+    const std::vector<std::string> refused{str(root / "interdit")};
+
+    // ---- 1. le catalogue ----
+    check(fd::catalog().size() == 20, "le catalogue : 20 extensions (" + std::to_string(fd::catalog().size()) + ")");
+    {
+        const auto g = fd::groups();
+        check(g.size() == 5 && g[0] == "Projets" && g[1] == "Exports Control Expert" && g[2] == "Paquets IHM" && g[3] == "Biblioth\xC3\xA8ques"
+                  && g[4] == "Autres",
+              "les groupes : Projets, Exports Control Expert, Paquets IHM, Biblioth\xC3\xA8ques, Autres");
+    }
+    check(fd::keyOf("MAST.XPG") == "xpg" && fd::keyOf("a.XpGvUeS") == "xpgvues" && fd::keyOf("PROJECT.XPGPROJ") == "xpgproj"
+              && fd::keyOf("notes.txt").empty() && fd::keyOf("sans_extension").empty() && fd::keyOf("x.") .empty(),
+          "l'extension sans la casse ; une autre extension : rien");
+    {
+        std::size_t api = 0, ihm = 0;
+        for (const auto& e : fd::catalog()) {
+            if (fd::mine(e, core::Edition::Api)) ++api;
+            if (fd::mine(e, core::Edition::Ihm)) ++ihm;
+        }
+        check(api == 10 && ihm == 12, "Celles d'API Studio : 10 ; Celles d'IHM Studio : 12 (le projet et le th\xC3\xA8me aux deux) ["
+                                          + std::to_string(api) + ", " + std::to_string(ihm) + "]");
+    }
+    // ---- 2. les dossiers passes ----
+    check(fd::skipFolder("$Recycle.Bin", false, false) && fd::skipFolder("System Volume Information", false, false)
+              && fd::skipFolder("Windows", true, false) && fd::skipFolder("Program Files (x86)", true, false) && fd::skipFolder("ProgramData", true, false)
+              && !fd::skipFolder("Windows", false, false) && !fd::skipFolder("Projets", true, false) && fd::skipFolder("cache", false, true),
+          "passer : la Corbeille partout, Windows et Program Files \xC3\xA0 la racine d'un lecteur, un dossier cach\xC3\xA9 ; pas un dossier Windows ailleurs");
+    // ---- 3. la version lue dans l'en-tete ----
+    {
+        std::string ed;
+        same_text(fd::readVersion(str(root / "Projets" / "Station" / "project.xpgproj"), "xpgproj", &ed), "1.2.0 \xC2\xB7 DEV", "version : un projet (son manifeste)");
+        check(ed == "ihm", "un projet : son application (edition = ihm)");
+        same_text(fd::readVersion(str(root / "Exports" / "MAST.XPG"), "xpg"), "Control Expert V15.3", "version : un .XPG (fileHeader product, sans la construction)");
+        same_text(fd::readVersion(str(root / "Exports" / "Base.Xdb"), "xdb"), "Unity Pro XL V13.1", "version : un .XDB");
+        check(fd::readVersion(str(root / "Exports" / "Projet.XEF"), "xef").empty(), "version : un fichier qui n'est pas du XML - rien");
+        same_text(fd::readVersion(str(root / "Archives" / "Station.xihm"), "xihm", &ed), "1.13.1", "version : une archive .xihm (son manifeste.txt, sans tout lire)");
+        check(ed == "ihm", "une archive : son genre");
+        check(fd::readVersion(str(root / "Archives" / "Automate.XAPI"), "xapi").empty(), "version : une archive illisible - rien, sans erreur");
+        same_text(fd::readVersion(str(root / "Biblio" / "AlmUuid.dfb"), "dfb"), "1.00", "version : un bloc DFB (version =)");
+        same_text(fd::readVersion(str(root / "Biblio" / "Ma_Macro.mac"), "mac"), "1.10", "version : une macro (#! version =)");
+    }
+
+    // ---- 4. le parcours ----
+    fd::Search search;
+    fd::Request rq;
+    rq.roots = {str(root)};
+    rq.refuseForTests = refused;
+    search.start(rq);
+    search.wait();
+    {
+        const auto p = search.progress();
+        const auto hits = search.since(0);
+        check(p.finished && !p.running && !p.stopped && p.generation == 1, "la recherche va au bout");
+        check(hits.size() == 21, "21 fichiers : chaque extension du catalogue, deux projets (" + std::to_string(hits.size()) + ")");
+        std::map<std::string, int> byKey;
+        bool bad = false;
+        for (const auto& h : hits) {
+            ++byKey[h.key];
+            bad = bad || h.path.find("$Recycle.Bin") != std::string::npos || h.path.find(".cache") != std::string::npos
+               || h.path.find("interdit") != std::string::npos || h.path.find("boucle") != std::string::npos
+               || h.path.find("lien.xpg") != std::string::npos || h.key.empty();
+        }
+        check(byKey.size() == 20 && byKey["xpgproj"] == 2 && byKey["xpg"] == 1 && byKey["xrec"] == 1 && byKey["xpgvues"] == 1,
+              "chaque extension trouv\xC3\xA9" "e, en majuscules comme en minuscules");
+        check(!bad, "ni la Corbeille, ni le dossier cach\xC3\xA9, ni le dossier interdit, ni par le lien en boucle, ni le lien vers MAST.XPG");
+        check(p.refused == 1 && p.links == 2 && p.skipped == 2 && p.folders >= 9,
+              "1 dossier refus\xC3\xA9, 2 liens pass\xC3\xA9s, 2 dossiers pass\xC3\xA9s ; " + std::to_string(p.folders) + " dossiers lus ["
+                  + std::to_string(p.refused) + ", " + std::to_string(p.links) + ", " + std::to_string(p.skipped) + "]");
+        const std::string line = fd::progressText(p);
+        check(line.rfind("Termin\xC3\xA9 : 21 fichiers dans ", 0) == 0 && line.find("1 dossier refus\xC3\xA9") != std::string::npos
+                  && line.find("2 liens pass\xC3\xA9s") != std::string::npos,
+              "la fin dite : " + line);
+        const fd::Hit* station = nullptr;
+        for (const auto& h : hits)
+            if (h.key == "xpgproj" && h.version.rfind("1.2.0", 0) == 0) station = &h;
+        check(station && station->name == "Station" && station->edition == "ihm" && fd::typeText(*station) == "Projet IHM Studio"
+                  && station->dir == str(root / "Projets" / "Station"),
+              "un projet : le nom de son dossier, son application, sa version");
+    }
+    // Sans passer les dossiers systeme et caches : la Corbeille et le cache sont lus.
+    rq.skipSystem = false;
+    search.start(rq);
+    search.wait();
+    check(search.found() == 23 && search.progress().generation == 2, "sans passer les dossiers syst\xC3\xA8me : 23 (la Corbeille, le cache)");
+    // Dans les .zip aussi.
+    rq.skipSystem = true;
+    rq.zips = true;
+    search.start(rq);
+    search.wait();
+    {
+        const auto hits = search.since(0);
+        const fd::Hit* inZip = nullptr;
+        for (const auto& h : hits)
+            if (!h.archive.empty()) inZip = &h;
+        check(hits.size() == 22 && search.progress().zips == 1, "dans les .zip aussi : 22, un .zip lu");
+        check(inZip && inZip->name == "Vue_Zip.xpgvues" && inZip->archive == str(root / "Autres" / "sauvegarde.zip")
+                  && inZip->dir.find("sauvegarde.zip \xE2\x80\xBA dossier") != std::string::npos,
+              "un fichier dans un .zip : le .zip, son dossier dedans");
+        if (inZip) {
+            fd::Context ctx;
+            ctx.edition = core::Edition::Ihm;
+            ctx.workspace = ctx.hmiProject = true;
+            check(!fd::openGesture(*inZip, ctx).enabled && fd::openGesture(*inZip, ctx).why.find(".zip") != std::string::npos
+                      && !fd::importGesture(*inZip, ctx).enabled,
+                  "dans un .zip : ni Ouvrir ni Importer (extrais-la d'abord)");
+        }
+    }
+    rq.zips = false;
+    // ---- 5. Arreter en cours de route ----
+    for (int a = 0; a < 40; ++a)
+        for (int b = 0; b < 40; ++b) write(big / ("d" + std::to_string(a)) / ("s" + std::to_string(b)) / "Bloc.dfb", "version = 1.00\n");
+    {
+        fd::Request r2;
+        r2.roots = {str(big)};
+        search.start(r2);
+        search.stop();
+        const auto p = search.progress();
+        check(p.stopped && !p.running && !p.finished, "Arr\xC3\xAAter : la recherche s'arr\xC3\xAAte tout de suite (l'\xC3\xA9" "cran le dit sans attendre)");
+        search.wait();
+        const auto after = search.progress();
+        check(after.stopped && !after.finished && search.found() < 1600,
+              "Arr\xC3\xAAter : le fil s'est arr\xC3\xAAt\xC3\xA9 avant la fin (" + std::to_string(search.found()) + " sur 1600)");
+        check(fd::progressText(after).rfind("Arr\xC3\xAAt\xC3\xA9" "e : ", 0) == 0, "Arr\xC3\xAAt\xC3\xA9" "e : ce qui est trouv\xC3\xA9 reste");
+        search.start(rq);
+        search.wait();
+        check(search.found() == 21 && search.progress().finished, "une nouvelle recherche apr\xC3\xA8s l'arr\xC3\xAAt : elle va au bout");
+    }
+
+    // ---- 6. le volet ----
+    core::setEdition(core::Edition::Ihm);
+    fd::Search shared;
+    std::vector<std::string> opened, imported, recents, revealed;
+    std::string saved;
+    fd::Context ctx;
+    ctx.edition = core::Edition::Ihm;
+    ctx.workspace = true;
+    ctx.hmiProject = true;
+    {
+        Pane pane("chercher1140", shared);
+        Pane::Hosts h;
+        h.context = [&ctx] { return ctx; };
+        h.open = [&opened](const fd::Hit& x) { opened.push_back(x.path); };
+        h.import = [&imported](const fd::Hit& x) { imported.push_back(x.path); };
+        h.addRecent = [&recents](const fd::Hit& x) { recents.push_back(fd::projectFolderOf(x)); };
+        h.reveal = [&revealed](const std::string& p) {
+            revealed.push_back(p);
+            return std::string{};
+        };
+        h.saveChoices = [&saved](const std::string& t) { saved = t; };
+        pane.setHosts(h);
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        check(pane.whereBox().items().size() == 4 && pane.whereBox().items()[3].label == "Un dossier\xE2\x80\xA6"
+                  && pane.whereBox().items()[0].label.rfind("Tout le PC (", 0) == 0,
+              "O\xC3\xB9 chercher : Tout le PC (ses lecteurs), le lecteur du syst\xC3\xA8me, Mes documents, Un dossier\xE2\x80\xA6");
+        check(pane.mineButton().text() == "Celles d'IHM Studio", "le bouton : Celles d'IHM Studio (dans IHM Studio)");
+        check(pane.stopButton().enabled() == false && pane.searchButton().enabled(), "avant : Chercher, pas Arr\xC3\xAAter");
+        pane.setTestRoots({str(root)}, refused);
+        pane.start();
+        check(pane.searching() || shared.progress().finished, "Chercher : la recherche part");
+        shared.wait();
+        pane.poll(true);
+        check(!pane.searching() && pane.hits().size() == 21 && pane.rows().size() == 21, "le volet : 21 fichiers, tous montr\xC3\xA9s");
+        check(pane.progressLine().rfind("Termin\xC3\xA9", 0) == 0 && pane.searchButton().enabled() && !pane.stopButton().enabled(),
+              "la fin : Termin\xC3\xA9 ..., Chercher de nouveau permis");
+        check(pane.countOf("xpgproj") == 2 && pane.countOf("xpg") == 1 && pane.chipKeys().size() == 20,
+              "le nombre trouv\xC3\xA9 par extension ; une puce par extension trouv\xC3\xA9" "e");
+        // le nom
+        pane.nameField().setText("station");
+        check(pane.rows().size() == 2, "Nom contient \xC2\xAB station \xC2\xBB au fil de la frappe : le projet Station et Station.xihm");
+        pane.setNameFilter("STATION -xihm");
+        check(pane.rows().size() == 1 && pane.rows().front()->key == "xpgproj", "sans la casse, -mot exclut");
+        pane.setNameFilter("");
+        check(pane.rows().size() == 21, "le nom effac\xC3\xA9 : tout revient");
+        // les extensions, les puces
+        pane.setExtension("xpg", false);
+        check(pane.rows().size() == 20 && pane.extensionBox("xpg")->state() == ui::Checkbox::State::Unchecked && pane.countOf("xpg") == 1,
+              "d\xC3\xA9" "cocher .xpg : cach\xC3\xA9, toujours compt\xC3\xA9");
+        pane.toggleChip("xpg");
+        check(pane.rows().size() == 21 && pane.extensionOn("xpg"), "sa puce : montr\xC3\xA9 de nouveau");
+        pane.extensionBox("xrec")->setState(ui::Checkbox::State::Unchecked);
+        check(pane.rows().size() == 20 && !pane.extensionOn("xrec"), "la case d\xC3\xA9" "coch\xC3\xA9" "e \xC3\xA0 la souris : le filtre suit");
+        pane.checkNone();
+        check(pane.rows().empty(), "Rien : plus rien de montr\xC3\xA9");
+        pane.checkMine();
+        {
+            bool onlyIhm = true;
+            for (const auto* r : pane.rows()) onlyIhm = onlyIhm && fd::info(r->key)->studio != fd::Studio::Api;
+            check(pane.rows().size() == 13 && onlyIhm, "Celles d'IHM Studio : 13 fichiers, aucun d'API Studio");
+        }
+        core::setEdition(core::Edition::Api);
+        pane.checkMine();
+        check(pane.rows().size() == 11, "Celles d'API Studio (dans API Studio) : 11 (" + std::to_string(pane.rows().size()) + ")");
+        core::setEdition(core::Edition::Ihm);
+        pane.checkAll();
+        check(pane.rows().size() == 21, "Tout : 21");
+        check(saved.find("ext=xpgproj,xihm,xapi") != std::string::npos && saved.find("|dossier=") != std::string::npos,
+              "le choix est gard\xC3\xA9 dans les r\xC3\xA9glages : " + saved);
+        // le tri
+        pane.sortBy(Pane::ColName, true);
+        {
+            const auto rows = pane.rows();
+            check(!rows.empty() && rows.front()->folded == "almuuid.dfb" && rows.back()->folded == "vues.xpgvues",
+                  "tri par nom : AlmUuid.dfb d'abord, Vues.XPGVUES \xC3\xA0 la fin, sans la casse");
+        }
+        pane.sortBy(Pane::ColName, false);
+        check(pane.rows().front()->folded == "vues.xpgvues", "tri par nom, \xC3\xA0 l'envers");
+        pane.sortBy(Pane::ColSize, false);
+        {
+            const auto rows = pane.rows();
+            check(std::is_sorted(rows.begin(), rows.end(), [](const fd::Hit* a, const fd::Hit* b) { return a->size > b->size; }) && rows.front()->size >= 200,
+                  "tri par taille, la plus grande d'abord");
+        }
+        pane.sortBy(Pane::ColType, true);
+        check(pane.rows().size() == 21, "tri par type : toujours 21");
+        // les gestes
+        const auto pathOf = [&root](std::initializer_list<const char*> parts) {
+            fs::path p = root;
+            for (const char* x : parts) p /= x;
+            return p.string();
+        };
+        check(pane.select(pathOf({"Exports", "MAST.XPG"})), "choisir MAST.XPG");
+        {
+            const auto g = pane.gesture(Pane::Act::Open);
+            check(g.enabled && g.label == "Ouvrir avec API Studio" && pane.actionButton(Pane::Act::Open).text() == "Ouvrir avec API Studio",
+                  "un .XPG dans IHM Studio : Ouvrir avec API Studio (le bouton le dit)");
+            check(!pane.gesture(Pane::Act::Import).enabled && pane.gesture(Pane::Act::Import).why.find("API Studio") != std::string::npos,
+                  "et Importer gris\xC3\xA9 : il s'importe dans API Studio");
+        }
+        check(pane.activate() && opened.size() == 1 && opened.back() == pathOf({"Exports", "MAST.XPG"}), "le double-clic : Ouvrir (l'h\xC3\xB4te lance API Studio)");
+        check(pane.select(pathOf({"Paquets", "Vues.XPGVUES"})), "choisir un paquet de vues");
+        check(!pane.gesture(Pane::Act::Open).enabled && pane.gesture(Pane::Act::Import).enabled
+                  && pane.actionButton(Pane::Act::Import).enabled(),
+              "un paquet dans IHM Studio, un projet ouvert : Importer dans le projet (Ouvrir gris\xC3\xA9 : il s'importe)");
+        check(pane.activate() && imported.size() == 1 && imported.back() == pathOf({"Paquets", "Vues.XPGVUES"}),
+              "le double-clic sur un paquet : Importer (la fen\xC3\xAAtre Importer de l'\xC3\xA9" "cran)");
+        ctx.workspace = false;
+        check(!pane.gesture(Pane::Act::Import).enabled && pane.gesture(Pane::Act::Import).why.find("ouvre d'abord le projet IHM") != std::string::npos,
+              "depuis l'accueil : Importer gris\xC3\xA9 (ouvre d'abord le projet)");
+        ctx.workspace = true;
+        check(pane.select(pathOf({"Autres", "Essai.XREC"})), "choisir un enregistrement");
+        check(!pane.gesture(Pane::Act::Import).enabled && pane.gesture(Pane::Act::Import).why.find("pas dans cette version") != std::string::npos
+                  && !pane.activate() && pane.message().find("pas dans cette version") != std::string::npos,
+              "un .xrec : Importer dans Ressources \xE2\x80\xBA Enregistrements gris\xC3\xA9 (pas dans cette version), le double-clic le dit");
+        ctx.recordings = true;
+        check(pane.gesture(Pane::Act::Import).enabled && pane.gesture(Pane::Act::Import).label == "Importer dans Ressources \xE2\x80\xBA Enregistrements",
+              "les enregistrements l\xC3\xA0 (le lot M4) : l'import s'ouvre");
+        ctx.recordings = false;
+        check(pane.select(pathOf({"Projets", "Station", "project.xpgproj"})), "choisir le projet Station");
+        check(pane.gesture(Pane::Act::Open).enabled && pane.gesture(Pane::Act::Open).label == "Ouvrir" && pane.gesture(Pane::Act::Recent).enabled,
+              "un projet IHM dans IHM Studio : Ouvrir, Ajouter aux r\xC3\xA9" "cents");
+        check(pane.run(Pane::Act::Recent) && recents.size() == 1 && recents.back() == pathOf({"Projets", "Station"}),
+              "Ajouter aux r\xC3\xA9" "cents : le dossier du projet");
+        check(pane.run(Pane::Act::CopyPath) && clipboard == pathOf({"Projets", "Station", "project.xpgproj"})
+                  && pane.message().rfind("Chemin copi\xC3\xA9", 0) == 0,
+              "Copier le chemin : le presse-papiers");
+        check(pane.run(Pane::Act::Reveal) && revealed.size() == 1 && revealed.back() == pathOf({"Projets", "Station", "project.xpgproj"}),
+              "Ouvrir le dossier : l'Explorateur, le fichier choisi");
+        check(pane.select(pathOf({"Biblio", "AlmUuid.dfb"})), "choisir un bloc DFB");
+        check(!pane.gesture(Pane::Act::Open).enabled && !pane.gesture(Pane::Act::Import).enabled && !pane.gesture(Pane::Act::Recent).enabled
+                  && !pane.activate(),
+              "un bloc DFB dans IHM Studio : ni Ouvrir ni Importer (la biblioth\xC3\xA8que d'API Studio)");
+        // le clic droit : les memes gestes
+        check(pane.select(pathOf({"Exports", "MAST.XPG"})), "choisir MAST.XPG de nouveau");
+        {
+            const auto labels = pane.contextLabels();
+            check(labels.size() == 6 && labels[0] == "MAST.XPG" && labels[1] == "Ouvrir avec API Studio" && labels[2] == "Ouvrir le dossier"
+                      && labels[3] == "Copier le chemin" && labels[4].rfind("Importer dans le projet (gris\xC3\xA9", 0) == 0,
+                  "le clic droit : le fichier en t\xC3\xAA" "te, puis les m\xC3\xAAmes gestes (gris\xC3\xA9s : pourquoi)");
+            clipboard.clear();
+            check(pane.chooseContext(Pane::Act::CopyPath) && clipboard == pathOf({"Exports", "MAST.XPG"}), "le clic droit \xE2\x80\xBA Copier le chemin");
+            pane.table().openContextMenu({300.f, 200.f});
+            const auto* menu = pane.table().contextMenu();
+            check(menu && findItem(menu->columnItems(0), "Ouvrir avec API Studio") && findItem(menu->columnItems(0), "Ouvrir le dossier"),
+                  "le menu du tableau porte les gestes");
+            if (menu) const_cast<ui::PopupMenu*>(menu)->close();
+        }
+        // la page dessinee
+        {
+            Recorder rec;
+            pane.layout();
+            pane.render(ui::PaintContext{rec, ui::Theme::dark(), {0, 0, 1600, 900}, 0.0, nullptr});
+            check(rec.wrote("EXTENSIONS") && rec.wrote("OPTIONS") && rec.wrote(".xpgproj  Projet (dossier)") && rec.wrote("BIBLIOTH\xC3\x88QUES"),
+                  "la page : les extensions par groupes, les options");
+            check(rec.wrote("Afficher :") && rec.wrote(".xpgproj  2"), "la page : les puces des extensions trouv\xC3\xA9" "es, avec leur nombre");
+            check(rec.wrote("Termin\xC3\xA9 : 21 fichiers"), "la page : la progression");
+            check(rec.wrote("Station.xihm") && rec.wrote("Archive IHM Studio") && rec.wrote("Control Expert V15.3") && rec.wrote("1.2.0 \xC2\xB7 DEV"),
+                  "la page : le tableau (le nom, le type, la version)");
+        }
+        // le choix relu
+        {
+            auto c = pane.choices();
+            c.where = fd::Where::Folder;
+            c.folder = "D:\\Affaires|2025";
+            c.zips = true;
+            c.extensions = {"xpg", "xihm"};
+            const auto back = fd::parseChoices(fd::serialize(c));
+            check(back.where == fd::Where::Folder && back.folder == "D:\\Affaires|2025" && back.zips && back.skipSystem && back.extensions.size() == 2,
+                  "le choix \xC3\xA9" "crit puis relu (le dossier, les options, les extensions)");
+            check(fd::parseChoices("").extensions.size() == 20 && !fd::parseChoices("").zips, "le premier lancement : toutes les extensions, sans les .zip");
+            pane.setChoices(back);
+            check(pane.where() == fd::Where::Folder && pane.option(Pane::Option::Zips) && pane.rows().size() == 2,
+                  "le choix pos\xC3\xA9 : Un dossier\xE2\x80\xA6, les .zip, deux extensions montr\xC3\xA9" "es");
+        }
+    }
+    // Un autre volet sur la meme recherche (l'onglet rouvert) : les resultats sont la.
+    {
+        Pane again("chercher1140b", shared);
+        check(again.hits().size() == 21, "le volet rouvert : les derniers r\xC3\xA9sultats sont l\xC3\xA0 (tant que l'appli est ouverte)");
+    }
+    // Le volet ferme pendant sa recherche : elle s'arrete.
+    {
+        fd::Search s3;
+        {
+            Pane closing("chercher1140c", s3);
+            closing.setTestRoots({str(big)});
+            closing.start();
+        }
+        check(s3.progress().stopped, "l'onglet ferm\xC3\xA9 pendant la recherche : elle s'arr\xC3\xAAte");
+        s3.wait();
+    }
+    // ---- 7. les gestes, sans le volet ----
+    {
+        fd::Hit dfb;
+        dfb.key = "dfb";
+        dfb.path = "/x/AlmUuid.dfb";
+        fd::Context api;
+        api.edition = core::Edition::Api;
+        api.workspace = api.plcProject = true;
+        check(fd::importGesture(dfb, api).enabled && fd::importGesture(dfb, api).label == "Ajouter \xC3\xA0 la biblioth\xC3\xA8que",
+              "un bloc DFB dans API Studio : Ajouter \xC3\xA0 la biblioth\xC3\xA8que");
+        fd::Hit vues;
+        vues.key = "xpgvues";
+        check(fd::openGesture(vues, api).enabled && fd::openGesture(vues, api).label == "Ouvrir avec IHM Studio",
+              "un paquet de vues dans API Studio : Ouvrir avec IHM Studio (il s'importe la-bas)");
+        fd::Hit proj;
+        proj.key = "xpgproj";
+        proj.edition = "api";
+        check(fd::openGesture(proj, ctx).label == "Ouvrir avec API Studio" && !fd::recentGesture(proj, ctx).enabled,
+              "un projet d'API Studio dans IHM Studio : Ouvrir avec API Studio, pas dans les r\xC3\xA9" "cents d'ici");
+        fd::Hit xpg;
+        xpg.key = "xpg";
+        check(fd::importGesture(xpg, api).enabled, "un .XPG dans API Studio, un projet ouvert : Importer dans le projet");
+        api.plcProject = false;
+        check(!fd::importGesture(xpg, api).enabled && fd::importGesture(xpg, api).why.find("ouvre d'abord") != std::string::npos,
+              "sans projet : gris\xC3\xA9 (ouvre d'abord le projet)");
+        fd::Hit theme;
+        theme.key = "xpgtheme";
+        check(fd::importGesture(theme, ctx).enabled && fd::importGesture(theme, ctx).label == "Ajouter aux th\xC3\xA8mes", "un th\xC3\xA8me : Ajouter aux th\xC3\xA8mes");
+        check(fd::studioOf(proj, core::Edition::Ihm) == fd::Studio::Api && fd::openedHere(xpg, core::Edition::Api) && !fd::openedHere(xpg, core::Edition::Ihm),
+              "l'application de chaque fichier");
+    }
+    // ---- 8. la bibliotheque : un .dfb, une macro ----
+    {
+        project::SharedLibrary lib(str(root / "libs"));
+        (void)lib.scan();
+        auto added = lib.importFile(str(root / "Biblio" / "AlmUuid.dfb"));
+        check(added && added->name == "AlmUuid" && added->version == "1.00" && added->category == "Importes"
+                  && fs::exists(root / "libs" / "Importes" / "AlmUuid.dfb"),
+              "Ajouter \xC3\xA0 la biblioth\xC3\xA8que : le bloc copi\xC3\xA9 dans libs/Importes, son nom et sa version (son en-t\xC3\xAA" "te)");
+        std::ifstream index(root / "libs" / "index.txt");
+        const std::string text((std::istreambuf_iterator<char>(index)), std::istreambuf_iterator<char>());
+        check(text.find("dfb ; Importes ; AlmUuid ; 1.00 ;  ; Compose l'identifiant , d'une alarme.") != std::string::npos,
+              "et sa ligne dans l'index (le r\xC3\xA9sum\xC3\xA9, sans son point-virgule)");
+        auto twice = lib.importFile(str(root / "Biblio" / "AlmUuid.dfb"));
+        check(!twice && twice.error().message().find("d\xC3\xA9j\xC3\xA0 dans la biblioth\xC3\xA8que") != std::string::npos,
+              "deux fois : refus\xC3\xA9 (rien n'est remplac\xC3\xA9 sans le dire)");
+        auto macro = lib.importFile(str(root / "Biblio" / "Ma_Macro.mac"));
+        check(macro && macro->name == "Ma_Macro" && macro->kind == project::LibraryItemKind::Macro && macro->version == "1.10"
+                  && fs::exists(root / "libs" / "Macros" / "Ma_Macro.mac"),
+              "une macro : dans libs/Macros, sa version (#! version)");
+        check(!lib.importFile(str(root / "Autres" / "notes.txt")), "un autre fichier : refus\xC3\xA9");
+        project::SharedLibrary again(str(root / "libs"));
+        (void)again.scan();
+        check(again.find("AlmUuid") && again.find("Ma_Macro"), "relue : la biblioth\xC3\xA8que les a");
+    }
+    // ---- 9. le raccourci ----
+    same_text(help::keys::bindingOf("app.findFiles"), "Ctrl+Shift+P", "Ctrl+Maj+P : Chercher des fichiers sur ce PC (Ctrl+Maj+O est l'import du .XHW)");
+
+    fs::permissions(root / "interdit", fs::perms::owner_all, ec);
+    fs::remove_all(root, ec);
+    fs::remove_all(big, ec);
+    {
+        ui::PlatformServices s;
+        s.measureWidth = [](std::string_view t, gfx::FontId) { return 8.f * static_cast<float>(t.size()); };
+        s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+        ui::installPlatformServices(std::move(s));
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.14.0 (lot M4) : HMI_TEST_M4=1 - enregistrer et rejouer l'IHM a l'ecran, seul.
     if (const char* only = std::getenv("HMI_TEST_M4"); only && *only == '1') {
@@ -40542,6 +41027,12 @@ int main(int argc, char** argv) {
     // 1.14.0 (lot M1) : HMI_TEST_M1=1 - la colonne Utilisations et Voir les usages, seuls.
     if (const char* only = std::getenv("HMI_TEST_M1"); only && *only == '1') {
         utilisationsM1_1140();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.14.0 (lot M5) : HMI_TEST_M5=1 - chercher les fichiers de l'appli sur le PC, seul.
+    if (const char* only = std::getenv("HMI_TEST_M5"); only && *only == '1') {
+        chercheur1140();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -41145,6 +41636,7 @@ int main(int argc, char** argv) {
     typesOnglets1131();                     // 1.13.1 (lot K4) : les types dans leurs onglets, et dans leur onglet de document
     enregistrements1140();                  // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM a l'ecran
     utilisationsM1_1140();                  // 1.14.0 (lot M1) : la colonne Utilisations compte les acces, Voir les usages
+    chercheur1140();                        // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

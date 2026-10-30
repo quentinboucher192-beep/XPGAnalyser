@@ -442,6 +442,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\DropFilesDialog.cpp" />
     <ClCompile Include="src\app\DropFilesPlan.cpp" />
     <ClCompile Include="src\app\FileExplorerHost.cpp" />
+    <ClCompile Include="src\app\FileFinder.cpp" />
+    <ClCompile Include="src\app\FileFinderPane.cpp" />
+    <ClCompile Include="src\app\screens\FinderWorkspace.cpp" />
     <ClCompile Include="src\app\FilePreview.cpp" />
     <ClCompile Include="src\app\SearchFocus.cpp" />
     <ClCompile Include="src\app\SimCenterOverview.cpp" />
@@ -939,6 +942,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\DropFilesDialog.hpp" />
     <ClInclude Include="src\app\DropFilesPlan.hpp" />
     <ClInclude Include="src\app\FileExplorerHost.hpp" />
+    <ClInclude Include="src\app\FileFinder.hpp" />
+    <ClInclude Include="src\app\FileFinderPane.hpp" />
     <ClInclude Include="src\app\FilePreview.hpp" />
     <ClInclude Include="src\app\SearchFocus.hpp" />
     <ClInclude Include="src\app\SimCenter.hpp" />

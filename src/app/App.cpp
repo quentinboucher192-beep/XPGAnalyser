@@ -697,6 +697,19 @@ void App::registerActions() {
     // 1.12.27 : une autre fenetre (un deuxieme projet a cote, pour copier de l'un a l'autre).
     actions_.add(Action{"app.newWindow", "Nouvelle fen\xC3\xAAtre", help::keys::bindingOf("app.newWindow"), {}, {}, nullptr,
                         [this] { openNewWindow({}); }});
+    // 1.14.0 (lot M5) : CHERCHER DES FICHIERS SUR CE PC (Ctrl+Maj+P) - l'onglet de l'ecran du projet,
+    // un ecran plein ailleurs (l'accueil : le menu principal). Le menu Projet, l'accueil (son lien, son
+    // clic droit) et Aller a / Faire (Ctrl+K) y passent.
+    actions_.add(Action{"app.findFiles", "Chercher des fichiers sur ce PC\xE2\x80\xA6", help::keys::bindingOf("app.findFiles"), {}, {}, nullptr,
+                        [this] {
+                            auto* top = menus_->top();
+                            if (auto* screen = dynamic_cast<MainAnalysisScreen*>(top)) {
+                                screen->openFileFinder();
+                                return;
+                            }
+                            if (dynamic_cast<FileFinderScreen*>(top)) return;
+                            menus_->PushMenu(std::make_unique<FileFinderScreen>(*this));
+                        }});
     // 1.8.0 : les dossiers de l'application (app/Dossiers.hpp) - l'accueil en a le
     // lien, le menu Projet l'entree.
     actions_.add(Action{"app.folders", "Dossiers de l'application...", {}, {}, {}, nullptr,
@@ -1448,6 +1461,20 @@ void App::openPath(std::string path) {
     // (IHM-Studio.exe chemin.xihm), une autre instance, un fichier lache : relue, verifiee,
     // deballee (ou l'on veut), puis le projet s'ouvre (app/ProjectExchange).
     if (exchange::openArchive(*this, path)) return;
+    // 1.14.0 (lot M5) : UN PAQUET D'IHM STUDIO (.xpgvues, .xpgsymboles, .xpgtypes, .xpgfonctions, .xpgscripts) -
+    // API Studio l'a passe ici (Chercher des fichiers > Ouvrir avec IHM Studio), ou la ligne de commande : il
+    // s'importe dans le projet ouvert (la fenetre Importer, comme un paquet lache sur la fenetre). Sans projet : le dire.
+    if (core::hasIhm() && HmiImportDialog::isPackageFile(path)) {
+        if (queueDroppedFile(path)) return;
+        const auto leaf = std::filesystem::path(path).filename().string();
+        menus_->ShowDialog(std::make_unique<MessageDialog>(
+                               "Un paquet IHM",
+                               leaf + " s'importe dans un projet IHM : ouvre d'abord le projet qui le recevra, puis "
+                                      "Importer\xE2\x80\xA6 (ou glisse le fichier sur la fen\xC3\xAAtre).",
+                               MessageDialog::Icon::Info),
+                           [](const menu::DialogResult&) {});
+        return;
+    }
     // 1.13.0 : une page web (.html) ne s'ouvre plus - un refus en francais, avant l'importeur d'API Studio (qui
     // repondait "no parser recognises this file") et sans toucher aux sources du projet en main.
     if (const auto refused = webPageRefusal(path)) {
@@ -2194,6 +2221,13 @@ void App::takeInstanceRequests() {
     // Le projet deja ouvert ici : on le garde tel quel (le relire perdrait ce qui n'est pas enregistre).
     if (!station && paths.size() == 1 && project_ && instanceSamePlace(paths.front(), projectFolder_)) {
         bus_.publish(StatusNotice{what + " est d\xC3\xA9j\xC3\xA0 ouvert ici.", 6.0});
+        return;
+    }
+    // 1.14.0 (lot M5) : des paquets IHM (Chercher des fichiers d'API Studio) s'importent dans le projet
+    // ouvert : rien ne le remplace, pas de question sur ses modifications.
+    if (!station && core::hasIhm()
+        && std::all_of(paths.begin(), paths.end(), [](const std::string& p) { return HmiImportDialog::isPackageFile(p); })) {
+        for (const auto& p : paths) openPath(p);
         return;
     }
     const bool unsaved = project_ && !projectFolder_.empty() && commands_.isModified();

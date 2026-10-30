@@ -4,7 +4,8 @@
 //  La table vient de la page des raccourcis de la maquette 1.11, validee par le
 //  client le 02/10 (60 lignes : General 22, Editeur IHM 9, Scripts 5,
 //  Simulation 11, Grafcet 6, Aide 7), plus Ctrl+Maj+O (l'import du .XHW,
-//  1.11) : 61 lignes, General 23. Elle a ete prise dans App.cpp
+//  1.11) : 61 lignes, General 23 (1.14.0 : + Ctrl+Maj+P, Chercher des fichiers
+//  sur ce PC). Elle a ete prise dans App.cpp
 //  (actions_.add), la table de HelpDocument.cpp, les sujets "raccourcis" et
 //  "onglets" du guide et le LISEZ-MOI 1.10.0.
 //
@@ -40,6 +41,10 @@ const std::vector<Shortcut> kTable = {
     {Context::General, "Ctrl+Maj+O",
      "Importer la configuration (.XHW) dans le projet ouvert",
      "1.11", "file.importHardware"},
+    // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur tout le PC (Ctrl+Maj+O est deja a l'import du .XHW).
+    {Context::General, "Ctrl+Maj+P",
+     "Chercher des fichiers sur ce PC : les projets, archives, exports, paquets et biblioth\xC3\xA8ques de l'appli",
+     "1.14.0", "app.findFiles"},
     {Context::General, "Ctrl+N",
      "Nouveau projet",
      "", "project.new"},

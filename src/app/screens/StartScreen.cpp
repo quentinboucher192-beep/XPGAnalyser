@@ -407,6 +407,7 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += rail.openCard().clicked->connect([this] { openFileDialog(); });
     uiLinks_ += rail.tutorialLink().clicked->connect([this] { showTutorial(); });
     uiLinks_ += rail.helpLink().clicked->connect([this] { triggerAction("help.open"); });
+    uiLinks_ += rail.findLink().clicked->connect([this] { triggerAction("app.findFiles"); });   // 1.14.0 (lot M5)
     uiLinks_ += rail.settingsLink().clicked->connect([this] { showSettings(); });
     // 1.8.0 : les dossiers de l'application.
     uiLinks_ += rail.foldersLink().clicked->connect([this] {
@@ -607,6 +608,11 @@ bool StartupScreen::handleKey(const ui::KeyDown& k, bool beforeWidgets) {
     // 1.12.27 : Ctrl+Maj+N - une autre fenetre (un deuxieme projet a cote).
     if (k.mods.ctrl && k.mods.shift && !k.mods.alt && !k.mods.super && k.key == Key::N) {
         if (!k.repeat) app_.openNewWindow({});
+        return true;
+    }
+    // 1.14.0 (lot M5) : Ctrl+Maj+P - Chercher des fichiers sur ce PC.
+    if (k.mods.ctrl && k.mods.shift && !k.mods.alt && !k.mods.super && k.key == Key::P) {
+        if (!k.repeat) triggerAction("app.findFiles");
         return true;
     }
     if (ui::isContextMenuKey(k)) {                     // 1.12.18 : Maj+F10, la touche Menu - le menu de la carte choisie
@@ -1243,7 +1249,7 @@ void StartupScreen::showCardMenu(gfx::Point at) {
 namespace {
 enum : int {
     kPageButton = 100, kPageNew, kPageOpen, kPageProjects, kPageSearch, kPageClear, kPageTutorial, kPageSettings,
-    kPageFolders, kPageHelp, kPageNewWindow,
+    kPageFolders, kPageHelp, kPageNewWindow, kPageFind,
     kPageFilter = 200,   // + le filtre
     kPageSort = 220,     // + le tri
     kPageTheme = 300,    // + le rang du theme
@@ -1285,7 +1291,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     // Le bouton sous la souris : son geste d'abord.
     menuButton_ = nullptr;
     auto& rail = page.rail();
-    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.tutorialLink(), &rail.helpLink(),
+    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
                                            &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton()};
     for (auto* b : buttons)
         if (b->visible() && b->bounds().contains(at) && !b->text().empty()) {
@@ -1299,6 +1305,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     if (!menuButton_) heading("Menu principal", core::productName());
     add(kPageNew, "Nouveau projet\xE2\x80\xA6", ui::Icon::Plus, "Ctrl+N");
     add(kPageOpen, "Ouvrir un projet\xE2\x80\xA6", ui::Icon::Open, "Ctrl+O");
+    add(kPageFind, "Chercher des fichiers sur ce PC\xE2\x80\xA6", ui::Icon::Search, "Ctrl+Maj+P");   // 1.14.0 (lot M5)
     add(kPageNewWindow, "Nouvelle fen\xC3\xAAtre", ui::Icon::Window, "Ctrl+Maj+N");   // un autre projet a cote
     add(kPageProjects, "Ouvrir le dossier des projets", ui::Icon::FolderOpen);
     rule();
@@ -1391,6 +1398,7 @@ void StartupScreen::pageMenuChosen(int id) {
             break;
         case kPageHelp: triggerAction("help.open"); break;
         case kPageNewWindow: app_.openNewWindow({}); break;
+        case kPageFind: triggerAction("app.findFiles"); break;   // 1.14.0 (lot M5)
         default: break;
     }
 }

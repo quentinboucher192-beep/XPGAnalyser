@@ -122,6 +122,8 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **L'historique** : Aller à (Entrée), Ouvrir dans une fenêtre, Revenir à cet état… (le double clic), Retirer de l'historique (Suppr), Vider l'historique - la liste seulement, Ctrl+Z annule toujours.
 @nouveau 1.12.27
 - **Le menu principal (l'accueil)** : une carte a son menu ; ailleurs (le vide, un bouton, la colonne de gauche), le bouton visé d'abord, puis Nouveau projet… (Ctrl+N), Ouvrir un projet… (Ctrl+O), Ouvrir le dossier des projets, Afficher › (le filtre), Trier ›, Thème ›, Chercher un projet (Ctrl+F), le didacticiel, les réglages, les dossiers de l'application, l'aide ; le panneau du projet choisi : le menu de sa carte.
+@nouveau 1.14.0
+- **Chercher des fichiers sur ce PC…** (Ctrl+Maj+P) : dans le menu principal (Chercher sur ce PC… dans la colonne de gauche, et son clic droit), le menu Projet et Aller à / Faire (Ctrl+K) - voir « Chercher des fichiers sur ce PC ».
 @nouveau 1.12.27
 - **La barre du haut et ses menus** : le clic droit sur une partie (Projet, Annuler, Simuler, la cloche...) ou sur une entrée d'un menu ouvert (Enregistrer sous…, un projet récent) : son nom en tête, Exécuter (ou Ouvrir le menu), **Épingler dans Aller à / Faire**, Copier le nom, Raccourcis clavier…, Aide.
 ### Les raccourcis
@@ -424,6 +426,40 @@ Cela marche aussi dans **une seule fenêtre** : copier dans un projet, en ouvrir
 Tire les objets choisis **hors de la fenêtre** et lâche-les sur une vue de l'autre : ils s'y posent au point du lâcher, avec ce qui leur manque, comme un collage. Dans la première fenêtre, **rien ne bouge** : c'est une copie. Échap pendant le glisser l'annule. Lâchée sur Excel ou le Bloc-notes, c'est la liste des objets (nom, genre, place, taille, valeur) qui arrive. Une colonne de noms de variables lâchée sur une vue y devient des étiquettes et des afficheurs, comme Ctrl+V.
 ### Le même projet dans deux fenêtres
 Ouvrir un projet déjà ouvert dans une autre fenêtre se demande d'abord : deux fenêtres qui enregistrent le même projet effacent les changements l'une de l'autre. **L'ouvrir quand même** reste possible (pour le relire) ; pour copier, ouvre plutôt l'autre projet.
+
+== chercher-fichiers | Chercher des fichiers sur ce PC
+: Trouver les fichiers de l'appli sur tout le PC - projets, archives, exports Control Expert, paquets IHM, bibliothèques, thèmes, enregistrements -, en arrière-plan, puis les ouvrir avec la bonne application, les importer ou les ajouter aux récents.
+@depuis 1.14.0
+@lieux chercher
+@mots Chercher des fichiers, chercher sur ce PC, Ctrl+Maj+P, fichiers compatibles, tout le PC, extensions, retrouver un projet, fichier perdu, dossiers refusés, Celles d'IHM Studio, Celles d'API Studio, Ouvrir avec API Studio, Ouvrir avec IHM Studio, Ajouter aux récents, Ajouter à la bibliothèque
+@voir onglets, archive-projet, echanges-api, paquets-de-vues, paquets-symboles, fenetres
+### L'ouvrir
+- **Projet › Chercher des fichiers sur ce PC…** (**Ctrl+Maj+P**), ou **Aller à / Faire** (Ctrl+K) : l'onglet **Chercher des fichiers**, à côté des autres ; tu continues à travailler pendant la recherche.
+- Le **menu principal** (l'accueil) : **Chercher sur ce PC…** dans la colonne de gauche, ou son clic droit (Ctrl+Maj+P aussi) : la page en plein écran, **Retour** (Échap) en haut.
+- Ctrl+Maj+O reste l'import de la configuration (.XHW) : la recherche a pris Ctrl+Maj+**P** (P comme PC).
+### Les extensions
+À gauche, les extensions de l'appli, par groupes, chacune avec le nombre trouvé :
+| Groupe | Extensions |
+| Projets | project.xpgproj (le dossier d'un projet), .xihm (archive IHM Studio), .xapi (archive API Studio) |
+| Exports Control Expert | .xpg (programme), .xhw (matériel), .xdb (base), .xef |
+| Paquets IHM | .xpgvues, .xpgsymboles, .xpgtypes, .xpgfonctions, .xpgscripts, .xpgst (opérateurs et scripts ST), .xpgmodele (modèle de vue) |
+| Bibliothèques | .xpgbib (bibliothèque IHM), .dfb, .ddt, .mac (la bibliothèque d'API Studio) |
+| Autres | .xpgtheme (thème), .xrec (enregistrement) |
+La recherche les trouve **toutes** ; les cases choisissent **ce qui se montre** : les décocher, les recocher ne relance rien. **Tout**, **Rien**, **Celles d'IHM Studio** (dans API Studio : **Celles d'API Studio**). Au-dessus du tableau, **une puce par extension trouvée**, avec son nombre : un clic la cache ou la montre. Le choix (les extensions, où chercher, les options) est **gardé** d'une séance à l'autre.
+### Où chercher, les options
+- **Tout le PC** : ses disques ; les **lecteurs réseau** mappés et les **clés USB et disques externes** selon leurs cases. **C: seulement** (le disque de Windows), **Mes documents**, ou **Un dossier…** (le champ et son bouton …).
+- **Passer Windows, Program Files, la Corbeille, les dossiers cachés** (coché au départ) : ni Windows, ni Program Files, ni ProgramData, ni la Corbeille, ni les dossiers système et cachés.
+- **Dans les archives .zip aussi** : la table des matières de chaque .zip est lue ; ce qu'il contient se montre, son dossier dit « sauvegarde.zip › dossier ». Pour l'ouvrir, extrais-le d'abord (Ouvrir le dossier montre le .zip).
+- **Nom contient…** filtre au fil de la frappe : chaque mot dans le nom, sans la casse ni les accents ; -mot l'exclut. Un projet se montre par **le nom de son dossier**.
+### La recherche
+**Chercher** la lance sur un fil à part, en priorité basse : le PC reste disponible, un lecteur réseau est lu à son rythme. Les fichiers arrivent **au fil de l'eau** ; la ligne sous la barre dit les dossiers lus, les fichiers trouvés et le dossier en cours. **Arrêter** l'arrête tout de suite : ce qui est trouvé reste. Ni les **liens symboliques** ni les **jonctions** ne sont suivis (pas de boucle) ; un dossier **refusé** (les droits) est passé sans erreur, et la fin le compte : « Terminé : 108 fichiers dans 62 311 dossiers (C:, D:), en 14 s · 12 dossiers refusés ». Les derniers résultats **restent** tant que l'appli est ouverte : l'onglet se ferme, se rouvre, ils sont là ; fermer l'onglet pendant une recherche l'arrête.
+### Le tableau et les gestes
+Nom, Type, Dossier, Taille, Modifié le et **Version**, lue dans l'en-tête quand c'est rapide et sûr : la version et l'état d'un projet, l'application qui a écrit une archive .xihm / .xapi ou un paquet, Control Expert pour un export (.xpg, .xhw, .xdb), la version d'un bloc, d'une macro, d'une bibliothèque IHM ; sinon « — ». Un clic sur un titre trie.
+- **Ouvrir** (le double-clic, Entrée) : avec **la bonne application**. Un projet, une archive ou un export de l'autre (un .XPG dans IHM Studio, un projet IHM dans API Studio) : **Ouvrir avec API Studio** (ou IHM Studio) la lance avec lui. Un paquet IHM vu d'API Studio : IHM Studio le reçoit et l'importe dans son projet ouvert.
+- **Ouvrir le dossier** : l'Explorateur, le fichier choisi. **Copier le chemin**.
+- **Importer**, selon le genre, depuis l'onglet d'un projet ouvert : un paquet IHM par la fenêtre **Importer** (ce qu'il apporte, les noms en conflit), un modèle de vue dans la galerie, une bibliothèque IHM par **Relier une bibliothèque**, un .XPG / .XHW / .XDB par la question du dépôt (le MAST, la configuration). Partout : un bloc .dfb / .ddt ou une macro .mac **à la bibliothèque** d'API Studio (libs/Importes, libs/Macros ; un nom déjà là est refusé), un thème **aux thèmes** (il s'applique). Un enregistrement (.xrec) n'a pas encore de place dans cette version : l'entrée est grisée.
+- **Ajouter aux récents** : un projet de l'application, en tête de l'accueil.
+Le **clic droit** sur une ligne propose les mêmes gestes, le fichier en tête ; une entrée grisée dit pourquoi.
 
 == plantages | Plantages et blocages : le rapport, l'historique interne
 : Si IHM Studio plante ou ne répond plus, il écrit un rapport dans le dossier crashs (à côté des réglages) - la version, le système, la pile d'appels, son historique interne - et ouvre sa fenêtre de rapport, dessinée comme l'application : ce qui s'est passé, ce qu'il faisait, le rapport. La veille du PC n'est pas un blocage.

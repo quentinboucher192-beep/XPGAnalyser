@@ -53,6 +53,8 @@ namespace hmi::decledit { struct Usage; }   // 1.14.0 (lot M1) : un endroit de V
 namespace app {
 
 class MacrosPane;   // lot macros 1 : l'onglet Macros
+class FileFinderPane;       // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (FileFinderPane.hpp)
+namespace finder { struct Hit; }
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
 class HmiLiveSource;        // 1.11.21 : un volet de code montre (hmi/HmiLive.hpp)
@@ -1010,7 +1012,7 @@ private:
     // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees (IHM > Espaces et bibliotheques) - les
     // fenetres : Relier (le fichier, l'alias), Publier (l'espace, le nom, la version, le fichier), Mettre a jour (le
     // diff de l'interface et ses ruptures), Localiser, Nouvel espace, Renommer l'espace, une definition en lecture seule.
-    void askHmiLinkLibrary();
+    void askHmiLinkLibrary(const std::string& path = {});   // 1.14.0 : `path` - le fichier deja choisi (Chercher des fichiers)
     void askHmiPublishLibrary(const std::string& space = {});
     void askHmiUpdateLibrary(const std::string& name);
     void askHmiLocateLibrary(const std::string& name);
@@ -1020,7 +1022,7 @@ private:
     // 1.11.2 (decision 188) : la fenetre d'import, sur `path` s'il est donne (un paquet lache sur l'appli), sinon
     // vide (Parcourir... dans la fenetre) ; `then` : une fois fermee (Importer ou Annuler) - le reste d'un depot.
     void askHmiImport(const std::string& path = {}, std::function<void()> then = {});
-    void askHmiImportTemplate();
+    void askHmiImportTemplate(const std::string& path = {});   // 1.14.0 : `path` - le fichier deja choisi
     void askHmiManageTemplates();
     void createHmiViewFromTemplate(const std::string& key, const std::string& name, const std::string& role,
                                    int width, int height, const std::string& description);
@@ -1187,6 +1189,19 @@ private:
     void runMastImport(std::shared_ptr<const domain::Project> imported, const std::string& source, bool keep,
                        const std::string& versionSaid);
     void openDroppedAsProject(std::vector<std::string> files);
+
+    // ---- 1.14.0 (lot M5) : CHERCHER DES FICHIERS SUR CE PC (FinderWorkspace.cpp) ----
+    //  Projet > Chercher des fichiers sur ce PC... (Ctrl+Maj+P), Aller a / Faire : l'onglet
+    //  "Chercher des fichiers" (FileFinderPane) - un seul, ouvert ou montre. Ses gestes :
+    //  ouvrir ici ou dans l'autre application, importer selon le genre (un paquet IHM par
+    //  la fenetre Importer, une bibliotheque a sa place, un .XPG / .XHW par la question
+    //  du depot), ajouter aux recents.
+public:
+    void openFileFinder();
+    [[nodiscard]] FileFinderPane* fileFinder() const;
+    void finderImport(const finder::Hit& hit);
+private:
+    void tickFileFinder();
 
     // ---- Lot API 8 : glisser n'importe quel fichier (DropFilesWorkspace.cpp) ----
     //  Un depot qui n'est pas fait que de .XPG / .XHW : le dialogue "Que faire
@@ -1563,6 +1578,24 @@ protected:
     core::Status buildUi() override;
 private:
     App&                  app_;
+    core::ConnectionScope links_;
+};
+
+// 1.14.0 (lot M5) : CHERCHER DES FICHIERS SUR CE PC, depuis l'accueil (le menu principal) ou un
+// ecran sans projet : le meme volet que l'onglet de l'ecran du projet (FileFinderPane), en plein
+// ecran, Retour (Echap) en haut. Ses gestes : ouvrir (ici ou dans l'autre application), ajouter aux
+// recents, a la bibliotheque, aux themes ; importer dans un projet se fait depuis son onglet.
+class FileFinderScreen final : public menu::WidgetMenu {
+public:
+    explicit FileFinderScreen(App& app);
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override;   // Echap : Retour ; F1 : l'aide
+    void            Update(const menu::FrameContext& f) override;     // la recherche : ce qu'elle a trouve
+    [[nodiscard]] FileFinderPane* pane() noexcept { return pane_; }
+protected:
+    core::Status buildUi() override;
+private:
+    App&                  app_;
+    FileFinderPane*       pane_{nullptr};
     core::ConnectionScope links_;
 };
 

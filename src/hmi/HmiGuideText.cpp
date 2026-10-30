@@ -253,6 +253,10 @@ const std::vector<Topic>& topics() {
                          "Th\xC3\xA8me \xE2\x80\xBA, Chercher un projet (Ctrl+F), le didacticiel, les "
                          "r\xC3\xA9glages, les dossiers de l'application, l'aide ; le panneau du projet "
                          "choisi : le menu de sa carte.", {}, "1.12.27"},
+             {K::Bullet, "**Chercher des fichiers sur ce PC\xE2\x80\xA6** (Ctrl+Maj+P) : dans le menu "
+                         "principal (Chercher sur ce PC\xE2\x80\xA6 dans la colonne de gauche, et son clic "
+                         "droit), le menu Projet et Aller \xC3\xA0 / Faire (Ctrl+K) - voir \xC2\xAB Chercher "
+                         "des fichiers sur ce PC \xC2\xBB.", {}, "1.14.0"},
              {K::Bullet, "**La barre du haut et ses menus** : le clic droit sur une partie (Projet, Annuler, "
                          "Simuler, la cloche...) ou sur une entr\xC3\xA9" "e d'un menu ouvert (Enregistrer "
                          "sous\xE2\x80\xA6, un projet r\xC3\xA9" "cent) : son nom en t\xC3\xAAte, "
@@ -859,6 +863,100 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.12.27"},
+        // ---- Demarrer / chercher-fichiers
+        {"chercher-fichiers", "Chercher des fichiers sur ce PC", "D\xC3\xA9marrer",
+         "Trouver les fichiers de l'appli sur tout le PC - projets, archives, exports Control Expert, "
+         "paquets IHM, biblioth\xC3\xA8ques, th\xC3\xA8mes, enregistrements -, en arri\xC3\xA8re-plan, puis "
+         "les ouvrir avec la bonne application, les importer ou les ajouter aux r\xC3\xA9" "cents.",
+         {
+             {K::Heading, "L'ouvrir", {}},
+             {K::Bullet, "**Projet \xE2\x80\xBA Chercher des fichiers sur ce PC\xE2\x80\xA6** "
+                         "(**Ctrl+Maj+P**), ou **Aller \xC3\xA0 / Faire** (Ctrl+K) : l'onglet **Chercher des "
+                         "fichiers**, \xC3\xA0 c\xC3\xB4t\xC3\xA9 des autres ; tu continues \xC3\xA0 "
+                         "travailler pendant la recherche.", {}},
+             {K::Bullet, "Le **menu principal** (l'accueil) : **Chercher sur ce PC\xE2\x80\xA6** dans la "
+                         "colonne de gauche, ou son clic droit (Ctrl+Maj+P aussi) : la page en plein "
+                         "\xC3\xA9" "cran, **Retour** (\xC3\x89" "chap) en haut.", {}},
+             {K::Bullet, "Ctrl+Maj+O reste l'import de la configuration (.XHW) : la recherche a pris "
+                         "Ctrl+Maj+**P** (P comme PC).", {}},
+             {K::Heading, "Les extensions", {}},
+             {K::Paragraph, "\xC3\x80 gauche, les extensions de l'appli, par groupes, chacune avec le nombre "
+                         "trouv\xC3\xA9 :", {}},
+             {K::Table, "Groupe\tExtensions\nProjets\tproject.xpgproj (le dossier d'un projet), .xihm "
+                         "(archive IHM Studio), .xapi (archive API Studio)\nExports Control Expert\t.xpg "
+                         "(programme), .xhw (mat\xC3\xA9riel), .xdb (base), .xef\nPaquets IHM\t.xpgvues, "
+                         ".xpgsymboles, .xpgtypes, .xpgfonctions, .xpgscripts, .xpgst (op\xC3\xA9rateurs et "
+                         "scripts ST), .xpgmodele (mod\xC3\xA8le de vue)\nBiblioth\xC3\xA8ques\t.xpgbib "
+                         "(biblioth\xC3\xA8que IHM), .dfb, .ddt, .mac (la biblioth\xC3\xA8que d'API "
+                         "Studio)\nAutres\t.xpgtheme (th\xC3\xA8me), .xrec (enregistrement)", {}},
+             {K::Paragraph, "La recherche les trouve **toutes** ; les cases choisissent **ce qui se montre** : "
+                         "les d\xC3\xA9" "cocher, les recocher ne relance rien. **Tout**, **Rien**, **Celles "
+                         "d'IHM Studio** (dans API Studio : **Celles d'API Studio**). Au-dessus du tableau, "
+                         "**une puce par extension trouv\xC3\xA9" "e**, avec son nombre : un clic la cache "
+                         "ou la montre. Le choix (les extensions, o\xC3\xB9 chercher, les options) est "
+                         "**gard\xC3\xA9** d'une s\xC3\xA9" "ance \xC3\xA0 l'autre.", {}},
+             {K::Heading, "O\xC3\xB9 chercher, les options", {}},
+             {K::Bullet, "**Tout le PC** : ses disques ; les **lecteurs r\xC3\xA9seau** mapp\xC3\xA9s et les "
+                         "**cl\xC3\xA9s USB et disques externes** selon leurs cases. **C: seulement** (le "
+                         "disque de Windows), **Mes documents**, ou **Un dossier\xE2\x80\xA6** (le champ et "
+                         "son bouton \xE2\x80\xA6).", {}},
+             {K::Bullet, "**Passer Windows, Program Files, la Corbeille, les dossiers cach\xC3\xA9s** "
+                         "(coch\xC3\xA9 au d\xC3\xA9part) : ni Windows, ni Program Files, ni ProgramData, ni "
+                         "la Corbeille, ni les dossiers syst\xC3\xA8me et cach\xC3\xA9s.", {}},
+             {K::Bullet, "**Dans les archives .zip aussi** : la table des mati\xC3\xA8res de chaque .zip est "
+                         "lue ; ce qu'il contient se montre, son dossier dit \xC2\xAB sauvegarde.zip "
+                         "\xE2\x80\xBA dossier \xC2\xBB. Pour l'ouvrir, extrais-le d'abord (Ouvrir le "
+                         "dossier montre le .zip).", {}},
+             {K::Bullet, "**Nom contient\xE2\x80\xA6** filtre au fil de la frappe : chaque mot dans le nom, "
+                         "sans la casse ni les accents ; -mot l'exclut. Un projet se montre par **le nom de "
+                         "son dossier**.", {}},
+             {K::Heading, "La recherche", {}},
+             {K::Paragraph, "**Chercher** la lance sur un fil \xC3\xA0 part, en priorit\xC3\xA9 basse : le PC "
+                         "reste disponible, un lecteur r\xC3\xA9seau est lu \xC3\xA0 son rythme. Les "
+                         "fichiers arrivent **au fil de l'eau** ; la ligne sous la barre dit les dossiers "
+                         "lus, les fichiers trouv\xC3\xA9s et le dossier en cours. **Arr\xC3\xAAter** "
+                         "l'arr\xC3\xAAte tout de suite : ce qui est trouv\xC3\xA9 reste. Ni les **liens "
+                         "symboliques** ni les **jonctions** ne sont suivis (pas de boucle) ; un dossier "
+                         "**refus\xC3\xA9** (les droits) est pass\xC3\xA9 sans erreur, et la fin le compte : "
+                         "\xC2\xAB Termin\xC3\xA9 : 108 fichiers dans 62 311 dossiers (C:, D:), en 14 s "
+                         "\xC2\xB7 12 dossiers refus\xC3\xA9s \xC2\xBB. Les derniers r\xC3\xA9sultats "
+                         "**restent** tant que l'appli est ouverte : l'onglet se ferme, se rouvre, ils sont "
+                         "l\xC3\xA0 ; fermer l'onglet pendant une recherche l'arr\xC3\xAAte.", {}},
+             {K::Heading, "Le tableau et les gestes", {}},
+             {K::Paragraph, "Nom, Type, Dossier, Taille, Modifi\xC3\xA9 le et **Version**, lue dans "
+                         "l'en-t\xC3\xAAte quand c'est rapide et s\xC3\xBBr : la version et l'\xC3\xA9tat "
+                         "d'un projet, l'application qui a \xC3\xA9" "crit une archive .xihm / .xapi ou un "
+                         "paquet, Control Expert pour un export (.xpg, .xhw, .xdb), la version d'un bloc, "
+                         "d'une macro, d'une biblioth\xC3\xA8que IHM ; sinon \xC2\xAB \xE2\x80\x94 \xC2\xBB. "
+                         "Un clic sur un titre trie.", {}},
+             {K::Bullet, "**Ouvrir** (le double-clic, Entr\xC3\xA9" "e) : avec **la bonne application**. Un "
+                         "projet, une archive ou un export de l'autre (un .XPG dans IHM Studio, un projet "
+                         "IHM dans API Studio) : **Ouvrir avec API Studio** (ou IHM Studio) la lance avec "
+                         "lui. Un paquet IHM vu d'API Studio : IHM Studio le re\xC3\xA7oit et l'importe dans "
+                         "son projet ouvert.", {}},
+             {K::Bullet, "**Ouvrir le dossier** : l'Explorateur, le fichier choisi. **Copier le chemin**.", {}},
+             {K::Bullet, "**Importer**, selon le genre, depuis l'onglet d'un projet ouvert : un paquet IHM "
+                         "par la fen\xC3\xAAtre **Importer** (ce qu'il apporte, les noms en conflit), un "
+                         "mod\xC3\xA8le de vue dans la galerie, une biblioth\xC3\xA8que IHM par **Relier une "
+                         "biblioth\xC3\xA8que**, un .XPG / .XHW / .XDB par la question du "
+                         "d\xC3\xA9p\xC3\xB4t (le MAST, la configuration). Partout : un bloc .dfb / .ddt ou "
+                         "une macro .mac **\xC3\xA0 la biblioth\xC3\xA8que** d'API Studio (libs/Importes, "
+                         "libs/Macros ; un nom d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est refus\xC3\xA9), un "
+                         "th\xC3\xA8me **aux th\xC3\xA8mes** (il s'applique). Un enregistrement (.xrec) n'a "
+                         "pas encore de place dans cette version : l'entr\xC3\xA9" "e est gris\xC3\xA9" "e.", {}},
+             {K::Bullet, "**Ajouter aux r\xC3\xA9" "cents** : un projet de l'application, en t\xC3\xAAte de "
+                         "l'accueil.", {}},
+             {K::Paragraph, "Le **clic droit** sur une ligne propose les m\xC3\xAAmes gestes, le fichier en "
+                         "t\xC3\xAAte ; une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi.", {}},
+         },
+         {"onglets", "archive-projet", "echanges-api", "paquets-de-vues", "paquets-symboles", "fenetres"},
+         {"Chercher des fichiers", "chercher sur ce PC", "Ctrl+Maj+P", "fichiers compatibles", "tout le PC", "extensions", "retrouver un projet", "fichier perdu", "dossiers refus\xC3\xA9s", "Celles d'IHM Studio", "Celles d'API Studio", "Ouvrir avec API Studio", "Ouvrir avec IHM Studio", "Ajouter aux r\xC3\xA9" "cents", "Ajouter \xC3\xA0 la biblioth\xC3\xA8que"},
+         {"chercher"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.14.0"},
         // ---- Demarrer / plantages
         {"plantages", "Plantages et blocages : le rapport, l'historique interne", "D\xC3\xA9marrer",
          "Si IHM Studio plante ou ne r\xC3\xA9pond plus, il \xC3\xA9" "crit un rapport dans le dossier "
