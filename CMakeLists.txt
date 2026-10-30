@@ -191,6 +191,14 @@ target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
 # 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de l'export SVG (app/SvgRenderer) :
 # il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
 target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
+# 1.15.0 : l'Assistant IA branche (app/ai/AiHttp, AiSecret). Windows : WinHTTP (HTTPS, les proxys
+# et les certificats du systeme) et crypt32 (DPAPI, la cle API protegee) - livrees avec Windows.
+# Linux : libcurl est chargee a la demande (dlopen) : aucune dependance a la compilation.
+if(WIN32)
+    target_link_libraries(xpg_app PUBLIC winhttp crypt32)
+else()
+    target_link_libraries(xpg_app PUBLIC ${CMAKE_DL_LIBS})
+endif()
 
 if(XPG_WITH_SDL)
     find_package(SDL3 CONFIG REQUIRED)

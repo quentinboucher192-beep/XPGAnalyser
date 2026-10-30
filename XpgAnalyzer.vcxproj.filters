@@ -967,6 +967,21 @@
     <ClCompile Include="src\app\ai\AiAssistant.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiAnthropic.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiHttp.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiProvider.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiSecret.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiSse.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiDemo.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -2492,6 +2507,18 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiAssistant.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiAnthropic.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiHttp.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiSecret.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiSse.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiDemo.hpp">

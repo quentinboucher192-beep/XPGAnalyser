@@ -71,7 +71,8 @@ struct ProviderRequest {
 // Ce que poll() rend. Les textes destines a l'utilisateur sont en francais.
 struct ProviderEvent {
     enum class Type : std::uint8_t {
-        Status,    // text : "connexion", "reflexion", "ecriture" (l'indicateur du panneau)
+        Status,    // text : "connexion", "reflexion", "ecriture", "operations" (l'appel d'outil
+                   //        s'ecrit), "reprise" (une nouvelle tentative : detail) - l'indicateur
         Text,      // text : un morceau de la reponse
         ToolUse,   // un appel d'outil COMPLET : toolUseId, toolName, toolInputJson
         Done,      // la fin : stopReason ("end_turn", "tool_use", "max_tokens", "refusal", "arrete")
@@ -83,6 +84,9 @@ struct ProviderEvent {
     std::string stopReason;
     int         httpStatus{0};
     bool        retryable{false};
+    // 1.15.0 (RESEAU) : Status "reprise" - ce que le panneau dit a cote de l'etat (la cause, la
+    // nouvelle tentative et son attente). Vide pour les autres.
+    std::string detail;
 };
 
 class Provider {
