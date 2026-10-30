@@ -47,6 +47,7 @@
 #include "../../core/FieldCodec.hpp"
 #include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
 #include "../hmi/HmiAssetPanes.hpp"
+#include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
 #include "../hmi/HmiAssist.hpp"
 #include "../hmi/HmiEditor.hpp"
@@ -417,7 +418,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
         || k == NK::VersionsFolder || k == NK::VersionItem                            // lot 21 : les versions
         || ProjectTreeModel::isNativesKind(k)                                          // 1.12.0 : les natives
-        || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode;                     // 1.13.0 (lot J8) : les bibliotheques
+        || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                      // 1.13.0 (lot J8) : les bibliotheques
+        || k == NK::HmiRecordings || k == NK::HmiRecordingSettings;                    // 1.14.0 (M4) : les enregistrements
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -691,6 +693,8 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiLanguages:     openHmiPane("langues"); break;
         case NK::HmiUnits:         openHmiPane("unites"); break;
         case NK::HmiMeasureUnits:  openHmiPane("unites-mesure"); break;   // 1.13.0 (lot J6b)
+        case NK::HmiRecordings:    openHmiPane("enregistrements"); break;          // 1.14.0 (M4)
+        case NK::HmiRecordingSettings: openHmiPane("config-enregistrements"); break;
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
         case NK::HmiStation:       openHmiPane("poste"); break;
         case NK::HmiNotify:        openHmiPane("notifications"); break;
@@ -1123,6 +1127,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         if (auto* report = dynamic_cast<HmiReportPane*>(page)) report->run();
         if (auto* files = dynamic_cast<HmiFilesPane*>(page)) files->refresh();
         if (auto* history = dynamic_cast<HmiHistoryPane*>(page)) history->refresh();
+        if (auto* recordings = dynamic_cast<HmiRecordingsPane*>(page)) recordings->refresh();   // 1.14.0 (M4)
         if (auto* exchange = dynamic_cast<HmiExchangePane*>(page)) {
             exchange->setNameExists(plcNames(app_.project()));
             exchange->setProjectFolder(app_.projectFolder());
@@ -1406,6 +1411,13 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         // IHM_EXPORTER) : le dialogue du lot 7, puis l'ecriture a l'endroit choisi.
         host.askExport = [this](const hmi::ExportRequest& rq, std::function<void(bool, const std::string&)> done) {
             return askHmiRuntimeExport(rq, std::move(done));
+        };
+        // 1.14.0 (M4) : la fenetre Arreter l'enregistrement, le mot de passe d'un enregistrement protege.
+        host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string)> done) {
+            askRecordingStopDialog(app_, ask, std::move(done));
+        };
+        host.askReplayPassword = [this](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {
+            askReplayPasswordDialog(app_, rq, error, std::move(done));
         };
         // ---- fin Lot API 8 ----
         // Lot 13 : chaque ligne d'audit va tout de suite dans ihm/historique/audit.csv
@@ -1989,6 +2001,31 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Aide";
         icon = Icon::Info;
+    } else if (key == "enregistrements") {
+        // 1.14.0 (M4) : Ressources > Enregistrements - le dossier natif des .xrec.
+        auto pane = std::make_unique<HmiRecordingsPane>("hmi.recordings", doc, apply);
+        HmiRecordingsPane::Hosts hosts;
+        hosts.projectFolder = [this] { return app_.projectFolder(); };
+        hosts.importFile = [this] { askHmiRecordingImport(); };
+        hosts.exportFile = [this](const std::string& name) { askHmiRecordingExport(name); };
+        hosts.rename = [this](const std::string& name) { askHmiRecordingRename(name); };
+        hosts.password = [this](const std::string& name) { askHmiRecordingPassword(name); };
+        hosts.remove = [this](const std::string& name) { askHmiRecordingDelete(name); };
+        hosts.replay = [this](const hmi::ReplayRequest& rq) { replayHmiRecording(rq); };
+        hosts.openFolder = [this](const std::string& folder) { openHmiRecordingsFolder(folder); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Enregistrements";
+        icon = Icon::Play;
+    } else if (key == "config-enregistrements") {
+        // 1.14.0 (M4) : Configuration > Enregistrements.
+        auto pane = std::make_unique<HmiRecordingSettingsPane>("hmi.recordingSettings", doc, apply);
+        HmiRecordingSettingsPane::Hosts hosts;
+        hosts.projectFolder = [this] { return app_.projectFolder(); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Configuration des enregistrements";
+        icon = Icon::Settings;
     } else if (key == "ressources") {
         auto pane = std::make_unique<HmiResourcesPane>("hmi.resources", doc, apply);
         HmiResourcesPane::Hosts hosts;
@@ -2771,6 +2808,123 @@ void MainAnalysisScreen::askHmiImportResource() {
             if (!pane->importFile(cleanPath(v[0]), v.size() > 1 ? v[1] : std::string{}, &why))
                 status_->setTransientMessage("Import impossible : " + why, 8.0);
         });
+}
+
+// ---- 1.14.0 (M4) : Ressources > Enregistrements ------------------------------------------------------------
+void MainAnalysisScreen::askHmiRecordingImport() {
+    openHmiPane("enregistrements");
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Fichier", "", "D:\\Exports\\Essai site nuit.xrec", false, {}});
+    app_.menus().ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiImportRecording", "Importer un enregistrement",
+            "Le fichier est copi\xC3\xA9 dans le dossier des enregistrements (un nom d\xC3\xA9j\xC3\xA0 pris devient \xC2\xAB Nom (2) \xC2\xBB). "
+            "Un enregistrement d'un autre projet s'importe aussi : ce qui n'existe pas dans ce projet est ignor\xC3\xA9 \xC3\xA0 la relecture, "
+            "et signal\xC3\xA9 une fois.",
+            std::move(fields), "Importer"), 0,
+            ui::openFile("Enregistrements de l'IHM (.xrec)|*.xrec", app_.projectFolder(), "Importer un enregistrement")),
+        [this](const menu::DialogResult& r) {
+            auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+            if (!r.accepted() || !pane) return;
+            const auto v = FormDialog::split(r.payload);
+            if (v.empty() || cleanPath(v[0]).empty()) return;
+            std::string why;
+            if (!pane->importPath(cleanPath(v[0]), &why)) status_->setTransientMessage("Import impossible : " + why, 8.0);
+        });
+}
+
+void MainAnalysisScreen::askHmiRecordingExport(const std::string& name) {
+    auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+    if (!pane || !pane->select(name)) return;
+    std::vector<FormDialog::Field> fields;
+    const std::string folder = app_.projectFolder().empty() ? std::string{} : app_.projectFolder() + "/exports";
+    fields.push_back({"Vers", folder, "un dossier, ou un fichier .xrec", false, {}});
+    app_.menus().ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiExportRecording", "Exporter \xC2\xAB " + name + " \xC2\xBB",
+            "Une copie du fichier .xrec, tel quel : prot\xC3\xA9g\xC3\xA9, il le reste (il faudra le mot de passe pour le rejouer).",
+            std::move(fields), "Exporter"), 0,
+            ui::chooseFolder(folder, "Exporter un enregistrement")),
+        [this, name](const menu::DialogResult& r) {
+            auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+            if (!r.accepted() || !current || !current->select(name)) return;
+            const auto v = FormDialog::split(r.payload);
+            if (v.empty() || cleanPath(v[0]).empty()) return;
+            std::string why;
+            if (!current->exportTo(cleanPath(v[0]), &why)) status_->setTransientMessage("Export impossible : " + why, 8.0);
+        });
+}
+
+void MainAnalysisScreen::askHmiRecordingRename(const std::string& name) {
+    auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+    if (!pane || !pane->select(name)) return;
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Nouveau nom", name, {}, false, {}});
+    auto dialog = std::make_unique<FormDialog>("dialog.hmiRenameRecording", "Renommer \xC2\xAB " + name + " \xC2\xBB",
+                                               "Les actions (Rejouer, Exporter, Supprimer), le Lecteur qui le rejoue toujours et les scripts qui "
+                                               "le citent en dur suivent ; G\xC3\xA9n\xC3\xA9rer signale ce qui le cite autrement.",
+                                               std::move(fields), "Renommer");
+    dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        field = 0;
+        std::string why;
+        if (v.empty() || !hmi::rec::validName(cleanPath(v[0]), &why)) return why.empty() ? std::string("Quel nom ?") : why;
+        return {};
+    });
+    app_.menus().ShowDialog(std::move(dialog), [this, name](const menu::DialogResult& r) {
+        auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+        if (!r.accepted() || !current || !current->select(name)) return;
+        const auto v = FormDialog::split(r.payload);
+        std::string why;
+        if (!v.empty() && !current->renameTo(cleanPath(v[0]), &why)) status_->setTransientMessage("Renommer : " + why, 8.0);
+    });
+}
+
+void MainAnalysisScreen::askHmiRecordingPassword(const std::string& name) {
+    auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+    if (!pane || !pane->select(name)) return;
+    bool locked = false;
+    for (const auto& it : pane->items())
+        if (it.name == name) locked = it.header.locked();
+    std::vector<FormDialog::Field> fields;
+    if (locked) fields.push_back({"Mot de passe actuel", {}, {}, true, {}});
+    fields.push_back({"Nouveau mot de passe", {}, locked ? "vide : retirer la protection" : "", true, {}});
+    app_.menus().ShowDialog(
+        std::make_unique<FormDialog>("dialog.hmiRecordingPassword", "Mot de passe de \xC2\xAB " + name + " \xC2\xBB",
+            "Avec un mot de passe, la piste (les valeurs, les \xC3\xA9" "crans, les clics) est chiffr\xC3\xA9" "e : sans lui, l'enregistrement ne se "
+            "rejoue pas et ses valeurs ne se lisent pas. Son en-t\xC3\xAA" "te (nom, date, dur\xC3\xA9" "e, description) reste lisible. "
+            "Un mot de passe oubli\xC3\xA9 ne se retrouve pas.",
+            std::move(fields), "Appliquer"),
+        [this, name, locked](const menu::DialogResult& r) {
+            auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+            if (!r.accepted() || !current || !current->select(name)) return;
+            const auto v = FormDialog::split(r.payload);
+            const std::string old = locked && !v.empty() ? v[0] : std::string{};
+            const std::string fresh = v.size() > (locked ? 1u : 0u) ? v[locked ? 1 : 0] : std::string{};
+            std::string why;
+            if (!current->setPassword(old, fresh, &why)) status_->setTransientMessage("Mot de passe : " + why, 8.0);
+        });
+}
+
+void MainAnalysisScreen::askHmiRecordingDelete(const std::string& name) {
+    app_.menus().ShowDialog(
+        std::make_unique<MessageDialog>("Supprimer l'enregistrement ?",
+                                        "\xC2\xAB " + name + " \xC2\xBB va dans la corbeille du projet (ihm/corbeille) : il s'y retrouve tant "
+                                        "qu'elle n'est pas vid\xC3\xA9" "e. Ce qui le cite (une action, le Lecteur) sera signal\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer.",
+                                        MessageDialog::Icon::Question, "Supprimer"),
+        [this, name](const menu::DialogResult& r) {
+            auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));
+            if (r.accepted() && current && current->select(name)) (void)current->removeSelected();
+        });
+}
+
+void MainAnalysisScreen::openHmiRecordingsFolder(const std::string& folder) {
+    if (const std::string why = dossiers::ouvrirDansLeSysteme(folder); !why.empty()) status_->setTransientMessage(why, 8.0);
+}
+
+void MainAnalysisScreen::replayHmiRecording(const hmi::ReplayRequest& request) {
+    openHmiPane("simulation");
+    auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+    if (!sim) return;
+    (void)showPage(sim);
+    (void)sim->replay(request);
 }
 
 // Lot 13 : Configuration > Langues.
@@ -3965,6 +4119,8 @@ std::string placeOfNode(NK kind) {
         case NK::HmiLanguages:     return "langues";
         case NK::HmiUnits:         return "unites";
         case NK::HmiMeasureUnits:  return "unites-mesure";   // 1.13.0 (lot J6b)
+        case NK::HmiRecordings:    return "enregistrements";          // 1.14.0 (M4)
+        case NK::HmiRecordingSettings: return "config-enregistrements";
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

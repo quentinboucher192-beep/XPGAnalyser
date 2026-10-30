@@ -963,8 +963,12 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     } timer{lastPaintMs_, std::chrono::steady_clock::now(), paintCount_};
     lastPaintObjects_ = 0;
     for (const auto& l : layers_) lastPaintObjects_ += l.view.objects.size();
-    const auto b = bounds();
-    ctx.r.fillRect(b, station_ ? gfx::Color{0, 0, 0, 255} : ctx.theme.color.windowBg);
+    // 1.14.0 (M4) : une relecture - la vue entre le bandeau et la barre (paintReplay, a la fin).
+    const gfx::Rect area0 = bounds();
+    const bool replay = replayShown();
+    const auto b = replay ? replayViewArea(area0) : area0;
+    ctx.r.fillRect(area0, station_ ? gfx::Color{0, 0, 0, 255} : ctx.theme.color.windowBg);
+    if (!replay) replayChrome_ = {};
     vps_.clear();
     popupRects_.clear();
     simRects_.clear();
@@ -1360,6 +1364,102 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
                      {static_cast<float>(vp_.toViewX(b.x)), static_cast<float>(vp_.toViewY(b.y)), b.w / vp_.zoomX(), b.h / vp_.zoomY()});
     paintStoppedNote(ctx, b, stoppedNote_, noteButtons_, noteRects_, noteActions_);   // 1.10 : l'IHM arretee
     ctx.r.popClip();
+    if (replay) paintReplay(ctx, area0);   // 1.14.0 (M4)
+}
+
+// ---- 1.14.0 (M4) : LA RELECTURE A L'ECRAN ------------------------------------------------------------------
+bool HmiLiveCanvas::replayShown() const noexcept {
+    return runtime_ && runtime_->replaying() && stoppedNote_.empty() && !layers_.empty();
+}
+
+void HmiLiveCanvas::paintReplay(const ui::PaintContext& ctx, const gfx::Rect& whole) {
+    const auto info = runtime_->replayInfo();
+    // Le pointeur et les clics d'alors, dans la vue (ou la popup) ou ils etaient.
+    const auto at = [&](const std::string& viewName, double x, double y, gfx::Point& out) {
+        for (std::size_t li = layers_.size(); li-- > 0;)
+            if (li < vps_.size() && layers_[li].view.name == viewName) {
+                out = vps_[li].toScreen(x, y);
+                return true;
+            }
+        return false;
+    };
+    ctx.r.pushClip(replayViewArea(whole));
+    constexpr double kRipple = 0.6;
+    for (const auto& e : runtime_->replayRecentClicks(kRipple)) {
+        gfx::Point p;
+        if (at(e.b, e.x, e.y, p)) paintReplayRipple(ctx.r, ctx.theme, p, static_cast<float>((info.position - e.t) / kRipple));
+    }
+    if (const auto ptr = runtime_->replayPointer(); ptr && ptr->inside) {
+        gfx::Point p;
+        if (at(ptr->view, ptr->x, ptr->y, p)) paintReplayPointer(ctx.r, ctx.theme, p, ptr->buttons != 0);
+    }
+    ctx.r.popClip();
+    const auto* player = runtime_->replayPlayer();
+    replayChrome_ = paintReplayChrome(ctx.r, ctx.theme, whole, info, player ? player->markers() : std::vector<hmi::rec::Player::Marker>{},
+                                      mouse_);
+}
+
+bool HmiLiveCanvas::replayEvent(const ui::InputEvent& ev) {
+    const auto emit = [this](std::string c) {
+        replayCommand->emit(c);
+        invalidate();
+        return true;
+    };
+    const auto seekAt = [this](float x) {
+        const double length = runtime_->replayInfo().length;
+        return "seek:" + hmi::formatNumber(replayChrome_.fractionAt(x) * length);
+    };
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+        if (k->mods.ctrl || k->mods.alt) return false;
+        switch (k->key) {
+            case ui::Key::Escape: return k->repeat ? true : emit("quit");
+            case ui::Key::Space:  return k->repeat ? true : emit("pause");
+            case ui::Key::Left:   return emit("step:-10");
+            case ui::Key::Right:  return emit("step:10");
+            case ui::Key::Home:   return emit("start");
+            case ui::Key::End:    return emit("end");
+            case ui::Key::Plus:   replaySignKey_ = true; return emit("faster");   // son TextInput "+" ne recompte pas
+            case ui::Key::Minus:  replaySignKey_ = true; return emit("slower");
+            default:              return false;   // F11, F8... : l'application ; l'IHM rejouee ne les recoit pas
+        }
+    }
+    if (const auto* t = std::get_if<ui::TextInput>(&ev)) {
+        const bool sign = replaySignKey_;
+        replaySignKey_ = false;
+        if (sign) return true;
+        if (t->utf8 == "+") return emit("faster");     // le + d'un clavier AZERTY (Maj + =)
+        if (t->utf8 == "-") return emit("slower");
+        return true;                                   // rien ne s'ecrit dans la vue rejouee
+    }
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        if (!bounds().contains(d->pos)) return false;
+        mouse_ = d->pos;
+        grabFocus();                                   // les touches de la relecture
+        if (d->button != ui::MouseButton::Left) return true;
+        const std::string part = replayChrome_.partAt(d->pos);
+        if (part == "progress") {
+            replayDrag_ = true;
+            return emit(seekAt(d->pos.x));
+        }
+        if (part == "play") return emit("pause");
+        if (part == "back") return emit("step:-10");
+        if (part == "fwd") return emit("step:10");
+        if (part == "start" || part == "end" || part == "quit" || part.rfind("speed:", 0) == 0) return emit(part);
+        if (replayChrome_.view.contains(d->pos)) return emit("hint");
+        return true;
+    }
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+        mouse_ = m->pos;
+        invalidate();
+        if (replayDrag_) return emit(seekAt(m->pos.x));
+        return bounds().contains(m->pos);
+    }
+    if (std::holds_alternative<ui::MouseUp>(ev)) {
+        replayDrag_ = false;
+        return true;
+    }
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) return bounds().contains(w->pos);
+    return false;
 }
 
 bool HmiLiveCanvas::systemPartRect(std::string_view part, gfx::Rect& out) const {
@@ -1622,6 +1722,25 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         }
                         break;
                     }
+                    case hmi::Kind::Recorder: {
+                        // 1.14.0 (M4) : "basculer" - son bouton rond.
+                        if (part != "basculer") break;
+                        const auto l = hmi::rec::recorderLayout(box.w, box.h, o.number("fontSize", 14), !o.text("title").empty());
+                        local = {l.button.x, l.button.y, l.button.w, l.button.h};
+                        found = true;
+                        break;
+                    }
+                    case hmi::Kind::RecordingPlayer: {
+                        // 1.14.0 (M4) : "ligne:N", "jouer:N", "jouer" (l'enregistrement fixe).
+                        const std::size_t rows = runtime_ ? hmi::rec::withPrefix(runtime_->recordings(), o.text("prefix")).size() : 0;
+                        const auto l = hmi::rec::playerLayout(box.w, box.h, o.number("fontSize", 13), rows, !o.text("fixed").empty(),
+                                                              !o.text("title").empty());
+                        const auto take = [&](const hmi::rec::Area& a) { local = {a.x, a.y, a.w, a.h}; found = a.w > 0; };
+                        if (part == "jouer") take(l.fixedButton);
+                        else if (const int i = index("ligne:"); i >= 0 && static_cast<std::size_t>(i) < l.rows.size()) take(l.rows[static_cast<std::size_t>(i)]);
+                        else if (const int j = index("jouer:"); j >= 0 && static_cast<std::size_t>(j) < l.plays.size()) take(l.plays[static_cast<std::size_t>(j)]);
+                        break;
+                    }
                     case hmi::Kind::DateTimePicker: {
                         const auto l = hmi::pickerLayout(o, box.w, box.h);
                         if (part == "maintenant") { local = l.now; found = true; }
@@ -1882,6 +2001,24 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             if (!part.empty()) partClicked->emit(id, "doc:at:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
             return;
         }
+        // 1.14.0 (M4) : l'Enregistreur - tout l'objet (sous son titre) est son bouton ; le Lecteur
+        // d'enregistrements - une ligne la choisit, son rond Rejouer (ou un double-clic sur la ligne) la rejoue.
+        if (o->kind == hmi::Kind::Recorder || o->kind == hmi::Kind::RecordingPlayer) {
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
+            const double fs = o->number("fontSize", o->kind == hmi::Kind::Recorder ? 14 : 13);
+            const bool titled = !o->text("title").empty();
+            std::string part;
+            if (o->kind == hmi::Kind::Recorder) {
+                const auto l = hmi::rec::recorderLayout(box.w, box.h, fs, titled);
+                if (!titled || ly > l.title.y + l.title.h) part = "basculer";
+            } else {
+                const std::size_t rows = runtime_ ? hmi::rec::withPrefix(runtime_->recordings(), o->text("prefix")).size() : 0;
+                part = hmi::rec::playerHit(hmi::rec::playerLayout(box.w, box.h, fs, rows, !o->text("fixed").empty(), titled), lx, ly);
+                if (clickCount >= 2 && part.rfind("ligne:", 0) == 0) part = "jouer:" + part.substr(6);
+            }
+            if (!part.empty()) partClicked->emit(id, part);
+            return;
+        }
         // Un objet a parties : la partie touchee (bouton, ligne, champ).
         if (o->kind == hmi::Kind::RecipeManager || o->kind == hmi::Kind::UserManager) {
             std::size_t rows = 0;
@@ -2110,6 +2247,13 @@ bool HmiLiveCanvas::hitAt(gfx::Point p, Id& view, Id& object, std::size_t* layer
 }
 
 ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
+    // 1.14.0 (M4) : une relecture prend la souris et ses touches - la vue rejouee ne recoit rien.
+    if (replayShown()) {
+        if (replayEvent(ev)) return ui::EventResult::Consumed;
+        if (!std::holds_alternative<ui::KeyDown>(ev) && !std::holds_alternative<ui::KeyUp>(ev)) return ui::EventResult::Ignored;
+    } else {
+        replayDrag_ = false;
+    }
     // 1.12.18 (planche 16) : LE CLIC DROIT DU MENU - l'hote dit s'il ouvre son menu (sinon il va
     // au projet : SYS.MouseRight). Le menu ne presse pas le bouton du projet, ni son relacher.
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right) {
@@ -2890,6 +3034,11 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         keepButton_ = &static_cast<ui::ToggleButton&>(bar->addCustom(std::move(keep)));
         links_ += keepButton_->toggled->connect([this](bool on) { setKeepData(on); });
     }
+    // 1.14.0 (M4) : ENREGISTRER - tout ce que montre l'IHM, comme un film ; Arreter demande le nom.
+    recordBtn_ = &bar->addButton("\xE2\x97\x8F Enregistrer", "hmi.record");
+    recordBtn_->setTooltip("Enregistre tout ce que montre l'IHM : valeurs, vues, popups, alarmes, pointeur et clics. Arr\xC3\xAAter demande "
+                           "le nom, une description et un mot de passe ; l'enregistrement va dans Ressources \xE2\x80\xBA Enregistrements, "
+                           "o\xC3\xB9 il se rejoue.");
     bar->addSeparator();
     plcChip_ = &bar->addCustom(std::make_unique<StateChip>(base + ".plcState"));
     plcChip_->setTooltip("L'API : le programme de l'automate simul\xC3\xA9. Ses commandes compl\xC3\xA8tes (pause, un cycle) "
@@ -3381,6 +3530,26 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hooks.simSlaves = host_.simSlaves;           // 1.9 : les esclaves simules (la page Simulation)
     hooks.simSlaveCommand = host_.simSlaveCommand;
     hooks.journaled = host_.console;             // 1.11.14 : la Console du panneau du bas
+    // 1.14.0 (M4) : l'Enregistreur arrete (sa case Demander le nom a l'arret) - la fenetre Arreter l'enregistrement ;
+    // un enregistrement protege a rejouer (le Lecteur, une action) - son mot de passe.
+    hooks.recordingStop = [this](const hmi::RecordingStopAsk& ask) {
+        const std::weak_ptr<char> alive = recordAlive_;
+        if (!host_.askRecordingStop) {
+            (void)runtime_.finishRecording(true, ask.name, ask.description, {}, now_);
+            return;
+        }
+        host_.askRecordingStop(ask, [this, alive](bool keep, std::string name, std::string description, std::string password) {
+            if (alive.expired()) return;
+            std::string why;
+            const std::string kept = runtime_.finishRecording(keep, name, description, password, now_, &why);
+            if (!keep) status_->setTransientMessage("Enregistrement jet\xC3\xA9.", 5.0);
+            else if (kept.empty()) status_->setTransientMessage("Enregistrement : " + why, 8.0, ui::StatusBar::Severity::Warning);
+            else status_->setTransientMessage("Enregistr\xC3\xA9 : Ressources \xE2\x80\xBA Enregistrements \xE2\x80\xBA " + kept, 8.0,
+                                              ui::StatusBar::Severity::Success);
+            refreshNow();
+        });
+    };
+    hooks.replayPassword = [this](const hmi::ReplayRequest& rq) { (void)replay(rq); };
     runtime_.setHooks(std::move(hooks));
     // 1.13.0 (lot J2) : le debogueur des scripts IHM (la simulation de l'editeur ; le poste ne s'arrete jamais).
     runtime_.setDebugger(true);
@@ -3449,6 +3618,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         runtime_.objectPart(object, part, now_);
         refreshNow();
     });
+    links_ += canvas_->replayCommand->connect([this](const std::string& c) { replayCommand(c); });   // 1.14.0 (M4)
     // Lot 8 : les popups (la croix, un clic dehors, tiree, ramenee devant) et la
     // saisie au clavier.
     links_ += canvas_->popupCloseRequested->connect([this](int slot, bool instant) {
@@ -3931,6 +4101,10 @@ void HmiSimulationPane::run(core::ActionId id) {
     // 1.12.24 : sa mise a l'echelle (la barre flottante) : Remplir, Garder les proportions, Taille reelle.
     if (id == "hmi.fitFill" || id == "hmi.fitKeep" || id == "hmi.fitActual") {
         setScreenFit(id == "hmi.fitFill" ? hmi::ScreenFit::Fill : id == "hmi.fitKeep" ? hmi::ScreenFit::Keep : hmi::ScreenFit::Actual);
+        return;
+    }
+    if (id == "hmi.record") {   // 1.14.0 (M4)
+        toggleRecording("barre de la simulation");
         return;
     }
     // 1.10 : l'IHM arretee - ce qui la suppose en marche le dit, et ne la demarre pas
@@ -4530,8 +4704,12 @@ void HmiSimulationPane::refreshBar() {
     for (const auto& v : doc_->project.views)
         if (!hmi::isTemplateRole(v.role) && v.role != "popup" && v.role != "symbole") viewsKey += v.name + '\n';
     const bool debugPaused = started_ && runtime_.paused();     // 1.13.0 (lot J2) : en pause dans un script
+    // 1.14.0 (M4) : le bouton Enregistrer - Arreter et le chrono quand un enregistrement tourne.
+    std::string recText = "\xE2\x97\x8F Enregistrer";
+    if (started_ && runtime_.recording()) recText = "\xE2\x96\xA0 Arr\xC3\xAAter  \xE2\x97\x8F ENR " + hmi::rec::clock(runtime_.recordingInfo().seconds);
+    else if (started_ && runtime_.replaying()) recText = "\xE2\x96\xB6 RELECTURE";
     const std::string key = std::to_string(started_) + (debugPaused ? "d" : "") + tone + plcStateText() + "|" + std::to_string(zoom) + (canvas_ && canvas_->displayZoom() > 0.f ? "z" : "f")
-                            + "|" + user + "|" + std::to_string(current) + "|" + viewsKey;
+                            + "|" + user + "|" + std::to_string(current) + "|" + viewsKey + "|" + recText;
     if (key == barState_) return;
     barState_ = key;
     static_cast<StateChip*>(hmiChip_)->set(debugPaused ? "IHM : en pause (d\xC3\xA9" "bogage)" : started_ ? "IHM : en marche" : "IHM : arr\xC3\xAAt\xC3\xA9" "e",
@@ -4544,6 +4722,10 @@ void HmiSimulationPane::refreshBar() {
                             "se d\xC3\xA9place (fond tir\xC3\xA9, molette, Maj+molette)");
     hmiStartBtn_->setEnabled(!started_);
     hmiStopBtn_->setEnabled(started_);
+    if (recordBtn_) {
+        recordBtn_->setText(recText);
+        recordBtn_->setEnabled(started_ && !runtime_.replaying());
+    }
     const bool plcRunning = tone == "running" || tone == "paused";
     plcBtn_->setText(plcRunning ? "Arr\xC3\xAAter l'API" : "D\xC3\xA9marrer l'API");
     plcBtn_->setIcon(plcRunning ? ui::Icon::Stop : ui::Icon::Play);
@@ -4806,14 +4988,152 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
 // max d'avant, exactement) ; ramene a l'heure du volet quand elle retarde de plus
 // d'une seconde ou avance de plus d'une heure (une autre base).
 void HmiSimulationPane::followClock(double now, ClockSource source) {
+    syncReplay();                                  // 1.14.0 (M4) : une relecture tient l'heure de l'IHM
     double& offset = clockOffset_[source == ClockSource::Paint ? 0 : 1];
     const double mine = now + offset;
-    if (clockSeen_ && (mine < now_ - 1.0 || mine > now_ + kClockLeap)) {
-        offset = now_ - now;
+    double& clock = replayHeld_ ? replayWall_ : now_;
+    if (clockSeen_ && (mine < clock - 1.0 || mine > clock + kClockLeap)) {
+        offset = clock - now;
         return;
     }
     clockSeen_ = true;
-    now_ = std::max(now_, mine);
+    clock = std::max(clock, mine);
+}
+
+// ---- 1.14.0 (M4) : ENREGISTRER ET REJOUER L'IHM ---------------------------------------------------------------
+//  LA RELECTURE TIENT L'HEURE DE L'IHM : now_ ne bouge plus (le moteur est mis de cote ; ses temporisations, ses
+//  cycles, ses courbes reprennent a la sortie la ou ils etaient) ; replayWall_ avance a sa place et fait avancer la
+//  relecture. A la sortie, les decalages des deux horloges reprennent le temps passe : now_ repart d'ou il etait.
+//  L'API SIMULEE SE MET EN PAUSE (le choix le plus sur : rien ne bouge derriere la relecture, l'IHM revient sur
+//  l'automate tel qu'elle l'a laisse) ; pas un automate reel (relie, ou le poste) : il continue, l'IHM ne lui ecrit
+//  rien tant qu'elle rejoue.
+void HmiSimulationPane::syncReplay() {
+    const bool on = started_ && runtime_.replaying();
+    if (on == replayHeld_) return;
+    if (on) {
+        replayHeld_ = true;
+        replayWall_ = now_;
+        plcPausedForReplay_ = false;
+        if (!station_ && core::hasApi() && host_.transport && !(host_.link && host_.link()) && plcTone() == "running") {
+            host_.transport("sim.pause");
+            plcPausedForReplay_ = true;
+        }
+        if (canvas_) canvas_->takeFocus();         // Espace, les fleches, Echap
+        if (status_)
+            status_->setTransientMessage(std::string("Relecture : l'IHM ne commande rien et ne re\xC3\xA7oit aucun clic") +
+                                             (plcPausedForReplay_ ? " ; l'API simul\xC3\xA9" "e est en pause" : "") + ". \xC3\x89" "chap la quitte.",
+                                         6.0);
+        return;
+    }
+    const double held = std::max(0.0, replayWall_ - now_);
+    clockOffset_[0] -= held;
+    clockOffset_[1] -= held;
+    replayHeld_ = false;
+    if (plcPausedForReplay_ && host_.transport && plcTone() == "paused") host_.transport("sim.run");
+    plcPausedForReplay_ = false;
+    if (status_) status_->setTransientMessage("Relecture quitt\xC3\xA9" "e : l'IHM reprend en direct, l\xC3\xA0 o\xC3\xB9 elle \xC3\xA9tait.", 6.0);
+}
+
+void HmiSimulationPane::toggleRecording(const std::string& source) {
+    if (!started_) {
+        status_->setTransientMessage("L'IHM est arr\xC3\xAAt\xC3\xA9" "e : D\xC3\xA9marrer l'IHM d'abord", 4.0, ui::StatusBar::Severity::Warning);
+        return;
+    }
+    if (runtime_.recording()) {
+        runtime_.askStopRecording(now_, source);   // la fenetre Arreter l'enregistrement (hooks.recordingStop)
+        refreshNow();
+        return;
+    }
+    hmi::RecordingStart r;
+    r.askAtStop = true;
+    r.source = source;
+    std::string why;
+    if (!runtime_.startRecording(r, now_, &why)) {
+        status_->setTransientMessage("Enregistrer : " + why, 8.0, ui::StatusBar::Severity::Warning);
+        return;
+    }
+    status_->setTransientMessage("Enregistrement d\xC3\xA9marr\xC3\xA9 : tout ce que montre l'IHM est gard\xC3\xA9.", 5.0);
+    refreshNow();
+}
+
+hmi::rec::Status HmiSimulationPane::replay(const hmi::ReplayRequest& request, std::string* why) {
+    if (!started_) {
+        // L'IHM arretee : elle demarre (son build d'abord) ; la relecture part des qu'elle tourne (refreshPane).
+        autoStart_ = true;
+        startHmi(request.source.empty() ? std::string("relecture") : request.source);
+        if (!started_) {
+            pendingReplay_ = request;
+            status_->setTransientMessage("La relecture d\xC3\xA9marre d\xC3\xA8s que l'IHM est en marche.", 6.0);
+            if (why) why->clear();
+            return hmi::rec::Status::Ok;
+        }
+    }
+    std::string reason;
+    hmi::rec::Status st = hmi::rec::Status::Unreadable;
+    if (!started_) reason = "l'IHM n'est pas en marche";
+    else st = runtime_.startReplay(request, now_, &reason);
+    const bool asked = st == hmi::rec::Status::PasswordNeeded || (st == hmi::rec::Status::BadPassword && request.password.empty());
+    if ((asked || st == hmi::rec::Status::BadPassword) && host_.askReplayPassword) {
+        // Protege : la question ; un mauvais mot de passe la repose (avec ce qui n'allait pas).
+        const std::weak_ptr<char> alive = recordAlive_;
+        host_.askReplayPassword(request, st == hmi::rec::Status::BadPassword ? reason : std::string{},
+                                [this, alive, request](bool ok, std::string password) {
+                                    if (alive.expired() || !ok) return;
+                                    auto again = request;
+                                    again.password = std::move(password);
+                                    (void)replay(again);
+                                });
+    } else if (st != hmi::rec::Status::Ok && status_) {
+        status_->setTransientMessage("Rejouer : " + reason, 8.0, ui::StatusBar::Severity::Warning);
+    }
+    if (why) *why = reason;
+    syncReplay();
+    refreshNow();
+    return st;
+}
+
+int HmiSimulationPane::runRecordingCommand(const hmi::rec::Command& command, std::string* message) {
+    if (command.kind == hmi::rec::Command::Kind::Record || command.kind == hmi::rec::Command::Kind::Replay) ensureStarted(now_);
+    const int code = runtime_.runCommand(command, now_, message);
+    syncReplay();
+    refreshNow();
+    return code;
+}
+
+int HmiSimulationPane::runCommandAnywhere(const hmi::rec::Command& command, std::string* message) {
+    HmiSimulationPane* target = nullptr;
+    for (auto* p : simPanes())
+        if (p->started_ && p->runtime_.running() && (!target || (p->station_ && !target->station_))) target = p;
+    if (!target) {
+        if (message) *message = "aucune IHM en marche (ni simulation, ni poste d'exploitation)";
+        return hmi::rec::kExitNoHmi;
+    }
+    return target->runRecordingCommand(command, message);
+}
+
+bool HmiSimulationPane::anyRunning() {
+    for (const auto* p : simPanes())
+        if (p->started_ && p->runtime_.running()) return true;
+    return false;
+}
+
+void HmiSimulationPane::replayCommand(const std::string& c) {
+    if (!runtime_.replaying()) return;
+    const auto arg = [&c](std::string_view prefix) { return std::atof(c.substr(prefix.size()).c_str()); };
+    if (c == "quit") (void)runtime_.quitReplay(now_, "barre de relecture");
+    else if (c == "pause") (void)runtime_.replayPause();
+    else if (c.rfind("seek:", 0) == 0) (void)runtime_.replaySeek(arg("seek:"));
+    else if (c.rfind("step:", 0) == 0) (void)runtime_.replayStep(arg("step:"));
+    else if (c == "start") (void)runtime_.replaySeek(0);
+    else if (c == "end") (void)runtime_.replaySeek(runtime_.replayInfo().length);
+    else if (c.rfind("speed:", 0) == 0) (void)runtime_.replaySpeed(arg("speed:"));
+    else if (c == "faster") (void)runtime_.replaySpeedStep(1);
+    else if (c == "slower") (void)runtime_.replaySpeedStep(-1);
+    else if (c == "hint" && status_)
+        status_->setTransientMessage("Relecture : l'IHM ne re\xC3\xA7oit pas les clics. \xC3\x89" "chap pour revenir en direct.", 5.0);
+    syncReplay();
+    refreshPane();
+    if (canvas_) canvas_->invalidate();
 }
 
 void HmiSimulationPane::refreshAt(double now) {
@@ -4907,6 +5227,13 @@ void HmiSimulationPane::refreshPane() {
     }
     canvas_->setStoppedNote({});
     ensureStarted(now_);
+    syncReplay();                                                            // 1.14.0 (M4)
+    if (pendingReplay_ && started_) {                                        // demandee l'IHM arretee : elle tourne
+        const auto rq = *pendingReplay_;
+        pendingReplay_.reset();
+        (void)replay(rq);
+    }
+    if (replayHeld_) runtime_.replayTick(replayWall_);                      // la relecture avance ; le moteur, lui, attend
     runtime_.tick(now_);
     retainTick();                                                            // 1.11.16 : le poste garde ses variables remanentes
     // Lot 14 : la communication au journal (liaison etablie, perdue, retrouvee...).

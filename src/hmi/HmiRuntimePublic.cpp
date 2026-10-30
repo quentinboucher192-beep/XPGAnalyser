@@ -227,6 +227,7 @@ bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
     const std::string_view n = sv->name;
     if (sv->domain == 13) return slaveSysValue(n, out);   // 1.9 : SYS.Sim* (les esclaves simules)
     if (sv->domain == pub::kInputDomain) return inputSysValue(n, out);   // 1.11.23 : la souris et le clavier
+    if (sv->domain == pub::kRecordingDomain) return recordSysValue(n, out);   // 1.14.0 (M4) : l'enregistrement, la relecture
     const auto text = [&](std::string s) { out = sim::Value::text(std::move(s)); return true; };
     const auto flag = [&](bool b) { out = sim::Value::boolean(b); return true; };
     const auto integer = [&](long long v) { out = sim::Value::integer(sim::Type::Int, v); return true; };

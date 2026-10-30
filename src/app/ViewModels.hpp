@@ -362,6 +362,10 @@ namespace app {
             // 1.13.0 (J1b) : sous un type IHM (une structure, une interface), "Methodes (n)" entre les valeurs et
             //   les operateurs : HmiTypeMethods (index = le type), HmiTypeMethod (sub = son rang). A LA FIN, toujours.
             HmiTypeMethods, HmiTypeMethod,
+            // 1.14.0 (M4) : LES ENREGISTREMENTS - Ressources > Enregistrements (le dossier natif des .xrec, le seul
+            // enfant de Ressources) et Configuration > Enregistrements (le 13e sous-noeud de Configuration). Deux
+            // volets. A LA FIN, toujours.
+            HmiRecordings, HmiRecordingSettings,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -814,7 +818,12 @@ namespace app {
         // oublie quand le document change (pas a chaque dessin).
         struct CodeOutline;
         mutable std::map<std::uint64_t, std::shared_ptr<const CodeOutline>> outlines_;
-        mutable std::uint64_t outlinesTests_{0};   // 1.13.0 (lot J4b) : la revision des verdicts (app::testruns) qu'ils montrent
+        mutable std::uint64_t outlinesTests_{0};
+        // 1.14.0 (M4) : le compte des enregistrements (Ressources > Enregistrements), relu au plus toutes les 2 s.
+        mutable std::size_t   recordingsCount_{0};
+        mutable std::string   recordingsDir_;
+        mutable double        recordingsAt_{-10};
+        [[nodiscard]] std::size_t recordingsCount() const;   // 1.13.0 (lot J4b) : la revision des verdicts (app::testruns) qu'ils montrent
         [[nodiscard]] const CodeOutline* outlineOf(std::uint32_t codeKind, std::uint64_t id) const;
         // 1.10 (chantier O) : les alarmes des objets, gardees par (vue, objet) et
         // oubliees quand le document change.

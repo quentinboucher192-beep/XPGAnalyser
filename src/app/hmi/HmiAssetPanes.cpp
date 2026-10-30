@@ -1,6 +1,7 @@
 #include "HmiAssetPanes.hpp"
 
 #include "HmiIcons.hpp"
+#include "HmiPaneKit.hpp"            // 1.14.0 (M4) : prop, tf, yes (les enregistrements)
 #include "HmiSound.hpp"
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiStore.hpp"
@@ -924,5 +925,484 @@ ui::EventResult HmiFilesPane::onEvent(const ui::InputEvent& ev) {
     }
     return ui::EventResult::Ignored;
 }
+
+// ======================================================= 1.14.0 (M4) : les enregistrements ==
+namespace {
+enum RecordingAction : int { RcImport = 1, RcExport, RcReplay, RcRename, RcPassword, RcDelete, RcFolder };
+// Les chemins de l'interface sont en UTF-8 (std::filesystem::path(std::string) les lirait dans la page de code du
+// systeme sous Windows).
+std::filesystem::path recPath(const std::string& utf8) { return std::filesystem::path(std::u8string(utf8.begin(), utf8.end())); }
+// "2026-10-29 14:02:33" -> "29/10/2026 14:02".
+std::string recDate(const std::string& iso) {
+    if (iso.size() < 16 || iso[4] != '-' || iso[7] != '-') return iso;
+    return iso.substr(8, 2) + "/" + iso.substr(5, 2) + "/" + iso.substr(0, 4) + " " + iso.substr(11, 5);
+}
+} // namespace
+
+HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
+    : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
+    const std::string base = this->id();
+    auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
+    tools->add(RcImport, HmiGlyph::Import, "Importer un enregistrement (.xrec) : il est copi\xC3\xA9 dans le dossier (un nom pris : \xC2\xAB Nom (2) \xC2\xBB)",
+               "Importer\xE2\x80\xA6");
+    tools->add(RcExport, HmiGlyph::Export, "Exporter (copier) l'enregistrement choisi : un dossier, ou un fichier .xrec", "Exporter\xE2\x80\xA6");
+    tools->separator();
+    tools->add(RcReplay, HmiGlyph::Play, "Rejouer : l'IHM montre ce qui a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9, comme un film (\xC3\x89" "chap la quitte). "
+                                         "Un double-clic sur la ligne aussi.", "Rejouer");
+    tools->add(RcRename, HmiGlyph::Text, "Renommer : les actions, le Lecteur et les scripts qui le citent suivent (Ctrl+Z les rend)", "Renommer");
+    tools->add(RcPassword, HmiGlyph::Key, "Mot de passe : prot\xC3\xA9ger, changer ou retirer (l'actuel est demand\xC3\xA9)", "Mot de passe\xE2\x80\xA6");
+    tools->add(RcDelete, HmiGlyph::Delete, "Supprimer : l'enregistrement va dans la corbeille du projet (ihm/corbeille)", "Supprimer");
+    tools->separator();
+    tools->add(RcFolder, HmiGlyph::Link, "Ouvrir le dossier des enregistrements dans l'explorateur", "Ouvrir le dossier");
+    tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    for (const int a : {RcExport, RcReplay, RcRename, RcPassword, RcDelete})
+        tools_->setEnabledWhen(a, [this] { return selectedItem() != nullptr; });
+    tools_->setEnabledWhen(RcImport, [this] { return !folder().empty(); });
+    tools_->setEnabledWhen(RcFolder, [this] { return !folder().empty(); });
+
+    auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
+    auto table = std::make_unique<ui::TableView>(base + ".table");
+    table->setColumns({{"Nom", 220.f}, {"Dur\xC3\xA9" "e", 70.f, 50.f, true, true, true, ui::Align::End}, {"Vue de d\xC3\xA9part", 140.f},
+                       {"Enregistr\xC3\xA9 le", 130.f}, {"O\xC3\xB9", 110.f}, {"Par", 90.f},
+                       {"Taille", 80.f, 50.f, true, true, true, ui::Align::End}, {"Prot\xC3\xA9g\xC3\xA9", 84.f}});
+    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setEnterActivates(true);
+    table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.64f, 320.f));
+    tools_->bindListKeys(*table_, {RcDelete});
+    detail_ = &static_cast<ui::PropertyGrid&>(split->addPane(std::make_unique<ui::PropertyGrid>(base + ".detail"), 0.36f, 240.f));
+    split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
+    status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
+
+    links_ += tools_->triggered->connect([this](int a) {
+        const auto* it = selectedItem();
+        const std::string name = it ? it->name : std::string{};
+        switch (a) {
+            case RcImport: if (hosts_.importFile) hosts_.importFile(); break;
+            case RcExport: if (it && hosts_.exportFile) hosts_.exportFile(name); break;
+            case RcReplay: replaySelected(); break;
+            case RcRename: if (it && hosts_.rename) hosts_.rename(name); break;
+            case RcPassword: if (it && hosts_.password) hosts_.password(name); break;
+            case RcDelete:
+                if (!it) break;
+                if (hosts_.remove) hosts_.remove(name);
+                else (void)removeSelected();
+                break;
+            case RcFolder:
+                if (hosts_.openFolder && !folder().empty()) {
+                    std::error_code ec;
+                    std::filesystem::create_directories(recPath(folder()), ec);
+                    hosts_.openFolder(folder());
+                }
+                break;
+            default: break;
+        }
+    });
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { showDetail(); });
+    links_ += table_->activated->connect([this](ui::RowIndex) { replaySelected(); });
+    links_ += doc_->changed->connect([this](Id) { scanned_.clear(); });
+    refresh();
+}
+
+void HmiRecordingsPane::setHosts(Hosts h) {
+    hosts_ = std::move(h);
+    refresh();
+}
+
+std::string HmiRecordingsPane::folder() const {
+    return hmi::rec::folderOf(doc_->project.recording, hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder);
+}
+
+void HmiRecordingsPane::say(std::string text, bool warning) {
+    message_ = std::move(text);
+    status_->setTransientMessage(message_, 8.0, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+    invalidate();
+}
+
+const hmi::rec::Item* HmiRecordingsPane::selectedItem() const {
+    const auto rows = table_ ? table_->selectedModelRows() : std::vector<ui::RowIndex>{};
+    return rows.size() == 1 && rows.front() < items_.size() ? &items_[rows.front()] : nullptr;
+}
+
+std::string HmiRecordingsPane::selectedName() const {
+    const auto* it = selectedItem();
+    return it ? it->name : std::string{};
+}
+
+bool HmiRecordingsPane::select(const std::string& name) {
+    for (std::size_t i = 0; i < items_.size(); ++i)
+        if (items_[i].name == name) {
+            table_->selectModelRows({static_cast<ui::RowIndex>(i)});
+            showDetail();
+            return true;
+        }
+    return false;
+}
+
+void HmiRecordingsPane::refresh() {
+    const std::string keep = selectedName();
+    const std::string dir = folder();
+    // Le dossier natif existe toujours (un projet enregistre) : il ne se supprime pas d'ici.
+    if (!dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(recPath(dir), ec);
+    }
+    std::vector<std::string> notes;
+    items_ = dir.empty() ? std::vector<hmi::rec::Item>{} : hmi::rec::listFolder(dir, &notes);
+    std::vector<std::vector<std::string>> rows;
+    std::vector<ui::CellStyle> styles, lockStyles;
+    std::uint64_t total = 0;
+    std::string sig = dir;
+    for (const auto& it : items_) {
+        total += it.bytes;
+        const auto& h = it.header;
+        rows.push_back({it.name, it.problem.empty() ? hmi::rec::clock(h.duration) : std::string("?"), h.startView, recDate(h.date), h.where,
+                        h.by.empty() ? std::string("\xE2\x80\x94") : h.by, hmi::rec::sizeText(it.bytes), h.locked() ? "oui" : ""});
+        ui::CellStyle st;
+        st.icon = ui::Icon::Play;
+        if (!it.problem.empty()) st.iconTone = ui::Tone::Error;
+        styles.push_back(st);
+        ui::CellStyle lock;                    // le cadenas d'un enregistrement protege
+        if (h.locked()) lock.icon = ui::Icon::Lock;
+        lockStyles.push_back(lock);
+        sig += "|" + it.name + ":" + std::to_string(it.bytes) + ":" + std::to_string(it.modified);
+    }
+    scanned_ = sig;
+    model_ = std::make_shared<RowsModel>(std::vector<std::string>{"Nom", "Dur\xC3\xA9" "e", "Vue de d\xC3\xA9part", "Enregistr\xC3\xA9 le", "O\xC3\xB9", "Par",
+                                                                  "Taille", "Prot\xC3\xA9g\xC3\xA9"},
+                                         std::move(rows), std::move(styles), std::move(lockStyles));
+    table_->setModel(model_);
+    if (!keep.empty()) (void)select(keep);
+    showDetail();
+    std::string msg = dir.empty() ? std::string("Le projet n'est pas encore enregistr\xC3\xA9 : pas de dossier des enregistrements.")
+                                  : std::to_string(items_.size()) + " enregistrement(s), " + hmi::rec::sizeText(total) + " \xC2\xB7 " + dir;
+    status_->setMessage(msg);
+    for (const auto& n : notes) say(n, true);
+    invalidate();
+}
+
+void HmiRecordingsPane::showDetail() {
+    using PG = ui::PropertyGrid;
+    std::vector<PG::Category> cats;
+    const auto* it = selectedItem();
+    if (!it) {
+        PG::Category c;
+        c.name = "Enregistrement";
+        c.properties.push_back(hmikit::prop("", items_.empty() ? "Aucun enregistrement : l'Enregistreur, le bouton Enregistrer de la simulation, "
+                                                                 "une action ou IHM_ENREG_DEMARRER en font un."
+                                                               : "Choisis un enregistrement.",
+                                            PG::ValueType::ReadOnly));
+        cats.push_back(std::move(c));
+        detail_->setCategories(std::move(cats));
+        return;
+    }
+    const auto& h = it->header;
+    PG::Category c;
+    c.name = it->name;
+    const auto ro = [&c](std::string label, std::string value) { c.properties.push_back(hmikit::prop(std::move(label), std::move(value), PG::ValueType::ReadOnly)); };
+    if (!it->problem.empty()) ro("Illisible", it->problem);
+    // L'ecran a 40 % de la duree : la vue (et les popups) d'alors - sans mot de passe, la piste se lit.
+    std::string at40 = "prot\xC3\xA9g\xC3\xA9 : il faut le mot de passe pour le voir";
+    if (!h.locked() && it->problem.empty()) {
+        hmi::rec::Header hh;
+        hmi::rec::Track track;
+        if (hmi::rec::readTrack(it->path, {}, hh, track) == hmi::rec::Status::Ok && !track.screens.empty()) {
+            const double t = h.duration * 0.4;
+            const hmi::rec::Screen* shown = &track.screens.front();
+            for (const auto& sc : track.screens) {
+                if (sc.t > t) break;
+                shown = &sc;
+            }
+            at40 = shown->view;
+            for (const auto& pp : shown->popups) at40 += " + " + pp.view;
+        } else {
+            at40 = h.startView;
+        }
+    }
+    ro("\xC3\x89" "cran \xC3\xA0 40 %", at40);
+    ro("Dur\xC3\xA9" "e", hmi::rec::clock(h.duration) + (h.cut ? " (coup\xC3\xA9 net : relu jusqu'au dernier bloc)" : ""));
+    ro("Images", std::to_string(h.frames) + " (" + std::to_string(h.rateHz) + " / s)");
+    ro("Clics", std::to_string(h.clicks));
+    ro("Alarmes", std::to_string(h.alarms));
+    ro("Vues", h.viewsShown.empty() ? h.startView : h.viewsShown);
+    ro("Projet", h.project + (h.projectVersion.empty() ? std::string{} : " " + h.projectVersion));
+    ro("Enregistr\xC3\xA9", recDate(h.date) + " \xC2\xB7 " + h.where + (h.by.empty() ? std::string{} : " \xC2\xB7 par " + h.by));
+    ro("Prot\xC3\xA9g\xC3\xA9", h.locked() ? "oui, mot de passe" : "non");
+    ro("Fichier", it->path);
+    const std::string path = it->path;
+    c.properties.push_back(hmikit::prop("Description", h.description, PG::ValueType::Text,
+                                        [this, path](std::string_view v) {
+                                            std::string why;
+                                            if (!hmi::rec::setDescription(path, std::string(v), &why)) {
+                                                say("Description : " + why, true);
+                                                return false;
+                                            }
+                                            say("Description enregistr\xC3\xA9" "e.");
+                                            refresh();
+                                            return true;
+                                        },
+                                        "Ce qu'on voit dans cet enregistrement (elle est lisible sans le mot de passe)."));
+    cats.push_back(std::move(c));
+    detail_->setCategories(std::move(cats));
+}
+
+bool HmiRecordingsPane::importPath(const std::string& path, std::string* why) {
+    std::string name, reason;
+    if (folder().empty()) reason = "le projet n'est pas encore enregistr\xC3\xA9";
+    else if (hmi::rec::importFile(path, folder(), name, &reason)) {
+        refresh();
+        (void)select(name);
+        say("Import\xC3\xA9 : " + name);
+        return true;
+    }
+    say("Importer : " + reason, true);
+    if (why) *why = reason;
+    return false;
+}
+
+bool HmiRecordingsPane::exportTo(const std::string& destination, std::string* why) {
+    const auto* it = selectedItem();
+    std::string written, reason = "aucun enregistrement choisi";
+    if (it && hmi::rec::exportFile(folder(), it->name, destination, &written, &reason)) {
+        say("Export\xC3\xA9 : " + written);
+        return true;
+    }
+    say("Exporter : " + reason, true);
+    if (why) *why = reason;
+    return false;
+}
+
+bool HmiRecordingsPane::renameTo(const std::string& wanted, std::string* why) {
+    const auto* it = selectedItem();
+    std::string reason = "aucun enregistrement choisi";
+    const std::string to = hmi::rec::cleanName(wanted);
+    if (it && it->name == to) return true;
+    if (it && hmi::rec::renameFile(folder(), it->name, to, &reason)) {
+        const std::string from = it->name;
+        // Ce qui le cite en dur suit (une commande : Ctrl+Z rend les citations, pas le nom du fichier).
+        std::size_t count = 0;
+        auto cmd = hmi::changeProject(doc_, "Renommer l'enregistrement " + from, [&](hmi::Project& p) { count = hmi::rec::renameReferences(p, from, to); });
+        if (cmd && count > 0) apply_(std::move(cmd));
+        refresh();
+        (void)select(to);
+        say("Renomm\xC3\xA9 : " + from + " \xE2\x86\x92 " + to + (count ? " (" + std::to_string(count) + " citation(s) suivent)" : std::string{}));
+        return true;
+    }
+    say("Renommer : " + reason, true);
+    if (why) *why = reason;
+    return false;
+}
+
+bool HmiRecordingsPane::setPassword(const std::string& current, const std::string& fresh, std::string* why) {
+    const auto* it = selectedItem();
+    std::string reason = "aucun enregistrement choisi";
+    if (it) {
+        const auto st = hmi::rec::setPassword(it->path, current, fresh, &reason);
+        if (st == hmi::rec::Status::Ok) {
+            refresh();
+            say(fresh.empty() ? "Protection retir\xC3\xA9" "e." : "Prot\xC3\xA9g\xC3\xA9 par un mot de passe.");
+            return true;
+        }
+    }
+    say("Mot de passe : " + reason, true);
+    if (why) *why = reason;
+    return false;
+}
+
+bool HmiRecordingsPane::setDescription(const std::string& text, std::string* why) {
+    const auto* it = selectedItem();
+    std::string reason = "aucun enregistrement choisi";
+    if (it && hmi::rec::setDescription(it->path, text, &reason)) {
+        refresh();
+        return true;
+    }
+    if (why) *why = reason;
+    return false;
+}
+
+bool HmiRecordingsPane::removeSelected(std::string* why) {
+    const auto* it = selectedItem();
+    std::string reason = "aucun enregistrement choisi";
+    const std::string pf = hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder;
+    const std::string trash = pf.empty() ? std::string{} : pf + "/ihm/corbeille";
+    if (it) {
+        const std::string name = it->name;
+        if (hmi::rec::removeFile(folder(), name, trash, &reason)) {
+            refresh();
+            say("Supprim\xC3\xA9 : " + name + (trash.empty() ? std::string{} : " (dans la corbeille du projet)"));
+            return true;
+        }
+    }
+    say("Supprimer : " + reason, true);
+    if (why) *why = reason;
+    return false;
+}
+
+void HmiRecordingsPane::replaySelected() {
+    const auto* it = selectedItem();
+    if (!it) return;
+    if (!it->problem.empty()) {
+        say("Rejouer : " + it->problem, true);
+        return;
+    }
+    hmi::ReplayRequest rq;
+    rq.name = it->name;
+    rq.source = "Ressources \xE2\x80\xBA Enregistrements";
+    if (hosts_.replay) hosts_.replay(rq);
+    else say("Rejouer : pas de simulation ici", true);
+}
+
+void HmiRecordingsPane::onLayout() {
+    const auto b = bounds();
+    tools_->setBounds({b.x, b.y, b.w, 38});
+    status_->setBounds({b.x, b.y + b.h - 24, b.w, 24});
+    split_->setBounds({b.x, b.y + 38, b.w, std::max(0.f, b.h - 62)});
+}
+
+void HmiRecordingsPane::onPaint(const ui::PaintContext& ctx) {
+    ctx.r.fillRect(bounds(), ctx.theme.color.panelBg);
+    // Le dossier change sans nous (un enregistrement qui finit, un fichier copie) : relu toutes les 2 s.
+    if (ctx.time - lastScan_ >= 2.0) {
+        lastScan_ = ctx.time;
+        std::string sig = folder();
+        for (const auto& name : hmi::rec::fileNames(folder())) sig += "|" + name;
+        std::string now = folder();
+        for (const auto& it : items_) now += "|" + it.name;
+        if (scanned_.empty() || sig != now) refresh();
+    }
+}
+
+// ---- Configuration > Enregistrements -------------------------------------------------------------------------
+HmiRecordingSettingsPane::HmiRecordingSettingsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
+    : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
+    const std::string base = this->id();
+    grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
+    status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
+    links_ += grid_->propertyRejected->connect([this](const std::string& name, const std::string& value) {
+        if (message_.empty()) say(name + " : \xC2\xAB " + value + " \xC2\xBB refus\xC3\xA9", true);
+    });
+    links_ += doc_->changed->connect([this](Id) { refresh(); });
+    refresh();
+}
+
+void HmiRecordingSettingsPane::setHosts(Hosts h) {
+    hosts_ = std::move(h);
+    refresh();
+}
+
+void HmiRecordingSettingsPane::say(std::string text, bool error) {
+    if (error) ui::PropertyGrid::refuse(text);
+    message_ = std::move(text);
+    status_->setTransientMessage(message_, 8.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+}
+
+bool HmiRecordingSettingsPane::setSetting(const std::string& key, const std::string& raw, std::string* why) {
+    using hmikit::trimmed;
+    const auto fail = [&](std::string m) {
+        say(m, true);
+        if (why) *why = std::move(m);
+        return false;
+    };
+    const std::string v = trimmed(raw);
+    const auto apply = [&](const std::string& label, const std::function<void(hmi::RecordingSettings&)>& fn) {
+        auto cmd = hmi::changeProject(doc_, "Enregistrements : " + label, [&](hmi::Project& p) { fn(p.recording); });
+        if (!cmd) return false;
+        apply_(std::move(cmd));
+        refresh();
+        return true;
+    };
+    if (key == "pointeur" || key == "sons" || key == "popups" || key == "commandes") {
+        const bool on = hmikit::yes(v);
+        return apply(key == "pointeur" ? "pointeur et clics" : key == "sons" ? "sons" : key == "popups" ? "popups" : "commandes d'une autre application",
+                     [&](hmi::RecordingSettings& r) {
+                         if (key == "pointeur") r.pointer = on;
+                         else if (key == "sons") r.sounds = on;
+                         else if (key == "popups") r.popups = on;
+                         else r.external = on;
+                     });
+    }
+    if (key == "dossier") {
+        if (v.find_first_of("*?\"<>|") != std::string::npos) return fail("Dossier : un chemin sans * ? \" < > |");
+        return apply("dossier", [&](hmi::RecordingSettings& r) { r.folder = v; });
+    }
+    struct Num {
+        const char* key;
+        long long   lo, hi;
+        const char* label;
+    };
+    static const Num kNums[] = {{"duree", 1, 24 * 60, "Dur\xC3\xA9" "e au plus (min)"},
+                                {"taille", 10, 1024 * 1024, "Taille du dossier au plus (Mo)"},
+                                {"frequence", 1, 50, "Prises par seconde"}};
+    for (const auto& k : kNums)
+        if (key == k.key) {
+            char* end = nullptr;
+            const long long x = std::strtoll(v.c_str(), &end, 10);
+            if (v.empty() || (end && *end) || x < k.lo || x > k.hi)
+                return fail(std::string(k.label) + " : un nombre de " + std::to_string(k.lo) + " \xC3\xA0 " + std::to_string(k.hi));
+            return apply(k.label, [&](hmi::RecordingSettings& r) {
+                if (key == "duree") r.maxMinutes = static_cast<int>(x);
+                else if (key == "taille") r.maxFolderMb = static_cast<int>(x);
+                else r.rateHz = static_cast<int>(x);
+            });
+        }
+    return fail("r\xC3\xA9glage inconnu : " + key);
+}
+
+void HmiRecordingSettingsPane::refresh() {
+    using PG = ui::PropertyGrid;
+    using hmikit::prop;
+    using hmikit::tf;
+    const auto& r = doc_->project.recording;
+    const auto commit = [this](const char* key) {
+        return [this, key](std::string_view v) {
+            message_.clear();
+            return setSetting(key, std::string(v));
+        };
+    };
+    const std::string pf = hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder;
+    const std::string dir = hmi::rec::folderOf(r, pf);
+    std::vector<PG::Category> cats;
+    PG::Category where;
+    where.name = "O\xC3\xB9";
+    where.properties.push_back(prop("Dossier", r.folder, PG::ValueType::Text, commit("dossier"),
+                                    "Vide : le dossier natif ressources/enregistrements du projet (Ressources \xE2\x80\xBA Enregistrements). "
+                                    "Un chemin relatif part du dossier du projet. Au poste d'exploitation : le m\xC3\xAAme dossier, sur le PC du poste."));
+    where.properties.push_back(prop("Chemin", dir.empty() ? std::string("(le projet n'est pas encore enregistr\xC3\xA9)") : dir, PG::ValueType::ReadOnly));
+    where.properties.push_back(prop("Taille du dossier au plus (Mo)", std::to_string(r.maxFolderMb), PG::ValueType::Integer, commit("taille"),
+                                    "Au-del\xC3\xA0, \xC3\xA0 la fin d'un enregistrement, les plus anciens sont retir\xC3\xA9s (le journal le dit). "
+                                    "2048 : 2 Go."));
+    cats.push_back(std::move(where));
+    PG::Category what;
+    what.name = "Ce qui est enregistr\xC3\xA9";
+    what.properties.push_back(prop("Dur\xC3\xA9" "e au plus (min)", std::to_string(r.maxMinutes), PG::ValueType::Integer, commit("duree"),
+                                   "Celle d'un enregistrement sans dur\xC3\xA9" "e donn\xC3\xA9" "e (l'Enregistreur, l'action, la native) : au bout, il "
+                                   "s'arr\xC3\xAAte et se garde."));
+    what.properties.push_back(prop("Prises par seconde", std::to_string(r.rateHz), PG::ValueType::Integer, commit("frequence"),
+                                   "10 : dix fois par seconde. Seul ce qui change est \xC3\xA9" "crit ; une image compl\xC3\xA8te toutes les 5 s."));
+    what.properties.push_back(prop("Pointeur et clics", tf(r.pointer), PG::ValueType::Boolean, commit("pointeur"),
+                                   "La souris (ou le doigt) de l'op\xC3\xA9rateur et ses clics, rejou\xC3\xA9s en fant\xC3\xB4me."));
+    what.properties.push_back(prop("Sons", tf(r.sounds), PG::ValueType::Boolean, commit("sons"),
+                                   "Les sons jou\xC3\xA9s (alarmes, actions, scripts) : rejou\xC3\xA9s sur le canal Relecture."));
+    what.properties.push_back(prop("Popups", tf(r.popups), PG::ValueType::Boolean, commit("popups"),
+                                   "Les popups ouvertes et leurs param\xC3\xA8tres. D\xC3\xA9" "coch\xC3\xA9 : la vue seule."));
+    cats.push_back(std::move(what));
+    PG::Category ext;
+    ext.name = "Autre application";
+    ext.properties.push_back(prop("Accepter les commandes d'une autre application", tf(r.external), PG::ValueType::Boolean, commit("commandes"),
+                                  "IHM-Studio.exe --enregistrer \"Nom\", --arreter-enregistrement, --rejouer \"Nom\", --quitter-relecture : "
+                                  "une autre application (un banc de test, un script) pilote les enregistrements de cette IHM. "
+                                  "D\xC3\xA9" "coch\xC3\xA9 (par d\xC3\xA9" "faut) : refus\xC3\xA9" "es (code 5)."));
+    cats.push_back(std::move(ext));
+    grid_->setCategories(std::move(cats));
+    status_->setMessage(dir.empty() ? std::string("Pas encore de dossier : enregistre le projet.")
+                                    : std::to_string(hmi::rec::fileNames(dir).size()) + " enregistrement(s) \xC2\xB7 " + dir);
+}
+
+void HmiRecordingSettingsPane::onLayout() {
+    const auto b = bounds();
+    status_->setBounds({b.x, b.y + b.h - 24, b.w, 24});
+    grid_->setBounds({b.x, b.y, std::min(b.w, 720.f), std::max(0.f, b.h - 24)});
+}
+
+void HmiRecordingSettingsPane::onPaint(const ui::PaintContext& ctx) { ctx.r.fillRect(bounds(), ctx.theme.color.panelBg); }
 
 } // namespace app

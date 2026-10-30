@@ -223,6 +223,7 @@ std::size_t Runtime::loginRows() const {
 
 // ============================================================ une partie ===
 void Runtime::loginPart(std::string_view part, double now) {
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun geste
     if (paused_) return;                                 // 1.13.0 : en pause (le debogueur), l'IHM est figee
     // 1.13.0 : un point arme - la connexion et ce qu'elle ouvre (la vue de son groupe, son OnOpen) sur une tache du
     // debogueur : une pause y fige la suite du geste.

@@ -62,6 +62,9 @@ struct AppOptions {
     // Lot 14 : --ihm <dossier du projet> - le poste d'exploitation (l'IHM seule,
     // en plein ecran, sans l'editeur).
     std::string station;
+    // 1.14.0 (M4) : une commande d'enregistrement (--enregistrer, --rejouer...) pour le poste qu'on ouvre : elle part
+    // des que son IHM tourne (hmi::rec::parseCommand).
+    std::vector<std::string> recordingCommand;
 };
 
 // Published when a project becomes current; every view repopulates from this.
@@ -236,6 +239,9 @@ public:
     // d'enregistrer celui qui est modifie ; plus tard si une question attend deja, si un
     // tutoriel tourne ; jamais par-dessus le poste d'exploitation en marche.
     void takeInstanceRequests();
+    // 1.14.0 (M4) : la commande d'enregistrement de la ligne de commande (le poste qu'on ouvre), des que son IHM tourne.
+    void runPendingRecording();
+    std::vector<std::string> pendingRecording_;
     void promptMasterKeyIfNeeded();                  // the first-run modal
     // 1.8.0 : l'epinglage a la barre des taches demande a l'installation (une fois par
     // compte) ; l'accueil l'appelle quand la fenetre est au premier plan, sans dialogue.

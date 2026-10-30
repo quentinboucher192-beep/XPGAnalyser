@@ -21,6 +21,8 @@ const std::vector<Place>& places() {
         {Kind::HmiPlace, "config", "Configuration", "configuration", "help.hmi"},
         {Kind::HmiPlace, "fichiers", "Fichiers externes", "fichiers", "help.hmi"},
         {Kind::HmiPlace, "ressources", "Ressources", "ressources", "help.hmi"},
+        {Kind::HmiPlace, "enregistrements", "Ressources \xE2\x80\xBA Enregistrements", "enregistrements", "help.hmi"},   // 1.14.0 (M4)
+        {Kind::HmiPlace, "config-enregistrements", "Configuration \xE2\x80\xBA Enregistrements", "enregistrements", "help.hmi"},
         {Kind::HmiPlace, "echange", "Exporter / Importer", "echange", "help.hmi"},
         {Kind::HmiPlace, "symboles", "Symboles", "symboles", "help.hmi"},
         {Kind::HmiPlace, "styles", "Styles", "styles-nommes", "help.hmi"},

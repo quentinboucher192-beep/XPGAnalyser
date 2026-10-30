@@ -97,6 +97,7 @@ struct ArchiveReport {
 struct ProjectArchiveOptions {
     bool        versions{true};       // versions/
     bool        history{true};        // ihm/historique/ : alarmes, mesures, audit, memoire des reglages PID
+    bool        recordings{false};    // 1.14.0 (M4) : ihm/ressources/enregistrements/ (la case "avec les enregistrements")
     std::string tool;                 // "IHM Studio 1.12.30"
 };
 // L'archive du dossier d'un projet (enregistre), en memoire ; puis ecrite.

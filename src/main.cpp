@@ -18,6 +18,7 @@
 #include "core/CrashGuard.hpp"   // 1.10.2 (CR) : le rapport de plantage et de blocage
 #include "core/CallTrail.hpp"    // 1.10.2 (CR) : --sans-historique
 #include "core/SingleInstance.hpp" // 1.11.2 (UNI, decision 195) : une seule instance
+#include "hmi/HmiRecording.hpp"   // 1.14.0 (M4) : --enregistrer, --rejouer (une autre application)
 #include "help/ProblemReport.hpp" // 1.11 (T2) : « Signaler le probleme » apres un plantage
 #include "import/ProjectImporter.hpp"
 #include "project/SharedLibrary.hpp"
@@ -26,9 +27,12 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <chrono>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
@@ -246,6 +250,11 @@ int main(int argc, char** argv) {
             if (core::hasIhm()) options.station = argv[++i];
             else std::fprintf(stderr, "warning: %s : le poste d'exploitation est dans IHM Studio\n", argv[++i]);
         }
+        // 1.14.0 (M4) : les enregistrements pilotes d'une autre application (hmi::rec::parseCommand les lit).
+        else if (a == "--enregistrer" || a == "--rejouer" || a == "--duree" || a == "--mot-de-passe" || a == "--vitesse" || a == "--reponse") {
+            if (i + 1 < argc && std::string(argv[i + 1]).rfind("--", 0) != 0) ++i;
+        }
+        else if (a == "--arreter-enregistrement" || a == "--jeter" || a == "--quitter-relecture") {}
         else if (a == "--size" && i + 1 < argc) {
             int w = 0, h = 0;
             if (std::sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
@@ -285,6 +294,27 @@ int main(int argc, char** argv) {
         return runCli(files);
     }
 
+    // ---- 1.14.0 (M4) : UNE COMMANDE D'ENREGISTREMENT D'UNE AUTRE APPLICATION ----------------------------------
+    //    IHM-Studio.exe --enregistrer "Nom" [--duree 10m] [--mot-de-passe x]   --arreter-enregistrement [--jeter]
+    //    IHM-Studio.exe --rejouer "Nom" [--vitesse 2] [--mot-de-passe x]       --quitter-relecture
+    //  IHM Studio deja ouvert : la commande lui est passee (l'instance unique) avec un fichier de reponse ; on attend sa
+    //  reponse (60 s au plus), on l'ecrit, et on sort avec son code : 0 fait, 2 aucune IHM en marche, 3 nom introuvable,
+    //  4 mot de passe faux, 5 refuse par la configuration (1 : une option mal ecrite). Pas ouvert : avec --poste <projet>,
+    //  le poste s'ouvre et la commande part des que son IHM tourne ; sans, 2.
+    const hmi::rec::Command recCommand = hmi::rec::parseCommand(std::vector<std::string>(argv + 1, argv + argc));
+    if (recCommand.kind != hmi::rec::Command::Kind::None || !recCommand.error.empty()) {
+        attachParentConsole();
+        if (!core::hasIhm()) {
+            std::fprintf(stderr, "les enregistrements sont dans IHM Studio\n");
+            return hmi::rec::kExitBadOption;
+        }
+        if (!recCommand.error.empty()) {
+            std::fprintf(stderr, "%s\n", recCommand.error.c_str());
+            return hmi::rec::kExitBadOption;
+        }
+    }
+    const bool recording = recCommand.kind != hmi::rec::Command::Kind::None;
+
     // 1.11.2 (UNI, decision 195) : UNE SEULE INSTANCE. Deja ouverte (meme utilisateur,
     // meme session) : on lui passe la demande - le projet, ou le poste (--ihm), en chemins
     // absolus, avant tout changement de dossier de travail - et on s'arrete ; elle revient
@@ -301,6 +331,37 @@ int main(int argc, char** argv) {
             core::instance::Options single;
             if (const auto label = core::editionLabel(); !label.empty()) single.name += "-" + std::string(label);
             instance = core::instance::Guard::acquire(single);
+            if (instance->role() == core::instance::Guard::Role::Secondary && recording) {
+                // 1.14.0 (M4) : la commande et le fichier ou l'instance ouverte repond ; on attend la reponse.
+                namespace fs = std::filesystem;
+                std::error_code ec;
+                const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+                const fs::path reply = fs::temp_directory_path(ec) / ("xpg-enregistrement-" + std::to_string(stamp) + ".txt");
+                auto command = recCommand;
+                const auto u8 = reply.u8string();
+                command.reply.assign(u8.begin(), u8.end());
+                std::string failed;
+                if (!instance->forward(hmi::rec::commandArgs(command), &failed)) {
+                    std::fprintf(stderr, "IHM Studio ne r\xC3\xA9pond pas (%s)\n", failed.c_str());
+                    return hmi::rec::kExitNoHmi;
+                }
+                for (int k = 0; k < 600; ++k) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::ifstream in(reply, std::ios::binary);
+                    if (!in) continue;
+                    std::ostringstream text;
+                    text << in.rdbuf();
+                    in.close();
+                    int code = hmi::rec::kExitNoHmi;
+                    std::string message;
+                    if (!hmi::rec::readReply(text.str(), code, message)) continue;   // pas encore fini d'ecrire
+                    fs::remove(reply, ec);
+                    std::fprintf(code == 0 ? stdout : stderr, "%s\n", message.c_str());
+                    return code;
+                }
+                std::fprintf(stderr, "IHM Studio n'a pas r\xC3\xA9pondu en 60 s\n");
+                return hmi::rec::kExitNoHmi;
+            }
             if (instance->role() == core::instance::Guard::Role::Secondary) {
                 namespace fs = std::filesystem;
                 std::vector<std::string> request;
@@ -331,6 +392,14 @@ int main(int argc, char** argv) {
         }
     }
 
+    // 1.14.0 (M4) : personne a qui passer la commande - le poste qu'on ouvre la recevra, sinon aucune IHM ne tourne.
+    if (recording) {
+        if (options.station.empty()) {
+            std::fprintf(stderr, "aucune IHM en marche (IHM Studio n'est pas ouvert ; --poste <projet> l'ouvre)\n");
+            return hmi::rec::kExitNoHmi;
+        }
+        options.recordingCommand = std::vector<std::string>(argv + 1, argv + argc);
+    }
     if (!files.empty()) options.openOnStart = files.front();
     // 1.8.0 : LA VERSION INSTALLEE (installation.ini a cote de l'exe) travaille dans
     // son dossier des donnees (app/Dossiers.hpp) ; sinon, comme avant : le dossier de

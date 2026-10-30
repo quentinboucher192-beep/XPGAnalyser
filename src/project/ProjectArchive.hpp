@@ -123,6 +123,9 @@ struct Item {
 struct CollectOptions {
     bool versions{true};    // versions/
     bool history{true};     // ihm/historique/ : l'historique de marche
+    // 1.14.0 (M4) : ihm/ressources/enregistrements/ - les enregistrements de l'IHM (.xrec), seulement si on le coche
+    // (ils peuvent peser lourd). Un enregistrement en cours (.xrec.part) ne part jamais.
+    bool recordings{false};
 };
 // Ce que l'archive ne prend pas (chemin relatif au dossier, avec des '/') ;
 // `why` : pourquoi, pour le dire ("les artefacts du build, refaits au deballage...").

@@ -99,7 +99,8 @@ Id Runtime::keyOwner(const keys::Chord& c) const {
 }
 
 bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool typing) {
-    if (paused_) return false;                   // 1.13.0 : en pause (le debogueur), l'IHM est figee
+    if (paused_) return false;
+    if (replayOn_) return false;                 // 1.14.0 (M4) : une relecture ne recoit aucune touche                   // 1.13.0 : en pause (le debogueur), l'IHM est figee
     // 1.13.0 : un relachement garde pendant une pause qui vient de finir part avant ce nouvel appui - la touche rappuyee
     // n'est pas prise pour une repetition, et son KeyRelease ne part pas apres, touche enfoncee.
     if (!deferred_.empty() && !currentTask_) {
@@ -163,6 +164,7 @@ bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool ty
 }
 
 bool Runtime::keyUp(std::string_view key, double now) {
+    if (replayOn_) return false;                 // 1.14.0 (M4) : une relecture ne recoit aucune touche
     // 1.13.0 : EN PAUSE (le debogueur), rien ne tourne ni ne se vide (une fonction de vue peut etre arretee au milieu) :
     // le relachement d'une touche tenue est garde, et rejoue a la reprise - ses actions KeyRelease partent alors, dans
     // l'ordre (un "Marche := FALSE" n'est jamais perdu), la touche ne reste pas enfoncee.

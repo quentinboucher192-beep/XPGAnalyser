@@ -118,6 +118,10 @@ enum class Kind : std::uint8_t {
     // (un PDF, une image, un texte : les pages, le zoom, les vignettes, la recherche ; sa
     // page suit une variable), dans la famille Medias apres la video (HmiDocView.hpp).
     SpeedDrive, DocumentViewer,
+    // 1.14.0 (M4), A LA FIN : les enregistrements de l'IHM (HmiRecording.hpp) - l'Enregistreur (un bouton
+    // rond Enregistrer / Arreter, le chrono, l'etat ; a l'arret, le nom, la description, le mot de passe) et le
+    // Lecteur d'enregistrements (la liste du dossier, Rejouer), dans la famille Enregistrements de la palette.
+    Recorder, RecordingPlayer,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -157,6 +161,8 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::AnimatedGif,
     // 1.12.24 : la regulation
     Kind::PidTuner,
+    // 1.14.0 (M4) : les enregistrements
+    Kind::Recorder, Kind::RecordingPlayer,
 };
 // Lot 8 : les objets qui repondent au clavier en marche (un champ a le focus).
 [[nodiscard]] bool kindTakesText(Kind) noexcept;   // champ de saisie, connexion, changer le mot de passe
@@ -341,9 +347,11 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::FireDamper,          "FireDamper",          "Clapet coupe-feu"},
     {Kind::SpeedDrive,          "SpeedDrive",          "Variateur de vitesse"},                    // 1.12.30
     {Kind::DocumentViewer,      "DocumentViewer",      "Visionneuse de documents"},                // 1.12.30
+    {Kind::Recorder,            "Recorder",            "Enregistreur"},                            // 1.14.0 (M4)
+    {Kind::RecordingPlayer,     "RecordingPlayer",     "Lecteur d'enregistrements"},
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::DocumentViewer) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::RecordingPlayer) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;
@@ -433,6 +441,15 @@ enum class Operation : std::uint8_t {
     // une variable rappel) : la cible le nomme, la valeur porte ses arguments ("Niveau, 2"). Comme un script
     // d'une ligne : Cible(arguments);
     Call,
+    // 1.14.0 (M4) : LES ENREGISTREMENTS (HmiRecording.hpp), A LA FIN. Enregistrement : demarrer (la cible : le
+    // nom, $reperes$ et {formules} comme un texte ; params : duree, mot_de_passe, deja), arreter et garder
+    // (params : demander), demarrer ou arreter (bascule), arreter sans garder. Relecture : rejouer (la cible :
+    // l'enregistrement ; la valeur : la vitesse ; params : depuis, mot_de_passe), pause / reprendre, avancer ou
+    // reculer (la valeur : des secondes, negatif : reculer), changer la vitesse (la valeur), quitter. Fichiers :
+    // exporter (la cible ; la valeur : le dossier), supprimer (la cible ; params : confirmer).
+    RecordStart, RecordStop, RecordToggle, RecordCancel,
+    ReplayStart, ReplayPause, ReplaySeek, ReplaySpeed, ReplayQuit,
+    RecordingExport, RecordingDelete,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -466,7 +483,19 @@ inline constexpr Operation kOperations[] = {
     Operation::Maths, Operation::Keyboard,                                               // 1.11.6
     Operation::SubmitInputs,                                                             // 1.11.23
     Operation::Call,                                                                     // 1.12.19
+    // 1.14.0 (M4) : les enregistrements
+    Operation::RecordStart, Operation::RecordStop, Operation::RecordToggle, Operation::RecordCancel,
+    Operation::ReplayStart, Operation::ReplayPause, Operation::ReplaySeek, Operation::ReplaySpeed, Operation::ReplayQuit,
+    Operation::RecordingExport, Operation::RecordingDelete,
 };
+// 1.14.0 (M4) : les operations des enregistrements (Enregistrement, Relecture, Fichiers) ; celles qui nomment
+// un enregistrement dans leur cible (Generer verifie un nom ecrit en dur).
+[[nodiscard]] constexpr bool operationIsRecording(Operation o) noexcept {
+    return static_cast<int>(o) >= static_cast<int>(Operation::RecordStart) && static_cast<int>(o) <= static_cast<int>(Operation::RecordingDelete);
+}
+[[nodiscard]] constexpr bool operationNamesRecording(Operation o) noexcept {
+    return o == Operation::ReplayStart || o == Operation::RecordingExport || o == Operation::RecordingDelete;
+}
 // Lot 16 : les operations qui visent un GIF anime de la vue.
 [[nodiscard]] constexpr bool operationTargetsGif(Operation o) noexcept {
     return o == Operation::GifPlay || o == Operation::GifPause || o == Operation::GifStop || o == Operation::GifReplay;
@@ -1927,6 +1956,23 @@ struct Station {
     bool operator==(const Station&) const = default;
 };
 
+// ------------------------------------------- 1.14.0 (M4) : les enregistrements ---
+//  Configuration > Enregistrements (HmiRecording.hpp). Un enregistrement garde ce que montre l'IHM qui tourne
+//  (valeurs, vues, popups, alarmes, pointeur et clics, sons, journal) dans un fichier .xrec du dossier natif
+//  Ressources > Enregistrements (ihm/ressources/enregistrements du projet). Ecrit dans le projet seulement s'il
+//  change (le format ne monte pas : un projet d'avant prend ces valeurs par defaut).
+struct RecordingSettings {
+    std::string folder;                 // vide : le dossier natif ; sinon un chemin (absolu, ou relatif au dossier du projet)
+    int         maxMinutes{30};         // la duree d'un enregistrement, au plus (un plus long s'arrete et se garde)
+    int         maxFolderMb{2048};      // la taille du dossier, au plus : les plus anciens sont retires (le journal le dit)
+    int         rateHz{10};             // les prises par seconde (au moins le cycle de l'IHM) ; 1 a 50
+    bool        pointer{true};          // le pointeur et les clics de l'operateur
+    bool        sounds{true};           // les sons joues
+    bool        popups{true};           // les popups ouvertes et fermees (avec leurs parametres)
+    bool        external{false};        // accepter les commandes d'une autre application (--enregistrer, --rejouer...)
+    bool operator==(const RecordingSettings&) const = default;
+};
+
 // ------------------------------------------------ lot 14 : notifications ---
 //  LES ALARMES PREVIENNENT QUELQU'UN. Un courriel par le relais SMTP de
 //  l'usine (sans TLS ; AUTH LOGIN si un utilisateur est donne), un SMS par une
@@ -2190,6 +2236,7 @@ struct Project {
     std::vector<VariableDisplay> displays;   // lot 13 : les unites et les formats des variables
     Communication     comm;                  // lot 14 : l'automate reel (Modbus TCP)
     Station           station;               // lot 14 : le poste d'exploitation
+    RecordingSettings recording;             // 1.14.0 (M4) : Configuration > Enregistrements
     Notifications     notify;                // lot 14 : courriels et SMS des alarmes
     std::vector<Report> reports;             // lot 14 : les rapports periodiques
     WebAccess         web;                   // lot 14 : l'acces par navigateur

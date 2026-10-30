@@ -67,6 +67,7 @@ inline constexpr std::string_view kSysDomains[] = {
     "Param\xC3\xA8tres syst\xC3\xA8me", "Communication",
     "Esclaves simul\xC3\xA9s",      // 1.9 : 13 - les compteurs, puis une structure SYS.Slave.<nom> par esclave
     "Souris et clavier",            // 1.11.23 : 14 - la souris, les touches, les raccourcis ; SYS.Key.<touche>
+    "Enregistrements",              // 1.14.0 (M4) : 15 - l'enregistrement qui tourne, la relecture affichee
 };
 inline constexpr std::size_t kSysDomainCount = sizeof(kSysDomains) / sizeof(kSysDomains[0]);
 // 1.12.0 : IHM Studio n'a pas d'automate - ni le domaine Automate (SYS.Plc...), ni
@@ -327,6 +328,16 @@ inline constexpr SysVar kSysVars[] = {
     {"KeyPresses",          14, "DINT",   "Les touches enfonc\xC3\xA9" "es depuis le lancement."},
     {"ShortcutLast",        14, "STRING", "Le dernier raccourci parti : Vue \xC2\xB7 touche ('' : aucun)."},
     {"ShortcutCount",       14, "DINT",   "Les raccourcis partis depuis le lancement."},
+    // ---- 15 : les enregistrements (1.14.0, M4 : HmiRecording.hpp) - en lecture seule ; pendant une relecture, elles
+    //      disent la relecture (pas ce qui a ete enregistre)
+    {"Recording",           15, "BOOL",   "Un enregistrement tourne (Enregistreur, action, IHM_ENREG_DEMARRER, --enregistrer)."},
+    {"RecordingName",       15, "STRING", "Son nom ('' : aucun)."},
+    {"RecordingTime",       15, "TIME",   "Depuis quand il tourne (T#0s : aucun)."},
+    {"Replay",              15, "BOOL",   "Une relecture est affich\xC3\xA9" "e : l'IHM montre un enregistrement, elle ne commande rien."},
+    {"ReplayPosition",      15, "TIME",   "O\xC3\xB9 en est la relecture, depuis le d\xC3\xA9" "but de l'enregistrement."},
+    {"ReplayLength",        15, "TIME",   "La dur\xC3\xA9" "e de l'enregistrement rejou\xC3\xA9 (T#0s : aucune relecture)."},
+    {"ReplaySpeed",         15, "REAL",   "Sa vitesse : 0,25 ; 0,5 ; 1 ; 2 ; 4 ou 8 (0 : aucune relecture)."},
+    {"ReplayPaused",        15, "BOOL",   "La relecture est en pause."},
 };
 inline constexpr std::size_t kSysVarCount = sizeof(kSysVars) / sizeof(kSysVars[0]);
 
@@ -510,6 +521,7 @@ inline constexpr int kSlaveDomain = 13;                    // "Esclaves simules"
 // jetons de hmi/HmiKeys.hpp : A..Z, Digit0..Digit9, F1..F12, Enter, Escape, Space...).
 inline constexpr std::string_view kKeyRoot = "Key";
 inline constexpr int kInputDomain = 14;                    // "Souris et clavier" dans kSysDomains
+inline constexpr int kRecordingDomain = 15;                // 1.14.0 (M4) : "Enregistrements" dans kSysDomains
 [[nodiscard]] inline const InfoVar* slaveMember(std::string_view name) noexcept {
     for (const auto& m : kSlaveMembers) if (same(m.name, name)) return &m;
     return nullptr;

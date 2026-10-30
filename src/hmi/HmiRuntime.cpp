@@ -465,6 +465,13 @@ public:
         const std::string r = resolved(n);
         // 1.9 : un parametre Copie / Les deux - la copie de la popup, jamais l'original.
         if (!r.empty() && r[0] == '$') return rt_.copyRead(r, out);
+        // 1.14.0 (M4) : UNE RELECTURE - la valeur de la piste passe avant tout le reste (variables IHM, automate,
+        // variables systeme, proprietes) ; ce qu'elle n'a pas se lit comme avant.
+        if (rt_.replayOn_)
+            if (const sim::Value* v = rt_.replayValue(upper(r))) {
+                out = *v;
+                return true;
+            }
         if (const auto it = vars.find(upper(r)); it != vars.end()) {
             // Lot 15 : liee a un equipement, elle se relit sur lui - sauf forcee (1.11.5) : elle garde sa valeur.
             if (!rt_.bound_.empty() && !rt_.forcedIhm_.count(it->first)) rt_.readBound(it->first, it->second);
@@ -475,10 +482,20 @@ public:
         // tableau IHM rend la valeur par defaut (et le journal le dit).
         if (!rt_.aggregates_.empty() && rt_.aggregateRead(r, out)) return true;
         // 1.12.7 : Reglages.Seuil - la constante publique d'un script general (une variable IHM passe avant).
-        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos && rt_.qualifiedRead(r, out)) return true;
+        // 1.14.0 (M4) : un enregistrement note ce que l'ecran lit (hors variables IHM, toutes prises) pour le garder.
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos && rt_.qualifiedRead(r, out)) {
+            if (rt_.recordOn_) rt_.noteRead(upper(r), r, rec::KeyKind::Qualified);
+            return true;
+        }
         // Lot 9 : SYS.UserName, Vue.Objet.Propriete, Vue.Open.
-        if (r.find('.') != std::string::npos && rt_.publicRead(r, out)) return true;
-        if (rt_.plc_ && rt_.plc_->read(plcOf(r), out)) return true;
+        if (r.find('.') != std::string::npos && rt_.publicRead(r, out)) {
+            if (rt_.recordOn_) rt_.noteRead(upper(r), r, rec::KeyKind::Public);
+            return true;
+        }
+        if (rt_.plc_ && rt_.plc_->read(plcOf(r), out)) {
+            if (rt_.recordOn_) rt_.noteRead(upper(r), r, rec::KeyKind::Plc);
+            return true;
+        }
         // 1.11.14 : INFO, ERROR... - les niveaux de IHM_LOG, en dernier : une vraie
         // variable du meme nom passe avant.
         if (const auto level = logLevelByName(n); level && n.find('.') == std::string_view::npos) {
@@ -733,7 +750,8 @@ public:
             || u == "IHM_NOM_UTILISATEUR" || u == "IHM_GROUPE" || u == "IHM_NIVEAU"
             || u == "IHM_EQUIPEMENT_OK" || u == "IHM_EQUIPEMENT_PING"                       // lot 15
             || u == "IHM_ESCLAVE_SIMULE"                                                    // 1.9
-            || u == "IHM_SCRIPT_ACTIF";                                                     // 1.12.26
+            || u == "IHM_SCRIPT_ACTIF"                                                      // 1.12.26
+            || u == "IHM_ENREG_EN_COURS" || u == "IHM_ENREG_EXISTE" || u == "IHM_ENREG_DUREE";  // 1.14.0 (M4)
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
     std::string caughtMessage(std::string_view m) override { return shownCodeNames(rt_.project_, frenchSimMessage(m)); }   // 1.12.1 : CATCH Erreur
@@ -995,6 +1013,7 @@ public:
     bool wait(std::int64_t milliseconds, std::string& why) override { return rt_.waitScript(milliseconds, why); }
     // 1.12.26 : FILE_READ, FILE_WRITE, DIR_LIST, RESOURCE_READ... (HmiRuntimeFiles.cpp).
     bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) override {
+        if (op == "IHM_ENREG_LISTE") return rt_.recordingFileOp(op, args, out, why);   // 1.14.0 (M4) : les noms du dossier
         return rt_.fileOp(op, args, out, why);
     }
     // 1.10 (integration, S1 <-> S2) : un operateur d'un type IHM ou d'un symbole
@@ -1233,6 +1252,9 @@ private:
                                    : std::string{};
         };
         const double now = rt_.now_;
+        // 1.14.0 (M4) : les enregistrements et la relecture (HmiRuntimeRecord.cpp).
+        if (u.rfind("IHM_ENREG_", 0) == 0 || u == "IHM_REJOUER" || u.rfind("IHM_RELECTURE_", 0) == 0)
+            if (rt_.recordingNative(u, args, result)) return true;
         if (u == "IHM_NAVIGUER") {
             Transition t;
             if (args.size() > 1)
@@ -1354,7 +1376,9 @@ private:
             return true;
         }
         if (u == "IHM_SON") {
+            rt_.soundChannel_ = "Scripts";                       // 1.14.0 (M4) : le canal, pour l'enregistrement
             result = sim::Value::boolean(rt_.playSound(text(0), rt_.source_));
+            rt_.soundChannel_.clear();
             return true;
         }
         // Lot 10 : le menu natif Parametres systeme ('Diagnostic' : cet onglet ;
@@ -2027,6 +2051,10 @@ void Runtime::setHooks(Hooks h) {
 
 sim::Environment& Runtime::environment() { return *env_; }
 sim::Environment& Runtime::envOf() const { return *env_; }
+// 1.14.0 (M4) : les variables IHM, case par case (un enregistrement les prend toutes).
+void Runtime::forEachIhmValue(const std::function<void(const std::string& key, const sim::Value&)>& f) const {
+    for (const auto& [key, value] : env_->vars) f(key, value);
+}
 std::string Runtime::resolvedPath(std::string_view path, bool concrete) {
     return concrete ? env_->concretePath(env_->resolved(path)) : env_->resolved(path);
 }
@@ -2372,6 +2400,7 @@ void Runtime::logAt(LogLevel level, std::string kind, std::string source, std::s
         ++errorCount_;
         lastError_ = e.message;
     }
+    if (recordOn_) recordEvent(rec::EventKind::Journal, e.kind, e.source.empty() ? e.message : e.source + " : " + e.message);   // 1.14.0 (M4)
     journal_.push_back(std::move(e));
     while (journal_.size() > journalCap()) journal_.pop_front();
 }
@@ -3758,6 +3787,12 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
         case Operation::Log:
             log("Journal", source, TextTemplate::compile(a.value).render(*env_));
             break;
+        // 1.14.0 (M4) : les enregistrements - Enregistrement, Relecture, Fichiers (HmiRuntimeRecord.cpp).
+        case Operation::RecordStart: case Operation::RecordStop: case Operation::RecordToggle: case Operation::RecordCancel:
+        case Operation::ReplayStart: case Operation::ReplayPause: case Operation::ReplaySeek: case Operation::ReplaySpeed:
+        case Operation::ReplayQuit: case Operation::RecordingExport: case Operation::RecordingDelete:
+            (void)recordingCommand(v, o, a, now);
+            break;
         case Operation::AckAlarm: {
             std::string why;
             const auto n = acknowledge(a.target, now, &why);
@@ -4914,6 +4949,9 @@ bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::V
 }
 
 void Runtime::stop(double now, const std::string& why) {
+    // 1.14.0 (M4) : une relecture se quitte (l'etat d'avant revient), un enregistrement se garde.
+    if (replayOn_) (void)quitReplay(now, "arr\xC3\xAAt de l'IHM");
+    if (recordOn_ || (rec_ && recordingInfo().stopping)) (void)stopRecording(true, now);
     stopTasks();                                     // 1.12.26 : les scripts detaches s'arretent avec l'IHM
     clearDebugState();                               // 1.13.0 : une pause, un pas en cours : finis
     deferred_.clear();                               // 1.13.0 : les relachements gardes pendant une pause : oublies
@@ -4951,6 +4989,7 @@ void Runtime::stop(double now, const std::string& why) {
 
 void Runtime::press(Id object, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun clic
     // 1.13.0 : un relachement garde pendant une pause qui vient de finir part avant ce nouvel appui (dans l'ordre).
     if (!deferred_.empty() && !currentTask_) {
         replayDeferredInput(now);
@@ -4983,6 +5022,7 @@ void Runtime::release(Id object, double now, bool inside) {
             deferred_.push_back(DeferredInput{false, {}, object, inside});
         return;
     }
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun clic
     if (unitWanted()) { (void)debugUnit("Clic", [this, object, now, inside] { release(object, now, inside); }); return; }
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
@@ -4997,6 +5037,7 @@ void Runtime::release(Id object, double now, bool inside) {
     evaluateProps(snapshot.id, *snapshot.object(object));
     const Object* o = snapshot.object(object);
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Clic sur");         // lot 13 : l'audit
+    if (click && recordOn_) recordClick(rec::EventKind::Click, object);   // 1.14.0 (M4) : le clic, enregistre
     // Lot 13 : une commande a signature attend le panneau - la bascule avant de
     // basculer, le bouton apres sa confirmation.
     // 1.12.24 : le Reglage PID signe ce qu'il ecrit (Appliquer, Revenir), pas l'ouverture de sa fenetre.
@@ -5063,6 +5104,7 @@ void Runtime::release(Id object, double now, bool inside) {
 
 void Runtime::doubleClick(Id object, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    if (replayOn_) return;                       // 1.14.0 (M4)
     if (unitWanted()) { (void)debugUnit("Double-clic", [this, object, now] { doubleClick(object, now); }); return; }
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
@@ -5072,6 +5114,7 @@ void Runtime::doubleClick(Id object, double now) {
     View snapshot = *v;
     evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Double-clic sur");         // lot 13 : l'audit
+    if (recordOn_) recordClick(rec::EventKind::DoubleClick, object);   // 1.14.0 (M4)
     runActions(snapshot, snapshot.object(object), Trigger::DoubleClick, now);
     // 1.13.0 (le debogueur) : la copie, pas l'objet de la vue - les actions ont pu s'arreter (une pause), et la vue changer
     // pendant ce temps (un objet ajoute : l'objet d'avant n'est plus a sa place).
@@ -5223,6 +5266,9 @@ void Runtime::cycle(double now) {
 
 void Runtime::tick(double now) {
     if (!running_ || !project_) return;
+    // 1.14.0 (M4) : UNE RELECTURE - le moteur est mis de cote (ni scripts, ni actions, ni alarmes, ni equipements) ;
+    // replayTick fait avancer la piste.
+    if (replayOn_) return;
     // 1.13.0 : EN PAUSE dans un script (le debogueur), l'IHM est figee : le prochain cycle attend la reprise.
     if (paused_) return;
     if (!currentTask_) {
@@ -5267,6 +5313,7 @@ void Runtime::tick(double now) {
                     const View snapshot = *v;
                     const Id held = pressed_;
                     GestureGuard gesture(*this, where(snapshot, snapshot.object(held)), "Appui long sur");   // lot 13 : l'audit
+                    if (recordOn_) recordClick(rec::EventKind::LongPress, held);   // 1.14.0 (M4)
                     runActions(snapshot, snapshot.object(held), Trigger::LongPress, now);
                     if (const Object* t = snapshot.object(held); t && t->kind == Kind::Table) tableGesture(snapshot, *t, Trigger::CellLongPress, now);
                 }
@@ -5325,6 +5372,7 @@ void Runtime::tick(double now) {
     }
     perfHistory_.advance(now);          // 1.12.17 : les secondes passees se ferment
     sampleExchanges(now);               // ... et les echanges, une fois par seconde
+    if (recordOn_) recordTick(now);     // 1.14.0 (M4) : une prise de l'enregistrement, a son heure
     // Deconnexion automatique apres N minutes sans un clic (lot 10 : le reglage du
     // poste, sinon celui du projet).
     const int idle = autoLogoutMinutes();
@@ -6918,6 +6966,7 @@ void Runtime::formMessage(Id object, std::string message, bool error, double now
 
 void Runtime::objectPart(Id object, std::string_view part, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun clic
     if (unitWanted()) { (void)debugUnit("Clic", [this, object, p = std::string(part), now] { objectPart(object, p, now); }); return; }
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
@@ -6946,6 +6995,14 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     // 1.12.30 : la visionneuse de documents - ses pages, son zoom, sa recherche (HmiRuntimeDocs.cpp).
     if (found->kind == Kind::DocumentViewer) {
         docObjectPart(*v, *found, part, now);
+        return;
+    }
+    // 1.14.0 (M4) : l'Enregistreur (son bouton), le Lecteur d'enregistrements (une ligne, Rejouer).
+    if (found->kind == Kind::Recorder || found->kind == Kind::RecordingPlayer) {
+        View snapshot = *v;
+        evaluateProps(snapshot.id, *snapshot.object(object));
+        if (recordOn_) recordClick(rec::EventKind::Click, object);
+        recorderPart(snapshot, *snapshot.object(object), part, now);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.
@@ -7091,6 +7148,7 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
 
 void Runtime::typeText(std::string_view text, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit rien
     if (unitWanted()) { (void)debugUnit("Saisie", [this, s = std::string(text), now] { typeText(s, now); }); return; }
     now_ = std::max(now_, now);
     lastActivity_ = now;
@@ -7132,6 +7190,7 @@ void Runtime::typeText(std::string_view text, double now) {
 
 void Runtime::typeKey(EditKey k, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit rien
     if (unitWanted()) { (void)debugUnit("Saisie", [this, k, now] { typeKey(k, now); }); return; }
     now_ = std::max(now_, now);
     lastActivity_ = now;
@@ -7336,6 +7395,8 @@ void Runtime::submitForm(const View& v, const Object& o, double now) {
             sim::Value after;
             (void)env_->read(var, after);
             log("Action", source, "saisie : " + var + " = " + (inputMode(o) == "motdepasse" ? std::string("********") : formatValue(after)));
+            // 1.14.0 (M4) : la saisie validee, enregistree (un mot de passe reste masque).
+            if (recordOn_) recordEvent(rec::EventKind::Input, source, inputMode(o) == "motdepasse" ? std::string("********") : formatValue(after));
             f.message.clear();
             f.error = false;
             f.text.clear();

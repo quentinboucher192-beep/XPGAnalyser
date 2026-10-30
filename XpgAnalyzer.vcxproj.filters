@@ -1180,6 +1180,9 @@
     <ClCompile Include="src\app\hmi\HmiDocPainter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiRecordPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1457,6 +1460,12 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimePid.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeRecord.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRecording.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiPidLoop.cpp">
@@ -2798,6 +2807,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDocView.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRecording.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">

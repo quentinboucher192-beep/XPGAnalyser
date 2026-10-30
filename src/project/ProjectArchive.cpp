@@ -333,6 +333,10 @@ bool excluded(std::string_view p, const CollectOptions& opt, std::string* why) {
     if (!opt.versions && (p == "versions" || startsWith(p, "versions/"))) return say("les versions (non demand\xC3\xA9" "es)");
     if (!opt.history && (p == "ihm/historique" || startsWith(p, "ihm/historique/")))
         return say("l'historique de marche (non demand\xC3\xA9)");
+    // 1.14.0 (M4) : les enregistrements de l'IHM - seulement si on le coche ; jamais un enregistrement en cours.
+    if (startsWith(p, "ihm/ressources/enregistrements/") && endsWith(p, ".part")) return say("un enregistrement en cours");
+    if (!opt.recordings && (p == "ihm/ressources/enregistrements" || startsWith(p, "ihm/ressources/enregistrements/")))
+        return say("les enregistrements de l'IHM (non demand\xC3\xA9s)");
     // Une archive ou une page d'archive posee dans le dossier : elle se contiendrait.
     if (archiveExtension(p)) return say("une archive de projet");
     return false;

@@ -46,6 +46,7 @@
 #include <vector>
 
 namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; struct ArchiveReport; }
+namespace hmi { struct RecordingStopAsk; struct ReplayRequest; }   // 1.14.0 (M4)
 namespace hmi::pipeline { struct Report; struct Diagnostic; struct Request; enum class Mode : std::uint8_t; }   // 1.11.13
 
 namespace app {
@@ -914,6 +915,15 @@ private:
     void askHmiViewFromType();                           // lot 12 : "Depuis un type" (DDT, DFB)
     // Les dialogues des volets Ressources et Fichiers externes (HmiWorkspace.cpp).
     void askHmiImportResource();
+    // 1.14.0 (M4) : Ressources > Enregistrements (HmiWorkspace.cpp) - importer, exporter, renommer, le mot de passe,
+    // supprimer (vers la corbeille), ouvrir le dossier ; rejouer : l'onglet Simulation . IHM, la relecture dedans.
+    void askHmiRecordingImport();
+    void askHmiRecordingExport(const std::string& name);
+    void askHmiRecordingRename(const std::string& name);
+    void askHmiRecordingPassword(const std::string& name);
+    void askHmiRecordingDelete(const std::string& name);
+    void openHmiRecordingsFolder(const std::string& folder);
+    void replayHmiRecording(const hmi::ReplayRequest& request);
     // Lot 13 : Configuration > Langues - ajouter une langue, importer un classeur.
     void askHmiAddLanguage();
     void askHmiImportTranslations();
@@ -1827,5 +1837,16 @@ private:
     ui::Widget*           bar_{nullptr};
     core::ConnectionScope links_;
 };
+
+// ---- 1.14.0 (M4) : LES ENREGISTREMENTS DE L'IHM EN MARCHE (HmiRuntimeDialogs.cpp) ----------------------------
+//  La fenetre Arreter l'enregistrement : sa duree, ses clics, ses alarmes, sa taille ; le nom, la description, le
+//  mot de passe ; Enregistrer, ou Jeter (le choix du champ "L'enregistrement") - done(garder, nom, description,
+//  mot de passe). Annuler (Echap) garde l'enregistrement sous le nom propose : rien ne se perd sans le dire.
+//  Le mot de passe d'un enregistrement protege a rejouer (`error` : le precedent n'allait pas) - done(rejouer, mdp).
+//  La simulation de l'editeur et le poste d'exploitation s'en servent.
+void askRecordingStopDialog(App& app, const hmi::RecordingStopAsk& ask,
+                            std::function<void(bool, std::string, std::string, std::string)> done);
+void askReplayPasswordDialog(App& app, const hmi::ReplayRequest& request, const std::string& error,
+                             std::function<void(bool, std::string)> done);
 
 } // namespace app

@@ -2886,8 +2886,8 @@ void arbre_supervision() {
     const auto ihm = tree.childAt(tree.root(), 1);
     const auto config = tree.childAt(ihm, 1);   // lot API 8 : apres la rangee des outils
     check(tree.childCount(ihm) == 9, "toujours neuf entr\xC3\xA9" "es de premier niveau (lot API 8 : les outils sortis de l'arbre, Simulation dans son dossier)");
-    check(tree.hasChildren(config) && tree.childCount(config) == 12,
-          "Configuration a douze sous-noeuds (lot 13 : Langues, Unit\xC3\xA9s et formats ; lot 14 : Communication (lot 15 : \xC3\x89quipements), Poste d'exploitation, Notifications, Rapports, Acc\xC3\xA8s web ; 1.13.0 : Unit\xC3\xA9s de mesure)");
+    check(tree.hasChildren(config) && tree.childCount(config) == 13,
+          "Configuration a treize sous-noeuds (lot 13 : Langues, Unit\xC3\xA9s et formats ; lot 14 : Communication (lot 15 : \xC3\x89quipements), Poste d'exploitation, Notifications, Rapports, Acc\xC3\xA8s web ; 1.13.0 : Unit\xC3\xA9s de mesure ; 1.14.0 : Enregistrements)");
     same_text(tree.text(tree.childAt(config, 0)) + "  [" + tree.counterOf(tree.childAt(config, 0)) + "]", "Alarmes  [1]", "Alarmes et leur nombre");
     same_text(tree.text(tree.childAt(config, 1)) + "  [" + tree.counterOf(tree.childAt(config, 1)) + "]", "Recettes  [1]", "Recettes et leur nombre");
     same_text(tree.text(tree.childAt(config, 2)) + "  [" + tree.counterOf(tree.childAt(config, 2)) + "]", "Utilisateurs  [0]", "Utilisateurs et leur nombre");
@@ -9159,7 +9159,7 @@ void lot13_affichage() {
         app::ProjectTreeModel tree(plc);
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
-        check(tree.childCount(config) == 12 && tree.text(tree.childAt(config, 5)) == "Unit\xC3\xA9s et formats" && tree.counterOf(tree.childAt(config, 5)) == "2"
+        check(tree.childCount(config) == 13 && tree.text(tree.childAt(config, 5)) == "Unit\xC3\xA9s et formats" && tree.counterOf(tree.childAt(config, 5)) == "2"
                   && app::ProjectTreeModel::kindOf(tree.childAt(config, 5)) == app::ProjectTreeModel::NodeKind::HmiUnits,
               "l'arbre : Configuration > Unit\xC3\xA9s et formats [2]");
     }
@@ -9272,7 +9272,7 @@ void lot14_poste() {
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
         const auto node = tree.childAt(config, 7);
-        check(tree.childCount(config) == 12 && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiStation
+        check(tree.childCount(config) == 13 && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiStation
                   && tree.text(node) == "Poste d'exploitation  [3 \xC3\xA9" "crans, kiosque]",
               "l'arbre : Configuration > Poste d'exploitation [3 \xC3\xA9" "crans, kiosque]");
         check(tree.style(node).iconTone == ui::Tone::Warning, "un kiosque sans mot de passe : l'ic\xC3\xB4ne orange");
@@ -9550,7 +9550,7 @@ void lot14_notifications_rapports_web() {
         app::ProjectTreeModel tree(std::make_shared<domain::Project>());
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
-        check(tree.childCount(config) == 12 && tree.text(tree.childAt(config, 8)) == "Notifications  [2 destinataires]"
+        check(tree.childCount(config) == 13 && tree.text(tree.childAt(config, 8)) == "Notifications  [2 destinataires]"
                   && app::ProjectTreeModel::kindOf(tree.childAt(config, 8)) == app::ProjectTreeModel::NodeKind::HmiNotify
                   && tree.style(tree.childAt(config, 8)).iconTone == ui::Tone::Ok,
               "l'arbre : Configuration > Notifications [2 destinataires], ic\xC3\xB4ne verte (actives)");
@@ -18440,20 +18440,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67.
     const auto& rel = hn::releases();
-    check(rel.size() == 66 && rel.front().version == "1.13.1" && rel[1].version == "1.13.0" && rel[2].version == "1.12.31" && rel[3].version == "1.12.30" && rel[4].version == "1.12.29" && rel[5].version == "1.12.28" && rel[6].version == "1.12.27" && rel[7].version == "1.12.26" && rel[8].version == "1.12.25" && rel[9].version == "1.12.24" && rel[10].version == "1.12.23" && rel[11].version == "1.12.22" && rel[12].version == "1.12.21" && rel[13].version == "1.12.20" && rel[14].version == "1.12.19" && rel[15].version == "1.12.18" && rel[16].version == "1.12.17" && rel[17].version == "1.12.16" && rel[18].version == "1.12.15" && rel[19].version == "1.12.14" && rel[20].version == "1.12.13" && rel[21].version == "1.12.12" && rel[22].version == "1.12.11" && rel[23].version == "1.12.10" && rel[24].version == "1.12.9" && rel[25].version == "1.12.8" && rel[26].version == "1.12.7" && rel[27].version == "1.12.6" && rel[28].version == "1.12.5" && rel[29].version == "1.12.4" && rel[30].version == "1.12.3" && rel[31].version == "1.12.2" && rel[32].version == "1.12.1"
-              && rel[33].version == "1.12.0" && rel[34].version == "1.11.24" && rel[35].version == "1.11.23"
-              && rel[36].version == "1.11.22" && rel[37].version == "1.11.21" && rel[38].version == "1.11.20" && rel[39].version == "1.11.19"
-              && rel[40].version == "1.11.18" && rel[41].version == "1.11.17"
-              && rel[42].version == "1.11.16" && rel[43].version == "1.11.15"
-              && rel[44].version == "1.11.14" && rel[45].version == "1.11.13" && rel[46].version == "1.11.12"
-              && rel[47].version == "1.11.11" && rel[48].version == "1.11.10"
-              && rel[49].version == "1.11.9" && rel[50].version == "1.11.8"
-              && rel[51].version == "1.11.7" && rel[52].version == "1.11.6" && rel[53].version == "1.11.5"
-              && rel[54].version == "1.11.4" && rel[55].version == "1.11.3" && rel[56].version == "1.11.2"
-              && rel[57].version == "1.11.1" && rel[58].version == "1.11" && rel[59].version == "1.10.4",
-          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 67 && rel.front().version == "1.14.0" && rel[1].version == "1.13.1" && rel[2].version == "1.13.0" && rel[3].version == "1.12.31" && rel[4].version == "1.12.30" && rel[5].version == "1.12.29" && rel[6].version == "1.12.28" && rel[7].version == "1.12.27" && rel[8].version == "1.12.26" && rel[9].version == "1.12.25" && rel[10].version == "1.12.24" && rel[11].version == "1.12.23" && rel[12].version == "1.12.22" && rel[13].version == "1.12.21" && rel[14].version == "1.12.20" && rel[15].version == "1.12.19" && rel[16].version == "1.12.18" && rel[17].version == "1.12.17" && rel[18].version == "1.12.16" && rel[19].version == "1.12.15" && rel[20].version == "1.12.14" && rel[21].version == "1.12.13" && rel[22].version == "1.12.12" && rel[23].version == "1.12.11" && rel[24].version == "1.12.10" && rel[25].version == "1.12.9" && rel[26].version == "1.12.8" && rel[27].version == "1.12.7" && rel[28].version == "1.12.6" && rel[29].version == "1.12.5" && rel[30].version == "1.12.4" && rel[31].version == "1.12.3" && rel[32].version == "1.12.2" && rel[33].version == "1.12.1"
+              && rel[34].version == "1.12.0" && rel[35].version == "1.11.24" && rel[36].version == "1.11.23"
+              && rel[37].version == "1.11.22" && rel[38].version == "1.11.21" && rel[39].version == "1.11.20" && rel[40].version == "1.11.19"
+              && rel[41].version == "1.11.18" && rel[42].version == "1.11.17"
+              && rel[43].version == "1.11.16" && rel[44].version == "1.11.15"
+              && rel[45].version == "1.11.14" && rel[46].version == "1.11.13" && rel[47].version == "1.11.12"
+              && rel[48].version == "1.11.11" && rel[49].version == "1.11.10"
+              && rel[50].version == "1.11.9" && rel[51].version == "1.11.8"
+              && rel[52].version == "1.11.7" && rel[53].version == "1.11.6" && rel[54].version == "1.11.5"
+              && rel[55].version == "1.11.4" && rel[56].version == "1.11.3" && rel[57].version == "1.11.2"
+              && rel[58].version == "1.11.1" && rel[59].version == "1.11" && rel[60].version == "1.10.4",
+          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lot M4), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18724,7 +18724,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 449,   // 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 454,   // 1.14.0 : + 5 (M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18870,8 +18870,8 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 230, "centre : L'IHM a les 230 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 66, "centre : 11 expressions, 66 notes (1.13.1)");
+    check(ix.count(hc::Chapter::Hmi) == 233, "centre : L'IHM a les 233 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 67, "centre : 11 expressions, 67 notes (1.14.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18933,10 +18933,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 66
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 67
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.13.1" && hc::notesPage("9.9").version == "1.13.1",   // 1.13.1 (lot K3) : la plus recente
+        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lot M4) : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -19330,7 +19330,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 66;   // 1.11.3 a 1.13.1 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 67;   // 1.11.3 a 1.14.0 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -38233,7 +38233,7 @@ void unites113() {
         app::ProjectTreeModel tree(plc);
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);
-        const auto node = tree.childCount(config) == 12 ? tree.childAt(config, 11) : ui::kInvalidNode;
+        const auto node = tree.childCount(config) == 13 ? tree.childAt(config, 11) : ui::kInvalidNode;   // 1.14.0 : + Enregistrements, apres
         check(node != ui::kInvalidNode && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiMeasureUnits
                   && tree.text(node).rfind("Unit\xC3\xA9s de mesure", 0) == 0,
               "l'arbre : Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure (le douzi\xC3\xA8me)");
@@ -39912,7 +39912,300 @@ void typesOnglets1131() {
     core::CommandGroupScope::registerStack(nullptr);
 }
 
+// 1.14.0 (lot M4) : ENREGISTRER ET REJOUER L'IHM A L'ECRAN - le bouton Enregistrer de la simulation, la fenetre
+// Arreter l'enregistrement, la relecture (le bandeau, la barre, les touches, l'heure tenue, Quitter), le mot de passe
+// demande, Ressources > Enregistrements, Configuration > Enregistrements, l'arbre, les deux objets dessines, le code
+// brut et Dupliquer, une commande d'une autre application.
+void enregistrements1140() {
+    std::printf("== 1.14.0 (lot M4) : enregistrer et rejouer l'IHM a l'ecran ==\n");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path()
+                         / ("xpg_m4_ecran_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    const fs::path recDir = dir / "ihm" / "ressources" / "enregistrements";
+    auto doc = std::make_shared<Document>();
+    doc->savedFolder = dir.string();
+    auto& p = doc->project;
+    p.config.name = "Station";
+    p.config.cycleMs = 100;
+    {
+        Variable var;
+        var.id = p.allocate();
+        var.name = "Niveau";
+        var.type = "REAL";
+        var.initial = "10.0";
+        p.programs.variables.push_back(var);
+        Script cyc;
+        cyc.id = p.allocate();
+        cyc.name = "Procede";
+        cyc.event = "Cyclique";
+        cyc.periodMs = 100;
+        cyc.body = "Niveau := Niveau + 1.0;\n";
+        p.programs.scripts.push_back(cyc);
+    }
+    View v = makeView(p, "Vue_Station");
+    const Id disp = edit::add(p, v, Kind::NumericDisplay, 100, 100);
+    v.object(disp)->name = "Afficheur";
+    v.object(disp)->setExpr("value", "Niveau");
+    const Id recId = edit::add(p, v, Kind::Recorder, 400, 100);
+    v.object(recId)->name = "Enregistreur";
+    const Id playId = edit::add(p, v, Kind::RecordingPlayer, 400, 300);
+    v.object(playId)->name = "Lecteur";
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    const Id vid = v.id;
+    // ---- les deux objets dans l'editeur : un apercu
+    {
+        Recorder r0;
+        const auto theme0 = ui::Theme::dark();
+        app::HmiPaintOptions opt;
+        opt.assets = &p.assets;
+        app::paintHmiObject(r0, *p.view(vid), *p.view(vid)->object(recId), {}, app::HmiPropertySource{}, theme0, opt);
+        check(r0.wrote("Enregistrer") && r0.wrote("Enregistreur"), "l'Enregistreur dans l'editeur : son titre, Enregistrer");
+        r0.texts.clear();
+        app::paintHmiObject(r0, *p.view(vid), *p.view(vid)->object(playId), {}, app::HmiPropertySource{}, theme0, opt);
+        check(r0.wrote("Enregistrements") && r0.wrote("Essai FAT client"), "le Lecteur dans l'editeur : son titre, deux lignes d'exemple");
+        // Le code brut et Dupliquer : les proprietes suivent.
+        const std::string code = serializeObjectCode(*p.view(vid), {recId});
+        auto parsed = parseObjectCode(code);
+        check(parsed && !parsed->objects.empty() && parsed->objects.front().kind == Kind::Recorder
+                  && parsed->objects.front().text("recName") == p.view(vid)->object(recId)->text("recName"),
+              "le code brut de l'Enregistreur se relit (son genre, son Nom)");
+        View copy = *p.view(vid);
+        const auto dup = edit::duplicate(p, copy, {playId}, 20, 20);
+        check(dup.size() == 1 && copy.object(dup.front()) && copy.object(dup.front())->kind == Kind::RecordingPlayer
+                  && copy.object(dup.front())->text("title") == "Enregistrements",
+              "Dupliquer le Lecteur : un Lecteur, ses proprietes");
+    }
+    // ---- la simulation
+    app::HmiSimulationHost host;
+    host.projectFolder = [dir] { return dir.string(); };
+    std::vector<hmi::RecordingStopAsk> stopAsked;
+    host.askRecordingStop = [&](const hmi::RecordingStopAsk& a, std::function<void(bool, std::string, std::string, std::string)> done) {
+        stopAsked.push_back(a);
+        done(true, "Essai ecran", "vu a l'ecran", {});
+    };
+    std::vector<std::string> pwdAsked;
+    host.askReplayPassword = [&](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {
+        pwdAsked.push_back(rq.name + "|" + error);
+        done(true, pwdAsked.size() == 1 ? std::string("faux") : std::string("secret"));
+    };
+    app::HmiSimulationPane pane("simM4", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    double t = 0;
+    const auto frame = [&](double dt) {
+        t += dt;
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    frame(0);
+    frame(0.1);
+    check(pane.runtime().running(), "la simulation tourne");
+    check(rec.wrote("\xE2\x97\x8F Enregistrer"), "la barre : le bouton \xE2\x97\x8F Enregistrer");
+    pane.command("hmi.record");
+    check(pane.runtime().recording(), "le bouton Enregistrer d\xC3\xA9marre un enregistrement");
+    for (int i = 0; i < 30; ++i) frame(0.1);
+    check(rec.wrote("ENR 00:0"), "la barre dit ENR et le chrono");
+    check(rec.wrote("enregistre depuis"), "l'Enregistreur de la vue le montre");
+    pane.command("hmi.record");
+    check(stopAsked.size() == 1 && stopAsked.front().seconds > 2.5 && !pane.runtime().recording(),
+          "Arr\xC3\xAAter : la fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (sa dur\xC3\xA9" "e)");
+    check(fs::exists(recDir / "Essai ecran.xrec"), "le fichier Essai ecran.xrec dans ressources/enregistrements");
+    // ---- rejouer
+    const double before = pane.runtime().now();
+    std::string niveauLive;
+    {
+        sim::Value nv;
+        if (pane.runtime().environment().read("Niveau", nv)) niveauLive = nv.display();
+    }
+    hmi::ReplayRequest rq;
+    rq.name = "Essai ecran";
+    check(pane.replay(rq) == hmi::rec::Status::Ok && pane.runtime().replaying(), "rejouer depuis l'\xC3\xA9" "cran");
+    frame(0.05);
+    check(rec.wrote("RELECTURE") && rec.wrote("Essai ecran") && rec.wrote("Quitter") && rec.wrote("Pause") && rec.wrote("+10 s"),
+          "le bandeau RELECTURE et la barre de relecture");
+    const double held = pane.runtime().now();
+    for (int i = 0; i < 10; ++i) frame(0.1);
+    check(std::fabs(pane.runtime().now() - held) < 1e-9, "pendant la relecture, l'heure de l'IHM est tenue");
+    const double pos1 = pane.runtime().replayInfo().position;
+    check(pos1 > 0.8 && pos1 < 1.3, "la relecture avance a l'heure du dessin (" + std::to_string(pos1) + " s)");
+    {
+        sim::Value nv;
+        check(pane.runtime().environment().read("Niveau", nv) && nv.display() != niveauLive, "les objets lisent la piste (Niveau d'alors)");
+    }
+    // Les touches : Espace (pause), la fleche droite (+10 s : au bout), Debut.
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Space, {}, false});
+    check(pane.runtime().replayInfo().paused, "Espace : pause");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Right, {}, false});
+    check(std::fabs(pane.runtime().replayInfo().position - pane.runtime().replayInfo().length) < 0.05, "\xE2\x86\x92 : +10 s (au bout)");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Home, {}, false});
+    check(pane.runtime().replayInfo().position < 0.05, "D\xC3\xA9" "but : au d\xC3\xA9" "but");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    pane.canvas().dispatch(ui::TextInput{"+"});
+    check(std::fabs(pane.runtime().replayInfo().speed - 2.0) < 1e-9, "+ : \xC3\x97" "2 (une seule fois pour la touche et son texte)");
+    frame(0.05);
+    // La barre a la souris : un clic sur x4, puis au milieu de la progression.
+    const auto chrome = pane.canvas().replayChrome();
+    const gfx::Rect s4 = chrome.part("speed:4");
+    check(s4.w > 0, "la barre : les vitesses");
+    pane.canvas().dispatch(ui::MouseDown{{s4.x + s4.w / 2, s4.y + s4.h / 2}, ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{s4.x + s4.w / 2, s4.y + s4.h / 2}, ui::MouseButton::Left, {}});
+    check(std::fabs(pane.runtime().replayInfo().speed - 4.0) < 1e-9, "un clic sur \xC3\x97" "4");
+    const gfx::Rect pr = chrome.progress;
+    pane.canvas().dispatch(ui::MouseDown{{pr.x + pr.w / 2, pr.y + pr.h / 2}, ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{pr.x + pr.w / 2, pr.y + pr.h / 2}, ui::MouseButton::Left, {}});
+    const auto mid = pane.runtime().replayInfo();
+    check(std::fabs(mid.position - mid.length / 2) < 0.2, "un clic au milieu de la progression : la moitie");
+    // Un clic sur la vue rejouee : rien ne part (le bouton d'avant ne bouge pas).
+    gfx::Rect od{};
+    if (pane.canvas().objectRect("Enregistreur", od)) {
+        pane.canvas().dispatch(ui::MouseDown{{od.x + od.w / 2, od.y + od.h / 2}, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{{od.x + od.w / 2, od.y + od.h / 2}, ui::MouseButton::Left, {}});
+    }
+    check(!pane.runtime().recording(), "un clic sur l'Enregistreur rejoue ne d\xC3\xA9marre rien");
+    // Quitter (le bouton) : l'IHM repart d'ou elle etait.
+    const gfx::Rect q = pane.canvas().replayChrome().part("quit");
+    pane.canvas().dispatch(ui::MouseDown{{q.x + q.w / 2, q.y + q.h / 2}, ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{q.x + q.w / 2, q.y + q.h / 2}, ui::MouseButton::Left, {}});
+    check(!pane.runtime().replaying(), "Quitter : la relecture se ferme");
+    frame(0.1);
+    check(pane.runtime().now() >= held && pane.runtime().now() < held + 0.5, "apr\xC3\xA8s Quitter, l'heure de l'IHM repart d'o\xC3\xB9 elle \xC3\xA9tait");
+    (void)before;
+    // Echap quitte.
+    (void)pane.replay(rq);
+    frame(0.1);
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte la relecture");
+    // ---- Ressources > Enregistrements
+    std::vector<core::CommandPtr> applied;
+    const auto apply = [&](core::CommandPtr c) {
+        if (c) (void)c->execute();
+        applied.push_back(std::move(c));
+    };
+    app::HmiRecordingsPane rp("m4.recordings", doc, apply);
+    app::HmiRecordingsPane::Hosts rh;
+    rh.projectFolder = [dir] { return dir.string(); };
+    hmi::ReplayRequest replayed;
+    rh.replay = [&](const hmi::ReplayRequest& r) { replayed = r; };
+    rp.setHosts(rh);
+    rp.setBounds({0, 0, 1200, 700});
+    rp.layout();
+    check(rp.rowCount() == 1 && rp.select("Essai ecran"), "Ressources \xE2\x80\xBA Enregistrements : la ligne de l'enregistrement");
+    same_text(rp.table().model() ? rp.table().model()->headerText(2) : std::string{}, "Vue de d\xC3\xA9part", "ses colonnes (Vue de d\xC3\xA9part)");
+    rp.table().activated->emit(0);
+    check(replayed.name == "Essai ecran", "un double-clic rejoue");
+    check(rp.setDescription("Le d\xC3\xA9marrage du matin") && rp.items().front().header.description == "Le d\xC3\xA9marrage du matin",
+          "la description se modifie");
+    // Renommer : l'action qui le cite suit.
+    {
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = Operation::ReplayStart;
+        a.target = "Essai ecran";
+        auto cmd = hmi::changeView(doc, vid, "action", [&](Project&, View& vv) { vv.object(disp)->actions.push_back(a); });
+        if (cmd) (void)cmd->execute();
+    }
+    check(rp.renameTo("Essai renomme") && fs::exists(recDir / "Essai renomme.xrec") && !fs::exists(recDir / "Essai ecran.xrec"),
+          "Renommer : le fichier");
+    check(p.view(vid)->object(disp)->actions.back().target == "Essai renomme", "Renommer : l'action Rejouer qui le citait suit");
+    // Le mot de passe : protege, la relecture le demande (un faux d'abord : la question revient).
+    check(rp.select("Essai renomme") && rp.setPassword({}, "secret") && rp.items().front().header.locked(), "Mot de passe : prot\xC3\xA9g\xC3\xA9");
+    check(rp.table().model() && rp.table().model()->cellText(0, 7) == "oui" && rp.table().model()->cellStyle(0, 7).icon == ui::Icon::Lock,
+          "la colonne Prot\xC3\xA9g\xC3\xA9 : oui, et le cadenas");
+    hmi::ReplayRequest locked;
+    locked.name = "Essai renomme";
+    (void)pane.replay(locked);
+    check(pwdAsked.size() == 2 && pane.runtime().replaying(), "prot\xC3\xA9g\xC3\xA9 : le mot de passe demand\xC3\xA9, faux puis bon");
+    check(pwdAsked.size() == 2 && pwdAsked[1].find("incorrect") != std::string::npos, "un faux mot de passe : la question revient et le dit");
+    pane.replayCommand("quit");
+    // Exporter, importer, supprimer (vers la corbeille).
+    const fs::path out = dir / "sortie";
+    fs::create_directories(out, ec);
+    check(rp.select("Essai renomme") && rp.exportTo(out.string()) && fs::exists(out / "Essai renomme.xrec"), "Exporter : une copie");
+    check(rp.importPath((out / "Essai renomme.xrec").string()) && rp.rowCount() == 2 && fs::exists(recDir / "Essai renomme (2).xrec"),
+          "Importer : un nom libre (Essai renomme (2))");
+    check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && fs::exists(dir / "ihm" / "corbeille" / "Essai renomme (2).xrec"),
+          "Supprimer : dans la corbeille du projet");
+    // ---- Configuration > Enregistrements
+    app::HmiRecordingSettingsPane cp("m4.settings", doc, apply);
+    check(!p.recording.external && cp.setSetting("commandes", "TRUE") && p.recording.external, "Accepter les commandes d'une autre application");
+    check(!cp.setSetting("duree", "0") && p.recording.maxMinutes == 30, "une dur\xC3\xA9" "e de 0 min est refus\xC3\xA9" "e");
+    check(cp.setSetting("frequence", "5") && p.recording.rateHz == 5, "les prises par seconde");
+    // ---- une autre application
+    std::string said;
+    const int code = app::HmiSimulationPane::runCommandAnywhere(hmi::rec::parseCommand({"--rejouer", "Absent"}), &said);
+    check(code == hmi::rec::kExitNotFound, "--rejouer d'un nom absent : code 3 (" + said + ")");
+    check(app::HmiSimulationPane::runCommandAnywhere(hmi::rec::parseCommand({"--rejouer", "Essai renomme", "--mot-de-passe", "secret"}), &said) == 0
+              && pane.runtime().replaying(),
+          "--rejouer avec le mot de passe : code 0, la relecture");
+    check(app::HmiSimulationPane::runCommandAnywhere(hmi::rec::parseCommand({"--quitter-relecture"}), &said) == 0 && !pane.runtime().replaying(),
+          "--quitter-relecture : code 0");
+    (void)cp.setSetting("commandes", "FALSE");
+    check(app::HmiSimulationPane::runCommandAnywhere(hmi::rec::parseCommand({"--enregistrer", "X"}), &said) == hmi::rec::kExitRefused,
+          "la case d\xC3\xA9" "coch\xC3\xA9" "e : refus\xC3\xA9 (code 5)");
+    // ---- les actions : leurs cases (scene 4)
+    {
+        app::HmiActionsPanel panel("m4.acts", doc, vid, apply);
+        panel.setBounds({0, 0, 600, 800});
+        panel.setOwner(disp);
+        Action a0;
+        panel.selectIndex(panel.add(a0));
+        panel.layout();
+        check(commitIn(panel.grid(), "Op\xC3\xA9ration", "D\xC3\xA9marrer un enregistrement") && commitIn(panel.grid(), "Nom", "Essai {SYS.Date}")
+                  && commitIn(panel.grid(), "Dur\xC3\xA9" "e maximale (min)", "5") && commitIn(panel.grid(), "Mot de passe", "fat2026")
+                  && commitIn(panel.grid(), "S'il en tourne d\xC3\xA9j\xC3\xA0 un", "red\xC3\xA9marrer"),
+              "D\xC3\xA9marrer un enregistrement : le nom, la dur\xC3\xA9" "e, le mot de passe, s'il en tourne d\xC3\xA9j\xC3\xA0 un");
+        const auto& acts = p.view(vid)->object(disp)->actions;
+        const Action* made = acts.empty() ? nullptr : &acts.back();
+        check(made && made->operation == Operation::RecordStart && made->target == "Essai {SYS.Date}"
+                  && hmi::actionkinds::param(*made, "duree") == "5" && hmi::actionkinds::param(*made, "deja") == "redemarrer"
+                  && hmi::actionkinds::param(*made, "mot_de_passe") != "fat2026"
+                  && hmi::notify::unmaskSecret(hmi::actionkinds::param(*made, "mot_de_passe")) == "fat2026",
+              "l'action r\xC3\xA9gl\xC3\xA9" "e (le mot de passe masqu\xC3\xA9 dans le projet)");
+        check(commitIn(panel.grid(), "Op\xC3\xA9ration", "Rejouer un enregistrement") && commitIn(panel.grid(), "Enregistrement", "Essai renomme")
+                  && commitIn(panel.grid(), "Vitesse", "2"),
+              "Rejouer un enregistrement : lequel, sa vitesse");
+        const auto& acts2 = p.view(vid)->object(disp)->actions;
+        check(!acts2.empty() && acts2.back().operation == Operation::ReplayStart && acts2.back().target == "Essai renomme" && acts2.back().value == "2",
+              "l'action Rejouer r\xC3\xA9gl\xC3\xA9" "e");
+    }
+    // ---- l'arbre : Ressources > Enregistrements [n], Configuration > Enregistrements
+    {
+        using NK = app::ProjectTreeModel::NodeKind;
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        ui::NodeId hmiNode = ui::kInvalidNode;
+        for (std::size_t i = 0; i < tree.childCount(tree.root()); ++i)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
+        ui::NodeId res = ui::kInvalidNode, conf = ui::kInvalidNode;
+        for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i) {
+            const auto c = tree.childAt(hmiNode, i);
+            if (app::ProjectTreeModel::kindOf(c) == NK::HmiResources) res = c;
+            if (app::ProjectTreeModel::kindOf(c) == NK::HmiConfig) conf = c;
+        }
+        check(res != ui::kInvalidNode && tree.childCount(res) == 1 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings,
+              "Ressources \xE2\x80\xBA Enregistrements dans l'arbre");
+        if (res != ui::kInvalidNode && tree.childCount(res) == 1)
+            same_text(tree.text(tree.childAt(res, 0)) + "  [" + tree.counterOf(tree.childAt(res, 0)) + "]", "Enregistrements  [1]", "... avec son compte");
+        check(conf != ui::kInvalidNode && tree.childCount(conf) == 13
+                  && app::ProjectTreeModel::kindOf(tree.childAt(conf, 12)) == NK::HmiRecordingSettings,
+              "Configuration \xE2\x80\xBA Enregistrements, le 13e sous-noeud");
+    }
+    fs::remove_all(dir, ec);
+}
+
 int main(int argc, char** argv) {
+    // 1.14.0 (lot M4) : HMI_TEST_M4=1 - enregistrer et rejouer l'IHM a l'ecran, seul.
+    if (const char* only = std::getenv("HMI_TEST_M4"); only && *only == '1') {
+        enregistrements1140();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.1 (lot K1) : HMI_TEST_K1=1 - les deux bugs des formules, seuls.
     if (const char* only = std::getenv("HMI_TEST_K1"); only && *only == '1') {
         formulesK1_1131();
@@ -40511,6 +40804,7 @@ int main(int argc, char** argv) {
     codeBrut1131();                         // 1.13.1 (lot K3) : l'onglet Code brut, le clic droit, Ctrl+V d'un code brut
     codeBrutSimulation1131();               // 1.13.1 (lot K3) : le code brut dans le menu de la vue en marche
     typesOnglets1131();                     // 1.13.1 (lot K4) : les types dans leurs onglets, et dans leur onglet de document
+    enregistrements1140();                  // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM a l'ecran
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

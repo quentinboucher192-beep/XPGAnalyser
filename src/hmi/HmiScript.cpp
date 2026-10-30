@@ -2053,7 +2053,11 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    // 1.12.26 : les scripts detaches
                                    "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER",
                                    // 1.13.0 (lot J2) : le debogueur (une native du dialecte ; hors simulation, rien)
-                                   "IHM_POINT_ARRET"};
+                                   "IHM_POINT_ARRET",
+                                   // 1.14.0 (M4) : les enregistrements et la relecture (IHM_ENREG_LISTE : une native du dialecte)
+                                   "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE",
+                                   "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE",
+                                   "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

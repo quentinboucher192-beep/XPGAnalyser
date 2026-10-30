@@ -151,6 +151,12 @@ const std::vector<Group>& groups() {
         {"Utilisateur et poste", "Connexion, menus natifs, langue, th\xC3\xA8me",
          {Operation::ChangeUser, Operation::Logout, Operation::ShowLogin, Operation::ShowSystem, Operation::SetLanguage,
           Operation::SetTheme}},
+        // 1.14.0 (M4) : les enregistrements de l'IHM (Ressources > Enregistrements).
+        {"Enregistrement", "Filmer l'IHM qui tourne : d\xC3\xA9marrer, arr\xC3\xAAter",
+         {Operation::RecordStart, Operation::RecordStop, Operation::RecordToggle, Operation::RecordCancel}},
+        {"Relecture", "Rejouer un enregistrement, le piloter",
+         {Operation::ReplayStart, Operation::ReplayPause, Operation::ReplaySeek, Operation::ReplaySpeed, Operation::ReplayQuit}},
+        {"Fichiers", "Exporter, supprimer un enregistrement", {Operation::RecordingExport, Operation::RecordingDelete}},
     };
     return g;
 }
@@ -213,6 +219,22 @@ std::string_view help(Operation o) noexcept {
         case Operation::ShowSystem: return "Ouvre le menu natif Param\xC3\xA8tres syst\xC3\xA8me.";
         case Operation::SetLanguage: return "Change la langue des textes.";
         case Operation::SetTheme: return "Passe au th\xC3\xA8me jour ou nuit.";
+        // 1.14.0 (M4) : les enregistrements
+        case Operation::RecordStart:
+            return "D\xC3\xA9marre un enregistrement de l'IHM (valeurs, vues, popups, alarmes, pointeur et clics) : son nom accepte "
+                   "$rep\xC3\xA8res$ et {formules} ; dur\xC3\xA9" "e maximale, mot de passe, ce qui se passe s'il en tourne d\xC3\xA9j\xC3\xA0 un.";
+        case Operation::RecordStop: return "Arr\xC3\xAAte l'enregistrement et le garde (Ressources \xE2\x80\xBA Enregistrements) ; il peut demander son nom.";
+        case Operation::RecordToggle: return "D\xC3\xA9marre un enregistrement, ou arr\xC3\xAAte et garde celui qui tourne.";
+        case Operation::RecordCancel: return "Arr\xC3\xAAte l'enregistrement sans rien garder.";
+        case Operation::ReplayStart:
+            return "Rejoue un enregistrement : l'IHM le montre comme un film (\xC3\x89" "chap le quitte) ; vitesse, position de d\xC3\xA9part ; "
+                   "prot\xC3\xA9g\xC3\xA9, son mot de passe est demand\xC3\xA9 \xC3\xA0 l'op\xC3\xA9rateur.";
+        case Operation::ReplayPause: return "Met la relecture en pause, ou la reprend.";
+        case Operation::ReplaySeek: return "Avance (ou recule, n\xC3\xA9gatif) la relecture de N secondes.";
+        case Operation::ReplaySpeed: return "Change la vitesse de la relecture : \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8.";
+        case Operation::ReplayQuit: return "Quitte la relecture : l'IHM reprend en direct, l\xC3\xA0 o\xC3\xB9 elle en \xC3\xA9tait.";
+        case Operation::RecordingExport: return "Copie un enregistrement (.xrec) vers un dossier.";
+        case Operation::RecordingDelete: return "Supprime un enregistrement (il va dans la corbeille de l'IHM).";
     }
     return {};
 }

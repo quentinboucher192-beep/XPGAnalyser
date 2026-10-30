@@ -402,6 +402,13 @@ void askExportArchive(App& app) {
                                      : std::string("L'historique de marche (vide)"),
                           joinOne, "", false, {joinOne, leaveOne}});
         if (api) fields.push_back({"Les macros de la biblioth\xC3\xA8que (libs\\Macros)", join, "", false, {join, leave}});
+        // 1.14.0 (M4) : les enregistrements de l'IHM (Ressources > Enregistrements) - laisses par defaut (ils pesent).
+        if (!api) {
+            const auto rBytes = treeBytes(fs::path(folder) / "ihm" / "ressources" / "enregistrements");
+            fields.push_back({rBytes > 0 ? "Avec les enregistrements (Ressources \xE2\x80\xBA Enregistrements : " + pa::sizeText(rBytes) + ")"
+                                         : std::string("Avec les enregistrements (aucun)"),
+                              leave, "", false, {join, leave}});
+        }
         const std::string text = api
             ? "Tout le projet de l'automate dans un seul fichier : la fiche, le programme (sections, ladders et GRAFCET gard\xC3\xA9s tels quels, "
               "unit\xC3\xA9s, DFB, DDT, variables), la configuration, les t\xC3\xA2" "ches, les tables d'animation, l'ic\xC3\xB4ne, les donn\xC3\xA9" "es, les "
@@ -437,13 +444,14 @@ void askExportArchive(App& app) {
                 const bool withVersions = v.size() < 2 || v[1] == join;
                 const bool withHistory = v.size() < 3 || v[2] == joinOne;
                 const bool withMacros = api && (v.size() < 4 || v[3] == join);
+                const bool withRecordings = !api && v.size() >= 4 && v[3] == join;   // 1.14.0 (M4)
                 struct Out {
                     std::string        error;
                     hmi::ArchiveReport hmi;
                     pa::ApiReport      api;
                 };
                 auto out = std::make_shared<Out>();
-                run("Archive du projet", [out, api, folder, path, withVersions, withHistory, withMacros] {
+                run("Archive du projet", [out, api, folder, path, withVersions, withHistory, withMacros, withRecordings] {
                     out->error = "l'\xC3\xA9" "criture s'est interrompue";
                     std::error_code ec;
                     fs::create_directories(fs::path(path).parent_path(), ec);
@@ -460,6 +468,7 @@ void askExportArchive(App& app) {
                         hmi::ProjectArchiveOptions o;
                         o.versions = withVersions;
                         o.history = withHistory;
+                        o.recordings = withRecordings;
                         o.tool = toolName();
                         if (auto st = hmi::exportProjectArchive(folder, path, o, &out->hmi); !st) out->error = errorText(st.error());
                         else out->error.clear();

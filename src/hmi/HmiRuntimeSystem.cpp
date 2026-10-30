@@ -110,6 +110,7 @@ DateTime Runtime::systemClock(bool* pending) const {
 
 // ============================================================ une partie ===
 void Runtime::systemPart(std::string_view part, double now) {
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun geste
     now_ = std::max(now_, now);
     lastActivity_ = std::max(lastActivity_, now);          // un toucher
     if (!systemShown_) return;
@@ -415,6 +416,11 @@ bool Runtime::playSound(const std::string& name, const std::string& source) {
     ++soundsPlayed_;
     lastSound_ = name;
     log("Action", source, "son : " + name);
+    // 1.14.0 (M4) : le son, enregistre avec son canal (Alarmes, Scripts, Actions) ; il se rejoue sur le canal Relecture.
+    if (recordOn_) {
+        const std::string channel = source.rfind("alarme", 0) == 0 ? "Alarmes" : soundChannel_.empty() ? "Actions" : soundChannel_;
+        recordEvent(rec::EventKind::Sound, name, channel);
+    }
     if (hooks_.playSound) hooks_.playSound(name);
     return true;
 }

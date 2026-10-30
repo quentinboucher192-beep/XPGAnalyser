@@ -1504,6 +1504,16 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
             for (const auto& e : st.screens) index += "poste_ecran" + fieldInt("ecran", e.display) + field("vue", e.view) + "\n";
         }
     }
+    // 1.14.0 (M4) : Configuration > Enregistrements - seulement s'ils changent (le format ne monte pas : un projet
+    // d'avant n'a pas la ligne et prend les valeurs par defaut).
+    {
+        const RecordingSettings def{};
+        const auto& r = p.recording;
+        if (!(r == def))
+            index += "enregistrements" + field("dossier", r.folder) + fieldInt("duree_max", r.maxMinutes) + fieldInt("dossier_max_mo", r.maxFolderMb)
+                   + fieldInt("frequence", r.rateHz) + fieldBool("pointeur", r.pointer) + fieldBool("sons", r.sounds)
+                   + fieldBool("popups", r.popups) + fieldBool("commandes_externes", r.external) + "\n";
+    }
     // Lot 14 : les notifications des alarmes - seulement si elles changent. Le
     // mot de passe SMTP est deja masque (jamais en clair).
     {
@@ -2173,6 +2183,17 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             st.keepLayout = toBool(r.get("garder_disposition"), true);  // 1.12.3
             // 1.12.24 : la mise a l'echelle de la vue ; absente (un projet d'avant) : Remplir.
             st.screenFit = screenFitFrom(toStr(r.get("echelle"))).value_or(ScreenFit::Fill);
+        } else if (r.word == "enregistrements") {                         // 1.14.0 (M4)
+            auto& e = p.recording;
+            const RecordingSettings def{};
+            e.folder = toStr(r.get("dossier"));
+            e.maxMinutes = static_cast<int>(std::clamp<long long>(toInt(r.get("duree_max"), def.maxMinutes), 1, 24 * 60));
+            e.maxFolderMb = static_cast<int>(std::clamp<long long>(toInt(r.get("dossier_max_mo"), def.maxFolderMb), 1, 1024 * 1024));
+            e.rateHz = static_cast<int>(std::clamp<long long>(toInt(r.get("frequence"), def.rateHz), 1, 50));
+            e.pointer = toBool(r.get("pointeur"), def.pointer);
+            e.sounds = toBool(r.get("sons"), def.sounds);
+            e.popups = toBool(r.get("popups"), def.popups);
+            e.external = toBool(r.get("commandes_externes"), def.external);
         } else if (r.word == "poste_ecran") {
             StationScreen e;
             e.display = static_cast<int>(std::clamp<long long>(toInt(r.get("ecran"), 2), 1, 16));
