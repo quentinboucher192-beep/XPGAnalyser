@@ -1695,9 +1695,12 @@ const std::vector<Topic>& topics() {
                          "biblioth\xC3\xA8que** (l'image choisie du projet) y ajoutent une image. Elles sont "
                          "gard\xC3\xA9" "es hors du projet, dans le dossier de tes r\xC3\xA9glages (\xC3\xA0 "
                          "c\xC3\xB4t\xC3\xA9 de tes th\xC3\xA8mes), et se posent dans tous tes projets ; "
-                         "clic droit \xE2\x80\xBA **Retirer de Mes images**.", {}, "1.14.1"},
+                         "clic droit \xE2\x80\xBA **Retirer de Mes images**. C'est la m\xC3\xAAme liste dans "
+                         "tous les \xC3\xA9" "diteurs de vues ouverts : une image ajout\xC3\xA9" "e ou "
+                         "retir\xC3\xA9" "e s'y voit aussit\xC3\xB4t.", {}, "1.14.1"},
              {K::Tip, "L'infobulle d'une image dit son nom, sa cat\xC3\xA9gorie et sa taille d'origine ; "
-                         "le bas de l'onglet les rappelle pour l'image survol\xC3\xA9" "e.", {}, "1.14.1"},
+                         "le bas de l'onglet les rappelle pour l'image survol\xC3\xA9" "e (ou choisie) - une "
+                         "image que la recherche cache n'y reste pas.", {}, "1.14.1"},
              {K::Heading, "Quelques composants", {}},
              {K::Bullet, "**Texte** : statique, dynamique (textes \xC3\xA0 trous `{Variable}`), "
                          "format\xC3\xA9, sur plusieurs lignes (retour \xC3\xA0 la ligne automatique).", {}},
@@ -5822,6 +5825,9 @@ const std::vector<Topic>& topics() {
                          "simulation la montre en rouge dans l'onglet Expressions ;", {}},
              {K::Bullet, "Compiler v\xC3\xA9rifie chaque trou ; l'aide \xC3\xA0 la saisie propose les "
                          "variables entre `{ }`.", {}},
+             {K::Bullet, "`\\n` (une nouvelle ligne) ne se lit que dans le texte tap\xC3\xA9 : la valeur "
+                         "d'un trou ou d'une expression se montre telle quelle - un chemin "
+                         "`C:\\travaux\\nouveau` (le Choix vers d'un Explorateur de fichiers) garde ses `\\`.", {}, "1.14.1"},
              {K::Tip, "Pour un texte qui change selon un \xC3\xA9tat, un seul trou suffit : `{Marche:en "
                          "marche|arr\xC3\xAAt\xC3\xA9}` pour un bool\xC3\xA9" "en ; pour trois \xC3\xA9tats, "
                          "une expression : `=SEL(Defaut, SEL(Marche, 'Arr\xC3\xAAt', 'Marche'), "
@@ -7613,9 +7619,10 @@ const std::vector<Topic>& topics() {
                          "l'unit\xC3\xA9 de d\xC3\xA9part.\nDimension\ttoutes\tLes unit\xC3\xA9s "
                          "propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
                          "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6).\nUnit\xC3\xA9 de "
-                         "d\xC3\xA9part\tbar\tLe symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; "
-                         "l'op\xC3\xA9rateur la change dans De.\nUnit\xC3\xA9 d'arriv\xC3\xA9" "e\tmbar\tLe "
-                         "symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme "
+                         "d\xC3\xA9part\tbar\tL'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans "
+                         "l'objet (bar, \xC2\xB0" "C, m\xC2\xB3/h ; le projet garde son symbole : degC, "
+                         "m3/h) ; l'op\xC3\xA9rateur la change dans De.\nUnit\xC3\xA9 "
+                         "d'arriv\xC3\xA9" "e\tmbar\tL'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme "
                          "dimension.\nD\xC3\xA9" "cimales\t3\tDe 0 \xC3\xA0 12.\nR\xC3\xA9sultat "
                          "vers\t(vide)\tUne variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le "
                          "r\xC3\xA9sultat ; vide : pas de bouton.\nPolice\tSans\tLa police de "
@@ -7634,11 +7641,12 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
                          "ses gestes ; \xC3\x89" "crire demande aussi la permission **Piloter** quand la "
                          "s\xC3\xA9" "curit\xC3\xA9 est active ;", {}},
-             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une unit\xC3\xA9 inconnue, deux unit\xC3\xA9s de "
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une unit\xC3\xA9 inconnue et deux unit\xC3\xA9s de "
                          "dimensions diff\xC3\xA9rentes (la Valeur de d\xC3\xA9part comprise, quand c'est "
-                         "une variable qui a une unit\xC3\xA9), une dimension inconnue, une Valeur de "
-                         "d\xC3\xA9part qui n'est pas un nombre, une variable inconnue dans R\xC3\xA9sultat "
-                         "vers ;", {}},
+                         "une variable qui a une unit\xC3\xA9) : des **erreurs**, comme EN mal "
+                         "employ\xC3\xA9 dans un script - la simulation ne d\xC3\xA9marre pas ; et une "
+                         "dimension inconnue, une Valeur de d\xC3\xA9part qui n'est pas un nombre, une "
+                         "variable inconnue dans R\xC3\xA9sultat vers ;", {}},
              {K::Bullet, "pour tester une conversion pendant la conception : l'onglet **Convertir** de "
                          "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure.", {}},
          },
@@ -7656,10 +7664,10 @@ const std::vector<Topic>& topics() {
             "Les unit\xC3\xA9s propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
             "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6)."},
            {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", "bar",
-            "Le symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; l'op\xC3\xA9rateur la change dans "
-            "De."},
+            "L'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans l'objet (bar, \xC2\xB0" "C, "
+            "m\xC2\xB3/h ; le projet garde son symbole : degC, m3/h) ; l'op\xC3\xA9rateur la change dans De."},
            {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "mbar",
-            "Le symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension."},
+            "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension."},
            {"decimals", "D\xC3\xA9" "cimales", "3",
             "De 0 \xC3\xA0 12."},
            {"resultTo", "R\xC3\xA9sultat vers", "(vide)",
@@ -14324,7 +14332,8 @@ const std::vector<Topic>& topics() {
                          "s'arr\xC3\xAAte \xC3\xA0 **\xC3\x89l\xC3\xA9ments au plus** (2000) et le dit.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "**une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) "
-                         "re\xC3\xA7oit son chemin complet ;", {}},
+                         "re\xC3\xA7oit son chemin complet, tel quel (`C:\\travaux\\nouveau\\rapport.pdf` : "
+                         "ses `\\` ne sont pas des \xC3\xA9" "chappements) ;", {}},
              {K::Bullet, "**un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un "
                          "dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les "
                          "**actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de "
@@ -14339,7 +14348,11 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Extraire** (si **Extraire permis** est coch\xC3\xA9) : le fichier choisi d'un "
                          "zip va dans le **Dossier d'extraction** (donnees/extraits du projet par "
                          "d\xC3\xA9" "faut), sous son nom seul ; un fichier qui existe d\xC3\xA9j\xC3\xA0 "
-                         "n'est jamais \xC3\xA9" "cras\xC3\xA9 ;", {}},
+                         "n'est jamais \xC3\xA9" "cras\xC3\xA9. La ligne du bas le dit, l'essentiel d'abord "
+                         "(\xC2\xAB Extrait : rapport.pdf (dans \xE2\x80\xA6) \xC2\xBB, \xC2\xAB rapport.pdf "
+                         "existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9 (dans \xE2\x80\xA6) "
+                         "\xC2\xBB) ; coup\xC3\xA9" "e \xC3\xA0 la largeur de l'objet, son infobulle dit "
+                         "tout ;", {}},
              {K::Bullet, "la molette fait d\xC3\xA9" "filer les lignes.", {}},
              {K::Heading, "L'infobulle", {}},
              {K::Paragraph, "Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, "
@@ -21192,6 +21205,10 @@ const std::vector<Topic>& topics() {
                          "prend tout l'\xC3\xA9" "cran. Un enregistrement d'une autre version du projet se "
                          "rejoue aussi : ce qui n'existe plus (une variable, une vue, un objet) est "
                          "ignor\xC3\xA9, et signal\xC3\xA9 une fois (la barre et la Console le disent).", {}},
+             {K::Paragraph, "Dans la barre, \xC3\xA0 la place du rappel des touches, la note se lit toujours : "
+                         "en entier si elle tient, sinon en bref (\xC2\xAB \xE2\x9A\xA0 Projet chang\xC3\xA9 "
+                         "depuis l'enregistrement \xC2\xBB, \xC2\xAB \xE2\x9A\xA0 Projet chang\xC3\xA9 "
+                         "\xC2\xBB) ; son infobulle la dit en entier.", {}, "1.14.1"},
              {K::Heading, "Le dossier Enregistrements", {}},
              {K::Paragraph, "Les enregistrements sont des fichiers `.xrec` dans le dossier natif "
                          "**ressources/enregistrements** du projet (ou celui de Configuration \xE2\x80\xBA "

@@ -66,6 +66,7 @@
 #include "../src/hmi/HmiLoginMenu.hpp"
 #include "../src/hmi/HmiDesign.hpp"
 #include "../third_party/miniz.h"   // 1.14.1 (lot N5) : les zips des essais de l'explorateur
+#include "../src/hmi/HmiPipeline.hpp"   // 1.14.1 (captures finales) : la gravite du Convertisseur dans le build
 #include "../src/hmi/HmiDuplicate.hpp"   // 1.10.2 (chantier D)
 #include "../src/hmi/HmiMarkers.hpp"     // 1.11 (REP) : le lecteur des reperes $...$
 #include "../src/hmi/HmiWhy.hpp"         // 1.12.27 : Pourquoi ?
@@ -32074,6 +32075,46 @@ void unites1141() {
         check(has(src, "value", "dimensions incompatibles : Temp est en \xC2\xB0" "C"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
         check(has(target, "resultTo", "Inconnue_Var"), "Generer : une variable inconnue dans R\xC3\xA9sultat vers");
         check(has(notNum, "value", "n'est pas un nombre"), "Generer : une Valeur de d\xC3\xA9part qui n'est pas un nombre");
+        // 1.14.1 (captures finales) : LA GRAVITE DE EN() - le convertisseur fait le calcul de EN(valeur, 'unite') ; des
+        // dimensions incompatibles (ou une unite inconnue) y sont une erreur BLOQUANTE, comme EN() mal employe dans un script
+        // ou une fx. Avant, le controle les disait en erreur et Generer les comptait en avertissements (la simulation
+        // demarrait). La dimension inconnue reste un avertissement (les listes proposent toutes les unites).
+        const auto blocks = [&](Id id, const char* key, const char* text) {
+            for (const auto& i : gen)
+                if (i.object == id && i.property == key && i.message.find(text) != std::string::npos)
+                    return i.severity == Issue::Severity::Error && i.blocking;
+            return false;
+        };
+        check(blocks(incompat, "unitTo", "dimensions incompatibles") && blocks(src, "value", "dimensions incompatibles")
+                  && blocks(unknownU, "unitFrom", "unit\xC3\xA9 inconnue") && !blocks(dimBad, "dimension", "dimension inconnue"),
+              "Generer : dimensions incompatibles, unit\xC3\xA9 inconnue - des erreurs bloquantes (comme EN() dans un script) ; "
+              "la dimension inconnue, un avertissement");
+        {
+            // Le build de la simulation (Demarrer) : 1 erreur, il s'arrete - comme pour un script avec EN(Debit, 'mbar').
+            Project bp;
+            View bv = makeView(bp, "Vue_Build");
+            const Id c = edit::add(bp, bv, Kind::UnitConverter, 10, 10);
+            bv.object(c)->name = "Conv_Debit";
+            bv.object(c)->set("unitFrom", "m3/h");
+            bv.object(c)->set("unitTo", "mbar");
+            bp.views = {bv};
+            bp.config.startView = bv.id;
+            pipeline::Cache cache;
+            pipeline::Options o;
+            o.plcHasName = [](std::string_view) { return false; };
+            o.cache = &cache;
+            o.artifacts = [](const std::string&, const std::string&) { return false; };
+            o.writeArtifact = [](const std::string&, const std::string&) {};
+            o.removeArtifact = [](const std::string&) {};
+            pipeline::Request rq;
+            rq.mode = pipeline::Mode::Start;
+            const auto rep = pipeline::run(bp, {}, rq, o);
+            bool said = false;
+            for (const auto& d : rep.diagnostics) said = said || (d.blocking() && d.message.find("dimensions incompatibles") != std::string::npos);
+            check(!rep.ok && rep.errors == 1 && said,
+                  "D\xC3\xA9marrer avec m\xC2\xB3/h vers mbar : 1 erreur, le build s'arr\xC3\xAAte (" + std::to_string(rep.errors) + " erreur(s), "
+                      + std::to_string(rep.warnings) + " avertissement(s))");
+        }
         // Dupliquer (copier-coller) et le code brut : les proprietes suivent.
         const View& vv = *gp.view(gp.views[0].id);
         const std::string code = serializeObjectCode(vv, {src});
@@ -32279,6 +32320,17 @@ void explorateur1141() {
     v.object(bad)->setFlag("allowExtract", true);
     const Id fixe = addExp("Fixe", src.string());
     v.object(fixe)->setFlag("pilotable", false);
+    // 1.14.1 (captures finales) : une source dont le chemin a des \ (sous Windows : C:\travaux\nouveau, Z:\tmp\...) ; ici,
+    // des \ dans le nom d'un dossier. Ses \t et \n ne sont pas des echappements : le chemin part tel quel.
+    const fs::path barres = root / "C:\\travaux\\nouveau";
+    n5x::writeFile(barres / "rapport.txt", "Rapport\n");
+    n5x::writeFile(barres / "archive.zip", n5x::zipOf({{"tableau.csv", "a;b\n1;2\n"}}));
+    p.programs.variables.push_back(hmiVar(p, "Chemin_Barres", "STRING", "''"));
+    const Id bars = addExp("Barres", barres.string());
+    v.object(bars)->set("pickTo", "Chemin_Barres");
+    const Id barsZip = addExp("Barres_Zip", (barres / "archive.zip").string());
+    v.object(barsZip)->setFlag("allowExtract", true);
+    v.object(barsZip)->set("extractTo", (root / "ex\\tr").string());
     p.views = {v};
     p.config.startView = v.id;
     Runtime rt;
@@ -32366,9 +32418,31 @@ void explorateur1141() {
     const fs::path out = root / "donnees" / "extraits" / "lisez.txt";
     check(fs::exists(out) && fs::file_size(out) == 30 && !rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("Extrait") == 0,
           "Extraire (permis) : lisez.txt dans donnees/extraits " + rt.fileExplorer(rel)->message);
+    // 1.14.1 (captures finales) : la ligne d'etat de l'objet coupe a sa largeur - l'essentiel d'abord : le nom du fichier,
+    // puis le dossier (avant : le chemin complet, et le nom tombait dans les points de suite).
+    check(rt.fileExplorer(rel)->message.rfind("Extrait : lisez.txt", 0) == 0
+              && rt.fileExplorer(rel)->message.find((root / "donnees" / "extraits").string()) != std::string::npos,
+          "Extrait : le nom du fichier en t\xC3\xAAte, puis son dossier (" + rt.fileExplorer(rel)->message + ")");
     rt.objectPart(rel, "extraire", 1.8);
     check(rt.fileExplorer(rel)->error && rt.fileExplorer(rel)->message.find("rien n'est \xC3\xA9" "cras\xC3\xA9") != std::string::npos,
           "Extraire encore : refus\xC3\xA9 (jamais d'\xC3\xA9" "crasement) " + rt.fileExplorer(rel)->message);
+    // ... et le refus dit sa raison d'abord (avant : le chemin complet, puis la raison - coupee).
+    check(rt.fileExplorer(rel)->message.rfind("lisez.txt existe d\xC3\xA9j\xC3\xA0", 0) == 0
+              && rt.fileExplorer(rel)->message.find("rien n'est \xC3\xA9" "cras\xC3\xA9") < 80,
+          "Extraire encore : la raison en t\xC3\xAAte (" + rt.fileExplorer(rel)->message + ")");
+    // 1.14.1 (captures finales) : un chemin a \ (C:\travaux\nouveau) part tel quel dans Choix vers et dans le message.
+    {
+        const auto* eb = rt.fileExplorer(bars);
+        rt.objectPart(bars, "ligne:" + std::to_string(rowOf(eb, "rapport.txt")), 1.81);
+        const sim::Value* chosen = rt.variable("Chemin_Barres");
+        check(chosen && chosen->asString() == (barres / "rapport.txt").string(),
+              "un chemin \xC3\xA0 barres : Choix vers le re\xC3\xA7oit tel quel (" + (chosen ? chosen->asString() : std::string("?")) + ")");
+        rt.objectPart(barsZip, "ligne:" + std::to_string(rowOf(rt.fileExplorer(barsZip), "tableau.csv")), 1.82);
+        rt.objectPart(barsZip, "extraire", 1.83);
+        const std::string said = rt.fileExplorer(barsZip)->message;
+        check(fs::exists(root / "ex\\tr" / "tableau.csv") && !rt.fileExplorer(barsZip)->error && said.find((root / "ex\\tr").string()) != std::string::npos,
+              "extraire vers un dossier \xC3\xA0 barres (ex\\tr) : le fichier y est, le message cite le chemin tel quel (" + said + ")");
+    }
     rt.objectPart(fx, "ouvrir:" + std::to_string(rowOf(rt.fileExplorer(fx), "archive.zip")), 1.9);
     rt.objectPart(fx, "ligne:" + std::to_string(rowOf(rt.fileExplorer(fx), "lisez.txt")), 1.91);
     rt.objectPart(fx, "extraire", 1.92);

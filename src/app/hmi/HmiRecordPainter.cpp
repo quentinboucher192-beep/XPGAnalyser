@@ -231,6 +231,52 @@ std::string replayLegend(gfx::IRenderer& r, gfx::FontId font, float width) {
     return {};
 }
 
+// 1.14.1 (captures finales) : la note, entiere si elle tient ; sinon chacune de ses parties (separees par " - ") a sa
+// tete (avant " : " ou " ("), en bref, le plus bref ; sinon la premiere seule, le nombre des autres apres. Avant : une
+// seule phrase coupee au milieu ("Le projet a change depuis l'enregistre..."), sur un .xrec de la 1.14.0 rejoue apres
+// une modification du projet.
+std::string replayNote(gfx::IRenderer& r, gfx::FontId font, const std::string& note, float width) {
+    if (note.empty()) return {};
+    const std::string sign = "\xE2\x9A\xA0 ";
+    const std::string sep = " \xC2\xB7 ";
+    std::vector<std::string> parts;
+    for (std::size_t from = 0;;) {
+        const auto at = note.find(sep, from);
+        parts.push_back(note.substr(from, at == std::string::npos ? std::string::npos : at - from));
+        if (at == std::string::npos) break;
+        from = at + sep.size();
+    }
+    const auto capital = [](std::string s) {
+        if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
+        return s;
+    };
+    // La forme d'une partie : 0 entiere, 1 sa tete, 2 en bref, 3 le plus bref.
+    const auto form = [&](const std::string& part, int level) -> std::string {
+        if (level == 0) return part;
+        std::size_t cut = std::min(part.find(" : "), part.find(" ("));
+        const std::string head = capital(part.substr(0, cut));
+        const bool project = part.rfind("Le projet a chang", 0) == 0;
+        const bool frozen = part.rfind("les fl\xC3\xA8" "ches de tendance", 0) == 0;
+        const bool silent = part.rfind("enregistr\xC3\xA9 sans les sons", 0) == 0;
+        if (level == 1) return head;
+        if (project) return level == 2 ? "Projet chang\xC3\xA9 depuis l'enregistrement" : "Projet chang\xC3\xA9";
+        if (frozen) return level == 2 ? "Tendances et compteurs : le direct" : "Direct fig\xC3\xA9";
+        if (silent) return "Sans les sons";
+        return head;
+    };
+    const auto fits = [&](const std::string& t) { return r.measure(t, font).width <= width; };
+    for (int level = 0; level <= 3; ++level) {
+        std::string t = sign;
+        for (std::size_t k = 0; k < parts.size(); ++k) t += (k ? sep : std::string{}) + form(parts[k], level);
+        if (fits(t)) return t;
+    }
+    if (parts.size() > 1) {
+        const std::string t = sign + form(parts[0], 3) + " (+" + std::to_string(parts.size() - 1) + ")";
+        if (fits(t)) return t;
+    }
+    return fits("\xE2\x9A\xA0") ? std::string("\xE2\x9A\xA0") : std::string{};
+}
+
 std::string ReplayChrome::partAt(gfx::Point p) const {
     for (const auto& [name, rect] : parts)
         if (rect.contains(p)) return name;
@@ -437,7 +483,7 @@ ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const 
                 "(survoler un rep\xC3\xA8re le d\xC3\xA9" "crit).";
     std::string help;
     if (!hover.empty()) help = hover;
-    else if (!info.note.empty()) help = "\xE2\x9A\xA0 " + info.note;
+    else if (!info.note.empty()) help = replayNote(r, f.smallUi, info.note, right - x);   // 1.14.1 : une forme qui tient
     else help = replayLegend(r, f.smallUi, right - x);
     if (!info.note.empty()) c.helpTip = "\xE2\x9A\xA0 " + info.note + "\n" + c.helpTip;
     if (right - x > 4.f) c.parts.emplace_back("help", gfx::Rect{x, rowY, right - x, rowH});

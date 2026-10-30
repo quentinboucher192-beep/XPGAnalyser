@@ -550,7 +550,7 @@ void drawMultiStateIndicator(const Ctx& c) {
         drawStatusSymbol(c, sym, cx, cy, d * 0.55, col);
     }
     if (showText) {
-        const std::string label = st ? st->text : std::string("?");
+        const std::string label = st ? hmi::unescapeText(st->text) : std::string("?");   // 1.14.1 : un texte tape (ses \n)
         const double fs = fsOf(c, 15);
         text(c, fitted(c, label, w - d - 10, fs), d + 8, 0, w - d - 8, h, colorOf(c, "textColor", 0xE6EAF0), fs, "gauche");
     }
@@ -566,7 +566,7 @@ void drawMultiStateText(const Ctx& c) {
     const auto states = hmi::parseStateList(c.src.text(c.o, "stateList"));
     const int idx = hmi::stateIndexOf(states, value(c), c.src.text(c.o, "valueName"));   // 1.12.6 : ou par son nom
     const hmi::StateEntry* st = idx >= 0 ? &states[static_cast<std::size_t>(idx)] : nullptr;
-    const std::string label = st ? st->text : c.src.text(c.o, "unknownText");
+    const std::string label = st ? hmi::unescapeText(st->text) : c.src.text(c.o, "unknownText");   // 1.14.1 : un texte tape (ses \n)
     gfx::Color col = st && !st->color.empty() ? hexColor(c, st->color, 0xE6EAF0) : colorOf(c, "textColor", 0xE6EAF0);
     if (st && st->blink && blinkOff(c)) col = withAlpha(col, 0.35f);
     const double fs = fsOf(c, 18);

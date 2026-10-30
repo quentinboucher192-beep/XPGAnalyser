@@ -789,8 +789,8 @@ L'onglet **Images** de la bibliothèque, entre **Objets** et **Variables**, rang
 - **Importer dans les ressources**, sans la poser : le bouton **Importer** (l'image choisie) ou le clic droit d'une image.
 - **La couleur** : les dessins monochromes (les flèches, l'interface, l'industrie...) prennent la couleur choisie dans la rangée du haut ; **Auto** prend celle qui se lit sur le fond de la vue (claire sur un fond sombre, sombre sur un fond clair). Une autre couleur donne une ressource à son nom (`fleche-haut-rouge.svg`). Les images en couleurs (panneaux, drapeaux, météo, pastilles) gardent les leurs. **Recolorier**, dans les propriétés de l'Image, la change ensuite, même en marche par une expression.
 - **La taille des vignettes** : petites, moyennes, ou grandes avec leur nom (les trois carrés).
-- **Mes images** : le bouton **+** (un fichier PNG, SVG, JPEG... du disque), un fichier lâché sur l'onglet, ou **Ressources › Ma bibliothèque** (l'image choisie du projet) y ajoutent une image. Elles sont gardées hors du projet, dans le dossier de tes réglages (à côté de tes thèmes), et se posent dans tous tes projets ; clic droit › **Retirer de Mes images**.
-> L'infobulle d'une image dit son nom, sa catégorie et sa taille d'origine ; le bas de l'onglet les rappelle pour l'image survolée.
+- **Mes images** : le bouton **+** (un fichier PNG, SVG, JPEG... du disque), un fichier lâché sur l'onglet, ou **Ressources › Ma bibliothèque** (l'image choisie du projet) y ajoutent une image. Elles sont gardées hors du projet, dans le dossier de tes réglages (à côté de tes thèmes), et se posent dans tous tes projets ; clic droit › **Retirer de Mes images**. C'est la même liste dans tous les éditeurs de vues ouverts : une image ajoutée ou retirée s'y voit aussitôt.
+> L'infobulle d'une image dit son nom, sa catégorie et sa taille d'origine ; le bas de l'onglet les rappelle pour l'image survolée (ou choisie) - une image que la recherche cache n'y reste pas.
 ### Quelques composants
 - **Texte** : statique, dynamique (textes à trous `{Variable}`), formaté, sur plusieurs lignes (retour à la ligne automatique).
 - **Bouton** : son texte, ses couleurs et surtout ses **actions** (onglet Actions).
@@ -2619,6 +2619,8 @@ Un titre, une étiquette, une valeur avec son unité, un message d'état, un par
 ### Bon à savoir
 - une valeur illisible (variable inconnue, expression fausse) s'affiche `###`, et la simulation la montre en rouge dans l'onglet Expressions ;
 - Compiler vérifie chaque trou ; l'aide à la saisie propose les variables entre `{ }`.
+@nouveau 1.14.1
+- `\n` (une nouvelle ligne) ne se lit que dans le texte tapé : la valeur d'un trou ou d'une expression se montre telle quelle - un chemin `C:\travaux\nouveau` (le Choix vers d'un Explorateur de fichiers) garde ses `\`.
 > Pour un texte qui change selon un état, un seul trou suffit : `{Marche:en marche|arrêté}` pour un booléen ; pour trois états, une expression : `=SEL(Defaut, SEL(Marche, 'Arrêt', 'Marche'), 'Défaut')`.
 
 == objet-image | Image
@@ -3368,8 +3370,8 @@ temp_f = temperature * 1.8 + 32.0;
 @param title | Titre | (vide) | Un titre au-dessus de la case ; vide : pas de titre.
 @param value | Valeur de départ | 1 | Un nombre, ou une expression (=Pression) ; une variable avec une unité donne l'unité de départ.
 @param dimension | Dimension | toutes | Les unités proposées dans De : toutes, ou une dimension (Pression, Température, Débit…).
-@param unitFrom | Unité de départ | bar | Le symbole de l'unité de la valeur (bar, degC, m3/h) ; l'opérateur la change dans De.
-@param unitTo | Unité d'arrivée | mbar | Le symbole de l'unité du résultat, de la même dimension.
+@param unitFrom | Unité de départ | bar | L'unité de la valeur, montrée comme dans l'objet (bar, °C, m³/h ; le projet garde son symbole : degC, m3/h) ; l'opérateur la change dans De.
+@param unitTo | Unité d'arrivée | mbar | L'unité du résultat, de la même dimension.
 @param decimals | Décimales | 3 | De 0 à 12.
 @param resultTo | Résultat vers | (vide) | Une variable où le bouton Écrire pose le résultat ; vide : pas de bouton.
 @param font | Police | Sans | La police de l'objet.
@@ -3383,7 +3385,7 @@ temp_f = temperature * 1.8 + 32.0;
 ### À savoir
 - le calcul est celui de **EN** : la bibliothèque des unités du projet (fournies, celles du projet et des bibliothèques reliées) ; une unité ajoutée dans Configuration › Unités de mesure apparaît dans ses listes ;
 - le niveau d'accès et l'autorisation de l'objet s'appliquent à tous ses gestes ; Écrire demande aussi la permission **Piloter** quand la sécurité est active ;
-- Générer signale une unité inconnue, deux unités de dimensions différentes (la Valeur de départ comprise, quand c'est une variable qui a une unité), une dimension inconnue, une Valeur de départ qui n'est pas un nombre, une variable inconnue dans Résultat vers ;
+- Générer signale une unité inconnue et deux unités de dimensions différentes (la Valeur de départ comprise, quand c'est une variable qui a une unité) : des **erreurs**, comme EN mal employé dans un script - la simulation ne démarre pas ; et une dimension inconnue, une Valeur de départ qui n'est pas un nombre, une variable inconnue dans Résultat vers ;
 - pour tester une conversion pendant la conception : l'onglet **Convertir** de Configuration › Unités de mesure.
 
 = La bibliothèque d'objets › Affichage
@@ -6037,12 +6039,12 @@ Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les
 - **Source** : un dossier ou un fichier **.zip** - une expression, avec les repères `$...$` comme les autres chemins. **Relative**, elle part du dossier du projet (`Echanges/rapports`, `archives/2026.zip`) ; complète, elle va où elle dit (`D:\Rapports`). **Vide** : le dossier des ressources du projet (ihm/ressources) ; tant que le projet n'est pas enregistré, ses ressources en mémoire.
 - La source se lit à l'ouverture de la vue, quand elle change, et sur **Rafraîchir** - jamais à chaque cycle (un dossier relu dix fois par seconde ralentirait le poste). Un dossier énorme : la liste s'arrête à **Éléments au plus** (2000) et le dit.
 ### En marche
-- **une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) reçoit son chemin complet ;
+- **une ligne** : un clic la choisit ; **Choix vers** (une variable STRING) reçoit son chemin complet, tel quel (`C:\travaux\nouveau\rapport.pdf` : ses `\` ne sont pas des échappements) ;
 - **un double-clic** : un dossier ou un zip s'ouvre (un zip se parcourt comme un dossier, un zip dans un zip aussi s'il fait moins de 32 Mo) ; un fichier lance les **actions Double clic** de l'objet - ouvrir une popup, montrer la Visionneuse de documents sur Choix vers ;
 - **remonter** : le bouton de la barre, la ligne **..**, ou une étape du **fil d'Ariane** ; jamais au-dessus de la source - le poste n'ouvre pas tout le disque ;
 - **les titres** Nom, Taille, Date trient la liste (un second clic inverse) ; les dossiers restent devant ;
 - **Nom contient** : la case de la barre filtre les lignes à chaque frappe (sans casse ni accents) ; Échap l'efface ;
-- **Extraire** (si **Extraire permis** est coché) : le fichier choisi d'un zip va dans le **Dossier d'extraction** (donnees/extraits du projet par défaut), sous son nom seul ; un fichier qui existe déjà n'est jamais écrasé ;
+- **Extraire** (si **Extraire permis** est coché) : le fichier choisi d'un zip va dans le **Dossier d'extraction** (donnees/extraits du projet par défaut), sous son nom seul ; un fichier qui existe déjà n'est jamais écrasé. La ligne du bas le dit, l'essentiel d'abord (« Extrait : rapport.pdf (dans …) », « rapport.pdf existe déjà : rien n'est écrasé (dans …) ») ; coupée à la largeur de l'objet, son infobulle dit tout ;
 - la molette fait défiler les lignes.
 ### L'infobulle
 Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, image, texte, document PDF, son, vidéo, tableau CSV, fichier de l'application), la **taille** (dans un zip : la taille compressée et le taux), les **dates** de modification (et de création quand le système la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et leur taille totale (le compte s'arrête à 5000 éléments, et le dit) ; pour un **zip**, ses entrées ; pour une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses premières lignes.
@@ -10211,6 +10213,8 @@ Pendant la relecture :
 | Échap | quitter la relecture |
 **Quitter** rend l'IHM exactement comme elle était : la vue, les popups, les alarmes, l'utilisateur, la langue, les courbes. Pendant la relecture, l'heure de l'IHM s'arrête (ses temporisations reprennent là où elles étaient) mais **les dates suivent l'heure du PC** : en quittant, SYS.Date, SYS.Time, les horodatages des alarmes, du journal et de l'audit, les rapports à leur heure ne retardent pas du temps passé à rejouer. **L'API simulée se met en pause** : rien ne bouge derrière le film ; elle repart en quittant - et aussi si l'on ferme l'onglet Simulation pendant la relecture. Un automate réel (relié, ou au poste) continue : l'IHM ne lui écrit rien tant qu'elle rejoue. En simulation, la relecture est dans la vue de la simulation ; au poste d'exploitation, elle prend tout l'écran.
 Un enregistrement d'une autre version du projet se rejoue aussi : ce qui n'existe plus (une variable, une vue, un objet) est ignoré, et signalé une fois (la barre et la Console le disent).
+@nouveau 1.14.1
+Dans la barre, à la place du rappel des touches, la note se lit toujours : en entier si elle tient, sinon en bref (« ⚠ Projet changé depuis l'enregistrement », « ⚠ Projet changé ») ; son infobulle la dit en entier.
 ### Le dossier Enregistrements
 Les enregistrements sont des fichiers `.xrec` dans le dossier natif **ressources/enregistrements** du projet (ou celui de Configuration › Enregistrements) ; au poste d'exploitation, le dossier du projet du poste. **Ressources › Enregistrements** les montre : Nom, Durée, Vue de départ, Enregistré le, Où, Par, Taille, Protégé (et son cadenas) ; à droite, le détail (l'écran à 40 % de la durée, les clics, les alarmes, les vues, le projet, enregistré le, où, par qui) et la **description**, qui se modifie ; trop longue pour sa case, elle se lit entière sous le détail.
 - **Importer…** copie un `.xrec` dans le dossier (un nom déjà pris devient « Nom (2) ») ; **Exporter…** en copie un ailleurs : un fichier du même nom déjà là, la question est posée avant de le remplacer ; protégé, la case **Garder le mot de passe dans le fichier exporté** (oui par défaut : la copie reste protégée) - non : le bon mot de passe est demandé, et la copie est sans protection ;

@@ -1891,6 +1891,8 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         } else if (part.rfind("ligne:", 0) == 0) {
                             const auto k = static_cast<std::size_t>(std::strtoul(std::string(part.substr(6)).c_str(), nullptr, 10));
                             if (k >= l.first && k - l.first < l.rows.size()) take(l.rows[k - l.first]);
+                        } else if (part == "etat") {
+                            take(l.status);   // 1.14.1 (captures finales) : la ligne d'etat (son infobulle)
                         }
                         break;
                     }
@@ -2115,6 +2117,13 @@ hmi::explorer::Tip HmiLiveCanvas::explorerTipAt(gfx::Point p) const {
     const auto box = o->box();
     const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
     const auto l = explorerLayout(*runtime_, *o, *fe, vp);
+    // 1.14.1 (captures finales) : la ligne d'etat - son message en entier (coupe a la largeur de l'objet : un refus, un
+    // chemin d'extraction long).
+    if (l.status.w > 0 && l.status.contains(lx, ly)) {
+        const std::string& said = !fe->message.empty() ? fe->message : fe->listing.error;
+        if (said.empty()) return {};
+        return {o->name, said};
+    }
     const std::string part = hmi::explorer::hit(l, lx, ly);
     if (part.rfind("ligne:", 0) != 0) return {};
     return runtime_->explorerTip(id, static_cast<std::size_t>(std::strtoul(part.c_str() + 6, nullptr, 10)));

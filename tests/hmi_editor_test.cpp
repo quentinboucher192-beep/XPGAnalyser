@@ -7347,7 +7347,29 @@ void unites1141Ecran() {
               "l'inspecteur : Dimension, Unit\xC3\xA9 de d\xC3\xA9part et d'arriv\xC3\xA9" "e, R\xC3\xA9sultat vers, Valeur de d\xC3\xA9part, D\xC3\xA9" "cimales, Pilotable");
         check(from && from->enumValues == std::vector<std::string>{"Pa", "hPa", "kPa", "mbar", "bar", "psi"},
               "Unit\xC3\xA9 d'arriv\xC3\xA9" "e : seulement les pressions (la dimension de bar)");
-        (void)id;
+        // 1.14.1 (captures finales) : les listes Unite de depart et d'arrivee montrent l'unite comme l'objet et l'onglet
+        // Convertir (degC avec le signe degre, m3/h avec l'exposant) ; le symbole enregistre reste degC, degF.
+        check(commitIn(b.editor->properties(), "Unit\xC3\xA9 de d\xC3\xA9part", "degC") && b.v().object(id)->text("unitFrom") == "degC",
+              "Unit\xC3\xA9 de d\xC3\xA9part : degC (tap\xC3\xA9 en symbole)");
+        b.editor->refresh();
+        b.editor->layout();
+        const auto unitProp = [&](const char* key) {
+            ui::PropertyGrid::Property out;
+            const auto cats = b.editor->properties().categories();
+            for (const auto& c : cats)
+                for (const auto& pr : c.properties)
+                    if (pr.key == key) out = pr;
+            return out;
+        };
+        const auto listed = [](const std::vector<std::string>& l, const std::string& s) { return std::find(l.begin(), l.end(), s) != l.end(); };
+        const auto pf = unitProp("unitFrom"), pt = unitProp("unitTo");
+        check(pf.value == "\xC2\xB0" "C" && listed(pf.enumValues, "\xC2\xB0" "C") && listed(pf.enumValues, "m\xC2\xB3/h") && listed(pf.enumValues, "bar")
+                  && !listed(pf.enumValues, "degC") && !listed(pf.enumValues, "m3/h"),
+              "Unit\xC3\xA9 de d\xC3\xA9part : \xC2\xB0" "C montr\xC3\xA9 (et m\xC2\xB3/h dans la liste), pas degC (" + pf.value + ")");
+        check(listed(pt.enumValues, "\xC2\xB0" "F") && listed(pt.enumValues, "K") && !listed(pt.enumValues, "degF"),
+              "Unit\xC3\xA9 d'arriv\xC3\xA9" "e : les temp\xC3\xA9ratures, \xC2\xB0" "F lisible");
+        check(commitIn(b.editor->properties(), "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "\xC2\xB0" "F") && b.v().object(id)->text("unitTo") == "degF",
+              "choisir \xC2\xB0" "F dans la liste : le symbole degF est enregistr\xC3\xA9 (" + b.v().object(id)->text("unitTo") + ")");
     }
     // ---- le dessin dans l'editeur
     {
@@ -7608,6 +7630,117 @@ void explorateur1141Ecran() {
     const auto lum = [](gfx::Color c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; };
     check(lum(night) < 80 && lum(day) > 160, "le th\xC3\xA8me jour : le fond de l'explorateur s'\xC3\xA9" "claircit (" + std::to_string(static_cast<int>(lum(night)))
                                                  + " \xE2\x86\x92 " + std::to_string(static_cast<int>(lum(day))) + ")");
+    // 1.14.1 (captures finales) : UN CHEMIN SE MONTRE TEL QUEL. Sous Windows, Z:\tmp\... et C:\travaux\nouveau perdaient leur
+    // \t (une tabulation) et leur \n (un retour a la ligne) au dessin : dans le pied de l'objet (Extrait : ...) et dans un
+    // Texte qui montre la variable de Choix vers. Ici, des \ dans le nom d'un dossier (Linux les permet). Et le refus d'une
+    // seconde extraction se lit dans un objet etroit (la raison d'abord, le chemin ensuite).
+    {
+        const fs::path bars = root / "C:\\travaux\\nouveau";
+        put(bars / "rapport.txt", "Rapport\n");
+        {
+            mz_zip_archive zip;
+            std::memset(&zip, 0, sizeof zip);
+            (void)mz_zip_writer_init_heap(&zip, 0, 0);
+            const std::string csv = "a;b\n1;2\n";
+            (void)mz_zip_writer_add_mem(&zip, "tableau.csv", csv.data(), csv.size(), MZ_DEFAULT_COMPRESSION);
+            void* buf = nullptr;
+            size_t size = 0;
+            (void)mz_zip_writer_finalize_heap_archive(&zip, &buf, &size);
+            put(bars / "archive.zip", std::string(static_cast<const char*>(buf), size));
+            mz_zip_writer_end(&zip);
+        }
+        auto doc2 = std::make_shared<Document>();
+        auto& q = doc2->project;
+        View qv = makeView(q, "Vue_Barres");
+        qv.width = 1000;
+        qv.height = 720;
+        hmi::Variable chosenVar;
+        chosenVar.id = q.allocate();
+        chosenVar.name = "Fichier_Choisi";
+        chosenVar.type = "STRING";
+        chosenVar.initial = "''";
+        q.programs.variables.push_back(chosenVar);
+        const auto addExplorer = [&](const char* name, const std::string& source, double y, double w) {
+            const Id id = edit::add(q, qv, Kind::FileExplorer, 10, y);
+            qv.object(id)->name = name;
+            qv.object(id)->set("folder", source);
+            qv.object(id)->setNumber("w", w);
+            qv.object(id)->setNumber("h", 200);
+            return id;
+        };
+        const Id e1 = addExplorer("Exp_Barres", bars.string(), 10, 980);
+        qv.object(e1)->set("pickTo", "Fichier_Choisi");
+        const Id e2 = addExplorer("Zip_Large", (bars / "archive.zip").string(), 220, 980);
+        const Id e3 = addExplorer("Zip_Etroit", (bars / "archive.zip").string(), 430, 640);
+        for (const Id z : {e2, e3}) {
+            qv.object(z)->setFlag("allowExtract", true);
+            qv.object(z)->set("extractTo", (bars / "extraits").string());
+        }
+        const Id twoLines = edit::add(q, qv, Kind::Text, 680, 430);
+        qv.object(twoLines)->name = "Txt_Deux_Lignes";
+        qv.object(twoLines)->set("text", "Ligne 1\\nLigne 2");
+        qv.object(twoLines)->setNumber("w", 300);
+        qv.object(twoLines)->setNumber("h", 60);
+        const Id txt = edit::add(q, qv, Kind::Text, 10, 650);
+        qv.object(txt)->name = "Txt_Choisi";
+        qv.object(txt)->set("text", "Choix vers : {Fichier_Choisi}");
+        qv.object(txt)->setNumber("w", 980);
+        q.views = {qv};
+        q.config.startView = qv.id;
+        app::HmiSimulationPane pane2("n5bbarres", doc2, app::HmiSimulationHost{});
+        pane2.setBounds({0, 0, 1600, 900});
+        pane2.layout();
+        ColorRecorder r2;
+        const auto paint2 = [&](double t) {
+            r2.tris.clear();
+            r2.texts.clear();
+            r2.textX.clear();
+            pane2.layout();
+            pane2.render(ui::PaintContext{r2, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto rowIn = [&](Id id, const std::string& n) {
+            const auto* fe2 = pane2.runtime().fileExplorer(id);
+            for (std::size_t i = 0; fe2 && i < fe2->shown.size(); ++i)
+                if (fe2->shown[i].name == n) return std::to_string(i);
+            return std::string("99");
+        };
+        paint2(0.1);
+        auto& rt2 = pane2.runtime();
+        rt2.objectPart(e1, "ligne:" + rowIn(e1, "rapport.txt"), 0.2);
+        paint2(0.3);
+        const std::string chosen = (bars / "rapport.txt").string();
+        const sim::Value* got = rt2.variable("Fichier_Choisi");
+        check(got && got->asString() == chosen, "Choix vers : la variable re\xC3\xA7oit le chemin tel quel (" + (got ? got->asString() : std::string("?")) + ")");
+        check(r2.wrote("Choix vers : " + chosen), "un Texte {Fichier_Choisi} le montre tel quel : ses \\t et \\n ne sont pas des \xC3\xA9" "chappements");
+        bool lineOne = false, lineTwo = false;
+        for (const auto& t : r2.texts) {
+            lineOne = lineOne || t == "Ligne 1";
+            lineTwo = lineTwo || t == "Ligne 2";
+        }
+        check(lineOne && lineTwo, "un texte tap\xC3\xA9 Ligne 1\\nLigne 2 garde ses deux lignes en marche (lu une fois, \xC3\xA0 la liaison)");
+        rt2.objectPart(e2, "ligne:" + rowIn(e2, "tableau.csv"), 0.4);
+        rt2.objectPart(e2, "extraire", 0.41);
+        paint2(0.5);
+        check(fs::exists(bars / "extraits" / "tableau.csv") && r2.wrote((bars / "extraits").string()),
+              "le pied de l'objet, Extrait : le chemin tel quel (" + rt2.fileExplorer(e2)->message + ")");
+        rt2.objectPart(e3, "ligne:" + rowIn(e3, "tableau.csv"), 0.6);
+        rt2.objectPart(e3, "extraire", 0.61);
+        paint2(0.7);
+        std::string footer;
+        for (const auto& t : r2.texts)
+            if (t.rfind("tableau.csv existe", 0) == 0) footer = t;
+        gfx::Rect narrow;
+        (void)pane2.canvas().objectRect("Zip_Etroit", narrow);
+        check(rt2.fileExplorer(e3)->error && footer.find("rien n'est \xC3\xA9" "cras\xC3\xA9") != std::string::npos,
+              "la seconde extraction, dans un objet \xC3\xA9troit (" + std::to_string(static_cast<int>(narrow.w)) + " px) : le refus se lit (" + footer + ")");
+        gfx::Rect st;
+        check(pane2.canvas().partRect("Zip_Etroit", "etat", st), "la ligne d'\xC3\xA9tat de l'explorateur");
+        pane2.canvas().dispatch(ui::MouseMove{{st.x + st.w / 2, st.y + st.h / 2}, {0, 0}, {}});
+        paint2(0.8);
+        // Le pied coupe le dossier (ses points de suite) ; l'infobulle le dit jusqu'au bout.
+        check(footer.find("extraits)") == std::string::npos && r2.wrote("Zip_Etroit") && r2.wrote("extraits)"),
+              "au survol de la ligne d'\xC3\xA9tat : son infobulle dit tout le message, le dossier compris");
+    }
     fs::remove_all(root, ec);
 }
 
@@ -19586,7 +19719,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 475,   // 1.14.1 : + 12 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 477,   // 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -42871,6 +43004,28 @@ void imagesN6_1141() {
     sections = pal.imageSections();
     check(sections.size() == 1 && sections.front().category == "Drapeaux" && sections.front().count == 1,
           "rechercher \xC2\xAB drapeau fr \xC2\xBB : le drapeau fran\xC3\xA7" "ais seul");
+    // 1.14.1 (captures finales) : LA LIGNE DU BAS SUIT CE QUI EST MONTRE - l'image choisie (ou survolee) que la recherche cache
+    // n'y reste pas (avant : "Danger electrique - Securite et signalisation" sous les vannes trouvees) ; la recherche
+    // effacee, l'image choisie y revient.
+    pal.setFilter("");
+    pal.revealImage("danger-electrique");
+    {
+        gfx::Rect dz;
+        check(pal.imageTileRect("danger-electrique", dz), "la vignette Danger \xC3\xA9lectrique");
+        pal.setCurrentImage("danger-electrique");
+        pal.dispatch(ui::MouseMove{{dz.x + dz.w / 2, dz.y + dz.h / 2}, {0, 0}, {}});
+        paint();
+        check(rec.wrote("Danger \xC3\xA9lectrique \xC2\xB7 S"), "la ligne du bas : Danger \xC3\xA9lectrique et sa cat\xC3\xA9gorie");
+        pal.setFilter("vanne");
+        paint();
+        check(!rec.wrote("Danger \xC3\xA9lectrique") && rec.wrote("Clique une image puis"),
+              "rechercher \xC2\xAB vanne \xC2\xBB : l'image cach\xC3\xA9" "e quitte la ligne du bas (le mode d'emploi revient)");
+        pal.setFilter("");
+        paint();
+        check(rec.wrote("Danger \xC3\xA9lectrique \xC2\xB7 S"), "la recherche effac\xC3\xA9" "e : l'image choisie revient");
+        pal.setCurrentImage({});
+        pal.setImageCategoryOpen("S\xC3\xA9" "curit\xC3\xA9 et signalisation", false);
+    }
     pal.setFilter("");
     // L'infobulle : le nom, la categorie, la taille d'origine.
     const std::string tip = pal.imageTooltip("fleche-haut");
@@ -43020,6 +43175,17 @@ void imagesN6_1141() {
     fs::remove_all(saved, ec);
 
     // ---- Ressources > Ma bibliotheque, et Mes images ----
+    // 1.14.1 (captures finales) : UNE SEULE LISTE pour tous les editeurs ouverts - un autre editeur (une autre vue), deja sur
+    // l'onglet Images, voit ce que Ma bibliotheque, le + ou Retirer font ailleurs, sans relire a la main (avant : Mes images
+    // restait a 3 apres Ressources > Ma bibliotheque, meme apres avoir change de vue).
+    Bench bOther;
+    auto& otherPal = bOther.editor->palette();
+    otherPal.setMode(app::HmiPalette::Mode::Images);
+    const auto mineCount = [](const app::HmiPalette& pp) {
+        const auto s = pp.imageSections();
+        return !s.empty() && s.front().category == il::kMine ? s.front().count : std::size_t(999);
+    };
+    check(mineCount(pal) == 0 && mineCount(otherPal) == 0, "Mes images vide, dans les deux \xC3\xA9" "diteurs");
     app::HmiResourcesPane pane("res", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
     pane.setBounds({0, 0, 1200, 600});
     pane.layout();
@@ -43030,6 +43196,9 @@ void imagesN6_1141() {
     pane.selectResource(b.doc->project.resourceByName("pompe.svg")->id);
     std::string why;
     check(pane.addSelectedToImageLibrary(&why) && fs::exists(mineDir / "pompe.svg"), "Ma biblioth\xC3\xA8que : pompe.svg rejoint Mes images (" + why + ")");
+    check(mineCount(pal) == 1 && mineCount(otherPal) == 1 && otherPal.imageById("mes/pompe.svg"),
+          "Ma biblioth\xC3\xA8que : Mes images en compte 1, dans l'\xC3\xA9" "diteur ouvert et dans l'autre (" + std::to_string(mineCount(pal)) + ", "
+              + std::to_string(mineCount(otherPal)) + ")");
     check(pane.addSelectedToImageLibrary() && pane.lastMessage().find("D\xC3\xA9j\xC3\xA0") == 0, "... encore : d\xC3\xA9j\xC3\xA0 l\xC3\xA0, pas de double");
     {
         std::ofstream other((mineDir / "autre.svg").string(), std::ios::binary);   // un fichier du disque, puis un homonyme
@@ -43080,6 +43249,8 @@ void imagesN6_1141() {
     const auto* toRemove = pal.imageById("mes/autre.svg");
     check(toRemove && b.editor->removeMyImage(*toRemove) && !fs::exists(mineDir / "autre.svg") && pal.myImages().size() == 3,
           "Retirer de Mes images : le fichier s'en va, la section en compte 3");
+    check(mineCount(otherPal) == 3 && mineCount(b2.editor->palette()) == 3 && !otherPal.imageById("mes/autre.svg"),
+          "... dans les autres \xC3\xA9" "diteurs aussi (" + std::to_string(mineCount(otherPal)) + ", " + std::to_string(mineCount(b2.editor->palette())) + ")");
     check(!b.editor->removeMyImage(*up, &why), "une image de la biblioth\xC3\xA8que ne se retire pas (" + why + ")");
 
     il::setUserFolder(keptFolder);
@@ -43606,6 +43777,55 @@ void sonsRelecture1141() {
                           d = labelAt(893.f, false, false);
         check(a == "Sons" && b == "Coup\xC3\xA9s" && c == "Alarmes" && d == "?",
               "1600 px : Sons, Coup\xC3\xA9s, Alarmes ; 893 px : le haut-parleur seul (" + a + ", " + b + ", " + c + ", " + d + ")");
+    }
+    // 1.14.1 (captures finales) : UN ENREGISTREMENT D'UN PROJET QUI A CHANGE DEPUIS (un .xrec de la 1.14.0) - sa note se lit
+    // dans la barre, a la place de la legende : la plus longue de ses formes qui tient (jamais coupee au milieu, avant :
+    // "Le projet a change depuis l'enregistre..."), le detail en infobulle ; le bouton Sons garde sa place et son libelle.
+    {
+        const std::string note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : il se rejoue quand m\xC3\xAAme";
+        const auto noteAt = [&](float w, std::string& said, std::string& sons, std::string& tip) {
+            Recorder br;
+            hmi::ReplayInfo ri;
+            ri.active = true;
+            ri.length = 25.0;
+            ri.position = 3.0;
+            ri.header.name = "Demarrage station";
+            ri.note = note;
+            const auto ch = app::paintReplayChrome(br, ui::Theme::dark(), {0.f, 0.f, w, 600.f}, ri, {}, {-1.f, -1.f});
+            said.clear();
+            sons = ch.part("sons").w > 0 ? "?" : "-";
+            for (const auto& t : br.texts) {
+                if (t.rfind("\xE2\x9A\xA0", 0) == 0) said = t;
+                if (t == "Sons") sons = t;
+            }
+            tip = ch.helpTip;
+        };
+        for (const float w : {1145.f, 1300.f, 1600.f, 2000.f}) {
+            std::string said, sons, tip;
+            noteAt(w, said, sons, tip);
+            check(said.find("rojet") != std::string::npos && said.find("\xE2\x80\xA6") == std::string::npos && tip.find(note) != std::string::npos
+                      && sons != "-",
+                  std::to_string(static_cast<int>(w)) + " px : la note se lit enti\xC3\xA8re (" + said + "), le d\xC3\xA9tail en infobulle, le bouton Sons ("
+                      + sons + ")");
+        }
+        std::string said, sons, tip;
+        noteAt(2000.f, said, sons, tip);
+        check(said == "\xE2\x9A\xA0 " + note && sons == "Sons", "2000 px : la note compl\xC3\xA8te, et Sons");
+        Recorder mr;
+        const gfx::FontId small = ui::Theme::dark().font.smallUi;
+        const std::string sign = "\xE2\x9A\xA0 ";
+        const std::string many = note + " \xC2\xB7 enregistr\xC3\xA9 sans les sons (Configuration \xE2\x80\xBA Enregistrements \xE2\x80\xBA Sons d\xC3\xA9" "coch\xC3\xA9" "e) : "
+                                 "aucun son ne se rejoue";
+        const auto w = [&](const std::string& t) { return mr.measure(t, small).width; };
+        check(app::replayNote(mr, small, note, 5000.f) == sign + note
+                  && app::replayNote(mr, small, note, w(sign + "Le projet a chang\xC3\xA9 depuis l'enregistrement")) == sign + "Le projet a chang\xC3\xA9 depuis l'enregistrement"
+                  && app::replayNote(mr, small, note, w(sign + "Projet chang\xC3\xA9 depuis l'enregistrement")) == sign + "Projet chang\xC3\xA9 depuis l'enregistrement"
+                  && app::replayNote(mr, small, note, w(sign + "Projet chang\xC3\xA9")) == sign + "Projet chang\xC3\xA9"
+                  && app::replayNote(mr, small, note, w("\xE2\x9A\xA0")) == "\xE2\x9A\xA0" && app::replayNote(mr, small, note, 2.f).empty(),
+              "la note : enti\xC3\xA8re, sa t\xC3\xAAte, en bref, le plus bref, le signe seul, rien");
+        check(app::replayNote(mr, small, many, w(sign + "Projet chang\xC3\xA9 \xC2\xB7 Sans les sons")) == sign + "Projet chang\xC3\xA9 \xC2\xB7 Sans les sons"
+                  && app::replayNote(mr, small, many, w(sign + "Projet chang\xC3\xA9 (+1)")) == sign + "Projet chang\xC3\xA9 (+1)",
+              "deux notes : chacune en bref, puis la premi\xC3\xA8re et le nombre des autres");
     }
     pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
     check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte");

@@ -77,6 +77,26 @@ void LiveView::bind(const View& view) {
     source_ = view;
     shown_ = view;
     for (auto& o : shown_.objects) roles::plainProps(o);   // 1.12.6 (lot C) : les reperes, retires selon le role
+    // 1.14.1 (captures finales) : LE TEXTE TAPE SE LIT ICI, UNE FOIS - ses \n (un retour a la ligne) et \t (une tabulation),
+    // dans un texte montre (libelle, titre, invite...) et une liste de textes (les colonnes d'un tableau, les noms des
+    // plumes...). Le dessin en marche montre ensuite la vue telle quelle : une valeur ({Fichier}, =Chemin, la variable d'un
+    // afficheur) garde ses \ (C:\travaux\nouveau, Z:\tmp\...). Un texte a trous lit les siens a sa compilation.
+    for (auto& o : shown_.objects)
+        for (auto& p : o.props) {
+            if (!p.expr.empty() || p.value.find('\\') == std::string::npos) continue;
+            const roles::KeyRole r = roles::keyRole(p.key) ? roles::roleOf(o.kind, p.key) : roles::KeyRole{};
+            const bool textList = r.role == roles::Role::List && r.item == roles::Role::Text;
+            if (displayedTextKey(p.key) || textList) p.value = unescapeText(p.value);
+            // ... les cases fixes d'un Tableau (une case =expression ou a trous se calcule plus bas) : un \n y devient un
+            // blanc (une case tient sur une ligne).
+            if (o.kind == Kind::Table && p.key == "cells") {
+                auto rows = parseCells(p.value);
+                for (auto& row : rows)
+                    for (auto& cell : row)
+                        if (!cellIsExpression(cell) && !cellIsTemplate(cell)) cell = unescapeText(cell);
+                p.value = formatCells(rows);
+            }
+        }
     bound_.clear();
     for (const auto& o : view.objects) {
         for (const auto& p : o.props) {

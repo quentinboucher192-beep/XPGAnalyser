@@ -153,13 +153,24 @@ std::string wrapText(const Ctx& c, std::string_view s, gfx::FontId f, float maxP
 
 void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, double bh, gfx::Color col,
           double sizePx, std::string_view align, bool wrap) {
-    if (raw.empty() || col.a == 0) return;
+    // Multiligne : "\n" tape dans le texte. 1.14.1 (captures finales) : SEUL LE TEXTE TAPE SE LIT AVEC SES \n ET \t, une
+    // fois - dans l'editeur, la propriete telle qu'elle est ecrite. En marche, la vue preparee (LiveView) porte deja le
+    // texte final : un texte fixe a lu les siens a la liaison, un texte a trous a sa compilation (TextTemplate) ; une
+    // valeur s'y montre telle quelle. Avant, le dessin les relisait partout : un chemin C:\travaux\nouveau, Z:\tmp\...
+    // (Choix vers d'un Explorateur montre par un Texte, son message Extrait) perdait ses \t (des blancs) et ses \n.
+    if (c.opt.editor) textAsIs(c, hmi::unescapeText(raw), bx, by, bw, bh, col, sizePx, align, wrap);
+    else textAsIs(c, raw, bx, by, bw, bh, col, sizePx, align, wrap);
+}
+
+void textAsIs(const Ctx& c, std::string_view shown, double bx, double by, double bw, double bh, gfx::Color col,
+              double sizePx, std::string_view align, bool wrap) {
+    if (shown.empty() || col.a == 0) return;
     const auto px = static_cast<std::uint16_t>(std::clamp(sizePx * c.vp.zoom, 6.0, 200.0));
     // 1.12.24 : la vue etiree (plein ecran Remplir) - la police reste a `zoom`, les
     // largeurs et hauteurs de l'ecran reviennent au repere local par leur axe.
     const double kx = c.vp.zoomX(), ky = c.vp.zoomY();
-    // Multiligne : "\n" tape dans le texte ; et le retour a la ligne automatique.
-    std::string owned = hmi::unescapeText(raw);
+    // Ses vrais retours a la ligne ; et le retour a la ligne automatique.
+    std::string owned(shown);
     if (wrap) owned = wrapText(c, owned, gfx::FontId{px}, static_cast<float>(std::max(1.0, (bw - 8) * kx)));
     const std::string_view s = owned;
     const gfx::FontId f{px};

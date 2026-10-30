@@ -47,6 +47,20 @@ std::vector<std::string> wrap(gfx::IRenderer& r, const std::string& text, gfx::F
             line = tried;
         }
         word.clear();
+        // 1.14.1 (captures finales) : un mot plus large que l'infobulle (un chemin Z:\tmp\...\extraits, sans espace) se
+        // coupe a sa largeur, apres un \ ou un / quand il y en a un - avant, il debordait du cadre.
+        while (line.size() > 1 && r.measure(line, font).width > width) {
+            std::size_t n = r.fitCharacters(line, font, width);
+            while (n > 0 && n < line.size() && (static_cast<unsigned char>(line[n]) & 0xC0) == 0x80) --n;   // pas dans un caractere
+            if (n == 0) {
+                n = 1;
+                while (n < line.size() && (static_cast<unsigned char>(line[n]) & 0xC0) == 0x80) ++n;
+            }
+            if (n >= line.size()) break;
+            if (const auto sep = line.find_last_of("\\/", n - 1); sep != std::string::npos && sep + 1 > n / 3) n = sep + 1;
+            lines.push_back(line.substr(0, n));
+            line.erase(0, n);
+        }
     };
     for (const char c : text) {
         if (c == ' ') flush();

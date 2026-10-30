@@ -2608,6 +2608,12 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 // 1.14.1 (lot N5) : le Convertisseur d'unites - ses unites connues, de la meme dimension (celle de sa Valeur de
                 // depart comprise, quand c'est une variable qui a une unite), sa dimension connue, Resultat vers.
                 case Kind::UnitConverter: {
+                    // 1.14.1 (captures finales) : LA GRAVITE DE EN() - l'objet fait le calcul de EN(valeur, 'unite') ; une unite
+                    // inconnue, des dimensions incompatibles y sont des erreurs BLOQUANTES (Issue::blocking : Generer s'arrete,
+                    // la simulation ne demarre pas), comme EN() mal employe dans un script ou une fx. Avant, Generer les
+                    // comptait en avertissements (une faute de configuration d'un objet, non bloquante) quand ce controle les
+                    // disait en erreur. Le reste (dimension inconnue, Resultat vers...) garde la regle des objets.
+                    const auto blocking = [&] { out.back().blocking = true; };
                     const units::Catalog cat(biblio::unitConfig(p));
                     const auto literal = [&](const char* key) {
                         const Prop* pr = o.find(key);
@@ -2630,6 +2636,7 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         }
                         if (!cat.unit(sym)) {
                             issue(S::Error, key, "unit\xC3\xA9 inconnue \xC2\xAB " + sym + " \xC2\xBB (ni fournie, ni du projet)");
+                            blocking();
                             continue;
                         }
                         if (!family.empty() && cat.familyOf(sym) != family)
@@ -2641,15 +2648,18 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         const std::string la = hmi::unitLabel(cat.canonical(from)), lb = hmi::unitLabel(cat.canonical(to));
                         issue(S::Error, "unitTo", "dimensions incompatibles : " + la + " est " + cat.familyPhrase(from) + ", " + lb + " "
                                                       + cat.familyPhrase(to) + " \xE2\x80\x94 on ne convertit pas des " + la + " en " + lb);
+                        blocking();
                     }
                     // La Valeur de depart : une variable qui a une unite la donne ; elle doit aller vers l'arrivee.
                     if (const Prop* vp = o.find("value"); vp && !vp->expr.empty()) {
                         const std::string path = trimmedCopy(markers::strip(vp->expr, markers::Mode::Expression));
                         const std::string su = units::unitOfPath(p, path);
-                        if (!su.empty() && cat.unit(su) && cat.unit(to) && cat.familyOf(su) != cat.familyOf(to))
+                        if (!su.empty() && cat.unit(su) && cat.unit(to) && cat.familyOf(su) != cat.familyOf(to)) {
                             issue(S::Error, "value", "dimensions incompatibles : " + path + " est en " + hmi::unitLabel(cat.canonical(su)) + " ("
                                                          + cat.familyPhrase(su) + "), l'arriv\xC3\xA9" "e " + hmi::unitLabel(cat.canonical(to)) + " "
                                                          + cat.familyPhrase(to));
+                            blocking();
+                        }
                     } else if (const Prop* vp2 = o.find("value"); vp2 && numberOrExpr(trimmedCopy(vp2->value))) {
                         issue(S::Error, "value", "Valeur de d\xC3\xA9part : '" + vp2->value + "' n'est pas un nombre (une expression s'\xC3\xA9" "crit avec =)");
                     }
