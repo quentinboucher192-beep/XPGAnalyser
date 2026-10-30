@@ -3169,9 +3169,11 @@ const std::vector<KeyInfo>& keyInfos() {
         {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", PG::ValueType::Enum, {},
          "L'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans l'objet (bar, \xC2\xB0" "C, m\xC2\xB3/h ; le projet garde son symbole : degC, "
          "m3/h). Une Valeur de d\xC3\xA9part qui est une variable avec une unit\xC3\xA9 "
-         "donne la sienne. En marche, l'op\xC3\xA9rateur la change dans la liste De."},
+         "donne la sienne. En marche, l'op\xC3\xA9rateur la change dans la liste De. Choisie dans la liste, ou tap\xC3\xA9" "e (son "
+         "dernier choix) : un symbole tap\xC3\xA9 est gard\xC3\xA9 tel quel ; inconnu, la case le dit et G\xC3\xA9n\xC3\xA9rer s'arr\xC3\xAAte."},
         {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", PG::ValueType::Enum, {},
-         "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension que celle de d\xC3\xA9part (sinon le convertisseur le dit)."},
+         "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension que celle de d\xC3\xA9part (sinon le convertisseur le dit). "
+         "Choisie dans la liste, ou tap\xC3\xA9" "e (son dernier choix), comme l'unit\xC3\xA9 de d\xC3\xA9part."},
         // ---- 1.14.1 (lot N5) : l'Explorateur de fichiers
         {"folder", "Source (dossier ou .zip)", PG::ValueType::Text, {},
          "Un dossier ou un fichier .zip (les rep\xC3\xA8res $...$ comme les autres chemins). Relatif : il part du dossier du projet "
@@ -4007,6 +4009,15 @@ void converterProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property
                     if (label == s) return inner(symbol);
                 return inner(s);
             };
+        // 1.14.1 (captures) : UN SYMBOLE SE TAPE. La liste etait fermee : "furlong/h" ou "degC" tapes ne changeaient
+        // rien, et rien ne le disait. Son dernier choix, "Taper un nom...", ouvre un champ (les unites en aide) : un
+        // symbole tape s'enregistre tel quel (degC reste degC, montre degre C comme les autres) ; une unite inconnue
+        // aussi - la case le dit (sa raison dessous, comme Generer, qui la bloque).
+        p.typeIn = true;
+        const auto from = prop.value.find_first_not_of(" \t");
+        const std::string sym = from == std::string::npos ? std::string{} : prop.value.substr(from, prop.value.find_last_not_of(" \t") + 1 - from);
+        if (prop.expr.empty() && !sym.empty() && !cat.unit(sym))
+            p.exprError = "unit\xC3\xA9 inconnue \xC2\xAB " + sym + " \xC2\xBB (ni fournie, ni du projet)";
     } else if (prop.key == "value") {
         explain("Le nombre \xC3\xA0 convertir au d\xC3\xA9part : un nombre, ou une expression (=Pression : une mesure de l'IHM). Une variable "
                 "qui a une unit\xC3\xA9 donne aussi l'unit\xC3\xA9 de d\xC3\xA9part (comme UNITE(Pression)). Tant que l'op\xC3\xA9rateur n'a "

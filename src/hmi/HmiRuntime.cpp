@@ -7741,6 +7741,18 @@ bool calcIntegerType(sim::Type t) {
     }
 }
 
+// 1.14.1 (captures) : ce que montre l'afficheur (la ligne du calcul, le resultat, la base active) - une touche qui le
+// change efface le message du dessus (calcKeyDone).
+std::string calcShown(const calculator::State& st) { return calculator::expressionText(st) + '\n' + calculator::displayText(st); }
+
+// 1.14.1 (captures) : LE MESSAGE CEDE AU CALCUL. "chargee : P_Reseau", "envoye : ..." restaient 4 s sur la ligne du
+// calcul et cachaient ce qu'on tapait ensuite ("chargee : P_Reseau" au-dessus de 8, le resultat de 9 - 1). La touche
+// suivante (souris ou clavier) qui change l'expression ou le resultat l'efface ; une touche sans effet le laisse.
+void calcKeyDone(std::map<Id, FormState>& forms, Id object, const std::string& before, const calculator::State& st) {
+    if (calcShown(st) == before) return;
+    if (const auto it = forms.find(object); it != forms.end()) it->second.message.clear();
+}
+
 } // namespace
 
 const calculator::State* Runtime::calculatorState(Id object) const {
@@ -7862,22 +7874,28 @@ void Runtime::calcObjectPart(const View& v, const Object& o, std::string_view pa
         if (focused_ != kNoId) unfocus(now, o.id);
         focused_ = o.id;
     }
+    const std::string before = calcShown(st);
     if (part.rfind("base:", 0) == 0) {
         calculator::Base b = calculator::Base::Dec;
         if (calculator::baseFrom(part.substr(5), b)) calculator::setBase(st, b);
+        calcKeyDone(forms_, o.id, before, st);
         return;
     }
     if (part.rfind("bit:", 0) == 0) {
         (void)calculator::toggleBit(st, std::atoi(std::string(part.substr(4)).c_str()));
+        calcKeyDone(forms_, o.id, before, st);
         return;
     }
     if (part.rfind("touche:", 0) != 0) return;   // "afficheur" : le clavier, rien d'autre
     const std::string key(part.substr(7));
     st.lastKey = key;
     st.lastKeyAt = now;
-    if (key == "load") (void)calcLoad(v, o, st, true, now);
+    if (key == "load") (void)calcLoad(v, o, st, true, now);       // leur message : ce qui vient de se passer
     else if (key == "send") (void)calcSend(v, o, st, now);
-    else (void)calculator::press(st, key);
+    else {
+        (void)calculator::press(st, key);
+        calcKeyDone(forms_, o.id, before, st);
+    }
 }
 
 void Runtime::calcTypeText(const View& v, const Object& raw, std::string_view text, double now) {
@@ -7885,6 +7903,7 @@ void Runtime::calcTypeText(const View& v, const Object& raw, std::string_view te
     evaluateProps(v.id, o);
     if (!o.flag("pilotable", true) || !objectAllowed(o)) return;
     auto& st = calcState(v, o, now);
+    const std::string before = calcShown(st);
     for (const char c : text) {
         const std::string key = calculator::keyForChar(st, c);
         if (key.empty()) continue;
@@ -7892,6 +7911,7 @@ void Runtime::calcTypeText(const View& v, const Object& raw, std::string_view te
         st.lastKeyAt = now;
         (void)calculator::press(st, key);
     }
+    calcKeyDone(forms_, o.id, before, st);
 }
 
 void Runtime::calcTypeKey(const View& v, const Object& raw, EditKey k, double now) {
@@ -7907,9 +7927,11 @@ void Runtime::calcTypeKey(const View& v, const Object& raw, EditKey k, double no
         case EditKey::Delete: key = "CE"; break;
         default: return;
     }
+    const std::string before = calcShown(st);
     st.lastKey = key;
     st.lastKeyAt = now;
     (void)calculator::press(st, key);
+    calcKeyDone(forms_, o.id, before, st);
 }
 
 bool Runtime::calcMemberValue(const Object& o, std::string_view info, sim::Value& out) const {

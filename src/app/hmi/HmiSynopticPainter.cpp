@@ -1300,9 +1300,13 @@ void drawDamper(const Ctx& c, const Sym& s) {
     const double ledO = fire ? s.cx() + r * 1.3 + 4 + lr : s.cx() - r * 1.3 - 4 - lr * 4.4;
     const double ledF = ledO + lr * 3.4;
     if (ledsShown) {
+        // 1.14.1 (captures) : le voyant eteint en gris, comme le registre et la vanne. Le clapet a pour Couleur ferme
+        // l'orange (sa lame fermee) : son voyant eteint la prenait et paraissait allume (ouvert : F orange ; ferme ou
+        // declenche : O orange). Le gris est celui de la Couleur ferme d'un registre neuf.
+        const gfx::Color ledOff = fire ? c.fixed(0x5A6577) : s.off;
         const struct { double x; bool on; const char* tag; } leds[] = {{ledO, d.limitO, "O"}, {ledF, d.limitF, "F"}};
         for (const auto& l : leds) {
-            const gfx::Color lc = d.discord ? bladeCol : l.on ? onCol : withA(s.off, 0.8f);
+            const gfx::Color lc = d.discord ? bladeCol : l.on ? onCol : withA(ledOff, 0.8f);
             fill(c, circle(l.x, ay - lr * 0.6, lr, 16), lc);
             outline(c, circle(l.x, ay - lr * 0.6, lr, 16), true, c.fixed(0x10141A), 1);
             text(c, l.tag, l.x - lr * 2, ay + lr * 0.5, lr * 4, lr * 2.6, s.txt, std::max(6.0, lr * 2.2), "centre");

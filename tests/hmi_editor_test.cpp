@@ -29228,8 +29228,9 @@ void finsDeCourse1141Editeur() {
                 ++i;
             }
         check(rankMode >= 0 && rankMode < rankValue && rankValue < rankFco && rankFco - rankValue <= 3, "... le choix avant la Valeur, les fins de course juste apr\xC3\xA8s");
-        check(commitIn(g2, "Temps de man\xC5\x93uvre", "10 s") && b.v().object(id)->text("travelTime") == "10",
-              "le temps de man\xC5\x93uvre se tape (10 s) et s'\xC3\xA9" "crit en secondes, comme toute dur\xC3\xA9" "e (10)");
+        // 1.14.1 (captures, seconde passe) : il garde ce qui est tape (avant : reecrit en secondes, 10).
+        check(commitIn(g2, "Temps de man\xC5\x93uvre", "10 s") && b.v().object(id)->text("travelTime") == "10 s",
+              "le temps de man\xC5\x93uvre se tape (10 s) et reste tel quel (10 s)");
         check(commitIn(b.editor->properties(), "Fin de course ouvert", "=V_FCO") && b.v().object(id)->text("limitOpen") == "V_FCO"
                   && b.v().object(id)->expr("limitOpen").empty(),
               "une fin de course : une formule (sa valeur est la formule, comme le d\xC3\xA9" "faut)");
@@ -29512,8 +29513,9 @@ void defautsVannes1141Captures() {
         reselect(b, v);
         check(refusedWhy(kTemps).find("n'est pas une dur\xC3\xA9" "e") != std::string::npos && refusedWhy(kTemps).find("secondes") != std::string::npos,
               "... \xC2\xAB 4 x \xC2\xBB refus\xC3\xA9, la raison dit une dur\xC3\xA9" "e (" + refusedWhy(kTemps) + ")");
-        check(commitIn(b.editor->properties(), kTemps, "4 s") && b.v().object(v)->text("travelTime") == "4",
-              "... tap\xC3\xA9 4 s : \xC3\xA9" "crit en secondes (4), comme toute dur\xC3\xA9" "e");
+        // 1.14.1 (captures, seconde passe) : tape, il reste tel quel (avant : reecrit en secondes, 4).
+        check(commitIn(b.editor->properties(), kTemps, "4 s") && b.v().object(v)->text("travelTime") == "4 s",
+              "... tap\xC3\xA9 4 s : il reste 4 s, comme venu du fichier");
         const struct { Kind k; const char* mode; const char* modeValue; } others[] = {
             {Kind::ThreeWayValve, "positionMode", "fins de course"}, {Kind::Damper, "stateMode", "fins de course"},
             {Kind::MultiBladeDamper, "stateMode", "fins de course"}, {Kind::FireDamper, "stateMode", "fins de course"}};
@@ -43832,7 +43834,350 @@ void sonsRelecture1141() {
     fs::remove_all(dir, ec);
 }
 
+// ---- 1.14.1 (captures, seconde passe) : les defauts vus aux captures de la 1.14.1 - l'infobulle qui traine dans la
+//      vue en marche, le voyant eteint du clapet coupe-feu, le Temps de manoeuvre tape, le message de la calculatrice,
+//      les unites tapees du Convertisseur.
+void defautsCaptures1141Seconde() {
+    std::printf("1.14.1 (captures, seconde passe) : infobulles de la vue, voyants du clapet, Temps de man\xC5\x93uvre, calculatrice, unit\xC3\xA9s\n");
+    namespace fs = std::filesystem;
+    const auto theme = ui::Theme::dark();
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+    const auto tipShown = [](const ColorRecorder& rec) {
+        for (const auto& t : rec.texts)
+            if (t.rfind("Taille : ", 0) == 0) return true;   // une ligne de l'infobulle d'un fichier (la colonne dit "Taille")
+        return false;
+    };
+    // ---- 1. l'infobulle d'une ligne de l'Explorateur ne traine pas quand la souris sort de la vue (5-explorateur/15)
+    {
+        const fs::path root = fs::temp_directory_path() / ("n5c_tip_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::error_code ec;
+        fs::remove_all(root, ec);
+        fs::create_directories(root / "Echanges");
+        {
+            std::ofstream out(root / "Echanges" / "mesures.csv", std::ios::binary);
+            out << "Date;Debit\n2026-10-30;12.5\n";
+        }
+        {
+            mz_zip_archive zip;
+            std::memset(&zip, 0, sizeof zip);
+            (void)mz_zip_writer_init_heap(&zip, 0, 0);
+            for (const char* n : {"a_dedans.csv", "b_dedans.txt", "c_dedans.txt", "d_dedans.txt"}) {
+                const std::string body = std::string("contenu de ") + n + "\n";
+                (void)mz_zip_writer_add_mem(&zip, n, body.data(), body.size(), MZ_DEFAULT_COMPRESSION);
+            }
+            void* buf = nullptr;
+            size_t size = 0;
+            (void)mz_zip_writer_finalize_heap_archive(&zip, &buf, &size);
+            std::ofstream out(root / "Echanges" / "paquet.zip", std::ios::binary);
+            out.write(static_cast<const char*>(buf), static_cast<std::streamsize>(size));
+            mz_zip_writer_end(&zip);
+            mz_free(buf);
+        }
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Vue_Fichiers");
+        v.width = 900;
+        v.height = 520;
+        const Id ex = edit::add(p, v, Kind::FileExplorer, 20, 20);
+        v.object(ex)->name = "Exp";
+        v.object(ex)->set("folder", (root / "Echanges").string());
+        v.object(ex)->setNumber("w", 640);
+        v.object(ex)->setNumber("h", 320);
+        p.views = {v};
+        p.config.startView = v.id;
+        app::HmiSimulationPane pane("n5ctip", doc, app::HmiSimulationHost{});
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            rec.textX.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto rowOf = [&](const std::string& n) {
+            const auto* fe = pane.runtime().fileExplorer(ex);
+            for (std::size_t i = 0; fe && i < fe->shown.size(); ++i)
+                if (fe->shown[i].name == n) return "ligne:" + std::to_string(i);
+            return std::string("ligne:99");
+        };
+        paintAt(0.1);
+        // Hors de la vue simulee, dans le volet (sa barre d'etat, en bas) : la souris y passe directement.
+        const gfx::Rect cv = pane.canvas().bounds();
+        const gfx::Point outside{cv.x + 40.f, 895.f};
+        gfx::Rect rCsv, rZip;
+        check(!cv.contains(outside) && pane.canvas().partRect("Exp", rowOf("mesures.csv"), rCsv) && pane.canvas().partRect("Exp", rowOf("paquet.zip"), rZip),
+              "les lignes mesures.csv et paquet.zip ; un point du volet hors de la vue (la barre du bas)");
+        pane.dispatch(ui::MouseMove{centre(rCsv), {0, 0}, {}});
+        paintAt(0.2);
+        check(tipShown(rec) && rec.wrote("Taille : 27 octets") && pane.canvas().hovered(), "la souris sur mesures.csv : son infobulle");
+        pane.dispatch(ui::MouseMove{outside, {0, 0}, {}});
+        paintAt(0.3);
+        check(!pane.canvas().hovered() && !tipShown(rec),
+              "la souris sort de la vue par la barre du bas : l'infobulle ne reste pas (avant : elle tra\xC3\xAEnait)");
+        // Le zip ouvert d'un double-clic, puis la souris sort : aucune infobulle d'une ligne jamais survolee.
+        pane.dispatch(ui::MouseMove{centre(rZip), {0, 0}, {}});
+        pane.canvas().dispatch(ui::MouseDown{centre(rZip), ui::MouseButton::Left, 2, {}});
+        pane.canvas().dispatch(ui::MouseUp{centre(rZip), ui::MouseButton::Left, {}});
+        paintAt(0.4);
+        check(pane.runtime().fileExplorer(ex) && !pane.runtime().fileExplorer(ex)->loc.at.empty() && rec.wrote("a_dedans.csv"),
+              "un double-clic sur paquet.zip : sa liste (a_dedans.csv...)");
+        pane.dispatch(ui::MouseMove{outside, {0, 0}, {}});
+        paintAt(0.5);
+        check(!tipShown(rec), "la liste chang\xC3\xA9" "e, la souris sortie : pas d'infobulle pour une ligne jamais survol\xC3\xA9" "e");
+        // Revenue sur une ligne : l'infobulle revient (le survol marche toujours).
+        gfx::Rect rIn;
+        check(pane.canvas().partRect("Exp", rowOf("b_dedans.txt"), rIn), "la ligne b_dedans.txt du zip");
+        pane.dispatch(ui::MouseMove{centre(rIn), {0, 0}, {}});
+        paintAt(0.6);
+        check(tipShown(rec) && pane.canvas().hovered(), "revenue sur b_dedans.txt : son infobulle");
+        fs::remove_all(root, ec);
+    }
+    // ... et les deux autres infobulles du meme endroit : la lecture simulee, la marque de qualite.
+    {
+        Project p;
+        View v = makeView(p, "Vue_Marques");
+        v.width = 600;
+        v.height = 400;
+        Object q = makeObject(Kind::Rectangle, 801, "Rect_Qualite", 40, 40, v.layers.front().id);
+        q.setNumber("w", 120);
+        q.setNumber("h", 80);
+        Object s = makeObject(Kind::Rectangle, 802, "Rect_Simule", 300, 40, v.layers.front().id);
+        s.setNumber("w", 120);
+        s.setNumber("h", 80);
+        v.objects = {q, s};
+        app::HmiLiveLayer layer;
+        layer.view = v;
+        layer.quality = {{801, 1}};
+        layer.qualityTips = {{801, "P_Reseau lue il y a 12 s"}};   // courte : l'infobulle passe a la ligne a 35 caracteres
+        app::HmiLiveLayer::SimRead sr;
+        sr.object = 802;
+        sr.equipment = "Centrale";
+        sr.path = "P_Reseau";
+        sr.tip = "Centrale ne r\xC3\xA9pond pas : lue sur son esclave simul\xC3\xA9";
+        layer.simulated = {sr};
+        app::HmiLiveCanvas canvas("n5c.marques");
+        canvas.setBounds({0, 0, 900, 600});
+        canvas.showLayers({layer}, true);
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            rec.textX.clear();
+            canvas.render(ui::PaintContext{rec, theme, {0, 0, 900, 600}, t, nullptr});
+        };
+        paintAt(0.1);
+        gfx::Rect rq, rs;
+        check(canvas.objectRect("Rect_Qualite", rq) && canvas.objectRect("Rect_Simule", rs), "les deux objets marqu\xC3\xA9s \xC3\xA0 l'\xC3\xA9" "cran");
+        canvas.dispatch(ui::MouseMove{centre(rq), {0, 0}, {}});
+        paintAt(0.2);
+        check(rec.wrote("Valeur ancienne") && rec.wrote("il y a 12 s"), "sur la marque de qualit\xC3\xA9 : son infobulle");
+        canvas.dispatch(ui::MouseMove{{950.f, 300.f}, {0, 0}, {}});   // hors du cadre du canevas
+        paintAt(0.3);
+        check(!rec.wrote("Valeur ancienne"), "la souris sortie : l'infobulle de la qualit\xC3\xA9 ne reste pas");
+        canvas.dispatch(ui::MouseMove{centre(rs), {0, 0}, {}});
+        paintAt(0.4);
+        check(rec.wrote("Lue sur l'esclave simul\xC3\xA9"), "sur l'objet lu en simul\xC3\xA9 : son infobulle");
+        canvas.dispatch(ui::MouseMove{{950.f, 300.f}, {0, 0}, {}});
+        paintAt(0.5);
+        check(!rec.wrote("Lue sur l'esclave simul\xC3\xA9"), "la souris sortie : l'infobulle de la lecture simul\xC3\xA9" "e ne reste pas");
+    }
+    // ---- 2. le clapet coupe-feu : un voyant eteint est gris, pas de la Couleur ferme (orange) (1-vannes/14, 29)
+    {
+        Project p;
+        View v = makeView(p, "Vue");
+        v.width = 1400;
+        v.height = 800;
+        app::HmiViewport vp;
+        vp.zoom = 1.f;
+        const auto draw = [&](const Object& o) {
+            ColorTris rec;
+            app::HmiPaintOptions opt;
+            opt.editor = false;
+            opt.time = 0.1;
+            app::paintHmiObject(rec, v, o, vp, app::HmiPropertySource{}, theme, opt);
+            return rec;
+        };
+        // Les voyants eteints : seuls dessins a 80 % d'opacite (withA 0,8).
+        const auto offLeds = [](const ColorTris& rec, int& orange, int& gray) {
+            orange = gray = 0;
+            for (const auto& t : rec.tris) {
+                if (t.col.a < 200 || t.col.a > 208) continue;
+                if (t.col.r > 200 && t.col.g > 120 && t.col.g < 185 && t.col.b < 110) ++orange;
+                else if (t.col.r < 140 && std::abs(int(t.col.r) - int(t.col.b)) < 50 && std::abs(int(t.col.g) - int(t.col.b)) < 40) ++gray;
+            }
+        };
+        const struct { const char* mode; const char* fco; const char* fcf; const char* what; } cases[] = {
+            {"fins de course", "TRUE", "FALSE", "ouvert (F \xC3\xA9teint)"}, {"fins de course", "FALSE", "TRUE", "ferm\xC3\xA9 (O \xC3\xA9teint)"},
+            {"une valeur", "TRUE", "FALSE", "une valeur, ouvert (F \xC3\xA9teint)"}};
+        for (const auto& k : cases) {
+            Object o = makeObject(Kind::FireDamper, 71, "CF", 100, 100, v.activeLayer);
+            o.set("stateMode", k.mode);
+            o.set("limitOpen", k.fco);
+            o.set("limitClosed", k.fcf);
+            int orange = 0, gray = 0;
+            offLeds(draw(o), orange, gray);
+            check(orange == 0 && gray > 0, std::string("le clapet coupe-feu ") + k.what + " : le voyant \xC3\xA9teint gris, comme le registre ("
+                                               + std::to_string(orange) + " triangles orange, " + std::to_string(gray) + " gris)");
+        }
+        Object rg = makeObject(Kind::Damper, 72, "RG", 100, 100, v.activeLayer);
+        rg.set("stateMode", "fins de course");
+        rg.set("limitOpen", "TRUE");
+        rg.set("limitClosed", "FALSE");
+        int orange = 0, gray = 0;
+        offLeds(draw(rg), orange, gray);
+        check(orange == 0 && gray > 0, "le registre ouvert : F \xC3\xA9teint gris (comme avant)");
+    }
+    // ---- 3. le Temps de manoeuvre garde ce qui est tape (1-vannes/06) ; un nombre seul reste des secondes
+    {
+        Bench b;
+        const std::string kTemps = "Temps de man\xC5\x93uvre";
+        const auto accepted = [&]() {
+            for (const auto& c : b.editor->properties().categories())
+                for (const auto& pr : c.properties)
+                    if (pr.name == kTemps) return pr.exprError.empty() && pr.legend && pr.legend->style != ui::PropertyGrid::LegendStyle::Error;
+            return false;
+        };
+        const Id v = b.place(Kind::Valve, 200, 150);
+        b.v().object(v)->set("stateMode", "fins de course");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({v});
+        b.editor->layout();
+        const struct { const char* typed; const char* kept; } cases[] = {
+            {"T#30s", "T#30s"}, {"1 min", "1 min"}, {"  4 s ", "4 s"}, {"250 ms", "250 ms"}, {"30", "30"}, {"2,5", "2.5"}};
+        for (const auto& k : cases) {
+            const bool ok = commitIn(b.editor->properties(), kTemps, k.typed);
+            b.editor->refresh();
+            b.editor->layout();
+            check(ok && b.v().object(v)->text("travelTime") == k.kept && accepted(),
+                  std::string("la vanne : \xC2\xAB ") + k.typed + " \xC2\xBB tap\xC3\xA9 reste \xC2\xAB " + k.kept + " \xC2\xBB (avant : r\xC3\xA9\xC3\xA9" "crit en secondes) ("
+                      + b.v().object(v)->text("travelTime") + ")");
+        }
+        check(!commitIn(b.editor->properties(), kTemps, "4 x") && b.v().object(v)->text("travelTime") == "2.5",
+              "\xC2\xAB 4 x \xC2\xBB refus\xC3\xA9 : rien ne change");
+        const Id rg = b.place(Kind::MultiBladeDamper, 500, 150);
+        b.v().object(rg)->set("stateMode", "fins de course");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({rg});
+        b.editor->layout();
+        check(commitIn(b.editor->properties(), kTemps, "1 min") && b.v().object(rg)->text("travelTime") == "1 min",
+              "le registre multi-lames : \xC2\xAB 1 min \xC2\xBB reste \xC2\xAB 1 min \xC2\xBB (1-vannes/06 : il devenait 60)");
+        // Les autres durees se lisent en nombre au moteur : elles s'ecrivent toujours dans l'unite de la case.
+        const Id btn = b.place(Kind::Button, 100, 400);
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({btn});
+        b.editor->layout();
+        check(deepCommit(b.editor->properties(), "", "Dur\xC3\xA9" "e du maintien (ms)", "T#2s") && b.v().object(btn)->text("holdMs") == "2000",
+              "la Dur\xC3\xA9" "e du maintien (ms), lue en nombre : T#2s s'\xC3\xA9" "crit 2000 (comme avant)");
+    }
+    // ---- 4. la calculatrice : le message (chargee, envoye) cede au calcul tape ensuite (3-calculatrice/12)
+    {
+        namespace calc = hmi::calculator;
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Vue_Calc");
+        v.width = 1000;
+        v.height = 720;
+        const Id c1 = edit::add(p, v, Kind::Calculator, 20, 20);
+        v.object(c1)->name = "Calc";
+        v.object(c1)->set("startValue", "P_Reseau");
+        v.object(c1)->set("resultTo", "Consigne");
+        p.programs.variables.push_back(Variable{p.allocate(), "P_Reseau", "REAL", "2.5", {}});
+        p.programs.variables.push_back(Variable{p.allocate(), "Consigne", "REAL", "0", {}});
+        p.views = {v};
+        p.config.startView = v.id;
+        app::HmiSimulationPane pane("n5ccalc", doc, app::HmiSimulationHost{});
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            rec.textX.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto clickPart = [&](const std::string& part) {
+            gfx::Rect r;
+            if (!pane.canvas().partRect("Calc", part, r)) return false;
+            pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+            pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
+            return true;
+        };
+        paintAt(0.1);
+        check(clickPart("touche:load"), "la touche \xE2\x87\xA9 (Charger)");
+        paintAt(0.2);
+        check(rec.wrote("charg\xC3\xA9" "e : P_Reseau"), "Charger : l'afficheur dit \xC2\xAB charg\xC3\xA9" "e : P_Reseau \xC2\xBB");
+        pane.canvas().dispatch(ui::TextInput{"9-1"});
+        pane.canvas().dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        paintAt(0.4);
+        const calc::State* st = pane.runtime().calculatorState(c1);
+        check(st && calc::displayText(*st) == "8" && !rec.wrote("charg\xC3\xA9" "e : P_Reseau") && rec.wrote("9 \xE2\x88\x92 1 ="),
+              "9 - 1 tap\xC3\xA9 au clavier juste apr\xC3\xA8s : le calcul se lit, le message s'est effac\xC3\xA9 (avant : 4 s par-dessus)");
+        check(clickPart("touche:send"), "Envoyer");
+        paintAt(0.5);
+        check(rec.wrote("envoy\xC3\xA9 : Consigne = 8"), "Envoyer : \xC2\xAB envoy\xC3\xA9 : Consigne = 8 \xC2\xBB");
+        check(clickPart("touche:5"), "la touche 5");
+        paintAt(0.6);
+        check(!rec.wrote("envoy\xC3\xA9 :") && st && calc::displayText(*st) == "5", "la touche 5 \xC3\xA0 la souris : le message s'efface, 5 se lit");
+    }
+    // ---- 5. le Convertisseur d'unites : Unite de depart et d'arrivee se tapent (un symbole, une unite inconnue)
+    {
+        Bench b;
+        const Id id = b.place(Kind::UnitConverter, 100, 100);
+        b.editor->layout();
+        auto& grid = b.editor->properties();
+        const auto prop = [&](const char* key) {
+            ui::PropertyGrid::Property out;
+            for (const auto& c : grid.categories())
+                for (const auto& pr : c.properties)
+                    if (pr.key == key) out = pr;
+            return out;
+        };
+        // Comme a l'ecran : un clic ouvre la liste, son dernier choix ouvre le champ, on tape, Entree.
+        const auto typeIn = [&](const char* key, const std::string& typed) {
+            const std::string name = prop(key).name;
+            gfx::Rect cell;
+            if (!grid.revealValue(name)) return false;
+            grid.layout();
+            if (!grid.valueRect(name, cell)) return false;
+            grid.dispatch(ui::MouseDown{{cell.x + 10, cell.y + cell.h / 2}, ui::MouseButton::Left, 1, {}});
+            if (!grid.editing()) return false;
+            b.editor->dispatch(ui::KeyDown{ui::Key::End, {}, false});
+            b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+            if (!grid.activeField()) return false;
+            b.editor->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+            b.editor->dispatch(ui::TextInput{typed});
+            b.editor->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+            b.editor->refresh();
+            b.editor->layout();
+            return true;
+        };
+        const auto pf0 = prop("unitFrom");
+        check(pf0.type == ui::PropertyGrid::ValueType::Enum && pf0.typeIn && prop("unitTo").typeIn,
+              "Unit\xC3\xA9 de d\xC3\xA9part et d'arriv\xC3\xA9" "e : une liste qui accepte aussi un symbole tap\xC3\xA9");
+        check(typeIn("unitFrom", "furlong/h") && b.v().object(id)->text("unitFrom") == "furlong/h",
+              "\xC2\xAB furlong/h \xC2\xBB tap\xC3\xA9 : enregistr\xC3\xA9 tel quel (avant : rien ne changeait) (" + b.v().object(id)->text("unitFrom") + ")");
+        const auto pf = prop("unitFrom");
+        check(pf.exprError.find("unit\xC3\xA9 inconnue \xC2\xAB furlong/h \xC2\xBB") != std::string::npos,
+              "... la case le dit, comme G\xC3\xA9n\xC3\xA9rer (" + pf.exprError + ")");
+        check(typeIn("unitFrom", "degC") && b.v().object(id)->text("unitFrom") == "degC" && prop("unitFrom").value == "\xC2\xB0" "C"
+                  && prop("unitFrom").exprError.empty(),
+              "\xC2\xAB degC \xC2\xBB tap\xC3\xA9 : degC enregistr\xC3\xA9, montr\xC3\xA9 \xC2\xB0" "C comme les autres, sans faute ("
+                  + b.v().object(id)->text("unitFrom") + ", " + prop("unitFrom").value + ")");
+        check(typeIn("unitTo", "\xC2\xB0" "F") && b.v().object(id)->text("unitTo") == "degF",
+              "\xC2\xAB \xC2\xB0" "F \xC2\xBB tap\xC3\xA9 (le libell\xC3\xA9 de la liste) : le symbole degF (" + b.v().object(id)->text("unitTo") + ")");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.14.1 (captures, seconde passe) : HMI_TEST_N5C=1 - les defauts de la seconde passe des captures, seuls.
+    if (const char* only = std::getenv("HMI_TEST_N5C"); only && *only == '1') {
+        defautsCaptures1141Seconde();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.1 (lot N6) : HMI_TEST_N6=1 - la bibliotheque d'images, seule.
     if (const char* only = std::getenv("HMI_TEST_N6"); only && *only == '1') {
         imagesN6_1141();
@@ -44492,6 +44837,7 @@ int main(int argc, char** argv) {
     imagesN6_1141();                        // 1.14.1 (lot N6) : la bibliotheque d'images
     pointeurs1141();                        // 1.14.1 (lot N2) : le pointeur - etirer, deplacer, ecrire
     sonsRelecture1141();                    // 1.14.1 (lot N3) : le bouton Sons de la barre de relecture
+    defautsCaptures1141Seconde();           // 1.14.1 (captures, seconde passe) : infobulles, clapet, Temps de manoeuvre, calculatrice, unites
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

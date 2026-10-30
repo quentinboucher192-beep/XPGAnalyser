@@ -1393,8 +1393,19 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                      + (keyRole.unit == hmi::roles::Unit::Milliseconds ? "millisecondes" : "secondes") + ". Pour une formule, commencer par =.");
                 return false;
             }
-            const std::string fixed = keyRole.unit == hmi::roles::Unit::Milliseconds ? std::to_string(ms) : hmi::formatNumber(static_cast<double>(ms) / 1000.0);
-            if (fixed != value) return commitProp(key, fixed, false);
+            // 1.14.1 (captures) : LE TEMPS DE MANOEUVRE GARDE CE QUI EST TAPE (T#30s, 1 min, 4 s), comme ce que le
+            // fichier apporte : le moteur (limits::travelSeconds), l'alarme Discordance et Generer le lisent en duree.
+            // Avant : reecrit en secondes (T#30s devenait 30, 1 min 60). Un nombre seul reste un nombre de secondes.
+            // Les autres durees (periode, fenetre, maintien...) se lisent en nombre au moteur : elles s'ecrivent
+            // toujours dans l'unite de la case (1,5 s : 1500 en ms).
+            double bare = 0;
+            if (key == "travelTime" && !hmi::parseNumber(typed, bare)) {
+                if (typed != value) return commitProp(key, typed, false);
+            } else {
+                const std::string fixed = keyRole.unit == hmi::roles::Unit::Milliseconds ? std::to_string(ms)
+                                                                                          : hmi::formatNumber(static_cast<double>(ms) / 1000.0);
+                if (fixed != value) return commitProp(key, fixed, false);
+            }
         } else if (!hmi::parseNumber(typed, n)) {
             warn("\xC2\xAB " + typed + " \xC2\xBB n'est pas un nombre (" + label + ") : rien n'a chang\xC3\xA9. Pour une formule, commencer par =.");
             return false;

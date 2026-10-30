@@ -1867,7 +1867,10 @@ const std::vector<Topic>& topics() {
                          "et de celle de son carr\xC3\xA9. Une dur\xC3\xA9" "e fixe (le Temps de "
                          "man\xC5\x93uvre, la dur\xC3\xA9" "e d'une courbe) se lit en nombre, dans "
                          "l'unit\xC3\xA9 de la case, ou \xC3\xA9" "crite en dur\xC3\xA9" "e : 4 s, 250 ms, "
-                         "T#30s, 1 min.", {}, "1.14.1"},
+                         "T#30s, 1 min. Le Temps de man\xC5\x93uvre garde ce qui est tap\xC3\xA9 (T#30s, 1 "
+                         "min, 4 s ; un nombre seul : des secondes) ; les autres dur\xC3\xA9" "es "
+                         "s'\xC3\xA9" "crivent dans l'unit\xC3\xA9 de la case (1,5 s : 1500 dans une case en "
+                         "millisecondes).", {}, "1.14.1"},
          },
          {"objets", "variables-ihm", "aide-saisie", "verifier", "champs-expressions", "couleurs", "dupliquer-reperes"},
          {"filtres de l'inspecteur", "Montrer", "fx", "Rep\xC3\xA8res", "Non vides", "cases pilot\xC3\xA9" "es", "cases renseign\xC3\xA9" "es", "pastille ambre", "sections de l'inspecteur", "propri\xC3\xA9t\xC3\xA9s communes", "Position et taille", "section du genre", "Communication", "Animation", "Variable \xC3\xA9" "crite", "Niveau d'acc\xC3\xA8s", "onglet Contenu"},
@@ -7450,8 +7453,8 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Avec l'IHM", {}},
              {K::Bullet, "**Valeur de d\xC3\xA9part** : une expression (une variable, un calcul : `Debit * "
                          "3.6`) lue quand la vue s'ouvre - la calculatrice part de sa valeur ; le bouton "
-                         "\xE2\x87\xA9 de la rang\xC3\xA9" "e du haut la relit. Vide : elle part de 0, sans "
-                         "bouton ;", {}},
+                         "\xE2\x87\xA9 de la rang\xC3\xA9" "e du haut la relit (l'afficheur dit \xC2\xAB "
+                         "charg\xC3\xA9" "e : Debit * 3.6 \xC2\xBB). Vide : elle part de 0, sans bouton ;", {}},
              {K::Bullet, "**R\xC3\xA9sultat vers** : une variable ; le bouton **Envoyer** y \xC3\xA9" "crit "
                          "le nombre montr\xC3\xA9, comme une commande - le niveau d'acc\xC3\xA8s de l'objet, "
                          "la permission Piloter quand la s\xC3\xA9" "curit\xC3\xA9 est active, puis le type "
@@ -7459,7 +7462,9 @@ const std::vector<Topic>& topics() {
                          "le dit), le nombre \xC3\xA9" "crit en texte dans une STRING, VRAI pour tout nombre "
                          "non nul dans un BOOL ; une structure est refus\xC3\xA9" "e. L'afficheur dit "
                          "\xC2\xAB envoy\xC3\xA9 : Consigne = 12,5 \xC2\xBB ou la raison du refus ; le "
-                         "journal garde l'\xC3\xA9" "criture. Vide : pas de bouton ;", {}},
+                         "journal garde l'\xC3\xA9" "criture. Vide : pas de bouton. Un message de "
+                         "l'afficheur s'efface \xC3\xA0 la touche suivante (souris ou clavier) qui change le "
+                         "calcul ;", {}},
              {K::Bullet, "ce qu'elle montre se lit dans une expression : `Vue_1.Calc_1.Result` (le nombre, "
                          "LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), "
                          "`.Memory` (la m\xC3\xA9moire).", {}},
@@ -7621,9 +7626,13 @@ const std::vector<Topic>& topics() {
                          "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6).\nUnit\xC3\xA9 de "
                          "d\xC3\xA9part\tbar\tL'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans "
                          "l'objet (bar, \xC2\xB0" "C, m\xC2\xB3/h ; le projet garde son symbole : degC, "
-                         "m3/h) ; l'op\xC3\xA9rateur la change dans De.\nUnit\xC3\xA9 "
+                         "m3/h) ; l'op\xC3\xA9rateur la change dans De. Une unit\xC3\xA9 se choisit dans la "
+                         "liste ou se tape (son dernier choix, \xC2\xAB Taper un nom\xE2\x80\xA6 \xC2\xBB) : "
+                         "le symbole tap\xC3\xA9 est gard\xC3\xA9 tel quel ; inconnue, la case le dit et "
+                         "G\xC3\xA9n\xC3\xA9rer s'arr\xC3\xAAte.\nUnit\xC3\xA9 "
                          "d'arriv\xC3\xA9" "e\tmbar\tL'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme "
-                         "dimension.\nD\xC3\xA9" "cimales\t3\tDe 0 \xC3\xA0 12.\nR\xC3\xA9sultat "
+                         "dimension ; choisie ou tap\xC3\xA9" "e, comme l'unit\xC3\xA9 de "
+                         "d\xC3\xA9part.\nD\xC3\xA9" "cimales\t3\tDe 0 \xC3\xA0 12.\nR\xC3\xA9sultat "
                          "vers\t(vide)\tUne variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le "
                          "r\xC3\xA9sultat ; vide : pas de bouton.\nPolice\tSans\tLa police de "
                          "l'objet.\nTaille du texte\t14\tEn pixels de la vue ; le r\xC3\xA9sultat est plus "
@@ -7665,9 +7674,13 @@ const std::vector<Topic>& topics() {
             "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6)."},
            {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", "bar",
             "L'unit\xC3\xA9 de la valeur, montr\xC3\xA9" "e comme dans l'objet (bar, \xC2\xB0" "C, "
-            "m\xC2\xB3/h ; le projet garde son symbole : degC, m3/h) ; l'op\xC3\xA9rateur la change dans De."},
+            "m\xC2\xB3/h ; le projet garde son symbole : degC, m3/h) ; l'op\xC3\xA9rateur la change dans De. "
+            "Une unit\xC3\xA9 se choisit dans la liste ou se tape (son dernier choix, \xC2\xAB Taper un "
+            "nom\xE2\x80\xA6 \xC2\xBB) : le symbole tap\xC3\xA9 est gard\xC3\xA9 tel quel ; inconnue, la "
+            "case le dit et G\xC3\xA9n\xC3\xA9rer s'arr\xC3\xAAte."},
            {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "mbar",
-            "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension."},
+            "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension ; choisie ou tap\xC3\xA9" "e, "
+            "comme l'unit\xC3\xA9 de d\xC3\xA9part."},
            {"decimals", "D\xC3\xA9" "cimales", "3",
             "De 0 \xC3\xA0 12."},
            {"resultTo", "R\xC3\xA9sultat vers", "(vide)",
@@ -11272,7 +11285,8 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9" "armement) ; pas suivie apr\xC3\xA8s le temps de man\xC5\x93uvre, "
                          "discordance.\nTemps de man\xC5\x93uvre\t(vide)\tAvec l'Ordre : le temps pour "
                          "atteindre sa fin de course (10 s, T#30s).\nVoyants des fins de "
-                         "course\tTRUE\tCoch\xC3\xA9 : les voyants O et F.", {}},
+                         "course\tTRUE\tCoch\xC3\xA9 : les voyants O et F (allum\xC3\xA9 : la couleur ouvert "
+                         "; \xC3\xA9teint : gris, comme le registre).", {}},
              {K::Heading, "Commande par les fins de course", {}, "1.14.1"},
              {K::Paragraph, "**Commande de l'\xC3\xA9tat : fins de course** : l'\xC3\xA9tat vient de ses fins "
                          "de course seules, comme le registre (voir \xC2\xAB Registre \xC2\xBB) ; "
@@ -11337,7 +11351,8 @@ const std::vector<Topic>& topics() {
            {"travelTime", "Temps de man\xC5\x93uvre", "(vide)",
             "Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s)."},
            {"showLimits", "Voyants des fins de course", "TRUE",
-            "Coch\xC3\xA9 : les voyants O et F."}},
+            "Coch\xC3\xA9 : les voyants O et F (allum\xC3\xA9 : la couleur ouvert ; \xC3\xA9teint : gris, "
+            "comme le registre)."}},
          "Le clapet CF-12 est ouvert (en veille) ; \xC3\xA0 3 s, il est d\xC3\xA9" "clench\xC3\xA9 : il se "
          "ferme, rouge et clignotant, son fusible aussi ; r\xC3\xA9" "arm\xC3\xA9 \xC3\xA0 8 s, il rouvre.",
          {}, "1.12.24"},

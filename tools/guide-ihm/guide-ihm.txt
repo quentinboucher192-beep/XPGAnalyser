@@ -876,7 +876,7 @@ Une valeur illisible (variable inconnue, expression fausse) s'affiche `###`.
 @nouveau 1.12.10
 1.12.10 : la case « Unité, format et plage de la variable » - cochée (par défaut), l'objet prend l'unité, le format, la plage et les seuils de sa variable pour ce qu'il laisse vide.
 @nouveau 1.14.1
-1.14.1 : une case grisée (sans effet dans le mode choisi : la Valeur d'une vanne commandée par ses fins de course, le Booléen A d'une vanne 3 voies par sa Position) dit pourquoi en tête de son infobulle et de celle de son carré. Une durée fixe (le Temps de manœuvre, la durée d'une courbe) se lit en nombre, dans l'unité de la case, ou écrite en durée : 4 s, 250 ms, T#30s, 1 min.
+1.14.1 : une case grisée (sans effet dans le mode choisi : la Valeur d'une vanne commandée par ses fins de course, le Booléen A d'une vanne 3 voies par sa Position) dit pourquoi en tête de son infobulle et de celle de son carré. Une durée fixe (le Temps de manœuvre, la durée d'une courbe) se lit en nombre, dans l'unité de la case, ou écrite en durée : 4 s, 250 ms, T#30s, 1 min. Le Temps de manœuvre garde ce qui est tapé (T#30s, 1 min, 4 s ; un nombre seul : des secondes) ; les autres durées s'écrivent dans l'unité de la case (1,5 s : 1500 dans une case en millisecondes).
 
 == couleurs | Choisir une couleur : la palette et la pipette
 : Un clic sur une case Couleur ouvre la palette : en haut la propriété et le bouton Pipette ; à gauche le nuancier, les couleurs du projet, les récentes et l'aperçu avant / après ; à droite le choix personnalisé, ouvert d'emblée - le carré saturation/valeur, la barre de teinte, la barre de transparence, le code #RRGGBB(AA), T S V, R G B et l'opacité ; en bas Annuler et Appliquer. La pipette prend une couleur n'importe où dans la fenêtre.
@@ -3303,8 +3303,8 @@ En plus de la standard :
 ### Le clavier
 Un clic sur la calculatrice lui donne le clavier (son cadre prend la couleur de =) : les chiffres, + - * / ^ ( ) . et , (la virgule), = ou **Entrée** (le résultat), **Échap** (C), **Retour arrière** (⌫), **Suppr** (CE), % (pourcentage ; mod en scientifique), ! (n!) ; en programmeur, A à F, & (AND), | (OR), ^ (XOR), ~ (NOT), < et > (les décalages). Un clic ailleurs le lui reprend. Les raccourcis des vues ne partent pas tant qu'elle a le clavier (sauf F1 à F12).
 ### Avec l'IHM
-- **Valeur de départ** : une expression (une variable, un calcul : `Debit * 3.6`) lue quand la vue s'ouvre - la calculatrice part de sa valeur ; le bouton ⇩ de la rangée du haut la relit. Vide : elle part de 0, sans bouton ;
-- **Résultat vers** : une variable ; le bouton **Envoyer** y écrit le nombre montré, comme une commande - le niveau d'accès de l'objet, la permission Piloter quand la sécurité est active, puis le type de la variable : arrondi pour un entier, ramené dans ses bornes (la Console le dit), le nombre écrit en texte dans une STRING, VRAI pour tout nombre non nul dans un BOOL ; une structure est refusée. L'afficheur dit « envoyé : Consigne = 12,5 » ou la raison du refus ; le journal garde l'écriture. Vide : pas de bouton ;
+- **Valeur de départ** : une expression (une variable, un calcul : `Debit * 3.6`) lue quand la vue s'ouvre - la calculatrice part de sa valeur ; le bouton ⇩ de la rangée du haut la relit (l'afficheur dit « chargée : Debit * 3.6 »). Vide : elle part de 0, sans bouton ;
+- **Résultat vers** : une variable ; le bouton **Envoyer** y écrit le nombre montré, comme une commande - le niveau d'accès de l'objet, la permission Piloter quand la sécurité est active, puis le type de la variable : arrondi pour un entier, ramené dans ses bornes (la Console le dit), le nombre écrit en texte dans une STRING, VRAI pour tout nombre non nul dans un BOOL ; une structure est refusée. L'afficheur dit « envoyé : Consigne = 12,5 » ou la raison du refus ; le journal garde l'écriture. Vide : pas de bouton. Un message de l'afficheur s'efface à la touche suivante (souris ou clavier) qui change le calcul ;
 - ce qu'elle montre se lit dans une expression : `Vue_1.Calc_1.Result` (le nombre, LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), `.Memory` (la mémoire).
 ### Ses paramètres
 @param calcMode | Mode | standard | standard, scientifique ou programmeur (la bibliothèque propose les trois, déjà réglées).
@@ -3370,8 +3370,8 @@ temp_f = temperature * 1.8 + 32.0;
 @param title | Titre | (vide) | Un titre au-dessus de la case ; vide : pas de titre.
 @param value | Valeur de départ | 1 | Un nombre, ou une expression (=Pression) ; une variable avec une unité donne l'unité de départ.
 @param dimension | Dimension | toutes | Les unités proposées dans De : toutes, ou une dimension (Pression, Température, Débit…).
-@param unitFrom | Unité de départ | bar | L'unité de la valeur, montrée comme dans l'objet (bar, °C, m³/h ; le projet garde son symbole : degC, m3/h) ; l'opérateur la change dans De.
-@param unitTo | Unité d'arrivée | mbar | L'unité du résultat, de la même dimension.
+@param unitFrom | Unité de départ | bar | L'unité de la valeur, montrée comme dans l'objet (bar, °C, m³/h ; le projet garde son symbole : degC, m3/h) ; l'opérateur la change dans De. Une unité se choisit dans la liste ou se tape (son dernier choix, « Taper un nom… ») : le symbole tapé est gardé tel quel ; inconnue, la case le dit et Générer s'arrête.
+@param unitTo | Unité d'arrivée | mbar | L'unité du résultat, de la même dimension ; choisie ou tapée, comme l'unité de départ.
 @param decimals | Décimales | 3 | De 0 à 12.
 @param resultTo | Résultat vers | (vide) | Une variable où le bouton Écrire pose le résultat ; vide : pas de bouton.
 @param font | Police | Sans | La police de l'objet.
@@ -4816,7 +4816,7 @@ Le clapet coupe-feu (CF) d'une traversée de paroi : une gaine, sa lame, la marq
 @param stateMode | Commande de l'état | une valeur | une valeur (Ouvert) ou fins de course (l'état vient de FCO et FCF seules ; le déclenchement passe avant).
 @param openOrder | Ordre d'ouverture | (vide) | Fins de course, facultatif : la commande (le réarmement) ; pas suivie après le temps de manœuvre, discordance.
 @param travelTime | Temps de manœuvre | (vide) | Avec l'Ordre : le temps pour atteindre sa fin de course (10 s, T#30s).
-@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F.
+@param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F (allumé : la couleur ouvert ; éteint : gris, comme le registre).
 @nouveau 1.14.1
 ### Commande par les fins de course
 **Commande de l'état : fins de course** : l'état vient de ses fins de course seules, comme le registre (voir « Registre ») ; déclenché, il reste fermé, rouge et clignotant, avant tout le reste. Ses voyants **O** et **F** sont à droite du déclencheur (la marque CF tient la gauche), dans les deux modes ; la pastille ≠ d'une discordance se met dans le coin de la gaine, sous eux, quand ils prennent le haut à droite.

@@ -31770,6 +31770,63 @@ void calculatrice1141() {
     }
 }
 
+// 1.14.1 (captures, seconde passe) : LE MESSAGE DE LA CALCULATRICE CEDE AU CALCUL (3-calculatrice/12). "chargee : ...",
+// "envoye : ..." restaient 4 s sur la ligne du calcul ; la touche suivante qui change l'expression ou le resultat (a la
+// souris ou au clavier) l'efface ; une touche sans effet le laisse.
+void calculatriceMessage1141() {
+    std::printf("-- 1.14.1 (captures, seconde passe) : le message de la calculatrice c\xC3\xA8" "de au calcul\n");
+    namespace calc = hmi::calculator;
+    Project p;
+    View v = makeView(p, "Vue_Calc");
+    const Id c1 = edit::add(p, v, Kind::Calculator, 10, 10);
+    v.object(c1)->name = "Calc";
+    v.object(c1)->set("startValue", "P_Reseau");
+    v.object(c1)->set("resultTo", "Consigne");
+    const Id c2 = edit::add(p, v, Kind::Calculator, 400, 10);
+    v.object(c2)->name = "Prog";
+    (void)applyKindVariant(*v.object(c2), "programmeur");
+    v.object(c2)->set("startValue", "Mot");
+    p.views = {v};
+    p.config.startView = v.id;
+    p.programs.variables.push_back(Variable{p.allocate(), "P_Reseau", "REAL", "2.5", {}});
+    p.programs.variables.push_back(Variable{p.allocate(), "Consigne", "REAL", "0", {}});
+    p.programs.variables.push_back(Variable{p.allocate(), "Mot", "WORD", "255", {}});
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0);
+    rt.tick(0.1);
+    const auto said = [&](Id id) { return rt.formState(id) ? rt.formState(id)->message : std::string{}; };
+    const calc::State* st = rt.calculatorState(c1);
+    rt.objectPart(c1, "touche:load", 0.2);
+    check(said(c1) == "charg\xC3\xA9" "e : P_Reseau", "Charger : \xC2\xAB charg\xC3\xA9" "e : P_Reseau \xC2\xBB (" + said(c1) + ")");
+    rt.objectPart(c1, "touche:(", 0.25);
+    check(said(c1) == "charg\xC3\xA9" "e : P_Reseau", "une touche sans effet (la parenth\xC3\xA8se, en standard) : le message reste");
+    rt.typeText("9", 0.3);
+    check(said(c1).empty() && st && calc::displayText(*st) == "9", "un chiffre tap\xC3\xA9 au clavier : le message s'efface (avant : 4 s sur le calcul)");
+    rt.typeText("-1", 0.31);
+    rt.typeKey(EditKey::Enter, 0.32);
+    same(calc::displayText(*st), "8", "9 - 1 = 8");
+    rt.objectPart(c1, "touche:send", 0.4);
+    check(said(c1).find("envoy\xC3\xA9 : Consigne = 8") == 0, "Envoyer : \xC2\xAB envoy\xC3\xA9 : Consigne = 8 \xC2\xBB (" + said(c1) + ")");
+    rt.objectPart(c1, "touche:+", 0.5);
+    check(said(c1).empty(), "la touche + \xC3\xA0 la souris (le calcul continue) : le message s'efface");
+    rt.objectPart(c1, "touche:load", 0.6);
+    rt.typeKey(EditKey::Escape, 0.61);
+    check(said(c1).empty() && calc::displayText(*st) == "0", "\xC3\x89" "chap (C) apr\xC3\xA8s Charger : le message s'efface");
+    // La programmeur : un bit, une base qui changent ce qui se lit effacent aussi le message.
+    rt.objectPart(c2, "touche:load", 0.7);
+    check(said(c2) == "charg\xC3\xA9" "e : Mot", "la programmeur : \xC2\xAB charg\xC3\xA9" "e : Mot \xC2\xBB");
+    rt.objectPart(c2, "bit:8", 0.71);
+    check(said(c2).empty(), "un clic sur un bit : le message s'efface");
+    rt.objectPart(c2, "touche:load", 0.72);
+    rt.objectPart(c2, "base:BIN", 0.73);
+    check(said(c2).empty(), "un clic sur la ligne BIN : le message s'efface");
+    // Le Temps de manoeuvre tel que l'inspecteur le garde desormais (T#30s, 1 min) : le moteur le lit en duree.
+    namespace L = hmi::limits;
+    check(L::travelSeconds("T#30s") == 30.0 && L::travelSeconds("1 min") == 60.0 && L::travelSeconds("4 s") == 4.0 && L::travelTimeOk("250 ms"),
+          "le Temps de man\xC5\x93uvre gard\xC3\xA9 tel que tap\xC3\xA9 (T#30s, 1 min, 4 s) : le moteur le lit");
+}
+
 // 1.14.1 (lot N5) : CONVERTIR DES UNITES - le calcul partage (units::convertValue : celui de EN), la formule, l'expression
 // a copier, les refus ; l'objet Convertisseur d'unites en marche (la case Valeur, De, Vers, inverser, Ecrire, la Valeur
 // de depart suivie, une variable qui a une unite, le niveau d'acces, Pilotable), Generer, Dupliquer, le code brut.
@@ -32537,6 +32594,7 @@ int main(int argc, char** argv) {
     // 1.14.1 (lot N4) : HMI_TEST_1141=1 - la Calculatrice, seule.
     if (const char* only = std::getenv("HMI_TEST_1141"); only && *only == '1') {
         calculatrice1141();
+        calculatriceMessage1141();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -32882,7 +32940,8 @@ int main(int argc, char** argv) {
     son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     finsDeCourse1141();               // 1.14.1 (lot N1) : vannes et registres commandes par leurs fins de course
     calculatrice1141();               // 1.14.1 (lot N4) : la Calculatrice (standard, scientifique, programmeur)
-    unites1141();                     // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
+    calculatriceMessage1141();        // 1.14.1 (captures, seconde passe) : le message de la calculatrice cede au calcul
+    unites1141();                   // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
     explorateur1141();                // 1.14.1 (lot N5) : l'explorateur de fichiers (dossier, zip, zip hostile)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);

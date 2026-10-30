@@ -1303,11 +1303,16 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         const gfx::Rect area = station_ ? gfx::Rect{b.x, b.y, b.w, simmark::kRibbonH} : gfx::Rect{screen_.x, screen_.y - above, screen_.w, simmark::kRibbonH};
         simmark::drawRibbon(ctx.r, area, simRibbon_, simRibbonRight_);
     }
+    // 1.14.1 (captures) : LES INFOBULLES DE LA VUE, SEULEMENT LA SOURIS DESSUS. Sortie du cadre (vers la barre du bas),
+    // le canevas ne recoit plus ses mouvements : mouse_ garde sa derniere position, et l'infobulle d'une ligne de
+    // l'Explorateur restait (pire : la liste changee ensuite, celle d'une ligne jamais survolee apparaissait). hovered()
+    // est tenu par dispatchOwn meme pour un mouvement hors du cadre (et la fenetre quittee) ; un appui au doigt le pose.
+    const bool over = hovered();
     bool tipped = false;
-    if (const std::string tip = simTipAt(mouse_); !tip.empty()) {
+    if (const std::string tip = over ? simTipAt(mouse_) : std::string{}; !tip.empty()) {
         simmark::drawTip(ctx.r, mouse_, b, "Lue sur l'esclave simul\xC3\xA9", tip);
         tipped = true;
-    } else {
+    } else if (over) {
         // 1.11.1 (decision 134, R1111-12) : l'infobulle d'une marque de qualite.
         for (auto it = qualityRects_.rbegin(); it != qualityRects_.rend(); ++it)
             if (it->rect.contains(mouse_)) {
@@ -1317,7 +1322,7 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
             }
     }
     // 1.14.1 (lot N5) : l'infobulle d'une ligne d'un Explorateur de fichiers (le chemin, la taille, les dates...).
-    if (!tipped)
+    if (!tipped && over)
         if (const auto t = explorerTipAt(mouse_); !t.title.empty()) simmark::drawTip(ctx.r, mouse_, b, t.title, t.body);
     // Lot 13 : le doigt d'un essai - un cercle sur l'objet que le pas vient de
     // toucher, qui grandit et s'efface.
