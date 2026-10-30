@@ -63,6 +63,14 @@ function Repair-XpgFichiers {
         $noms = @($Installation.Manifeste.dependances) + @($Installation.Manifeste.runtime_local)
         $cibles = @($Installation.Manifeste.fichiers | Where-Object { $noms -contains $_.chemin } | ForEach-Object { [pscustomobject]@{ Chemin = $_.chemin; Attendu = $_.sha256 } })
     }
+    # 1.14.0 : pas de copie de secours (la case « Garder une copie de secours pour Reparer » decochee, ou elle a
+    # disparu) : rien a reprendre ici - on le dit une fois, avec ce qu'il faut faire, au lieu d'un echec par fichier.
+    if ($cibles.Count -and -not (Test-Path -LiteralPath (Join-Path $res 'manifeste.json'))) {
+        if ($Installation.CopieDeSecours) { $pourquoi = "elle est introuvable ($res)" } else { $pourquoi = 'elle n''a pas été gardée à l''installation (case décochée)' }
+        Add-Rapport "  Pas de copie de secours pour réparer : $pourquoi."
+        Add-Rapport ("  Il faut l'installateur : repair.bat /mode:reinstaller /installateur:<API-IHM-Studio-Setup-{0}.exe> (tes données sont gardées)." -f $Installation.Version)
+        return [pscustomobject]@{ Repares = 0; Echecs = @($cibles | ForEach-Object { $_.Chemin }); SansCopie = $pourquoi }
+    }
     foreach ($e in $cibles) {
         $src = Join-Path $res $e.Chemin
         if (-not (Test-Path -LiteralPath $src) -or (Get-XpgSha256 $src) -ne $e.Attendu) { $echecs += $e.Chemin; Add-Rapport "  $($e.Chemin) : la réserve ne l'a pas (ou abîmé)"; continue }
@@ -73,7 +81,7 @@ function Repair-XpgFichiers {
         if ((Get-XpgSha256 $dst) -eq $e.Attendu) { $n++; Add-Rapport "  $($e.Chemin) : remis depuis la réserve, SHA-256 vérifié"; Write-XpgLog -Niveau OK -Message "$($e.Chemin) : remis" }
         else { $echecs += $e.Chemin; Add-Rapport "  $($e.Chemin) : ÉCHEC de la copie" }
     }
-    return [pscustomobject]@{ Repares = $n; Echecs = $echecs }
+    return [pscustomobject]@{ Repares = $n; Echecs = $echecs; SansCopie = '' }
 }
 
 function Repair-XpgRaccourcis {
@@ -191,8 +199,10 @@ try {
         Start-XpgEtape 'Réinstallation complète (tes données sont gardées)' | Out-Null
         $setup = Get-XpgOption -Noms @('installateur')
         if (-not $setup) { $setup = (Get-ChildItem -LiteralPath (Join-Path $i.Reserve $i.Version) -Filter '*-Setup-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
-        if (-not $setup) { $setup = Read-XpgTexte -Question 'Chemin de XPGAnalyser-Setup-<version>.exe' -OptionLigne '/installateur:<fichier>' }
-        if (-not $setup -or -not (Test-Path -LiteralPath $setup)) { Complete-XpgEtape -Statut ECHEC; Stop-Xpg -Code 7 -Message 'L''installateur est introuvable.' -Conseil 'Relance avec /installateur:<chemin de XPGAnalyser-Setup-*.exe>.' }
+        # 1.14.0 : sans copie de secours, l'installateur n'est pas sur ce PC : on le dit avant de le demander
+        if (-not $setup -and -not $i.CopieDeSecours) { Write-XpgLog -Niveau INFO -Message ("Pas de copie de secours sur ce PC (case décochée à l'installation) : l'installateur de la {0} n'y est pas." -f $i.Version) }
+        if (-not $setup) { $setup = Read-XpgTexte -Question ("Chemin de API-IHM-Studio-Setup-{0}.exe" -f $i.Version) -OptionLigne '/installateur:<fichier>' }
+        if (-not $setup -or -not (Test-Path -LiteralPath $setup)) { Complete-XpgEtape -Statut ECHEC; Stop-Xpg -Code 7 -Message 'L''installateur est introuvable.' -Conseil ("Relance avec /installateur:<chemin de API-IHM-Studio-Setup-{0}.exe> (tes données sont gardées)." -f $i.Version) }
         $portee = '/CURRENTUSER'; if ($i.Portee -eq 'tous') { $portee = '/ALLUSERS' }
         $p = Start-Process -FilePath $setup -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', $portee, "/DIR=`"$($i.Dossier)`"", '/MIGRER=non', "/LOG=`"$(Join-Path $i.Journaux ('reinstallation_' + (Get-Date).ToString('yyyy-MM-dd_HH-mm-ss') + '.log'))`"") -Wait -PassThru
         Add-Rapport "  réinstallation : $setup, code $($p.ExitCode)"
@@ -202,7 +212,12 @@ try {
         if ($mode -in @('auto', 'fichiers', 'dependances')) {
             Start-XpgEtape 'Fichiers du programme (depuis la réserve, vérifiés)' | Out-Null
             $r = Repair-XpgFichiers -Installation $i -Problemes $aFaire -Tous:($mode -eq 'dependances')
-            if ($r.Echecs.Count) { Complete-XpgEtape -Statut ECHEC -Detail ("{0} remis, {1} impossible(s) : {2}" -f $r.Repares, $r.Echecs.Count, ($r.Echecs -join ', ')); Write-XpgLog -Niveau INFO -Message 'Il faut l''installateur : repair.bat /mode:reinstaller /installateur:<Setup.exe>.' }
+            if ($r.SansCopie) {
+                # 1.14.0 : pas de copie de secours - une phrase claire, et ce qu'il faut faire
+                Complete-XpgEtape -Statut ECHEC -Detail ("pas de copie de secours ({0}) : {1} fichier(s) à remettre" -f $r.SansCopie, $r.Echecs.Count)
+                Write-XpgLog -Niveau INFO -Message ("Pour réparer, il faut l'installateur de la {0} : repair.bat /mode:reinstaller /installateur:<API-IHM-Studio-Setup-{0}.exe>. Tes données sont gardées." -f $i.Version)
+            }
+            elseif ($r.Echecs.Count) { Complete-XpgEtape -Statut ECHEC -Detail ("{0} remis, {1} impossible(s) : {2}" -f $r.Repares, $r.Echecs.Count, ($r.Echecs -join ', ')); Write-XpgLog -Niveau INFO -Message 'Il faut l''installateur : repair.bat /mode:reinstaller /installateur:<Setup.exe>.' }
             else { Complete-XpgEtape -Statut OK -Detail "$($r.Repares) fichier(s) remis" }
         }
         # ---- 18 : les raccourcis --------------------------------------------------------------

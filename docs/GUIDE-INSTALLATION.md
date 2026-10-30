@@ -9,22 +9,33 @@ Pour l'utilisateur, sur un PC vierge ou non. Un seul fichier, à la racine du do
 2. **Pour qui installer ?**
    - **Moi seul** : sans droits d'administrateur, dans `%LOCALAPPDATA%\Programs\XPGAnalyser`.
    - **Tous les comptes** : dans `C:\Program Files\XPGAnalyser` ; Windows demande les droits d'administrateur.
-3. **Le dossier du programme** : à la première installation seulement. Une mise à jour garde le même.
-4. **Tes données** : où ranger tes projets, ta bibliothèque, ton catalogue et tes captures. Par défaut `Documents\XPGAnalyser` ; en installation pour tous les comptes, chaque compte a le sien, dans ses Documents. Ce dossier ne peut pas être dans celui du programme. Il se change ensuite dans l'application (accueil › **Dossiers**).
-5. **Reprendre tes anciennes données** (seulement si une ancienne version est **installée** sur ce PC) :
+3. **Que veux-tu installer ?** (1.14.0) :
+   - **Les deux** : API Studio et IHM Studio (le choix habituel) ;
+   - **API Studio seul**, ou **IHM Studio seul** : l'exe de l'autre application, ses raccourcis et l'ouverture de ses fichiers ne s'installent pas ;
+   - **Poste d'exploitation** : IHM Studio sans l'éditeur, qui ouvre un projet en plein écran (`IHM-Studio.exe --poste <dossier du projet>`). Sa page demande le **projet** (son dossier ; un projet FINISH : l'installateur le vérifie et le dit), **Démarrer le poste à l'ouverture de la session Windows** (cochée : la valeur « XPG Poste d'exploitation » de la clé `Run`, celle que IHM Studio pose aussi - `HKLM` pour tous les comptes) et **Le relancer s'il se ferme** (le lanceur `maintenance\poste.cmd`, réduit dans la barre des tâches, le relance 5 s après ; trois fermetures de suite moins d'une minute après son lancement l'arrêtent, et `Journaux\poste.log` le dit). Dans le menu Démarrer : seulement « Poste d'exploitation ».
+
+   Une mise à jour reprend le choix d'avant. En changer (de « Les deux » à « IHM Studio seul », par exemple) retire ce qui ne sert plus - l'exe d'API Studio, ses raccourcis, l'ouverture des `.xapi` - et la page, le récapitulatif et « Ce qui a été installé » le disent. Tes données restent.
+4. **Le dossier du programme** : à la première installation seulement. Une mise à jour garde le même.
+5. **Tes données** : où ranger tes projets, ta bibliothèque, ton catalogue et tes captures. Par défaut `Documents\XPGAnalyser` ; en installation pour tous les comptes, chaque compte a le sien, dans ses Documents. Ce dossier ne peut pas être dans celui du programme. Il se change ensuite dans l'application (accueil › **Dossiers**).
+6. **Reprendre tes anciennes données** (seulement si une ancienne version est **installée** sur ce PC) :
    - une ancienne version, c'est un dossier où son programme (`XpgAnalyzer.exe`) est là, ou l'installation du lot 8 connue du registre. Un dossier qui n'a que des projets (une copie des sources, un dossier `build\`) n'est pas proposé : sur un PC vierge, cette page n'apparaît pas et ton dossier des données est créé **vide, sans aucun projet** ;
    - tu peux toujours ajouter un autre dossier à la main (une version portable) ;
    - leurs projets, leur bibliothèque, leur catalogue et leurs captures sont **copiés** ; les originaux ne sont jamais modifiés ;
    - un fichier de bibliothèque que tu as modifié garde ta version, et la version livrée est rangée à côté (`<nom>.livre-1.11.2`) ;
    - une case propose de désinstaller ensuite la version du lot 8 : seulement ses fichiers de programme, son désinstallateur garde tes données.
-6. **Ta bibliothèque** : la liste Windows des blocs livrés (DFB, DDT, macros), rangés par catégorie. Tu y **ajoutes les tiens** :
+7. **Ta bibliothèque** (avec API Studio) : la liste Windows des blocs livrés (DFB, DDT, macros), rangés par catégorie. Tu y **ajoutes les tiens** :
    - en les glissant depuis l'Explorateur (des fichiers `.dfb`, `.ddt`, `.mac`, ou un dossier entier, sous-dossiers compris) ;
    - ou avec **Ajouter des fichiers…** et **Ajouter un dossier…** ; **Retirer** enlève les tiens (les blocs livrés restent) ;
    - « Tes blocs sont rangés » : d'après leur dossier (un dossier `Control` va dans Control ; sinon `Perso`), ou dans la catégorie choisie ;
    - à l'installation, ils sont copiés dans `libs\<catégorie>\` de tes données et `libs\index.txt` les connaît. Le nom et la version sont lus dans le fichier (`name =`, `version =`). Même nom qu'un bloc déjà là : **le tien le remplace**, l'autre est rangé à côté (`.livre-1.11.2`).
-7. **Raccourcis** : un raccourci sur le Bureau (décoché), et **Épingler XPGAnalyser à la barre des tâches** (coché). Windows interdit à un installateur d'épingler un programme : au premier lancement, XPGAnalyser le demande à Windows, qui affiche sa confirmation ; si Windows ne le permet pas, XPGAnalyser te montre le geste (clic droit sur son icône dans la barre des tâches › Épingler). Une seule fois par compte.
-8. **Prêt à installer** : le résumé (pour qui, où, tes données, ce qui est repris, ta bibliothèque, les raccourcis).
-9. L'installation :
+8. **Options** (1.14.0 ; avant : Raccourcis) - seules celles des applications choisies sont proposées :
+   - **sur le Bureau** : un raccourci par application (décochés) ;
+   - **Épingler à la barre des tâches** (coché). Windows interdit à un installateur d'épingler un programme : au premier lancement, l'application le demande à Windows, qui affiche sa confirmation ; si Windows ne le permet pas, elle te montre le geste (clic droit sur son icône dans la barre des tâches › Épingler). Une seule fois par compte ;
+   - **les fichiers** : ouvrir les `.xihm` avec IHM Studio et les `.xapi` avec API Studio (cochées ; décochées, les nôtres sont retirées), et **« Ouvrir avec API Studio » dans le clic droit des `.XPG`** (seulement la liste « Ouvrir avec » : Control Expert reste leur programme par défaut) ;
+   - **le pare-feu Windows** : une règle entrante pour `IHM-Studio.exe` (« IHM Studio (API IHM Studio) », tous les réseaux), pour que les esclaves Modbus simulés et le poste ne déclenchent pas l'alerte au premier lancement. Seulement pour une installation pour tous les comptes (il faut être administrateur) : sinon la case est grisée, avec la raison. Retirée à la désinstallation (ou si la case est décochée à une mise à jour) ;
+   - **Garder une copie de secours pour Réparer** (cochée, environ 130 Mo) : la réserve où Réparer reprend un fichier abîmé, sans l'installateur. Décochée : pas de réserve (ni l'installateur rangé dedans), et Réparer dit qu'il lui faut l'installateur.
+9. **Prêt à installer** : le résumé (pour qui, ce que tu installes et ce qui est retiré, le poste, où, tes données, ce qui est repris, ta bibliothèque, les options, la copie de secours et les anciennes qui partent).
+10. L'installation :
    - une **sauvegarde** de la version déjà installée (programme, réglages, registre) ;
    - la fermeture propre de l'application si elle est ouverte ;
    - la copie ;
@@ -37,7 +48,7 @@ Pour l'utilisateur, sur un PC vierge ou non. Un seul fichier, à la racine du do
 
    Pendant la préparation et la copie, le panneau **Détails** (1.12.29) montre chaque action au moment où elle se fait, avec son heure et son état (en cours, fait, attention, erreur) : la version trouvée et sa sauvegarde, les fichiers copiés et leur taille, les raccourcis, le registre, puis tes dossiers, la reprise de chaque ancienne version (ce qui en est pris, un projet renommé, un fichier que tu avais modifié et qui est gardé), le lot 8, la vérification. Sans assistant (`/SILENT`, `/VERYSILENT`), les mêmes lignes vont dans le journal de l'installation (`/LOG`).
 
-10. **Ce qui a été installé** : les programmes (`API-Studio.exe`, `IHM-Studio.exe`, le désinstallateur, `SDL3.dll`, `pdfium.dll` - le lecteur PDF de la visionneuse, 1.12.30 -, les scripts de maintenance), leur **architecture** (64 bits x64, 32 bits x86) et leur taille, puis l'arborescence : le programme, tes données, la maintenance, le menu Démarrer, le Bureau, la barre des tâches, le registre. La zone défile ; **Copier** met le texte dans le presse-papiers ; **Suivant** mène à la fin. Le même texte est enregistré : `Journaux\recapitulatif_<date>.txt` (aussi en installation sans surveillance). Depuis la 1.12.29, il dit aussi **la version d'avant** (ce qui en a été sauvegardé, et où) et **ce qui a été repris** de chaque ancienne version.
+11. **Ce qui a été installé** : les programmes (`API-Studio.exe`, `IHM-Studio.exe`, le désinstallateur, `SDL3.dll`, `pdfium.dll` - le lecteur PDF de la visionneuse, 1.12.30 -, les scripts de maintenance), leur **architecture** (64 bits x64, 32 bits x86) et leur taille, puis l'arborescence : le programme, tes données, la maintenance, le menu Démarrer, le Bureau, la barre des tâches, le registre. La zone défile ; **Copier** met le texte dans le presse-papiers ; **Suivant** mène à la fin. Le même texte est enregistré : `Journaux\recapitulatif_<date>.txt` (aussi en installation sans surveillance). Depuis la 1.12.29, il dit aussi **la version d'avant** (ce qui en a été sauvegardé, et où) et **ce qui a été repris** de chaque ancienne version.
 
 À la fin, un rapport liste ce qui a été repris et gardé : `Journaux\migration_<date>.txt`.
 
@@ -60,6 +71,14 @@ XPGAnalyser-Setup-1.11.2.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D
 | `/MIGRER=oui` | reprend toutes les anciennes versions trouvées ; `non` n'en reprend aucune |
 | `/DESINSTALLERLOT8=non` | ne désinstalle pas la version du lot 8 |
 | `/COMPOSITION=non` | avec l'assistant (1.12.29) : si sa fenêtre se dessine mal sur un PC, enlève le double tampon de Windows qui l'empêche de clignoter (1.12.30 : il n'est plus que sur l'en-tête, l'accueil et la page de la copie, jamais sur une page à liste) |
+| `/ANIMATIONS=non` | (1.14.0) l'assistant ne bouge pas ; sans ce paramètre, il suit le réglage de Windows « Afficher les animations dans Windows » |
+| `/PROFIL=deux\|api\|ihm\|poste` | (1.14.0) ce que tu installes ; sans lui : le choix de l'installation d'avant, sinon les deux |
+| `/POSTE="D:\Projets\Armoire"` | (1.14.0) le projet du poste d'exploitation (obligatoire avec `/PROFIL=poste`, sauf à une mise à jour) |
+| `/POSTEAUTO=oui\|non` | (1.14.0) le poste démarre à l'ouverture de la session (oui par défaut) |
+| `/POSTERELANCE=oui\|non` | (1.14.0) le poste est relancé s'il se ferme (non par défaut) |
+| `/TASKS="…"`, `/MERGETASKS="…"` | les options : `bureauapi`, `bureauihm`, `bureauposte`, `barre`, `xihm`, `xapi`, `xpg`, `parefeu`, `reserve` ; `/MERGETASKS="!reserve"` : sans copie de secours, `/MERGETASKS="parefeu"` : la règle du pare-feu |
+
+Un paramètre faux (`/PROFIL=autre`, `/POSTEAUTO=peut-etre`, le poste sans son projet) arrête l'installateur sans rien installer : le journal (`/LOG`) dit pourquoi.
 
 ## 2. Où sont les choses
 
@@ -68,7 +87,8 @@ XPGAnalyser-Setup-1.11.2.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D
 | Le programme (remplacé à chaque mise à jour) | `%LOCALAPPDATA%\Programs\XPGAnalyser` ou `C:\Program Files\XPGAnalyser` |
 | Tes données | `Documents\XPGAnalyser` (ou le dossier choisi) : `projets\`, `libs\`, `resources\`, `captures\` |
 | Tes réglages | `%APPDATA%\XpgAnalyzer` : `settings.txt`, `XPGAnalyser.ini` (tes dossiers), `themes\`, `reprise\` |
-| Journaux, sauvegardes, réserve de réparation, état | `%LOCALAPPDATA%\XpgAnalyzer\` (pour toi seul) ou `%ProgramData%\XPGAnalyser\` (tous les comptes) |
+| Journaux, sauvegardes, réserve de réparation, état | `%LOCALAPPDATA%\XpgAnalyzer\` (pour toi seul) ou `%ProgramData%\XPGAnalyser\` (tous les comptes) ; la réserve (les copies de secours, `Reserve\<version>`) : celle de la version installée et celle de la précédente (1.14.0 : les autres partent à l'installation, avec le compte et la place libérée dans le journal et « Ce qui a été installé ») |
+| Le poste d'exploitation (1.14.0) | `maintenance\poste.cmd` (le lanceur, s'il relance le poste), la valeur « XPG Poste d'exploitation » de `HKCU` ou `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, `[Poste]` dans `installation.ini` |
 | Registre | `HKCU` ou `HKLM\Software\XPGAnalyser`, et la fiche « Applications installées » |
 | Les archives d'un projet (1.12.30) | un double-clic ouvre un `.xihm` (un projet IHM, tout compris) dans IHM Studio et un `.xapi` (un projet API) dans API Studio : `HKCU` ou `HKLM\Software\Classes` (`APIIHMStudio.xihm`, `APIIHMStudio.xapi`) ; la désinstallation les enlève |
 
@@ -101,7 +121,7 @@ Lance le nouvel installateur : même `AppId`, donc Windows voit une mise à jour
 8. installation précédente ;
 9. réinstallation complète en gardant tes données.
 
-Avant de modifier quoi que ce soit : l'application fermée proprement (forcée seulement avec ton accord) et une sauvegarde. Les fichiers manquants ou abîmés sont repris dans la **réserve** laissée par l'installateur (leur SHA-256 est vérifié avant la copie). Les raccourcis et le registre sont refaits. Tes projets et tes données ne sont jamais touchés. Un rapport est écrit : `Journaux\repair_<date>.txt`. En mode automatique, sans question : `repair.bat /mode:auto /oui /non-interactif`.
+Avant de modifier quoi que ce soit : l'application fermée proprement (forcée seulement avec ton accord) et une sauvegarde. Les fichiers manquants ou abîmés sont repris dans la **réserve** laissée par l'installateur (leur SHA-256 est vérifié avant la copie). Sans réserve (1.14.0 : la case « Garder une copie de secours pour Réparer » décochée), la réparation le dit une fois et donne la commande : `repair.bat /mode:reinstaller /installateur:<API-IHM-Studio-Setup-<version>.exe>`. L'exe d'une application que tu n'as pas installée (API Studio seul, IHM Studio seul, le poste) n'est ni vérifié ni réparé. Les raccourcis et le registre sont refaits. Tes projets et tes données ne sont jamais touchés. Un rapport est écrit : `Journaux\repair_<date>.txt`. En mode automatique, sans question : `repair.bat /mode:auto /oui /non-interactif`.
 
 Une installation pour tous les comptes se répare en administrateur : le script propose de se relancer avec les droits, pour cette opération seulement.
 
@@ -111,7 +131,7 @@ Tape « désinstaller » dans la recherche Windows : **Désinstaller XPGAnalyser
 
 - Par défaut, tes données (projets, bibliothèque, captures), tes réglages et tes sauvegardes **restent**.
 - Répondre « Non » à « Les garder ? » ouvre une confirmation : il faut taper **SUPPRIMER**. Ils partent alors dans la **Corbeille**, pas directement à la poubelle. Un dossier réglé ailleurs (une bibliothèque sur un partage réseau) n'est jamais supprimé.
-- Le programme, ses raccourcis, ses clés de registre (et les associations `.xihm` et `.xapi`), la réserve et l'état sont retirés.
+- Le programme, ses raccourcis, ses clés de registre (et les associations `.xihm`, `.xapi`, « Ouvrir avec » des `.XPG`, le démarrage du poste), toutes les copies de secours (1.14.0 : celles des versions d'avant aussi), la règle du pare-feu et l'état sont retirés.
 
 Sans surveillance : `unins000.exe /VERYSILENT` (dans le dossier du programme) garde les données ; `/SUPPRIMERDONNEES=oui` les envoie à la Corbeille.
 

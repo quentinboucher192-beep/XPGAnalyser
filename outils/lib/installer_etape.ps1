@@ -173,9 +173,10 @@ try {
 
             Set-XpgEtape -Installation $i -Etape 'verification'
             Start-XpgEtape 'Vérification du manifeste (tailles et SHA-256)' | Out-Null
-            Write-XpgProgres -Etat encours -Cle 'verif' -Texte ("Vérification des fichiers : 0 / {0} (taille et SHA-256)" -f @($i.Manifeste.fichiers).Count)
+            # (1.14.0 : sans l'exe que le profil n'a pas installe)
+            $total = @($i.Manifeste.fichiers | Where-Object { @($i.Absents) -notcontains $_.chemin }).Count
+            Write-XpgProgres -Etat encours -Cle 'verif' -Texte ("Vérification des fichiers : 0 / {0} (taille et SHA-256)" -f $total)
             $ecarts = Test-XpgFichiers -Installation $i -CleProgres 'verif'
-            $total = @($i.Manifeste.fichiers).Count
             if ($null -eq $ecarts) { Write-XpgProgres -Etat erreur -Cle 'verif' -Texte 'Vérification impossible : manifeste.json est illisible'; Complete-XpgEtape -Statut ECHEC -Detail 'manifeste.json illisible'; Set-XpgEtape -Installation $i -Etape 'verification' -Statut 'echec'; Stop-Xpg -Code 1 -Message 'manifeste.json illisible.' }
             if ($ecarts.Count) {
                 foreach ($e in $ecarts) { Write-XpgLog -Niveau ERREUR -Message "$($e.Chemin) : $($e.Etat)" }
@@ -199,11 +200,12 @@ try {
         }
         'desinstallation' {
             $i = Read-XpgInstallation -Dossier $dossier
-            Start-XpgEtape 'Nettoyage de la maintenance (réserve, état)' | Out-Null
-            foreach ($d in @((Join-Path $i.Reserve $i.Version), (Join-Path $i.Etat 'Etat'))) {
-                if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
-            }
-            if ((Test-Path -LiteralPath $i.Reserve) -and -not (Get-ChildItem -LiteralPath $i.Reserve -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $i.Reserve -Force -ErrorAction SilentlyContinue }
+            Start-XpgEtape 'Nettoyage de la maintenance (copies de secours, état)' | Out-Null
+            # 1.14.0 : toutes les copies de secours (avant : celle de la version installee seulement - celles des
+            # versions d'avant restaient)
+            if ($i.Reserve -and ((Split-Path -Leaf $i.Reserve) -ieq 'Reserve') -and (Test-Path -LiteralPath $i.Reserve)) { Remove-Item -LiteralPath $i.Reserve -Recurse -Force -ErrorAction SilentlyContinue }
+            $d = Join-Path $i.Etat 'Etat'
+            if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
             Complete-XpgEtape -Statut OK
             if ((Get-XpgOption -Noms @('supprimer-donnees')) -eq 'oui') {
                 Start-XpgEtape 'Tes données et tes réglages vers la Corbeille (demandé)' | Out-Null

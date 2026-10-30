@@ -98,6 +98,20 @@ function Read-XpgInstallation {
         Donnees = ''; Projets = ''; Bibliotheque = ''; Captures = ''
         CleProduit = ''; CleDesinstallation = ''
         RaccourciBureau = ((Get-XpgValeurIni $ini 'Installation' 'raccourci_bureau') -eq 'oui')
+        # 1.14.0 : ce que l'installateur a installe - le profil (deux, api, ihm, poste), les exe installes (celui que
+        # le profil n'a pas, Absents, n'est ni verifie ni repare), les raccourcis du Bureau, la copie de secours (la
+        # reserve : la case a pu etre decochee), le poste d'exploitation
+        Profil = (Get-XpgValeurIni $ini 'Installation' 'profil')
+        Applications = @((Get-XpgValeurIni $ini 'Installation' 'applications') -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        Absents = @()
+        NomsBureau = @((Get-XpgValeurIni $ini 'Installation' 'raccourcis_bureau') -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        CopieDeSecours = ((Get-XpgValeurIni $ini 'Maintenance' 'copie_de_secours') -ne 'non')
+        PosteProjet = (Get-XpgValeurIni $ini 'Poste' 'projet')
+        PosteRelance = ((Get-XpgValeurIni $ini 'Poste' 'relance') -eq 'oui')
+    }
+    if (-not $i.Profil) { $i.Profil = 'deux' }
+    if ($i.Applications.Count -and $manif) {
+        $i.Absents = @(@($manif.exe, $manif.exe_ihm) | Where-Object { $_ -and ($i.Applications -notcontains $_) })
     }
     if (-not $i.Nom) { $i.Nom = Get-XpgConfig -Section 'Produit' -Cle 'nom' -Defaut 'XPGAnalyser' }
     if (-not $i.Exe) { $i.Exe = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer.exe' }
@@ -168,9 +182,11 @@ function Test-XpgFichiers {
     if (-not $Dossier) { $Dossier = $Installation.Dossier }
     $ecarts = New-Object System.Collections.ArrayList
     if (-not $Installation.Manifeste) { return $null }
-    $total = @($Installation.Manifeste.fichiers).Count
+    # 1.14.0 : l'exe que le profil n'a pas installe (API Studio seul, IHM Studio seul, le poste) ne compte pas
+    $fichiers = @($Installation.Manifeste.fichiers | Where-Object { @($Installation.Absents) -notcontains $_.chemin })
+    $total = $fichiers.Count
     $vus = 0
-    foreach ($f in $Installation.Manifeste.fichiers) {
+    foreach ($f in $fichiers) {
         $vus++
         if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $CleProgres -Souvent -Texte ("Vérification des fichiers : {0} / {1} (taille et SHA-256)" -f $vus, $total) }
         $p = Join-Path $Dossier $f.chemin
@@ -189,8 +205,31 @@ function Get-XpgRaccourcis {
     # Un dossier connu introuvable (profil itinerant abime...) : son chemin habituel.
     if (-not $menu) { $menu = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs' }
     if (-not $bureau) { $bureau = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Desktop' }
-    $r = @([pscustomobject]@{ Nom = 'menu Démarrer'; Chemin = (Join-Path $menu "$($Installation.Nom)\$($Installation.Nom).lnk"); Cible = (Join-Path $Installation.Dossier $Installation.Exe); Obligatoire = $true })
-    if ($Installation.RaccourciBureau) { $r += [pscustomobject]@{ Nom = 'Bureau'; Chemin = (Join-Path $bureau "$($Installation.Nom).lnk"); Cible = (Join-Path $Installation.Dossier $Installation.Exe); Obligatoire = $true } }
+    # 1.14.0 : le raccourci de chaque application installee (le profil), et non plus « <nom>\<nom>.lnk », que
+    # l'installateur ne pose plus depuis la 1.12.20 ; le poste d'exploitation (IHM Studio en plein ecran, ou son
+    # lanceur s'il est relance) ; ceux du Bureau, d'apres installation.ini. (Les noms : ceux de l'installateur.)
+    $exeApi = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'API-Studio.exe'
+    $exeIhm = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'IHM-Studio.exe'
+    $poste = "Poste d'exploitation"
+    $cibles = @{}
+    if (-not @($Installation.Applications).Count -or (@($Installation.Applications) -contains $exeApi)) { $cibles['API Studio'] = @((Join-Path $Installation.Dossier $exeApi), '', '') }
+    if ($Installation.Profil -ne 'poste' -and (-not @($Installation.Applications).Count -or (@($Installation.Applications) -contains $exeIhm))) { $cibles['IHM Studio'] = @((Join-Path $Installation.Dossier $exeIhm), '', '') }
+    if ($Installation.Profil -eq 'poste') {
+        if ($Installation.PosteRelance) { $cibles[$poste] = @((Join-Path $Installation.Dossier 'maintenance\poste.cmd'), ('--ihm "{0}"' -f $Installation.PosteProjet), (Join-Path $Installation.Dossier $exeIhm)) }
+        else { $cibles[$poste] = @((Join-Path $Installation.Dossier $exeIhm), ('--poste "{0}"' -f $Installation.PosteProjet), '') }
+    }
+    $r = @()
+    foreach ($n in @($cibles.Keys | Sort-Object)) {
+        $c = $cibles[$n]
+        $r += [pscustomobject]@{ Nom = "menu Démarrer : $n"; Chemin = (Join-Path $menu ("{0}\{1}.lnk" -f $Installation.Nom, $n)); Cible = $c[0]; Arguments = $c[1]; Icone = $c[2]; Obligatoire = $true }
+    }
+    $surBureau = @($Installation.NomsBureau)
+    if (-not $surBureau.Count -and $Installation.RaccourciBureau) { $surBureau = @($cibles.Keys) }   # avant la 1.14.0 : une case pour les deux
+    foreach ($n in $surBureau) {
+        if (-not $cibles.ContainsKey($n)) { continue }
+        $c = $cibles[$n]
+        $r += [pscustomobject]@{ Nom = "Bureau : $n"; Chemin = (Join-Path $bureau "$n.lnk"); Cible = $c[0]; Arguments = $c[1]; Icone = $c[2]; Obligatoire = $true }
+    }
     foreach ($m in @(@('Réparer', 'repair.bat'), @('Vérifier l''installation', 'verify_installation.bat'), @('Reprendre une installation interrompue', 'resume_installation.bat'),
                      @('Restaurer une sauvegarde', 'restore_backup.bat'), @('Collecter les journaux', 'collect_diagnostics.bat'), @('Réinitialiser mes réglages', 'reset_user_settings.bat'))) {
         $r += [pscustomobject]@{ Nom = "Maintenance : $($m[0])"; Chemin = (Join-Path $menu ("{0}\Maintenance\{1}.lnk" -f $Installation.Nom, $m[0])); Cible = (Join-Path $Installation.Dossier ("maintenance\{0}" -f $m[1])); Obligatoire = $false }
@@ -221,6 +260,9 @@ function New-XpgRaccourci {
     $l.TargetPath = $Raccourci.Cible
     $l.WorkingDirectory = $Dossier
     if ($Raccourci.Cible -like '*.exe') { $l.IconLocation = "$($Raccourci.Cible),0" }
+    # 1.14.0 : le poste d'exploitation (ses arguments ; son lanceur, reduit, avec l'icone d'IHM Studio)
+    if ($Raccourci.PSObject.Properties['Arguments'] -and $Raccourci.Arguments) { $l.Arguments = $Raccourci.Arguments }
+    if ($Raccourci.PSObject.Properties['Icone'] -and $Raccourci.Icone) { $l.IconLocation = "$($Raccourci.Icone),0"; $l.WindowStyle = 7 }
     $l.Save()
 }
 
@@ -827,7 +869,9 @@ function Invoke-XpgDiagnostic {
         $ecarts = Test-XpgFichiers -Installation $i -SansEmpreinte:$Rapide
         if ($ecarts.Count) {
             foreach ($e in $ecarts) { Add-XpgLigne ("  {0} : {1}" -f $e.Chemin, $e.Etat) 'ERREUR'; [void]$pb.Add((New-XpgProbleme 'fichiers' "$($e.Chemin) : $($e.Etat)" 'erreur' 'fichiers' $e)) }
-        } else { Add-XpgLigne ("Fichiers obligatoires : {0} présents, tailles{1} conformes" -f @($i.Manifeste.fichiers).Count, $(if ($Rapide) { '' } else { ' et SHA-256' })) 'OK' }
+        } else { Add-XpgLigne ("Fichiers obligatoires : {0} présents, tailles{1} conformes" -f @($i.Manifeste.fichiers | Where-Object { @($i.Absents) -notcontains $_.chemin }).Count, $(if ($Rapide) { '' } else { ' et SHA-256' })) 'OK' }
+        # 1.14.0 : l'exe de l'autre application, pas installe (le choix de l'installation)
+        if (@($i.Absents).Count) { Add-XpgLigne ("Pas installé (ton choix : {0}) : {1}" -f $i.Profil, (@($i.Absents) -join ', ')) }
         # 8. les DLL necessaires
         foreach ($d in @($i.Manifeste.dependances)) {
             if (-not $d) { continue }
@@ -906,8 +950,11 @@ function Invoke-XpgDiagnostic {
     if ($etat -and $etat.statut -ne 'terminee') { Add-XpgLigne ("Installation interrompue : oui (étape « {0} », {1})" -f $etat.etape, $etat.statut) 'ATTENTION'; [void]$pb.Add((New-XpgProbleme 'reprise' "installation interrompue à l'étape $($etat.etape)" 'erreur' 'reprise' $etat)) }
     else { Add-XpgLigne 'Installation interrompue : non' 'OK' }
     # La reserve de reparation
+    # (1.14.0 : la copie de secours a pu ne pas etre gardee - sa case decochee : Reparer demande alors l'installateur)
     $res = Join-Path $i.Reserve $i.Version
-    if (Test-Path -LiteralPath (Join-Path $res 'manifeste.json')) { Add-XpgLigne "Réserve de réparation : $res" 'OK' } else { Add-XpgLigne "Réserve de réparation : absente ($res)" 'ATTENTION' }
+    if (Test-Path -LiteralPath (Join-Path $res 'manifeste.json')) { Add-XpgLigne "Réserve de réparation (copie de secours) : $res" 'OK' }
+    elseif (-not $i.CopieDeSecours) { Add-XpgLigne 'Réserve de réparation (copie de secours) : pas gardée à l''installation (case décochée) ; Réparer demandera l''installateur' }
+    else { Add-XpgLigne "Réserve de réparation : absente ($res)" 'ATTENTION' }
     return [pscustomobject]@{ Lignes = $lignes; Problemes = $pb }
 }
 

@@ -20955,6 +20955,23 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9lev\xC3\xA9 : l'administrateur) ; pour les autres, rien ne s'ouvre. Chaque "
                          "F1, permis ou refus\xC3\xA9, va au journal (cat\xC3\xA9gorie "
                          "S\xC3\xA9" "curit\xC3\xA9). **Fermer** revient au poste.", {}},
+             {K::Heading, "Installer un PC d'atelier", {}},
+             {K::Paragraph, "L'installateur pr\xC3\xA9pare le poste : \xC3\xA0 \xC2\xAB Que veux-tu installer ? "
+                         "\xC2\xBB, choisis **Poste d'exploitation**, puis le dossier du projet (un projet "
+                         "FINISH). Il n'installe qu'IHM Studio et ne met que \xC2\xAB Poste d'exploitation "
+                         "\xC2\xBB dans le menu D\xC3\xA9marrer (pas l'\xC3\xA9" "diteur). Ses deux cases :", {}, "1.14.0"},
+             {K::Bullet, "**D\xC3\xA9marrer le poste \xC3\xA0 l'ouverture de la session Windows** "
+                         "(coch\xC3\xA9" "e) : la m\xC3\xAAme entr\xC3\xA9" "e \xC2\xAB XPG Poste "
+                         "d'exploitation \xC2\xBB que D\xC3\xA9marrer avec la session ; pour une "
+                         "installation pour tous les comptes, celle de `HKLM` (chaque compte du PC) ;", {}},
+             {K::Bullet, "**Le relancer s'il se ferme** : un petit lanceur (`maintenance\\poste.cmd`, "
+                         "r\xC3\xA9" "duit dans la barre des t\xC3\xA2" "ches) le relance 5 s apr\xC3\xA8s ; "
+                         "trois fermetures de suite moins d'une minute apr\xC3\xA8s son lancement "
+                         "l'arr\xC3\xAAtent, et `Journaux\\poste.log` le dit. Pour quitter le poste pour de "
+                         "bon, ferme d'abord la fen\xC3\xAAtre du lanceur.", {}},
+             {K::Paragraph, "Sans surveillance : `API-IHM-Studio-Setup-<version>.exe /VERYSILENT /ALLUSERS "
+                         "/PROFIL=poste /POSTE=\"D:\\Projets\\Armoire_Gaz\" /POSTEAUTO=oui "
+                         "/POSTERELANCE=oui`.", {}},
              {K::Heading, "Un PC sans personne : l'ouverture de session automatique", {}},
              {K::Paragraph, "Le poste d\xC3\xA9marre \xC3\xA0 l'ouverture de la session ; pour qu'un PC qui "
                          "red\xC3\xA9marre (une coupure de courant) retrouve son poste sans personne, la "
