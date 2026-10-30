@@ -4015,6 +4015,14 @@ std::string cutTip(const PropertyGrid::Property& p, float nameAvail, float value
 bool plainProperty(const PropertyGrid::Property& p) {
     return p.expression.empty() && !p.overridden && !p.revert && !exprfield::accepts(p) && !p.legend && !p.open;
 }
+// 1.14.1 (captures finales) : UNE CASE GRISEE DIT POURQUOI. Une valeur en sourdine (Tone::Muted : sans effet dans le
+// mode choisi, gardee en reserve, une copie) porte sa raison en tete de sa description (la premiere ligne) ;
+// l'infobulle de la ligne et celle de son carre de legende la donnent en premier. Avant : la description ne se
+// montrait nulle part - la Valeur grisee d'une vanne par ses fins de course ne disait que "Accepte une expression".
+std::string mutedWhy(const PropertyGrid::Property& p) {
+    if (p.valueTone != Tone::Muted || p.description.empty()) return {};
+    return p.description.substr(0, p.description.find('\n'));
+}
 // cutTip a sa place dans la grille : `area` (contentRect), le partage nom / valeur, la profondeur de la ligne (comme
 // onPaint : le retrait, la marge, le cadenas, la pastille d'une couleur).
 std::string cutTipAt(const PropertyGrid::Property& p, const gfx::Rect& area, float nameRatio, std::uint16_t depth) {
@@ -4048,7 +4056,7 @@ bool PropertyGrid::hasTooltip() const {
     if (Widget::hasTooltip()) return true;
     for (const auto& vr : rows_)
         if (vr.prop && (!vr.prop->expression.empty() || vr.prop->overridden || vr.prop->revert || exprfield::accepts(*vr.prop)
-                        || vr.prop->legend))
+                        || vr.prop->legend || !mutedWhy(*vr.prop).empty()))   // 1.14.1 : une case grisee dit pourquoi
             return true;
     // 1.13.0 (correctifs F2) : un nom ou une valeur coupes, une valeur sur plusieurs lignes : leur infobulle.
     const auto area = contentRect();
@@ -4066,20 +4074,23 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
         return noteFix(why, from, to) ? why + "\nClic : remplacer " + from + " par " + to + " (Ctrl+Z pour annuler)." : why;
     }
     const Property* p = ri >= 0 ? rows_[static_cast<std::size_t>(ri)].prop : nullptr;
+    // 1.14.1 (captures finales) : une case grisee dit pourquoi, en tete de l'infobulle de sa ligne et de son carre.
+    const std::string why = p ? mutedWhy(*p) : std::string{};
+    const auto withWhy = [&why](std::string tip) { return why.empty() ? tip : tip.empty() ? why : why + "\n" + tip; };
     // 1.10.3 : une case a repere ($Vanne$) le dit en tete de son infobulle.
     const std::string mtip = p ? exprfield::markerTip(*p) : std::string{};
     if (p && mtip.size() && p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open) {
         const std::string base = Widget::liveTooltip(mouse);
-        return base.empty() ? mtip : mtip + "\n" + base;
+        return withWhy(base.empty() ? mtip : mtip + "\n" + base);
     }
     if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open)) {
         // 1.13.0 (correctifs F2) : un nom ou une valeur coupes (ou sur plusieurs lignes) : entiers, en infobulle.
         if (p && (rows_[static_cast<std::size_t>(ri)].depth & kNoteRow) == 0)
             if (std::string cut = cutTipAt(*p, contentRect(), nameRatio_, rows_[static_cast<std::size_t>(ri)].depth); !cut.empty()) {
                 const std::string base = Widget::liveTooltip(mouse);
-                return base.empty() ? cut : cut + "\n" + base;
+                return withWhy(base.empty() ? cut : cut + "\n" + base);
             }
-        return Widget::liveTooltip(mouse);
+        return withWhy(Widget::liveTooltip(mouse));
     }
     // 1.10 (chantier K) : le X dit ce qu'il fait ; une case vide, ce qu'elle accepte.
     {
@@ -4093,7 +4104,7 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
             std::string tip = p->legend->tip;
             if (legendClickable_)
                 tip += (tip.empty() ? "" : "\n") + std::string("Clic : la liste des carr\xC3\xA9s, puis le s\xC3\xA9lecteur de valeur.");
-            return tip.empty() ? std::string(valuekindHint) : tip;
+            return withWhy(tip.empty() ? std::string(valuekindHint) : tip);
         }
         if (showsClear(*p) && revertBox(endOf(*p, row)).contains(mouse)) return std::string(exprfield::kRemoveTip);
         // 1.9 : le bouton de retour dit ce qu'il fait.
@@ -4104,7 +4115,7 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
         std::string tip = "Accepte une expression : tape = puis l'expression (Ctrl+Espace : les propositions).";
         if (const std::string invite = exprfield::shownInvite(*p, false); p->value.empty() && !invite.empty())
             tip = "Vide : " + invite + ".\n" + tip;
-        return mtip.empty() ? tip : mtip + "\n" + tip;
+        return withWhy(mtip.empty() ? tip : mtip + "\n" + tip);
     }
     std::string tip = mtip;
     if (!p->expression.empty()) {
@@ -4121,8 +4132,8 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
              + (p->overrideDefault.empty() ? std::string("(vide)") : p->overrideDefault);
         if (p->revert) tip += "\n\xE2\x86\xBA au bout de la ligne : revenir \xC3\xA0 cette valeur";
     }
-    if (tip.empty()) return Widget::liveTooltip(mouse);
-    return tip;
+    if (tip.empty()) return withWhy(Widget::liveTooltip(mouse));
+    return withWhy(tip);
 }
 
 bool PropertyGrid::openRect(std::string_view name, gfx::Rect& out) const {

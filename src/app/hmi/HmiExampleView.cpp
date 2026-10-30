@@ -6,6 +6,7 @@
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace app {
@@ -13,6 +14,62 @@ namespace app {
 namespace {
 constexpr double kTutorialBase = 1000.0;     // lot 16 : l'heure du moteur au debut du tour du tutoriel (comme freezeAt)
 constexpr float kCaptionH = 28.f;
+// 1.14.1 (captures finales) : le texte de l'en-tete (smallUi) et le titre (ui) - mesures a la mise en page.
+constexpr gfx::FontId kCaptionFont{13};
+constexpr gfx::FontId kTitleFont{16};
+// Un mot qui ne se separe pas du precedent, comme apres une espace insecable : la ponctuation haute (: ; ! ? %
+// et le guillemet fermant), l'unite courte d'un nombre ("9 s.", "100 %", "250 ms") ; et le mot qui suit un
+// guillemet ouvrant.
+bool gluedTo(const std::string& prev, const std::string& word) {
+    if (prev.empty() || word.empty()) return false;
+    const char c = word.front();
+    if (c == ':' || c == ';' || c == '!' || c == '?' || c == '%' || word.rfind("\xC2\xBB", 0) == 0) return true;
+    if (prev == "\xC2\xAB") return true;
+    return std::isdigit(static_cast<unsigned char>(prev.back())) && word.size() <= 4 && std::isalpha(static_cast<unsigned char>(c));
+}
+// Les mots de `text` en lignes de `room` pixels au plus (un mot trop long reste seul sur sa ligne) ; au-dela de
+// `most` lignes, la derniere finit par "..." et `cut` est vrai.
+std::vector<std::string> wrapWords(const std::string& text, float room, std::size_t most, bool& cut) {
+    // Les mots, ceux qui se tiennent reunis (gluedTo) : une ligne ne se coupe qu'entre deux groupes.
+    std::vector<std::string> words;
+    std::string prevWord;
+    for (std::size_t at = 0; at < text.size();) {
+        while (at < text.size() && text[at] == ' ') ++at;
+        if (at >= text.size()) break;
+        const std::size_t end = std::min(text.find(' ', at), text.size());
+        std::string word = text.substr(at, end - at);
+        if (!words.empty() && gluedTo(prevWord, word)) words.back() += " " + word;
+        else words.push_back(word);
+        prevWord = std::move(word);
+        at = end;
+    }
+    std::vector<std::string> out;
+    cut = false;
+    std::string line;
+    for (const auto& word : words) {
+        const std::string trial = line.empty() ? word : line + " " + word;
+        if (!line.empty() && ui::measureWidth(trial, kCaptionFont) > room) {
+            out.push_back(line);
+            line = word;
+        } else {
+            line = trial;
+        }
+    }
+    if (!line.empty()) out.push_back(line);
+    if (out.size() > most && most > 0) {
+        cut = true;
+        out.resize(most);
+        std::string& last = out.back();
+        while (!last.empty() && ui::measureWidth(last + "...", kCaptionFont) > room) {
+            // un caractere entier (UTF-8) : ses octets de suite, puis son premier
+            while (!last.empty() && (static_cast<unsigned char>(last.back()) & 0xC0) == 0x80) last.pop_back();
+            if (!last.empty()) last.pop_back();
+        }
+        while (!last.empty() && last.back() == ' ') last.pop_back();
+        last += "...";
+    }
+    return out;
+}
 constexpr double kMove = 0.7;      // le pointeur part vers sa cible 0,7 s avant le geste
 constexpr double kArrive = 0.12;   // et y arrive un peu avant
 bool pointed(const std::string& op) {
@@ -308,10 +365,32 @@ bool HmiExampleView::targetOf(const hmi::examples::Step& s, gfx::Point& out) con
     return true;
 }
 
+// 1.14.1 (captures finales) : LE TEXTE DE L'EN-TETE SE LIT EN ENTIER - en lignes a la largeur, a droite du titre ;
+// l'en-tete grandit d'autant (le canevas en dessous). Au plus kCaptionLines lignes : au-dela, la derniere finit par
+// "..." et l'infobulle de l'en-tete le donne entier. Avant : une seule ligne coupee net, sans "..." (la phrase de
+// V-102, ajoutee a la vanne en 1.14.1, ne se lisait pas).
+float HmiExampleView::headerHeight() const noexcept {
+    const float lines = static_cast<float>(captionLines_.size());
+    return std::max(kCaptionH, (kCaptionH - captionLineH_) + lines * captionLineH_);
+}
+
 void HmiExampleView::onLayout() {
     const auto b = bounds();
-    canvas_->setBounds({b.x, b.y + kCaptionH, b.w, std::max(0.f, b.h - kCaptionH)});
+    captionLineH_ = std::max(10.f, ui::lineHeight(kCaptionFont) + 1.f);
+    const float room = b.w - (42.f + ui::measureWidth(title_, kTitleFont)) - 16.f;
+    captionLines_ = room > 40.f ? wrapWords(caption_, room, kCaptionLines, captionCut_) : std::vector<std::string>{};
+    if (room <= 40.f) captionCut_ = !caption_.empty();
+    const float headH = headerHeight();
+    canvas_->setBounds({b.x, b.y + headH, b.w, std::max(0.f, b.h - headH)});
 }
+
+std::string HmiExampleView::liveTooltip(gfx::Point mouse) const {
+    const auto b = bounds();
+    if (captionCut_ && gfx::Rect{b.x, b.y, b.w, headerHeight()}.contains(mouse)) return caption_;
+    return ui::Widget::liveTooltip(mouse);
+}
+
+bool HmiExampleView::hasTooltip() const { return captionCut_ || ui::Widget::hasTooltip(); }
 
 void HmiExampleView::onPaint(const ui::PaintContext& ctx) {
     const auto b = bounds();
@@ -338,20 +417,17 @@ void HmiExampleView::onPaint(const ui::PaintContext& ctx) {
     } else if (!frozen_) {
         step(ctx.time);
     }
-    // L'en-tete : "Exemple anime", ce qu'il montre, et ou en est le tour.
+    // L'en-tete : "Exemple anime", ce qu'il montre (1.14.1 : sur ses lignes, onLayout), et ou en est le tour.
     const auto& f = ctx.theme.font;
-    const gfx::Rect head{b.x, b.y, b.w, kCaptionH};
+    const gfx::Rect head{b.x, b.y, b.w, headerHeight()};
     ctx.r.fillRect(head, ctx.theme.color.windowBg);
     drawHmiGlyph(ctx.r, HmiGlyph::Play, {head.x + 8.f, head.y + 6.f, 16.f, 16.f}, ctx.theme.color.accent);
     const std::string label = title_;
     ctx.r.drawText({head.x + 30.f, head.y + (kCaptionH - ctx.r.lineHeight(f.ui)) / 2.f}, label, f.ui, ctx.theme.color.accent);
     const float lw = ctx.r.measure(label, f.ui).width;
-    if (!caption_.empty()) {
-        const float room = std::max(0.f, head.w - lw - 110.f);
-        const auto n = ctx.r.fitCharacters(caption_, f.smallUi, room);
-        ctx.r.drawText({head.x + 42.f + lw, head.y + (kCaptionH - ctx.r.lineHeight(f.smallUi)) / 2.f},
-                       std::string_view(caption_).substr(0, n), f.smallUi, ctx.theme.color.textMuted);
-    }
+    for (std::size_t i = 0; i < captionLines_.size(); ++i)
+        ctx.r.drawText({head.x + 42.f + lw, head.y + (kCaptionH - captionLineH_) / 2.f + static_cast<float>(i) * captionLineH_},
+                       captionLines_[i], f.smallUi, ctx.theme.color.textMuted);
     // La progression du tour : une fine barre sous l'en-tete.
     const float frac = example_->period > 0 ? static_cast<float>(std::clamp(played_ / example_->period, 0.0, 1.0)) : 0.f;
     ctx.r.fillRect({head.x, head.bottom() - 2.f, head.w * frac, 2.f}, ctx.theme.color.accent.withAlpha(140));

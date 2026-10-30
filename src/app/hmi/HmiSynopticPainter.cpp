@@ -611,7 +611,9 @@ void drawThreeWayValve(const Ctx& c, const Sym& s) {
     sa.line = line;
     drawActuator(c, sa, type, d, stemTop);
     // 1.14.1 : un voyant par fin de course de voie, entre ses deux voies (1-3 en bas a gauche, 2-3 en bas a
-    // droite, 1-2 en haut, au-dessus de la voie 2) ; la discordance, sa pastille en bas a gauche.
+    // droite, 1-2 en haut, au-dessus de la voie 2).
+    const bool portsShown = c.src.flag(c.o, "showPorts", true);
+    const double portFs = std::clamp(arm * 0.26, 7.0, 12.0);
     if (byLimits && c.src.flag(c.o, "showLimits", true)) {
         const double lr = std::clamp(d * 0.11, 2.5, 5.0);
         const struct { int w; double x, y; } leds[] = {
@@ -620,12 +622,17 @@ void drawThreeWayValve(const Ctx& c, const Sym& s) {
             if (ports[l.w].given && !(lBore && l.w == 1))
                 drawLimitLed(c, s, l.x, l.y, lr, ports[l.w].on, discord, bad, {});
     }
+    // 1.14.1 (captures finales) : la discordance, comme la vanne et les registres - sa pastille en haut a droite, sans
+    // cadre tirete (avant : en bas a gauche, et le cadre du defaut). Au-dessus du numero de la voie 2, plus petite s'il
+    // le faut ; la place manque (une vanne tres basse) : en bas a gauche, ou rien ne se dessine.
     if (discord) {
-        const double br = std::clamp(std::min(s.w, s.h) * 0.1, 5.0, 10.0);
-        drawDiscordBadge(c, s.x + br + 1, s.y + s.h - br - 1, br);
+        double br = std::clamp(std::min(s.w, s.h) * 0.1, 5.0, 10.0);
+        if (portsShown) br = std::min(br, (cy - a - portFs * 1.2 - 2 - s.y) / 2);   // le haut du chiffre 2
+        if (br >= 5.0) drawDiscordBadge(c, s.x + s.w - br - 1, s.y + br + 1, br);
+        else drawDiscordBadge(c, s.x + 6, s.y + s.h - 6, 5.0);
     }
     // En defaut : un cadre tirete rouge autour du symbole (maquette 1.10.4).
-    if (faulty) {
+    if (s.fault) {
         const double x0 = s.x + 1, y0 = s.y + 1, x1 = s.x + s.w - 1, y1 = s.y + s.h - 1;
         const auto dashes = [&](double ax, double ay, double bx, double by) {
             const double len = std::hypot(bx - ax, by - ay);
@@ -640,8 +647,8 @@ void drawThreeWayValve(const Ctx& c, const Sym& s) {
         dashes(x0, y1, x0, y0);
     }
     // Le numero de chaque voie, pres de sa base.
-    if (c.src.flag(c.o, "showPorts", true)) {
-        const double fs = std::clamp(arm * 0.26, 7.0, 12.0);
+    if (portsShown) {
+        const double fs = portFs;
         text(c, "1", cx - arm, cy - a - fs * 1.5, arm * 0.5, fs * 1.4, s.txt, fs, "centre");
         text(c, "2", cx + arm * 0.5, cy - a - fs * 1.5, arm * 0.5, fs * 1.4, s.txt, fs, "centre");
         text(c, "3", cx + a + 2, cy + arm - fs * 1.5, fs * 1.4, fs * 1.4, s.txt, fs, "gauche");
@@ -1286,13 +1293,15 @@ void drawDamper(const Ctx& c, const Sym& s) {
         text(c, hmi::formatNumber(std::round(d.opening)) + " %", tx, ay - fs * 0.75, std::max(fs * 3.2, s.x + s.w - tx), fs * 1.5, s.txt, fs, "gauche");
     }
     // Les fins de course : O (ouvert) et F (ferme), a gauche de l'actionneur. 1.14.1 : Voyants des fins de course
-    // decoche, rien.
-    if (d.hasLimits && d.leds) {
-        const double lr = std::clamp(actH * 0.16, 2.5, 6.0);
-        const double base = s.cx() - r * 1.3 - 4 - lr;
-        const struct { double x; bool on; const char* tag; } leds[] = {{base - lr * 3.4, d.limitO, "O"}, {base, d.limitF, "F"}};
+    // decoche, rien. 1.14.1 (captures finales) : le clapet coupe-feu, sa marque CF tient la gauche - ses voyants a
+    // droite du declencheur, O puis F (avant : a gauche, O passait sous la marque, et a sa taille par defaut F aussi).
+    const bool ledsShown = d.hasLimits && d.leds;
+    const double lr = std::clamp(actH * 0.16, 2.5, 6.0);
+    const double ledO = fire ? s.cx() + r * 1.3 + 4 + lr : s.cx() - r * 1.3 - 4 - lr * 4.4;
+    const double ledF = ledO + lr * 3.4;
+    if (ledsShown) {
+        const struct { double x; bool on; const char* tag; } leds[] = {{ledO, d.limitO, "O"}, {ledF, d.limitF, "F"}};
         for (const auto& l : leds) {
-            if (fire && l.x - lr < s.x + std::clamp(actH * 0.55, 7.0, 16.0) * 2.2) continue;   // la marque CF garde sa place
             const gfx::Color lc = d.discord ? bladeCol : l.on ? onCol : withA(s.off, 0.8f);
             fill(c, circle(l.x, ay - lr * 0.6, lr, 16), lc);
             outline(c, circle(l.x, ay - lr * 0.6, lr, 16), true, c.fixed(0x10141A), 1);
@@ -1300,14 +1309,17 @@ void drawDamper(const Ctx& c, const Sym& s) {
         }
     }
     // 1.14.1 : par ses fins de course - l'Ordre vise (une fleche a droite de l'actionneur, sans ouverture
-    // ecrite) et la pastille de la discordance (en haut a droite).
+    // ecrite) et la pastille de la discordance (en haut a droite, comme la vanne et la vanne 3 voies ; le clapet
+    // coupe-feu y a ses voyants : dans le coin de la gaine, juste dessous).
     if (d.byLimits && d.moving && d.opening < 0 && !fire) {
         const double ah = std::clamp(actH * 0.45, 4.0, 10.0);
         drawTowardArrow(c, s.cx() + r * 1.3 + ah * 0.6 + 2, ay, ah, d.toward, bladeCol);
     }
     if (d.byLimits && d.discord) {
         const double br = std::clamp(std::min(s.w, s.h) * 0.1, 5.0, 10.0);
-        drawDiscordBadge(c, s.x + s.w - br - 1, s.y + br + 1, br);
+        const bool ledsThere = fire && ledsShown && ledF + lr + 2 > s.x + s.w - 2 * br - 1;
+        if (ledsThere) drawDiscordBadge(c, x1 - br - std::max(2.0, s.lw) - 1, top + br + std::max(2.0, s.lw) + 1, br);
+        else drawDiscordBadge(c, s.x + s.w - br - 1, s.y + br + 1, br);
     }
     if (faulty && !s.fault && c.src.flag(c.o, "a11ySymbols", false)) drawFaultBadge(c, s.x + s.w, s.y, std::clamp(s.r() * 0.45, 9.0, 22.0));
 }
