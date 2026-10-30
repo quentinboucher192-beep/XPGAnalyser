@@ -690,7 +690,7 @@ void structures11214() {
           "un membre inconnu : refus\xC3\xA9 (" + why + ")");
     check(!tf::valueFits(p, "LIST OF T_Four", "[(Consigne := 'chaud')]", &why) && why.find("Consigne") != npos,
           "un texte pour un REAL : refus\xC3\xA9, le membre dit (" + why + ")");
-    check(!tf::valueFits(p, "LIST OF REAL", "[(Consigne := 1)]", &why), "une structure dans une LIST OF REAL : refus\xC3\xA9e (" + why + ")");
+    check(!tf::valueFits(p, "LIST OF REAL", "[(Consigne := 1)]", &why), "une structure dans une LIST OF REAL : refus\xC3\xA9" "e (" + why + ")");
     // une declaration (une constante, une locale) : sa valeur, jugee comme une variable IHM
     check(hmi::decledit::valueMisfit(p, "LIST OF T_Four", "[(Consigne := 80)]").empty(), "une d\xC3\xA9" "claration LIST OF T_Four : sa valeur accept\xC3\xA9" "e");
     check(hmi::decledit::valueMisfit(p, "T_Four", "(Consigne := 80)").empty(), "une d\xC3\xA9" "claration T_Four : (Consigne := 80) accept\xC3\xA9" "e");

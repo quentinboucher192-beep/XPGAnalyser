@@ -28356,7 +28356,7 @@ void tableauxDynamiques11213() {
     check(model("Tableau_Alarmes").rows.size() == 3, "Alarmes (LIST) : les 3 alarmes de d\xC3\xA9part");
     const auto ms = rowsText(model("Tableau_Stock"));
     check(ms.size() == 3 && ms[0].rfind("ecrou|50|20|", 0) == 0 && ms[2].rfind("rondelle|12|20|...|...", 0) == 0,
-          "Stock, Prix, Seuils (trois MAP) : tri\xC3\xA9es par quantit\xC3\xA9, la rondelle sans prix (\xC2\xAB ... \xC2\xBB) : "
+          "Stock, Prix, Seuils (trois MAP) : tri\xC3\xA9" "es par quantit\xC3\xA9, la rondelle sans prix (\xC2\xAB ... \xC2\xBB) : "
               + (ms.empty() ? std::string{} : ms[0] + " / " + ms.back()));
     check(rowsText(model("Tableau_Etats")).size() == 3, "T_Etat (\xC3\xA9num\xC3\xA9ration) : 3 lignes");
     const auto ml = rowsText(model("Tableau_Listes"));
