@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <set>
@@ -39,6 +40,31 @@ std::string upper(std::string_view s) {
     std::string out(s);
     for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     return out;
+}
+
+// 1.14.2 : LA LARGEUR PAR DEFAUT DU VOLET (les captures a 1280 x 800 : l'inspecteur de l'editeur
+// ne montrait plus que des "..."). Le separateur range ses volets en parts : la part du volet est
+// calculee pour ai::defaultPanelWidth(fenetre), les autres volets montres gardant les leurs. Tant
+// que la part est celle d'origine (0.26, MainAnalysisScreen.cpp) ou celle posee ici, elle suit la
+// fenetre ; une autre est une largeur tiree par l'utilisateur : elle reste (et se retient, comme avant).
+void fitAssistantWidth(ui::Splitter& split, ai::AiPanel& panel) {
+    auto r = split.ratios();
+    if (r.size() != 4 || split.children().size() < 4) return;
+    float& mine = r[3];
+    const bool untouched = std::abs(mine - 0.26f) < 1e-4f || (panel.autoRatio() > 0.f && std::abs(mine - panel.autoRatio()) < 1e-4f);
+    if (!untouched) return;
+    const float total = split.bounds().w - 15.f;   // trois poignees de 5 px
+    if (total < 600.f) return;
+    const auto surface = ui::surfaceSize();
+    const float want = ai::defaultPanelWidth(surface.w > 0.f ? surface.w : split.bounds().w);
+    float others = 0.f;
+    for (std::size_t i = 0; i < 3; ++i)
+        if (split.children()[i]->visibility() != ui::Visibility::Collapsed) others += r[i];
+    const float ratio = want * others / std::max(1.f, total - want);
+    if (std::abs(ratio - mine) < 1e-4f) return;
+    mine = ratio;
+    panel.setAutoRatio(ratio);
+    split.setRatios(r);
 }
 
 } // namespace
@@ -123,6 +149,7 @@ void MainAnalysisScreen::tickAssistant(double now) {
     // Montre au demarrage (la case retenue, la Disposition) : charge a la premiere image.
     if (assistantShown()) aiPanel_->ensureLoaded();
     if (aiPanel_->loaded()) aiPanel_->tick(now);
+    if (upper_ && assistantShown()) fitAssistantWidth(*upper_, *aiPanel_);
 }
 
 } // namespace app

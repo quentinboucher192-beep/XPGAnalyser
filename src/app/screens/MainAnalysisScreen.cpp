@@ -1081,7 +1081,8 @@ core::Status MainAnalysisScreen::buildUi() {
         upper_->addPane(std::move(right), 0.30f, 260.f);
         // 1.14.2 : L'ASSISTANT IA, le quatrieme volet (IHM Studio) - a droite de l'editeur, replie
         // au depart ; Ctrl+Maj+I, Affichage > Panneaux, la Disposition (app/ai/AiWorkspace.cpp).
-        if (core::hasIhm()) upper_->addPane(buildAssistantPanel(), 0.26f, 340.f);
+        // 1.14.2 : sa largeur par defaut suit la fenetre (ai::defaultPanelWidth, AiWorkspace.cpp).
+        if (core::hasIhm()) upper_->addPane(buildAssistantPanel(), 0.26f, 280.f);
 
         outer_->addPane(std::move(upper), 0.56f, 200.f);
     }

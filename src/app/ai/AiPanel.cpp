@@ -77,30 +77,473 @@ const std::string& welcomeText() {
     return k;
 }
 
+// 1.14.2 : un texte simple a la ligne, au mot (un mot plus large que la place : coupe ; une
+// ponctuation seule - le ":" francais - reste sur sa ligne).
+std::vector<std::string> wrapPlain(const std::string& text, gfx::FontId f, float width) {
+    std::vector<std::string> out;
+    std::string line;
+    width = std::max(width, 30.f);
+    std::size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && text[i] == ' ') ++i;
+        std::size_t e = i;
+        while (e < text.size() && text[e] != ' ') ++e;
+        if (e == i) break;
+        const std::string word = text.substr(i, e - i);
+        i = e;
+        const bool glue = word == ":" || word == ";" || word == "!" || word == "?" || word == "\xC2\xBB";
+        const std::string trial = line.empty() ? word : line + " " + word;
+        if (!line.empty() && (glue || ui::measureWidth(trial, f) <= width)) {
+            line = trial;
+            continue;
+        }
+        if (!line.empty()) out.push_back(line);
+        line.clear();
+        if (ui::measureWidth(word, f) <= width) {
+            line = word;
+            continue;
+        }
+        for (std::size_t k = 0; k < word.size();) {   // le mot seul ne tient pas : coupe
+            std::size_t n = k + 1;
+            while (n < word.size() && (static_cast<unsigned char>(word[n]) & 0xC0) == 0x80) ++n;
+            const std::string next = line + word.substr(k, n - k);
+            if (!line.empty() && ui::measureWidth(next, f) > width) {
+                out.push_back(line);
+                line.clear();
+                continue;
+            }
+            line = next;
+            k = n;
+        }
+    }
+    if (!line.empty() || out.empty()) out.push_back(line);
+    return out;
+}
+
+// Les boutons d'une carte, de gauche a droite, a la ligne quand ils ne tiennent pas (le bord
+// droit de la carte n'est jamais depasse : "Refuser" a 1280 x 800).
+constexpr float kBtnH = 28.f, kBtnGap = 6.f, kNoteH = 18.f;
+constexpr std::size_t kNoteLines = 4;   // les lignes d'une note, au plus (le reste : l'apercu)
+std::vector<gfx::Rect> flowButtons(const std::vector<std::string>& labels, float width) {
+    std::vector<gfx::Rect> out;
+    float x = 0.f, y = 0.f;
+    for (const auto& l : labels) {
+        const float w = std::min(width, ui::measureWidth(l, gfx::FontId{16}) + 26.f);
+        if (x > 0.f && x + w > width) {
+            x = 0.f;
+            y += kBtnH + kBtnGap;
+        }
+        out.push_back({x, y, w, kBtnH});
+        x += w + kBtnGap;
+    }
+    return out;
+}
+
 } // namespace
 
 // =============================================================================
 //  La saisie
 // =============================================================================
-AiPromptEdit::AiPromptEdit(std::string id) : ui::MultiLineText(std::move(id)) {
-    setShowLineNumbers(false);
-    setWordWrap(true);
-    setLanguage(ui::Language::PlainText);
-    setCommandKeys(false);
-    setZoomSupport(ui::ZoomSupport::None);
+namespace {
+
+constexpr float kPromptPadX = 8.f, kPromptPadY = 6.f;
+
+bool continuation(char c) { return (static_cast<unsigned char>(c) & 0xC0) == 0x80; }
+std::size_t nextChar(std::string_view s, std::size_t i) {
+    if (i >= s.size()) return s.size();
+    ++i;
+    while (i < s.size() && continuation(s[i])) ++i;
+    return i;
+}
+std::size_t prevChar(std::string_view s, std::size_t i) {
+    if (i == 0) return 0;
+    --i;
+    while (i > 0 && continuation(s[i])) --i;
+    return i;
+}
+bool blank(char c) { return c == ' ' || c == '\t'; }
+bool wordChar(char c) { return !blank(c) && c != '\n'; }
+
+} // namespace
+
+AiPromptEdit::AiPromptEdit(std::string id) : ui::Widget(std::move(id)) {
+    setFocusPolicy(true);
+}
+
+std::vector<AiPromptEdit::Row> AiPromptEdit::wrap(std::string_view text, float width) {
+    // Au mot, ligne par ligne du texte ; un mot plus large que le champ se coupe ou il ne tient plus.
+    std::vector<Row> out;
+    width = std::max(width, 24.f);
+    std::size_t para = 0;
+    while (true) {
+        std::size_t nl = text.find('\n', para);
+        const std::size_t stop = nl == std::string_view::npos ? text.size() : nl;
+        std::size_t begin = para;
+        while (true) {
+            if (begin >= stop) {
+                out.push_back({begin, stop, nl == std::string_view::npos ? stop : stop + 1});
+                break;
+            }
+            // Ce qui tient : des mots entiers (et leurs blancs) tant que le texte sans ses blancs de fin tient.
+            std::size_t end = begin, fit = begin;
+            while (end < stop) {
+                std::size_t w = end;
+                while (w < stop && blank(text[w])) ++w;
+                std::size_t e = w;
+                while (e < stop && !blank(text[e])) ++e;
+                if (fit > begin && ui::measureWidth(text.substr(begin, e - begin), kBody) > width) break;
+                if (fit == begin && ui::measureWidth(text.substr(begin, e - begin), kBody) > width) {
+                    // Le premier mot ne tient pas seul : coupe a la largeur (au moins un caractere).
+                    std::size_t cut = nextChar(text, begin);
+                    while (cut < e && ui::measureWidth(text.substr(begin, nextChar(text, cut) - begin), kBody) <= width) cut = nextChar(text, cut);
+                    fit = cut;
+                    end = cut;
+                    break;
+                }
+                // Les blancs qui suivent le mot restent sur la ligne.
+                while (e < stop && blank(text[e])) ++e;
+                fit = e;
+                end = e;
+            }
+            if (fit >= stop) {
+                out.push_back({begin, stop, nl == std::string_view::npos ? stop : stop + 1});
+                break;
+            }
+            out.push_back({begin, fit, fit});
+            begin = fit;
+        }
+        if (nl == std::string_view::npos) break;
+        para = nl + 1;
+    }
+    if (out.empty()) out.push_back({0, 0, 0});
+    return out;
+}
+
+gfx::Rect AiPromptEdit::textArea() const {
+    const auto b = bounds();
+    return {b.x + kPromptPadX, b.y + kPromptPadY, std::max(0.f, b.w - 2 * kPromptPadX), std::max(0.f, b.h - 2 * kPromptPadY)};
+}
+
+float AiPromptEdit::wrapWidth() const { return std::max(24.f, bounds().w - 2 * kPromptPadX - 8.f); }   // 8 : la barre
+
+const std::vector<AiPromptEdit::Row>& AiPromptEdit::rows() const {
+    const float w = wrapWidth();
+    if (w != rowsW_ || rowsRev_ != rev_) {
+        rows_ = wrap(text_, w);
+        rowsW_ = w;
+        rowsRev_ = rev_;
+    }
+    return rows_;
+}
+
+std::size_t AiPromptEdit::rowsFor(float width) const {
+    const float w = std::max(24.f, width - 2 * kPromptPadX - 8.f);
+    if (text_.empty()) return std::clamp<std::size_t>(wrap(placeholder_, w).size(), 1, 2);
+    return wrap(text_, w).size();
+}
+
+float AiPromptEdit::heightFor(float width) const {
+    const auto n = static_cast<float>(std::clamp<std::size_t>(rowsFor(width), 1, kMaxRows));
+    return n * (ui::lineHeight(kBody) + 3.f) + 2 * kPromptPadY + 6.f;
+}
+
+std::size_t AiPromptEdit::rowOf(std::size_t offset) const {
+    const auto& r = rows();
+    std::size_t row = 0;
+    for (std::size_t i = 0; i < r.size(); ++i)
+        if (r[i].begin <= offset) row = i;
+    return row;
+}
+
+std::size_t AiPromptEdit::rowLimit(std::size_t row) const {
+    const auto& r = rows();
+    if (row >= r.size()) return text_.size();
+    const Row& x = r[row];
+    // Une ligne coupee (pas de retour a la ligne) : son dernier curseur est AVANT son dernier
+    // caractere (le blanc de la coupure) ; sinon il tomberait au debut de la suivante.
+    if (x.next == x.end && x.end > x.begin && row + 1 < r.size()) return prevChar(text_, x.end);
+    return x.end;
+}
+
+std::size_t AiPromptEdit::offsetInRow(std::size_t row, float x) const {
+    const auto& r = rows();
+    if (row >= r.size()) return text_.size();
+    const std::size_t begin = r[row].begin, limit = rowLimit(row);
+    std::size_t best = begin;
+    float left = 0.f;
+    for (std::size_t i = begin; i < limit;) {
+        const std::size_t n = nextChar(text_, i);
+        const float w = ui::measureWidth(std::string_view(text_).substr(i, n - i), kBody);
+        if (x < left + w * 0.5f) return i;
+        left += w;
+        i = n;
+        best = i;
+    }
+    return std::max(best, begin);
+}
+
+std::size_t AiPromptEdit::offsetAt(gfx::Point p) const {
+    const auto area = textArea();
+    const float lh = ui::lineHeight(kBody) + 3.f;
+    const float y = p.y - area.y + scroll_;
+    const auto& r = rows();
+    const std::size_t row = y < 0.f ? 0 : std::min(r.size() - 1, static_cast<std::size_t>(y / lh));
+    return offsetInRow(row, p.x - area.x);
+}
+
+std::optional<ui::cursor::Shape> AiPromptEdit::cursorAt(gfx::Point local) const {
+    if (!bounds().contains(local)) return std::nullopt;
+    return ui::cursor::Shape::Text;
+}
+
+void AiPromptEdit::changed() {
+    ++rev_;
+    goalX_ = -1.f;
+    blinkFrom_ = lastTime_;
+    ensureCaretVisible();
+    if (parent()) parent()->invalidateLayout();   // la hauteur suit le nombre de lignes
+    invalidate();
+}
+
+void AiPromptEdit::setText(std::string t) {
+    std::erase(t, '\r');
+    if (t == text_) return;
+    text_ = std::move(t);
+    caret_ = anchor_ = text_.size();
+    scroll_ = 0.f;
+    changed();
+}
+
+void AiPromptEdit::replaceSelection(std::string_view with) {
+    const std::size_t lo = std::min(caret_, anchor_), hi = std::max(caret_, anchor_);
+    text_.replace(lo, hi - lo, with);
+    caret_ = anchor_ = lo + with.size();
+    changed();
+}
+
+void AiPromptEdit::insertText(std::string_view utf8) {
+    if (readOnly_) return;
+    std::string clean(utf8);
+    std::erase(clean, '\r');
+    replaceSelection(clean);
+}
+
+void AiPromptEdit::moveTo(std::size_t offset, bool extend) {
+    caret_ = std::min(offset, text_.size());
+    if (!extend) anchor_ = caret_;
+    blinkFrom_ = lastTime_;
+    ensureCaretVisible();
+    invalidate();
+}
+
+void AiPromptEdit::ensureCaretVisible() {
+    const auto area = textArea();
+    const float lh = ui::lineHeight(kBody) + 3.f;
+    const auto& r = rows();
+    const float content = static_cast<float>(r.size()) * lh;
+    const float top = static_cast<float>(rowOf(caret_)) * lh;
+    if (top < scroll_) scroll_ = top;
+    if (top + lh > scroll_ + area.h) scroll_ = top + lh - area.h;
+    scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content - area.h));
+}
+
+void AiPromptEdit::onFocusChanged(bool focused) {
+    if (focused) undoText_ = text_;
+    selecting_ = false;
+    invalidate();
+}
+
+void AiPromptEdit::onPaint(const ui::PaintContext& ctx) {
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    lastTime_ = ctx.time;
+    if (selecting_) ui::cursor::hold(ui::cursor::Shape::Text);
+    ctx.r.fillRoundedRect(b, enabled() ? c.inputBg : c.panelBg, 4.f);
+    ctx.r.strokeRect(b, focused() ? c.accent : c.border, 1.f);
+    const auto area = textArea();
+    const float lh = ctx.r.lineHeight(kBody) + 3.f;
+    const float textDy = 1.5f;
+    const auto& r = rows();
+    const float content = static_cast<float>(r.size()) * lh;
+    scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content - area.h));
+    ctx.r.pushClip({area.x - 2.f, area.y, area.w + 4.f, area.h});
+    if (text_.empty()) {
+        // L'indication : a la ligne elle aussi, jamais recouverte (le curseur est a gauche).
+        const auto ph = wrap(placeholder_, wrapWidth());
+        for (std::size_t i = 0; i < ph.size() && static_cast<float>(i) * lh < area.h; ++i) {
+            std::string line = placeholder_.substr(ph[i].begin, ph[i].end - ph[i].begin);
+            if (static_cast<float>(i + 2) * lh > area.h + 1.f && i + 1 < ph.size()) line = elide(ctx.r, line + " \xE2\x80\xA6", kBody, area.w);
+            ctx.r.drawText({area.x + 2.f, area.y + textDy + static_cast<float>(i) * lh}, line, kBody, c.textMuted);
+        }
+    } else {
+        const std::size_t lo = std::min(caret_, anchor_), hi = std::max(caret_, anchor_);
+        const std::string_view all(text_);
+        for (std::size_t i = 0; i < r.size(); ++i) {
+            const float y = area.y + static_cast<float>(i) * lh - scroll_;
+            if (y + lh < area.y || y > area.bottom()) continue;
+            const std::string_view line = all.substr(r[i].begin, r[i].end - r[i].begin);
+            if (lo != hi && focused() && hi > r[i].begin && lo <= r[i].end) {
+                const std::size_t a = std::max(lo, r[i].begin), z = std::min(hi, r[i].end);
+                const float xa = ctx.r.measure(all.substr(r[i].begin, a - r[i].begin), kBody).width;
+                float xb = ctx.r.measure(all.substr(r[i].begin, z - r[i].begin), kBody).width;
+                if (hi > r[i].end && r[i].next > r[i].end) xb += 5.f;   // le retour a la ligne choisi
+                if (xb > xa) ctx.r.fillRect({area.x + xa, y, xb - xa, lh}, c.selectionBg);
+            }
+            ctx.r.drawText({area.x, y + textDy}, line, kBody, readOnly_ || !enabled() ? c.textDisabled : c.text);
+        }
+    }
+    if (focused() && !readOnly_ && std::fmod(std::max(0.0, ctx.time - blinkFrom_), 1.0) < 0.55) {
+        const std::size_t row = text_.empty() ? 0 : rowOf(caret_);
+        const float x = text_.empty() ? 0.f : ctx.r.measure(std::string_view(text_).substr(r[row].begin, caret_ - r[row].begin), kBody).width;
+        const float y = area.y + static_cast<float>(row) * lh - scroll_;
+        ctx.r.fillRect({area.x + x, y + 1.f, 1.f, lh - 2.f}, c.text);
+    }
+    ctx.r.popClip();
+    bar_.paint(ctx, {b.x, area.y, b.w - 1.f, area.h}, content, area.h, scroll_);
 }
 
 ui::EventResult AiPromptEdit::onEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && k->key == ui::Key::Return && !k->mods.alt) {
-        if (k->mods.shift) {
-            insertNewline();          // Maj+Entree : une ligne de plus
-            return ui::EventResult::Consumed;
-        }
-        submitted->emit();            // Entree (ou Ctrl+Entree) : envoyer
+    const auto b = bounds();
+    const auto area = textArea();
+    const float lh = ui::lineHeight(kBody) + 3.f;
+    const float content = static_cast<float>(rows().size()) * lh;
+    if (bar_.handle(*this, ev, {b.x, area.y, b.w - 1.f, area.h}, content, area.h, scroll_)) {
+        invalidate();
         return ui::EventResult::Consumed;
     }
-    return ui::MultiLineText::onEvent(ev);
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && b.contains(w->pos) && !w->mods.ctrl) {
+        if (content <= area.h) return ui::EventResult::Ignored;   // rien a defiler : la discussion la prend
+        scroll_ = std::clamp(scroll_ - w->dy * lh, 0.f, std::max(0.f, content - area.h));
+        invalidate();
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        if (!b.contains(d->pos) || d->button != ui::MouseButton::Left) return b.contains(d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
+        grabFocus();
+        const std::size_t at = offsetAt(d->pos);
+        if (d->clickCount >= 2) {   // le mot sous la souris
+            std::size_t s = at, e = at;
+            while (s > 0 && wordChar(text_[s - 1])) --s;
+            while (e < text_.size() && wordChar(text_[e])) ++e;
+            anchor_ = s;
+            caret_ = e;
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+        moveTo(at, d->mods.shift);
+        goalX_ = -1.f;
+        selecting_ = true;
+        captureMouse();
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+        if (!selecting_) return ui::EventResult::Ignored;
+        moveTo(offsetAt(m->pos), true);
+        return ui::EventResult::Consumed;
+    }
+    if (std::get_if<ui::MouseUp>(&ev)) {
+        if (!selecting_) return ui::EventResult::Ignored;
+        selecting_ = false;
+        releaseMouse();
+        return ui::EventResult::Consumed;
+    }
+    if (!focused()) return ui::EventResult::Ignored;
+    if (const auto* t = std::get_if<ui::TextInput>(&ev)) {
+        insertText(t->utf8);
+        return ui::EventResult::Consumed;
+    }
+    const auto* k = std::get_if<ui::KeyDown>(&ev);
+    if (!k) return ui::EventResult::Ignored;
+    const bool shift = k->mods.shift, ctrl = k->mods.ctrl;
+    const auto wordLeft = [this](std::size_t i) {
+        while (i > 0 && !wordChar(text_[i - 1])) --i;
+        while (i > 0 && wordChar(text_[i - 1])) --i;
+        return i;
+    };
+    const auto wordRight = [this](std::size_t i) {
+        while (i < text_.size() && !wordChar(text_[i])) ++i;
+        while (i < text_.size() && wordChar(text_[i])) ++i;
+        return i;
+    };
+    const auto vertical = [&](int dir) {
+        const auto& r = rows();
+        const std::size_t row = rowOf(caret_);
+        if (goalX_ < 0.f) goalX_ = ui::measureWidth(std::string_view(text_).substr(r[row].begin, caret_ - r[row].begin), kBody);
+        const float goal = goalX_;
+        if (dir < 0 && row == 0) moveTo(0, shift);
+        else if (dir > 0 && row + 1 >= r.size()) moveTo(text_.size(), shift);
+        else moveTo(offsetInRow(dir < 0 ? row - 1 : row + 1, goal), shift);
+        goalX_ = goal;
+    };
+    switch (k->key) {
+        case ui::Key::Return:
+            if (k->mods.alt) return ui::EventResult::Ignored;
+            if (shift) insertText("\n");   // Maj+Entree : une ligne de plus
+            else submitted->emit();        // Entree (ou Ctrl+Entree) : envoyer
+            return ui::EventResult::Consumed;
+        case ui::Key::Backspace:
+            if (readOnly_) return ui::EventResult::Consumed;
+            if (caret_ == anchor_) anchor_ = ctrl ? wordLeft(caret_) : prevChar(text_, caret_);
+            replaceSelection({});
+            return ui::EventResult::Consumed;
+        case ui::Key::Delete:
+            if (readOnly_) return ui::EventResult::Consumed;
+            if (caret_ == anchor_) anchor_ = ctrl ? wordRight(caret_) : nextChar(text_, caret_);
+            replaceSelection({});
+            return ui::EventResult::Consumed;
+        case ui::Key::Left:
+            if (!shift && caret_ != anchor_) moveTo(std::min(caret_, anchor_), false);
+            else moveTo(ctrl ? wordLeft(caret_) : prevChar(text_, caret_), shift);
+            goalX_ = -1.f;
+            return ui::EventResult::Consumed;
+        case ui::Key::Right:
+            if (!shift && caret_ != anchor_) moveTo(std::max(caret_, anchor_), false);
+            else moveTo(ctrl ? wordRight(caret_) : nextChar(text_, caret_), shift);
+            goalX_ = -1.f;
+            return ui::EventResult::Consumed;
+        case ui::Key::Up: vertical(-1); return ui::EventResult::Consumed;
+        case ui::Key::Down: vertical(1); return ui::EventResult::Consumed;
+        case ui::Key::Home:
+            moveTo(ctrl ? 0 : rows()[rowOf(caret_)].begin, shift);
+            goalX_ = -1.f;
+            return ui::EventResult::Consumed;
+        case ui::Key::End:
+            moveTo(ctrl ? text_.size() : rowLimit(rowOf(caret_)), shift);
+            goalX_ = -1.f;
+            return ui::EventResult::Consumed;
+        case ui::Key::A:
+            if (!ctrl) break;
+            anchor_ = 0;
+            caret_ = text_.size();
+            invalidate();
+            return ui::EventResult::Consumed;
+        case ui::Key::C:
+        case ui::Key::X:
+            if (!ctrl) break;
+            if (caret_ != anchor_) {
+                const std::size_t lo = std::min(caret_, anchor_), hi = std::max(caret_, anchor_);
+                ui::setClipboardText(std::string_view(text_).substr(lo, hi - lo));
+                if (k->key == ui::Key::X && !readOnly_) replaceSelection({});
+            }
+            return ui::EventResult::Consumed;
+        case ui::Key::V:
+            if (!ctrl) break;
+            insertText(ui::clipboardText());
+            return ui::EventResult::Consumed;
+        case ui::Key::Z:
+            // Ctrl+Z : le texte d'avant (a la prise du clavier) ; rien a defaire : l'ecran le prend (le projet).
+            if (!ctrl || shift || readOnly_ || text_ == undoText_) break;
+            setText(undoText_);
+            return ui::EventResult::Consumed;
+        case ui::Key::Escape:
+            releaseFocus();
+            return ui::EventResult::Consumed;
+        default: break;
+    }
+    return ui::EventResult::Ignored;
 }
+
+float defaultPanelWidth(float windowWidth) noexcept { return std::clamp(0.22f * windowWidth, 280.f, 460.f); }
 
 // =============================================================================
 //  Le panneau
@@ -123,7 +566,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
                               "Param\xC3\xA8tres de l'Assistant IA : fournisseur, mod\xC3\xA8le, cl\xC3\xA9, confidentialit\xC3\xA9, historique");
     closeBtn_ = iconButton("Replier l'Assistant", ui::Icon::Close, ".replier", "Replier l'Assistant (Ctrl+Maj+I le rouvre)");
     modePreview_ = &static_cast<ui::ToggleButton&>(addChild(std::make_unique<ui::ToggleButton>("Pr\xC3\xA9visualisation", base + ".mode.apercu")));
-    modePreview_->setTooltip("Chaque proposition passe par l'aper\xC3\xA7u : rien ne change tant que vous n'avez pas dit Appliquer.");
+    modePreview_->setTooltip("Chaque proposition passe par l'aper\xC3\xA7u : rien ne change tant que tu n'as pas dit Appliquer.");
     modeDirect_ = &static_cast<ui::ToggleButton&>(addChild(std::make_unique<ui::ToggleButton>("Direct", base + ".mode.direct")));
     modeDirect_->setTooltip("Chaque proposition s'applique d\xC3\xA8s la r\xC3\xA9ponse (une suppression multiple demande d'abord) ; Ctrl+Z la reprend.");
     auto rename = std::make_unique<ui::InputText>(base + ".renommer");
@@ -131,7 +574,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     rename_ = &static_cast<ui::InputText&>(addChild(std::move(rename)));
     chat_ = &static_cast<AiChatView&>(addChild(std::make_unique<AiChatView>(base + ".discussion", *this)));
     prompt_ = &static_cast<AiPromptEdit&>(addChild(std::make_unique<AiPromptEdit>(base + ".saisie")));
-    prompt_->setTooltip("Votre demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : nouvelle ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
+    prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : nouvelle ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
     attachBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Joindre\xE2\x80\xA6", base + ".joindre")));
     attachBtn_->setIcon(ui::Icon::Link);
     attachBtn_->setCompact(true);   // l'icone seule (le libelle : l'infobulle, les seances de script)
@@ -181,11 +624,34 @@ void AiPanel::refreshButtons() {
     sendBtn_->setEnabled(gen || (a.settings().enabled && !a.processing()));
     attachBtn_->setEnabled(!gen);
     prompt_->setReadOnly(!a.settings().enabled);
+    prompt_->setPlaceholder(a.settings().enabled ? "D\xC3\xA9" "cris ta demande\xE2\x80\xA6 (ex. : Ajoute une cuve avec un indicateur de niveau)"
+                                                 : "L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres)");
 }
 
 void AiPanel::tick(double now) {
     (void)assistant_->tick(now);
     sync();
+    // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
+    // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
+    if (now - appliedCheck_ >= 0.25 || now < appliedCheck_) {
+        appliedCheck_ = now;
+        std::string key;
+        if (const auto* c = assistant_->current()) {
+            key = c->id + "|";
+            for (std::size_t i = 0; i < c->messages.size(); ++i)
+                if (c->messages[i].proposal && c->messages[i].proposal->state == "appliquee")
+                    key += static_cast<char>('0' + static_cast<int>(assistant_->appliedState(static_cast<int>(i))));
+        }
+        if (key != appliedKey_) {
+            const bool first = appliedKey_.empty();
+            appliedKey_ = std::move(key);
+            if (!first) {
+                chat_->rebuild();
+                invalidateLayout();
+                invalidate();
+            }
+        }
+    }
 }
 
 void AiPanel::ensureLoaded() {
@@ -220,7 +686,7 @@ void AiPanel::newConversation() {
     sync();
     prompt_->setText({});
     prompt_->takeFocus();
-    say("Nouvelle conversation : d\xC3\xA9" "crivez votre demande, ou choisissez une suggestion.");
+    say("Nouvelle conversation : d\xC3\xA9" "cris ta demande, ou choisis une suggestion.");
 }
 
 bool AiPanel::selectConversation(int index) {
@@ -387,7 +853,7 @@ bool AiPanel::clickSuggestion(std::size_t index) {
 
 void AiPanel::askAttach() {
     if (assistant_->generating()) {
-        say("Attendez la fin de la r\xC3\xA9ponse pour joindre un fichier.");
+        say("Attends la fin de la r\xC3\xA9ponse pour joindre un fichier.");
         return;
     }
     ui::FilePick pick;
@@ -397,7 +863,7 @@ void AiPanel::askAttach() {
     if (!ui::pickFile(pick, [this](std::string path) {
             if (!path.empty()) (void)attachFile(path);
         }))
-        say("Pas de s\xC3\xA9lecteur de fichiers ici : glissez le fichier sur le panneau.");
+        say("Pas de s\xC3\xA9lecteur de fichiers ici : glisse le fichier sur le panneau.");
 }
 
 bool AiPanel::attachFile(const std::string& path) {
@@ -462,6 +928,14 @@ bool AiPanel::applyProposal(int message) {
     return doApply();
 }
 
+bool AiPanel::reapplyProposal(int message) {
+    std::string why;
+    const bool ok = assistant_->reapply(message, &why);
+    if (!ok) say(why);
+    sync();
+    return ok;
+}
+
 bool AiPanel::refuseProposal(int message) {
     const bool ok = assistant_->refuse(message);
     sync();
@@ -476,7 +950,7 @@ void AiPanel::editRequest(int message) {
     prompt_->setText(request);
     prompt_->takeFocus();
     sync();
-    say("La demande est dans la saisie : modifiez-la, puis Entr\xC3\xA9" "e.");
+    say("La demande est dans la saisie : modifie-la, puis Entr\xC3\xA9" "e.");
 }
 
 void AiPanel::openSettings() {
@@ -545,12 +1019,12 @@ void AiPanel::onLayout() {
     }
     // Le bas : la barre (Joindre, Envoyer), la saisie, les pieces en attente ; la discussion prend le reste.
     bottomBar_ = {x, b.bottom() - kBottomH, w, kBottomH};
-    const float sw = std::max(110.f, ui::measureWidth(sendBtn_->text(), gfx::FontId{16}) + 40.f);
+    // Etroit (1280 x 800) : Envoyer moins large, l'aide des touches garde sa place.
+    const float sw = std::max(w < 340.f ? 84.f : 110.f, ui::measureWidth(sendBtn_->text(), gfx::FontId{16}) + (w < 340.f ? 28.f : 40.f));
     sendBtn_->setBounds({bottomBar_.right() - kPad - sw, bottomBar_.y + 5.f, sw, kBottomH - 10.f});
     attachBtn_->setBounds({x + kPad - 4.f, bottomBar_.y + 5.f, 32.f, kBottomH - 10.f});
-    const float lh = ui::lineHeight(gfx::FontId{16});
-    const auto lines = static_cast<float>(std::clamp<std::size_t>(prompt_->lineCount(), 2, 6));
-    const float ph = std::clamp(lines * lh + 14.f, 56.f, 150.f);
+    // La saisie : de 1 a 5 lignes selon le texte (comme une messagerie), puis elle defile.
+    const float ph = prompt_->heightFor(w - 2 * kPad);
     promptArea_ = {x + kPad, bottomBar_.y - ph - 2.f, w - 2 * kPad, ph};
     prompt_->setBounds(promptArea_);
     const float pendH = static_cast<float>(assistant_->pending().size()) * kPendingH;
@@ -582,8 +1056,9 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     // ---- le mode et la vue visee
     {
         const auto ctx2 = a.context();
-        const std::string viewText = ctx2.view ? "Vue : " + ctx2.view->name : std::string("Aucune vue ouverte");
         const float vx = modeDirect_->bounds().right() + 10.f;
+        std::string viewText = ctx2.view ? "Vue : " + ctx2.view->name : std::string("Aucune vue ouverte");
+        if (ctx2.view && ctx.r.measure(viewText, f.caption).width > modeRow_.right() - kPad - vx) viewText = ctx2.view->name;
         ctx.r.drawText({vx, modeRow_.y + (modeRow_.h - lhCap) / 2.f}, elide(ctx.r, viewText, f.caption, modeRow_.right() - kPad - vx),
                        f.caption, ctx2.view ? c.textMuted : c.warning);
     }
@@ -668,20 +1143,10 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
         } else {
             const float y0 = bottomBar_.y + (bottomBar_.h - 2.f * lhCap - 1.f) / 2.f;
             ctx.r.drawText({hx, y0}, elide(ctx.r, "Entr\xC3\xA9" "e : envoyer", f.caption, hw), f.caption, c.textMuted);
-            ctx.r.drawText({hx, y0 + lhCap + 1.f}, elide(ctx.r, "Maj+Entr\xC3\xA9" "e : nouvelle ligne", f.caption, hw), f.caption, c.textMuted);
+            const std::string second = ctx.r.measure("Maj+Entr\xC3\xA9" "e : nouvelle ligne", f.caption).width <= hw
+                                           ? std::string("Maj+Entr\xC3\xA9" "e : nouvelle ligne") : std::string("Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne");
+            ctx.r.drawText({hx, y0 + lhCap + 1.f}, elide(ctx.r, second, f.caption, hw), f.caption, c.textMuted);
         }
-    }
-}
-
-void AiPanel::onPaintOverlay(const ui::PaintContext& ctx) {
-    // Le texte d'invite de la saisie vide (le champ du logiciel n'en a pas).
-    if (prompt_->text().empty() && !prompt_->focused()) {
-        const auto r = prompt_->bounds();
-        const std::string invite = assistant_->settings().enabled ? "D\xC3\xA9" "crivez votre demande\xE2\x80\xA6 (ex. : Ajoute une cuve avec un indicateur de niveau)"
-                                                                  : "L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres)";
-        ctx.r.pushClip(r);
-        ctx.r.drawText({r.x + 8.f, r.y + 7.f}, elide(ctx.r, invite, kBody, r.w - 16.f), kBody, ctx.theme.color.textMuted);
-        ctx.r.popClip();
     }
 }
 
@@ -952,9 +1417,54 @@ void AiChatView::measure() {
                     // Une carte close (appliquee, refusee) n'a plus d'apercu : la vue a change depuis.
                     const bool open = m.proposal->state == "proposee";
                     const Thumb& t = thumb(static_cast<int>(i));
-                    const auto lines = open ? static_cast<float>(std::min<std::size_t>(3, t.check.errors.size() + t.check.warnings.size())) : 0.f;
-                    const float ch = open ? 30.f + 22.f + 104.f + lines * 18.f + 40.f : 30.f + 22.f + 26.f;
-                    b.card = {kPad + 2.f, b.h + 6.f, inner - 4.f, ch};
+                    const float cw = inner - 4.f;
+                    float ch = 8.f + 24.f + 22.f;
+                    if (open) {
+                        const bool stale = t.check.stale || t.check.viewMissing;
+                        b.buttons = {"Pr\xC3\xA9visualiser\xE2\x80\xA6"};
+                        if (!stale) b.buttons.push_back("Appliquer");
+                        b.buttons.push_back(stale ? "Redemander" : "Refuser");
+                        // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
+                        std::size_t lines = 0;
+                        const auto note = [&](const std::string& what, bool error) {
+                            if (b.notes.size() >= 3) return;
+                            Block::Note n;
+                            n.error = error;
+                            n.lines = wrapPlain(what, kMeta, cw - 44.f);
+                            if (n.lines.size() > kNoteLines) {
+                                n.lines.resize(kNoteLines);
+                                n.lines.back() += " \xE2\x80\xA6";
+                            }
+                            lines += n.lines.size();
+                            b.notes.push_back(std::move(n));
+                        };
+                        for (const auto& e : t.check.errors) note(e, true);
+                        for (const auto& wv : t.check.warnings) note(wv, false);
+                        ch += 100.f + 6.f + static_cast<float>(lines) * kNoteH + 6.f;
+                    } else {
+                        b.applied = a.appliedState(static_cast<int>(i));
+                        std::string done;
+                        switch (b.applied) {
+                            case Assistant::Applied::Undone:
+                                done = "Annul\xC3\xA9" "e : la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant (Ctrl+Z, ou le projet rouvert sans "
+                                       "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer la remet.";
+                                b.buttons = {"R\xC3\xA9" "appliquer"};
+                                break;
+                            case Assistant::Applied::Changed:
+                                done = "Appliqu\xC3\xA9" "e ; la vue a chang\xC3\xA9 depuis (d'autres modifications, ou elle n'existe plus).";
+                                break;
+                            case Assistant::Applied::Applied:
+                                done = "Appliqu\xC3\xA9" "e au projet : Ctrl+Z la reprend d'un coup.";
+                                break;
+                            default: done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9."; break;
+                        }
+                        b.doneLines = wrapPlain(done, kMeta, cw - 24.f);
+                        ch += static_cast<float>(b.doneLines.size()) * kNoteH + 2.f;
+                    }
+                    b.buttonRects = flowButtons(b.buttons, cw - 20.f);
+                    b.buttonsH = b.buttonRects.empty() ? 0.f : b.buttonRects.back().bottom();
+                    ch += (b.buttonsH > 0.f ? b.buttonsH + 4.f : 0.f) + 10.f;
+                    b.card = {kPad + 2.f, b.h + 6.f, cw, ch};
                     b.h += ch + 10.f;
                 }
             }
@@ -996,9 +1506,9 @@ void AiChatView::rebuild() {
     const auto& a = panel_.assistant();
     std::size_t slot = 0;
     for (const auto& b : blocks_) {
-        if (b.card.h <= 0.f) continue;
+        if (b.card.h <= 0.f || b.buttons.empty()) continue;
         const Proposal* p = a.proposal(b.message);
-        if (!p || p->state != "proposee") continue;
+        if (!p) continue;
         const Thumb& t = thumb(b.message);
         if (slot == cards_.size()) {
             CardButtons cb;
@@ -1016,7 +1526,9 @@ void AiChatView::rebuild() {
                 if (k < cards_.size() && cards_[k].message >= 0) panel_.openPreview(cards_[k].message);
             });
             links_ += cb.apply->clicked->connect([this, k] {
-                if (k < cards_.size() && cards_[k].message >= 0) (void)panel_.applyProposal(cards_[k].message);
+                if (k >= cards_.size() || cards_[k].message < 0) return;
+                if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
+                else (void)panel_.applyProposal(cards_[k].message);
             });
             links_ += cb.third->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
@@ -1027,6 +1539,15 @@ void AiChatView::rebuild() {
         }
         CardButtons& cb = cards_[slot++];
         cb.message = b.message;
+        cb.undone = p->state != "proposee";
+        if (cb.undone) {   // appliquee puis annulee (Ctrl+Z) : Reappliquer, seul
+            cb.stale = false;
+            cb.apply->setText("R\xC3\xA9" "appliquer");
+            cb.apply->setTooltip("La vue est exactement celle de la proposition : l'appliquer de nouveau (un pas d'annulation, Ctrl+Z la reprend).");
+            cb.apply->setEnabled(true);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            continue;
+        }
         cb.stale = t.check.stale || t.check.viewMissing;
         cb.preview->setText("Pr\xC3\xA9visualiser\xE2\x80\xA6");
         cb.preview->setTooltip("L'aper\xC3\xA7u : les objets, les propri\xC3\xA9t\xC3\xA9s avant \xE2\x86\x92 apr\xC3\xA8s, les variables, les avertissements, et la vue dessin\xC3\xA9" "e.");
@@ -1084,18 +1605,23 @@ void AiChatView::onLayout() {
     const auto b = bounds();
     for (auto& cb : cards_) {
         if (cb.message < 0) continue;
-        gfx::Rect card{};
-        for (const auto& bl : blocks_)
-            if (bl.message == cb.message) card = {b.x + bl.card.x, b.y + bl.y - offset_ + bl.card.y, bl.card.w, bl.card.h};
-        const float by = card.bottom() - 36.f;
-        float x = card.x + 10.f;
+        const Block* bl = nullptr;
+        for (const auto& x : blocks_)
+            if (x.message == cb.message) bl = &x;
+        if (!bl) continue;
+        const gfx::Rect card{b.x + bl->card.x, b.y + bl->y - offset_ + bl->card.y, bl->card.w, bl->card.h};
+        const float top = card.bottom() - 10.f - bl->buttonsH;
+        std::size_t k = 0;
         for (ui::Button* btn : {cb.preview, cb.apply, cb.third}) {
             if (btn->visibility() == ui::Visibility::Collapsed) continue;
-            const float bw = ui::measureWidth(btn->text(), gfx::FontId{16}) + 26.f;
-            btn->setBounds({x, by, bw, 28.f});
-            x += bw + 6.f;
+            if (k >= bl->buttonRects.size()) {
+                btn->setVisibility(ui::Visibility::Hidden);
+                continue;
+            }
+            const auto r = bl->buttonRects[k++];
+            btn->setBounds({card.x + 10.f + r.x, top + r.y, r.w, r.h});
             // Hors de la discussion : cache (la decoupe le couperait, le clic le trouverait).
-            const bool inside = by >= b.y && by + 28.f <= b.bottom();
+            const bool inside = top + r.y >= b.y && top + r.bottom() <= b.bottom();
             btn->setVisibility(inside ? ui::Visibility::Visible : ui::Visibility::Hidden);
         }
     }
@@ -1127,10 +1653,10 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     // L'en-tete : le titre, l'etat.
     float y = card.y + 8.f;
     ui::drawIcon(ctx.r, ui::Icon::Wrench, {card.x + 10.f, y, 16.f, 16.f}, c.textMuted);
-    bold(ctx.r, {card.x + 32.f, y + (16.f - ctx.r.lineHeight(kBody)) / 2.f}, "Op\xC3\xA9rations propos\xC3\xA9" "es", kBody, c.text);
     std::string st;
     gfx::Color tone = c.info;
-    if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
+    if (p->state == "appliquee" && b.applied == Assistant::Applied::Undone) { st = "Annul\xC3\xA9" "e"; tone = c.warning; }
+    else if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
     else if (p->state == "refusee") { st = "Refus\xC3\xA9" "e"; tone = c.textMuted; }
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
     else if (!t.check.ok()) { st = "\xC3\x80 compl\xC3\xA9ter"; tone = c.error; }
@@ -1139,26 +1665,40 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     const gfx::Rect chip{card.right() - 10.f - sw, y - 1.f, sw, 18.f};
     ctx.r.fillRoundedRect(chip, alpha(tone, 46), 9.f);
     ctx.r.drawText({chip.x + 7.f, chip.y + (chip.h - lhCap) / 2.f}, st, kMeta, tone);
+    // Le titre : la place que laisse la pastille (un volet etroit : "Operations..." plutot qu'un chevauchement).
+    bold(ctx.r, {card.x + 32.f, y + (16.f - ctx.r.lineHeight(kBody)) / 2.f},
+         elide(ctx.r, "Op\xC3\xA9rations propos\xC3\xA9" "es", kBody, chip.x - 8.f - card.x - 32.f), kBody, c.text);
     y += 24.f;
     // Les comptes.
+    // Les comptes : resserres quand ils ne tiennent pas a l'aise (un volet etroit).
+    float countGap = 24.f;
+    {
+        float need = 0.f;
+        for (const char* l : {"Cr\xC3\xA9" "er 00", "Modifier 00", "Supprimer 00"}) need += ctx.r.measure(l, kMeta).width + 10.f;
+        if (need + 2.f * countGap > card.w - 24.f) countGap = std::max(8.f, (card.w - 24.f - need) / 2.f);
+    }
     const auto count = [&](const char* label, int n, gfx::Color col, float& x) {
         const std::string s = std::string(label) + " " + std::to_string(n);
         ctx.r.fillRoundedRect({x, y + 5.f, 6.f, 6.f}, n > 0 ? col : c.textDisabled, 3.f);
         ctx.r.drawText({x + 10.f, y}, s, kMeta, n > 0 ? c.text : c.textMuted);
-        x += ctx.r.measure(s, kMeta).width + 24.f;
+        x += ctx.r.measure(s, kMeta).width + 10.f + countGap;
     };
     float cx = card.x + 12.f;
-    const int nc = p->state == "proposee" ? t.check.create : p->create;
-    const int nm = p->state == "proposee" ? t.check.modify : p->modify;
-    const int nr = p->state == "proposee" ? t.check.remove : p->remove;
+    // Proposee et lisible : les comptes de la validation ; close, ou perimee (la vue a change, ou
+    // n'existe plus) : ceux de la proposition - ce que son texte annonce (la conversation "demo").
+    const bool live = p->state == "proposee" && !stale;
+    const int nc = live ? t.check.create : p->create;
+    const int nm = live ? t.check.modify : p->modify;
+    const int nr = live ? t.check.remove : p->remove;
     count("Cr\xC3\xA9" "er", nc, c.ok, cx);
     count("Modifier", nm, c.info, cx);
     count("Supprimer", nr, c.error, cx);
     y += 22.f;
     if (p->state != "proposee") {
-        const std::string done = p->state == "appliquee" ? "Appliqu\xC3\xA9" "e au projet : Ctrl+Z la reprend d'un coup."
-                                                         : "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
-        ctx.r.drawText({card.x + 12.f, y + 2.f}, elide(ctx.r, done, kMeta, card.w - 24.f), kMeta, c.textMuted);
+        for (const auto& l : b.doneLines) {
+            ctx.r.drawText({card.x + 12.f, y + 2.f}, l, kMeta, b.applied == Assistant::Applied::Undone ? c.warning : c.textMuted);
+            y += kNoteH;
+        }
         return;
     }
     // L'apercu : la copie de la vue, dessinee par les painters du logiciel.
@@ -1195,24 +1735,22 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
         ctx.r.popClip();
         ctx.r.strokeRect(page, c.border, 1.f);
     } else {
-        ctx.r.drawText({area.x + 8.f, area.y + (area.h - lhCap) / 2.f},
-                       elide(ctx.r, t.preview.why.empty() ? std::string("Pas d'aper\xC3\xA7u") : t.preview.why, kMeta, area.w - 16.f), kMeta, c.textMuted);
+        // Pourquoi il n'y a pas d'apercu : a la ligne, centre dans la place de l'apercu.
+        auto why = wrapPlain(t.preview.why.empty() ? std::string("Pas d'aper\xC3\xA7u") : t.preview.why, kMeta, area.w - 16.f);
+        if (why.size() > 5) why.resize(5);
+        float wy = area.y + (area.h - static_cast<float>(why.size()) * kNoteH) / 2.f;
+        for (const auto& l : why) {
+            ctx.r.drawText({area.x + 8.f, wy}, l, kMeta, c.textMuted);
+            wy += kNoteH;
+        }
     }
     y = area.bottom() + 6.f;
-    // Les erreurs puis les avertissements (trois lignes au plus ; le reste dans l'apercu).
-    {
-        int shown = 0;
-        for (const auto& e : t.check.errors) {
-            if (shown++ >= 3) break;
-            ui::drawIcon(ctx.r, ui::Icon::Error, {card.x + 12.f, y + 1.f, 14.f, 14.f}, c.error);
-            ctx.r.drawText({card.x + 32.f, y}, elide(ctx.r, e, kMeta, card.w - 44.f), kMeta, c.text);
-            y += 18.f;
-        }
-        for (const auto& wv : t.check.warnings) {
-            if (shown++ >= 3) break;
-            ui::drawIcon(ctx.r, ui::Icon::Warning, {card.x + 12.f, y + 1.f, 14.f, 14.f}, c.warning);
-            ctx.r.drawText({card.x + 32.f, y}, elide(ctx.r, wv, kMeta, card.w - 44.f), kMeta, c.textMuted);
-            y += 18.f;
+    // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
+    for (const auto& n : b.notes) {
+        ui::drawIcon(ctx.r, n.error ? ui::Icon::Error : ui::Icon::Warning, {card.x + 12.f, y + 1.f, 14.f, 14.f}, n.error ? c.error : c.warning);
+        for (const auto& l : n.lines) {
+            ctx.r.drawText({card.x + 32.f, y}, l, kMeta, n.error ? c.text : c.textMuted);
+            y += kNoteH;
         }
     }
 }
@@ -1233,7 +1771,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
         // L'en-tete : qui, quand.
         const std::string when = shortDate(m.date, true);
         if (b.user) {
-            const std::string who = "Vous \xC2\xB7 " + when;
+            const std::string who = "Moi \xC2\xB7 " + when;
             const float w = ctx.r.measure(who, kMeta).width;
             ctx.r.drawText({bb.right() - kPad - 6.f - w, top}, who, kMeta, c.textMuted);
             const gfx::Rect bub{bb.x + b.bubble.x, top + b.bubble.y, b.bubble.w, b.bubble.h};
@@ -1309,7 +1847,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
                 y += l.h;
             }
         }
-        ctx.r.drawText({bb.x + kPad + 4.f, bb.y + suggestionsTop_ - offset_}, "ESSAYEZ", kMeta, c.textMuted);
+        ctx.r.drawText({bb.x + kPad + 4.f, bb.y + suggestionsTop_ - offset_}, "ESSAIE", kMeta, c.textMuted);
         const auto& s = demoSuggestions();
         for (std::size_t i = 0; i < suggestionRects_.size() && i < s.size(); ++i) {
             const auto r0 = suggestionRects_[i];
