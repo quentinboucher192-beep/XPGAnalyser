@@ -137,6 +137,8 @@ public:
     void setTheme(std::string_view name);
     // Lot API 6 : Affichage > Theme... - la galerie des neuf themes.
     void showThemeGallery();
+    // 1.14.2 (Assistant IA, chantier IA2) : la fenetre "Memoire et apprentissage de l'IA" (action ia.memoire).
+    void showAiMemory();
     // Une session rejouee (--script) : ce qui s'ouvre de soi-meme pour un
     // humain (le didacticiel de l'IHM) ne doit pas couvrir l'ecran du script.
     [[nodiscard]] bool scripted() const noexcept { return script_ != nullptr; }

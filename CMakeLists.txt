@@ -677,6 +677,11 @@ if(XPG_BUILD_TESTS)
     # deja construit pour les deux applications : rien a recompiler.
     xpg_add_test_executable(echanges_test tests/echanges_test.cpp)
     xpg_target_link_libraries(echanges_test PRIVATE xpg_app)
+    # 1.14.2 (Assistant IA, chantier IA2) : "Memoire et apprentissage de l'IA" - le moteur (mesure du dossier IA/,
+    # connaissances, nettoyage, activite, recherche, RAM) sur un dossier jetable, et la fenetre (ses six onglets, ses
+    # confirmations, son dessin). xpg_app est deja construit pour les deux applications : rien a recompiler.
+    xpg_add_test_executable(ai_memoire_test tests/ai_memoire_test.cpp)
+    xpg_target_link_libraries(ai_memoire_test PRIVATE xpg_app)
     file(GLOB HMI_EDITOR_SOURCES CONFIGURE_DEPENDS
          ${CMAKE_CURRENT_SOURCE_DIR}/src/app/hmi/*.cpp)
     # Lot 13 : Capture.cpp pour le JPEG des vignettes du dossier de l'IHM.
@@ -820,6 +825,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
+    xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
 
     # LES TESTS QUI LISENT libs/ NE SONT ENREGISTRES QUE SI libs/ EST LA.

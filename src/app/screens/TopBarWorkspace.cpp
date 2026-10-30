@@ -316,6 +316,8 @@ bool MainAnalysisScreen::topBarLot8Action(std::string_view id) {
         return true;
     }
     if (id == "cmd:compiler") { openHmiPane("compiler"); return true; }
+    // 1.14.2 (Assistant IA, IA2) : Ctrl+K "Memoire et apprentissage de l'IA" - l'action ia.memoire.
+    if (id == "cmd:ia.memoire") { (void)app_.actions().trigger("ia.memoire", app_.commands()); return true; }
     if (id == "cmd:generer") { openHmiPane("generer"); return true; }
     if (id.rfind("cmd:theme:", 0) == 0) { app_.setTheme(id.substr(10)); return true; }
     if (id.rfind("cmd:raccourcis:", 0) == 0) { setEditorKeyProfile(id.substr(15)); return true; }   // 1.12.2

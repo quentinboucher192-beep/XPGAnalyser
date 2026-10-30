@@ -18,6 +18,7 @@
 #include "hmi/HmiEditor.hpp"
 #include "../hmi/HmiEdit.hpp"           // 1.12.30 : vue-survol vide (hitTest)
 #include "hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : les commandes historique-...
+#include "ai/AiMemoryDialog.hpp"            // 1.14.2 (Assistant IA, IA2) : les commandes memoire-...
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
 #include "hmi/HmiFunctionPicker.hpp"   // 1.12.17 : les commandes fonction-...
 #include "hmi/HmiAssist.hpp"           // 1.12.17 : pickerSpec (fonction-choisir)
@@ -6975,6 +6976,90 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         else fail("commande inconnue : " + cmd);
         for (std::size_t i = 0; i < d->rowCount() && i < 3; ++i) std::printf("[script] historique %zu : %s\n", i + 1, d->rowText(i).c_str());
+        return Step::Yield;
+    }
+
+    // 1.14.2 (Assistant IA, IA2) : LA FENETRE "MEMOIRE ET APPRENTISSAGE DE L'IA" (action ia.memoire l'ouvre).
+    //  Ses boutons, ses cases et ses champs se pilotent comme ailleurs (bouton "Vider le cache*", case "Images
+    //  temporaires", champ "ia.memoire.memoire.recherche" "pompe", liste "ia.memoire.activite.type" puis choisir) ;
+    //  ce qui n'est pas un widget nomme :
+    //   memoire-onglet "Nettoyage"            un onglet (son titre ou son debut, sans casse ni accents)
+    //   memoire-ligne "texte"                 la ligne de la table de l'onglet qui contient ce texte (Apprentissage :
+    //                                         une connaissance par son nom ; Memoire : une ligne de la categorie montree)
+    //   memoire-categorie "Conversations"     une categorie de l'onglet Memoire (le debut de son titre)
+    //   memoire-chercher "texte"              la recherche de l'onglet Memoire ("" : l'efface)
+    //   memoire-filtre categorie|projet|type VALEUR   Apprentissage : une cle de categorie (regles), un projet, * (les
+    //                                         communes) ; Activite : un type (nettoyage) ; vide : tout
+    //   memoire-contenu "texte"               le contenu de l'editeur ouvert (\n : une ligne)
+    //   memoire-ajouter "NOM" "CATEGORIE" "PROJET" "CONTENU" ["DESCRIPTION"]   une connaissance, sans l'editeur
+    //   memoire-oui, memoire-non              la confirmation ; memoire-actualiser, memoire-fermer
+    //   memoire-verifier CLE N                echec si le compte differe : conversations, messages, connaissances,
+    //                                         actives, genres, fichiers, activite (les valeurs vont au journal)
+    if (cmd.rfind("memoire-", 0) == 0) {
+        auto* d = dynamic_cast<AiMemoryDialog*>(app_.menus().top());
+        if (!d) { fail(cmd + " : la fen\xC3\xAAtre M\xC3\xA9moire et apprentissage n'est pas ouverte (action ia.memoire)"); return Step::Next; }
+        if (cmd == "memoire-onglet") { if (!d->showTab(arg(1))) fail(cmd + " : onglet inconnu " + arg(1)); }
+        else if (cmd == "memoire-ligne") { if (!d->selectRow(arg(1))) fail(cmd + " : aucune ligne avec " + arg(1)); }
+        else if (cmd == "memoire-categorie") {
+            bool found = false;
+            for (int c = 0; c <= static_cast<int>(AiMemoryDialog::MemCat::Search) && !found; ++c) {
+                const auto mc = static_cast<AiMemoryDialog::MemCat>(c);
+                if (startsWith(ui::foldForSearch(AiMemoryDialog::memCatTitle(mc)), ui::foldForSearch(arg(1)))) {
+                    d->showTab(AiMemoryDialog::Tab::Memory);
+                    d->showMemoryCategory(mc);
+                    found = true;
+                }
+            }
+            if (!found) fail(cmd + " : cat\xC3\xA9gorie inconnue " + arg(1));
+        }
+        else if (cmd == "memoire-chercher") { d->showTab(AiMemoryDialog::Tab::Memory); d->setSearch(arg(1)); }
+        else if (cmd == "memoire-filtre") {
+            const auto f = lower(arg(1));
+            if (f == "categorie") d->setCategoryFilter(arg(2));
+            else if (f == "projet") d->setProjectFilter(arg(2));
+            else if (f == "type") d->setActivityFilter(arg(2));
+            else fail(cmd + " : categorie, projet ou type");
+        }
+        else if (cmd == "memoire-contenu") {
+            std::string text;
+            for (std::size_t i = 0; i < arg(1).size(); ++i) {
+                if (arg(1)[i] == '\\' && i + 1 < arg(1).size() && arg(1)[i + 1] == 'n') { text += '\n'; ++i; continue; }
+                text += arg(1)[i];
+            }
+            auto* ed = dynamic_cast<ui::MultiLineText*>(top() ? top()->findById("ia.memoire.apprentissage.contenu") : nullptr);
+            if (!ed || !d->editorOpen()) fail(cmd + " : l'\xC3\xA9" "diteur n'est pas ouvert (Ajouter, Modifier)");
+            else ed->setText(text);
+        }
+        else if (cmd == "memoire-ajouter") {
+            ai::memory::Knowledge k;
+            k.name = arg(1);
+            k.category = arg(2).empty() ? std::string("metier") : arg(2);
+            k.project = arg(3);
+            k.content = arg(4);
+            k.description = arg(5);
+            if (!d->addKnowledge(k)) fail(cmd + " : " + d->message());
+        }
+        else if (cmd == "memoire-oui") { if (!d->confirmYes()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-non") d->confirmNo();
+        else if (cmd == "memoire-actualiser") d->refresh();
+        else if (cmd == "memoire-fermer") d->dismiss();
+        else if (cmd == "memoire-verifier") {
+            const auto key = lower(arg(1));
+            std::size_t value = 0;
+            if (key == "conversations") value = d->conversations().size();
+            else if (key == "messages") value = d->messageCount();
+            else if (key == "connaissances") value = d->registry().count(false);
+            else if (key == "actives") value = d->registry().count(true);
+            else if (key == "genres") value = d->registry().kindsKnown();
+            else if (key == "fichiers") value = d->measured().total.files;
+            else if (key == "activite") value = d->activity().size();
+            else { fail(cmd + " : cl\xC3\xA9 inconnue " + arg(1)); return Step::Next; }
+            std::printf("[script] memoire %s = %zu\n", key.c_str(), value);
+            if (!arg(2).empty() && value != static_cast<std::size_t>(std::atoll(arg(2).c_str())))
+                fail(cmd + " : " + key + " = " + std::to_string(value) + ", " + arg(2) + " attendu");
+        }
+        else fail("commande inconnue : " + cmd);
+        if (!d->message().empty()) std::printf("[script] memoire : %s\n", d->message().c_str());
         return Step::Yield;
     }
 

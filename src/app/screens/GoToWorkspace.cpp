@@ -486,6 +486,10 @@ void MainAnalysisScreen::refreshGoToIndex() {
             push(ix.entries, GPane, pe.title, "Volet de l'IHM", std::string("pane:") + pe.key + ":" + std::to_string(pe.tab), ui::Icon::Folder);
     if (core::hasIhm())
         for (const auto& ae : kActions) push(ix.entries, GAction, ae.title, "Action", ae.key, ui::Icon::Play, {}, ae.shortcut);
+    // 1.14.2 (Assistant IA, IA2) : le centre de memoire de l'IA (l'action ia.memoire).
+    if (core::hasIhm())
+        push(ix.entries, GAction, "M\xC3\xA9moire et apprentissage de l'IA", "Assistant IA", "cmd:ia.memoire", ui::Icon::Library,
+             "memoire ia intelligence artificielle apprentissage connaissances cache stockage nettoyage assistant");
     // 1.12.2 : le profil des raccourcis des editeurs de code (Visual Studio ou classique).
     push(ix.entries, GAction, "Raccourcis des \xC3\xA9" "diteurs : Visual Studio (accords Ctrl+K)", "Commande", "cmd:raccourcis:vs", ui::Icon::Code);
     push(ix.entries, GAction, "Raccourcis des \xC3\xA9" "diteurs : classique (1.12.1, sans accords)", "Commande", "cmd:raccourcis:classique",
@@ -826,6 +830,7 @@ std::optional<GoToPanel::Outcome> MainAnalysisScreen::topBarPalette(const std::s
     add("Revenir avant\xE2\x80\xA6 (les 10 derni\xC3\xA8res actions)", "cmd:annuler-liste", ui::Icon::Undo);
     add("T\xC3\xA2" "ches de fond", "cmd:taches", ui::Icon::History);
     add("D\xC3\xA9poser un fichier\xE2\x80\xA6", "bar:files.drop", ui::Icon::Open);
+    if (core::hasIhm()) add("M\xC3\xA9moire et apprentissage de l'IA", "cmd:ia.memoire", ui::Icon::Library);   // 1.14.2 (IA2)
     for (const auto& t : ui::Theme::all()) add("Th\xC3\xA8me " + t.label, "cmd:theme:" + t.key, ui::Icon::Layers);
     // 1.12.2 : le profil des raccourcis des editeurs de code.
     add("Raccourcis des \xC3\xA9" "diteurs : Visual Studio (accords Ctrl+K)", "cmd:raccourcis:vs", ui::Icon::Code);

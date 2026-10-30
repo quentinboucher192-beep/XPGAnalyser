@@ -45,6 +45,8 @@
 #include "../hmi/HmiNetInfo.hpp"
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
 #include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
+#include "ai/AiPaths.hpp"           // 1.14.2 (Assistant IA) : le dossier IA/ de l'utilisateur
+#include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
 #include "../hmi/HmiStore.hpp"
 #include "../hmi/HmiEditHistory.hpp"   // 1.12.25 : l'historique des objets
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les nouveautes se voient
@@ -265,6 +267,13 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto imagesDir = std::filesystem::path(Settings::sharedFolder()) / "images";
         const auto u8 = imagesDir.u8string();
         hmi::imagelib::setUserFolder(std::string(u8.begin(), u8.end()));
+    }
+    // 1.14.2 (Assistant IA) : LE DOSSIER IA/ (app/ai/AiPaths.hpp, le contrat de l'Assistant et du centre de
+    // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet.
+    {
+        const auto iaDir = std::filesystem::path(Settings::sharedFolder()) / "IA";
+        const auto u8 = iaDir.u8string();
+        app::ai::setRoot(std::string(u8.begin(), u8.end()));
     }
     // ---- fin Lot API 8 ----
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);
@@ -1452,6 +1461,10 @@ void App::registerActions() {
     // Lot API 6 : la galerie des themes, a droite, sans assombrir l'ecran.
     actions_.add(Action{"view.theme", "Th\xC3\xA8me\xE2\x80\xA6", "", {}, {}, nullptr,
                         [this] { showThemeGallery(); }});
+    // 1.14.2 (Assistant IA, IA2) : LE CENTRE DE MEMOIRE - ce que l'IA connait, ce qu'elle garde, la place sur le PC.
+    // Ctrl+K "Memoire et apprentissage de l'IA" ; le bouton des parametres de l'Assistant declenche cette action.
+    actions_.add(Action{"ia.memoire", "M\xC3\xA9moire et apprentissage de l'IA", "", {}, {}, nullptr,
+                        [this] { showAiMemory(); }});
     actions_.add(Action{"analyze.run", "R\xC3\xA9" "analyser les fichiers", "",       // Lot API 8 : F5 est Simuler (Centre de simulation)
                         [this] { return project_ != nullptr && !importer_->busy(); }, {}, nullptr,
                         [this] { if (project_) importer_->importAsync(project_->header.sourceFile); }});
@@ -2548,6 +2561,17 @@ void App::refreshWindowIcon() {
         SDL_DestroySurface(surface);
     }
 #endif
+}
+
+void App::showAiMemory() {
+    // Le projet ouvert : le nom de son dossier (une connaissance d'un autre projet n'y est pas active).
+    AiMemoryDialog::Spec spec;
+    if (!projectFolder_.empty()) {
+        auto folder = dossiers::cheminDe(projectFolder_);
+        if (!folder.has_filename()) folder = folder.parent_path();
+        spec.project = dossiers::utf8De(folder.filename());
+    }
+    menus_->ShowDialog(std::make_unique<AiMemoryDialog>(std::move(spec)), [](const menu::DialogResult&) {});
 }
 
 void App::showThemeGallery() {

@@ -46,6 +46,9 @@
     <Filter Include="app\hmi">
       <UniqueIdentifier>{475c5e25-c513-4579-a5bd-098959a8e36a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="app\ai">
+      <UniqueIdentifier>{98480c16-3e7b-4172-962d-3ebf32286ae4}</UniqueIdentifier>
+    </Filter>
     <Filter Include="hmi">
       <UniqueIdentifier>{af48dadb-652d-4281-baa9-9ed0c4fbe6ac}</UniqueIdentifier>
     </Filter>
@@ -1627,6 +1630,18 @@
     <ClCompile Include="src\help\Trails.cpp">
       <Filter></Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiKnowledge.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMemory.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMemoryDialog.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMemoryJson.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -3045,6 +3060,21 @@
     </ClInclude>
     <ClInclude Include="src\help\Trails.hpp">
       <Filter></Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiKnowledge.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMemory.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMemoryDialog.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMemoryJson.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiPaths.hpp">
+      <Filter>app\ai</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
