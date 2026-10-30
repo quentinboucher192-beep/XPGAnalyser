@@ -2582,6 +2582,13 @@ void App::showAiMemory() {
         if (!folder.has_filename()) folder = folder.parent_path();
         spec.project = dossiers::utf8De(folder.filename());
     }
+    // 1.14.2 (captures) : ouverte depuis une fenetre modale qui assombrit deja le fond (les parametres de
+    // l'Assistant), elle ne remet pas son voile - le fond s'assombrissait deux fois. Comme le selecteur
+    // d'unites demande depuis une fenetre modale (HmiWorkspace) : la couche du dessous le dit.
+    if (const menu::IMenu* under = menus_->top()) {
+        const auto t = under->traits();
+        spec.overModal = (t.kind == menu::MenuKind::Dialog || t.kind == menu::MenuKind::Modal) && t.dimsBelow;
+    }
     menus_->ShowDialog(std::make_unique<AiMemoryDialog>(std::move(spec)), [](const menu::DialogResult&) {});
 }
 

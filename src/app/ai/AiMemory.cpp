@@ -306,7 +306,8 @@ Ram readRam() {
         r.total = ms.ullTotalPhys;
         r.available = ms.ullAvailPhys;
     }
-    r.source = "GetProcessMemoryInfo, GlobalMemoryStatusEx";
+    r.by = "Windows";
+    r.source = "GetProcessMemoryInfo (ce processus et son pic), GlobalMemoryStatusEx (la RAM du PC)";
 #else
     const auto kb = [](const std::string& file, const char* key, std::uint64_t& out) {
         std::ifstream in(file);
@@ -325,7 +326,8 @@ Ram readRam() {
     r.processKnown = kb("/proc/self/status", "VmRSS:", r.process);
     if (!kb("/proc/self/status", "VmHWM:", r.peak)) r.peak = r.process;
     r.systemKnown = kb("/proc/meminfo", "MemTotal:", r.total) && kb("/proc/meminfo", "MemAvailable:", r.available);
-    r.source = "/proc/self/status, /proc/meminfo";
+    r.by = "Linux";
+    r.source = "/proc/self/status (VmRSS, VmHWM), /proc/meminfo";
 #endif
     if (r.peak < r.process) r.peak = r.process;
     r.localAi = 0;   // aucun modele ni traitement IA ne tourne sur ce PC
@@ -568,7 +570,7 @@ bool writeState(const State& s) {
 std::string_view cacheConsequence(Part p) {
     switch (p) {
         case Part::CacheRequests:
-            return "Les r\xC3\xA9ponses gard\xC3\xA9" "es pour ne pas redemander : la prochaine demande identique repart chez le fournisseur.";
+            return "Les r\xC3\xA9ponses d\xC3\xA9j\xC3\xA0 re\xC3\xA7ues : une m\xC3\xAAme demande repartira chez le fournisseur.";
         case Part::CacheProcessing: return "Les fichiers interm\xC3\xA9" "diaires d'un traitement : refaits si un traitement en a besoin.";
         case Part::CacheImages: return "Les images r\xC3\xA9" "duites ou converties : refaites \xC3\xA0 la prochaine utilisation.";
         case Part::CacheDocuments: return "Les textes extraits des documents joints : relus depuis la pi\xC3\xA8" "ce jointe originale.";
@@ -636,10 +638,12 @@ CleanResult clearCache(const std::vector<Part>& parts) {
     (void)writeState(s);
     std::string what;
     for (const auto& n : names) what += (what.empty() ? "" : ", ") + n;
-    (void)appendActivity("nettoyage", "Cache vid\xC3\xA9 (" + (what.empty() ? std::string("aucune cat\xC3\xA9gorie") : what) + ") : "
-                                         + sizeText(r.freed.bytes) + " lib\xC3\xA9r\xC3\xA9s, " + std::to_string(r.freed.files)
+    // 1.14.2 (captures) : l'essentiel d'abord (ce qui est libere), la liste des categories ensuite - une ligne
+    // coupee du journal garde ce qui compte ; elle se lit en entier dans son infobulle.
+    (void)appendActivity("nettoyage", "Cache vid\xC3\xA9 : " + sizeText(r.freed.bytes) + " lib\xC3\xA9r\xC3\xA9s, " + std::to_string(r.freed.files)
                                          + (r.freed.files > 1 ? " fichiers" : " fichier")
-                                         + (r.failures ? ", " + std::to_string(r.failures) + " non supprim\xC3\xA9(s)" : std::string{}));
+                                         + (r.failures ? ", " + std::to_string(r.failures) + " non supprim\xC3\xA9(s)" : std::string{})
+                                         + " (" + (what.empty() ? std::string("aucune cat\xC3\xA9gorie") : what) + ")");
     return r;
 }
 

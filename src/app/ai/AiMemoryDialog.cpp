@@ -52,6 +52,47 @@ std::string fit(const ui::PaintContext& ctx, const std::string& s, gfx::FontId f
     return s.substr(0, n) + kDots;
 }
 
+// 1.14.2 (captures) : UN TEXTE COUPE SE LIT EN ENTIER DANS SON INFOBULLE, comme les cases des tables du
+// logiciel. Chaque page dessinee retient, a chaque dessin, la place de ses textes coupes (et des quelques
+// lignes qui disent un detail technique au survol) ; son liveTooltip les relit.
+struct Tip {
+    gfx::Rect   rect;
+    std::string text;
+};
+std::vector<Tip>* gTips = nullptr;   // celles de la page en cours de dessin (nul : aucune)
+
+// La page qui se dessine : ses infobulles repartent de zero, et se remplissent pendant le dessin.
+class TipScope {
+public:
+    explicit TipScope(std::vector<Tip>& tips) : previous_(gTips) {
+        tips.clear();
+        gTips = &tips;
+    }
+    ~TipScope() { gTips = previous_; }
+    TipScope(const TipScope&) = delete;
+    TipScope& operator=(const TipScope&) = delete;
+
+private:
+    std::vector<Tip>* previous_;
+};
+
+void addTip(const gfx::Rect& r, std::string text) {
+    if (gTips && r.w > 0.f && r.h > 0.f && !text.empty()) gTips->push_back({r, std::move(text)});
+}
+
+std::string tipAt(const std::vector<Tip>& tips, gfx::Point p) {
+    for (auto it = tips.rbegin(); it != tips.rend(); ++it)
+        if (it->rect.contains(p)) return it->text;
+    return {};
+}
+
+// Une ligne de texte coupee a `w` pixels ("...") ; coupee, elle se lit en entier au survol.
+void drawFit(const ui::PaintContext& ctx, gfx::Point at, const std::string& s, gfx::FontId f, float w, gfx::Color col) {
+    const std::string shown = fit(ctx, s, f, w);
+    ctx.r.drawText(at, shown, f, col);
+    if (shown != s) addTip({at.x, at.y - 2.f, w, ctx.r.lineHeight(f) + 4.f}, s);
+}
+
 // Un paragraphe en lignes de `w` pixels au plus (`maxLines` : la derniere finit par ...).
 std::vector<std::string> wrap(const ui::PaintContext& ctx, const std::string& s, gfx::FontId f, float w, std::size_t maxLines) {
     std::vector<std::string> lines;
@@ -302,9 +343,12 @@ ui::CellStyle toneStyle(ui::Tone tone, ui::Icon icon = ui::Icon::None) {
 class AiMemoryDialog::OverviewPage final : public ui::Widget {
 public:
     explicit OverviewPage(AiMemoryDialog& d) : ui::Widget("ia.memoire.vue"), d_(d) {}
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
 
 protected:
     void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         const auto r = bounds();
         ctx.r.fillRect(r, c.windowBg);
@@ -319,7 +363,7 @@ protected:
             const float hx = x0 + 24.f + textW(ctx, head, kText) + 2.f;
             const std::string right = "M\xC3\xA9moire locale de ce PC" + kDot + "aucune IA connect\xC3\xA9" "e (d\xC3\xA9monstration)";
             const float rw = textW(ctx, right, kSmall);
-            ctx.r.drawText({hx, y}, fit(ctx, d_.stateText(), kText, x0 + W - rw - 24.f - hx), kText, c.text);
+            drawFit(ctx, {hx, y}, d_.stateText(), kText, x0 + W - rw - 24.f - hx, c.text);
             ctx.r.drawText({x0 + W - rw, y + 2.f}, right, kSmall, c.textMuted);
         }
         y += 32.f;
@@ -389,8 +433,8 @@ protected:
             if (!k.unit.empty())
                 ctx.r.drawText({cr.x + 18.f + textW(ctx, big, kBig), cr.y + 28.f + ctx.r.lineHeight(kBig) - ctx.r.lineHeight(kSmall) - 3.f}, k.unit,
                                kSmall, c.textMuted);
-            ctx.r.drawText({cr.x + 12.f, cr.y + 60.f}, fit(ctx, k.line1, kSmall, cr.w - 24.f), kSmall, c.textMuted);
-            ctx.r.drawText({cr.x + 12.f, cr.y + 76.f}, fit(ctx, k.line2, kSmall, cr.w - 24.f), kSmall, c.textMuted);
+            drawFit(ctx, {cr.x + 12.f, cr.y + 60.f}, k.line1, kSmall, cr.w - 24.f, c.textMuted);
+            drawFit(ctx, {cr.x + 12.f, cr.y + 76.f}, k.line2, kSmall, cr.w - 24.f, c.textMuted);
             if (k.meter >= 0.0) meter(ctx, {cr.x + 12.f, cr.bottom() - 8.f, cr.w - 24.f, 4.f}, k.meter, k.meterColor);
         }
         y += ch + 12.f;
@@ -415,7 +459,7 @@ private:
                 gfx::Color fill) {
         const auto& c = ctx.theme.color;
         const float vw = textW(ctx, value, kSmall);
-        ctx.r.drawText({x, y}, fit(ctx, label, kSmall, w - vw - 12.f), kSmall, c.text);
+        drawFit(ctx, {x, y}, label, kSmall, w - vw - 12.f, c.text);
         ctx.r.drawText({x + w - vw, y}, value, kSmall, c.textMuted);
         meter(ctx, {x, y + 20.f, w, 8.f}, fraction, fill);
         return 40.f;
@@ -472,9 +516,15 @@ private:
             }
             y += noteH + 8.f;
         }
-        if (y + 16.f < b.bottom())
-            ctx.r.drawText({x, b.bottom() - 22.f}, fit(ctx, "Lu dans " + ram.source + kDot + "actualis\xC3\xA9 chaque seconde", kCaption, w), kCaption,
-                           c.textMuted);
+        // 1.14.2 (captures) : d'ou viennent les chiffres, en mots de l'utilisateur ; le nom des fonctions du
+        // systeme (le detail technique) dans l'infobulle seulement.
+        if (y + 16.f < b.bottom() && !ram.by.empty()) {
+            const std::string by = "Mesur\xC3\xA9 par " + ram.by + " pour ce logiciel et ce PC" + kDot + "actualis\xC3\xA9 chaque seconde";
+            const float fy = b.bottom() - 22.f;
+            ctx.r.drawText({x, fy}, fit(ctx, by, kCaption, w), kCaption, c.textMuted);
+            addTip({x, fy - 2.f, std::min(w, textW(ctx, by, kCaption)), ctx.r.lineHeight(kCaption) + 4.f},
+                   "Mesur\xC3\xA9 par " + ram.by + " pour ce logiciel et ce PC, chaque seconde.\nD\xC3\xA9tail technique : " + ram.source + ".");
+        }
     }
 
     // Les derniers evenements du journal (activite.jsonl).
@@ -492,7 +542,7 @@ private:
             const std::string when = mem::displayDate(it->date) + "  " + mem::activityTypeLabel(it->type);
             ctx.r.drawText({x, y}, when, kSmall, c.textMuted);
             const float tx = x + 205.f;
-            ctx.r.drawText({tx, y}, fit(ctx, it->text, kSmall, x + w - tx), kSmall, c.text);
+            drawFit(ctx, {tx, y}, it->text, kSmall, x + w - tx, c.text);
             y += 20.f;
         }
     }
@@ -512,8 +562,8 @@ private:
             if (mem::hereState(k, d_.spec_.project) != mem::Here::Active) continue;
             ++total;
             if (y + 18.f >= b.bottom() - 24.f) continue;
-            ctx.r.drawText({x, y}, fit(ctx, k.name, kSmall, w * 0.5f), kSmall, c.text);
-            ctx.r.drawText({x + w * 0.52f, y}, fit(ctx, mem::categoryLabel(k.category), kSmall, w * 0.3f), kSmall, c.textMuted);
+            drawFit(ctx, {x, y}, k.name, kSmall, w * 0.5f, c.text);
+            drawFit(ctx, {x + w * 0.52f, y}, mem::categoryLabel(k.category), kSmall, w * 0.3f, c.textMuted);
             textRight(ctx, x + w, y, mem::sizeText(k.size()), kSmall, c.textMuted);
             y += 20.f;
             ++shown;
@@ -532,7 +582,7 @@ private:
         if (m.disk.known && m.disk.capacity) {
             const std::string value = mem::sizeText(m.disk.available) + " libres sur " + mem::sizeText(m.disk.capacity);
             const float vw = textW(ctx, value, kSmall);
-            ctx.r.drawText({x, y}, fit(ctx, "Disque qui porte IA/", kSmall, w - vw - 12.f), kSmall, c.text);
+            drawFit(ctx, {x, y}, "Disque qui porte IA/", kSmall, w - vw - 12.f, c.text);
             ctx.r.drawText({x + w - vw, y}, value, kSmall, c.textMuted);
             const double cap = static_cast<double>(m.disk.capacity);
             const double used = cap - static_cast<double>(m.disk.free);
@@ -577,7 +627,8 @@ private:
                            kSmall, c.textMuted);
     }
 
-    AiMemoryDialog& d_;
+    AiMemoryDialog&  d_;
+    std::vector<Tip> tips_;
 };
 
 // ====================================================================== Apprentissage ===
@@ -623,6 +674,9 @@ public:
         edCat->setSelectedIndex(static_cast<int>(std::size(mem::kCategories)) - 1);
         showEditor(false);
     }
+
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
 
     void showEditor(bool on) {
         editorOn = on;
@@ -730,6 +784,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(bounds(), c.windowBg);
         // l'encart franc
@@ -749,8 +804,8 @@ protected:
             std::size_t shown = d_.shownKnowledge().size(), here = 0;
             for (const auto* k : d_.shownKnowledge())
                 if (mem::hereState(*k, d_.spec_.project) == mem::Here::Active) ++here;
-            textMid(ctx, countX_, fb, fit(ctx, plural(shown, "connaissance", "connaissances") + kDot + std::to_string(here) + " active(s) ici", kSmall, countW_), kSmall,
-                    c.textMuted);
+            drawFit(ctx, {countX_, fb.y + (fb.h - ctx.r.lineHeight(kSmall)) * 0.5f},
+                    plural(shown, "connaissance", "connaissances") + kDot + std::to_string(here) + " active(s) ici", kSmall, countW_, c.textMuted);
         }
         if (editorOn) {
             paintEditor(ctx);
@@ -781,7 +836,7 @@ private:
         std::string contentHead = "Contenu \xE2\x80\x94 le texte joint aux demandes";
         if (const auto* k = d_.selectedKnowledge(); k && !d_.editorAdding_)
             contentHead += kDot + mem::sizeText(k->size()) + (k->builtIn ? kDot + "tir\xC3\xA9 des tables du logiciel, en lecture seule" : std::string{});
-        ctx.r.drawText(contentLabel_, fit(ctx, contentHead, kSmall, editor_.right() - 12.f - contentLabel_.x), kSmall, c.textMuted);
+        drawFit(ctx, contentLabel_, contentHead, kSmall, editor_.right() - 12.f - contentLabel_.x, c.textMuted);
     }
 
     void paintDetail(const ui::PaintContext& ctx) {
@@ -795,7 +850,11 @@ private:
             return;
         }
         ui::drawIcon(ctx.r, k->builtIn ? ui::Icon::Library : ui::Icon::Document, {x, y + 1.f, 16.f, 16.f}, c.textMuted);
-        drawBold(ctx, {x + 24.f, y}, fit(ctx, k->name, kText, w - 24.f), kText, c.text);
+        {
+            const std::string name = fit(ctx, k->name, kText, w - 24.f);
+            drawBold(ctx, {x + 24.f, y}, name, kText, c.text);
+            if (name != k->name) addTip({x + 24.f, y - 2.f, w - 24.f, ctx.r.lineHeight(kText) + 4.f}, k->name);
+        }
         y += 24.f;
         // les puces : categorie, source, projet, etat
         float px = x;
@@ -813,20 +872,29 @@ private:
         chip(k->project.empty() ? std::string("Tous les projets") : "Projet " + k->project, ctx.theme.onSurface(ctx.theme.brand.family[4]));
         chip(mem::hereLabel(here), here == mem::Here::Active ? c.ok : here == mem::Here::Inactive ? c.textDisabled : c.warning);
         y += 32.f;
-        for (const auto& l : wrap(ctx, k->description.empty() ? std::string("(sans description)") : k->description, kSmall, w, 2)) {
-            ctx.r.drawText({x, y}, l, kSmall, c.text);
-            y += 17.f;
+        {
+            const std::string desc = k->description.empty() ? std::string("(sans description)") : k->description;
+            const auto lines = wrap(ctx, desc, kSmall, w, 2);
+            const float y0 = y;
+            for (const auto& l : lines) {
+                ctx.r.drawText({x, y}, l, kSmall, c.text);
+                y += 17.f;
+            }
+            // coupee a deux lignes : en entier au survol
+            if (!lines.empty() && lines.back().size() >= 3 && lines.back().compare(lines.back().size() - 3, 3, kDots) == 0)
+                addTip({x, y0 - 2.f, w, y - y0 + 2.f}, desc);
         }
         y += 4.f;
         const std::string dates = k->builtIn ? "Int\xC3\xA9gr\xC3\xA9" "e au logiciel (" + appName() + ")" + kDot + "taille estim\xC3\xA9" "e " + mem::sizeText(k->size())
                                              : "Ajout\xC3\xA9" "e le " + dateOrDash(k->added) + kDot + "mise \xC3\xA0 jour le " + dateOrDash(k->modified) + kDot + "taille estim\xC3\xA9" "e "
                                                    + mem::sizeText(k->size());
-        ctx.r.drawText({x, y}, fit(ctx, dates, kSmall, w), kSmall, c.textMuted);
+        drawFit(ctx, {x, y}, dates, kSmall, w, c.textMuted);
         y += 22.f;
         if (here == mem::Here::OtherProject) {
-            ctx.r.drawText({x, y}, fit(ctx, "Propre au projet " + k->project + " : elle ne part pas avec les demandes faites dans "
-                                                + (d_.spec_.project.empty() ? std::string("un autre projet") : d_.spec_.project) + ".", kSmall, w),
-                           kSmall, ctx.theme.onSurface(c.warning));
+            drawFit(ctx, {x, y},
+                    "Propre au projet " + k->project + " : elle ne part pas avec les demandes faites dans "
+                        + (d_.spec_.project.empty() ? std::string("un autre projet") : d_.spec_.project) + ".",
+                    kSmall, w, ctx.theme.onSurface(c.warning));
             y += 20.f;
         }
         // un apercu du contenu
@@ -858,7 +926,7 @@ private:
         for (auto it = d_.activity_.rbegin(); it != d_.activity_.rend() && y + 36.f < recent_.bottom(); ++it) {
             if (it->type != "connaissance" && it->type != "regle" && it->type != "fichier") continue;
             ctx.r.drawText({x, y}, mem::displayDate(it->date) + kDot + mem::activityTypeLabel(it->type), kCaption, c.textMuted);
-            ctx.r.drawText({x, y + 14.f}, fit(ctx, it->text, kSmall, w), kSmall, c.text);
+            drawFit(ctx, {x, y + 14.f}, it->text, kSmall, w, c.text);
             y += 38.f;
             ++n;
         }
@@ -871,6 +939,7 @@ private:
     }
 
     AiMemoryDialog& d_;
+    std::vector<Tip> tips_;
     gfx::Rect info_{}, detail_{}, recent_{}, editor_{};
     gfx::Point contentLabel_{};
     std::vector<float> labelsY_;
@@ -907,6 +976,9 @@ public:
     };
     std::vector<Entry> entries;
 
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
+
 protected:
     void onLayout() override {
         const auto r = bounds();
@@ -934,6 +1006,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(bounds(), c.windowBg);
         // le compte de la recherche
@@ -954,11 +1027,11 @@ protected:
             else if (hot) ctx.r.fillRoundedRect(e.rect, ctx.theme.brand.hover, 4.f);
             const gfx::Color ink = on ? c.selectionText : c.text;
             const gfx::Color muted = on ? c.selectionText : c.textMuted;
-            ctx.r.drawText({e.rect.x + 10.f, e.rect.y + 6.f}, fit(ctx, e.title, kText, e.rect.w - 20.f), kText, ink);
-            ctx.r.drawText({e.rect.x + 10.f, e.rect.y + 26.f}, fit(ctx, e.detail, kSmall, e.rect.w - 20.f), kSmall, muted);
+            drawFit(ctx, {e.rect.x + 10.f, e.rect.y + 6.f}, e.title, kText, e.rect.w - 20.f, ink);
+            drawFit(ctx, {e.rect.x + 10.f, e.rect.y + 26.f}, e.detail, kSmall, e.rect.w - 20.f, muted);
         }
         // l'aide des boutons
-        ctx.r.drawText({hintX_, hintY_ + (30.f - ctx.r.lineHeight(kSmall)) * 0.5f}, fit(ctx, hint_, kSmall, hintW_), kSmall, c.textMuted);
+        drawFit(ctx, {hintX_, hintY_ + (30.f - ctx.r.lineHeight(kSmall)) * 0.5f}, hint_, kSmall, hintW_, c.textMuted);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -992,6 +1065,7 @@ public:
 
 private:
     AiMemoryDialog& d_;
+    std::vector<Tip> tips_;
     gfx::Rect list_{};
     float countX_{0}, countY_{0}, hintX_{0}, hintW_{0}, hintY_{0};
     int hover_{-1};
@@ -1137,6 +1211,8 @@ public:
 
     std::vector<std::pair<mem::Part, ui::Checkbox*>>       cache;
     ui::Button*                                            clear{nullptr};
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
     std::vector<std::pair<mem::Persistent, ui::Checkbox*>> persistent;
     ui::Checkbox*                                          understood{nullptr};
     ui::Button*                                            erase{nullptr};
@@ -1175,20 +1251,21 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         const auto& m = d_.measure_;
         ctx.r.fillRect(bounds(), c.windowBg);
         // ---- vider le cache
         card(ctx, left_, c.border);
         caption(ctx, left_.x + 14.f, left_.y + 12.f, ui::Icon::Clear, "VIDER LE CACHE", c.textMuted);
-        ctx.r.drawText({left_.x + 14.f, left_.y + 32.f},
-                       fit(ctx, "Seul le dossier cache/ est vid\xC3\xA9 : ce qui se r\xC3\xA9g\xC3\xA9n\xC3\xA8re. Coche les cat\xC3\xA9gories \xC3\xA0 vider.", kSmall, left_.w - 28.f),
-                       kSmall, c.textMuted);
+        drawFit(ctx, {left_.x + 14.f, left_.y + 32.f},
+                "Seul le dossier cache/ est vid\xC3\xA9 : ce qui se r\xC3\xA9g\xC3\xA9n\xC3\xA8re. Coche les cat\xC3\xA9gories \xC3\xA0 vider.", kSmall, left_.w - 28.f,
+                c.textMuted);
         const float right = left_.right() - 14.f;
         for (const auto& [p, y] : cacheRows_) {
             const auto u = m.of(p);
             textRight(ctx, right, y + 4.f, mem::sizeText(u.bytes) + kDot + plural(u.files, "fichier", "fichiers"), kSmall, u.files ? c.text : c.textMuted);
-            ctx.r.drawText({left_.x + 40.f, y + 23.f}, fit(ctx, std::string(mem::cacheConsequence(p)), kNote, left_.w - 54.f), kNote, c.textMuted);
+            drawFit(ctx, {left_.x + 40.f, y + 23.f}, std::string(mem::cacheConsequence(p)), kNote, left_.w - 54.f, c.textMuted);
         }
         float y = cacheEnd_ + 4.f;
         const auto sel = d_.cacheSelection();
@@ -1230,13 +1307,14 @@ protected:
             const auto& line = plan[static_cast<std::size_t>(p)];
             textRight(ctx, rr, yy + 4.f, mem::sizeText(line.usage.bytes) + kDot + plural(line.usage.files, "fichier", "fichiers"), kSmall,
                       line.usage.files ? c.text : c.textMuted);
-            ctx.r.drawText({right_.x + 40.f, yy + 23.f}, fit(ctx, line.consequence, kNote, right_.w - 54.f), kNote, c.textMuted);
+            drawFit(ctx, {right_.x + 40.f, yy + 23.f}, line.consequence, kNote, right_.w - 54.f, c.textMuted);
         }
         (void)persistentEnd_;
     }
 
 private:
     AiMemoryDialog& d_;
+    std::vector<Tip> tips_;
     gfx::Rect left_{}, right_{};
     std::vector<std::pair<mem::Part, float>> cacheRows_;
     std::vector<std::pair<mem::Persistent, float>> persistentRows_;
@@ -1273,6 +1351,13 @@ protected:
         typeBox->setBounds({x0 + lw, r.y + 12.f, 230.f, 30.f});
         countX_ = x0 + lw + 244.f;
         table->setBounds({x0, r.y + 52.f, W, r.bottom() - 10.f - (r.y + 52.f)});
+        // 1.14.2 (captures) : le Texte prend toute la largeur qui reste (la barre de defilement a part) ; une ligne
+        // plus longue encore se lit en entier dans son infobulle (rebuildTables).
+        const float textCol = std::max(300.f, W - 150.f - 160.f - 20.f);
+        if (std::abs(textCol - textCol_) > 0.5f) {
+            textCol_ = textCol;
+            table->setColumns({col("Date", 150.f), col("Type", 160.f), col("Texte", textCol)});
+        }
     }
     void onPaint(const ui::PaintContext& ctx) override {
         const auto& c = ctx.theme.color;
@@ -1288,7 +1373,7 @@ protected:
 
 private:
     AiMemoryDialog& d_;
-    float labelX_{0}, labelY_{0}, countX_{0};
+    float labelX_{0}, labelY_{0}, countX_{0}, textCol_{0};
 };
 
 // ============================================================================== le corps ===
@@ -1296,6 +1381,8 @@ class AiMemoryDialog::Body final : public ui::Widget {
 public:
     explicit Body(AiMemoryDialog& d) : d_(d) {}
     gfx::Rect panel{};
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
 
 protected:
     void onLayout() override {
@@ -1329,6 +1416,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(panel, c.panelBg);
         ctx.r.strokeRect(panel, c.borderStrong, 1.f);
@@ -1341,8 +1429,8 @@ protected:
         // la bande du bas
         ctx.r.line({panel.x, panel.bottom() - 52.f}, {panel.right(), panel.bottom() - 52.f}, c.border, 1.f);
         if (!d_.message_.empty() && messageW_ > 40.f)
-            ctx.r.drawText({messageX_, panel.bottom() - 42.f + (32.f - ctx.r.lineHeight(kSmall)) * 0.5f}, fit(ctx, d_.message_, kSmall, messageW_), kSmall,
-                           d_.messageBad_ ? c.error : ctx.theme.onSurface(c.ok));
+            drawFit(ctx, {messageX_, panel.bottom() - 42.f + (32.f - ctx.r.lineHeight(kSmall)) * 0.5f}, d_.message_, kSmall, messageW_,
+                    d_.messageBad_ ? c.error : ctx.theme.onSurface(c.ok));
         if (d_.confirming()) {
             ctx.r.fillRoundedRect(confirm_, ctx.theme.brand.card, 4.f);
             ctx.r.strokeRect(confirm_, c.error, 1.f);
@@ -1353,11 +1441,14 @@ protected:
                 ctx.r.drawText({confirm_.x + 36.f, ly}, l, kSmall, c.text);
                 ly += 16.f;
             }
+            if (!lines.empty() && lines.back().size() >= 3 && lines.back().compare(lines.back().size() - 3, 3, kDots) == 0)
+                addTip({confirm_.x + 36.f, confirm_.y, confirmTextW_, confirm_.h}, d_.confirm_.text);
         }
     }
 
 private:
     AiMemoryDialog& d_;
+    std::vector<Tip> tips_;
     gfx::Rect confirm_{};
     float messageX_{0}, messageW_{0}, confirmTextW_{0};
 };
@@ -1377,7 +1468,7 @@ menu::MenuTraits AiMemoryDialog::traits() const {
     t.kind = menu::MenuKind::Dialog;
     t.rendersBelow = true;
     t.blocksInput = true;
-    t.dimsBelow = true;
+    t.dimsBelow = !spec_.overModal;   // sur une autre fenetre modale : son voile suffit
     return t;
 }
 
@@ -1413,6 +1504,9 @@ void AiMemoryDialog::refresh() {
     conversations_ = mem::loadConversations();
     attachments_ = mem::attachmentFolders(conversations_);
     activity_ = mem::readActivity();
+    // la zone rouge : une categorie devenue vide se decoche (elle se grise, syncWidgets)
+    persistentOn_.erase(std::remove_if(persistentOn_.begin(), persistentOn_.end(), [&](mem::Persistent p) { return persistentEmpty(p); }),
+                        persistentOn_.end());
     hits_ = search_.empty() ? std::vector<mem::Hit>{} : mem::search(search_, conversations_, registry_.all());
     if (!selectedKnowledge_.empty() && !registry_.find(selectedKnowledge_)) selectedKnowledge_.clear();
     rebuildTables();
@@ -1534,7 +1628,8 @@ void AiMemoryDialog::rebuildTables() {
                     row.styles.resize(7);
                     row.styles[0].icon = ui::Icon::Comment;
                     row.styles[0].iconTone = ui::Tone::Muted;
-                    row.tip = c.readable ? c.file : c.file + " : " + c.why;
+                    // 1.14.2 (captures) : le titre en entier d'abord (la case le coupe), le fichier ensuite
+                    row.tip = c.title + "\n" + (c.readable ? c.file : c.file + " : " + c.why);
                     m.rows.push_back(std::move(row));
                 }
                 break;
@@ -1596,7 +1691,7 @@ void AiMemoryDialog::rebuildTables() {
                     row.styles[0].icon = ui::Icon::Document;
                     row.styles[0].iconTone = ui::Tone::Muted;
                     if (a.conversation.empty()) row.styles[4] = toneStyle(ui::Tone::Warning);
-                    row.tip = a.folder;
+                    row.tip = (a.names.empty() ? std::string("(vide)") : a.names) + "\n" + a.folder;
                     m.rows.push_back(std::move(row));
                 }
                 break;
@@ -1620,6 +1715,7 @@ void AiMemoryDialog::rebuildTables() {
                     }
                     row.key += "#" + std::to_string(i);
                     row.cells = {h.where, h.title, h.excerpt};
+                    row.tip = h.title + "\n" + h.excerpt;
                     m.rows.push_back(std::move(row));
                 }
                 break;
@@ -1782,17 +1878,27 @@ void AiMemoryDialog::syncWidgets() {
         for (auto& [p, box] : cleaning_->cache) {
             const bool on = std::find(cacheOn_.begin(), cacheOn_.end(), p) != cacheOn_.end();
             box->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+            box->setTooltip(std::string(mem::cacheConsequence(p)));
         }
+        // 1.14.2 (captures) : UNE CATEGORIE VIDE NE SE COCHE PAS dans la zone rouge (grisee, son infobulle dit
+        // pourquoi) ; Supprimer definitivement reste grise tant qu'aucune categorie non vide n'est cochee.
+        const auto plan = mem::persistentPlan(measure_);
         bool any = false;
         for (auto& [p, box] : cleaning_->persistent) {
-            const bool on = std::find(persistentOn_.begin(), persistentOn_.end(), p) != persistentOn_.end();
+            const auto& line = plan[static_cast<std::size_t>(p)];
+            const bool empty = persistentEmpty(p);
+            const bool on = !empty && std::find(persistentOn_.begin(), persistentOn_.end(), p) != persistentOn_.end();
             any = any || on;
             box->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+            box->setEnabled(!empty);
+            box->setTooltip(empty ? "Vide (0 fichier) : rien \xC3\xA0 supprimer." : line.consequence);
         }
         cleaning_->understood->setState(understood_ ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
         cleaning_->clear->setEnabled(cacheSelection().files > 0);
         cleaning_->erase->setEnabled(understood_ && any);
-        cleaning_->erase->setTooltip(understood_ ? std::string{} : "Coche d'abord \xC2\xAB Je comprends \xC2\xBB.");
+        cleaning_->erase->setTooltip(!understood_ ? std::string("Coche d'abord \xC2\xAB Je comprends \xC2\xBB.")
+                                     : !any       ? std::string("Coche d'abord une cat\xC3\xA9gorie qui contient des donn\xC3\xA9" "es.")
+                                                  : std::string{});
         cleaning_->invalidateLayout();
         cleaning_->invalidate();
     }
@@ -2310,9 +2416,15 @@ bool AiMemoryDialog::doClearCache() {
     return true;
 }
 
+bool AiMemoryDialog::persistentEmpty(mem::Persistent p) const {
+    const auto plan = mem::persistentPlan(measure_);
+    const auto i = static_cast<std::size_t>(p);
+    return i >= plan.size() || plan[i].usage.files == 0;
+}
+
 void AiMemoryDialog::setPersistentChecked(mem::Persistent p, bool on) {
     persistentOn_.erase(std::remove(persistentOn_.begin(), persistentOn_.end(), p), persistentOn_.end());
-    if (on) persistentOn_.push_back(p);
+    if (on && !persistentEmpty(p)) persistentOn_.push_back(p);   // vide : rien a supprimer, elle ne se coche pas
     syncWidgets();
 }
 
@@ -2326,8 +2438,12 @@ bool AiMemoryDialog::deletePersistent(bool now) {
         say("Coche d'abord \xC2\xAB Je comprends \xC2\xBB : ces donn\xC3\xA9" "es ne se r\xC3\xA9" "cup\xC3\xA8rent pas.", true);
         return false;
     }
+    // une categorie devenue vide depuis (supprimee ailleurs) ne compte plus
+    persistentOn_.erase(std::remove_if(persistentOn_.begin(), persistentOn_.end(), [&](mem::Persistent p) { return persistentEmpty(p); }),
+                        persistentOn_.end());
     if (persistentOn_.empty()) {
-        say("Coche les donn\xC3\xA9" "es \xC3\xA0 supprimer.", true);
+        say("Coche les donn\xC3\xA9" "es \xC3\xA0 supprimer (une cat\xC3\xA9gorie vide n'a rien \xC3\xA0 supprimer).", true);
+        syncWidgets();
         return false;
     }
     if (now) return doDeletePersistent();

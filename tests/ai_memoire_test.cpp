@@ -24,6 +24,7 @@
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
+#include "../src/ui/widgets/Controls.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -486,6 +487,7 @@ public:
     gfx::Rect panel{};
     std::vector<std::string> outside;
     std::size_t texts{0};
+    std::string technical;   // 1.14.2 (captures) : un nom de fonction du systeme ou de fichier systeme dessine
     void beginFrame(gfx::Color) override {}
     void endFrame() override {}
     std::vector<gfx::Rect> clips;
@@ -508,6 +510,8 @@ public:
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
     void drawText(gfx::Point o, std::string_view t, gfx::FontId f, gfx::Color) override {
         ++texts;
+        for (const char* api : {"/proc/", "GetProcessMemoryInfo", "GlobalMemoryStatus"})
+            if (t.find(api) != std::string_view::npos) technical = std::string(t);
         // ce qui se voit : le texte coupe par la decoupe en cours
         float x0 = o.x, y0 = o.y, x1 = o.x + measure(t, f).width, y1 = o.y + static_cast<float>(f.v);
         if (!clips.empty()) {
@@ -546,10 +550,13 @@ void paintAll(app::AiMemoryDialog& d, Recorder& rec, const ui::Theme& theme, con
         std::vector<ui::Widget*> overlays;
         rec.outside.clear();
         rec.texts = 0;
+        rec.technical.clear();
         const ui::PaintContext ctx{rec, theme, {0.f, 0.f, rec.size.w, rec.size.h}, 0.0, &overlays};
         root->invalidate();
         root->render(ctx);
         check(rec.texts > 5, std::string(label) + " : l'onglet " + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t)) + " se dessine");
+        check(rec.technical.empty(), std::string(label) + " : aucun nom de fonction ni de fichier du syst\xC3\xA8me \xC3\xA0 l'\xC3\xA9" "cran ("
+                                         + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t)) + (rec.technical.empty() ? std::string{} : " : " + rec.technical) + ")");
         check(rec.outside.empty(), std::string(label) + " : aucun texte hors de la fenetre (" + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t))
                                        + (rec.outside.empty() ? std::string{} : " : " + rec.outside.front()) + ")");
     }
@@ -654,6 +661,43 @@ void dialog() {
           "Oui : supprimees, les comptes et les jauges suivent");
     check(!d.understood(), "\xC2\xAB Je comprends \xC2\xBB se decoche apres");
     check(d.measured().of(mem::Part::Settings).files >= 1 && fs::exists(ia / "parametres.json"), "les parametres jamais touches");
+    // 1.14.2 (captures) : une categorie VIDE ne se coche pas dans la zone rouge (grisee, son infobulle dit
+    // pourquoi) ; Supprimer definitivement reste grise tant qu'aucune categorie non vide n'est cochee.
+    {
+        auto* box = dynamic_cast<ui::Checkbox*>(d.widgetRoot()->findById("ia.memoire.nettoyage.persistant.conversations"));
+        auto* erase = dynamic_cast<ui::Button*>(d.widgetRoot()->findById("ia.memoire.nettoyage.supprimer"));
+        check(box && erase, "la zone rouge : la case des conversations et le bouton");
+        d.setUnderstood(true);
+        d.setPersistentChecked(mem::Persistent::Conversations, true);
+        check(d.persistentEmpty(mem::Persistent::Conversations) && !d.persistentChecked(mem::Persistent::Conversations),
+              "une categorie vide (0 conversation) ne se coche pas");
+        check(box && !box->enabled() && !box->isChecked() && box->tooltip().find("rien \xC3\xA0 supprimer") != std::string::npos,
+              "sa case est grisee, son infobulle dit pourquoi (" + (box ? box->tooltip() : std::string{}) + ")");
+        check(erase && !erase->enabled() && !erase->tooltip().empty(), "\xC2\xAB Je comprends \xC2\xBB coche, rien de non vide : Supprimer reste grise ("
+                                                                     + (erase ? erase->tooltip() : std::string{}) + ")");
+        check(!d.deletePersistent() && !d.confirming(), "rien a supprimer : pas de confirmation (" + d.message() + ")");
+        check(!d.persistentEmpty(mem::Persistent::Activity), "le journal d'activite n'est pas vide");
+        d.setPersistentChecked(mem::Persistent::Activity, true);
+        check(d.persistentChecked(mem::Persistent::Activity) && erase && erase->enabled() && erase->tooltip().empty(),
+              "une categorie non vide cochee : Supprimer s'active");
+        auto* act = dynamic_cast<ui::Checkbox*>(d.widgetRoot()->findById("ia.memoire.nettoyage.persistant.activite"));
+        check(act && act->enabled() && act->isChecked(), "sa case est cochee et active");
+        d.setPersistentChecked(mem::Persistent::Activity, false);
+        d.setUnderstood(false);
+        check(erase && !erase->enabled() && erase->tooltip().find("Je comprends") != std::string::npos, "decochee : de nouveau grise");
+    }
+    // 1.14.2 (captures) : ouverte par-dessus une autre fenetre modale (les parametres de l'Assistant), elle
+    // n'assombrit pas le fond une seconde fois.
+    {
+        check(d.traits().dimsBelow, "seule : son voile assombrit le fond");
+        app::AiMemoryDialog::Spec over;
+        over.overModal = true;
+        const app::AiMemoryDialog d2(std::move(over));
+        check(!d2.traits().dimsBelow && d2.traits().blocksInput, "sur une autre fenetre modale : pas de second voile (toujours modale)");
+    }
+    // 1.14.2 (captures) : la memoire vive dite en mots de l'utilisateur ; le detail technique a part (l'infobulle)
+    check(!d.ram().by.empty() && d.ram().by.find("/proc") == std::string::npos && d.ram().by.find("Get") == std::string::npos,
+          "la memoire vive : mesuree par " + d.ram().by);
     // Activite : le journal, filtre par type
     d.showTab(app::AiMemoryDialog::Tab::Activity);
     const auto all = d.activityRowCount();
