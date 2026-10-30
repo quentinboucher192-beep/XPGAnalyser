@@ -141,6 +141,56 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
+        note("1.14.2", "Assistant IA", Kind::New,
+         "L'ASSISTANT IA (D\xC3\x89MONSTRATION) : un panneau \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues (Ctrl+Maj+I, Affichage \xE2\x80\xBA Assistant "
+         "IA, la Disposition, Ctrl+K) o\xC3\xB9 l'on d\xC3\xA9" "crit en fran\xC3\xA7" "ais ce qu'on veut dans la vue ouverte. Ses r\xC3\xA9ponses "
+         "portent une carte Op\xC3\xA9rations propos\xC3\xA9" "es : ce qui serait cr\xC3\xA9\xC3\xA9, modifi\xC3\xA9 et supprim\xC3\xA9, une miniature de la vue "
+         "modifi\xC3\xA9" "e dessin\xC3\xA9" "e comme dans l'\xC3\xA9" "diteur, les avertissements, et Pr\xC3\xA9visualiser\xE2\x80\xA6, Appliquer, Refuser. Les objets "
+         "sont les vrais objets du logiciel (Cuve, Pompe, Vanne, Bargraphe, Bouton \xC3\xA0 impulsion, Tuyauterie\xE2\x80\xA6) avec leurs "
+         "vraies propri\xC3\xA9t\xC3\xA9s ; une propri\xC3\xA9t\xC3\xA9 inconnue est refus\xC3\xA9" "e, et une variable qui n'existe pas n'est jamais "
+         "invent\xC3\xA9" "e : l'aper\xC3\xA7u propose les variables du projet, ou de la cr\xC3\xA9" "er \xC3\xA0 votre demande. Appliquer se reprend "
+         "d'un seul Ctrl+Z. Le mode Direct applique d\xC3\xA8s la r\xC3\xA9ponse ; une suppression de plusieurs objets se confirme "
+         "toujours. Cette version est une d\xC3\xA9monstration : aucune IA n'est connect\xC3\xA9" "e (l'en-t\xC3\xAAte le dit), six demandes "
+         "sont reconnues (dont le synoptique complet d'une station de pompage : 31 objets), et rien ne quitte le PC.",
+         "assistant-ia", ""),
+        note("1.14.2", "Assistant IA", Kind::New,
+         "LA PR\xC3\x89VISUALISATION DES MODIFICATIONS : avant que rien ne change, la fen\xC3\xAAtre montre les comptes (\xC3\xA0 cr\xC3\xA9" "er, \xC3\xA0 "
+         "modifier, \xC3\xA0 supprimer), les erreurs et les avertissements, les variables associ\xC3\xA9" "es, chaque objet et ses "
+         "propri\xC3\xA9t\xC3\xA9s (avant \xE2\x86\x92 apr\xC3\xA8s), et la vue telle qu'elle serait \xE2\x80\x93 les objets nouveaux encadr\xC3\xA9s en vert, les "
+         "modifi\xC3\xA9s en bleu, ceux \xC3\xA0 supprimer barr\xC3\xA9s de rouge. Modifier la demande remet le texte dans la saisie. Une "
+         "proposition dont la vue a chang\xC3\xA9 depuis ne s'applique jamais : elle se redemande.",
+         "assistant-ia", ""),
+        note("1.14.2", "Assistant IA", Kind::New,
+         "LES CONVERSATIONS DE L'ASSISTANT SE GARDENT : un fichier par conversation dans le dossier IA des r\xC3\xA9glages de "
+         "l'utilisateur (jamais dans le projet) \xE2\x80\x93 messages, pi\xC3\xA8" "ces jointes copi\xC3\xA9" "es \xC3\xA0 l'identique, \xC3\xA9tat des "
+         "propositions. Fermer et rouvrir l'application les retrouve ; une conversation se renomme sur place (F2) et se "
+         "supprime apr\xC3\xA8s une confirmation. Les param\xC3\xA8tres de l'Assistant (fournisseur, mod\xC3\xA8le, adresse, d\xC3\xA9lai, mode, "
+         "conservation de l'historique, confidentialit\xC3\xA9) s'enregistrent sans la cl\xC3\xA9 API, qui reste en m\xC3\xA9moire le temps "
+         "de la s\xC3\xA9" "ance.",
+         "assistant-ia", ""),
+        note("1.14.2", "Assistant IA", Kind::New,
+         "M\xC3\x89MOIRE ET APPRENTISSAGE DE L'IA : une fen\xC3\xAAtre qui dit ce que l'Assistant conna\xC3\xAEt, ce qu'il garde et la place qu'il prend sur ce PC "
+         "(le bouton M\xC3\xA9moire et apprentissage\xE2\x80\xA6 de ses param\xC3\xA8tres, ou Ctrl+K). Tout y est mesur\xC3\xA9 sur les vrais fichiers du dossier IA/ "
+         "(dans les r\xC3\xA9glages de l'utilisateur, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Mes images), le disque et la m\xC3\xA9moire du processus, et remesur\xC3\xA9 apr\xC3\xA8s chaque "
+         "op\xC3\xA9ration. Six onglets : Vue g\xC3\xA9n\xC3\xA9rale (les comptes - conversations, messages, connaissances, genres d'objets connus 116/116 -, "
+         "les tailles, l'espace libre ; la m\xC3\xA9moire vive de l'application et le stockage permanent, s\xC3\xA9par\xC3\xA9s ; le mod\xC3\xA8le distant n'occupe rien "
+         "sur le PC, c'est dit), Apprentissage, M\xC3\xA9moire (la recherche, supprimer une conversation, une m\xC3\xA9moire, une cat\xC3\xA9gorie), Stockage PC "
+         "(la r\xC3\xA9partition, l'emplacement, Ouvrir le dossier), Nettoyage et Activit\xC3\xA9 (le journal, filtr\xC3\xA9 par type).",
+         "memoire-ia", ""),
+        note("1.14.2", "Assistant IA", Kind::New,
+         "LES CONNAISSANCES DE L'IA : six sont tir\xC3\xA9" "es des tables d'IHM Studio (les 116 genres d'objets, les propri\xC3\xA9t\xC3\xA9s de chacun telles que "
+         "la cr\xC3\xA9" "ation par d\xC3\xA9" "faut les pose et leur r\xC3\xB4le, les actions, le vocabulaire et les synonymes de la biblioth\xC3\xA8que, l'objet pos\xC3\xA9 pour "
+         "une variable, les mod\xC3\xA8les de vues) : elles se consultent, s'activent et se d\xC3\xA9sactivent, ne se suppriment pas. Les autres s'ajoutent "
+         "(une r\xC3\xA8gle, une pr\xC3\xA9" "f\xC3\xA9rence, le contexte d'un projet, une connaissance m\xC3\xA9tier), se modifient et se suppriment ; une connaissance "
+         "d'un projet n'est pas jointe aux demandes faites dans un autre. Apprendre ici = enrichir la m\xC3\xA9moire locale que l'Assistant joint \xC3\xA0 "
+         "ses demandes : le mod\xC3\xA8le distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9.",
+         "memoire-ia", ""),
+        note("1.14.2", "Assistant IA", Kind::New,
+         "VIDER LE CACHE DE L'IA, SANS RIEN PERDRE : le d\xC3\xA9tail avant (six cat\xC3\xA9gories, leur taille, ce que les vider change), le total \xC3\xA0 "
+         "lib\xC3\xA9rer, une confirmation ; seul le dossier cache/ est touch\xC3\xA9 - jamais les conversations, les connaissances, les pi\xC3\xA8" "ces jointes "
+         "originales, les projets ni les param\xC3\xA8tres. La date du dernier nettoyage est gard\xC3\xA9" "e. Supprimer les donn\xC3\xA9" "es persistantes est \xC3\xA0 part, "
+         "dans une zone rouge : cocher, puis \xC2\xAB Je comprends \xC2\xBB, puis confirmer.",
+         "memoire-ia", ""),
         note("1.14.1", "Objets", Kind::New,
          "LES VANNES \xC3\x80 FINS DE COURSE : la Vanne et la Vanne 3 voies ont une variante command\xC3\xA9" "e par leurs fins de course, comme sur "
          "le terrain, au lieu d'une seule valeur. Dans l'inspecteur, Commande de l'\xC3\xA9tat : fins de course (la vanne 3 voies : Commande de la "

@@ -1766,6 +1766,66 @@ Chaque changement est écrit au journal.
 - **Thème jour** : les gris sombres (les fonds, les cadres) deviennent clairs, les textes clairs deviennent sombres ; une couleur franche trop lumineuse fonce jusqu'à se lire sur un fond clair (un texte jaune devient ocre, plus foncé qu'un fond jaune), un fond bleu nuit s'éclaircit ; un texte posé sur une couleur franche (un bouton bleu) garde la sienne, le bouton d'un potentiomètre aussi. Les couleurs propres au dessin des objets (le fond des champs d'un sélecteur de date, les flèches, l'en-tête d'un tableau) suivent la même règle. La vue se conçoit une fois, en nuit.
 > Les menus natifs (Paramètres système, connexion, signature) gardent leur apparence.
 
+= Concevoir les vues › L'Assistant IA
+
+== assistant-ia | L'Assistant IA (démonstration)
+: Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Dans cette version, c'est une démonstration : aucune IA n'est connectée.
+@depuis 1.14.2
+@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU
+@lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres
+@voir editeur, objets, historique, memoire-ia
+- **Ctrl+Maj+I** le montre ou le replie (« I » comme IA).
+- **Affichage › Assistant IA**, ou la case « Assistant IA (Ctrl+Maj+I) » d'Affichage › Panneaux à afficher.
+- **Projet › Disposition…** : la ligne « Assistant IA » de La fenêtre (caché au départ, toujours, en édition, en simulation).
+- **Ctrl+K** (Aller à / Faire) : « Assistant IA ».
+Il se place à droite de l'éditeur de vues et le pousse, sans le cacher : la vue reste visible pendant qu'on dialogue. Son séparateur se tire comme les autres ; sa largeur et son état sont retenus.
+| Partie | Ce qu'elle montre |
+| En-tête | L'icône, « Assistant IA », l'état de connexion (« Démonstration – aucune IA connectée »), Nouvelle conversation (+), Paramètres, Replier. Dessous, le mode **Prévisualisation** ou **Direct**, et la vue visée (celle de l'onglet ouvert). |
+| Conversations | Les plus récentes d'abord, avec leur date. Un clic en ouvre une ; un double-clic ou **F2** la renomme sur place (Entrée garde, Échap annule) ; **Suppr** ou le clic droit › Supprimer… la supprime, après une confirmation. « démo » marque les conversations de démonstration. Un clic sur l'en-tête replie la liste. |
+| Discussion | Vos demandes à droite, les réponses à gauche, avec leur heure. Les réponses sont mises en forme : titres, **gras**, listes, `code`. Elle défile seule (la molette, sa barre) : la saisie reste toujours visible en bas. |
+| Pièces jointes | Les fichiers joints au prochain message : leur type, leur taille, leur traitement, la croix pour les retirer. |
+| Saisie | **Entrée** envoie, **Maj+Entrée** passe à la ligne (Ctrl+Entrée envoie aussi). Le trombone joint un fichier ; un fichier lâché sur le panneau aussi. Pendant une réponse, Envoyer devient **Arrêter**. |
+1. Ouvrez la vue à modifier dans l'éditeur (son onglet devant).
+2. Écrivez la demande, ou cliquez une suggestion (une conversation vide les propose).
+3. La réponse arrive par étapes : **En attente…**, **Réflexion…**, puis **Écriture…** mot à mot. **Arrêter** la coupe : ce qui est écrit reste, sans proposition.
+Une réponse qui modifie la vue porte une carte **Opérations proposées** : ce qu'elle crée, modifie et supprime, une miniature de la vue modifiée (dessinée comme dans l'éditeur), les avertissements et les erreurs, et trois boutons :
+- **Prévisualiser…** ouvre l'aperçu ;
+- **Appliquer** modifie le projet, en une seule étape d'annulation (l'historique la montre sous « Assistant IA : … ») ;
+- **Refuser** : le projet ne change pas.
+La carte passe ensuite à « Appliquée » ou « Refusée ».
+Les objets proposés sont de vrais objets du logiciel (Cuve, Pompe, Vanne, Bargraphe, Bouton à impulsion, Tuyauterie…) avec leurs vraies propriétés : une propriété inconnue d'un genre est refusée, jamais inventée.
+! L'Assistant n'invente jamais une variable. Une variable citée qui n'existe pas dans le projet est une erreur : l'aperçu propose les variables existantes (les plus proches d'abord) et « Créer … » – c'est vous qui choisissez.
+La fenêtre **Prévisualisation des modifications** montre, avant que rien ne change : les comptes (à créer, à modifier, à supprimer), les erreurs et les avertissements, les variables associées, chaque objet et ses propriétés (avant → après), et à droite la vue telle qu'elle serait, dessinée par l'éditeur : les objets nouveaux encadrés en vert, les modifiés en bleu, ceux à supprimer barrés de rouge. **Appliquer** (un seul Ctrl+Z), **Annuler** (la proposition est refusée), **Modifier la demande** (le texte revient dans la saisie). Échap ferme sans décider.
+En mode **Direct**, chaque proposition s'applique dès la fin de la réponse, sans l'aperçu ; Ctrl+Z la reprend d'un coup. Une suppression de plusieurs objets demande toujours une confirmation, quel que soit le mode.
+Une proposition garde l'empreinte de la vue au moment où elle a été faite. Si la vue a changé depuis (un objet déplacé, ajouté…), ou si elle n'existe plus, la proposition ne s'applique pas : la carte dit « Périmée » et propose **Redemander**, qui remet la demande dans la saisie.
+Images (PNG, JPG), PDF, texte (TXT), CSV, Excel (XLSX), XML, JSON et les fichiers du logiciel (.xihm, .xapi, le projet). Un autre format est refusé, et le panneau le dit. Le fichier est copié à l'identique dans le dossier de l'Assistant ; le retirer avant l'envoi supprime la copie. En démonstration, leur contenu n'est pas lu.
+Le bouton Paramètres de l'en-tête : activer l'Assistant, le fournisseur (Démonstration ; les autres sont à venir), le modèle (une case libre : rien n'est imposé), l'adresse et le délai, la **clé API** (masquée, Afficher, Effacer), le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui serait envoyé : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
+! La clé API n'est jamais écrite sur le disque : dans cette version, elle reste en mémoire le temps de la séance. Quand l'IA sera branchée, elle sera protégée par Windows (DPAPI), ou détenue par un serveur relais de l'entreprise.
+Dans le dossier **IA** des réglages de l'utilisateur (à côté de Mes images), jamais dans le projet : un fichier par conversation (ses messages, ses pièces jointes, l'état de ses propositions), la copie des pièces jointes, les paramètres. Fermer et rouvrir l'application retrouve tout.
+Elle reconnaît six demandes : le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un indicateur de niveau, « Mets celle de droite en rouge » (sur la sélection), « Aligne les quatre boutons », « Associe cette pompe à la variable … » et « Supprime les vannes ». À toute autre demande, elle répond honnêtement qu'elle ne la comprend pas encore, et propose les suggestions. Rien ne quitte le PC.
+
+== memoire-ia | Mémoire et apprentissage de l'IA
+: Ce que l'Assistant IA connaît, ce qu'il garde d'une séance à l'autre et la place que tout cela prend sur ce PC : six onglets, tous calculés sur les vrais fichiers du dossier IA/. Apprendre ici, c'est enrichir la mémoire locale que l'Assistant joint à ses demandes : le modèle distant n'est pas réentraîné.
+@depuis 1.14.2
+@mots Mémoire et apprentissage de l'IA, mémoire IA, apprentissage, connaissances, connaissance, cache, Vider le cache, données persistantes, Stockage PC, ia.memoire, IA, dossier IA, activite.jsonl, memoire.json, genres d'objets connus
+@lieux ia.memoire
+@voir assistant-ia, aller-a
+Dans les paramètres de l'Assistant IA, le bouton **Mémoire et apprentissage…** ; ou Ctrl+K, puis « mémoire ». C'est une fenêtre du logiciel : elle se déplace par son titre, s'agrandit par un bord ou un coin, Échap la ferme ; **Actualiser** (F5) refait toutes les mesures.
+Chaque chiffre est mesuré à l'ouverture et après chaque opération : la taille des fichiers du dossier IA/ (dans tes réglages, à côté de Mes images), l'espace libre du disque qui le porte, la mémoire vive d'IHM Studio. À la première ouverture le dossier est presque vide : l'écran le dit, avec de petites tailles, vraies.
+! L'apprentissage ne réentraîne pas le modèle distant. Une connaissance active est un texte que l'Assistant joint à chaque demande ; sa « taille estimée » est la taille de ce texte.
+L'état de la mémoire ; les conversations, les messages, les connaissances (combien sont actives ici et combien d'octets partent avec chaque demande), les genres d'objets connus (116/116 : tirés des tables du logiciel), le stockage total et l'espace libre. Deux blocs séparés : **Mémoire vive (RAM) de l'application** (celle d'IHM Studio maintenant, son pic, la RAM disponible du PC, les traitements IA locaux : aucun) et **Stockage permanent (disque)** (le disque, la répartition des données de l'IA, la date du dernier nettoyage).
+> Le modèle d'IA distant tourne chez son fournisseur : il n'occupe ni la RAM ni le disque de ce PC.
+La liste des connaissances : nom, catégorie, source, projet, dates d'ajout et de mise à jour, taille estimée, état. Filtrée par catégorie et par projet. **Consulter** montre tout le texte ; **Modifier**, **Activer / Désactiver**, **Supprimer** (en rouge, confirmé) ; **Ajouter une connaissance…** ouvre l'éditeur (nom, catégorie, projet, description, contenu, active).
+| Sorte | Ce qu'on peut en faire |
+| Du logiciel (6) | Genres d'objets, propriétés de chaque genre, actions, vocabulaire et synonymes, objet posé pour une variable, modèles de vues - tirées des tables d'IHM Studio : consulter, activer, désactiver. Elles ne se suppriment pas. |
+| Ajoutées | Une par fichier dans IA/connaissances : tout (consulter, modifier, activer, désactiver, supprimer). |
+Une connaissance porte un projet (vide : tous les projets). Celle d'un autre projet est marquée « Autre projet » : elle ne part pas avec les demandes faites ici. À droite, l'activité récente de l'apprentissage.
+Les informations gardées, par catégorie : conversations, historique des messages, informations par projet, préférences, connaissances métier, références aux pièces jointes. La recherche trouve un titre, un message, une connaissance ou une pièce jointe (les mots dans n'importe quel ordre, sans les accents). Supprimer une conversation, une mémoire, une pièce jointe, oublier un projet ou vider une catégorie entière : toujours une confirmation d'abord.
+La répartition précise (le tableau par dossier et l'anneau), la taille totale, le nombre de fichiers, l'espace libre, la date du dernier nettoyage ; l'emplacement du dossier (à copier) et **Ouvrir le dossier** dans l'explorateur du système.
+**Vider le cache** : les six catégories du cache (requêtes, fichiers de traitement, images, documents temporaires, aperçus, téléchargements), cochées par défaut, chacune avec sa taille et ce que la vider change ; le total à libérer s'affiche avant, et une confirmation le redit. Seul le dossier cache/ est touché : jamais les conversations, les connaissances, les pièces jointes originales, les projets ni les paramètres.
+La zone rouge **Supprimer les données persistantes** est à part : les catégories à cocher, puis « Je comprends : ces données seront supprimées définitivement de ce PC », puis la confirmation. Rien ne se récupère.
+Le journal de la mémoire (activite.jsonl), le plus récent en haut : la date, le type (conversation, connaissance, fichier analysé, règle, nettoyage, suppression) et ce qui s'est passé ; un filtre par type.
+
 = Communiquer
 
 == principe-communication | Le principe de la communication

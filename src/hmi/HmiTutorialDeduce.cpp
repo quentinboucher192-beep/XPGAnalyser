@@ -1169,6 +1169,8 @@ struct TopicPlace { std::string_view key, path; };
 constexpr TopicPlace kTopicPlaces[] = {
     {"nouveautes-1-9", "arbre:IHM"}, {"nouveautes-1-10", "arbre:IHM"}, {"reperes-nouveautes", "arbre:IHM"},
     {"historique", "arbre:IHM/Vues"}, {"comparer-versions", "arbre:Versions"}, {"onglets", "arbre:IHM/Vues"},
+    // 1.14.2 : l'Assistant IA vit a droite de l'editeur d'une vue ; sa memoire s'ouvre de ses parametres (Ctrl+K).
+    {"assistant-ia", "arbre:IHM/Vues"}, {"memoire-ia", "arbre:IHM"},
     {"aller-a", "arbre:IHM"}, {"excel", "arbre:IHM/Programmation/Variables IHM"}, {"dossiers", "arbre:IHM/Vues"},
     {"didacticiel", "arbre:IHM"}, {"nouveautes-lot8", "arbre:IHM"}, {"objets", "arbre:IHM/Vues"},
     {"proprietes", "arbre:IHM/Vues"}, {"actions", "arbre:IHM/Vues"}, {"parametres-popups", "arbre:IHM/Vues/Popups"},

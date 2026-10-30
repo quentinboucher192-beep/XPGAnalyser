@@ -3864,6 +3864,204 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Concevoir les vues  L'Assistant IA / assistant-ia
+        {"assistant-ia", "L'Assistant IA (d\xC3\xA9monstration)", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Un panneau \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues : on y d\xC3\xA9" "crit en "
+         "fran\xC3\xA7" "ais ce qu'on veut dans la vue ouverte, l'Assistant propose des op\xC3\xA9rations "
+         "sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les "
+         "reprend. Dans cette version, c'est une d\xC3\xA9monstration : aucune IA n'est connect\xC3\xA9" "e.",
+         {
+             {K::Bullet, "**Ctrl+Maj+I** le montre ou le replie (\xC2\xAB I \xC2\xBB comme IA).", {}},
+             {K::Bullet, "**Affichage \xE2\x80\xBA Assistant IA**, ou la case \xC2\xAB Assistant IA "
+                         "(Ctrl+Maj+I) \xC2\xBB d'Affichage \xE2\x80\xBA Panneaux \xC3\xA0 afficher.", {}},
+             {K::Bullet, "**Projet \xE2\x80\xBA Disposition\xE2\x80\xA6** : la ligne \xC2\xAB Assistant IA "
+                         "\xC2\xBB de La fen\xC3\xAAtre (cach\xC3\xA9 au d\xC3\xA9part, toujours, en "
+                         "\xC3\xA9" "dition, en simulation).", {}},
+             {K::Bullet, "**Ctrl+K** (Aller \xC3\xA0 / Faire) : \xC2\xAB Assistant IA \xC2\xBB.", {}},
+             {K::Paragraph, "Il se place \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues et le pousse, sans le "
+                         "cacher : la vue reste visible pendant qu'on dialogue. Son s\xC3\xA9parateur se "
+                         "tire comme les autres ; sa largeur et son \xC3\xA9tat sont retenus.", {}},
+             {K::Table, "Partie\tCe qu'elle montre\nEn-t\xC3\xAAte\tL'ic\xC3\xB4ne, \xC2\xAB Assistant IA "
+                         "\xC2\xBB, l'\xC3\xA9tat de connexion (\xC2\xAB D\xC3\xA9monstration \xE2\x80\x93 "
+                         "aucune IA connect\xC3\xA9" "e \xC2\xBB), Nouvelle conversation (+), "
+                         "Param\xC3\xA8tres, Replier. Dessous, le mode **Pr\xC3\xA9visualisation** ou "
+                         "**Direct**, et la vue vis\xC3\xA9" "e (celle de l'onglet "
+                         "ouvert).\nConversations\tLes plus r\xC3\xA9" "centes d'abord, avec leur date. Un "
+                         "clic en ouvre une ; un double-clic ou **F2** la renomme sur place "
+                         "(Entr\xC3\xA9" "e garde, \xC3\x89" "chap annule) ; **Suppr** ou le clic droit "
+                         "\xE2\x80\xBA Supprimer\xE2\x80\xA6 la supprime, apr\xC3\xA8s une confirmation. "
+                         "\xC2\xAB d\xC3\xA9mo \xC2\xBB marque les conversations de d\xC3\xA9monstration. Un "
+                         "clic sur l'en-t\xC3\xAAte replie la liste.\nDiscussion\tVos demandes \xC3\xA0 "
+                         "droite, les r\xC3\xA9ponses \xC3\xA0 gauche, avec leur heure. Les r\xC3\xA9ponses "
+                         "sont mises en forme : titres, **gras**, listes, `code`. Elle d\xC3\xA9" "file "
+                         "seule (la molette, sa barre) : la saisie reste toujours visible en "
+                         "bas.\nPi\xC3\xA8" "ces jointes\tLes fichiers joints au prochain message : leur "
+                         "type, leur taille, leur traitement, la croix pour les "
+                         "retirer.\nSaisie\t**Entr\xC3\xA9" "e** envoie, **Maj+Entr\xC3\xA9" "e** passe "
+                         "\xC3\xA0 la ligne (Ctrl+Entr\xC3\xA9" "e envoie aussi). Le trombone joint un "
+                         "fichier ; un fichier l\xC3\xA2" "ch\xC3\xA9 sur le panneau aussi. Pendant une "
+                         "r\xC3\xA9ponse, Envoyer devient **Arr\xC3\xAAter**.", {}},
+             {K::Step, "Ouvrez la vue \xC3\xA0 modifier dans l'\xC3\xA9" "diteur (son onglet devant).", "1"},
+             {K::Step, "\xC3\x89" "crivez la demande, ou cliquez une suggestion (une conversation vide les "
+                         "propose).", "2"},
+             {K::Step, "La r\xC3\xA9ponse arrive par \xC3\xA9tapes : **En attente\xE2\x80\xA6**, "
+                         "**R\xC3\xA9" "flexion\xE2\x80\xA6**, puis **\xC3\x89" "criture\xE2\x80\xA6** mot "
+                         "\xC3\xA0 mot. **Arr\xC3\xAAter** la coupe : ce qui est \xC3\xA9" "crit reste, sans "
+                         "proposition.", "3"},
+             {K::Paragraph, "Une r\xC3\xA9ponse qui modifie la vue porte une carte **Op\xC3\xA9rations "
+                         "propos\xC3\xA9" "es** : ce qu'elle cr\xC3\xA9" "e, modifie et supprime, une "
+                         "miniature de la vue modifi\xC3\xA9" "e (dessin\xC3\xA9" "e comme dans "
+                         "l'\xC3\xA9" "diteur), les avertissements et les erreurs, et trois boutons :", {}},
+             {K::Bullet, "**Pr\xC3\xA9visualiser\xE2\x80\xA6** ouvre l'aper\xC3\xA7u ;", {}},
+             {K::Bullet, "**Appliquer** modifie le projet, en une seule \xC3\xA9tape d'annulation "
+                         "(l'historique la montre sous \xC2\xAB Assistant IA : \xE2\x80\xA6 \xC2\xBB) ;", {}},
+             {K::Bullet, "**Refuser** : le projet ne change pas.", {}},
+             {K::Paragraph, "La carte passe ensuite \xC3\xA0 \xC2\xAB Appliqu\xC3\xA9" "e \xC2\xBB ou \xC2\xAB "
+                         "Refus\xC3\xA9" "e \xC2\xBB. Les objets propos\xC3\xA9s sont de vrais objets du "
+                         "logiciel (Cuve, Pompe, Vanne, Bargraphe, Bouton \xC3\xA0 impulsion, "
+                         "Tuyauterie\xE2\x80\xA6) avec leurs vraies propri\xC3\xA9t\xC3\xA9s : une "
+                         "propri\xC3\xA9t\xC3\xA9 inconnue d'un genre est refus\xC3\xA9" "e, jamais "
+                         "invent\xC3\xA9" "e.", {}},
+             {K::Warning, "L'Assistant n'invente jamais une variable. Une variable cit\xC3\xA9" "e qui "
+                         "n'existe pas dans le projet est une erreur : l'aper\xC3\xA7u propose les variables "
+                         "existantes (les plus proches d'abord) et \xC2\xAB Cr\xC3\xA9" "er \xE2\x80\xA6 "
+                         "\xC2\xBB \xE2\x80\x93 c'est vous qui choisissez.", {}},
+             {K::Paragraph, "La fen\xC3\xAAtre **Pr\xC3\xA9visualisation des modifications** montre, avant que "
+                         "rien ne change : les comptes (\xC3\xA0 cr\xC3\xA9" "er, \xC3\xA0 modifier, "
+                         "\xC3\xA0 supprimer), les erreurs et les avertissements, les variables "
+                         "associ\xC3\xA9" "es, chaque objet et ses propri\xC3\xA9t\xC3\xA9s (avant "
+                         "\xE2\x86\x92 apr\xC3\xA8s), et \xC3\xA0 droite la vue telle qu'elle serait, "
+                         "dessin\xC3\xA9" "e par l'\xC3\xA9" "diteur : les objets nouveaux encadr\xC3\xA9s "
+                         "en vert, les modifi\xC3\xA9s en bleu, ceux \xC3\xA0 supprimer barr\xC3\xA9s de "
+                         "rouge. **Appliquer** (un seul Ctrl+Z), **Annuler** (la proposition est "
+                         "refus\xC3\xA9" "e), **Modifier la demande** (le texte revient dans la saisie). "
+                         "\xC3\x89" "chap ferme sans d\xC3\xA9" "cider. En mode **Direct**, chaque "
+                         "proposition s'applique d\xC3\xA8s la fin de la r\xC3\xA9ponse, sans "
+                         "l'aper\xC3\xA7u ; Ctrl+Z la reprend d'un coup. Une suppression de plusieurs objets "
+                         "demande toujours une confirmation, quel que soit le mode. Une proposition garde "
+                         "l'empreinte de la vue au moment o\xC3\xB9 elle a \xC3\xA9t\xC3\xA9 faite. Si la "
+                         "vue a chang\xC3\xA9 depuis (un objet d\xC3\xA9plac\xC3\xA9, "
+                         "ajout\xC3\xA9\xE2\x80\xA6), ou si elle n'existe plus, la proposition ne s'applique "
+                         "pas : la carte dit \xC2\xAB P\xC3\xA9rim\xC3\xA9" "e \xC2\xBB et propose "
+                         "**Redemander**, qui remet la demande dans la saisie. Images (PNG, JPG), PDF, texte "
+                         "(TXT), CSV, Excel (XLSX), XML, JSON et les fichiers du logiciel (.xihm, .xapi, le "
+                         "projet). Un autre format est refus\xC3\xA9, et le panneau le dit. Le fichier est "
+                         "copi\xC3\xA9 \xC3\xA0 l'identique dans le dossier de l'Assistant ; le retirer "
+                         "avant l'envoi supprime la copie. En d\xC3\xA9monstration, leur contenu n'est pas "
+                         "lu. Le bouton Param\xC3\xA8tres de l'en-t\xC3\xAAte : activer l'Assistant, le "
+                         "fournisseur (D\xC3\xA9monstration ; les autres sont \xC3\xA0 venir), le "
+                         "mod\xC3\xA8le (une case libre : rien n'est impos\xC3\xA9), l'adresse et le "
+                         "d\xC3\xA9lai, la **cl\xC3\xA9 API** (masqu\xC3\xA9" "e, Afficher, Effacer), le "
+                         "mode par d\xC3\xA9" "faut, la conservation de l'historique (dur\xC3\xA9" "e, "
+                         "nombre de conversations), la confidentialit\xC3\xA9 (ce qui serait envoy\xC3\xA9 : "
+                         "la vue active, la s\xC3\xA9lection, les noms et types des variables, les "
+                         "pi\xC3\xA8" "ces jointes \xE2\x80\x93 chacun se d\xC3\xA9" "coche) et "
+                         "**M\xC3\xA9moire et apprentissage\xE2\x80\xA6**.", {}},
+             {K::Warning, "La cl\xC3\xA9 API n'est jamais \xC3\xA9" "crite sur le disque : dans cette "
+                         "version, elle reste en m\xC3\xA9moire le temps de la s\xC3\xA9" "ance. Quand l'IA "
+                         "sera branch\xC3\xA9" "e, elle sera prot\xC3\xA9g\xC3\xA9" "e par Windows (DPAPI), "
+                         "ou d\xC3\xA9tenue par un serveur relais de l'entreprise.", {}},
+             {K::Paragraph, "Dans le dossier **IA** des r\xC3\xA9glages de l'utilisateur (\xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 de Mes images), jamais dans le projet : un fichier par "
+                         "conversation (ses messages, ses pi\xC3\xA8" "ces jointes, l'\xC3\xA9tat de ses "
+                         "propositions), la copie des pi\xC3\xA8" "ces jointes, les param\xC3\xA8tres. "
+                         "Fermer et rouvrir l'application retrouve tout. Elle reconna\xC3\xAEt six demandes "
+                         ": le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, "
+                         "indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un "
+                         "indicateur de niveau, \xC2\xAB Mets celle de droite en rouge \xC2\xBB (sur la "
+                         "s\xC3\xA9lection), \xC2\xAB Aligne les quatre boutons \xC2\xBB, \xC2\xAB Associe "
+                         "cette pompe \xC3\xA0 la variable \xE2\x80\xA6 \xC2\xBB et \xC2\xAB Supprime les "
+                         "vannes \xC2\xBB. \xC3\x80 toute autre demande, elle r\xC3\xA9pond "
+                         "honn\xC3\xAAtement qu'elle ne la comprend pas encore, et propose les suggestions. "
+                         "Rien ne quitte le PC.", {}},
+         },
+         {"editeur", "objets", "historique", "memoire-ia"},
+         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U"},
+         {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.14.2"},
+        // ---- Concevoir les vues  L'Assistant IA / memoire-ia
+        {"memoire-ia", "M\xC3\xA9moire et apprentissage de l'IA", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Ce que l'Assistant IA conna\xC3\xAEt, ce qu'il garde d'une s\xC3\xA9" "ance \xC3\xA0 l'autre et la "
+         "place que tout cela prend sur ce PC : six onglets, tous calcul\xC3\xA9s sur les vrais fichiers du "
+         "dossier IA/. Apprendre ici, c'est enrichir la m\xC3\xA9moire locale que l'Assistant joint \xC3\xA0 "
+         "ses demandes : le mod\xC3\xA8le distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9.",
+         {
+             {K::Paragraph, "Dans les param\xC3\xA8tres de l'Assistant IA, le bouton **M\xC3\xA9moire et "
+                         "apprentissage\xE2\x80\xA6** ; ou Ctrl+K, puis \xC2\xAB m\xC3\xA9moire \xC2\xBB. "
+                         "C'est une fen\xC3\xAAtre du logiciel : elle se d\xC3\xA9place par son titre, "
+                         "s'agrandit par un bord ou un coin, \xC3\x89" "chap la ferme ; **Actualiser** (F5) "
+                         "refait toutes les mesures. Chaque chiffre est mesur\xC3\xA9 \xC3\xA0 l'ouverture "
+                         "et apr\xC3\xA8s chaque op\xC3\xA9ration : la taille des fichiers du dossier IA/ "
+                         "(dans tes r\xC3\xA9glages, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Mes images), l'espace "
+                         "libre du disque qui le porte, la m\xC3\xA9moire vive d'IHM Studio. \xC3\x80 la "
+                         "premi\xC3\xA8re ouverture le dossier est presque vide : l'\xC3\xA9" "cran le dit, "
+                         "avec de petites tailles, vraies.", {}},
+             {K::Warning, "L'apprentissage ne r\xC3\xA9" "entra\xC3\xAEne pas le mod\xC3\xA8le distant. Une "
+                         "connaissance active est un texte que l'Assistant joint \xC3\xA0 chaque demande ; "
+                         "sa \xC2\xAB taille estim\xC3\xA9" "e \xC2\xBB est la taille de ce texte.", {}},
+             {K::Paragraph, "L'\xC3\xA9tat de la m\xC3\xA9moire ; les conversations, les messages, les "
+                         "connaissances (combien sont actives ici et combien d'octets partent avec chaque "
+                         "demande), les genres d'objets connus (116/116 : tir\xC3\xA9s des tables du "
+                         "logiciel), le stockage total et l'espace libre. Deux blocs s\xC3\xA9par\xC3\xA9s : "
+                         "**M\xC3\xA9moire vive (RAM) de l'application** (celle d'IHM Studio maintenant, son "
+                         "pic, la RAM disponible du PC, les traitements IA locaux : aucun) et **Stockage "
+                         "permanent (disque)** (le disque, la r\xC3\xA9partition des donn\xC3\xA9" "es de "
+                         "l'IA, la date du dernier nettoyage).", {}},
+             {K::Tip, "Le mod\xC3\xA8le d'IA distant tourne chez son fournisseur : il n'occupe ni la RAM "
+                         "ni le disque de ce PC.", {}},
+             {K::Paragraph, "La liste des connaissances : nom, cat\xC3\xA9gorie, source, projet, dates d'ajout "
+                         "et de mise \xC3\xA0 jour, taille estim\xC3\xA9" "e, \xC3\xA9tat. Filtr\xC3\xA9" "e "
+                         "par cat\xC3\xA9gorie et par projet. **Consulter** montre tout le texte ; "
+                         "**Modifier**, **Activer / D\xC3\xA9sactiver**, **Supprimer** (en rouge, "
+                         "confirm\xC3\xA9) ; **Ajouter une connaissance\xE2\x80\xA6** ouvre "
+                         "l'\xC3\xA9" "diteur (nom, cat\xC3\xA9gorie, projet, description, contenu, active).", {}},
+             {K::Table, "Sorte\tCe qu'on peut en faire\nDu logiciel (6)\tGenres d'objets, "
+                         "propri\xC3\xA9t\xC3\xA9s de chaque genre, actions, vocabulaire et synonymes, objet "
+                         "pos\xC3\xA9 pour une variable, mod\xC3\xA8les de vues - tir\xC3\xA9" "es des "
+                         "tables d'IHM Studio : consulter, activer, d\xC3\xA9sactiver. Elles ne se "
+                         "suppriment pas.\nAjout\xC3\xA9" "es\tUne par fichier dans IA/connaissances : tout "
+                         "(consulter, modifier, activer, d\xC3\xA9sactiver, supprimer).", {}},
+             {K::Paragraph, "Une connaissance porte un projet (vide : tous les projets). Celle d'un autre "
+                         "projet est marqu\xC3\xA9" "e \xC2\xAB Autre projet \xC2\xBB : elle ne part pas "
+                         "avec les demandes faites ici. \xC3\x80 droite, l'activit\xC3\xA9 r\xC3\xA9" "cente "
+                         "de l'apprentissage. Les informations gard\xC3\xA9" "es, par cat\xC3\xA9gorie : "
+                         "conversations, historique des messages, informations par projet, "
+                         "pr\xC3\xA9" "f\xC3\xA9rences, connaissances m\xC3\xA9tier, "
+                         "r\xC3\xA9" "f\xC3\xA9rences aux pi\xC3\xA8" "ces jointes. La recherche trouve un "
+                         "titre, un message, une connaissance ou une pi\xC3\xA8" "ce jointe (les mots dans "
+                         "n'importe quel ordre, sans les accents). Supprimer une conversation, une "
+                         "m\xC3\xA9moire, une pi\xC3\xA8" "ce jointe, oublier un projet ou vider une "
+                         "cat\xC3\xA9gorie enti\xC3\xA8re : toujours une confirmation d'abord. La "
+                         "r\xC3\xA9partition pr\xC3\xA9" "cise (le tableau par dossier et l'anneau), la "
+                         "taille totale, le nombre de fichiers, l'espace libre, la date du dernier nettoyage "
+                         "; l'emplacement du dossier (\xC3\xA0 copier) et **Ouvrir le dossier** dans "
+                         "l'explorateur du syst\xC3\xA8me. **Vider le cache** : les six cat\xC3\xA9gories du "
+                         "cache (requ\xC3\xAAtes, fichiers de traitement, images, documents temporaires, "
+                         "aper\xC3\xA7us, t\xC3\xA9l\xC3\xA9" "chargements), coch\xC3\xA9" "es par "
+                         "d\xC3\xA9" "faut, chacune avec sa taille et ce que la vider change ; le total "
+                         "\xC3\xA0 lib\xC3\xA9rer s'affiche avant, et une confirmation le redit. Seul le "
+                         "dossier cache/ est touch\xC3\xA9 : jamais les conversations, les connaissances, "
+                         "les pi\xC3\xA8" "ces jointes originales, les projets ni les param\xC3\xA8tres. La "
+                         "zone rouge **Supprimer les donn\xC3\xA9" "es persistantes** est \xC3\xA0 part : "
+                         "les cat\xC3\xA9gories \xC3\xA0 cocher, puis \xC2\xAB Je comprends : ces "
+                         "donn\xC3\xA9" "es seront supprim\xC3\xA9" "es d\xC3\xA9" "finitivement de ce PC "
+                         "\xC2\xBB, puis la confirmation. Rien ne se r\xC3\xA9" "cup\xC3\xA8re. Le journal "
+                         "de la m\xC3\xA9moire (activite.jsonl), le plus r\xC3\xA9" "cent en haut : la date, "
+                         "le type (conversation, connaissance, fichier analys\xC3\xA9, r\xC3\xA8gle, "
+                         "nettoyage, suppression) et ce qui s'est pass\xC3\xA9 ; un filtre par type.", {}},
+         },
+         {"assistant-ia", "aller-a"},
+         {"M\xC3\xA9moire et apprentissage de l'IA", "m\xC3\xA9moire IA", "apprentissage", "connaissances", "connaissance", "cache", "Vider le cache", "donn\xC3\xA9" "es persistantes", "Stockage PC", "ia.memoire", "IA", "dossier IA", "activite.jsonl", "memoire.json", "genres d'objets connus"},
+         {"ia.memoire"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.14.2"},
         // ---- Communiquer / principe-communication
         {"principe-communication", "Le principe de la communication", "Communiquer",
          "L'IHM est le client - le ma\xC3\xAEtre : elle demande, l'appareil r\xC3\xA9pond, une "
