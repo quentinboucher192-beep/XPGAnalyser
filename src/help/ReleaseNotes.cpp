@@ -210,6 +210,21 @@ const std::vector<Note>& table() {
          "Son \xC3\xA9tat se lit d'un coup d'\xC5\x93il : le haut-parleur et Sons ; barr\xC3\xA9 sur fond rouge, Coup\xC3\xA9s ; barr\xC3\xA9 et "
          "estomp\xC3\xA9 quand tout le son est coup\xC3\xA9 ; Alarmes \xC3\xA0 \xC3\x97" "4 et \xC3\x97" "8.",
          "enregistrements", ""),
+        // 1.14.1 (captures finales) : la note de la barre de relecture se lit ; une valeur montree garde ses \.
+        note("1.14.1", "Simulation", Kind::Fixed,
+         "LA BARRE DE RELECTURE DIT QUE LE PROJET A CHANG\xC3\x89 DEPUIS L'ENREGISTREMENT, LISIBLEMENT : rejouer un enregistrement apr\xC3\xA8s "
+         "une modification du projet (une vue, une variable ajout\xC3\xA9" "e - un .xrec fait par la 1.14.0, par exemple) coupait sa note au "
+         "milieu, faute de place (\xC2\xAB \xE2\x9A\xA0 Le projet a chang\xC3\xA9 depuis l'enregistre\xE2\x80\xA6 \xC2\xBB). Elle se dit maintenant en "
+         "entier quand elle tient, sinon en bref (\xC2\xAB \xE2\x9A\xA0 Projet chang\xC3\xA9 depuis l'enregistrement \xC2\xBB, \xC2\xAB \xE2\x9A\xA0 Projet "
+         "chang\xC3\xA9 \xC2\xBB) ; son infobulle la donne toujours en entier. Le bouton Sons et les vitesses gardent leur place.",
+         "enregistrements", ""),
+        note("1.14.1", "Simulation", Kind::Fixed,
+         "UNE VALEUR S'AFFICHE TELLE QUELLE EN MARCHE : un texte \xC3\xA0 trous ({Chemin}), une formule (=Chemin) ou un afficheur qui montre "
+         "une variable STRING lisait ses \\t et \\n comme des \xC3\xA9" "chappements - le chemin C:\\travaux\\nouveau s'affichait \xC2\xAB C:    "
+         "ravaux \xC2\xBB puis \xC2\xAB ouveau \xC2\xBB \xC3\xA0 la ligne, Z:\\tmp\\... \xC2\xAB Z:    mp\\... \xC2\xBB (le Choix vers d'un Explorateur "
+         "de fichiers, son message Extrait). Seul le texte tap\xC3\xA9 lit son \\n (une nouvelle ligne), une fois ; un chemin, un nom de fichier, "
+         "une valeur se montrent comme ils sont.",
+         "objet-texte", ""),
         // 1.14.1 (lot N2, demande du 30/10) : la bonne fleche de Windows la ou l'on peut etirer, deplacer, ecrire (ui::cursor).
         note("1.14.1", "Application", Kind::New,
          "LE POINTEUR PREND LA FORME WINDOWS DE CE QU'ON PEUT FAIRE, avant le clic : la double fl\xC3\xA8" "che horizontale ou verticale sur un "
