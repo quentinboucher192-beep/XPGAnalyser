@@ -2150,7 +2150,13 @@ bool HmiLiveCanvas::comboListHit(gfx::Point p, hmi::Id& object, std::string& par
 
 void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount) {
     const Id id = objectAtLayer(layer, p);
-    const auto* o = id && layer < layers_.size() ? layers_[layer].view.object(id) : nullptr;
+    // 1.14.1 : l'objet est COPIE. clickedAway et partClicked rafraichissent la vue en marche (showLayers remplace
+    // layers_) : un pointeur dans l'ancienne vue serait perime apres eux - le plantage d'un clic d'une calculatrice a
+    // une autre (layoutOf lisait l'objet libere), et le meme piege pour l'Enregistreur, les alarmes, les panneaux.
+    std::optional<hmi::Object> held;
+    if (id && layer < layers_.size())
+        if (const auto* found = layers_[layer].view.object(id)) held = *found;
+    const hmi::Object* o = held ? &*held : nullptr;
     if (o && layer < vps_.size()) {
         const auto& vp = vps_[layer];
         const auto box = o->box();
