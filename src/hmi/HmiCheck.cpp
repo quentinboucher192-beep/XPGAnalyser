@@ -1846,6 +1846,33 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             add(out, S::Error, "Action", v.id, obj, where, "'" + a.target + "' n'est pas un son");
                         break;
                     }
+                    // 1.14.0 : le son - le canal vise (un mot, ou une expression qui le donne), le volume (0 a 100).
+                    case Operation::SoundVolume:
+                    case Operation::SoundChannelMute: {
+                        const std::string target = trimmedCopy(a.target);
+                        if (target.empty() && a.operation == Operation::SoundChannelMute)
+                            add(out, S::Error, "Action", v.id, obj, where, "aucun canal du son vis\xC3\xA9");
+                        else if (!target.empty() && !soundChannelFrom(target)) {
+                            const bool word = std::all_of(target.begin(), target.end(), [](char c) {
+                                return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || static_cast<unsigned char>(c) >= 0x80;
+                            });
+                            bool variable = false;
+                            for (const auto& var : p.programs.variables) variable = variable || upperText(var.name) == upperText(target);
+                            if ((word && !variable) || !Expression::compile(target).valid())
+                                add(out, S::Error, "Action", v.id, obj, where,
+                                    "canal du son '" + target + "' inconnu (General, Alarmes, Scripts, Actions, Videos ou Relecture)");
+                        }
+                        if (a.operation == Operation::SoundVolume && !trimmedCopy(a.value).empty()) {
+                            double n = 0;
+                            if (parseNumber(trimmedCopy(a.value), n)) {
+                                if (n < 0 || n > 100)
+                                    add(out, S::Warning, "Action", v.id, obj, where, "volume " + a.value + " : hors de 0 \xC3\xA0 100 %, il sera born\xC3\xA9");
+                            } else if (!Expression::compile(a.value).valid()) {
+                                add(out, S::Error, "Action", v.id, obj, where, "volume illisible : " + a.value);
+                            }
+                        }
+                        break;
+                    }
                     default: break;
                 }
             }
@@ -2516,6 +2543,40 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (trimmedCopy(o.text("function")).empty())
                         issue(S::Warning, "function", "instrument sans lettres ISA (PT, TIC, FT...) : sa bulle est vide");
                     break;
+                // 1.14.0 : le Coupe-son (son canal), le Melangeur de volume (ses canaux, son orientation).
+                case Kind::SoundMute: {
+                    const auto p1 = o.find("soundChannel");
+                    const std::string ch = trimmedCopy(o.text("soundChannel", "Tous"));
+                    if ((!p1 || p1->expr.empty()) && !ch.empty() && !soundChannelFrom(ch))
+                        issue(S::Error, "soundChannel", "canal inconnu \xC2\xAB " + ch + " \xC2\xBB (Tous, Alarmes, Scripts, Actions, Vid\xC3\xA9os ou Relecture) : "
+                                                         "le bouton coupera tous les sons");
+                    if (o.text("textOn").empty() != o.text("textOff").empty())
+                        issue(S::Warning, "textOn", "un seul libell\xC3\xA9 : l'autre \xC3\xA9tat montrera l'ic\xC3\xB4ne seule");
+                    break;
+                }
+                case Kind::VolumeMixer: {
+                    const auto p1 = o.find("channels");
+                    if (!p1 || p1->expr.empty()) {
+                        std::vector<std::string> unknown;
+                        const auto shown = mixerChannels(o.text("channels", "tous"), &unknown);
+                        for (const auto& u : unknown)
+                            issue(S::Error, "channels", "canal inconnu \xC2\xAB " + u + " \xC2\xBB (General, Alarmes, Scripts, Actions, Videos ou Relecture)");
+                        if (shown.empty()) issue(S::Error, "channels", "aucun canal montr\xC3\xA9 : le m\xC3\xA9langeur est vide");
+                        const auto l = mixerLayout(o, o.number("w", 480), o.number("h", 250));
+                        for (const auto& t : l.tracks) {
+                            const double course = l.vertical ? t.track.h : t.track.w;
+                            if (course < 30) {
+                                issue(S::Warning, "h", std::string("pistes trop ") + (l.vertical ? "basses" : "\xC3\xA9troites")
+                                                       + " : la course d'un curseur fait moins de 30 pixels (agrandis l'objet ou montre moins de canaux)");
+                                break;
+                            }
+                        }
+                    }
+                    const std::string orientation = o.text("orientation", "verticale");
+                    if (orientation != "verticale" && orientation != "horizontale")
+                        issue(S::Warning, "orientation", "orientation inconnue \xC2\xAB " + orientation + " \xC2\xBB : les pistes seront verticales");
+                    break;
+                }
                 case Kind::SystemButton: {
                     // Lot 10 : l'onglet ouvert ; une action "Parametres systeme" au clic ferait double emploi.
                     const std::string tab = o.text("tab", "R\xC3\xA9glages");

@@ -6912,6 +6912,225 @@ void lot10_synoptique() {
 }
 
 // ------------------------------------------------ 1.12.30 : la visionneuse de documents (ecran) --
+// ------------------------------------------- 1.14.0 (lot M3) : couper le son, le melangeur (ecran) --
+// Un enregistreur qui garde la couleur de chaque triangle (le theme clair et sombre).
+struct ColorRecorder final : gfx::IRenderer {
+    std::vector<std::pair<gfx::Point, gfx::Color>> tris;
+    std::vector<std::string> texts;
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
+        for (std::size_t i = 0; i < n; ++i) tris.emplace_back(v[i].pos, v[i].color);
+    }
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {8.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+    float lineHeight(gfx::FontId) const override { return 16.f; }
+    gfx::Size surfaceSize() const override { return {2000.f, 1000.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId, float maxWidth) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, maxWidth) / 8.f));
+    }
+    std::size_t count(std::string_view part) const {
+        std::size_t n = 0;
+        for (const auto& t : texts) n += t == part;
+        return n;
+    }
+    bool wrote(std::string_view part) const {
+        for (const auto& t : texts) if (t.find(part) != std::string::npos) return true;
+        return false;
+    }
+    // La premiere couleur dessinee dans `r` (le fond de l'objet, dessine d'abord).
+    gfx::Color firstIn(const gfx::Rect& r) const {
+        for (const auto& [p, c] : tris)
+            if (p.x >= r.x - 1 && p.x <= r.x + r.w + 1 && p.y >= r.y - 1 && p.y <= r.y + r.h + 1) return c;
+        return {};
+    }
+};
+
+void son1140Ecran() {
+    std::printf("1.14.0 : couper le son, le m\xC3\xA9langeur \xC3\xA0 l'\xC3\xA9" "cran (les voix par canal, le dessin, la simulation, la biblioth\xC3\xA8que)\n");
+    using hmi::SoundChannel;
+    // ---- les voix par canal : couper un canal, changer un gain, le niveau (le vumetre)
+    {
+        app::SoundVoices v;
+        std::vector<int> off;
+        const int a = 0, b = 0;
+        const int al = v.start(&a, 2.0, 0.0, off, static_cast<int>(SoundChannel::Alarms), 0.5f, {1.f, 0.5f, 0.2f});
+        (void)v.start(&b, 2.0, 0.0, off, static_cast<int>(SoundChannel::Scripts), 1.f, {});
+        check(std::fabs(v.level(static_cast<int>(SoundChannel::Alarms), 0.01) - 0.5f) < 1e-6
+                  && std::fabs(v.level(static_cast<int>(SoundChannel::Alarms), 0.06) - 0.25f) < 1e-6,
+              "le niveau d'un canal : la cr\xC3\xAAte de la voix au point o\xC3\xB9 elle en est, fois son gain");
+        check(std::fabs(v.level(0, 0.01) - 0.7f) < 1e-6 && v.level(static_cast<int>(SoundChannel::Videos), 0.01) == 0.f,
+              "le G\xC3\xA9n\xC3\xA9ral : la plus forte de toutes ; un canal sans voix : 0");
+        v.setGain(static_cast<int>(SoundChannel::Alarms), 0.2f);
+        check(std::fabs(v.level(static_cast<int>(SoundChannel::Alarms), 0.01) - 0.2f) < 1e-6, "un gain chang\xC3\xA9 : la voix en cours le prend");
+        off.clear();
+        v.silenceChannel(static_cast<int>(SoundChannel::Alarms), off);
+        check(off == std::vector<int>{al} && v.voices().size() == 1 && v.level(static_cast<int>(SoundChannel::Alarms), 0.01) == 0.f,
+              "couper un canal : ses voix se taisent, les autres jouent");
+        off.clear();
+        v.silenceChannel(0, off);
+        check(off.size() == 1 && v.voices().empty(), "tout couper : toutes les voix se taisent");
+        const auto peaks = app::SoundVoices::peaksOf({0, 16384, -32767, 0}, 1, 2, 1.0);
+        check(peaks.size() == 2 && std::fabs(peaks[0] - 0.5f) < 1e-3 && std::fabs(peaks[1] - 1.f) < 1e-6, "les cr\xC3\xAAtes d'un son, par pas");
+        auto& player = app::HmiSoundPlayer::instance();
+        player.setChannelGain(static_cast<int>(SoundChannel::Alarms), 0.3f);
+        player.stopChannel(static_cast<int>(SoundChannel::Videos));
+        check(player.level(static_cast<int>(SoundChannel::Alarms)) == 0.f, "sans sortie son (les essais) : le lecteur ne fait rien, sans erreur");
+    }
+    // ---- la bibliotheque : la famille Commandes, leurs icones ; l'inspecteur
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        pal.setFilter("commandes");
+        bool tiles = true;
+        for (const Kind k : {Kind::SoundMute, Kind::VolumeMixer}) {
+            gfx::Rect r;
+            if (!pal.tileRect(k, r)) pal.revealKind(k);
+            tiles = tiles && pal.tileRect(k, r) && app::glyphFor(k) != app::HmiGlyph::None;
+        }
+        check(tiles, "les tuiles Coupe-son et M\xC3\xA9langeur de volume dans la famille Commandes, chacune son ic\xC3\xB4ne");
+        pal.setFilter("");
+        (void)b.place(Kind::VolumeMixer, 100, 100);
+        b.editor->layout();
+        std::set<std::string> names;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) names.insert(pr.name);
+        check(names.count("Canaux affich\xC3\xA9s") && names.count("Orientation des curseurs") && names.count("Vum\xC3\xA8tre") && names.count("Bouton M (muet)")
+                  && names.count("Pourcentage") && names.count("Couleur du M allum\xC3\xA9") && names.count("Pilotable (curseurs, molette, M)"),
+              "l'inspecteur du m\xC3\xA9langeur : Canaux affich\xC3\xA9s, Orientation, Vum\xC3\xA8tre, Bouton M, Pourcentage, la couleur du M, Pilotable");
+        Bench b2;
+        (void)b2.place(Kind::SoundMute, 100, 100);
+        b2.editor->layout();
+        std::set<std::string> mute;
+        for (const auto& c : b2.editor->properties().categories())
+            for (const auto& pr : c.properties) mute.insert(pr.name);
+        check(mute.count("Canal vis\xC3\xA9") && mute.count("Libell\xC3\xA9 son actif") && mute.count("Libell\xC3\xA9 muet") && mute.count("Fond muet")
+                  && mute.count("Ic\xC3\xB4ne haut-parleur"),
+              "l'inspecteur du Coupe-son : Canal vis\xC3\xA9, les deux libell\xC3\xA9s, le fond muet, l'ic\xC3\xB4ne");
+    }
+    // ---- le dessin dans l'editeur : le son actif, tout a 100 %
+    {
+        Project p;
+        View v = makeView(p, "Vue_Son");
+        const app::HmiViewport vp{};
+        const auto theme = ui::Theme::dark();
+        Object m = makeObject(Kind::SoundMute, 900, "Coupe", 10, 10, v.layers.front().id);
+        ColorRecorder r1;
+        app::paintHmiObject(r1, v, m, vp, app::HmiPropertySource{}, theme, {});
+        check(r1.wrote("Son actif") && !r1.wrote("Son coup") && !r1.tris.empty(), "Coupe-son dans l'\xC3\xA9" "diteur : le haut-parleur et Son actif");
+        m.set("textOn", "");
+        m.set("textOff", "");
+        ColorRecorder r2;
+        app::paintHmiObject(r2, v, m, vp, app::HmiPropertySource{}, theme, {});
+        check(r2.texts.empty() && !r2.tris.empty(), "les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne seule");
+        Object x = makeObject(Kind::VolumeMixer, 901, "Melangeur", 10, 10, v.layers.front().id);
+        x.setNumber("w", 600);   // l'enregistreur mesure 8 pixels par octet : de la place pour le nom General (accentue)
+        ColorRecorder r3;
+        app::paintHmiObject(r3, v, x, vp, app::HmiPropertySource{}, theme, {});
+        check(r3.wrote("G\xC3\xA9n\xC3\xA9ral") && r3.wrote("Alarmes") && r3.wrote("Vid\xC3\xA9os") && r3.wrote("Relecture") && r3.count("100 %") == 6
+                  && r3.count("M") == 6,
+              "M\xC3\xA9langeur dans l'\xC3\xA9" "diteur : six pistes, 100 % chacune, six boutons M");
+        x.set("channels", "General;Videos");
+        x.setFlag("showMute", false);
+        x.setFlag("showPercent", false);
+        ColorRecorder r4;
+        app::paintHmiObject(r4, v, x, vp, app::HmiPropertySource{}, theme, {});
+        check(r4.wrote("G\xC3\xA9n\xC3\xA9ral") && r4.wrote("Vid\xC3\xA9os") && !r4.wrote("Alarmes") && r4.count("M") == 0 && !r4.wrote("%"),
+              "Canaux affich\xC3\xA9s General;Videos, sans M ni pourcentage : deux pistes nues");
+    }
+    // ---- en marche : la simulation, la souris, la molette, le theme jour
+    {
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Vue_Son");
+        v.width = 800;
+        v.height = 480;
+        const Id cs = edit::add(p, v, Kind::SoundMute, 20, 20);
+        v.object(cs)->name = "Coupe";
+        const Id mx = edit::add(p, v, Kind::VolumeMixer, 20, 100);
+        v.object(mx)->name = "Melangeur";
+        v.object(mx)->setNumber("w", 480);
+        v.object(mx)->setNumber("h", 260);
+        p.views = {v};
+        p.config.startView = v.id;
+        app::HmiSimulationPane pane("son1140", doc, app::HmiSimulationHost{});
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        const auto theme = ui::Theme::dark();
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+        paintAt(0.1);
+        check(rec.wrote("Son actif") && rec.count("100 %") >= 6, "en marche : Son actif, les six pistes \xC3\xA0 100 %");
+        gfx::Rect r;
+        check(pane.canvas().objectRect("Coupe", r), "le Coupe-son est dessin\xC3\xA9");
+        pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
+        paintAt(0.2);
+        check(!pane.runtime().settings().soundOn && rec.wrote("Son coup\xC3\xA9"), "un clic sur le Coupe-son (la souris) : tout est coup\xC3\xA9, il le montre");
+        pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
+        check(pane.runtime().settings().soundOn, "un second clic : le son revient");
+        // Glisser la poignee des Alarmes de 30 % a 80 % ; le volume suit en direct.
+        gfx::Rect a30, a80, a55;
+        check(pane.canvas().partRect("Melangeur", "volume:Alarmes:0.3", a30) && pane.canvas().partRect("Melangeur", "volume:Alarmes:0.8", a80)
+                  && pane.canvas().partRect("Melangeur", "volume:Alarmes:0.55", a55),
+              "les points de la course des Alarmes");
+        pane.canvas().dispatch(ui::MouseDown{centre(a30), ui::MouseButton::Left, 1, {}});
+        check(hmi::soundVolume(pane.runtime().settings(), SoundChannel::Alarms) == 30, "appuyer sur la course : 30 %");
+        pane.canvas().dispatch(ui::MouseMove{centre(a55), {0, 0}, {}});
+        check(hmi::soundVolume(pane.runtime().settings(), SoundChannel::Alarms) == 55, "glisser : le volume suit (55 %)");
+        pane.canvas().dispatch(ui::MouseMove{centre(a80), {0, 0}, {}});
+        pane.canvas().dispatch(ui::MouseUp{centre(a80), ui::MouseButton::Left, {}});
+        paintAt(0.3);
+        check(hmi::soundVolume(pane.runtime().settings(), SoundChannel::Alarms) == 80 && rec.wrote("80 %"), "l\xC3\xA2" "cher \xC3\xA0 80 % : dessin\xC3\xA9 80 %");
+        bool said = false;
+        for (const auto& e : pane.runtime().journal()) said = said || e.message == "volume Alarmes : 80 %";
+        check(said, "le journal dit le volume l\xC3\xA2" "ch\xC3\xA9");
+        // La molette sur la piste Scripts : deux crans vers le bas, -10 %.
+        gfx::Rect sc;
+        check(pane.canvas().partRect("Melangeur", "volume:Scripts:0.5", sc), "la piste Scripts");
+        pane.canvas().dispatch(ui::MouseWheel{centre(sc), 0.f, -2.f, {}});
+        check(hmi::soundVolume(pane.runtime().settings(), SoundChannel::Scripts) == 90, "la molette : deux crans vers le bas, 90 %");
+        // Le bouton M des Videos.
+        gfx::Rect mv;
+        check(pane.canvas().partRect("Melangeur", "muet:Videos", mv), "le bouton M des Vid\xC3\xA9os");
+        pane.canvas().dispatch(ui::MouseDown{centre(mv), ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{centre(mv), ui::MouseButton::Left, {}});
+        check(hmi::soundMuted(pane.runtime().settings(), SoundChannel::Videos), "M : le canal Vid\xC3\xA9os est coup\xC3\xA9");
+        // Le theme clair et sombre : le fond du melangeur passe au clair au jour.
+        gfx::Rect mr;
+        (void)pane.canvas().objectRect("Melangeur", mr);
+        paintAt(0.4);
+        const gfx::Color night = rec.firstIn(mr);
+        std::string why;
+        check(pane.runtime().setDisplay("theme", "jour", 0.5, "essai", &why), "le th\xC3\xA8me jour " + why);
+        paintAt(0.5);
+        const gfx::Color day = rec.firstIn(mr);
+        const auto lum = [](gfx::Color c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; };
+        check(lum(night) < 80 && lum(day) > 160 && rec.wrote("80 %"),
+              "le th\xC3\xA8me jour : le fond du m\xC3\xA9langeur s'\xC3\xA9" "claircit (" + std::to_string(static_cast<int>(lum(night))) + " \xE2\x86\x92 "
+                  + std::to_string(static_cast<int>(lum(day))) + "), les volumes restent");
+        // Redemarrer l'IHM : les reglages du poste restent.
+        pane.restart();
+        check(hmi::soundVolume(pane.runtime().settings(), SoundChannel::Alarms) == 80 && hmi::soundMuted(pane.runtime().settings(), SoundChannel::Videos),
+              "red\xC3\xA9marrer l'IHM : les volumes et les muets restent (r\xC3\xA9glages du poste)");
+    }
+}
+
 void visionneuse11230() {
     std::printf("1.12.30 : la visionneuse de documents \xC3\xA0 l'\xC3\xA9" "cran (biblioth\xC3\xA8que, inspecteur, dessin dans l'\xC3\xA9" "diteur)\n");
     {
@@ -18458,7 +18677,7 @@ void centreAide111() {
               && rel[52].version == "1.11.7" && rel[53].version == "1.11.6" && rel[54].version == "1.11.5"
               && rel[55].version == "1.11.4" && rel[56].version == "1.11.3" && rel[57].version == "1.11.2"
               && rel[58].version == "1.11.1" && rel[59].version == "1.11" && rel[60].version == "1.10.4",
-          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lots M1, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lots M1, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18729,7 +18948,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 457,   // 1.14.0 : + 8 (M1 : la colonne Utilisations ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 461,   // 1.14.0 : + 12 (M1 : la colonne Utilisations ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18876,7 +19095,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 233, "centre : L'IHM a les 233 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements)");
+    check(ix.count(hc::Chapter::Hmi) == 235, "centre : L'IHM a les 235 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 67, "centre : 11 expressions, 67 notes (1.14.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -18942,7 +19161,7 @@ void centreAide111() {
         check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 67
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lots M4, M5) : la plus recente
+        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lots M3, M4, M5) : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -41431,6 +41650,7 @@ int main(int argc, char** argv) {
     lot10_parametres_systeme();
     lot10_synoptique();
     visionneuse11230();   // 1.12.30
+    son1140Ecran();       // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     lot10_svg();
     lot10_symboles();
     lot11_bibliotheque();

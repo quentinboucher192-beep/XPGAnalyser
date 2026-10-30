@@ -391,7 +391,7 @@ void Runtime::alarmAppeared(const LiveAlarm& a, double now) {
         return;
     }
     soundsThisCycle_.insert(name);
-    (void)playSound(name, "alarme " + a.name);
+    (void)playSound(name, "alarme " + a.name, SoundChannel::Alarms);   // 1.14.0 : le canal Alarmes
 }
 
 void Runtime::alarmsCycle(double now) {
@@ -418,7 +418,7 @@ void Runtime::alarmsCycle(double now) {
     for (const auto& a : alarms_)
         if (!a.acked && a.priority == p) worst = &a;
     const std::string name = worst ? alarmSound(*worst) : as.sounds[static_cast<std::size_t>(std::clamp(p, 1, kAlarmPriorities) - 1)];
-    if (!name.empty() && project_->resourceByName(name)) (void)playSound(name, "alarmes (r\xC3\xA9p\xC3\xA9tition)");
+    if (!name.empty() && project_->resourceByName(name)) (void)playSound(name, "alarmes (r\xC3\xA9p\xC3\xA9tition)", SoundChannel::Alarms);
 }
 
 int Runtime::bannerAlarm(const Object& o) const {

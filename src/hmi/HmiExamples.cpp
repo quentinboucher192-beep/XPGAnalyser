@@ -2060,6 +2060,43 @@ Example speedDrive() {
     return m.done(12);
 }
 
+// ---- 1.14.0 : couper le son, le melangeur de volume ----------------------------------
+Example soundMute() {
+    Maker m;
+    m.add(Kind::SoundMute, "Coupe_Son", 30, 34, 200, 52);
+    auto& a = m.add(Kind::SoundMute, "Coupe_Alarmes", 250, 34, 60, 52);
+    a.set("soundChannel", "Alarmes");
+    a.set("textOn", "");
+    a.set("textOff", "");
+    m.title("Etat", 330, 40, 260, "Son {SYS.SoundEnabled:actif|coup\xC3\xA9}, alarmes {SYS.MuteAlarms:muettes|actives}", 15);
+    m.note("Explication", 30, 120, 540, 150,
+           "Un clic coupe tous les sons de l'IHM : ce qui joue se tait, les sons suivants ne partent pas ; un second clic les "
+           "r\xC3\xA9tablit, sans rien rejouer. Le petit bouton ne vise qu'un canal (les alarmes) : son ic\xC3\xB4ne seule, sans libell\xC3\xA9. "
+           "L'\xC3\xA9tat se lit dans SYS.SoundEnabled et SYS.MuteAlarms.");
+    m.step(1.0, "clic", "Coupe_Son");
+    m.step(3.0, "clic", "Coupe_Son");
+    m.step(4.5, "clic", "Coupe_Alarmes");
+    m.step(6.5, "clic", "Coupe_Alarmes");
+    return m.done(8.5);
+}
+
+Example volumeMixer() {
+    Maker m;
+    m.add(Kind::VolumeMixer, "Melangeur", 20, 16, 470, 268);
+    m.note("Explication", 500, 16, 90, 268,
+           "Le G\xC3\xA9n\xC3\xA9ral, puis un canal par source. Tire un curseur ; M coupe le canal.");
+    m.step(1.0, "partie", "Melangeur", "glisser:Alarmes:0.8");
+    m.step(1.3, "partie", "Melangeur", "lacher:Alarmes:0.6");
+    m.step(2.6, "partie", "Melangeur", "muet:Videos");
+    m.step(4.0, "partie", "Melangeur", "pas:General:-2");
+    m.step(5.5, "partie", "Melangeur", "muet:General");
+    m.step(7.0, "partie", "Melangeur", "muet:General");
+    m.step(7.5, "partie", "Melangeur", "muet:Videos");
+    m.step(8.0, "partie", "Melangeur", "lacher:Alarmes:1");
+    m.step(8.4, "partie", "Melangeur", "pas:General:2");
+    return m.done(9.5);
+}
+
 // ---- 1.12.30 : la visionneuse de documents - la notice suit l'etape de la procedure ----
 Example documentViewer() {
     Maker m(420);
@@ -2694,6 +2731,8 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::DocumentViewer:      return documentViewer();     // 1.12.30
         case Kind::Recorder:            return recorder();           // 1.14.0 (M4)
         case Kind::RecordingPlayer:     return recordingPlayer();
+        case Kind::SoundMute:           return soundMute();          // 1.14.0
+        case Kind::VolumeMixer:         return volumeMixer();
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

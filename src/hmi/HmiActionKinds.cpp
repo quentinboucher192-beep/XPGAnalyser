@@ -148,6 +148,9 @@ const std::vector<Group>& groups() {
          {Operation::Log, Operation::LoadRecipe, Operation::Export, Operation::BindTable, Operation::RequestResource}},
         {"M\xC3\xA9" "dias", "Sons et GIF anim\xC3\xA9s",
          {Operation::PlaySound, Operation::GifPlay, Operation::GifPause, Operation::GifStop, Operation::GifReplay}},
+        // 1.14.0 : le son - tout couper, retablir, un canal, son volume (le melangeur).
+        {"Son", "Couper, r\xC3\xA9tablir, r\xC3\xA9gler le volume des canaux",
+         {Operation::SoundMute, Operation::SoundRestore, Operation::SoundToggle, Operation::SoundVolume, Operation::SoundChannelMute}},
         {"Utilisateur et poste", "Connexion, menus natifs, langue, th\xC3\xA8me",
          {Operation::ChangeUser, Operation::Logout, Operation::ShowLogin, Operation::ShowSystem, Operation::SetLanguage,
           Operation::SetTheme}},
@@ -209,6 +212,14 @@ std::string_view help(Operation o) noexcept {
         case Operation::BindTable: return "Montre un fichier externe (SQLite, Excel, CSV...) dans un tableau de la vue.";
         case Operation::RequestResource: return "Fait choisir un fichier qui devient une ressource du projet.";
         case Operation::PlaySound: return "Joue un son des ressources.";
+        case Operation::SoundMute:
+            return "Coupe tous les sons : ce qui joue se tait, les suivants ne partent pas (SYS.SoundEnabled passe \xC3\xA0 FALSE).";
+        case Operation::SoundRestore: return "R\xC3\xA9tablit le son, sans rejouer ce qui a \xC3\xA9t\xC3\xA9 coup\xC3\xA9.";
+        case Operation::SoundToggle: return "Coupe le son s'il est actif, le r\xC3\xA9tablit s'il est coup\xC3\xA9.";
+        case Operation::SoundVolume:
+            return "R\xC3\xA8gle le volume d'un canal du son (G\xC3\xA9n\xC3\xA9ral, Alarmes, Scripts, Actions, Vid\xC3\xA9os, Relecture), de 0 \xC3\xA0 100 %.";
+        case Operation::SoundChannelMute:
+            return "Coupe, r\xC3\xA9tablit ou bascule un canal du son : ses sons qui jouent se taisent tout de suite.";
         case Operation::GifPlay: return "Fait jouer un GIF anim\xC3\xA9 de la vue.";
         case Operation::GifPause: return "Met un GIF anim\xC3\xA9 en pause.";
         case Operation::GifStop: return "Arr\xC3\xAAte un GIF anim\xC3\xA9 sur sa premi\xC3\xA8re image.";

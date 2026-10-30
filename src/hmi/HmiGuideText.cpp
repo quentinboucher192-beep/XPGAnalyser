@@ -1931,14 +1931,21 @@ const std::vector<Topic>& topics() {
                          "une alarme (ou une zone) pour N minutes en disant pourquoi ; la reprendre plus "
                          "t\xC3\xB4t (voir \xC2\xAB Les objets des alarmes \xC2\xBB)\nFaire taire les "
                          "alarmes\tcouper le son des alarmes jusqu'\xC3\xA0 la prochaine apparition, sans "
-                         "rien acquitter\nExporter des donn\xC3\xA9" "es\t\xC3\xA9" "crire un fichier CSV, "
-                         "Excel ou PDF : les alarmes, l'historique, les mesures, une recette, un objet de la "
-                         "vue ; au clic, il demande o\xC3\xB9 l'enregistrer (**Demander o\xC3\xB9 "
-                         "enregistrer**, coch\xC3\xA9 : exports/ propos\xC3\xA9) ; les autres "
-                         "d\xC3\xA9" "clencheurs \xC3\xA9" "crivent dans exports/ sans question (voir "
-                         "\xC2\xAB La production \xC2\xBB)\nParam\xC3\xA8tres syst\xC3\xA8me\touvre le menu "
-                         "natif des r\xC3\xA9glages du poste et du diagnostic, sur l'onglet choisi (voir "
-                         "\xC2\xAB Le menu Param\xC3\xA8tres syst\xC3\xA8me \xC2\xBB)\nVue "
+                         "rien acquitter", {}},
+             {K::Table, "Couper tout le son, R\xC3\xA9tablir le son, Basculer le son, R\xC3\xA9gler le "
+                         "volume, Couper ou r\xC3\xA9tablir un canal\tle groupe **Son** : tous les sons "
+                         "(SYS.SoundEnabled), le volume d'un canal (G\xC3\xA9n\xC3\xA9ral, Alarmes, Scripts, "
+                         "Actions, Vid\xC3\xA9os, Relecture ; de 0 \xC3\xA0 100 ou une expression), un canal "
+                         "coup\xC3\xA9, r\xC3\xA9tabli ou bascul\xC3\xA9 (voir \xC2\xAB Le menu "
+                         "Param\xC3\xA8tres syst\xC3\xA8me \xC2\xBB)\nExporter des "
+                         "donn\xC3\xA9" "es\t\xC3\xA9" "crire un fichier CSV, Excel ou PDF : les alarmes, "
+                         "l'historique, les mesures, une recette, un objet de la vue ; au clic, il demande "
+                         "o\xC3\xB9 l'enregistrer (**Demander o\xC3\xB9 enregistrer**, coch\xC3\xA9 : "
+                         "exports/ propos\xC3\xA9) ; les autres d\xC3\xA9" "clencheurs \xC3\xA9" "crivent "
+                         "dans exports/ sans question (voir \xC2\xAB La production "
+                         "\xC2\xBB)\nParam\xC3\xA8tres syst\xC3\xA8me\touvre le menu natif des "
+                         "r\xC3\xA9glages du poste et du diagnostic, sur l'onglet choisi (voir \xC2\xAB Le "
+                         "menu Param\xC3\xA8tres syst\xC3\xA8me \xC2\xBB)\nVue "
                          "pr\xC3\xA9" "c\xC3\xA9" "dente, Vue suivante, Vue d'accueil\tl'historique de "
                          "navigation et la vue du groupe de l'utilisateur (voir \xC2\xAB La navigation en "
                          "marche \xC2\xBB)\nMenu de connexion\touvre le menu natif de connexion sur l'onglet "
@@ -1947,7 +1954,7 @@ const std::vector<Topic>& topics() {
                          "de langue\tla langue de l'IHM : un code (en), `suivante`, ou une expression qui "
                          "donne le code (voir \xC2\xAB Plusieurs langues \xC2\xBB)\nChanger de "
                          "th\xC3\xA8me\tjour, nuit, ou l'autre (cible vide) : voir \xC2\xAB L'affichage : "
-                         "taille, couleurs, th\xC3\xA8me \xC2\xBB", {}},
+                         "taille, couleurs, th\xC3\xA8me \xC2\xBB", {}, "1.14.0"},
              {K::Heading, "Les transitions", {}},
              {K::Paragraph, "Naviguer et ouvrir une popup s'animent : Instantan\xC3\xA9" "e, Fondu, Glissement, "
                          "Zoom, Rotation, Personnalis\xC3\xA9" "e ; avec une dur\xC3\xA9" "e, une direction "
@@ -7073,6 +7080,197 @@ const std::vector<Topic>& topics() {
          "l'onglet Diagnostic ; \xC3\xA0 c\xC3\xB4t\xC3\xA9, des textes lisent SYS.Brightness, SYS.Volume et "
          "SYS.SoundEnabled.",
          {}},
+        // ---- La bibliotheque d'objets  Commandes / objet-coupe-son
+        {"objet-coupe-son", "Coupe-son", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes",
+         "Un bouton \xC3\xA0 bascule qui coupe tous les sons de l'IHM, puis les r\xC3\xA9tablit : le "
+         "haut-parleur, ou le haut-parleur barr\xC3\xA9. Il peut ne viser qu'un canal (les alarmes, les "
+         "scripts...).",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Faire taire le poste d'un geste : pendant une intervention, une r\xC3\xA9union "
+                         "devant l'\xC3\xA9" "cran, la nuit. Un clic coupe **tous les sons** : ce qui joue "
+                         "se tait tout de suite et les sons suivants ne partent pas (les alarmes, IHM_SON, "
+                         "l'action Jouer un son, les vid\xC3\xA9os). Un second clic les **r\xC3\xA9tablit**, "
+                         "sans rejouer ce qui a \xC3\xA9t\xC3\xA9 coup\xC3\xA9. Il est dans la famille "
+                         "**Commandes**, apr\xC3\xA8s Param\xC3\xA8tres syst\xC3\xA8me, avec le "
+                         "M\xC3\xA9langeur de volume.", {}},
+             {K::Heading, "Ce qu'il montre", {}},
+             {K::Bullet, "le son actif : le haut-parleur et son libell\xC3\xA9 (**Son actif**) sur le fond "
+                         "bleu ;", {}},
+             {K::Bullet, "coup\xC3\xA9 : le haut-parleur barr\xC3\xA9 et **Son coup\xC3\xA9** sur le fond "
+                         "rouge ;", {}},
+             {K::Bullet, "les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne seule, pour un petit bouton dans "
+                         "un bandeau.", {}},
+             {K::Paragraph, "L'\xC3\xA9tat est celui du poste : un autre Coupe-son, le M\xC3\xA9langeur, une "
+                         "action, IHM_SON_MUET ou Param\xC3\xA8tres syst\xC3\xA8me \xE2\x80\xBA Son le "
+                         "changent aussi, et il le montre.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nCanal "
+                         "vis\xC3\xA9\tTous\tTous : tous les sons (SYS.SoundEnabled). Un canal : Alarmes, "
+                         "Scripts, Actions, Vid\xC3\xA9os ou Relecture - seulement ses sons "
+                         "(SYS.MuteAlarms...).\nLibell\xC3\xA9 son actif\tSon actif\tLe libell\xC3\xA9 quand "
+                         "le son est actif. Les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne "
+                         "seule.\nLibell\xC3\xA9 muet\tSon coup\xC3\xA9\tLe libell\xC3\xA9 quand le son est "
+                         "coup\xC3\xA9.\nIc\xC3\xB4ne haut-parleur\tTRUE\tLe haut-parleur (barr\xC3\xA9 "
+                         "quand le son est coup\xC3\xA9), \xC3\xA0 gauche du "
+                         "libell\xC3\xA9.\nPolice\tSans\tLa police du libell\xC3\xA9.\nTaille du "
+                         "texte\t15\tEn pixels de la vue.\nCouleur du texte\t#FFFFFF\tLe libell\xC3\xA9 et "
+                         "l'ic\xC3\xB4ne.\nFond son actif\t#2F6FB0\tLe bouton quand le son est actif.\nFond "
+                         "muet\t#E5484D\tLe bouton quand le son est coup\xC3\xA9.\nRayon des coins\t6\t0 : "
+                         "coins carr\xC3\xA9s.\nPilotable (un clic coupe, "
+                         "r\xC3\xA9tablit)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre l'\xC3\xA9tat, sans "
+                         "r\xC3\xA9" "agir aux clics.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "un clic coupe, le suivant r\xC3\xA9tablit ; le journal le dit (\xC2\xAB son "
+                         "coup\xC3\xA9 (tous les sons) \xC2\xBB, \xC2\xAB son r\xC3\xA9tabli \xC2\xBB, "
+                         "\xC2\xAB canal Alarmes coup\xC3\xA9 \xC2\xBB) ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent : sans eux, un "
+                         "cadenas le marque et le refus est dit ; couper le son est \xC3\xA0 tout le monde, "
+                         "comme dans Param\xC3\xA8tres syst\xC3\xA8me ;", {}},
+             {K::Bullet, "le r\xC3\xA9glage est celui du **poste** : il reste quand l'IHM red\xC3\xA9marre, "
+                         "en simulation comme au poste d'exploitation, et ne va pas dans le projet ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un canal inconnu, et un seul des deux "
+                         "libell\xC3\xA9s donn\xC3\xA9.", {}},
+             {K::Tip, "Le m\xC3\xAAme geste ailleurs : l'action \xC2\xAB Couper tout le son \xC2\xBB (ou "
+                         "Basculer le son), `IHM_SON_MUET(TRUE)`, `SYS.SoundEnabled := FALSE`.", {}},
+         },
+         {"objet-melangeur-de-volume", "parametres-systeme", "actions", "objet-communs", "securite"},
+         {"Coupe-son", "couper le son", "muet", "mute", "r\xC3\xA9tablir le son", "SoundMute", "haut-parleur", "SYS.SoundEnabled"},
+         {},
+         {{"EX_SoundMute.png", "L'exemple anim\xC3\xA9 : couper tout, r\xC3\xA9tablir ; le petit bouton ne coupe que les alarmes."}},
+         "SoundMute",
+         {{"soundChannel", "Canal vis\xC3\xA9", "Tous",
+            "Tous : tous les sons (SYS.SoundEnabled). Un canal : Alarmes, Scripts, Actions, Vid\xC3\xA9os ou "
+            "Relecture - seulement ses sons (SYS.MuteAlarms...)."},
+           {"textOn", "Libell\xC3\xA9 son actif", "Son actif",
+            "Le libell\xC3\xA9 quand le son est actif. Les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne seule."},
+           {"textOff", "Libell\xC3\xA9 muet", "Son coup\xC3\xA9",
+            "Le libell\xC3\xA9 quand le son est coup\xC3\xA9."},
+           {"icon", "Ic\xC3\xB4ne haut-parleur", "TRUE",
+            "Le haut-parleur (barr\xC3\xA9 quand le son est coup\xC3\xA9), \xC3\xA0 gauche du libell\xC3\xA9."},
+           {"font", "Police", "Sans",
+            "La police du libell\xC3\xA9."},
+           {"fontSize", "Taille du texte", "15",
+            "En pixels de la vue."},
+           {"textColor", "Couleur du texte", "#FFFFFF",
+            "Le libell\xC3\xA9 et l'ic\xC3\xB4ne."},
+           {"colorOn", "Fond son actif", "#2F6FB0",
+            "Le bouton quand le son est actif."},
+           {"colorOff", "Fond muet", "#E5484D",
+            "Le bouton quand le son est coup\xC3\xA9."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (un clic coupe, r\xC3\xA9tablit)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre l'\xC3\xA9tat, sans r\xC3\xA9" "agir aux clics."}},
+         "Un clic coupe tous les sons (Son coup\xC3\xA9, sur fond rouge), le suivant les r\xC3\xA9tablit ; "
+         "le petit bouton, son ic\xC3\xB4ne seule, ne coupe que le canal Alarmes.",
+         {}, "1.14.0"},
+        // ---- La bibliotheque d'objets  Commandes / objet-melangeur-de-volume
+        {"objet-melangeur-de-volume", "M\xC3\xA9langeur de volume", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes",
+         "Un curseur de volume G\xC3\xA9n\xC3\xA9ral, puis une piste par canal du son (Alarmes, Scripts, "
+         "Actions, Vid\xC3\xA9os, Relecture) : son curseur, son pourcentage, son bouton M qui coupe le "
+         "canal, et un vum\xC3\xA8tre qui suit ce qui joue.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "R\xC3\xA9gler le son du poste canal par canal : garder les alarmes fortes et "
+                         "baisser les bips des scripts, couper les vid\xC3\xA9os d'une formation, tout "
+                         "baisser la nuit. Le **G\xC3\xA9n\xC3\xA9ral** multiplie chaque canal : un son joue "
+                         "\xC3\xA0 volume g\xC3\xA9n\xC3\xA9ral \xC3\x97 volume de son canal, et ne joue pas "
+                         "si l'un des deux est muet.", {}},
+             {K::Heading, "Les pistes", {}},
+             {K::Table, "Piste\tSes sons\nG\xC3\xA9n\xC3\xA9ral\ttous (SYS.Volume ; son M : tout couper, "
+                         "comme le Coupe-son)\nAlarmes\tles sons des alarmes et leur "
+                         "r\xC3\xA9p\xC3\xA9tition (SYS.VolumeAlarms, SYS.MuteAlarms)\nScripts\tIHM_SON dans "
+                         "un script (SYS.VolumeScripts, SYS.MuteScripts)\nActions\tl'action Jouer un son "
+                         "(SYS.VolumeActions, SYS.MuteActions)\nVid\xC3\xA9os\tle son des vid\xC3\xA9os "
+                         "(SYS.VolumeVideos, SYS.MuteVideos)\nRelecture\tles sons rejou\xC3\xA9s d'un "
+                         "enregistrement (SYS.VolumeReplay, SYS.MuteReplay)", {}},
+             {K::Paragraph, "Chaque piste a son **curseur** (vertical ou horizontal), son **pourcentage**, son "
+                         "**bouton M** (rouge : le canal est coup\xC3\xA9) et son **vum\xC3\xA8tre** : le "
+                         "niveau des sons qui jouent sur le canal, \xC3\xA0 leur volume (vert, puis orange, "
+                         "rouge en haut) ; celui du G\xC3\xA9n\xC3\xA9ral, le plus fort de tous. Une piste "
+                         "que le G\xC3\xA9n\xC3\xA9ral muet fait taire s'estompe.", {}},
+             {K::Tip, "Les vid\xC3\xA9os ne jouent pas encore de son (le lecteur ne lit que l'image) : la "
+                         "piste Vid\xC3\xA9os est pr\xC3\xAAte, son r\xC3\xA9glage est gard\xC3\xA9.", {}},
+             {K::Heading, "Le geste", {}},
+             {K::Bullet, "**la souris** : tirer la poign\xC3\xA9" "e (le volume suit, et le son qui joue "
+                         "avec lui), cliquer sur la course (le volume va l\xC3\xA0), la **molette** sur une "
+                         "piste (5 % par cran) ;", {}},
+             {K::Bullet, "**le doigt**, sur l'\xC3\xA9" "cran tactile du poste : comme la souris, toute la "
+                         "largeur de la piste se prend ;", {}},
+             {K::Bullet, "**M** : coupe le canal, ses sons qui jouent se taisent tout de suite ; un second "
+                         "clic le r\xC3\xA9tablit, sans rien rejouer.", {}},
+             {K::Paragraph, "Le journal dit le volume une fois la poign\xC3\xA9" "e l\xC3\xA2" "ch\xC3\xA9" "e "
+                         "(\xC2\xAB volume Alarmes : 60 % \xC2\xBB), et chaque M.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nCanaux "
+                         "affich\xC3\xA9s\ttous\ttous : le G\xC3\xA9n\xC3\xA9ral puis les cinq canaux. Sinon "
+                         "une liste : General;Alarmes;Videos (dans l'ordre du "
+                         "m\xC3\xA9langeur).\nOrientation des curseurs\tverticale\tVerticale : une colonne "
+                         "par canal ; horizontale : une ligne par canal.\nPourcentage\tTRUE\tLe volume de "
+                         "chaque piste, en %.\nBouton M (muet)\tTRUE\tLe bouton qui coupe et r\xC3\xA9tablit "
+                         "chaque canal.\nVum\xC3\xA8tre\tTRUE\tLe niveau du canal d'apr\xC3\xA8s les sons "
+                         "qui jouent.\nPolice\tSans\tLa police des noms et des pourcentages.\nTaille du "
+                         "texte\t12\tEn pixels de la vue.\nCouleur du texte\t#E6EAF0\tLes noms, les "
+                         "pourcentages, le M \xC3\xA9teint.\nFond\t#1F252E\tLe fond du "
+                         "m\xC3\xA9langeur.\nContour\t#3A4556\tSon bord.\nCouleur de la course\t#2F6FD6\tLa "
+                         "partie r\xC3\xA9gl\xC3\xA9" "e de chaque course.\nCouleur de la "
+                         "poign\xC3\xA9" "e\t#F4F6FA\tLa poign\xC3\xA9" "e des curseurs.\nCouleur du M "
+                         "allum\xC3\xA9\t#E5484D\tLe bouton M d'un canal coup\xC3\xA9.\nRayon des "
+                         "coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable (curseurs, molette, "
+                         "M)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre les volumes, sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "les r\xC3\xA9glages sont ceux du **poste** : ils restent quand l'IHM "
+                         "red\xC3\xA9marre (en simulation et au poste d'exploitation), ne vont pas dans le "
+                         "projet ; \xC2\xAB R\xC3\xA9glages par d\xC3\xA9" "faut \xC2\xBB de "
+                         "Param\xC3\xA8tres syst\xC3\xA8me les remet \xC3\xA0 100 %, rien de coup\xC3\xA9 ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un canal inconnu dans Canaux affich\xC3\xA9s, aucun "
+                         "canal, une course trop courte (moins de 30 pixels : agrandis l'objet ou montre "
+                         "moins de canaux) ;", {}},
+             {K::Bullet, "les volumes se lisent et s'\xC3\xA9" "crivent aussi en variables syst\xC3\xA8me "
+                         "(SYS.Volume, SYS.VolumeAlarms...), par les actions du groupe **Son** et par "
+                         "IHM_SON_VOLUME, IHM_SON_CANAL_MUET.", {}},
+         },
+         {"objet-coupe-son", "parametres-systeme", "actions", "objet-curseur", "objet-communs"},
+         {"M\xC3\xA9langeur de volume", "m\xC3\xA9langeur", "mixer", "VolumeMixer", "volume", "canal", "canaux", "piste", "vum\xC3\xA8tre", "bouton M", "muet", "SYS.Volume", "SYS.VolumeAlarms"},
+         {},
+         {{"EX_VolumeMixer.png", "L'exemple anim\xC3\xA9 : les alarmes baiss\xC3\xA9" "es, les vid\xC3\xA9os coup\xC3\xA9" "es, le g\xC3\xA9n\xC3\xA9ral muet puis r\xC3\xA9tabli."}},
+         "VolumeMixer",
+         {{"channels", "Canaux affich\xC3\xA9s", "tous",
+            "tous : le G\xC3\xA9n\xC3\xA9ral puis les cinq canaux. Sinon une liste : General;Alarmes;Videos "
+            "(dans l'ordre du m\xC3\xA9langeur)."},
+           {"orientation", "Orientation des curseurs", "verticale",
+            "Verticale : une colonne par canal ; horizontale : une ligne par canal."},
+           {"showPercent", "Pourcentage", "TRUE",
+            "Le volume de chaque piste, en %."},
+           {"showMute", "Bouton M (muet)", "TRUE",
+            "Le bouton qui coupe et r\xC3\xA9tablit chaque canal."},
+           {"showMeter", "Vum\xC3\xA8tre", "TRUE",
+            "Le niveau du canal d'apr\xC3\xA8s les sons qui jouent."},
+           {"font", "Police", "Sans",
+            "La police des noms et des pourcentages."},
+           {"fontSize", "Taille du texte", "12",
+            "En pixels de la vue."},
+           {"textColor", "Couleur du texte", "#E6EAF0",
+            "Les noms, les pourcentages, le M \xC3\xA9teint."},
+           {"fill", "Fond", "#1F252E",
+            "Le fond du m\xC3\xA9langeur."},
+           {"stroke", "Contour", "#3A4556",
+            "Son bord."},
+           {"accent", "Couleur de la course", "#2F6FD6",
+            "La partie r\xC3\xA9gl\xC3\xA9" "e de chaque course."},
+           {"knobColor", "Couleur de la poign\xC3\xA9" "e", "#F4F6FA",
+            "La poign\xC3\xA9" "e des curseurs."},
+           {"muteColor", "Couleur du M allum\xC3\xA9", "#E5484D",
+            "Le bouton M d'un canal coup\xC3\xA9."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (curseurs, molette, M)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre les volumes, sans r\xC3\xA9" "agir."}},
+         "Le volume des alarmes descend \xC3\xA0 60 %, le canal Vid\xC3\xA9os se coupe (M rouge), le "
+         "G\xC3\xA9n\xC3\xA9ral baisse de 10 %, se coupe et revient ; tout reprend \xC3\xA0 la fin.",
+         {}, "1.14.0"},
         // ---- La bibliotheque d'objets  Affichage / objet-voyant
         {"objet-voyant", "Voyant", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Affichage",
          "Un voyant allum\xC3\xA9 ou \xC3\xA9teint selon une valeur bool\xC3\xA9" "enne : marche, "
@@ -17054,7 +17252,18 @@ const std::vector<Topic>& topics() {
                          "le code : en simulation, le script s'arr\xC3\xAAte ici (avec un BOOL : seulement "
                          "s'il est vrai) ; hors simulation, rien - voir \xC2\xAB D\xC3\xA9" "boguer les "
                          "scripts IHM \xC2\xBB\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, "
-                         "MP3, OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
+                         "MP3, OGG)", {}, "1.13.0"},
+             {K::Table, "IHM_SON_MUET(muet)\tBOOL\tTRUE : tous les sons se taisent (ce qui joue aussi), les "
+                         "suivants ne partent pas ; FALSE : ils reviennent, rien n'est rejou\xC3\xA9 - voir "
+                         "\xC2\xAB Le menu Param\xC3\xA8tres syst\xC3\xA8me \xC2\xBB", {}, "1.14.0"},
+             {K::Table, "IHM_SON_EST_MUET()\tBOOL\tvrai si tout est coup\xC3\xA9 (NOT SYS.SoundEnabled ; en "
+                         "lecture, aussi dans une expression)", {}, "1.14.0"},
+             {K::Table, "IHM_SON_VOLUME('canal', volume)\tBOOL\tle volume d'un canal du son, de 0 \xC3\xA0 "
+                         "100 : 'General', 'Alarmes', 'Scripts', 'Actions', 'Videos', 'Relecture' ; faux si "
+                         "le canal est inconnu", {}, "1.14.0"},
+             {K::Table, "IHM_SON_CANAL_MUET('canal', muet)\tBOOL\tcoupe (TRUE) ou r\xC3\xA9tablit (FALSE) "
+                         "un canal : ses sons qui jouent se taisent tout de suite ; faux si le canal est "
+                         "inconnu\nIHM_VUE()\tSTRING\tle nom de la vue "
                          "affich\xC3\xA9" "e\nIHM_TEMPS()\tTIME\tle temps \xC3\xA9" "coul\xC3\xA9 depuis le "
                          "lancement de l'IHM\nIHM_UTILISATEUR(), IHM_NOM_UTILISATEUR(), "
                          "IHM_GROUPE()\tSTRING\tl'identifiant, le nom, le groupe de l'utilisateur "
@@ -17097,7 +17306,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9v\xC3\xA9nements, syst\xC3\xA8me, mesures, recette:Nom, objet:Nom ; "
                          "l'extension (.csv, .xlsx, .pdf) choisit le format ; dans le script qu'un clic "
                          "lance, il demande o\xC3\xB9 l'enregistrer (demander FALSE : jamais) ; vrai s'il "
-                         "est \xC3\xA9" "crit ou la question pos\xC3\xA9" "e", {}, "1.13.0"},
+                         "est \xC3\xA9" "crit ou la question pos\xC3\xA9" "e", {}, "1.14.0"},
              {K::Table, "IHM_ENREG_DEMARRER('Nom' [, dur\xC3\xA9" "e [, 'mot de passe']]), "
                          "IHM_ENREG_ARRETER([garder]), IHM_ENREG_EN_COURS()\tBOOL, STRING, BOOL\tenregistrer "
                          "l'IHM qui tourne, l'arr\xC3\xAAter (rend le nom gard\xC3\xA9), savoir s'il tourne "
@@ -17137,7 +17346,7 @@ const std::vector<Topic>& topics() {
                          "trous : `{IHM_NOM_UTILISATEUR()}`.", {}},
          },
          {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves", "deboguer-scripts"},
-         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT", "IHM_POINT_ARRET", "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE", "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE", "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER"},
+         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT", "IHM_POINT_ARRET", "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE", "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE", "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER", "IHM_SON_MUET", "IHM_SON_EST_MUET", "IHM_SON_VOLUME", "IHM_SON_CANAL_MUET"},
          {},
          {{"PNG_133_st_fonction_ihm_signature_et_vues.png", "IHM_NAVIGUER : sa signature, et les vues propos\xC3\xA9" "es entre les guillemets."}, {"PNG_191_aide_reference_ihm.png", "F1 sur IHM_JOURNAL, dans un script : la r\xC3\xA9" "f\xC3\xA9rence des fonctions IHM_."}},
          "",
@@ -17725,11 +17934,29 @@ const std::vector<Topic>& topics() {
                          "ferm\xC3\xA9).\n`SYS.Brightness`\tINT\tLa luminosit\xC3\xA9 de l'\xC3\xA9" "cran, "
                          "de 20 \xC3\xA0 100 %.\n`SYS.ScreenSaverMinutes`\tINT\tLa mise en veille, en "
                          "minutes sans toucher (0 : "
-                         "jamais).\n`SYS.ScreenSaverActive`\tBOOL\tL'\xC3\xA9" "cran est en "
-                         "veille.\n`SYS.SoundEnabled`\tBOOL\tLes sons de l'IHM sont "
-                         "activ\xC3\xA9s.\n`SYS.Volume`\tINT\tLe volume des sons, de 0 \xC3\xA0 100 "
-                         "%.\n`SYS.AutoLogoutMinutes`\tINT\tLa d\xC3\xA9" "connexion automatique en vigueur, "
-                         "en minutes (0 : jamais) : celle du poste, sinon celle du "
+                         "jamais).\n`SYS.ScreenSaverActive`\tBOOL\tL'\xC3\xA9" "cran est en veille.", {}},
+             {K::Table, "`SYS.SoundEnabled`\tBOOL\tLes sons de l'IHM sont activ\xC3\xA9s (FALSE : tout est "
+                         "coup\xC3\xA9 - Coupe-son, IHM_SON_MUET) ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.Volume`\tINT\tLe volume des sons, de 0 \xC3\xA0 100 % (le "
+                         "G\xC3\xA9n\xC3\xA9ral du m\xC3\xA9langeur) ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.VolumeAlarms`\tINT\tLe volume du canal Alarmes (les sons des alarmes et leur "
+                         "r\xC3\xA9p\xC3\xA9tition), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.VolumeScripts`\tINT\tLe volume du canal Scripts (IHM_SON), de 0 \xC3\xA0 100 "
+                         "% ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.VolumeActions`\tINT\tLe volume du canal Actions (l'action Jouer un son), de 0 "
+                         "\xC3\xA0 100 % ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.VolumeVideos`\tINT\tLe volume du canal Vid\xC3\xA9os, de 0 \xC3\xA0 100 % ; "
+                         "s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.VolumeReplay`\tINT\tLe volume du canal Relecture (les sons rejou\xC3\xA9s "
+                         "d'un enregistrement), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.MuteAlarms`\tBOOL\tLe canal Alarmes est coup\xC3\xA9 ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.MuteScripts`\tBOOL\tLe canal Scripts est coup\xC3\xA9 ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.MuteActions`\tBOOL\tLe canal Actions est coup\xC3\xA9 ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.MuteVideos`\tBOOL\tLe canal Vid\xC3\xA9os est coup\xC3\xA9 ; "
+                         "s'\xC3\xA9" "crit.", {}, "1.14.0"},
+             {K::Table, "`SYS.MuteReplay`\tBOOL\tLe canal Relecture est coup\xC3\xA9 ; "
+                         "s'\xC3\xA9" "crit.\n`SYS.AutoLogoutMinutes`\tINT\tLa d\xC3\xA9" "connexion "
+                         "automatique en vigueur, en minutes (0 : jamais) : celle du poste, sinon celle du "
                          "projet.\n`SYS.AutoLogoutFromProject`\tBOOL\tLe poste suit la d\xC3\xA9" "connexion "
                          "automatique du projet (Configuration > "
                          "Utilisateurs).\n`SYS.KeyboardMode`\tSTRING\tLe clavier virtuel : automatique, "
@@ -17743,7 +17970,7 @@ const std::vector<Topic>& topics() {
                          "s'\xC3\xA9" "crit.\n`SYS.StatusSymbols`\tBOOL\tDes symboles sur les voyants "
                          "(l'\xC3\xA9tat se lit sans la couleur) ; "
                          "s'\xC3\xA9" "crit.\n`SYS.Theme`\tSTRING\tLe th\xC3\xA8me : nuit (les couleurs de "
-                         "la conception) ou jour (claires) ; s'\xC3\xA9" "crit.", {}},
+                         "la conception) ou jour (claires) ; s'\xC3\xA9" "crit.", {}, "1.14.0"},
              {K::Heading, "Communication", {}},
              {K::Table, "Variable\tType\tCe qu'elle vaut\n`SYS.CommMode`\tSTRING\tLa liaison avec "
                          "l'automate : simulateur, ou modbus (un automate r\xC3\xA9" "el, Configuration > "
@@ -18787,21 +19014,24 @@ const std::vector<Topic>& topics() {
                          "change\tProt\xC3\xA9g\xC3\xA9\nLuminosit\xC3\xA9\tl'\xC3\xA9" "clairage de "
                          "l'\xC3\xA9" "cran, de 20 \xC3\xA0 100 %, par pas de 10\tnon\nMise en "
                          "veille\tapr\xC3\xA8s ce temps sans toucher (de 1 min \xC3\xA0 1 h, ou jamais), "
-                         "l'\xC3\xA9" "cran s'\xC3\xA9teint ; le toucher qui le rallume n'actionne "
-                         "rien\toui\nSon\tles sons de l'IHM (action Jouer un son, IHM_SON) : activ\xC3\xA9s "
-                         "ou coup\xC3\xA9s\tnon\nVolume\tle volume des sons, de 0 \xC3\xA0 100 "
-                         "%\tnon\nD\xC3\xA9" "connexion automatique\tapr\xC3\xA8s ce temps sans toucher, "
-                         "l'utilisateur est d\xC3\xA9" "connect\xC3\xA9 ; \xC2\xAB Selon le projet \xC2\xBB "
-                         "garde celle de Configuration > Utilisateurs\toui\nClavier virtuel\tautomatique "
-                         "(celui que demande chaque champ), toujours (un clavier pour chaque champ), "
-                         "jamais\toui\nTaille du texte\ttous les textes de l'IHM : 100, 125, 150 ou 175 "
-                         "%\tnon\nCouleurs\tnormales, ou daltonien : le vert passe au bleu, le rouge au "
-                         "vermillon, l'orange \xC3\xA0 l'ambre\tnon\nSymboles sur les voyants\tune coche, "
-                         "une croix, un point d'exclamation ou un tiret dans chaque voyant, un triangle sur "
-                         "un symbole en d\xC3\xA9" "faut\tnon\nTh\xC3\xA8me\tnuit (les couleurs de la "
-                         "conception) ou jour (claires, pour un \xC3\xA9" "cran en plein jour)\tnon\nDate et "
-                         "heure\tl'heure de l'IHM : les fl\xC3\xA8" "ches la r\xC3\xA8glent, **Appliquer** "
-                         "la pose ; **Heure du poste** reprend celle de l'ordinateur\toui", {}},
+                         "l'\xC3\xA9" "cran s'\xC3\xA9teint ; le toucher qui le rallume n'actionne rien\toui", {}},
+             {K::Table, "Son\tles sons de l'IHM (les alarmes, l'action Jouer un son, IHM_SON) : "
+                         "activ\xC3\xA9s ou coup\xC3\xA9s - le G\xC3\xA9n\xC3\xA9ral du m\xC3\xA9langeur "
+                         "(voir \xC2\xAB Le son, canal par canal \xC2\xBB)\tnon", {}, "1.14.0"},
+             {K::Table, "Volume\tle volume g\xC3\xA9n\xC3\xA9ral des sons, de 0 \xC3\xA0 100 % ; chaque "
+                         "canal a le sien en plus\tnon\nD\xC3\xA9" "connexion automatique\tapr\xC3\xA8s ce "
+                         "temps sans toucher, l'utilisateur est d\xC3\xA9" "connect\xC3\xA9 ; \xC2\xAB Selon "
+                         "le projet \xC2\xBB garde celle de Configuration > Utilisateurs\toui\nClavier "
+                         "virtuel\tautomatique (celui que demande chaque champ), toujours (un clavier pour "
+                         "chaque champ), jamais\toui\nTaille du texte\ttous les textes de l'IHM : 100, 125, "
+                         "150 ou 175 %\tnon\nCouleurs\tnormales, ou daltonien : le vert passe au bleu, le "
+                         "rouge au vermillon, l'orange \xC3\xA0 l'ambre\tnon\nSymboles sur les voyants\tune "
+                         "coche, une croix, un point d'exclamation ou un tiret dans chaque voyant, un "
+                         "triangle sur un symbole en d\xC3\xA9" "faut\tnon\nTh\xC3\xA8me\tnuit (les couleurs "
+                         "de la conception) ou jour (claires, pour un \xC3\xA9" "cran en plein "
+                         "jour)\tnon\nDate et heure\tl'heure de l'IHM : les fl\xC3\xA8" "ches la "
+                         "r\xC3\xA8glent, **Appliquer** la pose ; **Heure du poste** reprend celle de "
+                         "l'ordinateur\toui", {}, "1.14.0"},
              {K::Paragraph, "Les **choix** (veille, d\xC3\xA9" "connexion, clavier) avancent avec leurs "
                          "fl\xC3\xA8" "ches, ou d'un clic sur leur valeur ; les **pourcentages** avec - et "
                          "+. Chaque changement est \xC3\xA9" "crit au journal (\xC2\xAB Luminosit\xC3\xA9 : "
@@ -18814,9 +19044,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Red\xC3\xA9marrer l'IHM** : comme le bouton de la simulation ; les "
                          "r\xC3\xA9glages restent ;", {}},
              {K::Bullet, "**R\xC3\xA9glages par d\xC3\xA9" "faut** : luminosit\xC3\xA9 100 %, veille jamais, "
-                         "son activ\xC3\xA9, volume 100 %, d\xC3\xA9" "connexion selon le projet, clavier "
-                         "automatique, l'heure du poste ; l'affichage (taille du texte, couleurs, symboles, "
-                         "th\xC3\xA8me) reprend celui du projet.", {}},
+                         "son activ\xC3\xA9, volume 100 % (1.14.0 : chaque canal aussi, rien de "
+                         "coup\xC3\xA9), d\xC3\xA9" "connexion selon le projet, clavier automatique, l'heure "
+                         "du poste ; l'affichage (taille du texte, couleurs, symboles, th\xC3\xA8me) reprend "
+                         "celui du projet.", {}},
              {K::Heading, "Qui peut r\xC3\xA9gler quoi", {}},
              {K::Paragraph, "Sans s\xC3\xA9" "curit\xC3\xA9, tout se r\xC3\xA8gle. Sous "
                          "s\xC3\xA9" "curit\xC3\xA9 (Configuration > Utilisateurs), la luminosit\xC3\xA9, le "
@@ -18843,6 +19074,59 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Chaque ligne se lit aussi en variable syst\xC3\xA8me (SYS.PlcStatus, SYS.UserName, "
                          "SYS.AlarmUnackCount...). Sur un petit \xC3\xA9" "cran, des fl\xC3\xA8" "ches (ou "
                          "la molette) font d\xC3\xA9" "filer.", {}},
+             {K::Heading, "Le son, canal par canal", {}, "1.14.0"},
+             {K::Paragraph, "Depuis la 1.14.0, chaque son de l'IHM part sur un **canal** selon d'o\xC3\xB9 il "
+                         "vient ; chaque canal a son volume et son muet, sous le **G\xC3\xA9n\xC3\xA9ral** "
+                         "(le Son et le Volume de cet onglet). Les objets **Coupe-son** et "
+                         "**M\xC3\xA9langeur de volume** de la biblioth\xC3\xA8que les r\xC3\xA8glent d'un "
+                         "geste.", {}, "1.14.0"},
+             {K::Table, "Canal\tSes sons\tVolume\tMuet\nGeneral\ttous : son volume multiplie celui des "
+                         "autres\tSYS.Volume\tNOT SYS.SoundEnabled\nAlarmes\tles sons des alarmes et leur "
+                         "r\xC3\xA9p\xC3\xA9tition\tSYS.VolumeAlarms\tSYS.MuteAlarms\nScripts\tIHM_SON dans "
+                         "un script\tSYS.VolumeScripts\tSYS.MuteScripts\nActions\tl'action Jouer un "
+                         "son\tSYS.VolumeActions\tSYS.MuteActions\nVideos\tle son des "
+                         "vid\xC3\xA9os\tSYS.VolumeVideos\tSYS.MuteVideos\nRelecture\tles sons "
+                         "rejou\xC3\xA9s d'un enregistrement\tSYS.VolumeReplay\tSYS.MuteReplay", {}, "1.14.0"},
+             {K::Paragraph, "Le gain d'un son : **volume g\xC3\xA9n\xC3\xA9ral \xC3\x97 volume de son canal** ; "
+                         "rien si le G\xC3\xA9n\xC3\xA9ral ou le canal est muet. Couper un canal fait taire "
+                         "tout de suite ses sons qui jouent, et les suivants ne partent pas ; le "
+                         "r\xC3\xA9tablir ne rejoue rien. Le journal dit un son qui ne part pas (\xC2\xAB "
+                         "son : bip.wav (canal Scripts coup\xC3\xA9) \xC2\xBB).", {}, "1.14.0"},
+             {K::Heading, "Les r\xC3\xA9gler", {}, "1.14.0"},
+             {K::Bullet, "les objets **Coupe-son** et **M\xC3\xA9langeur de volume** (famille Commandes) ;", {}, "1.14.0"},
+             {K::Bullet, "les actions du groupe **Son** : Couper tout le son, R\xC3\xA9tablir le son, "
+                         "Basculer le son, R\xC3\xA9gler le volume (un canal, une valeur de 0 \xC3\xA0 100 "
+                         "ou une expression), Couper ou r\xC3\xA9tablir un canal (couper, r\xC3\xA9tablir, "
+                         "basculer) ;", {}, "1.14.0"},
+             {K::Bullet, "les variables syst\xC3\xA8me : elles se lisent et s'**\xC3\xA9" "crivent** "
+                         "(`SYS.VolumeAlarms := 80;`, `SYS.MuteVideos := TRUE;`, `SYS.SoundEnabled := "
+                         "FALSE;`) ;", {}, "1.14.0"},
+             {K::Bullet, "les fonctions IHM_ :", {}, "1.14.0"},
+             {K::Table, "Fonction\tRend\tEffet\nIHM_SON_MUET(muet)\tBOOL\tTRUE : tous les sons se taisent ; "
+                         "FALSE : ils reviennent (rien n'est rejou\xC3\xA9)\nIHM_SON_EST_MUET()\tBOOL\tvrai "
+                         "si tout est coup\xC3\xA9 (en lecture : aussi dans une "
+                         "expression)\nIHM_SON_VOLUME('canal', volume)\tBOOL\tle volume d'un canal, de 0 "
+                         "\xC3\xA0 100 ('General' : tous) ; faux si le canal est "
+                         "inconnu\nIHM_SON_CANAL_MUET('canal', muet)\tBOOL\tcoupe (TRUE) ou r\xC3\xA9tablit "
+                         "(FALSE) un canal ; faux si le canal est inconnu", {}, "1.14.0"},
+             {K::Code, "IF SYS.Hour >= 22 OR SYS.Hour < 6 THEN\n    IHM_SON_VOLUME('General', 40);\n    "
+                         "IHM_SON_CANAL_MUET('Videos', TRUE);\nEND_IF;\nIF IHM_SON_EST_MUET() AND "
+                         "Alarme_Critique THEN\n    IHM_SON_MUET(FALSE);\nEND_IF;", "ST", "1.14.0"},
+             {K::Code, "if (SYS.Hour >= 22 || SYS.Hour < 6) {\n    IHM_SON_VOLUME(\"General\", 40);\n    "
+                         "IHM_SON_CANAL_MUET(\"Videos\", TRUE);\n}\nif (IHM_SON_EST_MUET() && "
+                         "Alarme_Critique)\n    IHM_SON_MUET(FALSE);", "C", "1.14.0"},
+             {K::Code, "if (SYS.Hour >= 22 || SYS.Hour < 6) {\n    IHM_SON_VOLUME(\"General\", 40);\n    "
+                         "IHM_SON_CANAL_MUET(\"Videos\", true);\n}\nif (IHM_SON_EST_MUET() && "
+                         "Alarme_Critique)\n    IHM_SON_MUET(false);", "C++", "1.14.0"},
+             {K::Tip, "Entre les guillemets de IHM_SON_VOLUME et IHM_SON_CANAL_MUET, l'aide \xC3\xA0 la "
+                         "saisie propose les canaux.", {}, "1.14.0"},
+             {K::Paragraph, "Les volumes et les muets sont des r\xC3\xA9glages du **poste**, comme le volume de "
+                         "Param\xC3\xA8tres syst\xC3\xA8me : ils restent quand l'IHM red\xC3\xA9marre, en "
+                         "simulation comme au poste d'exploitation, et ne vont pas dans le projet. \xC2\xAB "
+                         "R\xC3\xA9glages par d\xC3\xA9" "faut \xC2\xBB les remet \xC3\xA0 100 %, rien de "
+                         "coup\xC3\xA9. \xC2\xAB Faire taire les alarmes \xC2\xBB (IHM_FAIRE_TAIRE) reste ce "
+                         "qu'il \xC3\xA9tait : il fait taire ce qui joue jusqu'\xC3\xA0 la prochaine alarme, "
+                         "sans rien couper.", {}, "1.14.0"},
              {K::Heading, "Des r\xC3\xA9glages du poste", {}},
              {K::Paragraph, "Les r\xC3\xA9glages sont ceux du **poste**, pas du projet : ils restent quand "
                          "l'IHM red\xC3\xA9marre et ne s'enregistrent pas avec le projet. L'affichage (la "
@@ -19043,12 +19327,12 @@ const std::vector<Topic>& topics() {
                          "filtr\xC3\xA9 sur les extensions (`png;jpg`) ; le fichier est copi\xC3\xA9 dans "
                          "les ressources et son nom va dans une variable STRING (permission "
                          "Administrer)\nLier un tableau\taffiche dans un Tableau les lignes d'un fichier "
-                         "externe ou d'une base (SQLite, Excel, CSV...)\nJouer un son\tjoue une ressource "
-                         "son (WAV, MP3, OGG), au volume r\xC3\xA9gl\xC3\xA9 dans Param\xC3\xA8tres "
-                         "syst\xC3\xA8me (rien quand le son y est coup\xC3\xA9)\nParam\xC3\xA8tres "
-                         "syst\xC3\xA8me\touvre le menu natif (voir \xC2\xAB Le menu Param\xC3\xA8tres "
-                         "syst\xC3\xA8me \xC2\xBB) : les r\xC3\xA9glages du poste, ou le diagnostic "
-                         "(propri\xC3\xA9t\xC3\xA9 Onglet)", {}},
+                         "externe ou d'une base (SQLite, Excel, CSV...)", {}},
+             {K::Table, "Jouer un son\tjoue une ressource son (WAV, MP3, OGG) sur le canal Actions : au "
+                         "volume g\xC3\xA9n\xC3\xA9ral fois celui du canal (rien quand le son, ou le canal, "
+                         "est coup\xC3\xA9)\nParam\xC3\xA8tres syst\xC3\xA8me\touvre le menu natif (voir "
+                         "\xC2\xAB Le menu Param\xC3\xA8tres syst\xC3\xA8me \xC2\xBB) : les r\xC3\xA9glages "
+                         "du poste, ou le diagnostic (propri\xC3\xA9t\xC3\xA9 Onglet)", {}, "1.14.0"},
          },
          {"actions", "ressources", "fichiers", "parametres-systeme"},
          {},

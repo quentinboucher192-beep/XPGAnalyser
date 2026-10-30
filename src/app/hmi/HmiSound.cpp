@@ -3,6 +3,7 @@
 #include "../../hmi/HmiMedia.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 
 #if XPG_WITH_SDL
@@ -12,7 +13,8 @@
 namespace app {
 
 // ============================================================ les voix ===
-int SoundVoices::start(const void* sound, double seconds, double now, std::vector<int>& silenced) {
+int SoundVoices::start(const void* sound, double seconds, double now, std::vector<int>& silenced, int channel, float gain,
+                       std::vector<float> peaks) {
     finished(now, silenced);
     for (std::size_t i = voices_.size(); i-- > 0;)
         if (voices_[i].sound == sound) {               // le meme son : il repart du debut
@@ -24,8 +26,53 @@ int SoundVoices::start(const void* sound, double seconds, double now, std::vecto
         voices_.erase(voices_.begin());
     }
     const int id = next_++;
-    voices_.push_back({id, sound, now + std::max(0.0, seconds)});
+    voices_.push_back({id, sound, now + std::max(0.0, seconds), channel, std::clamp(gain, 0.f, 1.f), now, std::move(peaks)});
     return id;
+}
+
+// 1.14.0 : le melangeur.
+void SoundVoices::silenceChannel(int channel, std::vector<int>& silenced) {
+    for (std::size_t i = voices_.size(); i-- > 0;)
+        if (channel == 0 || voices_[i].channel == channel) {
+            silenced.push_back(voices_[i].id);
+            voices_.erase(voices_.begin() + static_cast<long>(i));
+        }
+}
+
+void SoundVoices::setGain(int channel, float gain, std::vector<int>* changed) {
+    for (auto& v : voices_)
+        if (channel == 0 || v.channel == channel) {
+            v.gain = std::clamp(gain, 0.f, 1.f);
+            if (changed) changed->push_back(v.id);
+        }
+}
+
+float SoundVoices::level(int channel, double now) const {
+    float best = 0.f;
+    for (const auto& v : voices_) {
+        if ((channel != 0 && v.channel != channel) || now < v.started || now >= v.ends) continue;
+        float peak = 0.7f;           // sans enveloppe : un niveau moyen tant qu'elle joue
+        if (!v.peaks.empty()) {
+            const auto k = static_cast<std::size_t>(std::max(0.0, (now - v.started) / kPeakStep));
+            peak = k < v.peaks.size() ? v.peaks[k] : 0.f;
+        }
+        best = std::max(best, peak * v.gain);
+    }
+    return std::clamp(best, 0.f, 1.f);
+}
+
+std::vector<float> SoundVoices::peaksOf(const std::vector<std::int16_t>& samples, int channels, int rate, double step) {
+    std::vector<float> out;
+    if (channels <= 0 || rate <= 0 || step <= 0) return out;
+    const auto frames = samples.size() / static_cast<std::size_t>(channels);
+    const auto per = std::max<std::size_t>(1, static_cast<std::size_t>(rate * step));
+    for (std::size_t f = 0; f < frames; f += per) {
+        int peak = 0;
+        const std::size_t end = std::min(frames, f + per) * static_cast<std::size_t>(channels);
+        for (std::size_t i = f * static_cast<std::size_t>(channels); i < end; ++i) peak = std::max(peak, std::abs(static_cast<int>(samples[i])));
+        out.push_back(static_cast<float>(peak) / 32767.f);
+    }
+    return out;
 }
 
 void SoundVoices::finished(double now, std::vector<int>& silenced) {
@@ -149,7 +196,7 @@ bool HmiSoundPlayer::playing(double now) {
     return true;
 }
 
-bool HmiSoundPlayer::mix(const hmi::Resource& sound, std::string* why, float gain) {
+bool HmiSoundPlayer::mix(const hmi::Resource& sound, std::string* why, float gain, int channel) {
     if (!sound.data || sound.kind() != hmi::MediaKind::Sound) {
         if (why) *why = "ce n'est pas un son";
         return false;
@@ -159,7 +206,8 @@ bool HmiSoundPlayer::mix(const hmi::Resource& sound, std::string* why, float gai
         if (why) *why = "son illisible (" + sound.format + ")";
         return false;
     }
-    hmi::applyGain(pcm, gain);
+    // 1.14.0 : le gain va au flux (SDL_SetAudioStreamGain) - le melangeur le change pendant que la voix joue.
+    gain = std::clamp(gain, 0.f, 1.f);
 #if XPG_WITH_SDL
     if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         if (why) *why = std::string("pas de sortie son : ") + SDL_GetError();
@@ -172,7 +220,8 @@ bool HmiSoundPlayer::mix(const hmi::Resource& sound, std::string* why, float gai
         return false;
     }
     std::vector<int> silenced;
-    const int id = voices_.start(sound.data.get(), pcm.seconds(), audioClock(), silenced);
+    const int id = voices_.start(sound.data.get(), pcm.seconds(), audioClock(), silenced, channel, gain,
+                                 SoundVoices::peaksOf(pcm.samples, pcm.channels, pcm.rate));
     impl_->silence(silenced);
     SDL_AudioSpec spec;
     spec.format = SDL_AUDIO_S16;
@@ -185,13 +234,43 @@ bool HmiSoundPlayer::mix(const hmi::Resource& sound, std::string* why, float gai
         voices_.forget(id);
         return false;
     }
+    SDL_SetAudioStreamGain(stream, gain);
     SDL_PutAudioStreamData(stream, pcm.samples.data(), static_cast<int>(pcm.samples.size() * sizeof(std::int16_t)));
     SDL_FlushAudioStream(stream);
     impl_->voices[id] = stream;
     return true;
 #else
+    (void)channel;
     if (why) *why = "pas de sortie son dans cette version (construite sans SDL)";
     return false;
+#endif
+}
+
+// 1.14.0 : le melangeur.
+void HmiSoundPlayer::stopChannel(int channel) {
+    std::vector<int> silenced;
+    voices_.silenceChannel(channel, silenced);
+#if XPG_WITH_SDL
+    if (impl_) impl_->silence(silenced);
+#endif
+}
+
+void HmiSoundPlayer::setChannelGain(int channel, float gain) {
+    std::vector<int> changed;
+    voices_.setGain(channel, gain, &changed);
+#if XPG_WITH_SDL
+    if (impl_)
+        for (const int id : changed)
+            if (const auto it = impl_->voices.find(id); it != impl_->voices.end()) SDL_SetAudioStreamGain(it->second, std::clamp(gain, 0.f, 1.f));
+#endif
+}
+
+float HmiSoundPlayer::level(int channel) {
+#if XPG_WITH_SDL
+    return voices_.level(channel, audioClock());
+#else
+    (void)channel;
+    return 0.f;
 #endif
 }
 

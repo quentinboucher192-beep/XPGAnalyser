@@ -751,7 +751,8 @@ public:
             || u == "IHM_EQUIPEMENT_OK" || u == "IHM_EQUIPEMENT_PING"                       // lot 15
             || u == "IHM_ESCLAVE_SIMULE"                                                    // 1.9
             || u == "IHM_SCRIPT_ACTIF"                                                      // 1.12.26
-            || u == "IHM_ENREG_EN_COURS" || u == "IHM_ENREG_EXISTE" || u == "IHM_ENREG_DUREE";  // 1.14.0 (M4)
+            || u == "IHM_ENREG_EN_COURS" || u == "IHM_ENREG_EXISTE" || u == "IHM_ENREG_DUREE"   // 1.14.0 (M4)
+            || u == "IHM_SON_EST_MUET";                                                     // 1.14.0
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
     std::string caughtMessage(std::string_view m) override { return shownCodeNames(rt_.project_, frenchSimMessage(m)); }   // 1.12.1 : CATCH Erreur
@@ -1376,9 +1377,43 @@ private:
             return true;
         }
         if (u == "IHM_SON") {
-            rt_.soundChannel_ = "Scripts";                       // 1.14.0 (M4) : le canal, pour l'enregistrement
-            result = sim::Value::boolean(rt_.playSound(text(0), rt_.source_));
-            rt_.soundChannel_.clear();
+            result = sim::Value::boolean(rt_.playSound(text(0), rt_.source_, SoundChannel::Scripts));   // 1.14.0 : le canal Scripts
+            return true;
+        }
+        // 1.14.0 : couper le son, le melangeur.
+        //   IHM_SON_MUET(TRUE) coupe tout (ce qui joue se tait) ; FALSE le retablit (rien n'est rejoue).
+        //   IHM_SON_EST_MUET() : vrai si tout est coupe (NOT SYS.SoundEnabled).
+        //   IHM_SON_VOLUME('Alarmes', 80) ; IHM_SON_CANAL_MUET('Videos', TRUE) - 'General' : le volume, le muet de tout.
+        //   Vrai : fait ; faux : canal inconnu (le journal le dit).
+        if (u == "IHM_SON_MUET") {
+            (void)rt_.setChannelMuted(SoundChannel::General, args.empty() || args[0].second.isTruthy(), rt_.source_);
+            result = sim::Value::boolean(true);
+            return true;
+        }
+        if (u == "IHM_SON_EST_MUET") {
+            result = sim::Value::boolean(soundMuted(rt_.settings_, SoundChannel::General));
+            return true;
+        }
+        if (u == "IHM_SON_VOLUME" || u == "IHM_SON_CANAL_MUET") {
+            const auto channel = soundChannelFrom(text(0));
+            if (!channel) {
+                rt_.log("Erreur", rt_.source_, u + " : canal inconnu '" + text(0) + "' (General, Alarmes, Scripts, Actions, Videos ou Relecture)");
+                result = sim::Value::boolean(false);
+                return true;
+            }
+            if (u == "IHM_SON_VOLUME") {
+                double v = 0;
+                if (args.size() > 1) {
+                    const auto& a = args[1].second;
+                    if (a.type() == sim::Type::Real) v = a.asReal();
+                    else if (a.type() == sim::Type::String) { if (!parseNumber(a.asString(), v)) v = 0; }
+                    else v = static_cast<double>(a.asInteger());
+                }
+                (void)rt_.setChannelVolume(*channel, static_cast<int>(std::lround(v)), rt_.source_);
+            } else {
+                (void)rt_.setChannelMuted(*channel, args.size() < 2 || args[1].second.isTruthy(), rt_.source_);
+            }
+            result = sim::Value::boolean(true);
             return true;
         }
         // Lot 10 : le menu natif Parametres systeme ('Diagnostic' : cet onglet ;
@@ -2034,6 +2069,7 @@ void Runtime::setHooks(Hooks h) {
     // main seule, rien ne bouge pendant qu'elle lit.
     onUiThread(h.playSound);
     onUiThread(h.stopSounds);
+    onUiThread(h.soundSettings);     // 1.14.0 : le melangeur (les voix qui jouent)
     onUiThread(h.journaled);
     onUiThread(h.askLogin);
     onUiThread(h.recipeRequest);
@@ -3884,7 +3920,45 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
                 log("Erreur", source, "jouer un son : ressource '" + name + "' introuvable");
                 break;
             }
-            (void)playSound(name, source);
+            (void)playSound(name, source, SoundChannel::Actions);   // 1.14.0 : le canal Actions
+            break;
+        }
+        // 1.14.0 : le son - tout couper, retablir, basculer ; le volume d'un canal ; couper ou retablir un canal.
+        // Le canal : son mot (Alarmes), son nom (Videos accentue), ou une expression qui le donne.
+        case Operation::SoundMute: (void)setChannelMuted(SoundChannel::General, true, source); break;
+        case Operation::SoundRestore: (void)setChannelMuted(SoundChannel::General, false, source); break;
+        case Operation::SoundToggle: (void)setChannelMuted(SoundChannel::General, settings_.soundOn, source); break;
+        case Operation::SoundVolume: case Operation::SoundChannelMute: {
+            std::string name = trimText(a.target);
+            if (a.operation == Operation::SoundVolume && name.empty()) name = "General";
+            auto channel = soundChannelFrom(name);
+            if (!channel && !name.empty()) {
+                bool ok = false;
+                const auto evaluated = evalText(name, &ok);
+                if (ok) channel = soundChannelFrom(evaluated);
+            }
+            if (!channel) {
+                log("Erreur", source, std::string(operationLabel(a.operation)) + " : canal inconnu '" + name + "'");
+                break;
+            }
+            if (a.operation == Operation::SoundVolume) {
+                const std::string raw = trimText(a.value).empty() ? std::string("100") : trimText(a.value);
+                double v = 0;
+                if (!parseNumber(raw, v)) {
+                    bool ok = false;
+                    const auto evaluated = evalText(raw, &ok);
+                    if (!ok || !parseNumber(evaluated, v)) {
+                        log("Erreur", source, "r\xC3\xA9gler le volume : '" + raw + "' n'est pas un nombre de 0 \xC3\xA0 100");
+                        break;
+                    }
+                }
+                (void)setChannelVolume(*channel, static_cast<int>(std::lround(v)), source);
+                break;
+            }
+            const std::string how = plain(a.value);
+            const bool muted = how.rfind("bascul", 0) == 0 ? !soundMuted(settings_, *channel)
+                             : how.rfind("r", 0) == 0 ? false : true;          // retablir ; sinon couper
+            (void)setChannelMuted(*channel, muted, source);
             break;
         }
         case Operation::ShowSystem:
@@ -5068,6 +5142,8 @@ void Runtime::release(Id object, double now, bool inside) {
         }
         openSystemMenu(systemTabFrom(plain(shownText(snapshot.id, so, "tab"))), now, where(snapshot, &so));   // 1.9 : et Simulation ; 1.12.5 : sa formule
     }
+    // 1.14.0 : le Coupe-son coupe ou retablit tous les sons (ou ceux de son canal).
+    if (o->kind == Kind::SoundMute) soundMuteClick(snapshot, *snapshot.object(object));
     // Lot 12 : l'objet Menu de connexion ouvre le menu natif, sur son onglet.
     if (o->kind == Kind::LoginMenuButton) {
         const Object& lo = *snapshot.object(object);
@@ -7003,6 +7079,14 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
         evaluateProps(snapshot.id, *snapshot.object(object));
         if (recordOn_) recordClick(rec::EventKind::Click, object);
         recorderPart(snapshot, *snapshot.object(object), part, now);
+        return;
+    }
+    // 1.14.0 : le Melangeur de volume - une course tiree, la molette, le bouton M (HmiRuntimeSystem.cpp).
+    if (found->kind == Kind::VolumeMixer) {
+        View snapshot = *v;
+        evaluateProps(snapshot.id, *snapshot.object(object));
+        GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "R\xC3\xA9glage de");
+        mixerPart(snapshot, *snapshot.object(object), part);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.

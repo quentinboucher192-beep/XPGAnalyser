@@ -75,6 +75,8 @@ enum class HmiGlyph : std::uint8_t {
     Ruler, Columns, Dimension, LanguagesSide, ChevronLeft, ChevronRight,
     // 1.14.0 (M4) : l'Enregistreur (le point rouge de la camera), le Lecteur d'enregistrements
     Recorder, RecordingPlayer,
+    // 1.14.0 : le Coupe-son (le haut-parleur barre), le Melangeur de volume (trois curseurs)
+    SoundMute, VolumeMixer,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

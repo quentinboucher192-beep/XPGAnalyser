@@ -1361,6 +1361,48 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.setNumber("strokeWidth", 1);
             o.setNumber("radius", 4);
             break;
+        case Kind::SoundMute:
+            // 1.14.0 : le Coupe-son - un clic coupe tous les sons (ou ceux d'un canal, "soundChannel" : Tous,
+            // Alarmes, Scripts, Actions, Videos, Relecture), le suivant les retablit, sans rien rejouer. Il
+            // montre l'etat : le haut-parleur ("icon") et "textOn" (son actif) ou barre et "textOff" (muet),
+            // sur "colorOn" ou "colorOff" ; les deux libelles vides : l'icone seule. "pilotable" decoche : il
+            // montre l'etat sans reagir. Le reglage est celui du poste (SYS.SoundEnabled, SYS.Mute<Canal>).
+            common(o, x, y, 180, 48);
+            o.set("soundChannel", "Tous");
+            o.set("textOn", "Son actif");
+            o.set("textOff", "Son coup\xC3\xA9");
+            o.setFlag("icon", true);
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 15);
+            o.set("textColor", "#FFFFFF");
+            o.set("colorOn", "#2F6FB0");
+            o.set("colorOff", "#E5484D");
+            o.setNumber("radius", 6);
+            o.setFlag("pilotable", true);
+            break;
+        case Kind::VolumeMixer:
+            // 1.14.0 : le Melangeur de volume - le General, puis une piste par canal ("channels" : tous, ou une
+            // liste General;Alarmes;Videos) : un curseur (glisser, molette, au doigt), le pourcentage
+            // ("showPercent"), le bouton M qui coupe le canal ("showMute"), un vumetre ("showMeter" : le niveau
+            // des sons qui jouent). Pistes "verticale" ou "horizontale" ("orientation"). "pilotable" decoche :
+            // il montre sans reagir. Les reglages sont ceux du poste (SYS.Volume, SYS.VolumeAlarms...).
+            common(o, x, y, 480, 250);
+            o.set("channels", "tous");
+            o.set("orientation", "verticale");
+            o.setFlag("showPercent", true);
+            o.setFlag("showMute", true);
+            o.setFlag("showMeter", true);
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 12);
+            o.set("textColor", "#E6EAF0");
+            o.set("fill", "#1F252E");
+            o.set("stroke", "#3A4556");
+            o.set("accent", "#2F6FD6");
+            o.set("knobColor", "#F4F6FA");
+            o.set("muteColor", "#E5484D");
+            o.setNumber("radius", 6);
+            o.setFlag("pilotable", true);
+            break;
         case Kind::LoginMenuButton:
             // Lot 12 : un clic ouvre le menu natif de connexion, sur son onglet
             // ("tab") - sans action a ecrire. "showUser" : l'utilisateur connecte
@@ -2029,6 +2071,12 @@ constexpr OperationName kOperationNames[] = {
     {Operation::ReplayQuit, "Quitter la relecture"},
     {Operation::RecordingExport, "Exporter un enregistrement"},
     {Operation::RecordingDelete, "Supprimer un enregistrement"},
+    // 1.14.0 : le son
+    {Operation::SoundMute, "Couper tout le son"},
+    {Operation::SoundRestore, "R\xC3\xA9tablir le son"},
+    {Operation::SoundToggle, "Basculer le son"},
+    {Operation::SoundVolume, "R\xC3\xA9gler le volume"},
+    {Operation::SoundChannelMute, "Couper ou r\xC3\xA9tablir un canal"},
 };
 struct PlacementName { const char* key; const char* label; };
 constexpr PlacementName kPlacementNames[] = {
@@ -2280,6 +2328,15 @@ std::string describeAction(const Action& a) {
             s += " \xE2\x86\x92 " + a.target;
             break;
         case Operation::SubmitInputs:                       // 1.11.23 : le libelle suffit
+            break;
+        // 1.14.0 : le son - le canal, son volume ; couper, retablir ou basculer un canal
+        case Operation::SoundMute: case Operation::SoundRestore: case Operation::SoundToggle:
+            break;
+        case Operation::SoundVolume:
+            s += " " + (a.target.empty() ? std::string("General") : a.target) + " \xC3\xA0 " + (a.value.empty() ? std::string("100") : a.value) + " %";
+            break;
+        case Operation::SoundChannelMute:
+            s += " " + (a.target.empty() ? std::string("?") : a.target) + " (" + (a.value.empty() ? std::string("couper") : a.value) + ")";
             break;
         // 1.9 : un parametre en mode Les deux, ou tous
         case Operation::ApplyCopy: {

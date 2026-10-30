@@ -537,6 +537,11 @@ public:
         std::function<void(const std::string& resource)> playSound;          // IHM_SON
         // 1.12.3 : Silence (Faire taire) et l'arret : les sons qui jouent se taisent.
         std::function<void()>                            stopSounds;
+        // 1.14.0 : le melangeur - un volume ou un muet a change (settings()) : les voix qui jouent prennent leur
+        // nouveau gain, celles d'un canal qui se tait (soundSilenced) s'arretent ; rien n'est rejoue. Et le niveau
+        // d'un canal (0 a 1 : les voix qui jouent, a leur gain ; rang de kSoundChannels, 0 : tous) - le vumetre.
+        std::function<void()>                            soundSettings;
+        std::function<float(int channel)>                soundLevel;
         std::function<void(const JournalEntry&)>         journaled;          // chaque entree
         // "Changer d'utilisateur" : l'ecran demande le mot de passe (ou le code),
         // puis appelle login(). Vide : seule l'autorisation par expression passe.
@@ -1170,6 +1175,18 @@ public:
     // dans le projet.
     [[nodiscard]] const SystemSettings& settings() const noexcept { return settings_; }
     void setSettings(const SystemSettings& s) { settings_ = s; }
+    // ---- 1.14.0 : couper le son, le melangeur (HmiRuntimeSystem.cpp) ----------------------
+    //  Le General muet coupe tout (SYS.SoundEnabled faux) : ce qui joue se tait, les sons
+    //  suivants ne partent pas ; retabli, rien n'est rejoue. Un canal muet, de meme pour ses
+    //  sons. Le volume d'un canal : 0 a 100 %. Vrai : le reglage a change (le journal le dit,
+    //  sauf `quiet` : un curseur qu'on tire, dit une fois lache). Les reglages du poste.
+    bool setChannelMuted(SoundChannel channel, bool muted, const std::string& source);
+    bool setChannelVolume(SoundChannel channel, int volume, const std::string& source, bool quiet = false);
+    // Le canal du son qui part (pendant l'appel de Hooks::playSound) : son mot de kSoundChannels
+    // ('Alarmes', 'Scripts', 'Actions', 'Videos', 'Relecture') ; vide hors d'un appel.
+    [[nodiscard]] const std::string& soundChannel() const noexcept { return soundChannel_; }
+    // Le niveau d'un canal (le vumetre) : Hooks::soundLevel ; 0 sans lui.
+    [[nodiscard]] float soundLevel(SoundChannel channel) const;
     [[nodiscard]] bool settingAllowed(std::string_view key) const;      // protege : Administrer
     // Le dernier message du menu (un reglage change, un refus).
     [[nodiscard]] const std::string& systemMessage() const noexcept { return systemMessage_; }
@@ -1633,9 +1650,6 @@ public:
     [[nodiscard]] std::vector<rec::Item> recordings(bool fresh = false) const;
     // Le Lecteur d'enregistrements : la ligne choisie de cet objet.
     [[nodiscard]] int recordingPlayerRow(Id object) const;
-    // Le canal du son qui part, pendant l'appel de Hooks::playSound : "Scripts" (IHM_SON), "Relecture" (un son
-    // rejoue : sa source est la relecture - le melangeur du lot M3 le branche) ; vide : une action, une alarme.
-    [[nodiscard]] const std::string& soundChannel() const noexcept { return soundChannel_; }
     // Une commande d'une autre application (rec::Command) : son code de sortie (rec::kExit...) et ce qui est dit.
     // Refusee (5) si le projet ne coche pas Accepter les commandes d'une autre application.
     int runCommand(const rec::Command&, double now, std::string* message = nullptr);
@@ -2246,7 +2260,15 @@ private:
     bool                             slaveSysValue(std::string_view name, sim::Value& out) const;   // SYS.Sim*, SYS.Slave.*
     bool                             sleeping_{false};  // la veille, au dernier tick (le journal le dit)
     bool                             sleepNow_{false};  // "Eteindre l'ecran" : jusqu'au prochain toucher
-    bool                             playSound(const std::string& name, const std::string& source);
+    // 1.14.0 : `channel` - le canal du son (son gain, son muet ; soundChannel() pendant le crochet).
+    bool                             playSound(const std::string& name, const std::string& source,
+                                               SoundChannel channel = SoundChannel::Actions);
+    std::string                      soundChannel_;          // 1.14.0 : le canal du son qui part
+    void                             soundSettingsChanged();
+    // 1.14.0 : un clic sur le Coupe-son ; une partie du Melangeur de volume (HmiSystemMenu.hpp : "glisser:Alarmes:0.6",
+    // "lacher:...", "volume:...", "pas:Alarmes:+1", "muet:Alarmes"). Pilotable, le niveau d'acces, l'autorisation.
+    void                             soundMuteClick(const View& v, const Object& o);
+    void                             mixerPart(const View& v, const Object& o, std::string_view part);
     void                             systemSay(std::string text, bool error);
     void                             sleepTick(double now);
     // lot 11 (HmiRuntimeLot11.cpp) : graphiques, alarmes, production, saisie, export
@@ -2433,7 +2455,6 @@ private:
     std::unique_ptr<RecordState, RecordStateDelete> rec_;
     bool                                            recordOn_{false};    // un enregistrement prend (Env::read note les lectures)
     bool                                            replayOn_{false};    // une relecture est affichee (Env::read lit la piste)
-    std::string                                     soundChannel_;       // le canal du son qui part (IHM_SON : Scripts)
     RecordState& recState() const;
     // Env::read : la valeur de la piste (nulle : pas dans la piste) ; une lecture de l'ecran a garder.
     [[nodiscard]] const sim::Value* replayValue(const std::string& upperKey) const;

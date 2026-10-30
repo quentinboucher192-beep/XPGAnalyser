@@ -122,6 +122,10 @@ enum class Kind : std::uint8_t {
     // rond Enregistrer / Arreter, le chrono, l'etat ; a l'arret, le nom, la description, le mot de passe) et le
     // Lecteur d'enregistrements (la liste du dossier, Rejouer), dans la famille Enregistrements de la palette.
     Recorder, RecordingPlayer,
+    // 1.14.0, A LA FIN : le Coupe-son (un bouton a bascule : couper, retablir tous les sons, ou un
+    // canal) et le Melangeur de volume (le General, puis une piste par canal : curseur, pourcentage,
+    // bouton M, vumetre) - dans les Commandes, apres Parametres systeme (HmiSystemMenu.hpp).
+    SoundMute, VolumeMixer,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -140,6 +144,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Dial, Kind::Clock, Kind::HourMeter, Kind::SevenSegment, Kind::TrendArrow, Kind::Marquee, Kind::QrCode,
     // lot 10 : l'objet Parametres systeme, les symboles de synoptique
     Kind::SystemButton,
+    Kind::SoundMute, Kind::VolumeMixer,   // 1.14.0 : couper le son, le melangeur de volume
     Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor,
     Kind::SpeedDrive,   // 1.12.30 : le variateur de vitesse, apres le moteur
     Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
@@ -349,9 +354,11 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::DocumentViewer,      "DocumentViewer",      "Visionneuse de documents"},                // 1.12.30
     {Kind::Recorder,            "Recorder",            "Enregistreur"},                            // 1.14.0 (M4)
     {Kind::RecordingPlayer,     "RecordingPlayer",     "Lecteur d'enregistrements"},
+    {Kind::SoundMute,           "SoundMute",           "Coupe-son"},                               // 1.14.0
+    {Kind::VolumeMixer,         "VolumeMixer",         "M\xC3\xA9langeur de volume"},
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::RecordingPlayer) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::VolumeMixer) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;
@@ -450,6 +457,11 @@ enum class Operation : std::uint8_t {
     RecordStart, RecordStop, RecordToggle, RecordCancel,
     ReplayStart, ReplayPause, ReplaySeek, ReplaySpeed, ReplayQuit,
     RecordingExport, RecordingDelete,
+    // 1.14.0 : LE SON (le groupe Son) - couper tout, retablir, basculer (le General : SYS.SoundEnabled) ;
+    // regler le volume d'un canal (la cible : le canal, General compris ; la valeur : 0 a 100, une
+    // expression) ; couper ou retablir un canal (la cible : le canal ; la valeur : couper, retablir,
+    // basculer). Les canaux : HmiSystemMenu.hpp (kSoundChannels).
+    SoundMute, SoundRestore, SoundToggle, SoundVolume, SoundChannelMute,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -487,6 +499,8 @@ inline constexpr Operation kOperations[] = {
     Operation::RecordStart, Operation::RecordStop, Operation::RecordToggle, Operation::RecordCancel,
     Operation::ReplayStart, Operation::ReplayPause, Operation::ReplaySeek, Operation::ReplaySpeed, Operation::ReplayQuit,
     Operation::RecordingExport, Operation::RecordingDelete,
+    Operation::SoundMute, Operation::SoundRestore, Operation::SoundToggle, Operation::SoundVolume,   // 1.14.0
+    Operation::SoundChannelMute,
 };
 // 1.14.0 (M4) : les operations des enregistrements (Enregistrement, Relecture, Fichiers) ; celles qui nomment
 // un enregistrement dans leur cible (Generer verifie un nom ecrit en dur).

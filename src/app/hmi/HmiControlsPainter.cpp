@@ -21,6 +21,7 @@
 #include "../../hmi/HmiMarquee.hpp"   // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../../hmi/HmiQr.hpp"
 #include "../../hmi/HmiRuntime.hpp"
+#include "../../hmi/HmiSystemMenu.hpp"   // 1.14.0 : le Coupe-son, le Melangeur de volume
 
 #include <cmath>
 #include <cstdio>
@@ -1031,6 +1032,153 @@ void drawSystemButton(const Ctx& c) {
     text(c, c.src.text(c.o, "text"), tx, dy, tw, h, tc, fsOf(c, 16), c.src.text(c.o, "align", "centre"), c.src.flag(c.o, "wrap"));
 }
 
+// ------------------------------------------------------------------ 1.14.0 ----
+// Le haut-parleur dans un carre de `size` (en haut a gauche : x, y) : son pavillon, puis ses deux ondes (son
+// actif) ou une croix (muet).
+void speakerLocal(const Ctx& c, double x, double y, double size, gfx::Color col, bool muted) {
+    const double k = size / 16.0;
+    const auto P = [&](double px, double py) { return gfx::Point{static_cast<float>(x + px * k), static_cast<float>(y + py * k)}; };
+    fillLocal(c, {P(1.5, 6), P(4.5, 6), P(8.5, 2.5), P(8.5, 13.5), P(4.5, 10), P(1.5, 10)}, col);
+    const double t = std::max(1.0, 1.5 * k);
+    if (muted) {
+        lineLocal(c, x + 10.5 * k, y + 5.5 * k, x + 15 * k, y + 10.5 * k, col, t);
+        lineLocal(c, x + 15 * k, y + 5.5 * k, x + 10.5 * k, y + 10.5 * k, col, t);
+        return;
+    }
+    for (const double r : {3.5, 6.2}) {
+        const auto a = shapes::arc({static_cast<float>(x + 8.5 * k), static_cast<float>(y + 8 * k)}, static_cast<float>(r * k), -48.f, 48.f, 16);
+        strokeLocal(c, a, false, col, t);
+    }
+}
+
+// Le Coupe-son : un bouton a bascule - le haut-parleur et "Son actif" sur son fond, ou barre et "Son coupe" sur
+// le fond muet. L'etat est celui du poste (le moteur) ; dans l'editeur : le son actif.
+void drawSoundMute(const Ctx& c) {
+    const double w = c.w(), h = c.h(), rad = c.src.number(c.o, "radius", 6);
+    static const hmi::SystemSettings kEditor{};
+    const bool live = c.opt.runtime && !c.opt.editor;
+    const auto& st = live ? c.opt.runtime->settings() : kEditor;
+    const bool muted = hmi::soundMuted(st, hmi::muteChannelOf(c.src.text(c.o, "soundChannel", "Tous")));
+    const bool down = pressedNow(c);
+    const gfx::Color base = muted ? colorOf(c, "colorOff", 0xE5484D) : colorOf(c, "colorOn", 0x2F6FB0);
+    const gfx::Color fill = down ? mix(base, gfx::Color{0, 0, 0, base.a}, 0.25f) : base;
+    const auto shape = rectLocal(w, h, rad);
+    fillLocal(c, shape, fill);
+    // Le reflet du haut : une teinte opaque du fond (pas un voile : il se lit pareil sur tous les rendus).
+    if (!down) fillLocal(c, boxLocal({2, 2, w - 4, h * 0.45}, std::max(0.0, rad - 2)), mix(fill, gfx::Color{255, 255, 255, fill.a}, 0.08f));
+    strokeLocal(c, shape, true, mix(base, gfx::Color{0, 0, 0, base.a}, 0.3f), 1);
+    const gfx::Color tc = colorOf(c, "textColor", 0xFFFFFF);
+    const std::string label = muted ? c.src.text(c.o, "textOff") : c.src.text(c.o, "textOn");
+    const bool icon = c.src.flag(c.o, "icon", true);
+    const double dy = down ? 1.5 : 0;
+    if (label.empty()) {
+        const double g = std::min(h * 0.62, w * 0.62);
+        speakerLocal(c, (w - g) / 2, (h - g) / 2 + dy, g, tc, muted);
+        return;
+    }
+    const double fs = fsOf(c, 15);
+    double tx = 0, tw = w;
+    if (icon && w > h * 1.1) {
+        const double g = std::min(h * 0.56, 26.0);
+        const double textW = measureLocal(c, label, fs);
+        // Le haut-parleur et le libelle centres ensemble, le haut-parleur a gauche.
+        const double total = g + 8 + textW;
+        const double x0 = std::max(8.0, (w - total) / 2);
+        speakerLocal(c, x0, (h - g) / 2 + dy, g, tc, muted);
+        tx = x0 + g + 8;
+        tw = std::max(4.0, w - tx - 6);
+        text(c, fitted(c, label, tw, fs), tx, dy, tw, h, tc, fs, "gauche");
+        return;
+    }
+    text(c, fitted(c, label, tw - 8, fs), tx, dy, tw, h, tc, fs, "centre");
+}
+
+// Le Melangeur de volume : le General, puis une piste par canal (hmi::mixerLayout) - le nom, la course et sa
+// poignee, le vumetre (vert, orange, rouge), le pourcentage, le bouton M (allume : le canal est coupe). Une piste
+// que le General muet fait taire s'estompe. Les reglages sont ceux du poste ; dans l'editeur, ceux de depart.
+void drawVolumeMixer(const Ctx& c) {
+    const double w = c.w(), h = c.h(), rad = c.src.number(c.o, "radius", 6);
+    static const hmi::SystemSettings kEditor{};
+    const bool live = c.opt.runtime && !c.opt.editor;
+    const auto& st = live ? c.opt.runtime->settings() : kEditor;
+    const gfx::Color bg = colorOf(c, "fill", 0x1F252E);
+    const auto shape = rectLocal(w, h, rad);
+    fillLocal(c, shape, bg);
+    strokeLocal(c, shape, true, colorOf(c, "stroke", 0x3A4556), 1);
+    const auto l = hmi::mixerLayout(c.o, w, h);
+    if (l.tracks.empty()) {
+        text(c, "aucun canal", 0, 0, w, h, withAlpha(colorOf(c, "textColor", 0xE6EAF0), 0.6f), fsOf(c, 12), "centre");
+        return;
+    }
+    const gfx::Color tc = colorOf(c, "textColor", 0xE6EAF0);
+    const gfx::Color accent = colorOf(c, "accent", 0x2F6FD6);
+    const gfx::Color knob = colorOf(c, "knobColor", 0xF4F6FA);
+    const gfx::Color muteCol = colorOf(c, "muteColor", 0xE5484D);
+    const gfx::Color slot = mix(bg, tc, 0.22f);
+    const double fs = l.fontSize;
+    for (std::size_t i = 0; i < l.tracks.size(); ++i) {
+        const auto& t = l.tracks[i];
+        const bool own = hmi::soundMuted(st, t.channel);
+        const bool silenced = hmi::soundSilenced(st, t.channel);
+        // Une piste qui se tait s'estompe : ses couleurs vers le fond (opaques).
+        const float dim = silenced ? 0.45f : 1.f;
+        const auto dimmed = [&](gfx::Color col) { return silenced ? mix(bg, col, dim) : col; };
+        const double f = std::clamp(hmi::soundVolume(st, t.channel) / 100.0, 0.0, 1.0);
+        // Le General a part : un trait le separe des canaux.
+        if (t.channel == hmi::SoundChannel::General && i + 1 < l.tracks.size()) {
+            const auto& next = l.tracks[i + 1];
+            if (l.vertical) {
+                const double x = (t.frame.right() + next.frame.x) / 2;
+                lineLocal(c, x, t.frame.y + 2, x, t.frame.bottom() - 2, withAlpha(tc, 0.25f));
+            } else {
+                const double y = (t.frame.bottom() + next.frame.y) / 2;
+                lineLocal(c, t.frame.x + 2, y, t.frame.right() - 2, y, withAlpha(tc, 0.25f));
+            }
+        }
+        const std::string label(hmi::soundChannelSpec(t.channel).label);
+        text(c, fitted(c, label, t.name.w - 2, fs), t.name.x, t.name.y, t.name.w, t.name.h, dimmed(tc), fs,
+             l.vertical ? "centre" : "gauche");
+        // Le vumetre : le niveau des sons qui jouent (le moteur le lit au lecteur de sons).
+        if (t.meter.w > 0 && t.meter.h > 0) {
+            fillLocal(c, boxLocal(t.meter, 2), mix(bg, gfx::Color{0, 0, 0, bg.a}, 0.3f));
+            const double level = live ? static_cast<double>(c.opt.runtime->soundLevel(t.channel)) : 0.0;
+            const auto band = [&](double from, double to, std::uint32_t rgb) {
+                const double a = std::min(level, from), b = std::min(level, to);
+                if (b <= a) return;
+                if (l.vertical) fillLocal(c, boxLocal({t.meter.x, t.meter.bottom() - t.meter.h * b, t.meter.w, t.meter.h * (b - a)}), c.fixed(rgb));
+                else fillLocal(c, boxLocal({t.meter.x + t.meter.w * a, t.meter.y, t.meter.w * (b - a), t.meter.h}), c.fixed(rgb));
+            };
+            band(0.0, 0.6, 0x2E9E5B);
+            band(0.6, 0.85, 0xF5A623);
+            band(0.85, 1.0, 0xE5484D);
+        }
+        // La course, la partie reglee, la poignee.
+        fillLocal(c, boxLocal(t.track, 3), slot);
+        double kx = 0, ky = 0;
+        if (l.vertical) {
+            kx = t.track.cx();
+            ky = t.track.bottom() - t.track.h * f;
+            fillLocal(c, boxLocal({t.track.x, ky, t.track.w, t.track.bottom() - ky}, 3), dimmed(accent));
+        } else {
+            kx = t.track.x + t.track.w * f;
+            ky = t.track.cy();
+            fillLocal(c, boxLocal({t.track.x, t.track.y, kx - t.track.x, t.track.h}, 3), dimmed(accent));
+        }
+        fillLocal(c, circleLocal(kx + 1, ky + 1.5, l.knob), fade(gfx::Color{0, 0, 0, 80}, c.alpha));
+        fillLocal(c, circleLocal(kx, ky, l.knob), silenced ? mix(bg, knob, 0.7f) : knob);
+        strokeLocal(c, circleLocal(kx, ky, l.knob), true, fade(gfx::Color{0, 0, 0, 90}, c.alpha), 1.0);
+        if (t.percent.w > 0)
+            text(c, std::to_string(hmi::soundVolume(st, t.channel)) + " %", t.percent.x, t.percent.y, t.percent.w, t.percent.h,
+                 dimmed(tc), fs, l.vertical ? "centre" : "droite");
+        if (t.mute.w > 0) {
+            const auto b = boxLocal(t.mute, 4);
+            fillLocal(c, b, own ? muteCol : mix(bg, tc, 0.12f));
+            strokeLocal(c, b, true, own ? mix(muteCol, gfx::Color{0, 0, 0, muteCol.a}, 0.3f) : withAlpha(tc, 0.45f), 1);
+            text(c, "M", t.mute.x, t.mute.y, t.mute.w, t.mute.h, own ? c.fixedOn(0xFFFFFF) : tc, std::min(fs, t.mute.h * 0.6), "centre");
+        }
+    }
+}
+
 } // namespace
 
 bool drawLot9(const Ctx& c) {
@@ -1060,6 +1208,8 @@ bool drawLot9(const Ctx& c) {
         case Kind::Marquee:             drawMarquee(c); return true;
         case Kind::QrCode:              drawQrCode(c); return true;
         case Kind::SystemButton:        drawSystemButton(c); return true;     // lot 10
+        case Kind::SoundMute:           drawSoundMute(c); return true;        // 1.14.0
+        case Kind::VolumeMixer:         drawVolumeMixer(c); return true;
         default:                        return false;
     }
 }

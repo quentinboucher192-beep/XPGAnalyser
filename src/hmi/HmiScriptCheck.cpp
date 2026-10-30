@@ -367,6 +367,8 @@ constexpr Arity kHmi[] = {
     {"IHM_RELECTURE_PAUSE", 0, 1}, {"IHM_RELECTURE_ALLER", 1, 1}, {"IHM_RELECTURE_VITESSE", 1, 1}, {"IHM_RELECTURE_QUITTER", 0, 0},
     {"IHM_ENREG_LISTE", 0, 1},     {"IHM_ENREG_EXISTE", 1, 1},   {"IHM_ENREG_DUREE", 1, 1},     {"IHM_ENREG_EXPORTER", 2, 2},
     {"IHM_ENREG_IMPORTER", 1, 1},  {"IHM_ENREG_SUPPRIMER", 1, 1},
+    {"IHM_SON_MUET", 1, 1},        {"IHM_SON_EST_MUET", 0, 0},   {"IHM_SON_VOLUME", 2, 2},      // 1.14.0
+    {"IHM_SON_CANAL_MUET", 2, 2},
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }

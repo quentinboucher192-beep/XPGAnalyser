@@ -61,6 +61,7 @@ enum class Context : std::uint8_t {
     LocalType,    // VAR ... x : |  : les types d'une variable locale (lot 7)
     EquipmentName,// IHM_ESCLAVE_SIMULE('  IHM_EQUIPEMENT_OK('  : les equipements (1.9)
     LogLevel,     // IHM_LOG(|  NIVEAU_LOG#|  : les niveaux (1.11.14)
+    SoundChannel, // IHM_SON_VOLUME('  IHM_SON_CANAL_MUET('  : les canaux du son (1.14.0)
 };
 
 struct Where {

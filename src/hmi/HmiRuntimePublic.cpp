@@ -551,6 +551,12 @@ bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
         if (n == "ScreenSaverActive") return flag(asleep(now_));
         if (n == "SoundEnabled") return flag(settings_.soundOn);
         if (n == "Volume") return integer(settings_.volume);
+        // 1.14.0 : les canaux du son - SYS.Volume<Canal>, SYS.Mute<Canal> (Alarms, Scripts, Actions, Videos, Replay).
+        for (const auto& c : kSoundChannels) {
+            if (c.sys.empty()) continue;
+            if (n == "Volume" + std::string(c.sys)) return integer(soundVolume(settings_, c.channel));
+            if (n == "Mute" + std::string(c.sys)) return flag(soundMuted(settings_, c.channel));
+        }
         if (n == "AutoLogoutMinutes") return integer(autoLogoutMinutes());
         if (n == "AutoLogoutFromProject") return flag(settings_.autoLogoutMin < 0);
         if (n == "KeyboardMode") return text(settings_.keyboard);
@@ -801,6 +807,23 @@ int Runtime::publicWrite(std::string_view path, const sim::Value& value, std::st
                 std::string why2;
                 if (setLanguage(storedText(value), now_, source_.empty() ? std::string("SYS.Language") : source_, &why2)) return 1;
                 return refuse(std::string(path) + " : " + why2);
+            }
+            // 1.14.0 : le son - SYS.SoundEnabled (FALSE : tout coupe), SYS.Volume (le General), SYS.Volume<Canal>, SYS.Mute<Canal>.
+            if (r.access == pub::Access::ReadWrite && r.sys && pub::sysIsSound(r.sys->name)) {
+                const std::string n(r.sys->name);
+                const std::string src = source_.empty() ? "SYS." + n : source_;
+                if (pub::same(n, "SoundEnabled")) { (void)setChannelMuted(SoundChannel::General, !value.isTruthy(), src); return 1; }
+                const bool volume = n.size() >= 6 && pub::same(std::string_view(n).substr(0, 6), "Volume");
+                const auto channel = volume ? (n.size() == 6 ? std::optional<SoundChannel>(SoundChannel::General) : soundChannelFrom(std::string_view(n).substr(6)))
+                                            : soundChannelFrom(std::string_view(n).substr(4));
+                if (!channel) return refuse(std::string(path) + " : canal inconnu");
+                if (!volume) { (void)setChannelMuted(*channel, value.isTruthy(), src); return 1; }
+                double v = 0;
+                if (value.type() == sim::Type::Real) v = value.asReal();
+                else if (value.type() == sim::Type::String) { if (!parseNumber(value.asString(), v)) return refuse(std::string(path) + " : un nombre de 0 \xC3\xA0 100"); }
+                else v = static_cast<double>(value.asInteger());
+                (void)setChannelVolume(*channel, static_cast<int>(std::lround(v)), src);
+                return 1;
             }
             if (r.access == pub::Access::ReadWrite && r.sys) {
                 const std::string_view n = r.sys->name;

@@ -8,6 +8,7 @@
 #include "HmiLanguages.hpp"    // 1.12.30 : les debordements dans chaque langue
 #include "HmiNavigation.hpp"
 #include "HmiSymbols.hpp"
+#include "HmiSystemMenu.hpp"   // 1.14.0 : le Melangeur de volume (ses pistes, ses M)
 
 #include <algorithm>
 #include <cctype>
@@ -562,6 +563,7 @@ bool clickableKind(Kind k) {
         case Kind::PlcDiagnostic:   // lot 14 : ses deux boutons
         case Kind::DocumentViewer:  // 1.12.30 : les boutons de sa barre
         case Kind::Recorder: case Kind::RecordingPlayer:   // 1.14.0 (M4) : son bouton, ses lignes
+        case Kind::SoundMute: case Kind::VolumeMixer:   // 1.14.0 : couper le son, le melangeur (ses M, ses pistes)
             return true;
         default:
             return false;
@@ -617,6 +619,18 @@ void checkTouch(Ctx& c, const View& v, const Object& o) {
                 return;
             }
             break;
+        case Kind::VolumeMixer: {
+            // 1.14.0 : les boutons M et la largeur de chaque piste (la course se prend au doigt sur toute la piste).
+            const auto l = mixerLayout(o, w, h);
+            std::vector<Box> mutes, lanes;
+            for (const auto& t : l.tracks) {
+                mutes.push_back(t.mute);
+                lanes.push_back(l.vertical ? Box{t.frame.x, t.track.y, t.frame.w, t.track.h} : Box{t.track.x, t.frame.y, t.track.w, t.frame.h});
+            }
+            parts(mutes, "les boutons M");
+            parts(lanes, "les pistes");
+            return;
+        }
         case Kind::DocumentViewer: {
             // 1.12.30 : les boutons et les champs de sa barre (32 px : ils ne grandissent pas avec l'objet).
             const auto settings = docview::settingsOf(o);

@@ -36,19 +36,53 @@
 
 #include "HmiControls.hpp"
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace hmi {
 
+// ---- 1.14.0 : LES CANAUX DU SON ----------------------------------------------------------
+//  Chaque son appartient a un canal, selon d'ou il part : les alarmes (et leur
+//  repetition), IHM_SON dans un script, l'action Jouer un son, les videos, les sons
+//  rejoues d'un enregistrement (la relecture). Le General les tient tous : c'est le
+//  volume et le son (active, coupe) d'avant la 1.14.0 - SYS.Volume, SYS.SoundEnabled.
+//  Le gain d'un son : volume general x volume de son canal ; rien si l'un des deux est
+//  muet. Couper un canal fait taire ses voix tout de suite ; le retablir ne rejoue rien.
+enum class SoundChannel : std::uint8_t { General, Alarms, Scripts, Actions, Videos, Replay };
+inline constexpr std::size_t kSoundChannelCount = 6;
+struct SoundChannelSpec {
+    SoundChannel     channel;
+    std::string_view key;      // le mot des natives et des actions (ASCII) : 'General', 'Alarmes'...
+    std::string_view label;    // le nom montre : General (accentue), Videos (accentue)
+    std::string_view sys;      // la fin des variables : SYS.Volume<sys>, SYS.Mute<sys> ("" : le General)
+    std::string_view help;
+};
+inline constexpr SoundChannelSpec kSoundChannels[kSoundChannelCount] = {
+    {SoundChannel::General, "General", "G\xC3\xA9n\xC3\xA9ral", "",
+     "Tous les sons : son volume multiplie celui de chaque canal ; muet, plus rien ne sort (SYS.SoundEnabled)."},
+    {SoundChannel::Alarms, "Alarmes", "Alarmes", "Alarms", "Les sons des alarmes et leur r\xC3\xA9p\xC3\xA9tition."},
+    {SoundChannel::Scripts, "Scripts", "Scripts", "Scripts", "IHM_SON dans un script."},
+    {SoundChannel::Actions, "Actions", "Actions", "Actions", "L'action Jouer un son."},
+    {SoundChannel::Videos, "Videos", "Vid\xC3\xA9os", "Videos", "Le son des vid\xC3\xA9os."},
+    {SoundChannel::Replay, "Relecture", "Relecture", "Replay", "Les sons rejou\xC3\xA9s d'un enregistrement."},
+};
+[[nodiscard]] inline const SoundChannelSpec& soundChannelSpec(SoundChannel c) noexcept {
+    return kSoundChannels[static_cast<std::size_t>(c)];
+}
+// Un canal par son mot ('Alarmes'), son nom montre ('Videos' accentue), ou la fin de ses
+// variables ('Alarms'), sans casse ; 'Tous' et 'General' : le General.
+[[nodiscard]] std::optional<SoundChannel> soundChannelFrom(std::string_view text) noexcept;
+
 // ---- les reglages du poste --------------------------------------------------------------
 struct SystemSettings {
     int         brightness{100};           // % de 20 a 100
     int         screensaverMin{0};         // 0 : jamais
-    bool        soundOn{true};
-    int         volume{100};               // % de 0 a 100
+    bool        soundOn{true};             // 1.14.0 : faux, le General est muet (Couper tout le son)
+    int         volume{100};               // % de 0 a 100 (1.14.0 : le volume du General)
     int         autoLogoutMin{-1};         // -1 : celle du projet (Configuration > Utilisateurs) ; 0 : jamais
     std::string keyboard{"automatique"};   // "automatique", "toujours", "jamais"
     double      clockOffset{0};            // secondes ajoutees a l'heure du poste
@@ -58,8 +92,60 @@ struct SystemSettings {
     std::string colorMode{"normal"};       // "normal", "daltonien"
     bool        symbols{false};            // des symboles sur les voyants
     std::string theme{"nuit"};             // "nuit", "jour"
+    // 1.14.0 : le melangeur - le volume (0 a 100 %) et le muet de chaque canal, ranges comme
+    // kSoundChannels ; la case du General n'y sert pas (volume, soundOn).
+    std::array<int, kSoundChannelCount>  channelVolume{100, 100, 100, 100, 100, 100};
+    std::array<bool, kSoundChannelCount> channelMuted{};
     bool operator==(const SystemSettings&) const = default;
 };
+// 1.14.0 : le volume (0 a 100) et le muet d'un canal ; le General : volume, NOT soundOn.
+[[nodiscard]] int  soundVolume(const SystemSettings&, SoundChannel) noexcept;
+[[nodiscard]] bool soundMuted(const SystemSettings&, SoundChannel) noexcept;
+void setSoundVolume(SystemSettings&, SoundChannel, int volume) noexcept;      // borne a 0..100
+void setSoundMuted(SystemSettings&, SoundChannel, bool muted) noexcept;
+// Le gain d'un son de ce canal, de 0 a 1 : volume general x volume du canal ; 0 si le
+// General ou le canal est muet. Le General lui-meme : son volume (0 s'il est muet).
+[[nodiscard]] float soundGain(const SystemSettings&, SoundChannel) noexcept;
+// Le canal se tait (lui ou le General est muet) : ses sons ne partent pas, ceux qui jouent s'arretent.
+[[nodiscard]] bool soundSilenced(const SystemSettings&, SoundChannel) noexcept;
+
+// ---- 1.14.0 : le Coupe-son et le Melangeur de volume (la geometrie) ---------------------
+//  Comme HmiControls : le dessin et le clic lisent la meme geometrie. Une partie cliquee
+//  du melangeur est un petit texte que Runtime::mixerPart applique :
+//    "volume:<canal>:<fraction>"   la course du curseur (0 en bas ou a gauche, 1 au bout),
+//                                  pendant qu'on tire ("glisser:...") et au lacher ("lacher:...")
+//    "pas:<canal>:<+N|-N>"         la molette : N crans de 5 %
+//    "muet:<canal>"                le bouton M
+//  <canal> : le mot de kSoundChannels (General, Alarmes, Scripts, Actions, Videos, Relecture).
+// Le canal d'un Coupe-son ("soundChannel" : Tous, ou un canal) ; inconnu : le General.
+[[nodiscard]] SoundChannel muteChannelOf(std::string_view text) noexcept;
+// Les canaux montres par un melangeur ("channels" : "tous", ou une liste 'General;Alarmes;Videos'
+// separee par ; ou ,) dans l'ordre de kSoundChannels ; ce qui n'est pas un canal va dans `unknown`.
+[[nodiscard]] std::vector<SoundChannel> mixerChannels(std::string_view channels, std::vector<std::string>* unknown = nullptr);
+struct MixerTrack {
+    SoundChannel channel{SoundChannel::General};
+    Box frame;       // la piste entiere (ce qui se clique pour le volume, hors du bouton M)
+    Box name;        // son nom
+    Box track;       // la course du curseur (6 pixels d'epaisseur)
+    Box meter;       // le vumetre, a cote de la course (vide : pas montre)
+    Box percent;     // le pourcentage (vide : pas montre)
+    Box mute;        // le bouton M (vide : pas montre)
+};
+struct MixerLayout {
+    bool                    vertical{true};
+    double                  knob{8};          // le rayon de la poignee
+    double                  fontSize{12};
+    std::vector<MixerTrack> tracks;
+};
+// `channels`, `orientation` ("verticale", "horizontale"), `showPercent`, `showMute`, `showMeter`, `fontSize`.
+[[nodiscard]] MixerLayout mixerLayout(const Object&, double w, double h);
+// La fraction (0..1) de la course d'une piste au point (x, y), bornee.
+[[nodiscard]] double mixerFractionAt(const MixerLayout&, const MixerTrack&, double x, double y);
+// La partie sous (x, y) : "volume:<canal>:<fraction>", "muet:<canal>" ; vide : rien.
+[[nodiscard]] std::string mixerHit(const Object&, double w, double h, double x, double y);
+// La boite d'une partie ("volume:Alarmes:0.5" : le point de la course qui donne 50 % ; "muet:Alarmes") ;
+// faux : pas de cette partie.
+[[nodiscard]] bool mixerPartBox(const Object&, double w, double h, std::string_view part, Box& out);
 
 enum class SettingKind : std::uint8_t { Percent, Choice, Toggle, Clock };
 struct SettingSpec {

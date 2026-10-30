@@ -1399,7 +1399,8 @@ const std::vector<Category>& categories() {
         {"Commandes", {hmi::Kind::Button, hmi::Kind::PushButton, hmi::Kind::Switch, hmi::Kind::IlluminatedButton,
                        hmi::Kind::Selector, hmi::Kind::Slider, hmi::Kind::Knob, hmi::Kind::InputField, hmi::Kind::ComboBox,
                        hmi::Kind::CheckBox, hmi::Kind::RadioGroup, hmi::Kind::DateTimePicker, hmi::Kind::WeeklySchedule,
-                       hmi::Kind::List, hmi::Kind::SystemButton}},
+                       hmi::Kind::List, hmi::Kind::SystemButton,
+                       hmi::Kind::SoundMute, hmi::Kind::VolumeMixer}},   // 1.14.0 : couper le son, le melangeur
         {"Affichage", {hmi::Kind::Indicator, hmi::Kind::MultiStateIndicator, hmi::Kind::MultiStateText, hmi::Kind::NumericDisplay,
                        hmi::Kind::SevenSegment, hmi::Kind::ProgressBar, hmi::Kind::Bargraph, hmi::Kind::Gauge, hmi::Kind::Dial,
                        hmi::Kind::Thermometer, hmi::Kind::TrendArrow, hmi::Kind::Clock, hmi::Kind::HourMeter,
@@ -2491,6 +2492,22 @@ const std::vector<KeyInfo>& keyInfos() {
          "% par d\xC3\xA9" "faut ; tr/min pour une vitesse en tours."},
         {"colorReady", "Couleur pr\xC3\xAAt", PG::ValueType::Color, {},
          "Celle du variateur pr\xC3\xAAt, \xC3\xA0 l'arr\xC3\xAAt."},
+        // ---- 1.14.0 : le Coupe-son et le Melangeur de volume
+        {"soundChannel", "Canal vis\xC3\xA9", PG::ValueType::Enum, {"Tous", "Alarmes", "Scripts", "Actions", "Vid\xC3\xA9os", "Relecture"},
+         "Tous : un clic coupe tous les sons (SYS.SoundEnabled), le suivant les r\xC3\xA9tablit. Un canal : seulement ses sons "
+         "(Alarmes : les alarmes et leur r\xC3\xA9p\xC3\xA9tition ; Scripts : IHM_SON ; Actions : Jouer un son ; Relecture : les sons "
+         "rejou\xC3\xA9s d'un enregistrement). Ce qui joue se tait tout de suite ; r\xC3\xA9tabli, rien n'est rejou\xC3\xA9."},
+        {"channels", "Canaux affich\xC3\xA9s", PG::ValueType::Text, {},
+         "tous : le G\xC3\xA9n\xC3\xA9ral, puis Alarmes, Scripts, Actions, Vid\xC3\xA9os et Relecture. Sinon une liste, dans n'importe "
+         "quel ordre (elles se montrent dans celui du m\xC3\xA9langeur) : General;Alarmes;Videos."},
+        {"showPercent", "Pourcentage", PG::ValueType::Boolean, {}, "Le volume de chaque piste, en %, sous son curseur."},
+        {"showMute", "Bouton M (muet)", PG::ValueType::Boolean, {},
+         "Le bouton M de chaque piste : il coupe le canal (il s'allume), un second clic le r\xC3\xA9tablit. Celui du G\xC3\xA9n\xC3\xA9ral "
+         "coupe tout, comme le Coupe-son."},
+        {"showMeter", "Vum\xC3\xA8tre", PG::ValueType::Boolean, {},
+         "Le niveau du canal, d'apr\xC3\xA8s les sons qui jouent (\xC3\xA0 leur volume) : vert, orange, puis rouge en haut. Celui du "
+         "G\xC3\xA9n\xC3\xA9ral : le plus fort de tous."},
+        {"muteColor", "Couleur du M allum\xC3\xA9", PG::ValueType::Color, {}, "Le bouton M d'un canal coup\xC3\xA9."},
         // ---- 1.12.30 : la visionneuse de documents
         {"document", "Document", PG::ValueType::Text, {},
          "Une ressource du projet (un PDF, une image PNG, JPEG, BMP, GIF ou SVG, un texte TXT), un fichier externe du projet, "
@@ -2776,6 +2793,21 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "fill") return "Fond derri\xC3\xA8re les pages";
         if (key == "accent") return "Couleur d'accent";
         if (key == "textColor") return "Couleur des boutons";
+    }
+    // 1.14.0 : le Coupe-son et le Melangeur de volume - leurs libelles, leurs couleurs, ce qu'on y pilote.
+    if (kind == K::SoundMute) {
+        if (key == "textOn") return "Libell\xC3\xA9 son actif";
+        if (key == "textOff") return "Libell\xC3\xA9 muet";
+        if (key == "colorOn") return "Fond son actif";
+        if (key == "colorOff") return "Fond muet";
+        if (key == "icon") return "Ic\xC3\xB4ne haut-parleur";
+        if (key == "pilotable") return "Pilotable (un clic coupe, r\xC3\xA9tablit)";
+    }
+    if (kind == K::VolumeMixer) {
+        if (key == "orientation") return "Orientation des curseurs";
+        if (key == "accent") return "Couleur de la course";
+        if (key == "fill") return "Fond";
+        if (key == "pilotable") return "Pilotable (curseurs, molette, M)";
     }
     // 1.12.30 : le variateur de vitesse - la Valeur dit s'il tourne ; le fond est celui de son cadre.
     if (kind == K::SpeedDrive) {
@@ -3124,6 +3156,33 @@ void docProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p, c
     } else if (prop.key == "page") {
         p.type = PG::ValueType::Integer;
     }
+}
+
+// 1.14.0 : le Coupe-son et le Melangeur de volume - l'aide de leurs cles partagees (pilotable, textOn...), le canal
+// vise parmi les canaux (ou un mot tape garde).
+void soundProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p) {
+    if (o.kind != hmi::Kind::SoundMute && o.kind != hmi::Kind::VolumeMixer) return;
+    const auto explain = [&](std::string mine) {
+        const auto at = p.description.find("Tape =expression");
+        p.description = std::move(mine) + (at == std::string::npos ? std::string{} : "\n" + p.description.substr(at));
+    };
+    const bool mute = o.kind == hmi::Kind::SoundMute;
+    if (prop.key == "soundChannel" && std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end())
+        p.enumValues.push_back(prop.value);
+    else if (prop.key == "pilotable")
+        explain(mute ? "Coch\xC3\xA9 : en marche (simulation, poste d'exploitation), un clic coupe le son, le suivant le r\xC3\xA9tablit ; "
+                       "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent (un cadenas sinon). D\xC3\xA9" "coch\xC3\xA9 : il montre "
+                       "l'\xC3\xA9tat sans r\xC3\xA9" "agir."
+                     : "Coch\xC3\xA9 : en marche, chaque curseur se tire (souris ou doigt), la molette le r\xC3\xA8gle par pas de 5 %, "
+                       "M coupe le canal ; le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent. D\xC3\xA9" "coch\xC3\xA9 : il montre "
+                       "les volumes sans r\xC3\xA9" "agir.");
+    else if (mute && prop.key == "textOn") explain("Le libell\xC3\xA9 quand le son est actif. Les deux libell\xC3\xA9s vides : l'ic\xC3\xB4ne seule.");
+    else if (mute && prop.key == "textOff") explain("Le libell\xC3\xA9 quand le son est coup\xC3\xA9.");
+    else if (mute && prop.key == "icon") explain("Le haut-parleur (son actif) ou le haut-parleur barr\xC3\xA9 (muet), \xC3\xA0 gauche du libell\xC3\xA9.");
+    else if (mute && prop.key == "colorOn") explain("Le fond du bouton quand le son est actif.");
+    else if (mute && prop.key == "colorOff") explain("Le fond du bouton quand le son est coup\xC3\xA9.");
+    else if (!mute && prop.key == "orientation")
+        explain("Verticale : une colonne par canal (le curseur monte) ; horizontale : une ligne par canal (le curseur va \xC3\xA0 droite).");
 }
 
 // Les libelles et les choix des proprietes du lot H.
@@ -4039,6 +4098,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         lotHProperty(*o, prop, p, project);
         // 1.12.30 : la visionneuse de documents - ses documents, ses zooms.
         docProperty(*o, prop, p, assets);
+        soundProperty(*o, prop, p);   // 1.14.0 : le Coupe-son, le Melangeur de volume
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.
