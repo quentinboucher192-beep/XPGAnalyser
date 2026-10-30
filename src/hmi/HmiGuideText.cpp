@@ -13391,17 +13391,20 @@ const std::vector<Topic>& topics() {
                          "\xC2\xBB.\nDescription\t(vide)\tCe qu'on y voit (Ressources \xE2\x80\xBA "
                          "Enregistrements la montre).\nDemander le nom \xC3\xA0 l'arr\xC3\xAAt\tTRUE\tLa "
                          "fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; "
-                         "L'enregistrer ou Le jeter). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de "
-                         "suite, sous son Nom (un poste sans clavier).\nDur\xC3\xA9" "e maximale "
-                         "(min)\t0\tAu bout, il s'arr\xC3\xAAte et se garde. 0 : celle de Configuration "
-                         "\xE2\x80\xBA Enregistrements (30 min).\nMot de passe\t(vide)\tVide : en clair. "
-                         "Sinon la piste est chiffr\xC3\xA9" "e : il faut le mot de passe pour le rejouer et "
-                         "lire ses valeurs.\nPilotable (un clic agit)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : "
-                         "il montre l'\xC3\xA9tat sans r\xC3\xA9" "agir au clic.\nCouleur du "
-                         "bouton\t#E5484D\tLe rond du bouton.\nRemplissage\t#262C36\tLe "
-                         "fond.\nContour\t#3A4556\tLe cadre.\nCouleur du texte\t#DDE3EA\tLe titre, le "
-                         "libell\xC3\xA9, l'\xC3\xA9tat.\nTaille du texte\t14\tLa taille du libell\xC3\xA9 ; "
-                         "le bouton rond grandit avec elle.", {}},
+                         "Jeter ou Enregistrer). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de suite, "
+                         "sous son Nom (un poste sans clavier).\nDur\xC3\xA9" "e maximale (min)\t0\tAu bout, "
+                         "il s'arr\xC3\xAAte et se garde. 0 : celle de Configuration \xE2\x80\xBA "
+                         "Enregistrements (30 min).\nMot de passe\t(vide)\tVide : en clair. Sinon la piste "
+                         "est chiffr\xC3\xA9" "e : il faut le mot de passe pour le rejouer et lire ses "
+                         "valeurs. L'inspecteur le montre en points "
+                         "(\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2) ; il est gard\xC3\xA9 "
+                         "masqu\xC3\xA9 dans le projet, le code brut et l'archive, comme celui des actions. "
+                         "\xC3\x80 l'arr\xC3\xAAt, la fen\xC3\xAAtre le garde si on ne le retape "
+                         "pas.\nPilotable (un clic agit)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : il montre "
+                         "l'\xC3\xA9tat sans r\xC3\xA9" "agir au clic.\nCouleur du bouton\t#E5484D\tLe rond "
+                         "du bouton.\nRemplissage\t#262C36\tLe fond.\nContour\t#3A4556\tLe cadre.\nCouleur "
+                         "du texte\t#DDE3EA\tLe titre, le libell\xC3\xA9, l'\xC3\xA9tat.\nTaille du "
+                         "texte\t14\tLa taille du libell\xC3\xA9 ; le bouton rond grandit avec elle.", {}},
              {K::Heading, "En marche", {}},
              {K::Bullet, "un clic n'importe o\xC3\xB9 sous le titre d\xC3\xA9marre ou arr\xC3\xAAte ; "
                          "\xC2\xAB \xE2\x97\x8F enregistre depuis 01:12 \xC2\xBB en rouge, ou \xC2\xAB "
@@ -13425,15 +13428,18 @@ const std::vector<Topic>& topics() {
            {"description", "Description", "(vide)",
             "Ce qu'on y voit (Ressources \xE2\x80\xBA Enregistrements la montre)."},
            {"askName", "Demander le nom \xC3\xA0 l'arr\xC3\xAAt", "TRUE",
-            "La fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; "
-            "L'enregistrer ou Le jeter). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de suite, sous son "
-            "Nom (un poste sans clavier)."},
+            "La fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; Jeter ou "
+            "Enregistrer). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de suite, sous son Nom (un poste "
+            "sans clavier)."},
            {"maxMinutes", "Dur\xC3\xA9" "e maximale (min)", "0",
             "Au bout, il s'arr\xC3\xAAte et se garde. 0 : celle de Configuration \xE2\x80\xBA "
             "Enregistrements (30 min)."},
            {"password", "Mot de passe", "(vide)",
             "Vide : en clair. Sinon la piste est chiffr\xC3\xA9" "e : il faut le mot de passe pour le "
-            "rejouer et lire ses valeurs."},
+            "rejouer et lire ses valeurs. L'inspecteur le montre en points "
+            "(\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2) ; il est gard\xC3\xA9 masqu\xC3\xA9 dans le "
+            "projet, le code brut et l'archive, comme celui des actions. \xC3\x80 l'arr\xC3\xAAt, la "
+            "fen\xC3\xAAtre le garde si on ne le retape pas."},
            {"pilotable", "Pilotable (un clic agit)", "TRUE",
             "D\xC3\xA9" "coch\xC3\xA9" "e : il montre l'\xC3\xA9tat sans r\xC3\xA9" "agir au clic."},
            {"accent", "Couleur du bouton", "#E5484D",
@@ -19900,7 +19906,14 @@ const std::vector<Topic>& topics() {
                          "00:42** ; \xC3\xA0 l'arr\xC3\xAAt, la fen\xC3\xAAtre **Arr\xC3\xAAter "
                          "l'enregistrement** dit la dur\xC3\xA9" "e, les clics, les alarmes et la taille, et "
                          "demande le **nom**, une **description** et un **mot de passe** (facultatifs) ; "
-                         "**L'enregistrer** ou **Le jeter**. Annuler le garde sous le nom propos\xC3\xA9.", {}},
+                         "deux boutons, **Jeter** et **Enregistrer**. \xC3\x89" "chap le garde sous le nom "
+                         "propos\xC3\xA9.", {}},
+             {K::Bullet, "**Un enregistrement prot\xC3\xA9g\xC3\xA9 d\xC3\xA8s le d\xC3\xA9part** (le mot de "
+                         "passe de l'Enregistreur, de l'action, de `IHM_ENREG_DEMARRER`, de "
+                         "`--mot-de-passe`) **le reste** : \xC3\xA0 l'arr\xC3\xAAt, un champ Mot de passe "
+                         "laiss\xC3\xA9 vide garde celui du d\xC3\xA9part, \xC3\x89" "chap aussi ; seule la "
+                         "case **Retirer la protection** le retire. Un autre mot de passe tap\xC3\xA9 le "
+                         "remplace.", {}},
              {K::Bullet, "**Dans une vue** (en simulation comme au poste) : l'objet **Enregistreur** (voir "
                          "\xC2\xAB Enregistreur \xC2\xBB).", {}},
              {K::Bullet, "**Par une action** (D\xC3\xA9marrer un enregistrement, Arr\xC3\xAAter et garder, "
@@ -19927,7 +19940,22 @@ const std::vector<Topic>& topics() {
                          "d'alors, le pointeur de l'op\xC3\xA9rateur passe en fant\xC3\xB4me et chaque clic "
                          "fait un cercle ;", {}},
              {K::Bullet, "l'IHM **ne commande rien et ne re\xC3\xA7oit aucun clic** : ni script, ni action, "
-                         "ni \xC3\xA9" "criture vers l'automate ;", {}},
+                         "et **aucune \xC3\xA9" "criture** - ni variable IHM, ni automate, ni "
+                         "\xC3\xA9quipement, ni recette : elle est refus\xC3\xA9" "e, et la Console le dit "
+                         "une fois. Dans la suite d'un clic, apr\xC3\xA8s **Rejouer un enregistrement**, "
+                         "seules les actions Relecture passent encore (Pause, Avancer ou reculer, Vitesse, "
+                         "Quitter) ; les autres ne partent pas (la Console le dit). Dans un script, ce qui "
+                         "suit `IHM_REJOUER` n'\xC3\xA9" "crit plus rien tant que la relecture est "
+                         "affich\xC3\xA9" "e (ses variables locales, si) : `IHM_RELECTURE_ALLER` y marche, "
+                         "`Consigne := 50` non ;", {}},
+             {K::Bullet, "les **courbes**, **chronogrammes**, **histogrammes** et **courbes XY** se refont "
+                         "depuis la piste jusqu'\xC3\xA0 l'instant rejou\xC3\xA9 (leur m\xC3\xA9moire du "
+                         "direct revient en quittant) ; les **fl\xC3\xA8" "ches de tendance** et les "
+                         "**compteurs de production** ne sont pas dans la piste : ils montrent l'\xC3\xA9tat "
+                         "du direct, fig\xC3\xA9 (le bandeau le dit quand la vue en a) ;", {}},
+             {K::Bullet, "une popup montre ses param\xC3\xA8tres **Copie** et **Les deux** tels qu'ils "
+                         "\xC3\xA9taient (ceux d'un type objet - LIST, une structure \xC3\xA0 membre objet - "
+                         "ne s'enregistrent pas) ;", {}},
              {K::Bullet, "la barre du bas : la **progression** (un clic ou un glisser va \xC3\xA0 l'instant "
                          "; ses rep\xC3\xA8res : une alarme en rouge, un clic \xC3\xA0 la couleur d'accent, "
                          "un changement de vue en gris), **D\xC3\xA9" "but**, **\xE2\x88\x92" "10 s**, "
@@ -19938,16 +19966,19 @@ const std::vector<Topic>& topics() {
                          "arri\xC3\xA8re, en avant\n+ \xE2\x88\x92\tplus vite, moins vite\nD\xC3\xA9" "but, "
                          "Fin\tau d\xC3\xA9" "but, \xC3\xA0 la fin\n\xC3\x89" "chap\tquitter la relecture", {}},
              {K::Paragraph, "**Quitter** rend l'IHM exactement comme elle \xC3\xA9tait : la vue, les popups, "
-                         "les alarmes, l'utilisateur, la langue. Pendant la relecture, l'heure de l'IHM "
-                         "s'arr\xC3\xAAte (ses temporisations reprennent l\xC3\xA0 o\xC3\xB9 elles "
-                         "\xC3\xA9taient) et **l'API simul\xC3\xA9" "e se met en pause** : rien ne bouge "
-                         "derri\xC3\xA8re le film ; elle repart en quittant. Un automate r\xC3\xA9" "el "
-                         "(reli\xC3\xA9, ou au poste) continue : l'IHM ne lui \xC3\xA9" "crit rien tant "
-                         "qu'elle rejoue. En simulation, la relecture est dans la vue de la simulation ; au "
-                         "poste d'exploitation, elle prend tout l'\xC3\xA9" "cran. Un enregistrement d'une "
-                         "autre version du projet se rejoue aussi : ce qui n'existe plus (une variable, une "
-                         "vue, un objet) est ignor\xC3\xA9, et signal\xC3\xA9 une fois (la barre et la "
-                         "Console le disent).", {}},
+                         "les alarmes, l'utilisateur, la langue, les courbes. Pendant la relecture, l'heure "
+                         "de l'IHM s'arr\xC3\xAAte (ses temporisations reprennent l\xC3\xA0 o\xC3\xB9 elles "
+                         "\xC3\xA9taient) mais **les dates suivent l'heure du PC** : en quittant, SYS.Date, "
+                         "SYS.Time, les horodatages des alarmes, du journal et de l'audit, les rapports "
+                         "\xC3\xA0 leur heure ne retardent pas du temps pass\xC3\xA9 \xC3\xA0 rejouer. "
+                         "**L'API simul\xC3\xA9" "e se met en pause** : rien ne bouge derri\xC3\xA8re le "
+                         "film ; elle repart en quittant - et aussi si l'on ferme l'onglet Simulation "
+                         "pendant la relecture. Un automate r\xC3\xA9" "el (reli\xC3\xA9, ou au poste) "
+                         "continue : l'IHM ne lui \xC3\xA9" "crit rien tant qu'elle rejoue. En simulation, "
+                         "la relecture est dans la vue de la simulation ; au poste d'exploitation, elle "
+                         "prend tout l'\xC3\xA9" "cran. Un enregistrement d'une autre version du projet se "
+                         "rejoue aussi : ce qui n'existe plus (une variable, une vue, un objet) est "
+                         "ignor\xC3\xA9, et signal\xC3\xA9 une fois (la barre et la Console le disent).", {}},
              {K::Heading, "Le dossier Enregistrements", {}},
              {K::Paragraph, "Les enregistrements sont des fichiers `.xrec` dans le dossier natif "
                          "**ressources/enregistrements** du projet (ou celui de Configuration \xE2\x80\xBA "
@@ -19959,22 +19990,47 @@ const std::vector<Topic>& topics() {
                          "les vues, le projet) et la **description**, qui se modifie.", {}},
              {K::Bullet, "**Importer\xE2\x80\xA6** copie un `.xrec` dans le dossier (un nom "
                          "d\xC3\xA9j\xC3\xA0 pris devient \xC2\xAB Nom (2) \xC2\xBB) ; "
-                         "**Exporter\xE2\x80\xA6** en copie un ailleurs ;", {}},
+                         "**Exporter\xE2\x80\xA6** en copie un ailleurs : un fichier du m\xC3\xAAme nom "
+                         "d\xC3\xA9j\xC3\xA0 l\xC3\xA0, la question est pos\xC3\xA9" "e avant de le "
+                         "remplacer ; prot\xC3\xA9g\xC3\xA9, la case **Garder le mot de passe dans le "
+                         "fichier export\xC3\xA9** (oui par d\xC3\xA9" "faut : la copie reste "
+                         "prot\xC3\xA9g\xC3\xA9" "e) - non : le bon mot de passe est demand\xC3\xA9, et la "
+                         "copie est sans protection ;", {}},
              {K::Bullet, "**Renommer** : les actions, le Lecteur et les scripts qui le citent en dur suivent "
-                         "; G\xC3\xA9n\xC3\xA9rer signale ce qui le cite autrement ;", {}},
+                         "(`'Nom'` en ST, `\"Nom\"` en C et C++) ; **Ctrl+Z** rend le nom du fichier et les "
+                         "citations ensemble ; G\xC3\xA9n\xC3\xA9rer signale ce qui le cite autrement ;", {}},
              {K::Bullet, "**Mot de passe\xE2\x80\xA6** prot\xC3\xA8ge, change ou retire la protection "
                          "(l'actuel est demand\xC3\xA9) ;", {}},
              {K::Bullet, "**Supprimer** le met dans la corbeille du projet (ihm/corbeille) ; **Ouvrir le "
                          "dossier** l'ouvre dans l'explorateur.", {}},
-             {K::Paragraph, "L'archive du projet (.xihm) les emporte si on coche **Avec les enregistrements** "
-                         "(ils sont laiss\xC3\xA9s par d\xC3\xA9" "faut : ils p\xC3\xA8sent).", {}},
+             {K::Paragraph, "Un nom d'enregistrement n'est jamais un chemin : pas de / \\ : * ? \" < > |, pas "
+                         "de point au bout, ni un nom r\xC3\xA9serv\xC3\xA9 de Windows (CON, PRN, AUX, NUL, "
+                         "COM1 \xC3\xA0 COM9, LPT1 \xC3\xA0 LPT9) - une action ou un script qui en donne un "
+                         "est refus\xC3\xA9 (la Console le dit). L'archive du projet (.xihm) les emporte si "
+                         "on coche **Avec les enregistrements** (ils sont laiss\xC3\xA9s par "
+                         "d\xC3\xA9" "faut : ils p\xC3\xA8sent) ; la case d\xC3\xA9" "cide pour tous : le "
+                         "dossier natif et celui de Configuration \xE2\x80\xBA Enregistrements - hors du "
+                         "projet, ils vont dans le dossier natif de l'archive. Son libell\xC3\xA9 dit "
+                         "combien il y en a, et leur poids. La liste ne lit que l'en-t\xC3\xAAte de chaque "
+                         "fichier (quelques Ko), et seulement s'il a chang\xC3\xA9 : un dossier plein de "
+                         "longs enregistrements s'affiche vite.", {}},
              {K::Heading, "Le mot de passe", {}},
              {K::Paragraph, "Un enregistrement prot\xC3\xA9g\xC3\xA9 a sa piste **chiffr\xC3\xA9" "e** : sans "
                          "le mot de passe, il **ne se rejoue pas et ses valeurs ne se lisent pas**. Son "
                          "en-t\xC3\xAAte - le nom, la date, la dur\xC3\xA9" "e, la description, o\xC3\xB9 et "
                          "par qui - reste lisible, pour qu'on le trouve. Le mot de passe ne prot\xC3\xA8ge "
                          "que cela : le fichier, lui, se copie, se renomme et se supprime comme un autre. Un "
-                         "mot de passe oubli\xC3\xA9 ne se retrouve pas.", {}},
+                         "mot de passe oubli\xC3\xA9 ne se retrouve pas. La piste est chiffr\xC3\xA9" "e par "
+                         "une cl\xC3\xA9 propre au fichier, elle-m\xC3\xAAme chiffr\xC3\xA9" "e par le mot "
+                         "de passe dans l'en-t\xC3\xAAte : le donner (ou le retirer) \xC3\xA0 l'arr\xC3\xAAt "
+                         "ne r\xC3\xA9\xC3\xA9" "crit que l'en-t\xC3\xAAte ; **Mot de passe\xE2\x80\xA6** "
+                         "tire une cl\xC3\xA9 neuve et rechiffre toute la piste (qui avait l'ancien mot de "
+                         "passe ne lit plus la nouvelle). Pendant qu'il tourne sans mot de passe, le fichier "
+                         "en cours (`.xrec.part`) a sa cl\xC3\xA9 en clair. Un fichier `.xrec` "
+                         "fabriqu\xC3\xA9 pour nuire ne fait pas d\xC3\xA9" "border la m\xC3\xA9moire : "
+                         "l'en-t\xC3\xAAte fait 1 Mo au plus, la piste se lit bloc par bloc, 1 Go "
+                         "d\xC3\xA9" "compress\xC3\xA9 et 12 millions de valeurs au plus ; au-del\xC3\xA0, "
+                         "il est refus\xC3\xA9, et Ressources \xE2\x80\xBA Enregistrements dit pourquoi.", {}},
              {K::Heading, "Configuration \xE2\x80\xBA Enregistrements", {}},
              {K::Table, "R\xC3\xA9glage\tPar d\xC3\xA9" "faut\tCe qu'il fait\nDossier\t(vide)\tVide : "
                          "ressources/enregistrements du projet. Un chemin relatif part du dossier du "
@@ -20004,7 +20060,13 @@ const std::vector<Topic>& topics() {
              {K::Table, "Code de sortie\tCe qu'il dit\n0\tfait\n1\tune option mal "
                          "\xC3\xA9" "crite\n2\taucune IHM en marche\n3\tnom introuvable (ou rien \xC3\xA0 "
                          "arr\xC3\xAAter)\n4\tmot de passe faux\n5\trefus\xC3\xA9 par la configuration du "
-                         "projet", {}},
+                         "projet\n6\toccup\xC3\xA9" "e : un enregistrement tourne d\xC3\xA9j\xC3\xA0, ou une "
+                         "relecture est affich\xC3\xA9" "e\n7\tun fichier : \xC3\xA9" "criture impossible, "
+                         "enregistrement illisible, pas de dossier (projet jamais enregistr\xC3\xA9)", {}},
+             {K::Paragraph, "La r\xC3\xA9ponse revient par un fichier neuf du dossier temporaire "
+                         "(`xpg-enregistrement-<chiffres>.txt`) que la commande cr\xC3\xA9" "e et lit : IHM "
+                         "Studio n'\xC3\xA9" "crit sa r\xC3\xA9ponse nulle part ailleurs, et jamais "
+                         "par-dessus un fichier.", {}},
              {K::Heading, "Depuis un script", {}},
              {K::Table, "Fonction\tRend\tEffet\nIHM_ENREG_DEMARRER('Nom' [, T#10m [, 'mot de "
                          "passe']])\tBOOL\td\xC3\xA9marre un enregistrement (texte \xC3\xA0 trous : 'Essai "
@@ -20027,18 +20089,32 @@ const std::vector<Topic>& topics() {
                          "*/\n}", "C"},
              {K::Code, "if (Demarrage && !IHM_ENREG_EN_COURS()) {\n    "
                          "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", 15min);\n}", "C++"},
-             {K::Paragraph, "Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la "
-                         "m\xC3\xAAme suite d'actions que IHM_REJOUER, ou depuis une autre application. Les "
-                         "variables syst\xC3\xA8me du domaine **Enregistrements** (SYS.Recording, "
+             {K::Paragraph, "En C et en C++, une dur\xC3\xA9" "e et une position donn\xC3\xA9" "es en nombre "
+                         "sont des **millisecondes** (`IHM_ENREG_DEMARRER(\"Essai\", 600000)` : 10 min ; "
+                         "`IHM_RELECTURE_ALLER(30000)` : 30 s), comme pour IHM_APRES. Pendant une relecture, "
+                         "aucun script ne tourne : IHM_RELECTURE_* servent dans la m\xC3\xAAme suite "
+                         "d'actions que IHM_REJOUER, ou depuis une autre application. Les variables "
+                         "syst\xC3\xA8me du domaine **Enregistrements** (SYS.Recording, "
                          "SYS.ReplayPosition...) disent o\xC3\xB9 on en est (voir \xC2\xAB Variables "
                          "syst\xC3\xA8me : SYS. \xC2\xBB).", {}},
              {K::Heading, "Bon \xC3\xA0 savoir", {}},
              {K::Bullet, "un seul enregistrement \xC3\xA0 la fois, et pas pendant une relecture ;", {}},
              {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un enregistrement cit\xC3\xA9 en dur qui n'est pas "
                          "dans le dossier (une action, un Lecteur fixe, un script), une dur\xC3\xA9" "e "
-                         "n\xC3\xA9gative, un export sans dossier ;", {}},
+                         "n\xC3\xA9gative, un export sans dossier, et les actions **Pause**, **Avancer ou "
+                         "reculer**, **Vitesse**, **Quitter la relecture** seules sur un clic : elles "
+                         "n'agiraient jamais (pendant une relecture, l'IHM ne re\xC3\xA7oit aucun clic) - "
+                         "elles servent apr\xC3\xA8s **Rejouer** dans la m\xC3\xAAme suite, depuis un script "
+                         "ou une autre application ; la barre de relecture et ses touches font "
+                         "d\xC3\xA9j\xC3\xA0 tout cela ;", {}},
              {K::Bullet, "le Lecteur et la liste relisent le dossier toutes les 2 s : un fichier "
-                         "copi\xC3\xA9 \xC3\xA0 la main appara\xC3\xAEt tout seul.", {}},
+                         "copi\xC3\xA9 \xC3\xA0 la main appara\xC3\xAEt tout seul ;", {}},
+             {K::Bullet, "quand la taille du dossier est d\xC3\xA9pass\xC3\xA9" "e, les plus anciens partent "
+                         "les premiers, par leur **date d'enregistrement** (changer une description ne "
+                         "rajeunit pas un enregistrement) ;", {}},
+             {K::Bullet, "un `.xrec.part` encore ouvert par un autre programme (un second IHM Studio qui "
+                         "enregistre dans le m\xC3\xAAme dossier) n'est jamais repris ; abandonn\xC3\xA9, "
+                         "une seule fen\xC3\xAAtre le reprend.", {}},
          },
          {"objet-enregistreur", "objet-lecteur-enregistrements", "simulation", "poste-exploitation", "ressources", "actions", "reference", "variables-systeme", "essais"},
          {"enregistrement", "enregistrements", "enregistrer", "rejouer", "relecture", "replay", "film", ".xrec", "xrec", "Enregistreur", "Lecteur d'enregistrements", "ENR", "RELECTURE", "\xC3\x89" "chap quitte", "\xC2\xB1" "10 s", "-10 s", "+10 s", "vitesse de relecture", "barre de progression", "Arr\xC3\xAAter l'enregistrement", "Jeter", "Enregistrement prot\xC3\xA9g\xC3\xA9", "mot de passe d'un enregistrement", "ressources/enregistrements", "Configuration \xE2\x80\xBA Enregistrements", "Accepter les commandes d'une autre application", "--enregistrer", "--arreter-enregistrement", "--rejouer", "--quitter-relecture", "--jeter", "--duree", "--vitesse", "--mot-de-passe", "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE", "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE", "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER", "SYS.Recording", "SYS.RecordingName", "SYS.RecordingTime", "SYS.Replay", "SYS.ReplayPosition", "SYS.ReplayLength", "SYS.ReplaySpeed", "SYS.ReplayPaused"},
