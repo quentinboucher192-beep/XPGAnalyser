@@ -951,6 +951,11 @@ Ouvre la vue ou la popup : au-dessus du dessin, les sous-onglets **Dessin**, **C
 Dans la vue, par leur nom : une fx `=Pourcent(Temperature)`, un texte `{Seuil_Haut:0} °C`, un script, une action `Consigne := Borne(Consigne + 15.0)`, une autre fonction. Ailleurs : `Vue_Four.Seuil_Haut`, `Vue_Four.Pourcent(...)` - les publiques seulement.
 - L'**aide à la saisie** les propose : par leur nom dans la vue (les privées aussi), après `Vue_Four.` ailleurs ; la bulle de signature de `Pourcent(` et l'infobulle disent leur type et d'où elles viennent.
 - **Générer** refuse une privée lue d'ailleurs, une constante écrite, un nom déjà pris dans la vue (un objet, un paramètre), une constante du démarrage qui lit une de l'ouverture - chacun à sa ligne.
+@nouveau 1.14.0
+### Où elles servent : Utilisations et Voir les usages
+La colonne **Utilisations** du sous-onglet Constantes compte chaque lecture de la constante : les fx des objets, les textes à trous, les actions, les scripts et les fonctions de la vue, les autres constantes, et `Vue_Four.Seuil_Haut` ailleurs. **Chaque accès compte**, quel que soit le type composé : `Paliers[0]`, `Paliers[i]`, `Grille[1, 2]`, `Liste.Count`, `Liste.First`, `Couleurs['ok']`, `Paire.Item1`, `Four.Porte.Etat`, `Cuves[0].Niveau`, `M['a'][0]`, `$Repère$[0]`. Ne comptent pas : un nom plus long (`Paliers2`), une chaîne, un commentaire, le membre du même nom d'une autre variable (`Autre.Paliers`), un code qui déclare lui-même ce nom (un paramètre, une locale). Jusqu'à la 1.13.1, la colonne disait 0.
+- **Voir les usages** (la barre, Maj+F12) ouvre sous la table la **liste** de ces endroits - Où, Texte, Fois : la même somme que la colonne ; un **double-clic** y mène (l'objet choisi et sa case dans l'inspecteur, son action, la ligne du script ou de la fonction, l'autre constante) ;
+- le **clic droit** d'une constante : Voir les usages › les mêmes endroits, un clic y mène.
 ### Un exemple
 L'exemple animé, en haut : Seuil_Haut et Tiede s'écrivent, Rampe se calcule au démarrage ; Pourcent() et Couleur() (privée) remplissent et colorent la barre ; « +15 °C » appelle Borne(). Le modèle de vue **Constantes et fonctions** (Nouvelle vue › Modèle) en pose un complet : la vue du four et sa popup de réglage, qui lit la constante publique de la vue.
 
@@ -7228,6 +7233,8 @@ Depuis la 1.11.18, un script déclare ses constantes et ses variables dans les *
 - on écrit dans la case d'un double-clic (F2 : le nom) ; le type et le stockage se choisissent dans une liste ; l'unité se tape (un clic sur sa case puis F2, Ctrl+Espace propose les unités) ou se choisit d'un double-clic (voir « Les unités de mesure dans les types ») ; Inser ajoute, Suppr supprime, Ctrl+D duplique ; chaque geste s'annule (Ctrl+Z) ;
 - renommer une déclaration renomme ses utilisations dans le code ; le bouton **Voir les usages** (Maj+F12) y mène, l'un après l'autre ; une déclaration fautive a son nom en rouge, la raison en infobulle ;
 - **Excel** : Ctrl+C copie les lignes choisies avec leurs titres ; Ctrl+V colle un tableau d'Excel (les colonnes reconnues par leur titre, en français ou en anglais ; un nom existant mis à jour, un nouveau créé ; un seul Ctrl+Z).
+@nouveau 1.14.0
+- **Utilisations** compte chaque accès (`Seuils[0]`, `Seuils[i]`, `Four.Temp`, `M['clé']`) ; une constante d'un script général compte aussi ses lectures d'ailleurs (`Reglages.Seuils[1]` dans une fx, un autre script). Quand elle sert hors de son code, **Voir les usages** ouvre sous la table la liste de ces endroits (Où, Texte, Fois) ; un double-clic y mène.
 > Un script qui déclare encore ses variables dans son texte a un bandeau au-dessus de son code : **Migrer ce code** les passe dans ses onglets (leurs commentaires deviennent leur documentation ; Ctrl+Z la reprend). Pour tout le projet : IHM › Compiler › **Migrer les déclarations…** (la version « Avant migration des déclarations » d'abord).
 @nouveau 1.11.19
 > Le type d'une déclaration : **Choisir un type…**, au bout de la liste, ouvre le sélecteur de types (recherche, catégories, récents, tableaux, REF_TO, MAP) - voir « Les types IHM : les structures ».

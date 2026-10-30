@@ -48,6 +48,7 @@
 namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; struct ArchiveReport; }
 namespace hmi { struct RecordingStopAsk; struct ReplayRequest; }   // 1.14.0 (M4)
 namespace hmi::pipeline { struct Report; struct Diagnostic; struct Request; enum class Mode : std::uint8_t; }   // 1.11.13
+namespace hmi::decledit { struct Usage; }   // 1.14.0 (lot M1) : un endroit de Voir les usages
 
 namespace app {
 
@@ -945,6 +946,9 @@ private:
     void askHmiDeleteVariable(std::uint64_t variableId);
     // Le lot 7 : les fonctions IHM (Programmation generale > Fonctions).
     void openHmiFunctions(std::uint64_t functionId = 0, int line = 0);
+    // 1.14.0 (lot M1) : aller a un usage (Voir les usages d'une constante de vue ou d'un script general, d'une variable
+    // IHM) - le script et sa ligne, la fonction et sa ligne, sinon la vue : l'objet choisi, sa case, son action.
+    void goToHmiUsage(const hmi::decledit::Usage& usage);
     void openHmiFunctionDefinition(std::uint64_t viewId, std::uint64_t functionId);   // 1.12.17 : view 0 - une fonction du projet
     // 1.11.21 : un noeud du contenu d'un code (l'arbre) : son code, a l'onglet ou a la ligne voulus.
     void openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t);

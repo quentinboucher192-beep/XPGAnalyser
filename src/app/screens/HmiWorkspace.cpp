@@ -1491,6 +1491,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.removeVariable = [this](hmi::Id v) { askHmiDeleteVariable(v); };
         hosts.compile = [this] { openHmiPane("compiler"); };
         hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };   // 1.10 (chantier N) : un resultat de Compiler d'ailleurs
+        hosts.openUsage = [this](const hmi::decledit::Usage& u) { goToHmiUsage(u); };   // 1.14.0 (lot M1) : Script.Nom ailleurs
         hosts.exportItems = [this](hmi::Id sc) { askHmiExportPrograms(2, sc); };   // 1.11.2 (decision 174)
         hosts.importAny = [this] { askHmiImport(); };
         wireHmiBuildHosts(hosts);   // 1.11.13 : Generer, Regenerer, Compiler, Generer et compiler
@@ -1500,6 +1501,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             HmiVariablesPane::Hosts vh;
             vh.removeVariable = [this](hmi::Id v) { askHmiDeleteVariable(v); };
             vh.openUse = [this](hmi::Id v, hmi::Id o) { openHmiView(v, -1, o); };   // 1.12.18 : Voir les usages
+            vh.openUsage = [this](const hmi::decledit::Usage& u) { goToHmiUsage(u); };   // 1.14.0 (lot M1) : l'endroit exact
             // 1.12.18 (planches 11 et 12) : « Modifier l'adresse dans toutes les cases... » - la fenetre, puis
             // la formule posee en une commande (un Ctrl+Z).
             vh.editAddresses = [this, doc](hmi::Id v, const std::string& member) {
@@ -1954,6 +1956,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         // Lot 12 : rechercher / remplacer, avec l'apercu.
         auto pane = std::make_unique<HmiFindPane>("hmi.find", doc, apply);
         hmiLinks_ += pane->openHit->connect([this](hmi::Id v, hmi::Id o) { openHmiView(v, -1, o); });
+        hmiLinks_ += pane->openUsage->connect([this](const hmi::decledit::Usage& u) { goToHmiUsage(u); });   // 1.14.0 (lot M1)
         page = std::move(pane);
         title = "IHM \xC2\xB7 Rechercher / remplacer";
         icon = Icon::Search;
@@ -2241,6 +2244,8 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
             fns->setHosts(std::move(h));
         }
         hmiLinks_ += made->openView->connect([this](hmi::Id v) { openHmiView(v); });
+        // 1.14.0 (lot M1) : Voir les usages d'une constante de la vue - un endroit hors de la vue (un script, une autre vue).
+        hmiLinks_ += made->openUsage->connect([this](const hmi::decledit::Usage& u) { goToHmiUsage(u); });
         hmiLinks_ += made->palette().favoritesChanged->connect([this, raw] {
             std::vector<std::string> keys;
             for (const auto k : raw->palette().favorites()) keys.emplace_back(hmi::kindKey(k));
@@ -3192,6 +3197,7 @@ void MainAnalysisScreen::openHmiScripts(std::uint64_t viewId, std::uint64_t scri
             HmiScriptsPane::Hosts hosts;
             hosts.compile = [this] { openHmiPane("compiler"); };
             hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };   // 1.10 (chantier N)
+            hosts.openUsage = [this](const hmi::decledit::Usage& u) { goToHmiUsage(u); };   // 1.14.0 (lot M1)
             wireHmiBuildHosts(hosts);   // 1.11.13
             made->setHosts(std::move(hosts));
             wireAssist(*made, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
@@ -3659,6 +3665,27 @@ void MainAnalysisScreen::openHmiFunctions(std::uint64_t functionId, int line) {
     openHmiPane("fonctions");
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
     if (pane && functionId != hmi::kNoId) pane->goTo(asId(functionId), line);
+}
+
+// 1.14.0 (lot M1) : aller a un usage. Un script (de la vue, ou general) : son volet, la ligne ; une fonction IHM : le volet
+// Fonctions, la ligne ; sinon la vue - son editeur y va (l'objet, sa case, son action, une fonction de la vue, une
+// constante). Une alarme, une recette (aucune vue) : rien a ouvrir.
+void MainAnalysisScreen::goToHmiUsage(const hmi::decledit::Usage& u) {
+    const auto doc = app_.hmi();
+    if (!doc) return;
+    if (u.script != hmi::kNoId) {
+        const auto* v = u.view != hmi::kNoId ? doc->project.view(u.view) : nullptr;
+        const bool ofView = v && std::any_of(v->scripts.begin(), v->scripts.end(), [&](const hmi::Script& s) { return s.id == u.script; });
+        openHmiScripts(ofView ? u.view : hmi::kNoId, u.script, std::max(1, u.line));
+        return;
+    }
+    if (u.function != hmi::kNoId && u.view == hmi::kNoId) {
+        openHmiFunctions(u.function, std::max(1, u.line));
+        return;
+    }
+    if (u.view == hmi::kNoId || !doc->project.view(u.view)) return;
+    openHmiView(u.view, -1, u.object);
+    if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(u.view)))) (void)editor->goToUsage(u);
 }
 
 // 1.12.17 : une fonction du projet (view 0), d'une vue, d'une popup ou d'un symbole : son sous-onglet

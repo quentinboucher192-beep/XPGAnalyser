@@ -25,6 +25,7 @@
 #include "HmiCanvas.hpp"
 #include "HmiContentPanel.hpp"
 #include "HmiPanels.hpp"
+#include "../../hmi/HmiDeclEdit.hpp"   // 1.14.0 (lot M1) : decledit::Usage (aller a un usage d'une constante)
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -173,6 +174,13 @@ public:
     bool makeStyle(const std::string& name, std::string* why = nullptr);
     // Ouvrir une autre vue (double-clic sur une instance : son symbole).
     const core::SignalPtr<hmi::Id> openView = core::Signal<hmi::Id>::create();
+    // 1.14.0 (lot M1) : ALLER A UN USAGE d'une constante de la vue (la liste Voir les usages du sous-onglet Constantes,
+    // double-clic ; le menu du clic droit) - dans cette vue : l'objet choisi (sa case dans l'inspecteur, son action),
+    // une action de la vue, une fonction de la vue (sa ligne, sous-onglet Fonctions), une autre constante (sa ligne).
+    // Ailleurs (un script de la vue ou general, une fonction IHM, une autre vue) : openUsage, l'hote y va.
+    // Faux : l'endroit n'est plus la.
+    bool goToUsage(const hmi::decledit::Usage& usage);
+    const core::SignalPtr<const hmi::decledit::Usage&> openUsage = core::Signal<const hmi::decledit::Usage&>::create();
 
     // Annuler / retablir : la pile est celle de l'application. L'hote dit
     // comment y aller ; sans lui, les deux boutons restent grises.

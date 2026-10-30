@@ -20,6 +20,7 @@
 #include "HmiFolderTable.hpp"          // lot 21 : les styles ranges en dossiers
 #include "../../core/Signal.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiDeclEdit.hpp"   // 1.14.0 (lot M1) : decledit::globalUsages (Voir les usages d'une variable)
 #include "../../hmi/HmiDesign.hpp"
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -101,6 +102,15 @@ public:
     [[nodiscard]] const std::string& message() const noexcept { return message_; }
     // Double-clic sur une ligne : ouvrir la vue (et choisir l'objet).
     const core::SignalPtr<hmi::Id, hmi::Id> openHit = core::Signal<hmi::Id, hmi::Id>::create();
+    // 1.14.0 (lot M1) : VOIR LES USAGES d'une variable IHM (le clic droit de l'arbre du projet) - le champ prend son nom
+    // et la liste montre ses utilisations, lues comme la colonne Utilisations les lit (hmi::decledit::globalUsages : la
+    // racine et ses acces, Cuves[i].Niveau ; ni une chaine, ni un commentaire, ni le membre homonyme d'une autre variable,
+    // ni un code qui declare le meme nom) - pas les occurrences du texte. Double-clic : y aller (openUsage). Taper un autre
+    // texte revient a la recherche.
+    void showUsages(const std::string& name);
+    [[nodiscard]] bool showingUsages() const noexcept { return !usagesOf_.empty(); }
+    [[nodiscard]] const std::vector<hmi::decledit::Usage>& usages() const noexcept { return usages_; }
+    const core::SignalPtr<const hmi::decledit::Usage&> openUsage = core::Signal<const hmi::decledit::Usage&>::create();
 protected:
     void onLayout() override;
 private:
@@ -120,6 +130,9 @@ private:
     ui::StatusBar*                     status_{nullptr};
     std::vector<hmi::Id>               scopes_;       // kNoId, puis les vues
     std::vector<hmi::design::FindHit>  hits_;
+    std::string                        usagesOf_;      // 1.14.0 : le nom dont la liste montre les usages ("" : une recherche)
+    std::vector<hmi::decledit::Usage>  usages_;
+    void listUsages();
     std::string                        message_;
     core::ConnectionScope              links_;
 };

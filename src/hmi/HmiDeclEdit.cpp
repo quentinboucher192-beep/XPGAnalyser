@@ -16,6 +16,7 @@
 #include "HmiUnits.hpp"       // 1.13.0 (lot J6b) : la case Unite (le catalogue, un type numerique)
 
 #include <algorithm>
+#include <iterator>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
@@ -478,14 +479,18 @@ bool typeAllowed(const Project& p, std::string_view type) {
 }
 
 // ------------------------------------------------------- ce que la grille montre ----
-std::vector<Use> usesIn(std::string_view body, std::string_view name) {
-    std::vector<Use> out;
-    if (name.empty() || body.empty()) return out;
+namespace {
+// 1.14.0 (lot M1) : LE LECTEUR (celui de usesIn, qui ne lisait que le nom seul) - chaque reference a `name` (seul si
+// `bare`) ou a `qualifier`.`name` dans un code ST : un mot qui n'est ni un membre (x.Nom), ni un argument nomme.
+void scanReferences(std::string_view body, std::string_view name, std::string_view qualifier, bool bare, std::vector<Use>& out) {
     const auto toks = decl::lex(body);
     std::vector<const decl::Token*> sig;
     sig.reserve(toks.size());
     for (const auto& t : toks)
         if (t.kind != decl::TokenKind::Comment) sig.push_back(&t);
+    const auto punct = [&](std::size_t k, std::string_view p) {
+        return k < sig.size() && sig[k]->kind == decl::TokenKind::Punct && sig[k]->text(body) == p;
+    };
     int depth = 0;                    // les parentheses ouvertes : f(Nom := 1) nomme un argument
     for (std::size_t i = 0; i < sig.size(); ++i) {
         const auto& t = *sig[i];
@@ -495,20 +500,100 @@ std::vector<Use> usesIn(std::string_view body, std::string_view name) {
             else if (text == ")" && depth > 0) --depth;
             continue;
         }
-        if (t.kind != decl::TokenKind::Word || !same(text, name)) continue;
-        if (i > 0 && sig[i - 1]->kind == decl::TokenKind::Punct && sig[i - 1]->text(body) == ".") continue;   // un membre x.Nom
+        if (t.kind != decl::TokenKind::Word || (i > 0 && punct(i - 1, "."))) continue;   // un membre x.Nom
+        if (!qualifier.empty() && same(text, qualifier) && punct(i + 1, ".") && i + 2 < sig.size()
+            && sig[i + 2]->kind == decl::TokenKind::Word && same(sig[i + 2]->text(body), name)) {
+            out.push_back({t.line, t.column, static_cast<int>(sig[i + 2]->end - t.begin)});   // Vue.Nom, Script.Nom
+            i += 2;
+            continue;
+        }
+        if (!bare || !same(text, name)) continue;
         if (i + 1 < sig.size() && sig[i + 1]->kind == decl::TokenKind::Punct) {
             const auto next = sig[i + 1]->text(body);
-            if (next == "=>" || (next == ":=" && depth > 0)) continue;                                        // un argument nomme
+            if (next == "=>" || (next == ":=" && depth > 0)) continue;                     // un argument nomme
         }
         out.push_back({t.line, t.column, static_cast<int>(t.end - t.begin)});
     }
     // Les trous d'IHM_JOURNAL et d'IHM_LOG ({Nom:0.0}) : des utilisations aussi.
     forEachHole(body, [&](std::size_t b, std::size_t e, const decl::Token& str) {
-        for (const auto& u : usesIn(body.substr(b, e - b), name))
+        std::vector<Use> inner;
+        scanReferences(body.substr(b, e - b), name, qualifier, bare, inner);
+        for (const auto& u : inner)
             if (u.line == 1) out.push_back({str.line, str.column + static_cast<int>(b - str.begin) + u.column - 1, u.length});
     });
+}
+void sortUses(std::vector<Use>& out) {
     std::sort(out.begin(), out.end(), [](const Use& a, const Use& b) { return a.line != b.line ? a.line < b.line : a.column < b.column; });
+}
+bool containsNoCase(std::string_view text, std::string_view word) {
+    if (word.empty() || word.size() > text.size()) return false;
+    const auto up = [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); };
+    for (std::size_t i = 0; i + word.size() <= text.size(); ++i) {
+        std::size_t k = 0;
+        while (k < word.size() && up(text[i + k]) == up(word[k])) ++k;
+        if (k == word.size()) return true;
+    }
+    return false;
+}
+} // namespace
+
+std::vector<Use> usesIn(std::string_view body, std::string_view name) {
+    std::vector<Use> out;
+    if (name.empty() || body.empty()) return out;
+    scanReferences(body, name, {}, true, out);
+    sortUses(out);
+    return out;
+}
+
+std::vector<Use> referencesIn(std::string_view text, CodeForm form, std::string_view name, std::string_view qualifier, bool bare) {
+    std::vector<Use> out;
+    if (name.empty() || text.empty() || (!bare && qualifier.empty()) || !containsNoCase(text, name)) return out;
+    // Un morceau du texte (`offset` : son debut), ses references en positions du texte entier.
+    const auto read = [&](std::string_view piece, std::size_t offset) {
+        std::vector<Use> inner;
+        scanReferences(piece, name, qualifier, bare, inner);
+        int line = 1, column = 1;
+        for (std::size_t k = 0; k < offset && k < text.size(); ++k) {
+            if (text[k] == '\n') {
+                ++line;
+                column = 1;
+            } else {
+                ++column;
+            }
+        }
+        for (auto u : inner) {
+            if (u.line == 1) u.column += column - 1;
+            u.line += line - 1;
+            out.push_back(u);
+        }
+    };
+    if (form != CodeForm::Template) {
+        read(text, 0);
+    } else if (text.front() == '=') {
+        read(text.substr(1), 1);                         // "=expression" : toute l'expression (rewriteInText)
+    } else {
+        // Les trous, comme les lit le moteur : {{ et }} sont des accolades ; le format (:0.0) ne se lit pas.
+        std::size_t i = 0;
+        while (i < text.size()) {
+            const char c = text[i];
+            if ((c == '{' || c == '}') && i + 1 < text.size() && text[i + 1] == c) {
+                i += 2;
+                continue;
+            }
+            if (c != '{') {
+                ++i;
+                continue;
+            }
+            const auto close = text.find('}', i + 1);
+            if (close == std::string_view::npos) break;
+            std::string_view inside = text.substr(i + 1, close - i - 1);
+            if (const auto colon = inside.rfind(':'); colon != std::string_view::npos && colon + 1 < inside.size() && inside[colon + 1] != '=')
+                inside = inside.substr(0, colon);
+            read(inside, i + 1);
+            i = close + 1;
+        }
+    }
+    sortUses(out);
     return out;
 }
 
@@ -519,6 +604,233 @@ std::size_t usageCount(const Code& c, std::size_t index) {
     for (std::size_t j = 0; j < c.decls->size(); ++j)
         if (j != index) n += usesIn((*c.decls)[j].value, name).size();
     return n;
+}
+
+// ------------------------------------------- 1.14.0 (lot M1) : dans tout le projet ----
+namespace {
+// La ligne `line` (1 = la premiere) d'un texte, sans ses blancs de tete, coupee ; un texte entier sur une ligne.
+std::string cutLine(std::string text) {
+    for (auto& ch : text)
+        if (ch == '\n' || ch == '\r' || ch == '\t') ch = ' ';
+    text.erase(0, std::min(text.find_first_not_of(' '), text.size()));
+    while (!text.empty() && text.back() == ' ') text.pop_back();
+    if (text.size() > 72) {
+        std::size_t cut = 70;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
+        text = text.substr(0, cut) + "\xE2\x80\xA6";
+    }
+    return text;
+}
+std::string lineOf(std::string_view text, int line) {
+    std::size_t from = 0;
+    for (int l = 1; l < line && from != std::string_view::npos; ++l) {
+        from = text.find('\n', from);
+        if (from != std::string_view::npos) ++from;
+    }
+    if (from == std::string_view::npos) return {};
+    const auto to = text.find('\n', from);
+    return cutLine(std::string(text.substr(from, to == std::string_view::npos ? std::string_view::npos : to - from)));
+}
+
+// Le code qui porte ce texte declare-t-il `name` (ses declarations, un bloc VAR encore ecrit, les locales du calcul
+// d'une valeur) ? Son nom seul y vise alors la sienne.
+bool codeHides(const CodeSite& s, std::string_view text, CodeForm form, std::string_view name) {
+    if (s.decls)
+        for (const auto& d : *s.decls)
+            if (same(d.name, name)) return true;
+    if (s.declaration && text.data() == s.declaration->calc.data())
+        for (const auto& l : s.declaration->locals)
+            if (same(l.name, name)) return true;
+    if (form == CodeForm::Code && containsNoCase(text, "VAR"))
+        for (const auto& d : decl::extract(text).decls)
+            if (same(d.name, name)) return true;
+    return false;
+}
+
+// L'endroit d'un texte du parcours (forEachCode) : ou il est, ou y aller.
+Usage spotOf(const CodeSite& s) {
+    Usage base;
+    base.view = s.host ? s.host->id : s.view ? s.view->id : kNoId;
+    base.object = s.object ? s.object->id : kNoId;
+    base.key = s.key;
+    base.action = s.action;
+    base.script = s.script;
+    base.function = s.function;
+    base.declaration = s.declaration ? s.declaration->id : kNoId;
+    base.where = s.where;
+    if (s.action >= 0 && !base.where.empty() && base.where.back() == ')')      // "Vannes/Bouton (action 2)"
+        base.where.insert(base.where.size() - 1, " " + std::to_string(s.action + 1));
+    if (s.declaration) base.where += " \xC2\xB7 " + s.declaration->name;
+    return base;
+}
+// Les references d'un texte, en endroits : une par ligne d'un code, sinon le texte entier (une propriete, une action, une
+// valeur...) ; les morceaux d'un meme endroit (les trous d'un texte, les arguments d'une action) s'y ajoutent.
+void addAt(std::vector<Usage>& out, const Usage& base, std::string_view text, CodeForm form, const std::vector<Use>& refs) {
+    if (refs.empty()) return;
+    const auto sameSpot = [&](const Usage& u, int line) {
+        return u.rank < 0 && u.line == line && u.view == base.view && u.object == base.object && u.key == base.key && u.action == base.action
+            && u.script == base.script && u.function == base.function && u.declaration == base.declaration
+            && u.where.rfind(base.where, 0) == 0;
+    };
+    if (form == CodeForm::Code) {
+        for (const auto& r : refs) {
+            if (!out.empty() && sameSpot(out.back(), r.line)) {
+                ++out.back().count;
+                continue;
+            }
+            Usage u = base;
+            u.line = r.line;
+            u.count = 1;
+            u.where += ", ligne " + std::to_string(r.line);
+            u.text = lineOf(text, r.line);
+            out.push_back(std::move(u));
+        }
+        return;
+    }
+    if (!out.empty() && sameSpot(out.back(), 0)) {
+        out.back().count += refs.size();
+        out.back().text = cutLine(out.back().text + " ; " + std::string(text));
+        return;
+    }
+    Usage u = base;
+    u.count = refs.size();
+    u.text = cutLine(std::string(text));
+    out.push_back(std::move(u));
+}
+
+// Le nom d'une declaration dans un endroit : "constante Seuil", "variable Total", "parametre Pct".
+std::string declLabel(const Declaration& d) {
+    return (d.kind == DeclKind::Constant ? std::string("constante ") : d.kind == DeclKind::Parameter ? std::string("param\xC3\xA8tre ")
+                                                                                                    : std::string("variable "))
+         + d.name;
+}
+
+// Dans son code meme : le corps (une par utilisation, son rang), les valeurs et les calculs des autres declarations.
+std::vector<Usage> ownUsages(const Code& c, std::size_t index, const Place& at) {
+    std::vector<Usage> out;
+    const std::string& name = (*c.decls)[index].name;
+    const auto uses = usesIn(*c.body, name);
+    for (std::size_t k = 0; k < uses.size(); ++k) {
+        Usage u;
+        u.where = "ligne " + std::to_string(uses[k].line);
+        u.text = lineOf(*c.body, uses[k].line);
+        u.count = 1;
+        u.line = uses[k].line;
+        u.rank = static_cast<int>(k);
+        u.inCode = true;
+        out.push_back(std::move(u));
+    }
+    for (std::size_t j = 0; j < c.decls->size(); ++j) {
+        if (j == index) continue;
+        const Declaration& d = (*c.decls)[j];
+        Usage base;
+        base.view = at.kind == Place::Kind::ViewConstants ? at.view : kNoId;
+        base.declaration = d.id;
+        base.inCode = true;
+        base.where = declLabel(d) + " (valeur)";
+        addAt(out, base, d.value, CodeForm::Expression, referencesIn(d.value, CodeForm::Expression, name));
+        if (!d.computed || d.calc.empty()
+            || std::any_of(d.locals.begin(), d.locals.end(), [&](const Declaration& l) { return same(l.name, name); }))
+            continue;                                                        // une locale du calcul le cache
+        base.where = declLabel(d) + " (calcul)";
+        addAt(out, base, d.calc, CodeForm::Code, referencesIn(d.calc, CodeForm::Code, name));
+    }
+    return out;
+}
+
+// Hors de son code : qui lit la declaration, et comment. Une constante d'une vue (ou d'une popup) : par son nom seul dans
+// la vue, par Vue.Nom partout ; une constante d'un script general : par Script.Nom. Faux : une declaration locale.
+struct Outside {
+    const View* view{nullptr};     // la vue ou le nom seul la lit
+    std::string qualifier;         // Vue ou Script
+};
+bool outsideOf(const Project& p, const Place& at, Outside& o) {
+    if (at.kind == Place::Kind::ViewConstants) {
+        o.view = p.view(at.view);
+        if (!o.view) return false;
+        o.qualifier = o.view->name;
+        return true;
+    }
+    if (at.kind == Place::Kind::Script)
+        for (const auto& s : p.programs.scripts)
+            if (s.id == at.id) {
+                o.qualifier = s.name;
+                return !s.name.empty();
+            }
+    return false;
+}
+bool readOutside(const Place& at, const Declaration& d) {
+    return at.kind == Place::Kind::ViewConstants || d.kind == DeclKind::Constant;   // les variables d'un script restent a lui
+}
+// Le parcours du projet : `found(i, site, texte, forme, references)` pour chaque declaration `i` (`only` : celle-la seule).
+template <class Found>
+void walkOutside(const Project& p, const Place& at, const Code& c, const Outside& o, std::size_t only, Found&& found) {
+    forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite& s) {
+        if (s.again || text.empty()) return;
+        const bool own = &text == c.body || s.decls == c.decls;      // deja lu (ownUsages)
+        const bool inView = o.view && s.view == o.view && !own;
+        for (std::size_t i = 0; i < c.decls->size(); ++i) {
+            if (only != static_cast<std::size_t>(-1) && i != only) continue;
+            const Declaration& d = (*c.decls)[i];
+            if (d.name.empty() || !readOutside(at, d)) continue;
+            auto refs = referencesIn(text, form, d.name, o.qualifier, inView);
+            if (inView && !refs.empty() && codeHides(s, text, form, d.name)) refs = referencesIn(text, form, d.name, o.qualifier, false);
+            if (!refs.empty()) found(i, s, text, form, refs);
+        }
+    });
+}
+} // namespace
+
+std::vector<Usage> usages(const Project& p, const Place& at, std::size_t index) {
+    const Code c = locate(p, at);
+    if (!c.valid() || index >= c.decls->size() || (*c.decls)[index].name.empty()) return {};
+    std::vector<Usage> out = ownUsages(c, index, at);
+    Outside o;
+    if (outsideOf(p, at, o) && readOutside(at, (*c.decls)[index])) {
+        std::vector<Usage> rest;
+        walkOutside(p, at, c, o, index, [&](std::size_t, const CodeSite& s, const std::string& text, CodeForm form, const std::vector<Use>& refs) {
+            addAt(rest, spotOf(s), text, form, refs);
+        });
+        // La vue d'abord (ses scripts, ses objets, ses fonctions), puis ailleurs - chacun dans l'ordre du projet.
+        if (o.view)
+            std::stable_partition(rest.begin(), rest.end(), [&](const Usage& u) { return u.view == o.view->id; });
+        out.insert(out.end(), std::make_move_iterator(rest.begin()), std::make_move_iterator(rest.end()));
+    }
+    return out;
+}
+
+std::vector<std::size_t> usageCounts(const Project& p, const Place& at) {
+    const Code c = locate(p, at);
+    std::vector<std::size_t> out;
+    if (!c.valid()) return out;
+    out.resize(c.decls->size());
+    for (std::size_t i = 0; i < c.decls->size(); ++i) {
+        if ((*c.decls)[i].name.empty()) continue;
+        for (const auto& u : ownUsages(c, i, at)) out[i] += u.count;
+    }
+    Outside o;
+    if (outsideOf(p, at, o))
+        walkOutside(p, at, c, o, static_cast<std::size_t>(-1),
+                    [&](std::size_t i, const CodeSite&, const std::string&, CodeForm, const std::vector<Use>& refs) { out[i] += refs.size(); });
+    return out;
+}
+
+std::vector<Usage> globalUsages(const Project& p, std::string_view name) {
+    std::vector<Usage> out;
+    if (name.empty()) return out;
+    forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite& s) {
+        if (s.again || text.empty()) return;
+        const auto refs = referencesIn(text, form, name);
+        if (refs.empty() || codeHides(s, text, form, name)) return;
+        // Dans une vue (un symbole), une constante ou un parametre du meme nom cache la variable.
+        if (const View* v = s.view ? s.view : s.host) {
+            if (std::any_of(v->constants.begin(), v->constants.end(), [&](const Declaration& d) { return same(d.name, name); })
+                || v->param(name))
+                return;
+        }
+        addAt(out, spotOf(s), text, form, refs);
+    });
+    return out;
 }
 
 std::vector<std::string> faults(const Project& p, const Code& c) {

@@ -34,7 +34,7 @@ namespace {
 enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */, GCalc /* 1.12.7 */ };
 // 1.12.18 : les entrees du menu du clic droit (les ids rendus par TableView::contextAction).
 constexpr int kActionBase = 1000;   // + une GridAction
-constexpr int kUseBase = 1100;      // + le rang d'une utilisation (Voir les usages)
+constexpr int kUseBase = 1100;      // + le rang d'un endroit (Voir les usages ; 1.14.0 : aussi hors du code)
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
 
 // 1.12.7 : le script d'un endroit (et sa vue) ; nul : parti.
@@ -267,6 +267,43 @@ public:
 //  ([0], [1, 2] pour un tableau a deux dimensions), une cle ('bas', 3), un membre (Temp, Item1) -
 //  chacun avec son type et sa valeur ; un element a taille se deplie a son tour (la fleche).
 
+// --------------------------------------------- 1.14.0 (lot M1) : la liste des usages ----
+namespace {
+class UsagesModel final : public ui::ITableModel {
+public:
+    std::vector<de::Usage> rows;
+    [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 3; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override {
+        return c == 0 ? std::string("O\xC3\xB9") : c == 1 ? std::string("Texte") : std::string("Fois");
+    }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        if (r >= rows.size()) return {};
+        const auto& u = rows[r];
+        return c == 0 ? u.where : c == 1 ? u.text : std::to_string(u.count);
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
+        ui::CellStyle s;
+        if (c != 0 || r >= rows.size()) return s;
+        const auto& u = rows[r];
+        s.icon = u.object != kNoId ? ui::Icon::Document : ui::Icon::Code;
+        return s;
+    }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
+        if (c == 2) return rows[a].count < rows[b].count;
+        return cellText(a, c) < cellText(b, c);
+    }
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
+        return r < rows.size() ? rows[r].where + "\n" + rows[r].text + "\nDouble-clic : y aller" : std::string{};
+    }
+};
+std::size_t referencesOf(const std::vector<de::Usage>& list) {
+    std::size_t n = 0;
+    for (const auto& u : list) n += u.count;
+    return n;
+}
+} // namespace
+
 // ------------------------------------------------------------------- la grille ----
 HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::Tab tab)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)), tab_(tab) {
@@ -279,7 +316,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools->add(GUp, HmiGlyph::Up, "Monter la ligne choisie (Alt+Haut)", {});
     tools->add(GDown, HmiGlyph::Down, "Descendre la ligne choisie (Alt+Bas)", {});
     tools->separator();
-    tools->add(GUses, HmiGlyph::Search, "Voir les usages dans le code (Maj+F12 ; l'onglet Code, le suivant \xC3\xA0 chaque clic)",
+    tools->add(GUses, HmiGlyph::Search, "Voir les usages (Maj+F12) : dans le code, le suivant \xC3\xA0 chaque clic ; employ\xC3\xA9" "e ailleurs "
+               "(une constante de vue, Script.Nom), la liste des endroits sous la table - double-clic : y aller",
                "Voir les usages");
     // 1.12.16 (T4) : la valeur initiale - en brut (un editeur fait pour le type) ou en code (une fonction qui
     // rend le type), une seule fenetre (a la place d'« Elements... » 1.12.2 et de « fx Calcul... » 1.12.7).
@@ -312,6 +350,15 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     unfold_->setModel(unfoldModel_);
     unfold_->setColumns(HmiUnfoldModel::columns());   // une table sans colonnes ne montre rien
     unfold_->setVisibility(ui::Visibility::Collapsed);
+    // 1.14.0 (lot M1) : la liste des usages (cachee tant que Voir les usages ne l'ouvre pas).
+    usagesList_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>(base + ".usages")));
+    usagesList_->setColumns({{"O\xC3\xB9", 260.f}, {"Texte", 360.f}, {"Fois", 56.f, 40.f, true, true, true, ui::Align::End}});
+    usagesList_->setSelectionMode(ui::SelectionMode::Single);
+    usagesList_->setModel(std::make_shared<UsagesModel>());
+    usagesList_->setVisibility(ui::Visibility::Collapsed);
+    links_ += usagesList_->activated->connect([this](ui::RowIndex r) {
+        if (r < listed_.size()) (void)goToUsage(listed_[r]);
+    });
 
     rows_ = std::make_shared<Rows>();
     rows_->tab = tab_;
@@ -358,7 +405,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
             case GUp: (void)moveSelected(-1); break;
             case GDown: (void)moveSelected(+1); break;
             case GUses:
-                if (const auto sel = selectedRows(); sel.size() == 1 && sel.front() < rows_->rows.size())
+                // 1.14.0 (lot M1) : employee hors de son code (une constante de vue, Script.Nom) - la liste des endroits.
+                if (const auto sel = selectedRows(); sel.size() == 1 && sel.front() < rows_->rows.size() && !showUsages())
                     usesRequested->emit(rows_->rows[sel.front()].d.name);
                 break;
             case GCalc:
@@ -373,8 +421,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     table_->setExtraContextItems([this] { return contextItems(); });
     links_ += table_->contextAction->connect([this](int choice) {
         if (choice >= kUseBase) {
-            const auto sel = selectedRows();
-            if (sel.size() == 1 && sel.front() < rows_->rows.size()) useRequested->emit(rows_->rows[sel.front()].d.name, choice - kUseBase);
+            const auto k = static_cast<std::size_t>(choice - kUseBase);
+            if (k < menuUsages_.size()) (void)goToUsage(menuUsages_[k]);
             return;
         }
         tools_->triggered->emit(choice - kActionBase);
@@ -438,39 +486,32 @@ std::vector<ui::PopupMenu::Item> HmiDeclGrid::contextItems() const {
     items.push_back(tool(GDuplicate, "Dupliquer", "Ctrl+D", noRow));
     items.push_back(tool(GUp, "Monter", "Alt+Haut", one ? std::string("d\xC3\xA9j\xC3\xA0 en t\xC3\xAAte") : noRow));
     items.push_back(tool(GDown, "Descendre", "Alt+Bas", one ? std::string("d\xC3\xA9j\xC3\xA0 en bas") : noRow));
-    // Voir les usages : une entree par utilisation dans le code (la ligne et son texte).
+    // Voir les usages : une entree par endroit - dans le code (la ligne et son texte), puis (1.14.0, lot M1) ailleurs : les
+    // valeurs des voisines, et pour une constante de vue ou d'un script general tout ce qui la lit (la vue, Vue.Nom...).
     {
-        std::vector<de::Use> uses;
-        std::string body;
-        if (one && place_ && doc_) {
-            const auto code = de::locate(doc_->project, *place_);
-            if (code.valid()) {
-                body = *code.body;
-                uses = de::usesIn(body, rows_->rows[sel.front()].d.name);
-            }
-        }
+        menuUsages_.clear();
+        if (one && place_ && doc_)
+            if (const auto at = declIndex(sel.front())) menuUsages_ = de::usages(doc_->project, *place_, *at);
+        const auto cut = [](std::string t, std::size_t n) {
+            if (t.size() <= n) return t;
+            std::size_t c = n - 2;
+            while (c > 0 && (static_cast<unsigned char>(t[c]) & 0xC0) == 0x80) --c;
+            return t.substr(0, c) + "\xE2\x80\xA6";
+        };
         Item u;
-        u.label = "Voir les usages (" + std::to_string(uses.size()) + ")";
+        u.label = "Voir les usages (" + std::to_string(referencesOf(menuUsages_)) + ")";
         u.icon = ui::Icon::Search;
         u.id = -1;
-        for (std::size_t k = 0; k < uses.size() && k < 20; ++k) {
-            // Le texte de la ligne, sans ses blancs de tete.
-            std::size_t from = 0;
-            for (int l = 1; l < uses[k].line && from != std::string::npos; ++l) {
-                from = body.find('\n', from);
-                if (from != std::string::npos) ++from;
-            }
-            std::string text = from == std::string::npos ? std::string{} : body.substr(from, body.find('\n', from) - from);
-            text.erase(0, std::min(text.find_first_not_of(" \t"), text.size()));
-            if (text.size() > 48) text = text.substr(0, 46) + "\xE2\x80\xA6";
+        for (std::size_t k = 0; k < menuUsages_.size() && k < 20; ++k) {
+            const auto& m = menuUsages_[k];
             Item c;
-            c.label = "ligne " + std::to_string(uses[k].line) + " : " + text;
+            c.label = m.rank >= 0 ? "ligne " + std::to_string(m.line) + " : " + cut(m.text, 48) : cut(m.where + " : " + m.text, 72);
             c.id = kUseBase + static_cast<int>(k);
             u.children.push_back(std::move(c));
         }
         if (u.children.empty()) {
             u.enabled = false;
-            u.disabledReason = one ? std::string("aucune utilisation dans le code") : noRow;
+            u.disabledReason = one ? std::string("employ\xC3\xA9" "e nulle part") : noRow;
         }
         items.push_back(std::move(u));
     }
@@ -520,6 +561,7 @@ void HmiDeclGrid::setPlace(std::optional<de::Place> place, std::string why) {
         table_->selectModelRows({}, false);
         table_->setScrollOffset(0.f);
         paste::forget(paste_);
+        hideUsages();                                    // 1.14.0 (lot M1) : un autre code, une autre liste
     }
     refresh();
 }
@@ -580,11 +622,13 @@ void HmiDeclGrid::refresh() {
     rows_->editableAll = ok;
     if (code.valid()) {
         const auto faults = de::faults(doc_->project, code);
+        // 1.14.0 (lot M1) : les utilisations dans tout le projet, en un parcours (une constante de vue n'a pas de code).
+        const auto uses = de::usageCounts(doc_->project, *place_);
         for (const auto i : de::rowsOf(*code.decls, tab_)) {
             Rows::Row row;
             row.d = (*code.decls)[i];
             row.fault = i < faults.size() ? faults[i] : std::string{};
-            row.uses = de::usageCount(code, i);
+            row.uses = i < uses.size() ? uses[i] : 0;
             rows_->rows.push_back(std::move(row));
         }
         rows_->types = de::typeChoices(doc_->project);
@@ -598,6 +642,7 @@ void HmiDeclGrid::refresh() {
     table_->selectModelRows(sel, false);
     applySearch();
     refreshUnfold();
+    refreshUsages();
     // La barre du bas : pourquoi la grille est vide, ou ce que veulent dire ses colonnes.
     std::string hint;
     if (!place_) hint = placeWhy_.empty() ? std::string("Aucun code choisi.") : placeWhy_;
@@ -623,8 +668,105 @@ void HmiDeclGrid::refresh() {
                 break;
         }
     }
+    if (usagesShown_ && !listed_.empty() && !faultCount())
+        hint = plural(referencesOf(listed_), "utilisation", "utilisations") + " de " + usagesName() + " en "
+             + plural(listed_.size(), "endroit", "endroits") + " (la liste) \xC2\xB7 double-clic : y aller";
     hint_->setMessage(hint, faultCount() ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
     invalidate();
+}
+
+// ------------------------------------------------- 1.14.0 (lot M1) : Voir les usages ----
+std::optional<std::size_t> HmiDeclGrid::declIndex(std::size_t row) const {
+    if (!place_ || !doc_) return std::nullopt;
+    const auto code = de::locate(doc_->project, *place_);
+    if (!code.valid()) return std::nullopt;
+    const auto order = de::rowsOf(*code.decls, tab_);
+    if (row >= order.size()) return std::nullopt;
+    return order[row];
+}
+
+std::string HmiDeclGrid::usagesName() const {
+    for (const auto& r : rows_->rows)
+        if (r.d.id == usagesOf_) return r.d.name;
+    return {};
+}
+
+bool HmiDeclGrid::showUsages() {
+    const auto sel = selectedRows();
+    if (sel.size() != 1 || sel.front() >= rows_->rows.size() || !doc_ || !place_) return false;
+    const auto at = declIndex(sel.front());
+    if (!at) return false;
+    auto list = de::usages(doc_->project, *place_, *at);
+    const bool outside = place_->kind == de::Place::Kind::ViewConstants
+                      || std::any_of(list.begin(), list.end(), [](const de::Usage& u) { return !u.inCode; });
+    if (!outside) {
+        hideUsages();
+        return false;
+    }
+    usagesOf_ = rows_->rows[sel.front()].d.id;
+    listed_ = std::move(list);
+    auto model = std::make_shared<UsagesModel>();
+    model->rows = listed_;
+    usagesList_->setModel(model);
+    if (!usagesShown_) {
+        usagesShown_ = true;
+        usagesList_->setVisibility(ui::Visibility::Visible);
+        onLayout();
+    }
+    const std::string name = rows_->rows[sel.front()].d.name;
+    if (listed_.empty()) say(name + " : employ\xC3\xA9" "e nulle part (ni dans la vue, ni ailleurs)", false);
+    else
+        say(plural(referencesOf(listed_), "utilisation", "utilisations") + " de " + name + " en " + plural(listed_.size(), "endroit", "endroits")
+                + " \xE2\x80\x94 double-clic sur une ligne de la liste : y aller", false);
+    invalidate();
+    return true;
+}
+
+void HmiDeclGrid::hideUsages() {
+    listed_.clear();
+    usagesOf_ = kNoId;
+    if (!usagesShown_) return;
+    usagesShown_ = false;
+    usagesList_->setModel(std::make_shared<UsagesModel>());
+    usagesList_->setVisibility(ui::Visibility::Collapsed);
+    onLayout();
+}
+
+void HmiDeclGrid::refreshUsages() {
+    if (!usagesShown_) return;
+    // La declaration listee, retrouvee par son identifiant (renommee, deplacee) ; partie : la liste se ferme.
+    std::optional<std::size_t> at;
+    for (std::size_t r = 0; r < rows_->rows.size(); ++r)
+        if (rows_->rows[r].d.id == usagesOf_) at = declIndex(r);
+    if (!at || !doc_ || !place_) {
+        hideUsages();
+        return;
+    }
+    listed_ = de::usages(doc_->project, *place_, *at);
+    auto model = std::make_shared<UsagesModel>();
+    model->rows = listed_;
+    usagesList_->setModel(model);
+}
+
+bool HmiDeclGrid::goToUsage(const de::Usage& u) {
+    if (u.rank >= 0) {                                      // dans le code : l'onglet Code, cette utilisation
+        const std::string name = usagesOf_ != kNoId ? usagesName() : std::string{};
+        const auto sel = selectedRows();
+        const std::string which = !name.empty() ? name : sel.size() == 1 && sel.front() < rows_->rows.size() ? rows_->rows[sel.front()].d.name
+                                                                                                          : std::string{};
+        if (which.empty()) return false;
+        useRequested->emit(which, u.rank);
+        return true;
+    }
+    if (u.inCode && u.declaration != kNoId)
+        for (std::size_t r = 0; r < rows_->rows.size(); ++r)
+            if (rows_->rows[r].d.id == u.declaration) {      // une voisine de cette grille : sa ligne
+                selectRows({r});
+                say(u.where + " : " + u.text, false);
+                return true;
+            }
+    placeRequested->emit(u);
+    return true;
 }
 
 void HmiDeclGrid::applySearch() {
@@ -1317,7 +1459,10 @@ void HmiDeclGrid::onLayout() {
     search_->setBounds({b.right() - searchW, b.y + 4.f, searchW, kTools - 8.f});
     // 1.12.7 : le deballage sous la table (un tiers de la hauteur, 110 a 220 px), quand il montre une valeur.
     const float unfoldH = unfoldShown_ ? std::clamp((b.h - kTools - kHint) * 0.38f, 110.f, 220.f) : 0.f;
-    table_->setBounds({b.x, b.y + kTools, b.w, std::max(0.f, b.h - kTools - kHint - unfoldH)});
+    // 1.14.0 (lot M1) : la liste des usages sous la table (et au-dessus du deballage), quand Voir les usages l'ouvre.
+    const float usesH = usagesShown_ ? std::clamp((b.h - kTools - kHint - unfoldH) * 0.42f, 96.f, 260.f) : 0.f;
+    table_->setBounds({b.x, b.y + kTools, b.w, std::max(0.f, b.h - kTools - kHint - unfoldH - usesH)});
+    if (usagesList_) usagesList_->setBounds({b.x, b.bottom() - kHint - unfoldH - usesH, b.w, usesH});
     if (unfold_) unfold_->setBounds({b.x, b.bottom() - kHint - unfoldH, b.w, unfoldH});
     hint_->setBounds({b.x, b.bottom() - kHint, b.w, kHint});
 }
@@ -1403,6 +1548,7 @@ HmiCodeTabs::HmiCodeTabs(std::string id, hmi::DocumentPtr doc, HmiDeclGrid::Appl
         links_ += raw->message->connect([this](const std::string& text, bool warning) { message->emit(text, warning); });
         links_ += raw->usesRequested->connect([this](const std::string& name) { usesRequested->emit(name); });
         links_ += raw->useRequested->connect([this](const std::string& name, int k) { useRequested->emit(name, k); });
+        links_ += raw->placeRequested->connect([this](const hmi::decledit::Usage& u) { placeRequested->emit(u); });   // 1.14.0
         addTab({raw->title(), t == de::Tab::Constants ? ui::Icon::Constant : ui::Icon::Variable}, std::move(g));
         grids_.emplace_back(t, raw);
     }

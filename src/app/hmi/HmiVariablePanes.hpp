@@ -48,6 +48,7 @@
 #include "../../hmi/HmiComm.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiDesign.hpp"   // 1.12.18 : FindHit (Voir les usages)
+#include "../../hmi/HmiDeclEdit.hpp" // 1.14.0 (lot M1) : decledit::globalUsages (Voir les usages d'une variable)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -197,6 +198,9 @@ public:
         std::function<void(const std::string&, const std::string&, bool)> report;
         // 1.12.18 : « Voir les usages » - aller a un emploi (la vue, l'objet ; kNoId : la vue elle-meme).
         std::function<void(hmi::Id view, hmi::Id object)>               openUse;
+        // 1.14.0 (lot M1) : ... ou a l'endroit exact (un script et sa ligne, une fonction, l'action, la case) ; sans
+        // lui, openUse (la vue, l'objet).
+        std::function<void(const hmi::decledit::Usage&)>                openUsage;
         // 1.12.18 (planche 11) : « Modifier l'adresse dans toutes les cases... » - la fenetre (l'hote).
         std::function<void(hmi::Id variable, const std::string& member)> editAddresses;
     };
@@ -253,7 +257,8 @@ protected:
     void onPaint(const ui::PaintContext&) override;
 
 private:
-    std::vector<hmi::design::FindHit> usesOfMenu_;   // 1.12.18 : les emplois que montre le menu (Voir les usages)
+    std::vector<hmi::decledit::Usage> usesOfMenu_;   // 1.12.18 : les emplois que montre le menu (Voir les usages) ; 1.14.0 : lus par
+                                                     // le lecteur des references (ni chaine, ni commentaire, ni Autre.Nom)
     void rebuildProperties();
     void say(std::string text, bool warning = false);
     void apply(core::CommandPtr cmd);

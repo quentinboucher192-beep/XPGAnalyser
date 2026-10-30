@@ -1802,13 +1802,12 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         }
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         m.add("Modifier" + kDots, Icon::Settings, [this, id] { askHmiVariable(id); }, {}, oneAtATime);
+        // 1.14.0 (lot M1) : ses utilisations (la racine et ses acces, ni chaine, ni commentaire, ni Autre.Nom), pas le texte.
         m.add("Voir les usages", Icon::Search, [this, name] {
             openHmiPane("rechercher");
             if (auto* pane = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
                 pane->setScopeView(hmi::kNoId);
-                pane->setWholeWord(true);
-                pane->setFind(name);
-                pane->search();
+                pane->showUsages(name);
             }
         }, {}, several ? oneAtATime : name.empty() ? "variable introuvable" : "");
         m.separator();

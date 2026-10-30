@@ -173,6 +173,9 @@ void setPlcNames(std::shared_ptr<const std::set<std::string, std::less<>>> upper
 // variables, conditions, plumes, cases, actions, arguments - passe par `f`
 // (texte, est_du_code) et prend ce qu'elle rend. Un texte a trous : chaque trou.
 void rewriteNames(Object&, const std::function<std::string(std::string_view, bool code)>& f);
+// 1.14.0 (lot M1) : rewriteNames lit-il la valeur de cette action (une affectation, un journal a trous, un script, des
+// arguments) ? Le parcours des textes du projet (forEachCode) la relit alors sans la compter deux fois.
+[[nodiscard]] bool actionValueRead(const Action&);
 // Les chemins indexes lus par des objets ("Armoires[0]", une fois chacun, dans
 // l'ordre ou on les rencontre) : ce que "Creer un symbole" propose en parametres.
 [[nodiscard]] std::vector<std::string> indexedPaths(const std::vector<const Object*>&);
