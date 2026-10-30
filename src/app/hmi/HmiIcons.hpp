@@ -73,6 +73,8 @@ enum class HmiGlyph : std::uint8_t {
     // 1.12.30 : les regles, la grille de colonnes, les cotes, les langues cote a cote (et leurs
     // fleches : les langues d'avant, les suivantes)
     Ruler, Columns, Dimension, LanguagesSide, ChevronLeft, ChevronRight,
+    // 1.14.0 : le Coupe-son (le haut-parleur barre), le Melangeur de volume (trois curseurs)
+    SoundMute, VolumeMixer,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

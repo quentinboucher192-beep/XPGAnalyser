@@ -124,6 +124,8 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::FireDamper:           return HmiGlyph::FireDamper;
         case hmi::Kind::SpeedDrive:           return HmiGlyph::SpeedDrive;    // 1.12.30
         case hmi::Kind::DocumentViewer:       return HmiGlyph::DocumentViewer;   // 1.12.30
+        case hmi::Kind::SoundMute:            return HmiGlyph::SoundMute;        // 1.14.0
+        case hmi::Kind::VolumeMixer:          return HmiGlyph::VolumeMixer;
     }
     return HmiGlyph::None;
 }
@@ -789,6 +791,14 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
             L(4.5f, 5, 7.5f, 5, 0.9f); L(4.5f, 7.5f, 10, 7.5f, 0.9f); L(4.5f, 10, 7.5f, 10, 0.9f);
             circle(11.2f, 11.2f, 2.3f, false);
             L(12.9f, 12.9f, 15, 15, 1.6f);
+            break;
+        case HmiGlyph::SoundMute:       // 1.14.0 : le haut-parleur, barre d'une croix
+            poly({{1.5f, 6}, {4.5f, 6}, {8.5f, 2.5f}, {8.5f, 13.5f}, {4.5f, 10}, {1.5f, 10}}, true);
+            L(10.5f, 5.5f, 15, 10.5f, 1.5f); L(15, 5.5f, 10.5f, 10.5f, 1.5f);
+            break;
+        case HmiGlyph::VolumeMixer:     // 1.14.0 : trois courses, trois poignees a des hauteurs differentes
+            L(3.5f, 2, 3.5f, 14, 1.0f); L(8, 2, 8, 14, 1.0f); L(12.5f, 2, 12.5f, 14, 1.0f);
+            F(1.8f, 8.5f, 3.4f, 2.2f, c); F(6.3f, 4, 3.4f, 2.2f, c); F(10.8f, 10.5f, 3.4f, 2.2f, c);
             break;
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);

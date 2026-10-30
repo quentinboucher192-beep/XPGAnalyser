@@ -64,6 +64,166 @@ float soundGain(const SystemSettings& s, SoundChannel c) noexcept {
     return general * static_cast<float>(std::clamp(soundVolume(s, c), 0, 100)) / 100.f;
 }
 
+// ============================================ 1.14.0 : le Coupe-son, le Melangeur ===
+SoundChannel muteChannelOf(std::string_view text) noexcept {
+    return soundChannelFrom(text).value_or(SoundChannel::General);
+}
+
+std::vector<SoundChannel> mixerChannels(std::string_view channels, std::vector<std::string>* unknown) {
+    std::string t(channels);
+    for (auto& c : t) if (c == ',') c = ';';
+    bool wanted[kSoundChannelCount] = {};
+    bool items = false;
+    std::size_t at = 0;
+    while (at <= t.size()) {
+        const auto semi = t.find(';', at);
+        std::string item = t.substr(at, semi == std::string::npos ? std::string::npos : semi - at);
+        at = semi == std::string::npos ? t.size() + 1 : semi + 1;
+        while (!item.empty() && (item.front() == ' ' || item.front() == '\t')) item.erase(item.begin());
+        while (!item.empty() && (item.back() == ' ' || item.back() == '\t')) item.pop_back();
+        if (item.empty()) continue;
+        items = true;
+        std::string low;
+        for (const char c : item) low += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (low == "tous" || low == "*") {
+            for (auto& w : wanted) w = true;
+            continue;
+        }
+        if (const auto c = soundChannelFrom(item)) wanted[static_cast<std::size_t>(*c)] = true;
+        else if (unknown) unknown->push_back(item);
+    }
+    if (!items)
+        for (auto& w : wanted) w = true;          // vide : tous
+    std::vector<SoundChannel> out;
+    for (std::size_t k = 0; k < kSoundChannelCount; ++k)
+        if (wanted[k]) out.push_back(static_cast<SoundChannel>(k));
+    return out;
+}
+
+MixerLayout mixerLayout(const Object& o, double w, double h) {
+    MixerLayout l;
+    l.vertical = o.text("orientation", "verticale") != "horizontale";
+    l.fontSize = std::clamp(o.number("fontSize", 12), 7.0, 40.0);
+    const auto channels = mixerChannels(o.text("channels", "tous"));
+    const bool showPercent = o.flag("showPercent", true), showMute = o.flag("showMute", true), showMeter = o.flag("showMeter", true);
+    const double fs = l.fontSize, pad = 10, gap = 8;
+    const std::size_t n = channels.size();
+    if (n == 0 || w <= 2 * pad || h <= 2 * pad) return l;
+    if (l.vertical) {
+        const double tw = std::max(20.0, (w - 2 * pad - gap * static_cast<double>(n - 1)) / static_cast<double>(n));
+        l.knob = std::clamp(tw * 0.16, 6.0, 10.0);
+        const double nameH = fs * 1.7;
+        const double muteH = showMute ? std::clamp(fs * 2.0, 18.0, 32.0) : 0;
+        const double pctH = showPercent ? fs * 1.7 : 0;
+        for (std::size_t i = 0; i < n; ++i) {
+            MixerTrack t;
+            t.channel = channels[i];
+            const double x = pad + static_cast<double>(i) * (tw + gap);
+            t.frame = {x, pad, tw, h - 2 * pad};
+            t.name = {x, pad, tw, nameH};
+            double bottom = h - pad;
+            if (showMute) {
+                const double mw = std::min(tw - 4, std::max(28.0, muteH * 1.4));
+                t.mute = {x + (tw - mw) / 2, bottom - muteH, mw, muteH};
+                bottom = t.mute.y - 4;
+            }
+            if (showPercent) {
+                t.percent = {x, bottom - pctH, tw, pctH};
+                bottom = t.percent.y;
+            }
+            const double top = pad + nameH + l.knob + 2;
+            const double end = bottom - l.knob - 2;
+            const double cx = x + tw / 2 + (showMeter ? 5 : 0);
+            t.track = {cx - 3, top, 6, std::max(4.0, end - top)};
+            if (showMeter) t.meter = {std::max(x + 2, t.track.x - l.knob - 9), top, 6, t.track.h};
+            l.tracks.push_back(t);
+        }
+    } else {
+        const double rh = std::max(18.0, (h - 2 * pad - gap * static_cast<double>(n - 1)) / static_cast<double>(n));
+        l.knob = std::clamp(rh * 0.28, 6.0, 10.0);
+        const double nameW = std::clamp(fs * 6.5, 40.0, w * 0.3);
+        const double mh = std::min(rh, std::clamp(fs * 2.0, 18.0, 30.0));
+        const double muteW = showMute ? std::clamp(mh * 1.3, 24.0, 38.0) : 0;
+        const double pctW = showPercent ? fs * 3.8 : 0;
+        for (std::size_t i = 0; i < n; ++i) {
+            MixerTrack t;
+            t.channel = channels[i];
+            const double y = pad + static_cast<double>(i) * (rh + gap);
+            t.frame = {pad, y, w - 2 * pad, rh};
+            t.name = {pad, y, nameW, rh};
+            double right = w - pad;
+            if (showMute) {
+                t.mute = {right - muteW, y + (rh - mh) / 2, muteW, mh};
+                right = t.mute.x - 6;
+            }
+            if (showPercent) {
+                t.percent = {right - pctW, y, pctW, rh};
+                right = t.percent.x;
+            }
+            const double left = pad + nameW + l.knob + 4;
+            const double end = right - l.knob - 4;
+            const double cy = y + rh / 2 - (showMeter ? 3 : 0);
+            t.track = {left, cy - 3, std::max(4.0, end - left), 6};
+            if (showMeter) t.meter = {left, std::min(y + rh - 4, cy + l.knob + 1), t.track.w, 4};
+            l.tracks.push_back(t);
+        }
+    }
+    return l;
+}
+
+double mixerFractionAt(const MixerLayout& l, const MixerTrack& t, double x, double y) {
+    if (l.vertical) return t.track.h > 0 ? std::clamp(1.0 - (y - t.track.y) / t.track.h, 0.0, 1.0) : 0.0;
+    return t.track.w > 0 ? std::clamp((x - t.track.x) / t.track.w, 0.0, 1.0) : 0.0;
+}
+
+namespace {
+std::string fractionText(double f) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%.4g", std::clamp(f, 0.0, 1.0));
+    return b;
+}
+} // namespace
+
+std::string mixerHit(const Object& o, double w, double h, double x, double y) {
+    const auto l = mixerLayout(o, w, h);
+    for (const auto& t : l.tracks) {
+        const std::string key(soundChannelSpec(t.channel).key);
+        if (t.mute.w > 0 && t.mute.contains(x, y)) return "muet:" + key;
+        if (!t.frame.contains(x, y)) continue;
+        const bool onCourse = l.vertical ? (y >= t.track.y - l.knob - 2 && y <= t.track.bottom() + l.knob + 2)
+                                         : (x >= t.track.x - l.knob - 2 && x <= t.track.right() + l.knob + 2);
+        if (onCourse) return "volume:" + key + ":" + fractionText(mixerFractionAt(l, t, x, y));
+    }
+    return {};
+}
+
+bool mixerPartBox(const Object& o, double w, double h, std::string_view part, Box& out) {
+    const auto l = mixerLayout(o, w, h);
+    const auto colon = part.find(':');
+    if (colon == std::string_view::npos) return false;
+    const std::string_view what = part.substr(0, colon);
+    std::string_view rest = part.substr(colon + 1);
+    const auto second = rest.find(':');
+    const std::string_view name = second == std::string_view::npos ? rest : rest.substr(0, second);
+    const auto channel = soundChannelFrom(name);
+    if (!channel) return false;
+    for (const auto& t : l.tracks) {
+        if (t.channel != *channel) continue;
+        if (what == "muet") {
+            if (t.mute.w <= 0) return false;
+            out = t.mute;
+            return true;
+        }
+        if (what != "volume" || second == std::string_view::npos) return false;
+        const double f = std::clamp(std::atof(std::string(rest.substr(second + 1)).c_str()), 0.0, 1.0);
+        const double px = l.vertical ? t.track.cx() : t.track.x + t.track.w * f;
+        const double py = l.vertical ? t.track.bottom() - t.track.h * f : t.track.cy();
+        out = {px - 1, py - 1, 2, 2};
+        return true;
+    }
+    return false;
+}
+
 const MaintenanceSpec* maintenanceSpec(std::string_view key) noexcept {
     for (const auto& m : kMaintenance)
         if (m.key == key) return &m;

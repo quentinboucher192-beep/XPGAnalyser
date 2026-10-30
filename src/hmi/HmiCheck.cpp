@@ -2480,6 +2480,40 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (trimmedCopy(o.text("function")).empty())
                         issue(S::Warning, "function", "instrument sans lettres ISA (PT, TIC, FT...) : sa bulle est vide");
                     break;
+                // 1.14.0 : le Coupe-son (son canal), le Melangeur de volume (ses canaux, son orientation).
+                case Kind::SoundMute: {
+                    const auto p1 = o.find("soundChannel");
+                    const std::string ch = trimmedCopy(o.text("soundChannel", "Tous"));
+                    if ((!p1 || p1->expr.empty()) && !ch.empty() && !soundChannelFrom(ch))
+                        issue(S::Error, "soundChannel", "canal inconnu \xC2\xAB " + ch + " \xC2\xBB (Tous, Alarmes, Scripts, Actions, Vid\xC3\xA9os ou Relecture) : "
+                                                         "le bouton coupera tous les sons");
+                    if (o.text("textOn").empty() != o.text("textOff").empty())
+                        issue(S::Warning, "textOn", "un seul libell\xC3\xA9 : l'autre \xC3\xA9tat montrera l'ic\xC3\xB4ne seule");
+                    break;
+                }
+                case Kind::VolumeMixer: {
+                    const auto p1 = o.find("channels");
+                    if (!p1 || p1->expr.empty()) {
+                        std::vector<std::string> unknown;
+                        const auto shown = mixerChannels(o.text("channels", "tous"), &unknown);
+                        for (const auto& u : unknown)
+                            issue(S::Error, "channels", "canal inconnu \xC2\xAB " + u + " \xC2\xBB (General, Alarmes, Scripts, Actions, Videos ou Relecture)");
+                        if (shown.empty()) issue(S::Error, "channels", "aucun canal montr\xC3\xA9 : le m\xC3\xA9langeur est vide");
+                        const auto l = mixerLayout(o, o.number("w", 480), o.number("h", 250));
+                        for (const auto& t : l.tracks) {
+                            const double course = l.vertical ? t.track.h : t.track.w;
+                            if (course < 30) {
+                                issue(S::Warning, "h", std::string("pistes trop ") + (l.vertical ? "basses" : "\xC3\xA9troites")
+                                                       + " : la course d'un curseur fait moins de 30 pixels (agrandis l'objet ou montre moins de canaux)");
+                                break;
+                            }
+                        }
+                    }
+                    const std::string orientation = o.text("orientation", "verticale");
+                    if (orientation != "verticale" && orientation != "horizontale")
+                        issue(S::Warning, "orientation", "orientation inconnue \xC2\xAB " + orientation + " \xC2\xBB : les pistes seront verticales");
+                    break;
+                }
                 case Kind::SystemButton: {
                     // Lot 10 : l'onglet ouvert ; une action "Parametres systeme" au clic ferait double emploi.
                     const std::string tab = o.text("tab", "R\xC3\xA9glages");

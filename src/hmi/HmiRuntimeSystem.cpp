@@ -461,6 +461,54 @@ bool Runtime::setChannelVolume(SoundChannel channel, int volume, const std::stri
     return true;
 }
 
+// 1.14.0 : le Coupe-son - un clic coupe son canal (Tous : tout), le suivant le retablit.
+void Runtime::soundMuteClick(const View& v, const Object& o) {
+    if (!o.flag("pilotable", true)) return;
+    const std::string source = where(v, &o);
+    std::string why;
+    if (!objectAllowed(o, &why)) {
+        event("Acc\xC3\xA8s refus\xC3\xA9", source, why);
+        return;
+    }
+    const SoundChannel channel = muteChannelOf(shownText(v.id, o, "soundChannel", "Tous"));
+    (void)setChannelMuted(channel, !soundMuted(settings_, channel), source);
+}
+
+// 1.14.0 : le Melangeur de volume. "glisser" : le volume suit la poignee sans rien dire ; "lacher", "volume" : le
+// volume est dit au journal ; "pas:<canal>:<N>" : N crans de 5 % ; "muet:<canal>" : le canal se coupe ou revient.
+void Runtime::mixerPart(const View& v, const Object& o, std::string_view part) {
+    if (!o.flag("pilotable", true)) return;
+    const std::string source = where(v, &o);
+    std::string why;
+    if (!objectAllowed(o, &why)) {
+        event("Acc\xC3\xA8s refus\xC3\xA9", source, why);
+        return;
+    }
+    const auto colon = part.find(':');
+    if (colon == std::string_view::npos) return;
+    const std::string_view verb = part.substr(0, colon);
+    const std::string_view rest = part.substr(colon + 1);
+    const auto second = rest.find(':');
+    const auto channel = soundChannelFrom(rest.substr(0, second));
+    if (!channel) return;
+    const std::string arg = second == std::string_view::npos ? std::string{} : std::string(rest.substr(second + 1));
+    if (verb == "muet") {
+        (void)setChannelMuted(*channel, !soundMuted(settings_, *channel), source);
+    } else if (verb == "glisser" || verb == "lacher" || verb == "volume") {
+        double f = 0;
+        if (!parseNumber(arg, f)) return;
+        (void)setChannelVolume(*channel, static_cast<int>(std::lround(std::clamp(f, 0.0, 1.0) * 100.0)), source, verb == "glisser");
+    } else if (verb == "pas") {
+        double n = 0;
+        if (!parseNumber(arg, n) || n == 0) return;
+        const int step = static_cast<int>(std::lround(n)) * 5;
+        const int now = soundVolume(settings_, *channel);
+        // Un cran ramene d'abord sur le multiple de 5 (67 % : 70 % vers le haut, 65 % vers le bas).
+        const int next = step > 0 ? (now / 5) * 5 + step : ((now + 4) / 5) * 5 + step;
+        (void)setChannelVolume(*channel, next, source);
+    }
+}
+
 float Runtime::soundLevel(SoundChannel channel) const {
     if (!hooks_.soundLevel) return 0.f;
     return std::clamp(hooks_.soundLevel(static_cast<int>(channel)), 0.f, 1.f);

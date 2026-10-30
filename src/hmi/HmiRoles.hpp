@@ -182,6 +182,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"frequencyFormat", Role::Format}, {"currentFormat", Role::Format}, {"speedFormat", Role::Format},
     {"frequencyUnit", Role::Text}, {"currentUnit", Role::Text}, {"speedUnit", Role::Text},
     {"colorReady", Role::Color},
+    // 1.14.0 : le Coupe-son (son canal) et le Melangeur de volume (les canaux montres, ce qu'il montre, la couleur du M)
+    {"soundChannel", Role::Choice}, {"channels", Role::List, Role::Text},
+    {"showPercent", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showMute", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"showMeter", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"muteColor", Role::Color},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},

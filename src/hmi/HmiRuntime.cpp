@@ -5103,6 +5103,8 @@ void Runtime::release(Id object, double now, bool inside) {
         }
         openSystemMenu(systemTabFrom(plain(shownText(snapshot.id, so, "tab"))), now, where(snapshot, &so));   // 1.9 : et Simulation ; 1.12.5 : sa formule
     }
+    // 1.14.0 : le Coupe-son coupe ou retablit tous les sons (ou ceux de son canal).
+    if (o->kind == Kind::SoundMute) soundMuteClick(snapshot, *snapshot.object(object));
     // Lot 12 : l'objet Menu de connexion ouvre le menu natif, sur son onglet.
     if (o->kind == Kind::LoginMenuButton) {
         const Object& lo = *snapshot.object(object);
@@ -7022,6 +7024,14 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     // 1.12.30 : la visionneuse de documents - ses pages, son zoom, sa recherche (HmiRuntimeDocs.cpp).
     if (found->kind == Kind::DocumentViewer) {
         docObjectPart(*v, *found, part, now);
+        return;
+    }
+    // 1.14.0 : le Melangeur de volume - une course tiree, la molette, le bouton M (HmiRuntimeSystem.cpp).
+    if (found->kind == Kind::VolumeMixer) {
+        View snapshot = *v;
+        evaluateProps(snapshot.id, *snapshot.object(object));
+        GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "R\xC3\xA9glage de");
+        mixerPart(snapshot, *snapshot.object(object), part);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.

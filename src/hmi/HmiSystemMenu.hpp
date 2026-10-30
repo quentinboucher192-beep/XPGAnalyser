@@ -109,6 +109,43 @@ void setSoundMuted(SystemSettings&, SoundChannel, bool muted) noexcept;
 // Le canal se tait (lui ou le General est muet) : ses sons ne partent pas, ceux qui jouent s'arretent.
 [[nodiscard]] bool soundSilenced(const SystemSettings&, SoundChannel) noexcept;
 
+// ---- 1.14.0 : le Coupe-son et le Melangeur de volume (la geometrie) ---------------------
+//  Comme HmiControls : le dessin et le clic lisent la meme geometrie. Une partie cliquee
+//  du melangeur est un petit texte que Runtime::mixerPart applique :
+//    "volume:<canal>:<fraction>"   la course du curseur (0 en bas ou a gauche, 1 au bout),
+//                                  pendant qu'on tire ("glisser:...") et au lacher ("lacher:...")
+//    "pas:<canal>:<+N|-N>"         la molette : N crans de 5 %
+//    "muet:<canal>"                le bouton M
+//  <canal> : le mot de kSoundChannels (General, Alarmes, Scripts, Actions, Videos, Relecture).
+// Le canal d'un Coupe-son ("soundChannel" : Tous, ou un canal) ; inconnu : le General.
+[[nodiscard]] SoundChannel muteChannelOf(std::string_view text) noexcept;
+// Les canaux montres par un melangeur ("channels" : "tous", ou une liste 'General;Alarmes;Videos'
+// separee par ; ou ,) dans l'ordre de kSoundChannels ; ce qui n'est pas un canal va dans `unknown`.
+[[nodiscard]] std::vector<SoundChannel> mixerChannels(std::string_view channels, std::vector<std::string>* unknown = nullptr);
+struct MixerTrack {
+    SoundChannel channel{SoundChannel::General};
+    Box frame;       // la piste entiere (ce qui se clique pour le volume, hors du bouton M)
+    Box name;        // son nom
+    Box track;       // la course du curseur (6 pixels d'epaisseur)
+    Box meter;       // le vumetre, a cote de la course (vide : pas montre)
+    Box percent;     // le pourcentage (vide : pas montre)
+    Box mute;        // le bouton M (vide : pas montre)
+};
+struct MixerLayout {
+    bool                    vertical{true};
+    double                  knob{8};          // le rayon de la poignee
+    double                  fontSize{12};
+    std::vector<MixerTrack> tracks;
+};
+// `channels`, `orientation` ("verticale", "horizontale"), `showPercent`, `showMute`, `showMeter`, `fontSize`.
+[[nodiscard]] MixerLayout mixerLayout(const Object&, double w, double h);
+// La fraction (0..1) de la course d'une piste au point (x, y), bornee.
+[[nodiscard]] double mixerFractionAt(const MixerLayout&, const MixerTrack&, double x, double y);
+// La partie sous (x, y) : "volume:<canal>:<fraction>", "muet:<canal>" ; vide : rien.
+[[nodiscard]] std::string mixerHit(const Object&, double w, double h, double x, double y);
+// La boite d'une partie ("volume:Alarmes:0.5" : le point de la course qui donne 50 % ; "muet:Alarmes") ;
+// faux : pas de cette partie.
+[[nodiscard]] bool mixerPartBox(const Object&, double w, double h, std::string_view part, Box& out);
 
 enum class SettingKind : std::uint8_t { Percent, Choice, Toggle, Clock };
 struct SettingSpec {

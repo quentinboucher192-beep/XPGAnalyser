@@ -1652,6 +1652,9 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         }
                         break;
                     }
+                    case hmi::Kind::VolumeMixer:      // 1.14.0 : "volume:Alarmes:0.5", "muet:Alarmes"
+                        found = hmi::mixerPartBox(o, box.w, box.h, part, local);
+                        break;
                     case hmi::Kind::Slider:
                     case hmi::Kind::Knob: {
                         // "fraction:0.75" : le point de la course qui donne 75 %.
@@ -1841,6 +1844,22 @@ double HmiLiveCanvas::dragFraction(std::size_t layer, const hmi::Object& o, gfx:
     return o.kind == hmi::Kind::Knob ? hmi::knobFractionAt(box.w, box.h, lx, ly) : hmi::sliderFractionAt(o, box.w, box.h, lx, ly);
 }
 
+// 1.14.0 : la partie d'une piste du melangeur qu'on tire, au point p : "glisser:Alarmes:0.62" (ou "lacher:...").
+std::string HmiLiveCanvas::mixDragPart(std::string_view verb, gfx::Point p) const {
+    if (mixDrag_ == kNoId || mixDragLayer_ >= layers_.size() || mixDragLayer_ >= vps_.size()) return {};
+    const auto* o = layers_[mixDragLayer_].view.object(mixDrag_);
+    if (!o) return {};
+    const auto& vp = vps_[mixDragLayer_];
+    const auto box = o->box();
+    const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
+    const auto l = hmi::mixerLayout(*o, box.w, box.h);
+    const auto channel = hmi::soundChannelFrom(mixDragChannel_);
+    for (const auto& t : l.tracks)
+        if (channel && t.channel == *channel)
+            return std::string(verb) + ":" + mixDragChannel_ + ":" + hmi::formatNumber(std::round(hmi::mixerFractionAt(l, t, lx, ly) * 1000.0) / 1000.0);
+    return {};
+}
+
 bool HmiLiveCanvas::comboListHit(gfx::Point p, hmi::Id& object, std::string& part) const {
     if (!runtime_ || layers_.empty() || vps_.size() != layers_.size()) return false;
     const std::size_t li = liveTopLayer();   // 1.10.2 : pas une popup qui se ferme
@@ -2022,6 +2041,22 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 if (const std::string part = hmi::tableCellHit(*o, box.w, box.h, lx, ly, count, first, widths); !part.empty())
                     partClicked->emit(id, part);
             }
+        }
+        // 1.14.0 : le Melangeur de volume - une course se tire (la souris, le doigt : le toucher arrive en souris),
+        // le bouton M coupe ou retablit le canal.
+        if (o->kind == hmi::Kind::VolumeMixer) {
+            if (runtime_ && runtime_->focusedObject() != kNoId) clickedAway->emit(id);
+            const std::string hit = hmi::mixerHit(*o, box.w, box.h, lx, ly);
+            if (hit.rfind("volume:", 0) == 0) {
+                const std::string rest = hit.substr(7);
+                mixDrag_ = id;
+                mixDragLayer_ = layer;
+                mixDragChannel_ = rest.substr(0, rest.find(':'));
+                partClicked->emit(id, "glisser:" + rest);
+            } else if (!hit.empty()) {
+                partClicked->emit(id, hit);
+            }
+            return;
         }
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
         // date et heure, programmateur) ; le curseur et le potentiometre se tirent.
@@ -2325,6 +2360,17 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                                                          + trendScaleText(*runtime_, layers_[li].view.id, *o));
                         return ui::EventResult::Consumed;
                     }
+                    // 1.14.0 : sur une piste du melangeur, la molette regle son volume (un cran : 5 %).
+                    if (o->kind == hmi::Kind::VolumeMixer) {
+                        const auto l = hmi::mixerLayout(*o, o->box().w, o->box().h);
+                        const double mlx = x - o->box().x, mly = y - o->box().y;
+                        const double notches = std::clamp(static_cast<double>(w->dy != 0 ? w->dy : w->dx), -4.0, 4.0);
+                        for (const auto& t : l.tracks)
+                            if (t.frame.contains(mlx, mly) && notches != 0 && o->flag("pilotable", true))
+                                partClicked->emit(o->id, "pas:" + std::string(hmi::soundChannelSpec(t.channel).key) + ":"
+                                                             + hmi::formatNumber(std::round(notches)));
+                        return ui::EventResult::Consumed;
+                    }
                     if (o->kind != hmi::Kind::DocumentViewer) break;   // un autre objet par-dessus : il garde la molette
                     const double lx = x - o->box().x, ly = y - o->box().y;
                     if (w->mods.ctrl) {
@@ -2488,6 +2534,11 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
             invalidate();
             return ui::EventResult::Consumed;
         }
+        // 1.14.0 : la poignee d'une piste du melangeur suit la souris (le volume change en direct).
+        if (mixDrag_ != kNoId) {
+            if (const std::string part = mixDragPart("glisser", m->pos); !part.empty()) partClicked->emit(mixDrag_, part);
+            return ui::EventResult::Consumed;
+        }
         // Lot 9 : la poignee du curseur (ou du potentiometre) suit la souris.
         if (valueDrag_ != kNoId) {
             if (valueDragLayer_ < layers_.size())
@@ -2542,6 +2593,13 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                 swiped->emit(dx < 0 ? 1 : -1);
                 return ui::EventResult::Consumed;
             }
+        }
+        if (mixDrag_ != kNoId) {     // 1.14.0 : lache, le volume est dit au journal
+            const Id id = mixDrag_;
+            const std::string part = mixDragPart("lacher", u->pos);
+            mixDrag_ = kNoId;
+            if (!part.empty()) partClicked->emit(id, part);
+            return ui::EventResult::Consumed;
         }
         if (valueDrag_ != kNoId) {
             const Id id = valueDrag_;
@@ -3428,7 +3486,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         // lot 10 : l'objet Parametres systeme non plus - il ouvre le menu natif.
         if (o && o->actions.empty() && !hmi::kindWritesVariable(o->kind) && o->kind != hmi::Kind::SystemButton
             && o->kind != hmi::Kind::LoginMenuButton && o->kind != hmi::Kind::LanguageSelector && o->kind != hmi::Kind::ThemeSelector
-            && o->kind != hmi::Kind::PlcDiagnostic)
+            && o->kind != hmi::Kind::PlcDiagnostic && o->kind != hmi::Kind::SoundMute)   // 1.14.0 : le Coupe-son agit seul
             status_->setTransientMessage(o->name + " : aucune action sur cet objet", 4.0);
     });
     links_ += canvas_->released->connect([this](Id object, bool inside) { runtime_.release(object, now_, inside); });
@@ -4717,7 +4775,9 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
                     // Lot 9 : une commande qui ecrit sa variable demande aussi Piloter.
                     const bool writes = hmi::kindWritesVariable(o.kind);
                     const bool acts = !o.actions.empty() || writes || o.kind == hmi::Kind::SystemButton    // lot 10 : le menu
-                                   || o.kind == hmi::Kind::LoginMenuButton;                                      // lot 12
+                                   || o.kind == hmi::Kind::LoginMenuButton                                       // lot 12
+                                   || ((o.kind == hmi::Kind::SoundMute || o.kind == hmi::Kind::VolumeMixer)      // 1.14.0
+                                       && o.flag("pilotable", true));
                     if (acts && !runtime_.objectAllowed(o)) l.locked.push_back(o.id);
                     else if (writes && !runtime_.permitted("Piloter")) l.locked.push_back(o.id);
                 }

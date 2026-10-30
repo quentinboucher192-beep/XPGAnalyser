@@ -118,6 +118,10 @@ enum class Kind : std::uint8_t {
     // (un PDF, une image, un texte : les pages, le zoom, les vignettes, la recherche ; sa
     // page suit une variable), dans la famille Medias apres la video (HmiDocView.hpp).
     SpeedDrive, DocumentViewer,
+    // 1.14.0, A LA FIN : le Coupe-son (un bouton a bascule : couper, retablir tous les sons, ou un
+    // canal) et le Melangeur de volume (le General, puis une piste par canal : curseur, pourcentage,
+    // bouton M, vumetre) - dans les Commandes, apres Parametres systeme (HmiSystemMenu.hpp).
+    SoundMute, VolumeMixer,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -136,6 +140,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Dial, Kind::Clock, Kind::HourMeter, Kind::SevenSegment, Kind::TrendArrow, Kind::Marquee, Kind::QrCode,
     // lot 10 : l'objet Parametres systeme, les symboles de synoptique
     Kind::SystemButton,
+    Kind::SoundMute, Kind::VolumeMixer,   // 1.14.0 : couper le son, le melangeur de volume
     Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor,
     Kind::SpeedDrive,   // 1.12.30 : le variateur de vitesse, apres le moteur
     Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
@@ -341,9 +346,11 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::FireDamper,          "FireDamper",          "Clapet coupe-feu"},
     {Kind::SpeedDrive,          "SpeedDrive",          "Variateur de vitesse"},                    // 1.12.30
     {Kind::DocumentViewer,      "DocumentViewer",      "Visionneuse de documents"},                // 1.12.30
+    {Kind::SoundMute,           "SoundMute",           "Coupe-son"},                               // 1.14.0
+    {Kind::VolumeMixer,         "VolumeMixer",         "M\xC3\xA9langeur de volume"},
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::DocumentViewer) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::VolumeMixer) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;

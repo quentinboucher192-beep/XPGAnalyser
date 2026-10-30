@@ -2169,6 +2169,10 @@ private:
                                                SoundChannel channel = SoundChannel::Actions);
     std::string                      soundChannel_;          // 1.14.0 : le canal du son qui part
     void                             soundSettingsChanged();
+    // 1.14.0 : un clic sur le Coupe-son ; une partie du Melangeur de volume (HmiSystemMenu.hpp : "glisser:Alarmes:0.6",
+    // "lacher:...", "volume:...", "pas:Alarmes:+1", "muet:Alarmes"). Pilotable, le niveau d'acces, l'autorisation.
+    void                             soundMuteClick(const View& v, const Object& o);
+    void                             mixerPart(const View& v, const Object& o, std::string_view part);
     void                             systemSay(std::string text, bool error);
     void                             sleepTick(double now);
     // lot 11 (HmiRuntimeLot11.cpp) : graphiques, alarmes, production, saisie, export

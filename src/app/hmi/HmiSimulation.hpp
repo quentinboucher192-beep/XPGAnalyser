@@ -498,6 +498,11 @@ private:
     std::size_t               docDragLayer_{0};
     gfx::Point                docDragLast_{};
     hmi::Id                   trendDrag_{hmi::kNoId};   // 1.13.1 : le geste sur une courbe pilotable
+    // 1.14.0 : la course d'un Melangeur de volume qu'on tire (souris, doigt) - son canal.
+    hmi::Id                   mixDrag_{hmi::kNoId};
+    std::size_t               mixDragLayer_{0};
+    std::string               mixDragChannel_;
+    [[nodiscard]] std::string mixDragPart(std::string_view verb, gfx::Point p) const;
     std::size_t               trendDragLayer_{0};
     bool                      swipeArmed_{false};
     gfx::Point                swipeFrom_{};
