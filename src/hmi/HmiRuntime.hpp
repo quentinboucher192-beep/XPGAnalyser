@@ -59,6 +59,7 @@
 #include "HmiVideo.hpp"                // 1.12.12 (lot H) : la lecture d'une video
 #include "HmiTable.hpp"                // 1.12.13 : le Tableau, un mode a la fois
 #include "HmiDocView.hpp"              // 1.12.30 : la visionneuse de documents
+#include "HmiRecording.hpp"            // 1.14.0 (M4) : les enregistrements
 
 #include <cstdint>
 #include <deque>
@@ -481,6 +482,55 @@ struct DebugHit {
     std::vector<DebugFrame> stack;        // [0] : le contexte ... [dernier] : la ligne d'arret
 };
 
+// ---- 1.14.0 (M4) : LES ENREGISTREMENTS (HmiRecording.hpp, HmiRuntimeRecord.cpp) -------------------------------
+//  ENREGISTRER : l'Enregistreur, une action, IHM_ENREG_DEMARRER, --enregistrer. Le moteur prend ce que montre l'IHM
+//  a chaque prise (Configuration > Enregistrements : 10 par seconde) et l'ecrit a mesure dans <dossier>/<nom>.xrec.part ;
+//  a l'arret, <nom>.xrec. REJOUER : le Lecteur, une action, IHM_REJOUER, --rejouer, Ressources > Enregistrements. Le
+//  moteur est mis de cote (ni scripts, ni actions, ni ecriture ; les gestes ignores), les objets lisent les valeurs
+//  de la piste, la vue et les popups la suivent ; quitter rend l'etat d'avant tel quel.
+struct RecordingStart {
+    std::string name;              // $reperes$ et {formules} deja remplaces ; vide : "Enregistrement <date>"
+    std::string description;
+    std::string password;          // vide : en clair
+    double      maxSeconds{0};     // 0 : la duree de la configuration
+    bool        askAtStop{false};  // a l'arret, l'ecran demande le nom (Hooks::recordingStop)
+    std::string source;            // qui le demande (le journal)
+};
+// Ce que l'ecran demande a l'arret de l'Enregistreur (la fenetre Arreter l'enregistrement).
+struct RecordingStopAsk {
+    std::string name, description;
+    double      seconds{0};
+    std::size_t clicks{0}, alarms{0}, frames{0};
+    std::uint64_t bytes{0};
+    bool        locked{false};     // un mot de passe donne au depart
+};
+struct RecordingInfo {
+    bool          active{false};
+    bool          stopping{false};  // arrete, la question de l'arret attend sa reponse
+    std::string   name;
+    double        seconds{0};
+    std::size_t   frames{0}, events{0}, clicks{0}, alarms{0}, keys{0};
+    std::uint64_t bytes{0};
+    double        maxSeconds{0};
+};
+struct ReplayRequest {
+    std::string name;              // dans le dossier des enregistrements ; ou...
+    std::string path;              // ... un fichier (un .xrec ailleurs)
+    double      speed{1};
+    double      from{0};           // s : la position de depart
+    std::string password;
+    std::string source;            // qui le demande (le journal)
+};
+struct ReplayInfo {
+    bool        active{false};
+    rec::Header header;
+    std::string path;
+    double      position{0}, length{0}, speed{1};
+    bool        paused{false};
+    bool        ended{false};      // arrivee au bout (en pause)
+    std::string note;              // ce qui a change dans le projet depuis ('' : rien)
+};
+
 class Runtime {
 public:
     struct Hooks {
@@ -543,6 +593,13 @@ public:
         // 1.12.26 : le dossier du projet - les fonctions de fichiers des scripts (FILE_READ...) : un chemin relatif
         // part de son dossier donnees/. Vide (ou nul) : le projet n'est pas enregistre, seuls les chemins complets.
         std::function<std::string()>                             projectFolder;
+        // ---- 1.14.0 (M4) : les enregistrements ----
+        // L'Enregistreur arrete (sa case Demander le nom a l'arret) : l'ecran demande le nom, la description et le
+        // mot de passe (la fenetre Arreter l'enregistrement), puis appelle finishRecording. Nul : garde tel quel.
+        std::function<void(const RecordingStopAsk&)>             recordingStop;
+        // Une relecture demandee par un geste (Lecteur, action) d'un enregistrement protege, sans mot de passe :
+        // l'ecran le demande, puis rappelle startReplay avec lui. Nul : refusee (le journal le dit).
+        std::function<void(const ReplayRequest&)>                replayPassword;
     };
     struct Animation {
         Id         from{kNoId}, to{kNoId};
@@ -1541,6 +1598,45 @@ public:
     [[nodiscard]] DisplayOptions displayOptions() const;
     bool setDisplay(std::string_view key, std::string_view value, double now, const std::string& source, std::string* why = nullptr);
 
+    // ---- 1.14.0 (M4) : LES ENREGISTREMENTS (HmiRuntimeRecord.cpp) -----------------------------------------
+    //  Le dossier : Configuration > Enregistrements, sinon <projet>/ihm/ressources/enregistrements ('' : un projet
+    //  pas enregistre). Enregistrer : faux et `why` (deja un enregistrement, une relecture, pas de dossier...).
+    [[nodiscard]] std::string recordingsFolder() const;
+    bool startRecording(const RecordingStart&, double now, std::string* why = nullptr);
+    // Arreter : `keep` - garde le .xrec (le nom du depart, sinon `name` ; la description, le mot de passe donnes ;
+    // nuls : ceux du depart) ; rend le nom garde ('' : rien). L'arret par l'Enregistreur qui demande le nom passe
+    // par askStopRecording (la question a l'ecran), puis finishRecording.
+    std::string stopRecording(bool keep, double now, const std::string* name = nullptr, const std::string* description = nullptr,
+                              const std::string* password = nullptr, std::string* why = nullptr);
+    void        askStopRecording(double now, const std::string& source);
+    std::string finishRecording(bool keep, const std::string& name, const std::string& description, const std::string& password,
+                                double now, std::string* why = nullptr);
+    [[nodiscard]] bool          recording() const noexcept;
+    [[nodiscard]] RecordingInfo recordingInfo() const;
+    //  Rejouer : Ok, ou pourquoi pas (NotFound : nom introuvable ; PasswordNeeded, BadPassword ; Unreadable).
+    rec::Status startReplay(const ReplayRequest&, double now, std::string* why = nullptr);
+    [[nodiscard]] bool replaying() const noexcept { return replayOn_; }
+    // L'horloge de la relecture (l'heure du mur, en s) : elle avance a sa vitesse ; le moteur, lui, ne tourne pas.
+    void replayTick(double wallNow);
+    bool replayPause(std::optional<bool> paused = std::nullopt);   // sans argument : bascule
+    bool replaySeek(double seconds);                               // borne a [0, longueur]
+    bool replayStep(double deltaSeconds);                          // -10, +10
+    bool replaySpeed(double speed);                                // la plus proche de 0,25 0,5 1 2 4 8
+    bool replaySpeedStep(int direction);                           // +1 : plus vite ; -1 : moins vite
+    bool quitReplay(double now, const std::string& source = {});
+    [[nodiscard]] ReplayInfo replayInfo() const;
+    [[nodiscard]] const rec::Player* replayPlayer() const;
+    // Les clics des `window` dernieres secondes de la relecture (l'onde a l'ecran) et le pointeur enregistre.
+    [[nodiscard]] std::vector<rec::Event> replayRecentClicks(double window = 0.6) const;
+    [[nodiscard]] std::optional<rec::Pointer> replayPointer() const;
+    // Les enregistrements du dossier (relus au plus toutes les 2 s ; `fresh` : maintenant).
+    [[nodiscard]] std::vector<rec::Item> recordings(bool fresh = false) const;
+    // Le Lecteur d'enregistrements : la ligne choisie de cet objet.
+    [[nodiscard]] int recordingPlayerRow(Id object) const;
+    // Une commande d'une autre application (rec::Command) : son code de sortie (rec::kExit...) et ce qui est dit.
+    // Refusee (5) si le projet ne coche pas Accepter les commandes d'une autre application.
+    int runCommand(const rec::Command&, double now, std::string* message = nullptr);
+
 private:
     class Env;
     friend class Env;
@@ -2328,6 +2424,30 @@ private:
     // journal, et une marque sur les courbes des variables liees.
     void slaveWatch(double now);
     std::map<std::string, std::pair<bool, bool>>    slaveReads_;        // equipement -> (lu sur l'esclave, par la bascule)
+    // ---- 1.14.0 (M4) : les enregistrements (HmiRuntimeRecord.cpp) ----
+    struct RecordState;
+    struct RecordStateDelete { void operator()(RecordState*) const noexcept; };
+    std::unique_ptr<RecordState, RecordStateDelete> rec_;
+    bool                                            recordOn_{false};    // un enregistrement prend (Env::read note les lectures)
+    bool                                            replayOn_{false};    // une relecture est affichee (Env::read lit la piste)
+    std::string                                     soundChannel_;       // le canal du son qui part (IHM_SON : Scripts)
+    RecordState& recState() const;
+    // Env::read : la valeur de la piste (nulle : pas dans la piste) ; une lecture de l'ecran a garder.
+    [[nodiscard]] const sim::Value* replayValue(const std::string& upperKey) const;
+    void noteRead(const std::string& upperKey, std::string_view shown, rec::KeyKind kind);
+    void recordTick(double now);                                        // une prise, a son heure
+    void recordSample(double now);
+    void recordEvent(rec::EventKind kind, std::string a, std::string b = {}, double x = 0, double y = 0);
+    void recordClick(rec::EventKind kind, Id object);
+    void replayApply(bool force);                                       // l'ecran de la piste a la position
+    void replaySounds(double from, double to);
+    bool recordingCommand(const View&, const Object*, const Action&, double now);   // les actions
+    bool recordingNative(const std::string& u, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result);
+    bool recordSysValue(std::string_view name, sim::Value& out) const;  // SYS.Recording..., SYS.Replay...
+    void recorderPart(const View&, const Object&, std::string_view part, double now);   // l'Enregistreur, le Lecteur
+    bool recordingFileOp(std::string_view op, const std::vector<std::string>& args, sim::Environment::FileResult& out, std::string& why);
+    // Les variables IHM, case par case (cle en majuscules) - HmiRuntime.cpp, ou l'environnement est complet.
+    void forEachIhmValue(const std::function<void(const std::string& key, const sim::Value&)>&) const;
 };
 
 } // namespace hmi

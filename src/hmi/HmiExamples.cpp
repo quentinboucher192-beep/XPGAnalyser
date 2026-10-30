@@ -2089,6 +2089,30 @@ Example documentViewer() {
     return m.done(12);
 }
 
+// ---- 1.14.0 (M4) : l'Enregistreur et le Lecteur d'enregistrements ----
+Example recorder() {
+    Maker m(420);
+    m.var("Niveau", "REAL", "40.0");
+    m.cyclic("Niveau := 40.0 + 25.0 * SIN(T / 2.0);");
+    auto& o = m.add(Kind::Recorder, "Enregistreur", 16, 16, 300, 84);
+    o.set("recName", "Essai {SYS.Date}");
+    m.title("Titre", 16, 120, 300, "Niveau : {Niveau:0.0} %", 18);
+    m.note("Explication", 340, 16, 250, 200,
+           "Un clic sur Enregistrer d\xC3\xA9marre l'enregistrement : tout ce que montre l'IHM est gard\xC3\xA9 (valeurs, vues, popups, "
+           "alarmes, pointeur et clics). Un clic sur Arr\xC3\xAAter ouvre la fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement : le nom, une "
+           "description, un mot de passe. Il va dans Ressources \xE2\x80\xBA Enregistrements.");
+    return m.done(12);
+}
+Example recordingPlayer() {
+    Maker m(420);
+    auto& o = m.add(Kind::RecordingPlayer, "Lecteur", 16, 16, 420, 220);
+    o.set("prefix", "");
+    m.note("Explication", 450, 16, 150, 220,
+           "La liste des enregistrements du dossier (Ressources \xE2\x80\xBA Enregistrements), les plus r\xC3\xA9" "cents d'abord ; "
+           "\xE2\x96\xB6 rejoue. \xC3\x89" "chap quitte la relecture.");
+    return m.done(8);
+}
+
 // ---- 1.12.24 : le Reglage PID - une boucle simulee (un procede a deux constantes de temps et son PI) ----
 Example pidTuner() {
     Maker m;
@@ -2668,6 +2692,8 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::PidTuner:            return pidTuner();
         case Kind::SpeedDrive:          return speedDrive();         // 1.12.30
         case Kind::DocumentViewer:      return documentViewer();     // 1.12.30
+        case Kind::Recorder:            return recorder();           // 1.14.0 (M4)
+        case Kind::RecordingPlayer:     return recordingPlayer();
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

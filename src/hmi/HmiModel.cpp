@@ -696,6 +696,40 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("poster", "");      // l'image d'attente (une ressource image)
             o.set("fill", "#101318");
             break;
+        case Kind::Recorder:
+            // 1.14.0 (M4) : l'Enregistreur - un bouton rond Enregistrer / Arreter, le chrono, l'etat. "recName" : le nom
+            // de l'enregistrement ($reperes$ et {formules} comme un texte) ; "askName" : a l'arret, la fenetre demande le
+            // nom, la description et le mot de passe (decochee : le nom de "recName") ; "maxMinutes" : la duree au plus
+            // (0 : celle de Configuration > Enregistrements) ; "password" : chiffre l'enregistrement (masque).
+            common(o, x, y, 300, 84);
+            o.set("title", "Enregistreur");
+            o.set("recName", "Essai {SYS.Date}");
+            o.set("description", "");
+            o.setFlag("askName", true);
+            o.setNumber("maxMinutes", 0);
+            o.set("password", "");
+            o.setFlag("pilotable", true);
+            o.setNumber("fontSize", 14);
+            o.set("fill", "#262C36");
+            o.set("stroke", "#3A4556");
+            o.set("textColor", "#DDE3EA");
+            o.set("accent", "#E5484D");
+            break;
+        case Kind::RecordingPlayer:
+            // 1.14.0 (M4) : le Lecteur d'enregistrements - les enregistrements du dossier (ceux qui commencent par
+            // "prefix"), chacun avec Rejouer ; "fixed" : toujours le meme (un seul bouton) ; "speed" : la vitesse.
+            common(o, x, y, 420, 220);
+            o.set("title", "Enregistrements");
+            o.set("prefix", "");
+            o.set("fixed", "");
+            o.setNumber("speed", 1);
+            o.setFlag("pilotable", true);
+            o.setNumber("fontSize", 13);
+            o.set("fill", "#262C36");
+            o.set("stroke", "#3A4556");
+            o.set("textColor", "#DDE3EA");
+            o.set("accent", "#2F6FD6");
+            break;
         case Kind::DocumentViewer:
             // 1.12.30 : la visionneuse de documents. "document" : une ressource du projet (PDF, image, texte), un
             // fichier externe du projet, ou un chemin (absolu, ou relatif au dossier du projet ; une formule qui rend
@@ -1983,6 +2017,18 @@ constexpr OperationName kOperationNames[] = {
     {Operation::Keyboard, "Clavier virtuel"},
     // 1.11.23
     {Operation::SubmitInputs, "Valider les saisies"},
+    // 1.14.0 (M4) : les enregistrements
+    {Operation::RecordStart, "D\xC3\xA9marrer un enregistrement"},
+    {Operation::RecordStop, "Arr\xC3\xAAter et garder l'enregistrement"},
+    {Operation::RecordToggle, "D\xC3\xA9marrer ou arr\xC3\xAAter l'enregistrement"},
+    {Operation::RecordCancel, "Arr\xC3\xAAter l'enregistrement sans le garder"},
+    {Operation::ReplayStart, "Rejouer un enregistrement"},
+    {Operation::ReplayPause, "Pause / reprendre la relecture"},
+    {Operation::ReplaySeek, "Avancer ou reculer la relecture"},
+    {Operation::ReplaySpeed, "Changer la vitesse de relecture"},
+    {Operation::ReplayQuit, "Quitter la relecture"},
+    {Operation::RecordingExport, "Exporter un enregistrement"},
+    {Operation::RecordingDelete, "Supprimer un enregistrement"},
 };
 struct PlacementName { const char* key; const char* label; };
 constexpr PlacementName kPlacementNames[] = {
@@ -2080,7 +2126,9 @@ bool operationOpensView(Operation o) noexcept {
     return o == Operation::Navigate || o == Operation::Popup || o == Operation::ChangePopup;
 }
 bool operationHasValue(Operation o) noexcept {
-    return o == Operation::Increment || o == Operation::Decrement || o == Operation::Assign
+    return o == Operation::ReplayStart || o == Operation::ReplaySeek || o == Operation::ReplaySpeed   // 1.14.0 (M4) : vitesse, secondes
+        || o == Operation::RecordingExport                                                          // ... le dossier
+        || o == Operation::Increment || o == Operation::Decrement || o == Operation::Assign
         || o == Operation::Maths                                        // 1.11.6 : la formule
         || o == Operation::RunScript || o == Operation::Log
         || o == Operation::Call                                         // 1.12.19 : ses arguments
@@ -2239,6 +2287,30 @@ std::string describeAction(const Action& a) {
             s += t.empty() || t == "*" ? std::string(" (tous les param\xC3\xA8tres Les deux)") : " " + t;
             break;
         }
+        // 1.14.0 (M4) : les enregistrements
+        case Operation::RecordStart: case Operation::RecordToggle:
+            if (!trimCopy(a.target).empty()) s += " \xC2\xAB " + trimCopy(a.target) + " \xC2\xBB";
+            break;
+        case Operation::ReplayStart:
+            s += " " + (trimCopy(a.target).empty() ? std::string("(aucun)") : trimCopy(a.target));
+            if (!trimCopy(a.value).empty() && trimCopy(a.value) != "1") s += " (\xC3\x97" + trimCopy(a.value) + ")";
+            break;
+        case Operation::ReplaySeek: {
+            const std::string v = trimCopy(a.value).empty() ? std::string("10") : trimCopy(a.value);
+            s += " de " + (v.front() == '-' || v.front() == '+' ? v : "+" + v) + " s";
+            break;
+        }
+        case Operation::ReplaySpeed:
+            s += " \xC3\x97" + (trimCopy(a.value).empty() ? std::string("1") : trimCopy(a.value));
+            break;
+        case Operation::RecordingExport:
+            s += " " + trimCopy(a.target) + (trimCopy(a.value).empty() ? std::string{} : " \xE2\x86\x92 " + trimCopy(a.value));
+            break;
+        case Operation::RecordingDelete:
+            s += " " + trimCopy(a.target);
+            break;
+        case Operation::RecordStop: case Operation::RecordCancel: case Operation::ReplayPause: case Operation::ReplayQuit:
+            break;
     }
     if (!a.guard.empty()) s += "  si " + a.guard;
     return s;

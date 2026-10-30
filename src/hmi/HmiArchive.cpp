@@ -240,7 +240,7 @@ core::Result<pa::Bytes> projectArchive(const std::string& folder, const ProjectA
     const History h = opt.history ? loadHistory(folder) : History{};
 
     std::vector<pa::Skipped> skipped;
-    auto items = pa::collectFolder(folder, pa::CollectOptions{opt.versions, opt.history}, &skipped);
+    auto items = pa::collectFolder(folder, pa::CollectOptions{opt.versions, opt.history, opt.recordings}, &skipped);
     if (!items) return core::Err<core::Error>(items.error());
     for (const auto& s : skipped)
         rep.skipped.push_back(s.what + " : " + s.why + " (" + std::to_string(s.files) + " fichier(s), " + pa::sizeText(s.bytes) + ")");

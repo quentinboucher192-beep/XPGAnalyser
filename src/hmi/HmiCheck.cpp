@@ -29,6 +29,7 @@
 #include "HmiClock.hpp"        // 1.12.12 (lot H) : l'horloge liee a une variable
 #include "HmiMarquee.hpp"      // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "HmiPdf.hpp"          // 1.12.30 : la visionneuse de documents, son lecteur PDF
+#include "HmiRecording.hpp"    // 1.14.0 (M4) : les enregistrements
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
@@ -2128,6 +2129,68 @@ void checkMedias11212(const Project& p, const NameExists& plc, std::vector<Issue
 //  Son document (une ressource PDF, image ou texte, un fichier externe, un chemin : trouve ? lisible ici ? un PDF
 //  sans le lecteur PDF), sa page (dans les bornes du document), sa Variable de la page (connue, un entier), et la
 //  page qui ne bouge jamais (navigation interdite sans variable).
+// 1.14.0 (M4) : LES ENREGISTREMENTS. Un nom ecrit en dur (une action Rejouer, Exporter, Supprimer ; IHM_REJOUER('X'),
+// IHM_ENREG_EXISTE('X')... dans un code ; l'Enregistrement fixe d'un Lecteur) qui n'est pas dans le dossier : signale
+// (renomme ou supprime depuis, pas encore fait). L'Enregistreur : une duree negative ; Configuration > Enregistrements.
+void checkRecordings(const Project& p, const std::string& projectFolder, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    const std::string folder = rec::folderOf(p.recording, projectFolder);
+    const auto lowerText = [](std::string t) {
+        for (auto& c : t) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return t;
+    };
+    const bool known = !folder.empty();
+    std::set<std::string> names;
+    for (const auto& n : rec::fileNames(folder)) names.insert(lowerText(n));
+    const auto missing = [&](std::string name) {
+        name = trimmedCopy(name);
+        return known && !name.empty() && !names.count(lowerText(name));
+    };
+    const std::string hint = " - pas dans Ressources \xE2\x80\xBA Enregistrements (renomm\xC3\xA9 ou supprim\xC3\xA9 ?)";
+    const auto inCode = [&](const std::string& code, const std::string& cat, Id view, Id object, const std::string& prop, Id script) {
+        for (const auto& u : rec::namesInCode(code))
+            if (missing(u.name)) {
+                add(out, S::Warning, cat, view, object, prop, "enregistrement \xC2\xAB " + u.name + " \xC2\xBB introuvable" + hint, script);
+                out.back().line = u.line;
+            }
+    };
+    const auto actions = [&](const View& v, const Object* o, const std::vector<Action>& list) {
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const Action& a = list[i];
+            const std::string where = "action " + std::to_string(i + 1) + " (" + std::string(operationLabel(a.operation)) + ")";
+            if (operationNamesRecording(a.operation)) {
+                if (trimmedCopy(a.target).empty())
+                    add(out, S::Error, "Action", v.id, o ? o->id : kNoId, where, "aucun enregistrement nomm\xC3\xA9");
+                else if (rec::literalName(a.target) && missing(a.target))
+                    add(out, S::Warning, "Action", v.id, o ? o->id : kNoId, where, "enregistrement \xC2\xAB " + trimmedCopy(a.target) + " \xC2\xBB introuvable" + hint);
+            }
+            if (a.operation == Operation::RecordingExport && trimmedCopy(a.value).empty())
+                add(out, S::Error, "Action", v.id, o ? o->id : kNoId, where, "exporter : vers quel dossier ?");
+            if (a.operation == Operation::RunScript) inCode(a.value, "Action", v.id, o ? o->id : kNoId, where, kNoId);
+        }
+    };
+    for (const auto& sc : p.programs.scripts) inCode(sc.body, "Script", kNoId, kNoId, sc.name, sc.id);
+    for (const auto& f : p.programs.functions) inCode(f.body, "Fonction", kNoId, kNoId, f.name, kNoId);
+    for (const auto& v : p.views) {
+        for (const auto& sc : v.scripts) inCode(sc.body, "Script", v.id, kNoId, sc.event, sc.id);
+        actions(v, nullptr, v.actions);
+        for (const auto& o : v.objects) {
+            actions(v, &o, o.actions);
+            if (o.kind == Kind::Recorder) {
+                if (const Prop* mp = o.find("maxMinutes"); mp && mp->expr.empty() && o.number("maxMinutes", 0) < 0)
+                    add(out, S::Error, std::string(kindLabel(o.kind)), v.id, o.id, "maxMinutes", "dur\xC3\xA9" "e maximale n\xC3\xA9gative");
+                if (!o.flag("askName", true) && trimmedCopy(o.text("recName")).empty())
+                    add(out, S::Info, std::string(kindLabel(o.kind)), v.id, o.id, "recName",
+                        "sans Nom et sans la question \xC3\xA0 l'arr\xC3\xAAt : chaque enregistrement s'appelle \xC2\xAB Enregistrement <date> \xC2\xBB");
+            }
+            if (o.kind == Kind::RecordingPlayer)
+                if (const Prop* fp = o.find("fixed"); fp && fp->expr.empty() && rec::literalName(fp->value) && missing(fp->value))
+                    add(out, S::Warning, std::string(kindLabel(o.kind)), v.id, o.id, "fixed",
+                        "enregistrement fixe \xC2\xAB " + trimmedCopy(fp->value) + " \xC2\xBB introuvable" + hint);
+        }
+    }
+}
+
 void checkDocViewers11230(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
     using S = Issue::Severity;
     for (const auto& v : p.views)
@@ -5391,6 +5454,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkLot9(p, plcHasName, out);
     checkMedias11212(p, plcHasName, out);   // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
     checkDocViewers11230(p, plcHasName, projectFolder, out);   // 1.12.30 : la visionneuse de documents
+    checkRecordings(p, projectFolder, out);                    // 1.14.0 (M4) : les enregistrements
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
     eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat

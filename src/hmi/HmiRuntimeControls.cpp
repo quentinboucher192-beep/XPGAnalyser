@@ -535,6 +535,7 @@ void Runtime::controlPart(const View& v, const Object& o, std::string_view part,
 
 // ================================================================ glisser ===
 void Runtime::dragValue(Id object, double fraction, bool commit, double now) {
+    if (replayOn_) return;                       // 1.14.0 (M4) : une relecture ne recoit aucun geste
     now_ = std::max(now_, now);
     lastActivity_ = now;
     if (!running_) return;

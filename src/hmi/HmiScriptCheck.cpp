@@ -362,6 +362,11 @@ constexpr Arity kHmi[] = {
     {"IHM_SUR_CHANGEMENT", 2, 2},                                                          // 1.12.20
     {"IHM_SCRIPT_ACTIF", 1, 1},    {"IHM_SCRIPT_ARRETER", 1, 1},                            // 1.12.26
     {"IHM_POINT_ARRET", 0, 1},                                                             // 1.13.0 (lot J2)
+    // 1.14.0 (M4) : les enregistrements et la relecture
+    {"IHM_ENREG_DEMARRER", 1, 3},  {"IHM_ENREG_ARRETER", 0, 1},  {"IHM_ENREG_EN_COURS", 0, 0},  {"IHM_REJOUER", 1, 3},
+    {"IHM_RELECTURE_PAUSE", 0, 1}, {"IHM_RELECTURE_ALLER", 1, 1}, {"IHM_RELECTURE_VITESSE", 1, 1}, {"IHM_RELECTURE_QUITTER", 0, 0},
+    {"IHM_ENREG_LISTE", 0, 1},     {"IHM_ENREG_EXISTE", 1, 1},   {"IHM_ENREG_DUREE", 1, 1},     {"IHM_ENREG_EXPORTER", 2, 2},
+    {"IHM_ENREG_IMPORTER", 1, 1},  {"IHM_ENREG_SUPPRIMER", 1, 1},
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }

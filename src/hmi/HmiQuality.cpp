@@ -561,6 +561,7 @@ bool clickableKind(Kind k) {
         case Kind::LanguageSelector: case Kind::ThemeSelector:
         case Kind::PlcDiagnostic:   // lot 14 : ses deux boutons
         case Kind::DocumentViewer:  // 1.12.30 : les boutons de sa barre
+        case Kind::Recorder: case Kind::RecordingPlayer:   // 1.14.0 (M4) : son bouton, ses lignes
             return true;
         default:
             return false;

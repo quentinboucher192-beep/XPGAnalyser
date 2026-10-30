@@ -271,6 +271,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"document", Role::Name}, {"startZoom", Role::Choice},
     {"showToolbar", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showThumbnails", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"allowNavigation", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    // 1.14.0 (M4) : l'Enregistreur (son nom est un texte a trous) et le Lecteur d'enregistrements
+    {"recName", Role::Text}, {"description", Role::Text}, {"askName", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"maxMinutes", Role::Number, Role::Text, Unit::None, "REAL"}, {"password", Role::Text},
+    {"prefix", Role::Text}, {"fixed", Role::Name},
 };
 
 // La ligne d'une cle ; nul : une cle que la table ne connait pas.

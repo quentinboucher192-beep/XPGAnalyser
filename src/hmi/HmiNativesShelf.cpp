@@ -88,6 +88,7 @@ const ShelfDef kShelves[] = {
     {"ihm/gif", "GIF anim\xC3\xA9s", "Jouer, figer, arr\xC3\xAAter, rejouer un GIF anim\xC3\xA9.", false},
     {"ihm/equip", "\xC3\x89quipements et r\xC3\xA9seau", "Un \xC3\xA9quipement r\xC3\xA9pond-il, son ping, son esclave simul\xC3\xA9.", false},
     {"ihm/export", "Exports", "Exporter des donn\xC3\xA9" "es dans exports/ du projet.", false},
+    {"ihm/enreg", "Enregistrements", "Enregistrer l'IHM qui tourne, rejouer un enregistrement, le dossier des enregistrements.", false},   // 1.14.0 (M4)
     {"references", "R\xC3\xA9" "f\xC3\xA9rences et \xC3\xA9" "changes", "Une r\xC3\xA9" "f\xC3\xA9rence, un pointeur ; \xC3\xA9" "changer deux variables.", false},
 };
 
@@ -146,6 +147,7 @@ const std::vector<Rule>& rules() {
         {"gif", "ihm/gif", {}},
         {"equip", "ihm/equip", {}},
         {"export", "ihm/export", {}},
+        {"enreg", "ihm/enreg", {}},                     // 1.14.0 (M4)
     };
     return r;
 }

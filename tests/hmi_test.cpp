@@ -15970,8 +15970,8 @@ void pageSimulation19() {
     using W = pub::Resolved::What;
     std::size_t domain13 = 0;
     for (const auto& v : pub::kSysVars) domain13 += v.domain == pub::kSlaveDomain ? 1 : 0;
-    // 1.11.23 : un 15e domaine, Souris et clavier (apres les esclaves simules).
-    check(pub::kSysDomainCount == 15 && std::string(pub::kSysDomains[pub::kSlaveDomain]) == "Esclaves simul\xC3\xA9s" && domain13 == 7
+    // 1.11.23 : un 15e domaine, Souris et clavier (apres les esclaves simules) ; 1.14.0 (M4) : un 16e, Enregistrements.
+    check(pub::kSysDomainCount == 16 && std::string(pub::kSysDomains[pub::kRecordingDomain]) == "Enregistrements" && std::string(pub::kSysDomains[pub::kSlaveDomain]) == "Esclaves simul\xC3\xA9s" && domain13 == 7
               && pub::kSlaveMemberCount == 16 && std::string(pub::kSysDomains[pub::kInputDomain]) == "Souris et clavier",
           "le 14e domaine \xC2\xAB Esclaves simul\xC3\xA9s \xC2\xBB : 7 variables, et 16 membres par esclave (1.11.23 : puis Souris et clavier)");
     check(pub::slaveEquipments(p).size() == 2 && pub::slaveKeysText(p) == "Variateur_ATV320, Balance_B",

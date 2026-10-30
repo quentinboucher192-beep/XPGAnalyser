@@ -9609,7 +9609,7 @@ private:
         const bool ok = env_.fileOp(u, a, r, why);
         fileError_ = ok ? std::string{} : u + " : " + (why.empty() ? std::string("refus\xC3\xA9") : why);
         if (u == "FILE_READ" || u == "RESOURCE_READ" || u == "DIR_DATA") return text(ok ? r.text : std::string{});
-        if (u == "FILE_READ_LINES" || u == "RESOURCE_LINES" || u == "DIR_LIST" || u == "RESOURCE_LIST")
+        if (u == "FILE_READ_LINES" || u == "RESOURCE_LINES" || u == "DIR_LIST" || u == "RESOURCE_LIST" || u == "IHM_ENREG_LISTE")   // 1.14.0 (M4)
             return list(ok ? r.lines : std::vector<std::string>{});
         if (u == "FILE_SIZE" || u == "RESOURCE_SIZE") return RV{Value::integer(Type::LInt, ok ? r.number : -1), nullptr};
         if (u == "FILE_TIME") return RV{Value::integer(Type::Dt, ok ? r.number : 0), nullptr};

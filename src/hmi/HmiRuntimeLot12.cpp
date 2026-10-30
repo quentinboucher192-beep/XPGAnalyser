@@ -171,6 +171,7 @@ bool Runtime::navigateByUser(const View& v, const Object* o, Operation op, const
 }
 
 bool Runtime::swipe(int direction, double now, std::string* why) {
+    if (replayOn_) return false;                 // 1.14.0 (M4) : une relecture ne recoit aucun geste
     // 1.13.0 : EN PAUSE (le debogueur), l'IHM est figee : le glissement ne change pas de vue (ni OnClose ni OnOpen), et
     // rien ne se vide (une fonction de vue peut etre arretee au milieu).
     if (paused_) {

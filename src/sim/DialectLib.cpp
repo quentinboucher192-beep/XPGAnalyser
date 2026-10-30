@@ -754,6 +754,9 @@ const std::vector<NativeInfo>& natives() {
         {"RESOURCE_SIZE", 1, 1, false, false, false, false, "fichiers", "RESOURCE_SIZE(NOM) : LINT", "Sa taille en octets ; -1 si le projet ne l'a pas."},
         {"RESOURCE_LIST", 0, 1, false, false, false, false, "fichiers", "RESOURCE_LIST([DOSSIER]) : LIST OF STRING", "Les noms des ressources du projet, rang\xC3\xA9s ; DOSSIER : celles d'un dossier de la liste des ressources."},
         {"RESOURCE_EXTRACT", 2, 2, false, false, false, false, "fichiers", "RESOURCE_EXTRACT(NOM, CHEMIN) : BOOL", "Copie une ressource du projet dans un fichier (pour un autre programme, un mod\xC3\xA8le \xC3\xA0 remplir)."},
+        // ---- 1.14.0 (M4) : les noms des enregistrements de l'IHM (Ressources > Enregistrements), une liste - le moteur
+        // de l'IHM la remplit (fileOp) ; les autres IHM_ENREG_ sont des fonctions IHM_ ordinaires.
+        {"IHM_ENREG_LISTE", 0, 1, false, false, false, false, "fichiers", "IHM_ENREG_LISTE([PREFIXE]) : LIST OF STRING", "Les noms des enregistrements du dossier (Ressources \xE2\x80\xBA Enregistrements), les plus r\xC3\xA9" "cents d'abord ; PREFIXE : ceux qui commencent ainsi."},
         // ---- 1.13.0 : JSON (local, du calcul en m\xC3\xA9moire ; lis le texte avec FILE_READ / RESOURCE_READ, puis JSON_LIRE)
         {"JSON_LIRE", 1, 1, false, false, false, false, "json", "JSON_LIRE(TEXTE) : ANY", "Analyse un texte JSON : un objet devient une MAP[STRING] OF ANY, un tableau une LIST OF ANY ; un texte mal form\xC3\xA9 l\xC3\xA8ve E_JSON (la position cit\xC3\xA9" "e), que TRY\xE2\x80\xA6" "CATCH rattrape."},
         {"JSON_ECRIRE", 1, 2, false, false, false, false, "json", "JSON_ECRIRE(VALEUR [, INDENTE]) : STRING", "\xC3\x89" "crit une valeur en JSON : une valeur ANY, une MAP / LIST / SET / ARRAY / TUPLE, une structure IHM (ses membres), ou un scalaire. INDENTE \xC3\xA0 TRUE : deux espaces par niveau ; sinon compact."},
