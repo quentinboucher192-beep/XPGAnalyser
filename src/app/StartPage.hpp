@@ -107,7 +107,8 @@ public:
         Danger,        // encadre rouge (Supprimer...)
         Ghost,         // petit et discret (Changer...)
     };
-    enum class Glyph : std::uint8_t { None, Plus, Open, Tutorial, Help, Settings, Station, Copy, Rename, Trash, Remove };
+    enum class Glyph : std::uint8_t { None, Plus, Open, Tutorial, Help, Settings, Station, Copy, Rename, Trash, Remove,
+                                      Search };   // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
 
     StartButton(std::string text, std::string id, Look look, Glyph glyph = Glyph::None);
 
@@ -292,6 +293,8 @@ public:
     [[nodiscard]] StartButton&   settingsLink() noexcept { return *settings_; }
     // 1.8.0 : les dossiers de l'application (XPGAnalyser.ini).
     [[nodiscard]] StartButton&   foldersLink() noexcept { return *folders_; }
+    // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (Ctrl+Maj+P).
+    [[nodiscard]] StartButton&   findLink() noexcept { return *find_; }
     [[nodiscard]] ThemeSwatches& swatches() noexcept { return *swatches_; }
     [[nodiscard]] StartButton&   autostartButton() noexcept { return *autostart_; }
 
@@ -323,6 +326,7 @@ private:
     StartButton*   help_{nullptr};
     StartButton*   settings_{nullptr};
     StartButton*   folders_{nullptr};     // 1.8.0
+    StartButton*   find_{nullptr};        // 1.14.0 (lot M5)
     ThemeSwatches* swatches_{nullptr};
     StartButton*   autostart_{nullptr};
     std::string    autostartName_, tag_, date_;

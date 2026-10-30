@@ -204,6 +204,7 @@ void drawGlyph(gfx::IRenderer& r, StartButton::Glyph g, const gfx::Rect& area, g
             p.stroke(2.5f, 8.f, 13.5f, 8.f);
             break;
         case G::Open: ui::drawIcon(r, ui::Icon::Open, b, c); break;
+        case G::Search: ui::drawIcon(r, ui::Icon::Search, b, c); break;   // 1.14.0 (lot M5)
         case G::Tutorial:           // une toque de diplome : le didacticiel
             p.stroke(8.f, 3.f, 15.f, 6.5f);
             p.stroke(15.f, 6.5f, 8.f, 10.f);
@@ -1531,6 +1532,12 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     folders_->setHint(">");
     folders_->setTooltip("Les dossiers de l'application : tes projets, ta biblioth\xC3\xA8que, tes captures, tes r\xC3\xA9glages "
                          "(XPGAnalyser.ini) ; les ouvrir dans l'Explorateur, les changer");
+    // 1.14.0 (lot M5) : CHERCHER DES FICHIERS SUR CE PC - les projets, archives, exports, paquets et
+    // bibliotheques de l'appli, sur tous les lecteurs (Ctrl+Maj+P).
+    find_ = make("Chercher sur ce PC\xE2\x80\xA6", "startup.find", L::Link, G::Search);
+    find_->setHint("Ctrl+Maj+P");
+    find_->setTooltip("Chercher les fichiers de l'appli sur tout le PC (projets, archives, exports Control Expert, paquets IHM, "
+                      "biblioth\xC3\xA8ques, th\xC3\xA8mes) : les ouvrir, les ajouter aux r\xC3\xA9" "cents (Ctrl+Maj+P)");
     swatches_ = &static_cast<ThemeSwatches&>(addChild(std::make_unique<ThemeSwatches>("startup.themes")));
     autostart_ = make("Choisir\xE2\x80\xA6", "startup.autostart", L::Ghost, G::None);
     autostart_->setTooltip("Le poste d'exploitation d'un projet FINISH, lanc\xC3\xA9 au d\xC3\xA9marrage du PC (un seul projet par PC)");
@@ -1626,7 +1633,7 @@ float StartRail::placeBody(int level) {
 
     // ---- les liens ------------------------------------------------------------
     const float linkH = tall ? 34.f : easy ? 30.f : 28.f;
-    for (auto* link : {tutorial_, help_, settings_, folders_}) {
+    for (auto* link : {find_, tutorial_, help_, settings_, folders_}) {
         link->setBounds({x0 - 8.f, y, w + 16.f, linkH});
         y += linkH;
     }

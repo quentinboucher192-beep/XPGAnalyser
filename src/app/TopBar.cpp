@@ -206,6 +206,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     const auto sep = [](std::vector<Entry>& v) { Entry x; x.separator = true; v.push_back(std::move(x)); };
 
     e(project_, "Ouvrir\xE2\x80\xA6", "Ctrl+O", ui::Icon::Open, "file.open");
+    // 1.14.0 (lot M5) : les fichiers de l'appli sur tout le PC (la maquette : sous Ouvrir).
+    e(project_, "Chercher des fichiers sur ce PC\xE2\x80\xA6", "Ctrl+Maj+P", ui::Icon::Search, "app.findFiles");
     e(project_, "Enregistrer", "Ctrl+S", ui::Icon::Save, "project.save");
     e(project_, "Enregistrer sous\xE2\x80\xA6", "", ui::Icon::Document, "project.saveAs");
     sep(project_);

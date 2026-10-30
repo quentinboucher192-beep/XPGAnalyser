@@ -952,6 +952,15 @@
     <ClCompile Include="src\app\FileExplorerHost.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\FileFinder.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\FileFinderPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\FinderWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\FilePreview.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2414,6 +2423,12 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\FileExplorerHost.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FileFinder.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FileFinderPane.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\FilePreview.hpp">

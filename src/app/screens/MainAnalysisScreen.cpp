@@ -59,6 +59,7 @@
 #include "../hmi/HmiApiVarsPane.hpp"  // 1.11.1 (API-V) : une variable de l'automate glissee dans un script
 #include "../hmi/HmiSimulation.hpp"   // 1.10 : la pastille IHM de la barre du haut
 #include "../hmi/HmiBuildPanes.hpp"   // 1.11.14 : le panneau du bas (Sorties, Console, Diagnostics)
+#include "../FileFinderPane.hpp"          // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
 
 #include <algorithm>
 #include <cctype>
@@ -3675,6 +3676,8 @@ void MainAnalysisScreen::bindProject(ProjectRef project,
         // Lot API 2 : les onglets de l'API restent (ils se rafraichissent plus
         // bas), comme ceux de l'IHM ; une page gardee ne se detruit jamais.
         if (isApiTab(centre_->page(at))) continue;
+        // 1.14.0 (lot M5) : Chercher des fichiers n'est d'aucun projet - il reste (sa recherche aussi).
+        if (dynamic_cast<const FileFinderPane*>(centre_->page(at))) continue;
         forgetHmiTab(at);
         if (!parkTab(at)) centre_->removeTab(at);
     }
@@ -3907,6 +3910,11 @@ ui::EventResult MainAnalysisScreen::HandleEvent(const InputEvent& ev) {
         if (app_.hmi() && centre_ && centre_->tabCount() > 0
             && dynamic_cast<GrafcetPane*>(centre_->page(centre_->currentIndex())) != nullptr) {
             openHmiHelp("grafcet");
+            return EventResult::Consumed;
+        }
+        // 1.14.0 (lot M5) : Chercher des fichiers - son sujet (dans les deux applications).
+        if (centre_ && centre_->tabCount() > 0 && dynamic_cast<FileFinderPane*>(centre_->page(centre_->currentIndex())) != nullptr) {
+            openHmiHelp("chercher-fichiers");
             return EventResult::Consumed;
         }
         // ---- Lot API 8 : didacticiels et aide ----

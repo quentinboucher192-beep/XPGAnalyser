@@ -40,7 +40,7 @@ std::string trimmedText(std::string s) {
 } // namespace
 
 // ---------------------------------------------------------------------------------- relier ---
-void MainAnalysisScreen::askHmiLinkLibrary() {
+void MainAnalysisScreen::askHmiLinkLibrary(const std::string& path) {
     auto doc = app_.hmi();
     if (!doc) return;
     openHmiPane("bibliotheques");
@@ -55,6 +55,7 @@ void MainAnalysisScreen::askHmiLinkLibrary() {
     file.label = "Le fichier de la biblioth\xC3\xA8que (.xpgbib)";
     file.hasField = true;
     file.placeholder = "libs/Gaz-1.4.0.xpgbib";
+    file.field = path;      // 1.14.0 (lot M5) : le fichier trouve par Chercher des fichiers
     file.browse = ui::openFile("Biblioth\xC3\xA8ques IHM (.xpgbib)|*.xpgbib", ui::pathIn(folder, "libs"), "Relier une biblioth\xC3\xA8que");
     const auto project = std::make_shared<hmi::Project>(doc->project);
     file.check = [project, folder](const std::string& path) -> std::string {

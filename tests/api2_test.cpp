@@ -116,7 +116,10 @@ void testTopBar() {
     // 1.12.3 : + Disposition... (Projet). 1.12.27 : + Nouvelle fenetre (Projet).
     // 1.12.30 : + Exporter en archive .xapi..., Importer une archive... (Projet).
     // 1.13.0 : - Exporter / Importer en page web (retires).
-    check(entries == 51, "les quatre menus : " + std::to_string(entries) + " entrees");
+    // 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC... (Projet).
+    check(entries == 52, "les quatre menus : " + std::to_string(entries) + " entrees");
+    check(bar.reaches("app.findFiles") && bar.actionForLabel("Chercher des fichiers sur ce PC...") == "app.findFiles",
+          "1.14.0 : Projet > Chercher des fichiers sur ce PC...");
     check(bar.reaches("project.exportArchive") && bar.reaches("project.importArchive"),
           "1.12.30 : Projet > Exporter en archive, Importer une archive");
     check(bar.reaches("app.newWindow"), "1.12.27 : Projet > Nouvelle fenetre");

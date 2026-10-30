@@ -759,9 +759,10 @@ void MainAnalysisScreen::askHmiExportPrograms(int kind, std::uint64_t selected) 
 }
 
 // ======================================================= Importer un modele ==
-void MainAnalysisScreen::askHmiImportTemplate() {
+void MainAnalysisScreen::askHmiImportTemplate(const std::string& path) {
     std::vector<FormDialog::Field> fields;
-    fields.push_back({"Fichier", "", "un mod\xC3\xA8le (.xpgmodele) ou des vues (.xpgvues)", false, {}});
+    // 1.14.0 (lot M5) : `path` - le fichier trouve par Chercher des fichiers, deja choisi.
+    fields.push_back({"Fichier", path, "un mod\xC3\xA8le (.xpgmodele) ou des vues (.xpgvues)", false, {}});
     app_.menus().ShowDialog(
         FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiImportTemplate", "Importer un mod\xC3\xA8le",
                                                             "Le mod\xC3\xA8le est copi\xC3\xA9 dans ma biblioth\xC3\xA8que : il sert ensuite dans tous tes projets "

@@ -449,6 +449,11 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
             if (k.mods.shift && !core::hasApi()) return false;   // 1.12.0 : le .XHW est celui de l'automate
             (void)app_.actions().trigger(k.mods.shift ? "file.importHardware" : "file.open", app_.commands());
             return true;
+        // 1.14.0 (lot M5) : Ctrl+Maj+P - Chercher des fichiers sur ce PC (Ctrl+Maj+O est l'import du .XHW).
+        case Key::P:
+            if (!k.mods.shift || k.repeat) return false;
+            openFileFinder();
+            return true;
         // Lot API 7 : Ctrl+1 l'onglet API > Variables, Ctrl+5 API > Statistiques.
         case Key::Num1:
             if (k.mods.shift || !core::hasApi()) return false;
@@ -493,6 +498,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     tickStatusStrip(f.totalSeconds);
     // ---- fin Lot API 8 : le bandeau bas ----
     tickHmiBuild();                // 1.11.13 : le build de l'IHM (sa fin, la progression, l'analyse)
+    tickFileFinder();              // 1.14.0 (lot M5) : Chercher des fichiers - ce que la recherche a trouve
 }
 
 void MainAnalysisScreen::refreshHistoryButtons() {
