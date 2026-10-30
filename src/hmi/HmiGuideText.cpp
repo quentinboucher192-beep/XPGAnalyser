@@ -13376,6 +13376,134 @@ const std::vector<Topic>& topics() {
            {12.5, "Btn_Jouer", "\xC3\x80 toi",
             "\xC3\x80 toi : Jouer, Pause, Arr\xC3\xAAter, 3 tours - le vrai moteur r\xC3\xA9pond comme en "
             "marche. `IHM_GIF_JOUER('Ventilateur')` fait la m\xC3\xAAme chose dans un script."}}},
+        // ---- La bibliotheque d'objets  Enregistrements / objet-enregistreur
+        {"objet-enregistreur", "Enregistreur", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Enregistrements",
+         "Un bouton rond pour enregistrer l'IHM qui tourne : rouge, il d\xC3\xA9marre ; l'enregistrement en "
+         "cours, il devient un carr\xC3\xA9, le chrono tourne, et l'arr\xC3\xAAt demande le nom (ou garde "
+         "tout de suite).",
+         {
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
+                         "r\xC3\xA8gle\nTitre\tEnregistreur\tLe titre au-dessus du bouton (vide : sans "
+                         "titre).\nNom de l'enregistrement\tEssai {SYS.Date}\tLe nom de l'enregistrement : "
+                         "$rep\xC3\xA8res$ et {formules}, comme un texte. Un nom d\xC3\xA9j\xC3\xA0 pris "
+                         "devient \xC2\xAB Essai (2) \xC2\xBB ; vide : \xC2\xAB Enregistrement <date> "
+                         "\xC2\xBB.\nDescription\t(vide)\tCe qu'on y voit (Ressources \xE2\x80\xBA "
+                         "Enregistrements la montre).\nDemander le nom \xC3\xA0 l'arr\xC3\xAAt\tTRUE\tLa "
+                         "fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; "
+                         "L'enregistrer ou Le jeter). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de "
+                         "suite, sous son Nom (un poste sans clavier).\nDur\xC3\xA9" "e maximale "
+                         "(min)\t0\tAu bout, il s'arr\xC3\xAAte et se garde. 0 : celle de Configuration "
+                         "\xE2\x80\xBA Enregistrements (30 min).\nMot de passe\t(vide)\tVide : en clair. "
+                         "Sinon la piste est chiffr\xC3\xA9" "e : il faut le mot de passe pour le rejouer et "
+                         "lire ses valeurs.\nPilotable (un clic agit)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : "
+                         "il montre l'\xC3\xA9tat sans r\xC3\xA9" "agir au clic.\nCouleur du "
+                         "bouton\t#E5484D\tLe rond du bouton.\nRemplissage\t#262C36\tLe "
+                         "fond.\nContour\t#3A4556\tLe cadre.\nCouleur du texte\t#DDE3EA\tLe titre, le "
+                         "libell\xC3\xA9, l'\xC3\xA9tat.\nTaille du texte\t14\tLa taille du libell\xC3\xA9 ; "
+                         "le bouton rond grandit avec elle.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "un clic n'importe o\xC3\xB9 sous le titre d\xC3\xA9marre ou arr\xC3\xAAte ; "
+                         "\xC2\xAB \xE2\x97\x8F enregistre depuis 01:12 \xC2\xBB en rouge, ou \xC2\xAB "
+                         "pr\xC3\xAAt \xC2\xB7 10 min au plus \xC2\xBB ;", {}},
+             {K::Bullet, "son niveau d'acc\xC3\xA8s et sa condition d'autorisation s'appliquent comme sur un "
+                         "bouton ;", {}},
+             {K::Bullet, "pendant une relecture, il montre ce qu'il montrait pendant l'enregistrement (il "
+                         "tournait).", {}},
+         },
+         {"enregistrements", "objet-lecteur-enregistrements", "objet-communs", "actions"},
+         {"Enregistreur", "bouton enregistrer", "Demander le nom \xC3\xA0 l'arr\xC3\xAAt", "Dur\xC3\xA9" "e maximale", "enregistreur"},
+         {},
+         {},
+         "Recorder",
+         {{"title", "Titre", "Enregistreur",
+            "Le titre au-dessus du bouton (vide : sans titre)."},
+           {"recName", "Nom de l'enregistrement", "Essai {SYS.Date}",
+            "Le nom de l'enregistrement : $rep\xC3\xA8res$ et {formules}, comme un texte. Un nom "
+            "d\xC3\xA9j\xC3\xA0 pris devient \xC2\xAB Essai (2) \xC2\xBB ; vide : \xC2\xAB Enregistrement "
+            "<date> \xC2\xBB."},
+           {"description", "Description", "(vide)",
+            "Ce qu'on y voit (Ressources \xE2\x80\xBA Enregistrements la montre)."},
+           {"askName", "Demander le nom \xC3\xA0 l'arr\xC3\xAAt", "TRUE",
+            "La fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; "
+            "L'enregistrer ou Le jeter). D\xC3\xA9" "coch\xC3\xA9" "e : il se garde tout de suite, sous son "
+            "Nom (un poste sans clavier)."},
+           {"maxMinutes", "Dur\xC3\xA9" "e maximale (min)", "0",
+            "Au bout, il s'arr\xC3\xAAte et se garde. 0 : celle de Configuration \xE2\x80\xBA "
+            "Enregistrements (30 min)."},
+           {"password", "Mot de passe", "(vide)",
+            "Vide : en clair. Sinon la piste est chiffr\xC3\xA9" "e : il faut le mot de passe pour le "
+            "rejouer et lire ses valeurs."},
+           {"pilotable", "Pilotable (un clic agit)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9" "e : il montre l'\xC3\xA9tat sans r\xC3\xA9" "agir au clic."},
+           {"accent", "Couleur du bouton", "#E5484D",
+            "Le rond du bouton."},
+           {"fill", "Remplissage", "#262C36",
+            "Le fond."},
+           {"stroke", "Contour", "#3A4556",
+            "Le cadre."},
+           {"textColor", "Couleur du texte", "#DDE3EA",
+            "Le titre, le libell\xC3\xA9, l'\xC3\xA9tat."},
+           {"fontSize", "Taille du texte", "14",
+            "La taille du libell\xC3\xA9 ; le bouton rond grandit avec elle."}},
+         "L'Enregistreur d'une station de relevage : un clic d\xC3\xA9marre \xC2\xAB Essai {SYS.Date} "
+         "\xC2\xBB, le chrono tourne, un second clic l'arr\xC3\xAAte.",
+         {}, "1.14.0"},
+        // ---- La bibliotheque d'objets  Enregistrements / objet-lecteur-enregistrements
+        {"objet-lecteur-enregistrements", "Lecteur d'enregistrements", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Enregistrements",
+         "La liste des enregistrements du dossier (ceux d'un pr\xC3\xA9" "fixe), chacun avec sa "
+         "dur\xC3\xA9" "e, sa date, un cadenas s'il est prot\xC3\xA9g\xC3\xA9, et son bouton \xE2\x96\xB6 "
+         "Rejouer ; ou un seul bouton pour un enregistrement fixe.",
+         {
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
+                         "r\xC3\xA8gle\nTitre\tEnregistrements\tLe titre au-dessus de la liste (vide : sans "
+                         "titre).\nPr\xC3\xA9" "fixe\t(vide)\tSeuls les enregistrements dont le nom commence "
+                         "ainsi (sans tenir compte des majuscules) ; vide : tous.\nEnregistrement "
+                         "fixe\t(vide)\tToujours le m\xC3\xAAme : un seul bouton \xE2\x96\xB6 Rejouer "
+                         "\xC2\xAB Nom \xC2\xBB, sans liste.\nVitesse de relecture (\xC3\x97)\t1\t0,25 "
+                         "\xC3\xA0 8 : la vitesse de d\xC3\xA9part (la barre de relecture la "
+                         "change).\nPilotable (un clic agit)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : la liste "
+                         "se lit, sans rejouer.\nCouleur de Rejouer\t#2F6FD6\tLe rond \xE2\x96\xB6 et la "
+                         "ligne choisie.\nRemplissage\t#262C36\tLe fond.\nContour\t#3A4556\tLe "
+                         "cadre.\nCouleur du texte\t#DDE3EA\tLes noms, les dur\xC3\xA9" "es, les "
+                         "dates.\nTaille du texte\t13\tLa taille des lignes ; la hauteur d'une ligne la suit.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "un clic sur une ligne la choisit, un double-clic ou son \xE2\x96\xB6 la rejoue ; "
+                         "prot\xC3\xA9g\xC3\xA9" "e, le mot de passe est demand\xC3\xA9 ;", {}},
+             {K::Bullet, "la liste relit le dossier toutes les 2 s ; \xC2\xAB + 3 autres \xC2\xBB quand elle "
+                         "ne tient pas ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un Enregistrement fixe absent du dossier.", {}},
+         },
+         {"enregistrements", "objet-enregistreur", "objet-communs", "actions"},
+         {"Lecteur d'enregistrements", "lecteur", "Enregistrement fixe", "Pr\xC3\xA9" "fixe", "Rejouer"},
+         {},
+         {},
+         "RecordingPlayer",
+         {{"title", "Titre", "Enregistrements",
+            "Le titre au-dessus de la liste (vide : sans titre)."},
+           {"prefix", "Pr\xC3\xA9" "fixe", "(vide)",
+            "Seuls les enregistrements dont le nom commence ainsi (sans tenir compte des majuscules) ; vide "
+            ": tous."},
+           {"fixed", "Enregistrement fixe", "(vide)",
+            "Toujours le m\xC3\xAAme : un seul bouton \xE2\x96\xB6 Rejouer \xC2\xAB Nom \xC2\xBB, sans liste."},
+           {"speed", "Vitesse de relecture (\xC3\x97)", "1",
+            "0,25 \xC3\xA0 8 : la vitesse de d\xC3\xA9part (la barre de relecture la change)."},
+           {"pilotable", "Pilotable (un clic agit)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9" "e : la liste se lit, sans rejouer."},
+           {"accent", "Couleur de Rejouer", "#2F6FD6",
+            "Le rond \xE2\x96\xB6 et la ligne choisie."},
+           {"fill", "Remplissage", "#262C36",
+            "Le fond."},
+           {"stroke", "Contour", "#3A4556",
+            "Le cadre."},
+           {"textColor", "Couleur du texte", "#DDE3EA",
+            "Les noms, les dur\xC3\xA9" "es, les dates."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille des lignes ; la hauteur d'une ligne la suit."}},
+         "Le Lecteur des essais : chaque ligne commence par \xC2\xAB Essai \xC2\xBB ; \xE2\x96\xB6 rejoue, "
+         "un clic sur la ligne la choisit.",
+         {}, "1.14.0"},
         // ---- La bibliotheque d'objets  Utilisateurs / objet-connexion
         {"objet-connexion", "Connexion", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Utilisateurs",
          "Un panneau de connexion : l'utilisateur choisi dans la liste (ou tap\xC3\xA9), son mot de passe "
@@ -16848,6 +16976,17 @@ const std::vector<Topic>& topics() {
                          "l'extension (.csv, .xlsx, .pdf) choisit le format ; dans le script qu'un clic "
                          "lance, il demande o\xC3\xB9 l'enregistrer (demander FALSE : jamais) ; vrai s'il "
                          "est \xC3\xA9" "crit ou la question pos\xC3\xA9" "e", {}, "1.13.0"},
+             {K::Table, "IHM_ENREG_DEMARRER('Nom' [, dur\xC3\xA9" "e [, 'mot de passe']]), "
+                         "IHM_ENREG_ARRETER([garder]), IHM_ENREG_EN_COURS()\tBOOL, STRING, BOOL\tenregistrer "
+                         "l'IHM qui tourne, l'arr\xC3\xAAter (rend le nom gard\xC3\xA9), savoir s'il tourne "
+                         "- voir \xC2\xAB Enregistrer et rejouer l'IHM \xC2\xBB\nIHM_REJOUER('Nom' [, "
+                         "vitesse [, 'mot de passe']]), IHM_RELECTURE_PAUSE([pause]), "
+                         "IHM_RELECTURE_ALLER(instant), IHM_RELECTURE_VITESSE(v), "
+                         "IHM_RELECTURE_QUITTER()\tBOOL\trejouer un enregistrement et piloter la "
+                         "relecture\nIHM_ENREG_LISTE(['pr\xC3\xA9" "fixe']), IHM_ENREG_EXISTE('Nom'), "
+                         "IHM_ENREG_DUREE('Nom'), IHM_ENREG_EXPORTER('Nom', 'dossier'), "
+                         "IHM_ENREG_IMPORTER('chemin'), IHM_ENREG_SUPPRIMER('Nom')\tLIST OF STRING, BOOL, "
+                         "TIME, BOOL, STRING, BOOL\tles fichiers du dossier Enregistrements", {}, "1.14.0"},
              {K::Code, "IF Armoires[0].ana.PT1.mes > 30.0 THEN\n    IHM_SON('bip_alarme.wav');\n    "
                          "IHM_POPUP('Popup_Aide');\nEND_IF;\nIHM_JOURNAL('Vue {IHM_VUE()} ouverte depuis "
                          "{IHM_TEMPS():t}');\nIF Capteur_En_Essai THEN\n    "
@@ -16876,7 +17015,7 @@ const std::vector<Topic>& topics() {
                          "trous : `{IHM_NOM_UTILISATEUR()}`.", {}},
          },
          {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves", "deboguer-scripts"},
-         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT", "IHM_POINT_ARRET"},
+         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT", "IHM_POINT_ARRET", "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE", "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE", "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER"},
          {},
          {{"PNG_133_st_fonction_ihm_signature_et_vues.png", "IHM_NAVIGUER : sa signature, et les vues propos\xC3\xA9" "es entre les guillemets."}, {"PNG_191_aide_reference_ihm.png", "F1 sur IHM_JOURNAL, dans un script : la r\xC3\xA9" "f\xC3\xA9rence des fonctions IHM_."}},
          "",
@@ -17571,6 +17710,16 @@ const std::vector<Topic>& topics() {
                          "NOT SYS.KeyCtrl`. La souris et le clavier sont ceux de la vue qui tourne (la "
                          "simulation de l'\xC3\xA9" "diteur, le poste d'exploitation) ; pour lier une touche "
                          "\xC3\xA0 une action, voir \xC2\xAB Les raccourcis d'une vue \xC2\xBB.", {}, "1.11.23"},
+             {K::Heading, "Enregistrements (1.14.0)", {}, "1.14.0"},
+             {K::Table, "Variable\tType\tCe qu'elle vaut\n`SYS.Recording`\tBOOL\tUn enregistrement "
+                         "tourne.\n`SYS.RecordingName`\tSTRING\tSon nom ('' : "
+                         "aucun).\n`SYS.RecordingTime`\tTIME\tDepuis quand il "
+                         "tourne.\n`SYS.Replay`\tBOOL\tUne relecture est "
+                         "affich\xC3\xA9" "e.\n`SYS.ReplayPosition`\tTIME\tO\xC3\xB9 en est la "
+                         "relecture.\n`SYS.ReplayLength`\tTIME\tLa dur\xC3\xA9" "e de l'enregistrement "
+                         "rejou\xC3\xA9.\n`SYS.ReplaySpeed`\tREAL\tSa vitesse (0,25 \xC3\xA0 8 ; 0 sans "
+                         "relecture).\n`SYS.ReplayPaused`\tBOOL\tLa relecture est en pause (ou au bout).", {}, "1.14.0"},
+             {K::Paragraph, "Voir \xC2\xAB Enregistrer et rejouer l'IHM \xC2\xBB.", {}, "1.14.0"},
          },
          {"variables-instances", "variables-ihm", "securite", "reference", "simulation", "variables-esclaves", "raccourcis-vue"},
          {"SYS"},
@@ -19710,6 +19859,194 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Tester et livrer  Tester / enregistrements
+        {"enregistrements", "Enregistrer et rejouer l'IHM", "Tester et livrer \xE2\x80\xBA Tester",
+         "Un enregistrement, c'est l'IHM film\xC3\xA9" "e pendant qu'elle tourne : les valeurs, les vues et "
+         "les popups, les alarmes, les sons, le pointeur et les clics de l'op\xC3\xA9rateur. Il se garde "
+         "dans un fichier .xrec (Ressources \xE2\x80\xBA Enregistrements), se rejoue comme un film - pause, "
+         "\xC2\xB1" "10 s, vitesses \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8, \xC3\x89" "chap pour revenir en "
+         "direct -, se prot\xC3\xA8ge par un mot de passe, et se pilote d'un objet, d'une action, d'un "
+         "script ou d'une autre application.",
+         {
+             {K::Heading, "\xC3\x80 quoi \xC3\xA7" "a sert", {}},
+             {K::Bullet, "Montrer \xC3\xA0 quelqu'un ce qui s'est pass\xC3\xA9 : un d\xC3\xA9marrage de "
+                         "station, une alarme de nuit, un essai de r\xC3\xA9" "ception (FAT) - avec le "
+                         "pointeur et les clics de l'op\xC3\xA9rateur, tels qu'ils \xC3\xA9taient.", {}},
+             {K::Bullet, "Former : un sc\xC3\xA9nario de conduite rejou\xC3\xA9 au poste, \xC3\xA0 la "
+                         "vitesse qu'on veut.", {}},
+             {K::Bullet, "Comprendre un d\xC3\xA9" "faut : revenir 10 s en arri\xC3\xA8re, voir la vue et "
+                         "les valeurs \xC3\xA0 cet instant.", {}},
+             {K::Paragraph, "Un enregistrement n'est pas une vid\xC3\xA9o : ce sont les **valeurs** et les "
+                         "**\xC3\xA9v\xC3\xA9nements**, rejou\xC3\xA9s par l'IHM elle-m\xC3\xAAme. Il est "
+                         "l\xC3\xA9ger (quelques centaines de Ko pour dix minutes) et net \xC3\xA0 tout zoom "
+                         "; il se rejoue avec le projet qui l'a fait.", {}},
+             {K::Heading, "Ce qui est enregistr\xC3\xA9", {}},
+             {K::Table, "Quoi\tLe d\xC3\xA9tail\nLes valeurs\tToutes les variables IHM, et ce que "
+                         "l'\xC3\xA9" "cran lit de l'automate, des variables syst\xC3\xA8me et des "
+                         "propri\xC3\xA9t\xC3\xA9s d'objets ; 10 fois par seconde (Configuration "
+                         "\xE2\x80\xBA Enregistrements). Seul ce qui change s'\xC3\xA9" "crit ; une image "
+                         "compl\xC3\xA8te toutes les 5 s.\nL'\xC3\xA9" "cran\tLa vue, les popups ouvertes et "
+                         "leurs param\xC3\xA8tres, la langue, le th\xC3\xA8me, ce que les actions ont "
+                         "chang\xC3\xA9 aux objets.\nL'op\xC3\xA9rateur\tLe pointeur, les clics, les appuis "
+                         "longs, les saisies valid\xC3\xA9" "es (case coch\xC3\xA9" "e Pointeur et "
+                         "clics).\nLes \xC3\xA9v\xC3\xA9nements\tLes alarmes (apparues, "
+                         "acquitt\xC3\xA9" "es, disparues), les sons (leur ressource, leur canal), les "
+                         "lignes du journal.\nL'en-t\xC3\xAAte\tLe nom, la description, la date, la "
+                         "dur\xC3\xA9" "e, le projet et sa version, la vue de d\xC3\xA9part, o\xC3\xB9 "
+                         "(Simulation, ou le nom du poste), par qui (l'utilisateur IHM connect\xC3\xA9).", {}},
+             {K::Heading, "Enregistrer", {}},
+             {K::Bullet, "**En simulation** : le bouton **\xE2\x97\x8F Enregistrer** de la barre de "
+                         "Simulation \xC2\xB7 IHM. Il devient **\xE2\x96\xA0 Arr\xC3\xAAter \xE2\x97\x8F ENR "
+                         "00:42** ; \xC3\xA0 l'arr\xC3\xAAt, la fen\xC3\xAAtre **Arr\xC3\xAAter "
+                         "l'enregistrement** dit la dur\xC3\xA9" "e, les clics, les alarmes et la taille, et "
+                         "demande le **nom**, une **description** et un **mot de passe** (facultatifs) ; "
+                         "**L'enregistrer** ou **Le jeter**. Annuler le garde sous le nom propos\xC3\xA9.", {}},
+             {K::Bullet, "**Dans une vue** (en simulation comme au poste) : l'objet **Enregistreur** (voir "
+                         "\xC2\xAB Enregistreur \xC2\xBB).", {}},
+             {K::Bullet, "**Par une action** (D\xC3\xA9marrer un enregistrement, Arr\xC3\xAAter et garder, "
+                         "D\xC3\xA9marrer ou arr\xC3\xAAter, Arr\xC3\xAAter sans le garder), un **script** "
+                         "(`IHM_ENREG_DEMARRER`), ou **une autre application** (voir plus bas).", {}},
+             {K::Paragraph, "Au bout de la dur\xC3\xA9" "e maximale (30 min par d\xC3\xA9" "faut), il "
+                         "s'arr\xC3\xAAte et se garde. Pendant qu'il tourne, il s'\xC3\xA9" "crit \xC3\xA0 "
+                         "mesure (un fichier `.xrec.part`) : l'application qui s'arr\xC3\xAAte net ne perd "
+                         "que la derni\xC3\xA8re seconde - au prochain coup d'\xC5\x93il sur le dossier, il "
+                         "redevient un `.xrec`, relu jusqu'au dernier bloc entier (\xC2\xAB coup\xC3\xA9 net "
+                         "\xC2\xBB).", {}},
+             {K::Heading, "Rejouer", {}},
+             {K::Bullet, "**Ressources \xE2\x80\xBA Enregistrements** : un double-clic sur la ligne, ou "
+                         "**Rejouer**. La simulation s'ouvre et rejoue.", {}},
+             {K::Bullet, "**Dans une vue** : l'objet **Lecteur d'enregistrements**, une action **Rejouer un "
+                         "enregistrement**, `IHM_REJOUER('D\xC3\xA9marrage station')`, ou `--rejouer` d'une "
+                         "autre application.", {}},
+             {K::Paragraph, "Pendant la relecture :", {}},
+             {K::Bullet, "un **liser\xC3\xA9** de la couleur d'accent entoure la vue, et le bandeau du haut "
+                         "dit **\xE2\x96\xB6 RELECTURE \xE2\x80\x94 le nom \xE2\x80\x94 enregistr\xC3\xA9 le "
+                         "\xE2\x80\xA6 par \xE2\x80\xA6 \xE2\x80\x94 \xC3\x89" "chap quitte** ;", {}},
+             {K::Bullet, "l'IHM montre ce qui a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 : les objets lisent les "
+                         "valeurs de la piste, la vue et les popups suivent, les alarmes sont celles "
+                         "d'alors, le pointeur de l'op\xC3\xA9rateur passe en fant\xC3\xB4me et chaque clic "
+                         "fait un cercle ;", {}},
+             {K::Bullet, "l'IHM **ne commande rien et ne re\xC3\xA7oit aucun clic** : ni script, ni action, "
+                         "ni \xC3\xA9" "criture vers l'automate ;", {}},
+             {K::Bullet, "la barre du bas : la **progression** (un clic ou un glisser va \xC3\xA0 l'instant "
+                         "; ses rep\xC3\xA8res : une alarme en rouge, un clic \xC3\xA0 la couleur d'accent, "
+                         "un changement de vue en gris), **D\xC3\xA9" "but**, **\xE2\x88\x92" "10 s**, "
+                         "**Pause / Lecture**, **+10 s**, **Fin**, le temps (02:15 / 05:30), les vitesses "
+                         "**\xC3\x97" "0,25 \xC3\x97" "0,5 \xC3\x97" "1 \xC3\x97" "2 \xC3\x97" "4 "
+                         "\xC3\x97" "8**, **Quitter**.", {}},
+             {K::Table, "Touche\tEffet\nEspace\tpause, lecture\n\xE2\x86\x90 \xE2\x86\x92\t10 s en "
+                         "arri\xC3\xA8re, en avant\n+ \xE2\x88\x92\tplus vite, moins vite\nD\xC3\xA9" "but, "
+                         "Fin\tau d\xC3\xA9" "but, \xC3\xA0 la fin\n\xC3\x89" "chap\tquitter la relecture", {}},
+             {K::Paragraph, "**Quitter** rend l'IHM exactement comme elle \xC3\xA9tait : la vue, les popups, "
+                         "les alarmes, l'utilisateur, la langue. Pendant la relecture, l'heure de l'IHM "
+                         "s'arr\xC3\xAAte (ses temporisations reprennent l\xC3\xA0 o\xC3\xB9 elles "
+                         "\xC3\xA9taient) et **l'API simul\xC3\xA9" "e se met en pause** : rien ne bouge "
+                         "derri\xC3\xA8re le film ; elle repart en quittant. Un automate r\xC3\xA9" "el "
+                         "(reli\xC3\xA9, ou au poste) continue : l'IHM ne lui \xC3\xA9" "crit rien tant "
+                         "qu'elle rejoue. En simulation, la relecture est dans la vue de la simulation ; au "
+                         "poste d'exploitation, elle prend tout l'\xC3\xA9" "cran. Un enregistrement d'une "
+                         "autre version du projet se rejoue aussi : ce qui n'existe plus (une variable, une "
+                         "vue, un objet) est ignor\xC3\xA9, et signal\xC3\xA9 une fois (la barre et la "
+                         "Console le disent).", {}},
+             {K::Heading, "Le dossier Enregistrements", {}},
+             {K::Paragraph, "Les enregistrements sont des fichiers `.xrec` dans le dossier natif "
+                         "**ressources/enregistrements** du projet (ou celui de Configuration \xE2\x80\xBA "
+                         "Enregistrements) ; au poste d'exploitation, le dossier du projet du poste. "
+                         "**Ressources \xE2\x80\xBA Enregistrements** les montre : Nom, Dur\xC3\xA9" "e, Vue "
+                         "de d\xC3\xA9part, Enregistr\xC3\xA9 le, O\xC3\xB9, Par, Taille, "
+                         "Prot\xC3\xA9g\xC3\xA9 (et son cadenas) ; \xC3\xA0 droite, le d\xC3\xA9tail "
+                         "(l'\xC3\xA9" "cran \xC3\xA0 40 % de la dur\xC3\xA9" "e, les clics, les alarmes, "
+                         "les vues, le projet) et la **description**, qui se modifie.", {}},
+             {K::Bullet, "**Importer\xE2\x80\xA6** copie un `.xrec` dans le dossier (un nom "
+                         "d\xC3\xA9j\xC3\xA0 pris devient \xC2\xAB Nom (2) \xC2\xBB) ; "
+                         "**Exporter\xE2\x80\xA6** en copie un ailleurs ;", {}},
+             {K::Bullet, "**Renommer** : les actions, le Lecteur et les scripts qui le citent en dur suivent "
+                         "; G\xC3\xA9n\xC3\xA9rer signale ce qui le cite autrement ;", {}},
+             {K::Bullet, "**Mot de passe\xE2\x80\xA6** prot\xC3\xA8ge, change ou retire la protection "
+                         "(l'actuel est demand\xC3\xA9) ;", {}},
+             {K::Bullet, "**Supprimer** le met dans la corbeille du projet (ihm/corbeille) ; **Ouvrir le "
+                         "dossier** l'ouvre dans l'explorateur.", {}},
+             {K::Paragraph, "L'archive du projet (.xihm) les emporte si on coche **Avec les enregistrements** "
+                         "(ils sont laiss\xC3\xA9s par d\xC3\xA9" "faut : ils p\xC3\xA8sent).", {}},
+             {K::Heading, "Le mot de passe", {}},
+             {K::Paragraph, "Un enregistrement prot\xC3\xA9g\xC3\xA9 a sa piste **chiffr\xC3\xA9" "e** : sans "
+                         "le mot de passe, il **ne se rejoue pas et ses valeurs ne se lisent pas**. Son "
+                         "en-t\xC3\xAAte - le nom, la date, la dur\xC3\xA9" "e, la description, o\xC3\xB9 et "
+                         "par qui - reste lisible, pour qu'on le trouve. Le mot de passe ne prot\xC3\xA8ge "
+                         "que cela : le fichier, lui, se copie, se renomme et se supprime comme un autre. Un "
+                         "mot de passe oubli\xC3\xA9 ne se retrouve pas.", {}},
+             {K::Heading, "Configuration \xE2\x80\xBA Enregistrements", {}},
+             {K::Table, "R\xC3\xA9glage\tPar d\xC3\xA9" "faut\tCe qu'il fait\nDossier\t(vide)\tVide : "
+                         "ressources/enregistrements du projet. Un chemin relatif part du dossier du "
+                         "projet.\nTaille du dossier au plus (Mo)\t2048\tAu-del\xC3\xA0, \xC3\xA0 la fin "
+                         "d'un enregistrement, les plus anciens sont retir\xC3\xA9s ; le journal le "
+                         "dit.\nDur\xC3\xA9" "e au plus (min)\t30\tCelle d'un enregistrement sans "
+                         "dur\xC3\xA9" "e donn\xC3\xA9" "e.\nPrises par seconde\t10\tDix fois par seconde ; "
+                         "seul ce qui change s'\xC3\xA9" "crit.\nPointeur et clics\tcoch\xC3\xA9\tLa souris "
+                         "(le doigt) et ses clics.\nSons\tcoch\xC3\xA9\tRejou\xC3\xA9s sur le canal "
+                         "Relecture.\nPopups\tcoch\xC3\xA9\tLes popups et leurs param\xC3\xA8tres.\nAccepter "
+                         "les commandes d'une autre application\td\xC3\xA9" "coch\xC3\xA9\tVoir ci-dessous.", {}},
+             {K::Heading, "Depuis une autre application", {}},
+             {K::Paragraph, "Un banc de test, un script, une supervision lance l'enregistrement ou la relecture "
+                         "par la ligne de commande :", {}},
+             {K::Table, "Commande\tEffet\n`IHM-Studio.exe --enregistrer \"Essai FAT\" --duree 10m "
+                         "--mot-de-passe fat2026`\td\xC3\xA9marre un enregistrement (la dur\xC3\xA9" "e et "
+                         "le mot de passe sont facultatifs)\n`IHM-Studio.exe "
+                         "--arreter-enregistrement`\tl'arr\xC3\xAAte et le garde (`--jeter` : le "
+                         "jette)\n`IHM-Studio.exe --rejouer \"Essai FAT\" --vitesse 2 --mot-de-passe "
+                         "fat2026`\tlance la relecture\n`IHM-Studio.exe --quitter-relecture`\trevient en "
+                         "direct", {}},
+             {K::Paragraph, "La commande va \xC3\xA0 IHM Studio d\xC3\xA9j\xC3\xA0 ouvert (son IHM en marche : "
+                         "la simulation, ou le poste) et attend sa r\xC3\xA9ponse ; IHM Studio ferm\xC3\xA9, "
+                         "`--poste <projet>` ouvre le poste et la commande part d\xC3\xA8s que son IHM "
+                         "tourne. Il faut que le projet coche **Accepter les commandes d'une autre "
+                         "application** (d\xC3\xA9" "coch\xC3\xA9 par d\xC3\xA9" "faut).", {}},
+             {K::Table, "Code de sortie\tCe qu'il dit\n0\tfait\n1\tune option mal "
+                         "\xC3\xA9" "crite\n2\taucune IHM en marche\n3\tnom introuvable (ou rien \xC3\xA0 "
+                         "arr\xC3\xAAter)\n4\tmot de passe faux\n5\trefus\xC3\xA9 par la configuration du "
+                         "projet", {}},
+             {K::Heading, "Depuis un script", {}},
+             {K::Table, "Fonction\tRend\tEffet\nIHM_ENREG_DEMARRER('Nom' [, T#10m [, 'mot de "
+                         "passe']])\tBOOL\td\xC3\xA9marre un enregistrement (texte \xC3\xA0 trous : 'Essai "
+                         "{SYS.Date}')\nIHM_ENREG_ARRETER([garder])\tSTRING\tl'arr\xC3\xAAte ; garder FALSE "
+                         ": le jette ; rend le nom gard\xC3\xA9\nIHM_ENREG_EN_COURS()\tBOOL\tun "
+                         "enregistrement tourne\nIHM_REJOUER('Nom' [, vitesse [, 'mot de "
+                         "passe']])\tBOOL\tlance une relecture\nIHM_RELECTURE_PAUSE([pause])\tBOOL\tpause, "
+                         "ou bascule\nIHM_RELECTURE_ALLER(T#1m30s)\tBOOL\tva \xC3\xA0 un "
+                         "instant\nIHM_RELECTURE_VITESSE(2.0)\tBOOL\t\xC3\x97" "0,25 \xC3\xA0 "
+                         "\xC3\x97" "8\nIHM_RELECTURE_QUITTER()\tBOOL\trevient en "
+                         "direct\nIHM_ENREG_LISTE(['pr\xC3\xA9" "fixe'])\tLIST OF STRING\tles noms du "
+                         "dossier\nIHM_ENREG_EXISTE('Nom'), IHM_ENREG_DUREE('Nom')\tBOOL, TIME\til existe ; "
+                         "sa dur\xC3\xA9" "e\nIHM_ENREG_EXPORTER('Nom', 'dossier'), "
+                         "IHM_ENREG_IMPORTER('chemin'), IHM_ENREG_SUPPRIMER('Nom')\tBOOL, STRING, "
+                         "BOOL\tcopier, importer (rend le nom pris), mettre \xC3\xA0 la corbeille", {}},
+             {K::Code, "IF Demarrage AND NOT IHM_ENREG_EN_COURS() THEN\n    "
+                         "IHM_ENREG_DEMARRER('D\xC3\xA9marrage {SYS.Date}', T#15m);\nEND_IF;", "ST"},
+             {K::Code, "if (Demarrage && !IHM_ENREG_EN_COURS()) {\n    "
+                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", T#15m);\n}", "C"},
+             {K::Code, "if (Demarrage && !IHM_ENREG_EN_COURS()) {\n    "
+                         "IHM_ENREG_DEMARRER(\"D\xC3\xA9marrage {SYS.Date}\", T#15m);\n}", "C++"},
+             {K::Paragraph, "Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la "
+                         "m\xC3\xAAme suite d'actions que IHM_REJOUER, ou depuis une autre application. Les "
+                         "variables syst\xC3\xA8me du domaine **Enregistrements** (SYS.Recording, "
+                         "SYS.ReplayPosition...) disent o\xC3\xB9 on en est (voir \xC2\xAB Variables "
+                         "syst\xC3\xA8me : SYS. \xC2\xBB).", {}},
+             {K::Heading, "Bon \xC3\xA0 savoir", {}},
+             {K::Bullet, "un seul enregistrement \xC3\xA0 la fois, et pas pendant une relecture ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un enregistrement cit\xC3\xA9 en dur qui n'est pas "
+                         "dans le dossier (une action, un Lecteur fixe, un script), une dur\xC3\xA9" "e "
+                         "n\xC3\xA9gative, un export sans dossier ;", {}},
+             {K::Bullet, "le Lecteur et la liste relisent le dossier toutes les 2 s : un fichier "
+                         "copi\xC3\xA9 \xC3\xA0 la main appara\xC3\xAEt tout seul.", {}},
+         },
+         {"objet-enregistreur", "objet-lecteur-enregistrements", "simulation", "poste-exploitation", "ressources", "actions", "reference", "variables-systeme", "essais"},
+         {"enregistrement", "enregistrements", "enregistrer", "rejouer", "relecture", "replay", "film", ".xrec", "xrec", "Enregistreur", "Lecteur d'enregistrements", "ENR", "RELECTURE", "\xC3\x89" "chap quitte", "\xC2\xB1" "10 s", "-10 s", "+10 s", "vitesse de relecture", "barre de progression", "Arr\xC3\xAAter l'enregistrement", "Jeter", "Enregistrement prot\xC3\xA9g\xC3\xA9", "mot de passe d'un enregistrement", "ressources/enregistrements", "Configuration \xE2\x80\xBA Enregistrements", "Accepter les commandes d'une autre application", "--enregistrer", "--arreter-enregistrement", "--rejouer", "--quitter-relecture", "--jeter", "--duree", "--vitesse", "--mot-de-passe", "IHM_ENREG_DEMARRER", "IHM_ENREG_ARRETER", "IHM_ENREG_EN_COURS", "IHM_REJOUER", "IHM_RELECTURE_PAUSE", "IHM_RELECTURE_ALLER", "IHM_RELECTURE_VITESSE", "IHM_RELECTURE_QUITTER", "IHM_ENREG_LISTE", "IHM_ENREG_EXISTE", "IHM_ENREG_DUREE", "IHM_ENREG_EXPORTER", "IHM_ENREG_IMPORTER", "IHM_ENREG_SUPPRIMER", "SYS.Recording", "SYS.RecordingName", "SYS.RecordingTime", "SYS.Replay", "SYS.ReplayPosition", "SYS.ReplayLength", "SYS.ReplaySpeed", "SYS.ReplayPaused"},
+         {"enregistrements", "config-enregistrements"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.14.0"},
         // ---- Tester et livrer  Tester / performances
         {"performances", "Les performances", "Tester et livrer \xE2\x80\xBA Tester",
          "L'onglet Performances de la simulation mesure le cycle IHM, l'\xC3\xA9valuation des expressions, "

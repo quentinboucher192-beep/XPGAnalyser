@@ -1150,6 +1150,9 @@ constexpr TreePlace kTreePlaces[] = {
     {"equipements", "arbre:IHM/Configuration/\xC3\x89quipements"},
     {"poste", "arbre:IHM/Configuration/Poste d'exploitation"}, {"notifications", "arbre:IHM/Configuration/Notifications"},
     {"rapports", "arbre:IHM/Configuration/Rapports"}, {"web", "arbre:IHM/Configuration/Acc\xC3\xA8s web"},
+    {"config-enregistrements", "arbre:IHM/Configuration/Enregistrements"},   // 1.14.0 (M4)
+    // 1.14.0 (M4) : sous IHM > Ressources, replie au depart.
+    {"enregistrements", "arbre:IHM/Ressources/Enregistrements"},
     // Sous IHM > Programmation generale, replie au depart.
     {"types-ihm", "arbre:IHM/Programmation/Types IHM"}, {"variables-ihm", "arbre:IHM/Programmation/Variables IHM"},
     {"variables-systeme", "arbre:IHM/Programmation/Variables syst\xC3\xA8me"},

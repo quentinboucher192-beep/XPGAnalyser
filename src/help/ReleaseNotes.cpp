@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.14.0", "30/10/2026", "\xC3\xA0 venir"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
@@ -137,6 +138,49 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
+        note("1.14.0", "Simulation", Kind::New,
+         "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "
+         "d'exploitation) filme l'IHM - les valeurs dix fois par seconde, la vue et les popups, les alarmes, les sons, le journal, le pointeur et les "
+         "clics de l'op\xC3\xA9rateur. \xC3\x80 l'arr\xC3\xAAt, la fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement dit sa dur\xC3\xA9" "e, ses clics, ses alarmes et sa "
+         "taille, et demande le nom, une description et un mot de passe (L'enregistrer ou Le jeter). L'enregistrement est un fichier .xrec ; "
+         "il s'\xC3\xA9" "crit \xC3\xA0 mesure : une application arr\xC3\xAAt\xC3\xA9" "e net ne perd que la derni\xC3\xA8re seconde. Avec un mot de passe, sa piste "
+         "est chiffr\xC3\xA9" "e : sans lui, il ne se rejoue pas et ses valeurs ne se lisent pas (son nom, sa date et sa description restent lisibles).",
+         "enregistrements", ""),
+        note("1.14.0", "Simulation", Kind::New,
+         "REJOUER UN ENREGISTREMENT COMME UN FILM : l'IHM montre ce qui a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 - les objets suivent les valeurs d'alors, la vue "
+         "et les popups changent, le pointeur de l'op\xC3\xA9rateur passe en fant\xC3\xB4me et chaque clic fait un cercle - sous un lis\xC3\xA9r\xC3\xA9 et le "
+         "bandeau RELECTURE. La barre du bas : la progression (ses rep\xC3\xA8res d'alarmes et de clics) qu'on clique ou qu'on tire, D\xC3\xA9" "but, "
+         "\xE2\x88\x92" "10 s, Pause, +10 s, Fin, les vitesses \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8, Quitter ; au clavier Espace, les fl\xC3\xA8" "ches, + et \xE2\x88\x92, "
+         "\xC3\x89" "chap. Pendant la relecture l'IHM ne commande rien et ne re\xC3\xA7oit aucun clic, l'API simul\xC3\xA9" "e est en pause ; Quitter rend "
+         "l'IHM exactement comme elle \xC3\xA9tait. En simulation dans la vue, au poste d'exploitation sur tout l'\xC3\xA9" "cran.",
+         "enregistrements", ""),
+        note("1.14.0", "Ressources", Kind::New,
+         "RESSOURCES \xE2\x80\xBA ENREGISTREMENTS : le dossier natif ressources/enregistrements du projet et son tableau - nom, dur\xC3\xA9" "e, vue de "
+         "d\xC3\xA9part, date, o\xC3\xB9, par qui, taille, cadenas - avec le d\xC3\xA9tail (l'\xC3\xA9" "cran \xC3\xA0 40 %, les clics, les alarmes, la "
+         "description qui se modifie). Importer\xE2\x80\xA6, Exporter\xE2\x80\xA6, Rejouer (ou un double-clic), Renommer (les actions et les scripts qui le "
+         "citent suivent), Mot de passe\xE2\x80\xA6, Supprimer (vers la corbeille du projet), Ouvrir le dossier. Configuration \xE2\x80\xBA Enregistrements "
+         "r\xC3\xA8gle le dossier, la dur\xC3\xA9" "e (30 min) et la taille du dossier (2 Go) au plus, les prises par seconde, le pointeur, les sons et "
+         "les popups ; l'archive .xihm les emporte si on coche Avec les enregistrements.",
+         "enregistrements", ""),
+        note("1.14.0", "Vues", Kind::New,
+         "LES OBJETS, LES ACTIONS ET LES NATIVES DES ENREGISTREMENTS : dans la biblioth\xC3\xA8que, la famille Enregistrements - l'Enregistreur "
+         "(un bouton rond, le chrono, son nom en texte \xC3\xA0 trous, sa dur\xC3\xA9" "e et son mot de passe) et le Lecteur d'enregistrements (la "
+         "liste d'un pr\xC3\xA9" "fixe et son \xE2\x96\xB6 Rejouer, ou un enregistrement fixe). Les actions des groupes Enregistrement, Relecture et "
+         "Fichiers ; les fonctions IHM_ENREG_DEMARRER, IHM_ENREG_ARRETER, IHM_REJOUER, IHM_RELECTURE_PAUSE, IHM_RELECTURE_ALLER, "
+         "IHM_RELECTURE_VITESSE, IHM_RELECTURE_QUITTER, IHM_ENREG_LISTE, IHM_ENREG_EXISTE, IHM_ENREG_DUREE, IHM_ENREG_EXPORTER, "
+         "IHM_ENREG_IMPORTER et IHM_ENREG_SUPPRIMER ; les variables SYS.Recording, SYS.RecordingName, SYS.RecordingTime, SYS.Replay, "
+         "SYS.ReplayPosition, SYS.ReplayLength, SYS.ReplaySpeed et SYS.ReplayPaused. G\xC3\xA9n\xC3\xA9rer signale un enregistrement cit\xC3\xA9 qui "
+         "n'est pas dans le dossier.",
+         "enregistrements", ""),
+        note("1.14.0", "Simulation", Kind::New,
+         "PILOTER LES ENREGISTREMENTS D'UNE AUTRE APPLICATION : IHM-Studio.exe --enregistrer \"Nom\" [--duree 10m] [--mot-de-passe \xE2\x80\xA6], "
+         "--arreter-enregistrement [--jeter], --rejouer \"Nom\" [--vitesse 2], --quitter-relecture. La commande va \xC3\xA0 IHM Studio d\xC3\xA9j\xC3\xA0 "
+         "ouvert (la simulation ou le poste qui tourne) et attend sa r\xC3\xA9ponse ; ferm\xC3\xA9, --poste <projet> ouvre le poste et la commande part "
+         "d\xC3\xA8s que son IHM tourne. Codes de sortie : 0 fait, 2 aucune IHM en marche, 3 nom introuvable, 4 mot de passe faux, 5 refus\xC3\xA9. "
+         "Il faut que le projet coche Accepter les commandes d'une autre application (Configuration \xE2\x80\xBA Enregistrements, d\xC3\xA9" "coch\xC3\xA9" "e "
+         "par d\xC3\xA9" "faut).",
+         "enregistrements", ""),
         // 1.13.1 (lot K1, demande du 29/10) : les deux bugs des formules - les constantes globales dans une formule de
         // propriete (l'inspecteur les disait inconnues ; leur unite se perdait, EN ne convertissait rien en fx) et
         // l'aide a la saisie dans les reperes $...$ (rien n'etait propose dedans ni apres eux).

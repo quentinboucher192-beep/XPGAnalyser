@@ -5697,6 +5697,56 @@ Ils se lisent dans un texte à trous, une expression, un script.
 - dans l'éditeur, il montre sa première image et un badge : GIF, ses images, sa lecture.
 > Pour des images à toi qui défilent selon des états (marche, défaut), prends l'**Image animée**.
 
+= La bibliothèque d'objets › Enregistrements
+
+== objet-enregistreur | Enregistreur
+: Un bouton rond pour enregistrer l'IHM qui tourne : rouge, il démarre ; l'enregistrement en cours, il devient un carré, le chrono tourne, et l'arrêt demande le nom (ou garde tout de suite).
+@depuis 1.14.0
+@mots Enregistreur, bouton enregistrer, Demander le nom à l'arrêt, Durée maximale, enregistreur
+@voir enregistrements, objet-lecteur-enregistrements, objet-communs, actions
+@objet Recorder
+@exemple L'Enregistreur d'une station de relevage : un clic démarre « Essai {SYS.Date} », le chrono tourne, un second clic l'arrête.
+### Ses paramètres
+@param title | Titre | Enregistreur | Le titre au-dessus du bouton (vide : sans titre).
+@param recName | Nom de l'enregistrement | Essai {SYS.Date} | Le nom de l'enregistrement : $repères$ et {formules}, comme un texte. Un nom déjà pris devient « Essai (2) » ; vide : « Enregistrement <date> ».
+@param description | Description | (vide) | Ce qu'on y voit (Ressources › Enregistrements la montre).
+@param askName | Demander le nom à l'arrêt | TRUE | La fenêtre Arrêter l'enregistrement (nom, description, mot de passe ; L'enregistrer ou Le jeter). Décochée : il se garde tout de suite, sous son Nom (un poste sans clavier).
+@param maxMinutes | Durée maximale (min) | 0 | Au bout, il s'arrête et se garde. 0 : celle de Configuration › Enregistrements (30 min).
+@param password | Mot de passe | (vide) | Vide : en clair. Sinon la piste est chiffrée : il faut le mot de passe pour le rejouer et lire ses valeurs.
+@param pilotable | Pilotable (un clic agit) | TRUE | Décochée : il montre l'état sans réagir au clic.
+@param accent | Couleur du bouton | #E5484D | Le rond du bouton.
+@param fill | Remplissage | #262C36 | Le fond.
+@param stroke | Contour | #3A4556 | Le cadre.
+@param textColor | Couleur du texte | #DDE3EA | Le titre, le libellé, l'état.
+@param fontSize | Taille du texte | 14 | La taille du libellé ; le bouton rond grandit avec elle.
+### En marche
+- un clic n'importe où sous le titre démarre ou arrête ; « ● enregistre depuis 01:12 » en rouge, ou « prêt · 10 min au plus » ;
+- son niveau d'accès et sa condition d'autorisation s'appliquent comme sur un bouton ;
+- pendant une relecture, il montre ce qu'il montrait pendant l'enregistrement (il tournait).
+
+== objet-lecteur-enregistrements | Lecteur d'enregistrements
+: La liste des enregistrements du dossier (ceux d'un préfixe), chacun avec sa durée, sa date, un cadenas s'il est protégé, et son bouton ▶ Rejouer ; ou un seul bouton pour un enregistrement fixe.
+@depuis 1.14.0
+@mots Lecteur d'enregistrements, lecteur, Enregistrement fixe, Préfixe, Rejouer
+@voir enregistrements, objet-enregistreur, objet-communs, actions
+@objet RecordingPlayer
+@exemple Le Lecteur des essais : chaque ligne commence par « Essai » ; ▶ rejoue, un clic sur la ligne la choisit.
+### Ses paramètres
+@param title | Titre | Enregistrements | Le titre au-dessus de la liste (vide : sans titre).
+@param prefix | Préfixe | (vide) | Seuls les enregistrements dont le nom commence ainsi (sans tenir compte des majuscules) ; vide : tous.
+@param fixed | Enregistrement fixe | (vide) | Toujours le même : un seul bouton ▶ Rejouer « Nom », sans liste.
+@param speed | Vitesse de relecture (×) | 1 | 0,25 à 8 : la vitesse de départ (la barre de relecture la change).
+@param pilotable | Pilotable (un clic agit) | TRUE | Décochée : la liste se lit, sans rejouer.
+@param accent | Couleur de Rejouer | #2F6FD6 | Le rond ▶ et la ligne choisie.
+@param fill | Remplissage | #262C36 | Le fond.
+@param stroke | Contour | #3A4556 | Le cadre.
+@param textColor | Couleur du texte | #DDE3EA | Les noms, les durées, les dates.
+@param fontSize | Taille du texte | 13 | La taille des lignes ; la hauteur d'une ligne la suit.
+### En marche
+- un clic sur une ligne la choisit, un double-clic ou son ▶ la rejoue ; protégée, le mot de passe est demandé ;
+- la liste relit le dossier toutes les 2 s ; « + 3 autres » quand elle ne tient pas ;
+- Générer signale un Enregistrement fixe absent du dossier.
+
 = La bibliothèque d'objets › Utilisateurs
 
 == objet-connexion | Connexion
@@ -8075,7 +8125,7 @@ Les **unités de mesure propres** du projet (ses familles et ses unités, Config
 
 == reference | Référence : les fonctions IHM_
 : Les fonctions IHM_ agissent sur l'IHM depuis un script : naviguer, ouvrir et gérer les popups, écrire au journal, appeler un script, jouer un son, mettre une alarme de côté, exporter, lire la vue courante, le temps de marche et l'utilisateur connecté.
-@mots IHM_NAVIGUER, IHM_POPUP, IHM_FERMER_POPUP, IHM_JOURNAL, IHM_LOG, NIVEAU_LOG, IHM_APPELER, IHM_SON, IHM_VUE, IHM_TEMPS, IHM_UTILISATEUR, IHM_NOM_UTILISATEUR, IHM_GROUPE, IHM_NIVEAU, IHM_DECONNECTER, IHM_PARAMETRES_SYSTEME, IHM_METTRE_DE_COTE, IHM_REMETTRE, IHM_FAIRE_TAIRE, IHM_EXPORTER, IHM_PRECEDENTE, IHM_SUIVANTE, IHM_ACCUEIL, IHM_MENU_CONNEXION, IHM_LANGUE, IHM_THEME, IHM_EQUIPEMENT_OK, IHM_EQUIPEMENT_PING, IHM_GIF_JOUER, IHM_GIF_PAUSE, IHM_GIF_ARRETER, IHM_GIF_REJOUER, IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT, IHM_ANNULER, IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER, WAIT, IHM_POINT_ARRET
+@mots IHM_NAVIGUER, IHM_POPUP, IHM_FERMER_POPUP, IHM_JOURNAL, IHM_LOG, NIVEAU_LOG, IHM_APPELER, IHM_SON, IHM_VUE, IHM_TEMPS, IHM_UTILISATEUR, IHM_NOM_UTILISATEUR, IHM_GROUPE, IHM_NIVEAU, IHM_DECONNECTER, IHM_PARAMETRES_SYSTEME, IHM_METTRE_DE_COTE, IHM_REMETTRE, IHM_FAIRE_TAIRE, IHM_EXPORTER, IHM_PRECEDENTE, IHM_SUIVANTE, IHM_ACCUEIL, IHM_MENU_CONNEXION, IHM_LANGUE, IHM_THEME, IHM_EQUIPEMENT_OK, IHM_EQUIPEMENT_PING, IHM_GIF_JOUER, IHM_GIF_PAUSE, IHM_GIF_ARRETER, IHM_GIF_REJOUER, IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT, IHM_ANNULER, IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER, WAIT, IHM_POINT_ARRET, IHM_ENREG_DEMARRER, IHM_ENREG_ARRETER, IHM_ENREG_EN_COURS, IHM_REJOUER, IHM_RELECTURE_PAUSE, IHM_RELECTURE_ALLER, IHM_RELECTURE_VITESSE, IHM_RELECTURE_QUITTER, IHM_ENREG_LISTE, IHM_ENREG_EXISTE, IHM_ENREG_DUREE, IHM_ENREG_EXPORTER, IHM_ENREG_IMPORTER, IHM_ENREG_SUPPRIMER
 @voir scripts, fonctions, actions, navigation-marche, equipements, variables-esclaves, deboguer-scripts
 @capture PNG_133_st_fonction_ihm_signature_et_vues.png | IHM_NAVIGUER : sa signature, et les vues proposées entre les guillemets.
 @capture PNG_191_aide_reference_ihm.png | F1 sur IHM_JOURNAL, dans un script : la référence des fonctions IHM_.
@@ -8118,6 +8168,10 @@ Les **unités de mesure propres** du projet (ses familles et ses unités, Config
 | IHM_GIF_ARRETER('Objet') | BOOL | ramène un GIF animé à sa première image |
 | IHM_GIF_REJOUER('Objet', tours) | BOOL | le rejoue depuis le début pour ce nombre de tours (0 : sans fin) |
 | IHM_EXPORTER('source' [, 'fichier' [, demander]]) | BOOL | écrit un fichier dans exports/ : alarmes, historique, événements, système, mesures, recette:Nom, objet:Nom ; l'extension (.csv, .xlsx, .pdf) choisit le format ; dans le script qu'un clic lance, il demande où l'enregistrer (demander FALSE : jamais) ; vrai s'il est écrit ou la question posée |
+@nouveau 1.14.0
+| IHM_ENREG_DEMARRER('Nom' [, durée [, 'mot de passe']]), IHM_ENREG_ARRETER([garder]), IHM_ENREG_EN_COURS() | BOOL, STRING, BOOL | enregistrer l'IHM qui tourne, l'arrêter (rend le nom gardé), savoir s'il tourne - voir « Enregistrer et rejouer l'IHM » |
+| IHM_REJOUER('Nom' [, vitesse [, 'mot de passe']]), IHM_RELECTURE_PAUSE([pause]), IHM_RELECTURE_ALLER(instant), IHM_RELECTURE_VITESSE(v), IHM_RELECTURE_QUITTER() | BOOL | rejouer un enregistrement et piloter la relecture |
+| IHM_ENREG_LISTE(['préfixe']), IHM_ENREG_EXISTE('Nom'), IHM_ENREG_DUREE('Nom'), IHM_ENREG_EXPORTER('Nom', 'dossier'), IHM_ENREG_IMPORTER('chemin'), IHM_ENREG_SUPPRIMER('Nom') | LIST OF STRING, BOOL, TIME, BOOL, STRING, BOOL | les fichiers du dossier Enregistrements |
 @nouveau 1.10
 ```ST
 IF Armoires[0].ana.PT1.mes > 30.0 THEN
@@ -8580,6 +8634,19 @@ Et une structure par esclave simulé, `SYS.Slave.<nom>`, de seize membres (Runni
 | `SYS.ShortcutLast` | STRING | Le dernier raccourci parti : Vue · touche ('' : aucun). |
 | `SYS.ShortcutCount` | DINT | Les raccourcis partis depuis le lancement. |
 Et une variable par touche, `SYS.Key.<touche>` (BOOL) : vraie tant que la touche est tenue. Les touches : `A` à `Z`, `Digit0` à `Digit9` (les chiffres : `SYS.Key.1` se lirait comme un bit), `F1` à `F12`, `Enter`, `Escape`, `Space`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`. Par exemple : `SYS.Key.Up AND NOT SYS.KeyCtrl`. La souris et le clavier sont ceux de la vue qui tourne (la simulation de l'éditeur, le poste d'exploitation) ; pour lier une touche à une action, voir « Les raccourcis d'une vue ».
+
+@nouveau 1.14.0
+### Enregistrements (1.14.0)
+| Variable | Type | Ce qu'elle vaut |
+| `SYS.Recording` | BOOL | Un enregistrement tourne. |
+| `SYS.RecordingName` | STRING | Son nom ('' : aucun). |
+| `SYS.RecordingTime` | TIME | Depuis quand il tourne. |
+| `SYS.Replay` | BOOL | Une relecture est affichée. |
+| `SYS.ReplayPosition` | TIME | Où en est la relecture. |
+| `SYS.ReplayLength` | TIME | La durée de l'enregistrement rejoué. |
+| `SYS.ReplaySpeed` | REAL | Sa vitesse (0,25 à 8 ; 0 sans relecture). |
+| `SYS.ReplayPaused` | BOOL | La relecture est en pause (ou au bout). |
+Voir « Enregistrer et rejouer l'IHM ».
 
 == variables-esclaves | Les variables système des esclaves simulés
 : Le domaine SYS « Esclaves simulés » : sept variables pour toute l'IHM (combien d'esclaves, en marche, lus par l'IHM, les bascules, les valeurs animées et forcées) et une structure SYS.Slave.<nom> de seize membres par esclave simulé. Toutes en lecture seule ; IHM_ESCLAVE_SIMULE('Équipement') dit si l'IHM lit un équipement sur son esclave.
@@ -9621,6 +9688,113 @@ Un mot de passe ne s'affiche pas : des points, dans la fiche comme dans le rappo
 **Rapport PDF** ou **Rapport Excel** (dossier `exports/`) : l'essai choisi, sinon toute la campagne. Le titre dit réussi ou échec ; chaque pas, son verdict, ce qui s'est passé, son instant ; sous le tableau, l'objet de l'essai et une ligne « Joué par, Le, Visa » à signer à la main : c'est le procès-verbal de réception.
 ### Générer
 Une action inconnue, une vue ou un objet introuvable, une vérification sans expression, un essai sans pas, deux essais du même nom.
+
+== enregistrements | Enregistrer et rejouer l'IHM
+: Un enregistrement, c'est l'IHM filmée pendant qu'elle tourne : les valeurs, les vues et les popups, les alarmes, les sons, le pointeur et les clics de l'opérateur. Il se garde dans un fichier .xrec (Ressources › Enregistrements), se rejoue comme un film - pause, ±10 s, vitesses ×0,25 à ×8, Échap pour revenir en direct -, se protège par un mot de passe, et se pilote d'un objet, d'une action, d'un script ou d'une autre application.
+@depuis 1.14.0
+@mots enregistrement, enregistrements, enregistrer, rejouer, relecture, replay, film, .xrec, xrec, Enregistreur, Lecteur d'enregistrements, ENR, RELECTURE, Échap quitte, ±10 s, -10 s, +10 s, vitesse de relecture, barre de progression, Arrêter l'enregistrement, Jeter, Enregistrement protégé, mot de passe d'un enregistrement, ressources/enregistrements, Configuration › Enregistrements, Accepter les commandes d'une autre application, --enregistrer, --arreter-enregistrement, --rejouer, --quitter-relecture, --jeter, --duree, --vitesse, --mot-de-passe, IHM_ENREG_DEMARRER, IHM_ENREG_ARRETER, IHM_ENREG_EN_COURS, IHM_REJOUER, IHM_RELECTURE_PAUSE, IHM_RELECTURE_ALLER, IHM_RELECTURE_VITESSE, IHM_RELECTURE_QUITTER, IHM_ENREG_LISTE, IHM_ENREG_EXISTE, IHM_ENREG_DUREE, IHM_ENREG_EXPORTER, IHM_ENREG_IMPORTER, IHM_ENREG_SUPPRIMER, SYS.Recording, SYS.RecordingName, SYS.RecordingTime, SYS.Replay, SYS.ReplayPosition, SYS.ReplayLength, SYS.ReplaySpeed, SYS.ReplayPaused
+@lieux enregistrements, config-enregistrements
+@voir objet-enregistreur, objet-lecteur-enregistrements, simulation, poste-exploitation, ressources, actions, reference, variables-systeme, essais
+### À quoi ça sert
+- Montrer à quelqu'un ce qui s'est passé : un démarrage de station, une alarme de nuit, un essai de réception (FAT) - avec le pointeur et les clics de l'opérateur, tels qu'ils étaient.
+- Former : un scénario de conduite rejoué au poste, à la vitesse qu'on veut.
+- Comprendre un défaut : revenir 10 s en arrière, voir la vue et les valeurs à cet instant.
+Un enregistrement n'est pas une vidéo : ce sont les **valeurs** et les **événements**, rejoués par l'IHM elle-même. Il est léger (quelques centaines de Ko pour dix minutes) et net à tout zoom ; il se rejoue avec le projet qui l'a fait.
+### Ce qui est enregistré
+| Quoi | Le détail |
+| Les valeurs | Toutes les variables IHM, et ce que l'écran lit de l'automate, des variables système et des propriétés d'objets ; 10 fois par seconde (Configuration › Enregistrements). Seul ce qui change s'écrit ; une image complète toutes les 5 s. |
+| L'écran | La vue, les popups ouvertes et leurs paramètres, la langue, le thème, ce que les actions ont changé aux objets. |
+| L'opérateur | Le pointeur, les clics, les appuis longs, les saisies validées (case cochée Pointeur et clics). |
+| Les événements | Les alarmes (apparues, acquittées, disparues), les sons (leur ressource, leur canal), les lignes du journal. |
+| L'en-tête | Le nom, la description, la date, la durée, le projet et sa version, la vue de départ, où (Simulation, ou le nom du poste), par qui (l'utilisateur IHM connecté). |
+### Enregistrer
+- **En simulation** : le bouton **● Enregistrer** de la barre de Simulation · IHM. Il devient **■ Arrêter ● ENR 00:42** ; à l'arrêt, la fenêtre **Arrêter l'enregistrement** dit la durée, les clics, les alarmes et la taille, et demande le **nom**, une **description** et un **mot de passe** (facultatifs) ; **L'enregistrer** ou **Le jeter**. Annuler le garde sous le nom proposé.
+- **Dans une vue** (en simulation comme au poste) : l'objet **Enregistreur** (voir « Enregistreur »).
+- **Par une action** (Démarrer un enregistrement, Arrêter et garder, Démarrer ou arrêter, Arrêter sans le garder), un **script** (`IHM_ENREG_DEMARRER`), ou **une autre application** (voir plus bas).
+Au bout de la durée maximale (30 min par défaut), il s'arrête et se garde. Pendant qu'il tourne, il s'écrit à mesure (un fichier `.xrec.part`) : l'application qui s'arrête net ne perd que la dernière seconde - au prochain coup d'œil sur le dossier, il redevient un `.xrec`, relu jusqu'au dernier bloc entier (« coupé net »).
+### Rejouer
+- **Ressources › Enregistrements** : un double-clic sur la ligne, ou **Rejouer**. La simulation s'ouvre et rejoue.
+- **Dans une vue** : l'objet **Lecteur d'enregistrements**, une action **Rejouer un enregistrement**, `IHM_REJOUER('Démarrage station')`, ou `--rejouer` d'une autre application.
+Pendant la relecture :
+- un **liseré** de la couleur d'accent entoure la vue, et le bandeau du haut dit **▶ RELECTURE — le nom — enregistré le … par … — Échap quitte** ;
+- l'IHM montre ce qui a été enregistré : les objets lisent les valeurs de la piste, la vue et les popups suivent, les alarmes sont celles d'alors, le pointeur de l'opérateur passe en fantôme et chaque clic fait un cercle ;
+- l'IHM **ne commande rien et ne reçoit aucun clic** : ni script, ni action, ni écriture vers l'automate ;
+- la barre du bas : la **progression** (un clic ou un glisser va à l'instant ; ses repères : une alarme en rouge, un clic à la couleur d'accent, un changement de vue en gris), **Début**, **−10 s**, **Pause / Lecture**, **+10 s**, **Fin**, le temps (02:15 / 05:30), les vitesses **×0,25 ×0,5 ×1 ×2 ×4 ×8**, **Quitter**.
+| Touche | Effet |
+| Espace | pause, lecture |
+| ← → | 10 s en arrière, en avant |
+| + − | plus vite, moins vite |
+| Début, Fin | au début, à la fin |
+| Échap | quitter la relecture |
+**Quitter** rend l'IHM exactement comme elle était : la vue, les popups, les alarmes, l'utilisateur, la langue. Pendant la relecture, l'heure de l'IHM s'arrête (ses temporisations reprennent là où elles étaient) et **l'API simulée se met en pause** : rien ne bouge derrière le film ; elle repart en quittant. Un automate réel (relié, ou au poste) continue : l'IHM ne lui écrit rien tant qu'elle rejoue. En simulation, la relecture est dans la vue de la simulation ; au poste d'exploitation, elle prend tout l'écran.
+Un enregistrement d'une autre version du projet se rejoue aussi : ce qui n'existe plus (une variable, une vue, un objet) est ignoré, et signalé une fois (la barre et la Console le disent).
+### Le dossier Enregistrements
+Les enregistrements sont des fichiers `.xrec` dans le dossier natif **ressources/enregistrements** du projet (ou celui de Configuration › Enregistrements) ; au poste d'exploitation, le dossier du projet du poste. **Ressources › Enregistrements** les montre : Nom, Durée, Vue de départ, Enregistré le, Où, Par, Taille, Protégé (et son cadenas) ; à droite, le détail (l'écran à 40 % de la durée, les clics, les alarmes, les vues, le projet) et la **description**, qui se modifie.
+- **Importer…** copie un `.xrec` dans le dossier (un nom déjà pris devient « Nom (2) ») ; **Exporter…** en copie un ailleurs ;
+- **Renommer** : les actions, le Lecteur et les scripts qui le citent en dur suivent ; Générer signale ce qui le cite autrement ;
+- **Mot de passe…** protège, change ou retire la protection (l'actuel est demandé) ;
+- **Supprimer** le met dans la corbeille du projet (ihm/corbeille) ; **Ouvrir le dossier** l'ouvre dans l'explorateur.
+L'archive du projet (.xihm) les emporte si on coche **Avec les enregistrements** (ils sont laissés par défaut : ils pèsent).
+### Le mot de passe
+Un enregistrement protégé a sa piste **chiffrée** : sans le mot de passe, il **ne se rejoue pas et ses valeurs ne se lisent pas**. Son en-tête - le nom, la date, la durée, la description, où et par qui - reste lisible, pour qu'on le trouve. Le mot de passe ne protège que cela : le fichier, lui, se copie, se renomme et se supprime comme un autre. Un mot de passe oublié ne se retrouve pas.
+### Configuration › Enregistrements
+| Réglage | Par défaut | Ce qu'il fait |
+| Dossier | (vide) | Vide : ressources/enregistrements du projet. Un chemin relatif part du dossier du projet. |
+| Taille du dossier au plus (Mo) | 2048 | Au-delà, à la fin d'un enregistrement, les plus anciens sont retirés ; le journal le dit. |
+| Durée au plus (min) | 30 | Celle d'un enregistrement sans durée donnée. |
+| Prises par seconde | 10 | Dix fois par seconde ; seul ce qui change s'écrit. |
+| Pointeur et clics | coché | La souris (le doigt) et ses clics. |
+| Sons | coché | Rejoués sur le canal Relecture. |
+| Popups | coché | Les popups et leurs paramètres. |
+| Accepter les commandes d'une autre application | décoché | Voir ci-dessous. |
+### Depuis une autre application
+Un banc de test, un script, une supervision lance l'enregistrement ou la relecture par la ligne de commande :
+| Commande | Effet |
+| `IHM-Studio.exe --enregistrer "Essai FAT" --duree 10m --mot-de-passe fat2026` | démarre un enregistrement (la durée et le mot de passe sont facultatifs) |
+| `IHM-Studio.exe --arreter-enregistrement` | l'arrête et le garde (`--jeter` : le jette) |
+| `IHM-Studio.exe --rejouer "Essai FAT" --vitesse 2 --mot-de-passe fat2026` | lance la relecture |
+| `IHM-Studio.exe --quitter-relecture` | revient en direct |
+La commande va à IHM Studio déjà ouvert (son IHM en marche : la simulation, ou le poste) et attend sa réponse ; IHM Studio fermé, `--poste <projet>` ouvre le poste et la commande part dès que son IHM tourne. Il faut que le projet coche **Accepter les commandes d'une autre application** (décoché par défaut).
+| Code de sortie | Ce qu'il dit |
+| 0 | fait |
+| 1 | une option mal écrite |
+| 2 | aucune IHM en marche |
+| 3 | nom introuvable (ou rien à arrêter) |
+| 4 | mot de passe faux |
+| 5 | refusé par la configuration du projet |
+### Depuis un script
+| Fonction | Rend | Effet |
+| IHM_ENREG_DEMARRER('Nom' [, T#10m [, 'mot de passe']]) | BOOL | démarre un enregistrement (texte à trous : 'Essai {SYS.Date}') |
+| IHM_ENREG_ARRETER([garder]) | STRING | l'arrête ; garder FALSE : le jette ; rend le nom gardé |
+| IHM_ENREG_EN_COURS() | BOOL | un enregistrement tourne |
+| IHM_REJOUER('Nom' [, vitesse [, 'mot de passe']]) | BOOL | lance une relecture |
+| IHM_RELECTURE_PAUSE([pause]) | BOOL | pause, ou bascule |
+| IHM_RELECTURE_ALLER(T#1m30s) | BOOL | va à un instant |
+| IHM_RELECTURE_VITESSE(2.0) | BOOL | ×0,25 à ×8 |
+| IHM_RELECTURE_QUITTER() | BOOL | revient en direct |
+| IHM_ENREG_LISTE(['préfixe']) | LIST OF STRING | les noms du dossier |
+| IHM_ENREG_EXISTE('Nom'), IHM_ENREG_DUREE('Nom') | BOOL, TIME | il existe ; sa durée |
+| IHM_ENREG_EXPORTER('Nom', 'dossier'), IHM_ENREG_IMPORTER('chemin'), IHM_ENREG_SUPPRIMER('Nom') | BOOL, STRING, BOOL | copier, importer (rend le nom pris), mettre à la corbeille |
+```ST
+IF Demarrage AND NOT IHM_ENREG_EN_COURS() THEN
+    IHM_ENREG_DEMARRER('Démarrage {SYS.Date}', T#15m);
+END_IF;
+```
+```C
+if (Demarrage && !IHM_ENREG_EN_COURS()) {
+    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", T#15m);
+}
+```
+```C++
+if (Demarrage && !IHM_ENREG_EN_COURS()) {
+    IHM_ENREG_DEMARRER("Démarrage {SYS.Date}", T#15m);
+}
+```
+Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la même suite d'actions que IHM_REJOUER, ou depuis une autre application. Les variables système du domaine **Enregistrements** (SYS.Recording, SYS.ReplayPosition...) disent où on en est (voir « Variables système : SYS. »).
+### Bon à savoir
+- un seul enregistrement à la fois, et pas pendant une relecture ;
+- Générer signale un enregistrement cité en dur qui n'est pas dans le dossier (une action, un Lecteur fixe, un script), une durée négative, un export sans dossier ;
+- le Lecteur et la liste relisent le dossier toutes les 2 s : un fichier copié à la main apparaît tout seul.
 
 == performances | Les performances
 : L'onglet Performances de la simulation mesure le cycle IHM, l'évaluation des expressions, le dessin de la vue et chaque script : la dernière valeur, la moyenne, le maximum.
