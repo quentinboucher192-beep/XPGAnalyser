@@ -67,7 +67,9 @@ try {
         Start-XpgEtape 'Relancer l''installateur (la copie n''était pas finie)' | Out-Null
         $setup = Get-XpgOption -Noms @('installateur')
         if (-not $setup) { $setup = (Get-ChildItem -LiteralPath (Join-Path $i.Reserve $etat.version) -Filter '*-Setup-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
-        if (-not $setup) { $setup = Read-XpgTexte -Question 'Chemin de XPGAnalyser-Setup-<version>.exe' -OptionLigne '/installateur:<fichier>' }
+        # 1.14.0 : sans copie de secours, l'installateur n'est pas sur ce PC : on le dit avant de le demander
+        if (-not $setup -and -not $i.CopieDeSecours) { Write-XpgLog -Niveau INFO -Message ("Pas de copie de secours sur ce PC (case décochée à l'installation) : l'installateur de la {0} n'y est pas." -f $etat.version) }
+        if (-not $setup) { $setup = Read-XpgTexte -Question ("Chemin de API-IHM-Studio-Setup-{0}.exe" -f $etat.version) -OptionLigne '/installateur:<fichier>' }
         if (-not $setup -or -not (Test-Path -LiteralPath $setup)) { Stop-Xpg -Code 7 -Message 'L''installateur est introuvable.' -Conseil 'Relance-le toi-même : il reprend l''installation (tes données ne sont pas touchées).' }
         $portee = '/CURRENTUSER'; if ($i.Portee -eq 'tous') { $portee = '/ALLUSERS' }
         $p = Start-Process -FilePath $setup -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', $portee, "/DIR=`"$($i.Dossier)`"") -Wait -PassThru

@@ -6,13 +6,34 @@ L'analyse, l'IHM et la simulation de tes projets Control Expert (.XPG).
 
 CE QUI EST INSTALLÉ
 -------------------
-Ce dossier : les deux applications (API-Studio.exe : le programme de
-l'automate ; IHM-Studio.exe : l'IHM) et tout ce dont elles ont besoin
+Ce dossier : les applications choisies à l'installation (API-Studio.exe : le
+programme de l'automate ; IHM-Studio.exe : l'IHM) et tout ce dont elles ont besoin
 (SDL3.dll, le runtime Visual C++ s'il y en a un), resources\ et libs\ (les
 versions livrées, qui amorcent tes données), maintenance\ (les scripts de
 réparation), licences\, manifeste.json (chaque fichier, sa taille, son
 SHA-256) et installation.ini (écrit par l'installateur : ne pas modifier).
 Rien à ranger ici : ce dossier est remplacé à chaque mise à jour.
+
+CE QUE TU INSTALLES, LES OPTIONS (1.14.0)
+-----------------------------------------
+L'installateur le demande au début : les deux applications (le choix
+habituel), API Studio seul, IHM Studio seul, ou un poste d'exploitation -
+IHM Studio sans l'éditeur, qui ouvre un projet (FINISH) en plein écran. Le
+poste peut démarrer à l'ouverture de la session Windows et être relancé
+s'il se ferme (maintenance\poste.cmd, réduit dans la barre des tâches ; trois
+fermetures rapprochées l'arrêtent, Journaux\poste.log le dit). Seul ce qui
+sert s'installe. Une mise à jour reprend ton choix ; pour en changer,
+relance l'installateur : ce qui ne sert plus s'en va, tes données restent.
+Les options : un raccourci sur le Bureau par application ; ouvrir les .xihm
+et les .xapi d'un double-clic ; « Ouvrir avec API Studio » dans le clic
+droit des .XPG ; une règle du pare-feu pour IHM Studio (installation pour
+tous les comptes) ; la copie de secours pour Réparer (environ 130 Mo). Seules
+celle de la version installée et celle de la précédente sont gardées ; sans
+copie de secours, Réparer demande l'installateur.
+Sans surveillance : /PROFIL=deux|api|ihm|poste, /POSTE="D:\Projets\Armoire",
+/POSTEAUTO=oui|non, /POSTERELANCE=oui|non ; les cases par /MERGETASKS (par
+exemple "!reserve" : sans copie de secours ; "parefeu", "bureauapi",
+"bureauihm", "bureauposte", "xihm", "xapi", "xpg", "barre").
 
 TES DONNÉES
 -----------
