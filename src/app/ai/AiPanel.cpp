@@ -517,6 +517,8 @@ void AiPanel::layoutRows() {
 
 void AiPanel::onLayout() {
     const auto b = bounds();
+    // Le menu du clic droit : le cadre du panneau (ferme, il ne prend aucun clic ; ouvert, il deborde).
+    menu_->setBounds(b);
     const float x = b.x, w = b.w;
     header_ = {x, b.y, w, kHeaderH};
     const float bs = 28.f;

@@ -294,6 +294,14 @@ void testConversations() {
         del |= it.label.rfind("Supprimer", 0) == 0 && it.shortcut == "Suppr";
     }
     check(rename && del, "le clic droit : Renommer (F2), Supprimer (Suppr)");
+    {
+        Recorder rec;
+        std::vector<ui::Widget*> overlays;
+        f.panel->layout();
+        f.panel->render(ui::PaintContext{rec, ui::Theme::dark(), f.panel->bounds(), f.t, &overlays});
+        for (auto* o : overlays) o->paintTopMost(ui::PaintContext{rec, ui::Theme::dark(), f.panel->bounds(), f.t, nullptr});
+        check(rec.saw("Renommer\xE2\x80\xA6") && rec.saw("Supprimer\xE2\x80\xA6"), "le menu se dessine (la passe du dessus)");
+    }
     f.panel->menu()->close();
     // Supprimer : la confirmation, puis le fichier part.
     const std::size_t n = f.as().conversations().size();
