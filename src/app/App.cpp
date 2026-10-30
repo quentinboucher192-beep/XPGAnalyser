@@ -57,6 +57,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <map>                  // ---- Lot API 8 : les filtres retenus d'une session rejouee ----
 #include <system_error>
@@ -215,6 +216,7 @@ std::string frenchLabel(const std::string& en, const std::string& place) {
 core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     std::unique_ptr<App> a(new App());
     a->options_ = std::move(options);
+    a->pendingRecording_ = a->options_.recordingCommand;   // 1.14.0 (M4)
     // 1.12.0 : la fenetre porte le nom de son application (API Studio, IHM Studio).
     if (!core::editionLabel().empty() && a->options_.title == AppOptions{}.title) a->options_.title = core::productName();
 
@@ -2090,10 +2092,53 @@ void App::bringToFront() {
 #endif
 }
 
+// 1.14.0 (M4) : la reponse a une autre application - "<code>\n<texte>", ecrite d'un bloc (un .tmp renomme) : celle
+// qui attend ne lit jamais une reponse a moitie ecrite.
+namespace {
+void writeRecordingReply(const std::string& path, int code, const std::string& message) {
+    namespace fs = std::filesystem;
+    const fs::path target(std::u8string(path.begin(), path.end()));
+    fs::path tmp = target;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) return;
+        const std::string text = hmi::rec::replyText(code, message);
+        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    }
+    std::error_code ec;
+    fs::rename(tmp, target, ec);
+}
+} // namespace
+
+void App::runPendingRecording() {
+    if (pendingRecording_.empty() || !HmiSimulationPane::anyRunning()) return;
+    const auto command = hmi::rec::parseCommand(pendingRecording_);
+    pendingRecording_.clear();
+    std::string message;
+    const int code = HmiSimulationPane::runCommandAnywhere(command, &message);
+    std::fprintf(code == 0 ? stdout : stderr, "[enregistrement] %s (code %d)\n", message.c_str(), code);
+    bus_.publish(StatusNotice{"Ligne de commande : " + message, 8.0});
+    if (!command.reply.empty()) writeRecordingReply(command.reply, code, message);
+}
+
 void App::takeInstanceRequests() {
+    runPendingRecording();       // 1.14.0 (M4)
     auto* instance = core::instance::current();
     if (!instance) return;
     for (auto& request : instance->take()) {
+        // 1.14.0 (M4) : UNE COMMANDE D'ENREGISTREMENT d'une autre application (--enregistrer, --rejouer...) : a l'IHM en
+        // marche, tout de suite ; sa reponse (le code, la phrase) dans le fichier --reponse que la commande attend.
+        if (const auto command = hmi::rec::parseCommand(request.args);
+            command.kind != hmi::rec::Command::Kind::None || !command.error.empty()) {
+            std::string message = command.error;
+            const int code = command.error.empty() ? HmiSimulationPane::runCommandAnywhere(command, &message) : hmi::rec::kExitBadOption;
+            std::fprintf(stderr, "[instance] commande d'enregistrement : %s (code %d)\n", message.c_str(), code);
+            bus_.publish(StatusNotice{"Autre application : " + message, 8.0});
+            if (!command.reply.empty()) writeRecordingReply(command.reply, code, message);
+            if (code == 0 && command.kind == hmi::rec::Command::Kind::Replay) bringToFront();
+            continue;
+        }
         std::vector<std::string> files;
         std::string station;
         for (std::size_t i = 0; i < request.args.size(); ++i) {
