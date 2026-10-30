@@ -42698,6 +42698,28 @@ void imagesN6_1141() {
     sections = pal.imageSections();
     check(sections.size() == 1 && sections.front().category == "Drapeaux" && sections.front().count == 1,
           "rechercher \xC2\xAB drapeau fr \xC2\xBB : le drapeau fran\xC3\xA7" "ais seul");
+    // 1.14.1 (captures finales) : LA LIGNE DU BAS SUIT CE QUI EST MONTRE - l'image choisie (ou survolee) que la recherche cache
+    // n'y reste pas (avant : "Danger electrique - Securite et signalisation" sous les vannes trouvees) ; la recherche
+    // effacee, l'image choisie y revient.
+    pal.setFilter("");
+    pal.revealImage("danger-electrique");
+    {
+        gfx::Rect dz;
+        check(pal.imageTileRect("danger-electrique", dz), "la vignette Danger \xC3\xA9lectrique");
+        pal.setCurrentImage("danger-electrique");
+        pal.dispatch(ui::MouseMove{{dz.x + dz.w / 2, dz.y + dz.h / 2}, {0, 0}, {}});
+        paint();
+        check(rec.wrote("Danger \xC3\xA9lectrique \xC2\xB7 S"), "la ligne du bas : Danger \xC3\xA9lectrique et sa cat\xC3\xA9gorie");
+        pal.setFilter("vanne");
+        paint();
+        check(!rec.wrote("Danger \xC3\xA9lectrique") && rec.wrote("Clique une image puis"),
+              "rechercher \xC2\xAB vanne \xC2\xBB : l'image cach\xC3\xA9" "e quitte la ligne du bas (le mode d'emploi revient)");
+        pal.setFilter("");
+        paint();
+        check(rec.wrote("Danger \xC3\xA9lectrique \xC2\xB7 S"), "la recherche effac\xC3\xA9" "e : l'image choisie revient");
+        pal.setCurrentImage({});
+        pal.setImageCategoryOpen("S\xC3\xA9" "curit\xC3\xA9 et signalisation", false);
+    }
     pal.setFilter("");
     // L'infobulle : le nom, la categorie, la taille d'origine.
     const std::string tip = pal.imageTooltip("fleche-haut");
@@ -42847,6 +42869,17 @@ void imagesN6_1141() {
     fs::remove_all(saved, ec);
 
     // ---- Ressources > Ma bibliotheque, et Mes images ----
+    // 1.14.1 (captures finales) : UNE SEULE LISTE pour tous les editeurs ouverts - un autre editeur (une autre vue), deja sur
+    // l'onglet Images, voit ce que Ma bibliotheque, le + ou Retirer font ailleurs, sans relire a la main (avant : Mes images
+    // restait a 3 apres Ressources > Ma bibliotheque, meme apres avoir change de vue).
+    Bench bOther;
+    auto& otherPal = bOther.editor->palette();
+    otherPal.setMode(app::HmiPalette::Mode::Images);
+    const auto mineCount = [](const app::HmiPalette& pp) {
+        const auto s = pp.imageSections();
+        return !s.empty() && s.front().category == il::kMine ? s.front().count : std::size_t(999);
+    };
+    check(mineCount(pal) == 0 && mineCount(otherPal) == 0, "Mes images vide, dans les deux \xC3\xA9" "diteurs");
     app::HmiResourcesPane pane("res", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
     pane.setBounds({0, 0, 1200, 600});
     pane.layout();
@@ -42857,6 +42890,9 @@ void imagesN6_1141() {
     pane.selectResource(b.doc->project.resourceByName("pompe.svg")->id);
     std::string why;
     check(pane.addSelectedToImageLibrary(&why) && fs::exists(mineDir / "pompe.svg"), "Ma biblioth\xC3\xA8que : pompe.svg rejoint Mes images (" + why + ")");
+    check(mineCount(pal) == 1 && mineCount(otherPal) == 1 && otherPal.imageById("mes/pompe.svg"),
+          "Ma biblioth\xC3\xA8que : Mes images en compte 1, dans l'\xC3\xA9" "diteur ouvert et dans l'autre (" + std::to_string(mineCount(pal)) + ", "
+              + std::to_string(mineCount(otherPal)) + ")");
     check(pane.addSelectedToImageLibrary() && pane.lastMessage().find("D\xC3\xA9j\xC3\xA0") == 0, "... encore : d\xC3\xA9j\xC3\xA0 l\xC3\xA0, pas de double");
     {
         std::ofstream other((mineDir / "autre.svg").string(), std::ios::binary);   // un fichier du disque, puis un homonyme
@@ -42907,6 +42943,8 @@ void imagesN6_1141() {
     const auto* toRemove = pal.imageById("mes/autre.svg");
     check(toRemove && b.editor->removeMyImage(*toRemove) && !fs::exists(mineDir / "autre.svg") && pal.myImages().size() == 3,
           "Retirer de Mes images : le fichier s'en va, la section en compte 3");
+    check(mineCount(otherPal) == 3 && mineCount(b2.editor->palette()) == 3 && !otherPal.imageById("mes/autre.svg"),
+          "... dans les autres \xC3\xA9" "diteurs aussi (" + std::to_string(mineCount(otherPal)) + ", " + std::to_string(mineCount(b2.editor->palette())) + ")");
     check(!b.editor->removeMyImage(*up, &why), "une image de la biblioth\xC3\xA8que ne se retire pas (" + why + ")");
 
     il::setUserFolder(keptFolder);

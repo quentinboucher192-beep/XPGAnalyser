@@ -1615,6 +1615,7 @@ void HmiPalette::setFilter(std::string text) {
             if (hmiPaletteWordMatch(k, filter_)) wordHits_.insert(k);
     scrollY_ = 0;
     imageScrollY_ = 0;      // 1.14.1 (lot N6) : l'onglet Images aussi
+    hoverImage_.clear();    // 1.14.1 (captures finales) : la vignette survolee a pu disparaitre (la ligne du bas la suivait)
     invalidate();
 }
 
@@ -2228,6 +2229,7 @@ void HmiPalette::setImageCategoryOpen(const std::string& category, bool open) {
 bool HmiPalette::imageCategoryOpen(const std::string& category) const { return imagePrefs().open.count(category) > 0; }
 
 void HmiPalette::reloadMyImages() {
+    mineRevision_ = il::userRevision();
     mine_ = il::userImages();
     mineLoaded_ = true;
     for (auto it = tileRes_.begin(); it != tileRes_.end();)
@@ -2236,8 +2238,22 @@ void HmiPalette::reloadMyImages() {
     invalidate();
 }
 
+void HmiPalette::syncMine() const {
+    if (!mineLoaded_ || mineRevision_ == il::userRevision()) return;
+    mineRevision_ = il::userRevision();
+    mine_ = il::userImages();
+    for (auto it = tileRes_.begin(); it != tileRes_.end();)
+        it = it->first.first.rfind("mes/", 0) == 0 ? tileRes_.erase(it) : std::next(it);
+}
+
+const std::vector<il::Image>& HmiPalette::myImages() const {
+    syncMine();
+    return mine_;
+}
+
 const il::Image* HmiPalette::imageById(std::string_view id) const {
     if (id.empty()) return nullptr;
+    syncMine();
     for (const auto& i : mine_)
         if (i.id == id) return &i;
     return il::findBuiltIn(id);
@@ -2258,6 +2274,7 @@ const hmi::Resource& HmiPalette::tileResource(const il::Image& img, std::uint32_
 }
 
 std::vector<std::pair<std::string, std::vector<const il::Image*>>> HmiPalette::imageGroups() const {
+    syncMine();   // 1.14.1 (captures finales) : Mes images change ailleurs - la liste relue avant d'y pointer
     std::vector<std::pair<std::string, std::vector<const il::Image*>>> out;
     const bool searching = !filter_.empty();
     std::vector<const il::Image*> mine;
@@ -2514,7 +2531,17 @@ void HmiPalette::paintImages(const ui::PaintContext& ctx) {
     const gfx::Rect pr{b.x, bottom, b.w, kImageHelpH};
     ctx.r.fillRect(pr, c.headerBg);
     ctx.r.fillRect({pr.x, pr.y, pr.w, 1}, c.border);
-    const auto* shown = imageById(hoverImage_.empty() ? currentImage_ : hoverImage_);
+    // 1.14.1 (captures finales) : LA LIGNE SUIT CE QUI EST MONTRE - l'image survolee, sinon la choisie, si sa vignette est
+    // dans l'onglet ; une recherche (ou une section repliee) qui la cache rend le mode d'emploi. Avant, apres la recherche
+    // "vanne", elle disait encore "Danger electrique - Securite et signalisation".
+    const auto onTab = [&](const std::string& id) -> const il::Image* {
+        if (id.empty()) return nullptr;
+        for (const auto& t : imageTiles_)
+            if (t.image->id == id) return t.image;
+        return nullptr;
+    };
+    const il::Image* shown = onTab(hoverImage_);
+    if (!shown) shown = onTab(currentImage_);
     std::string l1 = "Clique une image puis clique dans la vue", l2 = "(ou glisse-la) ; double-clic : au centre.";
     if (shown) {
         l1 = shown->label + " \xC2\xB7 " + shown->category;

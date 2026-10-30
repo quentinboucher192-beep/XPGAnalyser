@@ -19,6 +19,7 @@
 #include "HmiModel.hpp"
 #include "../core/Result.hpp"
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -134,6 +135,10 @@ bool addUserImage(const std::string& name, const Bytes& data, std::string* store
                   std::string* why = nullptr);
 bool addUserFile(const std::string& path, std::string* stored = nullptr, bool* existed = nullptr, std::string* why = nullptr);
 bool removeUserImage(const Image&, std::string* why = nullptr);
+// 1.14.1 (captures finales) : LE NUMERO DE MES IMAGES - il monte a chaque ajout, retrait ou autre dossier (ci-dessus).
+// Chaque onglet Images ouvert (un par editeur de vue) relit la liste quand il a change : la meme pour tous (avant,
+// Ressources > Ma bibliotheque ne se voyait pas dans un onglet deja ouvert, meme apres avoir change de vue).
+[[nodiscard]] std::uint64_t userRevision() noexcept;
 
 // ---- chercher, colorer, importer ----
 // Le nom, la categorie et les mots-cles : chaque mot cherche commence un de leurs mots, sans casse ni accents.

@@ -429,7 +429,19 @@ const Image* findBuiltIn(std::string_view id) {
     return nullptr;
 }
 
-void setUserFolder(std::string folder) { folderRef() = std::move(folder); }
+namespace {
+std::uint64_t& revisionRef() {
+    static std::uint64_t n = 1;
+    return n;
+}
+} // namespace
+
+std::uint64_t userRevision() noexcept { return revisionRef(); }
+
+void setUserFolder(std::string folder) {
+    folderRef() = std::move(folder);
+    ++revisionRef();
+}
 const std::string& userFolder() { return folderRef(); }
 
 std::vector<Image> userImages() {
@@ -504,6 +516,7 @@ bool addUserImage(const std::string& name, const Bytes& data, std::string* store
         out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
         if (!out) return fail("\xC3\xA9" "criture incompl\xC3\xA8te : " + U(target));
     }
+    ++revisionRef();
     if (stored) *stored = file;
     return true;
 }
@@ -527,6 +540,7 @@ bool removeUserImage(const Image& img, std::string* why) {
         if (why) *why = "suppression impossible : " + img.file;
         return false;
     }
+    ++revisionRef();
     return true;
 }
 

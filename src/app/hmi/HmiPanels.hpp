@@ -390,7 +390,8 @@ public:
     void setImageCategoryOpen(const std::string& category, bool open);
     [[nodiscard]] bool imageCategoryOpen(const std::string& category) const;
     void reloadMyImages();                                      // relire le dossier de Mes images
-    [[nodiscard]] const std::vector<hmi::imagelib::Image>& myImages() const noexcept { return mine_; }
+    // 1.14.1 (captures finales) : la liste commune - relue des que Mes images a change ailleurs (hmi::imagelib::userRevision).
+    [[nodiscard]] const std::vector<hmi::imagelib::Image>& myImages() const;
     // Une image montree par l'onglet (embarquee, ou de Mes images : "mes/" + son fichier) ; nul : inconnue.
     [[nodiscard]] const hmi::imagelib::Image* imageById(std::string_view id) const;
     // Ce que montre l'onglet (la recherche appliquee) : ses sections, dans l'ordre, et leur nombre d'images.
@@ -456,8 +457,13 @@ private:
     static constexpr float kImageHelpH = 40.f;  // en bas : l'image survolee (ou choisie), ou le mode d'emploi
     struct ImageTile { const hmi::imagelib::Image* image; gfx::Rect rect; };
     struct ImageHead { std::string category; std::size_t count; bool open; gfx::Rect rect; };
-    std::vector<hmi::imagelib::Image> mine_;
+    // 1.14.1 (captures finales) : Mes images, la liste commune a tous les editeurs (hmi::imagelib::userRevision) - relue
+    // ici (syncMine) avant chaque lecture quand elle a change ailleurs : Ressources > Ma bibliotheque, le + ou Retirer d'un
+    // autre editeur. Les vignettes (imageTiles_) se refont juste apres (layoutImages lit la liste d'abord).
+    mutable std::vector<hmi::imagelib::Image> mine_;
     bool                              mineLoaded_{false};
+    mutable std::uint64_t             mineRevision_{0};
+    void syncMine() const;
     std::string                       backdrop_{"#20242B"};
     std::string                       currentImage_, hoverImage_;
     float                             imageScrollY_{0};
