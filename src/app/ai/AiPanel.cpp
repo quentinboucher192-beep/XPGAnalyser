@@ -1260,6 +1260,7 @@ bool AiChatView::atBottom() const noexcept { return offset_ >= std::max(0.f, con
 void AiChatView::scrollToBottom() {
     stick_ = true;
     anchor_ = false;
+    anchored_ = false;
     measure();
     offset_ = std::max(0.f, content_ - viewHeight());
     placeCards();
@@ -1268,6 +1269,7 @@ void AiChatView::scrollToBottom() {
 
 void AiChatView::scrollBy(float dy) {
     anchor_ = false;
+    anchored_ = false;
     offset_ = std::clamp(offset_ + dy, 0.f, std::max(0.f, content_ - viewHeight()));
     stick_ = atBottom();
     placeCards();
@@ -1626,7 +1628,10 @@ std::vector<std::string> AiChatView::renderedLines(int message) const {
 }
 
 void AiChatView::onLayout() {
-    if (bounds().w != measuredW_) measure();
+    if (bounds().w != measuredW_) {
+        measure();
+        if (anchored_) anchor_ = true;   // la largeur a change depuis le placement : le refaire
+    }
     offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - viewHeight()));
     if (stick_) offset_ = std::max(0.f, content_ - viewHeight());
     if (anchor_) applyAnchor();
@@ -1647,12 +1652,15 @@ void AiChatView::showLastExchange() {
 void AiChatView::applyAnchor() {
     if (bounds().w <= 40.f) return;   // pas encore de largeur : au prochain onLayout
     anchor_ = false;
+    anchored_ = true;
     // Le debut de la derniere demande en haut (tout tient : le debut de la conversation).
     float top = 0.f;
     for (const auto& b : blocks_)
         if (b.user) top = b.y - 8.f <= 10.f ? 0.f : b.y - 8.f;   // la premiere demande : tout en haut
     offset_ = std::clamp(top, 0.f, std::max(0.f, content_ - viewHeight()));
-    stick_ = atBottom();
+    // 1.14.2 (captures, 3e passe) : ne pas suivre le bas. Quand tout tenait a la premiere largeur,
+    // atBottom() etait vrai : le volet retreci (1280 x 800) restait colle en bas, la question cachee.
+    stick_ = false;
 }
 
 void AiChatView::placeCards() {
@@ -1938,6 +1946,7 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
     if (bar_.handle(*this, ev, bounds(), content_, viewHeight(), offset_)) {
         stick_ = atBottom();
         anchor_ = false;
+        anchored_ = false;
         placeCards();
         invalidateLayout();
         return ui::EventResult::Consumed;

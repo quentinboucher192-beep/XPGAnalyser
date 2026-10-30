@@ -1020,6 +1020,20 @@ void testSecondPass() {
     check(f.panel->selectConversation(f.as().currentIndex()), "Decouvrir l'Assistant rouverte");
     f.panel->layout();
     check(chat.contentHeight() > chat.bounds().h && chat.scrollOffset() == 0.f, "elle ne tient pas : son debut (la question en haut)");
+    // 3e passe : elle tient a la premiere largeur (grande), puis le volet retrecit (1280 x 800) :
+    // la discussion ne reste pas collee en bas, la question reste en haut.
+    f.panel->setBounds({0, 0, 900, 1400});
+    f.panel->layout();
+    check(f.panel->selectConversation(f.as().currentIndex()), "Decouvrir l'Assistant rouverte, grande");
+    f.panel->layout();
+    check(chat.contentHeight() <= chat.bounds().h + 1.f, "a la premiere largeur, elle tient");
+    f.panel->setBounds({0, 0, 282, 520});
+    f.panel->layout();
+    f.panel->layout();
+    check(chat.contentHeight() > chat.bounds().h && chat.scrollOffset() == 0.f && !chat.atBottom(),
+          "le volet retreci : toujours son debut, pas collee en bas");
+    f.panel->setBounds({0, 0, 440, 520});
+    f.panel->layout();
     // Plusieurs echanges : la derniere demande en haut, pas la fin de la derniere reponse.
     f.panel->newConversation();
     (void)f.sendAndWait("Bonjour, peux-tu me faire un caf\xC3\xA9 ?");

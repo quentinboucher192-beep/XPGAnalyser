@@ -328,6 +328,7 @@ private:
     std::uint64_t            measuredRev_{0};
     bool                     stick_{true};
     bool                     anchor_{false};   // showLastExchange en attente d'une largeur
+    bool                     anchored_{false}; // place par showLastExchange, pas encore defile a la main : suit la largeur
     mutable std::vector<std::pair<gfx::Rect, std::string>> tips_;
     int                      hoverSuggestion_{-1};
     ui::EdgeScrollBar        bar_;
