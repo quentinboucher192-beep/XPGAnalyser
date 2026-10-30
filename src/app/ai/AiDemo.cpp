@@ -167,7 +167,7 @@ DemoReply tankWithLevel(std::string_view request, const DemoContext& c) {
     DemoReply r;
     r.text = "Je propose **une cuve** (Cuve_" + id + ") et **son indicateur de niveau** (un bargraphe gradu\xC3\xA9 de 0 \xC3\xA0 100 %) "
              "\xC3\xA0 c\xC3\xB4t\xC3\xA9, dans " + viewName(c) + ", l\xC3\xA0 o\xC3\xB9 la vue est libre (x = " + num(x) + ", y = " + num(y) + ").\n"
-             "Aucune variable n'est associ\xC3\xA9" "e : dites-moi laquelle relier au niveau.";
+             "Aucune variable n'est associ\xC3\xA9" "e : dis-moi laquelle relier au niveau.";
     r.proposal = std::move(p);
     return r;
 }
