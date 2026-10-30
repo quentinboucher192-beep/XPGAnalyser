@@ -10211,7 +10211,7 @@ Sur le poste, **F1** ouvre l'aide - sur ce sujet - pour un utilisateur connecté
 ### Installer un PC d'atelier
 @nouveau 1.14.0
 L'installateur prépare le poste : à « Que veux-tu installer ? », choisis **Poste d'exploitation**, puis le dossier du projet (un projet FINISH). Il n'installe qu'IHM Studio et ne met que « Poste d'exploitation » dans le menu Démarrer (pas l'éditeur). Ses deux cases :
-- **Démarrer le poste à l'ouverture de la session Windows** (cochée) : la même entrée « XPG Poste d'exploitation » que Démarrer avec la session ; pour une installation pour tous les comptes, celle de `HKLM` (chaque compte du PC) ;
+- **Démarrer le poste à l'ouverture de la session Windows** (cochée) : la même entrée « XPG Poste d'exploitation » que Démarrer avec la session ; pour une installation pour tous les comptes, celle de `HKLM` (chaque compte du PC), que la case Démarrer avec la session ne montre pas : ne la coche pas en plus, le poste s'ouvrirait deux fois ;
 - **Le relancer s'il se ferme** : un petit lanceur (`maintenance\poste.cmd`, réduit dans la barre des tâches) le relance 5 s après ; trois fermetures de suite moins d'une minute après son lancement l'arrêtent, et `Journaux\poste.log` le dit. Pour quitter le poste pour de bon, ferme d'abord la fenêtre du lanceur.
 Sans surveillance : `API-IHM-Studio-Setup-<version>.exe /VERYSILENT /ALLUSERS /PROFIL=poste /POSTE="D:\Projets\Armoire_Gaz" /POSTEAUTO=oui /POSTERELANCE=oui`.
 ### Un PC sans personne : l'ouverture de session automatique

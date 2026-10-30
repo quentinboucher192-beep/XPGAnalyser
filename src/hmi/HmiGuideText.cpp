@@ -20963,7 +20963,9 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**D\xC3\xA9marrer le poste \xC3\xA0 l'ouverture de la session Windows** "
                          "(coch\xC3\xA9" "e) : la m\xC3\xAAme entr\xC3\xA9" "e \xC2\xAB XPG Poste "
                          "d'exploitation \xC2\xBB que D\xC3\xA9marrer avec la session ; pour une "
-                         "installation pour tous les comptes, celle de `HKLM` (chaque compte du PC) ;", {}},
+                         "installation pour tous les comptes, celle de `HKLM` (chaque compte du PC), que la "
+                         "case D\xC3\xA9marrer avec la session ne montre pas : ne la coche pas en plus, le "
+                         "poste s'ouvrirait deux fois ;", {}},
              {K::Bullet, "**Le relancer s'il se ferme** : un petit lanceur (`maintenance\\poste.cmd`, "
                          "r\xC3\xA9" "duit dans la barre des t\xC3\xA2" "ches) le relance 5 s apr\xC3\xA8s ; "
                          "trois fermetures de suite moins d'une minute apr\xC3\xA8s son lancement "
