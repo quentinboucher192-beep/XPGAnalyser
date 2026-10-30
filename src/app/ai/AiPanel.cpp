@@ -43,6 +43,20 @@ std::string elide(gfx::IRenderer& r, const std::string& text, gfx::FontId f, flo
     return text.substr(0, n) + dots;
 }
 
+// 1.14.2 (captures, 2e passe) : elide, et le texte entier pour l'infobulle quand il est coupe.
+std::string elideTip(gfx::IRenderer& r, const std::string& text, gfx::FontId f, float width, gfx::Rect at,
+                     std::vector<std::pair<gfx::Rect, std::string>>& tips) {
+    std::string shown = elide(r, text, f, width);
+    if (shown != text && !text.empty()) tips.emplace_back(at, text);
+    return shown;
+}
+
+std::string tipAt(const std::vector<std::pair<gfx::Rect, std::string>>& tips, gfx::Point p) {
+    for (auto it = tips.rbegin(); it != tips.rend(); ++it)
+        if (it->first.contains(p)) return it->second;
+    return {};
+}
+
 // Un texte trace deux fois a un pixel : le gras du logiciel (il n'a pas de face grasse).
 void bold(gfx::IRenderer& r, gfx::Point at, std::string_view t, gfx::FontId f, gfx::Color c) {
     r.drawText(at, t, f, c);
@@ -574,7 +588,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     rename_ = &static_cast<ui::InputText&>(addChild(std::move(rename)));
     chat_ = &static_cast<AiChatView&>(addChild(std::make_unique<AiChatView>(base + ".discussion", *this)));
     prompt_ = &static_cast<AiPromptEdit&>(addChild(std::make_unique<AiPromptEdit>(base + ".saisie")));
-    prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : nouvelle ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
+    prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
     attachBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Joindre\xE2\x80\xA6", base + ".joindre")));
     attachBtn_->setIcon(ui::Icon::Link);
     attachBtn_->setCompact(true);   // l'icone seule (le libelle : l'infobulle, les seances de script)
@@ -662,7 +676,7 @@ void AiPanel::ensureLoaded() {
     for (const auto& p : problems) say("Assistant IA : conversation illisible, laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 (" + p + ")");
     seen_ = 0;
     sync();
-    chat_->scrollToBottom();
+    chat_->showLastExchange();   // la premiere ouverture : le debut de la conversation, pas sa fin
 }
 
 void AiPanel::sync() {
@@ -695,7 +709,9 @@ bool AiPanel::selectConversation(int index) {
     cancelRename();
     const bool ok = assistant_->select(list[static_cast<std::size_t>(index)].id);
     chat_->rebuild();
-    chat_->scrollToBottom();
+    // Une reponse qui s'ecrit dans cette conversation : suivre le bas ; sinon le dernier echange.
+    if (assistant_->generatingMessage() >= 0) chat_->scrollToBottom();
+    else chat_->showLastExchange();
     invalidateLayout();
     return ok;
 }
@@ -1038,6 +1054,7 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto& f = ctx.theme.font;
     const auto b = bounds();
+    tips_.clear();
     ctx.r.fillRect(b, c.panelBg);
     ctx.r.fillRect({b.x, b.y, 1.f, b.h}, c.border);
     // ---- l'en-tete
@@ -1052,14 +1069,17 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     const float dotY = statusLine_.y + statusLine_.h / 2.f;
     ctx.r.fillRoundedRect({statusLine_.x + kPad + 6.f, dotY - 4.f, 8.f, 8.f}, on ? c.warning : c.textDisabled, 4.f);
     ctx.r.drawText({statusLine_.x + kPad + 22.f, statusLine_.y + (statusLine_.h - lhCap) / 2.f},
-                   elide(ctx.r, a.connectionText(), f.caption, statusLine_.w - 2 * kPad - 24.f), f.caption, c.textMuted);
+                   elideTip(ctx.r, a.connectionText(), f.caption, statusLine_.w - 2 * kPad - 24.f, statusLine_, tips_), f.caption, c.textMuted);
     // ---- le mode et la vue visee
     {
         const auto ctx2 = a.context();
         const float vx = modeDirect_->bounds().right() + 10.f;
         std::string viewText = ctx2.view ? "Vue : " + ctx2.view->name : std::string("Aucune vue ouverte");
+        const std::string full = viewText;
         if (ctx2.view && ctx.r.measure(viewText, f.caption).width > modeRow_.right() - kPad - vx) viewText = ctx2.view->name;
-        ctx.r.drawText({vx, modeRow_.y + (modeRow_.h - lhCap) / 2.f}, elide(ctx.r, viewText, f.caption, modeRow_.right() - kPad - vx),
+        const gfx::Rect viewAt{vx, modeRow_.y, std::max(0.f, modeRow_.right() - kPad - vx), modeRow_.h};
+        if (viewText != full) tips_.emplace_back(viewAt, full);
+        ctx.r.drawText({vx, modeRow_.y + (modeRow_.h - lhCap) / 2.f}, elideTip(ctx.r, viewText, f.caption, viewAt.w, viewAt, tips_),
                        f.caption, ctx2.view ? c.textMuted : c.warning);
     }
     // ---- les conversations
@@ -1097,7 +1117,8 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
                 ctx.r.drawText({chip.x + 5.f, chip.y + (chip.h - lhCap) / 2.f}, "d\xC3\xA9mo", f.caption, sel ? ink : c.info);
             }
             const float tx = r.x + kPad + 24.f;
-            ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kBody)) / 2.f}, elide(ctx.r, conv.title, kBody, right - tx - 8.f), kBody, ink);
+            ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kBody)) / 2.f},
+                           elideTip(ctx.r, conv.title, kBody, right - tx - 8.f, {r.x, r.y, right - r.x, r.h}, tips_), kBody, ink);
         }
         ctx.r.popClip();
         listBar_.paint(ctx, list_, static_cast<float>(a.conversations().size()) * kRowH, list_.h, listScroll_);
@@ -1122,7 +1143,8 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({x.x - 8.f - sw, r.y + (r.h - lhCap) / 2.f}, state, f.caption, done ? c.textMuted : c.info);
         const float nx = r.x + 28.f;
         const std::string label = pend[i].attachment.name + "  \xC2\xB7  " + look.type;
-        ctx.r.drawText({nx, r.y + (r.h - lhCap) / 2.f}, elide(ctx.r, label, f.caption, x.x - 16.f - sw - nx), f.caption, c.text);
+        ctx.r.drawText({nx, r.y + (r.h - lhCap) / 2.f}, elideTip(ctx.r, label, f.caption, x.x - 16.f - sw - nx, {r.x, r.y, x.x - r.x, r.h}, tips_),
+                       f.caption, c.text);
         if (!done) {
             ctx.r.fillRect({r.x + 1.f, r.bottom() - 3.f, r.w - 2.f, 2.f}, alpha(c.info, 50));
             ctx.r.fillRect({r.x + 1.f, r.bottom() - 3.f, (r.w - 2.f) * pend[i].progress, 2.f}, c.info);
@@ -1137,18 +1159,18 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
                        c.textMuted);
     } else {
         // L'aide des touches : sur une ligne si elle tient, sinon sur deux.
-        const std::string one = "Entr\xC3\xA9" "e : envoyer \xC2\xB7 Maj+Entr\xC3\xA9" "e : nouvelle ligne";
+        const std::string one = "Entr\xC3\xA9" "e : envoyer \xC2\xB7 Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne";
         if (ctx.r.measure(one, f.caption).width <= hw) {
             ctx.r.drawText({hx, bottomBar_.y + (bottomBar_.h - lhCap) / 2.f}, one, f.caption, c.textMuted);
         } else {
             const float y0 = bottomBar_.y + (bottomBar_.h - 2.f * lhCap - 1.f) / 2.f;
             ctx.r.drawText({hx, y0}, elide(ctx.r, "Entr\xC3\xA9" "e : envoyer", f.caption, hw), f.caption, c.textMuted);
-            const std::string second = ctx.r.measure("Maj+Entr\xC3\xA9" "e : nouvelle ligne", f.caption).width <= hw
-                                           ? std::string("Maj+Entr\xC3\xA9" "e : nouvelle ligne") : std::string("Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne");
-            ctx.r.drawText({hx, y0 + lhCap + 1.f}, elide(ctx.r, second, f.caption, hw), f.caption, c.textMuted);
+            ctx.r.drawText({hx, y0 + lhCap + 1.f}, elide(ctx.r, "Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne", f.caption, hw), f.caption, c.textMuted);
         }
     }
 }
+
+std::string AiPanel::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, mouse); }
 
 int AiPanel::rowAt(gfx::Point p) const {
     for (std::size_t i = 0; i < rows_.size(); ++i)
@@ -1237,14 +1259,18 @@ bool AiChatView::atBottom() const noexcept { return offset_ >= std::max(0.f, con
 
 void AiChatView::scrollToBottom() {
     stick_ = true;
+    anchor_ = false;
     measure();
     offset_ = std::max(0.f, content_ - viewHeight());
+    placeCards();
     invalidateLayout();
 }
 
 void AiChatView::scrollBy(float dy) {
+    anchor_ = false;
     offset_ = std::clamp(offset_ + dy, 0.f, std::max(0.f, content_ - viewHeight()));
     stick_ = atBottom();
+    placeCards();
     invalidateLayout();
 }
 
@@ -1562,6 +1588,7 @@ void AiChatView::rebuild() {
     }
     if (wasBottom) offset_ = std::max(0.f, content_ - viewHeight());
     offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - viewHeight()));
+    placeCards();
     invalidateLayout();
     invalidate();
 }
@@ -1602,6 +1629,35 @@ void AiChatView::onLayout() {
     if (bounds().w != measuredW_) measure();
     offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - viewHeight()));
     if (stick_) offset_ = std::max(0.f, content_ - viewHeight());
+    if (anchor_) applyAnchor();
+    placeCards();
+}
+
+void AiChatView::showLastExchange() {
+    anchor_ = true;
+    stick_ = false;
+    if (bounds().w > 40.f) {
+        if (bounds().w != measuredW_) measure();
+        applyAnchor();
+        placeCards();
+    }
+    invalidateLayout();
+}
+
+void AiChatView::applyAnchor() {
+    if (bounds().w <= 40.f) return;   // pas encore de largeur : au prochain onLayout
+    anchor_ = false;
+    // Le debut de la derniere demande en haut (tout tient : le debut de la conversation).
+    float top = 0.f;
+    for (const auto& b : blocks_)
+        if (b.user) top = b.y - 8.f <= 10.f ? 0.f : b.y - 8.f;   // la premiere demande : tout en haut
+    offset_ = std::clamp(top, 0.f, std::max(0.f, content_ - viewHeight()));
+    stick_ = atBottom();
+}
+
+void AiChatView::placeCards() {
+    // 1.14.2 (captures, 2e passe) : rappele a chaque changement du decalage (une reponse qui s'ecrit
+    // fait defiler la discussion entre deux mises en page : le bouton restait a l'ancienne place).
     const auto b = bounds();
     for (auto& cb : cards_) {
         if (cb.message < 0) continue;
@@ -1667,7 +1723,8 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     ctx.r.drawText({chip.x + 7.f, chip.y + (chip.h - lhCap) / 2.f}, st, kMeta, tone);
     // Le titre : la place que laisse la pastille (un volet etroit : "Operations..." plutot qu'un chevauchement).
     bold(ctx.r, {card.x + 32.f, y + (16.f - ctx.r.lineHeight(kBody)) / 2.f},
-         elide(ctx.r, "Op\xC3\xA9rations propos\xC3\xA9" "es", kBody, chip.x - 8.f - card.x - 32.f), kBody, c.text);
+         elideTip(ctx.r, "Op\xC3\xA9rations propos\xC3\xA9" "es", kBody, chip.x - 8.f - card.x - 32.f, {card.x, y - 2.f, chip.x - card.x, 20.f}, tips_), kBody,
+         c.text);
     y += 24.f;
     // Les comptes.
     // Les comptes : resserres quand ils ne tiennent pas a l'aise (un volet etroit).
@@ -1755,9 +1812,12 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     }
 }
 
+std::string AiChatView::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, mouse); }
+
 void AiChatView::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto bb = bounds();
+    tips_.clear();
     const auto& a = panel_.assistant();
     const auto* conv = a.current();
     ctx.r.pushClip(bb);
@@ -1788,7 +1848,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
                 const auto look = lookOf(ctx.theme, at.name);
                 ui::drawIcon(ctx.r, look.icon, {bub.x + 10.f, ly + 3.f, 16.f, 16.f}, look.tint);
                 const std::string s = at.name + "  \xC2\xB7  " + formatBytes(at.bytes);
-                ctx.r.drawText({bub.x + 32.f, ly + 3.f}, elide(ctx.r, s, kMeta, bub.w - 42.f), kMeta, c.text);
+                ctx.r.drawText({bub.x + 32.f, ly + 3.f}, elideTip(ctx.r, s, kMeta, bub.w - 42.f, {bub.x, ly, bub.w, 24.f}, tips_), kMeta, c.text);
                 ly += 24.f;
             }
             continue;
@@ -1861,7 +1921,10 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             for (std::size_t k = 0; k < lines.size() && k < 2; ++k) {
                 std::string t;
                 for (std::size_t q = 0; q < lines[k].runs.size(); ++q) t += (q ? " " : "") + lines[k].runs[q].text;
-                if (k == 1 && lines.size() > 2) t = elide(ctx.r, t + " \xE2\x80\xA6", kBody, r.w - 30.f);
+                if (k == 1 && lines.size() > 2) {
+                    t = elide(ctx.r, t + " \xE2\x80\xA6", kBody, r.w - 30.f);
+                    tips_.emplace_back(r, s[i]);   // la suggestion entiere
+                }
                 ctx.r.drawText({r.x + 24.f, ly}, t, kBody, c.text);
                 ly += ui::lineHeight(kBody) + 4.f;
             }
@@ -1874,6 +1937,8 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
 ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
     if (bar_.handle(*this, ev, bounds(), content_, viewHeight(), offset_)) {
         stick_ = atBottom();
+        anchor_ = false;
+        placeCards();
         invalidateLayout();
         return ui::EventResult::Consumed;
     }

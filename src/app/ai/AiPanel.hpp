@@ -34,6 +34,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace app::ai {
@@ -181,6 +182,10 @@ public:
     [[nodiscard]] float autoRatio() const noexcept { return autoRatio_; }
     void setAutoRatio(float r) noexcept { autoRatio_ = r; }
 
+    // 1.14.2 (captures, 2e passe) : un texte coupe par "..." se lit en entier dans son infobulle.
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool        hasTooltip() const override { return true; }
+
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
@@ -222,6 +227,7 @@ private:
     std::string            lastStatus_;
     std::string            appliedKey_;      // l'etat reel des propositions appliquees deja montre
     double                 appliedCheck_{-1.0};
+    mutable std::vector<std::pair<gfx::Rect, std::string>> tips_;   // les textes coupes du dernier dessin
     float                  autoRatio_{-1.f};
     bool                   syncing_{false};
     bool                   loaded_{false};
@@ -237,6 +243,9 @@ public:
 
     void rebuild();                          // la conversation a change : les cartes, les boutons
     void scrollToBottom();
+    // 1.14.2 (captures, 2e passe) : une conversation qu'on ouvre montre son debut si elle tient,
+    // sinon le debut de son dernier echange (la derniere demande en haut) - pas sa fin.
+    void showLastExchange();
     void scrollBy(float dy);
     [[nodiscard]] float scrollOffset() const noexcept { return offset_; }
     [[nodiscard]] float contentHeight() const noexcept { return content_; }
@@ -263,6 +272,8 @@ public:
         float            bulletX{0.f};
     };
     [[nodiscard]] static std::vector<Line> layoutText(const std::string& markdown, float width);
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool        hasTooltip() const override { return true; }
 
 protected:
     void onLayout() override;
@@ -300,6 +311,8 @@ private:
         bool        undone{false};        // appliquee puis annulee : `apply` dit Reappliquer
     };
     void measure();
+    void placeCards();             // les boutons des cartes, au decalage du moment
+    void applyAnchor();            // showLastExchange, une fois la largeur connue
     void paintCard(const ui::PaintContext&, const Block&, gfx::Rect card);
     void paintIndicator(const ui::PaintContext&, gfx::Rect at);
     [[nodiscard]] float viewHeight() const noexcept;
@@ -314,6 +327,8 @@ private:
     float                    measuredW_{-1.f};
     std::uint64_t            measuredRev_{0};
     bool                     stick_{true};
+    bool                     anchor_{false};   // showLastExchange en attente d'une largeur
+    mutable std::vector<std::pair<gfx::Rect, std::string>> tips_;
     int                      hoverSuggestion_{-1};
     ui::EdgeScrollBar        bar_;
     core::ConnectionScope    links_;
