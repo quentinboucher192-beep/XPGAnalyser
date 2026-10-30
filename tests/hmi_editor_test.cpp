@@ -18711,20 +18711,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67 ; 1.14.1 : 68.
     const auto& rel = hn::releases();
-    check(rel.size() == 67 && rel.front().version == "1.14.0" && rel[1].version == "1.13.1" && rel[2].version == "1.13.0" && rel[3].version == "1.12.31" && rel[4].version == "1.12.30" && rel[5].version == "1.12.29" && rel[6].version == "1.12.28" && rel[7].version == "1.12.27" && rel[8].version == "1.12.26" && rel[9].version == "1.12.25" && rel[10].version == "1.12.24" && rel[11].version == "1.12.23" && rel[12].version == "1.12.22" && rel[13].version == "1.12.21" && rel[14].version == "1.12.20" && rel[15].version == "1.12.19" && rel[16].version == "1.12.18" && rel[17].version == "1.12.17" && rel[18].version == "1.12.16" && rel[19].version == "1.12.15" && rel[20].version == "1.12.14" && rel[21].version == "1.12.13" && rel[22].version == "1.12.12" && rel[23].version == "1.12.11" && rel[24].version == "1.12.10" && rel[25].version == "1.12.9" && rel[26].version == "1.12.8" && rel[27].version == "1.12.7" && rel[28].version == "1.12.6" && rel[29].version == "1.12.5" && rel[30].version == "1.12.4" && rel[31].version == "1.12.3" && rel[32].version == "1.12.2" && rel[33].version == "1.12.1"
-              && rel[34].version == "1.12.0" && rel[35].version == "1.11.24" && rel[36].version == "1.11.23"
-              && rel[37].version == "1.11.22" && rel[38].version == "1.11.21" && rel[39].version == "1.11.20" && rel[40].version == "1.11.19"
-              && rel[41].version == "1.11.18" && rel[42].version == "1.11.17"
-              && rel[43].version == "1.11.16" && rel[44].version == "1.11.15"
-              && rel[45].version == "1.11.14" && rel[46].version == "1.11.13" && rel[47].version == "1.11.12"
-              && rel[48].version == "1.11.11" && rel[49].version == "1.11.10"
-              && rel[50].version == "1.11.9" && rel[51].version == "1.11.8"
-              && rel[52].version == "1.11.7" && rel[53].version == "1.11.6" && rel[54].version == "1.11.5"
-              && rel[55].version == "1.11.4" && rel[56].version == "1.11.3" && rel[57].version == "1.11.2"
-              && rel[58].version == "1.11.1" && rel[59].version == "1.11" && rel[60].version == "1.10.4",
-          "notes : 67 versions, la 1.14.0 en tete (1.14.0 : lots M1, M2, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 68 && rel.front().version == "1.14.1" && rel[1].version == "1.14.0" && rel[2].version == "1.13.1" && rel[3].version == "1.13.0" && rel[4].version == "1.12.31" && rel[5].version == "1.12.30" && rel[6].version == "1.12.29" && rel[7].version == "1.12.28" && rel[8].version == "1.12.27" && rel[9].version == "1.12.26" && rel[10].version == "1.12.25" && rel[11].version == "1.12.24" && rel[12].version == "1.12.23" && rel[13].version == "1.12.22" && rel[14].version == "1.12.21" && rel[15].version == "1.12.20" && rel[16].version == "1.12.19" && rel[17].version == "1.12.18" && rel[18].version == "1.12.17" && rel[19].version == "1.12.16" && rel[20].version == "1.12.15" && rel[21].version == "1.12.14" && rel[22].version == "1.12.13" && rel[23].version == "1.12.12" && rel[24].version == "1.12.11" && rel[25].version == "1.12.10" && rel[26].version == "1.12.9" && rel[27].version == "1.12.8" && rel[28].version == "1.12.7" && rel[29].version == "1.12.6" && rel[30].version == "1.12.5" && rel[31].version == "1.12.4" && rel[32].version == "1.12.3" && rel[33].version == "1.12.2" && rel[34].version == "1.12.1"
+              && rel[35].version == "1.12.0" && rel[36].version == "1.11.24" && rel[37].version == "1.11.23"
+              && rel[38].version == "1.11.22" && rel[39].version == "1.11.21" && rel[40].version == "1.11.20" && rel[41].version == "1.11.19"
+              && rel[42].version == "1.11.18" && rel[43].version == "1.11.17"
+              && rel[44].version == "1.11.16" && rel[45].version == "1.11.15"
+              && rel[46].version == "1.11.14" && rel[47].version == "1.11.13" && rel[48].version == "1.11.12"
+              && rel[49].version == "1.11.11" && rel[50].version == "1.11.10"
+              && rel[51].version == "1.11.9" && rel[52].version == "1.11.8"
+              && rel[53].version == "1.11.7" && rel[54].version == "1.11.6" && rel[55].version == "1.11.5"
+              && rel[56].version == "1.11.4" && rel[57].version == "1.11.3" && rel[58].version == "1.11.2"
+              && rel[59].version == "1.11.1" && rel[60].version == "1.11" && rel[61].version == "1.10.4",
+          "notes : 68 versions, la 1.14.1 en tete, la 1.14.0 (lots M1, M2, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -19208,7 +19208,7 @@ void centreAide111() {
         check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 67
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lots M2, M3, M4, M5) : la plus recente
+        check(hc::notesPage("").version == "1.14.1" && hc::notesPage("9.9").version == "1.14.1",   // 1.14.1 : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -40994,11 +40994,11 @@ void utilisationsM1_1140() {
         Id jauge = kNoId;
         for (const auto& o : four->objects)
             if (o.name == "Jauge") jauge = o.id;
-        de::Place at;
-        at.kind = de::Place::Kind::Script;
-        at.id = fr.reglages;
+        de::Place atReg;
+        atReg.kind = de::Place::Kind::Script;
+        atReg.id = fr.reglages;
         std::string why;
-        const bool ok = de::set(p, at, de::Tab::Constants, 0, de::Column::Name, "Limites", &why);
+        const bool ok = de::set(p, atReg, de::Tab::Constants, 0, de::Column::Name, "Limites", &why);
         const View* f2 = p.view(four->id);
         const Object* j = f2 ? f2->object(jauge) : nullptr;
         const Object* l = f2 ? f2->object(legende) : nullptr;
