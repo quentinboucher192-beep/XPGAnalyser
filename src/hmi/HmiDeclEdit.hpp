@@ -33,6 +33,7 @@
 #include "HmiDecl.hpp"
 #include "HmiMigrate.hpp"   // migrate::Place : l'adresse d'un code
 #include "HmiModel.hpp"
+#include "HmiScript.hpp"    // 1.14.0 (lot M1) : CodeForm (le lecteur des references)
 
 #include <cstddef>
 #include <cstdint>
@@ -112,6 +113,45 @@ struct Use {
 [[nodiscard]] std::vector<Use> usesIn(std::string_view body, std::string_view name);
 // Le nombre d'utilisations de la declaration `index` : son code et les valeurs des autres.
 [[nodiscard]] std::size_t usageCount(const Code&, std::size_t index);
+
+// ---- 1.14.0 (lot M1) : LES UTILISATIONS DANS TOUT LE PROJET -----------------------
+//  LE LECTEUR DES REFERENCES, partage par les compteurs (la colonne Utilisations, Voir les usages d'une declaration et
+//  d'une variable IHM) - celui de usesIn, appele sur chaque texte : les references a `name` dans un texte de la forme
+//  `form` (du code, une expression, un texte a trous : ses trous {...} sans leur format, ou toute l'expression "=...").
+//  Le nom en tete d'un chemin, seul ou suivi de ses acces - T[0], T[i], M[1, 2], L.Count, L.First, M['cle'], P.Item1,
+//  S.Sous.Membre, S[0].Membre, M['a'][0], F(x), $Repere$[0] - sans casse ; ni dans une chaine, ni dans un commentaire,
+//  ni prefixe d'un autre nom (NomsBis), ni membre d'un autre chemin (Autre.Nom), ni argument nomme (f(Nom := 1)), ni
+//  litteral type (E_Mode#Nom). `qualifier` non vide : aussi Qualifier.Nom (Vue.Nom, Script.Nom) ; `bare` faux :
+//  seulement celle-la.
+[[nodiscard]] std::vector<Use> referencesIn(std::string_view text, CodeForm form, std::string_view name,
+                                            std::string_view qualifier = {}, bool bare = true);
+// Un endroit qui emploie une declaration (ou une variable IHM) : une ligne de Voir les usages, et ou elle mene.
+struct Usage {
+    std::string where;              // "Vannes/Libelle (text)", "Vannes.OnOpen, ligne 2", "script Bilan, ligne 1", "ligne 3"
+    std::string text;               // ce qu'on y lit (la ligne du code, l'expression, le texte), sur une ligne
+    std::size_t count{0};           // ses references a cet endroit
+    Id          view{kNoId};        // la vue qui porte le texte ; kNoId : un script general, une fonction IHM, une alarme...
+    Id          object{kNoId};      // l'objet ; kNoId : la vue elle-meme, un script, une fonction
+    std::string key;                // la propriete de l'objet ("text", "fill")
+    int         action{-1};         // le rang de l'action (de l'objet ; sans objet : de la vue) ; -1 : pas une action
+    Id          script{kNoId};      // le script (general ou de la vue) qui porte le texte
+    Id          function{kNoId};    // la fonction (IHM ou de la vue) qui le porte
+    Id          declaration{kNoId}; // la declaration dont c'est la valeur ou le calcul
+    int         line{0};            // la ligne dans le code (1 = la premiere) ; 0 : une expression, un texte
+    int         rank{-1};           // dans le code meme de la declaration : le rang de l'utilisation (selectNextUse) ; -1 : ailleurs
+    bool        inCode{false};      // dans son code meme (son corps, les valeurs et les calculs de ses voisines)
+};
+// Les utilisations de la declaration `index` du code `at`, endroit par endroit : son code (une par utilisation, avec
+// son rang), les valeurs et les calculs de ses voisines, puis - une constante d'une vue ou d'une popup - tout ce que la
+// vue lit par le nom seul (les fx, les textes a trous, les actions, ses scripts, ses fonctions ; un code qui declare le
+// meme nom le cache) et Vue.Nom partout ; une constante d'un script general : Script.Nom partout.
+[[nodiscard]] std::vector<Usage> usages(const Project&, const Place& at, std::size_t index);
+// Leur nombre de references (la somme des `count`) pour chaque declaration du code, dans l'ordre de decls : la colonne
+// Utilisations (un seul parcours du projet).
+[[nodiscard]] std::vector<std::size_t> usageCounts(const Project&, const Place& at);
+// Les utilisations d'un nom global du projet (une variable IHM) : la racine seule, partout ou ni le code (ses
+// declarations, un bloc VAR, les locales d'un calcul) ni la vue (une constante, un parametre du meme nom) ne la cachent.
+[[nodiscard]] std::vector<Usage> globalUsages(const Project&, std::string_view name);
 // Les fautes de chaque declaration (meme ordre que decls ; "" : juste), jointes par " ; ".
 [[nodiscard]] std::vector<std::string> faults(const Project&, const Code&);
 

@@ -1535,9 +1535,12 @@ CodeForm actionForm(const Action& a) {
 template <class Decls, class Visit>
 void visitDeclarations(Decls& decls, const CodeSite& site, Visit& visit) {
     for (auto& d : decls) {
-        if (!d.value.empty()) visit(d.value, CodeForm::Expression, site);
+        CodeSite at = site;                // 1.14.0 (lot M1) : la declaration (et sa liste) dont c'est la valeur
+        at.decls = &decls;
+        at.declaration = &d;
+        if (!d.value.empty()) visit(d.value, CodeForm::Expression, at);
         // 1.12.16 : le code d'une valeur calculee (un renommage, une recherche le suivent).
-        if (d.computed && !d.calc.empty()) visit(d.calc, CodeForm::Code, site);
+        if (d.computed && !d.calc.empty()) visit(d.calc, CodeForm::Code, at);
     }
 }
 
@@ -1563,28 +1566,47 @@ void visitObject(const Project& p, O& o, const View* view, const View* scope, Vi
     const std::string at = view->name + "/" + o.name;
     const std::string props = at + " (propri\xC3\xA9t\xC3\xA9s)";
     for (auto& pr : o.props) {
-        const CodeSite site{.scope = scope, .view = view, .where = at + " (" + pr.key + ")", .group = props};
+        const CodeSite site{.scope = scope, .view = view, .where = at + " (" + pr.key + ")", .group = props, .host = view, .object = &o,
+                            .key = pr.key};
         Object holder;
         holder.kind = o.kind;
         holder.props.push_back(pr);
-        if (visitPieces(holder, site, visit)) {
+        // 1.14.0 (lot M1) : les morceaux qu'en lit rewriteNames - plus que l'expression (la premiere, si elle est
+        // ecrite) : la valeur aussi ; ses relectures plus bas sont alors `again` (un compte ne les compte pas deux fois).
+        const std::size_t exprPieces = pr.expr.empty() ? 0 : 1;
+        std::size_t pieces = 0;
+        auto counted = [&](auto& text, CodeForm form, const CodeSite& s) {
+            ++pieces;
+            visit(text, form, s);
+        };
+        if (visitPieces(holder, site, counted)) {
             if constexpr (kWrite) pr = std::move(holder.props.front());
         }
+        CodeSite reread = site;
+        reread.again = pieces > exprPieces;
         // 1.12.10 (lot F) : une borne, un seuil tapes en nom de variable (Consigne_Max) - plus seulement le champ de saisie.
-        if (roles::rangeNameKey(o.kind, pr.key)) visit(pr.value, CodeForm::Expression, site);
-        visit(pr.value, CodeForm::Template, site);       // un texte a trous ailleurs que dans "text" (un nom de fichier...)
+        const bool range = roles::rangeNameKey(o.kind, pr.key);
+        if (range) visit(pr.value, CodeForm::Expression, reread);
+        CodeSite asTemplate = reread;
+        asTemplate.again = reread.again || range;
+        visit(pr.value, CodeForm::Template, asTemplate);  // un texte a trous ailleurs que dans "text" (un nom de fichier...)
     }
-    if (!o.actions.empty()) {
-        const CodeSite site{.scope = scope, .view = view, .where = at + " (action)"};
+    // 1.14.0 (lot M1) : action par action (rewriteNames les lit une a une) - le rang de chacune (Voir les usages y va).
+    for (std::size_t i = 0; i < o.actions.size(); ++i) {
+        auto& a = o.actions[i];
+        const CodeSite site{.scope = scope, .view = view, .where = at + " (action)", .host = view, .object = &o,
+                            .action = static_cast<int>(i)};
         Object holder;
-        holder.actions = o.actions;
+        holder.actions.push_back(a);
         if (visitPieces(holder, site, visit)) {
-            if constexpr (kWrite) o.actions = std::move(holder.actions);
+            if constexpr (kWrite) a = std::move(holder.actions.front());
         }
-        for (auto& a : o.actions) visit(a.value, actionForm(a), site);
+        CodeSite reread = site;
+        reread.again = actionValueRead(a);
+        visit(a.value, actionForm(a), reread);
     }
     for (auto& ov : o.alarmOverrides) {                   // 1.9 : une instance surcharge une alarme du symbole
-        const CodeSite site{.where = at + " (alarme " + ov.alarm + ")"};
+        const CodeSite site{.where = at + " (alarme " + ov.alarm + ")", .host = view, .object = &o};
         if (ov.condition) visit(*ov.condition, CodeForm::Expression, site);
         if (ov.message) visit(*ov.message, CodeForm::Template, site);
         if (ov.instruction) visit(*ov.instruction, CodeForm::Template, site);
@@ -1592,7 +1614,8 @@ void visitObject(const Project& p, O& o, const View* view, const View* scope, Vi
     // 1.11.10 : le corps d'une redefinition est lu dans SON symbole (celui de l'instance).
     const View* own = o.functionOverrides.empty() ? nullptr : symbolOf(p, o);
     for (auto& fo : o.functionOverrides) {
-        const CodeSite site{.scope = own, .view = own, .where = at + "." + fo.function + " (red\xC3\xA9" "finition)"};
+        const CodeSite site{.scope = own, .view = own, .where = at + "." + fo.function + " (red\xC3\xA9" "finition)", .host = view,
+                            .object = &o, .decls = &fo.decls};
         visit(fo.body, CodeForm::Code, site);
         visitDeclarations(fo.decls, site, visit);
     }
@@ -1608,20 +1631,20 @@ void visitProject(P& p, Visit& visit) {
     };
     const auto ops = [&](auto& list, const std::string& owner) {
         for (auto& o : list) {
-            const CodeSite site{.where = "op\xC3\xA9rateur " + operatorSignature(o) + " (" + owner + ")"};
+            const CodeSite site{.where = "op\xC3\xA9rateur " + operatorSignature(o) + " (" + owner + ")", .decls = &o.decls};
             visit(o.body, CodeForm::Code, site);
             visitDeclarations(o.decls, site, visit);
         }
     };
     for (auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST) continue;
-        const CodeSite site{.where = "script " + sc.name, .ns = sc.ns};
+        const CodeSite site{.where = "script " + sc.name, .ns = sc.ns, .decls = &sc.decls, .script = sc.id};
         visit(sc.body, CodeForm::Code, site);
         visit(sc.watch, CodeForm::Expression, site);
         visitDeclarations(sc.decls, site, visit);
     }
     for (auto& f : p.programs.functions) {
-        const CodeSite site{.own = &f, .where = "fonction " + f.name, .ns = f.ns};
+        const CodeSite site{.own = &f, .where = "fonction " + f.name, .ns = f.ns, .decls = &f.decls, .function = f.id};
         visit(f.body, CodeForm::Code, site);
         visitDeclarations(f.decls, site, visit);
     }
@@ -1629,7 +1652,7 @@ void visitProject(P& p, Visit& visit) {
         ops(t.operators, "type " + t.name);
         // 1.13.0 : le corps des methodes (renommer une fonction, un espace, un type ; qui appelle quoi).
         for (auto& m : t.methods) {
-            const CodeSite site{.ownerType = &t, .where = "type " + fullName(t) + ", m\xC3\xA9thode " + m.name, .ns = t.ns};
+            const CodeSite site{.ownerType = &t, .where = "type " + fullName(t) + ", m\xC3\xA9thode " + m.name, .ns = t.ns, .decls = &m.decls};
             CodeSite body = site;
             body.method = &m;
             visit(m.body, CodeForm::Code, body);
@@ -1641,33 +1664,38 @@ void visitProject(P& p, Visit& visit) {
         const View* scope = isSymbolView(v) ? &v : popupOwner(p, v);
         for (auto& sc : v.scripts)
             if (sc.lang == ScriptLang::ST) {
-                const CodeSite site{.scope = scope, .view = &v, .where = v.name + "." + sc.event};
+                const CodeSite site{.scope = scope, .view = &v, .where = v.name + "." + sc.event, .host = &v, .decls = &sc.decls,
+                                    .script = sc.id};
                 visit(sc.body, CodeForm::Code, site);
                 visitDeclarations(sc.decls, site, visit);
             }
-        if (!v.actions.empty()) {
-            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (action de vue)"};
+        for (std::size_t i = 0; i < v.actions.size(); ++i) {   // 1.14.0 (lot M1) : action par action (son rang)
+            auto& a = v.actions[i];
+            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (action de vue)", .host = &v, .action = static_cast<int>(i)};
             Object holder;
-            holder.actions = v.actions;
+            holder.actions.push_back(a);
             if (visitPieces(holder, site, visit)) {
-                if constexpr (!std::is_const_v<P>) v.actions = std::move(holder.actions);
+                if constexpr (!std::is_const_v<P>) a = std::move(holder.actions.front());
             }
-            for (auto& a : v.actions) visit(a.value, actionForm(a), site);
+            CodeSite reread = site;
+            reread.again = actionValueRead(a);
+            visit(a.value, actionForm(a), reread);
         }
         for (auto& o : v.objects) visitObject(p, o, &v, scope, visit);
         // Le titre d'une popup et la valeur par defaut d'un parametre ne sont pas qualifies
         // (qualifiedOwnedPopup, symbolArguments) : un appel court y vise une fonction IHM.
-        visit(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)"});
+        visit(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)", .host = &v});
         for (auto& prm : v.params)
-            visit(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")"});
+            visit(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")", .host = &v});
         for (auto& fn : v.functions) {
-            const CodeSite site{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name};
+            const CodeSite site{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name, .host = &v, .decls = &fn.decls,
+                                .function = fn.id};
             visit(fn.body, CodeForm::Code, site);
             visitDeclarations(fn.decls, site, visit);
         }
         // 1.12.16 : les constantes de la vue - leurs valeurs, leurs calculs.
         if (!v.constants.empty()) {
-            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (constantes)"};
+            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (constantes)", .host = &v, .decls = &v.constants};
             visitDeclarations(v.constants, site, visit);
         }
         ops(v.operators, v.name);

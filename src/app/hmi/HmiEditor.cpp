@@ -753,6 +753,8 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         viewConstants_->setPlace(at);
         viewConstants_->setVisibility(ui::Visibility::Collapsed);
         links_ += viewConstants_->message->connect([this](const std::string& m, bool) { statusBar_->setMessage(m); });
+        // 1.14.0 (lot M1) : Voir les usages d'une constante - la liste (double-clic) et le menu menent a l'endroit.
+        links_ += viewConstants_->placeRequested->connect([this](const hmi::decledit::Usage& u) { (void)goToUsage(u); });
         viewFunctions_ = &static_cast<HmiFunctionsPane&>(addChild(std::make_unique<HmiFunctionsPane>(this->id() + ".viewfns", doc_, apply_)));
         viewFunctions_->setSymbol(viewId_);
         viewFunctions_->setAssist([this] { return plc_; });
@@ -2778,6 +2780,61 @@ void HmiEditor::showAction(Id object, int index) {
     actions_->setOwner(object);
     inspector_->setCurrentIndex(1);
     if (index >= 0) actions_->selectIndex(index);
+}
+
+// ---- 1.14.0 (lot M1) : aller a un usage d'une constante de la vue ----
+bool HmiEditor::goToUsage(const hmi::decledit::Usage& u) {
+    const auto* v = doc_->project.view(viewId_);
+    if (!v) return false;
+    if (u.view == viewId_ && u.script == kNoId) {
+        const auto drawing = [this] {
+            if (viewTabs_) viewTabs_->setCurrent(HmiSymbolTabs::Drawing);
+            else if (symbolTabs_) symbolTabs_->setCurrent(HmiSymbolTabs::Drawing);
+            layout();
+        };
+        if (u.object != kNoId) {
+            if (!v->object(u.object)) return false;
+            drawing();
+            canvas_->setSelection({u.object});
+            objects_->revealSelection();
+            if (u.action >= 0) showAction(u.object, u.action);
+            else if (!u.key.empty()) (void)revealProperty(u.object, u.key);
+            statusBar_->setMessage(u.where + " : " + u.text);
+            return true;
+        }
+        if (u.action >= 0) {                                 // une action de la vue (un raccourci : l'onglet Raccourcis)
+            drawing();
+            showAction(kNoId, u.action);
+            statusBar_->setMessage(u.where + " : " + u.text);
+            return true;
+        }
+        if (u.function != kNoId && viewFunctions_ && viewTabs_) {
+            viewTabs_->setCurrent(HmiSymbolTabs::Functions);
+            layout();
+            viewFunctions_->goTo(u.function, std::max(1, u.line));
+            return true;
+        }
+        if (u.function != kNoId && symbolFunctions_ && symbolTabs_) {   // la fonction d'un symbole (une variable IHM)
+            symbolTabs_->setCurrent(HmiSymbolTabs::Functions);
+            layout();
+            symbolFunctions_->goTo(u.function, std::max(1, u.line));
+            return true;
+        }
+        if (u.declaration != kNoId && viewConstants_ && viewTabs_)
+            for (const auto& d : v->constants)
+                if (d.id == u.declaration) {
+                    viewTabs_->setCurrent(HmiSymbolTabs::Constants);
+                    layout();
+                    (void)viewConstants_->selectName(d.name);
+                    statusBar_->setMessage(u.where + " : " + u.text);
+                    return true;
+                }
+        drawing();                                           // la vue elle-meme (le titre d'une popup, un parametre)
+        statusBar_->setMessage(u.where + " : " + u.text);
+        return true;
+    }
+    openUsage->emit(u);                                      // ailleurs : l'hote (un script, une autre vue...)
+    return true;
 }
 
 // ---- 1.10.3 (Q1103) : le clic d'une ligne d'un objet deplie (les deux explorateurs) ----

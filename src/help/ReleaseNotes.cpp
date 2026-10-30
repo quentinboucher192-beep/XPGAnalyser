@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.14.0", "30/10/2026", "\xC3\xA0 venir"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
@@ -137,6 +138,10 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.0 (lot M1, demande du 30/10) : la colonne Utilisations des constantes (vue, script general) et Voir les usages.
+        note("1.14.0", "Vues", Kind::Fixed,
+         "LA COLONNE UTILISATIONS COMPTE CHAQUE ACC\xC3\x88S : les constantes d'une vue ou d'une popup (sous-onglet Constantes) disaient 0 utilisation, m\xC3\xAAme employ\xC3\xA9" "es partout. La colonne lit d\xC3\xA9sormais ce que la vue lit - les formules \xC6\x92x des objets, les textes \xC3\xA0 trous {\xE2\x80\xA6}, les actions, les scripts et les fonctions de la vue, les autres constantes - et Vue.Nom ailleurs ; une constante d'un script g\xC3\xA9n\xC3\xA9ral compte aussi Script.Nom dans les vues et les autres scripts. Chaque acc\xC3\xA8s compte, quel que soit le type compos\xC3\xA9 : VannesStr[0], VannesStr[i], Grille[1, 2], Liste.Count, Liste.First, Dico['cl\xC3\xA9'], Paire.Item1, S.Sous.Membre, Tab[0].Membre, M['a'][0], $Rep\xC3\xA8re$[0] ; pas un nom plus long (NomsBis), ni une cha\xC3\xAEne, ni un commentaire, ni le membre homonyme d'une autre variable (Autre.VannesStr). Voir les usages ouvre sous la table la liste de ces m\xC3\xAAmes endroits (O\xC3\xB9, Texte, Fois) et un double-clic y m\xC3\xA8ne : l'objet et sa case, l'action, la ligne du script ou de la fonction ; le clic droit les propose aussi. Le clic droit d'une variable IHM \xE2\x80\xBA Voir les usages les lit de la m\xC3\xAAme fa\xC3\xA7on (avant : une recherche du texte, qui comptait les cha\xC3\xAEnes et les commentaires).",
+         "constantes-fonctions-vue", ""),
         // 1.13.1 (lot K1, demande du 29/10) : les deux bugs des formules - les constantes globales dans une formule de
         // propriete (l'inspecteur les disait inconnues ; leur unite se perdait, EN ne convertissait rien en fx) et
         // l'aide a la saisie dans les reperes $...$ (rien n'etait propose dedans ni apres eux).

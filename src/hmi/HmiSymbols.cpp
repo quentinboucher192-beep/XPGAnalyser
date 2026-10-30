@@ -1159,6 +1159,16 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
     }
 }
 
+bool actionValueRead(const Action& a) {
+    // Les memes branches que rewriteNames (plus haut), dans le meme ordre.
+    if (a.operation == Operation::Assign || a.operation == Operation::Increment || a.operation == Operation::Decrement)
+        return !trimmedCopy(a.value).empty();
+    if (a.operation == Operation::Log) return a.value.find('{') != std::string::npos;
+    if (a.operation == Operation::RunScript) return !trimmedCopy(a.value).empty();
+    if (operationTakesArguments(a.operation)) return !parseArguments(a.value).empty();
+    return false;
+}
+
 std::vector<std::string> indexedPaths(const std::vector<const Object*>& objects) {
     std::vector<std::string> out;
     std::set<std::string> seen;

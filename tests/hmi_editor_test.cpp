@@ -18440,20 +18440,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67 (lot M1 : la 1.14.0 a venir en tete - le coordinateur reconcilie a la fusion).
     const auto& rel = hn::releases();
-    check(rel.size() == 66 && rel.front().version == "1.13.1" && rel[1].version == "1.13.0" && rel[2].version == "1.12.31" && rel[3].version == "1.12.30" && rel[4].version == "1.12.29" && rel[5].version == "1.12.28" && rel[6].version == "1.12.27" && rel[7].version == "1.12.26" && rel[8].version == "1.12.25" && rel[9].version == "1.12.24" && rel[10].version == "1.12.23" && rel[11].version == "1.12.22" && rel[12].version == "1.12.21" && rel[13].version == "1.12.20" && rel[14].version == "1.12.19" && rel[15].version == "1.12.18" && rel[16].version == "1.12.17" && rel[17].version == "1.12.16" && rel[18].version == "1.12.15" && rel[19].version == "1.12.14" && rel[20].version == "1.12.13" && rel[21].version == "1.12.12" && rel[22].version == "1.12.11" && rel[23].version == "1.12.10" && rel[24].version == "1.12.9" && rel[25].version == "1.12.8" && rel[26].version == "1.12.7" && rel[27].version == "1.12.6" && rel[28].version == "1.12.5" && rel[29].version == "1.12.4" && rel[30].version == "1.12.3" && rel[31].version == "1.12.2" && rel[32].version == "1.12.1"
-              && rel[33].version == "1.12.0" && rel[34].version == "1.11.24" && rel[35].version == "1.11.23"
-              && rel[36].version == "1.11.22" && rel[37].version == "1.11.21" && rel[38].version == "1.11.20" && rel[39].version == "1.11.19"
-              && rel[40].version == "1.11.18" && rel[41].version == "1.11.17"
-              && rel[42].version == "1.11.16" && rel[43].version == "1.11.15"
-              && rel[44].version == "1.11.14" && rel[45].version == "1.11.13" && rel[46].version == "1.11.12"
-              && rel[47].version == "1.11.11" && rel[48].version == "1.11.10"
-              && rel[49].version == "1.11.9" && rel[50].version == "1.11.8"
-              && rel[51].version == "1.11.7" && rel[52].version == "1.11.6" && rel[53].version == "1.11.5"
-              && rel[54].version == "1.11.4" && rel[55].version == "1.11.3" && rel[56].version == "1.11.2"
-              && rel[57].version == "1.11.1" && rel[58].version == "1.11" && rel[59].version == "1.10.4",
-          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 67 && rel.front().version == "1.14.0" && rel[1].version == "1.13.1" && rel[2].version == "1.13.0" && rel[3].version == "1.12.31" && rel[4].version == "1.12.30" && rel[5].version == "1.12.29" && rel[6].version == "1.12.28" && rel[7].version == "1.12.27" && rel[8].version == "1.12.26" && rel[9].version == "1.12.25" && rel[10].version == "1.12.24" && rel[11].version == "1.12.23" && rel[12].version == "1.12.22" && rel[13].version == "1.12.21" && rel[14].version == "1.12.20" && rel[15].version == "1.12.19" && rel[16].version == "1.12.18" && rel[17].version == "1.12.17" && rel[18].version == "1.12.16" && rel[19].version == "1.12.15" && rel[20].version == "1.12.14" && rel[21].version == "1.12.13" && rel[22].version == "1.12.12" && rel[23].version == "1.12.11" && rel[24].version == "1.12.10" && rel[25].version == "1.12.9" && rel[26].version == "1.12.8" && rel[27].version == "1.12.7" && rel[28].version == "1.12.6" && rel[29].version == "1.12.5" && rel[30].version == "1.12.4" && rel[31].version == "1.12.3" && rel[32].version == "1.12.2" && rel[33].version == "1.12.1"
+              && rel[34].version == "1.12.0" && rel[35].version == "1.11.24" && rel[36].version == "1.11.23"
+              && rel[37].version == "1.11.22" && rel[38].version == "1.11.21" && rel[39].version == "1.11.20" && rel[40].version == "1.11.19"
+              && rel[41].version == "1.11.18" && rel[42].version == "1.11.17"
+              && rel[43].version == "1.11.16" && rel[44].version == "1.11.15"
+              && rel[45].version == "1.11.14" && rel[46].version == "1.11.13" && rel[47].version == "1.11.12"
+              && rel[48].version == "1.11.11" && rel[49].version == "1.11.10"
+              && rel[50].version == "1.11.9" && rel[51].version == "1.11.8"
+              && rel[52].version == "1.11.7" && rel[53].version == "1.11.6" && rel[54].version == "1.11.5"
+              && rel[55].version == "1.11.4" && rel[56].version == "1.11.3" && rel[57].version == "1.11.2"
+              && rel[58].version == "1.11.1" && rel[59].version == "1.11" && rel[60].version == "1.10.4",
+          "notes : 67 versions, la 1.14.0 en tete (lot M1), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18724,7 +18724,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 449,   // 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 450,   // 1.14.0 : + 1 (M1 : la colonne Utilisations) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18871,7 +18871,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 230, "centre : L'IHM a les 230 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 66, "centre : 11 expressions, 66 notes (1.13.1)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 67, "centre : 11 expressions, 67 notes (1.14.0, lot M1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18933,10 +18933,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 66
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 67
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.13.1" && hc::notesPage("9.9").version == "1.13.1",   // 1.13.1 (lot K3) : la plus recente
+        check(hc::notesPage("").version == "1.14.0" && hc::notesPage("9.9").version == "1.14.0",   // 1.14.0 (lot M1) : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -19330,7 +19330,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 66;   // 1.11.3 a 1.13.1 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 67;   // 1.11.3 a 1.14.0 : une version de plus (lot M1 : la 1.14.0 a venir)
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -39912,7 +39912,347 @@ void typesOnglets1131() {
     core::CommandGroupScope::registerStack(nullptr);
 }
 
+// ============================================================ 1.14.0 (lot M1) ======
+//  LA COLONNE UTILISATIONS COMPTE LES ACCES. Une constante de la vue citee seulement par un acces - VannesStr[0],
+//  VannesStr[i], Grille[1, 2], Liste.Count, Dico['cle'], Paire.Item1, Vanne.Sous.Membre, Organes[0].Sous.Membre,
+//  Imbrique['a'][0], $Noms$[0] - dans une formule fx, un texte a trous, une action, un script et une fonction de la
+//  vue (et Vannes.VannesStr[2] ailleurs) : la colonne les compte (elle disait 0 : la grille ne lisait que le corps du
+//  code, et une vue n'en a pas). Ni un prefixe d'un autre nom (NomsBis), ni une chaine, ni un commentaire, ni un
+//  membre homonyme d'une autre variable (Autre.VannesStr). La meme chose pour une constante d'un script general
+//  (Reglages.Seuils[1] dans une formule).
+namespace m1 {
+Declaration constante(std::string name, std::string type, std::string value = {}) {
+    Declaration d;
+    d.kind = DeclKind::Constant;
+    d.name = std::move(name);
+    d.type = std::move(type);
+    d.value = std::move(value);
+    d.visibility = Visibility::Public;
+    return d;
+}
+Declaration locale(std::string name, std::string type) {
+    Declaration d;
+    d.kind = DeclKind::Variable;
+    d.name = std::move(name);
+    d.type = std::move(type);
+    return d;
+}
+// Le projet de l'essai : la vue Vannes (la capture du client), ses constantes de chaque genre compose.
+struct Fixture {
+    std::shared_ptr<Document> doc = std::make_shared<Document>();
+    Id view{kNoId}, texte{kNoId}, forme{kNoId}, bouton{kNoId}, reglages{kNoId};
+    Fixture() {
+        auto& p = doc->project;
+        HmiType sous;
+        sous.id = p.allocate();
+        sous.name = "T_Sous";
+        sous.members = {{"Membre", "INT", "", ""}};
+        p.programs.types.push_back(sous);
+        HmiType organe;
+        organe.id = p.allocate();
+        organe.name = "T_Organe";
+        organe.members = {{"Nom", "STRING", "", ""}, {"Sous", "T_Sous", "", ""}};
+        p.programs.types.push_back(organe);
+        HmiType autreT;
+        autreT.id = p.allocate();
+        autreT.name = "T_Autre";
+        autreT.members = {{"VannesStr", "ARRAY[0..2] OF STRING", "", ""}};
+        p.programs.types.push_back(autreT);
+        p.programs.variables.push_back(Variable{p.allocate(), "Autre", "T_Autre", "", {}});
+        p.programs.variables.push_back(Variable{p.allocate(), "Sortie", "REAL", "0.0", {}});
+        View v = makeView(p, "Vannes");
+        v.constants = {constante("VannesStr", "ARRAY[0..2] OF STRING", "['Dessableur', 'Confinement', 'Bypass']"),
+                       constante("Noms", "ARRAY[0..1] OF STRING", "['Chapelle Charbon', 'Evangile']"),
+                       constante("NomsBis", "ARRAY[0..1] OF STRING", "['a', 'b']"),
+                       constante("Grille", "ARRAY[0..2, 0..3] OF INT"),
+                       constante("Liste", "LIST OF INT", "[1, 2, 3]"),
+                       constante("Vect", "VECTOR OF REAL"),
+                       constante("Ens", "SET OF INT"),
+                       constante("Anneau", "RING[5] OF REAL"),
+                       constante("Dico", "MAP[STRING] OF INT"),
+                       constante("Paire", "TUPLE(INT, STRING)"),
+                       constante("Vanne", "T_Organe"),
+                       constante("Organes", "ARRAY[0..1] OF T_Organe"),
+                       constante("Imbrique", "MAP[STRING] OF LIST OF INT"),
+                       constante("Jamais", "INT", "0")};
+        // Une formule fx (et un repere $Noms$ autour de la racine), un texte a trous, deux actions.
+        texte = edit::add(p, v, Kind::Text, 10, 10);
+        v.object(texte)->name = "Libelle";
+        v.object(texte)->set("text", "Vanne : {VannesStr[0]} / {Noms[1]} ({Dico['cle']:0}) {'VannesStr[2]'}");
+        forme = edit::add(p, v, Kind::Rectangle, 10, 60);
+        v.object(forme)->name = "Voyant";
+        v.object(forme)->setExpr("visible", "Grille[1, 2] > Liste.Count");
+        v.object(forme)->setExpr("fill", "SEL(LEN($Noms$[0]) > 0, '#FF0000', '#00FF00')");
+        bouton = edit::add(p, v, Kind::Button, 10, 120);
+        v.object(bouton)->name = "Bouton";
+        Action affecter;
+        affecter.operation = Operation::Assign;
+        affecter.target = "Sortie";
+        affecter.value = "Anneau[0] + Ens.Count";
+        Action journal;
+        journal.operation = Operation::Log;
+        journal.value = "Paire : {Paire.Item1}";
+        v.object(bouton)->actions = {affecter, journal};
+        // Un script de la vue : un indice calcule, des chemins de structure ; une chaine, un commentaire, un membre
+        // homonyme d'une autre variable et un nom qui n'en est que le prefixe ne comptent pas.
+        Script open;
+        open.id = p.allocate();
+        open.event = "OnOpen";
+        open.lang = ScriptLang::ST;
+        open.decls = {locale("i", "INT"), locale("n", "INT"), locale("t", "INT"), locale("msg", "STRING"), locale("w", "STRING"),
+                      locale("b", "STRING")};
+        open.body = "FOR i := 0 TO 2 DO\n    n := n + LEN(VannesStr[i]);\nEND_FOR;\n"
+                    "t := Vanne.Sous.Membre + Organes[0].Sous.Membre;\n"
+                    "msg := 'VannesStr[1]'; (* VannesStr[2] *) // Noms[0]\n"
+                    "w := Autre.VannesStr[0];\n"
+                    "b := NomsBis[0];\n";
+        v.scripts.push_back(open);
+        // Une fonction de la vue.
+        hmi::HmiFunction premier;
+        premier.id = p.allocate();
+        premier.name = "Premier";
+        premier.returnType = "REAL";
+        premier.body = "RETURN Vect.First + Imbrique['a'][0];\n";
+        v.functions.push_back(premier);
+        view = v.id;
+        p.views.push_back(v);
+        // Ailleurs : la constante publique par Vue.Nom ; une constante d'un script general par Script.Nom.
+        Script bilan;
+        bilan.id = p.allocate();
+        bilan.name = "Bilan";
+        bilan.event = "Appel";
+        bilan.lang = ScriptLang::ST;
+        bilan.decls = {locale("a", "STRING"), locale("c", "INT")};
+        bilan.body = "a := Vannes.VannesStr[2];\nc := Reglages.Seuils[0];\n";
+        p.programs.scripts.push_back(bilan);
+        Script reg;
+        reg.id = p.allocate();
+        reg.name = "Reglages";
+        reg.event = "Appel";
+        reg.lang = ScriptLang::ST;
+        reg.decls = {constante("Seuils", "ARRAY[0..2] OF INT", "[10, 20, 30]"), constante("Seuil", "INT", "5")};
+        reg.body = "";
+        reglages = reg.id;
+        p.programs.scripts.push_back(reg);
+        View four = makeView(p, "Vue_Four");
+        const Id jauge = edit::add(p, four, Kind::Rectangle, 10, 10);
+        four.object(jauge)->name = "Jauge";
+        four.object(jauge)->setExpr("visible", "Reglages.Seuils[1] * 10 > Reglages.SeuilBis");
+        p.views.push_back(four);
+        uniqueDeclarationIds(p);
+    }
+};
+// La colonne Utilisations de la grille, ligne par ligne : "Nom=compte".
+std::string counts(app::HmiDeclGrid& grid) {
+    std::string out;
+    const auto& m = grid.table().model();
+    for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+        out += (out.empty() ? "" : " ") + grid.rowName(r) + "="
+             + (grid.usesColumn() >= 0 ? m->cellText(static_cast<ui::RowIndex>(r), static_cast<std::size_t>(grid.usesColumn())) : "?");
+    return out;
+}
+} // namespace m1
+
+void utilisationsM1_1140() {
+    std::printf("1.14.0 (lot M1) : la colonne Utilisations compte les acc\xC3\xA8s [i], .Membre, ['cl\xC3\xA9'] des constantes\n");
+    namespace de = hmi::decledit;
+    m1::Fixture fx;
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    app::HmiEditor ed("edm1", fx.doc, fx.view, apply);
+    ed.setBounds({0, 0, 1600, 900});
+    ed.layout();
+    auto* tabs = ed.viewTabs();
+    check(tabs && ed.viewConstants(), "la vue Vannes : ses sous-onglets, la grille des constantes");
+    if (!tabs || !ed.viewConstants()) return;
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    auto& grid = *ed.viewConstants();
+    grid.refresh();
+    const std::string want = "VannesStr=3 Noms=2 NomsBis=1 Grille=1 Liste=1 Vect=1 Ens=1 Anneau=1 Dico=1 Paire=1 Vanne=1 Organes=1 "
+                             "Imbrique=1 Jamais=0";
+    const std::string got = m1::counts(grid);
+    check(got == want, "Utilisations : chaque acc\xC3\xA8s compte (fx, texte \xC3\xA0 trous, action, script, fonction, Vannes.Nom ailleurs) "
+                       "- ni prefixe, ni chaine, ni commentaire, ni membre homonyme\n      attendu : " + want + "\n      lu      : " + got);
+    // Une constante d'un script general : Reglages.Seuils[1] dans une formule, Reglages.Seuils[0] dans un autre script.
+    app::HmiDeclGrid reg("m1.reg", fx.doc, apply, de::Tab::Constants);
+    de::Place at;
+    at.kind = de::Place::Kind::Script;
+    at.id = fx.reglages;
+    reg.setPlace(at);
+    reg.refresh();
+    const std::string wantReg = "Seuils=2 Seuil=0";
+    const std::string gotReg = m1::counts(reg);
+    check(gotReg == wantReg, "une constante globale (script Reglages) : Reglages.Seuils[1] dans une fx, Reglages.Seuils[0] dans un script "
+                             "- pas Reglages.SeuilBis\n      attendu : " + wantReg + "\n      lu      : " + gotReg);
+    // VOIR LES USAGES (le bouton de la barre de la capture) : la liste des memes endroits, sous la table ; un double-clic y mene.
+    std::vector<hmi::decledit::Usage> sent;
+    core::ConnectionScope links;
+    links += ed.openUsage->connect([&](const hmi::decledit::Usage& u) { sent.push_back(u); });
+    const auto rowOf = [&](app::HmiDeclGrid& g, const std::string& name) {
+        for (std::size_t r = 0; r < g.count(); ++r)
+            if (g.rowName(r) == name) return r;
+        return std::size_t(99);
+    };
+    const auto listOf = [](const app::HmiDeclGrid& g) {
+        std::string out;
+        for (const auto& u : g.listedUsages()) out += (out.empty() ? "" : " | ") + u.where + " x" + std::to_string(u.count);
+        return out;
+    };
+    const auto rowWhere = [](const app::HmiDeclGrid& g, std::string_view where) {
+        for (std::size_t r = 0; r < g.listedUsages().size(); ++r)
+            if (g.listedUsages()[r].where.rfind(where, 0) == 0) return static_cast<ui::RowIndex>(r);
+        return static_cast<ui::RowIndex>(999);
+    };
+    const int usesTool = grid.tools().actionByTip("Voir les usages");
+    grid.selectRows({rowOf(grid, "VannesStr")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    check(usesTool > 0 && grid.usagesTable() && grid.usagesTable()->visibility() == ui::Visibility::Visible
+              && grid.listedUsages().size() == 3 && listOf(grid) == "Vannes.OnOpen, ligne 2 x1 | Vannes/Libelle (text) x1 | script Bilan, ligne 1 x1",
+          "Voir les usages de VannesStr : la liste - la vue d'abord (le script : VannesStr[i], le texte \xC3\xA0 trous), puis Vannes.VannesStr ailleurs ("
+              + listOf(grid) + ")");
+    check(grid.usagesTable() && grid.usagesTable()->model() && grid.usagesTable()->model()->rowCount() == 3
+              && grid.usagesTable()->model()->cellText(rowWhere(grid, "Vannes.OnOpen"), 1) == "n := n + LEN(VannesStr[i]);",
+          "... ses colonnes O\xC3\xB9, Texte (la ligne du code), Fois");
+    // Double-clic sur le texte a trous : le Dessin, l'objet choisi.
+    if (grid.usagesTable()) grid.usagesTable()->activated->emit(rowWhere(grid, "Vannes/Libelle (text)"));
+    check(tabs->current() == app::HmiSymbolTabs::Drawing && ed.canvas().selection() == std::vector<Id>{fx.texte},
+          "double-clic sur Vannes/Libelle (text) : le Dessin, Libelle choisi");
+    // Le script de la vue, ailleurs : l'hote y va (openUsage : le script, sa ligne).
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    grid.selectRows({rowOf(grid, "VannesStr")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    if (grid.usagesTable()) grid.usagesTable()->activated->emit(rowWhere(grid, "Vannes.OnOpen"));
+    check(sent.size() == 1 && sent.back().script != kNoId && sent.back().line == 2 && sent.back().view == fx.view,
+          "double-clic sur Vannes.OnOpen, ligne 2 : l'h\xC3\xB4te ouvre le script de la vue, \xC3\xA0 la ligne 2");
+    // Noms : la formule fx (repere $Noms$[0]) - l'objet et sa case.
+    grid.selectRows({rowOf(grid, "Noms")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    check(listOf(grid) == "Vannes/Libelle (text) x1 | Vannes/Voyant (fill) x1", "Noms : le texte et la fx (LEN($Noms$[0])) - " + listOf(grid));
+    if (grid.usagesTable()) grid.usagesTable()->activated->emit(rowWhere(grid, "Vannes/Voyant (fill)"));
+    check(ed.canvas().selection() == std::vector<Id>{fx.forme}, "double-clic : Voyant choisi");
+    // Une action : l'onglet Actions de l'objet, l'action choisie.
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    grid.selectRows({rowOf(grid, "Paire")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    check(listOf(grid) == "Vannes/Bouton (action 2) x1", "Paire : l'action 2 du bouton (Journal {Paire.Item1}) - " + listOf(grid));
+    if (grid.usagesTable()) grid.usagesTable()->activated->emit(0);
+    check(ed.canvas().selection() == std::vector<Id>{fx.bouton} && ed.inspector().currentIndex() == 1 && ed.actions().selectedIndex() == 1,
+          "double-clic : le bouton choisi, l'onglet Actions sur sa 2e action");
+    // Une fonction de la vue : le sous-onglet Fonctions, la fonction choisie.
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    grid.selectRows({rowOf(grid, "Imbrique")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    check(listOf(grid) == "fonction Vannes.Premier, ligne 1 x1", "Imbrique : la fonction Premier - " + listOf(grid));
+    if (grid.usagesTable()) grid.usagesTable()->activated->emit(0);
+    check(tabs->current() == app::HmiSymbolTabs::Functions && ed.viewFunctions()->selectedFunction() == fx.doc->project.view(fx.view)->functions[0].id,
+          "double-clic : le sous-onglet Fonctions, Premier choisie");
+    // Le clic droit : Voir les usages (N), un endroit par entree ; Jamais : grise.
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    grid.selectRows({rowOf(grid, "VannesStr")});
+    {
+        const auto items = grid.contextItems();
+        const ui::PopupMenu::Item* uses = nullptr;
+        for (const auto& it : items)
+            if (it.label.rfind("Voir les usages (", 0) == 0) uses = &it;
+        check(uses && uses->label == "Voir les usages (3)" && uses->children.size() == 3 && uses->enabled
+                  && uses->children[2].label.rfind("script Bilan, ligne 1 : a := Vannes.VannesStr[2];", 0) == 0,
+              "le clic droit : Voir les usages (3) \xE2\x80\xBA les trois endroits");
+        if (uses && uses->children.size() == 3) {
+            grid.table().contextAction->emit(uses->children[1].id);
+            check(ed.canvas().selection() == std::vector<Id>{fx.texte}, "... en choisir un y m\xC3\xA8ne (Libelle)");
+        }
+    }
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    grid.selectRows({rowOf(grid, "Jamais")});
+    {
+        const auto items = grid.contextItems();
+        const ui::PopupMenu::Item* uses = nullptr;
+        for (const auto& it : items)
+            if (it.label.rfind("Voir les usages (", 0) == 0) uses = &it;
+        check(uses && uses->label == "Voir les usages (0)" && !uses->enabled, "Jamais : Voir les usages (0), gris\xC3\xA9");
+    }
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    check(grid.usagesTable() && grid.listedUsages().empty() && grid.lastMessage().find("nulle part") != std::string::npos,
+          "le bouton sur Jamais : la liste vide, la barre dit nulle part (" + grid.lastMessage() + ")");
+    // La liste suit le projet : une fx de plus, elle se relit (et le compte aussi).
+    grid.selectRows({rowOf(grid, "Grille")});
+    if (usesTool > 0) grid.tools().triggered->emit(usesTool);
+    {
+        auto cmd = hmi::changeProject(fx.doc, "fx", [&](hmi::Project& q) { q.view(fx.view)->object(fx.bouton)->setExpr("visible", "Grille[0, 0] = 1"); });
+        if (cmd) apply(std::move(cmd));
+        grid.refresh();
+    }
+    check(grid.listedUsages().size() == 2 && m1::counts(grid).find("Grille=2") != std::string::npos,
+          "une fx de plus (Grille[0, 0]) : la liste et la colonne suivent (" + listOf(grid) + ")");
+    // UNE CONSTANTE D'UN SCRIPT GENERAL : la liste (Reglages.Seuils ailleurs), la fx d'une autre vue - placeRequested.
+    std::vector<hmi::decledit::Usage> asked;
+    links += reg.placeRequested->connect([&](const hmi::decledit::Usage& u) { asked.push_back(u); });
+    reg.selectRows({rowOf(reg, "Seuils")});
+    const int regTool = reg.tools().actionByTip("Voir les usages");
+    if (regTool > 0) reg.tools().triggered->emit(regTool);
+    check(reg.usagesTable() && listOf(reg) == "script Bilan, ligne 2 x1 | Vue_Four/Jauge (visible) x1",
+          "Reglages.Seuils : la liste - le script Bilan, la fx de Vue_Four (" + listOf(reg) + ")");
+    if (reg.usagesTable()) reg.usagesTable()->activated->emit(rowWhere(reg, "Vue_Four/Jauge"));
+    check(asked.size() == 1 && asked.back().object != kNoId && asked.back().key == "visible",
+          "double-clic : placeRequested (l'objet Jauge, sa case visible) - le volet des scripts le passe \xC3\xA0 l'h\xC3\xB4te");
+    // UNE VARIABLE IHM : Voir les usages (le clic droit du volet des variables) - lue par le meme lecteur.
+    {
+        app::HmiVariablesPane vars("varsm1", fx.doc, apply);
+        app::HmiVariablesPane::Hosts hosts;
+        std::vector<hmi::decledit::Usage> went;
+        hosts.openUsage = [&](const hmi::decledit::Usage& u) { went.push_back(u); };
+        vars.setHosts(std::move(hosts));
+        vars.setBounds({0, 0, 1600, 900});
+        vars.layout();
+        vars.selectPath("Autre");
+        vars.openContextMenu({400, 300});
+        auto* menu = vars.table().contextMenu();
+        const ui::PopupMenu::Item* uses = nullptr;
+        if (menu)
+            for (const auto& it : menu->items())
+                if (it.label.rfind("Voir les usages (", 0) == 0) uses = &it;
+        check(uses && uses->label == "Voir les usages (1)" && uses->children.size() == 1
+                  && uses->children[0].label.rfind("Vannes.OnOpen, ligne 6 : w := Autre.VannesStr[0];", 0) == 0,
+              "une variable IHM (Autre) : Voir les usages (1) - Autre.VannesStr[0] (" + (uses ? uses->label : std::string("rien")) + ")");
+        if (menu && uses && !uses->children.empty()) menu->itemChosen->emit(uses->children[0].id);
+        check(went.size() == 1 && went.back().script != kNoId && went.back().line == 6, "... en choisir un : l'h\xC3\xB4te va au script, ligne 6");
+    }
+    // ... et depuis l'arbre du projet : le volet Rechercher montre ses usages (pas les occurrences du texte).
+    {
+        app::HmiFindPane find("findm1", fx.doc, apply);
+        find.setBounds({0, 0, 1400, 700});
+        find.layout();
+        std::vector<hmi::decledit::Usage> went;
+        core::ConnectionScope fl;
+        fl += find.openUsage->connect([&](const hmi::decledit::Usage& u) { went.push_back(u); });
+        find.showUsages("VannesStr");
+        check(find.showingUsages() && find.usages().empty() && find.message().find("nulle part") != std::string::npos,
+              "Rechercher > usages de VannesStr (une constante de la vue, pas une variable) : nulle part comme variable globale");
+        find.showUsages("Autre");
+        check(find.showingUsages() && find.usages().size() == 1 && find.table().model() && find.table().model()->rowCount() == 1
+                  && find.table().model()->cellText(0, 1) == "w := Autre.VannesStr[0];",
+              "Rechercher > usages d'Autre : un endroit, sa ligne (" + find.message() + ")");
+        find.table().activated->emit(0);
+        check(went.size() == 1 && went.back().line == 6, "double-clic : openUsage (le script, ligne 6)");
+        find.setFind("VannesStr");
+        find.setWholeWord(true);
+        check(!find.showingUsages() && find.hits().size() >= 2, "taper un autre texte : de nouveau la recherche du texte (cha\xC3\xAEnes et commentaires compris)");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.14.0 (lot M1) : HMI_TEST_M1=1 - la colonne Utilisations et Voir les usages, seuls.
+    if (const char* only = std::getenv("HMI_TEST_M1"); only && *only == '1') {
+        utilisationsM1_1140();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.1 (lot K1) : HMI_TEST_K1=1 - les deux bugs des formules, seuls.
     if (const char* only = std::getenv("HMI_TEST_K1"); only && *only == '1') {
         formulesK1_1131();
@@ -40511,6 +40851,7 @@ int main(int argc, char** argv) {
     codeBrut1131();                         // 1.13.1 (lot K3) : l'onglet Code brut, le clic droit, Ctrl+V d'un code brut
     codeBrutSimulation1131();               // 1.13.1 (lot K3) : le code brut dans le menu de la vue en marche
     typesOnglets1131();                     // 1.13.1 (lot K4) : les types dans leurs onglets, et dans leur onglet de document
+    utilisationsM1_1140();                  // 1.14.0 (lot M1) : la colonne Utilisations compte les acces, Voir les usages
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

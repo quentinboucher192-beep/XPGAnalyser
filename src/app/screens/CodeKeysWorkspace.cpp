@@ -60,6 +60,24 @@ ui::StatusBar::Severity severityOf(ui::Tone t) {
 bool MainAnalysisScreen::showUsagesOf(const std::string& text, bool whole) {
     if (core::hasIhm() && app_.hmi()) {
         openHmiPane("rechercher");
+        // 1.14.0 (lot M1) : les usages d'une variable IHM (Cuves, Cuves[i].Niveau : sa racine) - ses utilisations, lues
+        // comme la colonne Utilisations (ni chaine, ni commentaire, ni membre homonyme), pas les occurrences du texte.
+        if (whole) {
+            const std::string root = text.substr(0, std::min(text.find_first_of(".[( "), text.size()));
+            const auto& vars = app_.hmi()->project.programs.variables;
+            const bool hmiVariable = !root.empty() && std::any_of(vars.begin(), vars.end(), [&](const hmi::Variable& v) {
+                if (v.name.size() != root.size()) return false;
+                for (std::size_t i = 0; i < root.size(); ++i)
+                    if (std::toupper(static_cast<unsigned char>(v.name[i])) != std::toupper(static_cast<unsigned char>(root[i]))) return false;
+                return true;
+            });
+            if (auto* find = dynamic_cast<HmiFindPane*>(hmiTab("rechercher")); find && hmiVariable) {
+                find->setScopeView(hmi::kNoId);
+                find->showUsages(root);
+                if (status_) status_->setTransientMessage("Les usages de \xC2\xAB " + root + " \xC2\xBB (Maj+F12) : IHM \xE2\x80\xBA Rechercher", 6.0);
+                return true;
+            }
+        }
         if (auto* find = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
             find->setFind(text);
             find->setWholeWord(whole);

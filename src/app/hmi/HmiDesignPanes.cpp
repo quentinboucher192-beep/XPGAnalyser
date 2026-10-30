@@ -468,6 +468,10 @@ HmiFindPane::HmiFindPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     links_ += case_->stateChanged->connect([this](ui::Checkbox::State) { search(); });
     links_ += word_->stateChanged->connect([this](ui::Checkbox::State) { search(); });
     links_ += table_->activated->connect([this](ui::RowIndex row) {
+        if (showingUsages()) {                                       // 1.14.0 (lot M1) : l'endroit exact
+            if (row < usages_.size()) openUsage->emit(usages_[row]);
+            return;
+        }
         if (row < hits_.size() && hits_[row].view != kNoId) openHit->emit(hits_[row].view, hits_[row].object);
     });
     links_ += doc_->changed->connect([this](Id) {
@@ -519,7 +523,51 @@ void HmiFindPane::setScopeView(Id view) {
     search();
 }
 
+// 1.14.0 (lot M1) : Voir les usages d'une variable IHM - ses utilisations, pas les occurrences du texte.
+void HmiFindPane::showUsages(const std::string& name) {
+    usagesOf_ = name;
+    find_->setText(name);   // la frappe relance search() : la liste des usages, le nom etant le meme
+    search();
+}
+
+void HmiFindPane::listUsages() {
+    usages_ = hmi::decledit::globalUsages(doc_->project, usagesOf_);
+    if (const Id only = options().view; only != kNoId)
+        usages_.erase(std::remove_if(usages_.begin(), usages_.end(), [&](const hmi::decledit::Usage& u) { return u.view != only; }), usages_.end());
+    hits_.clear();
+    std::vector<std::vector<std::string>> rows;
+    std::vector<ui::CellStyle> styles;
+    std::size_t refs = 0;
+    for (const auto& u : usages_) {
+        hmi::design::FindHit h;
+        h.view = u.view;
+        h.object = u.object;
+        h.where = u.where;
+        h.before = h.after = u.text;
+        h.count = u.count;
+        hits_.push_back(h);
+        rows.push_back({u.where, u.text, "", std::to_string(u.count)});
+        ui::CellStyle cs;
+        cs.icon = u.object != kNoId ? ui::Icon::Document : ui::Icon::Code;
+        styles.push_back(cs);
+        refs += u.count;
+    }
+    table_->setModel(std::make_shared<Rows>(std::vector<std::string>{"O\xC3\xB9", "Texte", "", "Fois"}, std::move(rows), std::move(styles)));
+    if (usages_.empty()) say("Usages de " + usagesOf_ + " : employ\xC3\xA9" "e nulle part" + (options().view != kNoId ? " dans cette vue." : "."));
+    else
+        say(std::to_string(refs) + " utilisation(s) de " + usagesOf_ + " en " + std::to_string(usages_.size())
+            + " endroit(s), lues comme la colonne Utilisations (ni cha\xC3\xAEne, ni commentaire, ni membre d'une autre variable). "
+              "Double-clic : y aller. Taper un autre texte : chercher.");
+    invalidate();
+}
+
 void HmiFindPane::search() {
+    if (!usagesOf_.empty() && find_->text() == usagesOf_) {         // 1.14.0 (lot M1) : Voir les usages
+        listUsages();
+        return;
+    }
+    usagesOf_.clear();
+    usages_.clear();
     hits_ = hmi::design::find(doc_->project, find_->text(), replace_->text(), options());
     std::vector<std::vector<std::string>> rows;
     std::vector<ui::CellStyle> styles;

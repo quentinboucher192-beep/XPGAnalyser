@@ -1984,6 +1984,24 @@ const std::vector<Topic>& topics() {
                          "constante \xC3\xA9" "crite, un nom d\xC3\xA9j\xC3\xA0 pris dans la vue (un objet, "
                          "un param\xC3\xA8tre), une constante du d\xC3\xA9marrage qui lit une de l'ouverture "
                          "- chacun \xC3\xA0 sa ligne.", {}},
+             {K::Heading, "O\xC3\xB9 elles servent : Utilisations et Voir les usages", {}, "1.14.0"},
+             {K::Paragraph, "La colonne **Utilisations** du sous-onglet Constantes compte chaque lecture de la "
+                         "constante : les fx des objets, les textes \xC3\xA0 trous, les actions, les scripts "
+                         "et les fonctions de la vue, les autres constantes, et `Vue_Four.Seuil_Haut` "
+                         "ailleurs. **Chaque acc\xC3\xA8s compte**, quel que soit le type compos\xC3\xA9 : "
+                         "`Paliers[0]`, `Paliers[i]`, `Grille[1, 2]`, `Liste.Count`, `Liste.First`, "
+                         "`Couleurs['ok']`, `Paire.Item1`, `Four.Porte.Etat`, `Cuves[0].Niveau`, "
+                         "`M['a'][0]`, `$Rep\xC3\xA8re$[0]`. Ne comptent pas : un nom plus long "
+                         "(`Paliers2`), une cha\xC3\xAEne, un commentaire, le membre du m\xC3\xAAme nom "
+                         "d'une autre variable (`Autre.Paliers`), un code qui d\xC3\xA9" "clare "
+                         "lui-m\xC3\xAAme ce nom (un param\xC3\xA8tre, une locale). Jusqu'\xC3\xA0 la "
+                         "1.13.1, la colonne disait 0.", {}, "1.14.0"},
+             {K::Bullet, "**Voir les usages** (la barre, Maj+F12) ouvre sous la table la **liste** de ces "
+                         "endroits - O\xC3\xB9, Texte, Fois : la m\xC3\xAAme somme que la colonne ; un "
+                         "**double-clic** y m\xC3\xA8ne (l'objet choisi et sa case dans l'inspecteur, son "
+                         "action, la ligne du script ou de la fonction, l'autre constante) ;", {}, "1.14.0"},
+             {K::Bullet, "le **clic droit** d'une constante : Voir les usages \xE2\x80\xBA les m\xC3\xAAmes "
+                         "endroits, un clic y m\xC3\xA8ne.", {}, "1.14.0"},
              {K::Heading, "Un exemple", {}},
              {K::Paragraph, "L'exemple anim\xC3\xA9, en haut : Seuil_Haut et Tiede s'\xC3\xA9" "crivent, Rampe "
                          "se calcule au d\xC3\xA9marrage ; Pourcent() et Couleur() (priv\xC3\xA9" "e) "
@@ -15704,6 +15722,11 @@ const std::vector<Topic>& topics() {
                          "tableau d'Excel (les colonnes reconnues par leur titre, en fran\xC3\xA7" "ais ou "
                          "en anglais ; un nom existant mis \xC3\xA0 jour, un nouveau cr\xC3\xA9\xC3\xA9 ; un "
                          "seul Ctrl+Z).", {}, "1.11.18"},
+             {K::Bullet, "**Utilisations** compte chaque acc\xC3\xA8s (`Seuils[0]`, `Seuils[i]`, "
+                         "`Four.Temp`, `M['cl\xC3\xA9']`) ; une constante d'un script g\xC3\xA9n\xC3\xA9ral "
+                         "compte aussi ses lectures d'ailleurs (`Reglages.Seuils[1]` dans une fx, un autre "
+                         "script). Quand elle sert hors de son code, **Voir les usages** ouvre sous la table "
+                         "la liste de ces endroits (O\xC3\xB9, Texte, Fois) ; un double-clic y m\xC3\xA8ne.", {}, "1.14.0"},
              {K::Tip, "Un script qui d\xC3\xA9" "clare encore ses variables dans son texte a un bandeau "
                          "au-dessus de son code : **Migrer ce code** les passe dans ses onglets (leurs "
                          "commentaires deviennent leur documentation ; Ctrl+Z la reprend). Pour tout le "

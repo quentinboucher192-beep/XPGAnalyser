@@ -813,7 +813,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
             else if (a <= kMenuBase - kMenuToolBase && a > kMenuBase - kMenuUseBase) tools_->triggered->emit(kMenuBase - kMenuToolBase - a);
             else if (a <= kMenuBase - kMenuUseBase && a > kMenuBase - kMenuUseBase - 100) {
                 const auto k = static_cast<std::size_t>(kMenuBase - kMenuUseBase - a);
-                if (k < usesOfMenu_.size() && hosts_.openUse) hosts_.openUse(usesOfMenu_[k].view, usesOfMenu_[k].object);
+                if (k < usesOfMenu_.size() && hosts_.openUsage) hosts_.openUsage(usesOfMenu_[k]);
+                else if (k < usesOfMenu_.size() && hosts_.openUse) hosts_.openUse(usesOfMenu_[k].view, usesOfMenu_[k].object);
             }
         });
 
@@ -3243,17 +3244,26 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
     if (noTrace)
         items.push_back(entry(std::to_string(noTrace) + (noTrace > 1 ? " variables sans courbe" : " variable sans courbe") + " (texte, couleur\xE2\x80\xA6)",
                               -1, {}, false, {}));
-    // Voir les usages : chaque emploi (la vue, l'objet, la case), un clic y va.
+    // Voir les usages : chaque emploi (la vue, l'objet, la case), un clic y va. 1.14.0 (lot M1) : lus comme la colonne
+    // Utilisations les lit - la racine et ses acces (Cuves[i].Niveau, Noms[1]), ni une chaine, ni un commentaire, ni le
+    // membre homonyme d'une autre variable, ni un code ou une vue qui declare le meme nom (avant : une recherche du texte).
     usesOfMenu_.clear();
     if (v) {
-        hmi::design::FindOptions o;
-        o.wholeWord = true;
-        usesOfMenu_ = hmi::design::find(doc_->project, v->name, {}, o);
-        ui::PopupMenu::Item uses = entry("Voir les usages (" + std::to_string(usesOfMenu_.size()) + ")", -1);
+        usesOfMenu_ = hmi::decledit::globalUsages(doc_->project, v->name);
+        std::size_t refs = 0;
+        for (const auto& u : usesOfMenu_) refs += u.count;
+        ui::PopupMenu::Item uses = entry("Voir les usages (" + std::to_string(refs) + ")", -1);
         uses.icon = ui::Icon::Search;
-        for (std::size_t k = 0; k < usesOfMenu_.size() && k < 20; ++k)
-            uses.children.push_back(entry(usesOfMenu_[k].where, kMenuBase - kMenuUseBase - static_cast<int>(k), {}, static_cast<bool>(hosts_.openUse),
-                                          "pas d'\xC3\xA9" "cran pour l'ouvrir"));
+        const bool go = static_cast<bool>(hosts_.openUsage) || static_cast<bool>(hosts_.openUse);
+        for (std::size_t k = 0; k < usesOfMenu_.size() && k < 20; ++k) {
+            std::string label = usesOfMenu_[k].where + " : " + usesOfMenu_[k].text;
+            if (label.size() > 76) {
+                std::size_t cut = 74;
+                while (cut > 0 && (static_cast<unsigned char>(label[cut]) & 0xC0) == 0x80) --cut;
+                label = label.substr(0, cut) + "\xE2\x80\xA6";
+            }
+            uses.children.push_back(entry(label, kMenuBase - kMenuUseBase - static_cast<int>(k), {}, go, "pas d'\xC3\xA9" "cran pour l'ouvrir"));
+        }
         if (uses.children.empty()) {
             uses.enabled = false;
             uses.disabledReason = "employ\xC3\xA9" "e nulle part";

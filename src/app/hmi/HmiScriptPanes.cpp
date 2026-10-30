@@ -647,6 +647,10 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     // menent au code ; le bandeau migre le script montre.
     links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
     links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
+    links_ += codeTabs_->placeRequested->connect([this](const hmi::decledit::Usage& u) {   // 1.14.0 (lot M1)
+        if (hosts_.openUsage) hosts_.openUsage(u);
+        else say(u.where + " : " + u.text, false);
+    });
     links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) { (void)goToNextUse(name, k); });   // 1.12.18
     links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });

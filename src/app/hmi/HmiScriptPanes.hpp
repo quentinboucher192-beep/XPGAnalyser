@@ -188,6 +188,9 @@ public:
         std::function<std::pair<std::string, std::string>(const std::string& key)> buildState;
         std::function<void()>                                                      buildOutputs;   // l'onglet IHM . Sorties
         std::function<void()>                                                      showDiagnostics;   // 1.11.21 : le panneau du bas, ses Diagnostics
+        // 1.14.0 (lot M1) : Voir les usages d'une constante employee ailleurs (Script.Nom dans une vue, un autre script) :
+        // aller a cet endroit.
+        std::function<void(const hmi::decledit::Usage&)>                           openUsage;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
     // 1.11.13 : la cle de build du script choisi ("" : aucun) ; l'etat de la barre relu (l'ecran,

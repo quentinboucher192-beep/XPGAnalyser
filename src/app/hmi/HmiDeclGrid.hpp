@@ -131,6 +131,24 @@ public:
     const core::SignalPtr<const std::string&, int> useRequested = core::Signal<const std::string&, int>::create();
     // 1.12.18 (planche 15) : le menu du clic droit de la ligne choisie (les essais le lisent).
     [[nodiscard]] std::vector<ui::PopupMenu::Item> contextItems() const;
+
+    // ---- 1.14.0 (lot M1) : VOIR LES USAGES, PARTOUT -----------------------------------
+    //  La colonne Utilisations compte chaque reference (hmi::decledit::usageCounts) : le code, les valeurs des
+    //  voisines et, pour une constante d'une vue (qui n'a pas de code) ou d'un script general, tout le projet - les
+    //  fx, les textes a trous, les actions, les scripts, les fonctions de la vue, Vue.Nom et Script.Nom ailleurs ; ses
+    //  acces aussi (T[0], T[i], M[1, 2], L.Count, M['cle'], S.Sous.Membre...). "Voir les usages" d'une declaration
+    //  employee hors de son code (toujours, pour une constante de vue) ouvre LA LISTE de ces endroits sous la table
+    //  (Ou, Texte, Fois : les memes que le compte) ; un double-clic (ou Entree) y mene. Employee seulement dans son code :
+    //  le bouton va a l'utilisation suivante, comme avant. Faux : pas une ligne choisie, ou rien hors du code.
+    bool showUsages();
+    void hideUsages();
+    // La liste (nulle : cachee) et ses endroits.
+    [[nodiscard]] ui::TableView* usagesTable() const noexcept { return usagesShown_ ? usagesList_ : nullptr; }
+    [[nodiscard]] const std::vector<hmi::decledit::Usage>& listedUsages() const noexcept { return listed_; }
+    // Aller a un endroit (de la liste, du menu) : dans le code - useRequested (son rang) ; la valeur d'une autre
+    // declaration de cette grille - sa ligne choisie ; ailleurs - placeRequested (le volet ou l'hote y vont).
+    bool goToUsage(const hmi::decledit::Usage& usage);
+    const core::SignalPtr<const hmi::decledit::Usage&> placeRequested = core::Signal<const hmi::decledit::Usage&>::create();
     // Un message pour la barre d'etat du volet (texte, avertissement).
     const core::SignalPtr<const std::string&, bool> message = core::Signal<const std::string&, bool>::create();
 
@@ -162,6 +180,15 @@ private:
     ui::TableView*          unfold_{nullptr};
     bool                    unfoldShown_{false};
     void refreshUnfold();
+    // 1.14.0 (lot M1) : la liste des usages (sous la table), ce qu'elle montre ; le menu du clic droit (ses endroits).
+    ui::TableView*                            usagesList_{nullptr};
+    bool                                      usagesShown_{false};
+    hmi::Id                                   usagesOf_{hmi::kNoId};   // la declaration listee (son identifiant)
+    std::vector<hmi::decledit::Usage>         listed_;
+    mutable std::vector<hmi::decledit::Usage> menuUsages_;
+    [[nodiscard]] std::optional<std::size_t> declIndex(std::size_t row) const;   // la ligne -> son rang dans decls
+    [[nodiscard]] std::string usagesName() const;                                 // le nom de la declaration listee
+    void refreshUsages();
 
     hmi::DocumentPtr       doc_;
     Apply                  apply_;
@@ -231,6 +258,7 @@ public:
     const core::SignalPtr<const std::string&, bool> message = core::Signal<const std::string&, bool>::create();
     const core::SignalPtr<const std::string&>       usesRequested = core::Signal<const std::string&>::create();
     const core::SignalPtr<const std::string&, int>  useRequested = core::Signal<const std::string&, int>::create();   // 1.12.18
+    const core::SignalPtr<const hmi::decledit::Usage&> placeRequested = core::Signal<const hmi::decledit::Usage&>::create();   // 1.14.0
     const core::SignalPtr<>                         migrateRequested = core::Signal<>::create();
 
 private:

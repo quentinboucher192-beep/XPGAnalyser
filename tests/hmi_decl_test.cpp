@@ -2472,6 +2472,161 @@ void vueConstantes11216() {
  // namespace
 
 
+// 1.14.0 (lot M1) : LE LECTEUR DES REFERENCES ET LES UTILISATIONS DANS TOUT LE PROJET. Le bug : la colonne Utilisations des
+// constantes d'une vue disait 0 (la grille ne lisait que le corps du code - une vue n'en a pas) ; "il faut checker les
+// [0] [1] etc, a adapter avec tous les types composes existants".
+void references1140() {
+    std::printf("-- 1.14.0 (lot M1) : le lecteur des r\xC3\xA9" "f\xC3\xA9rences, les utilisations dans tout le projet\n");
+    const auto n = [](std::string_view text, CodeForm form, std::string_view name, std::string_view q = {}, bool bare = true) {
+        return de::referencesIn(text, form, name, q, bare).size();
+    };
+    using F = CodeForm;
+    // Chaque genre compose : la racine, suivie de ses acces.
+    check(n("x := T[0] + T[i] + T [ 2 ];", F::Code, "T") == 3, "ARRAY : T[0], T[i], T [ 2 ]");
+    check(n("x := M[1, 2] + M[i, j];", F::Code, "m") == 2, "ARRAY 2D : M[1, 2], M[i, j] (sans casse)");
+    check(n("x := L[0] + L.Count + L.First;", F::Code, "L") == 3, "LIST, VECTOR, SET, RING : L[0], L.Count, L.First");
+    check(n("Dico['cl\xC3\xA9'] + Dico.Count", F::Expression, "Dico") == 2, "MAP : Dico['cle'], Dico.Count");
+    check(n("Paire.Item1 + Paire.Item2", F::Expression, "Paire") == 2, "TUPLE : Paire.Item1, Paire.Item2");
+    check(n("S.Membre + S.Sous.Membre + S[0].Membre", F::Expression, "S") == 3, "structure : S.Membre, S.Sous.Membre, S[0].Membre");
+    check(n("Imbrique['a'][0] + Imbrique['b'].Count", F::Expression, "Imbrique") == 2, "MAP[K] OF LIST OF T : Imbrique['a'][0]");
+    check(n("LEN($Noms$[0]) + LEN($Noms[1]$)", F::Expression, "Noms") == 2, "un rep\xC3\xA8re autour : $Noms$[0], $Noms[1]$");
+    check(n("F(x)[0] + F(y).Membre", F::Expression, "F") == 2, "un appel suivi d'un acc\xC3\xA8s : F(x)[0], F(y).Membre");
+    // Ce qui n'en est pas une.
+    check(n("x := NomsBis[0] + Noms_2[1];", F::Code, "Noms") == 0, "un nom dont Noms n'est que le pr\xC3\xA9" "fixe : non");
+    check(n("x := 'Noms[0]'; (* Noms[1] *) // Noms[2]\n", F::Code, "Noms") == 0, "une cha\xC3\xAEne, un commentaire : non");
+    check(n("x := Autre.Noms[0] + Vue.Autre.Noms;", F::Code, "Noms") == 0, "le membre homonyme d'une autre variable : non");
+    check(n("F(Noms := 1); G(Noms => y); m := E_Mode#Noms;", F::Code, "Noms") == 0, "un argument nomm\xC3\xA9, un litt\xC3\xA9ral typ\xC3\xA9 : non");
+    // Un texte a trous : ses trous seulement (sans le format) ; "=expression" : toute l'expression.
+    {
+        const auto u = de::referencesIn("Noms : {Noms[1]} {{Noms}} ({Noms[0]:0.0})", F::Template, "Noms");
+        check(u.size() == 2 && u[0].line == 1 && u[0].column == 9 && u[1].column == 29,
+              "un texte \xC3\xA0 trous : {Noms[1]} et {Noms[0]:0.0} - ni le texte, ni {{Noms}} (" + std::to_string(u.size()) + ")");
+    }
+    check(n("=Noms[0] + 1", F::Template, "Noms") == 1, "=Noms[0] + 1 : toute l'expression");
+    check(n("IHM_JOURNAL('vanne {Noms[1]}');", F::Code, "Noms") == 1, "un trou d'IHM_JOURNAL dans le code");
+    // Qualifiee : Vue.Nom, Script.Nom.
+    check(n("a := Vannes.Noms[0] + Noms[1] + Autre.Vannes.Noms[0];", F::Code, "Noms", "Vannes") == 2,
+          "Vannes.Noms[0] et Noms[1] - pas Autre.Vannes.Noms");
+    check(n("a := Vannes.Noms[0] + Noms[1];", F::Code, "Noms", "Vannes", false) == 1, "qualifi\xC3\xA9" "e seulement : Vannes.Noms[0]");
+    check(n("a := Vannes.NomsBis[0];", F::Code, "Noms", "Vannes") == 0, "Vannes.NomsBis : non");
+    // usesIn reste le meme (la grille d'un script, Renommer, selectNextUse).
+    check(de::usesIn("Compteur := Compteur + T[Compteur];", "compteur").size() == 3, "usesIn : le meme lecteur, inchang\xC3\xA9");
+
+    // LES UTILISATIONS D'UNE CONSTANTE DE VUE : la vue (fx, texte a trous, action, script, fonction, autre constante) et
+    // Vue.Nom ailleurs ; un code qui declare le meme nom le cache ; les comptes en un parcours.
+    Project p;
+    p.programs.variables.push_back(hmiVariable(p, "Sortie", "REAL"));
+    p.programs.variables.push_back(hmiVariable(p, "Cuves", "ARRAY[0..3] OF REAL"));
+    View v = makeView(p, "Vannes");
+    v.constants = {declared(DeclKind::Constant, "Tab", "ARRAY[0..2] OF INT", "[1, 2, 3]"), declared(DeclKind::Constant, "Jamais", "INT", "0"),
+                   computedDecl(DeclKind::Constant, "Somme", "INT", "RETURN Tab[0] + Tab[1];\n"),
+                   declared(DeclKind::Constant, "Double", "INT", "Tab[2] * 2")};
+    Object txt;
+    txt.id = p.allocate();
+    txt.kind = Kind::Text;
+    txt.name = "Libelle";
+    txt.props.push_back({"text", "Valeur : {Tab[0]} / {Tab[1]:0} {'Tab[2]'}", ""});
+    txt.props.push_back({"visible", "", "Tab[2] > Cuves[0]"});
+    Action a;
+    a.operation = Operation::Assign;
+    a.target = "Sortie";
+    a.value = "Tab[1] + Cuves[1]";
+    txt.actions.push_back(a);
+    v.objects.push_back(txt);
+    Script open;
+    open.id = p.allocate();
+    open.event = "OnOpen";
+    open.body = "FOR i := 0 TO 2 DO\n    Sortie := Sortie + Tab[i];\nEND_FOR;\nSortie := 'Tab' ; (* Tab[0] *)\n";
+    open.decls = {declared(DeclKind::Variable, "i", "INT")};
+    v.scripts.push_back(open);
+    HmiFunction cache;                                    // son parametre Tab cache la constante
+    cache.id = p.allocate();
+    cache.name = "Cache";
+    cache.returnType = "INT";
+    cache.body = "RETURN Tab;\n";
+    cache.decls = {declared(DeclKind::Parameter, "Tab", "INT")};
+    HmiFunction lit;
+    lit.id = p.allocate();
+    lit.name = "Lit";
+    lit.returnType = "INT";
+    lit.body = "RETURN Tab[0]\n    + Tab[1];\n";
+    v.functions = {cache, lit};
+    const Id vid = v.id, libelle = txt.id, openId = open.id, litId = lit.id;
+    p.views.push_back(v);
+    Script bilan;
+    bilan.id = p.allocate();
+    bilan.name = "Bilan";
+    bilan.body = "Sortie := Vannes.Tab[2] + Tab[0];\n";        // Tab seul hors de la vue : pas elle
+    p.programs.scripts.push_back(bilan);
+    uniqueDeclarationIds(p);
+    de::Place at{de::Place::Kind::ViewConstants, vid, kNoId, kNoId, kNoId, {}, {}};
+    const auto counts = de::usageCounts(p, at);
+    std::string got;
+    for (const auto c : counts) got += std::to_string(c) + " ";
+    // Tab : 2 trous, visible, action, script (Tab[i]), Lit (2), Somme (calcul : 2), Double (valeur), Bilan (Vannes.Tab[2]) = 11.
+    check(counts.size() == 4 && counts[0] == 11 && counts[1] == 0 && counts[2] == 0 && counts[3] == 0,
+          "usageCounts : Tab 11 (texte 2, fx, action, script, fonction 2, calcul 2, valeur, Vannes.Tab ailleurs), Jamais 0 - " + got);
+    const auto list = de::usages(p, at, 0);
+    std::size_t sum = 0;
+    for (const auto& u : list) sum += u.count;
+    const auto find = [&](std::string_view where) -> const de::Usage* {
+        for (const auto& u : list)
+            if (u.where.rfind(where, 0) == 0) return &u;
+        return nullptr;
+    };
+    const auto* holes = find("Vannes/Libelle (text)");
+    const auto* fx = find("Vannes/Libelle (visible)");
+    const auto* act = find("Vannes/Libelle (action 1)");
+    const auto* scr = find("Vannes.OnOpen, ligne 2");
+    const auto* fn1 = find("fonction Vannes.Lit, ligne 1");
+    const auto* fn2 = find("fonction Vannes.Lit, ligne 2");
+    const auto* calc = find("constante Somme (calcul), ligne 1");
+    const auto* val = find("constante Double (valeur)");
+    const auto* ail = find("script Bilan, ligne 1");
+    check(sum == counts[0], "usages : la somme de leurs fois est le compte (" + std::to_string(sum) + ")");
+    check(holes && holes->count == 2 && holes->view == vid && holes->object == libelle && holes->key == "text",
+          "le texte \xC3\xA0 trous : un endroit, 2 fois, la vue, l'objet, la case text");
+    check(fx && fx->count == 1 && fx->key == "visible" && act && act->action == 0 && act->object == libelle,
+          "la fx (visible), l'action 1 de l'objet");
+    check(scr && scr->script == openId && scr->line == 2 && scr->count == 1 && scr->text == "Sortie := Sortie + Tab[i];",
+          "le script de la vue : la ligne 2, son texte");
+    check(fn1 && fn2 && fn1->function == litId && fn2->line == 2, "la fonction Lit : ses deux lignes ; Cache (son param\xC3\xA8tre Tab) : non");
+    check(calc && calc->count == 2 && calc->declaration != kNoId && val && val->count == 1, "le calcul de Somme (2), la valeur de Double");
+    check(ail && ail->view == kNoId && ail->count == 1, "ailleurs : Vannes.Tab[2] dans le script Bilan (pas Tab[0], nu hors de la vue)");
+    // UNE CONSTANTE D'UN SCRIPT GENERAL : Script.Nom partout ; ses variables restent a lui.
+    Script reg;
+    reg.id = p.allocate();
+    reg.name = "Reglages";
+    reg.body = "Total := Seuils[0];\n";
+    reg.decls = {declared(DeclKind::Constant, "Seuils", "ARRAY[0..2] OF INT", "[1, 2, 3]"), declared(DeclKind::Variable, "Total", "INT")};
+    p.programs.scripts.push_back(reg);
+    p.programs.scripts[0].body += "Sortie := Reglages.Seuils[1] + Reglages.Total;\n";
+    p.views[0].objects[0].props.push_back({"fill", "", "SEL(Reglages.Seuils[2] > 0, '#FF0000', '#00FF00')"});
+    uniqueDeclarationIds(p);
+    const de::Place rat{de::Place::Kind::Script, kNoId, kNoId, kNoId, reg.id, {}, {}};
+    const auto rc = de::usageCounts(p, rat);
+    check(rc.size() == 2 && rc[0] == 3 && rc[1] == 1,
+          "Reglages.Seuils : son code (Seuils[0]), Reglages.Seuils[1] dans Bilan, Reglages.Seuils[2] dans une fx = 3 ; sa variable Total : "
+          "son code seulement, 1 (Reglages.Total ailleurs n'est pas elle) ("
+              + std::to_string(rc.empty() ? 0 : rc[0]) + ", " + std::to_string(rc.size() > 1 ? rc[1] : 0) + ")");
+    // UNE VARIABLE IHM : partout, sauf ou une constante de la vue ou une declaration du code du meme nom la cache.
+    const auto cu = de::globalUsages(p, "Cuves");
+    std::size_t cuves = 0;
+    for (const auto& u : cu) cuves += u.count;
+    check(cuves == 2 && cu.size() == 2, "une variable IHM (Cuves) : la fx et l'action - " + std::to_string(cuves));
+    p.views[0].constants.push_back(declared(DeclKind::Constant, "Cuves", "INT", "0"));
+    check(de::globalUsages(p, "Cuves").empty(), "une constante de la vue du m\xC3\xAAme nom la cache dans la vue");
+    // LE PARCOURS (forEachCode) : un texte lu en morceaux n'est relu qu'en `again` ; un compte le lit une fois.
+    {
+        std::size_t text = 0, again = 0;
+        forEachCode(p, [&](const std::string& t, CodeForm form, const CodeSite& s) {
+            if (s.key != "text" || t.find("Tab") == std::string::npos) return;
+            (s.again ? again : text) += de::referencesIn(t, form, "Tab").size();
+        });
+        check(text == 2 && again == 2, "forEachCode : les trous du texte lus une fois, la relecture du texte entier marqu\xC3\xA9" "e again");
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::printf("usage : hmi_decl_test <corpus.txt> [<dossier de projet>...]\n");
@@ -2493,6 +2648,7 @@ int main(int argc, char** argv) {
     calculees();
     calculeesRetour11216();     // 1.12.16 (T4) : le code qui rend la valeur initiale
     vueConstantes11216();                    // 1.12.16 : les constantes et fonctions des vues et des popups
+    references1140();                        // 1.14.0 (lot M1) : le lecteur des references, les utilisations partout
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);
     corpusFile(argv[1], t);

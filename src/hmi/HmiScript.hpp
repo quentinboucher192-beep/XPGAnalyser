@@ -212,6 +212,19 @@ struct CodeSite {
     // 1.13.0 : l'espace de noms du code (un script, une fonction, une methode d'un type de Gaz) : un nom court y vise
     // d'abord son espace. Vide : la racine (une vue n'a pas d'espace).
     std::string        ns{};
+    // ---- 1.14.0 (lot M1) : OU EST LE TEXTE - pour compter ses references et y aller (la colonne Utilisations,
+    //  Voir les usages : hmi::decledit::usages) ; les autres visiteurs les ignorent.
+    const View*        host{nullptr};       // la vue qui le porte (aussi le titre d'une popup, une redefinition)
+    const Object*      object{nullptr};     // l'objet qui le porte ; nul : la vue, un script, une fonction...
+    std::string        key{};               // la propriete de l'objet ("text", "fill")
+    int                action{-1};          // le rang de l'action (de l'objet ; sans objet : de la vue) ; -1 : pas une action
+    const std::vector<Declaration>* decls{nullptr};   // les declarations du code qui le porte (ses noms y cachent les autres)
+    const Declaration* declaration{nullptr};          // la declaration dont c'est la valeur ou le calcul
+    Id                 script{kNoId};       // le script (general ou de la vue) qui le porte
+    Id                 function{kNoId};     // la fonction (IHM ou de la vue) qui le porte
+    // Vrai : un texte deja passe en morceaux au meme endroit (la valeur d'une propriete, d'une action, que rewriteNames
+    // lit deja) - un renommage le relit sans dommage, un compte le saute (sinon : compte deux fois).
+    bool               again{false};
 };
 using CodeVisit = std::function<void(std::string& text, CodeForm, const CodeSite&)>;
 using ConstCodeVisit = std::function<void(const std::string& text, CodeForm, const CodeSite&)>;
