@@ -73,6 +73,10 @@ struct Proposal {
     std::string            view;                 // le nom de la vue visee
     hmi::Id                viewId{hmi::kNoId};
     std::string            fingerprint;          // l'empreinte de la vue a la proposition
+    // 1.14.2 : l'empreinte de la vue juste APRES Appliquer (vide : pas encore appliquee, ou un
+    // fichier d'avant). La carte compare la vue du moment aux deux : appliquee, annulee (Ctrl+Z,
+    // ou le projet pas enregistre), ou la vue a change depuis.
+    std::string            fingerprintAfter;
     std::string            request;              // la demande (Modifier la demande la remet dans la saisie)
     std::string            summary;              // le libelle de la commande ("Synoptique de station de pompage")
     std::vector<Operation> ops;

@@ -245,7 +245,7 @@ bool Assistant::send(std::string text, std::string* why) {
         return false;
     };
     if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
-    if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attendez-la, ou Arr\xC3\xAAtez-la.");
+    if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
     if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
     if (text.empty() && pending_.empty()) return fail("Rien \xC3\xA0 envoyer.");
     if (!cur()) newConversation();
@@ -356,7 +356,7 @@ void Assistant::stop() {
 // ---- les pieces jointes -------------------------------------------------------------------
 bool Assistant::attach(const std::string& path, std::string* why) {
     if (generating()) {
-        if (why) *why = "Attendez la fin de la r\xC3\xA9ponse pour joindre un fichier.";
+        if (why) *why = "Attends la fin de la r\xC3\xA9ponse pour joindre un fichier.";
         return false;
     }
     Attachment a;
@@ -441,10 +441,42 @@ bool Assistant::apply(int message, std::string* why) {
     if (host_.apply) host_.apply(std::move(cmd));
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
+    // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise.
+    prop.fingerprintAfter.clear();
+    if (const auto after = host_.document ? host_.document() : nullptr)
+        if (const auto* v = targetView(after->project, prop)) prop.fingerprintAfter = fingerprint(*v);
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;
+}
+
+Assistant::Applied Assistant::appliedState(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p || p->state != "appliquee") return Applied::NotApplied;
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return Applied::Applied;   // pas de projet ouvert : rien a comparer
+    const auto* v = targetView(doc->project, *p);
+    if (!v) return Applied::Changed;
+    const std::string now = fingerprint(*v);
+    if (now == p->fingerprintAfter) return Applied::Applied;
+    if (now == p->fingerprint) return Applied::Undone;
+    // Un fichier d'avant 1.14.2 n'a pas l'empreinte d'apres : on ne sait pas mieux qu'"appliquee".
+    return p->fingerprintAfter.empty() ? Applied::Applied : Applied::Changed;
+}
+
+bool Assistant::reapply(int message, std::string* why) {
+    auto* c = cur();
+    if (!c || appliedState(message) != Applied::Undone) {
+        if (why) *why = "Rien \xC3\xA0 r\xC3\xA9" "appliquer : la proposition n'est pas annul\xC3\xA9" "e.";
+        return false;
+    }
+    c->messages[static_cast<std::size_t>(message)].proposal->state = "proposee";
+    if (apply(message, why)) return true;
+    if (auto* again = cur(); again && message < static_cast<int>(again->messages.size()) && again->messages[static_cast<std::size_t>(message)].proposal)
+        again->messages[static_cast<std::size_t>(message)].proposal->state = "appliquee";
+    ++revision_;
+    return false;
 }
 
 bool Assistant::refuse(int message) {

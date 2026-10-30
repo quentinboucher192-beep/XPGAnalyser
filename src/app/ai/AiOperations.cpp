@@ -225,7 +225,7 @@ struct Run {
                 name = p.variable.use;
             } else if (p.variable.create) {
                 if (!hmi::isIdentifier(name)) return fail("\xC2\xAB " + name + " \xC2\xBB n'est pas un nom de variable valable.");
-                warn("La variable " + name + " (" + p.variable.type + ") sera cr\xC3\xA9\xC3\xA9" "e dans les variables de l'IHM, \xC3\xA0 votre demande.");
+                warn("La variable " + name + " (" + p.variable.type + ") sera cr\xC3\xA9\xC3\xA9" "e dans les variables de l'IHM, \xC3\xA0 ta demande.");
             } else {
                 if (check) {
                     check->missingVariable = name;
@@ -239,7 +239,7 @@ struct Run {
                 }
                 if (touched && preview) touched->modified.push_back(o->id);
                 return fail("La variable \xC2\xAB " + name + " \xC2\xBB n'existe pas dans le projet : l'Assistant ne l'invente pas. "
-                            "Choisissez une variable existante, ou demandez sa cr\xC3\xA9" "ation.");
+                            "Choisis une variable existante, ou demande sa cr\xC3\xA9" "ation.");
             }
         }
         if (Item* it = itemFor(createdIds.count(o->id) ? Item::What::Create : Item::What::Modify, *o)) {
@@ -447,7 +447,7 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     if (!p.fingerprint.empty() && fingerprint(*v) != p.fingerprint) {
         check.stale = true;
         check.errors.push_back("La vue \xC2\xAB " + v->name + " \xC2\xBB a chang\xC3\xA9 depuis cette proposition : elle ne s'applique pas "
-                               "sur un \xC3\xA9tat qui n'est plus le sien. Redemandez-la.");
+                               "sur un \xC3\xA9tat qui n'est plus le sien. Redemande-la.");
     }
     hmi::View copy = *v;
     hmi::Id next = project.nextId;
@@ -601,6 +601,7 @@ json::Value toJson(const Proposal& p) {
     o.set("vue", p.view);
     o.set("vueId", static_cast<std::int64_t>(p.viewId));
     o.set("empreinte", p.fingerprint);
+    if (!p.fingerprintAfter.empty()) o.set("empreinteApres", p.fingerprintAfter);
     o.set("demande", p.request);
     o.set("resume", p.summary);
     if (!(p.variable == VariableChoice{})) {
@@ -625,6 +626,7 @@ Proposal proposalFromJson(const json::Value& o) {
     p.view = o.str("vue");
     p.viewId = static_cast<hmi::Id>(o.integer("vueId"));
     p.fingerprint = o.str("empreinte");
+    p.fingerprintAfter = o.str("empreinteApres");
     p.request = o.str("demande");
     p.summary = o.str("resume");
     if (const auto* c = o.find("variableChoisie")) {
@@ -633,7 +635,7 @@ Proposal proposalFromJson(const json::Value& o) {
         p.variable.type = c->str("type", "BOOL");
     }
     if (const auto* ops = o.find("operations")) (void)operationsFromJson(*ops, p.ops);
-    p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "demande", "resume",
+    p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "empreinteApres", "demande", "resume",
                                        "variableChoisie", "operations"});
     return p;
 }
