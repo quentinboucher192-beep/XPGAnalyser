@@ -80,6 +80,16 @@ void emptyFolder(const fs::path& folder, const fs::path& guard, CleanResult& r) 
     if (!fs::is_directory(fs::symlink_status(folder, ec))) return;   // absent, ou un lien : on n'y touche pas
     for (fs::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
         const fs::path child = it->path();
+        // un lien : on retire le lien, jamais ce qu'il vise (il peut viser hors de IA/)
+        if (std::error_code e1; fs::is_symlink(fs::symlink_status(child, e1))) {
+            std::error_code e2;
+            fs::remove(child, e2);
+            if (e2) {
+                ++r.failures;
+                if (r.firstError.empty()) r.firstError = utf8Of(child) + " : " + e2.message();
+            }
+            continue;
+        }
         if (!inside(guard, child)) {
             ++r.failures;
             if (r.firstError.empty()) r.firstError = "hors du dossier permis : " + utf8Of(child);
@@ -602,6 +612,10 @@ CleanResult clearCache(const std::vector<Part>& parts) {
                 for (const auto& c : kCacheCategories) known = known || sub == c.folder;
                 std::error_code e2;
                 if (known && it->is_directory(e2) && !it->is_symlink(e2)) continue;
+                if (it->is_symlink(e2)) {     // un lien : le lien seul
+                    fs::remove(it->path(), e2);
+                    continue;
+                }
                 if (!inside(cache, it->path())) continue;
                 const Usage u = usageOf(it->path());
                 fs::remove_all(it->path(), e2);

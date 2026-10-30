@@ -390,11 +390,24 @@ void cleaning() {
     check(!acts.empty() && acts.back().type == "nettoyage" && acts.back().text.find(mem::sizeText(5024)) != std::string::npos
               && acts.back().text.find("3 fichiers") != std::string::npos,
           "l'activite : " + (acts.empty() ? std::string("?") : acts.back().text));
+    // un lien dans le cache vers un fichier et un dossier HORS de IA/ : le lien part, jamais ce qu'il vise
+    const fs::path outsideFile = scratch() / "dehors.txt";
+    const fs::path outsideDir = scratch() / "dehors";
+    writeText(outsideFile, "a garder");
+    writeText(outsideDir / "garde.txt", "a garder aussi");
+    std::error_code lec;
+    fs::create_symlink(outsideFile, ia / "cache" / "documents" / "lien.txt", lec);
+    fs::create_directory_symlink(outsideDir, ia / "cache" / "traitement" / "lien-dossier", lec);
+    const bool links = !lec;
     // tout le reste du cache
     const auto r2 = mem::clearCache({mem::Part::CacheProcessing, mem::Part::CacheDocuments, mem::Part::CachePreviews, mem::Part::CacheDownloads,
                                      mem::Part::CacheOther});
     const auto empty = mem::measure();
     check(r2.ok() && empty.cache().files == 0 && empty.cache().bytes == 0 && !fs::exists(ia / "cache" / "perdu.bin"), "le cache entier vide");
+    if (links)
+        check(readAll(outsideFile) == "a garder" && readAll(outsideDir / "garde.txt") == "a garder aussi"
+                  && !fs::exists(fs::symlink_status(ia / "cache" / "documents" / "lien.txt")),
+              "un lien du cache vers l'exterieur : le lien part, ce qu'il vise reste");
     check(readAll(conv) == convBefore && readAll(piece) == pieceBefore && fs::exists(ia / "parametres.json") && fs::exists(ia / "autre.txt"),
           "toujours intacts : conversations, pieces jointes, parametres, le reste");
 }
@@ -607,6 +620,8 @@ void dialog() {
     check(d.deleteMemorySelection() && d.confirming() && d.confirmText().find("Traitement de l'eau") != std::string::npos, "sa suppression demandee");
     check(d.confirmYes() && d.conversations().size() == 1 && d.messageCount() == 2 && d.measured().of(mem::Part::Conversations).files == 1,
           "supprimee : 1 conversation, 2 messages, la jauge suit");
+    check(d.activity().back().type == "suppression" && d.activity().back().text.find("Traitement de l'eau") != std::string::npos,
+          "son activite : " + d.activity().back().text);
     // la recherche
     d.setSearch("pompage");
     check(d.memoryCategory() == app::AiMemoryDialog::MemCat::Search && !d.hits().empty() && d.memoryRowCount() == d.hits().size(), "la recherche");
@@ -646,6 +661,14 @@ void dialog() {
     check(d.activityRowCount() >= 1 && d.activityRowCount() < all, "le journal filtre par type (" + std::to_string(d.activityRowCount()) + " sur "
                                                                         + std::to_string(all) + ")");
     d.setActivityFilter("");
+    check(d.selectRow("Cache vid") && d.currentTable() && d.currentTable()->selection().size() == 1, "une ligne du journal par son texte (seance : memoire-ligne)");
+    std::size_t nettoyages = 0, suppressions = 0, connaissances = 0;
+    for (const auto& a : d.activity()) {
+        nettoyages += a.type == "nettoyage";
+        suppressions += a.type == "suppression";
+        connaissances += a.type == "connaissance";
+    }
+    check(nettoyages >= 1 && suppressions >= 4 && connaissances >= 4, "chaque operation de la fenetre a sa ligne (ajout, modification, activation, suppressions, nettoyage)");
     check(d.showTab("stockage") && d.tab() == app::AiMemoryDialog::Tab::Storage && !d.showTab("inconnu"), "un onglet par son nom");
     // le dessin des six onglets, aux deux tailles, dans les deux themes
     writeText(ia / "conversations" / "c-20261030-173512-1.json",

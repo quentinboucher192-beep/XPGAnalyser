@@ -2369,6 +2369,7 @@ std::size_t AiMemoryDialog::activityRowCount() const { return activityPage_ ? ac
 // ---- la confirmation, le message ----------------------------------------------------------------
 void AiMemoryDialog::ask(Confirm kind, std::string text, std::string yes) {
     confirm_ = {kind, std::move(text), std::move(yes)};
+    message_.clear();
     syncWidgets();
     if (body_) {
         body_->invalidateLayout();
@@ -2394,8 +2395,9 @@ bool AiMemoryDialog::confirmYes() {
 }
 
 void AiMemoryDialog::confirmNo() {
+    const bool cache = confirm_.kind == Confirm::ClearCache;
     confirm_ = {};
-    say("Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
+    say(cache ? "Le cache n'a pas \xC3\xA9t\xC3\xA9 vid\xC3\xA9." : "Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
     syncWidgets();
     if (body_) body_->invalidateLayout();
 }
