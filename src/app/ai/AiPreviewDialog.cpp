@@ -123,10 +123,14 @@ protected:
         const std::string sub = "Vue \xC2\xAB " + p->view + " \xC2\xBB \xC2\xB7 " + (p->summary.empty() ? std::string("proposition") : p->summary)
                                 + " \xC2\xB7 la vue n'est pas modifi\xC3\xA9" "e avant Appliquer";
         ctx.r.drawText({x, panel_.y + 38.f}, elide(ctx.r, sub, kSmall, panel_.w - 32.f), kSmall, c.textMuted);
-        // Les comptes : trois tuiles.
+        // Les comptes : trois tuiles. Perimee (la vue a change, ou n'existe plus) : ceux de la
+        // proposition (son texte les annonce), pas ceux d'une validation qui n'a rien pu lire.
         const Check& ck = d_.check_;
+        const bool asProposed = ck.stale || ck.viewMissing;
         const struct { const char* label; int n; gfx::Color col; } tiles[] = {
-            {"\xC3\x80 cr\xC3\xA9" "er", ck.create, c.ok}, {"\xC3\x80 modifier", ck.modify, c.info}, {"\xC3\x80 supprimer", ck.remove, c.error}};
+            {"\xC3\x80 cr\xC3\xA9" "er", asProposed ? p->create : ck.create, c.ok},
+            {"\xC3\x80 modifier", asProposed ? p->modify : ck.modify, c.info},
+            {"\xC3\x80 supprimer", asProposed ? p->remove : ck.remove, c.error}};
         float tx = counts_.x;
         for (const auto& t : tiles) {
             const std::string n = std::to_string(t.n);
@@ -141,13 +145,18 @@ protected:
         }
         if (ck.stale || ck.viewMissing) {
             ctx.r.drawText({tx + 8.f, counts_.y + (counts_.h - ctx.r.lineHeight(kSmall)) / 2.f},
-                           elide(ctx.r, "P\xC3\xA9rim\xC3\xA9" "e : redemandez-la (Modifier la demande).", kSmall, counts_.right() - tx - 8.f), kSmall,
+                           elide(ctx.r, "P\xC3\xA9rim\xC3\xA9" "e : redemande-la (Modifier la demande).", kSmall, counts_.right() - tx - 8.f), kSmall,
                            c.warning);
         }
-        if (d_.variable_ && d_.variable_->visibility() == ui::Visibility::Visible)
-            ctx.r.drawText({varLabel_.x, varLabel_.y + 2.f},
-                           elide(ctx.r, "\xC2\xAB " + ck.missingVariable + " \xC2\xBB n'existe pas : quelle variable utiliser ?", kSmall, varLabel_.w), kSmall,
-                           c.error);
+        if (d_.variable_ && d_.variable_->visibility() == ui::Visibility::Visible) {
+            // Le nom introuvable reste dit apres le choix (la validation ne le cite plus : il est remplace).
+            const std::string name = "\xC2\xAB " + d_.missingName_ + " \xC2\xBB n'existe pas";
+            const bool chosen = !p->variable.use.empty() || p->variable.create;
+            const std::string label = !p->variable.use.empty() ? name + " : remplac\xC3\xA9" "e par " + p->variable.use + "."
+                                    : p->variable.create    ? name + " : elle sera cr\xC3\xA9\xC3\xA9" "e (" + p->variable.type + ")."
+                                                            : name + " : quelle variable utiliser ?";
+            ctx.r.drawText({varLabel_.x, varLabel_.y + 2.f}, elide(ctx.r, label, kSmall, varLabel_.w), kSmall, chosen ? c.textMuted : c.error);
+        }
         paintList(ctx);
         paintPreview(ctx);
     }
@@ -363,7 +372,7 @@ void AiPreviewDialog::refresh() {
     if (check_.bindings.empty()) rows.push_back({Row::Kind::Note, "Aucune (l'Assistant n'invente jamais une variable).", {}, 0});
     for (const auto& bnd : check_.bindings) rows.push_back({Row::Kind::Note, bnd, {}, 0});
     if (!check_.missingVariable.empty())
-        rows.push_back({Row::Kind::Note, "Introuvable : " + check_.missingVariable + " \xE2\x80\x94 choisissez au-dessus.", {}, 0});
+        rows.push_back({Row::Kind::Note, "Introuvable : " + check_.missingVariable + " \xE2\x80\x94 choisis au-dessus.", {}, 0});
     heading("OBJETS CONCERN\xC3\x89S (" + std::to_string(check_.items.size()) + ")");
     for (const auto& it : check_.items) {
         const int what = it.what == Item::What::Create ? 0 : it.what == Item::What::Modify ? 1 : 2;
@@ -389,6 +398,7 @@ void AiPreviewDialog::refresh() {
             std::string missing = check_.missingVariable;
             for (const auto& op : p->ops)
                 if (op.action == Operation::Action::Bind) missing = op.variable;
+            missingName_ = missing;
             variableNames_.clear();
             std::vector<ui::DropDown::Item> items;
             std::set<std::string> seen;

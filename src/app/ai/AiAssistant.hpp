@@ -110,6 +110,15 @@ public:
     [[nodiscard]] bool needsConfirm(int message) const;
     // Le choix de l'utilisateur pour une variable introuvable (une variable existante, ou la creer).
     bool chooseVariable(int message, VariableChoice choice);
+    // 1.14.2 : CE QU'EST DEVENUE UNE PROPOSITION APPLIQUEE, d'apres la vue telle qu'elle est (les
+    // empreintes d'avant et d'apres Appliquer) : toujours appliquee ; annulee (Ctrl+Z, ou le projet
+    // rouvert sans avoir ete enregistre : la vue est revenue a son etat d'avant) ; ou la vue a change
+    // depuis (d'autres gestes, ou elle n'existe plus). NotApplied : pas une proposition appliquee.
+    enum class Applied : std::uint8_t { NotApplied, Applied, Undone, Changed };
+    [[nodiscard]] Applied appliedState(int message) const;
+    // Reappliquer une proposition annulee : la vue est exactement celle de la proposition, elle
+    // s'applique de nouveau (UN pas d'annulation, une nouvelle commande). Faux et `why` sinon.
+    bool reapply(int message, std::string* why = nullptr);
 
     // ---- le mode, les reglages, la cle -----------------------------------------------------
     [[nodiscard]] bool directMode() const noexcept { return settings_.mode == "direct"; }
