@@ -7277,6 +7277,133 @@ const std::vector<Topic>& topics() {
          "Le volume des alarmes descend \xC3\xA0 60 %, le canal Vid\xC3\xA9os se coupe (M rouge), le "
          "G\xC3\xA9n\xC3\xA9ral baisse de 10 %, se coupe et revient ; tout reprend \xC3\xA0 la fin.",
          {}, "1.14.0"},
+        // ---- La bibliotheque d'objets  Commandes / objet-convertisseur-unites
+        {"objet-convertisseur-unites", "Convertisseur d'unit\xC3\xA9s", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes",
+         "Convertir une valeur d'une unit\xC3\xA9 dans une autre, en marche : la case Valeur, l'unit\xC3\xA9 "
+         "de d\xC3\xA9part, l'unit\xC3\xA9 d'arriv\xC3\xA9" "e (de la m\xC3\xAAme dimension), le "
+         "r\xC3\xA9sultat et sa formule - le m\xC3\xAAme calcul que EN(\xE2\x80\xA6) dans un script.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Donner \xC3\xA0 l'op\xC3\xA9rateur une table de conversion sur le poste : combien "
+                         "font 2,5 bar en psi, 20 \xC2\xB0" "C en \xC2\xB0" "F, 12 m3/h en L/min. Il tape "
+                         "une valeur, choisit **De** et **Vers**, et lit le r\xC3\xA9sultat ; sans rien "
+                         "taper, il montre une mesure de l'IHM dans une autre unit\xC3\xA9.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "**la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel "
+                         "num\xC3\xA9rique du poste), la premi\xC3\xA8re frappe remplace la valeur "
+                         "montr\xC3\xA9" "e ; 1.5 ou 1,5, -40, 2.5e3. Le r\xC3\xA9sultat suit chaque frappe "
+                         "; Entr\xC3\xA9" "e garde la valeur, **\xC3\x89" "chap** l'oublie : la case revient "
+                         "\xC3\xA0 la Valeur de d\xC3\xA9part ;", {}},
+             {K::Bullet, "**De** et **Vers** : un clic ouvre la liste des unit\xC3\xA9s (la **Dimension** "
+                         "choisie, ou toutes) ; Vers ne propose que la dimension de De, et une "
+                         "arriv\xC3\xA9" "e d'une autre dimension devient l'unit\xC3\xA9 de "
+                         "r\xC3\xA9" "f\xC3\xA9rence (Pa, K, m3/h\xE2\x80\xA6) ; la molette ou les "
+                         "fl\xC3\xA8" "ches de la liste la font d\xC3\xA9" "filer ;", {}},
+             {K::Bullet, "**le bouton aux deux fl\xC3\xA8" "ches** inverse De et Vers ;", {}},
+             {K::Bullet, "**le r\xC3\xA9sultat** en grand, \xC3\xA0 **D\xC3\xA9" "cimales** "
+                         "d\xC3\xA9" "cimales (les z\xC3\xA9ros inutiles ne s'\xC3\xA9" "crivent pas ; un "
+                         "tr\xC3\xA8s petit nombre garde ses chiffres significatifs), et **la formule** en "
+                         "petit : \xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "C -> K : x + "
+                         "273.15 \xC2\xBB ;", {}},
+             {K::Bullet, "**\xC3\x89" "crire** (si **R\xC3\xA9sultat vers** est pos\xC3\xA9) \xC3\xA9" "crit "
+                         "le r\xC3\xA9sultat dans la variable, convertie vers son type ; la Console le dit "
+                         "(\xC2\xAB Pression_mbar := 1500 mbar (1.5 bar) \xC2\xBB).", {}},
+             {K::Paragraph, "Un refus se dit dans l'objet, en rouge : \xC2\xAB unit\xC3\xA9 inconnue \xC2\xAB "
+                         "bars \xC2\xBB \xC2\xBB, \xC2\xAB dimensions diff\xC3\xA9rentes : bar est une "
+                         "pression, degC une temp\xC3\xA9rature \xC2\xBB, \xC2\xAB valeur illisible \xC2\xBB.", {}},
+             {K::Heading, "La Valeur de d\xC3\xA9part", {}},
+             {K::Paragraph, "Un nombre, ou une **expression** (=Pression) relue \xC3\xA0 chaque cycle tant que "
+                         "l'op\xC3\xA9rateur n'a rien tap\xC3\xA9. Une variable qui a une **unit\xC3\xA9** "
+                         "(voir \xC2\xAB Les unit\xC3\xA9s de mesure dans les types \xC2\xBB) donne "
+                         "l'unit\xC3\xA9 de d\xC3\xA9part, comme UNITE(Pression) : une mesure en mbar se "
+                         "montre en mbar ; si l'op\xC3\xA9rateur choisit bar dans De, la case montre la "
+                         "mesure convertie en bar - la valeur reste vraie.", {}},
+             {K::Code, "(* Ce que fait le convertisseur, dans un script *)\nPression_mbar := EN(Pression, "
+                         "'mbar');       (* bar -> mbar : x 1000 *)\nTemp_F        := EN(Temperature, "
+                         "'degF');    (* degC -> degF : x 1.8 + 32 *)", "ST"},
+             {K::Code, "/* le C n'a pas d'unit\xC3\xA9 : la conversion se fait \xC3\xA0 la main "
+                         "*/\npression_mbar = pression * 1000.0f;\ntemp_f = temperature * 1.8f + 32.0f;", "C"},
+             {K::Code, "// le C++ n'a pas d'unit\xC3\xA9 native : la conversion se fait \xC3\xA0 la "
+                         "main\npression_mbar = pression * 1000.0;\ntemp_f = temperature * 1.8 + 32.0;", "C++"},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nTitre\t(vide)\tUn "
+                         "titre au-dessus de la case ; vide : pas de titre.\nValeur de d\xC3\xA9part\t1\tUn "
+                         "nombre, ou une expression (=Pression) ; une variable avec une unit\xC3\xA9 donne "
+                         "l'unit\xC3\xA9 de d\xC3\xA9part.\nDimension\ttoutes\tLes unit\xC3\xA9s "
+                         "propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
+                         "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6).\nUnit\xC3\xA9 de "
+                         "d\xC3\xA9part\tbar\tLe symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; "
+                         "l'op\xC3\xA9rateur la change dans De.\nUnit\xC3\xA9 d'arriv\xC3\xA9" "e\tmbar\tLe "
+                         "symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme "
+                         "dimension.\nD\xC3\xA9" "cimales\t3\tDe 0 \xC3\xA0 12.\nR\xC3\xA9sultat "
+                         "vers\t(vide)\tUne variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le "
+                         "r\xC3\xA9sultat ; vide : pas de bouton.\nPolice\tSans\tLa police de "
+                         "l'objet.\nTaille du texte\t14\tEn pixels de la vue ; le r\xC3\xA9sultat est plus "
+                         "grand.\nCouleur du texte\t#E6EAF0\tLes unit\xC3\xA9s, la valeur, la "
+                         "formule.\nFond\t#1F252E\tLe fond de l'objet.\nContour\t#3A4556\tSon bord.\nCouleur "
+                         "d'accent\t#2F6FD6\tLe r\xC3\xA9sultat, la liste ouverte, le bouton "
+                         "\xC3\x89" "crire.\nRayon des coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable "
+                         "(saisie, listes, \xC3\x89" "crire)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre la "
+                         "conversion sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "\xC3\x80 savoir", {}},
+             {K::Bullet, "le calcul est celui de **EN** : la biblioth\xC3\xA8que des unit\xC3\xA9s du projet "
+                         "(fournies, celles du projet et des biblioth\xC3\xA8ques reli\xC3\xA9" "es) ; une "
+                         "unit\xC3\xA9 ajout\xC3\xA9" "e dans Configuration \xE2\x80\xBA Unit\xC3\xA9s de "
+                         "mesure appara\xC3\xAEt dans ses listes ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
+                         "ses gestes ; \xC3\x89" "crire demande aussi la permission **Piloter** quand la "
+                         "s\xC3\xA9" "curit\xC3\xA9 est active ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une unit\xC3\xA9 inconnue, deux unit\xC3\xA9s de "
+                         "dimensions diff\xC3\xA9rentes (la Valeur de d\xC3\xA9part comprise, quand c'est "
+                         "une variable qui a une unit\xC3\xA9), une dimension inconnue, une Valeur de "
+                         "d\xC3\xA9part qui n'est pas un nombre, une variable inconnue dans R\xC3\xA9sultat "
+                         "vers ;", {}},
+             {K::Bullet, "pour tester une conversion pendant la conception : l'onglet **Convertir** de "
+                         "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure.", {}},
+         },
+         {"unites-mesure", "objet-champ-de-saisie", "objet-communs", "actions"},
+         {"Convertisseur d'unit\xC3\xA9s", "convertisseur", "UnitConverter", "Unit\xC3\xA9 de d\xC3\xA9part", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "R\xC3\xA9sultat vers", "Valeur de d\xC3\xA9part", "inverser"},
+         {},
+         {{"EX_UnitConverter.png", "L'exemple anim\xC3\xA9 : la mesure Pression suivie en mbar, puis en psi ; une valeur tap\xC3\xA9" "e, des \xC2\xB0" "C en \xC2\xB0" "F, invers\xC3\xA9" "e."}},
+         "UnitConverter",
+         {{"title", "Titre", "(vide)",
+            "Un titre au-dessus de la case ; vide : pas de titre."},
+           {"value", "Valeur de d\xC3\xA9part", "1",
+            "Un nombre, ou une expression (=Pression) ; une variable avec une unit\xC3\xA9 donne "
+            "l'unit\xC3\xA9 de d\xC3\xA9part."},
+           {"dimension", "Dimension", "toutes",
+            "Les unit\xC3\xA9s propos\xC3\xA9" "es dans De : toutes, ou une dimension (Pression, "
+            "Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6)."},
+           {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", "bar",
+            "Le symbole de l'unit\xC3\xA9 de la valeur (bar, degC, m3/h) ; l'op\xC3\xA9rateur la change dans "
+            "De."},
+           {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "mbar",
+            "Le symbole de l'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension."},
+           {"decimals", "D\xC3\xA9" "cimales", "3",
+            "De 0 \xC3\xA0 12."},
+           {"resultTo", "R\xC3\xA9sultat vers", "(vide)",
+            "Une variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le r\xC3\xA9sultat ; vide : pas de "
+            "bouton."},
+           {"font", "Police", "Sans",
+            "La police de l'objet."},
+           {"fontSize", "Taille du texte", "14",
+            "En pixels de la vue ; le r\xC3\xA9sultat est plus grand."},
+           {"textColor", "Couleur du texte", "#E6EAF0",
+            "Les unit\xC3\xA9s, la valeur, la formule."},
+           {"fill", "Fond", "#1F252E",
+            "Le fond de l'objet."},
+           {"stroke", "Contour", "#3A4556",
+            "Son bord."},
+           {"accent", "Couleur d'accent", "#2F6FD6",
+            "Le r\xC3\xA9sultat, la liste ouverte, le bouton \xC3\x89" "crire."},
+           {"radius", "Rayon des coins", "6",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (saisie, listes, \xC3\x89" "crire)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : il montre la conversion sans r\xC3\xA9" "agir."}},
+         "La Valeur de d\xC3\xA9part suit la mesure Pression (en bar), convertie en mbar puis en psi ; 20 "
+         "est tap\xC3\xA9, converti de \xC2\xB0" "C en \xC2\xB0" "F, puis invers\xC3\xA9 ; tout revient "
+         "\xC3\xA0 la fin.",
+         {}, "1.14.1"},
         // ---- La bibliotheque d'objets  Affichage / objet-voyant
         {"objet-voyant", "Voyant", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Affichage",
          "Un voyant allum\xC3\xA9 ou \xC3\xA9teint selon une valeur bool\xC3\xA9" "enne : marche, "
@@ -15652,6 +15779,32 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clarations et retours compris.", {}},
              {K::Bullet, "La case **Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige "
                          "EN(\xE2\x80\xA6)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.", {}},
+             {K::Heading, "L'onglet Convertir : tester une conversion", {}, "1.14.1"},
+             {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets : "
+                         "**Biblioth\xC3\xA8que** (les familles et les unit\xC3\xA9s, ci-dessus) et "
+                         "**Convertir**, un banc d'essai.", {}, "1.14.1"},
+             {K::Bullet, "**Valeur** : le nombre \xC3\xA0 convertir (1.5 ou 1,5, -40, 2.5e3) ; **De** et "
+                         "**Vers** : les unit\xC3\xA9s, choisies dans des listes ; Vers ne propose que la "
+                         "dimension de De. **Dimension** restreint De \xC3\xA0 une dimension ; "
+                         "**Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : "
+                         "`psi`, `milli`, `d\xC3\xA9" "bit`) et y prend la premi\xC3\xA8re unit\xC3\xA9 "
+                         "trouv\xC3\xA9" "e ;", {}, "1.14.1"},
+             {K::Bullet, "le r\xC3\xA9sultat suit chaque frappe, \xC3\xA0 **D\xC3\xA9" "cimales** "
+                         "d\xC3\xA9" "cimales (0 \xC3\xA0 12 ; les z\xC3\xA9ros inutiles ne "
+                         "s'\xC3\xA9" "crivent pas) ; le bouton **\xE2\x87\x84** inverse De et Vers ;", {}, "1.14.1"},
+             {K::Bullet, "dessous : la **formule** (\xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB "
+                         "\xC2\xB0" "C -> K : x + 273.15 \xC2\xBB) et l'expression \xC3\xA0 mettre dans un "
+                         "script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au presse-papiers "
+                         "(Valeur : ta variable) ;", {}, "1.14.1"},
+             {K::Bullet, "l'**historique de la s\xC3\xA9" "ance** garde les douze derni\xC3\xA8res "
+                         "conversions (une valeur valid\xC3\xA9" "e par Entr\xC3\xA9" "e, une unit\xC3\xA9 "
+                         "choisie, \xE2\x87\x84, Copier) : un clic sur une ligne y revient ;", {}, "1.14.1"},
+             {K::Bullet, "un refus se dit en rouge : une valeur illisible, une unit\xC3\xA9 inconnue (une "
+                         "unit\xC3\xA9 du projet retir\xC3\xA9" "e depuis), deux dimensions "
+                         "diff\xC3\xA9rentes.", {}, "1.14.1"},
+             {K::Paragraph, "Le calcul est celui du moteur (EN dans un script, l'objet **Convertisseur "
+                         "d'unit\xC3\xA9s**) : aucune table \xC3\xA0 part, les unit\xC3\xA9s du projet et "
+                         "des biblioth\xC3\xA8ques reli\xC3\xA9" "es comprises.", {}, "1.14.1"},
              {K::Heading, "Deux r\xC3\xA8gles, voulues diff\xC3\xA9rentes", {}},
              {K::Paragraph, "L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) "
                          "exigent la **m\xC3\xAAme unit\xC3\xA9 exacte** : bar et mbar ne s'additionnent "
@@ -15742,7 +15895,7 @@ const std::vector<Topic>& topics() {
                          "la valeur de l'objet et tape mbar dans son unit\xC3\xA9.", {}},
          },
          {"types-ihm", "variables-ihm", "unites-formats", "retours-fonctions", "operateurs", "erreurs-scripts", "reference"},
-         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure"},
+         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure", "Convertir", "Copier l'expression"},
          {"unites-mesure", "types-ihm", "variables-ihm", "unites-formats"},
          {},
          "",

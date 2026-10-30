@@ -60,6 +60,7 @@
 #include "HmiTable.hpp"                // 1.12.13 : le Tableau, un mode a la fois
 #include "HmiDocView.hpp"              // 1.12.30 : la visionneuse de documents
 #include "HmiRecording.hpp"            // 1.14.0 (M4) : les enregistrements
+#include "HmiUnits.hpp"                // 1.14.1 (lot N5) : le Convertisseur d'unites (le calcul de EN)
 
 #include <cstdint>
 #include <deque>
@@ -940,6 +941,31 @@ public:
         double                          checkedAt{-1e9}; // la derniere fois que le fichier a ete regarde
     };
     [[nodiscard]] const DocViewer* docViewer(Id object) const;
+    // ---- 1.14.1 (lot N5) : LE CONVERTISSEUR D'UNITES (HmiRuntimeControls.cpp) ----------------------------------
+    //  Sa valeur : ce que l'operateur tape dans la case Valeur (objectPart "valeur" puis typeText ; Echap l'oublie), sinon
+    //  sa Valeur de depart ("value" : un nombre, une expression relue a chaque cycle ; une variable qui a une unite donne
+    //  aussi l'unite de depart, comme UNITE(x)). De ("de", "choix:N") parmi la Dimension ; Vers ("vers") parmi celle
+    //  de De ; "inverser" ; "ecrire" pose le resultat dans Resultat vers (Piloter, le niveau d'acces, comme une saisie).
+    //  Le calcul est celui de EN (units::convertValue) ; un refus (unite inconnue, dimensions differentes, valeur
+    //  illisible) se dit dans l'objet. Pour un essai : "de:mbar", "vers:bar", "valeur:12.5", "dehors" (ferme la liste).
+    struct UnitConverter {
+        std::string from, to;               // les unites choisies
+        std::string propFrom, propTo;       // les proprietes vues au dernier cycle (changees : elles reprennent la main)
+        std::string sourceUnit;             // l'unite de la Valeur de depart (sa variable) ; vide : aucune
+        std::string family;                 // la Dimension (vide : toutes)
+        std::string valueText;              // ce que montre la case Valeur
+        bool        typed{false};           // l'operateur a tape sa valeur (la Valeur de depart ne la remplace plus)
+        units::Conversion conv;             // le resultat, ou le refus
+        int         open{0};                // la liste ouverte : 0 aucune, 1 De, 2 Vers
+        std::size_t first{0};               // ... sa premiere ligne montree
+        std::vector<std::string> choices;   // ... ses unites
+        bool        writes{false};          // Resultat vers est pose : le bouton Ecrire
+        bool        pilotable{true};
+        int         decimals{3};
+        std::string message;                // la reponse d'Ecrire (ou un refus)
+        bool        error{false};
+    };
+    [[nodiscard]] const UnitConverter* unitConverter(Id object) const;
     // Ce qui est sous un point local de la visionneuse ("doc:next", "doc:area"...) ; vide : rien.
     [[nodiscard]] std::string docPartAt(Id object, double lx, double ly) const;
     // La visionneuse a le clavier ; ... et un de ses champs (le numero de page, la recherche) est en saisie.
@@ -1845,6 +1871,13 @@ private:
     void mediasReset();
     void mediasOpenView(const View&, double now);
     void mediasCycle(double now);
+    // 1.14.1 (lot N5) : le Convertisseur d'unites (HmiRuntimeControls.cpp).
+    std::map<Id, UnitConverter>                converters_;
+    void converterCycle(double now);
+    void converterRefresh(Id view, const Object& raw, const Object& shown);
+    void converterRecompute(Id object);     // apres un geste ou une frappe : la vue montree relue
+    void converterPart(const View&, const Object&, std::string_view part, double now);
+    void converterSubmit(const View&, const Object&, double now);
     // 1.12.30 : la visionneuse de documents (HmiRuntimeDocs.cpp).
     std::map<Id, DocViewer>                    docs_;
     void docsReset();

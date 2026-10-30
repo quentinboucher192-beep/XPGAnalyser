@@ -39,6 +39,8 @@
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
 #include "../../hmi/HmiPopupParams.hpp"     // 1.12.11 (lot G) : les DDT de l'automate (PlcTypes)
 #include "../../hmi/HmiClock.hpp"       // 1.12.12 (lot H) : les fuseaux de l'horloge
+#include "../../hmi/HmiLibrary.hpp"     // 1.14.1 (lot N5) : biblio::unitConfig (les unites du Convertisseur)
+#include "../../hmi/HmiUnits.hpp"       // 1.14.1 (lot N5) : les dimensions et les unites du Convertisseur
 #include "../../hmi/HmiMarquee.hpp"     // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../../hmi/HmiQr.hpp"          // 1.12.12 (lot H) : la place qui reste dans un code QR
 #include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
@@ -1401,7 +1403,8 @@ const std::vector<Category>& categories() {
                        hmi::Kind::Selector, hmi::Kind::Slider, hmi::Kind::Knob, hmi::Kind::InputField, hmi::Kind::ComboBox,
                        hmi::Kind::CheckBox, hmi::Kind::RadioGroup, hmi::Kind::DateTimePicker, hmi::Kind::WeeklySchedule,
                        hmi::Kind::List, hmi::Kind::SystemButton,
-                       hmi::Kind::SoundMute, hmi::Kind::VolumeMixer}},   // 1.14.0 : couper le son, le melangeur
+                       hmi::Kind::SoundMute, hmi::Kind::VolumeMixer,     // 1.14.0 : couper le son, le melangeur
+                       hmi::Kind::UnitConverter}},                        // 1.14.1 (lot N5) : convertir d'unite en unite
         {"Affichage", {hmi::Kind::Indicator, hmi::Kind::MultiStateIndicator, hmi::Kind::MultiStateText, hmi::Kind::NumericDisplay,
                        hmi::Kind::SevenSegment, hmi::Kind::ProgressBar, hmi::Kind::Bargraph, hmi::Kind::Gauge, hmi::Kind::Dial,
                        hmi::Kind::Thermometer, hmi::Kind::TrendArrow, hmi::Kind::Clock, hmi::Kind::HourMeter,
@@ -1557,6 +1560,7 @@ std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind) {
         {hmi::Kind::VolumeMixer, {"son", "volume", "mixage", "m\xC3\xA9langeur", "canal", "mute"}},
         {hmi::Kind::Recorder, {"enregistrement", "enregistrer", "film", "replay", "relecture"}},
         {hmi::Kind::RecordingPlayer, {"enregistrement", "rejouer", "relecture", "replay"}},
+        {hmi::Kind::UnitConverter, {"unit\xC3\xA9", "conversion", "convertir", "mesure", "bar", "degr\xC3\xA9"}},   // 1.14.1 (lot N5)
     };
     std::vector<std::string_view> out;
     if (const auto* t = hmi::guide::topicForKind(hmi::kindKey(kind)))
@@ -2549,6 +2553,18 @@ const std::vector<KeyInfo>& keyInfos() {
          "Le niveau du canal, d'apr\xC3\xA8s les sons qui jouent (\xC3\xA0 leur volume) : vert, orange, puis rouge en haut. Celui du "
          "G\xC3\xA9n\xC3\xA9ral : le plus fort de tous."},
         {"muteColor", "Couleur du M allum\xC3\xA9", PG::ValueType::Color, {}, "Le bouton M d'un canal coup\xC3\xA9."},
+        // ---- 1.14.1 (lot N5) : le Convertisseur d'unites
+        {"dimension", "Dimension", PG::ValueType::Enum, {"toutes"},
+         "toutes : les listes De et Vers proposent toutes les unit\xC3\xA9s (Vers : celles de la dimension de De). Une dimension "
+         "(Pression, Temp\xC3\xA9rature, D\xC3\xA9" "bit\xE2\x80\xA6) : seulement les siennes."},
+        {"unitFrom", "Unit\xC3\xA9 de d\xC3\xA9part", PG::ValueType::Enum, {},
+         "L'unit\xC3\xA9 de la valeur (le symbole : bar, degC, m3/h). Une Valeur de d\xC3\xA9part qui est une variable avec une unit\xC3\xA9 "
+         "donne la sienne. En marche, l'op\xC3\xA9rateur la change dans la liste De."},
+        {"unitTo", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", PG::ValueType::Enum, {},
+         "L'unit\xC3\xA9 du r\xC3\xA9sultat, de la m\xC3\xAAme dimension que celle de d\xC3\xA9part (sinon le convertisseur le dit)."},
+        {"resultTo", "R\xC3\xA9sultat vers", PG::ValueType::Text, {},
+         "Facultatif : une variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le r\xC3\xA9sultat (la permission Piloter et le niveau "
+         "d'acc\xC3\xA8s de l'objet s'appliquent). Vide : pas de bouton \xC3\x89" "crire."},
         // ---- 1.12.30 : la visionneuse de documents
         {"document", "Document", PG::ValueType::Text, {},
          "Une ressource du projet (un PDF, une image PNG, JPEG, BMP, GIF ou SVG, un texte TXT), un fichier externe du projet, "
@@ -2843,6 +2859,13 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "colorOff") return "Fond muet";
         if (key == "icon") return "Ic\xC3\xB4ne haut-parleur";
         if (key == "pilotable") return "Pilotable (un clic coupe, r\xC3\xA9tablit)";
+    }
+    // 1.14.1 (lot N5) : le Convertisseur d'unites.
+    if (kind == K::UnitConverter) {
+        if (key == "value") return "Valeur de d\xC3\xA9part";
+        if (key == "accent") return "Couleur d'accent";
+        if (key == "fill") return "Fond";
+        if (key == "pilotable") return "Pilotable (saisie, listes, \xC3\x89" "crire)";
     }
     if (kind == K::VolumeMixer) {
         if (key == "orientation") return "Orientation des curseurs";
@@ -3224,6 +3247,43 @@ void soundProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p)
     else if (mute && prop.key == "colorOff") explain("Le fond du bouton quand le son est coup\xC3\xA9.");
     else if (!mute && prop.key == "orientation")
         explain("Verticale : une colonne par canal (le curseur monte) ; horizontale : une ligne par canal (le curseur va \xC3\xA0 droite).");
+}
+
+// 1.14.1 (lot N5) : le Convertisseur d'unites - les dimensions et les unites du projet (fournies, du projet, des
+// bibliotheques reliees) ; De et Vers ne proposent que la dimension choisie ; un mot tape (inconnu) reste propose.
+void converterProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p, const hmi::Project* project) {
+    if (o.kind != hmi::Kind::UnitConverter) return;
+    const auto explain = [&](std::string mine) {
+        const auto at = p.description.find("Tape =expression");
+        p.description = std::move(mine) + (at == std::string::npos ? std::string{} : "\n" + p.description.substr(at));
+    };
+    const hmi::units::Catalog cat = project ? hmi::units::Catalog(hmi::biblio::unitConfig(*project)) : hmi::units::Catalog();
+    const auto keep = [&] {
+        if (!prop.value.empty() && std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end())
+            p.enumValues.push_back(prop.value);
+    };
+    if (prop.key == "dimension") {
+        p.enumValues = {"toutes"};
+        for (const auto& f : cat.families()) p.enumValues.push_back(cat.familyLabel(f.name));
+        keep();
+    } else if (prop.key == "unitFrom" || prop.key == "unitTo") {
+        std::string family = hmi::units::familyFrom(cat, o.text("dimension", "toutes"));
+        if (prop.key == "unitTo")
+            if (const auto* u = cat.unit(o.text("unitFrom"))) family = u->family;
+        p.enumValues.clear();
+        for (const auto* u : hmi::units::unitsOf(cat, family)) p.enumValues.push_back(u->symbol);
+        keep();
+    } else if (prop.key == "value") {
+        explain("Le nombre \xC3\xA0 convertir au d\xC3\xA9part : un nombre, ou une expression (=Pression : une mesure de l'IHM). Une variable "
+                "qui a une unit\xC3\xA9 donne aussi l'unit\xC3\xA9 de d\xC3\xA9part (comme UNITE(Pression)). Tant que l'op\xC3\xA9rateur n'a "
+                "rien tap\xC3\xA9, la case suit cette valeur ; \xC3\x89" "chap dans la case y revient.");
+    } else if (prop.key == "decimals") {
+        explain("Les d\xC3\xA9" "cimales du r\xC3\xA9sultat (0 \xC3\xA0 12) ; les z\xC3\xA9ros inutiles ne s'\xC3\xA9" "crivent pas.");
+    } else if (prop.key == "pilotable") {
+        explain("Coch\xC3\xA9 : en marche, l'op\xC3\xA9rateur tape une valeur, choisit De et Vers, inverse, \xC3\xA9" "crit le r\xC3\xA9sultat ; "
+                "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent. D\xC3\xA9" "coch\xC3\xA9 : il montre la conversion sans "
+                "r\xC3\xA9" "agir.");
+    }
 }
 
 // Les libelles et les choix des proprietes du lot H.
@@ -4152,6 +4212,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         // 1.12.30 : la visionneuse de documents - ses documents, ses zooms.
         docProperty(*o, prop, p, assets);
         soundProperty(*o, prop, p);   // 1.14.0 : le Coupe-son, le Melangeur de volume
+        converterProperty(*o, prop, p, project);   // 1.14.1 (lot N5) : le Convertisseur d'unites
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.

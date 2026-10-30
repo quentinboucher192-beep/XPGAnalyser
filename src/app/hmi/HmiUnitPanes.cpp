@@ -5,6 +5,7 @@
 #include "HmiUnitPanes.hpp"
 #include "../../hmi/HmiDisplay.hpp"   // hmi::unitLabel (l'unite comme la simulation la montre)
 #include "../../hmi/HmiOperators.hpp" // 1.13.0 (seconde passe) : le nom d'un operateur (ses emplois d'unite)
+#include "../../hmi/HmiLibrary.hpp"   // 1.14.1 (lot N5) : biblio::unitConfig (les unites que voit le moteur)
 #include "HmiPaneKit.hpp"
 #include "../../core/FieldCodec.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -634,6 +635,462 @@ ui::EventResult HmiUnitPicker::HandleEvent(const ui::InputEvent& ev) {
     return r;
 }
 
+
+// ============================================ 1.14.1 (lot N5) : l'onglet Convertir ===
+namespace {
+const std::string kAllDimensions = "Toutes les dimensions";
+constexpr std::size_t kHistoryMax = 12;
+// "mbar  -  millibar" ; une unite dont le nom est le symbole (bar) : le symbole seul.
+std::string choiceLabel(const hmi::UnitDef& u) {
+    return u.label.empty() || u.label == u.symbol ? u.symbol : u.symbol + "  \xE2\x80\x94  " + u.label;
+}
+std::vector<HmiUnitConvertPage::Entry>& historyList() {
+    static std::vector<HmiUnitConvertPage::Entry> k;
+    return k;
+}
+// La page Bibliotheque : le contenu d'avant (outils, familles, unites, fiche), mis en page par le volet.
+class LibraryPage final : public ui::Widget {
+public:
+    LibraryPage(std::string id, std::function<void(const gfx::Rect&)> place) : ui::Widget(std::move(id)), place_(std::move(place)) {}
+protected:
+    void onLayout() override { if (place_) place_(bounds()); }
+    void onPaint(const ui::PaintContext& ctx) override { ctx.r.fillRect(bounds(), ctx.theme.color.panelBg); }
+private:
+    std::function<void(const gfx::Rect&)> place_;
+};
+} // namespace
+
+const std::vector<HmiUnitConvertPage::Entry>& HmiUnitConvertPage::history() { return historyList(); }
+void HmiUnitConvertPage::clearHistory() { historyList().clear(); }
+
+HmiUnitConvertPage::HmiUnitConvertPage(std::string id, hmi::DocumentPtr doc) : ui::Widget(std::move(id)), doc_(std::move(doc)) {
+    const std::string base = this->id();
+    search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".search")));
+    search_->setPlaceholder("Symbole, nom ou dimension (psi, millibar, d\xC3\xA9" "bit)\xE2\x80\xA6");
+    search_->setEscapeClears(true);
+    search_->setTooltip("Filtre la liste De (sans casse ni accents) et y prend la premi\xC3\xA8re unit\xC3\xA9 trouv\xC3\xA9" "e.");
+    dimension_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".dimension")));
+    dimension_->setTooltip("La dimension : De ne propose qu'elle (Vers propose toujours la dimension de De).");
+    value_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".value")));
+    value_->setText(valueText_);
+    value_->setMonospace(true);
+    value_->setTooltip("La valeur \xC3\xA0 convertir : 1.5 ou 1,5, -40, 2.5e3. Le r\xC3\xA9sultat suit chaque frappe ; Entr\xC3\xA9" "e la garde dans l'historique.");
+    fromBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".from")));
+    fromBox_->setTooltip("L'unit\xC3\xA9 de d\xC3\xA9part (filtr\xC3\xA9" "e par la dimension et la recherche).");
+    fromBox_->setMaxVisibleRows(14);
+    swap_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("\xE2\x87\x84", base + ".swap")));
+    swap_->setTooltip("Inverser : De devient Vers (la valeur garde son nombre).");
+    toBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".to")));
+    toBox_->setTooltip("L'unit\xC3\xA9 d'arriv\xC3\xA9" "e : seulement celles de la dimension de De.");
+    toBox_->setMaxVisibleRows(14);
+    decimalsBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".decimals")));
+    decimalsBox_->setTooltip("Les d\xC3\xA9" "cimales du r\xC3\xA9sultat (les z\xC3\xA9ros inutiles ne s'\xC3\xA9" "crivent pas ; un tr\xC3\xA8s petit nombre garde ses chiffres).");
+    {
+        std::vector<ui::DropDown::Item> items;
+        for (int d = 0; d <= 12; ++d) items.push_back({std::to_string(d), std::to_string(d), {}, true});
+        decimalsBox_->setItems(std::move(items));
+        decimalsBox_->setSelectedIndex(decimals_);
+    }
+    copy_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Copier", base + ".copy")));
+    copy_->setIcon(ui::Icon::Copy);
+    copy_->setTooltip("Copie l'expression EN(\xE2\x80\xA6) pour un script ou une fx (Valeur : ta variable).");
+    auto table = std::make_unique<ui::TableView>(base + ".history");
+    table->setColumns({{"Valeur", 140.f}, {"De", 90.f}, {"Vers", 90.f}, {"R\xC3\xA9sultat", 220.f}});
+    table->setSelectionMode(ui::SelectionMode::Single);
+    history_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    history_->setTooltip("Les derni\xC3\xA8res conversions de la s\xC3\xA9" "ance : un clic sur une ligne y revient.");
+
+    links_ += value_->textChanged->connect([this](const std::string& t) {
+        if (syncing_) return;
+        valueText_ = t;
+        recompute();
+    });
+    links_ += value_->editingDone->connect([this](const std::string&) {
+        if (!syncing_) remember();
+    });
+    links_ += search_->textChanged->connect([this](const std::string& t) {
+        if (!syncing_) setSearch(t);
+    });
+    links_ += dimension_->selectionChanged->connect([this](int) {
+        if (syncing_) return;
+        if (const auto* it = dimension_->selectedItem()) (void)setDimension(it->value);
+    });
+    links_ += fromBox_->selectionChanged->connect([this](int) {
+        if (syncing_) return;
+        if (const auto* it = fromBox_->selectedItem()) {
+            setFrom(it->value);
+            remember();
+        }
+    });
+    links_ += toBox_->selectionChanged->connect([this](int) {
+        if (syncing_) return;
+        if (const auto* it = toBox_->selectedItem()) {
+            setTo(it->value);
+            remember();
+        }
+    });
+    links_ += decimalsBox_->selectionChanged->connect([this](int i) {
+        if (!syncing_) setDecimals(i);
+    });
+    links_ += swap_->clicked->connect([this] { swap(); });
+    links_ += copy_->clicked->connect([this] { (void)copyExpression(); });
+    links_ += history_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
+        if (syncing_ || rows.empty()) return;
+        (void)recall(rows.front());
+    });
+    refresh();
+    refillHistory();
+}
+
+hmi::units::Catalog HmiUnitConvertPage::catalog() const {
+    return doc_ ? hu::Catalog(hmi::biblio::unitConfig(doc_->project)) : hu::Catalog();
+}
+
+std::vector<std::string> HmiUnitConvertPage::dimensionChoices() const {
+    std::vector<std::string> out{kAllDimensions};
+    const hu::Catalog cat = catalog();
+    for (const auto& f : cat.families()) out.push_back(cat.familyLabel(f.name));
+    return out;
+}
+
+void HmiUnitConvertPage::refresh() {
+    const hu::Catalog cat = catalog();
+    syncing_ = true;
+    std::vector<ui::DropDown::Item> items{{kAllDimensions, "", {}, true}};
+    int at = 0;
+    for (const auto& f : cat.families()) {
+        if (f.name == family_) at = static_cast<int>(items.size());
+        items.push_back({cat.familyLabel(f.name), f.name, {}, true});
+    }
+    if (at == 0) family_.clear();   // une famille du projet retiree : toutes
+    dimension_->setItems(std::move(items));
+    dimension_->setSelectedIndex(at);
+    syncing_ = false;
+    fillLists();
+    recompute();
+}
+
+void HmiUnitConvertPage::fillLists() {
+    const hu::Catalog cat = catalog();
+    const std::string want = fold(searchText_);
+    fromSymbols_.clear();
+    std::vector<ui::DropDown::Item> fromItems;
+    for (const auto* u : hu::unitsOf(cat, family_)) {
+        if (!want.empty()) {
+            const std::string hay = fold(u->symbol) + "|" + fold(u->label) + "|" + fold(cat.familyLabel(u->family)) + "|" + fold(u->family);
+            if (hay.find(want) == std::string::npos) continue;
+        }
+        fromSymbols_.push_back(u->symbol);
+        fromItems.push_back({choiceLabel(*u), u->symbol, {}, true});
+    }
+    // L'unite de depart hors de la liste (la recherche, la dimension) : la premiere trouvee la remplace.
+    const auto inFrom = [&](const std::string& s) {
+        return std::any_of(fromSymbols_.begin(), fromSymbols_.end(), [&](const std::string& x) { return fold(x) == fold(s); });
+    };
+    if (!fromSymbols_.empty() && !inFrom(from_) && (cat.unit(from_) || !want.empty() || !family_.empty())) from_ = fromSymbols_.front();
+    // Vers : la dimension de De ; l'arrivee d'une autre dimension devient la reference (ou la premiere autre unite).
+    toSymbols_.clear();
+    std::vector<ui::DropDown::Item> toItems;
+    const hmi::UnitDef* fromDef = cat.unit(from_);
+    if (fromDef)
+        for (const auto* u : hu::unitsOf(cat, fromDef->family)) {
+            toSymbols_.push_back(u->symbol);
+            toItems.push_back({choiceLabel(*u), u->symbol, {}, true});
+        }
+    // Une unite hors de sa liste (inconnue, ou d'une autre dimension) reste montree dans sa case, grisee : le refus se lit.
+    const auto outside = [&](std::vector<ui::DropDown::Item>& items, const std::vector<std::string>& symbols, const std::string& sym) {
+        int at = -1;
+        for (std::size_t i = 0; i < symbols.size(); ++i)
+            if (fold(symbols[i]) == fold(sym)) at = static_cast<int>(i);
+        if (at < 0 && !trim(sym).empty()) {
+            items.push_back({sym + (cat.unit(sym) ? "  (autre dimension)" : "  (inconnue)"), sym, {}, false});
+            at = static_cast<int>(items.size()) - 1;
+        }
+        return at;
+    };
+    const int fi = outside(fromItems, fromSymbols_, from_);
+    const int ti = outside(toItems, toSymbols_, to_);
+    syncing_ = true;
+    fromBox_->setItems(std::move(fromItems));
+    fromBox_->setSelectedIndex(fi);
+    toBox_->setItems(std::move(toItems));
+    toBox_->setSelectedIndex(ti);
+    syncing_ = false;
+}
+
+void HmiUnitConvertPage::recompute() {
+    const hu::Catalog cat = catalog();
+    double v = 0;
+    error_.clear();
+    if (!hu::parseValue(valueText_, v)) {
+        conv_ = hu::Conversion{};
+        conv_.from = cat.canonical(from_);
+        conv_.to = cat.canonical(to_);
+        error_ = trim(valueText_).empty() ? "Tape une valeur." : "Valeur illisible \xC2\xAB " + trim(valueText_) + " \xC2\xBB : un nombre (1.5 ou 1,5, -40, 2.5e3).";
+    } else {
+        conv_ = hu::convertValue(cat, v, from_, to_);
+        if (!conv_.ok) {
+            error_ = conv_.error;
+            if (!error_.empty()) error_[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(error_[0])));
+            error_ += ".";
+        }
+    }
+    if (!searchText_.empty() && fromSymbols_.empty())
+        error_ = "Aucune unit\xC3\xA9 ne contient \xC2\xAB " + searchText_ + " \xC2\xBB (symbole, nom ou dimension).";
+    invalidate();
+}
+
+void HmiUnitConvertPage::setValueText(const std::string& text) {
+    valueText_ = text;
+    syncing_ = true;
+    value_->setText(text);
+    syncing_ = false;
+    recompute();
+}
+
+void HmiUnitConvertPage::setSearch(const std::string& text) {
+    searchText_ = trim(text);
+    if (search_->text() != text) {
+        syncing_ = true;
+        search_->setText(text);
+        syncing_ = false;
+    }
+    const std::string before = from_;
+    fillLists();
+    if (from_ != before) followFrom();   // De a change (la premiere trouvee) : Vers suit sa dimension
+    recompute();
+}
+
+bool HmiUnitConvertPage::setDimension(std::string_view labelOrName) {
+    const hu::Catalog cat = catalog();
+    const std::string t = trim(labelOrName);
+    std::string fam;
+    if (!t.empty() && fold(t) != fold(kAllDimensions)) {
+        fam = hu::familyFrom(cat, t);
+        if (fam.empty()) return false;
+    }
+    family_ = fam;
+    syncing_ = true;
+    int at = 0;
+    for (std::size_t i = 0; i < dimension_->items().size(); ++i)
+        if (dimension_->items()[i].value == family_) at = static_cast<int>(i);
+    dimension_->setSelectedIndex(at);
+    syncing_ = false;
+    // Une autre dimension : De y prend sa reference (sinon sa premiere unite) ; la recherche reste.
+    if (!family_.empty()) {
+        const hmi::UnitDef* cur = cat.unit(from_);
+        if (!cur || cur->family != family_) {
+            const hmi::UnitFamily* f = cat.family(family_);
+            from_ = f && cat.unit(f->reference) ? cat.canonical(f->reference) : std::string{};
+            const auto all = hu::unitsOf(cat, family_);
+            if (from_.empty() && !all.empty()) from_ = all.front()->symbol;
+        }
+    }
+    fillLists();
+    followFrom();
+    recompute();
+    return true;
+}
+
+// Vers suit la dimension de De : une arrivee d'une autre dimension devient la reference (ou la premiere autre unite).
+void HmiUnitConvertPage::followFrom() {
+    const hu::Catalog cat = catalog();
+    const hmi::UnitDef* fd = cat.unit(from_);
+    if (!fd) return;
+    const hmi::UnitDef* td = cat.unit(to_);
+    if (td && td->family == fd->family) return;
+    to_.clear();
+    if (const hmi::UnitFamily* f = cat.family(fd->family); f && cat.unit(f->reference) && fold(f->reference) != fold(from_))
+        to_ = cat.canonical(f->reference);
+    for (const auto* u : hu::unitsOf(cat, fd->family))
+        if (to_.empty() && fold(u->symbol) != fold(from_)) to_ = u->symbol;
+    if (to_.empty()) to_ = from_;
+    fillLists();
+}
+
+void HmiUnitConvertPage::setFrom(std::string_view symbol) {
+    const hu::Catalog cat = catalog();
+    const std::string sym = trim(symbol);
+    from_ = cat.unit(sym) ? cat.canonical(sym) : sym;
+    fillLists();
+    followFrom();
+    recompute();
+}
+
+void HmiUnitConvertPage::setTo(std::string_view symbol) {
+    const hu::Catalog cat = catalog();
+    const std::string s = trim(symbol);
+    to_ = cat.unit(s) ? cat.canonical(s) : s;
+    fillLists();
+    recompute();
+}
+
+void HmiUnitConvertPage::setDecimals(int decimals) {
+    decimals_ = std::clamp(decimals, 0, 12);
+    syncing_ = true;
+    decimalsBox_->setSelectedIndex(decimals_);
+    syncing_ = false;
+    recompute();
+}
+
+void HmiUnitConvertPage::swap() {
+    std::swap(from_, to_);
+    // La dimension filtree ne change pas (De et Vers sont de la meme) ; la recherche, elle, ne doit pas cacher De.
+    if (!searchText_.empty()) {
+        searchText_.clear();
+        syncing_ = true;
+        search_->setText("");
+        syncing_ = false;
+    }
+    fillLists();
+    recompute();
+    remember();
+}
+
+std::string HmiUnitConvertPage::expression() const {
+    const std::string to = conv_.to.empty() ? trim(to_) : conv_.to;
+    return to.empty() ? std::string{} : hu::enExpression("Valeur", to);
+}
+
+std::string HmiUnitConvertPage::resultText() const {
+    if (!conv_.ok) return {};
+    return trim(valueText_) + " " + hmi::unitLabel(conv_.from) + " = " + hu::formatResult(conv_.result, decimals_) + " " + hmi::unitLabel(conv_.to);
+}
+
+std::string HmiUnitConvertPage::formulaLine() const {
+    return conv_.ok && !conv_.formula.empty() ? "Formule : " + conv_.formula : std::string{};
+}
+
+std::string HmiUnitConvertPage::copyExpression() {
+    const std::string e = expression();
+    if (e.empty()) return {};
+    ui::setClipboardText(e);
+    remember();
+    return e;
+}
+
+void HmiUnitConvertPage::remember() {
+    if (!conv_.ok) return;
+    Entry e{trim(valueText_), conv_.from, conv_.to, hu::formatResult(conv_.result, decimals_) + " " + hmi::unitLabel(conv_.to)};
+    auto& h = historyList();
+    h.erase(std::remove_if(h.begin(), h.end(), [&](const Entry& x) { return x.value == e.value && x.from == e.from && x.to == e.to; }), h.end());
+    h.insert(h.begin(), std::move(e));
+    if (h.size() > kHistoryMax) h.resize(kHistoryMax);
+    refillHistory();
+}
+
+bool HmiUnitConvertPage::recall(std::size_t row) {
+    const auto& h = historyList();
+    if (row >= h.size()) return false;
+    const Entry e = h[row];
+    // La dimension et la recherche ne doivent pas cacher l'unite rappelee.
+    searchText_.clear();
+    family_.clear();
+    syncing_ = true;
+    search_->setText("");
+    dimension_->setSelectedIndex(0);
+    value_->setText(e.value);
+    syncing_ = false;
+    valueText_ = e.value;
+    from_ = e.from;
+    to_ = e.to;
+    fillLists();
+    recompute();
+    return true;
+}
+
+void HmiUnitConvertPage::refillHistory() {
+    std::vector<std::vector<std::string>> rows;
+    for (const auto& e : historyList()) rows.push_back({e.value, hmi::unitLabel(e.from), hmi::unitLabel(e.to), e.result});
+    syncing_ = true;
+    history_->setModel(std::make_shared<hmikit::Rows>(std::vector<std::string>{"Valeur", "De", "Vers", "R\xC3\xA9sultat"}, std::move(rows),
+                                                      [](ui::RowIndex, std::size_t c) {
+                                                          ui::CellStyle st;
+                                                          if (c == 0 || c == 3) st.monospace = true;
+                                                          return st;
+                                                      }));
+    syncing_ = false;
+}
+
+std::vector<std::string> HmiUnitConvertPage::fromChoices() const { return fromSymbols_; }
+std::vector<std::string> HmiUnitConvertPage::toChoices() const { return toSymbols_; }
+
+void HmiUnitConvertPage::onLayout() {
+    const auto b = bounds();
+    const float pad = 16.f, rowH = 30.f, gap = 10.f;
+    const auto labelW = [](const char* t) { return ui::measureWidth(t, gfx::FontId{16}) + 8.f; };
+    float x = b.x + pad, y = b.y + pad;
+    // Ligne 1 : Rechercher [....]   Dimension [....]
+    const float searchL = labelW("Rechercher"), dimL = labelW("Dimension");
+    labels_[0] = {x, y, searchL, rowH};
+    const float dimW = std::min(260.f, std::max(160.f, b.w * 0.24f));
+    const float searchW = std::max(120.f, std::min(420.f, b.w - 2 * pad - searchL - dimL - dimW - 2 * gap));
+    search_->setBounds({x + searchL, y, searchW, rowH});
+    labels_[1] = {x + searchL + searchW + 2 * gap, y, dimL, rowH};
+    dimension_->setBounds({labels_[1].x + dimL, y, dimW, rowH});
+    // Ligne 2 : Valeur [...]  De [...]  [<=>]  Vers [...]   Decimales [..]
+    y += rowH + gap + 4.f;
+    const float valL = labelW("Valeur"), fromL = labelW("De"), toL = labelW("Vers"), decL = labelW("D\xC3\xA9" "cimales");
+    const float decW = 64.f, swapW = 40.f;
+    const float avail = std::max(300.f, b.w - 2 * pad - valL - fromL - toL - decL - decW - swapW - 6 * gap);
+    const float valW = std::min(200.f, avail * 0.28f), boxW = std::min(260.f, (avail - valW) * 0.5f);
+    labels_[2] = {x, y, valL, rowH};
+    value_->setBounds({x + valL, y, valW, rowH});
+    x += valL + valW + gap;
+    labels_[3] = {x, y, fromL, rowH};
+    fromBox_->setBounds({x + fromL, y, boxW, rowH});
+    x += fromL + boxW + gap;
+    swap_->setBounds({x, y, swapW, rowH});
+    x += swapW + gap;
+    labels_[4] = {x, y, toL, rowH};
+    toBox_->setBounds({x + toL, y, boxW, rowH});
+    x += toL + boxW + 2 * gap;
+    decimalsLabel_ = {x, y, decL, rowH};
+    decimalsBox_->setBounds({x + decL, y, decW, rowH});
+    // Le resultat, la formule, l'expression et Copier.
+    y += rowH + gap + 6.f;
+    resultArea_ = {b.x + pad, y, std::max(0.f, b.w - 2 * pad), 104.f};
+    const float copyW = std::max(110.f, ui::measureWidth("Copier", gfx::FontId{16}) + 52.f);
+    copy_->setBounds({resultArea_.x + resultArea_.w - copyW - 12.f, y + 62.f, copyW, 30.f});
+    y += resultArea_.h + gap + 6.f;
+    historyTitle_ = {b.x + pad, y, std::max(0.f, b.w - 2 * pad), 24.f};
+    y += 26.f;
+    history_->setBounds({b.x + pad, y, std::max(0.f, b.w - 2 * pad), std::max(60.f, b.y + b.h - pad - y)});
+}
+
+void HmiUnitConvertPage::onPaint(const ui::PaintContext& ctx) {
+    const auto& c = ctx.theme.color;
+    ctx.r.fillRect(bounds(), c.panelBg);
+    const auto label = [&](const gfx::Rect& r, const std::string& t) {
+        ctx.r.drawText({r.x, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, t, ctx.theme.font.ui, c.textMuted);
+    };
+    label(labels_[0], "Rechercher");
+    label(labels_[1], "Dimension");
+    label(labels_[2], "Valeur");
+    label(labels_[3], "De");
+    label(labels_[4], "Vers");
+    label(decimalsLabel_, "D\xC3\xA9" "cimales");
+    // Le cadre du resultat : la conversion en grand, la formule, l'expression a copier ; le refus en rouge.
+    const gfx::Rect& a = resultArea_;
+    ctx.r.fillRoundedRect(a, c.inputBg, 6.f);
+    ctx.r.strokeRect(a, error_.empty() ? c.border : c.error, 1.f);
+    const gfx::FontId big{24};
+    if (error_.empty()) {
+        ctx.r.drawText({a.x + 14.f, a.y + 10.f}, resultText(), big, c.text);
+        ctx.r.drawText({a.x + 14.f, a.y + 44.f}, formulaLine(), ctx.theme.font.ui, c.textMuted);
+    } else {
+        ctx.r.drawText({a.x + 14.f, a.y + 14.f}, error_, ctx.theme.font.ui, c.error);
+    }
+    if (const std::string e = expression(); !e.empty()) {
+        const float lx = a.x + 14.f, ly = a.y + 68.f;
+        const std::string lead = "Dans un script ou une fx : ";
+        ctx.r.drawText({lx, ly}, lead, ctx.theme.font.ui, c.textMuted);
+        ctx.r.drawText({lx + ui::measureWidth(lead, ctx.theme.font.ui), ly}, e, ctx.theme.font.mono, c.accent);
+    }
+    ctx.r.drawText({historyTitle_.x, historyTitle_.y + 4.f},
+                   "HISTORIQUE DE LA S\xC3\x89" "ANCE  \xC2\xB7  un clic sur une ligne y revient", ctx.theme.font.caption, c.textMuted);
+}
+
 // ============================================ Configuration > Unites de mesure ===
 bool HmiMeasureUnitsPane::builtinUnit(std::string_view symbol) {
     for (const auto& u : hu::builtinUnits())
@@ -650,19 +1107,22 @@ bool HmiMeasureUnitsPane::builtinFamily(std::string_view name) {
 HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
+    // 1.14.1 (lot N5) : le contenu d'avant dans l'onglet Bibliotheque ; l'onglet Convertir a cote.
+    auto library = std::make_unique<LibraryPage>(base + ".library", [this](const gfx::Rect& r) { layoutLibrary(r); });
+    ui::Widget& host = *library;
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(AFamily, HmiGlyph::Plus, "Nouvelle famille : une grandeur \xC3\xA0 elle (son nom, son unit\xC3\xA9 de r\xC3\xA9" "f\xC3\xA9rence)", "Famille");
     tools->add(AUnit, HmiGlyph::Plus, "Nouvelle unit\xC3\xA9 dans la famille choisie (son symbole, son facteur vers la r\xC3\xA9" "f\xC3\xA9rence, son d\xC3\xA9" "calage)",
                "Unit\xC3\xA9");
     tools->add(ARemove, HmiGlyph::Delete, "Retirer l'unit\xC3\xA9 (ou la famille) du projet choisie : une unit\xC3\xA9 employ\xC3\xA9" "e ne se retire pas (Ctrl+Z la rend)",
                "Retirer");
-    tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    tools_ = &static_cast<HmiToolStrip&>(host.addChild(std::move(tools)));
     tools_->setEnabledWhen(AUnit, [this] { return !selectedFamily().empty(); });
     tools_->setEnabledWhen(ARemove, [this] {
         if (focusFamily_) return !selectedFamily().empty() && !builtinFamily(selectedFamily());
         return !selectedUnit().empty() && !builtinUnit(selectedUnit());
     });
-    strict_ = &static_cast<ui::Checkbox&>(addChild(std::make_unique<ui::Checkbox>(
+    strict_ = &static_cast<ui::Checkbox&>(host.addChild(std::make_unique<ui::Checkbox>(
         "Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige EN(\xE2\x80\xA6)", base + ".strict")));
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".familiesPanel", "FAMILLES");
@@ -672,7 +1132,7 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
                            {"Provenance", 110.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         families_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        familiesPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
+        familiesPanel_ = &static_cast<HmiTitledPanel&>(host.addChild(std::move(panel)));
     }
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".unitsPanel", "UNIT\xC3\x89S");
@@ -681,13 +1141,21 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
                            {"Emplois", 100.f, 40.f, true, true, true, ui::Align::End}});
         table->setSelectionMode(ui::SelectionMode::Single);
         units_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-        unitsPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
+        unitsPanel_ = &static_cast<HmiTitledPanel&>(host.addChild(std::move(panel)));
     }
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     grid->setShowDescriptionPane(false);
     grid->setNameColumnRatio(0.36f);
-    grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::move(grid)));
-    status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
+    grid_ = &static_cast<ui::PropertyGrid&>(host.addChild(std::move(grid)));
+    status_ = &static_cast<ui::StatusBar&>(host.addChild(std::make_unique<ui::StatusBar>(base + ".status")));
+    {
+        auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
+        tabs->addTab({"Biblioth\xC3\xA8que", ui::Icon::Library}, std::move(library));
+        auto convert = std::make_unique<HmiUnitConvertPage>(base + ".convert", doc_);
+        convert_ = convert.get();
+        tabs->addTab({"Convertir", ui::Icon::CodeCalc}, std::move(convert));
+        tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    }
     tools_->bindListKeys(*units_, {ARemove, 0, AUnit});
 
     links_ += tools_->triggered->connect([this](int a) {
@@ -838,6 +1306,7 @@ void HmiMeasureUnitsPane::refresh() {
     refreshUnits();
     rebuildProperties();
     const std::size_t mineU = p.config.units.size(), mineF = p.config.unitFamilies.size();
+    if (convert_) convert_->refresh();   // 1.14.1 (lot N5) : une unite du projet ajoutee ou retiree : les listes la suivent
     if (message_.empty())
         status_->setMessage(std::to_string(cat.units().size()) + " unit\xC3\xA9s en " + std::to_string(cat.families().size()) + " familles \xC2\xB7 "
                                 + std::to_string(mineU) + " du projet, " + std::to_string(mineF) + " famille(s) du projet \xC2\xB7 "
@@ -1203,7 +1672,16 @@ bool HmiMeasureUnitsPane::setStrict(bool on) {
 }
 
 void HmiMeasureUnitsPane::onLayout() {
-    const auto b = bounds();
+    if (tabs_) tabs_->setBounds(bounds());   // 1.14.1 (lot N5) : les onglets Bibliotheque et Convertir
+}
+
+void HmiMeasureUnitsPane::showTab(std::size_t tab) {
+    if (tabs_ && tab < tabs_->tabCount()) tabs_->setCurrentIndex(tab);
+}
+
+std::size_t HmiMeasureUnitsPane::currentTab() const noexcept { return tabs_ ? tabs_->currentIndex() : 0; }
+
+void HmiMeasureUnitsPane::layoutLibrary(const gfx::Rect& b) {
     constexpr float kTools = 38.f, kStatus = 24.f;
     const float strictW = std::min(460.f, b.w * 0.45f);
     tools_->setBounds({b.x, b.y, std::max(0.f, b.w - strictW - 8.f), kTools});

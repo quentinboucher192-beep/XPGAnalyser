@@ -139,6 +139,25 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.1 (lot N5) : convertir des unites - l'onglet Convertir, l'objet Convertisseur d'unites.
+        note("1.14.1", "Types", Kind::New,
+         "TESTER UNE CONVERSION D'UNIT\xC3\x89S : Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets, Biblioth\xC3\xA8que (les familles "
+         "et les unit\xC3\xA9s, comme avant) et Convertir. Une valeur, l'unit\xC3\xA9 de d\xC3\xA9part et celle d'arriv\xC3\xA9" "e choisies dans des "
+         "listes (Vers ne propose que la dimension de De ; Dimension et Rechercher filtrent De, par symbole, nom ou dimension) : le r\xC3\xA9sultat "
+         "suit chaque frappe, aux d\xC3\xA9" "cimales choisies, avec sa formule (\xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "C -> K : "
+         "x + 273.15 \xC2\xBB) ; \xE2\x87\x84 inverse, Copier met EN(Valeur, 'mbar') au presse-papiers pour un script ou une fx, et "
+         "l'historique de la s\xC3\xA9" "ance ram\xC3\xA8ne une conversion d'un clic. Une valeur illisible, une unit\xC3\xA9 inconnue, deux dimensions "
+         "diff\xC3\xA9rentes se disent en rouge. Le calcul est celui de EN : les unit\xC3\xA9s du projet et des biblioth\xC3\xA8ques reli\xC3\xA9" "es "
+         "comprises.",
+         "unites-mesure", ""),
+        note("1.14.1", "Vues", Kind::New,
+         "L'OBJET CONVERTISSEUR D'UNIT\xC3\x89S (biblioth\xC3\xA8que, famille Commandes) : en marche, une case Valeur, les listes De et Vers "
+         "(une Dimension, ou toutes ; Vers suit la dimension de De), un bouton qui inverse, le r\xC3\xA9sultat en grand et sa formule en petit. "
+         "Sa Valeur de d\xC3\xA9part est un nombre ou une expression (une mesure de l'IHM : une variable qui a une unit\xC3\xA9 donne aussi "
+         "l'unit\xC3\xA9 de d\xC3\xA9part) ; ce que tape l'op\xC3\xA9rateur la remplace, \xC3\x89" "chap y revient. R\xC3\xA9sultat vers ajoute un "
+         "bouton \xC3\x89" "crire (la permission Piloter et le niveau d'acc\xC3\xA8s s'appliquent). M\xC3\xAAme calcul que EN ; G\xC3\xA9n\xC3\xA9rer "
+         "signale une unit\xC3\xA9 inconnue, des dimensions incompatibles, une dimension inconnue, une variable inconnue dans R\xC3\xA9sultat vers.",
+         "objet-convertisseur-unites", ""),
         // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
         note("1.14.0", "Simulation", Kind::New,
          "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "

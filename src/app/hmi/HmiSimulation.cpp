@@ -1784,6 +1784,25 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                     case hmi::Kind::VolumeMixer:      // 1.14.0 : "volume:Alarmes:0.5", "muet:Alarmes"
                         found = hmi::mixerPartBox(o, box.w, box.h, part, local);
                         break;
+                    case hmi::Kind::UnitConverter: {  // 1.14.1 (lot N5) : "valeur", "de", "vers", "inverser", "ecrire", "choix:N"
+                        const auto* cs = runtime_ ? runtime_->unitConverter(o.id) : nullptr;
+                        const auto l = hmi::units::converterLayout(box.w, box.h, o.number("fontSize", 14), !o.text("title").empty(),
+                                                                   cs ? cs->writes : !o.text("resultTo").empty(), cs ? cs->open : 0,
+                                                                   cs ? cs->choices.size() : 0, cs ? cs->first : 0);
+                        const auto take = [&](const hmi::units::ConverterBox& a) {
+                            local = {a.x, a.y, a.w, a.h};
+                            found = a.w > 0;
+                        };
+                        if (part == "valeur") take(l.value);
+                        else if (part == "de") take(l.from);
+                        else if (part == "vers") take(l.to);
+                        else if (part == "inverser") take(l.swap);
+                        else if (part == "ecrire") take(l.write);
+                        else if (part.rfind("choix:", 0) == 0)
+                            for (std::size_t k = 0; k < l.rows.size(); ++k)
+                                if (std::to_string(l.rowIndex[k]) == part.substr(6)) take(l.rows[k]);
+                        break;
+                    }
                     case hmi::Kind::Slider:
                     case hmi::Kind::Knob: {
                         // "fraction:0.75" : le point de la course qui donne 75 %.
@@ -2205,6 +2224,19 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             }
             return;
         }
+        // 1.14.1 (lot N5) : le Convertisseur d'unites - la case Valeur (le clavier), De, Vers, inverser, Ecrire, une
+        // ligne de la liste ouverte ; ailleurs, la liste ouverte se ferme.
+        if (o->kind == hmi::Kind::UnitConverter) {
+            if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
+            const auto* cs = runtime_ ? runtime_->unitConverter(id) : nullptr;
+            const auto l = hmi::units::converterLayout(box.w, box.h, o->number("fontSize", 14), !o->text("title").empty(),
+                                                       cs ? cs->writes : !o->text("resultTo").empty(), cs ? cs->open : 0,
+                                                       cs ? cs->choices.size() : 0, cs ? cs->first : 0);
+            std::string hit = hmi::units::converterHit(l, lx, ly);
+            if (hit.empty() && cs && cs->open) hit = "dehors";
+            if (!hit.empty()) partClicked->emit(id, hit);
+            return;
+        }
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
         // date et heure, programmateur) ; le curseur et le potentiometre se tirent.
         if (o->kind == hmi::Kind::Slider || o->kind == hmi::Kind::Knob) {
@@ -2523,6 +2555,13 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                             if (t.frame.contains(mlx, mly) && notches != 0 && o->flag("pilotable", true))
                                 partClicked->emit(o->id, "pas:" + std::string(hmi::soundChannelSpec(t.channel).key) + ":"
                                                              + hmi::formatNumber(std::round(notches)));
+                        return ui::EventResult::Consumed;
+                    }
+                    // 1.14.1 (lot N5) : sur la liste ouverte d'un convertisseur, la molette la fait defiler.
+                    if (o->kind == hmi::Kind::UnitConverter) {
+                        const auto* cs = runtime_ ? runtime_->unitConverter(o->id) : nullptr;
+                        const double notches = w->dy != 0 ? w->dy : w->dx;
+                        if (cs && cs->open && notches != 0) partClicked->emit(o->id, notches > 0 ? "liste:haut" : "liste:bas");
                         return ui::EventResult::Consumed;
                     }
                     if (o->kind != hmi::Kind::DocumentViewer) break;   // un autre objet par-dessus : il garde la molette
@@ -3666,7 +3705,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         // lot 10 : l'objet Parametres systeme non plus - il ouvre le menu natif.
         if (o && o->actions.empty() && !hmi::kindWritesVariable(o->kind) && o->kind != hmi::Kind::SystemButton
             && o->kind != hmi::Kind::LoginMenuButton && o->kind != hmi::Kind::LanguageSelector && o->kind != hmi::Kind::ThemeSelector
-            && o->kind != hmi::Kind::PlcDiagnostic && o->kind != hmi::Kind::SoundMute)   // 1.14.0 : le Coupe-son agit seul
+            && o->kind != hmi::Kind::PlcDiagnostic && o->kind != hmi::Kind::SoundMute    // 1.14.0 : le Coupe-son agit seul
+            && o->kind != hmi::Kind::UnitConverter)                                     // 1.14.1 (lot N5) : ses parties
             status_->setTransientMessage(o->name + " : aucune action sur cet objet", 4.0);
     });
     links_ += canvas_->released->connect([this](Id object, bool inside) { runtime_.release(object, now_, inside); });
@@ -4973,7 +5013,8 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
                     const bool acts = !o.actions.empty() || writes || o.kind == hmi::Kind::SystemButton    // lot 10 : le menu
                                    || o.kind == hmi::Kind::LoginMenuButton                                       // lot 12
                                    || ((o.kind == hmi::Kind::SoundMute || o.kind == hmi::Kind::VolumeMixer)      // 1.14.0
-                                       && o.flag("pilotable", true));
+                                       && o.flag("pilotable", true))
+                                   || (o.kind == hmi::Kind::UnitConverter && o.flag("pilotable", true));          // 1.14.1 (lot N5)
                     if (acts && !runtime_.objectAllowed(o)) l.locked.push_back(o.id);
                     else if (writes && !runtime_.permitted("Piloter")) l.locked.push_back(o.id);
                 }

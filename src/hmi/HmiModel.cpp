@@ -1403,6 +1403,29 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.setNumber("radius", 6);
             o.setFlag("pilotable", true);
             break;
+        case Kind::UnitConverter:
+            // 1.14.1 (lot N5) : le Convertisseur d'unites - la case Valeur (ce que tape l'operateur ; sinon "value", la
+            // Valeur de depart : un nombre ou une expression, une mesure dont l'unite devient celle de depart), les
+            // listes De ("unitFrom") et Vers ("unitTo" : la dimension de De), le bouton inverser, le resultat a
+            // "decimals" decimales et la formule ; "dimension" : toutes, ou une seule (Pression...). "resultTo" :
+            // une variable ou Ecrire pose le resultat (vide : pas de bouton). "pilotable" decoche : il montre seulement.
+            common(o, x, y, 420, 170);
+            o.set("title", "");
+            o.set("value", "1");
+            o.set("dimension", "toutes");
+            o.set("unitFrom", "bar");
+            o.set("unitTo", "mbar");
+            o.setNumber("decimals", 3);
+            o.set("resultTo", "");
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 14);
+            o.set("textColor", "#E6EAF0");
+            o.set("fill", "#1F252E");
+            o.set("stroke", "#3A4556");
+            o.set("accent", "#2F6FD6");
+            o.setNumber("radius", 6);
+            o.setFlag("pilotable", true);
+            break;
         case Kind::LoginMenuButton:
             // Lot 12 : un clic ouvre le menu natif de connexion, sur son onglet
             // ("tab") - sans action a ecrire. "showUser" : l'utilisateur connecte

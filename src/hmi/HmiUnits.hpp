@@ -98,4 +98,58 @@ private:
 // vue) de type `type` et d'unite `unit`, suivie de `rest` (".Debit", "[2]", "[i].Pression" ; vide : elle-meme).
 [[nodiscard]] std::string unitAlong(const Project&, std::string_view type, std::string_view unit, std::string_view rest);
 
+// =============================================================================
+//  1.14.1 (lot N5) : CONVERTIR UNE VALEUR - l'onglet Convertir de Configuration >
+//  Unites de mesure (un banc d'essai) et l'objet Convertisseur d'unites. LE MEME
+//  CALCUL QUE EN(x, 'mbar') dans un script : Catalog::convert, l'affine de la
+//  bibliotheque (fournies + projet + bibliotheques reliees) ; aucune table a part.
+// =============================================================================
+struct Conversion {
+    bool        ok{false};
+    double      value{0};       // la valeur de depart
+    double      result{0};      // la valeur convertie (ok)
+    std::string from, to;       // les symboles du catalogue (degc -> degC) ; vides : inconnus
+    std::string error;          // le refus, dit clairement : unite inconnue, dimensions differentes
+    std::string formula;        // "1 bar = 1000 mbar" ; "\xC2\xB0" "C -> K : x + 273.15"
+};
+[[nodiscard]] Conversion convertValue(const Catalog&, double value, std::string_view from, std::string_view to);
+// La formule d'une conversion, a lire : un facteur seul "1 bar = 1000 mbar" ; une affine "\xC2\xB0" "C -> K : x + 273.15",
+// "\xC2\xB0" "F -> \xC2\xB0" "C : x \xC3\x97 0.555556 - 17.7778" ; la meme unite "1 bar = 1 bar". Vide : pas de conversion.
+[[nodiscard]] std::string formulaText(const Catalog&, std::string_view from, std::string_view to);
+// L'expression a copier dans un script ou une fx : "EN(Valeur, 'mbar')" (`value` vide : Valeur).
+[[nodiscard]] std::string enExpression(std::string_view value, std::string_view to);
+// Un resultat a `decimals` decimales (0..12), sans zeros inutiles : 1500, 21.755656 ; une valeur tres petite ou tres
+// grande garde ses chiffres significatifs (1.15741e-08) au lieu de s'ecrire 0.
+[[nodiscard]] std::string formatResult(double v, int decimals);
+// Une valeur tapee : "1,5", " 2.5e3 ", "-40" ; faux : illisible (vide, du texte, infini).
+[[nodiscard]] bool parseValue(std::string_view text, double& out);
+// Les unites d'une dimension (le nom ou le libelle de la famille : "pression", "Pression" ; vide, "toutes" : toutes),
+// dans l'ordre du catalogue.
+[[nodiscard]] std::vector<const UnitDef*> unitsOf(const Catalog&, std::string_view family);
+// La famille d'apres un nom ou un libelle ("Temp\xC3\xA9rature", "temperature") ; vide : toutes, ou inconnue.
+[[nodiscard]] std::string familyFrom(const Catalog&, std::string_view text);
+
+// ---- 1.14.1 (lot N5) : la geometrie de l'objet Convertisseur d'unites (le dessin et le clic la partagent) ----
+//  [ 1.5          ] [bar   v] = [mbar   v]          la ligne de saisie : la valeur, De, Vers
+//  [ \xE2\x87\x84 ]       1500 mbar                  le bouton inverser, le resultat
+//  1 bar = 1000 mbar                    [Ecrire]     la formule en petit ; Ecrire (Resultat vers)
+//  Une liste ouverte (De ou Vers) s'etale sous sa case, par-dessus le reste de l'objet.
+struct ConverterBox { double x{0}, y{0}, w{0}, h{0}; [[nodiscard]] bool contains(double px, double py) const noexcept {
+    return w > 0 && h > 0 && px >= x && px < x + w && py >= y && py < y + h; } };
+struct ConverterLayout {
+    ConverterBox title, value, from, to, swap, result, formula, write;
+    ConverterBox list;                   // la liste ouverte (vide : fermee)
+    std::vector<ConverterBox> rows;      // ses lignes montrees
+    std::vector<std::size_t>  rowIndex;  // ... leur rang dans la liste
+    ConverterBox up, down;               // les fleches (des unites au-dessus, au-dessous) ; vides : aucune
+    std::size_t first{0};                // le rang de la premiere ligne montree (ramene dans la liste)
+    double rowHeight{22};
+};
+// `open` : 0 aucune liste, 1 De, 2 Vers ; `count` : ses unites ; `first` : la premiere montree.
+[[nodiscard]] ConverterLayout converterLayout(double w, double h, double fontSize, bool titled, bool writes, int open, std::size_t count,
+                                              std::size_t first);
+// La partie touchee : "valeur", "de", "vers", "inverser", "ecrire", "choix:N" (une ligne de la liste ouverte),
+// "liste:haut", "liste:bas" (la liste, au-dela de ses lignes) ; "" : rien.
+[[nodiscard]] std::string converterHit(const ConverterLayout&, double x, double y);
+
 } // namespace hmi::units

@@ -2097,6 +2097,30 @@ Example volumeMixer() {
     return m.done(9.5);
 }
 
+// ---- 1.14.1 (lot N5) : le convertisseur d'unites - une mesure qui bouge, puis une valeur tapee ----
+Example unitConverter() {
+    Maker m;
+    m.var("Pression", "REAL", "1.5");
+    for (auto& var : m.project().programs.variables)
+        if (var.name == "Pression") var.unit = "bar";
+    m.cyclic("Pression := 1.5 + 0.25 * SIN(T * 0.7);");
+    auto& c = m.add(Kind::UnitConverter, "Convertisseur", 20, 20, 400, 150);
+    c.setExpr("value", "Pression");
+    c.set("unitTo", "mbar");
+    m.note("Explication", 440, 20, 150, 250,
+           "La Valeur de d\xC3\xA9part suit la mesure Pression (en bar). Tape une valeur, choisis De et Vers : le r\xC3\xA9sultat suit. "
+           "Le bouton aux deux fl\xC3\xA8" "ches inverse.");
+    m.step(2.0, "partie", "Convertisseur", "vers:psi");
+    m.step(3.5, "partie", "Convertisseur", "valeur:20");
+    m.step(4.0, "partie", "Convertisseur", "de:degC");
+    m.step(5.5, "partie", "Convertisseur", "vers:degF");
+    m.step(7.0, "partie", "Convertisseur", "inverser");
+    m.step(8.5, "partie", "Convertisseur", "valeur:");
+    m.step(8.6, "partie", "Convertisseur", "de:bar");
+    m.step(8.7, "partie", "Convertisseur", "vers:mbar");
+    return m.done(10.0);
+}
+
 // ---- 1.12.30 : la visionneuse de documents - la notice suit l'etape de la procedure ----
 Example documentViewer() {
     Maker m(420);
@@ -2733,6 +2757,7 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::RecordingPlayer:     return recordingPlayer();
         case Kind::SoundMute:           return soundMute();          // 1.14.0
         case Kind::VolumeMixer:         return volumeMixer();
+        case Kind::UnitConverter:       return unitConverter();      // 1.14.1 (lot N5)
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

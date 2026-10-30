@@ -30979,7 +30979,323 @@ void son1140() {
     }
 }
 
+// 1.14.1 (lot N5) : CONVERTIR DES UNITES - le calcul partage (units::convertValue : celui de EN), la formule, l'expression
+// a copier, les refus ; l'objet Convertisseur d'unites en marche (la case Valeur, De, Vers, inverser, Ecrire, la Valeur
+// de depart suivie, une variable qui a une unite, le niveau d'acces, Pilotable), Generer, Dupliquer, le code brut.
+void unites1141() {
+    std::printf("1.14.1 : convertir des unit\xC3\xA9s (le calcul, l'objet Convertisseur en marche, G\xC3\xA9n\xC3\xA9rer)\n");
+    namespace hu = units;
+    const hu::Catalog cat;
+    // ---- le calcul : celui de Catalog::convert (EN), dit avec sa formule
+    const auto conv = [&](double v, const char* a, const char* b) { return hu::convertValue(cat, v, a, b); };
+    const auto near = [](double a, double b) { return std::fabs(a - b) < 1e-9 * std::max(1.0, std::fabs(b)); };
+    auto c1 = conv(1.5, "bar", "mbar");
+    check(c1.ok && near(c1.result, 1500) && c1.from == "bar" && c1.to == "mbar" && c1.formula == "1 bar = 1000 mbar",
+          "1.5 bar = 1500 mbar ; la formule 1 bar = 1000 mbar : " + c1.formula);
+    auto c2 = conv(20, "degc", "K");
+    check(c2.ok && near(c2.result, 293.15) && c2.from == "degC" && c2.formula == "\xC2\xB0" "C -> K : x + 273.15",
+          "20 degC = 293.15 K (degc reconnu) ; la formule \xC2\xB0" "C -> K : x + 273.15 : " + c2.formula);
+    auto c3 = conv(20, "degC", "degF");
+    check(c3.ok && near(c3.result, 68) && c3.formula.find("x \xC3\x97 1.8 + 32") != std::string::npos, "20 \xC2\xB0" "C = 68 \xC2\xB0" "F (x \xC3\x97 1.8 + 32) : " + c3.formula);
+    auto c4 = conv(-40, "degF", "degC");
+    check(c4.ok && near(c4.result, -40), "-40 \xC2\xB0" "F = -40 \xC2\xB0" "C (le d\xC3\xA9" "calage n\xC3\xA9gatif)");
+    auto c5 = conv(1, "m3/s", "m3/h");
+    auto c6 = conv(120, "L/min", "m3/h");
+    check(c5.ok && near(c5.result, 3600) && c6.ok && near(c6.result, 7.2) && c5.formula == "1 m\xC2\xB3/s = 3600 m\xC2\xB3/h",
+          "d\xC3\xA9" "bit : 1 m3/s = 3600 m3/h, 120 L/min = 7.2 m3/h (la formule lue \xC2\xB3) : " + c5.formula);
+    auto c7 = conv(2.5, "bar", "psi");
+    check(c7.ok && std::fabs(c7.result - 36.2594) < 1e-3 && hu::formatResult(c7.result, 3) == "36.259" && hu::formatResult(1500.0, 6) == "1500",
+          "2.5 bar en psi : 36.259 (3 d\xC3\xA9" "cimales) ; 1500 sans z\xC3\xA9ros inutiles");
+    check(hu::formatResult(1.0 / 86400000.0, 6).find("e-08") != std::string::npos && hu::formatResult(0.0, 3) == "0" && hu::formatResult(-0.0001, 3) != "-0",
+          "un tr\xC3\xA8s petit r\xC3\xA9sultat garde ses chiffres (1 ms en jours : " + hu::formatResult(1.0 / 86400000.0, 6) + ") ; 0 ; pas de -0");
+    for (const auto& u : cat.units())
+        for (const auto& w : cat.units()) {
+            if (u.family != w.family) continue;
+            const auto aff = cat.convert(u.symbol, w.symbol);
+            const auto r = hu::convertValue(cat, 12.5, u.symbol, w.symbol);
+            if (!aff || !r.ok || r.result != aff->apply(12.5)) check(false, "le m\xC3\xAA" "me calcul que Catalog::convert : " + u.symbol + " -> " + w.symbol);
+        }
+    check(true, "chaque paire d'unit\xC3\xA9s d'une m\xC3\xAA" "me famille : le r\xC3\xA9sultat est celui de Catalog::convert (EN)");
+    auto e1 = conv(1, "bars", "mbar");
+    auto e2 = conv(1, "bar", "degC");
+    auto e3 = conv(1, "Nm3/h", "m3/h");
+    check(!e1.ok && e1.error.find("unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB") != std::string::npos, "unit\xC3\xA9 inconnue : " + e1.error);
+    check(!e2.ok && e2.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos && e2.error.find("une pression") != std::string::npos
+              && e2.error.find("une temp\xC3\xA9rature") != std::string::npos && e2.formula.empty(),
+          "dimensions diff\xC3\xA9rentes, dites avec leurs familles : " + e2.error);
+    check(!e3.ok && e3.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos, "Nm3/h et m3/h : deux dimensions (on ne ment pas sur les conditions normales)");
+    check(hu::enExpression("Pression", "mbar") == "EN(Pression, 'mbar')" && hu::enExpression("", "K") == "EN(Valeur, 'K')", "l'expression \xC3\xA0 copier");
+    double pv = 0;
+    check(hu::parseValue(" 1,5 ", pv) && pv == 1.5 && hu::parseValue("2.5e3", pv) && pv == 2500 && !hu::parseValue("abc", pv) && !hu::parseValue("", pv)
+              && !hu::parseValue("1.5 bar", pv),
+          "la valeur tap\xC3\xA9" "e : 1,5 et 2.5e3 ; refus\xC3\xA9" "s : du texte, rien, une unit\xC3\xA9 coll\xC3\xA9" "e");
+    check(hu::familyFrom(cat, "Temp\xC3\xA9rature") == "temperature" && hu::familyFrom(cat, "pression") == "pression" && hu::familyFrom(cat, "toutes").empty()
+              && hu::unitsOf(cat, "Temp\xC3\xA9rature").size() == 3 && hu::unitsOf(cat, "").size() == cat.units().size(),
+          "la dimension par son libell\xC3\xA9 ou son nom ; ses unit\xC3\xA9s (3 temp\xC3\xA9ratures) ; toutes");
+    // Le calcul du moteur : EN dans un script donne le meme nombre.
+    {
+        Project p;
+        View v = makeView(p, "Vue_EN");
+        Variable pr = hmiVar(p, "Pression", "REAL", "1.5");
+        pr.unit = "bar";
+        p.programs.variables.push_back(pr);
+        p.programs.variables.push_back(hmiVar(p, "Resultat", "REAL", "0.0"));
+        Variable t = hmiVar(p, "Temperature", "REAL", "20.0");
+        t.unit = "degC";
+        p.programs.variables.push_back(t);
+        p.programs.variables.push_back(hmiVar(p, "ResultatF", "REAL", "0.0"));
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Conv";
+        sc.event = "Appel";
+        sc.body = "Resultat := EN(Pression, 'psi');\nResultatF := EN(Temperature, 'degF');";
+        p.programs.scripts.push_back(sc);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0);
+        rt.tick(0.1);
+        std::string why;
+        check(rt.callScript("Conv", 0.2, &why), "EN dans un script " + why);
+        const auto* r = rt.variable("Resultat");
+        const auto* rf = rt.variable("ResultatF");
+        check(r && rf && r->asReal() == conv(1.5, "bar", "psi").result && rf->asReal() == conv(20, "degC", "degF").result,
+              "EN(Pression, 'psi') et EN(Temperature, 'degF') : le m\xC3\xAA" "me nombre que l'onglet Convertir et l'objet");
+    }
+
+    // ---- l'objet : registre, valeurs neuves, roles, exemple, sujet de l'aide
+    {
+        const Kind k = Kind::UnitConverter;
+        const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), k);
+        check(at != std::end(kPlaceableKinds) && kindFromKey(kindKey(k)) == k && kindLabel(k) == "Convertisseur d'unit\xC3\xA9s"
+                  && examples::exampleFor(k).has_value() && hmi::guide::topicForKind(kindKey(k)) != nullptr,
+              "Convertisseur d'unit\xC3\xA9s : dans la biblioth\xC3\xA8que, sa cl\xC3\xA9, son exemple, son sujet du guide");
+        const Object fo = makeObject(k, 7, "Conv_1", 0, 0, 1);
+        check(fo.text("unitFrom") == "bar" && fo.text("unitTo") == "mbar" && fo.text("value") == "1" && fo.text("dimension") == "toutes"
+                  && fo.number("decimals") == 3 && fo.text("resultTo").empty() && fo.flag("pilotable", false),
+              "Convertisseur neuf : 1 bar -> mbar, toutes les dimensions, 3 d\xC3\xA9" "cimales, sans R\xC3\xA9sultat vers, pilotable");
+        for (const auto& prop : fo.props) check(roles::keyRole(prop.key) != nullptr, "Convertisseur : le r\xC3\xB4le de " + prop.key);
+        const auto ex = examples::exampleFor(k);
+        bool hasConv = false;
+        for (const auto& o : ex->project.views.front().objects) hasConv = hasConv || o.kind == k;
+        check(hasConv && !ex->steps.empty(), "l'exemple anim\xC3\xA9 : un convertisseur et ses gestes");
+        const auto l = hu::converterLayout(420, 150, 14, false, true, 0, 0, 0);
+        check(l.value.w > 0 && l.from.x > l.value.x + l.value.w && l.swap.x > l.from.x && l.to.x > l.swap.x && l.write.w > 0
+                  && hu::converterHit(l, l.swap.x + 2, l.swap.y + 2) == "inverser" && hu::converterHit(l, l.write.x + 2, l.write.y + 2) == "ecrire"
+                  && hu::converterHit(l, l.value.x + 2, l.value.y + 2) == "valeur",
+              "la g\xC3\xA9om\xC3\xA9trie : Valeur, De, inverser, Vers sur une ligne ; \xC3\x89" "crire ; ce qui se clique");
+        const auto lo = hu::converterLayout(420, 150, 14, false, false, 1, 36, 0);
+        check(lo.list.w > 0 && !lo.rows.empty() && lo.down.w > 0 && lo.up.w == 0 && hu::converterHit(lo, lo.rows[0].x + 4, lo.rows[0].y + 2) == "choix:0"
+                  && hu::converterHit(lo, lo.down.x + 4, lo.down.y + 2) == "liste:bas",
+              "la liste De ouverte : ses lignes, la fl\xC3\xA8" "che du bas (36 unit\xC3\xA9s ne tiennent pas)");
+        const auto last = hu::converterLayout(420, 150, 14, false, false, 1, 36, 100);
+        check(last.up.w > 0 && last.down.w == 0 && !last.rowIndex.empty() && last.rowIndex.back() == 35, "au bout : la fl\xC3\xA8" "che du haut, la derni\xC3\xA8re unit\xC3\xA9");
+    }
+
+    // ---- en marche : la Valeur de depart suivie, la saisie, De, Vers, inverser, Ecrire, le niveau d'acces, Pilotable
+    {
+        Project op;
+        View ov = makeView(op, "Vue_Conv");
+        Variable pr = hmiVar(op, "Mesure", "REAL", "1500.0");
+        pr.unit = "mbar";
+        op.programs.variables.push_back(pr);
+        op.programs.variables.push_back(hmiVar(op, "Sortie", "REAL", "0.0"));
+        op.programs.variables.push_back(hmiVar(op, "SortieInt", "INT", "0"));
+        Script monte;
+        monte.id = op.allocate();
+        monte.name = "Monte";
+        monte.event = "Appel";
+        monte.body = "Mesure := 2000.0;";
+        op.programs.scripts.push_back(monte);
+        const Id cv = edit::add(op, ov, Kind::UnitConverter, 10, 10);
+        ov.object(cv)->name = "Conv";
+        ov.object(cv)->set("resultTo", "Sortie");
+        const Id cm = edit::add(op, ov, Kind::UnitConverter, 10, 200);
+        ov.object(cm)->name = "Conv_Mesure";
+        ov.object(cm)->setExpr("value", "Mesure");
+        ov.object(cm)->set("unitTo", "bar");
+        const Id fixe = edit::add(op, ov, Kind::UnitConverter, 10, 400);
+        ov.object(fixe)->name = "Conv_Fixe";
+        ov.object(fixe)->setFlag("pilotable", false);
+        const Id garde = edit::add(op, ov, Kind::UnitConverter, 10, 600);
+        ov.object(garde)->name = "Conv_Reserve";
+        ov.object(garde)->setNumber("access", 3);
+        ov.object(garde)->set("resultTo", "SortieInt");
+        const Id temp = edit::add(op, ov, Kind::UnitConverter, 500, 10);
+        ov.object(temp)->name = "Conv_Temp";
+        ov.object(temp)->set("dimension", "Temp\xC3\xA9rature");
+        ov.object(temp)->set("unitFrom", "degC");
+        ov.object(temp)->set("unitTo", "K");
+        op.views = {ov};
+        op.config.startView = ov.id;
+        Runtime rt;
+        rt.bind(&op, nullptr);
+        rt.start(0);
+        rt.tick(0.1);
+        const auto* c = rt.unitConverter(cv);
+        check(c && c->conv.ok && c->conv.result == 1000 && c->valueText == "1" && c->from == "bar" && c->to == "mbar" && c->writes,
+              "au d\xC3\xA9part : 1 bar = 1000 mbar (ses propri\xC3\xA9t\xC3\xA9s), le bouton \xC3\x89" "crire");
+        const auto* m = rt.unitConverter(cm);
+        check(m && m->sourceUnit == "mbar" && m->from == "mbar" && m->conv.ok && m->conv.result == 1.5 && m->valueText == "1500",
+              "la Valeur de d\xC3\xA9part = Mesure (REAL [mbar]) : l'unit\xC3\xA9 de d\xC3\xA9part est la sienne, 1500 mbar = 1.5 bar");
+        (void)rt.callScript("Monte", 0.15);
+        rt.tick(0.2);
+        check(rt.unitConverter(cm)->conv.result == 2.0, "la mesure change : le convertisseur suit (2000 mbar = 2 bar)");
+        rt.objectPart(cm, "de:bar", 0.25);
+        rt.objectPart(cm, "vers:mbar", 0.25);
+        check(rt.unitConverter(cm)->valueText == "2" && rt.unitConverter(cm)->conv.result == 2000,
+              "De = bar alors que la mesure est en mbar : la case montre la mesure en bar (2), la valeur reste vraie");
+        // La saisie : la premiere frappe remplace, la virgule passe, le resultat suit chaque frappe.
+        rt.objectPart(cv, "valeur", 0.3);
+        check(rt.focusedObject() == cv && rt.keyboardMode().empty(), "un clic sur la case Valeur : le clavier (sans clavier virtuel par d\xC3\xA9" "faut)");
+        rt.typeText("2", 0.31);
+        check(rt.unitConverter(cv)->conv.result == 2000, "la premi\xC3\xA8re frappe remplace : 2 bar = 2000 mbar");
+        rt.typeText(",5x", 0.32);
+        check(rt.unitConverter(cv)->valueText == "2,5" && rt.unitConverter(cv)->conv.result == 2500, "2,5 (la lettre refus\xC3\xA9" "e) : 2500 mbar, \xC3\xA0 chaque frappe");
+        rt.typeKey(EditKey::Enter, 0.33);
+        rt.tick(0.4);
+        check(rt.focusedObject() == kNoId && rt.unitConverter(cv)->typed && rt.unitConverter(cv)->conv.result == 2500, "Entr\xC3\xA9" "e : la valeur tap\xC3\xA9" "e reste");
+        // De : la liste (toutes les unites), une ligne ; Vers suit la dimension de De.
+        rt.objectPart(cv, "de", 0.5);
+        const auto* oc = rt.unitConverter(cv);
+        check(oc->open == 1 && oc->choices.size() == cat.units().size(), "De : la liste de toutes les unit\xC3\xA9s s'ouvre");
+        std::size_t degC = 0;
+        for (std::size_t i = 0; i < oc->choices.size(); ++i)
+            if (oc->choices[i] == "degC") degC = i;
+        rt.objectPart(cv, "choix:" + std::to_string(degC), 0.51);
+        oc = rt.unitConverter(cv);
+        check(oc->open == 0 && oc->from == "degC" && oc->to == "K" && oc->conv.ok && near(oc->conv.result, 275.65),
+              "De = degC : Vers (mbar, une autre dimension) devient K, la r\xC3\xA9" "f\xC3\xA9rence ; 2,5 \xC2\xB0" "C = 275.65 K");
+        rt.objectPart(cv, "vers", 0.52);
+        check(rt.unitConverter(cv)->open == 2 && rt.unitConverter(cv)->choices == std::vector<std::string>{"K", "degC", "degF"},
+              "Vers : seulement la dimension de De (K, degC, degF)");
+        rt.objectPart(cv, "dehors", 0.53);
+        rt.objectPart(cv, "inverser", 0.54);
+        oc = rt.unitConverter(cv);
+        check(oc->from == "K" && oc->to == "degC" && near(oc->conv.result, -270.65), "inverser : 2,5 K = -270.65 \xC2\xB0" "C");
+        // Echap : la valeur tapee est oubliee, la Valeur de depart revient.
+        rt.objectPart(cv, "valeur", 0.6);
+        rt.typeText("9", 0.61);
+        rt.typeKey(EditKey::Escape, 0.62);
+        rt.tick(0.7);
+        check(!rt.unitConverter(cv)->typed && rt.unitConverter(cv)->valueText == "1", "\xC3\x89" "chap : la case revient \xC3\xA0 la Valeur de d\xC3\xA9part (1)");
+        // Une valeur illisible : dite, rien n'est ecrit.
+        rt.objectPart(cv, "valeur:abc", 0.8);
+        check(!rt.unitConverter(cv)->conv.ok && rt.unitConverter(cv)->conv.error.find("valeur illisible") != std::string::npos,
+              "une valeur illisible : dite dans l'objet");
+        rt.objectPart(cv, "ecrire", 0.81);
+        check(rt.variable("Sortie")->asReal() == 0.0 && rt.formState(cv) && rt.formState(cv)->error, "\xC3\x89" "crire refuse une conversion impossible");
+        // Ecrire : le resultat dans Resultat vers, la Console le dit.
+        rt.objectPart(cv, "valeur:1.5", 0.9);
+        rt.objectPart(cv, "de:bar", 0.9);
+        rt.objectPart(cv, "vers:mbar", 0.9);
+        rt.objectPart(cv, "ecrire", 0.91);
+        check(rt.variable("Sortie")->asReal() == 1500.0 && journalHas(rt, "Action", "Sortie := 1500 mbar (1.5 bar)") && !rt.formState(cv)->error,
+              "\xC3\x89" "crire : Sortie = 1500 (la Console : Sortie := 1500 mbar (1.5 bar))");
+        // Les dimensions differentes (une unite tapee par un script ou une formule) : dites, rien d'ecrit.
+        rt.objectPart(cv, "vers:degC", 0.95);
+        check(!rt.unitConverter(cv)->conv.ok && rt.unitConverter(cv)->conv.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos,
+              "bar vers degC : dimensions diff\xC3\xA9rentes, dit");
+        rt.objectPart(cv, "vers:bars", 0.96);
+        check(rt.unitConverter(cv)->conv.error.find("unit\xC3\xA9 inconnue") != std::string::npos, "une unit\xC3\xA9 inconnue : dite");
+        // La Dimension : De ne propose qu'elle.
+        rt.objectPart(temp, "de", 1.0);
+        check(rt.unitConverter(temp)->choices == std::vector<std::string>{"K", "degC", "degF"}, "Dimension Temp\xC3\xA9rature : De ne propose qu'elle");
+        // Pilotable decoche : il montre, il ne reagit pas.
+        rt.objectPart(fixe, "inverser", 1.1);
+        rt.objectPart(fixe, "valeur", 1.1);
+        check(rt.unitConverter(fixe)->from == "bar" && rt.focusedObject() != fixe, "non pilotable : ni inverser, ni la case");
+        // Le niveau d'acces (securite active) : refuse, l'evenement le dit.
+        op.security.enabled = true;
+        rt.objectPart(garde, "ecrire", 1.2);
+        check(rt.variable("SortieInt")->asInteger() == 0 && eventHas(rt, "Acc\xC3\xA8s refus\xC3\xA9", "niveau d'acc\xC3\xA8s 3"),
+              "sous s\xC3\xA9" "curit\xC3\xA9, le niveau d'acc\xC3\xA8s de l'objet : refus\xC3\xA9");
+        op.security.enabled = false;
+        rt.objectPart(garde, "ecrire", 1.3);
+        check(rt.variable("SortieInt")->asInteger() == 1000, "sans s\xC3\xA9" "curit\xC3\xA9 : 1000 \xC3\xA9" "crit dans un INT (converti vers son type)");
+    }
+
+    // ---- Generer : unites inconnues, dimensions incompatibles, dimension inconnue, Resultat vers inconnu
+    {
+        Project gp;
+        View gv = makeView(gp, "Vue_Gen");
+        Variable t = hmiVar(gp, "Temp", "REAL", "20.0");
+        t.unit = "degC";
+        gp.programs.variables.push_back(t);
+        const auto add = [&](const char* name) {
+            const Id id = edit::add(gp, gv, Kind::UnitConverter, 10, 10);
+            gv.object(id)->name = name;
+            return id;
+        };
+        const Id ok = add("Conv_Bon");
+        const Id unknownU = add("Conv_Inconnue");
+        gv.object(unknownU)->set("unitFrom", "bars");
+        const Id incompat = add("Conv_Incompatible");
+        gv.object(incompat)->set("unitTo", "degC");
+        const Id dimBad = add("Conv_Dimension");
+        gv.object(dimBad)->set("dimension", "Vitesse");
+        const Id src = add("Conv_Source");
+        gv.object(src)->setExpr("value", "Temp");
+        const Id target = add("Conv_Cible");
+        gv.object(target)->set("resultTo", "Inconnue_Var");
+        const Id notNum = add("Conv_PasNombre");
+        gv.object(notNum)->set("value", "deux");
+        gp.views = {gv};
+        gp.config.startView = gv.id;
+        const auto gen = generate(gp, [](std::string_view) { return false; });
+        const auto has = [&](Id id, const char* key, const char* text) {
+            for (const auto& i : gen)
+                if (i.object == id && i.property == key && i.message.find(text) != std::string::npos) return true;
+            return false;
+        };
+        bool okClean = true;
+        for (const auto& i : gen) okClean = okClean && i.object != ok;
+        check(okClean, "Generer : un convertisseur neuf ne dit rien");
+        check(has(unknownU, "unitFrom", "unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB"), "Generer : l'unit\xC3\xA9 inconnue bars");
+        check(has(incompat, "unitTo", "dimensions incompatibles"), "Generer : bar vers degC, dimensions incompatibles");
+        check(has(dimBad, "dimension", "dimension inconnue \xC2\xAB Vitesse \xC2\xBB"), "Generer : la dimension inconnue Vitesse");
+        check(has(src, "value", "dimensions incompatibles : Temp est en degC"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
+        check(has(target, "resultTo", "Inconnue_Var"), "Generer : une variable inconnue dans R\xC3\xA9sultat vers");
+        check(has(notNum, "value", "n'est pas un nombre"), "Generer : une Valeur de d\xC3\xA9part qui n'est pas un nombre");
+        // Dupliquer (copier-coller) et le code brut : les proprietes suivent.
+        const View& vv = *gp.view(gp.views[0].id);
+        const std::string code = serializeObjectCode(vv, {src});
+        auto back = parseObjectCode(code);
+        check(back && back->objects.size() == 1 && back->objects[0] == *vv.object(src), "Convertisseur : le code brut se relit \xC3\xA0 l'identique");
+        View dup = vv;
+        const auto copies = edit::duplicate(gp, dup, {incompat}, 20, 20);
+        check(copies.size() == 1 && dup.object(copies[0]) && dup.object(copies[0])->kind == Kind::UnitConverter
+                  && dup.object(copies[0])->text("unitTo") == "degC",
+              "Dupliquer le convertisseur : ses unit\xC3\xA9s suivent");
+    }
+    // ---- un projet 1.14.0 s'ouvre sans rien perdre ; l'objet neuf s'enregistre et se relit
+    {
+        Project q;
+        View qv = makeView(q, "Vue_Avant");
+        (void)edit::add(q, qv, Kind::Slider, 10, 10);
+        q.views = {qv};
+        const auto files = serializeProject(q);
+        std::string text;
+        for (const auto& f : files) if (f.data) text.append(f.data->begin(), f.data->end());
+        check(text.find("UnitConverter") == std::string::npos && text.find("resultTo") == std::string::npos,
+              "un projet sans convertisseur s'\xC3\xA9" "crit comme en 1.14.0");
+        View nv = qv;
+        const Id a1 = edit::add(q, nv, Kind::UnitConverter, 300, 10);
+        nv.object(a1)->set("unitFrom", "L/min");
+        nv.object(a1)->set("unitTo", "m3/h");
+        auto back = parseView(serializeView(nv));
+        check(back && back->object(a1) && *back->object(a1) == *nv.object(a1), "le convertisseur s'enregistre et se relit (L/min -> m3/h)");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.14.1 (lot N5) : HMI_TEST_N5=1 - convertir des unites, l'explorateur de fichiers, seuls.
+    if (const char* only = std::getenv("HMI_TEST_N5"); only && *only == '1') {
+        unites1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.1 (lot K3) : HMI_TEST_1131=1 - le code brut des objets, seul.
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
         codeBrut1131();
@@ -31313,6 +31629,7 @@ int main(int argc, char** argv) {
     pourquoi11227();                  // 1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)
     codeBrut1131();                   // 1.13.1 (lot K3) : le code brut des objets
     son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
+    unites1141();                     // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

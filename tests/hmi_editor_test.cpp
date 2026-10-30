@@ -7178,6 +7178,265 @@ void son1140Ecran() {
     }
 }
 
+// 1.14.1 (lot N5) : CONVERTIR DES UNITES A L'ECRAN - l'onglet Convertir de Configuration > Unites de mesure (la saisie,
+// les listes filtrees, la recherche, inverser, Copier, l'historique, les refus, le dessin), l'objet Convertisseur
+// d'unites (la bibliotheque, l'inspecteur, le dessin dans l'editeur, en marche a la souris et au clavier, le theme jour).
+void unites1141Ecran() {
+    std::printf("1.14.1 : convertir des unit\xC3\xA9s \xC3\xA0 l'\xC3\xA9" "cran (l'onglet Convertir, l'objet Convertisseur)\n");
+    using app::HmiUnitConvertPage;
+    // ---- l'onglet Convertir
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        HmiUnitConvertPage::clearHistory();
+        // Un presse-papiers d'essai (Copier).
+        static std::string presse;
+        {
+            ui::PlatformServices sv;
+            sv.measureWidth = [](std::string_view t, gfx::FontId) { return 8.f * static_cast<float>(t.size()); };
+            sv.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+            sv.clipboardGet = [] { return presse; };
+            sv.clipboardSet = [](std::string_view t) { presse = std::string(t); };
+            ui::installPlatformServices(std::move(sv));
+        }
+        app::HmiMeasureUnitsPane mu("n5.mesure", doc, apply);
+        mu.setBounds({0, 0, 1400, 800});
+        mu.layout();
+        check(mu.tabs().tabCount() == 2 && mu.tabs().tab(0)->title == "Biblioth\xC3\xA8que" && mu.tabs().tab(1)->title == "Convertir"
+                  && mu.currentTab() == app::HmiMeasureUnitsPane::TabLibrary,
+              "Unit\xC3\xA9s de mesure : deux onglets, Biblioth\xC3\xA8que (ouvert) et Convertir");
+        mu.showTab(app::HmiMeasureUnitsPane::TabConvert);
+        mu.layout();
+        auto& cp = mu.convertPage();
+        check(mu.currentTab() == app::HmiMeasureUnitsPane::TabConvert && cp.bounds().w > 0, "l'onglet Convertir s'ouvre");
+        check(cp.resultText() == "1 bar = 1000 mbar" && cp.formulaLine() == "Formule : 1 bar = 1000 mbar" && cp.expression() == "EN(Valeur, 'mbar')",
+              "au d\xC3\xA9part : 1 bar = 1000 mbar, sa formule, l'expression \xC3\xA0 copier : " + cp.resultText());
+        cp.setValueText("1,5");
+        check(cp.resultText() == "1,5 bar = 1500 mbar" && cp.errorText().empty(), "la valeur tap\xC3\xA9" "e (1,5) : le r\xC3\xA9sultat suit");
+        // La saisie a la souris et au clavier : la case Valeur prend le clavier, chaque frappe recalcule.
+        {
+            const auto& vr = cp.valueField().bounds();
+            cp.valueField().setText("");
+            mu.dispatch(ui::MouseDown{{vr.x + 5, vr.y + 5}, ui::MouseButton::Left, 1, {}});
+            mu.dispatch(ui::MouseUp{{vr.x + 5, vr.y + 5}, ui::MouseButton::Left, {}});
+            for (const char* t : {"2", ".", "5"}) mu.dispatch(ui::TextInput{t});
+            check(cp.valueField().text() == "2.5" && cp.resultText() == "2.5 bar = 2500 mbar", "au clavier : 2.5, le r\xC3\xA9sultat \xC3\xA0 chaque frappe : " + cp.resultText());
+            mu.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+            check(!HmiUnitConvertPage::history().empty() && HmiUnitConvertPage::history()[0].value == "2.5"
+                      && HmiUnitConvertPage::history()[0].result == "2500 mbar",
+                  "Entr\xC3\xA9" "e : la conversion entre dans l'historique de la s\xC3\xA9" "ance");
+        }
+        // Les listes : De a toutes les unites ; Vers seulement la dimension de De.
+        const hmi::units::Catalog cat;
+        check(cp.fromChoices().size() == cat.units().size() && cp.toChoices().size() == 6 && cp.fromBox().items().size() == cat.units().size(),
+              "De : toutes les unit\xC3\xA9s ; Vers : les 6 pressions");
+        check(cp.setDimension("Temp\xC3\xA9rature") && cp.fromChoices() == std::vector<std::string>{"K", "degC", "degF"} && cp.from() == "K"
+                  && cp.toChoices() == std::vector<std::string>{"K", "degC", "degF"} && cp.to() == "degC",
+              "Dimension Temp\xC3\xA9rature : De ne propose qu'elle (sa r\xC3\xA9" "f\xC3\xA9rence K) ; Vers devient degC");
+        check(!cp.setDimension("Vitesse"), "une dimension inconnue est refus\xC3\xA9" "e");
+        cp.setFrom("degC");
+        cp.setTo("degF");
+        cp.setValueText("20");
+        check(cp.resultText() == "20 \xC2\xB0" "C = 68 \xC2\xB0" "F" && cp.formulaLine().find("\xC2\xB0" "C -> \xC2\xB0" "F : x \xC3\x97 1.8 + 32") != std::string::npos,
+              "20 \xC2\xB0" "C = 68 \xC2\xB0" "F ; la formule affine : " + cp.formulaLine());
+        // Inverser (le bouton), Copier (le bouton) : l'expression au presse-papiers, l'historique.
+        cp.swapButton().clicked->emit();
+        check(cp.from() == "degF" && cp.to() == "degC" && cp.resultText().find("20 \xC2\xB0" "F = -6.666667 \xC2\xB0" "C") == 0,
+              "inverser : 20 \xC2\xB0" "F = -6.666667 \xC2\xB0" "C (6 d\xC3\xA9" "cimales) : " + cp.resultText());
+        cp.setDecimals(2);
+        check(cp.resultText() == "20 \xC2\xB0" "F = -6.67 \xC2\xB0" "C", "D\xC3\xA9" "cimales 2 : -6.67");
+        cp.copyButton().clicked->emit();
+        same_text(ui::clipboardText(), "EN(Valeur, 'degC')", "Copier : EN(Valeur, 'degC') au presse-papiers");
+        // La recherche : filtre De et y prend la premiere trouvee (sans accents, sans casse).
+        cp.setDimension("Toutes les dimensions");
+        cp.setSearch("PSI");
+        check(cp.fromChoices() == std::vector<std::string>{"psi"} && cp.from() == "psi" && cp.toChoices().size() == 6,
+              "Rechercher PSI : De = psi ; Vers, les pressions");
+        cp.setSearch("debit norm");
+        check(cp.fromChoices() == std::vector<std::string>{"Nm3/h"}, "Rechercher \xC2\xAB debit norm \xC2\xBB (sans accent) : le d\xC3\xA9" "bit normalis\xC3\xA9");
+        cp.setSearch("zzz");
+        check(cp.errorText().find("Aucune unit\xC3\xA9 ne contient \xC2\xAB zzz \xC2\xBB") == 0, "une recherche vide : dite");
+        cp.setSearch("");
+        // L'historique : la plus recente d'abord ; un clic y revient.
+        const auto& h = HmiUnitConvertPage::history();
+        check(h.size() >= 2 && h[0].from == "degF" && h[0].to == "degC" && h[0].result == "-6.67 \xC2\xB0" "C" && cp.historyTable().model()
+                  && cp.historyTable().model()->rowCount() == h.size(),
+              "l'historique de la s\xC3\xA9" "ance : la derni\xC3\xA8re conversion en t\xC3\xAAte, dans le tableau");
+        cp.setFrom("bar");
+        cp.setTo("kPa");
+        check(cp.recall(0) && cp.from() == "degF" && cp.to() == "degC" && cp.valueField().text() == "20", "un clic sur la ligne : 20 \xC2\xB0" "F -> \xC2\xB0" "C revient");
+        // Les refus, dits clairement.
+        cp.setValueText("abc");
+        check(cp.resultText().empty() && cp.errorText().find("Valeur illisible \xC2\xAB abc \xC2\xBB") == 0, "une valeur illisible : " + cp.errorText());
+        cp.setValueText("1");
+        cp.setFrom("bar");
+        cp.setTo("degC");
+        check(cp.errorText().find("Dimensions diff\xC3\xA9rentes : bar est une pression, degC une temp\xC3\xA9rature") == 0, "dimensions diff\xC3\xA9rentes : " + cp.errorText());
+        cp.setFrom("bars");
+        check(cp.errorText().find("Unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB") == 0, "unit\xC3\xA9 inconnue : " + cp.errorText());
+        // Une unite du projet : la liste la propose (le meme catalogue que EN).
+        cp.setFrom("bar");
+        cp.setTo("mbar");
+        hmi::UnitDef atm;
+        atm.symbol = "atm";
+        atm.family = "pression";
+        atm.factor = 101325.0;
+        atm.label = "atmosph\xC3\xA8re";
+        check(mu.addUnit(atm), "une unit\xC3\xA9 du projet : atm");
+        cp.setTo("atm");
+        cp.setValueText("1.01325");
+        check(std::find(cp.toChoices().begin(), cp.toChoices().end(), std::string("atm")) != cp.toChoices().end()
+                  && cp.resultText() == "1.01325 bar = 1 atm",
+              "atm (du projet) dans Vers ; 1.01325 bar = 1 atm : " + cp.resultText());
+        // Le dessin : le resultat, la formule, l'expression.
+        ColorRecorder rec;
+        const auto theme = ui::Theme::dark();
+        mu.layout();
+        mu.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.1, nullptr});
+        check(rec.wrote("1.01325 bar = 1 atm") && rec.wrote("Formule : 1 bar = 0.986923 atm") && rec.wrote("EN(Valeur, 'atm')")
+                  && rec.wrote("HISTORIQUE DE LA S\xC3\x89" "ANCE") && rec.wrote("Rechercher") && rec.wrote("D\xC3\xA9" "cimales"),
+              "le dessin de l'onglet : le r\xC3\xA9sultat, la formule, l'expression, l'historique, les \xC3\xA9tiquettes");
+    }
+    // ---- la bibliotheque, l'inspecteur
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        pal.setFilter("commandes");
+        gfx::Rect r;
+        if (!pal.tileRect(Kind::UnitConverter, r)) pal.revealKind(Kind::UnitConverter);
+        check(pal.tileRect(Kind::UnitConverter, r) && app::glyphFor(Kind::UnitConverter) == app::HmiGlyph::UnitConverter,
+              "la tuile Convertisseur d'unit\xC3\xA9s dans la famille Commandes, son ic\xC3\xB4ne");
+        for (const char* w : {"conversion", "unite", "convertir"}) {
+            pal.setFilter(w);
+            gfx::Rect rr;
+            if (!pal.tileRect(Kind::UnitConverter, rr)) pal.revealKind(Kind::UnitConverter);
+            check(pal.tileRect(Kind::UnitConverter, rr), std::string("la recherche \xC2\xAB ") + w + " \xC2\xBB trouve le Convertisseur");
+        }
+        pal.setFilter("");
+        const Id id = b.place(Kind::UnitConverter, 100, 100);
+        b.editor->layout();
+        std::set<std::string> names;
+        const ui::PropertyGrid::Property* from = nullptr;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) {
+                names.insert(pr.name);
+                if (pr.key == "unitTo") from = &pr;
+            }
+        check(names.count("Dimension") && names.count("Unit\xC3\xA9 de d\xC3\xA9part") && names.count("Unit\xC3\xA9 d'arriv\xC3\xA9" "e")
+                  && names.count("R\xC3\xA9sultat vers") && names.count("Valeur de d\xC3\xA9part") && names.count("D\xC3\xA9" "cimales")
+                  && names.count("Pilotable (saisie, listes, \xC3\x89" "crire)"),
+              "l'inspecteur : Dimension, Unit\xC3\xA9 de d\xC3\xA9part et d'arriv\xC3\xA9" "e, R\xC3\xA9sultat vers, Valeur de d\xC3\xA9part, D\xC3\xA9" "cimales, Pilotable");
+        check(from && from->enumValues == std::vector<std::string>{"Pa", "hPa", "kPa", "mbar", "bar", "psi"},
+              "Unit\xC3\xA9 d'arriv\xC3\xA9" "e : seulement les pressions (la dimension de bar)");
+        (void)id;
+    }
+    // ---- le dessin dans l'editeur
+    {
+        Project p;
+        View v = makeView(p, "Vue_Conv");
+        const app::HmiViewport vp{};
+        const auto theme = ui::Theme::dark();
+        Object o = makeObject(Kind::UnitConverter, 900, "Conv", 10, 10, v.layers.front().id);
+        o.setNumber("w", 600);
+        ColorRecorder r1;
+        app::paintHmiObject(r1, v, o, vp, app::HmiPropertySource{}, theme, {});
+        check(r1.wrote("bar") && r1.wrote("mbar") && r1.wrote("= 1000 mbar") && r1.wrote("1 bar = 1000 mbar") && !r1.wrote("crire"),
+              "dans l'\xC3\xA9" "diteur : 1, bar, mbar, = 1000 mbar, sa formule ; sans R\xC3\xA9sultat vers, pas de bouton \xC3\x89" "crire");
+        o.set("unitTo", "degC");
+        o.set("resultTo", "Sortie");
+        ColorRecorder r2;
+        app::paintHmiObject(r2, v, o, vp, app::HmiPropertySource{}, theme, {});
+        check(r2.wrote("Dimensions diff\xC3\xA9rentes") && r2.wrote("\xC3\x89" "crire"), "bar vers degC : le refus dit en rouge ; R\xC3\xA9sultat vers : le bouton \xC3\x89" "crire");
+    }
+    // ---- en marche : la souris, le clavier, la liste, le theme jour
+    {
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Vue_Conv");
+        v.width = 800;
+        v.height = 480;
+        p.programs.variables.push_back([&] {
+            hmi::Variable var;
+            var.id = p.allocate();
+            var.name = "Sortie";
+            var.type = "REAL";
+            var.initial = "0.0";
+            return var;
+        }());
+        const Id cv = edit::add(p, v, Kind::UnitConverter, 20, 20);
+        v.object(cv)->name = "Conv";
+        v.object(cv)->setNumber("w", 460);
+        v.object(cv)->setNumber("h", 220);
+        v.object(cv)->set("resultTo", "Sortie");
+        p.views = {v};
+        p.config.startView = v.id;
+        app::HmiSimulationPane pane("n5conv", doc, app::HmiSimulationHost{});
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        const auto theme = ui::Theme::dark();
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+        const auto click = [&](const char* part) {
+            gfx::Rect r;
+            if (!pane.canvas().partRect("Conv", part, r)) return false;
+            pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+            pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
+            return true;
+        };
+        paintAt(0.1);
+        check(rec.wrote("= 1000 mbar") && rec.wrote("1 bar = 1000 mbar"), "en marche : 1 bar = 1000 mbar, sa formule");
+        check(click("valeur") && pane.runtime().focusedObject() == cv, "un clic sur la case Valeur : elle prend le clavier");
+        pane.canvas().dispatch(ui::TextInput{"3"});
+        pane.canvas().dispatch(ui::TextInput{"5"});
+        paintAt(0.2);
+        check(pane.runtime().unitConverter(cv)->conv.result == 35000 && rec.wrote("= 35000 mbar"), "au clavier : 35, dessin\xC3\xA9 = 35000 mbar");
+        pane.canvas().dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(pane.runtime().focusedObject() == kNoId, "Entr\xC3\xA9" "e : la case rend le clavier");
+        // Vers : la liste s'ouvre, une ligne la choisit.
+        check(click("vers") && pane.runtime().unitConverter(cv)->open == 2, "un clic sur Vers : la liste des pressions s'ouvre");
+        paintAt(0.3);
+        check(rec.wrote("psi") && rec.wrote("hPa"), "la liste ouverte est dessin\xC3\xA9" "e (psi, hPa)");
+        std::size_t psi = 0;
+        const auto& choices = pane.runtime().unitConverter(cv)->choices;
+        for (std::size_t i = 0; i < choices.size(); ++i)
+            if (choices[i] == "psi") psi = i;
+        check(click(("choix:" + std::to_string(psi)).c_str()) && pane.runtime().unitConverter(cv)->to == "psi"
+                  && pane.runtime().unitConverter(cv)->open == 0,
+              "un clic sur psi : Vers = psi, la liste se ferme");
+        check(click("inverser") && pane.runtime().unitConverter(cv)->from == "psi" && pane.runtime().unitConverter(cv)->to == "bar",
+              "le bouton inverser : psi -> bar");
+        check(click("ecrire") && std::fabs(pane.runtime().variable("Sortie")->asReal() - 35.0 * 6894.757293 / 100000.0) < 1e-9,
+              "\xC3\x89" "crire : Sortie = 35 psi en bar");
+        // La molette sur la liste ouverte la fait defiler.
+        (void)click("de");
+        gfx::Rect cr;
+        (void)pane.canvas().objectRect("Conv", cr);
+        const std::size_t before = pane.runtime().unitConverter(cv)->first;
+        pane.canvas().dispatch(ui::MouseWheel{{cr.x + 200, cr.y + cr.h - 20}, 0.f, -1.f, {}});
+        check(pane.runtime().unitConverter(cv)->first > before, "la molette sur la liste De : elle d\xC3\xA9" "file");
+        // Le theme jour : le fond s'eclaircit, la conversion reste.
+        pane.canvas().dispatch(ui::MouseDown{{cr.x + 5, cr.y + cr.h - 5}, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{{cr.x + 5, cr.y + cr.h - 5}, ui::MouseButton::Left, {}});
+        paintAt(0.4);
+        const gfx::Color night = rec.firstIn(cr);
+        std::string why;
+        check(pane.runtime().setDisplay("theme", "jour", 0.5, "essai", &why), "le th\xC3\xA8me jour " + why);
+        paintAt(0.5);
+        const gfx::Color day = rec.firstIn(cr);
+        const auto lum = [](gfx::Color c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; };
+        check(lum(night) < 80 && lum(day) > 160 && rec.wrote("bar"),
+              "le th\xC3\xA8me jour : le fond du convertisseur s'\xC3\xA9" "claircit (" + std::to_string(static_cast<int>(lum(night))) + " \xE2\x86\x92 "
+                  + std::to_string(static_cast<int>(lum(day))) + ")");
+    }
+}
+
 void visionneuse11230() {
     std::printf("1.12.30 : la visionneuse de documents \xC3\xA0 l'\xC3\xA9" "cran (biblioth\xC3\xA8que, inspecteur, dessin dans l'\xC3\xA9" "diteur)\n");
     {
@@ -18995,7 +19254,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 463,   // 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 465,   // 1.14.1 : + 2 (N5 : l'onglet Convertir des Unites de mesure, le Convertisseur d'unites) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19142,7 +19401,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 235, "centre : L'IHM a les 235 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume)");
+    check(ix.count(hc::Chapter::Hmi) == 236, "centre : L'IHM a les 236 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N5 : objet-convertisseur-unites)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 68, "centre : 11 expressions, 68 notes (1.14.1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -41562,6 +41821,12 @@ void chercheur1140() {
 }
 
 int main(int argc, char** argv) {
+    // 1.14.1 (lot N5) : HMI_TEST_N5=1 - convertir des unites, l'explorateur de fichiers, a l'ecran, seuls.
+    if (const char* only = std::getenv("HMI_TEST_N5"); only && *only == '1') {
+        unites1141Ecran();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.0 (lot M4) : HMI_TEST_M4=1 - enregistrer et rejouer l'IHM a l'ecran, seul.
     if (const char* only = std::getenv("HMI_TEST_M4"); only && *only == '1') {
         enregistrements1140();
@@ -41976,6 +42241,7 @@ int main(int argc, char** argv) {
     lot10_synoptique();
     visionneuse11230();   // 1.12.30
     son1140Ecran();       // 1.14.0 (lot M3) : couper le son, le melangeur de volume
+    unites1141Ecran();    // 1.14.1 (lot N5) : convertir des unites (l'onglet, l'objet)
     lot10_svg();
     lot10_symboles();
     lot11_bibliotheque();

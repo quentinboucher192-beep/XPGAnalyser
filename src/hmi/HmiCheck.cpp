@@ -2566,6 +2566,56 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         issue(S::Warning, "textOn", "un seul libell\xC3\xA9 : l'autre \xC3\xA9tat montrera l'ic\xC3\xB4ne seule");
                     break;
                 }
+                // 1.14.1 (lot N5) : le Convertisseur d'unites - ses unites connues, de la meme dimension (celle de sa Valeur de
+                // depart comprise, quand c'est une variable qui a une unite), sa dimension connue, Resultat vers.
+                case Kind::UnitConverter: {
+                    const units::Catalog cat(biblio::unitConfig(p));
+                    const auto literal = [&](const char* key) {
+                        const Prop* pr = o.find(key);
+                        return pr && pr->expr.empty() ? trimmedCopy(pr->value) : std::string{};
+                    };
+                    const std::string dim = literal("dimension");
+                    std::string family;
+                    if (!dim.empty() && units::familyFrom(cat, dim).empty() && dim != "toutes" && dim != "Toutes")
+                        issue(S::Warning, "dimension", "dimension inconnue \xC2\xAB " + dim + " \xC2\xBB : les listes proposeront toutes les unit\xC3\xA9s");
+                    else
+                        family = units::familyFrom(cat, dim);
+                    const std::string from = literal("unitFrom"), to = literal("unitTo");
+                    for (const auto& [key, sym] : {std::pair<const char*, std::string>{"unitFrom", from}, {"unitTo", to}}) {
+                        if (sym.empty()) {
+                            const Prop* pr = o.find(key);
+                            if (!pr || pr->expr.empty())
+                                issue(S::Warning, key, std::string(std::string_view(key) == "unitFrom" ? "unit\xC3\xA9 de d\xC3\xA9part" : "unit\xC3\xA9 d'arriv\xC3\xA9" "e")
+                                                           + " vide : l'op\xC3\xA9rateur devra la choisir");
+                            continue;
+                        }
+                        if (!cat.unit(sym)) {
+                            issue(S::Error, key, "unit\xC3\xA9 inconnue \xC2\xAB " + sym + " \xC2\xBB (ni fournie, ni du projet)");
+                            continue;
+                        }
+                        if (!family.empty() && cat.familyOf(sym) != family)
+                            issue(S::Warning, key, sym + " n'est pas de la dimension " + cat.familyLabel(family) + " : la liste ne la proposera pas");
+                    }
+                    if (cat.unit(from) && cat.unit(to) && cat.familyOf(from) != cat.familyOf(to))
+                        issue(S::Error, "unitTo", "dimensions incompatibles : " + cat.canonical(from) + " est " + cat.familyPhrase(from) + ", "
+                                                      + cat.canonical(to) + " " + cat.familyPhrase(to) + " \xE2\x80\x94 on ne convertit pas des "
+                                                      + cat.canonical(from) + " en " + cat.canonical(to));
+                    // La Valeur de depart : une variable qui a une unite la donne ; elle doit aller vers l'arrivee.
+                    if (const Prop* vp = o.find("value"); vp && !vp->expr.empty()) {
+                        const std::string path = trimmedCopy(markers::strip(vp->expr, markers::Mode::Expression));
+                        const std::string su = units::unitOfPath(p, path);
+                        if (!su.empty() && cat.unit(su) && cat.unit(to) && cat.familyOf(su) != cat.familyOf(to))
+                            issue(S::Error, "value", "dimensions incompatibles : " + path + " est en " + su + " (" + cat.familyPhrase(su) + "), l'arriv\xC3\xA9" "e "
+                                                         + to + " " + cat.familyPhrase(to));
+                    } else if (const Prop* vp2 = o.find("value"); vp2 && numberOrExpr(trimmedCopy(vp2->value))) {
+                        issue(S::Error, "value", "Valeur de d\xC3\xA9part : '" + vp2->value + "' n'est pas un nombre (une expression s'\xC3\xA9" "crit avec =)");
+                    }
+                    const std::string target = trimmedCopy(markers::strip(o.text("resultTo"), markers::Mode::Expression));
+                    if (!target.empty())
+                        for (const auto& r : scanRoots(target))
+                            if (!known(p, plc, r, &v)) issue(S::Error, "resultTo", "R\xC3\xA9sultat vers : " + std::string(unknownVariablePrefix()) + r);
+                    break;
+                }
                 case Kind::VolumeMixer: {
                     const auto p1 = o.find("channels");
                     if (!p1 || p1->expr.empty()) {

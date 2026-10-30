@@ -77,6 +77,8 @@ enum class HmiGlyph : std::uint8_t {
     Recorder, RecordingPlayer,
     // 1.14.0 : le Coupe-son (le haut-parleur barre), le Melangeur de volume (trois curseurs)
     SoundMute, VolumeMixer,
+    // 1.14.1 (lot N5) : le Convertisseur d'unites (deux fleches opposees entre deux cases)
+    UnitConverter,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;
