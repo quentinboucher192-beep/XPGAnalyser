@@ -171,29 +171,17 @@ void renameUses(Project& p, const Place& at, Code& c, std::size_t self, const st
         for (const auto& s : p.programs.scripts)
             if (s.id == at.id) owner = &s;
         if (owner) {
+            // 1.14.0 : partout ou un texte du projet se lit (forEachCode) - les scripts et les fonctions, mais aussi les
+            // formules fx des objets, leurs textes a trous, leurs actions, les alarmes, les methodes, les valeurs et les
+            // calculs des declarations. Avant : les scripts et les fonctions seulement (Reglages.Seuil restait dans une fx).
             const std::string qFrom = owner->name + "." + from, qTo = owner->name + "." + to;
-            const auto inCode = [&](std::string& code) {
-                if (code.find('.') != std::string::npos) code = replacePath(code, qFrom, qTo, true);
-            };
-            const auto inDecls = [&](std::vector<Declaration>& list) {
-                for (auto& d : list) {
-                    if (!d.calc.empty()) inCode(d.calc);
-                    if (!d.value.empty() && d.value.find('.') != std::string::npos) d.value = replacePath(d.value, qFrom, qTo, false);
-                }
-            };
-            for (auto& s : p.programs.scripts) {
-                inCode(s.body);
-                inDecls(s.decls);
-            }
-            for (auto& v : p.views)
-                for (auto& s : v.scripts) {
-                    inCode(s.body);
-                    inDecls(s.decls);
-                }
-            for (auto& f : p.programs.functions) {
-                inCode(f.body);
-                inDecls(f.decls);
-            }
+            forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite&) {
+                if (text.find('.') == std::string::npos) return;
+                std::string out = form == CodeForm::Template
+                                      ? rewriteInText(text, [&](std::string_view e) { return replacePath(e, qFrom, qTo, false); })
+                                      : replacePath(text, qFrom, qTo, form == CodeForm::Code);
+                if (out != text) text = std::move(out);
+            });
         }
     }
     // Un parametre d'une fonction de symbole : ses redefinitions le lisent aussi.

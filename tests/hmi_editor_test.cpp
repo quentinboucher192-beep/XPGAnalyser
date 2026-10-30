@@ -40789,6 +40789,49 @@ void utilisationsM1_1140() {
         find.setWholeWord(true);
         check(!find.showingUsages() && find.hits().size() >= 2, "taper un autre texte : de nouveau la recherche du texte (cha\xC3\xAEnes et commentaires compris)");
     }
+    // 1.14.0 (ecart signale par M1) : RENOMMER UNE CONSTANTE GLOBALE SUIT AUSSI LES FORMULES. Seuils, du script Reglages,
+    // devient Limites : Reglages.Seuils[1] dans la fx de Jauge, dans un texte a trous et dans une action suivent (avant :
+    // seulement les scripts et les fonctions) ; Reglages.SeuilBis, un autre nom, ne bouge pas.
+    {
+        m1::Fixture fr;
+        auto& p = fr.doc->project;
+        View* four = nullptr;
+        for (auto& v : p.views)
+            if (v.name == "Vue_Four") four = &v;
+        check(four != nullptr, "renommer : la vue Vue_Four");
+        if (!four) return;
+        const Id legende = edit::add(p, *four, Kind::Text, 10, 60);
+        four->object(legende)->set("text", "Seuil : {Reglages.Seuils[2]:0} mbar");
+        const Id bouton = edit::add(p, *four, Kind::Button, 10, 110);
+        Action a;
+        a.operation = Operation::Assign;
+        a.target = "Sortie";
+        a.value = "Reglages.Seuils[0] + 1";
+        four->object(bouton)->actions = {a};
+        Id jauge = kNoId;
+        for (const auto& o : four->objects)
+            if (o.name == "Jauge") jauge = o.id;
+        de::Place at;
+        at.kind = de::Place::Kind::Script;
+        at.id = fr.reglages;
+        std::string why;
+        const bool ok = de::set(p, at, de::Tab::Constants, 0, de::Column::Name, "Limites", &why);
+        const View* f2 = p.view(four->id);
+        const Object* j = f2 ? f2->object(jauge) : nullptr;
+        const Object* l = f2 ? f2->object(legende) : nullptr;
+        const Object* b = f2 ? f2->object(bouton) : nullptr;
+        check(ok && j && j->expr("visible") == "Reglages.Limites[1] * 10 > Reglages.SeuilBis",
+              "renommer Seuils en Limites : la fx de Jauge suit, pas Reglages.SeuilBis (" + why + " ; "
+                  + (j ? j->expr("visible") : std::string("?")) + ")");
+        check(l && l->text("text") == "Seuil : {Reglages.Limites[2]:0} mbar",
+              "... le texte \xC3\xA0 trous suit (" + (l ? l->text("text") : std::string("?")) + ")");
+        check(b && b->actions.size() == 1 && b->actions[0].value == "Reglages.Limites[0] + 1",
+              "... l'action suit (" + (b && !b->actions.empty() ? b->actions[0].value : std::string("?")) + ")");
+        std::string bilan;
+        for (const auto& sc : p.programs.scripts)
+            if (sc.name == "Bilan") bilan = sc.body;
+        check(bilan.find("c := Reglages.Limites[0];") != std::string::npos, "... et le script Bilan, comme avant");
+    }
 }
 
 // ---- 1.14.0 (lot M5) : CHERCHER LES FICHIERS DE L'APPLI SUR LE PC ------------------------------------------
