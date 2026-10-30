@@ -13,9 +13,23 @@
 //               qui choisit une variable existante ou de la creer ;
 //    aligner    des objets, un bord (hmi::edit::align) ;
 //    distribuer des objets, un sens (hmi::edit::distribute) ;
-//    supprimer  des objets (hmi::edit::remove) - plusieurs : une confirmation.
+//    supprimer  des objets (hmi::edit::remove) - plusieurs : une confirmation ;
+//    dupliquer  (1.15.0) des objets (avec leurs enfants), un decalage, les noms
+//               voulus des copies - comme Ctrl+D (hmi::edit::duplicate) ;
+//    code       (1.15.0) le CODE BRUT d'objets (le format du fichier de vue :
+//               hmi::parseObjectCode, puis hmi::edit::pasteCode, comme Ctrl+V d'un
+//               code) - pour un objet riche (ses actions, son contenu). Chaque
+//               propriete y est verifiee comme pour creer ; une action qui porte
+//               du code (executer un script, appeler, un calcul Maths) ou une
+//               fonction redefinie est refusee.
+//
+//  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
+//  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
 //  Jamais de code execute : une operation inconnue est refusee a la lecture.
+//  Jamais une variable inventee : la propriete `variable` d'un creer ou d'un
+//  modifier suit la meme regle qu'associer ; une formule (un defaut, un retour
+//  d'etat) ne lit que des noms qui existent.
 //
 //  VALIDER (validate) ne touche a rien : les comptes, les objets, les
 //  proprietes avant -> apres, les variables, les avertissements et les erreurs.
@@ -46,7 +60,7 @@
 namespace app::ai {
 
 struct Operation {
-    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove };
+    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code };
     Action                                           action{Action::Create};
     std::string                                      kind;      // creer : la cle du genre ("Tank")
     std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
@@ -55,6 +69,11 @@ struct Operation {
     std::string                                      variable;  // associer
     std::string                                      edge;      // aligner : haut, bas, gauche, droite, centre-h, centre-v ;
                                                                 // distribuer : horizontal, vertical
+    // 1.15.0 (a la fin) : dupliquer - les noms voulus des copies (dans l'ordre de `objects` ; vide
+    // ou pris : un nom libre), le decalage ; code - le code brut des objets a poser.
+    std::vector<std::string>                         names;
+    double                                           dx{20}, dy{20};
+    std::string                                      code;
 };
 [[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
 [[nodiscard]] std::optional<Operation::Action> actionFromKey(std::string_view) noexcept;
@@ -114,6 +133,9 @@ struct Check {
 // Ce que l'appelant sait en plus de l'IHM : les noms de l'automate relie (vide : aucun).
 struct Env {
     std::function<bool(std::string_view)> plcName;
+    // 1.15.0 (a la fin) : les variables de l'automate relie, pour le contexte envoye au modele (nom tel
+    // qu'une propriete l'ecrit, type) ; nul : aucune liste (plcName seul dit si un nom existe).
+    std::function<std::vector<std::pair<std::string, std::string>>()> plcVariables;
 };
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);
@@ -132,10 +154,12 @@ struct Env {
 struct Touched {
     std::vector<hmi::Id> created, modified, removed;
 };
+// 1.15.0 : `env` (a la fin) - les noms de l'automate relie (sans lui, une variable de l'automate est introuvable).
 bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, const Proposal&, Touched* touched = nullptr,
-              std::string* why = nullptr, bool skipRemovals = false);
+              std::string* why = nullptr, bool skipRemovals = false, const Env* env = nullptr);
 // La commande d'une proposition validee : UN pas d'annulation. nullptr et `why` : rien a faire.
-[[nodiscard]] core::CommandPtr makeCommand(const hmi::DocumentPtr&, const Proposal&, std::string* why = nullptr);
+// 1.15.0 : `env` (a la fin), celui de validate - sans lui, une association a une variable de l'automate est refusee.
+[[nodiscard]] core::CommandPtr makeCommand(const hmi::DocumentPtr&, const Proposal&, std::string* why = nullptr, const Env& env = {});
 
 // L'apercu : la copie de la vue, modifiee (les objets a supprimer y sont encore).
 struct Preview {
@@ -144,7 +168,7 @@ struct Preview {
     hmi::View   view;
     Touched     touched;
 };
-[[nodiscard]] Preview preview(const hmi::Project&, const Proposal&);
+[[nodiscard]] Preview preview(const hmi::Project&, const Proposal&, const Env& env = {});
 
 // ---- le JSON (le bloc "operations", et une proposition entiere) -----------------
 [[nodiscard]] json::Value operationsToJson(const std::vector<Operation>&);
