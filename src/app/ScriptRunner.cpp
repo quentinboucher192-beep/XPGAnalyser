@@ -630,7 +630,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia arreter                          arreter la generation
     //  ia joindre "chemin"                 joindre un fichier (comme lache sur le panneau)
     //  ia apercu | appliquer | refuser     la derniere proposition (dans la fenetre d'apercu : la sienne)
-    //  ia variable N                       dans l'apercu : la N-ieme variable de la liste (la derniere : la creer)
+    //  ia variable N                       dans l'apercu : la N-ieme ligne de la liste (1 : l'invite ; la derniere : la creer)
     //  ia mode previsualisation | direct
     //  ia parametres                       la fenetre des parametres
     //  ia defiler N                        la discussion, de N pixels (negatif : vers le haut)

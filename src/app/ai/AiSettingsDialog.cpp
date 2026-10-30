@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>   // std::size
 
 namespace app::ai {
 
