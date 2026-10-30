@@ -459,6 +459,15 @@ public:
     // 1.14.0 (captures finales) : l'infobulle de la legende de la barre de relecture (les touches, les reperes).
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
     [[nodiscard]] bool        hasTooltip() const override;
+    // ---- 1.14.1 (N2) : LE POINTEUR (ui::cursor) ----
+    //  Les objets de l'IHM en marche gardent la fleche (on ne les deplace pas ; un curseur,
+    //  une glissiere aussi, comme sous Windows). Sauf : sur une courbe pilotable, ses
+    //  curseurs A et B qu'on tire (<->) ; la barre de titre d'une popup qu'on peut deplacer
+    //  (deplacer) ; la relecture, sa barre de progression qu'on clique ou qu'on tire (la
+    //  main). Pendant le geste (au dessin) : le curseur A / B tire (<->), la fenetre de temps
+    //  qu'on fait glisser, la popup, la vue zoomee ou la page d'une visionneuse qu'on tire
+    //  (deplacer), la progression (la main).
+    [[nodiscard]] std::optional<ui::cursor::Shape> cursorAt(gfx::Point local) const override;
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;

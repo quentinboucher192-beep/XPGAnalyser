@@ -276,10 +276,27 @@ bool handle(Widget& root, const InputEvent& ev) {
 
 Grip cursor() noexcept { return state().drag.body ? state().drag.grip : state().hover; }
 
+// 1.14.1 (N2) : la forme du pointeur (ui::cursor) pour ce que la souris prend.
+cursor::Shape shapeOf(Grip g) noexcept {
+    switch (g) {
+        case Grip::Move: return cursor::Shape::Move;
+        case Grip::W: case Grip::E: return cursor::Shape::ResizeEW;
+        case Grip::N: case Grip::S: return cursor::Shape::ResizeNS;
+        case Grip::NW: case Grip::SE: return cursor::Shape::ResizeNWSE;
+        case Grip::NE: case Grip::SW: return cursor::Shape::ResizeNESW;
+        case Grip::None: break;
+    }
+    return cursor::Shape::Default;
+}
+
 void paint(Widget& root, gfx::IRenderer& r, const Theme& theme) {
     const Frame* f = findRoot(&root);
     if (!f || f->rect.w <= 0.f || f->rect.h <= 0.f) return;
     const gfx::Rect q = f->rect;
+    // 1.14.1 (N2) : le pointeur passe par ui::cursor - le titre ou le bord tire (le geste, meme la
+    // souris sortie du dialogue), sinon celui sous la souris (apres l'arbre du dialogue : il gagne).
+    if (state().drag.body == f->body && state().drag.grip != Grip::None) cursor::hold(shapeOf(state().drag.grip));
+    else if (state().hoverBody == f->body && state().hover != Grip::None) cursor::request(shapeOf(state().hover));
     // Un bord pris ou montre : le cadre en couleur, pour voir ce qui va bouger.
     const bool active = (state().drag.body == f->body && state().drag.grip != Grip::Move)
                         || (state().hoverBody == f->body && state().hover != Grip::None && state().hover != Grip::Move);

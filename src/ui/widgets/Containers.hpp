@@ -53,6 +53,13 @@ public:
     void    setOrientation(Orientation o);
     [[nodiscard]] Orientation orientation() const noexcept { return orientation_; }
     [[nodiscard]] std::size_t paneCount() const noexcept { return panes_.size(); }
+    // 1.14.1 (N2) : sur une poignee, la double fleche de son sens (<-> entre deux
+    // volets cote a cote) ; tiree, elle reste jusqu'au lacher, meme hors du
+    // separateur (la souris est tenue : le lacher dehors finit le glisser).
+    [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
+    [[nodiscard]] bool dragging() const noexcept { return dragHandle_ >= 0; }
+    // Le cadre de la poignee `i` (entre le volet montre i et le suivant) ; vide : aucune.
+    [[nodiscard]] gfx::Rect handleRect(std::size_t i) const;
 protected:
     void        onLayout() override;
     void        onPaint(const PaintContext&) override;

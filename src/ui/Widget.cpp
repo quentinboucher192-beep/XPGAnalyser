@@ -618,6 +618,84 @@ namespace ui {
         return hasTooltip() ? this : nullptr;
     }
 
+    // 1.14.1 (N2) : le pointeur, comme les infobulles - le plus profond qui en dit un.
+    std::optional<cursor::Shape> Widget::cursorAt(gfx::Point) const { return std::nullopt; }
+
+    std::optional<cursor::Shape> Widget::cursorUnder(gfx::Point p) const {
+        if (!visible() || !frame_.contains(p)) return std::nullopt;
+        const gfx::Point q = fromParentSpace(p);
+        for (auto it = children_.rbegin(); it != children_.rend(); ++it)
+            if (auto found = (*it)->cursorUnder(q)) return found;
+        if (!enabled()) return std::nullopt;
+        return cursorAt(q);
+    }
+
+    // ------------------------------------------------------------ le pointeur ---
+    namespace cursor {
+        namespace {
+            struct State {
+                std::optional<Shape> asked;    // le survol (la derniere demande)
+                std::optional<Shape> gesture;  // un geste en cours
+            };
+            State& state() noexcept {
+                static State s;
+                return s;
+            }
+        } // namespace
+
+        void begin() noexcept { state() = State{}; }
+        void request(Shape s) noexcept { state().asked = s; }
+        void hold(Shape s) noexcept { state().gesture = s; }
+        Shape shown() noexcept {
+            const State& s = state();
+            return s.gesture ? *s.gesture : s.asked.value_or(Shape::Default);
+        }
+        bool held() noexcept { return state().gesture.has_value(); }
+
+        Shape resizeFor(float dx, float dy) noexcept {
+            if (dx == 0.f && dy == 0.f) return Shape::ResizeEW;
+            // Le sens, ramene a [0, 180) : une double fleche n'a pas de bout.
+            double a = std::atan2(static_cast<double>(dy), static_cast<double>(dx)) * 180.0 / 3.14159265358979323846;
+            if (a < 0.0) a += 180.0;
+            if (a >= 180.0) a -= 180.0;
+            if (a < 22.5 || a >= 157.5) return Shape::ResizeEW;
+            if (a < 67.5) return Shape::ResizeNWSE;     // vers le bas a droite (y vers le bas)
+            if (a < 112.5) return Shape::ResizeNS;
+            return Shape::ResizeNESW;
+        }
+
+        Shape at(Widget& root, gfx::Point p) {
+            // Comme les infobulles (WidgetMenu::tooltipTargetAt) : ce qui peint par-dessus
+            // tout et couvre la souris (une liste ouverte) ne laisse pas percer le dessous.
+            if (Widget* overlay = root.findOverlayOwner()) {
+                const gfx::Point own = overlay->fromSurface(p);
+                if (overlay->eventBounds().contains(own) && overlay->overlayCovers(own)) {
+                    if (auto s = overlay->cursorUnder(overlay->parent() ? overlay->parent()->fromSurface(p) : p)) return *s;
+                    if (overlay->enabled())
+                        if (auto s = overlay->cursorAt(own)) return *s;   // la partie hors de son cadre
+                    return Shape::Default;
+                }
+            }
+            if (auto s = root.cursorUnder(p)) return *s;
+            return Shape::Default;
+        }
+
+        std::string_view name(Shape s) noexcept {
+            switch (s) {
+                case Shape::Default:    return "fleche";
+                case Shape::Text:       return "texte";
+                case Shape::Pointer:    return "main";
+                case Shape::Crosshair:  return "croix";
+                case Shape::Move:       return "deplacer";
+                case Shape::ResizeEW:   return "ew";
+                case Shape::ResizeNS:   return "ns";
+                case Shape::ResizeNWSE: return "nwse";
+                case Shape::ResizeNESW: return "nesw";
+            }
+            return "fleche";
+        }
+    } // namespace cursor
+
     // Lot 7 : le texte du moment (voir Widget.hpp) - relu a chaque image par
     // l'hote tant que l'infobulle est ouverte.
     std::string Widget::liveTooltip(gfx::Point) const {

@@ -139,6 +139,7 @@ protected:
 
     void onPaint(const ui::PaintContext& ctx) override {
         settle();
+        if (drag_ == Drag::Strip) ui::cursor::hold(ui::cursor::Shape::Move);   // 1.14.1 (N2) : la frise attrapee
         const auto b = bounds();
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(b, c.panelBg);

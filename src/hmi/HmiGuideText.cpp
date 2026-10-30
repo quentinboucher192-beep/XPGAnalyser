@@ -299,6 +299,21 @@ const std::vector<Topic>& topics() {
                          "reprend sa taille sous la souris.", {}, "1.12.21"},
              {K::Bullet, "**Retenue** : rouverte pendant la s\xC3\xA9" "ance, une fen\xC3\xAAtre revient "
                          "l\xC3\xA0 o\xC3\xB9 tu l'as laiss\xC3\xA9" "e, \xC3\xA0 la taille choisie.", {}, "1.12.21"},
+             {K::Heading, "Le pointeur : \xC3\xA9tirer, d\xC3\xA9placer, \xC3\xA9" "crire (1.14.1)", {}, "1.14.1"},
+             {K::Paragraph, "Comme sous Windows, le pointeur dit ce que fera la souris avant le clic : la "
+                         "**double fl\xC3\xA8" "che** horizontale ou verticale sur un s\xC3\xA9parateur "
+                         "entre deux panneaux (l'arbre du projet, l'explorateur, l'inspecteur, le panneau du "
+                         "bas, les groupes d'onglets, une fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e) et sur "
+                         "le bord d'une colonne dans les titres d'un tableau ; la **croix \xC3\xA0 quatre "
+                         "fl\xC3\xA8" "ches** sur ce qui se d\xC3\xA9place (la barre de titre d'une "
+                         "fen\xC3\xAAtre, l'objet choisi dans l'\xC3\xA9" "diteur de vues) ; la **barre en "
+                         "I** sur un champ de saisie, un \xC3\xA9" "diteur de code, une case en "
+                         "\xC3\xA9" "dition. Pendant le glisser, il garde sa forme m\xC3\xAAme si la souris "
+                         "sort de la zone ; un s\xC3\xA9parateur ou une colonne l\xC3\xA2" "ch\xC3\xA9 hors "
+                         "de son panneau s'arr\xC3\xAAte l\xC3\xA0. En simulation, les objets de l'IHM en "
+                         "marche gardent la fl\xC3\xA8" "che : seuls les curseurs A et B d'une courbe "
+                         "pilotable (la double fl\xC3\xA8" "che), la barre de titre d'une popup "
+                         "d\xC3\xA9pla\xC3\xA7" "able et la progression d'une relecture (la main) changent.", {}, "1.14.1"},
          },
          {"historique", "ihm", "equipements", "aller-a", "excel"},
          {"sous-onglets", "sous-onglet", "onglets", "fen\xC3\xAAtre", "fen\xC3\xAAtres", "d\xC3\xA9placer", "agrandir", "redimensionner", "barre de titre", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci", "disposition", "Disposition", "panneaux", "Ctrl+Maj+K", "clic droit", "menu contextuel", "Maj+F10", "Ctrl+Maj+T", "Rouvrir"},
@@ -1417,6 +1432,14 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9gal) et les guides V / H s'activent dans la barre d'outils ;", {}},
              {K::Bullet, "l'onglet **Variables** de la biblioth\xC3\xA8que pose une variable d'un geste "
                          "(voir \xC2\xAB Concevoir plus vite \xC2\xBB).", {}},
+             {K::Bullet, "**le pointeur** dit ce que fera le glisser : la croix \xC3\xA0 quatre "
+                         "fl\xC3\xA8" "ches sur l'objet choisi (le d\xC3\xA9placer) et sur les sommets d'une "
+                         "ligne ou d'une tuyauterie, sur ses poign\xC3\xA9" "es la double fl\xC3\xA8" "che "
+                         "de leur sens (un objet tourn\xC3\xA9 a ses fl\xC3\xA8" "ches tourn\xC3\xA9" "es), "
+                         "la main sur la poign\xC3\xA9" "e ronde, la croix fine quand un objet attend "
+                         "d'\xC3\xAAtre pos\xC3\xA9, la croix \xC3\xA0 quatre fl\xC3\xA8" "ches Espace tenu "
+                         "(faire d\xC3\xA9" "filer), la double fl\xC3\xA8" "che sur une r\xC3\xA8gle ou un "
+                         "guide ; un objet ou un calque verrouill\xC3\xA9 garde la fl\xC3\xA8" "che.", {}, "1.14.1"},
              {K::Heading, "S\xC3\xA9lectionner, grouper, aligner", {}},
              {K::Bullet, "un cadre tir\xC3\xA9 dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute "
                          "un ;", {}},

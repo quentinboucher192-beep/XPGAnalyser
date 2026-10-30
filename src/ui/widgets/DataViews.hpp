@@ -811,6 +811,14 @@ protected:
     void        onPaint(const PaintContext&) override;
     EventResult onEvent(const InputEvent&) override;
 
+public:
+    // 1.14.1 (N2) : le bord droit d'une colonne qu'on peut elargir, dans les titres : <->
+    // (tire, jusqu'au lacher, meme hors du tableau). La colonne dont le bord droit est
+    // sous `localX` (a 4 px pres) ; -1 : aucune.
+    [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
+    [[nodiscard]] int  columnEdgeAt(float localX) const;
+    [[nodiscard]] bool resizingColumn() const noexcept { return resizingColumn_ >= 0; }
+
 private:
     void rebuildView();                 // filter -> sort -> view_
     void revealSelection();             // la premiere ligne choisie en vue (au placement si pas encore placee)

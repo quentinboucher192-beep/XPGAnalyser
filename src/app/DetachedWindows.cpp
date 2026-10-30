@@ -238,6 +238,7 @@ struct DetachedWindows::Window {
     bool                                returning{false};    // a rendre des qu'on peut
     bool                                orphan{false};       // proprietaire parti : a fermer sans le rappeler
     bool                                asleep{false};       // lot API 8 : une question attend (la page ne survole plus rien)
+    ui::cursor::Shape                   cursor{ui::cursor::Shape::Default};   // 1.14.1 (N2) : son pointeur, au dernier dessin
     core::Connection                    backClicked;
     // Dans cet ordre : l'arbre (et la page) part avant le cache de ses images,
     // le cache avant le renderer qui porte les textures.
@@ -651,6 +652,11 @@ void DetachedWindows::mouseLeft(std::uint32_t windowId) {
     if (Window* w = byId(windowId); w && w->host) w->host->pointerLeft();
 }
 
+ui::cursor::Shape DetachedWindows::cursorOf(std::uint32_t windowId) const {
+    const Window* w = byId(windowId);
+    return w ? w->cursor : ui::cursor::Shape::Default;
+}
+
 bool DetachedWindows::sendEvent(const ui::Widget* page, const ui::InputEvent& e) {
     Window* w = byPage(page);
     if (!w) return false;
@@ -775,6 +781,7 @@ bool DetachedWindows::renderWindow(Window& w, const std::string* capture, std::s
         if (error) *error = std::move(why);
         return false;
     };
+    w.cursor = ui::cursor::Shape::Default;   // 1.14.1 (N2) : redemande a ce dessin
     if (!w.renderer || !w.window || !w.host || w.orphan) return failed("fen\xC3\xAAtre ferm\xC3\xA9" "e");
     const SDL_WindowFlags flags = SDL_GetWindowFlags(w.window);
     const bool hidden = (flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) != 0;
@@ -799,6 +806,8 @@ bool DetachedWindows::renderWindow(Window& w, const std::string* capture, std::s
         const HmiImageCache::Scope images(w.images);
         w.host->layout(size);
         r.beginFrame(theme.color.windowBg);
+        // 1.14.1 (N2) : le pointeur de cette fenetre (ui::cursor), demande par son dessin.
+        ui::cursor::begin();
         // Les infobulles de la page seulement quand rien n'attend : sous un
         // dialogue, la souris est a lui.
         w.host->paint(r, theme, size, impl_->seconds, route == menu::MenuManager::Route::Content);
@@ -806,6 +815,7 @@ bool DetachedWindows::renderWindow(Window& w, const std::string* capture, std::s
         // chacun avec son voile, a la taille de SA surface.
         const menu::FrameContext fc{impl_->delta, impl_->seconds, &theme, size, r.dpiScale()};
         impl_->app.menus().RenderWindow(w.id, r, fc);
+        w.cursor = ui::cursor::shown();
         if (route == menu::MenuManager::Route::Elsewhere) paintWaiting(r, theme, size, impl_->questionPlace());
         // Ce qui vient d'etre dessine, avant de le presenter : apres, le contenu
         // du tampon n'est plus garanti.

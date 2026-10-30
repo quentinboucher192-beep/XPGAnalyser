@@ -946,7 +946,52 @@ gfx::Point HmiLiveCanvas::baseToScreen(double x, double y) const {
     return {baseOrigin_.x + static_cast<float>(x) * baseZoom_ * baseSx_, baseOrigin_.y + static_cast<float>(y) * baseZoom_ * baseSy_};
 }
 
+// 1.14.1 (N2) : le pointeur de la vue en marche (voir HmiSimulation.hpp).
+std::optional<ui::cursor::Shape> HmiLiveCanvas::cursorAt(gfx::Point p) const {
+    using ui::cursor::Shape;
+    if (!bounds().contains(p)) return std::nullopt;
+    if (replayShown()) return replayChrome_.partAt(p) == "progress" ? Shape::Pointer : Shape::Default;
+    if (!interactive_) return Shape::Default;
+    // La popup du dessus sous la souris : sa barre de titre, si elle se deplace (pas sa croix).
+    for (auto it = popupRects_.rbegin(); it != popupRects_.rend(); ++it) {
+        if (!it->window.contains(p)) continue;
+        if (it->movable && it->title.w > 0.f && it->title.contains(p) && !(it->close.w > 0.f && it->close.contains(p)))
+            return Shape::Move;
+        break;
+    }
+    // Une courbe pilotable (1.13.1) : un curseur A ou B de sa zone de trace, a 6 px pres (comme le moteur l'attrape).
+    if (!runtime_) return Shape::Default;
+    const int li = layerUnder(p);
+    if (li < 0) return Shape::Default;
+    const auto layer = static_cast<std::size_t>(li);
+    const Id id = objectAtLayer(layer, p);
+    const auto* o = id != kNoId && layer < layers_.size() ? layers_[layer].view.object(id) : nullptr;
+    if (!o || o->kind != hmi::Kind::Trend || !hmi::trendPilotable(*o) || layer >= vps_.size()) return Shape::Default;
+    const Id view = layers_[layer].view.id;
+    const auto* st = runtime_->trendState(view, id);
+    if (!st || !(st->cursorA || st->cursorB)) return Shape::Default;
+    const auto& vp = vps_[layer];
+    const auto box = o->box();
+    const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
+    const bool cursors = st->cursors();
+    if (!hmi::trendHit(*o, box.w, box.h, lx, ly, cursors).empty()) return Shape::Default;   // un bouton de sa barre
+    const auto plot = hmi::trendLayout(*o, box.w, box.h, cursors).plot;
+    if (!plot.contains(lx, ly)) return Shape::Default;
+    double duration = 60;
+    if (const std::string t = o->text("duration"); !t.empty() && !hmi::roles::readNumber(t, duration)) duration = 60;
+    const auto [start, end] = runtime_->trendWindowOf(view, id, std::max(1.0, duration));
+    return hmi::trendCursorNear(*st, lx, plot, start, end) != 0 ? Shape::ResizeEW : Shape::Default;
+}
+
 void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
+    // 1.14.1 (N2) : le geste en cours garde sa forme (meme la souris sortie de l'objet).
+    if (replayDrag_) ui::cursor::hold(ui::cursor::Shape::Pointer);
+    else if (dragSlot_ >= 0 || panning_ || displayPanning_ || docDrag_ != kNoId) ui::cursor::hold(ui::cursor::Shape::Move);
+    else if (trendDrag_ != kNoId && runtime_ && trendDragLayer_ < layers_.size())
+        if (const auto* st = runtime_->trendState(layers_[trendDragLayer_].view.id, trendDrag_)) {
+            if (st->grab == 1 || st->grab == 2) ui::cursor::hold(ui::cursor::Shape::ResizeEW);   // un curseur tire
+            else if (st->grab == 3 && st->moved) ui::cursor::hold(ui::cursor::Shape::Move);    // la fenetre de temps
+        }
     // 1.10 (decision 12) : en plein ecran, la vue ne se dessine que dans la passe du
     // dessus (le volet, onPaintOverlay, sans liste de passes) : pas deux fois par image.
     if (ctx.overlays)

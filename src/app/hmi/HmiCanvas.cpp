@@ -1191,8 +1191,65 @@ void HmiCanvas::paintSelection(const ui::PaintContext& ctx, const HmiViewport& v
     paintVertices(ctx, vp);   // 1.12.12 (lot H) : par-dessus les poignees du cadre
 }
 
+// ---- 1.14.1 (N2) : le pointeur --------------------------------------------------------------
+ui::cursor::Shape HmiCanvas::handleCursor(int h) const {
+    if (h == 8) return ui::cursor::Shape::Pointer;   // la poignee ronde (tourner)
+    if (h < 0 || h > 7) return ui::cursor::Shape::Default;
+    // Le sens de chaque poignee dans le repere de l'objet (y vers le bas), dans l'ordre de handlePoints.
+    static constexpr float kDir[8][2] = {{-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}};
+    float dx = kDir[h][0], dy = kDir[h][1];
+    // Un objet seul : ses poignees tournent avec lui (et se retournent avec lui) - la fleche aussi.
+    if (const auto* v = view(); v && singleTransformable()) {
+        const auto units = hmi::edit::units(*v, selection_);
+        if (const auto* o = v->object(units.front())) {
+            const Box b = o->box();
+            const Pt c = hmi::edit::toView(*o, {b.w / 2, b.h / 2});
+            const Pt e = hmi::edit::toView(*o, {b.w / 2 + dx, b.h / 2 + dy});
+            dx = static_cast<float>(e.x - c.x);
+            dy = static_cast<float>(e.y - c.y);
+        }
+    }
+    return ui::cursor::resizeFor(dx, dy);
+}
+
+std::optional<ui::cursor::Shape> HmiCanvas::cursorAt(gfx::Point s) const {
+    using ui::cursor::Shape;
+    const auto* v = view();
+    if (!v || !bounds().contains(s)) return std::nullopt;
+    // Dans l'ordre de l'appui (onEvent, MouseDown).
+    if (const int ruler = rulerAt(s); ruler != 0) {
+        if (ruler == 3 || v->grid.guidesLocked) return Shape::Default;
+        return ruler == 1 ? Shape::ResizeNS : Shape::ResizeEW;   // le guide qu'on en tire
+    }
+    if (spaceDown_) return Shape::Move;                          // Espace + glisser : faire defiler
+    if (placeKind_ || traceMap_ != kNoId) return Shape::Crosshair;
+    const Pt p = toView(s);
+    if (const auto t = vertexTarget(); t.valid() && hmi::vertices::vertexAt(*v, t, p, (kVertex + 3.0) / zoom_) >= 0)
+        return Shape::Move;
+    if (const int h = handleAt(s); h >= 0) return handleCursor(h);
+    const Id hit = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_);   // un objet verrouille n'y est pas
+    if (hit == kNoId)
+        if (const int g = guideAt(s); g >= 0)
+            return v->guides[static_cast<std::size_t>(g)].vertical ? Shape::ResizeEW : Shape::ResizeNS;
+    if (hit != kNoId && std::find(selection_.begin(), selection_.end(), hit) != selection_.end()) return Shape::Move;
+    return Shape::Default;
+}
+
 void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
     paintTime_ = ctx.time;                       // 1.12.26 : le delai de l'infobulle de suivi
+    // 1.14.1 (N2) : pendant un glisser, la forme du geste (meme la souris sortie de la vue).
+    switch (drag_) {
+        case Drag::Move: case Drag::Pan: case Drag::Vertex: ui::cursor::hold(ui::cursor::Shape::Move); break;
+        case Drag::Resize: ui::cursor::hold(handleCursor(dragHandle_)); break;
+        case Drag::Rotate: ui::cursor::hold(ui::cursor::Shape::Pointer); break;
+        case Drag::Guide:
+            if (const auto* gv = view(); gv && dragGuide_ >= 0 && static_cast<std::size_t>(dragGuide_) < gv->guides.size())
+                ui::cursor::hold(gv->guides[static_cast<std::size_t>(dragGuide_)].vertical ? ui::cursor::Shape::ResizeEW
+                                                                                            : ui::cursor::Shape::ResizeNS);
+            break;
+        case Drag::NewGuide: ui::cursor::hold(newGuideVertical_ ? ui::cursor::Shape::ResizeEW : ui::cursor::Shape::ResizeNS); break;
+        case Drag::Marquee: case Drag::None: break;
+    }
     if (hoverSince_ < 0) hoverSince_ = ctx.time;
     const auto r = bounds();
     ctx.r.fillRect(r, ctx.theme.color.panelBg);

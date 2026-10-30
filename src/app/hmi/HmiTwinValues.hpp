@@ -170,6 +170,9 @@ public:
         core::Signal<const std::string&, const std::vector<std::string>&, bool>::create();
 
     [[nodiscard]] gfx::Rect eventBounds() const override;
+    // 1.14.1 (N2) : le pointeur - une poignee de la zone (min, max) : <-> ; la bande entiere :
+    // deplacer ; tirees, la forme reste jusqu'au lacher.
+    [[nodiscard]] std::optional<ui::cursor::Shape> cursorAt(gfx::Point local) const override;
 
 protected:
     void            onLayout() override;

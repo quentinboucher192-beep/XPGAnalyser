@@ -136,6 +136,10 @@ void WidgetMenu::Render(gfx::IRenderer& r, const FrameContext& fc) {
     const ui::PaintContext ctx{r, *fc.theme, {0.f, 0.f, fc.surface.w, fc.surface.h},
                                fc.totalSeconds, &overlays};
     root_->render(ctx);
+    // 1.14.1 (N2) : le pointeur (ui::cursor) - ce qui est sous la souris, pour la couche du
+    // dessus seulement (sous un dialogue, la fleche) ; dialogframe passe ensuite devant (la
+    // barre de titre, les bords et les coins du dialogue).
+    if (manager().top() == this) ui::cursor::request(ui::cursor::at(*root_, mouse_));
     // 1.12.21 : la poignee du coin d'un dialogue (et son cadre quand un bord est pris).
     ui::dialogframe::paint(*root_, r, *fc.theme);
 

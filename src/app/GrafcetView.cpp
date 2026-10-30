@@ -479,6 +479,8 @@ namespace app {
     }
 
     void GrafcetView::onPaint(const PaintContext& ctx) {
+        // 1.14.1 (N2) : une etape qu'on deplace a la souris : la croix a quatre fleches jusqu'au lacher.
+        if (draggingStep_ >= 0 && dragged_) ui::cursor::hold(ui::cursor::Shape::Move);
         const auto& c = ctx.theme.color;
         const auto  area = bounds();
         ctx.r.fillRect(area, c.windowBg);

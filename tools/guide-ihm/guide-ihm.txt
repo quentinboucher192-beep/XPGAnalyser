@@ -153,6 +153,9 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **Agrandir** : tire un bord ou un coin - la **poignée** en bas à droite (trois petits traits) est la plus commode ; le bord pris se colore. Une fenêtre ne devient pas plus petite que sa taille d'origine : son contenu y est placé.
 - **En grand** : un double clic sur la barre de titre la met en grand ; un autre la rend à sa place. Tirée par son titre, une fenêtre en grand reprend sa taille sous la souris.
 - **Retenue** : rouverte pendant la séance, une fenêtre revient là où tu l'as laissée, à la taille choisie.
+@nouveau 1.14.1
+### Le pointeur : étirer, déplacer, écrire (1.14.1)
+Comme sous Windows, le pointeur dit ce que fera la souris avant le clic : la **double flèche** horizontale ou verticale sur un séparateur entre deux panneaux (l'arbre du projet, l'explorateur, l'inspecteur, le panneau du bas, les groupes d'onglets, une fenêtre détachée) et sur le bord d'une colonne dans les titres d'un tableau ; la **croix à quatre flèches** sur ce qui se déplace (la barre de titre d'une fenêtre, l'objet choisi dans l'éditeur de vues) ; la **barre en I** sur un champ de saisie, un éditeur de code, une case en édition. Pendant le glisser, il garde sa forme même si la souris sort de la zone ; un séparateur ou une colonne lâché hors de son panneau s'arrête là. En simulation, les objets de l'IHM en marche gardent la flèche : seuls les curseurs A et B d'une courbe pilotable (la double flèche), la barre de titre d'une popup déplaçable et la progression d'une relecture (la main) changent.
 
 == zoom | Le zoom des pages
 : Chaque page se zoome tout entière : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, les icônes, les hauteurs et les marges grandissent ensemble ; chaque page garde le sien, d'une séance à l'autre.
@@ -690,6 +693,8 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 - Alt + glisser pose une copie ;
 - la grille, le magnétisme (grille, bords des autres objets, espacement égal) et les guides V / H s'activent dans la barre d'outils ;
 - l'onglet **Variables** de la bibliothèque pose une variable d'un geste (voir « Concevoir plus vite »).
+@nouveau 1.14.1
+- **le pointeur** dit ce que fera le glisser : la croix à quatre flèches sur l'objet choisi (le déplacer) et sur les sommets d'une ligne ou d'une tuyauterie, sur ses poignées la double flèche de leur sens (un objet tourné a ses flèches tournées), la main sur la poignée ronde, la croix fine quand un objet attend d'être posé, la croix à quatre flèches Espace tenu (faire défiler), la double flèche sur une règle ou un guide ; un objet ou un calque verrouillé garde la flèche.
 ### Sélectionner, grouper, aligner
 - un cadre tiré dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute un ;
 @nouveau 1.12.3

@@ -120,7 +120,7 @@ public:
     void startPipette();
     void cancelPipette();
     [[nodiscard]] bool picking() const noexcept { return picking_; }
-    // Le nombre de pipettes actives (l'hote montre alors un curseur en croix).
+    // Le nombre de pipettes actives. 1.14.1 (N2) : la croix passe par ui::cursor (le dessin de la pipette).
     [[nodiscard]] static int pickingCount() noexcept;
     // Une image connue a la place de celle du renderer (tests) : RGBA, w x h
     // pixels, `scale` pixels par point de la surface. Vide : relire le renderer.

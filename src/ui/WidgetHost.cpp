@@ -29,6 +29,9 @@ void WidgetHost::paint(gfx::IRenderer& r, const Theme& theme, gfx::Size surface,
     // La passe du dessus : les listes ouvertes, les menus de la page, qui
     // doivent sortir du rectangle de leur parent.
     for (auto* w : overlays) w->paintTopMost(ctx);
+    // 1.14.1 (N2) : le pointeur (ui::cursor) - la souris dans cette fenetre, et rien n'attend
+    // ailleurs (sinon, sous le voile, la fleche).
+    if (tooltips && pointerInside_) cursor::request(cursor::at(*root_, mouse_));
 
     const Widget* under = tooltips && pointerInside_ ? tooltipTargetAt(*root_, mouse_) : nullptr;
     if (under != tooltipTarget_) {

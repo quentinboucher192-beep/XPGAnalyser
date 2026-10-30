@@ -1947,9 +1947,29 @@ void TableView::barAreas(gfx::Rect& vArea, gfx::Rect& hArea, float& contentW, fl
     hArea = {body.x, body.y, body.w - vspace, body.h};
 }
 
+// 1.14.1 (N2) : le bord droit d'une colonne qu'on peut elargir (le meme test que l'appui).
+int TableView::columnEdgeAt(float localX) const {
+    float x = contentRect().x - scrollX_;
+    for (std::size_t i = 0; i < columns_.size(); ++i) {
+        if (!columns_[i].visible) continue;
+        const float edge = x + columns_[i].width;
+        if (columns_[i].resizable && std::abs(localX - edge) < 4.f) return static_cast<int>(i);
+        x = edge;
+    }
+    return -1;
+}
+
+std::optional<cursor::Shape> TableView::cursorAt(gfx::Point local) const {
+    const auto area = contentRect();
+    if (!model_ || local.y < area.y || local.y >= area.y + headerHeight_) return std::nullopt;
+    if (columnEdgeAt(local.x) < 0) return std::nullopt;
+    return cursor::Shape::ResizeEW;
+}
+
 void TableView::onPaint(const PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto  area = contentRect();
+    if (resizingColumn_ >= 0) cursor::hold(cursor::Shape::ResizeEW);   // 1.14.1 (N2) : jusqu'au lacher
     const float rowH = rowHeight_ = ctx.theme.metric.rowHeight;
     // Lot 20 : le bandeau du collage prend sa place au-dessus des titres.
     const float bannerH = bannerHeight();
@@ -2329,16 +2349,13 @@ EventResult TableView::onEvent(const InputEvent& ev) {
 
         // Header: sort, or start a column resize when on a boundary.
         if (d->pos.y < area.y + headerH) {
-            float x = area.x - scrollX_;
-            for (std::size_t i = 0; i < columns_.size(); ++i) {
-                if (!columns_[i].visible) continue;
-                const float edge = x + columns_[i].width;
-                if (columns_[i].resizable && std::abs(d->pos.x - edge) < 4.f) {
-                    resizingColumn_ = static_cast<int>(i);
-                    resizeOrigin_   = d->pos.x;
-                    return EventResult::Consumed;
-                }
-                x = edge;
+            if (const int edge = columnEdgeAt(d->pos.x); edge >= 0) {
+                resizingColumn_ = edge;
+                resizeOrigin_   = d->pos.x;
+                // 1.14.1 (N2) : la souris tenue - le bord suit hors du tableau, et le lacher dehors
+                // finit le glisser (avant : la colonne restait prise et suivait la souris au retour).
+                captureMouse();
+                return EventResult::Consumed;
             }
             const int col = columnAtX(d->pos.x);
             if (col >= 0 && columns_[static_cast<std::size_t>(col)].sortable) {
@@ -2545,6 +2562,7 @@ EventResult TableView::onEvent(const InputEvent& ev) {
     }
     if (std::get_if<MouseUp>(&ev) && resizingColumn_ >= 0) {
         resizingColumn_ = -1;
+        releaseMouse();
         return EventResult::Consumed;
     }
 

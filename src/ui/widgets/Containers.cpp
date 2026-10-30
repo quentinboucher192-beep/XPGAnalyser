@@ -162,21 +162,30 @@ void Splitter::setOrientation(Orientation o) {
     invalidateLayout();
 }
 
+gfx::Rect Splitter::handleRect(std::size_t i) const {
+    if (i + 1 >= panes_.size()) return {};
+    const auto b = panes_[at(i)].w->bounds();
+    return orientation_ == Orientation::Horizontal ? gfx::Rect{b.right(), b.y, 5.f, b.h}
+                                                   : gfx::Rect{b.x, b.bottom(), b.w, 5.f};
+}
+
 int Splitter::handleAt(gfx::Point p) const {
-    const bool horizontal = orientation_ == Orientation::Horizontal;
-    for (std::size_t i = 0; i + 1 < panes_.size(); ++i) {
-        const auto b = panes_[at(i)].w->bounds();
-        const gfx::Rect handle = horizontal ? gfx::Rect{b.right(), b.y, 5.f, b.h}
-                                            : gfx::Rect{b.x, b.bottom(), b.w, 5.f};
-        if (handle.contains(p)) return static_cast<int>(i);
-    }
+    for (std::size_t i = 0; i + 1 < panes_.size(); ++i)
+        if (handleRect(i).contains(p)) return static_cast<int>(i);
     return -1;
+}
+
+std::optional<cursor::Shape> Splitter::cursorAt(gfx::Point local) const {
+    if (handleAt(local) < 0) return std::nullopt;
+    return orientation_ == Orientation::Horizontal ? cursor::Shape::ResizeEW : cursor::Shape::ResizeNS;
 }
 
 void Splitter::onPaint(const PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(bounds(), c.windowBg);
     const bool horizontal = orientation_ == Orientation::Horizontal;
+    // 1.14.1 (N2) : une poignee tiree garde sa double fleche jusqu'au lacher.
+    if (dragHandle_ >= 0) cursor::hold(horizontal ? cursor::Shape::ResizeEW : cursor::Shape::ResizeNS);
     for (std::size_t i = 0; i + 1 < panes_.size(); ++i) {
         const auto b = panes_[at(i)].w->bounds();
         const gfx::Rect handle = horizontal ? gfx::Rect{b.right(), b.y, 5.f, b.h}
@@ -198,6 +207,9 @@ EventResult Splitter::onEvent(const InputEvent& ev) {
         if (h >= 0) {
             dragHandle_ = h;
             dragOrigin_ = horizontal ? d->pos.x : d->pos.y;
+            // 1.14.1 (N2) : la souris tenue - le glisser suit hors du separateur, et le lacher
+            // dehors le finit (avant : la poignee restait prise, et la fleche avec elle).
+            captureMouse();
             invalidate();
             return EventResult::Consumed;
         }
@@ -232,6 +244,7 @@ EventResult Splitter::onEvent(const InputEvent& ev) {
     }
     if (std::get_if<MouseUp>(&ev) && dragHandle_ >= 0) {
         dragHandle_ = -1;
+        releaseMouse();
         invalidate();
         return EventResult::Consumed;
     }
