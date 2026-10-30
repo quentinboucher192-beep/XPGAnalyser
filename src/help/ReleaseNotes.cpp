@@ -139,6 +139,19 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.1 (lot N4, demande du 30/10) : la calculatrice - standard, scientifique, programmeur.
+        note("1.14.1", "Objets", Kind::New,
+         "LA CALCULATRICE : un nouvel objet de la biblioth\xC3\xA8que (famille Commandes, apr\xC3\xA8s le M\xC3\xA9langeur de volume), en trois "
+         "variantes d\xC3\xA9j\xC3\xA0 r\xC3\xA9gl\xC3\xA9" "es, chacune sa tuile. Standard : les quatre op\xC3\xA9rations, %, \xC2\xB1, 1/x, x\xC2\xB2, \xE2\x88\x9Ax, C, CE, "
+         "\xE2\x8C\xAB et la m\xC3\xA9moire (MC MR M+ M\xE2\x88\x92, M affich\xC3\xA9 quand elle n'est pas vide). Scientifique : les parenth\xC3\xA8ses, sin cos "
+         "tan et leurs inverses (2nde), DEG / RAD, log, ln, 10^x, e^x, x^y, la racine y-i\xC3\xA8me, n!, \xCF\x80, e, mod, |x|, Exp. Programmeur : "
+         "l'entier en HEX, DEC, OCT et BIN \xC3\xA0 la fois (un clic choisit la base), BYTE \xC3\xA0 LWORD sign\xC3\xA9 ou non, A-F, AND OR XOR NOT "
+         "NAND NOR, << >>, ROL ROR, SWAP, et la grille des bits - un clic bascule un bit. L'ordre des op\xC3\xA9rations est respect\xC3\xA9 (2 + 3 "
+         "\xC3\x97 4 = 14), la virgule \xC3\xA0 la fran\xC3\xA7" "aise, Erreur pour une division par z\xC3\xA9ro. Un clic lui donne le clavier (chiffres, "
+         "+ - * / ^ ( ), Entr\xC3\xA9" "e, \xC3\x89" "chap, Retour arri\xC3\xA8re). Valeur de d\xC3\xA9part : une expression lue \xC3\xA0 l'ouverture de la vue ; "
+         "R\xC3\xA9sultat vers : le bouton Envoyer \xC3\xA9" "crit le r\xC3\xA9sultat dans une variable, avec le niveau d'acc\xC3\xA8s de l'objet et les "
+         "r\xC3\xA8gles d'\xC3\xA9" "criture (le type, ses bornes) ; Vue.Calc_1.Result le lit.",
+         "objet-calculatrice", ""),
         // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
         note("1.14.0", "Simulation", Kind::New,
          "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "
