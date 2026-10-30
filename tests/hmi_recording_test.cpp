@@ -1600,6 +1600,32 @@ void testRelectureM4b() {
               "renommes entre guillemets (\\\" echappe) ; la chaine d'a cote ne bouge pas : " + renamed);
         check(R::namesInCode("IHM_REJOUER('L''essai');").front().name == "L'essai", "ST : toujours entre apostrophes");
     }
+    // ---- 16. L'ARCHIVE : la case decide pour tous ------------------------------------------------------------------------
+    {
+        namespace pa = project::archive;
+        pa::CollectOptions co;
+        co.recordings = false;
+        co.recordingsDir = "mes_enregistrements";
+        check(pa::excluded("mes_enregistrements/A.xrec", co) && pa::excluded("ihm/ressources/enregistrements/B.xrec", co)
+                  && !pa::excluded("mes_enregistrements/notes.txt", co),
+              "decochee : le dossier de la configuration (ses .xrec) et le natif restent");
+        co.recordings = true;
+        check(!pa::excluded("mes_enregistrements/A.xrec", co) && !pa::excluded("ihm/ressources/enregistrements/B.xrec", co)
+                  && pa::excluded("mes_enregistrements/A.xrec.part", co),
+              "cochee : tous partent (jamais un enregistrement en cours)");
+        const std::string pf = freshFolder("m4b-archive");
+        fs::create_directories(fs::path(pf) / "mes_enregistrements");
+        writeBytes(pf + "/mes_enregistrements/A.xrec", "aaaa");
+        writeBytes(pf + "/mes_enregistrements/B.xrec", "bbbbbb");
+        RecordingSettings rs;
+        rs.folder = "mes_enregistrements";
+        const auto share = recordingsShare(rs, pf);
+        check(share.files == 2 && share.bytes == 10 && !share.outside, "le libelle de l'export dit le vrai compte (2, pas \xC2\xAB aucun \xC2\xBB)");
+        rs.folder = freshFolder("m4b-archive-ailleurs");
+        writeBytes(rs.folder + "/C.xrec", "c");
+        const auto away = recordingsShare(rs, pf);
+        check(away.files == 1 && away.outside, "un dossier hors du projet : compte, et dit hors du projet");
+    }
     // ---- 18. Generer : Pause, Avancer, Vitesse, Quitter seules sur un clic n'agiraient jamais ------------------------------
     {
         Station st("m4b-generer");

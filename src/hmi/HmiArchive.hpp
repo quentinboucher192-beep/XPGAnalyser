@@ -94,10 +94,20 @@ struct ArchiveReport {
                                                   ArchiveReport* report = nullptr, LoadReport* load = nullptr);
 
 // ---- 1.12.30 : le projet entier, .xihm ---------------------------------------
+// 1.14.0 (relecture M4b) : LES ENREGISTREMENTS QU'UNE ARCHIVE JOINDRAIT (la case de l'export) - ceux du dossier natif
+// et ceux du dossier de Configuration > Enregistrements (dans le projet ou ailleurs) : combien, leur poids, ou.
+struct RecordingsShare {
+    std::size_t   files{0};
+    std::uint64_t bytes{0};
+    std::string   folder;          // le dossier de la configuration ('' : le natif)
+    bool          outside{false};  // hors du dossier du projet : l'archive les met dans le dossier natif
+};
+[[nodiscard]] RecordingsShare recordingsShare(const RecordingSettings&, const std::string& projectFolder);
 struct ProjectArchiveOptions {
     bool        versions{true};       // versions/
     bool        history{true};        // ihm/historique/ : alarmes, mesures, audit, memoire des reglages PID
-    bool        recordings{false};    // 1.14.0 (M4) : ihm/ressources/enregistrements/ (la case "avec les enregistrements")
+    bool        recordings{false};    // 1.14.0 (M4) : les enregistrements (la case "avec les enregistrements") - le dossier
+                                      // natif et celui de Configuration > Enregistrements, dans le projet ou hors de lui
     std::string tool;                 // "IHM Studio 1.12.30"
 };
 // L'archive du dossier d'un projet (enregistre), en memoire ; puis ecrite.

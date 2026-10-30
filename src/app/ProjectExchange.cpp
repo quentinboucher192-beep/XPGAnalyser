@@ -403,10 +403,13 @@ void askExportArchive(App& app) {
                           joinOne, "", false, {joinOne, leaveOne}});
         if (api) fields.push_back({"Les macros de la biblioth\xC3\xA8que (libs\\Macros)", join, "", false, {join, leave}});
         // 1.14.0 (M4) : les enregistrements de l'IHM (Ressources > Enregistrements) - laisses par defaut (ils pesent).
+        // 1.14.0 (relecture M4b) : le vrai compte - le dossier natif et celui de Configuration > Enregistrements.
         if (!api) {
-            const auto rBytes = treeBytes(fs::path(folder) / "ihm" / "ressources" / "enregistrements");
-            fields.push_back({rBytes > 0 ? "Avec les enregistrements (Ressources \xE2\x80\xBA Enregistrements : " + pa::sizeText(rBytes) + ")"
-                                         : std::string("Avec les enregistrements (aucun)"),
+            const auto doc = app.hmi();
+            const auto share = hmi::recordingsShare(doc ? doc->project.recording : hmi::RecordingSettings{}, folder);
+            fields.push_back({share.files > 0 ? "Avec les enregistrements (" + std::to_string(share.files) + ", " + pa::sizeText(share.bytes)
+                                                    + (share.outside ? ", hors du projet : " + share.folder : std::string{}) + ")"
+                                              : std::string("Avec les enregistrements (aucun)"),
                               leave, "", false, {join, leave}});
         }
         const std::string text = api
