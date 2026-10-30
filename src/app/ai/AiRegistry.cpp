@@ -66,6 +66,18 @@ std::string firstSentence(std::string_view text, std::size_t max = 140) {
             s.resize(s[i] == '.' ? i + 1 : i);
             break;
         }
+    // sans les blancs (une espace insecable avant les deux-points) ni le point de la fin : la ligne continue
+    for (;;) {
+        if (!s.empty() && (s.back() == ' ' || s.back() == '.')) {
+            s.pop_back();
+            continue;
+        }
+        if (s.size() >= 2 && static_cast<unsigned char>(s[s.size() - 2]) == 0xC2 && static_cast<unsigned char>(s.back()) == 0xA0) {
+            s.resize(s.size() - 2);
+            continue;
+        }
+        break;
+    }
     if (s.size() > max) {
         std::size_t cut = s.rfind(' ', max - 3);
         if (cut == std::string::npos || cut < max / 2) cut = max - 3;
@@ -284,6 +296,7 @@ std::string KindRegistry::commonText() const {
 
 std::string KindRegistry::detailLine(const KindEntry& e) const {
     std::string s = e.key + " (" + e.label + ") " + hmi::formatNumber(e.w) + "x" + hmi::formatNumber(e.h);
+    if (!e.description.empty()) s += " - " + e.description;
     std::vector<std::string> caps;
     if (e.level) caps.push_back("niveau entre min et max");
     else if (e.shows) caps.push_back(std::string("montre une valeur (") + roleLetter(e.valueRole) + ")");

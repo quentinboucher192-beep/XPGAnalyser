@@ -265,6 +265,18 @@ struct Run {
             if (!hmi::roles::parseDuration(value, ms, r.unit == hmi::roles::Unit::Milliseconds ? hmi::roles::Unit::Milliseconds : hmi::roles::Unit::Seconds))
                 return "une dur\xC3\xA9" "e est attendue (500 ms, 2 s)";
         }
+        // Un texte a trous ({Variable}, {Expression:0.0}) : chaque trou ne lit que des noms qui existent.
+        if (r.role == hmi::roles::Role::Text && value.find('{') != std::string::npos) {
+            const auto t = hmi::TextTemplate::compile(value);
+            if (const auto errs = t.errors(); !errs.empty()) return "texte \xC3\xA0 trous illisible (" + errs.front() + ")";
+            for (const auto& root : t.roots())
+                if (!knownName(root)) {
+                    std::string msg = "le trou {" + root + "} ne lit pas une variable du projet (l'Assistant n'invente pas de variable)";
+                    if (const auto near = nearVariables(project, root, 3); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+                    return msg;
+                }
+            return {};
+        }
         if (hmi::roles::readsAsFormula(k, key)) {
             if (r.role == hmi::roles::Role::List) {
                 for (const auto& item : hmi::roles::splitList(value))

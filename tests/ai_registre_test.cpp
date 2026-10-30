@@ -38,6 +38,7 @@
 #include "../src/hmi/HmiStore.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -140,7 +141,10 @@ std::optional<ai::Proposal> fromTool(Fixture& f, const std::string& json, std::s
 // ------------------------------------------------------------- 1. le registre ----
 void registryAgainstTables() {
     std::printf("== 1. le registre contre les tables du logiciel ==\n");
+    const auto t0 = std::chrono::steady_clock::now();
     const ai::KindRegistry& reg = ai::registry();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("  le registre se construit en %lld ms (une fois)\n", static_cast<long long>(ms));
     check(reg.kinds().size() == 116 && std::size(hmi::kKindInfos) == 116, "116 genres (" + std::to_string(reg.kinds().size()) + ")");
     std::size_t sameKey = 0, sameProps = 0, sameRoles = 0, described = 0, choicesOk = 0, withChoices = 0, placeable = 0, bad = 0;
     for (std::size_t i = 0; i < reg.kinds().size(); ++i) {
@@ -203,7 +207,7 @@ void compactText() {
         if (!has(list, std::string(info.key) + " | " + std::string(info.label) + " | ")) ++missing;
     check(lines == 117 && missing == 0, "la liste : une ligne par genre (cle | libelle | famille | valeur), " + std::to_string(list.size()) + " octets");
     const std::string tank = reg.detailLine(*reg.find("Tank"));
-    check(has(tank, "Tank (Cuve) 120x160") && has(tank, "fillColor(c)=") && has(tank, "fault(f:b)") && has(tank, "unit(t)") && !has(tank, " x(n)")
+    check(has(tank, "Tank (Cuve) 120x160 - Une cuve de stockage") && has(tank, "fillColor(c)=") && has(tank, "fault(f:b)") && has(tank, "unit(t)") && !has(tank, " x(n)")
               && !has(tank, " visible("),
           "le detail de la cuve : sa taille, ses proprietes propres en abrege, sans les communes (" + std::to_string(tank.size()) + " octets)");
     const std::string valve = reg.detailLine(*reg.find("Valve"));
@@ -579,6 +583,15 @@ void fromToolInputs() {
     }
     auto fj = fromTool(f, "{\"operations\": [{\"action\": \"modifier\", \"objet\": \"Pompe_11\", \"proprietes\": {\"fault\": \"Pompe_1_Defaut AND NOT Pompe_1_Marche\"}}]}", &why);
     check(fj && ai::validate(f.doc->project, *fj).ok(), "une formule sur des variables existantes : acceptee");
+    // Un texte a trous : ses trous ne lisent que des variables existantes.
+    auto tt = fromTool(f, "{\"operations\": [{\"action\": \"creer\", \"genre\": \"Text\", \"nom\": \"Txt_Niveau\", \"proprietes\": {\"text\": "
+                          "\"Niveau : {Niveau_Cuve_1:0.0} %\"}}, {\"action\": \"creer\", \"genre\": \"Text\", \"nom\": \"Txt_Faux\", \"proprietes\": "
+                          "{\"text\": \"Debit : {Debit_Fantome} m3/h\"}}]}", &why);
+    if (tt) {
+        const auto ck = ai::validate(f.doc->project, *tt);
+        check(ck.errors.size() == 1 && has(ck.errors.front(), "Debit_Fantome") && has(ck.errors.front(), "Txt_Faux"),
+              "un texte a trous : {Niveau_Cuve_1} accepte, {Debit_Fantome} refuse");
+    }
     // Un choix hors liste ; une couleur illisible ; un booleen.
     auto cx = fromTool(f, "{\"operations\": [{\"action\": \"modifier\", \"objet\": \"Vanne_1\", \"proprietes\": {\"labelPosition\": \"milieu\"}}]}", &why);
     if (cx) {

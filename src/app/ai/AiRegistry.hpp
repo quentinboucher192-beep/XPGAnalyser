@@ -92,7 +92,7 @@ public:
     [[nodiscard]] static std::string roleCode(const PropertyInfo&);
     // La legende des abreviations et les proprietes communes.
     [[nodiscard]] std::string commonText() const;
-    // Le detail d'un genre en une ligne : taille, capacites, proprietes propres en abrege.
+    // Le detail d'un genre en une ligne : taille, description, capacites, proprietes propres en abrege.
     [[nodiscard]] std::string detailLine(const KindEntry&) const;
     // Toutes les proprietes de tous les genres, une ligne par genre, avec les libelles (la
     // connaissance "Proprietes de chaque genre" du centre de memoire).
