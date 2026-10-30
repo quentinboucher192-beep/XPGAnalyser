@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.14.2", "30/10/2026", "\xC3\xA0 venir"},
+    {"1.15.0", "30/10/2026", "\xC3\xA0 venir"},
+    {"1.14.2", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au soir"},
     {"1.14.1", "30/10/2026", "livr\xC3\xA9" "e le 30/10 dans l'apr\xC3\xA8s-midi"},
     {"1.14.0", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au matin"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
@@ -141,6 +142,69 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
+        note("1.15.0", "Assistant IA", Kind::New,
+         "L'ASSISTANT IA SE BRANCHE SUR UNE VRAIE IA : dans ses param\xC3\xA8tres, le fournisseur Anthropic (Claude), le mod\xC3\xA8le "
+         "(une case libre, vide au d\xC3\xA9part : Lister les mod\xC3\xA8les donne ceux que ta cl\xC3\xA9 peut utiliser) et ta cl\xC3\xA9 API. L'en-t\xC3\xAAte "
+         "du panneau dit l'\xC3\xA9tat r\xC3\xA9" "el (\xC2\xAB Anthropic \xE2\x80\x93 le mod\xC3\xA8le \xC2\xBB, \xC2\xAB \xC3\x80 configurer \xC2\xBB : un clic ouvre les param\xC3\xA8tres). "
+         "La r\xC3\xA9ponse arrive au fil de l'eau (En attente, R\xC3\xA9" "flexion, \xC3\x89" "criture, Pr\xC3\xA9paration des op\xC3\xA9rations), sur un fil "
+         "\xC3\xA0 part : l'\xC3\xA9" "diteur ne g\xC3\xA8le jamais, et Arr\xC3\xAAter coupe la connexion tout de suite. Ses propositions passent par la "
+         "m\xC3\xAAme validation, le m\xC3\xAAme aper\xC3\xA7u et le m\xC3\xAAme Ctrl+Z que la d\xC3\xA9monstration, qui reste le fournisseur par d\xC3\xA9" "faut.",
+         "assistant-ia", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "L'IA SAIT CE QUE SONT DEVENUES SES PROPOSITIONS : appliqu\xC3\xA9" "e, refus\xC3\xA9" "e, en attente, annul\xC3\xA9" "e par Ctrl+Z, ou refus\xC3\xA9" "e "
+         "par la validation (avec la raison) ; sa r\xC3\xA9ponse suivante en tient compte. La conversation, ses pi\xC3\xA8" "ces jointes (images, "
+         "PDF, textes et CSV ; un classeur ou un projet est seulement nomm\xC3\xA9, c'est dit) et ses appels d'outil se gardent : rouverte "
+         "apr\xC3\xA8s un red\xC3\xA9marrage, elle continue. Avant le premier envoi d'une conversation, une ligne sous la saisie dit ce qui part "
+         "(ta demande, la vue et ses objets, la s\xC3\xA9lection, les variables, les pi\xC3\xA8" "ces jointes), selon les r\xC3\xA9glages de "
+         "confidentialit\xC3\xA9.",
+         "assistant-ia", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "LES ERREURS SONT DITES EN CLAIR, ET SE R\xC3\x89" "ESSAIENT : cl\xC3\xA9 refus\xC3\xA9" "e, mod\xC3\xA8le introuvable, pas de r\xC3\xA9seau, d\xC3\xA9lai "
+         "d\xC3\xA9pass\xC3\xA9, demande trop lourde \xE2\x80\x93 la r\xC3\xA9ponse le dit en rouge, et R\xC3\xA9" "essayer renvoie la m\xC3\xAAme demande. Un service "
+         "surcharg\xC3\xA9 (529) ou trop sollicit\xC3\xA9 (429) est r\xC3\xA9" "essay\xC3\xA9 seul deux fois, avec une attente croissante, et l'indicateur le "
+         "dit. Une r\xC3\xA9ponse coup\xC3\xA9" "e (trop longue) ou d\xC3\xA9" "clin\xC3\xA9" "e ne propose rien ; une proposition illisible n'est jamais "
+         "appliqu\xC3\xA9" "e. Tester la connexion (dans les param\xC3\xA8tres) v\xC3\xA9rifie la cl\xC3\xA9 et l'adresse sans consommer de jetons.",
+         "assistant-ia", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "LA CL\xC3\x89 API EST PROT\xC3\x89G\xC3\x89" "E : jamais \xC3\xA9" "crite en clair, ni dans les param\xC3\xA8tres, ni dans un journal. Sous Windows, "
+         "M\xC3\xA9moriser la cl\xC3\xA9 la chiffre par Windows (DPAPI), li\xC3\xA9" "e \xC3\xA0 ta session : un autre compte, ou le fichier copi\xC3\xA9 sur un autre "
+         "PC, ne la relit pas ; sous Linux, elle est gard\xC3\xA9" "e le temps de la s\xC3\xA9" "ance. Une entreprise peut donner l'adresse de son "
+         "relais (Param\xC3\xA8tres \xE2\x80\xBA Adresse, en https) : il d\xC3\xA9tient la cl\xC3\xA9, le logiciel ne parle qu'\xC3\xA0 lui. L'effort (Auto, Bas, Moyen, "
+         "Haut) r\xC3\xA8gle combien l'IA r\xC3\xA9" "fl\xC3\xA9" "chit avant de r\xC3\xA9pondre. La connexion passe par Windows (WinHTTP : les proxys et "
+         "les certificats de l'entreprise) ; sous Linux, par libcurl, si elle est install\xC3\xA9" "e (sinon, l'Assistant le dit).",
+         "assistant-ia", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "LE REGISTRE DES GENRES : avec chaque demande, l'Assistant re\xC3\xA7oit les 116 genres d'objets tels que le logiciel "
+         "les d\xC3\xA9" "finit - leur cl\xC3\xA9, leur libell\xC3\xA9, leur famille dans la biblioth\xC3\xA8que ; et, pour les genres d\xC3\xA9j\xC3\xA0 dans la "
+         "vue et ceux que ta demande cite (\xC2\xAB pompe \xC2\xBB, \xC2\xAB cuve \xC2\xBB, \xC2\xAB vanne \xC2\xBB\xE2\x80\xA6), leurs propri\xC3\xA9t\xC3\xA9s r\xC3\xA9" "elles : la valeur que "
+         "pose la cr\xC3\xA9" "ation par d\xC3\xA9" "faut, le r\xC3\xB4le (un nombre, une couleur, une formule\xE2\x80\xA6), les mots d'une liste \xC3\xA0 choix de "
+         "l'inspecteur. Rien n'est \xC3\xA9" "crit \xC3\xA0 la main : tout est tir\xC3\xA9 des tables d'IHM Studio, et la M\xC3\xA9moire de l'IA en "
+         "tire ses genres connus (116/116).",
+         "assistant-ia-registre", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "LE CONTEXTE DE LA DEMANDE : le projet, la vue ouverte (taille, fond, calques), ses objets (nom, genre, "
+         "position, taille, ce qui diff\xC3\xA8re du d\xC3\xA9" "faut), la s\xC3\xA9lection de gauche \xC3\xA0 droite, les variables (noms, types, "
+         "description - jamais leur valeur), celles de l'automate reli\xC3\xA9 et les noms des autres vues ; puis les "
+         "connaissances actives de la m\xC3\xA9moire (celles d'un autre projet, ou d\xC3\xA9sactiv\xC3\xA9" "es, ne partent pas). Chaque case "
+         "de confidentialit\xC3\xA9 d\xC3\xA9" "coch\xC3\xA9" "e retire sa partie, et l'Assistant le sait : il demande au lieu de deviner. Une "
+         "grande vue se r\xC3\xA9sume (la s\xC3\xA9lection et ses voisins d\xC3\xA9taill\xC3\xA9s, les autres nomm\xC3\xA9s) : une demande ordinaire p\xC3\xA8se "
+         "de 25 \xC3\xA0 30 Ko.",
+         "assistant-ia-registre", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "DE NOUVELLES OP\xC3\x89RATIONS : Dupliquer (des objets avec leurs enfants, d\xC3\xA9" "cal\xC3\xA9s, les copies nomm\xC3\xA9" "es) et Code brut "
+         "(un objet riche, un bouton et ses actions, au format de l'onglet Code brut). D\xC3\xA9placer et redimensionner "
+         "passent par le geste de l'\xC3\xA9" "diteur : un groupe garde ses enfants. Toute la proposition s'applique toujours en "
+         "un seul Ctrl+Z.",
+         "assistant-ia-registre", ""),
+        note("1.15.0", "Assistant IA", Kind::New,
+         "TOUT EST V\xC3\x89RIFI\xC3\x89 AVANT L'APER\xC3\x87U : un genre hors de la biblioth\xC3\xA8que (le groupe : il na\xC3\xAEt d'une s\xC3\xA9lection) ou "
+         "inconnu (les genres proches sont cit\xC3\xA9s) ; une propri\xC3\xA9t\xC3\xA9 d'un autre genre ; une valeur qui ne convient pas \xC3\xA0 "
+         "son r\xC3\xB4le (un nombre, TRUE ou FALSE, une couleur, un mot de la liste de l'inspecteur, une dur\xC3\xA9" "e) ; une "
+         "variable qui n'existe pas - associ\xC3\xA9" "e, pos\xC3\xA9" "e dans les propri\xC3\xA9t\xC3\xA9s, lue par une formule ou par le trou d'un "
+         "texte ({Niveau}) ; un objet cit\xC3\xA9 absent ; un nom pris (l'objet neuf est renomm\xC3\xA9, l'aper\xC3\xA7u le dit). Le code "
+         "brut ne porte ni script, ni appel, ni calcul Maths. Une proposition refus\xC3\xA9" "e revient \xC3\xA0 l'IA avec ses raisons "
+         "et les vraies propri\xC3\xA9t\xC3\xA9s des genres en cause : elle se corrige au tour suivant.",
+         "assistant-ia-registre", ""),
         note("1.14.2", "Assistant IA", Kind::New,
          "L'ASSISTANT IA (D\xC3\x89MONSTRATION) : un panneau \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues (Ctrl+Maj+I, Affichage \xE2\x80\xBA Assistant "
          "IA, la Disposition, Ctrl+K) o\xC3\xB9 l'on d\xC3\xA9" "crit en fran\xC3\xA7" "ais ce qu'on veut dans la vue ouverte. Ses r\xC3\xA9ponses "

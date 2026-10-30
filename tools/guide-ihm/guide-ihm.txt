@@ -1768,26 +1768,30 @@ Chaque changement est écrit au journal.
 
 = Concevoir les vues › L'Assistant IA
 
-== assistant-ia | L'Assistant IA (démonstration)
-: Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Dans cette version, c'est une démonstration : aucune IA n'est connectée.
+== assistant-ia | L'Assistant IA
+: Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Il se branche sur une vraie IA (Anthropic, Claude) avec ta clé API ou le relais de ton entreprise ; sans réglage, il reste en démonstration (rien ne quitte le PC).
 @depuis 1.14.2
-@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU
+@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLAUDE, ANTHROPIC, RELAIS, MODÈLE
 @lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres
-@voir editeur, objets, historique, memoire-ia
+@voir editeur, objets, historique, assistant-ia-registre, memoire-ia
 - **Ctrl+Maj+I** le montre ou le replie (« I » comme IA).
 - **Affichage › Assistant IA**, ou la case « Assistant IA (Ctrl+Maj+I) » d'Affichage › Panneaux à afficher.
 - **Projet › Disposition…** : la ligne « Assistant IA » de La fenêtre (caché au départ, toujours, en édition, en simulation).
 - **Ctrl+K** (Aller à / Faire) : « Assistant IA ».
 Il se place à droite de l'éditeur de vues et le pousse, sans le cacher : la vue reste visible pendant qu'on dialogue. Son séparateur se tire comme les autres ; sa largeur et son état sont retenus. Un texte coupé (un titre, la vue visée, un nom de pièce jointe) se lit en entier au survol. Au départ, sa largeur suit la fenêtre (22 %, entre 280 et 460 px) ; tirée, elle reste.
 | Partie | Ce qu'elle montre |
-| En-tête | L'icône, « Assistant IA », l'état de connexion (« Démonstration – aucune IA connectée »), Nouvelle conversation (+), Paramètres, Replier. Dessous, le mode **Prévisualisation** ou **Direct**, et la vue visée (celle de l'onglet ouvert). |
+| En-tête | L'icône, « Assistant IA », l'état de connexion – « Démonstration – aucune IA connectée », « Anthropic – <le modèle> » (« (relais) » avec une adresse d'entreprise), ou « À configurer : choisis un modèle et une clé » ; un clic sur cet état ouvre les paramètres. Puis Nouvelle conversation (+), Paramètres, Replier. Dessous, le mode **Prévisualisation** ou **Direct**, et la vue visée (celle de l'onglet ouvert). |
 | Conversations | Les plus récentes d'abord, avec leur date. Un clic en ouvre une (elle s'ouvre sur sa dernière demande) ; un double-clic ou **F2** la renomme sur place (Entrée garde, Échap annule) ; **Suppr** ou le clic droit › Supprimer… la supprime, après une confirmation. « démo » marque les conversations de démonstration. Un clic sur l'en-tête replie la liste. |
 | Discussion | Tes demandes à droite (sous « Moi »), les réponses à gauche, avec leur heure. Les réponses sont mises en forme : titres, **gras**, listes, `code`. Elle défile seule (la molette, sa barre) : la saisie reste toujours visible en bas. |
 | Pièces jointes | Les fichiers joints au prochain message : leur type, leur taille, leur traitement, la croix pour les retirer. |
 | Saisie | Un champ de message : le texte passe à la ligne, le champ grandit jusqu'à 5 lignes puis défile. **Entrée** envoie, **Maj+Entrée** passe à la ligne (Ctrl+Entrée envoie aussi). Le trombone joint un fichier ; un fichier lâché sur le panneau aussi. Pendant une réponse, Envoyer devient **Arrêter**. |
 1. Ouvre la vue à modifier dans l'éditeur (son onglet devant).
 2. Écris la demande, ou clique une suggestion (une conversation vide les propose).
-3. La réponse arrive par étapes : **En attente…**, **Réflexion…**, puis **Écriture…** mot à mot. **Arrêter** la coupe : ce qui est écrit reste, sans proposition.
+3. La réponse arrive par étapes : **En attente…** (la connexion), **Réflexion…**, **Écriture…** (le texte arrive au fil de l'eau), puis **Préparation des opérations…** quand l'IA écrit sa proposition. **Arrêter** coupe la connexion tout de suite : ce qui est écrit reste, sans proposition.
+Avant le premier envoi d'une conversation à une vraie IA, une ligne sous la saisie dit **ce qui part** : ta demande, la vue ouverte et son nombre d'objets, la sélection, le nombre de variables, les pièces jointes – selon les réglages de confidentialité. La conversation entière (tes demandes, ses réponses, ce que sont devenues ses propositions) repart avec chaque demande : c'est ainsi que l'IA « se souvient ».
+L'IA sait ce que sont devenues ses propositions : appliquée, refusée, en attente, annulée par Ctrl+Z, ou refusée par la validation (avec la raison) – sa réponse suivante en tient compte.
+! Si quelque chose ne va pas (clé refusée, modèle introuvable, pas de réseau, délai dépassé, service surchargé), la réponse le dit en rouge, en clair, et un bouton **Réessayer** renvoie la même demande. Un service surchargé (529) ou trop sollicité (429) est réessayé seul deux fois, avec une attente croissante : l'indicateur le dit (« Nouvelle tentative (1/2) dans 2 s… »).
+Une réponse coupée (trop longue) ou déclinée par l'IA ne propose rien, et le dit. Une proposition illisible (une opération inconnue) n'est jamais appliquée : la réponse le dit, et l'IA le saura à ta demande suivante.
 Une réponse qui modifie la vue porte une carte **Opérations proposées** : ce qu'elle crée, modifie et supprime, une miniature de la vue modifiée (dessinée comme dans l'éditeur), les avertissements et les erreurs, et trois boutons :
 - **Prévisualiser…** ouvre l'aperçu ;
 - **Appliquer** modifie le projet, en une seule étape d'annulation (l'historique la montre sous « Assistant IA : … ») ;
@@ -1798,11 +1802,65 @@ Les objets proposés sont de vrais objets du logiciel (Cuve, Pompe, Vanne, Bargr
 La fenêtre **Prévisualisation des modifications** montre, avant que rien ne change : les comptes (à créer, à modifier, à supprimer), les erreurs et les avertissements, les variables associées, chaque objet et ses propriétés (avant → après), et à droite la vue telle qu'elle serait, dessinée par l'éditeur : les objets nouveaux encadrés en vert, les modifiés en bleu, ceux à supprimer barrés de rouge. **Appliquer** (un seul Ctrl+Z), **Annuler** (la proposition est refusée), **Modifier la demande** (le texte revient dans la saisie). Échap ferme sans décider.
 En mode **Direct**, chaque proposition s'applique dès la fin de la réponse, sans l'aperçu ; Ctrl+Z la reprend d'un coup. Une suppression de plusieurs objets demande toujours une confirmation, quel que soit le mode.
 Une proposition garde l'empreinte de la vue au moment où elle a été faite. Si la vue a changé depuis (un objet déplacé, ajouté…), ou si elle n'existe plus, la proposition ne s'applique pas : la carte dit « Périmée » et propose **Redemander**, qui remet la demande dans la saisie.
-Images (PNG, JPG), PDF, texte (TXT), CSV, Excel (XLSX), XML, JSON et les fichiers du logiciel (.xihm, .xapi, le projet). Un autre format est refusé, et le panneau le dit. Le fichier est copié à l'identique dans le dossier de l'Assistant ; le retirer avant l'envoi supprime la copie. En démonstration, leur contenu n'est pas lu.
-Le bouton Paramètres de l'en-tête : activer l'Assistant, le fournisseur (Démonstration ; les autres sont à venir), le modèle (une case libre : rien n'est imposé), l'adresse et le délai, la **clé API** (masquée, Afficher, Effacer), le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui serait envoyé : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
-! La clé API n'est jamais écrite sur le disque : dans cette version, elle reste en mémoire le temps de la séance. Quand l'IA sera branchée, elle sera protégée par Windows (DPAPI), ou détenue par un serveur relais de l'entreprise.
+Images (PNG, JPG), PDF, texte (TXT), CSV, Excel (XLSX), XML, JSON et les fichiers du logiciel (.xihm, .xapi, le projet). Un autre format est refusé, et le panneau le dit. Le fichier est copié à l'identique dans le dossier de l'Assistant ; le retirer avant l'envoi supprime la copie.
+| Pièce | Ce que l'IA en reçoit |
+| PNG, JPG | L'image (5 Mo au plus) : une capture d'écran, la photo d'un synoptique. |
+| PDF | Le document (20 Mo au plus) : un plan, un cahier des charges. |
+| TXT, CSV, JSON, XML | Le texte, avec son nom (les 200 premiers Ko ; un CSV d'Excel est relu correctement). |
+| XLSX, .xihm, .xapi, projet | Seulement son nom : ces fichiers ne sont pas lus par l'IA dans cette version (le panneau le dit à l'envoi). |
+En démonstration, leur contenu n'est pas lu.
+Le bouton Paramètres de l'en-tête (ou un clic sur l'état de connexion) :
+| Réglage | Ce qu'il fait |
+| Fournisseur | **Démonstration** (sans IA, rien ne quitte le PC) ou **Anthropic (Claude)** ; les autres sont à venir. |
+| Modèle | Une case libre, vide au départ : rien n'est imposé par le logiciel (exemple : claude-opus-5-5). **Lister les modèles** demande au fournisseur ceux que ta clé peut utiliser (gratuit) : un clic en choisit un. |
+| Effort | Auto (celui du modèle), Bas, Moyen, Haut : combien l'IA réfléchit avant de répondre. Haut est plus soigné, Bas plus rapide et moins cher. |
+| Adresse | Vide : celle du fournisseur. Sinon, le **relais de ton entreprise** (https://…) : la demande part à <adresse>/v1/messages. http:// n'est accepté que vers ce PC (127.0.0.1). |
+| Délai | Les secondes sans rien recevoir avant de dire « Délai dépassé » (60 par défaut). |
+| Clé API | Masquée ; Afficher, Effacer. **Mémoriser la clé (protégée par Windows)** la garde d'une séance à l'autre. |
+| Tester la connexion | Demande la liste des modèles avec ces réglages (gratuit, sans consommer de jetons) : « Connexion réussie : 12 modèles », ou l'erreur en clair (clé refusée, adresse introuvable, hors ligne…). |
+Puis le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui part avec chaque demande : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
+! La clé API n'est jamais écrite en clair, ni dans les paramètres, ni dans un journal. Sous Windows, « Mémoriser la clé » la chiffre par Windows (DPAPI), liée à ta session : un autre compte, ou le fichier copié sur un autre PC, ne la relit pas. Sous Linux, elle est gardée le temps de la séance seulement. Avec le relais de l'entreprise, la clé peut rester sur son serveur : laisse alors la case vide.
+> Pour une entreprise, le relais est la meilleure façon de protéger la clé : un serveur interne la détient, IHM Studio ne parle qu'à lui (Adresse), et rien ne change pour l'utilisateur.
 Dans le dossier **IA** des réglages de l'utilisateur (à côté de Mes images), jamais dans le projet : un fichier par conversation (ses messages, ses pièces jointes, l'état de ses propositions), la copie des pièces jointes, les paramètres. Fermer et rouvrir l'application retrouve tout.
-Elle reconnaît six demandes : le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un indicateur de niveau, « Mets celle de droite en rouge » (sur la sélection), « Aligne les quatre boutons », « Associe cette pompe à la variable … » et « Supprime les vannes ». À toute autre demande, elle répond honnêtement qu'elle ne la comprend pas encore, et propose les suggestions. Rien ne quitte le PC.
+En **démonstration** (le fournisseur par défaut), elle reconnaît six demandes : le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un indicateur de niveau, « Mets celle de droite en rouge » (sur la sélection), « Aligne les quatre boutons », « Associe cette pompe à la variable … » et « Supprime les vannes ». À toute autre demande, elle répond honnêtement qu'elle ne la comprend pas encore, et propose les suggestions. Rien ne quitte le PC.
+Branchée sur une vraie IA, elle comprend le langage courant (les fautes, les abréviations, « celle de droite »), mais ses propositions passent toujours par la même validation, le même aperçu et le même Ctrl+Z : elle ne peut rien modifier sans eux.
+
+== assistant-ia-registre | Ce que l'Assistant IA sait et ce qu'il peut proposer
+: Avec chaque demande, l'Assistant reçoit les objets que le logiciel connaît vraiment (les 116 genres, tirés de ses tables), la vue ouverte et ses variables selon tes réglages de confidentialité, et les connaissances actives de sa mémoire. Il ne fait que proposer : le logiciel vérifie chaque opération avant de te la montrer.
+@depuis 1.15.0
+@mots REGISTRE, GENRES D'OBJETS, CONTEXTE, CONFIDENTIALITÉ, DUPLIQUER, CODE BRUT, PROPOSER_OPERATIONS, OPÉRATIONS PROPOSÉES
+@lieux ai.panneau, dialog.ai.parametres, dialog.ai.apercu
+@voir assistant-ia, memoire-ia, objets, historique
+### Ce qui part avec chaque demande
+- **Les consignes** : en français, au tutoiement ; les règles (n'inventer ni genre, ni propriété, ni variable ; demander quand la demande est ambiguë ; placer les objets dans la vue, alignés et espacés).
+- **Le registre des genres** : les 116 genres d'objets (clé, libellé, famille de la bibliothèque), tirés des tables d'IHM Studio, et les propriétés communes à tous. Le détail des propriétés (valeur par défaut, rôle, mots d'une liste à choix) part pour les genres déjà dans la vue et pour ceux que ta demande cite : « pompe », « cuve », « vanne », « variateur »…
+- **Les connaissances actives** du centre de mémoire : celles du logiciel que tu n'as pas désactivées, et celles que tu as ajoutées pour tous les projets ou pour ce projet. Une connaissance désactivée, ou d'un autre projet, ne part pas.
+- **Le contexte** : le projet, la vue ouverte (sa taille, son fond, ses calques), ses objets (nom, genre, position, taille et ce qui diffère du défaut), la sélection (de gauche à droite), les variables de l'IHM (noms, types, description), celles de l'automate relié, les noms des autres vues.
+! La valeur d'une variable ne part jamais (ni en marche, ni sa valeur initiale) : seulement son nom, son type et sa description.
+| Confidentialité (Paramètres de l'Assistant) | Décochée |
+| La vue active | Ses objets ne partent pas (son nom et sa taille, si : il faut bien placer les objets). L'Assistant le sait : pour modifier un objet existant, il te demande son nom. |
+| La sélection | Elle ne part pas : « cette pompe », « celle de droite » lui font demander de quel objet il s'agit. |
+| Les variables | Aucun nom de variable ne part : pour associer une variable, il te demande son nom exact. |
+Une grande vue se résume : la sélection et les objets les plus proches d'elle sont détaillés, les autres seulement nommés, rangés par genre ; l'Assistant le sait. Une demande ordinaire pèse de 25 à 30 Ko ; une vue de 300 objets, une quarantaine.
+### Ce qu'il peut proposer
+| Opération | Ce qu'elle fait |
+| Créer | Un objet d'un genre de la bibliothèque, son nom, ses propriétés (dont sa position et sa taille). |
+| Modifier | Les propriétés d'un objet. **Déplacer** et **redimensionner**, c'est modifier X, Y, Largeur et Hauteur : un groupe garde ses enfants à leur place. |
+| Associer | Un objet et une variable qui existe. |
+| Aligner, Répartir | Comme les boutons de l'éditeur (répartir : trois objets ou plus, des écarts égaux). |
+| Dupliquer | Des objets avec leurs enfants, décalés, les copies nommées comme il le dit. |
+| Supprimer | Des objets ; plusieurs : une confirmation. |
+| Code brut | Un objet riche (un bouton et ses actions), au format de l'onglet Code brut de l'inspecteur. |
+Toute la proposition s'applique en une seule étape d'annulation : un Ctrl+Z la reprend entière.
+### Ce que le logiciel vérifie
+- **Le genre** : il existe, et la bibliothèque le propose (un groupe naît d'une sélection) ; un genre inconnu est refusé, avec les genres proches.
+- **Les propriétés** : seulement celles du genre ; chaque valeur selon son rôle - un nombre, TRUE ou FALSE, une couleur #RRGGBB, un mot de la liste de l'inspecteur, une durée.
+- **Les variables** : une variable associée existe (sinon l'aperçu te propose les plus proches, ou « Créer… ») ; une formule (un défaut, un retour d'état) et un texte à trous ({Niveau}) ne lisent que des variables qui existent.
+- **Les objets cités** existent dans la vue, ou sont créés plus haut dans la même proposition. Un nom neuf déjà pris : l'objet est renommé et l'aperçu le dit.
+- **La place** : un objet qui déborde de la vue est signalé.
+- **Le code brut** : ni script, ni appel de fonction, ni calcul Maths, ni fonction redéfinie ; une propriété absente garde sa valeur par défaut.
+! Rien de ce que l'IA écrit n'est exécuté : elle ne peut qu'appeler l'outil des opérations, et une opération inconnue est refusée.
+> Une proposition refusée revient à l'IA avec les raisons (et les vraies propriétés des genres en cause) : elle corrige d'elle-même au tour suivant.
 
 == memoire-ia | Mémoire et apprentissage de l'IA
 : Ce que l'Assistant IA connaît, ce qu'il garde d'une séance à l'autre et la place que tout cela prend sur ce PC : six onglets, tous calculés sur les vrais fichiers du dossier IA/. Apprendre ici, c'est enrichir la mémoire locale que l'Assistant joint à ses demandes : le modèle distant n'est pas réentraîné.
@@ -1813,11 +1871,11 @@ Elle reconnaît six demandes : le synoptique de station de pompage (trois cuves,
 Dans les paramètres de l'Assistant IA, le bouton **Mémoire et apprentissage…** ; ou Ctrl+K, puis « mémoire ». C'est une fenêtre du logiciel : elle se déplace par son titre, s'agrandit par un bord ou un coin, Échap la ferme ; **Actualiser** (F5) refait toutes les mesures. Un texte trop long pour sa place se lit en entier au survol. Ouverte depuis les paramètres de l'Assistant, elle se pose par-dessus sans assombrir le fond une seconde fois.
 Chaque chiffre est mesuré à l'ouverture et après chaque opération : la taille des fichiers du dossier IA/ (dans tes réglages, à côté de Mes images), l'espace libre du disque qui le porte, la mémoire vive d'IHM Studio. À la première ouverture le dossier est presque vide : l'écran le dit, avec de petites tailles, vraies.
 ! L'apprentissage ne réentraîne pas le modèle distant. Une connaissance active est un texte que l'Assistant joint à chaque demande ; sa « taille estimée » est la taille de ce texte.
-L'état de la mémoire ; les conversations, les messages, les connaissances (combien sont actives ici et combien d'octets partent avec chaque demande), les genres d'objets connus (116/116 : tirés des tables du logiciel), le stockage total et l'espace libre. Deux blocs séparés : **Mémoire vive (RAM) de l'application** (celle d'IHM Studio maintenant, son pic, la RAM disponible du PC, les traitements IA locaux : aucun ; mesurée par Windows, chaque seconde - le détail technique est dans l'infobulle) et **Stockage permanent (disque)** (le disque, la répartition des données de l'IA, la date du dernier nettoyage).
+L'état de la mémoire ; les conversations, les messages, les connaissances (combien sont actives ici et combien d'octets partent avec chaque demande), les genres d'objets connus (116/116 : le registre des genres de l'Assistant, le même texte que celui qu'il envoie), le stockage total et l'espace libre. Deux blocs séparés : **Mémoire vive (RAM) de l'application** (celle d'IHM Studio maintenant, son pic, la RAM disponible du PC, les traitements IA locaux : aucun ; mesurée par Windows, chaque seconde - le détail technique est dans l'infobulle) et **Stockage permanent (disque)** (le disque, la répartition des données de l'IA, la date du dernier nettoyage).
 > Le modèle d'IA distant tourne chez son fournisseur : il n'occupe ni la RAM ni le disque de ce PC.
 La liste des connaissances : nom, catégorie, source, projet, dates d'ajout et de mise à jour, taille estimée, état. Filtrée par catégorie et par projet. **Consulter** montre tout le texte ; **Modifier**, **Activer / Désactiver**, **Supprimer** (en rouge, confirmé) ; **Ajouter une connaissance…** ouvre l'éditeur (nom, catégorie, projet, description, contenu, active).
 | Sorte | Ce qu'on peut en faire |
-| Du logiciel (6) | Genres d'objets, propriétés de chaque genre, actions, vocabulaire et synonymes, objet posé pour une variable, modèles de vues - tirées des tables d'IHM Studio : consulter, activer, désactiver. Elles ne se suppriment pas. |
+| Du logiciel (6) | Genres d'objets, propriétés de chaque genre, actions, vocabulaire et synonymes, objet posé pour une variable, modèles de vues - tirées des tables d'IHM Studio : consulter, activer, désactiver. Elles ne se suppriment pas. La liste des genres part avec chaque demande ; des propriétés, seulement le détail des genres utiles (ceux de la vue et de la demande). |
 | Ajoutées | Une par fichier dans IA/connaissances : tout (consulter, modifier, activer, désactiver, supprimer). |
 Une connaissance porte un projet (vide : tous les projets). Celle d'un autre projet est marquée « Autre projet » : elle ne part pas avec les demandes faites ici. À droite, l'activité récente de l'apprentissage.
 Les informations gardées, par catégorie : conversations, historique des messages, informations par projet, préférences, connaissances métier, références aux pièces jointes. La recherche trouve un titre, un message, une connaissance ou une pièce jointe (les mots dans n'importe quel ordre, sans les accents). Supprimer une conversation, une mémoire, une pièce jointe, oublier un projet ou vider une catégorie entière : toujours une confirmation d'abord.
