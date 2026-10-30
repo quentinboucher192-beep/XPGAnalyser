@@ -9,6 +9,7 @@
 #include "HmiNavigation.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiSystemMenu.hpp"   // 1.14.0 : le Melangeur de volume (ses pistes, ses M)
+#include "HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice (ses touches, ses bits)
 
 #include <algorithm>
 #include <cctype>
@@ -564,6 +565,7 @@ bool clickableKind(Kind k) {
         case Kind::DocumentViewer:  // 1.12.30 : les boutons de sa barre
         case Kind::Recorder: case Kind::RecordingPlayer:   // 1.14.0 (M4) : son bouton, ses lignes
         case Kind::SoundMute: case Kind::VolumeMixer:   // 1.14.0 : couper le son, le melangeur (ses M, ses pistes)
+        case Kind::Calculator:                          // 1.14.1 (N4) : ses touches
             return true;
         default:
             return false;
@@ -619,6 +621,19 @@ void checkTouch(Ctx& c, const View& v, const Object& o) {
                 return;
             }
             break;
+        case Kind::Calculator: {
+            // 1.14.1 (N4) : les touches du pave, la rangee du haut, les bits du programmeur (la calculatrice neuve,
+            // dans son mode : la taille du mot de l'objet).
+            const auto st = calculator::initialState(calculator::settingsOf(o));
+            const auto l = calculator::layoutOf(o, st, w, h);
+            std::vector<Box> keys, strip;
+            for (const auto& k : l.keys) keys.push_back(k.box);
+            for (const auto& k : l.stripKeys) strip.push_back(k.box);
+            parts(keys, "les touches");
+            parts(strip, "les touches du haut (m\xC3\xA9moire, Envoyer)");
+            if (!l.bits.empty()) parts(l.bits, "les bits");
+            return;
+        }
         case Kind::VolumeMixer: {
             // 1.14.0 : les boutons M et la largeur de chaque piste (la course se prend au doigt sur toute la piste).
             const auto l = mixerLayout(o, w, h);

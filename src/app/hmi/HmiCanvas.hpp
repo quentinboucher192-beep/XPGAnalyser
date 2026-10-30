@@ -67,6 +67,10 @@ public:
     // ---- outils -------------------------------------------------------------
     void setPlaceKind(std::optional<hmi::Kind> kind);
     [[nodiscard]] std::optional<hmi::Kind> placeKind() const noexcept { return placeKind_; }
+    // 1.14.1 (N4) : poser une variante de la bibliotheque (hmi::kindVariants : la Calculatrice scientifique...),
+    // reglee des sa pose (hmi::applyKindVariant).
+    void setPlaceVariant(hmi::Kind kind, std::string variant);
+    [[nodiscard]] const std::string& placeVariant() const noexcept { return placeVariant_; }
     // Lot 10 : poser une instance d'un symbole du projet (le clic suivant).
     void setPlaceSymbol(std::string symbol);
     [[nodiscard]] const std::string& placeSymbol() const noexcept { return placeSymbol_; }
@@ -293,6 +297,7 @@ private:
     bool                   copiesHere_{false}; // etaient-elles dans la vue au dernier changement ?
     std::optional<hmi::Kind> placeKind_;
     std::string            placeSymbol_;       // lot 10 : placeKind_ = SymbolInstance
+    std::string            placeVariant_;      // 1.14.1 (N4) : la variante du genre a poser ("scientifique")
     std::optional<hmi::design::VarInfo> placeVariable_;   // lot 12 : placeKind_ = l'objet de la variable
     std::optional<PlaceImage> placeImage_;                // 1.14.1 (lot N6) : placeKind_ = Image
     hmi::Id placeImageAt(const PlaceImage& image, double x, double y);

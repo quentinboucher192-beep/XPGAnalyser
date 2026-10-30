@@ -7247,6 +7247,164 @@ void visionneuse11230() {
 }
 
 // ------------------------------------------------ lot 10 : SVG net et recolorable (ecran) --
+// ---- 1.14.1 (lot N4) : la Calculatrice a l'ecran - la bibliotheque (ses trois variantes), l'inspecteur, le dessin,
+//      la simulation a la souris (les touches, Envoyer, la grille des bits) et au clavier.
+void calculatrice1141Ecran() {
+    std::printf("1.14.1 (N4) : la Calculatrice a l'ecran\n");
+    namespace calc = hmi::calculator;
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+    // ---- la bibliotheque : trois tuiles dans Commandes, chacune son icone ; la recherche ; poser une variante
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        const auto shown = [&](const char* text, const char* variant) {
+            pal.setFilter(text);
+            gfx::Rect r;
+            if (!pal.variantTileRect(Kind::Calculator, variant, r)) pal.revealKind(Kind::Calculator);
+            return pal.variantTileRect(Kind::Calculator, variant, r);
+        };
+        check(shown("commandes", "standard") && shown("commandes", "scientifique") && shown("commandes", "programmeur")
+                  && app::glyphFor(Kind::Calculator) == app::HmiGlyph::Calculator
+                  && app::glyphFor(Kind::Calculator, "scientifique") == app::HmiGlyph::CalculatorScientific
+                  && app::glyphFor(Kind::Calculator, "programmeur") == app::HmiGlyph::CalculatorProgrammer,
+              "trois tuiles Calculatrice dans Commandes (standard, scientifique, programmeur), chacune son ic\xC3\xB4ne");
+        check(shown("scientifique", "scientifique") && !shown("scientifique", "standard") && !shown("scientifique", "programmeur")
+                  && shown("programmeur", "programmeur") && shown("calculatrice", "programmeur") && shown("binaire", "programmeur")
+                  && shown("calculette", "standard"),
+              "la recherche : \xC2\xAB scientifique \xC2\xBB ne montre que la sienne ; calculatrice, binaire, calculette : les trois");
+        pal.setFilter("");
+        gfx::Rect r;
+        if (!pal.variantTileRect(Kind::Calculator, "scientifique", r)) pal.revealKind(Kind::Calculator);
+        check(pal.variantTileRect(Kind::Calculator, "scientifique", r), "la tuile Scientifique est visible");
+        pal.dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+        check(b.editor->canvas().placeKind() == Kind::Calculator && b.editor->canvas().placeVariant() == "scientifique",
+              "un clic sur la tuile arme la pose de la calculatrice scientifique");
+        b.down(b.screen(100, 100));
+        b.up(b.screen(100, 100));
+        const Id id = b.editor->canvas().selection().empty() ? kNoId : b.editor->canvas().selection().front();
+        const Object* o = id ? b.v().object(id) : nullptr;
+        check(o && o->kind == Kind::Calculator && o->text("calcMode") == "scientifique" && o->number("w") == 460
+                  && b.editor->canvas().placeVariant().empty(),
+              "pos\xC3\xA9" "e : une calculatrice scientifique, \xC3\xA0 sa taille (460 de large) ; l'outil rel\xC3\xA2" "ch\xC3\xA9");
+        b.editor->layout();
+        std::set<std::string> names;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) names.insert(pr.name);
+        check(names.count("Mode") && names.count("Angles") && names.count("Taille du mot") && names.count("Sign\xC3\xA9")
+                  && names.count("Base de d\xC3\xA9part") && names.count("D\xC3\xA9" "cimales max") && names.count("Valeur de d\xC3\xA9part")
+                  && names.count("R\xC3\xA9sultat vers") && names.count("Touches des chiffres") && names.count("Touches des fonctions")
+                  && names.count("Touche =") && names.count("Fond de l'afficheur") && names.count("Pilotable (touches, clavier)"),
+              "l'inspecteur : Mode, Angles, Taille du mot, Sign\xC3\xA9, Base de d\xC3\xA9part, D\xC3\xA9" "cimales max, Valeur de d\xC3\xA9part, "
+              "R\xC3\xA9sultat vers, ses couleurs, Pilotable");
+    }
+    // ---- le dessin dans l'editeur : la calculatrice neuve de chaque mode
+    {
+        Project p;
+        View v = makeView(p, "Vue_Calc");
+        const app::HmiViewport vp{};
+        const auto theme = ui::Theme::dark();
+        Object c = makeObject(Kind::Calculator, 900, "Calc", 10, 10, v.layers.front().id);
+        ColorRecorder r1;
+        app::paintHmiObject(r1, v, c, vp, app::HmiPropertySource{}, theme, {});
+        check(r1.count("0") >= 2 && r1.wrote("MC") && r1.wrote("CE") && r1.wrote("\xC3\xB7") && r1.wrote("=") && r1.wrote("\xE2\x88\x9Ax")
+                  && r1.wrote("\xE2\x8C\xAB") && !r1.wrote("sin") && !r1.wrote("Envoyer") && !r1.tris.empty(),
+              "standard dans l'\xC3\xA9" "diteur : 0 affich\xC3\xA9, MC, CE, \xC3\xB7, =, racine, retour arri\xC3\xA8re ; ni sin ni Envoyer");
+        c.set("resultTo", "Consigne");
+        c.set("startValue", "Debit");
+        ColorRecorder r2;
+        app::paintHmiObject(r2, v, c, vp, app::HmiPropertySource{}, theme, {});
+        check(r2.wrote("Envoyer") && r2.wrote("\xE2\x87\xA9"), "R\xC3\xA9sultat vers et Valeur de d\xC3\xA9part : Envoyer et la fl\xC3\xA8" "che");
+        Object s = makeObject(Kind::Calculator, 901, "Sci", 10, 10, v.layers.front().id);
+        (void)applyKindVariant(s, "scientifique");
+        ColorRecorder r3;
+        app::paintHmiObject(r3, v, s, vp, app::HmiPropertySource{}, theme, {});
+        check(r3.wrote("sin") && r3.wrote("DEG") && r3.wrote("2nde") && r3.wrote("Exp") && r3.wrote("log") && r3.wrote("n!")
+                  && r3.wrote("\xCF\x80") && r3.wrote("mod"),
+              "scientifique : sin, DEG, 2nde, Exp, log, n!, pi, mod");
+        Object g = makeObject(Kind::Calculator, 902, "Prog", 10, 10, v.layers.front().id);
+        (void)applyKindVariant(g, "programmeur");
+        ColorRecorder r4;
+        app::paintHmiObject(r4, v, g, vp, app::HmiPropertySource{}, theme, {});
+        check(r4.wrote("HEX") && r4.wrote("DEC") && r4.wrote("OCT") && r4.wrote("BIN") && r4.wrote("NAND") && r4.wrote("SWAP")
+                  && r4.wrote("WORD") && r4.wrote("Sign\xC3\xA9") && r4.wrote("ROL") && r4.wrote("<<") && r4.wrote("12") && r4.count("0") >= 16,
+              "programmeur : les quatre bases, NAND, SWAP, ROL, <<, WORD Sign\xC3\xA9, la grille des 16 bits (12 sous son groupe)");
+    }
+    // ---- en marche : la souris (les touches, Envoyer, les bits, une base), le clavier
+    {
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Vue_Calc");
+        v.width = 1000;
+        v.height = 720;
+        const Id c1 = edit::add(p, v, Kind::Calculator, 20, 20);
+        v.object(c1)->name = "Calc";
+        v.object(c1)->set("resultTo", "Consigne");
+        const Id c2 = edit::add(p, v, Kind::Calculator, 380, 20);
+        v.object(c2)->name = "Prog";
+        (void)applyKindVariant(*v.object(c2), "programmeur");
+        p.programs.variables.push_back(Variable{p.allocate(), "Consigne", "REAL", "0", {}});
+        p.views = {v};
+        p.config.startView = v.id;
+        app::HmiSimulationPane pane("calc1141", doc, app::HmiSimulationHost{});
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        const auto theme = ui::Theme::dark();
+        ColorRecorder rec;
+        const auto paintAt = [&](double t) {
+            rec.tris.clear();
+            rec.texts.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        const auto clickPart = [&](const char* object, const std::string& part) {
+            gfx::Rect r;
+            if (!pane.canvas().partRect(object, part, r)) return false;
+            pane.canvas().dispatch(ui::MouseDown{centre(r), ui::MouseButton::Left, 1, {}});
+            pane.canvas().dispatch(ui::MouseUp{centre(r), ui::MouseButton::Left, {}});
+            return true;
+        };
+        paintAt(0.1);
+        bool clicked = true;
+        for (const char* k : {"touche:1", "touche:2", "touche:+", "touche:3", "touche:*", "touche:4", "touche:="}) clicked = clicked && clickPart("Calc", k);
+        const calc::State* st = pane.runtime().calculatorState(c1);
+        check(clicked && st && calc::displayText(*st) == "24", "\xC3\xA0 la souris : 12 + 3 x 4 = 24 (chaque touche sous son dessin)");
+        paintAt(0.2);
+        check(rec.wrote("24") && rec.wrote("12 + 3 \xC3\x97 4 ="), "dessin\xC3\xA9s : le r\xC3\xA9sultat en grand, le calcul en petit");
+        check(pane.canvas().focused() && pane.runtime().focusedObject() == c1, "le clic a donn\xC3\xA9 le clavier \xC3\xA0 la calculatrice");
+        pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+        pane.canvas().dispatch(ui::TextInput{"7*6"});
+        pane.canvas().dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(calc::displayText(*st) == "42" && pane.runtime().popups().empty(), "au clavier : \xC3\x89" "chap (C), 7*6, Entr\xC3\xA9" "e = 42");
+        pane.canvas().dispatch(ui::TextInput{"5"});
+        pane.canvas().dispatch(ui::KeyDown{ui::Key::Backspace, {}, false});
+        pane.canvas().dispatch(ui::TextInput{"9.5"});
+        check(calc::displayText(*st) == "9,5", "Retour arri\xC3\xA8re, puis 9.5 : 9,5");
+        check(clickPart("Calc", "touche:send"), "le bouton Envoyer est sous son dessin");
+        sim::Value cons;
+        check(pane.runtime().environment().read("Consigne", cons) && std::fabs(cons.asReal() - 9.5) < 1e-9, "Envoyer : Consigne = 9,5");
+        paintAt(0.3);
+        check(rec.wrote("envoy\xC3\xA9 : Consigne = 9.5"), "l'afficheur dit ce qui est envoy\xC3\xA9");
+        // La programmeur : deux bits a la souris, puis un chiffre au clavier, une base.
+        check(clickPart("Prog", "bit:0") && clickPart("Prog", "bit:3"), "les bits 0 et 3 sous leur dessin");
+        const calc::State* sp = pane.runtime().calculatorState(c2);
+        check(sp && calc::wordValue(*sp) == 9 && pane.runtime().focusedObject() == c2, "la grille des bits : 0 et 3 \xC3\xA0 1, la valeur 9 ; elle a le clavier");
+        paintAt(0.4);
+        check(rec.count("1001") == 1 && rec.count("11") >= 1, "la ligne BIN : 1001 (group\xC3\xA9" "e par 4), la ligne OCT : 11");
+        pane.canvas().dispatch(ui::TextInput{"f"});
+        check(calc::wordValue(*sp) == 0x9F, "au clavier, en HEX : f (9F)");
+        check(clickPart("Prog", "base:BIN") && sp->settings.base == calc::Base::Bin, "un clic sur la ligne BIN : la base active");
+        check(clickPart("Prog", "touche:A") && calc::wordValue(*sp) == 0x9F, "A gris\xC3\xA9" "e en BIN : sans effet");
+        check(clickPart("Prog", "touche:word") && sp->settings.bits == 32, "la touche du mot : DWORD");
+        paintAt(0.5);
+        gfx::Rect b31;
+        check(pane.canvas().partRect("Prog", "bit:31", b31), "DWORD : 32 bits (le bit 31 se dessine)");
+        // Un clic ailleurs : le clavier quitte la calculatrice.
+        gfx::Rect rc;
+        check(pane.canvas().objectRect("Calc", rc), "la calculatrice standard");
+        check(clickPart("Calc", "afficheur") && pane.runtime().focusedObject() == c1, "un clic sur l'autre afficheur : elle prend le clavier");
+    }
+}
+
 void lot10_svg() {
     std::printf("lot 10 : le SVG \xC3\xA0 l'\xC3\xA9" "cran - redessin\xC3\xA9 \xC3\xA0 sa taille, recolori\xC3\xA9 par une expression\n");
     struct SizeRecorder final : gfx::IRenderer {
@@ -18995,7 +19153,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 467,   // 1.14.1 : + 4 (N1 : les vannes et les registres a fins de course ; N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 468,   // 1.14.1 : + 5 (N1 : les vannes et les registres a fins de course ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19142,7 +19300,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 235, "centre : L'IHM a les 235 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume)");
+    check(ix.count(hc::Chapter::Hmi) == 236, "centre : L'IHM a les 236 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 68, "centre : 11 expressions, 68 notes (1.14.1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -42221,6 +42379,12 @@ int main(int argc, char** argv) {
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
+    // 1.14.1 (lot N4) : HMI_TEST_N4=1 - la Calculatrice a l'ecran, seule.
+    if (const char* only = std::getenv("HMI_TEST_N4"); only && *only == '1') {
+        calculatrice1141Ecran();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.0 (lot M4) : HMI_TEST_M4=1 - enregistrer et rejouer l'IHM a l'ecran, seul.
     if (const char* only = std::getenv("HMI_TEST_M4"); only && *only == '1') {
         enregistrements1140();
@@ -42635,6 +42799,7 @@ int main(int argc, char** argv) {
     lot10_synoptique();
     visionneuse11230();   // 1.12.30
     son1140Ecran();       // 1.14.0 (lot M3) : couper le son, le melangeur de volume
+    calculatrice1141Ecran();   // 1.14.1 (lot N4) : la Calculatrice
     lot10_svg();
     lot10_symboles();
     lot11_bibliotheque();

@@ -77,9 +77,13 @@ enum class HmiGlyph : std::uint8_t {
     Recorder, RecordingPlayer,
     // 1.14.0 : le Coupe-son (le haut-parleur barre), le Melangeur de volume (trois curseurs)
     SoundMute, VolumeMixer,
+    // 1.14.1 (N4) : la Calculatrice et ses deux variantes de la bibliotheque (scientifique, programmeur)
+    Calculator, CalculatorScientific, CalculatorProgrammer,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;
+// 1.14.1 (N4) : l'icone d'une variante de la bibliotheque (hmi::kindVariants) ; vide : celle du genre.
+[[nodiscard]] HmiGlyph glyphFor(hmi::Kind, std::string_view variant) noexcept;
 void drawHmiGlyph(gfx::IRenderer&, HmiGlyph, const gfx::Rect& box, gfx::Color);
 
 } // namespace app

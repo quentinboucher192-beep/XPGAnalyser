@@ -7326,6 +7326,203 @@ const std::vector<Topic>& topics() {
          "Le volume des alarmes descend \xC3\xA0 60 %, le canal Vid\xC3\xA9os se coupe (M rouge), le "
          "G\xC3\xA9n\xC3\xA9ral baisse de 10 %, se coupe et revient ; tout reprend \xC3\xA0 la fin.",
          {}, "1.14.0"},
+        // ---- La bibliotheque d'objets  Commandes / objet-calculatrice
+        {"objet-calculatrice", "Calculatrice", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes",
+         "Une calculatrice pos\xC3\xA9" "e dans la vue, en trois variantes : standard, scientifique, "
+         "programmeur (HEX, DEC, OCT, BIN et la grille des bits). Un calcul rapide, un mot converti, un "
+         "registre v\xC3\xA9rifi\xC3\xA9 bit par bit, sans quitter l'IHM.",
+         {
+             {K::Heading, "\xC3\x80 quoi elle sert", {}},
+             {K::Paragraph, "Pour l'automaticien sur un poste d'exploitation, en simulation ou \xC3\xA0 la mise "
+                         "en service : faire un calcul rapide, convertir un mot en binaire ou en "
+                         "hexad\xC3\xA9" "cimal, v\xC3\xA9rifier un registre Modbus bit par bit, sans "
+                         "quitter l'IHM. Elle est dans la famille **Commandes**, apr\xC3\xA8s le "
+                         "M\xC3\xA9langeur de volume : la biblioth\xC3\xA8que propose ses **trois "
+                         "variantes**, chacune sa tuile, d\xC3\xA9j\xC3\xA0 r\xC3\xA9gl\xC3\xA9" "es "
+                         "(Calculatrice, Scientifique, Programmeur) ; la propri\xC3\xA9t\xC3\xA9 **Mode** "
+                         "les change ensuite.", {}},
+             {K::Heading, "L'afficheur", {}},
+             {K::Bullet, "en haut, en petit : l'expression en cours (`12 + 3 \xC3\x97`), ou le calcul fait "
+                         "(`12 + 3 \xC3\x97 4 =`) ; trop longue, sa fin se lit ;", {}},
+             {K::Bullet, "en grand, cal\xC3\xA9 \xC3\xA0 droite : le nombre tap\xC3\xA9, ou le "
+                         "r\xC3\xA9sultat ; la virgule \xC3\xA0 la fran\xC3\xA7" "aise, les milliers "
+                         "s\xC3\xA9par\xC3\xA9s (`1 234 567,89`) ; au-del\xC3\xA0 de 10^16, la notation "
+                         "`1,2E+20` ;", {}},
+             {K::Bullet, "**Erreur** apr\xC3\xA8s une division par z\xC3\xA9ro, une racine d'un nombre "
+                         "n\xC3\xA9gatif, un logarithme de 0, tan(90\xC2\xB0)... : la petite ligne dit "
+                         "pourquoi ; un chiffre, C ou CE repartent ;", {}},
+             {K::Bullet, "**M** en haut \xC3\xA0 gauche : la m\xC3\xA9moire n'est pas vide.", {}},
+             {K::Paragraph, "L'**ordre des op\xC3\xA9rations** est respect\xC3\xA9 dans les trois variantes : 2 "
+                         "+ 3 \xC3\x97 4 = 14 (pas l'encha\xC3\xAEnement d'une calculette de poche). Une "
+                         "fonction (\xE2\x88\x9A, sin, x\xC2\xB2...) agit tout de suite sur le nombre en "
+                         "cours et s'\xC3\xA9" "crit dans l'expression : `2 + \xE2\x88\x9A(9)`. = encore "
+                         "refait la derni\xC3\xA8re op\xC3\xA9ration (2 + 3 = = : 8).", {}},
+             {K::Heading, "Standard", {}},
+             {K::Table, "Touches\tCe qu'elles font\n0 \xC3\xA0 9, virgule\tle nombre en cours (16 chiffres "
+                         "au plus)\n+ \xE2\x88\x92 \xC3\x97 \xC3\xB7\tles op\xC3\xA9rations ; un autre "
+                         "op\xC3\xA9rateur remplace le pr\xC3\xA9" "c\xC3\xA9" "dent\n=\tle r\xC3\xA9sultat "
+                         "; 5 + = : 5 + 5\n%\ta + b % : b % de a (200 + 10 % : 200 + 20) ; a \xC3\x97 b % : "
+                         "b / 100\n\xC2\xB1\tchange le signe\n1/x, x\xC2\xB2, \xE2\x88\x9Ax\tl'inverse, le "
+                         "carr\xC3\xA9, la racine du nombre en cours\nC, CE, \xE2\x8C\xAB\ttout effacer ; "
+                         "effacer le nombre en cours ; le dernier chiffre\nMC, MR, M+, M\xE2\x88\x92\tla "
+                         "m\xC3\xA9moire : l'effacer, la rappeler, y ajouter ou retrancher le nombre "
+                         "montr\xC3\xA9", {}},
+             {K::Heading, "Scientifique", {}},
+             {K::Paragraph, "En plus de la standard :", {}},
+             {K::Bullet, "les **parenth\xC3\xA8ses** : `2 \xC3\x97 (3 + 1)` ; une parenth\xC3\xA8se "
+                         "ferm\xC3\xA9" "e se calcule tout de suite ; celles qui restent ouvertes se ferment "
+                         "\xC3\xA0 = ; `2(3 + 1)` vaut 2 \xC3\x97 (3 + 1) ;", {}},
+             {K::Bullet, "**sin, cos, tan** et, avec **2nde**, leurs inverses (sin\xE2\x88\x92" "1, "
+                         "cos\xE2\x88\x92" "1, tan\xE2\x88\x92" "1 : asin, acos, atan), en degr\xC3\xA9s ou "
+                         "en radians : la touche **DEG / RAD** de la rang\xC3\xA9" "e du haut bascule ;", {}},
+             {K::Bullet, "**log**, **ln**, **10^x**, **e^x**, **x^y** (2 ^ 3 ^ 2 = 2 ^ 9 : de droite "
+                         "\xC3\xA0 gauche), la **racine y-i\xC3\xA8me** (27 yroot 3 = 3), **n!** (un entier "
+                         "de 0 \xC3\xA0 170), **\xCF\x80**, **e**, **mod** (le reste : 7 mod 3 = 1), **|x|** "
+                         ";", {}},
+             {K::Bullet, "**Exp** : un exposant, `1,2E+5` (\xC2\xB1 change alors le signe de l'exposant).", {}},
+             {K::Heading, "Programmeur", {}},
+             {K::Bullet, "la valeur est un **entier**, montr\xC3\xA9" "e \xC3\xA0 la fois en **HEX**, "
+                         "**DEC**, **OCT** et **BIN**, une ligne chacune ; la base active est en "
+                         "\xC3\xA9vidence : les chiffres tap\xC3\xA9s y sont lus ; un clic sur une ligne la "
+                         "rend active (la valeur reste) ;", {}},
+             {K::Bullet, "la **taille du mot** : BYTE, WORD, DWORD, LWORD (8, 16, 32, 64 bits) - la touche "
+                         "du haut passe \xC3\xA0 la suivante ; **Sign\xC3\xA9** / **Non sign\xC3\xA9** : "
+                         "FFFF vaut \xE2\x88\x92" "1 en WORD sign\xC3\xA9 (INT), 65 535 non sign\xC3\xA9 "
+                         "(UINT) ;", {}},
+             {K::Bullet, "les touches **A \xC3\xA0 F** ne servent qu'en HEX, 8 et 9 sont gris\xC3\xA9" "es "
+                         "en OCT, 2 \xC3\xA0 9 en BIN ; un chiffre qui ferait d\xC3\xA9" "border le mot est "
+                         "refus\xC3\xA9 ;", {}},
+             {K::Bullet, "**AND, OR, XOR, NOT, NAND, NOR**, les d\xC3\xA9" "calages **<<** et **>>** "
+                         "(arithm\xC3\xA9tique pour un mot sign\xC3\xA9), les rotations **ROL, ROR**, "
+                         "**SWAP** (\xC3\xA9" "change les deux moiti\xC3\xA9s du mot : les octets d'un WORD, "
+                         "les mots d'un DWORD - l'ordre des registres Modbus), **mod**, les "
+                         "parenth\xC3\xA8ses ;", {}},
+             {K::Bullet, "les calculs **d\xC3\xA9" "bordent dans la taille du mot**, en compl\xC3\xA9ment "
+                         "\xC3\xA0 deux : 255 + 1 = 0 en BYTE non sign\xC3\xA9, 127 + 1 = \xE2\x88\x92" "128 "
+                         "en BYTE sign\xC3\xA9 ; la division est enti\xC3\xA8re ;", {}},
+             {K::Bullet, "**la grille des bits** : chaque bit du mot, 0 ou 1, par groupes de 4, "
+                         "num\xC3\xA9rot\xC3\xA9s (le bit 0 en bas \xC3\xA0 droite, le num\xC3\xA9ro du plus "
+                         "bas de chaque groupe dessous) ; un clic sur un bit le bascule et la valeur suit.", {}},
+             {K::Heading, "Le clavier", {}},
+             {K::Paragraph, "Un clic sur la calculatrice lui donne le clavier (son cadre prend la couleur de =) "
+                         ": les chiffres, + - * / ^ ( ) . et , (la virgule), = ou **Entr\xC3\xA9" "e** (le "
+                         "r\xC3\xA9sultat), **\xC3\x89" "chap** (C), **Retour arri\xC3\xA8re** "
+                         "(\xE2\x8C\xAB), **Suppr** (CE), % (pourcentage ; mod en scientifique), ! (n!) ; en "
+                         "programmeur, A \xC3\xA0 F, & (AND), | (OR), ^ (XOR), ~ (NOT), < et > (les "
+                         "d\xC3\xA9" "calages). Un clic ailleurs le lui reprend. Les raccourcis des vues ne "
+                         "partent pas tant qu'elle a le clavier (sauf F1 \xC3\xA0 F12).", {}},
+             {K::Heading, "Avec l'IHM", {}},
+             {K::Bullet, "**Valeur de d\xC3\xA9part** : une expression (une variable, un calcul : `Debit * "
+                         "3.6`) lue quand la vue s'ouvre - la calculatrice part de sa valeur ; le bouton "
+                         "\xE2\x87\xA9 de la rang\xC3\xA9" "e du haut la relit. Vide : elle part de 0, sans "
+                         "bouton ;", {}},
+             {K::Bullet, "**R\xC3\xA9sultat vers** : une variable ; le bouton **Envoyer** y \xC3\xA9" "crit "
+                         "le nombre montr\xC3\xA9, comme une commande - le niveau d'acc\xC3\xA8s de l'objet, "
+                         "la permission Piloter quand la s\xC3\xA9" "curit\xC3\xA9 est active, puis le type "
+                         "de la variable : arrondi pour un entier, ramen\xC3\xA9 dans ses bornes (la Console "
+                         "le dit), le nombre \xC3\xA9" "crit en texte dans une STRING, VRAI pour tout nombre "
+                         "non nul dans un BOOL ; une structure est refus\xC3\xA9" "e. L'afficheur dit "
+                         "\xC2\xAB envoy\xC3\xA9 : Consigne = 12,5 \xC2\xBB ou la raison du refus ; le "
+                         "journal garde l'\xC3\xA9" "criture. Vide : pas de bouton ;", {}},
+             {K::Bullet, "ce qu'elle montre se lit dans une expression : `Vue_1.Calc_1.Result` (le nombre, "
+                         "LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), "
+                         "`.Memory` (la m\xC3\xA9moire).", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
+                         "r\xC3\xA8gle\nMode\tstandard\tstandard, scientifique ou programmeur (la "
+                         "biblioth\xC3\xA8que propose les trois, d\xC3\xA9j\xC3\xA0 "
+                         "r\xC3\xA9gl\xC3\xA9" "es).\nAngles\tDEG\tScientifique : sin, cos, tan et leurs "
+                         "inverses en degr\xC3\xA9s (DEG) ou en radians (RAD).\nTaille du "
+                         "mot\tWORD\tProgrammeur : BYTE, WORD, DWORD ou LWORD (8, 16, 32, 64 "
+                         "bits).\nSign\xC3\xA9\tTRUE\tProgrammeur : le mot se lit sign\xC3\xA9 (SINT, INT, "
+                         "DINT, LINT) ; d\xC3\xA9" "coch\xC3\xA9, non sign\xC3\xA9.\nBase de "
+                         "d\xC3\xA9part\tDEC\tProgrammeur : la base active \xC3\xA0 l'ouverture de la vue "
+                         "(HEX pour la variante de la biblioth\xC3\xA8que).\nD\xC3\xA9" "cimales "
+                         "max\t10\tLes d\xC3\xA9" "cimales montr\xC3\xA9" "es au plus (0 \xC3\xA0 15) ; les "
+                         "z\xC3\xA9ros de la fin tombent.\nValeur de d\xC3\xA9part\t(vide)\tUne expression "
+                         "lue \xC3\xA0 l'ouverture de la vue (et par le bouton "
+                         "\xE2\x87\xA9).\nR\xC3\xA9sultat vers\t(vide)\tLa variable o\xC3\xB9 Envoyer "
+                         "\xC3\xA9" "crit le r\xC3\xA9sultat ; vide : pas de bouton "
+                         "Envoyer.\nPolice\tSans\tLa police des touches et de l'afficheur.\nTaille des "
+                         "touches (max)\t20\tLes libell\xC3\xA9s des touches au plus : ils "
+                         "r\xC3\xA9tr\xC3\xA9" "cissent avec la calculatrice.\nCouleur des "
+                         "textes\t#F2F4F8\tLes libell\xC3\xA9s, l'afficheur.\nFond\t#1B2028\tLe fond de la "
+                         "calculatrice.\nBordure\t#323A46\tSon bord.\nFond de "
+                         "l'afficheur\t#10141A\tDerri\xC3\xA8re l'expression et le r\xC3\xA9sultat.\nTouches "
+                         "des chiffres\t#3B4351\tLes chiffres, la virgule, \xC2\xB1 (et A \xC3\xA0 "
+                         "F).\nTouches des fonctions\t#2A313C\tLes op\xC3\xA9rateurs, les fonctions, C, CE, "
+                         "la m\xC3\xA9moire.\nTouche =\t#2F6FD6\t= et Envoyer, la base active, les bits "
+                         "\xC3\xA0 1, la 2nde allum\xC3\xA9" "e, le cadre quand elle a le clavier.\nRayon "
+                         "des coins\t8\t0 : coins carr\xC3\xA9s.\nPilotable (touches, "
+                         "clavier)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : elle montre sa Valeur de d\xC3\xA9part, "
+                         "sans r\xC3\xA9" "agir.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "chaque calculatrice garde son calcul tant que sa vue est ouverte ; la vue "
+                         "ferm\xC3\xA9" "e puis rouverte, elle repart de sa Valeur de d\xC3\xA9part (la "
+                         "m\xC3\xA9moire aussi s'efface) ;", {}},
+             {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 toutes "
+                         "ses touches : sans eux, un cadenas la marque et le refus est dit ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un mode, une taille de mot, une base ou des angles "
+                         "inconnus, une calculatrice trop petite pour se lire (au moins 170 \xC3\x97 270 en "
+                         "standard, 260 \xC3\x97 300 en scientifique, 280 \xC3\x97 470 en programmeur), un "
+                         "nom inconnu dans Valeur de d\xC3\xA9part ou R\xC3\xA9sultat vers, et un "
+                         "R\xC3\xA9sultat vers qui n'est pas un nombre (un BOOL, une STRING : un "
+                         "avertissement ; une structure : une erreur) ;", {}},
+             {K::Bullet, "le contr\xC3\xB4le d'ergonomie mesure ses touches, celles du haut et les bits du "
+                         "programmeur (au doigt : 32 pixels par d\xC3\xA9" "faut).", {}},
+         },
+         {"objet-champ-de-saisie", "objet-afficheur-numerique", "objet-communs", "securite", "simulation"},
+         {"Calculatrice", "calculette", "Calculator", "calcul", "scientifique", "programmeur", "hexad\xC3\xA9" "cimal", "binaire", "octal", "bits", "grille des bits", "Envoyer", "R\xC3\xA9sultat vers", "Valeur de d\xC3\xA9part"},
+         {},
+         {{"EX_Calculator.png", "L'exemple anim\xC3\xA9 : 12 + 3 \xC3\x97 4 = 24, la m\xC3\xA9moire, puis 7*6 tap\xC3\xA9 au clavier."}},
+         "Calculator",
+         {{"calcMode", "Mode", "standard",
+            "standard, scientifique ou programmeur (la biblioth\xC3\xA8que propose les trois, "
+            "d\xC3\xA9j\xC3\xA0 r\xC3\xA9gl\xC3\xA9" "es)."},
+           {"angleUnit", "Angles", "DEG",
+            "Scientifique : sin, cos, tan et leurs inverses en degr\xC3\xA9s (DEG) ou en radians (RAD)."},
+           {"wordSize", "Taille du mot", "WORD",
+            "Programmeur : BYTE, WORD, DWORD ou LWORD (8, 16, 32, 64 bits)."},
+           {"signedWord", "Sign\xC3\xA9", "TRUE",
+            "Programmeur : le mot se lit sign\xC3\xA9 (SINT, INT, DINT, LINT) ; d\xC3\xA9" "coch\xC3\xA9, "
+            "non sign\xC3\xA9."},
+           {"calcBase", "Base de d\xC3\xA9part", "DEC",
+            "Programmeur : la base active \xC3\xA0 l'ouverture de la vue (HEX pour la variante de la "
+            "biblioth\xC3\xA8que)."},
+           {"decimals", "D\xC3\xA9" "cimales max", "10",
+            "Les d\xC3\xA9" "cimales montr\xC3\xA9" "es au plus (0 \xC3\xA0 15) ; les z\xC3\xA9ros de la fin "
+            "tombent."},
+           {"startValue", "Valeur de d\xC3\xA9part", "(vide)",
+            "Une expression lue \xC3\xA0 l'ouverture de la vue (et par le bouton \xE2\x87\xA9)."},
+           {"resultTo", "R\xC3\xA9sultat vers", "(vide)",
+            "La variable o\xC3\xB9 Envoyer \xC3\xA9" "crit le r\xC3\xA9sultat ; vide : pas de bouton Envoyer."},
+           {"font", "Police", "Sans",
+            "La police des touches et de l'afficheur."},
+           {"fontSize", "Taille des touches (max)", "20",
+            "Les libell\xC3\xA9s des touches au plus : ils r\xC3\xA9tr\xC3\xA9" "cissent avec la "
+            "calculatrice."},
+           {"textColor", "Couleur des textes", "#F2F4F8",
+            "Les libell\xC3\xA9s, l'afficheur."},
+           {"fill", "Fond", "#1B2028",
+            "Le fond de la calculatrice."},
+           {"stroke", "Bordure", "#323A46",
+            "Son bord."},
+           {"displayColor", "Fond de l'afficheur", "#10141A",
+            "Derri\xC3\xA8re l'expression et le r\xC3\xA9sultat."},
+           {"keyColor", "Touches des chiffres", "#3B4351",
+            "Les chiffres, la virgule, \xC2\xB1 (et A \xC3\xA0 F)."},
+           {"opColor", "Touches des fonctions", "#2A313C",
+            "Les op\xC3\xA9rateurs, les fonctions, C, CE, la m\xC3\xA9moire."},
+           {"equalsColor", "Touche =", "#2F6FD6",
+            "= et Envoyer, la base active, les bits \xC3\xA0 1, la 2nde allum\xC3\xA9" "e, le cadre quand "
+            "elle a le clavier."},
+           {"radius", "Rayon des coins", "8",
+            "0 : coins carr\xC3\xA9s."},
+           {"pilotable", "Pilotable (touches, clavier)", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9 : elle montre sa Valeur de d\xC3\xA9part, sans r\xC3\xA9" "agir."}},
+         "12 + 3 \xC3\x97 4 donne 24 (l'ordre des op\xC3\xA9rations) ; M+ le garde, C efface, 7*6 "
+         "Entr\xC3\xA9" "e tap\xC3\xA9s au clavier donnent 42, + MR = ajoute la m\xC3\xA9moire (66).",
+         {}, "1.14.1"},
         // ---- La bibliotheque d'objets  Affichage / objet-voyant
         {"objet-voyant", "Voyant", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Affichage",
          "Un voyant allum\xC3\xA9 ou \xC3\xA9teint selon une valeur bool\xC3\xA9" "enne : marche, "
@@ -18447,6 +18644,9 @@ const std::vector<Topic>& topics() {
                          "souris l'enfonce en ce moment\n`.Focused`\tBOOL\til a le clavier (un champ de "
                          "saisie)\n`.Enabled`\tBOOL\tl'utilisateur connect\xC3\xA9 peut agir dessus (niveau "
                          "d'acc\xC3\xA8s, autorisation, permission Piloter)", {}},
+             {K::Paragraph, "Une calculatrice y ajoute ce qu'elle montre : `.Result` (le nombre en grand, "
+                         "LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), "
+                         "`.Memory` (la m\xC3\xA9moire) - voir \xC2\xAB Calculatrice \xC2\xBB.", {}, "1.14.1"},
              {K::Heading, "Ce qu'une vue publie", {}},
              {K::Table, "Variable\tType\tAcc\xC3\xA8s\tCe que c'est\n`Vue.Name`\tSTRING\tR\tson "
                          "nom\n`Vue.Description`\tSTRING\tR\tsa description\n`Vue.Role`\tSTRING\tR\tVue, "

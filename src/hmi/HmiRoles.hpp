@@ -192,6 +192,12 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"soundChannel", Role::Choice}, {"channels", Role::List, Role::Text},
     {"showPercent", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showMute", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"showMeter", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"muteColor", Role::Color},
+    // 1.14.1 (N4) : la Calculatrice - son mode, ses reglages, ses couleurs, la valeur de depart (une formule lue a
+    // l'ouverture de la vue) et la variable du resultat (Envoyer)
+    {"calcMode", Role::Choice}, {"angleUnit", Role::Choice}, {"wordSize", Role::Choice}, {"calcBase", Role::Choice},
+    {"signedWord", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"keyColor", Role::Color}, {"opColor", Role::Color}, {"equalsColor", Role::Color}, {"displayColor", Role::Color},
+    {"startValue", Role::Formula, Role::Number}, {"resultTo", Role::Formula, Role::Text},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},

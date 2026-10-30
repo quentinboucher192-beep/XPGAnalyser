@@ -313,6 +313,12 @@ public:
     [[nodiscard]] ui::SizeHint sizeHint() const override;
     void setFilter(std::string text);
     void setCurrent(std::optional<hmi::Kind> kind) { current_ = kind; invalidate(); }
+    // 1.14.1 (N4) : LES VARIANTES (hmi::kindVariants) - un meme genre en plusieurs tuiles deja reglees (la Calculatrice
+    // standard, scientifique, programmeur). Un clic sur l'une : chosenVariant (son genre, sa cle), pas chosen.
+    const core::SignalPtr<hmi::Kind, const std::string&> chosenVariant = core::Signal<hmi::Kind, const std::string&>::create();
+    void setCurrentVariant(std::string key) { currentVariant_ = std::move(key); invalidate(); }
+    [[nodiscard]] const std::string& hoveredVariant() const noexcept { return hoverVariant_; }
+    [[nodiscard]] bool variantTileRect(hmi::Kind, std::string_view variant, gfx::Rect& out) const;
     void setFavorites(std::set<hmi::Kind> favs) { favorites_ = std::move(favs); invalidate(); }
     [[nodiscard]] const std::set<hmi::Kind>& favorites() const noexcept { return favorites_; }
     const core::SignalPtr<hmi::Kind> chosen           = core::Signal<hmi::Kind>::create();
@@ -432,7 +438,7 @@ private:
     float                                 varScrollY_{0};
     void layoutVariables() const;
     void paintVariables(const ui::PaintContext&);
-    struct Tile { hmi::Kind kind; gfx::Rect rect; gfx::Rect star; std::string symbol; };   // symbol : lot 10
+    struct Tile { hmi::Kind kind; gfx::Rect rect; gfx::Rect star; std::string symbol; std::string variant{}; };   // symbol : lot 10 ; variant : 1.14.1
     void layoutTiles(const ui::Theme*) const;
     std::string               filter_;
     std::set<hmi::Kind>       wordHits_;              // 1.14.0 (captures finales) : trouves par leurs mots-cles
@@ -440,6 +446,7 @@ private:
     std::string               currentSymbol_, hoverSymbol_;
     mutable float             emptySymbolsY_{-1.f};   // la ligne "aucun symbole", sous son titre
     std::optional<hmi::Kind>  current_, hoverKind_;
+    std::string               currentVariant_, hoverVariant_;   // 1.14.1 (N4)
     std::set<hmi::Kind>       favorites_{hmi::Kind::Button, hmi::Kind::Indicator, hmi::Kind::Text};
     mutable std::vector<Tile> tiles_;
     mutable std::vector<std::pair<std::string, float>> headings_;

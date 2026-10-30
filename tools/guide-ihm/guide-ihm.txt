@@ -3252,6 +3252,77 @@ Le journal dit le volume une fois la poignée lâchée (« volume Alarmes : 60 %
 - Générer signale un canal inconnu dans Canaux affichés, aucun canal, une course trop courte (moins de 30 pixels : agrandis l'objet ou montre moins de canaux) ;
 - les volumes se lisent et s'écrivent aussi en variables système (SYS.Volume, SYS.VolumeAlarms...), par les actions du groupe **Son** et par IHM_SON_VOLUME, IHM_SON_CANAL_MUET.
 
+== objet-calculatrice | Calculatrice
+: Une calculatrice posée dans la vue, en trois variantes : standard, scientifique, programmeur (HEX, DEC, OCT, BIN et la grille des bits). Un calcul rapide, un mot converti, un registre vérifié bit par bit, sans quitter l'IHM.
+@depuis 1.14.1
+@mots Calculatrice, calculette, Calculator, calcul, scientifique, programmeur, hexadécimal, binaire, octal, bits, grille des bits, Envoyer, Résultat vers, Valeur de départ
+@voir objet-champ-de-saisie, objet-afficheur-numerique, objet-communs, securite, simulation
+@capture EX_Calculator.png | L'exemple animé : 12 + 3 × 4 = 24, la mémoire, puis 7*6 tapé au clavier.
+@objet Calculator
+@exemple 12 + 3 × 4 donne 24 (l'ordre des opérations) ; M+ le garde, C efface, 7*6 Entrée tapés au clavier donnent 42, + MR = ajoute la mémoire (66).
+### À quoi elle sert
+Pour l'automaticien sur un poste d'exploitation, en simulation ou à la mise en service : faire un calcul rapide, convertir un mot en binaire ou en hexadécimal, vérifier un registre Modbus bit par bit, sans quitter l'IHM. Elle est dans la famille **Commandes**, après le Mélangeur de volume : la bibliothèque propose ses **trois variantes**, chacune sa tuile, déjà réglées (Calculatrice, Scientifique, Programmeur) ; la propriété **Mode** les change ensuite.
+### L'afficheur
+- en haut, en petit : l'expression en cours (`12 + 3 ×`), ou le calcul fait (`12 + 3 × 4 =`) ; trop longue, sa fin se lit ;
+- en grand, calé à droite : le nombre tapé, ou le résultat ; la virgule à la française, les milliers séparés (`1 234 567,89`) ; au-delà de 10^16, la notation `1,2E+20` ;
+- **Erreur** après une division par zéro, une racine d'un nombre négatif, un logarithme de 0, tan(90°)... : la petite ligne dit pourquoi ; un chiffre, C ou CE repartent ;
+- **M** en haut à gauche : la mémoire n'est pas vide.
+L'**ordre des opérations** est respecté dans les trois variantes : 2 + 3 × 4 = 14 (pas l'enchaînement d'une calculette de poche). Une fonction (√, sin, x²...) agit tout de suite sur le nombre en cours et s'écrit dans l'expression : `2 + √(9)`. = encore refait la dernière opération (2 + 3 = = : 8).
+### Standard
+| Touches | Ce qu'elles font |
+| 0 à 9, virgule | le nombre en cours (16 chiffres au plus) |
+| + − × ÷ | les opérations ; un autre opérateur remplace le précédent |
+| = | le résultat ; 5 + = : 5 + 5 |
+| % | a + b % : b % de a (200 + 10 % : 200 + 20) ; a × b % : b / 100 |
+| ± | change le signe |
+| 1/x, x², √x | l'inverse, le carré, la racine du nombre en cours |
+| C, CE, ⌫ | tout effacer ; effacer le nombre en cours ; le dernier chiffre |
+| MC, MR, M+, M− | la mémoire : l'effacer, la rappeler, y ajouter ou retrancher le nombre montré |
+### Scientifique
+En plus de la standard :
+- les **parenthèses** : `2 × (3 + 1)` ; une parenthèse fermée se calcule tout de suite ; celles qui restent ouvertes se ferment à = ; `2(3 + 1)` vaut 2 × (3 + 1) ;
+- **sin, cos, tan** et, avec **2nde**, leurs inverses (sin−1, cos−1, tan−1 : asin, acos, atan), en degrés ou en radians : la touche **DEG / RAD** de la rangée du haut bascule ;
+- **log**, **ln**, **10^x**, **e^x**, **x^y** (2 ^ 3 ^ 2 = 2 ^ 9 : de droite à gauche), la **racine y-ième** (27 yroot 3 = 3), **n!** (un entier de 0 à 170), **π**, **e**, **mod** (le reste : 7 mod 3 = 1), **|x|** ;
+- **Exp** : un exposant, `1,2E+5` (± change alors le signe de l'exposant).
+### Programmeur
+- la valeur est un **entier**, montrée à la fois en **HEX**, **DEC**, **OCT** et **BIN**, une ligne chacune ; la base active est en évidence : les chiffres tapés y sont lus ; un clic sur une ligne la rend active (la valeur reste) ;
+- la **taille du mot** : BYTE, WORD, DWORD, LWORD (8, 16, 32, 64 bits) - la touche du haut passe à la suivante ; **Signé** / **Non signé** : FFFF vaut −1 en WORD signé (INT), 65 535 non signé (UINT) ;
+- les touches **A à F** ne servent qu'en HEX, 8 et 9 sont grisées en OCT, 2 à 9 en BIN ; un chiffre qui ferait déborder le mot est refusé ;
+- **AND, OR, XOR, NOT, NAND, NOR**, les décalages **<<** et **>>** (arithmétique pour un mot signé), les rotations **ROL, ROR**, **SWAP** (échange les deux moitiés du mot : les octets d'un WORD, les mots d'un DWORD - l'ordre des registres Modbus), **mod**, les parenthèses ;
+- les calculs **débordent dans la taille du mot**, en complément à deux : 255 + 1 = 0 en BYTE non signé, 127 + 1 = −128 en BYTE signé ; la division est entière ;
+- **la grille des bits** : chaque bit du mot, 0 ou 1, par groupes de 4, numérotés (le bit 0 en bas à droite, le numéro du plus bas de chaque groupe dessous) ; un clic sur un bit le bascule et la valeur suit.
+### Le clavier
+Un clic sur la calculatrice lui donne le clavier (son cadre prend la couleur de =) : les chiffres, + - * / ^ ( ) . et , (la virgule), = ou **Entrée** (le résultat), **Échap** (C), **Retour arrière** (⌫), **Suppr** (CE), % (pourcentage ; mod en scientifique), ! (n!) ; en programmeur, A à F, & (AND), | (OR), ^ (XOR), ~ (NOT), < et > (les décalages). Un clic ailleurs le lui reprend. Les raccourcis des vues ne partent pas tant qu'elle a le clavier (sauf F1 à F12).
+### Avec l'IHM
+- **Valeur de départ** : une expression (une variable, un calcul : `Debit * 3.6`) lue quand la vue s'ouvre - la calculatrice part de sa valeur ; le bouton ⇩ de la rangée du haut la relit. Vide : elle part de 0, sans bouton ;
+- **Résultat vers** : une variable ; le bouton **Envoyer** y écrit le nombre montré, comme une commande - le niveau d'accès de l'objet, la permission Piloter quand la sécurité est active, puis le type de la variable : arrondi pour un entier, ramené dans ses bornes (la Console le dit), le nombre écrit en texte dans une STRING, VRAI pour tout nombre non nul dans un BOOL ; une structure est refusée. L'afficheur dit « envoyé : Consigne = 12,5 » ou la raison du refus ; le journal garde l'écriture. Vide : pas de bouton ;
+- ce qu'elle montre se lit dans une expression : `Vue_1.Calc_1.Result` (le nombre, LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), `.Memory` (la mémoire).
+### Ses paramètres
+@param calcMode | Mode | standard | standard, scientifique ou programmeur (la bibliothèque propose les trois, déjà réglées).
+@param angleUnit | Angles | DEG | Scientifique : sin, cos, tan et leurs inverses en degrés (DEG) ou en radians (RAD).
+@param wordSize | Taille du mot | WORD | Programmeur : BYTE, WORD, DWORD ou LWORD (8, 16, 32, 64 bits).
+@param signedWord | Signé | TRUE | Programmeur : le mot se lit signé (SINT, INT, DINT, LINT) ; décoché, non signé.
+@param calcBase | Base de départ | DEC | Programmeur : la base active à l'ouverture de la vue (HEX pour la variante de la bibliothèque).
+@param decimals | Décimales max | 10 | Les décimales montrées au plus (0 à 15) ; les zéros de la fin tombent.
+@param startValue | Valeur de départ | (vide) | Une expression lue à l'ouverture de la vue (et par le bouton ⇩).
+@param resultTo | Résultat vers | (vide) | La variable où Envoyer écrit le résultat ; vide : pas de bouton Envoyer.
+@param font | Police | Sans | La police des touches et de l'afficheur.
+@param fontSize | Taille des touches (max) | 20 | Les libellés des touches au plus : ils rétrécissent avec la calculatrice.
+@param textColor | Couleur des textes | #F2F4F8 | Les libellés, l'afficheur.
+@param fill | Fond | #1B2028 | Le fond de la calculatrice.
+@param stroke | Bordure | #323A46 | Son bord.
+@param displayColor | Fond de l'afficheur | #10141A | Derrière l'expression et le résultat.
+@param keyColor | Touches des chiffres | #3B4351 | Les chiffres, la virgule, ± (et A à F).
+@param opColor | Touches des fonctions | #2A313C | Les opérateurs, les fonctions, C, CE, la mémoire.
+@param equalsColor | Touche = | #2F6FD6 | = et Envoyer, la base active, les bits à 1, la 2nde allumée, le cadre quand elle a le clavier.
+@param radius | Rayon des coins | 8 | 0 : coins carrés.
+@param pilotable | Pilotable (touches, clavier) | TRUE | Décoché : elle montre sa Valeur de départ, sans réagir.
+### En marche
+- chaque calculatrice garde son calcul tant que sa vue est ouverte ; la vue fermée puis rouverte, elle repart de sa Valeur de départ (la mémoire aussi s'efface) ;
+- le niveau d'accès et l'autorisation de l'objet s'appliquent à toutes ses touches : sans eux, un cadenas la marque et le refus est dit ;
+- Générer signale un mode, une taille de mot, une base ou des angles inconnus, une calculatrice trop petite pour se lire (au moins 170 × 270 en standard, 260 × 300 en scientifique, 280 × 470 en programmeur), un nom inconnu dans Valeur de départ ou Résultat vers, et un Résultat vers qui n'est pas un nombre (un BOOL, une STRING : un avertissement ; une structure : une erreur) ;
+- le contrôle d'ergonomie mesure ses touches, celles du haut et les bits du programmeur (au doigt : 32 pixels par défaut).
+
 = La bibliothèque d'objets › Affichage
 
 == objet-voyant | Voyant
@@ -8979,6 +9050,8 @@ Lu = Vue_Commandes.Liste_Gaz.Value;
 | `.Pressed` | BOOL | la souris l'enfonce en ce moment |
 | `.Focused` | BOOL | il a le clavier (un champ de saisie) |
 | `.Enabled` | BOOL | l'utilisateur connecté peut agir dessus (niveau d'accès, autorisation, permission Piloter) |
+@nouveau 1.14.1
+Une calculatrice y ajoute ce qu'elle montre : `.Result` (le nombre en grand, LREAL), `.DisplayText` (le texte de l'afficheur), `.Expression` (la petite ligne), `.Memory` (la mémoire) - voir « Calculatrice ».
 ### Ce qu'une vue publie
 | Variable | Type | Accès | Ce que c'est |
 | `Vue.Name` | STRING | R | son nom |

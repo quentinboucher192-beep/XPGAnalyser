@@ -30979,7 +30979,9 @@ void son1140() {
     }
 }
 
-// =============================================================================
+// ======================================================================    }
+}
+
 //  1.14.1 (lot N1) : LES VANNES ET LES REGISTRES COMMANDES PAR LEURS FINS DE COURSE
 //  La regle (deux voies, trois voies), le chrono a l'heure de la marche, une vue
 //  en marche, Pourquoi ?, Generer, l'alarme Discordance, le fichier (un projet
@@ -31347,10 +31349,431 @@ void finsDeCourse1141() {
         }
         check(limited > 0 && seen.count(St::Open) && seen.count(St::Closed) && seen.count(St::Moving) && seen.count(St::Discord),
               std::string(kindLabel(k)) + " : son exemple montre la variante, ouverte, ferm\xC3\xA9" "e, en mouvement et en discordance");
+=======
+// ---- 1.14.1 (lot N4) : la Calculatrice - standard, scientifique, programmeur --------------------------------
+//  Le moteur de calcul de chaque mode (les priorites, les parentheses, les fonctions, les erreurs, la memoire, les
+//  bases, la taille du mot, le signe, le debordement, les bits), sa geometrie, puis l'objet en marche (la Valeur de
+//  depart, les touches, le clavier, Envoyer et ses refus), Generer, Dupliquer, le code brut, un projet d'avant.
+void calculatrice1141() {
+    std::printf("-- 1.14.1 (N4) : la Calculatrice\n");
+    namespace calc = hmi::calculator;
+    const std::string kMinus = "\xE2\x88\x92", kTimes = "\xC3\x97", kDiv = "\xC3\xB7", kThin = "\xE2\x80\xAF", kRoot = "\xE2\x88\x9A";
+    const auto run = [](calc::Mode m, std::initializer_list<const char*> keys, int bits = 16, bool sg = true,
+                        calc::Base b = calc::Base::Dec) {
+        calc::Settings s;
+        s.mode = m;
+        s.bits = bits;
+        s.isSigned = sg;
+        s.base = b;
+        calc::State st = calc::initialState(s);
+        for (const char* k : keys) (void)calc::press(st, k);
+        return st;
+    };
+    using M = calc::Mode;
+    using B = calc::Base;
+
+    // ---- standard : l'ordre des operations, = encore, les fonctions, le pourcentage, la memoire, les erreurs
+    {
+        auto st = run(M::Standard, {"2", "+", "3", "*", "4", "="});
+        same(calc::displayText(st), "14", "2 + 3 x 4 = 14 : l'ordre des op\xC3\xA9rations (pas 20)");
+        same(calc::expressionText(st), "2 + 3 " + kTimes + " 4 =", "la petite ligne : le calcul fait");
+        st = run(M::Standard, {"2", "+", "3", "*"});
+        same(calc::expressionText(st), "2 + 3 " + kTimes, "en cours : l'expression tap\xC3\xA9" "e");
+        same(calc::displayText(st), "3", "... et le dernier nombre en grand");
+        same(calc::displayText(run(M::Standard, {"1", "2", ",", "5", "+", "7", "="})), "19,5", "la virgule \xC3\xA0 la fran\xC3\xA7" "aise");
+        same(calc::displayText(run(M::Standard, {"0", ",", "1", "+", "0", ",", "2", "="})), "0,3", "0,1 + 0,2 = 0,3 (pas 0,30000000000000004)");
+        same(calc::displayText(run(M::Standard, {"1", "/", "3", "=", "*", "3", "="})), "1", "1 / 3 = x 3 = 1 (le r\xC3\xA9sultat garde sa pr\xC3\xA9" "cision)");
+        same(calc::displayText(run(M::Standard, {"2", "+", "3", "=", "=", "="})), "11", "= encore refait + 3 (5, 8, 11)");
+        same(calc::displayText(run(M::Standard, {"5", "+", "="})), "10", "5 + = : 5 + 5");
+        same(calc::displayText(run(M::Standard, {"5", "+", "*", "2", "="})), "10", "un autre op\xC3\xA9rateur remplace le pr\xC3\xA9" "c\xC3\xA9" "dent");
+        st = run(M::Standard, {"2", "+", "9", "sqrt"});
+        same(calc::expressionText(st), "2 + " + kRoot + "(9)", "une fonction s'\xC3\xA9" "crit dans l'expression : 2 + racine(9)");
+        same(calc::displayText(st), "3", "... et se calcule tout de suite");
+        same(calc::displayText(run(M::Standard, {"2", "+", "9", "sqrt", "="})), "5", "2 + racine(9) = 5");
+        same(calc::displayText(run(M::Standard, {"4", "sqr", "inv"})), "0,0625", "x\xC2\xB2 puis 1/x : 1/16");
+        same(calc::displayText(run(M::Standard, {"2", "0", "0", "+", "1", "0", "%", "="})), "220", "200 + 10 % = 220 (10 % de 200)");
+        same(calc::displayText(run(M::Standard, {"5", "0", "*", "1", "0", "%", "="})), "5", "50 x 10 % = 5");
+        same(calc::displayText(run(M::Standard, {"5", "neg", "*", "3", "="})), kMinus + "15", "\xC2\xB1 : -5 x 3 = -15 (le vrai signe moins)");
+        same(calc::displayText(run(M::Standard, {"1", "2", "3", "4", "5", "6", "7", ",", "8", "9"})), "1" + kThin + "234" + kThin + "567,89",
+             "les milliers s\xC3\xA9par\xC3\xA9s (espace fine), la virgule");
+        st = run(M::Standard, {"9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9"});
+        check(st.entry.size() == 16, "16 chiffres au plus : le 17e est refus\xC3\xA9");
+        same(calc::displayText(run(M::Standard, {"7", "back", "8", "CE", "4", "+", "1", "="})), "5", "\xE2\x8C\xAB et CE : 4 + 1 = 5");
+        st = run(M::Standard, {"5", "M+", "2", "M+", "C", "MR", "*", "2", "="});
+        same(calc::displayText(st), "14", "M+ 5, M+ 2, C, MR x 2 = 14 (la m\xC3\xA9moire survit \xC3\xA0 C)");
+        check(st.hasMemory && calc::keyEnabled(st, "MR") && calc::keyEnabled(st, "MC"), "M montr\xC3\xA9 : la m\xC3\xA9moire n'est pas vide, MC et MR actives");
+        (void)calc::press(st, "M-");
+        near(st.memory, -7, "M- : la m\xC3\xA9moire moins le nombre montr\xC3\xA9 (7 - 14)");
+        (void)calc::press(st, "MC");
+        check(!st.hasMemory && !calc::keyEnabled(st, "MR") && !calc::press(st, "MR"), "MC : vide, MR gris\xC3\xA9" "e");
+        st = run(M::Standard, {"1", "/", "0", "="});
+        check(!st.error.empty() && calc::displayText(st) == "Erreur", "1 / 0 : Erreur");
+        same(calc::expressionText(st), "1 " + kDiv + " 0 \xE2\x80\x94 division par z\xC3\xA9ro", "la petite ligne dit pourquoi");
+        check(!calc::keyEnabled(st, "+") && !calc::press(st, "+") && calc::keyEnabled(st, "7"), "en erreur : les op\xC3\xA9rateurs gris\xC3\xA9s, un chiffre repart");
+        (void)calc::press(st, "7");
+        check(st.error.empty() && calc::displayText(st) == "7", "un chiffre efface l'erreur et repart");
+        st = run(M::Standard, {"1", "neg", "sqrt"});
+        check(calc::displayText(st) == "Erreur" && st.error.find("domaine") != std::string::npos, "racine de -1 : Erreur (hors du domaine)");
+        check(!calc::keyEnabled(st, "(") && !calc::keyEnabled(run(M::Standard, {}), "sin") && !calc::keyEnabled(run(M::Standard, {}), "A"),
+              "standard : ni parenth\xC3\xA8ses, ni sin, ni A-F");
+        same(calc::formatNumber(1e20, 10), "1E+20", "1E+20 au-del\xC3\xA0 de 10^16");
+        same(calc::formatNumber(-0.000000000012, 10), kMinus + "1,2E" + kMinus + "11", "un tr\xC3\xA8s petit nombre : 1,2E-11");
+        same(calc::formatNumber(2.0 / 3, 4), "0,6667", "D\xC3\xA9" "cimales max 4 : 0,6667");
+        double x = 0;
+        check(calc::parseEntry("1,5", x) && x == 1.5 && calc::parseEntry("1.5", x) && x == 1.5 && calc::parseEntry("1,2E+5", x) && x == 120000,
+              "la virgule et le point se lisent, l'exposant aussi");
+    }
+
+    // ---- scientifique : les parentheses, les fonctions, DEG / RAD, la 2nde, Exp
+    {
+        auto st = run(M::Scientific, {"2", "+", "3", "*", "(", "4", "-", "1", ")", "="});
+        same(calc::displayText(st), "11", "2 + 3 x (4 - 1) = 11");
+        same(calc::expressionText(st), "2 + 3 " + kTimes + " (4 " + kMinus + " 1) =", "... la parenth\xC3\xA8se dans l'expression");
+        st = run(M::Scientific, {"(", "2", "+", "3", "*", "4"});
+        check(calc::keyEnabled(st, ")") && calc::displayText(st) == "4", "une parenth\xC3\xA8se ouverte : ) active");
+        (void)calc::press(st, "=");
+        same(calc::displayText(st), "14", "= ferme les parenth\xC3\xA8ses restees ouvertes : (2 + 3 x 4) = 14");
+        same(calc::expressionText(st), "(2 + 3 " + kTimes + " 4) =", "... et l'\xC3\xA9" "crit");
+        same(calc::displayText(run(M::Scientific, {"2", "(", "3", "+", "1", ")", "="})), "8", "2(3 + 1) = 2 x (3 + 1) = 8");
+        check(!calc::keyEnabled(run(M::Scientific, {"2"}), ")"), "pas de parenth\xC3\xA8se ouverte : ) gris\xC3\xA9" "e");
+        st = run(M::Scientific, {"3", "0", "sin"});
+        same(calc::displayText(st), "0,5", "sin(30) = 0,5 en degr\xC3\xA9s");
+        same(calc::expressionText(st), "sin(30)", "... sin(30) dans l'expression");
+        st = run(M::Scientific, {"angle", "3", "0", "sin"});
+        check(!st.settings.degrees && calc::displayText(st) == kMinus + "0,9880316241", "RAD : sin(30 rad) = -0,988...");
+        st = run(M::Scientific, {"2nd", "0", ",", "5", "sin"});
+        check(calc::displayText(st) == "30" && !st.second, "2nde puis sin : asin(0,5) = 30 ; la 2nde s'\xC3\xA9teint");
+        check(run(M::Scientific, {"9", "0", "tan"}).error.find("domaine") != std::string::npos, "tan(90) en degr\xC3\xA9s : Erreur");
+        same(calc::displayText(run(M::Scientific, {"2", "pow", "3", "pow", "2", "="})), "512", "2 ^ 3 ^ 2 = 2 ^ 9 = 512 (de droite \xC3\xA0 gauche)");
+        same(calc::displayText(run(M::Scientific, {"2", "+", "3", "pow", "2", "*", "2", "="})), "20", "2 + 3^2 x 2 = 20");
+        same(calc::displayText(run(M::Scientific, {"2", "7", "root", "3", "="})), "3", "27 yroot 3 = 3");
+        same(calc::displayText(run(M::Scientific, {"8", "neg", "root", "3", "="})), kMinus + "2", "-8 yroot 3 = -2 (une racine impaire)");
+        same(calc::displayText(run(M::Scientific, {"5", "fact"})), "120", "5! = 120");
+        check(run(M::Scientific, {"1", "7", "1", "fact"}).error.find("passement") != std::string::npos
+                  && run(M::Scientific, {"2", ",", "5", "fact"}).error.find("domaine") != std::string::npos,
+              "171! d\xC3\xA9passe, 2,5! hors du domaine");
+        same(calc::displayText(run(M::Scientific, {"1", "0", "0", "log"})), "2", "log(100) = 2");
+        same(calc::displayText(run(M::Scientific, {"2", "pow10"})), "100", "10^2 = 100");
+        same(calc::displayText(run(M::Scientific, {"1", "ln"})), "0", "ln(1) = 0");
+        check(run(M::Scientific, {"0", "log"}).error.find("domaine") != std::string::npos, "log(0) : Erreur");
+        same(calc::displayText(run(M::Scientific, {"pi", "*", "2", "="})), "6,2831853072", "pi x 2 (10 d\xC3\xA9" "cimales)");
+        same(calc::displayText(run(M::Scientific, {"7", "mod", "3", "="})), "1", "7 mod 3 = 1");
+        same(calc::displayText(run(M::Scientific, {"5", "neg", "abs"})), "5", "|-5| = 5");
+        st = run(M::Scientific, {"1", ",", "2", "exp", "5"});
+        same(calc::displayText(st), "1,2E+5", "Exp : 1,2E+5");
+        same(calc::displayText(run(M::Scientific, {"1", ",", "2", "exp", "5", "+", "1", "="})), "120" + kThin + "001", "1,2E+5 + 1 = 120 001");
+        st = run(M::Scientific, {"1", ",", "2", "exp", "neg", "3"});
+        check(calc::displayText(st) == "1,2E" + kMinus + "3" && std::fabs(calc::value(st) - 0.0012) < 1e-12, "\xC2\xB1 apr\xC3\xA8s Exp : l'exposant n\xC3\xA9gatif");
+        check(calc::keyForChar(st, '^') == "pow" && calc::keyForChar(st, '!') == "fact" && calc::keyForChar(st, '%') == "mod"
+                  && calc::keyForChar(st, '.') == "," && calc::keyForChar(run(M::Standard, {}), '(').empty(),
+              "le clavier : ^ x^y, ! n!, % mod, le point est la virgule ; ( rien en standard");
+    }
+
+    // ---- programmeur : les bases, la taille du mot, le signe, le debordement, les bits
+    {
+        auto st = run(M::Programmer, {"2", "5", "5", "+", "1", "="}, 8, false);
+        check(calc::wordValue(st) == 0 && calc::displayText(st) == "0", "BYTE non sign\xC3\xA9 : 255 + 1 = 0 (le d\xC3\xA9" "bordement suit le mot)");
+        st = run(M::Programmer, {"1", "2", "7", "+", "1", "="}, 8, true);
+        check(calc::signedValue(st) == -128 && calc::baseText(calc::wordValue(st), B::Hex, 8, true) == "80", "BYTE sign\xC3\xA9 : 127 + 1 = -128 (16#80)");
+        st = run(M::Programmer, {"1", "neg"}, 16, true);
+        check(calc::baseText(calc::wordValue(st), B::Hex, 16, true) == "FFFF" && calc::displayText(st) == kMinus + "1", "WORD sign\xC3\xA9 : -1 = FFFF");
+        same(calc::baseText(calc::wordValue(st), B::Bin, 16, true), "1111 1111 1111 1111", "BIN group\xC3\xA9 par 4");
+        same(calc::baseText(0x1F, B::Bin, 8, false), "0001 1111", "BIN compl\xC3\xA9t\xC3\xA9 au groupe de 4");
+        same(calc::baseText(0777, B::Oct, 16, false), "777", "OCT");
+        (void)calc::press(st, "sign");
+        same(calc::displayText(st), "65" + kThin + "535", "Non sign\xC3\xA9 : FFFF = 65 535 (les bits restent)");
+        st = run(M::Programmer, {"F", "F", "and", "0", "F", "="}, 16, true, B::Hex);
+        same(calc::displayText(st), "F", "HEX : FF AND 0F = F");
+        same(calc::expressionText(st), "FF AND F =", "... l'expression dans la base active");
+        check(calc::wordValue(run(M::Programmer, {"1", "shl", "4", "="}, 16, true, B::Hex)) == 0x10, "1 << 4 = 16#10");
+        check(calc::wordValue(run(M::Programmer, {"1", "2", "3", "4", "swap"}, 16, true, B::Hex)) == 0x3412, "SWAP : 16#1234 -> 16#3412 (les octets)");
+        check(calc::wordValue(run(M::Programmer, {"1", "2", "3", "4", "swap"}, 32, true, B::Hex)) == 0x12340000, "SWAP en DWORD : les deux mots");
+        check(calc::wordValue(run(M::Programmer, {"8", "0", "0", "1", "rol", "1", "="}, 16, false, B::Hex)) == 3, "ROL : 16#8001 ROL 1 = 3");
+        check(calc::wordValue(run(M::Programmer, {"8", "0", "0", "1", "ror", "1", "="}, 16, false, B::Hex)) == 0xC000, "ROR : 16#8001 ROR 1 = 16#C000");
+        check(calc::wordValue(run(M::Programmer, {"5", "not"}, 8, false)) == 0xFA, "NOT 5 en BYTE = 250 (16#FA)");
+        check(calc::wordValue(run(M::Programmer, {"C#", "nand", "A", "="}, 8, false, B::Hex)) == 0xF7
+                  && calc::wordValue(run(M::Programmer, {"C#", "nor", "A", "="}, 8, false, B::Hex)) == 0xF1
+                  && calc::wordValue(run(M::Programmer, {"C#", "xor", "A", "="}, 8, false, B::Hex)) == 0x6
+                  && calc::wordValue(run(M::Programmer, {"C#", "or", "A", "="}, 8, false, B::Hex)) == 0xE,
+              "NAND, NOR, XOR, OR (le chiffre C du pave est \xC2\xAB C# \xC2\xBB ; C efface)");
+        check(calc::signedValue(run(M::Programmer, {"7", "/", "2", "="})) == 3 && calc::signedValue(run(M::Programmer, {"7", "neg", "/", "2", "="})) == -3,
+              "la division est enti\xC3\xA8re (7 / 2 = 3, -7 / 2 = -3)");
+        check(calc::signedValue(run(M::Programmer, {"7", "neg", "shr", "1", "="})) == -4
+                  && calc::wordValue(run(M::Programmer, {"7", "neg", "shr", "1", "="}, 16, false)) == 0x7FFC,
+              ">> arithm\xC3\xA9tique sign\xC3\xA9 (-7 >> 1 = -4), logique non sign\xC3\xA9");
+        check(calc::signedValue(run(M::Programmer, {"2", "+", "3", "*", "4", "="})) == 14 && calc::signedValue(run(M::Programmer, {"1", "or", "2", "and", "3", "="})) == 3,
+              "les priorit\xC3\xA9s : x avant +, AND avant OR");
+        check(run(M::Programmer, {"5", "/", "0", "="}).error.find("division") != std::string::npos, "division par z\xC3\xA9ro : Erreur");
+        st = run(M::Programmer, {"6", "5", "5", "3", "5"}, 16, false);
+        check(calc::wordValue(st) == 65535 && !calc::press(st, "6") && calc::wordValue(st) == 65535, "WORD non sign\xC3\xA9 : 65535, un chiffre de plus est refus\xC3\xA9");
+        st = run(M::Programmer, {"3", "2", "7", "6", "7"}, 16, true);
+        check(calc::signedValue(st) == 32767 && !calc::press(st, "0"), "WORD sign\xC3\xA9 : 32767 au plus");
+        st = run(M::Programmer, {}, 16, true, B::Bin);
+        check(!calc::keyEnabled(st, "2") && !calc::press(st, "2") && calc::keyEnabled(st, "1") && !calc::keyEnabled(st, "A")
+                  && !calc::keyEnabled(run(M::Programmer, {}, 16, true, B::Oct), "8") && calc::keyEnabled(run(M::Programmer, {}, 16, true, B::Hex), "F")
+                  && !calc::keyEnabled(run(M::Programmer, {}), "A") && !calc::keyEnabled(st, ","),
+              "BIN : 2-9 gris\xC3\xA9s ; OCT : 8 gris\xC3\xA9 ; A-F seulement en HEX ; la virgule toujours");
+        // La taille du mot : la valeur garde son signe en grandissant, est tronquee en retrecissant.
+        st = run(M::Programmer, {"1", "neg"}, 16, true);
+        calc::setWord(st, 32);
+        same(calc::baseText(calc::wordValue(st), B::Hex, 32, true), "FFFF FFFF", "WORD -1 -> DWORD : -1 (FFFF FFFF)");
+        calc::setWord(st, 8);
+        check(calc::wordValue(st) == 0xFF && calc::signedValue(st) == -1, "-> BYTE : FF, toujours -1");
+        check(calc::toggleBit(st, 7) && calc::wordValue(st) == 0x7F && calc::displayText(st) == "127", "le bit 7 bascule : 127");
+        check(!calc::toggleBit(st, 8), "le bit 8 n'existe pas en BYTE");
+        calc::setBase(st, B::Hex);
+        same(calc::displayText(st), "7F", "HEX : 7F (la valeur reste)");
+        st = run(M::Programmer, {"word"}, 16);
+        check(st.settings.bits == 32 && calc::press(st, "word") && st.settings.bits == 64 && calc::press(st, "word") && st.settings.bits == 8,
+              "la touche du mot : WORD, DWORD, LWORD, BYTE...");
+        st = run(M::Programmer, {}, 16, true, B::Hex);
+        check(calc::keyForChar(st, 'c') == "C#" && calc::keyForChar(st, '^') == "xor" && calc::keyForChar(st, '&') == "and"
+                  && calc::keyForChar(st, '<') == "shl" && calc::keyForChar(st, ',').empty(),
+              "le clavier du programmeur : a-f, ^ XOR, & AND, < d\xC3\xA9" "calage ; pas de virgule");
+        // LWORD non signe : 64 bits pleins
+        st = run(M::Programmer, {"F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F"}, 64, false, B::Hex);
+        check(calc::wordValue(st) == ~std::uint64_t{0} && !calc::press(st, "1"), "LWORD : 16 chiffres hexa, pas un de plus");
+        same(calc::baseText(calc::wordValue(st), B::Dec, 64, false), "18" + kThin + "446" + kThin + "744" + kThin + "073" + kThin + "709"
+                                                                        + kThin + "551" + kThin + "615",
+             "ULINT : 18 446 744 073 709 551 615");
+    }
+
+    // ---- la geometrie : le pave de chaque mode, la rangee du haut, les bits, les parties
+    {
+        auto st = calc::initialState({});
+        auto l = calc::layoutOf(st, 320, 470, false, false);
+        check(l.keys.size() == 24 && l.stripKeys.size() == 4 && l.bits.empty() && l.baseRows.empty(), "standard : 24 touches, MC MR M+ M-");
+        bool roundTrip = true;
+        for (const auto& k : l.keys) roundTrip = roundTrip && calc::hitPart(l, k.box.cx(), k.box.cy()) == "touche:" + k.id;
+        for (const auto& k : l.keys) roundTrip = roundTrip && k.box.w >= 32 && k.box.h >= 32;
+        check(roundTrip, "chaque touche se clique en son milieu, et fait 32 px au moins (au doigt)");
+        l = calc::layoutOf(st, 320, 470, true, true);
+        check(l.stripKeys.size() == 6 && l.stripKeys[4].id == "load" && l.stripKeys[5].id == "send" && l.stripKeys[5].label == "Envoyer",
+              "Valeur de d\xC3\xA9part et R\xC3\xA9sultat vers : les boutons \xE2\x87\xA9 et Envoyer");
+        st.settings.mode = M::Scientific;
+        l = calc::layoutOf(st, 460, 480, false, false);
+        check(l.keys.size() == 42 && l.stripKeys.front().id == "angle" && l.stripKeys.front().label == "DEG", "scientifique : 42 touches, DEG");
+        st.second = true;
+        l = calc::layoutOf(st, 460, 480, false, false);
+        hmi::Box sinBox;
+        bool sinSup = false;
+        for (const auto& k : l.keys) if (k.id == "sin") { sinSup = k.sup == kMinus + "1"; sinBox = k.box; }
+        check(sinSup, "la 2nde allum\xC3\xA9" "e : sin montre son exposant -1");
+        st = calc::initialState({});
+        st.settings.mode = M::Programmer;
+        l = calc::layoutOf(st, 440, 660, false, false);
+        check(l.keys.size() == 40 && l.baseRows.size() == 4 && l.bits.size() == 16 && l.bitGroups.size() == 4 && l.stripKeys[0].id == "word"
+                  && l.stripKeys[1].id == "sign",
+              "programmeur : 40 touches, 4 bases, 16 bits en 4 groupes (WORD), le mot et le signe");
+        check(l.bits[0].x > l.bits[15].x && l.bits[0].x > l.bits[4].x && calc::hitPart(l, l.bits[0].cx(), l.bits[0].cy()) == "bit:0"
+                  && calc::hitPart(l, l.baseRows[0].cx(), l.baseRows[0].cy()) == "base:HEX",
+              "le bit 0 \xC3\xA0 droite ; un bit, une base se cliquent");
+        check(l.bitGroupFirst == std::vector<int>{12, 8, 4, 0}, "sous chaque groupe : le num\xC3\xA9ro de son bit le plus bas");
+        st.settings.bits = 64;
+        l = calc::layoutOf(st, 440, 660, false, false);
+        check(l.bits.size() == 64 && l.bits[0].y > l.bits[63].y && l.bitGroups.size() == 16, "LWORD : 64 bits sur 4 lignes, le bit 63 en haut");
+        hmi::Box b;
+        check(calc::partBox(l, "touche:C#", b) && calc::hitPart(l, b.cx(), b.cy()) == "touche:C#" && calc::partBox(l, "bit:63", b)
+                  && calc::partBox(l, "base:BIN", b) && !calc::partBox(l, "bit:64", b),
+              "la bo\xC3\xAEte d'une partie (les essais, les exemples)");
+        check(calc::hitPart(l, l.display.cx(), l.display.cy()) == "afficheur", "l'afficheur se clique (le clavier)");
+    }
+
+    // ---- l'objet : registre, valeurs neuves, variantes, roles
+    {
+        const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), Kind::Calculator);
+        check(at != std::end(kPlaceableKinds) && kindFromKey("Calculator") == Kind::Calculator && kindLabel(Kind::Calculator) == "Calculatrice"
+                  && examples::exampleFor(Kind::Calculator).has_value() && hmi::guide::topicForKind("Calculator") != nullptr,
+              "Calculatrice : dans la biblioth\xC3\xA8que, sa cl\xC3\xA9, son exemple, son sujet du guide");
+        const Object c = makeObject(Kind::Calculator, 7, "Calc_1", 0, 0, 1);
+        check(c.text("calcMode") == "standard" && c.text("angleUnit") == "DEG" && c.text("wordSize") == "WORD" && c.flag("signedWord", false)
+                  && c.number("decimals") == 10 && c.text("startValue").empty() && c.text("resultTo").empty() && c.flag("pilotable", false)
+                  && c.number("w") == 320 && c.number("h") == 470,
+              "Calculatrice neuve : standard, DEG, WORD sign\xC3\xA9, 10 d\xC3\xA9" "cimales, sans lien, pilotable, 320 x 470");
+        for (const auto& prop : c.props) check(roles::keyRole(prop.key) != nullptr, "Calculatrice : le r\xC3\xB4le de " + prop.key);
+        const auto vars = kindVariants(Kind::Calculator);
+        check(vars.size() == 3 && vars[0].key == "standard" && vars[1].key == "scientifique" && vars[2].key == "programmeur"
+                  && vars[1].label == "Calculatrice scientifique" && kindVariants(Kind::Button).empty(),
+              "trois variantes : standard, scientifique, programmeur (les autres genres : aucune)");
+        Object sci = c, prog = c, but = makeObject(Kind::Button, 8, "B", 0, 0, 1);
+        check(applyKindVariant(sci, "scientifique") && sci.text("calcMode") == "scientifique" && sci.number("w") == 460
+                  && applyKindVariant(prog, "programmeur") && prog.text("calcMode") == "programmeur" && prog.text("calcBase") == "HEX"
+                  && prog.number("h") == 660 && !applyKindVariant(but, "scientifique") && !applyKindVariant(sci, "comptable"),
+              "une variante r\xC3\xA8gle le mode et la taille (le programmeur part en HEX)");
+    }
+
+    // ---- en marche : la Valeur de depart, les touches, le clavier, Envoyer, le niveau d'acces, Result
+    {
+        Project p;
+        View v = makeView(p, "Vue_Calc");
+        const Id c1 = edit::add(p, v, Kind::Calculator, 10, 10);
+        v.object(c1)->name = "Calc";
+        v.object(c1)->set("startValue", "Debit * 2");
+        v.object(c1)->set("resultTo", "Consigne");
+        const Id c2 = edit::add(p, v, Kind::Calculator, 400, 10);
+        v.object(c2)->name = "Prog";
+        (void)applyKindVariant(*v.object(c2), "programmeur");
+        v.object(c2)->set("startValue", "Mot");
+        v.object(c2)->set("resultTo", "Mot_Ecrit");
+        const Id c3 = edit::add(p, v, Kind::Calculator, 10, 500);
+        v.object(c3)->name = "Lecture";
+        v.object(c3)->set("startValue", "42");
+        v.object(c3)->setFlag("pilotable", false);
+        View w = makeView(p, "Vue_Autre");
+        p.views = {v, w};
+        p.config.startView = v.id;
+        p.programs.variables.push_back(Variable{p.allocate(), "Debit", "REAL", "6.25", {}});
+        p.programs.variables.push_back(Variable{p.allocate(), "Consigne", "INT", "0", {}});
+        p.programs.variables.push_back(Variable{p.allocate(), "Mot", "WORD", "255", {}});
+        p.programs.variables.push_back(Variable{p.allocate(), "Mot_Ecrit", "INT", "0", {}});
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0);
+        rt.tick(0.1);
+        const calc::State* st = rt.calculatorState(c1);
+        check(st && calc::displayText(*st) == "12,5", "la Valeur de d\xC3\xA9part (Debit * 2) lue \xC3\xA0 l'ouverture de la vue : 12,5");
+        const calc::State* sp = rt.calculatorState(c2);
+        check(sp && sp->settings.mode == M::Programmer && sp->settings.base == B::Hex && calc::displayText(*sp) == "FF",
+              "la programmeur part de Mot (255) : FF en HEX");
+        for (const char* k : {"touche:+", "touche:3", "touche:="}) rt.objectPart(c1, k, 0.2);
+        check(calc::displayText(*st) == "15,5" && rt.focusedObject() == c1, "les touches (le clic) : 12,5 + 3 = 15,5 ; elle a le clavier");
+        rt.typeText("*2", 0.3);
+        rt.typeKey(EditKey::Enter, 0.3);
+        same(calc::displayText(*st), "31", "le clavier : * 2 Entr\xC3\xA9" "e = 31");
+        rt.typeKey(EditKey::Escape, 0.35);
+        rt.typeText("7.4", 0.35);
+        same(calc::displayText(*st), "7,4", "\xC3\x89" "chap efface (C), le point s'\xC3\xA9" "crit en virgule : 7,4");
+        rt.typeKey(EditKey::Backspace, 0.36);
+        rt.typeText("6", 0.36);
+        same(calc::displayText(*st), "7,6", "Retour arri\xC3\xA8re efface le dernier chiffre");
+        sim::Value out;
+        check(rt.publicRead("Vue_Calc.Calc.Result", out) && std::fabs(out.asReal() - 7.6) < 1e-9 && rt.publicRead("Vue_Calc.Calc.DisplayText", out)
+                  && out.asString() == "7,6",
+              "Vue_Calc.Calc.Result (7.6) et .DisplayText se lisent");
+        rt.objectPart(c1, "touche:send", 0.4);
+        sim::Value cons;
+        check(rt.environment().read("Consigne", cons) && cons.asInteger() == 8 && journalHas(rt, "Action", "Consigne = 8"),
+              "Envoyer : Consigne (INT) re\xC3\xA7oit 8 (7,6 arrondi), le journal le dit");
+        const auto* f = rt.formState(c1);
+        check(f && !f->error && f->message.find("Consigne = 8") != std::string::npos, "l'afficheur dit \xC2\xAB envoy\xC3\xA9 : Consigne = 8 \xC2\xBB");
+        rt.objectPart(c1, "touche:1", 0.45);
+        rt.objectPart(c1, "touche:/", 0.45);
+        rt.objectPart(c1, "touche:0", 0.45);
+        rt.objectPart(c1, "touche:=", 0.45);
+        rt.objectPart(c1, "touche:send", 0.5);
+        check(rt.environment().read("Consigne", cons) && cons.asInteger() == 8 && rt.formState(c1)->error, "en erreur, Envoyer n'\xC3\xA9" "crit rien");
+        // Charger : la Valeur de depart relue (Debit a change).
+        check(rt.environment().write("Debit", sim::Value::real(1.5)), "Debit = 1,5");
+        rt.objectPart(c1, "touche:load", 0.6);
+        same(calc::displayText(*st), "3", "\xE2\x87\xA9 relit la Valeur de d\xC3\xA9part : 3");
+        // La programmeur : un bit, une base, Envoyer un entier.
+        rt.objectPart(c2, "bit:8", 0.7);
+        check(calc::wordValue(*sp) == 0x1FF && rt.focusedObject() == c2, "un clic sur le bit 8 : 16#1FF ; la programmeur a le clavier");
+        rt.objectPart(c2, "base:BIN", 0.7);
+        same(calc::displayText(*sp), "1 1111 1111", "un clic sur BIN : la base active");
+        rt.typeText("0", 0.75);
+        check(calc::wordValue(*sp) == 0x3FE, "un 0 tap\xC3\xA9 en BIN : 11 1111 1110");
+        rt.objectPart(c2, "touche:send", 0.8);
+        sim::Value mot;
+        check(rt.environment().read("Mot_Ecrit", mot) && mot.asInteger() == 0x3FE, "Envoyer en programmeur : l'entier (1022)");
+        rt.objectPart(c2, "touche:word", 0.85);
+        rt.objectPart(c2, "touche:sign", 0.85);
+        check(sp->settings.bits == 32 && !sp->settings.isSigned, "les touches du mot et du signe");
+        // Non pilotable : elle montre sa valeur, sans reagir.
+        const calc::State* sl = rt.calculatorState(c3);
+        rt.objectPart(c3, "touche:9", 0.9);
+        check(sl && calc::displayText(*sl) == "42" && rt.focusedObject() != c3, "non pilotable : 42, les touches ne r\xC3\xA9" "agissent pas");
+        // La vue fermee, le calcul s'oublie ; rouverte, la Valeur de depart est relue.
+        check(rt.navigate(w.id, Transition{}, 1.0), "Vue_Autre s'ouvre");
+        rt.tick(1.1);
+        check(rt.calculatorState(c1) == nullptr && rt.focusedObject() != c1, "la vue ferm\xC3\xA9" "e : son calcul s'oublie");
+        check(rt.navigate(v.id, Transition{}, 1.2), "Vue_Calc revient");
+        rt.tick(1.3);
+        check(rt.calculatorState(c1) && calc::displayText(*rt.calculatorState(c1)) == "3", "rouverte : elle repart de sa Valeur de d\xC3\xA9part (Debit * 2 = 3)");
+        // Le niveau d'acces : sous securite, une calculatrice de niveau 3 refuse ; Envoyer demande Piloter.
+        Project q = p;
+        q.security.enabled = true;
+        q.views[0].object(c1)->setNumber("access", 3);
+        Runtime rq;
+        rq.bind(&q, nullptr);
+        rq.start(0);
+        rq.tick(0.1);
+        rq.objectPart(c1, "touche:9", 0.2);
+        check(calc::displayText(*rq.calculatorState(c1)) == "12,5" && eventHas(rq, "Acc\xC3\xA8s refus\xC3\xA9", "niveau d'acc\xC3\xA8s 3"),
+              "sous s\xC3\xA9" "curit\xC3\xA9, le niveau d'acc\xC3\xA8s de l'objet : la touche est refus\xC3\xA9" "e");
+        rq.objectPart(c2, "touche:send", 0.3);
+        sim::Value m2;
+        check(rq.environment().read("Mot_Ecrit", m2) && m2.asInteger() == 0 && rq.formState(c2) && rq.formState(c2)->error
+                  && rq.formState(c2)->message.find("Piloter") != std::string::npos,
+              "Envoyer sans la permission Piloter : refus\xC3\xA9, rien n'est \xC3\xA9" "crit");
+    }
+
+    // ---- Generer, Dupliquer, le code brut, un projet d'avant
+    {
+        Project gp;
+        View gv = makeView(gp, "Vue_G");
+        const Id a = edit::add(gp, gv, Kind::Calculator, 10, 10);
+        gv.object(a)->set("calcMode", "comptable");
+        gv.object(a)->set("resultTo", "Inconnue_X");
+        const Id b = edit::add(gp, gv, Kind::Calculator, 400, 10);
+        (void)applyKindVariant(*gv.object(b), "programmeur");
+        gv.object(b)->set("wordSize", "QUADWORD");
+        gv.object(b)->set("resultTo", "Drapeau");
+        gv.object(b)->setNumber("h", 200);
+        const Id c = edit::add(gp, gv, Kind::Calculator, 10, 500);
+        gv.object(c)->set("resultTo", "Mesures");
+        gp.views = {gv};
+        gp.config.startView = gv.id;
+        gp.programs.variables.push_back(Variable{gp.allocate(), "Drapeau", "BOOL", "FALSE", {}});
+        gp.programs.variables.push_back(Variable{gp.allocate(), "Mesures", "ARRAY[0..3] OF REAL", "", {}});
+        const auto gen = generate(gp, [](std::string_view) { return false; });
+        bool mode = false, unknown = false, word = false, flag = false, small = false, array = false;
+        for (const auto& i : gen) {
+            mode = mode || (i.property == "calcMode" && i.message.find("comptable") != std::string::npos);
+            unknown = unknown || (i.property == "resultTo" && i.message.find("Inconnue_X") != std::string::npos);
+            word = word || (i.property == "wordSize" && i.message.find("QUADWORD") != std::string::npos);
+            flag = flag || (i.property == "resultTo" && i.message.find("Drapeau (BOOL)") != std::string::npos);
+            small = small || (i.property == "w" && i.message.find("trop petite") != std::string::npos);
+            array = array || (i.property == "resultTo" && i.message.find("Mesures") != std::string::npos && i.severity == Issue::Severity::Error);
+        }
+        check(mode && unknown && word && flag && small && array,
+              "G\xC3\xA9n\xC3\xA9rer : mode inconnu, R\xC3\xA9sultat vers inconnu, mot inconnu, un BOOL (avertissement), trop petite, un tableau (erreur)");
+        const View& vv = *gp.view(gv.id);
+        for (const Id id : {a, b}) {
+            const std::string code = serializeObjectCode(vv, {id});
+            auto back = parseObjectCode(code);
+            check(back && back->objects.size() == 1 && back->objects[0] == *vv.object(id), "Calculatrice : le code brut se relit \xC3\xA0 l'identique");
+        }
+        View dup = vv;
+        const auto copies = edit::duplicate(gp, dup, {b}, 20, 20);
+        check(copies.size() == 1 && dup.object(copies[0]) && dup.object(copies[0])->kind == Kind::Calculator
+                  && dup.object(copies[0])->text("calcMode") == "programmeur" && dup.object(copies[0])->text("resultTo") == "Drapeau",
+              "Dupliquer la calculatrice : son mode et son R\xC3\xA9sultat vers suivent");
+        // Un projet sans calculatrice s'ecrit comme en 1.14.0 ; avec, elle se relit a l'identique.
+        Project q;
+        View qv = makeView(q, "Vue_Avant");
+        (void)edit::add(q, qv, Kind::VolumeMixer, 10, 10);
+        q.views = {qv};
+        q.config.startView = qv.id;
+        std::string text;
+        for (const auto& fl : serializeProject(q)) if (fl.data) text.append(fl.data->begin(), fl.data->end());
+        check(text.find("Calculator") == std::string::npos && text.find("calcMode") == std::string::npos,
+              "un projet 1.14.0 sans calculatrice s'\xC3\xA9" "crit comme avant (rien de nouveau dans ses fichiers)");
+        View nv = qv;
+        const Id n1 = edit::add(q, nv, Kind::Calculator, 300, 10);
+        nv.object(n1)->set("startValue", "Debit * 3.6");
+        auto back = parseView(serializeView(nv));
+        check(back && back->object(n1) && *back->object(n1) == *nv.object(n1), "la calculatrice s'enregistre et se relit \xC3\xA0 l'identique");
     }
 }
 
 int main(int argc, char** argv) {
+    // 1.14.1 (lot N4) : HMI_TEST_1141=1 - la Calculatrice, seule.
+    if (const char* only = std::getenv("HMI_TEST_1141"); only && *only == '1') {
+        calculatrice1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.1 (lot K3) : HMI_TEST_1131=1 - le code brut des objets, seul.
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
         codeBrut1131();
@@ -31685,6 +32108,7 @@ int main(int argc, char** argv) {
     codeBrut1131();                   // 1.13.1 (lot K3) : le code brut des objets
     son1140();                        // 1.14.0 (lot M3) : couper le son, le melangeur de volume
     finsDeCourse1141();               // 1.14.1 (lot N1) : vannes et registres commandes par leurs fins de course
+    calculatrice1141();               // 1.14.1 (lot N4) : la Calculatrice (standard, scientifique, programmeur)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

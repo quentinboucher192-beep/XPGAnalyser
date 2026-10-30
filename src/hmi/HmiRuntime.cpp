@@ -4626,6 +4626,7 @@ void Runtime::start(double now) {
     gifs_.clear();                      // lot 16
     mediasReset();                      // 1.12.12 (lot H)
     docsReset();                        // 1.12.30
+    calcs_.clear();                     // 1.14.1 (N4) : les calculatrices
     openCounts_.clear();
     previousView_ = kNoId;
     navigations_ = cycles_ = recipeApplies_ = 0;
@@ -5002,6 +5003,7 @@ void Runtime::prime(double now) {
     gifs_.clear();                      // lot 16
     mediasReset();                      // 1.12.12 (lot H)
     docsReset();                        // 1.12.30
+    calcs_.clear();                     // 1.14.1 (N4) : les calculatrices
     initVariables();
     // 1.12.7 : l'essai d'une fonction, le banc des expressions lisent aussi les constantes calculees.
     (void)computeDeclarations();
@@ -5303,6 +5305,7 @@ void Runtime::cycle(double now) {
     gifsCycle(now);                     // lot 16 : les GIF animes (conditions, fin de lecture)
     mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
     docsCycle(now);                     // 1.12.30 : les visionneuses de documents (document, page)
+    calcsCycle(now);                    // 1.14.1 (N4) : les calculatrices (nees a l'ouverture de leur vue)
     double rest = lap();
     double scripted = 0;
     for (const auto& part : cycleParts_) scripted += part.ms;
@@ -7049,6 +7052,7 @@ std::string Runtime::keyboardMode() const {
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) return {};
     if (o->kind == Kind::DocumentViewer) return docKeyboardMode();   // 1.12.30 : son numero de page, sa recherche
+    if (o->kind == Kind::Calculator) return {};                      // 1.14.1 (N4) : ses touches suffisent
     // Lot 10 : le reglage du poste - jamais aucun clavier, ou toujours un.
     if (settings_.keyboard == "jamais") return {};
     const std::string k = plain(o->text("keyboard", "aucun"));
@@ -7117,6 +7121,13 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     // 1.12.30 : la visionneuse de documents - ses pages, son zoom, sa recherche (HmiRuntimeDocs.cpp).
     if (found->kind == Kind::DocumentViewer) {
         docObjectPart(*v, *found, part, now);
+        return;
+    }
+    // 1.14.1 (N4) : la Calculatrice - une touche, une base, un bit, Charger, Envoyer (a la fin du fichier).
+    if (found->kind == Kind::Calculator) {
+        View snapshot = *v;
+        evaluateProps(snapshot.id, *snapshot.object(object));
+        calcObjectPart(snapshot, *snapshot.object(object), part, now);
         return;
     }
     // 1.14.0 (M4) : l'Enregistreur (son bouton), le Lecteur d'enregistrements (une ligne, Rejouer).
@@ -7291,6 +7302,7 @@ void Runtime::typeText(std::string_view text, double now) {
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) { focused_ = kNoId; return; }
     if (o->kind == Kind::DocumentViewer) { docTypeText(*v, *o, text, now); return; }   // 1.12.30
+    if (o->kind == Kind::Calculator) { calcTypeText(*v, *o, text, now); return; }      // 1.14.1 (N4)
     auto& f = forms_[focused_];
     if (f.focus.empty()) return;
     auto& buffer = f.text[f.focus];
@@ -7337,6 +7349,7 @@ void Runtime::typeKey(EditKey k, double now) {
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) { focused_ = kNoId; return; }
     if (o->kind == Kind::DocumentViewer) { docTypeKey(*v, *o, k, now); return; }   // 1.12.30
+    if (o->kind == Kind::Calculator) { calcTypeKey(*v, *o, k, now); return; }      // 1.14.1 (N4)
     const Id object = focused_;
     auto& f = forms_[object];
     if (f.focus.empty()) return;
@@ -7670,6 +7683,215 @@ void Runtime::userManagerClick(const View& v, const Object& o, std::string_view 
     }
     f.message.clear();
     hooks_.userRequest(rq);
+}
+
+// ================================================================ 1.14.1 (N4) : la Calculatrice ===
+//  Un etat par calculatrice montree (calcs_) : il nait quand sa vue s'ouvre (sa Valeur de depart s'y charge), suit
+//  ses proprietes (un autre mode, une autre taille de mot : calculator::applySettings), et s'oublie quand sa vue se
+//  ferme. Le calcul est dans HmiCalculator.cpp ; ici, le clic, le clavier, Charger et Envoyer.
+namespace {
+
+// Le type d'un entier du programmeur, ecrit tel quel (writeCommand le convertit ensuite vers la variable).
+sim::Type calcWordType(int bits, bool isSigned) {
+    switch (bits) {
+        case 8: return isSigned ? sim::Type::Int : sim::Type::Byte;
+        case 32: return isSigned ? sim::Type::DInt : sim::Type::UDInt;
+        case 64: return isSigned ? sim::Type::LInt : sim::Type::ULInt;
+        default: return isSigned ? sim::Type::Int : sim::Type::UInt;
+    }
+}
+
+bool calcIntegerType(sim::Type t) {
+    switch (t) {
+        case sim::Type::Byte: case sim::Type::Word: case sim::Type::DWord: case sim::Type::Int: case sim::Type::DInt:
+        case sim::Type::UInt: case sim::Type::UDInt: case sim::Type::LInt: case sim::Type::ULInt: case sim::Type::LWord:
+            return true;
+        default:
+            return false;
+    }
+}
+
+} // namespace
+
+const calculator::State* Runtime::calculatorState(Id object) const {
+    const auto it = calcs_.find(object);
+    return it == calcs_.end() ? nullptr : &it->second;
+}
+
+void Runtime::calcsCycle(double now) {
+    if (!project_) return;
+    std::set<Id> seen;
+    const auto visit = [&](Id viewId) {
+        const View* v = viewOf(viewId);
+        if (!v) return;
+        for (const auto& so : v->objects) {
+            if (so.kind != Kind::Calculator) continue;
+            seen.insert(so.id);
+            Object o = so;
+            evaluateProps(viewId, o);      // telle que l'ecran la montre
+            (void)calcState(*v, o, now);
+        }
+    };
+    visit(current_);
+    for (const Id p : popups_) visit(p);
+    // Les calculatrices qui ne se montrent plus : leur calcul s'oublie (la vue rouverte relit sa Valeur de depart).
+    for (auto it = calcs_.begin(); it != calcs_.end();) {
+        if (seen.count(it->first)) {
+            ++it;
+            continue;
+        }
+        if (focused_ == it->first) focused_ = kNoId;
+        it = calcs_.erase(it);
+    }
+}
+
+calculator::State& Runtime::calcState(const View& v, const Object& o, double now) {
+    const auto settings = calculator::settingsOf(o);
+    if (const auto it = calcs_.find(o.id); it != calcs_.end()) {
+        calculator::applySettings(it->second, settings);
+        return it->second;
+    }
+    auto& st = calcs_.emplace(o.id, calculator::initialState(settings)).first->second;
+    (void)calcLoad(v, o, st, false, now);    // la Valeur de depart, a l'ouverture de la vue
+    return st;
+}
+
+// La Valeur de depart (une expression : une variable, un calcul) chargee dans la calculatrice. `gesture` : le bouton
+// Charger (l'afficheur dit ce qui s'est passe) ; sinon l'ouverture de la vue (une valeur illisible : la Console).
+bool Runtime::calcLoad(const View& v, const Object& o, calculator::State& st, bool gesture, double now) {
+    const std::string src = formulaOf(o, "startValue");
+    if (src.empty()) {
+        if (gesture) formMessage(o.id, "aucune valeur de d\xC3\xA9part", true, now);
+        return false;
+    }
+    auto it = expressions_.find(src);
+    if (it == expressions_.end()) it = expressions_.emplace(src, Expression::compile(src)).first;
+    std::optional<sim::Value> val;
+    if (it->second.valid() && env_)
+        if (auto r = it->second.evaluate(*env_, viewScope(v.id))) val = *r;
+    double x = 0;
+    bool ok = val.has_value();
+    if (ok) {
+        switch (val->type()) {
+            case sim::Type::Unknown: ok = false; break;
+            case sim::Type::String: ok = calculator::parseEntry(trimText(val->asString()), x); break;
+            case sim::Type::Bool: x = val->isTruthy() ? 1 : 0; break;
+            case sim::Type::Time: x = static_cast<double>(val->asInteger()) / 1000.0; break;   // en secondes
+            default: x = val->asReal(); break;
+        }
+    }
+    if (!ok || !std::isfinite(x)) {
+        const std::string why = "valeur de d\xC3\xA9part illisible : " + src;
+        logAt(LogLevel::Warning, "Calculatrice", where(v, &o), why);
+        if (gesture) formMessage(o.id, why, true, now);
+        return false;
+    }
+    if (st.settings.mode == calculator::Mode::Programmer && calcIntegerType(val->type())) calculator::loadWord(st, val->asInteger());
+    else calculator::load(st, x);
+    if (gesture) formMessage(o.id, "charg\xC3\xA9" "e : " + src, false, now);
+    return true;
+}
+
+// Envoyer : le nombre montre ecrit dans Resultat vers, comme une commande (writeCommand : le niveau d'acces de
+// l'objet, la permission Piloter, la conversion vers le type de la variable et ses bornes, le journal). Un entier du
+// programmeur s'ecrit tel quel (signe ou non) ; une erreur n'envoie rien.
+bool Runtime::calcSend(const View& v, const Object& o, calculator::State& st, double now) {
+    const std::string target = trimText(markers::strip(formulaOf(o, "resultTo")));
+    if (target.empty()) return false;
+    if (!st.error.empty()) {
+        formMessage(o.id, "rien \xC3\xA0 envoyer (" + st.error + ")", true, now);
+        return false;
+    }
+    sim::Value value;
+    if (st.settings.mode == calculator::Mode::Programmer)
+        value = sim::Value::integer(calcWordType(st.settings.bits, st.settings.isSigned), calculator::signedValue(st));
+    else
+        value = sim::Value::real(calculator::value(st));
+    Object writer = o;
+    writer.set("variable", target);
+    GestureGuard gesture(*this, where(v, &o), "Clic sur");
+    if (!writeCommand(v, writer, value, now, calculator::displayText(st), true)) return false;   // la raison : l'afficheur, le journal
+    sim::Value after;
+    formMessage(o.id, "envoy\xC3\xA9 : " + target + " = " + (environment().read(target, after) ? formatValue(after) : formatValue(value)), false,
+                now);
+    return true;
+}
+
+void Runtime::calcObjectPart(const View& v, const Object& o, std::string_view part, double now) {
+    auto& st = calcState(v, o, now);
+    if (!o.flag("pilotable", true)) return;      // elle montre, sans reagir
+    const std::string source = where(v, &o);
+    std::string why;
+    if (!objectAllowed(o, &why)) {
+        event("Acc\xC3\xA8s refus\xC3\xA9", source, why);
+        formMessage(o.id, why, true, now);
+        return;
+    }
+    // Le clavier : un clic sur la calculatrice le lui donne (la saisie d'un autre objet se termine).
+    if (focused_ != o.id) {
+        if (focused_ != kNoId) unfocus(now, o.id);
+        focused_ = o.id;
+    }
+    if (part.rfind("base:", 0) == 0) {
+        calculator::Base b = calculator::Base::Dec;
+        if (calculator::baseFrom(part.substr(5), b)) calculator::setBase(st, b);
+        return;
+    }
+    if (part.rfind("bit:", 0) == 0) {
+        (void)calculator::toggleBit(st, std::atoi(std::string(part.substr(4)).c_str()));
+        return;
+    }
+    if (part.rfind("touche:", 0) != 0) return;   // "afficheur" : le clavier, rien d'autre
+    const std::string key(part.substr(7));
+    st.lastKey = key;
+    st.lastKeyAt = now;
+    if (key == "load") (void)calcLoad(v, o, st, true, now);
+    else if (key == "send") (void)calcSend(v, o, st, now);
+    else (void)calculator::press(st, key);
+}
+
+void Runtime::calcTypeText(const View& v, const Object& raw, std::string_view text, double now) {
+    Object o = raw;
+    evaluateProps(v.id, o);
+    if (!o.flag("pilotable", true) || !objectAllowed(o)) return;
+    auto& st = calcState(v, o, now);
+    for (const char c : text) {
+        const std::string key = calculator::keyForChar(st, c);
+        if (key.empty()) continue;
+        st.lastKey = key;
+        st.lastKeyAt = now;
+        (void)calculator::press(st, key);
+    }
+}
+
+void Runtime::calcTypeKey(const View& v, const Object& raw, EditKey k, double now) {
+    Object o = raw;
+    evaluateProps(v.id, o);
+    if (!o.flag("pilotable", true) || !objectAllowed(o)) return;
+    auto& st = calcState(v, o, now);
+    std::string key;
+    switch (k) {
+        case EditKey::Enter: key = "="; break;
+        case EditKey::Escape: key = "C"; break;
+        case EditKey::Backspace: key = "back"; break;
+        case EditKey::Delete: key = "CE"; break;
+        default: return;
+    }
+    st.lastKey = key;
+    st.lastKeyAt = now;
+    (void)calculator::press(st, key);
+}
+
+bool Runtime::calcMemberValue(const Object& o, std::string_view info, sim::Value& out) const {
+    if (o.kind != Kind::Calculator) return false;
+    const calculator::State* st = calculatorState(o.id);
+    const bool ok = st && st->error.empty();
+    if (info == "Result") out = sim::Value::real(ok ? calculator::value(*st) : 0.0);
+    else if (info == "DisplayText") out = sim::Value::text(st ? calculator::displayText(*st) : std::string("0"));
+    else if (info == "Expression") out = sim::Value::text(st ? calculator::expressionText(*st) : std::string{});
+    else if (info == "Memory") out = sim::Value::real(st && st->hasMemory ? st->memory : 0.0);
+    else return false;
+    return true;
 }
 
 } // namespace hmi

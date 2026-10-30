@@ -153,6 +153,8 @@ bool symbolShape(char32_t code, SymbolShape& s) {
     case 0x22EF: return box(1.15f, 0.3f, { discP({0.14f, 0.5f}, 0.45f), discP({0.5f, 0.5f}, 0.45f), discP({0.86f, 0.5f}, 0.45f) });
     case 0x232B: return box(1.25f, 0.88f, { loopP({{0.3f, 0.06f}, {0.97f, 0.06f}, {0.97f, 0.94f}, {0.3f, 0.94f}, {0.03f, 0.5f}}, 0.8f),
                                             lineP({{0.5f, 0.3f}, {0.78f, 0.7f}}), lineP({{0.78f, 0.3f}, {0.5f, 0.7f}}) });
+    // 1.14.1 (N4) : la racine carree - le petit crochet, la grande montee, la barre du haut (la Calculatrice)
+    case 0x221A: return box(0.82f, 1.02f, { lineP({{0.02f, 0.6f}, {0.18f, 0.52f}, {0.42f, 0.97f}, {0.72f, 0.03f}, {1.0f, 0.03f}}, 0.9f) });
     // 1.11.13 : les etats du build de l'IHM - ◌ non genere (un cercle en pointilles),
     // ⚙ generation en cours (une roue dentee), ◔ compilation en cours (un quart plein),
     // ⛓ dependance invalide (deux maillons), ⏱ obsolete (un chronometre)

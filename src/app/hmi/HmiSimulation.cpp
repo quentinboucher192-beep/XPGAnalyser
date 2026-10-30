@@ -1784,6 +1784,16 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                     case hmi::Kind::VolumeMixer:      // 1.14.0 : "volume:Alarmes:0.5", "muet:Alarmes"
                         found = hmi::mixerPartBox(o, box.w, box.h, part, local);
                         break;
+                    case hmi::Kind::Calculator: {     // 1.14.1 (N4) : "touche:7", "base:HEX", "bit:12", "afficheur"
+                        const auto* st = runtime_ ? runtime_->calculatorState(o.id) : nullptr;
+                        hmi::calculator::State fresh;
+                        if (!st) {
+                            fresh = hmi::calculator::initialState(hmi::calculator::settingsOf(o));
+                            st = &fresh;
+                        }
+                        found = hmi::calculator::partBox(hmi::calculator::layoutOf(o, *st, box.w, box.h), part, local);
+                        break;
+                    }
                     case hmi::Kind::Slider:
                     case hmi::Kind::Knob: {
                         // "fraction:0.75" : le point de la course qui donne 75 %.
@@ -2028,6 +2038,21 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 docDragLast_ = p;
             }
             if (!part.empty()) partClicked->emit(id, "doc:at:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
+            return;
+        }
+        // 1.14.1 (N4) : la Calculatrice - une touche, une base, un bit (la geometrie de son dessin) ; un clic, ou que ce
+        // soit sur elle, lui donne le clavier (le moteur).
+        if (o->kind == hmi::Kind::Calculator) {
+            if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
+            const auto* st = runtime_ ? runtime_->calculatorState(id) : nullptr;
+            hmi::calculator::State fresh;
+            if (!st) {
+                fresh = hmi::calculator::initialState(hmi::calculator::settingsOf(*o));
+                st = &fresh;
+            }
+            std::string part = hmi::calculator::hitPart(hmi::calculator::layoutOf(*o, *st, box.w, box.h), lx, ly);
+            if (part.empty()) part = "afficheur";
+            partClicked->emit(id, part);
             return;
         }
         // 1.14.0 (M4) : l'Enregistreur - tout l'objet (sous son titre) est son bouton ; le Lecteur
@@ -4973,7 +4998,8 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
                     const bool writes = hmi::kindWritesVariable(o.kind);
                     const bool acts = !o.actions.empty() || writes || o.kind == hmi::Kind::SystemButton    // lot 10 : le menu
                                    || o.kind == hmi::Kind::LoginMenuButton                                       // lot 12
-                                   || ((o.kind == hmi::Kind::SoundMute || o.kind == hmi::Kind::VolumeMixer)      // 1.14.0
+                                   || ((o.kind == hmi::Kind::SoundMute || o.kind == hmi::Kind::VolumeMixer      // 1.14.0
+                                        || o.kind == hmi::Kind::Calculator)                                      // 1.14.1 (N4)
                                        && o.flag("pilotable", true));
                     if (acts && !runtime_.objectAllowed(o)) l.locked.push_back(o.id);
                     else if (writes && !runtime_.permitted("Piloter")) l.locked.push_back(o.id);

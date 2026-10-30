@@ -1,4 +1,5 @@
 #include "HmiModel.hpp"
+#include "HmiCalculator.hpp"      // 1.14.1 (N4) : la Calculatrice (ses variantes, leur taille)
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "../sim/ValueText.hpp"  // 1.12.19 : les lecteurs d'une valeur tapee
 
@@ -1401,6 +1402,35 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("knobColor", "#F4F6FA");
             o.set("muteColor", "#E5484D");
             o.setNumber("radius", 6);
+            o.setFlag("pilotable", true);
+            break;
+        case Kind::Calculator:
+            // 1.14.1 (N4) : la Calculatrice (HmiCalculator.hpp). "calcMode" : standard, scientifique ou programmeur
+            // (la bibliotheque propose les trois) ; "angleUnit" DEG / RAD (scientifique) ; "wordSize" BYTE, WORD,
+            // DWORD, LWORD, "signedWord", "calcBase" (programmeur, la base de depart) ; "decimals" : les decimales
+            // montrees au plus. Ses couleurs : le fond, l'afficheur, les touches des chiffres, des fonctions et
+            // operateurs, de =. "startValue" : une expression lue a l'ouverture de la vue (et par le bouton Charger) ;
+            // "resultTo" : la variable ou le bouton Envoyer ecrit le resultat (vide : pas de bouton). "pilotable"
+            // decoche : elle montre sans reagir.
+            common(o, x, y, 320, 470);
+            o.set("calcMode", "standard");
+            o.set("angleUnit", "DEG");
+            o.set("wordSize", "WORD");
+            o.setFlag("signedWord", true);
+            o.set("calcBase", "DEC");
+            o.setNumber("decimals", 10);
+            o.set("font", "Sans");
+            o.setNumber("fontSize", 20);
+            o.set("textColor", "#F2F4F8");
+            o.set("fill", "#1B2028");
+            o.set("stroke", "#323A46");
+            o.set("displayColor", "#10141A");
+            o.set("keyColor", "#3B4351");
+            o.set("opColor", "#2A313C");
+            o.set("equalsColor", "#2F6FD6");
+            o.setNumber("radius", 8);
+            o.set("startValue", "");
+            o.set("resultTo", "");
             o.setFlag("pilotable", true);
             break;
         case Kind::LoginMenuButton:
@@ -3285,6 +3315,26 @@ bool Project::isNamespace(std::string_view name) const {
     if (!isNamespaceName(name)) return false;
     const auto all = namespaces();
     return std::any_of(all.begin(), all.end(), [&](const std::string& n) { return iequals(n, name); });
+}
+
+// ================================================ 1.14.1 (N4) : les variantes ===
+std::vector<KindVariant> kindVariants(Kind k) {
+    if (k != Kind::Calculator) return {};
+    return {{k, calculator::modeKey(calculator::Mode::Standard), calculator::modeLabel(calculator::Mode::Standard), "Calculatrice"},
+            {k, calculator::modeKey(calculator::Mode::Scientific), calculator::modeLabel(calculator::Mode::Scientific), "Scientifique"},
+            {k, calculator::modeKey(calculator::Mode::Programmer), calculator::modeLabel(calculator::Mode::Programmer), "Programmeur"}};
+}
+
+bool applyKindVariant(Object& o, std::string_view key) {
+    if (o.kind != Kind::Calculator || !calculator::knownMode(key)) return false;
+    const auto mode = calculator::modeFrom(key);
+    o.set("calcMode", std::string(calculator::modeKey(mode)));
+    const Box size = calculator::defaultSize(mode);
+    o.setNumber("w", size.w);
+    o.setNumber("h", size.h);
+    // Le programmeur part en HEX : un registre se lit en hexadecimal et bit par bit.
+    if (mode == calculator::Mode::Programmer) o.set("calcBase", "HEX");
+    return true;
 }
 
 } // namespace hmi
