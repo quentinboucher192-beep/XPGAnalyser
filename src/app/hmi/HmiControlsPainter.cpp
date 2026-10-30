@@ -1064,7 +1064,8 @@ void drawSoundMute(const Ctx& c) {
     const gfx::Color fill = down ? mix(base, gfx::Color{0, 0, 0, base.a}, 0.25f) : base;
     const auto shape = rectLocal(w, h, rad);
     fillLocal(c, shape, fill);
-    if (!down) fillLocal(c, boxLocal({2, 2, w - 4, h * 0.45}, rad), fade(gfx::Color{255, 255, 255, 20}, c.alpha));
+    // Le reflet du haut : une teinte opaque du fond (pas un voile : il se lit pareil sur tous les rendus).
+    if (!down) fillLocal(c, boxLocal({2, 2, w - 4, h * 0.45}, std::max(0.0, rad - 2)), mix(fill, gfx::Color{255, 255, 255, fill.a}, 0.08f));
     strokeLocal(c, shape, true, mix(base, gfx::Color{0, 0, 0, base.a}, 0.3f), 1);
     const gfx::Color tc = colorOf(c, "textColor", 0xFFFFFF);
     const std::string label = muted ? c.src.text(c.o, "textOff") : c.src.text(c.o, "textOn");
@@ -1119,7 +1120,9 @@ void drawVolumeMixer(const Ctx& c) {
         const auto& t = l.tracks[i];
         const bool own = hmi::soundMuted(st, t.channel);
         const bool silenced = hmi::soundSilenced(st, t.channel);
+        // Une piste qui se tait s'estompe : ses couleurs vers le fond (opaques).
         const float dim = silenced ? 0.45f : 1.f;
+        const auto dimmed = [&](gfx::Color col) { return silenced ? mix(bg, col, dim) : col; };
         const double f = std::clamp(hmi::soundVolume(st, t.channel) / 100.0, 0.0, 1.0);
         // Le General a part : un trait le separe des canaux.
         if (t.channel == hmi::SoundChannel::General && i + 1 < l.tracks.size()) {
@@ -1133,11 +1136,11 @@ void drawVolumeMixer(const Ctx& c) {
             }
         }
         const std::string label(hmi::soundChannelSpec(t.channel).label);
-        text(c, fitted(c, label, t.name.w - 2, fs), t.name.x, t.name.y, t.name.w, t.name.h, withAlpha(tc, dim), fs,
+        text(c, fitted(c, label, t.name.w - 2, fs), t.name.x, t.name.y, t.name.w, t.name.h, dimmed(tc), fs,
              l.vertical ? "centre" : "gauche");
         // Le vumetre : le niveau des sons qui jouent (le moteur le lit au lecteur de sons).
         if (t.meter.w > 0 && t.meter.h > 0) {
-            fillLocal(c, boxLocal(t.meter, 2), fade(gfx::Color{0, 0, 0, 70}, c.alpha));
+            fillLocal(c, boxLocal(t.meter, 2), mix(bg, gfx::Color{0, 0, 0, bg.a}, 0.3f));
             const double level = live ? static_cast<double>(c.opt.runtime->soundLevel(t.channel)) : 0.0;
             const auto band = [&](double from, double to, std::uint32_t rgb) {
                 const double a = std::min(level, from), b = std::min(level, to);
@@ -1155,18 +1158,18 @@ void drawVolumeMixer(const Ctx& c) {
         if (l.vertical) {
             kx = t.track.cx();
             ky = t.track.bottom() - t.track.h * f;
-            fillLocal(c, boxLocal({t.track.x, ky, t.track.w, t.track.bottom() - ky}, 3), withAlpha(accent, dim));
+            fillLocal(c, boxLocal({t.track.x, ky, t.track.w, t.track.bottom() - ky}, 3), dimmed(accent));
         } else {
             kx = t.track.x + t.track.w * f;
             ky = t.track.cy();
-            fillLocal(c, boxLocal({t.track.x, t.track.y, kx - t.track.x, t.track.h}, 3), withAlpha(accent, dim));
+            fillLocal(c, boxLocal({t.track.x, t.track.y, kx - t.track.x, t.track.h}, 3), dimmed(accent));
         }
         fillLocal(c, circleLocal(kx + 1, ky + 1.5, l.knob), fade(gfx::Color{0, 0, 0, 80}, c.alpha));
-        fillLocal(c, circleLocal(kx, ky, l.knob), withAlpha(knob, silenced ? 0.75f : 1.f));
+        fillLocal(c, circleLocal(kx, ky, l.knob), silenced ? mix(bg, knob, 0.7f) : knob);
         strokeLocal(c, circleLocal(kx, ky, l.knob), true, fade(gfx::Color{0, 0, 0, 90}, c.alpha), 1.0);
         if (t.percent.w > 0)
             text(c, std::to_string(hmi::soundVolume(st, t.channel)) + " %", t.percent.x, t.percent.y, t.percent.w, t.percent.h,
-                 withAlpha(tc, dim), fs, l.vertical ? "centre" : "droite");
+                 dimmed(tc), fs, l.vertical ? "centre" : "droite");
         if (t.mute.w > 0) {
             const auto b = boxLocal(t.mute, 4);
             fillLocal(c, b, own ? muteCol : mix(bg, tc, 0.12f));

@@ -639,8 +639,10 @@ View displayView(const View& v, const Project& p, const DisplayOptions& o) {
                 // La couleur d'une chose (le bouton d'un potentiometre) : le theme ne la change pas ;
                 // le texte des tuiles du resume des alarmes est pose sur leurs couleurs d'etat, celui
                 // d'un plan a zones sur son image.
+                // 1.14.0 : celui du Coupe-son, sur son fond (son actif, muet) : il reste lisible au jour.
                 if (prop.key == "knobColor"
-                    || ((obj.kind == Kind::AlarmSummary || obj.kind == Kind::ZoneMap) && (prop.key == "textColor" || prop.key == "selectedColor")))
+                    || ((obj.kind == Kind::AlarmSummary || obj.kind == Kind::ZoneMap) && (prop.key == "textColor" || prop.key == "selectedColor"))
+                    || (obj.kind == Kind::SoundMute && prop.key == "textColor"))
                     onColored = true;
                 Rgb probe;
                 prop.value = parseColor(prop.value, probe) ? displayColor(prop.value, o, onColored, isText) : displayColors(prop.value, o);
