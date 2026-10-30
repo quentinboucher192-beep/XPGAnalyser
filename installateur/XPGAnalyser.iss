@@ -92,12 +92,38 @@
 ;   - les archives d'un projet s'ouvrent d'un double-clic : .xihm avec IHM Studio, .xapi avec API
 ;     Studio ([Registry], Software\Classes ; la désinstallation les enlève).
 ;
+;  1.14.0 - ce qu'on installe, les options, les copies de secours :
+;   - la page « Que veux-tu installer ? » (après l'accueil) : les deux applications (le défaut),
+;     API Studio seul, IHM Studio seul, ou un poste d'exploitation (IHM Studio sans l'éditeur, qui
+;     ouvre un projet en plein écran : IHM-Studio.exe --poste <dossier du projet>). Le poste a sa
+;     page : le projet, « Démarrer le poste à l'ouverture de la session Windows » (la valeur « XPG
+;     Poste d'exploitation » de la clé Run, celle que l'application pose elle-même), « Le relancer
+;     s'il se ferme » (maintenance\poste.cmd, réduit dans la barre des tâches : il le relance 5 s
+;     après, et s'arrête après 3 fermetures rapprochées, noté dans Journaux\poste.log). Seul ce qui
+;     sert s'installe : l'exe de l'autre application, ses raccourcis, son association ([Components]
+;     api, ihm, poste ; leur page est sautée : la page du choix les règle). Une mise à jour reprend
+;     le choix d'avant (Software\XPGAnalyser, Profil) ; en changer retire ce qui ne sert plus, et le
+;     récapitulatif le dit ;
+;   - la page des options (les tâches) : un raccourci Bureau par application, l'ouverture des .xihm
+;     et des .xapi (cochées), « Ouvrir avec API Studio » dans le clic droit des .XPG
+;     (OpenWithProgids : Control Expert reste leur programme), la règle du pare-feu pour IHM Studio
+;     (tous les comptes seulement : sinon grisée, avec la raison ; retirée à la désinstallation),
+;     la copie de secours pour Réparer (la réserve, cochée) ;
+;   - les copies de secours ne s'entassent plus : celle de la version qui s'installe et celle de la
+;     précédente restent, les autres partent (le journal et le récapitulatif disent combien et la
+;     place libérée) ; la désinstallation les retire toutes ;
+;   - les animations suivent le réglage de Windows « Afficher les animations dans Windows »
+;     (SPI_GETCLIENTAREAANIMATION) ; /ANIMATIONS=oui|non le force.
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
+;    [/PROFIL=deux|api|ihm|poste] [/POSTE="D:\Projets\Armoire"] [/POSTEAUTO=oui|non] [/POSTERELANCE=oui|non]
+;    [/TASKS="..." | /MERGETASKS="..."] - les cases : bureauapi, bureauihm, bureauposte, barre, xihm,
+;    xapi, xpg, parefeu, reserve (« !reserve » : sans copie de secours)
 ;  (voir docs\GUIDE-INSTALLATION.md). Avec l'assistant : /COMPOSITION=non (1.12.29) si sa fenêtre
 ;  se dessine mal sur un PC (le double tampon de Windows est alors enlevé ; 1.12.30 : il n'est plus
-;  que sur l'en-tête, l'accueil et la page de la copie).
+;  que sur l'en-tête, l'accueil et la page de la copie) ; /ANIMATIONS=non (1.14.0) : rien ne bouge.
 ; =============================================================================
 
 #if Ver < EncodeVer(6, 3, 0)
@@ -223,6 +249,28 @@
   #expr NbFichiers = NbFichiers + 1
   #expr TailleFichiers = TailleFichiers + FileSize(ManifesteFichier)
 #endif
+; 1.14.0 : la taille de chaque exe (un profil sans l'une des deux applications ne la copie pas) et celle
+; de la copie de secours (la case des options), en Mo.
+#define TailleExeApi 0
+#define TailleExeIhm 0
+#if FileExists(AddBackslash(Staging) + Exe)
+  #expr TailleExeApi = FileSize(AddBackslash(Staging) + Exe)
+#endif
+#if FileExists(AddBackslash(Staging) + ExeIhm)
+  #expr TailleExeIhm = FileSize(AddBackslash(Staging) + ExeIhm)
+#endif
+#define ReserveMo 0
+#expr ReserveMo = (TailleFichiers + 524288) / 1048576
+; 1.14.0 : « Ouvrir avec API Studio » dans le clic droit des .XPG (OpenWithProgids : jamais leur programme
+; par défaut, celui de Control Expert).
+#define ProgIdXpg "APIIHMStudio.xpg"
+; 1.14.0 : le poste d'exploitation au démarrage de la session - la valeur de la clé Run que l'application
+; pose elle-même (Configuration > Poste d'exploitation > Démarrer avec la session : HmiStationLaunch.cpp).
+#define ValeurRunPoste "XPG Poste d'exploitation"
+#define RacPoste "Poste d'exploitation"
+; (dans le [Code], entre apostrophes : l'apostrophe doublée)
+#define ValeurRunPosteP StringChange(ValeurRunPoste, "'", "''")
+#define RacPosteP StringChange(RacPoste, "'", "''")
 
 [Setup]
 AppId={{{#AppGuid}}
@@ -266,7 +314,8 @@ DisableWelcomePage=no
 WizardImageFile=images\grande.bmp,images\grande-2x.bmp
 WizardSmallImageFile=images\petite.bmp,images\petite-2x.bmp
 SetupIconFile=..\resources\logo\studio.ico
-UninstallDisplayIcon={app}\{#Exe}
+; 1.14.0 : l'exe du profil (IHM Studio seul : pas d'API-Studio.exe)
+UninstallDisplayIcon={app}\{code:ExePrincipal}
 UninstallDisplayName={#Nom}
 OutputDir={#Sortie}
 OutputBaseFilename={#Fichier}-Setup-{#Version}
@@ -291,8 +340,9 @@ ClickNext=Clique sur Suivant pour continuer, ou sur Annuler pour quitter l'assis
 SelectDirDesc=Où installer [name] ?
 SelectDirBrowseLabel=Pour continuer, clique sur Suivant. Pour choisir un autre dossier, clique sur Parcourir.
 DiskSpaceMBLabel=Il faut au moins [mb] Mo d'espace libre.
-SelectTasksDesc=Les raccourcis, et ce que l'assistant fait en plus.
-SelectTasksLabel2=Choisis ce que l'assistant doit faire en plus, puis clique sur Suivant.
+; 1.14.0 : les options - les raccourcis, les fichiers, le pare-feu, la copie de secours.
+SelectTasksDesc=Les raccourcis, les fichiers qu'elles ouvrent, le pare-feu, la copie de secours.
+SelectTasksLabel2=Coche ce que tu veux, puis clique sur Suivant. Une mise à jour reprend tes choix d'avant.
 ReadyLabel1=Tout est prêt : relis le résumé avant d'installer.
 ReadyLabel2a=Clique sur Installer pour commencer, ou sur Précédent pour changer un choix.
 InstallingLabel=Copie des fichiers d'{#Nom}, puis vérification.
@@ -305,23 +355,59 @@ FinishedLabel={#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec leur Main
 FinishedLabelNoIcons=L'assistant a terminé l'installation de [name].
 
 [CustomMessages]
-fr.RaccourciBureau=Créer un raccourci sur le Bureau
-fr.Raccourcis=Raccourcis :
+fr.Raccourcis=Sur le Bureau :
+fr.Barre=La barre des tâches :
+fr.Fichiers=Les fichiers, d'un double-clic :
+fr.Windows=Windows :
+fr.Reparer=Réparer :
 fr.Lancer=Lancer {#NomApi}
 fr.LancerIhm=Lancer {#NomIhm}
-fr.EpinglerBarre=Épingler {#NomApi} et {#NomIhm} à la barre des tâches (au premier lancement : Windows te demande de confirmer)
+fr.LancerPoste=Lancer le poste d'exploitation
+fr.EpinglerBarre=Épingler à la barre des tâches (au premier lancement de chaque application : Windows te demande de confirmer)
+fr.Parefeu=Laisser IHM Studio recevoir des connexions (une règle du pare-feu Windows) : les esclaves Modbus simulés et le poste ne déclenchent pas l'alerte au premier lancement
+
+; 1.14.0 : ce qu'on installe. Leur page est sautée : la page « Que veux-tu installer ? » les règle (ses
+; quatre profils : deux = api + ihm ; api ; ihm ; poste = IHM-Studio.exe sans l'éditeur dans le menu).
+; Les tâches et les fichiers d'une application la suivent (Components:).
+[Types]
+Name: "deux"; Description: "{#NomApi} et {#NomIhm}"
+Name: "choix"; Description: "Un choix"; Flags: iscustom
+
+[Components]
+Name: "api"; Description: "{#NomApi}"; Types: deux
+Name: "ihm"; Description: "{#NomIhm}"; Types: deux
+Name: "poste"; Description: "Poste d'exploitation"
 
 [Tasks]
-Name: "bureau"; Description: "{cm:RaccourciBureau}"; GroupDescription: "{cm:Raccourcis}"; Flags: unchecked
+; 1.14.0 : un raccourci Bureau par application (avant : une case pour les deux)
+Name: "bureauapi"; Description: "Un raccourci d'{#NomApi}"; GroupDescription: "{cm:Raccourcis}"; Components: api; Flags: unchecked
+Name: "bureauihm"; Description: "Un raccourci d'{#NomIhm}"; GroupDescription: "{cm:Raccourcis}"; Components: ihm; Flags: unchecked
+Name: "bureauposte"; Description: "Un raccourci du poste d'exploitation"; GroupDescription: "{cm:Raccourcis}"; Components: poste; Flags: unchecked
 ; 1.8.0 : Windows interdit a un installateur d'epingler ; l'application le demande a Windows
 ; au premier lancement (installation.ini : epingler_barre_taches), une fois par compte.
-Name: "barre"; Description: "{cm:EpinglerBarre}"; GroupDescription: "{cm:Raccourcis}"
+Name: "barre"; Description: "{cm:EpinglerBarre}"; GroupDescription: "{cm:Barre}"; Components: api ihm
+; 1.14.0 : les associations (1.12.30 : imposees) ; .XPG : seulement dans « Ouvrir avec »
+Name: "xihm"; Description: "Ouvrir les .xihm (un projet IHM, tout compris) avec {#NomIhm}"; GroupDescription: "{cm:Fichiers}"; Components: ihm
+Name: "xapi"; Description: "Ouvrir les .xapi (un projet API) avec {#NomApi}"; GroupDescription: "{cm:Fichiers}"; Components: api
+Name: "xpg"; Description: "« Ouvrir avec {#NomApi} » dans le clic droit des .XPG (Control Expert reste leur programme)"; GroupDescription: "{cm:Fichiers}"; Components: api
+; 1.14.0 : pour tous les comptes seulement (il faut etre administrateur) ; sinon grisee (CurPageChanged)
+Name: "parefeu"; Description: "{cm:Parefeu}"; GroupDescription: "{cm:Windows}"; Components: ihm poste; Flags: unchecked
+; 1.14.0 : la reserve (de quoi reparer sans l'installateur)
+Name: "reserve"; Description: "Garder une copie de secours pour Réparer (environ {#ReserveMo} Mo) : sans elle, Réparer te demandera l'installateur"; GroupDescription: "{cm:Reparer}"
 
 [Files]
-; Le programme et tout ce dont il a besoin (préparé par outils\package.bat dans dist\staging).
-Source: "{#Staging}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; La réserve de réparation : les mêmes fichiers (Inno Setup ne les stocke qu'une fois).
-Source: "{#Staging}\*"; DestDir: "{code:DossierReserve}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Le programme et tout ce dont il a besoin (préparé par outils\package.bat dans dist\staging). 1.14.0 : les
+; deux exe a part - seul celui du profil s'installe.
+Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm}"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Staging}\{#Exe}"; DestDir: "{app}"; Components: api; Flags: ignoreversion
+Source: "{#Staging}\{#ExeIhm}"; DestDir: "{app}"; Components: ihm poste; Flags: ignoreversion
+; 1.14.0 : le lanceur du poste d'exploitation (« Le relancer s'il se ferme »)
+Source: "poste.cmd"; DestDir: "{app}\maintenance"; Components: poste; Flags: ignoreversion
+; La réserve de réparation : les mêmes fichiers (Inno Setup ne les stocke qu'une fois). 1.14.0 : si elle est
+; demandée (la case « Garder une copie de secours pour Réparer »), sans l'exe que le profil n'a pas.
+Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm}"; DestDir: "{code:DossierReserve}"; Tasks: reserve; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Staging}\{#Exe}"; DestDir: "{code:DossierReserve}"; Components: api; Tasks: reserve; Flags: ignoreversion
+Source: "{#Staging}\{#ExeIhm}"; DestDir: "{code:DossierReserve}"; Components: ihm poste; Tasks: reserve; Flags: ignoreversion
 ; Les étapes PowerShell, pour la sauvegarde AVANT la copie (le programme n'est pas encore là).
 Source: "{#Staging}\maintenance\lib\*"; DestDir: "{tmp}\xpg\lib"; Flags: dontcopy
 Source: "{#Staging}\maintenance\config.ini"; DestDir: "{tmp}\xpg"; Flags: dontcopy
@@ -353,21 +439,40 @@ Type: files; Name: "{autodesktop}\{#Cle} API.lnk"
 Type: files; Name: "{autodesktop}\{#Cle} IHM.lnk"
 ; 1.13.0 : la page web est retiree - le moteur de la page (web\, pose par la 1.12.31) s'en va.
 Type: filesandordirs; Name: "{app}\web"
+; 1.14.0 : une mise a jour qui change de profil retire ce qui ne sert plus - l'exe de l'autre application,
+; ses raccourcis (menu Demarrer, Bureau), le poste et son lanceur (les associations et la cle Run : [Code]).
+Type: files; Name: "{app}\{#Exe}"; Components: not api
+Type: files; Name: "{app}\{#ExeIhm}"; Components: not (ihm or poste)
+Type: files; Name: "{app}\maintenance\poste.cmd"; Components: not poste
+Type: files; Name: "{code:DossierReserve}\{#Exe}"; Components: not api
+Type: files; Name: "{code:DossierReserve}\{#ExeIhm}"; Components: not (ihm or poste)
+Type: files; Name: "{autoprograms}\{#Nom}\{#NomApi}.lnk"; Components: not api
+Type: files; Name: "{autoprograms}\{#Nom}\{#NomIhm}.lnk"; Components: not ihm
+Type: files; Name: "{autoprograms}\{#Nom}\{#RacPoste}.lnk"; Components: not poste
+Type: files; Name: "{autodesktop}\{#NomApi}.lnk"; Components: not api
+Type: files; Name: "{autodesktop}\{#NomIhm}.lnk"; Components: not ihm
+Type: files; Name: "{autodesktop}\{#RacPoste}.lnk"; Components: not poste
 
 [Icons]
-Name: "{autoprograms}\{#Nom}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"
-Name: "{autoprograms}\{#Nom}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Comment: "Les vues, les scripts, les équipements, la simulation de l'IHM"
-Name: "{autoprograms}\{#Nom}\Maintenance\Réparer"; Filename: "{app}\maintenance\repair.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
-Name: "{autoprograms}\{#Nom}\Maintenance\Vérifier l'installation"; Filename: "{app}\maintenance\verify_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
-Name: "{autoprograms}\{#Nom}\Maintenance\Reprendre une installation interrompue"; Filename: "{app}\maintenance\resume_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
-Name: "{autoprograms}\{#Nom}\Maintenance\Restaurer une sauvegarde"; Filename: "{app}\maintenance\restore_backup.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
-Name: "{autoprograms}\{#Nom}\Maintenance\Collecter les journaux"; Filename: "{app}\maintenance\collect_diagnostics.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
-Name: "{autoprograms}\{#Nom}\Maintenance\Réinitialiser mes réglages"; Filename: "{app}\maintenance\reset_user_settings.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
+Name: "{autoprograms}\{#Nom}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"; Components: api
+Name: "{autoprograms}\{#Nom}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Comment: "Les vues, les scripts, les équipements, la simulation de l'IHM"; Components: ihm
+; 1.14.0 : le poste d'exploitation - IHM Studio en plein ecran sur son projet, sans l'editeur ; « Le relancer
+; s'il se ferme » : par son lanceur, reduit (maintenance\poste.cmd).
+Name: "{autoprograms}\{#Nom}\{#RacPoste}"; Filename: "{app}\{#ExeIhm}"; Parameters: "--poste ""{code:PosteDossier}"""; WorkingDir: "{app}"; Comment: "IHM Studio en plein écran sur son projet"; Components: poste; Check: not PosteRelance
+Name: "{autoprograms}\{#Nom}\{#RacPoste}"; Filename: "{app}\maintenance\poste.cmd"; Parameters: "--ihm ""{code:PosteDossier}"""; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#ExeIhm}"; Comment: "IHM Studio en plein écran sur son projet, relancé s'il se ferme"; Components: poste; Check: PosteRelance; Flags: runminimized
+Name: "{autoprograms}\{#Nom}\Maintenance\Réparer"; Filename: "{app}\maintenance\repair.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
+Name: "{autoprograms}\{#Nom}\Maintenance\Vérifier l'installation"; Filename: "{app}\maintenance\verify_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
+Name: "{autoprograms}\{#Nom}\Maintenance\Reprendre une installation interrompue"; Filename: "{app}\maintenance\resume_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
+Name: "{autoprograms}\{#Nom}\Maintenance\Restaurer une sauvegarde"; Filename: "{app}\maintenance\restore_backup.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
+Name: "{autoprograms}\{#Nom}\Maintenance\Collecter les journaux"; Filename: "{app}\maintenance\collect_diagnostics.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
+Name: "{autoprograms}\{#Nom}\Maintenance\Réinitialiser mes réglages"; Filename: "{app}\maintenance\reset_user_settings.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{code:ExePrincipal}"
 Name: "{autoprograms}\{#Nom}\Tes données"; Filename: "{code:DonneesReel}"; Check: not IsAdminInstallMode
 ; 1.8.0 : trouvé par la recherche Windows (« désinstaller »). Tes données restent (voir plus bas).
 Name: "{autoprograms}\{#Nom}\Désinstaller {#Nom}"; Filename: "{uninstallexe}"; Comment: "Désinstaller {#Nom} (tes données sont gardées)"
-Name: "{autodesktop}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureau
-Name: "{autodesktop}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Tasks: bureau
+Name: "{autodesktop}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureauapi
+Name: "{autodesktop}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Tasks: bureauihm
+Name: "{autodesktop}\{#RacPoste}"; Filename: "{app}\{#ExeIhm}"; Parameters: "--poste ""{code:PosteDossier}"""; WorkingDir: "{app}"; Comment: "IHM Studio en plein écran sur son projet"; Tasks: bureauposte; Check: not PosteRelance
+Name: "{autodesktop}\{#RacPoste}"; Filename: "{app}\maintenance\poste.cmd"; Parameters: "--ihm ""{code:PosteDossier}"""; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#ExeIhm}"; Comment: "IHM Studio en plein écran sur son projet, relancé s'il se ferme"; Tasks: bureauposte; Check: PosteRelance; Flags: runminimized
 
 [Registry]
 Root: HKA; Subkey: "Software\{#Cle}"; Flags: uninsdeletekey
@@ -375,30 +480,52 @@ Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "InstallDir"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Version"; ValueData: "{#Version}"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Portee"; ValueData: "{code:Portee}"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "DossierDonnees"; ValueData: "{code:DonneesBrut}"
+; 1.14.0 : ce qui a ete choisi, pour la mise a jour suivante (le profil, le projet du poste et ses cases).
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Profil"; ValueData: "{code:ProfilNomCode}"
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "PosteProjet"; ValueData: "{code:PosteDossier}"; Components: poste
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "PosteDemarrage"; ValueData: "{code:PosteAutoTexte}"; Components: poste
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "PosteRelance"; ValueData: "{code:PosteRelanceTexte}"; Components: poste
 ; 1.12.30 : les archives d'un projet s'ouvrent d'un double-clic - .xihm (un projet IHM, tout compris)
 ; avec IHM Studio, .xapi (un projet API) avec API Studio : l'exe reçoit le chemin de l'archive, comme
 ; tout fichier qu'il ouvre. Un ProgID par extension. La désinstallation enlève tout : le ProgID, la
 ; valeur de l'extension, puis sa clé si elle est vide (une autre application a pu s'y inscrire).
-Root: HKA; Subkey: "Software\Classes\.xihm"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdIhm}"; Flags: uninsdeletevalue uninsdeletekeyifempty
-Root: HKA; Subkey: "Software\Classes\.xihm\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdIhm}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
-Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomIhm} (archive)"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeIhm},0"
-Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeIhm}"" ""%1"""
-Root: HKA; Subkey: "Software\Classes\.xapi"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdApi}"; Flags: uninsdeletevalue uninsdeletekeyifempty
-Root: HKA; Subkey: "Software\Classes\.xapi\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdApi}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
-Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomApi} (archive)"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#Exe},0"
-Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#Exe}"" ""%1"""
+; 1.14.0 : chacune a sa case (cochée), et suit son application ; décochée, la nôtre est retirée ([Code]).
+Root: HKA; Subkey: "Software\Classes\.xihm"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdIhm}"; Flags: uninsdeletevalue uninsdeletekeyifempty; Tasks: xihm
+Root: HKA; Subkey: "Software\Classes\.xihm\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdIhm}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty; Tasks: xihm
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomIhm} (archive)"; Flags: uninsdeletekey; Tasks: xihm
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeIhm},0"; Tasks: xihm
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeIhm}"" ""%1"""; Tasks: xihm
+Root: HKA; Subkey: "Software\Classes\.xapi"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdApi}"; Flags: uninsdeletevalue uninsdeletekeyifempty; Tasks: xapi
+Root: HKA; Subkey: "Software\Classes\.xapi\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdApi}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty; Tasks: xapi
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomApi} (archive)"; Flags: uninsdeletekey; Tasks: xapi
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#Exe},0"; Tasks: xapi
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#Exe}"" ""%1"""; Tasks: xapi
+; 1.14.0 : « Ouvrir avec API Studio » dans le clic droit des .XPG - seulement OpenWithProgids : la valeur par
+; défaut de .XPG (le programme de Control Expert) n'est jamais touchée.
+Root: HKA; Subkey: "Software\Classes\.XPG\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdXpg}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty; Tasks: xpg
+Root: HKA; Subkey: "Software\Classes\{#ProgIdXpg}"; ValueType: string; ValueName: ""; ValueData: "Export Control Expert (.XPG)"; Flags: uninsdeletekey; Tasks: xpg
+Root: HKA; Subkey: "Software\Classes\{#ProgIdXpg}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#Exe},0"; Tasks: xpg
+Root: HKA; Subkey: "Software\Classes\{#ProgIdXpg}\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#NomApi}"; Tasks: xpg
+Root: HKA; Subkey: "Software\Classes\{#ProgIdXpg}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#Exe}"" ""%1"""; Tasks: xpg
+; 1.14.0 : le poste d'exploitation à l'ouverture de la session - la valeur de la clé Run que l'application
+; pose elle-même (IHM Studio > Configuration > Poste d'exploitation la voit, et « Ne plus démarrer » la
+; retire) ; pour tous les comptes : celle de HKLM. Décochée (ou un autre profil), la nôtre est retirée ([Code]).
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#ValeurRunPoste}"; ValueData: "{code:PosteCommande}"; Flags: uninsdeletevalue; Components: poste; Check: PosteAuto
 
 [Run]
-Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked
+; 1.14.0 : ce que le profil a installé (IHM Studio seul : coché)
+Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Components: api
+Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked; Components: ihm and api
+Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Components: ihm and not api
+Filename: "{app}\{#ExeIhm}"; Parameters: "--poste ""{code:PosteDossier}"""; Description: "{cm:LancerPoste}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked; Components: poste
 
 [UninstallDelete]
 Type: files; Name: "{app}\installation.ini"
 Type: files; Name: "{code:DossierReserve}\{#Fichier}-Setup-*.exe"
 Type: files; Name: "{code:DossierReserve}\{#Cle}-Setup-*.exe"
 Type: dirifempty; Name: "{code:DossierReserve}"
+; 1.14.0 : toutes les copies de secours (celles des versions d'avant aussi : elles restaient)
+Type: filesandordirs; Name: "{code:DossierEtat}\Reserve"
 Type: dirifempty; Name: "{app}"
 
 [Code]
@@ -434,6 +561,15 @@ var
   // le texte de « Ce qui a été installé » ; RecapVu : ses lignes à l'écran (1.12.30 : toutes, d'un coup)
   RecapTexte: TArrayOfString;
   RecapVu: Integer;
+  // 1.14.0 : la page « Que veux-tu installer ? » (ses quatre choix, la note de ce qui change) et celle du
+  // poste d'exploitation (le projet, ses deux cases)
+  PageProfil: TWizardPage;
+  RadiosProfil: array of TNewRadioButton;
+  NoteProfil: TNewStaticText;
+  PagePoste: TInputDirWizardPage;
+  CasePosteAuto, CasePosteRelance: TNewCheckBox;
+  TexteRelance: TNewStaticText;
+  TachesVues: Boolean;
 
 // ---------------------------------------------- 1.8.0 : la liste des blocs ----
 //  Une vraie ListView de Windows (aide\xpgliste.c) : setuponly et delayload - la DLL
@@ -568,6 +704,217 @@ end;
 function DonneesReel(Param: String): String;
 begin
   Result := DevelopperJetons(DonneesBrut(''));
+end;
+
+// ================================================ 1.14.0 : ce qu'on installe ====
+//  Le profil (la page « Que veux-tu installer ? », /PROFIL=) : les deux applications, l'une des deux, ou
+//  un poste d'exploitation (IHM-Studio.exe, sans l'éditeur dans le menu Démarrer). Il règle les
+//  composants (api, ihm, poste : leur page est sautée), donc les fichiers, les raccourcis, les
+//  associations et les cases des options. Une mise à jour reprend celui d'avant (Software\XPGAnalyser,
+//  Profil ; une version d'avant la 1.14.0 : les deux) ; en changer retire ce qui ne sert plus.
+const
+  pDeux = 0;
+  pApi = 1;
+  pIhm = 2;
+  pPoste = 3;
+  // le pare-feu : le nom de notre règle (retirée à la désinstallation, ou quand la case est décochée)
+  RegleParefeu = '{#NomIhm} ({#Nom})';
+  SPI_GETCLIENTAREAANIMATION = $1042;
+
+var
+  ProfilChoisi, ProfilAvant: Integer;
+  // la version installée avant celle-ci (Software\XPGAnalyser, Version), lue au démarrage
+  VersionAvant: String;
+  // le poste d'exploitation : son projet (un dossier), ses deux cases
+  PosteDossierChoisi: String;
+  PosteAutoChoisi, PosteRelanceChoisi, PosteAutoAvant: Boolean;
+  // ce que l'installation a fait des options (pour « Ce qui a été installé »)
+  BilanReserve, BilanParefeu, BilanPoste, BilanAssoc, BilanPurge: String;
+
+function ProfilNom(P: Integer): String;
+begin
+  case P of
+    pApi: Result := 'api';
+    pIhm: Result := 'ihm';
+    pPoste: Result := 'poste';
+  else
+    Result := 'deux';
+  end;
+end;
+
+function ProfilDeNom(S: String): Integer;
+var I: Integer;
+begin
+  Result := -1;
+  S := Lowercase(Trim(S));
+  for I := 0 to 3 do
+    if S = ProfilNom(I) then Result := I;
+end;
+
+function ProfilLibelle(P: Integer): String;
+begin
+  case P of
+    pApi: Result := '{#NomApi} seul';
+    pIhm: Result := '{#NomIhm} seul';
+    pPoste: Result := 'Poste d''exploitation';
+  else
+    Result := 'Les deux : {#NomApi} et {#NomIhm}';
+  end;
+end;
+
+// Ce que fait chaque profil (la page du choix).
+function ProfilTexte(P: Integer): String;
+begin
+  case P of
+    pApi: Result := 'Le programme de l''automate : analyse, variables, tables et simulation. {#NomIhm} n''est pas installé.';
+    pIhm: Result := 'Les vues, les scripts, les équipements et leur simulation. {#NomApi} n''est pas installé.';
+    pPoste: Result := 'Le PC de l''atelier : {#NomIhm} ouvre un projet en plein écran, sans l''éditeur dans le menu Démarrer. La page suivante demande le projet.';
+  else
+    Result := 'Le programme de l''automate et l''IHM, chacun avec sa Maintenance : le choix habituel.';
+  end;
+end;
+
+// Ce que le profil installe : API Studio ; IHM-Studio.exe (aussi pour le poste) ; l'éditeur d'IHM Studio
+// (son raccourci, ses fichiers .xihm).
+function AvecApi(P: Integer): Boolean;
+begin
+  Result := (P = pDeux) or (P = pApi);
+end;
+
+function AvecExeIhm(P: Integer): Boolean;
+begin
+  Result := (P = pDeux) or (P = pIhm) or (P = pPoste);
+end;
+
+function AvecEditeurIhm(P: Integer): Boolean;
+begin
+  Result := (P = pDeux) or (P = pIhm);
+end;
+
+function ProfilNomCode(Param: String): String;
+begin
+  Result := ProfilNom(ProfilChoisi);
+end;
+
+// L'exe principal du profil : celui de l'icône de la désinstallation, des raccourcis de la Maintenance et
+// de installation.ini (exe = ...).
+function ExePrincipal(Param: String): String;
+begin
+  if AvecApi(ProfilChoisi) then Result := '{#Exe}' else Result := '{#ExeIhm}';
+end;
+
+// Les composants du profil (la page des composants est sautée).
+procedure AppliquerProfil(P: Integer);
+begin
+  case P of
+    pApi: WizardSelectComponents('api,!ihm,!poste');
+    pIhm: WizardSelectComponents('!api,ihm,!poste');
+    pPoste: WizardSelectComponents('!api,!ihm,poste');
+  else
+    WizardSelectComponents('api,ihm,!poste');
+  end;
+end;
+
+// Ce qu'un changement de profil retire (vide : rien). Pour la page du choix, le récapitulatif et
+// « Ce qui a été installé ».
+function TexteRetire(Avant, Apres: Integer): String;
+var L: String;
+begin
+  Result := '';
+  if (Avant < 0) or (Avant = Apres) then Exit;
+  L := '';
+  if AvecApi(Avant) and not AvecApi(Apres) then L := '{#NomApi} (son programme, ses raccourcis, l''ouverture des .xapi et des .XPG)';
+  if AvecEditeurIhm(Avant) and not AvecExeIhm(Apres) then begin
+    if L <> '' then L := L + ', ';
+    L := L + '{#NomIhm} (son programme, ses raccourcis, l''ouverture des .xihm)';
+  end else if AvecEditeurIhm(Avant) and not AvecEditeurIhm(Apres) then begin
+    if L <> '' then L := L + ', ';
+    L := L + 'le raccourci de l''éditeur {#NomIhm} et l''ouverture des .xihm (son programme reste : le poste en a besoin)';
+  end;
+  if (Avant = pPoste) and (Apres <> pPoste) then begin
+    if L <> '' then L := L + ', ';
+    L := L + 'le poste d''exploitation (son raccourci, son démarrage avec la session, son lanceur)';
+    if not AvecExeIhm(Apres) then L := L + ' et {#NomIhm}';
+  end;
+  Result := L;
+end;
+
+// Le dossier du projet du poste, sans la barre de fin.
+function PosteDossier(Param: String): String;
+begin
+  Result := RemoveBackslashUnlessRoot(Trim(PosteDossierChoisi));
+end;
+
+function PosteAuto: Boolean;
+begin
+  Result := (ProfilChoisi = pPoste) and PosteAutoChoisi;
+end;
+
+function PosteRelance: Boolean;
+begin
+  Result := (ProfilChoisi = pPoste) and PosteRelanceChoisi;
+end;
+
+function OuiNon(B: Boolean): String;
+begin
+  if B then Result := 'oui' else Result := 'non';
+end;
+
+function PosteAutoTexte(Param: String): String;
+begin
+  Result := OuiNon(PosteAutoChoisi);
+end;
+
+function PosteRelanceTexte(Param: String): String;
+begin
+  Result := OuiNon(PosteRelanceChoisi);
+end;
+
+// La ligne de la clé Run. Sans relance : celle que l'application écrit elle-même ("exe" --ihm "dossier" :
+// IHM Studio > Configuration > Poste d'exploitation la reconnaît) ; avec : le lanceur, réduit, qui finit
+// aussi par --ihm "dossier" (l'application y retrouve le projet).
+function PosteCommande(Param: String): String;
+begin
+  if PosteRelance then
+    Result := '"' + ExpandConstant('{sys}\cmd.exe') + '" /c start "{#RacPosteP}" /min "' + ExpandConstant('{app}\maintenance\poste.cmd') +
+              '" --ihm "' + PosteDossier('') + '"'
+  else
+    Result := '"' + ExpandConstant('{app}\{#ExeIhm}') + '" --ihm "' + PosteDossier('') + '"';
+end;
+
+// La valeur d'une ligne « cle = valeur » d'un fichier (project.xpgproj), '' si absente.
+function ValeurDansFichier(Fichier, Cle: String): String;
+var L: TArrayOfString;
+    I, P: Integer;
+begin
+  Result := '';
+  if not LoadStringsFromFile(Fichier, L) then Exit;
+  for I := 0 to GetArrayLength(L) - 1 do begin
+    P := Pos('=', L[I]);
+    if (P > 0) and (CompareText(Trim(Copy(L[I], 1, P - 1)), Cle) = 0) then begin
+      Result := Trim(Copy(L[I], P + 1, Length(L[I])));
+      Exit;
+    end;
+  end;
+end;
+
+// Ce que le poste ne pourra pas ouvrir dans ce dossier ('' : rien à dire) : pas de projet, un projet
+// d'API Studio, un projet qui n'est pas FINISH (le poste n'ouvre que les projets finis).
+function PosteProbleme(D: String): String;
+var F, Etat, Edition: String;
+begin
+  Result := '';
+  F := AddBackslash(D) + 'project.xpgproj';
+  if not FileExists(F) then begin
+    Result := 'ce dossier n''a pas de project.xpgproj : ce n''est pas (encore) un projet {#NomIhm}';
+    Exit;
+  end;
+  Edition := ValeurDansFichier(F, 'edition');
+  Etat := ValeurDansFichier(F, 'state');
+  if CompareText(Edition, 'api') = 0 then
+    Result := 'c''est un projet d''{#NomApi} : le poste ouvre un projet d''{#NomIhm}'
+  else if (Etat <> '') and (CompareText(Etat, 'FINISH') <> 0) then
+    Result := 'ce projet est en ' + Etat + ' : le poste n''ouvre qu''un projet FINISH (dans {#NomIhm} : Projet › État)';
 end;
 
 // ================================================ 1.12.29 : les détails, les lignes ====
@@ -1105,15 +1452,59 @@ begin
 end;
 
 // 1.12.30 : .xihm et .xapi sont à nous : la valeur de chaque extension (notre ProgID) et sa commande.
+// 1.14.0 : une par une (chacune a sa case) ; .XPG : seulement notre ligne de « Ouvrir avec ».
+function AssociationOk(Ext, ProgId, ExeNom: String): Boolean;
+var V: String;
+begin
+  Result := RegQueryStringValue(HKA, 'Software\Classes\' + Ext, '', V) and (CompareText(V, ProgId) = 0)
+            and RegQueryStringValue(HKA, 'Software\Classes\' + ProgId + '\shell\open\command', '', V) and (Pos(ExeNom, V) > 0);
+end;
+
+function OuvrirAvecXpgOk: Boolean;
+var V: String;
+begin
+  Result := RegValueExists(HKA, 'Software\Classes\.XPG\OpenWithProgids', '{#ProgIdXpg}')
+            and RegQueryStringValue(HKA, 'Software\Classes\{#ProgIdXpg}\shell\open\command', '', V) and (Pos('{#Exe}', V) > 0);
+end;
+
+// Chaque association demandée est là.
 function AssociationsOk: Boolean;
+begin
+  Result := (not WizardIsTaskSelected('xihm') or AssociationOk('.xihm', '{#ProgIdIhm}', '{#ExeIhm}'))
+            and (not WizardIsTaskSelected('xapi') or AssociationOk('.xapi', '{#ProgIdApi}', '{#Exe}'))
+            and (not WizardIsTaskSelected('xpg') or OuvrirAvecXpgOk);
+end;
+
+// 1.14.0 : notre association retirée (sa case décochée, ou l'application n'est plus là) : notre ProgID, notre
+// ligne de « Ouvrir avec », et la valeur de l'extension seulement si c'est la nôtre (une autre application a pu
+// la prendre). Rend vrai si quelque chose est parti.
+function AssociationRetirer(Ext, ProgId: String): Boolean;
 var V: String;
 begin
   Result := False;
-  if not RegQueryStringValue(HKA, 'Software\Classes\.xihm', '', V) or (CompareText(V, '{#ProgIdIhm}') <> 0) then Exit;
-  if not RegQueryStringValue(HKA, 'Software\Classes\.xapi', '', V) or (CompareText(V, '{#ProgIdApi}') <> 0) then Exit;
-  if not RegQueryStringValue(HKA, 'Software\Classes\{#ProgIdIhm}\shell\open\command', '', V) or (Pos('{#ExeIhm}', V) = 0) then Exit;
-  if not RegQueryStringValue(HKA, 'Software\Classes\{#ProgIdApi}\shell\open\command', '', V) or (Pos('{#Exe}', V) = 0) then Exit;
-  Result := True;
+  if RegQueryStringValue(HKA, 'Software\Classes\' + Ext, '', V) and (CompareText(V, ProgId) = 0) then
+    Result := RegDeleteValue(HKA, 'Software\Classes\' + Ext, '') or Result;
+  if RegValueExists(HKA, 'Software\Classes\' + Ext + '\OpenWithProgids', ProgId) then
+    Result := RegDeleteValue(HKA, 'Software\Classes\' + Ext + '\OpenWithProgids', ProgId) or Result;
+  RegDeleteKeyIfEmpty(HKA, 'Software\Classes\' + Ext + '\OpenWithProgids');
+  RegDeleteKeyIfEmpty(HKA, 'Software\Classes\' + Ext);
+  if RegKeyExists(HKA, 'Software\Classes\' + ProgId) then
+    Result := RegDeleteKeyIncludingSubkeys(HKA, 'Software\Classes\' + ProgId) or Result;
+end;
+
+// Ce que font les fichiers, en clair (les détails, « Ce qui a été installé »).
+function TexteAssociations: String;
+begin
+  Result := '';
+  if WizardIsTaskSelected('xihm') then Result := '.xihm avec {#NomIhm}';
+  if WizardIsTaskSelected('xapi') then begin
+    if Result <> '' then Result := Result + ', ';
+    Result := Result + '.xapi avec {#NomApi}';
+  end;
+  if WizardIsTaskSelected('xpg') then begin
+    if Result <> '' then Result := Result + ', ';
+    Result := Result + '« Ouvrir avec {#NomApi} » pour les .XPG';
+  end;
 end;
 
 // 1.12.29 : une rubrique des lignes « recap » des étapes PowerShell (rubrique|niveau|texte), sous son titre.
@@ -1139,7 +1530,7 @@ end;
 
 function RecapLignes: TArrayOfString;
 var L: TArrayOfString;
-    App, Don, Etat, Menu, Unins, S: String;
+    App, Don, Etat, Menu, Unins, S, R: String;
     N: Integer;
 begin
   App := ExpandConstant('{app}');
@@ -1150,6 +1541,10 @@ begin
   if IsAdminInstallMode then S := 'pour tous les comptes' else S := 'pour toi seul';
   Ajoute(L, '{#Nom} {#Version} · installé le ' + GetDateTimeString('dd/mm/yyyy à hh:nn', '/', ':') + ' · ' + S);
   Ajoute(L, 'Ce PC : ' + LeWindows);
+  // 1.14.0 : ce qui a été choisi, et ce qu'un changement de choix a retiré
+  Ajoute(L, 'Ton choix : ' + ProfilLibelle(ProfilChoisi));
+  R := TexteRetire(ProfilAvant, ProfilChoisi);
+  if R <> '' then Ajoute(L, '  avant : ' + ProfilLibelle(ProfilAvant) + ' ; retiré : ' + R);
   Ajoute(L, '');
   // 1.12.29 : ce que les étapes PowerShell ont fait (leurs lignes « recap ») : la version d'avant,
   // ce qui a été repris et d'où, tes blocs
@@ -1157,8 +1552,12 @@ begin
   RecapRubrique(L, 'reprise', 'REPRIS DE TES ANCIENNES VERSIONS', 'copié : les originaux ne sont pas modifiés');
   RecapRubrique(L, 'blocs', 'TES BLOCS', '');
   Ajoute(L, 'LES PROGRAMMES');
-  Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('API Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
-  Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('IHM Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
+  if AvecApi(ProfilChoisi) then
+    Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('API Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
+  if AvecExeIhm(ProfilChoisi) then begin
+    if ProfilChoisi = pPoste then S := 'le poste d''exploitation' else S := 'IHM Studio';
+    Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne(S, 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
+  end;
   Ajoute(L, '  ' + Colonne(ExtractFileName(Unins), 17) + Colonne('le désinstallateur', 27) + Colonne('32 bits (x86)', 15) + TailleDe(Unins));
   Ajoute(L, '  ' + Colonne('SDL3.dll', 17) + Colonne('fenêtres, affichage, son', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\SDL3.dll'));
   Ajoute(L, '  ' + Colonne('pdfium.dll', 17) + Colonne('les PDF (1.12.30)', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\pdfium.dll'));
@@ -1168,15 +1567,16 @@ begin
   Ajoute(L, '  Rien d''autre à installer : tout est à côté de l''exe.');
   Ajoute(L, '');
   Ajoute(L, 'LE PROGRAMME   ' + App);
-  Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'API Studio');
-  Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'IHM Studio');
+  if AvecApi(ProfilChoisi) then Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'API Studio');
+  if AvecExeIhm(ProfilChoisi) then Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'IHM Studio');
   Ajoute(L, '  ├─ ' + Colonne('SDL3.dll', 32));
   Ajoute(L, '  ├─ ' + Colonne('pdfium.dll', 32) + 'le lecteur PDF de la visionneuse');
   Ajoute(L, '  ├─ ' + Colonne(ExtractFileName(Unins) + ', .dat', 32) + 'le désinstallateur');
   Ajoute(L, '  ├─ ' + Colonne('installation.ini', 32) + 'écrit par l''installateur');
   Ajoute(L, '  ├─ ' + Colonne('manifeste.json', 32) + 'chaque fichier, sa taille, son SHA-256');
   Ajoute(L, '  ├─ ' + Colonne('libs\', 32) + 'la bibliothèque livrée');
-  Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell)');
+  if ProfilChoisi = pPoste then Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell), poste.cmd')
+  else Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell)');
   Ajoute(L, '  ├─ ' + Colonne('resources\', 32) + 'le catalogue des automates');
   Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, PDFium, miniz, stb, nanosvg, minimp3');
   Ajoute(L, '');
@@ -1202,33 +1602,66 @@ begin
   for N := 0 to GetArrayLength(RecapPs) - 1 do
     if Copy(RecapPs[N], 1, 8) = 'rapport|' then
       Ajoute(L, '  │  ' + Colonne('', 33) + ExtractFileName(Copy(RecapPs[N], 11, Length(RecapPs[N]))) + ' : tes données, la reprise, la vérification');
+  if ProfilChoisi = pPoste then Ajoute(L, '  │  ' + Colonne('', 33) + 'poste.log : le lanceur du poste (s''il le relance)');
   Ajoute(L, '  ├─ ' + Colonne('Sauvegardes\', 32) + 'la version d''avant, s''il y en avait une');
-  Ajoute(L, '  ├─ ' + Colonne('Reserve\{#Version}\', 32) + 'de quoi réparer sans Internet');
+  // 1.14.0 : la copie de secours (la case), et les anciennes retirées
+  if WizardIsTaskSelected('reserve') then Ajoute(L, '  ├─ ' + Colonne('Reserve\{#Version}\', 32) + 'la copie de secours : réparer sans l''installateur')
+  else Ajoute(L, '  ├─ ' + Colonne('Reserve\', 32) + 'pas de copie de secours (case décochée) : Réparer demandera l''installateur');
+  if BilanReserve <> '' then Ajoute(L, '  │  ' + Colonne('', 33) + BilanReserve);
+  if BilanPurge <> '' then Ajoute(L, '  │  ' + Colonne('', 33) + BilanPurge);
   Ajoute(L, '  └─ ' + Colonne('Etat\', 32));
   Ajoute(L, '');
   Ajoute(L, 'LE MENU DÉMARRER   ' + Menu);
-  Ajoute(L, '  ├─ ' + Colonne('{#NomApi}', 32));
-  Ajoute(L, '  ├─ ' + Colonne('{#NomIhm}', 32));
+  if AvecApi(ProfilChoisi) then Ajoute(L, '  ├─ ' + Colonne('{#NomApi}', 32));
+  if AvecEditeurIhm(ProfilChoisi) then Ajoute(L, '  ├─ ' + Colonne('{#NomIhm}', 32));
+  if ProfilChoisi = pPoste then Ajoute(L, '  ├─ ' + Colonne('{#RacPosteP}', 32) + 'IHM Studio en plein écran (pas l''éditeur)');
   Ajoute(L, '  ├─ ' + Colonne('Désinstaller {#Nom}', 32) + 'la recherche Windows le trouve');
   if not IsAdminInstallMode then Ajoute(L, '  ├─ ' + Colonne('Tes données', 32));
   Ajoute(L, '  └─ ' + Colonne('Maintenance\', 32) + '6 raccourcis');
   Ajoute(L, '');
-  if WizardIsTaskSelected('bureau') then S := '{#NomApi}, {#NomIhm}' else S := 'aucun raccourci';
+  S := '';
+  if WizardIsTaskSelected('bureauapi') then S := '{#NomApi}';
+  if WizardIsTaskSelected('bureauihm') then begin
+    if S <> '' then S := S + ', ';
+    S := S + '{#NomIhm}';
+  end;
+  if WizardIsTaskSelected('bureauposte') then begin
+    if S <> '' then S := S + ', ';
+    S := S + '{#RacPosteP}';
+  end;
+  if S = '' then S := 'aucun raccourci';
   Ajoute(L, Colonne('LE BUREAU', 20) + S);
   if WizardIsTaskSelected('barre') then S := 'épinglage proposé au premier lancement' else S := 'rien (non demandé)';
   Ajoute(L, Colonne('LA BARRE DES TÂCHES', 20) + S);
   if IsAdminInstallMode then S := 'HKLM' else S := 'HKCU';
   Ajoute(L, Colonne('LE REGISTRE', 20) + S + '\Software\{#Cle}');
-  Ajoute(L, Colonne('', 20) + 'InstallDir, Version, Portee, DossierDonnees');
+  Ajoute(L, Colonne('', 20) + 'InstallDir, Version, Portee, DossierDonnees, Profil');
   Ajoute(L, Colonne('', 20) + 'et la désinstallation (Paramètres > Applications)');
-  // 1.12.30 : les archives d'un projet
+  // 1.12.30 : les archives d'un projet ; 1.14.0 : chacune sa case, et les .XPG
   Ajoute(L, '');
-  if AssociationsOk then begin
-    Ajoute(L, Colonne('LES FICHIERS', 20) + '.xihm (un projet IHM, tout compris) : {#NomIhm}');
-    Ajoute(L, Colonne('', 20) + '.xapi (un projet API) : {#NomApi}');
+  R := TexteAssociations;
+  if R = '' then Ajoute(L, Colonne('LES FICHIERS', 20) + 'aucune association (non demandée)')
+  else if AssociationsOk then begin
+    Ajoute(L, Colonne('LES FICHIERS', 20) + R);
     Ajoute(L, Colonne('', 20) + 'un double-clic les ouvre (' + S + '\Software\Classes)');
   end else
-    Ajoute(L, Colonne('LES FICHIERS', 20) + '.xihm et .xapi : pas associés (voir le journal)');
+    Ajoute(L, Colonne('LES FICHIERS', 20) + R + ' : pas toutes en place (voir le journal)');
+  if BilanAssoc <> '' then Ajoute(L, Colonne('', 20) + BilanAssoc);
+  // 1.14.0 : le pare-feu, le poste d'exploitation
+  if BilanParefeu <> '' then Ajoute(L, Colonne('LE PARE-FEU', 20) + BilanParefeu);
+  if ProfilChoisi = pPoste then begin
+    Ajoute(L, '');
+    Ajoute(L, 'LE POSTE D''EXPLOITATION   ' + PosteDossier(''));
+    if PosteAuto then begin
+      if IsAdminInstallMode then S := 'pour chaque compte (HKLM' else S := 'pour ton compte (HKCU';
+      Ajoute(L, '  ├─ ' + Colonne('au démarrage', 32) + 'à l''ouverture de la session, ' + S + '\...\Run, « {#ValeurRunPosteP} »)');
+    end else
+      Ajoute(L, '  ├─ ' + Colonne('au démarrage', 32) + 'non (case décochée) : menu Démarrer > {#RacPosteP}');
+    if PosteRelance then Ajoute(L, '  ├─ ' + Colonne('s''il se ferme', 32) + 'relancé 5 s après (maintenance\poste.cmd ; 3 fermetures rapprochées : il s''arrête)')
+    else Ajoute(L, '  ├─ ' + Colonne('s''il se ferme', 32) + 'pas relancé (case décochée)');
+    if BilanPoste <> '' then Ajoute(L, '  ├─ ' + Colonne('', 32) + BilanPoste);
+    Ajoute(L, '  └─ ' + Colonne('pour en sortir', 32) + 'Ctrl+Alt+Q (le mot de passe de sortie du projet)');
+  end;
   Result := L;
 end;
 
@@ -1304,8 +1737,10 @@ const
   RDW_MAINTENANT = $0180;
   // Les étapes, dans l'ordre : leur nom | leur icône (images\ui\icone-<nom>.bmp). Une page
   // de plus dans l'assistant : son étape ici (ou une existante), et sa ligne dans EtapeDePage.
-  EtapesNoms = 'Bienvenue|Emplacement|Tes données|Bibliothèque|Raccourcis|Récapitulatif|Installation|Terminé';
-  EtapesIcones = 'bienvenue|emplacement|donnees|bibliotheque|raccourcis|recapitulatif|installation|termine';
+  // 1.14.0 : « Applications » (que veux-tu installer ? et le poste d'exploitation) ; « Raccourcis » devient
+  // « Options » (les raccourcis, les fichiers, le pare-feu, la copie de secours).
+  EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|Options|Récapitulatif|Installation|Terminé';
+  EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|raccourcis|recapitulatif|installation|termine';
   // 1.12.28 : le diaporama de la copie (une diapositive toutes les 5,6 s) : son image
   // (images\ui\<image>.bmp) | son titre | son texte. Une diapositive de plus = un morceau de plus
   // dans chacune des trois listes. (#160 : une espace insécable, devant les deux-points.)
@@ -1324,12 +1759,14 @@ const
   // côte, coupées en RailCoupe - les marques (elles bougent : la pulsation, l'anneau de la copie) et
   // les noms (redessinés seulement quand une étape change d'état) : la pulsation d'une marque ne
   // redessine jamais le nom à côté d'elle.
+  // 1.14.0 : neuf étapes (huit avant) - le pas passe de 34 à 32 : le rail (292) laisse sa place à la note
+  // du bas de la colonne
   RailX = 12;
   RailY = 140;
   RailL = 208;
-  RailH = 274;
+  RailH = 292;
   RailPremier = 18;
-  RailPas = 34;
+  RailPas = 32;
   RailMarqueX = 22;
   RailCoupe = 40;
   RailTexteX = 46;
@@ -1511,6 +1948,9 @@ function SetWindowLong(Fenetre: HWND; Index: Integer; Valeur: Longint): Longint;
   external 'SetWindowLongW@user32.dll stdcall setuponly';
 function SystemParametersInfo(Action, Param: Cardinal; var Zone: TRect; WinIni: Cardinal): BOOL;
   external 'SystemParametersInfoW@user32.dll stdcall setuponly';
+// 1.14.0 : « Afficher les animations dans Windows » (SPI_GETCLIENTAREAANIMATION : un BOOL)
+function SystemParametersInfoBool(Action, Param: Cardinal; var Valeur: LongBool; WinIni: Cardinal): BOOL;
+  external 'SystemParametersInfoW@user32.dll stdcall setuponly';
 function IntersectClipRect(DC: LongWord; X1, Y1, X2, Y2: Integer): Integer;
   external 'IntersectClipRect@gdi32.dll stdcall setuponly';
 function SelectClipRgn(DC: LongWord; Region: LongWord): Integer;
@@ -1651,14 +2091,16 @@ end;
 function EtapeDePage(PageID: Integer): Integer;
 begin
   if PageID = wpWelcome then Result := 0
-  else if PageID = wpSelectDir then Result := 1
+  // 1.14.0 : que veux-tu installer ? et le poste d'exploitation
+  else if ((PageProfil <> nil) and (PageID = PageProfil.ID)) or ((PagePoste <> nil) and (PageID = PagePoste.ID)) then Result := 1
+  else if PageID = wpSelectDir then Result := 2
   else if ((PageDonnees <> nil) and (PageID = PageDonnees.ID)) or ((PageReprise <> nil) and (PageID = PageReprise.ID))
-          or ((PageAutre <> nil) and (PageID = PageAutre.ID)) then Result := 2
-  else if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := 3
-  else if PageID = wpSelectTasks then Result := 4
-  else if PageID = wpReady then Result := 5
-  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 6
-  else Result := 7;   // « Ce qui a été installé » et la fin
+          or ((PageAutre <> nil) and (PageID = PageAutre.ID)) then Result := 3
+  else if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := 4
+  else if PageID = wpSelectTasks then Result := 5
+  else if PageID = wpReady then Result := 6
+  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 7
+  else Result := 8;   // « Ce qui a été installé » et la fin
 end;
 
 // ======================================================== 1.12.28 : le mouvement ====
@@ -3311,7 +3753,7 @@ begin
   if (AppDossier <> '') and (CompareText(Copy(S, 1, Length(AppDossier) + 1), AppDossier + '\') = 0) then
     Result := Copy(S, Length(AppDossier) + 2, Length(S))
   else if (ReserveDossier <> '') and (CompareText(Copy(S, 1, Length(ReserveDossier) + 1), ReserveDossier + '\') = 0) then
-    Result := 'Réserve de réparation : ' + Copy(S, Length(ReserveDossier) + 2, Length(S))
+    Result := 'Copie de secours : ' + Copy(S, Length(ReserveDossier) + 2, Length(S))
   else
     Result := ExtractFileName(S);
 end;
@@ -3413,9 +3855,27 @@ begin
   end;
 end;
 
-function CopieCompte: String;
+// 1.14.0 : ce que la copie pose pour ce profil, dans le groupe G (1 le programme, 2 la réserve) - le
+// manifeste, sans l'exe que le profil n'a pas ; le lanceur du poste en plus dans le programme.
+function CopieNbPrevu(G: Integer): Integer;
 begin
-  if CopieNbFichiers > 0 then Result := IntToStr(Mini(CopieN, CopieNbFichiers)) + ' / ' + IntToStr(CopieNbFichiers) + ' fichiers'
+  Result := CopieNbFichiers;
+  if Result <= 0 then Exit;
+  if not AvecApi(ProfilChoisi) then Result := Result - 1;
+  if not AvecExeIhm(ProfilChoisi) then Result := Result - 1;
+  if (G = 1) and (ProfilChoisi = pPoste) then Result := Result + 1;
+end;
+
+function CopieTaillePrevue(G: Integer): Extended;
+begin
+  Result := CopieTaille;
+  if not AvecApi(ProfilChoisi) then Result := Result - {#TailleExeApi};
+  if not AvecExeIhm(ProfilChoisi) then Result := Result - {#TailleExeIhm};
+end;
+
+function CopieCompte(G: Integer): String;
+begin
+  if CopieNbPrevu(G) > 0 then Result := IntToStr(Mini(CopieN, CopieNbPrevu(G))) + ' / ' + IntToStr(CopieNbPrevu(G)) + ' fichiers'
   else Result := IntToStr(CopieN) + ' fichiers';
 end;
 
@@ -3424,15 +3884,15 @@ end;
 function CopieTexte(G: Integer; Fini: Boolean): String;
 var Total, Fait: Extended;
 begin
-  Total := CopieTaille;
+  Total := CopieTaillePrevue(G);
   Fait := CopieOctets;
   if Fait > Total then Fait := Total;
   if G = 1 then begin
-    if Fini then Result := 'Le programme est copié : ' + IntToStr(CopieNbFichiers) + ' fichiers, ' + TailleLisible(Total)
-    else Result := 'Le programme : ' + CopieCompte + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
+    if Fini then Result := 'Le programme est copié : ' + IntToStr(CopieNbPrevu(G)) + ' fichiers, ' + TailleLisible(Total)
+    else Result := 'Le programme : ' + CopieCompte(G) + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
   end else begin
-    if Fini then Result := 'La réserve de réparation est prête : ' + IntToStr(CopieNbFichiers) + ' fichiers, ' + TailleLisible(Total) + ', pour réparer sans Internet'
-    else Result := 'La réserve de réparation : ' + CopieCompte + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
+    if Fini then Result := 'La copie de secours est prête : ' + IntToStr(CopieNbPrevu(G)) + ' fichiers, ' + TailleLisible(Total) + ', pour réparer sans l''installateur'
+    else Result := 'La copie de secours : ' + CopieCompte(G) + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
   end;
 end;
 
@@ -3754,6 +4214,33 @@ begin
   end;
 end;
 
+// 1.14.0 : les animations de l'assistant suivent le réglage de Windows « Afficher les animations dans
+// Windows » (Paramètres > Accessibilité > Effets visuels : SPI_GETCLIENTAREAANIMATION) ; /ANIMATIONS=oui|non
+// le force. Sans elles : tout à son état final, sans minuterie (comme après une panne du mouvement) - la
+// barre, le fichier en cours et les détails de la copie suivent quand même.
+function AnimationsVoulues: Boolean;
+var S: String;
+    Oui: LongBool;
+begin
+  S := Lowercase(Trim(ExpandConstant('{param:ANIMATIONS|}')));
+  if S = 'non' then begin
+    Result := False;
+    Log('Habillage : /ANIMATIONS=non - rien ne bouge');
+    Exit;
+  end;
+  Result := True;
+  if S = 'oui' then Exit;
+  Oui := True;
+  try
+    if SystemParametersInfoBool(SPI_GETCLIENTAREAANIMATION, 0, Oui, 0) then begin
+      Result := Oui;
+      if not Result then Log('Habillage : Windows n''affiche pas les animations (Effets visuels) - l''assistant non plus');
+    end;
+  except
+    Log('Habillage : SPI_GETCLIENTAREAANIMATION illisible (' + GetExceptionMessage + ')');
+  end;
+end;
+
 procedure Habiller;
 begin
   if WizardSilent then Exit;
@@ -3772,6 +4259,8 @@ begin
   SensPage := 1;
   PageAvant := -1;
   SansComposition := Lowercase(ExpandConstant('{param:COMPOSITION|oui}')) = 'non';
+  // 1.14.0 : sans les animations de Windows, le moteur ne démarre pas (tout se pose à son état final)
+  if not AnimationsVoulues then MoteurEnPanne := True;
   if PolicesOk then WizardForm.Font.Name := 'Barlow';
   // une erreur ici n'arrête jamais l'assistant (InitializeWizard) : le mouvement, seulement
   try
@@ -3792,11 +4281,83 @@ begin
 end;
 
 // --------------------------------------------------------------- l'assistant ----
+// 1.14.0 : un paramètre oui|non (/POSTEAUTO, /POSTERELANCE) ; une autre valeur arrête l'installateur (mieux
+// que d'installer autre chose que ce qui était demandé).
+function ParametreOuiNon(Nom: String; Defaut: Boolean; var Valeur: Boolean): Boolean;
+var S: String;
+begin
+  Result := True;
+  Valeur := Defaut;
+  S := Lowercase(Trim(ExpandConstant('{param:' + Nom + '|}')));
+  if S = '' then Exit;
+  if S = 'oui' then Valeur := True
+  else if S = 'non' then Valeur := False
+  else begin
+    Result := False;
+    Log('/' + Nom + '=' + S + ' : oui ou non');
+    SuppressibleMsgBox('/' + Nom + '=' + S + ' : la valeur doit être oui ou non.', mbCriticalError, MB_OK, IDOK);
+  end;
+end;
+
+// 1.14.0 : le profil de départ et le poste - /PROFIL, /POSTE, /POSTEAUTO, /POSTERELANCE, sinon le choix de
+// l'installation d'avant (Software\XPGAnalyser : Profil, PosteProjet, PosteDemarrage, PosteRelance) ; une
+// version d'avant la 1.14.0 : les deux. Sans assistant, le poste demande son projet (/POSTE).
+function ChoisirProfilDepart: Boolean;
+var S: String;
+begin
+  Result := True;
+  ProfilAvant := -1;
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'Profil', S) then ProfilAvant := ProfilDeNom(S);
+  if (ProfilAvant < 0) and (VersionAvant <> '') then ProfilAvant := pDeux;
+  ProfilChoisi := ProfilAvant;
+  S := Trim(ExpandConstant('{param:PROFIL|}'));
+  if S <> '' then begin
+    ProfilChoisi := ProfilDeNom(S);
+    if ProfilChoisi < 0 then begin
+      Log('/PROFIL=' + S + ' : inconnu (deux, api, ihm, poste)');
+      SuppressibleMsgBox('/PROFIL=' + S + ' : ce choix n''existe pas. Les choix : deux, api, ihm, poste.', mbCriticalError, MB_OK, IDOK);
+      Result := False;
+      Exit;
+    end;
+  end;
+  if ProfilChoisi < 0 then ProfilChoisi := pDeux;
+  PosteDossierChoisi := Trim(ExpandConstant('{param:POSTE|}'));
+  if (PosteDossierChoisi = '') and not RegQueryStringValue(HKA, 'Software\{#Cle}', 'PosteProjet', PosteDossierChoisi) then PosteDossierChoisi := '';
+  PosteAutoChoisi := True;
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'PosteDemarrage', S) then PosteAutoChoisi := S <> 'non';
+  // la valeur Run d'avant n'est retirée que si c'est l'installateur qui l'avait posée
+  PosteAutoAvant := (ProfilAvant = pPoste) and PosteAutoChoisi;
+  PosteRelanceChoisi := False;
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'PosteRelance', S) then PosteRelanceChoisi := S = 'oui';
+  if not ParametreOuiNon('POSTEAUTO', PosteAutoChoisi, PosteAutoChoisi) or not ParametreOuiNon('POSTERELANCE', PosteRelanceChoisi, PosteRelanceChoisi) then begin
+    Result := False;
+    Exit;
+  end;
+  if ProfilAvant >= 0 then S := ProfilNom(ProfilAvant) else S := 'aucun';
+  Log('Profil : ' + ProfilNom(ProfilChoisi) + ' (avant : ' + S + ', version ' + VersionAvant + ')');
+  if (ProfilChoisi = pPoste) and WizardSilent then begin
+    if PosteDossier('') = '' then begin
+      Log('Poste d''exploitation : pas de projet (/POSTE="...")');
+      SuppressibleMsgBox('Le poste d''exploitation a besoin de son projet : /POSTE="D:\Projets\Armoire" (le dossier du projet).', mbCriticalError, MB_OK, IDOK);
+      Result := False;
+      Exit;
+    end;
+    S := PosteProbleme(PosteDossier(''));
+    if S <> '' then Log('Poste d''exploitation : attention, ' + S + ' (' + PosteDossier('') + ')');
+  end;
+end;
+
 function InitializeSetup: Boolean;
 var Etat: AnsiString;
     F: String;
 begin
   Result := True;
+  // 1.14.0 : la version d'avant (la purge des copies de secours garde la sienne), le profil
+  if not RegQueryStringValue(HKA, 'Software\{#Cle}', 'Version', VersionAvant) then VersionAvant := '';
+  if not ChoisirProfilDepart then begin
+    Result := False;
+    Exit;
+  end;
   DonneesDefautReel := DevelopperJetons('{#DonneesDefaut}');
   JournalInstallation := DossierEtat('') + '\Journaux\installation_' + Horodatage + '.log';
   ForceDirectories(ExtractFileDir(JournalInstallation));
@@ -3909,6 +4470,133 @@ begin
   MajCompteBiblio;
 end;
 
+// ------------------------------------------- 1.14.0 : que veux-tu installer ? ----
+// La note du bas : ce qui est installé sur ce PC, et ce qu'un autre choix retire (en ambre).
+procedure MajNoteProfil;
+var S, R: String;
+begin
+  if NoteProfil = nil then Exit;
+  R := '';
+  if ProfilAvant < 0 then
+    S := 'Tu pourras changer d''avis plus tard : relance l''installateur et fais un autre choix. Ce qui ne sert plus s''en va ; tes projets et tes données restent.'
+  else begin
+    S := 'Installé sur ce PC : ' + ProfilLibelle(ProfilAvant);
+    if VersionAvant <> '' then S := S + ' (version ' + VersionAvant + ')';
+    R := TexteRetire(ProfilAvant, ProfilChoisi);
+    if R = '' then S := S + '. La mise à jour garde ce choix.'
+    else S := S + '. Avec « ' + ProfilLibelle(ProfilChoisi) + ' », l''installateur retire ' + R + '. Tes projets et tes données restent.';
+  end;
+  if R <> '' then Ecrire(NoteProfil.Font, 'Medium', 10, CouleurAttention) else Ecrire(NoteProfil.Font, '', 10, CouleurTexte);
+  NoteProfil.Caption := S;
+end;
+
+procedure ProfilClick(Sender: TObject);
+var I: Integer;
+begin
+  for I := 0 to GetArrayLength(RadiosProfil) - 1 do
+    if RadiosProfil[I].Checked then ProfilChoisi := I;
+  AppliquerProfil(ProfilChoisi);
+  MajNoteProfil;
+end;
+
+// Un clic sur le texte d'un choix le choisit.
+procedure ProfilTexteClick(Sender: TObject);
+begin
+  RadiosProfil[TNewStaticText(Sender).Tag].Checked := True;
+  ProfilClick(Sender);
+end;
+
+// Quatre choix, chacun son titre et ce qu'il installe ; la note dessous.
+procedure CreerPageProfil;
+var I, Y: Integer;
+    R: TNewRadioButton;
+    T: TNewStaticText;
+begin
+  PageProfil := CreateCustomPage(wpWelcome, 'Que veux-tu installer ?', 'Les deux applications, l''une des deux, ou un poste d''exploitation pour l''atelier.');
+  SetArrayLength(RadiosProfil, 4);
+  Y := 0;
+  for I := 0 to 3 do begin
+    R := TNewRadioButton.Create(PageProfil);
+    R.Parent := PageProfil.Surface;
+    R.SetBounds(0, Y, PageProfil.SurfaceWidth, ScaleY(24));
+    Ecrire(R.Font, 'SemiBold', 11, CouleurTitre);
+    R.Caption := ProfilLibelle(I);
+    R.Checked := I = ProfilChoisi;
+    R.OnClick := @ProfilClick;
+    RadiosProfil[I] := R;
+    T := TNewStaticText.Create(PageProfil);
+    T.Parent := PageProfil.Surface;
+    T.AutoSize := False;
+    T.WordWrap := True;
+    T.SetBounds(ScaleX(22), Y + ScaleY(25), PageProfil.SurfaceWidth - ScaleX(22), ScaleY(36));
+    Ecrire(T.Font, '', 10, CouleurTexte);
+    T.Caption := ProfilTexte(I);
+    T.Tag := I;
+    T.OnClick := @ProfilTexteClick;
+    Y := Y + ScaleY(68);
+  end;
+  NoteProfil := TNewStaticText.Create(PageProfil);
+  NoteProfil.Parent := PageProfil.Surface;
+  NoteProfil.AutoSize := False;
+  NoteProfil.WordWrap := True;
+  NoteProfil.SetBounds(0, Y + ScaleY(6), PageProfil.SurfaceWidth, Maxi(ScaleY(40), PageProfil.SurfaceHeight - Y - ScaleY(6)));
+  MajNoteProfil;
+end;
+
+// ------------------------------------------- 1.14.0 : le poste d'exploitation ----
+// Le projet (un dossier : IHM-Studio.exe --poste <dossier>), « Démarrer le poste à l'ouverture de la session
+// Windows » (cochée), « Le relancer s'il se ferme » (le lanceur maintenance\poste.cmd).
+procedure CreerPagePoste;
+var Y: Integer;
+    T: TNewStaticText;
+begin
+  PagePoste := CreateInputDirPage(PageProfil.ID, 'Le poste d''exploitation', 'Le projet qu''il ouvre en plein écran, et quand il démarre.',
+    'Le dossier d''un projet {#NomIhm} (celui où est project.xpgproj), passé en FINISH : le poste n''ouvre que les projets finis. ' +
+    'Une archive .xihm s''ouvre d''abord dans {#NomIhm}, qui la range dans un dossier.', False, '');
+  PagePoste.Add('Le projet :');
+  PagePoste.Values[0] := PosteDossierChoisi;
+  Y := PagePoste.Edits[0].Top + PagePoste.Edits[0].Height + ScaleY(18);
+  CasePosteAuto := TNewCheckBox.Create(PagePoste);
+  CasePosteAuto.Parent := PagePoste.Surface;
+  CasePosteAuto.SetBounds(0, Y, PagePoste.SurfaceWidth, ScaleY(20));
+  CasePosteAuto.Caption := 'Démarrer le poste à l''ouverture de la session Windows';
+  CasePosteAuto.Checked := PosteAutoChoisi;
+  T := TNewStaticText.Create(PagePoste);
+  T.Parent := PagePoste.Surface;
+  T.AutoSize := False;
+  T.WordWrap := True;
+  T.SetBounds(ScaleX(20), Y + ScaleY(22), PagePoste.SurfaceWidth - ScaleX(20), ScaleY(32));
+  T.Font.Color := CouleurTexte;
+  if IsAdminInstallMode then
+    T.Caption := 'Pour chaque compte de ce PC (installation pour tous les comptes) : la valeur « {#ValeurRunPosteP} » de la clé Run (HKLM). ' +
+                 'Un PC sans personne : sa session doit s''ouvrir seule (voir l''aide F1 du poste).'
+  else
+    T.Caption := 'Pour ton compte : la valeur « {#ValeurRunPosteP} » de la clé Run, celle que {#NomIhm} règle aussi (Configuration › Poste d''exploitation).';
+  Y := Y + ScaleY(62);
+  CasePosteRelance := TNewCheckBox.Create(PagePoste);
+  CasePosteRelance.Parent := PagePoste.Surface;
+  CasePosteRelance.SetBounds(0, Y, PagePoste.SurfaceWidth, ScaleY(20));
+  CasePosteRelance.Caption := 'Le relancer s''il se ferme';
+  CasePosteRelance.Checked := PosteRelanceChoisi;
+  TexteRelance := TNewStaticText.Create(PagePoste);
+  TexteRelance.Parent := PagePoste.Surface;
+  TexteRelance.AutoSize := False;
+  TexteRelance.WordWrap := True;
+  TexteRelance.SetBounds(ScaleX(20), Y + ScaleY(22), PagePoste.SurfaceWidth - ScaleX(20), ScaleY(48));
+  TexteRelance.Font.Color := CouleurTexte;
+  TexteRelance.Caption := 'Un petit lanceur (maintenance\poste.cmd, réduit dans la barre des tâches) le relance 5 s après. S''il se ferme trois fois de suite ' +
+                          'moins d''une minute après son lancement, le lanceur s''arrête et l''écrit dans le journal (Journaux\poste.log). Pour quitter le poste pour de bon : ' +
+                          'ferme d''abord la fenêtre du lanceur.';
+  Y := Y + ScaleY(78);
+  T := TNewStaticText.Create(PagePoste);
+  T.Parent := PagePoste.Surface;
+  T.AutoSize := False;
+  T.WordWrap := True;
+  T.SetBounds(0, Y, PagePoste.SurfaceWidth, Maxi(ScaleY(20), PagePoste.SurfaceHeight - Y));
+  T.Font.Color := CouleurTexte;
+  T.Caption := 'Dans le menu Démarrer : seulement « {#RacPosteP} », pas l''éditeur. Ctrl+Alt+Q en sort (avec le mot de passe de sortie du projet).';
+end;
+
 procedure InitializeWizard;
 var I: Integer;
     S, Precedent: String;
@@ -3921,6 +4609,10 @@ begin
     WizardForm.ClientWidth := WizardForm.ClientWidth * 130 div 100;
     WizardForm.ClientHeight := WizardForm.ClientHeight * 140 div 100;
   end;
+  // ---- 1.14.0 : que veux-tu installer ? le poste d'exploitation ; les composants du profil ----
+  CreerPageProfil;
+  CreerPagePoste;
+  AppliquerProfil(ProfilChoisi);
   // ---- Tes donnees ----
   S := 'Ce dossier reste à toi : une mise à jour, une réparation ou une désinstallation ne l''effacent jamais sans ta confirmation.' + #13#10 +
        'Il ne peut pas être dans le dossier du programme. Tu pourras le changer plus tard : accueil d''{#NomApi} ou d''{#NomIhm} > Dossiers.';
@@ -3983,8 +4675,58 @@ begin
   BoutonCopier.Visible := False;
 end;
 
+// 1.14.0 : la page des options. La première fois, les raccourcis du Bureau d'une version d'avant (une case
+// pour les deux applications) restent cochés ; la case du pare-feu est grisée, avec sa raison, pour une
+// installation pour toi seul (une règle du pare-feu demande d'être administrateur).
+procedure PreparerOptions;
+var I: Integer;
+    C: String;
+begin
+  if not TachesVues then begin
+    TachesVues := True;
+    try
+      if AvecApi(ProfilChoisi) and FileExists(ExpandConstant('{autodesktop}\{#NomApi}.lnk')) then WizardSelectTasks('bureauapi');
+      if AvecEditeurIhm(ProfilChoisi) and FileExists(ExpandConstant('{autodesktop}\{#NomIhm}.lnk')) then WizardSelectTasks('bureauihm');
+      if (ProfilChoisi = pPoste) and FileExists(ExpandConstant('{autodesktop}\{#RacPosteP}.lnk')) then WizardSelectTasks('bureauposte');
+    except
+      Log('Options : ' + GetExceptionMessage);
+    end;
+  end;
+  if IsAdminInstallMode then Exit;
+  for I := 0 to WizardForm.TasksList.Items.Count - 1 do begin
+    C := WizardForm.TasksList.ItemCaption[I];
+    if Pos('pare-feu', C) > 0 then begin
+      WizardForm.TasksList.Checked[I] := False;
+      WizardForm.TasksList.ItemEnabled[I] := False;
+      if Pos('administrateur', C) = 0 then
+        WizardForm.TasksList.ItemCaption[I] := C + ' - pas ici : il faut une installation pour tous les comptes (administrateur)';
+    end;
+  end;
+end;
+
+// 1.14.0 : le texte de la fin suit ce qui a été installé.
+function TexteFin: String;
+begin
+  case ProfilChoisi of
+    pApi: Result := '{#NomApi} est dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer).';
+    pIhm: Result := '{#NomIhm} est dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer).';
+    pPoste: begin
+        Result := 'Le poste d''exploitation est dans le menu Démarrer';
+        if PosteAuto then Result := Result + ', et démarre à l''ouverture de la session Windows';
+        Result := Result + '. Ctrl+Alt+Q en sort. Sa Maintenance (vérifier, réparer, restaurer) est à côté.';
+      end;
+  else
+    Result := '{#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec leur Maintenance (vérifier, réparer, restaurer).';
+  end;
+  if ProfilChoisi <> pPoste then Result := Result + ' Tes dossiers se règlent dans l''application : accueil > Dossiers.';
+  Result := Result + ' Pour désinstaller : tape « désinstaller » dans la recherche Windows.';
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
+  // 1.14.0 : les options ; le texte de la fin (avant qu'il s'habille)
+  if CurPageID = wpSelectTasks then PreparerOptions;
+  if CurPageID = wpFinished then WizardForm.FinishedLabel.Caption := TexteFin;
   // 1.12.30 : l'en-tete, l'accueil et la page de la copie se dessinent d'un bloc (un handle recree :
   // de nouveau ; voir Composer)
   Composer;
@@ -4029,6 +4771,11 @@ begin
   // rien a reprendre, aucun projet. (Un ancien dossier se reprend aussi plus tard :
   // Maintenance > Reprendre une installation interrompue, /migrer:"D:\ancien".)
   if (PageReprise <> nil) and (PageID = PageReprise.ID) then Result := GetArrayLength(Sources) = 0;
+  // 1.14.0 : les composants se règlent par la page du choix ; le poste, seulement pour lui ; la
+  // bibliothèque (les blocs d'API Studio), seulement avec API Studio
+  if PageID = wpSelectComponents then Result := True;
+  if (PagePoste <> nil) and (PageID = PagePoste.ID) then Result := ProfilChoisi <> pPoste;
+  if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := not AvecApi(ProfilChoisi);
   if (PageAutre <> nil) and (PageID = PageAutre.ID) then Result := (GetArrayLength(Sources) = 0) or not PageReprise.Values[OptionAutre];
 end;
 
@@ -4036,6 +4783,22 @@ function NextButtonClick(CurPageID: Integer): Boolean;
 var D, App, Essai: String;
 begin
   Result := True;
+  // 1.14.0 : le choix fait les composants ; le poste vérifie son projet
+  if (PageProfil <> nil) and (CurPageID = PageProfil.ID) then AppliquerProfil(ProfilChoisi);
+  if (PagePoste <> nil) and (CurPageID = PagePoste.ID) then begin
+    D := RemoveBackslashUnlessRoot(Trim(PagePoste.Values[0]));
+    if D = '' then begin MsgBox('Choisis le dossier du projet que le poste ouvre.', mbError, MB_OK); Result := False; Exit; end;
+    if not DirExists(D) then begin MsgBox('Ce dossier n''existe pas : ' + D, mbError, MB_OK); Result := False; Exit; end;
+    Essai := PosteProbleme(D);
+    if (Essai <> '') and (MsgBox('Attention : ' + Essai + '.' + #13#10 + #13#10 + 'Le poste ne s''ouvrira pas sur ce projet tel qu''il est. Le garder quand même ?',
+                                 mbConfirmation, MB_YESNO) = IDNO) then begin
+      Result := False;
+      Exit;
+    end;
+    PosteDossierChoisi := D;
+    PosteAutoChoisi := CasePosteAuto.Checked;
+    PosteRelanceChoisi := CasePosteRelance.Checked;
+  end;
   if CurPageID = PageDonnees.ID then begin
     D := RemoveBackslashUnlessRoot(Trim(PageDonnees.Values[0]));
     App := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
@@ -4069,11 +4832,183 @@ begin
 end;
 
 // Le resume de la page « Pret a installer » : des lignes courtes (le cadre ne les coupe pas).
+// ================================= 1.14.0 : les copies de secours (la réserve) ====
+//  Chaque version laissait sa copie, Reserve\<version> (DossierReserve), et aucune ne partait : 19 versions,
+//  2,6 Go sur le PC d'essai. Maintenant restent celle de la version qui s'installe (si sa case est cochée)
+//  et la précédente - la version installée avant celle-ci, sinon (une réinstallation) la plus récente d'avant
+//  elle : celle que « Restaurer une sauvegarde » remet en place. Les autres partent après la copie ; la
+//  désinstallation les retire toutes ([UninstallDelete]).
+
+// -1, 0, 1 : 1.12.9 avant 1.12.30.
+function VersionComparer(A, B: String): Integer;
+var PA, PB, NA, NB: Integer;
+begin
+  Result := 0;
+  while (Result = 0) and ((A <> '') or (B <> '')) do begin
+    PA := Pos('.', A);
+    if PA = 0 then PA := Length(A) + 1;
+    PB := Pos('.', B);
+    if PB = 0 then PB := Length(B) + 1;
+    NA := StrToIntDef(Copy(A, 1, PA - 1), 0);
+    NB := StrToIntDef(Copy(B, 1, PB - 1), 0);
+    if NA < NB then Result := -1
+    else if NA > NB then Result := 1;
+    Delete(A, 1, PA);
+    Delete(B, 1, PB);
+  end;
+end;
+
+// Un nom de dossier de version (des chiffres et des points) : rien d'autre n'est touché dans Reserve\.
+function EstUneVersion(S: String): Boolean;
+var I: Integer;
+begin
+  Result := (S <> '') and (S[1] >= '0') and (S[1] <= '9');
+  for I := 1 to Length(S) do
+    if not (((S[I] >= '0') and (S[I] <= '9')) or (S[I] = '.')) then Result := False;
+end;
+
+function ReservesPresentes(var Noms: TArrayOfString): Integer;
+var F: TFindRec;
+begin
+  SetArrayLength(Noms, 0);
+  if FindFirst(DossierEtat('') + '\Reserve\*', F) then
+    try
+      repeat
+        if (F.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0) and EstUneVersion(F.Name) then Ajoute(Noms, F.Name);
+      until not FindNext(F);
+    finally
+      FindClose(F);
+    end;
+  Result := GetArrayLength(Noms);
+end;
+
+function ReservePrecedente(Noms: TArrayOfString): String;
+var I: Integer;
+begin
+  Result := '';
+  if (VersionAvant <> '') and (VersionAvant <> '{#Version}') then
+    for I := 0 to GetArrayLength(Noms) - 1 do
+      if Noms[I] = VersionAvant then Result := VersionAvant;
+  if Result <> '' then Exit;
+  for I := 0 to GetArrayLength(Noms) - 1 do
+    if (VersionComparer(Noms[I], '{#Version}') < 0) and ((Result = '') or (VersionComparer(Noms[I], Result) > 0)) then Result := Noms[I];
+end;
+
+// Celles qui partent (les anciennes ; celle de cette version, à part : sa case est décochée).
+procedure ReservesATrier(var Anciennes: TArrayOfString; var Celle: Boolean; var Precedente: String);
+var Noms: TArrayOfString;
+    I: Integer;
+begin
+  SetArrayLength(Anciennes, 0);
+  Celle := False;
+  ReservesPresentes(Noms);
+  Precedente := ReservePrecedente(Noms);
+  for I := 0 to GetArrayLength(Noms) - 1 do
+    if Noms[I] = '{#Version}' then Celle := not WizardIsTaskSelected('reserve')
+    else if Noms[I] <> Precedente then Ajoute(Anciennes, Noms[I]);
+end;
+
+function TailleDossier(D: String): Extended;
+var F: TFindRec;
+begin
+  Result := 0;
+  if FindFirst(D + '\*', F) then
+    try
+      repeat
+        if (F.Name <> '.') and (F.Name <> '..') then begin
+          if F.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then Result := Result + TailleDossier(D + '\' + F.Name)
+          else Result := Result + F.SizeHigh * 4294967296.0 + F.SizeLow;
+        end;
+      until not FindNext(F);
+    finally
+      FindClose(F);
+    end;
+end;
+
+// « 17 anciennes copies de secours (1.12.15 à 1.12.31) » ; la plus vieille et la plus récente.
+function TexteReserves(Noms: TArrayOfString): String;
+var I, Mi, Ma: Integer;
+begin
+  Result := '';
+  if GetArrayLength(Noms) = 0 then Exit;
+  Mi := 0;
+  Ma := 0;
+  for I := 1 to GetArrayLength(Noms) - 1 do begin
+    if VersionComparer(Noms[I], Noms[Mi]) < 0 then Mi := I;
+    if VersionComparer(Noms[I], Noms[Ma]) > 0 then Ma := I;
+  end;
+  if GetArrayLength(Noms) = 1 then Result := '1 ancienne copie de secours (' + Noms[0] + ')'
+  else Result := IntToStr(GetArrayLength(Noms)) + ' anciennes copies de secours (' + Noms[Mi] + ' à ' + Noms[Ma] + ')';
+end;
+
+// Après la copie : les anciennes partent. Le journal et « Ce qui a été installé » disent combien, et la place
+// libérée.
+procedure PurgerReserves;
+var Anciennes, Parties: TArrayOfString;
+    I: Integer;
+    Celle: Boolean;
+    Prec, D, L: String;
+    T, Total: Extended;
+begin
+  BilanPurge := '';
+  ReservesATrier(Anciennes, Celle, Prec);
+  if Celle then begin
+    D := DossierEtat('') + '\Reserve\{#Version}';
+    T := TailleDossier(D);
+    if DelTree(D, True, True, True) then begin
+      BilanReserve := 'celle de la {#Version} (une installation d''avant) est retirée : ' + TailleLisible(T) + ' libérés';
+      JournalNote(jFait, 'reserve', 'Pas de copie de secours (case décochée) : celle de la {#Version} est retirée, ' + TailleLisible(T) + ' libérés');
+    end;
+  end;
+  if GetArrayLength(Anciennes) = 0 then begin
+    Log('Copies de secours : rien à retirer (gardée : ' + Prec + ')');
+    Exit;
+  end;
+  JournalNote(jEnCours, 'purge', 'Les anciennes copies de secours partent : ' + TexteReserves(Anciennes) + '…');
+  JournalMontrerMaintenant;
+  Total := 0;
+  for I := 0 to GetArrayLength(Anciennes) - 1 do begin
+    D := DossierEtat('') + '\Reserve\' + Anciennes[I];
+    T := TailleDossier(D);
+    if DelTree(D, True, True, True) then begin
+      Ajoute(Parties, Anciennes[I]);
+      Total := Total + T;
+      Log('Copie de secours retirée : ' + D + ' (' + TailleLisible(T) + ')');
+    end else
+      Log('Copie de secours : ' + D + ' ne part pas (un fichier ouvert ?)');
+  end;
+  L := TexteReserves(Parties);
+  if GetArrayLength(Parties) = 1 then L := L + ' retirée' else L := L + ' retirées';
+  L := L + ', ' + TailleLisible(Total) + ' libérés';
+  if GetArrayLength(Parties) < GetArrayLength(Anciennes) then L := L + ' (' + IntToStr(GetArrayLength(Anciennes) - GetArrayLength(Parties)) + ' restée(s) : voir le journal)';
+  BilanPurge := L;
+  if Prec <> '' then BilanPurge := BilanPurge + ' ; la ' + Prec + ' (la précédente) reste';
+  if GetArrayLength(Parties) < GetArrayLength(Anciennes) then JournalNote(jAttention, 'purge', L)
+  else JournalNote(jFait, 'purge', L);
+  if Prec <> '' then JournalSous(jInfo, 'purge', 'purge:gardee', 'gardée : la ' + Prec + ', la précédente (pour revenir à la version d''avant)');
+end;
+
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 var S, L, Prec: String;
+    Anciennes: TArrayOfString;
+    Celle: Boolean;
 begin
   S := '';
   if IsAdminInstallMode then S := S + 'Pour : tous les comptes de ce PC' + NewLine else S := S + 'Pour : toi seul (sans droits d''administrateur)' + NewLine;
+  // 1.14.0 : ce qui s'installe ; ce qu'un autre choix que celui d'avant retire
+  S := S + NewLine + 'Ce que tu installes :' + NewLine + Space + ProfilLibelle(ProfilChoisi) + NewLine;
+  L := TexteRetire(ProfilAvant, ProfilChoisi);
+  if L <> '' then
+    S := S + Space + 'Installé avant : ' + ProfilLibelle(ProfilAvant) + '. Retiré :' + NewLine + Space + L + '.' + NewLine +
+         Space + 'Tes projets et tes données restent.' + NewLine;
+  if ProfilChoisi = pPoste then begin
+    S := S + NewLine + 'Le poste d''exploitation :' + NewLine + Space + PosteDossier('') + NewLine;
+    if PosteAuto then begin
+      if IsAdminInstallMode then S := S + Space + 'démarre à l''ouverture de la session de chaque compte' + NewLine
+      else S := S + Space + 'démarre à l''ouverture de ta session' + NewLine;
+    end else S := S + Space + 'ne démarre pas tout seul (menu Démarrer > {#RacPosteP})' + NewLine;
+    if PosteRelance then S := S + Space + 'relancé s''il se ferme (maintenance\poste.cmd)' + NewLine;
+  end;
   S := S + NewLine + MemoDirInfo + NewLine;
   S := S + NewLine + 'Tes données :' + NewLine + Space + DonneesReel('') + NewLine;
   L := ListeSources;
@@ -4098,19 +5033,39 @@ begin
     S := S + NewLine + 'Mise à jour de la version ' + Prec + ' :' + NewLine +
          Space + 'elle est d''abord sauvegardée (programme, réglages, registre).' + NewLine;
   if MemoTasksInfo <> '' then S := S + NewLine + MemoTasksInfo;
-  // 1.8.0 : toujours, dans le menu Demarrer (la recherche Windows le trouve).
-  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + '{#NomApi}, {#NomIhm}, Désinstaller {#Nom}, Maintenance' + NewLine;
+  // 1.14.0 : la copie de secours, et les anciennes qui partent
+  ReservesATrier(Anciennes, Celle, Prec);
+  S := S + NewLine + 'La copie de secours pour Réparer :' + NewLine;
+  if WizardIsTaskSelected('reserve') then S := S + Space + 'gardée (environ {#ReserveMo} Mo)' + NewLine
+  else S := S + Space + 'pas gardée : Réparer te demandera l''installateur' + NewLine;
+  if GetArrayLength(Anciennes) > 0 then begin
+    S := S + Space + TexteReserves(Anciennes);
+    if GetArrayLength(Anciennes) = 1 then S := S + ' sera retirée' else S := S + ' seront retirées';
+    if Prec <> '' then S := S + NewLine + Space + '(la ' + Prec + ', la précédente, reste)';
+    S := S + NewLine;
+  end;
+  // 1.8.0 : toujours, dans le menu Demarrer (la recherche Windows le trouve). 1.14.0 : ce que le profil y met.
+  L := '';
+  if AvecApi(ProfilChoisi) then L := '{#NomApi}, ';
+  if AvecEditeurIhm(ProfilChoisi) then L := L + '{#NomIhm}, ';
+  if ProfilChoisi = pPoste then L := L + '{#RacPosteP}, ';
+  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + L + 'Désinstaller {#Nom}, Maintenance' + NewLine;
   Result := S;
 end;
 
 // --------------------------------------------------------------- installer ----
 // 1.12.29 : les raccourcis, vérifiés (les détails) : ceux du menu Démarrer, ceux du Bureau (demandés).
 procedure RaccourcisVerifier;
-var G, D, Noms, Manque, S, L: String;
+var G, D, Noms, Manque, S, L, B: String;
     I, N, Total, NB, K: Integer;
 begin
   G := ExpandConstant('{autoprograms}\{#Nom}');
-  Noms := '{#NomApi}|{#NomIhm}|Désinstaller {#Nom}|Maintenance\Réparer|Maintenance\Vérifier l''installation|' +
+  // 1.14.0 : ceux du profil
+  Noms := '';
+  if AvecApi(ProfilChoisi) then Noms := '{#NomApi}|';
+  if AvecEditeurIhm(ProfilChoisi) then Noms := Noms + '{#NomIhm}|';
+  if ProfilChoisi = pPoste then Noms := Noms + '{#RacPosteP}|';
+  Noms := Noms + 'Désinstaller {#Nom}|Maintenance\Réparer|Maintenance\Vérifier l''installation|' +
           'Maintenance\Reprendre une installation interrompue|Maintenance\Restaurer une sauvegarde|' +
           'Maintenance\Collecter les journaux|Maintenance\Réinitialiser mes réglages';
   if not IsAdminInstallMode then Noms := Noms + '|Tes données';
@@ -4124,17 +5079,23 @@ begin
       Manque := Manque + Morceau(Noms, I);
     end;
   S := IntToStr(N) + ' dans le menu Démarrer';
-  if WizardIsTaskSelected('bureau') then begin
+  // 1.14.0 : un raccourci Bureau par application (sa case)
+  B := '';
+  if WizardIsTaskSelected('bureauapi') then B := '{#NomApi}|';
+  if WizardIsTaskSelected('bureauihm') then B := B + '{#NomIhm}|';
+  if WizardIsTaskSelected('bureauposte') then B := B + '{#RacPosteP}|';
+  if B <> '' then begin
+    B := Copy(B, 1, Length(B) - 1);
     D := ExpandConstant('{autodesktop}');
     NB := 0;
-    for I := 0 to 1 do begin
+    for I := 0 to NombreDeMorceaux(B) - 1 do begin
       Total := Total + 1;
-      if FileExists(D + '\' + Morceau('{#NomApi}|{#NomIhm}', I) + '.lnk') then begin
+      if FileExists(D + '\' + Morceau(B, I) + '.lnk') then begin
         N := N + 1;
         NB := NB + 1;
       end else begin
         if Manque <> '' then Manque := Manque + '|';
-        Manque := Manque + Morceau('{#NomApi}|{#NomIhm}', I) + ' (Bureau)';
+        Manque := Manque + Morceau(B, I) + ' (Bureau)';
       end;
     end;
     S := S + ', ' + IntToStr(NB) + ' sur le Bureau';
@@ -4228,41 +5189,163 @@ end;
 
 procedure EcrireInstallationIni;
 var L: TArrayOfString;
-    Bureau, Barre: String;
+    S, B: String;
 begin
-  if WizardIsTaskSelected('bureau') then Bureau := 'oui' else Bureau := 'non';
+  Ajoute(L, '; installation.ini - écrit par l''installateur d''{#Nom} {#Version}. Ne pas modifier :');
+  Ajoute(L, '; tes dossiers se changent dans %APPDATA%\XpgAnalyzer\XPGAnalyser.ini (accueil > Dossiers).');
+  Ajoute(L, '[Installation]');
+  Ajoute(L, 'nom = {#Nom}');
+  Ajoute(L, 'cle = {#Cle}');
+  Ajoute(L, 'version = {#Version}');
+  Ajoute(L, 'portee = ' + Portee(''));
+  Ajoute(L, 'date = ' + GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':'));
+  // 1.14.0 : l'exe du profil ; le profil et les applications installées (la maintenance ne cherche pas
+  // l'exe que le profil n'a pas : verify_installation, repair)
+  Ajoute(L, 'exe = ' + ExePrincipal(''));
+  Ajoute(L, 'profil = ' + ProfilNom(ProfilChoisi));
+  S := '';
+  if AvecApi(ProfilChoisi) then S := '{#Exe}';
+  if AvecExeIhm(ProfilChoisi) then begin
+    if S <> '' then S := S + ';';
+    S := S + '{#ExeIhm}';
+  end;
+  Ajoute(L, 'applications = ' + S);
+  Ajoute(L, 'chaine = {#Chaine}');
+  B := '';
+  if WizardIsTaskSelected('bureauapi') then B := '{#NomApi}';
+  if WizardIsTaskSelected('bureauihm') then begin
+    if B <> '' then B := B + ';';
+    B := B + '{#NomIhm}';
+  end;
+  if WizardIsTaskSelected('bureauposte') then begin
+    if B <> '' then B := B + ';';
+    B := B + '{#RacPosteP}';
+  end;
+  Ajoute(L, 'raccourci_bureau = ' + OuiNon(B <> ''));
+  Ajoute(L, 'raccourcis_bureau = ' + B);
   // 1.8.0 : l'application demande l'epinglage a Windows au premier lancement (une fois par compte).
-  if WizardIsTaskSelected('barre') then Barre := 'oui' else Barre := 'non';
-  SetArrayLength(L, 22);
-  L[0] := '; installation.ini - écrit par l''installateur d''{#Nom} {#Version}. Ne pas modifier :';
-  L[1] := '; tes dossiers se changent dans %APPDATA%\XpgAnalyzer\XPGAnalyser.ini (accueil > Dossiers).';
-  L[2] := '[Installation]';
-  L[3] := 'nom = {#Nom}' + #13#10 + 'cle = {#Cle}';
-  L[4] := 'version = {#Version}';
-  L[5] := 'portee = ' + Portee('');
-  L[6] := 'date = ' + GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':');
-  L[7] := 'exe = {#Exe}';
-  L[8] := 'chaine = {#Chaine}';
-  L[9] := 'raccourci_bureau = ' + Bureau;
-  L[10] := 'epingler_barre_taches = ' + Barre;
-  L[11] := '';
-  L[12] := '[Dossiers]';
-  L[13] := '; Le dossier des données par défaut ({Documents} : celui de chaque compte).';
-  L[14] := 'donnees = ' + DonneesBrut('');
-  L[15] := '';
-  L[16] := '[Maintenance]';
-  L[17] := 'etat = ' + DossierEtat('');
-  L[18] := 'journaux = ' + DossierEtat('') + '\Journaux';
-  L[19] := 'sauvegardes = ' + DossierEtat('') + '\Sauvegardes';
-  L[20] := 'reserve = ' + DossierEtat('') + '\Reserve';
-  L[21] := '';
+  Ajoute(L, 'epingler_barre_taches = ' + OuiNon(WizardIsTaskSelected('barre')));
+  Ajoute(L, '');
+  Ajoute(L, '[Dossiers]');
+  Ajoute(L, '; Le dossier des données par défaut ({Documents} : celui de chaque compte).');
+  Ajoute(L, 'donnees = ' + DonneesBrut(''));
+  Ajoute(L, '');
+  Ajoute(L, '[Maintenance]');
+  Ajoute(L, 'etat = ' + DossierEtat(''));
+  Ajoute(L, 'journaux = ' + DossierEtat('') + '\Journaux');
+  Ajoute(L, 'sauvegardes = ' + DossierEtat('') + '\Sauvegardes');
+  Ajoute(L, 'reserve = ' + DossierEtat('') + '\Reserve');
+  // 1.14.0 : non - la case « Garder une copie de secours pour Réparer » décochée : Réparer demande l'installateur
+  Ajoute(L, 'copie_de_secours = ' + OuiNon(WizardIsTaskSelected('reserve')));
+  if ProfilChoisi = pPoste then begin
+    Ajoute(L, '');
+    Ajoute(L, '[Poste]');
+    Ajoute(L, 'projet = ' + PosteDossier(''));
+    Ajoute(L, 'demarrage = ' + OuiNon(PosteAuto));
+    Ajoute(L, 'relance = ' + OuiNon(PosteRelance));
+  end;
+  Ajoute(L, '');
   if not SaveStringsToUTF8File(ExpandConstant('{app}\installation.ini'), L, False) then
     Log('installation.ini : ecriture impossible');
 end;
 
+// --------------------------------------------- 1.14.0 : après la copie, les options ----
+// Les associations décochées (ou dont l'application n'est plus là) : les nôtres partent. Puis celles qui
+// restent, vérifiées.
+procedure AssociationsRegler;
+var R: String;
+begin
+  BilanAssoc := '';
+  R := '';
+  if not WizardIsTaskSelected('xihm') and AssociationRetirer('.xihm', '{#ProgIdIhm}') then R := '.xihm';
+  if not WizardIsTaskSelected('xapi') and AssociationRetirer('.xapi', '{#ProgIdApi}') then begin
+    if R <> '' then R := R + ', ';
+    R := R + '.xapi';
+  end;
+  if not WizardIsTaskSelected('xpg') and AssociationRetirer('.XPG', '{#ProgIdXpg}') then begin
+    if R <> '' then R := R + ', ';
+    R := R + '« Ouvrir avec » des .XPG';
+  end;
+  if R <> '' then begin
+    BilanAssoc := 'retiré : ' + R + ' (case décochée, ou l''application n''est plus là)';
+    JournalNote(jFait, 'assoc-moins', 'Associations retirées : ' + R);
+  end;
+  if TexteAssociations = '' then Exit;
+  if AssociationsOk then
+    JournalNote(jFait, 'assoc', 'Les fichiers : ' + TexteAssociations + ' (un double-clic)')
+  else begin
+    Log('Associations : ' + TexteAssociations + ' - pas toutes en place (Software\Classes)');
+    JournalNote(jAttention, 'assoc', 'Les fichiers ne s''ouvrent pas tous d''un double-clic : voir le journal');
+  end;
+end;
+
+// Le poste d'exploitation : notre valeur Run quand elle ne sert plus (un autre profil, la case décochée) -
+// seulement si c'est l'installateur qui l'avait posée et qu'elle vise toujours ce programme : celle que
+// l'application a posée elle-même (Configuration > Poste d'exploitation) reste.
+procedure PosteRegler;
+var V: String;
+begin
+  BilanPoste := '';
+  if PosteAuto then begin
+    if RegQueryStringValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunPosteP}', V) then begin
+      BilanPoste := V;
+      JournalNote(jFait, 'poste', 'Le poste d''exploitation démarre à l''ouverture de la session : ' + PosteDossier(''));
+    end else
+      JournalNote(jAttention, 'poste', 'Le poste d''exploitation : la valeur de la clé Run n''est pas là (voir le journal)');
+    if PosteRelance then JournalSous(jInfo, 'poste', 'poste:relance', 'relancé s''il se ferme (maintenance\poste.cmd)');
+  end else if ProfilChoisi = pPoste then
+    JournalNote(jInfo, 'poste', 'Le poste d''exploitation : menu Démarrer > {#RacPosteP} (il ne démarre pas tout seul)');
+  if PosteAuto or not PosteAutoAvant then Exit;
+  if RegQueryStringValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunPosteP}', V)
+     and (Pos(Lowercase(ExpandConstant('{app}')), Lowercase(V)) > 0) then begin
+    RegDeleteValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunPosteP}');
+    Log('Poste d''exploitation : la valeur Run est retirée (' + V + ')');
+    JournalNote(jFait, 'poste-moins', 'Le poste d''exploitation ne démarre plus avec la session');
+  end;
+end;
+
+// netsh, caché ; son code (-1 : pas lancé).
+function Netsh(Args: String): Integer;
+var Code: Integer;
+begin
+  Result := -1;
+  if Exec(ExpandConstant('{sys}\netsh.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
+  Log('netsh ' + Args + ' : code ' + IntToStr(Result));
+end;
+
+// La règle entrante du pare-feu pour IHM-Studio.exe (tous les réseaux : une usine est souvent un réseau
+// « public » pour Windows) - pour tous les comptes seulement (administrateur). Décochée : la nôtre part.
+procedure ParefeuRegler;
+var Avant: String;
+begin
+  BilanParefeu := '';
+  if AvecExeIhm(ProfilChoisi) and WizardIsTaskSelected('parefeu') then begin
+    if not IsAdminInstallMode then begin
+      BilanParefeu := 'pas de règle : il faut une installation pour tous les comptes (administrateur)';
+      JournalNote(jAttention, 'parefeu', 'Pare-feu : pas de règle pour une installation pour toi seul (il faut être administrateur)');
+      Exit;
+    end;
+    Netsh('advfirewall firewall delete rule name="' + RegleParefeu + '"');
+    if Netsh('advfirewall firewall add rule name="' + RegleParefeu + '" dir=in action=allow program="' + ExpandConstant('{app}\{#ExeIhm}') +
+             '" enable=yes profile=any description="Les esclaves Modbus simulés et le poste d''exploitation d''{#NomIhm} (installé par {#Nom})"') = 0 then begin
+      RegWriteStringValue(HKA, 'Software\{#Cle}', 'Parefeu', 'oui');
+      BilanParefeu := 'la règle « ' + RegleParefeu + ' » laisse entrer {#ExeIhm} (tous les réseaux)';
+      JournalNote(jFait, 'parefeu', 'Pare-feu : {#NomIhm} peut recevoir des connexions (règle « ' + RegleParefeu + ' »)');
+    end else begin
+      BilanParefeu := 'la règle n''a pas pu être posée (voir le journal) : Windows demandera au premier lancement';
+      JournalNote(jAttention, 'parefeu', 'Pare-feu : la règle n''a pas pu être posée (netsh) ; Windows demandera au premier lancement');
+    end;
+  end else if IsAdminInstallMode and RegQueryStringValue(HKA, 'Software\{#Cle}', 'Parefeu', Avant) and (Avant = 'oui') then begin
+    Netsh('advfirewall firewall delete rule name="' + RegleParefeu + '"');
+    RegDeleteValue(HKA, 'Software\{#Cle}', 'Parefeu');
+    BilanParefeu := 'notre règle « ' + RegleParefeu + ' » est retirée (case décochée)';
+    JournalNote(jFait, 'parefeu', 'Pare-feu : notre règle pour {#NomIhm} est retirée (case décochée)');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
-    Sources2, Lot8, Migrer, Setup: String;
+    Sources2, Lot8, Migrer, Setup, Blocs: String;
     Demarre: Boolean;
 begin
   // 1.8.0 : sans assistant (/VERYSILENT), le recapitulatif va quand meme dans les journaux.
@@ -4281,31 +5364,38 @@ begin
       JournalNote(jFait, 'desinst', 'La désinstallation est enregistrée : Paramètres > Applications')
     else
       JournalNote(jAttention, 'desinst', 'Désinstallation : absente de Paramètres > Applications ; unins000.exe la fait');
-    // 1.12.30 : les archives d'un projet, vérifiées (la valeur de l'extension, sa commande)
-    if AssociationsOk then
-      JournalNote(jFait, 'assoc', 'Les fichiers .xihm s''ouvrent avec {#NomIhm}, les .xapi avec {#NomApi} (un double-clic)')
-    else begin
-      Log('Associations : .xihm ou .xapi ne vise pas {#ProgIdIhm} / {#ProgIdApi} (Software\Classes)');
-      JournalNote(jAttention, 'assoc', 'Les fichiers .xihm et .xapi ne s''ouvrent pas d''un double-clic : voir le journal');
-    end;
+    // 1.12.30 : les archives d'un projet, vérifiées (la valeur de l'extension, sa commande). 1.14.0 : chacune
+    // sa case ; les décochées partent
+    AssociationsRegler;
     RaccourcisVerifier;
+    // 1.14.0 : le poste d'exploitation (la clé Run), le pare-feu
+    PosteRegler;
+    ParefeuRegler;
   except
     Log('Détails : ' + GetExceptionMessage);
   end;
   EcrireInstallationIni;
-  JournalNote(jFait, 'ini', 'installation.ini est écrit : la version, tes dossiers, la maintenance');
+  JournalNote(jFait, 'ini', 'installation.ini est écrit : la version, ton choix, tes dossiers, la maintenance');
   // L'installateur lui-meme dans la reserve : repair.bat (reinstaller) et la reprise s'en servent.
   // (1.12.29 : CopyFile depuis Inno Setup 6.4 - FileCopy, son ancien nom, y donne un avertissement.)
+  // 1.14.0 : seulement avec la copie de secours (sa case) ; puis les anciennes copies partent.
   Setup := ExpandConstant('{srcexe}');
+  if not WizardIsTaskSelected('reserve') then
+    JournalNote(jInfo, 'setup', 'Pas de copie de secours (case décochée) : Réparer te demandera l''installateur')
 #if Ver >= EncodeVer(6, 4, 0)
-  if not CopyFile(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
+  else if not CopyFile(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
 #else
-  if not FileCopy(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
+  else if not FileCopy(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
 #endif
     Log('Copie de l''installateur dans la reserve : echec');
-    JournalNote(jAttention, 'setup', 'L''installateur n''a pas pu être rangé dans la réserve de réparation');
+    JournalNote(jAttention, 'setup', 'L''installateur n''a pas pu être rangé dans la copie de secours');
   end else
-    JournalNote(jFait, 'setup', 'L''installateur est rangé dans la réserve : réparer n''aura pas besoin d''Internet');
+    JournalNote(jFait, 'setup', 'L''installateur est rangé dans la copie de secours : réparer n''aura pas besoin de lui');
+  try
+    PurgerReserves;
+  except
+    Log('Copies de secours : ' + GetExceptionMessage);
+  end;
   if PowerShellBloque then begin
     Log('Etape apres-copie non lancee : Windows refuse les scripts PowerShell (voir plus haut).');
     JournalNote(jAttention, 'fin', 'Installé, sans les étapes PowerShell (Windows les refuse), en ' + DureeLisible(GetTickCount - InstallDebut));
@@ -4330,9 +5420,12 @@ begin
   if (OptionLot8 >= 0) and (PageReprise <> nil) and PageReprise.Values[OptionLot8] and (SourceLot8 >= 0) and PageReprise.Values[SourceLot8] then Lot8 := 'oui';
   if Lowercase(ExpandConstant('{param:DESINSTALLERLOT8|}')) = 'non' then Lot8 := 'non';
   WizardForm.StatusLabel.Caption := 'Tes données, la reprise des anciennes versions, la vérification...';
+  // 1.14.0 : les blocs de la page Ta bibliothèque vont avec API Studio (la page est sautée sans lui)
+  Blocs := '';
+  if AvecApi(ProfilChoisi) then Blocs := FichierBlocsAjoutes;
   if not EtapePowerShell(ExpandConstant('{app}\maintenance\lib\installer_etape.ps1'),
        '/etape:apres-copie /dossier:"' + ExpandConstant('{app}') + '" /sources:"' + Sources2 + '" /desinstaller-lot8:' + Lot8
-       + ' /libs-ajoutees:"' + FichierBlocsAjoutes + '"', Code, Demarre) or (Code <> 0) then begin
+       + ' /libs-ajoutees:"' + Blocs + '"', Code, Demarre) or (Code <> 0) then begin
     Log('Etape apres-copie : echec, code ' + IntToStr(Code));
     JournalNote(jErreur, 'fin', 'Une étape n''a pas abouti (code ' + IntToStr(Code) + ') : tes anciennes données ne sont pas touchées');
     JournalMontrerMaintenant;
@@ -4411,10 +5504,13 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Code: Integer;
-    Choix: String;
+    Choix, V: String;
     Demarre: Boolean;
 begin
   if CurUninstallStep <> usUninstall then Exit;
+  // 1.14.0 : notre règle du pare-feu (les copies de secours : [UninstallDelete] ; la clé Run : uninsdeletevalue)
+  if IsAdminInstallMode and RegQueryStringValue(HKA, 'Software\{#Cle}', 'Parefeu', V) and (V = 'oui') then
+    Netsh('advfirewall firewall delete rule name="' + RegleParefeu + '"');
   JournalInstallation := DossierEtat('') + '\Journaux\desinstallation_' + Horodatage + '.log';
   ForceDirectories(ExtractFileDir(JournalInstallation));
   if SupprimerDonnees then Choix := 'oui' else Choix := 'non';

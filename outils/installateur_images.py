@@ -642,6 +642,7 @@ def tuile_icone(police, code, taille, fond_page):
 # ------------------------------------------------------- les icones d'etapes ----
 ICONES = {   # l'etape -> le nom de l'icone Material
     "bienvenue": "waving_hand",
+    "applications": "apps",          # 1.14.0 : que veux-tu installer ? (et le poste d'exploitation)
     "emplacement": "folder_open",
     "donnees": "storage",
     "bibliotheque": "library_books",
