@@ -1858,6 +1858,13 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.10 : la case \xC2\xAB Unit\xC3\xA9, format et plage de la variable \xC2\xBB - "
                          "coch\xC3\xA9" "e (par d\xC3\xA9" "faut), l'objet prend l'unit\xC3\xA9, le format, "
                          "la plage et les seuils de sa variable pour ce qu'il laisse vide.", {}, "1.12.10"},
+             {K::Paragraph, "1.14.1 : une case gris\xC3\xA9" "e (sans effet dans le mode choisi : la Valeur "
+                         "d'une vanne command\xC3\xA9" "e par ses fins de course, le Bool\xC3\xA9" "en A "
+                         "d'une vanne 3 voies par sa Position) dit pourquoi en t\xC3\xAAte de son infobulle "
+                         "et de celle de son carr\xC3\xA9. Une dur\xC3\xA9" "e fixe (le Temps de "
+                         "man\xC5\x93uvre, la dur\xC3\xA9" "e d'une courbe) se lit en nombre, dans "
+                         "l'unit\xC3\xA9 de la case, ou \xC3\xA9" "crite en dur\xC3\xA9" "e : 4 s, 250 ms, "
+                         "T#30s, 1 min.", {}, "1.14.1"},
          },
          {"objets", "variables-ihm", "aide-saisie", "verifier", "champs-expressions", "couleurs", "dupliquer-reperes"},
          {"filtres de l'inspecteur", "Montrer", "fx", "Rep\xC3\xA8res", "Non vides", "cases pilot\xC3\xA9" "es", "cases renseign\xC3\xA9" "es", "pastille ambre", "sections de l'inspecteur", "propri\xC3\xA9t\xC3\xA9s communes", "Position et taille", "section du genre", "Communication", "Animation", "Variable \xC3\xA9" "crite", "Niveau d'acc\xC3\xA8s", "onglet Contenu"},
@@ -10654,10 +10661,10 @@ const std::vector<Topic>& topics() {
                          "les bouts (0 % ferm\xC3\xA9" "e, 100 % ouverte) ; entre les deux, elle est "
                          "\xC3\xA0 son ouverture.", {}, "1.14.1"},
              {K::Bullet, "Le **D\xC3\xA9" "faut** passe avant tout. La Valeur et En mouvement n'y servent "
-                         "plus (gris\xC3\xA9s dans l'inspecteur). Reli\xC3\xA9" "es, les fins de course "
-                         "donnent l'alarme par d\xC3\xA9" "faut **Discordance** (son d\xC3\xA9lai : le temps "
-                         "de man\xC5\x93uvre, 30 s sans lui) ; **Pourquoi ?** dit quelle fin de course "
-                         "d\xC3\xA9" "cide.", {}, "1.14.1"},
+                         "plus (gris\xC3\xA9s dans l'inspecteur ; le survol dit pourquoi). "
+                         "Reli\xC3\xA9" "es, les fins de course donnent l'alarme par d\xC3\xA9" "faut "
+                         "**Discordance** (son d\xC3\xA9lai : le temps de man\xC5\x93uvre, 30 s sans lui) ; "
+                         "**Pourquoi ?** dit quelle fin de course d\xC3\xA9" "cide.", {}, "1.14.1"},
              {K::Tip, "Dans la biblioth\xC3\xA8que, chercher \xC2\xAB fins de course \xC2\xBB trouve la "
                          "vanne, la vanne 3 voies et les registres ; un projet 1.14.0 reste \xC3\xA0 "
                          "\xC2\xAB une valeur \xC2\xBB.", {}, "1.14.1"},
@@ -10811,8 +10818,9 @@ const std::vector<Topic>& topics() {
                          "seulement) - et, facultative, **FC ferm\xC3\xA9" "e**. La seule vraie donne la "
                          "voie (ou ferm\xC3\xA9" "e) ; aucune : **en mouvement**, le boisseau tourne (son "
                          "bord clignote en ambre) ; plusieurs \xC3\xA0 la fois : **discordance** - les "
-                         "passages de chacune en rouge, le cadre tiret\xC3\xA9, la pastille \xE2\x89\xA0 en "
-                         "bas \xC3\xA0 gauche.", {}, "1.14.1"},
+                         "passages de chacune en rouge et la pastille \xE2\x89\xA0 en haut \xC3\xA0 droite, "
+                         "comme la vanne et les registres (en bas \xC3\xA0 gauche sur une vanne trop petite "
+                         "pour l'y loger ; le cadre tiret\xC3\xA9 reste au **D\xC3\xA9" "faut**).", {}, "1.14.1"},
              {K::Bullet, "Un petit **voyant par voie**, entre ses deux voies : 1-3 en bas \xC3\xA0 gauche, "
                          "2-3 en bas \xC3\xA0 droite, 1-2 en haut ; **Voyants des fins de course** "
                          "d\xC3\xA9" "coch\xC3\xA9 les cache.", {}, "1.14.1"},
@@ -10822,9 +10830,9 @@ const std::vector<Topic>& topics() {
                          "n'est pas la seule vraie ; toujours pas apr\xC3\xA8s le temps de man\xC5\x93uvre : "
                          "discordance.", {}, "1.14.1"},
              {K::Bullet, "La Position, les bool\xC3\xA9" "ens A et B et En mouvement n'y servent plus "
-                         "(gris\xC3\xA9s) ; l'alarme par d\xC3\xA9" "faut **Discordance** part de deux fins "
-                         "de course \xC3\xA0 la fois, ou de l'ordre pas suivi ; **Pourquoi ?** dit laquelle "
-                         "d\xC3\xA9" "cide.", {}, "1.14.1"},
+                         "(gris\xC3\xA9s ; le survol dit pourquoi) ; l'alarme par d\xC3\xA9" "faut "
+                         "**Discordance** part de deux fins de course \xC3\xA0 la fois, ou de l'ordre pas "
+                         "suivi ; **Pourquoi ?** dit laquelle d\xC3\xA9" "cide.", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nPosition\t2\tLa "
                          "voie active : 0 ferm\xC3\xA9" "e, 1 (ou 12) 1-2, 2 (ou 13) 1-3, 3 (ou 23) 2-3. Une "
@@ -11006,10 +11014,10 @@ const std::vector<Topic>& topics() {
                          "man\xC5\x93uvre** : **discordance** (le rouge qui clignote, la pastille "
                          "\xE2\x89\xA0 en haut \xC3\xA0 droite). Modulant : son ouverture entre les deux, 0 "
                          "et 100 % aux fins de course. Une seule reli\xC3\xA9" "e : l'autre position s'en "
-                         "d\xC3\xA9" "duit. La Valeur et En mouvement n'y servent plus (gris\xC3\xA9s) ; "
-                         "l'alarme **Discordance** prend l'ordre et le temps de man\xC5\x93uvre (30 s sans "
-                         "lui). **Voyants des fins de course** d\xC3\xA9" "coch\xC3\xA9 cache les voyants O "
-                         "et F, dans les deux modes.", {}, "1.14.1"},
+                         "d\xC3\xA9" "duit. La Valeur et En mouvement n'y servent plus (gris\xC3\xA9s ; le "
+                         "survol dit pourquoi) ; l'alarme **Discordance** prend l'ordre et le temps de "
+                         "man\xC5\x93uvre (30 s sans lui). **Voyants des fins de course** "
+                         "d\xC3\xA9" "coch\xC3\xA9 cache les voyants O et F, dans les deux modes.", {}, "1.14.1"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert\tFALSE\tVrai "
                          ": ouvert (la lame \xC3\xA0 plat) ; faux : ferm\xC3\xA9. Une expression : "
@@ -11261,7 +11269,10 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "**Commande de l'\xC3\xA9tat : fins de course** : l'\xC3\xA9tat vient de ses fins "
                          "de course seules, comme le registre (voir \xC2\xAB Registre \xC2\xBB) ; "
                          "d\xC3\xA9" "clench\xC3\xA9, il reste ferm\xC3\xA9, rouge et clignotant, avant tout "
-                         "le reste.", {}, "1.14.1"},
+                         "le reste. Ses voyants **O** et **F** sont \xC3\xA0 droite du d\xC3\xA9" "clencheur "
+                         "(la marque CF tient la gauche), dans les deux modes ; la pastille \xE2\x89\xA0 "
+                         "d'une discordance se met dans le coin de la gaine, sous eux, quand ils prennent le "
+                         "haut \xC3\xA0 droite.", {}, "1.14.1"},
              {K::Heading, "En marche", {}},
              {K::Bullet, "d\xC3\xA9" "clench\xC3\xA9, il se ferme, rouge et clignotant, et l'alarme "
                          "**Declenche** part ; ses fins de course corrigent la lame et disent la discordance "
@@ -20215,6 +20226,10 @@ const std::vector<Topic>& topics() {
                          "\xC2\xBB). Double clic sur un nom : le forcer ; clic droit : Forcer, "
                          "Rel\xC3\xA2" "cher, Suivre sur la courbe, Ajouter aux expressions, Copier la "
                          "valeur, Copier le rapport ;", {}, "1.12.27"},
+             {K::Bullet, "dans **Pourquoi ?**, l'\xC3\xA9tat retenu (\xC2\xAB ordre d'ouverture "
+                         "donn\xC3\xA9, FC ouvert pas atteinte apr\xC3\xA8s le temps de man\xC5\x93uvre "
+                         "\xC2\xBB) court sur toute la largeur du tableau, et chaque ligne se lit "
+                         "enti\xC3\xA8re en infobulle ;", {}, "1.14.1"},
              {K::Bullet, "**D\xC3\xA9" "bogage** : le d\xC3\xA9" "bogueur des **scripts IHM** - les points "
                          "d'arr\xC3\xAAt pos\xC3\xA9s dans la marge des scripts et des fonctions, la pause "
                          "au milieu du script, le pas \xC3\xA0 pas (Continuer F5, Suivant F10, Entrer F11, "
