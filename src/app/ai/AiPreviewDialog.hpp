@@ -72,6 +72,7 @@ private:
     ui::Button*   apply_{nullptr};
     ui::DropDown* variable_{nullptr};
     std::vector<std::string> variableNames_;   // les noms de la liste ("" : creer)
+    std::string   missingName_;                // la variable introuvable (gardee apres un choix)
     bool          done_{false};
     bool          syncing_{false};
     core::ConnectionScope links_;
