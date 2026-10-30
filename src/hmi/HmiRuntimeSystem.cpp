@@ -224,6 +224,7 @@ void Runtime::systemPart(std::string_view part, double now) {
         } else if (key == "defaut") {
             settings_ = SystemSettings{};
             applyProjectDisplay();           // lot 13 : l'affichage, celui du projet
+            soundSettingsChanged();          // 1.14.0 : les volumes et les muets du melangeur aussi
             log("Action", kSource, "r\xC3\xA9glages par d\xC3\xA9" "faut");
             systemSay("R\xC3\xA9glages par d\xC3\xA9" "faut : luminosit\xC3\xA9 100 %, son activ\xC3\xA9, volume 100 %, l'heure du poste", false);
         } else if (key == "redemarrer") {
@@ -254,6 +255,7 @@ void Runtime::systemPart(std::string_view part, double now) {
     const std::string shown = std::string(spec->label) + " : " + settingText(settings_, key, projectMin);
     log("Action", kSource, shown);
     systemSay(shown, false);
+    if (key == "son" || key == "volume") soundSettingsChanged();   // 1.14.0 : coupe, ce qui joue se tait
 }
 
 // ============================================================== la veille ===
@@ -407,16 +409,61 @@ std::size_t Runtime::diagnosticRows() const {
 }
 
 // ================================================================= le son ===
-bool Runtime::playSound(const std::string& name, const std::string& source) {
+// 1.14.0 : le son part sur son canal - les alarmes, IHM_SON (Scripts), Jouer un son (Actions) ; le
+// crochet lit soundChannel() pour son gain. Le General muet (Couper tout) ou le canal muet : il ne part pas.
+bool Runtime::playSound(const std::string& name, const std::string& source, SoundChannel channel) {
     if (!settings_.soundOn) {
         log("Action", source, "son : " + name + " (son coup\xC3\xA9)");
+        return false;
+    }
+    if (soundMuted(settings_, channel)) {
+        log("Action", source, "son : " + name + " (canal " + std::string(soundChannelSpec(channel).label) + " coup\xC3\xA9)");
         return false;
     }
     ++soundsPlayed_;
     lastSound_ = name;
     log("Action", source, "son : " + name);
-    if (hooks_.playSound) hooks_.playSound(name);
+    if (hooks_.playSound) {
+        const std::string before = soundChannel_;
+        soundChannel_ = std::string(soundChannelSpec(channel).key);
+        hooks_.playSound(name);
+        soundChannel_ = before;
+    }
     return true;
+}
+
+void Runtime::soundSettingsChanged() {
+    if (hooks_.soundSettings) hooks_.soundSettings();
+}
+
+bool Runtime::setChannelMuted(SoundChannel channel, bool muted, const std::string& source) {
+    if (soundMuted(settings_, channel) == muted) return false;
+    setSoundMuted(settings_, channel, muted);
+    const std::string label(soundChannelSpec(channel).label);
+    if (channel == SoundChannel::General)
+        log("Action", source, muted ? std::string("son coup\xC3\xA9 (tous les sons)") : std::string("son r\xC3\xA9tabli"));
+    else
+        log("Action", source, "canal " + label + (muted ? " coup\xC3\xA9" : " r\xC3\xA9tabli"));
+    soundSettingsChanged();
+    return true;
+}
+
+bool Runtime::setChannelVolume(SoundChannel channel, int volume, const std::string& source, bool quiet) {
+    volume = std::clamp(volume, 0, 100);
+    const int before = soundVolume(settings_, channel);
+    if (before == volume) {
+        if (!quiet) log("Action", source, "volume " + std::string(soundChannelSpec(channel).label) + " : " + std::to_string(volume) + " %");
+        return false;
+    }
+    setSoundVolume(settings_, channel, volume);
+    if (!quiet) log("Action", source, "volume " + std::string(soundChannelSpec(channel).label) + " : " + std::to_string(volume) + " %");
+    soundSettingsChanged();
+    return true;
+}
+
+float Runtime::soundLevel(SoundChannel channel) const {
+    if (!hooks_.soundLevel) return 0.f;
+    return std::clamp(hooks_.soundLevel(static_cast<int>(channel)), 0.f, 1.f);
 }
 
 } // namespace hmi

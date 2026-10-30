@@ -247,8 +247,19 @@ inline constexpr SysVar kSysVars[] = {
     {"Brightness",          11, "INT",    "La luminosit\xC3\xA9 de l'\xC3\xA9" "cran, de 20 \xC3\xA0 100 %."},
     {"ScreenSaverMinutes",  11, "INT",    "La mise en veille, en minutes sans toucher (0 : jamais)."},
     {"ScreenSaverActive",   11, "BOOL",   "L'\xC3\xA9" "cran est en veille."},
-    {"SoundEnabled",        11, "BOOL",   "Les sons de l'IHM sont activ\xC3\xA9s."},
-    {"Volume",              11, "INT",    "Le volume des sons, de 0 \xC3\xA0 100 %."},
+    {"SoundEnabled",        11, "BOOL",   "Les sons de l'IHM sont activ\xC3\xA9s (1.14.0 : FALSE, tout est coup\xC3\xA9 - Coupe-son, IHM_SON_MUET) ; s'\xC3\xA9" "crit."},
+    {"Volume",              11, "INT",    "Le volume des sons, de 0 \xC3\xA0 100 % (1.14.0 : le volume G\xC3\xA9n\xC3\xA9ral du m\xC3\xA9langeur) ; s'\xC3\xA9" "crit."},
+    // 1.14.0 : les canaux du son (le melangeur) - le volume et le muet de chacun, en lecture et en ecriture
+    {"VolumeAlarms",        11, "INT",    "Le volume du canal Alarmes (les sons des alarmes et leur r\xC3\xA9p\xC3\xA9tition), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit."},
+    {"VolumeScripts",       11, "INT",    "Le volume du canal Scripts (IHM_SON), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit."},
+    {"VolumeActions",       11, "INT",    "Le volume du canal Actions (l'action Jouer un son), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit."},
+    {"VolumeVideos",        11, "INT",    "Le volume du canal Vid\xC3\xA9os, de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit."},
+    {"VolumeReplay",        11, "INT",    "Le volume du canal Relecture (les sons rejou\xC3\xA9s d'un enregistrement), de 0 \xC3\xA0 100 % ; s'\xC3\xA9" "crit."},
+    {"MuteAlarms",          11, "BOOL",   "Le canal Alarmes est coup\xC3\xA9 ; s'\xC3\xA9" "crit."},
+    {"MuteScripts",         11, "BOOL",   "Le canal Scripts est coup\xC3\xA9 ; s'\xC3\xA9" "crit."},
+    {"MuteActions",         11, "BOOL",   "Le canal Actions est coup\xC3\xA9 ; s'\xC3\xA9" "crit."},
+    {"MuteVideos",          11, "BOOL",   "Le canal Vid\xC3\xA9os est coup\xC3\xA9 ; s'\xC3\xA9" "crit."},
+    {"MuteReplay",          11, "BOOL",   "Le canal Relecture est coup\xC3\xA9 ; s'\xC3\xA9" "crit."},
     {"AutoLogoutMinutes",   11, "INT",    "La d\xC3\xA9" "connexion automatique en vigueur, en minutes (0 : jamais) : celle du poste, sinon celle du projet."},
     {"AutoLogoutFromProject",11,"BOOL",   "Le poste suit la d\xC3\xA9" "connexion automatique du projet (Configuration > Utilisateurs)."},
     {"KeyboardMode",        11, "STRING", "Le clavier virtuel : automatique, toujours ou jamais."},
@@ -332,10 +343,20 @@ inline constexpr std::size_t kSysVarCount = sizeof(kSysVars) / sizeof(kSysVars[0
 
 // "SYS" (sans casse).
 [[nodiscard]] inline bool isSysRoot(std::string_view root) noexcept { return same(root, "SYS"); }
-// Lot 13 : SYS.Language et les quatre reglages de l'affichage s'ecrivent ; les autres se lisent.
+// 1.14.0 : une variable du son (SYS.SoundEnabled, SYS.Volume, SYS.Volume<Canal>, SYS.Mute<Canal>).
+[[nodiscard]] inline bool sysIsSound(std::string_view name) noexcept {
+    if (same(name, "SoundEnabled") || same(name, "Volume")) return true;
+    for (const std::string_view c : {"Alarms", "Scripts", "Actions", "Videos", "Replay"}) {
+        if (name.size() == 6 + c.size() && same(name.substr(0, 6), "Volume") && same(name.substr(6), c)) return true;
+        if (name.size() == 4 + c.size() && same(name.substr(0, 4), "Mute") && same(name.substr(4), c)) return true;
+    }
+    return false;
+}
+// Lot 13 : SYS.Language et les quatre reglages de l'affichage s'ecrivent ; 1.14.0 : le son
+// (SoundEnabled, les volumes, les muets) ; les autres se lisent.
 [[nodiscard]] inline Access sysAccess(const SysVar& v) noexcept {
     return same(v.name, "Language") || same(v.name, "TextScale") || same(v.name, "ColorMode") || same(v.name, "StatusSymbols")
-                || same(v.name, "Theme")
+                || same(v.name, "Theme") || sysIsSound(v.name)
              ? Access::ReadWrite
              : Access::Read;
 }

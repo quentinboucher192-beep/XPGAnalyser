@@ -36,19 +36,53 @@
 
 #include "HmiControls.hpp"
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace hmi {
 
+// ---- 1.14.0 : LES CANAUX DU SON ----------------------------------------------------------
+//  Chaque son appartient a un canal, selon d'ou il part : les alarmes (et leur
+//  repetition), IHM_SON dans un script, l'action Jouer un son, les videos, les sons
+//  rejoues d'un enregistrement (la relecture). Le General les tient tous : c'est le
+//  volume et le son (active, coupe) d'avant la 1.14.0 - SYS.Volume, SYS.SoundEnabled.
+//  Le gain d'un son : volume general x volume de son canal ; rien si l'un des deux est
+//  muet. Couper un canal fait taire ses voix tout de suite ; le retablir ne rejoue rien.
+enum class SoundChannel : std::uint8_t { General, Alarms, Scripts, Actions, Videos, Replay };
+inline constexpr std::size_t kSoundChannelCount = 6;
+struct SoundChannelSpec {
+    SoundChannel     channel;
+    std::string_view key;      // le mot des natives et des actions (ASCII) : 'General', 'Alarmes'...
+    std::string_view label;    // le nom montre : General (accentue), Videos (accentue)
+    std::string_view sys;      // la fin des variables : SYS.Volume<sys>, SYS.Mute<sys> ("" : le General)
+    std::string_view help;
+};
+inline constexpr SoundChannelSpec kSoundChannels[kSoundChannelCount] = {
+    {SoundChannel::General, "General", "G\xC3\xA9n\xC3\xA9ral", "",
+     "Tous les sons : son volume multiplie celui de chaque canal ; muet, plus rien ne sort (SYS.SoundEnabled)."},
+    {SoundChannel::Alarms, "Alarmes", "Alarmes", "Alarms", "Les sons des alarmes et leur r\xC3\xA9p\xC3\xA9tition."},
+    {SoundChannel::Scripts, "Scripts", "Scripts", "Scripts", "IHM_SON dans un script."},
+    {SoundChannel::Actions, "Actions", "Actions", "Actions", "L'action Jouer un son."},
+    {SoundChannel::Videos, "Videos", "Vid\xC3\xA9os", "Videos", "Le son des vid\xC3\xA9os."},
+    {SoundChannel::Replay, "Relecture", "Relecture", "Replay", "Les sons rejou\xC3\xA9s d'un enregistrement."},
+};
+[[nodiscard]] inline const SoundChannelSpec& soundChannelSpec(SoundChannel c) noexcept {
+    return kSoundChannels[static_cast<std::size_t>(c)];
+}
+// Un canal par son mot ('Alarmes'), son nom montre ('Videos' accentue), ou la fin de ses
+// variables ('Alarms'), sans casse ; 'Tous' et 'General' : le General.
+[[nodiscard]] std::optional<SoundChannel> soundChannelFrom(std::string_view text) noexcept;
+
 // ---- les reglages du poste --------------------------------------------------------------
 struct SystemSettings {
     int         brightness{100};           // % de 20 a 100
     int         screensaverMin{0};         // 0 : jamais
-    bool        soundOn{true};
-    int         volume{100};               // % de 0 a 100
+    bool        soundOn{true};             // 1.14.0 : faux, le General est muet (Couper tout le son)
+    int         volume{100};               // % de 0 a 100 (1.14.0 : le volume du General)
     int         autoLogoutMin{-1};         // -1 : celle du projet (Configuration > Utilisateurs) ; 0 : jamais
     std::string keyboard{"automatique"};   // "automatique", "toujours", "jamais"
     double      clockOffset{0};            // secondes ajoutees a l'heure du poste
@@ -58,8 +92,23 @@ struct SystemSettings {
     std::string colorMode{"normal"};       // "normal", "daltonien"
     bool        symbols{false};            // des symboles sur les voyants
     std::string theme{"nuit"};             // "nuit", "jour"
+    // 1.14.0 : le melangeur - le volume (0 a 100 %) et le muet de chaque canal, ranges comme
+    // kSoundChannels ; la case du General n'y sert pas (volume, soundOn).
+    std::array<int, kSoundChannelCount>  channelVolume{100, 100, 100, 100, 100, 100};
+    std::array<bool, kSoundChannelCount> channelMuted{};
     bool operator==(const SystemSettings&) const = default;
 };
+// 1.14.0 : le volume (0 a 100) et le muet d'un canal ; le General : volume, NOT soundOn.
+[[nodiscard]] int  soundVolume(const SystemSettings&, SoundChannel) noexcept;
+[[nodiscard]] bool soundMuted(const SystemSettings&, SoundChannel) noexcept;
+void setSoundVolume(SystemSettings&, SoundChannel, int volume) noexcept;      // borne a 0..100
+void setSoundMuted(SystemSettings&, SoundChannel, bool muted) noexcept;
+// Le gain d'un son de ce canal, de 0 a 1 : volume general x volume du canal ; 0 si le
+// General ou le canal est muet. Le General lui-meme : son volume (0 s'il est muet).
+[[nodiscard]] float soundGain(const SystemSettings&, SoundChannel) noexcept;
+// Le canal se tait (lui ou le General est muet) : ses sons ne partent pas, ceux qui jouent s'arretent.
+[[nodiscard]] bool soundSilenced(const SystemSettings&, SoundChannel) noexcept;
+
 
 enum class SettingKind : std::uint8_t { Percent, Choice, Toggle, Clock };
 struct SettingSpec {

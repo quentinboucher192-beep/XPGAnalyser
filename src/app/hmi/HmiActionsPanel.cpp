@@ -1192,6 +1192,47 @@ void HmiActionsPanel::rebuildGrid() {
         op.properties.push_back(prop("Son (ressource)", a.target, PG::ValueType::Enum, sounds,
                                      commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
                                      "Un son du gestionnaire de ressources (WAV). Une expression peut le choisir en marche."));
+    } else if (a.operation == Operation::SoundMute || a.operation == Operation::SoundRestore || a.operation == Operation::SoundToggle) {
+        // 1.14.0 : le son - tout couper, retablir, basculer (le General du melangeur, SYS.SoundEnabled).
+        const char* effect = a.operation == Operation::SoundMute    ? "tous les sons se taisent ; les suivants ne partent pas"
+                           : a.operation == Operation::SoundRestore ? "le son revient (rien n'est rejou\xC3\xA9)"
+                                                                    : "coupe le son s'il est actif, le r\xC3\xA9tablit sinon";
+        op.properties.push_back(prop("Effet", effect, PG::ValueType::ReadOnly, {}, nullptr,
+                                     "Comme le bouton Coupe-son de la biblioth\xC3\xA8que et IHM_SON_MUET. L'\xC3\xA9tat : SYS.SoundEnabled. "
+                                     "Le r\xC3\xA9glage est celui du poste : il reste au red\xC3\xA9marrage de l'IHM."));
+    } else if (a.operation == Operation::SoundVolume || a.operation == Operation::SoundChannelMute) {
+        // 1.14.0 : un canal du son - son volume, ou le couper / le retablir.
+        const bool volume = a.operation == Operation::SoundVolume;
+        std::vector<std::string> channels;
+        for (const auto& c : hmi::kSoundChannels) channels.emplace_back(c.label);
+        const auto known = hmi::soundChannelFrom(a.target);
+        std::string shown = known ? std::string(hmi::soundChannelSpec(*known).label) : a.target;
+        if (shown.empty()) shown = volume ? std::string(hmi::soundChannelSpec(hmi::SoundChannel::General).label) : std::string{};
+        if (std::find(channels.begin(), channels.end(), shown) == channels.end()) channels.push_back(shown);
+        op.properties.push_back(prop("Canal", shown, PG::ValueType::Enum, channels,
+                                     commitWith([](Action& n, std::string_view v) {
+                                         const auto c = hmi::soundChannelFrom(v);
+                                         n.target = c ? std::string(hmi::soundChannelSpec(*c).key) : std::string(v);
+                                         return true;
+                                     }),
+                                     "G\xC3\xA9n\xC3\xA9ral (tous les sons), Alarmes (les alarmes et leur r\xC3\xA9p\xC3\xA9tition), Scripts (IHM_SON), "
+                                     "Actions (Jouer un son), Vid\xC3\xA9os, Relecture (les sons rejou\xC3\xA9s d'un enregistrement). "
+                                     "Une expression qui donne le canal marche aussi."));
+        if (volume) {
+            op.properties.push_back(prop("Volume (%)", a.value.empty() ? std::string("100") : a.value, PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                         "De 0 \xC3\xA0 100, ou une expression (Volume_Nuit). Le gain d'un son : le volume g\xC3\xA9n\xC3\xA9ral "
+                                         "fois celui de son canal. Les sons qui jouent le prennent tout de suite. En marche : SYS.Volume, "
+                                         "SYS.VolumeAlarms..."));
+        } else {
+            const std::string how = a.value.empty() ? std::string("couper") : a.value;
+            std::vector<std::string> hows{"couper", "r\xC3\xA9tablir", "basculer"};
+            if (std::find(hows.begin(), hows.end(), how) == hows.end()) hows.push_back(how);
+            op.properties.push_back(prop("Le canal", how, PG::ValueType::Enum, hows,
+                                         commitWith([](Action& n, std::string_view v) { n.value = v == "couper" ? std::string() : std::string(v); return true; }),
+                                         "Couper : ses sons qui jouent se taisent tout de suite, les suivants ne partent pas ; r\xC3\xA9tablir : "
+                                         "il revient (rien n'est rejou\xC3\xA9) ; basculer : l'un ou l'autre. En marche : SYS.MuteAlarms..."));
+        }
     } else if (a.operation == Operation::ShowSystem) {
         // Lot 10 : le menu natif, sur l'onglet choisi ("" : Reglages) ; 1.9 : Simulation.
         const std::string tab(hmi::systemTabLabel(hmi::systemTabFrom(a.value)));

@@ -3299,14 +3299,33 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hooks.playSound = [this](const std::string& name) {
         if (const auto* r = doc_->project.resourceByName(name)) {
             std::string why;
-            // Lot 10 : au volume regle dans Parametres systeme.
-            const float gain = static_cast<float>(std::clamp(runtime_.settings().volume, 0, 100)) / 100.f;
+            // Lot 10 : au volume regle dans Parametres systeme. 1.14.0 : sur son canal (le moteur le dit pendant
+            // l'appel ; sans : Actions) - volume general x volume du canal, rien si l'un est muet.
+            const auto channel = hmi::soundChannelFrom(runtime_.soundChannel()).value_or(hmi::SoundChannel::Actions);
+            if (hmi::soundSilenced(runtime_.settings(), channel)) return;
+            const float gain = hmi::soundGain(runtime_.settings(), channel);
             // 1.12.3 : mele aux sons qui jouent deja (deux alarmes s'entendent ensemble).
-            if (!HmiSoundPlayer::instance().mix(*r, &why, gain)) status_->setTransientMessage("Son " + name + " : " + why, 6.0);
+            if (!HmiSoundPlayer::instance().mix(*r, &why, gain, static_cast<int>(channel)))
+                status_->setTransientMessage("Son " + name + " : " + why, 6.0);
         }
     };
     // 1.12.3 : Silence (Faire taire) et l'arret coupent ce qui joue.
     hooks.stopSounds = [] { HmiSoundPlayer::instance().stopMix(); };
+    // 1.14.0 : le melangeur - chaque canal prend son gain ; celui qui se tait (ou tout, coupe) arrete ses voix.
+    hooks.soundSettings = [this] {
+        const auto& s = runtime_.settings();
+        auto& player = HmiSoundPlayer::instance();
+        if (hmi::soundMuted(s, hmi::SoundChannel::General)) {      // tout coupe : toutes les voix, quel que soit leur canal
+            player.stopChannel(0);
+            return;
+        }
+        for (const auto& c : hmi::kSoundChannels) {
+            if (c.channel == hmi::SoundChannel::General) continue;
+            if (hmi::soundSilenced(s, c.channel)) player.stopChannel(static_cast<int>(c.channel));
+            else player.setChannelGain(static_cast<int>(c.channel), hmi::soundGain(s, c.channel));
+        }
+    };
+    hooks.soundLevel = [](int channel) { return HmiSoundPlayer::instance().level(channel); };
     // Lot 10 : "Redemarrer l'IHM" du menu Parametres systeme - comme le bouton.
     hooks.restart = [this] { restart(); };
     hooks.recipeRequest = [this](const hmi::RecipeRequest& rq) {

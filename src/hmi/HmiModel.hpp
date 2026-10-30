@@ -433,6 +433,11 @@ enum class Operation : std::uint8_t {
     // une variable rappel) : la cible le nomme, la valeur porte ses arguments ("Niveau, 2"). Comme un script
     // d'une ligne : Cible(arguments);
     Call,
+    // 1.14.0 : LE SON (le groupe Son) - couper tout, retablir, basculer (le General : SYS.SoundEnabled) ;
+    // regler le volume d'un canal (la cible : le canal, General compris ; la valeur : 0 a 100, une
+    // expression) ; couper ou retablir un canal (la cible : le canal ; la valeur : couper, retablir,
+    // basculer). Les canaux : HmiSystemMenu.hpp (kSoundChannels).
+    SoundMute, SoundRestore, SoundToggle, SoundVolume, SoundChannelMute,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -466,6 +471,8 @@ inline constexpr Operation kOperations[] = {
     Operation::Maths, Operation::Keyboard,                                               // 1.11.6
     Operation::SubmitInputs,                                                             // 1.11.23
     Operation::Call,                                                                     // 1.12.19
+    Operation::SoundMute, Operation::SoundRestore, Operation::SoundToggle, Operation::SoundVolume,   // 1.14.0
+    Operation::SoundChannelMute,
 };
 // Lot 16 : les operations qui visent un GIF anime de la vue.
 [[nodiscard]] constexpr bool operationTargetsGif(Operation o) noexcept {

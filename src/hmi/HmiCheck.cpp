@@ -1845,6 +1845,33 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             add(out, S::Error, "Action", v.id, obj, where, "'" + a.target + "' n'est pas un son");
                         break;
                     }
+                    // 1.14.0 : le son - le canal vise (un mot, ou une expression qui le donne), le volume (0 a 100).
+                    case Operation::SoundVolume:
+                    case Operation::SoundChannelMute: {
+                        const std::string target = trimmedCopy(a.target);
+                        if (target.empty() && a.operation == Operation::SoundChannelMute)
+                            add(out, S::Error, "Action", v.id, obj, where, "aucun canal du son vis\xC3\xA9");
+                        else if (!target.empty() && !soundChannelFrom(target)) {
+                            const bool word = std::all_of(target.begin(), target.end(), [](char c) {
+                                return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || static_cast<unsigned char>(c) >= 0x80;
+                            });
+                            bool variable = false;
+                            for (const auto& var : p.programs.variables) variable = variable || upperText(var.name) == upperText(target);
+                            if ((word && !variable) || !Expression::compile(target).valid())
+                                add(out, S::Error, "Action", v.id, obj, where,
+                                    "canal du son '" + target + "' inconnu (General, Alarmes, Scripts, Actions, Videos ou Relecture)");
+                        }
+                        if (a.operation == Operation::SoundVolume && !trimmedCopy(a.value).empty()) {
+                            double n = 0;
+                            if (parseNumber(trimmedCopy(a.value), n)) {
+                                if (n < 0 || n > 100)
+                                    add(out, S::Warning, "Action", v.id, obj, where, "volume " + a.value + " : hors de 0 \xC3\xA0 100 %, il sera born\xC3\xA9");
+                            } else if (!Expression::compile(a.value).valid()) {
+                                add(out, S::Error, "Action", v.id, obj, where, "volume illisible : " + a.value);
+                            }
+                        }
+                        break;
+                    }
                     default: break;
                 }
             }

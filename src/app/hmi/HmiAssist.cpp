@@ -15,6 +15,7 @@
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiLog.hpp"              // 1.11.14 : IHM_LOG et ses niveaux
+#include "../../hmi/HmiSystemMenu.hpp"       // 1.14.0 : les canaux du son (IHM_SON_VOLUME)
 #include "../../hmi/HmiEnums.hpp"            // 1.10 (chantier K2) : les enumerations (E)
 #include "../../hmi/HmiOperators.hpp"        // 1.10 (chantier K2) : les operateurs (S2)
 #include "../../hmi/HmiScriptCheck110.hpp"   // 1.10 (chantier K2) : le langage des scripts (S1)
@@ -282,6 +283,17 @@ std::vector<Function> makeFunctions() {
          "en simulation, le script s'arr\xC3\xAAte ici (le volet D\xC3\xA9" "bogage) ; avec une condition, seulement si elle est vraie",
          "IHM_POINT_ARRET(|)", false},
         {"IHM_SON", {"son : STRING"}, "BOOL", "joue un son des ressources (WAV, MP3, OGG)", "IHM_SON('|')", true},
+        // 1.14.0 : couper le son, le melangeur
+        {"IHM_SON_MUET", {"muet : BOOL"}, "BOOL",
+         "TRUE coupe tous les sons (ce qui joue se tait, les suivants ne partent pas) ; FALSE les r\xC3\xA9tablit, sans rien rejouer. "
+         "L'\xC3\xA9tat : SYS.SoundEnabled", "IHM_SON_MUET(|)", true},
+        {"IHM_SON_EST_MUET", {}, "BOOL", "vrai si tous les sons sont coup\xC3\xA9s (NOT SYS.SoundEnabled)", "IHM_SON_EST_MUET()|", false},
+        {"IHM_SON_VOLUME", {"canal : STRING ('General', 'Alarmes', 'Scripts', 'Actions', 'Videos', 'Relecture')", "volume : INT (0 \xC3\xA0 100)"},
+         "BOOL", "r\xC3\xA8gle le volume d'un canal du son ('General' : tous) ; faux si le canal est inconnu. Le volume : SYS.VolumeAlarms...",
+         "IHM_SON_VOLUME('|', 80)", true},
+        {"IHM_SON_CANAL_MUET", {"canal : STRING ('General', 'Alarmes', 'Scripts', 'Actions', 'Videos', 'Relecture')", "muet : BOOL"}, "BOOL",
+         "coupe (TRUE) ou r\xC3\xA9tablit (FALSE) un canal du son : ses sons qui jouent se taisent tout de suite ; faux si le canal est inconnu. "
+         "L'\xC3\xA9tat : SYS.MuteAlarms...", "IHM_SON_CANAL_MUET('|', TRUE)", true},
         {"IHM_VUE", {}, "STRING", "le nom de la vue affich\xC3\xA9" "e", "IHM_VUE()|", false},
         {"IHM_TEMPS", {}, "TIME", "le temps \xC3\xA9" "coul\xC3\xA9 depuis le lancement de l'IHM", "IHM_TEMPS()|", false},
         {"IHM_UTILISATEUR", {}, "STRING", "l'identifiant de l'utilisateur connect\xC3\xA9 ('' sans)", "IHM_UTILISATEUR()|", false},
@@ -1607,6 +1619,7 @@ Where locate(std::string_view before, bool templateText) {
         else if (callee == "IHM_NAVIGUER" && argument == 1) w.context = Context::Transition;
         else if (callee == "IHM_APPELER" && argument == 0) w.context = Context::ScriptName;
         else if (callee == "IHM_SON" && argument == 0) w.context = Context::SoundName;
+        else if ((callee == "IHM_SON_VOLUME" || callee == "IHM_SON_CANAL_MUET") && argument == 0) w.context = Context::SoundChannel;   // 1.14.0
         else if ((callee == "IHM_ESCLAVE_SIMULE" || callee == "IHM_EQUIPEMENT_OK" || callee == "IHM_EQUIPEMENT_PING") && argument == 0)
             w.context = Context::EquipmentName;                                    // 1.9
         else if (callee == "IHM_JOURNAL" || (callee == "IHM_LOG" && argument == 1)) {
@@ -2142,6 +2155,9 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
         case Context::SoundName:
             for (const auto& r : hp.assets.resources)
                 if (r.kind() == hmi::MediaKind::Sound) named(r.name, r.format + (r.detail.empty() ? "" : "  \xC2\xB7  " + r.detail), Kind::Sound);
+            break;
+        case Context::SoundChannel:      // 1.14.0 : les canaux du son, dans l'ordre du melangeur
+            for (const auto& c : hmi::kSoundChannels) named(std::string(c.key), "canal du son  \xC2\xB7  " + std::string(c.help), Kind::Sound);
             break;
         case Context::EquipmentName: {
             // 1.9 : IHM_ESCLAVE_SIMULE(' - les equipements qui ont un esclave simule ;

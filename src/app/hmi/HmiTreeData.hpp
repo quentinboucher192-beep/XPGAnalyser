@@ -151,6 +151,16 @@ inline std::string actionText(const hmi::Action& a) {
             what = "appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence " + (a.target.empty() || a.target == "*" ? std::string("(tous)") : a.target);
             break;
         case hmi::Operation::SubmitInputs: what = "valider les saisies"; break;     // 1.11.23
+        // 1.14.0 : le son
+        case hmi::Operation::SoundMute:    what = "couper tout le son"; break;
+        case hmi::Operation::SoundRestore: what = "r\xC3\xA9tablir le son"; break;
+        case hmi::Operation::SoundToggle:  what = "basculer le son"; break;
+        case hmi::Operation::SoundVolume:
+            what = "volume " + (a.target.empty() ? std::string("General") : a.target) + " \xC3\xA0 " + (a.value.empty() ? std::string("100") : a.value) + " %";
+            break;
+        case hmi::Operation::SoundChannelMute:
+            what = (a.value.empty() ? std::string("couper") : a.value) + " le canal " + a.target;
+            break;
         default: break;
     }
     std::string when(triggerText(a.trigger));

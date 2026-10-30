@@ -1983,6 +1983,12 @@ constexpr OperationName kOperationNames[] = {
     {Operation::Keyboard, "Clavier virtuel"},
     // 1.11.23
     {Operation::SubmitInputs, "Valider les saisies"},
+    // 1.14.0 : le son
+    {Operation::SoundMute, "Couper tout le son"},
+    {Operation::SoundRestore, "R\xC3\xA9tablir le son"},
+    {Operation::SoundToggle, "Basculer le son"},
+    {Operation::SoundVolume, "R\xC3\xA9gler le volume"},
+    {Operation::SoundChannelMute, "Couper ou r\xC3\xA9tablir un canal"},
 };
 struct PlacementName { const char* key; const char* label; };
 constexpr PlacementName kPlacementNames[] = {
@@ -2232,6 +2238,15 @@ std::string describeAction(const Action& a) {
             s += " \xE2\x86\x92 " + a.target;
             break;
         case Operation::SubmitInputs:                       // 1.11.23 : le libelle suffit
+            break;
+        // 1.14.0 : le son - le canal, son volume ; couper, retablir ou basculer un canal
+        case Operation::SoundMute: case Operation::SoundRestore: case Operation::SoundToggle:
+            break;
+        case Operation::SoundVolume:
+            s += " " + (a.target.empty() ? std::string("General") : a.target) + " \xC3\xA0 " + (a.value.empty() ? std::string("100") : a.value) + " %";
+            break;
+        case Operation::SoundChannelMute:
+            s += " " + (a.target.empty() ? std::string("?") : a.target) + " (" + (a.value.empty() ? std::string("couper") : a.value) + ")";
             break;
         // 1.9 : un parametre en mode Les deux, ou tous
         case Operation::ApplyCopy: {

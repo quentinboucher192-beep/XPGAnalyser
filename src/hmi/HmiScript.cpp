@@ -2052,6 +2052,8 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    "IHM_SUR_CHANGEMENT",
                                    // 1.12.26 : les scripts detaches
                                    "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER",
+                                   // 1.14.0 : couper le son, le melangeur
+                                   "IHM_SON_MUET", "IHM_SON_EST_MUET", "IHM_SON_VOLUME", "IHM_SON_CANAL_MUET",
                                    // 1.13.0 (lot J2) : le debogueur (une native du dialecte ; hors simulation, rien)
                                    "IHM_POINT_ARRET"};
     const std::string u = upper(name);

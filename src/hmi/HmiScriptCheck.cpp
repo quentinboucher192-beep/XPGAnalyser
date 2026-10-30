@@ -362,6 +362,8 @@ constexpr Arity kHmi[] = {
     {"IHM_SUR_CHANGEMENT", 2, 2},                                                          // 1.12.20
     {"IHM_SCRIPT_ACTIF", 1, 1},    {"IHM_SCRIPT_ARRETER", 1, 1},                            // 1.12.26
     {"IHM_POINT_ARRET", 0, 1},                                                             // 1.13.0 (lot J2)
+    {"IHM_SON_MUET", 1, 1},        {"IHM_SON_EST_MUET", 0, 0},   {"IHM_SON_VOLUME", 2, 2},      // 1.14.0
+    {"IHM_SON_CANAL_MUET", 2, 2},
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }

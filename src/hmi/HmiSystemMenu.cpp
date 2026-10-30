@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <utility>
 
 namespace hmi {
@@ -12,6 +13,55 @@ const SettingSpec* settingSpec(std::string_view key) noexcept {
     for (const auto& s : kSettings)
         if (s.key == key) return &s;
     return nullptr;
+}
+
+// ================================================================ 1.14.0 : les canaux ===
+std::optional<SoundChannel> soundChannelFrom(std::string_view text) noexcept {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\'' || text.front() == '"')) text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\'' || text.back() == '"')) text.remove_suffix(1);
+    const auto same = [](std::string_view a, std::string_view b) {
+        if (a.size() != b.size()) return false;
+        for (std::size_t i = 0; i < a.size(); ++i)
+            if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+        return true;
+    };
+    if (text.empty()) return std::nullopt;
+    if (same(text, "Tous") || same(text, "G\xC3\x89N\xC3\x89RAL")) return SoundChannel::General;
+    for (const auto& c : kSoundChannels)
+        if (same(text, c.key) || same(text, c.label) || (!c.sys.empty() && same(text, c.sys))) return c.channel;
+    return std::nullopt;
+}
+
+int soundVolume(const SystemSettings& s, SoundChannel c) noexcept {
+    if (c == SoundChannel::General) return s.volume;
+    return s.channelVolume[static_cast<std::size_t>(c)];
+}
+
+bool soundMuted(const SystemSettings& s, SoundChannel c) noexcept {
+    if (c == SoundChannel::General) return !s.soundOn;
+    return s.channelMuted[static_cast<std::size_t>(c)];
+}
+
+void setSoundVolume(SystemSettings& s, SoundChannel c, int volume) noexcept {
+    volume = std::clamp(volume, 0, 100);
+    if (c == SoundChannel::General) s.volume = volume;
+    else s.channelVolume[static_cast<std::size_t>(c)] = volume;
+}
+
+void setSoundMuted(SystemSettings& s, SoundChannel c, bool muted) noexcept {
+    if (c == SoundChannel::General) s.soundOn = !muted;
+    else s.channelMuted[static_cast<std::size_t>(c)] = muted;
+}
+
+bool soundSilenced(const SystemSettings& s, SoundChannel c) noexcept {
+    return soundMuted(s, SoundChannel::General) || soundMuted(s, c);
+}
+
+float soundGain(const SystemSettings& s, SoundChannel c) noexcept {
+    if (soundSilenced(s, c)) return 0.f;
+    const float general = static_cast<float>(std::clamp(s.volume, 0, 100)) / 100.f;
+    if (c == SoundChannel::General) return general;
+    return general * static_cast<float>(std::clamp(soundVolume(s, c), 0, 100)) / 100.f;
 }
 
 const MaintenanceSpec* maintenanceSpec(std::string_view key) noexcept {

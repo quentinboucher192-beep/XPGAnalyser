@@ -224,7 +224,7 @@ void catalogueComplet() {
                           "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_GIF_JOUER", "IHM_GIF_PAUSE",
                           "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_ESCLAVE_SIMULE", "IHM_LOG",
                           "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER", "IHM_SUR_CHANGEMENT", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER",
-                          "IHM_POINT_ARRET"}) {
+                          "IHM_POINT_ARRET", "IHM_SON_MUET", "IHM_SON_EST_MUET", "IHM_SON_VOLUME", "IHM_SON_CANAL_MUET"}) {
         check(has(n), std::string("dans le catalogue : ") + n);
         check(isHmiFunction(n), std::string("connue de Compiler : ") + n);
     }
@@ -235,7 +235,8 @@ void catalogueComplet() {
             ++ihm;
             check(isHmiFunction(f.name), "la fonction du catalogue est connue de Compiler : " + std::string(f.name));
         }
-    check(ihm == 44, "44 fonctions IHM_ (" + std::to_string(ihm) + ") - 1.12.26 : IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER ; 1.13.0 : IHM_POINT_ARRET");
+    check(ihm == 48, "48 fonctions IHM_ (" + std::to_string(ihm) + ") - 1.12.26 : IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER ; 1.13.0 : IHM_POINT_ARRET ; "
+                     "1.14.0 : IHM_SON_MUET, IHM_SON_EST_MUET, IHM_SON_VOLUME, IHM_SON_CANAL_MUET");
     // Chaque fonction : sa categorie existe, sa syntaxe en C et C++ est dite.
     for (const auto& f : nt::functions()) {
         check(nt::category(f.category) != nullptr, std::string(f.name) + " : categorie " + std::string(f.category));
