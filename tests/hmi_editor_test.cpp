@@ -18996,7 +18996,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 465,   // 1.14.1 : + 2 (N2 : le pointeur, le separateur lache dehors) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 467,   // 1.14.1 : + 4 (N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -40335,12 +40335,12 @@ void enregistrements1140() {
                 if (said.rfind("Esp", 0) == 0) legend = said;
             return std::make_pair(legend, chrome.part("help").w > 0.f && !chrome.helpTip.empty());
         };
-        const auto [mid, midTip] = legendAt(1200.f);
+        const auto [mid, midTip] = legendAt(1300.f);   // 1.14.1 (N3) : 1200 -> 1300 px, le bouton Sons a pris sa place
         const auto [wide, wideTip] = legendAt(2000.f);
         check(midTip && wideTip && mid.rfind("Espace pause", 0) == 0 && mid.find("rouge") == std::string::npos
                   && mid.find("\xE2\x80\xA6") == std::string::npos && wide.find("rouge : alarme") != std::string::npos
                   && wide.find("\xE2\x80\xA6") == std::string::npos,
-              "1200 px : les touches (" + mid + ") ; 2000 px : avec les couleurs des rep\xC3\xA8res (" + wide + ")");
+              "1300 px : les touches (" + mid + ") ; 2000 px : avec les couleurs des rep\xC3\xA8res (" + wide + ")");
         const gfx::Rect help = pane.canvas().replayChrome().part("help");
         const std::string tip = help.w > 0 ? pane.canvas().liveTooltip({help.x + help.w / 2, help.y + help.h / 2}) : std::string{};
         check(help.w > 0 && pane.canvas().hasTooltip() && tip.find("rouge, une alarme") != std::string::npos && tip.find("Espace") != std::string::npos,
@@ -41975,7 +41975,123 @@ void pointeurs1141() {
     }
 }
 
+// ---- 1.14.1 (lot N3) : le bouton Sons de la barre de relecture (le canal Relecture : le M du Melangeur, SYS.MuteReplay) ----
+void sonsRelecture1141() {
+    std::printf("== 1.14.1 (N3) : le bouton Sons de la barre de relecture ==\n");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path()
+                         / ("xpg_n3_sons_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    auto doc = std::make_shared<Document>();
+    doc->savedFolder = dir.string();
+    auto& p = doc->project;
+    p.config.name = "Station";
+    p.config.cycleMs = 100;
+    View v = makeView(p, "Vue_Sons");
+    (void)edit::add(p, v, Kind::Button, 100, 100);
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    app::HmiSimulationHost host;
+    host.projectFolder = [dir] { return dir.string(); };
+    host.askRecordingStop = [](const hmi::RecordingStopAsk&, std::function<void(bool, std::string, std::string, std::string, bool)> done) {
+        done(true, "Essai sons", {}, {}, false);
+    };
+    app::HmiSimulationPane pane("simN3", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    double t = 0;
+    const auto frame = [&](double dt) {
+        t += dt;
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    frame(0);
+    frame(0.1);
+    pane.command("hmi.record");
+    for (int i = 0; i < 12; ++i) frame(0.1);
+    pane.command("hmi.record");
+    hmi::ReplayRequest rq;
+    rq.name = "Essai sons";
+    check(pane.replay(rq) == hmi::rec::Status::Ok && pane.runtime().replaying(), "rejouer");
+    frame(0.05);
+    const auto muted = [&] { return hmi::soundMuted(pane.runtime().settings(), hmi::SoundChannel::Replay); };
+    auto chrome = pane.canvas().replayChrome();
+    const gfx::Rect sons = chrome.part("sons"), s8 = chrome.part("speed:8"), help = chrome.part("help");
+    check(sons.w > 0 && s8.w > 0 && sons.x > s8.right() && help.w > 0 && sons.right() <= help.x,
+          "le bouton Sons, juste apr\xC3\xA8s les vitesses ; la l\xC3\xA9gende garde sa place (sa zone, son infobulle)");
+    const auto sonsTip = [&] {
+        const gfx::Rect b = pane.canvas().replayChrome().part("sons");
+        return pane.canvas().liveTooltip({b.x + b.w / 2, b.y + b.h / 2});
+    };
+    const std::string tip = sonsTip();
+    check(!muted() && tip.rfind("Sons de la relecture : actifs", 0) == 0, "actif : le haut-parleur (son infobulle : actifs)");
+    check(tip.find("SYS.MuteReplay") != std::string::npos && tip.find("\xC3\x97" "4") != std::string::npos,
+          "son infobulle : le canal Relecture, SYS.MuteReplay, les vitesses (" + tip.substr(0, 60) + "...)");
+    pane.canvas().dispatch(ui::MouseDown{{sons.x + sons.w / 2, sons.y + sons.h / 2}, ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{sons.x + sons.w / 2, sons.y + sons.h / 2}, ui::MouseButton::Left, {}});
+    frame(0.05);
+    check(muted() && pane.runtime().replayInfo().soundsMuted && sonsTip().rfind("Sons de la relecture : coup", 0) == 0,
+          "un clic : le canal Relecture coup\xC3\xA9 (le M du M\xC3\xA9langeur, SYS.MuteReplay) ; le bouton barr\xC3\xA9 sur fond rouge");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::S, {}, false});
+    pane.canvas().dispatch(ui::TextInput{"s"});
+    frame(0.05);
+    check(!muted() && sonsTip().rfind("Sons de la relecture : actifs", 0) == 0 && pane.runtime().replaying(),
+          "la touche S : r\xC3\xA9tablis (rien ne s'\xC3\xA9" "crit dans la vue)");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::Replay, true, "M\xC3\xA9langeur");
+    frame(0.05);
+    check(sonsTip().rfind("Sons de la relecture : coup", 0) == 0, "coup\xC3\xA9 ailleurs (le M\xC3\xA9langeur, SYS.MuteReplay) : le bouton le montre");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::Replay, false, "M\xC3\xA9langeur");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::General, true, "essai");
+    frame(0.05);
+    chrome = pane.canvas().replayChrome();
+    const gfx::Rect sons2 = chrome.part("sons");
+    check(pane.canvas().liveTooltip({sons2.x + sons2.w / 2, sons2.y + sons2.h / 2}).find("tout le son est coup") != std::string::npos,
+          "tout le son coup\xC3\xA9 : le bouton barr\xC3\xA9, estomp\xC3\xA9 (son infobulle le dit)");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::General, false, "essai");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    frame(0.05);
+    check(pane.runtime().replayInfo().speed >= 4.0 && sonsTip().find("d'alarme seulement") != std::string::npos,
+          "\xC3\x97" "4 : les sons d'alarme seulement (le bouton le dit)");
+    // La barre seule, assez large : le bouton a son libelle (Sons, Coupes, Alarmes) ; etroite (celle de l'essai), le
+    // haut-parleur seul - la legende des touches garde sa forme et sa place.
+    {
+        const auto labelAt = [&](float w, bool mutedNow, bool alarms) {
+            Recorder br;
+            hmi::ReplayInfo ri;
+            ri.active = true;
+            ri.length = 25.0;
+            ri.position = 3.0;
+            ri.header.name = "Demarrage station";
+            ri.soundsMuted = mutedNow;
+            ri.alarmSoundsOnly = alarms;
+            const auto ch = app::paintReplayChrome(br, ui::Theme::dark(), {0.f, 0.f, w, 600.f}, ri, {}, {-1.f, -1.f});
+            std::string got = ch.part("sons").w > 0 ? "?" : "-";
+            for (const auto& said : br.texts)
+                if (said == "Sons" || said == "Coup\xC3\xA9s" || said == "Alarmes") got = said;
+            return got;
+        };
+        const std::string a = labelAt(1600.f, false, false), b = labelAt(1600.f, true, false), c = labelAt(1600.f, false, true),
+                          d = labelAt(893.f, false, false);
+        check(a == "Sons" && b == "Coup\xC3\xA9s" && c == "Alarmes" && d == "?",
+              "1600 px : Sons, Coup\xC3\xA9s, Alarmes ; 893 px : le haut-parleur seul (" + a + ", " + b + ", " + c + ", " + d + ")");
+    }
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte");
+    fs::remove_all(dir, ec);
+}
+
 int main(int argc, char** argv) {
+    // 1.14.1 (lot N3) : HMI_TEST_N3=1 - le bouton Sons de la barre de relecture, seul.
+    if (const char* only = std::getenv("HMI_TEST_N3"); only && *only == '1') {
+        sonsRelecture1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.1 (lot N2) : HMI_TEST_N2=1 - le pointeur (etirer, deplacer, ecrire), seul.
     if (const char* only = std::getenv("HMI_TEST_N2"); only && *only == '1') {
         pointeurs1141();
@@ -42603,6 +42719,7 @@ int main(int argc, char** argv) {
     utilisationsM1_1140();                  // 1.14.0 (lot M1) : la colonne Utilisations compte les acces, Voir les usages
     chercheur1140();                        // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC
     pointeurs1141();                        // 1.14.1 (lot N2) : le pointeur - etirer, deplacer, ecrire
+    sonsRelecture1141();                    // 1.14.1 (lot N3) : le bouton Sons de la barre de relecture
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

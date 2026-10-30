@@ -1307,6 +1307,7 @@ std::string toJson(const Header& h) {
     s("vues_montrees", h.viewsShown);
     s("ecran_40", h.at40);
     b("coupe", h.cut);
+    b("sons_gardes", h.soundsKept);   // 1.14.1 (N3)
     o += "  " + jsonString("taille_piste") + ": " + number(static_cast<double>(h.trackBytes)) + "\n}\n";
     return o;
 }
@@ -1360,6 +1361,7 @@ bool fromJson(std::string_view text, Header& h, std::string* why) {
     h.viewsShown = get("vues_montrees");
     h.at40 = get("ecran_40");
     h.cut = get("coupe") == "true";
+    h.soundsKept = get("sons_gardes") != "false";   // 1.14.1 (N3) : absente (un fichier d'avant) : vrai
     h.trackBytes = static_cast<std::uint64_t>(num("taille_piste", 0));
     return true;
 }

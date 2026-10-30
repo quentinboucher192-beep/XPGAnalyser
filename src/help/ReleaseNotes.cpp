@@ -139,6 +139,22 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.1 (lot N3, demande du 30/10) : entendre les sons a la relecture d'un enregistrement.
+        note("1.14.1", "Simulation", Kind::Fixed,
+         "LES SONS SE REJOUENT \xC3\x80 LA RELECTURE D'UN ENREGISTREMENT, tous : celui qui jouait d\xC3\xA8s le d\xC3\xA9part (une alarme "
+         "d\xC3\xA9j\xC3\xA0 l\xC3\xA0, un clic au premier instant) ne se rejouait jamais ; au-del\xC3\xA0 de \xC3\x97" "2, plus aucun - \xC3\xA0 "
+         "\xC3\x97" "4 et \xC3\x97" "8, les sons d'alarme se rejouent maintenant, une fois chacun ; la pause, un saut (\xE2\x88\x92" "10 s, +10 s, "
+         "D\xC3\xA9" "but, Fin, la barre) et \xC3\x89" "chap font taire ce qui jouait (avant : il continuait), et ce qui est saut\xC3\xA9 ne se "
+         "rejoue pas en rafale. Un son qui n'est plus une ressource du projet (ou un enregistrement d'un autre projet) : la Console le "
+         "dit une fois, au lieu de rien. Un enregistrement fait sans les sons le dit dans la barre ; la case de Configuration \xE2\x80\xBA "
+         "Enregistrements s'appelle d\xC3\xA9sormais \xC2\xAB Sons (pour les entendre \xC3\xA0 la relecture) \xC2\xBB.",
+         "enregistrements", ""),
+        note("1.14.1", "Simulation", Kind::New,
+         "LE BOUTON SONS DE LA BARRE DE RELECTURE, \xC3\xA0 c\xC3\xB4t\xC3\xA9 des vitesses (ou la touche S) : il coupe ou r\xC3\xA9tablit les "
+         "sons rejou\xC3\xA9s - le canal Relecture, le m\xC3\xAAme que le M de sa piste au M\xC3\xA9langeur de volume et que SYS.MuteReplay. "
+         "Son \xC3\xA9tat se lit d'un coup d'\xC5\x93il : le haut-parleur et Sons ; barr\xC3\xA9 sur fond rouge, Coup\xC3\xA9s ; barr\xC3\xA9 et "
+         "estomp\xC3\xA9 quand tout le son est coup\xC3\xA9 ; Alarmes \xC3\xA0 \xC3\x97" "4 et \xC3\x97" "8.",
+         "enregistrements", ""),
         // 1.14.1 (lot N2, demande du 30/10) : la bonne fleche de Windows la ou l'on peut etirer, deplacer, ecrire (ui::cursor).
         note("1.14.1", "Application", Kind::New,
          "LE POINTEUR PREND LA FORME WINDOWS DE CE QU'ON PEUT FAIRE, avant le clic : la double fl\xC3\xA8" "che horizontale ou verticale sur un "

@@ -1424,6 +1424,7 @@ bool HmiLiveCanvas::hasTooltip() const { return Widget::hasTooltip() || !replayC
 
 std::string HmiLiveCanvas::liveTooltip(gfx::Point mouse) const {
     if (replayShown() && replayChrome_.partAt(mouse) == "help") return replayChrome_.helpTip;
+    if (replayShown() && replayChrome_.partAt(mouse) == "sons") return replayChrome_.soundsTip;   // 1.14.1 (N3)
     return Widget::liveTooltip(mouse);
 }
 
@@ -1475,6 +1476,7 @@ bool HmiLiveCanvas::replayEvent(const ui::InputEvent& ev) {
             case ui::Key::End:    return emit("end");
             case ui::Key::Plus:   replaySignKey_ = true; return emit("faster");   // son TextInput "+" ne recompte pas
             case ui::Key::Minus:  replaySignKey_ = true; return emit("slower");
+            case ui::Key::S:      return k->repeat || k->mods.shift ? true : emit("sons");   // 1.14.1 (N3) : le bouton Sons
             default:              return false;   // F11, F8... : l'application ; l'IHM rejouee ne les recoit pas
         }
     }
@@ -1499,7 +1501,7 @@ bool HmiLiveCanvas::replayEvent(const ui::InputEvent& ev) {
         if (part == "play") return emit("pause");
         if (part == "back") return emit("step:-10");
         if (part == "fwd") return emit("step:10");
-        if (part == "start" || part == "end" || part == "quit" || part.rfind("speed:", 0) == 0) return emit(part);
+        if (part == "start" || part == "end" || part == "quit" || part == "sons" || part.rfind("speed:", 0) == 0) return emit(part);
         if (replayChrome_.view.contains(d->pos)) return emit("hint");
         return true;
     }
@@ -5335,6 +5337,18 @@ void HmiSimulationPane::replayCommand(const std::string& c) {
     else if (c.rfind("speed:", 0) == 0) (void)runtime_.replaySpeed(arg("speed:"));
     else if (c == "faster") (void)runtime_.replaySpeedStep(1);
     else if (c == "slower") (void)runtime_.replaySpeedStep(-1);
+    else if (c == "sons") {
+        // 1.14.1 (N3) : le bouton Sons (la touche S) - le canal Relecture, le meme que le M de sa piste au Melangeur et
+        // SYS.MuteReplay ; coupe, ce qui joue se tait (le melangeur).
+        const bool mute = !hmi::soundMuted(runtime_.settings(), hmi::SoundChannel::Replay);
+        (void)runtime_.setChannelMuted(hmi::SoundChannel::Replay, mute, "barre de relecture");
+        if (status_)
+            status_->setTransientMessage(mute ? std::string("Sons de la relecture coup\xC3\xA9s (S les r\xC3\xA9tablit)")
+                                              : hmi::soundMuted(runtime_.settings(), hmi::SoundChannel::General)
+                                                    ? std::string("Sons de la relecture r\xC3\xA9tablis - mais tout le son est coup\xC3\xA9 (Param\xC3\xA8tres syst\xC3\xA8me, Coupe-son)")
+                                                    : std::string("Sons de la relecture r\xC3\xA9tablis"),
+                                         4.0);
+    }
     else if (c == "hint" && status_)
         status_->setTransientMessage("Relecture : l'IHM ne re\xC3\xA7oit pas les clics. \xC3\x89" "chap pour revenir en direct.", 5.0);
     syncReplay();

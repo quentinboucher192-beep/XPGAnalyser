@@ -126,6 +126,10 @@ struct Runtime::RecordState {
     const rec::Player*                                          reading{nullptr};  // replayValue lit celui-ci (nul : player)
     double                                                      chartsAt{-1}, chartsBase{0}, chartStep{0.1};
     std::string                                                 chartsShown;
+    // 1.14.1 (N3) : les sons rejoues - le prochain pas prend aussi l'instant de depart (apres Rejouer, un saut, Debut) ;
+    // les sons de la piste qui ne sont pas des ressources du projet (dits une fois chacun).
+    bool                                                        soundsInclusive{true};
+    std::set<std::string>                                       soundsMissing;
     struct Live {
         Id                                   current{kNoId};
         std::string                          currentArgs;
@@ -222,6 +226,7 @@ bool Runtime::startRecording(const RecordingStart& req, double now, std::string*
     if (const User* u = user()) o.header.by = u->fullName.empty() ? u->login : u->fullName;
     else o.header.by = user_;
     o.header.rateHz = std::clamp(project_->recording.rateHz, 1, 50);
+    o.header.soundsKept = project_->recording.sounds;   // 1.14.1 (N3) : la relecture dira s'il a ete fait sans les sons
     o.password = req.password;
     auto recorder = std::make_unique<rec::Recorder>();
     std::string err;
@@ -576,6 +581,8 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     s.chartsShown.clear();
     s.source2 = req.source;
     s.player->seek(std::max(0.0, req.from));
+    s.soundsInclusive = true;                          // 1.14.1 (N3) : un son a l'instant de depart (t = 0) se rejoue
+    s.soundsMissing.clear();
     // ---- ce qui n'existe plus dans le projet : ignore, dit une fois
     std::vector<std::string> vars, views, objects;
     for (const auto& k : track->keys)
@@ -638,6 +645,14 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
         if (frozenKinds)
             s.note += std::string(s.note.empty() ? "" : " \xC2\xB7 ")
                     + "les fl\xC3\xA8" "ches de tendance et les compteurs de production montrent l'\xC3\xA9tat du direct (ils ne sont pas dans la piste)";
+    }
+    // 1.14.1 (N3) : FAIT SANS LES SONS (Configuration > Enregistrements > Sons decochee) - la relecture est muette : la
+    // barre et la Console le disent, une fois.
+    if (!header.soundsKept) {
+        const std::string said = "enregistr\xC3\xA9 sans les sons (Configuration \xE2\x80\xBA Enregistrements \xE2\x80\xBA Sons d\xC3\xA9" "coch\xC3\xA9" "e) : "
+                                 "aucun son ne se rejoue";
+        s.note += std::string(s.note.empty() ? "" : " \xC2\xB7 ") + said;
+        logAt(LogLevel::Info, "Relecture", header.name, said);
     }
     replayOn_ = true;
     composed_.clear();
@@ -815,16 +830,41 @@ void Runtime::replayCharts() {
     if (s.chartsAt < 0) s.chartsAt = pos;
 }
 
-void Runtime::replaySounds(double from, double to) {
-    if (!rec_ || !rec_->player || !hooks_.playSound || to <= from || to - from > 1.0 || rec_->speed > 2.0) return;
-    for (const rec::Event* e : rec_->player->eventsIn(from, to))
-        if (e->kind == rec::EventKind::Sound && project_ && project_->resourceByName(e->a)) {
-            // M4 -> M3 : un son rejoue, de source "relecture" - il sort sur le canal Relecture du melangeur. Le canal
-            // se lit pendant l'appel (soundChannel()) ; celui d'alors est dans l'evenement (e->b).
-            soundChannel_ = "Relecture";
-            hooks_.playSound(e->a);
-            soundChannel_.clear();
+// 1.14.1 (N3) : LES SONS REJOUES. Ceux du pas (from, to] - et l'instant de depart juste apres Rejouer, un saut, Debut
+// (avant : un son a t = 0, celui d'une alarme deja la au depart de l'enregistrement, ne se rejouait jamais). Rien si
+// le canal Relecture ou tout le son est coupe (le bouton Sons, le Melangeur, SYS.MuteReplay, le Coupe-son) ; rien d'un pas
+// de plus d'une seconde du PC (l'IHM figee : pas de rafale). A x4 et x8, seuls les sons d'alarme, une fois chacun par
+// pas (avant : aucun son au-dela de x2). Un son qui n'est plus une ressource du projet (ou un .xrec d'un autre projet) :
+// la Console le dit une fois (avant : rien, en silence).
+void Runtime::replaySounds(double from, double to, double wall) {
+    if (!rec_ || !rec_->player) return;
+    auto& s = *rec_;
+    const bool inclusive = s.soundsInclusive;
+    s.soundsInclusive = false;
+    if (!hooks_.playSound || !project_ || to < from || (to <= from && !inclusive) || wall > 1.0) return;
+    if (soundSilenced(settings_, SoundChannel::Replay)) return;
+    const bool alarmsOnly = s.speed > 2.0;
+    std::set<std::string> played;
+    for (const rec::Event* e : s.player->eventsIn(inclusive ? from - 1e-6 : from, to)) {
+        if (e->kind != rec::EventKind::Sound) continue;
+        if (alarmsOnly && soundChannelFrom(e->b) != SoundChannel::Alarms) continue;
+        if (!project_->resourceByName(e->a)) {
+            if (s.soundsMissing.insert(e->a).second)
+                logAt(LogLevel::Warning, "Relecture", s.header.name,
+                      "son \xC2\xAB " + e->a + " \xC2\xBB : ce n'est plus une ressource du projet, il ne se rejoue pas");
+            continue;
         }
+        if (alarmsOnly && !played.insert(e->a).second) continue;
+        // M4 -> M3 : un son rejoue, de source "relecture" - il sort sur le canal Relecture du melangeur. Le canal
+        // se lit pendant l'appel (soundChannel()) ; celui d'alors est dans l'evenement (e->b).
+        soundChannel_ = "Relecture";
+        hooks_.playSound(e->a);
+        soundChannel_.clear();
+    }
+}
+
+void Runtime::replayStopSounds() {
+    if (hooks_.stopSounds) hooks_.stopSounds();
 }
 
 void Runtime::replayTick(double wallNow) {
@@ -842,7 +882,7 @@ void Runtime::replayTick(double wallNow) {
             s.ended = true;
         }
         s.player->advanceTo(to);
-        replaySounds(from, to);
+        replaySounds(from, to, dt);
     }
     replayApply(false);
 }
@@ -853,8 +893,10 @@ bool Runtime::replayPause(std::optional<bool> paused) {
     const bool want = paused ? *paused : !s.paused;
     if (!want && s.ended && s.player->position() >= s.player->length() - 1e-6) {
         s.player->seek(0);                            // au bout : Lecture repart du debut
+        s.soundsInclusive = true;                     // 1.14.1 (N3) : son instant 0 compris
         replayApply(false);
     }
+    if (want && !s.paused) replayStopSounds();        // 1.14.1 (N3) : en pause, ce qui jouait se tait
     s.paused = want;
     if (!want) s.ended = false;
     s.lastWall = -1;
@@ -866,6 +908,10 @@ bool Runtime::replaySeek(double seconds) {
     auto& s = *rec_;
     s.player->seek(seconds);
     if (s.player->position() < s.player->length() - 1e-6) s.ended = false;
+    // 1.14.1 (N3) : un saut (-10 s, +10 s, Debut, Fin, la barre) - ce qui jouait se tait, ce qui a ete saute ne se rejoue
+    // pas ; un son a l'instant d'arrivee, si.
+    replayStopSounds();
+    s.soundsInclusive = true;
     replayApply(false);
     return true;
 }
@@ -932,7 +978,7 @@ bool Runtime::quitReplay(double now, const std::string& source) {
     jokerViews_.clear();
     linkViews_.clear();
     rangeViews_.clear();
-    if (hooks_.stopSounds) hooks_.stopSounds();
+    replayStopSounds();                                // Echap, Quitter : ce qui jouait se tait
     now_ = std::max(now_, now);
     followWatched(now_, true);                         // les liaisons reprennent ce qu'elles suivaient
     log("Relecture", source.empty() ? (s.source2.empty() ? std::string("IHM") : s.source2) : source,
@@ -953,6 +999,9 @@ ReplayInfo Runtime::replayInfo() const {
     i.paused = s.paused;
     i.ended = s.ended;
     i.note = s.note;
+    i.soundsMuted = soundMuted(settings_, SoundChannel::Replay);       // 1.14.1 (N3) : le bouton Sons de la barre
+    i.soundsGeneralMuted = soundMuted(settings_, SoundChannel::General);
+    i.alarmSoundsOnly = s.speed > 2.0;
     return i;
 }
 

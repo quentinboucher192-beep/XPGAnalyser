@@ -43,6 +43,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <set>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -1669,6 +1670,203 @@ void testRelectureM4b() {
     }
 }
 
+// ======================================================================= 1.14.1 (N3) : les sons a la relecture ==
+//  Un faux crochet note chaque son rejoue (nom, canal) et chaque arret. Les trois sources (une alarme et sa repetition,
+//  IHM_SON d'un script, l'action Jouer un son), un son a t = 0 ; le premier pas apres Rejouer, la pause, la reprise, un
+//  saut (rien de ce qui est saute), les vitesses, un pas de plus d'une seconde (pas de rafale) ; le canal Relecture coupe,
+//  tout le son coupe ; un son qui n'est plus une ressource (dit une fois) ; un enregistrement fait sans les sons.
+void testSonsRelecture1141() {
+    std::printf("1.14.1 (N3) : les sons a la relecture\n");
+    Station st("sons1141");
+    for (const char* n : {"Bip.wav", "Script.wav", "Alarme.wav"}) {
+        Resource snd;
+        snd.id = st.p.allocate();
+        snd.name = n;
+        st.p.assets.resources.push_back(snd);
+    }
+    st.p.views.front().objects.front().actions.push_back(act(Trigger::Click, Operation::PlaySound, "Bip.wav"));
+    st.p.programs.scripts.front().body += "IF Compteur = 3 THEN IHM_SON('Script.wav'); END_IF;\n";
+    st.p.alarmSettings.sounds[0] = "Alarme.wav";   // Niveau_Haut, priorite 1 : vers 0,7 s
+    st.p.alarmSettings.repeatS = 1;                 // ... et sa repetition, chaque seconde tant qu'elle attend
+    Runtime rt;
+    std::vector<std::pair<std::string, std::string>> played;   // (nom, canal) au crochet
+    int stops = 0;
+    Runtime::Hooks h;
+    const std::string f = st.folder;
+    h.projectFolder = [f] { return f; };
+    h.playSound = [&](const std::string& r) { played.emplace_back(r, rt.soundChannel()); };
+    h.stopSounds = [&] { ++stops; };
+    rt.setHooks(h);
+    rt.bind(&st.p, nullptr);
+    rt.start(0.0);
+    double now = 0;
+    std::string why;
+    // ---- enregistrer : un son des le depart (t = 0), puis les trois sources
+    check(rt.startRecording(RecordingStart{"Sons", {}, {}, 0.0, false, "essai"}, now, &why), "enregistrer (" + why + ")");
+    rt.press(st.button, now);
+    rt.release(st.button, now, true);
+    for (int step = 1; step <= 30; ++step) {
+        now = step / 10.0;
+        if (step == 15) {
+            rt.press(st.button, now);
+            rt.release(st.button, now, true);
+        }
+        rt.tick(now);
+    }
+    (void)rt.stopRecording(true, now);
+    const auto live = played;
+    rec::Header hh;
+    rec::Track tr;
+    check(rec::readTrack(rec::pathOf(rt.recordingsFolder(), "Sons"), "", hh, tr) == rec::Status::Ok && hh.soundsKept,
+          "garde ; l'en-tete dit que les sons sont gardes");
+    std::vector<std::string> inTrack;
+    bool atZero = false, three = false;
+    std::set<std::string> channels;
+    for (const auto& e : tr.events)
+        if (e.kind == rec::EventKind::Sound) {
+            inTrack.push_back(e.a);
+            channels.insert(e.b);
+            atZero = atZero || (e.a == "Bip.wav" && e.t < 1e-9);
+        }
+    three = channels.count("Alarmes") && channels.count("Scripts") && channels.count("Actions");
+    const auto count = [](const std::vector<std::string>& l, const char* n) { return std::count(l.begin(), l.end(), std::string(n)); };
+    check(atZero && three && count(inTrack, "Alarme.wav") >= 2 && inTrack.size() == live.size(),
+          "la piste : le Bip a t = 0, les trois sources (" + std::to_string(inTrack.size()) + " sons, " + std::to_string(count(inTrack, "Alarme.wav"))
+              + " d'alarme avec la r\xC3\xA9p\xC3\xA9tition)");
+    // ---- rejouer a x1 : chaque son, une fois, sur le canal Relecture - le premier (t = 0) compris
+    played.clear();
+    stops = 0;
+    check(rt.startReplay(ReplayRequest{"Sons", {}, 1.0, 0, {}, "essai"}, now, &why) == rec::Status::Ok, "rejouer (" + why + ")");
+    double wall = 100;
+    rt.replayTick(wall);                     // le premier pas apres Rejouer : la position 0
+    check(played.size() == 1 && played[0].first == "Bip.wav",
+          "le son \xC3\xA0 t = 0 se rejoue d\xC3\xA8s le premier pas (avant : jamais - le premier instant \xC3\xA9tait exclu)");
+    for (int i = 0; i < 35; ++i) rt.replayTick(wall += 0.1);
+    std::vector<std::string> names;
+    bool allReplay = true;
+    for (const auto& [n, c] : played) {
+        names.push_back(n);
+        allReplay = allReplay && c == "Relecture";
+    }
+    check(names == inTrack, "x1 : chaque son de la piste, une fois, dans l'ordre (" + std::to_string(names.size()) + " sur "
+                                + std::to_string(inTrack.size()) + ")");
+    check(allReplay && rt.soundChannel().empty(), "... tous sur le canal Relecture du M\xC3\xA9langeur");
+    // ---- pause, reprise, saut
+    rt.replaySeek(0.0);
+    check(stops >= 1, "un saut (D\xC3\xA9" "but) : ce qui jouait se tait (avant : il continuait)");
+    played.clear();
+    rt.replayPause(false);                   // arrivee au bout, la relecture etait en pause
+    rt.replayTick(wall += 0.1);
+    rt.replayTick(wall += 0.1);
+    check(!played.empty() && played[0].first == "Bip.wav", "D\xC3\xA9" "but : le son \xC3\xA0 t = 0 se rejoue");
+    stops = 0;
+    rt.replayPause(true);
+    check(stops == 1, "la pause : ce qui jouait se tait (avant : il continuait)");
+    played.clear();
+    for (int i = 0; i < 5; ++i) rt.replayTick(wall += 0.1);
+    check(played.empty(), "en pause : rien ne joue");
+    rt.replayPause(false);
+    check(stops == 1, "la reprise ne coupe rien");
+    for (int i = 0; i < 6; ++i) rt.replayTick(wall += 0.1);
+    check(count([&] { std::vector<std::string> v; for (const auto& p : played) v.push_back(p.first); return v; }(), "Script.wav") == 1,
+          "apr\xC3\xA8s la reprise, la suite se rejoue (IHM_SON \xC3\xA0 0,3 s)");
+    // Un saut en avant : ce qui est saute ne se rejoue pas en rafale.
+    rt.replaySeek(0.6);
+    played.clear();
+    rt.replaySeek(2.5);
+    for (int i = 0; i < 2; ++i) rt.replayTick(wall += 0.05);
+    check(played.empty() && !rt.replayInfo().paused,
+          "un saut de 0,6 \xC3\xA0 2,5 s : ni l'alarme de 0,7 s, ni le Bip de 1,5 s, ni la r\xC3\xA9p\xC3\xA9tition de 1,7 s (saut\xC3\xA9s) ne se rejouent");
+    // Un pas de plus d'une seconde (l'IHM figee) : rien, pas de rafale.
+    rt.replaySeek(0.1);
+    rt.replayTick(wall += 0.05);
+    played.clear();
+    rt.replayTick(wall += 1.6);
+    check(played.empty() && !rt.replayInfo().paused && rt.replayInfo().position > 1.6,
+          "un pas de 1,6 s d'un coup (de 0,15 \xC3\xA0 1,75 s) : aucun son en rafale");
+    // ---- les vitesses
+    const auto run = [&](double speed, double seconds) {
+        rt.replaySeek(0.0);
+        rt.replaySpeed(speed);
+        rt.replayPause(false);              // la precedente est allee au bout (en pause)
+        played.clear();
+        rt.replayTick(wall += 0.05);
+        const int steps = static_cast<int>(seconds / speed / 0.05);
+        for (int i = 0; i < steps; ++i) rt.replayTick(wall += 0.05);
+        std::vector<std::string> v;
+        for (const auto& p : played) v.push_back(p.first);
+        return v;
+    };
+    for (const double sp : {0.25, 0.5, 2.0}) {
+        const auto v = run(sp, 3.2);
+        check(v == inTrack, "\xC3\x97" + hmi::formatNumber(sp) + " : tous les sons (" + std::to_string(v.size()) + ")");
+    }
+    for (const double sp : {4.0, 8.0}) {
+        const auto v = run(sp, 3.2);
+        check(!v.empty() && count(v, "Alarme.wav") == static_cast<long>(v.size()) && rt.replayInfo().alarmSoundsOnly,
+              "\xC3\x97" + hmi::formatNumber(sp) + " : les sons d'alarme seulement (" + std::to_string(v.size()) + ") - avant : aucun son au-del\xC3\xA0 de \xC3\x97" "2");
+    }
+    rt.replaySpeed(1.0);
+    // ---- le canal Relecture coupe (le bouton Sons, le M du Melangeur, SYS.MuteReplay), tout le son coupe
+    check(rt.setChannelMuted(SoundChannel::Replay, true, "essai") && rt.replayInfo().soundsMuted, "le canal Relecture coup\xC3\xA9");
+    check(run(1.0, 3.2).empty(), "... aucun son rejou\xC3\xA9");
+    (void)rt.setChannelMuted(SoundChannel::Replay, false, "essai");
+    check(rt.setChannelMuted(SoundChannel::General, true, "essai") && rt.replayInfo().soundsGeneralMuted && run(1.0, 3.2).empty(),
+          "tout le son coup\xC3\xA9 : aucun son rejou\xC3\xA9");
+    (void)rt.setChannelMuted(SoundChannel::General, false, "essai");
+    check(run(1.0, 3.2) == inTrack, "r\xC3\xA9tablis : ils se rejouent");
+    // ---- Echap (quitter) : ce qui joue se tait
+    stops = 0;
+    (void)rt.quitReplay(now, "essai");
+    check(stops == 1, "quitter : ce qui jouait se tait");
+    // ---- un son qui n'est plus une ressource du projet : dit une fois dans la Console
+    st.p.assets.resources.erase(std::remove_if(st.p.assets.resources.begin(), st.p.assets.resources.end(),
+                                               [](const Resource& r) { return r.name == "Script.wav"; }),
+                                st.p.assets.resources.end());
+    check(rt.startReplay(ReplayRequest{"Sons", {}, 1.0, 0, {}, "essai"}, now, &why) == rec::Status::Ok, "rejouer encore");
+    const auto missing = [&] {
+        const std::string j = journalText(rt);
+        std::size_t n = 0;
+        for (std::size_t at = j.find("Script.wav \xC2\xBB : ce n'est plus une ressource"); at != std::string::npos;
+             at = j.find("Script.wav \xC2\xBB : ce n'est plus une ressource", at + 1))
+            ++n;
+        return n;
+    };
+    const auto v1 = run(1.0, 3.2);
+    const auto v2 = run(1.0, 3.2);
+    check(count(v1, "Script.wav") == 0 && count(v1, "Bip.wav") == 2 && missing() == 1,
+          "un son qui n'est plus une ressource : ne se rejoue pas, la Console le dit une fois (" + std::to_string(missing()) + ")");
+    (void)v2;
+    (void)rt.quitReplay(now, "essai");
+    // ---- un enregistrement fait sans les sons (Configuration > Enregistrements > Sons decochee) : la relecture le dit
+    st.p.recording.sounds = false;
+    check(rt.startRecording(RecordingStart{"Muet", {}, {}, 0.0, false, "essai"}, now, &why), "enregistrer sans les sons");
+    for (int step = 1; step <= 10; ++step) {
+        now += 0.1;
+        if (step == 3) {
+            rt.press(st.button, now);
+            rt.release(st.button, now, true);
+        }
+        rt.tick(now);
+    }
+    (void)rt.stopRecording(true, now);
+    st.p.recording.sounds = true;
+    played.clear();
+    check(rt.startReplay(ReplayRequest{"Muet", {}, 1.0, 0, {}, "essai"}, now, &why) == rec::Status::Ok, "le rejouer");
+    for (int i = 0; i < 15; ++i) rt.replayTick(wall += 0.1);
+    const auto info = rt.replayInfo();
+    check(played.empty() && !info.header.soundsKept && info.note.find("sans les sons") != std::string::npos
+              && journalHas(rt, "enregistr\xC3\xA9 sans les sons"),
+          "fait sans les sons : rien ne joue, la barre et la Console le disent (" + info.note + ")");
+    (void)rt.quitReplay(now, "essai");
+    // Un fichier d'avant (sans la cle sons_gardes) : les sons sont gardes.
+    rec::Header old;
+    check(rec::fromJson("{\"format\": 1, \"nom\": \"Ancien\"}", old) && old.soundsKept, "un en-t\xC3\xAAte de la 1.14.0 : sons gard\xC3\xA9s (par d\xC3\xA9" "faut)");
+    rec::Header back;
+    hh.soundsKept = false;
+    check(rec::fromJson(rec::toJson(hh), back) && !back.soundsKept, "sons_gardes : false se relit");
+}
+
 } // namespace
 
 int main() {
@@ -1687,6 +1885,7 @@ int main() {
     testLimits();
     testGenerateAndStore();
     testRelectureM4b();      // 1.14.0 : la relecture contradictoire du lot
+    testSonsRelecture1141(); // 1.14.1 (N3) : les sons a la relecture
     // Les dossiers de l'essai (xpg-m4-<pid>-*) : retires.
     {
         std::error_code ec;

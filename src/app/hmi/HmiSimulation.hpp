@@ -228,10 +228,13 @@ struct HmiLiveLayer {
 //  gris) qu'on clique ou qu'on tire ; Debut, -10 s, Pause / Lecture, +10 s, Fin ; le temps ; les vitesses ; Quitter.
 //  Les parties : "progress", "start", "back", "play", "fwd", "end", "speed:<v>", "quit" ; "help" (1.14.0, captures
 //  finales) : la legende des touches, qui tient dans sa place - le detail (helpTip) en infobulle sur elle.
+//  1.14.1 (N3) : "sons" - le bouton Sons, a cote des vitesses (le haut-parleur ; barre sur fond rouge : le canal
+//  Relecture coupe ; estompe : tout le son coupe ; "Alarmes" a x4 et x8) ; son infobulle, soundsTip.
 struct ReplayChrome {
     gfx::Rect banner, bar, view, progress;
     std::vector<std::pair<std::string, gfx::Rect>> parts;
     std::string helpTip;
+    std::string soundsTip;   // 1.14.1 (N3)
     [[nodiscard]] std::string partAt(gfx::Point p) const;
     [[nodiscard]] gfx::Rect   part(std::string_view name) const;
     [[nodiscard]] double      fractionAt(float x) const;   // 0..1 sur la progression
@@ -452,7 +455,8 @@ public:
     void setTouch(hmi::Id object, float strength) { touch_ = object; touchStrength_ = strength; }
     // ---- 1.14.0 (M4) : LA RELECTURE - le bandeau et la barre se dessinent ici, par-dessus tout (la vue entre les
     //  deux) ; la vue ne recoit ni clic ni touche. replayCommand : "pause", "seek:<s>", "step:-10", "step:10",
-    //  "start", "end", "speed:<v>", "faster", "slower", "quit", "hint" (un clic sur la vue rejouee).
+    //  "start", "end", "speed:<v>", "faster", "slower", "quit", "hint" (un clic sur la vue rejouee) ; 1.14.1 (N3) :
+    //  "sons" (le bouton Sons, la touche S) - le canal Relecture coupe ou retabli.
     const core::SignalPtr<std::string> replayCommand = core::Signal<std::string>::create();
     [[nodiscard]] bool                replayShown() const noexcept;
     [[nodiscard]] const ReplayChrome& replayChrome() const noexcept { return replayChrome_; }
