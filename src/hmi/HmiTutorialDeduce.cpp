@@ -1174,6 +1174,7 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"raccourcis-vue", "arbre:IHM/Vues"},                                  // 1.11.23 : les raccourcis d'une vue
     {"legende-explorateur", "arbre:IHM"},                                  // 1.11.23 : la legende de l'explorateur
     {"fenetres", "arbre:IHM"},                                             // 1.12.27 : plusieurs fenetres
+    {"chercher-fichiers", "arbre:IHM"},                                    // 1.14.0 (lot M5) : Projet > Chercher des fichiers sur ce PC
     // 1.12.30 : le zoom d'une page (un tableau), les regles de l'editeur de vues, les langues cote a cote
     // (Configuration > Langues, son bouton Cote a cote).
     {"zoom", "arbre:IHM/Programmation/Variables IHM"}, {"regles-guides", "arbre:IHM/Vues"},

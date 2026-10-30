@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.14.0", "30/10/2026", "\xC3\xA0 venir"},
     {"1.13.1", "29/10/2026", "livr\xC3\xA9" "e le 29/10 au soir"},
     {"1.13.0", "26/10/2026", "livr\xC3\xA9" "e le 26/10 au soir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
@@ -137,6 +138,13 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.0 (lot M5, demande du 30/10) : chercher les fichiers de l'appli sur tout le PC, depuis le menu principal.
+        note("1.14.0", "Projet", Kind::New,
+         "CHERCHER DES FICHIERS SUR CE PC (Ctrl+Maj+P) : le menu principal (Chercher sur ce PC\xE2\x80\xA6 dans la colonne de gauche, et son clic droit), le menu Projet et Aller \xC3\xA0 / Faire trouvent les fichiers de l'appli sur tout le PC - les projets (project.xpgproj, montr\xC3\xA9s par le nom de leur dossier), les archives .xihm et .xapi, les exports Control Expert (.xpg, .xhw, .xdb, .xef), les paquets IHM (.xpgvues, .xpgsymboles, .xpgtypes, .xpgfonctions, .xpgscripts, .xpgst, .xpgmodele), les biblioth\xC3\xA8ques (.xpgbib, .dfb, .ddt, .mac), les th\xC3\xA8mes et les enregistrements. O\xC3\xB9 : tout le PC (les lecteurs r\xC3\xA9seau, les cl\xC3\xA9s USB et les disques externes selon leurs cases), C:, Mes documents ou un dossier ; Windows, Program Files, ProgramData, la Corbeille et les dossiers cach\xC3\xA9s sont pass\xC3\xA9s, les .zip lus si on le demande. La recherche tourne en arri\xC3\xA8re-plan, en priorit\xC3\xA9 basse et au rythme d'un lecteur r\xC3\xA9seau : les fichiers arrivent au fil de l'eau (les dossiers lus, le dossier en cours), Arr\xC3\xAAter l'arr\xC3\xAAte tout de suite, ni les liens ni les jonctions ne sont suivis, et la fin compte les dossiers refus\xC3\xA9s. Les extensions se cochent par groupes, avec leur nombre (Tout, Rien, Celles d'IHM Studio ou d'API Studio), une puce par extension trouv\xC3\xA9" "e la cache ou la montre d'un clic, Nom contient filtre au fil de la frappe ; le choix est gard\xC3\xA9.",
+         "chercher-fichiers", ""),
+        note("1.14.0", "Projet", Kind::New,
+         "LES FICHIERS TROUV\xC3\x89S : le tableau (Nom, Type, Dossier, Taille, Modifi\xC3\xA9 le, et la Version lue dans l'en-t\xC3\xAAte - un projet, une archive, un export Control Expert, un paquet, un bloc, une macro) se trie par colonne. Le double-clic ouvre avec la bonne application : un fichier de l'autre la lance avec lui (un .XPG dans IHM Studio : Ouvrir avec API Studio ; un paquet IHM vu d'API Studio : IHM Studio l'importe dans son projet ouvert). Ouvrir le dossier (l'Explorateur, le fichier choisi), Copier le chemin, Importer selon le genre (un paquet IHM par la fen\xC3\xAAtre Importer, un mod\xC3\xA8le par la galerie, une biblioth\xC3\xA8que IHM par Relier, un .XPG / .XHW par la question du d\xC3\xA9p\xC3\xB4t, un bloc ou une macro dans la biblioth\xC3\xA8que, un th\xC3\xA8me dans les th\xC3\xA8mes), Ajouter aux r\xC3\xA9" "cents ; les m\xC3\xAAmes au clic droit, une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi. Les derniers r\xC3\xA9sultats restent tant que l'appli est ouverte.",
+         "chercher-fichiers", ""),
         // 1.13.1 (lot K1, demande du 29/10) : les deux bugs des formules - les constantes globales dans une formule de
         // propriete (l'inspecteur les disait inconnues ; leur unite se perdait, EN ne convertissait rien en fx) et
         // l'aide a la saisie dans les reperes $...$ (rien n'etait propose dedans ni apres eux).
