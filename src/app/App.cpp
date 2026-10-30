@@ -2092,22 +2092,13 @@ void App::bringToFront() {
 #endif
 }
 
-// 1.14.0 (M4) : la reponse a une autre application - "<code>\n<texte>", ecrite d'un bloc (un .tmp renomme) : celle
-// qui attend ne lit jamais une reponse a moitie ecrite.
+// 1.14.0 (M4) : la reponse a une autre application - "<code>\n<texte>\n#fin\n". 1.14.0 (relecture M4b) : seulement un
+// fichier NEUF du dossier temporaire, nomme xpg-enregistrement-<chiffres>.txt, cree en exclusivite (hmi::rec::writeReply) :
+// une commande --reponse ne fait jamais ecrire ailleurs, ni ecraser un fichier.
 namespace {
 void writeRecordingReply(const std::string& path, int code, const std::string& message) {
-    namespace fs = std::filesystem;
-    const fs::path target(std::u8string(path.begin(), path.end()));
-    fs::path tmp = target;
-    tmp += ".tmp";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out) return;
-        const std::string text = hmi::rec::replyText(code, message);
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-    }
-    std::error_code ec;
-    fs::rename(tmp, target, ec);
+    std::string why;
+    if (!hmi::rec::writeReply(path, code, message, &why)) std::fprintf(stderr, "[enregistrement] r\xC3\xA9ponse non \xC3\xA9" "crite : %s\n", why.c_str());
 }
 } // namespace
 

@@ -18,29 +18,45 @@
 //    - LES EVENEMENTS : les alarmes (la liste ; apparition, acquittement,
 //      disparition), les sons joues (la ressource, le canal), le journal.
 //
-//  LE FICHIER .xrec : un zip (un outil zip l'ouvre) de deux entrees -
+//  LE FICHIER .xrec : un zip (un outil zip l'ouvre) de deux entrees stockees -
 //    entete.json : l'en-tete, lisible (nom, description, date, duree, projet et
 //                  version, empreinte du projet, vue de depart, ou, par qui, les
-//                  comptes) ; il ne contient aucune valeur ;
+//                  comptes) ; il ne contient aucune valeur. Il est EN PREMIER, et
+//                  complete de blancs jusqu'a une place fixe (16 Kio) : la liste
+//                  du dossier ne lit que lui (quelques Kio), et l'arret, une
+//                  description, un nom le reecrivent SUR PLACE ;
 //    piste.bin   : la piste, une suite de BLOCS (un par seconde a peu pres),
-//                  chacun compresse (deflate), chiffre s'il y a un mot de passe,
-//                  avec sa longueur, son CRC et l'instant de sa fin. Un bloc
-//                  abime ou coupe arrete la lecture : ce qui precede se relit.
-//  Pendant l'enregistrement, les blocs s'ajoutent a <nom>.xrec.part (ecrit a
-//  mesure) ; a l'arret, le .xrec est ecrit d'un coup et le .part retire. Un
-//  enregistrement coupe net (plantage, coupure de courant) laisse son .part : la
-//  prochaine lecture du dossier en fait un .xrec, relu jusqu'au dernier bloc
-//  entier (l'en-tete le dit : coupe).
+//                  chacun compresse (deflate) et chiffre, avec sa longueur, son
+//                  CRC et l'instant de sa fin. Un bloc abime ou coupe arrete la
+//                  lecture : ce qui precede se relit.
+//  Pendant l'enregistrement, le fichier <nom>.xrec.part a deja cette forme : les
+//  blocs s'ajoutent a mesure. A l'arret, l'en-tete final s'ecrit a sa place, le
+//  repertoire du zip a la fin, et le .part est renomme : rien n'est relu ni
+//  recopie. Un enregistrement coupe net (plantage, coupure de courant) laisse son
+//  .part : la prochaine lecture du dossier le prend (s'il n'est plus ouvert par
+//  personne) et en fait un .xrec, relu jusqu'au dernier bloc entier (l'en-tete
+//  le dit : coupe).
 //
 //  LE MOT DE PASSE : un sel et une empreinte, comme les mots de passe des
 //  utilisateurs (HmiCrypto.hpp) - le mot de passe n'est pas dans le fichier. La
-//  piste est chiffree avec une cle tiree du mot de passe (SHA-256 itere, un
-//  second sel) : chaque bloc par un flux HMAC-SHA-256 en mode compteur (un
-//  nombre unique par fichier, le numero du bloc, le compteur). CE QUE CA
-//  PROTEGE : qui n'a pas le mot de passe ne rejoue pas l'enregistrement et ne
-//  lit pas ses valeurs. CE QUE CA NE PROTEGE PAS : l'en-tete (nom, description,
-//  date, duree, vues, qui l'a fait) reste lisible ; le fichier peut etre
-//  supprime, copie ou abime ; la piste n'est pas signee.
+//  piste est chiffree avec une CLE PROPRE AU FICHIER, tiree au sort : chaque bloc
+//  par un flux HMAC-SHA-256 en mode compteur (un nombre unique par fichier, le
+//  numero du bloc, le compteur). Cette cle est dans l'en-tete, chiffree par une
+//  cle tiree du mot de passe (SHA-256 itere, un second sel) ; sans mot de passe,
+//  elle y est en clair. Donner (ou retirer) le mot de passe a l'arret ne change
+//  que l'en-tete ; Mot de passe... (Ressources) tire une cle neuve et rechiffre
+//  la piste. CE QUE CA PROTEGE : qui n'a pas le mot de passe ne rejoue pas
+//  l'enregistrement et ne lit pas ses valeurs. CE QUE CA NE PROTEGE PAS :
+//  l'en-tete (nom, description, date, duree, vues, qui l'a fait) reste lisible ;
+//  le fichier peut etre supprime, copie ou abime ; la piste n'est pas signee ;
+//  pendant l'enregistrement, un .part commence sans mot de passe a sa cle en
+//  clair (il recoit le mot de passe a l'arret).
+//
+//  UN FICHIER HOSTILE (un .xrec fabrique) ne fait pas allouer sans fin : l'en-tete
+//  fait 1 Mio au plus, la piste est lue bloc par bloc (64 Mio decompresses au plus
+//  chacun, et pas plus que ce que deflate peut donner), 1 Gio decompresse et 12
+//  millions de valeurs en tout (limits()) ; au-dela, le fichier est refuse et dit
+//  pourquoi.
 //
 //  LA RELECTURE (Player) : l'etat a un instant = l'image complete d'avant, puis
 //  les changements jusqu'a lui - le meme que celui d'une lecture continue. Une
@@ -71,7 +87,7 @@ inline constexpr std::string_view kPartSuffix = ".part";          // "<nom>.xrec
 inline constexpr std::string_view kHeaderEntry = "entete.json";
 inline constexpr std::string_view kTrackEntry = "piste.bin";
 inline constexpr std::string_view kNativeFolder = "ihm/ressources/enregistrements";   // relatif au dossier du projet
-inline constexpr int              kFormat = 1;
+inline constexpr int              kFormat = 2;                    // 2 (1.14.0) : la cle du fichier dans l'en-tete ; 1 se relit
 inline constexpr double           kKeyframeEvery = 5.0;           // s : une image complete
 inline constexpr double           kSpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
 
@@ -81,9 +97,11 @@ inline constexpr double           kSpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
 // enregistre, sans chemin absolu donne).
 [[nodiscard]] std::string folderOf(const RecordingSettings&, const std::string& projectFolder);
 // Le nom d'un enregistrement (sans extension) : pas vide, pas de / \ : * ? " < > |, pas de . au bout, 120 caracteres
-// au plus. Faux et `why` sinon.
+// au plus, pas un nom reserve de Windows (CON, PRN, AUX, NUL, COM1 a COM9, LPT1 a LPT9, meme suivis d'un point).
+// UN NOM N'EST JAMAIS UN CHEMIN : chaque fonction de fichier qui prend un nom le verifie. Faux et `why` sinon.
 [[nodiscard]] bool validName(std::string_view name, std::string* why = nullptr);
-// Un nom propre a partir d'un texte quelconque (les caracteres refuses deviennent _ ; vide : "Enregistrement").
+// Un nom propre a partir d'un texte quelconque (les caracteres refuses deviennent _, un nom reserve prend un _ ;
+// vide : "Enregistrement").
 [[nodiscard]] std::string cleanName(std::string_view text);
 // "<dossier>/<nom>.xrec".
 [[nodiscard]] std::string pathOf(const std::string& folder, std::string_view name);
@@ -106,19 +124,24 @@ struct Header {
     double        keyframeEvery{kKeyframeEvery};
     // le mot de passe (vide : en clair)
     std::string   salt, hash;                  // la verification (passwordHash)
-    std::string   keySalt, nonce;              // la cle et le flux
+    std::string   keySalt, nonce;              // la cle tiree du mot de passe ; le flux
+    std::string   fileKey;                     // format 2 : la cle du fichier (hex) - en clair, ou chiffree si protege
     // les comptes
     std::size_t   frames{0}, keys{0}, clicks{0}, alarms{0}, views{0}, sounds{0}, journal{0}, events{0};
     std::string   viewsShown;                  // "Vue_Station;Popup_Pompe"
+    std::string   at40;                        // l'ecran a 40 % de la duree ("Vue_Station + Popup_Pompe") : le detail
     bool          cut{false};                  // coupe net : relu jusqu'au dernier bloc entier
     std::uint64_t trackBytes{0};
     [[nodiscard]] bool locked() const noexcept { return !hash.empty(); }
 };
 [[nodiscard]] std::string toJson(const Header&);
 bool fromJson(std::string_view text, Header& out, std::string* why = nullptr);
-// Le mot de passe : un sel et une empreinte neufs, la cle et le flux (vide : retire la protection).
-void protect(Header&, const std::string& password);
+// Le mot de passe : un sel et une empreinte neufs, et la cle du fichier `fileKey` (32 octets) chiffree par lui ;
+// vide : sans protection (la cle en clair).
+void protect(Header&, const std::string& password, const std::string& fileKey);
 [[nodiscard]] bool passwordOk(const Header&, std::string_view password);
+// La cle qui dechiffre la piste (le bon mot de passe d'un enregistrement protege) ; vide : en clair (format 1).
+[[nodiscard]] std::string trackKey(const Header&, const std::string& password);
 
 // ---- la piste ------------------------------------------------------------------
 enum class KeyKind : std::uint8_t {
@@ -262,10 +285,11 @@ public:
     [[nodiscard]] std::size_t   clicks() const noexcept { return clicks_; }
     [[nodiscard]] std::size_t   alarmEvents() const noexcept { return alarmEvents_; }
     [[nodiscard]] const std::string& lastError() const noexcept { return error_; }
+    [[nodiscard]] bool locked() const noexcept { return options_.header.locked(); }
 
-    // FERMER. keep : le .xrec est ecrit a `finalPath` (nom, description et mot de passe de `final`, la duree et
-    // les comptes d'ici ; un autre mot de passe que celui du fichier en cours : la piste est rechiffree) ; le
-    // .part est retire. keep faux : rien n'est garde.
+    // FERMER. keep : l'en-tete final (nom, description, la duree et les comptes d'ici) s'ecrit a sa place, le
+    // .part devient `finalPath` - rien n'est relu ni recopie. `password` protege le fichier (vide : sans
+    // protection) : seule la cle de l'en-tete change. keep faux : rien n'est garde.
     bool close(double t, bool keep, const std::string& finalPath, const std::string& name, const std::string& description,
                const std::string& password, std::string* why = nullptr, Header* written = nullptr);
 
@@ -274,7 +298,12 @@ private:
     std::uint32_t keyOf(std::string_view key, KeyKind kind, std::string_view shown, Id variable, std::string_view declared);
     RecorderOptions           options_;
     bool                      open_{false};
-    std::string               key_;              // la cle de chiffrement du fichier en cours (vide : en clair)
+    std::string               key_;              // la cle du fichier (32 octets, tiree au sort)
+    std::size_t               room_{0};          // la place de l'en-tete
+    std::uint64_t             trackLocalAt_{0}, trackDataAt_{0};
+    std::uint32_t             trackCrc_{0};
+    std::uint32_t             stampTime_{0}, stampDate_{0};
+    std::vector<std::pair<double, std::string>> shown_;   // l'ecran dans le temps (l'ecran a 40 %)
     std::string               pending_;          // les enregistrements pas encore dans un bloc
     std::uint32_t             seq_{0};
     std::uint64_t             written_{0};
@@ -338,10 +367,24 @@ private:
 // ---- les fichiers ---------------------------------------------------------------------
 enum class Status : std::uint8_t { Ok, NotFound, Unreadable, PasswordNeeded, BadPassword };
 [[nodiscard]] std::string_view statusText(Status) noexcept;
-// L'en-tete seul (la liste, le detail) : pas besoin du mot de passe.
+// L'en-tete seul (la liste, le detail) : pas besoin du mot de passe. Seule l'entree entete.json est lue (quelques
+// Kio au debut du fichier ; un zip refait par un autre outil : son repertoire, a la fin).
 Status readHeader(const std::string& path, Header& out, std::string* why = nullptr);
-// La piste : le mot de passe d'un enregistrement protege (vide : PasswordNeeded).
+// La piste, bloc par bloc : le mot de passe d'un enregistrement protege (vide : PasswordNeeded). Une piste au-dela
+// des limites : Unreadable, et `why` le dit.
 Status readTrack(const std::string& path, const std::string& password, Header& header, Track& out, std::string* why = nullptr);
+// Les limites de la lecture (un fichier fabrique ne fait pas allouer sans fin) ; les essais les baissent.
+struct Limits {
+    std::uint64_t trackRaw{1ull << 30};      // octets decompresses de la piste, en tout
+    std::uint64_t items{12'000'000};         // valeurs, images, evenements... en tout
+};
+[[nodiscard]] Limits limits() noexcept;
+void setLimits(const Limits&) noexcept;
+// Ce qui a ete lu des fichiers d'enregistrement depuis le lancement (les essais : la liste ne relit pas tout).
+struct FileStats {
+    std::uint64_t opens{0}, bytes{0};
+};
+[[nodiscard]] FileStats fileStats() noexcept;
 
 struct Item {
     std::string   name, path;
@@ -350,15 +393,17 @@ struct Item {
     std::int64_t  modified{0};        // secondes depuis 1970
     std::string   problem;            // illisible : pourquoi ('' : lu)
 };
-// Les enregistrements d'un dossier, les plus recents d'abord. Un .part abandonne (pas en cours ici, pas touche
-// depuis 10 s) devient un .xrec relu jusqu'au dernier bloc : `notes` le dit.
+// Les enregistrements d'un dossier, les plus recents d'abord. Un en-tete deja lu (meme chemin, meme taille, meme
+// date de modification) ne se relit pas. Un .part abandonne (pas en cours ici, pas touche depuis 10 s, ouvert par
+// aucun autre programme : il est pris d'abord) devient un .xrec relu jusqu'au dernier bloc : `notes` le dit.
 [[nodiscard]] std::vector<Item> listFolder(const std::string& folder, std::vector<std::string>* notes = nullptr);
 // Ceux dont le nom commence par `prefix` (sans la casse, blancs autour retires) ; vide : tous. Le Lecteur
 // d'enregistrements : son dessin, ses clics et le moteur prennent les memes lignes.
 [[nodiscard]] std::vector<Item> withPrefix(const std::vector<Item>& items, std::string_view prefix);
 // Les noms des .xrec du dossier, sans rien lire ni rien recuperer (Generer).
 [[nodiscard]] std::vector<std::string> fileNames(const std::string& folder);
-// Un .part en .xrec : faux et `why` s'il ne se lit pas.
+// Un .part en .xrec : faux et `why` s'il ne se lit pas, ou s'il est encore ouvert par un autre programme (un autre
+// IHM Studio qui enregistre) - il est d'abord pris (verrou, renommage) : deux fenetres n'en font pas deux .xrec.
 bool recoverPart(const std::string& partPath, std::string* finalPath = nullptr, std::string* why = nullptr);
 // Les .part de ce processus (ceux qu'on ecrit) : la liste du dossier ne les touche pas.
 void markActive(const std::string& partPath, bool active);
@@ -367,15 +412,23 @@ void markActive(const std::string& partPath, bool active);
 // Importer un .xrec dans le dossier (son nom, ou un nom libre) ; `name` : le nom pris.
 bool importFile(const std::string& source, const std::string& folder, std::string& name, std::string* why = nullptr);
 // Exporter (copier) vers un dossier, ou un fichier (.xrec) ; `written` : le chemin ecrit.
+struct ExportOptions {
+    enum class IfExists : std::uint8_t { Refuse, Replace, FreeName };
+    IfExists    ifExists{IfExists::Refuse};   // un fichier deja la : refuse (`exists` vrai), remplace, ou "Nom (2).xrec"
+    std::string unprotect;                    // le mot de passe : la copie est sans protection (vide : telle quelle)
+    bool*       exists{nullptr};              // Refuse : le fichier etait deja la
+    Status*     status{nullptr};              // BadPassword, PasswordNeeded...
+};
 bool exportFile(const std::string& folder, std::string_view name, const std::string& destination, std::string* written = nullptr,
-                std::string* why = nullptr);
+                std::string* why = nullptr, const ExportOptions& options = {});
 bool renameFile(const std::string& folder, std::string_view from, std::string_view to, std::string* why = nullptr);
 // Vers la corbeille (un dossier ; vide : supprime).
 bool removeFile(const std::string& folder, std::string_view name, const std::string& trash, std::string* why = nullptr);
 // Changer le mot de passe (l'actuel s'il y en a un ; le nouveau vide : retirer la protection).
 Status setPassword(const std::string& path, const std::string& current, const std::string& fresh, std::string* why = nullptr);
 bool setDescription(const std::string& path, const std::string& description, std::string* why = nullptr);
-// La taille du dossier au plus : les plus anciens sont retires (sauf `keep`) ; rend leurs noms.
+// La taille du dossier au plus : les plus anciens (par la date de l'en-tete, pas par celle du fichier : changer une
+// description ne rajeunit rien) sont retires (sauf `keep`) ; rend leurs noms.
 std::vector<std::string> prune(const std::string& folder, std::uint64_t maxBytes, std::string_view keep = {});
 [[nodiscard]] std::uint64_t folderBytes(const std::string& folder);
 
@@ -387,8 +440,10 @@ std::vector<std::string> prune(const std::string& folder, std::uint64_t maxBytes
 //  La commande va a IHM Studio deja ouvert (core::instance) ; sinon, avec --poste <projet>, elle ouvre le poste. Il
 //  faut que le projet coche Accepter les commandes d'une autre application (Configuration > Enregistrements).
 //  Codes de sortie : 0 fait, 2 aucune IHM en marche, 3 nom introuvable, 4 mot de passe faux, 5 refuse par la
-//  configuration (1 : une option mal ecrite).
-inline constexpr int kExitDone = 0, kExitBadOption = 1, kExitNoHmi = 2, kExitNotFound = 3, kExitBadPassword = 4, kExitRefused = 5;
+//  configuration, 6 occupee (un enregistrement ou une relecture deja en cours), 7 fichier (ecriture impossible,
+//  enregistrement illisible, pas de dossier) ; 1 : une option mal ecrite.
+inline constexpr int kExitDone = 0, kExitBadOption = 1, kExitNoHmi = 2, kExitNotFound = 3, kExitBadPassword = 4, kExitRefused = 5,
+                     kExitBusy = 6, kExitFile = 7;
 struct Command {
     enum class Kind : std::uint8_t { None, Record, Stop, Replay, QuitReplay };
     Kind        kind{Kind::None};
@@ -405,13 +460,20 @@ struct Command {
 [[nodiscard]] std::vector<std::string> commandArgs(const Command&);
 // Une duree : "10m", "90s", "1h30m", "2h", "600" (des secondes), "00:10:00". Rien : illisible.
 [[nodiscard]] std::optional<double> parseDuration(std::string_view);
-// La reponse de l'instance : "<code>\n<texte>" ; et sa lecture.
+// La reponse de l'instance : "<code>\n<texte>\n#fin\n" ; et sa lecture (faux tant que la fin n'est pas ecrite).
 [[nodiscard]] std::string replyText(int code, std::string_view message);
 bool readReply(std::string_view text, int& code, std::string& message);
+// LE FICHIER DE LA REPONSE : seulement un fichier NEUF du dossier temporaire, nomme xpg-enregistrement-<chiffres>.txt
+// (newReplyPath en fait un) - une commande ne fait jamais ecrire ailleurs. writeReply le cree en exclusivite (deja
+// la : refuse).
+[[nodiscard]] std::string newReplyPath();
+[[nodiscard]] bool        replyPathOk(const std::string& path, std::string* why = nullptr);
+bool                      writeReply(const std::string& path, int code, std::string_view message, std::string* why = nullptr);
 
 // ---- les noms cites en dur (Generer, Renommer) -------------------------------------------
-// Les noms d'enregistrements ecrits entre apostrophes dans un code ST, comme premier argument de IHM_REJOUER,
-// IHM_ENREG_EXISTE, IHM_ENREG_DUREE, IHM_ENREG_EXPORTER, IHM_ENREG_SUPPRIMER : le nom et sa ligne (1 = la premiere).
+// Les noms d'enregistrements ecrits entre apostrophes (ST) ou entre guillemets (scripts C et C++), comme premier
+// argument de IHM_REJOUER, IHM_ENREG_EXISTE, IHM_ENREG_DUREE, IHM_ENREG_EXPORTER, IHM_ENREG_SUPPRIMER : le nom et sa
+// ligne (1 = la premiere).
 struct NameUse {
     std::string name;
     int         line{1};

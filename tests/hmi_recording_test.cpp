@@ -29,6 +29,11 @@
 #include "../src/hmi/HmiRecording.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiStore.hpp"
+#include "../src/hmi/HmiArchive.hpp"     // 1.14.0 (relecture M4b) : les enregistrements d'une archive
+#include "../src/hmi/HmiNotify.hpp"      // 1.14.0 (relecture M4b) : le mot de passe masque de l'Enregistreur
+#include "../src/project/ProjectArchive.hpp"
+#include "../third_party/miniz.h"        // 1.14.0 (relecture M4b) : des fichiers hostiles fabriques
+#include <chrono>
 
 #include <algorithm>
 #include <cmath>
@@ -203,7 +208,8 @@ void testFormat() {
     h.clicks = 5;
     h.alarms = 2;
     h.viewsShown = "Vue_Station;Popup_Pompe";
-    rec::protect(h, "fat2026");
+    const std::string fileKey(32, 'k');
+    rec::protect(h, "fat2026", fileKey);
     rec::Header back;
     std::string why;
     check(rec::fromJson(rec::toJson(h), back, &why), "l'en-tete JSON se relit (" + why + ")");
@@ -214,6 +220,15 @@ void testFormat() {
     check(rec::toJson(h).find("fat2026") == std::string::npos, "le mot de passe n'est pas dans l'en-tete");
     check(rec::validName("Essai nuit") && !rec::validName("a/b") && !rec::validName("") && !rec::validName("x."), "les noms valides et refuses");
     check(rec::cleanName("a:b*c?") == "a_b_c_", "un nom nettoye");
+    // 1.14.0 (relecture M4b, point 14) : les noms reserves de Windows ne sont jamais des noms d'enregistrement.
+    check(!rec::validName("CON") && !rec::validName("nul.essai") && !rec::validName("Com3") && !rec::validName("LPT9 ") && !rec::validName("..")
+              && !rec::validName("..\\Projet") && rec::validName("Console") && rec::validName("COM10"),
+          "CON, NUL.essai, COM3, LPT9, .. refuses ; Console, COM10 acceptes");
+    check(rec::cleanName("CON") == "CON_" && rec::cleanName("lpt1.essai") == "lpt1_.essai" && rec::validName(rec::cleanName("aux")),
+          "un nom reserve nettoye prend un _");
+    // La cle du fichier : chiffree par le mot de passe dans l'en-tete, rendue par le bon seulement.
+    check(rec::trackKey(back, "fat2026") == fileKey && rec::trackKey(back, "faux").empty() && back.fileKey.find("6b6b6b") == std::string::npos,
+          "la cle du fichier : rendue par le bon mot de passe, pas en clair dans l'en-tete");
     check(rec::clock(65) == "01:05" && rec::clock(3725) == "1:02:05", "mm:ss et h:mm:ss");
     check(rec::parseDuration("10m") == 600.0 && rec::parseDuration("1h30m") == 5400.0 && rec::parseDuration("90s") == 90.0
               && rec::parseDuration("00:10:00") == 600.0 && rec::parseDuration("600") == 600.0 && !rec::parseDuration("10x"),
@@ -536,9 +551,9 @@ void testTruncated() {
     rec::Header h;
     rec::Track full;
     check(rec::readTrack(path, "", h, full) == rec::Status::Ok && !full.truncated, "entier : relu sans manque");
-    // Coupe a 60 % : relu jusqu'au dernier bloc entier.
+    // Coupe a 60 % de la piste (l'en-tete, au debut, reste entier) : relu jusqu'au dernier bloc entier.
     const std::string cut = folder + "/Coupe.xrec";
-    writeBytes(cut, data.substr(0, data.size() * 6 / 10));
+    writeBytes(cut, data.substr(0, data.size() - static_cast<std::size_t>(h.trackBytes) * 4 / 10 - 120));
     rec::Track part;
     check(rec::readTrack(cut, "", h, part, &why) == rec::Status::Ok, "un fichier tronque se lit (" + why + ")");
     check(part.truncated && h.cut, "il est dit coupe");
@@ -1081,6 +1096,294 @@ void testGenerateAndStore() {
     }
 }
 
+// ======================================================================= 1.14.0 : la relecture contradictoire (M4b) ==
+//  Les defauts trouves par la relecture du lot : chacun a son essai (il echouait avant la correction).
+class FakePlc final : public sim::Environment {
+public:
+    std::map<std::string, sim::Value> values;
+    int writes{0};
+    bool read(std::string_view n, sim::Value& out) override {
+        const auto it = values.find(std::string(n));
+        if (it == values.end()) return false;
+        out = it->second;
+        return true;
+    }
+    bool write(std::string_view n, const sim::Value& v) override {
+        const auto it = values.find(std::string(n));
+        if (it == values.end()) return false;
+        it->second = v;
+        ++writes;
+        return true;
+    }
+    bool exists(std::string_view n) override { return values.count(std::string(n)) != 0; }
+    bool call(std::string_view, std::string_view, const std::vector<std::pair<std::string, sim::Value>>&, sim::Value&) override { return false; }
+    void report(sim::Diagnostic) override {}
+};
+
+std::string le16s(std::uint32_t v) { return std::string{static_cast<char>(v & 0xFF), static_cast<char>((v >> 8) & 0xFF)}; }
+std::string le32s(std::uint32_t v) {
+    std::string o;
+    for (int i = 0; i < 4; ++i) o.push_back(static_cast<char>((v >> (8 * i)) & 0xFF));
+    return o;
+}
+// Un en-tete local de zip (sans CRC : le lecteur ne le verifie pas) suivi de ses donnees.
+std::string zipLocal(const std::string& name, std::uint32_t method, std::uint32_t csize, std::uint32_t usize, const std::string& data) {
+    return le32s(0x04034b50u) + le16s(20) + le16s(0) + le16s(method) + le16s(0) + le16s(0x21) + le32s(0) + le32s(csize) + le32s(usize)
+         + le16s(static_cast<std::uint32_t>(name.size())) + le16s(0) + name + data;
+}
+std::string deflated(const std::string& raw) {
+    std::size_t n = 0;
+    void* p = tdefl_compress_mem_to_heap(raw.data(), raw.size(), &n, TDEFL_DEFAULT_MAX_PROBES);
+    std::string out(static_cast<const char*>(p), n);
+    mz_free(p);
+    return out;
+}
+// Un bloc de piste (compresse, en clair).
+std::string trackBlock(const std::string& raw, std::uint32_t rawLenClaim = 0) {
+    const std::string stored = deflated(raw);
+    const auto crc = static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const unsigned char*>(stored.data()), stored.size()));
+    return std::string("XRB1") + std::string(1, '\x01') + le32s(0) + le32s(0) + le32s(rawLenClaim ? rawLenClaim : static_cast<std::uint32_t>(raw.size()))
+         + le32s(static_cast<std::uint32_t>(stored.size())) + le32s(crc) + stored;
+}
+
+void testRelectureM4b() {
+    std::printf("relecture contradictoire (M4b) : les defauts corriges\n");
+    namespace R = rec;
+    // ---- 4. UN .xrec HOSTILE NE FAIT PAS ALLOUER SANS FIN -------------------------------------------------------------
+    {
+        const std::string folder = freshFolder("m4b-hostile");
+        // L'en-tete compresse annonce 4 Gio.
+        const std::string z = deflated("{\"format\": 2, \"nom\": \"Bombe\"}");
+        writeBytes(folder + "/Entete.xrec", zipLocal("entete.json", 8, static_cast<std::uint32_t>(z.size()), 0xFFFFFFFFu, z));
+        R::Header h;
+        std::string why;
+        const auto before = R::fileStats();
+        check(R::readHeader(folder + "/Entete.xrec", h, &why) == R::Status::Unreadable && why.find("trop grand") != std::string::npos,
+              "un en-tete annonce de 4 Gio : refuse sans rien allouer (" + why + ")");
+        check(R::fileStats().bytes - before.bytes < 4096, "... et presque rien n'est lu");
+        // Une piste de 200 000 changements "00 00" (400 Ko decompresses, quelques Ko dans le fichier) : au-dela des limites.
+        std::string raw;
+        raw += std::string("\x01\x00\x00\x01K\x01K\x00\x00", 9);              // une cle
+        raw += std::string("\x02\x00", 2);                                     // des valeurs a 0 s...
+        std::uint32_t n = 200000;
+        while (n >= 0x80) { raw.push_back(static_cast<char>((n & 0x7F) | 0x80)); n >>= 7; }
+        raw.push_back(static_cast<char>(n));
+        for (int i = 0; i < 200000; ++i) raw += std::string("\x00\x00", 2);    // ... 200 000 fois (cle 0, rien)
+        const std::string head = "{\"format\": 2, \"nom\": \"Bombe\"}";
+        const std::string track = trackBlock(raw);
+        writeBytes(folder + "/Bombe.xrec", zipLocal("entete.json", 0, static_cast<std::uint32_t>(head.size()), static_cast<std::uint32_t>(head.size()), head)
+                                               + zipLocal("piste.bin", 0, static_cast<std::uint32_t>(track.size()), static_cast<std::uint32_t>(track.size()), track));
+        const R::Limits saved = R::limits();
+        R::setLimits(R::Limits{saved.trackRaw, 50000});
+        R::Track tr;
+        check(R::readTrack(folder + "/Bombe.xrec", "", h, tr, &why) == R::Status::Unreadable && why.find("trop grande") != std::string::npos
+                  && tr.frames.empty(),
+              "une piste au-dela des limites : refusee et dite (" + why + ")");
+        R::setLimits(saved);
+        check(R::readTrack(folder + "/Bombe.xrec", "", h, tr, &why) == R::Status::Ok && tr.frames.size() == 1, "dans les limites, elle se lit");
+        // Un bloc qui annonce 64 Mio pour quelques octets : faux, pas alloue.
+        const std::string liar = trackBlock("\x09\x00", 64u << 20);
+        writeBytes(folder + "/Menteur.xrec", zipLocal("entete.json", 0, static_cast<std::uint32_t>(head.size()), static_cast<std::uint32_t>(head.size()), head)
+                                                 + zipLocal("piste.bin", 0, static_cast<std::uint32_t>(liar.size()), static_cast<std::uint32_t>(liar.size()), liar));
+        check(R::readTrack(folder + "/Menteur.xrec", "", h, tr, &why) == R::Status::Ok && tr.truncated && tr.blocks == 0,
+              "un bloc qui ment sur sa taille : la lecture s'y arrete (coupe), rien n'est alloue");
+        // Une piste compressee par un autre outil qui annonce 2 Gio.
+        writeBytes(folder + "/Zip.xrec", zipLocal("entete.json", 0, static_cast<std::uint32_t>(head.size()), static_cast<std::uint32_t>(head.size()), head)
+                                             + zipLocal("piste.bin", 8, 16, 0x7FFFFFFFu, std::string(16, '\0')));
+        check(R::readTrack(folder + "/Zip.xrec", "", h, tr, &why) == R::Status::Unreadable && why.find("trop grande") != std::string::npos,
+              "une piste compressee annoncee de 2 Gio : refusee (" + why + ")");
+    }
+    // ---- 5. LA LISTE NE LIT QUE LES EN-TETES, UNE FOIS -----------------------------------------------------------------
+    {
+        Station st("m4b-liste");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string why;
+        for (const char* name : {"Un", "Deux"}) {
+            (void)rt.startRecording(RecordingStart{name, {}, {}, 0, false, "essai"}, now, &why);
+            for (int step = 1; step <= 200; ++step) rt.tick(now += 0.1);
+            (void)rt.stopRecording(true, now);
+        }
+        const std::string folder = rt.recordingsFolder();
+        R::Header h;
+        (void)R::readHeader(R::pathOf(folder, "Un"), h);
+        // Un gros enregistrement (des valeurs qui ne se compressent guere) : plus de 500 Ko de piste.
+        {
+            R::Recorder big;
+            R::RecorderOptions o;
+            o.partPath = R::pathOf(folder, "Gros") + ".part";
+            o.header.name = "Gros";
+            (void)big.open(o);
+            std::uint64_t x = 88172645463325252ull;
+            for (int i = 0; i < 2000; ++i) {
+                big.beginSample(i / 10.0);
+                for (int k = 0; k < 60; ++k) {
+                    x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+                    big.value("V" + std::to_string(k), sim::Value::real(static_cast<double>(x % 1000000007ull) / 7.0));
+                }
+                big.endSample();
+                (void)big.flush(i / 10.0);
+            }
+            (void)big.close(200.0, true, R::pathOf(folder, "Gros"), "Gros", {}, {});
+        }
+        const std::string grosPath = R::pathOf(folder, "Gros");
+        const auto grosBytes = fs::file_size(fs::path(std::u8string(grosPath.begin(), grosPath.end())));
+        const auto a = R::fileStats();
+        auto items = R::listFolder(folder);
+        const auto b = R::fileStats();
+        check(items.size() == 3 && grosBytes > 500000 && b.bytes - a.bytes < 3 * 20000,
+              "la liste lit les en-tetes seulement (" + std::to_string(b.bytes - a.bytes) + " octets lus pour 3 fichiers, dont un de "
+                  + std::to_string(grosBytes) + " octets ; avant : tout)");
+        items = R::listFolder(folder);
+        const auto c = R::fileStats();
+        check(c.opens == b.opens && c.bytes == b.bytes, "relistee sans changement : rien n'est relu");
+        check(R::setDescription(R::pathOf(folder, "Un"), "une description", &why), "la description se change (sur place)");
+        const auto d = R::fileStats();
+        items = R::listFolder(folder);
+        const auto e = R::fileStats();
+        check(e.opens - d.opens == 1, "apres un changement, seul cet en-tete est relu");
+        bool seen = false;
+        for (const auto& it : items) seen = seen || (it.name == "Un" && it.header.description == "une description");
+        check(seen, "... et il dit la nouvelle description");
+        check(!h.at40.empty(), "l'ecran a 40 % est dans l'en-tete (le detail ne lit pas la piste) : " + h.at40);
+    }
+    // ---- 8. --reponse : un fichier neuf du dossier temporaire, rien d'autre --------------------------------------------
+    {
+        std::string why;
+        const std::string good = R::newReplyPath();
+        check(R::replyPathOk(good, &why), "le chemin de la reponse que fait la commande est accepte (" + why + ")");
+        check(!R::replyPathOk(freshFolder("m4b-rep") + "/xpg-enregistrement-1.txt", &why), "ailleurs que le dossier temporaire : refuse (" + why + ")");
+        check(!R::replyPathOk(utf8(fs::temp_directory_path() / "ihm.txt"), &why), "un autre nom : refuse");
+        check(!R::replyPathOk(utf8(fs::temp_directory_path() / "xpg-enregistrement-12a.txt"), &why), "des lettres dans le numero : refuse");
+        check(R::writeReply(good, 5, "refus\xC3\xA9", &why), "la reponse s'ecrit (" + why + ")");
+        int code = 0;
+        std::string msg;
+        check(R::readReply(fileBytes(good), code, msg) && code == 5 && msg == "refus\xC3\xA9", "et se relit");
+        check(!R::writeReply(good, 0, "x", &why) && R::readReply(fileBytes(good), code, msg) && code == 5, "deja la : pas ecrasee (" + why + ")");
+        check(!R::readReply("4\nmot de pa", code, msg), "une reponse a moitie ecrite ne se lit pas");
+        std::error_code ec;
+        fs::remove(fs::path(std::u8string(good.begin(), good.end())), ec);
+    }
+    // ---- 11. UN .part OUVERT PAR UN AUTRE PROGRAMME N'EST PAS RECUPERE ----------------------------------------------------
+    {
+        const std::string folder = freshFolder("m4b-part");
+        R::Recorder r;
+        R::RecorderOptions o;
+        o.partPath = folder + "/Vivant.xrec.part";
+        o.header.name = "Vivant";
+        check(r.open(o), "un enregistrement en cours");
+        for (int i = 0; i <= 20; ++i) {
+            r.beginSample(i / 10.0);
+            r.value("NIVEAU", sim::Value::real(i));
+            r.endSample();
+            (void)r.flush(i / 10.0, true);
+        }
+        R::markActive(o.partPath, false);            // comme s'il etait a un autre programme
+        const fs::path part = fs::path(std::u8string(o.partPath.begin(), o.partPath.end()));
+        std::error_code ec;
+        fs::last_write_time(part, fs::file_time_type::clock::now() - std::chrono::minutes(5), ec);
+        std::string why, target;
+#if !defined(_WIN32)
+        check(!R::recoverPart(o.partPath, &target, &why) && fs::exists(part) && !fs::exists(fs::path(folder) / "Vivant.xrec"),
+              "ouvert par un autre programme : pas recupere (avant : un .xrec en double) - " + why);
+        (void)R::listFolder(folder);
+        check(fs::exists(part) && R::fileNames(folder).empty(), "la liste du dossier n'y touche pas non plus");
+#endif
+        (void)r.close(2.0, false, {}, {}, {}, {});
+        // Abandonne pour de bon : une seule fenetre le recupere.
+        R::Recorder r2;
+        o.partPath = folder + "/Panne.xrec.part";
+        (void)r2.open(o);
+        for (int i = 0; i <= 20; ++i) {
+            r2.beginSample(i / 10.0);
+            r2.value("NIVEAU", sim::Value::real(i));
+            r2.endSample();
+            (void)r2.flush(i / 10.0, true);
+        }
+        const std::string copy = folder + "/Copie.xrec.part";
+        writeBytes(copy, fileBytes(o.partPath));
+        (void)r2.close(2.0, false, {}, {}, {}, {});
+        check(R::recoverPart(copy, &target, &why) && !R::recoverPart(copy, nullptr, &why), "la premiere fenetre le prend, la seconde ne le trouve plus");
+        R::Header h;
+        R::Track tr;
+        check(R::fileNames(folder).size() == 1 && R::readTrack(target, "", h, tr) == R::Status::Ok && h.cut && tr.frames.size() >= 15,
+              "un seul .xrec, relu jusqu'au dernier bloc");
+    }
+    // ---- 12. EXPORTER : demander avant d'ecraser ; la copie sans le mot de passe -----------------------------------------
+    {
+        Station st("m4b-export");
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string why, written;
+        (void)rt.startRecording(RecordingStart{"Prot", {}, "pw", 0, false, "essai"}, now, &why);
+        for (int step = 1; step <= 20; ++step) rt.tick(now = step / 10.0);
+        (void)rt.stopRecording(true, now);
+        const std::string folder = rt.recordingsFolder();
+        const std::string out = freshFolder("m4b-export-dehors");
+        writeBytes(out + "/Prot.xrec", "un autre fichier");
+        bool existed = false;
+        R::ExportOptions eo;
+        eo.exists = &existed;
+        check(!R::exportFile(folder, "Prot", out, &written, &why, eo) && existed && fileBytes(out + "/Prot.xrec") == "un autre fichier",
+              "un fichier deja la : pas ecrase sans le demander (" + why + ")");
+        eo.ifExists = R::ExportOptions::IfExists::FreeName;
+        check(R::exportFile(folder, "Prot", out, &written, &why, eo) && R::nameOfPath(written) == "Prot (2)", "ou un nom libre : " + written);
+        eo.ifExists = R::ExportOptions::IfExists::Replace;
+        eo.unprotect = "faux";
+        R::Status st2 = R::Status::Ok;
+        eo.status = &st2;
+        check(!R::exportFile(folder, "Prot", out, &written, &why, eo) && st2 == R::Status::BadPassword
+                  && fileBytes(out + "/Prot.xrec") == "un autre fichier",
+              "sans le mot de passe dans la copie, un faux : refuse, rien d'ecrit");
+        eo.unprotect = "pw";
+        R::Header h;
+        R::Track tr;
+        check(R::exportFile(folder, "Prot", out, &written, &why, eo) && R::readTrack(out + "/Prot.xrec", "", h, tr) == R::Status::Ok && !h.locked()
+                  && !tr.frames.empty(),
+              "remplacer, et la copie sans protection se rejoue sans mot de passe (" + why + ")");
+        check(R::readTrack(R::pathOf(folder, "Prot"), "", h, tr) == R::Status::PasswordNeeded, "l'original reste protege");
+    }
+    // ---- 15. Renommer dans un script C : "..." ----------------------------------------------------------------------------
+    {
+        const std::string c = "if (IHM_ENREG_EXISTE(\"Essai\")) IHM_REJOUER(\"Essai\", 2.0);\nauto x = \"IHM_REJOUER('Essai')\";\n";
+        const auto uses = R::namesInCode(c);
+        check(uses.size() == 2 && uses[0].name == "Essai" && uses[1].name == "Essai", "les noms entre guillemets d'un script C (pas dans une chaine)");
+        std::size_t count = 0;
+        const std::string renamed = R::renameInCode(c, "Essai", "Nuit \"2\"", &count);
+        check(count == 2 && renamed.find("IHM_REJOUER(\"Nuit \\\"2\\\"\", 2.0)") != std::string::npos && renamed.find("'Essai'") != std::string::npos,
+              "renommes entre guillemets (\\\" echappe) ; la chaine d'a cote ne bouge pas : " + renamed);
+        check(R::namesInCode("IHM_REJOUER('L''essai');").front().name == "L'essai", "ST : toujours entre apostrophes");
+    }
+    // ---- 18. prune : par la date de l'en-tete ---------------------------------------------------------------------------
+    {
+        const std::string folder = freshFolder("m4b-prune");
+        const char* dates[] = {"2026-01-01 10:00:00", "2026-02-01 10:00:00", "2026-03-01 10:00:00"};
+        const char* names[] = {"Ancien", "Moyen", "Recent"};
+        for (int k = 0; k < 3; ++k) {
+            R::Recorder r;
+            R::RecorderOptions o;
+            o.partPath = folder + "/" + names[k] + ".xrec.part";
+            o.header.name = names[k];
+            o.header.date = dates[k];
+            (void)r.open(o);
+            r.beginSample(0);
+            r.value("X", sim::Value::real(k));
+            r.endSample();
+            (void)r.close(1.0, true, folder + "/" + names[k] + ".xrec", names[k], {}, {});
+        }
+        // La description de l'ancien change : son fichier rajeunit, pas son enregistrement.
+        check(R::setDescription(folder + "/Ancien.xrec", "relu ce matin"), "la description de l'ancien change");
+        const auto removed = R::prune(folder, R::folderBytes(folder) - 1);
+        check(removed.size() == 1 && removed[0] == "Ancien", "trop gros : le plus ancien enregistre part (" + (removed.empty() ? std::string("rien") : removed[0]) + ")");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1098,6 +1401,7 @@ int main() {
     testCommandLine();
     testLimits();
     testGenerateAndStore();
+    testRelectureM4b();      // 1.14.0 : la relecture contradictoire du lot
     // Les dossiers de l'essai (xpg-m4-<pid>-*) : retires.
     {
         std::error_code ec;
