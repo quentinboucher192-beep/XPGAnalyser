@@ -1473,7 +1473,7 @@ bool extract(const Location& loc, const Entry& e, const std::string& folder, std
 }
 
 Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh, bool extract,
-                bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first) {
+                bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first, const TextWidth& measure) {
     Layout l;
     const double fs = std::clamp(fontSize, 7.0, 40.0);
     const double pad = 6;
@@ -1500,8 +1500,14 @@ Layout layoutOf(double w, double h, double fontSize, const std::vector<std::stri
             right -= sw + 6;
         }
     }
-    // Le fil d'Ariane : les dernieres etapes qui tiennent ; celles d'avant se resument en "..." devant.
-    const auto approx = [&](const std::string& s) { return static_cast<double>(codepoints(s)) * fs * 0.56 + 10; };
+    // Le fil d'Ariane : les dernieres etapes qui tiennent ; celles d'avant se resument en "..." devant. Une etape : son
+    // texte mesure avec la police (le peintre et la souris passent `measure`), plus 4 pixels devant (le texte "gauche")
+    // et 6 avant le separateur ; sans mesure (Generer), une estimation : 0,5 em par caractere.
+    // 1.14.1 (lot N5, retouche) : 0,56 em par caractere laissait un grand vide apres un nom long (archives_2026.zip).
+    const auto approx = [&](const std::string& s) {
+        const double text = measure ? measure(s, fs) : static_cast<double>(codepoints(s)) * fs * 0.5;
+        return std::max(0.0, text) + 10;
+    };
     const double sepW = fs * 1.1, dots = fs * 1.6;
     const double avail = std::max(0.0, right - x);
     l.crumbs.assign(crumbs.size(), Box{});

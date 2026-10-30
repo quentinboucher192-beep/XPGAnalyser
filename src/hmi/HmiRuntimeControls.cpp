@@ -1295,10 +1295,15 @@ void Runtime::converterPart(const View& v, const Object& o, std::string_view par
             formMessage(o.id, "permission Piloter requise", true, now);
         } else {
             const auto aliases = viewAliases(v.id);
-            const std::string shown = units::formatResult(c.conv.result, c.decimals);
+            // 1.14.1 (lot N5, retouche) : le message de l'objet montre le nombre a la francaise (1500,5 mbar) ; la Console
+            // garde la valeur ecrite, un nombre (Var := 1500.5), comme ses autres lignes Var := valeur. Les unites : comme
+            // les listes les montrent (le signe degre, pas degC).
+            const std::string toLabel = unitLabel(c.conv.to), fromLabel = unitLabel(c.conv.from);
             if (writeConverted(var, sim::Value::real(c.conv.result), source, &o)) {
-                log("Action", source, var + " := " + shown + " " + c.conv.to + " (" + c.valueText + " " + c.conv.from + ")");
-                formMessage(o.id, "\xC3\x89" "crit : " + var + " = " + shown + " " + c.conv.to, false, now);
+                log("Action", source, var + " := " + units::resultNumber(c.conv.result, c.decimals) + " " + toLabel + " ("
+                                          + units::resultNumber(c.conv.value, 6) + " " + fromLabel + ")");
+                formMessage(o.id, "\xC3\x89" "crit : " + var + " = " + units::formatResult(c.conv.result, c.decimals) + " " + toLabel, false,
+                            now);
             } else {
                 formMessage(o.id, "\xC3\xA9" "criture refus\xC3\xA9" "e : " + var + " (voir la Console)", true, now);
             }
@@ -1313,7 +1318,7 @@ void Runtime::converterSubmit(const View&, const Object& o, double now) {
     const std::string text = trimmedText(f.text["valeur"]);
     double x = 0;
     if (!f.fresh && !text.empty() && !units::parseValue(text, x)) {
-        formMessage(o.id, "valeur illisible \xC2\xAB " + text + " \xC2\xBB : un nombre (1.5 ou 1,5, -40, 2.5e3)", true, now);
+        formMessage(o.id, "valeur illisible \xC2\xAB " + text + " \xC2\xBB : un nombre (1,5 ou 1.5, -40, 2,5E3)", true, now);
         return;   // la case garde le clavier
     }
     if (f.fresh) f.text.erase("valeur");   // Entree sans rien taper : la Valeur de depart reste suivie

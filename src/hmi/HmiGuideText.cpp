@@ -7291,7 +7291,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "En marche", {}},
              {K::Bullet, "**la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel "
                          "num\xC3\xA9rique du poste), la premi\xC3\xA8re frappe remplace la valeur "
-                         "montr\xC3\xA9" "e ; 1.5 ou 1,5, -40, 2.5e3. Le r\xC3\xA9sultat suit chaque frappe "
+                         "montr\xC3\xA9" "e ; 1,5 ou 1.5, -40, 2,5E3. Le r\xC3\xA9sultat suit chaque frappe "
                          "; Entr\xC3\xA9" "e garde la valeur, **\xC3\x89" "chap** l'oublie : la case revient "
                          "\xC3\xA0 la Valeur de d\xC3\xA9part ;", {}},
              {K::Bullet, "**De** et **Vers** : un clic ouvre la liste des unit\xC3\xA9s (la **Dimension** "
@@ -7303,14 +7303,19 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**le r\xC3\xA9sultat** en grand, \xC3\xA0 **D\xC3\xA9" "cimales** "
                          "d\xC3\xA9" "cimales (les z\xC3\xA9ros inutiles ne s'\xC3\xA9" "crivent pas ; un "
                          "tr\xC3\xA8s petit nombre garde ses chiffres significatifs), et **la formule** en "
-                         "petit : \xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "C -> K : x + "
-                         "273.15 \xC2\xBB ;", {}},
+                         "petit : \xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "F -> \xC2\xB0" "C "
+                         ": x \xC3\x97 0,555556 - 17,7778 \xC2\xBB ; les nombres montr\xC3\xA9s "
+                         "s'\xC3\xA9" "crivent \xC3\xA0 la fran\xC3\xA7" "aise (36,259 psi), comme dans la "
+                         "Calculatrice ;", {}},
              {K::Bullet, "**\xC3\x89" "crire** (si **R\xC3\xA9sultat vers** est pos\xC3\xA9) \xC3\xA9" "crit "
-                         "le r\xC3\xA9sultat dans la variable, convertie vers son type ; la Console le dit "
-                         "(\xC2\xAB Pression_mbar := 1500 mbar (1.5 bar) \xC2\xBB).", {}},
+                         "le r\xC3\xA9sultat dans la variable, convertie vers son type ; l'objet le dit "
+                         "(\xC2\xAB \xC3\x89" "crit : Pression_mbar = 1500,5 mbar \xC2\xBB) et la Console "
+                         "aussi, la valeur \xC3\xA9" "crite en nombre comme ses autres lignes (\xC2\xAB "
+                         "Pression_mbar := 1500.5 mbar (1.5005 bar) \xC2\xBB).", {}},
              {K::Paragraph, "Un refus se dit dans l'objet, en rouge : \xC2\xAB unit\xC3\xA9 inconnue \xC2\xAB "
                          "bars \xC2\xBB \xC2\xBB, \xC2\xAB dimensions diff\xC3\xA9rentes : bar est une "
-                         "pression, degC une temp\xC3\xA9rature \xC2\xBB, \xC2\xAB valeur illisible \xC2\xBB.", {}},
+                         "pression, \xC2\xB0" "C une temp\xC3\xA9rature \xC2\xBB (les unit\xC3\xA9s comme "
+                         "les listes les montrent), \xC2\xAB valeur illisible \xC2\xBB.", {}},
              {K::Heading, "La Valeur de d\xC3\xA9part", {}},
              {K::Paragraph, "Un nombre, ou une **expression** (=Pression) relue \xC3\xA0 chaque cycle tant que "
                          "l'op\xC3\xA9rateur n'a rien tap\xC3\xA9. Une variable qui a une **unit\xC3\xA9** "
@@ -15923,7 +15928,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets : "
                          "**Biblioth\xC3\xA8que** (les familles et les unit\xC3\xA9s, ci-dessus) et "
                          "**Convertir**, un banc d'essai.", {}, "1.14.1"},
-             {K::Bullet, "**Valeur** : le nombre \xC3\xA0 convertir (1.5 ou 1,5, -40, 2.5e3) ; **De** et "
+             {K::Bullet, "**Valeur** : le nombre \xC3\xA0 convertir (1,5 ou 1.5, -40, 2,5E3) ; **De** et "
                          "**Vers** : les unit\xC3\xA9s, choisies dans des listes ; Vers ne propose que la "
                          "dimension de De. **Dimension** restreint De \xC3\xA0 une dimension ; "
                          "**Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : "
@@ -15933,9 +15938,10 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "cimales (0 \xC3\xA0 12 ; les z\xC3\xA9ros inutiles ne "
                          "s'\xC3\xA9" "crivent pas) ; le bouton **\xE2\x87\x84** inverse De et Vers ;", {}, "1.14.1"},
              {K::Bullet, "dessous : la **formule** (\xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB "
-                         "\xC2\xB0" "C -> K : x + 273.15 \xC2\xBB) et l'expression \xC3\xA0 mettre dans un "
-                         "script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au presse-papiers "
-                         "(Valeur : ta variable) ;", {}, "1.14.1"},
+                         "\xC2\xB0" "C -> K : x + 273,15 \xC2\xBB ; les nombres \xC3\xA0 la "
+                         "fran\xC3\xA7" "aise, comme le r\xC3\xA9sultat) et l'expression \xC3\xA0 mettre "
+                         "dans un script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au "
+                         "presse-papiers (Valeur : ta variable) ;", {}, "1.14.1"},
              {K::Bullet, "l'**historique de la s\xC3\xA9" "ance** garde les douze derni\xC3\xA8res "
                          "conversions (une valeur valid\xC3\xA9" "e par Entr\xC3\xA9" "e, une unit\xC3\xA9 "
                          "choisie, \xE2\x87\x84, Copier) : un clic sur une ligne y revient ;", {}, "1.14.1"},

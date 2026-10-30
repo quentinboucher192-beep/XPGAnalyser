@@ -600,7 +600,9 @@ bool drawFileExplorer(const Ctx& c) {
         ex::sort(rows, sortBy, false);
         status = std::to_string(rows.size()) + " \xC3\xA9l\xC3\xA9ments (exemple : la liste se lit en marche)";
     }
-    const auto l = ex::layoutOf(w, h, fs, crumbs, search, refresh, extract, parent, showSize, showDate, rows.size(), first);
+    // Le fil d'Ariane mesure avec la police dessinee (rawWidth) ; la souris (HmiLiveCanvas) mesure de meme.
+    const auto l = ex::layoutOf(w, h, fs, crumbs, search, refresh, extract, parent, showSize, showDate, rows.size(), first,
+                                [&c](std::string_view s, double px) { return rawWidth(c, s, px); });
 
     // ---- la barre : remonter, le fil d'Ariane, la recherche, Rafraichir, Extraire
     box(c, l.bar, mix(bg, tc, 0.06f), rad);

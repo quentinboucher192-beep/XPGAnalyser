@@ -30995,10 +30995,10 @@ void unites1141() {
     check(c1.ok && near(c1.result, 1500) && c1.from == "bar" && c1.to == "mbar" && c1.formula == "1 bar = 1000 mbar",
           "1.5 bar = 1500 mbar ; la formule 1 bar = 1000 mbar : " + c1.formula);
     auto c2 = conv(20, "degc", "K");
-    check(c2.ok && near(c2.result, 293.15) && c2.from == "degC" && c2.formula == "\xC2\xB0" "C -> K : x + 273.15",
-          "20 degC = 293.15 K (degc reconnu) ; la formule \xC2\xB0" "C -> K : x + 273.15 : " + c2.formula);
+    check(c2.ok && near(c2.result, 293.15) && c2.from == "degC" && c2.formula == "\xC2\xB0" "C -> K : x + 273,15",
+          "20 degC = 293.15 K (degc reconnu) ; la formule \xC2\xB0" "C -> K : x + 273,15 (la virgule) : " + c2.formula);
     auto c3 = conv(20, "degC", "degF");
-    check(c3.ok && near(c3.result, 68) && c3.formula.find("x \xC3\x97 1.8 + 32") != std::string::npos, "20 \xC2\xB0" "C = 68 \xC2\xB0" "F (x \xC3\x97 1.8 + 32) : " + c3.formula);
+    check(c3.ok && near(c3.result, 68) && c3.formula.find("x \xC3\x97 1,8 + 32") != std::string::npos, "20 \xC2\xB0" "C = 68 \xC2\xB0" "F (x \xC3\x97 1,8 + 32) : " + c3.formula);
     auto c4 = conv(-40, "degF", "degC");
     check(c4.ok && near(c4.result, -40), "-40 \xC2\xB0" "F = -40 \xC2\xB0" "C (le d\xC3\xA9" "calage n\xC3\xA9gatif)");
     auto c5 = conv(1, "m3/s", "m3/h");
@@ -31006,9 +31006,15 @@ void unites1141() {
     check(c5.ok && near(c5.result, 3600) && c6.ok && near(c6.result, 7.2) && c5.formula == "1 m\xC2\xB3/s = 3600 m\xC2\xB3/h",
           "d\xC3\xA9" "bit : 1 m3/s = 3600 m3/h, 120 L/min = 7.2 m3/h (la formule lue \xC2\xB3) : " + c5.formula);
     auto c7 = conv(2.5, "bar", "psi");
-    check(c7.ok && std::fabs(c7.result - 36.2594) < 1e-3 && hu::formatResult(c7.result, 3) == "36.259" && hu::formatResult(1500.0, 6) == "1500",
-          "2.5 bar en psi : 36.259 (3 d\xC3\xA9" "cimales) ; 1500 sans z\xC3\xA9ros inutiles");
-    check(hu::formatResult(1.0 / 86400000.0, 6).find("e-08") != std::string::npos && hu::formatResult(0.0, 3) == "0" && hu::formatResult(-0.0001, 3) != "-0",
+    check(c7.ok && std::fabs(c7.result - 36.2594) < 1e-3 && hu::formatResult(c7.result, 3) == "36,259" && hu::formatResult(1500.0, 6) == "1500",
+          "2.5 bar en psi : 36,259 (3 d\xC3\xA9" "cimales, la virgule) ; 1500 sans z\xC3\xA9ros inutiles");
+    // 1.14.1 (lot N5, retouche) : montre a la francaise (la virgule, comme la Calculatrice) ; la valeur en nombre (le point)
+    // pour la Console ; pas de separateur de milliers.
+    check(hu::resultNumber(c7.result, 3) == "36.259" && hu::formatResult(-1234.5, 3) == "-1234,5" && hu::formatResult(1234567.25, 2) == "1234567,25",
+          "le m\xC3\xAA" "me nombre en valeur : 36.259 ; -1234,5 ; 1234567,25 (sans espace des milliers)");
+    check(hu::formatResult(1.0 / 86400000.0, 6).find("E-8") != std::string::npos && hu::formatResult(1.0 / 86400000.0, 6).find('.') == std::string::npos
+              && hu::resultNumber(1.0 / 86400000.0, 6).find("e-08") != std::string::npos && hu::formatResult(0.0, 3) == "0"
+              && hu::formatResult(-0.0001, 3) != "-0",
           "un tr\xC3\xA8s petit r\xC3\xA9sultat garde ses chiffres (1 ms en jours : " + hu::formatResult(1.0 / 86400000.0, 6) + ") ; 0 ; pas de -0");
     for (const auto& u : cat.units())
         for (const auto& w : cat.units()) {
@@ -31025,6 +31031,10 @@ void unites1141() {
     check(!e2.ok && e2.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos && e2.error.find("une pression") != std::string::npos
               && e2.error.find("une temp\xC3\xA9rature") != std::string::npos && e2.formula.empty(),
           "dimensions diff\xC3\xA9rentes, dites avec leurs familles : " + e2.error);
+    // 1.14.1 (lot N5, retouche) : l'unite citee comme les listes la montrent (\xC2\xB0" "C), jamais le symbole brut degC.
+    check(e2.error.find("\xC2\xB0" "C une temp\xC3\xA9rature") != std::string::npos && e2.error.find("des bar en \xC2\xB0" "C") != std::string::npos
+              && e2.error.find("degC") == std::string::npos,
+          "le refus cite \xC2\xB0" "C, pas degC : " + e2.error);
     check(!e3.ok && e3.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos, "Nm3/h et m3/h : deux dimensions (on ne ment pas sur les conditions normales)");
     check(hu::enExpression("Pression", "mbar") == "EN(Pression, 'mbar')" && hu::enExpression("", "K") == "EN(Valeur, 'K')", "l'expression \xC3\xA0 copier");
     double pv = 0;
@@ -31148,6 +31158,12 @@ void unites1141() {
         rt.objectPart(cm, "vers:mbar", 0.25);
         check(rt.unitConverter(cm)->valueText == "2" && rt.unitConverter(cm)->conv.result == 2000,
               "De = bar alors que la mesure est en mbar : la case montre la mesure en bar (2), la valeur reste vraie");
+        // 1.14.1 (lot N5, retouche) : la mesure suivie se montre a la francaise dans la case (29,007548 psi).
+        rt.objectPart(cm, "de:psi", 0.26);
+        check(rt.unitConverter(cm)->valueText.find(',') != std::string::npos && rt.unitConverter(cm)->valueText.find('.') == std::string::npos
+                  && near(rt.unitConverter(cm)->conv.result, 2000),
+              "De = psi : la case montre la mesure \xC3\xA0 la fran\xC3\xA7" "aise (" + rt.unitConverter(cm)->valueText + ")");
+        rt.objectPart(cm, "de:bar", 0.27);
         // La saisie : la premiere frappe remplace, la virgule passe, le resultat suit chaque frappe.
         rt.objectPart(cv, "valeur", 0.3);
         check(rt.focusedObject() == cv && rt.keyboardMode().empty(), "un clic sur la case Valeur : le clavier (sans clavier virtuel par d\xC3\xA9" "faut)");
@@ -31195,10 +31211,19 @@ void unites1141() {
         rt.objectPart(cv, "ecrire", 0.91);
         check(rt.variable("Sortie")->asReal() == 1500.0 && journalHas(rt, "Action", "Sortie := 1500 mbar (1.5 bar)") && !rt.formState(cv)->error,
               "\xC3\x89" "crire : Sortie = 1500 (la Console : Sortie := 1500 mbar (1.5 bar))");
+        // 1.14.1 (lot N5, retouche) : un resultat a virgule - le message de l'objet a la francaise, la Console en nombre.
+        rt.objectPart(cv, "valeur:1,23456", 0.92);
+        rt.objectPart(cv, "ecrire", 0.93);
+        check(near(rt.variable("Sortie")->asReal(), 1234.56) && rt.formState(cv)->message == "\xC3\x89" "crit : Sortie = 1234,56 mbar"
+                  && journalHas(rt, "Action", "Sortie := 1234.56 mbar (1.23456 bar)"),
+              "\xC3\x89" "crire 1,23456 bar : l'objet dit 1234,56 mbar, la Console Sortie := 1234.56 mbar (1.23456 bar) : "
+                  + rt.formState(cv)->message);
         // Les dimensions differentes (une unite tapee par un script ou une formule) : dites, rien d'ecrit.
         rt.objectPart(cv, "vers:degC", 0.95);
         check(!rt.unitConverter(cv)->conv.ok && rt.unitConverter(cv)->conv.error.find("dimensions diff\xC3\xA9rentes") != std::string::npos,
               "bar vers degC : dimensions diff\xC3\xA9rentes, dit");
+        check(rt.unitConverter(cv)->conv.error.find("\xC2\xB0" "C une temp\xC3\xA9rature") != std::string::npos,
+              "dans l'objet aussi, l'unit\xC3\xA9 cit\xC3\xA9" "e est \xC2\xB0" "C : " + rt.unitConverter(cv)->conv.error);
         rt.objectPart(cv, "vers:bars", 0.96);
         check(rt.unitConverter(cv)->conv.error.find("unit\xC3\xA9 inconnue") != std::string::npos, "une unit\xC3\xA9 inconnue : dite");
         // La Dimension : De ne propose qu'elle.
@@ -31255,9 +31280,10 @@ void unites1141() {
         for (const auto& i : gen) okClean = okClean && i.object != ok;
         check(okClean, "Generer : un convertisseur neuf ne dit rien");
         check(has(unknownU, "unitFrom", "unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB"), "Generer : l'unit\xC3\xA9 inconnue bars");
-        check(has(incompat, "unitTo", "dimensions incompatibles"), "Generer : bar vers degC, dimensions incompatibles");
+        check(has(incompat, "unitTo", "dimensions incompatibles") && has(incompat, "unitTo", "bar est une pression, \xC2\xB0" "C une temp\xC3\xA9rature"),
+              "Generer : bar vers degC, dimensions incompatibles (l'unit\xC3\xA9 cit\xC3\xA9" "e est \xC2\xB0" "C)");
         check(has(dimBad, "dimension", "dimension inconnue \xC2\xAB Vitesse \xC2\xBB"), "Generer : la dimension inconnue Vitesse");
-        check(has(src, "value", "dimensions incompatibles : Temp est en degC"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
+        check(has(src, "value", "dimensions incompatibles : Temp est en \xC2\xB0" "C"), "Generer : la Valeur de d\xC3\xA9part Temp (degC) vers mbar");
         check(has(target, "resultTo", "Inconnue_Var"), "Generer : une variable inconnue dans R\xC3\xA9sultat vers");
         check(has(notNum, "value", "n'est pas un nombre"), "Generer : une Valeur de d\xC3\xA9part qui n'est pas un nombre");
         // Dupliquer (copier-coller) et le code brut : les proprietes suivent.
@@ -31417,6 +31443,28 @@ void explorateur1141() {
               "le filtre : *.csv;*.pdf et csv, .PDF lisibles ; *.c/v et ** non");
         check(ex::sizeText(900) == "900 octets" && ex::sizeText(12700) == "12,4 Ko" && !ex::dateText(1793350000).empty() && ex::dateText(0).empty(),
               "les tailles et les dates lisibles");
+        // 1.14.1 (lot N5, retouche) : le fil d'Ariane mesure avec la police (le peintre et la souris passent la mesure) :
+        // une etape = son texte + 10 pixels (4 devant, 6 avant le separateur), pas 0,56 em par caractere.
+        const std::vector<std::string> fil{"archives_2026.zip", "docs"};
+        const ex::TextWidth sept = [](std::string_view t, double) { return 7.0 * static_cast<double>(t.size()); };
+        const auto lm = ex::layoutOf(700, 300, 13, fil, true, true, false, true, true, true, 0, 0, sept);
+        const double sep = 13 * 1.1;
+        check(lm.crumbs.size() == 2 && lm.firstCrumb == 0 && std::fabs(lm.crumbs[0].w - (7.0 * 17 + 10)) < 1e-9
+                  && std::fabs(lm.crumbs[1].x - (lm.crumbs[0].right() + sep)) < 1e-9 && std::fabs(lm.crumbs[1].w - (7.0 * 4 + 10)) < 1e-9,
+              "le fil mesur\xC3\xA9 : archives_2026.zip = 17 x 7 + 10 px, docs juste apr\xC3\xA8s le s\xC3\xA9parateur");
+        const auto le = ex::layoutOf(700, 300, 13, fil, true, true, false, true, true, true, 0, 0);
+        check(le.crumbs[0].w < 17 * 13 * 0.56 + 10 && le.crumbs[0].w > 17 * 13 * 0.4,
+              "sans mesure (G\xC3\xA9n\xC3\xA9rer) : une estimation resserr\xC3\xA9" "e (0,5 em par caract\xC3\xA8re)");
+        // Une mesure plus etroite garde plus d'etapes : le fil n'est resume ("...") que s'il ne tient pas.
+        const std::vector<std::string> long6{"Source_principale", "Dossier_numero_un", "Dossier_numero_deux", "Dossier_numero_trois", "Ici"};
+        const auto large = ex::layoutOf(420, 300, 13, long6, false, false, false, true, true, true, 0, 0,
+                                        [](std::string_view t, double) { return 12.0 * static_cast<double>(t.size()); });
+        const auto fin = ex::layoutOf(420, 300, 13, long6, false, false, false, true, true, true, 0, 0,
+                                      [](std::string_view t, double) { return 4.0 * static_cast<double>(t.size()); });
+        check(large.firstCrumb > fin.firstCrumb && large.crumbs.back().w > 0 && ex::hit(fin, fin.crumbs[fin.firstCrumb].cx(), fin.crumbs[fin.firstCrumb].cy())
+                                                                                     == "ariane:" + std::to_string(fin.firstCrumb),
+              "un texte plus large r\xC3\xA9sume plus t\xC3\xB4t (" + std::to_string(large.firstCrumb) + " contre " + std::to_string(fin.firstCrumb)
+                  + ") ; une \xC3\xA9tape mesur\xC3\xA9" "e se clique o\xC3\xB9 elle se dessine");
     }
 
     // ---- l'objet en marche

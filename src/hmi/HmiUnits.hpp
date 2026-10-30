@@ -109,18 +109,24 @@ struct Conversion {
     double      value{0};       // la valeur de depart
     double      result{0};      // la valeur convertie (ok)
     std::string from, to;       // les symboles du catalogue (degc -> degC) ; vides : inconnus
-    std::string error;          // le refus, dit clairement : unite inconnue, dimensions differentes
-    std::string formula;        // "1 bar = 1000 mbar" ; "\xC2\xB0" "C -> K : x + 273.15"
+    std::string error;          // le refus, dit clairement : unite inconnue, dimensions differentes (les unites
+                                // comme les listes les montrent : "\xC2\xB0" "C", pas degC)
+    std::string formula;        // "1 bar = 1000 mbar" ; "\xC2\xB0" "C -> K : x + 273,15" (les nombres a la francaise)
 };
 [[nodiscard]] Conversion convertValue(const Catalog&, double value, std::string_view from, std::string_view to);
-// La formule d'une conversion, a lire : un facteur seul "1 bar = 1000 mbar" ; une affine "\xC2\xB0" "C -> K : x + 273.15",
-// "\xC2\xB0" "F -> \xC2\xB0" "C : x \xC3\x97 0.555556 - 17.7778" ; la meme unite "1 bar = 1 bar". Vide : pas de conversion.
+// La formule d'une conversion, a lire : un facteur seul "1 bar = 1000 mbar" ; une affine "\xC2\xB0" "C -> K : x + 273,15",
+// "\xC2\xB0" "F -> \xC2\xB0" "C : x \xC3\x97 0,555556 - 17,7778" ; la meme unite "1 bar = 1 bar". Vide : pas de conversion.
+// Les nombres a la francaise (la virgule), comme le resultat.
 [[nodiscard]] std::string formulaText(const Catalog&, std::string_view from, std::string_view to);
 // L'expression a copier dans un script ou une fx : "EN(Valeur, 'mbar')" (`value` vide : Valeur).
 [[nodiscard]] std::string enExpression(std::string_view value, std::string_view to);
-// Un resultat a `decimals` decimales (0..12), sans zeros inutiles : 1500, 21.755656 ; une valeur tres petite ou tres
-// grande garde ses chiffres significatifs (1.15741e-08) au lieu de s'ecrire 0.
+// Un resultat MONTRE (l'onglet, l'objet, l'historique, le message Ecrit) a `decimals` decimales (0..12), sans zeros
+// inutiles, a la francaise comme la Calculatrice : 1500, 21,755656 ; une valeur tres petite ou tres grande garde ses
+// chiffres significatifs (1,15741E-8) au lieu de s'ecrire 0. Pas de separateur de milliers (il se retape tel quel).
 [[nodiscard]] std::string formatResult(double v, int decimals);
+// Le meme nombre avec un point (21.755656, 1.15741e-08) : une valeur, pas un texte - la Console (Var := 1500), comme
+// les autres ecritures qu'elle trace.
+[[nodiscard]] std::string resultNumber(double v, int decimals);
 // Une valeur tapee : "1,5", " 2.5e3 ", "-40" ; faux : illisible (vide, du texte, infini).
 [[nodiscard]] bool parseValue(std::string_view text, double& out);
 // Les unites d'une dimension (le nom ou le libelle de la famille : "pression", "Pression" ; vide, "toutes" : toutes),

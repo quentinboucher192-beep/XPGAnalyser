@@ -6917,6 +6917,7 @@ void lot10_synoptique() {
 struct ColorRecorder final : gfx::IRenderer {
     std::vector<std::pair<gfx::Point, gfx::Color>> tris;
     std::vector<std::string> texts;
+    std::vector<std::pair<std::string, float>> textX;   // 1.14.1 (lot N5) : ou chaque texte commence (x)
     void beginFrame(gfx::Color) override {}
     void endFrame() override {}
     void pushClip(const gfx::Rect&) override {}
@@ -6925,7 +6926,16 @@ struct ColorRecorder final : gfx::IRenderer {
     void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
     void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
-    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawText(gfx::Point at, std::string_view t, gfx::FontId, gfx::Color) override {
+        texts.emplace_back(t);
+        textX.emplace_back(std::string(t), at.x);
+    }
+    // Le x du dernier texte `t` dessine (-1 : aucun).
+    float lastX(std::string_view t) const {
+        for (auto it = textX.rbegin(); it != textX.rend(); ++it)
+            if (it->first == t) return it->second;
+        return -1.f;
+    }
     void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
     void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
         for (std::size_t i = 0; i < n; ++i) tris.emplace_back(v[i].pos, v[i].color);
@@ -7221,9 +7231,10 @@ void unites1141Ecran() {
             mu.dispatch(ui::MouseDown{{vr.x + 5, vr.y + 5}, ui::MouseButton::Left, 1, {}});
             mu.dispatch(ui::MouseUp{{vr.x + 5, vr.y + 5}, ui::MouseButton::Left, {}});
             for (const char* t : {"2", ".", "5"}) mu.dispatch(ui::TextInput{t});
-            check(cp.valueField().text() == "2.5" && cp.resultText() == "2.5 bar = 2500 mbar", "au clavier : 2.5, le r\xC3\xA9sultat \xC3\xA0 chaque frappe : " + cp.resultText());
+            // 1.14.1 (lot N5, retouche) : tape avec un point, montre a la francaise (la case garde ce qui est tape).
+            check(cp.valueField().text() == "2.5" && cp.resultText() == "2,5 bar = 2500 mbar", "au clavier : 2.5, le r\xC3\xA9sultat \xC3\xA0 chaque frappe : " + cp.resultText());
             mu.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
-            check(!HmiUnitConvertPage::history().empty() && HmiUnitConvertPage::history()[0].value == "2.5"
+            check(!HmiUnitConvertPage::history().empty() && HmiUnitConvertPage::history()[0].value == "2,5"
                       && HmiUnitConvertPage::history()[0].result == "2500 mbar",
                   "Entr\xC3\xA9" "e : la conversion entre dans l'historique de la s\xC3\xA9" "ance");
         }
@@ -7238,14 +7249,14 @@ void unites1141Ecran() {
         cp.setFrom("degC");
         cp.setTo("degF");
         cp.setValueText("20");
-        check(cp.resultText() == "20 \xC2\xB0" "C = 68 \xC2\xB0" "F" && cp.formulaLine().find("\xC2\xB0" "C -> \xC2\xB0" "F : x \xC3\x97 1.8 + 32") != std::string::npos,
+        check(cp.resultText() == "20 \xC2\xB0" "C = 68 \xC2\xB0" "F" && cp.formulaLine().find("\xC2\xB0" "C -> \xC2\xB0" "F : x \xC3\x97 1,8 + 32") != std::string::npos,
               "20 \xC2\xB0" "C = 68 \xC2\xB0" "F ; la formule affine : " + cp.formulaLine());
         // Inverser (le bouton), Copier (le bouton) : l'expression au presse-papiers, l'historique.
         cp.swapButton().clicked->emit();
-        check(cp.from() == "degF" && cp.to() == "degC" && cp.resultText().find("20 \xC2\xB0" "F = -6.666667 \xC2\xB0" "C") == 0,
-              "inverser : 20 \xC2\xB0" "F = -6.666667 \xC2\xB0" "C (6 d\xC3\xA9" "cimales) : " + cp.resultText());
+        check(cp.from() == "degF" && cp.to() == "degC" && cp.resultText().find("20 \xC2\xB0" "F = -6,666667 \xC2\xB0" "C") == 0,
+              "inverser : 20 \xC2\xB0" "F = -6,666667 \xC2\xB0" "C (6 d\xC3\xA9" "cimales) : " + cp.resultText());
         cp.setDecimals(2);
-        check(cp.resultText() == "20 \xC2\xB0" "F = -6.67 \xC2\xB0" "C", "D\xC3\xA9" "cimales 2 : -6.67");
+        check(cp.resultText() == "20 \xC2\xB0" "F = -6,67 \xC2\xB0" "C", "D\xC3\xA9" "cimales 2 : -6,67");
         cp.copyButton().clicked->emit();
         same_text(ui::clipboardText(), "EN(Valeur, 'degC')", "Copier : EN(Valeur, 'degC') au presse-papiers");
         // La recherche : filtre De et y prend la premiere trouvee (sans accents, sans casse).
@@ -7260,7 +7271,7 @@ void unites1141Ecran() {
         cp.setSearch("");
         // L'historique : la plus recente d'abord ; un clic y revient.
         const auto& h = HmiUnitConvertPage::history();
-        check(h.size() >= 2 && h[0].from == "degF" && h[0].to == "degC" && h[0].result == "-6.67 \xC2\xB0" "C" && cp.historyTable().model()
+        check(h.size() >= 2 && h[0].from == "degF" && h[0].to == "degC" && h[0].result == "-6,67 \xC2\xB0" "C" && cp.historyTable().model()
                   && cp.historyTable().model()->rowCount() == h.size(),
               "l'historique de la s\xC3\xA9" "ance : la derni\xC3\xA8re conversion en t\xC3\xAAte, dans le tableau");
         cp.setFrom("bar");
@@ -7272,7 +7283,13 @@ void unites1141Ecran() {
         cp.setValueText("1");
         cp.setFrom("bar");
         cp.setTo("degC");
-        check(cp.errorText().find("Dimensions diff\xC3\xA9rentes : bar est une pression, degC une temp\xC3\xA9rature") == 0, "dimensions diff\xC3\xA9rentes : " + cp.errorText());
+        // 1.14.1 (lot N5, retouche) : l'unite citee comme les listes la montrent (\xC2\xB0" "C), pas degC.
+        check(cp.errorText().find("Dimensions diff\xC3\xA9rentes : bar est une pression, \xC2\xB0" "C une temp\xC3\xA9rature") == 0
+                  && cp.errorText().find("des bar en \xC2\xB0" "C") != std::string::npos && cp.errorText().find("degC") == std::string::npos,
+              "dimensions diff\xC3\xA9rentes : " + cp.errorText());
+        // La liste Vers garde l'unite refusee, grisee, sous son symbole montre.
+        check(cp.toBox().selectedItem() && cp.toBox().selectedItem()->label == "\xC2\xB0" "C  (autre dimension)" && cp.toBox().selectedItem()->value == "degC",
+              "Vers : \xC2\xB0" "C (autre dimension), gris\xC3\xA9" "e : " + (cp.toBox().selectedItem() ? cp.toBox().selectedItem()->label : std::string("?")));
         cp.setFrom("bars");
         check(cp.errorText().find("Unit\xC3\xA9 inconnue \xC2\xAB bars \xC2\xBB") == 0, "unit\xC3\xA9 inconnue : " + cp.errorText());
         // Une unite du projet : la liste la propose (le meme catalogue que EN).
@@ -7287,14 +7304,14 @@ void unites1141Ecran() {
         cp.setTo("atm");
         cp.setValueText("1.01325");
         check(std::find(cp.toChoices().begin(), cp.toChoices().end(), std::string("atm")) != cp.toChoices().end()
-                  && cp.resultText() == "1.01325 bar = 1 atm",
-              "atm (du projet) dans Vers ; 1.01325 bar = 1 atm : " + cp.resultText());
+                  && cp.resultText() == "1,01325 bar = 1 atm",
+              "atm (du projet) dans Vers ; 1,01325 bar = 1 atm : " + cp.resultText());
         // Le dessin : le resultat, la formule, l'expression.
         ColorRecorder rec;
         const auto theme = ui::Theme::dark();
         mu.layout();
         mu.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.1, nullptr});
-        check(rec.wrote("1.01325 bar = 1 atm") && rec.wrote("Formule : 1 bar = 0.986923 atm") && rec.wrote("EN(Valeur, 'atm')")
+        check(rec.wrote("1,01325 bar = 1 atm") && rec.wrote("Formule : 1 bar = 0,986923 atm") && rec.wrote("EN(Valeur, 'atm')") && !rec.wrote("0.986923")
                   && rec.wrote("HISTORIQUE DE LA S\xC3\x89" "ANCE") && rec.wrote("Rechercher") && rec.wrote("D\xC3\xA9" "cimales"),
               "le dessin de l'onglet : le r\xC3\xA9sultat, la formule, l'expression, l'historique, les \xC3\xA9tiquettes");
     }
@@ -7348,6 +7365,14 @@ void unites1141Ecran() {
         ColorRecorder r2;
         app::paintHmiObject(r2, v, o, vp, app::HmiPropertySource{}, theme, {});
         check(r2.wrote("Dimensions diff\xC3\xA9rentes") && r2.wrote("\xC3\x89" "crire"), "bar vers degC : le refus dit en rouge ; R\xC3\xA9sultat vers : le bouton \xC3\x89" "crire");
+        // 1.14.1 (lot N5, retouche) : la case montre la Valeur de depart a la francaise, le resultat et la formule aussi.
+        o.set("unitTo", "degF");
+        o.set("unitFrom", "degC");
+        o.set("value", "37.5");
+        ColorRecorder r3;
+        app::paintHmiObject(r3, v, o, vp, app::HmiPropertySource{}, theme, {});
+        check(r3.wrote("37,5") && r3.wrote("= 99,5 \xC2\xB0" "F") && r3.wrote("x \xC3\x97 1,8 + 32") && !r3.wrote("37.5") && !r3.wrote("99.5"),
+              "37.5 \xC2\xB0" "C : la case 37,5, = 99,5 \xC2\xB0" "F, la formule x \xC3\x97 1,8 + 32");
     }
     // ---- en marche : la souris, le clavier, la liste, le theme jour
     {
@@ -7414,6 +7439,11 @@ void unites1141Ecran() {
               "le bouton inverser : psi -> bar");
         check(click("ecrire") && std::fabs(pane.runtime().variable("Sortie")->asReal() - 35.0 * 6894.757293 / 100000.0) < 1e-9,
               "\xC3\x89" "crire : Sortie = 35 psi en bar");
+        // 1.14.1 (lot N5, retouche) : le message de l'objet a la francaise (2,413 bar a 3 decimales).
+        paintAt(0.35);
+        // (La variable Sortie elle-meme, dans les listes de la Simulation, reste un nombre : 2.41316...)
+        check(rec.wrote("\xC3\x89" "crit : Sortie = 2,413 bar") && rec.wrote("= 2,413 bar") && !rec.wrote("= 2.413"),
+              "le message \xC3\x89" "crit : Sortie = 2,413 bar, le r\xC3\xA9sultat = 2,413 bar");
         // La molette sur la liste ouverte la fait defiler.
         (void)click("de");
         gfx::Rect cr;
@@ -7513,6 +7543,7 @@ void explorateur1141Ecran() {
     const auto paintAt = [&](double t) {
         rec.tris.clear();
         rec.texts.clear();
+        rec.textX.clear();
         pane.layout();
         pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
     };
@@ -7540,6 +7571,19 @@ void explorateur1141Ecran() {
     check(pane.runtime().fileExplorer(ex)->loc.at == std::vector<std::string>{"Archives"} && rec.wrote("jan.csv") && rec.wrote("..")
               && rec.wrote("Archives"),
           "un double-clic sur Archives : il s'ouvre (jan.csv), la ligne .. et le fil");
+    // 1.14.1 (lot N5, retouche) : le fil d'Ariane mesure avec la police - l'etape Donnees fait la largeur de son texte
+    // (7 x 8 pixels ici) plus 10, pas 0,56 em par caractere ; le dessin et le clic tombent au meme endroit.
+    {
+        gfx::Rect er0, a0, a1;
+        check(pane.canvas().objectRect("Exp", er0) && pane.canvas().partRect("Exp", "ariane:0", a0) && pane.canvas().partRect("Exp", "ariane:1", a1),
+              "les deux \xC3\xA9tapes du fil (Donnees, Archives)");
+        const float z = er0.w / 640.f;
+        const float sx = rec.lastX("\xE2\x80\xBA"), dx = rec.lastX("Donnees"), ax = rec.lastX("Archives");
+        check(std::fabs(a0.w - (8.f * 7.f + 10.f * z)) < 1.f && std::fabs((a1.x - a0.x) - (ax - dx)) < 1.f && sx > dx + 8.f * 7.f - 12.f
+                  && sx - (dx + 8.f * 7.f) < 16.f * z,
+              "Donnees : sa largeur mesur\xC3\xA9" "e (" + std::to_string(a0.w) + " px), le s\xC3\xA9parateur juste apr\xC3\xA8s ("
+                  + std::to_string(sx - dx - 56.f) + " px), Archives dessin\xC3\xA9" "e o\xC3\xB9 elle se clique");
+    }
     gfx::Rect up;
     check(pane.canvas().partRect("Exp", "parent", up), "la ligne ..");
     pane.canvas().dispatch(ui::MouseDown{centre(up), ui::MouseButton::Left, 1, {}});

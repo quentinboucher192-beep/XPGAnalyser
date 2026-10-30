@@ -1641,6 +1641,22 @@ bool HmiLiveCanvas::objectRect(std::string_view name, gfx::Rect& out) const {
     return false;
 }
 
+namespace {
+// 1.14.1 (lot N5, retouche) : la geometrie de l'Explorateur de fichiers sous la souris, le fil d'Ariane mesure avec la
+// police comme le peintre la mesure (rawWidth de HmiDocPainter : la taille a l'ecran, ramenee au repere de la vue) - ce
+// qui se clique est ce qui se dessine.
+hmi::explorer::Layout explorerLayout(const hmi::Runtime& rt, const hmi::Object& o, const hmi::Runtime::FileExplorer& fe,
+                                     const HmiViewport& vp) {
+    const auto box = o.box();
+    const auto measure = [zoom = static_cast<double>(vp.zoom), kx = static_cast<double>(vp.zoomX())](std::string_view s, double px) {
+        const gfx::FontId f{static_cast<std::uint16_t>(std::clamp(std::lround(px * zoom), 4L, 400L))};
+        return static_cast<double>(ui::measureWidth(s, f)) / std::max(0.01, kx);
+    };
+    return hmi::explorer::layoutOf(box.w, box.h, o.number("fontSize", 13), rt.explorerCrumbs(o.id), fe.showSearch, fe.allowRefresh,
+                                   fe.allowExtract, !fe.loc.at.empty(), fe.showSize, fe.showDate, fe.shown.size(), fe.first, measure);
+}
+} // namespace
+
 bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::Rect& out) const {
     if (layers_.empty() || vps_.size() != layers_.size()) return false;
     for (std::size_t li = layers_.size(); li-- > 0;) {
@@ -1794,9 +1810,7 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                     case hmi::Kind::FileExplorer: {   // 1.14.1 (lot N5) : "ligne:N", "parent", "monter", "colonne:taille", "ariane:N"...
                         const auto* fe = runtime_ ? runtime_->fileExplorer(o.id) : nullptr;
                         if (!fe) break;
-                        const auto l = hmi::explorer::layoutOf(box.w, box.h, o.number("fontSize", 13), runtime_->explorerCrumbs(o.id), fe->showSearch,
-                                                               fe->allowRefresh, fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate,
-                                                               fe->shown.size(), fe->first);
+                        const auto l = explorerLayout(*runtime_, o, *fe, vp);
                         const auto take = [&](const hmi::Box& a) {
                             local = a;
                             found = a.w > 0;
@@ -2038,8 +2052,7 @@ hmi::explorer::Tip HmiLiveCanvas::explorerTipAt(gfx::Point p) const {
     const auto& vp = vps_[li];
     const auto box = o->box();
     const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
-    const auto l = hmi::explorer::layoutOf(box.w, box.h, o->number("fontSize", 13), runtime_->explorerCrumbs(id), fe->showSearch, fe->allowRefresh,
-                                           fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate, fe->shown.size(), fe->first);
+    const auto l = explorerLayout(*runtime_, *o, *fe, vp);
     const std::string part = hmi::explorer::hit(l, lx, ly);
     if (part.rfind("ligne:", 0) != 0) return {};
     return runtime_->explorerTip(id, static_cast<std::size_t>(std::strtoul(part.c_str() + 6, nullptr, 10)));
@@ -2296,9 +2309,7 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
             const auto* fe = runtime_ ? runtime_->fileExplorer(id) : nullptr;
             if (!fe) return;
-            const auto l = hmi::explorer::layoutOf(box.w, box.h, o->number("fontSize", 13), runtime_->explorerCrumbs(id), fe->showSearch,
-                                                   fe->allowRefresh, fe->allowExtract, !fe->loc.at.empty(), fe->showSize, fe->showDate,
-                                                   fe->shown.size(), fe->first);
+            const auto l = explorerLayout(*runtime_, *o, *fe, vp);
             std::string part = hmi::explorer::hit(l, lx, ly);
             if (clickCount >= 2 && part.rfind("ligne:", 0) == 0) part = "ouvrir:" + part.substr(6);
             if (!part.empty()) partClicked->emit(id, part);

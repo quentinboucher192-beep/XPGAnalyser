@@ -2632,19 +2632,23 @@ void checkLot9(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             continue;
                         }
                         if (!family.empty() && cat.familyOf(sym) != family)
-                            issue(S::Warning, key, sym + " n'est pas de la dimension " + cat.familyLabel(family) + " : la liste ne la proposera pas");
+                            issue(S::Warning, key, hmi::unitLabel(cat.canonical(sym)) + " n'est pas de la dimension " + cat.familyLabel(family)
+                                                       + " : la liste ne la proposera pas");
                     }
-                    if (cat.unit(from) && cat.unit(to) && cat.familyOf(from) != cat.familyOf(to))
-                        issue(S::Error, "unitTo", "dimensions incompatibles : " + cat.canonical(from) + " est " + cat.familyPhrase(from) + ", "
-                                                      + cat.canonical(to) + " " + cat.familyPhrase(to) + " \xE2\x80\x94 on ne convertit pas des "
-                                                      + cat.canonical(from) + " en " + cat.canonical(to));
+                    // Les unites citees comme les listes les montrent (degC : avec le signe degre), le texte de l'objet.
+                    if (cat.unit(from) && cat.unit(to) && cat.familyOf(from) != cat.familyOf(to)) {
+                        const std::string la = hmi::unitLabel(cat.canonical(from)), lb = hmi::unitLabel(cat.canonical(to));
+                        issue(S::Error, "unitTo", "dimensions incompatibles : " + la + " est " + cat.familyPhrase(from) + ", " + lb + " "
+                                                      + cat.familyPhrase(to) + " \xE2\x80\x94 on ne convertit pas des " + la + " en " + lb);
+                    }
                     // La Valeur de depart : une variable qui a une unite la donne ; elle doit aller vers l'arrivee.
                     if (const Prop* vp = o.find("value"); vp && !vp->expr.empty()) {
                         const std::string path = trimmedCopy(markers::strip(vp->expr, markers::Mode::Expression));
                         const std::string su = units::unitOfPath(p, path);
                         if (!su.empty() && cat.unit(su) && cat.unit(to) && cat.familyOf(su) != cat.familyOf(to))
-                            issue(S::Error, "value", "dimensions incompatibles : " + path + " est en " + su + " (" + cat.familyPhrase(su) + "), l'arriv\xC3\xA9" "e "
-                                                         + to + " " + cat.familyPhrase(to));
+                            issue(S::Error, "value", "dimensions incompatibles : " + path + " est en " + hmi::unitLabel(cat.canonical(su)) + " ("
+                                                         + cat.familyPhrase(su) + "), l'arriv\xC3\xA9" "e " + hmi::unitLabel(cat.canonical(to)) + " "
+                                                         + cat.familyPhrase(to));
                     } else if (const Prop* vp2 = o.find("value"); vp2 && numberOrExpr(trimmedCopy(vp2->value))) {
                         issue(S::Error, "value", "Valeur de d\xC3\xA9part : '" + vp2->value + "' n'est pas un nombre (une expression s'\xC3\xA9" "crit avec =)");
                     }

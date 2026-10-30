@@ -157,7 +157,8 @@ const std::vector<Note>& table() {
          "et les unit\xC3\xA9s, comme avant) et Convertir. Une valeur, l'unit\xC3\xA9 de d\xC3\xA9part et celle d'arriv\xC3\xA9" "e choisies dans des "
          "listes (Vers ne propose que la dimension de De ; Dimension et Rechercher filtrent De, par symbole, nom ou dimension) : le r\xC3\xA9sultat "
          "suit chaque frappe, aux d\xC3\xA9" "cimales choisies, avec sa formule (\xC2\xAB 1 bar = 1000 mbar \xC2\xBB, \xC2\xAB \xC2\xB0" "C -> K : "
-         "x + 273.15 \xC2\xBB) ; \xE2\x87\x84 inverse, Copier met EN(Valeur, 'mbar') au presse-papiers pour un script ou une fx, et "
+         "x + 273,15 \xC2\xBB ; les nombres \xC3\xA0 la fran\xC3\xA7" "aise, comme la Calculatrice) ; \xE2\x87\x84 inverse, Copier met "
+         "EN(Valeur, 'mbar') au presse-papiers pour un script ou une fx, et "
          "l'historique de la s\xC3\xA9" "ance ram\xC3\xA8ne une conversion d'un clic. Une valeur illisible, une unit\xC3\xA9 inconnue, deux dimensions "
          "diff\xC3\xA9rentes se disent en rouge. Le calcul est celui de EN : les unit\xC3\xA9s du projet et des biblioth\xC3\xA8ques reli\xC3\xA9" "es "
          "comprises.",

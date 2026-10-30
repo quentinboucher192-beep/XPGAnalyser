@@ -3251,12 +3251,12 @@ Le journal dit le volume une fois la poignée lâchée (« volume Alarmes : 60 %
 ### À quoi il sert
 Donner à l'opérateur une table de conversion sur le poste : combien font 2,5 bar en psi, 20 °C en °F, 12 m3/h en L/min. Il tape une valeur, choisit **De** et **Vers**, et lit le résultat ; sans rien taper, il montre une mesure de l'IHM dans une autre unité.
 ### En marche
-- **la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel numérique du poste), la première frappe remplace la valeur montrée ; 1.5 ou 1,5, -40, 2.5e3. Le résultat suit chaque frappe ; Entrée garde la valeur, **Échap** l'oublie : la case revient à la Valeur de départ ;
+- **la case Valeur** : un clic la prend (le clavier, ou le clavier virtuel numérique du poste), la première frappe remplace la valeur montrée ; 1,5 ou 1.5, -40, 2,5E3. Le résultat suit chaque frappe ; Entrée garde la valeur, **Échap** l'oublie : la case revient à la Valeur de départ ;
 - **De** et **Vers** : un clic ouvre la liste des unités (la **Dimension** choisie, ou toutes) ; Vers ne propose que la dimension de De, et une arrivée d'une autre dimension devient l'unité de référence (Pa, K, m3/h…) ; la molette ou les flèches de la liste la font défiler ;
 - **le bouton aux deux flèches** inverse De et Vers ;
-- **le résultat** en grand, à **Décimales** décimales (les zéros inutiles ne s'écrivent pas ; un très petit nombre garde ses chiffres significatifs), et **la formule** en petit : « 1 bar = 1000 mbar », « °C -> K : x + 273.15 » ;
-- **Écrire** (si **Résultat vers** est posé) écrit le résultat dans la variable, convertie vers son type ; la Console le dit (« Pression_mbar := 1500 mbar (1.5 bar) »).
-Un refus se dit dans l'objet, en rouge : « unité inconnue « bars » », « dimensions différentes : bar est une pression, degC une température », « valeur illisible ».
+- **le résultat** en grand, à **Décimales** décimales (les zéros inutiles ne s'écrivent pas ; un très petit nombre garde ses chiffres significatifs), et **la formule** en petit : « 1 bar = 1000 mbar », « °F -> °C : x × 0,555556 - 17,7778 » ; les nombres montrés s'écrivent à la française (36,259 psi), comme dans la Calculatrice ;
+- **Écrire** (si **Résultat vers** est posé) écrit le résultat dans la variable, convertie vers son type ; l'objet le dit (« Écrit : Pression_mbar = 1500,5 mbar ») et la Console aussi, la valeur écrite en nombre comme ses autres lignes (« Pression_mbar := 1500.5 mbar (1.5005 bar) »).
+Un refus se dit dans l'objet, en rouge : « unité inconnue « bars » », « dimensions différentes : bar est une pression, °C une température » (les unités comme les listes les montrent), « valeur illisible ».
 ### La Valeur de départ
 Un nombre, ou une **expression** (=Pression) relue à chaque cycle tant que l'opérateur n'a rien tapé. Une variable qui a une **unité** (voir « Les unités de mesure dans les types ») donne l'unité de départ, comme UNITE(Pression) : une mesure en mbar se montre en mbar ; si l'opérateur choisit bar dans De, la case montre la mesure convertie en bar - la valeur reste vraie.
 ```ST
@@ -7170,9 +7170,9 @@ Dans l'arbre, sous Configuration : la bibliothèque des unités du projet.
 @nouveau 1.14.1
 ### L'onglet Convertir : tester une conversion
 Configuration › Unités de mesure a deux onglets : **Bibliothèque** (les familles et les unités, ci-dessus) et **Convertir**, un banc d'essai.
-- **Valeur** : le nombre à convertir (1.5 ou 1,5, -40, 2.5e3) ; **De** et **Vers** : les unités, choisies dans des listes ; Vers ne propose que la dimension de De. **Dimension** restreint De à une dimension ; **Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : `psi`, `milli`, `débit`) et y prend la première unité trouvée ;
+- **Valeur** : le nombre à convertir (1,5 ou 1.5, -40, 2,5E3) ; **De** et **Vers** : les unités, choisies dans des listes ; Vers ne propose que la dimension de De. **Dimension** restreint De à une dimension ; **Rechercher** filtre De par symbole, nom ou dimension (sans casse ni accents : `psi`, `milli`, `débit`) et y prend la première unité trouvée ;
 - le résultat suit chaque frappe, à **Décimales** décimales (0 à 12 ; les zéros inutiles ne s'écrivent pas) ; le bouton **⇄** inverse De et Vers ;
-- dessous : la **formule** (« 1 bar = 1000 mbar », « °C -> K : x + 273.15 ») et l'expression à mettre dans un script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au presse-papiers (Valeur : ta variable) ;
+- dessous : la **formule** (« 1 bar = 1000 mbar », « °C -> K : x + 273,15 » ; les nombres à la française, comme le résultat) et l'expression à mettre dans un script ou une fx, `EN(Valeur, 'mbar')` : **Copier** la met au presse-papiers (Valeur : ta variable) ;
 - l'**historique de la séance** garde les douze dernières conversions (une valeur validée par Entrée, une unité choisie, ⇄, Copier) : un clic sur une ligne y revient ;
 - un refus se dit en rouge : une valeur illisible, une unité inconnue (une unité du projet retirée depuis), deux dimensions différentes.
 Le calcul est celui du moteur (EN dans un script, l'objet **Convertisseur d'unités**) : aucune table à part, les unités du projet et des bibliothèques reliées comprises.

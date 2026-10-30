@@ -391,6 +391,20 @@ std::string shortNumber(double v) {
     return s;
 }
 
+// 1.14.1 (lot N5, retouche) : un nombre MONTRE a la francaise, la regle de la Calculatrice et de l'outil Modbus
+// (mbtool::frenchNumber) : la virgule decimale ("21,755656", "x \xC3\x97 1,8 + 32") ; l'exposant d'un tres petit ou tres
+// grand nombre en E ("1,15741E-8", comme la Calculatrice). Pas de separateur de milliers : "1500 mbar" se relit et se
+// retape tel quel dans la case Valeur. `s` : le meme nombre ecrit avec un point (printf).
+std::string frenchShown(const std::string& s) {
+    const auto e = s.find_first_of("eE");
+    std::string mantissa = s.substr(0, e);
+    for (auto& ch : mantissa)
+        if (ch == '.') ch = ',';
+    if (e == std::string::npos) return mantissa;
+    const int exponent = std::atoi(s.c_str() + e + 1);
+    return mantissa + "E" + (exponent < 0 ? "-" : "+") + std::to_string(std::abs(exponent));
+}
+
 std::string trimmedText(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
@@ -417,13 +431,15 @@ Conversion convertValue(const Catalog& cat, double value, std::string_view from,
         return c;
     }
     if (ua->family != ub->family) {
-        c.error = "dimensions diff\xC3\xA9rentes : " + ua->symbol + " est " + cat.familyPhrase(ua->symbol) + ", " + ub->symbol + " "
-                + cat.familyPhrase(ub->symbol) + " \xE2\x80\x94 on ne convertit pas des " + ua->symbol + " en " + ub->symbol;
+        // Les unites citees comme les listes les montrent (degC : avec le signe degre).
+        const std::string la = unitLabel(ua->symbol), lb = unitLabel(ub->symbol);
+        c.error = "dimensions diff\xC3\xA9rentes : " + la + " est " + cat.familyPhrase(ua->symbol) + ", " + lb + " "
+                + cat.familyPhrase(ub->symbol) + " \xE2\x80\x94 on ne convertit pas des " + la + " en " + lb;
         return c;
     }
     const auto aff = cat.convert(ua->symbol, ub->symbol);
     if (!aff) {
-        c.error = "conversion impossible de " + ua->symbol + " en " + ub->symbol + " (facteur nul)";
+        c.error = "conversion impossible de " + unitLabel(ua->symbol) + " en " + unitLabel(ub->symbol) + " (facteur nul)";
         return c;
     }
     if (!std::isfinite(value)) {
@@ -444,10 +460,10 @@ std::string formulaText(const Catalog& cat, std::string_view from, std::string_v
     const auto aff = cat.convert(ua->symbol, ub->symbol);
     if (!aff) return {};
     const std::string a = unitLabel(ua->symbol), b = unitLabel(ub->symbol);
-    if (aff->offset == 0.0) return "1 " + a + " = " + shortNumber(aff->factor) + " " + b;
+    if (aff->offset == 0.0) return "1 " + a + " = " + frenchShown(shortNumber(aff->factor)) + " " + b;
     std::string f = "x";
-    if (shortNumber(aff->factor) != "1") f += " \xC3\x97 " + shortNumber(aff->factor);
-    f += (aff->offset >= 0 ? " + " : " - ") + shortNumber(std::fabs(aff->offset));
+    if (shortNumber(aff->factor) != "1") f += " \xC3\x97 " + frenchShown(shortNumber(aff->factor));
+    f += (aff->offset >= 0 ? " + " : " - ") + frenchShown(shortNumber(std::fabs(aff->offset)));
     return a + " -> " + b + " : " + f;
 }
 
@@ -458,6 +474,10 @@ std::string enExpression(std::string_view value, std::string_view to) {
 }
 
 std::string formatResult(double v, int decimals) {
+    return frenchShown(resultNumber(v, decimals));
+}
+
+std::string resultNumber(double v, int decimals) {
     if (!std::isfinite(v)) return "?";
     decimals = std::clamp(decimals, 0, 12);
     if (v == 0.0) return "0";

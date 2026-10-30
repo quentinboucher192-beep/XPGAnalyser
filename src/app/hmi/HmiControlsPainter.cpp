@@ -1234,6 +1234,7 @@ void drawUnitConverter(const Ctx& c) {
         double v = 0;
         valueText = c.src.text(c.o, "value");
         if (!hu::parseValue(valueText, v)) v = 1;
+        else valueText = hu::formatResult(v, 12);   // a la francaise, comme en marche (37.5 -> 37,5)
         conv = hu::convertValue(cat, v, from, to);
         writes = !c.src.text(c.o, "resultTo").empty();
     }

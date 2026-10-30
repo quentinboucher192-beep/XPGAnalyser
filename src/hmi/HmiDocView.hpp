@@ -33,6 +33,7 @@
 #include "HmiModel.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
@@ -279,9 +280,14 @@ struct Layout {
     Box status;                                 // la ligne du bas : le compte, le filtre, le message
     double rowHeight{24};
 };
-// `crumbs` : les libelles du fil ; `parent` : une ligne ".." (pas a la source) ; `rows` : les entrees.
+// La largeur d'un texte a la taille `sizePx`, en pixels de l'objet : la vraie police (le peintre et la souris passent la
+// meme mesure, ce qui se dessine est ce qui se clique).
+using TextWidth = std::function<double(std::string_view text, double sizePx)>;
+// `crumbs` : les libelles du fil ; `parent` : une ligne ".." (pas a la source) ; `rows` : les entrees. `measure` : la largeur
+// d'une etape du fil (1.14.1, lot N5, retouche) ; absente (Generer, sans police) : une estimation, 0,5 em par caractere.
 [[nodiscard]] Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh,
-                              bool extract, bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first);
+                              bool extract, bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first,
+                              const TextWidth& measure = {});
 // "monter", "ariane:N", "recherche", "rafraichir", "extraire", "colonne:nom", "colonne:taille", "colonne:date", "parent",
 // "ligne:N" (N : le rang dans la liste), "liste:haut", "liste:bas" ; "" : rien.
 [[nodiscard]] std::string hit(const Layout&, double x, double y);

@@ -640,10 +640,16 @@ ui::EventResult HmiUnitPicker::HandleEvent(const ui::InputEvent& ev) {
 namespace {
 const std::string kAllDimensions = "Toutes les dimensions";
 constexpr std::size_t kHistoryMax = 12;
-// "mbar  -  millibar" ; une unite dont le nom est le symbole (bar) : le symbole seul.
+// "mbar  -  millibar" ; une unite dont le nom est le symbole (bar) : le symbole seul. 1.14.1 (lot N5, retouche) : le
+// symbole MONTRE, comme l'objet, l'historique et les refus ("\xC2\xB0" "C  -  degre Celsius", pas degC) ; le symbole a
+// taper dans un script se lit dans EN(Valeur, 'degC').
 std::string choiceLabel(const hmi::UnitDef& u) {
-    return u.label.empty() || u.label == u.symbol ? u.symbol : u.symbol + "  \xE2\x80\x94  " + u.label;
+    const std::string shown = hmi::unitLabel(u.symbol);
+    return u.label.empty() || u.label == u.symbol ? shown : shown + "  \xE2\x80\x94  " + u.label;
 }
+// 1.14.1 (lot N5, retouche) : la valeur tapee, montree a la francaise comme le resultat ("1.5" -> "1,5", "2.5e3" -> "2500") ;
+// illisible : telle quelle.
+std::string shownValue(const hu::Conversion& c, const std::string& typed) { return c.ok ? hu::formatResult(c.value, 12) : typed; }
 std::vector<HmiUnitConvertPage::Entry>& historyList() {
     static std::vector<HmiUnitConvertPage::Entry> k;
     return k;
@@ -674,7 +680,7 @@ HmiUnitConvertPage::HmiUnitConvertPage(std::string id, hmi::DocumentPtr doc) : u
     value_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".value")));
     value_->setText(valueText_);
     value_->setMonospace(true);
-    value_->setTooltip("La valeur \xC3\xA0 convertir : 1.5 ou 1,5, -40, 2.5e3. Le r\xC3\xA9sultat suit chaque frappe ; Entr\xC3\xA9" "e la garde dans l'historique.");
+    value_->setTooltip("La valeur \xC3\xA0 convertir : 1,5 ou 1.5, -40, 2,5E3. Le r\xC3\xA9sultat suit chaque frappe ; Entr\xC3\xA9" "e la garde dans l'historique.");
     fromBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".from")));
     fromBox_->setTooltip("L'unit\xC3\xA9 de d\xC3\xA9part (filtr\xC3\xA9" "e par la dimension et la recherche).");
     fromBox_->setMaxVisibleRows(14);
@@ -803,7 +809,7 @@ void HmiUnitConvertPage::fillLists() {
         for (std::size_t i = 0; i < symbols.size(); ++i)
             if (fold(symbols[i]) == fold(sym)) at = static_cast<int>(i);
         if (at < 0 && !trim(sym).empty()) {
-            items.push_back({sym + (cat.unit(sym) ? "  (autre dimension)" : "  (inconnue)"), sym, {}, false});
+            items.push_back({cat.unit(sym) ? hmi::unitLabel(cat.canonical(sym)) + "  (autre dimension)" : sym + "  (inconnue)", sym, {}, false});
             at = static_cast<int>(items.size()) - 1;
         }
         return at;
@@ -826,7 +832,7 @@ void HmiUnitConvertPage::recompute() {
         conv_ = hu::Conversion{};
         conv_.from = cat.canonical(from_);
         conv_.to = cat.canonical(to_);
-        error_ = trim(valueText_).empty() ? "Tape une valeur." : "Valeur illisible \xC2\xAB " + trim(valueText_) + " \xC2\xBB : un nombre (1.5 ou 1,5, -40, 2.5e3).";
+        error_ = trim(valueText_).empty() ? "Tape une valeur." : "Valeur illisible \xC2\xAB " + trim(valueText_) + " \xC2\xBB : un nombre (1,5 ou 1.5, -40, 2,5E3).";
     } else {
         conv_ = hu::convertValue(cat, v, from_, to_);
         if (!conv_.ok) {
@@ -954,7 +960,8 @@ std::string HmiUnitConvertPage::expression() const {
 
 std::string HmiUnitConvertPage::resultText() const {
     if (!conv_.ok) return {};
-    return trim(valueText_) + " " + hmi::unitLabel(conv_.from) + " = " + hu::formatResult(conv_.result, decimals_) + " " + hmi::unitLabel(conv_.to);
+    return shownValue(conv_, trim(valueText_)) + " " + hmi::unitLabel(conv_.from) + " = " + hu::formatResult(conv_.result, decimals_) + " "
+         + hmi::unitLabel(conv_.to);
 }
 
 std::string HmiUnitConvertPage::formulaLine() const {
@@ -971,7 +978,7 @@ std::string HmiUnitConvertPage::copyExpression() {
 
 void HmiUnitConvertPage::remember() {
     if (!conv_.ok) return;
-    Entry e{trim(valueText_), conv_.from, conv_.to, hu::formatResult(conv_.result, decimals_) + " " + hmi::unitLabel(conv_.to)};
+    Entry e{shownValue(conv_, trim(valueText_)), conv_.from, conv_.to, hu::formatResult(conv_.result, decimals_) + " " + hmi::unitLabel(conv_.to)};
     auto& h = historyList();
     h.erase(std::remove_if(h.begin(), h.end(), [&](const Entry& x) { return x.value == e.value && x.from == e.from && x.to == e.to; }), h.end());
     h.insert(h.begin(), std::move(e));
