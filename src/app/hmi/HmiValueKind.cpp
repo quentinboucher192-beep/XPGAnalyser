@@ -16,6 +16,7 @@
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPopupParams.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
+#include "../../hmi/HmiRoles.hpp"         // 1.14.1 : la valeur fixe d'une duree (parseDuration)
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiSymbols.hpp"
@@ -513,6 +514,35 @@ std::string expectedOfProperty(const ui::PropertyGrid::Property& p) {
     return {};
 }
 
+// 1.14.1 (captures finales) : LA VALEUR FIXE D'UNE DUREE - un nombre dans l'unite de la case (4 : 4 s ; une
+// periode : des ms) ou une duree ecrite (4 s, 250 ms, T#30s, 1 min, 00:05), lue comme le moteur et Generer la
+// lisent (roles::parseDuration). Avant : lue en nombre, et "4 s" refuse ("n'est pas un nombre") alors que
+// l'aide, les notes et les exemples l'ecrivent ainsi (le Temps de manoeuvre d'une vanne, d'un registre).
+namespace {
+Result durationConstant(const Env& env, std::string_view text, std::string_view key) {
+    const std::string t = trimmed(text);
+    // Des reperes ($Temps$) : la regle d'avant (le nombre, reperes compris).
+    if (t.empty() || !hmi::dup::markersIn(t, false).empty()) return classify(env, text, false, "NOMBRE");
+    const auto* row = hmi::roles::keyRole(key);
+    const auto unit = row && row->role == hmi::roles::Role::Duration ? row->unit : hmi::roles::Unit::Seconds;
+    Result r;
+    r.empty = false;
+    std::int64_t ms = 0;
+    if (hmi::roles::parseDuration(t, ms, unit)) {
+        r.style = Style::Constant;
+        r.literal = t;
+        r.info = "Constante : " + t + " (dur\xC3\xA9" "e)";
+        return r;
+    }
+    r.style = Style::Error;
+    r.diags.push_back({"\xC2\xAB " + t + " \xC2\xBB n'est pas une dur\xC3\xA9" "e : 5 s, 250 ms, T#5s ; un nombre seul en "
+                           + std::string(unit == hmi::roles::Unit::Milliseconds ? "millisecondes." : "secondes."),
+                       {{"En faire une formule (fx)", t, true, {}}}});
+    r.info = "Constante impossible \xC3\xA0 convertir.";
+    return r;
+}
+} // namespace
+
 void decorateCells(std::vector<ui::PropertyGrid::Category>& cats, const Env& env) {
     using VT = ui::PropertyGrid::ValueType;
     for (auto& c : cats) {
@@ -521,9 +551,11 @@ void decorateCells(std::vector<ui::PropertyGrid::Category>& cats, const Env& env
             bool fx = !p.expression.empty();
             std::string expected = expectedOfProperty(p);
             // Une duree se garde en nombre, dans l'unite de la case (60 : 60 s) : sa valeur fixe se lit en
-            // nombre, sa formule en duree.
-            if (expected == "TIME" && !fx) expected = "NOMBRE";
-            auto res = classify(env, fx ? p.expression : p.value, fx, expected);
+            // nombre, sa formule en duree. 1.14.1 (captures finales) : ou en duree ecrite (4 s, T#30s, 1 min).
+            const bool fixedDuration = expected == "TIME" && !fx;
+            if (fixedDuration) expected = "NOMBRE";
+            auto res = fixedDuration ? durationConstant(env, p.value, p.key.empty() ? p.name : p.key)
+                                     : classify(env, fx ? p.expression : p.value, fx, expected);
             // 1.12.23 : une case « tout expression » (markWhole : l'expression d'une plume, la condition d'une alarme)
             // garde sa formule dans sa valeur : ce qui n'est pas une constante du type attendu (12, TRUE) se lit en
             // formule. Avant : toujours en constante - « SPPV_TELUNA[0].SP n'est pas un nombre », une condition

@@ -875,6 +875,8 @@ Une valeur illisible (variable inconnue, expression fausse) s'affiche `###`.
 - Une case **Couleur** s'édite dans la palette : nuancier, couleurs du projet, récentes, et le choix personnalisé (carré, teinte, transparence, code, T S V, R G B, opacité, pipette) : voir « Choisir une couleur : la palette et la pipette ».
 @nouveau 1.12.10
 1.12.10 : la case « Unité, format et plage de la variable » - cochée (par défaut), l'objet prend l'unité, le format, la plage et les seuils de sa variable pour ce qu'il laisse vide.
+@nouveau 1.14.1
+1.14.1 : une case grisée (sans effet dans le mode choisi : la Valeur d'une vanne commandée par ses fins de course, le Booléen A d'une vanne 3 voies par sa Position) dit pourquoi en tête de son infobulle et de celle de son carré. Une durée fixe (le Temps de manœuvre, la durée d'une courbe) se lit en nombre, dans l'unité de la case, ou écrite en durée : 4 s, 250 ms, T#30s, 1 min.
 
 == couleurs | Choisir une couleur : la palette et la pipette
 : Un clic sur une case Couleur ouvre la palette : en haut la propriété et le bouton Pipette ; à gauche le nuancier, les couleurs du projet, les récentes et l'aperçu avant / après ; à droite le choix personnalisé, ouvert d'emblée - le carré saturation/valeur, la barre de teinte, la barre de transparence, le code #RRGGBB(AA), T S V, R G B et l'opacité ; en bas Annuler et Appliquer. La pipette prend une couleur n'importe où dans la fenêtre.
@@ -4600,7 +4602,7 @@ Sur le terrain, une vanne dit où elle est par ses **fins de course** : FCO quan
 - deux voyants **O** et **F**, à gauche de l'actionneur, disent chaque fin de course ; **Voyants des fins de course** décoché les cache.
 - Facultatifs, **Ordre d'ouverture** (la commande de l'automate : `=V101_Cde`) et **Temps de manœuvre** (10 s, T#30s ; un nombre seul : des secondes) : l'ordre donné, la vanne est en mouvement vers lui (une flèche le long de la tige) tant que sa fin de course n'est pas atteinte ; toujours pas atteinte après le temps de manœuvre : discordance. Le chrono suit l'heure de la marche (la simulation, le poste d'exploitation).
 - Une seule fin de course reliée : l'autre position s'en déduit. Réglante : l'ouverture reste montrée, les fins de course donnent les bouts (0 % fermée, 100 % ouverte) ; entre les deux, elle est à son ouverture.
-- Le **Défaut** passe avant tout. La Valeur et En mouvement n'y servent plus (grisés dans l'inspecteur). Reliées, les fins de course donnent l'alarme par défaut **Discordance** (son délai : le temps de manœuvre, 30 s sans lui) ; **Pourquoi ?** dit quelle fin de course décide.
+- Le **Défaut** passe avant tout. La Valeur et En mouvement n'y servent plus (grisés dans l'inspecteur ; le survol dit pourquoi). Reliées, les fins de course donnent l'alarme par défaut **Discordance** (son délai : le temps de manœuvre, 30 s sans lui) ; **Pourquoi ?** dit quelle fin de course décide.
 > Dans la bibliothèque, chercher « fins de course » trouve la vanne, la vanne 3 voies et les registres ; un projet 1.14.0 reste à « une valeur ».
 ### Ses paramètres
 @param value | Valeur | FALSE | Vraie : ouverte ; fausse : fermée. Une expression la relie : =V_101.Ouv.
@@ -4651,10 +4653,10 @@ Le symbole d'une vanne 3 voies : trois triangles qui se rejoignent au centre - l
 - **En mouvement** (une expression vraie quand le boisseau tourne) fait clignoter le passage en ambre, et la tige comme la vanne ; reliée, elle donne l'alarme par défaut **Course_Trop_Longue**.
 @nouveau 1.14.1
 ### Commande par les fins de course
-- **Commande de la position : fins de course** : une fin de course par voie - **FC voie 1-2**, **FC voie 1-3**, **FC voie 2-3** (boisseau en L : 1-3 et 2-3 seulement) - et, facultative, **FC fermée**. La seule vraie donne la voie (ou fermée) ; aucune : **en mouvement**, le boisseau tourne (son bord clignote en ambre) ; plusieurs à la fois : **discordance** - les passages de chacune en rouge, le cadre tireté, la pastille ≠ en bas à gauche.
+- **Commande de la position : fins de course** : une fin de course par voie - **FC voie 1-2**, **FC voie 1-3**, **FC voie 2-3** (boisseau en L : 1-3 et 2-3 seulement) - et, facultative, **FC fermée**. La seule vraie donne la voie (ou fermée) ; aucune : **en mouvement**, le boisseau tourne (son bord clignote en ambre) ; plusieurs à la fois : **discordance** - les passages de chacune en rouge et la pastille ≠ en haut à droite, comme la vanne et les registres (en bas à gauche sur une vanne trop petite pour l'y loger ; le cadre tireté reste au **Défaut**).
 - Un petit **voyant par voie**, entre ses deux voies : 1-3 en bas à gauche, 2-3 en bas à droite, 1-2 en haut ; **Voyants des fins de course** décoché les cache.
 - Facultatifs, **Ordre de position** (0 fermée, 1 la voie 1-2, 2 la voie 1-3, 3 la voie 2-3 ; ou 12, 13, 23) et **Temps de manœuvre** : l'ordre donné, le passage visé clignote en ambre tant que sa fin de course n'est pas la seule vraie ; toujours pas après le temps de manœuvre : discordance.
-- La Position, les booléens A et B et En mouvement n'y servent plus (grisés) ; l'alarme par défaut **Discordance** part de deux fins de course à la fois, ou de l'ordre pas suivi ; **Pourquoi ?** dit laquelle décide.
+- La Position, les booléens A et B et En mouvement n'y servent plus (grisés ; le survol dit pourquoi) ; l'alarme par défaut **Discordance** part de deux fins de course à la fois, ou de l'ordre pas suivi ; **Pourquoi ?** dit laquelle décide.
 ### Ses paramètres
 @param value | Position | 2 | La voie active : 0 fermée, 1 (ou 12) 1-2, 2 (ou 13) 1-3, 3 (ou 23) 2-3. Une expression : =V3[0].Pos.
 @param fault | Défaut (expression) | FALSE | Vrai : le passage en rouge, dans un cadre tireté. Une expression : =V3V_Defaut.
@@ -4717,7 +4719,7 @@ Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une 
 - **Discordance** : les deux à la fois, ou aucune hors mouvement, les deux étant reliées : le registre se dessine en défaut et clignote. Reliées toutes les deux, elles donnent l'alarme par défaut **Discordance** (10 s).
 @nouveau 1.14.1
 ### Commande par les fins de course
-**Commande de l'état : fins de course** (au lieu de « une valeur ») : l'état vient de **Fin de course ouvert** et **Fin de course fermé** seules, sans Valeur, avec les règles de la vanne - FCO seule, **ouvert** (la lame à plat) ; FCF seule, **fermé** (debout) ; aucune, **en mouvement** (la lame à mi-course, en ambre, qui clignote, et l'axe) ; les deux, ou l'**Ordre d'ouverture** pas suivi après le **Temps de manœuvre** : **discordance** (le rouge qui clignote, la pastille ≠ en haut à droite). Modulant : son ouverture entre les deux, 0 et 100 % aux fins de course. Une seule reliée : l'autre position s'en déduit. La Valeur et En mouvement n'y servent plus (grisés) ; l'alarme **Discordance** prend l'ordre et le temps de manœuvre (30 s sans lui). **Voyants des fins de course** décoché cache les voyants O et F, dans les deux modes.
+**Commande de l'état : fins de course** (au lieu de « une valeur ») : l'état vient de **Fin de course ouvert** et **Fin de course fermé** seules, sans Valeur, avec les règles de la vanne - FCO seule, **ouvert** (la lame à plat) ; FCF seule, **fermé** (debout) ; aucune, **en mouvement** (la lame à mi-course, en ambre, qui clignote, et l'axe) ; les deux, ou l'**Ordre d'ouverture** pas suivi après le **Temps de manœuvre** : **discordance** (le rouge qui clignote, la pastille ≠ en haut à droite). Modulant : son ouverture entre les deux, 0 et 100 % aux fins de course. Une seule reliée : l'autre position s'en déduit. La Valeur et En mouvement n'y servent plus (grisés ; le survol dit pourquoi) ; l'alarme **Discordance** prend l'ordre et le temps de manœuvre (30 s sans lui). **Voyants des fins de course** décoché cache les voyants O et F, dans les deux modes.
 ### Ses paramètres
 @param value | Ouvert | FALSE | Vrai : ouvert (la lame à plat) ; faux : fermé. Une expression : =RG3212_Ouvert.
 @param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote. Une expression : =RG3212_Defaut.
@@ -4815,7 +4817,7 @@ Le clapet coupe-feu (CF) d'une traversée de paroi : une gaine, sa lame, la marq
 @param showLimits | Voyants des fins de course | TRUE | Coché : les voyants O et F.
 @nouveau 1.14.1
 ### Commande par les fins de course
-**Commande de l'état : fins de course** : l'état vient de ses fins de course seules, comme le registre (voir « Registre ») ; déclenché, il reste fermé, rouge et clignotant, avant tout le reste.
+**Commande de l'état : fins de course** : l'état vient de ses fins de course seules, comme le registre (voir « Registre ») ; déclenché, il reste fermé, rouge et clignotant, avant tout le reste. Ses voyants **O** et **F** sont à droite du déclencheur (la marque CF tient la gauche), dans les deux modes ; la pastille ≠ d'une discordance se met dans le coin de la gaine, sous eux, quand ils prennent le haut à droite.
 ### En marche
 - déclenché, il se ferme, rouge et clignotant, et l'alarme **Declenche** part ; ses fins de course corrigent la lame et disent la discordance comme le registre ;
 - Générer signale une variable inconnue dans ses expressions.
@@ -9808,6 +9810,8 @@ Sur le poste d'exploitation, la barre est cachée : le clic droit en haut n'ouvr
 - **Performances** : le cycle de l'IHM, les scripts, le calcul, le dessin ;
 @nouveau 1.12.27
 - **Pourquoi ?** : clic droit sur un objet de la vue en marche › **Pourquoi ?** - ce qu'il montre et pourquoi, suivi à chaque image : chaque propriété calculée (sa formule, sa valeur), puis la valeur de **chaque terme** (les opérandes d'un AND / OR, les deux côtés d'une comparaison, les conditions des états, chaque nom lu, « forcée » s'il l'est) et **l'état retenu** (« allumé : #2ECC71 », « condition 1 vraie (Defaut) ; état 2 sur 3 », « zone 60..80 », « caché »). Double clic sur un nom : le forcer ; clic droit : Forcer, Relâcher, Suivre sur la courbe, Ajouter aux expressions, Copier la valeur, Copier le rapport ;
+@nouveau 1.14.1
+- dans **Pourquoi ?**, l'état retenu (« ordre d'ouverture donné, FC ouvert pas atteinte après le temps de manœuvre ») court sur toute la largeur du tableau, et chaque ligne se lit entière en infobulle ;
 @nouveau 1.13.0
 - **Débogage** : le débogueur des **scripts IHM** - les points d'arrêt posés dans la marge des scripts et des fonctions, la pause au milieu du script, le pas à pas (Continuer F5, Suivant F10, Entrer F11, Sortir Maj+F11), la pile, les locales, les espions (voir « Déboguer les scripts IHM ») ;
 - **Esclaves simulés** (l'ancien onglet Jumeaux) : les esclaves rangés par groupe - lié prêt, lié lu par l'IHM, seulement simulé - et les valeurs simulées des esclaves (animer, la zone de mouvement, forcer), serrées, pour régler pendant la marche ; les Graphiques de la vue marquent une zone tirée, un forçage (voir « Les valeurs simulées »).

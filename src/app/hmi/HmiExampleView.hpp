@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace app {
 
@@ -38,8 +39,14 @@ public:
     void setTopic(std::string_view key);
     [[nodiscard]] const std::string& topic() const noexcept { return topic_; }
     [[nodiscard]] bool hasExample() const noexcept { return example_.has_value(); }
-    // Ce que montre l'exemple, ecrit au-dessus (le @exemple du guide).
-    void setCaption(std::string caption) { caption_ = std::move(caption); invalidate(); }
+    // Ce que montre l'exemple, ecrit au-dessus (le @exemple du guide). 1.14.1 (captures finales) : sur plusieurs
+    // lignes s'il le faut (l'en-tete grandit), au plus kCaptionLines ; au-dela, "..." et l'infobulle de l'en-tete.
+    void setCaption(std::string caption) { caption_ = std::move(caption); invalidateLayout(); }
+    [[nodiscard]] const std::string& caption() const noexcept { return caption_; }
+    // Les lignes montrees (la derniere finit par "..." si le texte ne tient pas) et la hauteur de l'en-tete.
+    [[nodiscard]] const std::vector<std::string>& captionLines() const noexcept { return captionLines_; }
+    [[nodiscard]] float headerHeight() const noexcept;
+    static constexpr std::size_t kCaptionLines = 4;
     // Reprendre au debut du tour.
     void restart();
     // Sans attendre les images (tests, captures) : l'exemple a `seconds` du tour.
@@ -66,11 +73,14 @@ public:
     [[nodiscard]] bool interactive() const noexcept { return interactive_; }
     [[nodiscard]] const hmi::examples::Example* example() const noexcept { return example_ ? &*example_ : nullptr; }
     // Le titre de l'en-tete ("Exemple anime", "Tutoriel").
-    void setTitle(std::string title) { title_ = std::move(title); invalidate(); }
+    void setTitle(std::string title) { title_ = std::move(title); invalidateLayout(); }
     [[nodiscard]] const hmi::Runtime* runtime() const noexcept { return runtime_.get(); }
     // Le cadre de la vue de l'exemple, a l'ecran (captures du guide Word).
     [[nodiscard]] gfx::Rect exampleRect() const noexcept { return frame_; }
 
+    // 1.14.1 (captures finales) : un texte d'en-tete coupe se lit entier en infobulle (sur l'en-tete).
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool hasTooltip() const override;
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
@@ -92,6 +102,9 @@ private:
     HmiLayerBuilder                          layers_;
     HmiLiveCanvas*                           canvas_{nullptr};
     std::string                              caption_;
+    std::vector<std::string>                 captionLines_;   // 1.14.1 : le texte de l'en-tete, en lignes (onLayout)
+    bool                                     captionCut_{false};
+    float                                    captionLineH_{16.f};
     double                                   origin_{-1};   // l'instant (ctx.time) du debut du tour
     double                                   played_{0};    // le temps du tour deja joue
     double                                   clock_{0};     // l'heure du moteur

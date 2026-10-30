@@ -28826,6 +28826,7 @@ struct ColorTris final : gfx::IRenderer {
     std::vector<Tri> tris;
     std::vector<Tri> lines;      // 1.10.4 : les traits (leur milieu), pour la croix et le cadre tirete
     std::vector<std::string> texts;
+    std::vector<gfx::Point>  textAt;   // 1.14.1 : ou chaque texte s'ecrit (les voyants du clapet coupe-feu)
     void beginFrame(gfx::Color) override {}
     void endFrame() override {}
     void pushClip(const gfx::Rect&) override {}
@@ -28834,7 +28835,10 @@ struct ColorTris final : gfx::IRenderer {
     void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
     void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
     void line(gfx::Point a, gfx::Point b, gfx::Color col, float) override { lines.push_back({{(a.x + b.x) / 2, (a.y + b.y) / 2}, col}); }
-    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawText(gfx::Point at, std::string_view t, gfx::FontId, gfx::Color) override {
+        texts.emplace_back(t);
+        textAt.push_back(at);
+    }
     void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
     void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
         for (std::size_t i = 0; i + 2 < n; i += 3)
@@ -29328,6 +29332,282 @@ void finsDeCourse1141Editeur() {
             check(overdueAt > 8.9 && overdueAt < 9.2, "... la discordance par le temps \xC3\xA0 9 s (l'ordre \xC3\xA0 7 s + 2 s), les couches de la simulation la posent ("
                                                           + std::to_string(overdueAt) + ")");
         }
+    }
+}
+
+// ---- 1.14.1 (captures finales du lot N1) : les defauts vus a l'ecran ----
+//  1. le Temps de manoeuvre ecrit en duree (4 s, 60 s) refuse par l'inspecteur ; 2. la raison d'une case grisee
+//  invisible ; 3. le voyant O du clapet coupe-feu sous sa marque CF ; 4. la raison coupee dans Pourquoi ? ;
+//  5. le texte de l'exemple anime coupe net ; 6. la vanne 3 voies en discordance (cadre tirete, pastille en bas).
+void defautsVannes1141Captures() {
+    std::printf("1.14.1 (lot N1) : les d\xC3\xA9" "fauts des captures finales (vannes, registres)\n");
+    const auto findProp = [](const ui::PropertyGrid& grid, const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : grid.categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == name) return &pr;
+        return nullptr;
+    };
+    const auto reselect = [](Bench& b, Id id) {
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({id});
+        b.editor->layout();
+    };
+    const std::string kTemps = "Temps de man\xC5\x93uvre";
+    // ---- 1. le Temps de manoeuvre : une duree (4 s, 60 s, T#30s, 1 min), comme l'aide et les exemples l'ecrivent
+    {
+        Bench b;
+        const auto accepted = [&](const std::string& name) {
+            const auto* pr = findProp(b.editor->properties(), name);
+            return pr && pr->exprError.empty() && pr->legend && pr->legend->style != ui::PropertyGrid::LegendStyle::Error;
+        };
+        const auto refusedWhy = [&](const std::string& name) {
+            const auto* pr = findProp(b.editor->properties(), name);
+            return pr ? pr->exprError : std::string("(pas de case)");
+        };
+        const Id v = b.place(Kind::Valve, 200, 150);
+        b.v().object(v)->set("stateMode", "fins de course");
+        b.v().object(v)->set("travelTime", "4 s");
+        reselect(b, v);
+        check(accepted(kTemps), "la vanne : Temps de man\xC5\x93uvre \xC2\xAB 4 s \xC2\xBB accept\xC3\xA9 (avant : \xC2\xAB 4 s \xC2\xBB n'est pas un nombre) "
+                                    + refusedWhy(kTemps));
+        for (const char* t : {"4", "T#30s", "1 min", "2,5 s", "250 ms"}) {
+            b.v().object(v)->set("travelTime", t);
+            reselect(b, v);
+            check(accepted(kTemps), std::string("... \xC2\xAB ") + t + " \xC2\xBB aussi");
+        }
+        b.v().object(v)->set("travelTime", "4 x");
+        reselect(b, v);
+        check(refusedWhy(kTemps).find("n'est pas une dur\xC3\xA9" "e") != std::string::npos && refusedWhy(kTemps).find("secondes") != std::string::npos,
+              "... \xC2\xAB 4 x \xC2\xBB refus\xC3\xA9, la raison dit une dur\xC3\xA9" "e (" + refusedWhy(kTemps) + ")");
+        check(commitIn(b.editor->properties(), kTemps, "4 s") && b.v().object(v)->text("travelTime") == "4",
+              "... tap\xC3\xA9 4 s : \xC3\xA9" "crit en secondes (4), comme toute dur\xC3\xA9" "e");
+        const struct { Kind k; const char* mode; const char* modeValue; } others[] = {
+            {Kind::ThreeWayValve, "positionMode", "fins de course"}, {Kind::Damper, "stateMode", "fins de course"},
+            {Kind::MultiBladeDamper, "stateMode", "fins de course"}, {Kind::FireDamper, "stateMode", "fins de course"}};
+        double x = 350;
+        for (const auto& o : others) {
+            const Id id = b.place(o.k, x, 150);
+            x += 150;
+            b.v().object(id)->set(o.mode, o.modeValue);
+            b.v().object(id)->set("travelTime", "60 s");
+            reselect(b, id);
+            check(accepted(kTemps), std::string("... ") + std::string(kindKey(o.k)) + " : \xC2\xAB 60 s \xC2\xBB accept\xC3\xA9 " + refusedWhy(kTemps));
+        }
+    }
+    // ---- 2. la raison d'une case grisee : en tete de l'infobulle de la ligne et de son carre de legende
+    {
+        Bench b;
+        const Id v = b.place(Kind::Valve, 300, 200);
+        b.editor->layout();
+        check(commitIn(b.editor->properties(), "Commande de l'\xC3\xA9tat", "fins de course"), "la vanne par ses fins de course");
+        reselect(b, v);
+        auto& grid = b.editor->properties();
+        const std::string why = "Sans effet : l'\xC3\xA9tat se lit par les fins de course";
+        gfx::Rect r{};
+        check(grid.revealValue("Valeur") && grid.valueRect("Valeur", r), "la Valeur \xC3\xA0 l'\xC3\xA9" "cran");
+        const std::string onValue = grid.liveTooltip({r.x + 6.f, r.y + r.h * 0.5f});
+        const std::string onName = grid.liveTooltip({grid.bounds().x + 20.f, r.y + r.h * 0.5f});
+        check(grid.hasTooltip() && onValue.rfind(why, 0) == 0 && onValue.find("Accepte une expression") != std::string::npos,
+              "le survol de la Valeur gris\xC3\xA9" "e dit pourquoi, en t\xC3\xAA" "te (" + onValue + ")");
+        check(onName.rfind(why, 0) == 0, "... sur son nom aussi (" + onName + ")");
+        gfx::Rect lg{};
+        const std::string onLegend = grid.legendRect("Valeur", lg) ? grid.liveTooltip({lg.x + lg.w * 0.5f, lg.y + lg.h * 0.5f}) : std::string{};
+        check(onLegend.rfind(why, 0) == 0, "... et son carr\xC3\xA9 de l\xC3\xA9gende (" + onLegend + ")");
+        gfx::Rect fr{};
+        const std::string onFco = grid.revealValue("Fin de course ouvert") && grid.valueRect("Fin de course ouvert", fr)
+                                      ? grid.liveTooltip({fr.x + 6.f, fr.y + fr.h * 0.5f}) : std::string("?");
+        check(onFco.find("Sans effet") == std::string::npos, "une case qui sert ne dit rien de tel (" + onFco + ")");
+        // La vanne 3 voies (lot G) : les cases du mode de position qui ne sert pas, pareil.
+        const Id v3 = b.place(Kind::ThreeWayValve, 600, 200);
+        reselect(b, v3);
+        auto& g3 = b.editor->properties();
+        gfx::Rect ra{};
+        const std::string onA = g3.revealValue("Bool\xC3\xA9" "en A (expression)") && g3.valueRect("Bool\xC3\xA9" "en A (expression)", ra)
+                                    ? g3.liveTooltip({ra.x + 6.f, ra.y + ra.h * 0.5f}) : std::string("?");
+        check(onA.rfind("Sans effet : la position se lit par la Position", 0) == 0, "la vanne 3 voies : le Bool\xC3\xA9" "en A gris\xC3\xA9 dit pourquoi (" + onA + ")");
+    }
+    // ---- 3 et 6. le dessin : les voyants du clapet coupe-feu, la discordance de la vanne 3 voies
+    Project p;
+    View v = makeView(p, "Vue");
+    v.width = 1400;
+    v.height = 800;
+    app::HmiViewport vp;
+    vp.zoom = 1.f;
+    const auto theme = ui::Theme::dark();
+    const auto draw = [&](const Object& o) {
+        ColorTris rec;
+        app::HmiPaintOptions opt;
+        opt.editor = false;
+        opt.time = 0.1;
+        app::paintHmiObject(rec, v, o, vp, app::HmiPropertySource{}, theme, opt);
+        return rec;
+    };
+    const auto isWhite = [](gfx::Color c) { return c.r > 235 && c.g > 235 && c.b > 235; };
+    const auto isRed = [](gfx::Color c) { return c.r > 180 && c.g < 120; };
+    const auto textAt = [](const ColorTris& rec, std::string_view t) {
+        for (std::size_t i = 0; i < rec.texts.size(); ++i)
+            if (rec.texts[i] == t) return rec.textAt[i];
+        return gfx::Point{-1.f, -1.f};
+    };
+    const auto badge = [&](const ColorTris& rec, gfx::Point& at) {
+        std::size_t n = 0;
+        at = {0.f, 0.f};
+        for (const auto& l : rec.lines)
+            if (isWhite(l.col)) {
+                at.x += l.c.x;
+                at.y += l.c.y;
+                ++n;
+            }
+        if (n) at = {at.x / static_cast<float>(n), at.y / static_cast<float>(n)};
+        return n == 3;
+    };
+    for (const auto& [w, h] : {std::pair{90.0, 70.0}, std::pair{112.0, 56.0}, std::pair{150.0, 110.0}}) {
+        Object o = makeObject(Kind::FireDamper, 61, "CF", 100, 100, v.activeLayer);
+        o.setNumber("w", w);
+        o.setNumber("h", h);
+        o.set("limitOpen", "TRUE");
+        o.set("limitClosed", "FALSE");
+        const std::string size = std::to_string(static_cast<int>(w)) + " x " + std::to_string(static_cast<int>(h));
+        for (const char* mode : {"une valeur", "fins de course"}) {
+            o.set("stateMode", mode);
+            const auto rec = draw(o);
+            const gfx::Point cf = textAt(rec, "CF"), po = textAt(rec, "O"), pf = textAt(rec, "F");
+            const float tagRight = static_cast<float>(100 + 2 + std::clamp(std::min(h * 0.34, w * 0.36) * 0.55, 7.0, 16.0) * 1.9);
+            check(rec.wrote("CF") && rec.wrote("O") && rec.wrote("F") && po.x > tagRight && pf.x > po.x && pf.x < 100 + w && cf.x < tagRight,
+                  "le clapet coupe-feu " + size + " (" + mode + ") : ses deux voyants O et F se voient, \xC3\xA0 droite de la marque CF (O \xC3\xA0 "
+                      + std::to_string(static_cast<int>(po.x)) + ", F \xC3\xA0 " + std::to_string(static_cast<int>(pf.x)) + ")");
+        }
+        // En discordance : la pastille ne couvre pas les voyants.
+        o.set("stateMode", "fins de course");
+        o.set("limitClosed", "TRUE");
+        const auto rec = draw(o);
+        gfx::Point bc{};
+        const gfx::Point pf = textAt(rec, "F");
+        const double br = std::clamp(std::min(w, h) * 0.1, 5.0, 10.0);
+        check(badge(rec, bc) && rec.wrote("F") && (bc.y > pf.y + 6.f || bc.x - br > pf.x + 10.f),
+              "... en discordance, sa pastille \xE2\x89\xA0 ne couvre pas les voyants (pastille " + std::to_string(static_cast<int>(bc.x)) + ","
+                  + std::to_string(static_cast<int>(bc.y)) + ")");
+    }
+    {
+        // Le registre garde ses voyants a gauche de l'actionneur, sa pastille en haut a droite.
+        Object o = makeObject(Kind::Damper, 62, "RG", 100, 100, v.activeLayer);
+        o.setNumber("w", 90);
+        o.setNumber("h", 70);
+        o.set("stateMode", "fins de course");
+        o.set("limitOpen", "TRUE");
+        o.set("limitClosed", "TRUE");
+        const auto rec = draw(o);
+        gfx::Point bc{};
+        check(textAt(rec, "O").x < 145 && textAt(rec, "F").x < 145 && badge(rec, bc) && bc.x > 170 && bc.y < 115,
+              "le registre : O et F \xC3\xA0 gauche, la pastille en haut \xC3\xA0 droite (comme avant)");
+    }
+    for (const double side : {90.0, 120.0}) {
+        Object o = makeObject(Kind::ThreeWayValve, 63, "V3V", 100, 100, v.activeLayer);
+        o.setNumber("w", side);
+        o.setNumber("h", side);
+        o.set("positionMode", "fins de course");
+        for (const char* k : {"limit12", "limit13", "limit23", "limitClosed"}) o.set(k, "FALSE");
+        o.set("limit12", "TRUE");
+        o.set("limit23", "TRUE");
+        const auto rec = draw(o);
+        gfx::Point bc{};
+        std::size_t dashes = 0;
+        for (const auto& l : rec.lines)
+            if (isRed(l.col) && (std::fabs(l.c.y - 101.f) < 0.6f || std::fabs(l.c.x - 101.f) < 0.6f || std::fabs(l.c.y - (99.f + static_cast<float>(side))) < 0.6f
+                                 || std::fabs(l.c.x - (99.f + static_cast<float>(side))) < 0.6f))
+                ++dashes;
+        const std::string size = std::to_string(static_cast<int>(side));
+        check(dashes == 0, "la vanne 3 voies " + size + " en discordance : sans cadre tir\xC3\xA9t\xC3\xA9 (comme la vanne, les registres ; "
+                               + std::to_string(dashes) + " tirets)");
+        check(badge(rec, bc) && bc.x > 100 + side * 0.75 && bc.y < 100 + side * 0.25,
+              "... sa pastille \xE2\x89\xA0 en haut \xC3\xA0 droite (" + std::to_string(static_cast<int>(bc.x)) + "," + std::to_string(static_cast<int>(bc.y)) + ")");
+        o.set("limit23", "FALSE");
+        o.set("fault", "TRUE");
+        std::size_t faultDashes = 0;
+        for (const auto& l : draw(o).lines)
+            if (isRed(l.col) && std::fabs(l.c.y - 101.f) < 0.6f) ++faultDashes;
+        check(faultDashes >= 3, "... le D\xC3\xA9" "faut garde son cadre tir\xC3\xA9t\xC3\xA9 (maquette 1.10.4)");
+    }
+    // ---- 4. Pourquoi ? : l'etat retenu se lit en entier (sur toute la largeur), chaque ligne en infobulle
+    {
+        installerPressePapiers();
+        auto doc = std::make_shared<Document>();
+        auto& pj = doc->project;
+        for (const char* name : {"V205_FCO", "V205_FCF"}) {
+            Variable var;
+            var.id = pj.allocate();
+            var.name = name;
+            var.type = "BOOL";
+            var.initial = "TRUE";
+            pj.programs.variables.push_back(var);
+        }
+        View vw = makeView(pj, "Vue_FC");
+        const Id id = edit::add(pj, vw, Kind::Valve, 100, 100);
+        vw.object(id)->name = "Vanne_V205";
+        vw.object(id)->set("stateMode", "fins de course");
+        vw.object(id)->set("limitOpen", "V205_FCO");
+        vw.object(id)->set("limitClosed", "V205_FCF");
+        pj.config.startView = vw.id;
+        pj.views.push_back(vw);
+        app::HmiSimulationHost host;
+        app::HmiSimulationPane pane("sim1141why", doc, host);
+        pane.setBounds({0, 0, 1600, 900});
+        Recorder rec;
+        const auto paintAt = [&](double t) {
+            rec.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        paintAt(0.0);
+        paintAt(0.1);
+        check(pane.explainObject(vw.id, id), "Pourquoi ? sur la vanne V205 (FCO et FCF vraies)");
+        paintAt(0.2);
+        const auto m = pane.whyTable().model();
+        std::size_t stateRow = m ? m->rowCount() : 0;
+        bool allTips = m && m->rowCount() > 0;
+        for (std::size_t i = 0; m && i < m->rowCount(); ++i) {
+            if (m->cellText(i, 0).find("vraies \xC3\xA0 la fois") != std::string::npos) stateRow = i;
+            allTips = allTips && !m->rowTooltip(i).empty();
+        }
+        check(m && stateRow < m->rowCount() && m->cellStyle(stateRow, 0).spanRow
+                  && m->cellText(stateRow, 0) == "\xE2\x86\x92 FC ouvert et FC ferm\xC3\xA9 vraies \xC3\xA0 la fois",
+              "l'\xC3\xA9tat retenu court sur toute la largeur, sa raison enti\xC3\xA8re (" + (m && stateRow < m->rowCount() ? m->cellText(stateRow, 0) : "") + ")");
+        check(allTips && m->rowTooltip(stateRow) == "\xC3\x89tat retenu : FC ouvert et FC ferm\xC3\xA9 vraies \xC3\xA0 la fois",
+              "chaque ligne donne son texte entier en infobulle (" + (m && stateRow < m->rowCount() ? m->rowTooltip(stateRow) : "") + ")");
+        check(!pane.whyTable().columns().empty() && pane.whyTable().columns()[0].width >= 240.f,
+              "Ce qui compte : assez large pour Commande de l'\xC3\xA9tat, Fin de course ferm\xC3\xA9");
+    }
+    // ---- 5. IHM > Aide : le texte de l'exemple anime de la vanne se lit en entier
+    {
+        app::HmiHelpPane pane("aide1141v");
+        pane.setBounds({0, 0, 1800, 900});
+        pane.layout();
+        pane.show("objet-vanne");
+        pane.layout();
+        auto& ex = pane.example();
+        const std::string cap = ex.caption();
+        check(cap.find("V-102") != std::string::npos && cap.find("discordance \xC3\xA0 9 s") != std::string::npos, "l'exemple de la vanne : son texte dit V-102");
+        Recorder rec;
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1800, 900}, 20.0, nullptr});
+        std::string drawn;
+        for (const auto& t : rec.texts) drawn += t + " ";
+        check(drawn.find("discordance \xC3\xA0 9 s.") != std::string::npos && drawn.find("FCO ne vient pas") != std::string::npos,
+              "... il se lit en entier, la fin aussi (avant : coupe net apr\xC3\xA8s \xC2\xAB elle cli \xC2\xBB)");
+        check(ex.captionLines().size() >= 2 && ex.headerHeight() > 28.f && ex.canvas().bounds().y >= ex.bounds().y + ex.headerHeight() - 0.5f,
+              "... sur " + std::to_string(ex.captionLines().size()) + " lignes : l'en-t\xC3\xAAte grandit, l'exemple dessous");
+        check(!ex.hasTooltip(), "... entier : pas d'infobulle de reste");
+        // Une ligne ne commence ni par la ponctuation haute ni par l'unite d'un nombre (comme une espace insecable).
+        std::string orphan;
+        for (const auto& l : ex.captionLines())
+            if (l.rfind(":", 0) == 0 || l.rfind(";", 0) == 0 || l.rfind("s.", 0) == 0 || l.rfind("s,", 0) == 0 || l.rfind("s ", 0) == 0) orphan += "[" + l + "] ";
+        check(orphan.empty(), "... sans \xC2\xAB s. \xC2\xBB ni \xC2\xAB : \xC2\xBB en d\xC3\xA9" "but de ligne " + orphan);
+        // Un volet etroit : au plus quatre lignes, la derniere finit par "...", l'infobulle de l'en-tete le donne entier.
+        pane.setBounds({0, 0, 760, 900});
+        pane.layout();
+        const auto& lines = ex.captionLines();
+        check(lines.size() == app::HmiExampleView::kCaptionLines && lines.back().size() > 3 && lines.back().substr(lines.back().size() - 3) == "...",
+              "un volet \xC3\xA9troit : " + std::to_string(lines.size()) + " lignes, la derni\xC3\xA8re finit par \xC2\xAB ... \xC2\xBB");
+        check(ex.hasTooltip() && ex.liveTooltip({ex.bounds().x + 60.f, ex.bounds().y + 10.f}) == cap, "... et l'infobulle de l'en-t\xC3\xAAte le donne entier");
     }
 }
 
@@ -37103,10 +37383,14 @@ void pourquoiSimulation11227() {
             if (m->cellText(i, 1) == col1 && m->cellText(i, 2).rfind(prefix, 0) == 0) return true;
         return false;
     };
+    // 1.14.1 (captures finales) : l'etat retenu court sur toute la ligne (sa premiere case, "-> ...", son infobulle
+    // "Etat retenu : ...").
     const auto stateHas = [&](std::string_view part) {
         const auto m = pane.whyTable().model();
         for (std::size_t i = 0; m && i < m->rowCount(); ++i)
-            if (m->cellText(i, 1).find(part) != std::string::npos) return true;
+            if (m->cellStyle(i, 0).spanRow && m->rowTooltip(i).find("tat retenu") != std::string::npos
+                && m->cellText(i, 0).find(part) != std::string::npos)
+                return true;
         return false;
     };
     check(cellIs("=Marche AND NOT Defaut", "") && cellIs("Marche", "FALSE") && cellIs("NOT Defaut", "TRUE"),
@@ -43900,6 +44184,7 @@ int main(int argc, char** argv) {
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import
     vanne3Voies1104Editeur();               // 1.10.4 (K2) : la vanne 3 voies a l'ecran
     finsDeCourse1141Editeur();              // 1.14.1 (lot N1) : vannes et registres par leurs fins de course, a l'ecran
+    defautsVannes1141Captures();            // 1.14.1 (lot N1) : les defauts des captures finales (vannes, registres)
     tutoriels111();                         // 1.11 (chantier T1) : le moteur des tutoriels, sans ecran
     vi1111();                               // 1.11.1 (decision 108, T1) : les alarmes, le groupe et les parametres d'un objet
     centreAide111();                        // 1.11 (chantier T2) : le centre d'aide, les raccourcis, les notes, Signaler

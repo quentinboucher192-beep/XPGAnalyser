@@ -591,7 +591,10 @@ private:
 };
 
 // 1.12.27 : LES LIGNES DE L'ONGLET POURQUOI ? - chaque propriete calculee (en gras), son etat
-// retenu, puis ses termes (en retrait) ; les valeurs en erreur en orange.
+// retenu, puis ses termes (en retrait) ; les valeurs en erreur en orange. 1.14.1 (captures finales) : l'etat
+// retenu est une phrase (quelle fin de course decide, l'ordre, le temps) - sa ligne court sur toute la largeur
+// (avant : coupee dans la colonne Formule ou terme, "FC voie 1-2 et FC voie 2-3 v...") ; et chaque ligne donne
+// son texte entier en infobulle (une colonne etroite, un volet etroit).
 class WhyRows final : public ui::ITableModel {
 public:
     struct Line {
@@ -601,6 +604,7 @@ public:
         std::size_t   item{0};
         int           term{-1};      // -1 : la propriete (ou son etat)
         bool          state{false};
+        std::string   tip;           // 1.14.1 : le texte entier de la ligne (infobulle)
     };
     std::vector<Line> lines;
     [[nodiscard]] std::size_t rowCount() const override { return lines.size(); }
@@ -624,6 +628,7 @@ public:
         return cs;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override { return r < lines.size() ? lines[r].tip : std::string{}; }
 };
 
 // La page Pourquoi ? : en tete l'objet (ou comment en choisir un) et Copier, puis les lignes.
@@ -3649,7 +3654,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     {
         // 1.12.27 : Pourquoi ? - ce que montre l'objet choisi (clic droit > Pourquoi ?), et pourquoi.
         auto table = std::make_unique<ui::TableView>(base + ".pourquoi");
-        table->setColumns({{"Ce qui compte", 170.f}, {"Formule ou terme", 220.f}, {"Maintenant", 150.f}});
+        // 1.14.1 (captures finales) : Ce qui compte plus large - "Commande de l'etat", "Fin de course ferme" s'y lisent.
+        table->setColumns({{"Ce qui compte", 240.f}, {"Formule ou terme", 220.f}, {"Maintenant", 150.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table->setExtraContextOnly(true);
         table->setExtraContextItems([this] { return whyMenuItems(); });
@@ -6098,15 +6104,20 @@ void HmiSimulationPane::refreshWhy() {
         head.item = i;
         head.first.bold = true;
         head.first.icon = it.text ? ui::Icon::Document : ui::Icon::Code;
+        head.tip = head.a + " : " + head.b + (head.c.empty() ? std::string{} : "\nMaintenant : " + head.c);
         lines.push_back(std::move(head));
         if (!it.state.empty()) {
+            // 1.14.1 (captures finales) : une phrase, sur toute la largeur du tableau, sous la propriete qu'elle explique
+            // (sans "etat retenu :" devant - la place de la raison : 600 px pour la plus longue, un volet de 660 px la
+            // montre entiere) ; l'infobulle la dit "Etat retenu".
             WhyRows::Line st;
-            st.a = "\xE2\x86\x92 \xC3\xA9tat retenu";
-            st.b = it.state;
+            st.a = "\xE2\x86\x92 " + it.state;
             st.item = i;
             st.state = true;
             st.first.indent = 18.f;
             st.first.fgTone = ui::Tone::Accent;
+            st.first.spanRow = true;
+            st.tip = "\xC3\x89tat retenu : " + it.state;
             lines.push_back(std::move(st));
         }
         for (std::size_t k = 0; k < it.terms.size(); ++k) {
@@ -6120,6 +6131,7 @@ void HmiSimulationPane::refreshWhy() {
             tl.term = static_cast<int>(k);
             tl.first.indent = 18.f;
             tl.first.fgTone = ui::Tone::Muted;
+            tl.tip = tl.b + (tl.c.empty() ? std::string{} : "\nMaintenant : " + tl.c);
             lines.push_back(std::move(tl));
         }
     }
