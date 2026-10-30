@@ -139,6 +139,28 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
+        note("1.14.1", "Objets", Kind::New,
+         "LES VANNES \xC3\x80 FINS DE COURSE : la Vanne et la Vanne 3 voies ont une variante command\xC3\xA9" "e par leurs fins de course, comme sur "
+         "le terrain, au lieu d'une seule valeur. Dans l'inspecteur, Commande de l'\xC3\xA9tat : fins de course (la vanne 3 voies : Commande de la "
+         "position : fins de course). La vanne lit Fin de course ouvert et Fin de course ferm\xC3\xA9 : l'une seule, ouverte ou ferm\xC3\xA9" "e ; aucune, en "
+         "mouvement (l'ambre qui clignote, la tige aussi) ; les deux, discordance (le rouge qui clignote et une pastille \xE2\x89\xA0) ; deux voyants O et F "
+         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'actionneur. La vanne 3 voies lit une fin de course par voie (1-2, 1-3, 2-3, et ferm\xC3\xA9" "e) : la seule vraie donne la "
+         "voie, aucune fait tourner le boisseau, plusieurs sont une discordance ; un petit voyant par voie. Facultatifs, l'Ordre (d'ouverture, de "
+         "position) et le Temps de man\xC5\x93uvre : l'ordre donn\xC3\xA9, elle est en mouvement vers lui, et en discordance si sa fin de course n'est "
+         "toujours pas l\xC3\xA0 apr\xC3\xA8s ce temps (le chrono suit l'heure de la simulation et du poste). La Valeur n'y sert plus (gris\xC3\xA9" "e) ; "
+         "l'alarme par d\xC3\xA9" "faut Discordance, Pourquoi ? (quelle fin de course d\xC3\xA9" "cide) et G\xC3\xA9n\xC3\xA9rer (aucune fin de course reli\xC3\xA9" "e, "
+         "une seule, un temps illisible, une formule qui n'est pas un bool\xC3\xA9" "en) suivent ; un projet 1.14.0 reste \xC3\xA0 une valeur. Les exemples "
+         "anim\xC3\xA9s montrent les deux, et chercher \xC2\xAB fins de course \xC2\xBB dans la biblioth\xC3\xA8que les trouve.",
+         "objet-vanne", ""),
+        note("1.14.1", "Objets", Kind::New,
+         "LES REGISTRES \xC3\x80 FINS DE COURSE : le Registre, le Registre multi-lames et le Clapet coupe-feu ont le m\xC3\xAAme choix, Commande de "
+         "l'\xC3\xA9tat : fins de course - leur \xC3\xA9tat vient de Fin de course ouvert et Fin de course ferm\xC3\xA9 seules, sans Valeur, avec les r\xC3\xA8gles "
+         "de la vanne : ouvert (la lame \xC3\xA0 plat), ferm\xC3\xA9, en mouvement (la lame \xC3\xA0 mi-course, ambre, qui clignote), discordance (les deux, "
+         "ou l'Ordre d'ouverture pas suivi apr\xC3\xA8s le Temps de man\xC5\x93uvre). Modulant, son ouverture entre les deux, 0 et 100 % aux fins de "
+         "course ; le clapet garde son d\xC3\xA9" "clenchement, qui passe avant. Voyants des fins de course cache les voyants O et F (dans les deux "
+         "modes).",
+         "objet-registre", ""),
         // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
         note("1.14.0", "Simulation", Kind::New,
          "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "

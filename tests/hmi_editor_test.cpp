@@ -18995,7 +18995,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 463,   // 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 465,   // 1.14.1 : + 2 (N1 : les vannes et les registres a fins de course) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -28089,7 +28089,8 @@ void inspecteur_range_1104() {
         std::vector<std::string> own;
         if (vanne) for (const auto& pr : vanne->properties) own.push_back(k3Plain(pr.name));
         // 1.12.11 (lot G) : \xC3\x89quipement (la liaison par structure) en t\xC3\xAAte de la section d'un symbole du synoptique.
-        same_text(k3Join(own), "\xC3\x89quipement, Valeur, D\xC3\xA9" "faut (expression), Couleur allum\xC3\xA9, Couleur \xC3\xA9teint, Couleur de d\xC3\xA9" "faut, "
+        // 1.14.1 : Commande de l'etat (une valeur / fins de course) juste avant la Valeur.
+        same_text(k3Join(own), "\xC3\x89quipement, Commande de l'\xC3\xA9tat, Valeur, D\xC3\xA9" "faut (expression), Couleur allum\xC3\xA9, Couleur \xC3\xA9teint, Couleur de d\xC3\xA9" "faut, "
                                "Libell\xC3\xA9, Place du libell\xC3\xA9, Commande de la vanne, Ouverture (%), En mouvement (expression), "
                                // 1.12.10 (lot F) : la plage de l'ouverture, et la case qui la prend a la variable
                                "Unit\xC3\xA9, format et plage de la variable, Ouverture : min, Ouverture : max",
@@ -28109,9 +28110,9 @@ void inspecteur_range_1104() {
         p.views[0].object(valve)->setNumber("refresh", 250);
         const auto cats = app::hmiPropertyCategories(p.views[0], {valve}, nullptr, {}, &p.assets, &p);
         const auto* vanne = k3Cat(cats, "Vanne");
-        // (1.12.11 : \xC3\x89quipement en t\xC3\xAAte, puis Valeur, puis la variable.)
-        check(vanne && vanne->properties.size() > 2 && k3Plain(vanne->properties[1].name) == "Valeur"
-                  && vanne->properties[2].name == "Variable montr\xC3\xA9" "e" && vanne->properties[2].value == "V_101.Ouv",
+        // (1.12.11 : \xC3\x89quipement en t\xC3\xAAte, puis Valeur, puis la variable ; 1.14.1 : Commande de l'etat avant la Valeur.)
+        check(vanne && vanne->properties.size() > 3 && k3Plain(vanne->properties[2].name) == "Valeur"
+                  && vanne->properties[3].name == "Variable montr\xC3\xA9" "e" && vanne->properties[3].value == "V_101.Ouv",
               "une vanne d'avant : sa variable gard\xC3\xA9" "e et relue, juste apr\xC3\xA8s Valeur (Variable montr\xC3\xA9" "e)");
         bool refreshShown = false;
         for (const auto& c : cats) for (const auto& pr : c.properties) refreshShown = refreshShown || pr.name.rfind("Rafra", 0) == 0;
@@ -28305,7 +28306,7 @@ void vanne3Voies1104Editeur() {
         const auto& grid = b.editor->properties();
         check(choicesOf(grid, "Variante") == std::vector<std::string>{"m\xC3\xA9langeuse", "r\xC3\xA9partitrice"}
                   && choicesOf(grid, "Boisseau") == std::vector<std::string>{"T", "L"}
-                  && choicesOf(grid, "Commande de la position") == std::vector<std::string>{"entier", "deux bool\xC3\xA9" "ens"},
+                  && choicesOf(grid, "Commande de la position") == std::vector<std::string>{"entier", "deux bool\xC3\xA9" "ens", "fins de course"},   // 1.14.1
               "l'inspecteur (les mots de la maquette) : Variante m\xC3\xA9langeuse ou r\xC3\xA9partitrice, Boisseau en T ou en L, "
               "Commande de la position par entier ou deux bool\xC3\xA9" "ens");
         check(hasProperty(grid, "Position") && hasProperty(grid, "Couleur du passage") && hasProperty(grid, "Couleur ferm\xC3\xA9" "e")
@@ -28448,6 +28449,294 @@ void vanne3Voies1104Editeur() {
         const auto wr = waysOf(run, o), we = waysOf(ed, o);
         check(run.tris.size() == ed.tris.size() && amber >= 3 && !wr.left && !wr.right && we.left && we.right,
               "en mouvement : le passage en ambre (" + std::to_string(amber) + " triangles), vert dans l'\xC3\xA9" "diteur");
+    }
+}
+
+// ---- 1.14.1 (lot N1) : les vannes et les registres commandes par leurs fins de course, a l'ecran ----
+//  L'inspecteur (le mode montre ses cases, grise ce qui ne sert plus), la bibliotheque (chercher "fins de course"),
+//  le dessin de chaque etat (couleurs, voyants, la pastille de la discordance), l'exemple anime par les couches de
+//  la simulation (le chrono a l'heure de la marche).
+void finsDeCourse1141Editeur() {
+    std::printf("1.14.1 (lot N1) : vannes et registres par leurs fins de course \xC3\xA0 l'\xC3\xA9" "cran\n");
+    const auto prop = [](const ui::PropertyGrid& grid, const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& c : grid.categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == name) return &pr;
+        return nullptr;
+    };
+    const auto muted = [&](const ui::PropertyGrid& grid, const std::string& name) {
+        const auto* pr = prop(grid, name);
+        return pr && pr->valueTone == ui::Tone::Muted && pr->description.rfind("Sans effet", 0) == 0;
+    };
+    // ---- l'inspecteur : la vanne
+    {
+        Bench b;
+        const Id id = b.place(Kind::Valve, 300, 200);
+        b.editor->layout();
+        const auto& grid = b.editor->properties();
+        check(choicesOf(grid, "Commande de l'\xC3\xA9tat") == std::vector<std::string>{"une valeur", "fins de course"}
+                  && gridValue(grid.categories(), "Commande de l'\xC3\xA9tat") == "une valeur",
+              "la vanne : Commande de l'\xC3\xA9tat, une valeur (par d\xC3\xA9" "faut) ou fins de course");
+        check(!hasProperty(grid, "Fin de course ouvert") && !hasProperty(grid, "Ordre d'ouverture") && !hasProperty(grid, "Temps de man\xC5\x93uvre")
+                  && hasProperty(grid, "Valeur") && !muted(grid, "Valeur"),
+              "... \xC3\xA0 une valeur : ni fins de course, ni ordre, ni temps ; la Valeur se r\xC3\xA8gle");
+        check(b.v().object(id) && !b.v().object(id)->find("stateMode"), "... sans rien poser dans l'objet (un objet neuf s'\xC3\xA9" "crit comme avant)");
+        check(commitIn(grid, "Commande de l'\xC3\xA9tat", "fins de course") && hmi::limits::limitMode(*b.v().object(id)), "choisir fins de course");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({id});
+        b.editor->layout();
+        const auto& g2 = b.editor->properties();
+        check(hasProperty(g2, "Fin de course ouvert") && hasProperty(g2, "Fin de course ferm\xC3\xA9") && hasProperty(g2, "Ordre d'ouverture")
+                  && hasProperty(g2, "Temps de man\xC5\x93uvre") && hasProperty(g2, "Voyants des fins de course"),
+              "... ses cases : les deux fins de course, l'ordre, le temps de man\xC5\x93uvre, les voyants");
+        check(muted(g2, "Valeur") && muted(g2, "En mouvement (expression)"), "... la Valeur et En mouvement gris\xC3\xA9" "es (sans effet)");
+        // L'ordre des cases : Commande de l'etat juste avant la Valeur, ses fins de course juste apres.
+        int rankMode = -1, rankValue = -1, rankFco = -1, i = 0;
+        for (const auto& c : g2.categories())
+            for (const auto& pr : c.properties) {
+                if (pr.name == "Commande de l'\xC3\xA9tat") rankMode = i;
+                if (pr.name == "Valeur") rankValue = i;
+                if (pr.name == "Fin de course ouvert") rankFco = i;
+                ++i;
+            }
+        check(rankMode >= 0 && rankMode < rankValue && rankValue < rankFco && rankFco - rankValue <= 3, "... le choix avant la Valeur, les fins de course juste apr\xC3\xA8s");
+        check(commitIn(g2, "Temps de man\xC5\x93uvre", "10 s") && b.v().object(id)->text("travelTime") == "10",
+              "le temps de man\xC5\x93uvre se tape (10 s) et s'\xC3\xA9" "crit en secondes, comme toute dur\xC3\xA9" "e (10)");
+        check(commitIn(b.editor->properties(), "Fin de course ouvert", "=V_FCO") && b.v().object(id)->text("limitOpen") == "V_FCO"
+                  && b.v().object(id)->expr("limitOpen").empty(),
+              "une fin de course : une formule (sa valeur est la formule, comme le d\xC3\xA9" "faut)");
+        check(commitIn(b.editor->properties(), "Commande de l'\xC3\xA9tat", "une valeur"), "revenir \xC3\xA0 une valeur");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({id});
+        b.editor->layout();
+        check(muted(b.editor->properties(), "Fin de course ouvert") && muted(b.editor->properties(), "Temps de man\xC5\x93uvre")
+                  && !muted(b.editor->properties(), "Valeur"),
+              "... ce qui est r\xC3\xA9gl\xC3\xA9 reste, gris\xC3\xA9 (sans effet) ; la Valeur revient");
+    }
+    // ---- l'inspecteur : la vanne 3 voies et le registre
+    {
+        Bench b;
+        const Id id = b.place(Kind::ThreeWayValve, 300, 200);
+        b.editor->layout();
+        check(choicesOf(b.editor->properties(), "Commande de la position") == std::vector<std::string>{"entier", "deux bool\xC3\xA9" "ens", "fins de course"}
+                  && !hasProperty(b.editor->properties(), "FC voie 1-2"),
+              "la vanne 3 voies : Commande de la position, un troisi\xC3\xA8me choix (fins de course)");
+        check(commitIn(b.editor->properties(), "Commande de la position", "fins de course"), "... choisi");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({id});
+        b.editor->layout();
+        const auto& g = b.editor->properties();
+        check(hasProperty(g, "FC voie 1-2") && hasProperty(g, "FC voie 1-3") && hasProperty(g, "FC voie 2-3") && hasProperty(g, "Fin de course ferm\xC3\xA9")
+                  && hasProperty(g, "Ordre de position") && hasProperty(g, "Temps de man\xC5\x93uvre") && !hasProperty(g, "Commande de l'\xC3\xA9tat"),
+              "... ses cases : une fin de course par voie, ferm\xC3\xA9" "e, l'ordre de position, le temps");
+        check(muted(g, "Position") && muted(g, "Bool\xC3\xA9" "en A (expression)") && muted(g, "En mouvement (expression)"),
+              "... la Position, A et B, le mouvement gris\xC3\xA9s");
+        const Id rg = b.place(Kind::Damper, 600, 200);
+        b.editor->layout();
+        const auto& gr = b.editor->properties();
+        check(hasProperty(gr, "Commande de l'\xC3\xA9tat") && hasProperty(gr, "Voyants des fins de course") && hasProperty(gr, "Fin de course ouvert")
+                  && !hasProperty(gr, "Ordre d'ouverture"),
+              "le registre : le choix, ses voyants (dans les deux modes), ses fins de course ; pas d'ordre \xC3\xA0 une valeur");
+        check(commitIn(gr, "Commande de l'\xC3\xA9tat", "fins de course"), "... par ses fins de course");
+        b.editor->canvas().setSelection({});
+        b.editor->canvas().setSelection({rg});
+        b.editor->layout();
+        check(hasProperty(b.editor->properties(), "Ordre d'ouverture") && muted(b.editor->properties(), "Ouvert") && !muted(b.editor->properties(), "Fin de course ouvert"),
+              "... l'ordre se montre, Ouvert gris\xC3\xA9, ses fins de course actives");
+    }
+    // ---- la bibliotheque : chercher "fins de course"
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        pal.setFilter("fins de course");
+        gfx::Rect r;
+        std::string missing;
+        for (const Kind k : {Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper}) {
+            if (!pal.tileRect(k, r)) pal.revealKind(k);
+            if (!pal.tileRect(k, r)) missing += std::string(kindKey(k)) + " ";
+        }
+        check(missing.empty() && !pal.tileRect(Kind::Pump, r), "la biblioth\xC3\xA8que : \xC2\xAB fins de course \xC2\xBB trouve les vannes et les registres, pas la pompe " + missing);
+        pal.setFilter("FCO");
+        check(pal.tileRect(Kind::Valve, r) || (pal.revealKind(Kind::Valve), pal.tileRect(Kind::Valve, r)), "... \xC2\xAB FCO \xC2\xBB aussi");
+        pal.setFilter("");
+    }
+    // ---- le dessin de chaque etat
+    Project p;
+    View v = makeView(p, "Vue");
+    v.width = 1400;
+    v.height = 800;
+    app::HmiViewport vp;
+    vp.zoom = 1.f;
+    const auto theme = ui::Theme::dark();
+    const auto draw = [&](const Object& o, bool editor = false, double t = 0.1) {
+        ColorTris rec;
+        app::HmiPaintOptions opt;
+        opt.editor = editor;
+        opt.time = t;
+        app::paintHmiObject(rec, v, o, vp, app::HmiPropertySource{}, theme, opt);
+        return rec;
+    };
+    const auto isGreen = [](gfx::Color c) { return c.g > 150 && c.r < 120 && c.b < 160; };
+    const auto isAmber = [](gfx::Color c) { return c.r > 220 && c.g > 150 && c.g < 200 && c.b < 90; };
+    const auto isRed = [](gfx::Color c) { return c.r > 180 && c.g < 120; };
+    const auto isGrey = [](gfx::Color c) { return c.r == 0x5A && c.g == 0x65 && c.b == 0x77; };
+    const auto isWhite = [](gfx::Color c) { return c.r > 235 && c.g > 235 && c.b > 235; };
+    const auto count = [](const std::vector<ColorTris::Tri>& v2, const auto& pred, const auto& where) {
+        std::size_t n = 0;
+        for (const auto& t : v2) n += pred(t.col) && where(t.c);
+        return n;
+    };
+    const auto anywhere = [](gfx::Point) { return true; };
+    {
+        Object o = makeObject(Kind::Valve, 51, "V", 100, 100, v.activeLayer);
+        o.setNumber("w", 120);
+        o.setNumber("h", 100);
+        o.set("valveType", "motoris\xC3\xA9" "e");
+        o.set("stateMode", "fins de course");
+        // Le corps : sous 42 % de la hauteur ; les voyants : en haut a gauche.
+        const auto body = [&](gfx::Point c) { return c.y > 100 + 100 * 0.42; };
+        const auto ledZone = [&](gfx::Point c) { return c.y < 100 + 100 * 0.3 && c.x < 160 - 12; };
+        o.set("limitOpen", "TRUE");
+        o.set("limitClosed", "FALSE");
+        auto rec = draw(o);
+        check(count(rec.tris, isGreen, body) >= 2 && count(rec.tris, isAmber, anywhere) == 0 && count(rec.tris, isRed, anywhere) == 0,
+              "la vanne : FC ouvert seule - ouverte (le corps vert)");
+        check(count(rec.tris, isGreen, ledZone) >= 3 && count(rec.tris, isGrey, ledZone) >= 3 && rec.wrote("O") && rec.wrote("F"),
+              "... les voyants O (allum\xC3\xA9, vert) et F (\xC3\xA9teint, gris), en haut \xC3\xA0 gauche");
+        o.set("limitOpen", "FALSE");
+        o.set("limitClosed", "TRUE");
+        rec = draw(o);
+        check(count(rec.tris, isGreen, body) == 0 && count(rec.tris, isGrey, body) >= 2, "FC ferm\xC3\xA9 seule : ferm\xC3\xA9" "e (le corps gris)");
+        o.set("limitClosed", "FALSE");
+        rec = draw(o);
+        check(count(rec.tris, isAmber, body) >= 2, "aucune : en mouvement (le corps ambre)");
+        const auto dimmed = draw(o, false, 0.6);
+        bool fainter = false;
+        for (const auto& t : dimmed.tris) fainter = fainter || (t.col.r > 220 && t.col.g > 150 && t.col.b < 90 && t.col.a < 200);
+        check(fainter, "... et il clignote (estomp\xC3\xA9 une demi-p\xC3\xA9riode sur deux)");
+        check(count(draw(o, true).tris, isAmber, anywhere) == 0 && count(draw(o, true).tris, isGrey, body) >= 2,
+              "dans l'\xC3\xA9" "diteur, rien ne bouge : entre les deux, elle se montre ferm\xC3\xA9" "e");
+        o.set("limitOpen", "TRUE");
+        o.set("limitClosed", "TRUE");
+        rec = draw(o);
+        check(count(rec.tris, isRed, body) >= 2 && count(rec.lines, isWhite, anywhere) == 3,
+              "les deux : discordance - le rouge, et la pastille \xE2\x89\xA0 (trois traits blancs)");
+        o.set("limitClosed", "FALSE");
+        o.set("openOrder", "FALSE");
+        rec = draw(o);
+        check(count(rec.tris, isAmber, body) >= 2, "FCO, l'ordre de fermeture : en fermeture (ambre)");
+        o.set("limitOverdue", "TRUE");
+        rec = draw(o);
+        check(count(rec.tris, isRed, body) >= 2 && count(rec.lines, isWhite, anywhere) == 3, "... et le chrono d\xC3\xA9pass\xC3\xA9 (limitOverdue) : discordance");
+        o.set("limitOverdue", "");
+        o.set("openOrder", "");
+        o.set("fault", "TRUE");
+        rec = draw(o, false, 0.1);
+        check(count(rec.tris, isRed, body) >= 2 && count(rec.lines, isWhite, anywhere) == 0, "le D\xC3\xA9" "faut passe avant (rouge, sans pastille)");
+        o.set("fault", "FALSE");
+        o.setFlag("showLimits", false);
+        rec = draw(o);
+        check(count(rec.tris, isGreen, ledZone) == 0 && !rec.wrote("O"), "Voyants des fins de course d\xC3\xA9" "coch\xC3\xA9 : plus de voyants");
+        o.setFlag("showLimits", true);
+        // Reglante : l'ouverture montree, les bouts donnes par les fins de course.
+        o.set("valveType", "r\xC3\xA9glante");
+        o.set("opening", "37");
+        o.set("limitOpen", "FALSE");
+        o.set("limitClosed", "FALSE");
+        rec = draw(o);
+        check(rec.wrote("37 %") && count(rec.tris, isAmber, anywhere) == 0, "r\xC3\xA9glante entre les deux : son ouverture (37 %), pas en mouvement");
+        o.set("limitClosed", "TRUE");
+        check(draw(o).wrote("0 %"), "... FC ferm\xC3\xA9 : 0 %");
+        o.set("limitClosed", "FALSE");
+        o.set("limitOpen", "TRUE");
+        check(draw(o).wrote("100 %"), "... FC ouvert : 100 %");
+        o.set("stateMode", "une valeur");
+        check(draw(o).wrote("37 %"), "\xC3\xA0 une valeur : comme avant (son ouverture)");
+    }
+    {
+        Object o = makeObject(Kind::ThreeWayValve, 52, "V3V", 100, 100, v.activeLayer);
+        o.setNumber("w", 120);
+        o.setNumber("h", 120);
+        o.set("positionMode", "fins de course");
+        for (const char* k : {"limit12", "limit13", "limit23", "limitClosed"}) o.set(k, "FALSE");
+        o.set("limit13", "TRUE");
+        auto w = waysOf(draw(o), o);
+        check(w.left && w.bottom && !w.right && !w.red, "la vanne 3 voies : FC 1-3 seule - la voie 1-3");
+        o.set("limit13", "FALSE");
+        o.set("limit23", "TRUE");
+        w = waysOf(draw(o), o);
+        check(!w.left && w.bottom && w.right, "FC 2-3 seule : la voie 2-3");
+        o.set("limit13", "TRUE");
+        auto rec = draw(o);
+        w = waysOf(rec, o);
+        check(w.red && !w.left && !w.right && count(rec.lines, isWhite, anywhere) == 3, "1-3 et 2-3 \xC3\xA0 la fois : discordance (rouge, la pastille)");
+        o.set("limit13", "FALSE");
+        o.set("limit23", "FALSE");
+        rec = draw(o);
+        w = waysOf(rec, o);
+        check(!w.left && !w.right && !w.bottom && count(rec.lines, isAmber, anywhere) >= 10, "aucune : le boisseau tourne (son bord ambre)");
+        o.set("positionOrder", "13");
+        rec = draw(o);
+        check(count(rec.tris, isAmber, anywhere) >= 3, "... l'ordre 13 : le passage 1-3 vis\xC3\xA9, en ambre");
+        o.set("positionOrder", "");
+        o.set("limitClosed", "TRUE");
+        rec = draw(o);
+        check(count(rec.lines, isRed, anywhere) >= 2 && !waysOf(rec, o).left, "FC ferm\xC3\xA9" "e : la croix sur le boisseau");
+        o.set("limitClosed", "FALSE");
+        o.set("limit12", "TRUE");
+        const auto ledsOn = count(draw(o).tris, isGreen, [&](gfx::Point c) { return c.y < 100 + 120 * 0.52 - 6 && c.x > 160; });
+        o.setFlag("showLimits", false);
+        const auto ledsOff = count(draw(o).tris, isGreen, [&](gfx::Point c) { return c.y < 100 + 120 * 0.52 - 6 && c.x > 160; });
+        check(ledsOn >= 3 && ledsOff == 0, "le voyant de la voie 1-2 (en haut), cach\xC3\xA9 si Voyants des fins de course est d\xC3\xA9" "coch\xC3\xA9");
+    }
+    {
+        Object o = makeObject(Kind::Damper, 53, "RG", 100, 100, v.activeLayer);
+        o.setNumber("w", 150);
+        o.setNumber("h", 110);
+        o.set("stateMode", "fins de course");
+        const auto blade = [&](gfx::Point c) { return c.y > 100 + 110 * 0.4; };
+        o.set("limitOpen", "TRUE");
+        o.set("limitClosed", "FALSE");
+        check(count(draw(o).lines, isGreen, blade) >= 1, "le registre : FC ouvert seule - la lame verte");
+        o.set("limitOpen", "FALSE");
+        check(count(draw(o).lines, isAmber, blade) >= 1, "aucune : la lame ambre (en mouvement)");
+        o.set("limitClosed", "TRUE");
+        check(count(draw(o).lines, isGreen, blade) == 0 && count(draw(o).lines, isAmber, blade) == 0, "FC ferm\xC3\xA9 seule : ferm\xC3\xA9");
+        o.set("limitOpen", "TRUE");
+        const auto rec = draw(o);
+        check(count(rec.lines, isRed, blade) >= 1 && count(rec.lines, isWhite, anywhere) == 3, "les deux : discordance, la pastille");
+        o.set("stateMode", "une valeur");
+        check(count(draw(o).lines, isWhite, anywhere) == 0, "\xC3\xA0 une valeur : sa discordance d'avant, sans pastille");
+    }
+    // ---- l'exemple anime de la vanne, par les couches de la simulation : le chrono a l'heure de la marche
+    {
+        auto ex = hmi::examples::exampleFor(Kind::Valve);
+        check(ex && ex->period >= 12.0, "l'exemple de la vanne : un tour de 12 s");
+        if (ex) {
+            hmi::Runtime rt;
+            rt.bind(&ex->project, nullptr);
+            rt.start(0.0);
+            app::HmiLayerBuilder builder;
+            const Object* v102 = nullptr;
+            for (const auto& o : ex->project.views.front().objects) if (o.name == "V102") v102 = &o;
+            check(v102 && hmi::limits::limitMode(*v102) && v102->text("label") == "V-102", "... V-102 par ses fins de course, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de V-101");
+            std::set<hmi::limits::State> seen;
+            double overdueAt = -1;
+            for (double t = 0.05; t <= ex->period + 1e-9 && v102; t += 0.05) {
+                rt.tick(t);
+                const auto layers = builder.build(rt, ex->project, t, nullptr);
+                if (layers.empty()) continue;
+                const Object* shown = layers.front().view.object(v102->id);
+                if (!shown) continue;
+                seen.insert(hmi::limits::read(*shown).state);
+                if (overdueAt < 0 && shown->text("limitOverdue") == "TRUE") overdueAt = t;
+            }
+            check(seen.count(hmi::limits::State::Open) && seen.count(hmi::limits::State::Closed) && seen.count(hmi::limits::State::Moving)
+                      && seen.count(hmi::limits::State::Discord),
+                  "... ouverte, ferm\xC3\xA9" "e, en mouvement, puis en discordance");
+            check(overdueAt > 8.9 && overdueAt < 9.2, "... la discordance par le temps \xC3\xA0 9 s (l'ordre \xC3\xA0 7 s + 2 s), les couches de la simulation la posent ("
+                                                          + std::to_string(overdueAt) + ")");
+        }
     }
 }
 
@@ -42098,6 +42387,7 @@ int main(int argc, char** argv) {
     paquetsPanneaux1112();                  // 1.11.2 (decision 174) : Types IHM, Fonctions, Scripts generaux - Exporter, Importer
     paquetsDepot1112();                     // 1.11.2 (decision 188) : un paquet glisse sur l'appli ouvre la fenetre d'import
     vanne3Voies1104Editeur();               // 1.10.4 (K2) : la vanne 3 voies a l'ecran
+    finsDeCourse1141Editeur();              // 1.14.1 (lot N1) : vannes et registres par leurs fins de course, a l'ecran
     tutoriels111();                         // 1.11 (chantier T1) : le moteur des tutoriels, sans ecran
     vi1111();                               // 1.11.1 (decision 108, T1) : les alarmes, le groupe et les parametres d'un objet
     centreAide111();                        // 1.11 (chantier T2) : le centre d'aide, les raccourcis, les notes, Signaler

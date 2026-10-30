@@ -1835,15 +1835,25 @@ Example synoptic(Kind k) {
     m.var("Niveau", "REAL", "20.0");
     m.var("Position", "REAL", "0.0");
     m.var("Mesure", "REAL", "6.0");
-    m.cyclic("Marche := T > 1.0 AND T < 8.5;\nDefaut := T > 5.5 AND T < 7.0;\n"
-             "Niveau := 20.0 + 70.0 * (0.5 - 0.5 * COS(T * 0.63));\nPosition := 50.0 - 50.0 * COS(T * 1.25);\n"
-             "Mesure := 6.0 + 2.5 * SIN(T * 0.9);");
+    std::string body = "Marche := T > 1.0 AND T < 8.5;\nDefaut := T > 5.5 AND T < 7.0;\n"
+                       "Niveau := 20.0 + 70.0 * (0.5 - 0.5 * COS(T * 0.63));\nPosition := 50.0 - 50.0 * COS(T * 1.25);\n"
+                       "Mesure := 6.0 + 2.5 * SIN(T * 0.9);";
+    if (k == Kind::Valve) {
+        // 1.14.1 : V-102, commandee par ses fins de course - l'ordre l'ouvre (1 s), la ferme (4 s), la rouvre (7 s) ;
+        // la troisieme fois, FCO ne vient pas : apres 2 s (son temps de manoeuvre), discordance.
+        m.var("Ordre", "BOOL", "FALSE");
+        m.var("FCO", "BOOL", "FALSE");
+        m.var("FCF", "BOOL", "TRUE");
+        body += "\nOrdre := (T >= 1.0 AND T < 4.0) OR T >= 7.0;\nFCF := T < 1.2 OR (T >= 5.6 AND T < 7.2);\nFCO := T >= 2.6 AND T < 4.2;";
+    }
+    m.cyclic(body);
     struct Spec { double w, h; const char* tag; const char* source; const char* shown; const char* note; };
     Spec s{120, 120, "", "Marche", "{Marche:En marche|\xC3\x80 l'arr\xC3\xAAt}{Defaut: - D\xC3\x89" "FAUT|}", ""};
     switch (k) {
-        case Kind::Valve: s = {150, 120, "V-101", "Marche", "Ouverture {Position:0} %{Defaut: - D\xC3\x89" "FAUT|}",
-                               "Tout ou rien : vraie, ouverte (vert) ; fausse, ferm\xC3\xA9" "e. R\xC3\xA9glante : son ouverture (0 \xC3\xA0 100 %) remplit "
-                               "la jauge, la tige clignote quand elle bouge. En d\xC3\xA9" "faut, elle clignote."}; break;
+        case Kind::Valve: s = {130, 115, "V-101", "Marche", "V-101 : {Position:0} %{Defaut: - D\xC3\x89" "FAUT|}",
+                               "V-101, r\xC3\xA9glante : son ouverture (0 \xC3\xA0 100 %) remplit la jauge, la tige clignote quand elle bouge ; en "
+                               "d\xC3\xA9" "faut, elle clignote. V-102, par ses fins de course (voyants O et F) : l'ordre l'ouvre, elle est ambre "
+                               "en mouvement ; \xC3\xA0 7 s, FCO ne vient pas : discordance (\xE2\x89\xA0) apr\xC3\xA8s 2 s."}; break;
         case Kind::Pump: s = {150, 130, "P-101", "Marche", "{Marche:En marche|\xC3\x80 l'arr\xC3\xAAt}{Defaut: - D\xC3\x89" "FAUT|}",
                               "En marche, sa roue tourne ; \xC3\xA0 l'arr\xC3\xAAt, elle est grise ; en d\xC3\xA9" "faut, rouge et clignotante."}; break;
         case Kind::Motor: s = {160, 120, "M-12", "Marche", "{Marche:En marche|\xC3\x80 l'arr\xC3\xAAt}{Defaut: - D\xC3\x89" "FAUT|}",
@@ -1903,6 +1913,21 @@ Example synoptic(Kind k) {
         o.set("valveType", "r\xC3\xA9glante");
         o.setExpr("opening", "Position");
         o.setExpr("moving", "Marche AND Position > 2.0 AND Position < 98.0");
+        // 1.14.1 : a cote, V-102 commandee par ses fins de course (son ordre, son temps de manoeuvre).
+        o.setNumber("x", 15);
+        o.setNumber("y", 60);
+        auto& v2 = m.add(Kind::Valve, "V102", 155, 60, s.w, s.h);
+        v2.set("label", "V-102");
+        v2.set("valveType", "motoris\xC3\xA9" "e");
+        v2.set(std::string(limits::kModeKey), std::string(limits::kLimitsMode));
+        v2.setExpr("limitOpen", "FCO");
+        v2.setExpr("limitClosed", "FCF");
+        v2.setExpr("openOrder", "Ordre");
+        v2.set("travelTime", "2 s");
+        m.title("Etat", 300, 30, 280, s.shown, 16);
+        m.title("Etat2", 300, 62, 280, "V-102 : ordre {Ordre:ouvrir|fermer}", 16);
+        m.note("Explication", 300, 105, 280, 185, s.note);
+        return m.done(12);
     }
     if (k == Kind::Tank || k == Kind::Silo || k == Kind::Hopper) {
         // Lot 11 : les seuils dessines sur le contenant.
@@ -1923,19 +1948,40 @@ Example threeWayValve() {
     m.var("Voie", "INT", "1");
     m.var("Mouvement", "BOOL", "FALSE");
     m.var("Defaut", "BOOL", "FALSE");
+    // 1.14.1 : V3V-202, commandee par ses fins de course - l'ordre de position passe de 1-2 a 1-3 (2 s), 2-3 (4,5 s),
+    // fermee (7 s) ; entre deux, aucune fin de course : le boisseau tourne ; a 9 s, FC 1-3 revient avec FC fermee :
+    // discordance.
+    m.var("Cde", "INT", "1");
+    m.var("FC12", "BOOL", "TRUE");
+    m.var("FC13", "BOOL", "FALSE");
+    m.var("FC23", "BOOL", "FALSE");
+    m.var("FC_F", "BOOL", "FALSE");
     m.cyclic("Voie := 1;\nIF T >= 2.5 THEN Voie := 2; END_IF;\nIF T >= 4.5 THEN Voie := 3; END_IF;\nIF T >= 6.5 THEN Voie := 0; END_IF;\n"
              "Mouvement := (T > 2.0 AND T < 2.5) OR (T > 4.0 AND T < 4.5) OR (T > 6.0 AND T < 6.5);\n"
-             "Defaut := T > 7.5 AND T < 9.0;");
-    auto& o = m.add(Kind::ThreeWayValve, "V3V", 70, std::max(10.0, (kHeight - 150.0) / 2), 150, 150);
+             "Defaut := T > 7.5 AND T < 9.0;\n"
+             "Cde := 1;\nIF T >= 2.0 THEN Cde := 2; END_IF;\nIF T >= 4.5 THEN Cde := 3; END_IF;\nIF T >= 7.0 THEN Cde := 0; END_IF;\n"
+             "FC12 := T < 2.2;\nFC13 := (T >= 3.2 AND T < 4.7) OR T >= 9.0;\nFC23 := T >= 5.7 AND T < 7.2;\nFC_F := T >= 8.0;");
+    auto& o = m.add(Kind::ThreeWayValve, "V3V", 15, 60, 130, 130);
     o.set("variable", "Voie");
     o.set("label", "V3V-201");
     o.setExpr("fault", "Defaut");
     o.setExpr("moving", "Mouvement");
-    m.title("Etat", 300, 40, 280, "Voie active : {Voie:0}{Mouvement: - en mouvement|}{Defaut: - D\xC3\x89" "FAUT|}", 18);
-    m.note("Explication", 300, 110, 280, 170,
-           "La valeur est la voie active : 1 la voie 1-2, 2 la voie 1-3, 3 la voie 2-3, 0 ferm\xC3\xA9" "e. Les deux voies du passage "
-           "sont vertes, le boisseau tourne vers elles ; la tige clignote pendant le mouvement.");
-    return m.done(10);
+    auto& o2 = m.add(Kind::ThreeWayValve, "V3V2", 155, 60, 130, 130);
+    o2.set("label", "V3V-202");
+    o2.set("positionMode", std::string(limits::kLimitsMode));
+    o2.setExpr("limit12", "FC12");
+    o2.setExpr("limit13", "FC13");
+    o2.setExpr("limit23", "FC23");
+    o2.setExpr("limitClosed", "FC_F");
+    o2.setExpr("positionOrder", "Cde");
+    o2.set("travelTime", "3 s");
+    m.title("Etat", 300, 30, 280, "V3V-201 : voie {Voie:0}{Mouvement: - en mouvement|}{Defaut: - D\xC3\x89" "FAUT|}", 16);
+    m.title("Etat2", 300, 62, 280, "V3V-202 : ordre {Cde:0}", 16);
+    m.note("Explication", 300, 105, 280, 185,
+           "V3V-201 : la valeur est la voie active (1 la voie 1-2, 2 la voie 1-3, 3 la voie 2-3, 0 ferm\xC3\xA9" "e), le boisseau tourne "
+           "vers elle. V3V-202, par une fin de course par voie (ses voyants) : la seule vraie donne la voie ; aucune, le passage "
+           "vis\xC3\xA9 clignote en ambre ; \xC3\xA0 9 s, deux \xC3\xA0 la fois : discordance.");
+    return m.done(12);
 }
 
 // ---- 1.12.24 : les registres et le clapet coupe-feu ----------------------------------------
@@ -1946,6 +1992,9 @@ Example damper() {
     m.var("Bouge", "BOOL", "FALSE");
     m.var("FCO", "BOOL", "FALSE");
     m.var("FCF", "BOOL", "TRUE");
+    m.var("Ordre2", "BOOL", "FALSE");
+    m.var("FCO2", "BOOL", "FALSE");
+    m.var("FCF2", "BOOL", "TRUE");
     m.cyclic("Position := 0.0;\n"
              "IF T >= 1.0 THEN Position := (T - 1.0) * 100.0; END_IF;\n"
              "IF T >= 2.0 THEN Position := 100.0; END_IF;\n"
@@ -1956,18 +2005,30 @@ Example damper() {
              "Ouvert := Position > 1.0;\n"
              "Bouge := (T >= 1.0 AND T < 2.0) OR (T >= 3.0 AND T < 6.0) OR (T >= 7.0 AND T < 8.0);\n"
              "FCO := Position >= 99.0;\n"
-             "FCF := Position <= 1.0 AND NOT (T >= 8.0 AND T < 9.5);");
-    auto& o = m.add(Kind::Damper, "RG", 60, std::max(10.0, (kHeight - 150.0) / 2), 190, 150);
+             "FCF := Position <= 1.0 AND NOT (T >= 8.0 AND T < 9.5);\n"
+             "Ordre2 := T >= 1.0 AND T < 5.0;\nFCO2 := T >= 2.4 AND T < 5.2 OR T >= 8.0;\nFCF2 := T < 1.2 OR T >= 6.4;");
+    auto& o = m.add(Kind::Damper, "RG", 15, 70, 130, 110);
     o.set("label", "RG-3212");
     o.setExpr("value", "Ouvert");
     o.setExpr("opening", "Position");
     o.setExpr("moving", "Bouge");
     o.setExpr("limitOpen", "FCO");
     o.setExpr("limitClosed", "FCF");
-    m.title("Etat", 300, 40, 280, "Ouverture : {Position:0} %{Bouge: - en mouvement|}", 18);
-    m.note("Explication", 300, 110, 280, 170,
-           "La lame tourne avec l'ouverture (0 \xC3\xA0 100 %) : \xC3\xA0 plat ouverte, debout ferm\xC3\xA9" "e. Les voyants O et F sont ses fins de "
-           "course ; de 8 \xC3\xA0 9,5 s, F ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en rouge.");
+    // 1.14.1 : RG-3213, tout ou rien, commande par ses fins de course - l'ordre l'ouvre (1 s), le ferme (5 s) ; entre
+    // deux, aucune fin de course : la lame, ambre, clignote ; a 8 s, FCO colle avec FCF : discordance.
+    auto& o2 = m.add(Kind::Damper, "RG2", 155, 70, 130, 110);
+    o2.set("label", "RG-3213");
+    o2.set(std::string(limits::kModeKey), std::string(limits::kLimitsMode));
+    o2.setExpr("limitOpen", "FCO2");
+    o2.setExpr("limitClosed", "FCF2");
+    o2.setExpr("openOrder", "Ordre2");
+    o2.set("travelTime", "3 s");
+    m.title("Etat", 300, 30, 280, "RG-3212 : {Position:0} %{Bouge: - en mouvement|}", 16);
+    m.title("Etat2", 300, 62, 280, "RG-3213 : ordre {Ordre2:ouvrir|fermer}", 16);
+    m.note("Explication", 300, 105, 280, 185,
+           "RG-3212 : la lame tourne avec l'ouverture ; ses voyants O et F sont ses fins de course ; de 8 \xC3\xA0 9,5 s, F ne revient pas : "
+           "discordance. RG-3213, par ses fins de course : l'ordre l'ouvre, le ferme ; entre deux, la lame ambre clignote ; "
+           "\xC3\xA0 8 s, O et F \xC3\xA0 la fois : discordance (\xE2\x89\xA0).");
     return m.done(10);
 }
 
