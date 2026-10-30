@@ -1431,6 +1431,8 @@ const std::vector<Category>& categories() {
         {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans IHM Studio (retire plus bas)
         {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::DocumentViewer,   // 1.12.30 : la visionneuse de documents
                      hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
+        // 1.14.0 (M4) : enregistrer et rejouer l'IHM.
+        {"Enregistrements", {hmi::Kind::Recorder, hmi::Kind::RecordingPlayer}},
         // Lot 8 : se connecter, se deconnecter, voir qui est connecte, changer son
         // mot de passe, gerer les comptes.
         {"Utilisateurs", {hmi::Kind::LoginMenuButton, hmi::Kind::LoginPanel, hmi::Kind::LogoutButton, hmi::Kind::UserInfo,
@@ -2504,6 +2506,24 @@ const std::vector<KeyInfo>& keyInfos() {
         {"allowNavigation", "Navigation autoris\xC3\xA9" "e", PG::ValueType::Boolean, {},
          "D\xC3\xA9" "coch\xC3\xA9" "e : une seule page, celle que dit la Variable de la page (ou Page) - une proc\xC3\xA9" "dure pas \xC3\xA0 pas ; "
          "l'op\xC3\xA9rateur zoome et d\xC3\xA9place la page, sans en changer."},
+        // ---- 1.14.0 (M4) : l'Enregistreur et le Lecteur d'enregistrements
+        {"recName", "Nom de l'enregistrement", PG::ValueType::Text, {},
+         "Le nom de l'enregistrement : $rep\xC3\xA8res$ et {formules} comme un texte (Essai $Ligne$ {SYS.Date}). Un nom d\xC3\xA9j\xC3\xA0 "
+         "pris devient \xC2\xAB Essai (2) \xC2\xBB. Vide : \xC2\xAB Enregistrement <date> \xC2\xBB."},
+        {"description", "Description", PG::ValueType::Text, {},
+         "Ce qu'on voit dans cet enregistrement (Ressources \xE2\x80\xBA Enregistrements la montre et la laisse modifier)."},
+        {"askName", "Demander le nom \xC3\xA0 l'arr\xC3\xAAt", PG::ValueType::Boolean, {},
+         "\xC3\x80 l'arr\xC3\xAAt, la fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement demande le nom, une description et un mot de passe "
+         "(Jeter ou Enregistrer). D\xC3\xA9" "coch\xC3\xA9" "e (un poste d'exploitation sans clavier) : il se garde tout de suite, sous son Nom."},
+        {"maxMinutes", "Dur\xC3\xA9" "e maximale (min)", PG::ValueType::Real, {},
+         "Au bout, l'enregistrement s'arr\xC3\xAAte et se garde. 0 : celle de Configuration \xE2\x80\xBA Enregistrements (30 min)."},
+        {"password", "Mot de passe", PG::ValueType::Text, {},
+         "Vide : en clair. Sinon l'enregistrement est chiffr\xC3\xA9 : il faut le mot de passe pour le rejouer, l'exporter ou retirer "
+         "la protection. Il est gard\xC3\xA9 masqu\xC3\xA9 dans le projet."},
+        {"prefix", "Pr\xC3\xA9" "fixe", PG::ValueType::Text, {},
+         "Seuls les enregistrements dont le nom commence ainsi (Essai) ; vide : tous ceux du dossier."},
+        {"fixed", "Enregistrement fixe", PG::ValueType::Text, {},
+         "Toujours le m\xC3\xAA" "me : un seul bouton Rejouer, sans liste. Vide : la liste du dossier."},
         // ---- 1.12.24 : le Reglage PID (les mots de la maquette)
         {"pidLoop", "Structure de la boucle", PG::ValueType::Text, {},
          "Une structure qui porte la consigne et la mesure : SPPV_TELUNA[0]. Ses membres se trouvent par leur nom - SP (ou Consigne, "
@@ -2741,6 +2761,13 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "value") return kind == K::FireDamper ? "Ouvert (en veille)" : "Ouvert";
         if (key == "colorOn") return "Couleur ouvert";
         if (key == "colorOff") return "Couleur ferm\xC3\xA9";
+    }
+    // 1.14.0 (M4) : l'Enregistreur, le Lecteur d'enregistrements.
+    if (kind == K::Recorder || kind == K::RecordingPlayer) {
+        if (key == "pilotable") return "Pilotable (un clic agit)";
+        if (key == "accent") return kind == K::Recorder ? "Couleur du bouton" : "Couleur de Rejouer";
+        if (key == "speed") return "Vitesse de relecture (\xC3\x97)";
+        if (key == "title") return "Titre";
     }
     // 1.12.30 : la visionneuse de documents - sa page, sa variable, ses couleurs.
     if (kind == K::DocumentViewer) {

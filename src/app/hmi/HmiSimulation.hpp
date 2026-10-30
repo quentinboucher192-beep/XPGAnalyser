@@ -175,6 +175,15 @@ struct HmiSimulationHost {
     //  goToCode : le script (ou la fonction) dans son editeur, le curseur a la ligne (1 = la premiere) -
     //  le double clic sur un point d'arret, sur un niveau de la pile. Nul : pas de lien.
     std::function<void(hmi::Id script, hmi::Id function, int line)> goToCode;
+    // ---- 1.14.0 (M4) : LES ENREGISTREMENTS ----
+    //  askRecordingStop : la fenetre Arreter l'enregistrement (le nom, la description, le mot de passe ; Jeter ou
+    //  Enregistrer) - done(garder, nom, description, mot de passe). Nul : garde tel quel, sous le nom du depart.
+    //  askReplayPassword : le mot de passe d'un enregistrement protege (`error` : celui d'avant etait faux) -
+    //  done(rejouer, mot de passe). Nul : la relecture est refusee (la Console le dit).
+    std::function<void(const hmi::RecordingStopAsk&, std::function<void(bool, std::string, std::string, std::string)> done)>
+        askRecordingStop;
+    std::function<void(const hmi::ReplayRequest&, const std::string& error, std::function<void(bool, std::string)> done)>
+        askReplayPassword;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -212,6 +221,28 @@ struct HmiLiveLayer {
 };
 
 // Le dessin des vues evaluees, ajustees a la place disponible.
+// ---- 1.14.0 (M4) : LA RELECTURE A L'ECRAN (HmiRecordPainter.cpp) --------------------------------------------
+//  Le bandeau en haut (RELECTURE, le nom, enregistre le ... par ..., Echap quitte), un lisere autour de la vue, la
+//  barre du bas : la progression et ses reperes (une alarme en rouge, un clic a la couleur d'accent, une autre vue en
+//  gris) qu'on clique ou qu'on tire ; Debut, -10 s, Pause / Lecture, +10 s, Fin ; le temps ; les vitesses ; Quitter.
+//  Les parties : "progress", "start", "back", "play", "fwd", "end", "speed:<v>", "quit".
+struct ReplayChrome {
+    gfx::Rect banner, bar, view, progress;
+    std::vector<std::pair<std::string, gfx::Rect>> parts;
+    [[nodiscard]] std::string partAt(gfx::Point p) const;
+    [[nodiscard]] gfx::Rect   part(std::string_view name) const;
+    [[nodiscard]] double      fractionAt(float x) const;   // 0..1 sur la progression
+};
+inline constexpr float kReplayBannerH = 30.f;
+inline constexpr float kReplayBarH = 72.f;
+// La place de la vue pendant une relecture : entre le bandeau et la barre.
+[[nodiscard]] gfx::Rect replayViewArea(const gfx::Rect& whole);
+ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const gfx::Rect& whole, const hmi::ReplayInfo& info,
+                               const std::vector<hmi::rec::Player::Marker>& markers, gfx::Point mouse);
+// Le pointeur de l'operateur (une fleche fantome) ; un clic : un cercle qui grandit et s'efface (age 0 a 1).
+void paintReplayPointer(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, bool pressed);
+void paintReplayRipple(gfx::IRenderer& r, const ui::Theme& theme, gfx::Point at, float age);
+
 class HmiLiveCanvas final : public ui::Widget {
 public:
     explicit HmiLiveCanvas(std::string id);
@@ -414,6 +445,12 @@ public:
     // Lot 13 : le doigt d'un essai - l'objet que le pas vient de toucher, marque
     // d'un cercle qui s'efface (`strength` 1 a 0 ; 0 : rien).
     void setTouch(hmi::Id object, float strength) { touch_ = object; touchStrength_ = strength; }
+    // ---- 1.14.0 (M4) : LA RELECTURE - le bandeau et la barre se dessinent ici, par-dessus tout (la vue entre les
+    //  deux) ; la vue ne recoit ni clic ni touche. replayCommand : "pause", "seek:<s>", "step:-10", "step:10",
+    //  "start", "end", "speed:<v>", "faster", "slower", "quit", "hint" (un clic sur la vue rejouee).
+    const core::SignalPtr<std::string> replayCommand = core::Signal<std::string>::create();
+    [[nodiscard]] bool                replayShown() const noexcept;
+    [[nodiscard]] const ReplayChrome& replayChrome() const noexcept { return replayChrome_; }
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
@@ -532,6 +569,12 @@ private:
     std::vector<NoteButton>   noteButtons_;         // 1.11.15 : vide - Demarrer l'IHM, Demarrer les deux
     std::vector<gfx::Rect>    noteRects_;           // ... leur cadre au dernier dessin
     std::vector<std::string>  noteActions_;
+    // 1.14.0 (M4) : la relecture - ses rectangles au dernier dessin, la progression qu'on tire.
+    [[nodiscard]] bool        replayEvent(const ui::InputEvent&);
+    void                      paintReplay(const ui::PaintContext&, const gfx::Rect& whole);
+    ReplayChrome              replayChrome_;
+    bool                      replayDrag_{false};
+    bool                      replaySignKey_{false};   // + ou - deja pris a l'appui (pas une 2e fois au texte)
 };
 
 // Lot 8 : les couches de l'IHM en marche - la vue courante (les deux vues d'une
@@ -739,6 +782,22 @@ public:
     // "hmi.restart", "plc.start", "plc.stop", "both.start", "all.stop",
     // "hmi.zoomIn", "hmi.zoomOut", "hmi.zoomFit", "hmi.zoom100", "hmi.back"...
     void command(core::ActionId id) { run(id); }
+    // ---- 1.14.0 (M4) : ENREGISTRER ET REJOUER L'IHM ---------------------------------------------------------
+    //  Le bouton Enregistrer de la barre ("hmi.record") : demarre (le nom est demande a l'arret), ou arrete (la
+    //  fenetre Arreter l'enregistrement). Rejouer (Ressources > Enregistrements, le Lecteur, l'autre application) : l'IHM
+    //  demarree d'abord ; protege sans mot de passe : la question (askReplayPassword). Pendant la relecture, l'heure de
+    //  l'IHM est tenue (ses temporisations, ses cycles reprennent a la sortie la ou ils etaient) et l'API simulee se met
+    //  en pause (pas un automate reel) ; Quitter rend tout tel quel.
+    void        toggleRecording(const std::string& source);
+    hmi::rec::Status replay(const hmi::ReplayRequest& request, std::string* why = nullptr);
+    // Une commande d'une autre application (--enregistrer, --rejouer...) : son code de sortie (hmi::rec::kExit...).
+    int         runRecordingCommand(const hmi::rec::Command& command, std::string* message = nullptr);
+    // Une commande de la barre de relecture (HmiLiveCanvas::replayCommand) : "pause", "seek:12.5", "quit"...
+    void        replayCommand(const std::string& command);
+    // Une commande d'une autre application, a l'IHM qui tourne dans cette application (le poste d'abord, sinon la
+    // simulation) ; aucune : 2 (hmi::rec::kExitNoHmi). anyRunning : une IHM tourne-t-elle ?
+    static int  runCommandAnywhere(const hmi::rec::Command& command, std::string* message = nullptr);
+    [[nodiscard]] static bool anyRunning();
     // ---- 1.10 (decision 12) : LE SIMULATEUR IHM EN PLEIN ECRAN ---------------------
     //  Le bouton Plein ecran de la barre, F11 ("hmi.fullscreen") : la fenetre passe en
     //  plein ecran (l'hote), la vue de l'IHM la couvre toute (la passe du dessus : ni
@@ -778,6 +837,15 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent&) override;
 private:
     void run(core::ActionId id);
+    // 1.14.0 (M4) : la relecture - l'heure de l'IHM tenue (now_ ne bouge pas, replayWall_ avance a sa place),
+    // l'API simulee mise en pause par elle ; le bouton Enregistrer de la barre.
+    void                  syncReplay();
+    bool                  replayHeld_{false};
+    double                replayWall_{0};
+    bool                  plcPausedForReplay_{false};
+    std::optional<hmi::ReplayRequest> pendingReplay_;   // l'IHM demarre d'abord (son build) : la relecture attend
+    ui::Button*           recordBtn_{nullptr};
+    std::shared_ptr<char> recordAlive_{std::make_shared<char>('\0')};
     bool                  fullScreen_{false};     // 1.10 : le plein ecran
     float                 zoomBeforeFull_{0.f};   // ... et le zoom d'avant (rendu a la sortie)
     hmi::ScreenFit        screenFit_{hmi::ScreenFit::Fill};   // 1.12.24 : sa mise a l'echelle

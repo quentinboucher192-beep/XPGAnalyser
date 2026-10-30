@@ -518,6 +518,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiDebugSession.cpp" />
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp" />
     <ClCompile Include="src\app\hmi\HmiDocPainter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiRecordPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiEditHistoryDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp" />
@@ -637,6 +638,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiTable.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeTable.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimePid.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeRecord.cpp" />
+    <ClCompile Include="src\hmi\HmiRecording.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
@@ -1064,6 +1067,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
     <ClInclude Include="src\hmi\HmiDocument.hpp" />
     <ClInclude Include="src\hmi\HmiDocView.hpp" />
+    <ClInclude Include="src\hmi\HmiRecording.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
     <ClInclude Include="src\hmi\HmiEditHistory.hpp" />
     <ClInclude Include="src\hmi\HmiEnums.hpp" />

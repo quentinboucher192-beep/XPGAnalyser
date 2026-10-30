@@ -124,6 +124,8 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::FireDamper:           return HmiGlyph::FireDamper;
         case hmi::Kind::SpeedDrive:           return HmiGlyph::SpeedDrive;    // 1.12.30
         case hmi::Kind::DocumentViewer:       return HmiGlyph::DocumentViewer;   // 1.12.30
+        case hmi::Kind::Recorder:             return HmiGlyph::Recorder;         // 1.14.0 (M4)
+        case hmi::Kind::RecordingPlayer:      return HmiGlyph::RecordingPlayer;
     }
     return HmiGlyph::None;
 }
@@ -789,6 +791,14 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
             L(4.5f, 5, 7.5f, 5, 0.9f); L(4.5f, 7.5f, 10, 7.5f, 0.9f); L(4.5f, 10, 7.5f, 10, 0.9f);
             circle(11.2f, 11.2f, 2.3f, false);
             L(12.9f, 12.9f, 15, 15, 1.6f);
+            break;
+        case HmiGlyph::Recorder:        // 1.14.0 (M4) : un rond, le point plein de l'enregistrement
+            circle(8, 8, 6.2f, false);
+            circle(8, 8, 3.2f, true);
+            break;
+        case HmiGlyph::RecordingPlayer: // 1.14.0 (M4) : deux lignes de liste et le triangle Rejouer
+            L(1.5f, 4, 8.5f, 4, 1.1f); L(1.5f, 8, 8.5f, 8, 1.1f); L(1.5f, 12, 6.5f, 12, 1.1f);
+            poly({{10, 4.5f}, {15, 8}, {10, 11.5f}}, true);
             break;
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);

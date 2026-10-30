@@ -18,6 +18,7 @@
 #include "../hmi/HmiNames.hpp"     // 1.13.0 (lot J8) : les espaces de noms
 #include "../hmi/HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees
 #include "../hmi/HmiUnits.hpp"     // 1.13.0 (lot J6b) : Configuration > Unites de mesure (le compte)
+#include "../hmi/HmiRecording.hpp" // 1.14.0 (M4) : Ressources > Enregistrements (le compte)
 #include "../hmi/HmiAlarmGroups.hpp"   // 1.11.1 (decision 108) : le groupe de l'IHM lie a celui d'un objet
 #include "hmi/HmiTreeData.hpp"
 #include "hmi/HmiTestRuns.hpp"           // 1.13.0 (lot J4b) : les verdicts des tests (app::testruns)
@@ -30,6 +31,7 @@
 #include "../ui/Icons.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -356,6 +358,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 case hmi::Kind::Image:
                 case hmi::Kind::Video:       return ui::Icon::Image;
                 case hmi::Kind::DocumentViewer: return ui::Icon::Document;   // 1.12.30
+                case hmi::Kind::RecordingPlayer: return ui::Icon::Play;      // 1.14.0 (M4)
                 case hmi::Kind::Gauge:
                 case hmi::Kind::ProgressBar:
                 case hmi::Kind::Trend:
@@ -891,7 +894,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFolder:           return hmi_ ? 13 : 0;
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
-        case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure
+        case NodeKind::HmiConfig:           return hmi_ ? 13 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements
+        case NodeKind::HmiResources:        return hmi_ ? 1 : 0;   // 1.14.0 (M4) : Enregistrements
         case NodeKind::HmiViews:            return hmi_ ? 3 : 0;   // lot 8 : Modeles, Vues, Popups
         case NodeKind::HmiViewFolder:
             if (!hmi_) return 0;
@@ -1377,9 +1381,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                                                NodeKind::HmiStation,                              // Poste d'exploitation,
                                                NodeKind::HmiNotify, NodeKind::HmiReports,         // Notifications, Rapports,
                                                NodeKind::HmiWeb,                                  // Acces web
-                                               NodeKind::HmiMeasureUnits};                        // 1.13.0 (lot J6b) : Unites de mesure
+                                               NodeKind::HmiMeasureUnits,                         // 1.13.0 (lot J6b) : Unites de mesure
+                                               NodeKind::HmiRecordingSettings};                   // 1.14.0 (M4) : Enregistrements
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
+        case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements
+            return hmi_ && k == 0 ? pack(NodeKind::HmiRecordings, 0) : ui::kInvalidNode;
         case NodeKind::HmiViews:
             return hmi_ && k < 3 ? pack(NodeKind::HmiViewFolder, static_cast<Index>(k)) : ui::kInvalidNode;
         case NodeKind::HmiViewFolder: {
@@ -1923,6 +1930,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiScripts: case NK::HmiAlarms: case NK::HmiRecipes: case NK::HmiUsers: case NK::HmiLanguages:
             case NK::HmiUnits: case NK::HmiComm: case NK::HmiReports: case NK::HmiAlarmGroup: case NK::HmiRoles:
             case NK::HmiMeasureUnits:                                      // 1.13.0 (lot J6b)
+            case NK::HmiRecordings:                                        // 1.14.0 (M4)
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
@@ -1983,9 +1991,23 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar)                               // 1.11.1 (decision 108)
                 || ProjectTreeModel::isNativesKind(k)                                                // 1.12.0
                 || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                           // 1.13.0 (lot J8)
-                || k == NK::HmiMeasureUnits;                                                         // 1.13.0 (lot J6b)
+                || k == NK::HmiMeasureUnits                                                          // 1.13.0 (lot J6b)
+                || k == NK::HmiRecordings || k == NK::HmiRecordingSettings;                          // 1.14.0 (M4)
         }
     } // namespace
+
+    // 1.14.0 (M4) : les .xrec du dossier des enregistrements (sans les lire), relus au plus toutes les 2 s.
+    std::size_t ProjectTreeModel::recordingsCount() const {
+        if (!hmi_) return 0;
+        const std::string dir = hmi::rec::folderOf(hmi_->project.recording, hmi_->savedFolder);
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (dir != recordingsDir_ || now - recordingsAt_ >= 2.0) {
+            recordingsDir_ = dir;
+            recordingsAt_ = now;
+            recordingsCount_ = dir.empty() ? 0 : hmi::rec::fileNames(dir).size();
+        }
+        return recordingsCount_;
+    }
 
     std::string ProjectTreeModel::counterOf(ui::NodeId n) const {
         const auto k = kindOf(n);
@@ -2609,6 +2631,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiHistory:       return "Historiques";
         case NodeKind::HmiLanguages:     return "Langues  [" + std::to_string(hmi_ ? hmi_->project.languages.list.size() : 1u) + "]";   // lot 13
         case NodeKind::HmiUnits:         return "Unit\xC3\xA9s et formats  [" + std::to_string(hmi_ ? hmi_->project.displays.size() : 0u) + "]";
+        case NodeKind::HmiRecordings:    return "Enregistrements  [" + std::to_string(recordingsCount()) + "]";   // 1.14.0 (M4)
+        case NodeKind::HmiRecordingSettings: return "Enregistrements";
         case NodeKind::HmiMeasureUnits:  return "Unit\xC3\xA9s de mesure  [" + std::to_string(hmi_ ? hmi::units::Catalog(hmi_->project.config).units().size() : 0u) + "]";   // 1.13.0 (lot J6b)
         case NodeKind::HmiComm:                                                                                      // lot 14 ; lot 15 : les equipements
             return "\xC3\x89quipements  [" + std::to_string(hmi_ ? hmi_->project.equipments.size() + (hmi_->project.comm.modbus() ? 1u : 0u) : 0u) + "]";
@@ -3760,6 +3784,13 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiConfig:        s.icon = ui::Icon::Settings; break;
         case NodeKind::HmiExternalFiles: s.icon = ui::Icon::Document; break;
         case NodeKind::HmiResources:     s.icon = ui::Icon::Image; break;
+        case NodeKind::HmiRecordings:                                              // 1.14.0 (M4) : rouge, un enregistrement qui tourne
+            s.icon = ui::Icon::Play;
+            break;
+        case NodeKind::HmiRecordingSettings:                                       // 1.14.0 (M4) : vert, les commandes d'une autre application
+            s.icon = ui::Icon::Settings;
+            if (hmi_ && hmi_->project.recording.external) s.iconTone = ui::Tone::Ok;
+            break;
         case NodeKind::HmiExchange:      s.icon = ui::Icon::Export; break;
         case NodeKind::HmiViews:         s.bold = true; s.icon = ui::Icon::Folder; break;
         case NodeKind::HmiSymbolsFolder: s.bold = true; s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Accent; break;

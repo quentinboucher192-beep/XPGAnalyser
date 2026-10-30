@@ -145,4 +145,9 @@ bool drawPidTuner(const Ctx& c);
 // La visionneuse de documents (en marche : l'etat du moteur ; dans l'editeur : sa page). Faux : pas une visionneuse.
 bool drawDocumentViewer(const Ctx& c);
 
+// ---- 1.14.0 M4 (HmiRecordPainter.cpp) ----------------------------------------------------
+// L'Enregistreur et le Lecteur d'enregistrements (en marche : l'etat du moteur, les fichiers du
+// dossier ; dans l'editeur : un apercu). Faux : ni l'un ni l'autre.
+bool drawRecordings(const Ctx& c);
+
 } // namespace app::paint

@@ -623,4 +623,69 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
     });
 }
 
+// ---- 1.14.0 (M4) : LES ENREGISTREMENTS ------------------------------------------------------------------------
+void askRecordingStopDialog(App& app, const hmi::RecordingStopAsk& ask,
+                            std::function<void(bool, std::string, std::string, std::string)> done) {
+    const std::string keep = "L'enregistrer", drop = "Le jeter";
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Nom", ask.name, "Enregistrement du jour", false, {}});
+    fields.push_back({"Description", ask.description, "ce qu'on y voit (facultatif)", false, {}});
+    fields.push_back({"Mot de passe", {}, ask.locked ? "celui du d\xC3\xA9part (vide : le garder)" : "aucun (en clair)", true, {}});
+    fields.push_back({"L'enregistrement", keep, {}, false, {keep, drop}});
+    std::string text = "Dur\xC3\xA9" "e " + hmi::rec::clock(ask.seconds) + " \xC2\xB7 clics " + std::to_string(ask.clicks) + " \xC2\xB7 alarmes "
+                       + std::to_string(ask.alarms) + " \xC2\xB7 taille environ " + hmi::rec::sizeText(ask.bytes) + ".\n"
+                       + "Gard\xC3\xA9 dans Ressources \xE2\x80\xBA Enregistrements. Avec un mot de passe, il faut le donner pour le rejouer, "
+                         "l'exporter ou retirer la protection. Annuler le garde sous ce nom.";
+    auto dialog = std::make_unique<FormDialog>("dialog.recordingStop", "Arr\xC3\xAAter l'enregistrement", std::move(text), std::move(fields),
+                                               "Valider");
+    dialog->setRules([drop](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        const bool dropping = v.size() > 3 && v[3] == drop;
+        for (std::size_t i = 0; i < 3 && i < st.size(); ++i) {
+            st[i].enabled = !dropping;
+            st[i].hint = dropping ? "jet\xC3\xA9 : rien n'est gard\xC3\xA9" : std::string{};
+        }
+    });
+    dialog->setValidator([drop](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        field = 0;
+        if (v.size() > 3 && v[3] == drop) return {};
+        std::string why;
+        const std::string name = v.empty() ? std::string{} : hmi::rec::cleanName(v[0]);
+        if (!name.empty() && !hmi::rec::validName(name, &why)) return why;
+        return {};
+    });
+    auto shared = std::make_shared<std::function<void(bool, std::string, std::string, std::string)>>(std::move(done));
+    const std::string proposed = ask.name, description = ask.description;
+    app.menus().ShowDialog(std::move(dialog), [shared, keep, drop, proposed, description](const menu::DialogResult& r) {
+        if (!*shared) return;
+        if (!r.accepted()) {
+            (*shared)(true, proposed, description, {});
+            return;
+        }
+        const auto v = FormDialog::split(r.payload);
+        const bool dropping = v.size() > 3 && v[3] == drop;
+        (*shared)(!dropping, v.size() > 0 ? cleanQuotes(v[0]) : proposed, v.size() > 1 ? v[1] : description, v.size() > 2 ? v[2] : std::string{});
+    });
+}
+
+void askReplayPasswordDialog(App& app, const hmi::ReplayRequest& request, const std::string& error,
+                             std::function<void(bool, std::string)> done) {
+    const std::string name = request.name.empty() ? request.path : request.name;
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Mot de passe", {}, {}, true, {}});
+    auto dialog = std::make_unique<FormDialog>("dialog.replayPassword", "Enregistrement prot\xC3\xA9g\xC3\xA9",
+                                               "\xC2\xAB " + name + " \xC2\xBB est prot\xC3\xA9g\xC3\xA9 par un mot de passe."
+                                                   + (error.empty() ? std::string{} : "\n" + error + "."),
+                                               std::move(fields), "Rejouer");
+    auto shared = std::make_shared<std::function<void(bool, std::string)>>(std::move(done));
+    app.menus().ShowDialog(std::move(dialog), [shared](const menu::DialogResult& r) {
+        if (!*shared) return;
+        if (!r.accepted()) {
+            (*shared)(false, {});
+            return;
+        }
+        const auto v = FormDialog::split(r.payload);
+        (*shared)(true, v.empty() ? std::string{} : v[0]);
+    });
+}
+
 } // namespace app

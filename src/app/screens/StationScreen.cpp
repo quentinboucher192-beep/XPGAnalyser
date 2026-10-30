@@ -160,6 +160,13 @@ core::Status StationScreen::buildUi() {
     host.askExport = [this](const hmi::ExportRequest& rq, std::function<void(bool, const std::string&)> done) {
         return askExport(rq, std::move(done));
     };
+    // 1.14.0 (M4) : la fenetre Arreter l'enregistrement, le mot de passe d'un enregistrement protege.
+    host.askRecordingStop = [this](const hmi::RecordingStopAsk& ask, std::function<void(bool, std::string, std::string, std::string)> done) {
+        askRecordingStopDialog(app_, ask, std::move(done));
+    };
+    host.askReplayPassword = [this](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {
+        askReplayPasswordDialog(app_, rq, error, std::move(done));
+    };
     // ---- fin Lot API 8 ----
     host.audit = [this](const hmi::AuditEntry& e) {
         const std::string folder = app_.projectFolder();

@@ -25,6 +25,7 @@
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiAssets.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiRuntime.hpp"         // 1.14.0 (M4) : les enregistrements (ReplayRequest, rec::Item)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -112,6 +113,100 @@ private:
     std::string          searchText_;
     bool                 unusedOnly_{false};
     std::string          message_;
+    core::ConnectionScope links_;
+};
+
+// ------------------------------------------------- 1.14.0 (M4) : les enregistrements ---
+//  RESSOURCES > ENREGISTREMENTS : le dossier natif des enregistrements de l'IHM (ressources/enregistrements, ou
+//  celui de Configuration > Enregistrements). Le tableau (Nom, Duree, Vue de depart, Enregistre le, Ou, Par, Taille,
+//  cadenas), le detail (l'ecran a 40 % de la duree, les comptes, la description qui se modifie), et Importer...,
+//  Exporter..., Rejouer, Renommer (les actions et les scripts qui le citent suivent), Mot de passe..., Supprimer
+//  (vers la corbeille du projet), Ouvrir le dossier. Un double-clic rejoue. Ce sont des fichiers, pas le projet :
+//  rien ne passe par Ctrl+Z, sauf le renommage des citations.
+class HmiRecordingsPane final : public ui::Widget {
+public:
+    using Apply = std::function<void(core::CommandPtr)>;
+    HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply apply);
+
+    void refresh();
+    [[nodiscard]] std::string folder() const;
+    [[nodiscard]] std::size_t rowCount() const noexcept { return items_.size(); }
+    [[nodiscard]] const std::vector<hmi::rec::Item>& items() const noexcept { return items_; }
+    [[nodiscard]] std::string selectedName() const;
+    bool select(const std::string& name);
+    // Les actions, sans dialogue (les tests, les scripts ; les hotes demandent d'abord). Faux et `why` sinon.
+    bool importPath(const std::string& path, std::string* why = nullptr);
+    bool exportTo(const std::string& destination, std::string* why = nullptr);
+    bool renameTo(const std::string& name, std::string* why = nullptr);
+    bool setPassword(const std::string& current, const std::string& fresh, std::string* why = nullptr);
+    bool setDescription(const std::string& text, std::string* why = nullptr);
+    bool removeSelected(std::string* why = nullptr);
+    void replaySelected();
+
+    struct Hosts {
+        std::function<std::string()>                       projectFolder;
+        std::function<void()>                              importFile;              // demande un .xrec
+        std::function<void(const std::string& name)>       exportFile, rename, password, remove;
+        std::function<void(const hmi::ReplayRequest&)>     replay;                  // ouvre la simulation et rejoue
+        std::function<void(const std::string& folder)>     openFolder;
+    };
+    void setHosts(Hosts h);
+    [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
+    [[nodiscard]] ui::TableView&     table() noexcept { return *table_; }
+    [[nodiscard]] ui::PropertyGrid&  detail() noexcept { return *detail_; }
+    [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext&) override;
+
+private:
+    void say(std::string text, bool warning = false);
+    void showDetail();
+    [[nodiscard]] const hmi::rec::Item* selectedItem() const;
+    hmi::DocumentPtr               doc_;
+    Apply                          apply_;
+    Hosts                          hosts_;
+    HmiToolStrip*                  tools_{nullptr};
+    ui::Splitter*                  split_{nullptr};
+    ui::TableView*                 table_{nullptr};
+    ui::PropertyGrid*              detail_{nullptr};
+    ui::StatusBar*                 status_{nullptr};
+    std::shared_ptr<ui::ITableModel> model_;
+    std::vector<hmi::rec::Item>    items_;
+    std::string                    message_;
+    double                         lastScan_{-10};
+    std::string                    scanned_;          // ce que montre le tableau (pour ne le refaire qu'au besoin)
+    core::ConnectionScope          links_;
+};
+
+// CONFIGURATION > ENREGISTREMENTS : le dossier, la duree au plus (30 min), la taille du dossier au plus (2 Go : les
+// plus anciens partent, le journal le dit), les prises par seconde (10), le pointeur et les clics, les sons, les
+// popups, et "Accepter les commandes d'une autre application" (decochee). Gardes dans le projet.
+class HmiRecordingSettingsPane final : public ui::Widget {
+public:
+    using Apply = std::function<void(core::CommandPtr)>;
+    HmiRecordingSettingsPane(std::string id, hmi::DocumentPtr doc, Apply apply);
+    void refresh();
+    // Un reglage : "dossier", "duree", "taille", "frequence", "pointeur", "sons", "popups", "commandes".
+    bool setSetting(const std::string& key, const std::string& value, std::string* why = nullptr);
+    struct Hosts {
+        std::function<std::string()> projectFolder;
+    };
+    void setHosts(Hosts h);
+    [[nodiscard]] ui::PropertyGrid&  properties() noexcept { return *grid_; }
+    [[nodiscard]] const std::string& message() const noexcept { return message_; }
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext&) override;
+private:
+    void say(std::string text, bool error = false);
+    hmi::DocumentPtr      doc_;
+    Apply                 apply_;
+    Hosts                 hosts_;
+    ui::PropertyGrid*     grid_{nullptr};
+    ui::StatusBar*        status_{nullptr};
+    std::string           message_;
     core::ConnectionScope links_;
 };
 
