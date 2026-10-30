@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../hmi/HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe de l'Enregistreur)
 #include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 #include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'automate
@@ -4034,6 +4035,18 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.name = "\xC3\x80 la fin" + mark;
                 choose({"derni\xC3\xA8re image", "premi\xC3\xA8re image", "cach\xC3\xA9"});
             }
+        }
+        // 1.14.0 (relecture M4b) : le mot de passe de l'Enregistreur, comme celui des actions - montre en points, garde
+        // masque (notify::maskSecret) : jamais en clair dans l'inspecteur, le projet, le code brut ou un export.
+        if (o->kind == hmi::Kind::Recorder && prop.key == "password") {
+            const std::string dots = "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2";
+            p.value = prop.value.empty() ? std::string{} : dots;
+            p.type = PG::ValueType::Text;
+            p.commit = [commit, dots](std::string_view v) {
+                if (!commit.prop) return false;
+                if (v == dots) return true;                               // inchange
+                return commit.prop("password", v.empty() ? std::string{} : hmi::notify::maskSecret(v), false);
+            };
         }
         // 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR - leurs libelles et leurs choix.
         lotHProperty(*o, prop, p, project);

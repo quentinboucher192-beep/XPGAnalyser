@@ -625,45 +625,55 @@ void MainAnalysisScreen::askHmiUserRecord(const hmi::UserRequest& rq) {
 
 // ---- 1.14.0 (M4) : LES ENREGISTREMENTS ------------------------------------------------------------------------
 void askRecordingStopDialog(App& app, const hmi::RecordingStopAsk& ask,
-                            std::function<void(bool, std::string, std::string, std::string)> done) {
-    const std::string keep = "L'enregistrer", drop = "Le jeter";
+                            std::function<void(bool, std::string, std::string, std::string, bool)> done) {
+    // 1.14.0 (relecture M4b) : la fenetre de la maquette (scene 1) - le nom, la description, le mot de passe ; deux
+    // boutons, Jeter et Enregistrer. LE MOT DE PASSE NE SAUTE PAS : protege au depart, un champ vide le garde, et seule
+    // la case Retirer la protection le retire ; Echap garde l'enregistrement tel quel (nom et mot de passe du depart).
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", ask.name, "Enregistrement du jour", false, {}});
     fields.push_back({"Description", ask.description, "ce qu'on y voit (facultatif)", false, {}});
-    fields.push_back({"Mot de passe", {}, ask.locked ? "celui du d\xC3\xA9part (vide : le garder)" : "aucun (en clair)", true, {}});
-    fields.push_back({"L'enregistrement", keep, {}, false, {keep, drop}});
+    fields.push_back({"Mot de passe", {}, ask.locked ? "vide : garder celui du d\xC3\xA9part" : "vide : pas de mot de passe", true, {}});
+    if (ask.locked) fields.push_back({"Retirer la protection", "Non", {}, false, {"Non", "Oui"}});
     std::string text = "Dur\xC3\xA9" "e " + hmi::rec::clock(ask.seconds) + " \xC2\xB7 clics " + std::to_string(ask.clicks) + " \xC2\xB7 alarmes "
                        + std::to_string(ask.alarms) + " \xC2\xB7 taille environ " + hmi::rec::sizeText(ask.bytes) + ".\n"
                        + "Gard\xC3\xA9 dans Ressources \xE2\x80\xBA Enregistrements. Avec un mot de passe, il faut le donner pour le rejouer, "
-                         "l'exporter ou retirer la protection. Annuler le garde sous ce nom.";
+                         "l'exporter ou retirer la protection. \xC3\x89" "chap le garde sous ce nom"
+                       + std::string(ask.locked ? ", avec son mot de passe." : ".");
     auto dialog = std::make_unique<FormDialog>("dialog.recordingStop", "Arr\xC3\xAAter l'enregistrement", std::move(text), std::move(fields),
-                                               "Valider");
-    dialog->setRules([drop](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
-        const bool dropping = v.size() > 3 && v[3] == drop;
-        for (std::size_t i = 0; i < 3 && i < st.size(); ++i) {
-            st[i].enabled = !dropping;
-            st[i].hint = dropping ? "jet\xC3\xA9 : rien n'est gard\xC3\xA9" : std::string{};
-        }
-    });
-    dialog->setValidator([drop](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+                                               "Enregistrer");
+    dialog->setSecondary("Jeter", false);
+    if (ask.locked)
+        dialog->setRules([](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+            const bool removing = v.size() > 3 && v[3] == "Oui";
+            if (st.size() > 2) {
+                st[2].enabled = !removing;
+                st[2].hint = removing ? "la protection est retir\xC3\xA9" "e : l'enregistrement sera en clair" : std::string{};
+            }
+        });
+    dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         field = 0;
-        if (v.size() > 3 && v[3] == drop) return {};
         std::string why;
         const std::string name = v.empty() ? std::string{} : hmi::rec::cleanName(v[0]);
         if (!name.empty() && !hmi::rec::validName(name, &why)) return why;
         return {};
     });
-    auto shared = std::make_shared<std::function<void(bool, std::string, std::string, std::string)>>(std::move(done));
+    auto shared = std::make_shared<std::function<void(bool, std::string, std::string, std::string, bool)>>(std::move(done));
     const std::string proposed = ask.name, description = ask.description;
-    app.menus().ShowDialog(std::move(dialog), [shared, keep, drop, proposed, description](const menu::DialogResult& r) {
+    const bool locked = ask.locked;
+    app.menus().ShowDialog(std::move(dialog), [shared, proposed, description, locked](const menu::DialogResult& r) {
         if (!*shared) return;
-        if (!r.accepted()) {
-            (*shared)(true, proposed, description, {});
+        const auto v = FormDialog::split(r.payload);
+        if (r.button == menu::DialogResult::Button::No) {          // Jeter
+            (*shared)(false, proposed, description, {}, false);
             return;
         }
-        const auto v = FormDialog::split(r.payload);
-        const bool dropping = v.size() > 3 && v[3] == drop;
-        (*shared)(!dropping, v.size() > 0 ? cleanQuotes(v[0]) : proposed, v.size() > 1 ? v[1] : description, v.size() > 2 ? v[2] : std::string{});
+        if (!r.accepted()) {                                       // Echap : garde, nom et mot de passe du depart
+            (*shared)(true, proposed, description, {}, false);
+            return;
+        }
+        const bool unprotect = locked && v.size() > 3 && v[3] == "Oui";
+        (*shared)(true, v.size() > 0 ? cleanQuotes(v[0]) : proposed, v.size() > 1 ? v[1] : description,
+                  unprotect || v.size() <= 2 ? std::string{} : v[2], unprotect);
     });
 }
 

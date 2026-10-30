@@ -39982,9 +39982,9 @@ void enregistrements1140() {
     app::HmiSimulationHost host;
     host.projectFolder = [dir] { return dir.string(); };
     std::vector<hmi::RecordingStopAsk> stopAsked;
-    host.askRecordingStop = [&](const hmi::RecordingStopAsk& a, std::function<void(bool, std::string, std::string, std::string)> done) {
+    host.askRecordingStop = [&](const hmi::RecordingStopAsk& a, std::function<void(bool, std::string, std::string, std::string, bool)> done) {
         stopAsked.push_back(a);
-        done(true, "Essai ecran", "vu a l'ecran", {});
+        done(true, "Essai ecran", "vu a l'ecran", {}, false);
     };
     std::vector<std::string> pwdAsked;
     host.askReplayPassword = [&](const hmi::ReplayRequest& rq, const std::string& error, std::function<void(bool, std::string)> done) {
@@ -40017,6 +40017,7 @@ void enregistrements1140() {
     check(fs::exists(recDir / "Essai ecran.xrec"), "le fichier Essai ecran.xrec dans ressources/enregistrements");
     // ---- rejouer
     const double before = pane.runtime().now();
+    const double epoch0 = pane.runtime().epochOf(pane.runtime().now()), paint0 = t;   // 1.14.0 (relecture M4b) : l'heure
     std::string niveauLive;
     {
         sim::Value nv;
@@ -40074,12 +40075,23 @@ void enregistrements1140() {
     check(!pane.runtime().replaying(), "Quitter : la relecture se ferme");
     frame(0.1);
     check(pane.runtime().now() >= held && pane.runtime().now() < held + 0.5, "apr\xC3\xA8s Quitter, l'heure de l'IHM repart d'o\xC3\xB9 elle \xC3\xA9tait");
+    {
+        // 1.14.0 (relecture M4b) : ... mais les dates suivent le mur (avant : SYS.Date retardait du temps de la relecture).
+        const double wallGone = t - paint0, dateGone = pane.runtime().epochOf(pane.runtime().now()) - epoch0;
+        check(std::fabs(dateGone - wallGone) < 0.3, "apr\xC3\xA8s la relecture, la date de l'IHM suit le mur (" + std::to_string(dateGone) + " s pour "
+                                                        + std::to_string(wallGone) + " s)");
+    }
     (void)before;
     // Echap quitte.
     (void)pane.replay(rq);
     frame(0.1);
     pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
     check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte la relecture");
+    // 1.14.0 (relecture M4b) : l'onglet qui se ferme quitte la relecture proprement.
+    (void)pane.replay(rq);
+    frame(0.1);
+    pane.leaveReplay("essai");
+    check(!pane.runtime().replaying(), "fermer l'onglet pendant une relecture : elle se quitte");
     // ---- Ressources > Enregistrements
     std::vector<core::CommandPtr> applied;
     const auto apply = [&](core::CommandPtr c) {
@@ -40112,6 +40124,13 @@ void enregistrements1140() {
     check(rp.renameTo("Essai renomme") && fs::exists(recDir / "Essai renomme.xrec") && !fs::exists(recDir / "Essai ecran.xrec"),
           "Renommer : le fichier");
     check(p.view(vid)->object(disp)->actions.back().target == "Essai renomme", "Renommer : l'action Rejouer qui le citait suit");
+    // 1.14.0 (relecture M4b) : Ctrl+Z rend le nom du fichier AVEC les citations (avant : les citations seules).
+    check(!applied.empty() && applied.back() && applied.back()->undo() && fs::exists(recDir / "Essai ecran.xrec") && !fs::exists(recDir / "Essai renomme.xrec")
+              && p.view(vid)->object(disp)->actions.back().target == "Essai ecran",
+          "Renommer, puis Ctrl+Z : le fichier et l'action reviennent ensemble");
+    check(applied.back()->execute() && fs::exists(recDir / "Essai renomme.xrec") && p.view(vid)->object(disp)->actions.back().target == "Essai renomme",
+          "Ctrl+Y : renommes de nouveau, ensemble");
+    rp.refresh();
     // Le mot de passe : protege, la relecture le demande (un faux d'abord : la question revient).
     check(rp.select("Essai renomme") && rp.setPassword({}, "secret") && rp.items().front().header.locked(), "Mot de passe : prot\xC3\xA9g\xC3\xA9");
     check(rp.table().model() && rp.table().model()->cellText(0, 7) == "oui" && rp.table().model()->cellStyle(0, 7).icon == ui::Icon::Lock,
@@ -40126,6 +40145,21 @@ void enregistrements1140() {
     const fs::path out = dir / "sortie";
     fs::create_directories(out, ec);
     check(rp.select("Essai renomme") && rp.exportTo(out.string()) && fs::exists(out / "Essai renomme.xrec"), "Exporter : une copie");
+    {
+        // 1.14.0 (relecture M4b) : un fichier deja la n'est pas ecrase sans le demander ; la copie sans le mot de passe.
+        bool existed = false;
+        app::RecordingExportChoice choice;
+        choice.existed = &existed;
+        check(rp.select("Essai renomme") && !rp.exportTo(out.string(), nullptr, choice) && existed, "Exporter une seconde fois : la question avant d'\xC3\xA9" "craser");
+        choice.replace = true;
+        choice.keepPassword = false;
+        choice.password = "secret";
+        hmi::rec::Header eh;
+        hmi::rec::Track et;
+        check(rp.exportTo(out.string(), nullptr, choice)
+                  && hmi::rec::readTrack((out / "Essai renomme.xrec").string(), "", eh, et) == hmi::rec::Status::Ok && !eh.locked(),
+              "Remplacer, sans garder le mot de passe : la copie se rejoue sans lui");
+    }
     check(rp.importPath((out / "Essai renomme.xrec").string()) && rp.rowCount() == 2 && fs::exists(recDir / "Essai renomme (2).xrec"),
           "Importer : un nom libre (Essai renomme (2))");
     check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && fs::exists(dir / "ihm" / "corbeille" / "Essai renomme (2).xrec"),

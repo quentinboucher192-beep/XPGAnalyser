@@ -116,13 +116,22 @@ private:
     core::ConnectionScope links_;
 };
 
+// 1.14.0 (relecture M4b) : ce qu'Exporter... a choisi (HmiRecordingsPane::exportTo).
+struct RecordingExportChoice {
+    bool              replace{false};        // un fichier deja la : le remplacer (l'ecran l'a demande)
+    bool              keepPassword{true};    // la copie garde le mot de passe (la case de la maquette, cochee)
+    std::string       password;              // sinon : le bon, pour la copie sans protection
+    bool*             existed{nullptr};      // refuse parce qu'un fichier etait deja la
+    hmi::rec::Status* status{nullptr};       // BadPassword, PasswordNeeded...
+};
+
 // ------------------------------------------------- 1.14.0 (M4) : les enregistrements ---
 //  RESSOURCES > ENREGISTREMENTS : le dossier natif des enregistrements de l'IHM (ressources/enregistrements, ou
 //  celui de Configuration > Enregistrements). Le tableau (Nom, Duree, Vue de depart, Enregistre le, Ou, Par, Taille,
-//  cadenas), le detail (l'ecran a 40 % de la duree, les comptes, la description qui se modifie), et Importer...,
-//  Exporter..., Rejouer, Renommer (les actions et les scripts qui le citent suivent), Mot de passe..., Supprimer
-//  (vers la corbeille du projet), Ouvrir le dossier. Un double-clic rejoue. Ce sont des fichiers, pas le projet :
-//  rien ne passe par Ctrl+Z, sauf le renommage des citations.
+//  cadenas), le detail (l'ecran a 40 % de la duree, lu dans l'en-tete ; les comptes, la description qui se modifie),
+//  et Importer..., Exporter..., Rejouer, Renommer (les actions et les scripts qui le citent suivent), Mot de passe...,
+//  Supprimer (vers la corbeille du projet), Ouvrir le dossier. Un double-clic rejoue. Ce sont des fichiers, pas le
+//  projet : rien ne passe par Ctrl+Z, sauf Renommer (le fichier et ce qui le cite, d'un seul pas).
 class HmiRecordingsPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
@@ -136,7 +145,10 @@ public:
     bool select(const std::string& name);
     // Les actions, sans dialogue (les tests, les scripts ; les hotes demandent d'abord). Faux et `why` sinon.
     bool importPath(const std::string& path, std::string* why = nullptr);
-    bool exportTo(const std::string& destination, std::string* why = nullptr);
+    // Exporter : un fichier deja la est refuse (`existed` vrai : l'ecran demande Remplacer ?) sauf `replace` ; un
+    // enregistrement protege garde son mot de passe dans la copie (`keepPassword`), sinon `password` (le bon) l'en retire.
+    using ExportChoice = RecordingExportChoice;
+    bool exportTo(const std::string& destination, std::string* why = nullptr, const ExportChoice& choice = {});
     bool renameTo(const std::string& name, std::string* why = nullptr);
     bool setPassword(const std::string& current, const std::string& fresh, std::string* why = nullptr);
     bool setDescription(const std::string& text, std::string* why = nullptr);
