@@ -110,7 +110,8 @@ struct Ram {
     std::uint64_t total{0};         // la RAM du PC
     std::uint64_t available{0};     // ce qui reste disponible
     std::uint64_t localAi{0};       // les traitements IA locaux : aucun aujourd'hui
-    std::string   source;           // d'ou viennent les chiffres ("/proc/self/status", "GetProcessMemoryInfo")
+    std::string   by;               // qui les mesure, en mots de l'utilisateur ("Windows", "Linux") : ce que la fenetre dit
+    std::string   source;           // le detail technique ("GetProcessMemoryInfo...", "/proc/self/status...") : l'infobulle seule
 };
 [[nodiscard]] Ram readRam();
 

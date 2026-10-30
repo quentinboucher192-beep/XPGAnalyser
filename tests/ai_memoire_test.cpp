@@ -486,6 +486,7 @@ public:
     gfx::Rect panel{};
     std::vector<std::string> outside;
     std::size_t texts{0};
+    std::string technical;   // 1.14.2 (captures) : un nom de fonction du systeme ou de fichier systeme dessine
     void beginFrame(gfx::Color) override {}
     void endFrame() override {}
     std::vector<gfx::Rect> clips;
@@ -508,6 +509,8 @@ public:
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
     void drawText(gfx::Point o, std::string_view t, gfx::FontId f, gfx::Color) override {
         ++texts;
+        for (const char* api : {"/proc/", "GetProcessMemoryInfo", "GlobalMemoryStatus"})
+            if (t.find(api) != std::string_view::npos) technical = std::string(t);
         // ce qui se voit : le texte coupe par la decoupe en cours
         float x0 = o.x, y0 = o.y, x1 = o.x + measure(t, f).width, y1 = o.y + static_cast<float>(f.v);
         if (!clips.empty()) {
@@ -546,10 +549,13 @@ void paintAll(app::AiMemoryDialog& d, Recorder& rec, const ui::Theme& theme, con
         std::vector<ui::Widget*> overlays;
         rec.outside.clear();
         rec.texts = 0;
+        rec.technical.clear();
         const ui::PaintContext ctx{rec, theme, {0.f, 0.f, rec.size.w, rec.size.h}, 0.0, &overlays};
         root->invalidate();
         root->render(ctx);
         check(rec.texts > 5, std::string(label) + " : l'onglet " + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t)) + " se dessine");
+        check(rec.technical.empty(), std::string(label) + " : aucun nom de fonction ni de fichier du syst\xC3\xA8me \xC3\xA0 l'\xC3\xA9" "cran ("
+                                         + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t)) + (rec.technical.empty() ? std::string{} : " : " + rec.technical) + ")");
         check(rec.outside.empty(), std::string(label) + " : aucun texte hors de la fenetre (" + app::AiMemoryDialog::tabTitle(static_cast<app::AiMemoryDialog::Tab>(t))
                                        + (rec.outside.empty() ? std::string{} : " : " + rec.outside.front()) + ")");
     }
@@ -654,6 +660,9 @@ void dialog() {
           "Oui : supprimees, les comptes et les jauges suivent");
     check(!d.understood(), "\xC2\xAB Je comprends \xC2\xBB se decoche apres");
     check(d.measured().of(mem::Part::Settings).files >= 1 && fs::exists(ia / "parametres.json"), "les parametres jamais touches");
+    // 1.14.2 (captures) : la memoire vive dite en mots de l'utilisateur ; le detail technique a part (l'infobulle)
+    check(!d.ram().by.empty() && d.ram().by.find("/proc") == std::string::npos && d.ram().by.find("Get") == std::string::npos,
+          "la memoire vive : mesuree par " + d.ram().by);
     // Activite : le journal, filtre par type
     d.showTab(app::AiMemoryDialog::Tab::Activity);
     const auto all = d.activityRowCount();
