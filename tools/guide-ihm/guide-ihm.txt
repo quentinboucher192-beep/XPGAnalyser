@@ -776,6 +776,16 @@ Un guide hors de la vue, une grille de colonnes qui ne tient pas (des marges et 
 Chaque objet a sa page dans le chapitre **La bibliothèque d'objets**, rangée dans la famille de sa tuile (Commandes, Synoptique…) : à quoi il sert, **chacun de ses paramètres** (ce qu'il règle, sa valeur par défaut), ce qu'il fait en marche, et un **exemple animé** qui tourne sur le vrai moteur de l'IHM, gestes de l'utilisateur compris. **F1** sur un objet choisi dans l'éditeur, ou au survol d'une tuile de la bibliothèque, ouvre sa page ; la bulle d'aide d'une propriété de l'inspecteur reprend la même description.
 ### Favoris et recherche
 L'étoile d'un composant le met dans les **Favoris**, en tête de la bibliothèque ; les favoris sont gardés d'un lancement à l'autre. Le champ de recherche filtre par nom ou par famille. Le survol d'un composant montre son aperçu.
+@nouveau 1.14.1
+### La bibliothèque d'images
+L'onglet **Images** de la bibliothèque, entre **Objets** et **Variables**, range plus de 300 images prêtes à poser, dessinées pour l'application (des dessins vectoriels, nets à toute taille) : **Flèches et navigation**, **Interface**, **Sécurité et signalisation** (les panneaux de danger, d'interdiction, d'obligation, de secours et d'incendie, l'arrêt d'urgence, le feu tricolore), **Industrie et process**, **Énergie et fluides**, **Bâtiment et infrastructure**, **Réseau et informatique**, **Véhicules et logistique**, **Météo**, **Personnes**, **Drapeaux** (pour les boutons de langue) et **Formes et pastilles** (voyants, états, badges numérotés). Chaque catégorie est une section qui se replie d'un clic sur son titre, son nombre d'images à droite ; **Mes images**, en tête, rassemble les tiennes.
+- **Chercher** : le champ de recherche de la bibliothèque cherche aussi les images, par leur nom, leur catégorie et leurs mots-clés (« pompe », « danger », « langue », « alarme ») ; les sections qui trouvent s'ouvrent.
+- **Poser** : un clic sur une image, puis un clic dans la vue (ou glisse-la sur la vue) ; un **double-clic** la pose au centre de ce qu'on voit. C'est un objet **Image** comme les autres (ses propriétés, Dupliquer, le code brut, l'archive .xihm), et son image entre dans **Ressources** : la même image déjà importée est réutilisée, un nom déjà pris par une autre image devient `nom_2.svg`. Un seul Ctrl+Z retire l'objet et sa ressource.
+- **Importer dans les ressources**, sans la poser : le bouton **Importer** (l'image choisie) ou le clic droit d'une image.
+- **La couleur** : les dessins monochromes (les flèches, l'interface, l'industrie...) prennent la couleur choisie dans la rangée du haut ; **Auto** prend celle qui se lit sur le fond de la vue (claire sur un fond sombre, sombre sur un fond clair). Une autre couleur donne une ressource à son nom (`fleche-haut-rouge.svg`). Les images en couleurs (panneaux, drapeaux, météo, pastilles) gardent les leurs. **Recolorier**, dans les propriétés de l'Image, la change ensuite, même en marche par une expression.
+- **La taille des vignettes** : petites, moyennes, ou grandes avec leur nom (les trois carrés).
+- **Mes images** : le bouton **+** (un fichier PNG, SVG, JPEG... du disque), un fichier lâché sur l'onglet, ou **Ressources › Ma bibliothèque** (l'image choisie du projet) y ajoutent une image. Elles sont gardées hors du projet, dans le dossier de tes réglages (à côté de tes thèmes), et se posent dans tous tes projets ; clic droit › **Retirer de Mes images**.
+> L'infobulle d'une image dit son nom, sa catégorie et sa taille d'origine ; le bas de l'onglet les rappelle pour l'image survolée.
 ### Quelques composants
 - **Texte** : statique, dynamique (textes à trous `{Variable}`), formaté, sur plusieurs lignes (retour à la ligne automatique).
 - **Bouton** : son texte, ses couleurs et surtout ses **actions** (onglet Actions).
@@ -2627,6 +2637,8 @@ Un SVG est redessiné **à la taille où il s'affiche** : net dans une vignette 
 - renommer une ressource met à jour les objets qui la citent, expressions comprises ;
 - un SVG reste net à toutes les tailles, et se recolorie (Recolorier) ;
 - un **GIF animé** tourne en boucle en marche, à son rythme (dans l'éditeur : sa première image). Pour le jouer une fois, N fois, sur une action, prends l'objet **GIF animé**.
+@nouveau 1.14.1
+- plus de 300 images prêtes à poser (flèches, interface, panneaux de sécurité, industrie, drapeaux...) : l'onglet **Images** de la bibliothèque (voir « Les objets de la bibliothèque ») ; posée, l'image entre dans les ressources.
 > Pour plusieurs images qui défilent (une roue qui tourne), prends l'**Image animée**.
 
 == objet-rectangle | Rectangle
@@ -9467,6 +9479,8 @@ Les choix de la page **durent jusqu'au redémarrage de l'IHM** : ils ne vont pas
 - **Renommer** : les propriétés et les expressions qui la citent suivent ;
 - **Remplacer** : même nom, nouveau contenu (du même genre) ;
 - **Supprimer** : confirmation si elle est citée ; Ctrl+Z la rend.
+@nouveau 1.14.1
+- **Ma bibliothèque** : une copie de l'image choisie rejoint **Mes images**, dans l'onglet Images de la bibliothèque de l'éditeur de vues ; gardée hors du projet, elle se pose dans tous tes projets (voir « Les objets de la bibliothèque »). Les images posées depuis cet onglet arrivent ici, comme un fichier importé.
 @nouveau 1.12.12
 1.12.12 : les vidéos AVI, MOV et WMV s'importent ; la fiche montre la première image quand elle se décode ici (un AVI Motion-JPEG partout, le reste sous Windows), sa durée, sa taille, son codec.
 

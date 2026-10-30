@@ -18995,7 +18995,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 463,   // 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 465,   // 1.14.1 : + 2 (N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -41561,7 +41561,377 @@ void chercheur1140() {
     }
 }
 
+// ----------------------------------------------------------------------------
+// 1.14.1 (lot N6) : LA BIBLIOTHEQUE D'IMAGES. Le catalogue (plus de 200 images, 12 categories, chaque image lue et
+// dessinee), l'onglet Images de la bibliotheque (les sections et leur nombre, la recherche, l'infobulle, les vignettes
+// dessinees), poser une image (l'Image et sa ressource d'un seul Ctrl+Z, le nom _2, la meme image reutilisee, le
+// double-clic au centre), Importer dans les ressources (le bouton, le clic droit), la couleur d'une icone monochrome
+// (Auto selon le fond de la vue, une couleur choisie), Ressources > Ma bibliotheque et Mes images (ajouter, relire,
+// un fichier du disque, retirer), puis Dupliquer, le code brut et le projet enregistre.
+void imagesN6_1141() {
+    std::printf("1.14.1 (lot N6) : la bibliotheque d'images\n");
+    namespace il = hmi::imagelib;
+    namespace fs = std::filesystem;
+    const auto& all = il::builtIn();
+    const auto& cats = il::builtInCategories();
+    check(all.size() >= 200, "plus de 200 images embarqu\xC3\xA9" "es (" + std::to_string(all.size()) + ")");
+    check(cats.size() == 12 && cats.front() == "Fl\xC3\xA8" "ches et navigation" && cats.back() == "Formes et pastilles",
+          "douze cat\xC3\xA9gories, des fl\xC3\xA8" "ches aux formes (" + std::to_string(cats.size()) + ")");
+    std::map<std::string, std::size_t> perCat;
+    std::set<std::string> ids;
+    bool unique = true, described = true;
+    for (const auto& i : all) {
+        unique = ids.insert(i.id).second && unique;
+        ++perCat[i.category];
+        described = described && !i.label.empty() && !i.words.empty() && i.format == "SVG" && i.width > 0 && i.height > 0 && i.data
+                 && std::find(cats.begin(), cats.end(), i.category) != cats.end() && !i.mine();
+    }
+    check(unique && described, "chaque image a sa cl\xC3\xA9, son nom, sa cat\xC3\xA9gorie, ses mots-cl\xC3\xA9s et sa taille");
+    bool everyCat = true;
+    for (const auto& c : cats) everyCat = everyCat && perCat[c] >= 10;
+    check(everyCat, "chaque cat\xC3\xA9gorie a au moins dix images");
+    check(il::findBuiltIn("fleche-haut") && il::findBuiltIn("danger-electrique") && il::findBuiltIn("drapeau-fr")
+              && il::findBuiltIn("automate") && il::findBuiltIn("arret-urgence") && il::findBuiltIn("badge-3") && !il::findBuiltIn("_crane"),
+          "les images attendues (fl\xC3\xA8" "che, danger \xC3\xA9lectrique, drapeau, automate, arr\xC3\xAAt d'urgence, badge) ; les aides ne sont pas livr\xC3\xA9" "es");
+
+    // Chaque image se lit (un SVG de sa taille) et se dessine (assez de pixels) ; une monochrome prend la couleur demandee.
+    std::size_t drawnOk = 0, monos = 0, colored = 0;
+    std::string firstBad;
+    for (const auto& img : all) {
+        const auto blob = il::contentFor(img, 0xFF0000);
+        const auto info = hmi::inspectMedia(*blob, img.id + ".svg");
+        hmi::Rgba px;
+        bool good = info.kind == hmi::MediaKind::Image && info.format == "SVG" && info.width == img.width && info.height == img.height
+                 && hmi::rasterizeSvg(*blob, img.width, img.height, px);
+        std::size_t lit = 0, solid = 0, red = 0;
+        for (std::size_t k = 0; k + 3 < px.pixels.size(); k += 4) {
+            if (px.pixels[k + 3] > 24) ++lit;
+            if (px.pixels[k + 3] > 230) {
+                ++solid;
+                if (px.pixels[k] > 230 && px.pixels[k + 1] < 30 && px.pixels[k + 2] < 30) ++red;
+            }
+        }
+        good = good && lit * 25 >= px.pixels.size() / 4;     // au moins 4 % de l'image dessinee
+        if (img.mono) {
+            ++monos;
+            good = good && solid > 0 && red == solid;         // tout ce qui est plein est a la couleur demandee
+        } else if (!img.ink) {
+            ++colored;
+            good = good && blob == img.data;                  // une image en couleurs garde les siennes (le meme contenu)
+        }
+        if (good) ++drawnOk;
+        else if (firstBad.empty()) firstBad = img.id;
+    }
+    check(drawnOk == all.size(), "les " + std::to_string(all.size()) + " images se lisent et se dessinent (" + std::to_string(drawnOk)
+                                     + (firstBad.empty() ? std::string(")") : ", la premi\xC3\xA8re en d\xC3\xA9" "faut : " + firstBad + ")"));
+    check(monos >= 150 && colored >= 60, "des monochromes (" + std::to_string(monos) + ") et des images en couleurs (" + std::to_string(colored) + ")");
+
+    // Les couleurs, les noms, la recherche.
+    const auto* up = il::findBuiltIn("fleche-haut");
+    const auto* danger = il::findBuiltIn("danger-general");
+    check(up && up->mono && danger && !danger->ink, "la fl\xC3\xA8" "che est monochrome, le panneau de danger en couleurs");
+    if (!up || !danger) return;
+    const auto redUp = il::contentFor(*up, 0xD93A2B);
+    const std::string redText(redUp->begin(), redUp->end());
+    check(redText.find("#D93A2B") != std::string::npos && redText.find(il::kInkHex) == std::string::npos
+              && il::contentFor(*up, 0xD93A2B) == redUp && il::contentFor(*up, il::kInk) == up->data,
+          "une monochrome en rouge : son encre remplac\xC3\xA9" "e (le m\xC3\xAA" "me contenu d'un appel \xC3\xA0 l'autre)");
+    check(il::resourceName(*up, il::kInk) == "fleche-haut.svg" && il::resourceName(*up, 0xD93A2B) == "fleche-haut-rouge.svg"
+              && il::resourceName(*up, 0x123456) == "fleche-haut-123456.svg" && il::resourceName(*danger, 0xD93A2B) == "danger-general.svg",
+          "les noms propos\xC3\xA9s : fleche-haut.svg, fleche-haut-rouge.svg, fleche-haut-123456.svg ; un panneau garde le sien");
+    check(il::autoInk("#20242B") == il::kInk && il::autoInk("#F4F6F8") == il::kDarkInk && il::autoInk("") == il::kInk,
+          "Auto : clair sur un fond sombre, sombre sur un fond clair");
+    std::size_t dangers = 0, langues = 0, pompes = 0;
+    for (const auto& i : all) {
+        dangers += il::matches(i, "danger") ? 1u : 0u;
+        langues += il::matches(i, "langue") ? 1u : 0u;
+        pompes += il::matches(i, "POMPE") ? 1u : 0u;
+    }
+    check(dangers >= 13 && langues >= 20 && pompes >= 1 && il::matches(*up, "fleche haut") && il::matches(*up, "Fl\xC3\xA8" "ches")
+              && !il::matches(*up, "xyzzy") && !il::matches(*up, "aut"),
+          "la recherche : le nom, la cat\xC3\xA9gorie, les mots-cl\xC3\xA9s, sans casse ni accents, par d\xC3\xA9" "but de mot (danger "
+              + std::to_string(dangers) + ", langue " + std::to_string(langues) + ")");
+
+    // ---- Mes images : un dossier a part (dans l'appli : les reglages de l'utilisateur) ----
+    const fs::path mineDir = fs::temp_directory_path() / "xpg_essai_n6_mes_images";
+    std::error_code ec;
+    fs::remove_all(mineDir, ec);
+    const std::string keptFolder = il::userFolder();
+    il::setUserFolder(mineDir.string());
+
+    // ---- L'onglet Images de la bibliotheque ----
+    Bench b;
+    auto& pal = b.editor->palette();
+    const auto theme = ui::Theme::dark();
+    Recorder rec;
+    const auto paint = [&] {
+        rec.clear();
+        pal.render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+    };
+    gfx::Rect tab;
+    check(pal.modeRect(app::HmiPalette::Mode::Images, tab), "l'onglet Images, entre Objets et Variables");
+    gfx::Rect objTab, varTab;
+    (void)pal.modeRect(app::HmiPalette::Mode::Objects, objTab);
+    (void)pal.modeRect(app::HmiPalette::Mode::Variables, varTab);
+    check(objTab.x < tab.x && tab.x < varTab.x, "les onglets : Objets | Images | Variables");
+    pal.dispatch(ui::MouseDown{{tab.x + tab.w / 2, tab.y + tab.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(pal.mode() == app::HmiPalette::Mode::Images, "un clic sur l'onglet Images l'ouvre");
+    paint();
+    check(rec.wrote("Images") && rec.wrote("Objets") && rec.wrote("Variables"), "les trois onglets s'\xC3\xA9" "crivent");
+    auto sections = pal.imageSections();
+    bool counts = sections.size() == cats.size() + 1 && sections.front().category == il::kMine && sections.front().count == 0;
+    for (std::size_t k = 1; counts && k < sections.size(); ++k) counts = sections[k].category == cats[k - 1] && sections[k].count == perCat[cats[k - 1]];
+    check(counts, "les sections : Mes images (vide), puis les douze cat\xC3\xA9gories et leur nombre d'images");
+    check(sections.size() > 2 && sections[1].open && !sections[2].open, "par d\xC3\xA9" "faut, la premi\xC3\xA8re cat\xC3\xA9gorie est ouverte, les autres repli\xC3\xA9" "es");
+    check(rec.wrote("Fl\xC3\xA8" "ches et navigation") && rec.wrote(std::to_string(perCat["Fl\xC3\xA8" "ches et navigation"]))
+              && rec.wrote("Aucune : +"),
+          "chaque section dit son nom et son nombre ; Mes images, vide, dit comment la remplir");
+    std::size_t thumbs = rec.drawn.size();
+    check(thumbs >= 10 && !rec.made.empty(), "les vignettes ouvertes sont dessin\xC3\xA9" "es (" + std::to_string(thumbs) + ")");
+    // Ouvrir Interface d'un clic sur son titre ; le refermer (Fleches repliee : la bibliotheque est basse ici).
+    pal.setImageCategoryOpen("Fl\xC3\xA8" "ches et navigation", false);
+    gfx::Rect head;
+    check(pal.imageHeadingRect("Interface", head), "le titre de la section Interface");
+    pal.dispatch(ui::MouseDown{{head.x + 40, head.y + head.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(pal.imageCategoryOpen("Interface"), "un clic sur le titre ouvre la section");
+    pal.dispatch(ui::MouseDown{{head.x + 40, head.y + head.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(!pal.imageCategoryOpen("Interface"), "... un second la referme");
+    pal.setImageCategoryOpen("Fl\xC3\xA8" "ches et navigation", true);
+    // La recherche (le champ de la bibliotheque) : les sections qui trouvent, ouvertes.
+    pal.setFilter("pompe");
+    sections = pal.imageSections();
+    bool found = !sections.empty();
+    for (const auto& sct : sections) found = found && sct.open && sct.count >= 1 && sct.category != il::kMine;
+    check(found && pal.imageTileRect("pompe", tab), "rechercher \xC2\xAB pompe \xC2\xBB : ses sections, ouvertes, et la vignette de la pompe");
+    pal.setFilter("drapeau fr");
+    sections = pal.imageSections();
+    check(sections.size() == 1 && sections.front().category == "Drapeaux" && sections.front().count == 1,
+          "rechercher \xC2\xAB drapeau fr \xC2\xBB : le drapeau fran\xC3\xA7" "ais seul");
+    pal.setFilter("");
+    // L'infobulle : le nom, la categorie, la taille d'origine.
+    const std::string tip = pal.imageTooltip("fleche-haut");
+    check(tip.find("Fl\xC3\xA8" "che haut") == 0 && tip.find("Fl\xC3\xA8" "ches et navigation") != std::string::npos
+              && tip.find("64 x 64") != std::string::npos && tip.find("Monochrome") != std::string::npos,
+          "l'infobulle : le nom, la cat\xC3\xA9gorie, la taille d'origine, monochrome");
+    check(pal.imageTooltip("drapeau-fr").find("96 x 64") != std::string::npos, "... un drapeau : 96 x 64");
+    pal.revealImage("fleche-haut");
+    gfx::Rect tile;
+    check(pal.imageTileRect("fleche-haut", tile), "la vignette de la fl\xC3\xA8" "che haut");
+    pal.dispatch(ui::MouseMove{{tile.x + tile.w / 2, tile.y + tile.h / 2}, {0, 0}, {}});
+    check(pal.hoveredImage() == "fleche-haut" && pal.tooltip() == tip, "au survol : la vignette, et son infobulle");
+    // Trois tailles de vignettes.
+    gfx::Rect sizeR;
+    const float smallW = tile.w;
+    check(pal.imageSizeRect(2, sizeR), "les trois tailles");
+    pal.dispatch(ui::MouseDown{{sizeR.x + 5, sizeR.y + 5}, ui::MouseButton::Left, 1, {}});
+    check(pal.imageSize() == 2 && pal.imageTileRect("fleche-haut", tile) && tile.w > smallW, "les grandes vignettes : plus larges, avec leur nom");
+    paint();
+    check(rec.wrote("Fl\xC3\xA8" "che haut"), "... leur nom s'\xC3\xA9" "crit dessous");
+    pal.setImageSize(1);
+
+    // ---- Poser : un clic sur la vignette, un clic dans la vue ----
+    auto& res = b.doc->project.assets.resources;
+    const std::size_t res0 = res.size();
+    pal.revealImage("fleche-haut");
+    check(pal.imageTileRect("fleche-haut", tile), "la vignette, de nouveau");
+    pal.dispatch(ui::MouseDown{{tile.x + tile.w / 2, tile.y + tile.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(b.editor->canvas().placeImage() && b.editor->canvas().placeImage()->image.id == "fleche-haut"
+              && b.editor->canvas().placeKind() == Kind::Image && pal.currentImage() == "fleche-haut",
+          "un clic sur la vignette : l'image est \xC3\xA0 poser (un objet Image)");
+    b.down(b.screen(300, 200));
+    b.up(b.screen(300, 200));
+    const auto sel = b.editor->canvas().selection();
+    const auto* o = sel.size() == 1 ? b.v().object(sel.front()) : nullptr;
+    const auto* r1 = b.doc->project.resourceByName("fleche-haut.svg");
+    check(o && o->kind == Kind::Image && o->text("image") == "fleche-haut.svg" && o->number("w") == 64 && o->number("h") == 64
+              && std::abs(o->number("x") - 300) < 11 && std::abs(o->number("y") - 200) < 11,
+          "un clic dans la vue : une Image de 64 x 64, l\xC3\xA0 o\xC3\xB9 on a cliqu\xC3\xA9, qui cite fleche-haut.svg");
+    check(r1 && res.size() == res0 + 1 && r1->data && *r1->data == *up->data && r1->format == "SVG" && r1->width == 64
+              && r1->origin.find("Fl\xC3\xA8" "ches et navigation") != std::string::npos,
+          "... et sa ressource, import\xC3\xA9" "e dans Ressources (l'encre Auto : claire, sur le fond sombre de la vue)");
+    check(o && o->text("stretch") == "ajuster" && o->text("recolor").empty(), "l'Image garde ses propri\xC3\xA9t\xC3\xA9s habituelles");
+    check(o && o->name.rfind("Fleche_haut", 0) == 0, "son nom dit son image (" + (o ? o->name : std::string("?")) + ")");
+    const auto made = sel.empty() ? kNoId : sel.front();
+    (void)b.stack.undo();
+    check(!b.v().object(made) && !b.doc->project.resourceByName("fleche-haut.svg"), "un seul Ctrl+Z retire l'Image et sa ressource");
+    (void)b.stack.redo();
+    check(b.v().object(made) && b.doc->project.resourceByName("fleche-haut.svg"), "Ctrl+Y les rend");
+    // Le double-clic : au centre de ce qu'on voit ; la meme image deja la est reutilisee.
+    const std::size_t objs = b.v().objects.size(), res1 = res.size();
+    pal.dispatch(ui::MouseDown{{tile.x + tile.w / 2, tile.y + tile.h / 2}, ui::MouseButton::Left, 1, {}});
+    pal.dispatch(ui::MouseDown{{tile.x + tile.w / 2, tile.y + tile.h / 2}, ui::MouseButton::Left, 2, {}});
+    const auto* o2 = b.editor->canvas().selection().size() == 1 ? b.v().object(b.editor->canvas().selection().front()) : nullptr;
+    check(b.v().objects.size() == objs + 1 && res.size() == res1 && o2 && o2->id != made && o2->text("image") == "fleche-haut.svg"
+              && !b.editor->canvas().placeImage(),
+          "un double-clic pose l'image tout de suite ; la m\xC3\xAAme image d\xC3\xA9j\xC3\xA0 import\xC3\xA9" "e est r\xC3\xA9utilis\xC3\xA9" "e (aucune ressource de plus)");
+    // Un nom deja pris par une autre image : pompe_2.svg.
+    {
+        auto other = hmi::makeResource(b.doc->project, "pompe.svg", std::make_shared<const hmi::Bytes>(redUp->begin(), redUp->end()), "essai");
+        b.doc->project.assets.resources.push_back(other);
+    }
+    const auto* pump = il::findBuiltIn("pompe");
+    const Id pumpObj = pump ? b.editor->placeLibraryImage(*pump, hmi::edit::Pt{500, 300}) : kNoId;
+    const auto* po = b.v().object(pumpObj);
+    check(po && po->text("image") == "pompe_2.svg" && b.doc->project.resourceByName("pompe_2.svg")
+              && b.doc->project.resourceByName("pompe.svg")->data->size() == redUp->size(),
+          "un nom d\xC3\xA9j\xC3\xA0 pris par une autre image : pompe_2.svg (la ressource d'avant est gard\xC3\xA9" "e)");
+    check(po && po->number("x") == 500 && po->number("y") == 300, "... pos\xC3\xA9" "e au point demand\xC3\xA9");
+
+    // ---- La couleur : une couleur choisie, puis Auto sur une vue claire ----
+    int rouge = 0;
+    for (std::size_t k = 0; k < il::swatches().size(); ++k)
+        if (il::swatches()[k].key == "rouge") rouge = static_cast<int>(k) + 1;
+    gfx::Rect sw;
+    check(rouge > 0 && pal.imageSwatchRect(rouge, sw), "la pastille Rouge");
+    pal.dispatch(ui::MouseDown{{sw.x + sw.w / 2, sw.y + sw.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(pal.imageSwatch() == rouge && pal.imageInk() == 0xD93A2B, "un clic sur Rouge : l'encre est rouge");
+    const auto* down = il::findBuiltIn("fleche-bas");
+    const Id downObj = down ? b.editor->placeLibraryImage(*down, hmi::edit::Pt{100, 400}) : kNoId;
+    const auto* dres = b.doc->project.resourceByName("fleche-bas-rouge.svg");
+    check(b.v().object(downObj) && b.v().object(downObj)->text("image") == "fleche-bas-rouge.svg" && dres && dres->data,
+          "une monochrome pos\xC3\xA9" "e en rouge : sa ressource fleche-bas-rouge.svg");
+    if (dres && dres->data) {
+        hmi::Rgba px;
+        std::size_t solid = 0, reds = 0;
+        if (hmi::rasterizeSvg(*dres->data, 64, 64, px))
+            for (std::size_t k = 0; k + 3 < px.pixels.size(); k += 4)
+                if (px.pixels[k + 3] > 230) {
+                    ++solid;
+                    // l'anticrenelage arrondit d'un ou deux points
+                    reds += std::abs(px.pixels[k] - 0xD9) <= 3 && std::abs(px.pixels[k + 1] - 0x3A) <= 3 && std::abs(px.pixels[k + 2] - 0x2B) <= 3 ? 1u : 0u;
+                }
+        check(solid > 0 && reds == solid, "... dessin\xC3\xA9" "e en #D93A2B (" + std::to_string(reds) + " / " + std::to_string(solid) + ")");
+    }
+    const auto* flag = il::findBuiltIn("drapeau-fr");
+    std::string flagName;
+    check(flag && b.editor->importLibraryImage(*flag, &flagName) && flagName == "drapeau-fr.svg"
+              && *b.doc->project.resourceByName("drapeau-fr.svg")->data == *flag->data,
+          "une image en couleurs garde les siennes, m\xC3\xAA" "me avec Rouge choisi");
+    pal.setImageSwatch(0);
+    b.editor->editView("Fond clair", [](hmi::View& vv) { vv.background = "#F4F6F8"; return true; });
+    b.editor->refresh();
+    check(pal.imageBackdrop() == "#F4F6F8" && b.editor->libraryInk(*up) == il::kDarkInk && b.editor->libraryInk(*danger) == il::kInk,
+          "Auto, sur une vue au fond clair : l'encre sombre (la couleur du th\xC3\xA8me de la vue)");
+    b.editor->editView("Fond sombre", [](hmi::View& vv) { vv.background = "#20242B"; return true; });
+    b.editor->refresh();
+
+    // ---- Importer dans les ressources, sans poser : le bouton, le clic droit ----
+    const std::size_t objs2 = b.v().objects.size(), res2 = res.size();
+    pal.revealImage("usine");
+    check(pal.imageTileRect("usine", tile), "la vignette de l'usine (sa section s'ouvre)");
+    pal.dispatch(ui::MouseDown{{tile.x + tile.w / 2, tile.y + tile.h / 2}, ui::MouseButton::Left, 1, {}});
+    gfx::Rect imp;
+    check(pal.imageImportRect(imp), "le bouton Importer");
+    pal.dispatch(ui::MouseDown{{imp.x + imp.w / 2, imp.y + imp.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(res.size() == res2 + 1 && b.doc->project.resourceByName("usine.svg") && b.v().objects.size() == objs2
+              && !b.editor->canvas().placeImage() && pal.currentImage() == "usine",
+          "Importer : la ressource usine.svg, aucun objet pos\xC3\xA9 (et l'image n'est plus \xC3\xA0 poser)");
+    (void)b.stack.undo();
+    check(!b.doc->project.resourceByName("usine.svg"), "Ctrl+Z retire l'import");
+    pal.dispatch(ui::MouseDown{{tile.x + tile.w / 2, tile.y + tile.h / 2}, ui::MouseButton::Right, 1, {}});
+    const auto* menu = b.editor->canvasMenu();
+    check(menu && menu->isOpen() && pal.currentImage() == "usine", "le clic droit d'une vignette ouvre son menu");
+    b.editor->canvasMenuChosen(app::HmiEditor::kImageImport);
+    check(b.doc->project.resourceByName("usine.svg") && b.v().objects.size() == objs2, "Importer dans les ressources (le menu)");
+    b.editor->canvasMenuChosen(app::HmiEditor::kImageImport);
+    check(res.size() == res2 + 1, "... encore : la m\xC3\xAA" "me image, rien de neuf");
+    b.editor->canvasMenuChosen(app::HmiEditor::kImagePlace);
+    check(b.v().objects.size() == objs2 + 1 && b.v().objects.back().text("image") == "usine.svg", "Placer sur la vue (le menu) : au centre");
+
+    // ---- Dupliquer, le code brut, le projet enregistre et relu ----
+    b.editor->canvas().setSelection({made});
+    b.editor->canvas().duplicateSelection();
+    const auto copies = b.editor->canvas().selection();
+    check(copies.size() == 1 && copies.front() != made && b.v().object(copies.front())->text("image") == "fleche-haut.svg",
+          "Dupliquer : la copie cite la m\xC3\xAAme ressource");
+    check(hmi::serializeObjectCode(b.v(), {made}).find("fleche-haut.svg") != std::string::npos, "le code brut cite la ressource");
+    const fs::path saved = fs::temp_directory_path() / "xpg_essai_n6_projet";
+    fs::remove_all(saved, ec);
+    const auto st = hmi::save(b.doc->project, saved.string());
+    auto back = hmi::load(saved.string());
+    const auto* rb = back ? back->resourceByName("fleche-bas-rouge.svg") : nullptr;
+    const auto* rd = b.doc->project.resourceByName("fleche-bas-rouge.svg");
+    check(static_cast<bool>(st) && back && rb && rb->data && rd && *rb->data == *rd->data && back->resourceByName("pompe_2.svg"),
+          "enregistr\xC3\xA9 puis relu : les images import\xC3\xA9" "es sont des ressources comme les autres");
+    fs::remove_all(saved, ec);
+
+    // ---- Ressources > Ma bibliotheque, et Mes images ----
+    app::HmiResourcesPane pane("res", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    pane.setBounds({0, 0, 1200, 600});
+    pane.layout();
+    const int libAction = pane.tools().actionByTip("Ajouter \xC3\xA0 ma biblioth\xC3\xA8que d'images : une copie de l'image choisie rejoint "
+                                                   "Mes images (l'onglet Images de la biblioth\xC3\xA8que, dans l'\xC3\xA9" "diteur de vues), "
+                                                   "gard\xC3\xA9" "e hors du projet pour la poser ailleurs");
+    check(libAction > 0, "le bouton Ma biblioth\xC3\xA8que du volet Ressources");
+    pane.selectResource(b.doc->project.resourceByName("pompe.svg")->id);
+    std::string why;
+    check(pane.addSelectedToImageLibrary(&why) && fs::exists(mineDir / "pompe.svg"), "Ma biblioth\xC3\xA8que : pompe.svg rejoint Mes images (" + why + ")");
+    check(pane.addSelectedToImageLibrary() && pane.lastMessage().find("D\xC3\xA9j\xC3\xA0") == 0, "... encore : d\xC3\xA9j\xC3\xA0 l\xC3\xA0, pas de double");
+    {
+        std::ofstream other((mineDir / "autre.svg").string(), std::ios::binary);   // un fichier du disque, puis un homonyme
+        other << std::string(up->data->begin(), up->data->end());
+    }
+    const fs::path disk = fs::temp_directory_path() / "xpg_essai_n6_logo.svg";
+    {
+        std::ofstream f(disk.string(), std::ios::binary);
+        const auto blue = il::contentFor(*up, 0x2F6FD6);
+        f << std::string(blue->begin(), blue->end());
+    }
+    check(pal.addImageFile(disk.string(), &why) && fs::exists(mineDir / "xpg_essai_n6_logo.svg"), "le bouton + : un fichier du disque rejoint Mes images");
+    const fs::path disk2 = fs::temp_directory_path() / "xpg_essai_n6_bis" / "xpg_essai_n6_logo.svg";
+    fs::create_directories(disk2.parent_path(), ec);
+    {
+        std::ofstream f(disk2.string(), std::ios::binary);
+        const auto green = il::contentFor(*up, 0x1E9A4A);
+        f << std::string(green->begin(), green->end());
+    }
+    check(pal.addImageFile(disk2.string(), &why) && fs::exists(mineDir / "xpg_essai_n6_logo (2).svg"), "un autre contenu au m\xC3\xAAme nom : \xC2\xAB nom (2) \xC2\xBB");
+    const fs::path text = fs::temp_directory_path() / "xpg_essai_n6_notes.txt";
+    {
+        std::ofstream f(text.string(), std::ios::binary);
+        f << "pas une image";
+    }
+    check(!pal.addImageFile(text.string(), &why) && why.find("n'est pas une image") != std::string::npos, "un fichier qui n'est pas une image est refus\xC3\xA9 (" + why + ")");
+    pal.reloadMyImages();
+    pal.setFilter("");                       // en haut de l'onglet
+    sections = pal.imageSections();
+    check(pal.myImages().size() == 4 && sections.front().category == il::kMine && sections.front().count == 4 && sections.front().open,
+          "Mes images relues du dossier : 4 images, en t\xC3\xAAte, ouvertes");
+    const auto* mineImg = pal.imageById("mes/pompe.svg");
+    check(mineImg && mineImg->mine() && mineImg->label == "pompe" && mineImg->category == il::kMine && !mineImg->ink,
+          "une image de Mes images : son nom, sa cat\xC3\xA9gorie, gard\xC3\xA9" "e telle quelle");
+    paint();
+    check(rec.wrote("Mes images") && rec.wrote("4"), "la section Mes images et son nombre");
+    // Posee depuis Mes images : la ressource deja dans le projet (le meme contenu) est reutilisee.
+    const std::size_t res3 = res.size();
+    const Id mineObj = mineImg ? b.editor->placeLibraryImage(*mineImg) : kNoId;
+    check(b.v().object(mineObj) && b.v().object(mineObj)->text("image") == "pompe.svg" && res.size() == res3,
+          "pos\xC3\xA9" "e depuis Mes images : la ressource pompe.svg (le m\xC3\xAAme contenu) est r\xC3\xA9utilis\xC3\xA9" "e");
+    // Une nouvelle editeur (une autre vue) relit Mes images ; Retirer de Mes images.
+    Bench b2;
+    b2.editor->palette().setMode(app::HmiPalette::Mode::Images);
+    check(b2.editor->palette().myImages().size() == 4 && b2.editor->palette().imageSwatch() == 0
+              && b2.editor->palette().imageSize() == 1 && b2.editor->palette().imageCategoryOpen("Fl\xC3\xA8" "ches et navigation"),
+          "un autre \xC3\xA9" "diteur relit Mes images et garde les r\xC3\xA9glages de l'onglet");
+    const auto* toRemove = pal.imageById("mes/autre.svg");
+    check(toRemove && b.editor->removeMyImage(*toRemove) && !fs::exists(mineDir / "autre.svg") && pal.myImages().size() == 3,
+          "Retirer de Mes images : le fichier s'en va, la section en compte 3");
+    check(!b.editor->removeMyImage(*up, &why), "une image de la biblioth\xC3\xA8que ne se retire pas (" + why + ")");
+
+    il::setUserFolder(keptFolder);
+    fs::remove_all(mineDir, ec);
+    fs::remove(disk, ec);
+    fs::remove(text, ec);
+    fs::remove_all(disk2.parent_path(), ec);
+}
+
 int main(int argc, char** argv) {
+    // 1.14.1 (lot N6) : HMI_TEST_N6=1 - la bibliotheque d'images, seule.
+    if (const char* only = std::getenv("HMI_TEST_N6"); only && *only == '1') {
+        imagesN6_1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.0 (lot M4) : HMI_TEST_M4=1 - enregistrer et rejouer l'IHM a l'ecran, seul.
     if (const char* only = std::getenv("HMI_TEST_M4"); only && *only == '1') {
         enregistrements1140();
@@ -42182,6 +42552,7 @@ int main(int argc, char** argv) {
     enregistrements1140();                  // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM a l'ecran
     utilisationsM1_1140();                  // 1.14.0 (lot M1) : la colonne Utilisations compte les acces, Voir les usages
     chercheur1140();                        // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC
+    imagesN6_1141();                        // 1.14.1 (lot N6) : la bibliotheque d'images
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

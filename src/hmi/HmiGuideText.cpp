@@ -1630,6 +1630,51 @@ const std::vector<Topic>& topics() {
                          "biblioth\xC3\xA8que ; les favoris sont gard\xC3\xA9s d'un lancement \xC3\xA0 "
                          "l'autre. Le champ de recherche filtre par nom ou par famille. Le survol d'un "
                          "composant montre son aper\xC3\xA7u.", {}},
+             {K::Heading, "La biblioth\xC3\xA8que d'images", {}, "1.14.1"},
+             {K::Paragraph, "L'onglet **Images** de la biblioth\xC3\xA8que, entre **Objets** et **Variables**, "
+                         "range plus de 300 images pr\xC3\xAAtes \xC3\xA0 poser, dessin\xC3\xA9" "es pour "
+                         "l'application (des dessins vectoriels, nets \xC3\xA0 toute taille) : "
+                         "**Fl\xC3\xA8" "ches et navigation**, **Interface**, **S\xC3\xA9" "curit\xC3\xA9 et "
+                         "signalisation** (les panneaux de danger, d'interdiction, d'obligation, de secours "
+                         "et d'incendie, l'arr\xC3\xAAt d'urgence, le feu tricolore), **Industrie et "
+                         "process**, **\xC3\x89nergie et fluides**, **B\xC3\xA2timent et infrastructure**, "
+                         "**R\xC3\xA9seau et informatique**, **V\xC3\xA9hicules et logistique**, "
+                         "**M\xC3\xA9t\xC3\xA9o**, **Personnes**, **Drapeaux** (pour les boutons de langue) "
+                         "et **Formes et pastilles** (voyants, \xC3\xA9tats, badges "
+                         "num\xC3\xA9rot\xC3\xA9s). Chaque cat\xC3\xA9gorie est une section qui se replie "
+                         "d'un clic sur son titre, son nombre d'images \xC3\xA0 droite ; **Mes images**, en "
+                         "t\xC3\xAAte, rassemble les tiennes.", {}, "1.14.1"},
+             {K::Bullet, "**Chercher** : le champ de recherche de la biblioth\xC3\xA8que cherche aussi les "
+                         "images, par leur nom, leur cat\xC3\xA9gorie et leurs mots-cl\xC3\xA9s (\xC2\xAB "
+                         "pompe \xC2\xBB, \xC2\xAB danger \xC2\xBB, \xC2\xAB langue \xC2\xBB, \xC2\xAB "
+                         "alarme \xC2\xBB) ; les sections qui trouvent s'ouvrent.", {}, "1.14.1"},
+             {K::Bullet, "**Poser** : un clic sur une image, puis un clic dans la vue (ou glisse-la sur la "
+                         "vue) ; un **double-clic** la pose au centre de ce qu'on voit. C'est un objet "
+                         "**Image** comme les autres (ses propri\xC3\xA9t\xC3\xA9s, Dupliquer, le code brut, "
+                         "l'archive .xihm), et son image entre dans **Ressources** : la m\xC3\xAAme image "
+                         "d\xC3\xA9j\xC3\xA0 import\xC3\xA9" "e est r\xC3\xA9utilis\xC3\xA9" "e, un nom "
+                         "d\xC3\xA9j\xC3\xA0 pris par une autre image devient `nom_2.svg`. Un seul Ctrl+Z "
+                         "retire l'objet et sa ressource.", {}, "1.14.1"},
+             {K::Bullet, "**Importer dans les ressources**, sans la poser : le bouton **Importer** (l'image "
+                         "choisie) ou le clic droit d'une image.", {}, "1.14.1"},
+             {K::Bullet, "**La couleur** : les dessins monochromes (les fl\xC3\xA8" "ches, l'interface, "
+                         "l'industrie...) prennent la couleur choisie dans la rang\xC3\xA9" "e du haut ; "
+                         "**Auto** prend celle qui se lit sur le fond de la vue (claire sur un fond sombre, "
+                         "sombre sur un fond clair). Une autre couleur donne une ressource \xC3\xA0 son nom "
+                         "(`fleche-haut-rouge.svg`). Les images en couleurs (panneaux, drapeaux, "
+                         "m\xC3\xA9t\xC3\xA9o, pastilles) gardent les leurs. **Recolorier**, dans les "
+                         "propri\xC3\xA9t\xC3\xA9s de l'Image, la change ensuite, m\xC3\xAAme en marche par "
+                         "une expression.", {}, "1.14.1"},
+             {K::Bullet, "**La taille des vignettes** : petites, moyennes, ou grandes avec leur nom (les "
+                         "trois carr\xC3\xA9s).", {}, "1.14.1"},
+             {K::Bullet, "**Mes images** : le bouton **+** (un fichier PNG, SVG, JPEG... du disque), un "
+                         "fichier l\xC3\xA2" "ch\xC3\xA9 sur l'onglet, ou **Ressources \xE2\x80\xBA Ma "
+                         "biblioth\xC3\xA8que** (l'image choisie du projet) y ajoutent une image. Elles sont "
+                         "gard\xC3\xA9" "es hors du projet, dans le dossier de tes r\xC3\xA9glages (\xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 de tes th\xC3\xA8mes), et se posent dans tous tes projets ; "
+                         "clic droit \xE2\x80\xBA **Retirer de Mes images**.", {}, "1.14.1"},
+             {K::Tip, "L'infobulle d'une image dit son nom, sa cat\xC3\xA9gorie et sa taille d'origine ; "
+                         "le bas de l'onglet les rappelle pour l'image survol\xC3\xA9" "e.", {}, "1.14.1"},
              {K::Heading, "Quelques composants", {}},
              {K::Bullet, "**Texte** : statique, dynamique (textes \xC3\xA0 trous `{Variable}`), "
                          "format\xC3\xA9, sur plusieurs lignes (retour \xC3\xA0 la ligne automatique).", {}},
@@ -5818,6 +5863,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "un **GIF anim\xC3\xA9** tourne en boucle en marche, \xC3\xA0 son rythme (dans "
                          "l'\xC3\xA9" "diteur : sa premi\xC3\xA8re image). Pour le jouer une fois, N fois, "
                          "sur une action, prends l'objet **GIF anim\xC3\xA9**.", {}},
+             {K::Bullet, "plus de 300 images pr\xC3\xAAtes \xC3\xA0 poser (fl\xC3\xA8" "ches, interface, "
+                         "panneaux de s\xC3\xA9" "curit\xC3\xA9, industrie, drapeaux...) : l'onglet "
+                         "**Images** de la biblioth\xC3\xA8que (voir \xC2\xAB Les objets de la "
+                         "biblioth\xC3\xA8que \xC2\xBB) ; pos\xC3\xA9" "e, l'image entre dans les ressources.", {}, "1.14.1"},
              {K::Tip, "Pour plusieurs images qui d\xC3\xA9" "filent (une roue qui tourne), prends "
                          "l'**Image anim\xC3\xA9" "e**.", {}},
          },
@@ -19290,6 +19339,11 @@ const std::vector<Topic>& topics() {
                          "suivent ;", {}},
              {K::Bullet, "**Remplacer** : m\xC3\xAAme nom, nouveau contenu (du m\xC3\xAAme genre) ;", {}},
              {K::Bullet, "**Supprimer** : confirmation si elle est cit\xC3\xA9" "e ; Ctrl+Z la rend.", {}},
+             {K::Bullet, "**Ma biblioth\xC3\xA8que** : une copie de l'image choisie rejoint **Mes images**, "
+                         "dans l'onglet Images de la biblioth\xC3\xA8que de l'\xC3\xA9" "diteur de vues ; "
+                         "gard\xC3\xA9" "e hors du projet, elle se pose dans tous tes projets (voir \xC2\xAB "
+                         "Les objets de la biblioth\xC3\xA8que \xC2\xBB). Les images pos\xC3\xA9" "es depuis "
+                         "cet onglet arrivent ici, comme un fichier import\xC3\xA9.", {}, "1.14.1"},
              {K::Paragraph, "1.12.12 : les vid\xC3\xA9os AVI, MOV et WMV s'importent ; la fiche montre la "
                          "premi\xC3\xA8re image quand elle se d\xC3\xA9" "code ici (un AVI Motion-JPEG "
                          "partout, le reste sous Windows), sa dur\xC3\xA9" "e, sa taille, son codec.", {}, "1.12.12"},
