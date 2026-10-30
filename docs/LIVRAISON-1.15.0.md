@@ -210,7 +210,7 @@ Les zips portables (167 fichiers chacun ; décompresse, puis lance l'exe) :
 
 ## 7. Les fichiers créés et modifiés
 
-Depuis la 1.14.2 : 17 fichiers créés et 22 modifiés (un `.cpp` et son `.hpp` comptent pour deux).
+Depuis la 1.14.2, dans le code et les essais : 19 fichiers créés et 29 modifiés (un `.cpp` et son `.hpp` comptent pour deux).
 
 **Créés** (`src/app/ai/`, l'espace de noms `app::ai`) :
 
@@ -228,7 +228,7 @@ Depuis la 1.14.2 : 17 fichiers créés et 22 modifiés (un `.cpp` et son `.hpp` 
 Les essais : `tests/ai_reseau_test.cpp`, `tests/ai_registre_test.cpp`, et le faux fournisseur `tests/fixtures/ia/faux_fournisseur.py`.
 
 **Modifiés** :
-- l'Assistant : `AiAssistant`, `AiPanel`, `AiSettingsDialog`, `AiStore`, `AiWorkspace.cpp`, `AiOperations` (Dupliquer, Code brut, la validation par rôle), `AiKnowledge`, `AiDemo.cpp` ;
+- l'Assistant : `AiAssistant`, `AiPanel`, `AiSettingsDialog`, `AiStore`, `AiWorkspace.cpp`, `AiOperations` (Dupliquer, Code brut, la validation par rôle), `AiKnowledge`, `AiDemo.cpp`, `AiMemoryDialog` (le vrai fournisseur dans la Vue générale) ;
 - les séances de script : `src/app/ScriptRunner.cpp/.hpp` (les commandes `ia fournisseur`, `ia modele`, `ia cle`, `ia tester`…) ;
 - la compilation : `CMakeLists.txt` (winhttp et crypt32 sous Windows), `XpgAnalyzer.vcxproj`, `XpgAnalyzer.vcxproj.filters`, `outils/mingw/package_mingw.py` ;
 - la version, l'aide et les notes : `src/core/Version.hpp`, `outils/config.ini`, `src/help/ReleaseNotes.cpp`, `tools/guide-ihm/guide-ihm.txt`, `src/hmi/HmiGuideText.cpp`, `src/hmi/HmiTutorialDeduce.cpp` ;
