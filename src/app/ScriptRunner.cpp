@@ -631,6 +631,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia arreter                          arreter la generation
     //  ia joindre "chemin"                 joindre un fichier (comme lache sur le panneau)
     //  ia apercu | appliquer | refuser     la derniere proposition (dans la fenetre d'apercu : la sienne)
+    //  ia reappliquer                      la derniere proposition, annulee par Ctrl+Z (le bouton Reappliquer de sa carte)
     //  ia variable N                       dans l'apercu : la N-ieme ligne de la liste (1 : l'invite ; la derniere : la creer)
     //  ia mode previsualisation | direct
     //  ia parametres                       la fenetre des parametres
@@ -688,6 +689,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (sub == "apercu") { panel->openPreview(lastProposal()); return Step::Yield; }
         if (sub == "appliquer") { (void)panel->applyProposal(lastProposal()); return Step::Yield; }
         if (sub == "refuser") { (void)panel->refuseProposal(lastProposal()); return Step::Yield; }
+        if (sub == "reappliquer") { if (!panel->reapplyProposal(lastProposal())) fail("ia reappliquer : " + panel->lastStatus()); return Step::Yield; }
         if (sub == "mode") { panel->setDirect(lower(arg(2)) == "direct"); return Step::Yield; }
         if (sub == "parametres") { panel->openSettings(); return Step::Yield; }
         if (sub == "defiler") { panel->chat().scrollBy(static_cast<float>(std::atof(arg(2).c_str()))); return Step::Yield; }
@@ -696,8 +698,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::printf("[script] ia : %zu conversations ; ouverte : %s (%zu messages) ; %s\n", as.conversations().size(),
                         c ? c->title.c_str() : "-", c ? c->messages.size() : std::size_t{0},
                         as.generating() ? std::string(ai::phaseLabel(as.phase())).c_str() : "au repos");
-            if (const auto* p = as.proposal(lastProposal()))
-                std::printf("[script] ia : proposition %s (%s) : %d / %d / %d\n", p->summary.c_str(), p->state.c_str(), p->create, p->modify, p->remove);
+            if (const auto* p = as.proposal(lastProposal())) {
+                // 1.14.2 : l'etat reel d'une proposition appliquee (Ctrl+Z, la vue changee depuis).
+                const auto real = as.appliedState(lastProposal());
+                const char* now = real == ai::Assistant::Applied::Undone ? " ; annulee (Ctrl+Z)" : real == ai::Assistant::Applied::Changed ? " ; la vue a change depuis" : "";
+                std::printf("[script] ia : proposition %s (%s%s) : %d / %d / %d\n", p->summary.c_str(), p->state.c_str(), now, p->create, p->modify, p->remove);
+            }
             std::fflush(stdout);
             return Step::Next;
         }
