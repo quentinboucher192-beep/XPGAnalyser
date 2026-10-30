@@ -4898,6 +4898,7 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
         // Lot 8 : les parametres de la vue (une popup ouverte pour Pompes[3]).
         auto shown = it->second.evaluate(env, values ? values : &local, runtime_.viewScope(viewId), now_ - runtime_.startedAt());
         for (const auto& lv : values ? *values : local) if (lv.error) errors.push_back(lv.object);
+        travel_[viewId].observe(shown, now_);   // 1.14.1 : l'Ordre des fins de course pas suivi a temps
         return shown;
     };
 
@@ -5861,7 +5862,8 @@ void HmiSimulationPane::refreshWhy() {
     std::vector<hmi::LiveValue> values;
     auto& env = runtime_.environment();
     const auto* scope = runtime_.viewScope(whyView_);
-    const auto shown = whyLive_.evaluate(env, &values, scope, now_ - runtime_.startedAt());
+    auto shown = whyLive_.evaluate(env, &values, scope, now_ - runtime_.startedAt());
+    layers_.markOverdue(whyView_, shown);   // 1.14.1 : le chrono des fins de course, celui de l'ecran
     const hmi::Object* o = shown.object(whyObject_);
     whyReport_ = hmi::why::explain(o ? *o : *source, values, env, scope);
     const auto forced = [this](const std::string& path) {

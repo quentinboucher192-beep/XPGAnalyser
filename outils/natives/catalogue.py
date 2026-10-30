@@ -1593,7 +1593,7 @@ ENUMS = [
      [("T", 0, "En T", "T"), ("L", 1, "En L", "L")],
      [("*", "valve3Bore")]),
     ("VANNE3_COMMANDE", "Comment se commande la position d'une vanne 3 voies.", "", -1,
-     [("Entier", 0, "Un entier", "entier"), ("DeuxBooleens", 1, "Deux booléens", "deux booléens")],
+     [("Entier", 0, "Un entier", "entier"), ("DeuxBooleens", 1, "Deux booléens", "deux booléens"), ("FinsDeCourse", 2, "Des fins de course", "fins de course")],
      [("*", "positionMode")]),
     ("STYLE_NAVIGATION", "La forme d'une barre de navigation.", "", -1,
      [("Onglets", 0, "Des onglets", "onglets"), ("Boutons", 1, "Des boutons", "boutons"), ("Liens", 2, "Des liens", "liens")],

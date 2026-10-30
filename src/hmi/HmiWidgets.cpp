@@ -171,4 +171,259 @@ std::string progressLabel(double value, double min, double max, bool percentSign
     return formatNumber(std::round(f * 100.0)) + (percentSign ? " %" : "");
 }
 
+// ------------------------------------------------- 1.14.1 : les fins de course
+namespace limits {
+
+namespace {
+const std::string kFco = "FC ouvert", kFcf = "FC ferm\xC3\xA9";
+const std::string kManoeuvre = "le temps de man\xC5\x93uvre";
+std::string portName(int way) { return way == 0 ? std::string("FC ferm\xC3\xA9" "e") : "FC voie " + std::string(wayLabel(way)); }
+} // namespace
+
+bool kindHasLimits(Kind k) noexcept {
+    return k == Kind::Valve || k == Kind::ThreeWayValve || k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::FireDamper;
+}
+
+bool limitModeText(Kind k, std::string_view modeText) noexcept {
+    if (!kindHasLimits(k)) return false;
+    std::size_t a = 0;
+    while (a < modeText.size() && (modeText[a] == ' ' || modeText[a] == '\t')) ++a;
+    return modeText.substr(a).rfind("fins", 0) == 0;
+}
+
+bool limitMode(const Object& o) noexcept {
+    const Prop* p = o.find(o.kind == Kind::ThreeWayValve ? std::string_view("positionMode") : kModeKey);
+    return p && limitModeText(o.kind, p->value);
+}
+
+std::string stateLabel(State s, bool feminine) {
+    switch (s) {
+        case State::Open: return feminine ? "ouverte" : "ouvert";
+        case State::Closed: return feminine ? "ferm\xC3\xA9" "e" : "ferm\xC3\xA9";
+        case State::Moving: return "en mouvement";
+        case State::Discord: return "discordance";
+        case State::None: break;
+    }
+    return "sans fin de course reli\xC3\xA9" "e";
+}
+
+Reading decide(Input fo, Input ff, Input order, bool overdue, bool regulating) {
+    Reading r;
+    if (!fo.given && !ff.given) {
+        r.why = "aucune fin de course reli\xC3\xA9" "e (FC ouvert, FC ferm\xC3\xA9)";
+        return r;
+    }
+    // Une seule reliee : l'autre position s'en deduit (FC ouvert fausse : ferme).
+    const bool o = fo.given ? fo.on : !ff.on;
+    const bool f = ff.given ? ff.on : !fo.on;
+    const std::string alone = fo.given && ff.given ? std::string(" seule vraie") : std::string(" (seule reli\xC3\xA9" "e)");
+    if (order.given) {
+        r.order = order.on ? 1 : 0;
+        r.reached = order.on ? o && !f : f && !o;
+    }
+    if (o && f) {
+        r.state = State::Discord;
+        r.both = true;
+        r.why = kFco + " et " + kFcf + " vraies \xC3\xA0 la fois";
+        return r;
+    }
+    if (order.given) {
+        const std::string what = order.on ? "ordre d'ouverture" : "ordre de fermeture";
+        const std::string& wanted = order.on ? kFco : kFcf;
+        if (r.reached) {
+            r.state = order.on ? State::Open : State::Closed;
+            r.why = what + " donn\xC3\xA9 et " + wanted + " atteinte";
+        } else if (overdue) {
+            r.state = State::Discord;
+            r.overdue = true;
+            r.why = what + " donn\xC3\xA9, " + wanted + " pas atteinte apr\xC3\xA8s " + kManoeuvre;
+        } else {
+            r.state = State::Moving;
+            r.toward = order.on ? 1 : -1;
+            r.why = what + " donn\xC3\xA9, " + wanted + " pas encore atteinte : " + (order.on ? "en ouverture" : "en fermeture");
+        }
+        return r;
+    }
+    if (o) {
+        r.state = State::Open;
+        r.why = fo.given ? kFco + alone : kFcf + " fausse (seule reli\xC3\xA9" "e)";
+    } else if (f) {
+        r.state = State::Closed;
+        r.why = ff.given ? kFcf + alone : kFco + " fausse (seule reli\xC3\xA9" "e)";
+    } else if (regulating) {
+        r.state = State::Open;
+        r.between = true;
+        r.why = "ni " + kFco + " ni " + kFcf + " : entre les deux, \xC3\xA0 son ouverture";
+    } else {
+        r.state = State::Moving;
+        r.why = "ni " + kFco + " ni " + kFcf + " : en mouvement";
+    }
+    return r;
+}
+
+Reading3 decide3(const Input (&ports)[4], bool lBore, int order, bool overdue) {
+    Reading3 r;
+    bool any = false;
+    for (int w = 0; w < 4; ++w) {
+        if ((lBore && w == 1) || !ports[w].given) continue;
+        any = true;
+        if (ports[w].on) r.on.push_back(w);
+    }
+    if (!any) {
+        r.why = "aucune fin de course reli\xC3\xA9" "e";
+        return r;
+    }
+    if (order > 3 || (lBore && order == 1)) order = -1;   // une voie qui n'existe pas : pas d'ordre
+    if (order >= 0) {
+        r.order = order;
+        r.reached = order == 0 ? (ports[0].given ? r.on.size() == 1 && r.on[0] == 0 : r.on.empty())
+                               : r.on.size() == 1 && r.on[0] == order;
+    }
+    if (r.on.size() >= 2) {
+        r.state = State::Discord;
+        r.way = order;
+        for (std::size_t i = 0; i < r.on.size(); ++i) r.why += (i == 0 ? "" : i + 1 == r.on.size() ? " et " : ", ") + portName(r.on[i]);
+        r.why += " vraies \xC3\xA0 la fois";
+        return r;
+    }
+    if (order >= 0) {
+        const std::string what = "ordre " + std::string(order == 0 ? "de fermeture" : "de position " + std::string(wayLabel(order)));
+        const std::string wanted = order == 0 && !ports[0].given ? std::string("aucune voie") : portName(order);
+        r.way = order;
+        if (r.reached) {
+            r.state = order == 0 ? State::Closed : State::Open;
+            r.why = what + " donn\xC3\xA9 et " + wanted + (order == 0 && !ports[0].given ? " vraie" : " atteinte");
+        } else if (overdue) {
+            r.state = State::Discord;
+            r.overdue = true;
+            r.why = what + " donn\xC3\xA9, " + wanted + " pas atteinte apr\xC3\xA8s " + kManoeuvre;
+        } else {
+            r.state = State::Moving;
+            r.why = what + " donn\xC3\xA9, " + wanted + " pas encore atteinte : le boisseau tourne";
+        }
+        return r;
+    }
+    if (r.on.size() == 1) {
+        r.way = r.on[0];
+        r.state = r.way == 0 ? State::Closed : State::Open;
+        r.why = portName(r.way) + " seule vraie";
+    } else {
+        r.state = State::Moving;
+        r.why = "aucune fin de course vraie : le boisseau tourne";
+    }
+    return r;
+}
+
+int wayOf(std::string_view raw) {
+    const std::string t = trim(raw);
+    if (t.empty()) return -1;
+    double n = 0;
+    if (parseNumber(t, n)) {
+        const long v = std::lround(n);
+        if (v == 0) return 0;
+        if (v == 1 || v == 12 || v == 21) return 1;
+        if (v == 2 || v == 13 || v == 31) return 2;
+        if (v == 3 || v == 23 || v == 32) return 3;
+        return -1;
+    }
+    if (t.find("1-2") != std::string::npos || t.find("2-1") != std::string::npos) return 1;
+    if (t.find("1-3") != std::string::npos || t.find("3-1") != std::string::npos) return 2;
+    if (t.find("2-3") != std::string::npos || t.find("3-2") != std::string::npos) return 3;
+    if (t.rfind("ferm", 0) == 0 || t.rfind("Ferm", 0) == 0) return 0;
+    if (parseBool(t, false) != parseBool(t, true)) return -1;
+    return parseBool(t, false) ? 1 : 0;
+}
+
+std::string_view wayLabel(int way) noexcept {
+    switch (way) {
+        case 0: return "ferm\xC3\xA9" "e";
+        case 1: return "1-2";
+        case 2: return "1-3";
+        case 3: return "2-3";
+        default: return "?";
+    }
+}
+
+Input inputOf(const Object& o, std::string_view key) {
+    Input in;
+    const Prop* p = o.find(key);
+    if (!p) return in;
+    const std::string t = trim(p->value);
+    in.given = !t.empty() || !trim(p->expr).empty();
+    if (t.empty()) return in;
+    double n = 0;
+    in.on = parseNumber(t, n) ? n != 0 : parseBool(t, false);
+    return in;
+}
+
+Reading read(const Object& o) {
+    double opening = 0;
+    const bool regulating = o.kind != Kind::FireDamper && parseNumber(trim(o.text("opening")), opening);
+    return decide(inputOf(o, "limitOpen"), inputOf(o, "limitClosed"), inputOf(o, "openOrder"), inputOf(o, kOverdueKey).on, regulating);
+}
+
+Reading3 read3(const Object& o) {
+    Input ports[4];
+    for (int w = 0; w < 4; ++w) ports[w] = inputOf(o, kWayKeys[w]);
+    const bool lBore = trim(o.text("valve3Bore", "T")) == "L";
+    return decide3(ports, lBore, wayOf(o.text("positionOrder")), inputOf(o, kOverdueKey).on);
+}
+
+double travelSeconds(std::string_view text) {
+    const std::string t = trim(text);
+    std::int64_t ms = 0;
+    if (t.empty() || !roles::parseDuration(t, ms, roles::Unit::Seconds) || ms <= 0) return 0.0;
+    return static_cast<double>(ms) / 1000.0;
+}
+
+bool travelTimeOk(std::string_view text) {
+    const std::string t = trim(text);
+    std::int64_t ms = 0;
+    return t.empty() || (roles::parseDuration(t, ms, roles::Unit::Seconds) && ms >= 0);
+}
+
+bool TravelClock::step(Track& t, int order, bool reached, double now, double travel) noexcept {
+    if (order < 0 || travel <= 0) {
+        t = Track{};
+        return false;
+    }
+    // Le chrono repart quand l'Ordre change, quand la fin de course attendue se perd, ou quand l'heure
+    // recule (un exemple qui recommence son tour).
+    if (order != t.order || (t.reached && !reached) || now < t.since) t.since = now;
+    t.order = order;
+    t.reached = reached;
+    t.overdue = !reached && now - t.since >= travel - 1e-9;
+    return t.overdue;
+}
+
+void TravelClock::observe(View& shown, double now) {
+    for (auto& o : shown.objects) {
+        if (!kindHasLimits(o.kind) || !limitMode(o)) continue;
+        int order = -1;
+        bool reached = false;
+        if (o.kind == Kind::ThreeWayValve) {
+            const auto r = read3(o);
+            order = r.order;
+            reached = r.reached;
+        } else {
+            const auto r = read(o);
+            order = r.order;
+            reached = r.reached;
+        }
+        if (step(tracks_[o.id], order, reached, now, travelSeconds(o.text("travelTime")))) o.set(std::string(kOverdueKey), "TRUE");
+    }
+}
+
+bool TravelClock::overdue(Id object) const noexcept {
+    const auto it = tracks_.find(object);
+    return it != tracks_.end() && it->second.overdue;
+}
+
+void TravelClock::mark(View& shown) const {
+    for (auto& o : shown.objects)
+        if (overdue(o.id) && kindHasLimits(o.kind) && limitMode(o)) o.set(std::string(kOverdueKey), "TRUE");
+}
+
+} // namespace limits
+
 } // namespace hmi

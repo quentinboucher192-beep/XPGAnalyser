@@ -11,8 +11,10 @@
 #include "HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement remplit le Defaut
 #include "HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
 #include "HmiRoles.hpp"    // 1.12.31 : formulaValueKey, d'apres le role de la propriete
+#include "HmiWidgets.hpp"  // 1.14.1 : les fins de course
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <cctype>
 #include <cstdlib>
@@ -122,6 +124,56 @@ std::string linkedSource(const Object& o, std::string_view key) {
     return trimmed(pr->value);
 }
 
+namespace {
+LibraryAlarm limitDiscordAlarm(const Object& o, const std::string& cap) {
+    int delayMs = 30000;
+    if (const Prop* tp = o.find("travelTime"); tp && trimmed(tp->expr).empty())
+        if (const double sec = limits::travelSeconds(tp->value); sec > 0) delayMs = static_cast<int>(std::lround(sec * 1000.0));
+    std::vector<std::string> parts;
+    std::string why;
+    const auto both = [](const std::string& a, const std::string& b) { return "(" + a + ") AND (" + b + ")"; };
+    if (o.kind == Kind::ThreeWayValve) {
+        const bool lBore = trimmed(o.text("valve3Bore", "T")) == "L";
+        std::vector<std::pair<int, std::string>> ways;   // les voies reliees (0 : fermee) et leur fin de course
+        for (int w = 0; w < 4; ++w)
+            if (!(lBore && w == 1))
+                if (std::string src = linkedSource(o, limits::kWayKeys[w]); !src.empty()) ways.emplace_back(w, std::move(src));
+        for (std::size_t i = 0; i < ways.size(); ++i)
+            for (std::size_t j = i + 1; j < ways.size(); ++j) parts.push_back(both(ways[i].second, ways[j].second));
+        const std::string order = linkedSource(o, "positionOrder");
+        static const char* const kCodes[4] = {"0", "12", "13", "23"};
+        if (!order.empty()) {
+            for (const auto& [w, src] : ways)
+                parts.push_back("((" + order + ") = " + std::to_string(w) + (w ? " OR (" + order + ") = " + kCodes[w] : std::string{}) + ") AND NOT ("
+                                + src + ")");
+        } else if (ways.size() >= 2) {
+            std::string none;
+            for (const auto& [w, src] : ways) none += (none.empty() ? "NOT (" : " AND NOT (") + src + ")";
+            parts.push_back(none);
+        }
+        if (parts.empty())
+            why = ways.empty() ? "aucune fin de course de voie (limit12, limit13, limit23, limitClosed) n'est reli\xC3\xA9" "e"
+                               : "une seule fin de course reli\xC3\xA9" "e, sans Ordre de position (positionOrder) : rien \xC3\xA0 comparer";
+    } else {
+        const std::string fco = linkedSource(o, "limitOpen"), fcf = linkedSource(o, "limitClosed"), ord = linkedSource(o, "openOrder");
+        if (!fco.empty() && !fcf.empty()) parts.push_back(both(fco, fcf));
+        if (!ord.empty()) {
+            if (!fco.empty()) parts.push_back("(" + ord + ") AND NOT (" + fco + ")");
+            if (!fcf.empty()) parts.push_back("NOT (" + ord + ") AND NOT (" + fcf + ")");
+        } else if (!fco.empty() && !fcf.empty()) {
+            parts.push_back("NOT (" + fco + ") AND NOT (" + fcf + ")");
+        }
+        if (parts.empty())
+            why = fco.empty() && fcf.empty() ? "les fins de course (limitOpen, limitClosed) ne sont pas reli\xC3\xA9" "es"
+                                             : "une seule fin de course reli\xC3\xA9" "e, sans Ordre d'ouverture (openOrder) : rien \xC3\xA0 comparer";
+    }
+    std::string condition;
+    for (const auto& part : parts) condition += (condition.empty() ? "(" : " OR (") + part + ")";
+    auto la = make("Discordance", condition, cap + " : discordance des fins de course", 2, "Alarme", delayMs);
+    return parts.empty() ? unusable(std::move(la), why) : la;
+}
+} // namespace
+
 // ================================================================ bibliotheque ==
 std::vector<LibraryAlarm> libraryAlarms(const Object& o) {
     std::vector<LibraryAlarm> out;
@@ -173,6 +225,12 @@ std::vector<LibraryAlarm> libraryAlarms(const Object& o) {
         auto la = make("Course_Trop_Longue", moving, cap + " : ne finit pas sa course", 3, "Alarme", 30000);
         out.push_back(moving.empty() ? unusable(std::move(la), "le mouvement (moving) n'est pas reli\xC3\xA9") : std::move(la));
     }
+    // 1.14.1 : COMMANDE PAR LES FINS DE COURSE (la vanne, la vanne 3 voies, les registres) - la discordance : deux
+    // fins de course vraies a la fois, l'Ordre donne et sa fin de course pas atteinte, ou (sans Ordre) aucune ;
+    // son delai : le Temps de manoeuvre (30 s sans lui).
+    if (limits::kindHasLimits(o.kind) && limits::limitMode(o)) {
+        out.push_back(limitDiscordAlarm(o, cap));
+    } else
     // 1.12.24 : le registre dont les deux fins de course sont reliees - ni l'une ni l'autre hors mouvement (il
     // est reste en route), ou les deux a la fois (un capteur colle) ; le clapet coupe-feu declenche.
     if (kindIsDamper(o.kind)) {

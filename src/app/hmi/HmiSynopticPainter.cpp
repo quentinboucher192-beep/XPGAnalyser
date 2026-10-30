@@ -286,6 +286,95 @@ void drawActuator(const Ctx& c, const Sym& s, const std::string& type, double hw
     }
 }
 
+// ---- 1.14.1 : commandes par leurs fins de course ---------------------------------------------
+//  La vanne, la vanne 3 voies et les registres en "Commande de l'etat : fins de course" : leur etat
+//  vient de leurs fins de course (hmi::limits, la meme regle partout), pas de la Valeur. Ouvert, ferme : les
+//  couleurs de l'objet ; en mouvement : la couleur de mouvement (ambre) qui clignote ; discordance : la
+//  couleur de defaut qui clignote et le signe "different" dans une pastille. Les voyants O et F (une vanne
+//  3 voies : un par voie) disent chaque fin de course. Dans l'editeur rien ne bouge : entre les deux, il se
+//  montre ferme.
+hmi::limits::Input limitInput(const Ctx& c, std::string_view key) {
+    hmi::limits::Input in;
+    std::string t = c.src.text(c.o, key);
+    while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+    while (!t.empty() && std::isspace(static_cast<unsigned char>(t.front()))) t.erase(t.begin());
+    const hmi::Prop* p = c.o.find(key);
+    in.given = !t.empty() || (p && p->expr.find_first_not_of(" \t") != std::string::npos);
+    double n = 0;
+    if (!t.empty()) in.on = truthy(t, n);
+    return in;
+}
+
+struct LimitView {
+    bool                    active{false};   // commande par les fins de course
+    hmi::limits::Reading    r;
+    hmi::limits::Input      fo, ff;
+    bool                    leds{true};      // les voyants (showLimits)
+};
+
+LimitView limitView(const Ctx& c, bool regulating) {
+    LimitView v;
+    v.active = hmi::limits::limitModeText(c.o.kind, c.src.text(c.o, hmi::limits::kModeKey));
+    if (!v.active) return v;
+    v.fo = limitInput(c, "limitOpen");
+    v.ff = limitInput(c, "limitClosed");
+    double n = 0;
+    const bool overdue = !c.opt.editor && truthy(c.src.text(c.o, hmi::limits::kOverdueKey), n);
+    v.r = hmi::limits::decide(v.fo, v.ff, limitInput(c, "openOrder"), overdue, regulating);
+    if (c.opt.editor && v.r.state == hmi::limits::State::Moving) {
+        v.r.state = hmi::limits::State::Closed;
+        v.r.toward = 0;
+    }
+    v.leds = c.src.flag(c.o, "showLimits", true);
+    return v;
+}
+
+// La couleur d'un etat ; `on` : celle de l'etat ouvert. Le defaut (externe) passe avant (s.col, qui clignote).
+gfx::Color limitColor(const Ctx& c, const Sym& s, hmi::limits::State st, gfx::Color on) {
+    using St = hmi::limits::State;
+    if (s.fault) return s.col;
+    if (st == St::Open) return on;
+    if (st == St::Moving) {
+        const bool dim = !c.opt.editor && std::fmod(c.opt.time, 0.9) >= 0.45;
+        return withA(c.color("colorMoving", gfx::Color::rgb(0xF0B429)), dim ? 0.35f : 1.f);
+    }
+    if (st == St::Discord) {
+        const gfx::Color bad = c.color("colorFault", gfx::Color::rgb(0xE5534B));
+        const bool blink = !c.opt.editor && std::fmod(c.opt.time, 1.0) >= 0.5;
+        return blink ? shade(bad, 0.45f) : bad;
+    }
+    return s.off;
+}
+
+// La pastille de la discordance : un disque de la couleur de defaut (fixe, pour se lire), le signe "different".
+void drawDiscordBadge(const Ctx& c, double cx, double cy, double r) {
+    fill(c, circle(cx, cy, r, 24), c.color("colorFault", gfx::Color::rgb(0xE5534B)));
+    outline(c, circle(cx, cy, r, 24), true, c.fixed(0x10141A), 1);
+    const gfx::Color ink = c.fixedOn(0xFFFFFF);
+    const double w = std::max(1.2, r * 0.2);
+    seg(c, cx - r * 0.5, cy - r * 0.24, cx + r * 0.5, cy - r * 0.24, ink, w);
+    seg(c, cx - r * 0.5, cy + r * 0.24, cx + r * 0.5, cy + r * 0.24, ink, w);
+    seg(c, cx + r * 0.26, cy - r * 0.62, cx - r * 0.26, cy + r * 0.62, ink, w);
+}
+
+// Un voyant de fin de course : allume (la couleur ouverte), eteint, ou de la couleur de la discordance ; son
+// nom dessous (O, F, 12...). `tag` vide : sans nom.
+void drawLimitLed(const Ctx& c, const Sym& s, double x, double y, double lr, bool on, bool discord, gfx::Color discordCol,
+                  std::string_view tag) {
+    const gfx::Color lc = discord ? discordCol : on ? c.color("colorOn", gfx::Color::rgb(0x2ECC71)) : withA(s.off, 0.8f);
+    fill(c, circle(x, y, lr, 16), lc);
+    outline(c, circle(x, y, lr, 16), true, c.fixed(0x10141A), 1);
+    if (!tag.empty())
+        text(c, tag, x - lr * 2.4, y + lr * 1.05, lr * 4.8, lr * 2.6, s.txt, std::max(6.0, lr * 2.2), "centre");
+}
+
+// La fleche du mouvement vise (l'Ordre) : vers le haut en ouverture, vers le bas en fermeture.
+void drawTowardArrow(const Ctx& c, double x, double y, double size, int toward, gfx::Color col) {
+    if (toward == 0) return;
+    const double d = toward > 0 ? -1.0 : 1.0;
+    fill(c, {P(x, y + d * size * 0.55), P(x - size * 0.5, y - d * size * 0.35), P(x + size * 0.5, y - d * size * 0.35)}, col);
+}
+
 // ---- process ------------------------------------------------------------------------------
 void drawValve(const Ctx& c, const Sym& s) {
     const std::string type = c.src.text(c.o, "valveType", "manuelle");
@@ -300,21 +389,34 @@ void drawValve(const Ctx& c, const Sym& s) {
     const bool regulating = !openingText.empty() && hmi::parseNumber(openingText, opening);
     opening = std::clamp(opening, 0.0, 100.0);
     double moved = 0;
-    const bool moving = !c.opt.editor && truthy(c.src.text(c.o, "moving"), moved);
+    bool moving = !c.opt.editor && truthy(c.src.text(c.o, "moving"), moved);
+    const gfx::Color onCol = c.color("colorOn", gfx::Color::rgb(0x2ECC71));
     gfx::Color body = s.col;
-    if (regulating && !s.fault) body = opening > 0.5 ? c.color("colorOn", gfx::Color::rgb(0x2ECC71)) : s.off;
+    if (regulating && !s.fault) body = opening > 0.5 ? onCol : s.off;
+    // 1.14.1 : par ses fins de course - leur etat donne la couleur ; reglante, les bouts (0 % ferme, 100 %
+    // ouvert) et, entre les deux, son ouverture.
+    const LimitView lv = limitView(c, regulating);
+    gfx::Color line = s.line;
+    if (lv.active) {
+        using St = hmi::limits::State;
+        moving = lv.r.state == St::Moving;
+        if (regulating && lv.r.state == St::Closed) opening = 0;
+        if (regulating && lv.r.state == St::Open && !lv.r.between) opening = 100;
+        body = limitColor(c, s, regulating && lv.r.between ? (opening > 0.5 ? St::Open : St::Closed) : lv.r.state, onCol);
+        if (lv.r.state == St::Discord && !s.fault) line = body;
+    }
     fill(c, left, body);
     fill(c, right, body);
-    outline(c, left, true, s.line, s.lw);
-    outline(c, right, true, s.line, s.lw);
+    outline(c, left, true, line, s.lw);
+    outline(c, right, true, line, s.lw);
     const double stemTop = s.y + s.h * 0.2;
     const bool blinkStem = moving && std::fmod(c.opt.time, 0.6) >= 0.3;
-    seg(c, s.cx(), bcy, s.cx(), stemTop, blinkStem ? c.color("colorOn", gfx::Color::rgb(0x2ECC71)) : s.line, s.lw);
+    seg(c, s.cx(), bcy, s.cx(), stemTop, blinkStem ? (lv.active ? body : onCol) : s.line, s.lw);
     if (regulating) {
         // L'ouverture : une jauge sous le corps, et le pourcentage a droite de la tige.
         const double gy = std::min(s.y + s.h - 4, bcy + a + 3), gw = x1 - x0;
         fill(c, box(x0, gy, gw, 4, 1), fade(gfx::Color{255, 255, 255, 30}, c.alpha));
-        fill(c, box(x0, gy, gw * opening / 100.0, 4, 1), c.color("colorOn", gfx::Color::rgb(0x2ECC71)));
+        fill(c, box(x0, gy, gw * opening / 100.0, 4, 1), onCol);
         // Le pourcentage, a droite de l'actionneur (sa membrane, son volant...),
         // a la hauteur de la tige : il ne le recouvre pas.
         const double fs = std::clamp(std::min(s.h * 0.2, 12.0), 7.0, 12.0);
@@ -327,6 +429,27 @@ void drawValve(const Ctx& c, const Sym& s) {
         seg(c, s.cx() - 4, py, s.cx() + 4, py, s.txt, 1.4);
     }
     drawActuator(c, s, type, hw, stemTop);
+    if (!lv.active) return;
+    // L'Ordre vise : une fleche a droite de l'actionneur (vers le haut : en ouverture), comme le registre ; une
+    // vanne reglante y ecrit son ouverture : sans fleche.
+    if (moving && !regulating) {
+        const double act = std::min(s.h * 0.22, hw * 0.7);
+        const double ah = std::clamp(s.h * 0.14, 4.0, 10.0);
+        drawTowardArrow(c, s.cx() + act + ah * 0.6 + 3, stemTop, ah, lv.r.toward, body);
+    }
+    // Les voyants O et F, a gauche de l'actionneur (et de son positionneur).
+    if (lv.leds && (lv.fo.given || lv.ff.given)) {
+        const double act = std::min(s.h * 0.22, hw * 0.7);
+        const double lr = std::clamp(s.h * 0.055, 2.5, 5.0);
+        const double ledX = s.cx() - act * (type == "r\xC3\xA9glante" ? 1.6 : 1.1) - 3 - lr;
+        const double ly = s.y + std::max(lr + 1, s.h * 0.1);
+        const bool discord = lv.r.state == hmi::limits::State::Discord;
+        if (lv.fo.given) drawLimitLed(c, s, ledX - (lv.ff.given ? lr * 3.4 : 0.0), ly, lr, lv.fo.on, discord, body, "O");
+        if (lv.ff.given) drawLimitLed(c, s, ledX, ly, lr, lv.ff.on, discord, body, "F");
+    }
+    if (lv.r.state == hmi::limits::State::Discord)
+        drawDiscordBadge(c, s.x + s.w - std::clamp(std::min(s.w, s.h) * 0.11, 5.0, 10.0) - 1,
+                         s.y + std::clamp(std::min(s.w, s.h) * 0.11, 5.0, 10.0) + 1, std::clamp(std::min(s.w, s.h) * 0.11, 5.0, 10.0));
 }
 
 // 1.10.4 : la vanne 3 voies. Trois triangles tete-beche qui se rejoignent au
@@ -360,27 +483,69 @@ int threeWayFromText(std::string t) {
 
 void drawThreeWayValve(const Ctx& c, const Sym& s) {
     int way = 0;
-    if (c.src.text(c.o, "positionMode", "entier").rfind("deux", 0) == 0) {
-        double n = 0;
-        const bool a = truthy(c.src.text(c.o, "positionA"), n), b = truthy(c.src.text(c.o, "positionB"), n);
-        way = (a ? 1 : 0) + (b ? 2 : 0);
-    } else {
-        way = threeWayFromText(c.src.text(c.o, "value"));
-    }
-    // Les voies du passage : 1-2, 1-3, 2-3.
-    const bool p1 = way == 1 || way == 2, p2 = way == 1 || way == 3, p3 = way == 2 || way == 3;
     const std::string type = c.src.text(c.o, "valveType", "manuelle");
     const bool mixing = c.src.text(c.o, "valve3Function", "m\xC3\xA9langeuse").rfind("r\xC3\xA9", 0) != 0;
     const bool lBore = c.src.text(c.o, "valve3Bore", "T") == "L";
     double moved = 0;
-    const bool moving = !c.opt.editor && truthy(c.src.text(c.o, "moving"), moved);
+    bool moving = !c.opt.editor && truthy(c.src.text(c.o, "moving"), moved);
+    // 1.14.1 : par ses fins de course - une par voie (et fermee) ; la seule vraie donne la voie, aucune : le
+    // boisseau tourne (vers l'Ordre de position s'il est donne), plusieurs : discordance (le rouge, le cadre
+    // tirete) - les passages de chacune, ensemble.
+    const bool byLimits = hmi::limits::limitModeText(Kind::ThreeWayValve, c.src.text(c.o, "positionMode", "entier"));
+    hmi::limits::Input ports[4];
+    hmi::limits::Reading3 lr3;
+    std::vector<int> passages;          // les voies dont le passage se dessine (1 a 3)
+    bool cross = false;                 // la croix de la vanne fermee
+    if (byLimits) {
+        using St = hmi::limits::State;
+        for (int w = 0; w < 4; ++w) ports[w] = limitInput(c, hmi::limits::kWayKeys[w]);
+        double n = 0;
+        const bool overdue = !c.opt.editor && truthy(c.src.text(c.o, hmi::limits::kOverdueKey), n);
+        lr3 = hmi::limits::decide3(ports, lBore, hmi::limits::wayOf(c.src.text(c.o, "positionOrder")), overdue);
+        if (c.opt.editor && lr3.state == St::Moving) {
+            lr3.state = St::Closed;
+            lr3.way = 0;
+        }
+        moving = lr3.state == St::Moving;
+        if (lr3.state == St::Discord) {
+            for (const int w : lr3.on) {
+                if (w == 0) cross = true;
+                else passages.push_back(w);
+            }
+            if (lr3.overdue && lr3.way > 0) passages.push_back(lr3.way);
+            if (lr3.overdue && lr3.way == 0) cross = true;
+        } else if (lr3.way > 0) {
+            passages.push_back(lr3.way);
+        }
+        cross = cross || lr3.state == St::Closed;
+        way = passages.empty() ? (cross ? 0 : -1) : passages.front();
+    } else {
+        if (c.src.text(c.o, "positionMode", "entier").rfind("deux", 0) == 0) {
+            double n = 0;
+            const bool a = truthy(c.src.text(c.o, "positionA"), n), b = truthy(c.src.text(c.o, "positionB"), n);
+            way = (a ? 1 : 0) + (b ? 2 : 0);
+        } else {
+            way = threeWayFromText(c.src.text(c.o, "value"));
+        }
+        if (way > 0) passages.push_back(way);
+        cross = way == 0;
+    }
+    const bool discord = byLimits && lr3.state == hmi::limits::State::Discord;
+    const bool faulty = s.fault || discord;
+    // Les voies du passage : 1-2, 1-3, 2-3.
+    bool p1 = false, p2 = false, p3 = false;
+    for (const int w : passages) {
+        p1 = p1 || w == 1 || w == 2;
+        p2 = p2 || w == 1 || w == 3;
+        p3 = p3 || w == 2 || w == 3;
+    }
     const gfx::Color on = c.color("colorOn", gfx::Color::rgb(0x2ECC71));
     // Comme la maquette 1.10.4 (scene 4) : les voies du passage prennent la couleur
     // du passage ; en defaut, le rouge (fixe, et un cadre tirete) ; en mouvement,
     // l'ambre qui clignote (0,9 s). Les autres voies restent eteintes.
     const gfx::Color bad = c.color("colorFault", gfx::Color::rgb(0xE5534B));
-    const bool dim = moving && !s.fault && std::fmod(c.opt.time, 0.9) >= 0.45;
-    const gfx::Color pass = s.fault ? bad : moving ? withA(c.color("colorMoving", gfx::Color::rgb(0xF0B429)), dim ? 0.35f : 1.f) : on;
+    const bool dim = moving && !faulty && std::fmod(c.opt.time, 0.9) >= 0.45;
+    const gfx::Color pass = faulty ? bad : moving ? withA(c.color("colorMoving", gfx::Color::rgb(0xF0B429)), dim ? 0.35f : 1.f) : on;
     const gfx::Color line = c.color("stroke", gfx::Color::rgb(0xC8D0DC));
     const auto wayColor = [&](bool active) { return active ? pass : s.off; };
 
@@ -422,10 +587,14 @@ void drawThreeWayValve(const Ctx& c, const Sym& s) {
     outline(c, circle(cx, cy, rb), true, line, std::max(1.0, s.lw * 0.8));
     const gfx::Color bore = way ? pass : s.off;
     const double bw = std::max(1.5, rb * 0.42);
-    if (way == 0) {
+    if (cross) {
         // Fermee : une croix rouge sur le boisseau (maquette 1.10.4).
         seg(c, cx - rb * 0.62, cy - rb * 0.62, cx + rb * 0.62, cy + rb * 0.62, bad, bw);
         seg(c, cx + rb * 0.62, cy - rb * 0.62, cx - rb * 0.62, cy + rb * 0.62, bad, bw);
+    }
+    if (passages.empty()) {
+        // 1.14.1 : le boisseau tourne vers une voie qu'on ne sait pas (aucune fin de course) : son bord clignote.
+        if (way < 0 && (moving || faulty)) outline(c, circle(cx, cy, rb), true, pass, std::max(1.5, s.lw * 1.2));
     } else {
         if (p1) seg(c, cx, cy, cx - rb * 0.9, cy, bore, bw);
         if (p2) seg(c, cx, cy, cx + rb * 0.9, cy, bore, bw);
@@ -441,8 +610,22 @@ void drawThreeWayValve(const Ctx& c, const Sym& s) {
     Sym sa = s;
     sa.line = line;
     drawActuator(c, sa, type, d, stemTop);
+    // 1.14.1 : un voyant par fin de course de voie, entre ses deux voies (1-3 en bas a gauche, 2-3 en bas a
+    // droite, 1-2 en haut, au-dessus de la voie 2) ; la discordance, sa pastille en bas a gauche.
+    if (byLimits && c.src.flag(c.o, "showLimits", true)) {
+        const double lr = std::clamp(d * 0.11, 2.5, 5.0);
+        const struct { int w; double x, y; } leds[] = {
+            {1, cx + d * 0.62, cy - a * 0.62 - lr - 1.5}, {2, cx - d * 0.62, cy + d * 0.62}, {3, cx + d * 0.62, cy + d * 0.62}};
+        for (const auto& l : leds)
+            if (ports[l.w].given && !(lBore && l.w == 1))
+                drawLimitLed(c, s, l.x, l.y, lr, ports[l.w].on, discord, bad, {});
+    }
+    if (discord) {
+        const double br = std::clamp(std::min(s.w, s.h) * 0.1, 5.0, 10.0);
+        drawDiscordBadge(c, s.x + br + 1, s.y + s.h - br - 1, br);
+    }
     // En defaut : un cadre tirete rouge autour du symbole (maquette 1.10.4).
-    if (s.fault) {
+    if (faulty) {
         const double x0 = s.x + 1, y0 = s.y + 1, x1 = s.x + s.w - 1, y1 = s.y + s.h - 1;
         const auto dashes = [&](double ax, double ay, double bx, double by) {
             const double len = std::hypot(bx - ax, by - ay);
@@ -940,6 +1123,10 @@ struct DamperState {
     double opening{-1};     // % ; -1 : tout ou rien
     bool   open{false}, moving{false}, discord{false}, tripped{false};
     bool   hasLimits{false}, limitO{false}, limitF{false};
+    bool   leds{true};      // 1.14.1 : les voyants O et F (showLimits)
+    bool   byLimits{false}; // 1.14.1 : commande par ses fins de course (l'etat vient d'elles)
+    hmi::limits::State state{hmi::limits::State::None};
+    int    toward{0};
 };
 
 DamperState damperState(const Ctx& c, const Sym& s) {
@@ -954,6 +1141,29 @@ DamperState damperState(const Ctx& c, const Sym& s) {
     d.hasLimits = !lo.empty() || !lf.empty();
     d.limitO = !lo.empty() && truthy(lo, n);
     d.limitF = !lf.empty() && truthy(lf, n);
+    d.leds = c.src.flag(c.o, "showLimits", true);
+    // 1.14.1 : PAR SES FINS DE COURSE (Commande de l'etat) - la regle de la vanne : FC ouvert seule, ouvert ;
+    // FC ferme seule, ferme ; aucune, en mouvement (l'ambre qui clignote) ; les deux, ou l'Ordre pas suivi a
+    // temps, discordance. Modulant : son ouverture entre les deux, les bouts donnes par les fins de course.
+    if (const LimitView lv = limitView(c, d.opening >= 0); lv.active) {
+        using St = hmi::limits::State;
+        d.byLimits = true;
+        d.state = lv.r.state;
+        d.toward = lv.r.toward;
+        d.hasLimits = lv.fo.given || lv.ff.given;
+        d.limitO = lv.fo.given && lv.fo.on;
+        d.limitF = lv.ff.given && lv.ff.on;
+        d.moving = d.state == St::Moving;
+        d.discord = d.state == St::Discord;
+        d.open = d.state == St::Open;
+        if (d.opening >= 0 && d.state == St::Open && !lv.r.between) d.opening = 100;
+        if (d.opening >= 0 && d.state == St::Closed) d.opening = 0;
+        double frac = d.opening >= 0 ? d.opening / 100.0 : d.state == St::Open ? 1.0 : d.state == St::Moving ? 0.5 : 0.0;
+        if (d.state == St::Discord && d.opening < 0) frac = lv.r.both ? 0.5 : d.limitO ? 1.0 : 0.0;
+        if (d.tripped) frac = 0;
+        d.angle = 90.0 * (1.0 - std::clamp(frac, 0.0, 1.0));
+        return d;
+    }
     // La position : l'ouverture (modulant), sinon l'etat ; les fins de course la corrigent.
     double frac = d.opening >= 0 ? d.opening / 100.0 : (d.open ? 1.0 : 0.0);
     if (d.tripped) frac = 0;
@@ -988,6 +1198,8 @@ void drawDamper(const Ctx& c, const Sym& s) {
     const gfx::Color onCol = c.color("colorOn", gfx::Color::rgb(0x2ECC71));
     const double frac = 1.0 - d.angle / 90.0;
     gfx::Color bladeCol = frac > 0.02 ? onCol : s.off;
+    // 1.14.1 : par ses fins de course, en mouvement : l'ambre qui clignote (comme la vanne).
+    if (d.byLimits && d.state == hmi::limits::State::Moving) bladeCol = limitColor(c, s, d.state, onCol);
     if (faulty) bladeCol = blinkOff ? shade(bad, 0.45f) : bad;
     const gfx::Color wall = faulty ? bladeCol : s.line;
     // La gaine : son fond, ses deux parois, ses brides.
@@ -1020,7 +1232,7 @@ void drawDamper(const Ctx& c, const Sym& s) {
     const double axisTop = multi ? top + dh / std::max(2.0, c.src.number(c.o, "blades", 4)) * 0.5 : cy;
     const bool blinkAxis = d.moving && std::fmod(c.opt.time, 0.6) >= 0.3;
     const double ay = s.y + actH * 0.5;
-    seg(c, s.cx(), multi ? top : axisTop, s.cx(), ay + actH * 0.3, blinkAxis ? onCol : s.line, s.lw);
+    seg(c, s.cx(), multi ? top : axisTop, s.cx(), ay + actH * 0.3, blinkAxis ? (d.byLimits ? bladeCol : onCol) : s.line, s.lw);
     const double r = std::max(3.0, std::min(actH * 0.42, s.w * 0.16));
     if (fire) {
         // Le declencheur : un fusible (un trait en zigzag dans sa boite), un electro-aimant
@@ -1073,8 +1285,9 @@ void drawDamper(const Ctx& c, const Sym& s) {
         const double tx = s.cx() + r * 1.3 + 2;
         text(c, hmi::formatNumber(std::round(d.opening)) + " %", tx, ay - fs * 0.75, std::max(fs * 3.2, s.x + s.w - tx), fs * 1.5, s.txt, fs, "gauche");
     }
-    // Les fins de course : O (ouvert) et F (ferme), a gauche de l'actionneur.
-    if (d.hasLimits) {
+    // Les fins de course : O (ouvert) et F (ferme), a gauche de l'actionneur. 1.14.1 : Voyants des fins de course
+    // decoche, rien.
+    if (d.hasLimits && d.leds) {
         const double lr = std::clamp(actH * 0.16, 2.5, 6.0);
         const double base = s.cx() - r * 1.3 - 4 - lr;
         const struct { double x; bool on; const char* tag; } leds[] = {{base - lr * 3.4, d.limitO, "O"}, {base, d.limitF, "F"}};
@@ -1085,6 +1298,16 @@ void drawDamper(const Ctx& c, const Sym& s) {
             outline(c, circle(l.x, ay - lr * 0.6, lr, 16), true, c.fixed(0x10141A), 1);
             text(c, l.tag, l.x - lr * 2, ay + lr * 0.5, lr * 4, lr * 2.6, s.txt, std::max(6.0, lr * 2.2), "centre");
         }
+    }
+    // 1.14.1 : par ses fins de course - l'Ordre vise (une fleche a droite de l'actionneur, sans ouverture
+    // ecrite) et la pastille de la discordance (en haut a droite).
+    if (d.byLimits && d.moving && d.opening < 0 && !fire) {
+        const double ah = std::clamp(actH * 0.45, 4.0, 10.0);
+        drawTowardArrow(c, s.cx() + r * 1.3 + ah * 0.6 + 2, ay, ah, d.toward, bladeCol);
+    }
+    if (d.byLimits && d.discord) {
+        const double br = std::clamp(std::min(s.w, s.h) * 0.1, 5.0, 10.0);
+        drawDiscordBadge(c, s.x + s.w - br - 1, s.y + br + 1, br);
     }
     if (faulty && !s.fault && c.src.flag(c.o, "a11ySymbols", false)) drawFaultBadge(c, s.x + s.w, s.y, std::clamp(s.r() * 0.45, 9.0, 22.0));
 }
