@@ -161,6 +161,26 @@ const std::vector<Note>& table() {
          "course ; le clapet garde son d\xC3\xA9" "clenchement, qui passe avant. Voyants des fins de course cache les voyants O et F (dans les deux "
          "modes).",
          "objet-registre", ""),
+        // 1.14.1 (lot N6, demande du 30/10) : la bibliotheque d'images - l'onglet Images, l'import dans les Ressources, Mes images.
+        note("1.14.1", "Vues", Kind::New,
+         "LA BIBLIOTH\xC3\x88QUE D'IMAGES : un onglet Images dans la biblioth\xC3\xA8que de l'\xC3\xA9" "diteur de vues, entre Objets et Variables - "
+         "plus de 300 images pr\xC3\xAAtes \xC3\xA0 poser, dessin\xC3\xA9" "es pour l'application (vectorielles, nettes \xC3\xA0 toute taille), "
+         "rang\xC3\xA9" "es par cat\xC3\xA9gorie en sections repliables avec leur nombre : Fl\xC3\xA8" "ches et navigation, Interface, S\xC3\xA9" "curit\xC3\xA9 "
+         "et signalisation (danger, interdiction, obligation, secours, incendie, arr\xC3\xAAt d'urgence), Industrie et process, \xC3\x89nergie et "
+         "fluides, B\xC3\xA2timent et infrastructure, R\xC3\xA9seau et informatique, V\xC3\xA9hicules et logistique, M\xC3\xA9t\xC3\xA9o, Personnes, "
+         "Drapeaux (les boutons de langue) et Formes et pastilles. La recherche de la biblioth\xC3\xA8que y lit le nom, la cat\xC3\xA9gorie et les "
+         "mots-cl\xC3\xA9s ; trois tailles de vignettes ; l'infobulle dit le nom, la cat\xC3\xA9gorie et la taille d'origine. Un clic puis un clic "
+         "dans la vue (ou la glisser, ou un double-clic : au centre) pose un objet Image et importe son image dans Ressources, d'un seul Ctrl+Z ; "
+         "la m\xC3\xAAme image d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est r\xC3\xA9utilis\xC3\xA9" "e, un nom pris devient nom_2.svg. Importer (le bouton, le clic "
+         "droit) l'importe sans la poser. Les dessins monochromes prennent la couleur choisie (Auto : celle qui se lit sur le fond de la vue, "
+         "ou blanc, noir, gris, bleu, vert, jaune, orange, rouge) ; les images en couleurs gardent les leurs.",
+         "objets", ""),
+        note("1.14.1", "Ressources", Kind::New,
+         "MES IMAGES : Ressources \xE2\x80\xBA Ma biblioth\xC3\xA8que ajoute une copie de l'image choisie \xC3\xA0 Mes images, la premi\xC3\xA8re "
+         "section de l'onglet Images ; le bouton + de l'onglet (ou un fichier PNG, SVG, JPEG... l\xC3\xA2" "ch\xC3\xA9 dessus) y ajoute un fichier du "
+         "disque. Mes images sont gard\xC3\xA9" "es hors du projet, dans le dossier des r\xC3\xA9glages de l'utilisateur (images, \xC3\xA0 c\xC3\xB4t\xC3\xA9 "
+         "de ses th\xC3\xA8mes) : elles se posent dans tous ses projets. Clic droit \xE2\x80\xBA Retirer de Mes images.",
+         "ressources", ""),
         // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
         note("1.14.0", "Simulation", Kind::New,
          "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "

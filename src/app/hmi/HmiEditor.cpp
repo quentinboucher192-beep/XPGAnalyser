@@ -638,6 +638,24 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         palette_->setCurrent(canvas_->placeKind());
         palette_->setCurrentSymbol(canvas_->placeSymbol());
         palette_->setCurrentVariable(canvas_->placeVariable() ? canvas_->placeVariable()->name : std::string{});
+        palette_->setCurrentImage(canvas_->placeImage() ? canvas_->placeImage()->image.id : std::string{});   // 1.14.1 (lot N6)
+    });
+    // 1.14.1 (lot N6) : L'ONGLET IMAGES - une image choisie se pose au clic suivant (ou la ou on la lache) ; un
+    // double-clic la pose au centre ; Importer, le clic droit, Mes images.
+    links_ += palette_->chosenImage->connect([this](const hmi::imagelib::Image& img) {
+        canvas_->setPlaceImage(HmiCanvas::PlaceImage{img, libraryInk(img)});
+        statusBar_->setMessage("Clique dans la vue (ou l\xC3\xA2" "che-la) pour poser l'image " + img.label
+                               + " : elle entre dans les ressources du projet (Maj : en poser plusieurs, \xC3\x89" "chap : annuler).");
+    });
+    links_ += palette_->imageActivated->connect([this](const hmi::imagelib::Image& img) { (void)placeLibraryImage(img); });
+    links_ += palette_->importImageRequested->connect([this](const hmi::imagelib::Image& img) { (void)importLibraryImage(img); });
+    links_ += palette_->imageContextRequested->connect([this](const hmi::imagelib::Image& img, gfx::Point at) { openImageMenu(img, at); });
+    links_ += palette_->addImageFileRequested->connect([this] {
+        if (askImageFile_) askImageFile_();
+        else statusBar_->setTransientMessage("Glisse un fichier PNG ou SVG sur l'onglet Images : il rejoint Mes images.", 6.0);
+    });
+    links_ += palette_->imageMessage->connect([this](const std::string& m) {
+        statusBar_->setTransientMessage(m, 6.0, ui::StatusBar::Severity::Success);
     });
     // Lot 12 : l'onglet Variables de la bibliotheque - lues a l'ouverture de
     // l'onglet (le programme a pu changer) ; une variable choisie se pose au
@@ -890,6 +908,7 @@ void HmiEditor::setObjectFilter(std::string text, std::optional<hmi::Kind> kind)
 void HmiEditor::refresh() {
     const auto* v = doc_->project.view(viewId_);
     canvas_->documentChanged();
+    if (v) palette_->setImageBackdrop(v->background);   // 1.14.1 (lot N6) : les vignettes sur le fond de la vue
     objects_->setExpressionContext(&doc_->project, plc_.get());   // ---- Lot API 8 : les expressions impossibles (le badge fx) ----
     objects_->setView(v);
     objects_->setSelection(canvas_->selection());
@@ -1856,6 +1875,7 @@ enum CanvasMenu : int {
     MRawCopy = 35, MRawPaste = 36, MRawShow = 37, MRawCopyTarget = 38,   // 1.13.1 (lot K3) : le code brut
 };
 constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
+constexpr int kMenuImage = 3;          // 1.14.1 (lot N6) : une vignette de l'onglet Images
 enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
 constexpr hmi::Kind kInsertKinds[] = {hmi::Kind::Text, hmi::Kind::Button, hmi::Kind::Indicator, hmi::Kind::Trend, hmi::Kind::Table};
 }   // namespace
@@ -2518,6 +2538,80 @@ void HmiEditor::openPaletteMenu(hmi::Kind kind, gfx::Point at) {
     openMenuAt(*context_, at);
 }
 
+// ---- 1.14.1 (lot N6) : la bibliotheque d'images ----------------------------------------------------------------
+std::uint32_t HmiEditor::libraryInk(const hmi::imagelib::Image& image) const {
+    return image.ink ? palette_->imageInk() : hmi::imagelib::kInk;
+}
+
+hmi::Id HmiEditor::placeLibraryImage(const hmi::imagelib::Image& image, std::optional<hmi::edit::Pt> at) {
+    const Id made = canvas_->placeImageNow(image, libraryInk(image), at);
+    if (made != kNoId) objects_->revealSelection();
+    return made;
+}
+
+bool HmiEditor::importLibraryImage(const hmi::imagelib::Image& image, std::string* name) {
+    hmi::imagelib::Imported imported;
+    const std::uint32_t ink = libraryInk(image);
+    auto cmd = hmi::changeProject(doc_, "Importer l'image " + image.label,
+                                  [&](hmi::Project& p) { imported = hmi::imagelib::importImage(p, image, ink); });
+    if (cmd) apply_(std::move(cmd));
+    // L'image n'est plus a poser : elle est importee (la vignette reste choisie).
+    if (canvas_->placeImage() && canvas_->placeImage()->image.id == image.id) canvas_->setPlaceImage(std::nullopt);
+    if (imported.name.empty()) {
+        warn("Import impossible : " + image.label);
+        return false;
+    }
+    if (name) *name = imported.name;
+    statusBar_->setTransientMessage(imported.reused ? "D\xC3\xA9j\xC3\xA0 dans les ressources du projet : " + imported.name + " (rien de neuf)"
+                                                    : "Import\xC3\xA9" "e dans Ressources : " + imported.name + " (Ctrl+Z la retire)",
+                                    8.0, ui::StatusBar::Severity::Success);
+    return true;
+}
+
+bool HmiEditor::removeMyImage(const hmi::imagelib::Image& image, std::string* why) {
+    std::string error;
+    const std::string label = image.label;     // `image` peut etre dans Mes images, relues plus bas
+    if (!hmi::imagelib::removeUserImage(image, &error)) {
+        if (why) *why = error;
+        warn("Retirer de Mes images : " + error);
+        return false;
+    }
+    palette_->reloadMyImages();
+    statusBar_->setTransientMessage("Retir\xC3\xA9" "e de Mes images : " + label
+                                        + " (les ressources des projets qui l'ont import\xC3\xA9" "e la gardent)",
+                                    8.0, ui::StatusBar::Severity::Success);
+    return true;
+}
+
+void HmiEditor::openImageMenu(const hmi::imagelib::Image& image, gfx::Point at) {
+    namespace cmd = ui::cmd;
+    if (!context_) return;
+    menuKind_ = kMenuImage;
+    menuImage_ = image;
+    std::vector<ui::PopupMenu::Item> items;
+    items.push_back(cmd::heading(image.label, image.category));
+    ui::PopupMenu::Item place;
+    place.label = "Placer sur la vue";
+    place.id = kImagePlace;
+    items.push_back(std::move(place));
+    ui::PopupMenu::Item import;
+    import.label = "Importer dans les ressources";
+    import.id = kImageImport;
+    items.push_back(std::move(import));
+    if (image.mine()) {
+        items.push_back(cmd::separator());
+        ui::PopupMenu::Item remove;
+        remove.label = "Retirer de Mes images";
+        remove.id = kImageRemove;
+        items.push_back(std::move(remove));
+    }
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Aide, kImageHelp, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
+                              "Aide sur la biblioth\xC3\xA8que d'images"));
+    context_->setItems(std::move(items));
+    openMenuAt(*context_, at);
+}
+
 void HmiEditor::openMenuAt(ui::PopupMenu& menu, gfx::Point at) {
     // 1.12.31 : `at` est dans la surface (la vue, ilot de la page zoomee ; l'explorateur, les
     // calques, la bibliotheque) ; le menu, dans le repere de l'editeur.
@@ -2529,6 +2623,15 @@ void HmiEditor::canvasMenuChosen(int a) {
     const auto* v = doc_->project.view(viewId_);
     if (!v) return;
     if (menuKind_ == kMenuLayers) { layerMenuChosen(menuLayer_, a); return; }
+    if (menuKind_ == kMenuImage) {             // 1.14.1 (lot N6) : une vignette de l'onglet Images
+        if (!menuImage_) return;
+        const auto img = *menuImage_;
+        if (a == kImagePlace) (void)placeLibraryImage(img);
+        else if (a == kImageImport) (void)importLibraryImage(img);
+        else if (a == kImageRemove) (void)removeMyImage(img);
+        else if (a == kImageHelp && openHelp_) openHelp_("objets");
+        return;
+    }
     if (menuKind_ == kMenuPalette) {
         if (a == kPalettePlace) palette_->chosen->emit(menuPaletteKind_);
         else if (a == kPaletteFavorite) palette_->toggleFavorite(menuPaletteKind_);

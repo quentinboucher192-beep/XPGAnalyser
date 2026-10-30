@@ -46,6 +46,7 @@
 #include "../hmi/HmiVersions.hpp"
 #include "../hmi/HmiNetInfo.hpp"
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
+#include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
 #include "../hmi/HmiStore.hpp"
 #include "../hmi/HmiEditHistory.hpp"   // 1.12.25 : l'historique des objets
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les nouveautes se voient
@@ -259,6 +260,13 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto u8 = themesDir.u8string();
         ui::UserThemes::setFolder(std::string(u8.begin(), u8.end()));
         for (const auto& problem : ui::UserThemes::load()) std::fprintf(stderr, "theme : %s\n", problem.c_str());
+    }
+    // 1.14.1 (lot N6) : MES IMAGES, la part de l'utilisateur dans la bibliotheque d'images de l'editeur de vues - un
+    // fichier par image dans "images/", a cote des themes (communs aux deux applications, hors des projets).
+    {
+        const auto imagesDir = std::filesystem::path(Settings::sharedFolder()) / "images";
+        const auto u8 = imagesDir.u8string();
+        hmi::imagelib::setUserFolder(std::string(u8.begin(), u8.end()));
     }
     // ---- fin Lot API 8 ----
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);

@@ -234,6 +234,20 @@ public:
     void openPaletteMenu(hmi::Kind kind, gfx::Point at);        // planche 7 : une tuile de la bibliotheque
     [[nodiscard]] ui::PopupMenu* canvasMenu() const noexcept { return context_; }
 
+    // ---- 1.14.1 (lot N6) : LA BIBLIOTHEQUE D'IMAGES (l'onglet Images de la bibliotheque) ----
+    //  Une image choisie se pose au clic suivant dans la vue (ou la ou on la lache) ; un double-clic la pose au
+    //  centre. Importer : sa ressource seule (Ctrl+Z la retire ; la meme image deja la : rien de neuf). Le clic
+    //  droit d'une vignette : Placer sur la vue, Importer dans les ressources, Retirer de Mes images, l'aide.
+    // La couleur de ses traits monochromes (celle de l'onglet ; Auto : celle qui se lit sur le fond de la vue).
+    [[nodiscard]] std::uint32_t libraryInk(const hmi::imagelib::Image& image) const;
+    hmi::Id placeLibraryImage(const hmi::imagelib::Image& image, std::optional<hmi::edit::Pt> at = std::nullopt);
+    bool importLibraryImage(const hmi::imagelib::Image& image, std::string* name = nullptr);
+    bool removeMyImage(const hmi::imagelib::Image& image, std::string* why = nullptr);
+    void openImageMenu(const hmi::imagelib::Image& image, gfx::Point at);
+    enum ImageMenu : int { kImagePlace = 1, kImageImport, kImageRemove, kImageHelp };
+    // Le bouton + de l'onglet Images : l'hote demande un fichier, puis palette().addImageFile(chemin).
+    void setImageFileAsker(std::function<void()> ask) { askImageFile_ = std::move(ask); }
+
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
@@ -324,6 +338,8 @@ private:
     int                       menuKind_{0};               // le menu ouvert : la vue, un calque, la bibliotheque
     hmi::Id                   menuLayer_{hmi::kNoId};     // ... le calque vise
     hmi::Kind                 menuPaletteKind_{hmi::Kind::Text};
+    std::optional<hmi::imagelib::Image> menuImage_;       // 1.14.1 (lot N6) : la vignette du clic droit
+    std::function<void()>     askImageFile_;              // 1.14.1 (lot N6) : le bouton + de l'onglet Images
     void openMenuAt(ui::PopupMenu& menu, gfx::Point at);
     ui::PopupMenu*            legendMenu_{nullptr};       // 1.11.3 : la liste des carres
     ValueRequest              legendRequest_;             // ... la case pour laquelle elle est ouverte

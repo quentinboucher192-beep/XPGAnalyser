@@ -2240,6 +2240,7 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         });
         made->setLanguagesOpener([this](hmi::Id v) { openHmiLanguageCompare(v); });   // 1.12.30 : les langues cote a cote
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
+        made->setImageFileAsker([this, viewId] { askHmiAddMyImage(viewId); });    // 1.14.1 (lot N6) : + de l'onglet Images
         // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
         if (auto* fns = made->symbolFunctions()) {
             auto h = fns->hosts();
@@ -2820,6 +2821,29 @@ void MainAnalysisScreen::askHmiImportResource() {
             std::string why;
             if (!pane->importFile(cleanPath(v[0]), v.size() > 1 ? v[1] : std::string{}, &why))
                 status_->setTransientMessage("Import impossible : " + why, 8.0);
+        });
+}
+
+// 1.14.1 (lot N6) : le bouton + de l'onglet Images - un fichier du disque rejoint Mes images (hors du projet).
+void MainAnalysisScreen::askHmiAddMyImage(std::uint64_t viewId) {
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Fichier", "", "C:\\Images\\logo.png", false, {}});
+    app_.menus().ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiAddMyImage", "Ajouter \xC3\xA0 Mes images",
+            "L'image (PNG, JPEG, BMP, GIF, SVG, ICO) est copi\xC3\xA9" "e dans Mes images, la biblioth\xC3\xA8que d'images de "
+            "l'\xC3\xA9" "diteur de vues : gard\xC3\xA9" "e hors du projet, dans le dossier de tes r\xC3\xA9glages ("
+            + hmi::imagelib::userFolder() + "), elle se pose ensuite dans n'importe quel projet (la poser l'importe dans "
+            "ses ressources). Glisser un fichier sur l'onglet Images l'ajoute aussi.",
+            std::move(fields), "Ajouter"), 0,
+            ui::openFile("Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.svg;*.ico", app_.projectFolder(), "Ajouter \xC3\xA0 Mes images")),
+        [this, viewId](const menu::DialogResult& r) {
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
+            if (!r.accepted() || !editor) return;
+            const auto v = FormDialog::split(r.payload);
+            if (v.empty() || cleanPath(v[0]).empty()) return;
+            std::string why;
+            if (!editor->palette().addImageFile(cleanPath(v[0]), &why))
+                status_->setTransientMessage("Mes images : " + why, 8.0);
         });
 }
 

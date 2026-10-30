@@ -18,6 +18,7 @@
 #include "HmiObjectAlarmTree.hpp"   // 1.10 (chantier O) : le noeud Alarmes d'un objet
 #include "HmiPainter.hpp"
 #include "../../core/Signal.hpp"
+#include "../../hmi/HmiAssets.hpp"     // 1.14.1 (lot N6) : la bibliotheque d'images (l'onglet Images)
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiEditHistory.hpp"   // 1.12.26 : les dates des objets
 #include "../../hmi/HmiExprCheck.hpp"   // ---- Lot API 8 : les expressions impossibles ----
@@ -340,7 +341,9 @@ public:
     // leur type ; une variable glissee dans la vue (ou choisie, puis un clic
     // dans la vue) y pose l'objet qui lui va (hmi/HmiDesign.hpp) : un voyant,
     // un afficheur, un texte, le bouton d'une popup d'equipement.
-    enum class Mode : std::uint8_t { Objects, Variables };
+    // 1.14.1 (lot N6) : Images, l'onglet de la bibliotheque d'images (en dernier : les rangs restent ; il se montre
+    // entre Objets et Variables).
+    enum class Mode : std::uint8_t { Objects, Variables, Images };
     void setMode(Mode m);
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
     void setVariables(std::vector<hmi::design::VarInfo> vars) { variables_ = std::move(vars); invalidate(); }
@@ -360,6 +363,55 @@ public:
     void setApiModel(std::shared_ptr<const hmi::apivars::Model> model);
     [[nodiscard]] HmiApiVarsView* apiTree() noexcept { return apiTree_; }
     [[nodiscard]] bool treeShown() const noexcept { return apiTree_ && apiModel_ && mode_ == Mode::Variables; }
+
+    // ---- 1.14.1 (lot N6) : L'ONGLET IMAGES ---------------------------------------------------------------------
+    //  La bibliotheque d'images (hmi::imagelib) : Mes images en tete, puis les categories (Fleches et navigation,
+    //  Interface, Securite et signalisation...), chacune une section repliable avec son nombre d'images ; le champ
+    //  de recherche de la bibliotheque y cherche le nom, la categorie et les mots-cles (les sections qui trouvent
+    //  s'ouvrent). En haut : la couleur des dessins monochromes (Auto : celle qui se lit sur le fond de la vue, ou
+    //  une autre), la taille des vignettes (petites, moyennes, grandes), Importer (l'image choisie dans les
+    //  ressources, sans la poser) et + (un fichier du disque dans Mes images). Un clic choisit une image : un clic
+    //  dans la vue (ou la lacher sur la vue) la pose - une Image et sa ressource ; un double-clic la pose au centre
+    //  de la vue ; le clic droit ouvre le menu de l'editeur. Un fichier image lache sur l'onglet rejoint Mes images.
+    //  Les reglages de l'onglet (couleur, taille, sections ouvertes) sont communs aux editeurs ouverts.
+    void setImageBackdrop(std::string background);              // le fond de la vue ouverte, "#20242B"
+    [[nodiscard]] const std::string& imageBackdrop() const noexcept { return backdrop_; }
+    void setImageSwatch(int index);                             // 0 : Auto ; k : hmi::imagelib::swatches()[k - 1]
+    [[nodiscard]] int imageSwatch() const noexcept;
+    [[nodiscard]] std::uint32_t imageInk() const;               // la couleur de l'encre, Auto resolu
+    void setImageSize(int size);                                // 0 petites, 1 moyennes, 2 grandes (et leur nom)
+    [[nodiscard]] int imageSize() const noexcept;
+    void setImageCategoryOpen(const std::string& category, bool open);
+    [[nodiscard]] bool imageCategoryOpen(const std::string& category) const;
+    void reloadMyImages();                                      // relire le dossier de Mes images
+    [[nodiscard]] const std::vector<hmi::imagelib::Image>& myImages() const noexcept { return mine_; }
+    // Une image montree par l'onglet (embarquee, ou de Mes images : "mes/" + son fichier) ; nul : inconnue.
+    [[nodiscard]] const hmi::imagelib::Image* imageById(std::string_view id) const;
+    // Ce que montre l'onglet (la recherche appliquee) : ses sections, dans l'ordre, et leur nombre d'images.
+    struct ImageSection { std::string category; std::size_t count{0}; bool open{false}; };
+    [[nodiscard]] std::vector<ImageSection> imageSections() const;
+    // Pour les scripts et les essais (apres un premier dessin) : la vignette d'une image, l'en-tete d'une
+    // section, les boutons ; faire defiler jusqu'a une image (sa section s'ouvre).
+    [[nodiscard]] bool imageTileRect(std::string_view id, gfx::Rect& out) const;
+    [[nodiscard]] bool imageHeadingRect(std::string_view category, gfx::Rect& out) const;
+    [[nodiscard]] bool imageSwatchRect(int index, gfx::Rect& out) const;
+    [[nodiscard]] bool imageSizeRect(int size, gfx::Rect& out) const;
+    [[nodiscard]] bool imageImportRect(gfx::Rect& out) const;
+    [[nodiscard]] bool imageAddRect(gfx::Rect& out) const;
+    void revealImage(std::string_view id);
+    [[nodiscard]] std::string imageTooltip(std::string_view id) const;   // l'infobulle d'une vignette
+    [[nodiscard]] const std::string& currentImage() const noexcept { return currentImage_; }
+    void setCurrentImage(std::string id) { currentImage_ = std::move(id); invalidate(); }
+    [[nodiscard]] const std::string& hoveredImage() const noexcept { return hoverImage_; }
+    // Un fichier du disque dans Mes images (le bouton +, un fichier lache sur l'onglet) ; faux et `why` sinon.
+    bool addImageFile(const std::string& path, std::string* why = nullptr);
+    const core::SignalPtr<const hmi::imagelib::Image&> chosenImage = core::Signal<const hmi::imagelib::Image&>::create();
+    const core::SignalPtr<const hmi::imagelib::Image&> imageActivated = core::Signal<const hmi::imagelib::Image&>::create();   // double-clic
+    const core::SignalPtr<const hmi::imagelib::Image&> importImageRequested = core::Signal<const hmi::imagelib::Image&>::create();
+    const core::SignalPtr<const hmi::imagelib::Image&, gfx::Point> imageContextRequested =
+        core::Signal<const hmi::imagelib::Image&, gfx::Point>::create();
+    const core::SignalPtr<>                   addImageFileRequested = core::Signal<>::create();   // le bouton +
+    const core::SignalPtr<const std::string&> imageMessage = core::Signal<const std::string&>::create();   // Mes images : ce qui a ete fait
 protected:
     void            onLayout() override;
     void            onPaint(const ui::PaintContext&) override;
@@ -392,6 +444,27 @@ private:
     mutable std::vector<Tile> tiles_;
     mutable std::vector<std::pair<std::string, float>> headings_;
     float                     scrollY_{0};
+    // 1.14.1 (lot N6) : l'onglet Images.
+    static constexpr float kImageBarH = 52.f;   // la couleur, puis la taille, Importer et +
+    static constexpr float kImageHelpH = 40.f;  // en bas : l'image survolee (ou choisie), ou le mode d'emploi
+    struct ImageTile { const hmi::imagelib::Image* image; gfx::Rect rect; };
+    struct ImageHead { std::string category; std::size_t count; bool open; gfx::Rect rect; };
+    std::vector<hmi::imagelib::Image> mine_;
+    bool                              mineLoaded_{false};
+    std::string                       backdrop_{"#20242B"};
+    std::string                       currentImage_, hoverImage_;
+    float                             imageScrollY_{0};
+    mutable std::vector<ImageTile>    imageTiles_;
+    mutable std::vector<ImageHead>    imageHeads_;
+    mutable float                     mineInviteY_{-1.f};   // "Mes images" vide : une ligne d'aide
+    mutable std::map<std::pair<std::string, std::uint32_t>, hmi::Resource> tileRes_;   // le contenu d'une vignette
+    void layoutImages() const;
+    void paintImages(const ui::PaintContext&);
+    ui::EventResult imageEvent(const ui::InputEvent&);
+    [[nodiscard]] float imageCell() const noexcept;
+    [[nodiscard]] const hmi::Resource& tileResource(const hmi::imagelib::Image&, std::uint32_t ink) const;
+    [[nodiscard]] std::vector<std::pair<std::string, std::vector<const hmi::imagelib::Image*>>> imageGroups() const;
+    [[nodiscard]] std::uint32_t inkFor(const hmi::imagelib::Image&) const;
 };
 
 // ----------------------------------------------------------- proprietes -----

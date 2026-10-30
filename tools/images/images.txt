@@ -1,0 +1,1358 @@
+# =============================================================================
+#  La bibliotheque d'images de l'IHM (1.14.1, lot N6) - LA description unique.
+#
+#  python3 tools/images/generer_images.py --cpp src/hmi/HmiImageLibraryData.cpp
+#  en tire le C++ embarque (des SVG : nets a toute taille). Chaque image est
+#  DESSINEE ici, forme par forme, pour l'application : aucune image ni police
+#  d'icones d'ailleurs.
+#
+#  Syntaxe, une ligne a la fois :
+#    = Categorie                       une categorie, dans l'ordre de la bibliotheque
+#    == cle | Nom | mots, cles [| LxH] une image (cle : minuscules et tirets) ; LxH :
+#                                      sa grille (24x24 par defaut) ; elle se pose a
+#                                      8/3 de sa grille (24 -> 64 pixels)
+#    puis ses formes, une par ligne, indentees, dans la grille :
+#      trait D            un chemin trace (D : la syntaxe d'un chemin SVG)
+#      plein D            un chemin rempli
+#      cercle cx cy r     un cercle trace          disque cx cy r     un disque
+#      rect x y l h [r]   un rectangle trace       pave x y l h [r]   un rectangle plein
+#      ligne x1 y1 x2 y2  un segment
+#      ellipse cx cy rx ry ; ovale cx cy rx ry (rempli)
+#      poly x,y ...       une ligne brisee ; contour x,y ... (fermee) ; polygone x,y ... (rempli)
+#      fleche x1 y1 x2 y2 [t]           un segment et sa pointe (t : la longueur des barbes)
+#      arcfleche cx cy r a0 a1 [t]      un arc (degres, 0 a droite, 90 en bas ; a1 > a0 :
+#                                       sens horaire) et sa pointe en a1
+#      engrenage cx cy r dents [trou]   une roue dentee ; etoile cx cy R r branches [depart] ;
+#      etoile-pleine ... ; trefle cx cy r1 r2 (le trefle de la radioactivite)
+#      etoiles-cercle cx cy R n r       n etoiles sur un cercle ; grille-disques x y dx dy nx ny r
+#      chiffre 123 cx cy h              des chiffres dessines au trait (pastilles, compteurs)
+#      image cle [x y echelle]          les formes d'une autre image, decalees, a l'echelle
+#      danger cle | interdit cle | obligation cle | secours cle | incendie cle
+#                                       un panneau (dans l'esprit des normes) et son pictogramme
+#                                       (une autre image ; - : le panneau general)
+#      brut <...>                       du SVG tel quel
+#    et, apres un ; , des options : ep=1.5 (l'epaisseur ; 2 par defaut), coul=rouge (ou
+#    #RRGGBB ; encre par defaut), op=0.4 (l'opacite), tirets=2,2, bout=carre,
+#    regle=pairimpair (des trous), bord=coul et epb=1 (le bord d'une forme pleine),
+#    tourne=a[,b...] et centre=x,y (une copie tournee par angle), fep=1.6 (l'epaisseur
+#    des traits d'une image incluse, multipliee).
+#
+#  L'ENCRE : une image tracee seulement a l'encre est MONOCHROME, elle prend la
+#  couleur choisie a l'import (la couleur du theme, ou une autre) ; une image qui a
+#  ses couleurs les garde (ses traits a l'encre, s'il y en a, prennent la couleur
+#  choisie). Une cle ou une categorie qui commence par _ est une aide (dessinee,
+#  pas livree).
+# =============================================================================
+
+@couleur noir #1B1B1B
+@couleur blanc #FFFFFF
+@couleur rouge #D93A2B
+@couleur rouge-fonce #9E241A
+@couleur jaune #F5C400
+@couleur vert #1E9A4A
+@couleur vert-fonce #14703A
+@couleur bleu #1F64B5
+@couleur bleu-fonce #164A87
+@couleur orange #EE8A1F
+@couleur gris #8A94A6
+@couleur gris-fonce #5B6576
+@couleur ciel #4FA3E0
+@couleur nuage #D5DCE6
+@couleur glace #A9D8F5
+@couleur lune #F3E3A1
+
+# ============================================================================
+= Flèches et navigation
+== fleche-haut | Flèche haut | haut, monter, up, flèche
+  fleche 12 20 12 4.5 6.5
+== fleche-bas | Flèche bas | bas, descendre, down, flèche
+  fleche 12 4 12 19.5 6.5
+== fleche-gauche | Flèche gauche | gauche, retour, left, flèche
+  fleche 20 12 4.5 12 6.5
+== fleche-droite | Flèche droite | droite, avancer, right, flèche
+  fleche 4 12 19.5 12 6.5
+== fleche-haut-droite | Flèche diagonale haut | diagonale, haut, droite, flèche, ouvrir
+  fleche 5.5 18.5 18.5 5.5 6.5
+== fleche-bas-droite | Flèche diagonale bas | diagonale, bas, droite, flèche
+  fleche 5.5 5.5 18.5 18.5 6.5
+== chevron-haut | Chevron haut | haut, monter, replier, chevron
+  trait M5 15.5l7-7 7 7
+== chevron-bas | Chevron bas | bas, descendre, déplier, chevron
+  trait M5 8.5l7 7 7-7
+== precedent | Précédent | précédent, chevron, gauche, arrière, page
+  trait M15.5 5l-7 7 7 7
+== suivant | Suivant | suivant, chevron, droite, avant, page
+  trait M8.5 5l7 7-7 7
+== double-gauche | Retour rapide | double, gauche, reculer, chevrons
+  trait M18.5 6l-6 6 6 6
+  trait M11.5 6l-6 6 6 6
+== double-droite | Avance rapide | double, droite, avancer, chevrons
+  trait M5.5 6l6 6-6 6
+  trait M12.5 6l6 6-6 6
+== premier | Premier | premier, début, gauche, origine
+  trait M6 5v14
+  trait M18 5.5l-7 6.5 7 6.5
+== dernier | Dernier | dernier, fin, droite
+  trait M18 5v14
+  trait M6 5.5l7 6.5-7 6.5
+== annuler | Annuler | annuler, retour, défaire, undo
+  trait M4.5 10h9.5a5.5 5.5 0 0 1 0 11H10
+  trait M8.5 6L4.5 10l4 4
+== retablir | Rétablir | rétablir, refaire, redo
+  trait M19.5 10H10a5.5 5.5 0 0 0 0 11h4
+  trait M15.5 6l4 4-4 4
+== accueil | Accueil | accueil, maison, home, menu principal, départ
+  trait M3 11.5L12 4l9 7.5
+  trait M5.5 9.5v11h4.5v-6h4v6h4.5v-11
+== rafraichir | Rafraîchir | rafraîchir, actualiser, recharger, refresh, cycle
+  arcfleche 12 12.5 7.5 30 315 5
+== rotation-horaire | Rotation horaire | rotation, tourner, horaire, sens
+  arcfleche 12 13 7.5 200 450 5
+== rotation-antihoraire | Rotation antihoraire | rotation, tourner, antihoraire, sens
+  arcfleche 12 13 7.5 340 90 5
+== menu | Menu | menu, liste, hamburger, options
+  trait M4 6.5h16M4 12h16M4 17.5h16
+== plein-ecran | Plein écran | plein écran, agrandir, maximiser
+  trait M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5
+== reduire | Réduire | réduire, quitter le plein écran, minimiser
+  trait M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5
+== deplacer | Déplacer | déplacer, bouger, quatre directions, pan
+  trait M12 3v18M3 12h18
+  trait M9.5 5.5L12 3l2.5 2.5M9.5 18.5L12 21l2.5-2.5M5.5 9.5L3 12l2.5 2.5M18.5 9.5L21 12l-2.5 2.5
+== trier | Trier | trier, haut, bas, ordre, tri
+  fleche 8 20 8 4 4.5
+  fleche 16 4 16 20 4.5
+== echanger | Échanger | échanger, permuter, gauche, droite, swap
+  fleche 4 8 20 8 4.5
+  fleche 20 16 4 16 4.5
+== sortie | Sortie | sortie, déconnexion, quitter, logout
+  trait M10 4H5.5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1H10
+  fleche 9.5 12 20.5 12 4.5
+== entree | Entrée | entrée, connexion, login, entrer
+  trait M14 4h4.5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H14
+  fleche 3.5 12 14.5 12 4.5
+== lien-externe | Ouvrir ailleurs | ouvrir, lien, externe, fenêtre
+  trait M18.5 13.5v5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5V7a1.5 1.5 0 0 1 1.5-1.5h5
+  fleche 11 13 20 4 5
+
+# ============================================================================
+= Interface
+== reglages | Réglages | réglages, paramètres, engrenage, options, configuration
+  engrenage 12 12 9.5 8 3.2
+== curseurs | Réglages fins | curseurs, réglages, mixage, niveaux
+  trait M4 6.5h4.2M11.8 6.5H20M4 12h10.6M18.2 12H20M4 17.5h1.8M9.4 17.5H20
+  cercle 10 6.5 1.8
+  cercle 16.4 12 1.8
+  cercle 7.6 17.5 1.8
+== utilisateur | Utilisateur | utilisateur, personne, compte, profil
+  cercle 12 8 4
+  trait M4.5 20.5a7.5 7.5 0 0 1 15 0
+== cadenas-ferme | Cadenas fermé | cadenas, verrouillé, fermé, sécurité, protégé
+  rect 5 10.5 14 10.5 2
+  trait M8 10.5V7.5a4 4 0 0 1 8 0v3
+  trait M12 14.5v2.5
+== cadenas-ouvert | Cadenas ouvert | cadenas, déverrouillé, ouvert, libre
+  rect 5 10.5 14 10.5 2
+  trait M8 10.5V7.5a4 4 0 0 1 7.7-1.6
+  trait M12 14.5v2.5
+== cle | Clé | clé, accès, mot de passe, autorisation
+  cercle 8 16 4.5
+  trait M11.2 12.8L20 4
+  trait M16.8 7.2l2.6 2.6M14.3 9.7l2 2
+== cloche | Cloche d'alarme | cloche, alarme, alerte, notification, sonnerie
+  trait M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z
+  trait M10 21h4M12 3v2
+== cloche-barree | Alarme coupée | cloche, alarme, silence, muet, acquitter
+  image cloche
+  trait M3.5 3.5l17 17
+== info | Information | information, info, renseignement
+  cercle 12 12 9.5
+  trait M12 11v6
+  disque 12 7.6 1.3
+== aide | Aide | aide, question, help, comment
+  cercle 12 12 9.5
+  trait M9.3 9.4a2.8 2.8 0 1 1 3.9 2.6c-.8.4-1.2 1-1.2 1.8v.6
+  disque 12 17.2 1.3
+== attention | Attention | attention, avertissement, warning, défaut
+  trait M12 3.5L21.5 20h-19z
+  trait M12 9.5v5
+  disque 12 17.3 1.3
+== ok | Valider | ok, valider, coche, correct, bon
+  trait M4 12.5l5 5L20 6.5
+== ok-cercle | Validé | ok, validé, coche, conforme, terminé
+  cercle 12 12 9.5
+  trait M7.5 12.3l3 3 6-6.3
+== croix | Fermer | croix, fermer, annuler, supprimer, non
+  trait M6 6l12 12M18 6L6 18
+== croix-cercle | Refusé | croix, refusé, erreur, non conforme
+  cercle 12 12 9.5
+  trait M8.5 8.5l7 7M15.5 8.5l-7 7
+== plus | Plus | plus, ajouter, augmenter, nouveau
+  trait M12 5v14M5 12h14
+== moins | Moins | moins, retirer, diminuer
+  trait M5 12h14
+== recherche | Rechercher | recherche, loupe, chercher, trouver
+  cercle 10.5 10.5 6.5
+  trait M15.3 15.3L20.5 20.5
+== zoom-plus | Zoom avant | zoom, agrandir, loupe, plus
+  image recherche
+  trait M10.5 7.8v5.4M7.8 10.5h5.4
+== zoom-moins | Zoom arrière | zoom, réduire, loupe, moins
+  image recherche
+  trait M7.8 10.5h5.4
+== filtre | Filtre | filtre, entonnoir, trier, sélection
+  trait M3.5 4.5h17l-6.5 8v6.5l-4 2v-8.5z
+== enregistrer | Enregistrer | enregistrer, sauvegarder, disquette, save
+  trait M5 4h11l3.5 3.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z
+  trait M8 4v4.5h7V4
+  rect 7.5 13 9 7
+== imprimer | Imprimer | imprimer, imprimante, papier, rapport
+  trait M7 8.5V3.5h10v5
+  trait M7 17H5a1.5 1.5 0 0 1-1.5-1.5V10A1.5 1.5 0 0 1 5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v5.5A1.5 1.5 0 0 1 19 17h-2
+  rect 7 13.5 10 7
+== exporter | Exporter | exporter, sortir, envoyer, export
+  fleche 12 14 12 3.5 4.5
+  trait M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12
+== importer | Importer | importer, entrer, recevoir, import
+  fleche 12 3.5 12 14 4.5
+  trait M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12
+== telecharger | Télécharger | télécharger, descendre, download
+  fleche 12 3.5 12 15 5
+  trait M5 20h14
+== televerser | Téléverser | téléverser, envoyer, upload
+  fleche 12 15 12 3.5 5
+  trait M5 20h14
+== lecture | Lecture | lecture, démarrer, play, marche, lancer
+  plein M7.5 4.5v15a.8.8 0 0 0 1.2.7l11.5-7.5a.8.8 0 0 0 0-1.4L8.7 3.8a.8.8 0 0 0-1.2.7z
+== pause | Pause | pause, attente, suspendre
+  pave 6 4.5 4 15 1
+  pave 14 4.5 4 15 1
+== stop | Stop | stop, arrêt, arrêter, carré
+  pave 5 5 14 14 2
+== enregistrement | Enregistrement | enregistrement, enregistrer, rec, point
+  disque 12 12 7.5
+== avance-rapide | Avance rapide (lecture) | avance, rapide, suivant, forward
+  polygone 3,6 3,18 11.5,12
+  polygone 12,6 12,18 20.5,12
+== retour-arriere | Retour rapide (lecture) | retour, rapide, précédent, rewind
+  polygone 21,6 21,18 12.5,12
+  polygone 12,6 12,18 3.5,12
+== horloge | Horloge | horloge, heure, temps, durée, montre
+  cercle 12 12 9.5
+  trait M12 6.5V12l4 2.5
+== calendrier | Calendrier | calendrier, date, jour, planning, agenda
+  rect 3.5 5 17 15.5 2
+  trait M3.5 10h17M8 3v4M16 3v4
+  pave 7 13 3 3 .5
+== sablier | Sablier | sablier, attente, minuterie, temporisation
+  trait M6.5 3.5h11M6.5 20.5h11
+  trait M8 3.5c0 4.5 8 4.8 8 8.5s-8 4-8 8.5M16 3.5c0 4.5-8 4.8-8 8.5s8 4 8 8.5
+== poubelle | Corbeille | poubelle, corbeille, supprimer, effacer
+  trait M4 6.5h16M9.5 6.5V4h5v2.5
+  trait M6 6.5l1 13.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13.5
+  trait M10 10.5v6.5M14 10.5v6.5
+== crayon | Modifier | crayon, modifier, éditer, écrire
+  trait M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 0l.5.5a2.1 2.1 0 0 1 0 3L8.5 19z
+  trait M14 6.5l3.5 3.5
+== copier | Copier | copier, dupliquer, copie
+  rect 8.5 8.5 12 12 1.5
+  trait M15.5 8.5V5A1.5 1.5 0 0 0 14 3.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5
+== dossier | Dossier | dossier, répertoire, classer, ouvrir
+  trait M3.5 6.5A1.5 1.5 0 0 1 5 5h4.5l2 2.5H19a1.5 1.5 0 0 1 1.5 1.5v9.5A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5z
+== document | Document | document, fichier, page, rapport, notice
+  trait M6 3.5h8l4.5 4.5v12.5H6z
+  trait M14 3.5V8h4.5
+  trait M9 12.5h6M9 16h6
+== liste | Liste | liste, éléments, lignes, menu
+  trait M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5
+  disque 5 6 1.5
+  disque 5 12 1.5
+  disque 5 18 1.5
+== grille | Grille | grille, tuiles, vignettes, mosaïque
+  rect 4 4 6.5 6.5 1
+  rect 13.5 4 6.5 6.5 1
+  rect 4 13.5 6.5 6.5 1
+  rect 13.5 13.5 6.5 6.5 1
+== favori | Favori | favori, étoile, préféré
+  etoile 12 12.8 9.8 4.2 5
+== oeil | Voir | voir, œil, visible, afficher
+  trait M2.5 12c2.2-4.2 5.6-6.5 9.5-6.5s7.3 2.3 9.5 6.5c-2.2 4.2-5.6 6.5-9.5 6.5S4.7 16.2 2.5 12z
+  cercle 12 12 3
+== oeil-barre | Masquer | masquer, caché, invisible, œil
+  image oeil
+  trait M4 4l16 16
+== lien | Lien | lien, chaîne, relier, attacher
+  trait M10 13.5a4 4 0 0 0 5.7.4l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2
+  trait M14 10.5a4 4 0 0 0-5.7-.4l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2
+== enveloppe | Message | message, courriel, mail, enveloppe, e-mail
+  rect 3 5.5 18 13 2
+  trait M3.5 6.5L12 13l8.5-6.5
+== telephone | Téléphone | téléphone, appel, combiné, astreinte
+  trait M6.5 3.5h3l1.5 4.5-2 1.5a10.5 10.5 0 0 0 5.5 5.5l1.5-2 4.5 1.5v3a2 2 0 0 1-2 2A15.5 15.5 0 0 1 4.5 5.5a2 2 0 0 1 2-2z
+== haut-parleur | Son | son, haut-parleur, volume, audio
+  trait M4 9.5h3.5L12 5.5v13l-4.5-4H4z
+  trait M15.5 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11
+== haut-parleur-coupe | Son coupé | son coupé, muet, silence, mute
+  trait M4 9.5h3.5L12 5.5v13l-4.5-4H4z
+  trait M15.5 9.5l5 5M20.5 9.5l-5 5
+== appareil-photo | Capture | capture, photo, appareil, image
+  trait M3.5 8.5A1.5 1.5 0 0 1 5 7h2.5L9 4.5h6L16.5 7H19a1.5 1.5 0 0 1 1.5 1.5V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18z
+  cercle 12 13 3.7
+== courbe | Courbe | courbe, graphique, tendance, historique
+  trait M3.5 3.5v17h17
+  trait M7 15l4-5 3.5 3.5L20 6.5
+== barres | Graphique en barres | barres, graphique, statistiques, histogramme
+  trait M3.5 3.5v17h17
+  pave 7 12 3 6 .5
+  pave 12 8.5 3 9.5 .5
+  pave 17 5 3 13 .5
+== jauge | Tableau de bord | jauge, compteur, vitesse, tableau de bord
+  trait M3.5 16.5a8.5 8.5 0 1 1 17 0
+  trait M12 16.5l4.2-4.8
+  disque 12 16.5 1.8
+== alimentation | Marche / arrêt | alimentation, marche, arrêt, power, interrupteur
+  trait M12 3.5V12
+  trait M7.2 6.3a7.5 7.5 0 1 0 9.6 0
+== repere | Repère | repère, drapeau, marque, signaler
+  trait M5.5 21V3.5
+  trait M5.5 4.5h12.5l-2.5 4 2.5 4H5.5
+== position | Position | position, lieu, emplacement, carte, site
+  trait M12 21s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z
+  cercle 12 9.5 2.5
+
+# ============================================================================
+= Sécurité et signalisation
+== danger-general | Danger général | danger, attention, avertissement, triangle
+  danger -
+== danger-electrique | Danger électrique | danger, électricité, tension, électrique, foudre
+  danger eclair
+== danger-chaud | Surface chaude | danger, chaud, chaleur, brûlure, température
+  danger _chaleur
+== danger-toxique | Matières toxiques | danger, toxique, poison, chimique
+  danger _crane
+== danger-inflammable | Matières inflammables | danger, inflammable, feu, incendie
+  danger _flamme-pleine
+== danger-explosion | Risque d'explosion | danger, explosion, explosif, atex
+  danger _explosion
+== danger-radiation | Rayonnement ionisant | danger, radiation, radioactif, nucléaire
+  danger _radiation
+== danger-laser | Faisceau laser | danger, laser, rayon, faisceau
+  danger _laser
+== danger-magnetique | Champ magnétique | danger, magnétique, aimant, champ
+  danger _aimant
+== danger-corrosif | Matières corrosives | danger, corrosif, acide, chimique
+  danger _corrosif
+== danger-froid | Basse température | danger, froid, gel, basse température
+  danger flocon
+== danger-chariots | Chariots élévateurs | danger, chariot, élévateur, circulation
+  danger chariot-elevateur
+== danger-ondes | Ondes radio | danger, ondes, rayonnement, antenne
+  danger antenne
+== interdit | Interdiction | interdit, interdiction, défense
+  interdit -
+== interdit-fumer | Défense de fumer | interdit, fumer, cigarette, tabac
+  interdit _cigarette
+== interdit-flamme | Flamme nue interdite | interdit, flamme, feu, allumer
+  interdit _flamme-pleine
+== interdit-pietons | Interdit aux piétons | interdit, piéton, passage, personne
+  interdit _pieton
+== interdit-toucher | Ne pas toucher | interdit, toucher, main, contact
+  interdit _main
+== interdit-telephone | Téléphone interdit | interdit, téléphone, portable, mobile
+  interdit smartphone
+== interdit-eau | Ne pas utiliser d'eau | interdit, eau, éteindre, arroser
+  interdit goutte
+== interdit-chariots | Interdit aux chariots | interdit, chariot, élévateur, engin
+  interdit chariot-elevateur
+== obligation | Obligation | obligation, obligatoire, consigne
+  obligation -
+== obligation-casque | Casque obligatoire | obligation, casque, tête, protection
+  obligation _casque
+== obligation-lunettes | Lunettes obligatoires | obligation, lunettes, yeux, protection
+  obligation _lunettes
+== obligation-gants | Gants obligatoires | obligation, gants, mains, protection
+  obligation _gant
+== obligation-chaussures | Chaussures de sécurité | obligation, chaussures, pieds, protection
+  obligation _botte
+== obligation-auditive | Protection auditive | obligation, casque antibruit, oreilles, bruit, protection
+  obligation _antibruit
+== obligation-masque | Masque obligatoire | obligation, masque, respiratoire, poussière, protection
+  obligation _masque
+== obligation-gilet | Gilet obligatoire | obligation, gilet, haute visibilité, protection
+  obligation _gilet
+== obligation-notice | Consulter la notice | obligation, notice, manuel, lire, instructions
+  obligation _livre
+== premiers-secours | Premiers secours | secours, premiers secours, infirmerie, croix
+  secours _croix
+== sortie-secours | Sortie de secours | secours, sortie, évacuation, issue
+  secours _sortie
+== douche-securite | Douche de sécurité | secours, douche, rinçage, chimique
+  secours _douche
+== rince-oeil | Rince-œil | secours, rince-œil, yeux, lavage
+  secours _rince-oeil
+== defibrillateur | Défibrillateur | secours, défibrillateur, cœur, DAE
+  secours _coeur-eclair
+== telephone-urgence | Téléphone d'urgence | secours, téléphone, urgence, appel
+  secours telephone
+== extincteur | Extincteur | incendie, extincteur, feu
+  incendie _extincteur
+== alarme-incendie | Alarme incendie | incendie, alarme, cloche, évacuation
+  incendie cloche
+== robinet-incendie | Robinet d'incendie armé | incendie, RIA, robinet, lance, tuyau
+  incendie _ria
+== arret-urgence | Arrêt d'urgence | arrêt d'urgence, AU, coup de poing, urgence, bouton
+  disque 12 12 10.5 ; coul=jaune
+  cercle 12 12 10.5 ; coul=noir ep=1
+  disque 12 12.6 6.9 ; coul=rouge-fonce
+  disque 12 11.6 6.4 ; coul=rouge
+  ovale 10 9.4 2.6 1.5 ; coul=blanc op=0.35
+== feu-tricolore | Feu tricolore | feu, tricolore, signalisation, rouge, vert, orange
+  pave 7 2 10 20 3 ; coul=gris-fonce
+  disque 12 6.6 2.4 ; coul=rouge
+  disque 12 12 2.4 ; coul=orange
+  disque 12 17.4 2.4 ; coul=vert
+== gyrophare | Gyrophare | gyrophare, balise, alarme, lumière, flash
+  pave 6 18 12 3 .8 ; coul=gris-fonce
+  plein M7 18v-5a5 5 0 0 1 10 0v5z ; coul=orange
+  ovale 10.3 12.6 1.2 2.2 ; coul=blanc op=0.45
+  trait M12 2.5v2.5M4.6 6.4l1.6 1.4M19.4 6.4l-1.6 1.4M2.8 13h2.2M19 13h2.2 ; coul=orange ep=1.6
+== cone-chantier | Cône de chantier | cône, chantier, travaux, balisage
+  plein M10 4h4l4.5 15h-13z ; coul=orange
+  plein M8.35 9.5h7.3l.78 2.6H7.57z ; coul=blanc
+  plein M6.85 14.5h10.3l.78 2.6H6.07z ; coul=blanc
+  pave 3.5 19 17 2.5 .8 ; coul=gris-fonce
+
+# ============================================================================
+= Industrie et process
+== usine | Usine | usine, site, atelier, production, bâtiment
+  trait M2.5 20.5h19
+  trait M4 20.5V10.5l5 3v-3l5 3v-3l3 2V4h3v16.5
+  pave 6.3 15.5 2 2 .3
+  pave 10.8 15.5 2 2 .3
+  pave 15.3 15.5 2 2 .3
+== moteur | Moteur | moteur, électrique, entraînement
+  rect 2.5 6 14 11.5 2.5
+  trait M6 9.5h7M6 12h7M6 14.5h7 ; ep=1.4
+  trait M16.5 9.5h1.5v5h-1.5M18 12h3.5
+  trait M5 17.5l-1 3h11l-1-3
+== moteur-symbole | Moteur (symbole) | moteur, M, symbole, schéma
+  cercle 12 12 9.5
+  poly 7.8,16 7.8,8.2 12,13 16.2,8.2 16.2,16
+== pompe | Pompe | pompe, refoulement, centrifuge, fluide
+  cercle 11 12 7.5
+  trait M11 4.5h10.5M21.5 2.5v4
+  contour 8,8.5 8,15.5 17,12
+  trait M6.5 21.5h9M8 18.8l-1.2 2.7M14 18.8l1.2 2.7
+== ventilateur | Ventilateur | ventilateur, hélice, air, extraction
+  cercle 12 12 9.5
+  plein M12 12c-1-3.6-.4-6.6 3-7.4 2.1 1.2 1.5 4.5-3 7.4z ; tourne=0,120,240
+  disque 12 12 1.8
+== compresseur | Compresseur | compresseur, air, pression
+  cercle 12 12 9.5
+  trait M5 7.2l14 3M5 16.8l14-3
+== convoyeur | Convoyeur | convoyeur, tapis, transport, bande
+  rect 2.5 14 19 6 3
+  disque 5.5 17 1
+  disque 12 17 1
+  disque 18.5 17 1
+  pave 4.5 6 6.5 6.5 .8
+  pave 13 8.5 5 4 .8
+== robot | Robot | robot, bras, manipulateur, automatisation
+  trait M4.5 20.5h9
+  trait M6 20.5l1-3h4l1 3
+  trait M9 15.5l3.5-7
+  trait M12.5 8.5l5.5 2.5
+  trait M18 11l2.5-2.5M18 11l1.3 3.3
+  disque 9 15.5 1.8
+  disque 12.5 8.5 1.8
+== engrenage | Engrenage | engrenage, mécanique, roue dentée, réglage
+  engrenage 12 12 9.5 10 3
+== engrenages | Engrenages | engrenages, mécanique, transmission, maintenance
+  engrenage 9 9 6.5 8 2
+  engrenage 16.6 16.6 5 7 1.6
+== marteau | Outil | outil, marteau, maintenance, réparation
+  trait M13.5 4.5l6 6-2.5 2.5-6-6z
+  trait M12.5 9.5L4.5 17.5a1.6 1.6 0 0 0 2.3 2.3l8-8
+== cle-plate | Clé plate | clé, outil, maintenance, réglage, réparation
+  trait M15.5 3.7a5 5 0 0 0-5.6 6.7L3.8 16.5a1.9 1.9 0 0 0 2.7 2.7l6.1-6.1a5 5 0 0 0 6.7-5.6l-2.9 2.9-2.6-.4-.4-2.6z
+== tournevis | Tournevis | tournevis, outil, maintenance
+  pave 9.6 1.5 4.8 9 2 ; tourne=45
+  trait M12 10.5v8.5 ; ep=2.2 tourne=45
+  trait M10.8 20.2h2.4 ; tourne=45
+== vanne | Vanne | vanne, robinet, fluide, ouvrir, fermer
+  trait M3 8v8l18-8v8z
+  trait M12 12V5
+  trait M8.5 5h7
+== vanne-manuelle | Vanne manuelle | vanne, manuelle, volant, robinet
+  trait M3 10v8l18-8v8z
+  trait M12 14V6.5
+  ellipse 12 5 5 1.8
+== vanne-3-voies | Vanne 3 voies | vanne, 3 voies, mélange, dérivation
+  contour 3,6 3,14 12,10
+  contour 21,6 21,14 12,10
+  contour 8,19.5 16,19.5 12,10
+  trait M12 10V3.5M9 3.5h6
+== cuve | Cuve | cuve, réservoir, stockage, citerne
+  trait M5 5.5c0-1.6 14-1.6 14 0v13c0 1.6-14 1.6-14 0z
+  trait M5 5.5c0 1.6 14 1.6 14 0
+  trait M5 13c0 1.4 14 1.4 14 0 ; ep=1.5 op=0.6
+== silo | Silo | silo, stockage, vrac, trémie
+  trait M6 3.5h12v10.5l-4 4.5v3h-4v-3l-4-4.5z
+  trait M6 9h12 ; ep=1.5 op=0.6
+  trait M7 14.5v6.5M17 14.5v6.5
+== chaudiere | Chaudière | chaudière, chauffage, brûleur, flamme
+  rect 4.5 3 15 18 2
+  trait M4.5 8h15
+  plein M12 18.5c-2 0-3.3-1.3-3.3-3 0-1.6 1.2-2.6 2-3.4.2 1 .8 1.6 1.4 1.8.2-1.6 1-3 2.2-3.9.2 1.5 1 2.6 1 4.5 0 2.4-1.4 4-3.3 4z
+  disque 8 5.5 .9
+  disque 11 5.5 .9
+== echangeur | Échangeur | échangeur, chaleur, thermique, serpentin
+  cercle 12 12 9.5
+  poly 2.5,12 6.5,12 8.5,8 11,16 13.5,8 15.5,16 17.5,12 21.5,12
+== filtre-process | Filtre | filtre, filtration, process, tamis
+  trait M12 2.5l9.5 9.5-9.5 9.5L2.5 12z
+  trait M6 12h12 ; tirets=2,2 bout=carre
+== capteur | Capteur | capteur, détecteur, proximité, sonde
+  rect 2.5 9 10 6 1.5
+  trait M12.5 12h2
+  trait M16.5 9a4 4 0 0 1 0 6M19.5 7a7 7 0 0 1 0 10
+== thermometre | Thermomètre | thermomètre, température, sonde
+  trait M10 14.3V5a2 2 0 0 1 4 0v9.3a4 4 0 1 1-4 0z
+  disque 12 17.5 1.9
+  trait M12 17.5V9.5 ; ep=1.6
+== manometre | Manomètre | manomètre, pression, mesure, cadran
+  cercle 12 10.5 7.5
+  trait M12 10.5l3.6-3.2
+  disque 12 10.5 1.4
+  trait M12 18v3.5M9 21.5h6
+  trait M7.5 13.6l1-.6M16.5 13.6l-1-.6M12 4.6v1.2 ; ep=1.5
+== debitmetre | Débitmètre | débitmètre, débit, compteur, mesure
+  trait M2 14h4.5M17.5 14H22
+  trait M6.5 10.5v7M17.5 10.5v7
+  cercle 12 14 5.5
+  fleche 9.3 14 14.8 14 2.6 ; ep=1.6
+  rect 9.5 2.5 5 3.5 .8
+  trait M12 6v2.5
+== niveau | Niveau | niveau, cuve, remplissage, hauteur
+  rect 4 3.5 11 17 2
+  pave 4 12.5 11 8 2 ; op=0.4
+  trait M4 12.5h11
+  fleche 19 12 19 4 3
+  fleche 19 12 19 20 3
+== agitateur | Agitateur | agitateur, mélangeur, malaxeur, cuve
+  trait M5 7v11.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7
+  trait M12 5v10.5
+  trait M7.5 15.5c1.5 1.2 3 1.2 4.5 0s3-1.2 4.5 0
+  rect 9.5 2 5 3 .6
+== verin | Vérin | vérin, piston, pneumatique, hydraulique
+  rect 2.5 7.5 12 9 1.5
+  trait M9 7.5v9
+  trait M9 12h12.5
+  trait M21.5 9.5v5
+== pesage | Pesage | pesage, balance, poids, masse
+  plein M7.2 9.5h9.6l3 11.5H4.2z
+  cercle 12 6 2.6
+== four | Four | four, cuisson, étuve, chaleur
+  rect 3 4 18 16.5 2
+  rect 6 9 12 8.5 1
+  disque 6 6.3 .8
+  disque 9 6.3 .8
+  trait M9.5 15.5c-.8-1 .8-1.8 0-2.8M12 15.5c-.8-1 .8-1.8 0-2.8M14.5 15.5c-.8-1 .8-1.8 0-2.8 ; ep=1.4
+== compteur | Compteur | compteur, totalisateur, comptage, nombre
+  rect 2.5 6.5 19 11 2
+  trait M8.8 6.5v11M15.2 6.5v11 ; ep=1.4
+  chiffre 0 5.65 12 6 ; ep=1.5
+  chiffre 4 12 12 6 ; ep=1.5
+  chiffre 7 18.35 12 6 ; ep=1.5
+== armoire-electrique | Armoire électrique | armoire, coffret, électrique, tableau
+  rect 4.5 2.5 15 19 1.5
+  trait M12 2.5v19
+  trait M9.8 10.5v3M14.2 10.5v3
+  plein M8.6 4.5l-2.3 3.2h1.7l-.6 2.6 2.4-3.3H8.1z
+== presse | Presse | presse, emboutissage, hydraulique, machine
+  trait M4 21V3.5h16V21
+  trait M2.5 21h19
+  rect 8 6 8 3.5 .8
+  trait M12 9.5V13
+  pave 7.5 13 9 2.5 .6
+  pave 6.5 17.5 11 2 .5
+== tuyauterie | Tuyauterie | tuyau, coude, canalisation, réseau
+  trait M2.5 6.5H11a6.5 6.5 0 0 1 6.5 6.5v8.5
+  trait M2.5 11.5H11a1.5 1.5 0 0 1 1.5 1.5v8.5
+  trait M2.5 4.5v9M10.5 21.5h9
+
+# ============================================================================
+= Énergie et fluides
+== eclair | Éclair | éclair, électricité, énergie, courant, foudre
+  plein M13.5 2.5L5 13.5h6.5l-1.5 8 9-11.5h-6.5z
+== prise | Prise | prise, courant, secteur, électricité
+  cercle 12 12 9.5
+  disque 8.8 12.5 1.5
+  disque 15.2 12.5 1.5
+  trait M12 4.5v2.5
+== fiche | Fiche | fiche, branchement, câble, électricité
+  trait M9 3v5M15 3v5
+  trait M6 8h12v2.5a6 6 0 0 1-12 0z
+  trait M12 16.5V21
+== batterie | Batterie pleine | batterie, pleine, charge, accumulateur
+  rect 2.5 7 17 10 2
+  pave 20 10 2 4 .6
+  pave 5 9.5 12 5 .6
+== batterie-moitie | Batterie à moitié | batterie, moitié, charge
+  rect 2.5 7 17 10 2
+  pave 20 10 2 4 .6
+  pave 5 9.5 6 5 .6
+== batterie-faible | Batterie faible | batterie, faible, vide, décharge
+  rect 2.5 7 17 10 2
+  pave 20 10 2 4 .6
+  pave 5 9.5 2.5 5 .6
+== batterie-charge | Batterie en charge | batterie, charge, recharge, chargeur
+  rect 2.5 7 17 10 2
+  pave 20 10 2 4 .6
+  plein M12 8.5l-4 4.5h3l-1 3.5 4-4.5h-3z
+== panneau-solaire | Panneau solaire | solaire, panneau, photovoltaïque, énergie
+  trait M5 4h14l3 9.5H2z
+  trait M3.5 8.7h17M10 4l-1 9.5M14 4l1 9.5 ; ep=1.5
+  trait M12 13.5v5M7.5 20.5h9
+== eolienne | Éolienne | éolienne, vent, énergie, renouvelable
+  plein M11 21.5l.5-12h1l.5 12z
+  trait M8 21.5h8
+  plein M12 9.5c-1.6-2.6-1.4-5.3 0-7.5 1.4 2.2 1.6 4.9 0 7.5z ; tourne=0,120,240 centre=12,9.5
+  disque 12 9.5 1.6
+== goutte | Goutte d'eau | eau, goutte, liquide, fluide
+  trait M12 3s-6.5 7.2-6.5 11.5a6.5 6.5 0 0 0 13 0C18.5 10.2 12 3 12 3z
+== robinet | Robinet | robinet, eau, distribution
+  trait M3 8h10a3.5 3.5 0 0 1 3.5 3.5V13
+  trait M8 8V4.5M5.5 4.5h5
+  plein M16.5 16.5s-1.6 1.8-1.6 2.9a1.6 1.6 0 0 0 3.2 0c0-1.1-1.6-2.9-1.6-2.9z
+== flamme | Flamme | flamme, feu, gaz, chaleur, combustion
+  trait M12 21.5c-3.9 0-6.5-2.6-6.5-6 0-3.2 2.2-4.8 3.6-7 .4 1.8 1.3 2.8 2.4 3.3.1-3.1 1.6-5.8 4.2-7.8.2 3.3 2.8 5.1 2.8 10 0 4-2.6 7.5-6.5 7.5z
+== flocon | Flocon | froid, gel, neige, flocon, réfrigération
+  trait M12 2.5v19 ; tourne=0,60,120
+  trait M9.5 4l2.5 2.5L14.5 4M9.5 20l2.5-2.5 2.5 2.5 ; tourne=0,60,120
+== vapeur | Vapeur | vapeur, chaleur, fumée, évaporation
+  trait M7.5 20c-1.8-2.4 1.8-4 0-6.4s1.8-4 0-6.4
+  trait M12 18c-1.8-2.4 1.8-4 0-6.4s1.8-4 0-6.4
+  trait M16.5 20c-1.8-2.4 1.8-4 0-6.4s1.8-4 0-6.4
+== vent | Vent | vent, air, souffle, ventilation
+  trait M3 8.5h10a2.8 2.8 0 1 0-2.8-2.8
+  trait M3 15.5h13.5a2.8 2.8 0 1 1-2.8 2.8
+  trait M3 12h16
+== bouteille-gaz | Bouteille de gaz | gaz, bouteille, comprimé, cylindre
+  trait M8 9a4 4 0 0 1 8 0v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z
+  trait M12 5V3M10 3h4
+  trait M8 12.5h8 ; ep=1.5 op=0.6
+== air-comprime | Air comprimé | air comprimé, réservoir, pneumatique, pression
+  rect 2.5 10 19 8.5 4.25
+  cercle 12 5.2 2.6
+  trait M12 7.8V10
+  trait M12 5.2l1.3-1.2 ; ep=1.3
+  trait M7 18.5v3M17 18.5v3
+== huile | Huile | huile, lubrifiant, graissage, burette
+  trait M3.5 20.5V12.5h8l3 3v5z
+  trait M14.5 15.5L21 9.5
+  trait M5.5 12.5v-2h4v2
+  plein M20.5 13s-1.3 1.5-1.3 2.4a1.3 1.3 0 0 0 2.6 0c0-.9-1.3-2.4-1.3-2.4z
+== ampoule | Ampoule | ampoule, lumière, éclairage, idée, lampe
+  trait M9 18h6M10 21h4
+  trait M9 15.5c0-2-3.2-3.6-3.2-7.3a6.2 6.2 0 0 1 12.4 0c0 3.7-3.2 5.3-3.2 7.3z
+== compteur-electrique | Compteur électrique | compteur, électrique, énergie, consommation, kWh
+  rect 4 2.5 16 19 2
+  rect 7 5.5 10 4.5 .8
+  plein M12.6 12.5l-2.6 3.6h2l-.6 3 2.6-3.6h-2z
+== pylone | Pylône | pylône, ligne, haute tension, réseau électrique
+  trait M8 21.5L12 2.5l4 19
+  trait M5 7.5h14M6.5 12h11
+  trait M9.5 12l5 9.5M14.5 12l-5 9.5 ; ep=1.5
+  trait M5 7.5v2M19 7.5v2 ; ep=1.5
+== transformateur | Transformateur | transformateur, tension, électrique, poste
+  cercle 9 12 5.5
+  cercle 15 12 5.5
+  trait M3.5 12H2M20.5 12H22
+== feuille | Économie d'énergie | feuille, écologie, économie, environnement, vert
+  trait M5 19.5C5 10.5 10.5 5 19.5 4.5c-.5 9-6 15-14.5 15z
+  trait M5 19.5l8.5-8.5
+
+# ============================================================================
+= Bâtiment et infrastructure
+== maison | Maison | maison, habitation, bâtiment, logement
+  trait M3 11.5L12 4l9 7.5
+  trait M5.5 9.5v11h13v-11
+  rect 10 14.5 4 6
+  trait M16 6.5V4h2.5v4.5
+== immeuble | Immeuble | immeuble, bureaux, bâtiment, étages
+  rect 5 2.5 14 19 1
+  pave 8 5.5 2.5 2.2 .3
+  pave 13.5 5.5 2.5 2.2 .3
+  pave 8 9.5 2.5 2.2 .3
+  pave 13.5 9.5 2.5 2.2 .3
+  pave 8 13.5 2.5 2.2 .3
+  pave 13.5 13.5 2.5 2.2 .3
+  trait M10.5 21.5v-3.5h3v3.5
+== entrepot | Entrepôt | entrepôt, hangar, stockage, magasin
+  trait M2.5 9l9.5-5 9.5 5v12h-19z
+  trait M6 21v-8.5h12V21M6 15.5h12M6 18.3h12 ; ep=1.5
+== porte | Porte | porte, accès, entrée, issue
+  rect 6 2.5 12 19 1
+  disque 15 12.5 1.2
+  trait M3.5 21.5h17
+== porte-ouverte | Porte ouverte | porte, ouverte, accès, passage
+  trait M5 21.5V2.5h14v19
+  trait M5 2.5l8 2.5v18l-8-1.5
+  disque 11 12.5 1
+  trait M3 21.5h18
+== fenetre | Fenêtre | fenêtre, vitre, ouvrant
+  rect 4 3.5 16 17 1.5
+  trait M12 3.5v17M4 11.5h16
+== escalier | Escalier | escalier, marches, étage, accès
+  trait M2.5 20.5h4.5v-4h4.5v-4h4.5v-4h4.5V4
+== ascenseur | Ascenseur | ascenseur, monte-charge, étage, cabine
+  rect 4 2.5 16 19 2
+  plein M12 5.5l3.2 4H8.8z
+  plein M12 18.5l3.2-4H8.8z
+== parking | Parking | parking, stationnement, P, voiture
+  rect 3 3 18 18 3
+  trait M9.5 17V7h3.5a3 3 0 0 1 0 6H9.5
+== eclairage | Éclairage | éclairage, plafonnier, lumière, luminaire
+  trait M12 2.5v4
+  trait M5.5 13a6.5 6.5 0 0 1 13 0z
+  trait M12 16v4M7 15.5L5 18M17 15.5l2 2.5
+== radiateur | Chauffage | chauffage, radiateur, chaleur, température
+  rect 3 4.5 3.5 13 1.6
+  rect 7.5 4.5 3.5 13 1.6
+  rect 12 4.5 3.5 13 1.6
+  rect 16.5 4.5 3.5 13 1.6
+  trait M4.5 17.5v3M18.5 17.5v3
+== climatisation | Climatisation | climatisation, clim, froid, air
+  rect 2.5 4 19 8 2
+  trait M5.5 9h13 ; ep=1.5
+  trait M7.5 15l-1 4.5M12 15v5M16.5 15l1 4.5 ; ep=1.6
+== ventilation | Ventilation | ventilation, VMC, extraction, bouche
+  rect 3 3 18 18 2.5
+  cercle 12 12 6.5
+  plein M12 12c-.3-2.4.2-4 2-5 1.1.8.9 2.5-2 5z ; tourne=0,120,240
+  disque 12 12 1.2
+== volet-roulant | Volet roulant | volet, store, fenêtre, occultation
+  rect 4 3 16 18 1
+  trait M4 6.5h16M4 9.5h16M4 12.5h16 ; ep=1.5
+  trait M12 12.5v3.5 ; ep=1.5
+== thermostat | Thermostat | thermostat, consigne, température, régulation
+  rect 4.5 2.5 15 19 3
+  cercle 12 10.5 4.5
+  trait M12 10.5l2.4-2.4
+  trait M9 17.5h6
+== camera | Caméra | caméra, surveillance, vidéo, sécurité
+  trait M3.5 9.5l12-4 2.2 6.5-12 4z
+  trait M17.6 9l3.4-1.6v4.6l-2.6-.9
+  trait M8 14l1 4H4.5M4.5 15v6
+== detecteur-fumee | Détecteur de fumée | détecteur, fumée, incendie, plafond
+  trait M3 5.5h18
+  trait M5 5.5v2.5a7 7 0 0 0 14 0V5.5
+  disque 12 9.5 1
+  trait M8.5 17.5c2 1.4 5 1.4 7 0M6 20.5c3.4 2 8.6 2 12 0 ; ep=1.5
+== barriere | Barrière | barrière, parking, accès, contrôle
+  rect 3 12 4 9 1
+  rect 7 12.5 14.5 3 1
+  trait M11 12.5l-2 3M15 12.5l-2 3M19 12.5l-2 3 ; ep=1.5
+  trait M2 21h6
+
+# ============================================================================
+= Réseau et informatique
+== automate | Automate (API) | automate, API, PLC, contrôleur
+  rect 2.5 5 19 14 1.5
+  trait M7 5v14M11.5 5v14M16 5v14 ; ep=1.4
+  disque 4.75 8 .9
+  disque 4.75 10.8 .9
+  trait M9.25 8v2M9.25 13.5h0
+  trait M13.75 8v8M18.25 8v8 ; ep=1.4 tirets=1.2,1.2 bout=carre
+== ecran | Écran | écran, moniteur, affichage, IHM
+  rect 2.5 4 19 12.5 1.5
+  trait M12 16.5v4M8 20.5h8
+== pc | Ordinateur | ordinateur, PC, poste, unité centrale
+  rect 14.5 3.5 7 17 1
+  trait M16.5 7h3M16.5 9.5h3 ; ep=1.4
+  rect 2.5 5 10 8 1
+  trait M7.5 13v3.5M5 16.5h5
+== portable | Ordinateur portable | portable, ordinateur, laptop
+  rect 4.5 4.5 15 10.5 1.2
+  trait M2 18.5h20l-1.5-3.5H3.5z
+== serveur | Serveur | serveur, baie, informatique, données
+  rect 4 3 16 5.2 1
+  rect 4 9.4 16 5.2 1
+  rect 4 15.8 16 5.2 1
+  disque 7 5.6 .9
+  disque 7 12 .9
+  disque 7 18.4 .9
+  trait M11 5.6h6M11 12h6M11 18.4h6 ; ep=1.4
+== reseau | Réseau | réseau, nœuds, liaison, topologie
+  cercle 12 5 2.5
+  cercle 5 18.5 2.5
+  cercle 19 18.5 2.5
+  trait M10.8 7.2L6.2 16.3M13.2 7.2l4.6 9.1M7.5 18.5h9
+== commutateur | Commutateur | commutateur, switch, réseau, ports
+  rect 2 8.5 20 8 1.5
+  pave 4.5 11 2.2 2.2 .3
+  pave 8 11 2.2 2.2 .3
+  pave 11.5 11 2.2 2.2 .3
+  pave 15 11 2.2 2.2 .3
+  disque 19.2 12.1 .9
+== wifi | Wi-Fi | wifi, sans fil, réseau, signal
+  trait M2.5 9a13.5 13.5 0 0 1 19 0
+  trait M5.6 12.6a9 9 0 0 1 12.8 0
+  trait M8.8 16.1a4.5 4.5 0 0 1 6.4 0
+  disque 12 19.5 1.6
+== ethernet | Prise réseau | ethernet, RJ45, prise, câble, réseau
+  rect 3.5 4 17 16 2
+  trait M7.5 16.5V11H10V8.5h4V11h2.5v5.5z
+  trait M10 16.5v-2M12 16.5v-2M14 16.5v-2 ; ep=1.2
+== antenne | Antenne | antenne, radio, émetteur, ondes
+  trait M12 10.5V21M8.5 21h7
+  disque 12 9 1.7
+  trait M8.6 5.6a4.8 4.8 0 0 0 0 6.8M15.4 5.6a4.8 4.8 0 0 1 0 6.8
+  trait M5.6 2.6a9 9 0 0 0 0 12.8M18.4 2.6a9 9 0 0 1 0 12.8
+== nuage-informatique | Nuage | nuage, cloud, internet, en ligne
+  trait M7 18.5a4.5 4.5 0 0 1-.4-9 5.8 5.8 0 0 1 11.2 1.2 3.9 3.9 0 0 1 .2 7.8z
+== nuage-envoi | Envoi vers le nuage | nuage, envoi, synchroniser, cloud
+  trait M8 18.5H7a4.5 4.5 0 0 1-.4-9 5.8 5.8 0 0 1 11.2 1.2 3.9 3.9 0 0 1 .2 7.8h-2
+  fleche 12 21 12 11.5 3.5
+== base-de-donnees | Base de données | base de données, SQL, stockage, données
+  ellipse 12 5.5 7.5 2.8
+  trait M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13
+  trait M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8
+== cle-usb | Clé USB | USB, clé, mémoire, stockage
+  rect 6.5 9 11 12.5 2
+  rect 8.5 3 7 6 .8
+  pave 10 5 1.4 1.4
+  pave 12.6 5 1.4 1.4
+== carte-sd | Carte mémoire | carte, SD, mémoire, stockage
+  trait M7.5 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1V8z
+  trait M9 3.5v3M11.5 3.5v3M14 3.5v3M16.5 3.5v3 ; ep=1.3
+== code | Code | code, programme, script, développement
+  trait M8 7l-5 5 5 5M16 7l5 5-5 5
+  trait M13.5 4.5l-3 15
+== terminal | Terminal | terminal, console, commande, invite
+  rect 2.5 4 19 16 2
+  trait M6.5 9l3 3-3 3M11.5 15h6
+== bus-terrain | Bus de terrain | bus, terrain, Modbus, Profibus, réseau
+  trait M2 6.5h20
+  trait M5 6.5V12M12 6.5V12M19 6.5V12
+  rect 3 12 4 5 1
+  rect 10 12 4 5 1
+  rect 17 12 4 5 1
+  trait M2 4.5v4M22 4.5v4
+== smartphone | Smartphone | smartphone, mobile, téléphone portable
+  rect 6 2.5 12 19 2.5
+  trait M10.5 18.5h3
+== tablette | Tablette | tablette, écran tactile, mobile
+  rect 3 4.5 18 15 2
+  disque 18.6 12 .9
+== routeur | Routeur | routeur, box, passerelle, internet
+  rect 2.5 12.5 19 6.5 1.5
+  trait M7 12.5l-2-6M17 12.5l2-6
+  disque 6.5 15.8 .9
+  disque 9.5 15.8 .9
+  trait M13 15.8h5 ; ep=1.4
+
+# ============================================================================
+= Véhicules et logistique
+== camion | Camion | camion, transport, livraison, poids lourd
+  rect 2 5.5 12 10.5 1
+  trait M14 9h4.2l3.3 3.8V16H14z
+  cercle 6 18 2.2
+  cercle 17.5 18 2.2
+== chariot-elevateur | Chariot élévateur | chariot, élévateur, fenwick, manutention
+  plein M2.5 16.5V12a1 1 0 0 1 1-1h8.8l1.7 2.6v2.9z
+  trait M5.2 11V5.2h5l2.3 5.8
+  trait M15.6 3v15.8H22
+  disque 6 18.6 2.4
+  disque 12.4 18.6 2.4
+== voiture | Voiture | voiture, véhicule, automobile
+  trait M2.5 16.5v-3.5l2.4-.8L7.5 7.5h8.5l3.5 4.7 2 .8v3.5z
+  cercle 7 17 2.2
+  cercle 17 17 2.2
+  trait M10 7.5v4.7h9.5 ; ep=1.4
+== palette | Palette | palette, manutention, stockage, charge
+  rect 2.5 11.5 19 3 .5
+  pave 4 14.5 3 4.5
+  pave 10.5 14.5 3 4.5
+  pave 17 14.5 3 4.5
+  rect 2.5 19 19 2.5 .5
+== colis | Colis | colis, carton, paquet, expédition
+  trait M12 3l8.5 4.3v9.4L12 21l-8.5-4.3V7.3z
+  trait M3.5 7.3L12 11.6l8.5-4.3M12 11.6V21
+  trait M7.8 5.1l8.5 4.3 ; ep=1.5
+== grue | Grue | grue, levage, chantier, charge
+  trait M6.5 21.5V5
+  trait M2.5 5h19
+  trait M4.5 5l2-3 2 3
+  trait M17.5 5v7
+  trait M17.5 12v1.5a1.8 1.8 0 1 1-1.8 1.8
+  trait M3.5 21.5h6
+  pave 2.5 5.5 3 2.5
+== transpalette | Transpalette | transpalette, manutention, palette
+  trait M4 3l3.5 13.5
+  trait M2.5 3h3
+  trait M7.5 16.5H21.5
+  cercle 7.5 19 2
+  cercle 19.5 19.2 1.2
+== caddie | Chariot | chariot, caddie, achat, approvisionnement
+  trait M2.5 4h3l2.6 11h10.5l2-7.5H6.5
+  cercle 9.5 19 1.7
+  cercle 17 19 1.7
+== conteneur | Conteneur | conteneur, container, transport, maritime
+  rect 2 6.5 20 12 1
+  trait M6 6.5v12M10 6.5v12M14 6.5v12M18 6.5v12 ; ep=1.4
+== rayonnage | Rayonnage | rayonnage, étagère, stock, magasin
+  trait M4 2.5v19M20 2.5v19
+  trait M4 8.5h16M4 15h16M4 21h16
+  rect 6 4.5 4 4 .4
+  rect 11.5 5.5 3.5 3 .4
+  rect 6.5 11 6 4 .4
+  rect 15 17.5 3.5 3.5 .4
+== bateau | Bateau | bateau, navire, maritime, port
+  trait M2.5 14.5h19l-2.8 5.5H5.3z
+  rect 6 9 5 5.5 .5
+  rect 11 10.5 5 4 .5
+  trait M8.5 9V5.5
+== train | Train | train, ferroviaire, rail, transport
+  rect 5 3 14 14 3
+  trait M5 10h14
+  disque 8.5 13.5 1.1
+  disque 15.5 13.5 1.1
+  trait M7.5 17L5 21.5M16.5 17l2.5 4.5
+
+# ============================================================================
+= Météo
+== soleil | Soleil | soleil, beau temps, ensoleillé, jour
+  disque 12 12 4.6 ; coul=jaune
+  trait M12 2.5V5 ; coul=jaune tourne=0,45,90,135,180,225,270,315
+== nuage | Nuage | nuage, nuageux, couvert
+  image _nuage-plein
+== soleil-nuage | Éclaircies | éclaircies, soleil, nuage, variable
+  image soleil -2.5 -2.5 .8
+  image _nuage-plein 3 3.5 .85
+== pluie | Pluie | pluie, pluvieux, averse
+  image _nuage-plein 0 -3 1
+  trait M8 17.5l-1.2 3.5M12 17.5l-1.2 3.5M16 17.5l-1.2 3.5 ; coul=ciel
+== neige | Neige | neige, flocons, hiver, froid
+  image _nuage-plein 0 -3 1
+  disque 7.5 18 1.1 ; coul=glace
+  disque 12 19.5 1.1 ; coul=glace
+  disque 16.5 18 1.1 ; coul=glace
+  disque 9.8 21.8 1.1 ; coul=glace
+  disque 14.3 21.8 1.1 ; coul=glace
+== orage | Orage | orage, éclair, tonnerre, foudre
+  image _nuage-sombre 0 -3 1
+  plein M12.8 13.5L9 19h3l-1 4.2 4.2-5.7h-3l1-4z ; coul=jaune
+== vent-meteo | Vent fort | vent, rafales, tempête
+  image vent ; coul=ciel
+== brouillard | Brouillard | brouillard, brume, visibilité
+  image _nuage-plein 0 -4 1
+  trait M4 17h16M6 20.5h12 ; coul=gris
+== chaud | Chaleur | chaud, canicule, température, été
+  trait M10 14.3V5a2 2 0 0 1 4 0v9.3a4 4 0 1 1-4 0z ; coul=gris
+  disque 12 17.5 2.2 ; coul=rouge
+  trait M12 17.5V7 ; coul=rouge ep=1.8
+  trait M16.5 6h2.5M16.5 9h2.5M16.5 12h2.5 ; coul=gris ep=1.4
+== froid | Froid | froid, gel, température, hiver
+  trait M10 14.3V5a2 2 0 0 1 4 0v9.3a4 4 0 1 1-4 0z ; coul=gris
+  disque 12 17.5 2.2 ; coul=ciel
+  trait M12 17.5V13 ; coul=ciel ep=1.8
+  trait M16.5 6h2.5M16.5 9h2.5M16.5 12h2.5 ; coul=gris ep=1.4
+== lune | Nuit | nuit, lune, soir
+  plein M9.69 4.6A8.5 8.5 0 1 0 19.4 14.31A7 7 0 0 1 9.69 4.6z ; coul=lune
+== humidite | Humidité | humidité, hygrométrie, eau, pourcentage
+  plein M12 2.5s-7 7.5-7 12.2a7 7 0 0 0 14 0C19 10 12 2.5 12 2.5z ; coul=ciel
+  cercle 9.8 13 1.2 ; coul=blanc ep=1.2
+  cercle 14.2 17.4 1.2 ; coul=blanc ep=1.2
+  trait M14.6 12.3l-5.2 5.8 ; coul=blanc ep=1.3
+
+# ============================================================================
+= Personnes
+== operateur | Opérateur | opérateur, personne, casque, conducteur
+  cercle 12 9.5 3.6
+  plein M7.6 8.2a4.4 4.4 0 0 1 8.8 0z
+  trait M6.5 8.2h11
+  trait M4.5 21a7.5 7.5 0 0 1 15 0
+== equipe | Équipe | équipe, groupe, personnes, service
+  cercle 12 8 3.3
+  trait M6 20.5a6 6 0 0 1 12 0
+  cercle 5 10.5 2.3
+  trait M1.8 19a3.5 3.5 0 0 1 4.6-3.2
+  cercle 19 10.5 2.3
+  trait M22.2 19a3.5 3.5 0 0 0-4.6-3.2
+== technicien | Technicien | technicien, maintenance, intervenant
+  cercle 9 8 3.6
+  trait M2.5 20.5a6.5 6.5 0 0 1 9.5-5.8
+  image cle-plate 11.5 10.5 .5 ; fep=1.6
+== administrateur | Administrateur | administrateur, admin, gestion, droits
+  cercle 9 8 3.6
+  trait M2.5 20.5a6.5 6.5 0 0 1 9.5-5.8
+  image engrenage 11.5 10.5 .5 ; fep=1.6
+== utilisateur-ajout | Ajouter un utilisateur | utilisateur, ajouter, nouveau, compte
+  cercle 9.5 8 3.6
+  trait M3 20.5a6.5 6.5 0 0 1 13 0
+  trait M19 8v6M16 11h6
+== utilisateur-retrait | Retirer un utilisateur | utilisateur, retirer, supprimer, compte
+  cercle 9.5 8 3.6
+  trait M3 20.5a6.5 6.5 0 0 1 13 0
+  trait M16 11h6
+== utilisateur-valide | Utilisateur autorisé | utilisateur, autorisé, validé, accès
+  cercle 9.5 8 3.6
+  trait M3 20.5a6.5 6.5 0 0 1 13 0
+  trait M15.5 11l2 2 4-4
+== visiteur | Visiteur | visiteur, badge, invité, accueil
+  cercle 8.5 8 3.6
+  trait M2 20.5a6.5 6.5 0 0 1 13 0
+  rect 15 9.5 6.5 10 1 ; ep=1.6
+  disque 18.25 12.8 1.3
+  trait M16.8 16.5h2.9 ; ep=1.4
+== groupe | Groupe | groupe, deux personnes, binôme
+  cercle 9 8 3.3
+  trait M3 20a6 6 0 0 1 12 0
+  cercle 16.5 8.5 2.8
+  trait M15.5 13.5a5.5 5.5 0 0 1 6.5 5.5
+== responsable | Responsable | responsable, chef, encadrant, manager
+  cercle 12 7.5 3.6
+  trait M4.5 21a7.5 7.5 0 0 1 15 0
+  plein M12 13.6l1.3 1.4-.9 4.5h-.8l-.9-4.5z
+
+# ============================================================================
+= Drapeaux
+== drapeau-fr | France | France, français, FR, langue, drapeau | 36x24
+  pave 0 0 12 24 ; coul=#0055A4
+  pave 12 0 12 24 ; coul=blanc
+  pave 24 0 12 24 ; coul=#EF4135
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-gb | Royaume-Uni | Royaume-Uni, anglais, GB, english, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#012169
+  ligne 0 0 36 24 ; coul=blanc ep=4.8 bout=carre
+  ligne 36 0 0 24 ; coul=blanc ep=4.8 bout=carre
+  ligne 0 0 36 24 ; coul=#C8102E ep=1.6 bout=carre
+  ligne 36 0 0 24 ; coul=#C8102E ep=1.6 bout=carre
+  pave 14 0 8 24 ; coul=blanc
+  pave 0 8 36 8 ; coul=blanc
+  pave 15.6 0 4.8 24 ; coul=#C8102E
+  pave 0 9.6 36 4.8 ; coul=#C8102E
+== drapeau-de | Allemagne | Allemagne, allemand, DE, deutsch, langue, drapeau | 36x24
+  pave 0 0 36 8 ; coul=#000000
+  pave 0 8 36 8 ; coul=#DD0000
+  pave 0 16 36 8 ; coul=#FFCE00
+== drapeau-es | Espagne | Espagne, espagnol, ES, español, langue, drapeau | 36x24
+  pave 0 0 36 6 ; coul=#AA151B
+  pave 0 6 36 12 ; coul=#F1BF00
+  pave 0 18 36 6 ; coul=#AA151B
+== drapeau-it | Italie | Italie, italien, IT, italiano, langue, drapeau | 36x24
+  pave 0 0 12 24 ; coul=#009246
+  pave 12 0 12 24 ; coul=blanc
+  pave 24 0 12 24 ; coul=#CE2B37
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-nl | Pays-Bas | Pays-Bas, néerlandais, NL, nederlands, langue, drapeau | 36x24
+  pave 0 0 36 8 ; coul=#AE1C28
+  pave 0 8 36 8 ; coul=blanc
+  pave 0 16 36 8 ; coul=#21468B
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-pt | Portugal | Portugal, portugais, PT, português, langue, drapeau | 36x24
+  pave 0 0 14.4 24 ; coul=#006600
+  pave 14.4 0 21.6 24 ; coul=#FF0000
+  cercle 14.4 12 4.8 ; coul=#FFE000 ep=1.6
+  pave 12.4 9.4 4 5.2 1 ; coul=blanc bord=#FF0000 epb=.8
+== drapeau-pl | Pologne | Pologne, polonais, PL, polski, langue, drapeau | 36x24
+  pave 0 0 36 12 ; coul=blanc
+  pave 0 12 36 12 ; coul=#DC143C
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-be | Belgique | Belgique, belge, BE, langue, drapeau | 36x24
+  pave 0 0 12 24 ; coul=#000000
+  pave 12 0 12 24 ; coul=#FDDA24
+  pave 24 0 12 24 ; coul=#EF3340
+== drapeau-ch | Suisse | Suisse, suisse, CH, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#DA291C
+  pave 15.5 5 5 14 ; coul=blanc
+  pave 11 9.5 14 5 ; coul=blanc
+== drapeau-at | Autriche | Autriche, autrichien, AT, langue, drapeau | 36x24
+  pave 0 0 36 8 ; coul=#C8102E
+  pave 0 8 36 8 ; coul=blanc
+  pave 0 16 36 8 ; coul=#C8102E
+== drapeau-se | Suède | Suède, suédois, SE, svenska, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#006AA7
+  pave 10 0 4.5 24 ; coul=#FECC02
+  pave 0 9.75 36 4.5 ; coul=#FECC02
+== drapeau-dk | Danemark | Danemark, danois, DK, dansk, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#C8102E
+  pave 10 0 3.5 24 ; coul=blanc
+  pave 0 10.25 36 3.5 ; coul=blanc
+== drapeau-fi | Finlande | Finlande, finnois, FI, suomi, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=blanc
+  pave 10 0 6 24 ; coul=#003580
+  pave 0 9 36 6 ; coul=#003580
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-no | Norvège | Norvège, norvégien, NO, norsk, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#BA0C2F
+  pave 9 0 7 24 ; coul=blanc
+  pave 0 8.5 36 7 ; coul=blanc
+  pave 10.75 0 3.5 24 ; coul=#00205B
+  pave 0 10.25 36 3.5 ; coul=#00205B
+== drapeau-ie | Irlande | Irlande, irlandais, IE, langue, drapeau | 36x24
+  pave 0 0 12 24 ; coul=#169B62
+  pave 12 0 12 24 ; coul=blanc
+  pave 24 0 12 24 ; coul=#FF883E
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-lu | Luxembourg | Luxembourg, luxembourgeois, LU, langue, drapeau | 36x24
+  pave 0 0 36 8 ; coul=#ED2939
+  pave 0 8 36 8 ; coul=blanc
+  pave 0 16 36 8 ; coul=#00A1DE
+== drapeau-cz | Tchéquie | Tchéquie, tchèque, CZ, čeština, langue, drapeau | 36x24
+  pave 0 0 36 12 ; coul=blanc
+  pave 0 12 36 12 ; coul=#D7141A
+  polygone 0,0 18,12 0,24 ; coul=#11457E
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-ro | Roumanie | Roumanie, roumain, RO, langue, drapeau | 36x24
+  pave 0 0 12 24 ; coul=#002B7F
+  pave 12 0 12 24 ; coul=#FCD116
+  pave 24 0 12 24 ; coul=#CE1126
+== drapeau-hu | Hongrie | Hongrie, hongrois, HU, magyar, langue, drapeau | 36x24
+  pave 0 0 36 8 ; coul=#CE2939
+  pave 0 8 36 8 ; coul=blanc
+  pave 0 16 36 8 ; coul=#477050
+== drapeau-ua | Ukraine | Ukraine, ukrainien, UA, langue, drapeau | 36x24
+  pave 0 0 36 12 ; coul=#0057B7
+  pave 0 12 36 12 ; coul=#FFD700
+== drapeau-eu | Union européenne | Europe, européen, EU, UE, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#003399
+  etoiles-cercle 18 12 7.2 12 1.5 ; coul=#FFCC00
+== drapeau-us | États-Unis | États-Unis, américain, US, english, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=blanc
+  pave 0 0 36 1.846 ; coul=#B22234
+  pave 0 3.692 36 1.846 ; coul=#B22234
+  pave 0 7.385 36 1.846 ; coul=#B22234
+  pave 0 11.077 36 1.846 ; coul=#B22234
+  pave 0 14.769 36 1.846 ; coul=#B22234
+  pave 0 18.462 36 1.846 ; coul=#B22234
+  pave 0 22.154 36 1.846 ; coul=#B22234
+  pave 0 0 14.4 12.923 ; coul=#3C3B6E
+  grille-disques 1.6 1.7 2.25 2.35 6 5 .5 ; coul=blanc
+== drapeau-jp | Japon | Japon, japonais, JP, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=blanc
+  disque 18 12 7.2 ; coul=#BC002D
+  rect .25 .25 35.5 23.5 ; coul=gris ep=.5
+== drapeau-cn | Chine | Chine, chinois, CN, langue, drapeau | 36x24
+  pave 0 0 36 24 ; coul=#EE1C25
+  etoile-pleine 6 6 3.6 1.4 5 ; coul=#FFFF00
+  etoile-pleine 12 2.4 1.2 .48 5 -70 ; coul=#FFFF00
+  etoile-pleine 14.4 4.8 1.2 .48 5 -50 ; coul=#FFFF00
+  etoile-pleine 14.4 8.4 1.2 .48 5 -90 ; coul=#FFFF00
+  etoile-pleine 12 10.8 1.2 .48 5 -110 ; coul=#FFFF00
+
+# ============================================================================
+= Formes et pastilles
+== pastille-verte | Pastille verte | pastille, voyant, vert, marche, en service
+  disque 12 12 9.5 ; coul=vert
+  cercle 12 12 9.5 ; coul=vert-fonce ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.3
+== pastille-rouge | Pastille rouge | pastille, voyant, rouge, défaut, arrêt
+  disque 12 12 9.5 ; coul=rouge
+  cercle 12 12 9.5 ; coul=rouge-fonce ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.3
+== pastille-orange | Pastille orange | pastille, voyant, orange, alerte, attente
+  disque 12 12 9.5 ; coul=orange
+  cercle 12 12 9.5 ; coul=#B5620E ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.3
+== pastille-jaune | Pastille jaune | pastille, voyant, jaune, avertissement
+  disque 12 12 9.5 ; coul=jaune
+  cercle 12 12 9.5 ; coul=#B38F00 ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.35
+== pastille-bleue | Pastille bleue | pastille, voyant, bleu, information, manuel
+  disque 12 12 9.5 ; coul=bleu
+  cercle 12 12 9.5 ; coul=bleu-fonce ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.3
+== pastille-grise | Pastille grise | pastille, voyant, gris, inactif, hors service
+  disque 12 12 9.5 ; coul=gris
+  cercle 12 12 9.5 ; coul=gris-fonce ep=1.2
+  ovale 9.5 8.6 3.6 2.1 ; coul=blanc op=0.3
+== statut-ok | État correct | état, ok, correct, vert, coche
+  disque 12 12 10 ; coul=vert
+  trait M7.3 12.4l3.2 3.2 6.3-6.6 ; coul=blanc ep=2.4
+== statut-erreur | Erreur | état, erreur, défaut, rouge, croix
+  disque 12 12 10 ; coul=rouge
+  trait M8.3 8.3l7.4 7.4M15.7 8.3l-7.4 7.4 ; coul=blanc ep=2.4
+== statut-alerte | Alerte | état, alerte, avertissement, orange
+  disque 12 12 10 ; coul=orange
+  trait M12 6.5v7 ; coul=blanc ep=2.6
+  disque 12 17.2 1.5 ; coul=blanc
+== statut-info | Information (pastille) | état, information, bleu, info
+  disque 12 12 10 ; coul=bleu
+  trait M12 10.5v7 ; coul=blanc ep=2.6
+  disque 12 6.8 1.5 ; coul=blanc
+== statut-aide | Aide (pastille) | état, aide, question, bleu
+  disque 12 12 10 ; coul=bleu
+  trait M9.3 9.3a2.8 2.8 0 1 1 3.9 2.6c-.8.4-1.2 1-1.2 1.8v.6 ; coul=blanc ep=2.2
+  disque 12 17.2 1.4 ; coul=blanc
+== statut-arret | Arrêté | état, arrêt, stoppé, gris
+  disque 12 12 10 ; coul=gris
+  pave 8 8 8 8 1 ; coul=blanc
+== badge-1 | Badge 1 | badge, numéro, 1, un, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 1 12 12 10 ; coul=blanc ep=2.2
+== badge-2 | Badge 2 | badge, numéro, 2, deux, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 2 12 12 10 ; coul=blanc ep=2.2
+== badge-3 | Badge 3 | badge, numéro, 3, trois, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 3 12 12 10 ; coul=blanc ep=2.2
+== badge-4 | Badge 4 | badge, numéro, 4, quatre, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 4 12 12 10 ; coul=blanc ep=2.2
+== badge-5 | Badge 5 | badge, numéro, 5, cinq, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 5 12 12 10 ; coul=blanc ep=2.2
+== badge-6 | Badge 6 | badge, numéro, 6, six, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 6 12 12 10 ; coul=blanc ep=2.2
+== badge-7 | Badge 7 | badge, numéro, 7, sept, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 7 12 12 10 ; coul=blanc ep=2.2
+== badge-8 | Badge 8 | badge, numéro, 8, huit, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 8 12 12 10 ; coul=blanc ep=2.2
+== badge-9 | Badge 9 | badge, numéro, 9, neuf, étape
+  disque 12 12 10 ; coul=bleu
+  chiffre 9 12 12 10 ; coul=blanc ep=2.2
+== cercle | Cercle | cercle, rond, forme
+  cercle 12 12 9
+== disque | Disque | disque, rond plein, point, forme
+  disque 12 12 9
+== carre | Carré | carré, forme, cadre
+  rect 3.5 3.5 17 17 .5
+== carre-plein | Carré plein | carré plein, forme, bloc
+  pave 3.5 3.5 17 17 .5
+== carre-arrondi | Carré arrondi | carré arrondi, bouton, forme
+  rect 3.5 3.5 17 17 4.5
+== triangle | Triangle | triangle, forme
+  trait M12 3.5L21.5 20h-19z
+== triangle-plein | Triangle plein | triangle plein, forme
+  plein M12 3L22 20.5H2z
+== losange | Losange | losange, forme, décision
+  trait M12 2.5l9.5 9.5-9.5 9.5L2.5 12z
+== hexagone | Hexagone | hexagone, forme
+  contour 12,2.5 20.2,7.25 20.2,16.75 12,21.5 3.8,16.75 3.8,7.25
+== etoile-forme | Étoile pleine | étoile, forme, note
+  etoile-pleine 12 12.8 10 4.2 5
+== coeur | Cœur | cœur, favori, santé
+  trait M12 20.5s-8.5-5.2-8.5-11.2a4.5 4.5 0 0 1 8.5-2 4.5 4.5 0 0 1 8.5 2c0 6-8.5 11.2-8.5 11.2z
+== fleche-bloc | Flèche pleine | flèche, pleine, direction, forme
+  plein M3 9h10V4.5l8.5 7.5-8.5 7.5V15H3z
+== bulle | Bulle | bulle, message, commentaire, dialogue
+  trait M4 5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 5z
+== anneau | Anneau | anneau, cercle épais, forme
+  cercle 12 12 7.5 ; ep=4
+
+# ============================================================================
+#  Les aides : les pictogrammes des panneaux (dessines, pas livres seuls).
+= _Aides
+== _chaleur | Chaleur | -
+  trait M3.5 20h17
+  trait M8 16.5c-1.5-1.8 1.5-3.2 0-5s1.5-3.2 0-5
+  trait M12 16.5c-1.5-1.8 1.5-3.2 0-5s1.5-3.2 0-5
+  trait M16 16.5c-1.5-1.8 1.5-3.2 0-5s1.5-3.2 0-5
+== _crane | Crâne | -
+  plein M12 3a6.5 6.5 0 0 0-6.5 6.5c0 2.4 1.2 4 2.5 4.8V17h8v-2.7c1.3-.8 2.5-2.4 2.5-4.8A6.5 6.5 0 0 0 12 3zM9.3 8a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6zM14.7 8a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z ; regle=pairimpair
+  trait M4.5 18.5l15 3.5M4.5 22l15-3.5
+== _flamme-pleine | Flamme | -
+  plein M12 21.5c-3.9 0-6.5-2.6-6.5-6 0-3.2 2.2-4.8 3.6-7 .4 1.8 1.3 2.8 2.4 3.3.1-3.1 1.6-5.8 4.2-7.8.2 3.3 2.8 5.1 2.8 10 0 4-2.6 7.5-6.5 7.5z
+== _explosion | Explosion | -
+  etoile-pleine 11.5 13 9 4.2 8 -80
+  pave 18.5 2.5 2.5 2.5 .3
+  pave 2.5 3.5 2 2 .3
+  pave 19.5 17 2 2 .3
+== _radiation | Radiation | -
+  trefle 12 12 2.8 9.5
+== _laser | Laser | -
+  trait M2.5 12h8
+  disque 15 12 2
+  trait M15 5.5v2.5M15 16v2.5M21.5 12H19M10.4 7.4l1.7 1.7M19.6 7.4l-1.7 1.7M10.4 16.6l1.7-1.7M19.6 16.6l-1.7-1.7
+== _aimant | Aimant | -
+  trait M7 3.5v8a5 5 0 0 0 10 0v-8 ; ep=3.4 bout=carre
+  trait M5 7h4M15 7h4 ; ep=1.4
+  trait M3 18.5c2.5 2.6 15.5 2.6 18 0 ; ep=1.4
+== _corrosif | Corrosif | -
+  trait M4 4.5l7.5 3.8-1.8 3.6-7.5-3.8z
+  disque 11.5 14 1
+  disque 9.5 16.5 1
+  trait M3.5 20.5h17
+  trait M14 20.5l1.5-2.5 1.5 2.5
+== _cigarette | Cigarette | -
+  pave 2.5 13 14 3.5 .5
+  pave 17.5 13 4 3.5 .5
+  trait M18 10.5c-1-1.5 1-2.5 0-4M20.5 10.5c-1-1.5 1-2.5 0-4 ; ep=1.6
+== _pieton | Piéton | -
+  disque 13.2 4.2 2.1
+  trait M12.6 7.6L11 13.6
+  trait M11 13.6l3 3 1.2 4.6
+  trait M11 13.6l-2 3.6-2.6 3.3
+  trait M12.4 8.6l3.2 2.8 2.4-.6
+  trait M12.4 8.6l-3.2 2-1 3.2
+== _main | Main | -
+  pave 7 10.5 10.5 9 3
+  trait M8.2 11V5.5M11.1 10.5V3.6M14 10.5V4.2M16.6 11.5V6.6 ; ep=2.4
+  trait M7.6 15.6L4.3 12.4 ; ep=2.4
+  pave 8.5 18.5 7.5 3.5 1
+== _casque | Casque | -
+  plein M4.5 16a7.5 7.5 0 0 1 15 0z
+  pave 2.5 16 19 2.6 1.3
+== _lunettes | Lunettes | -
+  rect 2.5 9.5 8 6 3
+  rect 13.5 9.5 8 6 3
+  trait M10.5 11.5c1-.8 2-.8 3 0
+== _gant | Gant | -
+  plein M7 20v-3.5L4.3 13.8a1.4 1.4 0 0 1 2.2-1.7L8.5 14V5.8a1.3 1.3 0 0 1 2.6 0V11 4.6a1.3 1.3 0 0 1 2.6 0V11 5.4a1.3 1.3 0 0 1 2.6 0v6.1V7.6a1.3 1.3 0 0 1 2.6 0V15c0 2.5-1 4-2.5 5z
+  pave 6.5 20.5 10.5 2.5 .5
+== _botte | Botte | -
+  plein M6 3.5h5.5v9l6 2.2c1.6.6 2.5 1.9 2.5 3.5V20H4.5V5a1.5 1.5 0 0 1 1.5-1.5z
+  pave 4 20.5 16.5 2 .8
+== _antibruit | Casque antibruit | -
+  trait M5.5 13v-2a6.5 6.5 0 0 1 13 0v2
+  pave 3 12 5 8 2
+  pave 16 12 5 8 2
+== _masque | Masque | -
+  cercle 12 11 8
+  disque 9.2 8.8 1.1
+  disque 14.8 8.8 1.1
+  plein M6.5 12.2h11c0 3.8-2.4 6.6-5.5 6.6s-5.5-2.8-5.5-6.6z
+  trait M4.2 12.8l2.6-.4M19.8 12.8l-2.6-.4
+== _gilet | Gilet | -
+  trait M8 3.5L4 6v14.5h6.5V12M16 3.5L20 6v14.5h-6.5V12M8 3.5c0 2.5 1.6 4.5 4 4.5s4-2 4-4.5
+  trait M4 15h6.5M13.5 15H20
+== _livre | Livre | -
+  trait M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5zM12 6.5v13
+== _croix | Croix | -
+  plein M9.5 4h5v5.5H20v5h-5.5V20h-5v-5.5H4v-5h5.5z
+== _sortie | Sortie | -
+  trait M15 3.5h5.5v17H15
+  disque 9 5 1.9
+  trait M8.5 8.3l-1.5 5 3 2.5.6 4.7
+  trait M7 13.3l-1.3 3.4-2.7 2.6
+  trait M8.6 9l3.3 2.4 2.6-.4
+  trait M8.6 9l-3 1.6-1.4 2.6
+== _douche | Douche | -
+  trait M4 3.5h8.5v3
+  plein M7.5 10.5a5 4 0 0 1 10 0z
+  trait M9 13.5l-1 3M12.5 13.5v3.5M16 13.5l1 3M10.5 18.5l-.6 2M14.5 18.5l.6 2
+== _rince-oeil | Rince-oeil | -
+  trait M3 16c2.5-3.5 5.5-5 9-5s6.5 1.5 9 5c-2.5 3.5-5.5 5-9 5s-6.5-1.5-9-5z
+  disque 12 16 2.2
+  trait M8 9c0-2 1-3.5 2-4.5M16 9c0-2-1-3.5-2-4.5
+== _coeur-eclair | Coeur et eclair | -
+  plein M12 20.5s-8.5-5.2-8.5-11.2a4.5 4.5 0 0 1 8.5-2 4.5 4.5 0 0 1 8.5 2c0 6-8.5 11.2-8.5 11.2zM12.8 8.5l-3 5h2.6l-1 4.5 3.6-6h-2.7l.8-3.5z ; regle=pairimpair
+== _extincteur | Extincteur | -
+  plein M9 9a3 3 0 0 1 6 0v12H9z
+  trait M12 6V3.5M10 3.5h4.5
+  trait M14.5 4.5c2.5 0 4 1.2 4.5 3.5l.5 3
+== _ria | RIA | -
+  cercle 10 12 7
+  cercle 10 12 3.8
+  disque 10 12 1.5
+  trait M17 12h4v6.5
+== _nuage-plein | Nuage plein | -
+  plein M7 18.5a4.5 4.5 0 0 1-.4-9 5.8 5.8 0 0 1 11.2 1.2 3.9 3.9 0 0 1 .2 7.8z ; coul=nuage bord=gris epb=1
+== _nuage-sombre | Nuage sombre | -
+  plein M7 18.5a4.5 4.5 0 0 1-.4-9 5.8 5.8 0 0 1 11.2 1.2 3.9 3.9 0 0 1 .2 7.8z ; coul=gris bord=gris-fonce epb=1

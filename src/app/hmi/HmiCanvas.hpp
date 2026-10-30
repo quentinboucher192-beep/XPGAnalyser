@@ -32,6 +32,7 @@
 #include "HmiPainter.hpp"
 #include "../../core/Command.hpp"
 #include "../../core/Signal.hpp"
+#include "../../hmi/HmiAssets.hpp"     // 1.14.1 (lot N6) : poser une image de la bibliotheque d'images
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiEdit.hpp"
@@ -73,6 +74,18 @@ public:
     // au clic suivant, ou la ou elle est lachee (glissee depuis la bibliotheque).
     void setPlaceVariable(std::optional<hmi::design::VarInfo> variable);
     [[nodiscard]] const std::optional<hmi::design::VarInfo>& placeVariable() const noexcept { return placeVariable_; }
+    // 1.14.1 (lot N6) : poser une image de la bibliotheque d'images (l'onglet Images) : au clic suivant, ou la ou
+    // elle est lachee. L'Image posee cite sa ressource, importee dans le meme pas (Ctrl+Z retire les deux) ; le meme
+    // contenu deja dans le projet est reutilise. `ink` : la couleur de ses traits monochromes.
+    struct PlaceImage {
+        hmi::imagelib::Image image;
+        std::uint32_t        ink{hmi::imagelib::kInk};
+    };
+    void setPlaceImage(std::optional<PlaceImage> image);
+    [[nodiscard]] const std::optional<PlaceImage>& placeImage() const noexcept { return placeImage_; }
+    // Poser tout de suite (le double-clic, les scripts, les essais) : son coin haut-gauche a `at` (la vue) ; sans :
+    // centree sur ce qu'on voit de la vue. Rend l'objet pose (kNoId : rien).
+    hmi::Id placeImageNow(const hmi::imagelib::Image& image, std::uint32_t ink, std::optional<hmi::edit::Pt> at = std::nullopt);
     void setShowHidden(bool on) { showHidden_ = on; invalidate(); }
     [[nodiscard]] bool showHidden() const noexcept { return showHidden_; }
 
@@ -281,6 +294,8 @@ private:
     std::optional<hmi::Kind> placeKind_;
     std::string            placeSymbol_;       // lot 10 : placeKind_ = SymbolInstance
     std::optional<hmi::design::VarInfo> placeVariable_;   // lot 12 : placeKind_ = l'objet de la variable
+    std::optional<PlaceImage> placeImage_;                // 1.14.1 (lot N6) : placeKind_ = Image
+    hmi::Id placeImageAt(const PlaceImage& image, double x, double y);
     bool                   downHere_{false};   // lot 12 : l'appui a eu lieu ici (sinon : un lacher venu de la bibliotheque)
     void placeAt(gfx::Point screen, bool keep);
     bool                   showHidden_{false};
