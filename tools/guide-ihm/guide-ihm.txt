@@ -153,6 +153,9 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **Agrandir** : tire un bord ou un coin - la **poignée** en bas à droite (trois petits traits) est la plus commode ; le bord pris se colore. Une fenêtre ne devient pas plus petite que sa taille d'origine : son contenu y est placé.
 - **En grand** : un double clic sur la barre de titre la met en grand ; un autre la rend à sa place. Tirée par son titre, une fenêtre en grand reprend sa taille sous la souris.
 - **Retenue** : rouverte pendant la séance, une fenêtre revient là où tu l'as laissée, à la taille choisie.
+@nouveau 1.14.1
+### Le pointeur : étirer, déplacer, écrire (1.14.1)
+Comme sous Windows, le pointeur dit ce que fera la souris avant le clic : la **double flèche** horizontale ou verticale sur un séparateur entre deux panneaux (l'arbre du projet, l'explorateur, l'inspecteur, le panneau du bas, les groupes d'onglets, une fenêtre détachée) et sur le bord d'une colonne dans les titres d'un tableau ; la **croix à quatre flèches** sur ce qui se déplace (la barre de titre d'une fenêtre, l'objet choisi dans l'éditeur de vues) ; la **barre en I** sur un champ de saisie, un éditeur de code, une case en édition. Pendant le glisser, il garde sa forme même si la souris sort de la zone ; un séparateur ou une colonne lâché hors de son panneau s'arrête là. En simulation, les objets de l'IHM en marche gardent la flèche : seuls les curseurs A et B d'une courbe pilotable (la double flèche), la barre de titre d'une popup déplaçable et la progression d'une relecture (la main) changent.
 
 == zoom | Le zoom des pages
 : Chaque page se zoome tout entière : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, les icônes, les hauteurs et les marges grandissent ensemble ; chaque page garde le sien, d'une séance à l'autre.
@@ -690,6 +693,8 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 - Alt + glisser pose une copie ;
 - la grille, le magnétisme (grille, bords des autres objets, espacement égal) et les guides V / H s'activent dans la barre d'outils ;
 - l'onglet **Variables** de la bibliothèque pose une variable d'un geste (voir « Concevoir plus vite »).
+@nouveau 1.14.1
+- **le pointeur** dit ce que fera le glisser : la croix à quatre flèches sur l'objet choisi (le déplacer) et sur les sommets d'une ligne ou d'une tuyauterie, sur ses poignées la double flèche de leur sens (un objet tourné a ses flèches tournées), la main sur la poignée ronde, la croix fine quand un objet attend d'être posé, la croix à quatre flèches Espace tenu (faire défiler), la double flèche sur une règle ou un guide ; un objet ou un calque verrouillé garde la flèche.
 ### Sélectionner, grouper, aligner
 - un cadre tiré dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute un ;
 @nouveau 1.12.3
@@ -10074,11 +10079,14 @@ Pendant la relecture :
 - les **courbes**, **chronogrammes**, **histogrammes** et **courbes XY** se refont depuis la piste jusqu'à l'instant rejoué (leur mémoire du direct revient en quittant) ; les **flèches de tendance** et les **compteurs de production** ne sont pas dans la piste : ils montrent l'état du direct, figé (le bandeau le dit quand la vue en a) ;
 - une popup montre ses paramètres **Copie** et **Les deux** tels qu'ils étaient (ceux d'un type objet - LIST, une structure à membre objet - ne s'enregistrent pas) ;
 - la barre du bas : la **progression** (un clic ou un glisser va à l'instant ; ses repères : une alarme en rouge, un clic à la couleur d'accent, un changement de vue en gris), **Début**, **−10 s**, **Pause / Lecture**, **+10 s**, **Fin**, le temps (02:15 / 05:30), les vitesses **×0,25 ×0,5 ×1 ×2 ×4 ×8**, **Quitter** ; entre les deux, le rappel des touches, en bref quand la place manque (son infobulle dit tout : les touches, les couleurs des repères).
+@nouveau 1.14.1
+- **les sons** se rejouent comme ils ont joué - les alarmes et leur répétition, `IHM_SON` des scripts, l'action Jouer un son -, sur le canal **Relecture** du Mélangeur de volume : de ×0,25 à ×2 tous, à ×4 et ×8 les sons d'alarme seulement (une fois chacun ; le bouton dit alors **Alarmes**). Le bouton **Sons**, à côté des vitesses (ou la touche **S**), coupe ou rétablit ce canal - le même état que le M de la piste Relecture du Mélangeur et que SYS.MuteReplay : actif, le haut-parleur ; coupé, barré sur fond rouge ; tout le son coupé (Paramètres système, le Coupe-son), barré et estompé (quand la barre est étroite, le haut-parleur seul, sans son mot ; son infobulle dit l'état). En pause, après un saut (−10 s, +10 s, Début, Fin, la barre) et en quittant, ce qui jouait se tait ; ce qui a été sauté ne se rejoue pas. Un son qui n'est plus une ressource du projet ne se rejoue pas (la Console le dit une fois) ; un enregistrement fait sans les sons (Configuration › Enregistrements › Sons décochée) le dit dans la barre.
 | Touche | Effet |
 | Espace | pause, lecture |
 | ← → | 10 s en arrière, en avant |
 | + − | plus vite, moins vite |
 | Début, Fin | au début, à la fin |
+| S | les sons de la relecture : coupés, rétablis (1.14.1) |
 | Échap | quitter la relecture |
 **Quitter** rend l'IHM exactement comme elle était : la vue, les popups, les alarmes, l'utilisateur, la langue, les courbes. Pendant la relecture, l'heure de l'IHM s'arrête (ses temporisations reprennent là où elles étaient) mais **les dates suivent l'heure du PC** : en quittant, SYS.Date, SYS.Time, les horodatages des alarmes, du journal et de l'audit, les rapports à leur heure ne retardent pas du temps passé à rejouer. **L'API simulée se met en pause** : rien ne bouge derrière le film ; elle repart en quittant - et aussi si l'on ferme l'onglet Simulation pendant la relecture. Un automate réel (relié, ou au poste) continue : l'IHM ne lui écrit rien tant qu'elle rejoue. En simulation, la relecture est dans la vue de la simulation ; au poste d'exploitation, elle prend tout l'écran.
 Un enregistrement d'une autre version du projet se rejoue aussi : ce qui n'existe plus (une variable, une vue, un objet) est ignoré, et signalé une fois (la barre et la Console le disent).
@@ -10102,7 +10110,7 @@ Un fichier `.xrec` fabriqué pour nuire ne fait pas déborder la mémoire : l'en
 | Durée au plus (min) | 30 | Celle d'un enregistrement sans durée donnée. |
 | Prises par seconde | 10 | Dix fois par seconde ; seul ce qui change s'écrit. |
 | Pointeur et clics | coché | La souris (le doigt) et ses clics. |
-| Sons | coché | Rejoués sur le canal Relecture. |
+| Sons (pour les entendre à la relecture) | coché | Les sons joués pendant l'enregistrement, rejoués sur le canal Relecture ; décochée, la relecture est muette, et le dit (1.14.1). |
 | Popups | coché | Les popups et leurs paramètres. |
 | Accepter les commandes d'une autre application | décoché | Voir ci-dessous. |
 ### Depuis une autre application

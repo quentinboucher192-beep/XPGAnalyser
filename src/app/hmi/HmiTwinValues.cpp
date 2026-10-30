@@ -1256,7 +1256,15 @@ void HmiTwinValues::paintCurves(const ui::PaintContext& ctx, const gfx::Rect& ar
     }
 }
 
+std::optional<ui::cursor::Shape> HmiTwinValues::cursorAt(gfx::Point p) const {
+    const Part part = hit(p).second;
+    if (part == Part::Low || part == Part::High) return ui::cursor::Shape::ResizeEW;
+    if (part == Part::Band) return ui::cursor::Shape::Move;
+    return std::nullopt;
+}
+
 void HmiTwinValues::onPaint(const ui::PaintContext& ctx) {
+    if (drag_.on) ui::cursor::hold(drag_.part == Part::Band ? ui::cursor::Shape::Move : ui::cursor::Shape::ResizeEW);   // 1.14.1 (N2)
     auto& g = ctx.r;
     const auto& th = ctx.theme;
     const auto b = bounds();

@@ -299,6 +299,21 @@ const std::vector<Topic>& topics() {
                          "reprend sa taille sous la souris.", {}, "1.12.21"},
              {K::Bullet, "**Retenue** : rouverte pendant la s\xC3\xA9" "ance, une fen\xC3\xAAtre revient "
                          "l\xC3\xA0 o\xC3\xB9 tu l'as laiss\xC3\xA9" "e, \xC3\xA0 la taille choisie.", {}, "1.12.21"},
+             {K::Heading, "Le pointeur : \xC3\xA9tirer, d\xC3\xA9placer, \xC3\xA9" "crire (1.14.1)", {}, "1.14.1"},
+             {K::Paragraph, "Comme sous Windows, le pointeur dit ce que fera la souris avant le clic : la "
+                         "**double fl\xC3\xA8" "che** horizontale ou verticale sur un s\xC3\xA9parateur "
+                         "entre deux panneaux (l'arbre du projet, l'explorateur, l'inspecteur, le panneau du "
+                         "bas, les groupes d'onglets, une fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e) et sur "
+                         "le bord d'une colonne dans les titres d'un tableau ; la **croix \xC3\xA0 quatre "
+                         "fl\xC3\xA8" "ches** sur ce qui se d\xC3\xA9place (la barre de titre d'une "
+                         "fen\xC3\xAAtre, l'objet choisi dans l'\xC3\xA9" "diteur de vues) ; la **barre en "
+                         "I** sur un champ de saisie, un \xC3\xA9" "diteur de code, une case en "
+                         "\xC3\xA9" "dition. Pendant le glisser, il garde sa forme m\xC3\xAAme si la souris "
+                         "sort de la zone ; un s\xC3\xA9parateur ou une colonne l\xC3\xA2" "ch\xC3\xA9 hors "
+                         "de son panneau s'arr\xC3\xAAte l\xC3\xA0. En simulation, les objets de l'IHM en "
+                         "marche gardent la fl\xC3\xA8" "che : seuls les curseurs A et B d'une courbe "
+                         "pilotable (la double fl\xC3\xA8" "che), la barre de titre d'une popup "
+                         "d\xC3\xA9pla\xC3\xA7" "able et la progression d'une relecture (la main) changent.", {}, "1.14.1"},
          },
          {"historique", "ihm", "equipements", "aller-a", "excel"},
          {"sous-onglets", "sous-onglet", "onglets", "fen\xC3\xAAtre", "fen\xC3\xAAtres", "d\xC3\xA9placer", "agrandir", "redimensionner", "barre de titre", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci", "disposition", "Disposition", "panneaux", "Ctrl+Maj+K", "clic droit", "menu contextuel", "Maj+F10", "Ctrl+Maj+T", "Rouvrir"},
@@ -1417,6 +1432,14 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9gal) et les guides V / H s'activent dans la barre d'outils ;", {}},
              {K::Bullet, "l'onglet **Variables** de la biblioth\xC3\xA8que pose une variable d'un geste "
                          "(voir \xC2\xAB Concevoir plus vite \xC2\xBB).", {}},
+             {K::Bullet, "**le pointeur** dit ce que fera le glisser : la croix \xC3\xA0 quatre "
+                         "fl\xC3\xA8" "ches sur l'objet choisi (le d\xC3\xA9placer) et sur les sommets d'une "
+                         "ligne ou d'une tuyauterie, sur ses poign\xC3\xA9" "es la double fl\xC3\xA8" "che "
+                         "de leur sens (un objet tourn\xC3\xA9 a ses fl\xC3\xA8" "ches tourn\xC3\xA9" "es), "
+                         "la main sur la poign\xC3\xA9" "e ronde, la croix fine quand un objet attend "
+                         "d'\xC3\xAAtre pos\xC3\xA9, la croix \xC3\xA0 quatre fl\xC3\xA8" "ches Espace tenu "
+                         "(faire d\xC3\xA9" "filer), la double fl\xC3\xA8" "che sur une r\xC3\xA8gle ou un "
+                         "guide ; un objet ou un calque verrouill\xC3\xA9 garde la fl\xC3\xA8" "che.", {}, "1.14.1"},
              {K::Heading, "S\xC3\xA9lectionner, grouper, aligner", {}},
              {K::Bullet, "un cadre tir\xC3\xA9 dans la vue choisit plusieurs objets ; Ctrl + clic en ajoute "
                          "un ;", {}},
@@ -20820,9 +20843,27 @@ const std::vector<Topic>& topics() {
                          "\xC3\x97" "8**, **Quitter** ; entre les deux, le rappel des touches, en bref quand "
                          "la place manque (son infobulle dit tout : les touches, les couleurs des "
                          "rep\xC3\xA8res).", {}},
+             {K::Bullet, "**les sons** se rejouent comme ils ont jou\xC3\xA9 - les alarmes et leur "
+                         "r\xC3\xA9p\xC3\xA9tition, `IHM_SON` des scripts, l'action Jouer un son -, sur le "
+                         "canal **Relecture** du M\xC3\xA9langeur de volume : de \xC3\x97" "0,25 \xC3\xA0 "
+                         "\xC3\x97" "2 tous, \xC3\xA0 \xC3\x97" "4 et \xC3\x97" "8 les sons d'alarme "
+                         "seulement (une fois chacun ; le bouton dit alors **Alarmes**). Le bouton **Sons**, "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 des vitesses (ou la touche **S**), coupe ou "
+                         "r\xC3\xA9tablit ce canal - le m\xC3\xAAme \xC3\xA9tat que le M de la piste "
+                         "Relecture du M\xC3\xA9langeur et que SYS.MuteReplay : actif, le haut-parleur ; "
+                         "coup\xC3\xA9, barr\xC3\xA9 sur fond rouge ; tout le son coup\xC3\xA9 "
+                         "(Param\xC3\xA8tres syst\xC3\xA8me, le Coupe-son), barr\xC3\xA9 et estomp\xC3\xA9 "
+                         "(quand la barre est \xC3\xA9troite, le haut-parleur seul, sans son mot ; son "
+                         "infobulle dit l'\xC3\xA9tat). En pause, apr\xC3\xA8s un saut (\xE2\x88\x92" "10 s, "
+                         "+10 s, D\xC3\xA9" "but, Fin, la barre) et en quittant, ce qui jouait se tait ; ce "
+                         "qui a \xC3\xA9t\xC3\xA9 saut\xC3\xA9 ne se rejoue pas. Un son qui n'est plus une "
+                         "ressource du projet ne se rejoue pas (la Console le dit une fois) ; un "
+                         "enregistrement fait sans les sons (Configuration \xE2\x80\xBA Enregistrements "
+                         "\xE2\x80\xBA Sons d\xC3\xA9" "coch\xC3\xA9" "e) le dit dans la barre.", {}, "1.14.1"},
              {K::Table, "Touche\tEffet\nEspace\tpause, lecture\n\xE2\x86\x90 \xE2\x86\x92\t10 s en "
                          "arri\xC3\xA8re, en avant\n+ \xE2\x88\x92\tplus vite, moins vite\nD\xC3\xA9" "but, "
-                         "Fin\tau d\xC3\xA9" "but, \xC3\xA0 la fin\n\xC3\x89" "chap\tquitter la relecture", {}},
+                         "Fin\tau d\xC3\xA9" "but, \xC3\xA0 la fin\nS\tles sons de la relecture : "
+                         "coup\xC3\xA9s, r\xC3\xA9tablis (1.14.1)\n\xC3\x89" "chap\tquitter la relecture", {}},
              {K::Paragraph, "**Quitter** rend l'IHM exactement comme elle \xC3\xA9tait : la vue, les popups, "
                          "les alarmes, l'utilisateur, la langue, les courbes. Pendant la relecture, l'heure "
                          "de l'IHM s'arr\xC3\xAAte (ses temporisations reprennent l\xC3\xA0 o\xC3\xB9 elles "
@@ -20899,9 +20940,12 @@ const std::vector<Topic>& topics() {
                          "dit.\nDur\xC3\xA9" "e au plus (min)\t30\tCelle d'un enregistrement sans "
                          "dur\xC3\xA9" "e donn\xC3\xA9" "e.\nPrises par seconde\t10\tDix fois par seconde ; "
                          "seul ce qui change s'\xC3\xA9" "crit.\nPointeur et clics\tcoch\xC3\xA9\tLa souris "
-                         "(le doigt) et ses clics.\nSons\tcoch\xC3\xA9\tRejou\xC3\xA9s sur le canal "
-                         "Relecture.\nPopups\tcoch\xC3\xA9\tLes popups et leurs param\xC3\xA8tres.\nAccepter "
-                         "les commandes d'une autre application\td\xC3\xA9" "coch\xC3\xA9\tVoir ci-dessous.", {}},
+                         "(le doigt) et ses clics.\nSons (pour les entendre \xC3\xA0 la "
+                         "relecture)\tcoch\xC3\xA9\tLes sons jou\xC3\xA9s pendant l'enregistrement, "
+                         "rejou\xC3\xA9s sur le canal Relecture ; d\xC3\xA9" "coch\xC3\xA9" "e, la relecture "
+                         "est muette, et le dit (1.14.1).\nPopups\tcoch\xC3\xA9\tLes popups et leurs "
+                         "param\xC3\xA8tres.\nAccepter les commandes d'une autre "
+                         "application\td\xC3\xA9" "coch\xC3\xA9\tVoir ci-dessous.", {}},
              {K::Heading, "Depuis une autre application", {}},
              {K::Paragraph, "Un banc de test, un script, une supervision lance l'enregistrement ou la relecture "
                          "par la ligne de commande :", {}},

@@ -85,6 +85,9 @@ public:
     bool closeRequested(std::uint32_t windowId);
     // La souris a quitte la fenetre : plus de survol, plus d'infobulle.
     void mouseLeft(std::uint32_t windowId);
+    // 1.14.1 (N2) : le pointeur que la fenetre `windowId` a demande a son dernier
+    // dessin (ui::cursor) ; une fenetre inconnue : la fleche.
+    [[nodiscard]] ui::cursor::Shape cursorOf(std::uint32_t windowId) const;
     // Le titre donne a detach (ou a setTitle), "" si `page` n'est pas detachee.
     [[nodiscard]] std::string titleOf(const ui::Widget* page) const;
     // L'onglet a change de nom : la bande et le titre de la fenetre suivent.

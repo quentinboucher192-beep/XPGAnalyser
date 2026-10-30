@@ -239,6 +239,22 @@ public:
     [[nodiscard]] gfx::Rect eventBounds() const override;
     [[nodiscard]] bool      dragging() const noexcept { return drag_ != Drag::None; }
 
+    // ---- 1.14.1 (N2) : LE POINTEUR (ui::cursor), dans l'ordre ou la souris cherche ----
+    //  une regle : la double fleche du guide qu'on en tire (celle du haut : un guide
+    //  horizontal, NS) - la fleche si les guides sont verrouilles ; Espace tenu : deplacer
+    //  (faire defiler) ; un objet a poser, une zone a tracer : la croix fine ; un sommet de
+    //  la ligne, de la tuyauterie choisie : deplacer ; une poignee : la double fleche de son
+    //  sens (celui de l'objet tourne), la poignee ronde : la main ; un guide : EW ou NS ; un
+    //  objet CHOISI qu'on peut deplacer : deplacer. Un objet, un calque verrouille : la
+    //  fleche. Pendant un glisser, la forme du geste reste (au dessin).
+    [[nodiscard]] std::optional<ui::cursor::Shape> cursorAt(gfx::Point local) const override;
+    // La double fleche de la poignee `h` (0 le coin haut-gauche, puis dans le sens des
+    // aiguilles d'une montre ; 8 la rotation : la main).
+    [[nodiscard]] ui::cursor::Shape handleCursor(int h) const;
+    [[nodiscard]] int  handleUnder(gfx::Point screen) const { return handleAt(screen); }   // essais
+    [[nodiscard]] std::vector<gfx::Point> handlesForTest() const { return handlePoints(); }
+    void setSpaceHeldForTest(bool on) noexcept { spaceDown_ = on; }
+
     // ---- pour les tests et les captures -------------------------------------
     void setHoverForTest(hmi::Id id) { hover_ = id; }
     void setMarqueeForTest(const hmi::Box& b) { marquee_ = b; marqueeShown_ = true; }

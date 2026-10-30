@@ -359,13 +359,25 @@ ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const 
     x += 4.f;
     r.drawText({x, textY}, time, f.ui, col.text);
     x += std::max(r.measure(time, f.ui).width, r.measure("00:00 / 00:00", f.ui).width) + 12.f;
-    // Quitter, a droite ; les vitesses entre les deux.
+    // Quitter, a droite ; les vitesses entre les deux, puis le bouton Sons (1.14.1, N3).
     const float quitBtnW = std::max(80.f, r.measure("Quitter", f.ui).width + 24.f);
+    const std::string soundsText = info.soundsMuted ? "Coup\xC3\xA9s" : info.alarmSoundsOnly ? "Alarmes" : "Sons";
     const float right = c.bar.right() - pad - quitBtnW - 6.f;
+    // Son libelle (Sons, Coupes, Alarmes) seulement si la legende des touches garde sa place (sa zone, son infobulle) et
+    // ses touches (une forme plus courte, si) ; sinon le haut-parleur seul - son etat se lit a l'icone et au fond rouge,
+    // le detail en infobulle.
+    const float labelW = std::max({r.measure("Coup\xC3\xA9s", f.ui).width, r.measure("Alarmes", f.ui).width, r.measure("Sons", f.ui).width})
+                         + rowH * 0.7f + 22.f;
+    const float iconW = rowH * 0.6f + 18.f;
+    const float speedsEnd = x + static_cast<float>(std::size(hmi::rec::kSpeeds)) * (44.f + 2.f) + 10.f;
+    const float helpWith = right - (speedsEnd + labelW + 6.f), helpWithout = right - (speedsEnd + iconW + 6.f);
+    const bool soundsLabel = helpWith > 4.f && replayLegend(r, f.smallUi, helpWith).empty() == replayLegend(r, f.smallUi, helpWithout).empty();
+    const float soundsW = soundsLabel ? labelW : iconW;
+    const float speedsRight = right - soundsW - 16.f;   // les vitesses s'arretent avant le bouton Sons
     float speedW = 44.f;
     const float speedsW = static_cast<float>(std::size(hmi::rec::kSpeeds)) * (speedW + 2.f);
-    if (x + speedsW > right) speedW = std::max(30.f, (right - x) / static_cast<float>(std::size(hmi::rec::kSpeeds)) - 2.f);
-    if (x + static_cast<float>(std::size(hmi::rec::kSpeeds)) * (speedW + 2.f) <= right + 1.f) {
+    if (x + speedsW > speedsRight) speedW = std::max(30.f, (speedsRight - x) / static_cast<float>(std::size(hmi::rec::kSpeeds)) - 2.f);
+    if (x + static_cast<float>(std::size(hmi::rec::kSpeeds)) * (speedW + 2.f) <= speedsRight + 1.f) {
         for (const double v : hmi::rec::kSpeeds) {
             const bool on = std::fabs(v - info.speed) < 1e-6;
             const std::string t = speedText(v);
@@ -380,12 +392,47 @@ ReplayChrome paintReplayChrome(gfx::IRenderer& r, const ui::Theme& theme, const 
         }
         x += 10.f;
     }
+    // 1.14.1 (N3) : LE BOUTON SONS - le canal Relecture (le M de sa piste au Melangeur, SYS.MuteReplay ; la touche S).
+    // Actif : le haut-parleur et ses ondes ; coupe : barre, sur le fond rouge ; tout le son coupe (le General) : barre,
+    // estompe. A x4 et x8 : "Alarmes" (seuls les sons d'alarme se rejouent).
+    if (x + soundsW <= right) {
+        const bool muted = info.soundsMuted, silenced = !muted && info.soundsGeneralMuted;
+        const gfx::Rect b{x, rowY, soundsW, rowH};
+        const bool over = b.contains(mouse);
+        const gfx::Color bg = muted ? (over ? red.withAlpha(220) : red) : silenced ? red.withAlpha(90) : over ? col.selectionBg : col.headerBg;
+        r.fillRoundedRect(b, bg, 4.f);
+        if (!muted) r.strokeRect(b, col.border, 1.f);
+        const gfx::Color ink = muted ? col.textInverted : silenced ? col.textMuted : col.text;
+        const float g = rowH * 0.6f, k = g / 16.f, gx = soundsLabel ? b.x + 9.f : b.x + (b.w - g) / 2.f, gy = b.y + (b.h - g) / 2.f;
+        const auto P = [&](float px, float py) { return gfx::Point{gx + px * k, gy + py * k}; };
+        ui::shapes::fillPolygon(r, std::vector<gfx::Point>{P(1.5f, 6), P(4.5f, 6), P(8.5f, 2.5f), P(8.5f, 13.5f), P(4.5f, 10), P(1.5f, 10)}, ink);
+        const float t = std::max(1.f, 1.5f * k);
+        if (muted || silenced) {
+            r.line(P(10.5f, 5.5f), P(15, 10.5f), ink, t);
+            r.line(P(15, 5.5f), P(10.5f, 10.5f), ink, t);
+        } else {
+            for (const float rad : {3.5f, 6.2f})
+                ui::shapes::strokePolyline(r, ui::shapes::arc(P(8.5f, 8), rad * k, -48.f, 48.f, 16), false, ink, t);
+        }
+        if (soundsLabel) r.drawText({gx + g + 6.f, textY}, soundsText, f.ui, ink);
+        c.parts.emplace_back("sons", b);
+        x += soundsW + 6.f;
+        c.soundsTip = std::string(muted ? "Sons de la relecture : coup\xC3\xA9s"
+                                  : silenced ? "Sons de la relecture : actifs, mais tout le son est coup\xC3\xA9 (G\xC3\xA9n\xC3\xA9ral)"
+                                  : info.alarmSoundsOnly ? "Sons de la relecture : les sons d'alarme seulement (\xC3\x97" "4, \xC3\x97" "8)"
+                                                         : "Sons de la relecture : actifs")
+                      + " - un clic (ou S) les coupe ou les r\xC3\xA9tablit : le canal Relecture du M\xC3\xA9langeur (SYS.MuteReplay).\n"
+                      + "Se rejouent : les alarmes et leur r\xC3\xA9p\xC3\xA9tition, IHM_SON, l'action Jouer un son - de \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "2 ; "
+                      + "\xC3\xA0 \xC3\x97" "4 et \xC3\x97" "8, les sons d'alarme seulement. En pause, apr\xC3\xA8s un saut, en quittant : ce qui jouait se tait.";
+        if (!info.header.soundsKept)
+            c.soundsTip += "\nCet enregistrement a \xC3\xA9t\xC3\xA9 fait sans les sons (Configuration \xE2\x80\xBA Enregistrements \xE2\x80\xBA Sons).";
+    }
     // L'aide des touches (ou ce qui a change dans le projet depuis l'enregistrement), dans ce qui reste.
     // 1.14.0 (captures finales) : LA LEGENDE TIENT DANS SA PLACE - la plus longue de ses formes qui y entre (les touches
     // et les couleurs des reperes ; les touches seules ; les touches en bref) ; le tout, en infobulle sur elle (la
     // partie "help"). Avant, une seule phrase, coupee au milieu ("... rouge : alarme - co...").
     c.helpTip = "Les touches : Espace, pause ou lecture ; \xE2\x86\x90 \xE2\x86\x92, 10 s en arri\xC3\xA8re ou en avant ; D\xC3\xA9" "but, Fin ; "
-                "+ \xE2\x88\x92, la vitesse ; \xC3\x89" "chap quitte la relecture.\n"
+                "+ \xE2\x88\x92, la vitesse ; S, les sons ; \xC3\x89" "chap quitte la relecture.\n"
                 "Les rep\xC3\xA8res de la barre : rouge, une alarme ; couleur d'accent, un clic ; gris, une autre vue "
                 "(survoler un rep\xC3\xA8re le d\xC3\xA9" "crit).";
     std::string help;

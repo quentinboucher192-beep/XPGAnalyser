@@ -519,6 +519,11 @@ namespace ui {
         });
     }
 
+    std::optional<cursor::Shape> InputText::cursorAt(gfx::Point local) const {
+        if (!bounds().contains(local)) return std::nullopt;
+        return cursor::Shape::Text;
+    }
+
     gfx::Rect InputText::eventBounds() const {
         if (suggestions_.empty()) return bounds();
         const auto b = bounds();
@@ -2002,10 +2007,27 @@ namespace ui {
     }
 
     // -------------------------------------------------------------- painting ---
+    std::optional<cursor::Shape> MultiLineText::cursorAt(gfx::Point p) const {
+        const auto r = bounds();
+        if (!r.contains(p)) return std::nullopt;
+        if (completionOpen() && completionBox_.contains(p)) return cursor::Shape::Default;
+        if (barMode_ != BarMode::None && barBox_.contains(p))   // ses deux champs (chercher, remplacer) : la barre en I
+            return barField0_.contains(p) || barField1_.contains(p) ? cursor::Shape::Text : cursor::Shape::Default;
+        const auto inner = contentRect();
+        // Les barres de defilement, la ou onPaint les dessine (et la ou handleEvent les prend).
+        if (paintLineHeight_ > 0.f && !visible_.empty()) {
+            if (static_cast<float>(visible_.size()) * paintLineHeight_ > inner.h && p.x >= r.right() - 12.f) return cursor::Shape::Default;
+            if (paintContentW_ > inner.w && p.y >= r.bottom() - 12.f) return cursor::Shape::Default;
+        }
+        if (p.x < inner.x + paintGutter_) return cursor::Shape::Default;   // la marge
+        return cursor::Shape::Text;
+    }
+
     void MultiLineText::onPaint(const PaintContext& ctx) {
         const auto& c = ctx.theme.color;
         const auto  r = bounds();
         const auto  f = scaledFont(ctx.theme.font.mono);
+        if (selecting_) cursor::hold(cursor::Shape::Text);   // 1.14.1 (N2) : un choix a la souris en cours
 
         ctx.r.fillRect(r, c.inputBg);
         ctx.r.strokeRect(r, focused() ? c.accent : c.border, 1.f);

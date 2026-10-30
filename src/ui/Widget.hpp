@@ -18,8 +18,10 @@
 #include "../platform/Renderer.hpp"
 #include "Theme.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,6 +32,63 @@ namespace ui {
     class Widget;
     using WidgetPtr = std::unique_ptr<Widget>;
     struct ZoomMap;     // 1.12.30 : ui/Zoom.hpp (la correspondance de deux reperes)
+
+    // ---------------------------------------------------------------------------
+    //  1.14.1 (N2) : LE POINTEUR - LA BONNE FLECHE DE WINDOWS. La ou l'on peut
+    //  etirer, deplacer ou ecrire, le pointeur le dit avant le clic : une double
+    //  fleche sur un separateur, le bord d'une colonne, une poignee ; la croix a
+    //  quatre branches sur ce qui se deplace ; la barre en I sur un texte.
+    //
+    //  UNE DEMANDE PAR IMAGE, remise a zero a chaque image (begin) :
+    //    - le SURVOL : l'hote (WidgetMenu pour la couche du dessus, WidgetHost
+    //      pour une fenetre detachee) demande (request) la forme du widget le
+    //      plus profond sous la souris qui en dit une (Widget::cursorAt) - une
+    //      liste ouverte d'abord, comme les infobulles ; rien : la fleche. La
+    //      derniere demande de l'image gagne (dialogframe passe apres l'arbre :
+    //      la barre de titre et les bords d'un dialogue) ;
+    //    - le GESTE : un widget en train de tirer (un separateur, un bord de
+    //      colonne, une poignee) le dit a son dessin (hold) ; jusqu'au lacher, la
+    //      forme du geste passe devant tout survol, meme la souris sortie de la
+    //      zone. La pipette des palettes aussi (la croix fine).
+    //  App lit shown() de la fenetre ou est la souris et ne change le pointeur du
+    //  systeme (SDL_SetCursor) que quand il change. Sans ecran (les essais), tout
+    //  cela existe pareil : la demande se lit.
+    // ---------------------------------------------------------------------------
+    namespace cursor {
+        // Les formes de Windows (SDL_SYSTEM_CURSOR_* du meme nom).
+        enum class Shape : std::uint8_t {
+            Default,     // la fleche
+            Text,        // la barre en I (un champ, un editeur de code, une case en edition)
+            Pointer,     // la main (une barre de progression qu'on tire, la poignee de rotation)
+            Crosshair,   // la croix fine (la pipette, poser un objet)
+            Move,        // la croix a quatre fleches (deplacer)
+            ResizeEW,    // <-> (un separateur vertical, le bord d'une colonne)
+            ResizeNS,    // la double fleche verticale
+            ResizeNWSE,  // la diagonale haut-gauche / bas-droite
+            ResizeNESW,  // la diagonale haut-droite / bas-gauche
+        };
+        // Une nouvelle image (une fenetre) : demandes et gestes oublies.
+        void begin() noexcept;
+        // Le survol : la derniere demande de l'image gagne.
+        void request(Shape s) noexcept;
+        // Un geste en cours (appele au dessin, a chaque image du geste) : passe
+        // devant tout survol ; le dernier gagne.
+        void hold(Shape s) noexcept;
+        // Ce que montre l'image : le geste, sinon la derniere demande, sinon la fleche.
+        [[nodiscard]] Shape shown() noexcept;
+        [[nodiscard]] bool  held() noexcept;          // un geste dans cette image
+        // La double fleche la plus proche d'un sens a l'ecran (y vers le bas) :
+        // (1, 0) ResizeEW, (0, 1) ResizeNS, (1, 1) ResizeNWSE, (1, -1) ResizeNESW.
+        // Les poignees d'un objet tourne prennent ainsi la fleche de leur sens.
+        [[nodiscard]] Shape resizeFor(float dx, float dy) noexcept;
+        // Le pointeur sous `surface` (un point de la surface) dans l'arbre `root` :
+        // ce qui peint par-dessus tout (une liste ouverte) d'abord, puis le plus
+        // profond qui en dit un ; sinon la fleche.
+        [[nodiscard]] Shape at(Widget& root, gfx::Point surface);
+        // Le nom d'une forme (essais, scripts) : "fleche", "texte", "main",
+        // "croix", "deplacer", "ew", "ns", "nwse", "nesw".
+        [[nodiscard]] std::string_view name(Shape s) noexcept;
+    } // namespace cursor
 
     // ---------------------------------------------------------------------------
     //  Platform services the widget layer needs but must not link against.
@@ -275,6 +334,14 @@ namespace ui {
         // Deepest visible widget under `p` that has a tooltip. Deepest wins: a
         // tooltip on a cell should beat one on the panel that contains it.
         [[nodiscard]] const Widget* tooltipAt(gfx::Point p) const;
+
+        // 1.14.1 (N2) : LE POINTEUR (ui::cursor). La forme qu'il prend, la souris
+        // posee en `local` (le repere du widget) sur lui ; rien (le defaut) : il
+        // n'en dit pas - ce qui est dessous (le parent) decide. Un widget hors
+        // service n'est pas interroge. cursorUnder : `p` dans le repere du PARENT
+        // (comme tooltipAt) - le plus profond visible qui en dit une.
+        [[nodiscard]] virtual std::optional<cursor::Shape> cursorAt(gfx::Point local) const;
+        [[nodiscard]] std::optional<cursor::Shape> cursorUnder(gfx::Point p) const;
 
         // --- 1.12.30 : LE CONTRAT DU ZOOM ---------------------------------------
         //  zoomSupport() dit si le widget se zoome. Scaled : la BASE s'en charge -

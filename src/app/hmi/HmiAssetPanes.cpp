@@ -1559,8 +1559,12 @@ void HmiRecordingSettingsPane::refresh() {
                                    "10 : dix fois par seconde. Seul ce qui change est \xC3\xA9" "crit ; une image compl\xC3\xA8te toutes les 5 s."));
     what.properties.push_back(prop("Pointeur et clics", tf(r.pointer), PG::ValueType::Boolean, commit("pointeur"),
                                    "La souris (ou le doigt) de l'op\xC3\xA9rateur et ses clics, rejou\xC3\xA9s en fant\xC3\xB4me."));
-    what.properties.push_back(prop("Sons", tf(r.sounds), PG::ValueType::Boolean, commit("sons"),
-                                   "Les sons jou\xC3\xA9s (alarmes, actions, scripts) : rejou\xC3\xA9s sur le canal Relecture."));
+    // 1.14.1 (N3) : le libelle et l'infobulle disent qu'il faut la cocher pour entendre les sons a la relecture.
+    what.properties.push_back(prop("Sons (pour les entendre \xC3\xA0 la relecture)", tf(r.sounds), PG::ValueType::Boolean, commit("sons"),
+                                   "Coch\xC3\xA9" "e (par d\xC3\xA9" "faut) : les sons qui jouent pendant l'enregistrement - les alarmes et leur "
+                                   "r\xC3\xA9p\xC3\xA9tition, IHM_SON des scripts, l'action Jouer un son - sont not\xC3\xA9s, et s'entendent "
+                                   "\xC3\xA0 la relecture sur le canal Relecture (le bouton Sons de la barre, le M\xC3\xA9langeur). "
+                                   "D\xC3\xA9" "coch\xC3\xA9" "e : l'enregistrement n'en garde aucun ; sa relecture est muette, et le dit."));
     what.properties.push_back(prop("Popups", tf(r.popups), PG::ValueType::Boolean, commit("popups"),
                                    "Les popups ouvertes et leurs param\xC3\xA8tres. D\xC3\xA9" "coch\xC3\xA9 : la vue seule."));
     cats.push_back(std::move(what));

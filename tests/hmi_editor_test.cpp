@@ -97,6 +97,7 @@
 #include "../src/app/hmi/HmiTypePicker.hpp"          // 1.11.19 (refonte, lot 6) : le selecteur de types
 #include "../src/ui/DialogFrame.hpp"                 // 1.12.21 : les fenetres se deplacent et s'agrandissent
 #include "../src/app/hmi/HmiSimulation.hpp"
+#include "../src/ui/widgets/TabArea.hpp"             // 1.14.1 (lot N2) : la poignee entre deux groupes d'onglets
 #include "../src/app/hmi/HmiBuildPanes.hpp"         // 1.11.16 : le double-clic vers la source
 #include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
 #include "../src/app/ExportTarget.hpp"                 // lot API 8 : les exports qui demandent ou
@@ -19153,7 +19154,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 468,   // 1.14.1 : + 5 (N1 : les vannes et les registres a fins de course ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 472,   // 1.14.1 : + 9 (N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -40781,12 +40782,12 @@ void enregistrements1140() {
                 if (said.rfind("Esp", 0) == 0) legend = said;
             return std::make_pair(legend, chrome.part("help").w > 0.f && !chrome.helpTip.empty());
         };
-        const auto [mid, midTip] = legendAt(1200.f);
+        const auto [mid, midTip] = legendAt(1300.f);   // 1.14.1 (N3) : 1200 -> 1300 px, le bouton Sons a pris sa place
         const auto [wide, wideTip] = legendAt(2000.f);
         check(midTip && wideTip && mid.rfind("Espace pause", 0) == 0 && mid.find("rouge") == std::string::npos
                   && mid.find("\xE2\x80\xA6") == std::string::npos && wide.find("rouge : alarme") != std::string::npos
                   && wide.find("\xE2\x80\xA6") == std::string::npos,
-              "1200 px : les touches (" + mid + ") ; 2000 px : avec les couleurs des rep\xC3\xA8res (" + wide + ")");
+              "1300 px : les touches (" + mid + ") ; 2000 px : avec les couleurs des rep\xC3\xA8res (" + wide + ")");
         const gfx::Rect help = pane.canvas().replayChrome().part("help");
         const std::string tip = help.w > 0 ? pane.canvas().liveTooltip({help.x + help.w / 2, help.y + help.h / 2}) : std::string{};
         check(help.w > 0 && pane.canvas().hasTooltip() && tip.find("rouge, une alarme") != std::string::npos && tip.find("Espace") != std::string::npos,
@@ -42372,6 +42373,529 @@ void imagesN6_1141() {
     fs::remove_all(disk2.parent_path(), ec);
 }
 
+// ---- 1.14.1 (lot N2) : la bonne fleche de Windows - la ou l'on peut etirer, deplacer, ecrire ----
+// ui::cursor : une demande par image (le plus profond sous la souris gagne), le geste devant tout survol (au dessin) ;
+// les separateurs, les bords des colonnes, les champs et les editeurs de code, les groupes d'onglets, l'editeur de
+// vues (les 8 poignees, tournees ; le corps ; verrouille ; les regles et les guides ; poser ; les sommets), la courbe
+// en marche (les curseurs A et B, la fenetre de temps), la barre de titre et les bords d'un dialogue (non-regression).
+namespace n2 {
+template <class T>
+T* firstOf(ui::Widget& w) {
+    if (!w.visible()) return nullptr;
+    if (auto* t = dynamic_cast<T*>(&w); t && w.bounds().w > 20.f && w.bounds().h > 10.f && w.enabled()) return t;
+    for (const auto& c : w.children())
+        if (T* f = firstOf<T>(*c)) return f;
+    return nullptr;
+}
+struct TableModel final : ui::ITableModel {
+    std::size_t rowCount() const override { return 3; }
+    std::size_t columnCount() const override { return 2; }
+    std::string headerText(std::size_t c) const override { return c ? "Valeur" : "Nom"; }
+    std::string cellText(ui::RowIndex r, std::size_t c) const override { return std::to_string(r * 10 + c); }
+    bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+};
+} // namespace n2
+
+void pointeurs1141() {
+    std::printf("== 1.14.1 (N2) : le pointeur - etirer, deplacer, ecrire (ui::cursor) ==\n");
+    namespace cu = ui::cursor;
+    using S = cu::Shape;
+    const auto theme = ui::Theme::dark();
+    const auto nm = [](S s) { return std::string(cu::name(s)); };
+    // Une image de `w` : le geste qu'il tient a son dessin (rien : la fleche).
+    const auto heldBy = [&](ui::Widget& w) {
+        cu::begin();
+        Recorder rec;
+        w.render(ui::PaintContext{rec, theme, w.bounds(), 1.0, nullptr});
+        return cu::held() ? cu::shown() : S::Default;
+    };
+    // Un evenement comme le passe un hote : la souris tenue d'abord, puis l'arbre.
+    const auto send = [](ui::Widget& root, const ui::InputEvent& ev) {
+        if (!ui::Widget::routeCapturedMouse(root, ev)) (void)root.dispatch(ev);
+    };
+
+    // ---- 1. le mecanisme
+    cu::begin();
+    check(cu::shown() == S::Default && !cu::held(), "rien de demand\xC3\xA9 : la fl\xC3\xA8" "che");
+    cu::request(S::ResizeEW);
+    cu::request(S::Text);
+    check(cu::shown() == S::Text, "la derni\xC3\xA8re demande de l'image gagne");
+    cu::hold(S::ResizeNS);
+    cu::request(S::Move);
+    check(cu::shown() == S::ResizeNS && cu::held(), "un geste en cours passe devant tout survol");
+    cu::begin();
+    check(cu::shown() == S::Default && !cu::held(), "remis \xC3\xA0 z\xC3\xA9ro \xC3\xA0 chaque image");
+    check(cu::resizeFor(1, 0) == S::ResizeEW && cu::resizeFor(0, -1) == S::ResizeNS && cu::resizeFor(1, 1) == S::ResizeNWSE
+              && cu::resizeFor(-1, 1) == S::ResizeNESW && cu::resizeFor(1, -1) == S::ResizeNESW && cu::resizeFor(-1, -1) == S::ResizeNWSE
+              && cu::resizeFor(10, 1) == S::ResizeEW,
+          "le sens d'une poign\xC3\xA9" "e : la double fl\xC3\xA8" "che la plus proche (y vers le bas)");
+
+    // ---- 2. un separateur (les volets de l'API, de l'IHM, les fenetres detachees : ui::Splitter)
+    {
+        ui::Splitter sp(ui::Orientation::Horizontal, "n2.split");
+        sp.addPane(std::make_unique<ui::Widget>("n2.gauche"), 0.5f);
+        sp.addPane(std::make_unique<ui::Widget>("n2.droite"), 0.5f);
+        sp.setBounds({0, 0, 805, 400});
+        sp.layout();
+        const gfx::Rect h = sp.handleRect(0);
+        const gfx::Point on{h.x + h.w / 2, 200}, off{h.x - 40, 200};
+        check(h.w > 0 && cu::at(sp, on) == S::ResizeEW, "s\xC3\xA9parateur entre deux volets c\xC3\xB4te \xC3\xA0 c\xC3\xB4te : <-> (" + nm(cu::at(sp, on)) + ")");
+        check(cu::at(sp, off) == S::Default, "\xC3\xA0 c\xC3\xB4t\xC3\xA9, dans un volet : la fl\xC3\xA8" "che");
+        sp.dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        const auto before = sp.ratios();
+        send(sp, ui::MouseMove{{on.x + 100, 900}, {}, {}});
+        check(heldBy(sp) == S::ResizeEW, "tir\xC3\xA9 puis sorti de la zone : la double fl\xC3\xA8" "che du geste reste");
+        check(sp.ratios() != before, "... et le s\xC3\xA9parateur suit la souris hors de lui (la souris tenue)");
+        send(sp, ui::MouseUp{{on.x + 100, 900}, ui::MouseButton::Left, {}});
+        check(!sp.dragging() && heldBy(sp) == S::Default,
+              "l\xC3\xA2" "ch\xC3\xA9 dehors : le glisser finit, la fl\xC3\xA8" "che revient (avant : la poign\xC3\xA9" "e restait prise)");
+        ui::Splitter col(ui::Orientation::Vertical, "n2.splitV");
+        col.addPane(std::make_unique<ui::Widget>("n2.haut"), 0.5f);
+        col.addPane(std::make_unique<ui::Widget>("n2.bas"), 0.5f);
+        col.setBounds({0, 0, 600, 405});
+        col.layout();
+        const gfx::Rect hv = col.handleRect(0);
+        check(cu::at(col, {300, hv.y + hv.h / 2}) == S::ResizeNS, "s\xC3\xA9parateur entre deux volets empil\xC3\xA9s (le panneau du bas) : NS");
+    }
+
+    // ---- 3. le bord d'une colonne dans les titres d'un tableau
+    {
+        ui::TableView t("n2.table");
+        t.setModel(std::make_shared<n2::TableModel>());
+        t.setColumns({{"Nom", 150.f}, {"Valeur", 200.f}});
+        t.setBounds({0, 0, 600, 300});
+        t.layout();
+        (void)heldBy(t);   // un dessin : la hauteur des titres
+        const gfx::Rect a = t.contentRect();
+        const gfx::Point edge{a.x + 150.f, a.y + 8.f};
+        check(cu::at(t, edge) == S::ResizeEW, "le bord d'une colonne dans les titres : <-> (" + nm(cu::at(t, edge)) + ")");
+        check(cu::at(t, {edge.x - 50.f, edge.y}) == S::Default, "le milieu d'un titre : la fl\xC3\xA8" "che (un clic trie)");
+        check(cu::at(t, {edge.x, a.y + 90.f}) == S::Default, "le m\xC3\xAAme x dans les lignes : la fl\xC3\xA8" "che");
+        t.dispatch(ui::MouseDown{edge, ui::MouseButton::Left, 1, {}});
+        check(t.resizingColumn(), "un appui sur le bord : la colonne se tire");
+        send(t, ui::MouseMove{{edge.x + 60.f, 700.f}, {}, {}});
+        check(heldBy(t) == S::ResizeEW, "tir\xC3\xA9" "e hors du tableau : <-> reste");
+        near(t.columns()[0].width, 210.f, "... et la colonne suit la souris hors du tableau (150 + 60)");
+        send(t, ui::MouseUp{{edge.x + 60.f, 700.f}, ui::MouseButton::Left, {}});
+        check(!t.resizingColumn() && heldBy(t) == S::Default, "l\xC3\xA2" "ch\xC3\xA9" "e dehors : finie (avant : elle suivait encore la souris au retour)");
+        const float w = t.columns()[0].width;
+        send(t, ui::MouseMove{{edge.x + 10.f, a.y + 90.f}, {}, {}});
+        near(t.columns()[0].width, w, "rel\xC3\xA2" "ch\xC3\xA9" "e : revenir sur le tableau ne la tire plus");
+    }
+
+    // ---- 4. les champs, l'editeur de code, un bouton dessus, un champ hors service
+    {
+        ui::Widget panel("n2.panneau");
+        panel.setBounds({0, 0, 700, 420});
+        auto& field = static_cast<ui::InputText&>(panel.addChild(std::make_unique<ui::InputText>("n2.champ")));
+        field.setBounds({10, 10, 300, 28});
+        auto& code = static_cast<ui::MultiLineText&>(panel.addChild(std::make_unique<ui::MultiLineText>("n2.code")));
+        code.setBounds({10, 60, 500, 300});
+        code.setReadOnly(false);
+        code.setText("IF a THEN\n    b := 1;\nEND_IF;\n");
+        auto& btn = static_cast<ui::Button&>(panel.addChild(std::make_unique<ui::Button>("Go", "n2.bouton")));
+        btn.setBounds({420, 300, 60, 24});
+        panel.layout();
+        (void)heldBy(panel);   // un dessin : la marge de l'editeur
+        check(cu::at(panel, {60, 24}) == S::Text, "un champ de saisie : la barre en I");
+        check(cu::at(panel, {400, 24}) == S::Default, "\xC3\xA0 c\xC3\xB4t\xC3\xA9 du champ : la fl\xC3\xA8" "che");
+        const float textX = code.contentRect().x + code.gutterForTest() + 40.f;
+        check(cu::at(panel, {textX, 90}) == S::Text, "un \xC3\xA9" "diteur de code : la barre en I sur le texte");
+        check(cu::at(panel, {code.contentRect().x + 3.f, 90}) == S::Default, "sa marge (num\xC3\xA9ros, plis) : la fl\xC3\xA8" "che");
+        check(cu::at(panel, {450, 312}) == S::Default, "un bouton pos\xC3\xA9 sur l'\xC3\xA9" "diteur : la fl\xC3\xA8" "che (le plus profond gagne)");
+        code.dispatch(ui::MouseDown{{textX, 90}, ui::MouseButton::Left, 1, {}});
+        code.dispatch(ui::MouseMove{{textX + 30, 100}, {}, {}});
+        check(heldBy(code) == S::Text, "un choix \xC3\xA0 la souris en cours : la barre en I reste");
+        code.dispatch(ui::MouseUp{{textX + 30, 100}, ui::MouseButton::Left, {}});
+        check(heldBy(code) == S::Default, "rel\xC3\xA2" "ch\xC3\xA9 : plus de geste");
+        field.setEnabled(false);
+        check(cu::at(panel, {60, 24}) == S::Default, "un champ hors service : la fl\xC3\xA8" "che");
+    }
+
+    // ---- 5. les groupes d'onglets du centre : la poignee entre deux groupes
+    {
+        ui::TabArea area("n2.onglets");
+        area.addTab({"Un"}, std::make_unique<ui::Widget>("n2.p1"));
+        area.addTab({"Deux"}, std::make_unique<ui::Widget>("n2.p2"));
+        area.setBounds({0, 0, 900, 500});
+        area.layout();
+        check(area.splitTab(1, ui::TabArea::Side::Right), "un onglet mis \xC3\xA0 droite : deux groupes");
+        area.layout();
+        const auto handles = area.splitHandles();
+        check(handles.size() == 1, "une poign\xC3\xA9" "e entre les groupes");
+        if (!handles.empty()) {
+            const gfx::Point at{handles[0].x + handles[0].w / 2, 250};
+            check(cu::at(area, at) == S::ResizeEW, "la poign\xC3\xA9" "e entre deux groupes c\xC3\xB4te \xC3\xA0 c\xC3\xB4te : <-> (" + nm(cu::at(area, at)) + ")");
+            check(cu::at(area, {at.x - 150, 250}) == S::Default, "dans un groupe : la fl\xC3\xA8" "che");
+            area.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+            area.dispatch(ui::MouseMove{{at.x + 40, 250}, {}, {}});
+            check(heldBy(area) == S::ResizeEW, "tir\xC3\xA9" "e : <-> reste");
+            area.dispatch(ui::MouseUp{{at.x + 40, 250}, ui::MouseButton::Left, {}});
+            check(heldBy(area) == S::Default, "l\xC3\xA2" "ch\xC3\xA9" "e : la fl\xC3\xA8" "che");
+        }
+    }
+
+    // ---- 6. l'editeur de vues : les 8 poignees, le corps, un autre objet, tourne, verrouille, pendant un glisser
+    {
+        Bench b;
+        auto& c = b.editor->canvas();
+        const auto at = [&](gfx::Point screen) { return cu::at(*b.editor, c.toSurface(screen)); };
+        const Id r = b.place(Kind::Rectangle, 200, 200);   // 160 x 100, choisi
+        b.editor->layout();
+        const auto shapesOfHandles = [&](std::string& got) {
+            std::vector<S> out;
+            for (const auto& p : c.handlesForTest()) {
+                out.push_back(at(p));
+                got += nm(out.back()) + " ";
+            }
+            return out;
+        };
+        std::string got;
+        auto hs = shapesOfHandles(got);
+        const std::vector<S> straight{S::ResizeNWSE, S::ResizeNS, S::ResizeNESW, S::ResizeEW, S::ResizeNWSE, S::ResizeNS, S::ResizeNESW, S::ResizeEW, S::Pointer};
+        check(hs == straight, "les 8 poign\xC3\xA9" "es : coins NWSE / NESW, c\xC3\xB4t\xC3\xA9s NS / EW ; la ronde (tourner) : la main (" + got + ")");
+        check(at(b.screen(280, 250)) == S::Move, "le corps de l'objet choisi : d\xC3\xA9placer");
+        check(at(b.screen(700, 480)) == S::Default, "le vide de la vue : la fl\xC3\xA8" "che");
+        const Id r2 = b.place(Kind::Rectangle, 500, 200);
+        check(r2 != kNoId && at(b.screen(280, 250)) == S::Default && at(b.screen(580, 250)) == S::Move,
+              "un objet non choisi : la fl\xC3\xA8" "che ; celui qu'on vient de poser (choisi) : d\xC3\xA9placer");
+        // Tourne de 90 degres : les poignees tournent avec lui, leur fleche aussi.
+        c.setSelection({r});
+        c.rotateSelection(90);
+        got.clear();
+        hs = shapesOfHandles(got);
+        const std::vector<S> quarter{S::ResizeNESW, S::ResizeEW, S::ResizeNWSE, S::ResizeNS, S::ResizeNESW, S::ResizeEW, S::ResizeNWSE, S::ResizeNS, S::Pointer};
+        check(hs == quarter, "tourn\xC3\xA9 de 90\xC2\xB0 : la poign\xC3\xA9" "e du haut est sur un c\xC3\xB4t\xC3\xA9 (EW), les coins s'\xC3\xA9" "changent (" + got + ")");
+        c.rotateSelection(-45);
+        got.clear();
+        hs = shapesOfHandles(got);
+        check(hs.size() == 9 && (hs[0] == S::ResizeNS || hs[0] == S::ResizeEW) && (hs[1] == S::ResizeNWSE || hs[1] == S::ResizeNESW),
+              "tourn\xC3\xA9 de 45\xC2\xB0 : les coins prennent une fl\xC3\xA8" "che droite, les c\xC3\xB4t\xC3\xA9s une diagonale (" + got + ")");
+        c.rotateSelection(-45);
+        // Verrouille : ni poignees, ni deplacer.
+        const auto handles = c.handlesForTest();
+        b.v().object(r)->locked = true;
+        c.setSelection({r});
+        check(c.handlesForTest().empty() && !handles.empty() && at(handles[4]) == S::Default && at(b.screen(280, 250)) == S::Default,
+              "un objet verrouill\xC3\xA9 : la fl\xC3\xA8" "che (ni poign\xC3\xA9" "es, ni d\xC3\xA9placer)");
+        b.v().object(r)->locked = false;
+        hmi::Layer layer;
+        layer.id = b.doc->project.allocate();
+        layer.name = "Calque";
+        layer.locked = true;
+        b.v().layers.push_back(layer);
+        b.v().object(r)->layer = layer.id;
+        c.setSelection({r});
+        check(at(b.screen(280, 250)) == S::Default, "un calque verrouill\xC3\xA9 : la fl\xC3\xA8" "che");
+        b.v().object(r)->layer = kNoId;
+        c.setSelection({r});
+        // Pendant un glisser : la forme du geste, meme la souris sortie de la vue.
+        const auto pts = c.handlesForTest();
+        check(pts.size() == 9, "les poign\xC3\xA9" "es reviennent");
+        if (pts.size() == 9) {
+            b.down(pts[4]);
+            b.move({-400.f, -300.f});
+            check(heldBy(c) == S::ResizeNWSE, "le coin bas-droit tir\xC3\xA9, la souris hors de la vue : NWSE reste");
+            b.up({-400.f, -300.f});
+            (void)b.stack.undo();
+            check(heldBy(c) == S::Default, "l\xC3\xA2" "ch\xC3\xA9 : plus de geste");
+            b.down(pts[8]);
+            b.move({pts[8].x + 60.f, pts[8].y + 30.f});
+            check(heldBy(c) == S::Pointer, "la poign\xC3\xA9" "e ronde tir\xC3\xA9" "e : la main reste");
+            b.up({pts[8].x + 60.f, pts[8].y + 30.f});
+            (void)b.stack.undo();
+        }
+        b.down(b.screen(280, 250));
+        b.move({2500.f, 1500.f});
+        check(heldBy(c) == S::Move, "l'objet tir\xC3\xA9 hors de la vue : d\xC3\xA9placer reste");
+        b.up(b.screen(280, 250));
+        // Poser un objet : la croix ; Espace tenu : deplacer (faire defiler).
+        c.setPlaceKind(Kind::Ellipse);
+        check(at(b.screen(700, 480)) == S::Crosshair && at(b.screen(280, 250)) == S::Crosshair, "un objet \xC3\xA0 poser : la croix, partout sur la vue");
+        c.cancelPlacement();
+        c.setSpaceHeldForTest(true);
+        check(at(b.screen(700, 480)) == S::Move, "Espace tenu : d\xC3\xA9placer (faire d\xC3\xA9" "filer)");
+        c.setSpaceHeldForTest(false);
+        check(at(b.screen(700, 480)) == S::Default, "Espace l\xC3\xA2" "ch\xC3\xA9 : la fl\xC3\xA8" "che");
+        // Les sommets d'une forme : deplacer.
+        const Id poly = b.place(Kind::Polygon, 100, 400);   // sommets a l'ecran (160,400) (220,500) (100,500)
+        b.editor->layout();
+        check(poly != kNoId && c.vertexTarget().valid() && at(b.screen(160, 400)) == S::Move && at(b.screen(220, 500)) == S::Move,
+              "les sommets d'une forme choisie : d\xC3\xA9placer");
+    }
+
+    // ---- 7. les regles et les guides de l'editeur
+    {
+        Bench b;
+        auto& c = b.editor->canvas();
+        const auto at = [&](gfx::Point screen) { return cu::at(*b.editor, c.toSurface(screen)); };
+        b.editor->run(app::HmiEditor::ActRulers);
+        b.editor->layout();
+        const gfx::Rect top = c.topRuler(), left = c.leftRuler();
+        check(at({top.x + 200.f, top.y + 10.f}) == S::ResizeNS, "la r\xC3\xA8gle du haut (on en tire un guide horizontal) : NS");
+        check(at({left.x + 10.f, left.y + 200.f}) == S::ResizeEW, "la r\xC3\xA8gle de gauche (un guide vertical) : EW");
+        b.v().guides.push_back({true, 600});
+        b.v().guides.push_back({false, 400});
+        check(at(b.screen(600, 300)) == S::ResizeEW && at(b.screen(800, 400)) == S::ResizeNS && at(b.screen(650, 300)) == S::Default,
+              "un guide vertical : EW ; horizontal : NS ; \xC3\xA0 c\xC3\xB4t\xC3\xA9 : la fl\xC3\xA8" "che");
+        b.down({top.x + 300.f, top.y + 10.f});
+        b.move({top.x + 300.f, -200.f});
+        check(heldBy(c) == S::ResizeNS, "un guide tir\xC3\xA9 de la r\xC3\xA8gle, la souris sortie : NS reste");
+        b.up({top.x + 300.f, top.y + 5.f});
+        b.down(b.screen(600, 300));
+        b.move(b.screen(640, 300));
+        check(heldBy(c) == S::ResizeEW, "un guide vertical tir\xC3\xA9 : EW reste");
+        b.up(b.screen(640, 300));
+        b.editor->run(app::HmiEditor::ActGuidesLock);
+        check(at({top.x + 200.f, top.y + 10.f}) == S::Default && at(b.screen(640, 300)) == S::Default,
+              "guides verrouill\xC3\xA9s : ni la r\xC3\xA8gle ni un guide ne montrent la double fl\xC3\xA8" "che");
+        // Un champ de l'inspecteur : la barre en I.
+        if (auto* f = n2::firstOf<ui::InputText>(*b.editor)) {
+            const gfx::Rect fr = f->toSurface(f->bounds());
+            check(cu::at(*b.editor, {fr.x + fr.w / 2, fr.y + fr.h / 2}) == S::Text, "un champ de l'\xC3\xA9" "diteur (" + f->id() + ") : la barre en I");
+        } else {
+            check(false, "un champ dans l'\xC3\xA9" "diteur de vues");
+        }
+    }
+
+    // ---- 8. la courbe en marche : les curseurs A et B qu'on tire, la fenetre de temps qu'on fait glisser
+    {
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        Variable var;
+        var.id = p.allocate();
+        var.name = "Niveau";
+        var.type = "REAL";
+        var.initial = "42";
+        p.programs.variables.push_back(var);
+        View v = makeView(p, "Vue_Courbe");
+        v.width = 1000;
+        v.height = 600;
+        const Id trend = edit::add(p, v, Kind::Trend, 100, 100);
+        auto* o = v.object(trend);
+        o->name = "Courbe";
+        o->setNumber("w", 600);
+        o->setNumber("h", 300);
+        o->set("variables", "Niveau");
+        o->setNumber("duration", 10);
+        o->setFlag("pilotable", true);
+        p.config.startView = v.id;
+        p.views.push_back(v);
+        app::HmiSimulationHost host;
+        app::HmiSimulationPane pane("simN2", doc, host);
+        pane.setBounds({0, 0, 1600, 900});
+        Recorder rec;
+        const auto paintAt = [&](double t) {
+            rec.clear();
+            pane.layout();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+        };
+        for (double t = 0; t <= 12.01; t += 0.1) paintAt(t);
+        auto& cv = pane.canvas();
+        auto& rt = pane.runtime();
+        const Id view = p.views[0].id;
+        gfx::Rect plot{};
+        check(cv.partRect("Courbe", "trace", plot), "la zone de trace de la courbe pilotable");
+        const auto click = [&](gfx::Point at) {
+            cv.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+            cv.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+        };
+        check(cu::at(pane, {plot.x + plot.w * 0.5f, plot.y + 40.f}) == S::Default, "sans curseur, la zone de trace : la fl\xC3\xA8" "che");
+        click({plot.x + plot.w * 0.3f, plot.y + plot.h * 0.5f});
+        click({plot.x + plot.w * 0.7f, plot.y + plot.h * 0.5f});
+        const auto* st = rt.trendState(view, trend);
+        check(st && st->cursors(), "deux clics : les curseurs A et B");
+        if (st && st->cursors()) {
+            paintAt(12.1);
+            const auto w = rt.trendWindowOf(view, trend, 10);
+            const float ax = plot.x + static_cast<float>((*st->cursorA - w.first) / (w.second - w.first)) * plot.w;
+            const float bx = plot.x + static_cast<float>((*st->cursorB - w.first) / (w.second - w.first)) * plot.w;
+            check(cu::at(pane, {ax + 1.f, plot.y + 40.f}) == S::ResizeEW && cu::at(pane, {bx - 2.f, plot.y + 60.f}) == S::ResizeEW,
+                  "sur le curseur A, sur le curseur B : <-> (" + nm(cu::at(pane, {ax + 1.f, plot.y + 40.f})) + ")");
+            check(cu::at(pane, {(ax + bx) / 2.f, plot.y + 40.f}) == S::Default, "entre les deux : la fl\xC3\xA8" "che (un objet de l'IHM en marche)");
+            cv.dispatch(ui::MouseDown{{ax + 1.f, plot.y + 40.f}, ui::MouseButton::Left, 1, {}});
+            cv.dispatch(ui::MouseMove{{ax + 40.f, plot.y + 40.f}, {0, 0}, {}});
+            cu::begin();
+            paintAt(12.2);
+            check(cu::held() && cu::shown() == S::ResizeEW, "le curseur A tir\xC3\xA9 : <-> reste");
+            cv.dispatch(ui::MouseMove{{ax + 60.f, plot.bottom() + 120.f}, {0, 0}, {}});
+            cu::begin();
+            paintAt(12.3);
+            check(cu::held() && cu::shown() == S::ResizeEW, "... la souris sortie de la courbe aussi");
+            cv.dispatch(ui::MouseUp{{ax + 60.f, plot.bottom() + 120.f}, ui::MouseButton::Left, {}});
+            cu::begin();
+            paintAt(12.4);
+            check(!cu::held(), "l\xC3\xA2" "ch\xC3\xA9 : plus de geste");
+            // La fenetre de temps qu'on fait glisser : deplacer pendant le glisser.
+            const float mid = (ax + 40.f + bx) / 2.f;
+            cv.dispatch(ui::MouseDown{{mid, plot.y + plot.h - 30.f}, ui::MouseButton::Left, 1, {}});
+            cu::begin();
+            paintAt(12.5);
+            check(!cu::held(), "un appui sur la zone, sans glisser : pas encore de geste (un clic pose un curseur)");
+            for (int k = 1; k <= 3; ++k) cv.dispatch(ui::MouseMove{{mid + 20.f * static_cast<float>(k), plot.y + plot.h - 30.f}, {0, 0}, {}});
+            cu::begin();
+            paintAt(12.6);
+            check(cu::held() && cu::shown() == S::Move, "la fen\xC3\xAAtre de temps qu'on fait glisser : d\xC3\xA9placer pendant le glisser");
+            cv.dispatch(ui::MouseUp{{mid + 60.f, plot.y + plot.h - 30.f}, ui::MouseButton::Left, {}});
+        }
+    }
+
+    // ---- 9. non-regression : la barre de titre, les bords et le coin d'un dialogue (ui::dialogframe)
+    {
+        namespace df = ui::dialogframe;
+        df::reset();
+        auto doc = std::make_shared<Document>();
+        menu::MenuManager mm{menu::MenuFactory{}};
+        app::HmiTypePicker::Spec spec;
+        spec.field = "Type de Essai";
+        spec.current = "INT";
+        spec.use = hmi::typereg::UseVariable;
+        spec.doc = doc;
+        mm.ShowDialog(std::make_unique<app::HmiTypePicker>(std::move(spec)), [](const menu::DialogResult&) {});
+        mm.applyPending();
+        auto* picker = dynamic_cast<app::HmiTypePicker*>(mm.top());
+        check(picker != nullptr, "un dialogue ouvert (le s\xC3\xA9lecteur de types)");
+        if (picker) {
+            menu::FrameContext fc{};
+            fc.surface = {1600.f, 1000.f};
+            fc.theme = &theme;
+            mm.Update(fc);
+            const gfx::Rect f = df::frameOf(*picker->widgetRoot());
+            const auto shownAt = [&](gfx::Point pt) {
+                (void)mm.HandleEvent(ui::MouseMove{pt, {}, {}});
+                mm.Update(fc);
+                Recorder rr;
+                cu::begin();
+                mm.Render(rr, fc);
+                return cu::shown();
+            };
+            check(shownAt({f.x + 200.f, f.y + 15.f}) == S::Move, "la barre de titre : d\xC3\xA9placer (comme en 1.12.21, par ui::cursor)");
+            check(shownAt({f.right() - 1.f, f.y + 300.f}) == S::ResizeEW, "le bord droit : EW");
+            check(shownAt({f.x + 300.f, f.bottom() - 1.f}) == S::ResizeNS, "le bord du bas : NS");
+            check(shownAt({f.right() - 5.f, f.bottom() - 5.f}) == S::ResizeNWSE, "le coin bas-droit : NWSE");
+            check(shownAt({f.right() - 1.f, f.y + 1.f}) == S::ResizeNESW, "le coin haut-droit : NESW");
+            check(shownAt({f.x + 200.f, f.y + 66.f}) == S::Text, "la recherche du dialogue (un champ) : la barre en I");
+            (void)mm.HandleEvent(ui::MouseMove{{f.x + 200.f, f.y + 15.f}, {}, {}});
+            (void)mm.HandleEvent(ui::MouseDown{{f.x + 200.f, f.y + 15.f}, ui::MouseButton::Left, 1, {}});
+            check(shownAt({1590.f, 990.f}) == S::Move, "le titre tir\xC3\xA9, la souris loin du titre : d\xC3\xA9placer reste");
+            (void)mm.HandleEvent(ui::MouseUp{{1590.f, 990.f}, ui::MouseButton::Left, {}});
+            picker->finish(false);
+            mm.applyPending();
+        }
+        df::reset();
+    }
+}
+
+// ---- 1.14.1 (lot N3) : le bouton Sons de la barre de relecture (le canal Relecture : le M du Melangeur, SYS.MuteReplay) ----
+void sonsRelecture1141() {
+    std::printf("== 1.14.1 (N3) : le bouton Sons de la barre de relecture ==\n");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path()
+                         / ("xpg_n3_sons_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    auto doc = std::make_shared<Document>();
+    doc->savedFolder = dir.string();
+    auto& p = doc->project;
+    p.config.name = "Station";
+    p.config.cycleMs = 100;
+    View v = makeView(p, "Vue_Sons");
+    (void)edit::add(p, v, Kind::Button, 100, 100);
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    app::HmiSimulationHost host;
+    host.projectFolder = [dir] { return dir.string(); };
+    host.askRecordingStop = [](const hmi::RecordingStopAsk&, std::function<void(bool, std::string, std::string, std::string, bool)> done) {
+        done(true, "Essai sons", {}, {}, false);
+    };
+    app::HmiSimulationPane pane("simN3", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    double t = 0;
+    const auto frame = [&](double dt) {
+        t += dt;
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    frame(0);
+    frame(0.1);
+    pane.command("hmi.record");
+    for (int i = 0; i < 12; ++i) frame(0.1);
+    pane.command("hmi.record");
+    hmi::ReplayRequest rq;
+    rq.name = "Essai sons";
+    check(pane.replay(rq) == hmi::rec::Status::Ok && pane.runtime().replaying(), "rejouer");
+    frame(0.05);
+    const auto muted = [&] { return hmi::soundMuted(pane.runtime().settings(), hmi::SoundChannel::Replay); };
+    auto chrome = pane.canvas().replayChrome();
+    const gfx::Rect sons = chrome.part("sons"), s8 = chrome.part("speed:8"), help = chrome.part("help");
+    check(sons.w > 0 && s8.w > 0 && sons.x > s8.right() && help.w > 0 && sons.right() <= help.x,
+          "le bouton Sons, juste apr\xC3\xA8s les vitesses ; la l\xC3\xA9gende garde sa place (sa zone, son infobulle)");
+    const auto sonsTip = [&] {
+        const gfx::Rect b = pane.canvas().replayChrome().part("sons");
+        return pane.canvas().liveTooltip({b.x + b.w / 2, b.y + b.h / 2});
+    };
+    const std::string tip = sonsTip();
+    check(!muted() && tip.rfind("Sons de la relecture : actifs", 0) == 0, "actif : le haut-parleur (son infobulle : actifs)");
+    check(tip.find("SYS.MuteReplay") != std::string::npos && tip.find("\xC3\x97" "4") != std::string::npos,
+          "son infobulle : le canal Relecture, SYS.MuteReplay, les vitesses (" + tip.substr(0, 60) + "...)");
+    pane.canvas().dispatch(ui::MouseDown{{sons.x + sons.w / 2, sons.y + sons.h / 2}, ui::MouseButton::Left, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{sons.x + sons.w / 2, sons.y + sons.h / 2}, ui::MouseButton::Left, {}});
+    frame(0.05);
+    check(muted() && pane.runtime().replayInfo().soundsMuted && sonsTip().rfind("Sons de la relecture : coup", 0) == 0,
+          "un clic : le canal Relecture coup\xC3\xA9 (le M du M\xC3\xA9langeur, SYS.MuteReplay) ; le bouton barr\xC3\xA9 sur fond rouge");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::S, {}, false});
+    pane.canvas().dispatch(ui::TextInput{"s"});
+    frame(0.05);
+    check(!muted() && sonsTip().rfind("Sons de la relecture : actifs", 0) == 0 && pane.runtime().replaying(),
+          "la touche S : r\xC3\xA9tablis (rien ne s'\xC3\xA9" "crit dans la vue)");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::Replay, true, "M\xC3\xA9langeur");
+    frame(0.05);
+    check(sonsTip().rfind("Sons de la relecture : coup", 0) == 0, "coup\xC3\xA9 ailleurs (le M\xC3\xA9langeur, SYS.MuteReplay) : le bouton le montre");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::Replay, false, "M\xC3\xA9langeur");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::General, true, "essai");
+    frame(0.05);
+    chrome = pane.canvas().replayChrome();
+    const gfx::Rect sons2 = chrome.part("sons");
+    check(pane.canvas().liveTooltip({sons2.x + sons2.w / 2, sons2.y + sons2.h / 2}).find("tout le son est coup") != std::string::npos,
+          "tout le son coup\xC3\xA9 : le bouton barr\xC3\xA9, estomp\xC3\xA9 (son infobulle le dit)");
+    (void)pane.runtime().setChannelMuted(hmi::SoundChannel::General, false, "essai");
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Plus, {}, false});
+    frame(0.05);
+    check(pane.runtime().replayInfo().speed >= 4.0 && sonsTip().find("d'alarme seulement") != std::string::npos,
+          "\xC3\x97" "4 : les sons d'alarme seulement (le bouton le dit)");
+    // La barre seule, assez large : le bouton a son libelle (Sons, Coupes, Alarmes) ; etroite (celle de l'essai), le
+    // haut-parleur seul - la legende des touches garde sa forme et sa place.
+    {
+        const auto labelAt = [&](float w, bool mutedNow, bool alarms) {
+            Recorder br;
+            hmi::ReplayInfo ri;
+            ri.active = true;
+            ri.length = 25.0;
+            ri.position = 3.0;
+            ri.header.name = "Demarrage station";
+            ri.soundsMuted = mutedNow;
+            ri.alarmSoundsOnly = alarms;
+            const auto ch = app::paintReplayChrome(br, ui::Theme::dark(), {0.f, 0.f, w, 600.f}, ri, {}, {-1.f, -1.f});
+            std::string got = ch.part("sons").w > 0 ? "?" : "-";
+            for (const auto& said : br.texts)
+                if (said == "Sons" || said == "Coup\xC3\xA9s" || said == "Alarmes") got = said;
+            return got;
+        };
+        const std::string a = labelAt(1600.f, false, false), b = labelAt(1600.f, true, false), c = labelAt(1600.f, false, true),
+                          d = labelAt(893.f, false, false);
+        check(a == "Sons" && b == "Coup\xC3\xA9s" && c == "Alarmes" && d == "?",
+              "1600 px : Sons, Coup\xC3\xA9s, Alarmes ; 893 px : le haut-parleur seul (" + a + ", " + b + ", " + c + ", " + d + ")");
+    }
+    pane.canvas().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(!pane.runtime().replaying(), "\xC3\x89" "chap quitte");
+    fs::remove_all(dir, ec);
+}
+
 int main(int argc, char** argv) {
     // 1.14.1 (lot N6) : HMI_TEST_N6=1 - la bibliotheque d'images, seule.
     if (const char* only = std::getenv("HMI_TEST_N6"); only && *only == '1') {
@@ -42382,6 +42906,18 @@ int main(int argc, char** argv) {
     // 1.14.1 (lot N4) : HMI_TEST_N4=1 - la Calculatrice a l'ecran, seule.
     if (const char* only = std::getenv("HMI_TEST_N4"); only && *only == '1') {
         calculatrice1141Ecran();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.14.1 (lot N3) : HMI_TEST_N3=1 - le bouton Sons de la barre de relecture, seul.
+    if (const char* only = std::getenv("HMI_TEST_N3"); only && *only == '1') {
+        sonsRelecture1141();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.14.1 (lot N2) : HMI_TEST_N2=1 - le pointeur (etirer, deplacer, ecrire), seul.
+    if (const char* only = std::getenv("HMI_TEST_N2"); only && *only == '1') {
+        pointeurs1141();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -43008,6 +43544,8 @@ int main(int argc, char** argv) {
     utilisationsM1_1140();                  // 1.14.0 (lot M1) : la colonne Utilisations compte les acces, Voir les usages
     chercheur1140();                        // 1.14.0 (lot M5) : chercher les fichiers de l'appli sur le PC
     imagesN6_1141();                        // 1.14.1 (lot N6) : la bibliotheque d'images
+    pointeurs1141();                        // 1.14.1 (lot N2) : le pointeur - etirer, deplacer, ecrire
+    sonsRelecture1141();                    // 1.14.1 (lot N3) : le bouton Sons de la barre de relecture
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

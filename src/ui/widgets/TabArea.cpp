@@ -96,6 +96,9 @@ public:
     [[nodiscard]] bool overlayCovers(gfx::Point) const override {
         return owner_.dragging_ || owner_.resizing_ != nullptr;
     }
+    // 1.14.1 (N2) : une poignee entre deux groupes (elle voit l'appui avant eux) : la double
+    // fleche de son sens.
+    [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
 
 protected:
     [[nodiscard]] bool hitTest(gfx::Point) const override { return false; }
@@ -119,6 +122,12 @@ struct TabArea::Node {
     gfx::Rect             rect{}, handle{};
     [[nodiscard]] bool leaf() const noexcept { return strip != nullptr; }
 };
+
+std::optional<cursor::Shape> TabArea::Layer::cursorAt(gfx::Point local) const {
+    if (owner_.dragging_) return std::nullopt;
+    if (const Node* h = owner_.handleAt(local)) return h->stacked ? cursor::Shape::ResizeNS : cursor::Shape::ResizeEW;
+    return std::nullopt;
+}
 
 // ================================================================ vie ====
 TabArea::TabArea(std::string id) : Widget(std::move(id)) {
@@ -788,6 +797,8 @@ void TabArea::layoutMosaic(const gfx::Rect& area) {
 void TabArea::onPaint(const PaintContext& ctx) {
     purgeRetired();                 // ici, aucun evenement n'est en cours
     const auto& c = ctx.theme.color;
+    // 1.14.1 (N2) : une poignee tiree garde sa double fleche jusqu'au lacher.
+    if (resizing_) cursor::hold(resizing_->stacked ? cursor::Shape::ResizeNS : cursor::Shape::ResizeEW);
     ctx.r.fillRect(bounds(), c.windowBg);
     // Les poignees : un trait au milieu, l'accent pendant qu'on en tire une.
     const auto handles = [&](const auto& self, const Node* n) -> void {

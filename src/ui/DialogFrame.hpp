@@ -10,7 +10,8 @@
 //
 //  WidgetMenu passe les evenements de la souris a handle() avant les widgets du
 //  dialogue et dessine la poignee du coin (paint) ; App montre le curseur de
-//  cursor(). Un dialogue ne devient jamais plus petit que son cadre a lui : son
+//  cursor(). 1.14.1 (N2) : par ui::cursor - paint() le demande (le survol) ou le
+//  tient (le glisser), comme tout ce qui s'etire ou se deplace. Un dialogue ne devient jamais plus petit que son cadre a lui : son
 //  contenu y est place pour cette taille. La place choisie est retenue pour la
 //  seance, sous le nom du menu, tant que le dialogue demande la meme taille.
 // =============================================================================
@@ -28,6 +29,7 @@ namespace ui {
 
 class Widget;
 struct Theme;
+namespace cursor { enum class Shape : std::uint8_t; }   // 1.14.1 (N2) : ui/Widget.hpp
 
 namespace dialogframe {
 
@@ -53,6 +55,8 @@ bool handle(Widget& root, const InputEvent& ev);
 
 // Ce que la souris montre : ce qu'il y a dessous, ou ce qui se glisse.
 [[nodiscard]] Grip cursor() noexcept;
+// 1.14.1 (N2) : sa forme de pointeur (Move, les doubles fleches ; None : la fleche).
+[[nodiscard]] cursor::Shape shapeOf(Grip g) noexcept;
 
 // La poignee du coin en bas a droite, par-dessus le dialogue de `root`.
 void paint(Widget& root, gfx::IRenderer& r, const Theme& theme);

@@ -25,8 +25,6 @@
 #include "ExportTarget.hpp"                 // Lot API 8 : les clics d'un navigateur n'exportent pas en demandant ou
 #include "DropFilesDialog.hpp"              // ---- Lot API 8 : glisser de fichiers, 2e partie (le dialogue ouvert prend ce qu'on lache) ----
 #include "../ui/widgets/FilterMemory.hpp"   // Lot API 8 : les filtres retenus d'une seance a l'autre
-#include "../ui/widgets/ColorPalette.hpp"   // 1.10 (chantier Q) : la pipette (le curseur en croix)
-#include "../ui/DialogFrame.hpp"              // 1.12.21 : les curseurs du titre et des bords d'un dialogue
 #include "../ui/ThemeFile.hpp"              // Lot API 8 : themes (ceux de l'utilisateur, relus au demarrage)
 #include "FileExplorerHost.hpp"             // ---- Lot API 8 : l'explorateur de fichiers de l'appli ----
 #include "screens/LibraryHelpScreen.hpp"
@@ -3063,38 +3061,17 @@ void App::frame(double dt) {
     // 1.11 (T1) : le tutoriel en cours - la scene joue sa file, l'horloge avance.
     tutorials::frame(dt * 1000.0);
     menus_->Update(fc);      // 3. tick logic and animations
-#if XPG_HAVE_SDL3
-    // 1.10 (chantier Q) : la pipette d'une palette de couleurs montre une croix.
-    // 1.12.21 : la barre de titre d'un dialogue, ses bords et ses coins (ui/DialogFrame).
-    {
-        static SDL_Cursor* cursors[7] = {};
-        static int         shown = 0;
-        int                want = 0;
-        if (ui::ColorPalette::pickingCount() > 0) want = 1;
-        else switch (ui::dialogframe::cursor()) {
-            case ui::dialogframe::Grip::Move: want = 2; break;
-            case ui::dialogframe::Grip::W: case ui::dialogframe::Grip::E: want = 3; break;
-            case ui::dialogframe::Grip::N: case ui::dialogframe::Grip::S: want = 4; break;
-            case ui::dialogframe::Grip::NW: case ui::dialogframe::Grip::SE: want = 5; break;
-            case ui::dialogframe::Grip::NE: case ui::dialogframe::Grip::SW: want = 6; break;
-            case ui::dialogframe::Grip::None: break;
-        }
-        if (want != shown) {
-            static const SDL_SystemCursor kinds[7] = {SDL_SYSTEM_CURSOR_DEFAULT, SDL_SYSTEM_CURSOR_CROSSHAIR,
-                                                      SDL_SYSTEM_CURSOR_MOVE, SDL_SYSTEM_CURSOR_EW_RESIZE,
-                                                      SDL_SYSTEM_CURSOR_NS_RESIZE, SDL_SYSTEM_CURSOR_NWSE_RESIZE,
-                                                      SDL_SYSTEM_CURSOR_NESW_RESIZE};
-            if (want && !cursors[want]) cursors[want] = SDL_CreateSystemCursor(kinds[want]);
-            (void)SDL_SetCursor(want && cursors[want] ? cursors[want] : SDL_GetDefaultCursor());
-            shown = want;
-        }
-    }
-#endif
+    // 1.14.1 (N2) : LE POINTEUR (ui::cursor). Chaque fenetre le demande pendant son dessin - ce
+    // qui est sous la souris (une double fleche sur un separateur, la barre en I sur un champ...),
+    // ou le geste en cours ; celui de la fenetre ou est la souris est montre apres le dessin (6 bis).
+    ui::cursor::Shape mainCursor = ui::cursor::Shape::Default;
     if (renderer_) {
         renderer_->beginFrame(theme_.color.windowBg);
+        ui::cursor::begin();
         menus_->Render(*renderer_, fc);   // 4. paint back-to-front
         tutorials::paint(*renderer_, theme_, fc.surface, time_);   // 1.11 (T1) : le calque du tutoriel
         noveltyCenter().paint(*renderer_, theme_, fc.surface);   // 4. bis 1.10 : les reperes orange, la bulle
+        mainCursor = ui::cursor::shown();
         // ---- Lot API 8 : la question attend dans une fenetre detachee : le
         //      voile de la principale, et ou aller (avant la capture).
         detached_.paintOverMain(*renderer_, fc.surface);
@@ -3122,6 +3099,30 @@ void App::frame(double dt) {
     // 6. Lot API 7 : les onglets detaches, chacun dans sa fenetre avec son
     //    renderer, a la meme horloge (celle, fixe, d'une session rejouee comprise).
     detached_.frame(time_);
+#if XPG_HAVE_SDL3
+    // 6 bis. 1.14.1 (N2) : le pointeur de la fenetre ou est la souris (la principale, ou une
+    //    fenetre detachee : le sien, demande a son dessin). Le pointeur du systeme ne change que
+    //    quand il change. Remplace la croix de la pipette (1.10) et les fleches des dialogues
+    //    (1.12.21), qui passent maintenant par ui::cursor comme le reste.
+    {
+        static SDL_Cursor*       cursors[9] = {};
+        static ui::cursor::Shape shown = ui::cursor::Shape::Default;
+        ui::cursor::Shape want = mainCursor;
+        if (SDL_Window* focus = SDL_GetMouseFocus(); focus && focus != window_) want = detached_.cursorOf(SDL_GetWindowID(focus));
+        if (want != shown) {
+            static const SDL_SystemCursor kinds[9] = {
+                SDL_SYSTEM_CURSOR_DEFAULT,     SDL_SYSTEM_CURSOR_TEXT,        SDL_SYSTEM_CURSOR_POINTER,
+                SDL_SYSTEM_CURSOR_CROSSHAIR,   SDL_SYSTEM_CURSOR_MOVE,        SDL_SYSTEM_CURSOR_EW_RESIZE,
+                SDL_SYSTEM_CURSOR_NS_RESIZE,   SDL_SYSTEM_CURSOR_NWSE_RESIZE, SDL_SYSTEM_CURSOR_NESW_RESIZE};
+            const auto k = static_cast<std::size_t>(want);
+            if (k > 0 && k < 9 && !cursors[k]) cursors[k] = SDL_CreateSystemCursor(kinds[k]);
+            (void)SDL_SetCursor(k > 0 && k < 9 && cursors[k] ? cursors[k] : SDL_GetDefaultCursor());
+            shown = want;
+        }
+    }
+#else
+    (void)mainCursor;
+#endif
     // 7. Lot API 8 : les filtres retenus, sur le disque une seconde apres le dernier changement.
     flushFilterMemory();
     // 8. 1.12.31 : le zoom des pages, de meme.

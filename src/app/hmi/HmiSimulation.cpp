@@ -946,7 +946,52 @@ gfx::Point HmiLiveCanvas::baseToScreen(double x, double y) const {
     return {baseOrigin_.x + static_cast<float>(x) * baseZoom_ * baseSx_, baseOrigin_.y + static_cast<float>(y) * baseZoom_ * baseSy_};
 }
 
+// 1.14.1 (N2) : le pointeur de la vue en marche (voir HmiSimulation.hpp).
+std::optional<ui::cursor::Shape> HmiLiveCanvas::cursorAt(gfx::Point p) const {
+    using ui::cursor::Shape;
+    if (!bounds().contains(p)) return std::nullopt;
+    if (replayShown()) return replayChrome_.partAt(p) == "progress" ? Shape::Pointer : Shape::Default;
+    if (!interactive_) return Shape::Default;
+    // La popup du dessus sous la souris : sa barre de titre, si elle se deplace (pas sa croix).
+    for (auto it = popupRects_.rbegin(); it != popupRects_.rend(); ++it) {
+        if (!it->window.contains(p)) continue;
+        if (it->movable && it->title.w > 0.f && it->title.contains(p) && !(it->close.w > 0.f && it->close.contains(p)))
+            return Shape::Move;
+        break;
+    }
+    // Une courbe pilotable (1.13.1) : un curseur A ou B de sa zone de trace, a 6 px pres (comme le moteur l'attrape).
+    if (!runtime_) return Shape::Default;
+    const int li = layerUnder(p);
+    if (li < 0) return Shape::Default;
+    const auto layer = static_cast<std::size_t>(li);
+    const Id id = objectAtLayer(layer, p);
+    const auto* o = id != kNoId && layer < layers_.size() ? layers_[layer].view.object(id) : nullptr;
+    if (!o || o->kind != hmi::Kind::Trend || !hmi::trendPilotable(*o) || layer >= vps_.size()) return Shape::Default;
+    const Id view = layers_[layer].view.id;
+    const auto* st = runtime_->trendState(view, id);
+    if (!st || !(st->cursorA || st->cursorB)) return Shape::Default;
+    const auto& vp = vps_[layer];
+    const auto box = o->box();
+    const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
+    const bool cursors = st->cursors();
+    if (!hmi::trendHit(*o, box.w, box.h, lx, ly, cursors).empty()) return Shape::Default;   // un bouton de sa barre
+    const auto plot = hmi::trendLayout(*o, box.w, box.h, cursors).plot;
+    if (!plot.contains(lx, ly)) return Shape::Default;
+    double duration = 60;
+    if (const std::string t = o->text("duration"); !t.empty() && !hmi::roles::readNumber(t, duration)) duration = 60;
+    const auto [start, end] = runtime_->trendWindowOf(view, id, std::max(1.0, duration));
+    return hmi::trendCursorNear(*st, lx, plot, start, end) != 0 ? Shape::ResizeEW : Shape::Default;
+}
+
 void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
+    // 1.14.1 (N2) : le geste en cours garde sa forme (meme la souris sortie de l'objet).
+    if (replayDrag_) ui::cursor::hold(ui::cursor::Shape::Pointer);
+    else if (dragSlot_ >= 0 || panning_ || displayPanning_ || docDrag_ != kNoId) ui::cursor::hold(ui::cursor::Shape::Move);
+    else if (trendDrag_ != kNoId && runtime_ && trendDragLayer_ < layers_.size())
+        if (const auto* st = runtime_->trendState(layers_[trendDragLayer_].view.id, trendDrag_)) {
+            if (st->grab == 1 || st->grab == 2) ui::cursor::hold(ui::cursor::Shape::ResizeEW);   // un curseur tire
+            else if (st->grab == 3 && st->moved) ui::cursor::hold(ui::cursor::Shape::Move);    // la fenetre de temps
+        }
     // 1.10 (decision 12) : en plein ecran, la vue ne se dessine que dans la passe du
     // dessus (le volet, onPaintOverlay, sans liste de passes) : pas deux fois par image.
     if (ctx.overlays)
@@ -1379,6 +1424,7 @@ bool HmiLiveCanvas::hasTooltip() const { return Widget::hasTooltip() || !replayC
 
 std::string HmiLiveCanvas::liveTooltip(gfx::Point mouse) const {
     if (replayShown() && replayChrome_.partAt(mouse) == "help") return replayChrome_.helpTip;
+    if (replayShown() && replayChrome_.partAt(mouse) == "sons") return replayChrome_.soundsTip;   // 1.14.1 (N3)
     return Widget::liveTooltip(mouse);
 }
 
@@ -1430,6 +1476,7 @@ bool HmiLiveCanvas::replayEvent(const ui::InputEvent& ev) {
             case ui::Key::End:    return emit("end");
             case ui::Key::Plus:   replaySignKey_ = true; return emit("faster");   // son TextInput "+" ne recompte pas
             case ui::Key::Minus:  replaySignKey_ = true; return emit("slower");
+            case ui::Key::S:      return k->repeat || k->mods.shift ? true : emit("sons");   // 1.14.1 (N3) : le bouton Sons
             default:              return false;   // F11, F8... : l'application ; l'IHM rejouee ne les recoit pas
         }
     }
@@ -1454,7 +1501,7 @@ bool HmiLiveCanvas::replayEvent(const ui::InputEvent& ev) {
         if (part == "play") return emit("pause");
         if (part == "back") return emit("step:-10");
         if (part == "fwd") return emit("step:10");
-        if (part == "start" || part == "end" || part == "quit" || part.rfind("speed:", 0) == 0) return emit(part);
+        if (part == "start" || part == "end" || part == "quit" || part == "sons" || part.rfind("speed:", 0) == 0) return emit(part);
         if (replayChrome_.view.contains(d->pos)) return emit("hint");
         return true;
     }
@@ -5317,6 +5364,18 @@ void HmiSimulationPane::replayCommand(const std::string& c) {
     else if (c.rfind("speed:", 0) == 0) (void)runtime_.replaySpeed(arg("speed:"));
     else if (c == "faster") (void)runtime_.replaySpeedStep(1);
     else if (c == "slower") (void)runtime_.replaySpeedStep(-1);
+    else if (c == "sons") {
+        // 1.14.1 (N3) : le bouton Sons (la touche S) - le canal Relecture, le meme que le M de sa piste au Melangeur et
+        // SYS.MuteReplay ; coupe, ce qui joue se tait (le melangeur).
+        const bool mute = !hmi::soundMuted(runtime_.settings(), hmi::SoundChannel::Replay);
+        (void)runtime_.setChannelMuted(hmi::SoundChannel::Replay, mute, "barre de relecture");
+        if (status_)
+            status_->setTransientMessage(mute ? std::string("Sons de la relecture coup\xC3\xA9s (S les r\xC3\xA9tablit)")
+                                              : hmi::soundMuted(runtime_.settings(), hmi::SoundChannel::General)
+                                                    ? std::string("Sons de la relecture r\xC3\xA9tablis - mais tout le son est coup\xC3\xA9 (Param\xC3\xA8tres syst\xC3\xA8me, Coupe-son)")
+                                                    : std::string("Sons de la relecture r\xC3\xA9tablis"),
+                                         4.0);
+    }
     else if (c == "hint" && status_)
         status_->setTransientMessage("Relecture : l'IHM ne re\xC3\xA7oit pas les clics. \xC3\x89" "chap pour revenir en direct.", 5.0);
     syncReplay();

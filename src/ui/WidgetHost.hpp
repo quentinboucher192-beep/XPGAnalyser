@@ -50,6 +50,8 @@ public:
     // L'arbre, puis ce qui a demande la passe du dessus (dans l'ordre des
     // demandes), puis l'infobulle - apres 0,9 s sur le meme widget, comme dans
     // un ecran. `tooltips` faux : aucune (la fenetre attend une reponse ailleurs).
+    // 1.14.1 (N2) : et le pointeur sous la souris (ui::cursor::request), dans
+    // les memes conditions.
     void paint(gfx::IRenderer& r, const Theme& theme, gfx::Size surface, double time, bool tooltips = true);
     // Un evenement de la fenetre : ce qui peint par-dessus tout le recoit
     // d'abord ; Tab que personne ne prend promene le focus.

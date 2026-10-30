@@ -530,6 +530,12 @@ struct ReplayInfo {
     bool        paused{false};
     bool        ended{false};      // arrivee au bout (en pause)
     std::string note;              // ce qui a change dans le projet depuis ('' : rien)
+    // 1.14.1 (N3) : LES SONS DE LA RELECTURE - le canal Relecture coupe (le bouton Sons de la barre, la touche S, le M de
+    // la piste Relecture du Melangeur, SYS.MuteReplay) ; tout le son coupe (le General) ; a x4 et x8, seuls les sons
+    // d'alarme se rejouent. Un enregistrement fait sans les sons : header.soundsKept faux.
+    bool        soundsMuted{false};
+    bool        soundsGeneralMuted{false};
+    bool        alarmSoundsOnly{false};
 };
 
 class Runtime {
@@ -2496,7 +2502,10 @@ private:
     void recordEvent(rec::EventKind kind, std::string a, std::string b = {}, double x = 0, double y = 0);
     void recordClick(rec::EventKind kind, Id object);
     void replayApply(bool force);                                       // l'ecran de la piste a la position
-    void replaySounds(double from, double to);
+    // 1.14.1 (N3) : les sons de (from, to] de la piste - [from, to] juste apres le depart, un saut, Debut (soundsInclusive) ;
+    // `wall` : le temps du PC passe (un pas plus long qu'une seconde : rien, pas de rafale).
+    void replaySounds(double from, double to, double wall);
+    void replayStopSounds();                                            // pause, saut, sortie : ce qui joue se tait
     bool recordingCommand(const View&, const Object*, const Action&, double now);   // les actions
     bool recordingNative(const std::string& u, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result);
     bool recordSysValue(std::string_view name, sim::Value& out) const;  // SYS.Recording..., SYS.Replay...

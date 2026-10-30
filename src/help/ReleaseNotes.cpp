@@ -194,6 +194,41 @@ const std::vector<Note>& table() {
          "R\xC3\xA9sultat vers : le bouton Envoyer \xC3\xA9" "crit le r\xC3\xA9sultat dans une variable, avec le niveau d'acc\xC3\xA8s de l'objet et les "
          "r\xC3\xA8gles d'\xC3\xA9" "criture (le type, ses bornes) ; Vue.Calc_1.Result le lit.",
          "objet-calculatrice", ""),
+        // 1.14.1 (lot N3, demande du 30/10) : entendre les sons a la relecture d'un enregistrement.
+        note("1.14.1", "Simulation", Kind::Fixed,
+         "LES SONS SE REJOUENT \xC3\x80 LA RELECTURE D'UN ENREGISTREMENT, tous : celui qui jouait d\xC3\xA8s le d\xC3\xA9part (une alarme "
+         "d\xC3\xA9j\xC3\xA0 l\xC3\xA0, un clic au premier instant) ne se rejouait jamais ; au-del\xC3\xA0 de \xC3\x97" "2, plus aucun - \xC3\xA0 "
+         "\xC3\x97" "4 et \xC3\x97" "8, les sons d'alarme se rejouent maintenant, une fois chacun ; la pause, un saut (\xE2\x88\x92" "10 s, +10 s, "
+         "D\xC3\xA9" "but, Fin, la barre) et \xC3\x89" "chap font taire ce qui jouait (avant : il continuait), et ce qui est saut\xC3\xA9 ne se "
+         "rejoue pas en rafale. Un son qui n'est plus une ressource du projet (ou un enregistrement d'un autre projet) : la Console le "
+         "dit une fois, au lieu de rien. Un enregistrement fait sans les sons le dit dans la barre ; la case de Configuration \xE2\x80\xBA "
+         "Enregistrements s'appelle d\xC3\xA9sormais \xC2\xAB Sons (pour les entendre \xC3\xA0 la relecture) \xC2\xBB.",
+         "enregistrements", ""),
+        note("1.14.1", "Simulation", Kind::New,
+         "LE BOUTON SONS DE LA BARRE DE RELECTURE, \xC3\xA0 c\xC3\xB4t\xC3\xA9 des vitesses (ou la touche S) : il coupe ou r\xC3\xA9tablit les "
+         "sons rejou\xC3\xA9s - le canal Relecture, le m\xC3\xAAme que le M de sa piste au M\xC3\xA9langeur de volume et que SYS.MuteReplay. "
+         "Son \xC3\xA9tat se lit d'un coup d'\xC5\x93il : le haut-parleur et Sons ; barr\xC3\xA9 sur fond rouge, Coup\xC3\xA9s ; barr\xC3\xA9 et "
+         "estomp\xC3\xA9 quand tout le son est coup\xC3\xA9 ; Alarmes \xC3\xA0 \xC3\x97" "4 et \xC3\x97" "8.",
+         "enregistrements", ""),
+        // 1.14.1 (lot N2, demande du 30/10) : la bonne fleche de Windows la ou l'on peut etirer, deplacer, ecrire (ui::cursor).
+        note("1.14.1", "Application", Kind::New,
+         "LE POINTEUR PREND LA FORME WINDOWS DE CE QU'ON PEUT FAIRE, avant le clic : la double fl\xC3\xA8" "che horizontale ou verticale sur un "
+         "s\xC3\xA9parateur entre deux panneaux (l'arbre du projet, l'explorateur, l'inspecteur, le panneau du bas, les volets, les groupes "
+         "d'onglets, les fen\xC3\xAAtres d\xC3\xA9tach\xC3\xA9" "es) et sur le bord d'une colonne dans les titres d'un tableau ; dans l'\xC3\xA9" "diteur "
+         "de vues, la croix \xC3\xA0 quatre fl\xC3\xA8" "ches sur l'objet choisi et sur les sommets d'une ligne ou d'une tuyauterie, sur ses huit "
+         "poign\xC3\xA9" "es la double fl\xC3\xA8" "che de leur sens (un objet tourn\xC3\xA9 a ses fl\xC3\xA8" "ches tourn\xC3\xA9" "es), la main sur la poign\xC3\xA9" "e "
+         "ronde, la croix fine pour poser un objet, la double fl\xC3\xA8" "che sur une r\xC3\xA8gle ou un guide - un objet ou un calque verrouill\xC3\xA9 "
+         "garde la fl\xC3\xA8" "che ; la barre en I sur un champ, un \xC3\xA9" "diteur de code, une case en \xC3\xA9" "dition ; en simulation, la double "
+         "fl\xC3\xA8" "che sur les curseurs A et B d'une courbe pilotable, la croix \xC3\xA0 quatre fl\xC3\xA8" "ches quand on fait glisser sa fen\xC3\xAAtre "
+         "de temps ou qu'on tire une popup par son titre, la main sur la progression d'une relecture. Les objets de l'IHM en marche gardent la "
+         "fl\xC3\xA8" "che. Pendant le glisser, la forme reste m\xC3\xAAme si la souris sort de la zone. La barre de titre, les bords et les coins "
+         "des fen\xC3\xAAtres (1.12.21) et la pipette passent par le m\xC3\xAAme m\xC3\xA9" "canisme.",
+         "onglets", ""),
+        note("1.14.1", "Application", Kind::Fixed,
+         "UN S\xC3\x89PARATEUR OU UNE COLONNE L\xC3\x82" "CH\xC3\x89" "E HORS DE SON PANNEAU s'arr\xC3\xAAte : avant, l\xC3\xA2" "ch\xC3\xA9" "e dehors, la "
+         "poign\xC3\xA9" "e restait prise et suivait encore la souris au retour, sans bouton appuy\xC3\xA9. Le glisser suit maintenant la souris "
+         "hors du panneau, jusqu'au l\xC3\xA2" "cher.",
+         "onglets", ""),
         // 1.14.0 (lot M4) : enregistrer et rejouer l'IHM.
         note("1.14.0", "Simulation", Kind::New,
          "ENREGISTRER L'IHM QUI TOURNE : le bouton \xE2\x97\x8F Enregistrer de la barre de Simulation \xC2\xB7 IHM (ou l'objet Enregistreur au poste "

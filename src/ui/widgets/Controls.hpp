@@ -38,6 +38,8 @@ namespace ui {
         [[nodiscard]] const std::string& text() const noexcept { return text_; }
         [[nodiscard]] core::ActionId action() const noexcept { return action_; }
         [[nodiscard]] SizeHint sizeHint() const override;
+        // 1.14.1 (N2) : un bouton garde la fleche, meme pose dans un champ ou un separateur.
+        [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point) const override { return cursor::Shape::Default; }
 
         const core::SignalPtr<> clicked = core::Signal<>::create();
 
@@ -124,6 +126,8 @@ namespace ui {
         // La liste est dessinee au-dessus de tout et doit recevoir le clic.
         [[nodiscard]] bool      requestsOverlayPass() const override { return !suggestions_.empty(); }
         [[nodiscard]] gfx::Rect eventBounds() const override;
+        // 1.14.1 (N2) : la barre en I sur le champ (la liste ouverte dessous : la fleche).
+        [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
 
         const core::SignalPtr<const std::string&> textChanged = core::Signal<const std::string&>::create();
         const core::SignalPtr<const std::string&> editingDone = core::Signal<const std::string&>::create();
@@ -426,6 +430,10 @@ namespace ui {
             return completionOpen() || signatureActive_;
         }
         [[nodiscard]] gfx::Rect eventBounds() const override;
+        // 1.14.1 (N2) : la barre en I sur le texte ; la fleche sur la marge (numeros, plis,
+        // points d'arret), les barres de defilement, la barre de recherche et la liste ouverte.
+        // Pendant un choix a la souris, la barre en I reste (meme sortie de l'editeur).
+        [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
 
         // ---- 1.12.2 : les raccourcis de Visual Studio (ui/KeyMap.hpp, CodeCommands.cpp) ----
         //  setCommandKeys(true) : un editeur de code (scripts, fonctions, operateurs, script

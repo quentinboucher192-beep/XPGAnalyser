@@ -131,6 +131,9 @@ struct Header {
     std::string   viewsShown;                  // "Vue_Station;Popup_Pompe"
     std::string   at40;                        // l'ecran a 40 % de la duree ("Vue_Station + Popup_Pompe") : le detail
     bool          cut{false};                  // coupe net : relu jusqu'au dernier bloc entier
+    // 1.14.1 (N3) : Configuration > Enregistrements > Sons cochee a l'enregistrement. Faux : aucun son n'a ete garde (la
+    // relecture le dit). Un fichier d'avant (sans la cle) : vrai.
+    bool          soundsKept{true};
     std::uint64_t trackBytes{0};
     [[nodiscard]] bool locked() const noexcept { return !hash.empty(); }
 };

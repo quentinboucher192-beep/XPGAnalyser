@@ -836,6 +836,8 @@ std::string ColorPalette::hint() const {
 }
 
 void ColorPalette::paintPipette(const PaintContext& ctx) {
+    // 1.14.1 (N2) : la croix, par ui::cursor (un geste : elle passe devant tout survol).
+    cursor::hold(cursor::Shape::Crosshair);
     // L'image que l'application vient de dessiner (la palette comprise, pas
     // la loupe) : relue a chaque image, la vue en marche bouge sous la pipette.
     if (!shotFixed_) {
