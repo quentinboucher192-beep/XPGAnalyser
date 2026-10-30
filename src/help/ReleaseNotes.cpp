@@ -148,8 +148,8 @@ const std::vector<Note>& table() {
          "modifi\xC3\xA9" "e dessin\xC3\xA9" "e comme dans l'\xC3\xA9" "diteur, les avertissements, et Pr\xC3\xA9visualiser\xE2\x80\xA6, Appliquer, Refuser. Les objets "
          "sont les vrais objets du logiciel (Cuve, Pompe, Vanne, Bargraphe, Bouton \xC3\xA0 impulsion, Tuyauterie\xE2\x80\xA6) avec leurs "
          "vraies propri\xC3\xA9t\xC3\xA9s ; une propri\xC3\xA9t\xC3\xA9 inconnue est refus\xC3\xA9" "e, et une variable qui n'existe pas n'est jamais "
-         "invent\xC3\xA9" "e : l'aper\xC3\xA7u propose les variables du projet, ou de la cr\xC3\xA9" "er \xC3\xA0 votre demande. Appliquer se reprend "
-         "d'un seul Ctrl+Z. Le mode Direct applique d\xC3\xA8s la r\xC3\xA9ponse ; une suppression de plusieurs objets se confirme "
+         "invent\xC3\xA9" "e : l'aper\xC3\xA7u propose les variables du projet, ou de la cr\xC3\xA9" "er \xC3\xA0 ta demande. Appliquer se reprend "
+         "d'un seul Ctrl+Z, et la carte suit la vue : \xC2\xAB Annul\xC3\xA9" "e \xC2\xBB apr\xC3\xA8s un Ctrl+Z (R\xC3\xA9" "appliquer la remet), \xC2\xAB la vue a chang\xC3\xA9 \xC2\xBB si elle a boug\xC3\xA9 depuis. Le mode Direct applique d\xC3\xA8s la r\xC3\xA9ponse ; une suppression de plusieurs objets se confirme "
          "toujours. Cette version est une d\xC3\xA9monstration : aucune IA n'est connect\xC3\xA9" "e (l'en-t\xC3\xAAte le dit), six demandes "
          "sont reconnues (dont le synoptique complet d'une station de pompage : 31 objets), et rien ne quitte le PC.",
          "assistant-ia", ""),

@@ -3880,7 +3880,9 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Ctrl+K** (Aller \xC3\xA0 / Faire) : \xC2\xAB Assistant IA \xC2\xBB.", {}},
              {K::Paragraph, "Il se place \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues et le pousse, sans le "
                          "cacher : la vue reste visible pendant qu'on dialogue. Son s\xC3\xA9parateur se "
-                         "tire comme les autres ; sa largeur et son \xC3\xA9tat sont retenus.", {}},
+                         "tire comme les autres ; sa largeur et son \xC3\xA9tat sont retenus. Au "
+                         "d\xC3\xA9part, sa largeur suit la fen\xC3\xAAtre (22 %, entre 280 et 460 px) ; "
+                         "tir\xC3\xA9" "e, elle reste.", {}},
              {K::Table, "Partie\tCe qu'elle montre\nEn-t\xC3\xAAte\tL'ic\xC3\xB4ne, \xC2\xAB Assistant IA "
                          "\xC2\xBB, l'\xC3\xA9tat de connexion (\xC2\xAB D\xC3\xA9monstration \xE2\x80\x93 "
                          "aucune IA connect\xC3\xA9" "e \xC2\xBB), Nouvelle conversation (+), "
@@ -3891,18 +3893,20 @@ const std::vector<Topic>& topics() {
                          "(Entr\xC3\xA9" "e garde, \xC3\x89" "chap annule) ; **Suppr** ou le clic droit "
                          "\xE2\x80\xBA Supprimer\xE2\x80\xA6 la supprime, apr\xC3\xA8s une confirmation. "
                          "\xC2\xAB d\xC3\xA9mo \xC2\xBB marque les conversations de d\xC3\xA9monstration. Un "
-                         "clic sur l'en-t\xC3\xAAte replie la liste.\nDiscussion\tVos demandes \xC3\xA0 "
-                         "droite, les r\xC3\xA9ponses \xC3\xA0 gauche, avec leur heure. Les r\xC3\xA9ponses "
-                         "sont mises en forme : titres, **gras**, listes, `code`. Elle d\xC3\xA9" "file "
-                         "seule (la molette, sa barre) : la saisie reste toujours visible en "
-                         "bas.\nPi\xC3\xA8" "ces jointes\tLes fichiers joints au prochain message : leur "
-                         "type, leur taille, leur traitement, la croix pour les "
-                         "retirer.\nSaisie\t**Entr\xC3\xA9" "e** envoie, **Maj+Entr\xC3\xA9" "e** passe "
-                         "\xC3\xA0 la ligne (Ctrl+Entr\xC3\xA9" "e envoie aussi). Le trombone joint un "
-                         "fichier ; un fichier l\xC3\xA2" "ch\xC3\xA9 sur le panneau aussi. Pendant une "
-                         "r\xC3\xA9ponse, Envoyer devient **Arr\xC3\xAAter**.", {}},
-             {K::Step, "Ouvrez la vue \xC3\xA0 modifier dans l'\xC3\xA9" "diteur (son onglet devant).", "1"},
-             {K::Step, "\xC3\x89" "crivez la demande, ou cliquez une suggestion (une conversation vide les "
+                         "clic sur l'en-t\xC3\xAAte replie la liste.\nDiscussion\tTes demandes \xC3\xA0 "
+                         "droite (sous \xC2\xAB Moi \xC2\xBB), les r\xC3\xA9ponses \xC3\xA0 gauche, avec "
+                         "leur heure. Les r\xC3\xA9ponses sont mises en forme : titres, **gras**, listes, "
+                         "`code`. Elle d\xC3\xA9" "file seule (la molette, sa barre) : la saisie reste "
+                         "toujours visible en bas.\nPi\xC3\xA8" "ces jointes\tLes fichiers joints au "
+                         "prochain message : leur type, leur taille, leur traitement, la croix pour les "
+                         "retirer.\nSaisie\tUn champ de message : le texte passe \xC3\xA0 la ligne, le champ "
+                         "grandit jusqu'\xC3\xA0 5 lignes puis d\xC3\xA9" "file. **Entr\xC3\xA9" "e** "
+                         "envoie, **Maj+Entr\xC3\xA9" "e** passe \xC3\xA0 la ligne (Ctrl+Entr\xC3\xA9" "e "
+                         "envoie aussi). Le trombone joint un fichier ; un fichier l\xC3\xA2" "ch\xC3\xA9 "
+                         "sur le panneau aussi. Pendant une r\xC3\xA9ponse, Envoyer devient "
+                         "**Arr\xC3\xAAter**.", {}},
+             {K::Step, "Ouvre la vue \xC3\xA0 modifier dans l'\xC3\xA9" "diteur (son onglet devant).", "1"},
+             {K::Step, "\xC3\x89" "cris la demande, ou clique une suggestion (une conversation vide les "
                          "propose).", "2"},
              {K::Step, "La r\xC3\xA9ponse arrive par \xC3\xA9tapes : **En attente\xE2\x80\xA6**, "
                          "**R\xC3\xA9" "flexion\xE2\x80\xA6**, puis **\xC3\x89" "criture\xE2\x80\xA6** mot "
@@ -3917,15 +3921,20 @@ const std::vector<Topic>& topics() {
                          "(l'historique la montre sous \xC2\xAB Assistant IA : \xE2\x80\xA6 \xC2\xBB) ;", {}},
              {K::Bullet, "**Refuser** : le projet ne change pas.", {}},
              {K::Paragraph, "La carte passe ensuite \xC3\xA0 \xC2\xAB Appliqu\xC3\xA9" "e \xC2\xBB ou \xC2\xAB "
-                         "Refus\xC3\xA9" "e \xC2\xBB. Les objets propos\xC3\xA9s sont de vrais objets du "
-                         "logiciel (Cuve, Pompe, Vanne, Bargraphe, Bouton \xC3\xA0 impulsion, "
-                         "Tuyauterie\xE2\x80\xA6) avec leurs vraies propri\xC3\xA9t\xC3\xA9s : une "
-                         "propri\xC3\xA9t\xC3\xA9 inconnue d'un genre est refus\xC3\xA9" "e, jamais "
-                         "invent\xC3\xA9" "e.", {}},
+                         "Refus\xC3\xA9" "e \xC2\xBB. Elle suit la vue : apr\xC3\xA8s un Ctrl+Z (ou un "
+                         "projet rouvert sans avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9), elle dit \xC2\xAB "
+                         "Annul\xC3\xA9" "e \xC2\xBB et propose **R\xC3\xA9" "appliquer** (que Ctrl+Z "
+                         "reprend aussi) ; si la vue a chang\xC3\xA9 depuis, elle le dit. Les objets "
+                         "propos\xC3\xA9s sont de vrais objets du logiciel (Cuve, Pompe, Vanne, Bargraphe, "
+                         "Bouton \xC3\xA0 impulsion, Tuyauterie\xE2\x80\xA6) avec leurs vraies "
+                         "propri\xC3\xA9t\xC3\xA9s : une propri\xC3\xA9t\xC3\xA9 inconnue d'un genre est "
+                         "refus\xC3\xA9" "e, jamais invent\xC3\xA9" "e.", {}},
              {K::Warning, "L'Assistant n'invente jamais une variable. Une variable cit\xC3\xA9" "e qui "
                          "n'existe pas dans le projet est une erreur : l'aper\xC3\xA7u propose les variables "
                          "existantes (les plus proches d'abord) et \xC2\xAB Cr\xC3\xA9" "er \xE2\x80\xA6 "
-                         "\xC2\xBB \xE2\x80\x93 c'est vous qui choisissez.", {}},
+                         "\xC2\xBB \xE2\x80\x93 c'est toi qui choisis. Une fois le choix fait, "
+                         "l'aper\xC3\xA7u dit quelle variable remplace celle qui n'existe pas (ou qu'elle "
+                         "sera cr\xC3\xA9\xC3\xA9" "e).", {}},
              {K::Paragraph, "La fen\xC3\xAAtre **Pr\xC3\xA9visualisation des modifications** montre, avant que "
                          "rien ne change : les comptes (\xC3\xA0 cr\xC3\xA9" "er, \xC3\xA0 modifier, "
                          "\xC3\xA0 supprimer), les erreurs et les avertissements, les variables "
@@ -3994,12 +4003,14 @@ const std::vector<Topic>& topics() {
                          "apprentissage\xE2\x80\xA6** ; ou Ctrl+K, puis \xC2\xAB m\xC3\xA9moire \xC2\xBB. "
                          "C'est une fen\xC3\xAAtre du logiciel : elle se d\xC3\xA9place par son titre, "
                          "s'agrandit par un bord ou un coin, \xC3\x89" "chap la ferme ; **Actualiser** (F5) "
-                         "refait toutes les mesures. Chaque chiffre est mesur\xC3\xA9 \xC3\xA0 l'ouverture "
-                         "et apr\xC3\xA8s chaque op\xC3\xA9ration : la taille des fichiers du dossier IA/ "
-                         "(dans tes r\xC3\xA9glages, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Mes images), l'espace "
-                         "libre du disque qui le porte, la m\xC3\xA9moire vive d'IHM Studio. \xC3\x80 la "
-                         "premi\xC3\xA8re ouverture le dossier est presque vide : l'\xC3\xA9" "cran le dit, "
-                         "avec de petites tailles, vraies.", {}},
+                         "refait toutes les mesures. Un texte trop long pour sa place se lit en entier au "
+                         "survol. Ouverte depuis les param\xC3\xA8tres de l'Assistant, elle se pose "
+                         "par-dessus sans assombrir le fond une seconde fois. Chaque chiffre est "
+                         "mesur\xC3\xA9 \xC3\xA0 l'ouverture et apr\xC3\xA8s chaque op\xC3\xA9ration : la "
+                         "taille des fichiers du dossier IA/ (dans tes r\xC3\xA9glages, \xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 de Mes images), l'espace libre du disque qui le porte, la "
+                         "m\xC3\xA9moire vive d'IHM Studio. \xC3\x80 la premi\xC3\xA8re ouverture le dossier "
+                         "est presque vide : l'\xC3\xA9" "cran le dit, avec de petites tailles, vraies.", {}},
              {K::Warning, "L'apprentissage ne r\xC3\xA9" "entra\xC3\xAEne pas le mod\xC3\xA8le distant. Une "
                          "connaissance active est un texte que l'Assistant joint \xC3\xA0 chaque demande ; "
                          "sa \xC2\xAB taille estim\xC3\xA9" "e \xC2\xBB est la taille de ce texte.", {}},
@@ -4008,9 +4019,10 @@ const std::vector<Topic>& topics() {
                          "demande), les genres d'objets connus (116/116 : tir\xC3\xA9s des tables du "
                          "logiciel), le stockage total et l'espace libre. Deux blocs s\xC3\xA9par\xC3\xA9s : "
                          "**M\xC3\xA9moire vive (RAM) de l'application** (celle d'IHM Studio maintenant, son "
-                         "pic, la RAM disponible du PC, les traitements IA locaux : aucun) et **Stockage "
-                         "permanent (disque)** (le disque, la r\xC3\xA9partition des donn\xC3\xA9" "es de "
-                         "l'IA, la date du dernier nettoyage).", {}},
+                         "pic, la RAM disponible du PC, les traitements IA locaux : aucun ; "
+                         "mesur\xC3\xA9" "e par Windows, chaque seconde - le d\xC3\xA9tail technique est "
+                         "dans l'infobulle) et **Stockage permanent (disque)** (le disque, la "
+                         "r\xC3\xA9partition des donn\xC3\xA9" "es de l'IA, la date du dernier nettoyage).", {}},
              {K::Tip, "Le mod\xC3\xA8le d'IA distant tourne chez son fournisseur : il n'occupe ni la RAM "
                          "ni le disque de ce PC.", {}},
              {K::Paragraph, "La liste des connaissances : nom, cat\xC3\xA9gorie, source, projet, dates d'ajout "
@@ -4049,10 +4061,14 @@ const std::vector<Topic>& topics() {
                          "zone rouge **Supprimer les donn\xC3\xA9" "es persistantes** est \xC3\xA0 part : "
                          "les cat\xC3\xA9gories \xC3\xA0 cocher, puis \xC2\xAB Je comprends : ces "
                          "donn\xC3\xA9" "es seront supprim\xC3\xA9" "es d\xC3\xA9" "finitivement de ce PC "
-                         "\xC2\xBB, puis la confirmation. Rien ne se r\xC3\xA9" "cup\xC3\xA8re. Le journal "
-                         "de la m\xC3\xA9moire (activite.jsonl), le plus r\xC3\xA9" "cent en haut : la date, "
-                         "le type (conversation, connaissance, fichier analys\xC3\xA9, r\xC3\xA8gle, "
-                         "nettoyage, suppression) et ce qui s'est pass\xC3\xA9 ; un filtre par type.", {}},
+                         "\xC2\xBB, puis la confirmation. Rien ne se r\xC3\xA9" "cup\xC3\xA8re. Une "
+                         "cat\xC3\xA9gorie vide est gris\xC3\xA9" "e et ne se coche pas ; **Supprimer "
+                         "d\xC3\xA9" "finitivement\xE2\x80\xA6** reste gris\xC3\xA9 tant qu'aucune "
+                         "cat\xC3\xA9gorie qui contient des donn\xC3\xA9" "es n'est coch\xC3\xA9" "e. Le "
+                         "journal de la m\xC3\xA9moire (activite.jsonl), le plus r\xC3\xA9" "cent en haut : "
+                         "la date, le type (conversation, connaissance, fichier analys\xC3\xA9, "
+                         "r\xC3\xA8gle, nettoyage, suppression) et ce qui s'est pass\xC3\xA9 ; un filtre par "
+                         "type.", {}},
          },
          {"assistant-ia", "aller-a"},
          {"M\xC3\xA9moire et apprentissage de l'IA", "m\xC3\xA9moire IA", "apprentissage", "connaissances", "connaissance", "cache", "Vider le cache", "donn\xC3\xA9" "es persistantes", "Stockage PC", "ia.memoire", "IA", "dossier IA", "activite.jsonl", "memoire.json", "genres d'objets connus"},
