@@ -334,6 +334,9 @@
     <ClCompile Include="src\hmi\HmiHistory.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiImageLibraryData.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiIpScan.cpp">
       <Filter>hmi</Filter>
     </ClCompile>

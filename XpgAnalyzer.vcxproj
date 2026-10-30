@@ -276,6 +276,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiGuide.cpp" />
     <ClCompile Include="src\hmi\HmiGuideText.cpp" />
     <ClCompile Include="src\hmi\HmiHistory.cpp" />
+    <ClCompile Include="src\hmi\HmiImageLibraryData.cpp" />
     <ClCompile Include="src\hmi\HmiIpScan.cpp" />
     <ClCompile Include="src\hmi\HmiLanguages.cpp" />
     <ClCompile Include="src\hmi\HmiLive.cpp" />

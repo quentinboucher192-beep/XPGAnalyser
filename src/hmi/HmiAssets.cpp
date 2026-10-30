@@ -1,13 +1,19 @@
 #include "HmiAssets.hpp"
+#include "HmiGuide.hpp"         // 1.14.1 (lot N6) : fold (la recherche de la bibliotheque d'images)
+#include "HmiMedia.hpp"
 #include "HmiStore.hpp"
 #include "HmiWidgets.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <map>
+#include <mutex>
 #include <system_error>
 
 namespace fs = std::filesystem;
@@ -334,5 +340,296 @@ std::vector<Citation> externalCitations(const Project& p, std::string_view name)
                     out.push_back({v.id, o.id, v.name + "/" + o.name + "." + prop.key, !prop.expr.empty()});
     return out;
 }
+
+// =============================================== 1.14.1 (lot N6) : la bibliotheque d'images ===
+namespace imagelib {
+
+namespace {
+
+// Un chemin en UTF-8 <-> std::filesystem (sous Windows, std::string serait lu dans la page de code du systeme).
+fs::path P(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+std::string U(const fs::path& p) {
+    const auto u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+
+std::string& folderRef() {
+    static std::string f;
+    return f;
+}
+
+bool readAll(const fs::path& path, Bytes& out) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return true;
+}
+
+std::string hex6(std::uint32_t rgb) {
+    char b[8];
+    std::snprintf(b, sizeof b, "#%06X", static_cast<unsigned>(rgb & 0xFFFFFFu));
+    return b;
+}
+
+// "Le nom.PNG" -> ("Le nom", ".PNG").
+std::pair<std::string, std::string> stemExt(const std::string& name) {
+    const auto dot = name.rfind('.');
+    if (dot == std::string::npos || dot == 0) return {name, {}};
+    return {name.substr(0, dot), name.substr(dot)};
+}
+
+// Un nom de fichier sur partout (Windows compris).
+std::string safeFileName(std::string name) {
+    for (auto& ch : name)
+        if (static_cast<unsigned char>(ch) < 0x20 || std::string_view("<>:\"/\\\\|?*").find(ch) != std::string_view::npos) ch = '_';
+    while (!name.empty() && (name.back() == ' ' || name.back() == '.')) name.pop_back();
+    while (!name.empty() && name.front() == ' ') name.erase(name.begin());
+    return name.empty() ? std::string("image") : name;
+}
+
+} // namespace
+
+const std::vector<Image>& builtIn() {
+    static const std::vector<Image> all = [] {
+        std::vector<Image> out;
+        out.reserve(builtInData().size());
+        for (const auto& b : builtInData()) {
+            Image i;
+            i.id = b.id;
+            i.label = b.label;
+            i.category = b.category;
+            i.words = b.words;
+            i.ink = b.ink;
+            i.mono = b.mono;
+            i.width = b.width;
+            i.height = b.height;
+            i.format = "SVG";
+            const std::string_view svg(b.svg);
+            i.data = std::make_shared<const Bytes>(svg.begin(), svg.end());
+            out.push_back(std::move(i));
+        }
+        return out;
+    }();
+    return all;
+}
+
+const std::vector<std::string>& builtInCategories() {
+    static const std::vector<std::string> cats = [] {
+        std::vector<std::string> out;
+        for (const auto& i : builtIn())
+            if (out.empty() || out.back() != i.category) out.push_back(i.category);
+        return out;
+    }();
+    return cats;
+}
+
+const Image* findBuiltIn(std::string_view id) {
+    for (const auto& i : builtIn())
+        if (i.id == id) return &i;
+    return nullptr;
+}
+
+void setUserFolder(std::string folder) { folderRef() = std::move(folder); }
+const std::string& userFolder() { return folderRef(); }
+
+std::vector<Image> userImages() {
+    std::vector<Image> out;
+    const std::string& folder = folderRef();
+    if (folder.empty()) return out;
+    std::error_code ec;
+    std::vector<fs::path> files;
+    for (fs::directory_iterator it(P(folder), ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code e2;
+        if (!it->is_regular_file(e2)) continue;
+        const std::string name = U(it->path().filename());
+        if (kindOfFormat(formatFromExtension(name)) != MediaKind::Image) continue;
+        files.push_back(it->path());
+    }
+    std::sort(files.begin(), files.end(), [](const fs::path& a, const fs::path& b) {
+        return guide::fold(U(a.filename())) < guide::fold(U(b.filename()));
+    });
+    for (const auto& f : files) {
+        auto bytes = std::make_shared<Bytes>();
+        if (!readAll(f, *bytes) || bytes->empty()) continue;
+        const std::string name = U(f.filename());
+        const MediaInfo m = inspectMedia(*bytes, name);
+        if (m.kind != MediaKind::Image || !m.ok()) continue;
+        Image i;
+        i.id = "mes/" + name;
+        i.label = stemExt(name).first;
+        i.category = std::string(kMine);
+        i.words = name;
+        i.width = m.width;
+        i.height = m.height;
+        i.format = m.format;
+        i.file = U(f);
+        i.data = std::move(bytes);
+        out.push_back(std::move(i));
+    }
+    return out;
+}
+
+bool addUserImage(const std::string& name, const Bytes& data, std::string* stored, bool* existed, std::string* why) {
+    const auto fail = [why](std::string m) {
+        if (why) *why = std::move(m);
+        return false;
+    };
+    if (existed) *existed = false;
+    const std::string& folder = folderRef();
+    if (folder.empty()) return fail("pas de dossier pour Mes images");
+    const std::string clean = safeFileName(name);
+    const MediaInfo m = inspectMedia(data, clean);
+    if (m.kind != MediaKind::Image || !m.ok())
+        return fail(clean + " n'est pas une image (PNG, JPEG, BMP, GIF, SVG ou ICO)" + (m.ok() ? std::string{} : " : " + m.error));
+    std::error_code ec;
+    fs::create_directories(P(folder), ec);
+    // Le meme contenu deja la : rien a ecrire.
+    for (const auto& img : userImages())
+        if (img.data && *img.data == data) {
+            if (existed) *existed = true;
+            if (stored) *stored = U(P(img.file).filename());
+            return true;
+        }
+    auto [stem, ext] = stemExt(clean);
+    if (ext.empty()) {
+        ext = "." + m.format;
+        for (auto& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    std::string file = stem + ext;
+    for (int n = 2; n < 1000 && fs::exists(P(folder) / P(file), ec); ++n) file = stem + " (" + std::to_string(n) + ")" + ext;
+    const fs::path target = P(folder) / P(file);
+    {
+        std::ofstream out(target, std::ios::binary | std::ios::trunc);
+        if (!out) return fail("\xC3\xA9" "criture impossible : " + U(target));
+        out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+        if (!out) return fail("\xC3\xA9" "criture incompl\xC3\xA8te : " + U(target));
+    }
+    if (stored) *stored = file;
+    return true;
+}
+
+bool addUserFile(const std::string& path, std::string* stored, bool* existed, std::string* why) {
+    Bytes data;
+    if (!readAll(P(path), data) || data.empty()) {
+        if (why) *why = "fichier illisible : " + path;
+        return false;
+    }
+    return addUserImage(U(P(path).filename()), data, stored, existed, why);
+}
+
+bool removeUserImage(const Image& img, std::string* why) {
+    if (!img.mine()) {
+        if (why) *why = "une image de la biblioth\xC3\xA8que se garde (seules Mes images se retirent)";
+        return false;
+    }
+    std::error_code ec;
+    if (!fs::remove(P(img.file), ec) || ec) {
+        if (why) *why = "suppression impossible : " + img.file;
+        return false;
+    }
+    return true;
+}
+
+bool matches(const Image& img, std::string_view query) {
+    const std::string q = guide::fold(query);
+    const std::string hay = guide::fold(img.label + " " + img.category + " " + img.words + " " + img.id);
+    std::size_t at = 0;
+    bool any = false;
+    while (at < q.size()) {
+        while (at < q.size() && (q[at] == ' ' || q[at] == ',')) ++at;
+        std::size_t end = at;
+        while (end < q.size() && q[end] != ' ' && q[end] != ',') ++end;
+        if (end == at) break;
+        const std::string word = q.substr(at, end - at);
+        at = end;
+        any = true;
+        bool found = false;
+        for (std::size_t pos = hay.find(word); pos != std::string::npos && !found; pos = hay.find(word, pos + 1))
+            found = pos == 0 || !std::isalnum(static_cast<unsigned char>(hay[pos - 1]));
+        if (!found) return false;
+    }
+    return any;
+}
+
+const std::vector<Swatch>& swatches() {
+    static const std::vector<Swatch> k = {
+        {"clair", "Clair", kInk},        {"sombre", "Sombre", kDarkInk},  {"noir", "Noir", 0x111111},
+        {"gris", "Gris", 0x8A94A6},       {"bleu", "Bleu", 0x2F6FD6},      {"vert", "Vert", 0x1E9A4A},
+        {"jaune", "Jaune", 0xF5C400},     {"orange", "Orange", 0xEE8A1F},  {"rouge", "Rouge", 0xD93A2B},
+    };
+    return k;
+}
+
+std::uint32_t autoInk(std::string_view background) {
+    unsigned r = 0x20, g = 0x24, b = 0x2B;
+    if (background.size() >= 7 && background[0] == '#') {
+        const auto h = [&](std::size_t at) { return static_cast<unsigned>(std::stoul(std::string(background.substr(at, 2)), nullptr, 16)); };
+        try {
+            r = h(1);
+            g = h(3);
+            b = h(5);
+        } catch (...) {
+        }
+    }
+    return (r * 299 + g * 587 + b * 114) / 1000 < 140 ? kInk : kDarkInk;
+}
+
+BlobPtr contentFor(const Image& img, std::uint32_t rgb) {
+    if (!img.data || !img.ink || (rgb & 0xFFFFFFu) == kInk) return img.data;
+    static std::mutex m;
+    static std::map<std::pair<const void*, std::uint32_t>, BlobPtr> cache;
+    const std::lock_guard<std::mutex> lock(m);
+    auto& slot = cache[{img.data.get(), rgb & 0xFFFFFFu}];
+    if (slot) return slot;
+    std::string text(img.data->begin(), img.data->end());
+    const std::string to = hex6(rgb);
+    for (std::size_t at = text.find(kInkHex); at != std::string::npos; at = text.find(kInkHex, at + to.size()))
+        text.replace(at, kInkHex.size(), to);
+    slot = std::make_shared<const Bytes>(text.begin(), text.end());
+    return slot;
+}
+
+std::string resourceName(const Image& img, std::uint32_t rgb) {
+    if (img.mine()) return U(P(img.file).filename());
+    std::string name = img.id;
+    rgb &= 0xFFFFFFu;
+    if (img.ink && rgb != kInk) {
+        std::string key;
+        for (const auto& s : swatches())
+            if (s.rgb == rgb) key = std::string(s.key);
+        if (key.empty()) {
+            key = hex6(rgb).substr(1);
+            for (auto& ch : key) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        }
+        name += "-" + key;
+    }
+    return name + ".svg";
+}
+
+Imported importImage(Project& p, const Image& img, std::uint32_t rgb) {
+    const BlobPtr blob = contentFor(img, rgb);
+    Imported out;
+    if (!blob) return out;
+    for (const auto& r : p.assets.resources)
+        if (r.data && (r.data == blob || *r.data == *blob)) {
+            out.id = r.id;
+            out.name = r.name;
+            out.reused = true;
+            return out;
+        }
+    Resource r = makeResource(p, resourceName(img, rgb), blob,
+                              img.mine() ? img.file : "Biblioth\xC3\xA8que d'images \xE2\x80\xBA " + img.category + " \xE2\x80\xBA " + img.label);
+    out.id = r.id;
+    out.name = r.name;
+    p.assets.resources.push_back(std::move(r));
+    return out;
+}
+
+std::string sizeText(const Image& img) {
+    const std::string wh = std::to_string(img.width) + " x " + std::to_string(img.height);
+    return img.format == "SVG" ? wh + ", vectorielle (nette \xC3\xA0 toute taille)" : wh + " px";
+}
+
+} // namespace imagelib
 
 } // namespace hmi
