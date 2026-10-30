@@ -22,6 +22,8 @@
 #include "../../hmi/HmiWidgets.hpp"       // 1.12.13 : les en-tetes des cases fixes
 #include "../../hmi/HmiSystemMenu.hpp"          // 1.9 : les onglets de Parametres systeme
 #include "../../hmi/HmiMedia.hpp"
+#include "../../hmi/HmiNotify.hpp"         // 1.14.0 (M4) : le mot de passe d'un enregistrement, masque
+#include "../../hmi/HmiRecording.hpp"      // 1.14.0 (M4) : les enregistrements du dossier
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
@@ -1334,6 +1336,91 @@ void HmiActionsPanel::rebuildGrid() {
                                          "Seul un geste de l'op\xC3\xA9rateur (clic, double clic, appui long) fait demander o\xC3\xB9 "
                                          "enregistrer ; ce d\xC3\xA9" "clencheur-ci \xC3\xA9" "crit dans exports/ du projet."));
         // ---- fin Lot API 8 ----
+    }
+    // 1.14.0 (M4) : LES ENREGISTREMENTS - les cases de la maquette (scene 4) : le nom (un texte a trous), la duree, le
+    // mot de passe (masque dans le projet), s'il en tourne deja un ; l'enregistrement a rejouer (ceux du dossier), sa
+    // vitesse, d'ou, son mot de passe ; les secondes ; la vitesse ; le dossier d'un export.
+    if (hmi::operationIsRecording(a.operation)) {
+        namespace ak = hmi::actionkinds;
+        const auto setParam = [&](const char* key) {
+            return commitWith([key](Action& n, std::string_view v) {
+                ak::setParam(n, key, std::string(v));
+                return true;
+            });
+        };
+        const Operation o = a.operation;
+        if (o == Operation::RecordStart || o == Operation::RecordToggle) {
+            op.properties.push_back(prop("Nom", a.target, PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
+                                         "Le nom de l'enregistrement : $rep\xC3\xA8res$ et {formules} (Essai $Ligne$ {SYS.Date}). Vide : "
+                                         "\xC2\xAB Enregistrement <date> \xC2\xBB ; un nom pris : \xC2\xAB Nom (2) \xC2\xBB."));
+            op.properties.push_back(prop("Dur\xC3\xA9" "e maximale (min)", ak::param(a, "duree"), PG::ValueType::Text, {}, setParam("duree"),
+                                         "Vide : celle de Configuration \xE2\x80\xBA Enregistrements (30 min)."));
+            const std::string masked = ak::param(a, "mot_de_passe");
+            op.properties.push_back(prop("Mot de passe", masked.empty() ? std::string{} : std::string("\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2"),
+                                         PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) {
+                                             if (v == "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2") return true;   // inchange
+                                             ak::setParam(n, "mot_de_passe", v.empty() ? std::string{} : hmi::notify::maskSecret(v));
+                                             return true;
+                                         }),
+                                         "Vide : en clair. Sinon la piste est chiffr\xC3\xA9" "e : il faut le mot de passe pour la rejouer et lire ses "
+                                         "valeurs. Gard\xC3\xA9 masqu\xC3\xA9 dans le projet."));
+            const std::string already = ak::param(a, "deja") == "redemarrer" ? "red\xC3\xA9marrer" : "ne rien faire";
+            op.properties.push_back(prop("S'il en tourne d\xC3\xA9j\xC3\xA0 un", already, PG::ValueType::Enum,
+                                         {"ne rien faire", "red\xC3\xA9marrer"},
+                                         commitWith([](Action& n, std::string_view v) {
+                                             ak::setParam(n, "deja", v == "ne rien faire" ? std::string{} : std::string("redemarrer"));
+                                             return true;
+                                         }),
+                                         "Red\xC3\xA9marrer : celui qui tourne est gard\xC3\xA9, un nouveau part."));
+        }
+        if (o == Operation::RecordStop || o == Operation::RecordToggle)
+            op.properties.push_back(prop("Demander le nom", ak::param(a, "demander").empty() ? std::string("FALSE") : ak::param(a, "demander"),
+                                         PG::ValueType::Boolean, {}, setParam("demander"),
+                                         "La fen\xC3\xAAtre Arr\xC3\xAAter l'enregistrement (nom, description, mot de passe ; l'enregistrer ou le jeter). "
+                                         "D\xC3\xA9" "coch\xC3\xA9" "e : il se garde sous son nom."));
+        if (o == Operation::ReplayStart || o == Operation::RecordingExport || o == Operation::RecordingDelete) {
+            std::vector<std::string> names = hmi::rec::fileNames(hmi::rec::folderOf(doc_->project.recording, doc_->savedFolder));
+            std::sort(names.begin(), names.end());
+            std::string list;
+            for (std::size_t i = 0; i < names.size() && i < 8; ++i) list += (i ? ", " : "") + names[i];
+            if (names.size() > 8) list += "\xE2\x80\xA6";
+            op.properties.push_back(prop("Enregistrement", a.target, PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
+                                         "Un enregistrement de Ressources \xE2\x80\xBA Enregistrements, ou un nom \xC3\xA0 trous ({Nom_Essai}). "
+                                         "G\xC3\xA9n\xC3\xA9rer signale un nom \xC3\xA9" "crit en dur qui n'y est pas."
+                                             + (list.empty() ? std::string{} : " Dans le dossier : " + list + ".")));
+        }
+        if (o == Operation::ReplayStart) {
+            op.properties.push_back(prop("Vitesse", a.value.empty() ? std::string("1") : a.value, PG::ValueType::Enum,
+                                         {"0.25", "0.5", "1", "2", "4", "8"},
+                                         commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                         "\xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8 ; la barre de relecture la change ensuite."));
+            op.properties.push_back(prop("Depuis (s)", ak::param(a, "depuis").empty() ? std::string("0") : ak::param(a, "depuis"),
+                                         PG::ValueType::Text, {}, setParam("depuis"), "0 : le d\xC3\xA9" "but."));
+            op.properties.push_back(prop("Mot de passe", ak::param(a, "mot_de_passe").empty() ? std::string{} : std::string("\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2"),
+                                         PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) {
+                                             if (v == "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2") return true;
+                                             ak::setParam(n, "mot_de_passe", v.empty() ? std::string{} : hmi::notify::maskSecret(v));
+                                             return true;
+                                         }),
+                                         "Vide : demand\xC3\xA9 \xC3\xA0 l'op\xC3\xA9rateur s'il est prot\xC3\xA9g\xC3\xA9."));
+        }
+        if (o == Operation::ReplaySeek)
+            op.properties.push_back(prop("Secondes", a.value.empty() ? std::string("10") : a.value, PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                         "+10 : avancer ; -10 : reculer."));
+        if (o == Operation::ReplaySpeed)
+            op.properties.push_back(prop("Vitesse", a.value.empty() ? std::string("2") : a.value, PG::ValueType::Enum,
+                                         {"0.25", "0.5", "1", "2", "4", "8"},
+                                         commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                         "\xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8."));
+        if (o == Operation::RecordingExport)
+            op.properties.push_back(prop("Vers le dossier", a.value, PG::ValueType::Text, {},
+                                         commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                         "Un dossier (D:\\Exports) : une copie du .xrec, prot\xC3\xA9g\xC3\xA9" "e s'il l'est."));
     }
     if (a.operation == Operation::Increment || a.operation == Operation::Decrement)
         op.properties.push_back(prop("Pas", a.value.empty() ? std::string("1") : a.value, PG::ValueType::Text, {},

@@ -40147,6 +40147,32 @@ void enregistrements1140() {
     (void)cp.setSetting("commandes", "FALSE");
     check(app::HmiSimulationPane::runCommandAnywhere(hmi::rec::parseCommand({"--enregistrer", "X"}), &said) == hmi::rec::kExitRefused,
           "la case d\xC3\xA9" "coch\xC3\xA9" "e : refus\xC3\xA9 (code 5)");
+    // ---- les actions : leurs cases (scene 4)
+    {
+        app::HmiActionsPanel panel("m4.acts", doc, vid, apply);
+        panel.setBounds({0, 0, 600, 800});
+        panel.setOwner(disp);
+        Action a0;
+        panel.selectIndex(panel.add(a0));
+        panel.layout();
+        check(commitIn(panel.grid(), "Op\xC3\xA9ration", "D\xC3\xA9marrer un enregistrement") && commitIn(panel.grid(), "Nom", "Essai {SYS.Date}")
+                  && commitIn(panel.grid(), "Dur\xC3\xA9" "e maximale (min)", "5") && commitIn(panel.grid(), "Mot de passe", "fat2026")
+                  && commitIn(panel.grid(), "S'il en tourne d\xC3\xA9j\xC3\xA0 un", "red\xC3\xA9marrer"),
+              "D\xC3\xA9marrer un enregistrement : le nom, la dur\xC3\xA9" "e, le mot de passe, s'il en tourne d\xC3\xA9j\xC3\xA0 un");
+        const auto& acts = p.view(vid)->object(disp)->actions;
+        const Action* made = acts.empty() ? nullptr : &acts.back();
+        check(made && made->operation == Operation::RecordStart && made->target == "Essai {SYS.Date}"
+                  && hmi::actionkinds::param(*made, "duree") == "5" && hmi::actionkinds::param(*made, "deja") == "redemarrer"
+                  && hmi::actionkinds::param(*made, "mot_de_passe") != "fat2026"
+                  && hmi::notify::unmaskSecret(hmi::actionkinds::param(*made, "mot_de_passe")) == "fat2026",
+              "l'action r\xC3\xA9gl\xC3\xA9" "e (le mot de passe masqu\xC3\xA9 dans le projet)");
+        check(commitIn(panel.grid(), "Op\xC3\xA9ration", "Rejouer un enregistrement") && commitIn(panel.grid(), "Enregistrement", "Essai renomme")
+                  && commitIn(panel.grid(), "Vitesse", "2"),
+              "Rejouer un enregistrement : lequel, sa vitesse");
+        const auto& acts2 = p.view(vid)->object(disp)->actions;
+        check(!acts2.empty() && acts2.back().operation == Operation::ReplayStart && acts2.back().target == "Essai renomme" && acts2.back().value == "2",
+              "l'action Rejouer r\xC3\xA9gl\xC3\xA9" "e");
+    }
     // ---- l'arbre : Ressources > Enregistrements [n], Configuration > Enregistrements
     {
         using NK = app::ProjectTreeModel::NodeKind;
