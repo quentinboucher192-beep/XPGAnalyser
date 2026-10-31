@@ -83,7 +83,16 @@ La case ne s'écrit dans le projet que **décochée** (`incidents=0`) : un proje
 
 ## 5. Les essais
 
-ESSAIS
+**108 suites d'essais, toutes réussies** sous Linux (la construction complète, sans nouvel avertissement). Celles de la 1.20.2 :
+
+| Suite | Ce qu'elle vérifie | Résultat |
+|---|---|---|
+| ai_reseau_test | la bande « Plan en cours » (vérification, validation requise, application, appliqué, dépliée, clic sur une étape, croix) ; les blocs de code (découpe, langue, ligne longue repliée, bouton Copier : le code exact dans le presse-papiers, « Copié ») | 252 vérifications, 0 échec |
+| hmi_incident_test | le volet (dossiers par alarme, recherche, criticité, tri, l'incident le plus récent d'un dossier, Arrêter / Reprendre gardé) ; la case Incidents d'une alarme, d'un groupe, d'une alarme d'objet ; l'interrupteur général (aucune image demandée, tampon rendu, relu du projet) | 218 contrôles, 0 échec |
+| hmi_recording_test | la copie du projet dans l'enregistrement, la relecture avec elle (vue renommée, objet et variable supprimés depuis), le retour au projet d'aujourd'hui, un enregistrement d'avant sans copie | 381 vérifications, 0 échec |
+| hmi_editor_test (alarmes) | la colonne et la fiche Incidents, la case d'un groupe (mêlée « – », une seule commande), plusieurs alarmes ensemble, Ctrl+Z / Ctrl+Y, coller depuis Excel, l'enregistrement (`incidents=0` seulement décochée), un projet d'avant | 35 contrôles, 0 échec |
+| hmi_editor_test (le reste) | les notes de version (548, 78 versions), l'aide F1 (269 sujets, le texte et le C++ identiques) | réussie |
+| core_process_test | (pour la 1.21.0) un programme lancé à part, borné en temps, en mémoire et en sortie | 7 vérifications, 0 échec |
 
 ## 6. Installer
 
@@ -105,7 +114,12 @@ Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 
 ## 7. Les limites
 
-LIMITES
+- **Le plan en cours** pendant une application de fond ne connaît que l'avancement global : les étapes disent « En cours » jusqu'au compte rendu, jamais une réussite avant qu'elle ait eu lieu.
+- **Les blocs de code** n'ont pas de coloration syntaxique (le code est montré tel quel, sur son fond).
+- **Les vidéos d'incident** restent en Motion-JPEG (lisibles partout, par le lecteur Vidéo de l'IHM) : plus nettes et plus fluides, elles sont aussi plus lourdes qu'avant (qualité 92 au lieu de 75, 5 images par seconde au lieu de 2 ; la taille n'a pas été mesurée sur un vrai projet). 10 images par seconde au plus.
+- **Les enregistrements** ne copient ni les images ni les sons (ils viennent du projet actuel) ; une copie du projet de plus de 64 Mio (décompressée) n'est pas gardée, et c'est dit.
+- **La case Incidents** porte sur les alarmes de IHM › Alarmes et sur les groupes ; une alarme définie dans un symbole n'a pas sa propre case : elle suit la case du groupe de son objet.
+- **Pas de nouvelles captures d'écran** (à ta demande) ; les vérifications Windows sont faites sous Wine, pas sur un vrai Windows.
 
 ## 8. Ce qui a été optimisé pour livrer plus tôt
 
