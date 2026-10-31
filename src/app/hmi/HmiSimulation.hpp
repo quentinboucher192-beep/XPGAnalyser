@@ -34,6 +34,7 @@
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiScenarios.hpp"          // lot 13 : les essais
 #include "../../hmi/HmiWhy.hpp"                // 1.12.27 : Pourquoi ?
+#include "../FileView.hpp"                       // 1.21.0 : l'apercu du fichier choisi (une fenetre)
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -186,6 +187,10 @@ struct HmiSimulationHost {
         askRecordingStop;
     std::function<void(const hmi::ReplayRequest&, const std::string& error, std::function<void(bool, std::string)> done)>
         askReplayPassword;
+    // 1.21.0 : L'APERCU DU FICHIER CHOISI dans un Explorateur de fichiers trop etroit pour le montrer en lui (propriete
+    // Apercu cochee) : une fenetre d'apercu, deplacable et redimensionnable, la meme pour les choix suivants. `allowOpen` :
+    // ses boutons Ouvrir avec le programme du systeme et Ouvrir le dossier. Nul : pas de fenetre (les essais).
+    std::function<void(const app::fileview::Source&, bool allowOpen)> showFilePreview;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -726,6 +731,9 @@ public:
     // ne le fige plus (voir followClock).
     void refreshNow();
     void refreshAt(double now);
+    // 1.21.0 : apres un geste sur un Explorateur de fichiers (une ligne choisie, ouverte) : s'il est trop etroit pour son
+    // apercu (et sa propriete Apercu cochee), le fichier choisi va a la fenetre d'apercu de l'hote. Vrai : envoye.
+    bool followFilePreview(hmi::Id object, const std::string& part);
     // Relancer l'IHM : variables a leur valeur initiale, scripts de demarrage,
     // vue de demarrage.
     void restart();

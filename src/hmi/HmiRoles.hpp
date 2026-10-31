@@ -206,6 +206,8 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"pickTo", Role::Formula, Role::Text}, {"allowRefresh", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     {"allowExtract", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"extractTo", Role::Name},
     {"showSize", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showDate", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    // 1.21.0 : l'apercu du fichier choisi, et ses boutons Ouvrir (permis ou non)
+    {"showPreview", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"allowOpen", Role::Boolean, Role::Text, Unit::None, "BOOL"},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},

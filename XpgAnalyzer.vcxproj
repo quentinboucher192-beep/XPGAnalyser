@@ -539,6 +539,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\DispositionDialog.cpp" />
     <ClCompile Include="src\app\DispositionPreview.cpp" />
     <ClCompile Include="src\app\EditionMigration.cpp" />
+    <ClCompile Include="src\app\FileView.cpp" />
+    <ClCompile Include="src\app\FileViewer.cpp" />
+    <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\ProjectExchange.cpp" />
@@ -1077,6 +1080,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\DispositionDialog.hpp" />
     <ClInclude Include="src\app\DispositionPreview.hpp" />
     <ClInclude Include="src\app\EditionMigration.hpp" />
+    <ClInclude Include="src\app\FileView.hpp" />
+    <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\ProjectExchange.hpp" />

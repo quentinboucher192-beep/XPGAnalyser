@@ -37,16 +37,26 @@
 
 namespace app {
 
+class FileViewer;   // 1.21.0 : app/FileViewer.hpp, l'apercu de tous les fichiers
+
 // ------------------------------------------------------------------ apercus ---
+//  1.21.0 : l'apercu d'une ressource est celui de tous les fichiers (app/FileViewer : l'image ajustee et zoomee, le
+//  son et Lire, la video, la police ecrite, un PDF page a page, un texte, une grille, un JSON, un DOCX, un zip, un
+//  binaire), ses renseignements dessous (nom, genre, dimensions, poids, utilisations).
 class HmiResourcePreview final : public ui::Widget {
 public:
-    explicit HmiResourcePreview(std::string id) : ui::Widget(std::move(id)) {}
-    void show(const hmi::Project* project, hmi::Id resource) { project_ = project; resource_ = resource; invalidate(); }
+    explicit HmiResourcePreview(std::string id);
+    ~HmiResourcePreview() override;
+    void show(const hmi::Project* project, hmi::Id resource);
+    [[nodiscard]] FileViewer& viewer() noexcept { return *viewer_; }
 protected:
     void onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;
 private:
-    const hmi::Project* project_{nullptr};
-    hmi::Id             resource_{hmi::kNoId};
+    const hmi::Project*         project_{nullptr};
+    hmi::Id                     resource_{hmi::kNoId};
+    std::unique_ptr<FileViewer> viewer_;
+    gfx::Rect                   area_{};
 };
 
 class HmiResourcesPane final : public ui::Widget {
@@ -236,7 +246,11 @@ private:
 class HmiFilePreview final : public ui::Widget {
 public:
     explicit HmiFilePreview(std::string id);
+    ~HmiFilePreview() override;
     void show(const hmi::ExternalFile* file);
+    // 1.21.0 : un document present (PDF, DOCX, ZIP, image, binaire...) se montre dans l'apercu de tous les fichiers.
+    [[nodiscard]] FileViewer& viewer() noexcept { return *viewer_; }
+    [[nodiscard]] bool viewerShown() const noexcept { return docView_; }
     [[nodiscard]] const hmi::ExternalData* data() const noexcept { return data_.get(); }
     // ---- Lot API 8 : glisser de fichiers, 2e partie ----
     //  Un document (PDF, DOCX, ZIP...) : son nom, sa taille, et le bouton
@@ -247,12 +261,16 @@ public:
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;   // 1.21.0 : les gestes de l'apercu d'un document
 private:
     std::shared_ptr<const hmi::ExternalData> data_;
     std::string                              title_;
     ui::TableView*                           grid_{nullptr};
     std::string                              openPath_;          // lot API 8 : le document montre (chemin resolu)
     ui::Button*                              open_{nullptr};
+    std::unique_ptr<FileViewer>              viewer_;            // 1.21.0 : l'apercu d'un document
+    bool                                     docView_{false};
+    gfx::Rect                                viewArea_{};
     core::ConnectionScope                    links_;
 };
 

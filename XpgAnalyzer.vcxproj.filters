@@ -1246,6 +1246,15 @@
     <ClCompile Include="src\app\EditionMigration.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\FileView.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\FileViewer.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\FileViewerWindow.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\GrafcetCodePanel.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2840,6 +2849,12 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\EditionMigration.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FileView.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\FileViewer.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\GrafcetCodePanel.hpp">

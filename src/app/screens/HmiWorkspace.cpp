@@ -70,6 +70,7 @@
 #include "../../help/F1Table.hpp"   // 1.11 (T2, tranche 16) : F1 ouvre le centre, au sujet de l'endroit
 #include "../../hmi/HmiPublicVars.hpp"
 #include "../hmi/HmiImages.hpp"
+#include "../FileViewer.hpp"                         // 1.21.0 : la fenetre d'apercu (un Explorateur de fichiers etroit)
 #include "../hmi/HmiPanes.hpp"
 #include "../hmi/HmiAskDialog.hpp"                 // 1.11.18 (lot 5) : migrer les declarations (les codes a cocher)
 #include "../../hmi/HmiMigrate.hpp"                // 1.11.18 (lot 5) : le plan de la migration
@@ -1417,6 +1418,11 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.resource = [this](const hmi::ResourceRequest& rq) { askHmiRuntimeResource(rq); };
         // Lot 11 : un export va dans exports/ du dossier du projet.
         host.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
+        // 1.21.0 : l'apercu du fichier choisi dans un Explorateur de fichiers etroit - sa fenetre (une seule, reprise).
+        host.showFilePreview = [this](const fileview::Source& src, bool allowOpen) {
+            if (!showPreviewWindow(app_.detachedWindows(), src, allowOpen) && status_)
+                status_->setTransientMessage("Impossible d'ouvrir la fen\xC3\xAAtre d'aper\xC3\xA7u.", 5.0, ui::StatusBar::Severity::Warning);
+        };
         host.projectFolder = [this] { return app_.projectFolder(); };       // 1.12.26 : les fichiers des scripts
         // ---- Lot API 8 : les exports qui demandent ou ----
         // Lance par un geste de l'operateur (le bouton d'export, l'action Exporter,
