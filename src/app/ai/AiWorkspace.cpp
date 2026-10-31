@@ -27,6 +27,7 @@
 #include "../../core/Edition.hpp"
 #include "../hmi/HmiCommPanes.hpp"   // 1.18.0 : le scanner (Detecter ce qui repond...)
 #include "../hmi/HmiEditor.hpp"
+#include "../../hmi/HmiDeclEdit.hpp"   // 1.19.0 : ouvrir un script nomme dans le plan (goToHmiUsage)
 #include "../screens/Screens.hpp"
 #include "../../domain/ProjectModel.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -138,6 +139,71 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     };
     // 1.16.0 : la vue qu'une proposition vient de creer s'ouvre dans l'editeur.
     core.openView = [this](hmi::Id id) { openHmiView(id); };
+    // 1.19.0 : un element nomme dans le plan d'action ou le compte rendu s'ouvre (son onglet, son volet).
+    core.reveal = [this](const std::string& kind, const std::string& name, const std::string& view) {
+        const auto doc = app_.hmi();
+        if (!doc) return false;
+        const auto& pr = doc->project;
+        if (kind == "objet") {
+            const hmi::View* v = view.empty() ? nullptr : pr.viewByName(view);
+            if (!v) return false;
+            for (const auto& o : v->objects)
+                if (o.name == name) {
+                    openHmiView(v->id, -1, o.id);
+                    return true;
+                }
+            openHmiView(v->id);
+            return true;
+        }
+        if (kind == "vue" || kind == "symbole" || kind == "popup" || kind == "modele" || kind == "entete" || kind == "pied") {
+            const hmi::View* v = pr.viewByName(name);
+            if (!v) return false;
+            openHmiView(v->id);
+            return true;
+        }
+        if (kind == "variable") {
+            const hmi::Variable* v = pr.variable(name);
+            if (!v) return false;
+            askHmiVariable(v->id);
+            return true;
+        }
+        if (kind == "fonction") {
+            const auto* f = pr.functionByName(name);
+            if (!f) return false;
+            openHmiFunctions(f->id);
+            return true;
+        }
+        if (kind == "script") {
+            const auto* sc = pr.generalScript(name);
+            if (!sc) return false;
+            hmi::decledit::Usage u;
+            u.script = sc->id;
+            u.line = 1;
+            goToHmiUsage(u);
+            return true;
+        }
+        if (kind == "alarme") {
+            if (!pr.alarmByName(name)) return false;
+            openHmiPane("alarmes");
+            return true;
+        }
+        if (kind == "equipement") {
+            if (!pr.equipmentByName(name)) return false;
+            openHmiPane("communication");
+            return true;
+        }
+        if (kind == "ressource") {
+            if (!pr.resourceByName(name)) return false;
+            openHmiPane("ressources");
+            return true;
+        }
+        if (kind == "type") {
+            if (!pr.hmiTypeByName(name)) return false;
+            openHmiPane("scripts");
+            return true;
+        }
+        return false;
+    };
 
     ai::AiPanel::UiHost ui;
     ui.showDialog = [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {

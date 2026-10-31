@@ -2022,6 +2022,19 @@ std::string opTarget(const Proposal& p, std::size_t index) {
     return {};
 }
 
+void scopeProposal(Proposal& p, const hmi::View* open) {
+    if (usesOpenView(p) && open) {
+        p.view = open->name;
+        p.viewId = open->id;
+    } else if (createsView(p)) {
+        p.view = newViewName(p);
+        p.viewId = hmi::kNoId;
+    } else if (!usesOpenView(p)) {
+        p.view.clear();
+        p.viewId = hmi::kNoId;
+    }
+}
+
 bool usesOpenView(const Proposal& p) noexcept {
     // Une proposition vide (une ancienne conversation) : la vue visee, comme avant.
     if (p.ops.empty()) return true;

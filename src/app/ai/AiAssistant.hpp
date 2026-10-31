@@ -45,6 +45,7 @@
 #include "AiAnthropic.hpp"
 #include "AiDemo.hpp"
 #include "AiLearning.hpp"
+#include "AiPlan.hpp"   // 1.19.0 : le plan d'action et le compte rendu
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -78,6 +79,10 @@ public:
         // (IHM Studio n'en a pas d'autre) ; vrai et `said` : ce qui a ete lu ("891 variables globales et 28 types
         // (DDT)") ; faux et `said` : pourquoi. Nul : un .XPG joint reste une piece jointe ordinaire.
         std::function<bool(const std::string& path, std::string* said)> readPlc;
+        // 1.19.0 (a la fin) : MONTRER un element du projet nomme dans le plan ou le compte rendu (une vue, un objet d'une
+        // vue, une variable, un type, une fonction, un script, une alarme, un equipement, une ressource) : son onglet ou
+        // son volet. `kind` : celui de plan::Ref. Faux : introuvable (supprime depuis). Nul : rien ne s'ouvre (un essai).
+        std::function<bool(const std::string& kind, const std::string& name, const std::string& view)> reveal;
     };
 
     // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un
@@ -165,6 +170,15 @@ public:
     // Reappliquer une proposition annulee : la vue est exactement celle de la proposition, elle
     // s'applique de nouveau (UN pas d'annulation, une nouvelle commande). Faux et `why` sinon.
     bool reapply(int message, std::string* why = nullptr);
+    // 1.19.0 : LE PLAN D'ACTION de la proposition (ses etapes dans l'ordre d'execution, leurs etats) : celui garde a
+    // l'application (les etats confirmes dans le projet ; << annulee >> apres un Ctrl+Z), sinon celui de la validation
+    // du moment. Le meme plan que l'apercu : aucune divergence possible.
+    [[nodiscard]] plan::Plan planOf(int message) const;
+    // Le compte rendu reel (le projet d'avant et d'apres Appliquer) ; vide : pas encore appliquee.
+    [[nodiscard]] std::optional<plan::Report> reportOf(int message) const;
+    // Retirer (ou remettre) une etape du plan avant d'appliquer : les etapes qui en dependent sont ignorees a leur tour
+    // (le plan est recalcule). Faux : la proposition n'est plus << proposee >>.
+    bool setExcluded(int message, std::size_t op, bool excluded);
 
     // ---- le mode, les reglages, la cle -----------------------------------------------------
     [[nodiscard]] bool directMode() const noexcept { return settings_.mode == "direct"; }

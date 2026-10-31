@@ -52,6 +52,35 @@ std::string elideTip(gfx::IRenderer& r, const std::string& text, gfx::FontId f, 
     return shown;
 }
 
+// 1.19.0 : les phases REELLES d'une proposition (celles qui ont eu lieu ; aucune n'est montree a l'avance).
+std::string phasesOf(const Proposal& p, const plan::Plan& pl, Assistant::Applied applied, bool ok) {
+    const std::string sep = " \xE2\x80\xBA ";
+    std::string s = "Analyse" + sep + "Planification (" + std::to_string(pl.steps.size()) + " \xC3\xA9tapes)" + sep + "V\xC3\xA9rification";
+    if (p.state == "proposee") return s + (ok ? " sans erreur bloquante" : " : erreurs") + sep + "Proposition (en attente de ta validation)";
+    s += sep + "Application";
+    if (applied == Assistant::Applied::Undone) return s + " annul\xC3\xA9" "e (Ctrl+Z)";
+    return s + sep + "Compte rendu";
+}
+
+// L'en-tete du plan : le nombre d'etapes et l'avancement reel (les etats confirmes).
+std::string planHeadOf(const Proposal& p, const plan::Plan& pl) {
+    using plan::State;
+    std::string s = "Plan d'action \xE2\x80\x94 " + std::to_string(pl.steps.size()) + " \xC3\xA9tapes";
+    const auto part = [&](State st, const char* one, const char* many) {
+        const std::size_t n = pl.count(st);
+        if (n > 0) s += ", " + std::to_string(n) + " " + (n > 1 ? many : one);
+    };
+    if (p.state == "appliquee") {
+        part(State::Applied, "appliqu\xC3\xA9" "e", "appliqu\xC3\xA9" "es");
+        part(State::Cancelled, "annul\xC3\xA9" "e", "annul\xC3\xA9" "es");
+    } else {
+        part(State::Validated, "valid\xC3\xA9" "e", "valid\xC3\xA9" "es");
+    }
+    part(State::Failed, "en erreur", "en erreur");
+    part(State::Skipped, "ignor\xC3\xA9" "e", "ignor\xC3\xA9" "es");
+    return s;
+}
+
 std::string tipAt(const std::vector<std::pair<gfx::Rect, std::string>>& tips, gfx::Point p) {
     for (auto it = tips.rbegin(); it != tips.rend(); ++it)
         if (it->first.contains(p)) return it->second;
@@ -1671,6 +1700,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     std::string key;
     if (p) {
         key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+        for (const auto x : p->excluded) key += "x" + std::to_string(x);   // 1.19.0 : les etapes retirees
         // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
         if (auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr)
             key += "|" + proposalPrint(doc->project, *p);
@@ -1679,6 +1709,9 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
         t.key = key;
         t.preview = panel_.assistant().previewOf(message);
         t.check = panel_.assistant().check(message);
+        // 1.19.0 : le plan - celui de la validation (sans la refaire), ou celui garde a l'application.
+        const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
+        t.plan = p && p->state == "proposee" && doc ? plan::build(doc->project, *p, t.check) : panel_.assistant().planOf(message);
     }
     return t;
 }
@@ -1745,6 +1778,45 @@ void AiChatView::measure() {
                         b.createLines = wrapPlain("Cr\xC3\xA9" "e aussi : " + made, kMeta, cw - 24.f);
                         ch += static_cast<float>(b.createLines.size()) * kNoteH + 2.f;
                     }
+                    // 1.19.0 : LE PLAN D'ACTION - seulement pour une demande qui en merite un (pas une simple question).
+                    const plan::Plan& pl = t.plan;
+                    const bool showPlan = m.proposal->state != "refusee" && pl.worthShowing();
+                    if (showPlan) {
+                        const auto applied = m.proposal->state == "appliquee" ? a.appliedState(static_cast<int>(i)) : Assistant::Applied::NotApplied;
+                        b.phaseLines = wrapPlain(phasesOf(*m.proposal, pl, applied, t.check.ok()), kMeta, cw - 24.f);
+                        ch += static_cast<float>(b.phaseLines.size()) * kNoteH + 2.f;
+                        b.planY = ch;
+                        b.planHead = planHeadOf(*m.proposal, pl);
+                        ch += kNoteH + 6.f;
+                        if (planOpen_.count(m.proposal->id)) {
+                            constexpr std::size_t kMaxSteps = 80;
+                            b.stepsY = ch;
+                            for (const auto& st : pl.steps) {
+                                if (b.steps.size() == kMaxSteps) {
+                                    b.stepsMore = "\xE2\x80\xA6 et " + std::to_string(pl.steps.size() - kMaxSteps)
+                                                  + " autres \xC3\xA9tapes (Pr\xC3\xA9visualiser les montre toutes)";
+                                    break;
+                                }
+                                Block::StepLine sl;
+                                sl.text = st.id + "  " + st.title + "  \xE2\x80\x94 "
+                                          + (st.excluded ? std::string("retir\xC3\xA9" "e") : std::string(plan::stateLabel(st.state)));
+                                if (!st.errors.empty()) sl.text += " : " + st.errors.front();
+                                else if (!st.note.empty() && !st.excluded) sl.text += " (" + st.note + ")";
+                                sl.state = st.state;
+                                sl.op = st.op;
+                                sl.excluded = st.excluded;
+                                sl.removable = open && (st.optional || st.excluded);
+                                const plan::Ref* ref = !st.creates.empty() ? &st.creates.front() : !st.modifies.empty() ? &st.modifies.front() : nullptr;
+                                if (ref) {
+                                    sl.kind = ref->kind;
+                                    sl.name = ref->name;
+                                    sl.view = !ref->view.empty() ? ref->view : !st.target.empty() ? st.target : m.proposal->view;
+                                }
+                                b.steps.push_back(std::move(sl));
+                            }
+                            ch += static_cast<float>(b.steps.size()) * kNoteH + (b.stepsMore.empty() ? 0.f : kNoteH) + 4.f;
+                        }
+                    }
                     if (open) {
                         const bool stale = t.check.stale || t.check.viewMissing;
                         b.buttons = {"Pr\xC3\xA9visualiser\xE2\x80\xA6"};
@@ -1796,6 +1868,34 @@ void AiChatView::measure() {
                                 done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
                                 if (m.proposal->state == "refusee") b.buttons = {"Revenir sur le refus"};   // 1.16.1
                                 break;
+                        }
+                        // 1.19.0 : LE COMPTE RENDU REEL (le projet d'avant et d'apres Appliquer), garde avec la proposition.
+                        if (const auto rep = a.reportOf(static_cast<int>(i)); rep && showPlan) {
+                            const auto add = [&](const std::string& said, std::uint8_t tone, std::size_t maxLines) {
+                                auto lines = wrapPlain(said, kMeta, cw - 24.f);
+                                if (lines.size() > maxLines) {
+                                    lines.resize(maxLines);
+                                    lines.back() += " \xE2\x80\xA6";
+                                }
+                                for (auto& l : lines) b.reportLines.push_back({std::move(l), tone});
+                            };
+                            const auto names = [](const plan::Line& l) {
+                                std::string out = std::to_string(l.names.size()) + " " + l.category + " : ";
+                                for (std::size_t k = 0; k < l.names.size(); ++k) out += (k ? ", " : "") + l.names[k];
+                                return out;
+                            };
+                            add(b.applied == Assistant::Applied::Undone
+                                    ? std::string("Compte rendu (repris depuis par Ctrl+Z : ce qui suit n'est plus dans le projet)")
+                                    : std::string("Compte rendu"),
+                                b.applied == Assistant::Applied::Undone ? 2 : 4, 2);
+                            for (const auto& l : rep->created) add("Cr\xC3\xA9\xC3\xA9 \xE2\x80\x94 " + names(l), 1, 3);
+                            for (const auto& l : rep->modified) add("Modifi\xC3\xA9 \xE2\x80\x94 " + names(l), 0, 3);
+                            for (const auto& l : rep->reused) add("R\xC3\xA9utilis\xC3\xA9 \xE2\x80\x94 " + names(l), 0, 2);
+                            for (const auto& x : rep->todo) add("\xC3\x80 faire \xE2\x80\x94 " + x, 2, 3);
+                            for (const auto& x : rep->failures) add("Erreur \xE2\x80\x94 " + x, 3, 3);
+                            for (const auto& x : rep->external) add(x, 2, 3);
+                            add(rep->verdict, rep->failed + rep->skipped > 0 ? 2 : 1, 3);
+                            ch += static_cast<float>(b.reportLines.size()) * kNoteH + 4.f;
                         }
                         b.doneLines = wrapPlain(done, kMeta, cw - 24.f);
                         ch += static_cast<float>(b.doneLines.size()) * kNoteH + 2.f;
@@ -2130,7 +2230,64 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
         y += kNoteH;
     }
     if (!b.createLines.empty()) y += 2.f;
+    // 1.19.0 : les phases reelles, le plan d'action (un clic le deplie), ses etapes et leur etat.
+    if (b.planY > 0.f) {
+        for (const auto& l : b.phaseLines) {
+            ctx.r.drawText({card.x + 12.f, y}, l, kMeta, c.textMuted);
+            y += kNoteH;
+        }
+        y = card.y + b.planY;
+        const gfx::Rect head{card.x + 10.f, y, card.w - 20.f, kNoteH + 2.f};
+        ctx.r.fillRoundedRect(head, alpha(c.info, 26), 4.f);
+        const bool unfolded = !b.steps.empty();
+        ui::drawIcon(ctx.r, unfolded ? ui::Icon::Collapse : ui::Icon::Expand, {head.x + 4.f, head.y + 2.f, 14.f, 14.f}, c.textMuted);
+        ctx.r.drawText({head.x + 22.f, head.y + (head.h - lhCap) / 2.f},
+                       elideTip(ctx.r, b.planHead + (unfolded ? "" : "  (clic : d\xC3\xA9plier)"), kMeta, head.w - 28.f, head, tips_), kMeta,
+                       c.text);
+        y += kNoteH + 6.f;
+        if (unfolded) {
+            y = card.y + b.stepsY;
+            for (const auto& sl : b.steps) {
+                gfx::Color dot = c.textDisabled;
+                switch (sl.state) {
+                    case plan::State::Validated: dot = c.info; break;
+                    case plan::State::Applied: dot = c.ok; break;
+                    case plan::State::Failed: dot = c.error; break;
+                    case plan::State::Skipped: dot = c.warning; break;
+                    case plan::State::Cancelled: dot = c.textMuted; break;
+                    default: break;
+                }
+                if (sl.excluded) dot = c.textDisabled;
+                ctx.r.fillRoundedRect({card.x + 14.f, y + 6.f, 7.f, 7.f}, dot, 3.5f);
+                const float linkW = sl.removable ? 70.f : 0.f;
+                const gfx::Rect at{card.x + 26.f, y, card.w - 36.f - linkW, kNoteH};
+                ctx.r.drawText({at.x, y}, elideTip(ctx.r, sl.text, kMeta, at.w, at, tips_), kMeta, sl.excluded ? c.textMuted : c.text);
+                if (sl.removable) {
+                    const std::string link = sl.excluded ? "remettre" : "retirer";
+                    ctx.r.drawText({card.right() - 10.f - ctx.r.measure(link, kMeta).width, y}, link, kMeta, c.info);
+                    tips_.emplace_back(gfx::Rect{card.right() - 80.f, y, 70.f, kNoteH},
+                                       sl.excluded ? std::string("Remettre cette \xC3\xA9tape dans le plan.")
+                                                   : std::string("Retirer cette \xC3\xA9tape facultative (rien n'en d\xC3\xA9pend) : le plan est recalcul\xC3\xA9."));
+                } else if (p->state == "appliquee" && !sl.kind.empty()) {
+                    tips_.emplace_back(at, sl.text + "\nClic : ouvrir " + sl.name + ".");
+                }
+                y += kNoteH;
+            }
+            if (!b.stepsMore.empty()) {
+                ctx.r.drawText({card.x + 26.f, y}, b.stepsMore, kMeta, c.textMuted);
+                y += kNoteH;
+            }
+            y += 4.f;
+        }
+    }
     if (p->state != "proposee") {
+        for (const auto& rl : b.reportLines) {
+            const gfx::Color ink = rl.tone == 1 ? c.ok : rl.tone == 2 ? c.warning : rl.tone == 3 ? c.error : c.text;
+            if (rl.tone == 4) bold(ctx.r, {card.x + 12.f, y}, rl.text, kMeta, ink);
+            else ctx.r.drawText({card.x + 12.f, y}, rl.text, kMeta, ink);
+            y += kNoteH;
+        }
+        if (!b.reportLines.empty()) y += 4.f;
         for (const auto& l : b.doneLines) {
             ctx.r.drawText({card.x + 12.f, y + 2.f}, l, kMeta, b.applied == Assistant::Applied::Undone ? c.warning : c.textMuted);
             y += kNoteH;
@@ -2366,6 +2523,42 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 (void)panel_.clickSuggestion(i);
                 return ui::EventResult::Consumed;
             }
+        // 1.19.0 : le plan d'action - l'en-tete le deplie ; << retirer >> / << remettre >> une etape facultative ; une
+        // etape appliquee ouvre ce qu'elle a cree.
+        for (const auto& b : blocks_) {
+            if (b.planY <= 0.f) continue;
+            const gfx::Rect card = cardRect(b.message);
+            if (card.h <= 0.f || !card.contains(d->pos)) continue;
+            const Proposal* p = panel_.assistant().proposal(b.message);
+            if (!p) continue;
+            const gfx::Rect head{card.x + 10.f, card.y + b.planY, card.w - 20.f, kNoteH + 2.f};
+            if (head.contains(d->pos)) {
+                if (!planOpen_.erase(p->id)) planOpen_.insert(p->id);
+                stick_ = false;
+                measure();
+                placeCards();
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            const float top = card.y + b.stepsY;
+            if (b.steps.empty() || d->pos.y < top || d->pos.y >= top + static_cast<float>(b.steps.size()) * kNoteH) continue;
+            const auto& sl = b.steps[static_cast<std::size_t>((d->pos.y - top) / kNoteH)];
+            if (sl.removable && d->pos.x >= card.right() - 80.f) {
+                (void)panel_.assistant().setExcluded(b.message, sl.op, !sl.excluded);
+                panel_.say(sl.excluded ? "\xC3\x89tape remise dans le plan." : "\xC3\x89tape retir\xC3\xA9" "e : le plan est recalcul\xC3\xA9 (ce qui en d\xC3\xA9pendait est ignor\xC3\xA9).");
+                stick_ = false;
+                measure();
+                placeCards();
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            if (p->state == "appliquee" && !sl.kind.empty()) {
+                const auto& reveal = panel_.assistant().host().reveal;
+                if (!reveal || !reveal(sl.kind, sl.name, sl.view))
+                    panel_.say("\xC2\xAB " + sl.name + " \xC2\xBB n'est plus dans le projet (supprim\xC3\xA9, renomm\xC3\xA9 ou annul\xC3\xA9 depuis).");
+                return ui::EventResult::Consumed;
+            }
+        }
         // Un clic sur une carte (hors de ses boutons) : l'apercu.
         for (const auto& b : blocks_)
             if (b.card.h > 0.f && cardRect(b.message).contains(d->pos) && d->clickCount >= 2) {

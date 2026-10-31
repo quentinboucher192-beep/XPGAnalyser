@@ -98,6 +98,7 @@ private:
     std::string   missingName_;                // la variable introuvable (gardee apres un choix)
     bool          done_{false};
     bool          syncing_{false};
+    bool          planFolded_{false};   // 1.19.0 : les categories du plan repliees a la premiere ouverture
     core::ConnectionScope links_;
 };
 

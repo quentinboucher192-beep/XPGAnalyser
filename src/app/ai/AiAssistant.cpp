@@ -436,10 +436,7 @@ bool Assistant::send(std::string text, std::string* why) {
         // 1.16.0 (captures) : l'empreinte d'avant, celle de ce que la proposition touche (la vue ouverte, ou la vue
         // neuve encore absente, les variables et types crees) - la carte saura dire qu'un Ctrl+Z l'a reprise.
         if (reply.proposal && ctx.project) {
-            if (createsView(*reply.proposal)) {   // la vue neuve : ni le nom ni l'identifiant de la vue ouverte
-                reply.proposal->view = newViewName(*reply.proposal);
-                reply.proposal->viewId = hmi::kNoId;
-            }
+            scopeProposal(*reply.proposal, ctx.view);   // 1.19.0 : la vue ouverte d'abord, sinon la vue neuve principale
             reply.proposal->fingerprint = proposalPrint(*ctx.project, *reply.proposal, ctx.view ? fingerprint(*ctx.view) : std::string{});
         }
         reply.suggestions = !lr.suggestions.empty();
@@ -709,25 +706,48 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
         return false;
     }
     const auto doc = host_.document ? host_.document() : nullptr;
+    // 1.19.0 : le projet d'avant et le plan valide - le compte rendu se lit dans la difference avant / apres.
+    std::optional<hmi::Project> before;
+    plan::Plan pl;
+    if (doc) {
+        before = doc->project;
+        pl = plan::build(doc->project, *p, validate(doc->project, *p, host_.env));
+    }
     std::string w;
     std::vector<std::string> skipped;   // 1.16.1 : ce qui est laisse de cote (appliquer malgre les erreurs)
     auto cmd = ignoringErrors ? makeCommandLenient(doc, *p, skipped, &w, host_.env) : makeCommand(doc, *p, &w, host_.env);
     if (!cmd) {
         if (why) *why = w;
         notice_ = w;
+        // 1.19.0 : une transaction refusee - le projet n'a pas change (rien n'a ete applique), dit dans le journal.
+        appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : " + w);
         ++revision_;
         return false;
     }
     if (host_.apply) host_.apply(std::move(cmd));
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
+    // 1.19.0 : LE COMPTE RENDU REEL - les etats confirmes dans le projet d'apres (jamais ce que l'IA a annonce).
+    if (const auto after = host_.document ? host_.document() : nullptr; after && before) {
+        const plan::Report rep = plan::report(*before, after->project, pl, prop);
+        prop.plan = plan::toJson(pl);
+        prop.report = plan::reportToJson(rep);
+        if (pl.worthShowing()) {
+            appendActivity("conversation", "Plan appliqu\xC3\xA9 : " + rep.verdict);
+            for (const auto& f : rep.failures) appendActivity("conversation", "\xC3\x89tape non appliqu\xC3\xA9" "e : " + f);
+        }
+    }
     // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise. 1.16.0 : proposalPrint (la vue
     // neuve, les variables et les types crees comptent) ; la vue neuve retient son identifiant.
     prop.fingerprintAfter.clear();
     hmi::Id opened = hmi::kNoId;
     if (const auto after = host_.document ? host_.document() : nullptr) {
+        // 1.19.0 : une proposition qui touche AUSSI la vue ouverte garde son identifiant ; la vue neuve s'ouvre quand meme.
         if (createsView(prop))
-            if (const auto* nv = after->project.viewByName(newViewName(prop))) prop.viewId = opened = nv->id;
+            if (const auto* nv = after->project.viewByName(newViewName(prop))) {
+                opened = nv->id;
+                if (!usesOpenView(prop)) prop.viewId = nv->id;
+            }
         prop.fingerprintAfter = proposalPrint(after->project, prop);
     }
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
@@ -770,6 +790,44 @@ Assistant::Applied Assistant::appliedOf(const Proposal& prop) const {
     if (now == p->fingerprint) return Applied::Undone;
     // Un fichier d'avant 1.14.2 n'a pas l'empreinte d'apres : on ne sait pas mieux qu'"appliquee".
     return p->fingerprintAfter.empty() ? Applied::Applied : Applied::Changed;
+}
+
+plan::Plan Assistant::planOf(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p) return {};
+    if (p->state == "appliquee" && p->plan.isObject()) {
+        plan::Plan pl = plan::fromJson(p->plan);
+        // Ctrl+Z : ce qui etait applique est annule (la carte le dit ; le compte rendu garde ce qui avait ete fait).
+        if (appliedOf(*p) == Applied::Undone)
+            for (auto& s : pl.steps)
+                if (s.state == plan::State::Applied) s.state = plan::State::Cancelled;
+        return pl;
+    }
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return plan::build(hmi::Project{}, *p, Check{});
+    return plan::build(doc->project, *p, validate(doc->project, *p, host_.env));
+}
+
+std::optional<plan::Report> Assistant::reportOf(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p || p->state != "appliquee" || !p->report.isObject()) return std::nullopt;
+    return plan::reportFromJson(p->report);
+}
+
+bool Assistant::setExcluded(int message, std::size_t op, bool excluded) {
+    auto* c = cur();
+    if (!c || message < 0 || static_cast<std::size_t>(message) >= c->messages.size()) return false;
+    auto& m = c->messages[static_cast<std::size_t>(message)];
+    if (!m.proposal || m.proposal->state != "proposee" || op >= m.proposal->ops.size()) return false;
+    auto& ex = m.proposal->excluded;
+    const auto it = std::find(ex.begin(), ex.end(), op);
+    if (excluded == (it != ex.end())) return true;
+    if (excluded) ex.push_back(op);
+    else ex.erase(it);
+    std::sort(ex.begin(), ex.end());
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
 }
 
 bool Assistant::reapply(int message, std::string* why) {

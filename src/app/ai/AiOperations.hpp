@@ -270,6 +270,10 @@ struct Env {
 // 1.19.0 : la vue visee par une operation sur des objets (son nom ; vide : la vue ouverte) - Operation::target, sinon la
 // derniere creer_vue ecrite avant elle. Vide aussi pour une operation du projet.
 [[nodiscard]] std::string opTarget(const Proposal&, std::size_t index);
+// 1.19.0 : LA PORTEE d'une proposition, la meme partout (IA en ligne, IA integree, Assistant) : la vue ouverte si elle
+// touche des objets sans vue nommee (meme si elle cree aussi une vue) ; sinon la vue neuve principale (son nom, aucun
+// id tant qu'elle n'existe pas) ; sinon aucune vue (elle ne cree que des elements du projet).
+void scopeProposal(Proposal&, const hmi::View* open);
 // 1.16.0 : L'EMPREINTE DE CE QUE LA PROPOSITION TOUCHE, telle qu'elle est dans le projet : la vue visee
 // (fingerprint, comme en 1.15.0 : une proposition qui ne cree que des objets garde la meme empreinte) ;
 // la vue neuve d'un creer_vue (absente, ou son empreinte) ; + l'etat des variables et des types qu'elle cree

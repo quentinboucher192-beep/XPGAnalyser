@@ -33,6 +33,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -344,6 +345,25 @@ private:
         float                    noteY{0.f}, retryY{0.f};
         // 1.16.0 : ce que la proposition cree en plus des objets (la vue, les variables, les types), sous les comptes.
         std::vector<std::string> createLines;
+        // 1.19.0 : LE PLAN D'ACTION (une demande qui en merite un : plan::Plan::worthShowing) - les phases reelles, l'en-tete
+        // (un clic le deplie), une ligne par etape dans l'ordre d'execution avec son etat ; apres Appliquer, le compte
+        // rendu reel. Les hauteurs sont relatives au haut de la carte.
+        std::vector<std::string> phaseLines;
+        std::string              planHead;
+        float                    planY{0.f};       // l'en-tete du plan (0 : pas de plan affiche)
+        struct StepLine {
+            std::string text;
+            plan::State state{plan::State::ToDo};
+            std::size_t op{0};
+            bool        removable{false};          // proposee, facultative ou retiree : << retirer >> / << remettre >>
+            bool        excluded{false};
+            std::string kind, name, view;          // ce qu'un clic ouvre (appliquee)
+        };
+        std::vector<StepLine>    steps;
+        float                    stepsY{0.f};
+        std::string              stepsMore;        // "... et 12 autres etapes"
+        struct ReportLine { std::string text; std::uint8_t tone{0}; };   // 0 normal, 1 ok, 2 attention, 3 erreur, 4 titre
+        std::vector<ReportLine>  reportLines;
     };
     struct CardButtons {
         int         message{-1};
@@ -384,7 +404,9 @@ private:
         std::string key;      // la proposition, l'empreinte de la vue
         Preview     preview;
         Check       check;
+        plan::Plan  plan;     // 1.19.0 : le plan d'action (celui de la validation, ou celui garde a l'application)
     };
+    std::set<std::string> planOpen_;   // 1.19.0 : les propositions dont le plan est deplie (par identifiant)
     mutable std::map<int, Thumb> thumbs_;
     const Thumb& thumb(int message) const;
 };

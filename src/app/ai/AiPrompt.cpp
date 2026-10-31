@@ -619,12 +619,7 @@ std::optional<Proposal> proposalFromTool(std::string_view inputJson, const Promp
     p.request = std::string(request);
     p.summary = v.at("resume").isString() ? v.str("resume") : std::string{};
     if (p.summary.empty()) p.summary = "Proposition de l'Assistant";
-    if (createsView(p)) {
-        p.view = p.ops.front().name;
-    } else if (usesOpenView(p)) {
-        p.view = in.view->name;
-        p.viewId = in.view->id;
-    }
+    scopeProposal(p, in.view);   // 1.19.0 : la vue ouverte d'abord, sinon la vue neuve principale
     p.fingerprint = in.project ? proposalPrint(*in.project, p) : in.view && usesOpenView(p) ? fingerprint(*in.view) : std::string{};
     return p;
 }

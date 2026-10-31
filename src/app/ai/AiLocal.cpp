@@ -1463,13 +1463,8 @@ LocalReply Engine::finish(Proposal p, std::string text) const {
     // LA PORTEE, comme le chemin des IA en ligne (proposalFromTool) : une proposition qui commence par creer_vue
     // vise la vue neuve (son nom ; aucun id tant qu'elle n'existe pas) ; une qui ne cree que des variables ou des
     // types ne vise aucune vue.
-    if (createsView(p)) {
-        p.view = newViewName(p);
-        p.viewId = hmi::kNoId;
-    } else if (!usesOpenView(p)) {
-        p.view.clear();
-        p.viewId = hmi::kNoId;
-    }
+    // 1.19.0 : une proposition peut creer une vue ET toucher la vue ouverte (scopeProposal).
+    scopeProposal(p, view());
     // UNE OPERATION QUI NE CHANGE AUCUNE VALEUR NE SE PROPOSE PAS : une propriete deja a cette valeur (et sans
     // formule) est retiree ; une modification vide aussi.
     if (view() && usesOpenView(p) && !createsView(p)) {

@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <cctype>
+#include <map>
 #include <set>
 
 namespace app::ai {
@@ -705,6 +707,58 @@ void AiPreviewDialog::refresh() {
         heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size()) + ")");
         for (const auto& w : check_.warnings) rows.push_back({Row::Kind::Warning, w, {}, 0});
     }
+    // 1.19.0 : L'APERCU GLOBAL PAR CATEGORIE - le meme plan que la carte de la conversation (aucune divergence) : une
+    // synthese (l'architecture), puis chaque categorie, et pour chaque etape son nom, son action (creation, modification,
+    // reutilisation), ce dont elle depend, ses avertissements et ses erreurs.
+    std::vector<std::string> planGroups;   // les categories : repliees a la premiere ouverture (la synthese reste ouverte)
+    {
+        const auto doc = a.host().document ? a.host().document() : nullptr;
+        const plan::Plan pl = p->state == "proposee" && doc ? plan::build(doc->project, *p, check_) : a.planOf(message_);
+        if (pl.worthShowing()) {
+            std::map<plan::Category, std::vector<const plan::Step*>> byCat;
+            for (const auto& st : pl.steps) byCat[st.category].push_back(&st);
+            heading("ARCHITECTURE (" + std::to_string(pl.steps.size()) + " \xC3\xA9tapes, dans l'ordre d'ex\xC3\xA9" "cution)");
+            std::size_t create = 0, modify = 0, reuse = 0, excluded = 0;
+            for (const auto& st : pl.steps) {
+                if (st.excluded) ++excluded;
+                else if (st.verb == plan::Verb::Reuse) ++reuse;
+                else if (st.verb == plan::Verb::Create) ++create;
+                else ++modify;
+            }
+            rows.push_back({Row::Kind::Note, std::to_string(create) + " cr\xC3\xA9" "ation(s), " + std::to_string(modify) + " modification(s), "
+                                                 + std::to_string(reuse) + " r\xC3\xA9utilisation(s)"
+                                                 + (excluded ? ", " + std::to_string(excluded) + " retir\xC3\xA9" "e(s)" : std::string{}),
+                            {}, 0});
+            for (const auto& [cat, steps] : byCat)
+                rows.push_back({Row::Kind::Change, std::string(plan::categoryLabel(cat)) + " : " + std::to_string(steps.size()) + " \xC3\xA9tape(s)", {}, 0});
+            for (const auto& e : pl.errors) rows.push_back({Row::Kind::Error, e, {}, 0});
+            for (const auto& [cat, steps] : byCat) {
+                std::string head = plan::categoryLabel(cat).data();
+                for (auto& ch : head) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                heading(head + " (" + std::to_string(steps.size()) + ")");
+                planGroups.push_back(head);
+                for (const auto* st : steps) {
+                    const int what = st->verb == plan::Verb::Create ? 0 : st->verb == plan::Verb::Remove ? 2 : 1;
+                    rows.push_back({Row::Kind::Item, st->id + "  " + st->title,
+                                    st->excluded ? std::string("retir\xC3\xA9" "e") : std::string(plan::verbLabel(st->verb)), what});
+                    std::string state = "\xC3\x89tat : " + std::string(plan::stateLabel(st->state));
+                    if (!st->note.empty()) state += " (" + st->note + ")";
+                    rows.push_back({Row::Kind::Change, state, {}, 0});
+                    if (!st->deps.empty()) {
+                        std::string d = "D\xC3\xA9pend de ";
+                        for (std::size_t k = 0; k < st->deps.size(); ++k) d += (k ? ", " : "") + st->deps[k];
+                        rows.push_back({Row::Kind::Change, d, {}, 0});
+                    }
+                    std::string uses;
+                    for (const auto& u : st->uses)
+                        if (u.exists) uses += (uses.empty() ? "" : ", ") + u.name;
+                    if (!uses.empty()) rows.push_back({Row::Kind::Change, "R\xC3\xA9utilise : " + uses, {}, 0});
+                    for (const auto& w : st->warnings) rows.push_back({Row::Kind::Warning, w, {}, 0});
+                    for (const auto& e : st->errors) rows.push_back({Row::Kind::Error, e, {}, 0});
+                }
+            }
+        }
+    }
     // 1.16.0 : CE QUI SERA CREE en plus des objets - la vue neuve, les variables, les types IHM (jamais en silence).
     if (!check_.newView.empty()) {
         heading("VUE \xC3\x80 CR\xC3\x89" "ER (elle s'ouvre apr\xC3\xA8s Appliquer)");
@@ -772,6 +826,10 @@ void AiPreviewDialog::refresh() {
         }
     }
     if (body) body->rows = std::move(rows);
+    if (body && !planFolded_ && !planGroups.empty()) {
+        for (const auto& g : planGroups) body->folded.insert(g);
+        planFolded_ = true;
+    }
     // Le choix de la variable (introuvable) : les plus proches d'abord, puis les autres, puis Creer.
     const bool needChoice = !check_.missingVariable.empty() || !p->variable.use.empty() || p->variable.create;
     if (variable_) {
