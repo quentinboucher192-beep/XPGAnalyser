@@ -75,8 +75,10 @@ enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
 constexpr int kMenuToolBase = 100, kMenuUseBase = 200;
 constexpr int kMemberDuplicate = 50, kMemberRename = 51;   // 1.12.18 : le menu des membres d'un type
 constexpr int kMemberPrivate = 52, kMemberPublic = 53;     // 1.13.0 (J1b) : Rendre prive / Rendre public
+constexpr int kMemberUnfoldAll = 54, kMemberFoldAll = 55;  // 1.16.1 : Tout deplier / Tout replier (les membres)
 // 1.13.1 (lot K4) : les entrees du type en tete du menu de la liste des types (TableView : 1000 et plus, par contextAction).
 constexpr int kTypeMenuOpen = 1001, kTypeMenuRename = 1002, kTypeMenuDuplicate = 1003, kTypeMenuExport = 1004, kTypeMenuDelete = 1005;
+constexpr int kTypeMenuUnfoldAll = 1006, kTypeMenuFoldAll = 1007;   // 1.16.1 : les deballages de la liste
 
 // 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
 std::string allElementsOf(std::string_view rel) {
@@ -3532,6 +3534,8 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                                      if (!ok) say("Refus\xC3\xA9 : " + why, true);
                                      return ok;
                                  });
+        // 1.16.1 : les deballages - un type, ses membres (ou ses valeurs) ; un membre structure, les siens.
+        folders_->setUnfold([this](Id type, std::vector<HmiFolderTable::Detail>& out) { return listParts(type, out); });
     }
     {
         // 1.13.1 (lot K4) : LE TYPE CHOISI, DANS SES ONGLETS (comme une fonction IHM : Code | Parametres | Locales...),
@@ -3557,8 +3561,11 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             table->onContextMenu = [this](gfx::Point at) { openMemberMenu(at); };
             table->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)pasteMembers(rq.text); });
             // 1.13.0 (lot J6b) : la case Unite tapee - Ctrl+Espace propose les unites, puis " Choisir une unite... ".
-            table->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+            table->setCellAssist([this](ui::RowIndex row, std::size_t col) -> ui::InputText::Assist {
                 const auto* t = doc_->project.hmiType(current_);
+                const int k = memberIndexOf(row);   // 1.16.1 : une ligne depliee n'a pas de case Unite a taper
+                if (k < 0) return {};
+                const auto r = static_cast<std::size_t>(k);
                 if (col != 2 || !t || r >= t->members.size() || callbackPage_) return {};
                 const Id tid = t->id;
                 const std::size_t index = r;
@@ -3657,7 +3664,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                 } else if (a == kMenuBase - kMemberRename) {
                     // 1.13.0 (D3b) : le nom du membre, meme apres un clic sur sa case Unite (que F2 taperait alors).
                     members_->takeFocus();
-                    if (selectedMember() >= 0) (void)members_->beginCellEdit(static_cast<ui::RowIndex>(selectedMember()), 0);
+                    if (const int row = rowOfMember(selectedMember()); row >= 0) (void)members_->beginCellEdit(static_cast<ui::RowIndex>(row), 0);
+                } else if (a == kMenuBase - kMemberUnfoldAll || a == kMenuBase - kMemberFoldAll) {   // 1.16.1
+                    unfoldMembers(a == kMenuBase - kMemberUnfoldAll);
                 } else if (a == kMenuBase - kMemberPrivate || a == kMenuBase - kMemberPublic) {   // 1.13.0 (J1b)
                     std::string why;
                     if (selectedMember() >= 0
@@ -3671,6 +3680,20 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
         members_->setKeyHandler([this](const ui::KeyDown& k) {
             const bool alt = k.mods.alt && !k.mods.ctrl && !k.mods.shift;
             const int m = selectedMember();
+            // 1.16.1 : Gauche sur une ligne depliee (repliee ou sans fleche) remonte a sa ligne parente.
+            if (k.key == ui::Key::Left && k.mods.none()) {
+                const auto rows = members_->selectedModelRows();
+                if (!rows.empty() && rows.front() < memberLines_.size()) {
+                    const auto at = static_cast<std::size_t>(rows.front());
+                    const auto& line = memberLines_[at];
+                    if (line.part && line.expander != 1)
+                        for (std::size_t i = at; i-- > 0;)
+                            if (memberLines_[i].depth == line.depth - 1) {
+                                members_->selectModelRows({static_cast<ui::RowIndex>(i)});
+                                return true;
+                            }
+                }
+            }
             if (k.key == ui::Key::Insert && k.mods.none()) { tools_->triggered->emit(TMember); return true; }
             if (k.key == ui::Key::Delete && k.mods.none() && m >= 0) { tools_->triggered->emit(TRemoveMember); return true; }
             if (alt && k.key == ui::Key::Up && m >= 0) { tools_->triggered->emit(TUp); return true; }
@@ -3763,7 +3786,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                     showTypeTab(TabMembers);                          // 1.13.1 (lot K4) : son nom s'ecrit dans l'onglet Membres
                     selectMember(static_cast<int>(doc_->project.hmiType(t)->members.size()) - 1);
                     if (typeTabs_) typeTabs_->layout();               // la table a sa place avant d'ouvrir la case
-                    (void)members_->beginCellEdit(static_cast<ui::RowIndex>(member_), 0);
+                    if (const int row = rowOfMember(member_); row >= 0) (void)members_->beginCellEdit(static_cast<ui::RowIndex>(row), 0);
                 } else {
                     say("Refus\xC3\xA9 : " + why, true);
                 }
@@ -3780,18 +3803,46 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
         if (syncing_) return;
         current_ = folders_->selectedItem();                  // lot 21 : une ligne de dossier ne choisit aucun type
         member_ = -1;
+        memberPart_.clear();
+        // 1.16.1 : un membre deplie dans la liste - a droite, ce membre (le premier du chemin : Purge pour Purge.Debit).
+        if (const std::string part = folders_->selectedDetail(); !part.empty())
+            if (const auto* t = doc_->project.hmiType(current_)) {
+                const std::string first = part.substr(0, part.find_first_of(".#"));
+                int index = 0;
+                bool found = false;
+                for (const auto& m : t->members) {
+                    if (sameText(m.name, first)) { found = true; break; }
+                    ++index;
+                }
+                if (found && part.find('#') == std::string::npos) {
+                    member_ = index;
+                    showTypeTab(TabMembers);
+                }
+            }
         refreshMembers();
         rebuildProperties();
     });
     links_ += members_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (syncing_) return;
-        member_ = rows.empty() ? -1 : static_cast<int>(rows.front());
+        // 1.16.1 : une ligne depliee ne choisit aucun membre (elle se lit) ; son chemin est retenu.
+        member_ = rows.empty() ? -1 : memberIndexOf(rows.front());
+        memberPart_ = !rows.empty() && member_ < 0 && rows.front() < memberLines_.size() ? memberLines_[rows.front()].rel : std::string{};
         // 1.13.0 (J1b) : une ligne d'un membre herite (a la suite) ne se modifie pas ici - aucun membre choisi.
         if (const auto* t = doc_->project.hmiType(current_); t && member_ >= static_cast<int>(t->members.size())) member_ = -1;
         rebuildProperties();
     });
     links_ += folders_->message->connect([this](const std::string& text) { say(text); });
     links_ += folders_->relayout->connect([this] { refresh(); });
+    // 1.16.1 : les deballages - la fleche (ou Droite, Gauche) d'un type de la liste, d'un membre deplie, d'un membre.
+    links_ += folders_->unfoldToggled->connect([this](Id type, const std::string& path) {
+        (void)setListUnfolded(type, path, !listUnfolded(type, path));
+    });
+    links_ += members_->expanderClicked->connect([this](ui::RowIndex r) {
+        if (r >= memberLines_.size()) return;
+        const auto line = memberLines_[r];
+        (void)setMemberUnfolded(line.rel, line.expander != 1);
+    });
+    links_ += members_->activated->connect([this](ui::RowIndex r) { (void)openMemberRow(r); });
     // ---- 1.13.1 (lot K4) : les onglets du type, la liste, l'onglet de document ----
     // L'onglet que l'utilisateur choisit reste d'un type a l'autre (celui qu'un type impose, non).
     links_ += typeTabs_->currentChanged->connect([this](std::size_t i) {
@@ -3802,6 +3853,10 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
         const auto* row = folders_->row(r);
         if (row && row->folder) {
             (void)types_->beginCellEdit(r, 0);
+            return;
+        }
+        if (row && !row->detail.empty()) {   // 1.16.1 : un membre deplie - son type IHM
+            (void)openListPart(row->id, row->detail);
             return;
         }
         if (const Id t = folders_->itemAt(r); t != kNoId && !openInTab(t)) say("Ouvrir dans un onglet : rien pour l'ouvrir ici.", true);
@@ -3820,6 +3875,8 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             case kTypeMenuDuplicate: tools_->triggered->emit(TDuplicate); break;
             case kTypeMenuExport: tools_->triggered->emit(TExport); break;
             case kTypeMenuDelete: tools_->triggered->emit(TDelete); break;
+            case kTypeMenuUnfoldAll: unfoldList(true); break;    // 1.16.1
+            case kTypeMenuFoldAll: unfoldList(false); break;
             default: break;
         }
     });
@@ -3987,6 +4044,7 @@ void HmiTypesPane::refreshMembers() {
         return;
     }
     std::vector<std::vector<std::string>> rows;
+    memberLines_.clear();
     // 1.13.0 (J1b) : les membres herites (la tranche des parents, a la suite des siens, grises) et leur parent.
     std::vector<hmi::TypeMember> inherited;
     std::vector<std::string> inheritedFrom;
@@ -4002,6 +4060,100 @@ void HmiTypesPane::refreshMembers() {
         const auto flat = ty::flatten(p, "x", hmi::fullName(*t));
         std::vector<hmi::TypeMember> shown = t->members;
         shown.insert(shown.end(), inherited.begin(), inherited.end());
+        // 1.16.1 : LES DEBALLAGES - la place de chaque chemin ("Purge[1].Debit" : son premier mot, son bit, ses mots), faite
+        // une fois, la premiere fois qu'une ligne depliee la demande.
+        struct Place {
+            long long first{-1}, words{0};
+            int bit{-1};
+        };
+        std::map<std::string, Place> places;
+        bool placed = false;
+        const auto placeOf = [&](const std::string& rel) -> const Place* {
+            if (!placed) {
+                placed = true;
+                for (const auto& l : flat.leaves) {
+                    const std::string& s = l.path;   // "x.Purge[1].Debit"
+                    for (std::size_t i = 2; i <= s.size(); ++i)
+                        if (i == s.size() || s[i] == '.' || s[i] == '[') {
+                            if (i <= 2) continue;
+                            auto& pl = places[upper(s.substr(2, i - 2))];
+                            if (pl.first < 0) {
+                                pl.first = l.word;
+                                pl.bit = l.bit;
+                            }
+                            pl.words += l.words;
+                        }
+                }
+            }
+            const auto it = places.find(upper(rel));
+            return it == places.end() ? nullptr : &it->second;
+        };
+        // Ce qui se deplie : un tableau (ses cases), une structure du projet (ses membres) ; ni un objet, ni un generique.
+        const auto unfoldable = [&](const std::string& type) {
+            if (!flat.ok() || ty::isRich(type)) return false;
+            ty::Spec s;
+            if (!ty::parseSpec(type, s)) return false;
+            if (s.array()) return true;
+            const auto* st = unfoldableType(type);
+            return st && !hmi::isEnumeration(*st);
+        };
+        constexpr std::size_t kMaxParts = 2000;
+        std::size_t parts = 0;
+        bool capped = false;
+        // Les lignes d'un membre deplie (recursif) : ses cases (un tableau, 200 au plus) ou ses membres (une structure).
+        std::function<void(const std::string&, const std::string&, int)> emitParts = [&](const std::string& rel, const std::string& type, int depth) {
+            if (depth > 16) return;
+            struct Child {
+                std::string rel, name, type, unit, initial, description;
+            };
+            std::vector<Child> children;
+            std::size_t more = 0;
+            ty::Spec s;
+            if (!ty::parseSpec(type, s)) return;
+            if (s.array()) {
+                const long long n0 = s.count(0), n1 = s.dims > 1 ? s.count(1) : 1;
+                const long long total = n0 * n1;
+                for (long long k = 0; k < total && k < 200; ++k) {
+                    const long long i = s.low[0] + k / n1, j = s.dims > 1 ? s.low[1] + k % n1 : 0;
+                    const std::string index = "[" + std::to_string(i) + (s.dims > 1 ? "," + std::to_string(j) : std::string{}) + "]";
+                    children.push_back({rel + index, index, s.element, {}, {}, {}});
+                }
+                if (total > 200) more = static_cast<std::size_t>(total - 200);
+            } else if (const auto* st = unfoldableType(type); st && !hmi::isEnumeration(*st)) {
+                std::vector<hmi::TypeMember> all = st->members;
+                for (const auto* b : hmi::baseChain(p, hmi::fullName(*st))) all.insert(all.end(), b->members.begin(), b->members.end());
+                for (const auto& m : all) children.push_back({rel + "." + m.name, m.name, m.type, m.unit, hmi::shownCell(m.initial), m.description});
+            }
+            for (const auto& c : children) {
+                if (parts >= kMaxParts) break;
+                std::string offset = "?", size = "?";
+                if (const auto* pl = placeOf(c.rel)) {
+                    offset = "mot " + std::to_string(pl->first) + (pl->bit >= 0 ? ", bit " + std::to_string(pl->bit) : std::string{});
+                    size = ty::isComposite(c.type) ? std::to_string(pl->words) + (pl->words > 1 ? " mots" : " mot")
+                         : pl->bit >= 0 ? std::string("1 bit") : std::to_string(ty::wordsOf(c.type)) + (ty::wordsOf(c.type) > 1 ? " mots" : " mot");
+                } else if (ty::isRich(c.type)) {
+                    offset = "\xE2\x80\x94";
+                    size = "objet (IHM)";
+                }
+                const bool can = unfoldable(c.type);
+                const bool open = can && memberUnfolded(c.rel);
+                rows.push_back({c.name, c.type, c.unit, c.initial, offset, size, c.description, {}});
+                memberLines_.push_back({-1, true, c.rel, c.type, depth, can ? (open ? 1 : 0) : -1});
+                ++parts;
+                if (open) emitParts(c.rel, c.type, depth + 1);
+            }
+            if (more > 0 && parts < kMaxParts) {
+                rows.push_back({"\xE2\x80\xA6", {}, {}, {}, {}, {}, std::to_string(more) + " autres cases (les 200 premi\xC3\xA8res sont montr\xC3\xA9" "es)", {}});
+                memberLines_.push_back({-1, true, rel + "[...]", {}, depth, -1});
+                ++parts;
+            }
+            if (parts >= kMaxParts && !capped) {
+                capped = true;
+                rows.push_back({"\xE2\x80\xA6", {}, {}, {}, {}, {}, "2000 lignes au plus : replie un membre pour voir la suite", {}});
+                memberLines_.push_back({-1, true, "...", {}, depth, -1});
+                ++parts;
+            }
+        };
         for (std::size_t k = 0; k < shown.size(); ++k) {
             const auto& m = shown[k];
             std::string offset = "?", size = "?";
@@ -4033,6 +4185,10 @@ void HmiTypesPane::refreshMembers() {
                             own ? m.description : "(h\xC3\xA9rit\xC3\xA9 de " + inheritedFrom[k - t->members.size()] + ")"
                                                       + (m.description.empty() ? std::string{} : " " + m.description),
                             priv ? "Priv\xC3\xA9" : "Public"});   // 1.12.19 (U3) ; 1.13.0 : l'unite ; J1b : la visibilite
+            const bool can = unfoldable(m.type);
+            const bool open = can && memberUnfolded(m.name);
+            memberLines_.push_back({static_cast<int>(k), false, m.name, m.type, 0, can ? (open ? 1 : 0) : -1});
+            if (open) emitParts(m.name, m.type, 1);
         }
     }
     const Id tid = current_;
@@ -4047,11 +4203,30 @@ void HmiTypesPane::refreshMembers() {
             privateRow.push_back(m.visibility == hmi::Visibility::Private);
         }
     }
+    // 1.16.1 : une ligne du tableau n'est plus le rang du membre (les lignes depliees s'intercalent) : chaque fonction
+    // de la table passe par sa ligne (lines : le membre de chaque ligne, -1 : une ligne depliee).
+    std::vector<int> member;
+    std::vector<std::pair<int, int>> shape;   // (profondeur, fleche)
+    for (const auto& l : memberLines_) {
+        member.push_back(l.member);
+        shape.emplace_back(l.depth, l.expander);
+    }
     memberModel_ = std::make_shared<Rows>(
         std::vector<std::string>{"Membre", "Type", "Unit\xC3\xA9", "Initiale", "D\xC3\xA9" "calage", "Taille", "Description", "Visibilit\xC3\xA9"},
         std::move(rows),
-        [numeric, privateRow, ownCount](ui::RowIndex r, std::size_t c) {
+        [numeric, privateRow, ownCount, member, shape](ui::RowIndex row, std::size_t c) {
             ui::CellStyle st;
+            if (row >= member.size()) return st;
+            if (c == 0) {
+                st.indent = static_cast<float>(shape[row].first) * 18.f;
+                st.expander = shape[row].second;
+            }
+            if (member[row] < 0) {   // une ligne depliee : elle se lit
+                if (c != 0) st.fgTone = ui::Tone::Muted;
+                if (c == 1 || c == 2) st.monospace = c == 2;
+                return st;
+            }
+            const auto r = static_cast<std::size_t>(member[row]);
             if (c == 0) st.bold = r < ownCount;
             if (c == 7 && r < privateRow.size() && privateRow[r]) st.icon = ui::Icon::Lock;   // 1.13.0 (J1b) : le cadenas
             if (c == 2) {
@@ -4064,7 +4239,9 @@ void HmiTypesPane::refreshMembers() {
             if (c == 4 || c == 5 || r >= ownCount) st.fgTone = ui::Tone::Muted;   // 1.13.0 (J1b) : un membre herite, grise
             return st;
         },
-        [numeric, ownCount](std::size_t r, std::size_t c) {
+        [numeric, ownCount, member](std::size_t row, std::size_t c) {
+            if (row >= member.size() || member[row] < 0) return false;   // 1.16.1 : une ligne depliee se lit
+            const auto r = static_cast<std::size_t>(member[row]);
             if (r >= ownCount) return false;   // 1.13.0 (J1b) : un membre herite se change dans son type
             return c == 0 || c == 1 || c == 3 || c == 6 || c == 7 || (c == 2 && r < numeric.size() && numeric[r]);
         },
@@ -4074,17 +4251,23 @@ void HmiTypesPane::refreshMembers() {
             const auto* t2 = doc_->project.hmiType(tid);
             return typeChoices(doc_->project, t2 ? t2->name : std::string_view{});   // 1.12.4 : les membres objets aussi
         },
-        [this](std::size_t r, std::size_t c, const std::string& text) { return commitMemberCell(r, c, text); });
+        [this, member](std::size_t row, std::size_t c, const std::string& text) {
+            return row < member.size() && member[row] >= 0 && commitMemberCell(static_cast<std::size_t>(member[row]), c, text);
+        });
     // 1.12.14 : la case Type d'un membre ouvre le selecteur de types (les types imbriques aussi).
     // 1.13.0 (seconde passe) : la case Unite d'un membre se tape (Ctrl+Espace) ; le double-clic ouvre le selecteur d'unites.
-    static_cast<Rows&>(*memberModel_).setDoubleClickDialog([this, tid](std::size_t r, std::size_t c) {
+    static_cast<Rows&>(*memberModel_).setDoubleClickDialog([this, tid, member](std::size_t row, std::size_t c) {
         const auto* t2 = doc_->project.hmiType(tid);
+        if (row >= member.size() || member[row] < 0) return false;
+        const auto r = static_cast<std::size_t>(member[row]);
         if (c != 2 || !t2 || r >= t2->members.size() || !unitpicker::available()) return false;
         pickMemberUnit(tid, r);
         return true;
     });
-    static_cast<Rows&>(*memberModel_).setDialog([this, tid](std::size_t r, std::size_t c) {
+    static_cast<Rows&>(*memberModel_).setDialog([this, tid, member](std::size_t row, std::size_t c) {
         const auto* t2 = doc_->project.hmiType(tid);
+        if (row >= member.size() || member[row] < 0) return false;
+        const auto r = static_cast<std::size_t>(member[row]);
         if (c != 1 || !t2 || r >= t2->members.size()) return false;
         const std::weak_ptr<int> alive = alive_;
         return askTypeIn(doc_, "Type de " + t2->name + "." + t2->members[r].name, t2->members[r].type,
@@ -4101,8 +4284,14 @@ void HmiTypesPane::refreshMembers() {
     });
     syncing_ = true;
     members_->setModel(memberModel_);
-    if (t && member_ >= 0 && member_ < static_cast<int>(t->members.size())) members_->selectModelRows({static_cast<ui::RowIndex>(member_)}, false);
-    else member_ = -1;
+    if (t && member_ >= 0 && member_ < static_cast<int>(t->members.size())) {
+        if (const int row = rowOfMember(member_); row >= 0) members_->selectModelRows({static_cast<ui::RowIndex>(row)}, false);
+    } else {
+        member_ = -1;
+        // 1.16.1 : la ligne depliee choisie, si elle est encore montree.
+        if (const int row = memberRowOf(memberPart_); !memberPart_.empty() && row >= 0) members_->selectModelRows({static_cast<ui::RowIndex>(row)}, false);
+        else memberPart_.clear();
+    }
     syncing_ = false;
 }
 
@@ -4157,6 +4346,8 @@ void HmiTypesPane::refreshCallbackPage(const hmi::HmiType& t) {
             return ok;
         });
     syncing_ = true;
+    memberLines_.clear();   // 1.16.1 : ni membre ni ligne depliee
+    memberPart_.clear();
     members_->setModel(memberModel_);
     member_ = -1;
     syncing_ = false;
@@ -4191,6 +4382,7 @@ void HmiTypesPane::selectType(Id id) {
 
 void HmiTypesPane::selectMember(int index) {
     member_ = index;
+    memberPart_.clear();
     refreshMembers();
     rebuildProperties();
 }
@@ -5211,8 +5403,8 @@ std::string HmiTypesPane::copyMembersText() const {
     const auto* t = doc_->project.hmiType(current_);
     if (!t) return {};
     std::vector<std::size_t> rows;
-    for (const auto r : members_->selectedModelRows())
-        if (r < t->members.size()) rows.push_back(static_cast<std::size_t>(r));
+    for (const auto r : members_->selectedModelRows())   // 1.16.1 : la ligne d'un membre (une ligne depliee ne se copie pas)
+        if (const int k = memberIndexOf(r); k >= 0 && static_cast<std::size_t>(k) < t->members.size()) rows.push_back(static_cast<std::size_t>(k));
     std::sort(rows.begin(), rows.end());
     if (rows.empty()) return {};
     // Une case comme Excel l'ecrit : entre guillemets si elle contient une
@@ -5230,8 +5422,9 @@ std::string HmiTypesPane::copyMembersText() const {
     std::string out = "Nom\tType\tValeur initiale\tDescription\tD\xC3\xA9" "calage\tTaille\tUnit\xC3\xA9\r\n";
     for (const auto r : rows) {
         const auto& m = t->members[r];
-        const std::string offset = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 4) : std::string{};
-        const std::string size = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 5) : std::string{};
+        const int row = rowOfMember(static_cast<int>(r));
+        const std::string offset = memberModel_ && row >= 0 ? memberModel_->cellText(static_cast<ui::RowIndex>(row), 4) : std::string{};
+        const std::string size = memberModel_ && row >= 0 ? memberModel_->cellText(static_cast<ui::RowIndex>(row), 5) : std::string{};
         out += cell(m.name) + "\t" + cell(m.type) + "\t" + cell(m.initial) + "\t" + cell(m.description) + "\t" + cell(offset) + "\t" + cell(size)
              + "\t" + cell(m.unit) + "\r\n";
     }
@@ -5374,6 +5567,14 @@ void HmiTypesPane::openMemberMenu(gfx::Point at) {
     items.push_back(cmd::separator());
     items.push_back(entry("Copier (pour Excel)", kMenuBase - TCopy, "Ctrl+C", member, "choisis des membres"));
     items.push_back(entry("Coller depuis Excel\xE2\x80\xA6", kMenuBase - TPaste, "Ctrl+V", type, noType));
+    // 1.16.1 : les deballages des membres (structures et tableaux, sur place).
+    {
+        const bool unfoldable = std::any_of(memberLines_.begin(), memberLines_.end(), [](const MemberLine& l) { return l.expander >= 0; });
+        const bool unfolded = std::any_of(memberLines_.begin(), memberLines_.end(), [](const MemberLine& l) { return l.part; });
+        items.push_back(cmd::separator());
+        items.push_back(entry("Tout d\xC3\xA9plier", kMenuBase - kMemberUnfoldAll, {}, unfoldable, "aucun membre structure ou tableau"));
+        items.push_back(entry("Tout replier", kMenuBase - kMemberFoldAll, {}, unfolded, "rien n'est d\xC3\xA9pli\xC3\xA9"));
+    }
     // De la table : Tout choisir et les filtres.
     bool keep = false;
     for (const auto& it : menu_->items()) {
@@ -5806,6 +6007,11 @@ std::vector<ui::PopupMenu::Item> HmiTypesPane::typeMenuItems() const {
                           t ? std::string("pas d'export ici") : noType, ui::Icon::Export));
     items.push_back(cmd::separator());
     items.push_back(entry(folder ? "Supprimer le dossier" : "Supprimer le type", kTypeMenuDelete, "Suppr", t || folder, noType, ui::Icon::Delete));
+    // 1.16.1 : les deballages de la liste (les membres de chaque type, a toute profondeur).
+    items.push_back(cmd::separator());
+    const bool any = !doc_->project.programs.types.empty();
+    items.push_back(entry("Tout d\xC3\xA9plier", kTypeMenuUnfoldAll, {}, any, "aucun type", ui::Icon::None));
+    items.push_back(entry("Tout replier", kTypeMenuFoldAll, {}, !listOpen_.empty(), "rien n'est d\xC3\xA9pli\xC3\xA9", ui::Icon::None));
     return items;
 }
 
@@ -5859,6 +6065,250 @@ Id HmiTypesPane::createEnumerationFromPanel(std::string* why) {
 bool HmiTypesPane::showsEnumeration() const {
     const auto* t = doc_->project.hmiType(current_);
     return t && hmi::isEnumeration(*t);
+}
+
+// =============================================================================
+//  1.16.1 : LES DEBALLAGES DES TYPES IHM (la liste et le tableau des membres)
+// =============================================================================
+std::string HmiTypesPane::listKey(Id type, const std::string& path) const { return std::to_string(type) + "|" + upper(path); }
+std::string HmiTypesPane::memberKey(const std::string& rel) const { return std::to_string(current_) + "|" + upper(rel); }
+
+const hmi::HmiType* HmiTypesPane::unfoldableType(const std::string& type) const {
+    ty::Spec s;
+    const std::string name = ty::parseSpec(type, s) ? s.element : type;
+    if (name.empty() || ty::isElementary(name) || ty::isRich(name)) return nullptr;
+    const auto* t = doc_->project.hmiTypeByName(name);
+    if (!t) return nullptr;
+    if (hmi::isEnumeration(*t)) return t->values.empty() ? nullptr : t;
+    if (t->kind != hmi::HmiTypeKind::Structure) return nullptr;
+    return t->members.empty() && t->base.empty() ? nullptr : t;
+}
+
+bool HmiTypesPane::listUnfolded(Id type, const std::string& path) const {
+    const std::string key = listKey(type, path);
+    if (listAll_) listOpen_.insert(key);   // Tout deplier : chaque fleche s'ouvre et se retient
+    return listOpen_.count(key) > 0;
+}
+
+bool HmiTypesPane::setListUnfolded(Id type, const std::string& path, bool open) {
+    const std::string key = listKey(type, path);
+    const bool was = listOpen_.count(key) > 0;
+    if (was == open) return false;
+    if (open) listOpen_.insert(key);
+    else listOpen_.erase(key);
+    refresh();
+    // La ligne de la fleche reste choisie (une ligne repliee sous elle : elle).
+    if (!path.empty()) folders_->selectDetail(type, path);
+    return true;
+}
+
+void HmiTypesPane::unfoldList(bool open) {
+    if (open) {
+        listAll_ = true;
+        refresh();
+        listAll_ = false;
+        say("Tout est d\xC3\xA9pli\xC3\xA9 : les membres de chaque type (Gauche replie une ligne).");
+    } else {
+        listOpen_.clear();
+        refresh();
+        say("Tout est repli\xC3\xA9.");
+    }
+}
+
+int HmiTypesPane::listParts(Id type, ListParts& out) {
+    const auto* t = doc_->project.hmiType(type);
+    if (!t) return -1;
+    const bool en = hmi::isEnumeration(*t);
+    if (en ? t->values.empty() : t->kind != hmi::HmiTypeKind::Structure || (t->members.empty() && t->base.empty())) return -1;
+    if (!listUnfolded(type, {})) return 0;
+    if (en) {
+        for (const auto& v : t->values) {
+            HmiFolderTable::Detail d;
+            d.key = "#" + v.name;
+            d.depth = 1;
+            d.cells = {v.name, "= " + std::to_string(v.value), {}, v.description};
+            d.styles.resize(4);
+            d.styles[0].icon = ui::Icon::Constant;
+            d.styles[0].iconTone = ui::Tone::Muted;
+            for (std::size_t c = 1; c < 4; ++c) d.styles[c].fgTone = ui::Tone::Muted;
+            out.push_back(std::move(d));
+        }
+        return 1;
+    }
+    emitListParts(*t, type, {}, 1, out);
+    return 1;
+}
+
+void HmiTypesPane::emitListParts(const hmi::HmiType& t, Id root, const std::string& path, int depth, ListParts& out) {
+    constexpr std::size_t kMaxLines = 500;   // par type (un type tres imbrique, tout deplie)
+    const auto& p = doc_->project;
+    std::vector<std::pair<const hmi::TypeMember*, std::string>> all;   // le membre, et le parent d'un herite
+    for (const auto& m : t.members) all.emplace_back(&m, std::string{});
+    for (const auto* b : hmi::baseChain(p, hmi::fullName(t)))
+        for (const auto& m : b->members) all.emplace_back(&m, b->name);
+    for (const auto& [mp, from] : all) {
+        if (out.size() >= kMaxLines) return;
+        const auto& m = *mp;
+        const std::string key = path.empty() ? m.name : path + "." + m.name;
+        const bool generic = std::any_of(t.generics.begin(), t.generics.end(), [&](const auto& g) { return sameText(g.name, m.type); });
+        std::string words;
+        if (ty::isRich(m.type)) words = "objet";
+        else if (generic) words = "selon " + m.type;
+        else if (const auto w = ty::weightOf(p, m.type).words; w > 0) words = std::to_string(w);
+        else words = "?";
+        const auto* sub = depth < 16 ? unfoldableType(m.type) : nullptr;
+        ty::Spec s;
+        const bool array = ty::parseSpec(m.type, s) && s.array();
+        HmiFolderTable::Detail d;
+        d.key = key;
+        d.depth = depth;
+        d.expander = sub ? (listUnfolded(root, key) ? 1 : 0) : -1;
+        d.cells = {m.name, m.type, words, from.empty() ? m.description : "(h\xC3\xA9rit\xC3\xA9 de " + from + ")" + (m.description.empty() ? "" : " " + m.description)};
+        d.styles.resize(4);
+        d.styles[0].icon = array ? ui::Icon::AnimationTable : sub && !hmi::isEnumeration(*sub) ? ui::Icon::DerivedType
+                         : sub ? ui::Icon::Constant : ui::Icon::Variable;
+        d.styles[0].iconTone = array ? ui::Tone::Family2 : sub ? ui::Tone::Accent : ui::Tone::Muted;
+        d.styles[1].monospace = true;
+        for (std::size_t c = 1; c < 4; ++c) d.styles[c].fgTone = ui::Tone::Muted;
+        const bool open = d.expander == 1;
+        out.push_back(std::move(d));
+        if (!open) continue;
+        if (!hmi::isEnumeration(*sub)) {
+            emitListParts(*sub, root, key, depth + 1, out);
+            continue;
+        }
+        for (const auto& v : sub->values) {
+            if (out.size() >= kMaxLines) return;
+            HmiFolderTable::Detail e;
+            e.key = key + "#" + v.name;
+            e.depth = depth + 1;
+            e.cells = {v.name, "= " + std::to_string(v.value), {}, v.description};
+            e.styles.resize(4);
+            e.styles[0].icon = ui::Icon::Constant;
+            e.styles[0].iconTone = ui::Tone::Muted;
+            for (std::size_t c = 1; c < 4; ++c) e.styles[c].fgTone = ui::Tone::Muted;
+            out.push_back(std::move(e));
+        }
+    }
+}
+
+// Le double-clic sur un membre deplie de la liste : le type IHM de ce membre (celui des cases d'un tableau), choisi.
+bool HmiTypesPane::openListPart(Id root, const std::string& path) {
+    const auto& p = doc_->project;
+    const auto* t = p.hmiType(root);
+    if (!t || path.empty()) return false;
+    const auto hash = path.find('#');
+    if (hash == 0) return false;   // une valeur de l'enumeration elle-meme
+    const std::string members = path.substr(0, hash);
+    const hmi::HmiType* at = t;
+    std::string type, where = t->name;
+    std::size_t from = 0;
+    while (at && from <= members.size()) {
+        const auto dot = members.find('.', from);
+        const std::string name = members.substr(from, dot == std::string::npos ? std::string::npos : dot - from);
+        const hmi::TypeMember* found = nullptr;
+        for (const auto& m : at->members)
+            if (sameText(m.name, name)) found = &m;
+        if (!found)
+            for (const auto* b : hmi::baseChain(p, hmi::fullName(*at)))
+                for (const auto& m : b->members)
+                    if (!found && sameText(m.name, name)) found = &m;
+        if (!found) return false;
+        type = found->type;
+        where += "." + found->name;
+        if (dot == std::string::npos) break;
+        at = unfoldableType(type);
+        from = dot + 1;
+    }
+    const auto* target = unfoldableType(type);
+    if (!target) {
+        say(where + " : " + type + " (un type simple, rien \xC3\xA0 ouvrir).");
+        return false;
+    }
+    selectType(target->id);
+    say(target->name + " : le type de " + where + ".");
+    return true;
+}
+
+int HmiTypesPane::memberIndexOf(ui::RowIndex row) const {
+    return row < memberLines_.size() ? memberLines_[row].member : -1;
+}
+
+int HmiTypesPane::rowOfMember(int member) const {
+    if (member < 0) return -1;
+    for (std::size_t i = 0; i < memberLines_.size(); ++i)
+        if (memberLines_[i].member == member) return static_cast<int>(i);
+    return -1;
+}
+
+int HmiTypesPane::memberRowOf(const std::string& rel) const {
+    if (rel.empty()) return -1;
+    for (std::size_t i = 0; i < memberLines_.size(); ++i)
+        if (sameText(memberLines_[i].rel, rel)) return static_cast<int>(i);
+    return -1;
+}
+
+std::string HmiTypesPane::memberRowPath(ui::RowIndex row) const { return row < memberLines_.size() ? memberLines_[row].rel : std::string{}; }
+bool HmiTypesPane::memberRowUnfolded(ui::RowIndex row) const { return row < memberLines_.size() && memberLines_[row].part; }
+
+bool HmiTypesPane::memberUnfolded(const std::string& rel) const {
+    const std::string key = memberKey(rel);
+    if (memberAll_) memberOpen_.insert(key);
+    return memberOpen_.count(key) > 0;
+}
+
+bool HmiTypesPane::setMemberUnfolded(const std::string& rel, bool open) {
+    const std::string key = memberKey(rel);
+    const bool was = memberOpen_.count(key) > 0;
+    if (was == open) return false;
+    if (open) memberOpen_.insert(key);
+    else memberOpen_.erase(key);
+    // La ligne de la fleche reste choisie (un membre : lui ; une ligne depliee : son chemin).
+    const int row = memberRowOf(rel);
+    const int k = row >= 0 ? memberIndexOf(static_cast<ui::RowIndex>(row)) : -1;
+    if (k >= 0) {
+        member_ = k;
+        memberPart_.clear();
+    } else if (row >= 0) {
+        member_ = -1;
+        memberPart_ = rel;
+    }
+    refreshMembers();
+    rebuildProperties();
+    return true;
+}
+
+void HmiTypesPane::unfoldMembers(bool open) {
+    if (open) {
+        memberAll_ = true;
+        refreshMembers();
+        memberAll_ = false;
+        say("Les membres sont d\xC3\xA9pli\xC3\xA9s (les tableaux : leurs 200 premi\xC3\xA8res cases).");
+    } else {
+        const std::string prefix = std::to_string(current_) + "|";
+        for (auto it = memberOpen_.begin(); it != memberOpen_.end();)
+            it = it->rfind(prefix, 0) == 0 ? memberOpen_.erase(it) : std::next(it);
+        memberPart_.clear();
+        refreshMembers();
+        say("Les membres sont repli\xC3\xA9s.");
+    }
+}
+
+// Le double-clic sur une ligne depliee du tableau des membres : son type IHM (celui des cases d'un tableau), choisi.
+bool HmiTypesPane::openMemberRow(ui::RowIndex row) {
+    if (row >= memberLines_.size() || !memberLines_[row].part) return false;
+    const auto line = memberLines_[row];
+    const auto* target = unfoldableType(line.type);
+    if (!target) {
+        if (line.expander >= 0) return setMemberUnfolded(line.rel, line.expander != 1);
+        say(line.rel + (line.type.empty() ? std::string{} : " : " + line.type) + " - se lit ici ; il se change dans son propre type.");
+        return false;
+    }
+    const auto* t = doc_->project.hmiType(current_);
+    const std::string where = (t ? t->name + "." : std::string{}) + line.rel;
+    selectType(target->id);
+    say(target->name + " : le type de " + where + ".");
+    return true;
 }
 
 void HmiTypesPane::onPaint(const ui::PaintContext& ctx) { ctx.r.fillRect(bounds(), ctx.theme.color.panelBg); }

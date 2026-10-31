@@ -18,6 +18,15 @@
 //  montre, ses cases et son style ; l'aide fait le reste (les lignes de
 //  dossiers, la selection gardee d'une reconstruction a l'autre, les dossiers
 //  replies, le renommage d'un dossier dans sa case).
+//
+//  1.16.1 : LES DEBALLAGES (setUnfold). Un element qui se deplie (un type IHM :
+//  ses membres) - le volet dit sa fleche et, deplie, les lignes qui suivent la
+//  sienne (Detail : en retrait, a toute profondeur). Elles se lisent : ni nom a
+//  taper, ni glisser, ni Suppr ni Ctrl+D ; les choisir choisit leur element
+//  (itemAt, selectedItem). La fleche, Droite et Gauche : unfoldToggled (le volet
+//  garde ce qui est deplie et refait la liste) ; Gauche sur une ligne repliee
+//  remonte a sa ligne parente. Trier une colonne garde chaque element avec ses
+//  lignes.
 // =============================================================================
 #pragma once
 
@@ -42,10 +51,21 @@ class HmiFolderTable {
 public:
     struct Row {
         bool        folder{false};
-        hmi::Id     id{hmi::kNoId};    // un element
+        hmi::Id     id{hmi::kNoId};    // un element (une ligne depliee : le sien)
         std::string path;              // le dossier (sa ligne), ou celui de l'element
         int         depth{0};
+        std::string detail;            // 1.16.1 : une ligne depliee sous l'element - son chemin ; vide : un dossier, un element
     };
+    // 1.16.1 : une ligne depliee sous un element, telle que le volet la donne.
+    struct Detail {
+        std::string                key;          // son chemin, unique sous l'element ("Purge.Debit")
+        int                        depth{1};     // 1 : juste sous l'element
+        int                        expander{-1}; // -1 : rien ; 0 : repliee ; 1 : depliee
+        std::vector<std::string>   cells;
+        std::vector<ui::CellStyle> styles;       // chaque colonne
+    };
+    // La fleche d'un element (-1 : rien a deplier ; 0 : replie ; 1 : deplie) ; deplie, ses lignes dans `out`.
+    using Unfold = std::function<int(hmi::Id, std::vector<Detail>& out)>;
     using Apply = std::function<void(core::CommandPtr)>;
     using Cells = std::function<std::vector<std::string>(hmi::Id)>;
     using Style = std::function<ui::CellStyle(hmi::Id, std::size_t column)>;
@@ -66,6 +86,14 @@ public:
         itemEditable_ = std::move(editable);
         itemCommit_ = std::move(commit);
     }
+    // 1.16.1 : les deballages - la fleche et les lignes de chaque element (rien : comme avant). A poser avant rebuild().
+    void setUnfold(Unfold unfold);
+    [[nodiscard]] std::string detailAt(ui::RowIndex modelRow) const;              // vide : pas une ligne depliee
+    [[nodiscard]] int rowOfDetail(hmi::Id item, const std::string& key) const noexcept;   // -1 : pas montree
+    [[nodiscard]] std::string selectedDetail() const;                              // la ligne depliee choisie ("" : aucune)
+    void selectDetail(hmi::Id item, const std::string& key);
+    // La fleche d'un element (`key` vide) ou d'une de ses lignes : la cliquer, Droite, Gauche.
+    const core::SignalPtr<hmi::Id, const std::string&> unfoldToggled = core::Signal<hmi::Id, const std::string&>::create();
     // La ligne (du modele) d'un element ; -1 : pas montre.
     [[nodiscard]] int rowOfItem(hmi::Id) const noexcept;
     [[nodiscard]] std::optional<hmi::fold::List> list() const noexcept { return list_; }
@@ -77,7 +105,8 @@ public:
     [[nodiscard]] std::string selectedFolder() const;        // une ligne de dossier choisie ("" : aucune)
     [[nodiscard]] std::string targetFolder() const;          // ou va un nouvel element : ce dossier, ou celui de l'element choisi
     [[nodiscard]] std::size_t itemCount() const noexcept { return items_; }
-    [[nodiscard]] std::size_t folderCount() const noexcept { return rows_.size() - items_; }
+    [[nodiscard]] std::size_t folderCount() const noexcept { return rows_.size() - items_ - details_; }
+    [[nodiscard]] std::size_t detailCount() const noexcept { return details_; }   // 1.16.1 : les lignes depliees
     void selectItem(hmi::Id id);                             // ses dossiers se deplient
     void selectFolder(const std::string& path);
     [[nodiscard]] bool collapsed(const std::string& path) const;
@@ -97,12 +126,15 @@ public:
 
 private:
     [[nodiscard]] static std::string upper(const std::string&);
+    bool unfoldKey(const ui::KeyDown&);            // 1.16.1 : Gauche remonte ; Suppr, Ctrl+D ne visent pas une ligne depliee
     ui::TableView&                   table_;
     hmi::DocumentPtr                 doc_;
     Apply                            apply_;
     std::optional<hmi::fold::List>   list_;
     std::vector<Row>                 rows_;
     std::size_t                      items_{0};
+    std::size_t                      details_{0};     // 1.16.1 : les lignes depliees
+    Unfold                           unfold_;
     std::set<std::string>            collapsed_;      // en majuscules
     std::shared_ptr<FolderRowsModel> model_;
     std::string                      editAfter_;      // un dossier cree : son nom se tape tout de suite

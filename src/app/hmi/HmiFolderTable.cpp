@@ -19,6 +19,8 @@ public:
         std::vector<std::string>   cells;
         ui::CellStyle              style;     // la premiere colonne (un dossier : ses autres cases sont grises)
         std::vector<ui::CellStyle> styles;    // un element : chaque colonne
+        int                        expander{-1};   // 1.16.1 : un element ou une ligne depliee (setUnfold) : sa fleche
+        std::size_t                owner{0};       // 1.16.1 : la ligne de son element (un dossier, un element : la sienne)
     };
     FolderRowsModel(std::vector<std::string> headers, std::vector<Line> lines, bool folders)
         : headers_(std::move(headers)), lines_(std::move(lines)), folders_(folders) {}
@@ -48,18 +50,24 @@ public:
         ui::CellStyle s = c == 0 ? line.style : c < line.styles.size() ? line.styles[c] : ui::CellStyle{};
         if (c == 0 && folders_) {
             s.indent = static_cast<float>(line.row.depth) * 18.f + 16.f;   // sous la fleche de son dossier
-            s.expander = -1;
+            s.expander = line.expander;                                    // 1.16.1 : un element qui se deplie
+        } else if (c == 0 && (line.expander >= 0 || !line.row.detail.empty())) {
+            s.indent = static_cast<float>(line.row.depth) * 18.f;          // une liste melee : le retrait des deballages
+            s.expander = line.expander;
         }
         return s;
     }
-    // L'ordre est celui du projet : trier par une colonne garderait les dossiers en tete.
+    // L'ordre est celui du projet : trier par une colonne garderait les dossiers en tete. 1.16.1 : une ligne depliee
+    // se trie avec son element (sa case) - dans les deux sens, elle reste dessous, dans son ordre (le tri est stable).
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
         const bool fa = a < lines_.size() && lines_[a].row.folder, fb = b < lines_.size() && lines_[b].row.folder;
         if (fa != fb) return fa;
-        return cellText(a, c) < cellText(b, c);
+        const auto owner = [this](ui::RowIndex r) { return r < lines_.size() ? static_cast<ui::RowIndex>(lines_[r].owner) : r; };
+        return cellText(owner(a), c) < cellText(owner(b), c);
     }
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override {
         if (r >= lines_.size()) return false;
+        if (!lines_[r].row.detail.empty()) return false;   // 1.16.1 : une ligne depliee se lit
         if (lines_[r].row.folder) return c == 0 && static_cast<bool>(rename);
         return itemEditable && itemEditable(lines_[r].row.id, c);
     }
@@ -76,7 +84,7 @@ public:
         if (!folders_ || from.empty()) return false;
         bool anyItem = false, anyFolder = false;
         for (const auto f : from) {
-            if (f >= lines_.size()) return false;
+            if (f >= lines_.size() || !lines_[f].row.detail.empty()) return false;   // 1.16.1 : une ligne depliee ne se glisse pas
             (lines_[f].row.folder ? anyFolder : anyItem) = true;
         }
         // Sous les lignes : a la racine (s'il y a quelque chose a y remonter).
@@ -88,7 +96,7 @@ public:
             }
             return false;
         }
-        if (to >= lines_.size()) return false;
+        if (to >= lines_.size() || !lines_[to].row.detail.empty()) return false;
         const auto& target = lines_[to].row;
         if (target.folder) {
             if (where != Where::Into) return false;
@@ -122,7 +130,9 @@ HmiFolderTable::HmiFolderTable(ui::TableView& table, hmi::DocumentPtr doc, Apply
     table_.setSelectionMode(ui::SelectionMode::Extended);
     table_.setRowDragEnabled(true);
     links_ += table_.expanderClicked->connect([this](ui::RowIndex r) {
-        if (const auto* row = this->row(r); row && row->folder) setCollapsed(row->path, !collapsed(row->path));
+        const auto* row = this->row(r);
+        if (row && row->folder) setCollapsed(row->path, !collapsed(row->path));
+        else if (row && unfold_) unfoldToggled->emit(row->id, row->detail);   // 1.16.1 : le volet deplie, puis refait la liste
     });
     links_ += table_.rowsDropped->connect([this](const std::vector<ui::RowIndex>& rows, ui::RowIndex to, Where where) {
         (void)drop(rows, to, where);
@@ -147,27 +157,52 @@ void HmiFolderTable::setCollapsed(const std::string& path, bool on) {
 
 void HmiFolderTable::rebuild(std::optional<fold::List> list, const std::vector<hmi::Id>& shown, std::vector<std::string> headers,
                              const Cells& cells, const Style& style) {
-    // La selection d'avant, a retrouver.
-    std::vector<hmi::Id> keepItems = selectedItems();
+    // La selection d'avant, a retrouver. 1.16.1 : une ligne depliee, par son element et son chemin.
+    std::vector<hmi::Id> keepItems;
     std::vector<std::string> keepFolders;
+    std::vector<std::pair<hmi::Id, std::string>> keepDetails;
     for (const auto r : table_.selectedModelRows())
-        if (const auto* row = this->row(r); row && row->folder) keepFolders.push_back(row->path);
+        if (const auto* row = this->row(r)) {
+            if (row->folder) keepFolders.push_back(row->path);
+            else if (!row->detail.empty()) keepDetails.emplace_back(row->id, row->detail);
+            else if (std::find(keepItems.begin(), keepItems.end(), row->id) == keepItems.end()) keepItems.push_back(row->id);
+        }
 
     list_ = list;
     rows_.clear();
     items_ = 0;
+    details_ = 0;
     std::vector<FolderRowsModel::Line> lines;
     const auto& p = doc_->project;
     const auto itemLine = [&](hmi::Id id, const std::string& folder, int depth) {
         FolderRowsModel::Line line;
-        line.row = {false, id, folder, depth};
+        line.row = {false, id, folder, depth, {}};
         line.cells = cells(id);
         line.cells.resize(headers.size());
         line.style = style(id, 0);
         for (std::size_t c = 0; c < headers.size(); ++c) line.styles.push_back(c == 0 ? line.style : style(id, c));
+        line.owner = lines.size();
+        // 1.16.1 : ses lignes depliees, a la suite de la sienne.
+        std::vector<Detail> parts;
+        if (unfold_) line.expander = unfold_(id, parts);
         rows_.push_back(line.row);
         lines.push_back(std::move(line));
         ++items_;
+        const std::size_t owner = lines.size() - 1;
+        for (auto& d : parts) {
+            FolderRowsModel::Line sub;
+            sub.row = {false, id, folder, depth + std::max(1, d.depth), std::move(d.key)};
+            sub.cells = std::move(d.cells);
+            sub.cells.resize(headers.size());
+            sub.styles = std::move(d.styles);
+            sub.styles.resize(headers.size());
+            sub.style = sub.styles.front();
+            sub.expander = d.expander;
+            sub.owner = owner;
+            rows_.push_back(sub.row);
+            lines.push_back(std::move(sub));
+            ++details_;
+        }
     };
     if (!list) {
         for (const auto id : shown) itemLine(id, {}, 0);
@@ -187,7 +222,8 @@ void HmiFolderTable::rebuild(std::optional<fold::List> list, const std::vector<h
                 for (const auto id : shown)
                     if (fold::inside(folderOf(id), f)) ++count;
                 FolderRowsModel::Line line;
-                line.row = {true, hmi::kNoId, f, depth};
+                line.row = {true, hmi::kNoId, f, depth, {}};
+                line.owner = lines.size();
                 line.cells.assign(headers.size(), std::string{});
                 line.cells[0] = hmi::types::folderLeaf(f);
                 if (line.cells.size() > 1) line.cells[1] = std::to_string(count) + " " + fold::noun(*list, count);
@@ -210,11 +246,18 @@ void HmiFolderTable::rebuild(std::optional<fold::List> list, const std::vector<h
     model_->itemCommit = itemCommit_;
     table_.setRowDragEnabled(list.has_value());
     table_.setModel(model_);
-    // La selection retrouvee.
+    // La selection retrouvee. 1.16.1 : une ligne depliee qui n'est plus montree (repliee, son membre renomme ou
+    // retire) laisse la place a son element.
+    for (const auto& [id, key] : keepDetails)
+        if (rowOfDetail(id, key) < 0 && std::find(keepItems.begin(), keepItems.end(), id) == keepItems.end()) keepItems.push_back(id);
     std::vector<ui::RowIndex> again;
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         const auto& r = rows_[i];
-        if (!r.folder && std::find(keepItems.begin(), keepItems.end(), r.id) != keepItems.end()) again.push_back(static_cast<ui::RowIndex>(i));
+        if (!r.folder && r.detail.empty() && std::find(keepItems.begin(), keepItems.end(), r.id) != keepItems.end())
+            again.push_back(static_cast<ui::RowIndex>(i));
+        if (!r.detail.empty())
+            for (const auto& [id, key] : keepDetails)
+                if (id == r.id && upper(key) == upper(r.detail)) again.push_back(static_cast<ui::RowIndex>(i));
         if (r.folder)
             for (const auto& f : keepFolders)
                 if (fold::sameFolder(f, r.path)) again.push_back(static_cast<ui::RowIndex>(i));
@@ -235,19 +278,75 @@ void HmiFolderTable::rebuild(std::optional<fold::List> list, const std::vector<h
 
 int HmiFolderTable::rowOfItem(hmi::Id id) const noexcept {
     for (std::size_t i = 0; i < rows_.size(); ++i)
-        if (!rows_[i].folder && rows_[i].id == id) return static_cast<int>(i);
+        if (!rows_[i].folder && rows_[i].detail.empty() && rows_[i].id == id) return static_cast<int>(i);
     return -1;
+}
+
+// ---------------------------------------------- 1.16.1 : les deballages ------
+void HmiFolderTable::setUnfold(Unfold unfold) {
+    const bool first = !unfold_;
+    unfold_ = std::move(unfold);
+    if (!first) return;
+    // Le clavier : avant les touches de la liste (Suppr, Ctrl+D...) posees par le volet.
+    auto before = table_.keyHandler();
+    table_.setKeyHandler([this, before = std::move(before)](const ui::KeyDown& k) { return unfoldKey(k) || (before && before(k)); });
+}
+
+std::string HmiFolderTable::detailAt(ui::RowIndex modelRow) const {
+    const auto* r = row(modelRow);
+    return r ? r->detail : std::string{};
+}
+
+int HmiFolderTable::rowOfDetail(hmi::Id item, const std::string& key) const noexcept {
+    if (key.empty()) return -1;
+    const std::string want = upper(key);
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (!rows_[i].folder && rows_[i].id == item && !rows_[i].detail.empty() && upper(rows_[i].detail) == want) return static_cast<int>(i);
+    return -1;
+}
+
+std::string HmiFolderTable::selectedDetail() const {
+    for (const auto r : table_.selectedModelRows())
+        if (const auto* row = this->row(r); row && !row->detail.empty()) return row->detail;
+    return {};
+}
+
+void HmiFolderTable::selectDetail(hmi::Id item, const std::string& key) {
+    if (const int r = rowOfDetail(item, key); r >= 0) table_.selectModelRows({static_cast<ui::RowIndex>(r)});
+}
+
+// Gauche sur une ligne repliee (ou sans fleche) : sa ligne parente - l'element d'une ligne depliee, la ligne au-dessus
+// d'elle, le dossier d'un element. Suppr et Ctrl+D sur une ligne depliee : rien (elle se lit), et pourquoi.
+bool HmiFolderTable::unfoldKey(const ui::KeyDown& k) {
+    const auto selected = table_.selectedModelRows();
+    if (selected.empty() || !model_) return false;
+    const ui::RowIndex at = selected.back();
+    if (at >= rows_.size()) return false;
+    const auto& r = rows_[at];
+    if (!r.detail.empty() && ((k.key == ui::Key::Delete && k.mods.none()) || (k.key == ui::Key::D && k.mods.ctrl && !k.mods.alt))) {
+        message->emit("Une ligne d\xC3\xA9pli\xC3\xA9" "e se lit : elle se change dans son propre type (double-clic pour l'ouvrir).");
+        return true;
+    }
+    if (k.key != ui::Key::Left || !k.mods.none()) return false;
+    const int open = r.folder ? (collapsed(r.path) ? 0 : 1) : model_->line(at).expander;
+    if (open == 1 || r.depth == 0) return false;   // deplie : la table le replie
+    for (std::size_t i = at; i-- > 0;)
+        if (rows_[i].depth == r.depth - 1) {
+            table_.selectModelRows({static_cast<ui::RowIndex>(i)});
+            return true;
+        }
+    return false;
 }
 
 hmi::Id HmiFolderTable::itemAt(ui::RowIndex modelRow) const noexcept {
     const auto* r = row(modelRow);
-    return r && !r->folder ? r->id : hmi::kNoId;
+    return r && !r->folder ? r->id : hmi::kNoId;   // 1.16.1 : une ligne depliee - son element
 }
 
 std::vector<hmi::Id> HmiFolderTable::selectedItems() const {
     std::vector<hmi::Id> out;
     for (const auto r : table_.selectedModelRows())
-        if (const auto id = itemAt(r); id != hmi::kNoId) out.push_back(id);
+        if (const auto id = itemAt(r); id != hmi::kNoId && std::find(out.begin(), out.end(), id) == out.end()) out.push_back(id);
     return out;
 }
 
@@ -271,7 +370,7 @@ std::string HmiFolderTable::targetFolder() const {
 void HmiFolderTable::selectItem(hmi::Id id) {
     if (!list_ || id == hmi::kNoId) {
         for (std::size_t i = 0; i < rows_.size(); ++i)
-            if (!rows_[i].folder && rows_[i].id == id) table_.selectModelRows({static_cast<ui::RowIndex>(i)});
+            if (!rows_[i].folder && rows_[i].detail.empty() && rows_[i].id == id) table_.selectModelRows({static_cast<ui::RowIndex>(i)});
         return;
     }
     // Ses dossiers deplies d'abord (la table se reconstruit).
@@ -284,7 +383,7 @@ void HmiFolderTable::selectItem(hmi::Id id) {
         }
     if (opened) relayout->emit();
     for (std::size_t i = 0; i < rows_.size(); ++i)
-        if (!rows_[i].folder && rows_[i].id == id) {
+        if (!rows_[i].folder && rows_[i].detail.empty() && rows_[i].id == id) {
             table_.selectModelRows({static_cast<ui::RowIndex>(i)});
             return;
         }
@@ -393,10 +492,11 @@ bool HmiFolderTable::drop(const std::vector<ui::RowIndex>& from, ui::RowIndex to
     for (const auto r : from)
         if (const auto* row = this->row(r)) {
             if (row->folder) folders.push_back(row->path);
-            else ids.push_back(row->id);
+            else if (row->detail.empty()) ids.push_back(row->id);   // 1.16.1 : une ligne depliee ne se glisse pas
         }
     // La cible : un dossier (dans), la racine, ou un element (avant / apres).
     const Row* target = to == ui::TableView::kNoRow ? nullptr : this->row(to);
+    if (target && !target->detail.empty()) return false;
     if (!target || target->folder) {
         const std::string into = target ? target->path : std::string{};
         std::string why;

@@ -165,6 +165,12 @@ const std::vector<Note>& table() {
          "le dit) ; le reste part \xC3\xA0 l'IA connect\xC3\xA9" "e avec la conversation. Une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 "
          "l'IA connect\xC3\xA9" "e. Commande de s\xC3\xA9" "ance : ia dabord oui|non.",
          "assistant-ia", ""),
+        note("1.16.1", "Types IHM", Kind::New,
+         "LES D\xC3\x89" "BALLAGES : dans la liste des types, une structure se d\xC3\xA9plie (ses membres, leur type, leurs mots), une "
+         "\xC3\xA9num\xC3\xA9ration aussi (ses valeurs), et un membre structure ou tableau de structures \xC3\xA0 son tour. Dans le tableau "
+         "des membres, un membre structure ou tableau se d\xC3\xA9plie sur place : ses cases et leurs membres, avec leur d\xC3\xA9" "calage "
+         "depuis le d\xC3\xA9" "but du type. Droite, Gauche, le double-clic (son type), le clic droit Tout d\xC3\xA9plier / Tout replier.",
+         "types-ihm", ""),
         note("1.16.1", "Assistant IA", Kind::New,
          "M'AVERTIR DES R\xC3\x89PONSES : une r\xC3\xA9ponse de l'IA qui arrive quand tu ne regardes pas le panneau (une autre fen\xC3\xAAtre "
          "devant, le panneau repli\xC3\xA9, une autre conversation) : un avis dans la cloche (Voir ouvre la conversation) et, la fen\xC3\xAAtre en "

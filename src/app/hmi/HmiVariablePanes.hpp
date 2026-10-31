@@ -432,6 +432,34 @@ public:
     // Le double-clic sur un type de la liste (ou Entree) : l'hote l'ouvre dans son onglet (openTypeTab). Faux : pas d'hote.
     bool openInTab(hmi::Id type);
 
+    // ---- 1.16.1 : LES DEBALLAGES (comme ceux des Variables IHM, 1.12.14) ----
+    //  LA LISTE : un type se deplie - une structure, ses membres (leur type dans Membres, leur place dans Mots, leur
+    //  description) ; une enumeration, ses valeurs. Un membre structure, tableau de structures ou enumeration se deplie a
+    //  son tour, a toute profondeur (16 niveaux au plus) ; un tableau de structures montre UNE fois les membres de son
+    //  element (sa ligne dit ARRAY[0..2] OF ...). Un clic sur un membre choisit le type et, a droite, ce membre ; le
+    //  double-clic (ou Entree) sur un membre dont le type est un type IHM choisit ce type.
+    //  LE TABLEAU DES MEMBRES : un membre structure ou tableau se deplie sur place - ses parties en retrait, avec leur
+    //  type, unite, initiale, et leur DECALAGE depuis le debut du type (comme la colonne Decalage) ; un tableau, chacune
+    //  de ses cases (les 200 premieres). Ces lignes se lisent : Monter, Descendre, Supprimer, Renommer ne les visent pas ;
+    //  le double-clic sur l'une d'elles choisit son type (un type IHM).
+    //  Partout : la fleche, Droite deplie, Gauche replie (ou remonte a la ligne parente) ; le clic droit : Tout deplier,
+    //  Tout replier. Ce qui est deplie se garde par chemin (d'un type a l'autre ; un membre renomme ou retire : sa ligne
+    //  s'en va).
+    //  `path` : le chemin sous le type ("" : le type lui-meme ; "Purge.Debit" ; une valeur : "Mode#Auto").
+    bool setListUnfolded(hmi::Id type, const std::string& path, bool open);
+    [[nodiscard]] bool listUnfolded(hmi::Id type, const std::string& path) const;
+    void unfoldList(bool open);                                    // Tout deplier / Tout replier (la liste)
+    // `rel` : le chemin dans le type choisi ("Purge", "Purge[1]", "Purge[1].Debit").
+    bool setMemberUnfolded(const std::string& rel, bool open);
+    [[nodiscard]] bool memberUnfolded(const std::string& rel) const;
+    void unfoldMembers(bool open);                                 // Tout deplier / Tout replier (le tableau des membres)
+    [[nodiscard]] int memberRowOf(const std::string& rel) const;   // sa ligne dans le tableau des membres ; -1 : pas montree
+    [[nodiscard]] std::string memberRowPath(ui::RowIndex row) const;   // le chemin d'une ligne du tableau ; vide : aucune
+    [[nodiscard]] bool memberRowUnfolded(ui::RowIndex row) const;  // une ligne depliee (en lecture seule) ?
+    [[nodiscard]] const std::string& selectedMemberPart() const noexcept { return memberPart_; }   // la ligne depliee choisie
+    bool openMemberRow(ui::RowIndex row);                          // le double-clic sur une ligne depliee : son type IHM
+    bool openListPart(hmi::Id root, const std::string& path);      // le double-clic sur un membre de la liste : son type IHM
+
     struct Hosts {
         std::function<void(const std::string&)> showVariable;                                         // Utilise par : la variable
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
@@ -537,6 +565,29 @@ private:
     [[nodiscard]] bool tabMakesSense(std::size_t tab, const hmi::HmiType* t) const;
     [[nodiscard]] std::vector<ui::PopupMenu::Item> typeMenuItems() const;   // les entrees du type (clic droit de la liste)
     void fitTypeColumns();                    // Nom suit le plus long nom, Utilise par prend la place qui reste
+    // ---- 1.16.1 : les deballages ----
+    struct MemberLine {
+        int         member{-1};        // le membre (rang dans les siens puis les herites) ; une ligne depliee : -1
+        bool        part{false};       // une ligne depliee (en lecture seule)
+        std::string rel;               // son chemin dans le type ("Purge[1].Debit")
+        std::string type;              // son type ecrit
+        int         depth{0};
+        int         expander{-1};
+    };
+    using ListParts = std::vector<HmiFolderTable::Detail>;
+    int  listParts(hmi::Id type, ListParts& out);                  // la fleche d'un type de la liste, ses lignes
+    void emitListParts(const hmi::HmiType& t, hmi::Id root, const std::string& path, int depth, ListParts& out);
+    // Le type IHM d'un membre (une structure avec des membres, une enumeration avec des valeurs ; un tableau : celui de ses
+    // cases) ; nul : rien a deplier.
+    [[nodiscard]] const hmi::HmiType* unfoldableType(const std::string& type) const;
+    [[nodiscard]] std::string listKey(hmi::Id type, const std::string& path) const;
+    [[nodiscard]] std::string memberKey(const std::string& rel) const;
+    [[nodiscard]] int memberIndexOf(ui::RowIndex row) const;       // le membre d'une ligne (-1 : une ligne depliee)
+    [[nodiscard]] int rowOfMember(int member) const;               // la ligne d'un membre (-1 : pas montre)
+    std::vector<MemberLine> memberLines_;
+    mutable std::set<std::string> listOpen_, memberOpen_;          // "id|CHEMIN" en majuscules
+    std::string             memberPart_;                           // la ligne depliee choisie (son chemin)
+    bool                    listAll_{false}, memberAll_{false};    // Tout deplier : chaque fleche s'ouvre (et se retient)
     float             nameFit_{0.f}, listFit_{0.f};   // ... ce qu'elle a vu la derniere fois
     void revealUse(const TypeUse& u, std::size_t tab);   // un emploi sur sa ligne, dans ce volet (son type deja montre)
 

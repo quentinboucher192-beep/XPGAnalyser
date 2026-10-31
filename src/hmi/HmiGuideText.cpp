@@ -16095,6 +16095,28 @@ const std::vector<Topic>& topics() {
                          "marge des points d'arr\xC3\xAAt), les op\xC3\xA9rateurs, Exporter le "
                          "type\xE2\x80\xA6, Supprimer le type ; chaque geste se reprend par Ctrl+Z, et la "
                          "page Types IHM le voit aussi.", {}, "1.13.1"},
+             {K::Heading, "Les d\xC3\xA9" "ballages (1.16.1)", {}, "1.16.1"},
+             {K::Paragraph, "Comme les Variables IHM, les types se **d\xC3\xA9plient** sans quitter la page :", {}, "1.16.1"},
+             {K::Bullet, "**La liste des types** : la fl\xC3\xA8" "che d'une structure montre ses membres "
+                         "sous elle (leur type dans Membres, leur place dans Mots, leur description) ; celle "
+                         "d'une \xC3\xA9num\xC3\xA9ration, ses valeurs. Un membre structure, tableau de "
+                         "structures ou \xC3\xA9num\xC3\xA9ration a sa fl\xC3\xA8" "che \xC3\xA0 son tour, "
+                         "\xC3\xA0 toute profondeur : `Purge : ARRAY[0..2] OF T_CfgPurge` montre une fois "
+                         "les membres de sa case. Un clic sur un membre choisit le type et, \xC3\xA0 droite, "
+                         "ce membre ; un **double-clic** (ou Entr\xC3\xA9" "e) choisit son type \xC3\xA0 lui "
+                         "(T_CfgPurge).", {}, "1.16.1"},
+             {K::Bullet, "**Le tableau des membres** : un membre structure ou tableau se d\xC3\xA9plie sur "
+                         "place - ses cases (`Purge[0]`, `Purge[1]`\xE2\x80\xA6 : les 200 premi\xC3\xA8res), "
+                         "puis leurs membres, en retrait, avec leur type, leur unit\xC3\xA9, leur valeur "
+                         "initiale et leur **D\xC3\xA9" "calage depuis le d\xC3\xA9" "but du type** "
+                         "(`Purge[1].Debit` : mot 11). Ces lignes se lisent : elles se changent dans leur "
+                         "propre type (un double-clic l'ouvre) ; Monter, Descendre, Renommer, Supprimer le "
+                         "membre ne les visent pas.", {}, "1.16.1"},
+             {K::Bullet, "Partout : la fl\xC3\xA8" "che, **Droite** d\xC3\xA9plie, **Gauche** replie (ou "
+                         "remonte \xC3\xA0 la ligne parente) ; le clic droit \xE2\x80\xBA **Tout "
+                         "d\xC3\xA9plier**, **Tout replier**. Ce qui est d\xC3\xA9pli\xC3\xA9 se garde d'un "
+                         "type \xC3\xA0 l'autre ; un membre renomm\xC3\xA9 ou retir\xC3\xA9 : sa ligne s'en "
+                         "va.", {}, "1.16.1"},
              {K::Heading, "L'employer", {}},
              {K::Paragraph, "Une variable IHM de type `T_Four` (le dialogue ou la case Type) a tous les membres "
                          "du type : `Four1.Temperature`, `Four1.Vannes[2].Ouverte`. Un **tableau de "

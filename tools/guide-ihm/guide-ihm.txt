@@ -6665,6 +6665,13 @@ Un **double-clic** sur un type, dans la liste des Types IHM ou dans l'arbre du p
 - **Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet. Ctrl+Z rend le type ; son onglet se rouvre alors par Ctrl+Maj+T (Rouvrir le dernier fermé) ou d'un double-clic.
 - **Va-et-vient avec l'arbre** : l'arbre suit l'onglet actif (le type y est choisi) ; le clic droit sur l'onglet › **Afficher dans l'arbre** ; un clic dans l'arbre sur un type déjà ouvert mène à son onglet ; **Aller à** (Ctrl+K) propose aussi les types IHM et les ouvre dans leur onglet. Un emploi d'un autre type (l'onglet Emplois) ouvre l'onglet de cet autre type.
 - Tout s'y fait comme dans la page : les membres (Ctrl+C / Ctrl+V avec Excel, le clic droit Rendre privé…), les méthodes et leur corps (la marge des points d'arrêt), les opérateurs, Exporter le type…, Supprimer le type ; chaque geste se reprend par Ctrl+Z, et la page Types IHM le voit aussi.
+@nouveau 1.16.1
+### Les déballages (1.16.1)
+Comme les Variables IHM, les types se **déplient** sans quitter la page :
+- **La liste des types** : la flèche d'une structure montre ses membres sous elle (leur type dans Membres, leur place dans Mots, leur description) ; celle d'une énumération, ses valeurs. Un membre structure, tableau de structures ou énumération a sa flèche à son tour, à toute profondeur : `Purge : ARRAY[0..2] OF T_CfgPurge` montre une fois les membres de sa case. Un clic sur un membre choisit le type et, à droite, ce membre ; un **double-clic** (ou Entrée) choisit son type à lui (T_CfgPurge).
+- **Le tableau des membres** : un membre structure ou tableau se déplie sur place - ses cases (`Purge[0]`, `Purge[1]`… : les 200 premières), puis leurs membres, en retrait, avec leur type, leur unité, leur valeur initiale et leur **Décalage depuis le début du type** (`Purge[1].Debit` : mot 11). Ces lignes se lisent : elles se changent dans leur propre type (un double-clic l'ouvre) ; Monter, Descendre, Renommer, Supprimer le membre ne les visent pas.
+- Partout : la flèche, **Droite** déplie, **Gauche** replie (ou remonte à la ligne parente) ; le clic droit › **Tout déplier**, **Tout replier**. Ce qui est déplié se garde d'un type à l'autre ; un membre renommé ou retiré : sa ligne s'en va.
+@nouveau -
 ### L'employer
 Une variable IHM de type `T_Four` (le dialogue ou la case Type) a tous les membres du type : `Four1.Temperature`, `Four1.Vannes[2].Ouverte`. Un **tableau de structures** : `Fours : ARRAY[1..4] OF T_Four`, puis `Fours[f].Consigne` dans une boucle.
 @nouveau 1.10

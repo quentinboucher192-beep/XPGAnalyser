@@ -19721,7 +19721,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 509,   // 1.16.1 : + 7 (l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 510,   // 1.16.1 : + 8 (les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -44173,7 +44173,91 @@ void defautsCaptures1141Seconde() {
     }
 }
 
+// ---- 1.16.1 : les deballages des types IHM (la liste et le tableau des membres) ----
+void deballagesTypes1161() {
+    std::printf("1.16.1 : les deballages des types IHM (la liste, le tableau des membres)\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    app::HmiTypesPane types("ty1161", doc, apply);
+    types.setBounds({0, 0, 1400, 800});
+    types.layout();
+    std::string why;
+    // Un type neuf a deux membres pour commencer (Valeur : REAL, Marche : BOOL).
+    const Id purge = types.addType("T_CfgPurge", &why);
+    check(purge != kNoId && types.addMember(purge, "Debit", "REAL", &why), "T_CfgPurge : Valeur, Marche, Debit");
+    const Id gaz = types.addType("T_ConfigGaz", &why);
+    check(gaz != kNoId && types.addMember(gaz, "Purge", "ARRAY[0..2] OF T_CfgPurge", &why) && types.addMember(gaz, "DLHE", "ARRAY[1..5] OF INT", &why),
+          "T_ConfigGaz : Valeur, Marche, Purge : ARRAY[0..2] OF T_CfgPurge, DLHE : ARRAY[1..5] OF INT");
+    auto& folders = types.folders();
+    const auto list = [&] { return types.typeTable().model(); };
+    // ---- la liste
+    check(folders.detailCount() == 0 && list()->cellStyle(static_cast<ui::RowIndex>(folders.rowOfItem(gaz)), 0).expander == 0,
+          "la liste : T_ConfigGaz a sa fl\xC3\xA8" "che, repli\xC3\xA9" "e");
+    check(types.setListUnfolded(gaz, {}, true) && folders.detailCount() == 4 && folders.rowOfDetail(gaz, "Purge") > folders.rowOfItem(gaz),
+          "T_ConfigGaz d\xC3\xA9pli\xC3\xA9 : ses 4 membres sous lui (" + std::to_string(folders.detailCount()) + ")");
+    const int purgeRow = folders.rowOfDetail(gaz, "Purge"), dlheRow = folders.rowOfDetail(gaz, "DLHE");
+    check(purgeRow >= 0 && dlheRow >= 0 && list()->cellStyle(static_cast<ui::RowIndex>(purgeRow), 0).expander == 0
+              && list()->cellStyle(static_cast<ui::RowIndex>(dlheRow), 0).expander == -1
+              && list()->cellText(static_cast<ui::RowIndex>(purgeRow), 1).find("T_CfgPurge") != std::string::npos,
+          "Purge (un tableau de structures) se d\xC3\xA9plie, DLHE (des INT) non ; sa ligne dit son type");
+    check(!list()->editable(static_cast<ui::RowIndex>(purgeRow), 0), "une ligne d\xC3\xA9pli\xC3\xA9" "e de la liste se lit");
+    check(types.setListUnfolded(gaz, "Purge", true) && folders.rowOfDetail(gaz, "Purge.Debit") > purgeRow
+              && folders.rowOfDetail(gaz, "Purge[0]") < 0,
+          "Purge d\xC3\xA9pli\xC3\xA9 : les membres de sa case, une fois (Purge.Debit)");
+    // Un clic sur un membre deplie : le type, et a droite ce membre.
+    types.typeTable().selectModelRows({static_cast<ui::RowIndex>(folders.rowOfDetail(gaz, "Purge.Debit"))});
+    check(types.selectedType() == gaz && types.selectedMember() == 2, "un clic sur Purge.Debit : T_ConfigGaz, et son membre Purge");
+    check(types.openListPart(gaz, "Purge") && types.selectedType() == purge, "le double-clic sur Purge : son type, T_CfgPurge");
+    types.unfoldList(false);
+    check(folders.detailCount() == 0, "Tout replier : plus aucune ligne d\xC3\xA9pli\xC3\xA9" "e");
+    types.unfoldList(true);
+    check(folders.rowOfDetail(gaz, "Purge.Debit") >= 0 && folders.rowOfDetail(purge, "Debit") >= 0, "Tout d\xC3\xA9plier : chaque type, a toute profondeur");
+    // ---- le tableau des membres
+    types.selectType(gaz);
+    auto& members = types.memberTable();
+    check(members.model()->rowCount() == 4 && types.memberRowOf("Purge") == 2, "les membres de T_ConfigGaz : 4 lignes, Purge la troisi\xC3\xA8me");
+    check(members.model()->cellStyle(2, 0).expander == 0 && members.model()->cellStyle(3, 0).expander == 0 && members.model()->cellStyle(0, 0).expander == -1,
+          "Purge et DLHE (des tableaux) ont leur fl\xC3\xA8" "che ; Valeur non");
+    check(types.setMemberUnfolded("Purge", true) && types.memberRowOf("Purge[0]") == 3 && types.memberRowOf("Purge[2]") == 5
+              && types.memberRowUnfolded(3) && members.model()->rowCount() == 7,
+          "Purge d\xC3\xA9pli\xC3\xA9 : ses 3 cases sous lui");
+    check(types.setMemberUnfolded("Purge[1]", true) && types.memberRowOf("Purge[1].Debit") > types.memberRowOf("Purge[1]"),
+          "Purge[1] d\xC3\xA9pli\xC3\xA9 : ses membres");
+    const auto offsetOf = [&](const std::string& rel) {
+        const int r = types.memberRowOf(rel);
+        const std::string text = r >= 0 ? members.model()->cellText(static_cast<ui::RowIndex>(r), 4) : std::string{};
+        return text.rfind("mot ", 0) == 0 ? std::atoll(text.c_str() + 4) : -1LL;
+    };
+    const long long p0 = offsetOf("Purge"), e0 = offsetOf("Purge[0]"), e1 = offsetOf("Purge[1]"), d1 = offsetOf("Purge[1].Debit"), v1 = offsetOf("Purge[1].Valeur");
+    check(p0 >= 0 && e0 == p0 && e1 > e0 && d1 > v1 && v1 == e1,
+          "les d\xC3\xA9" "calages depuis le d\xC3\xA9" "but du type : Purge " + std::to_string(p0) + ", [0] " + std::to_string(e0) + ", [1] " + std::to_string(e1)
+              + ", [1].Valeur " + std::to_string(v1) + ", [1].Debit " + std::to_string(d1));
+    const int part = types.memberRowOf("Purge[1].Debit");
+    check(!members.model()->editable(static_cast<ui::RowIndex>(part), 0) && members.model()->editable(static_cast<ui::RowIndex>(types.memberRowOf("DLHE")), 0),
+          "une ligne d\xC3\xA9pli\xC3\xA9" "e se lit ; un membre se change");
+    members.selectModelRows({static_cast<ui::RowIndex>(part)});
+    check(types.selectedMember() == -1 && types.selectedMemberPart() == "Purge[1].Debit", "choisir une ligne d\xC3\xA9pli\xC3\xA9" "e : aucun membre (Monter, Supprimer gris\xC3\xA9s)");
+    // Les lignes intercalees : la case d'un membre ecrit bien ce membre.
+    check(members.model()->setCellText(static_cast<ui::RowIndex>(types.memberRowOf("DLHE")), 0, "DLHE2") && doc->project.hmiType(gaz)->members[3].name == "DLHE2",
+          "renommer DLHE sous les lignes d\xC3\xA9pli\xC3\xA9" "es : c'est bien DLHE qui change");
+    types.unfoldMembers(false);
+    check(members.model()->rowCount() == 4, "Tout replier : les 4 membres");
+    types.unfoldMembers(true);
+    check(types.memberRowOf("Purge[2].Debit") >= 0 && types.memberRowOf("DLHE2[5]") >= 0, "Tout d\xC3\xA9plier : les cases et leurs membres");
+    check(types.openMemberRow(static_cast<ui::RowIndex>(types.memberRowOf("Purge[0]"))) && types.selectedType() == purge,
+          "le double-clic sur Purge[0] : son type, T_CfgPurge");
+    types.selectType(gaz);
+    check(types.memberRowOf("Purge[0]") >= 0, "ce qui est d\xC3\xA9pli\xC3\xA9 se garde d'un type \xC3\xA0 l'autre");
+}
+
 int main(int argc, char** argv) {
+    // 1.16.1 : HMI_TEST_D161=1 - les deballages des types IHM, seuls.
+    if (const char* only = std::getenv("HMI_TEST_D161"); only && *only == '1') {
+        deballagesTypes1161();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.1 (captures, seconde passe) : HMI_TEST_N5C=1 - les defauts de la seconde passe des captures, seuls.
     if (const char* only = std::getenv("HMI_TEST_N5C"); only && *only == '1') {
         defautsCaptures1141Seconde();
@@ -44840,6 +44924,7 @@ int main(int argc, char** argv) {
     pointeurs1141();                        // 1.14.1 (lot N2) : le pointeur - etirer, deplacer, ecrire
     sonsRelecture1141();                    // 1.14.1 (lot N3) : le bouton Sons de la barre de relecture
     defautsCaptures1141Seconde();           // 1.14.1 (captures, seconde passe) : infobulles, clapet, Temps de manoeuvre, calculatrice, unites
+    deballagesTypes1161();                  // 1.16.1 : les deballages des types IHM (la liste, le tableau des membres)
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
