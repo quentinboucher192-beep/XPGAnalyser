@@ -4014,10 +4014,15 @@ const std::vector<Topic>& topics() {
                          "de l'Assistant ; le retirer avant l'envoi supprime la copie.", {}},
              {K::Table, "Pi\xC3\xA8" "ce\tCe que l'IA en re\xC3\xA7oit\nPNG, JPG\tL'image (5 Mo au plus) : "
                          "une capture d'\xC3\xA9" "cran, la photo d'un synoptique.\nPDF\tLe document (20 Mo "
-                         "au plus) : un plan, un cahier des charges.\nTXT, CSV, JSON, XML\tLe texte, avec "
-                         "son nom (les 200 premiers Ko ; un CSV d'Excel est relu correctement).\nXLSX, "
-                         ".xihm, .xapi, projet\tSeulement son nom : ces fichiers ne sont pas lus par l'IA "
-                         "dans cette version (le panneau le dit \xC3\xA0 l'envoi).", {}},
+                         "au plus) : un plan, un cahier des charges.\nTXT, CSV, JSON, XML\tLe texte entier, "
+                         "avec son nom, d\xC3\xA9" "coup\xC3\xA9 en parties aux fins de ligne (\xC2\xAB "
+                         "partie 2/5, lignes 1201 \xC3\xA0 2400 \xC2\xBB) ; un CSV d'Excel est relu "
+                         "correctement. 1.20.0 : la limite est celle de la fen\xC3\xAAtre du mod\xC3\xA8le - "
+                         "les parties qui n'y tiennent pas sont lues \xC3\xA0 part, une demande chacune "
+                         "(\xC2\xAB Lecture de mesures.csv : partie 3/9 \xC2\xBB), et leur extrait part "
+                         "\xC3\xA0 leur place ; ce qui n'a pas pu \xC3\xAAtre lu est dit.\nXLSX, .xihm, "
+                         ".xapi, projet\tSeulement son nom : ces fichiers ne sont pas lus par l'IA dans "
+                         "cette version (le panneau le dit \xC3\xA0 l'envoi).", {}},
              {K::Paragraph, "Avec l'IA int\xC3\xA9gr\xC3\xA9" "e ou en d\xC3\xA9monstration, leur contenu n'est "
                          "pas lu. Le bouton Param\xC3\xA8tres de l'en-t\xC3\xAAte (ou un clic sur "
                          "l'\xC3\xA9tat de connexion) :", {}},

@@ -186,6 +186,30 @@ const std::vector<Note>& table() {
          "mesure ? \xC2\xBB. XPGAnalyser aide \xC3\xA0 comprendre un \xC3\xA9v\xC3\xA9nement : ce n'est pas un syst\xC3\xA8me de "
          "s\xC3\xA9" "curit\xC3\xA9.",
          "incidents", ""),
+        // 1.20.0 : vus a l'essai (les membres de structures, les gros fichiers joints, les grosses propositions)
+        note("1.20.0", "Assistant IA", Kind::Fixed,
+         "ADRESSER UN MEMBRE DE STRUCTURE, \xC3\x80 TOUTE PROFONDEUR : \xC2\xAB ConfigArmoire.ConfPoids \xC2\xBB ou \xC2\xAB Config.Sous.Valeur \xC2\xBB "
+         "n'est plus refus\xC3\xA9 comme \xC2\xAB variable IHM introuvable \xC2\xBB. La variable doit exister, le membre est cherch\xC3\xA9 dans "
+         "son type d\xC3\xA9pli\xC3\xA9 (jamais invent\xC3\xA9 : un membre inconnu est refus\xC3\xA9 en listant ceux du niveau o\xC3\xB9 le chemin "
+         "s'arr\xC3\xAAte) ; son adresse va dans les adresses corrig\xC3\xA9" "es de la variable, comme dans l'\xC3\xA9" "cran des variables, et "
+         "tous les membres suivent l'\xC3\xA9quipement de la variable.",
+         "assistant-ia-registre", ""),
+        note("1.20.0", "Assistant IA", Kind::Changed,
+         "LES FICHIERS TEXTE JOINTS NE SONT PLUS COUP\xC3\x89S \xC3\x80 200 KO : avant d'envoyer, la limite est v\xC3\xA9rifi\xC3\xA9" "e - la "
+         "fen\xC3\xAAtre du mod\xC3\xA8le (lue dans la liste des mod\xC3\xA8les, ou donn\xC3\xA9" "e dans les Param\xC3\xA8tres) moins la r\xC3\xA9ponse, "
+         "les consignes et les messages. Le fichier part ENTIER tant qu'il tient, d\xC3\xA9" "coup\xC3\xA9 en parties aux fins de ligne "
+         "(\xC2\xAB partie 2/5, lignes 1201 \xC3\xA0 2400 \xC2\xBB) ; au-del\xC3\xA0, les parties en trop sont LUES \xC3\x80 PART, une demande "
+         "chacune, et leur extrait part \xC3\xA0 leur place (\xC2\xAB Lecture de mesures.csv : partie 3/9 \xC2\xBB). Rien n'est coup\xC3\xA9 en "
+         "silence : ce qui n'a pas pu \xC3\xAAtre lu est dit, \xC3\xA0 l'IA et \xC3\xA0 toi ; les jetons des lectures comptent dans la "
+         "consommation.",
+         "assistant-ia", ""),
+        note("1.20.0", "Assistant IA", Kind::Fixed,
+         "UNE GROSSE PROPOSITION NE G\xC3\x88LE PLUS L'APPLI : des centaines d'op\xC3\xA9rations se v\xC3\xA9rifient cinq fois plus vite "
+         "(600 op\xC3\xA9rations, dont 400 adresses : de 0,4 s \xC3\xA0 0,08 s) ; \xC3\xA0 partir de 40 op\xC3\xA9rations, la carte se v\xC3\xA9rifie "
+         "sur un fil de fond avec une barre d'avancement (\xC2\xAB V\xC3\xA9rification\xE2\x80\xA6 \xC2\xBB), Appliquer revient \xC3\xA0 la fin ; "
+         "son empreinte n'est plus recalcul\xC3\xA9" "e \xC3\xA0 chaque affichage, et une carte appliqu\xC3\xA9" "e ou refus\xC3\xA9" "e ne "
+         "revalide plus rien.",
+         "assistant-ia-plan", ""),
         // 1.19.0 : l'IA qui concoit et construit des projets complets
         note("1.19.0", "Assistant IA", Kind::New,
          "UNE INSTALLATION COMPL\xC3\x88TE, SANS CONNEXION : l'IA int\xC3\xA9gr\xC3\xA9" "e con\xC3\xA7oit une station de pompage (\xC2\xAB Cr\xC3\xA9" "e une "

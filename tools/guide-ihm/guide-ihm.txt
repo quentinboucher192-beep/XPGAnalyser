@@ -1815,7 +1815,7 @@ Images (PNG, JPG), PDF, texte (TXT), CSV, Excel (XLSX), XML, JSON et les fichier
 | Pièce | Ce que l'IA en reçoit |
 | PNG, JPG | L'image (5 Mo au plus) : une capture d'écran, la photo d'un synoptique. |
 | PDF | Le document (20 Mo au plus) : un plan, un cahier des charges. |
-| TXT, CSV, JSON, XML | Le texte, avec son nom (les 200 premiers Ko ; un CSV d'Excel est relu correctement). |
+| TXT, CSV, JSON, XML | Le texte entier, avec son nom, découpé en parties aux fins de ligne (« partie 2/5, lignes 1201 à 2400 ») ; un CSV d'Excel est relu correctement. 1.20.0 : la limite est celle de la fenêtre du modèle - les parties qui n'y tiennent pas sont lues à part, une demande chacune (« Lecture de mesures.csv : partie 3/9 »), et leur extrait part à leur place ; ce qui n'a pas pu être lu est dit. |
 | XLSX, .xihm, .xapi, projet | Seulement son nom : ces fichiers ne sont pas lus par l'IA dans cette version (le panneau le dit à l'envoi). |
 Avec l'IA intégrée ou en démonstration, leur contenu n'est pas lu.
 Le bouton Paramètres de l'en-tête (ou un clic sur l'état de connexion) :
