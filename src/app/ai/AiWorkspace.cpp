@@ -19,9 +19,11 @@
 //    - les fenetres (MenuManager::ShowDialog), la barre d'etat, la commande
 //      ia.memoire (le centre de memoire, s'il est la).
 // =============================================================================
+#include "AiAutomate.hpp"
 #include "AiPanel.hpp"
 
 #include "../App.hpp"
+#include "../../core/Edition.hpp"
 #include "../hmi/HmiEditor.hpp"
 #include "../screens/Screens.hpp"
 #include "../../domain/ProjectModel.hpp"
@@ -96,55 +98,38 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
         return std::string(u.begin(), u.end());
     };
     core.projectPath = [this] { return app_.projectFolder(); };
-    // Les globales de l'automate relie : une variable de l'automate existe aussi (sans casse).
-    core.env.plcName = [this](std::string_view root) {
-        const auto plc = app_.project();
-        if (!plc) return false;
-        const std::string want = upper(root);
-        for (const auto& v : plc->variables)
-            if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return true;
-        return false;
-    };
-    // 1.15.0 : leur liste pour le contexte envoye au modele - le nom tel qu'une propriete l'ecrit
-    // ("API." + nom) et son type, comme plcName les reconnait.
-    core.env.plcVariables = [this] {
-        std::vector<std::pair<std::string, std::string>> out;
-        const auto plc = app_.project();
-        if (!plc) return out;
-        for (const auto& v : plc->variables)
-            if (v.scope == domain::VariableScope::Global)
-                out.emplace_back("API." + std::string(plc->strings.text(v.name)), std::string(plc->strings.text(v.type.name)));
-        return out;
-    };
-
-    // 1.16.0 : le commentaire d'une globale (la description d'une variable IHM proposee depuis l'automate).
-    core.env.plcComment = [this](std::string_view name) {
-        const auto plc = app_.project();
-        if (!plc) return std::string{};
-        const std::string want = upper(name);
-        for (const auto& v : plc->variables)
-            if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return std::string(plc->strings.text(v.comment));
-        return std::string{};
-    };
-    // 1.16.0 : les types (DDT) de l'automate relie : leur nom, leur commentaire, leurs membres (nom, type tel
-    // qu'ecrit - ARRAY[0..3] OF T_Vanne, STRING[32], EBOOL -, commentaire). Les DDT d'equipement en sont aussi.
-    core.env.plcTypes = [this] {
-        std::vector<ai::Env::PlcType> out;
-        const auto plc = app_.project();
-        if (!plc) return out;
-        for (const auto& d : plc->derivedTypes) {
-            ai::Env::PlcType t;
-            t.name = std::string(plc->strings.text(d.name));
-            t.comment = std::string(plc->strings.text(d.comment));
-            for (const auto fi : d.fields) {
-                if (fi >= plc->variables.size()) continue;
-                const auto& f = plc->variables[fi];
-                t.members.push_back({std::string(plc->strings.text(f.name)), std::string(plc->strings.text(f.type.name)),
-                                     std::string(plc->strings.text(f.comment))});
-            }
-            out.push_back(std::move(t));
+    // Les globales de l'automate relie : une variable de l'automate existe aussi (sans casse). 1.16.0 : seulement
+    // dans l'edition qui a l'automate (IHM Studio n'en a pas : son contexte ne dit plus qu'un automate est relie).
+    if (core::hasApi())
+        core.env.plcName = [this](std::string_view root) {
+            const auto plc = app_.project();
+            if (!plc) return false;
+            const std::string want = upper(root);
+            for (const auto& v : plc->variables)
+                if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return true;
+            return false;
+        };
+    // 1.15.0 : leurs listes (variables, commentaires, DDT) pour le contexte et les propositions. 1.16.0 (captures) :
+    // sans automate relie (IHM Studio), celui d'un export de Control Expert JOINT a la conversation (.XPG) - lu par
+    // readPlc, garde le temps de la seance.
+    auto plcFile = std::make_shared<ai::PlcFile>();
+    ai::fillPlcEnv(core.env, [this, plcFile]() -> std::shared_ptr<const domain::Project> {
+        if (auto plc = app_.project()) return plc;
+        return plcFile->project;
+    });
+    core.env.plcSource = [this, plcFile] { return app_.project() ? std::string{} : plcFile->name; };
+    core.readPlc = [plcFile](const std::string& path, std::string* said) {
+        std::string why;
+        auto f = ai::readPlcFile(path, &why);
+        if (!f) {
+            if (said) *said = why;
+            return false;
         }
-        return out;
+        *plcFile = std::move(*f);
+        if (said)
+            *said = std::to_string(plcFile->variables) + (plcFile->variables > 1 ? " variables globales" : " variable globale") + " et "
+                    + std::to_string(plcFile->types) + (plcFile->types > 1 ? " types (DDT)" : " type (DDT)");
+        return true;
     };
     // 1.16.0 : la vue qu'une proposition vient de creer s'ouvre dans l'editeur.
     core.openView = [this](hmi::Id id) { openHmiView(id); };

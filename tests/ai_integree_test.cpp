@@ -16,6 +16,7 @@
 //      carte, appliquer, Ctrl+Z ; le mode Direct ; les suggestions.
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
+#include "../src/app/ai/AiAutomate.hpp"
 #include "../src/app/ai/AiLocal.hpp"
 #include "../src/app/ai/AiRegistry.hpp"
 #include "../src/core/Command.hpp"
@@ -360,7 +361,7 @@ void testVariablesAndView() {
     r = b.ask("cree la variable Pompe_1_Marche");
     check(!r.proposal && has(r.text, "existe d\xC3\xA9j\xC3\xA0"), "une variable qui existe : rien a creer");
     r = b.ask("cr\xC3\xA9" "e les variables de l'automate");
-    check(!r.proposal && has(r.text, "Aucun automate"), "sans automate relie : dit");
+    check(!r.proposal && has(r.text, "pas encore lu d'automate") && has(r.text, ".XPG"), "sans automate : dit, et comment joindre le .XPG");
     b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{{"PT101", "REAL"}, {"PT102", "REAL"}, {"FT201", "REAL"}}; };
     r = b.ask("cree les variables de l'automate qui commencent par PT");
     op = firstOp(r);
@@ -818,10 +819,10 @@ void testNoPlc() {
     b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{}; };
     b.env.plcTypes = [] { return std::vector<ai::Env::PlcType>{}; };
     auto r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT");
-    check(!r.proposal && has(r.text, "Aucun automate n'est reli\xC3\xA9 \xC3\xA0 ce projet") && !has(r.text, "Rien \xC3\xA0 cr\xC3\xA9" "er"),
+    check(!r.proposal && has(r.text, "pas encore lu d'automate") && !has(r.text, "Rien \xC3\xA0 cr\xC3\xA9" "er"),
           "variables de l'automate, sans automate : dit (" + r.text + ")");
     r = b.ask("Propose les types IHM des DDT");
-    check(!r.proposal && has(r.text, "Aucun automate n'est reli\xC3\xA9"), "les types des DDT, sans automate : dit");
+    check(!r.proposal && has(r.text, "pas encore lu d'automate"), "les types des DDT, sans automate : dit");
     // avec un automate : les types qu'elles emploient d'abord
     b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{{"PT101", "T_Mesure"}, {"PT102", "REAL"}}; };
     b.env.plcTypes = [] { return std::vector<ai::Env::PlcType>{{"T_Mesure", "", {{"Valeur", "REAL", ""}, {"Defaut", "BOOL", ""}}}}; };
@@ -886,7 +887,52 @@ void testHelpPhrases() {
 
 } // namespace
 
-int main() {
+// 1.16.0 (captures) : IHM Studio n'a pas d'automate relie - le .XPG joint est lu (AiAutomate : readPlcFile,
+// fillPlcEnv), puis ses globales et ses DDT se proposent en variables et types IHM.
+void testPlcFile(const char* xpg) {
+    std::printf("[l'automate lu dans un .XPG joint]\n");
+    check(ai::isPlcExport("MAST.XPG") && ai::isPlcExport("prog.xef") && !ai::isPlcExport("plan.pdf") && !ai::isPlcExport("cfg.xhw"),
+          "les exports reconnus : .XPG, .XEF (pas un PDF, pas la configuration .XHW seule)");
+    if (!xpg) {
+        check(false, "le chemin de MAST.XPG manque (argument de l'essai)");
+        return;
+    }
+    std::string why;
+    const auto f = ai::readPlcFile(xpg, &why);
+    check(f && f->project && f->name == "MAST.XPG" && f->variables > 100 && f->types == 28,
+          "MAST.XPG lu : " + (f ? std::to_string(f->variables) + " globales, " + std::to_string(f->types) + " DDT" : why));
+    check(!ai::readPlcFile("/chemin/absent.XPG", &why) && !why.empty(), "un fichier absent : refuse, avec la raison");
+    if (!f) return;
+    Bench b;
+    ai::fillPlcEnv(b.env, [p = f->project] { return p; });
+    b.env.plcSource = [] { return std::string("MAST.XPG"); };
+    const auto vars = b.env.plcVariables();
+    const auto ddts = b.env.plcTypes();
+    check(vars.size() == f->variables && ddts.size() == 28 && !vars.empty() && vars.front().first.rfind("API.", 0) == 0,
+          "les listes de l'automate lu (API.Nom, les 28 DDT)");
+    auto r = b.ask("Propose les types IHM des DDT");
+    std::size_t types = 0;
+    if (r.proposal)
+        for (const auto& op : r.proposal->ops) types += op.action == ai::Operation::Action::Type ? 1 : 0;
+    check(r.proposal && types > 0 && types <= 28, "les types IHM des DDT du .XPG : " + std::to_string(types) + " types proposes");
+    // une globale de l'automate, par un morceau de son nom
+    std::string piece;
+    for (const auto& [n, t] : vars)
+        if (t == "EBOOL" || t == "BOOL" || t == "INT" || t == "REAL") {
+            piece = n.substr(4, std::min<std::size_t>(5, n.size() - 4));
+            break;
+        }
+    r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par " + piece);
+    std::size_t created = 0;
+    if (r.proposal)
+        for (const auto& op : r.proposal->ops) created += op.action == ai::Operation::Action::Variables ? op.variables.size() : 0;
+    check(!piece.empty() && r.proposal && created > 0, "des variables IHM proposees depuis le .XPG (" + piece + ") : " + std::to_string(created));
+    if (r.proposal)
+        for (const auto& op : r.proposal->ops)
+            for (const auto& v : op.variables) check(v.name.rfind("API.", 0) != 0 && v.type != "EBOOL", "le nom IHM sans API., le type converti : " + v.name + " " + v.type);
+}
+
+int main(int argc, char** argv) {
     testCreate();
     testSynoptic();
     testModify();
@@ -907,6 +953,7 @@ int main() {
     testNoPlc();
     testSuggestions();
     testHelpPhrases();
+    testPlcFile(argc > 1 ? argv[1] : nullptr);
     std::printf("ai_integree_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

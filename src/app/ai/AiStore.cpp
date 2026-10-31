@@ -413,6 +413,9 @@ const std::vector<AttachmentFormat>& attachmentFormats() {
         {"xlsx", "Classeur Excel"},    {"xml", "Fichier XML"},         {"json", "Fichier JSON"},
         {"xihm", "Projet IHM (archive .xihm)"}, {"xapi", "Projet API (archive .xapi)"},
         {"xpgproj", "Projet (dossier)"},
+        // 1.16.0 : l'export de l'automate - l'Assistant le lit (ses variables, ses DDT -> variables et types IHM).
+        {"xpg", "Export de l'automate (Control Expert)"}, {"xef", "Export de l'automate (Control Expert)"},
+        {"zef", "Export de l'automate (Control Expert)"},
     };
     return k;
 }

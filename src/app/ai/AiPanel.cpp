@@ -912,7 +912,7 @@ void AiPanel::askAttach() {
     ui::FilePick pick;
     pick.title = "Joindre un fichier \xC3\xA0 la demande";
     pick.filters = {{"Fichiers pris en charge", attachmentFilter()}, {"Images", "png;jpg;jpeg"}, {"Documents", "pdf;txt;csv;xlsx;xml;json"},
-                    {"Projets", "xihm;xapi;xpgproj"}};
+                    {"Projets", "xihm;xapi;xpgproj"}, {"Automate (Control Expert)", "xpg;xef;zef"}};
     if (!ui::pickFile(pick, [this](std::string path) {
             if (!path.empty()) (void)attachFile(path);
         }))

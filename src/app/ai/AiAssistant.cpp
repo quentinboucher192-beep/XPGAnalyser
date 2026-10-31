@@ -3,6 +3,8 @@
 // =============================================================================
 #include "AiAssistant.hpp"
 
+#include "AiAutomate.hpp"
+
 #include "AiHttp.hpp"
 #include "AiLocal.hpp"
 #include "AiOpenAI.hpp"
@@ -315,6 +317,7 @@ bool Assistant::send(std::string text, std::string* why) {
             c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
         }
         if (const DemoContext ctx = context(); ctx.view) c.project.view = ctx.view->name;
+        const std::string plcRead = readPlcAttachments(u.attachments);   // avant le contexte de la demande
         c.messages.push_back(std::move(u));
         if (!startLive(c, text, &w)) {
             c = before;
@@ -337,6 +340,13 @@ bool Assistant::send(std::string text, std::string* why) {
             save(*cc);
         }
         if (!notes.empty()) notice_ = "Assistant IA : " + notes;
+        if (!plcRead.empty()) {
+            std::string plain = plcRead;
+            std::erase(plain, '*');
+            std::erase(plain, '`');
+            while (!plain.empty() && (plain.back() == '\n' || plain.back() == ' ')) plain.pop_back();
+            notice_ = "Assistant IA : " + plain;
+        }
         ++revision_;
         return true;
     }
@@ -362,6 +372,8 @@ bool Assistant::send(std::string text, std::string* why) {
     if (ctx.view) c.project.view = ctx.view->name;
     c.messages.push_back(std::move(u));
 
+    // 1.16.0 (captures) : un .XPG joint est lu d'abord (l'automate de la seance : ses variables et ses DDT).
+    const std::string plcRead = readPlcAttachments(ctx.attachments);
     // 1.16.0 : l'IA integree (sur ce PC, des regles) ; sinon la demonstration.
     DemoReply reply;
     localSuggestions_.clear();
@@ -398,12 +410,13 @@ bool Assistant::send(std::string text, std::string* why) {
         }
         reply.suggestions = !lr.suggestions.empty();
         localSuggestions_ = std::move(lr.suggestions);
-        if (!ctx.attachments.empty()) {
-            std::string files;
-            for (const auto& att : ctx.attachments) files += (files.empty() ? "" : ", ") + std::string("**") + att.name + "**";
-            reply.text = "J'ai bien re\xC3\xA7u " + files + ", mais l'IA int\xC3\xA9gr\xC3\xA9" "e ne lit pas le contenu des pi\xC3\xA8" "ces jointes.\n\n"
-                         + reply.text;
-        }
+        std::string files;
+        for (const auto& att : ctx.attachments)
+            if (!host_.readPlc || !isPlcExport(att.name)) files += (files.empty() ? "" : ", ") + std::string("**") + att.name + "**";
+        if (!files.empty())
+            reply.text = "J'ai bien re\xC3\xA7u " + files + ", mais l'IA int\xC3\xA9gr\xC3\xA9" "e ne lit pas le contenu des pi\xC3\xA8" "ces jointes "
+                         "(sauf l'export de l'automate, .XPG).\n\n" + reply.text;
+        reply.text = plcRead + reply.text;
     } else {
         reply = demoReply(text, ctx);
     }
@@ -432,6 +445,24 @@ bool Assistant::send(std::string text, std::string* why) {
     ++revision_;
     (void)doc;
     return true;
+}
+
+std::string Assistant::readPlcAttachments(const std::vector<Attachment>& attachments) {
+    std::string said;
+    if (!host_.readPlc) return said;
+    for (const auto& att : attachments) {
+        if (!isPlcExport(att.name)) continue;
+        std::string what;
+        if (host_.readPlc(attachmentPath(att), &what)) {
+            said += "J'ai lu l'automate de **" + att.name + "** : " + what + ". Ses variables ne s'associent pas directement : demande "
+                    "`Cr\xC3\xA9" "e les variables de l'automate` (un morceau de nom les filtre) ou `Propose les types IHM des DDT`, puis "
+                    "associe les variables IHM cr\xC3\xA9\xC3\xA9" "es.\n\n";
+            appendActivity("fichier", "Automate lu : " + att.name + " (" + what + ")");
+        } else {
+            said += "Je n'ai pas pu lire l'automate de **" + att.name + "** : " + what + ".\n\n";
+        }
+    }
+    return said;
 }
 
 std::string Assistant::shownText() const {

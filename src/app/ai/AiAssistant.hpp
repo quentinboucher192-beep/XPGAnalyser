@@ -71,6 +71,10 @@ public:
         // 1.16.0 (a la fin) : ouvrir une vue dans l'editeur (son onglet) - apres Appliquer une proposition qui
         // cree une vue (creer_vue), l'editeur l'ouvre. Nul : rien ne s'ouvre (un essai).
         std::function<void(hmi::Id)>          openView;
+        // 1.16.0 (captures, a la fin) : lire un export de Control Expert joint (.XPG) comme l'automate de la seance
+        // (IHM Studio n'en a pas d'autre) ; vrai et `said` : ce qui a ete lu ("891 variables globales et 28 types
+        // (DDT)") ; faux et `said` : pourquoi. Nul : un .XPG joint reste une piece jointe ordinaire.
+        std::function<bool(const std::string& path, std::string* said)> readPlc;
     };
 
     // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un
@@ -242,6 +246,9 @@ private:
     void autoApply(int message);
     // 1.15.0 : un vrai fournisseur.
     bool startLive(Conversation& c, std::string request, std::string* why);
+    // 1.16.0 (captures) : les exports de Control Expert joints (.XPG...) lus comme l'automate de la seance
+    // (Host::readPlc) ; le texte a dire (vide : aucun).
+    [[nodiscard]] std::string readPlcAttachments(const std::vector<Attachment>& attachments);
     void pollLive();
     void finishLive(const std::string& stopReason);
     void failLive(const ProviderEvent& e);

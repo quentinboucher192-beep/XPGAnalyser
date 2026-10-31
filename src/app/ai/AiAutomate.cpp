@@ -3,8 +3,13 @@
 // =============================================================================
 #include "AiAutomate.hpp"
 
+#include "../../core/EventBus.hpp"
+#include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"
 #include "../../hmi/HmiTypes.hpp"
+#include "../../import/ProjectImporter.hpp"
+
+#include <filesystem>
 
 #include <algorithm>
 #include <cctype>
@@ -177,6 +182,74 @@ std::vector<Operation> fromPlc(const hmi::Project& project, const Env& env, std:
     auto out = orderedTypes(project, all, wanted);
     for (auto& op : vars) out.push_back(std::move(op));
     return out;
+}
+
+// ---- 1.16.0 (captures) : un automate lu dans un fichier --------------------------------------------
+bool isPlcExport(std::string_view fileName) {
+    const auto f = importer::ProjectImporter::sniff({}, fileName);
+    return f == importer::SourceFormat::Xpg || f == importer::SourceFormat::Xef || f == importer::SourceFormat::Zef
+        || f == importer::SourceFormat::Xsy || f == importer::SourceFormat::Stu;
+}
+
+std::optional<PlcFile> readPlcFile(const std::string& path, std::string* why) {
+    core::EventBus bus;
+    importer::ProjectImporter imp(bus);
+    importer::ParseOptions po;
+    po.keepSourceBodies = false;   // les declarations suffisent
+    auto r = imp.importFile(path, po);
+    if (!r || !r->project) {
+        if (why) *why = r ? std::string("le fichier ne contient pas de programme d'automate") : r.error().message();
+        return std::nullopt;
+    }
+    PlcFile f;
+    const auto u8 = std::filesystem::path(std::u8string(path.begin(), path.end())).filename().u8string();
+    f.name.assign(u8.begin(), u8.end());
+    for (const auto& v : r->project->variables)
+        if (v.scope == domain::VariableScope::Global) ++f.variables;
+    f.types = r->project->derivedTypes.size();
+    f.project = std::move(r->project);
+    return f;
+}
+
+void fillPlcEnv(Env& env, std::function<std::shared_ptr<const domain::Project>()> source) {
+    // Le nom tel qu'une propriete l'ecrit ("API." + nom) et son type, comme plcName les reconnait.
+    env.plcVariables = [source] {
+        std::vector<std::pair<std::string, std::string>> out;
+        const auto plc = source ? source() : nullptr;
+        if (!plc) return out;
+        for (const auto& v : plc->variables)
+            if (v.scope == domain::VariableScope::Global)
+                out.emplace_back("API." + std::string(plc->strings.text(v.name)), std::string(plc->strings.text(v.type.name)));
+        return out;
+    };
+    // Le commentaire d'une globale (la description d'une variable IHM proposee).
+    env.plcComment = [source](std::string_view name) {
+        const auto plc = source ? source() : nullptr;
+        if (!plc) return std::string{};
+        const std::string want = upper(name);
+        for (const auto& v : plc->variables)
+            if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return std::string(plc->strings.text(v.comment));
+        return std::string{};
+    };
+    // Les types (DDT) : leur nom, leur commentaire, leurs membres (nom, type tel qu'ecrit, commentaire).
+    env.plcTypes = [source] {
+        std::vector<Env::PlcType> out;
+        const auto plc = source ? source() : nullptr;
+        if (!plc) return out;
+        for (const auto& d : plc->derivedTypes) {
+            Env::PlcType t;
+            t.name = std::string(plc->strings.text(d.name));
+            t.comment = std::string(plc->strings.text(d.comment));
+            for (const auto fi : d.fields) {
+                if (fi >= plc->variables.size()) continue;
+                const auto& fv = plc->variables[fi];
+                t.members.push_back({std::string(plc->strings.text(fv.name)), std::string(plc->strings.text(fv.type.name)),
+                                     std::string(plc->strings.text(fv.comment))});
+            }
+            out.push_back(std::move(t));
+        }
+        return out;
+    };
 }
 
 } // namespace app::ai

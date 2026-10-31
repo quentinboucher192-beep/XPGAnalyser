@@ -19,8 +19,14 @@
 
 #include "AiOperations.hpp"
 
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
+
+namespace domain { struct Project; }
 
 namespace app::ai {
 
@@ -39,5 +45,23 @@ namespace app::ai {
 // vide et `why` : pas d'equivalent. `ddts` : les noms des DDT de l'automate (un nom de DDT reste le meme).
 [[nodiscard]] std::string hmiTypeOfPlc(std::string_view plcType, const std::vector<std::string>& ddts, const hmi::Project&,
                                        std::string* why = nullptr);
+
+// 1.16.0 (captures) : UN AUTOMATE LU DANS UN FICHIER. IHM Studio n'a pas d'automate relie (il n'ouvre pas les
+// exports de Control Expert) : le .XPG joint a la conversation est lu ici, pour proposer ses globales et ses DDT
+// en variables et types IHM. Ses variables ne s'associent pas directement a un objet (pas de plcName) : on cree
+// d'abord la variable IHM.
+struct PlcFile {
+    std::shared_ptr<const domain::Project> project;
+    std::string                            name;          // "MAST.XPG"
+    std::size_t                            variables{0};  // ses globales
+    std::size_t                            types{0};      // ses DDT
+};
+// Un export de Control Expert qui porte des variables (.XPG, .XEF, .ZEF, .XSY, .STU) ?
+[[nodiscard]] bool isPlcExport(std::string_view fileName);
+// Lit le fichier, sur place (un XPG de 900 variables : une fraction de seconde). nullopt et `why` : illisible.
+[[nodiscard]] std::optional<PlcFile> readPlcFile(const std::string& path, std::string* why = nullptr);
+// Remplit Env::plcVariables, plcComment et plcTypes sur le programme que rend `source` (nul : listes vides).
+// plcName n'est pas touche (l'automate relie seul le remplit).
+void fillPlcEnv(Env&, std::function<std::shared_ptr<const domain::Project>()> source);
 
 } // namespace app::ai

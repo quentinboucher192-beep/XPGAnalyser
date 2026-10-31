@@ -277,7 +277,12 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
             lines += name + (type.empty() ? std::string{} : " : " + type) + "\n";
             ++info.plcListed;
         }
-        s += "Variables de l'automate reli\xC3\xA9 (" + std::to_string(plc.size()) + ") :\n" + lines;
+        const std::string source = in.env.plcSource ? in.env.plcSource() : std::string{};
+        if (source.empty())
+            s += "Variables de l'automate reli\xC3\xA9 (" + std::to_string(plc.size()) + ") :\n" + lines;
+        else   // 1.16.0 : un fichier lu (IHM Studio) - pour creer des variables IHM, pas pour associer
+            s += "Variables globales de l'automate lu dans " + source + " (" + std::to_string(plc.size()) + ") - elles ne s'associent PAS "
+                 "directement : pour s'en servir, propose d'abord creer_variables (le nom IHM est sans \"API.\", le type converti) :\n" + lines;
         if (info.plcListed < plc.size())
             s += "... et " + std::to_string(plc.size() - info.plcListed) + " autres de l'automate, non list\xC3\xA9" "es.\n";
     } else if (in.env.plcName) {
@@ -323,7 +328,9 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
                 lines += "\n";
                 ++info.plcTypesListed;
             }
-            s += "Types (DDT) de l'automate reli\xC3\xA9 (" + std::to_string(ddts.size()) + ") : nom : membres (pour cr\xC3\xA9" "er des types IHM du "
+            const std::string source = in.env.plcSource ? in.env.plcSource() : std::string{};
+            s += "Types (DDT) de l'automate " + (source.empty() ? std::string("reli\xC3\xA9") : "lu dans " + source) + " (" + std::to_string(ddts.size())
+                 + ") : nom : membres (pour cr\xC3\xA9" "er des types IHM du "
                  "m\xC3\xAAme nom, \xC3\xA0 la demande) :\n" + lines;
             if (info.plcTypesListed < ddts.size())
                 s += "... et " + std::to_string(ddts.size() - info.plcTypesListed) + " autres DDT, non list\xC3\xA9s.\n";

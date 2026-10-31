@@ -181,6 +181,10 @@ struct Env {
     // 1.16.0 (a la fin, chantier OPTIONS) : le commentaire d'une globale de l'automate (son nom, sans "API.") ;
     // vide : aucun. AiAutomate en fait la description d'une variable IHM proposee. Nul : aucun commentaire.
     std::function<std::string(std::string_view)> plcComment;
+    // 1.16.0 (captures, a la fin) : l'automate vient d'un FICHIER lu (le .XPG joint a la conversation, IHM Studio) -
+    // son nom ("MAST.XPG") ; vide ou nul : l'automate relie (ou aucun). Ses variables servent a creer des variables
+    // IHM, elles ne s'associent pas directement.
+    std::function<std::string()> plcSource;
 };
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);

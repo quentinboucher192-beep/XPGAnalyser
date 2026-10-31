@@ -212,8 +212,9 @@ const std::vector<Note>& table() {
          "Ctrl+Z.",
          "assistant-ia-registre", ""),
         note("1.16.0", "Assistant IA", Kind::New,
-         "LES VARIABLES ET LES DDT DE L'AUTOMATE RELI\xC3\x89 VERS L'IHM : l'Assistant voit les types (DDT) de l'automate "
-         "reli\xC3\xA9, r\xC3\xA9sum\xC3\xA9s, et peut proposer ses globales qui n'ont pas encore de variable IHM et ses DDT qui n'ont pas "
+         "LES VARIABLES ET LES DDT DE L'AUTOMATE VERS L'IHM : joins \xC3\xA0 ta demande le .XPG du programme de l'automate (bouton "
+         "Joindre ; IHM Studio n'ouvre pas les exports de Control Expert) - l'Assistant le lit sans l'ouvrir comme projet, voit ses "
+         "types (DDT), r\xC3\xA9sum\xC3\xA9s, et peut proposer ses globales qui n'ont pas encore de variable IHM et ses DDT qui n'ont pas "
          "encore de type IHM (un morceau de nom les filtre), avec la conversion de la migration 1.12.0 : EBOOL -> BOOL, "
          "STRING[32] -> STRING, un tableau garde ses bornes, un DDT devient le type IHM du m\xC3\xAAme nom (dans l'ordre des "
          "d\xC3\xA9pendances) ; la description est le commentaire de l'automate. Une instance de bloc (TON, un DFB) est "

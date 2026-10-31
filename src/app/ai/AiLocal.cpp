@@ -2159,10 +2159,11 @@ LocalReply Engine::createVariables() const {
         const bool linked = (in_.env.plcVariables && !in_.env.plcVariables().empty()) || (in_.env.plcTypes && !in_.env.plcTypes().empty());
         if (ops.empty()) {
             if (!linked)
-                return ask("**Aucun automate n'est reli\xC3\xA9 \xC3\xA0 ce projet** : je ne lis ni variable globale ni type (DDT) d'automate, "
-                           "donc rien \xC3\xA0 en tirer. L'\xC3\xA9quipement \xC2\xAB Automate du projet \xC2\xBB (Configuration \xE2\x80\xBA \xC3\x89quipements) "
-                           "n'est qu'une liaison Modbus : ses adresses, pas un programme dont je lirais les variables. Cr\xC3\xA9" "e-les par leur "
-                           "nom et leur type, ou d\xC3\xA9" "cris le type IHM :",
+                return ask("**Je n'ai pas encore lu d'automate** : joins \xC3\xA0 ta demande l'export de son programme (le fichier **.XPG** de "
+                           "Control Expert, bouton Joindre) - je lis ses variables globales et ses types (DDT), puis je les propose en "
+                           "variables et types IHM. L'\xC3\xA9quipement \xC2\xAB Automate du projet \xC2\xBB (Configuration \xE2\x80\xBA \xC3\x89quipements) "
+                           "n'est qu'une liaison Modbus : ses adresses, pas un programme dont je lirais les variables. Sinon, cr\xC3\xA9" "e-les par "
+                           "leur nom et leur type, ou d\xC3\xA9" "cris le type IHM :",
                            {"Cr\xC3\xA9" "e la variable PT101 en REAL", "Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL"});
             return ask(std::string("Rien \xC3\xA0 cr\xC3\xA9" "er : ") + (types ? "chaque type de l'automate" : "chaque variable de l'automate")
                        + (filter.empty() ? std::string{} : " qui r\xC3\xA9pond \xC3\xA0 " + code(filter)) + " a d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent dans l'IHM"

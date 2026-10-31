@@ -857,7 +857,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiassistant COMMAND ai_assistant_test)                 # 1.14.2 : l'Assistant IA (la maquette)
     xpg_add_test(NAME aireseau COMMAND ai_reseau_test)                       # 1.15.0 : l'Assistant IA, la connexion (RESEAU)
     xpg_add_test(NAME airegistre COMMAND ai_registre_test)                   # 1.15.0 : le registre, le contexte, l'outil
-    xpg_add_test(NAME aiintegree COMMAND ai_integree_test)                   # 1.16.0 : l'IA integree (sans connexion)
+    xpg_add_test(NAME aiintegree COMMAND ai_integree_test ${XPG_FIXTURE})                   # 1.16.0 : l'IA integree (sans connexion)
     xpg_add_test(NAME aicompatible COMMAND ai_compatible_test)               # 1.16.0 : compatible OpenAI, la limite en direct
     xpg_add_test(NAME aioptions COMMAND ai_options_test)                     # 1.16.0 : vue, variables, types, reperes, formules
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi

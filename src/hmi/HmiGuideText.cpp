@@ -4165,14 +4165,16 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Ce n'est pas un grand mod\xC3\xA8le de langage : c'est un moteur de r\xC3\xA8gles. "
                          "Il lit ta phrase (les verbes, les genres d'objets et leurs synonymes, les nombres, "
                          "les couleurs, les positions) et la rapproche de ce que le logiciel sait "
-                         "d\xC3\xA9j\xC3\xA0 : les 116 genres de la biblioth\xC3\xA8que, les objets de la "
-                         "vue ouverte, la s\xC3\xA9lection, les variables du projet et celles de l'automate "
-                         "reli\xC3\xA9. Sa proposition est faite des m\xC3\xAAmes op\xC3\xA9rations qu'une "
-                         "IA en ligne : la m\xC3\xAAme validation, la m\xC3\xAAme carte, le m\xC3\xAAme "
-                         "aper\xC3\xA7u, le mode Direct, et **un seul Ctrl+Z**. L'en-t\xC3\xAAte du panneau "
-                         "dit \xC2\xAB IA int\xC3\xA9gr\xC3\xA9" "e \xE2\x80\x93 sans connexion \xC2\xBB. "
-                         "Aucun r\xC3\xA9glage : ni mod\xC3\xA8le, ni cl\xC3\xA9. Pour la choisir (ou la "
-                         "quitter), Param\xC3\xA8tres de l'Assistant IA \xE2\x80\xBA Fournisseur.", {}},
+                         "d\xC3\xA9j\xC3\xA0 : les 116 genres d'objets du registre (ceux de la "
+                         "biblioth\xC3\xA8que, qu'elle sait cr\xC3\xA9" "er ; le groupe et l'instance de "
+                         "symbole naissent autrement), les objets de la vue ouverte, la s\xC3\xA9lection, "
+                         "les variables du projet et celles de l'automate lu dans un .XPG joint. Sa "
+                         "proposition est faite des m\xC3\xAAmes op\xC3\xA9rations qu'une IA en ligne : la "
+                         "m\xC3\xAAme validation, la m\xC3\xAAme carte, le m\xC3\xAAme aper\xC3\xA7u, le "
+                         "mode Direct, et **un seul Ctrl+Z**. L'en-t\xC3\xAAte du panneau dit \xC2\xAB IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e \xE2\x80\x93 sans connexion \xC2\xBB. Aucun "
+                         "r\xC3\xA9glage : ni mod\xC3\xA8le, ni cl\xC3\xA9. Pour la choisir (ou la quitter), "
+                         "Param\xC3\xA8tres de l'Assistant IA \xE2\x80\xBA Fournisseur.", {}},
              {K::Heading, "Ce qu'elle comprend", {}},
              {K::Table, "Demande\tExemples\nCr\xC3\xA9" "er des objets\t\xC2\xAB Ajoute 3 pompes \xC2\xBB, "
                          "\xC2\xAB Cr\xC3\xA9" "e une cuve et un bargraphe \xC2\xBB, \xC2\xAB Mets deux "
@@ -4187,25 +4189,31 @@ const std::vector<Topic>& topics() {
                          "Monte P1 de 50 \xC2\xBB, \xC2\xAB Cache V1 \xC2\xBB, \xC2\xAB Renomme Cuve_1 en "
                          "Bac_Eau \xC2\xBB.\nAssocier une variable\t\xC2\xAB Associe P1 \xC3\xA0 "
                          "Pompe_1_Marche \xC2\xBB, \xC2\xAB Relie la cuve au niveau "
-                         "\xC2\xBB.\nCr\xC3\xA9" "er des variables, une vue\t\xC2\xAB Cr\xC3\xA9" "e les "
-                         "variables Pompe_3_Marche et Pompe_4_Marche en BOOL \xC2\xBB (sans type dit, elle "
-                         "le tire du nom et le dit), \xC2\xAB Cr\xC3\xA9" "e les variables de l'automate qui "
-                         "commencent par PT \xC2\xBB (les types qu'elles emploient d'abord), \xC2\xAB "
-                         "Propose les types IHM des DDT \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e une vue "
-                         "Vue_Process en 1920x1080 \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e une vue Vue_Pompes avec "
-                         "3 pompes et un voyant \xC2\xBB (la vue et ses objets, un seul Ctrl+Z).\nAligner, "
-                         "r\xC3\xA9partir, dupliquer, supprimer\t\xC2\xAB Aligne les boutons en haut "
-                         "\xC2\xBB, \xC2\xAB R\xC3\xA9partis les boutons \xC2\xBB, \xC2\xAB Duplique P1 3 "
-                         "fois vers la droite \xC2\xBB, \xC2\xAB Supprime les vannes "
-                         "\xC2\xBB.\nAnimer\t\xC2\xAB Fais clignoter V1 quand Defaut_V1 \xC2\xBB, \xC2\xAB "
-                         "P1 verte si Pompe_1_Marche sinon rouge \xC2\xBB, \xC2\xAB Cache Texte_1 quand "
-                         "Pompe_1_Marche \xC2\xBB.\nQuestions\t\xC2\xAB Que sais-tu faire ? \xC2\xBB, "
-                         "\xC2\xAB Combien d'objets ? \xC2\xBB, \xC2\xAB Combien de pompes ? \xC2\xBB, "
-                         "\xC2\xAB Quelles variables ? \xC2\xBB, \xC2\xAB Quels genres d'objets ? \xC2\xBB, "
-                         "\xC2\xAB Quelles vues ? \xC2\xBB.\nUne suite\t\xC2\xAB Et une autre \xC2\xBB, "
-                         "\xC2\xAB Encore deux \xC2\xBB, \xC2\xAB La m\xC3\xAAme en bleu \xC2\xBB, \xC2\xAB "
-                         "Mets-la en rouge \xC2\xBB (le dernier objet cr\xC3\xA9\xC3\xA9 ou cit\xC3\xA9), "
-                         "\xC2\xAB Pareil pour P2 \xC2\xBB.", {}},
+                         "\xC2\xBB.\nCr\xC3\xA9" "er des variables, un type, une vue\t\xC2\xAB "
+                         "Cr\xC3\xA9" "e les variables Pompe_3_Marche et Pompe_4_Marche en BOOL \xC2\xBB, "
+                         "\xC2\xAB Cr\xC3\xA9" "e les variables Niveau_Cuve_1 en REAL et Defaut_P1 en BOOL "
+                         "\xC2\xBB (chacune son type ; sans type dit, elle le tire du nom et le dit), "
+                         "\xC2\xAB Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL et Vitesse en REAL "
+                         "\xC2\xBB (un type IHM, comme Types IHM \xE2\x80\xBA Nouveau ; \xC2\xAB une "
+                         "structure \xC2\xBB se dit aussi ; un membre sans type : tir\xC3\xA9 du nom), "
+                         "\xC2\xAB Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT \xC2\xBB "
+                         "(les types qu'elles emploient d'abord), \xC2\xAB Propose les types IHM des DDT "
+                         "\xC2\xBB (ces deux-l\xC3\xA0 apr\xC3\xA8s avoir joint le .XPG de l'automate : voir "
+                         "plus bas), \xC2\xAB Cr\xC3\xA9" "e une vue Vue_Process en 1920x1080 \xC2\xBB, "
+                         "\xC2\xAB Cr\xC3\xA9" "e une vue Vue_Pompes avec 3 pompes et un voyant \xC2\xBB (la "
+                         "vue et ses objets, un seul Ctrl+Z).\nAligner, r\xC3\xA9partir, dupliquer, "
+                         "supprimer\t\xC2\xAB Aligne les boutons en haut \xC2\xBB, \xC2\xAB R\xC3\xA9partis "
+                         "les boutons \xC2\xBB, \xC2\xAB Duplique P1 3 fois vers la droite \xC2\xBB, "
+                         "\xC2\xAB Supprime les vannes \xC2\xBB.\nAnimer\t\xC2\xAB Fais clignoter V1 quand "
+                         "Defaut_V1 \xC2\xBB (un objet qui ne sait pas clignoter, un voyant par exemple, est "
+                         "dit \xC3\xA0 part), \xC2\xAB P1 verte si Pompe_1_Marche sinon rouge \xC2\xBB, "
+                         "\xC2\xAB Cache Texte_1 quand Pompe_1_Marche \xC2\xBB.\nQuestions\t\xC2\xAB Que "
+                         "sais-tu faire ? \xC2\xBB, \xC2\xAB Combien d'objets ? \xC2\xBB, \xC2\xAB Combien "
+                         "de pompes ? \xC2\xBB, \xC2\xAB Quelles variables ? \xC2\xBB, \xC2\xAB Quels genres "
+                         "d'objets ? \xC2\xBB, \xC2\xAB Quelles vues ? \xC2\xBB.\nUne suite\t\xC2\xAB Et une "
+                         "autre \xC2\xBB, \xC2\xAB Encore deux \xC2\xBB, \xC2\xAB La m\xC3\xAAme en bleu "
+                         "\xC2\xBB, \xC2\xAB Mets-la en rouge \xC2\xBB (le dernier objet cr\xC3\xA9\xC3\xA9 "
+                         "ou cit\xC3\xA9), \xC2\xAB Pareil pour P2 \xC2\xBB.", {}},
              {K::Heading, "Comment elle lit", {}},
              {K::Bullet, "**Les genres** : par leur libell\xC3\xA9 (\xC2\xAB bouton \xC3\xA0 impulsion "
                          "\xC2\xBB, \xC2\xAB afficheur num\xC3\xA9rique \xC2\xBB), au pluriel, une faute de "
@@ -4217,7 +4225,16 @@ const std::vector<Topic>& topics() {
                          "mots (\xC2\xAB pompe 1 \xC2\xBB), par leur libell\xC3\xA9 ou leur texte (\xC2\xAB "
                          "P1 \xC2\xBB, \xC2\xAB Marche \xC2\xBB), par leur genre (\xC2\xAB la cuve \xC2\xBB "
                          "s'il n'y en a qu'une, \xC2\xAB les pompes \xC2\xBB), par la s\xC3\xA9lection "
-                         "(\xC2\xAB celle de droite \xC2\xBB, \xC2\xAB mets-les en rouge \xC2\xBB).", {}},
+                         "(\xC2\xAB celle de droite \xC2\xBB, \xC2\xAB mets-les en rouge \xC2\xBB). Un nom "
+                         "exact passe d'abord, puis un libell\xC3\xA9 ou un texte, puis "
+                         "l'abr\xC3\xA9g\xC3\xA9 (\xC2\xAB P1 \xC2\xBB pour Pompe_1) : \xC2\xAB V1 \xC2\xBB "
+                         "est la vanne dont le libell\xC3\xA9 est V1, pas aussi Voyant_1. Une "
+                         "d\xC3\xA9signation au singulier qui r\xC3\xA9pond \xC3\xA0 plusieurs objets "
+                         "(\xC2\xAB P1 \xC2\xBB apr\xC3\xA8s \xC2\xAB Duplique P1 3 fois \xC2\xBB, dont les "
+                         "copies gardent le libell\xC3\xA9) : elle demande lequel, avec les candidats "
+                         "\xC3\xA0 cliquer ; le pluriel (\xC2\xAB les pompes \xC2\xBB) les prend tous. "
+                         "\xC2\xAB Le texte de Bouton_1 \xC2\xBB, \xC2\xAB le fond de la cuve \xC2\xBB : une "
+                         "partie de l'objet, pas un Texte.", {}},
              {K::Bullet, "**Les couleurs** : rouge, vert, bleu, jaune, orange, gris, blanc, noir, violet, "
                          "rose, cyan, turquoise, marron, beige, avec \xC2\xAB clair \xC2\xBB ou \xC2\xAB "
                          "fonc\xC3\xA9 \xC2\xBB, ou un #RRGGBB \xE2\x80\x93 les couleurs du logiciel (le "
@@ -4232,16 +4249,34 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "faut, une place libre de la vue (sur une grille, sans recouvrir "
                          "l'existant), ou \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'objet cit\xC3\xA9 (\xC3\xA0 "
                          "droite de, \xC3\xA0 gauche de, sous, au-dessus de).", {}},
+             {K::Bullet, "**D\xC3\xA9placer** : \xC2\xAB D\xC3\xA9place V1 \xC3\xA0 droite de P2 \xC2\xBB la "
+                         "pose \xC3\xA0 c\xC3\xB4t\xC3\xA9 de P2 sans recouvrir un autre objet ; si la place "
+                         "juste \xC3\xA0 c\xC3\xB4t\xC3\xA9 est prise, elle la d\xC3\xA9" "cale "
+                         "jusqu'\xC3\xA0 la premi\xC3\xA8re place libre, et le dit. \xC2\xAB Monte P1 de 50 "
+                         "\xC2\xBB s'arr\xC3\xAAte au bord de la vue (y = 0), et le dit. Un objet qui "
+                         "d\xC3\xA9passerait du cadre de la vue est signal\xC3\xA9 dans la r\xC3\xA9ponse.", {}},
              {K::Heading, "Ce qu'elle ne fait jamais", {}},
              {K::Bullet, "**Inventer une variable.** Un nom introuvable est dit, avec les plus proches du "
                          "projet et la phrase pour la cr\xC3\xA9" "er (un clic). Une variable "
                          "d\xC3\xA9" "crite par des mots (\xC2\xAB au niveau \xC2\xBB) n'est prise que si "
-                         "une seule convient ; sinon elle cite les candidates et demande.", {}},
-             {K::Bullet, "**Deviner.** \xC2\xAB La pompe \xC2\xBB quand il y en a deux, \xC2\xAB des pompes "
-                         "\xC2\xBB sans nombre : elle demande. Une demande qu'elle ne comprend pas "
-                         "re\xC3\xA7oit une r\xC3\xA9ponse honn\xC3\xAAte et des formulations qu'elle "
-                         "comprend, \xC3\xA0 cliquer.", {}},
-             {K::Bullet, "**Lire les pi\xC3\xA8" "ces jointes.** Elle le dit.", {}},
+                         "une seule convient ; sinon elle cite les candidates et demande ; si aucune ne "
+                         "convient, elle propose un nom parlant \xC3\xA0 cr\xC3\xA9" "er (\xC2\xAB "
+                         "Cr\xC3\xA9" "e la variable Niveau_Cuve_1 en REAL \xC2\xBB).", {}},
+             {K::Bullet, "**Remplacer un objet introuvable.** \xC2\xAB Mets Bouton_9 en rouge \xC2\xBB sans "
+                         "Bouton_9 : \xC2\xAB Je ne trouve pas \xC2\xAB Bouton_9 \xC2\xBB dans la vue "
+                         "\xC2\xBB, avec les noms les plus proches, et aucune proposition. Le dernier objet "
+                         "cit\xC3\xA9 ne sert qu'\xC3\xA0 un pronom (\xC2\xAB mets-la en rouge \xC2\xBB, "
+                         "\xC2\xAB la m\xC3\xAAme en bleu \xC2\xBB).", {}},
+             {K::Bullet, "**Deviner.** \xC2\xAB La pompe \xC2\xBB quand il y en a deux, \xC2\xAB P1 \xC2\xBB "
+                         "quand deux objets portent ce libell\xC3\xA9, \xC2\xAB des pompes \xC2\xBB sans "
+                         "nombre : elle demande. Une demande qu'elle ne comprend pas re\xC3\xA7oit une "
+                         "r\xC3\xA9ponse honn\xC3\xAAte et des formulations qu'elle comprend, \xC3\xA0 "
+                         "cliquer.", {}},
+             {K::Bullet, "**Proposer ce qui ne change rien.** Des boutons d\xC3\xA9j\xC3\xA0 align\xC3\xA9s, "
+                         "une pompe d\xC3\xA9j\xC3\xA0 rouge, des objets d\xC3\xA9j\xC3\xA0 r\xC3\xA9partis "
+                         ": elle le dit, sans carte.", {}},
+             {K::Bullet, "**Lire les pi\xC3\xA8" "ces jointes**, sauf l'export de l'automate (.XPG) : elle "
+                         "le dit.", {}},
              {K::Warning, "Elle comprend des phrases simples, pas tout le fran\xC3\xA7" "ais : une demande "
                          "longue ou inhabituelle peut lui \xC3\xA9" "chapper. Pour le langage courant, "
                          "branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de l'Assistant IA "
@@ -4266,10 +4301,10 @@ const std::vector<Topic>& topics() {
          "Avec chaque demande, l'Assistant re\xC3\xA7oit les objets que le logiciel conna\xC3\xAEt vraiment "
          "(les 116 genres, tir\xC3\xA9s de ses tables), la vue ouverte et ses variables selon tes "
          "r\xC3\xA9glages de confidentialit\xC3\xA9, les types IHM du projet, les types (DDT) de l'automate "
-         "reli\xC3\xA9, et les connaissances actives de sa m\xC3\xA9moire. Il ne fait que proposer : le "
-         "logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration avant de te la montrer. Depuis la 1.16.0, il peut "
-         "aussi proposer une vue neuve, des variables et des types IHM, dupliquer avec les rep\xC3\xA8res "
-         "$\xE2\x80\xA6$ et poser des formules (fx).",
+         "lu dans un .XPG joint, et les connaissances actives de sa m\xC3\xA9moire. Il ne fait que proposer "
+         ": le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration avant de te la montrer. Depuis la 1.16.0, il "
+         "peut aussi proposer une vue neuve, des variables et des types IHM, dupliquer avec les "
+         "rep\xC3\xA8res $\xE2\x80\xA6$ et poser des formules (fx).",
          {
              {K::Heading, "Ce qui part avec chaque demande", {}},
              {K::Bullet, "**Les consignes** : en fran\xC3\xA7" "ais, au tutoiement ; les r\xC3\xA8gles "
@@ -4291,9 +4326,9 @@ const std::vector<Topic>& topics() {
                          "ses objets (nom, genre, position, taille et ce qui diff\xC3\xA8re du "
                          "d\xC3\xA9" "faut), la s\xC3\xA9lection (de gauche \xC3\xA0 droite), les variables "
                          "de l'IHM (noms, types, description), les noms des types IHM du projet, les "
-                         "variables de l'automate reli\xC3\xA9, ses types (DDT) r\xC3\xA9sum\xC3\xA9s - leur "
-                         "nom et leurs membres, quand ta demande parle de types ou de l'automate, ou qu'il y "
-                         "en a peu -, les noms des autres vues.", {}},
+                         "variables de l'automate lu dans le .XPG joint, ses types (DDT) "
+                         "r\xC3\xA9sum\xC3\xA9s - leur nom et leurs membres, quand ta demande parle de types "
+                         "ou de l'automate, ou qu'il y en a peu -, les noms des autres vues.", {}},
              {K::Warning, "La valeur d'une variable ne part jamais (ni en marche, ni sa valeur initiale) : "
                          "seulement son nom, son type et sa description.", {}},
              {K::Table, "Confidentialit\xC3\xA9 (Param\xC3\xA8tres de "
@@ -4362,12 +4397,20 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Une proposition refus\xC3\xA9" "e revient \xC3\xA0 l'IA avec les raisons (et les "
                          "vraies propri\xC3\xA9t\xC3\xA9s des genres en cause) : elle corrige "
                          "d'elle-m\xC3\xAAme au tour suivant.", {}},
-             {K::Heading, "Les variables et les types de l'automate reli\xC3\xA9", {}},
-             {K::Paragraph, "Avec un automate reli\xC3\xA9, demande par exemple \xC2\xAB cr\xC3\xA9" "e les "
-                         "variables IHM de l'automate qui commencent par Cuve \xC2\xBB ou \xC2\xAB fais les "
-                         "types IHM des DDT de l'automate \xC2\xBB : l'Assistant propose ses globales qui "
-                         "n'ont pas encore de variable IHM, et ses DDT qui n'ont pas encore de type IHM - ce "
-                         "qui existe d\xC3\xA9j\xC3\xA0 n'est pas repropos\xC3\xA9.", {}},
+             {K::Heading, "Les variables et les types de l'automate (un .XPG joint)", {}},
+             {K::Paragraph, "IHM Studio n'ouvre pas les exports de Control Expert : **joins \xC3\xA0 ta demande "
+                         "le fichier .XPG** du programme de l'automate (bouton Joindre du panneau ; .XEF et "
+                         ".ZEF aussi). L'Assistant le lit - sans l'ouvrir comme projet, rien ne change dans "
+                         "le tien - et le dit : \xC2\xAB J'ai lu l'automate de MAST.XPG : 412 variables "
+                         "globales et 28 types (DDT) \xC2\xBB. Il le garde le temps de la s\xC3\xA9" "ance, "
+                         "pour toutes les IA (l'int\xC3\xA9gr\xC3\xA9" "e comme une IA en ligne). Demande "
+                         "ensuite par exemple \xC2\xAB cr\xC3\xA9" "e les variables de l'automate qui "
+                         "commencent par Cuve \xC2\xBB ou \xC2\xAB propose les types IHM des DDT \xC2\xBB : "
+                         "l'Assistant propose ses globales qui n'ont pas encore de variable IHM, et ses DDT "
+                         "qui n'ont pas encore de type IHM - ce qui existe d\xC3\xA9j\xC3\xA0 n'est pas "
+                         "repropos\xC3\xA9. Ses variables ne s'associent pas directement \xC3\xA0 un objet : "
+                         "on cr\xC3\xA9" "e d'abord la variable IHM (elle a le nom de la globale, sans "
+                         "API.), puis on l'associe.", {}},
              {K::Table, "De l'automate\tDans l'IHM\nBOOL, EBOOL\tBOOL\nINT, DINT, REAL, "
                          "TIME\xE2\x80\xA6\tLe m\xC3\xAAme type\nSTRING[32]\tSTRING\nTOD, DATE, "
                          "DT\t\xC3\x89" "cart\xC3\xA9s : l'IHM n'en fait pas de variable (l'aper\xC3\xA7u ne "
@@ -4378,10 +4421,8 @@ const std::vector<Topic>& topics() {
                          "DFB)\t\xC3\x89" "cart\xC3\xA9" "e : pas de variable IHM \xC3\xA9quivalente", {}},
              {K::Paragraph, "La description d'une variable est le commentaire de l'automate (sinon \xC2\xAB La "
                          "variable API.Nom de l'automate reli\xC3\xA9 \xC2\xBB). C'est la m\xC3\xAAme "
-                         "conversion que la migration 1.12.0 (une IHM rendue autonome). Une variable IHM qui "
-                         "porte le nom d'une globale est signal\xC3\xA9" "e dans l'aper\xC3\xA7u : c'est "
-                         "voulu pour une IHM autonome, l'automate reli\xC3\xA9 s'\xC3\xA9" "crit toujours "
-                         "API.Nom.", {}},
+                         "conversion que la migration 1.12.0 (une IHM rendue autonome). Sans .XPG lu, "
+                         "l'Assistant le dit et explique comment le joindre.", {}},
              {K::Heading, "Dupliquer avec les rep\xC3\xA8res", {}},
              {K::Paragraph, "Pose le premier objet avec ses rep\xC3\xA8res ($Cuves[0]$.Niveau dans une formule, "
                          "un texte, une action), puis demande \xC2\xAB duplique-le trois fois avec les "
