@@ -43,11 +43,22 @@ Fichiers livrés :
 
 Le format des projets ne change pas (33).
 
-EMPREINTES
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.20.1.exe` (42,6 Mo, 44 651 551 octets) :
+`93C63D91E26FB93C559CB6DCAB5A02296AD71A4838B68B8D07E4B63F72F17DB8`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.20.1-portable.zip` (33,0 Mo) :
+  `18D221DB77F65E88BB067D6C726B81B1CC1A22AE948F68C689695E5EE96F1C8C`
+- `IHM-Studio-1.20.1-portable.zip` (33,0 Mo) :
+  `BDDAC2904D1F6BC6EAE07906BEA8A7FBE5A4D53613140271B73C61251827670A`
 
 ### Les vérifications sous Windows (Wine)
 
-VERIFICATIONS
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.20.1` et `IHM Studio 1.20.1` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, par-dessus la 1.20.0 livrée, avec **une clé API d'essai** déposée dans `%APPDATA%\XpgAnalyzer\IA\cles` : « Installation process succeeded ».
+- La clé est **intacte** après l'installation (même empreinte avant et après) ; le journal dit « Clés API : 1 gardée (protégée par Windows ; la réinstallation n'y touche pas) ».
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.20.0 est faite.
 
 Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 
