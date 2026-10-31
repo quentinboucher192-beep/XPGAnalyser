@@ -280,6 +280,237 @@ void Monitor::clear() {
     triggers_.clear();
 }
 
+// ---- 1.21.0 : les reapparitions regroupees ---------------------------------------------------------------------------
+void ShortText::set(std::string_view s) noexcept {
+    std::size_t n = std::min(s.size(), kMax);
+    // jamais un caractere coupe en deux : on recule tant que l'octet suivant est une suite UTF-8 (10xxxxxx)
+    if (n < s.size())
+        while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0u) == 0x80u) --n;
+    std::copy_n(s.data(), n, chars_.data());
+    size_ = static_cast<std::uint8_t>(n);
+}
+
+namespace {
+
+// Une case de plus dans un histogramme dont la derniere case est l'instant `last` (une minute, une heure) : un instant
+// plus recent decale les cases vers la gauche ; un instant trop ancien (l'horloge revenue en arriere) n'y entre pas.
+template <std::size_t N>
+void bump(std::array<std::uint32_t, N>& cells, std::int64_t& last, std::int64_t at) {
+    constexpr auto n = static_cast<std::int64_t>(N);
+    if (at > last) {
+        const std::int64_t k = at - last;
+        if (k >= n) {
+            cells.fill(0);
+        } else {
+            std::move(cells.begin() + k, cells.end(), cells.begin());
+            std::fill(cells.end() - k, cells.end(), 0u);
+        }
+        last = at;
+    }
+    const std::int64_t back = last - at;
+    if (back < n) {
+        auto& c = cells[static_cast<std::size_t>(n - 1 - back)];
+        if (c < 0xFFFFFFFFu) ++c;
+    }
+}
+
+std::int64_t slot(double t, double width) { return static_cast<std::int64_t>(std::floor(t / width)); }
+
+// 2.5 -> "2,5" ; 10 -> "10" (une decimale au plus).
+std::string tenths(double v) {
+    char buf[32];
+    const double r = std::round(v * 10.0) / 10.0;
+    if (std::fabs(r - std::round(r)) < 1e-9) std::snprintf(buf, sizeof buf, "%.0f", r);
+    else std::snprintf(buf, sizeof buf, "%.1f", r);
+    std::string out(buf);
+    for (auto& c : out)
+        if (c == '.') c = ',';
+    return out;
+}
+
+} // namespace
+
+void Burst::start(double t, std::string_view at) {
+    originT = t;
+    originAt.set(at);
+    pending = true;
+    pendingT = t;
+}
+
+void Burst::add(double t, std::string_view at, std::string_view value) {
+    const double gap = std::max(0.0, t - (count ? lastT : originT));
+    if (count == 0) {
+        minGap = maxGap = gap;
+        firstT = t;
+        firstAt.set(at);
+        lastMinute = slot(t, 60.0);
+        lastHour = slot(t, 3600.0);
+    } else {
+        minGap = std::min(minGap, gap);
+        maxGap = std::max(maxGap, gap);
+    }
+    ++count;
+    lastT = t;
+    lastAt.set(at);
+    bump(minutes, lastMinute, slot(t, 60.0));
+    bump(hours, lastHour, slot(t, 3600.0));
+    // l'anneau des dernieres : reserve une fois (kRecent), puis on ecrase la plus ancienne
+    if (ring.capacity() < kRecent) ring.reserve(kRecent);
+    Reappearance r;
+    r.t = t;
+    r.at.set(at);
+    r.value.set(value);
+    if (ring.size() < kRecent) {
+        ring.push_back(r);
+    } else {
+        ring[head] = r;
+        head = (head + 1) % kRecent;
+    }
+    pending = true;
+    pendingT = t;
+}
+
+void Burst::cleared(double t) {
+    if (!pending) return;
+    pending = false;
+    const double d = std::max(0.0, t - pendingT);
+    activeSum += d;
+    activeMax = std::max(activeMax, d);
+    ++activeCount;
+    if (count == 0 || ring.empty()) return;   // l'origine : sa duree compte, elle n'est pas dans l'anneau
+    Reappearance& newest = ring.size() < kRecent ? ring.back() : ring[(head + kRecent - 1) % kRecent];
+    if (newest.t == pendingT) newest.active = static_cast<float>(d);
+}
+
+std::vector<Reappearance> Burst::recent() const {
+    std::vector<Reappearance> out;
+    out.reserve(ring.size());
+    for (std::size_t i = 0; i < ring.size(); ++i) out.push_back(ring[(head + i) % ring.size()]);
+    return out;
+}
+
+void Burst::setRecent(const std::vector<Reappearance>& list) {
+    ring.clear();
+    ring.reserve(kRecent);
+    head = 0;
+    const std::size_t from = list.size() > kRecent ? list.size() - kRecent : 0;
+    for (std::size_t i = from; i < list.size(); ++i) ring.push_back(list[i]);
+}
+
+std::string countText(std::uint64_t n) {
+    std::string digits = std::to_string(n), out;
+    for (std::size_t i = 0; i < digits.size(); ++i) {
+        if (i > 0 && (digits.size() - i) % 3 == 0) out += "\xC2\xA0";
+        out += digits[i];
+    }
+    return out;
+}
+
+std::string durationText(double s) {
+    if (!std::isfinite(s) || s < 0) return "?";
+    if (s < 10.0) return tenths(s) + "\xC2\xA0s";
+    if (s < 60.0) return std::to_string(static_cast<long long>(std::lround(s))) + "\xC2\xA0s";
+    if (s < 3600.0) {
+        const long long total = std::llround(s), m = total / 60, r = total % 60;
+        return std::to_string(m) + "\xC2\xA0min" + (r ? " " + std::to_string(r) + "\xC2\xA0s" : std::string{});
+    }
+    const long long total = std::llround(s / 60.0), h = total / 60, m = total % 60;
+    char buf[48];
+    std::snprintf(buf, sizeof buf, "%lld\xC2\xA0h\xC2\xA0%02lld", h, m);
+    return buf;
+}
+
+std::string everyText(double s) {
+    if (!std::isfinite(s) || s <= 0) return "en rafale (au m\xC3\xAAme instant)";
+    if (s < 10.0) return "toutes les " + tenths(s) + "\xC2\xA0s environ";
+    if (s < 60.0) return "toutes les " + std::to_string(static_cast<long long>(std::lround(s))) + "\xC2\xA0s environ";
+    if (s < 3600.0) return "toutes les " + std::to_string(std::max(1LL, std::llround(s / 60.0))) + "\xC2\xA0min environ";
+    return "toutes les " + tenths(s / 3600.0) + "\xC2\xA0h environ";
+}
+
+std::string burstDiagnosis(const Burst& b, const Snapshot* snap) {
+    std::string t;
+    if (b.count == 0) return "Aucune r\xC3\xA9" "apparition depuis l'incident.\n";
+    const std::string n = countText(b.count);
+    if (b.count >= 3) {
+        t += "**Alarme instable : elle bat.** " + n + " r\xC3\xA9" "apparitions apr\xC3\xA8s l'incident, " + everyText(b.meanGap())
+             + ", compt\xC3\xA9" "es sans nouveau dossier (ni image, ni vid\xC3\xA9o).\n";
+        const double spread = b.meanGap() > 0 ? (b.maxGap - b.minGap) / b.meanGap() : 0.0;
+        t += std::string("- Cadence ") + (spread < 0.25 ? "r\xC3\xA9guli\xC3\xA8re" : "irr\xC3\xA9guli\xC3\xA8re") + " : de " + durationText(b.minGap)
+             + " \xC3\xA0 " + durationText(b.maxGap) + " entre deux apparitions (en moyenne " + durationText(b.meanGap()) + ").\n";
+    } else {
+        t += n + (b.count > 1 ? " r\xC3\xA9" "apparitions" : " r\xC3\xA9" "apparition") + " apr\xC3\xA8s l'incident (" + durationText(b.meanGap())
+             + " en moyenne entre deux apparitions), compt\xC3\xA9" "e" + (b.count > 1 ? "s" : "") + " sans nouveau dossier.\n";
+    }
+    if (b.activeCount > 0) {
+        t += "- Elle reste active " + durationText(b.meanActive()) + " en moyenne (au plus " + durationText(b.activeMax) + ") avant de repartir"
+             + (b.meanActive() < 2.0 ? " : des apparitions br\xC3\xA8ves" : "") + ".\n";
+    }
+    // les valeurs lues au meme cycle (les plus recentes d'abord, sans doublon)
+    std::vector<std::string> values;
+    const auto recent = b.recent();
+    for (auto it = recent.rbegin(); it != recent.rend() && values.size() < 6; ++it)
+        if (!it->value.empty() && std::find(values.begin(), values.end(), it->value.str()) == values.end()) values.push_back(it->value.str());
+    if (!values.empty()) {
+        std::string list;
+        for (const auto& v : values) list += (list.empty() ? "" : " \xC2\xB7 ") + v;
+        const std::string path = snap && !snap->conditionVariables.empty() ? snap->conditionVariables.front() : std::string("la condition");
+        t += "- Valeurs de " + path + " lues \xC3\xA0 ses derni\xC3\xA8res r\xC3\xA9" "apparitions : " + list + ".\n";
+    }
+    if (snap && snap->alarm.known) {
+        if (!snap->alarm.condition.empty()) t += "- Condition : `" + snap->alarm.condition + "`.\n";
+        t += "- Temporisation d'apparition au moment de l'incident : "
+             + (snap->alarm.delayMs > 0 ? std::to_string(snap->alarm.delayMs) + " ms" : std::string("aucune")) + ".\n";
+    }
+    if (b.count >= 3) {
+        t += "\nPistes \xC3\xA0 v\xC3\xA9rifier (des pistes, pas des causes \xC3\xA9tablies) :\n";
+        t += "- une valeur qui oscille autour du seuil : une hyst\xC3\xA9r\xC3\xA9sis (une bande morte) sur le seuil de la condition "
+             "l'emp\xC3\xAA" "cherait de battre ;\n";
+        t += "- une temporisation d'apparition (le d\xC3\xA9lai de l'alarme)"
+             + (b.activeCount > 0 ? " plus longue que sa dur\xC3\xA9" "e active (" + durationText(b.meanActive()) + " en moyenne)" : std::string{})
+             + " filtrerait les apparitions br\xC3\xA8ves ;\n";
+        t += "- un capteur, un c\xC3\xA2" "blage ou un contact d\xC3\xA9" "fectueux (un contact qui rebondit, une mesure bruit\xC3\xA9" "e, une liaison "
+             "qui coupe).\n";
+    }
+    t += "*Rien n'est perdu : chaque r\xC3\xA9" "apparition est compt\xC3\xA9" "e, les " + std::to_string(Burst::kRecent)
+         + " derni\xC3\xA8res sont d\xC3\xA9taill\xC3\xA9" "es.*\n";
+    return t;
+}
+
+std::string burstContext(const Burst& b, std::size_t maxBytes) {
+    std::string t = "## R\xC3\xA9" "apparitions regroup\xC3\xA9" "es (apr\xC3\xA8s l'incident, sans nouveau dossier)\n";
+    t += "- nombre : " + std::to_string(b.count) + "\n";
+    if (b.count > 0) {
+        t += "- origine (l'incident) : " + b.originAt.str() + " ; premi\xC3\xA8re r\xC3\xA9" "apparition : " + b.firstAt.str() + " ; derni\xC3\xA8re : "
+             + b.lastAt.str() + "\n";
+        t += "- intervalle entre deux apparitions : min " + durationText(b.minGap) + ", moyen " + durationText(b.meanGap()) + ", max "
+             + durationText(b.maxGap) + " (" + everyText(b.meanGap()) + ")\n";
+    }
+    if (b.activeCount > 0)
+        t += "- dur\xC3\xA9" "e active : moyenne " + durationText(b.meanActive()) + ", max " + durationText(b.activeMax) + " ("
+             + std::to_string(b.activeCount) + " disparitions vues)\n";
+    if (b.count > 0) {
+        t += "- par heure, des 24 derni\xC3\xA8res heures jusqu'\xC3\xA0 la derni\xC3\xA8re r\xC3\xA9" "apparition :";
+        for (const auto c : b.hours) t += " " + std::to_string(c);
+        t += "\n- derni\xC3\xA8res r\xC3\xA9" "apparitions (horodatage ; dur\xC3\xA9" "e active ; valeur lue) :\n";
+        const auto recent = b.recent();
+        const std::size_t from = recent.size() > 10 ? recent.size() - 10 : 0;
+        for (std::size_t i = from; i < recent.size(); ++i) {
+            const auto& r = recent[i];
+            t += "  - " + (r.at.empty() ? durationText(r.t) : r.at.str()) + " ; "
+                 + (r.active >= 0 ? "active " + durationText(r.active) : std::string("disparition non vue")) + " ; "
+                 + (r.value.empty() ? std::string("valeur non lue") : r.value.str()) + "\n";
+        }
+    }
+    if (t.size() > maxBytes) {
+        t.resize(maxBytes);
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0u) == 0x80u) t.pop_back();   // un caractere entier
+        if (!t.empty() && static_cast<unsigned char>(t.back()) >= 0xC0u) t.pop_back();
+        t += "\n(...tronqu\xC3\xA9)";
+    }
+    return t;
+}
+
 // ---- le contexte -----------------------------------------------------------------------------------------------------
 Snapshot snapshot(const SnapshotInput& in) {
     Snapshot s;

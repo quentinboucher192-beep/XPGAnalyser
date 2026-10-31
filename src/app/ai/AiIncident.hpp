@@ -16,6 +16,11 @@
 //       validation.json      (valides/ seulement) quand, par qui, l'empreinte
 //       empreintes.sha256    l'empreinte SHA-256 de chaque fichier, au format de
 //                            sha256sum (verifiable hors de l'application)
+//       reapparitions.json   1.21.0 : les reapparitions regroupees (une alarme qui
+//                            bat) - le SEUL fichier vivant du dossier : reecrit
+//                            (atomique) tant que l'alarme bat, HORS empreinte (ni
+//                            dans empreintes.sha256, ni compte en trop), borne
+//                            (quelques dizaines de Ko au plus)
 //
 //  RIEN N'EST RECALCULE depuis le projet du moment : un ajout est un fichier de
 //  plus ; aucun fichier ecrit n'est reecrit (sauf la liste des empreintes, qui ne
@@ -46,6 +51,7 @@ inline constexpr int              kFormat = 1;
 inline constexpr std::string_view kPendingFolder = "en attente";
 inline constexpr std::string_view kValidatedFolder = "valides";
 inline constexpr std::string_view kManifest = "empreintes.sha256";
+inline constexpr std::string_view kReappearances = "reapparitions.json";   // 1.21.0 : hors empreinte (reecrit)
 
 // ---- le contenu ----------------------------------------------------------------------------------------------------
 // Ce que l'ecran a montre. `capture` : l'image du declenchement (JPEG) ; `frames` : la video (JPEG, avant et apres).
@@ -113,6 +119,10 @@ struct Item {
     double                      videoSeconds{0};
     int                         videoFrames{0};
     double                      videoFps{0};
+    // 1.21.0 : les reapparitions regroupees relues (reapparitions.json ; absent : aucune) ; la place de la capture et de
+    // la video sur le disque (le quota des images et videos, sans reparcourir le disque).
+    std::optional<hmi::incident::Burst> reappearances;
+    std::uint64_t               mediaBytes{0};
     // les raccourcis de la liste
     [[nodiscard]] std::string equipment() const;       // le premier equipement de la chaine
     [[nodiscard]] std::string synthesis() const;       // la premiere phrase de la derniere analyse faite (sinon le resume)
@@ -126,6 +136,10 @@ struct Item {
 bool                      fromJson(const json::Value&, hmi::incident::Snapshot&, std::string* why = nullptr);
 [[nodiscard]] json::Value toJson(const Analysis&);
 bool                      fromJson(const json::Value&, Analysis&);
+// 1.21.0 : les reapparitions regroupees (reapparitions.json) - les 200 dernieres en tableaux d'une ligne
+// [t, "horodatage", duree active (-1 : non vue), "valeur"] : le fichier reste petit (borne).
+[[nodiscard]] json::Value toJson(const hmi::incident::Burst&);
+bool                      fromJson(const json::Value&, hmi::incident::Burst&);
 
 // ---- l'analyse -----------------------------------------------------------------------------------------------------
 // L'analyse initiale, faite ici (sans reseau) : la fiche de diagnostic.
@@ -163,6 +177,9 @@ public:
     bool addAnalysis(const std::string& folder, Analysis& a, std::string* why = nullptr);
     // Un commentaire de plus.
     bool addComment(const std::string& folder, Comment& c, std::string* why = nullptr);
+    // 1.21.0 : (re)ecrire reapparitions.json (fichier temporaire puis renommage) ; jamais dans un dossier qui n'existe
+    // plus (valide, supprime : faux, rien n'est recree).
+    bool writeReappearances(const std::string& folder, const hmi::incident::Burst&, std::string* why = nullptr);
     // VALIDER : la copie vers valides/, verifiee, puis l'original retire. `validated` : le chemin dans valides/.
     bool validate(const std::string& folder, const std::string& author, const std::string& note, std::string& validated,
                   std::string* why = nullptr);

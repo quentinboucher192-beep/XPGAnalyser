@@ -89,8 +89,9 @@ struct Section {
 
 // LES REGLAGES DE LA SURVEILLANCE, champ par champ, dans l'ordre du dialogue : Surveillance (Activee / Desactivee),
 // Alarmes surveillees, Alarmes ignorees, Defauts de communication (Oui / Non), Secondes avant, Secondes apres, Images
-// par seconde, Maintien apres (s), Anti-rebond (s).
-inline constexpr std::size_t kSettingsFields = 9;
+// par seconde, Maintien apres (s), Anti-rebond (s) ; 1.21.0 : Regroupement des reapparitions (s), Nouveaux incidents par
+// heure au plus, Quota des images et videos (Mo).
+inline constexpr std::size_t kSettingsFields = 12;
 [[nodiscard]] std::vector<std::string> settingsLabels();
 [[nodiscard]] std::vector<std::string> settingsValues(const hmi::incident::Settings&);
 // Faux et `why` (et `field`, le champ fautif) : une valeur refusee ; `io` n'est pas touche.
@@ -171,7 +172,7 @@ public:
     [[nodiscard]] std::string rowText(std::size_t row) const;
 
     // ---- 1.20.2 : les dossiers par alarme, la recherche, la criticite, le tri ----
-    enum Sort : int { SortRecent = 0, SortOldest, SortCriticality, SortAlarm, SortCount };
+    enum Sort : int { SortRecent = 0, SortOldest, SortCriticality, SortAlarm, SortCount, SortReappear /* 1.21.0 */ };
     [[nodiscard]] bool rowIsGroup(std::size_t row) const;      // une ligne-dossier (deux incidents ou plus d'une alarme)
     [[nodiscard]] bool rowIsOpen(std::size_t row) const;       // ... depliee
     [[nodiscard]] int  rowDepth(std::size_t row) const;        // 1 : un incident dans un dossier deplie
@@ -280,6 +281,8 @@ private:
     std::set<std::string>                 requested_;        // les analyses demandees d'ici, pas encore arrivees
     std::map<std::string, std::size_t>    analysesSeen_;     // ... et le nombre d'analyses qu'elles avaient
     std::string                           message_;
+    std::uint64_t                         liveSeen_{0};      // 1.21.0 : les rafales en cours (IncidentHost::liveRevision)
+    double                                liveAt_{-1e9};
     core::ConnectionScope                 links_;
 };
 

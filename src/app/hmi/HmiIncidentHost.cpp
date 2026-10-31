@@ -13,6 +13,7 @@
 #include "../../platform/Renderer.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -38,6 +39,28 @@ constexpr int         kStillQuality = 95;                      // l'image du def
 constexpr std::size_t kMaxEvents = 300;
 constexpr double      kAnalysisTimeout = 240.0;
 constexpr std::size_t kMaxRetries = 50;
+// 1.21.0 : reapparitions.json d'une alarme qui bat, au plus toutes les 5 s (jamais une ecriture par reapparition)
+constexpr double      kBurstWriteEvery = 5.0;
+constexpr std::size_t kMaxCapAlarms = 32;                      // le plafond horaire : les alarmes nommees (le reste compte)
+constexpr std::uint64_t kMiB = 1024u * 1024u;
+
+// 1.21.0 : la cle d'une rafale - l'alarme en majuscules ; un equipement (un defaut de communication) : "COMM:" + son nom.
+std::string keyOf(const inc::Event& e) {
+    std::string k = e.kind == inc::EventKind::CommLost || e.kind == inc::EventKind::CommBack ? "COMM:" : "";
+    for (const char c : e.name) k += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return k;
+}
+
+// 1.21.0 : "512 Mo", "2,0 Go".
+std::string sizeText(std::uint64_t bytes) {
+    char buf[48];
+    if (bytes >= 1024u * kMiB) std::snprintf(buf, sizeof buf, "%.1f Go", static_cast<double>(bytes) / static_cast<double>(1024u * kMiB));
+    else std::snprintf(buf, sizeof buf, "%.0f Mo", static_cast<double>(bytes) / static_cast<double>(kMiB));
+    std::string out(buf);
+    for (auto& c : out)
+        if (c == '.') c = ',';
+    return out;
+}
 
 std::filesystem::path P(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
 std::string U(const std::filesystem::path& p) {
@@ -144,6 +167,9 @@ json::Value settingsJson(const inc::Settings& s) {
     o.set("chronologie_s", s.timeline);
     o.set("images_par_seconde", s.framesPerSecond);
     o.set("en_attente_max", static_cast<std::int64_t>(s.maxPending));
+    o.set("regroupement_s", s.regroup);                                          // 1.21.0
+    o.set("incidents_par_heure_max", static_cast<std::int64_t>(s.maxPerHour));   // 1.21.0
+    o.set("quota_images_videos_mo", static_cast<std::int64_t>(s.mediaQuotaMb));  // 1.21.0
     return o;
 }
 inc::Settings settingsOf(const json::Value& o) {
@@ -159,6 +185,12 @@ inc::Settings settingsOf(const json::Value& o) {
     s.timeline = std::clamp(o.num("chronologie_s", 120), 5.0, 3600.0);
     s.framesPerSecond = static_cast<int>(std::clamp<std::int64_t>(o.integer("images_par_seconde", inc::Settings{}.framesPerSecond), 0, 10));
     s.maxPending = static_cast<std::size_t>(std::clamp<std::int64_t>(o.integer("en_attente_max", 200), 1, 100000));
+    // 1.21.0 : un ancien fichier sans ces cles : les valeurs par defaut
+    const inc::Settings d;
+    s.regroup = std::clamp(o.num("regroupement_s", d.regroup), 0.0, 86400.0);
+    s.maxPerHour = static_cast<std::size_t>(std::clamp<std::int64_t>(o.integer("incidents_par_heure_max", static_cast<std::int64_t>(d.maxPerHour)), 0, 10000));
+    s.mediaQuotaMb = static_cast<std::size_t>(
+        std::clamp<std::int64_t>(o.integer("quota_images_videos_mo", static_cast<std::int64_t>(d.mediaQuotaMb)), 0, 1048576));
     return s;
 }
 
@@ -176,6 +208,7 @@ void IncidentHost::shutdown() {
         provider_->cancel();
         provider_.reset();
     }
+    closeGroups();   // 1.21.0 : les reapparitions pas encore ecrites (le fil les ecrit avant de s'arreter)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (stop_) return;
@@ -268,6 +301,8 @@ std::string IncidentHost::root() const {
 // ================================================================== les reglages ==
 void IncidentHost::setProjectFolder(const std::string& folder) {
     if (folder == projectFolder_) return;
+    closeGroups();   // 1.21.0 : dans le dossier de l'ancien projet
+    mediaBytes_ = 0;
     projectFolder_ = folder;
     triggers_.clear();
     recordings_.clear();
@@ -309,6 +344,7 @@ bool IncidentHost::setSettings(const inc::Settings& s, std::string* why) {
         triggers_.clear();
         captureNow_ = false;
         monitor_.clear();
+        closeGroups();   // 1.21.0 : le detecteur repart de zero ; les rafales aussi (ecrites d'abord)
         if (!s.enabled)
             for (auto& r : recordings_) r.until = std::min(r.until, now_);
     }
@@ -343,26 +379,206 @@ bool IncidentHost::setEnabled(bool on, std::string* why) {
 void IncidentHost::notice(const hmi::AlarmNotice& n) {
     if (!store_ || !settings_.enabled) return;
     monitor_.notice(n, now_);
-    auto fronts = monitor_.takeTriggers();
-    if (fronts.empty()) return;
-    // 1.20.2 : la case << Incidents >> de l'alarme (ou de son groupe) decochee : pas d'incident - decide ICI, avant
-    // toute capture (ni image, ni video, rien d'ecrit). Le detecteur a quand meme vu le front : l'alarme reste dans la
-    // chronologie des autres incidents. Le projet en marche (celui que la simulation ou le poste fait tourner).
-    const std::optional<IncidentContext> ctx = source_ ? source_() : std::nullopt;
-    for (auto& e : fronts) {
-        if (ctx && ctx->project && !inc::allowedFor(*ctx->project, e.name, e.name == n.name ? std::string_view(n.group) : std::string_view{}))
+    // 1.21.0 : TOUS les evenements de l'avis (une reapparition dans l'anti-rebond compte aussi dans sa rafale ; une
+    // disparition donne sa duree active), puis ceux qui demandent un incident
+    const std::vector<inc::Event> fresh = monitor_.take();
+    route(fresh, monitor_.takeTriggers(), &n);
+}
+
+// 1.21.0 : LES FRONTS. 1. Les reapparitions regroupees : l'alarme a une rafale ouverte (son incident) et sa derniere
+// activite date de moins de Settings::regroup - comptee (l'heure, la valeur lue au meme cycle), rien d'autre ; une
+// disparition donne la duree active et fait glisser la fenetre. 2. Les fronts qui restent : la case Incidents (1.20.2),
+// le plafond horaire, puis un incident a creer (sa rafale s'ouvre aussitot : les reapparitions des secondes suivantes,
+// avant meme que le dossier soit ecrit, y sont comptees).
+void IncidentHost::route(const std::vector<inc::Event>& fresh, std::vector<inc::Event> fronts, const hmi::AlarmNotice* n) {
+    std::optional<IncidentContext> ctx;   // lu une fois par avis, et seulement s'il sert
+    bool ctxRead = false;
+    const auto context = [&]() -> const std::optional<IncidentContext>& {
+        if (!ctxRead) {
+            ctxRead = true;
+            if (source_) ctx = source_();
+        }
+        return ctx;
+    };
+    for (const auto& e : fresh) {
+        const bool back = e.kind == inc::EventKind::Clear || e.kind == inc::EventKind::CommBack;
+        const bool front = e.kind == inc::EventKind::Appear || e.kind == inc::EventKind::Reappear || e.kind == inc::EventKind::CommLost;
+        if (!back && !front) continue;
+        const auto it = groups_.find(keyOf(e));
+        if (it == groups_.end()) continue;
+        Group& g = it->second;
+        if (back) {
+            if (g.active) {
+                g.burst.cleared(e.t);
+                g.active = false;
+                g.last = e.t;
+                g.dirty = g.dirty || g.burst.count > 0;
+                ++liveRevision_;
+            }
             continue;
+        }
+        if (settings_.regroup <= 0 || e.t - g.last > settings_.regroup) continue;   // restee calme plus que la fenetre : un incident
+        std::string value;
+        if (!g.valuePath.empty())
+            if (const auto& c = context(); c && c->read)
+                if (const auto v = c->read(g.valuePath)) value = v->first;
+        g.burst.add(e.t, e.at, value);
+        g.active = true;
+        g.last = e.t;
+        g.dirty = true;
+        ++liveRevision_;
+        // ce front n'ouvre pas d'incident (le detecteur a pu le demander : l'anti-rebond etait passe)
+        const std::string key = it->first;
+        fronts.erase(std::remove_if(fronts.begin(), fronts.end(), [&](const inc::Event& f) { return keyOf(f) == key; }), fronts.end());
+    }
+    for (auto& e : fronts) {
+        // 1.20.2 : la case << Incidents >> de l'alarme (ou de son groupe) decochee : pas d'incident - decide ICI, avant
+        // toute capture (ni image, ni video, rien d'ecrit). Le detecteur a quand meme vu le front : l'alarme reste dans
+        // la chronologie des autres incidents. Le projet en marche (celui que la simulation ou le poste fait tourner).
+        if (n) {
+            const auto& c = context();
+            if (c && c->project && !inc::allowedFor(*c->project, e.name, e.name == n->name ? std::string_view(n->group) : std::string_view{}))
+                continue;
+        }
+        if (!admit(e)) continue;   // 1.21.0 : le plafond horaire (compte, sans dossier)
         Trigger t;
         t.event = std::move(e);
         t.at = now_;
+        t.id = st::newId();
+        startGroup(t.event, t.id);
+        // 1.21.0 : le quota des images et videos depasse - ni capture ni video : l'incident se cree sans attendre d'image
+        if (overQuota()) t.waitingCapture = false;
+        else captureNow_ = true;   // l'image de ce cycle : la prochaine dessinee
         triggers_.push_back(std::move(t));
-        captureNow_ = true;   // l'image de ce cycle : la prochaine dessinee
     }
+}
+
+void IncidentHost::startGroup(const inc::Event& e, const std::string& id) {
+    if (settings_.regroup <= 0) return;   // regroupement desactive : comme avant 1.21.0
+    const std::string key = keyOf(e);
+    if (const auto it = groups_.find(key); it != groups_.end()) {   // l'ancienne rafale (fenetre finie) : ecrite, puis remplacee
+        flushGroup(it->second, true);
+        groups_.erase(it);
+    }
+    Group g;
+    g.id = id;
+    g.alarm = e.name;
+    g.last = e.t;
+    g.active = true;
+    g.burst.start(e.t, e.at);
+    groups_.emplace(key, std::move(g));
+    ++liveRevision_;
+}
+
+void IncidentHost::flushGroup(Group& g, bool relistAfter) {
+    // rien de neuf (et pas de relecture demandee : la fin d'une rafale relit la liste, le volet lit alors le dossier)
+    if (!store_ || g.burst.count == 0 || (!g.dirty && !relistAfter)) {
+        g.dirty = false;
+        return;
+    }
+    g.dirty = false;
+    g.written = now_;
+    // UNE SEULE ecriture en attente par incident : la derniere copie (bornee, quelques Ko) remplace la precedente - un
+    // disque lent n'accumule jamais de copies dans la file ; le fil d'ecriture ne lit jamais groups_.
+    bool first = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto [it, inserted] = burstOut_.try_emplace(g.id);
+        it->second.burst = g.burst;
+        it->second.relist = it->second.relist || relistAfter;
+        first = inserted;
+    }
+    if (!first) return;
+    auto store = store_;
+    post([this, store, id = g.id] {
+        BurstOut out;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto it = burstOut_.find(id);
+            if (it == burstOut_.end()) return;
+            out = std::move(it->second);
+            burstOut_.erase(it);
+        }
+        writeBurst(store, id, out.burst, out.relist);
+    });
+}
+
+void IncidentHost::closeGroups() {
+    for (auto& [key, g] : groups_) flushGroup(g, false);
+    if (!groups_.empty()) ++liveRevision_;
+    groups_.clear();
+}
+
+// 1.21.0 : le plafond de NOUVEAUX incidents par heure glissante, toutes alarmes confondues.
+bool IncidentHost::admit(const inc::Event& e) {
+    while (!createdTimes_.empty() && now_ - createdTimes_.front() >= 3600.0) createdTimes_.pop_front();
+    if (settings_.maxPerHour > 0 && createdTimes_.size() >= settings_.maxPerHour) {
+        ++capSkipped_;
+        if (capEpisode_++ == 0) {
+            capSince_ = e.at.empty() ? st::nowStamp() : e.at;
+            postEvent("Incidents : plafond horaire atteint (" + std::to_string(settings_.maxPerHour)
+                      + " nouveaux incidents en une heure) - les suivants sont compt\xC3\xA9s, sans dossier (R\xC3\xA9glages : nouveaux incidents par "
+                        "heure)");
+        }
+        if (capBy_.count(e.name) || capBy_.size() < kMaxCapAlarms) ++capBy_[e.name];
+        ++liveRevision_;
+        return false;
+    }
+    if (capEpisode_ > 0) {
+        std::string by;
+        for (const auto& [name, k] : capBy_) by += (by.empty() ? " (" : ", ") + name + " \xC3\x97" + std::to_string(k);
+        postEvent(std::to_string(capEpisode_) + (capEpisode_ > 1 ? " incidents non cr\xC3\xA9\xC3\xA9s" : " incident non cr\xC3\xA9\xC3\xA9")
+                  + " : plafond horaire atteint depuis " + capSince_ + (by.empty() ? std::string{} : by + ")"));
+        capEpisode_ = 0;
+        capBy_.clear();
+        capSince_.clear();
+        ++liveRevision_;
+    }
+    createdTimes_.push_back(now_);
+    return true;
+}
+
+bool IncidentHost::overQuota() const {
+    return settings_.mediaQuotaMb > 0 && mediaBytes_.load() >= static_cast<std::uint64_t>(settings_.mediaQuotaMb) * kMiB;
+}
+
+const inc::Burst* IncidentHost::reappearances(const std::string& id) const {
+    if (id.empty()) return nullptr;
+    for (const auto& [key, g] : groups_)
+        if (g.id == id) return &g.burst;
+    return nullptr;
+}
+
+IncidentHost::Guards IncidentHost::guards() const {
+    Guards g;
+    g.maxPerHour = settings_.maxPerHour;
+    for (const double t : createdTimes_)
+        if (now_ - t < 3600.0) ++g.createdLastHour;
+    g.capReached = g.maxPerHour > 0 && g.createdLastHour >= g.maxPerHour;
+    g.skipped = capSkipped_;
+    g.skippedNow = capEpisode_;
+    g.skippedSince = capSince_;
+    g.skippedBy.assign(capBy_.begin(), capBy_.end());
+    std::stable_sort(g.skippedBy.begin(), g.skippedBy.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+    g.mediaBytes = mediaBytes_.load();
+    g.quotaBytes = static_cast<std::uint64_t>(settings_.mediaQuotaMb) * kMiB;
+    g.quotaReached = overQuota();
+    g.withoutMedia = withoutMedia_;
+    return g;
+}
+
+std::string IncidentHost::idOf(const std::string& folder) const {
+    const auto l = listing();
+    for (const auto* list : {&l->pending, &l->validated})
+        for (const auto& it : *list)
+            if (it.folder == folder) return it.snapshot.id;
+    return {};
 }
 
 bool IncidentHost::wantsFrame(double now) const {
     if (!store_ || !settings_.enabled) return false;
     if (captureNow_) return true;
+    if (overQuota() && recordings_.empty()) return false;   // 1.21.0 : aucune image ne serait gardee
     if (settings_.framesPerSecond <= 0) return false;
     return now - lastFrame_ >= 1.0 / settings_.framesPerSecond;
 }
@@ -439,7 +655,7 @@ void IncidentHost::tick(double now) {
         std::string why;
         const auto a = analyst_(&why);
         // l'IA integree (ou aucune) : la fiche de l'incident est son analyse ; sinon, l'IA choisie en arriere-plan
-        if (a && !a->provider.empty() && a->provider != "integree" && a->provider != "demo") analyses_.push_back(Job{folder, std::move(snap)});
+        if (a && !a->provider.empty() && a->provider != "integree" && a->provider != "demo") analyses_.push_back(Job{folder, std::move(snap), {}});
     }
     if (!settings_.enabled) {
         triggers_.clear();
@@ -459,13 +675,8 @@ void IncidentHost::tick(double now) {
             lastEquip_ = now;
             if (const auto ctx = source_(); ctx && !ctx->equipments.empty()) {
                 monitor_.equipments(ctx->equipments, now);
-                for (auto& e : monitor_.takeTriggers()) {
-                    Trigger t;
-                    t.event = std::move(e);
-                    t.at = now;
-                    triggers_.push_back(std::move(t));
-                    captureNow_ = true;
-                }
+                const std::vector<inc::Event> fresh = monitor_.take();
+                route(fresh, monitor_.takeTriggers(), nullptr);   // 1.21.0 : une liaison qui bat se regroupe aussi
             }
         }
         // les defauts : leur image arrivee (ou une seconde sans image : aucune vue en marche affichee)
@@ -480,7 +691,7 @@ void IncidentHost::tick(double now) {
                         break;
                     }
             }
-            if (t.capture || now - t.at > 1.0) {
+            if (t.capture || !t.waitingCapture || now - t.at > 1.0) {
                 createIncident(t, now);
                 triggers_.erase(triggers_.begin() + static_cast<std::ptrdiff_t>(i));
             } else {
@@ -491,7 +702,43 @@ void IncidentHost::tick(double now) {
             std::lock_guard<std::mutex> lock(mutex_);
             // les images de defaut que plus personne n'attend (bornees)
             if (captures_.size() > 16) captures_.erase(captures_.begin(), captures_.end() - 16);
+            // 1.21.0 : le quota des images et videos depasse, plus de video a finir : le tampon est rendu
+            if (overQuota() && recordings_.empty()) {
+                frames_.clear();
+                frameBytes_ = 0;
+            }
         }
+    }
+    // 1.21.0 : LES RAFALES. Les incidents valides, supprimes ou abandonnes : leur rafale est oubliee (la reapparition
+    // suivante ouvre un nouvel incident). reapparitions.json reecrit au plus toutes les 5 s ; une alarme restee calme
+    // plus longtemps que la fenetre (ou le regroupement desactive) : sa rafale est ecrite une derniere fois, la liste
+    // relue (le volet la lit alors du dossier), puis oubliee.
+    {
+        std::vector<std::string> gone;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            gone.swap(forgetQueue_);
+        }
+        for (const auto& id : gone)
+            for (auto it = groups_.begin(); it != groups_.end();) {
+                if (it->second.id == id) {
+                    it = groups_.erase(it);
+                    ++liveRevision_;
+                } else {
+                    ++it;
+                }
+            }
+    }
+    for (auto it = groups_.begin(); it != groups_.end();) {
+        Group& g = it->second;
+        if (settings_.regroup <= 0 || (!g.active && now - g.last > settings_.regroup)) {
+            flushGroup(g, true);
+            it = groups_.erase(it);
+            ++liveRevision_;
+            continue;
+        }
+        if (g.dirty && now - g.written >= kBurstWriteEvery) flushGroup(g, false);
+        ++it;
     }
     // les videos : les secondes d'apres sont passees
     for (std::size_t i = 0; i < recordings_.size();) {
@@ -544,7 +791,14 @@ void IncidentHost::tick(double now) {
             const auto it = idToFolder_.find(id);
             if (it == idToFolder_.end()) return;   // la creation a echoue : rien a completer
             std::string why;
-            if (!store->addVideo(it->second, v, &why)) postEvent("Incident : vid\xC3\xA9o non enregistr\xC3\xA9" "e (" + why + ")");
+            if (!store->addVideo(it->second, v, &why)) {
+                postEvent("Incident : vid\xC3\xA9o non enregistr\xC3\xA9" "e (" + why + ")");
+                return;
+            }
+            // 1.21.0 : sa taille, comptee pour le quota (la liste la recompte a sa prochaine relecture)
+            std::error_code ec;
+            const auto size = std::filesystem::file_size(P(it->second) / "video.avi", ec);
+            if (!ec) mediaBytes_ += static_cast<std::uint64_t>(size);
         });
     }
     // les creations qui ont echoue (le disque) : reessayees toutes les 30 s
@@ -574,7 +828,7 @@ void IncidentHost::createIncident(Trigger& t, double now) {
     in.timeline = monitor_.timeline(t.event.t - settings_.timeline, now + 0.001);
     in.active = monitor_.active();
     in.software = std::string(XPG_PRODUCT_IHM " " XPG_ANALYZER_VERSION);
-    in.id = st::newId();
+    in.id = t.id.empty() ? st::newId() : t.id;   // 1.21.0 : celui de sa rafale
     in.createdAt = st::nowStamp();
     if (in.trigger.at.empty()) in.trigger.at = in.createdAt;
     if (ctx) {
@@ -598,15 +852,37 @@ void IncidentHost::createIncident(Trigger& t, double now) {
     r.maxPending = settings_.maxPending;
     r.snapshot = inc::snapshot(in);   // copie : rien n'est relu du projet ensuite
     if (!ctx) r.snapshot.missing.push_back("aucune vue en marche : ni valeur, ni \xC3\xA9tat des \xC3\xA9quipements");
-    if (t.capture) {
+    // 1.21.0 : LE QUOTA des images et videos des incidents depasse - l'incident est cree SANS image ni video (le texte,
+    // la chronologie, la fiche restent) et c'est dit ; rien n'est supprime automatiquement.
+    const bool noMedia = overQuota();
+    if (noMedia) {
+        const std::string quota = "quota disque des images et vid\xC3\xA9os des incidents atteint (" + sizeText(mediaBytes_.load()) + " sur "
+                                  + sizeText(static_cast<std::uint64_t>(settings_.mediaQuotaMb) * kMiB) + ")";
+        r.capture.note = quota + " : incident enregistr\xC3\xA9 sans image ni vid\xC3\xA9o";
+        r.snapshot.missing.push_back("l'image et la vid\xC3\xA9o : " + quota + " (rien n'est supprim\xC3\xA9 automatiquement)");
+        ++withoutMedia_;
+        ++liveRevision_;
+        if (!quotaSaid_) {
+            quotaSaid_ = true;
+            postEvent("Incidents : " + quota + " - les nouveaux incidents sont cr\xC3\xA9\xC3\xA9s sans image ni vid\xC3\xA9o ; rien n'est supprim\xC3\xA9 "
+                      "automatiquement (valide ou supprime les anciens, ou augmente le quota dans les R\xC3\xA9glages)");
+        }
+    } else if (quotaSaid_) {
+        quotaSaid_ = false;
+        postEvent("Incidents : de nouveau sous le quota disque des images et vid\xC3\xA9os - les captures et les vid\xC3\xA9os reprennent");
+    }
+    if (t.capture && !noMedia) {
         r.capture.jpeg = *t.capture->jpeg;
         r.capture.width = t.capture->w;
         r.capture.height = t.capture->h;
         r.capture.at = r.snapshot.createdAt;
-    } else {
+    } else if (!noMedia) {
         r.capture.note = "aucune vue en marche n'\xC3\xA9tait affich\xC3\xA9" "e : pas d'image";
     }
-    if (settings_.framesPerSecond > 0 && t.capture) recordings_.push_back({r.snapshot.id, t.at, t.at + settings_.after});
+    if (settings_.framesPerSecond > 0 && t.capture && !noMedia) recordings_.push_back({r.snapshot.id, t.at, t.at + settings_.after});
+    // 1.21.0 : la valeur lue a chaque reapparition - la premiere variable de la condition (une lecture, au meme cycle)
+    if (const auto g = groups_.find(keyOf(t.event)); g != groups_.end() && g->second.id == r.snapshot.id && !r.snapshot.conditionVariables.empty())
+        g->second.valuePath = r.snapshot.conditionVariables.front();
     auto store = store_;
     post([this, store, r = std::move(r)]() mutable { writeIncident(store, std::move(r)); });
 }
@@ -618,6 +894,12 @@ void IncidentHost::writeIncident(const std::shared_ptr<st::Store>& store, Retry 
     std::string folder, why;
     if (store->create(r.snapshot, r.capture, initial, folder, &why)) {
         idToFolder_[r.snapshot.id] = folder;
+        // 1.21.0 : des reapparitions comptees pendant que le disque refusait l'incident : ecrites avec lui
+        if (const auto w = waitingBursts_.find(r.snapshot.id); w != waitingBursts_.end()) {
+            std::string w2;
+            if (!store->writeReappearances(folder, w->second, &w2)) postEvent("Incident : r\xC3\xA9" "apparitions non enregistr\xC3\xA9" "es (" + w2 + ")");
+            waitingBursts_.erase(w);
+        }
         const std::size_t pending = store->pendingCount();
         postEvent("Incident enregistr\xC3\xA9 : " + r.snapshot.trigger.name + " (" + std::string(inc::eventLabel(r.snapshot.trigger.kind)) + ", "
                   + U(P(folder).filename()) + ")");
@@ -637,13 +919,45 @@ void IncidentHost::writeIncident(const std::shared_ptr<st::Store>& store, Retry 
     if (r.attempts < 4) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (pendingRetries_.size() < kMaxRetries) pendingRetries_.push_back(std::move(r));
+        return;
     }
+    forget(r.snapshot.id);   // 1.21.0 : abandonne - sa rafale est close (la prochaine apparition refait un incident)
+}
+
+// 1.21.0 (fil d'ecriture) : reapparitions.json, dans le dossier de l'incident ; pas encore ecrit : gardee pour lui.
+void IncidentHost::writeBurst(const std::shared_ptr<st::Store>& store, const std::string& id, const inc::Burst& b, bool relistAfter) {
+    if (forgotten_.count(id)) return;
+    const auto it = idToFolder_.find(id);
+    if (it == idToFolder_.end()) {
+        if (waitingBursts_.count(id) || waitingBursts_.size() < kMaxRetries) waitingBursts_[id] = b;
+        return;
+    }
+    std::string why;
+    if (store->writeReappearances(it->second, b, &why)) burstFailed_.erase(id);
+    else if (burstFailed_.insert(id).second) postEvent("Incident : r\xC3\xA9" "apparitions non enregistr\xC3\xA9" "es (" + why + ")");   // une fois
+    if (relistAfter) relist(store);
+}
+
+// 1.21.0 (fil d'ecriture) : un incident valide, supprime ou abandonne - plus rien n'est ecrit pour lui, et le fil de
+// l'interface oublie sa rafale.
+void IncidentHost::forget(const std::string& id) {
+    if (id.empty()) return;
+    forgotten_.insert(id);
+    waitingBursts_.erase(id);
+    burstFailed_.erase(id);
+    std::lock_guard<std::mutex> lock(mutex_);
+    forgetQueue_.push_back(id);
 }
 
 void IncidentHost::relist(const std::shared_ptr<st::Store>& store) {
     auto l = std::make_shared<Listing>();
     l->pending = store->list(st::State::Pending);
     l->validated = store->list(st::State::Validated);
+    // 1.21.0 : le quota - la somme des tailles connues (relues avec la liste ; aucun parcours du disque a part)
+    std::uint64_t media = 0;
+    for (const auto* list : {&l->pending, &l->validated})
+        for (const auto& it : *list) media += it.mediaBytes;
+    mediaBytes_ = media;
     std::lock_guard<std::mutex> lock(mutex_);
     l->revision = ++revision_;
     listing_ = std::move(l);
@@ -680,30 +994,48 @@ void IncidentHost::analyze(const std::string& folder) {
                 for (const auto& j : analyses_)
                     if (j.folder == folder) return;   // deja demandee
                 if (current_ && current_->folder == folder) return;
-                analyses_.push_back(Job{folder, it.snapshot});
+                // 1.21.0 : ses reapparitions (la rafale en cours, sinon celle du dossier) entrent dans le contexte
+                const inc::Burst* b = reappearances(it.snapshot.id);
+                if (!b && it.reappearances) b = &*it.reappearances;
+                analyses_.push_back(Job{folder, it.snapshot, b && b->count > 0 ? "\n\n" + inc::burstContext(*b) : std::string{}});
                 return;
             }
     postEvent("Incident : introuvable dans la liste (" + folder + ")");
 }
 
+// 1.21.0 : VALIDER clot la rafale de l'incident - ses derniers chiffres sont ecrits d'abord (la copie validee les emporte,
+// figes) ; la reapparition suivante de l'alarme ouvre un NOUVEL incident (la copie validee est verifiee et ne change
+// plus ; << ca recommence apres ma validation >> est une information a voir). Supprimer : de meme.
 void IncidentHost::validate(const std::string& folder, const std::string& note, const std::string& author) {
     if (!store_) return;
+    const std::string id = idOf(folder);
+    for (auto& [key, g] : groups_)
+        if (!id.empty() && g.id == id) flushGroup(g, false);
     auto store = store_;
-    post([this, store, folder, note, author] {
+    post([this, store, folder, note, author, id] {
         std::string validated, why;
-        if (store->validate(folder, author, note, validated, &why)) postEvent("Incident valid\xC3\xA9 : " + U(P(validated).filename()));
-        else postEvent("Incident non valid\xC3\xA9 : " + why);
+        if (store->validate(folder, author, note, validated, &why)) {
+            postEvent("Incident valid\xC3\xA9 : " + U(P(validated).filename()));
+            forget(id);
+        } else {
+            postEvent("Incident non valid\xC3\xA9 : " + why);
+        }
         relist(store);
     });
 }
 
 void IncidentHost::remove(const std::string& folder) {
     if (!store_) return;
+    const std::string id = idOf(folder);
     auto store = store_;
-    post([this, store, folder] {
+    post([this, store, folder, id] {
         std::string why;
-        if (store->remove(folder, &why)) postEvent("Incident supprim\xC3\xA9 : " + U(P(folder).filename()));
-        else postEvent("Incident non supprim\xC3\xA9 : " + why);
+        if (store->remove(folder, &why)) {
+            postEvent("Incident supprim\xC3\xA9 : " + U(P(folder).filename()));
+            forget(id);
+        } else {
+            postEvent("Incident non supprim\xC3\xA9 : " + why);
+        }
         relist(store);
     });
 }
@@ -749,11 +1081,12 @@ void IncidentHost::startNextAnalysis() {
                 if (it.folder == job.folder) earlier = it.analyses;
     }
     const std::string system = st::analysisSystemPrompt();
-    const std::string request = st::analysisRequest(job.snapshot, 12000, earlier);
+    const std::string request = st::analysisRequest(job.snapshot, 12000, earlier) + job.extra;   // 1.21.0 : + les reapparitions
     currentModel_ = setup->base.model;
     // le cache : l'empreinte du contexte de l'INCIDENT (pas des analyses jointes) pour ce modele - la meme demande au
-    // meme modele n'est pas renvoyee ; un autre modele, oui (il approfondit, les analyses d'avant jointes)
-    currentHash_ = st::contextHash(system, inc::aiContext(job.snapshot, 12000), setup->provider + "/" + currentModel_);
+    // meme modele n'est pas renvoyee ; un autre modele, oui (il approfondit, les analyses d'avant jointes). 1.21.0 :
+    // des reapparitions de plus changent le contexte.
+    currentHash_ = st::contextHash(system, inc::aiContext(job.snapshot, 12000) + job.extra, setup->provider + "/" + currentModel_);
     for (const auto& a : earlier)
         if (a.state == "faite" && a.contextHash == currentHash_) {
             postEvent("Analyse d\xC3\xA9j\xC3\xA0 faite pour ce contexte par " + a.source + " (" + a.createdAt + ") : pas renvoy\xC3\xA9" "e");

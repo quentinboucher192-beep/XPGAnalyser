@@ -24,6 +24,28 @@
 //
 //  JAMAIS un widget touche hors du fil de l'interface ; jamais le projet lu hors
 //  de lui. Le fil d'ecriture ne recoit que des donnees copiees.
+//
+//  1.21.0 : UNE ALARME QUI BAT (la meme alarme toutes les X secondes, des jours
+//  durant) ne fait plus des centaines de milliers d'incidents. LA REGLE : une
+//  apparition d'une alarme dont l'incident a ete cree, ou qui a reapparu ou
+//  disparu, il y a moins de Settings::regroup secondes (600 par defaut ; la
+//  fenetre GLISSE a chaque activite ; elle ne court pas tant que l'alarme est
+//  active) est une REAPPARITION de cet incident : aucun dossier, aucune image,
+//  aucune video - elle est comptee dans sa rafale (hmi::incident::Burst, bornee :
+//  quelques Ko quel que soit le nombre). Seule une alarme restee calme plus
+//  longtemps que la fenetre rouvre un vrai incident. Un incident VALIDE (ou
+//  supprime) est clos : la reapparition suivante ouvre un nouvel incident (la
+//  copie validee est verifiee et figee ; et << ca recommence apres ma
+//  validation >> est une information a voir). Sur le disque : reapparitions.json
+//  dans le dossier (hors empreinte), reecrit sur le fil d'ecriture au plus toutes
+//  les 5 s pendant que l'alarme bat, a sa fin et a l'arret - jamais une ecriture
+//  par reapparition. Les defauts de communication qui battent : de meme.
+//  DEUX GARDE-FOUS GLOBAUX : au plus Settings::maxPerHour NOUVEAUX incidents par
+//  heure glissante (au-dela : comptes, sans dossier, dit au journal et dans le
+//  volet) ; au-dela de Settings::mediaQuotaMb Mo d'images et de videos (la somme
+//  des tailles relues avec la liste, jamais un parcours du disque a part), les
+//  nouveaux incidents sont crees SANS image ni video (le texte, la chronologie et
+//  la fiche restent ; c'est dit). Rien n'est jamais supprime automatiquement.
 // =============================================================================
 #pragma once
 
@@ -39,6 +61,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -127,6 +150,27 @@ public:
     [[nodiscard]] std::vector<std::string> takeEvents();
     [[nodiscard]] std::size_t created() const noexcept { return created_; }   // les incidents crees depuis le lancement
 
+    // ---- 1.21.0 : les reapparitions regroupees, les garde-fous (fil de l'interface) ----
+    // La rafale EN COURS de l'incident `id` (son alarme bat, ou sa fenetre court encore) ; nulle : aucune - le volet lit
+    // alors celle du dossier (Item::reappearances, relue avec la liste).
+    [[nodiscard]] const hmi::incident::Burst* reappearances(const std::string& id) const;
+    [[nodiscard]] std::size_t liveGroups() const noexcept { return groups_.size(); }   // les rafales en memoire (une par alarme au plus)
+    // Change a chaque reapparition comptee, a chaque incident refuse par le plafond : le volet se refait (au plus par seconde).
+    [[nodiscard]] std::uint64_t liveRevision() const noexcept { return liveRevision_; }
+    struct Guards {
+        std::size_t   maxPerHour{0};          // le plafond (0 : aucun)
+        std::size_t   createdLastHour{0};     // les nouveaux incidents de l'heure glissante
+        bool          capReached{false};      // le plafond atteint en ce moment
+        std::uint64_t skipped{0};             // les incidents non crees (plafond horaire), depuis le lancement
+        std::uint64_t skippedNow{0};          // ... depuis que le plafond est atteint (0 : il ne l'est pas)
+        std::string   skippedSince;           // l'horodatage du premier refus de l'episode en cours
+        std::vector<std::pair<std::string, std::uint64_t>> skippedBy;   // l'episode en cours, par alarme (les plus touchees d'abord)
+        std::uint64_t mediaBytes{0}, quotaBytes{0};   // les images et videos des incidents ; le quota (0 : aucun)
+        bool          quotaReached{false};
+        std::uint64_t withoutMedia{0};        // les incidents crees sans image ni video (le quota), depuis le lancement
+    };
+    [[nodiscard]] Guards guards() const;
+
     // Les essais : le stockage (les fautes simulees).
     [[nodiscard]] app::ai::incidents::Store* storeForTests() { return store_.get(); }
     // Les essais : attendre que le fil d'ecriture ait tout fait.
@@ -140,6 +184,7 @@ private:
     };
     struct Trigger {
         hmi::incident::Event event;
+        std::string          id;             // 1.21.0 : l'incident (connu des le front : sa rafale s'ouvre aussitot)
         double               at{0};          // l'horloge de l'hote
         std::optional<Frame> capture;        // l'image du defaut (JPEG, venue du fil)
         bool                 waitingCapture{true};
@@ -152,6 +197,17 @@ private:
     struct Job {
         std::string             folder;
         hmi::incident::Snapshot snapshot;
+        std::string             extra;      // 1.21.0 : le resume des reapparitions (le contexte de l'analyse)
+    };
+    struct Group {                           // 1.21.0 : les reapparitions regroupees d'une alarme (fil de l'interface)
+        std::string          id;             // l'incident
+        std::string          alarm;          // le nom tel qu'ecrit
+        std::string          valuePath;      // la premiere variable de la condition : lue a chaque reapparition
+        double               last{0};        // la derniere activite (creation, reapparition, disparition)
+        double               written{-1e9};  // la derniere ecriture de reapparitions.json demandee
+        bool                 active{true};   // l'alarme est active : la fenetre ne court pas
+        bool                 dirty{false};   // des reapparitions pas encore ecrites
+        hmi::incident::Burst burst;
     };
     struct Retry {                           // un incident a ecrire (garde en memoire si le disque refuse)
         hmi::incident::Snapshot          snapshot;
@@ -161,6 +217,18 @@ private:
     };
     void post(std::function<void()> job);
     void worker();
+    // 1.21.0 : les fronts du detecteur - les reapparitions regroupees, puis la case Incidents (`n` : l'avis d'alarme ;
+    // nul : un defaut de communication) et le plafond horaire ; les fronts qui restent sont des incidents a creer.
+    void route(const std::vector<hmi::incident::Event>& fresh, std::vector<hmi::incident::Event> fronts, const hmi::AlarmNotice* n);
+    void startGroup(const hmi::incident::Event& e, const std::string& id);
+    void flushGroup(Group& g, bool relistAfter);   // reapparitions.json, sur le fil d'ecriture (rien si rien de neuf)
+    void closeGroups();                            // tout ecrire, tout oublier (l'arret, un autre projet)
+    bool admit(const hmi::incident::Event& e);     // le plafond horaire : faux, compte sans dossier
+    [[nodiscard]] bool overQuota() const;           // le quota des images et videos depasse
+    [[nodiscard]] std::string idOf(const std::string& folder) const;   // (la liste)
+    void writeBurst(const std::shared_ptr<app::ai::incidents::Store>& store, const std::string& id, const hmi::incident::Burst& b,
+                    bool relistAfter);                                   // (fil d'ecriture)
+    void forget(const std::string& id);            // (fil d'ecriture) valide, supprime, abandonne : sa rafale est close
     void postEvent(std::string line);
     void createIncident(Trigger& t, double now);
     void writeIncident(const std::shared_ptr<app::ai::incidents::Store>& store, Retry r);   // (fil d'ecriture)
@@ -186,6 +254,16 @@ private:
     std::vector<Recording>                                    recordings_;
     std::vector<Retry>                                        retries_;
     std::size_t                                               created_{0};
+    // 1.21.0 : les rafales (par alarme en majuscules ; "COMM:" + equipement) et les garde-fous (fil de l'interface)
+    std::map<std::string, Group>                              groups_;
+    std::uint64_t                                             liveRevision_{0};
+    std::deque<double>                                        createdTimes_;   // les nouveaux incidents de l'heure glissante
+    std::uint64_t                                             capSkipped_{0}, capEpisode_{0};
+    std::string                                               capSince_;
+    std::map<std::string, std::uint64_t>                      capBy_;          // (borne)
+    bool                                                      quotaSaid_{false};
+    std::uint64_t                                             withoutMedia_{0};
+    std::atomic<std::uint64_t>                                mediaBytes_{0};  // (ecrit par le fil d'ecriture)
     // le graphe des relations du projet en marche (refait quand il change, jamais a chaque cycle)
     std::shared_ptr<const hmi::rel::Graph>                    graph_;
     const hmi::Project*                                       graphProject_{nullptr};
@@ -198,6 +276,14 @@ private:
     double                                                    analysisStarted_{0};
     // le fil d'ecriture
     std::map<std::string, std::string>                        idToFolder_;  // (fil d'ecriture seulement)
+    std::map<std::string, hmi::incident::Burst>               waitingBursts_;   // 1.21.0 (fil d'ecriture) : l'incident pas encore ecrit
+    std::set<std::string>                                     forgotten_, burstFailed_;   // 1.21.0 (fil d'ecriture)
+    std::vector<std::string>                                  forgetQueue_;     // 1.21.0 (sous mutex_) : vers le fil de l'interface
+    struct BurstOut {                                                           // 1.21.0 : une ecriture de reapparitions.json en attente
+        hmi::incident::Burst burst;
+        bool                 relist{false};
+    };
+    std::map<std::string, BurstOut>                           burstOut_;        // 1.21.0 (sous mutex_) : une seule par incident
     mutable std::mutex                                        mutex_;
     std::condition_variable                                   wake_;
     std::deque<std::function<void()>>                         jobs_;

@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -379,6 +380,108 @@ bool fromJson(const json::Value& o, Analysis& a) {
     return true;
 }
 
+// 1.21.0 : les reapparitions regroupees. Une ligne par reapparition detaillee (un tableau de scalaires tient sur une
+// ligne) : au plus 200, des textes de 23 octets au plus - le fichier reste petit quel que soit le nombre compte.
+namespace {
+json::Value stampJson(double t, const inc::ShortText& at) {
+    json::Value o = json::Value::object();
+    o.set("t", t);
+    o.set("horodatage", at.str());
+    return o;
+}
+double rounded(double v) { return std::round(v * 1000.0) / 1000.0; }
+} // namespace
+
+json::Value toJson(const inc::Burst& b) {
+    json::Value o = json::Value::object();
+    o.set("format", 1);
+    o.set("genre", "r\xC3\xA9" "apparitions XPGAnalyser");
+    o.set("note", "les r\xC3\xA9" "apparitions de l'alarme apr\xC3\xA8s l'incident, compt\xC3\xA9" "es sans nouveau dossier ; fichier r\xC3\xA9\xC3\xA9" "crit "
+                  "tant que l'alarme bat, hors des empreintes");
+    o.set("mis_a_jour_le", nowStamp());
+    o.set("origine", stampJson(b.originT, b.originAt));
+    o.set("nombre", b.count);
+    if (b.count > 0) {
+        o.set("premiere", stampJson(b.firstT, b.firstAt));
+        o.set("derniere", stampJson(b.lastT, b.lastAt));
+        json::Value gap = json::Value::object();
+        gap.set("min", rounded(b.minGap));
+        gap.set("moyen", rounded(b.meanGap()));
+        gap.set("max", rounded(b.maxGap));
+        o.set("intervalle_s", gap);
+    }
+    json::Value act = json::Value::object();
+    act.set("disparitions", b.activeCount);
+    act.set("somme", rounded(b.activeSum));
+    act.set("max", rounded(b.activeMax));
+    if (b.pending) act.set("active_depuis_t", b.pendingT);
+    o.set("active_s", act);
+    json::Value mins = json::Value::object();
+    mins.set("derniere_minute", static_cast<std::int64_t>(b.lastMinute));
+    json::Value mv = json::Value::array();
+    for (const auto c : b.minutes) mv.push(static_cast<std::int64_t>(c));
+    mins.set("nombres", mv);
+    o.set("par_minute", mins);
+    json::Value hrs = json::Value::object();
+    hrs.set("derniere_heure", static_cast<std::int64_t>(b.lastHour));
+    json::Value hv = json::Value::array();
+    for (const auto c : b.hours) hv.push(static_cast<std::int64_t>(c));
+    hrs.set("nombres", hv);
+    o.set("par_heure", hrs);
+    json::Value list = json::Value::array();
+    for (const auto& r : b.recent()) {
+        json::Value x = json::Value::array();
+        x.push(r.t);
+        x.push(r.at.str());
+        x.push(r.active >= 0.f ? rounded(static_cast<double>(r.active)) : -1.0);
+        x.push(r.value.str());
+        list.push(x);
+    }
+    o.set("dernieres", list);
+    return o;
+}
+
+bool fromJson(const json::Value& o, inc::Burst& b) {
+    if (!o.isObject() || !o.has("nombre")) return false;
+    b = {};
+    b.originT = o.at("origine").num("t");
+    b.originAt.set(o.at("origine").str("horodatage"));
+    b.count = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o.integer("nombre")));
+    b.firstT = o.at("premiere").num("t");
+    b.firstAt.set(o.at("premiere").str("horodatage"));
+    b.lastT = o.at("derniere").num("t");
+    b.lastAt.set(o.at("derniere").str("horodatage"));
+    b.minGap = o.at("intervalle_s").num("min");
+    b.maxGap = o.at("intervalle_s").num("max");
+    const auto& act = o.at("active_s");
+    b.activeCount = static_cast<std::uint64_t>(std::max<std::int64_t>(0, act.integer("disparitions")));
+    b.activeSum = act.num("somme");
+    b.activeMax = act.num("max");
+    b.pending = act.has("active_depuis_t");
+    b.pendingT = act.num("active_depuis_t");
+    b.lastMinute = o.at("par_minute").integer("derniere_minute");
+    const auto& mv = o.at("par_minute").at("nombres").items();
+    for (std::size_t i = 0; i < mv.size() && i < b.minutes.size(); ++i)
+        b.minutes[i] = static_cast<std::uint32_t>(std::max<std::int64_t>(0, mv[i].asInt()));
+    b.lastHour = o.at("par_heure").integer("derniere_heure");
+    const auto& hv = o.at("par_heure").at("nombres").items();
+    for (std::size_t i = 0; i < hv.size() && i < b.hours.size(); ++i)
+        b.hours[i] = static_cast<std::uint32_t>(std::max<std::int64_t>(0, hv[i].asInt()));
+    std::vector<inc::Reappearance> list;
+    for (const auto& x : o.at("dernieres").items()) {
+        const auto& v = x.items();
+        if (v.size() < 4) continue;
+        inc::Reappearance r;
+        r.t = v[0].asNumber();
+        r.at.set(v[1].asString());
+        r.active = static_cast<float>(v[2].asNumber(-1.0));
+        r.value.set(v[3].asString());
+        list.push_back(r);
+    }
+    b.setRecent(list);
+    return true;
+}
+
 // ================================================================== l'analyse ==
 Analysis initialAnalysis(const inc::Snapshot& s, std::string_view createdAt) {
     Analysis a;
@@ -672,6 +775,16 @@ bool Store::addAnalysis(const std::string& folder, Analysis& a, std::string* why
     return appendManifest(folder, {rel}, why);
 }
 
+// 1.21.0 : le seul fichier reecrit d'un dossier (hors empreinte) ; jamais un dossier recree.
+bool Store::writeReappearances(const std::string& folder, const inc::Burst& b, std::string* why) {
+    std::error_code ec;
+    if (!fs::exists(P(join(folder, "incident.json")), ec)) {
+        if (why) *why = "le dossier de l'incident n'existe plus : " + folder;
+        return false;
+    }
+    return write(join(folder, kReappearances), json::write(toJson(b)), why);
+}
+
 bool Store::addComment(const std::string& folder, Comment& c, std::string* why) {
     const std::string dir = join(folder, "commentaires");
     c.number = std::max(1, nextNumber(dir));
@@ -707,7 +820,7 @@ Integrity Store::verify(const std::string& folder) const {
         if (hashOf(data) != hash) r.altered.push_back(rel);
     }
     for (const auto& f : filesOf(folder))
-        if (f != kManifest && !m.count(f)) r.extra.push_back(f);
+        if (f != kManifest && f != kReappearances && !m.count(f)) r.extra.push_back(f);   // 1.21.0 : reapparitions.json, hors empreinte
     r.ok = r.missing.empty() && r.altered.empty() && r.extra.empty();
     return r;
 }
@@ -811,6 +924,19 @@ Item Store::read(const std::string& folder) const {
         it.videoSeconds = it.videoFps > 0 ? it.videoFrames / it.videoFps : 0;
         it.videoNote = vdoc.str("note");
     }
+    // 1.21.0 : les reapparitions regroupees ; la place des images et de la video (le quota, sans reparcourir le disque)
+    std::string rtext;
+    json::Value rdoc;
+    if (readAll(join(folder, kReappearances), rtext) && json::parse(rtext, rdoc)) {
+        inc::Burst b;
+        if (fromJson(rdoc, b)) it.reappearances = std::move(b);
+    }
+    for (const auto* media : {&it.capturePath, &it.videoPath}) {
+        std::error_code e1;
+        if (media->empty()) continue;
+        const auto n = fs::file_size(P(*media), e1);
+        if (!e1) it.mediaBytes += static_cast<std::uint64_t>(n);
+    }
     for (const auto& rel : filesOf(folder)) {
         if (rel.rfind("analyses/", 0) == 0 && rel.ends_with(".json")) {
             std::string t;
@@ -903,7 +1029,7 @@ std::vector<std::string> Store::recover() {
             const auto known = parseManifest(old);
             std::vector<std::string> add;
             for (const auto& f : filesOf(U(p)))
-                if (f != kManifest && !known.count(f)) add.push_back(f);
+                if (f != kManifest && f != kReappearances && !known.count(f)) add.push_back(f);
             std::string w;
             if (!add.empty() && !appendManifest(U(p), add, &w)) {
                 notes.push_back("reprise impossible de " + base + " : " + w);

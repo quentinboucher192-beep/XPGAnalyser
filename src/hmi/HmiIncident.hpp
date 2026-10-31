@@ -32,6 +32,7 @@
 #include "HmiModel.hpp"
 #include "HmiRuntime.hpp"   // AlarmNotice, EquipmentStatus
 
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -75,6 +76,16 @@ struct Settings {
     double                   timeline{120.0};  // la fenetre de la chronologie
     int                      framesPerSecond{5};   // 1.20.2 : 5 (2 en 1.20.0 : une video a saccades)
     std::size_t              maxPending{200};  // au-dela, les plus anciens incidents en attente non commentes sont dits
+    // 1.21.0 : UNE ALARME QUI BAT ne fait plus un incident par reapparition (voir Burst, plus bas). Une reapparition
+    // moins de `regroup` secondes apres la derniere activite de l'alarme (son incident, une reapparition, sa
+    // disparition : la fenetre GLISSE) est comptee dans son incident, sans dossier, sans image, sans video ; seule une
+    // alarme restee calme plus longtemps rouvre un incident. 0 : desactive (le comportement d'avant).
+    double                   regroup{600.0};
+    // 1.21.0 : les garde-fous globaux (l'hote). Au plus `maxPerHour` NOUVEAUX incidents par heure glissante, toutes
+    // alarmes confondues (au-dela : comptes, sans dossier ; 0 : sans plafond). Au-dela de `mediaQuotaMb` Mo d'images
+    // et de videos d'incidents, les nouveaux sont crees sans image ni video (0 : sans quota) - rien n'est supprime.
+    std::size_t              maxPerHour{60};
+    std::size_t              mediaQuotaMb{2048};
 };
 // Une alarme est-elle surveillee ?
 [[nodiscard]] bool watched(const Settings&, std::string_view alarm);
@@ -122,6 +133,93 @@ private:
     std::deque<Event>            history_;
     std::vector<Event>           fresh_, triggers_;
 };
+
+// ---- 1.21.0 : LES REAPPARITIONS REGROUPEES (une alarme qui bat) ------------------------------------------------------
+//  Une alarme qui reapparait sans cesse (toutes les 2 s, des jours durant) faisait un incident a chaque fois : des
+//  centaines de milliers de dossiers, d'images, de videos, et la memoire de la liste. Desormais, apres son incident,
+//  chaque reapparition dans la fenetre de regroupement (Settings::regroup) est COMPTEE dans une rafale. Ce qui est
+//  garde est BORNE, quel que soit le nombre de reapparitions (300 000 ou 30 millions : la meme taille, au plus
+//  kMaxBytes) : le compte exact, l'origine, la premiere et la derniere reapparition, les intervalles min / moyen / max,
+//  la duree active, deux histogrammes (par minute sur la derniere heure, par heure sur les dernieres 24 heures, jusqu'a
+//  la derniere reapparition) et les kRecent dernieres detaillees. Aucune allocation par reapparition : l'anneau des
+//  dernieres est reserve une fois, les textes sont de taille fixe.
+
+struct Snapshot;
+
+// Un petit texte de taille fixe (aucune allocation) : un horodatage, une valeur. Coupe sur un caractere entier.
+class ShortText {
+public:
+    static constexpr std::size_t kMax = 23;
+    ShortText() = default;
+    explicit ShortText(std::string_view s) noexcept { set(s); }
+    void set(std::string_view s) noexcept;
+    [[nodiscard]] std::string_view view() const noexcept { return {chars_.data(), size_}; }
+    [[nodiscard]] std::string      str() const { return std::string(view()); }
+    [[nodiscard]] bool             empty() const noexcept { return size_ == 0; }
+
+private:
+    std::array<char, kMax> chars_{};
+    std::uint8_t           size_{0};
+};
+
+struct Reappearance {
+    double    t{0};             // l'horloge de l'hote (secondes) : les intervalles
+    float     active{-1.f};     // restee active (s) jusqu'a sa disparition ; negatif : encore active, ou inconnue
+    ShortText at;               // l'horodatage du moteur
+    ShortText value;            // la valeur lue au meme cycle (la premiere variable de la condition) ; vide : inconnue
+};
+
+struct Burst {
+    static constexpr std::size_t kRecent = 200;      // les dernieres reapparitions detaillees
+    static constexpr int         kMinutes = 60;      // l'histogramme par minute : la derniere heure
+    static constexpr int         kHours = 24;        // ... par heure : les dernieres 24 heures
+    static constexpr std::size_t kMaxBytes = 16384;  // la memoire d'une rafale, au plus (memoryBytes ; les essais)
+
+    // l'apparition qui a fait l'incident (l'origine des intervalles)
+    double        originT{0};
+    ShortText     originAt;
+    // les reapparitions comptees (sans l'origine)
+    std::uint64_t count{0};
+    double        firstT{0}, lastT{0};
+    ShortText     firstAt, lastAt;
+    double        minGap{0}, maxGap{0};              // entre deux apparitions successives (l'origine comprise)
+    // la duree active (de l'apparition a la disparition), sur les disparitions vues
+    double        activeSum{0}, activeMax{0};
+    std::uint64_t activeCount{0};
+    // les histogrammes, la derniere case a droite : minutes[kMinutes - 1] est la minute de la derniere reapparition
+    // (lastMinute = floor(lastT / 60)), hours[kHours - 1] son heure (lastHour = floor(lastT / 3600))
+    std::int64_t                          lastMinute{0}, lastHour{0};
+    std::array<std::uint32_t, kMinutes>   minutes{};
+    std::array<std::uint32_t, kHours>     hours{};
+    // les dernieres reapparitions : un anneau (au plus kRecent ; une fois plein, `head` est la plus ancienne)
+    std::vector<Reappearance> ring;
+    std::size_t               head{0};
+    // une apparition dont on attend la disparition (sa duree active)
+    bool                      pending{false};
+    double                    pendingT{0};
+
+    void start(double t, std::string_view at);                              // l'apparition qui fait l'incident
+    void add(double t, std::string_view at, std::string_view value = {});   // une reapparition
+    void cleared(double t);                                                 // l'alarme est repartie
+    [[nodiscard]] double meanGap() const noexcept { return count ? (lastT - originT) / static_cast<double>(count) : 0.0; }
+    [[nodiscard]] double meanActive() const noexcept { return activeCount ? activeSum / static_cast<double>(activeCount) : -1.0; }
+    [[nodiscard]] std::vector<Reappearance> recent() const;               // du plus ancien au plus recent (au plus kRecent)
+    void setRecent(const std::vector<Reappearance>& list);                  // (la relecture : les plus recentes gardees)
+    [[nodiscard]] std::size_t memoryBytes() const noexcept { return sizeof(Burst) + ring.capacity() * sizeof(Reappearance); }
+};
+
+// 300000 -> "300 000" (l'espace est insecable : le nombre ne se coupe pas a la ligne).
+[[nodiscard]] std::string countText(std::uint64_t n);
+// "toutes les 10 s environ", "toutes les 3 min environ", "toutes les 2 h environ".
+[[nodiscard]] std::string everyText(double seconds);
+// Une duree courte, en francais : "0,4 s", "12 s", "3 min 20 s", "2 h 05".
+[[nodiscard]] std::string durationText(double seconds);
+// LE DIAGNOSTIC D'UNE RAFALE, en clair (markdown leger) : l'alarme est instable / bat, sa cadence, sa duree active,
+// les valeurs lues, et les PISTES a verifier (hysteresis du seuil, temporisation d'apparition, capteur ou contact
+// defectueux) - jamais une cause affirmee. `snapshot` (facultatif) : la temporisation et la condition de l'alarme.
+[[nodiscard]] std::string burstDiagnosis(const Burst&, const Snapshot* snapshot = nullptr);
+// Le resume d'une rafale pour une analyse IA (borne a `maxBytes`) : les chiffres, l'histogramme par heure, les dernieres.
+[[nodiscard]] std::string burstContext(const Burst&, std::size_t maxBytes = 2500);
 
 // ---- le contexte ---------------------------------------------------------------------------------------------------
 enum class Certainty : std::uint8_t { Fact, Indirect, Hypothesis };
