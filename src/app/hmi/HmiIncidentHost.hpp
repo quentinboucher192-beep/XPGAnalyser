@@ -150,6 +150,7 @@ private:
         hmi::incident::Snapshot          snapshot;
         app::ai::incidents::Capture      capture;
         int                              attempts{0};
+        std::size_t                      maxPending{200};   // (copie du reglage : le fil d'ecriture ne lit pas settings_)
     };
     void post(std::function<void()> job);
     void worker();

@@ -1943,6 +1943,55 @@ L'IA intégrée y répond sans connexion, à partir du **graphe des relations** 
 « **Vérifie tout mon projet et propose les corrections** » : Générer, Compiler, les adresses qui se chevauchent, les orphelins et les dossiers, rangés en **erreurs bloquantes**, **avertissements** et **informations**, avec la correction proposée pour chacun. Les corrections d'adresse forment une proposition : rien ne change avant que tu la valides (Prévisualiser, puis Appliquer).
 « **Optimise les adresses des pompes** » (ou de toutes les variables) : le plan avant / après – l'emprise de chaque table, les chevauchements, chaque déplacement et sa raison – et sa proposition. Une adresse existante ne change jamais en silence ; un appareil réel doit utiliser les mêmes adresses.
 
+== incidents | Les incidents : enregistrement et analyse
+: Quand une alarme apparaît en simulation ou au poste d'exploitation, l'IHM crée toute seule un dossier d'incident : l'image et une vidéo de la vue, l'alarme telle qu'elle était, ce à quoi elle est reliée dans le projet, les valeurs du moment, la chronologie, une fiche de diagnostic et l'analyse de l'IA. Tu le consultes, le commentes et le valides.
+@depuis 1.20.0
+@mots INCIDENT, INCIDENTS, DOSSIER D'INCIDENT, EN ATTENTE, VALIDÉS, VALIDER, DIAGNOSTIC, FICHE DE DIAGNOSTIC, CHAÎNE DE DÉPENDANCES, ALARMES LIÉES, CAUSE, CAUSES POTENTIELLES, CERTITUDE, CHRONOLOGIE, CAPTURE, VIDÉO, TAMPON CIRCULAIRE, EMPREINTE, SHA-256, IMMUABLE, SURVEILLANCE, ANALYSE IA
+@lieux ai.panneau
+@voir alarmes, assistant-ia, assistant-ia-plan, enregistrements
+### Ce qui déclenche un incident
+La surveillance suit les **fronts**, jamais chaque cycle :
+| Événement | Incident ? |
+| Une alarme apparaît | Oui, aussitôt, sans geste. |
+| Elle réapparaît après avoir disparu | Oui (un nouvel incident). Dans le délai anti-rebond (5 s par défaut) : le même. |
+| Elle reste active | Non : le **maintien** est noté une fois dans la chronologie (après 30 s par défaut). |
+| Elle disparaît, elle est acquittée | Non : noté dans la chronologie, avec sa durée. |
+| Un équipement devient injoignable | Oui (réglable) ; son retour est noté. |
+Plusieurs alarmes au même instant font chacune leur incident ; chacun voit les autres.
+### Ce que contient un dossier
+Un dossier par incident, dans **ihm/ressources/enregistrements/en attente/** (le nom : date, heure, alarme, identifiant) :
+| Fichier | Contenu |
+| capture.jpg | La vue en marche dessinée juste après le cycle de l'alarme. Une **image** : elle n'est jamais présentée comme une vidéo. |
+| video.avi | Une **vidéo Motion-JPEG** des secondes d'avant et d'après (un tampon circulaire : 10 s avant, 5 s après, 2 images par seconde par défaut). Le lecteur Vidéo de l'IHM la lit. |
+| incident.json | Le contexte **copié** : l'alarme (identifiant, nom, description, condition, priorité, délai, groupe), son état et son horodatage, le projet et sa version, les variables de la condition et leurs valeurs, la chaîne de dépendances, les alarmes actives et liées, la chronologie, les pistes, les équipements, la vue affichée et ses objets concernés, les incidents précédents de la même alarme. |
+| analyses/ | L'analyse **initiale** (la fiche, 000-initiale.json), puis chaque nouvelle analyse dans son propre fichier. |
+| commentaires/ | Un fichier par commentaire. |
+| empreintes.sha256 | L'empreinte SHA-256 de chaque fichier (le format de sha256sum : vérifiable hors du logiciel). |
+! Une valeur que l'IHM n'avait pas au moment du défaut est dite « non disponible » : jamais inventée.
+### La chaîne de dépendances
+Lue dans le graphe des relations du projet, en partant de la condition de l'alarme : les variables qu'elle lit (un membre de structure compris), leur structure, leur équipement et leur adresse, les scripts et fonctions qui les écrivent ou les lisent, les vues et objets qui les montrent, les autres alarmes qui les lisent ; puis un niveau plus loin, ce que lisent les traitements qui écrivent la condition. Chaque maillon a sa certitude : **fait vérifié** (lu dans le projet) ou **relation indirecte**.
+Les autres alarmes sont rangées : **dépendance technique commune** (même variable, même équipement), **apparue au même moment**, **potentiellement secondaire** (après une perte de communication de l'équipement), **indépendante**.
+### La fiche de diagnostic
+Dix sections, chacune dépliable : 1. Résumé, 2. Alarme déclenchée, 3. Origine des données, 4. Chaîne de dépendances, 5. Autres alarmes, 6. Chronologie, 7. Analyse technique, 8. Causes potentielles, 9. Éléments à vérifier, 10. Niveau de certitude. Les causes sont des **pistes** classées, chacune avec ce qui l'appuie : « peut expliquer », jamais « a causé ».
+! L'ordre d'apparition n'est pas une preuve de causalité.
+### L'analyse par l'IA
+La fiche est faite sur ce PC, aussitôt. Si l'Assistant utilise une IA connectée, elle reçoit ensuite, **en arrière-plan**, un contexte ciblé (l'incident, pas tout le projet, borné) et sa réponse est **ajoutée** au dossier, avec sa source et sa certitude. Une nouvelle analyse est un fichier de plus : l'analyse initiale n'est jamais réécrite, et tu peux les comparer. La même demande au même modèle n'est pas renvoyée (le cache).
+IA indisponible (pas de clé, pas de réseau, service en erreur) : l'incident est gardé, l'analyse marquée **en attente** ; relance-la plus tard. La surveillance n'attend jamais la réponse d'un modèle.
+### Le volet Incidents
+La liste des incidents **en attente** et **validés** : miniature, nom, date, alarme, équipement, vue, synthèse de l'analyse, certitude, état. Pour chacun : consulter la fiche, voir l'analyse complète et la comparer, explorer les dépendances (un clic ouvre l'élément du projet quand il existe encore), commenter, demander une nouvelle analyse, **valider**, supprimer (en attente seulement).
+**Valider** copie le dossier dans **ihm/ressources/enregistrements/valides/**, vérifie chaque empreinte de la copie, ajoute la validation (date, auteur, note), puis seulement retire l'original. Un nom n'est jamais écrasé ; un incident altéré n'est pas validé.
+### Immuable
+Un incident garde le projet **de son moment** : une alarme renommée ou supprimée, un équipement retiré, une vue modifiée n'y changent rien. Rien n'est recalculé depuis le projet d'aujourd'hui.
+### Les réglages
+Dans le volet : surveillance active, alarmes surveillées (vide : toutes ; * permis, ex. Defaut_*), alarmes ignorées, défauts de communication, secondes avant et après, images par seconde, maintien, anti-rebond. Ils sont gardés avec le projet (ihm/ressources/enregistrements/reglages-incidents.json).
+### Robustesse
+- Les images sont copiées sur le fil de l'interface et codées ailleurs ; les dossiers sont écrits en arrière-plan.
+- Un arrêt brutal pendant l'écriture : au prochain démarrage, le dossier est terminé (ou mis à part s'il est incomplet).
+- Disque plein : c'est dit dans le journal, l'incident est gardé en mémoire et réessayé.
+### Dans l'Assistant
+« Pourquoi cette alarme est-elle apparue ? », « Retrouve toute la chaîne de dépendances de cette alarme », « Quelles variables peuvent être à l'origine de ce défaut ? », « Pourquoi cinq alarmes sont-elles apparues en même temps ? », « Est-ce que cette alarme est déjà apparue dans le passé ? », « Compare les trois derniers incidents de la pompe 2 », « Quel équipement est commun à ces défauts ? », « Les défauts de communication expliquent-ils les alarmes de mesure ? », « Fais-moi un diagnostic complet de cet incident » : l'IA répond à partir des dossiers et du projet.
+! XPGAnalyser aide à comprendre un événement. Ce n'est pas un système de sécurité ni une surveillance déterministe de la logique de l'automate.
+
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0

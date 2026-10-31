@@ -503,6 +503,7 @@ void IncidentHost::createIncident(Trigger& t, double now) {
         }
     }
     Retry r;
+    r.maxPending = settings_.maxPending;
     r.snapshot = inc::snapshot(in);   // copie : rien n'est relu du projet ensuite
     if (!ctx) r.snapshot.missing.push_back("aucune vue en marche : ni valeur, ni \xC3\xA9tat des \xC3\xA9quipements");
     if (t.capture) {
@@ -528,8 +529,8 @@ void IncidentHost::writeIncident(const std::shared_ptr<st::Store>& store, Retry 
         const std::size_t pending = store->pendingCount();
         postEvent("Incident enregistr\xC3\xA9 : " + r.snapshot.trigger.name + " (" + std::string(inc::eventLabel(r.snapshot.trigger.kind)) + ", "
                   + U(P(folder).filename()) + ")");
-        if (pending > settings_.maxPending)
-            postEvent("Incidents : " + std::to_string(pending) + " en attente (plus de " + std::to_string(settings_.maxPending)
+        if (pending > r.maxPending)
+            postEvent("Incidents : " + std::to_string(pending) + " en attente (plus de " + std::to_string(r.maxPending)
                       + ") - valide ou supprime les anciens");
         {
             std::lock_guard<std::mutex> lock(mutex_);

@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.19.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.19.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.18.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.17.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin de matin\xC3\xA9" "e"},
     {"1.16.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
@@ -146,6 +147,45 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.20.0 : l'enregistrement intelligent et l'analyse IA des incidents
+        note("1.20.0", "Incidents", Kind::New,
+         "UN DOSSIER D'INCIDENT \xC3\x80 CHAQUE D\xC3\x89" "FAUT, SANS GESTE : en simulation IHM et au poste d'exploitation, une alarme qui "
+         "appara\xC3\xAEt (ou r\xC3\xA9" "appara\xC3\xAEt, ou une perte de communication) cr\xC3\xA9" "e aussit\xC3\xB4t un dossier dans "
+         "ihm/ressources/enregistrements/en attente/ : l'image de la vue au d\xC3\xA9" "faut, une vid\xC3\xA9o Motion-JPEG des secondes "
+         "d'avant et d'apr\xC3\xA8s (un tampon circulaire), l'alarme telle qu'elle \xC3\xA9tait (condition, priorit\xC3\xA9, d\xC3\xA9lai), "
+         "les valeurs du moment (une valeur absente est dite absente), les alarmes actives et la chronologie. Seulement aux FRONTS : "
+         "jamais un incident \xC3\xA0 chaque cycle.",
+         "incidents", ""),
+        note("1.20.0", "Incidents", Kind::New,
+         "CE \xC3\x80 QUOI L'ALARME EST RELI\xC3\x89" "E : la cha\xC3\xAEne de d\xC3\xA9pendances est lue dans le graphe du projet - "
+         "condition, variables, structures, \xC3\xA9quipement et adresse, scripts et fonctions qui les \xC3\xA9" "crivent ou les lisent, "
+         "vues et objets, autres alarmes - avec la certitude de chaque maillon (fait v\xC3\xA9rifi\xC3\xA9, relation indirecte). Les "
+         "alarmes li\xC3\xA9" "es sont class\xC3\xA9" "es (d\xC3\xA9pendance commune, simultan\xC3\xA9" "e, potentiellement secondaire, "
+         "ind\xC3\xA9pendante) et les pistes aussi : jamais une cause affirm\xC3\xA9" "e, jamais une relation invent\xC3\xA9" "e ; "
+         "l'ordre d'apparition n'est pas une preuve.",
+         "incidents", ""),
+        note("1.20.0", "Incidents", Kind::New,
+         "L'ANALYSE IA EN ARRI\xC3\x88RE-PLAN : la fiche de diagnostic (dix sections) est faite sur ce PC ; l'IA choisie dans "
+         "l'Assistant re\xC3\xA7oit ensuite un contexte CIBL\xC3\x89 (l'incident, pas tout le projet) et sa r\xC3\xA9ponse est AJOUT\xC3\x89" "E "
+         "au dossier - l'analyse initiale n'est jamais r\xC3\xA9" "\xC3\xA9" "crite, on peut comparer. IA indisponible : l'incident est "
+         "gard\xC3\xA9, l'analyse en attente, \xC3\xA0 relancer. La surveillance n'attend jamais le r\xC3\xA9seau.",
+         "incidents", ""),
+        note("1.20.0", "Incidents", Kind::New,
+         "IMMUABLE, PUIS VALID\xC3\x89 : un incident garde exactement le projet de son moment (une alarme renomm\xC3\xA9" "e ou supprim\xC3\xA9" "e, "
+         "un \xC3\xA9quipement retir\xC3\xA9, une vue modifi\xC3\xA9" "e n'y changent rien) ; chaque fichier a son empreinte SHA-256 "
+         "(empreintes.sha256, v\xC3\xA9rifiable avec sha256sum). Valider le copie dans valides/, v\xC3\xA9rifie chaque empreinte, puis "
+         "seulement retire l'original ; un nom n'est jamais \xC3\xA9" "cras\xC3\xA9. Un arr\xC3\xAAt brutal pendant l'\xC3\xA9" "criture est "
+         "repris au d\xC3\xA9marrage ; un disque plein est dit, l'incident gard\xC3\xA9 en m\xC3\xA9moire et r\xC3\xA9" "essay\xC3\xA9.",
+         "incidents", ""),
+        note("1.20.0", "Incidents", Kind::New,
+         "LE VOLET INCIDENTS ET L'ASSISTANT DE DIAGNOSTIC : la liste des incidents en attente et valid\xC3\xA9s (miniature, alarme, "
+         "\xC3\xA9quipement, vue, synth\xC3\xA8se, certitude), la fiche d\xC3\xA9pliable, la vid\xC3\xA9o, les analyses c\xC3\xB4te \xC3\xA0 "
+         "c\xC3\xB4te, commenter, relancer l'analyse, valider, supprimer ; et dans l'Assistant : \xC2\xAB Pourquoi cette alarme est-elle "
+         "apparue ? \xC2\xBB, \xC2\xAB Compare les trois derniers incidents de la pompe 2 \xC2\xBB, \xC2\xAB Quel \xC3\xA9quipement est "
+         "commun \xC3\xA0 ces d\xC3\xA9" "fauts ? \xC2\xBB, \xC2\xAB Les d\xC3\xA9" "fauts de communication expliquent-ils les alarmes de "
+         "mesure ? \xC2\xBB. XPGAnalyser aide \xC3\xA0 comprendre un \xC3\xA9v\xC3\xA9nement : ce n'est pas un syst\xC3\xA8me de "
+         "s\xC3\xA9" "curit\xC3\xA9.",
+         "incidents", ""),
         // 1.19.0 : l'IA qui concoit et construit des projets complets
         note("1.19.0", "Assistant IA", Kind::New,
          "UNE INSTALLATION COMPL\xC3\x88TE, SANS CONNEXION : l'IA int\xC3\xA9gr\xC3\xA9" "e con\xC3\xA7oit une station de pompage (\xC2\xAB Cr\xC3\xA9" "e une "

@@ -4408,6 +4408,134 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.19.0"},
+        // ---- Concevoir les vues  L'Assistant IA / incidents
+        {"incidents", "Les incidents : enregistrement et analyse", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Quand une alarme appara\xC3\xAEt en simulation ou au poste d'exploitation, l'IHM cr\xC3\xA9" "e "
+         "toute seule un dossier d'incident : l'image et une vid\xC3\xA9o de la vue, l'alarme telle qu'elle "
+         "\xC3\xA9tait, ce \xC3\xA0 quoi elle est reli\xC3\xA9" "e dans le projet, les valeurs du moment, la "
+         "chronologie, une fiche de diagnostic et l'analyse de l'IA. Tu le consultes, le commentes et le "
+         "valides.",
+         {
+             {K::Heading, "Ce qui d\xC3\xA9" "clenche un incident", {}},
+             {K::Paragraph, "La surveillance suit les **fronts**, jamais chaque cycle :", {}},
+             {K::Table, "\xC3\x89v\xC3\xA9nement\tIncident ?\nUne alarme appara\xC3\xAEt\tOui, "
+                         "aussit\xC3\xB4t, sans geste.\nElle r\xC3\xA9" "appara\xC3\xAEt apr\xC3\xA8s avoir "
+                         "disparu\tOui (un nouvel incident). Dans le d\xC3\xA9lai anti-rebond (5 s par "
+                         "d\xC3\xA9" "faut) : le m\xC3\xAAme.\nElle reste active\tNon : le **maintien** est "
+                         "not\xC3\xA9 une fois dans la chronologie (apr\xC3\xA8s 30 s par "
+                         "d\xC3\xA9" "faut).\nElle dispara\xC3\xAEt, elle est acquitt\xC3\xA9" "e\tNon : "
+                         "not\xC3\xA9 dans la chronologie, avec sa dur\xC3\xA9" "e.\nUn \xC3\xA9quipement "
+                         "devient injoignable\tOui (r\xC3\xA9glable) ; son retour est not\xC3\xA9.", {}},
+             {K::Paragraph, "Plusieurs alarmes au m\xC3\xAAme instant font chacune leur incident ; chacun voit "
+                         "les autres.", {}},
+             {K::Heading, "Ce que contient un dossier", {}},
+             {K::Paragraph, "Un dossier par incident, dans **ihm/ressources/enregistrements/en attente/** (le "
+                         "nom : date, heure, alarme, identifiant) :", {}},
+             {K::Table, "Fichier\tContenu\ncapture.jpg\tLa vue en marche dessin\xC3\xA9" "e juste "
+                         "apr\xC3\xA8s le cycle de l'alarme. Une **image** : elle n'est jamais "
+                         "pr\xC3\xA9sent\xC3\xA9" "e comme une vid\xC3\xA9o.\nvideo.avi\tUne **vid\xC3\xA9o "
+                         "Motion-JPEG** des secondes d'avant et d'apr\xC3\xA8s (un tampon circulaire : 10 s "
+                         "avant, 5 s apr\xC3\xA8s, 2 images par seconde par d\xC3\xA9" "faut). Le lecteur "
+                         "Vid\xC3\xA9o de l'IHM la lit.\nincident.json\tLe contexte **copi\xC3\xA9** : "
+                         "l'alarme (identifiant, nom, description, condition, priorit\xC3\xA9, d\xC3\xA9lai, "
+                         "groupe), son \xC3\xA9tat et son horodatage, le projet et sa version, les variables "
+                         "de la condition et leurs valeurs, la cha\xC3\xAEne de d\xC3\xA9pendances, les "
+                         "alarmes actives et li\xC3\xA9" "es, la chronologie, les pistes, les "
+                         "\xC3\xA9quipements, la vue affich\xC3\xA9" "e et ses objets concern\xC3\xA9s, les "
+                         "incidents pr\xC3\xA9" "c\xC3\xA9" "dents de la m\xC3\xAAme "
+                         "alarme.\nanalyses/\tL'analyse **initiale** (la fiche, 000-initiale.json), puis "
+                         "chaque nouvelle analyse dans son propre fichier.\ncommentaires/\tUn fichier par "
+                         "commentaire.\nempreintes.sha256\tL'empreinte SHA-256 de chaque fichier (le format "
+                         "de sha256sum : v\xC3\xA9rifiable hors du logiciel).", {}},
+             {K::Warning, "Une valeur que l'IHM n'avait pas au moment du d\xC3\xA9" "faut est dite \xC2\xAB "
+                         "non disponible \xC2\xBB : jamais invent\xC3\xA9" "e.", {}},
+             {K::Heading, "La cha\xC3\xAEne de d\xC3\xA9pendances", {}},
+             {K::Paragraph, "Lue dans le graphe des relations du projet, en partant de la condition de l'alarme "
+                         ": les variables qu'elle lit (un membre de structure compris), leur structure, leur "
+                         "\xC3\xA9quipement et leur adresse, les scripts et fonctions qui les "
+                         "\xC3\xA9" "crivent ou les lisent, les vues et objets qui les montrent, les autres "
+                         "alarmes qui les lisent ; puis un niveau plus loin, ce que lisent les traitements "
+                         "qui \xC3\xA9" "crivent la condition. Chaque maillon a sa certitude : **fait "
+                         "v\xC3\xA9rifi\xC3\xA9** (lu dans le projet) ou **relation indirecte**. Les autres "
+                         "alarmes sont rang\xC3\xA9" "es : **d\xC3\xA9pendance technique commune** "
+                         "(m\xC3\xAAme variable, m\xC3\xAAme \xC3\xA9quipement), **apparue au m\xC3\xAAme "
+                         "moment**, **potentiellement secondaire** (apr\xC3\xA8s une perte de communication "
+                         "de l'\xC3\xA9quipement), **ind\xC3\xA9pendante**.", {}},
+             {K::Heading, "La fiche de diagnostic", {}},
+             {K::Paragraph, "Dix sections, chacune d\xC3\xA9pliable : 1. R\xC3\xA9sum\xC3\xA9, 2. Alarme "
+                         "d\xC3\xA9" "clench\xC3\xA9" "e, 3. Origine des donn\xC3\xA9" "es, 4. Cha\xC3\xAEne "
+                         "de d\xC3\xA9pendances, 5. Autres alarmes, 6. Chronologie, 7. Analyse technique, 8. "
+                         "Causes potentielles, 9. \xC3\x89l\xC3\xA9ments \xC3\xA0 v\xC3\xA9rifier, 10. "
+                         "Niveau de certitude. Les causes sont des **pistes** class\xC3\xA9" "es, chacune "
+                         "avec ce qui l'appuie : \xC2\xAB peut expliquer \xC2\xBB, jamais \xC2\xAB a "
+                         "caus\xC3\xA9 \xC2\xBB.", {}},
+             {K::Warning, "L'ordre d'apparition n'est pas une preuve de causalit\xC3\xA9.", {}},
+             {K::Heading, "L'analyse par l'IA", {}},
+             {K::Paragraph, "La fiche est faite sur ce PC, aussit\xC3\xB4t. Si l'Assistant utilise une IA "
+                         "connect\xC3\xA9" "e, elle re\xC3\xA7oit ensuite, **en arri\xC3\xA8re-plan**, un "
+                         "contexte cibl\xC3\xA9 (l'incident, pas tout le projet, born\xC3\xA9) et sa "
+                         "r\xC3\xA9ponse est **ajout\xC3\xA9" "e** au dossier, avec sa source et sa "
+                         "certitude. Une nouvelle analyse est un fichier de plus : l'analyse initiale n'est "
+                         "jamais r\xC3\xA9\xC3\xA9" "crite, et tu peux les comparer. La m\xC3\xAAme demande "
+                         "au m\xC3\xAAme mod\xC3\xA8le n'est pas renvoy\xC3\xA9" "e (le cache). IA "
+                         "indisponible (pas de cl\xC3\xA9, pas de r\xC3\xA9seau, service en erreur) : "
+                         "l'incident est gard\xC3\xA9, l'analyse marqu\xC3\xA9" "e **en attente** ; "
+                         "relance-la plus tard. La surveillance n'attend jamais la r\xC3\xA9ponse d'un "
+                         "mod\xC3\xA8le.", {}},
+             {K::Heading, "Le volet Incidents", {}},
+             {K::Paragraph, "La liste des incidents **en attente** et **valid\xC3\xA9s** : miniature, nom, "
+                         "date, alarme, \xC3\xA9quipement, vue, synth\xC3\xA8se de l'analyse, certitude, "
+                         "\xC3\xA9tat. Pour chacun : consulter la fiche, voir l'analyse compl\xC3\xA8te et "
+                         "la comparer, explorer les d\xC3\xA9pendances (un clic ouvre "
+                         "l'\xC3\xA9l\xC3\xA9ment du projet quand il existe encore), commenter, demander une "
+                         "nouvelle analyse, **valider**, supprimer (en attente seulement). **Valider** copie "
+                         "le dossier dans **ihm/ressources/enregistrements/valides/**, v\xC3\xA9rifie chaque "
+                         "empreinte de la copie, ajoute la validation (date, auteur, note), puis seulement "
+                         "retire l'original. Un nom n'est jamais \xC3\xA9" "cras\xC3\xA9 ; un incident "
+                         "alt\xC3\xA9r\xC3\xA9 n'est pas valid\xC3\xA9.", {}},
+             {K::Heading, "Immuable", {}},
+             {K::Paragraph, "Un incident garde le projet **de son moment** : une alarme renomm\xC3\xA9" "e ou "
+                         "supprim\xC3\xA9" "e, un \xC3\xA9quipement retir\xC3\xA9, une vue "
+                         "modifi\xC3\xA9" "e n'y changent rien. Rien n'est recalcul\xC3\xA9 depuis le projet "
+                         "d'aujourd'hui.", {}},
+             {K::Heading, "Les r\xC3\xA9glages", {}},
+             {K::Paragraph, "Dans le volet : surveillance active, alarmes surveill\xC3\xA9" "es (vide : toutes "
+                         "; * permis, ex. Defaut_*), alarmes ignor\xC3\xA9" "es, d\xC3\xA9" "fauts de "
+                         "communication, secondes avant et apr\xC3\xA8s, images par seconde, maintien, "
+                         "anti-rebond. Ils sont gard\xC3\xA9s avec le projet "
+                         "(ihm/ressources/enregistrements/reglages-incidents.json).", {}},
+             {K::Heading, "Robustesse", {}},
+             {K::Bullet, "Les images sont copi\xC3\xA9" "es sur le fil de l'interface et cod\xC3\xA9" "es "
+                         "ailleurs ; les dossiers sont \xC3\xA9" "crits en arri\xC3\xA8re-plan.", {}},
+             {K::Bullet, "Un arr\xC3\xAAt brutal pendant l'\xC3\xA9" "criture : au prochain "
+                         "d\xC3\xA9marrage, le dossier est termin\xC3\xA9 (ou mis \xC3\xA0 part s'il est "
+                         "incomplet).", {}},
+             {K::Bullet, "Disque plein : c'est dit dans le journal, l'incident est gard\xC3\xA9 en "
+                         "m\xC3\xA9moire et r\xC3\xA9" "essay\xC3\xA9.", {}},
+             {K::Heading, "Dans l'Assistant", {}},
+             {K::Paragraph, "\xC2\xAB Pourquoi cette alarme est-elle apparue ? \xC2\xBB, \xC2\xAB Retrouve "
+                         "toute la cha\xC3\xAEne de d\xC3\xA9pendances de cette alarme \xC2\xBB, \xC2\xAB "
+                         "Quelles variables peuvent \xC3\xAAtre \xC3\xA0 l'origine de ce d\xC3\xA9" "faut ? "
+                         "\xC2\xBB, \xC2\xAB Pourquoi cinq alarmes sont-elles apparues en m\xC3\xAAme temps "
+                         "? \xC2\xBB, \xC2\xAB Est-ce que cette alarme est d\xC3\xA9j\xC3\xA0 apparue dans "
+                         "le pass\xC3\xA9 ? \xC2\xBB, \xC2\xAB Compare les trois derniers incidents de la "
+                         "pompe 2 \xC2\xBB, \xC2\xAB Quel \xC3\xA9quipement est commun \xC3\xA0 ces "
+                         "d\xC3\xA9" "fauts ? \xC2\xBB, \xC2\xAB Les d\xC3\xA9" "fauts de communication "
+                         "expliquent-ils les alarmes de mesure ? \xC2\xBB, \xC2\xAB Fais-moi un diagnostic "
+                         "complet de cet incident \xC2\xBB : l'IA r\xC3\xA9pond \xC3\xA0 partir des dossiers "
+                         "et du projet.", {}},
+             {K::Warning, "XPGAnalyser aide \xC3\xA0 comprendre un \xC3\xA9v\xC3\xA9nement. Ce n'est pas un "
+                         "syst\xC3\xA8me de s\xC3\xA9" "curit\xC3\xA9 ni une surveillance "
+                         "d\xC3\xA9terministe de la logique de l'automate.", {}},
+         },
+         {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
+         {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},
+         {"ai.panneau"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.20.0"},
         // ---- Concevoir les vues  L'Assistant IA / assistant-ia-integree
         {"assistant-ia-integree", "L'IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion)", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
          "Une IA \xC3\xA9" "crite dans le logiciel : elle comprend des demandes simples en "
