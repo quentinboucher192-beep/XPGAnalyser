@@ -54,6 +54,15 @@
 //  (chosen_) : cache dans un dossier ferme, c'est le dossier qui est choisi,
 //  et les gestes (consulter, commenter, valider, supprimer...) portent sur
 //  lui - le plus recent du dossier quand on choisit le dossier lui-meme.
+//
+//  1.21.0 : UNE ALARME QUI BAT (ses reapparitions regroupees par l'hote, voir
+//  HmiIncidentHost.hpp). Sur sa ligne, un badge << x327 >> (un dossier
+//  d'alarme : le total) ; dans la fiche, la section << Reapparitions >> (le
+//  nombre, la premiere, la derniere, la frequence, un histogramme par heure et
+//  un par minute aux couleurs du theme, le diagnostic en clair, les dernieres) ;
+//  le tri << Nombre de reapparitions >> ; la barre d'etat dit le plafond horaire
+//  et le quota disque. La rafale en cours vient de l'hote (a jour, la fiche
+//  refaite au plus une fois par seconde) ; finie, du dossier (reapparitions.json).
 // =============================================================================
 #pragma once
 

@@ -1085,7 +1085,7 @@ void burstHost() {
                 if (const auto* live = h.reappearances(id)) peak = std::max(peak, live->memoryBytes());
         }
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c0).count();
-        std::printf("  %d reapparitions (600 000 avis, 600 000 images du moteur) en %.0f ms\n", kN, ms);
+        std::printf("  %d reapparitions (600 000 avis, 600 000 tops de l'hote) en %.0f ms\n", kN, ms);
         const double last = 100.0 + 2.0 * kN;
         check(h.created() == 1 && h.listing()->pending.size() == 1, "R2 300 000 reapparitions toutes les 2 s : UN seul incident, un seul dossier");
         const inc::Burst* b = h.reappearances(id);
@@ -1135,6 +1135,7 @@ void burstHost() {
         check(h.drain(20000), "R5 les ecritures finies");
         const std::string text = readText((fs::path(folder) / "reapparitions.json").string());
         check(!text.empty() && text.size() < 32u * 1024u, "R5 reapparitions.json borne : " + std::to_string(text.size()) + " octets");
+        std::printf("  la rafale : %zu octets en memoire ; reapparitions.json : %zu octets\n", b ? b->memoryBytes() : std::size_t{0}, text.size());
         app::ai::json::Value doc;
         inc::Burst back;
         check(app::ai::json::parse(text, doc) && st::fromJson(doc, back), "R5 reapparitions.json relu");
