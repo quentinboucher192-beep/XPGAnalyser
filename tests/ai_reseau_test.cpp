@@ -966,6 +966,37 @@ void testTextParts() {
               "la suite : le TEXTE EXACT des lignes 5000 et 5001 en tool_result");
         check(!toolSeen && dones == 1 && readStatus && allText(ev) == "Je lis la ligne. La ligne 5000 dit Pompe_5000.",
               "le panneau : le texte suivi, l'etat << Lecture exacte >>, une seule fin, aucun appel d'outil visible");
+        // compatible OpenAI : pareil (l'appel en tool_calls, la reponse en role tool)
+        g_net.reset();
+        const auto oaData = [](const std::string& json) { return "data: " + json + "\n\n"; };
+        const std::string oaArgs = "{\\\"fichier\\\": \\\"mesures.csv\\\", \\\"de_ligne\\\": 5000, \\\"a_ligne\\\": 5001}";
+        g_net.push(sseReply(oaData(R"({"choices":[{"index":0,"delta":{"role":"assistant","content":"Je lis la ligne. "},"finish_reason":null}]})")
+                            + oaData(R"({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_lire","type":"function","function":{"name":"lire_piece_jointe","arguments":")"
+                                     + oaArgs + R"("}}]},"finish_reason":null}]})")
+                            + oaData(R"({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]})") + "data: [DONE]\n\n"));
+        g_net.push(sseReply(oaData(R"({"choices":[{"index":0,"delta":{"content":"La ligne 5000 dit Pompe_5000."},"finish_reason":"stop"}]})")
+                            + "data: [DONE]\n\n"));
+        ai::OpenAIProvider::Options oo;
+        oo.firstDelay = 0.01;
+        ai::OpenAIProvider q(oo);
+        ai::ProviderRequest ro = r;
+        ro.endpoint = "https://service.exemple/v1";
+        (void)q.start(ro);
+        const auto ev2 = runToEnd(q, 10000);
+        const std::size_t n2 = g_net.count();
+        const std::string ask2 = g_net.at(n2 - 2).body, cont2 = g_net.at(n2 - 1).body;
+        int dones2 = 0;
+        bool toolSeen2 = false, readStatus2 = false;
+        for (const auto& e : ev2) {
+            if (e.type == ai::ProviderEvent::Type::Done) ++dones2;
+            if (e.type == ai::ProviderEvent::Type::ToolUse) toolSeen2 = true;
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "lecture" && has(e.detail, "Lecture exacte")) readStatus2 = true;
+        }
+        check(has(ask2, "lire_piece_jointe") && has(cont2, "\"tool\"") && has(cont2, "call_lire") && has(cont2, "Pompe_5000;")
+                  && has(cont2, "texte exact"),
+              "compatible OpenAI : l'outil offert, le texte exact en role tool");
+        check(!toolSeen2 && dones2 == 1 && readStatus2 && allText(ev2) == "Je lis la ligne. La ligne 5000 dit Pompe_5000.",
+              "compatible OpenAI : le panneau, une seule fin, aucun appel d'outil visible");
         ai::textparts::Library lib;
         ai::textparts::Library::File file;
         file.name = "a.txt";
