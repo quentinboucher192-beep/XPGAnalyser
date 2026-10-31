@@ -1442,6 +1442,7 @@ LocalReply Engine::notUnderstood() const {
              "ouverte (cr\xC3\xA9" "er, modifier, associer, aligner, supprimer...), pas tout le fran\xC3\xA7" "ais. Essaie une de ces "
              "formulations, ou demande-moi **ce que je sais faire**.";
     r.suggestions = examples();
+    r.understood = false;
     return r;
 }
 

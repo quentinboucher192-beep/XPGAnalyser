@@ -44,6 +44,9 @@ struct LocalReply {
     std::string              text;          // la reponse (markdown simple, au tutoiement)
     std::optional<Proposal>  proposal;      // nullopt : rien a proposer (une question, pas compris)
     std::vector<std::string> suggestions;   // des formulations comprises (quand la demande ne l'est pas)
+    // 1.16.1 : faux - la demande n'est pas comprise (ou trop mal pour proposer) ; l'Assistant peut alors la passer a
+    // l'IA connectee (le relais, Settings::relay), qui comprend le langage courant.
+    bool                     understood{true};
 };
 
 // La demande `request` sur le projet et la vue de `in` (le contexte, comme pour un vrai fournisseur).
