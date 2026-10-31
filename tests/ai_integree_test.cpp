@@ -24,7 +24,10 @@
 #include "../src/hmi/HmiModel.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -885,6 +888,411 @@ void testHelpPhrases() {
     }
 }
 
+
+// ======================================= 1.16.1 : comprendre la demande, pas la decouper ====
+std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+// Les noms qu'une proposition pose : objets, vue, type et ses membres, variables, copies.
+std::vector<std::string> proposedNames(const ai::LocalReply& r) {
+    std::vector<std::string> out;
+    if (!r.proposal) return out;
+    for (const auto& op : r.proposal->ops) {
+        if (op.action == ai::Operation::Action::Create || op.action == ai::Operation::Action::View || op.action == ai::Operation::Action::Type)
+            out.push_back(op.name);
+        for (const auto& m : op.members) out.push_back(m.name);
+        for (const auto& v : op.variables) out.push_back(v.name);
+        for (const auto& n : op.names) out.push_back(n);
+    }
+    return out;
+}
+std::string joined(const std::vector<std::string>& v) {
+    std::string s;
+    for (const auto& x : v) s += (s.empty() ? "" : ", ") + x;
+    return s;
+}
+// Un nom absurde : un mot-outil du francais, un mot de remplissage, ou un verbe d'une demande.
+bool absurdName(const std::string& n) {
+    static const std::set<std::string> k = {
+        "pour", "qui", "que", "avec", "de", "du", "des", "le", "la", "les", "l", "un", "une", "son", "sa", "ses", "mon", "ma", "mes", "ce",
+        "cet", "cette", "nouveau", "nouvelle", "et", "ou", "en", "a", "au", "aux", "dont", "par", "sur", "dans", "il", "elle", "je", "tu",
+        "me", "moi", "s", "d", "j", "exemple", "etc", "gestion", "membres", "membre", "champs", "donnee", "donnees", "truc", "machin",
+        "quelque", "chose", "notamment", "comme", "gerer", "gere", "appelle", "appele", "appelee", "nomme", "nommee", "cree", "creer",
+        "creez", "ajoute", "ajouter", "rajoute", "mets", "met", "mettre", "pose", "place", "fais", "faire", "veux", "voudrais", "peux",
+        "faut", "faudrait", "aimerais", "definis"};
+    return k.count(lowerAscii(n)) != 0;
+}
+const ai::Operation* typeOp(const ai::LocalReply& r) {
+    if (!r.proposal) return nullptr;
+    for (const auto& op : r.proposal->ops)
+        if (op.action == ai::Operation::Action::Type) return &op;
+    return nullptr;
+}
+const ai::Operation::MemberSpec* member(const ai::Operation& op, const std::string& name) {
+    for (const auto& m : op.members)
+        if (m.name == name) return &m;
+    return nullptr;
+}
+std::string memberList(const ai::Operation* op) {
+    if (!op) return "-";
+    std::string s = op->name + " :";
+    for (const auto& m : op->members) s += " " + m.name + "/" + m.type;
+    return s;
+}
+bool asciiIdentifier(const std::string& s) {
+    if (s.empty() || std::isdigit(static_cast<unsigned char>(s[0]))) return false;
+    return std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
+}
+
+// 1.16.1 - 1. Creer un type : le nom et les membres compris dans la phrase (la capture de l'utilisateur).
+void testTypeUnderstood() {
+    std::printf("[1.16.1 : creer un type, compris]\n");
+    Bench b;
+    auto r = b.ask("Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs");
+    const auto* op = typeOp(r);
+    check(op && op->name == "T_Capteur", "un type pour gerer les capteurs : T_Capteur, pas << pour >> (" + memberList(op) + " " + r.text + ")");
+    check(op && !member(*op, "Gerer") && !member(*op, "capteurs") && member(*op, "Mesure"), "ses membres : un modele, pas Gerer ni capteurs");
+    if (op) valid(b, r, "un type pour gerer les capteurs");
+    r = b.ask("Non je veux cr\xC3\xA9" "er une structure qui s'appelle Capteur avec des membres de gestion, par exemple son type, sa mesure etc, ses defauts");
+    op = typeOp(r);
+    check(op && op->name == "Capteur", "une structure qui s'appelle Capteur : le type Capteur, pas << qui >> (" + memberList(op) + " " + r.text + ")");
+    if (op) {
+        check(op->members.size() >= 3 && op->members[0].name == "Type" && op->members[1].name == "Mesure" && op->members[2].name == "Defauts",
+              "ses membres d'abord : Type, Mesure, Defauts (" + memberList(op) + ")");
+        check(op->members.size() >= 3 && op->members[0].type == "STRING" && op->members[1].type == "REAL" && op->members[2].type == "BOOL",
+              "leurs types : STRING, REAL, BOOL (" + memberList(op) + ")");
+        for (const char* bad : {"appelle", "Capteur", "gestion", "Gestion", "exemple", "Exemple", "etc", "Etc", "qui", "membres", "Membres"})
+            check(!member(*op, bad), std::string("aucun membre << ") + bad + " >> (" + memberList(op) + ")");
+        check(op->members.size() == 3 || has(r.text, "compl\xC3\xA9t\xC3\xA9"), "des membres ajoutes au modele : dits (" + r.text + ")");
+        valid(b, r, "la structure Capteur");
+    }
+    op = typeOp(r = b.ask("Cr\xC3\xA9" "e une structure nomm\xC3\xA9" "e Mesure_Debit avec une mesure, un d\xC3\xA9" "faut et un \xC3\xA9tat"));
+    check(op && op->name == "Mesure_Debit" && op->members.size() == 3 && op->members[0].name == "Mesure" && op->members[0].type == "REAL"
+              && op->members[1].name == "Defaut" && op->members[1].type == "BOOL" && op->members[2].name == "Etat"
+              && (op->members[2].type == "INT" || op->members[2].type == "BOOL"),
+          "avec une mesure, un defaut et un etat : Mesure REAL, Defaut BOOL, Etat (" + memberList(op) + ")");
+    op = typeOp(r = b.ask("cr\xC3\xA9" "e un type appel\xC3\xA9 T_Analog comme la mesure et l'unit\xC3\xA9"));
+    check(op && op->name == "T_Analog" && op->members.size() == 2 && op->members[0].name == "Mesure" && op->members[0].type == "REAL"
+              && op->members[1].name == "Unite" && op->members[1].type == "STRING",
+          "comme la mesure et l'unite : Mesure REAL, Unite STRING (" + memberList(op) + ")");
+    op = typeOp(r = b.ask("Cr\xC3\xA9" "e un type T_Cuve avec un niveau, un volume et une alarme haute"));
+    check(op && op->name == "T_Cuve" && op->members.size() == 3 && op->members[0].name == "Niveau" && op->members[0].type == "REAL"
+              && op->members[1].name == "Volume" && op->members[1].type == "REAL" && op->members[2].name == "AlarmeHaute" && op->members[2].type == "BOOL",
+          "un niveau, un volume et une alarme haute : Niveau, Volume, AlarmeHaute (" + memberList(op) + ")");
+    op = typeOp(r = b.ask("Je veux une structure Moteur avec marche, d\xC3\xA9" "faut, courant"));
+    check(op && op->name == "Moteur" && op->members.size() == 3 && op->members[0].name == "Marche" && op->members[0].type == "BOOL"
+              && op->members[1].name == "Defaut" && op->members[2].name == "Courant" && op->members[2].type == "REAL",
+          "des membres en minuscules : Marche, Defaut, Courant (" + memberList(op) + ")");
+    op = typeOp(r = b.ask("D\xC3\xA9" "finis une structure T_Regul avec Mesure, Consigne et Sortie en REAL"));
+    check(op && op->members.size() == 3 && std::all_of(op->members.begin(), op->members.end(), [](const auto& m) { return m.type == "REAL"; }),
+          "Mesure, Consigne et Sortie en REAL (" + memberList(op) + ")");
+    // sans nom sur, sans modele : elle demande
+    r = b.ask("Cr\xC3\xA9" "e un type avec Marche et Defaut");
+    check(!r.proposal && has(r.text, "nom"), "un type sans nom (des membres, aucun modele) : son nom demande (" + r.text + ")");
+    r = b.ask("Cr\xC3\xA9" "e un nouveau type");
+    check(!r.proposal && has(r.text, "Quel nom"), "un nouveau type : son nom demande, pas << nouveau >> (" + r.text + ")");
+    // "de type ..." precise un objet : ce n'est pas un type a creer
+    r = b.ask("Ajoute une pompe de type centrifuge");
+    check(countKind(r, "Pump") == 1 && !typeOp(r), "une pompe de type centrifuge : une pompe, pas un type (" + r.text + ")");
+}
+
+// 1.16.1 - 2. Les modeles metier : un type sans membres dits part d'un modele classique, et le dit.
+void testTypeModels() {
+    std::printf("[1.16.1 : les modeles metier]\n");
+    Bench b;
+    struct Case {
+        std::string                                       phrase, name;
+        std::vector<std::pair<std::string, std::string>>  must;   // un type vide : seulement present
+    };
+    const std::vector<Case> cases = {
+        {"Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs", "T_Capteur",
+         {{"Mesure", "REAL"}, {"Unite", "STRING"}, {"Min", "REAL"}, {"Max", "REAL"}, {"SeuilHaut", "REAL"}, {"SeuilBas", "REAL"},
+          {"AlarmeHaute", "BOOL"}, {"AlarmeBasse", "BOOL"}, {"Defaut", "BOOL"}}},
+        {"il me faut un type pour un capteur TOR", "T_CapteurTOR", {{"Etat", "BOOL"}, {"Defaut", "BOOL"}}},
+        {"Cr\xC3\xA9" "e une structure pour une pompe", "T_Pompe", {{"Marche", "BOOL"}, {"Defaut", "BOOL"}, {"Auto", "BOOL"}, {"Commande", "BOOL"}, {"HeuresMarche", ""}}},
+        {"une structure pour une pompe", "T_Pompe", {{"Marche", "BOOL"}}},
+        {"Cr\xC3\xA9" "e un type Vanne", "Vanne", {{"Ouverte", "BOOL"}, {"Fermee", "BOOL"}, {"Commande", "BOOL"}, {"Defaut", "BOOL"}}},
+        {"un type Vanne", "Vanne", {{"Ouverte", "BOOL"}}},
+        {"je voudrais un type moteur", "T_Moteur", {{"Marche", "BOOL"}, {"Defaut", "BOOL"}}},
+        {"peux-tu me faire une structure pour un variateur ?", "T_Variateur", {{"Consigne", "REAL"}, {"Vitesse", "REAL"}}},
+        {"Cr\xC3\xA9" "e un type pour une cuve", "T_Cuve", {{"Niveau", "REAL"}}},
+        {"Il me faut un type de donn\xC3\xA9" "es pour un capteur de pression", "T_Capteur", {{"Mesure", "REAL"}}},
+        {"Pourrais-tu me cr\xC3\xA9" "er un type Pompe ?", "Pompe", {{"Marche", "BOOL"}}},
+    };
+    static const std::set<std::string> known = {"BOOL", "INT", "DINT", "UINT", "UDINT", "WORD", "DWORD", "REAL", "LREAL", "STRING", "TIME"};
+    for (const auto& c : cases) {
+        const auto r = ai::understand(b.input(), c.phrase, {});
+        const auto* op = typeOp(r);
+        check(op && op->name == c.name, c.phrase + " : le type " + c.name + " (" + memberList(op) + " " + r.text + ")");
+        if (!op) continue;
+        check(r.proposal->ops.size() == 1, c.phrase + " : un type seul (aucun objet pose)");
+        for (const auto& [n, t] : c.must) {
+            const auto* m = member(*op, n);
+            check(m && (t.empty() || m->type == t), c.phrase + " : le membre " + n + " " + t + " (" + memberList(op) + ")");
+        }
+        bool clean = true, described = true;
+        for (const auto& m : op->members) {
+            clean = clean && asciiIdentifier(m.name) && known.count(m.type);
+            described = described && !m.description.empty();
+        }
+        check(clean, c.phrase + " : des noms sans accent, des types connus (" + memberList(op) + ")");
+        check(described && std::any_of(op->props.begin(), op->props.end(), [](const auto& kv) { return kv.first == "description" && !kv.second.empty(); }),
+              c.phrase + " : le type et ses membres decrits");
+        check(has(r.text, "mod\xC3\xA8le de d\xC3\xA9part") && has(r.text, "adapter") && has(r.text, "aper\xC3\xA7u"),
+              c.phrase + " : dit (un modele de depart, a adapter, l'apercu) : " + r.text);
+        valid(b, r, c.phrase);
+    }
+    // le nom d'un modele deja pris : dit, et un autre propose
+    auto r = b.ask("Cr\xC3\xA9" "e une structure pour une pompe");
+    check(b.apply(r) && b.doc->project.hmiTypeByName("T_Pompe"), "T_Pompe cree (applique)");
+    r = b.ask("Cr\xC3\xA9" "e une structure pour une pompe");
+    const auto* op = typeOp(r);
+    check(op && op->name != "T_Pompe" && op->name.rfind("T_Pompe", 0) == 0 && has(r.text, "existe d\xC3\xA9j\xC3\xA0"),
+          "T_Pompe pris : un autre nom propose, et dit (" + memberList(op) + " " + r.text + ")");
+    if (op) valid(b, r, "le modele sous un autre nom");
+    r = b.ask("Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL");
+    check(!r.proposal && has(r.text, "existe d\xC3\xA9j\xC3\xA0") && has(r.text, "T_Pompe_2"), "un nom donne deja pris : dit, un autre nom propose (" + r.text + ")");
+    // des membres dits : les siens seulement (le modele ne s'ajoute que sur << par exemple >>, << etc >>)
+    const auto* op2 = typeOp(r = b.ask("Cr\xC3\xA9" "e un type T_Vanne2 pour une vanne avec Ouverte et Fermee"));
+    check(op2 && op2->members.size() == 2, "une vanne avec Ouverte et Fermee : ces deux membres (" + memberList(op2) + ")");
+    op2 = typeOp(r = b.ask("Cr\xC3\xA9" "e un type T_Vanne3 pour une vanne avec par exemple Ouverte et Fermee"));
+    check(op2 && op2->members.size() > 2 && op2->members[0].name == "Ouverte" && member(*op2, "Commande") && has(r.text, "compl\xC3\xA9t\xC3\xA9"),
+          "par exemple : les siens d'abord, le modele complete, et dit (" + memberList(op2) + ")");
+}
+
+// 1.16.1 - 3. Le garde-fou : aucun nom propose n'est un mot-outil ni un verbe de la demande.
+void testNameGuard() {
+    std::printf("[1.16.1 : jamais un mot-outil pour nom]\n");
+    Bench b;
+    for (const std::string phrase : {"ajoute une pompe appel\xC3\xA9" "e Pour", "cr\xC3\xA9" "e une vue qui s'appelle Avec", "renomme Cuve_1 en Pour",
+                                     "Cr\xC3\xA9" "e une structure qui s'appelle Nouveau", "Cr\xC3\xA9" "e une structure qui s'appelle Gerer avec une mesure",
+                                     "Cr\xC3\xA9" "e la variable Pour en BOOL", "ajoute un voyant nomm\xC3\xA9 Avec", "cr\xC3\xA9" "e une vue appel\xC3\xA9" "e De"}) {
+        const auto r = ai::understand(b.input(), phrase, {});
+        check(!r.proposal && !r.text.empty(), phrase + " : aucune proposition, une question (" + joined(proposedNames(r)) + ")");
+    }
+    // un vrai nom passe
+    auto r = b.ask("ajoute une pompe appel\xC3\xA9" "e Pompe_Eau");
+    check(r.proposal && r.proposal->ops.size() == 1 && r.proposal->ops.front().name == "Pompe_Eau", "un vrai nom : pris");
+}
+
+// 1.16.1 - 4. Une demande trop mal comprise : understood = false (l'Assistant peut la passer a une IA connectee).
+void testUnderstoodFlag() {
+    std::printf("[1.16.1 : understood]\n");
+    Bench b;
+    for (const std::string phrase : {"Cr\xC3\xA9" "e un type pour le truc", "il me faut un machin pour le process", "fais un truc sympa",
+                                     "je veux cr\xC3\xA9" "er quelque chose", "raconte-moi une blague"}) {
+        const auto r = ai::understand(b.input(), phrase, {});
+        check(!r.proposal && !r.understood && !r.text.empty() && !r.suggestions.empty() && shortAll(r.suggestions),
+              phrase + " : understood = false, un texte honnete et des suggestions (" + r.text + ")");
+    }
+    for (const std::string phrase : {"ajoute 3 pompes", "Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs", "mets P1 en rouge", "Cr\xC3\xA9" "e un type",
+                                     "supprime la pompe", "Que sais-tu faire ?"}) {
+        const auto r = ai::understand(b.input(), phrase, {});
+        check(r.understood, phrase + " : compris (une proposition, ou une question sur ce qui manque)");
+    }
+}
+
+// 1.16.1 - 5. Un corpus de robustesse : des phrases d'automaticien. Chacune donne la bonne proposition, ou
+// une question, ou understood = false - jamais une proposition absurde (un nom pris dans un mot-outil).
+using Pred = std::function<bool(const ai::LocalReply&)>;
+Pred makes(std::string kind, std::size_t n) {
+    return [=](const ai::LocalReply& r) { return countKind(r, kind) == n && r.proposal->ops.size() == n; };
+}
+Pred makesNamed(std::string kind, std::string name) {
+    return [=](const ai::LocalReply& r) { return countKind(r, kind) == 1 && r.proposal->ops.front().name == name; };
+}
+Pred modifies(std::string name) {
+    return [=](const ai::LocalReply& r) { return r.proposal && countOps(r, ai::Operation::Action::Modify) >= 1 && opsOn(r, name) == r.proposal->ops.size(); };
+}
+Pred binds(std::string name, std::string var) {
+    return [=](const ai::LocalReply& r) {
+        return r.proposal && r.proposal->ops.size() == 1 && r.proposal->ops[0].action == ai::Operation::Action::Bind && r.proposal->ops[0].name == name
+            && r.proposal->ops[0].variable == var;
+    };
+}
+Pred vars(std::vector<std::pair<std::string, std::string>> want) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = firstOp(r);
+        if (!op || op->action != ai::Operation::Action::Variables || op->variables.size() != want.size()) return false;
+        for (std::size_t i = 0; i < want.size(); ++i)
+            if (op->variables[i].name != want[i].first || op->variables[i].type != want[i].second) return false;
+        return true;
+    };
+}
+Pred typed(std::string name, std::vector<std::string> members) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = typeOp(r);
+        if (!op || op->name != name) return false;
+        return std::all_of(members.begin(), members.end(), [&](const std::string& m) { return member(*op, m) != nullptr; });
+    };
+}
+Pred dups(std::string name) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = firstOp(r);
+        return op && op->action == ai::Operation::Action::Duplicate && op->objects.size() == 1 && op->objects[0] == name;
+    };
+}
+Pred renames(std::string from, std::string to) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = firstOp(r);
+        return op && op->action == ai::Operation::Action::Duplicate && op->objects.size() == 1 && op->objects[0] == from && op->names.size() == 1
+            && op->names[0] == to;
+    };
+}
+Pred removes(std::string name) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = firstOp(r);
+        return op && op->action == ai::Operation::Action::Remove && op->objects.size() == 1 && op->objects[0] == name;
+    };
+}
+Pred newView(std::string name) {
+    return [=](const ai::LocalReply& r) {
+        const auto* op = firstOp(r);
+        return op && op->action == ai::Operation::Action::View && (name.empty() ? op->name.rfind("Vue_", 0) == 0 : op->name == name);
+    };
+}
+Pred asks() {
+    return [](const ai::LocalReply& r) { return !r.proposal && r.understood; };
+}
+Pred lost() {
+    return [](const ai::LocalReply& r) { return !r.proposal && !r.understood; };
+}
+
+void testCorpus() {
+    std::printf("[1.16.1 : le corpus de robustesse]\n");
+    Bench b;
+    const std::vector<std::pair<std::string, Pred>> corpus = {
+        // creer des objets
+        {"je voudrais 2 pompes", makes("Pump", 2)},
+        {"peux-tu ajouter un voyant rouge ?", makes("Indicator", 1)},
+        {"il me faut une cuve", makes("Tank", 1)},
+        {"rajoute moi deux vannes", makes("Valve", 2)},
+        {"pose un bouton Marche sous P1", makes("PushButton", 1)},
+        {"place un voyant a droite de la cuve", makes("Indicator", 1)},
+        {"Pourriez-vous ajouter trois voyants ?", makes("Indicator", 3)},
+        {"mets moi un afficheur numerique", makes("NumericDisplay", 1)},
+        {"ajoute un bargraphe stp", makes("Bargraph", 1)},
+        {"Je veux un moteur \xC3\xA0 gauche de P1", makes("Motor", 1)},
+        {"ajouter une pompe", makes("Pump", 1)},
+        {"Cr\xC3\xA9" "e 2 boutons Marche et Arr\xC3\xAAt", makes("PushButton", 2)},
+        {"met une vanne sous la cuve", makes("Valve", 1)},
+        {"il faudrait un voyant vert", makes("Indicator", 1)},
+        {"fais-moi une pompe", makes("Pump", 1)},
+        {"dessine une cuve", makes("Tank", 1)},
+        {"Ajoutez un moteur s'il vous plait", makes("Motor", 1)},
+        {"j'aimerais avoir 4 voyants", makes("Indicator", 4)},
+        {"tu peux me rajouter une pompe \xC3\xA0 droite de P2 ?", makes("Pump", 1)},
+        {"je souhaite ajouter un moteur", makes("Motor", 1)},
+        {"J'ai besoin d'un voyant rouge", makes("Indicator", 1)},
+        {"rajoute deux boutons Marche et Arret sous la cuve", makes("PushButton", 2)},
+        {"il me faudrait une vanne a gauche de la cuve", makes("Valve", 1)},
+        {"Ajoute une pompe qui s'appelle Pompe_Gavage", makesNamed("Pump", "Pompe_Gavage")},
+        {"rajoute un voyant D\xC3\xA9" "faut \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la vanne", makes("Indicator", 1)},
+        // des variables
+        {"Cr\xC3\xA9" "e la variable Debit_Entree en REAL", vars({{"Debit_Entree", "REAL"}})},
+        {"je voudrais une variable Marche_P3 de type BOOL", vars({{"Marche_P3", "BOOL"}})},
+        {"peux-tu cr\xC3\xA9" "er les variables Temp_1 et Temp_2 en r\xC3\xA9" "el ?", vars({{"Temp_1", "REAL"}, {"Temp_2", "REAL"}})},
+        {"il me faut une variable bool\xC3\xA9" "enne Alarme_Generale", vars({{"Alarme_Generale", "BOOL"}})},
+        {"Ajoute une variable Consigne_Vitesse", vars({{"Consigne_Vitesse", "REAL"}})},
+        {"Cr\xC3\xA9" "ez la variable Compteur_Pieces en INT", vars({{"Compteur_Pieces", "INT"}})},
+        {"Peux-tu cr\xC3\xA9" "er une variable Niveau_Bac de type r\xC3\xA9" "el", vars({{"Niveau_Bac", "REAL"}})},
+        {"cr\xC3\xA9" "e moi les variables Marche_P5 et Arret_P5", vars({{"Marche_P5", "BOOL"}, {"Arret_P5", "BOOL"}})},
+        {"je voudrais une variable", asks()},
+        // des types
+        {"Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs", typed("T_Capteur", {"Mesure", "Unite", "Defaut"})},
+        {"Non je veux cr\xC3\xA9" "er une structure qui s'appelle Capteur avec des membres de gestion, par exemple son type, sa mesure etc, ses defauts",
+         typed("Capteur", {"Type", "Mesure", "Defauts"})},
+        {"Cr\xC3\xA9" "e une structure pour une pompe", typed("T_Pompe", {"Marche", "Defaut", "Auto", "Commande", "HeuresMarche"})},
+        {"Cr\xC3\xA9" "e un type Vanne", typed("Vanne", {"Ouverte", "Fermee", "Commande", "Defaut"})},
+        {"je voudrais un type moteur", typed("T_Moteur", {"Marche", "Defaut"})},
+        {"peux-tu me faire une structure pour un variateur ?", typed("T_Variateur", {"Consigne", "Vitesse"})},
+        {"Cr\xC3\xA9" "e un type T_Cuve avec un niveau, un volume et une alarme haute", typed("T_Cuve", {"Niveau", "Volume", "AlarmeHaute"})},
+        {"Cr\xC3\xA9" "e une structure nomm\xC3\xA9" "e Mesure_Debit avec une mesure, un d\xC3\xA9" "faut et un \xC3\xA9tat", typed("Mesure_Debit", {"Mesure", "Defaut", "Etat"})},
+        {"cr\xC3\xA9" "e un type appel\xC3\xA9 T_Analog comme la mesure et l'unit\xC3\xA9", typed("T_Analog", {"Mesure", "Unite"})},
+        {"il me faut un type pour un capteur TOR", typed("T_CapteurTOR", {"Etat", "Defaut"})},
+        {"D\xC3\xA9" "finis une structure T_Regul avec Mesure, Consigne et Sortie en REAL", typed("T_Regul", {"Mesure", "Consigne", "Sortie"})},
+        {"cr\xC3\xA9" "er un type de donn\xC3\xA9" "e pour les moteurs", typed("T_Moteur", {"Marche"})},
+        {"Pourrais-tu me cr\xC3\xA9" "er un type Pompe ?", typed("Pompe", {"Marche"})},
+        {"Je veux une structure Moteur avec marche, d\xC3\xA9" "faut, courant", typed("Moteur", {"Marche", "Defaut", "Courant"})},
+        {"Cr\xC3\xA9" "e un nouveau type", asks()},
+        {"Cr\xC3\xA9" "e un type pour le truc", lost()},
+        {"Ajoute une pompe de type centrifuge", makes("Pump", 1)},
+        // modifier
+        {"peux-tu mettre la cuve en bleu ?", modifies("Cuve_1")},
+        {"je voudrais que la vanne soit rouge", modifies("Vanne_1")},
+        {"change la couleur de P2 en jaune", modifies("Pompe_2")},
+        {"agrandis la cuve", modifies("Cuve_1")},
+        {"Pouvez-vous d\xC3\xA9placer V1 \xC3\xA0 droite de P2 ?", modifies("Vanne_1")},
+        {"renomme Cuve_1 en Bac_Eau", renames("Cuve_1", "Bac_Eau")},
+        {"cache Texte_1", modifies("Texte_1")},
+        {"change le texte de Bouton_1 en D\xC3\xA9marrer", modifies("Bouton_1")},
+        {"d\xC3\xA9" "cale P2 vers la droite de 50", modifies("Pompe_2")},
+        {"rends la cuve rouge", modifies("Cuve_1")},
+        {"colorie P2 en orange", modifies("Pompe_2")},
+        {"met la pompe 1 en rouge", modifies("Pompe_1")},
+        // associer
+        {"associe P1 a Pompe_1_Marche", binds("Pompe_1", "Pompe_1_Marche")},
+        {"relie la vanne \xC3\xA0 Defaut_V1", binds("Vanne_1", "Defaut_V1")},
+        {"peux-tu lier P2 \xC3\xA0 Pompe_2_Marche ?", binds("Pompe_2", "Pompe_2_Marche")},
+        {"branche Pompe_2 sur Pompe_2_Marche", binds("Pompe_2", "Pompe_2_Marche")},
+        {"pourrais-tu associer la pompe 1 \xC3\xA0 Pompe_1_Marche", binds("Pompe_1", "Pompe_1_Marche")},
+        // animer
+        {"fais clignoter V1 quand Defaut_V1", modifies("Vanne_1")},
+        {"P1 en vert si Pompe_1_Marche sinon rouge", modifies("Pompe_1")},
+        {"je voudrais que la vanne clignote quand Defaut_V1", modifies("Vanne_1")},
+        {"cache Texte_1 quand Pompe_1_Marche", modifies("Texte_1")},
+        {"je voudrais que P1 clignote si Defaut_V1", modifies("Pompe_1")},
+        // dupliquer
+        {"duplique V1", dups("Vanne_1")},
+        {"copie la cuve 2 fois", dups("Cuve_1")},
+        {"peux-tu dupliquer V1 vers la droite ?", dups("Vanne_1")},
+        {"fais 3 copies de Pompe_2", dups("Pompe_2")},
+        {"je voudrais dupliquer la vanne", dups("Vanne_1")},
+        {"fais une copie de la cuve", dups("Cuve_1")},
+        // des vues
+        {"je voudrais cr\xC3\xA9" "er une vue Synoptique_2", newView("Synoptique_2")},
+        {"il me faut une nouvelle vue", newView("")},
+        {"je voudrais une nouvelle vue Vue_Pompes", newView("Vue_Pompes")},
+        // supprimer, et le flou
+        {"tu peux supprimer V1 ?", removes("Vanne_1")},
+        {"enl\xC3\xA8ve Bouton_3", removes("Bouton_3")},
+        {"supprime la pompe", asks()},
+        {"fais un truc sympa", lost()},
+        {"il me faut un machin pour le process", lost()},
+        {"je veux voir le niveau de la cuve", lost()},
+        {"Ajoute un champ Vitesse au type T_Pompe", lost()},
+        {"Mets-moi 3 pompes en ligne", makes("Pump", 3)},
+        {"mets un titre Station de pompage", [](const ai::LocalReply& r) { return countKind(r, "Text") == 1 && r.proposal->ops.size() == 1 && prop(r.proposal->ops[0], "text") == "Station de pompage"; }},
+        {"Il me faut 2 boutons marche et arr\xC3\xAAt", [](const ai::LocalReply& r) { return countKind(r, "PushButton") == 2 && prop(r.proposal->ops[0], "text") == "Marche"; }},
+        {"place la vanne sous la cuve", modifies("Vanne_1")},
+        {"Cr\xC3\xA9" "e un type T_Dosage pour une pompe", typed("T_Dosage", {"Marche", "Defaut"})},
+        {"Cr\xC3\xA9" "e un type T_Moteur avec heures de marche, temps de d\xC3\xA9marrage et nombre de d\xC3\xA9marrages", typed("T_Moteur", {"HeuresMarche", "TempsDemarrage", "NombreDemarrages"})},
+        {"Je voudrais cr\xC3\xA9" "er une structure avec des champs : marche, arr\xC3\xAAt, d\xC3\xA9" "faut. Appelle-la T_Cmd", typed("T_Cmd", {"Marche", "Arret", "Defaut"})},
+        {"je voudrais une structure pour un r\xC3\xA9gulateur PID", typed("T_Regulateur", {"Mesure", "Consigne", "Sortie"})},
+        {"je veux cr\xC3\xA9" "er quelque chose", lost()},
+    };
+    std::size_t good = 0;
+    for (const auto& [phrase, expect] : corpus) {
+        const auto r = ai::understand(b.input(), phrase, {});
+        bool ok = expect(r);
+        // jamais absurde : une proposition valide, aucun nom pris dans un mot-outil ou un verbe
+        if (r.proposal) {
+            const auto ck = b.validate(r);
+            std::vector<std::string> bad;
+            for (const auto& n : proposedNames(r))
+                if (absurdName(n)) bad.push_back(n);
+            check(ck.ok() && bad.empty(), phrase + " : une proposition valide, sans nom absurde (" + joined(bad) + (ck.ok() ? "" : " " + ck.errors.front()) + ")");
+        } else {
+            check(!r.text.empty() && shortAll(r.suggestions), phrase + " : une reponse honnete");
+        }
+        check(ok, phrase + " : attendu (" + joined(proposedNames(r)) + " | " + r.text.substr(0, 160) + ")");
+        good += ok ? 1 : 0;
+    }
+    check(corpus.size() >= 60, "au moins 60 phrases");
+    std::printf("  corpus : %zu/%zu phrases comprises comme attendu\n", good, corpus.size());
+}
+
 } // namespace
 
 // 1.16.0 (captures) : IHM Studio n'a pas d'automate relie - le .XPG joint est lu (AiAutomate : readPlcFile,
@@ -958,6 +1366,11 @@ int main(int argc, char** argv) {
     testNoPlc();
     testSuggestions();
     testHelpPhrases();
+    testTypeUnderstood();
+    testTypeModels();
+    testNameGuard();
+    testUnderstoodFlag();
+    testCorpus();
     testPlcFile(argc > 1 ? argv[1] : nullptr);
     std::printf("ai_integree_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

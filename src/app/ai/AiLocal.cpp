@@ -16,6 +16,13 @@
 //    - les couleurs (les noms francais -> les couleurs du logiciel), les
 //      nombres (chiffres, un..vingt), les positions (a droite de, sous...).
 //
+//  1.16.1 : elle COMPREND la phrase plutot que de la decouper. Un nom propose n'est
+//  jamais un mot-outil (pour, qui, avec...) ni un verbe de la demande (sinon elle
+//  demande) ; un type se lit en langage courant ("une structure qui s'appelle
+//  Capteur avec son type, sa mesure, ses defauts") et part d'un MODELE METIER
+//  (capteur, capteur TOR, pompe, vanne, moteur, variateur, cuve, regulateur) quand
+//  aucun membre n'est dit ; une demande trop mal comprise rend understood = false.
+//
 //  Elle rend une PROPOSITION faite des operations du contrat (AiOperations.hpp) :
 //  la meme validation, le meme apercu, le meme Ctrl+Z qu'un vrai fournisseur. Elle
 //  se verifie elle-meme (validate) : une proposition qu'elle saurait fausse n'est
@@ -176,6 +183,72 @@ bool partWord(const std::string& f) {
     static const std::set<std::string> k = {"texte", "libelle", "intitule", "etiquette", "fond", "contour", "bordure", "bord",
                                             "couleur", "remplissage", "ecriture", "nom", "taille", "largeur", "hauteur", "trait"};
     return k.count(f) != 0;
+}
+
+// 1.16.1 : LES MOTS-OUTILS du francais (articles, prepositions, pronoms, possessifs, conjonctions, adverbes) : jamais
+// un nom propose (objet, variable, type, membre, vue) - "Cree un type pour..." ne nomme pas un type << pour >>.
+bool functionWord(const std::string& f) {
+    static const std::set<std::string> k = {
+        "le", "la", "les", "l", "un", "une", "des", "du", "de", "d", "au", "aux", "a", "et", "ou", "en", "sur", "dans", "avec", "pour", "par",
+        "sans", "sous", "vers", "chez", "entre", "depuis", "via", "contre", "selon", "pendant", "apres", "avant", "ce", "cet", "cette", "ces",
+        "ceci", "cela", "ca", "celui", "celle", "ceux", "celles", "son", "sa", "ses", "mon", "ma", "mes", "ton", "ta", "tes", "notre", "nos",
+        "votre", "vos", "leur", "leurs", "moi", "toi", "lui", "me", "te", "se", "il", "elle", "ils", "elles", "on", "je", "j", "tu", "nous",
+        "vous", "qui", "que", "qu", "quoi", "dont", "lequel", "laquelle", "quel", "quelle", "quels", "quelles", "y", "s", "n", "m", "t", "c",
+        "ne", "pas", "plus", "moins", "tres", "trop", "peu", "bien", "aussi", "ainsi", "alors", "donc", "mais", "car", "puis", "ensuite",
+        "si", "sinon", "quand", "lorsque", "comme", "tout", "tous", "toute", "toutes", "chaque", "quelque", "quelques", "autre", "autres",
+        "meme", "memes", "nouveau", "nouvel", "nouvelle", "nouveaux", "nouvelles", "ici", "voici", "voila", "oui", "non", "svp", "stp",
+        "merci", "plait", "est", "sont", "etre", "ai", "as", "ont", "etc", "bon", "ok"};
+    return k.count(f) != 0;
+}
+
+// 1.16.1 : les verbes d'une demande, sous leurs formes courantes (creer, ajouter, gerer, vouloir, appeler...) : jamais un
+// nom propose - "un type pour gerer les capteurs" n'a pas de membre << Gerer >>.
+bool requestVerb(const std::string& f) {
+    static const std::set<std::string> k = {
+        "cree", "crees", "creer", "creez", "creons", "ajoute", "ajoutes", "ajouter", "ajoutez", "rajoute", "rajouter", "rajoutez", "mets",
+        "met", "mettre", "mettez", "pose", "poser", "posez", "place", "placer", "placez", "fais", "faire", "faites", "fait", "gere", "geres",
+        "gerer", "gerez", "veux", "veut", "voudrais", "voudrait", "voulez", "vouloir", "aimerais", "aimerait", "souhaite", "souhaiterais",
+        "faut", "faudrait", "peux", "peut", "pourrais", "pourriez", "pouvez", "appelle", "appelles", "appeler", "appele", "appelee",
+        "appeles", "appelees", "nomme", "nommer", "nommee", "nommes", "nommees", "definis", "definir", "definit", "definissez", "insere",
+        "inserer", "genere", "generer", "fabrique", "fabriquer", "dessine", "dessiner", "associe", "associer", "relie", "relier", "lie",
+        "lier", "branche", "brancher", "duplique", "dupliquer", "copie", "copier", "supprime", "supprimer", "efface", "effacer", "enleve",
+        "enlever", "retire", "retirer", "vire", "virer", "renomme", "renommer", "deplace", "deplacer", "bouge", "bouger", "decale",
+        "decaler", "aligne", "aligner", "repartis", "repartir", "agrandis", "agrandir", "reduis", "reduire", "change", "changer", "modifie",
+        "modifier", "contient", "contenir", "contenant", "comprend", "comprenant", "ayant", "avoir", "donne", "donner", "prevois", "prevoir",
+        "prepare", "preparer", "construis", "construire", "decrire", "decris", "represente", "representer"};
+    return k.count(f) != 0;
+}
+
+// 1.16.1 : des mots vagues (un truc, un machin, quelque chose) : ni un nom, ni une demande comprise.
+bool vagueWord(const std::string& f) {
+    static const std::set<std::string> k = {"truc", "trucs", "machin", "machins", "bidule", "bidules", "chose", "choses", "quelque", "brol"};
+    return k.count(f) != 0;
+}
+
+// 1.16.1 : les mots de remplissage d'une liste de membres : "des membres de gestion, par exemple, etc., tel que".
+bool fillerWord(const std::string& f) {
+    static const std::set<std::string> k = {
+        "exemple", "exemples", "etc", "notamment", "tel", "telle", "tels", "telles", "gestion", "membre", "membres", "champ", "champs",
+        "element", "elements", "donnee", "donnees", "info", "infos", "information", "informations", "propriete", "proprietes", "attribut",
+        "attributs", "variable", "variables", "style", "base", "basique", "classique", "classiques", "standard", "simple", "complet",
+        "complete", "habituel", "habituels", "habituelle", "habituelles", "utile", "utiles", "necessaire", "necessaires", "important",
+        "importants", "principal", "principaux", "suivant", "suivants", "suivante", "suivantes", "ihm", "structure", "structures",
+        "structuree", "struct", "personnalise", "personnalisee", "perso", "utilisateur", "egalement", "ensemble", "cetera", "suite"};
+    return k.count(f) != 0 || vagueWord(f);
+}
+
+// 1.16.1 : LE GARDE-FOU DES NOMS. Un nom propose (objet, variable, type, membre, vue) n'est jamais un mot-outil, un verbe de
+// la demande, ni un mot vague ou de remplissage ("exemple", "etc", "gestion") : la reponse demande plutot.
+bool badName(std::string_view raw) {
+    const std::string f = [&] {
+        std::string s = fold(raw);
+        s.erase(std::remove(s.begin(), s.end(), ' '), s.end());
+        return s;
+    }();
+    if (f.empty()) return true;
+    static const std::set<std::string> filler = {"exemple", "exemples", "etc", "gestion", "membre", "membres", "champ", "champs", "notamment",
+                                                 "donnee", "donnees", "cetera"};
+    return functionWord(f) || requestVerb(f) || vagueWord(f) || filler.count(f) != 0;
 }
 
 std::size_t distance(std::string_view a, std::string_view b) {
@@ -1390,6 +1463,7 @@ LocalReply Engine::finish(Proposal p, std::string text) const {
                      + (real.size() > 1 ? " (et " + plural(real.size() - 1, "autre probl\xC3\xA8me", "autres probl\xC3\xA8mes") + ")" : std::string{})
                      + "\nReformule, ou choisis l'objet dans la vue.";
             r.suggestions = examples();
+            r.understood = false;   // 1.16.1 : mal comprise - une IA connectee peut la reprendre
             return r;
         }
         // LA PLACE (l'aide : un objet qui deborde de la vue est signale) : la verification le dit, la reponse aussi
@@ -1460,7 +1534,8 @@ LocalReply Engine::help() const {
              "`D\xC3\xA9place V1 \xC3\xA0 droite de P2`, `Monte P1 de 50`, `Cache V1`, `Renomme Cuve_1 en Bac_Eau` ;\n"
              "- **associer** une variable : `Associe P1 \xC3\xA0 Pompe_1_Marche`, `Relie la cuve au niveau` ;\n"
              "- **cr\xC3\xA9" "er des variables**, **un type**, **une vue** : `Cr\xC3\xA9" "e la variable Pompe_3_Marche en BOOL`, "
-             "`Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL`, `Cr\xC3\xA9" "e les variables de l'automate`, "
+             "`Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL`, `Cr\xC3\xA9" "e un type pour une pompe` (un mod\xC3\xA8le de d\xC3\xA9part : "
+             "capteur, pompe, vanne, moteur, variateur, cuve...), `Cr\xC3\xA9" "e les variables de l'automate`, "
              "`Cr\xC3\xA9" "e une vue Vue_Process en 1920x1080` ;\n"
              "- **aligner, r\xC3\xA9partir, dupliquer, supprimer** : `Aligne les boutons en haut`, `R\xC3\xA9partis les pompes`, "
              "`Duplique P1 3 fois vers la droite`, `Supprime les vannes` ;\n"
@@ -1773,10 +1848,15 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
     for (const auto& m : mentions_) {
         if (pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end) continue;   // l'objet de reference
         if (m.definite && !m.indefinite) continue;
+        // 1.16.1 : "3 pompes en ligne" : une disposition, pas une Ligne a poser
+        if (m.kind == hmi::Kind::Line && m.at > 0 && (t_[m.at - 1].f == "en" || t_[m.at - 1].f == "a")) continue;
         news.push_back(&m);
     }
-    // "cree la pompe P5" : un genre defini, un nom neuf
-    if (news.empty())
+    // "cree la pompe P5" : un genre defini, un nom neuf - avec un vrai verbe de creation (1.16.1 : pas "je veux voir le
+    // niveau de la cuve", ni "place la vanne sous la cuve")
+    const bool strongCreate = hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("insere")
+                           || hasPrefix("dessin") || hasPrefix("genere") || hasPrefix("fabriqu");
+    if (news.empty() && strongCreate)
         for (const auto& m : mentions_)
             if (!(pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end)) news.push_back(&m);
     if (news.empty()) return notUnderstood();
@@ -1801,8 +1881,18 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
                 ++i;
                 continue;
             }
-            // un mot en majuscule, ou entre guillemets : un texte (Marche, Arret)
-            const bool capital = !tk.raw.empty() && (std::isupper(static_cast<unsigned char>(tk.raw[0])) || static_cast<unsigned char>(tk.raw[0]) == 0xC3);
+            // un mot en majuscule, ou entre guillemets : un texte (Marche, Arret) ; 1.16.1 : pour des boutons, aussi un mot de
+            // commande en minuscules ("2 boutons marche et arret")
+            bool capital = !tk.raw.empty() && (std::isupper(static_cast<unsigned char>(tk.raw[0])) || static_cast<unsigned char>(tk.raw[0]) == 0xC3);
+            if (!capital && !tk.quoted && isButtonKind(m.kind) && (i == m.at + m.len || t_[i - 1].f == "et" || t_[i - 1].f == "ou"))
+                for (const char* w : {"marche", "arret", "start", "stop", "reset", "acquit", "demarr", "ouvr", "ferm", "auto", "manu"})
+                    if (tk.f.rfind(w, 0) == 0) {
+                        capital = true;
+                        std::string up = tk.raw;
+                        up[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(up[0])));
+                        texts.push_back(up);
+                    }
+            if (capital && !tk.quoted && !std::isupper(static_cast<unsigned char>(tk.raw[0])) && static_cast<unsigned char>(tk.raw[0]) != 0xC3) continue;
             if (tk.quoted || (capital && !stopWord(tk.f) && numberOf(tk.f) < 0 && !mentionAt(i))) {
                 // un nom d'objet voulu (Pompe_Eau, P5) plutot qu'un texte, pour un symbole sans texte
                 if (!tk.quoted && tk.raw.find('_') != std::string::npos) {
@@ -1811,6 +1901,24 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
                 }
                 texts.push_back(tk.raw);
             }
+        }
+        // 1.16.1 : le garde-fou des noms - "une pompe appelee Pour" : un mot de la phrase, pas un nom
+        if (!name.empty() && (badName(name) || !hmi::isIdentifier(name)))
+            return ask(guill(name) + " ne peut pas \xC3\xAAtre le nom " + std::string(feminine(m.kind) ? "de la " : "du ") + lowerFirst(kindPlural(m.kind, 1))
+                       + " : c'est un mot de la phrase, pas un nom (des lettres sans accent, des chiffres et _). Quel nom ? Par exemple `Ajoute une "
+                         "pompe appel\xC3\xA9" "e Pompe_Eau`.");
+        // 1.16.1 : un titre, un texte non cite : la suite de la phrase depuis son premier mot ("un titre Station de pompage")
+        if (m.kind == hmi::Kind::Text && texts.size() == 1 && std::none_of(t_.begin(), t_.end(), [](const Tok& x) { return x.quoted; })) {
+            std::size_t first = m.at + m.len;
+            while (first < stop && t_[first].raw != texts.front()) ++first;
+            std::string all;
+            for (std::size_t i = first; i < stop; ++i) {
+                if (!colorAt(t_, i).empty()) break;
+                const bool elided = !all.empty() && all.back() == '\'';
+                all += (all.empty() || elided ? "" : " ") + t_[i].raw;
+                if (t_[i].f.size() <= 2 && (t_[i].f == "d" || t_[i].f == "l" || t_[i].f == "qu" || t_[i].f == "j")) all += '\'';
+            }
+            if (!all.empty()) texts.front() = all;
         }
         int count = m.count;
         if (count < 0) count = m.plural ? (texts.size() > 1 ? static_cast<int>(texts.size()) : -1) : 1;
@@ -2058,6 +2166,7 @@ LocalReply Engine::createView() const {
         while (in_.project->viewByName("Vue_" + std::to_string(n))) ++n;
         name = "Vue_" + std::to_string(n);
     }
+    if (badName(name)) return ask(guill(name) + " ne peut pas \xC3\xAAtre le nom de la vue : c'est un mot de la phrase. Quel nom ? Par exemple `Cr\xC3\xA9" "e une vue Vue_Process`.");
     if (!hmi::isIdentifier(name)) return ask(guill(name) + " n'est pas un nom de vue valable (des lettres, des chiffres et _).");
     if (in_.project->viewByName(name)) return ask("La vue " + code(name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet. Choisis un autre nom.");
     Proposal p = base("Cr\xC3\xA9" "er la vue " + name);
@@ -2096,12 +2205,57 @@ std::string typeWord(const std::string& f) {
     return it == k.end() ? std::string{} : it->second;
 }
 
-// Le type tire du nom (une marche, un defaut : BOOL ; un niveau, une mesure : REAL).
+// Les mots d'un nom : coupes au _, aux chiffres et aux majuscules ("Pompe_1_Marche", "SeuilHaut", "HeuresMarche"), replies.
+std::vector<std::string> nameWords(std::string_view name) {
+    std::vector<std::string> out;
+    std::string cur;
+    const auto flush = [&] {
+        if (!cur.empty()) out.push_back(foldWord(cur));
+        cur.clear();
+    };
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        const auto c = static_cast<unsigned char>(name[i]);
+        if (c == '_' || c == ' ' || c == '.' || std::isdigit(c)) {
+            flush();
+            continue;
+        }
+        if (std::isupper(c) && !cur.empty() && !std::isupper(static_cast<unsigned char>(cur.back()))) flush();
+        cur += static_cast<char>(c);
+    }
+    flush();
+    std::erase_if(out, [](const std::string& w) { return w.empty(); });
+    return out;
+}
+
+// Le type tire du nom, par ses mots (1.16.1) : un defaut, une alarme, le mode auto : BOOL ; un type, une unite, un libelle :
+// STRING ; un temps, une duree : TIME ; des heures, un compteur, un nombre : DINT ; un etat, un mode : INT ; un niveau, une
+// mesure, une consigne, un seuil, un min : REAL ; sinon BOOL (une marche, une commande, ouverte).
 std::string typeFromName(const std::string& name) {
-    const std::string f = fold(name);
-    static const char* const reals[] = {"niveau", "temp", "pression", "debit", "mesure", "consigne", "vitesse", "poids", "valeur", "courant", "tension"};
-    for (const char* r : reals)
-        if (f.find(r) != std::string::npos) return "REAL";
+    const std::vector<std::string> words = nameWords(name);
+    const auto starts = [&](std::initializer_list<const char*> stems) {
+        for (const auto& w : words)
+            for (const char* s : stems)
+                if (w.rfind(s, 0) == 0) return true;
+        return false;
+    };
+    const auto is = [&](std::initializer_list<const char*> exact) {
+        for (const auto& w : words)
+            for (const char* s : exact)
+                if (w == s || w == std::string(s) + "s") return true;
+        return false;
+    };
+    if (starts({"defaut", "alarm", "alerte", "auto", "manu"})) return "BOOL";
+    if (is({"type", "nom", "tag", "texte", "message", "marque", "modele", "reference", "repere", "libelle", "unite", "description", "commentaire",
+            "designation", "fabricant", "serie", "matricule"}))
+        return "STRING";
+    if (starts({"temps", "duree", "delai", "tempo", "retard"})) return "TIME";
+    if (starts({"heure", "compteur", "cycle", "demarrage", "nombre", "manoeuvres"}) || is({"nb"})) return "DINT";
+    if (is({"etat", "mode", "etape", "code", "numero", "adresse", "rang", "index", "indice", "choix", "priorite"})) return "INT";
+    if (starts({"niveau", "temperature", "temp", "pression", "debit", "mesure", "consigne", "vitesse", "poids", "valeur", "courant", "tension",
+                "seuil", "position", "puissance", "frequence", "couple", "intensite", "volume", "hauteur", "capacite", "ouverture", "recopie",
+                "pourcent", "taux", "densite", "conductivit", "energie", "echelle", "moyenne", "ecart"})
+        || is({"min", "max", "mini", "maxi", "minimum", "maximum", "kp", "ki", "kd", "ti", "td", "gain", "offset", "ph"}))
+        return "REAL";
     return "BOOL";
 }
 
@@ -2133,7 +2287,7 @@ LocalReply Engine::createVariables() const {
             pending.clear();
             continue;
         }
-        if (tk.quoted || stopWord(tk.f) || tk.raw == filter) continue;
+        if (tk.quoted || stopWord(tk.f) || tk.raw == filter || badName(tk.raw)) continue;   // 1.16.1 : jamais un mot-outil ni un verbe
         const bool identifier = tk.raw.find('_') != std::string::npos
                              || (std::isupper(static_cast<unsigned char>(tk.raw[0])) && i > 0 && !plc
                                  && (stopWord(t_[i - 1].f) || t_[i - 1].f.rfind("variable", 0) == 0 || t_[i - 1].raw.find('_') != std::string::npos));
@@ -2244,14 +2398,171 @@ LocalReply Engine::createVariables() const {
 }
 
 // ---- un type IHM (une structure) ------------------------------------------------------------------
-// "Cree un type T_Pompe avec Marche en BOOL et Vitesse en REAL", "Cree une structure T_Vanne avec Ouverte, Fermee
-// et Defaut en BOOL" : l'operation creer_type (comme Types IHM > Nouveau). Chaque membre garde SON type (comme les
-// variables) ; un membre sans type dit : le type tire du nom, et dit.
+// "Cree un type T_Pompe avec Marche en BOOL et Vitesse en REAL" : l'operation creer_type (comme Types IHM > Nouveau).
+// 1.16.1 : LA PHRASE EST LUE, PAS DECOUPEE. Le nom vient de "qui s'appelle X", "nomme X", "appele X", "la structure X",
+// "un type X" - jamais d'un mot-outil ni d'un verbe (sans nom sur, elle demande) ; les membres, de la liste en langage
+// courant ("son type, sa mesure, ses defauts", "avec une mesure, un defaut et un etat", "comme la mesure et l'unite"),
+// sans les articles, les possessifs ni le remplissage ("des membres de gestion", "par exemple", "etc"). Un type qui decrit
+// un equipement (un capteur, une pompe, une vanne...) sans membres dits part d'un MODELE METIER, et le dit.
+
+// Les modeles metier : des types classiques de l'industrie (des membres sans accent, des types elementaires, decrits).
+struct TypeModel {
+    const char*                                        key;      // "pompe"
+    const char*                                        label;    // "pompe" (dans la reponse)
+    const char*                                        name;     // le nom propose : T_Pompe
+    const char*                                        description;
+    std::vector<Operation::MemberSpec>                 members;
+};
+const std::vector<TypeModel>& typeModels() {
+    static const std::vector<TypeModel> k = {
+        {"capteur", "capteur analogique", "T_Capteur", "Capteur analogique : la mesure, son \xC3\xA9" "chelle, ses seuils et ses alarmes",
+         {{"Mesure", "REAL", "Valeur mesur\xC3\xA9" "e, en unit\xC3\xA9 physique"},
+          {"Unite", "STRING", "Unit\xC3\xA9 de la mesure (bar, \xC2\xB0" "C, m3/h...)"},
+          {"Min", "REAL", "D\xC3\xA9" "but d'\xC3\xA9" "chelle"},
+          {"Max", "REAL", "Fin d'\xC3\xA9" "chelle"},
+          {"SeuilHaut", "REAL", "Seuil d'alarme haute"},
+          {"SeuilBas", "REAL", "Seuil d'alarme basse"},
+          {"AlarmeHaute", "BOOL", "Mesure au-dessus du seuil haut"},
+          {"AlarmeBasse", "BOOL", "Mesure au-dessous du seuil bas"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut capteur (hors \xC3\xA9" "chelle, rupture de fil)"}}},
+        {"capteur_tor", "capteur TOR", "T_CapteurTOR", "Capteur tout ou rien : d\xC3\xA9tecteur, fin de course, contact",
+         {{"Etat", "BOOL", "\xC3\x89tat du contact (vrai : d\xC3\xA9tect\xC3\xA9)"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut du capteur (discordance, c\xC3\xA2" "ble coup\xC3\xA9)"},
+          {"Inverse", "BOOL", "Logique invers\xC3\xA9" "e (contact \xC3\xA0 ouverture)"},
+          {"Filtre", "TIME", "Temps de filtrage (anti-rebond)"},
+          {"Forcage", "BOOL", "For\xC3\xA7" "age actif (maintenance)"}}},
+        {"pompe", "pompe", "T_Pompe", "Pompe : commande, retour de marche, modes et compteurs",
+         {{"Marche", "BOOL", "Retour de marche (la pompe tourne)"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut (disjoncteur, thermique, discordance)"},
+          {"Auto", "BOOL", "Mode automatique (faux : manuel)"},
+          {"Commande", "BOOL", "Ordre de marche envoy\xC3\xA9 \xC3\xA0 la pompe"},
+          {"Disponible", "BOOL", "Pr\xC3\xAAte \xC3\xA0 d\xC3\xA9marrer (sans d\xC3\xA9" "faut, en automatique)"},
+          {"HeuresMarche", "DINT", "Compteur d'heures de marche"},
+          {"NbDemarrages", "DINT", "Nombre de d\xC3\xA9marrages"}}},
+        {"vanne", "vanne", "T_Vanne", "Vanne tout ou rien : commande et fins de course",
+         {{"Ouverte", "BOOL", "Fin de course ouverte"},
+          {"Fermee", "BOOL", "Fin de course ferm\xC3\xA9" "e"},
+          {"Commande", "BOOL", "Ordre d'ouverture"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut (discordance : ni ouverte ni ferm\xC3\xA9" "e apr\xC3\xA8s le temps de man\xC5\x93uvre)"},
+          {"Auto", "BOOL", "Mode automatique (faux : manuel)"},
+          {"TempsManoeuvre", "TIME", "Temps maximal d'ouverture ou de fermeture"}}},
+        {"moteur", "moteur", "T_Moteur", "Moteur : commande, retour de marche, d\xC3\xA9" "fauts et compteurs",
+         {{"Marche", "BOOL", "Retour de marche (contacteur ferm\xC3\xA9)"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut (disjoncteur, discordance)"},
+          {"DefautThermique", "BOOL", "D\xC3\xA9" "faut thermique (relais de protection)"},
+          {"Auto", "BOOL", "Mode automatique (faux : manuel)"},
+          {"Commande", "BOOL", "Ordre de marche"},
+          {"Courant", "REAL", "Courant absorb\xC3\xA9 (A)"},
+          {"HeuresMarche", "DINT", "Compteur d'heures de marche"}}},
+        {"variateur", "variateur de vitesse", "T_Variateur", "Variateur de vitesse : commande, consigne, vitesse et \xC3\xA9tat",
+         {{"Marche", "BOOL", "Retour de marche"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut variateur"},
+          {"Pret", "BOOL", "Pr\xC3\xAAt (sous tension, sans d\xC3\xA9" "faut)"},
+          {"Auto", "BOOL", "Mode automatique (faux : manuel)"},
+          {"Commande", "BOOL", "Ordre de marche"},
+          {"Consigne", "REAL", "Consigne de vitesse (%)"},
+          {"Vitesse", "REAL", "Vitesse mesur\xC3\xA9" "e (tr/min)"},
+          {"Courant", "REAL", "Courant moteur (A)"}}},
+        {"cuve", "cuve", "T_Cuve", "Cuve : niveau, volume et alarmes de niveau",
+         {{"Niveau", "REAL", "Niveau (%)"},
+          {"Volume", "REAL", "Volume contenu (m3)"},
+          {"Capacite", "REAL", "Capacit\xC3\xA9 de la cuve (m3)"},
+          {"NiveauHaut", "BOOL", "Niveau haut atteint (d\xC3\xA9tecteur)"},
+          {"NiveauBas", "BOOL", "Niveau bas atteint (d\xC3\xA9tecteur)"},
+          {"AlarmeHaute", "BOOL", "Alarme de niveau tr\xC3\xA8s haut"},
+          {"AlarmeBasse", "BOOL", "Alarme de niveau tr\xC3\xA8s bas"}}},
+        {"regulateur", "r\xC3\xA9gulateur PID", "T_Regulateur", "R\xC3\xA9gulateur PID : mesure, consigne, sortie et r\xC3\xA9glages",
+         {{"Mesure", "REAL", "Mesure (grandeur r\xC3\xA9gl\xC3\xA9" "e)"},
+          {"Consigne", "REAL", "Consigne"},
+          {"Sortie", "REAL", "Sortie (%)"},
+          {"Auto", "BOOL", "Mode automatique (faux : manuel)"},
+          {"Kp", "REAL", "Gain proportionnel"},
+          {"Ti", "REAL", "Temps int\xC3\xA9gral (s)"},
+          {"Td", "REAL", "Temps d\xC3\xA9riv\xC3\xA9 (s)"},
+          {"Defaut", "BOOL", "D\xC3\xA9" "faut de r\xC3\xA9gulation (\xC3\xA9" "cart trop grand)"}}},
+    };
+    return k;
+}
+const TypeModel* typeModel(std::string_view key) {
+    for (const auto& m : typeModels())
+        if (key == m.key) return &m;
+    return nullptr;
+}
+// Le modele d'un mot (replie) : capteur, sonde, transmetteur -> capteur analogique ; detecteur -> capteur TOR ; bac,
+// reservoir -> cuve... ; vide : aucun.
+std::string modelWord(const std::string& f) {
+    static const std::map<std::string, std::string> k = {
+        {"capteur", "capteur"}, {"sonde", "capteur"}, {"transmetteur", "capteur"}, {"instrument", "capteur"}, {"analogique", "capteur"},
+        {"detecteur", "capteur_tor"}, {"pompe", "pompe"}, {"vanne", "vanne"}, {"electrovanne", "vanne"}, {"robinet", "vanne"},
+        {"moteur", "moteur"}, {"variateur", "variateur"}, {"cuve", "cuve"}, {"bac", "cuve"}, {"reservoir", "cuve"}, {"citerne", "cuve"},
+        {"regulateur", "regulateur"}, {"regulation", "regulateur"}, {"regul", "regulateur"}, {"pid", "regulateur"}};
+    if (const auto it = k.find(f); it != k.end()) return it->second;
+    if (f.size() > 3 && (f.back() == 's' || f.back() == 'x'))
+        if (const auto it = k.find(f.substr(0, f.size() - 1)); it != k.end()) return it->second;
+    return {};
+}
+// Un nom de membre ramene a son singulier, pour comparer (Defauts et Defaut, AlarmesHautes...).
+std::string memberKey(const std::string& name) {
+    std::string out;
+    for (const auto& w : nameWords(name)) out += (w.size() > 3 && (w.back() == 's' || w.back() == 'x')) ? w.substr(0, w.size() - 1) : w;
+    return out;
+}
+// Un nom de membre ecrit en langage courant : chaque mot sans accent, une majuscule en tete ("seuil haut" -> SeuilHaut) ;
+// un mot deja ecrit comme un nom (SeuilHaut, Marche, PT1_Mesure) reste tel quel.
+std::string memberName(const std::vector<Tok>& words) {
+    if (words.size() == 1) {
+        const std::string& raw = words.front().raw;
+        const bool written = hmi::isIdentifier(raw) && std::any_of(raw.begin(), raw.end(), [](char c) { return std::isupper(static_cast<unsigned char>(c)); });
+        if (words.front().quoted) return sanitize(raw);
+        if (written || (hmi::isIdentifier(raw) && raw.find('_') != std::string::npos)) return raw;
+    }
+    std::string out;
+    for (const auto& w : words) {
+        std::string s = sanitize(w.raw);
+        s.erase(std::remove(s.begin(), s.end(), '_'), s.end());
+        if (!s.empty()) s[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
+        out += s;
+    }
+    return out;
+}
+// Le mot-cle d'un type a creer : "type", "structure" (un type IHM), pas "de type REAL", "son type" (une precision, un membre).
+std::size_t typeNoun(const std::vector<Tok>& t) {
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        const std::string& f = t[i].f;
+        if (t[i].quoted || !(f == "type" || f == "structure" || f == "struct" || f == "udt" || f == "dut")) continue;
+        if (i > 0) {
+            const std::string& p = t[i - 1].f;
+            if (p == "de" || p == "du" || p == "d" || p == "son" || p == "sa" || p == "ses" || p == "leur" || p == "leurs" || p == "quel"
+                || p == "quels" || p == "quelle" || p == "en" || p == "le" || p == "au" || p == "aux" || p == "a" || p == "dans" || p == "ce"
+                || p == "cet" || p == "cette" || p == "chaque" || p == "meme")
+                return std::string::npos;
+        }
+        return i;
+    }
+    return std::string::npos;
+}
+
 LocalReply Engine::createType() const {
     if (!in_.project) return ask("Ouvre d'abord un projet IHM.");
-    std::size_t at = std::string::npos;
-    for (std::size_t i = 0; i < t_.size() && at == std::string::npos; ++i)
-        if (t_[i].f == "type" || t_[i].f == "structure" || t_[i].f == "struct") at = i;
+    // les mots, et les virgules : elles separent les membres ("son type, sa mesure")
+    std::vector<Tok> u;
+    {
+        std::string piece;
+        const auto flush = [&] {
+            for (auto& tk : tokenize(piece)) u.push_back(std::move(tk));
+            piece.clear();
+        };
+        for (const char c : request_) {
+            if (c == ',' || c == ';' || c == '\n' || c == '(' || c == ')') {
+                flush();
+                u.push_back({",", ",", false});
+            } else {
+                piece += c;
+            }
+        }
+        flush();
+    }
+    const std::size_t at = typeNoun(u);
     if (at == std::string::npos) return notUnderstood();
     const auto typeOf = [&](const Tok& tk) -> std::string {
         if (tk.quoted) return {};
@@ -2259,68 +2570,273 @@ LocalReply Engine::createType() const {
         if (const auto* ht = in_.project->hmiTypeByName(tk.raw)) return ht->name;
         return {};
     };
-    // le nom du type : le premier mot apres "type" (sans "IHM", "de", "nomme")
-    static const std::set<std::string> skip = {"ihm", "nomme", "nommee", "appele", "appelee", "de", "d", "du"};
-    std::string name;
-    std::size_t i = at + 1;
-    while (i < t_.size() && skip.count(t_[i].f)) ++i;
-    if (i < t_.size() && t_[i].f != "avec" && typeOf(t_[i]).empty()) {
-        name = t_[i].quoted ? sanitize(t_[i].raw) : t_[i].raw;
-        ++i;
+    const auto nameLike = [](const Tok& tk) {
+        if (tk.quoted || tk.raw.find('_') != std::string::npos) return true;
+        if (std::any_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) return true;
+        const auto c0 = static_cast<unsigned char>(tk.raw[0]);
+        return std::isupper(c0) || (c0 == 0xC3 && tk.raw.size() > 1 && static_cast<unsigned char>(tk.raw[1]) >= 0x80 && static_cast<unsigned char>(tk.raw[1]) <= 0x9E);
+    };
+    const auto asName = [](const Tok& tk) { return tk.quoted || !hmi::isIdentifier(tk.raw) ? sanitize(tk.raw) : tk.raw; };
+    // 1. LE NOM, tel qu'ecrit : "qui s'appelle X", "nomme(e) X", "appele(e) X", "dont le nom est X" ; sinon le mot juste apres
+    // "type" ("la structure X", "un type X") s'il est ecrit comme un nom (une majuscule, un _, un chiffre) - un mot du
+    // metier en minuscules ("un type pompe") dit ce que le type decrit, pas son nom. Jamais un mot-outil ni un verbe.
+    std::string name, refused;
+    std::size_t nameAt = std::string::npos, namingAt = std::string::npos;
+    for (std::size_t i = 0; i < u.size() && nameAt == std::string::npos; ++i) {
+        const std::string& f = u[i].f;
+        if (u[i].quoted || !(f.rfind("appel", 0) == 0 || f.rfind("nomm", 0) == 0 || f == "nom")) continue;
+        std::size_t j = i + 1;
+        while (j < u.size() && (u[j].f == "le" || u[j].f == "la" || u[j].f == "l" || u[j].f == "est" || u[j].f == "sera" || u[j].f == "serait"
+                                || u[j].f == "de" || u[j].f == "d" || u[j].f == "du" || u[j].f == "simplement"))
+            ++j;
+        if (j >= u.size() || u[j].f == ",") continue;
+        if (f == "nom" && !nameLike(u[j])) continue;   // "un nom de type", "le nom de la pompe"
+        namingAt = i;
+        nameAt = j;
+        if (badName(u[j].raw) || !typeWord(u[j].f).empty()) refused = u[j].raw;
+        else name = asName(u[j]);
     }
-    if (name.empty() || !hmi::isIdentifier(name))
-        return ask("Quel nom pour le type ? " + (name.empty() ? std::string{} : guill(name) + " n'est pas un nom valable (des lettres sans accent, des chiffres et _). ")
-                       + "Par exemple `Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL`.",
-                   {"Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL"});
-    if (const auto* ht = in_.project->hmiTypeByName(name)) return ask("Le type IHM " + code(ht->name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet : choisis un autre nom.");
-    // les membres : apres "avec" (ou juste apres le nom), chacun avec son type
-    static const std::set<std::string> noise = {"avec", "membre", "membres", "champ", "champs", "element", "elements", "contenant", "comme",
-                                                "type", "types", "ihm", "et", "un", "une", "les", "des", "de", "en", "le", "la", "l", "d", "du"};
+    std::size_t k = at + 1;
+    while (k < u.size() && (u[k].f == "ihm" || u[k].f == "structure" || u[k].f == "structuree" || u[k].f == "struct" || u[k].f == "utilisateur"
+                            || u[k].f == "dut" || u[k].f == "udt"
+                            || u[k].f == "personnalise" || u[k].f == "personnalisee" || u[k].f == "complet" || u[k].f == "simple"
+                            || u[k].f == "donnee" || u[k].f == "donnees"
+                            || ((u[k].f == "de" || u[k].f == "d") && k + 1 < u.size() && (u[k + 1].f == "donnee" || u[k + 1].f == "donnees"))))
+        ++k;
+    // (un type IHM qui existe deja, "un type T_Pompe" : c'est bien le nom voulu - deja pris, ce sera dit)
+    if (nameAt == std::string::npos && k < u.size() && u[k].f != "," && typeWord(u[k].f).empty() && !functionWord(u[k].f) && !requestVerb(u[k].f)
+        && !fillerWord(u[k].f) && !isDigits(u[k].f)) {
+        if (nameLike(u[k]) || modelWord(u[k].f).empty()) {
+            nameAt = k;
+            if (badName(u[k].raw)) refused = u[k].raw;
+            else name = asName(u[k]);
+        }
+    }
+    if (!name.empty() && !hmi::isIdentifier(name)) {
+        refused = name;
+        name.clear();
+    }
+    // 2. OU COMMENCENT LES MEMBRES : apres "avec", "contenant", "comme"... ; sinon apres le nom ; sinon nulle part (un type
+    // "pour gerer les capteurs" n'en dit aucun).
+    std::size_t from = std::string::npos;
+    for (std::size_t i = at + 1; i < u.size() && from == std::string::npos; ++i) {
+        const std::string& f = u[i].f;
+        if (i == nameAt) continue;
+        if (f == "avec" || f == "contenant" || f == "comprenant" || f == "incluant" || f == "ayant" || f == "comme" || f.rfind("compos", 0) == 0
+            || f.rfind("constitu", 0) == 0 || ((f == "contient" || f == "comprend" || f == "a") && i > 0 && u[i - 1].f == "qui"))
+            from = i + 1;
+    }
+    // (sauf un but : "un type T_Dosage pour une pompe" decrit le type, il ne liste pas ses membres)
+    if (from == std::string::npos && nameAt != std::string::npos && nameAt + 1 < u.size()) {
+        static const std::set<std::string> aim = {"pour", "qui", "de", "d", "du", "des", "dans", "sur", "afin", "en", "a", "au"};
+        if (!aim.count(u[nameAt + 1].f)) from = nameAt + 1;
+    }
+    // 3. CE QUE LE TYPE DECRIT (avant les membres, et son nom) : un modele metier
+    const std::size_t subjectEnd = from == std::string::npos ? u.size() : from;
+    std::string modelKey;
+    std::size_t modelAt = std::string::npos;
+    for (std::size_t i = 0; i < subjectEnd; ++i)
+        if (const std::string m = u[i].quoted ? std::string{} : modelWord(u[i].f); !m.empty() && (modelAt == std::string::npos || i < modelAt)) {
+            modelKey = m;
+            modelAt = i;
+        }
+    if (modelKey.empty() && !name.empty())
+        for (const auto& w : nameWords(name))
+            if (const std::string m = modelWord(w); !m.empty()) {
+                modelKey = m;
+                break;
+            }
+    const auto said = [&](std::string_view w) {
+        for (const auto& tk : u)
+            if (tk.f == w) return true;
+        return false;
+    };
+    if (modelKey == "capteur" && (said("tor") || said("detecteur") || said("course") || said("contact") || said("rien")
+                                  || (!name.empty() && fold(name).find("tor") != std::string::npos)))
+        modelKey = "capteur_tor";
+    if (modelKey == "moteur" && said("variateur")) modelKey = "variateur";
+    const TypeModel* model = modelKey.empty() ? nullptr : typeModel(modelKey);
+    // 4. LES MEMBRES en langage courant : une virgule, "et", "ou", un article ou un possessif en commencent un autre ; "de"
+    // lie ("heures de marche" -> HeuresMarche), un adjectif aussi ("alarme haute" -> AlarmeHaute) ; un type dit ("en
+    // BOOL", "de type REAL") vaut pour les membres ecrits depuis le type d'avant.
     std::vector<Operation::MemberSpec> members;
+    std::vector<bool> typed;   // le type du membre a ete dit
     std::vector<std::size_t> pending;
     std::string leading;
     std::vector<std::string> invalid;
-    for (; i < t_.size(); ++i) {
-        const Tok& tk = t_[i];
+    std::vector<Tok> cur;
+    bool join = false;
+    const auto close = [&] {
+        if (cur.empty()) return;
+        const std::string mn = memberName(cur);
+        cur.clear();
+        join = false;
+        if (mn.empty() || !hmi::isIdentifier(mn) || badName(mn)) {
+            if (!mn.empty() && !badName(mn)) invalid.push_back(mn);
+            return;
+        }
+        if (!name.empty() && norm(mn) == norm(name)) return;
+        if (std::any_of(members.begin(), members.end(), [&](const auto& m) { return memberKey(m.name) == memberKey(mn); })) return;
+        pending.push_back(members.size());
+        members.push_back({mn, {}, {}});
+        typed.push_back(false);
+    };
+    static const std::set<std::string> modifiers = {"haut", "haute", "bas", "basse", "min", "max", "mini", "maxi", "minimum", "maximum",
+                                                    "nominal", "nominale", "moyen", "moyenne", "total", "totale", "tres", "general",
+                                                    "generale", "thermique", "instantane", "instantanee"};
+    for (std::size_t i = from == std::string::npos ? u.size() : from; i < u.size(); ++i) {
+        const Tok& tk = u[i];
+        if (i == nameAt || i == namingAt || tk.f == ",") {
+            close();
+            continue;
+        }
         if (const std::string ty = typeOf(tk); !ty.empty()) {
+            close();
             if (pending.empty() && members.empty()) leading = ty;
-            for (const auto k : pending) members[k].type = ty;
+            for (const auto m : pending) {
+                members[m].type = ty;
+                typed[m] = true;
+            }
             pending.clear();
             continue;
         }
-        if (noise.count(tk.f) || stopWord(tk.f) || isDigits(tk.f)) continue;
-        // un accent : le nom sans accent (Defaut)
-        const std::string mn = tk.quoted || !hmi::isIdentifier(tk.raw) ? sanitize(tk.raw) : tk.raw;
-        if (mn.empty() || !hmi::isIdentifier(mn)) {
-            invalid.push_back(tk.raw);
+        if (tk.f == "type" && i + 1 < u.size() && !typeOf(u[i + 1]).empty()) continue;   // "de type REAL"
+        if ((tk.f == "de" || tk.f == "du" || tk.f == "d") && !cur.empty() && i + 1 < u.size() && typeOf(u[i + 1]).empty()
+            && !(u[i + 1].f == "type" && i + 2 < u.size() && !typeOf(u[i + 2]).empty())) {
+            join = true;
             continue;
         }
-        if (std::any_of(members.begin(), members.end(), [&](const auto& m) { return norm(m.name) == norm(mn); })) continue;
-        pending.push_back(members.size());
-        members.push_back({mn, {}, {}});
-    }
-    if (members.empty())
-        return ask("Quels membres pour le type " + code(name) + " ? \xC3\x89" "cris-les avec leur type, par exemple `Cr\xC3\xA9" "e un type " + name
-                       + " avec Marche en BOOL et Vitesse en REAL`.",
-                   {"Cr\xC3\xA9" "e un type " + name + " avec Marche en BOOL"});
-    std::vector<std::string> guessed, list;
-    for (auto& m : members) {
-        if (m.type.empty()) m.type = leading;
-        if (m.type.empty()) {
-            m.type = typeFromName(m.name);
-            guessed.push_back(m.name + " : " + m.type);
+        if (join && (tk.f == "la" || tk.f == "l" || tk.f == "le" || tk.f == "les")) continue;
+        if (!tk.quoted && !cur.empty() && modifiers.count(tk.f)) {
+            cur.push_back(tk);
+            continue;
         }
-        list.push_back(code(m.name) + " (" + m.type + ")");
+        if (!tk.quoted && (functionWord(tk.f) || fillerWord(tk.f) || requestVerb(tk.f) || isDigits(tk.f) || tk.f == "ou")) {
+            close();
+            continue;
+        }
+        if (tk.quoted || tk.raw.find('_') != std::string::npos) {   // un nom ecrit tel quel : un membre a lui seul
+            close();
+            cur.push_back(tk);
+            close();
+            continue;
+        }
+        if (!cur.empty() && !join) close();
+        cur.push_back(tk);
+        join = false;
+        if (cur.size() >= 4) close();
+    }
+    close();
+    // la liste est ouverte ("par exemple", "etc", "notamment", "entre autres") : le modele la complete
+    const bool openList = said("exemple") || said("etc") || said("notamment") || said("cetera") || (said("entre") && said("autres"));
+    std::vector<std::string> added;
+    // 5. LE TYPE DE CHAQUE MEMBRE : dit ; sinon celui du modele (le meme membre) ; sinon tire du nom - et dit
+    std::vector<std::string> guessed;
+    for (std::size_t i = 0; i < members.size(); ++i) {
+        auto& m = members[i];
+        if (m.type.empty() && !leading.empty()) {
+            m.type = leading;
+            typed[i] = true;
+        }
+        const Operation::MemberSpec* same = nullptr;
+        if (model)
+            for (const auto& mm : model->members)
+                if (memberKey(mm.name) == memberKey(m.name)) same = &mm;
+        if (same) m.description = same->description;
+        if (m.type.empty()) m.type = same ? same->type : typeFromName(m.name);
+        if (!typed[i]) guessed.push_back(m.name + " : " + m.type);
+    }
+    if (model && openList && !members.empty())
+        for (const auto& mm : model->members)
+            if (std::none_of(members.begin(), members.end(), [&](const auto& m) { return memberKey(m.name) == memberKey(mm.name); })) {
+                members.push_back(mm);
+                added.push_back(mm.name);
+            }
+    const bool fromModel = model && members.empty();
+    if (fromModel) members = model->members;
+    // 6. LE NOM : celui qui est dit ; sinon celui du modele (T_Pompe) ; sinon, demander
+    std::vector<std::string> sugg = {"Cr\xC3\xA9" "e un type pour une pompe", "Cr\xC3\xA9" "e un type pour un capteur",
+                                     "Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL"};
+    if (!refused.empty() && name.empty())
+        return ask(guill(refused) + " ne peut pas \xC3\xAAtre le nom du type : c'est un mot de la phrase, pas un nom. Quel nom lui donner ? "
+                   "\xC3\x89" "cris-le apr\xC3\xA8s \xC2\xAB qui s'appelle \xC2\xBB ou \xC2\xAB nomm\xC3\xA9 \xC2\xBB, par exemple `Cr\xC3\xA9" "e une "
+                   "structure nomm\xC3\xA9" "e T_Capteur avec Mesure en REAL`.",
+                   sugg);
+    if (members.empty()) {
+        if (!name.empty())
+            return ask("Quels membres pour le type " + code(name) + " ? \xC3\x89" "cris-les avec leur type, par exemple `Cr\xC3\xA9" "e un type " + name
+                           + " avec Marche en BOOL et Vitesse en REAL`. Je connais aussi des **mod\xC3\xA8les de d\xC3\xA9part** : capteur, capteur TOR, "
+                             "pompe, vanne, moteur, variateur, cuve, r\xC3\xA9gulateur (`Cr\xC3\xA9" "e un type pour une pompe`).",
+                       {"Cr\xC3\xA9" "e un type " + name + " avec Marche en BOOL", "Cr\xC3\xA9" "e un type pour une pompe"});
+        // une phrase qui dit autre chose (un truc, un mot inconnu) : pas comprise - une IA connectee le peut peut-etre
+        bool unclear = false;
+        for (const auto& tk : u) {
+            if (tk.f == "," || tk.f == u[at].f) continue;
+            if (vagueWord(tk.f)) unclear = true;
+            else if (!functionWord(tk.f) && !fillerWord(tk.f) && !requestVerb(tk.f) && typeWord(tk.f).empty() && !isDigits(tk.f) && tk.f != "ihm"
+                     && tk.f != "type" && tk.f != "structure" && tk.f != "struct")
+                unclear = true;
+        }
+        if (unclear) {
+            LocalReply r = ask("Je n'ai pas compris quel **type IHM** cr\xC3\xA9" "er. Dis-moi son nom et ses membres, par exemple `Cr\xC3\xA9" "e un type "
+                               "T_Pompe avec Marche en BOOL et Vitesse en REAL` ; ou ce qu'il d\xC3\xA9" "crit : je connais des **mod\xC3\xA8les de "
+                               "d\xC3\xA9part** (capteur, capteur TOR, pompe, vanne, moteur, variateur, cuve, r\xC3\xA9gulateur).",
+                               sugg);
+            r.understood = false;
+            return r;
+        }
+        return ask("Quel nom pour le type, et que d\xC3\xA9" "crit-il ? Par exemple `Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL`, ou "
+                   "`Cr\xC3\xA9" "e un type pour une pompe` (un **mod\xC3\xA8le de d\xC3\xA9part** : capteur, capteur TOR, pompe, vanne, moteur, "
+                   "variateur, cuve, r\xC3\xA9gulateur).",
+                   sugg);
+    }
+    std::string text;
+    if (name.empty() && model) {
+        name = model->name;
+        if (in_.project->hmiTypeByName(name)) {
+            std::string other;
+            for (int n = 2; n < 1000 && other.empty(); ++n)
+                if (!in_.project->hmiTypeByName(name + "_" + std::to_string(n))) other = name + "_" + std::to_string(n);
+            text = code(name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet : je propose " + code(other) + ". ";
+            name = other;
+        }
+    }
+    if (name.empty()) {
+        std::vector<std::string> list;
+        for (const auto& m : members) list.push_back(m.name);
+        return ask("Quel nom pour le type qui aura " + plural(members.size(), "membre", "membres") + " (" + codes(list, 6) + ") ? \xC3\x89" "cris-le "
+                   "apr\xC3\xA8s \xC2\xAB type \xC2\xBB ou \xC2\xAB nomm\xC3\xA9 \xC2\xBB, par exemple `Cr\xC3\xA9" "e un type T_Moteur avec Marche et "
+                   "Defaut`.",
+                   {"Cr\xC3\xA9" "e un type T_Moteur avec Marche et Defaut"});
+    }
+    if (const auto* ht = in_.project->hmiTypeByName(name)) {
+        std::string other;
+        for (int n = 2; n < 1000 && other.empty(); ++n)
+            if (!in_.project->hmiTypeByName(name + "_" + std::to_string(n))) other = name + "_" + std::to_string(n);
+        return ask("Le type IHM " + code(ht->name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet : choisis un autre nom, par exemple " + code(other) + ".");
     }
     Proposal p = base("Cr\xC3\xA9" "er le type " + name);
     Operation op;
     op.action = Operation::Action::Type;
     op.name = name;
     op.members = members;
+    if (model && (fromModel || !added.empty())) op.props.emplace_back("description", model->description);
     p.ops.push_back(std::move(op));
-    std::string text = "Je propose de cr\xC3\xA9" "er le **type IHM " + name + "** (une structure, comme Types IHM \xE2\x80\xBA Nouveau), avec "
-                       + plural(members.size(), "membre", "membres") + " : " + joinAnd(list, 20) + ".";
-    if (!guessed.empty()) text += "\nLe type n'\xC3\xA9tait pas dit : je l'ai tir\xC3\xA9 du nom (" + joinAnd(guessed) + ") - redemande avec le type s'il ne convient pas.";
+    std::vector<std::string> list;
+    for (const auto& m : members) list.push_back(code(m.name) + " (" + m.type + ")");
+    if (fromModel) {
+        text += "Voici un **mod\xC3\xA8le de d\xC3\xA9part**, \xC3\xA0 adapter : le **type IHM " + name + "** (" + model->label + ", un mod\xC3\xA8le classique de "
+                "l'industrie), avec " + plural(members.size(), "membre", "membres") + " : " + joinAnd(list, 20) + ". Chaque membre a sa description. "
+                "Pour d'autres membres, dis-les : `Cr\xC3\xA9" "e un type " + name + " avec Marche et Defaut`.";
+    } else {
+        text += "Je propose de cr\xC3\xA9" "er le **type IHM " + name + "** (une structure, comme Types IHM \xE2\x80\xBA Nouveau), avec "
+                + plural(members.size(), "membre", "membres") + " : " + joinAnd(list, 20) + ".";
+        if (!added.empty())
+            text += "\nTa liste \xC3\xA9tait ouverte (\xC2\xAB par exemple \xC2\xBB, \xC2\xAB etc \xC2\xBB) : je l'ai compl\xC3\xA9t\xC3\xA9" "e avec le mod\xC3\xA8le "
+                    + std::string(model->label) + " (" + codes(added, 12) + "). Redemande sans \xC2\xAB par exemple \xC2\xBB pour n'avoir que les tiens.";
+        if (!guessed.empty())
+            text += "\nLe type n'\xC3\xA9tait pas dit : je l'ai tir\xC3\xA9 du nom (" + joinAnd(guessed) + ") - redemande avec le type s'il ne convient pas.";
+    }
     if (!invalid.empty()) text += "\n" + codes(invalid) + " : pas un nom de membre valable (des lettres sans accent, des chiffres et _), laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9.";
     text += "\nL'aper\xC3\xA7u le montre avant d'appliquer ; Ctrl+Z le retire. Ensuite : `Cr\xC3\xA9" "e la variable Etat_P1 en " + name + "`.";
     return finish(std::move(p), std::move(text));
@@ -2335,6 +2851,7 @@ LocalReply Engine::bind() const {
     if (verb == std::string::npos) verb = indexOfPrefix("lie");
     if (verb == std::string::npos) verb = indexOfPrefix("branch");
     if (verb == std::string::npos) verb = indexOfPrefix("connect");
+    if (verb == std::string::npos) verb = indexOfPrefix("anim");
     if (verb == std::string::npos) verb = 0;
     std::size_t link = std::string::npos;
     for (std::size_t i = verb + 1; i < t_.size(); ++i)
@@ -2690,6 +3207,7 @@ LocalReply Engine::rename() const {
     if (t.objects.empty()) return ask("Quel objet renommer ?");
     const hmi::Object& o = *t.objects.front();
     const std::string wanted = t_[at + 1].quoted ? sanitize(t_[at + 1].raw) : t_[at + 1].raw;
+    if (badName(wanted)) return ask(guill(wanted) + " ne peut pas \xC3\xAAtre un nom d'objet : c'est un mot de la phrase. \xC3\x89" "cris le nouveau nom, par exemple `Renomme " + o.name + " en Bac_Eau`.");
     if (!hmi::edit::validName(wanted)) return ask(guill(wanted) + " n'est pas un nom d'objet valable (des lettres, des chiffres et _, sans espace).");
     if (!nameFree(*view(), wanted, {})) return ask("Le nom " + code(wanted) + " est d\xC3\xA9j\xC3\xA0 pris dans " + viewName() + ".");
     if (!view()->descendantsOf(o.id).empty())
@@ -3041,6 +3559,12 @@ LocalReply Engine::run() {
                          || hasPrefix("dessin") || phrase("il me faut") || phrase("je veux") || hasPrefix("genere") || hasPrefix("fabriqu");
     const bool weakCreate = has("mets") || has("met") || has("mettre") || has("pose") || has("poser") || has("place") || has("placer")
                          || hasPrefix("positionn");
+    // 1.16.1 : les tournures d'une envie ("je voudrais", "j'aimerais", "il faudrait", "j'ai besoin de") et d'une fabrication
+    // ("fais-moi", "prevois", "prepare") : elles demandent une vue, des variables, un type comme "cree".
+    const bool wantVerb = has("voudrais") || has("voudrait") || has("voudrions") || has("aimerais") || has("aimerait") || hasPrefix("souhait")
+                       || has("faudrait") || phrase("il faut") || has("besoin") || phrase("je veux") || phrase("on veut");
+    const bool makeVerb = has("fais") || has("faire") || has("faites") || hasPrefix("prevoi") || hasPrefix("prepar") || hasPrefix("construi")
+                       || has("donne") || has("donnez");
     if ((has("quelles") || has("quels") || has("liste") || has("lister") || phrase("montre moi") || phrase("donne moi") || question) && !createVerb) {
         if (has("variables") || has("variable")) return listVariables();
         if (has("vues")) return listViews();
@@ -3052,17 +3576,32 @@ LocalReply Engine::run() {
                      || phrase("la meme") || phrase("le meme") || has("idem") || phrase("les memes") || (has("aussi") && t_.size() <= 4);
     if (follow && mentions_.empty() && !hasPrefix("supprim") && !hasPrefix("dupliqu")) return followUp();
     // le synoptique
-    if (has("synoptique") || (has("station") && has("pompage"))) return synoptic();
+    if (has("synoptique") || (has("station") && has("pompage") && !has("titre") && !has("texte") && !has("libelle") && !has("intitule") && !hasPrefix("ecri")))
+        return synoptic();
     // une vue neuve
-    if (createVerb && (phrase("une vue") || phrase("nouvelle vue") || phrase("un ecran") || phrase("une page") || (phrase("la vue") && mentions_.empty()))
+    if ((createVerb || wantVerb || makeVerb) && (phrase("une vue") || phrase("nouvelle vue") || phrase("un ecran") || phrase("une page")
+                                                 || (phrase("la vue") && mentions_.empty()))
         && !(has("variable") || has("variables")))
         return createView();
+    // 1.16.1 : "ajoute un champ Vitesse au type T_Pompe" : modifier un type existant n'est pas une operation de l'Assistant
+    if ((has("champ") || has("champs") || has("membre") || has("membres")) && (phrase("au type") || phrase("du type") || phrase("a la structure")
+                                                                              || phrase("de la structure") || phrase("dans le type") || phrase("dans la structure"))) {
+        LocalReply r = ask("Je ne sais pas **modifier un type IHM qui existe** : ajoute le membre dans **Types IHM** (double-clic sur le type), ou "
+                           "d\xC3\xA9" "cris un nouveau type complet, par exemple `Cr\xC3\xA9" "e un type T_Pompe2 avec Marche et Vitesse`.",
+                           {"Cr\xC3\xA9" "e un type pour une pompe", "Que sais-tu faire ?"});
+        r.understood = false;
+        return r;
+    }
     // un type IHM (une structure) : "cree un type T_Pompe avec Marche en BOOL", "cree une structure T_Vanne avec ..."
-    if ((createVerb || hasPrefix("defini")) && (has("type") || has("structure") || has("struct")) && !has("types") && !has("structures")
+    // 1.16.1 : aussi "je voudrais un type moteur", "fais-moi une structure pour un variateur", et sans verbe "une structure
+    // pour une pompe", "un type Vanne" ; pas "une pompe de type centrifuge" (une precision de l'objet).
+    const std::size_t typeAt = typeNoun(t_);
+    const bool typeAlone = typeAt == 1 && (t_[0].f == "un" || t_[0].f == "une" || t_[0].f == "nouveau" || t_[0].f == "nouvelle");
+    if (typeAt != std::string::npos && (createVerb || wantVerb || makeVerb || hasPrefix("defini") || typeAlone) && !has("types") && !has("structures")
         && !has("automate") && !has("api") && !has("plc") && !has("ddt") && !has("ddts") && !hasPrefix("variable"))
         return createType();
     // des variables
-    if ((createVerb || hasPrefix("propos") || hasPrefix("import")) && (hasPrefix("variable") || has("ddt") || has("ddts")
+    if ((createVerb || wantVerb || makeVerb || hasPrefix("propos") || hasPrefix("import")) && (hasPrefix("variable") || has("ddt") || has("ddts")
                                                                        || ((has("types") || has("type")) && (has("automate") || has("ihm")))))
         return createVariables();
     // creer des objets neufs ("cree 4 voyants alignes") : avant les gestes d'edition que la phrase peut citer
@@ -3074,7 +3613,8 @@ LocalReply Engine::run() {
         if (createVerb && fresh && !hasPrefix("associ") && !hasPrefix("reli")) return createFromMentions();
     }
     // associer
-    if (hasPrefix("associ") || hasPrefix("reli") || has("lie") || has("lier") || hasPrefix("branch") || hasPrefix("connect"))
+    if (hasPrefix("associ") || hasPrefix("reli") || has("lie") || has("lier") || hasPrefix("branch") || hasPrefix("connect")
+        || (hasPrefix("anim") && has("avec") && !has("si") && !has("quand") && !has("lorsque")))
         return bind();
     // animer : clignoter, une couleur ou une visibilite selon une condition
     if (hasPrefix("clignot") || ((has("si") || has("quand") || has("lorsque")) && (has("sinon") || hasPrefix("cach") || hasPrefix("montr")
@@ -3110,6 +3650,10 @@ LocalReply Engine::run() {
         if (m.indefinite && !(pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end)) newObjects = true;
     if (moveVerb && !newObjects) return move();
     if (weakCreate && !newObjects && pos.rel != Rel::None && !names_.empty() && names_.front().at < pos.at) return move();
+    // 1.16.1 : "place la vanne sous la cuve" (un objet qui existe, devant la position) : le deplacer
+    if (weakCreate && !newObjects && pos.rel != Rel::None
+        && std::any_of(mentions_.begin(), mentions_.end(), [&](const Mention& m) { return m.definite && !m.indefinite && m.at < pos.at; }))
+        return move();
     // le texte
     const bool textWord = has("texte") || has("libelle") || has("intitule") || hasPrefix("ecri") || has("titre");
     bool quotedText = false;
@@ -3129,10 +3673,15 @@ LocalReply Engine::run() {
     if (!anyColor.empty() && !newObjects && !(createVerb && !mentions_.empty())) return color();
     // creer
     if (!mentions_.empty() && (createVerb || weakCreate || newObjects)) return createFromMentions();
-    if (createVerb && mentions_.empty())
-        return ask("Quel genre d'objet ? Je connais ceux de la biblioth\xC3\xA8que (une pompe, une cuve, un bouton, un voyant...). Par exemple "
-                   "`Ajoute 2 pompes`. Demande `Quels genres d'objets ?` pour la liste.",
-                   examples());
+    if (createVerb && mentions_.empty()) {
+        // 1.16.1 : un verbe de creation sans genre connu ("il me faut un machin") : pas comprise (understood = false) - une IA
+        // connectee, si elle est reglee, peut la reprendre
+        LocalReply r = ask("Quel genre d'objet ? Je connais ceux de la biblioth\xC3\xA8que (une pompe, une cuve, un bouton, un voyant...). Par exemple "
+                           "`Ajoute 2 pompes`. Demande `Quels genres d'objets ?` pour la liste.",
+                           examples());
+        r.understood = false;
+        return r;
+    }
     if (follow) return followUp();
     return notUnderstood();
 }
