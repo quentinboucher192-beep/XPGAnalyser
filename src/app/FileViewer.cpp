@@ -145,10 +145,6 @@ std::string colName(std::size_t c) {
     return s;
 }
 
-bool isTextKind(fv::Kind k) {
-    return k == fv::Kind::Text || k == fv::Kind::Json || k == fv::Kind::Xml || k == fv::Kind::ControlExpert || k == fv::Kind::Binary;
-}
-
 } // namespace
 
 // ============================================================================ l'etat ==
@@ -691,7 +687,7 @@ void drawImage(const Ctx& c, const fv::Preview& p, gfx::Rect area) {
     // la barre : -, +, Ajuster, 100 %
     float x = area.x;
     const float y = area.y;
-    const auto bm = button(c, x, y, "\xE2\x88\x92", "zoom-", true, false, lineH(c, c.f.small) + 14.f);
+    const auto bm = button(c, x, y, "-", "zoom-", true, false, lineH(c, c.f.small) + 14.f);
     x += bm.w + 4;
     x += button(c, x, y, "+", "zoom+", true, false, bm.w).w + 4;
     x += button(c, x, y, "Ajuster", "fit", true, d.fit).w + 4;
@@ -852,7 +848,7 @@ void drawPdf(const Ctx& c, const fv::Preview& p, gfx::Rect area) {
     const auto next = button(c, x, y, "", "page+", d.page + 1 < n);
     glyph(c, next, '>', d.page + 1 < n ? c.pal.text : c.pal.muted);
     x += next.w + 10;
-    x += button(c, x, y, "\xE2\x88\x92", "zoom-", true, false, prev.w).w + 4;
+    x += button(c, x, y, "-", "zoom-", true, false, prev.w).w + 4;
     x += button(c, x, y, "+", "zoom+", true, false, prev.w).w + 4;
     x += button(c, x, y, "Ajuster", "fit", true, d.fit).w + 8;
     area.y += prev.h + 8;
@@ -955,7 +951,7 @@ void drawLines(const Ctx& c, const fv::Preview& p, gfx::Rect area) {
     }
     c.r.popClip();
     d.maxLeft = std::max(0.0, static_cast<double>(widest - (area.w - gutter - marker) + 20.f));
-    d.left = std::clamp(d.left, 0.0, std::max(d.maxLeft, d.left > 0 ? d.left : 0.0));
+    d.left = std::clamp(d.left, 0.0, d.maxLeft);
     scrollbar(c, area, d.top, static_cast<double>(rows), static_cast<double>(shown.size()));
 }
 
@@ -1084,7 +1080,7 @@ void drawDocx(const Ctx& c, const fv::Preview& p, gfx::Rect area) {
         float y = 0;
         for (const auto& para : p.paragraphs) {
             const gfx::FontId f = para.level == 1 ? c.f.title : para.level == 2 ? c.f.ui : para.table ? c.f.small : c.f.ui;
-            const std::string body = (para.item ? "\xE2\x80\xA2 " : "") + para.text;
+            const std::string body = (para.item ? "\xC2\xB7 " : "") + para.text;
             if (para.level > 0) y += lineH(c, f) * 0.4f;
             for (const auto& l : wrapText(c, body, f, w - (para.item ? 14.f : 0.f))) {
                 FileViewer::Impl::WLine wl;
@@ -1267,6 +1263,11 @@ void FileViewer::paint(gfx::IRenderer& r, const gfx::Rect& area, const Palette& 
         }
     }
     r.popClip();
+    // Les textures remplacees pendant ce dessin (l'image suivante d'un GIF, une page de PDF plus nette) : rendues tout de
+    // suite (elles ne sont plus dessinees ; celles des images d'avant l'ont ete et le sont deja).
+    for (const auto id : d.retired)
+        if (id.v) base.releaseImage(id);
+    d.retired.clear();
 }
 
 bool FileViewer::event(const ui::InputEvent& ev, const gfx::Rect& area) {
@@ -1384,9 +1385,11 @@ struct Held {
     gfx::Rect                   rect{};
     double                      used{0};
 };
+// Jamais detruite : a la sortie de l'appli, le lecteur de sons (un statique) est peut-etre deja parti ; un apercu qui
+// l'arreterait en se detruisant le toucherait mort. Le systeme reprend tout.
 std::map<std::pair<const void*, std::uint32_t>, Held>& heldViewers() {
-    static std::map<std::pair<const void*, std::uint32_t>, Held> m;
-    return m;
+    static auto* m = new std::map<std::pair<const void*, std::uint32_t>, Held>();
+    return *m;
 }
 } // namespace
 

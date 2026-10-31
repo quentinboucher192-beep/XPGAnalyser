@@ -5,6 +5,7 @@
 
 #include "App.hpp"
 #include "FilePreview.hpp"   // Lot API 8 : l'explorateur, 2e partie
+#include "FileViewer.hpp"    // 1.21.0 : l'apercu complet (la fenetre d'apercu de tous les fichiers)
 #include "Settings.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../ui/FileExplorerModel.hpp"
@@ -65,6 +66,11 @@ namespace app::explorer {
         ctx.preview = [facts](const std::string& path) { return preview::describe(path, facts); };
         ctx.thumbnail = [](const std::string& path, int maxSide) { return preview::thumbnail(path, maxSide); };
         ctx.openExternally = [](const std::string& path) { return preview::openWithSystem(path); };
+        // 1.21.0 : l'apercu complet - la fenetre d'apercu de tous les fichiers (app/FileViewer).
+        ctx.fullPreview = [&app](const std::string& path) -> std::string {
+            return showPreviewWindow(app.detachedWindows(), fileview::fromPath(path), true) ? std::string{}
+                                                                                            : std::string("fen\xC3\xAAtre d'aper\xC3\xA7u impossible ici");
+        };
         ctx.useSystemExplorer = [&app] {
             setSystemPreferred(app.settings(), true);
             (void)app.settings().save();

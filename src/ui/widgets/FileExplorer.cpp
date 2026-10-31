@@ -561,6 +561,7 @@ namespace ui {
             const auto r = bounds();
             ctx.r.fillRect({r.x, r.y, 1.f, r.h}, c.border);
             openRect_ = {};
+            fullRect_ = {};
             if (!d_.previewShown_) {
                 toggle_ = {r.x + 1.f, r.y, std::max(1.f, r.w - 1.f), r.h};
                 ctx.r.drawText({r.x + 9.f, r.y + 6.f}, "\xE2\x80\xB9", fnt.uiBold, c.textMuted);
@@ -667,6 +668,16 @@ namespace ui {
                 ctx.r.strokeRect(openRect_, c.border, 1.f);
                 const std::string label = fitted("Ouvrir avec le programme du syst\xC3\xA8me", fnt.smallUi, w - 12.f);
                 ctx.r.drawText({x + (w - ui::measureWidth(label, fnt.smallUi)) * 0.5f, y + 6.f}, label, fnt.smallUi, c.accent);
+                y += 28.f;
+            }
+            // 1.21.0 : l'apercu complet (la fenetre d'apercu de tous les fichiers), pour un fichier.
+            if (!p.folder && p.error.empty() && d_.context_.fullPreview) {
+                y += 6.f;
+                fullRect_ = {x, y, w, 28.f};
+                ctx.r.fillRoundedRect(fullRect_, ctx.theme.brand.card, ctx.theme.metric.radius);
+                ctx.r.strokeRect(fullRect_, c.border, 1.f);
+                const std::string label = fitted("Aper\xC3\xA7u complet", fnt.smallUi, w - 12.f);
+                ctx.r.drawText({x + (w - ui::measureWidth(label, fnt.smallUi)) * 0.5f, y + 6.f}, label, fnt.smallUi, c.accent);
             }
             ctx.r.popClip();
         }
@@ -682,6 +693,11 @@ namespace ui {
                     if (!why.empty()) d_.preview_.error = why;
                     invalidate();
                 }
+                if (fullRect_.w > 0.f && fullRect_.contains(m->pos)) {   // 1.21.0
+                    const std::string why = d_.previewSelectedFully();
+                    if (!why.empty()) d_.preview_.error = why;
+                    invalidate();
+                }
                 return EventResult::Consumed;
             }
             return EventResult::Ignored;
@@ -689,7 +705,7 @@ namespace ui {
 
     private:
         FileExplorerDialog& d_;
-        gfx::Rect           toggle_{}, openRect_{};
+        gfx::Rect           toggle_{}, openRect_{}, fullRect_{};
     };
     // ---- fin Lot API 8 : l'explorateur, 2e partie ----
 
@@ -1666,7 +1682,15 @@ namespace ui {
         }
         for (const auto& line : p.text) out.push_back("> " + line);
         if (p.openable) out.emplace_back("[Ouvrir avec le programme du syst\xC3\xA8me]");
+        if (!p.folder && p.error.empty() && context_.fullPreview) out.emplace_back("[Aper\xC3\xA7u complet]");   // 1.21.0
         return out;
+    }
+
+    std::string FileExplorerDialog::previewSelectedFully() {
+        const f::Entry* e = selectedEntry();
+        if (!e || e->folder) return "choisis d'abord un fichier";
+        if (!context_.fullPreview) return "pas d'aper\xC3\xA7u complet ici";
+        return context_.fullPreview(e->path);
     }
 
     std::string FileExplorerDialog::openSelectedExternally() {
