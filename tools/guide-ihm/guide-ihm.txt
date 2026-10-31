@@ -6488,6 +6488,8 @@ Montrer au poste d'exploitation les fichiers d'un dossier ou d'une archive : les
 - la molette fait défiler les lignes.
 ### L'infobulle
 Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zip, image, texte, document PDF, son, vidéo, tableau CSV, fichier de l'application), la **taille** (dans un zip : la taille compressée et le taux), les **dates** de modification (et de création quand le système la donne) ; pour un **dossier**, ses fichiers, ses sous-dossiers et leur taille totale (le compte s'arrête à 5000 éléments, et le dit) ; pour un **zip**, ses entrées ; pour une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses premières lignes.
+### L'aperçu (1.21.0)
+**Aperçu** (coché d'office) montre le fichier choisi. Si l'objet fait au moins 760 pixels de large, l'aperçu est dans l'objet : la liste à gauche, l'aperçu à droite, la ligne d'état dessous. Sinon, il s'ouvre dans une fenêtre déplaçable et redimensionnable qui suit les choix suivants. C'est le même aperçu que IHM › Ressources : image, PDF, texte, grille, JSON, XML, DOCX, zip, son, vidéo, police, sinon le type et les premiers octets. Une entrée d'un zip se montre sans être extraite ; un dossier choisi montre son contenu résumé. Les boutons **Ouvrir avec le programme du système** et **Ouvrir le dossier** n'apparaissent que si **Ouvrir avec le système permis** est coché (décoché d'office : un poste d'exploitation ne lance aucun programme). Pilotable décoché bloque aussi les gestes de l'aperçu.
 ### Ses paramètres
 @param folder | Source (dossier ou .zip) | (vide) | Un dossier ou un .zip ; relative : au dossier du projet ; vide : les ressources du projet.
 @param filter | Filtre d'extensions | (vide) | *.csv;*.pdf : seulement ces fichiers (les dossiers et les zips restent) ; vide : tout.
@@ -6498,6 +6500,8 @@ Au survol d'une ligne : le **chemin complet**, le **genre** (dossier, archive zi
 @param showDate | Colonne Date | TRUE | La date de modification.
 @param pickTo | Choix vers | (vide) | Une variable STRING : le chemin complet de la ligne choisie.
 @param allowRefresh | Rafraîchir permis | TRUE | Le bouton qui relit la source.
+@param showPreview | Aperçu | TRUE | Le fichier choisi se montre : dans l'objet dès 760 pixels de large, sinon dans une fenêtre d'aperçu.
+@param allowOpen | Ouvrir avec le système permis | FALSE | Les boutons « Ouvrir avec le programme du système » et « Ouvrir le dossier » de l'aperçu.
 @param allowExtract | Extraire permis | FALSE | Le bouton Extraire (un fichier d'un zip).
 @param extractTo | Dossier d'extraction | donnees/extraits | Relatif : au dossier du projet ; jamais dans le projet lui-même (ihm/).
 @param maxItems | Éléments au plus | 2000 | La liste s'arrête là, et le dit.
@@ -10190,6 +10194,10 @@ Les choix de la page **durent jusqu'au redémarrage de l'IHM** : ils ne vont pas
 - **Ma bibliothèque** : une copie de l'image choisie rejoint **Mes images**, dans l'onglet Images de la bibliothèque de l'éditeur de vues ; gardée hors du projet, elle se pose dans tous tes projets (voir « Les objets de la bibliothèque »). Les images posées depuis cet onglet arrivent ici, comme un fichier importé.
 @nouveau 1.12.12
 1.12.12 : les vidéos AVI, MOV et WMV s'importent ; la fiche montre la première image quand elle se décode ici (un AVI Motion-JPEG partout, le reste sous Windows), sa durée, sa taille, son codec.
+### L'aperçu de tous les fichiers (1.21.0)
+Choisir une ressource la montre à droite, quel que soit son genre. Une image s'ajuste (−, +, Ajuster, 100 %, Ctrl+molette ; un double-clic bascule) et un GIF animé tourne. Un son montre son onde (Lire / Pause), une vidéo sa première image (Lire quand elle se décode ici), une police s'écrit sur quatre lignes. Pour un document : un PDF page à page avec son nombre de pages ; un texte ou du code numéroté (encodage détecté : UTF-8, UTF-16, Windows-1252) ; une grille CSV ou Excel avec ses onglets et ses 500 premières lignes ; un JSON ou un XML indenté qu'on replie et déplie ; un DOCX avec ses titres ; la liste d'un zip ; sinon le type reconnu et les premiers octets en hexadécimal.
+- La molette fait défiler, Maj+molette en largeur. **Ouvrir avec le programme du système** ouvre une copie ; **Ouvrir le dossier** ouvre le dossier des ressources du projet enregistré.
+- Ce qui est long à lire se charge en arrière-plan (« Chargement… ») ; un fichier abîmé dit pourquoi. Le même aperçu sert dans **Fichiers externes**, dans l'objet **Explorateur de fichiers** et dans l'explorateur de l'appli (**Aperçu complet**).
 
 == fichiers | Fichiers externes et bases de données
 : Un fichier externe (Excel, CSV, TXT, JSON, XML, SQLite) est lié au projet par son chemin ; un tableau peut en afficher les lignes.

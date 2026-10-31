@@ -230,6 +230,16 @@ const std::vector<Note>& table() {
          "un compteur avance) ; un dossier contenu dans un autre n'est jamais compt\xC3\xA9 deux fois. Ouvrir le dossier, "
          "trier par nom ou par poids, actualiser, copier le r\xC3\xA9sum\xC3\xA9.",
          "menu-aide", ""),
+        note("1.21.0", "Ressources", Kind::New,
+         "UN APER\xC3\x87U DE TOUS LES TYPES DE FICHIERS, le m\xC3\xAAme partout : IHM \xE2\x80\xBA Ressources, Fichiers "
+         "externes, l'objet Explorateur de fichiers et l'explorateur de l'appli (\xC2\xAB Aper\xC3\xA7u complet \xC2\xBB). "
+         "Une image ajust\xC3\xA9" "e et zoomable, un PDF page \xC3\xA0 page, du texte ou du code num\xC3\xA9rot\xC3\xA9 "
+         "avec son encodage, une grille CSV ou Excel avec ses onglets, un JSON ou un XML d\xC3\xA9pliable, un DOCX et ses "
+         "titres, la liste d'un zip, un son ou une vid\xC3\xA9o \xC3\xA0 lire, l'\xC3\xA9" "chantillon d'une police ; pour "
+         "tout autre fichier, son type reconnu et ses premiers octets en hexad\xC3\xA9" "cimal. La lecture se fait en arri\xC3\xA8re-plan, "
+         "sans jamais bloquer l'\xC3\xA9" "cran ; l'Explorateur de fichiers gagne les propri\xC3\xA9t\xC3\xA9s Aper\xC3\xA7u "
+         "(dans l'objet d\xC3\xA8s 760 pixels de large, sinon une fen\xC3\xAAtre) et Ouvrir avec le syst\xC3\xA8me permis.",
+         "ressources", ""),
         note("1.21.0", "Vues", Kind::Fixed,
          "Supprimer un symbole emporte aussi ses popups (elles restaient orphelines).",
          "assistant-ia-plan", ""),
