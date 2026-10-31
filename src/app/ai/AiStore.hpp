@@ -93,7 +93,9 @@ struct Conversation {
 // memoire (Assistant::setApiKey) ; "Memoriser la cle" la protege par Windows (DPAPI, AiSecret.hpp).
 struct Settings {
     bool        enabled{true};
-    std::string provider{"demo"};          // "demo", "anthropic" (1.15.0), puis ceux a venir
+    // 1.16.0 : "integree" par defaut (une installation neuve : l'IA ecrite dans le logiciel, sans
+    // connexion) ; un parametres.json existant garde son choix (sans la cle : "demo", celui d'avant).
+    std::string provider{"integree"};      // "integree", "demo", "anthropic" (1.15.0), "openai" (1.16.0)
     std::string model;                     // une case libre, vide par defaut : rien en dur
     std::string endpoint;                  // l'adresse de connexion (vide : celle du fournisseur ; sinon un relais)
     int         timeoutSeconds{60};        // l'inactivite : rien recu pendant ce delai, une erreur

@@ -29,6 +29,14 @@
 //  Arreter ferme la connexion ; le fournisseur arrete finit sur son fil, sans
 //  bloquer l'interface (retiring_).
 //
+//  1.16.0 : L'IA INTEGREE (AiLocal.hpp, Settings::provider "integree", le choix par
+//  defaut d'une installation neuve) suit le chemin de la demonstration : sa reponse est
+//  calculee a l'envoi (des regles, sur ce PC : rapide, sans fil), puis "s'ecrit" au
+//  rythme de tick() apres une courte reflexion ; sa proposition entre dans la
+//  conversation comme celle d'un vrai fournisseur (la carte, l'apercu, le mode Direct,
+//  un Ctrl+Z). Les tours precedents de la conversation lui donnent le sens d'une suite
+//  ("et une autre", "la meme en bleu").
+//
 //  L'HORLOGE est celle qu'on passe a tick() (les secondes de l'application) :
 //  les essais et les seances de script sont reproductibles.
 // =============================================================================
@@ -99,6 +107,10 @@ public:
     [[nodiscard]] std::string shownText() const;
     // Les suggestions a montrer sous la derniere reponse (une demande non reconnue).
     [[nodiscard]] bool suggestionsAfterLast() const noexcept { return suggestionsAfter_ && !generating(); }
+    // 1.16.0 : LES SUGGESTIONS (les puces de la conversation vide, et sous une reponse qui en a) : celles de
+    // l'IA integree (apres une demande qu'elle n'a pas comprise : les formulations qu'elle propose), sinon
+    // celles de la demonstration.
+    [[nodiscard]] const std::vector<std::string>& suggestions() const;
 
     // ---- les pieces jointes du prochain message ------------------------------------------
     struct Pending {
@@ -159,6 +171,8 @@ public:
     // Un fournisseur par le reseau (1.16.0 : providerUsesNetwork - "anthropic", "openai") ; "demo" et
     // "integree" restent sur le PC.
     [[nodiscard]] bool live() const noexcept { return providerUsesNetwork(settings_.provider); }
+    // 1.16.0 : l'IA integree (AiLocal.hpp) - sur ce PC, sans connexion ni configuration.
+    [[nodiscard]] bool local() const noexcept { return settings_.provider == "integree"; }
     // Il manque le modele ou la cle (l'en-tete dit "A configurer", un clic ouvre les parametres).
     [[nodiscard]] bool needsSetup() const;
     // Pret a envoyer ? Faux et `why` : ce qui manque, en francais.
@@ -220,6 +234,7 @@ private:
         std::size_t words{0}, shownWords{0};
         std::optional<Proposal> proposal;
         bool        suggestions{false};
+        bool        local{false};       // 1.16.0 : la reponse de l'IA integree (une reflexion plus courte)
         // 1.15.0 : un vrai fournisseur.
         bool                    live{false};
         std::string             text;          // recu jusqu'ici
@@ -239,6 +254,7 @@ private:
     Generation                gen_;
     std::vector<Pending>      pending_;
     bool                      suggestionsAfter_{false};
+    std::vector<std::string>  localSuggestions_;   // 1.16.0 : celles de la derniere reponse de l'IA integree
     std::string               notice_;
     int                       directConfirm_{-1};
     double                    lastNow_{0};

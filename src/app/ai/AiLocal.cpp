@@ -718,8 +718,11 @@ void Engine::scanMentions() {
         bool found = false;
         // d'abord le mot exact (ou son pluriel) ; puis, seul, a une faute pres - pas une couleur, pas un mot
         // courant (aligne n'est pas une ligne, jaune pas une jauge), les deux premieres lettres justes
-        static const std::set<std::string> common = {"aligne", "alignes", "ligne", "jaune", "cache", "monte", "texte", "teste", "pose",
-                                                     "place", "trace", "barre", "grande", "grand", "petite", "porte", "carte", "marche"};
+        static const std::set<std::string> common = {
+            "aligne", "alignes", "ligne", "jaune", "cache", "monte", "texte", "teste", "pose", "place", "trace", "barre", "grande", "grand",
+            "petite", "porte", "carte", "marche", "change", "changer", "changes", "modifie", "modifier", "ajoute", "ajouter", "supprime",
+            "deplace", "renomme", "associe", "relie", "duplique", "copie", "montre", "affiche", "ecris", "ecrire", "rends", "agrandis",
+            "reduis", "descends", "decale", "efface", "retire", "enleve", "repartis", "branche", "mettre", "creer", "cree", "pareil"};
         const bool typoOk = colorAt(t_, i).empty() && !common.count(t_[i].f) && !stopWord(t_[i].f);
         for (int pass = 0; pass < 2 && !found; ++pass)
         for (const auto& kw : words) {
@@ -899,7 +902,7 @@ Engine::Target Engine::targets(std::size_t from, std::size_t to, bool many, bool
             side.clear();
             continue;
         }
-        if (m.plural || m.all || many) {
+        if (m.plural || m.all) {
             for (const auto* o : all) push(o);
         } else if (all.size() == 1) {
             push(all.front());
@@ -973,7 +976,11 @@ Engine::VarFind Engine::findVariable(std::size_t from, std::size_t to, const hmi
     for (std::size_t i = from; i < to; ++i) {
         const Tok& tk = t_[i];
         if (tk.quoted) continue;
-        if (nameAt(i) && !(tk.raw.find('_') != std::string::npos)) continue;   // un objet, pas une variable
+        // l'objet vise lui-meme (son nom ecrit) n'est pas la variable ; un mot qui est aussi le texte d'un autre
+        // objet (Marche) peut l'etre
+        if (const auto* n = nameAt(i); n && about && tk.raw.find('_') == std::string::npos
+                                       && std::find(n->ids.begin(), n->ids.end(), about->id) != n->ids.end())
+            continue;
         const bool identifier = tk.raw.find('_') != std::string::npos || tk.raw.find('.') != std::string::npos
                              || (std::any_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })
                                  && std::any_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isalpha(static_cast<unsigned char>(c)); }))
@@ -1108,8 +1115,10 @@ LocalReply Engine::finish(Proposal p, std::string text) const {
     if (in_.project) {
         const Check ck = validate(*in_.project, p, in_.env);
         std::vector<std::string> real;
+        // ce que le contrat ne valide pas encore (creer_vue, creer_variables ; une formule "=..." dans une
+        // propriete) : la validation complete en decidera, la carte le dira
         for (const auto& e : ck.errors)
-            if (e.find("pas encore disponible") == std::string::npos) real.push_back(e);
+            if (e.find("pas encore disponible") == std::string::npos && e.find(" = \xC2\xAB =") == std::string::npos) real.push_back(e);
         if (!real.empty()) {
             r.text = "Je n'ai pas pu pr\xC3\xA9parer une proposition valable : " + real.front()
                      + (real.size() > 1 ? " (et " + plural(real.size() - 1, "autre probl\xC3\xA8me", "autres probl\xC3\xA8mes") + ")" : std::string{})

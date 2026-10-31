@@ -4,6 +4,7 @@
 #include "AiAssistant.hpp"
 
 #include "AiHttp.hpp"
+#include "AiLocal.hpp"
 #include "AiPrompt.hpp"
 #include "AiSecret.hpp"
 
@@ -51,6 +52,8 @@ std::string firstWords(std::string_view s, std::size_t n) {
 }
 
 const char* const kNewTitle = "Nouvelle conversation";
+// 1.16.0 : l'IA integree repond vite (des regles sur ce PC) : une attente et une reflexion courtes.
+constexpr double kLocalWaiting = 0.15, kLocalThinking = 0.45;
 const char* const kStoppedEmpty = "*(Arr\xC3\xAAt\xC3\xA9" "e avant la r\xC3\xA9ponse.)*";
 
 // Le libelle d'un fournisseur ("Anthropic (Claude)" -> "Anthropic").
@@ -142,13 +145,14 @@ bool Assistant::tick(double now) {
     } else if (gen_.phase != Phase::Idle) {
         if (gen_.start < 0) gen_.start = now;
         const double t = now - gen_.start;
-        Phase ph = t < kWaiting ? Phase::Waiting : t < kWaiting + kThinking ? Phase::Thinking : Phase::Writing;
+        const double waiting = gen_.local ? kLocalWaiting : kWaiting, thinking = gen_.local ? kLocalThinking : kThinking;
+        Phase ph = t < waiting ? Phase::Waiting : t < waiting + thinking ? Phase::Thinking : Phase::Writing;
         if (ph != gen_.phase) {
             gen_.phase = ph;
             ++revision_;
         }
         if (ph == Phase::Writing) {
-            const double w = (t - kWaiting - kThinking) * kWordsPerSecond;
+            const double w = (t - waiting - thinking) * kWordsPerSecond;
             const auto shown = std::min<std::size_t>(gen_.words, static_cast<std::size_t>(std::max(0.0, std::floor(w))) + 1);
             if (shown != gen_.shownWords) {
                 gen_.shownWords = shown;
@@ -352,7 +356,42 @@ bool Assistant::send(std::string text, std::string* why) {
     if (ctx.view) c.project.view = ctx.view->name;
     c.messages.push_back(std::move(u));
 
-    DemoReply reply = demoReply(text, ctx);
+    // 1.16.0 : l'IA integree (sur ce PC, des regles) ; sinon la demonstration.
+    DemoReply reply;
+    localSuggestions_.clear();
+    if (local()) {
+        PromptInput in;
+        in.project = ctx.project;
+        in.view = ctx.view;
+        in.selection = ctx.selection;
+        in.settings = settings_;
+        in.env = host_.env;
+        in.projectName = host_.projectName ? host_.projectName() : std::string{};
+        in.request = text;
+        // les tours d'avant (les six derniers) : la demande, la proposition de sa reponse
+        std::vector<LocalTurn> history;
+        for (std::size_t i = 0; i + 1 < c.messages.size(); ++i) {
+            if (c.messages[i].role != "utilisateur") continue;
+            LocalTurn turn;
+            turn.request = c.messages[i].text;
+            if (i + 1 < c.messages.size() - 1 && c.messages[i + 1].role == "assistant") turn.proposal = c.messages[i + 1].proposal;
+            history.push_back(std::move(turn));
+        }
+        if (history.size() > 6) history.erase(history.begin(), history.end() - 6);
+        LocalReply lr = understand(in, text, history);
+        reply.text = std::move(lr.text);
+        reply.proposal = std::move(lr.proposal);
+        reply.suggestions = !lr.suggestions.empty();
+        localSuggestions_ = std::move(lr.suggestions);
+        if (!ctx.attachments.empty()) {
+            std::string files;
+            for (const auto& att : ctx.attachments) files += (files.empty() ? "" : ", ") + std::string("**") + att.name + "**";
+            reply.text = "J'ai bien re\xC3\xA7u " + files + ", mais l'IA int\xC3\xA9gr\xC3\xA9" "e ne lit pas le contenu des pi\xC3\xA8" "ces jointes.\n\n"
+                         + reply.text;
+        }
+    } else {
+        reply = demoReply(text, ctx);
+    }
     Message a;
     a.id = "m" + std::to_string(c.messages.size() + 1);
     a.role = "assistant";
@@ -368,6 +407,7 @@ bool Assistant::send(std::string text, std::string* why) {
     gen_.words = countWords(gen_.full);
     gen_.proposal = std::move(reply.proposal);
     gen_.suggestions = reply.suggestions;
+    gen_.local = local();
     suggestionsAfter_ = false;
     (void)touch(c);
     if (first) appendActivity("conversation", "Nouvelle conversation : " + cur()->title);
@@ -618,6 +658,7 @@ void Assistant::setSettings(Settings s) {
 
 std::string Assistant::connectionText() const {
     if (!settings_.enabled) return "Assistant d\xC3\xA9sactiv\xC3\xA9";
+    if (local()) return "IA int\xC3\xA9gr\xC3\xA9" "e \xE2\x80\x93 sans connexion";
     if (!live()) return "D\xC3\xA9monstration \xE2\x80\x93 aucune IA connect\xC3\xA9" "e";
     std::string why;
     if (!providerFactory_ && !httpAvailable(&why)) {
@@ -626,6 +667,12 @@ std::string Assistant::connectionText() const {
     }
     if (needsSetup()) return "\xC3\x80 configurer : choisis un mod\xC3\xA8le et une cl\xC3\xA9";
     return providerName(settings_.provider) + " \xE2\x80\x93 " + settings_.model + (settings_.endpoint.empty() ? std::string{} : std::string(" (relais)"));
+}
+
+// 1.16.0 : les suggestions de l'IA integree, ou celles de la demonstration.
+const std::vector<std::string>& Assistant::suggestions() const {
+    if (!local()) return demoSuggestions();
+    return suggestionsAfter_ && !localSuggestions_.empty() ? localSuggestions_ : localSuggestions();
 }
 
 // ---- la cle ------------------------------------------------------------------------------------
