@@ -498,6 +498,7 @@ const std::vector<AttachmentFormat>& attachmentFormats() {
         {"png", "Image PNG"},          {"jpg", "Image JPEG"},          {"jpeg", "Image JPEG"},
         {"pdf", "Document PDF"},       {"txt", "Texte"},               {"csv", "Tableau CSV"},
         {"xlsx", "Classeur Excel"},    {"xml", "Fichier XML"},         {"json", "Fichier JSON"},
+        {"xlsm", "Classeur Excel avec macros (jamais ex\xC3\xA9" "cut\xC3\xA9" "es)"},   // 1.21.0 : les modeles de fichiers
         {"xihm", "Projet IHM (archive .xihm)"}, {"xapi", "Projet API (archive .xapi)"},
         {"xpgproj", "Projet (dossier)"},
         // 1.16.0 : l'export de l'automate - l'Assistant le lit (ses variables, ses DDT -> variables et types IHM).
@@ -523,6 +524,7 @@ std::string mimeOfExtension(std::string_view ext) {
     if (e == "c" || e == "h") return "text/x-c";
     if (e == "cpp" || e == "hpp") return "text/x-c++";
     if (e == "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (e == "xlsm") return "application/vnd.ms-excel.sheet.macroEnabled.12";
     if (e == "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     if (e == "xihm" || e == "xapi" || e == "zef") return "application/zip";
     return {};
@@ -537,7 +539,7 @@ std::string formatLabel(std::string_view ext) {
     if (e == "csv") return "Tableau CSV";
     if (e == "json") return "Fichier JSON";
     if (e == "xml") return "Fichier XML";
-    if (e == "xlsx") return "Tableur";
+    if (e == "xlsx" || e == "xlsm") return "Tableur";
     if (e == "docx") return "Document Word";
     if (e == "st") return "Programme ST";
     if (e == "c" || e == "h") return "Code C";

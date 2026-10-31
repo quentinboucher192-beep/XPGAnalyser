@@ -34,12 +34,22 @@ struct FileOptions {
     bool states{true};           // l'etat des connaissances integrees (actives, desactivees)
     bool settings{false};        // les reglages de l'Assistant (fournisseur, service, adresse, modele) - JAMAIS la cle
     bool conversations{false};   // les conversations (leurs pieces jointes non comprises)
+    // 1.21.0 (a la fin) : les MODELES DE FICHIERS (AiFileModels.hpp : des connaissances de categorie << modele-fichier >>).
+    // Ils partent avec les connaissances ; sans elles (knowledge faux), seuls eux partent ; faux : ils ne partent pas.
+    bool fileModels{true};
 };
+
+//  1.21.0 : LE FORMAT NE CHANGE PAS DE VERSION (toujours 1) - une version precedente refuse un fichier d'une version plus
+//  grande ; les modeles de fichiers voyagent DANS "connaissances" (une connaissance de plus pour elle : elle les garde et
+//  les envoie comme du texte, rien ne casse). Le fichier dit en plus "revision": 2 et "modelesFichiers": <nombre>
+//  (ignores par une version precedente) ; un .xia d'avant (sans eux) se lit tel quel.
+inline constexpr int kFormatRevision = 2;
 
 struct ImportReport {
     int added{0}, replaced{0}, kept{0}, skipped{0};
     std::string from;                  // "PC-ATELIER-3, 31/10/2026 08:40" (ce que dit le fichier)
     std::vector<std::string> lines;    // une ligne par connaissance : ajoutee, remplacee, gardee, ignoree (et pourquoi)
+    int models{0};                     // 1.21.0 (a la fin) : les modeles de fichiers ajoutes ou remplaces (compris dans added/replaced)
 };
 
 bool exportTo(const std::string& path, const FileOptions& options, std::string* why = nullptr);

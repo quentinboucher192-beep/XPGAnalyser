@@ -7,6 +7,7 @@
 #include "AiMarkdown.hpp"
 #include "AiPlanStrip.hpp"
 #include "AiContextPane.hpp"   // 1.21.0
+#include "AiFileModelDialog.hpp"   // 1.21.0 : << Modele... >> d'un classeur joint
 #include "../Dossiers.hpp"
 #include "../screens/Screens.hpp"   // MessageDialog
 
@@ -665,6 +666,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
         cb.analyses = [this](const std::string& att) { contextAction(2, att); };
         cb.remove = [this](const std::string& att) { contextAction(3, att); };
         cb.restore = [this](const std::string& att) { contextAction(4, att); };
+        cb.model = [this](const std::string& att) { contextAction(5, att); };   // 1.21.0 : << Modele... >> d'un classeur
         cb.toggled = [this](bool) { invalidateLayout(); };
         ctxPane_ = &static_cast<AiContextPane&>(addChild(std::make_unique<AiContextPane>(base + ".contexte", std::move(cb))));
     }
@@ -790,7 +792,7 @@ void AiPanel::tick(double now) {
     }
 }
 
-// 1.21.0 : un geste du contexte de la discussion (0 ouvrir, 1 detail, 2 analyses, 3 retirer, 4 remettre).
+// 1.21.0 : un geste du contexte de la discussion (0 ouvrir, 1 detail, 2 analyses, 3 retirer, 4 remettre, 5 modele d'un classeur).
 void AiPanel::contextAction(int what, const std::string& attachmentId) {
     const attach::ContextFile* f = ctxPane_ ? ctxPane_->context().find(attachmentId) : nullptr;
     if (!f) return;
@@ -853,6 +855,19 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
             std::string why;
             if (!assistant_->restoreToDiscussion(attachmentId, &why)) say("Assistant IA : " + why);
             sync();
+            return;
+        }
+        case 5: {   // 1.21.0 : << Modele... >> - le genre, la correspondance, les modeles de fichiers ; le choix reste avec la piece
+            if (f->availability == attach::Availability::Missing) {
+                say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est manquant : son classeur ne peut pas \xC3\xAAtre relu.");
+                return;
+            }
+            if (!ui_.showDialog) return;
+            ui_.showDialog(std::make_unique<AiFileModelDialog>(*assistant_, attachmentId, [this](const std::string& s) { say(s); }),
+                           [this](const menu::DialogResult&) {
+                               seen_ = 0;   // le choix garde avec la piece : le contexte se redessine
+                               sync();
+                           });
             return;
         }
         default: return;
@@ -1090,7 +1105,7 @@ void AiPanel::askAttach() {
     }
     ui::FilePick pick;
     pick.title = "Joindre un fichier \xC3\xA0 la demande";
-    pick.filters = {{"Fichiers pris en charge", attachmentFilter()}, {"Images", "png;jpg;jpeg"}, {"Documents", "pdf;txt;csv;xlsx;xml;json"},
+    pick.filters = {{"Fichiers pris en charge", attachmentFilter()}, {"Images", "png;jpg;jpeg"}, {"Documents", "pdf;txt;csv;xlsx;xlsm;xml;json"},
                     {"Projets", "xihm;xapi;xpgproj"}, {"Automate (Control Expert)", "xpg;xef;zef"}};
     if (!ui::pickFile(pick, [this](std::string path) {
             if (!path.empty()) (void)attachFile(path);

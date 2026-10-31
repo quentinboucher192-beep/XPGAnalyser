@@ -1213,7 +1213,7 @@ public:
         out.push_back(w);
         for (const auto& c : mem::kCategories) {
             if (c.key == "modeles" || c.key == "vocabulaire") continue;
-            ThemeLine t{std::string(c.key), std::string(c.label), 0, 0, ui::Icon::Document};
+            ThemeLine t{std::string(c.key), std::string(c.label), 0, 0, c.key == "modele-fichier" ? ui::Icon::Columns : ui::Icon::Document};   // 1.21.0 : les modeles de fichiers
             for (const auto& k : d_.registry_.all())
                 if (k.category == c.key && (q.empty() || folded(k.name + " " + k.content).find(q) != std::string::npos)) {
                     ++t.count;
