@@ -179,8 +179,8 @@ bool Assistant::tick(double now) {
     // que l'IA a proposes pendant sa reponse - a valider par l'utilisateur, dit une fois.
     pollAnalyses();
     if (const int n = proposedMemories_->exchange(0); n > 0) {
-        notice_ = "Assistant IA : " + std::to_string(n) + (n > 1 ? " souvenirs proposÃ©s" : " souvenir proposÃ©")
-                  + " Ã  valider dans MÃ©moire et apprentissage âº Souvenirs (rien n'est retenu sans ton accord).";
+        notice_ = "Assistant IA : " + std::to_string(n) + (n > 1 ? " souvenirs propos\xC3\xA9s" : " souvenir propos\xC3\xA9")
+                  + " \xC3\xA0 valider dans M\xC3\xA9moire et apprentissage \xE2\x80\xBA Souvenirs (rien n'est retenu sans ton accord).";
         ++revision_;
     }
     // 1.21.0 : LE PONT DE L'AGENT, sur le fil de l'interface - les confirmations de scan demandees par l'IA s'ouvrent ici,

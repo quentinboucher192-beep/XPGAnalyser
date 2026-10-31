@@ -802,7 +802,7 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
     switch (what) {
         case 0: {
             if (f->availability == attach::Availability::Missing) {
-                say("Assistant IA : Â« " + name + " Â» est manquant : sa copie n'est plus dans le dossier de l'Assistant.");
+                say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est manquant : sa copie n'est plus dans le dossier de l'Assistant.");
                 return;
             }
             if (const std::string why = dossiers::ouvrirDansLeSysteme(f->path); !why.empty()) say("Assistant IA : " + why);
@@ -812,17 +812,17 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
             std::string text = f->line() + "\n\n" + f->detail();
             if (!f->attachment.sha256.empty()) text += "\nEmpreinte SHA-256 : " + f->attachment.sha256;
             if (!f->path.empty()) text += "\nCopie : " + f->path;
-            if (f->textMissing) text += "\nLe texte extrait n'est plus dans le cache : il sera refait Ã  la prochaine ouverture de la conversation.";
+            if (f->textMissing) text += "\nLe texte extrait n'est plus dans le cache : il sera refait \xC3\xA0 la prochaine ouverture de la conversation.";
             show("Fichier joint", text);
             return;
         }
         case 2: {
             std::string text;
             for (auto it = f->attachment.analyses.rbegin(); it != f->attachment.analyses.rend(); ++it) {
-                text += (text.empty() ? "" : "\n\n") + it->date + " â " + it->kind + " â " + it->state;
+                text += (text.empty() ? "" : "\n\n") + it->date + " \xE2\x80\x94 " + it->kind + " \xE2\x80\x94 " + it->state;
                 if (!it->summary.empty()) text += "\n" + it->summary;
                 if (!it->error.empty()) text += "\n" + it->error;
-                for (const auto& d : it->details) text += "\nâ¢ " + d;
+                for (const auto& d : it->details) text += "\n\xE2\x80\xA2 " + d;
             }
             show("Analyses de " + name, text.empty() ? std::string("Aucune analyse pour l'instant.") : text);
             return;
@@ -840,7 +840,7 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
             HmiAskDialog::Spec spec;
             spec.id = "dialog.ai.retirer-fichier";
             spec.title = "Retirer de la discussion";
-            spec.text = "Retirer Â« " + name + " Â» de la discussion ?\nIl ne partira plus avec les demandes ; sa copie reste dans "
+            spec.text = "Retirer \xC2\xAB " + name + " \xC2\xBB de la discussion ?\nIl ne partira plus avec les demandes ; sa copie reste dans "
                         "le dossier de l'Assistant et il se remet quand tu veux. L'historique garde son nom.";
             spec.confirm = "Retirer";
             spec.width = 520.f;
