@@ -280,7 +280,7 @@ void analyses(ai::Conversation& c) {
     const auto* pdf = fileNamed(ctx, "Schema_Pompe.pdf");
     if (hmi::pdf::library().ok && hmi::pdf::canExtractText()) {
         check(pdf && pdf->attachment.analysis == "analysee" && pdf->attachment.analyses.back().pages == 4, "un PDF : 4 pages lues (PDFium)");
-        check(pdf && at::textOf(pdf->attachment, text, &why) && has(text, "VARIATEUR") && has(text, "--- Page 2 ---"), "son texte, page par page");
+        check(pdf && at::textOf(pdf->attachment, text, &why) && has(text, "variateur VAR-101") && has(text, "--- Page 2 ---"), "son texte, page par page");
         check(pdf && pdf->line() == "Schema_Pompe.pdf \xE2\x80\x94 Document PDF \xE2\x80\x94 Analys\xC3\xA9", "sa ligne : " + (pdf ? pdf->line() : std::string{}));
     } else {
         check(pdf && pdf->attachment.analysis == "echec" && has(lastError(pdf->attachment), "PDF"),

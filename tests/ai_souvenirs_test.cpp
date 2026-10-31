@@ -95,6 +95,8 @@ Projects makeProjects() {
     p.a = mem::identifyProject("Station", (scratch() / "affaires" / "A" / "Station").string(), "2026-10-01 08:00");
     p.b = mem::identifyProject("Station", (scratch() / "affaires" / "B" / "Station").string(), "2026-10-02 09:00");
     p.c = mem::identifyProject("Eau", (scratch() / "affaires" / "Eau").string());
+    // A, vu avant B, ne savait pas encore que son nom serait porte deux fois : relu, il le sait.
+    p.a = mem::identifyProject("Station", (scratch() / "affaires" / "A" / "Station").string(), "2026-10-01 08:00");
     return p;
 }
 

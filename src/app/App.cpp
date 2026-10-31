@@ -771,7 +771,8 @@ void App::registerActions() {
                         }});
 
     // 1.10 (R2, menu Aide) : la fenetre A propos (version, construction, dossiers,
-    // composants et licences, informations pour le support).
+    // composants et licences, informations pour le support) ; 1.21.0 : et l'arbre des
+    // fichiers de l'application avec leur poids (AboutDialog.hpp).
     actions_.add(Action{"help.about", "\xC3\x80 propos d'" + core::productName() + "\xE2\x80\xA6", {}, {}, {}, nullptr,
                         [this] { showAboutDialog(*this); }});
     // 1.10.2 (CR) : l'historique interne des appels (app/CrashDialogs.hpp).

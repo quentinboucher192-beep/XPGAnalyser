@@ -387,7 +387,8 @@ if(XPG_BUILD_TESTS)
 
     # 1.8.0 : les dossiers de l'application (installation.ini, XPGAnalyser.ini) -
     # lire, ecrire, les jetons, la resolution, changer (copie sans ecraser).
-    xpg_add_test_executable(dossiers_test tests/dossiers_test.cpp src/app/Dossiers.cpp)
+    # 1.21.0 : et le poids des fichiers de l'application (A propos, app/ArbreTailles.hpp).
+    xpg_add_test_executable(dossiers_test tests/dossiers_test.cpp src/app/Dossiers.cpp src/app/ArbreTailles.cpp)
     xpg_target_link_libraries(dossiers_test PRIVATE xpg_core)
 
     # -- l'aide : le fichier, l'article, l'editeur -----------------------------

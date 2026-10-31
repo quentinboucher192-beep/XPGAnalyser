@@ -436,7 +436,9 @@ bool extractImage(std::string_view b, const std::string& ext, Extraction& x, std
     auto& an = x.analysis;
     std::string kind;
     if (ext == "png") {
-        if (b.size() < 24 || b.compare(0, 8, std::string_view("\x89PNG\r\n\x1A\n", 8)) != 0 || b.compare(12, 4, "IHDR") != 0) {
+        // la signature en octets (pas une chaine : 0x89 seul n'est pas de l'UTF-8, l'essai des glyphes le refuserait)
+        static constexpr char kPng[8] = {static_cast<char>(0x89), 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        if (b.size() < 24 || b.compare(0, 8, std::string_view(kPng, 8)) != 0 || b.compare(12, 4, "IHDR") != 0) {
             why = "pas une image PNG lisible (signature absente : fichier ab\xC3\xAEm\xC3\xA9 ou mal nomm\xC3\xA9)";
             return false;
         }

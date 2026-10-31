@@ -12,6 +12,15 @@
 //    - la capture en grand (une image fixe : jamais dite video) et la video
 //      Motion-JPEG (lue ici par le decodeur des objets Video, ou ouverte avec le
 //      lecteur du systeme) ;
+//      1.21.0 : LUE COMME UN ENREGISTREMENT - sous l'image, la barre de la
+//      relecture (VideoClock) : la barre de temps (un clic, un glisser ; le
+//      repere rouge : le declenchement, t = 0), Debut, -10 s, -1 image,
+//      Lecture / Pause, +1 image, +10 s, Fin, Declenchement, Boucle, les
+//      vitesses x0,25 a x8, le temps et l'image montree ; les memes touches
+//      (Espace, fleches, Debut, Fin, + -). Elle demarre a la demande, comme
+//      avant, mais s'arrete au bout (sauf Boucle). LE ZOOM (ImageView, la video
+//      et la capture) : la molette sur l'image (autour de la souris), moins /
+//      Ajuster / plus, glisser l'image zoomee, double-clic : ajuster ;
 //    - la fiche de diagnostic en dix sections depliables (hmi::incident::diagnosis,
 //      decoupee sur ses titres "### n.") ;
 //    - les dependances (snapshot.chain) : un clic ouvre l'element dans le projet
@@ -120,6 +129,65 @@ struct Target {
     bool        exists{false};
 };
 [[nodiscard]] Target targetOf(const hmi::Project* project, const hmi::incident::Link& link);
+
+// 1.21.0 : LE LECTEUR DE LA VIDEO D'UN INCIDENT, comme celui des enregistrements - sans horloge ni ecran (les essais).
+// La position est en secondes depuis le debut de la video ; en lecture, elle avance de (dt x vitesse), dt donne par la
+// fiche a chaque image. La vitesse est une de celles de la relecture (hmi::rec::kSpeeds : x0,25 a x8 ; + et - passent a
+// la voisine). Au bout : sans la boucle, la lecture s'arrete sur la derniere image (<< (fin) >>, Lecture repart du
+// debut) ; avec, elle repart du debut. `trigger` : la position du declenchement dans la video (t = 0 ; negative :
+// inconnue). La vitesse et la boucle restent d'une video a l'autre (start ne les touche pas).
+struct VideoClock {
+    double duration{0};   // s (0 : inconnue : la position avance sans borne)
+    double fps{0};        // images par seconde (0 : inconnue ; une image vaut alors 0,1 s)
+    double trigger{-1};
+    double position{0};
+    double speed{1};
+    bool   playing{false}, loop{false}, ended{false};
+
+    void start(double duration, double fps, double trigger);   // une video : au debut, en lecture
+    void advance(double dt);         // dt secondes d'horloge (rien en pause)
+    void playPause();                // Lecture / Pause (Espace) ; au bout, Lecture repart du debut
+    void seek(double seconds);       // bornee a [0, duree] ; la lecture continue
+    void step(double seconds);       // -10 s, +10 s (les fleches)
+    void stepFrame(int frames);      // une image avant ou apres, en pause
+    void toTrigger();                // au declenchement (inconnu : rien)
+    void faster();                   // la vitesse suivante (+)
+    void slower();                   // la precedente (-)
+    void setSpeed(double v);         // la plus proche des vitesses de la relecture
+    [[nodiscard]] int    frame() const;    // l'image montree (0 : la premiere)
+    [[nodiscard]] int    frames() const;   // le nombre d'images (0 : inconnu)
+    [[nodiscard]] bool   hasTrigger() const noexcept { return trigger >= 0; }
+    [[nodiscard]] double sinceTrigger() const noexcept { return position - trigger; }   // negatif : avant
+};
+
+// La position du declenchement dans la video (s depuis son debut), d'apres video.json : `times` (instants_s, un par
+// image, en secondes depuis le declenchement, negatifs avant) et la cadence ; sans instants : `before` (avant_s).
+// Negative : inconnue (le declenchement n'est pas dans la video).
+[[nodiscard]] double triggerPosition(const std::vector<double>& times, double fps, double before, double duration);
+// "00:06,8" (les dixiemes) ; "+1,2 s", "\xE2\x88\x92" "3,2 s", "0,0 s" (depuis le declenchement) ; "\xC3\x97" "0,25".
+[[nodiscard]] std::string clockTenths(double seconds);
+[[nodiscard]] std::string signedSeconds(double seconds);
+[[nodiscard]] std::string speedLabel(double speed);
+
+// 1.21.0 : LE ZOOM DE L'IMAGE (la video ou la capture). 1 : l'image entiere, ajustee a son cadre ; jusqu'a 10. `pan` :
+// le decalage de son centre (points), borne : zoomee, l'image couvre son cadre sans bord vide.
+struct ImageView {
+    static constexpr float kMin = 1.f, kMax = 10.f, kStep = 1.25f;
+    float      zoom{1.f};
+    gfx::Point pan{0.f, 0.f};
+    // L'image de w x h dans `box`, a ce zoom et ce decalage (w ou h nuls : le cadre).
+    [[nodiscard]] gfx::Rect place(const gfx::Rect& box, int w, int h) const;
+    // Zoomer en gardant `at` (un point de l'ecran) sous la souris ; zoomBy : autour du centre du cadre (les boutons).
+    void zoomAt(float z, const gfx::Rect& box, int w, int h, gfx::Point at);
+    void zoomBy(float factor, const gfx::Rect& box, int w, int h);
+    void drag(gfx::Point delta, const gfx::Rect& box, int w, int h);   // glisser l'image zoomee
+    void clamp(const gfx::Rect& box, int w, int h);
+    void fit() noexcept {   // Ajuster (le double-clic)
+        zoom = kMin;
+        pan = {0.f, 0.f};
+    }
+    [[nodiscard]] bool zoomed() const noexcept { return zoom > kMin + 1e-3f; }
+};
 
 } // namespace incidentsui
 

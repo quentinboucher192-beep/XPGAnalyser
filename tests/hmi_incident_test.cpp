@@ -1430,6 +1430,135 @@ void burstGuards() {
     }
 }
 
+// ---- 1.21.0 : la video d'un incident lue comme un enregistrement (le declenchement, la lecture, la vitesse, la boucle,
+// le pas a pas) et le zoom de l'image ----------------------------------------------------------------------------------
+void incidentPlayer() {
+    std::printf("1.21.0 : le lecteur des videos d'incident, le zoom de l'image\n");
+    namespace iu = app::incidentsui;
+    const auto near = [](double a, double b, double eps = 1e-6) { return std::fabs(a - b) <= eps; };
+    // ---- le declenchement dans la video (video.json : instants_s, avant_s)
+    {
+        std::vector<double> times, shifted;
+        for (int i = 0; i < 76; ++i) times.push_back(-10.0 + i * 0.2);   // 5 images par seconde : 10 s avant, 5 s apres
+        for (const double t : times) shifted.push_back(t + 0.1);
+        check(near(iu::triggerPosition(times, 5, 10, 15.2), 10.0, 1e-9), "1.21.0 declenchement : une cadence juste, -instants[0]");
+        check(near(iu::triggerPosition(shifted, 5, 10, 15.2), 9.9, 1e-9), "1.21.0 declenchement : entre deux images");
+        check(near(iu::triggerPosition({-3, -1, 0.5, 2}, 2, 0, 2), (1.0 + 1.0 / 1.5) / 2.0, 1e-9),
+              "1.21.0 declenchement : des instants irreguliers (avant la 1.20.2), au prorata");
+        check(near(iu::triggerPosition({0, 0.5, 1}, 2, 0, 1.5), 0.0), "1.21.0 declenchement sur la premiere image");
+        check(iu::triggerPosition({2, 2.5, 3}, 2, 0, 1.5) < 0, "1.21.0 la video commence apres le declenchement : inconnu");
+        check(near(iu::triggerPosition({}, 5, 10, 15), 10.0), "1.21.0 sans instants : avant_s");
+        check(iu::triggerPosition({}, 5, 20, 15) < 0, "1.21.0 avant_s plus long que la video : inconnu");
+        check(iu::triggerPosition({}, 0, 0, 15) < 0, "1.21.0 ni instants ni avant_s : inconnu");
+    }
+    // ---- la lecture : position, pause, vitesse, -10 s / +10 s, le pas a pas, le bout, la boucle
+    {
+        iu::VideoClock c;
+        c.start(15.0, 5.0, 10.0);
+        check(c.playing && near(c.position, 0) && near(c.speed, 1) && !c.loop && !c.ended, "1.21.0 la video part du debut, en lecture, x1");
+        check(c.frames() == 75 && c.frame() == 0 && c.hasTrigger() && near(c.sinceTrigger(), -10.0), "1.21.0 75 images, t = -10 s");
+        c.advance(1.0);
+        check(near(c.position, 1.0), "1.21.0 elle avance de dt x vitesse");
+        c.playPause();
+        c.advance(1.0);
+        check(!c.playing && near(c.position, 1.0), "1.21.0 en pause, rien ne bouge");
+        c.playPause();
+        c.faster();
+        check(near(c.speed, 2.0), "1.21.0 + : x2 (les vitesses de la relecture)");
+        c.advance(0.5);
+        check(near(c.position, 2.0), "1.21.0 a x2, 0,5 s d'horloge font 1 s de video");
+        c.slower();
+        c.slower();
+        c.slower();
+        check(near(c.speed, 0.25), "1.21.0 - trois fois : x0,25");
+        c.slower();
+        check(near(c.speed, 0.25), "1.21.0 x0,25 est la plus lente");
+        for (int i = 0; i < 10; ++i) c.faster();
+        check(near(c.speed, 8.0), "1.21.0 x8 est la plus rapide");
+        c.setSpeed(3.0);
+        check(near(c.speed, 4.0), "1.21.0 une vitesse quelconque : la plus proche (x3 -> x4)");
+        c.setSpeed(1.4);
+        check(near(c.speed, 1.0), "1.21.0 x1,4 -> x1");
+        c.setSpeed(-2);
+        check(near(c.speed, 1.0), "1.21.0 une vitesse absurde : x1");
+        c.seek(5);
+        c.step(-10);
+        check(near(c.position, 0), "1.21.0 -10 s s'arrete au debut");
+        c.step(10);
+        check(near(c.position, 10) && c.playing, "1.21.0 +10 s, la lecture continue");
+        c.step(10);
+        check(near(c.position, 15) && c.ended && !c.playing, "1.21.0 +10 s s'arrete a la fin (sans boucle : en pause, finie)");
+        c.toTrigger();
+        check(near(c.position, 10) && near(c.sinceTrigger(), 0) && !c.ended, "1.21.0 aller au declenchement : t = 0");
+        c.playPause();
+        c.stepFrame(1);
+        check(!c.playing && c.frame() == 51 && near(c.position, 10.2), "1.21.0 l'image suivante met en pause (image 51)");
+        c.stepFrame(-2);
+        check(c.frame() == 49 && near(c.sinceTrigger(), -0.2), "1.21.0 deux images en arriere : t = -0,2 s");
+        c.seek(0);
+        c.stepFrame(-1);
+        check(c.frame() == 0 && near(c.position, 0), "1.21.0 pas d'image avant la premiere");
+        c.seek(15);
+        check(c.frame() == 74, "1.21.0 a la fin : la derniere image (" + std::to_string(c.frame()) + ")");
+        c.stepFrame(1);
+        check(c.frame() == 74, "1.21.0 pas d'image apres la derniere");
+        c.seek(14.5);
+        c.playPause();
+        c.advance(1.0);
+        check(near(c.position, 15) && !c.playing && c.ended, "1.21.0 au bout, sans boucle : la derniere image reste");
+        c.playPause();
+        check(c.playing && near(c.position, 0) && !c.ended, "1.21.0 au bout, Lecture repart du debut");
+        c.loop = true;
+        c.seek(14.5);
+        c.advance(1.0);
+        check(c.playing && near(c.position, 0.5), "1.21.0 en boucle, elle repart du debut");
+        c.setSpeed(0.5);
+        c.start(10, 10, 2);
+        check(near(c.speed, 0.5) && c.loop && near(c.position, 0) && c.frames() == 100, "1.21.0 la vitesse et la boucle restent d'une video a l'autre");
+        iu::VideoClock d;
+        d.start(3, 0, -1);
+        d.toTrigger();
+        check(!d.hasTrigger() && near(d.position, 0) && d.frames() == 0, "1.21.0 sans declenchement ni cadence : D ne fait rien");
+        d.stepFrame(1);
+        check(near(d.position, 0.1) && !d.playing, "1.21.0 sans cadence, une image vaut 0,1 s");
+    }
+    // ---- les textes de la barre
+    check(iu::clockTenths(6.84) == "00:06,8" && iu::clockTenths(75) == "01:15,0" && iu::clockTenths(-1) == "00:00,0",
+          "1.21.0 le temps au dixieme (" + iu::clockTenths(6.84) + ")");
+    check(iu::signedSeconds(-3.21) == "\xE2\x88\x92" "3,2 s" && iu::signedSeconds(1.2) == "+1,2 s" && iu::signedSeconds(0.01) == "0,0 s",
+          "1.21.0 t depuis le declenchement (" + iu::signedSeconds(-3.21) + ")");
+    check(iu::speedLabel(0.25) == "\xC3\x97" "0,25" && iu::speedLabel(8) == "\xC3\x97" "8", "1.21.0 les vitesses ecrites comme la relecture");
+    // ---- le zoom de l'image
+    {
+        iu::ImageView v;
+        const gfx::Rect box{0.f, 0.f, 400.f, 300.f};
+        gfx::Rect r = v.place(box, 800, 400);   // 800 x 400 ajustee : 400 x 200, centree
+        check(near(r.x, 0) && near(r.y, 50) && near(r.w, 400) && near(r.h, 200) && !v.zoomed(), "1.21.0 l'image entiere, ajustee");
+        v.zoomAt(2.f, box, 800, 400, {100.f, 150.f});
+        r = v.place(box, 800, 400);
+        check(v.zoomed() && near(r.w, 800) && near(r.x + 0.25f * r.w, 100, 1.0) && near(r.y + 0.5f * r.h, 150, 1.0),
+              "1.21.0 la molette zoome autour de la souris (le point reste dessous)");
+        v.drag({1000.f, 1000.f}, box, 800, 400);
+        r = v.place(box, 800, 400);
+        check(near(r.x, 0, 1.0) && near(r.y, 0, 1.0), "1.21.0 glisser : l'image ne laisse pas de bord vide (haut gauche)");
+        v.drag({-5000.f, -5000.f}, box, 800, 400);
+        r = v.place(box, 800, 400);
+        check(near(r.x + r.w, 400, 1.0) && near(r.y + r.h, 300, 1.0), "1.21.0 glisser : ... ni en bas a droite");
+        v.zoomAt(100.f, box, 800, 400, {200.f, 150.f});
+        check(near(v.zoom, iu::ImageView::kMax), "1.21.0 le zoom s'arrete a 10");
+        v.zoomBy(1.f / iu::ImageView::kStep, box, 800, 400);
+        check(near(v.zoom, iu::ImageView::kMax / iu::ImageView::kStep, 1e-4), "1.21.0 zoom arriere : un cran");
+        v.zoomAt(0.5f, box, 800, 400, {10.f, 10.f});
+        r = v.place(box, 800, 400);
+        check(!v.zoomed() && near(v.pan.x, 0) && near(v.pan.y, 0) && near(r.y, 50), "1.21.0 pas plus petit que l'image entiere");
+        v.zoomBy(2.f, box, 800, 400);
+        v.fit();
+        check(!v.zoomed() && near(v.pan.x, 0), "1.21.0 Ajuster (le double-clic) : l'image entiere");
+        r = v.place(box, 0, 0);
+        check(near(r.w, 400) && near(r.h, 300), "1.21.0 une image sans taille : le cadre");
+    }
+}
+
 int main() {
     detection();
     dependencies();
@@ -1439,6 +1568,7 @@ int main() {
     volume();
     incidentsCase();
     incidentsPane();   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
+    incidentPlayer();  // 1.21.0 : la video lue comme un enregistrement, le zoom de l'image
     burstHost();       // 1.21.0 : une alarme qui bat - 300 000 reapparitions, un seul incident
     burstGuards();     // 1.21.0 : regroupement 0, anti-rebond, plafond horaire, quota disque, reglages
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
