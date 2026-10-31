@@ -8,6 +8,7 @@
 //    efface, une boucle sans fin arretee (temps borne), un chemin complet refuse par FILE_WRITE (rien d'ecrit) ;
 //  - l'entree de l'outil (JSON), sa definition, le compte rendu (jamais << reussi >> sans cas joue).
 // =============================================================================
+#include "../src/app/ai/AiAgentTools.hpp"
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiSandbox.hpp"
 #include "../src/core/Process.hpp"
@@ -18,6 +19,7 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -256,6 +258,35 @@ void confinement() {
     fs::remove_all(box, ec);
 }
 
+// ---- analyser_projet (lecture seule) ------------------------------------------------------------------------------
+void agentTools() {
+    std::printf("analyser_projet\n");
+    hmi::Project p = projectWithFunction();
+    hmi::Variable v;
+    v.name = "Niveau_Cuve";
+    v.type = "REAL";
+    p.programs.variables.push_back(v);
+    const hmi::Project before = p;
+    const std::string orphans = app::ai::agent::analyse(p, R"({"question":"orphelins"})");
+    check(has(orphans, "lecture seule") && has(orphans, "orphelins"), "orphelins : une reponse (" + orphans.substr(0, 200) + ")");
+    const std::string impact = app::ai::agent::analyse(p, R"({"question":"impact","sujet":"Niveau_Cuve"})");
+    check(has(impact, "Niveau_Cuve"), "impact : le sujet cite");
+    check(has(app::ai::agent::analyse(p, R"({"question":"impact"})"), "manque le sujet"), "impact sans sujet : dit");
+    check(has(app::ai::agent::analyse(p, R"({"question":"effacer_tout"})"), "Question inconnue"), "une question inconnue : refusee");
+    check(has(app::ai::agent::analyse(p, "pas du json"), "illisible"), "une entree illisible : dite");
+    const std::string verify = app::ai::agent::analyse(p, R"({"question":"verifier"})");
+    check(!verify.empty(), "verifier : une reponse");
+    check(p.programs.variables.size() == before.programs.variables.size() && p.programs.functions.size() == before.programs.functions.size(), "rien n'est modifie");
+    auto snap = std::make_shared<const hmi::Project>(p);
+    const app::ai::LocalTool t = app::ai::agent::analyseTool(snap);
+    std::string said;
+    std::atomic<bool> stop{false};
+    const std::string r = t.run(R"({"question":"orphelins"})", [&](const std::string& s2) { said = s2; }, stop);
+    check(t.name == "analyser_projet" && has(said, "Analyse du projet") && has(r, "lecture seule"), "l'outil : l'etat et la reponse");
+    app::ai::json::Value def;
+    check(app::ai::json::parse(t.definitionJson, def) && def.str("name") == "analyser_projet", "sa definition se lit");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -264,6 +295,7 @@ int main(int argc, char** argv) {
     const std::string self = core::process::selfPath();
     inProcess();
     toolInput();
+    agentTools();
     confinement();
     childProcess(self);
     std::printf("\nai_sandbox_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

@@ -13,7 +13,7 @@
 #include "AiOpenAI.hpp"
 #include "AiPaths.hpp"
 #include "AiPrompt.hpp"
-#include "AiSandbox.hpp"     // 1.21.0 : le bac a sable (executer_code)
+#include "AiAgentTools.hpp"   // 1.21.0 : les outils de l'agent (analyser_projet, executer_code)
 #include "AiSecret.hpp"
 
 #include "../../core/Edition.hpp"
@@ -1286,32 +1286,13 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
     req.toolsJson = operationsTool();
-    // 1.21.0 : LE BAC A SABLE (executer_code) - IHM Studio, avec l'appel d'outil. Sur une COPIE du projet, prise ici sur
-    // le fil de l'interface : le fil du fournisseur ne lit jamais le projet vivant. Chaque essai : un processus a part.
-    if (sandbox_ && core::hasIhm() && ctx.project && !req.toolsInText) {
+    // 1.21.0 : LES OUTILS DE L'AGENT (AiAgentTools.hpp) - IHM Studio, avec l'appel d'outil : analyser_projet (le graphe,
+    // en lecture seule) et executer_code (le bac a sable). Sur une COPIE du projet, prise ici sur le fil de l'interface : le
+    // fil du fournisseur ne lit jamais le projet vivant ; ce qui modifie le projet reste une proposition a valider.
+    if (core::hasIhm() && ctx.project && !req.toolsInText) {
         auto snap = std::make_shared<const hmi::Project>(*ctx.project);
-        LocalTool tool;
-        tool.name = std::string(sandbox::kTool);
-        tool.definitionJson = sandbox::toolJson();
-        tool.maxCalls = sandbox::kMaxRuns;
-        tool.run = [snap, program = sandboxProgram_](const std::string& input, const std::function<void(const std::string&)>& status,
-                                                     const std::atomic<bool>& cancelled) -> std::string {
-            sandbox::Job job;
-            std::string bad;
-            if (!sandbox::jobFromJson(input, job, &bad))
-                return "Entr\xC3\xA9" "e refus\xC3\xA9" "e : " + bad + ". Rien n'a \xC3\xA9t\xC3\xA9 ex\xC3\xA9" "cut\xC3\xA9.";
-            status("Bac \xC3\xA0 sable : " + job.name + " (" + job.language + ")\xE2\x80\xA6");
-            const sandbox::Outcome o = sandbox::run(job, *snap, &cancelled, program);
-            const sandbox::Stage* comp = o.stage("compilation");
-            std::string said = "Bac \xC3\xA0 sable : " + job.name + " - ";
-            if (!o.error.empty()) said += o.error;
-            else if (o.testsPassed()) said += std::to_string(o.cases.size()) + " cas r\xC3\xA9ussis";
-            else if (comp && comp->state == sandbox::State::Ok && o.cases.empty()) said += "compil\xC3\xA9" "e, aucun cas";
-            else said += "\xC3\xA0 corriger";
-            status(said);
-            return o.report();
-        };
-        req.localTools.push_back(std::move(tool));
+        req.localTools.push_back(agent::analyseTool(snap));
+        if (sandbox_) req.localTools.push_back(agent::sandboxTool(snap, sandboxProgram_));
     }
     if (!prov->start(std::move(req), why)) return false;
     retire();
