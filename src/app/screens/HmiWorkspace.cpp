@@ -2809,6 +2809,11 @@ void MainAnalysisScreen::askDeleteHmiView(std::uint64_t viewId) {
         if (const auto uses = hmi::instancesOf(doc->project, view->name).size(); uses > 0)
             message += " C'est un symbole : ses " + std::to_string(uses) + " instance(s) montreront \xC2\xAB Symbole introuvable \xC2\xBB "
                        "(G\xC3\xA9n\xC3\xA9rer le signale).";
+    // 1.21.0 : ses popups (View::ownerSymbol) partent avec lui.
+    if (const auto pops = std::count_if(doc->project.views.begin(), doc->project.views.end(),
+                                        [&](const hmi::View& v) { return v.ownerSymbol != hmi::kNoId && v.ownerSymbol == view->id; });
+        pops > 0)
+        message += " Ses " + std::to_string(pops) + " popup(s) partent avec lui.";
     if (doc->project.config.startView == viewId)
         message += " C'est la vue de d\xC3\xA9marrage : la premi\xC3\xA8re restante la remplace.";
     app_.menus().ShowDialog(

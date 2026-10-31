@@ -34,7 +34,7 @@
 #include <string_view>
 #include <vector>
 
-namespace hmi { class Document; }
+namespace hmi { class Document; struct Project; }
 namespace ui { class InputText; class Button; class Checkbox; class TabControl; }
 
 namespace app {
@@ -117,6 +117,12 @@ private:
 // La moitie IHM du plan, sur ce document (nul : pas d'IHM - rien a verifier ni
 // a reecrire de ce cote).
 [[nodiscard]] std::unique_ptr<project::rename::HmiSide> makeHmiRenameSide(std::shared_ptr<hmi::Document> doc);
+
+// 1.21.0 : REMPLACER LES REFERENCES (la suppression de l'Assistant IA, strategie << remplacer >>, AiDelete) - le passage
+// de Renommer sur `p` (une copie, ou le projet d'une commande), sans dialogue : ce qui cite la variable IHM `from`
+// (`view` : la vue, la popup, le symbole `from`) cite `to`. L'element `from` est renomme lui aussi : l'appelant le retire
+// ensuite par son identifiant. Rend les conflits que Renommer aurait dits (vide : aucun).
+[[nodiscard]] std::vector<std::string> rewriteHmiReferences(hmi::Project& p, bool view, const std::string& from, const std::string& to);
 
 // ---------------------------------------------------------------------------
 //  DEMANDER UN RENOMMAGE DEPUIS UN VOLET. Les volets (types, blocs, unites,

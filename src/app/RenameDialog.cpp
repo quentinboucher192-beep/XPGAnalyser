@@ -1129,6 +1129,15 @@ std::unique_ptr<pr::HmiSide> makeHmiRenameSide(std::shared_ptr<hmi::Document> do
     return std::make_unique<DocumentHmiSide>(std::move(doc));
 }
 
+// 1.21.0 : le meme passage que Renommer, sans dialogue (la strategie << remplacer >> de la suppression de l'Assistant).
+std::vector<std::string> rewriteHmiReferences(hmi::Project& p, bool view, const std::string& from, const std::string& to) {
+    if (from.empty() || to.empty() || from == to) return {};
+    Sink sink(nullptr);
+    const Ren r{view ? What::View : What::HmiVar, from, to};
+    Rewriter(p, r, sink).run();
+    return sink.conflicts;
+}
+
 // =============================================================================
 //  2. LE DIALOGUE
 // =============================================================================

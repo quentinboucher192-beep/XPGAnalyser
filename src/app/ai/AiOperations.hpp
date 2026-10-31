@@ -51,6 +51,15 @@
 //    creer_ressource    depuis une piece jointe de la conversation ;
 //    creer_dossier, ranger  les dossiers des listes (vues, scripts, types...).
 //
+//    1.21.0 (LA SUPPRESSION INTELLIGENTE, AiDelete.hpp) :
+//    supprimer + genre  une vue, une popup, un symbole (sa definition), une instance, un ecran
+//                       modele, une variable, un type, une alarme, un script, une fonction, un
+//                       equipement, une ressource, un dossier - le graphe des relations dit ce qui
+//                       en depend ; une strategie (seul, remplacer par un element EXISTANT,
+//                       references, + inutiles) ; des exclusions ; une confirmation toujours ;
+//                       verifie sur la copie (aucune reference restante, la verification
+//                       globale) avant la commande - un seul Ctrl+Z.
+//
 //  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
 //  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
@@ -136,11 +145,19 @@ struct Operation {
     // la meme proposition (creer_vue) ou une vue du projet. Vide : la derniere creer_vue ecrite avant l'operation,
     // sinon la vue ouverte (comme en 1.18.0). Le JSON : "vue".
     std::string                                      target;
+    // 1.21.0 (a la fin) : LA SUPPRESSION INTELLIGENTE (AiDelete.hpp) - supprimer : `kind` est le genre de ce qui part
+    // ("variable", "type", "vue", "popup", "symbole", "instance"... ; vide ou "objet" : des objets de la vue, comme avant),
+    // `objects` les noms, `props` la strategie (strategie, remplacer_par, inutiles, liste) ; `keep` : les elements EXCLUS
+    // (jamais supprimes ni modifies). Le JSON : "genre", "objets", "strategie"..., "exclure".
+    std::vector<std::string>                         keep;
     bool operator==(const Operation&) const = default;
 };
 
 // 1.18.0 : l'operation ne touche que le projet (pas la vue ouverte) : creer_variables, creer_type, creer_vue et les outils.
 [[nodiscard]] bool projectLevel(Operation::Action) noexcept;
+// 1.21.0 : la meme question pour une operation : une suppression d'elements du projet (une variable, une vue, un type...)
+// ne touche pas la vue ouverte ; une suppression d'objets (genre vide, objet, instance), si.
+[[nodiscard]] bool projectLevel(const Operation&) noexcept;
 [[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
 [[nodiscard]] std::optional<Operation::Action> actionFromKey(std::string_view) noexcept;
 
@@ -229,6 +246,23 @@ struct Check {
     std::vector<std::size_t>                            order;
     std::vector<std::vector<std::size_t>>               deps;
     std::vector<std::string>                            planErrors;
+    // 1.21.0 : LES SUPPRESSIONS ANALYSEES (AiDelete) - la categorie << Suppressions >> de l'apercu, une par operation
+    // supprimer : ce qui part (demande, contenu, devenu inutile), ce qui en depend (directe, indirecte, potentielle,
+    // partage garde), ce que la strategie change ailleurs et ce qui devient orphelin ; le resume compte par genre
+    // ("4 variables directement concernees"). `projectRemovals` : des elements du projet (pas seulement des objets)
+    // partent - la confirmation est obligatoire (confirmRemoval).
+    struct Removal {
+        std::size_t              op{0};            // l'indice dans Proposal::ops
+        std::string              title;            // "Suppression du type T_Pompe"
+        std::string              strategy;         // "seul", "remplacer par T_Pompe_2", "r\xC3\xA9" "f\xC3\xA9rences"...
+        std::vector<std::string> summary;
+        std::vector<Made>        removed;          // what : le genre ; name ; detail : pourquoi il part
+        std::vector<Made>        dependencies;     // what : "directe", "indirecte", "potentielle", "partag\xC3\xA9" "e" ; detail : ou
+        std::vector<std::string> consequences;     // les references retirees ou remplacees, les orphelins gardes
+        std::vector<std::string> keep;             // les exclusions de l'operation (Operation::keep)
+    };
+    std::vector<Removal>                                removals;
+    int                                                 projectRemovals{0};
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 

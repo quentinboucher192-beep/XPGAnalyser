@@ -462,6 +462,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiPrompt.cpp" />
     <ClCompile Include="src\app\ai\AiRegistry.cpp" />
     <ClCompile Include="src\app\ai\AiContext.cpp" />
+    <ClCompile Include="src\app\ai\AiDelete.cpp" />
     <ClCompile Include="src\app\ai\AiDesign.cpp" />
     <ClCompile Include="src\app\ai\AiIncident.cpp" />
     <ClCompile Include="src\app\ai\AiIncidentAnswers.cpp" />
@@ -1010,6 +1011,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiPrompt.hpp" />
     <ClInclude Include="src\app\ai\AiRegistry.hpp" />
     <ClInclude Include="src\app\ai\AiContext.hpp" />
+    <ClInclude Include="src\app\ai\AiDelete.hpp" />
     <ClInclude Include="src\app\ai\AiDesign.hpp" />
     <ClInclude Include="src\app\ai\AiIncident.hpp" />
     <ClInclude Include="src\app\ai\AiIncidentAnswers.hpp" />
