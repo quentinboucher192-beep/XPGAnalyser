@@ -45,7 +45,7 @@ namespace app {
             const auto m = d.size() >= 11 ? months.find(d.substr(0, 3)) : std::string_view::npos;
             if (m == std::string_view::npos) return std::string(d);
             const int day = std::atoi(std::string(d.substr(4, 2)).c_str());
-            char buf[32];
+            char buf[64];
             std::snprintf(buf, sizeof buf, "%02d/%02d/%.4s", day % 100, static_cast<int>(m / 3 + 1), d.substr(7, 4).data());
             return std::string(buf) + " \xC3\xA0 " + std::string(__TIME__).substr(0, 5);
         }
@@ -136,7 +136,7 @@ namespace app {
 #else
             localtime_r(&now, &tm);
 #endif
-            char buf[32];
+            char buf[64];
             std::snprintf(buf, sizeof buf, "%02d/%02d/%04d \xC3\xA0 %02d:%02d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour, tm.tm_min);
             return buf;
         }
