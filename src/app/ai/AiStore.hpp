@@ -102,6 +102,20 @@ struct Settings {
     int         keepDays{0};               // 0 : toujours
     int         keepCount{0};              // 0 : sans limite
     bool        sendView{true}, sendSelection{true}, sendVariables{true}, sendAttachments{true};
+    // 1.16.0 (le contrat, a la fin) :
+    //  - preset : le service d'un fournisseur "openai" ("ollama", "lmstudio", "openrouter", "groq",
+    //    "gemini", "mistral", "autre") - il propose une adresse ; le modele reste une case libre ;
+    //  - contextTokens : la fenetre de contexte du modele (jetons ; 0 : celle que le service dit, sinon
+    //    inconnue) - un petit modele recoit des consignes resserrees ;
+    //  - toolMode : "auto" (l'appel d'outil, sinon le JSON en texte si le modele le refuse), "outil",
+    //    "texte" ;
+    //  - budgetTokens, budgetPeriod : le budget que l'utilisateur se fixe (0 : aucun), par "jour" ou par
+    //    "mois" - la jauge en direct du panneau ; au-dela, l'envoi demande confirmation.
+    std::string preset;
+    int         contextTokens{0};
+    std::string toolMode{"auto"};
+    long long   budgetTokens{0};
+    std::string budgetPeriod{"jour"};
     json::Value extra;
     bool operator==(const Settings&) const = default;
 };
@@ -112,6 +126,13 @@ struct ProviderInfo {
     bool             available;
 };
 [[nodiscard]] const std::vector<ProviderInfo>& providers();
+// 1.16.0 (le contrat) : le fournisseur passe-t-il par le reseau ("anthropic", "openai") ? "demo" et
+// "integree" restent sur le PC.
+[[nodiscard]] bool providerUsesNetwork(std::string_view key) noexcept;
+// 1.16.0 (le contrat) : faut-il une cle API pour ces reglages ? Anthropic : oui, sauf avec un relais
+// (une adresse) ; compatible OpenAI : non pour un modele sur ce PC (ollama, lmstudio, ou une adresse
+// 127.0.0.1 / localhost), oui pour un service en ligne ; demo, integree : non.
+[[nodiscard]] bool providerNeedsKey(const Settings&) noexcept;
 
 // ---- l'horloge et les identifiants -------------------------------------------------
 // L'heure du PC ; un essai la fige (nul : l'horloge du PC).

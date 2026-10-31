@@ -644,7 +644,8 @@ bool Assistant::keyRemembered() const { return hasStoredKey(); }
 // ---- le fournisseur (1.15.0) ----------------------------------------------------------------------
 bool Assistant::needsSetup() const {
     if (!live()) return false;
-    return trim(settings_.model).empty() || (apiKey_.empty() && trim(settings_.endpoint).empty());
+    // 1.16.0 : la cle selon le fournisseur (providerNeedsKey : un relais, un modele sur ce PC n'en ont pas besoin).
+    return trim(settings_.model).empty() || (apiKey_.empty() && providerNeedsKey(settings_));
 }
 
 bool Assistant::ready(std::string* why) const {
@@ -659,7 +660,7 @@ bool Assistant::ready(std::string* why) const {
     if (!available) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9 : choisis Anthropic (Claude), ou la D\xC3\xA9monstration (Param\xC3\xA8tres).");
     if (trim(settings_.model).empty())
         return fail("\xC3\x80 configurer : choisis un mod\xC3\xA8le dans les Param\xC3\xA8tres de l'Assistant IA (\xC2\xAB Lister les mod\xC3\xA8les \xC2\xBB).");
-    if (apiKey_.empty() && trim(settings_.endpoint).empty())
+    if (apiKey_.empty() && providerNeedsKey(settings_))
         return fail("\xC3\x80 configurer : entre ta cl\xC3\xA9 API dans les Param\xC3\xA8tres de l'Assistant IA.");
     std::string w;
     if (!providerFactory_ && !httpAvailable(&w)) return fail("Pas de connexion possible sur ce poste : " + w + ".");

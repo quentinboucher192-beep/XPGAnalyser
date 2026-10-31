@@ -666,6 +666,12 @@ struct Run {
                 case Operation::Action::Remove: ok = remove(op); break;
                 case Operation::Action::Duplicate: ok = duplicate(op); break;
                 case Operation::Action::Code: ok = code(op); break;
+                // 1.16.0 (le contrat) : le chantier OPTIONS les remplit.
+                case Operation::Action::View:
+                case Operation::Action::Variables:
+                case Operation::Action::Type:
+                    ok = fail("\xC2\xAB " + std::string(actionKey(op.action)) + " \xC2\xBB : pas encore disponible dans cette version.");
+                    break;
             }
             if (!ok) return false;
         }
@@ -722,13 +728,17 @@ std::string_view actionKey(Operation::Action a) noexcept {
         case Operation::Action::Remove: return "supprimer";
         case Operation::Action::Duplicate: return "dupliquer";
         case Operation::Action::Code: return "code";
+        case Operation::Action::View: return "creer_vue";
+        case Operation::Action::Variables: return "creer_variables";
+        case Operation::Action::Type: return "creer_type";
     }
     return "creer";
 }
 
 std::optional<Operation::Action> actionFromKey(std::string_view k) noexcept {
     for (const auto a : {Operation::Action::Create, Operation::Action::Modify, Operation::Action::Bind, Operation::Action::Align,
-                         Operation::Action::Distribute, Operation::Action::Remove, Operation::Action::Duplicate, Operation::Action::Code})
+                         Operation::Action::Distribute, Operation::Action::Remove, Operation::Action::Duplicate, Operation::Action::Code,
+                         Operation::Action::View, Operation::Action::Variables, Operation::Action::Type})
         if (actionKey(a) == k) return a;
     return std::nullopt;
 }

@@ -144,13 +144,27 @@ bool writeJsonFile(const std::string& path, const json::Value& v, std::string* w
 // ---- les fournisseurs -------------------------------------------------------------
 const std::vector<ProviderInfo>& providers() {
     // 1.15.0 : Anthropic (Claude) est branche ; un relais d'entreprise passe par son adresse.
+    // 1.16.0 : l'IA integree (sans connexion) et les services compatibles OpenAI (Ollama et LM Studio sur
+    // ce PC, des offres gratuites en ligne).
     static const std::vector<ProviderInfo> k = {
+        {"integree", "IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion)", true},
         {"demo", "D\xC3\xA9monstration (sans IA)", true},
         {"anthropic", "Anthropic (Claude)", true},
-        {"service", "Autre service en ligne (\xC3\xA0 venir)", false},
-        {"local", "Mod\xC3\xA8le sur ce PC (\xC3\xA0 venir)", false},
+        {"openai", "Compatible OpenAI (Ollama, LM Studio, services gratuits...)", true},
     };
     return k;
+}
+
+bool providerUsesNetwork(std::string_view key) noexcept { return key == "anthropic" || key == "openai"; }
+
+bool providerNeedsKey(const Settings& s) noexcept {
+    if (s.provider == "anthropic") return s.endpoint.empty();
+    if (s.provider != "openai") return false;
+    if (s.preset == "ollama" || s.preset == "lmstudio") return false;
+    const std::string_view e = s.endpoint;
+    const auto has = [&](std::string_view w) { return e.find(w) != std::string_view::npos; };
+    if (has("://127.0.0.1") || has("://localhost") || has("://[::1]")) return false;
+    return s.preset != "autre";   // un service "autre" : la cle est facultative (le service le dira)
 }
 
 // ---- l'horloge ----------------------------------------------------------------------
@@ -271,6 +285,14 @@ json::Value toJson(const Settings& s) {
     priv.set("variables", s.sendVariables);
     priv.set("pieces", s.sendAttachments);
     o.set("confidentialite", std::move(priv));
+    // 1.16.0 : le service compatible OpenAI, la fenetre de contexte, l'outil, le budget.
+    o.set("service", s.preset);
+    o.set("contexte", s.contextTokens);
+    o.set("outil", s.toolMode);
+    json::Value budget = json::Value::object();
+    budget.set("jetons", static_cast<std::int64_t>(s.budgetTokens));
+    budget.set("periode", s.budgetPeriod);
+    o.set("budget", std::move(budget));
     json::addMembers(o, s.extra);
     return o;
 }
@@ -292,9 +314,15 @@ Settings settingsFromJson(const json::Value& o) {
     s.sendSelection = priv.flag("selection", true);
     s.sendVariables = priv.flag("variables", true);
     s.sendAttachments = priv.flag("pieces", true);
+    s.preset = o.str("service");
+    s.contextTokens = static_cast<int>(std::clamp<std::int64_t>(o.integer("contexte", 0), 0, 10000000));
+    s.toolMode = o.str("outil", "auto");
+    if (s.toolMode != "outil" && s.toolMode != "texte") s.toolMode = "auto";
+    s.budgetTokens = std::max<std::int64_t>(0, o.at("budget").integer("jetons", 0));
+    s.budgetPeriod = o.at("budget").str("periode", "jour") == "mois" ? "mois" : "jour";
     // Une cle API ecrite par erreur (un fichier retouche a la main) n'est jamais relue ni reecrite.
     s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "effort", "mode", "historique",
-                                       "confidentialite", "cle", "cleApi", "apiKey", "api_key"});
+                                       "confidentialite", "service", "contexte", "outil", "budget", "cle", "cleApi", "apiKey", "api_key"});
     return s;
 }
 

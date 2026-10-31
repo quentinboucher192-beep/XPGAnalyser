@@ -447,6 +447,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileFinderPane.cpp" />
     <ClCompile Include="src\app\ai\AiAssistant.cpp" />
     <ClCompile Include="src\app\ai\AiAnthropic.cpp" />
+    <ClCompile Include="src\app\ai\AiAutomate.cpp" />
+    <ClCompile Include="src\app\ai\AiLocal.cpp" />
+    <ClCompile Include="src\app\ai\AiOpenAI.cpp" />
+    <ClCompile Include="src\app\ai\AiUsage.cpp" />
     <ClCompile Include="src\app\ai\AiHttp.cpp" />
     <ClCompile Include="src\app\ai\AiProvider.cpp" />
     <ClCompile Include="src\app\ai\AiSecret.cpp" />
@@ -969,6 +973,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileFinderPane.hpp" />
     <ClInclude Include="src\app\ai\AiAssistant.hpp" />
     <ClInclude Include="src\app\ai\AiAnthropic.hpp" />
+    <ClInclude Include="src\app\ai\AiAutomate.hpp" />
+    <ClInclude Include="src\app\ai\AiLocal.hpp" />
+    <ClInclude Include="src\app\ai\AiOpenAI.hpp" />
+    <ClInclude Include="src\app\ai\AiUsage.hpp" />
     <ClInclude Include="src\app\ai\AiHttp.hpp" />
     <ClInclude Include="src\app\ai\AiSecret.hpp" />
     <ClInclude Include="src\app\ai\AiSse.hpp" />

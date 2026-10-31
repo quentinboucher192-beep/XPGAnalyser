@@ -156,7 +156,9 @@ public:
     // Un essai y met son faux fournisseur ; nul : makeProvider (AiProvider.hpp).
     void setProviderFactory(ProviderFactory f) { providerFactory_ = std::move(f); }
     // Le fournisseur des reglages n'est pas la demonstration.
-    [[nodiscard]] bool live() const noexcept { return settings_.provider != "demo"; }
+    // Un fournisseur par le reseau (1.16.0 : providerUsesNetwork - "anthropic", "openai") ; "demo" et
+    // "integree" restent sur le PC.
+    [[nodiscard]] bool live() const noexcept { return providerUsesNetwork(settings_.provider); }
     // Il manque le modele ou la cle (l'en-tete dit "A configurer", un clic ouvre les parametres).
     [[nodiscard]] bool needsSetup() const;
     // Pret a envoyer ? Faux et `why` : ce qui manque, en francais.

@@ -23,6 +23,17 @@
 //               du code (executer un script, appeler, un calcul Maths) ou une
 //               fonction redefinie est refusee.
 //
+//    1.16.0 (le contrat ; le chantier OPTIONS les remplit) :
+//    creer_vue       une vue neuve (son nom, sa taille, son fond) ; les operations
+//                    qui suivent dans la meme proposition visent cette vue ;
+//    creer_variables des variables de l'IHM (nom, type, description, valeur
+//                    initiale) - montrees dans l'apercu, jamais en silence ;
+//    creer_type      un type IHM (une structure : ses membres, nom et type) ;
+//    dupliquer       + `count` copies et `markers` : les reperes $...$ avancent comme
+//                    Ctrl+Maj+D (hmi : la duplication avec reperes) ;
+//    creer, modifier + une valeur qui commence par "=" est une FORMULE (fx), lue et
+//                    verifiee comme une formule de l'inspecteur.
+//
 //  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
 //  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
@@ -60,7 +71,8 @@
 namespace app::ai {
 
 struct Operation {
-    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code };
+    // 1.16.0 (le contrat, a la fin) : View (creer_vue), Variables (creer_variables), Type (creer_type).
+    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code, View, Variables, Type };
     Action                                           action{Action::Create};
     std::string                                      kind;      // creer : la cle du genre ("Tank")
     std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
@@ -74,6 +86,22 @@ struct Operation {
     std::vector<std::string>                         names;
     double                                           dx{20}, dy{20};
     std::string                                      code;
+    // 1.16.0 (le contrat, a la fin) :
+    //  - creer_vue : `name` (le nom de la vue), `props` (largeur, hauteur, fond, description) ;
+    //  - creer_variables : `variables` ; creer_type : `name` (le nom du type) et `members` ;
+    //  - dupliquer : `count` copies (1 : une), `markers` (les reperes $...$ avancent d'une copie a l'autre).
+    struct VariableSpec {
+        std::string name, type, description, initial;
+        bool operator==(const VariableSpec&) const = default;
+    };
+    struct MemberSpec {
+        std::string name, type, description;
+        bool operator==(const MemberSpec&) const = default;
+    };
+    std::vector<VariableSpec>                        variables;
+    std::vector<MemberSpec>                          members;
+    int                                              count{1};
+    bool                                             markers{false};
 };
 [[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
 [[nodiscard]] std::optional<Operation::Action> actionFromKey(std::string_view) noexcept;
@@ -136,6 +164,14 @@ struct Env {
     // 1.15.0 (a la fin) : les variables de l'automate relie, pour le contexte envoye au modele (nom tel
     // qu'une propriete l'ecrit, type) ; nul : aucune liste (plcName seul dit si un nom existe).
     std::function<std::vector<std::pair<std::string, std::string>>()> plcVariables;
+    // 1.16.0 (le contrat, a la fin) : les types (DDT) de l'automate relie - leur nom, leurs membres (nom,
+    // type, commentaire) ; nul : aucun. Le chantier OPTIONS le branche (AiWorkspace) et s'en sert
+    // (AiAutomate.hpp : des types IHM proposes).
+    struct PlcType {
+        std::string                           name, comment;
+        std::vector<Operation::MemberSpec>    members;
+    };
+    std::function<std::vector<PlcType>()> plcTypes;
 };
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);

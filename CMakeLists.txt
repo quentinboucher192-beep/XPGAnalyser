@@ -699,6 +699,14 @@ if(XPG_BUILD_TESTS)
     # un serveur local, la cle (jamais en clair), l'Assistant branche (le tour suivant porte le resultat reel).
     xpg_add_test_executable(ai_reseau_test tests/ai_reseau_test.cpp)
     xpg_target_link_libraries(ai_reseau_test PRIVATE xpg_app)
+    # 1.16.0 (Assistant IA) : l'IA integree sans connexion (INTEGREE), les services compatibles OpenAI et la limite
+    # en direct (FOURNISSEURS), les nouvelles operations - vue, variables, types, reperes, formules (OPTIONS).
+    xpg_add_test_executable(ai_integree_test tests/ai_integree_test.cpp)
+    xpg_target_link_libraries(ai_integree_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_compatible_test tests/ai_compatible_test.cpp)
+    xpg_target_link_libraries(ai_compatible_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_options_test tests/ai_options_test.cpp)
+    xpg_target_link_libraries(ai_options_test PRIVATE xpg_app)
     # 1.15.0 (la vraie IA, chantier du registre) : le registre des 116 genres tire du code, le contexte et ses
     # reglages de confidentialite, les consignes et les connaissances actives, le schema de l'outil, la lecture de
     # son entree, les nouvelles operations (dupliquer, code) en un Ctrl+Z (xpg_app : rien a recompiler).
@@ -849,6 +857,9 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiassistant COMMAND ai_assistant_test)                 # 1.14.2 : l'Assistant IA (la maquette)
     xpg_add_test(NAME aireseau COMMAND ai_reseau_test)                       # 1.15.0 : l'Assistant IA, la connexion (RESEAU)
     xpg_add_test(NAME airegistre COMMAND ai_registre_test)                   # 1.15.0 : le registre, le contexte, l'outil
+    xpg_add_test(NAME aiintegree COMMAND ai_integree_test)                   # 1.16.0 : l'IA integree (sans connexion)
+    xpg_add_test(NAME aicompatible COMMAND ai_compatible_test)               # 1.16.0 : compatible OpenAI, la limite en direct
+    xpg_add_test(NAME aioptions COMMAND ai_options_test)                     # 1.16.0 : vue, variables, types, reperes, formules
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
