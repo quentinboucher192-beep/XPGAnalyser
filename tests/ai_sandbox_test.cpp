@@ -12,6 +12,7 @@
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiSandbox.hpp"
 #include "../src/core/Process.hpp"
+#include "../src/hmi/HmiDiscovery.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 
@@ -287,6 +288,33 @@ void agentTools() {
     check(app::ai::json::parse(t.definitionJson, def) && def.str("name") == "analyser_projet", "sa definition se lit");
 }
 
+// ---- detecter_equipements, resultat_detection (le pont) -------------------------------------------------------------
+void scanTools() {
+    std::printf("detecter_equipements\n");
+    auto bridge = std::make_shared<app::ai::agent::Bridge>();
+    check(has(app::ai::agent::askScan(*bridge, R"({"plage":"192.168.1.0/28"})"), "pas disponible"), "sans projet : indisponible, rien de pose");
+    check(bridge->scanAsks.empty(), "rien de pose");
+    bridge->scanAvailable = true;
+    const std::string ok = app::ai::agent::askScan(*bridge, R"({"plage":"192.168.1.0/28","protocoles":["Modbus TCP"],"raison":"les pompes"})");
+    check(has(ok, "RIEN N'EST PARTI") && has(ok, "192.168.1.") && bridge->scanAsks.size() == 1 && bridge->scanAsks[0].reason == "les pompes",
+          "une plage valide : la confirmation demandee, rien ne part (" + ok.substr(0, 160) + ")");
+    hmi::discovery::Request rq;
+    check(hmi::discovery::decodeRequest(bridge->scanAsks[0].encoded, rq) && rq.origin == "Assistant IA", "la demande relue, son origine");
+    check(has(app::ai::agent::askScan(*bridge, R"({"plage":"pas une plage"})"), "refus") && bridge->scanAsks.size() == 1, "une plage illisible : refusee");
+    check(has(app::ai::agent::askScan(*bridge, R"({"plage":"10.0.0.0/16"})"), "refus") && bridge->scanAsks.size() == 1, "65536 adresses : refusees");
+    check(has(app::ai::agent::askScan(*bridge, R"({"plage":"192.168.1.0/28","cadence":500})"), "refus"), "une cadence de 500/s : refusee");
+    const app::ai::LocalTool res = app::ai::agent::scanResultTool(bridge);
+    std::atomic<bool> stop{false};
+    const auto none = res.run("{}", [](const std::string&) {}, stop);
+    check(has(none, "Aucun scan"), "aucun scan termine : dit, rien d'invente");
+    bridge->scanSerial = 3;
+    bridge->scanText = "1 appareil : 192.168.1.10 (Modbus TCP, confirme)";
+    check(has(res.run("{}", [](const std::string&) {}, stop), "192.168.1.10"), "le compte rendu reel");
+    const app::ai::LocalTool tool = app::ai::agent::scanTool(bridge);
+    app::ai::json::Value def;
+    check(app::ai::json::parse(tool.definitionJson, def) && def.str("name") == "detecter_equipements" && tool.maxCalls == 2, "sa definition");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -296,6 +324,7 @@ int main(int argc, char** argv) {
     inProcess();
     toolInput();
     agentTools();
+    scanTools();
     confinement();
     childProcess(self);
     std::printf("\nai_sandbox_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

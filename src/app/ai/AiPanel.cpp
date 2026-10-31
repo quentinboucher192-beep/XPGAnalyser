@@ -1165,7 +1165,7 @@ bool AiPanel::canDetect(int message) const {
 
 bool AiPanel::detectFromProposal(int message) {
     // 1.18.0 : la detection des equipements est une action de l'utilisateur. L'IA l'a PROPOSEE ;
-    // ce bouton ouvre le scanner, la plage remplie, et c'est l'utilisateur qui clique Demarrer.
+    // ce bouton ouvre la confirmation du scanner (1.21.0), la plage remplie, et c'est l'utilisateur qui clique Lancer.
     if (!canDetect(message)) return false;
     const Proposal* p = assistant_->proposal(message);
     const auto found = proposedDetections(*p);
@@ -1175,8 +1175,8 @@ bool AiPanel::detectFromProposal(int message) {
         say(why.empty() ? std::string("Le scanner n'a pas pu s'ouvrir.") : why);
         return false;
     }
-    say("Communication \xE2\x80\xBA Scanner IP" + (range.empty() ? std::string{} : " : la plage " + range + " est remplie")
-        + ". Rien n'est parti sur le r\xC3\xA9seau : clique D\xC3\xA9marrer pour lancer la d\xC3\xA9tection.");
+    say("Communication \xE2\x80\xBA Scanner IP : la confirmation est ouverte" + (range.empty() ? std::string{} : ", la plage " + range + " remplie")
+        + ". Rien n'est parti sur le r\xC3\xA9seau : v\xC3\xA9rifie et clique Lancer.");   // 1.21.0 : la confirmation obligatoire
     return true;
 }
 

@@ -26,6 +26,7 @@
 #include "../BackgroundTasks.hpp"   // 1.16.1 : la cloche (une reponse de l'Assistant arrivee)
 #include "../../core/Edition.hpp"
 #include "../hmi/HmiCommPanes.hpp"   // 1.18.0 : le scanner (Detecter ce qui repond...)
+#include "../../hmi/HmiDiscovery.hpp"   // 1.21.0 : la detection reseau proposee par l'IA (la confirmation)
 #include "../hmi/HmiEditor.hpp"
 #include "../../hmi/HmiDeclEdit.hpp"   // 1.19.0 : ouvrir un script nomme dans le plan (goToHmiUsage)
 #include "../screens/Screens.hpp"
@@ -172,6 +173,30 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
         return cache->all;
     };
 
+    // 1.21.0 : LA DETECTION RESEAU proposee par l'IA (detecter_equipements) - Communication > Scanner IP, la fenetre de
+    // confirmation ouverte et preremplie (HmiCommPane::askScan) ; c'est l'utilisateur qui clique Lancer. Le compte rendu du
+    // dernier scan, pour resultat_detection.
+    core.askScan = [this](const std::string& encoded, const std::string& reason, std::string* why) {
+        hmi::discovery::Request rq;
+        if (!hmi::discovery::decodeRequest(encoded, rq, why)) return false;
+        openHmiPane("communication");
+        auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"));
+        if (!comm) {
+            if (why) *why = "l'onglet Communication n'a pas pu s'ouvrir (un projet IHM est-il ouvert ?)";
+            return false;
+        }
+        comm->tabs().setCurrentIndex(static_cast<std::size_t>(HmiCommPane::TScanner));
+        return comm->askScan(rq, "Propos\xC3\xA9 par l'Assistant IA" + (reason.empty() ? std::string{} : " : " + reason), why);
+    };
+    core.scanSerial = [this]() -> std::uint64_t {
+        auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"));
+        return comm && comm->scanFinished() ? comm->scanReportSerial() : 0;
+    };
+    core.scanReportText = [this]() -> std::string {
+        auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"));
+        return comm ? hmi::discovery::reportText(comm->scanReport(), 20) : std::string{};
+    };
+
     ai::AiPanel::UiHost ui;
     ui.showDialog = [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
         app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
@@ -192,10 +217,11 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
             return false;
         }
         comm->tabs().setCurrentIndex(static_cast<std::size_t>(HmiCommPane::TScanner));
-        if (!range.empty() && !comm->setScanField("plage", range, why)) return false;
-        if (status_)
-            status_->setTransientMessage("Scanner IP : la plage de \xC2\xAB " + equipment + " \xC2\xBB est remplie ; D\xC3\xA9marrer lance la d\xC3\xA9tection.", 8.0);
-        return true;
+        // 1.21.0 : la fenetre de confirmation, preremplie avec la plage de l'equipement (c'est Lancer qui part).
+        hmi::discovery::Request rq;
+        rq.origin = "Assistant IA";
+        if (!range.empty() && !hmi::discovery::setRange(rq, range, why)) return false;
+        return comm->askScan(rq, "Propos\xC3\xA9 par l'Assistant IA pour \xC2\xAB " + equipment + " \xC2\xBB", why);
     };
     // 1.16.1 : << M'avertir des reponses >> - seulement si l'utilisateur ne regarde pas : la fenetre derriere une autre,
     // le panneau replie, ou une autre conversation ouverte. La cloche (Voir ouvre la conversation) ; la fenetre en

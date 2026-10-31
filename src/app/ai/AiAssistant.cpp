@@ -94,6 +94,7 @@ std::string_view phaseLabel(Assistant::Phase p) noexcept {
 }
 
 Assistant::Assistant(Host host) : host_(std::move(host)) {
+    bridge_ = std::make_shared<agent::Bridge>();   // 1.21.0 : les outils de l'agent y deposent leurs demandes
     // 1.18.0 : creer_ressource - une piece jointe de la conversation ouverte, par son nom (le plus recent d'abord) ; son chemin
     // (copiee dans IA/pieces-jointes/, ou le fichier d'origine sans racine). Un hote qui donne deja la sienne la garde.
     if (!host_.env.attachmentPath)
@@ -172,6 +173,36 @@ void Assistant::load(std::vector<std::string>* problems) {
 bool Assistant::tick(double now) {
     lastNow_ = now;
     const std::uint64_t before = revision_;
+    // 1.21.0 : LE PONT DE L'AGENT, sur le fil de l'interface - les confirmations de scan demandees par l'IA s'ouvrent ici,
+    // et le dernier compte rendu de scan est recopie pour resultat_detection.
+    if (bridge_) {
+        std::vector<agent::Bridge::ScanAsk> asks;
+        {
+            std::lock_guard<std::mutex> lk(bridge_->m);
+            asks.swap(bridge_->scanAsks);
+        }
+        for (const auto& a : asks) {
+            std::string why;
+            if (!host_.askScan || !host_.askScan(a.encoded, a.reason, &why)) {
+                notice_ = "Assistant IA : la confirmation de la d\xC3\xA9tection n'a pas pu s'ouvrir" + (why.empty() ? std::string(".") : " : " + why);
+                ++revision_;
+            }
+        }
+        if (host_.scanSerial) {
+            const std::uint64_t serial = host_.scanSerial();
+            bool fresh = false;
+            {
+                std::lock_guard<std::mutex> lk(bridge_->m);
+                fresh = serial != 0 && serial != bridge_->scanSerial;
+            }
+            if (fresh) {
+                std::string text = host_.scanReportText ? host_.scanReportText() : std::string{};
+                std::lock_guard<std::mutex> lk(bridge_->m);
+                bridge_->scanSerial = serial;
+                bridge_->scanText = std::move(text);
+            }
+        }
+    }
     for (auto& p : pending_) {
         if (p.started < 0) p.started = now;
         const float prog = static_cast<float>(std::clamp((now - p.started) / kAttachSeconds, 0.0, 1.0));
@@ -1293,6 +1324,15 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         auto snap = std::make_shared<const hmi::Project>(*ctx.project);
         req.localTools.push_back(agent::analyseTool(snap));
         if (sandbox_) req.localTools.push_back(agent::sandboxTool(snap, sandboxProgram_));
+        // la detection reseau : proposee, jamais lancee par l'IA (la confirmation s'ouvre chez l'utilisateur)
+        if (host_.askScan && bridge_) {
+            {
+                std::lock_guard<std::mutex> lk(bridge_->m);
+                bridge_->scanAvailable = true;
+            }
+            req.localTools.push_back(agent::scanTool(bridge_));
+            req.localTools.push_back(agent::scanResultTool(bridge_));
+        }
     }
     if (!prov->start(std::move(req), why)) return false;
     retire();

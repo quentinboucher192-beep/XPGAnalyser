@@ -7,6 +7,7 @@
 #include "AiProjectAnswers.hpp"
 #include "AiSandbox.hpp"
 
+#include "../../hmi/HmiDiscovery.hpp"
 #include "../../hmi/HmiModel.hpp"
 
 #include <cctype>
@@ -137,6 +138,108 @@ LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string 
         else said += "\xC3\xA0 corriger";
         status(said);
         return o.report();
+    };
+    return t;
+}
+
+std::string askScan(Bridge& bridge, std::string_view inputJson) {
+    json::Value in;
+    std::string err;
+    if (!json::parse(inputJson, in, &err) || !in.isObject())
+        return "Entr\xC3\xA9" "e illisible : " + err + ". Rien n'a \xC3\xA9t\xC3\xA9 pr\xC3\xA9par\xC3\xA9, rien n'est parti.";
+    {
+        std::lock_guard<std::mutex> lk(bridge.m);
+        if (!bridge.scanAvailable)
+            return "La d\xC3\xA9tection r\xC3\xA9seau n'est pas disponible ici (aucun projet IHM ouvert). Rien n'est parti.";
+    }
+    std::vector<std::string> protocols;
+    for (const auto& p : in.at("protocoles").items())
+        if (p.isString()) protocols.push_back(p.asString());
+    hmi::discovery::Request rq;
+    std::string why;
+    // Les interfaces du PC ne se lisent que sur le fil de l'interface : la fenetre les propose (et le resume le dira).
+    if (!hmi::discovery::requestFrom(in.str("plage"), protocols, in.num("cadence", 0.0), rq, {}, &why))
+        return "Demande refus\xC3\xA9" "e : " + why + ". Rien n'est parti.";
+    const hmi::discovery::Plan pl = hmi::discovery::plan(rq, {});
+    if (!pl.ok()) return "Demande refus\xC3\xA9" "e : " + pl.error + ". Rien n'est parti.";
+    const std::string reason = in.str("raison");
+    {
+        std::lock_guard<std::mutex> lk(bridge.m);
+        if (bridge.scanAsks.size() < 4) bridge.scanAsks.push_back({hmi::discovery::encodeRequest(rq), reason});
+    }
+    return "La fen\xC3\xAAtre de confirmation de la d\xC3\xA9tection s'ouvre chez l'utilisateur, pr\xC3\xA9remplie :\n" + hmi::discovery::summaryText(pl)
+           + "\nRIEN N'EST PARTI : c'est l'utilisateur qui lance (ou annule) ; il peut changer l'interface, la plage, les "
+             "protocoles. La d\xC3\xA9tection n'est qu'une observation (aucune \xC3\xA9" "criture, aucune commande). Quand elle sera "
+             "finie, resultat_detection rend le compte rendu r\xC3\xA9" "el ; n'en invente aucun.";
+}
+
+LocalTool scanTool(std::shared_ptr<Bridge> bridge) {
+    LocalTool t;
+    t.name = std::string(kScanTool);
+    json::Value d = json::Value::object();
+    d.set("name", std::string(kScanTool));
+    d.set("description",
+          "Pr\xC3\xA9pare une d\xC3\xA9tection des \xC3\xA9quipements du r\xC3\xA9seau (lecture seule : ping, connexion TCP referm\xC3\xA9" "e, "
+          "identification Modbus) et OUVRE LA FEN\xC3\x8ATRE DE CONFIRMATION chez l'utilisateur, pr\xC3\xA9remplie. Tu ne lances jamais "
+          "un scan : l'utilisateur v\xC3\xA9rifie la plage et clique Lancer. Ne propose que la plage qu'il a donn\xC3\xA9" "e ou celle "
+          "du projet (jamais un r\xC3\xA9seau entier sans raison). Ensuite, resultat_detection rend le compte rendu.");
+    json::Value props = json::Value::object();
+    json::Value range = json::Value::object();
+    range.set("type", "string");
+    range.set("description", "192.168.1.0/24, 192.168.1.10-40 ou une adresse (4096 adresses au plus).");
+    props.set("plage", std::move(range));
+    json::Value prot = json::Value::object();
+    prot.set("type", "array");
+    json::Value item = json::Value::object();
+    item.set("type", "string");
+    prot.set("items", std::move(item));
+    prot.set("description", "Modbus TCP, S7, EtherNet/IP, OPC UA, web... (vide : ceux par d\xC3\xA9" "faut).");
+    props.set("protocoles", std::move(prot));
+    json::Value rate = json::Value::object();
+    rate.set("type", "number");
+    rate.set("description", "Interrogations par seconde (0 : 20 par d\xC3\xA9" "faut ; 100 au plus).");
+    props.set("cadence", std::move(rate));
+    json::Value why = json::Value::object();
+    why.set("type", "string");
+    why.set("description", "Pourquoi (montr\xC3\xA9 \xC3\xA0 l'utilisateur dans la confirmation).");
+    props.set("raison", std::move(why));
+    json::Value schema = json::Value::object();
+    schema.set("type", "object");
+    schema.set("properties", std::move(props));
+    json::Value req = json::Value::array();
+    req.push("plage");
+    schema.set("required", std::move(req));
+    d.set("input_schema", std::move(schema));
+    t.definitionJson = json::write(d, false);
+    t.maxCalls = 2;
+    t.run = [b = std::move(bridge)](const std::string& input, const std::function<void(const std::string&)>& status,
+                                    const std::atomic<bool>&) -> std::string {
+        status("D\xC3\xA9tection r\xC3\xA9seau : la confirmation s'ouvre\xE2\x80\xA6");
+        return b ? askScan(*b, input) : std::string("La d\xC3\xA9tection r\xC3\xA9seau n'est pas disponible ici.");
+    };
+    return t;
+}
+
+LocalTool scanResultTool(std::shared_ptr<Bridge> bridge) {
+    LocalTool t;
+    t.name = std::string(kScanResultTool);
+    json::Value d = json::Value::object();
+    d.set("name", std::string(kScanResultTool));
+    d.set("description", "Le compte rendu r\xC3\xA9" "el du dernier scan r\xC3\xA9seau termin\xC3\xA9 (appareils et ce qui est confirm\xC3\xA9, "
+                         "annonc\xC3\xA9 ou suppos\xC3\xA9 ; comparaison avec le projet ; propositions). Lecture seule.");
+    json::Value schema = json::Value::object();
+    schema.set("type", "object");
+    schema.set("properties", json::Value::object());
+    d.set("input_schema", std::move(schema));
+    t.definitionJson = json::write(d, false);
+    t.maxCalls = 3;
+    t.run = [b = std::move(bridge)](const std::string&, const std::function<void(const std::string&)>&, const std::atomic<bool>&) -> std::string {
+        if (!b) return "Aucun scan.";
+        std::lock_guard<std::mutex> lk(b->m);
+        if (b->scanSerial == 0 || b->scanText.empty())
+            return "Aucun scan termin\xC3\xA9 dans cette s\xC3\xA9" "ance : l'utilisateur n'a pas (encore) lanc\xC3\xA9 la d\xC3\xA9tection. N'invente "
+                   "aucun appareil.";
+        return "Compte rendu du dernier scan (r\xC3\xA9" "el) :\n" + b->scanText;
     };
     return t;
 }

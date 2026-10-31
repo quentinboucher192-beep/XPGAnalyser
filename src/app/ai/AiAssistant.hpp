@@ -47,6 +47,7 @@
 #include "AiLearning.hpp"
 #include "AiPlan.hpp"   // 1.19.0 : le plan d'action et le compte rendu
 #include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
+#include "AiAgentTools.hpp"
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -90,6 +91,13 @@ public:
         // questions de diagnostic (<< Pourquoi cette alarme est-elle apparue ? >>...) depuis eux, l'IA distante en recoit
         // un resume borne. Nul : aucun (un essai) - rien ne change.
         IncidentSource incidents;
+        // 1.21.0 (a la fin) : LA DETECTION RESEAU proposee par l'IA (l'outil detecter_equipements) - ouvrir la fenetre de
+        // confirmation du scanner, preremplie (`encoded` : hmi::discovery::encodeRequest ; `reason` : pourquoi) ; c'est
+        // l'utilisateur qui lance. Faux et `why` : impossible. Nul : l'outil n'est pas offert.
+        std::function<bool(const std::string& encoded, const std::string& reason, std::string* why)> askScan;
+        // ... et le dernier compte rendu de scan : son numero (0 : aucun ; change a chaque nouveau) et son texte.
+        std::function<std::uint64_t()> scanSerial;
+        std::function<std::string()>   scanReportText;
     };
 
     // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un
@@ -362,6 +370,7 @@ private:
     std::uint64_t             revision_{1};
     ProviderFactory                        providerFactory_;
     bool                                   sandbox_{true};     // 1.21.0 : executer_code
+    std::shared_ptr<agent::Bridge>         bridge_;            // 1.21.0 : le pont des outils de l'agent (detection reseau)
     std::string                            sandboxProgram_;
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
