@@ -120,7 +120,24 @@ Un classeur Excel joint (.xlsx ou .xlsm) est reconnu, sur le fil d'analyse :
 
 ## 13. Les essais
 
-@@ESSAIS@@
+**115 suites d'essais, toutes réussies** sous Linux (construction complète, essais en 3 min 12 s). Celles de la 1.21.0 :
+
+| Suite | Ce qu'elle vérifie | Résultat |
+|---|---|---|
+| ai_delete_test | la suppression avec l'Assistant : le graphe, les quatre stratégies, la catégorie Suppressions, un seul Ctrl+Z, les popups d'un symbole supprimé | 115 vérifications, 0 échec |
+| ai_sandbox_test | le bac à sable : le processus à part, le temps et la sortie bornés, les étapes et leur état réel, le ST compilé et exécuté, le C/C++ seulement relu, le journal | 67 vérifications, 0 échec |
+| core_process_test | un programme lancé à part, borné en temps, en mémoire et en sortie | 7 vérifications, 0 échec |
+| hmi_discovery_test | la découverte réseau : la confirmation, la cadence, la lecture seule, un scan simulé (accessible, inaccessible, incomplet, inattendu, Arrêter), la comparaison avec le projet, le journal | 161 vérifications, 0 échec |
+| ai_souvenirs_test | les souvenirs : l'identifiant d'un projet (deux projets de même nom, déplacé, copié), proposer puis valider, les conflits, la recherche dans les conversations, la sauvegarde et la restauration | 144 vérifications, 0 échec |
+| ai_contexte_test | le contexte de la discussion : disponibilité, analyse en arrière-plan (PDF, Word, Excel, code), retirer et remettre, un doublon copié une fois | 148 vérifications, 0 échec |
+| ai_modeles_fichiers_test | les classeurs : les trois genres en français et en anglais, les modèles (enregistrer, reconnaître, renommer, désactiver), le .xia, les propositions validées, l'outil par pages | 149 vérifications, 0 échec |
+| ai_registre_test, ai_assistant_test, ai_integree_test, ai_reseau_test, ai_design_test, ai_apprentissage_fichier_test, ai_incident_answers_test | l'Assistant de bout en bout avec tout cela branché (consignes, outils, IA intégrée, conversation, .xia, incidents) | 251, 298, 647, 256, 258, 43 et 408 vérifications, 0 échec |
+| hmi_incident_test | le lecteur vidéo (barre de temps, sauts de 10 s, vitesses, zoom), l'alarme qui bat (regroupement, mémoire bornée vérifiée jusqu'à 30 millions de réapparitions, plafond horaire, quota), les vidéos sans copie | 331 contrôles, 0 échec |
+| dossiers_test | À propos : l'arbre des fichiers, les poids, un dossier jamais compté deux fois | réussie |
+| fileview_test | l'aperçu de chaque type de fichier (images, vidéo, son, PDF, texte, CSV/XLSX, JSON/XML, DOCX, ZIP, polices, le reste en hexadécimal), les bornes, le fil de fond | réussie |
+| hmi_editor_test | les notes de version (562), l'aide F1 (269 sujets, le texte et le C++ identiques), aucun caractère que l'atlas n'a pas sous Windows | réussie |
+
+Le bac à sable a aussi été lancé à la main, comme l'Assistant le lance (l'exe relancé avec `--bac-a-sable`, le travail sur l'entrée) : une fonction `Moyenne` et deux cas – analyse, compilation et exécution réussies, le premier cas réussi (3,0), le second en échec comme prévu (1,0 obtenu au lieu de 5,0).
 
 ## 14. Installer
 
