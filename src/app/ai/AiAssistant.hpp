@@ -151,6 +151,9 @@ public:
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
     [[nodiscard]] const Proposal* proposal(int message) const noexcept;
     [[nodiscard]] Check check(int message) const;
+    // 1.20.0 : l'environnement FIGE (les noms de l'automate, les pieces jointes de la conversation) pour verifier une
+    // proposition sur un fil de fond - la carte d'une grosse proposition ; faux : impossible (verifier ici).
+    bool frozenEnvironment(Env& out) const;
     // L'apercu (une copie de la vue, rien ne change dans le projet).
     [[nodiscard]] Preview previewOf(int message) const;
     // Appliquer : UN pas d'annulation. Faux et `why` : perimee, vue absente, erreurs, plus a

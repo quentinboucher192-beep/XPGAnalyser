@@ -12,6 +12,7 @@
 #include "../../ui/Icons.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <unordered_map>
 #include <utility>
@@ -706,6 +707,14 @@ void AiPanel::refreshButtons() {
 void AiPanel::tick(double now) {
     (void)assistant_->tick(now);
     sync();
+    // 1.20.0 : les verifications de fond des grosses propositions - leur avancement se redessine, leur resultat arrive.
+    if (chat_) {
+        if (chat_->pollThumbs()) {
+            chat_->rebuild();
+            invalidateLayout();
+        }
+        if (chat_->anyChecking()) invalidate();
+    }
     // 1.16.1 : une reponse vient de finir - l'ecran avertit (s'il le faut : l'utilisateur ne regarde pas).
     if (assistant_->generating()) {
         watchingReply_ = assistant_->generatingConversationId();
@@ -1694,26 +1703,115 @@ std::vector<AiChatView::Line> AiChatView::layoutText(const std::string& md, floa
     return out;
 }
 
+namespace {
+// 1.20.0 : une proposition d'au moins tant d'operations se verifie sur un fil de fond (la carte montre l'avancement).
+constexpr std::size_t kBackgroundOps = 40;
+double steadySeconds() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+} // namespace
+
 const AiChatView::Thumb& AiChatView::thumb(int message) const {
     auto& t = thumbs_[message];
-    const Proposal* p = panel_.assistant().proposal(message);
+    const auto& as = panel_.assistant();
+    const Proposal* p = as.proposal(message);
+    const auto doc = as.host().document ? as.host().document() : nullptr;
     std::string key;
     if (p) {
-        key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
-        for (const auto x : p->excluded) key += "x" + std::to_string(x);   // 1.19.0 : les etapes retirees
+        std::string base = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+        for (const auto x : p->excluded) base += "x" + std::to_string(x);   // 1.19.0 : les etapes retirees
         // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
-        if (auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr)
-            key += "|" + proposalPrint(doc->project, *p);
+        // 1.20.0 : relue seulement si le projet a change (sa revision) ou chaque seconde - pas a chaque peinture.
+        if (doc) {
+            const double now = steadySeconds();
+            if (base != t.base || doc->revision != t.revision || now - t.at >= 1.0 || now < t.at) {
+                t.print = proposalPrint(doc->project, *p);
+                t.base = base;
+                t.revision = doc->revision;
+                t.at = now;
+            }
+            key = base + "|" + t.print;
+        } else {
+            key = base;
+        }
     }
-    if (t.key != key || key.empty()) {
+    if (t.job && t.job->key == key && !key.empty()) return t;   // deja en verification pour cette empreinte
+    if (t.key == key && !key.empty()) {
+        if (t.job) retiring_.push_back(std::move(t.job));          // une verification d'une empreinte depassee
+        return t;
+    }
+    if (t.job) retiring_.push_back(std::move(t.job));
+    // Une carte close (appliquee, refusee) : ni apercu ni validation - le plan garde a l'application.
+    if (p && p->state != "proposee") {
         t.key = key;
-        t.preview = panel_.assistant().previewOf(message);
-        t.check = panel_.assistant().check(message);
-        // 1.19.0 : le plan - celui de la validation (sans la refaire), ou celui garde a l'application.
-        const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
-        t.plan = p && p->state == "proposee" && doc ? plan::build(doc->project, *p, t.check) : panel_.assistant().planOf(message);
+        t.preview = Preview{};
+        t.check = Check{};
+        t.plan = p->state == "appliquee" ? as.planOf(message) : plan::Plan{};
+        return t;
     }
+    // 1.20.0 : une grosse proposition - sur un fil de fond, sur une copie du projet et un environnement fige.
+    Env frozen;
+    if (p && doc && p->ops.size() >= kBackgroundOps && as.frozenEnvironment(frozen)) {
+        auto job = std::make_shared<ThumbJob>();
+        job->key = key;
+        job->total = 2 * p->ops.size();   // la validation puis l'apercu
+        auto project = std::make_shared<const hmi::Project>(doc->project);
+        job->worker = std::thread([job, project, prop = *p, env = std::move(frozen)] {
+            setProgressCounter(&job->done);
+            job->check = validate(*project, prop, env);
+            job->preview = preview(*project, prop, env);
+            job->plan = plan::build(*project, prop, job->check);
+            setProgressCounter(nullptr);
+            job->finished.store(true, std::memory_order_release);
+        });
+        t.job = std::move(job);
+        return t;
+    }
+    t.key = key;
+    t.preview = as.previewOf(message);
+    t.check = as.check(message);
+    // 1.19.0 : le plan - celui de la validation (sans la refaire), ou celui garde a l'application.
+    t.plan = p && doc ? plan::build(doc->project, *p, t.check) : as.planOf(message);
     return t;
+}
+
+bool AiChatView::pollThumbs() {
+    bool changed = false;
+    for (auto& [message, t] : thumbs_)
+        if (t.job && t.job->finished.load(std::memory_order_acquire)) {
+            if (t.job->worker.joinable()) t.job->worker.join();
+            t.key = t.job->key;
+            t.preview = std::move(t.job->preview);
+            t.check = std::move(t.job->check);
+            t.plan = std::move(t.job->plan);
+            t.job.reset();
+            changed = true;
+        }
+    std::erase_if(retiring_, [](const std::shared_ptr<ThumbJob>& j) {
+        if (!j->finished.load(std::memory_order_acquire)) return false;
+        if (j->worker.joinable()) j->worker.join();
+        return true;
+    });
+    return changed;
+}
+
+bool AiChatView::checking(int message) const {
+    const auto it = thumbs_.find(message);
+    return it != thumbs_.end() && it->second.pending();
+}
+
+float AiChatView::checkProgress(int message) const {
+    const auto it = thumbs_.find(message);
+    if (it == thumbs_.end() || !it->second.job || it->second.job->total == 0) return 0.f;
+    return std::min(1.f, static_cast<float>(it->second.job->done.load()) / static_cast<float>(it->second.job->total));
+}
+
+AiChatView::~AiChatView() {
+    // Les verifications de fond finissent (elles ne touchent que leurs copies) : attendues ici, a la fermeture.
+    for (auto& [message, t] : thumbs_)
+        if (t.job && t.job->worker.joinable()) t.job->worker.join();
+    for (auto& j : retiring_)
+        if (j->worker.joinable()) j->worker.join();
 }
 
 void AiChatView::measure() {
@@ -2024,7 +2122,8 @@ void AiChatView::rebuild() {
                                  : std::string("Appliquer"));
         cb.apply->setTooltip(anyway ? "Appliquer ce qui est valide ; les erreurs sont laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9" "es au journal (une confirmation les liste)."
                                     : "Appliquer au projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
-        cb.apply->setEnabled(t.check.ok() || anyway);
+        cb.apply->setEnabled((t.check.ok() || anyway) && !t.pending());   // 1.20.0 : pas pendant la verification de fond
+        if (t.pending()) cb.apply->setTooltip("La proposition se v\xC3\xA9rifie (sur un fil de fond) : Appliquer revient \xC3\xA0 la fin.");
         cb.third->setText(cb.stale ? "Redemander" : "Refuser\xE2\x80\xA6");
         cb.third->setTooltip(cb.stale ? "La vue a chang\xC3\xA9 : remettre la demande dans la saisie."
                                       : "Refuser (une question d'abord) : le projet ne change pas ; la carte pourra revenir sur ce refus.");
@@ -2187,6 +2286,7 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     else if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
     else if (p->state == "refusee") { st = "Refus\xC3\xA9" "e"; tone = c.textMuted; }
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
+    else if (t.pending()) { st = "V\xC3\xA9rification\xE2\x80\xA6"; tone = c.info; }   // 1.20.0 : sur un fil de fond
     // 1.15.0 : "A completer" seulement quand l'utilisateur peut completer (une variable a choisir dans
     // l'apercu) ; une proposition que le logiciel refuse (une propriete inventee...) est "Non valide".
     else if (!t.check.ok()) { st = t.check.missingVariable.empty() ? "Non valide" : "\xC3\x80 compl\xC3\xA9ter"; tone = c.error; }
@@ -2297,7 +2397,18 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     // L'apercu : la copie de la vue, dessinee par les painters du logiciel.
     const gfx::Rect area{card.x + 10.f, y, card.w - 20.f, 100.f};
     ctx.r.fillRect(area, c.windowBg);
-    if (t.preview.ok && t.preview.view.width > 0 && t.preview.view.height > 0) {
+    if (t.pending() && t.job) {
+        // 1.20.0 : une grosse proposition se verifie sur un fil de fond - l'avancement, l'interface reste libre.
+        const std::size_t done = std::min(t.job->done.load(), t.job->total), total = std::max<std::size_t>(1, t.job->total);
+        const float frac = static_cast<float>(done) / static_cast<float>(total);
+        const std::string line = "V\xC3\xA9rification de la proposition (" + std::to_string(p->ops.size()) + " op\xC3\xA9rations)\xE2\x80\xA6 "
+                                 + std::to_string(static_cast<int>(frac * 100.f + 0.5f)) + " %";
+        ctx.r.drawText({area.x + 10.f, area.y + area.h / 2.f - kNoteH - 2.f}, line, kMeta, c.text);
+        const gfx::Rect track{area.x + 10.f, area.y + area.h / 2.f + 2.f, area.w - 20.f, 8.f};
+        ctx.r.fillRoundedRect(track, alpha(c.info, 40), 4.f);
+        if (frac > 0.f) ctx.r.fillRoundedRect({track.x, track.y, std::max(8.f, track.w * frac), track.h}, c.info, 4.f);
+        ctx.r.drawText({area.x + 10.f, track.bottom() + 4.f}, "Tu peux continuer \xC3\xA0 travailler : la carte se met \xC3\xA0 jour seule.", kMeta, c.textMuted);
+    } else if (t.preview.ok && t.preview.view.width > 0 && t.preview.view.height > 0) {
         const auto& v = t.preview.view;
         const float z = std::min(area.w / static_cast<float>(v.width), area.h / static_cast<float>(v.height));
         const HmiViewport vp{area.x + (area.w - static_cast<float>(v.width) * z) / 2.f, area.y + (area.h - static_cast<float>(v.height) * z) / 2.f, z};

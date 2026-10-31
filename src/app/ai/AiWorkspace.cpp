@@ -112,6 +112,15 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
                 if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return true;
             return false;
         };
+    // 1.20.0 : la meme liste, pour figer l'environnement d'une verification de fond (une grosse proposition).
+    if (core::hasApi())
+        core.env.plcNameList = [this] {
+            std::vector<std::string> out;
+            if (const auto plc = app_.project())
+                for (const auto& v : plc->variables)
+                    if (v.scope == domain::VariableScope::Global) out.emplace_back(plc->strings.text(v.name));
+            return out;
+        };
     // 1.15.0 : leurs listes (variables, commentaires, DDT) pour le contexte et les propositions. 1.16.0 (captures) :
     // sans automate relie (IHM Studio), celui d'un export de Control Expert JOINT a la conversation (.XPG) - lu par
     // readPlc, garde le temps de la seance.

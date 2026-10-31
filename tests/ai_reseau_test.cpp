@@ -1229,6 +1229,7 @@ void testSecret() {
     ai::setKeyProtector({});
 }
 
+
 // =============================================================================
 //  9. L'Assistant branche : le faux fournisseur, le panneau, les parametres
 // =============================================================================
@@ -1651,6 +1652,53 @@ void testAssistantRealProvider() {
     ai::setHttpFactory(nullptr);
 }
 
+// =============================================================================
+//  1.20.0 : une GROSSE proposition se verifie sur un fil de fond - la carte montre l'avancement, l'interface ne gele pas
+// =============================================================================
+void testBackgroundCard() {
+    std::printf("[grosse proposition : verification de fond]\n");
+    useFakeNet();
+    Fixture f("fond");
+    f.configure();
+    std::string input = "{\"resume\": \"Beaucoup de rectangles\", \"operations\": [";
+    for (int i = 0; i < 80; ++i) {
+        if (i) input += ", ";
+        input += "{\"action\": \"creer\", \"genre\": \"Rectangle\", \"nom\": \"R_" + std::to_string(i) + "\", \"proprietes\": {\"x\": \""
+                 + std::to_string(10 + (i % 10) * 60) + "\", \"y\": \"" + std::to_string(10 + (i / 10) * 50) + "\", \"w\": \"40\", \"h\": \"30\"}}";
+    }
+    input += "]}";
+    g_net.push(sseReply(streamTextTool("toolu_big", input)));
+    check(f.panel->sendText("Ajoute 80 rectangles"), "envoyer");
+    for (int k = 0; k < 2500 && f.as().generating(); ++k) {
+        f.step(0.002);
+        pause(2);
+    }
+    const int m = f.lastIndex();
+    check(f.last().proposal && f.last().proposal->ops.size() == 80, "la proposition : 80 operations");
+    // La mise en page qui suit la reponse a lance la verification sur un fil de fond : la carte attend, l'interface est libre.
+    check(f.panel->chat().checking(m), "80 operations : la carte se verifie sur un fil de fond");
+    Recorder rec;
+    f.render(rec);   // la carte en verification : l'avancement se dessine (sans plantage)
+    bool said = false;
+    for (const auto& tx : rec.texts) said = said || has(tx, "rification");
+    check(said, "la carte dit << Verification... >> pendant le travail de fond");
+    for (int k = 0; k < 2500 && f.panel->chat().checking(m); ++k) {
+        f.step(0.002);
+        pause(2);
+    }
+    check(!f.panel->chat().checking(m), "la verification de fond se termine (le resultat arrive au tick)");
+    f.panel->chat().rebuild();
+    f.panel->layout();
+    auto* apply = f.panel->chat().cardButton(m, 1);
+    check(apply && apply->enabled(), "le resultat est la : Appliquer est disponible");
+    check(f.as().apply(m) && f.object("R_79"), "appliquee : les 80 rectangles");
+    // Une petite proposition reste verifiee tout de suite (pas de fil pour si peu).
+    g_net.push(sseReply(streamTextTool("toolu_small", kTankInput)));
+    (void)f.panel->sendText("Ajoute une cuve");
+    f.waitLive();
+    check(!f.panel->chat().checking(f.lastIndex()), "une petite proposition : verifiee tout de suite");
+}
+
 void testSettingsDialog() {
     std::printf("[parametres]\n");
     useFakeNet();
@@ -1881,6 +1929,7 @@ int main() {
     testWritingBeforeText();
     testDirectAndDemo();
     testAssistantRealProvider();
+    testBackgroundCard();
     testSettingsDialog();
     testFauxFournisseur();
     std::printf("ai_reseau_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

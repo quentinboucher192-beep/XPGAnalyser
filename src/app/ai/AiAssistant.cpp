@@ -672,6 +672,18 @@ Check Assistant::check(int message) const {
     return validate(doc->project, *p, host_.env);
 }
 
+bool Assistant::frozenEnvironment(Env& out) const {
+    std::map<std::string, std::string> files;   // comme attachmentPath : le plus recent d'abord
+    if (const Conversation* c = current())
+        for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
+            for (const auto& a : m->attachments) {
+                if (files.count(a.name)) continue;
+                if (!a.file.empty() && !root().empty()) files[a.name] = detail::join(root(), a.file);
+                else if (!a.source.empty()) files[a.name] = a.source;
+            }
+    return frozenEnv(host_.env, files, out);
+}
+
 Preview Assistant::previewOf(int message) const {
     const Proposal* p = proposal(message);
     const auto doc = host_.document ? host_.document() : nullptr;

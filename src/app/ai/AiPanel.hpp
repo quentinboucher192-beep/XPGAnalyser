@@ -30,6 +30,9 @@
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/ScrollBar.hpp"
 
+#include <atomic>
+#include <thread>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -400,15 +403,47 @@ private:
     ui::EdgeScrollBar        bar_;
     core::ConnectionScope    links_;
     // L'apercu de chaque carte (la copie de la vue, refaite quand la vue change).
+    // 1.20.0 : une GROSSE proposition se verifie sur un fil de fond (la copie du projet, l'environnement fige) - la carte
+    // montre l'avancement, l'interface ne gele pas ; le resultat arrive au tick (pollThumbs).
+    struct ThumbJob {
+        std::string              key;
+        std::atomic<std::size_t> done{0};
+        std::size_t              total{0};
+        std::atomic<bool>        finished{false};
+        Preview                  preview;
+        Check                    check;
+        plan::Plan               plan;
+        std::thread              worker;
+    };
     struct Thumb {
         std::string key;      // la proposition, l'empreinte de la vue
         Preview     preview;
         Check       check;
         plan::Plan  plan;     // 1.19.0 : le plan d'action (celui de la validation, ou celui garde a l'application)
+        // 1.20.0 : l'empreinte n'est relue que si le projet a change (ou chaque seconde), pas a chaque peinture.
+        std::string   base, print;
+        std::uint64_t revision{~0ull};
+        double        at{-1e9};
+        std::shared_ptr<ThumbJob> job;   // la verification de fond en cours (nul : aucune)
+        [[nodiscard]] bool pending() const noexcept { return job != nullptr; }
     };
     std::set<std::string> planOpen_;   // 1.19.0 : les propositions dont le plan est deplie (par identifiant)
     mutable std::map<int, Thumb> thumbs_;
+    mutable std::vector<std::shared_ptr<ThumbJob>> retiring_;   // remplacees en cours : attendues sans bloquer
     const Thumb& thumb(int message) const;
+
+public:
+    ~AiChatView() override;
+    // 1.20.0 : les verifications de fond finies passent dans leur carte (vrai : une carte a change).
+    bool pollThumbs();
+    // Une verification de fond est en cours pour cette carte (essais) ; son avancement (0..1).
+    [[nodiscard]] bool  checking(int message) const;
+    [[nodiscard]] float checkProgress(int message) const;
+    [[nodiscard]] bool  anyChecking() const {
+        for (const auto& [m, t] : thumbs_)
+            if (t.pending()) return true;
+        return false;
+    }
 };
 
 } // namespace app::ai

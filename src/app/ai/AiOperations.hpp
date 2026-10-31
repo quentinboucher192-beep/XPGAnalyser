@@ -79,6 +79,8 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <atomic>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -254,7 +256,17 @@ struct Env {
     // 1.18.0 (a la fin) : une piece jointe de la conversation, par son nom de fichier ("logo.png") - son chemin sur le disque ;
     // vide (ou nul) : aucune. creer_ressource n'importe que celles-la.
     std::function<std::string(std::string_view)> attachmentPath;
+    // 1.20.0 : la liste des noms que plcName reconnait (les globales de l'automate relie) - pour figer l'environnement
+    // d'une verification sur un fil de fond (frozen) ; nulle avec un plcName : pas de verification de fond.
+    std::function<std::vector<std::string>()> plcNameList;
 };
+
+// 1.20.0 : un environnement FIGE, sans rappel vers l'interface (une verification sur un fil de fond) : les noms de
+// l'automate (plcNameList) et les pieces jointes donnees. Faux : impossible (un plcName sans sa liste).
+bool frozenEnv(const Env& live, const std::map<std::string, std::string>& attachments, Env& out);
+// 1.20.0 : l'avancement d'une verification longue, sur le fil qui l'appelle : validate, preview et makeCommand y
+// ajoutent les operations traitees (nul : rien n'est compte).
+void setProgressCounter(std::atomic<std::size_t>* counter) noexcept;
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);
 // 1.16.0 : LA PORTEE D'UNE PROPOSITION.

@@ -30,6 +30,8 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
+
 #include "HmiHistory.hpp"
 #include "HmiModel.hpp"
 #include "HmiScenarios.hpp"      // lot 13 : les rapports des essais
@@ -70,7 +72,11 @@ public:
     // 1.12.26 : un Enregistrer a ecrit l'historique (les volets relisent : Suivi, Explorateur d'objets).
     const core::SignalPtr<>   editsSaved = core::Signal<>::create();
 
-    void touched(Id view) { dirty = true; changed->emit(view); }
+    // 1.20.0 : change a chaque modification (touched) - qui relit le projet souvent (la carte d'une proposition de l'IA)
+    // ne recalcule que s'il a change.
+    std::uint64_t revision{0};
+
+    void touched(Id view) { dirty = true; ++revision; changed->emit(view); }
 };
 using DocumentPtr = std::shared_ptr<Document>;
 

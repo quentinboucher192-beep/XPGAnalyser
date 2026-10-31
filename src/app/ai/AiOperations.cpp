@@ -29,6 +29,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 namespace app::ai {
 
@@ -1959,12 +1960,22 @@ std::vector<std::string> requestedVariables(const Proposal& p) {
 // (absents, ou leur definition) - la part "projet" de son empreinte ; vide : elle n'en cree pas.
 std::string createdState(const hmi::Project& project, const Proposal& p) {
     std::string out;
+    // 1.20.0 : une grosse proposition (des centaines d'adresses) : les variables indexees une fois (la carte relit cette
+    // empreinte souvent ; project.variable parcourt toute la liste a chaque nom).
+    std::unordered_map<std::string, const hmi::Variable*> byName;
+    const auto variableNamed = [&](const std::string& name) -> const hmi::Variable* {
+        if (p.ops.size() < 16) return project.variable(name);
+        if (byName.empty())
+            for (const auto& v : project.programs.variables) byName.emplace(lower(v.name), &v);   // le premier garde (comme variable())
+        const auto it = byName.find(lower(name));
+        return it == byName.end() ? nullptr : it->second;
+    };
     for (const auto& op : p.ops) {
         if (op.action == Operation::Action::Variables)
             for (const auto& spec : op.variables) {
                 const std::string name = trimmed(spec.name);
                 out += "V:" + name + "=";
-                if (const auto* v = project.variable(name)) out += v->type + "|" + v->initial + "|" + v->description;
+                if (const auto* v = variableNamed(name)) out += v->type + "|" + v->initial + "|" + v->description;
                 else out += "-";
                 out += ";";
             }
@@ -1990,7 +2001,7 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
             case Operation::Action::Address: {
                 const std::string v = trimmed(op.variable);
                 out += "A:" + v + "=";
-                if (const auto* x = project.variable(v)) out += x->equipment + "@" + x->address + "#" + std::to_string(x->places.size());
+                if (const auto* x = variableNamed(v)) out += x->equipment + "@" + x->address + "#" + std::to_string(x->places.size());
                 else out += "-";
                 out += ";";
                 break;
@@ -2396,6 +2407,8 @@ bool stopped(const Outcome& o) noexcept {
 
 // Le coeur : `pr` grandit d'unite en unite. `only` (appliquer) : les operations a executer ; nul : toutes celles qui ne
 // sont ni retirees, ni bloquees, ni dependantes d'une operation qui l'est. Faux et `why` : une unite a echoue (appliquer).
+thread_local std::atomic<std::size_t>* tlProgress = nullptr;   // 1.20.0 : setProgressCounter
+
 bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, Check* check, std::vector<Outcome>& out,
                const plan::Schedule& sch, const std::set<std::size_t>* only, std::string* why,
                std::map<hmi::Id, Touched>* touched, hmi::Id openView) {
@@ -2493,6 +2506,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
             if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;
             return false;
         }
+        if (tlProgress) tlProgress->fetch_add(run.size(), std::memory_order_relaxed);   // 1.20.0 : l'avancement
         // 3. l'etat de chaque operation (ce qu'elle a dit)
         for (const auto& sp : r.spans) {
             if (sp.op >= run.size()) continue;
@@ -2996,6 +3010,38 @@ Proposal proposalFromJson(const json::Value& o) {
     p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "empreinteApres", "demande", "resume",
                                        "variableChoisie", "operations", "exclues", "plan", "compteRendu"});
     return p;
+}
+
+// ---- 1.20.0 : une verification sur un fil de fond -----------------------------------------------------
+void setProgressCounter(std::atomic<std::size_t>* counter) noexcept { tlProgress = counter; }
+
+bool frozenEnv(const Env& live, const std::map<std::string, std::string>& attachments, Env& out) {
+    out = Env{};
+    if (live.plcName) {
+        if (!live.plcNameList) return false;
+        auto names = std::make_shared<std::set<std::string>>();
+        for (const auto& n : live.plcNameList()) names->insert(upperOf(n));
+        out.plcName = [names](std::string_view root) { return names->count(upperOf(root)) > 0; };
+        out.plcNameList = [names] { return std::vector<std::string>(names->begin(), names->end()); };
+    }
+    if (live.plcVariables) {
+        auto vars = std::make_shared<std::vector<std::pair<std::string, std::string>>>(live.plcVariables());
+        out.plcVariables = [vars] { return *vars; };
+    }
+    if (live.plcTypes) {
+        auto types = std::make_shared<std::vector<Env::PlcType>>(live.plcTypes());
+        out.plcTypes = [types] { return *types; };
+    }
+    if (live.plcSource) {
+        const std::string source = live.plcSource();
+        out.plcSource = [source] { return source; };
+    }
+    auto files = std::make_shared<std::map<std::string, std::string>>(attachments);
+    out.attachmentPath = [files](std::string_view name) {
+        const auto it = files->find(std::string(name));
+        return it == files->end() ? std::string{} : it->second;
+    };
+    return true;
 }
 
 } // namespace app::ai
