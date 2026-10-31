@@ -181,6 +181,28 @@ const std::vector<Note>& table() {
          "mettre \xC3\xA0 jour l'adresse, associer) en une commande annulable ; un journal des scans. L'IA peut pr\xC3\xA9parer "
          "une d\xC3\xA9tection : c'est toi qui lances.",
          "scanner-ip", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "LA M\xC3\x89MOIRE PERSISTANTE : l'Assistant garde sur ce PC des souvenirs - tes pr\xC3\xA9" "f\xC3\xA9rences, "
+         "les conventions et d\xC3\xA9" "cisions d'un projet, celles d'une conversation, les solutions techniques - avec "
+         "leur statut, leur confiance, une \xC3\xA9pingle, leur provenance et leur historique. Un projet est reconnu par "
+         "un identifiant, jamais par son nom seul : deux projets de m\xC3\xAAme nom ne m\xC3\xA9langent rien. L'IA propose "
+         "de retenir, tu valides (M\xC3\xA9moire et apprentissage \xE2\x80\xBA Souvenirs) ; une contradiction n'\xC3\xA9" "crase "
+         "jamais, les deux restent \xC2\xAB en conflit \xC2\xBB. Elle cherche aussi dans tes anciennes conversations. Le "
+         "mod\xC3\xA8le distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9 : il relit cette m\xC3\xA9moire locale.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "LE CONTEXTE DE LA DISCUSSION : un panneau \xC2\xAB Fichiers joints : N \xC2\xBB en haut de la conversation - chaque "
+         "fichier avec son type, sa taille, sa date, sa disponibilit\xC3\xA9 (disponible, d\xC3\xA9plac\xC3\xA9, manquant) "
+         "et son \xC3\xA9tat d'analyse ; l'ouvrir, son d\xC3\xA9tail, ses analyses, le retirer de la discussion ou l'y remettre. "
+         "Le texte des PDF, documents Word, classeurs Excel et du code est extrait en arri\xC3\xA8re-plan ; l'original n'est "
+         "jamais modifi\xC3\xA9, un doublon n'est copi\xC3\xA9 qu'une fois.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Incidents", Kind::Fixed,
+         "Plantage (m\xC3\xA9moire \xC3\xA9puis\xC3\xA9" "e) apr\xC3\xA8s plusieurs alarmes d\xC3\xA9" "clench\xC3\xA9" "es "
+         "ensemble, pr\xC3\xA9" "c\xC3\xA9" "d\xC3\xA9 d'un blocage de quelques secondes : chaque vid\xC3\xA9o d'incident "
+         "recopiait toutes ses images. Elles sont maintenant partag\xC3\xA9" "es avec le tampon ; une image illisible ne "
+         "fait plus planter la fiche.",
+         "incidents", ""),
         note("1.21.0", "Vues", Kind::Fixed,
          "Supprimer un symbole emporte aussi ses popups (elles restaient orphelines).",
          "assistant-ia-plan", ""),
