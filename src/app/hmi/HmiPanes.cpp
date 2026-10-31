@@ -990,7 +990,9 @@ core::CommandPtr hmiDeleteViewCommand(const hmi::DocumentPtr& doc, Id view) {
     if (!doc || !doc->project.view(view)) return nullptr;
     const std::string name = doc->project.view(view)->name;
     return hmi::changeProject(doc, "Supprimer la vue " + name, [&](hmi::Project& p) {
-        std::erase_if(p.views, [&](const hmi::View& v) { return v.id == view; });
+        // 1.21.0 : un symbole emporte ses popups (View::ownerSymbol) - elles n'existent pas sans lui (avant : elles restaient,
+        // orphelines, avec des objets qui lisent les parametres d'un symbole disparu).
+        std::erase_if(p.views, [&](const hmi::View& v) { return v.id == view || (v.ownerSymbol != kNoId && v.ownerSymbol == view); });
         if (p.config.startView == view) p.config.startView = p.views.empty() ? kNoId : p.views.front().id;
     });
 }

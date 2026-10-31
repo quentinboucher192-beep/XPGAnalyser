@@ -13,6 +13,7 @@
 #include "AiPrompt.hpp"
 
 #include "AiContext.hpp"
+#include "AiDelete.hpp"     // 1.21.0 : supprimer - les genres et les strategies (le schema, la lecture stricte)
 #include "AiKnowledge.hpp"
 #include "AiProvider.hpp"
 #include "AiRegistry.hpp"
@@ -71,7 +72,7 @@ const char* const kRules =
     "un libell\xC3\xA9 (label) court et parlant (P11, V1) ; les couleurs du th\xC3\xA8me sombre du logiciel (fond #20242B) ; "
     "#E5534B pour un d\xC3\xA9" "faut ou un arr\xC3\xAAt, #2ECC71 pour la marche.\n"
     "9. D\xC3\xA9placer, redimensionner : modifier x, y, w, h. Dupliquer : l'op\xC3\xA9ration dupliquer. Plusieurs suppressions "
-    ": l'utilisateur confirmera.\n"
+    ": l'utilisateur confirmera ; un \xC3\xA9l\xC3\xA9ment du projet (une vue, une variable, un type...) : il confirme toujours.\n"
     "10. Jamais de code \xC3\xA0 ex\xC3\xA9" "cuter : seules les op\xC3\xA9rations de l'outil existent. Le code brut (op\xC3\xA9ration code) ne "
     "porte ni script ni appel de fonction.\n"
     "11. Une proposition refus\xC3\xA9" "e te revient en r\xC3\xA9sultat d'outil, avec les raisons : corrige-la et repropose (un "
@@ -102,7 +103,17 @@ const char* const kRules =
     "- aligner : objets (deux ou plus), bord : haut, bas, gauche, droite, centre-h (les centres sur une m\xC3\xAAme "
     "verticale), centre-v (les centres sur une m\xC3\xAAme horizontale).\n"
     "- distribuer : objets (trois ou plus), sens : horizontal ou vertical (des \xC3\xA9" "carts \xC3\xA9gaux).\n"
-    "- supprimer : objets.\n"
+    "- supprimer : objets (les noms) ; sans genre : des objets de la vue. 1.21.0 : genre = ce qui part - objet, instance (une "
+    "instance de symbole : le symbole et ses autres instances restent), vue, popup, symbole (SA D\xC3\x89" "FINITION : toutes ses instances "
+    "en d\xC3\xA9pendent), modele, variable, type, alarme, script, fonction, equipement, ressource, dossier (+ liste). strategie : seul "
+    "(par d\xC3\xA9" "faut ; refus\xC3\xA9" "e si quelque chose en d\xC3\xA9pend - le logiciel dit quoi), remplacer + remplacer_par (un \xC3\xA9l\xC3\xA9ment "
+    "EXISTANT du m\xC3\xAAme genre, jamais invent\xC3\xA9), references (il part avec SEULEMENT les r\xC3\xA9" "f\xC3\xA9rences qui le citent : propri\xC3\xA9t\xC3\xA9s "
+    "vid\xC3\xA9" "es, actions retir\xC3\xA9" "es, instances retir\xC3\xA9" "es, variables d\xC3\xA9li\xC3\xA9" "es ; du code qui le cite : refus\xC3\xA9). inutiles: true : "
+    "aussi ce qui devient inutile (popup, script sur appel, fonction, ressource ; jamais une variable ni une d\xC3\xA9" "finition). exclure : "
+    "les noms \xC3\xA0 garder. Supprimer un objet garde sa variable ; une vue garde les scripts qu'elle appelle. Le logiciel analyse les "
+    "d\xC3\xA9pendances (directes, indirectes, potentielles, partag\xC3\xA9" "es, orphelins), v\xC3\xA9rifie sur une copie, montre tout et demande "
+    "confirmation. Exemple : {\"action\": \"supprimer\", \"genre\": \"type\", \"objets\": [\"T_Pompe\"], \"strategie\": \"remplacer\", "
+    "\"remplacer_par\": \"T_Pompe_V2\"}\n"
     "- dupliquer : objets, noms (ceux des copies, dans le m\xC3\xAAme ordre), dx, dy (le d\xC3\xA9" "calage en pixels). Exemple : "
     "{\"action\": \"dupliquer\", \"objets\": [\"Vanne_1\"], \"noms\": [\"Vanne_4\"], \"dx\": 0, \"dy\": 120}\n"
     "- code : code (le code brut d'objets, le format de l'onglet Code brut de l'inspecteur), pour un objet riche "
@@ -221,7 +232,8 @@ const std::vector<Fields>& fieldsOf() {
         {A::Bind, {"objet", "variable"}, {"objet", "variable"}},
         {A::Align, {"objets", "bord"}, {"objets", "bord"}},
         {A::Distribute, {"objets", "sens"}, {"objets"}},
-        {A::Remove, {"objets"}, {"objets"}},
+        // 1.21.0 : la suppression intelligente - le genre, la vue des objets, la strategie, le remplacant, les exclusions.
+        {A::Remove, {"objets", "genre", "vue", "strategie", "remplacer_par", "inutiles", "exclure", "liste", "proprietes"}, {"objets"}},
         {A::Duplicate, {"objets", "noms", "dx", "dy", "copies", "reperes"}, {"objets"}},
         {A::Code, {"code"}, {"code"}},
         // 1.16.0 : la vue neuve, les variables, les types IHM.
@@ -303,6 +315,24 @@ std::string malformed(const json::Value& o, std::size_t n) {
             return what + " : \xC2\xAB copies \xC2\xBB est un nombre entier de 1 \xC3\xA0 50.";
     }
     if (o.has("reperes") && !o.at("reperes").isBool()) return what + " : \xC2\xAB reperes \xC2\xBB vaut true ou false.";
+    // 1.21.0 : supprimer - un genre, une strategie connus ; les exclusions : des noms ; inutiles : un booleen.
+    if (*action == Operation::Action::Remove) {
+        if (o.has("genre") && !del::genreFromKey(o.str("genre")))
+            return what + " : genre \xC2\xAB " + o.str("genre") + " \xC2\xBB inconnu (objet, instance, vue, popup, symbole, modele, variable, type, alarme, "
+                          "script, fonction, equipement, ressource, dossier).";
+        if (o.has("strategie") && (!o.at("strategie").isString() || !del::strategyFromKey(o.str("strategie"))))
+            return what + " : \xC2\xAB strategie \xC2\xBB vaut seul, remplacer, references ou inutiles.";
+        if (o.has("remplacer_par") && (!o.at("remplacer_par").isString() || o.str("remplacer_par").empty()))
+            return what + " : \xC2\xAB remplacer_par \xC2\xBB est le nom d'un \xC3\xA9l\xC3\xA9ment EXISTANT du m\xC3\xAAme genre.";
+        if (o.has("inutiles") && !o.at("inutiles").isBool()) return what + " : \xC2\xAB inutiles \xC2\xBB vaut true ou false.";
+        if (o.has("exclure")) {
+            const auto& list = o.at("exclure");
+            if (!list.isArray()) return what + " : \xC2\xAB exclure \xC2\xBB est une liste de noms.";
+            for (const auto& item : list.items())
+                if (!item.isString() || item.asString().empty()) return what + " : \xC2\xAB exclure \xC2\xBB ne contient que des noms (des textes).";
+        }
+        if (o.has("vue") && !o.at("vue").isString()) return what + " : \xC2\xAB vue \xC2\xBB est un nom de vue.";
+    }
     const auto entries = [&](std::string_view key, std::initializer_list<std::string_view> allowedKeys, bool withValue) -> std::string {
         const auto& list = o.at(key);
         const std::string k(key);
@@ -465,10 +495,13 @@ std::string operationsTool() {
     {
         Value kinds = Value::array();
         for (const auto& info : hmi::kKindInfos) kinds.push(std::string(info.key));
+        // 1.21.0 : supprimer - ce qui part (un genre d'element du projet, pas une cle d'objet).
+        for (int k = 0; k <= static_cast<int>(del::Genre::Folder); ++k) kinds.push(std::string(del::genreKey(static_cast<del::Genre>(k))));
         Value g = Value::object();
         g.set("type", "string");
         g.set("enum", kinds);
-        g.set("description", "creer : la cl\xC3\xA9 du genre.");
+        g.set("description", "creer : la cl\xC3\xA9 du genre ; supprimer : ce qui part (objet, instance, vue, popup, symbole, modele, variable, type, "
+                             "alarme, script, fonction, equipement, ressource, dossier) - absent : des objets.");
         props.set("genre", g);
     }
     props.set("nom", str("creer : un nom neuf ; creer_vue : le nom de la vue neuve ; creer_type : le nom du type IHM (T_...) ; creer_equipement, "
@@ -476,7 +509,20 @@ std::string operationsTool() {
     props.set("objet", str("modifier, associer : un objet existant."));
     // 1.19.0 : la vue visee par un objet (plusieurs vues dans une proposition).
     props.set("vue", str("un objet : sa vue ; absente : la derni\xC3\xA8re creer_vue au-dessus, sinon la vue ouverte."));
-    props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants ; ranger : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 ranger."));
+    props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants ; ranger : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 ranger ; "
+                              "supprimer + genre : les \xC3\xA9l\xC3\xA9ments existants de ce genre."));
+    // 1.21.0 : la suppression intelligente.
+    props.set("strategie", choice({"seul", "remplacer", "references", "inutiles"},
+                                  "supprimer : seul (refus\xC3\xA9 si quelque chose en d\xC3\xA9pend), remplacer (+ remplacer_par), references (retire "
+                                  "seulement les r\xC3\xA9" "f\xC3\xA9rences), inutiles (+ ce qui devient inutile)."));
+    props.set("remplacer_par", str("supprimer, strategie remplacer : un \xC3\xA9l\xC3\xA9ment EXISTANT du m\xC3\xAAme genre (jamais invent\xC3\xA9)."));
+    props.set("exclure", names("supprimer : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 garder (jamais supprim\xC3\xA9s ni modifi\xC3\xA9s)."));
+    {
+        Value b = Value::object();
+        b.set("type", "boolean");
+        b.set("description", "supprimer : true - aussi ce qui devient inutile (popup, script sur appel, fonction, ressource).");
+        props.set("inutiles", b);
+    }
     {
         Value p = Value::object();
         p.set("type", "object");
@@ -694,7 +740,8 @@ const char* const kRulesShort =
     "la vue, sans recouvrir. Valeurs en texte : nombres avec un point, TRUE/FALSE, couleurs #RRGGBB.\n"
     "- Op\xC3\xA9rations : creer (genre, nom, proprietes), modifier (objet, proprietes), associer (objet, variable), "
     "aligner (objets, bord : haut|bas|gauche|droite|centre-h|centre-v), distribuer (objets, sens : horizontal|vertical), "
-    "supprimer (objets), dupliquer (objets, noms, dx, dy), code (code). Jamais de code \xC3\xA0 ex\xC3\xA9" "cuter.\n"
+    "supprimer (objets ; genre : vue, variable, type... ; strategie : seul|remplacer|references|inutiles), dupliquer (objets, noms, dx, "
+    "dy), code (code). Jamais de code \xC3\xA0 ex\xC3\xA9" "cuter.\n"
     "- Une proposition refus\xC3\xA9" "e te revient avec ses raisons : corrige-la.\n";
 
 bool blankChar(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'; }

@@ -21,6 +21,7 @@
 //  de la station de pompage).
 // =============================================================================
 #include "../src/app/ai/AiContext.hpp"
+#include "../src/app/ai/AiDelete.hpp"   // 1.21.0 : les genres de supprimer (le schema)
 #include "../src/app/ai/AiDemo.hpp"
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiKnowledge.hpp"
@@ -446,9 +447,12 @@ void toolSchema() {
           "input_schema : un objet, operations obligatoire");
     const auto& item = schema.at("properties").at("operations").at("items");
     const auto& kinds = item.at("properties").at("genre").at("enum");
-    bool all = kinds.items().size() == 116;
-    for (std::size_t i = 0; all && i < kinds.items().size(); ++i) all = kinds.items()[i].asString() == hmi::kKindInfos[i].key;
-    check(all, "genre : l'enumeration des 116 cles de kKindInfos");
+    // 1.21.0 : puis les 14 genres de supprimer (la suppression intelligente : vue, variable, type...).
+    constexpr std::size_t kRemoval = static_cast<std::size_t>(ai::del::Genre::Folder) + 1;
+    bool all = kinds.items().size() == 116 + kRemoval;
+    for (std::size_t i = 0; all && i < 116; ++i) all = kinds.items()[i].asString() == hmi::kKindInfos[i].key;
+    for (std::size_t k = 0; all && k < kRemoval; ++k) all = kinds.items()[116 + k].asString() == ai::del::genreKey(static_cast<ai::del::Genre>(k));
+    check(all, "genre : l'enumeration des 116 cles de kKindInfos, puis les 14 genres de supprimer");
     const auto& actions = item.at("properties").at("action").at("enum");
     std::set<std::string> a;
     for (const auto& x : actions.items()) a.insert(x.asString());

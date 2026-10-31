@@ -86,11 +86,21 @@ std::string groupKey(const std::string& heading) {
     return cut == std::string::npos ? heading : heading.substr(0, cut);
 }
 
+// Ce qui, change, refait la liste : l'etat, le choix de la variable ; 1.21.0 : les etapes retirees (une suppression
+// retiree ici ou sur la bande du plan).
+std::string proposalKey(const Proposal& p) {
+    std::string key = p.id + "|" + p.state + "|" + p.variable.use + (p.variable.create ? "+" : "-");
+    for (const auto x : p.excluded) key += "x" + std::to_string(x);
+    return key;
+}
+
 // Une ligne de la liste de gauche.
 struct Row {
     enum class Kind : std::uint8_t { Heading, Item, Change, Note, Warning, Error } kind{Kind::Note};
     std::string text, right;
     int         what{0};      // un objet : 0 creer, 1 modifier, 2 supprimer
+    int         op{-1};       // 1.21.0 : une suppression (l'indice de son operation) - un clic la retire ou la remet
+    bool        excluded{false};
 };
 
 } // namespace
@@ -203,6 +213,11 @@ public:
             if (r.contains(at) && i < rows.size() && rows[i].kind == Row::Kind::Heading) return static_cast<int>(i);
         return -1;
     }
+    [[nodiscard]] int removalAt(gfx::Point at) const {   // 1.21.0 : la ligne d'une suppression sous ce point (-1 : aucune)
+        for (const auto& [r, i] : hits_)
+            if (r.contains(at) && i < rows.size() && rows[i].op >= 0) return static_cast<int>(i);
+        return -1;
+    }
     [[nodiscard]] gfx::Rect headingRect(const std::string& key) const {
         for (const auto& [r, i] : hits_)
             if (i < rows.size() && rows[i].kind == Row::Kind::Heading && groupKey(rows[i].text) == key) return r;
@@ -222,6 +237,9 @@ public:
                 const auto& row = rows[i];
                 if (row.kind == Row::Kind::Heading)
                     return folded.count(groupKey(row.text)) ? "Clic : d\xC3\xA9plier ce groupe" : "Clic : replier ce groupe";
+                if (row.op >= 0)
+                    return row.excluded ? "Clic : remettre cette suppression dans le plan."
+                                        : "Clic : retirer cette suppression du plan (ce qui en d\xC3\xA9pend est ignor\xC3\xA9, la v\xC3\xA9rification se refait).";
                 return row.text + (row.right.empty() ? std::string{} : " \xE2\x80\x94 " + row.right);
             }
         if (area_.contains(mouse)) {
@@ -380,7 +398,7 @@ protected:
                         break;
                     }
                     case Row::Kind::Item: {
-                        const gfx::Color col = row.what == 0 ? c.ok : row.what == 1 ? c.info : c.error;
+                        const gfx::Color col = row.excluded ? c.textDisabled : row.what == 0 ? c.ok : row.what == 1 ? c.info : c.error;
                         const char* tag = row.what == 0 ? "+" : row.what == 1 ? "~" : "\xE2\x88\x92";
                         ctx.r.fillRoundedRect({list_.x + 8.f, y + 4.f, 16.f, lh - 8.f}, alpha(col, 50), 3.f);
                         ctx.r.drawText({list_.x + 12.f, ty}, tag, kText, col);
@@ -546,6 +564,12 @@ protected:
                 const std::string key = groupKey(rows[static_cast<std::size_t>(h)].text);
                 if (!folded.erase(key)) folded.insert(key);
                 invalidate();
+                return ui::EventResult::Consumed;
+            }
+            // 1.21.0 : une suppression : la retirer du plan, ou l'y remettre.
+            if (const int k = removalAt(d->pos); k >= 0) {
+                const Row& row = rows[static_cast<std::size_t>(k)];
+                (void)d_.excludeRemoval(static_cast<std::size_t>(row.op), !row.excluded);
                 return ui::EventResult::Consumed;
             }
             if (area_.contains(d->pos)) {
@@ -716,6 +740,55 @@ void AiPreviewDialog::refresh() {
         heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size()) + ")");
         for (const auto& w : check_.warnings) rows.push_back({Row::Kind::Warning, w, {}, 0});
     }
+    // 1.21.0 : LES SUPPRESSIONS - chacune : sa strategie, le resume par genre, ce qui part, ce qui en depend, les
+    // consequences ; un clic la retire du plan (ou l'y remet). Les suppressions retirees restent listees (a remettre).
+    std::size_t removalOps = 0;
+    for (std::size_t i = 0; i < p->ops.size(); ++i)
+        if (p->ops[i].action == Operation::Action::Remove) ++removalOps;
+    if (removalOps > 0 && !waiting_) {
+        heading("SUPPRESSIONS (" + std::to_string(removalOps) + ") \xE2\x80\x94 clic sur une suppression : la retirer du plan ou l'y remettre");
+        const auto cap = [&](const std::vector<Check::Made>& list, const char* title, std::size_t max) {
+            if (list.empty()) return;
+            rows.push_back({Row::Kind::Note, title, {}, 0});
+            for (std::size_t k = 0; k < list.size() && k < max; ++k)
+                rows.push_back({Row::Kind::Change, list[k].what + " " + list[k].name + (list[k].detail.empty() ? std::string{} : " \xE2\x80\x94 " + list[k].detail), {}, 0});
+            if (list.size() > max) rows.push_back({Row::Kind::Change, "\xE2\x80\xA6 et " + std::to_string(list.size() - max) + " autres", {}, 0});
+        };
+        for (std::size_t i = 0; i < p->ops.size(); ++i) {
+            if (p->ops[i].action != Operation::Action::Remove) continue;
+            const bool excluded = std::find(p->excluded.begin(), p->excluded.end(), i) != p->excluded.end();
+            const Check::Removal* r = nullptr;
+            for (const auto& x : check_.removals)
+                if (x.op == i) r = &x;
+            std::string title = r ? r->title : "Supprimer " + [&] {
+                std::string names;
+                for (const auto& n : p->ops[i].objects) names += (names.empty() ? "" : ", ") + n;
+                return names;
+            }();
+            Row head{Row::Kind::Item, std::move(title), excluded ? std::string("retir\xC3\xA9" "e") : r ? "strat\xC3\xA9gie " + r->strategy : std::string{}, 2};
+            head.op = static_cast<int>(i);
+            head.excluded = excluded;
+            rows.push_back(std::move(head));
+            if (excluded) {
+                rows.push_back({Row::Kind::Change, "Retir\xC3\xA9" "e du plan : rien ne part (clic : la remettre).", {}, 0});
+                continue;
+            }
+            if (!r) continue;
+            for (const auto& line : r->summary) rows.push_back({Row::Kind::Note, "\xE2\x80\xA2 " + line, {}, 0});
+            cap(r->removed, "Part :", 12);
+            cap(r->dependencies, "D\xC3\xA9pendances :", 12);
+            if (!r->consequences.empty()) {
+                rows.push_back({Row::Kind::Note, "Cons\xC3\xA9quences :", {}, 0});
+                for (std::size_t k = 0; k < r->consequences.size() && k < 12; ++k) rows.push_back({Row::Kind::Change, r->consequences[k], {}, 0});
+                if (r->consequences.size() > 12) rows.push_back({Row::Kind::Change, "\xE2\x80\xA6 et " + std::to_string(r->consequences.size() - 12) + " autres", {}, 0});
+            }
+            if (!r->keep.empty()) {
+                std::string kept;
+                for (const auto& k : r->keep) kept += (kept.empty() ? "" : ", ") + k;
+                rows.push_back({Row::Kind::Note, "Exclus (gard\xC3\xA9s) : " + kept, {}, 0});
+            }
+        }
+    }
     // 1.19.0 : L'APERCU GLOBAL PAR CATEGORIE - le meme plan que la carte de la conversation (aucune divergence) : une
     // synthese (l'architecture), puis chaque categorie, et pour chaque etape son nom, son action (creation, modification,
     // reutilisation), ce dont elle depend, ses avertissements et ses erreurs.
@@ -742,6 +815,7 @@ void AiPreviewDialog::refresh() {
                 rows.push_back({Row::Kind::Change, std::string(plan::categoryLabel(cat)) + " : " + std::to_string(steps.size()) + " \xC3\xA9tape(s)", {}, 0});
             for (const auto& e : pl.errors) rows.push_back({Row::Kind::Error, e, {}, 0});
             for (const auto& [cat, steps] : byCat) {
+                if (cat == plan::Category::Removals && removalOps > 0 && !waiting_) continue;   // 1.21.0 : la categorie Suppressions, plus haut
                 std::string head = plan::categoryLabel(cat).data();
                 for (auto& ch : head) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
                 heading(head + " (" + std::to_string(steps.size()) + ")");
@@ -895,7 +969,7 @@ void AiPreviewDialog::refresh() {
         apply_->setEnabled(p->state == "proposee" && (check_.ok() || anyway) && !waiting_);   // 1.20.1 : apres la verification de fond
     }
     if (cancel_) cancel_->setEnabled(p->state == "proposee");
-    key_ = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+    key_ = proposalKey(*p);
     if (widgetRoot()) widgetRoot()->invalidateLayout();
 }
 
@@ -917,6 +991,30 @@ bool AiPreviewDialog::chooseVariable(int index) {
     return ok;
 }
 
+bool AiPreviewDialog::excludeRemoval(std::size_t op, bool excluded) {
+    const Proposal* p = panel_.assistant().proposal(message_);
+    if (!p || p->state != "proposee" || op >= p->ops.size() || p->ops[op].action != Operation::Action::Remove) return false;
+    const bool ok = panel_.assistant().setExcluded(message_, op, excluded);
+    panel_.sync();
+    refresh();
+    return ok;
+}
+
+std::vector<std::string> AiPreviewDialog::removalRows() const {
+    std::vector<std::string> out;
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    if (!b) return out;
+    bool inside = false;
+    for (const auto& r : b->rows) {
+        if (r.kind == Row::Kind::Heading) {
+            inside = groupKey(r.text) == "SUPPRESSIONS";
+            continue;
+        }
+        if (inside) out.push_back(r.text + (r.right.empty() ? std::string{} : " | " + r.right));
+    }
+    return out;
+}
+
 void AiPreviewDialog::Update(const menu::FrameContext& f) {
     menu::WidgetMenu::Update(f);
     const Proposal* p = panel_.assistant().proposal(message_);
@@ -925,7 +1023,7 @@ void AiPreviewDialog::Update(const menu::FrameContext& f) {
         finish(p && p->state == "appliquee");
         return;
     }
-    const std::string key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+    const std::string key = proposalKey(*p);
     if (key != key_) refresh();
     // 1.20.1 : la verification de fond finie : la fenetre se remplit ; en cours : l'avancement (quatre fois par seconde).
     else if (waiting_ && (!panel_.chat().checking(message_) || f.totalSeconds - lastWait_ >= 0.25 || f.totalSeconds < lastWait_)) {

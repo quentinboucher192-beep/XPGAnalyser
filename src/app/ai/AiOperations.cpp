@@ -2,6 +2,7 @@
 //  app/ai/AiOperations.cpp - voir AiOperations.hpp
 // =============================================================================
 #include "AiOperations.hpp"
+#include "AiDelete.hpp" // 1.21.0 : la suppression intelligente (genre, strategie, verification)
 #include "AiPlan.hpp"   // 1.19.0 : l'ordre d'execution (les unites, leurs dependances)
 
 #include "AiRegistry.hpp"
@@ -640,12 +641,29 @@ struct Run {
         return true;
     }
 
+    // 1.21.0 : des objets (genre vide ou objet) ou des instances de symbole (genre instance : jamais leur definition, ni les
+    // autres instances) ; la strategie seul (l'objet part, sa variable reste) ; les exclusions restent.
     bool remove(const Operation& op) {
+        {
+            del::Request rq;
+            std::string bad;
+            if (!del::requestOf(op, rq, &bad, view.name)) return fail(bad);
+        }
+        const bool instances = del::genreFromKey(op.kind) == del::Genre::Instance;
         std::vector<hmi::Id> ids;
         for (const auto& n : op.objects) {
+            if (std::any_of(op.keep.begin(), op.keep.end(), [&](const std::string& k) { return iequal(trimmed(k), trimmed(n)); })) {
+                warn("\xC2\xAB " + n + " \xC2\xBB est exclu de la suppression : il reste.");
+                continue;
+            }
             hmi::Object* o = find(n);
             if (!o) {
                 warn("\xC2\xAB " + n + " \xC2\xBB n'est plus dans la vue (rien \xC3\xA0 supprimer).");
+                continue;
+            }
+            if (instances && o->kind != hmi::Kind::SymbolInstance) {
+                if (!fail("\xC2\xAB " + o->name + " \xC2\xBB n'est pas une instance de symbole (c'est " + std::string(hmi::kindLabel(o->kind))
+                          + ") : genre objet.")) return false;
                 continue;
             }
             ids.push_back(o->id);
@@ -1936,7 +1954,7 @@ struct Run {
 
 // 1.16.0 : la proposition cree-t-elle des variables ou des types (le projet change, pas seulement une vue) ?
 bool createsProjectItems(const Proposal& p) noexcept {
-    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return projectLevel(op.action); });
+    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return projectLevel(op); });
 }
 
 // Les variables qu'une proposition demande (associer, la propriete variable d'un creer, d'un modifier) ;
@@ -1990,6 +2008,9 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
             }
             out += ";";
         }
+        // 1.21.0 : une suppression d'elements du projet - chacun present ou absent (applique : absents ; Ctrl+Z : presents).
+        if (del::projectRemoval(op))
+            for (const auto& it : del::namedItems(op)) out += "X:" + op.kind + ":" + lower(it.name) + "=" + (del::exists(project, it) ? "1" : "-") + ";";
         // 1.18.0 : les outils - l'element tel qu'il est dans le projet (absent, ou ce qui le decrit).
         const std::string name = trimmed(op.name);
         switch (op.action) {
@@ -2092,6 +2113,8 @@ std::vector<std::pair<std::string, std::string>> proposedDetections(const Propos
     }
     return out;
 }
+
+bool projectLevel(const Operation& op) noexcept { return projectLevel(op.action) || del::projectRemoval(op); }
 
 bool projectLevel(Operation::Action a) noexcept {
     switch (a) {
@@ -2213,7 +2236,7 @@ std::string newViewName(const Proposal& p) {
 }
 
 std::string opTarget(const Proposal& p, std::size_t index) {
-    if (index >= p.ops.size() || projectLevel(p.ops[index].action)) return {};
+    if (index >= p.ops.size() || projectLevel(p.ops[index])) return {};
     if (const std::string t = trimmed(p.ops[index].target); !t.empty()) return t;
     for (std::size_t j = index; j-- > 0;)
         if (p.ops[j].action == Operation::Action::View) return trimmed(p.ops[j].name);
@@ -2237,7 +2260,7 @@ bool usesOpenView(const Proposal& p) noexcept {
     // Une proposition vide (une ancienne conversation) : la vue visee, comme avant.
     if (p.ops.empty()) return true;
     for (std::size_t i = 0; i < p.ops.size(); ++i)
-        if (!projectLevel(p.ops[i].action) && opTarget(p, i).empty()) return true;
+        if (!projectLevel(p.ops[i]) && opTarget(p, i).empty()) return true;
     return false;
 }
 
@@ -2402,6 +2425,19 @@ std::string opLabel(const Proposal& p, std::size_t i) {
 
 using Outcome = Check::Outcome;
 
+// 1.21.0 : ce que les suppressions ont emporte (l'operation, l'element) et les elements dont une reference a change : la
+// verification d'apres (validate, applyStaged) les relit.
+struct RemovalLog {
+    std::vector<std::pair<std::size_t, del::Item>> removed;
+    std::vector<std::string>                       touched;
+    bool                                           project{false};   // un element du projet est parti (pas seulement des objets)
+    [[nodiscard]] std::vector<del::Item> items() const {
+        std::vector<del::Item> out;
+        for (const auto& [i, it] : removed) out.push_back(it);
+        return out;
+    }
+};
+
 bool stopped(const Outcome& o) noexcept {
     return o.state == Outcome::State::Failed || o.state == Outcome::State::Skipped || o.state == Outcome::State::Excluded;
 }
@@ -2412,9 +2448,24 @@ thread_local std::atomic<std::size_t>* tlProgress = nullptr;   // 1.20.0 : setPr
 
 bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, Check* check, std::vector<Outcome>& out,
                const plan::Schedule& sch, const std::set<std::size_t>* only, std::string* why,
-               std::map<hmi::Id, Touched>* touched, hmi::Id openView) {
+               std::map<hmi::Id, Touched>* touched, hmi::Id openView, RemovalLog* log = nullptr) {
     const std::size_t n = p.ops.size();
     out.assign(n, Outcome{});
+    // 1.21.0 : la vue ouverte (son nom) ; ce que les AUTRES suppressions de la proposition emportent (celles qui ne sont ni
+    // retirees, ni echouees) - leurs dependances ne bloquent pas celle-ci.
+    const std::string openName = [&] {
+        const hmi::View* v = pr.view(openView);
+        return v ? v->name : p.view;
+    }();
+    const auto alsoFor = [&](std::size_t self) {
+        std::vector<del::Item> list;
+        for (std::size_t j = 0; j < n; ++j) {
+            if (j == self || p.ops[j].action != Operation::Action::Remove || stopped(out[j])) continue;
+            const std::string target = opTarget(p, j);
+            for (auto& it : del::namedItems(p.ops[j], target.empty() ? openName : target)) list.push_back(std::move(it));
+        }
+        return list;
+    };
     const std::set<std::size_t> excluded(p.excluded.begin(), p.excluded.end());
     const std::set<std::size_t> blocked(sch.blocked.begin(), sch.blocked.end());
     for (std::size_t i = 0; i < n; ++i) {
@@ -2456,6 +2507,60 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
             run.push_back(i);
         }
         if (run.empty()) continue;
+        // 1.21.0 : UNE SUPPRESSION D'ELEMENTS DU PROJET (AiDelete) - sur `pr`, la copie qui grandit d'unite en unite :
+        // l'analyse, la strategie, le retrait, la verification de l'operation ; refusee : `pr` est inchange.
+        if (unit.kind == plan::Unit::Kind::Project && run.size() == 1 && del::projectRemoval(p.ops[run.front()])) {
+            const std::size_t i = run.front();
+            del::Request rq;
+            del::Analysis an;
+            std::string bad;
+            bool ok = del::requestOf(p.ops[i], rq, &bad);
+            if (!ok) {
+                an.title = opLabel(p, i);
+                an.errors.push_back(bad);
+            } else {
+                del::Context ctx;
+                ctx.plcName = env.plcName;
+                ctx.global = false;   // une fois pour toute la proposition, a la fin (validate, applyStaged)
+                ctx.also = alsoFor(i);
+                ok = del::run(pr, rq, an, ctx);
+            }
+            if (mode == Mode::Apply && !ok) {
+                if (why) *why = an.errors.empty() ? std::string("La suppression ne s'applique pas.") : an.errors.front();
+                return false;
+            }
+            Outcome& o = out[i];
+            o.errors = an.errors;
+            o.warnings = an.warnings;
+            o.state = ok ? Outcome::State::Validated : Outcome::State::Failed;
+            if (ok && log) {
+                log->project = true;
+                for (const auto& it : an.removed) log->removed.emplace_back(i, it);
+                for (const auto& d : an.direct) log->touched.push_back(d.name);
+            }
+            if (check) {
+                for (const auto& e : an.errors) check->errors.push_back(e);
+                for (const auto& w : an.warnings) check->warnings.push_back(w);
+                check->removals.push_back(del::removalOf(i, an, p.ops[i].keep));
+                check->remove += static_cast<int>(an.removed.size());
+                ++check->projectRemovals;
+                check->confirmRemoval = true;   // un element du projet part : toujours une confirmation
+                for (const auto& ed : an.objects) {
+                    if (ed.removed) continue;   // une instance retiree : dans la liste de la suppression
+                    Item item;
+                    item.what = Item::What::Modify;
+                    item.id = ed.object;
+                    item.name = ed.name;
+                    item.kind = ed.kind;
+                    item.changes = ed.changes;
+                    item.view = ed.viewName;
+                    check->items.push_back(std::move(item));
+                    ++check->modify;
+                }
+            }
+            if (tlProgress) tlProgress->fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
         const bool newView = unit.kind == plan::Unit::Kind::NewView;
         if (newView && p.ops[run.front()].action != Operation::Action::View) {
             for (const auto i : run) {
@@ -2506,6 +2611,37 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         if (mode == Mode::Apply && !ok) {
             if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;
             return false;
+        }
+        // 1.21.0 : les objets supprimes (la verification d'apres les cherche) et, a la validation, leur analyse pour
+        // l'apercu - ce qui en depend, ce qui devient orphelin ; la variable d'un objet, le symbole d'une instance restent.
+        if (existing != hmi::kNoId) {
+            std::size_t owner = run.front();
+            for (const auto i : run)
+                if (p.ops[i].action == Operation::Action::Remove) owner = i;
+            if (log)
+                if (const hmi::View* v = pr.view(existing))
+                    for (const auto id : r.removedIds)
+                        if (const hmi::Object* o = v->object(id)) {
+                            del::Item it;
+                            it.kind = hmi::rel::Kind::Object;
+                            it.name = o->name;
+                            it.id = id;
+                            it.view = existing;
+                            it.viewName = v->name;
+                            log->removed.emplace_back(owner, std::move(it));
+                        }
+            if (check)
+                for (const auto i : run) {
+                    if (p.ops[i].action != Operation::Action::Remove) continue;
+                    del::Request rq;
+                    if (!del::requestOf(p.ops[i], rq, nullptr, work.name)) continue;
+                    del::Context ctx;
+                    ctx.plcName = env.plcName;
+                    ctx.global = false;
+                    ctx.also = alsoFor(i);
+                    const del::Analysis an = del::analyze(pr, rq, ctx);
+                    if (!an.removed.empty()) check->removals.push_back(del::removalOf(i, an, p.ops[i].keep));
+                }
         }
         if (tlProgress) tlProgress->fetch_add(run.size(), std::memory_order_relaxed);   // 1.20.0 : l'avancement
         // 3. l'etat de chaque operation (ce qu'elle a dit)
@@ -2642,8 +2778,26 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     const plan::Schedule sch = plan::schedule(p);
     hmi::Project copy = project;
     std::vector<Check::Outcome> out;
-    (void)runStaged(copy, p, env, Mode::Check, &check, out, sch, nullptr, nullptr, nullptr, open);
+    RemovalLog log;
+    (void)runStaged(copy, p, env, Mode::Check, &check, out, sch, nullptr, nullptr, nullptr, open, &log);
     for (const auto& e : sch.errors) check.errors.push_back(e);
+    // 1.21.0 : LA VERIFICATION D'APRES SUPPRESSION, sur la copie : chaque element parti est absent, aucune reference ne
+    // reste, la verification globale ne trouve aucune erreur bloquante nouvelle qui le cite. L'etape fautive echoue.
+    if (log.project)
+        for (const auto& pb : del::verify(project, copy, log.items(), log.touched, env.plcName)) {
+            const std::string text = "V\xC3\xA9rification apr\xC3\xA8s suppression (sur une copie) : " + pb + ".";
+            check.errors.push_back(text);
+            std::size_t owner = log.removed.back().first;
+            for (const auto& [i, it] : log.removed)
+                if (!it.name.empty() && pb.find(it.name) != std::string::npos) {
+                    owner = i;
+                    break;
+                }
+            if (owner < out.size()) {
+                out[owner].errors.push_back(text);
+                out[owner].state = Check::Outcome::State::Failed;
+            }
+        }
     check.outcomes = std::move(out);
     check.order = sch.order();
     check.deps = sch.deps;
@@ -2700,7 +2854,20 @@ bool applyStaged(hmi::Project& pr, const Proposal& p, const Env& env, std::strin
         pr.programs.variables.push_back(std::move(var));
     }
     std::vector<Check::Outcome> out;
-    if (!runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open)) {
+    RemovalLog log;
+    bool ok = runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open, &log);
+    // 1.21.0 : une suppression est VERIFIEE avant la commande (sur ce projet de travail, une copie) : absente, aucune
+    // reference restante - sinon rien n'est applique (la verification globale : faite par la validation juste au-dessus,
+    // sur le meme projet).
+    if (ok && log.project) {
+        const auto problems = del::verify(backup, pr, log.items(), log.touched, env.plcName, false);
+        if (!problems.empty()) {
+            ok = false;
+            failed = "Suppression refus\xC3\xA9" "e \xC3\xA0 la v\xC3\xA9rification : " + problems.front()
+                     + (problems.size() > 1 ? " (et " + std::to_string(problems.size() - 1) + " autres)." : std::string("."));
+        }
+    }
+    if (!ok) {
         if (failed.empty()) failed = "La proposition ne s'applique pas.";
         failed += " Le projet est rest\xC3\xA9 tel qu'il \xC3\xA9tait (rien n'a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9).";
         const hmi::Id keep = pr.nextId;
@@ -2765,7 +2932,11 @@ Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) 
     const hmi::Id open = openViewOf(project, p);
     if (!createsView(p) && !usesOpenView(p)) {
         // Ni vue ni objet : des variables, des types (l'apercu de la carte le dit, la liste les montre).
-        out.why = "Rien \xC3\xA0 dessiner : la proposition cr\xC3\xA9" "e " + creationSummary(p) + " (la liste de l'aper\xC3\xA7u les montre).";
+        const bool removes = std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return del::projectRemoval(op); });
+        const std::string made = creationSummary(p);
+        out.why = "Rien \xC3\xA0 dessiner : la proposition " + (made.empty() ? std::string{} : "cr\xC3\xA9" "e " + made + (removes ? " et " : ""))
+                  + (removes ? std::string("supprime des \xC3\xA9l\xC3\xA9ments du projet") : std::string{})
+                  + " (la liste de l'aper\xC3\xA7u les montre" + (removes ? std::string(" : Suppressions") : std::string{}) + ").";
         return out;
     }
     if (usesOpenView(p) && open == hmi::kNoId && !createsView(p)) {
@@ -2900,7 +3071,16 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
             if (op.markers) o.set("reperes", true);
         }
         // 1.19.0 : la vue visee par une operation sur des objets (seulement si elle est dite).
-        if (!projectLevel(op.action) && !op.target.empty()) o.set("vue", op.target);
+        if (!projectLevel(op) && !op.target.empty()) o.set("vue", op.target);
+        // 1.21.0 : supprimer - le genre de ce qui part (vide : des objets, comme avant) et les exclusions.
+        if (op.action == Operation::Action::Remove) {
+            if (!op.kind.empty()) o.set("genre", op.kind);
+            if (!op.keep.empty()) {
+                json::Value keep = json::Value::array();
+                for (const auto& k : op.keep) keep.push(k);
+                o.set("exclure", std::move(keep));
+            }
+        }
         arr.push(std::move(o));
     }
     return arr;
@@ -2921,6 +3101,13 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         Operation op;
         op.action = *action;
         op.kind = o.str("genre");
+        // 1.21.0 : supprimer - un genre inconnu est refuse a la lecture, comme une operation inconnue.
+        if (*action == Operation::Action::Remove && !del::genreFromKey(op.kind)) {
+            if (why)
+                *why = "Op\xC3\xA9ration refus\xC3\xA9" "e : supprimer, genre \xC2\xAB " + op.kind + " \xC2\xBB inconnu (objet, instance, vue, popup, symbole, "
+                       "modele, variable, type, alarme, script, fonction, equipement, ressource, dossier).";
+            return false;
+        }
         const bool named = *action == Operation::Action::Create || *action == Operation::Action::View || *action == Operation::Action::Type
                            || *action == Operation::Action::Equipment || *action == Operation::Action::Script || *action == Operation::Action::Function
                            || *action == Operation::Action::Alarm || *action == Operation::Action::Resource;
@@ -2957,6 +3144,18 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         if (!projectLevel(*action)) op.target = o.str("vue");   // 1.19.0 : la vue visee (vide : comme avant)
         if (*action == Operation::Action::Store)
             for (const auto& n : o.at("elements").items()) op.objects.push_back(n.asString());
+        // 1.21.0 : supprimer - la strategie, le remplacant, la liste d'un dossier, les devenus inutiles (aussi au premier
+        // niveau), les exclusions.
+        if (*action == Operation::Action::Remove) {
+            for (const char* k : {"strategie", "remplacer_par", "par", "liste", "inutiles"}) {
+                const json::Value& v = o.at(k);
+                if (!(v.isString() || v.isNumber() || v.isBool())) continue;
+                const bool already = std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; });
+                if (!already) op.props.emplace_back(k, scalar(v));
+            }
+            for (const auto& n : o.at("exclure").items())
+                if (n.isString() && !trimmed(n.asString()).empty()) op.keep.push_back(trimmed(n.asString()));
+        }
         if (projectLevel(*action) && *action != Operation::Action::Variables && *action != Operation::Action::Type) {
             static const std::set<std::string, std::less<>> reserved = {"action", "nom", "objet", "objets", "elements", "variable", "proprietes", "variables",
                                                                         "membres", "parametres", "generiques", "detecter", "genre", "noms", "dx", "dy",

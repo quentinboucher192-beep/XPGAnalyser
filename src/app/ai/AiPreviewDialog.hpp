@@ -19,6 +19,14 @@
 //                Appliquer (un seul Ctrl+Z ; une suppression multiple se
 //                confirme). Echap ferme sans decider.
 //
+//  1.21.0 : LES SUPPRESSIONS (AiDelete) - une categorie en tete de la liste :
+//  chaque suppression, sa strategie, le resume par genre (<< 4 variables
+//  directement concernees >>), ce qui part, ce qui en depend (directe,
+//  indirecte, potentielle, partagee), les consequences (references retirees ou
+//  remplacees, orphelins gardes). Un clic sur une suppression la RETIRE du plan
+//  (ou l'y remet) : le geste de la bande du plan (Assistant::setExcluded) - ce
+//  qui en depend est ignore, la verification se refait.
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -55,6 +63,10 @@ public:
     void close();           // Echap : sans decider
     [[nodiscard]] bool waiting() const noexcept { return waiting_; }   // 1.20.1 : la verification de fond n'est pas finie
     bool chooseVariable(int index);   // dans la liste deroulante (le dernier : creer)
+    // 1.21.0 : retirer (ou remettre) une suppression (l'operation `op`, une operation supprimer) - comme la bande du plan.
+    bool excludeRemoval(std::size_t op, bool excluded);
+    // Les lignes de la categorie Suppressions (leur texte), dans l'ordre (essais).
+    [[nodiscard]] std::vector<std::string> removalRows() const;
 
     [[nodiscard]] int                message() const noexcept { return message_; }
     [[nodiscard]] const Check&       check() const noexcept { return check_; }

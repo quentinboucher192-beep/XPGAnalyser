@@ -8,6 +8,7 @@
 //       entre le projet d'avant et celui d'apres (report).
 // =============================================================================
 #include "AiPlan.hpp"
+#include "AiDelete.hpp"   // 1.21.0 : les suppressions (le genre, la verification d'apres)
 
 #include "../../hmi/HmiFolders.hpp"
 
@@ -50,7 +51,8 @@ std::string roleOf(const Operation& op) {
     const std::string r = lower(prop(op, "role"));
     return r.empty() ? std::string("vue") : r;
 }
-bool objectAction(A a) noexcept { return !projectLevel(a); }
+// 1.21.0 : une operation sur des objets d'une vue (une suppression d'elements du projet n'en est pas une).
+bool objectAction(const Operation& op) noexcept { return !projectLevel(op); }
 
 // Les noms LUS dans un texte (une expression, du code, un type) : la racine de chaque chemin (Pompe_1.Defaut -> Pompe_1)
 // et le contenu de chaque chaine ('Reglage_P1' : une popup ouverte par son nom). Les commentaires sont sautes.
@@ -210,6 +212,7 @@ std::string_view categoryLabel(Category c) noexcept {
         case Category::Resources: return "Ressources";
         case Category::Folders: return "Dossiers";
         case Category::Objects: return "Objets des vues";
+        case Category::Removals: return "Suppressions";
     }
     return "";
 }
@@ -230,6 +233,7 @@ Category categoryOf(const Operation& op) noexcept {
         case A::Resource: return Category::Resources;
         case A::Folder:
         case A::Store: return Category::Folders;
+        case A::Remove: return Category::Removals;
         default: return Category::Objects;
     }
 }
@@ -273,9 +277,26 @@ void refsOf(const hmi::Project& pr, const Proposal& p, std::size_t index, std::v
             break;
         case A::Align:
         case A::Distribute:
-        case A::Remove:
             for (const auto& n : op.objects) addUnique(modifies, obj(n));
             break;
+        case A::Remove: {
+            // 1.21.0 : des objets (comme avant), ou des elements du projet - ce qui part, et le remplacant (lu).
+            if (!del::projectRemoval(op)) {
+                for (const auto& n : op.objects) addUnique(modifies, obj(n));
+                break;
+            }
+            const auto g = del::genreFromKey(op.kind);
+            const std::string kind = g ? std::string(del::genreKey(*g)) : std::string("element");
+            for (const auto& it : del::namedItems(op)) addUnique(modifies, Ref{kind, it.name, {}, del::exists(pr, it)});
+            std::string rep = prop(op, "remplacer_par");
+            if (rep.empty()) rep = prop(op, "par");
+            if (!rep.empty()) {
+                Ref r = readRef(pr, rep);
+                if (!r.exists) r.kind = kind;
+                addUnique(uses, r);
+            }
+            break;
+        }
         case A::Duplicate:
             for (const auto& n : op.objects) addUnique(uses, obj(n));
             for (const auto& n : op.names)
@@ -363,7 +384,7 @@ void refsOf(const hmi::Project& pr, const Proposal& p, std::size_t index, std::v
             break;
     }
     // Un objet vise sa vue : une vue creee plus haut (ou du projet).
-    if (objectAction(op.action) && !target.empty()) addUnique(uses, Ref{"vue", target, {}, existsIn(pr, "vue", target)});
+    if (objectAction(op) && !target.empty()) addUnique(uses, Ref{"vue", target, {}, existsIn(pr, "vue", target)});
 }
 
 // ---- l'ordonnancement ---------------------------------------------------------------------------------------
@@ -373,6 +394,9 @@ namespace {
 int rankOf(const Proposal& p, const Unit& u) {
     if (u.kind == Unit::Kind::ExistingView) return 12;
     const Operation& op = p.ops[u.ops.front()];
+    // 1.21.0 : une suppression d'elements du projet d'abord (un nom libere peut etre recree ; un remplacant cree dans la
+    // proposition passe avant elle, par sa dependance).
+    if (del::projectRemoval(op)) return -1;
     switch (op.action) {
         case A::Folder: return 0;
         case A::Type: return 1;
@@ -411,8 +435,9 @@ Schedule schedule(const Proposal& p) {
     // 1. ce que chaque operation cree (par nom, sans casse) et lit.
     std::map<std::string, std::vector<std::size_t>> createdBy;                     // sauf les objets
     std::map<std::pair<std::string, std::string>, std::vector<std::size_t>> objectBy;   // (vue, objet)
-    std::vector<std::vector<Ref>> reads(n);
+    std::vector<std::vector<Ref>> reads(n), made(n);
     std::vector<std::string> targets(n);
+    std::map<std::string, std::vector<std::size_t>> removedBy;   // 1.21.0 : un element du projet supprime (par nom)
     for (std::size_t i = 0; i < n; ++i) {
         std::vector<Ref> c, m, u;
         refsOf(empty, p, i, c, m, u);
@@ -421,14 +446,20 @@ Schedule schedule(const Proposal& p) {
             if (r.kind == "objet") objectBy[{lower(r.view), lower(r.name)}].push_back(i);
             else createdBy[lower(r.name)].push_back(i);
         }
-        // une modification depend de la creation de ce qu'elle modifie (une variable creee puis adressee)
-        for (const auto& r : m) u.push_back(r);
+        made[i] = c;
+        // une modification depend de la creation de ce qu'elle modifie (une variable creee puis adressee) ; 1.21.0 : pas une
+        // suppression (elle ne lit pas ce qu'elle supprime ; c'est une creation du meme nom qui l'attend)
+        if (del::projectRemoval(p.ops[i])) {
+            for (const auto& r : m) removedBy[lower(r.name)].push_back(i);
+        } else {
+            for (const auto& r : m) u.push_back(r);
+        }
         reads[i] = std::move(u);
     }
     // 2. les dependances : une operation depend de celles qui creent ce qu'elle lit.
     for (std::size_t i = 0; i < n; ++i) {
         std::set<std::size_t> d;
-        const bool onObjects = objectAction(p.ops[i].action);
+        const bool onObjects = objectAction(p.ops[i]);
         for (const auto& r : reads[i]) {
             const std::string key = lower(r.name);
             if (r.kind == "objet") {
@@ -442,6 +473,10 @@ Schedule schedule(const Proposal& p) {
                 if (auto it = objectBy.find({targets[i], key}); it != objectBy.end())
                     for (auto j : it->second) d.insert(j);
         }
+        // 1.21.0 : recreer un nom que la proposition supprime : apres la suppression.
+        for (const auto& r : made[i])
+            if (auto it = removedBy.find(lower(r.name)); it != removedBy.end())
+                for (auto j : it->second) d.insert(j);
         d.erase(i);
         // dans une meme vue, les objets gardent l'ordre ecrit entre eux (un nom renomme, un alignement apres la creation)
         s.deps[i].assign(d.begin(), d.end());
@@ -464,7 +499,7 @@ Schedule schedule(const Proposal& p) {
     std::map<std::string, int> existingUnit;
     for (std::size_t i = 0; i < n; ++i) {
         if (unitOf[i] >= 0) continue;
-        if (!objectAction(p.ops[i].action)) {
+        if (!objectAction(p.ops[i])) {
             unitOf[i] = static_cast<int>(s.units.size());
             s.units.push_back(Unit{Unit::Kind::Project, {}, {i}});
             continue;
@@ -610,7 +645,18 @@ std::string titleOf(const Proposal& p, std::size_t index, const hmi::Project& pr
         case A::Bind: return "Associer " + name + " \xC3\xA0 " + trimmed(op.variable);
         case A::Align: return "Aligner " + std::to_string(op.objects.size()) + " objets" + inView;
         case A::Distribute: return "R\xC3\xA9partir " + std::to_string(op.objects.size()) + " objets" + inView;
-        case A::Remove: return "Supprimer " + list(op.objects) + inView;
+        case A::Remove: {
+            // 1.21.0 : le genre (une instance : sa definition reste), la strategie.
+            const auto g = del::genreFromKey(op.kind);
+            std::string rep = prop(op, "remplacer_par");
+            if (rep.empty()) rep = prop(op, "par");
+            const std::string how = !rep.empty() ? " (remplac\xC3\xA9" "e par " + rep + ")" : lower(prop(op, "strategie")) == "references" ? " (et ses r\xC3\xA9" "f\xC3\xA9rences)"
+                                  : lower(prop(op, "strategie")) == "inutiles" || lower(prop(op, "inutiles")) == "true" ? " (et ce qui devient inutile)" : std::string{};
+            if (!g || *g == del::Genre::Object) return "Supprimer " + list(op.objects) + inView;
+            if (*g == del::Genre::Instance) return "Supprimer l'instance " + list(op.objects) + inView + " (le symbole reste)";
+            if (op.objects.size() == 1) return "Supprimer " + del::genreNoun(*g) + " " + trimmed(op.objects.front()) + how;
+            return "Supprimer " + std::to_string(op.objects.size()) + " \xC3\xA9l\xC3\xA9ments (" + std::string(del::genreKey(*g)) + " : " + list(op.objects) + ")" + how;
+        }
         case A::Duplicate: return "Dupliquer " + list(op.objects) + (op.count > 1 ? " (" + std::to_string(op.count) + " copies)" : std::string{}) + inView;
         case A::Code: return "Poser des objets (code brut)" + inView;
         case A::View: {
@@ -668,6 +714,11 @@ std::vector<std::string> checksOf(const Operation& op) {
         case A::Resource: return {"le fichier joint existe"};
         case A::Folder:
         case A::Store: return {"la liste et le chemin", "les \xC3\xA9l\xC3\xA9ments existent"};
+        case A::Remove:
+            if (del::projectRemoval(op))
+                return {"ce qui en d\xC3\xA9pend (le graphe des relations)", "la strat\xC3\xA9gie", "aucune r\xC3\xA9" "f\xC3\xA9rence restante",
+                        "la v\xC3\xA9rification globale (sur une copie)"};
+            return {"les objets existent", "leur variable et leur symbole restent"};
         default: return {"les objets existent"};
     }
 }
@@ -706,7 +757,7 @@ Plan build(const hmi::Project& pr, const Proposal& p, const Check& ck) {
         s.category = categoryOf(op);
         s.verb = verbOf(op);
         s.name = trimmed(op.name.empty() ? op.variable : op.name);
-        s.target = objectAction(op.action) ? opTarget(p, i) : std::string{};
+        s.target = objectAction(op) ? opTarget(p, i) : std::string{};
         refsOf(pr, p, i, s.creates, s.modifies, s.uses);
         s.checks = checksOf(op);
         if (i < deps.size())
@@ -800,7 +851,7 @@ Plan fromJson(const json::Value& o) {
             if (auto act = actionFromKey(str(j, "action"))) s.action = *act;
             if (const json::Value* v = j.find("categorie"); v && v->isNumber()) {
                 const int c = static_cast<int>(v->asNumber());
-                if (c >= 0 && c <= static_cast<int>(Category::Objects)) s.category = static_cast<Category>(c);
+                if (c >= 0 && c <= static_cast<int>(Category::Removals)) s.category = static_cast<Category>(c);
             }
             if (const json::Value* v = j.find("verbe"); v && v->isNumber()) {
                 const int c = static_cast<int>(v->asNumber());
@@ -855,9 +906,15 @@ std::string roleNoun(const std::string& role, std::size_t n) {
     return many ? "Vues" : "Vue";
 }
 
-bool confirmed(const hmi::Project& after, const Step& s, const Proposal& p) {
+bool confirmed(const hmi::Project& after, const Step& s, const Proposal& p, std::string* note) {
     if (s.op >= p.ops.size()) return false;
     const Operation& op = p.ops[s.op];
+    // 1.21.0 : une suppression - ses elements absents ET plus aucune reference vers eux (lu dans le projet d'apres).
+    if (op.action == A::Remove) {
+        std::string view = s.target.empty() ? p.view : s.target;
+        if (const hmi::View* v = s.target.empty() && p.viewId != hmi::kNoId ? after.view(p.viewId) : nullptr) view = v->name;
+        return del::confirmRemoved(after, op, view, note);
+    }
     const std::string name = trimmed(op.name);
     switch (op.action) {
         case A::Type: return after.hmiTypeByName(name) != nullptr;
@@ -900,10 +957,11 @@ Report report(const hmi::Project& before, const hmi::Project& after, Plan& plan,
     // 1. les etats : une etape validee est APPLIQUEE si son resultat est dans le projet d'apres.
     for (auto& s : plan.steps) {
         if (s.state == State::Validated || s.state == State::Applied) {
-            if (confirmed(after, s, p)) s.state = State::Applied;
+            std::string note;
+            if (confirmed(after, s, p, &note)) s.state = State::Applied;
             else {
                 s.state = State::Failed;
-                s.note = "son r\xC3\xA9sultat n'est pas dans le projet apr\xC3\xA8s Appliquer";
+                s.note = "son r\xC3\xA9sultat n'est pas dans le projet apr\xC3\xA8s Appliquer" + (note.empty() ? std::string{} : " : " + note);
             }
         }
     }
@@ -950,6 +1008,47 @@ Report report(const hmi::Project& before, const hmi::Project& after, Plan& plan,
             if (n > 0) objects.push_back(v.name + " : " + std::to_string(n));
         }
         add(r.created, "Objets dans les vues", objects);
+    }
+    // 2 bis. 1.21.0 : SUPPRIME - ce qui etait dans le projet d'avant et n'est plus dans celui d'apres (par identifiant).
+    {
+        const auto gone = [](const auto& had, const auto& has, auto name) {
+            std::vector<std::string> out;
+            for (const auto& x : had)
+                if (std::none_of(has.begin(), has.end(), [&](const auto& y) { return y.id == x.id; })) out.push_back(name(x));
+            return out;
+        };
+        add(r.removed, "Types", gone(before.programs.types, after.programs.types, [](const hmi::HmiType& t) { return t.name; }));
+        add(r.removed, "Variables", gone(before.programs.variables, after.programs.variables, [](const hmi::Variable& v) { return v.name; }));
+        add(r.removed, "\xC3\x89quipements", gone(before.equipments, after.equipments, [](const hmi::Equipment& e) { return e.name; }));
+        add(r.removed, "Alarmes", gone(before.alarms, after.alarms, [](const hmi::AlarmDef& a) { return a.name; }));
+        add(r.removed, "Scripts", gone(before.programs.scripts, after.programs.scripts, [](const hmi::Script& x) { return x.name; }));
+        add(r.removed, "Fonctions", gone(before.programs.functions, after.programs.functions, [](const hmi::HmiFunction& f) { return f.name; }));
+        add(r.removed, "Ressources", gone(before.assets.resources, after.assets.resources, [](const hmi::Resource& x) { return x.name; }));
+        std::map<std::string, std::vector<std::string>> byRole;
+        std::vector<std::string> objects;
+        for (const auto& v : before.views) {
+            const hmi::View* now = after.view(v.id);
+            if (!now) {
+                byRole[v.role].push_back(v.name);
+                continue;
+            }
+            std::size_t k = 0;
+            for (const auto& o : v.objects)
+                if (!now->object(o.id)) ++k;
+            if (k > 0) objects.push_back(v.name + " : " + std::to_string(k));
+        }
+        for (const char* role : {"symbole", "popup", "modele", "entete", "pied", "vue"})
+            if (auto it = byRole.find(role); it != byRole.end()) add(r.removed, roleNoun(role, it->second.size()), it->second);
+        add(r.removed, "Objets des vues", objects);
+        std::vector<std::string> folders;
+        for (std::size_t l = 0; l < static_cast<std::size_t>(hmi::fold::List::Count); ++l) {
+            const auto list = static_cast<hmi::fold::List>(l);
+            const auto now = hmi::fold::allFolders(after, list);
+            for (const auto& f : hmi::fold::allFolders(before, list))
+                if (std::none_of(now.begin(), now.end(), [&](const std::string& h) { return hmi::fold::sameFolder(h, f); }))
+                    folders.push_back(f + " (" + std::string(hmi::fold::label(list)) + ")");
+        }
+        add(r.removed, "Dossiers", folders);
     }
     // 3. MODIFIE : ce qui existait et a change.
     {
@@ -1044,6 +1143,7 @@ json::Value reportToJson(const Report& r) {
     o.set("cree", lines(r.created));
     o.set("modifie", lines(r.modified));
     o.set("reutilise", lines(r.reused));
+    if (!r.removed.empty()) o.set("supprime", lines(r.removed));
     o.set("a_faire", strings(r.todo));
     o.set("echecs", strings(r.failures));
     o.set("externe", strings(r.external));
@@ -1069,6 +1169,7 @@ Report reportFromJson(const json::Value& o) {
     r.created = lines(o.find("cree"));
     r.modified = lines(o.find("modifie"));
     r.reused = lines(o.find("reutilise"));
+    r.removed = lines(o.find("supprime"));
     r.todo = stringsOf(o.find("a_faire"));
     r.failures = stringsOf(o.find("echecs"));
     r.external = stringsOf(o.find("externe"));
@@ -1095,6 +1196,7 @@ std::string reportText(const Report& r, std::string_view title) {
     section("Cr\xC3\xA9\xC3\xA9", r.created);
     section("Modifi\xC3\xA9", r.modified);
     section("R\xC3\xA9utilis\xC3\xA9", r.reused);
+    section("Supprim\xC3\xA9", r.removed);
     if (!r.todo.empty()) {
         t += "**\xC3\x80 faire**\n";
         for (const auto& x : r.todo) t += "- " + x + "\n";

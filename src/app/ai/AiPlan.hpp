@@ -48,8 +48,9 @@ enum class State : std::uint8_t { ToDo, Validated, Applied, Failed, Skipped, Can
 [[nodiscard]] std::string_view stateKey(State) noexcept;              // "a_faire"... (le fichier)
 [[nodiscard]] State            stateFromKey(std::string_view) noexcept;
 
-// Les categories de l'apercu, dans leur ordre d'affichage.
-enum class Category : std::uint8_t { Types, Equipments, Addresses, Code, Alarms, Views, Popups, Resources, Folders, Objects };
+// Les categories de l'apercu, dans leur ordre d'affichage. 1.21.0 : Removals (<< Suppressions >>, a la fin) - toute operation
+// supprimer, d'objets ou d'elements du projet.
+enum class Category : std::uint8_t { Types, Equipments, Addresses, Code, Alarms, Views, Popups, Resources, Folders, Objects, Removals };
 [[nodiscard]] std::string_view categoryLabel(Category) noexcept;     // "Types et variables"...
 [[nodiscard]] Category         categoryOf(const Operation&) noexcept;
 
@@ -133,6 +134,7 @@ struct Line {
 };
 struct Report {
     std::vector<Line>        created, modified, reused;
+    std::vector<Line>        removed;     // 1.21.0 : ce qui etait dans le projet d'avant et n'est plus dans celui d'apres
     std::vector<std::string> todo;        // ce qui reste a faire (l'adresse IP definitive, la detection a lancer...)
     std::vector<std::string> failures;    // "E4 Creer l'alarme X : la raison" ; "E5 ... : non executee (depend de E4)"
     std::vector<std::string> external;    // les actions hors du projet (non annulables par Ctrl+Z) - aucune en general
@@ -140,11 +142,12 @@ struct Report {
     bool        restored{false};          // une transaction refusee : le projet n'a pas change (confirme)
     std::string verdict;                  // "24 operations appliquees, aucune erreur bloquante."
     [[nodiscard]] std::size_t createdCount() const noexcept;
-    [[nodiscard]] bool        empty() const noexcept { return created.empty() && modified.empty() && reused.empty(); }
+    [[nodiscard]] bool        empty() const noexcept { return created.empty() && modified.empty() && reused.empty() && removed.empty(); }
 };
 // LE COMPTE RENDU REEL : la difference entre le projet d'avant et celui d'apres Appliquer ; `plan` (ses etats mis
 // a jour ici : appliquee si ce qu'elle cree est bien dans `after`, echouee sinon) et la proposition (les detections
-// proposees, les etapes ignorees).
+// proposees, les etapes ignorees). 1.21.0 : une suppression est appliquee si ses elements sont ABSENTS de `after` et
+// qu'AUCUNE reference ne les cite encore (AiDelete : confirmRemoved) - jamais parce que la commande est partie.
 [[nodiscard]] Report report(const hmi::Project& before, const hmi::Project& after, Plan& plan, const Proposal&);
 [[nodiscard]] json::Value reportToJson(const Report&);
 [[nodiscard]] Report      reportFromJson(const json::Value&);
