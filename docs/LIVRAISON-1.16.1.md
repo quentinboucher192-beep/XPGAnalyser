@@ -114,7 +114,22 @@ Une proposition qui associait un objet à `$Armoires[0]$.Prete` (un repère que 
 
 ## 3. Les captures
 
-(à compléter après la passe sous Wine)
+Prises sous Wine, avec l'exe livré, par 8 séances de script (`captures-1.16.1.zip`, un dossier par sujet). **Aucun plantage.**
+
+| Dossier | Ce qu'on y voit | Résultat |
+| 1-types | 9 demandes de types à l'IA intégrée : « un type pour gérer les capteurs » (T_Capteur, 9 membres), « une structure qui s'appelle Capteur… par exemple mesure, etc, défauts », T_Pompe avec ses types, « un type moteur avec marche, défaut et courant », une vanne, un variateur, un débitmètre (elle demande le nom) | bon ; jamais un type nommé « pour » ou « qui » |
+| 2-pas-compris | « la capitale de l'Australie », une phrase longue et floue | elle dit qu'elle n'a pas compris, propose des formulations, n'ouvre aucune carte |
+| 3-relais | les paramètres (1920 et 1280 x 800) ; « IA intégrée d'abord » cochée : « Ajoute 3 pompes » répondu sans connexion, l'Australie part au faux fournisseur ; décochée : tout part au faux fournisseur | bon (le journal du faux fournisseur le montre) |
+| 4-avertir | le panneau replié pendant une réponse lente, la cloche, Voir | bon |
+| 5-refus-et-malgre | Refuser… et sa question, Échap qui ne décide rien, Revenir sur le refus ; Appliquer malgré 1 erreur (carte, aperçu, confirmation, note) | bon |
+| 6-apercu | Ajuster, la molette sur la cuve, l'infobulle d'un objet, un groupe replié, la liste masquée, 1280 x 800 | bon |
+| 7-types-ihm | T_ConfigGaz déplié dans la liste et dans le tableau des membres (Purge[1] : Debit mot 9, Duree mot 11, Active mot 12 bit 0) ; Tout déplier | bon |
+| 8-aide | l'aide de la Prévisualisation, des réglages, des déballages ; les notes 1.16.1 | bon |
+| 9-corrections | les défauts ci-dessous, revérifiés avec l'exe corrigé | voir plus bas |
+
+Cette passe a trouvé **5 défauts et 4 petits**, tous corrigés avant la livraison (voir « Vu aux essais sous Windows » plus haut) : le membre « Duree en INT » perdu, le poème jamais transmis à l'IA connectée, « un voyant lié à X » mal compris, Refuser… de la carte sans question, la note « laissée de côté » et sa ligne coupée ; « 1 autres », le titre ERREURS, le tableau de l'aide, le nom de la case dans la note.
+
+(la revérification : à compléter)
 
 ## 4. Installer
 
