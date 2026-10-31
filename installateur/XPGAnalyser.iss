@@ -1822,8 +1822,9 @@ const
   // de plus dans l'assistant : son étape ici (ou une existante), et sa ligne dans EtapeDePage.
   // 1.14.0 : « Applications » (que veux-tu installer ? et le poste d'exploitation) ; « Raccourcis » devient
   // « Options » (les raccourcis, les fichiers, le pare-feu, la copie de secours).
-  EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|Options|Récapitulatif|Installation|Terminé';
-  EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|raccourcis|recapitulatif|installation|termine';
+  // 1.18.0 : « IA » (l'Assistant IA et l'IA depuis un autre PC : elles montraient « Terminé »).
+  EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|IA|Options|Récapitulatif|Installation|Terminé';
+  EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|ia|raccourcis|recapitulatif|installation|termine';
   // 1.12.28 : le diaporama de la copie (une diapositive toutes les 5,6 s) : son image
   // (images\ui\<image>.bmp) | son titre | son texte. Une diapositive de plus = un morceau de plus
   // dans chacune des trois listes. (#160 : une espace insécable, devant les deux-points.)
@@ -1843,13 +1844,14 @@ const
   // les noms (redessinés seulement quand une étape change d'état) : la pulsation d'une marque ne
   // redessine jamais le nom à côté d'elle.
   // 1.14.0 : neuf étapes (huit avant) - le pas passe de 34 à 32 : le rail (292) laisse sa place à la note
-  // du bas de la colonne
+  // du bas de la colonne. 1.18.0 : dix étapes (l'étape « IA ») - le pas passe à 29 (la dernière marque
+  // finit à 290, dans le rail).
   RailX = 12;
   RailY = 140;
   RailL = 208;
   RailH = 292;
   RailPremier = 18;
-  RailPas = 32;
+  RailPas = 29;
   RailMarqueX = 22;
   RailCoupe = 40;
   RailTexteX = 46;
@@ -2183,10 +2185,12 @@ begin
   else if ((PageDonnees <> nil) and (PageID = PageDonnees.ID)) or ((PageReprise <> nil) and (PageID = PageReprise.ID))
           or ((PageAutre <> nil) and (PageID = PageAutre.ID)) then Result := 3
   else if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := 4
-  else if PageID = wpSelectTasks then Result := 5
-  else if PageID = wpReady then Result := 6
-  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 7
-  else Result := 8;   // « Ce qui a été installé » et la fin
+  // 1.18.0 : l'Assistant IA, et l'apprentissage d'un autre PC (.xia)
+  else if ((PageIA <> nil) and (PageID = PageIA.ID)) or ((PageXia <> nil) and (PageID = PageXia.ID)) then Result := 5
+  else if PageID = wpSelectTasks then Result := 6
+  else if PageID = wpReady then Result := 7
+  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 8
+  else Result := 9;   // « Ce qui a été installé » et la fin
 end;
 
 // ======================================================== 1.12.28 : le mouvement ====
@@ -4805,10 +4809,34 @@ begin
   Result := Result + '"';
 end;
 
+// 1.18.0 : les clés API de l'utilisateur (le gestionnaire des clés : %APPDATA%\XpgAnalyzer\IA\cles\*.bin, protégées
+// par Windows ; avant la 1.18.0, IA\cle.bin). L'installateur n'y touche jamais : le journal dit qu'elles sont gardées.
+procedure IAClesJournal;
+var Dossier: String;
+    R: TFindRec;
+    N: Integer;
+begin
+  Dossier := ExpandConstant('{userappdata}\XpgAnalyzer\IA');
+  N := 0;
+  if FindFirst(Dossier + '\cles\*.bin', R) then begin
+    try
+      repeat
+        N := N + 1;
+      until not FindNext(R);
+    finally
+      FindClose(R);
+    end;
+  end;
+  if (N = 0) and FileExists(Dossier + '\cle.bin') then N := 1;
+  if N = 1 then JournalNote(jInfo, 'ia-cles', 'Clés API : 1 gardée (protégée par Windows ; la réinstallation n''y touche pas)')
+  else if N > 1 then JournalNote(jInfo, 'ia-cles', 'Clés API : ' + IntToStr(N) + ' gardées (protégées par Windows ; la réinstallation n''y touche pas)');
+end;
+
 procedure IAInstaller;
 var Dossier, Xia, Cle, Json, Dabord: String;
 begin
   if (PageIA = nil) or not AvecExeIhm(ProfilChoisi) or (ProfilChoisi = pPoste) then Exit;
+  IAClesJournal;
   Cle := IACle(PageIA.SelectedValueIndex);
   Xia := Trim(PageXia.Values[0]);
   if (Cle = 'garder') and (Xia = '') then begin

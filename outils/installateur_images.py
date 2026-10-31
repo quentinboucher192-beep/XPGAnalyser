@@ -657,6 +657,34 @@ def icone(police, code):
     return tuile_icone(police, code, 44, BLANC)
 
 
+# 1.18.0 : l'etape << IA >> (l'Assistant IA, l'IA depuis un autre PC) : des etincelles dessinees
+# (comme << auto_awesome >>), sans la police d'icones - la tuile des autres etapes.
+def etoile(d, cx, cy, r, couleur):
+    pts = []
+    for k in range(8):
+        a = math.pi / 4 * k - math.pi / 2
+        rr = r if k % 2 == 0 else r * 0.30
+        pts.append((cx + rr * math.cos(a), cy + rr * math.sin(a)))
+    d.polygon(pts, fill=couleur)
+
+
+def tuile_ia(taille, fond_page):
+    def f(e):
+        t = taille * e
+        g = t * SS
+        im = Image.new("RGBA", (g, g), fond_page + (255,))
+        fond = degrade_horizontal(g, g, BLEU_FONCE, TURQUOISE_FONCE).convert("RGBA")
+        masque = Image.new("L", (g, g))
+        ImageDraw.Draw(masque).rounded_rectangle((0, 0, g - 1, g - 1), radius=int(g * 0.26), fill=255)
+        im.paste(fond, (0, 0), masque)
+        d = ImageDraw.Draw(im)
+        etoile(d, g * 0.44, g * 0.56, g * 0.27, BLANC + (255,))
+        etoile(d, g * 0.71, g * 0.29, g * 0.13, BLANC + (255,))
+        etoile(d, g * 0.74, g * 0.73, g * 0.09, BLANC + (255,))
+        return im.resize((t, t), Image.Resampling.LANCZOS).convert("RGB")
+    return f
+
+
 # --------------------------------------- 1.12.29 : les « Details » de la copie ----
 # Une marque devant chaque ligne (16 x 16) : fait (la coche turquoise), en cours (un anneau),
 # attention (l'ambre et son point d'exclamation), erreur (le rouge et sa croix), info (un point) ;
@@ -866,6 +894,7 @@ def main():
         deux_tailles_alpha(nom, marque_journal(dessin), MARQUE_J, MARQUE_J)
     deux_tailles_alpha("journal-roue", marque_journal(j_roue, 12), MARQUE_J, MARQUE_J, 12)
     deux_tailles_alpha("barre-eclat", barre_eclat, 64, 10)
+    deux_tailles("icone-ia", tuile_ia(44, BLANC), 44, 44)   # 1.18.0 : l'etape IA
     deux_tailles("diapo-api", logo_carte("api_studio", 56), 56, 56)
     deux_tailles("diapo-ihm", logo_carte("ihm_studio", 56), 56, 56)
     if a.icones:
