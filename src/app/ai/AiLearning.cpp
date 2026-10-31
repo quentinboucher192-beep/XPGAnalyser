@@ -624,4 +624,27 @@ void dismissRequest(std::string_view request) {
     (void)memory::writeText(ignoredFile(), memory::writeJson(j, true));
 }
 
+std::vector<Decision> decisions() {
+    std::vector<Decision> out;
+    if (root().empty()) return out;
+    for (const auto& c : loadConversations())
+        for (const auto& m : c.messages)
+            if (m.proposal && (m.proposal->state == "appliquee" || m.proposal->state == "refusee"))
+                out.push_back({m.date, m.proposal->state == "appliquee"});
+    return out;
+}
+
+namespace {
+PhraseTester& tester() {
+    static PhraseTester t;
+    return t;
+}
+} // namespace
+void setPhraseTester(PhraseTester t) { tester() = std::move(t); }
+bool hasPhraseTester() { return static_cast<bool>(tester()); }
+Trial tryPhrase(const std::string& phrase) {
+    if (!tester()) return {false, "Pas de projet ouvert : ouvre un projet d'IHM Studio pour essayer une phrase."};
+    return tester()(phrase);
+}
+
 } // namespace app::ai::learning

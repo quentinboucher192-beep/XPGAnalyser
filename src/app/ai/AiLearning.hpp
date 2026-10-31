@@ -27,6 +27,7 @@
 // =============================================================================
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -127,5 +128,18 @@ struct Week {
 // Les demandes non comprises des `days` derniers jours (les plus recentes d'abord, sans doublon), sauf celles qu'on a ecartees.
 [[nodiscard]] std::vector<Measure> notUnderstood(int days, long long nowT);
 void dismissRequest(std::string_view request);   // << Ignorer >> : la demande quitte << A lui apprendre >>
+// Les propositions decidees des conversations du dossier IA (appliquees : gardees ; refusees : non).
+[[nodiscard]] std::vector<Decision> decisions();
+
+// ---- << ESSAYER UNE PHRASE >> : l'IA integree la lit sur le projet ouvert, SANS RIEN APPLIQUER ----
+//  L'ecran du projet pose le testeur (il connait le projet et la vue) ; sans lui, rien a essayer.
+struct Trial {
+    bool        understood{false};
+    std::string summary;    // << le type T_Capteur : Mesure (REAL), ... >> ; pas comprise : la reponse
+};
+using PhraseTester = std::function<Trial(const std::string&)>;
+void setPhraseTester(PhraseTester tester);
+[[nodiscard]] bool hasPhraseTester();
+[[nodiscard]] Trial tryPhrase(const std::string& phrase);
 
 } // namespace app::ai::learning
