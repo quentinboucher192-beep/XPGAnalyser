@@ -205,6 +205,17 @@ const std::vector<Note>& table() {
          "s'arr\xC3\xAAte au lieu de boucler sans fin. La vid\xC3\xA9o et la capture se zooment : la molette, les boutons "
          "- / Ajuster / +, glisser pour se d\xC3\xA9placer, double-clic pour ajuster.",
          "incidents", ""),
+        note("1.21.0", "Incidents", Kind::New,
+         "UNE ALARME QUI BAT ne cr\xC3\xA9" "e plus un incident \xC3\xA0 chaque fois : tant qu'elle ne reste pas calme plus "
+         "que le \xC2\xAB Regroupement des r\xC3\xA9" "apparitions \xC2\xBB (10 minutes par d\xC3\xA9" "faut, fen\xC3\xAAtre "
+         "glissante), ses r\xC3\xA9" "apparitions sont compt\xC3\xA9" "es dans son incident - le nombre exact, la premi\xC3\xA8re "
+         "et la derni\xC3\xA8re, la fr\xC3\xA9quence, un histogramme par heure et par minute, les 200 derni\xC3\xA8res en "
+         "d\xC3\xA9tail - le tout born\xC3\xA9 (moins de 16 Ko en m\xC3\xA9moire, quelques dizaines de Ko sur le disque, "
+         "\xC3\xA0 300 000 comme \xC3\xA0 30 millions de r\xC3\xA9" "apparitions). Deux garde-fous : au plus 60 nouveaux "
+         "incidents par heure (au-del\xC3\xA0 compt\xC3\xA9s, sans dossier) et un quota de 2 Go d'images et de vid\xC3\xA9os "
+         "(au-del\xC3\xA0, les nouveaux incidents sont cr\xC3\xA9\xC3\xA9s sans image ni vid\xC3\xA9o) ; rien n'est jamais "
+         "supprim\xC3\xA9 automatiquement.",
+         "incidents", ""),
         note("1.21.0", "Incidents", Kind::Fixed,
          "Plantage (m\xC3\xA9moire \xC3\xA9puis\xC3\xA9" "e) apr\xC3\xA8s plusieurs alarmes d\xC3\xA9" "clench\xC3\xA9" "es "
          "ensemble, pr\xC3\xA9" "c\xC3\xA9" "d\xC3\xA9 d'un blocage de quelques secondes : chaque vid\xC3\xA9o d'incident "
