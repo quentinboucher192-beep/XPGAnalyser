@@ -203,6 +203,14 @@ const std::vector<Note>& table() {
          "recopiait toutes ses images. Elles sont maintenant partag\xC3\xA9" "es avec le tampon ; une image illisible ne "
          "fait plus planter la fiche.",
          "incidents", ""),
+        note("1.21.0", "Aide", Kind::New,
+         "\xC3\x80 PROPOS : tous les fichiers de l'application dans un arbre d\xC3\xA9pliable - le programme install\xC3\xA9, "
+         "les r\xC3\xA9glages de l'utilisateur (Assistant IA, rapports de plantage, th\xC3\xA8mes\xE2\x80\xA6), les donn\xC3\xA9" "es, "
+         "les projets, la biblioth\xC3\xA8que, les captures et les journaux - chacun avec son poids et son nombre de fichiers, "
+         "et le poids total bien en vue. Le compte se fait en arri\xC3\xA8re-plan (la fen\xC3\xAAtre s'ouvre tout de suite, "
+         "un compteur avance) ; un dossier contenu dans un autre n'est jamais compt\xC3\xA9 deux fois. Ouvrir le dossier, "
+         "trier par nom ou par poids, actualiser, copier le r\xC3\xA9sum\xC3\xA9.",
+         "menu-aide", ""),
         note("1.21.0", "Vues", Kind::Fixed,
          "Supprimer un symbole emporte aussi ses popups (elles restaient orphelines).",
          "assistant-ia-plan", ""),

@@ -74,7 +74,7 @@ L'IHM s'enregistre avec le projet (Ctrl+S), dans le dossier `ihm/` du projet. To
 == menu-aide | Le menu Aide et le centre d'aide
 : Toute l'aide est dans un seul centre : un arbre de neuf chapitres, une recherche unique et, sur chaque sujet, son tutoriel. F1 l'ouvre au sujet de l'endroit ; le menu Aide (le « ? » en haut à droite) y mène aussi. Une pastille orange sur le « ? » dit combien de nouveautés tu n'as pas encore vues.
 @depuis 1.10
-@mots menu Aide, Aide, centre d'aide, F1, Raccourcis clavier, guides, didacticiel, Nouveautés, Repères des nouveautés, À propos d'IHM Studio, support, Copier les informations pour le support, pastille, Aller à / Faire, Signaler un problème, notes de version, favoris, récents
+@mots menu Aide, Aide, centre d'aide, F1, Raccourcis clavier, guides, didacticiel, Nouveautés, Repères des nouveautés, À propos d'IHM Studio, support, Copier les informations pour le support, poids, poids total, fichiers de l'application, arbre des fichiers, espace disque, Copier le résumé, pastille, Aller à / Faire, Signaler un problème, notes de version, favoris, récents
 @lieux api, ihm
 @voir reperes-nouveautes
 ### Le centre d'aide
@@ -91,6 +91,11 @@ F1 ouvre le centre au sujet de l'endroit : le volet de l'IHM ou le nœud choisi 
 | Nouveautés et support | **Nouveautés…** (à droite : combien il en reste à voir), la case **Repères des nouveautés** (cochée : les éléments nouveaux sont encadrés en orange), le **Journal interne**, **À propos d'IHM Studio…**. |
 ### À propos d'IHM Studio
 La version, la date de construction, les dossiers de l'application (données, projets, bibliothèque, captures, réglages, programme), le projet ouvert (son nom, ses sections, ses vues) et les composants libres avec leurs licences. **Copier les informations pour le support** met tout cela dans le presse-papiers, prêt à coller dans un message : la version, le système, les dossiers et le résumé du projet, jamais ses données.
+### Les fichiers de l'application (1.21.0)
+**Fichiers de l'application**, dans À propos : un arbre de tous les fichiers de l'application – le **programme installé**, les **réglages de l'utilisateur** (dont l'Assistant IA, les rapports de plantage, les thèmes, Mes images), les **données**, les **projets** (avec leurs incidents et leurs enregistrements), la **bibliothèque**, les **captures**, les **journaux** – chaque ligne avec son poids (Ko, Mo, Go) et, pour un dossier, son nombre de fichiers ; le **poids total** en haut à droite, celui de chaque dossier racine sur sa ligne, son chemin en infobulle.
+- Un dossier contenu dans un autre n'est compté qu'une fois (il est nommé dans l'arbre : « Assistant IA »…) ; les liens symboliques ne sont pas suivis ; ce qui ne se lit pas (droits, fichier verrouillé) est ignoré et compté (« 3 éléments illisibles »).
+- Le compte se fait en arrière-plan : la fenêtre s'ouvre tout de suite sur « Calcul en cours… » et un compteur, puis l'arbre apparaît (chaque racine dépliée d'un niveau) ; fermer la fenêtre arrête le compte.
+- **Ouvrir le dossier** (ou le clic droit sur une ligne), **Trier par nom** / **Trier par poids**, **Actualiser**, **Copier le résumé** (le poids total et celui de chaque dossier avec son chemin). **Copier les informations pour le support** ne ferme plus la fenêtre. Elle se déplace par sa barre de titre et s'agrandit par un bord ; Échap la ferme.
 ### Aller à / Faire…
 Ctrl+K : les commandes de l'application s'y cherchent en français (Ouvrir un projet…, Enregistrer le projet, Fermer le projet, Revenir au menu principal…), avec leur raccourci à droite.
 
