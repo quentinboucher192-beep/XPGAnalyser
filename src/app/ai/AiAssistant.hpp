@@ -224,6 +224,13 @@ public:
     using ProviderFactory = std::function<std::unique_ptr<Provider>(std::string_view key)>;
     // Un essai y met son faux fournisseur ; nul : makeProvider (AiProvider.hpp).
     void setProviderFactory(ProviderFactory f) { providerFactory_ = std::move(f); }
+    // 1.21.0 : le bac a sable (l'outil executer_code) - actif dans IHM Studio, avec l'appel d'outil. `program` : le
+    // programme relance en --bac-a-sable (vide : celui-ci ; les essais donnent le leur).
+    void setSandbox(bool on, std::string program = {}) {
+        sandbox_ = on;
+        sandboxProgram_ = std::move(program);
+    }
+    [[nodiscard]] bool sandbox() const noexcept { return sandbox_; }
     // Le fournisseur des reglages n'est pas la demonstration.
     // Un fournisseur par le reseau (1.16.0 : providerUsesNetwork - "anthropic", "openai") ; "demo" et
     // "integree" restent sur le PC.
@@ -354,6 +361,8 @@ private:
     double                    lastNow_{0};
     std::uint64_t             revision_{1};
     ProviderFactory                        providerFactory_;
+    bool                                   sandbox_{true};     // 1.21.0 : executer_code
+    std::string                            sandboxProgram_;
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
     // 1.20.1 : l'application de fond en cours (une a la fois).

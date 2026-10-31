@@ -339,14 +339,16 @@ std::string readToolJson() {
            "\"required\": [\"fichier\", \"de_ligne\", \"a_ligne\"]}}";
 }
 
-std::string withReadTool(const std::string& toolsJson) {
-    if (toolsJson.empty()) return "[" + readToolJson() + "]";
+std::string withTool(const std::string& toolsJson, const std::string& definition) {
+    if (toolsJson.empty()) return "[" + definition + "]";
     const auto close = toolsJson.find_last_of(']');
     if (close == std::string::npos) return toolsJson;
     const auto open = toolsJson.find('[');
     const bool empty = open != std::string::npos && toolsJson.find_first_not_of(" \t\r\n", open + 1) == close;
-    return toolsJson.substr(0, close) + (empty ? "" : ", ") + readToolJson() + toolsJson.substr(close);
+    return toolsJson.substr(0, close) + (empty ? "" : ", ") + definition + toolsJson.substr(close);
 }
+
+std::string withReadTool(const std::string& toolsJson) { return withTool(toolsJson, readToolJson()); }
 
 std::string Library::read(std::string_view inputJson, std::string* detail) {
     // L'entree : {"fichier": ..., "de_ligne": n, "a_ligne": m} - lue sans dependre du lecteur JSON (des entiers, un nom).

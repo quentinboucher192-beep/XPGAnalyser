@@ -1762,6 +1762,9 @@
     <ClCompile Include="src\app\ai\AiProjectAnswers.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiSandbox.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -3308,6 +3311,9 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiProjectAnswers.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiSandbox.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
   </ItemGroup>

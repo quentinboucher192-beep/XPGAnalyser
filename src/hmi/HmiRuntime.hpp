@@ -2613,4 +2613,10 @@ private:
     void forEachIhmValue(const std::function<void(const std::string& key, const sim::Value&)>&) const;
 };
 
+// 1.21.0 : LE BAC A SABLE D'EXECUTION (app/ai/AiSandbox) - les fonctions de fichiers des scripts (FILE_READ, FILE_WRITE...)
+// de CE PROCESSUS ne voient plus que `root` : un chemin complet est refuse, un chemin relatif part de `root` et n'en sort pas.
+// Vide : comme avant. Pour tout le processus (l'enfant du bac a sable le pose une fois, avant tout).
+void confineFiles(std::string root);
+[[nodiscard]] const std::string& filesConfinedTo();
+
 } // namespace hmi

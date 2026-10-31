@@ -699,6 +699,8 @@ if(XPG_BUILD_TESTS)
     # un serveur local, la cle (jamais en clair), l'Assistant branche (le tour suivant porte le resultat reel).
     xpg_add_test_executable(ai_reseau_test tests/ai_reseau_test.cpp)
     xpg_target_link_libraries(ai_reseau_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_sandbox_test tests/ai_sandbox_test.cpp)      # 1.21.0 : le bac a sable d'execution
+    xpg_target_link_libraries(ai_sandbox_test PRIVATE xpg_app)
     # 1.16.0 (Assistant IA) : l'IA integree sans connexion (INTEGREE), les services compatibles OpenAI et la limite
     # en direct (FOURNISSEURS), les nouvelles operations - vue, variables, types, reperes, formules (OPTIONS).
     xpg_add_test_executable(ai_integree_test tests/ai_integree_test.cpp)
@@ -889,6 +891,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----
     xpg_add_test(NAME aiassistant COMMAND ai_assistant_test)                 # 1.14.2 : l'Assistant IA (la maquette)
     xpg_add_test(NAME aireseau COMMAND ai_reseau_test)                       # 1.15.0 : l'Assistant IA, la connexion (RESEAU)
+    xpg_add_test(NAME aisandbox COMMAND ai_sandbox_test)                     # 1.21.0 : le bac a sable (processus enfant, etapes, confinement)
     xpg_add_test(NAME airegistre COMMAND ai_registre_test)                   # 1.15.0 : le registre, le contexte, l'outil
     xpg_add_test(NAME aiintegree COMMAND ai_integree_test ${XPG_FIXTURE})                   # 1.16.0 : l'IA integree (sans connexion)
     xpg_add_test(NAME aicompatible COMMAND ai_compatible_test)               # 1.16.0 : compatible OpenAI, la limite en direct

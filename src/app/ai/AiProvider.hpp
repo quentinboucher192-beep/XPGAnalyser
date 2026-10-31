@@ -22,7 +22,9 @@
 // =============================================================================
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -60,6 +62,19 @@ struct ProviderTurn {
     bool        toolResultError{false};
 };
 
+// 1.21.0 : UN OUTIL LOCAL - un appel de l'IA repondu sur le fil du fournisseur (jamais sur celui de l'interface), puis la
+// demande continue, comme la lecture exacte des pieces jointes (1.20.1) : le panneau ne voit ni l'appel ni le tour qui
+// l'attendait, seulement l'etat ("outil" : ce qui se fait). Exemple : executer_code (le bac a sable, AiSandbox.hpp).
+struct LocalTool {
+    std::string name;
+    std::string definitionJson;   // au format Anthropic (name, description, input_schema)
+    int         maxCalls{5};      // par demande ; au-dela, l'IA recoit << limite atteinte >>
+    // La reponse a un appel (son entree JSON). `status` : l'etat montre ("Bac a sable : essai de Moyenne...") ;
+    // `cancelled` : Arreter. Appelee sur le fil du fournisseur : elle ne touche ni le projet vivant ni l'interface.
+    std::function<std::string(const std::string& inputJson, const std::function<void(const std::string&)>& status,
+                              const std::atomic<bool>& cancelled)> run;
+};
+
 struct ProviderRequest {
     std::string model;            // la case des parametres ; vide : start() refuse et le dit
     std::string endpoint;         // vide : l'adresse du fournisseur ; sinon un relais d'entreprise
@@ -84,6 +99,9 @@ struct ProviderRequest {
     // 1.16.0 (FOURNISSEURS, a la fin) : Settings::toolMode "auto" - un service qui refuse l'outil (un
     // modele sans appel d'outil) : une nouvelle tentative aussitot, la proposition demandee en texte.
     bool        textFallback{true};
+    // 1.21.0 : les outils repondus ici (LocalTool) ; ajoutes aux outils de la demande par le fournisseur. Un mode sans
+    // appel d'outil (la proposition en texte) ne les a pas.
+    std::vector<LocalTool> localTools;
 };
 
 // 1.16.0 (le contrat) : ce qu'une reponse a consomme - les jetons, tels que le service les compte.

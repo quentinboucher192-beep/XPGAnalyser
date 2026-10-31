@@ -79,6 +79,8 @@ struct Library {
 [[nodiscard]] std::string readToolJson();
 // Le tableau des outils `toolsJson` (vide : aucun) avec l'outil de lecture en plus.
 [[nodiscard]] std::string withReadTool(const std::string& toolsJson);
+// 1.21.0 : le tableau des outils avec un outil de plus (sa definition JSON) - les outils locaux (LocalTool).
+[[nodiscard]] std::string withTool(const std::string& toolsJson, const std::string& definition);
 
 // Prepare les pieces texte de `req` (ProviderAttachment::prepared). Le budget va d'abord a la DERNIERE demande, puis
 // aux plus anciennes. Une piece qui tient : ses parties. Sinon : ses premieres parties, puis les autres lues a part

@@ -130,6 +130,12 @@ std::string reason(const std::error_code& ec) {
     return ec.message();
 }
 
+// 1.21.0 : LE BAC A SABLE (confineFiles) - tout chemin part de ce dossier et y reste ; vide : comme avant.
+std::string& confinedRoot() {
+    static std::string root;
+    return root;
+}
+
 // Le chemin d'un script : relatif, il part de <projet>/donnees/. Pour une ecriture, le projet lui-meme est refuse : son
 // dossier ihm/ et ce qu'il contient, project.xpgproj, et tout dossier qui contient ihm/ (le projet, ses parents).
 bool resolve(const std::string& projectFolder, const std::string& given, bool writing, fs::path& out, std::string& why) {
@@ -139,6 +145,23 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
         return false;
     }
     fs::path p = pathOf(text);
+    // 1.21.0 : dans le bac a sable, un chemin complet est refuse et un chemin relatif ne sort pas du dossier de travail
+    // (ni lecture ni ecriture ailleurs : les fichiers de l'utilisateur ne sont pas accessibles au code essaye).
+    if (const std::string& box = confinedRoot(); !box.empty()) {
+        if (p.has_root_name() || p.has_root_directory()) {
+            why = "bac \xC3\xA0 sable : seuls les chemins relatifs au dossier de travail sont permis - " + text;
+            return false;
+        }
+        const fs::path root = pathOf(box).lexically_normal();
+        const fs::path full = (root / p).lexically_normal();
+        const fs::path rel = full.lexically_relative(root);
+        if (rel.empty() || *rel.begin() == "..") {
+            why = "bac \xC3\xA0 sable : ce chemin sort du dossier de travail - " + text;
+            return false;
+        }
+        out = full;
+        return true;
+    }
     if (!p.has_root_name() && !p.has_root_directory()) {
         if (projectFolder.empty()) {
             why = "le projet n'est pas encore enregistr\xC3\xA9 : un chemin relatif part de son dossier donnees/ (enregistre-le, "
@@ -165,6 +188,9 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
 }
 
 } // namespace
+
+void confineFiles(std::string root) { confinedRoot() = std::move(root); }
+const std::string& filesConfinedTo() { return confinedRoot(); }
 
 void Runtime::fileFailed(const std::string& op, const std::string& why) {
     if (!fileSaid_.insert(op + "|" + why).second) return;

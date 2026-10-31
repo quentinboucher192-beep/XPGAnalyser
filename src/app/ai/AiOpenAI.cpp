@@ -765,6 +765,9 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
             [this] { return cancelled_.load(); }, &notes, withTools ? &library : nullptr);
         if (cancelled_) return finish(doneEvent("arrete"));
         if (library.active()) request.toolsJson = textparts::withReadTool(request.toolsJson);
+        // 1.21.0 : les outils locaux (le bac a sable...), repondus ici comme la lecture exacte (avec l'appel d'outil seulement).
+        if (withTools)
+            for (const auto& t : request.localTools) request.toolsJson = textparts::withTool(request.toolsJson, t.definitionJson);
         if (!notes.empty()) {
             std::string all;
             for (const auto& n : notes) all += (all.empty() ? "" : " ") + n;
@@ -779,28 +782,41 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
     std::optional<ProviderEvent> readCall, heldDone;
     bool otherTool = false;
     int reads = 0;
+    // 1.21.0 : les outils locaux (LocalTool) passent par le meme chemin que la lecture exacte.
+    std::vector<int> localCalls(request.localTools.size(), 0);
+    int localBudget = 0;
+    for (const auto& t : request.localTools) localBudget += std::max(0, t.maxCalls);
+    const auto localIndex = [&](const std::string& name) -> int {
+        for (std::size_t i = 0; i < request.localTools.size(); ++i)
+            if (request.localTools[i].name == name) return static_cast<int>(i);
+        return -1;
+    };
     const auto route = [&](ProviderEvent e) {
-        if (library.active() && withTools) {
-            if (e.type == ProviderEvent::Type::ToolUse && e.toolName == textparts::kReadTool) {
+        if ((library.active() || !request.localTools.empty()) && withTools) {
+            const bool isRead = library.active() && e.toolName == textparts::kReadTool;
+            if (e.type == ProviderEvent::Type::ToolUse && (isRead || localIndex(e.toolName) >= 0)) {
                 if (!readCall) readCall = std::move(e);
                 return;
             }
             if (e.type == ProviderEvent::Type::ToolUse) otherTool = true;
             if (e.type == ProviderEvent::Type::Done && readCall && !otherTool) {
-                if (reads < textparts::kMaxReads) {
+                const int li = localIndex(readCall->toolName);
+                const bool read = li < 0;
+                if (read ? reads < textparts::kMaxReads : localCalls[static_cast<std::size_t>(li)] < request.localTools[static_cast<std::size_t>(li)].maxCalls) {
                     heldDone = std::move(e);
                     return;
                 }
                 ProviderEvent t;
                 t.type = ProviderEvent::Type::Text;
-                t.text = "\n\n[Lectures exactes des pi\xC3\xA8" "ces jointes : la limite de cette demande est atteinte.]";
+                t.text = read ? "\n\n[Lectures exactes des pi\xC3\xA8" "ces jointes : la limite de cette demande est atteinte.]"
+                              : "\n\n[" + readCall->toolName + " : la limite de cette demande est atteinte.]";
                 push(std::move(t));
             }
             if (e.type == ProviderEvent::Type::Text) turnText += e.text;
         }
         push(std::move(e));
     };
-    for (int round = 0; round < 8 + textparts::kMaxReads; ++round) {
+    for (int round = 0; round < 8 + textparts::kMaxReads + localBudget; ++round) {
         if (cancelled_) return finish(doneEvent("arrete"));
         if (round > 0) push(statusEvent("connexion"));
         hr.body = openAIBody(request, withTools, streamUsage);   // lit les pieces jointes : ici, sur le fil
@@ -836,10 +852,20 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
             for (auto& e : stream.take()) route(std::move(e));
             if (stream.finished() && heldDone && readCall) {
                 // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
-                ++reads;
-                std::string detail;
-                const std::string result = library.read(readCall->toolInputJson, &detail);
-                push(statusEvent("lecture", detail));
+                // 1.21.0 : ou un outil local (le bac a sable) : sa reponse, de meme.
+                std::string result;
+                if (const int li = localIndex(readCall->toolName); li >= 0) {
+                    const LocalTool& tool = request.localTools[static_cast<std::size_t>(li)];
+                    ++localCalls[static_cast<std::size_t>(li)];
+                    const auto say = [this](const std::string& detail) { push(statusEvent("outil", detail)); };
+                    result = tool.run ? tool.run(readCall->toolInputJson, say, cancelled_) : std::string("outil indisponible");
+                    if (cancelled_) return finish(doneEvent("arrete"));
+                } else {
+                    ++reads;
+                    std::string detail;
+                    result = library.read(readCall->toolInputJson, &detail);
+                    push(statusEvent("lecture", detail));
+                }
                 ProviderTurn a;
                 a.role = ProviderTurn::Role::Assistant;
                 a.text = turnText;

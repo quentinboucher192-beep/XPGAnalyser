@@ -12,6 +12,7 @@
 #include "app/Dossiers.hpp"
 #include "app/ReportWindow.hpp"   // 1.12.28 : la fenetre de rapport a part (un blocage, un plantage)
 #include "app/Settings.hpp"
+#include "app/ai/AiSandbox.hpp"   // 1.21.0 : --bac-a-sable (le processus enfant de l'Assistant IA)
 #include "core/Version.hpp"
 #include "core/Edition.hpp"    // 1.12.0 : API Studio, IHM Studio
 #include "help/TutorialLaunch.hpp"
@@ -185,6 +186,16 @@ int main(int argc, char** argv) {
     // pendant un blocage ou apres un plantage : sa fenetre, et rien d'autre (ni instance unique,
     // ni chien de garde, ni reglages ecrits).
     if (app::reportwindow::Args report; app::reportwindow::parse(argc, argv, report)) return app::reportwindow::run(report);
+    // 1.21.0 : LE BAC A SABLE DE L'ASSISTANT IA (app/ai/AiSandbox.hpp) - l'exe relance pour verifier et essayer une
+    // fonction : il lit le travail sur son entree, rend le resultat sur sa sortie, et rien d'autre (ni fenetre, ni
+    // instance unique, ni reglages, ni rapport de plantage : le parent voit un plantage et le dit).
+    if (argc >= 2 && std::string(argv[1]) == app::ai::sandbox::kChildFlag) {
+        if (!core::hasIhm()) {
+            std::fprintf(stderr, "--bac-a-sable : le bac a sable des fonctions est dans IHM Studio\n");
+            return 2;
+        }
+        return app::ai::sandbox::childMain();
+    }
     std::vector<std::string> files;
     app::AppOptions options;
     bool cli = false;
