@@ -7,9 +7,14 @@
 //  rien), le demarrage (le dossier des donnees cree, amorce, dossier de
 //  travail), changer (tout verifier d'abord, copier sans ecraser, l'ancien
 //  .ini garde, projets et captures tout de suite).
+//  1.21.0 : app/ArbreTailles.hpp, le poids des fichiers de l'application (A
+//  propos) - le total juste, le tri, l'annulation, les liens non suivis, une
+//  racine dans une autre comptee une seule fois.
 // =============================================================================
 #include "../src/app/Dossiers.hpp"
+#include "../src/app/ArbreTailles.hpp"
 
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -49,6 +54,130 @@ Contexte contexte(const fs::path& root) {
         return std::nullopt;
     };
     return c;
+}
+
+// 1.21.0 : l'arbre des tailles de la fenetre A propos (app/ArbreTailles.hpp).
+void arbreDesTailles(const fs::path& base) {
+    namespace t = app::tailles;
+    const fs::path A = base / "A", B = base / "B";
+    write(A / "a1.bin", std::string(100, 'x'));
+    write(A / "a2.bin", std::string(300, 'x'));
+    write(A / "sous" / "s1.bin", std::string(1000, 'x'));
+    fs::create_directories(A / "vide");
+    write(B / "b.bin", std::string(50, 'x'));
+    write(B / "inclus" / "c.bin", std::string(7, 'x'));
+
+    const auto noms = [](const t::Noeud& n) {
+        std::string s;
+        for (const auto& e : n.enfants) s += (s.empty() ? "" : ",") + e.nom;
+        return s;
+    };
+
+    // ---- parcourir : le total, les fichiers, le tri ----------------------------
+    t::Parcours p = t::parcourir(A);
+    check(!p.annule && p.illisibles == 0 && p.racine.dossier, "parcourir : un dossier lu sans erreur");
+    check(p.racine.octets == 1400 && p.racine.fichiers == 3, "parcourir : 1 400 octets dans 3 fichiers (sous-dossier compris)");
+    t::trier(p.racine, t::Tri::Poids);
+    check(noms(p.racine) == "sous,a2.bin,a1.bin,vide", "tri par poids decroissant (le dossier vide en dernier) : " + noms(p.racine));
+    const t::Noeud* sous = p.racine.enfants.empty() ? nullptr : &p.racine.enfants.front();
+    check(sous && sous->dossier && sous->octets == 1000 && sous->fichiers == 1, "un dossier porte le poids et le nombre de ses fichiers");
+    t::trier(p.racine, t::Tri::Nom);
+    check(noms(p.racine) == "sous,vide,a1.bin,a2.bin", "tri par nom : les dossiers d'abord : " + noms(p.racine));
+
+    // ---- annulation -------------------------------------------------------------
+    {
+        std::atomic<bool> arret{true};
+        t::Options o;
+        o.arret = &arret;
+        const t::Parcours q = t::parcourir(A, o);
+        check(q.annule, "le drapeau leve : le parcours s'arrete");
+        const t::Bilan b = t::mesurer({{"A", utf8De(A)}}, o);
+        check(b.annule && b.racines.empty() && b.octets == 0, "mesurer s'arrete aussi (rien de compte)");
+    }
+
+    // ---- la limite des noeuds : tout est compte, pas tout est garde ---------------
+    {
+        t::Options o;
+        o.maxNoeuds = 1;
+        const t::Parcours q = t::parcourir(A, o);
+        std::uint64_t caches = 0;
+        const std::function<void(const t::Noeud&)> somme = [&](const t::Noeud& n) {
+            caches += n.nonDetailles;
+            for (const auto& e : n.enfants) somme(e);
+        };
+        somme(q.racine);
+        check(q.racine.octets == 1400 && q.racine.fichiers == 3 && q.noeuds <= 1 && caches > 0,
+              "au-dela de la limite : compte (1 400 octets, 3 fichiers) mais pas detaille");
+    }
+
+    // ---- les liens symboliques ne sont pas suivis -----------------------------------
+    {
+        std::error_code ec;
+        fs::create_directory_symlink(B, A / "lien", ec);
+        if (!ec) {
+            const t::Parcours q = t::parcourir(A);
+            check(q.racine.octets == 1400 && q.racine.fichiers == 3, "un lien vers un autre dossier n'est ni suivi ni compte");
+            fs::remove(A / "lien", ec);
+        } else {
+            std::printf("     (pas de lien symbolique ici : %s)\n", ec.message().c_str());
+        }
+    }
+
+    // ---- retenir : les racines qui existent, aucune dans une autre -----------------
+    {
+        const std::vector<t::Racine> c{{"Inclus", utf8De(B / "inclus")},
+                                       {"A", utf8De(A)},
+                                       {"B", utf8De(B)},
+                                       {"A encore", utf8De(A) + "/"},
+                                       {"Absent", utf8De(base / "absent")},
+                                       {"Vide", ""}};
+        const t::Retenues r = t::retenir(c);
+        check(r.racines.size() == 2 && r.racines[0].libelle == "A" && r.racines[1].libelle == "B",
+              "retenir : A et B ; l'absent et le vide oublies, l'inclus et le doublon retires");
+        bool inclus = false, doublon = false;
+        for (const auto& x : r.incluses) {
+            if (x.racine.libelle == "Inclus") inclus = x.dans == 1 && x.sousChemin == std::vector<std::string>{"inclus"};
+            if (x.racine.libelle == "A encore") doublon = x.dans == 0 && x.sousChemin.empty();
+        }
+        check(r.incluses.size() == 2 && inclus && doublon, "les incluses disent dans quelle racine (et le chemin depuis elle)");
+
+        t::Progression prog;
+        t::Options o;
+        o.progression = &prog;
+        std::vector<std::string> vues;
+        const t::Bilan b = t::mesurer(c, o, t::Tri::Poids, [&](std::size_t, const t::Racine& r0) { vues.push_back(r0.libelle); });
+        check(!b.annule && b.racines.size() == 2 && b.octets == 1400 + 57 && b.fichiers == 5,
+              "mesurer : 1 457 octets dans 5 fichiers - B/inclus compte une seule fois");
+        check(prog.fichiers.load() == 5 && prog.octets.load() == 1457 && vues == std::vector<std::string>{"A", "B"},
+              "la progression avance, chaque racine annoncee");
+        bool trouvee = false;
+        for (const auto& x : b.incluses)
+            if (x.racine.libelle == "Inclus") trouvee = x.trouvee && x.octets == 7 && x.fichiers == 1;
+        check(trouvee, "l'incluse est retrouvee dans l'arbre de sa racine (7 octets)");
+        const std::string s = t::resume(b, "Essai");
+        check(s.find("Poids total : 1,4 Ko") != std::string::npos && s.find("dont Inclus : 7 o") != std::string::npos
+                  && s.find("illisible") == std::string::npos,
+              "le resume : le total a la francaise, ce que contient chaque racine");
+        check(t::milliers(1234567) == "1\xE2\x80\xAF" "234\xE2\x80\xAF" "567" && t::nombreDeFichiers(1) == "1 fichier",
+              "les milliers et le pluriel");
+    }
+
+    // ---- un dossier illisible : saute et compte (sauf pour un administrateur) ----------
+    {
+        std::error_code ec;
+        const fs::path ferme = A / "ferme";
+        write(ferme / "secret.bin", std::string(10, 'x'));
+        fs::permissions(ferme, fs::perms::none, ec);
+        std::error_code lu;
+        fs::directory_iterator essai(ferme, lu);
+        if (!ec && lu) {
+            const t::Parcours q = t::parcourir(A);
+            check(q.illisibles == 1 && q.racine.octets == 1400, "un dossier sans droit de lecture : saute, compte comme illisible");
+        } else {
+            std::printf("     (le dossier ferme reste lisible ici : essai des droits saute)\n");
+        }
+        fs::permissions(ferme, fs::perms::owner_all, ec);
+    }
 }
 
 } // namespace
@@ -249,6 +378,9 @@ int main() {
               "au demarrage suivant : les dossiers de XPGAnalyser.ini");
         check(read(data / "Biblio" / "index.txt") == "index", "la nouvelle bibliotheque, vide, est amorcee");
     }
+
+    // ---- 7. 1.21.0 : le poids des fichiers de l'application (A propos) ------------
+    arbreDesTailles(root / "tailles");
 
     fs::current_path(cwdBefore);
     fs::remove_all(root, ec);
