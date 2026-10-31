@@ -2031,6 +2031,19 @@ Dans le volet : surveillance active, alarmes surveillées (vide : toutes ; * per
 « Pourquoi cette alarme est-elle apparue ? », « Retrouve toute la chaîne de dépendances de cette alarme », « Quelles variables peuvent être à l'origine de ce défaut ? », « Pourquoi cinq alarmes sont-elles apparues en même temps ? », « Est-ce que cette alarme est déjà apparue dans le passé ? », « Compare les trois derniers incidents de la pompe 2 », « Quel équipement est commun à ces défauts ? », « Les défauts de communication expliquent-ils les alarmes de mesure ? », « Fais-moi un diagnostic complet de cet incident » : l'IA répond à partir des dossiers et du projet.
 ! XPGAnalyser aide à comprendre un événement. Ce n'est pas un système de sécurité ni une surveillance déterministe de la logique de l'automate.
 
+### Lire la vidéo d'un incident (1.21.0)
+Dans la fiche, groupe **Capture et vidéo**, **Lire la vidéo ici** lance la lecture depuis le début ; sous l'image, la barre de lecture fonctionne comme celle des enregistrements. La barre de temps se clique ou se glisse ; son **repère rouge** marque le déclenchement de l'alarme (t = 0). Dessous : la position et la durée, t (les secondes depuis le déclenchement, négatives avant) et le numéro de l'image.
+| Commande | Touche |
+| Lecture / Pause | Espace |
+| -10 s, +10 s | ← →  |
+| image précédente, image suivante (en pause) | Maj+← Maj+→, ou la virgule et le point |
+| Début, Fin | Début, Fin |
+| Déclenchement (aller à t = 0) | D |
+| Boucle | B |
+| vitesse ×0,25 à ×8 | + et - |
+| arrêter la vidéo | Échap |
+Au bout, sans la boucle, la dernière image reste à l'écran ; Lecture repart du début. Les touches marchent une fois la fiche cliquée.
+**Zoom**, sur la vidéo comme sur la capture : la molette sur l'image zoome autour de la souris ; les boutons **-** / **Ajuster** / **+** sont en haut à droite, avec le pourcentage ; on glisse l'image zoomée pour la déplacer ; un double-clic la remet entière. **Ouvrir avec le lecteur du système** reste disponible.
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0

@@ -197,6 +197,14 @@ const std::vector<Note>& table() {
          "Le texte des PDF, documents Word, classeurs Excel et du code est extrait en arri\xC3\xA8re-plan ; l'original n'est "
          "jamais modifi\xC3\xA9, un doublon n'est copi\xC3\xA9 qu'une fois.",
          "assistant-ia-plan", ""),
+        note("1.21.0", "Incidents", Kind::New,
+         "LA VID\xC3\x89O D'UN INCIDENT SE LIT COMME UN ENREGISTREMENT : sous l'image, une barre de temps qu'on clique ou "
+         "qu'on glisse, avec un rep\xC3\xA8re rouge au d\xC3\xA9" "clenchement (t = 0), et les commandes de la relecture "
+         "- D\xC3\xA9" "but, -10 s, image pr\xC3\xA9" "c\xC3\xA9" "dente, Lecture/Pause, image suivante, +10 s, Fin, D\xC3\xA9" "clenchement, "
+         "Boucle et les vitesses \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8, avec les m\xC3\xAAmes touches. Au bout, la lecture "
+         "s'arr\xC3\xAAte au lieu de boucler sans fin. La vid\xC3\xA9o et la capture se zooment : la molette, les boutons "
+         "- / Ajuster / +, glisser pour se d\xC3\xA9placer, double-clic pour ajuster.",
+         "incidents", ""),
         note("1.21.0", "Incidents", Kind::Fixed,
          "Plantage (m\xC3\xA9moire \xC3\xA9puis\xC3\xA9" "e) apr\xC3\xA8s plusieurs alarmes d\xC3\xA9" "clench\xC3\xA9" "es "
          "ensemble, pr\xC3\xA9" "c\xC3\xA9" "d\xC3\xA9 d'un blocage de quelques secondes : chaque vid\xC3\xA9o d'incident "
