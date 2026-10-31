@@ -103,31 +103,35 @@ std::string keyProtectionText() {
 #endif
 }
 
-bool storeKey(const std::string& key, std::string* why) {
+bool storeKey(const std::string& key, std::string* why) { return storeKeyAt(keyFile(), key, why); }
+
+std::optional<std::string> loadStoredKey(std::string* why) { return loadKeyAt(keyFile(), why); }
+
+bool storeKeyAt(const std::string& file, const std::string& key, std::string* why) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
     };
     const KeyProtector p = currentProtector();
     if (!p.protect) return fail("Sous Linux, la cl\xC3\xA9 est gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance seulement : elle n'est jamais \xC3\xA9" "crite.");
-    if (root().empty()) return fail("Pas de dossier pour l'Assistant : la cl\xC3\xA9 reste en m\xC3\xA9moire.");
+    if (root().empty() || file.empty()) return fail("Pas de dossier pour l'Assistant : la cl\xC3\xA9 reste en m\xC3\xA9moire.");
     if (key.empty()) return fail("Pas de cl\xC3\xA9 \xC3\xA0 m\xC3\xA9moriser.");
     const auto blob = p.protect(key);
     if (!blob || blob->empty()) return fail("Windows n'a pas pu prot\xC3\xA9ger la cl\xC3\xA9 (DPAPI) : elle reste en m\xC3\xA9moire pour cette s\xC3\xA9" "ance.");
     std::error_code ec;
-    fs::create_directories(P(root()), ec);
+    fs::create_directories(P(file).parent_path(), ec);
     core::AtomicWrite how;
     how.keepBackup = false;
-    if (!core::writeFileAtomic(P(keyFile()), std::string(kMagic) + *blob, how))
-        return fail("\xC3\x89" "criture impossible : " + keyFile());
+    if (!core::writeFileAtomic(P(file), std::string(kMagic) + *blob, how))
+        return fail("\xC3\x89" "criture impossible : " + file);
     return true;
 }
 
-std::optional<std::string> loadStoredKey(std::string* why) {
-    if (root().empty()) return std::nullopt;
+std::optional<std::string> loadKeyAt(const std::string& file, std::string* why) {
+    if (root().empty() || file.empty()) return std::nullopt;
     std::string text;
     std::error_code ec;
-    if (!fs::exists(P(keyFile()), ec) || !core::readFileAll(P(keyFile()), text)) return std::nullopt;
+    if (!fs::exists(P(file), ec) || !core::readFileAll(P(file), text)) return std::nullopt;
     const KeyProtector p = currentProtector();
     if (text.rfind(kMagic, 0) != 0 || !p.unprotect) {
         if (why) *why = "La cl\xC3\xA9 m\xC3\xA9moris\xC3\xA9" "e est illisible sur ce poste : entre-la de nouveau.";

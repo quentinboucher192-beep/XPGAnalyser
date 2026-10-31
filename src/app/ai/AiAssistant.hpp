@@ -179,6 +179,9 @@ public:
     // pas de cle, Windows n'a pas pu la proteger.
     bool rememberKey(bool on, std::string* why = nullptr);
     [[nodiscard]] bool keyRemembered() const;
+    // 1.18.0 (le gestionnaire des cles, AiKeys) : relire la cle ACTIVE du fournisseur choisi (la fenetre Cles API vient
+    // de la changer) ; vide : aucune. Faux et un avis : elle ne se relit pas sur ce poste.
+    bool reloadKey();
     // L'etat de connexion, tel que l'en-tete le dit : "Demonstration - aucune IA connectee",
     // "Anthropic - <modele>", "A configurer : choisis un modele et une cle"...
     [[nodiscard]] std::string connectionText() const;

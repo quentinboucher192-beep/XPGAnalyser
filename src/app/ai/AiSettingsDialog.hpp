@@ -83,6 +83,12 @@ public:
     // "budget", "periode".
     // 1.16.0 : choisir un service (sa cle) remplit l'adresse ; la fenetre suit le fournisseur choisi.
     bool chooseService(std::string_view key);
+    // 1.18.0 : LES CLES ENREGISTREES (le gestionnaire, AiKeys) - la liste des cles du fournisseur choisi ("cles") et
+    // << Gerer les cles... >> ("gerer", la fenetre Cles API). Choisir une cle la pose dans la case ; la derniere ligne,
+    // << Nouvelle cle... >>, vide la case : Enregistrer l'ajoute (memorisee par defaut). Vrai : la cle est connue.
+    bool chooseKey(const std::string& id);
+    void manageKeys();
+    [[nodiscard]] const std::string& chosenKey() const noexcept { return keyId_; }
     [[nodiscard]] bool openAIShown() const;
     [[nodiscard]] ui::Widget* field(const std::string& name) const;
 
@@ -108,6 +114,11 @@ private:
     ui::ToggleButton* showKey_{nullptr};
     ui::Button*       clearKey_{nullptr};
     ui::Checkbox*     remember_{nullptr};
+    ui::DropDown*     keys_{nullptr};         // 1.18.0 : les cles enregistrees du fournisseur
+    ui::Button*       manageKeys_{nullptr};   // 1.18.0 : Gerer les cles...
+    std::string       keyId_;                 // la cle choisie dans la liste (vide : une cle neuve)
+    std::string       keyProvider_;           // le fournisseur dont la liste montre les cles
+    void              refreshKeys();
     ui::Button*       test_{nullptr};
     ui::DropDown*     mode_{nullptr};
     ui::DropDown*     days_{nullptr};

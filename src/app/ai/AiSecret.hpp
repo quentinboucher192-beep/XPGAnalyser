@@ -40,6 +40,9 @@ bool storeKey(const std::string& key, std::string* why = nullptr);
 [[nodiscard]] bool hasStoredKey();
 // Efface le fichier (vrai : il n'y est plus).
 bool forgetStoredKey();
+// 1.18.0 (le gestionnaire des cles, AiKeys) : la meme protection, dans un fichier donne (IA/cles/<id>.bin).
+bool storeKeyAt(const std::string& file, const std::string& key, std::string* why = nullptr);
+[[nodiscard]] std::optional<std::string> loadKeyAt(const std::string& file, std::string* why = nullptr);
 
 // La protection (essais) : deux fonctions inverses ; nulles : celle du systeme.
 struct KeyProtector {

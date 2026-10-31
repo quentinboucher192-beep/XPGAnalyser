@@ -8,6 +8,7 @@
 #include "AiAutomate.hpp"
 
 #include "AiHttp.hpp"
+#include "AiKeys.hpp"          // 1.18.0 : le gestionnaire des cles API
 #include "AiLocal.hpp"
 #include "AiOpenAI.hpp"
 #include "AiPrompt.hpp"
@@ -97,11 +98,16 @@ Assistant::~Assistant() = default;
 void Assistant::load(std::vector<std::string>* problems) {
     bool found = false;
     settings_ = loadSettings(&found);
-    // 1.15.0 : la cle memorisee (protegee par Windows) revient pour la seance.
-    if (apiKey_.empty() && hasStoredKey()) {
-        std::string why;
-        if (auto key = loadStoredKey(&why)) apiKey_ = std::move(*key);
-        else if (!why.empty()) notice_ = "Assistant IA : " + why;
+    // 1.15.0 : la cle memorisee (protegee par Windows) revient pour la seance. 1.18.0 : celle du gestionnaire des cles
+    // (l'active du fournisseur choisi) ; la cle d'avant (IA/cle.bin) y entre au premier lancement.
+    if (apiKey_.empty()) {
+        (void)keys::migrateLegacy(settings_.provider);
+        (void)reloadKey();
+        if (apiKey_.empty() && hasStoredKey()) {   // illisible a la migration (une autre session) : comme avant
+            std::string why;
+            if (auto key = loadStoredKey(&why)) apiKey_ = std::move(*key);
+            else if (!why.empty()) notice_ = "Assistant IA : " + why;
+        }
     }
     conversations_ = loadConversations(problems);
     if (!found && conversations_.empty()) {
@@ -821,9 +827,35 @@ void Assistant::setSettings(Settings s) {
         limit_ = LimitState{};
         limit_.conversation = conversation;
     }
+    // 1.18.0 : un autre fournisseur - sa cle active (le gestionnaire des cles). L'appelant qui pose une cle saisie
+    // (Parametres) la pose ensuite.
+    const bool otherKey = keys::providerOf(s.provider) != keys::providerOf(settings_.provider);
     settings_ = std::move(s);
     (void)saveSettings(settings_);
+    if (otherKey) {
+        apiKey_.clear();
+        (void)reloadKey();
+    }
     ++revision_;
+}
+
+bool Assistant::reloadKey() {
+    const std::string provider = keys::providerOf(settings_.provider);
+    if (provider.empty()) return true;
+    const std::string id = keys::activeId(provider);
+    if (id.empty()) return true;
+    std::string why;
+    if (auto key = keys::secret(id, &why)) {
+        apiKey_ = std::move(*key);
+        ++revision_;
+        return true;
+    }
+    const auto e = keys::find(id);
+    notice_ = "Assistant IA : la cl\xC3\xA9 \xC2\xAB " + (e ? e->name : id) + " \xC2\xBB ne se relit pas sur ce poste ("
+              + (why.empty() ? std::string("une autre session Windows, un autre PC") : why)
+              + ") : saisis-la de nouveau (Param\xC3\xA8tres \xE2\x80\xBA G\xC3\xA9rer les cl\xC3\xA9s).";
+    ++revision_;
+    return false;
 }
 
 std::string Assistant::connectionText() const {
@@ -871,15 +903,47 @@ const std::vector<std::string>& Assistant::suggestions() const {
 // ---- la cle ------------------------------------------------------------------------------------
 bool Assistant::rememberKey(bool on, std::string* why) {
     ++revision_;
-    if (!on) return forgetStoredKey();
+    // 1.18.0 : la cle active du fournisseur, dans le gestionnaire des cles (IA/cles/).
+    const std::string provider = keys::providerOf(settings_.provider);
+    const std::string id = provider.empty() ? std::string{} : keys::activeId(provider);
+    if (!on) {
+        (void)forgetStoredKey();   // la cle d'avant, s'il en reste une
+        if (id.empty()) return true;
+        if (apiKey_.empty()) return keys::remove(id);
+        return keys::replace(id, apiKey_, false, why);   // gardee pour la seance seulement
+    }
     if (apiKey_.empty()) {
         if (why) *why = "Pas de cl\xC3\xA9 \xC3\xA0 m\xC3\xA9moriser.";
         return false;
     }
-    return storeKey(apiKey_, why);
+    if (provider.empty()) return storeKey(apiKey_, why);
+    if (!id.empty()) {
+        const auto cur = keys::secret(id);
+        const auto e = keys::find(id);
+        if (cur && *cur == apiKey_ && e && e->stored) return true;
+        return keys::replace(id, apiKey_, true, why);
+    }
+    keys::Entry e;
+    e.provider = provider;
+    e.name = "Ma cl\xC3\xA9 (" + keys::providerLabel(provider) + ")";
+    const auto all = keys::list();
+    const auto taken = [&](const std::string& n) {
+        return std::any_of(all.begin(), all.end(), [&](const keys::Entry& x) { return x.name == n; });
+    };
+    for (int n = 2; taken(e.name) && n < 100; ++n) e.name = "Ma cl\xC3\xA9 (" + keys::providerLabel(provider) + ") " + std::to_string(n);
+    const std::string made = keys::add(e, apiKey_, true, why);
+    if (made.empty()) return false;
+    (void)keys::setActive(made);
+    return made.front() == 'k';
 }
 
-bool Assistant::keyRemembered() const { return hasStoredKey(); }
+bool Assistant::keyRemembered() const {
+    const std::string provider = keys::providerOf(settings_.provider);
+    if (!provider.empty())
+        if (const std::string id = keys::activeId(provider); !id.empty())
+            if (const auto e = keys::find(id)) return e->stored;
+    return hasStoredKey();
+}
 
 // ---- le fournisseur (1.15.0) ----------------------------------------------------------------------
 bool Assistant::needsSetup() const {

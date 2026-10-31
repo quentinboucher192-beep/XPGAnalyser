@@ -461,6 +461,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiPrompt.cpp" />
     <ClCompile Include="src\app\ai\AiRegistry.cpp" />
     <ClCompile Include="src\app\ai\AiContext.cpp" />
+    <ClCompile Include="src\app\ai\AiKeys.cpp" />
+    <ClCompile Include="src\app\ai\AiKeysDialog.cpp" />
     <ClCompile Include="src\app\ai\AiPanel.cpp" />
     <ClCompile Include="src\app\ai\AiPreviewDialog.cpp" />
     <ClCompile Include="src\app\ai\AiSettingsDialog.cpp" />
@@ -988,6 +990,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiPrompt.hpp" />
     <ClInclude Include="src\app\ai\AiRegistry.hpp" />
     <ClInclude Include="src\app\ai\AiContext.hpp" />
+    <ClInclude Include="src\app\ai\AiKeys.hpp" />
+    <ClInclude Include="src\app\ai\AiKeysDialog.hpp" />
     <ClInclude Include="src\app\ai\AiProvider.hpp" />
     <ClInclude Include="src\app\ai\AiPanel.hpp" />
     <ClInclude Include="src\app\ai\AiPreviewDialog.hpp" />

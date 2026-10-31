@@ -3,6 +3,8 @@
 // =============================================================================
 #include "AiSettingsDialog.hpp"
 
+#include "AiKeys.hpp"          // 1.18.0 : le gestionnaire des cles API
+#include "AiKeysDialog.hpp"
 #include "AiOpenAI.hpp"
 #include "AiPanel.hpp"
 #include "AiPaths.hpp"
@@ -65,10 +67,11 @@ std::vector<std::string> wrap(const std::string& text, gfx::FontId f, float widt
 
 // 1.15.0 : ce que devient la cle (Windows : DPAPI ; Linux : la seance seulement).
 std::string keyNote() {
+    // 1.18.0 : plus court (la liste des cles et Gerer les cles prennent une ligne).
     std::string n = keyProtectionAvailable()
-                        ? "M\xC3\xA9moris\xC3\xA9" "e, elle est " + keyProtectionText() + " dans le dossier de l'Assistant ; sinon gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance. "
-                        : "Gard\xC3\xA9" "e en m\xC3\xA9moire pour cette s\xC3\xA9" "ance seulement : sous Linux, elle n'est jamais \xC3\xA9" "crite sur le disque. ";
-    return n + "Jamais en clair, ni dans un journal. Un relais d'entreprise (l'adresse) peut d\xC3\xA9tenir la cl\xC3\xA9 : laisse alors la case vide.";
+                        ? "M\xC3\xA9moris\xC3\xA9" "e par d\xC3\xA9" "faut, " + keyProtectionText() + " (Cl\xC3\xA9s API : le dossier de l'Assistant). "
+                        : "Gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance seulement (Linux : jamais \xC3\xA9" "crite). ";
+    return n + "Jamais en clair. Un relais d'entreprise (l'adresse) peut d\xC3\xA9tenir la cl\xC3\xA9 : laisse-la vide.";
 }
 const char* const kPrivacyNote = "Ce qui part chez le fournisseur avec chaque demande, en plus de la demande et de la conversation. "
                                  "En d\xC3\xA9monstration, rien ne quitte ce PC.";
@@ -132,7 +135,16 @@ protected:
         y += kRow - 4.f;
         heading("CONNEXION");
         const bool openai = d_.openAIShown();   // 1.16.0 : le Service a la place de l'Effort
-        if (openai) row("Service", d_.service_);
+        // 1.18.0 : le Delai sur la ligne du Service (ou de l'Effort) - la ligne des cles tient a 1280 x 800.
+        const auto withDelay = [&](const char* label, ui::Widget* wgt) {
+            const char* const dlabel = "D\xC3\xA9lai (s)";
+            const float dw = 64.f, dl = ui::measureWidth(dlabel, kText) + 12.f;
+            const float fw = colW - labelW - dw - dl - 8.f;
+            row(label, wgt, fw);
+            labels_.push_back({{x + labelW + fw + 8.f, y - kRow + 6.f}, dlabel, false, dl});
+            d_.timeout_->setBounds({x + colW - dw, y - kRow, dw, kRow - 4.f});
+        };
+        if (openai) withDelay("Service", d_.service_);
         {   // le modele : la case sur toute la largeur (l'indication grise se lit en entier), puis
             // "Lister les modeles" dessous, a droite
             const float lw = ui::measureWidth(d_.listModels_->text(), gfx::FontId{16}) + 28.f;
@@ -140,10 +152,15 @@ protected:
             d_.listModels_->setBounds({x + colW - lw, y, lw, kRow - 4.f});
             y += kRow;
         }
-        if (!openai) row("Effort", d_.effort_);
+        if (!openai) withDelay("Effort", d_.effort_);
         row("Adresse", d_.endpoint_);
-        row("D\xC3\xA9lai (secondes)", d_.timeout_, 90.f);
         heading("CL\xC3\x89 API");
+        {   // 1.18.0 : les cles enregistrees du fournisseur, et Gerer les cles...
+            const float gw = ui::measureWidth(d_.manageKeys_->text(), gfx::FontId{16}) + 28.f;
+            d_.keys_->setBounds({x, y, colW - gw - 6.f, kRow - 4.f});
+            d_.manageKeys_->setBounds({x + colW - gw, y, gw, kRow - 4.f});
+            y += kRow;
+        }
         {
             const float bw1 = ui::measureWidth("Afficher", gfx::FontId{16}) + 24.f;
             const float bw2 = ui::measureWidth("Effacer", gfx::FontId{16}) + 28.f;
@@ -361,6 +378,16 @@ core::Status AiSettingsDialog::buildUi() {
     links_ += clearKey_->clicked->connect([this] { clearKey(); });
     // 1.17.1 : COCHEE PAR DEFAUT pour une cle a saisir (decochee, une cle tapee etait perdue au redemarrage - une
     // reinstallation l'effacait). Une cle deja gardee pour la seance seulement (un choix) reste decochee.
+    // 1.18.0 : les cles enregistrees (le gestionnaire des cles) et la fenetre Cles API.
+    keys_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".cles")));
+    keys_->setTooltip("Les cl\xC3\xA9s enregistr\xC3\xA9" "es pour ce fournisseur (l'\xC3\xA9toile : celle de l'Assistant). Nouvelle cl\xC3\xA9 : la case se vide, "
+                      "Enregistrer l'ajoute.");
+    links_ += keys_->selectionChanged->connect([this](int) {
+        if (const auto* it = keys_->selectedItem()) (void)chooseKey(it->value);
+    });
+    manageKeys_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("G\xC3\xA9rer les cl\xC3\xA9s\xE2\x80\xA6", base + ".gerer")));
+    manageKeys_->setTooltip("La fen\xC3\xAAtre Cl\xC3\xA9s API : plusieurs cl\xC3\xA9s nomm\xC3\xA9" "es, l'active, Tester, Remplacer, Supprimer.");
+    links_ += manageKeys_->clicked->connect([this] { manageKeys(); });
     remember_ = check("M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)", ".memoriser",
                       panel_.assistant().keyRemembered() || (keyProtectionAvailable() && panel_.assistant().apiKey().empty()));
     remember_->setEnabled(keyProtectionAvailable());
@@ -490,7 +517,69 @@ void AiSettingsDialog::providerChanged() {
                           static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_), static_cast<ui::Widget*>(localFirst_)})
         if (w) w->setEnabled(net);
     if (remember_) remember_->setEnabled(net && keyProtectionAvailable());
+    if (keys_) keys_->setEnabled(net);
+    refreshKeys();
     if (auto* r = widgetRoot()) r->invalidateLayout();
+}
+
+// 1.18.0 : la liste des cles du fournisseur choisi. Un AUTRE fournisseur : sa cle active vient dans la case.
+void AiSettingsDialog::refreshKeys() {
+    if (!keys_) return;
+    const auto* it = provider_ ? provider_->selectedItem() : nullptr;
+    const std::string provider = it ? keys::providerOf(it->value) : std::string{};
+    const bool moved = provider != keyProvider_;
+    if (moved) {
+        keyProvider_ = provider;
+        keyId_ = provider.empty() ? std::string{} : keys::activeId(provider);
+        if (!provider.empty() && key_) {
+            const auto secret = keyId_.empty() ? std::nullopt : keys::secret(keyId_);
+            // La cle de la seance (saisie, pas encore enregistree) reste si ce fournisseur est celui de l'Assistant.
+            if (secret) key_->setText(*secret);
+            else if (keys::providerOf(panel_.assistant().settings().provider) != provider) key_->setText({});
+            if (remember_)
+                if (const auto e = keyId_.empty() ? std::nullopt : keys::find(keyId_))
+                    remember_->setState(e->stored ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+        }
+    }
+    std::vector<ui::DropDown::Item> items;
+    int sel = -1;
+    const std::string active = provider.empty() ? std::string{} : keys::activeId(provider);
+    for (const auto& e : keys::list(provider)) {
+        if (e.id == keyId_) sel = static_cast<int>(items.size());
+        items.push_back({(e.id == active ? "\xE2\x98\x85 " : "") + e.name + "  " + keys::masked(e), e.id});
+    }
+    items.push_back({"Nouvelle cl\xC3\xA9\xE2\x80\xA6", ""});
+    if (sel < 0) sel = static_cast<int>(items.size()) - 1;
+    keys_->setItems(std::move(items));
+    keys_->setSelectedIndex(sel);
+}
+
+bool AiSettingsDialog::chooseKey(const std::string& id) {
+    if (id == keyId_) return !id.empty();
+    keyId_ = id;
+    if (id.empty()) {   // une cle neuve : la case se vide, memorisee par defaut
+        key_->setText({});
+        remember_->setState(keyProtectionAvailable() ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+        return false;
+    }
+    std::string why;
+    const auto secret = keys::secret(id, &why);
+    key_->setText(secret ? *secret : std::string{});
+    const auto e = keys::find(id);
+    remember_->setState(e && e->stored ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+    if (!secret) {
+        result_ = "Cette cl\xC3\xA9 ne se relit pas sur ce poste : saisis-la (Enregistrer la remplace).";
+        resultOk_ = false;
+    }
+    return secret.has_value();
+}
+
+void AiSettingsDialog::manageKeys() {
+    if (!panel_.uiHost().showDialog) return;
+    panel_.uiHost().showDialog(std::make_unique<AiKeysDialog>(panel_), [this](const menu::DialogResult&) {
+        keyProvider_.clear();   // relire la liste et l'active
+        refreshKeys();
+    });
 }
 
 bool AiSettingsDialog::chooseService(std::string_view key) {
@@ -537,6 +626,8 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "periode") return period_;
     if (name == "dabord") return localFirst_;
     if (name == "malgre") return anyway_;
+    if (name == "cles") return keys_;
+    if (name == "gerer") return manageKeys_;
     return nullptr;
 }
 
@@ -587,8 +678,10 @@ void AiSettingsDialog::showKey(bool on) {
 void AiSettingsDialog::clearKey() {
     key_->setText({});
     panel_.assistant().setApiKey({});
-    (void)panel_.assistant().rememberKey(false);   // et du PC, si elle y etait
-    remember_->setState(ui::Checkbox::State::Unchecked);
+    (void)panel_.assistant().rememberKey(false);   // et du PC, si elle y etait (1.18.0 : la cle active du gestionnaire)
+    remember_->setState(keyProtectionAvailable() ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+    keyProvider_.clear();
+    refreshKeys();
 }
 
 // ---- 1.15.0 : lister les modeles, tester la connexion (sur un fil) -----------------------------
@@ -686,14 +779,43 @@ void AiSettingsDialog::openMemory() {
 
 void AiSettingsDialog::save() {
     auto& as = panel_.assistant();
-    as.setSettings(draft());
-    as.setApiKey(key_->text());    // en memoire ; protegee par Windows si "Memoriser" est coche
+    const Settings s = draft();
+    as.setSettings(s);
+    // 1.18.0 : la cle va dans le gestionnaire des cles - celle choisie dans la liste (remplacee si elle a change), ou une
+    // cle neuve (Nouvelle cle...) - et devient l'active de son fournisseur.
+    const std::string provider = keys::providerOf(s.provider);
+    const std::string text = key_->text();
+    const bool remember = remember_->isChecked() && keyProtectionAvailable();
     std::string why;
-    if (remember_->isChecked() && keyProtectionAvailable() && !key_->text().empty()) {
-        if (!as.rememberKey(true, &why) && panel_.uiHost().status) panel_.uiHost().status("Assistant IA : " + why);
-    } else if (!remember_->isChecked() || key_->text().empty()) {
-        (void)as.rememberKey(false);
+    if (!provider.empty() && !text.empty()) {
+        std::string id = keyId_;
+        if (!id.empty()) {
+            const auto cur = keys::secret(id);
+            const auto e = keys::find(id);
+            if (!e) id.clear();
+            else if (!cur || *cur != text || e->stored != remember) {
+                const std::string name = e->name;
+                if (keys::replace(id, text, remember, &why)) {
+                    for (const auto& x : keys::list(provider))
+                        if (x.name == name) id = x.id;
+                } else if (panel_.uiHost().status) {
+                    panel_.uiHost().status("Assistant IA : " + why);
+                }
+            }
+        }
+        if (id.empty()) {
+            keys::Entry e;
+            e.provider = provider;
+            const auto all = keys::list();
+            e.name = "Ma cl\xC3\xA9 (" + keys::providerLabel(provider) + ")";
+            for (int n = 2; n < 100 && std::any_of(all.begin(), all.end(), [&](const keys::Entry& x) { return x.name == e.name; }); ++n)
+                e.name = "Ma cl\xC3\xA9 (" + keys::providerLabel(provider) + ") " + std::to_string(n);
+            id = keys::add(e, text, remember, &why);
+            if (id.empty() && panel_.uiHost().status) panel_.uiHost().status("Assistant IA : " + why);
+        }
+        if (!id.empty()) (void)keys::setActive(id);
     }
+    as.setApiKey(text);    // en memoire pour la seance (et protegee par Windows si memorisee)
     panel_.sync();
     finish(true);
 }

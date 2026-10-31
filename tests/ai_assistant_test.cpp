@@ -21,6 +21,9 @@
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiJson.hpp"
+#include "../src/app/ai/AiKeys.hpp"
+#include "../src/app/ai/AiKeysDialog.hpp"
+#include "../src/app/ai/AiSecret.hpp"
 #include "../src/app/ai/AiPanel.hpp"
 #include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/ai/AiPreviewDialog.hpp"
@@ -1231,6 +1234,128 @@ void testPreviewZoomTooltips() {
     check(f.as().proposal(m)->state == "proposee", "rien de tout cela ne decide de la proposition");
 }
 
+
+// ---- 1.18.0 : le gestionnaire des cles API (plusieurs cles, l'active, la cle d'avant reprise) ----
+void testKeyManager() {
+    std::printf("[cles API]\n");
+    namespace keys = ai::keys;
+    // Une protection d'essai (reversible) : sous Linux, rien ne serait ecrit.
+    ai::KeyProtector fake;
+    fake.protect = [](const std::string& s) -> std::optional<std::string> {
+        std::string o(s.rbegin(), s.rend());
+        for (auto& c : o) c = static_cast<char>(c ^ 0x5A);
+        return o;
+    };
+    fake.unprotect = [](const std::string& s) -> std::optional<std::string> {
+        std::string o = s;
+        for (auto& c : o) c = static_cast<char>(c ^ 0x5A);
+        return std::string(o.rbegin(), o.rend());
+    };
+    ai::setKeyProtector(fake);
+    keys::resetSession();
+    // La cle d'avant (IA/cle.bin, 1.15.0 a 1.17.x), puis le premier lancement de la 1.18.0.
+    const fs::path dir = fs::temp_directory_path() / "xpg_ai_cles";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    ai::setRoot(U(dir / "IA"));
+    const std::string old = "sk-ant-ANCIENNE-CLE-0123456789-7Q2c";
+    check(ai::storeKey(old) && ai::hasStoredKey(), "la cle d'avant : IA/cle.bin");
+    Fixture f("cles", false);
+    auto all = keys::list();
+    check(all.size() == 1 && all.front().stored && all.front().provider == "anthropic" && all.front().name.find("Ma cl") == 0
+              && all.front().tail == "7Q2c" && all.front().head == "sk-ant-",
+          "le premier lancement : la cle d'avant devient \xC2\xAB Ma cl\xC3\xA9 (Anthropic) \xC2\xBB, m\xC3\xA9moris\xC3\xA9" "e");
+    check(!ai::hasStoredKey() && fs::exists(dir / "IA" / "cles" / (all.front().id + ".bin")), "IA/cle.bin part ; la cle vit dans IA/cles/");
+    const std::string index = readAll(dir / "IA" / "cles" / "index.json");
+    check(!index.empty() && index.find("ANCIENNE") == std::string::npos && index.find(old) == std::string::npos,
+          "index.json ne porte jamais la cle en clair");
+    check(keys::masked(all.front()).find("7Q2c") != std::string::npos && keys::masked(all.front()).find("ANCIENNE") == std::string::npos,
+          "la cle masquee : son debut connu et ses 4 derniers caracteres");
+    ai::Settings st = f.as().settings();
+    st.provider = "anthropic";
+    f.as().setSettings(st);
+    check(f.as().apiKey() == old, "Anthropic choisi : sa cle active revient");
+    // Une seconde cle, d'un autre fournisseur ; une troisieme pour la seance seulement.
+    keys::Entry e;
+    e.name = "OpenAI - bureau";
+    e.provider = "openai";
+    std::string why;
+    const std::string k2 = keys::add(e, "sk-OPENAI-BUREAU-000000000091fA", true, &why);
+    check(!k2.empty() && k2.front() == 'k' && keys::activeId("openai") == k2, "une cle OpenAI : memorisee, l'active de son fournisseur");
+    check(keys::add(e, "autre", true, &why).empty() && why.find("nom") != std::string::npos, "deux cles du meme nom : refuse (" + why + ")");
+    e.name = "Essai";
+    const std::string k3 = keys::add(e, "sk-SEANCE-SEULEMENT-0000000000", false, &why);
+    check(!k3.empty() && k3.front() == 's' && !fs::exists(dir / "IA" / "cles" / (k3 + ".bin")) && keys::activeId("openai") == k2,
+          "pour la seance : rien n'est ecrit, l'active ne change pas");
+    st.provider = "openai";
+    f.as().setSettings(st);
+    check(f.as().apiKey() == "sk-OPENAI-BUREAU-000000000091fA", "Compatible OpenAI choisi : sa cle active");
+    check(keys::setActive(k3) && keys::activeId("openai") == k3 && f.as().reloadKey() && f.as().apiKey() == "sk-SEANCE-SEULEMENT-0000000000",
+          "Utiliser une autre cle : l'Assistant la prend");
+    // Remplacer : le meme nom, la meme place d'active.
+    check(keys::replace(k2, "sk-OPENAI-NEUVE-1111111111112222", true, &why), "remplacer la cle");
+    all = keys::list("openai");
+    const auto bureau = std::find_if(all.begin(), all.end(), [](const keys::Entry& x) { return x.name == "OpenAI - bureau"; });
+    check(bureau != all.end() && bureau->tail == "2222" && keys::secret(bureau->id) == std::optional<std::string>("sk-OPENAI-NEUVE-1111111111112222"),
+          "remplacee : le meme nom, la nouvelle cle");
+    // La fenetre Cles API.
+    f.mm.ShowDialog(std::make_unique<ai::AiKeysDialog>(*f.panel), nullptr);
+    f.mm.applyPending();
+    auto* d = dynamic_cast<ai::AiKeysDialog*>(f.mm.top());
+    check(d != nullptr, "Gerer les cles : la fenetre Cles API s'ouvre");
+    if (d) {
+        d->widgetRoot()->setBounds({0, 0, 1280, 800});
+        d->widgetRoot()->layout();
+        check(d->rowCount() == 3, "ses 3 cles (" + std::to_string(d->rowCount()) + ")");
+        check(d->select(bureau->id) && d->use() && keys::activeId("openai") == bureau->id, "Utiliser : l'etoile passe a OpenAI - bureau");
+        (void)d->beginNew();
+        auto* name = dynamic_cast<ui::InputText*>(d->field("nom"));
+        auto* key = dynamic_cast<ui::InputText*>(d->field("cle"));
+        auto* rem = dynamic_cast<ui::Checkbox*>(d->field("memoriser"));
+        check(name && key && rem && rem->isChecked(), "une cle neuve : Memoriser coche par defaut");
+        if (name && key) {
+            name->setText("Anthropic - perso");
+            if (auto* prov = dynamic_cast<ui::DropDown*>(d->field("fournisseur"))) prov->setSelectedIndex(0);   // Anthropic
+            key->setText("sk-ant-PERSO-99999999999999-ABCD");
+            const bool saved = d->saveDetail();
+            check(saved && d->rowCount() == 4 && keys::list("anthropic").size() == 2,
+                  "Ajouter la cle : 4 cles (" + std::to_string(d->rowCount()) + ", " + d->message() + ")");
+            check(key->masked(), "la cle reste masquee");
+        }
+        const std::string made = d->selectedId();
+        d->askRemove();
+        check(keys::find(made).has_value() && !d->messageOk(), "Supprimer : une confirmation d'abord");
+        d->askRemove();
+        check(!keys::find(made).has_value() && d->rowCount() == 3 && !fs::exists(dir / "IA" / "cles" / (made + ".bin")),
+              "confirme : la cle et son fichier partent");
+        d->close();
+        f.mm.applyPending();
+    }
+    // Les Parametres : la liste des cles du fournisseur, Nouvelle cle..., Enregistrer l'ajoute (memorisee par defaut).
+    f.panel->openSettings();
+    f.mm.applyPending();
+    auto* s = dynamic_cast<ai::AiSettingsDialog*>(f.mm.top());
+    check(s != nullptr, "Parametres : la fenetre s'ouvre");
+    if (s) {
+        auto* list = dynamic_cast<ui::DropDown*>(s->field("cles"));
+        auto* key = dynamic_cast<ui::InputText*>(s->field("cle"));
+        check(list && s->field("gerer") && list->items().size() == 3, "la liste des cles OpenAI (2) + Nouvelle cle...");
+        check(key && key->text() == "sk-OPENAI-NEUVE-1111111111112222" && s->chosenKey() == bureau->id, "la case porte la cle active");
+        if (list && key) {
+            list->setSelectedIndex(static_cast<int>(list->items().size()) - 1);
+            check(key->text().empty() && s->chosenKey().empty(), "Nouvelle cle... : la case se vide");
+            key->setText("sk-OPENAI-TROISIEME-3333333333333333");
+            s->save();
+            f.mm.applyPending();
+            check(keys::list("openai").size() == 3 && f.as().apiKey() == "sk-OPENAI-TROISIEME-3333333333333333"
+                      && keys::find(keys::activeId("openai"))->stored,
+                  "Enregistrer : la cle neuve est ajoutee, memorisee, active");
+        }
+    }
+    keys::resetSession();
+    ai::setKeyProtector({});
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1257,6 +1382,7 @@ int main() {
     testPreviewZoomTooltips();
     testMarkdown();
     testSecondPass();
+    testKeyManager();
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
