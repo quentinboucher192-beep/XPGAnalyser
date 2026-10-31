@@ -722,6 +722,12 @@ if(XPG_BUILD_TESTS)
     # la confirmation, la verification d'apres ; supprimer un symbole emporte ses popups (hmiDeleteViewCommand).
     xpg_add_test_executable(ai_delete_test tests/ai_delete_test.cpp)
     xpg_target_link_libraries(ai_delete_test PRIVATE xpg_app)
+    # 1.21.0 : la memoire persistante (portees, projets, conflits, doublons, statut, migration, sauvegardes, la recherche dans les
+    # anciennes conversations, les outils, l'onglet Souvenirs) ; le contexte de la discussion (les fichiers joints, le volet).
+    xpg_add_test_executable(ai_souvenirs_test tests/ai_souvenirs_test.cpp)
+    xpg_target_link_libraries(ai_souvenirs_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_contexte_test tests/ai_contexte_test.cpp)
+    xpg_target_link_libraries(ai_contexte_test PRIVATE xpg_app)
     # 1.19.0 : l'IA qui concoit et construit des projets complets (AiDesign) - station de pompage, ligne, cuves, regulation ;
     # etendre une serie, dupliquer, alarmes sur une serie, remplacer un symbole, ajouter une mesure, ranger.
     xpg_add_test_executable(ai_design_test tests/ai_design_test.cpp)
@@ -908,6 +914,8 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiapprentissage COMMAND ai_apprentissage_test)        # 1.17.0 : l'onglet Apprentissage (modeles, vocabulaire, mesures)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
     xpg_add_test(NAME aidelete COMMAND ai_delete_test)                       # 1.21.0 : la suppression intelligente
+    xpg_add_test(NAME aisouvenirs COMMAND ai_souvenirs_test)                 # 1.21.0 : la memoire persistante (les souvenirs)
+    xpg_add_test(NAME aicontexte COMMAND ai_contexte_test ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium)   # 1.21.0 : le contexte de la discussion
     xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale

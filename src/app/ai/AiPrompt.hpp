@@ -64,6 +64,12 @@ struct PromptInput {
     // 1.20.0 (a la fin) : les dossiers d'incident (nul : aucun - un essai). L'IA integree en diagnostique les questions
     // (AiIncidentAnswers) ; le contexte du modele en recoit un resume borne quand la demande parle d'incident.
     IncidentSource          incidents;
+    // 1.21.0 (a la fin) : LA MEMOIRE PERSISTANTE - l'identifiant fiable du projet (AiMemoryManager.hpp : identifyProject ;
+    // vide : seuls les souvenirs lies par le nom partent), son nom porte par deux projets connus (alors, pas ceux-la), et
+    // la conversation (ses souvenirs de portee << conversation >>).
+    std::string             projectId;
+    bool                    projectNameAmbiguous{false};
+    std::string             conversationId;
 };
 
 // Les consignes et le contexte (le champ "system" de la requete).

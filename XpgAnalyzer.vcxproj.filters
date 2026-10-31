@@ -973,6 +973,9 @@
     <ClCompile Include="src\app\ai\AiAnthropic.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiAttachments.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiAutomate.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -1013,6 +1016,12 @@
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiContext.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiContextPane.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiConversationIndex.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiDelete.cpp">
@@ -1763,6 +1772,9 @@
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMemoryManager.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiPlan.cpp">
@@ -2605,6 +2617,9 @@
     <ClInclude Include="src\app\ai\AiAnthropic.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\ai\AiAttachments.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ai\AiAutomate.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
@@ -2642,6 +2657,12 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiContext.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiContextPane.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiConversationIndex.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiDelete.hpp">
@@ -3323,6 +3344,9 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiMemoryJson.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMemoryManager.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiPaths.hpp">

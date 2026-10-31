@@ -7,7 +7,7 @@
 //  s'agrandit par un bord, Echap la ferme.
 //
 //    +-- Memoire et apprentissage de l'IA ---------------- Donnees de l'Assistant sur ce PC --+
-//    | Vue generale | Apprentissage | Memoire | Stockage PC | Nettoyage | Activite             |
+//    | Vue generale | Apprentissage | Souvenirs | Memoire | Stockage PC | Nettoyage | Activite |
 //    |  ...                                                                                    |
 //    +-----------------------------------------------------------------------------------------+
 //    | Cache vide : 1,2 Mo liberes.                               [Actualiser]  [Fermer]       |
@@ -30,6 +30,14 @@
 //      membres ; un mot : ce qu'il designe) ; << Essayer une phrase >>. Un
 //      theme en texte garde la page des connaissances (consulter, modifier,
 //      activer, desactiver, supprimer, ajouter) ;
+//    - SOUVENIRS (1.21.0) : LE GESTIONNAIRE DE LA MEMOIRE PERSISTANTE - chaque
+//      souvenir (portee, statut confirme / provisoire / hypothese, confiance,
+//      projet, provenance, dates, historique, conflits), la recherche et les
+//      filtres ; confirmer, garder comme hypothese, valider ou refuser une
+//      proposition de l'Assistant, epingler, associer au projet ouvert (ou a
+//      tous), modifier, supprimer, garder l'un de deux souvenirs en conflit ; les
+//      sauvegardes (sauvegarder, restaurer). Le bandeau le dit : le modele distant
+//      n'est pas reentraine, ces souvenirs sont relus et envoyes avec les demandes ;
 //    - MEMOIRE : les informations persistantes par categorie, la recherche,
 //      supprimer une conversation, une memoire, une categorie entiere ;
 //    - STOCKAGE PC : la repartition (tableau et anneau), le total, l'espace libre,
@@ -45,6 +53,7 @@
 
 #include "AiKnowledge.hpp"
 #include "AiMemory.hpp"
+#include "AiMemoryManager.hpp"
 #include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -64,6 +73,11 @@ public:
     struct Spec {
         std::string id{"dialog.iaMemoire"};
         std::string project;      // le projet ouvert (son nom) ; vide : aucun
+        // 1.21.0 : son identifiant fiable (AiMemoryManager.hpp : identifyProject ; vide : jamais enregistre), son nom
+        // porte par deux projets connus, la conversation ouverte - ce qui part avec une demande en depend.
+        std::string projectId;
+        bool        projectAmbiguous{false};
+        std::string conversationId;
         // Ouvrir un dossier dans l'explorateur du systeme ; rend "" ou pourquoi pas. Vide :
         // app::dossiers::ouvrirDansLeSysteme.
         std::function<std::string(const std::string&)> openFolder;
@@ -72,7 +86,8 @@ public:
         bool overModal{false};
     };
 
-    enum class Tab : std::uint8_t { Overview, Learning, Memory, Storage, Cleaning, Activity };
+    // 1.21.0 : Souvenirs (le gestionnaire de la memoire persistante), apres Apprentissage.
+    enum class Tab : std::uint8_t { Overview, Learning, Souvenirs, Memory, Storage, Cleaning, Activity };
     // Les categories de l'onglet Memoire (12.3).
     enum class MemCat : std::uint8_t { Conversations, Messages, Projects, Preferences, Knowledge, Attachments, Search };
 
@@ -93,6 +108,8 @@ public:
     [[nodiscard]] const std::vector<ai::memory::Activity>& activity() const noexcept { return activity_; }
     [[nodiscard]] std::size_t messageCount() const noexcept;
     [[nodiscard]] const std::string& project() const noexcept { return spec_.project; }
+    // 1.21.0 : le contexte d'une demande faite maintenant (le projet ouvert, son identifiant, la conversation).
+    [[nodiscard]] ai::memory::Context here() const;
     // Une ligne d'etat de la memoire (le haut de la Vue generale).
     [[nodiscard]] std::string stateText() const;
 
@@ -155,6 +172,30 @@ public:
     bool deleteMemoryCategory(bool now = false);        // la categorie entiere
     [[nodiscard]] static std::string memCatTitle(MemCat c);
 
+    // ---- Souvenirs (1.21.0) -------------------------------------------------------------------
+    void setSouvenirSearch(std::string text);
+    // La portee ("" : toutes), le statut ("" : tous), le projet ("" : tous ; "ici" : le projet ouvert ; "*" : ceux de
+    // tous les projets ; sinon un identifiant de projet connu) ; "conflits" dans `status` : les seuls en conflit.
+    void setSouvenirFilter(std::string scope, std::string status, std::string project);
+    [[nodiscard]] std::vector<const ai::memory::Knowledge*> shownSouvenirs() const;
+    bool selectSouvenir(std::string_view idOrName);     // l'id, le nom, ou le debut du nom
+    [[nodiscard]] const ai::memory::Knowledge* selectedSouvenir() const;
+    bool pinSelected(bool on);
+    bool setSelectedStatus(std::string_view status);    // "confirme" (valider), "hypothese", "provisoire"
+    bool associateSelectedHere();                       // au projet ouvert (son identifiant)
+    bool associateSelectedAll();                        // a tous les projets
+    bool keepSelectedInConflict();                      // garde la selection ; celles qui la contredisent se desactivent
+    bool rejectSelected();                              // une proposition de l'Assistant : refusee (supprimee)
+    bool editSelectedSouvenir(const std::string& name, const std::string& content);
+    bool deleteSelectedSouvenir(bool now = false);      // une confirmation d'abord, sauf `now`
+    void beginSouvenirEdit();
+    bool saveSouvenirEdit();
+    void closeSouvenirEdit();
+    [[nodiscard]] bool souvenirEditing() const noexcept;
+    bool backupNow();
+    bool restoreLatestBackup(bool now = false);         // une confirmation d'abord, sauf `now`
+    [[nodiscard]] const std::vector<ai::memory::Backup>& backups() const noexcept { return backups_; }
+
     // ---- Stockage PC --------------------------------------------------------------------------
     [[nodiscard]] std::string location() const;
     void copyLocation();
@@ -203,6 +244,7 @@ private:
     class CleaningPage;
     class ActivityPage;
     class LearningHub;
+    class SouvenirsPage;
     friend class Body;
     friend class OverviewPage;
     friend class LearningPage;
@@ -211,8 +253,10 @@ private:
     friend class CleaningPage;
     friend class ActivityPage;
     friend class LearningHub;
+    friend class SouvenirsPage;
 
-    enum class Confirm : std::uint8_t { None, DeleteKnowledge, DeleteMemory, DeleteCategory, ClearCache, DeletePersistent, ImportLearning };
+    enum class Confirm : std::uint8_t { None, DeleteKnowledge, DeleteMemory, DeleteCategory, ClearCache, DeletePersistent, ImportLearning,
+                                        DeleteSouvenir, RestoreBackup };
     struct Pending {
         Confirm     kind{Confirm::None};
         std::string text;
@@ -230,6 +274,12 @@ private:
     bool doDeleteCategory();
     bool doClearCache();
     bool doDeletePersistent();
+    bool doDeleteSouvenir();
+    bool doRestoreBackup();
+    void rebuildSouvenirs();
+    void connectSouvenirs();
+    [[nodiscard]] ui::TableView* souvenirsTable() const;
+    void syncSouvenirs();
     [[nodiscard]] std::string memoryKeyAt(std::size_t modelRow) const;
 
     Spec                                  spec_;
@@ -259,6 +309,11 @@ private:
     bool                                  understood_{false};
     // Activite
     std::string                           activityFilter_;
+    // Souvenirs (1.21.0)
+    std::string                           souvSearch_, souvScope_, souvStatus_, souvProject_;
+    std::string                           selectedSouvenir_;
+    std::vector<ai::memory::Backup>       backups_;
+    std::vector<ai::memory::ProjectIdentity> projects_;
 
     Pending                               confirm_;
     std::string                           message_;
@@ -271,6 +326,7 @@ private:
     OverviewPage*                         overview_{nullptr};
     LearningPage*                         learning_{nullptr};   // la page des connaissances (dans le tableau de bord)
     LearningHub*                          hub_{nullptr};
+    SouvenirsPage*                        souvenirs_{nullptr};
     MemoryPage*                           memory_{nullptr};
     StoragePage*                          storage_{nullptr};
     CleaningPage*                         cleaning_{nullptr};

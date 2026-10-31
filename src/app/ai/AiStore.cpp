@@ -49,6 +49,53 @@ std::string lowerExt(std::string_view name) {
     return e;
 }
 
+// 1.21.0 : une analyse d'une piece jointe (AiStore.hpp : AttachmentAnalysis).
+json::Value toJson(const AttachmentAnalysis& r) {
+    json::Value o = json::Value::object();
+    o.set("date", r.date);
+    o.set("genre", r.kind);
+    o.set("etat", r.state);
+    if (!r.summary.empty()) o.set("resume", r.summary);
+    if (!r.error.empty()) o.set("erreur", r.error);
+    if (!r.textFile.empty()) o.set("texte", r.textFile);
+    if (r.textBytes) o.set("texteOctets", static_cast<std::uint64_t>(r.textBytes));
+    if (r.pages) o.set("pages", r.pages);
+    if (r.sheets) o.set("feuilles", r.sheets);
+    if (r.width) o.set("largeur", r.width);
+    if (r.height) o.set("hauteur", r.height);
+    if (r.lines) o.set("lignes", static_cast<std::uint64_t>(r.lines));
+    if (!r.details.empty()) {
+        json::Value list = json::Value::array();
+        for (const auto& d : r.details) list.push(d);
+        o.set("details", std::move(list));
+    }
+    if (!r.message.empty()) o.set("message", r.message);
+    json::addMembers(o, r.extra);
+    return o;
+}
+
+AttachmentAnalysis analysisFromJson(const json::Value& o) {
+    AttachmentAnalysis r;
+    r.date = o.str("date");
+    r.kind = o.str("genre", "extraction");
+    r.state = o.str("etat");
+    r.summary = o.str("resume");
+    r.error = o.str("erreur");
+    r.textFile = o.str("texte");
+    r.textBytes = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o.integer("texteOctets")));
+    r.pages = static_cast<int>(std::max<std::int64_t>(0, o.integer("pages")));
+    r.sheets = static_cast<int>(std::max<std::int64_t>(0, o.integer("feuilles")));
+    r.width = static_cast<int>(std::max<std::int64_t>(0, o.integer("largeur")));
+    r.height = static_cast<int>(std::max<std::int64_t>(0, o.integer("hauteur")));
+    r.lines = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o.integer("lignes")));
+    for (const auto& d : o.at("details").items())
+        if (d.isString()) r.details.push_back(d.asString());
+    r.message = o.str("message");
+    r.extra = json::unknownMembers(o, {"date", "genre", "etat", "resume", "erreur", "texte", "texteOctets", "pages", "feuilles", "largeur",
+                                       "hauteur", "lignes", "details", "message"});
+    return r;
+}
+
 json::Value toJson(const Attachment& a) {
     json::Value o = json::Value::object();
     o.set("id", a.id);
@@ -56,6 +103,24 @@ json::Value toJson(const Attachment& a) {
     o.set("type", a.type);
     o.set("octets", static_cast<std::uint64_t>(a.bytes));
     o.set("fichier", a.file);
+    // 1.21.0 : le contexte de la discussion (rien d'ecrit quand c'est vide : un fichier d'avant reste identique)
+    if (!a.conversation.empty()) o.set("conversation", a.conversation);
+    if (!a.message.empty()) o.set("message", a.message);
+    if (!a.ext.empty()) o.set("extension", a.ext);
+    if (!a.mime.empty()) o.set("mime", a.mime);
+    if (!a.added.empty()) o.set("ajoute", a.added);
+    if (!a.sha256.empty()) o.set("sha256", a.sha256);
+    if (!a.origin.empty() && a.origin != "utilisateur") o.set("origine", a.origin);
+    if (!a.originalPath.empty()) o.set("cheminOrigine", a.originalPath);
+    if (!a.workingCopyOf.empty()) o.set("copieDe", a.workingCopyOf);
+    if (!a.duplicateOf.empty()) o.set("doublonDe", a.duplicateOf);
+    if (a.removed) o.set("retiree", true);
+    if (!a.analysis.empty()) o.set("analyse", a.analysis);
+    if (!a.analyses.empty()) {
+        json::Value list = json::Value::array();
+        for (const auto& r : a.analyses) list.push(toJson(r));
+        o.set("analyses", std::move(list));
+    }
     json::addMembers(o, a.extra);
     return o;
 }
@@ -67,7 +132,22 @@ Attachment attachmentFromJson(const json::Value& o) {
     a.type = o.str("type");
     a.bytes = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o.integer("octets")));
     a.file = o.str("fichier");
-    a.extra = json::unknownMembers(o, {"id", "nom", "type", "octets", "fichier"});
+    a.conversation = o.str("conversation");
+    a.message = o.str("message");
+    a.ext = o.str("extension");
+    a.mime = o.str("mime");
+    a.added = o.str("ajoute");
+    a.sha256 = o.str("sha256");
+    a.origin = o.str("origine", "utilisateur");
+    a.originalPath = o.str("cheminOrigine");
+    a.workingCopyOf = o.str("copieDe");
+    a.duplicateOf = o.str("doublonDe");
+    a.removed = o.flag("retiree");
+    a.analysis = o.str("analyse");
+    for (const auto& r : o.at("analyses").items())
+        if (r.isObject()) a.analyses.push_back(analysisFromJson(r));
+    a.extra = json::unknownMembers(o, {"id", "nom", "type", "octets", "fichier", "conversation", "message", "extension", "mime", "ajoute", "sha256",
+                                       "origine", "cheminOrigine", "copieDe", "doublonDe", "retiree", "analyse", "analyses"});
     return a;
 }
 
@@ -423,8 +503,48 @@ const std::vector<AttachmentFormat>& attachmentFormats() {
         // 1.16.0 : l'export de l'automate - l'Assistant le lit (ses variables, ses DDT -> variables et types IHM).
         {"xpg", "Export de l'automate (Control Expert)"}, {"xef", "Export de l'automate (Control Expert)"},
         {"zef", "Export de l'automate (Control Expert)"},
+        // 1.21.0 : le code (lu tel quel, ses fins de ligne gardees) et les documents Word (leur texte extrait).
+        {"st", "Programme ST (texte structur\xC3\xA9)"}, {"c", "Source C"}, {"cpp", "Source C++"},
+        {"h", "En-t\xC3\xAAte C/C++"}, {"hpp", "En-t\xC3\xAAte C++"}, {"docx", "Document Word"},
     };
     return k;
+}
+
+std::string mimeOfExtension(std::string_view ext) {
+    std::string e(ext);
+    for (auto& c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (e == "png") return "image/png";
+    if (e == "jpg" || e == "jpeg") return "image/jpeg";
+    if (e == "pdf") return "application/pdf";
+    if (e == "txt" || e == "st") return "text/plain";
+    if (e == "csv") return "text/csv";
+    if (e == "json") return "application/json";
+    if (e == "xml" || e == "xef" || e == "xpg") return "application/xml";
+    if (e == "c" || e == "h") return "text/x-c";
+    if (e == "cpp" || e == "hpp") return "text/x-c++";
+    if (e == "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (e == "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (e == "xihm" || e == "xapi" || e == "zef") return "application/zip";
+    return {};
+}
+
+std::string formatLabel(std::string_view ext) {
+    std::string e(ext);
+    for (auto& c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (e == "png" || e == "jpg" || e == "jpeg") return "Image";
+    if (e == "pdf") return "Document PDF";
+    if (e == "txt") return "Fichier texte";
+    if (e == "csv") return "Tableau CSV";
+    if (e == "json") return "Fichier JSON";
+    if (e == "xml") return "Fichier XML";
+    if (e == "xlsx") return "Tableur";
+    if (e == "docx") return "Document Word";
+    if (e == "st") return "Programme ST";
+    if (e == "c" || e == "h") return "Code C";
+    if (e == "cpp" || e == "hpp") return "Code C++";
+    if (e == "xihm" || e == "xapi" || e == "xpgproj") return "Projet XPGAnalyser";
+    if (e == "xpg" || e == "xef" || e == "zef") return "Export de l'automate";
+    return e.empty() ? std::string("Fichier") : "Fichier " + e;
 }
 
 bool acceptedFormat(std::string_view fileName) {
@@ -481,6 +601,16 @@ bool addAttachment(const std::string& sourcePath, Attachment& out, std::string* 
     a.type = lowerExt(name);
     a.bytes = static_cast<std::uint64_t>(fs::file_size(src, ec));
     a.source = sourcePath;
+    // 1.21.0 : le contexte de la discussion (AiAttachments.hpp)
+    if (a.bytes > kMaxAttachmentBytes) {
+        if (why)
+            *why = "\xC2\xAB " + name + " \xC2\xBB : trop volumineux (" + formatBytes(a.bytes) + ", au plus " + formatBytes(kMaxAttachmentBytes) + ").";
+        return false;
+    }
+    a.ext = a.type;
+    a.mime = mimeOfExtension(a.ext);
+    a.added = isoDate(now());
+    a.originalPath = sourcePath;
     if (!root().empty()) {
         const fs::path dir = P(attachmentsDir()) / P(a.id);
         fs::create_directories(dir, ec);

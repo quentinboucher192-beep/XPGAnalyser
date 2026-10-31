@@ -4,6 +4,7 @@
 // =============================================================================
 #include "AiKnowledge.hpp"
 #include "AiMemory.hpp"
+#include "AiMemoryManager.hpp"
 #include "AiPaths.hpp"
 #include "AiRegistry.hpp"
 #include "../Dossiers.hpp"
@@ -12,10 +13,12 @@
 #include "../../hmi/HmiDesign.hpp"        // kindForVariable, viewTemplates
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiRoles.hpp"
+#include "../../ui/TextSearch.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <mutex>
 
 namespace app::ai::memory {
 
@@ -40,10 +43,87 @@ bool knownCategory(std::string_view key) noexcept {
     return false;
 }
 
-Here hereState(const Knowledge& k, std::string_view project) noexcept {
+// ---------------------------------------------------- 1.21.0 : portees, statuts ---
+std::string scopeLabel(std::string_view key) {
+    for (const auto& c : kScopes)
+        if (c.key == key) return std::string(c.label);
+    return std::string(key);
+}
+
+std::string statusLabel(std::string_view key) {
+    for (const auto& c : kStatuses)
+        if (c.key == key) return std::string(c.label);
+    return std::string(key);
+}
+
+bool knownScope(std::string_view key) noexcept {
+    for (const auto& c : kScopes)
+        if (c.key == key) return true;
+    return false;
+}
+
+bool knownStatus(std::string_view key) noexcept {
+    for (const auto& c : kStatuses)
+        if (c.key == key) return true;
+    return false;
+}
+
+std::string scopeFor(std::string_view category, std::string_view project) {
+    if (!project.empty() || category == "projet") return "projet";
+    if (category == "preferences") return "utilisateur";
+    return "technique";
+}
+
+std::string Knowledge::provenance() const {
+    if (builtIn) return "Logiciel (tir\xC3\xA9" "e de ses tables)";
+    std::string who = source == "assistant" ? "Propos\xC3\xA9" "e par l'Assistant" : source == "fichier" ? "Tir\xC3\xA9" "e d'un fichier analys\xC3\xA9" : "Saisie par l'utilisateur";
+    if (!conversation.empty()) who += " \xE2\x80\x94 conversation " + conversation + (message.empty() ? std::string{} : ", message " + message);
+    return who;
+}
+
+std::string normalizedText(std::string_view s) {
+    const std::string f = ui::foldForSearch(s);
+    std::string out;
+    out.reserve(f.size());
+    bool space = false;
+    for (const char ch : f) {
+        const auto c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c) || c >= 0x80) {
+            if (space && !out.empty()) out += ' ';
+            space = false;
+            out += ch;
+        } else {
+            space = true;
+        }
+    }
+    return out;
+}
+
+void addHistory(Knowledge& k, std::string text) {
+    k.history.push_back({nowIso(), std::move(text)});
+    constexpr std::size_t kMax = 50;
+    if (k.history.size() > kMax) k.history.erase(k.history.begin(), k.history.begin() + static_cast<std::ptrdiff_t>(k.history.size() - kMax));
+}
+
+Here hereState(const Knowledge& k, const Context& ctx) noexcept {
     if (!k.active) return Here::Inactive;
-    if (!k.project.empty() && k.project != project) return Here::OtherProject;
+    if (k.status == "provisoire") return Here::Pending;
+    if (k.scope == "conversation" && (k.conversation.empty() || k.conversation != ctx.conversationId)) return Here::OtherConversation;
+    // L'identifiant fiable d'abord : un souvenir de projet ne part qu'avec les demandes de CE projet.
+    if (!k.projectId.empty()) return k.projectId == ctx.projectId ? Here::Active : Here::OtherProject;
+    if (!k.project.empty()) {
+        if (k.project != ctx.projectName) return Here::OtherProject;
+        // Lie par le nom seul (avant la 1.21) : pas si deux projets connus portent ce nom.
+        return ctx.nameAmbiguous ? Here::Unbound : Here::Active;
+    }
+    if (k.scope == "projet") return Here::Unbound;   // un souvenir de projet sans projet : a associer
     return Here::Active;
+}
+
+Here hereState(const Knowledge& k, std::string_view project) noexcept {
+    Context ctx;
+    ctx.projectName = std::string(project);
+    return hereState(k, ctx);
 }
 
 std::string hereLabel(Here h) {
@@ -51,6 +131,9 @@ std::string hereLabel(Here h) {
         case Here::Active: return "Active ici";
         case Here::Inactive: return "Inactive";
         case Here::OtherProject: return "Autre projet";
+        case Here::Pending: return "\xC3\x80 valider";
+        case Here::OtherConversation: return "Autre conversation";
+        case Here::Unbound: return "Projet \xC3\xA0 associer";
     }
     return {};
 }
@@ -219,10 +302,69 @@ void Registry::load() {
         k.added = j.str("ajoute");
         k.modified = j.str("modifie", k.added);
         k.content = j.str("contenu");
+        // 1.21.0 : le souvenir ; un fichier du format 1 : confirme, sa portee deduite (la migration le reecrit)
+        k.format = static_cast<int>(j.num("format", 1));
+        k.scope = j.str("portee");
+        if (!knownScope(k.scope)) k.scope = scopeFor(k.category, k.project);
+        k.status = j.str("statut", "confirme");
+        if (!knownStatus(k.status)) k.status = "confirme";
+        k.confidence = std::clamp(j.num("confiance", 1.0), 0.0, 1.0);
+        k.pinned = j.flag("epingle");
+        k.projectId = j.str("projetId");
+        k.conversation = j.str("conversation");
+        k.message = j.str("message");
+        k.subject = j.str("sujet");
+        if (const Json* c = j.get("conflits"); c && c->isArray())
+            for (const auto& v : c->items)
+                if (v.isString() && !v.text.empty()) k.conflicts.push_back(v.text);
+        if (const Json* h = j.get("historique"); h && h->isArray())
+            for (const auto& v : h->items)
+                if (v.isObject()) k.history.push_back({v.str("date"), v.str("texte")});
         added.push_back(std::move(k));
     }
     std::stable_sort(added.begin(), added.end(), [](const Knowledge& a, const Knowledge& b) { return a.added > b.added; });
     for (auto& k : added) items_.push_back(std::move(k));
+    migrate();
+}
+
+// 1.21.0 : LA MIGRATION du format 1 au format 2. Une sauvegarde de toute la memoire d'abord (sauvegardes/) ; sans
+// elle, rien n'est reecrit (les souvenirs se lisent quand meme, en memoire). Deux fils qui chargent en meme temps : le
+// verrou, et le format relu sur le disque, font qu'un seul migre.
+void Registry::migrate() {
+    std::vector<std::size_t> old;
+    for (std::size_t i = 0; i < items_.size(); ++i)
+        if (!items_[i].builtIn && items_[i].format < kKnowledgeFormat) old.push_back(i);
+    if (old.empty()) return;
+    static std::mutex m;
+    const std::lock_guard<std::mutex> lock(m);
+    // relu sur le disque : un autre fil a peut-etre deja migre
+    old.erase(std::remove_if(old.begin(), old.end(),
+                             [&](std::size_t i) {
+                                 std::string text;
+                                 Json j;
+                                 return !readText(items_[i].file, text) || !parseJson(text, j) || j.num("format", 1) >= kKnowledgeFormat;
+                             }),
+              old.end());
+    if (old.empty()) return;
+    std::string name, why;
+    if (!backupMemory("migration du format 1 au format 2", &name, &why)) {
+        problems_.push_back("migration remise \xC3\xA0 plus tard : la sauvegarde a \xC3\xA9" "chou\xC3\xA9 (" + why + ")");
+        return;
+    }
+    std::size_t done = 0;
+    for (const std::size_t i : old) {
+        Knowledge next = items_[i];
+        addHistory(next, "Migr\xC3\xA9" "e du format 1 (avant la 1.21) : statut confirm\xC3\xA9, port\xC3\xA9" "e " + scopeLabel(next.scope));
+        next.format = kKnowledgeFormat;
+        if (write(next, &why)) {
+            items_[i] = std::move(next);
+            ++done;
+        } else {
+            problems_.push_back(items_[i].name + " : migration impossible (" + why + ")");
+        }
+    }
+    migration_ = std::to_string(done) + (done > 1 ? " souvenirs migr\xC3\xA9s" : " souvenir migr\xC3\xA9") + " au format 2 (sauvegarde " + name + ")";
+    (void)appendActivity("connaissance", "M\xC3\xA9moire migr\xC3\xA9" "e : " + migration_);
 }
 
 const Knowledge* Registry::find(std::string_view id) const noexcept {
@@ -233,7 +375,7 @@ const Knowledge* Registry::find(std::string_view id) const noexcept {
 
 bool Registry::write(Knowledge& k, std::string* why) {
     Json j = k.raw.isObject() ? k.raw : Json::makeObject();
-    j.set("format", Json::makeNumber(1));
+    j.set("format", Json::makeNumber(kKnowledgeFormat));
     j.set("id", Json::makeString(k.id));
     j.set("nom", Json::makeString(k.name));
     j.set("description", Json::makeString(k.description));
@@ -244,9 +386,37 @@ bool Registry::write(Knowledge& k, std::string* why) {
     j.set("ajoute", Json::makeString(k.added));
     j.set("modifie", Json::makeString(k.modified));
     j.set("contenu", Json::makeString(k.content));
+    // 1.21.0 : le souvenir
+    if (k.scope.empty()) k.scope = scopeFor(k.category, k.project);
+    j.set("portee", Json::makeString(k.scope));
+    j.set("statut", Json::makeString(k.status.empty() ? std::string("confirme") : k.status));
+    j.set("confiance", Json::makeNumber(std::clamp(k.confidence, 0.0, 1.0)));
+    j.set("epingle", Json::makeBool(k.pinned));
+    j.set("projetId", Json::makeString(k.projectId));
+    j.set("conversation", Json::makeString(k.conversation));
+    j.set("message", Json::makeString(k.message));
+    j.set("sujet", Json::makeString(k.subject));
+    Json conflicts = Json::makeArray();
+    for (const auto& c : k.conflicts) conflicts.items.push_back(Json::makeString(c));
+    j.set("conflits", std::move(conflicts));
+    Json history = Json::makeArray();
+    for (const auto& h : k.history) {
+        Json line = Json::makeObject();
+        line.set("date", Json::makeString(h.date));
+        line.set("texte", Json::makeString(h.text));
+        history.items.push_back(std::move(line));
+    }
+    j.set("historique", std::move(history));
     if (!writeText(k.file, writeJson(j, true), why)) return false;
     k.raw = std::move(j);
+    k.format = kKnowledgeFormat;
     return true;
+}
+
+Knowledge* Registry::mut(std::string_view id) noexcept {
+    for (auto& k : items_)
+        if (k.id == id) return &k;
+    return nullptr;
 }
 
 bool Registry::add(Knowledge& k, std::string* why) {
@@ -276,6 +446,19 @@ bool Registry::add(Knowledge& k, std::string* why) {
     k.modified = now;
     if (k.source.empty() || k.source == "logiciel") k.source = "utilisateur";
     if (k.category.empty()) k.category = "metier";
+    // 1.21.0 : la portee, le statut, la provenance
+    if (!knownScope(k.scope)) k.scope = scopeFor(k.category, k.project);
+    if (!knownStatus(k.status)) k.status = "confirme";
+    k.confidence = std::clamp(k.confidence, 0.0, 1.0);
+    {
+        // la creation d'abord (ce que l'appelant a deja note - un conflit - vient apres)
+        std::vector<HistoryLine> before = std::move(k.history);
+        k.history.clear();
+        addHistory(k, (k.source == "assistant" ? std::string("Propos\xC3\xA9" "e par l'Assistant") : std::string("Enregistr\xC3\xA9" "e"))
+                          + " (" + statusLabel(k.status) + ", port\xC3\xA9" "e " + scopeLabel(k.scope)
+                          + (k.conversation.empty() ? std::string{} : ", conversation " + k.conversation) + ")");
+        for (auto& h : before) k.history.push_back(std::move(h));
+    }
     k.raw = Json{};
     if (!write(k, why)) return false;
     items_.push_back(k);
@@ -306,6 +489,26 @@ bool Registry::update(const Knowledge& k, std::string* why) {
         next.content = k.content;
         next.active = k.active;
         next.modified = nowIso();
+        // 1.21.0 : le souvenir (ce que la fenetre modifie aussi)
+        // la portee : celle qu'on donne ; sinon, un projet change la rededuit (une portee conversation reste)
+        if (knownScope(k.scope) && k.scope != cur.scope) next.scope = k.scope;
+        else if (k.project != cur.project && cur.scope != "conversation") next.scope = scopeFor(next.category, next.project);
+        if (knownStatus(k.status)) next.status = k.status;
+        next.confidence = std::clamp(k.confidence, 0.0, 1.0);
+        next.pinned = k.pinned;
+        // l'identifiant suit ce qui l'a change ; un projet renomme a la main (le nom seul) : lie par le nom de nouveau
+        if (k.projectId != cur.projectId) next.projectId = k.projectId;
+        else if (k.project != cur.project) next.projectId.clear();
+        next.subject = k.subject;
+        {
+            std::string what;
+            if (next.content != cur.content) what += "le contenu";
+            if (next.name != cur.name) what += std::string(what.empty() ? "" : ", ") + "le nom";
+            if (next.project != cur.project || next.projectId != cur.projectId) what += std::string(what.empty() ? "" : ", ") + "le projet";
+            if (next.status != cur.status) what += std::string(what.empty() ? "" : ", ") + "le statut (" + statusLabel(next.status) + ")";
+            if (next.scope != cur.scope) what += std::string(what.empty() ? "" : ", ") + "la port\xC3\xA9" "e (" + scopeLabel(next.scope) + ")";
+            if (!what.empty()) addHistory(next, "Modifi\xC3\xA9" "e : " + what);
+        }
         if (!write(next, why)) return false;
         cur = std::move(next);
         (void)appendActivity(cur.category == "regles" ? "regle" : "connaissance",
@@ -356,8 +559,17 @@ bool Registry::remove(std::string_view id, std::string* why) {
             if (why) *why = ec.message();
             return false;
         }
-        const std::string name = it->name;
+        const std::string name = it->name, gone = it->id;
         items_.erase(it);
+        // 1.21.0 : ceux qu'elle contredisait ne sont plus en conflit avec elle
+        for (auto& o : items_) {
+            if (o.builtIn || std::find(o.conflicts.begin(), o.conflicts.end(), gone) == o.conflicts.end()) continue;
+            Knowledge next = o;
+            next.conflicts.erase(std::remove(next.conflicts.begin(), next.conflicts.end(), gone), next.conflicts.end());
+            addHistory(next, "Le souvenir qui la contredisait (" + name + ") a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9");
+            std::string w;
+            if (write(next, &w)) o = std::move(next);
+        }
         (void)appendActivity("suppression", "Connaissance supprim\xC3\xA9" "e : " + name);
         return true;
     }
@@ -385,6 +597,230 @@ std::size_t Registry::removeProject(std::string_view project) {
     if (n)
         (void)appendActivity("suppression", "Connaissances du projet " + std::string(project) + " supprim\xC3\xA9" "es (" + std::to_string(n) + ")");
     return n;
+}
+
+// ---------------------------------------------------------- 1.21.0 : les souvenirs ---
+namespace {
+// Le meme << lieu >> : meme portee, meme projet (l'identifiant, sinon le nom), meme conversation (portee conversation).
+bool samePlace(const Knowledge& a, const Knowledge& b) {
+    if (a.builtIn || b.builtIn) return false;
+    if (a.scopeKey() != b.scopeKey()) return false;
+    if (!a.projectId.empty() || !b.projectId.empty()) {
+        if (a.projectId != b.projectId) return false;
+    } else if (a.project != b.project) {
+        return false;
+    }
+    if (a.scopeKey() == "conversation" && a.conversation != b.conversation) return false;
+    return true;
+}
+std::string subjectKeyOf(const Knowledge& k) { return normalizedText(k.subject.empty() ? k.name : k.subject); }
+std::string firstLine(const std::string& s, std::size_t max) {
+    std::size_t e = s.find('\n');
+    std::string l = s.substr(0, e == std::string::npos ? s.size() : e);
+    while (!l.empty() && (l.back() == '\r' || l.back() == ' ')) l.pop_back();
+    if (l.size() > max) {
+        std::size_t cut = max;
+        while (cut > 0 && (static_cast<unsigned char>(l[cut]) & 0xC0) == 0x80) --cut;
+        l = l.substr(0, cut) + "\xE2\x80\xA6";
+    }
+    return l;
+}
+} // namespace
+
+RememberResult Registry::remember(Knowledge k) {
+    RememberResult r;
+    const auto refuse = [&](std::string why) {
+        r.kind = RememberResult::Kind::Refused;
+        r.why = std::move(why);
+        return r;
+    };
+    if (k.content.find_first_not_of(" \t\r\n") == std::string::npos) return refuse("un souvenir a un contenu");
+    if (k.name.empty()) k.name = firstLine(k.content, 70);
+    if (k.category.empty()) k.category = k.scope == "utilisateur" ? "preferences" : k.scope == "projet" ? "projet" : "metier";
+    if (!knownScope(k.scope)) k.scope = scopeFor(k.category, k.project);
+    if (!knownStatus(k.status)) k.status = "confirme";
+    if (k.scope == "projet" && k.projectId.empty() && k.project.empty())
+        return refuse("un souvenir de projet est associ\xC3\xA9 \xC3\xA0 un projet (ouvre-le, ou choisis-le)");
+    if (k.scope == "conversation" && k.conversation.empty()) return refuse("un souvenir de conversation dit sa conversation");
+    // Une solution propre a un projet ne devient pas une regle generale d'elle-meme : un souvenir qui porte un projet le
+    // garde, quelle que soit sa portee (seule l'association, demandee, l'en libere).
+    const std::string body = normalizedText(k.content);
+    const std::string subject = subjectKeyOf(k);
+    std::vector<std::string> contradicted;
+    for (const auto& cur : items_) {
+        if (!samePlace(cur, k)) continue;
+        if (normalizedText(cur.content) == body) {   // le meme contenu : un doublon
+            r.kind = RememberResult::Kind::Duplicate;
+            r.id = cur.id;
+            if (k.status == "confirme" && cur.status != "confirme") (void)setStatus(cur.id, "confirme");
+            (void)appendActivity("connaissance", "Souvenir d\xC3\xA9j\xC3\xA0 connu, pas ajout\xC3\xA9 une seconde fois : " + cur.name);
+            return r;
+        }
+        if (!subject.empty() && subjectKeyOf(cur) == subject) contradicted.push_back(cur.id);
+    }
+    if (!contradicted.empty()) {
+        k.conflicts = contradicted;
+        std::string names;
+        for (const auto& id : contradicted)
+            if (const auto* o = find(id)) names += (names.empty() ? "" : ", ") + o->name + " (" + o->id + ")";
+        addHistory(k, "En conflit avec " + names + " : les deux sont gard\xC3\xA9" "es, rien n'est \xC3\xA9" "cras\xC3\xA9");
+    }
+    std::string why;
+    if (!add(k, &why)) return refuse(why);
+    r.id = k.id;
+    if (contradicted.empty()) {
+        r.kind = RememberResult::Kind::Added;
+        return r;
+    }
+    r.kind = RememberResult::Kind::Conflict;
+    r.conflictsWith = contradicted;
+    for (const auto& id : contradicted) {
+        Knowledge* o = mut(id);
+        if (!o) continue;
+        Knowledge next = *o;
+        if (std::find(next.conflicts.begin(), next.conflicts.end(), k.id) == next.conflicts.end()) next.conflicts.push_back(k.id);
+        addHistory(next, "Contredite par " + k.name + " (" + k.id + ", " + k.provenance() + ")");
+        if (write(next, &why)) *o = std::move(next);
+    }
+    (void)appendActivity("connaissance", "Conflit signal\xC3\xA9 : " + k.name + " contredit un souvenir existant (les deux sont gard\xC3\xA9" "s)");
+    return r;
+}
+
+bool Registry::setPinned(std::string_view id, bool on, std::string* why) {
+    Knowledge* k = mut(id);
+    if (!k || k->builtIn) {
+        if (why) *why = k ? "une connaissance int\xC3\xA9gr\xC3\xA9" "e ne s'\xC3\xA9pingle pas" : "souvenir introuvable : " + std::string(id);
+        return false;
+    }
+    if (k->pinned == on) return true;
+    Knowledge next = *k;
+    next.pinned = on;
+    addHistory(next, on ? "\xC3\x89pingl\xC3\xA9" "e" : "D\xC3\xA9s\xC3\xA9pingl\xC3\xA9" "e");
+    if (!write(next, why)) return false;
+    *k = std::move(next);
+    (void)appendActivity("connaissance", std::string(on ? "Souvenir \xC3\xA9pingl\xC3\xA9 : " : "Souvenir d\xC3\xA9s\xC3\xA9pingl\xC3\xA9 : ") + k->name);
+    return true;
+}
+
+bool Registry::setStatus(std::string_view id, std::string_view status, std::string* why) {
+    Knowledge* k = mut(id);
+    if (!k || k->builtIn || !knownStatus(status)) {
+        if (why) *why = !k ? "souvenir introuvable : " + std::string(id) : k->builtIn ? "une connaissance int\xC3\xA9gr\xC3\xA9" "e n'a pas de statut" : "statut inconnu : " + std::string(status);
+        return false;
+    }
+    if (k->status == status) return true;
+    Knowledge next = *k;
+    const std::string before = next.status;
+    next.status = std::string(status);
+    next.modified = nowIso();
+    addHistory(next, "Statut : " + statusLabel(before) + " \xE2\x86\x92 " + statusLabel(next.status));
+    if (!write(next, why)) return false;
+    *k = std::move(next);
+    (void)appendActivity("connaissance", "Souvenir " + statusLabel(k->status) + " : " + k->name);
+    return true;
+}
+
+bool Registry::setConfidence(std::string_view id, double confidence, std::string* why) {
+    Knowledge* k = mut(id);
+    if (!k || k->builtIn) {
+        if (why) *why = "souvenir introuvable : " + std::string(id);
+        return false;
+    }
+    Knowledge next = *k;
+    next.confidence = std::clamp(confidence, 0.0, 1.0);
+    if (next.confidence == k->confidence) return true;
+    addHistory(next, "Confiance : " + std::to_string(static_cast<int>(next.confidence * 100.0 + 0.5)) + " %");
+    if (!write(next, why)) return false;
+    *k = std::move(next);
+    return true;
+}
+
+bool Registry::associate(std::string_view id, const std::string& projectId, const std::string& projectName, std::string* why) {
+    Knowledge* k = mut(id);
+    if (!k || k->builtIn) {
+        if (why) *why = !k ? "souvenir introuvable : " + std::string(id) : "une connaissance int\xC3\xA9gr\xC3\xA9" "e vaut pour tous les projets";
+        return false;
+    }
+    Knowledge next = *k;
+    next.projectId = projectId;
+    next.project = projectName;
+    if (projectId.empty() && projectName.empty()) {
+        if (next.scope == "projet") next.scope = "technique";
+        addHistory(next, "Associ\xC3\xA9" "e \xC3\xA0 tous les projets (port\xC3\xA9" "e " + scopeLabel(next.scope) + ")");
+    } else {
+        if (next.scope != "conversation") next.scope = "projet";
+        addHistory(next, "Associ\xC3\xA9" "e au projet " + projectName + (projectId.empty() ? std::string{} : " (" + projectId + ")"));
+    }
+    next.modified = nowIso();
+    if (!write(next, why)) return false;
+    *k = std::move(next);
+    (void)appendActivity("connaissance", "Souvenir associ\xC3\xA9 : " + k->name + " \xE2\x86\x92 " + (projectName.empty() ? std::string("tous les projets") : "projet " + projectName));
+    return true;
+}
+
+bool Registry::resolveConflict(std::string_view keep, std::string_view other, bool removeOther, std::string* why) {
+    Knowledge* a = mut(keep);
+    Knowledge* b = mut(other);
+    if (!a || !b || a == b) {
+        if (why) *why = "souvenirs introuvables";
+        return false;
+    }
+    const std::string otherId(other), keepId(keep), otherName = b->name;
+    Knowledge na = *a;
+    na.conflicts.erase(std::remove(na.conflicts.begin(), na.conflicts.end(), otherId), na.conflicts.end());
+    na.status = "confirme";
+    addHistory(na, "Conflit r\xC3\xA9solu : gard\xC3\xA9" "e, " + otherName + (removeOther ? " supprim\xC3\xA9" "e" : " retir\xC3\xA9" "e"));
+    if (!write(na, why)) return false;
+    *a = std::move(na);
+    if (removeOther) return remove(otherId, why);
+    b = mut(otherId);
+    Knowledge nb = *b;
+    nb.conflicts.erase(std::remove(nb.conflicts.begin(), nb.conflicts.end(), keepId), nb.conflicts.end());
+    nb.active = false;
+    addHistory(nb, "Remplac\xC3\xA9" "e par " + a->name + " (" + keepId + ") : d\xC3\xA9sactiv\xC3\xA9" "e, gard\xC3\xA9" "e pour m\xC3\xA9moire");
+    if (!write(nb, why)) return false;
+    *b = std::move(nb);
+    (void)appendActivity("connaissance", "Conflit r\xC3\xA9solu : " + a->name + " gard\xC3\xA9" "e, " + otherName + " d\xC3\xA9sactiv\xC3\xA9" "e");
+    return true;
+}
+
+std::size_t Registry::bindLegacy(const Context& ctx) {
+    if (ctx.projectId.empty() || ctx.projectName.empty() || ctx.nameAmbiguous) return 0;
+    std::size_t n = 0;
+    for (auto& k : items_) {
+        if (k.builtIn || !k.projectId.empty() || k.project != ctx.projectName) continue;
+        Knowledge next = k;
+        next.projectId = ctx.projectId;
+        addHistory(next, "Li\xC3\xA9" "e au projet " + ctx.projectName + " par son identifiant (" + ctx.projectId + ")");
+        std::string why;
+        if (!write(next, &why)) continue;
+        k = std::move(next);
+        ++n;
+    }
+    if (n)
+        (void)appendActivity("connaissance", std::to_string(n) + " souvenir(s) du projet " + ctx.projectName + " li\xC3\xA9(s) \xC3\xA0 son identifiant");
+    return n;
+}
+
+std::vector<const Knowledge*> Registry::conflictsOf(std::string_view id) const {
+    std::vector<const Knowledge*> out;
+    if (const auto* k = find(id))
+        for (const auto& c : k->conflicts)
+            if (const auto* o = find(c)) out.push_back(o);
+    return out;
+}
+
+std::vector<const Knowledge*> Registry::pendingHere(const Context& ctx) const {
+    std::vector<const Knowledge*> out;
+    for (const auto& k : items_) {
+        if (k.builtIn || k.status != "provisoire" || !k.active) continue;
+        if (!k.projectId.empty() && k.projectId != ctx.projectId) continue;
+        if (k.projectId.empty() && !k.project.empty() && k.project != ctx.projectName) continue;
+        if (k.scope == "conversation" && !ctx.conversationId.empty() && k.conversation != ctx.conversationId) continue;
+        out.push_back(&k);
+    }
+    std::stable_sort(out.begin(), out.end(), [](const Knowledge* a, const Knowledge* b) { return a->added > b->added; });
+    return out;
 }
 
 std::size_t Registry::kindsKnown() const noexcept {
@@ -421,6 +857,13 @@ std::uintmax_t Registry::bytesHere(std::string_view project) const noexcept {
     std::uintmax_t n = 0;
     for (const auto& k : items_)
         if (hereState(k, project) == Here::Active) n += k.size();
+    return n;
+}
+
+std::uintmax_t Registry::bytesHere(const Context& ctx) const noexcept {
+    std::uintmax_t n = 0;
+    for (const auto& k : items_)
+        if (hereState(k, ctx) == Here::Active) n += k.size();
     return n;
 }
 

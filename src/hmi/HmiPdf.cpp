@@ -74,6 +74,9 @@ struct Api {
     void (*textFindClose)(FPDF_SCHHANDLE) = nullptr;
     int (*textCountRects)(FPDF_TEXTPAGE, int, int) = nullptr;
     FPDF_BOOL (*textGetRect)(FPDF_TEXTPAGE, int, double*, double*, double*, double*) = nullptr;
+    // 1.21.0 : le texte d'une page (facultatives : sans elles, la visionneuse marche toujours)
+    int (*textCountChars)(FPDF_TEXTPAGE) = nullptr;
+    int (*textGetText)(FPDF_TEXTPAGE, int, int, unsigned short*) = nullptr;
 };
 
 std::mutex gLock;
@@ -82,6 +85,7 @@ Library gLibrary;
 bool gTried = false;
 Api gApi;
 bool gInitialized = false;   // FPDF_InitLibrary fait (sur le fil des documents)
+std::recursive_mutex gCall;  // 1.21.0 : un appel a PDFium a la fois, quel que soit le fil
 
 #if defined(_WIN32)
 using Module = HMODULE;
@@ -182,6 +186,11 @@ void loadLocked() {
         bind(a.textFindClose, m, "FPDFText_FindClose", missing);
         bind(a.textCountRects, m, "FPDFText_CountRects", missing);
         bind(a.textGetRect, m, "FPDFText_GetRect", missing);
+        {
+            std::string optional;   // 1.21.0 : facultatives (le texte des pages pour l'Assistant)
+            bind(a.textCountChars, m, "FPDFText_CountChars", optional);
+            bind(a.textGetText, m, "FPDFText_GetText", optional);
+        }
         if (!missing.empty()) {
             // Une autre version (plus ancienne) : on la garde chargee (rien ne se decharge), on ne s'en sert pas.
             gLibrary.found = true;
@@ -254,8 +263,11 @@ std::string missingAdvice() {
 }
 
 // ---- un fil -----------------------------------------------------------------------------
+std::unique_lock<std::recursive_mutex> callLock() { return std::unique_lock<std::recursive_mutex>(gCall); }
+
 bool initOnThisThread() {
     if (!library().ok) return false;
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     if (!gInitialized) {
         gApi.initLibrary();
         gInitialized = true;
@@ -264,6 +276,7 @@ bool initOnThisThread() {
 }
 
 DocHandle open(const std::uint8_t* data, std::size_t size, std::string* error) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     if (!initOnThisThread()) {
         if (error) *error = missingAdvice();
         return nullptr;
@@ -278,12 +291,17 @@ DocHandle open(const std::uint8_t* data, std::size_t size, std::string* error) {
 }
 
 void close(DocHandle d) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     if (d && gInitialized) gApi.closeDocument(d);
 }
 
-int pageCount(DocHandle d) { return d && gInitialized ? std::max(0, gApi.getPageCount(d)) : 0; }
+int pageCount(DocHandle d) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
+    return d && gInitialized ? std::max(0, gApi.getPageCount(d)) : 0;
+}
 
 bool pageSize(DocHandle d, int index, double& width, double& height) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     if (!d || !gInitialized) return false;
     FS_SIZEF s{0.f, 0.f};
     if (!gApi.getPageSizeByIndexF(d, index, &s) || s.width <= 0 || s.height <= 0) return false;
@@ -293,6 +311,7 @@ bool pageSize(DocHandle d, int index, double& width, double& height) {
 }
 
 bool render(DocHandle d, int index, int pxW, int pxH, int quarter, Rgba& out, std::string* error) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     if (!d || !gInitialized || pxW <= 0 || pxH <= 0) return false;
     FPDF_PAGE page = gApi.loadPage(d, index);
     if (!page) {
@@ -316,6 +335,7 @@ bool render(DocHandle d, int index, int pxW, int pxH, int quarter, Rgba& out, st
 }
 
 std::vector<Found> search(DocHandle d, int index, const std::u16string& query) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
     std::vector<Found> out;
     if (!d || !gInitialized || query.empty()) return out;
     FPDF_PAGE page = gApi.loadPage(d, index);
@@ -346,6 +366,82 @@ std::vector<Found> search(DocHandle d, int index, const std::u16string& query) {
     }
     gApi.closePage(page);
     return out;
+}
+
+// ---- 1.21.0 : le texte --------------------------------------------------------------------
+namespace {
+// UTF-16 (avec les paires de substitution) vers UTF-8 ; les caracteres de controle hors fin de ligne et tabulation
+// sont sautes (PDFium en rend parfois pour les traits d'union conditionnels).
+void appendUtf16(std::string& out, const unsigned short* s, std::size_t n) {
+    for (std::size_t i = 0; i < n; ++i) {
+        unsigned cp = s[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < n && s[i + 1] >= 0xDC00 && s[i + 1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (s[i + 1] - 0xDC00);
+            ++i;
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+            cp = 0xFFFD;
+        }
+        if (cp == 0) continue;
+        if (cp < 0x20 && cp != '\n' && cp != '\r' && cp != '\t') continue;
+        if (cp == 0xFFFE) continue;
+        if (cp < 0x80) out += static_cast<char>(cp);
+        else if (cp < 0x800) {
+            out += static_cast<char>(0xC0 | (cp >> 6));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        } else if (cp < 0x10000) {
+            out += static_cast<char>(0xE0 | (cp >> 12));
+            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        } else {
+            out += static_cast<char>(0xF0 | (cp >> 18));
+            out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+    }
+}
+} // namespace
+
+bool canExtractText() {
+    if (!library().ok) return false;
+    const std::lock_guard<std::recursive_mutex> call(gCall);
+    return gApi.textCountChars && gApi.textGetText;
+}
+
+std::string pageText(DocHandle d, int index) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
+    std::string out;
+    if (!d || !gInitialized || !gApi.textCountChars || !gApi.textGetText) return out;
+    FPDF_PAGE page = gApi.loadPage(d, index);
+    if (!page) return out;
+    if (FPDF_TEXTPAGE text = gApi.textLoadPage(page)) {
+        const int n = gApi.textCountChars(text);
+        if (n > 0) {
+            std::vector<unsigned short> buf(static_cast<std::size_t>(n) + 1u, 0);
+            const int got = gApi.textGetText(text, 0, n, buf.data());   // le nombre ecrit, zero final compris
+            if (got > 0) appendUtf16(out, buf.data(), static_cast<std::size_t>(std::min(got, n + 1)));
+        }
+        gApi.textClosePage(text);
+    }
+    gApi.closePage(page);
+    return out;
+}
+
+bool extractText(const std::uint8_t* data, std::size_t size, std::vector<std::string>& pages, std::string* error, int maxPages, int* pageTotal) {
+    const std::lock_guard<std::recursive_mutex> call(gCall);
+    pages.clear();
+    if (pageTotal) *pageTotal = 0;
+    if (!canExtractText()) {
+        if (error) *error = library().ok ? std::string(libraryFileName()) + " ne sait pas rendre le texte des pages (version trop ancienne)" : missingAdvice();
+        return false;
+    }
+    DocHandle d = open(data, size, error);
+    if (!d) return false;
+    const int n = pageCount(d);
+    if (pageTotal) *pageTotal = n;
+    for (int i = 0; i < n && i < std::max(1, maxPages); ++i) pages.push_back(pageText(d, i));
+    close(d);
+    return true;
 }
 
 } // namespace hmi::pdf
