@@ -901,6 +901,74 @@ void incidentsPane() {
 
 } // namespace
 
+// ---- 1.20.2 : la case Incidents des alarmes (et de leurs groupes), l'interrupteur general -------------------------
+void incidentsCase() {
+    std::printf("1.20.2 : la case Incidents des alarmes, l'interrupteur general\n");
+    const fs::path proj = tempRoot("case");
+    Project p = station();
+    for (auto& a : p.alarms)
+        if (a.name == "Niveau_Haut") a.incidents = false;   // la case Incidents decochee
+    AlarmGroupDef g;
+    g.id = p.allocate();
+    g.name = "Zone_Objets";
+    g.incidents = false;                                   // ses alarmes d'objets : pas d'incident
+    p.alarmGroups.push_back(g);
+    const auto objectNotice = [](const char* name, const char* group) {
+        AlarmNotice n = notice("Apparition", name, "2026-10-31 11:00:00.000");
+        n.group = group;
+        return n;
+    };
+    {
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        h.setContextSource([&]() -> std::optional<app::IncidentContext> {
+            app::IncidentContext c;
+            c.project = &p;
+            c.projectName = p.config.name;
+            return c;
+        });
+        double t = 0;
+        const auto run = [&](double until) {
+            for (; t < until; t += 0.25) {
+                h.tick(t);
+                if (h.wantsFrame(t)) h.offerPixels(frame(32, 24, 60), 32, 24, t);
+                (void)h.drain(2000);
+            }
+        };
+        run(1.0);
+        check(h.enabled(), "1.20.2 la surveillance en marche par defaut");
+        h.notice(notice("Apparition", "Niveau_Haut", "2026-10-31 11:00:00.000"));
+        run(t + 3.0);
+        check(h.created() == 0, "1.20.2 une alarme dont la case Incidents est decochee : aucun incident");
+        h.notice(notice("Apparition", "Defaut_Pompe_1", "2026-10-31 11:00:05.000"));
+        run(t + 3.0);
+        check(h.created() == 1, "1.20.2 cochee (par defaut) : un incident (" + std::to_string(h.created()) + ")");
+        h.notice(objectNotice("Vue_Station.Voyant_P2.Defaut", "Zone_Objets"));
+        run(t + 3.0);
+        check(h.created() == 1, "1.20.2 une alarme d'objet de Zone_Objets (case du groupe decochee) : aucun incident");
+        h.notice(objectNotice("Vue_Station.Voyant_P2.Fuite", "Autre"));
+        run(t + 3.0);
+        check(h.created() == 2, "1.20.2 une alarme d'objet d'un autre groupe : un incident");
+        // l'interrupteur general
+        check(h.setEnabled(false) && !h.enabled() && !h.settings().enabled, "1.20.2 arreter la surveillance (enregistre)");
+        h.notice(notice("Apparition", "Niveau_Tres_Haut", "2026-10-31 11:00:20.000"));
+        check(!h.wantsFrame(t), "1.20.2 arretee : aucune image demandee");
+        run(t + 3.0);
+        check(h.created() == 2 && h.bufferedFrames() == 0, "1.20.2 arretee : aucun incident, le tampon des images rendu");
+        check(h.setEnabled(true) && h.enabled(), "1.20.2 remise en marche");
+        h.notice(notice("Apparition", "Niveau_Tres_Haut", "2026-10-31 11:00:30.000"));
+        run(t + 3.0);
+        check(h.created() == 3, "1.20.2 en marche : un incident de nouveau (" + std::to_string(h.created()) + ")");
+        check(h.setEnabled(false), "1.20.2 arretee de nouveau");
+        (void)h.drain(3000);
+    }
+    {
+        app::IncidentHost h2;
+        h2.setProjectFolder(proj.string());
+        check(!h2.enabled(), "1.20.2 l'arret relu du projet (reglages-incidents.json, cle active)");
+    }
+}
+
 int main() {
     detection();
     dependencies();
@@ -908,6 +976,7 @@ int main() {
     disk();
     host();
     volume();
+    incidentsCase();
     incidentsPane();   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

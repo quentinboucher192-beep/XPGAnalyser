@@ -34,15 +34,52 @@ Ce qui la dégradait, et ce qui change :
 - **une cadence fausse** (les images, arrivées à intervalles irréguliers, étaient écrites à la suite : la vidéo allait trop vite ou par saccades) → chaque image est posée **à son heure réelle** : la vidéo dure ce qu'a duré la scène ;
 - le tampon circulaire passe de 48 à 96 Mo (les images plus fines ne chassent pas les secondes d'avant) ; « avant » et « après » acceptent jusqu'à 120 s comme la fenêtre des réglages (60 au chargement avant).
 
-INCIDENTS-VOLET
+### Un dossier par alarme, une recherche, le tri par criticité
+
+Dans chaque onglet du volet Incidents (En attente, Validés) :
+- **Les incidents d'une même alarme** (deux ou plus) se rangent sous **une ligne-dossier** : « Defaut_Pompe_2 — 3 incidents », sa criticité, le premier et le dernier, la miniature du plus récent. Fermée au départ : un clic, **Entrée** ou **→** la déplie (le plus récent d'abord), **←** la replie. Une alarme d'un seul incident reste une ligne simple.
+- Choisir un dossier fermé, c'est choisir **son incident le plus récent** : les gestes (consulter, commenter, valider, supprimer) portent sur lui seul, jamais sur tout le dossier – la barre d'état et le menu le disent.
+- **La recherche**, au-dessus de la liste : l'alarme, son message, l'équipement, la vue, la synthèse de l'analyse, les commentaires, la date affichée, le groupe, la catégorie, la criticité. Plusieurs mots : tous ; « entre guillemets » : la phrase ; -mot : l'exclut.
+- **La criticité** : Toutes, Critique, Haute, Moyenne, Basse (la priorité de l'alarme).
+- **Le tri** : plus récents d'abord, plus anciens, criticité (critique d'abord), alarme de A à Z, nombre d'incidents.
+- Les badges des onglets comptent toujours tous les incidents ; la barre d'état dit « N incidents affichés sur M ».
+
+### Arrêter les incidents
+
+Le bouton **Arrêter les incidents** de la barre du volet coupe toute création de dossier, quelle que soit l'alarme : plus aucune image n'est demandée, le tampon des images est rendu, les vidéos en cours se terminent avec ce qu'elles ont. Les incidents déjà enregistrés restent. **Reprendre les incidents** la relance. C'est le réglage « surveillance active », gardé avec le projet (`reglages-incidents.json`). Au retour, la surveillance repart de zéro : une alarme disparue pendant l'arrêt puis revenue fait bien son incident.
 
 ## 3. Les enregistrements fidèles
 
-ENREGISTREMENTS
+Un enregistrement (`.xrec`) garde maintenant **une copie du projet de son moment** : les vues, les popups, les objets, les variables, les types, les scripts – compressée et chiffrée comme sa piste (avec son mot de passe s'il en a un).
+
+- **La relecture se fait avec cette copie** : une vue renommée, un objet supprimé, une variable retirée depuis se rejouent tels qu'ils étaient ; la barre dit « rejoué avec le projet de son moment ».
+- **En quittant la relecture**, l'IHM revient au projet d'aujourd'hui ; l'éditeur n'est jamais touché.
+- Ressources › Enregistrements montre, pour chacun, « Projet gardé ».
+- Ce qui n'est **pas** copié : les images et les sons (ils viennent du projet actuel ; les copier alourdirait chaque fichier).
+- **Les enregistrements d'avant** (sans copie) se rejouent comme avant, avec le projet actuel ; une copie abîmée aussi, et c'est dit. Une copie de plus de 64 Mio (décompressée) n'est pas gardée, et c'est dit.
+- Le format passe à 3 ; une version d'avant la 1.20.2 lit toujours la piste (elle ignore la copie).
 
 ## 4. Les alarmes et l'arrêt des incidents
 
-ALARMES
+### La case « Incidents » de chaque alarme
+
+Dans **IHM › Alarmes**, chaque alarme a une case **Incidents** (une colonne du tableau, et sa fiche) :
+- **cochée** (par défaut) : son apparition crée un dossier d'incident ;
+- **décochée** : elle s'affiche, s'acquitte et passe à l'historique comme avant, mais **aucun incident** n'est créé pour elle (ni image, ni vidéo, rien d'écrit). Une alarme de routine (porte ouverte, maintenance) ne remplit plus le volet.
+- **Plusieurs alarmes choisies** : un clic sur la case de l'une les change toutes, en **une seule modification** (Ctrl+Z la défait). Coller depuis Excel accepte oui / non / x.
+- La barre d'état compte les alarmes « sans incident ».
+
+### La case « Incidents » d'un groupe
+
+Chaque groupe (partie **Groupes d'alarmes**) a sa case **Incidents** : la cocher ou la décocher le fait pour **toutes ses alarmes**, en une modification ; elle montre « – » quand ses alarmes sont mêlées. Les alarmes des **objets du synoptique et des symboles** suivent la case de leur groupe (celui de l'objet lié à un groupe de l'IHM, ou celui qu'elles déclarent) ; sans groupe connu, elles créent leurs incidents.
+
+### Tout arrêter
+
+En haut des groupes, la case **Surveillance des incidents** : décochée, plus aucun incident n'est créé, quelle que soit l'alarme. C'est le même réglage que **Arrêter les incidents** du volet Incidents, vu de deux endroits ; la barre d'état dit « surveillance des incidents arrêtée ».
+
+### Les projets
+
+La case ne s'écrit dans le projet que **décochée** (`incidents=0`) : un projet d'avant s'ouvre tout coché et s'enregistre à l'identique ; une version d'avant ignore la clé. L'Assistant IA sait créer une alarme sans incident (`incidents: false`).
 
 ## 5. Les essais
 

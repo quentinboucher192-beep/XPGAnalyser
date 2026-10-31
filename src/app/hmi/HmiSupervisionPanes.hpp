@@ -3,8 +3,9 @@
 //  utilisateurs, historiques ; et IHM > Exporter / Importer
 // -----------------------------------------------------------------------------
 //  ALARMES       le tableau des definitions (nom, priorite, categorie, groupe,
-//                condition, message, acquittement, temporisation) et la fiche
-//                de l'alarme choisie. Nouvelle, dupliquer, supprimer, ordonner.
+//                condition, message, acquittement, temporisation ; 1.20.2 : la
+//                case Incidents) et la fiche de l'alarme choisie. Nouvelle,
+//                dupliquer, supprimer, ordonner.
 //  RECETTES      les recettes, leurs elements (une variable chacun, une unite,
 //                des bornes) et leurs jeux de valeurs ; importer / exporter un
 //                jeu en CSV, comparer deux jeux.
@@ -71,8 +72,19 @@ public:
     bool    deleteAlarm(hmi::Id);
     bool    moveAlarm(hmi::Id, int delta);
     // nom, condition, message, priorite (1..4 ou "2 - Haute"), categorie, groupe,
-    // acquittement, delai (ms), description.
+    // acquittement, delai (ms), description ; 1.20.2 : incidents (oui / non).
     bool    setField(hmi::Id, const std::string& field, const std::string& value, std::string* why = nullptr);
+    // ---- 1.20.2 : LA CASE << INCIDENTS >> (creer un dossier d'incident quand l'alarme apparait) ----
+    // La colonne du tableau (une case par alarme, AlarmDef::incidents).
+    static constexpr std::size_t kIncidentsColumn = 8;
+    // Cocher (on) ou decocher la case des alarmes `ids`, en UNE commande (Ctrl+Z). Faux si rien ne change.
+    bool    setIncidents(const std::vector<hmi::Id>& ids, bool on, std::string* why = nullptr);
+    // Un clic sur la case de la ligne `modelRow` (TableView::cellCheckClicked) : elle s'inverse ; la ligne fait partie
+    // de plusieurs lignes choisies : toutes prennent sa nouvelle valeur (une commande), et restent choisies.
+    bool    toggleIncidentsAt(ui::RowIndex modelRow);
+    // La case << Incidents >> d'un groupe (IHM > Alarmes > Groupes) : celle de toutes ses alarmes (et la sienne, que
+    // suivent ses alarmes d'objets), en une commande - hmi::setAlarmGroupIncidentsCmd.
+    bool    setGroupIncidents(const std::string& group, bool on);
     // Lot 11 : les reglages de toutes les alarmes - son1..son4 (une ressource
     // son par priorite, "" : aucun), repetition (s), mise_de_cote_max (min).
     bool    setSetting(const std::string& field, const std::string& value, std::string* why = nullptr);
@@ -81,8 +93,16 @@ public:
         std::function<void(hmi::Id)> remove;
         // 1.11 (R111) : ouvrir une fenetre qui demande (« Lier... » d'un groupe d'alarmes).
         std::function<void(HmiAskDialog::Spec, std::function<void(bool, const HmiAskDialog::Answer&)>)> ask;
+        // 1.20.2 : L'INTERRUPTEUR GENERAL DES INCIDENTS (App : IncidentHost::enabled, setEnabled) - la case
+        // << Surveillance des incidents >> de la grille et la ligne d'etat ; nuls : ni case ni mention.
+        std::function<bool()>                   incidentsEnabled;
+        std::function<bool(bool, std::string*)> setIncidentsEnabled;
     };
-    void setHosts(Hosts h) { hosts_ = std::move(h); }
+    // 1.20.2 : la grille et la ligne d'etat suivent (l'interrupteur general des incidents).
+    void setHosts(Hosts h) {
+        hosts_ = std::move(h);
+        refresh();
+    }
     // 1.11 (R111) : « Lier... » d'un groupe de IHM > Alarmes > Groupes, une fenetre a
     // cocher : les groupes d'objets, les vues (Vue.*), les symboles (symbole:Sym) ; ceux
     // deja lies a ce groupe sont coches. `names` : le nom de chaque case, dans l'ordre.

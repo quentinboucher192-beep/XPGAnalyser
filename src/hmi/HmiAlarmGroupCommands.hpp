@@ -16,6 +16,9 @@ namespace hmi {
 // Les reglages d'un groupe (le nom de `settings` est ignore). Un groupe seulement nomme
 // par des alarmes est declare a cette occasion.
 [[nodiscard]] core::CommandPtr setAlarmGroupCmd(const DocumentPtr&, std::string_view name, const AlarmGroupDef& settings);
+// 1.20.2 : la case << Incidents >> d'un groupe (IHM > Alarmes > Groupes) - celle de toutes ses
+// alarmes et la sienne (hmi::setAlarmGroupIncidents), en UNE commande : Ctrl+Z les rend toutes.
+[[nodiscard]] core::CommandPtr setAlarmGroupIncidentsCmd(const DocumentPtr&, std::string_view name, bool on);
 // Renommer : les alarmes, les liens et les surcharges des objets suivent.
 [[nodiscard]] core::CommandPtr renameAlarmGroupCmd(const DocumentPtr&, std::string_view from, std::string_view to,
                                                    std::string* why = nullptr);

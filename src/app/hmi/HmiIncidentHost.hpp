@@ -90,7 +90,14 @@ public:
 
     // ---- les reglages (par projet : ihm/ressources/enregistrements/reglages-incidents.json) ----
     [[nodiscard]] const hmi::incident::Settings& settings() const noexcept { return settings_; }
+    // 1.20.2 : la surveillance mise en marche ou arretee (Settings::enabled) remet le detecteur a zero et oublie les
+    // defauts pas encore enregistres ; arretee, les videos en cours se terminent tout de suite (les images deja la).
     bool setSettings(const hmi::incident::Settings&, std::string* why = nullptr);
+    // 1.20.2 : L'INTERRUPTEUR GENERAL (<< arreter totalement la generation des incidents >>) - Settings::enabled, la
+    // cle "active" de reglages-incidents.json. setEnabled l'enregistre (comme setSettings) ; faux : rien n'a pu etre
+    // ecrit (`why`), le reglage vaut quand meme pour la seance. Arretee : aucun incident, aucune image prise.
+    [[nodiscard]] bool enabled() const noexcept { return settings_.enabled; }
+    bool setEnabled(bool on, std::string* why = nullptr);
 
     // ---- la liste (relue sur le fil d'ecriture ; le volet lit la derniere) ----
     struct Listing {

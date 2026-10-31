@@ -120,6 +120,7 @@
 #include "../src/app/hmi/HmiParamPanes.hpp"             // 1.9 : les parametres des popups
 #include "../src/app/hmi/HmiObjectAlarmPanes.hpp"    // 1.9 : les alarmes des objets
 #include "../src/hmi/HmiAlarmGroups.hpp"              // 1.10.2 (AL) : les groupes d'alarmes et les liens
+#include "../src/hmi/HmiIncident.hpp"                  // 1.20.2 : la case Incidents (incident::allowedFor)
 #include "../src/app/hmi/HmiOperatorPanes.hpp"       // 1.10 (chantier S2)
 #include "../src/app/hmi/HmiEnumPanes.hpp"           // 1.10 (chantier U)
 #include "../src/hmi/HmiEnums.hpp"                   // 1.10 (chantier E)
@@ -19439,17 +19440,17 @@ void centreAide111() {
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
     // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67 ; 1.14.1 : 68 ; 1.14.2 : 69 ; 1.15.0 : 70 ; 1.16.0 : 71 ; 1.16.1 : 72 ; 1.17.0 : 73 ; 1.18.0 : 74.
     const auto& rel = hn::releases();
-    check(rel.size() == 77 && rel.front().version == "1.20.1" && rel[1].version == "1.20.0" && rel[2].version == "1.19.0" && rel[3].version == "1.18.0" && rel[4].version == "1.17.0" && rel[5].version == "1.16.1" && rel[6].version == "1.16.0" && rel[7].version == "1.15.0" && rel[8].version == "1.14.2" && rel[9].version == "1.14.1" && rel[10].version == "1.14.0" && rel[11].version == "1.13.1" && rel[12].version == "1.13.0" && rel[13].version == "1.12.31" && rel[14].version == "1.12.30" && rel[15].version == "1.12.29" && rel[16].version == "1.12.28" && rel[17].version == "1.12.27" && rel[18].version == "1.12.26" && rel[19].version == "1.12.25" && rel[20].version == "1.12.24" && rel[21].version == "1.12.23" && rel[22].version == "1.12.22" && rel[23].version == "1.12.21" && rel[24].version == "1.12.20" && rel[25].version == "1.12.19" && rel[26].version == "1.12.18" && rel[27].version == "1.12.17" && rel[28].version == "1.12.16" && rel[29].version == "1.12.15" && rel[30].version == "1.12.14" && rel[31].version == "1.12.13" && rel[32].version == "1.12.12" && rel[33].version == "1.12.11" && rel[34].version == "1.12.10" && rel[35].version == "1.12.9" && rel[36].version == "1.12.8" && rel[37].version == "1.12.7" && rel[38].version == "1.12.6" && rel[39].version == "1.12.5" && rel[40].version == "1.12.4" && rel[41].version == "1.12.3" && rel[42].version == "1.12.2" && rel[43].version == "1.12.1"
-              && rel[44].version == "1.12.0" && rel[45].version == "1.11.24" && rel[46].version == "1.11.23"
-              && rel[47].version == "1.11.22" && rel[48].version == "1.11.21" && rel[49].version == "1.11.20" && rel[50].version == "1.11.19"
-              && rel[51].version == "1.11.18" && rel[52].version == "1.11.17"
-              && rel[53].version == "1.11.16" && rel[54].version == "1.11.15"
-              && rel[55].version == "1.11.14" && rel[56].version == "1.11.13" && rel[57].version == "1.11.12"
-              && rel[58].version == "1.11.11" && rel[59].version == "1.11.10"
-              && rel[60].version == "1.11.9" && rel[61].version == "1.11.8"
-              && rel[62].version == "1.11.7" && rel[63].version == "1.11.6" && rel[64].version == "1.11.5"
-              && rel[65].version == "1.11.4" && rel[66].version == "1.11.3" && rel[67].version == "1.11.2"
-              && rel[68].version == "1.11.1" && rel[69].version == "1.11" && rel[70].version == "1.10.4",
+    check(rel.size() == 78 && rel.front().version == "1.20.2" && rel[1].version == "1.20.1" && rel[2].version == "1.20.0" && rel[3].version == "1.19.0" && rel[4].version == "1.18.0" && rel[5].version == "1.17.0" && rel[6].version == "1.16.1" && rel[7].version == "1.16.0" && rel[8].version == "1.15.0" && rel[9].version == "1.14.2" && rel[10].version == "1.14.1" && rel[11].version == "1.14.0" && rel[12].version == "1.13.1" && rel[13].version == "1.13.0" && rel[14].version == "1.12.31" && rel[15].version == "1.12.30" && rel[16].version == "1.12.29" && rel[17].version == "1.12.28" && rel[18].version == "1.12.27" && rel[19].version == "1.12.26" && rel[20].version == "1.12.25" && rel[21].version == "1.12.24" && rel[22].version == "1.12.23" && rel[23].version == "1.12.22" && rel[24].version == "1.12.21" && rel[25].version == "1.12.20" && rel[26].version == "1.12.19" && rel[27].version == "1.12.18" && rel[28].version == "1.12.17" && rel[29].version == "1.12.16" && rel[30].version == "1.12.15" && rel[31].version == "1.12.14" && rel[32].version == "1.12.13" && rel[33].version == "1.12.12" && rel[34].version == "1.12.11" && rel[35].version == "1.12.10" && rel[36].version == "1.12.9" && rel[37].version == "1.12.8" && rel[38].version == "1.12.7" && rel[39].version == "1.12.6" && rel[40].version == "1.12.5" && rel[41].version == "1.12.4" && rel[42].version == "1.12.3" && rel[43].version == "1.12.2" && rel[44].version == "1.12.1"
+              && rel[45].version == "1.12.0" && rel[46].version == "1.11.24" && rel[47].version == "1.11.23"
+              && rel[48].version == "1.11.22" && rel[49].version == "1.11.21" && rel[50].version == "1.11.20" && rel[51].version == "1.11.19"
+              && rel[52].version == "1.11.18" && rel[53].version == "1.11.17"
+              && rel[54].version == "1.11.16" && rel[55].version == "1.11.15"
+              && rel[56].version == "1.11.14" && rel[57].version == "1.11.13" && rel[58].version == "1.11.12"
+              && rel[59].version == "1.11.11" && rel[60].version == "1.11.10"
+              && rel[61].version == "1.11.9" && rel[62].version == "1.11.8"
+              && rel[63].version == "1.11.7" && rel[64].version == "1.11.6" && rel[65].version == "1.11.5"
+              && rel[66].version == "1.11.4" && rel[67].version == "1.11.3" && rel[68].version == "1.11.2"
+              && rel[69].version == "1.11.1" && rel[70].version == "1.11" && rel[71].version == "1.10.4",
           "notes : 72 versions, la 1.16.1 en tete, la 1.16.0, la 1.15.0, la 1.14.2, la 1.14.1, la 1.14.0 (lots M1, M2, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
@@ -19721,7 +19722,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 541,   // 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 548,   // 1.20.2 : + 7 (le plan en cours en haut ; les blocs de code copiables ; un dossier par alarme, la recherche, le tri ; arreter les incidents ; la case Incidents des alarmes et des groupes ; les enregistrements fideles ; les images nettes). 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19869,7 +19870,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 244, "centre : L'IHM a les 244 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 77, "centre : 11 expressions, 77 notes (1.20.1)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 78, "centre : 11 expressions, 78 notes (1.20.2)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -19931,10 +19932,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 77
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 78
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.20.1" && hc::notesPage("9.9").version == "1.20.1",   // 1.20.1 : la plus recente
+        check(hc::notesPage("").version == "1.20.2" && hc::notesPage("9.9").version == "1.20.2",   // 1.20.2 : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -20328,7 +20329,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 77;   // 1.11.3 a 1.20.1 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 78;   // 1.11.3 a 1.20.2 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -21949,6 +21950,224 @@ void groupesAlarmes1102Editeur() {
         const int mp = hp.alarm(m) ? hp.alarm(m)->priority : -1;
         check(m != kNoId && pane.setField(m, "groupe", "Zone_B") && hp.alarm(m)->priority == mp,
               "un groupe sans priorit\xC3\xA9 par d\xC3\xA9" "faut (0) : elle garde la sienne");
+    }
+}
+
+// 1.20.2 : LA CASE << INCIDENTS >> des alarmes (IHM > Alarmes) et des groupes - le modele (cochee par defaut, ecrite
+// seulement decochee, un projet d'avant relu coche), la colonne du tableau (un clic, la souris, plusieurs lignes
+// choisies, Ctrl+Z), la fiche de l'alarme, la case d'un groupe (<< - >>, une commande pour toutes ses alarmes), et ce
+// que la surveillance des incidents en fait (hmi::incident::allowedFor).
+void incidentsAlarmes1202() {
+    std::printf("1.20.2 : la case Incidents des alarmes et des groupes\n");
+    using PG = ui::PropertyGrid;
+    using AP = app::HmiAlarmsPane;
+    auto doc = std::make_shared<Document>();
+    hmi::Project& hp = doc->project;
+    const auto addAl = [&](const char* name, const char* group) {
+        AlarmDef a;
+        a.id = hp.allocate();
+        a.name = name;
+        a.condition = "FALSE";
+        a.message = name;
+        a.group = group;
+        hp.alarms.push_back(a);
+        return a.id;
+    };
+    const Id a1 = addAl("Fuite_A", "Zone_Inc");
+    const Id a2 = addAl("Fuite_B", "Zone_Inc");
+    const Id a3 = addAl("Porte", "");
+    check(AlarmDef{}.incidents && AlarmGroupDef{}.incidents && hp.alarm(a1)->incidents,
+          "par d\xC3\xA9" "faut : la case Incidents est coch\xC3\xA9" "e (une alarme, un groupe)");
+
+    // ---- l'enregistrement : ecrite seulement decochee ; un projet d'avant (sans la cle) se relit coche
+    const auto reread = [](const hmi::Project& p, std::string& index) {
+        const auto files = serializeProject(p);
+        if (!files.empty()) index.assign(files.front().data->begin(), files.front().data->end());
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) {
+                    content.assign(f.data->begin(), f.data->end());
+                    return true;
+                }
+            return false;
+        };
+        return parseProject(reader);
+    };
+    {
+        std::string index;
+        const auto back = reread(hp, index);
+        check(!index.empty() && index.find("incidents=") == std::string::npos,
+              "toutes coch\xC3\xA9" "es : rien d'\xC3\xA9" "crit (un projet d'avant s'\xC3\xA9" "crit \xC3\xA0 l'identique)");
+        check(back && back->alarmByName("Fuite_A") && back->alarmByName("Fuite_A")->incidents && back->alarmByName("Porte")
+                  && back->alarmByName("Porte")->incidents,
+              "un projet sans la cl\xC3\xA9 incidents : relu, chaque alarme coch\xC3\xA9" "e");
+        hmi::Project q = hp;
+        q.alarm(a2)->incidents = false;
+        AlarmGroupDef g;
+        g.id = q.allocate();
+        g.name = "Zone_Inc";
+        g.incidents = false;
+        q.alarmGroups.push_back(g);
+        std::string qi;
+        const auto qb = reread(q, qi);
+        check(qi.find(" incidents=0") != std::string::npos && qb && qb->alarmByName("Fuite_B") && !qb->alarmByName("Fuite_B")->incidents
+                  && qb->alarmByName("Fuite_A") && qb->alarmByName("Fuite_A")->incidents && hmi::alarmGroupByName(*qb, "Zone_Inc")
+                  && !hmi::alarmGroupByName(*qb, "Zone_Inc")->incidents,
+              "d\xC3\xA9" "coch\xC3\xA9" "e (une alarme, un groupe) : enregistr\xC3\xA9" "e, relue d\xC3\xA9" "coch\xC3\xA9" "e");
+    }
+
+    // ---- IHM > Alarmes : la colonne Incidents
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    AP pane("inc1202", doc, apply);
+    pane.setBounds({0, 0, 3200, 800});
+    pane.layout();
+    pane.refresh();
+    const std::size_t col = AP::kIncidentsColumn;
+    {
+        const auto& m = pane.table().model();
+        check(m && m->headerText(col) == "Incidents" && m->cellText(0, col) == "oui" && m->cellStyle(0, col).check == 1
+                  && m->cellStyle(0, col).checkInCell && m->cellStyle(0, col).tip.find("dossier d'incident") != std::string::npos,
+              "la colonne Incidents : une vraie case coch\xC3\xA9" "e dans sa colonne, son infobulle");
+    }
+    pane.table().cellCheckClicked->emit(0, col);
+    check(!hp.alarm(a1)->incidents && hp.alarm(a2)->incidents && pane.table().model()->cellStyle(0, col).check == 0
+              && pane.table().model()->cellText(0, col) == "non",
+          "un clic sur la case : Fuite_A d\xC3\xA9" "coch\xC3\xA9" "e (elle seule)");
+    check(stack.undoLabel() == "Incidents : Fuite_A d\xC3\xA9" "coch\xC3\xA9" "e", "une commande (" + stack.undoLabel() + ")");
+    (void)stack.undo();
+    check(hp.alarm(a1)->incidents && pane.table().model()->cellStyle(0, col).check == 1, "Ctrl+Z : recoch\xC3\xA9" "e");
+    (void)stack.redo();
+    check(!hp.alarm(a1)->incidents, "Ctrl+Y : d\xC3\xA9" "coch\xC3\xA9" "e de nouveau");
+    (void)stack.undo();
+    // la souris : la case dessinee dans sa colonne
+    {
+        const auto theme = ui::Theme::dark();
+        Recorder rec;
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 3200, 800}, 0.0, nullptr});
+        gfx::Rect box, none;
+        const bool shown = pane.table().cellCheckRect(2, col, box);
+        check(shown && !pane.table().cellCheckRect(2, 0, none), "la case de Porte \xC3\xA0 l'\xC3\xA9" "cran (cellCheckRect), pas dans la premi\xC3\xA8re colonne");
+        if (shown) {
+            pane.table().dispatch(ui::MouseDown{{box.x + 7.f, box.y + 7.f}, ui::MouseButton::Left, 1, {}});
+            check(!hp.alarm(a3)->incidents && hp.alarm(a1)->incidents, "un clic de souris sur la case de Porte : d\xC3\xA9" "coch\xC3\xA9" "e");
+            (void)stack.undo();
+            check(hp.alarm(a3)->incidents, "Ctrl+Z : recoch\xC3\xA9" "e");
+        }
+        // deux lignes choisies, un clic de souris sur la case de l'une : les deux, et elles restent choisies
+        pane.table().selectModelRows({0, 1});
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 3200, 800}, 0.0, nullptr});
+        if (pane.table().cellCheckRect(1, col, box)) pane.table().dispatch(ui::MouseDown{{box.x + 7.f, box.y + 7.f}, ui::MouseButton::Left, 1, {}});
+        check(!hp.alarm(a1)->incidents && !hp.alarm(a2)->incidents && hp.alarm(a3)->incidents && pane.table().selectedModelRows().size() == 2,
+              "deux lignes choisies, un clic sur la case de l'une : les deux d\xC3\xA9" "coch\xC3\xA9" "es, toujours choisies");
+        check(stack.undoLabel() == "Incidents : 2 alarmes d\xC3\xA9" "coch\xC3\xA9" "es", "une seule commande (" + stack.undoLabel() + ")");
+        (void)stack.undo();
+        check(hp.alarm(a1)->incidents && hp.alarm(a2)->incidents, "Ctrl+Z : les deux reviennent en une fois");
+    }
+    // la fiche de l'alarme choisie : la case Incidents, son infobulle
+    pane.selectAlarm(a3);
+    {
+        const auto cats = pane.properties().categories();
+        const auto* p = deepProp(cats, "Alarme", "Incidents");
+        const auto f = p && p->commit ? p->commit : std::function<bool(std::string_view)>{};
+        check(p && p->type == PG::ValueType::Boolean && p->value == "TRUE" && p->description.find("sans incident") != std::string::npos,
+              "la fiche de Porte : la case Incidents (coch\xC3\xA9" "e), son infobulle");
+        check(f && f("FALSE") && !hp.alarm(a3)->incidents, "la d\xC3\xA9" "cocher dans la fiche");
+        (void)stack.undo();
+        check(hp.alarm(a3)->incidents && !pane.setField(a3, "incidents", "peut-\xC3\xAAtre"), "Ctrl+Z ; une valeur qui n'est ni oui ni non : refus\xC3\xA9" "e");
+    }
+
+    // ---- IHM > Alarmes > Groupes : la case Incidents d'un groupe
+    struct GroupBox {
+        bool                                    found{false}, mixed{false};
+        std::string                             value, tip;
+        std::function<bool(std::string_view)>   commit;
+    };
+    const auto groupBox = [&] {
+        GroupBox b;
+        const auto cats = pane.properties().categories();
+        if (const auto* p = deepProp(cats, "Zone_Inc", "Incidents")) {
+            b.found = true;
+            b.value = p->value;
+            b.mixed = p->mixed;
+            b.commit = p->commit;
+            b.tip = p->description;
+        }
+        return b;
+    };
+    auto gb = groupBox();
+    check(gb.found && gb.value == "TRUE" && !gb.mixed && hmi::alarmGroupIncidents(hp, "Zone_Inc") == 1 && gb.tip.find("toutes les alarmes du groupe") != std::string::npos,
+          "le groupe Zone_Inc : sa case Incidents coch\xC3\xA9" "e (toutes ses alarmes le sont), son infobulle");
+    check(pane.setIncidents({a2}, false), "Fuite_B d\xC3\xA9" "coch\xC3\xA9" "e");
+    gb = groupBox();
+    check(gb.found && gb.mixed && gb.value != "TRUE" && hmi::alarmGroupIncidents(hp, "Zone_Inc") == -1,
+          "ses alarmes diff\xC3\xA8rent : la case du groupe montre \xC2\xAB \xE2\x80\x93 \xC2\xBB");
+    std::size_t before = stack.done().size();
+    check(gb.commit && gb.commit("TRUE") && hp.alarm(a1)->incidents && hp.alarm(a2)->incidents && stack.done().size() == before + 1,
+          "un clic sur la case du groupe : toutes ses alarmes coch\xC3\xA9" "es, en une commande");
+    gb = groupBox();
+    check(gb.value == "TRUE" && !gb.mixed, "la case du groupe : coch\xC3\xA9" "e");
+    (void)stack.undo();
+    check(hp.alarm(a1)->incidents && !hp.alarm(a2)->incidents, "Ctrl+Z (une fois) : Fuite_B d\xC3\xA9" "coch\xC3\xA9" "e de nouveau");
+    gb = groupBox();
+    before = stack.done().size();
+    check(gb.commit && gb.commit("FALSE") && !hp.alarm(a1)->incidents && !hp.alarm(a2)->incidents && hp.alarm(a3)->incidents
+              && hmi::alarmGroupByName(hp, "Zone_Inc") && !hmi::alarmGroupByName(hp, "Zone_Inc")->incidents
+              && hmi::alarmGroupIncidents(hp, "Zone_Inc") == 0 && stack.done().size() == before + 1,
+          "d\xC3\xA9" "cocher le groupe : ses alarmes et le groupe (d\xC3\xA9" "clar\xC3\xA9 pour l'occasion) ; Porte (sans groupe) ne bouge pas");
+    check(stack.undoLabel() == "Incidents du groupe Zone_Inc : d\xC3\xA9" "coch\xC3\xA9s", "la commande (" + stack.undoLabel() + ")");
+    (void)stack.undo();
+    check(hp.alarm(a1)->incidents && !hp.alarm(a2)->incidents && !hmi::alarmGroupByName(hp, "Zone_Inc"),
+          "Ctrl+Z : tout revient (le groupe n'est plus d\xC3\xA9" "clar\xC3\xA9)");
+    check(pane.setGroupIncidents("Zone_Inc", true) && hp.alarm(a2)->incidents && hmi::alarmGroupIncidents(hp, "Zone_Inc") == 1
+              && !pane.setGroupIncidents("Zone_Inc", true),
+          "setGroupIncidents : coch\xC3\xA9 ; recocher ne fait rien");
+
+    // ---- l'interrupteur general (Hosts : IncidentHost::enabled / setEnabled) : la case de la grille, la ligne d'etat
+    {
+        bool on = true;
+        int calls = 0;
+        AP::Hosts h;
+        h.incidentsEnabled = [&] { return on; };
+        h.setIncidentsEnabled = [&](bool v, std::string*) {
+            on = v;
+            ++calls;
+            return true;
+        };
+        pane.setHosts(std::move(h));
+        const auto cats = pane.properties().categories();
+        const auto* sw = deepProp(cats, "Incidents (toutes", "Surveillance des incidents");
+        const auto f = sw && sw->commit ? sw->commit : std::function<bool(std::string_view)>{};
+        const std::size_t done0 = stack.done().size();
+        check(sw && sw->value == "TRUE" && f && f("FALSE") && !on && calls == 1 && stack.done().size() == done0,
+              "la case Surveillance des incidents : arr\xC3\xAAt\xC3\xA9" "e par l'h\xC3\xB4te, sans commande (pas de Ctrl+Z)");
+        const auto after = pane.properties().categories();
+        const auto* sw2 = deepProp(after, "Incidents (toutes", "Surveillance des incidents");
+        check(sw2 && sw2->value == "FALSE" && pane.lastMessage().find("arr\xC3\xAAt\xC3\xA9" "e") != std::string::npos,
+              "la case le dit, la barre aussi (" + pane.lastMessage() + ")");
+        pane.setHosts({});
+        check(!deepCat(pane.properties().categories(), "Incidents (toutes"), "sans h\xC3\xB4te : pas de case");
+    }
+
+    // ---- la case du groupe compte quand des groupes d'objets lui sont lies (ses alarmes d'objets la suivent)
+    {
+        hmi::Project p = hp;
+        AlarmGroupDef g;
+        g.id = p.allocate();
+        g.name = "Zone_Inc";
+        g.incidents = false;
+        p.alarmGroups.push_back(g);
+        check(hmi::alarmGroupIncidents(p, "Zone_Inc") == 1, "sans groupe d'objets li\xC3\xA9 : seules ses alarmes comptent");
+        (void)hmi::setAlarmGroupLink(p, "Vue_Inc.Pompe_1", "Zone_Inc");
+        check(hmi::alarmGroupIncidents(p, "Zone_Inc") == -1, "un groupe d'objets li\xC3\xA9 : la case du groupe compte (\xC2\xAB \xE2\x80\x93 \xC2\xBB)");
+        // ce que la surveillance des incidents en fait
+        p.alarm(a1)->incidents = false;
+        namespace inc = hmi::incident;
+        check(!inc::allowedFor(p, "Fuite_A") && !inc::allowedFor(p, "fuite_a", "Autre") && inc::allowedFor(p, "Fuite_B") && inc::allowedFor(p, "PORTE"),
+              "surveillance : une alarme du projet suit sa case (sans casse ; son groupe n'y change rien)");
+        check(!inc::allowedFor(p, "Vue_Inc.Pompe_1.Defaut", "Zone_Inc") && inc::allowedFor(p, "Vue_Inc.Pompe_1.Defaut", "Autre")
+                  && inc::allowedFor(p, "Vue_Inc.Pompe_1.Defaut"),
+              "surveillance : une alarme d'objet suit la case de son groupe ; un groupe inconnu, ou aucun : oui");
     }
 }
 
@@ -44275,6 +44494,12 @@ void deballagesTypes1161() {
 }
 
 int main(int argc, char** argv) {
+    // 1.20.2 : HMI_TEST_INC=1 - la case Incidents des alarmes et des groupes, seule.
+    if (const char* only = std::getenv("HMI_TEST_INC"); only && *only == '1') {
+        incidentsAlarmes1202();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.16.1 : HMI_TEST_D161=1 - les deballages des types IHM, seuls.
     if (const char* only = std::getenv("HMI_TEST_D161"); only && *only == '1') {
         deballagesTypes1161();
@@ -44813,6 +45038,7 @@ int main(int argc, char** argv) {
     menuCodeChamps11218();                  // 1.12.18 : le menu du code, des champs, des fiches (planches 14 et 15)
     dupliquer_fenetre_1102();               // 1.10.2 (chantier D) : Dupliquer... (Ctrl+Maj+D depuis la 1.12.18, la fenetre, une commande)
     groupesAlarmes1102Editeur();            // 1.10.2 (AL) : Groupe de l'IHM, IHM > Alarmes > Groupes
+    incidentsAlarmes1202();                 // 1.20.2 : la case Incidents des alarmes et des groupes
     tailleTexteListes111();                 // 1.11 (R111) : la taille du texte des listes d'alarmes et de l'historique
     depliageParNom111();                    // 1.11 (R111) : le depliage suit chaque categorie par son nom (keepExpanded)
     dupliquerMembre111();                   // 1.11 (R111) : Dupliquer... - veux-tu dire sur un membre de l'automate

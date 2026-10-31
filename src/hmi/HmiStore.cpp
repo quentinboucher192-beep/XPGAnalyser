@@ -1333,11 +1333,14 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         index += serializeFunctionTests(f.tests);                                           // 1.13.0 (lot J4)
     }
     // Lot 4 : alarmes, recettes, securite, historiques.
+    // 1.20.2 : incidents=0 seulement si la case Incidents est decochee (un projet d'avant s'ecrit a l'identique ;
+    // une version d'avant ignore la cle).
     for (const auto& a : p.alarms)
         index += "alarme" + fieldInt("id", a.id) + field("nom", a.name) + field("condition", a.condition)
                + field("message", a.message) + fieldInt("priorite", a.priority) + field("categorie", a.category)
                + field("groupe", a.group) + fieldBool("acquittement", a.ackRequired) + fieldInt("delai", a.delayMs)
-               + field("description", a.description) + field("consigne", a.instruction) + "\n";
+               + field("description", a.description) + field("consigne", a.instruction)
+               + (a.incidents ? std::string{} : fieldBool("incidents", false)) + "\n";
     // Lot 11 : les sons des alarmes (un par priorite), leur repetition, la mise de cote.
     {
         const auto& as = p.alarmSettings;
@@ -1353,7 +1356,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + fieldInt("priorite", g.priority) + field("couleur_active", g.colorActive)
                + field("couleur_acquittee", g.colorAcked) + field("couleur_disparue", g.colorCleared)
                + field("acquittement", ack) + field("son", g.sound) + field("zone", g.zone)
-               + fieldInt("niveau", g.level) + fieldBool("archive", g.archive) + "\n";
+               + fieldInt("niveau", g.level) + fieldBool("archive", g.archive)
+               + (g.incidents ? std::string{} : fieldBool("incidents", false)) + "\n";   // 1.20.2 : seulement decochee
     }
     for (const auto& l : p.alarmGroupLinks)
         index += "lien_groupe_alarmes" + field("objets", l.objectGroup) + field("groupe", l.group) + "\n";
@@ -2033,6 +2037,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             a.delayMs = static_cast<int>(std::max<long long>(0, toInt(r.get("delai"), 0)));
             a.description = toStr(r.get("description"));
             a.instruction = toStr(r.get("consigne"));
+            a.incidents = toBool(r.get("incidents"), true);   // 1.20.2 : absente (un projet d'avant) : oui
             p.alarms.push_back(std::move(a));
         } else if (r.word == "groupe_alarmes") {                         // 1.10.2
             AlarmGroupDef g;
@@ -2049,6 +2054,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             g.zone = toStr(r.get("zone"));
             g.level = static_cast<int>(std::clamp<long long>(toInt(r.get("niveau"), 0), 0, 4));
             g.archive = toBool(r.get("archive"), true);
+            g.incidents = toBool(r.get("incidents"), true);   // 1.20.2 : absente : oui
             if (!g.name.empty()) p.alarmGroups.push_back(std::move(g));
         } else if (r.word == "lien_groupe_alarmes") {                    // 1.10.2
             AlarmGroupLink l{toStr(r.get("objets")), toStr(r.get("groupe"))};

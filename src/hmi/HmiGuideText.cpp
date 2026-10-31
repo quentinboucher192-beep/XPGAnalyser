@@ -4566,11 +4566,13 @@ const std::vector<Topic>& topics() {
                          "cr\xC3\xA9" "ation de dossier, quelle que soit l'alarme \xE2\x80\x93 les incidents "
                          "d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent ; **Reprendre les incidents** la "
                          "relance. C'est le r\xC3\xA9glage \xC2\xAB surveillance active \xC2\xBB, "
-                         "gard\xC3\xA9 avec le projet. Dans le volet : surveillance active, alarmes "
-                         "surveill\xC3\xA9" "es (vide : toutes ; * permis, ex. Defaut_*), alarmes "
-                         "ignor\xC3\xA9" "es, d\xC3\xA9" "fauts de communication, secondes avant et "
-                         "apr\xC3\xA8s, images par seconde, maintien, anti-rebond. Ils sont gard\xC3\xA9s "
-                         "avec le projet (ihm/ressources/enregistrements/reglages-incidents.json).", {}},
+                         "gard\xC3\xA9 avec le projet. Alarme par alarme, ou groupe par groupe : la case "
+                         "**Incidents** de IHM \xE2\x80\xBA Alarmes (voir \xC2\xAB Alarmes \xC2\xBB). Dans "
+                         "le volet : surveillance active, alarmes surveill\xC3\xA9" "es (vide : toutes ; * "
+                         "permis, ex. Defaut_*), alarmes ignor\xC3\xA9" "es, d\xC3\xA9" "fauts de "
+                         "communication, secondes avant et apr\xC3\xA8s, images par seconde, maintien, "
+                         "anti-rebond. Ils sont gard\xC3\xA9s avec le projet "
+                         "(ihm/ressources/enregistrements/reglages-incidents.json).", {}},
              {K::Heading, "Robustesse", {}},
              {K::Bullet, "Les images sont copi\xC3\xA9" "es sur le fil de l'interface et cod\xC3\xA9" "es "
                          "ailleurs ; les dossiers sont \xC3\xA9" "crits en arri\xC3\xA8re-plan.", {}},
@@ -20427,6 +20429,32 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Voir \xC2\xAB Les alarmes d'un symbole \xC2\xBB, \xC2\xAB Les alarmes par "
                          "d\xC3\xA9" "faut des objets du synoptique \xC2\xBB, \xC2\xAB Le groupe d'alarmes "
                          "d'un objet \xC2\xBB et \xC2\xAB Surcharger une alarme sur un objet \xC2\xBB.", {}},
+             {K::Heading, "Cr\xC3\xA9" "er un incident, ou pas", {}},
+             {K::Paragraph, "1.20.2 : chaque alarme a une case **Incidents** (une colonne du tableau, et sa "
+                         "fiche) : coch\xC3\xA9" "e (par d\xC3\xA9" "faut), son apparition cr\xC3\xA9" "e un "
+                         "dossier d'incident (voir \xC2\xAB Incidents \xC2\xBB) ; "
+                         "d\xC3\xA9" "coch\xC3\xA9" "e, elle s'affiche, s'acquitte et passe \xC3\xA0 "
+                         "l'historique comme avant, mais aucun incident n'est cr\xC3\xA9\xC3\xA9 pour elle "
+                         "\xE2\x80\x93 une alarme de routine (porte ouverte, maintenance) ne remplit plus le "
+                         "volet.", {}},
+             {K::Bullet, "**Plusieurs alarmes choisies** : un clic sur la case de l'une les coche ou les "
+                         "d\xC3\xA9" "coche toutes, en une seule modification (Ctrl+Z la d\xC3\xA9" "fait).", {}},
+             {K::Bullet, "**Un groupe** (partie Groupes d'alarmes) a sa case **Incidents** : la cocher ou la "
+                         "d\xC3\xA9" "cocher le fait pour toutes ses alarmes, en une modification ; elle "
+                         "montre \xC2\xAB \xE2\x80\x93 \xC2\xBB quand ses alarmes sont "
+                         "m\xC3\xAAl\xC3\xA9" "es. Les alarmes des objets du synoptique et des symboles "
+                         "suivent la case de leur groupe (celui de l'objet li\xC3\xA9 \xC3\xA0 un groupe de "
+                         "l'IHM, ou celui qu'elles d\xC3\xA9" "clarent) ; sans groupe connu, elles "
+                         "cr\xC3\xA9" "ent leurs incidents.", {}},
+             {K::Bullet, "**Surveillance des incidents** (en haut des groupes) : "
+                         "d\xC3\xA9" "coch\xC3\xA9" "e, plus aucun incident n'est cr\xC3\xA9\xC3\xA9, quelle "
+                         "que soit l'alarme \xE2\x80\x93 c'est le m\xC3\xAAme r\xC3\xA9glage que "
+                         "**Arr\xC3\xAAter les incidents** du volet Incidents, gard\xC3\xA9 avec le projet ; "
+                         "la barre d'\xC3\xA9tat dit \xC2\xAB surveillance des incidents "
+                         "arr\xC3\xAAt\xC3\xA9" "e \xC2\xBB.", {}},
+             {K::Paragraph, "La case ne s'\xC3\xA9" "crit dans le projet que d\xC3\xA9" "coch\xC3\xA9" "e "
+                         "(`incidents=0`) : un projet d'avant s'ouvre tout coch\xC3\xA9, et une version "
+                         "d'avant ignore la cl\xC3\xA9.", {}},
              {K::Heading, "Sons et mise de c\xC3\xB4t\xC3\xA9", {}},
              {K::Paragraph, "La cat\xC3\xA9gorie **Sons et mise de c\xC3\xB4t\xC3\xA9 (toutes les alarmes)** de "
                          "Configuration \xE2\x80\xBA Alarmes r\xC3\xA8gle :", {}},
@@ -20460,7 +20488,7 @@ const std::vector<Topic>& topics() {
                          "(les actions qui les visent suivent).", {}},
          },
          {"historiques", "securite", "proprietes", "alarmes-objets", "objet-historique", "excel", "groupes-objets", "alarmes-symboles", "alarmes-bibliotheque", "surcharge-alarmes"},
-         {"G\xC3\x89N\xC3\x89R\xC3\x89" "ES", "Alarmes du projet", "Ouvrir l'objet", "Ouvrir le symbole", "G\xC3\xA9n\xC3\xA9r\xC3\xA9" "e par"},
+         {"G\xC3\x89N\xC3\x89R\xC3\x89" "ES", "Alarmes du projet", "Ouvrir l'objet", "Ouvrir le symbole", "G\xC3\xA9n\xC3\xA9r\xC3\xA9" "e par", "Incidents", "Surveillance des incidents", "sans incident"},
          {"alarmes"},
          {{"PNG_096_alarmes_definitions.png", "Le volet Alarmes : conditions, messages, priorit\xC3\xA9s, groupes."}, {"PNG_115_simulation_superviseur_alarmes.png", "En marche : les alarmes en cours et leur acquittement."}, {"PNG_285_alarmes_consigne_sons.png", "La consigne d'une alarme, et les sons par priorit\xC3\xA9 de Configuration \xE2\x80\xBA Alarmes."}, {"PNG_954_configuration_alarmes_generees.png", "Configuration \xE2\x80\xBA Alarmes : les alarmes du projet, puis Symboles et Objets du synoptique (G\xC3\x89N\xC3\x89R\xC3\x89" "ES), par vue et par objet ; la fiche d'une alarme g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e."}},
          "",

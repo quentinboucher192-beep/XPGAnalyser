@@ -174,6 +174,12 @@ struct CellStyle {
     // 1.12.16 (T4) : LE TEXTE D'ATTENTE d'une case vide (TableView), en gris : la valeur du type
     // ("0.0 (du type)"). Il ne s'ecrit pas : la case editee part vide.
     std::string       placeholder{};
+    // 1.20.2 : LA CASE A COCHER DANS CETTE COLONNE (TableView) - `check` dessine dans la case, quelle
+    // que soit la colonne (sans ce drapeau : la premiere colonne seulement, comme en 1.9) ; un clic
+    // dessus : TableView::cellCheckClicked (ligne du modele, colonne). La colonne Incidents des alarmes.
+    bool              checkInCell{false};
+    // 1.20.2 : l'infobulle de CETTE case (TableView), au survol ; vide : celle de la ligne (rowTooltip).
+    std::string       tip{};
 };
 
 // ============================================================== ListView ====
@@ -612,6 +618,14 @@ public:
     // La case a cocher de la ligne de VUE `i` a l'ecran (tests, scripts) ; false
     // si la ligne n'en a pas ou n'est pas visible.
     [[nodiscard]] bool checkRect(std::size_t viewRowIndex, gfx::Rect& out) const;
+    // 1.20.2 : un clic sur la case a cocher d'une autre colonne (CellStyle::checkInCell) : la ligne du
+    // modele et la colonne. La table ne change rien : l'hote coche ou decoche. La ligne cliquee faisait
+    // partie de la selection : la selection reste (l'hote peut cocher toutes les lignes choisies) ;
+    // sinon, elle devient la seule choisie.
+    const core::SignalPtr<RowIndex, std::size_t> cellCheckClicked = core::Signal<RowIndex, std::size_t>::create();
+    // La case a cocher de la colonne `col` de la ligne de VUE `i` a l'ecran (tests, scripts) ; false si
+    // la case n'en a pas (CellStyle::checkInCell) ou n'est pas visible.
+    [[nodiscard]] bool cellCheckRect(std::size_t viewRowIndex, std::size_t col, gfx::Rect& out) const;
 
     // ---- lot 16 : l'edition dans la case, et la table en arbre ---------------
     //  Double-clic (ou F2 sur la ligne choisie) sur une case que le modele dit
@@ -886,6 +900,7 @@ private:
     std::vector<Mark>            marks_;
     int                          markKeyColumn_{-1};
     int                          hoverCol_{-1};    // la colonne sous la souris (l'infobulle d'une case refusee)
+    int                          hoverTipCol_{-1}; // 1.20.2 : la colonne sous la souris (CellStyle::tip)
     bool                         cellTipShown_{false};
     gfx::Size                    surface_{};       // la fenetre (le menu reste a l'ecran)
     core::ConnectionScope        contextLinks_;

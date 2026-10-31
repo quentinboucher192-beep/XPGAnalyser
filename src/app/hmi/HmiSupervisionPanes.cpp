@@ -49,6 +49,17 @@ std::vector<std::string> priorityChoices() {
     return out;
 }
 
+// 1.20.2 : les infobulles de la case << Incidents >> (une alarme, un groupe).
+const char* const kIncidentsTip = "Cr\xC3\xA9" "er un dossier d'incident quand cette alarme appara\xC3\xAEt (en simulation et au poste). "
+                                  "D\xC3\xA9" "coch\xC3\xA9" "e : l'alarme fonctionne comme avant, sans incident.";
+const char* const kGroupIncidentsTip = "Coche ou d\xC3\xA9" "coche la case Incidents de toutes les alarmes du groupe (et celle de ses "
+                                       "alarmes d'objets li\xC3\xA9" "es). \xC2\xAB \xE2\x80\x93 \xC2\xBB : elles diff\xC3\xA8rent ; "
+                                       "un clic les coche toutes. Une seule commande (Ctrl+Z).";
+const char* const kGlobalIncidentsTip = "En marche : quand une alarme dont la case Incidents est coch\xC3\xA9" "e appara\xC3\xAEt (en simulation et "
+                                        "au poste), un dossier d'incident s'ouvre. Arr\xC3\xAAt\xC3\xA9" "e : aucun incident, aucune image "
+                                        "prise. Le m\xC3\xAAme r\xC3\xA9glage que la page Incidents (celui du projet) ; il ne s'annule pas "
+                                        "par Ctrl+Z.";
+
 } // namespace
 
 // =================================================================== alarmes ==
@@ -82,7 +93,8 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Alarme", 214.f}, {"Priorit\xC3\xA9", 110.f}, {"Cat\xC3\xA9gorie", 110.f}, {"Groupe", 110.f},
-                       {"Condition", 230.f}, {"Message", 300.f}, {"Acquittement", 104.f}, {"D\xC3\xA9lai", 70.f, 50.f, true, true, true, ui::Align::End}});
+                       {"Condition", 230.f}, {"Message", 300.f}, {"Acquittement", 104.f}, {"D\xC3\xA9lai", 70.f, 50.f, true, true, true, ui::Align::End},
+                       {"Incidents", 92.f, 70.f}});   // 1.20.2 : une case par alarme (kIncidentsColumn)
     table->setSelectionMode(ui::SelectionMode::Extended);     // lot 20 : plusieurs lignes a copier
     {
         // 1.9 : sous les alarmes du projet, celles generees par les objets (Symboles,
@@ -146,6 +158,13 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 while (!value.empty() && value.back() == ' ') value.pop_back();
                 return setField(idOf(k), "delai", value, why);
             }));
+        // 1.20.2 : la case Incidents - oui, non, x (coche d'Excel), TRUE, 1...
+        tg.columns.push_back(paste::column("Incidents", {"Incident", "Dossier d'incident"}, static_cast<int>(kIncidentsColumn),
+            [this, idOf](const std::string& k, const std::string& v, std::string* why) {
+                const std::string n = paste::normalizedTitle(v);
+                const std::string value = n == "x" || v == "\xE2\x9C\x93" ? std::string("TRUE") : v;
+                return setField(idOf(k), "incidents", value, why);
+            }));
         tg.columns.push_back(paste::column("Description", {"Commentaire", "Comment"}, -1, field("description")));
         tg.columns.push_back(paste::column("Consigne", {"Instruction", "Action operateur"}, -1, field("consigne")));
         tg.exists = [this](const std::string& k) { return doc_->project.alarmByName(k) != nullptr; };
@@ -182,6 +201,10 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     links_ += priority_->selectionChanged->connect([this](int i) { priorityFilter_ = i; refresh(); });
     links_ += search_->textChanged->connect([this](const std::string& t) { searchText_ = t; refresh(); });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { rebuildProperties(); });
+    // 1.20.2 : la case Incidents d'une ligne (ou de toutes les lignes choisies).
+    links_ += table_->cellCheckClicked->connect([this](ui::RowIndex r, std::size_t col) {
+        if (col == kIncidentsColumn) (void)toggleIncidentsAt(r);
+    });
     links_ += grid_->propertyRejected->connect([this](const std::string& name, const std::string& value) {
         if (message_.empty()) say(name + " : \xC2\xAB " + value + " \xC2\xBB refus\xC3\xA9", true);
     });
@@ -203,6 +226,8 @@ void HmiAlarmsPane::refresh() {
     const auto& p = doc_->project;
     std::vector<std::vector<std::string>> rows;
     std::vector<int> prios;
+    std::vector<char> incidents;   // 1.20.2 : la case Incidents de chaque ligne
+    std::size_t withoutIncident = 0;
     order_.clear();
     // Lot recherche : la recherche de toutes les listes - chaque mot (ou "phrase")
     // dans le nom, le groupe, la condition, le message, la categorie, la
@@ -213,21 +238,30 @@ void HmiAlarmsPane::refresh() {
     for (const auto& a : p.alarms) {
         if (a.priority >= 1 && a.priority <= hmi::kAlarmPriorities) ++perPriority[a.priority];
         if (!a.group.empty()) groups.insert(a.group);
+        if (!a.incidents) ++withoutIncident;
         if (priorityFilter_ > 0 && a.priority != priorityFilter_) continue;
         if (!query.matches({a.name, a.group, a.condition, a.message, a.category, a.description, a.instruction})) continue;
         order_.push_back(a.id);
         prios.push_back(a.priority);
+        incidents.push_back(a.incidents ? 1 : 0);
         rows.push_back({a.name, priorityChoice(a.priority), a.category, a.group, a.condition, a.message,
-                        a.ackRequired ? "requis" : "automatique", a.delayMs > 0 ? std::to_string(a.delayMs) + " ms" : "-"});
+                        a.ackRequired ? "requis" : "automatique", a.delayMs > 0 ? std::to_string(a.delayMs) + " ms" : "-",
+                        a.incidents ? "oui" : "non"});
     }
     model_ = std::make_shared<Rows>(std::vector<std::string>{"Alarme", "Priorit\xC3\xA9", "Cat\xC3\xA9gorie", "Groupe", "Condition",
-                                                             "Message", "Acquittement", "D\xC3\xA9lai"},
-                                    std::move(rows), [prios](ui::RowIndex r, std::size_t c) {
+                                                             "Message", "Acquittement", "D\xC3\xA9lai", "Incidents"},
+                                    std::move(rows), [prios, incidents](ui::RowIndex r, std::size_t c) {
                                         ui::CellStyle s;
                                         if (r >= prios.size()) return s;
                                         if (c == 0) { s.icon = ui::Icon::Warning; s.iconTone = priorityTone(prios[r]); s.bold = prios[r] == 1; }
                                         if (c == 1) s.fgTone = priorityTone(prios[r]);
                                         if (c == 4) s.monospace = true;
+                                        if (c == kIncidentsColumn && r < incidents.size()) {   // 1.20.2 : une vraie case, dans sa colonne
+                                            s.check = incidents[r];
+                                            s.checkInCell = true;
+                                            s.tip = kIncidentsTip;
+                                            if (!incidents[r]) s.fgTone = ui::Tone::Muted;
+                                        }
                                         return s;
                                     });
     table_->setModel(model_);
@@ -238,6 +272,8 @@ void HmiAlarmsPane::refresh() {
         if (perPriority[k]) msg += " \xC2\xB7 " + std::to_string(perPriority[k]) + " " + lower(std::string(hmi::alarmPriorityLabel(k)))
                                    + (perPriority[k] > 1 ? "s" : "");   // 1.11 (R111, T3-11) : « 3 critiques », « 1 basse »
     if (!groups.empty()) msg += " \xC2\xB7 groupes : " + fewOf(std::vector<std::string>(groups.begin(), groups.end()), 5);
+    if (withoutIncident) msg += " \xC2\xB7 " + std::to_string(withoutIncident) + " sans incident";   // 1.20.2
+    if (hosts_.incidentsEnabled && !hosts_.incidentsEnabled()) msg += " \xC2\xB7 surveillance des incidents arr\xC3\xAAt\xC3\xA9" "e";
     if (order_.size() != p.alarms.size()) msg += " \xC2\xB7 " + std::to_string(order_.size()) + (order_.size() == 1 ? " montr\xC3\xA9" "e" : " montr\xC3\xA9" "es");
     status_->setMessage(msg);
     rebuildProperties();
@@ -406,6 +442,20 @@ PG::Category alarmGroupsCategory(const hmi::DocumentPtr& doc, const std::functio
                                         return true;
                                     }),
                                     "Non : les alarmes du groupe n'entrent pas dans l'historique."));
+        // 1.20.2 : la case Incidents du groupe - cochee, decochee, ou << - >> (ses alarmes different) ; la cocher ou
+        // la decocher pose celle de toutes ses alarmes (et la sienne), en une commande.
+        {
+            const int state = hmi::alarmGroupIncidents(doc->project, name);
+            auto inc = prop("Incidents", tf(state == 1), VT::Boolean,
+                            Commit([doc, run, name](std::string_view v) {
+                                const bool on = hmi::parseBool(v, false);
+                                auto cmd = hmi::setAlarmGroupIncidentsCmd(doc, name, on);
+                                return !cmd || run(std::move(cmd));
+                            }),
+                            kGroupIncidentsTip);
+            inc.mixed = state < 0;
+            c.properties.push_back(std::move(inc));
+        }
         const auto linked = hmi::objectGroupsLinkedTo(doc->project, name);
         std::string names;
         for (const auto& l : linked) names += (names.empty() ? "" : ", ") + l;
@@ -505,6 +555,25 @@ void HmiAlarmsPane::rebuildProperties() {
             return setSetting(field, std::string(v));
         };
     };
+    // 1.20.2 : l'interrupteur general des incidents (Hosts), sous les groupes - pas une modification du projet :
+    // il ne s'annule pas par Ctrl+Z (comme le bouton de la page Incidents).
+    const auto withIncidents = [this](std::vector<PG::Category>& cats) {
+        if (!hosts_.incidentsEnabled || !hosts_.setIncidentsEnabled) return;
+        PG::Category g;
+        g.name = "Incidents (toutes les alarmes)";
+        g.properties.push_back(prop("Surveillance des incidents", tf(hosts_.incidentsEnabled()), PG::ValueType::Boolean,
+                                    [this](std::string_view v) {
+                                        const bool on = hmi::parseBool(v, false);
+                                        std::string why;
+                                        const bool saved = hosts_.setIncidentsEnabled && hosts_.setIncidentsEnabled(on, &why);
+                                        refresh();
+                                        say(std::string(on ? "Incidents : surveillance en marche" : "Incidents : surveillance arr\xC3\xAAt\xC3\xA9" "e")
+                                            + (saved || why.empty() ? std::string{} : " (" + why + ")"));
+                                        return true;
+                                    },
+                                    kGlobalIncidentsTip));
+        cats.push_back(std::move(g));
+    };
     if (!a) {
         PG::Category c;
         c.name = "Alarmes";
@@ -513,8 +582,12 @@ void HmiAlarmsPane::rebuildProperties() {
                                     std::string("Une alarme = une condition (une expression bool\xC3\xA9" "enne sur les variables de ")
                                         + (core::hasApi() ? "l'automate ou de l'IHM" : "l'IHM")   // 1.12.2
                                         + "), un message, une priorit\xC3\xA9, une cat\xC3\xA9gorie et un groupe."));
-        grid_->setCategories({std::move(c), alarmGroupsCategory(doc_, apply_, [this] { refresh(); }, [this](const std::string& g) { openLinkDialog(g); }),
-                              alarmSettingsCategory(doc_->project, settingCommit)});
+        std::vector<PG::Category> cats;
+        cats.push_back(std::move(c));
+        cats.push_back(alarmGroupsCategory(doc_, apply_, [this] { refresh(); }, [this](const std::string& g) { openLinkDialog(g); }));
+        withIncidents(cats);   // 1.20.2
+        cats.push_back(alarmSettingsCategory(doc_->project, settingCommit));
+        grid_->setCategories(std::move(cats));
         return;
     }
     const Id id = a->id;
@@ -541,6 +614,7 @@ void HmiAlarmsPane::rebuildProperties() {
                                 "Un groupe s'acquitte d'un coup (action \xC2\xAB Acquitter \xC2\xBB, cible groupe:Armoire A)."));
     c.properties.push_back(prop("Acquittement requis", tf(a->ackRequired), PG::ValueType::Boolean, commit("acquittement"),
                                 "Non : l'alarme dispara\xC3\xAEt seule quand sa condition redevient fausse."));
+    c.properties.push_back(prop("Incidents", tf(a->incidents), PG::ValueType::Boolean, commit("incidents"), kIncidentsTip));   // 1.20.2
     c.properties.push_back(prop("Temporisation (ms)", std::to_string(a->delayMs), PG::ValueType::Integer, commit("delai"),
                                 "La condition doit rester vraie ce temps-l\xC3\xA0 avant que l'alarme apparaisse (0 : aussit\xC3\xB4t)."));
     c.properties.push_back(prop("Description", a->description, PG::ValueType::Text, commit("description")));
@@ -555,8 +629,13 @@ void HmiAlarmsPane::rebuildProperties() {
                                 PG::ValueType::ReadOnly));
     const auto paths = variablePaths(a->condition);
     u.properties.push_back(prop("Variables lues", paths.empty() ? std::string("-") : fewOf(paths, 4), PG::ValueType::ReadOnly));
-    grid_->setCategories({std::move(c), std::move(u), alarmGroupsCategory(doc_, apply_, [this] { refresh(); }, [this](const std::string& g) { openLinkDialog(g); }),
-                          alarmSettingsCategory(doc_->project, settingCommit)});
+    std::vector<PG::Category> cats;
+    cats.push_back(std::move(c));
+    cats.push_back(std::move(u));
+    cats.push_back(alarmGroupsCategory(doc_, apply_, [this] { refresh(); }, [this](const std::string& g) { openLinkDialog(g); }));
+    withIncidents(cats);   // 1.20.2
+    cats.push_back(alarmSettingsCategory(doc_->project, settingCommit));
+    grid_->setCategories(std::move(cats));
 }
 
 bool HmiAlarmsPane::setSetting(const std::string& field, const std::string& raw, std::string* why) {
@@ -737,6 +816,10 @@ bool HmiAlarmsPane::setField(Id id, const std::string& field, const std::string&
             }
     } else if (field == "acquittement") {
         next.ackRequired = yes(value);
+    } else if (field == "incidents") {                    // 1.20.2 : la case Incidents (oui / non)
+        const bool on = hmi::parseBool(value, false);
+        if (!on && hmi::parseBool(value, true)) return fail("incidents : oui ou non (" + value + ")");
+        next.incidents = on;
     } else if (field == "delai") {
         double ms = 0;
         if (!hmi::parseNumber(value, ms) || ms < 0) return fail("temporisation : un nombre de millisecondes (0 ou plus)");
@@ -769,7 +852,7 @@ bool HmiAlarmsPane::setField(Id id, const std::string& field, const std::string&
     static const std::map<std::string, std::string> labels = {
         {"condition", "condition"}, {"message", "message"}, {"priorite", "priorit\xC3\xA9"}, {"categorie", "cat\xC3\xA9gorie"},
         {"groupe", "groupe"}, {"acquittement", "acquittement requis"}, {"delai", "temporisation (ms)"}, {"description", "description"},
-        {"consigne", "consigne"}};
+        {"consigne", "consigne"}, {"incidents", "incidents"}};
     if (field == "nom")
         say("Renomm\xC3\xA9" "e en " + next.name + (followed ? " : " + std::to_string(followed) + " action(s) suivent" : std::string{})
             + (compared ? " ; " + std::to_string(compared) + " endroit(s) qui la nomment (SYS.AlarmSelected = '...', IHM_METTRE_DE_COTE('...')) : suivi(s)"
@@ -780,6 +863,63 @@ bool HmiAlarmsPane::setField(Id id, const std::string& field, const std::string&
             + kNames[std::clamp(groupPriority, 1, 4)] + ", celle du groupe " + value);
     } else
         say(next.name + " : " + (labels.count(field) ? labels.at(field) : field) + " = " + value);
+    return true;
+}
+
+// 1.20.2 : la case << Incidents >> - plusieurs alarmes en une commande.
+bool HmiAlarmsPane::setIncidents(const std::vector<Id>& ids, bool on, std::string* why) {
+    std::vector<Id> change;
+    std::vector<std::string> names;
+    for (const Id id : ids)
+        if (const auto* a = doc_->project.alarm(id); a && a->incidents != on && std::find(change.begin(), change.end(), id) == change.end()) {
+            change.push_back(id);
+            names.push_back(a->name);
+        }
+    if (change.empty()) {
+        if (why) *why = "rien \xC3\xA0 changer";
+        return false;
+    }
+    const bool many = names.size() > 1;
+    const std::string label = "Incidents : " + (many ? std::to_string(names.size()) + " alarmes" : names.front())
+                            + (on ? " coch\xC3\xA9" : " d\xC3\xA9" "coch\xC3\xA9") + (many ? "es" : "e");
+    auto cmd = hmi::changeProject(doc_, label, [&](hmi::Project& pr) {
+        for (const Id id : change)
+            if (auto* a = pr.alarm(id)) a->incidents = on;
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    say(label + (on ? std::string(" : un dossier d'incident \xC3\xA0 chaque apparition")
+                    : std::string(" : plus d'incident, l'alarme fonctionne comme avant")));
+    return true;
+}
+
+bool HmiAlarmsPane::toggleIncidentsAt(ui::RowIndex row) {
+    if (row >= order_.size()) return false;
+    const auto* a = doc_->project.alarm(order_[row]);
+    if (!a) return false;
+    const bool on = !a->incidents;
+    std::vector<Id> ids{a->id};
+    // La ligne fait partie de plusieurs lignes choisies : toutes prennent sa nouvelle valeur.
+    const auto chosen = table_->selectedModelRows();
+    const bool many = chosen.size() > 1 && std::find(chosen.begin(), chosen.end(), row) != chosen.end();
+    if (many) {
+        ids.clear();
+        for (const auto r : chosen)
+            if (r < order_.size()) ids.push_back(order_[r]);
+    }
+    const auto keep = std::vector<ui::RowIndex>(chosen.begin(), chosen.end());
+    const bool changed = setIncidents(ids, on);
+    if (many) table_->selectModelRows(keep);   // les lignes choisies le restent
+    return changed;
+}
+
+bool HmiAlarmsPane::setGroupIncidents(const std::string& group, bool on) {
+    auto cmd = hmi::setAlarmGroupIncidentsCmd(doc_, group, on);
+    if (!cmd) return false;
+    const std::string label = cmd->label();
+    apply_(std::move(cmd));
+    refresh();
+    say(label);
     return true;
 }
 

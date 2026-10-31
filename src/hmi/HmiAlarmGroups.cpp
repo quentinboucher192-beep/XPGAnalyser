@@ -70,6 +70,44 @@ std::string uniqueAlarmGroupName(const Project& p, std::string_view wanted) {
     }
 }
 
+// ---- 1.20.2 : la case << Incidents >> d'un groupe ---------------------------------------
+int alarmGroupIncidents(const Project& p, std::string_view group) {
+    bool on = false, off = false, any = false;
+    for (const auto& a : p.alarms) {
+        if (a.group != group) continue;
+        any = true;
+        (a.incidents ? on : off) = true;
+    }
+    // la case du groupe (ses alarmes d'objets) : s'il en a de liees, ou s'il n'a rien d'autre a montrer
+    if (!any || !objectGroupsLinkedTo(p, group).empty()) (alarmGroupSettings(p, group).incidents ? on : off) = true;
+    return on && off ? -1 : on ? 1 : 0;
+}
+
+std::size_t setAlarmGroupIncidents(Project& p, std::string_view group, bool on) {
+    if (group.empty()) return 0;
+    std::size_t n = 0;
+    for (auto& a : p.alarms)
+        if (a.group == group && a.incidents != on) {
+            a.incidents = on;
+            ++n;
+        }
+    AlarmGroupDef* g = nullptr;
+    for (auto& x : p.alarmGroups)
+        if (x.name == group) g = &x;
+    if (!g && !on && alarmGroupExists(p, group)) {   // nomme seulement par des alarmes : declare (reglages par defaut)
+        AlarmGroupDef d;
+        d.id = p.allocate();
+        d.name = std::string(group);
+        p.alarmGroups.push_back(std::move(d));
+        g = &p.alarmGroups.back();
+    }
+    if (g && g->incidents != on) {
+        g->incidents = on;
+        ++n;
+    }
+    return n;
+}
+
 // ---- les liens -------------------------------------------------------------------------
 namespace {
 

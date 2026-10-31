@@ -1423,6 +1423,13 @@ struct AlarmDef {
     // Lot 11 : la CONSIGNE - ce que fait l'operateur quand elle apparait ("Changer
     // la bouteille A ; verifier le detendeur."). L'objet Consigne d'alarme la montre.
     std::string instruction;
+    // 1.20.2 : LA CASE << INCIDENTS >> (IHM > Alarmes) - vraie (par defaut, et pour un
+    // projet d'avant) : quand l'alarme apparait, en simulation et au poste, la
+    // surveillance des incidents ouvre un dossier d'incident (hmi::incident::allowed) ;
+    // fausse : l'alarme fonctionne comme avant, sans incident. Ecrite seulement fausse
+    // (incidents=0). Les alarmes des symboles ne s'en servent pas : une alarme d'objet
+    // suit la case de son groupe (AlarmGroupDef::incidents).
+    bool        incidents{true};
     bool operator==(const AlarmDef&) const = default;
 };
 inline constexpr int kAlarmPriorities = 4;
@@ -1447,7 +1454,11 @@ struct AlarmSettings {
 //   sound    : une ressource ; vide : le son de la priorite (AlarmSettings::sounds) ;
 //   zone     : le resume par zone ; vide : le nom du groupe ;
 //   level    : le niveau d'acces pour acquitter (1 a 4) ; 0 : quiconque peut acquitter ;
-//   archive  : l'historique garde ses alarmes (oui par defaut).
+//   archive  : l'historique garde ses alarmes (oui par defaut) ;
+//   incidents: 1.20.2 - les alarmes des OBJETS de ce groupe (liees, ou mises dans ce groupe
+//              par leur surcharge) ouvrent un dossier d'incident (oui par defaut). La case
+//              << Incidents >> du groupe la pose avec celles de toutes ses alarmes du projet
+//              (hmi::setAlarmGroupIncidents).
 enum class AlarmAckMode : std::uint8_t { Single, Group, Auto };
 struct AlarmGroupDef {
     Id           id{kNoId};
@@ -1460,6 +1471,7 @@ struct AlarmGroupDef {
     std::string  zone;
     int          level{0};
     bool         archive{true};
+    bool         incidents{true};   // 1.20.2 : voir plus haut (ecrit seulement faux)
     bool operator==(const AlarmGroupDef&) const = default;
 };
 // 1.10.2 : UN LIEN d'un groupe d'alarmes des objets (le groupe interne "Vue.Objet",

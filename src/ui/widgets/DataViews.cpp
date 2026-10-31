@@ -1393,7 +1393,11 @@ std::string TableView::liveTooltip(gfx::Point mouse) const {
     if (model_ && hoverRow_ >= 0 && static_cast<std::size_t>(hoverRow_) < view_.size()) {
         const RowIndex row = view_[static_cast<std::size_t>(hoverRow_)];
         if (row < model_->rowCount()) {
-            std::string tip = model_->rowTooltip(row);
+            // 1.20.2 : l'infobulle de la case survolee (CellStyle::tip), puis celle de la ligne.
+            std::string tip = hoverTipCol_ >= 0 && static_cast<std::size_t>(hoverTipCol_) < model_->columnCount()
+                                  ? model_->cellStyle(row, static_cast<std::size_t>(hoverTipCol_)).tip
+                                  : std::string{};
+            if (tip.empty()) tip = model_->rowTooltip(row);
             if (!tip.empty()) return tip;
         }
         // La ligne n'en a pas (ou plus) : celle de la table.
@@ -1925,6 +1929,17 @@ bool TableView::checkRect(std::size_t viewRowIndex, gfx::Rect& out) const {
     return true;
 }
 
+// 1.20.2 : la case a cocher d'une autre colonne que la premiere (CellStyle::checkInCell).
+bool TableView::cellCheckRect(std::size_t viewRowIndex, std::size_t col, gfx::Rect& out) const {
+    if (!model_ || viewRowIndex >= view_.size() || col >= columns_.size() || !columns_[col].visible) return false;
+    if (col == firstVisibleColumn()) return false;   // la premiere colonne : checkRect (checkClicked), comme en 1.9
+    const auto st = model_->cellStyle(view_[viewRowIndex], col);
+    gfx::Rect cell;
+    if (st.check < 0 || !st.checkInCell || !cellRect(viewRowIndex, col, cell) || cell.w <= 32.f) return false;
+    out = {cell.x + 6.f, cell.y + (cell.h - 14.f) * 0.5f, 14.f, 14.f};
+    return true;
+}
+
 bool TableView::rowRect(std::size_t i, gfx::Rect& out) const {
     if (i >= view_.size()) return false;
     const auto area = contentRect();
@@ -2097,8 +2112,9 @@ void TableView::onPaint(const PaintContext& ctx) {
                 tx += 16.f;
                 avail -= 16.f;
             }
-            // 1.9 : une vraie case a cocher (premiere colonne), avant l'icone.
-            if (col == firstCol && st.check >= 0 && avail > 20.f) {
+            // 1.9 : une vraie case a cocher (premiere colonne), avant l'icone. 1.20.2 : ou dans sa
+            // colonne, quelle qu'elle soit (CellStyle::checkInCell).
+            if ((col == firstCol || st.checkInCell) && st.check >= 0 && avail > 20.f) {
                 drawCheckBox(ctx, {tx, r.y + (rowH - 14.f) * 0.5f, 14.f, 14.f}, st.check > 0);
                 tx    += 20.f;
                 avail -= 20.f;
@@ -2399,6 +2415,20 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 invalidate();
                 return EventResult::Consumed;
             }
+            // 1.20.2 : la case a cocher d'une autre colonne (CellStyle::checkInCell). Sur une ligne deja
+            // choisie, la selection reste : l'hote coche toutes les lignes choisies.
+            if (d->button == MouseButton::Left && lastClickColumn_ >= 0
+                && cellCheckRect(static_cast<std::size_t>(vi), static_cast<std::size_t>(lastClickColumn_), cr)
+                && gfx::Rect{cr.x - 4.f, cr.y - 4.f, cr.w + 8.f, cr.h + 8.f}.contains(d->pos)) {
+                const bool chosen = std::find(selection_.begin(), selection_.end(), row) != selection_.end();
+                if (selectionMode_ != SelectionMode::None && !chosen) {
+                    selection_.assign(1, row);
+                    selectionChanged->emit(selection_);
+                }
+                cellCheckClicked->emit(row, static_cast<std::size_t>(lastClickColumn_));
+                invalidate();
+                return EventResult::Consumed;
+            }
             // Lot 21 : saisir une ligne d'une selection de plusieurs, pour les
             // trainer ensemble - la selection ne se reduit qu'au relacher, si
             // aucun glisser n'a eu lieu.
@@ -2537,10 +2567,17 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 return EventResult::Ignored;
             }
         }
-        if (h != hoverRow_) {
+        // 1.20.2 : l'infobulle d'une case (CellStyle::tip) - la colonne survolee compte aussi.
+        const int tipCol = h >= 0 ? columnAtX(m->pos.x) : -1;
+        if (h != hoverRow_ || tipCol != hoverTipCol_) {
+            const bool rowChanged = h != hoverRow_;
             hoverRow_ = h;
-            // Lot 16 : l'infobulle de la ligne survolee, si le modele en donne une.
-            const std::string tip = h >= 0 ? model_->rowTooltip(view_[static_cast<std::size_t>(h)]) : std::string{};
+            hoverTipCol_ = tipCol;
+            // Lot 16 : l'infobulle de la ligne survolee, si le modele en donne une. 1.20.2 : celle de la case avant.
+            std::string tip = h >= 0 && tipCol >= 0 && static_cast<std::size_t>(tipCol) < model_->columnCount()
+                                  ? model_->cellStyle(view_[static_cast<std::size_t>(h)], static_cast<std::size_t>(tipCol)).tip
+                                  : std::string{};
+            if (tip.empty() && h >= 0) tip = model_->rowTooltip(view_[static_cast<std::size_t>(h)]);
             if (!tip.empty()) {
                 if (!rowTooltipShown_) tableTooltip_ = tooltip();
                 rowTooltipShown_ = true;
@@ -2549,7 +2586,7 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 rowTooltipShown_ = false;
                 setTooltip(tableTooltip_);
             }
-            invalidate();
+            if (rowChanged) invalidate();   // 1.20.2 : une autre colonne de la meme ligne ne change pas le dessin
         }
         return EventResult::Ignored;
     }

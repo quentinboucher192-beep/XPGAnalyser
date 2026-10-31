@@ -135,7 +135,7 @@ const char* const kRules =
     "Config.Sous.Valeur (son adresse propre, dans la structure).\n"
     "- creer_script : nom, langage (ST, C, C++), evenement (Demarrage, Cyclique + periode, Changement + surveille, Appel), corps. "
     "creer_fonction : nom, retour, generiques, corps (VAR_INPUT ... END_VAR, puis Nom := r\xC3\xA9sultat). Compil\xC3\xA9s, jamais ex\xC3\xA9" "cut\xC3\xA9s ici.\n"
-    "- creer_alarme : nom, condition (variables existantes), message, priorite (1-4), groupe, delai (ms), consigne.\n"
+    "- creer_alarme : nom, condition (variables existantes), message, priorite (1-4), groupe, delai (ms), consigne, incidents (false : aucun dossier d'incident).\n"
     "- creer_ressource : piece_jointe (un fichier joint \xC3\xA0 la conversation). creer_dossier : liste (vues, popups, symboles, "
     "ecrans_modeles, entetes, pieds, scripts, types, styles, ressources, variables), dossier. ranger : liste, dossier, objets.\n"
     // 1.19.0 : concevoir une installation complete.
@@ -233,7 +233,7 @@ const std::vector<Fields>& fieldsOf() {
         {A::Address, {"variable", "equipement", "adresse", "formule", "motif", "lecture_seule", "proprietes"}, {"variable", "equipement"}},
         {A::Script, {"nom", "langage", "evenement", "periode", "surveille", "corps", "description", "dossier", "proprietes"}, {"nom", "corps"}},
         {A::Function, {"nom", "retour", "corps", "description", "generiques", "proprietes"}, {"nom", "corps"}},
-        {A::Alarm, {"nom", "condition", "message", "priorite", "categorie", "groupe", "delai", "acquittement", "consigne", "description", "proprietes"},
+        {A::Alarm, {"nom", "condition", "message", "priorite", "categorie", "groupe", "delai", "acquittement", "incidents", "consigne", "description", "proprietes"},
          {"nom", "condition"}},
         {A::Resource, {"nom", "piece_jointe", "dossier", "proprietes"}, {"piece_jointe"}},
         {A::Folder, {"liste", "dossier", "proprietes"}, {"liste", "dossier"}},
@@ -564,6 +564,7 @@ std::string operationsTool() {
              {"evenement", "creer_script."}, {"surveille", "creer_script."}, {"corps", "creer_script, creer_fonction."},
              {"retour", "creer_fonction."}, {"condition", "creer_alarme."}, {"message", "creer_alarme."}, {"priorite", "creer_alarme."},
              {"categorie", "creer_alarme."}, {"groupe", "creer_alarme."}, {"delai", "creer_alarme (ms)."}, {"acquittement", "creer_alarme."},
+             {"incidents", "creer_alarme : false = pas de dossier d'incident pour elle."},
              {"consigne", "creer_alarme."}, {"piece_jointe", "creer_ressource."}, {"liste", "creer_dossier, ranger."},
              {"dossier", "creer_dossier, ranger..."}})
         props.set(k, str(d));

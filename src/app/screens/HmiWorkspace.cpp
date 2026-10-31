@@ -2082,6 +2082,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                 if (done) done(r.accepted(), HmiAskDialog::parse(r.payload));
             });
         };
+        // 1.20.2 : l'interrupteur general des incidents - la meme surveillance que la page Incidents.
+        hosts.incidentsEnabled = [this] { return app_.incidents().enabled(); };
+        hosts.setIncidentsEnabled = [this](bool on, std::string* why) { return app_.incidents().setEnabled(on, why); };
         pane->setHosts(std::move(hosts));
         // 1.9 : un double-clic sur une alarme generee ouvre l'objet dans sa vue (maquette A3).
         pane->generated().open = [this](hmi::Id v, hmi::Id o) { openHmiView(v, -1, o); };

@@ -1987,7 +1987,7 @@ Au-dessus de la liste : **la recherche** (l'alarme, son message, l'équipement, 
 ### Immuable
 Un incident garde le projet **de son moment** : une alarme renommée ou supprimée, un équipement retiré, une vue modifiée n'y changent rien. Rien n'est recalculé depuis le projet d'aujourd'hui.
 ### Les réglages
-1.20.2 : **Arrêter les incidents** (la barre du volet) coupe toute création de dossier, quelle que soit l'alarme – les incidents déjà enregistrés restent ; **Reprendre les incidents** la relance. C'est le réglage « surveillance active », gardé avec le projet.
+1.20.2 : **Arrêter les incidents** (la barre du volet) coupe toute création de dossier, quelle que soit l'alarme – les incidents déjà enregistrés restent ; **Reprendre les incidents** la relance. C'est le réglage « surveillance active », gardé avec le projet. Alarme par alarme, ou groupe par groupe : la case **Incidents** de IHM › Alarmes (voir « Alarmes »).
 Dans le volet : surveillance active, alarmes surveillées (vide : toutes ; * permis, ex. Defaut_*), alarmes ignorées, défauts de communication, secondes avant et après, images par seconde, maintien, anti-rebond. Ils sont gardés avec le projet (ihm/ressources/enregistrements/reglages-incidents.json).
 ### Robustesse
 - Les images sont copiées sur le fil de l'interface et codées ailleurs ; les dossiers sont écrits en arrière-plan.
@@ -9641,7 +9641,7 @@ if (Bouton_Acquitter)
 
 == alarmes | Alarmes
 : Une alarme apparaît quand sa condition devient vraie, s'affiche avec son message horodaté, s'acquitte, puis disparaît et passe à l'historique.
-@mots GÉNÉRÉES, Alarmes du projet, Ouvrir l'objet, Ouvrir le symbole, Générée par
+@mots GÉNÉRÉES, Alarmes du projet, Ouvrir l'objet, Ouvrir le symbole, Générée par, Incidents, Surveillance des incidents, sans incident
 @lieux alarmes
 @voir historiques, securite, proprietes, alarmes-objets, objet-historique, excel, groupes-objets, alarmes-symboles, alarmes-bibliotheque, surcharge-alarmes
 @capture PNG_096_alarmes_definitions.png | Le volet Alarmes : conditions, messages, priorités, groupes.
@@ -9657,6 +9657,12 @@ Sous les **Alarmes du projet** (celles que tu écris ici), le tableau montre deu
 - La fiche d'une alarme générée, à droite quand tu la choisis : « Générée par Sym_Pompe, sur Pompe_3 », son nom complet, **Ouvrir** (l'objet dans sa vue, ou le symbole), puis ses champs comme dans la fiche de l'objet : un champ surchargé porte l'étiquette **SURCHARGÉ** et le bouton ↺ qui revient à la valeur du symbole ; le bouton ↺ de la ligne **État** fait **Tout revenir**.
 - Un **double-clic** ouvre l'objet dans sa vue, sur sa section Alarmes de l'objet.
 Voir « Les alarmes d'un symbole », « Les alarmes par défaut des objets du synoptique », « Le groupe d'alarmes d'un objet » et « Surcharger une alarme sur un objet ».
+### Créer un incident, ou pas
+1.20.2 : chaque alarme a une case **Incidents** (une colonne du tableau, et sa fiche) : cochée (par défaut), son apparition crée un dossier d'incident (voir « Incidents ») ; décochée, elle s'affiche, s'acquitte et passe à l'historique comme avant, mais aucun incident n'est créé pour elle – une alarme de routine (porte ouverte, maintenance) ne remplit plus le volet.
+- **Plusieurs alarmes choisies** : un clic sur la case de l'une les coche ou les décoche toutes, en une seule modification (Ctrl+Z la défait).
+- **Un groupe** (partie Groupes d'alarmes) a sa case **Incidents** : la cocher ou la décocher le fait pour toutes ses alarmes, en une modification ; elle montre « – » quand ses alarmes sont mêlées. Les alarmes des objets du synoptique et des symboles suivent la case de leur groupe (celui de l'objet lié à un groupe de l'IHM, ou celui qu'elles déclarent) ; sans groupe connu, elles créent leurs incidents.
+- **Surveillance des incidents** (en haut des groupes) : décochée, plus aucun incident n'est créé, quelle que soit l'alarme – c'est le même réglage que **Arrêter les incidents** du volet Incidents, gardé avec le projet ; la barre d'état dit « surveillance des incidents arrêtée ».
+La case ne s'écrit dans le projet que décochée (`incidents=0`) : un projet d'avant s'ouvre tout coché, et une version d'avant ignore la clé.
 ### Sons et mise de côté
 La catégorie **Sons et mise de côté (toutes les alarmes)** de Configuration › Alarmes règle :
 | Réglage | Effet |

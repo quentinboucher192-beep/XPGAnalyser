@@ -73,11 +73,17 @@ struct Settings {
     double                   before{10.0};     // les secondes gardees AVANT le defaut (images, chronologie)
     double                   after{5.0};       // ... et APRES
     double                   timeline{120.0};  // la fenetre de la chronologie
-    int                      framesPerSecond{2};
+    int                      framesPerSecond{5};   // 1.20.2 : 5 (2 en 1.20.0 : une video a saccades)
     std::size_t              maxPending{200};  // au-dela, les plus anciens incidents en attente non commentes sont dits
 };
 // Une alarme est-elle surveillee ?
 [[nodiscard]] bool watched(const Settings&, std::string_view alarm);
+// 1.20.2 : LA CASE << INCIDENTS >> DES ALARMES (IHM > Alarmes) - cette alarme ouvre-t-elle un dossier d'incident ?
+// Une alarme de IHM > Alarmes : sa case (AlarmDef::incidents) ; une autre (une alarme d'objet) : la case de son
+// groupe (`group` : celui de l'avis, AlarmNotice::group - le groupe lie, ou celui de sa surcharge ; un groupe
+// inconnu : oui) ; sans groupe : oui. L'hote (IncidentHost) la demande AVANT toute capture. `settings.enabled`
+// reste l'interrupteur general (rien du tout quand il est faux).
+[[nodiscard]] bool allowedFor(const Project&, std::string_view alarm, std::string_view group = {});
 
 // LE DETECTEUR : il recoit les avis du moteur (les fronts) et l'etat des equipements ; il rend les evenements et ceux
 // qui demandent un incident. Il ne lit jamais le projet : rien de lourd a chaque cycle.

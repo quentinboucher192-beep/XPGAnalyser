@@ -176,6 +176,14 @@ const std::vector<Note>& table() {
          "cr\xC3\xA9" "ation de dossier, quelle que soit l'alarme (les incidents d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent) ; \xC2\xAB Reprendre les "
          "incidents \xC2\xBB la relance. Le choix est gard\xC3\xA9 avec le projet.",
          "incidents", ""),
+        note("1.20.2", "Alarmes", Kind::New,
+         "UNE CASE INCIDENTS SUR CHAQUE ALARME ET CHAQUE GROUPE : dans IHM \xE2\x80\xBA Alarmes, la colonne (et la fiche) "
+         "Incidents dit si l'apparition de l'alarme cr\xC3\xA9" "e un dossier d'incident (coch\xC3\xA9" "e par "
+         "d\xC3\xA9" "faut). La case d'un groupe coche ou d\xC3\xA9" "coche toutes ses alarmes en une modification (\xC2\xAB \xE2\x80\x93 "
+         "\xC2\xBB quand elles sont m\xC3\xAAl\xC3\xA9" "es) ; les alarmes des objets suivent celle de leur groupe. Plusieurs "
+         "alarmes choisies changent ensemble ; Ctrl+Z d\xC3\xA9" "fait. La case Surveillance des incidents arr\xC3\xAAte tout, "
+         "comme Arr\xC3\xAAter les incidents du volet. Un projet d'avant s'ouvre tout coch\xC3\xA9.",
+         "alarmes", ""),
         note("1.20.2", "Enregistrements", Kind::Changed,
          "UN ENREGISTREMENT RESTE FID\xC3\x88LE M\xC3\x8AME SI LE PROJET A CHANG\xC3\x89 : il garde une copie du projet de son moment (vues, "
          "popups, objets, variables, types, scripts), compress\xC3\xA9" "e et chiffr\xC3\xA9" "e comme sa piste. La relecture se fait avec "

@@ -27,8 +27,14 @@ namespace json = app::ai::json;
 
 namespace {
 
-constexpr std::size_t kMaxFrameBytes = 48u * 1024u * 1024u;   // le tampon circulaire, borne
-constexpr int         kMaxFrameWidth = 1280;                   // au-dela : reduite (la memoire, le disque)
+constexpr std::size_t kMaxFrameBytes = 96u * 1024u * 1024u;   // le tampon circulaire, borne
+// 1.20.2 : la qualite des images et des videos (<< horrible >> en 1.20.0). Avant : JPEG qualite 75, que stb code en
+// 4:2:0 (la couleur a demi-resolution : textes colores et traits fins baveux), une reduction par un facteur ENTIER
+// (une vue de 1300 px tombait a 650), 2 images par seconde a une cadence fausse. Maintenant : 4:4:4 (stb : qualite
+// > 90), une reduction a la juste taille (moyenne ponderee), l'image du defaut codee a part en qualite maximale.
+constexpr int         kMaxFrameWidth = 1920;                   // au-dela : reduite (la memoire, le disque)
+constexpr int         kVideoQuality = 92;                      // > 90 : 4:4:4 chez stb (pas de couleur baveuse)
+constexpr int         kStillQuality = 95;                      // l'image du defaut (capture.jpg)
 constexpr std::size_t kMaxEvents = 300;
 constexpr double      kAnalysisTimeout = 240.0;
 constexpr std::size_t kMaxRetries = 50;
@@ -39,24 +45,56 @@ std::string U(const std::filesystem::path& p) {
     return std::string(u.begin(), u.end());
 }
 
-// Une image reduite d'un facteur entier (la moyenne de chaque carre).
+// 1.20.2 : une image plus large que kMaxFrameWidth, reduite A LA JUSTE TAILLE (et plus d'un facteur entier : 1300 px
+// donnaient 650) - chaque pixel d'arrivee est la moyenne ponderee des pixels qu'il couvre (une boite fractionnaire).
 void shrink(std::vector<std::uint8_t>& rgba, int& w, int& h) {
     if (w <= kMaxFrameWidth) return;
-    const int f = (w + kMaxFrameWidth - 1) / kMaxFrameWidth;
-    const int nw = w / f, nh = h / f;
-    if (nw < 1 || nh < 1) return;
-    std::vector<std::uint8_t> out(static_cast<std::size_t>(nw) * static_cast<std::size_t>(nh) * 4);
-    for (int y = 0; y < nh; ++y)
-        for (int x = 0; x < nw; ++x) {
-            unsigned sum[4] = {0, 0, 0, 0};
-            for (int dy = 0; dy < f; ++dy)
-                for (int dx = 0; dx < f; ++dx) {
-                    const std::size_t i = (static_cast<std::size_t>(y * f + dy) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x * f + dx)) * 4;
-                    for (int c = 0; c < 4; ++c) sum[c] += rgba[i + static_cast<std::size_t>(c)];
-                }
-            const std::size_t o = (static_cast<std::size_t>(y) * static_cast<std::size_t>(nw) + static_cast<std::size_t>(x)) * 4;
-            for (int c = 0; c < 4; ++c) out[o + static_cast<std::size_t>(c)] = static_cast<std::uint8_t>(sum[c] / static_cast<unsigned>(f * f));
+    const int nw = kMaxFrameWidth;
+    const int nh = std::max(1, static_cast<int>(std::lround(static_cast<double>(h) * nw / w)));
+    const double sx = static_cast<double>(w) / nw, sy = static_cast<double>(h) / nh;
+    // les poids de chaque colonne (et de chaque ligne) d'arrivee : les pixels de depart couverts, et leur part
+    struct Span { int from{0}, to{0}; std::vector<double> wt; };
+    const auto spans = [](int n, double scale, int limit) {
+        std::vector<Span> out(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            const double a = i * scale, b = (i + 1) * scale;
+            Span sp;
+            sp.from = static_cast<int>(std::floor(a));
+            sp.to = std::min(limit, static_cast<int>(std::ceil(b)));
+            for (int k = sp.from; k < sp.to; ++k) sp.wt.push_back((std::min(b, k + 1.0) - std::max(a, static_cast<double>(k))) / scale);
+            out[static_cast<std::size_t>(i)] = std::move(sp);
         }
+        return out;
+    };
+    const auto cols = spans(nw, sx, w), rows = spans(nh, sy, h);
+    // d'abord en largeur (une ligne a la fois), puis en hauteur
+    std::vector<float> mid(static_cast<std::size_t>(nw) * static_cast<std::size_t>(h) * 4);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < nw; ++x) {
+            const Span& sp = cols[static_cast<std::size_t>(x)];
+            float acc[4] = {0.f, 0.f, 0.f, 0.f};
+            for (int k = sp.from; k < sp.to; ++k) {
+                const std::size_t i = (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(k)) * 4;
+                const float f = static_cast<float>(sp.wt[static_cast<std::size_t>(k - sp.from)]);
+                for (int c = 0; c < 4; ++c) acc[c] += f * rgba[i + static_cast<std::size_t>(c)];
+            }
+            const std::size_t o = (static_cast<std::size_t>(y) * static_cast<std::size_t>(nw) + static_cast<std::size_t>(x)) * 4;
+            for (int c = 0; c < 4; ++c) mid[o + static_cast<std::size_t>(c)] = acc[c];
+        }
+    std::vector<std::uint8_t> out(static_cast<std::size_t>(nw) * static_cast<std::size_t>(nh) * 4);
+    for (int y = 0; y < nh; ++y) {
+        const Span& sp = rows[static_cast<std::size_t>(y)];
+        for (int x = 0; x < nw; ++x) {
+            float acc[4] = {0.f, 0.f, 0.f, 0.f};
+            for (int k = sp.from; k < sp.to; ++k) {
+                const std::size_t i = (static_cast<std::size_t>(k) * static_cast<std::size_t>(nw) + static_cast<std::size_t>(x)) * 4;
+                const float f = static_cast<float>(sp.wt[static_cast<std::size_t>(k - sp.from)]);
+                for (int c = 0; c < 4; ++c) acc[c] += f * mid[i + static_cast<std::size_t>(c)];
+            }
+            const std::size_t o = (static_cast<std::size_t>(y) * static_cast<std::size_t>(nw) + static_cast<std::size_t>(x)) * 4;
+            for (int c = 0; c < 4; ++c) out[o + static_cast<std::size_t>(c)] = static_cast<std::uint8_t>(std::clamp(acc[c] + 0.5f, 0.f, 255.f));
+        }
+    }
     rgba = std::move(out);
     w = nw;
     h = nh;
@@ -116,10 +154,10 @@ inc::Settings settingsOf(const json::Value& o) {
     s.communication = o.flag("communication", true);
     s.heldAfter = std::clamp(o.num("maintien_s", 30), 0.0, 86400.0);
     s.debounce = std::clamp(o.num("anti_rebond_s", 5), 0.0, 3600.0);
-    s.before = std::clamp(o.num("avant_s", 10), 0.0, 60.0);
-    s.after = std::clamp(o.num("apres_s", 5), 0.0, 60.0);
+    s.before = std::clamp(o.num("avant_s", 10), 0.0, 120.0);   // 1.20.2 : comme la fenetre des reglages (0 a 120 s)
+    s.after = std::clamp(o.num("apres_s", 5), 0.0, 120.0);
     s.timeline = std::clamp(o.num("chronologie_s", 120), 5.0, 3600.0);
-    s.framesPerSecond = static_cast<int>(std::clamp<std::int64_t>(o.integer("images_par_seconde", 2), 0, 10));
+    s.framesPerSecond = static_cast<int>(std::clamp<std::int64_t>(o.integer("images_par_seconde", inc::Settings{}.framesPerSecond), 0, 10));
     s.maxPending = static_cast<std::size_t>(std::clamp<std::int64_t>(o.integer("en_attente_max", 200), 1, 100000));
     return s;
 }
@@ -264,6 +302,16 @@ void IncidentHost::loadSettings() {
 }
 
 bool IncidentHost::setSettings(const inc::Settings& s, std::string* why) {
+    // 1.20.2 : en marche <-> arretee - le detecteur repart de zero (arrete, il ne voyait plus les disparitions : une
+    // alarme disparue pendant l'arret, reapparue apres, n'aurait pas fait d'incident) ; les defauts en attente de leur
+    // image sont oublies ; arretee, les videos en cours se terminent avec les images deja prises.
+    if (s.enabled != settings_.enabled) {
+        triggers_.clear();
+        captureNow_ = false;
+        monitor_.clear();
+        if (!s.enabled)
+            for (auto& r : recordings_) r.until = std::min(r.until, now_);
+    }
     settings_ = s;
     monitor_.setSettings(s);
     if (projectFolder_.empty()) {
@@ -284,11 +332,26 @@ bool IncidentHost::setSettings(const inc::Settings& s, std::string* why) {
 
 void IncidentHost::saveSettings() { (void)setSettings(settings_); }
 
+// 1.20.2 : l'interrupteur general.
+bool IncidentHost::setEnabled(bool on, std::string* why) {
+    inc::Settings s = settings_;
+    s.enabled = on;
+    return setSettings(s, why);
+}
+
 // ======================================================= le fil de l'interface ==
 void IncidentHost::notice(const hmi::AlarmNotice& n) {
     if (!store_ || !settings_.enabled) return;
     monitor_.notice(n, now_);
-    for (auto& e : monitor_.takeTriggers()) {
+    auto fronts = monitor_.takeTriggers();
+    if (fronts.empty()) return;
+    // 1.20.2 : la case << Incidents >> de l'alarme (ou de son groupe) decochee : pas d'incident - decide ICI, avant
+    // toute capture (ni image, ni video, rien d'ecrit). Le detecteur a quand meme vu le front : l'alarme reste dans la
+    // chronologie des autres incidents. Le projet en marche (celui que la simulation ou le poste fait tourner).
+    const std::optional<IncidentContext> ctx = source_ ? source_() : std::nullopt;
+    for (auto& e : fronts) {
+        if (ctx && ctx->project && !inc::allowedFor(*ctx->project, e.name, e.name == n.name ? std::string_view(n.group) : std::string_view{}))
+            continue;
         Trigger t;
         t.event = std::move(e);
         t.at = now_;
@@ -339,12 +402,18 @@ void IncidentHost::offerPixels(std::vector<std::uint8_t> rgba, int w, int h, dou
 void IncidentHost::encodeFrame(std::vector<std::uint8_t> rgba, int w, int h, double t, std::uint64_t seq, double keep) {
     shrink(rgba, w, h);
     std::vector<std::uint8_t> jpeg;
-    if (!encodeJpeg(rgba, w, h, 75, jpeg) || jpeg.empty()) return;
+    if (!encodeJpeg(rgba, w, h, kVideoQuality, jpeg) || jpeg.empty()) return;
     Frame f;
     f.jpeg = std::make_shared<const std::vector<std::uint8_t>>(std::move(jpeg));
     f.w = w;
     f.h = h;
     f.t = t;
+    // 1.20.2 : l'image du defaut (capture.jpg) codee a part, en qualite maximale ; la video garde la sienne
+    Frame still = f;
+    if (seq != 0) {
+        std::vector<std::uint8_t> best;
+        if (encodeJpeg(rgba, w, h, kStillQuality, best) && !best.empty()) still.jpeg = std::make_shared<const std::vector<std::uint8_t>>(std::move(best));
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     frames_.push_back(f);
     frameBytes_ += f.jpeg->size();
@@ -352,7 +421,7 @@ void IncidentHost::encodeFrame(std::vector<std::uint8_t> rgba, int w, int h, dou
         frameBytes_ -= frames_.front().jpeg->size();
         frames_.pop_front();
     }
-    if (seq != 0) captures_.emplace_back(seq, f);
+    if (seq != 0) captures_.emplace_back(seq, still);
 }
 
 void IncidentHost::tick(double now) {
@@ -375,6 +444,13 @@ void IncidentHost::tick(double now) {
     if (!settings_.enabled) {
         triggers_.clear();
         (void)monitor_.take();
+        // 1.20.2 : arretee, et plus de video a finir : le tampon des images est rendu (rien ne s'y ajoute)
+        if (recordings_.empty()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            frames_.clear();
+            frameBytes_ = 0;
+            captures_.clear();
+        }
     } else {
         monitor_.tick(now);
         (void)monitor_.take();   // la chronologie est gardee par le detecteur ; rien a montrer ici
@@ -438,11 +514,27 @@ void IncidentHost::tick(double now) {
                 // une seule taille d'image (la fenetre a pu changer) : celle de la plus recente
                 v.width = window.back()->w;
                 v.height = window.back()->h;
+                std::vector<const Frame*> same;
                 for (const Frame* f : window)
-                    if (f->w == v.width && f->h == v.height) {
+                    if (f->w == v.width && f->h == v.height) same.push_back(f);
+                // 1.20.2 : une CADENCE JUSTE. Les images arrivent a intervalles irreguliers (une image par cycle
+                // dessine, plus celle du defaut) : la video les ecrivait a la suite, a la cadence reglee - elle allait
+                // trop vite ou par saccades. Maintenant, a chaque top de la cadence, l'image la plus recente a ce
+                // moment (repetee si rien de neuf) : la duree de la video est la duree reelle.
+                if (v.fps > 0 && same.size() >= 2) {
+                    const double step = 1.0 / v.fps, t0 = same.front()->t, t1 = same.back()->t;
+                    std::size_t k = 0;
+                    for (double at = t0; at <= t1 + 1e-6 && v.frames.size() < 20000; at += step) {
+                        while (k + 1 < same.size() && same[k + 1]->t <= at + 1e-6) ++k;
+                        v.frames.push_back(*same[k]->jpeg);
+                        v.times.push_back(at - rec.trigger);
+                    }
+                } else {
+                    for (const Frame* f : same) {
                         v.frames.push_back(*f->jpeg);
                         v.times.push_back(f->t - rec.trigger);
                     }
+                }
             }
         }
         if (v.frames.size() < 2) v.note = "trop peu d'images : la vue en marche n'\xC3\xA9tait pas affich\xC3\xA9" "e assez longtemps";

@@ -33,6 +33,18 @@ namespace hmi {
 [[nodiscard]] std::string_view     alarmAckModeLabel(AlarmAckMode) noexcept;   // "Un par un", "Par groupe", "Automatique au retour"
 [[nodiscard]] std::string          uniqueAlarmGroupName(const Project&, std::string_view wanted);
 
+// ---- 1.20.2 : la case << Incidents >> d'un groupe ---------------------------------------
+// Ce qu'elle montre : 1 cochee (toutes ses alarmes ouvrent un dossier d'incident), 0 decochee
+// (aucune), -1 melangee (<< - >>). Ce qui compte : la case de chaque alarme de IHM > Alarmes
+// du groupe (AlarmDef::incidents) et celle du groupe lui-meme (AlarmGroupDef::incidents, que
+// suivent ses alarmes d'objets) quand des groupes d'objets lui sont lies ou qu'il n'a aucune
+// alarme du projet.
+[[nodiscard]] int                  alarmGroupIncidents(const Project&, std::string_view group);
+// Cocher (on) ou decocher la case de toutes les alarmes du groupe et la sienne (le groupe
+// seulement nomme par des alarmes est declare a cette occasion, si on decoche). Le nombre de
+// cases changees (0 : rien a faire).
+std::size_t                        setAlarmGroupIncidents(Project&, std::string_view group, bool on);
+
 // ---- les liens -------------------------------------------------------------------------
 // Le lien qui vaut pour une alarme d'objet de ce groupe interne ("Vue.Objet",
 // "Vue.Instance.Objet") : le plus precis - le groupe lui-meme, puis le groupe qui

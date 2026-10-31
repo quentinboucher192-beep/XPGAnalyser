@@ -1683,6 +1683,7 @@ struct Run {
         if (!readInt(prop(op, "delai"), 0, 3600000, 0, n)) return fail(at + "d\xC3\xA9lai : de 0 \xC3\xA0 3600000 ms.");
         a.delayMs = static_cast<int>(n);
         a.ackRequired = readBool(prop(op, "acquittement"), true);
+        a.incidents = readBool(prop(op, "incidents"), true);   // 1.20.2 : la case Incidents (cochee par defaut)
         a.instruction = prop(op, "consigne");
         a.description = prop(op, "description").empty() ? created() : prop(op, "description");
         a.id = nextId++;

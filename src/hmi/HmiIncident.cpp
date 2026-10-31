@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiIncident.hpp"
 
+#include "HmiAlarmGroups.hpp"   // 1.20.2 : la case Incidents d'un groupe (alarmGroupSettings)
 #include "HmiRelations.hpp"
 
 #include <algorithm>
@@ -129,6 +130,13 @@ bool watched(const Settings& s, std::string_view alarm) {
         if (matches(p, alarm)) return false;
     if (s.watched.empty()) return true;
     return std::any_of(s.watched.begin(), s.watched.end(), [&](const std::string& p) { return matches(p, alarm); });
+}
+
+// 1.20.2 : la case << Incidents >> de l'alarme (ou de son groupe, pour une alarme d'objet).
+bool allowedFor(const Project& p, std::string_view alarm, std::string_view group) {
+    if (const AlarmDef* a = p.alarmByName(alarm)) return a->incidents;
+    if (group.empty()) return true;
+    return alarmGroupSettings(p, group).incidents;
 }
 
 // ---- le detecteur ----------------------------------------------------------------------------------------------------

@@ -39,6 +39,13 @@ core::CommandPtr setAlarmGroupCmd(const DocumentPtr& doc, std::string_view name,
     });
 }
 
+// 1.20.2 : la case << Incidents >> d'un groupe, en une commande.
+core::CommandPtr setAlarmGroupIncidentsCmd(const DocumentPtr& doc, std::string_view name, bool on) {
+    if (name.empty() || !alarmGroupExists(doc->project, name)) return nullptr;
+    return changeProject(doc, "Incidents du groupe " + std::string(name) + (on ? " : coch\xC3\xA9s" : " : d\xC3\xA9" "coch\xC3\xA9s"),
+                         [&](Project& p) { (void)setAlarmGroupIncidents(p, name, on); });
+}
+
 core::CommandPtr renameAlarmGroupCmd(const DocumentPtr& doc, std::string_view from, std::string_view to, std::string* why) {
     if (from == to || from.empty()) return nullptr;
     if (to.empty()) {
