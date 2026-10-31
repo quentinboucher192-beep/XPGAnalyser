@@ -170,7 +170,10 @@ std::vector<std::string> settingsLabels() {
             "Secondes apr\xC3\xA8s le d\xC3\xA9" "faut",
             "Images par seconde",
             "Maintien signal\xC3\xA9 apr\xC3\xA8s (s)",
-            "Anti-rebond (s)"};
+            "Anti-rebond (s)",
+            "Regroupement des r\xC3\xA9" "apparitions (s)",       // 1.21.0
+            "Nouveaux incidents par heure, au plus",
+            "Quota des images et vid\xC3\xA9os (Mo)"};
 }
 
 std::vector<std::string> settingsValues(const inc::Settings& s) {
@@ -182,7 +185,10 @@ std::vector<std::string> settingsValues(const inc::Settings& s) {
             number(s.after),
             std::to_string(s.framesPerSecond),
             number(s.heldAfter),
-            number(s.debounce)};
+            number(s.debounce),
+            number(s.regroup),                       // 1.21.0
+            std::to_string(s.maxPerHour),
+            std::to_string(s.mediaQuotaMb)};
 }
 
 bool settingsFrom(const std::vector<std::string>& v, inc::Settings& io, std::string* why, std::size_t* field) {
@@ -216,6 +222,15 @@ bool settingsFrom(const std::vector<std::string>& v, inc::Settings& io, std::str
     s.framesPerSecond = static_cast<int>(std::lround(fps));
     if (!range(7, 0, 86400, s.heldAfter, "maintien")) return false;
     if (!range(8, 0, 3600, s.debounce, "anti-rebond")) return false;
+    // 1.21.0 : le regroupement des reapparitions, les garde-fous (des nombres entiers pour les deux derniers)
+    if (!range(9, 0, 86400, s.regroup, "regroupement")) return false;
+    double perHour = 0, quota = 0;
+    if (!range(10, 0, 10000, perHour, "nouveaux incidents par heure")) return false;
+    if (std::fabs(perHour - std::round(perHour)) > 1e-9) return fail(10, "nouveaux incidents par heure : un nombre entier (0 : sans plafond)");
+    if (!range(11, 0, 1048576, quota, "quota des images et vid\xC3\xA9os")) return false;
+    if (std::fabs(quota - std::round(quota)) > 1e-9) return fail(11, "quota des images et vid\xC3\xA9os : un nombre entier de Mo (0 : sans quota)");
+    s.maxPerHour = static_cast<std::size_t>(std::llround(perHour));
+    s.mediaQuotaMb = static_cast<std::size_t>(std::llround(quota));
     io = std::move(s);
     return true;
 }
@@ -725,6 +740,21 @@ std::string criticalityLabel(int p) {
 }
 std::string incidentsWord(std::size_t n) { return std::to_string(n) + (n > 1 ? " incidents" : " incident"); }
 
+// 1.21.0 : LES REAPPARITIONS d'un incident - la rafale en cours (l'hote, a jour a chaque reapparition), sinon celle
+// relue du dossier (reapparitions.json) ; nulle : aucune.
+const inc::Burst* burstOf(const IncidentHost* host, const st::Item& it) {
+    if (host)
+        if (const inc::Burst* b = host->reappearances(it.snapshot.id)) return b;
+    return it.reappearances ? &*it.reappearances : nullptr;
+}
+std::uint64_t reappearancesOf(const IncidentHost* host, const st::Item& it) {
+    const inc::Burst* b = burstOf(host, it);
+    return b ? b->count : 0;
+}
+// "\xC3\x97" "327" : le badge d'une ligne ; "327 r\xC3\xA9" "apparitions" : le texte.
+std::string badgeText(std::uint64_t n) { return "\xC3\x97" + inc::countText(n); }
+std::string reappearancesWord(std::uint64_t n) { return inc::countText(n) + (n > 1 ? " r\xC3\xA9" "apparitions" : " r\xC3\xA9" "apparition"); }
+
 } // namespace
 
 // ============================================================================================== la liste ==
@@ -879,6 +909,19 @@ protected:
     }
 
 private:
+    // 1.21.0 : le badge << x327 >> dont le bord droit est `right` ; rend sa largeur.
+    static float paintBadge(const ui::PaintContext& ctx, std::uint64_t n, float right, float y) {
+        const auto& th = ctx.theme;
+        const auto small = th.font.smallUi;
+        const std::string t = badgeText(n);
+        const float tw = ctx.r.measure(t, small).width, h = ctx.r.lineHeight(small) + 4.f;
+        const gfx::Rect box{right - tw - 12.f, y + 1.f, tw + 12.f, h};
+        ctx.r.fillRoundedRect(box, th.color.warning, h * 0.5f);
+        ctx.r.drawText({box.x + 6.f, box.y + 2.f}, t, small, th.color.windowBg);
+        ctx.r.drawText({box.x + 6.6f, box.y + 2.f}, t, small, th.color.windowBg);   // en gras (simule)
+        return box.w;
+    }
+
     // La miniature de `it` dans `box` (sinon un cadre et la raison) ; vrai : pas encore prete.
     static bool paintThumb(const ui::PaintContext& ctx, const st::Item& it, const gfx::Rect& box) {
         const auto& th = ctx.theme;
@@ -940,7 +983,10 @@ private:
         const float y0 = r.y + 7.f;
         const std::string date = ui_::dateText(ui_::stampOf(it));
         const float dw = ctx.r.measure(date, small).width;
-        const std::string name = ellipsize(ctx.r, it.name, font, w - dw - 10.f);
+        // 1.21.0 : une alarme qui bat - le badge << x327 >> (ses reapparitions regroupees), avant la date
+        const std::uint64_t again = reappearancesOf(pane_.host_, it);
+        const float bw = again ? paintBadge(ctx, again, r.right() - 10.f - dw - 8.f, y0) + 8.f : 0.f;
+        const std::string name = ellipsize(ctx.r, it.name, font, w - dw - 10.f - bw);
         ctx.r.drawText({x, y0}, name, font, sel ? c.selectionText : c.text);
         ctx.r.drawText({x + 0.6f, y0}, name, font, sel ? c.selectionText : c.text);   // en gras (simule)
         ctx.r.drawText({r.right() - 10.f - dw, y0 + 2.f}, date, small, c.textMuted);
@@ -1040,6 +1086,10 @@ private:
         chip(" \xC2\xB7 ", c.textMuted, y1);
         chip(criticalityLabel(row.criticality), critColor, y1);
         chip(" \xC2\xB7 du " + ui_::dateText(ui_::stampOf(*oldest)) + " au " + ui_::dateText(ui_::stampOf(latest)), c.textMuted, y1);
+        std::uint64_t again = 0;   // 1.21.0 : les reapparitions regroupees de ses incidents
+        for (const int m : row.members)
+            if (m >= 0 && static_cast<std::size_t>(m) < items.size()) again += reappearancesOf(pane_.host_, items[static_cast<std::size_t>(m)]);
+        if (again) chip(" \xC2\xB7 " + reappearancesWord(again), c.warning, y1);
         // l'equipement et la vue du plus recent ; sa synthese
         const float y2 = y1 + sl + 2.f;
         const std::string equipment = latest.equipment();
@@ -1065,7 +1115,7 @@ private:
 //  capture (sa texture, quand elle est prete) et la video (son image du moment).
 class HmiIncidentSheet final : public ui::Widget {
 public:
-    enum Group : int { GCapture, GDiag, GChain, GAnalyses, GComments, GValidation, GIntegrity, GCount };
+    enum Group : int { GCapture, GDiag, GChain, GAnalyses, GComments, GValidation, GIntegrity, GReappear /* 1.21.0 */, GCount };
     enum Act : int {
         ANone, AGroup, ASection, AAnalysis, AReveal, AAlarm, APlay, AStop, AOpenVideo, AFolder, ACompare, AAnalyze, AComment, AValidate,
         ARemove, AVerify, AExpandAll,
@@ -1797,6 +1847,7 @@ private:
         }
         B.y += 6.f;
         B.buttons({{"Ouvrir l'alarme", AAlarm, 0}, {"Voir l'analyse compl\xC3\xA8te", AExpandAll, 0}, {"Ouvrir le dossier", AFolder, 0}});
+        reappearGroup(B);   // 1.21.0 : une alarme qui bat - ses reapparitions regroupees
 
         // ---- la capture et la video ----
         group(B, GCapture, "Capture et vid\xC3\xA9o", it.hasVideo ? "vid\xC3\xA9o Motion-JPEG" : "pas de vid\xC3\xA9o");
@@ -2014,6 +2065,76 @@ private:
         }
         integrityGroup(B);
         finish(B);
+    }
+
+    // 1.21.0 : LES REAPPARITIONS REGROUPEES - le nombre, la premiere et la derniere, la frequence, deux histogrammes
+    // (par heure sur 24 h, par minute sur la derniere heure, aux couleurs du theme), le diagnostic en clair (une alarme
+    // instable, les pistes) et les dernieres reapparitions. Rien quand l'incident n'en a pas.
+    void reappearGroup(Builder& B) {
+        if (!item_) return;
+        const inc::Burst* b = burstOf(pane_.host_, *item_);
+        if (!b || b->count == 0) return;
+        const bool live = pane_.host_ && pane_.host_->reappearances(item_->snapshot.id) != nullptr;
+        group(B, GReappear, "R\xC3\xA9" "apparitions", badgeText(b->count) + " \xC2\xB7 " + inc::everyText(b->meanGap()));
+        if (!groupOpen_[GReappear]) return;
+        const auto f = B.th.font.ui;
+        const auto small = B.th.font.smallUi;
+        const float X = B.x0, W = B.w;
+        const double window = pane_.host_ ? pane_.host_->settings().regroup : 0.0;
+        B.para(X, W,
+               reappearancesWord(b->count) + " apr\xC3\xA8s l'incident, regroup\xC3\xA9" "es"
+                   + (window > 0 ? " (fen\xC3\xAAtre de " + inc::durationText(window) + ", glissante)" : std::string{})
+                   + " : aucun nouveau dossier, ni image, ni vid\xC3\xA9o."
+                   + (live ? " L'alarme bat encore : les chiffres suivent." : " Termin\xC3\xA9" "e (relue du dossier : reapparitions.json)."),
+               f, Tone::Text);
+        B.para(X, W,
+               "Premi\xC3\xA8re : " + ui_::dateText(b->firstAt.view()) + " \xC2\xB7 derni\xC3\xA8re : " + ui_::dateText(b->lastAt.view())
+                   + " \xC2\xB7 fr\xC3\xA9quence : " + inc::everyText(b->meanGap()) + " (de " + inc::durationText(b->minGap) + " \xC3\xA0 "
+                   + inc::durationText(b->maxGap) + ")",
+               small, Tone::Muted);
+        B.y += 6.f;
+        // les histogrammes : une barre par heure (puis par minute), la derniere a droite
+        const auto histogram = [&](const std::string& title, const std::uint32_t* cells, int n, const std::string& left) {
+            std::uint32_t top = 0;
+            for (int i = 0; i < n; ++i) top = std::max(top, cells[i]);
+            B.text(X, B.y, title + " \xE2\x80\x94 au plus " + inc::countText(top), small, Tone::Muted);
+            B.y += B.lh(small) + 2.f;
+            const float bw = std::min(W, 480.f), bh = 54.f;
+            const gfx::Rect box{X, B.y, bw, bh};
+            B.rect(Prim::K::Fill, box, Tone::Band);
+            const float step = (bw - 8.f) / static_cast<float>(n), gap = step > 6.f ? 2.f : 1.f;
+            for (int i = 0; i < n; ++i) {
+                if (!cells[i] || !top) continue;
+                const float h = std::max(2.f, (bh - 8.f) * static_cast<float>(cells[i]) / static_cast<float>(top));
+                B.rect(Prim::K::Fill, {X + 4.f + step * static_cast<float>(i), B.y + bh - 4.f - h, std::max(1.f, step - gap), h},
+                       i == n - 1 ? Tone::Error : Tone::Warning);
+            }
+            B.rect(Prim::K::Fill, {X + 4.f, B.y + bh - 4.f, bw - 8.f, 1.f}, Tone::Border);
+            B.rect(Prim::K::Stroke, box, Tone::Border);
+            B.y += bh + 2.f;
+            B.text(X, B.y, left, small, Tone::Muted);
+            const std::string right = "la derni\xC3\xA8re r\xC3\xA9" "apparition";
+            B.text(X + bw - B.r.measure(right, small).width, B.y, right, small, Tone::Muted);
+            B.y += B.lh(small) + 8.f;
+        };
+        histogram("Par heure (24 h)", b->hours.data(), inc::Burst::kHours, "il y a 23 h");
+        histogram("Par minute (la derni\xC3\xA8re heure)", b->minutes.data(), inc::Burst::kMinutes, "il y a 59 min");
+        // le diagnostic, en clair : instable, les pistes (jamais une cause affirmee)
+        B.markdown(X, W, inc::burstDiagnosis(*b, &item_->snapshot));
+        B.y += 4.f;
+        // les dernieres reapparitions (la plus recente d'abord)
+        const auto recent = b->recent();
+        B.text(X, B.y, "Les derni\xC3\xA8res (" + std::to_string(recent.size()) + " gard\xC3\xA9" "es en d\xC3\xA9tail, dans reapparitions.json) :", f,
+               Tone::Text, true);
+        B.y += B.lh(f) + 2.f;
+        int shown = 0;
+        for (auto r = recent.rbegin(); r != recent.rend() && shown < 12; ++r, ++shown)
+            B.para(X + 8.f, W - 8.f,
+                   "\xE2\x80\xA2 " + (r->at.empty() ? inc::durationText(r->t) : ui_::dateText(r->at.view()))
+                       + (r->active >= 0.f ? " \xC2\xB7 active " + inc::durationText(r->active) : std::string(" \xC2\xB7 disparition non vue"))
+                       + (r->value.empty() ? std::string{} : " \xC2\xB7 valeur " + r->value.str()),
+                   small, Tone::Muted);
+        B.y += 4.f;
     }
 
     // 1.21.0 : LA BARRE DU LECTEUR, mise en page ici (ses zones sont des Hit ; paintPlayer les dessine dans leur etat
@@ -2358,7 +2479,8 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
     tools->add(TFolder, HmiGlyph::Link, "Ouvrir le dossier de l'incident choisi (sans choix : celui des incidents en attente)", "Ouvrir le dossier");
     tools->add(TSettings, HmiGlyph::Gear,
                "R\xC3\xA9glages de la surveillance : activ\xC3\xA9" "e, les alarmes surveill\xC3\xA9" "es ou ignor\xC3\xA9" "es, les secondes avant et "
-               "apr\xC3\xA8s, les images par seconde, le maintien, l'anti-rebond",
+               "apr\xC3\xA8s, les images par seconde, le maintien, l'anti-rebond, le regroupement des r\xC3\xA9" "apparitions, le plafond horaire, "
+               "le quota des images et vid\xC3\xA9os",
                "R\xC3\xA9glages\xE2\x80\xA6");
     // 1.20.2 : L'INTERRUPTEUR GENERAL - arreter (ou reprendre) toute creation d'incident, en un clic ; garde avec le projet
     // (le reglage << surveillance active >>).
@@ -2398,7 +2520,8 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
                         {"Plus anciens d'abord", "anciens", {}, true},
                         {"Criticit\xC3\xA9 (critique d'abord)", "criticite", {}, true},
                         {"Alarme (A \xE2\x86\x92 Z)", "alarme", {}, true},
-                        {"Nombre d'incidents", "nombre", {}, true}});
+                        {"Nombre d'incidents", "nombre", {}, true},
+                        {"Nombre de r\xC3\xA9" "apparitions", "reapparitions", {}, true}});   // 1.21.0
         order->setSelectedIndex(SortRecent);
         order->setTooltip("Trier les lignes : les dossiers d'alarme et les incidents seuls ensemble ; dans un dossier, le plus r\xC3\xA9" "cent "
                          "d'abord");
@@ -2590,12 +2713,17 @@ std::string HmiIncidentsPane::rowText(std::size_t row) const {
     const st::Item* item = r ? itemAt(t, r->item) : nullptr;
     if (!item) return {};
     const auto& it = *item;
-    if (r->group)   // 1.20.2 : une ligne-dossier
+    if (r->group) {   // 1.20.2 : une ligne-dossier
+        std::uint64_t again = 0;   // 1.21.0
+        for (const int m : r->members)
+            if (const auto* x = itemAt(t, m)) again += reappearancesOf(host_, *x);
         return "Dossier | " + r->alarm + " | " + incidentsWord(r->members.size()) + " | " + criticalityLabel(r->criticality) + " | dernier : "
-               + incidentsui::dateText(incidentsui::stampOf(it)) + " | " + it.name;
+               + incidentsui::dateText(incidentsui::stampOf(it)) + " | " + it.name + (again ? " | " + reappearancesWord(again) : std::string{});
+    }
+    const std::uint64_t again = reappearancesOf(host_, it);   // 1.21.0 : une alarme qui bat
     return it.name + " | " + incidentsui::dateText(it.snapshot.createdAt) + " | " + incidentsui::alarmOf(it) + " | " + it.equipment() + " | "
            + it.snapshot.openView + " | " + it.synthesis() + " | " + it.certainty() + " | " + it.analysisState() + " | "
-           + incidentsui::validationLabel(it);
+           + incidentsui::validationLabel(it) + (again ? " | " + reappearancesWord(again) : std::string{});
 }
 
 void HmiIncidentsPane::showSelected() {
@@ -2659,6 +2787,7 @@ void HmiIncidentsPane::rebuildRows(int tab) {
         std::string      key, alarm;
         std::vector<int> members;
         int              criticality{0};
+        std::uint64_t    reappear{0};   // 1.21.0 : les reapparitions regroupees de ses incidents
     };
     std::vector<Entry> entries;
     std::map<std::string, std::size_t> byKey;
@@ -2698,12 +2827,13 @@ void HmiIncidentsPane::rebuildRows(int tab) {
             if (const auto found = byKey.find(key); found != byKey.end()) {
                 auto& e = entries[found->second];
                 e.members.push_back(index);
+                e.reappear += reappearancesOf(host_, it);
                 if (crit > 0 && (e.criticality == 0 || crit < e.criticality)) e.criticality = crit;
                 continue;
             }
             byKey.emplace(key, entries.size());
         }
-        entries.push_back({key, alarm, {index}, crit});
+        entries.push_back({key, alarm, {index}, crit, reappearancesOf(host_, it)});
     }
     // 3. le tri des lignes du haut (dossiers et incidents seuls ensemble) ; a egalite, le plus recent d'abord. La liste
     //    de l'hote va du plus recent au plus ancien : l'index du premier membre est la date du plus recent.
@@ -2724,6 +2854,9 @@ void HmiIncidentsPane::rebuildRows(int tab) {
             }
             case SortCount:
                 if (a.members.size() != b.members.size()) return a.members.size() > b.members.size();
+                break;
+            case SortReappear:   // 1.21.0 : les alarmes qui battent le plus d'abord
+                if (a.reappear != b.reappear) return a.reappear > b.reappear;
                 break;
             default: break;
         }
@@ -2863,6 +2996,17 @@ void HmiIncidentsPane::updateStatus() {
     if (filtering())
         msg = std::to_string(shown_[t]) + (shown_[t] > 1 ? " incidents affich\xC3\xA9s sur " : " incident affich\xC3\xA9 sur ") + std::to_string(total)
               + " \xC2\xB7 " + msg;
+    // 1.21.0 : les garde-fous - le plafond horaire (les incidents non crees), le quota des images et videos
+    const auto g = host_->guards();
+    if (g.skippedNow > 0 || g.capReached)
+        msg += " \xC2\xB7 plafond horaire atteint (" + std::to_string(g.maxPerHour) + " nouveaux incidents par heure) : "
+               + std::to_string(g.skippedNow) + (g.skippedNow > 1 ? " incidents non cr\xC3\xA9\xC3\xA9s" : " incident non cr\xC3\xA9\xC3\xA9")
+               + (g.skippedSince.empty() ? std::string{} : " depuis " + incidentsui::dateText(g.skippedSince));
+    else if (g.skipped > 0)
+        msg += " \xC2\xB7 " + std::to_string(g.skipped) + (g.skipped > 1 ? " incidents non cr\xC3\xA9\xC3\xA9s" : " incident non cr\xC3\xA9\xC3\xA9")
+               + " (plafond horaire) depuis le lancement";
+    if (g.quotaReached)
+        msg += " \xC2\xB7 quota des images et vid\xC3\xA9os atteint : les nouveaux incidents sont cr\xC3\xA9\xC3\xA9s sans image ni vid\xC3\xA9o";
     // un dossier choisi : les gestes portent sur l'incident qu'il montre
     const Row* r = row_[t] >= 0 ? rowAt(t, static_cast<std::size_t>(row_[t])) : nullptr;
     if (r && r->group)
@@ -3147,6 +3291,13 @@ void HmiIncidentsPane::onLayout() {
 void HmiIncidentsPane::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRect(bounds(), ctx.theme.color.panelBg);
     (void)poll();   // la liste de l'hote a change (un incident cree, un geste fait) : on la reprend
+    // 1.21.0 : une alarme qui bat - ses chiffres (la fiche, la barre d'etat) suivent, au plus une fois par seconde
+    if (host_ && host_->liveRevision() != liveSeen_ && ctx.time - liveAt_ >= 1.0) {
+        liveSeen_ = host_->liveRevision();
+        liveAt_ = ctx.time;
+        if (sheet_) sheet_->dirty();
+        updateStatus();
+    }
 }
 
 } // namespace app

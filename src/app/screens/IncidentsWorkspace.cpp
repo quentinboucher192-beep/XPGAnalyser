@@ -151,6 +151,10 @@ void MainAnalysisScreen::askHmiIncidentSettings() {
             case 6: f.placeholder = "1 \xC3\xA0 10"; break;
             case 7: f.placeholder = "0 : jamais"; break;
             case 8: f.placeholder = "une r\xC3\xA9" "apparition dans ce d\xC3\xA9lai : le m\xC3\xAAme incident"; break;
+            // 1.21.0 : une alarme qui bat ; les garde-fous
+            case 9: f.placeholder = "0 : d\xC3\xA9sactiv\xC3\xA9 ; dans ce d\xC3\xA9lai (glissant) : compt\xC3\xA9" "e dans l'incident"; break;
+            case 10: f.placeholder = "0 : sans plafond ; au-del\xC3\xA0 : compt\xC3\xA9s, sans dossier"; break;
+            case 11: f.placeholder = "0 : sans quota ; au-del\xC3\xA0 : incidents sans image ni vid\xC3\xA9o"; break;
             default: break;
         }
         fields.push_back(std::move(f));
@@ -159,7 +163,9 @@ void MainAnalysisScreen::askHmiIncidentSettings() {
         "dialog.hmiIncidentSettings", "R\xC3\xA9glages de la surveillance des incidents",
         "Quand une alarme surveill\xC3\xA9" "e appara\xC3\xAEt (simulation IHM, poste d'exploitation), un dossier d'incident se cr\xC3\xA9" "e tout "
         "seul : la capture, la vid\xC3\xA9o des secondes avant et apr\xC3\xA8s, le contexte copi\xC3\xA9 et l'analyse. Les listes acceptent * "
-        "(POMPE_*) et se s\xC3\xA9parent par des virgules ; une alarme ignor\xC3\xA9" "e ne fait jamais d'incident. Gard\xC3\xA9s avec le projet.",
+        "(POMPE_*) et se s\xC3\xA9parent par des virgules ; une alarme ignor\xC3\xA9" "e ne fait jamais d'incident. Une alarme qui bat (elle "
+        "r\xC3\xA9" "appara\xC3\xAEt avant la fin du regroupement) ne refait pas d'incident : ses r\xC3\xA9" "apparitions sont compt\xC3\xA9" "es dans le "
+        "sien. Gard\xC3\xA9s avec le projet.",
         std::move(fields), "Enregistrer");
     dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         hmi::incident::Settings s;

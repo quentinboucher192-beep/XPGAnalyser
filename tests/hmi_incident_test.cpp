@@ -11,6 +11,8 @@
 //  F. l'archivage (valider, deplacer, conserver, verifier les empreintes, reprendre apres un arret brutal) ;
 //  G. la resilience (IA distante et locale indisponibles, erreur et disque plein, incidents simultanes,
 //     projet volumineux, beaucoup d'alarmes).
+//  1.21.0 : une alarme qui bat (300 000 reapparitions : un incident, le compte exact, la memoire et le fichier
+//     bornes), regroupement 0 (comme avant), l'anti-rebond, le plafond horaire, le quota disque, les reglages.
 // =============================================================================
 #include "../src/app/ai/AiIncident.hpp"
 #include "../src/app/hmi/HmiIncidentHost.hpp"
@@ -26,6 +28,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -970,6 +973,464 @@ void incidentsCase() {
     }
 }
 
+// ---- 1.21.0 : UNE ALARME QUI BAT - les reapparitions regroupees, le plafond horaire, le quota disque ----------------
+namespace {
+
+// L'horodatage du moteur pour l'instant simule `t` (secondes depuis le 31/10/2026 a 00:00).
+std::string stampAt(double t) {
+    const long long ms = std::llround(t * 1000.0), sec = ms / 1000, day = sec / 86400;
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "2026-%s-%02lld %02lld:%02lld:%02lld.%03lld", day == 0 ? "10" : "11", day == 0 ? 31LL : day, (sec % 86400) / 3600,
+                  (sec % 3600) / 60, sec % 60, ms % 1000);
+    return buf;
+}
+
+// Un fournisseur d'IA qui garde le texte de la demande (le contexte envoye).
+class SeeingProvider : public app::ai::Provider {
+public:
+    explicit SeeingProvider(std::string* seen) : seen_(seen) {}
+    std::string_view key() const noexcept override { return "faux"; }
+    bool start(app::ai::ProviderRequest r, std::string*) override {
+        if (!r.turns.empty()) *seen_ = r.turns.back().text;
+        started_ = true;
+        return true;
+    }
+    std::vector<app::ai::ProviderEvent> poll() override {
+        std::vector<app::ai::ProviderEvent> out;
+        if (!started_) return out;
+        started_ = false;
+        app::ai::ProviderEvent e;
+        e.type = app::ai::ProviderEvent::Type::Text;
+        e.text = "L'alarme bat autour de son seuil.\nCertitude : hypoth\xC3\xA8se";
+        out.push_back(e);
+        e = {};
+        e.type = app::ai::ProviderEvent::Type::Done;
+        e.stopReason = "end_turn";
+        out.push_back(e);
+        return out;
+    }
+    void cancel() override {}
+    bool busy() const noexcept override { return started_; }
+
+private:
+    std::string* seen_;
+    bool         started_{false};
+};
+
+bool eventsHave(const std::vector<std::string>& events, const std::string& part) {
+    return std::any_of(events.begin(), events.end(), [&](const std::string& e) { return has(e, part); });
+}
+
+const st::Item* itemNamed(const std::vector<st::Item>& list, const std::string& alarm) {
+    for (const auto& it : list)
+        if (it.snapshot.trigger.name == alarm) return &it;
+    return nullptr;
+}
+
+} // namespace
+
+// R : 300 000 reapparitions toutes les 2 s (temps simule) - un seul incident, le compte exact, la memoire et le fichier
+// bornes, les histogrammes justes ; calme plus que la fenetre : un deuxieme incident ; valide : la rafale close.
+void burstHost() {
+    std::printf("1.21.0 : une alarme qui bat - 300 000 reapparitions, un seul incident\n");
+    const fs::path proj = tempRoot("rafale");
+    const Project p = station();
+    {
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        h.setContextSource([&]() -> std::optional<app::IncidentContext> {
+            app::IncidentContext c;
+            c.project = &p;
+            c.projectName = p.config.name;
+            c.read = [](std::string_view path) -> std::optional<std::pair<std::string, std::string>> {
+                if (path == "Pompe_2.Defaut") return std::make_pair(std::string("VRAI"), std::string("bonne"));
+                return std::nullopt;
+            };
+            return c;
+        });
+        const inc::Settings s0 = h.settings();
+        check(s0.regroup == 600.0 && s0.maxPerHour == 60 && s0.mediaQuotaMb == 2048 && s0.debounce == 5.0,
+              "R0 par defaut : regroupement 600 s, 60 nouveaux incidents par heure, 2048 Mo, l'anti-rebond 5 s inchange");
+        double t = 0;
+        const auto at = [&](double when) {
+            t = when;
+            h.tick(t);
+        };
+        const auto front = [&](const char* kind, double when) {
+            at(when);
+            h.notice(notice(kind, "Defaut_Pompe_2", stampAt(when).c_str()));
+        };
+        // l'incident : l'apparition (pas de vue en marche : il se cree sans image apres une seconde)
+        front("Apparition", 100.0);
+        front("Disparition", 100.5);
+        at(101.6);
+        check(h.drain(5000), "R l'ecriture du premier incident");
+        at(101.7);
+        auto l = h.listing();
+        check(h.created() == 1 && l->pending.size() == 1 && h.liveGroups() == 1, "R1 la premiere apparition : un incident, sa rafale ouverte");
+        const std::string id = l->pending.empty() ? std::string{} : l->pending[0].snapshot.id;
+        const std::string folder = l->pending.empty() ? std::string{} : l->pending[0].folder;
+        // 300 000 reapparitions, toutes les 2 s (active 0,5 s chacune) : pres de 7 jours simules
+        constexpr int kN = 300000;
+        std::map<std::int64_t, std::uint32_t> perMinute, perHour;
+        std::size_t peak = 0;
+        const auto c0 = std::chrono::steady_clock::now();
+        for (int i = 1; i <= kN; ++i) {
+            const double ti = 100.0 + 2.0 * i;
+            front("Apparition", ti);
+            front("Disparition", ti + 0.5);
+            ++perMinute[static_cast<std::int64_t>(std::floor(ti / 60.0))];
+            ++perHour[static_cast<std::int64_t>(std::floor(ti / 3600.0))];
+            if (i % 25000 == 0)
+                if (const auto* live = h.reappearances(id)) peak = std::max(peak, live->memoryBytes());
+        }
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c0).count();
+        std::printf("  %d reapparitions (600 000 avis, 600 000 tops de l'hote) en %.0f ms\n", kN, ms);
+        const double last = 100.0 + 2.0 * kN;
+        check(h.created() == 1 && h.listing()->pending.size() == 1, "R2 300 000 reapparitions toutes les 2 s : UN seul incident, un seul dossier");
+        const inc::Burst* b = h.reappearances(id);
+        check(b != nullptr, "R2 la rafale en cours, trouvee par l'incident");
+        if (b) {
+            check(b->count == 300000, "R2 le compte exact : 300000 (" + std::to_string(b->count) + ")");
+            check(b->firstT == 102.0 && b->lastT == last && b->firstAt.view() == stampAt(102.0) && b->lastAt.view() == stampAt(last),
+                  "R2 la premiere et la derniere (" + b->firstAt.str() + ", " + b->lastAt.str() + ")");
+            check(b->minGap == 2.0 && b->maxGap == 2.0 && b->meanGap() == 2.0, "R2 l'intervalle min, moyen, max : 2 s");
+            check(b->activeCount == static_cast<std::uint64_t>(kN) + 1 && std::fabs(b->meanActive() - 0.5) < 1e-9 && b->activeMax == 0.5,
+                  "R2 la duree active a chaque disparition (0,5 s ; l'incident compris)");
+            const auto recent = b->recent();
+            check(recent.size() == inc::Burst::kRecent && recent.back().t == last && recent.front().t == last - 2.0 * (inc::Burst::kRecent - 1),
+                  "R2 les 200 dernieres, dans l'ordre");
+            check(recent.back().value.view() == "VRAI" && recent.back().active == 0.5f && recent.back().at.view() == stampAt(last),
+                  "R2 le detail : l'heure, la duree, la valeur lue au meme cycle");
+            // la memoire : bornee, la meme au debut et a la fin
+            check(b->memoryBytes() <= inc::Burst::kMaxBytes && peak == b->memoryBytes() && b->ring.capacity() == inc::Burst::kRecent,
+                  "R3 la memoire de la rafale bornee : " + std::to_string(b->memoryBytes()) + " octets, au plus " + std::to_string(inc::Burst::kMaxBytes)
+                      + " (la meme a 25 000 et a 300 000)");
+            check(sizeof(inc::Reappearance) <= 64 && sizeof(inc::Burst) <= 1024,
+                  "R3 la taille des structures : " + std::to_string(sizeof(inc::Reappearance)) + " octets par reapparition detaillee, "
+                      + std::to_string(sizeof(inc::Burst)) + " pour la rafale");
+            check(h.liveGroups() == 1 && h.monitor().timeline(-1, 1e12).size() <= 2000, "R3 une rafale en memoire ; la chronologie du detecteur bornee");
+            // les histogrammes justes
+            bool minutesOk = b->lastMinute == static_cast<std::int64_t>(std::floor(last / 60.0));
+            for (int k = 0; k < inc::Burst::kMinutes; ++k) {
+                const auto it = perMinute.find(b->lastMinute - (inc::Burst::kMinutes - 1) + k);
+                minutesOk = minutesOk && b->minutes[static_cast<std::size_t>(k)] == (it == perMinute.end() ? 0u : it->second);
+            }
+            bool hoursOk = b->lastHour == static_cast<std::int64_t>(std::floor(last / 3600.0));
+            for (int k = 0; k < inc::Burst::kHours; ++k) {
+                const auto it = perHour.find(b->lastHour - (inc::Burst::kHours - 1) + k);
+                hoursOk = hoursOk && b->hours[static_cast<std::size_t>(k)] == (it == perHour.end() ? 0u : it->second);
+            }
+            check(minutesOk && b->minutes.back() > 0, "R4 l'histogramme par minute (la derniere heure) juste");
+            check(hoursOk && b->hours[0] == 1800, "R4 l'histogramme par heure (24 h) juste (1800 par heure pleine)");
+            // le diagnostic en clair, et le contexte de l'IA (borne)
+            const std::string diag = inc::burstDiagnosis(*b);
+            check(has(diag, "instable") && has(diag, "toutes les 2") && has(diag, "hyst\xC3\xA9r\xC3\xA9sis") && has(diag, "temporisation")
+                      && has(diag, "contact") && has(diag, "pas des causes"),
+                  "R4 le diagnostic : instable, la frequence, les pistes (sans cause affirmee)");
+            check(inc::burstContext(*b, 600).size() <= 640, "R4 le resume pour l'IA est borne");
+        }
+        // le fichier : ecrit (au plus toutes les 5 s, une seule ecriture en attente), borne, relu juste, hors empreinte
+        at(last + 6.0);
+        check(h.drain(20000), "R5 les ecritures finies");
+        const std::string text = readText((fs::path(folder) / "reapparitions.json").string());
+        check(!text.empty() && text.size() < 32u * 1024u, "R5 reapparitions.json borne : " + std::to_string(text.size()) + " octets");
+        std::printf("  la rafale : %zu octets en memoire ; reapparitions.json : %zu octets\n", b ? b->memoryBytes() : std::size_t{0}, text.size());
+        app::ai::json::Value doc;
+        inc::Burst back;
+        check(app::ai::json::parse(text, doc) && st::fromJson(doc, back), "R5 reapparitions.json relu");
+        if (b) {
+            check(back.count == b->count && back.firstT == b->firstT && back.lastT == b->lastT && back.minGap == b->minGap && back.maxGap == b->maxGap
+                      && back.activeCount == b->activeCount,
+                  "R5 relu juste : le compte, la premiere, la derniere, les intervalles, les durees");
+            check(back.minutes == b->minutes && back.hours == b->hours && back.lastMinute == b->lastMinute && back.lastHour == b->lastHour,
+                  "R5 relu juste : les histogrammes");
+            const auto r1 = back.recent(), r2 = b->recent();
+            check(r1.size() == r2.size() && !r1.empty() && r1.front().t == r2.front().t && r1.back().t == r2.back().t
+                      && r1.back().at.view() == r2.back().at.view() && r1.back().value.view() == "VRAI" && r1.back().active == 0.5f,
+                  "R5 relu juste : les 200 dernieres");
+        }
+        check(h.verify(folder).ok, "R5 reapparitions.json est hors empreinte : le dossier reste intact (verifie)");
+        // le volet : la ligne le dit
+        {
+            auto vdoc = std::make_shared<hmi::Document>();
+            app::HmiIncidentsPane pane("hmi.incidents", vdoc, &h);
+            pane.setBounds({0, 0, 1400, 800});
+            pane.layout();
+            (void)h.drain(3000);
+            (void)pane.poll();
+            check(pane.rowCount() == 1 && has(pane.rowText(0), "300\xC2\xA0" "000 r\xC3\xA9" "apparitions"),
+                  "R6 le volet : la ligne de l'incident dit ses 300 000 reapparitions (" + (pane.rowCount() ? pane.rowText(0) : std::string{}) + ")");
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortReappear);
+            check(pane.rowCount() == 1, "R6 le tri par nombre de reapparitions");
+        }
+        // l'analyse demandee ensuite : le resume des reapparitions dans son contexte
+        std::string seen;
+        h.setAnalyst([](std::string*) -> std::optional<app::IncidentAnalyst> {
+            app::IncidentAnalyst a;
+            a.provider = "anthropic";
+            a.label = "Faux (modele-essai)";
+            a.base.model = "modele-essai";
+            return a;
+        });
+        h.setProviderFactory([&seen](const std::string&) { return std::make_unique<SeeingProvider>(&seen); });
+        h.analyze(folder);
+        at(t + 0.1);
+        at(t + 0.1);
+        (void)h.drain(3000);
+        check(has(seen, "R\xC3\xA9" "apparitions regroup") && has(seen, "nombre : 300000"), "R6 << Analyser >> : le resume des reapparitions part avec la fiche");
+        h.setAnalyst(nullptr);
+        // calme plus longtemps que la fenetre : la rafale est ecrite une derniere fois et oubliee ; puis un DEUXIEME incident
+        at(last + 0.5 + 601.0);
+        check(h.liveGroups() == 0 && h.reappearances(id) == nullptr, "R7 restee calme plus de 600 s : la rafale close");
+        (void)h.drain(5000);
+        const double t2 = t + 10.0;
+        front("Apparition", t2);
+        at(t2 + 1.2);
+        (void)h.drain(5000);
+        at(t2 + 1.3);
+        l = h.listing();
+        check(h.created() == 2 && l->pending.size() == 2, "R7 la reapparition apres la fenetre : un deuxieme incident");
+        std::string id2, folder2;
+        for (const auto& it : l->pending) {
+            if (it.snapshot.id == id)
+                check(it.reappearances && it.reappearances->count == 300000, "R7 le premier garde ses 300 000 reapparitions (relues du dossier)");
+            else {
+                id2 = it.snapshot.id;
+                folder2 = it.folder;
+            }
+        }
+        // trois reapparitions, puis VALIDER : la rafale close, la copie validee la garde ; la suivante ouvre un incident
+        front("Disparition", t2 + 1.5);
+        for (int k = 1; k <= 3; ++k) {
+            front("Apparition", t2 + 2.0 * k);
+            front("Disparition", t2 + 2.0 * k + 0.5);
+        }
+        const inc::Burst* b2 = h.reappearances(id2);
+        check(b2 && b2->count == 3 && h.created() == 2, "R8 trois reapparitions : comptees dans le deuxieme incident");
+        h.validate(folder2, "vu", "essai");
+        (void)h.drain(5000);
+        at(t2 + 7.0);
+        check(h.reappearances(id2) == nullptr, "R8 valide : sa rafale est close");
+        l = h.listing();
+        const st::Item* v = l->validated.empty() ? nullptr : &l->validated[0];
+        check(v && v->reappearances && v->reappearances->count == 3 && h.verify(v->folder).ok,
+              "R8 la copie validee garde ses reapparitions (hors empreinte : verifiee intacte)");
+        front("Apparition", t2 + 12.0);
+        at(t2 + 13.2);
+        (void)h.drain(5000);
+        at(t2 + 13.3);
+        check(h.created() == 3, "R8 une reapparition apres la validation : un NOUVEL incident (" + std::to_string(h.created()) + ")");
+        h.shutdown();
+    }
+    // 30 millions de reapparitions : la meme taille
+    {
+        inc::Burst big;
+        big.start(0.0, "2026-10-31 00:00:00.000");
+        std::size_t after300k = 0;
+        for (int i = 1; i <= 30000000; ++i) {
+            big.add(0.1 * i, "2026-10-31 00:00:00.000", "1,49");
+            if (i == 300000) after300k = big.memoryBytes();
+        }
+        check(big.count == 30000000 && big.memoryBytes() == after300k && big.memoryBytes() <= inc::Burst::kMaxBytes,
+              "R3 30 millions de reapparitions : la meme taille qu'a 300 000 (" + std::to_string(big.memoryBytes()) + " octets)");
+    }
+    std::error_code ec;
+    fs::remove_all(proj, ec);
+}
+
+// G : regroupement 0 (le comportement d'avant), l'anti-rebond inchange, le plafond horaire, le quota disque, les reglages.
+void burstGuards() {
+    std::printf("1.21.0 : regroupement 0, anti-rebond, plafond horaire, quota disque, reglages\n");
+    // le meme scenario, regroupement 0 puis 600 s : apparitions a 10, 20 (apres une disparition), 22 (dans l'anti-rebond de 20), 30
+    for (const double regroup : {0.0, 600.0}) {
+        const fs::path proj = tempRoot(regroup > 0 ? "rafale600" : "rafale0");
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        inc::Settings s = h.settings();
+        s.regroup = regroup;
+        check(h.setSettings(s), "G les reglages");
+        const auto front = [&](const char* kind, double when) {
+            h.tick(when);
+            h.notice(notice(kind, "Niveau_Haut", stampAt(when).c_str()));
+        };
+        const auto settle = [&](double when) {
+            h.tick(when);
+            (void)h.drain(3000);
+            h.tick(when + 0.01);
+        };
+        front("Apparition", 10.0);
+        front("Disparition", 10.5);
+        settle(11.2);
+        front("Apparition", 20.0);
+        front("Disparition", 20.5);
+        settle(21.2);
+        const std::size_t afterSecond = h.created();
+        front("Apparition", 22.0);   // 2 s apres celle de 20 : dans l'anti-rebond (5 s)
+        front("Disparition", 22.5);
+        settle(23.2);
+        const std::size_t afterDebounce = h.created();
+        front("Apparition", 30.0);
+        settle(31.2);
+        if (regroup <= 0) {
+            check(afterSecond == 2 && afterDebounce == 2 && h.created() == 3,
+                  "G1 regroupement 0 : comme avant - un incident par reapparition hors anti-rebond (3), aucun dans l'anti-rebond");
+            check(h.liveGroups() == 0, "G1 regroupement 0 : aucune rafale");
+            bool none = true;
+            for (const auto& it : h.listing()->pending) none = none && !fs::exists(fs::path(it.folder) / "reapparitions.json");
+            check(none, "G1 regroupement 0 : aucun reapparitions.json");
+        } else {
+            const auto l = h.listing();
+            const std::string id = l->pending.empty() ? std::string{} : l->pending[0].snapshot.id;
+            const inc::Burst* b = h.reappearances(id);
+            check(h.created() == 1 && b && b->count == 3,
+                  "G2 regroupement 600 s, le meme scenario : un incident, 3 reapparitions (celle de l'anti-rebond comptee aussi)");
+        }
+        h.shutdown();
+        std::error_code ec;
+        fs::remove_all(proj, ec);
+    }
+    // le detecteur seul : l'anti-rebond inchange (une reapparition dans le delai ne demande pas d'incident)
+    {
+        inc::Monitor m;
+        m.notice(notice("Apparition", "X", "a"), 0.0);
+        m.notice(notice("Disparition", "X", "b"), 1.0);
+        m.notice(notice("Apparition", "X", "c"), 2.0);
+        check(m.takeTriggers().size() == 1 && m.settings().debounce == 5.0, "G3 l'anti-rebond du detecteur inchange (5 s)");
+    }
+    // le plafond horaire : 3 par heure, 5 alarmes -> 3 incidents, 2 comptes sans dossier ; une heure plus tard, de nouveau
+    {
+        const fs::path proj = tempRoot("plafond");
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        inc::Settings s = h.settings();
+        s.maxPerHour = 3;
+        check(h.setSettings(s), "P les reglages");
+        double t = 5.0;
+        h.tick(t);
+        for (int i = 1; i <= 5; ++i) h.notice(notice("Apparition", ("Alarme_" + std::to_string(i)).c_str(), stampAt(t).c_str()));
+        h.tick(t + 1.2);
+        (void)h.drain(3000);
+        h.tick(t + 1.3);
+        auto g = h.guards();
+        check(h.created() == 3 && h.listing()->pending.size() == 3, "P1 plafond de 3 par heure, 5 alarmes : 3 incidents, 3 dossiers");
+        check(g.skipped == 2 && g.skippedNow == 2 && g.capReached && g.createdLastHour == 3 && g.skippedBy.size() == 2,
+              "P1 les 2 autres : comptees, sans dossier (par alarme)");
+        auto events = h.takeEvents();
+        check(eventsHave(events, "plafond horaire atteint"), "P2 le plafond dit au journal de l'hote");
+        t += 3601.0;
+        h.tick(t);
+        h.notice(notice("Apparition", "Alarme_6", stampAt(t).c_str()));
+        h.tick(t + 1.2);
+        (void)h.drain(3000);
+        h.tick(t + 1.3);
+        g = h.guards();
+        events = h.takeEvents();
+        check(h.created() == 4 && !g.capReached && g.skippedNow == 0 && g.skipped == 2, "P3 une heure plus tard : de nouveau un incident");
+        check(eventsHave(events, "2 incidents non cr\xC3\xA9\xC3\xA9s : plafond horaire atteint"), "P3 << 2 incidents non crees : plafond horaire atteint >>, dit");
+        h.shutdown();
+        std::error_code ec;
+        fs::remove_all(proj, ec);
+    }
+    // le quota disque des images et videos : au-dela, les NOUVEAUX incidents sans image ni video ; rien de supprime
+    {
+        const fs::path proj = tempRoot("quota");
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        check(h.drain(3000), "Q l'hote pret");
+        st::Store* store = h.storeForTests();
+        std::string oldFolder, why;
+        if (store) {
+            inc::SnapshotInput in;
+            in.trigger.kind = inc::EventKind::Appear;
+            in.trigger.name = "Ancien_Defaut";
+            in.trigger.at = "2026-10-30 08:00:00.000";
+            in.id = st::newId();
+            in.createdAt = in.trigger.at;
+            const inc::Snapshot old = inc::snapshot(in);
+            st::Capture big;
+            big.jpeg.assign(1536u * 1024u, 0x55);   // 1,5 Mo (le stockage ne la decode pas)
+            big.width = 10;
+            big.height = 10;
+            check(store->create(old, big, st::initialAnalysis(old, old.createdAt), oldFolder, &why), "Q un incident deja la, sa capture de 1,5 Mo " + why);
+        }
+        inc::Settings s = h.settings();
+        s.mediaQuotaMb = 1;
+        s.framesPerSecond = 4;
+        check(h.setSettings(s), "Q le quota : 1 Mo");
+        h.refresh();
+        (void)h.drain(3000);
+        double t = 1.0;
+        h.tick(t);
+        auto g = h.guards();
+        check(g.mediaBytes >= 1536u * 1024u && g.quotaBytes == 1024u * 1024u && g.quotaReached, "Q1 la place connue (relue avec la liste) : le quota est atteint");
+        check(!h.wantsFrame(t), "Q1 quota atteint : aucune image a prendre (elle ne serait pas gardee)");
+        h.notice(notice("Apparition", "Nouveau_Defaut", stampAt(t).c_str()));
+        check(!h.wantsFrame(t), "Q1 ... meme pour le defaut");
+        h.tick(t + 0.1);
+        (void)h.drain(3000);
+        h.tick(t + 0.2);
+        const auto l = h.listing();
+        const st::Item* it = itemNamed(l->pending, "Nouveau_Defaut");
+        check(h.created() == 1 && it != nullptr, "Q2 l'incident est cree quand meme (sans attendre d'image)");
+        if (it) {
+            check(!it->hasCapture && !it->hasVideo && has(it->captureNote, "quota") && it->mediaBytes == 0, "Q2 SANS image ni video, et c'est dit");
+            check(std::any_of(it->snapshot.missing.begin(), it->snapshot.missing.end(), [](const std::string& m) { return has(m, "quota"); }),
+                  "Q2 la fiche le dit aussi (non disponible)");
+        }
+        check(!oldFolder.empty() && fs::exists(oldFolder) && itemNamed(l->pending, "Ancien_Defaut") != nullptr, "Q3 rien n'est supprime automatiquement");
+        check(eventsHave(h.takeEvents(), "quota disque"), "Q4 le quota dit au journal de l'hote");
+        g = h.guards();
+        check(g.withoutMedia == 1, "Q4 compte : un incident cree sans image ni video");
+        h.shutdown();
+        std::error_code ec;
+        fs::remove_all(proj, ec);
+    }
+    // les reglages : gardes avec le projet ; un ancien fichier sans les cles : les valeurs par defaut
+    {
+        const fs::path proj = tempRoot("reglages121");
+        {
+            app::IncidentHost h;
+            h.setProjectFolder(proj.string());
+            inc::Settings s = h.settings();
+            s.regroup = 120;
+            s.maxPerHour = 10;
+            s.mediaQuotaMb = 500;
+            check(h.setSettings(s), "S les reglages enregistres");
+        }
+        {
+            app::IncidentHost h;
+            h.setProjectFolder(proj.string());
+            check(h.settings().regroup == 120 && h.settings().maxPerHour == 10 && h.settings().mediaQuotaMb == 500, "S relus : regroupement, plafond, quota");
+        }
+        (void)core::writeFileAtomic(proj / "ihm" / "ressources" / "enregistrements" / "reglages-incidents.json",
+                                    "{\"format\": 1, \"active\": true, \"anti_rebond_s\": 7}", core::AtomicWrite{false, false});
+        {
+            app::IncidentHost h;
+            h.setProjectFolder(proj.string());
+            check(h.settings().debounce == 7 && h.settings().regroup == 600 && h.settings().maxPerHour == 60 && h.settings().mediaQuotaMb == 2048,
+                  "S un ancien reglages-incidents.json (sans les cles) : les valeurs par defaut");
+        }
+        // le dialogue des reglages : trois champs de plus
+        inc::Settings in;
+        in.regroup = 90;
+        in.maxPerHour = 7;
+        in.mediaQuotaMb = 100;
+        const auto values = app::incidentsui::settingsValues(in);
+        inc::Settings out;
+        std::string why;
+        check(app::incidentsui::settingsLabels().size() == app::incidentsui::kSettingsFields && values.size() == app::incidentsui::kSettingsFields
+                  && app::incidentsui::settingsFrom(values, out, &why) && out.regroup == 90 && out.maxPerHour == 7 && out.mediaQuotaMb == 100,
+              "S le dialogue : regroupement, plafond horaire, quota (aller-retour) " + why);
+        auto bad = values;
+        bad[9] = "-1";
+        std::size_t field = 0;
+        check(!app::incidentsui::settingsFrom(bad, out, &why, &field) && field == 9, "S un regroupement negatif : refuse");
+        std::error_code ec;
+        fs::remove_all(proj, ec);
+    }
+}
+
 // ---- 1.21.0 : la video d'un incident lue comme un enregistrement (le declenchement, la lecture, la vitesse, la boucle,
 // le pas a pas) et le zoom de l'image ----------------------------------------------------------------------------------
 void incidentPlayer() {
@@ -1109,6 +1570,8 @@ int main() {
     incidentsCase();
     incidentsPane();   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
     incidentPlayer();  // 1.21.0 : la video lue comme un enregistrement, le zoom de l'image
+    burstHost();       // 1.21.0 : une alarme qui bat - 300 000 reapparitions, un seul incident
+    burstGuards();     // 1.21.0 : regroupement 0, anti-rebond, plafond horaire, quota disque, reglages
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
