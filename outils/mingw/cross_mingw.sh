@@ -45,7 +45,11 @@ else
 fi
 rm -f "$OUT/XpgAnalyzer.exe" "$OUT/xpg_analyzer.exe"     # la 1.11 : un seul exe
 rm -f "$OUT/XpgAnalyzer-API.exe" "$OUT/XpgAnalyzer-IHM.exe"     # 1.12.0 a 1.12.19 : les anciens noms
+# 1.21.0 : une copie AVEC les symboles, a part (jamais livree : package_mingw.py prend les exe de $OUT seulement) - une
+# pile de plantage (IHM-Studio.exe+0x...) se lit alors directement avec x86_64-w64-mingw32-addr2line / nm.
+mkdir -p "$OUT/symboles"
 for exe in API-Studio IHM-Studio; do
+    cp -f "$OUT/$exe.exe" "$OUT/symboles/$exe.exe"
     x86_64-w64-mingw32-strip "$OUT/$exe.exe"
     echo "fait : $OUT/$exe.exe"
 done
