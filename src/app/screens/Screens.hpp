@@ -930,6 +930,14 @@ private:
     void askHmiRecordingDelete(const std::string& name);
     void openHmiRecordingsFolder(const std::string& folder);
     void replayHmiRecording(const hmi::ReplayRequest& request);
+    // 1.20.0 : Ressources > Incidents (IncidentsWorkspace.cpp) - le volet branche a la surveillance (app_.incidents()),
+    // ses dialogues (commentaire, validation, suppression) et les reglages de la surveillance.
+    [[nodiscard]] ui::WidgetPtr buildHmiIncidentsPane();
+    void askHmiIncidentSettings();
+    // 1.19.0 / 1.20.0 : MONTRER un element du projet (son onglet, son volet) - "vue", "objet" (dans `view`), "variable",
+    // "type", "fonction", "script", "alarme", "equipement", "ressource" ; faux : introuvable. L'Assistant IA (le plan,
+    // le compte rendu) et les dependances d'un incident (AiWorkspace.cpp).
+    bool revealHmiElement(const std::string& kind, const std::string& name, const std::string& view);
     // Lot 13 : Configuration > Langues - ajouter une langue, importer un classeur.
     void askHmiAddLanguage();
     void askHmiImportTranslations();

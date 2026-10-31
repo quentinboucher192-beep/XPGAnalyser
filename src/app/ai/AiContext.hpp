@@ -15,7 +15,10 @@
 //    - 1.16.0 : les noms des types IHM du projet (une variable creee peut en
 //      etre) ; les types (DDT) de l'automate relie, resumes (nom et membres),
 //      quand la demande parle de types ou de l'automate, ou qu'il y en a peu ;
-//    - les autres vues (leurs noms : une navigation les cite).
+//    - les autres vues (leurs noms : une navigation les cite) ;
+//    - 1.20.0 : SEULEMENT QUAND LA DEMANDE PARLE D'INCIDENT (pourquoi cette alarme, un
+//      diagnostic, la chaine de dependances...), les trois derniers dossiers d'incident
+//      qu'elle concerne, resumes et bornes a 6 Ko (AiIncidentAnswers : contextBlock).
 //
 //  UNE GRANDE VUE SE RESUME. Le detail des objets a un budget (des octets) : la
 //  selection d'abord, puis les objets les plus proches d'elle ; les autres ne

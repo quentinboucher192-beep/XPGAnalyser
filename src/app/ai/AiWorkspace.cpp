@@ -139,70 +139,28 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     };
     // 1.16.0 : la vue qu'une proposition vient de creer s'ouvre dans l'editeur.
     core.openView = [this](hmi::Id id) { openHmiView(id); };
-    // 1.19.0 : un element nomme dans le plan d'action ou le compte rendu s'ouvre (son onglet, son volet).
+    // 1.19.0 : un element nomme dans le plan d'action ou le compte rendu s'ouvre (son onglet, son volet). 1.20.0 : le
+    // meme chemin que les dependances d'un incident (revealHmiElement, plus bas).
     core.reveal = [this](const std::string& kind, const std::string& name, const std::string& view) {
-        const auto doc = app_.hmi();
-        if (!doc) return false;
-        const auto& pr = doc->project;
-        if (kind == "objet") {
-            const hmi::View* v = view.empty() ? nullptr : pr.viewByName(view);
-            if (!v) return false;
-            for (const auto& o : v->objects)
-                if (o.name == name) {
-                    openHmiView(v->id, -1, o.id);
-                    return true;
-                }
-            openHmiView(v->id);
-            return true;
+        return revealHmiElement(kind, name, view);
+    };
+    // 1.20.0 : les dossiers d'incident du projet (en attente et valides), tels que la surveillance les a relus - l'IA
+    // integree diagnostique depuis eux (AiIncidentAnswers), l'IA distante en recoit un resume borne. Rien n'est lu du
+    // disque ici ; les deux listes ne sont reunies qu'une fois par relecture (la meme liste tant qu'elle ne change pas).
+    struct IncidentCache {
+        std::shared_ptr<const IncidentHost::Listing>              listing;
+        std::shared_ptr<const std::vector<ai::incidents::Item>>   all;
+    };
+    core.incidents = [this, cache = std::make_shared<IncidentCache>()]() -> std::shared_ptr<const std::vector<ai::incidents::Item>> {
+        const auto l = app_.incidents().listing();
+        if (!l) return nullptr;
+        if (cache->listing != l || !cache->all) {
+            auto all = std::make_shared<std::vector<ai::incidents::Item>>(l->pending);
+            all->insert(all->end(), l->validated.begin(), l->validated.end());
+            cache->listing = l;
+            cache->all = std::move(all);
         }
-        if (kind == "vue" || kind == "symbole" || kind == "popup" || kind == "modele" || kind == "entete" || kind == "pied") {
-            const hmi::View* v = pr.viewByName(name);
-            if (!v) return false;
-            openHmiView(v->id);
-            return true;
-        }
-        if (kind == "variable") {
-            const hmi::Variable* v = pr.variable(name);
-            if (!v) return false;
-            askHmiVariable(v->id);
-            return true;
-        }
-        if (kind == "fonction") {
-            const auto* f = pr.functionByName(name);
-            if (!f) return false;
-            openHmiFunctions(f->id);
-            return true;
-        }
-        if (kind == "script") {
-            const auto* sc = pr.generalScript(name);
-            if (!sc) return false;
-            hmi::decledit::Usage u;
-            u.script = sc->id;
-            u.line = 1;
-            goToHmiUsage(u);
-            return true;
-        }
-        if (kind == "alarme") {
-            if (!pr.alarmByName(name)) return false;
-            openHmiPane("alarmes");
-            return true;
-        }
-        if (kind == "equipement") {
-            if (!pr.equipmentByName(name)) return false;
-            openHmiPane("communication");
-            return true;
-        }
-        if (kind == "ressource") {
-            if (!pr.resourceByName(name)) return false;
-            openHmiPane("ressources");
-            return true;
-        }
-        if (kind == "type") {
-            if (!pr.hmiTypeByName(name)) return false;
-            openHmiPane("scripts");
-            return true;
-        }
-        return false;
+        return cache->all;
     };
 
     ai::AiPanel::UiHost ui;
@@ -254,6 +212,72 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     auto panel = std::make_unique<ai::AiPanel>("ai.panneau", std::move(core), std::move(ui));
     aiPanel_ = panel.get();
     return panel;
+}
+
+// 1.19.0 (l'Assistant IA, le plan et le compte rendu) ; 1.20.0 : aussi les dependances d'un incident (IncidentsWorkspace.cpp).
+bool MainAnalysisScreen::revealHmiElement(const std::string& kind, const std::string& name, const std::string& view) {
+    const auto doc = app_.hmi();
+    if (!doc) return false;
+    const auto& pr = doc->project;
+    if (kind == "objet") {
+        const hmi::View* v = view.empty() ? nullptr : pr.viewByName(view);
+        if (!v) return false;
+        for (const auto& o : v->objects)
+            if (o.name == name) {
+                openHmiView(v->id, -1, o.id);
+                return true;
+            }
+        openHmiView(v->id);
+        return true;
+    }
+    if (kind == "vue" || kind == "symbole" || kind == "popup" || kind == "modele" || kind == "entete" || kind == "pied") {
+        const hmi::View* v = pr.viewByName(name);
+        if (!v) return false;
+        openHmiView(v->id);
+        return true;
+    }
+    if (kind == "variable") {
+        const hmi::Variable* v = pr.variable(name);
+        if (!v) return false;
+        askHmiVariable(v->id);
+        return true;
+    }
+    if (kind == "fonction") {
+        const auto* f = pr.functionByName(name);
+        if (!f) return false;
+        openHmiFunctions(f->id);
+        return true;
+    }
+    if (kind == "script") {
+        const auto* sc = pr.generalScript(name);
+        if (!sc) return false;
+        hmi::decledit::Usage u;
+        u.script = sc->id;
+        u.line = 1;
+        goToHmiUsage(u);
+        return true;
+    }
+    if (kind == "alarme") {
+        if (!pr.alarmByName(name)) return false;
+        openHmiPane("alarmes");
+        return true;
+    }
+    if (kind == "equipement") {
+        if (!pr.equipmentByName(name)) return false;
+        openHmiPane("communication");
+        return true;
+    }
+    if (kind == "ressource") {
+        if (!pr.resourceByName(name)) return false;
+        openHmiPane("ressources");
+        return true;
+    }
+    if (kind == "type") {
+        if (!pr.hmiTypeByName(name)) return false;
+        openHmiPane("scripts");
+        return true;
+    }
+    return false;
 }
 
 bool MainAnalysisScreen::assistantShown() const {

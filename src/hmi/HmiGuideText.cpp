@@ -4530,7 +4530,7 @@ const std::vector<Topic>& topics() {
          },
          {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
          {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},
-         {"ai.panneau"},
+         {"incidents", "ai.panneau"},
          {},
          "",
          {},

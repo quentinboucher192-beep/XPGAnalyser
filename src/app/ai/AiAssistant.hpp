@@ -46,6 +46,7 @@
 #include "AiDemo.hpp"
 #include "AiLearning.hpp"
 #include "AiPlan.hpp"   // 1.19.0 : le plan d'action et le compte rendu
+#include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -83,6 +84,10 @@ public:
         // vue, une variable, un type, une fonction, un script, une alarme, un equipement, une ressource) : son onglet ou
         // son volet. `kind` : celui de plan::Ref. Faux : introuvable (supprime depuis). Nul : rien ne s'ouvre (un essai).
         std::function<bool(const std::string& kind, const std::string& name, const std::string& view)> reveal;
+        // 1.20.0 (a la fin) : LES DOSSIERS D'INCIDENT du projet (en attente et valides) - l'IA integree repond aux
+        // questions de diagnostic (<< Pourquoi cette alarme est-elle apparue ? >>...) depuis eux, l'IA distante en recoit
+        // un resume borne. Nul : aucun (un essai) - rien ne change.
+        IncidentSource incidents;
     };
 
     // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un

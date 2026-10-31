@@ -521,6 +521,7 @@ LocalReply Assistant::askLocal(const Conversation* c, std::size_t turns, const D
     in.env = host_.env;
     in.projectName = host_.projectName ? host_.projectName() : std::string{};
     in.request = text;
+    in.incidents = host_.incidents;   // 1.20.0 : les questions de diagnostic des incidents
     // les tours d'avant (les six derniers) : la demande, la proposition de sa reponse
     std::vector<LocalTurn> history;
     if (c)
@@ -1142,6 +1143,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     in.env = host_.env;
     in.projectName = host_.projectName ? host_.projectName() : std::string{};
     in.request = request;   // les genres que la demande evoque ont le detail de leurs proprietes
+    in.incidents = host_.incidents;   // 1.20.0 : un resume borne des incidents, si la demande en parle
     ProviderRequest req = requestFor(c, c.messages.size());
     req.apiKey = apiKey_;
     // 1.16.0 : le service, la fenetre de contexte, l'outil (Auto : en texte si le modele le refuse).

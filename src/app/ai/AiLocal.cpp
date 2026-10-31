@@ -35,6 +35,7 @@
 #include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
 #include "AiProjectAnswers.hpp"   // 1.19.0 : les relations, verifier le projet, optimiser les adresses
 #include "AiDesign.hpp"           // 1.19.0 : concevoir une installation, modifier l'existant
+#include "AiIncidentAnswers.hpp"  // 1.20.0 : le diagnostic des incidents
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : une adresse IP, un equipement
@@ -924,6 +925,7 @@ private:
     LocalReply tools() const;        // 1.18.0 : un outil (symbole, popup, equipement, adresse, alarme, script, fonction, dossier)
     LocalReply listSystem() const;   // 1.18.0 : les variables systeme
     LocalReply projectQuestion() const;   // 1.19.0 : les relations, verifier le projet, optimiser les adresses (vide : pas une telle demande)
+    LocalReply incidentQuestion() const;  // 1.20.0 : le diagnostic des incidents (vide : pas une telle demande, ou pas d'hote)
     LocalReply design() const;            // 1.19.0 : une installation complete, modifier l'existant (vide : pas une telle demande)
     LocalReply designReply(design::Design d) const;
     struct NewObject {
@@ -1606,6 +1608,12 @@ LocalReply Engine::help() const {
              "variable** ; un objet que je ne trouve pas, je le dis. Chaque proposition passe par l'aper\xC3\xA7u, et **Ctrl+Z** la "
              "reprend d'un coup. Pour des demandes plus libres, branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de "
              "l'Assistant IA).";
+    // 1.20.0 : le diagnostic des incidents (seulement si l'hote donne les dossiers)
+    if (in_.incidents)
+        if (const auto at = r.text.find("- des **questions**"); at != std::string::npos)
+            r.text.insert(at, "- **diagnostiquer un incident** (une alarme apparue en simulation, la surveillance active) : "
+                              "`Pourquoi cette alarme est-elle apparue ?`, `Cha\xC3\xAEne de d\xC3\xA9pendances de cette alarme`, "
+                              "`Quel \xC3\xA9quipement est commun aux d\xC3\xA9" "fauts ?` - depuis ses dossiers, jamais invent\xC3\xA9 ;\n");
     r.suggestions = examples();
     return r;
 }
@@ -4321,6 +4329,21 @@ LocalReply Engine::projectQuestion() const {
     return r;
 }
 
+// ---- 1.20.0 : les questions sur les incidents (AiIncidentAnswers) --------------------------------------------------
+// << Pourquoi cette alarme est-elle apparue ? >>, << Fais-moi un diagnostic complet de cet incident >>, la chaine, l'origine,
+// les simultanees, l'historique, comparer, l'equipement commun, les scripts, la communication : depuis les dossiers
+// d'incident (l'hote les donne) et le projet ouvert. Sans hote (un essai) : rien ne change.
+LocalReply Engine::incidentQuestion() const {
+    if (!in_.incidents || !diagnosis::isIncidentQuestion(request_)) return {};
+    const auto list = in_.incidents();
+    static const std::vector<incidents::Item> none;
+    diagnosis::Answer a = diagnosis::answer(request_, list ? *list : none, in_.project);
+    if (a.text.empty()) return {};
+    LocalReply r = ask(std::move(a.text), std::move(a.suggestions));
+    r.understood = a.understood;
+    return r;
+}
+
 // ---- 1.19.0 : concevoir une installation, modifier l'existant (AiDesign) -----------------------------------------
 LocalReply Engine::designReply(design::Design d) const {
     std::string text = std::move(d.text);
@@ -4512,6 +4535,8 @@ LocalReply Engine::run() {
         || phrase("sais tu faire") || ((has("aide") || has("help")) && mentions_.empty()) || phrase("comment ca marche") || phrase("que comprends tu")
         || (t_.size() <= 2 && (has("bonjour") || has("salut") || has("aide"))))
         return help();
+    // 1.20.0 : le diagnostic des incidents (avant << combien >> : << combien de fois cette alarme est-elle apparue ? >>)
+    if (LocalReply r = incidentQuestion(); !r.text.empty()) return r;
     if (has("combien")) return countQuestion();
     const bool createVerb = hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("insere")
                          || hasPrefix("dessin") || phrase("il me faut") || phrase("je veux") || hasPrefix("genere") || hasPrefix("fabriqu");

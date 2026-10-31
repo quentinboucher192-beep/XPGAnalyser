@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiContext.hpp"
 
+#include "AiIncidentAnswers.hpp"         // 1.20.0 : les incidents que la demande evoque
 #include "../../hmi/HmiRelations.hpp"   // 1.19.0 : ce qui utilise les elements nommes
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiGuide.hpp"   // fold : la demande sans accents ni casse
@@ -502,6 +503,17 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
     }
 }
 
+// 1.20.0 : LES INCIDENTS, SEULEMENT QUAND LA DEMANDE EN PARLE (<< pourquoi cette alarme... >>, << diagnostic >>...) - les
+// trois derniers dossiers qu'elle concerne, resumes (date, alarme, resume, valeurs, pistes et leur certitude,
+// equipements, alarmes liees), au plus 6 Ko : jamais tout le projet ni toute la fiche. Une demande ordinaire n'en recoit
+// rien (la taille de son contexte ne change pas).
+void incidentsPart(const PromptInput& in, std::string& s) {
+    if (!in.incidents || !diagnosis::isIncidentQuestion(in.request)) return;
+    const auto list = in.incidents();
+    static const std::vector<incidents::Item> none;
+    s += diagnosis::contextBlock(in.request, list ? *list : none, 6000, 3);
+}
+
 } // namespace
 
 std::vector<hmi::Kind> kindsInView(const hmi::View& v) {
@@ -542,6 +554,7 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
     variablesPart(in, lim, info, s);
     viewsPart(in, lim, s);
     toolsPart(in, lim, s);   // 1.18.0
+    incidentsPart(in, s);    // 1.20.0
     if (infoOut) *infoOut = info;
     return s;
 }

@@ -1172,7 +1172,7 @@ constexpr TopicPlace kTopicPlaces[] = {
     // 1.14.2 : l'Assistant IA vit a droite de l'editeur d'une vue ; sa memoire s'ouvre de ses parametres (Ctrl+K).
     {"assistant-ia", "arbre:IHM/Vues"}, {"assistant-ia-registre", "arbre:IHM/Vues"}, {"assistant-ia-integree", "arbre:IHM/Vues"}, {"memoire-ia", "arbre:IHM"},
     {"assistant-ia-plan", "arbre:IHM/Vues"},   // 1.19.0 : le plan d'action, le compte rendu, les questions sur le projet
-    {"incidents", "arbre:IHM/Ressources/Enregistrements"},   // 1.20.0 : les dossiers d'incident (en attente, valides)
+    {"incidents", "arbre:IHM/Ressources/Enregistrements"},   // 1.20.0 : les dossiers d'incident (le noeud Incidents [N] a un libelle variable : son voisin)
     {"aller-a", "arbre:IHM"}, {"excel", "arbre:IHM/Programmation/Variables IHM"}, {"dossiers", "arbre:IHM/Vues"},
     {"didacticiel", "arbre:IHM"}, {"nouveautes-lot8", "arbre:IHM"}, {"objets", "arbre:IHM/Vues"},
     {"proprietes", "arbre:IHM/Vues"}, {"actions", "arbre:IHM/Vues"}, {"parametres-popups", "arbre:IHM/Vues/Popups"},

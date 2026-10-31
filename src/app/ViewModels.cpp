@@ -35,6 +35,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>   // 1.20.0 : le compte des incidents en attente
 
 namespace app {
 
@@ -897,7 +898,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
         case NodeKind::HmiConfig:           return hmi_ ? 13 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements
-        case NodeKind::HmiResources:        return hmi_ ? 1 : 0;   // 1.14.0 (M4) : Enregistrements
+        case NodeKind::HmiResources:        return hmi_ ? 2 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents
         case NodeKind::HmiViews:            return hmi_ ? 3 : 0;   // lot 8 : Modeles, Vues, Popups
         case NodeKind::HmiViewFolder:
             if (!hmi_) return 0;
@@ -1387,8 +1388,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                                                NodeKind::HmiRecordingSettings};                   // 1.14.0 (M4) : Enregistrements
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
-        case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements
-            return hmi_ && k == 0 ? pack(NodeKind::HmiRecordings, 0) : ui::kInvalidNode;
+        case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements ; 1.20.0 : les incidents
+            if (!hmi_ || k > 1) return ui::kInvalidNode;
+            return pack(k == 0 ? NodeKind::HmiRecordings : NodeKind::HmiIncidents, 0);
         case NodeKind::HmiViews:
             return hmi_ && k < 3 ? pack(NodeKind::HmiViewFolder, static_cast<Index>(k)) : ui::kInvalidNode;
         case NodeKind::HmiViewFolder: {
@@ -1933,6 +1935,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiUnits: case NK::HmiComm: case NK::HmiReports: case NK::HmiAlarmGroup: case NK::HmiRoles:
             case NK::HmiMeasureUnits:                                      // 1.13.0 (lot J6b)
             case NK::HmiRecordings:                                        // 1.14.0 (M4)
+            case NK::HmiIncidents:                                         // 1.20.0
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
@@ -1994,7 +1997,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || ProjectTreeModel::isNativesKind(k)                                                // 1.12.0
                 || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                           // 1.13.0 (lot J8)
                 || k == NK::HmiMeasureUnits                                                          // 1.13.0 (lot J6b)
-                || k == NK::HmiRecordings || k == NK::HmiRecordingSettings;                          // 1.14.0 (M4)
+                || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                           // 1.14.0 (M4)
+                || k == NK::HmiIncidents;                                                            // 1.20.0
         }
     } // namespace
 
@@ -2009,6 +2013,29 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             recordingsCount_ = dir.empty() ? 0 : hmi::rec::fileNames(dir).size();
         }
         return recordingsCount_;
+    }
+
+    // 1.20.0 : les dossiers d'incident en attente (ihm/ressources/enregistrements/en attente, app::ai::incidents::Store ;
+    // un ".partiel" ne compte pas), sans les lire, au plus toutes les 2 s. Le dossier natif des enregistrements, celui de
+    // la surveillance (IncidentHost), quel que soit Configuration > Enregistrements.
+    std::size_t ProjectTreeModel::incidentsCount() const {
+        if (!hmi_) return 0;
+        const std::string dir = hmi_->savedFolder.empty() ? std::string{} : hmi_->savedFolder + "/" + std::string(hmi::rec::kNativeFolder) + "/en attente";
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (dir != incidentsDir_ || now - incidentsAt_ >= 2.0) {
+            incidentsDir_ = dir;
+            incidentsAt_ = now;
+            incidentsCount_ = 0;
+            std::error_code ec;
+            if (!dir.empty())
+                for (std::filesystem::directory_iterator it(std::filesystem::path(std::u8string(dir.begin(), dir.end())), ec), end; !ec && it != end;
+                     it.increment(ec)) {
+                    const auto u8 = it->path().filename().u8string();
+                    const std::string name(u8.begin(), u8.end());
+                    if (it->is_directory(ec) && !name.empty() && name.front() != '.' && !name.ends_with(".partiel")) ++incidentsCount_;
+                }
+        }
+        return incidentsCount_;
     }
 
     std::string ProjectTreeModel::counterOf(ui::NodeId n) const {
@@ -2635,6 +2662,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiUnits:         return "Unit\xC3\xA9s et formats  [" + std::to_string(hmi_ ? hmi_->project.displays.size() : 0u) + "]";
         case NodeKind::HmiRecordings:    return "Enregistrements  [" + std::to_string(recordingsCount()) + "]";   // 1.14.0 (M4)
         case NodeKind::HmiRecordingSettings: return "Enregistrements";
+        case NodeKind::HmiIncidents:     return "Incidents  [" + std::to_string(incidentsCount()) + "]";   // 1.20.0 : en attente
         case NodeKind::HmiMeasureUnits:  return "Unit\xC3\xA9s de mesure  [" + std::to_string(hmi_ ? hmi::units::Catalog(hmi_->project.config).units().size() : 0u) + "]";   // 1.13.0 (lot J6b)
         case NodeKind::HmiComm:                                                                                      // lot 14 ; lot 15 : les equipements
             return "\xC3\x89quipements  [" + std::to_string(hmi_ ? hmi_->project.equipments.size() + (hmi_->project.comm.modbus() ? 1u : 0u) : 0u) + "]";
@@ -3788,6 +3816,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiResources:     s.icon = ui::Icon::Image; break;
         case NodeKind::HmiRecordings:                                              // 1.14.0 (M4) : rouge, un enregistrement qui tourne
             s.icon = ui::Icon::Play;
+            break;
+        case NodeKind::HmiIncidents:                                               // 1.20.0 : ambre, des incidents en attente
+            s.icon = ui::Icon::Analyze;
+            if (incidentsCount() > 0) s.iconTone = ui::Tone::Warning;
             break;
         case NodeKind::HmiRecordingSettings:                                       // 1.14.0 (M4) : vert, les commandes d'une autre application
             s.icon = ui::Icon::Settings;

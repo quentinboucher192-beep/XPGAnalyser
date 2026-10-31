@@ -284,6 +284,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     sep(view_);
     e(view_, "Panneaux \xC3\xA0 afficher\xE2\x80\xA6", "", ui::Icon::Settings, "view.layout");
     if (core::hasIhm()) e(view_, "Assistant IA", "Ctrl+Maj+I", ui::Icon::Assistant, "ia.assistant");   // 1.14.2
+    if (core::hasIhm()) e(view_, "Incidents", "", ui::Icon::Analyze, "hmi.incidents");   // 1.20.0 : IHM > Ressources > Incidents
     sep(view_);
     e(view_, "Th\xC3\xA8me\xE2\x80\xA6", "", ui::Icon::Layers, "view.theme");
     // ---- Lot API 8 : l'explorateur de fichiers - le bouton ... ouvre celui de l'appli ou celui du systeme ----

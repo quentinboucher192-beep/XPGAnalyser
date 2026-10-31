@@ -15,6 +15,8 @@
 //    - scenario G (la taille) : 40 pompes, 400 variables, 40 alarmes, 120 objets - le temps de la validation et de
 //      l'application.
 // =============================================================================
+#include "../src/app/ai/AiContext.hpp"    // 1.20.0 : le resume des incidents dans le contexte du modele
+#include "../src/app/ai/AiIncident.hpp"   // 1.20.0 : les dossiers d'incident
 #include "../src/app/ai/AiLocal.hpp"
 #include "../src/app/ai/AiOperations.hpp"
 #include "../src/app/ai/AiPlan.hpp"
@@ -412,6 +414,90 @@ void questions() {
     }
 }
 
+// ---- 1.20.0 : le diagnostic des incidents par l'IA integree (l'hote donne les dossiers ; AiIncidentAnswers) ---------------
+void incidentQuestions() {
+    std::printf("le diagnostic des incidents\n");
+    Fixture f;
+    namespace inc = hmi::incident;
+    auto items = std::make_shared<std::vector<ai::incidents::Item>>();
+    {
+        ai::incidents::Item it;
+        it.readable = true;
+        it.name = "20261031-100000-NIVEAU_HAUT-a1";
+        auto& s = it.snapshot;
+        s.id = "a1";
+        s.trigger.kind = inc::EventKind::Appear;
+        s.trigger.name = "NIVEAU_HAUT";
+        s.trigger.at = "2026-10-31 10:00:00.000";
+        s.trigger.t = 50.0;
+        s.alarm.name = "NIVEAU_HAUT";
+        s.alarm.known = true;
+        s.alarm.condition = "Consigne_Generale > 90.0";
+        s.conditionVariables = {"Consigne_Generale"};
+        s.values.push_back({"Consigne_Generale", "", "", false});
+        inc::Link l;
+        l.kind = "equipement";
+        l.name = "Station_Modbus";
+        l.relation = "source de Consigne_Generale";
+        s.chain.push_back(l);
+        inc::Hypothesis h;
+        h.text = "La mesure Consigne_Generale vient de Station_Modbus : un capteur peut d\xC3\xA9" "clencher l'alarme.";
+        s.hypotheses.push_back(h);
+        items->push_back(it);
+    }
+    const auto input = [&](const std::string& text, bool host) {
+        ai::PromptInput in;
+        in.project = &f.doc->project;
+        in.view = f.doc->project.view(f.view);
+        in.request = text;
+        if (host) in.incidents = [items] { return std::shared_ptr<const std::vector<ai::incidents::Item>>(items); };
+        return in;
+    };
+    const std::string why = "Pourquoi l'alarme NIVEAU_HAUT est-elle apparue ?";
+    {
+        const auto r = ai::understand(input(why, true), why);
+        check(r.understood && !r.proposal && has(r.text, "`NIVEAU_HAUT`") && has(r.text, "`Consigne_Generale` = non disponible")
+                  && has(r.text, "pas une preuve de causalit\xC3\xA9") && !r.suggestions.empty(),
+              "incidents : l'IA int\xC3\xA9gr\xC3\xA9" "e r\xC3\xA9pond depuis le dossier (" + r.text + ")");
+    }
+    {
+        const auto r = ai::understand(input(why, false), why);
+        check(!has(r.text, "dossier d'incident"), "incidents : sans h\xC3\xB4te, rien ne change");
+    }
+    {
+        ai::PromptInput in = input(why, false);
+        in.incidents = [] { return std::shared_ptr<const std::vector<ai::incidents::Item>>(); };
+        const auto r = ai::understand(in, why);
+        check(has(r.text, "aucun dossier d'incident") && has(r.text, "simulation"), "incidents : aucun encore - le dire, et comment en obtenir");
+    }
+    {
+        const std::string q = "Combien de fois l'alarme NIVEAU_HAUT est-elle apparue ?";
+        const auto r = ai::understand(input(q, true), q);
+        check(has(r.text, "un seul incident de `NIVEAU_HAUT`"), "incidents : << combien de fois >> est l'historique, pas un compte d'objets");
+    }
+    {
+        const std::string q = "Ajoute une alarme de d\xC3\xA9" "faut sur Pompe_1_Marche";
+        const auto r = ai::understand(input(q, true), q);
+        check(!has(r.text, "dossier d'incident"), "incidents : une demande de cr\xC3\xA9" "ation n'en est pas une");
+    }
+    {
+        const auto withHost = ai::understand(input("Que sais-tu faire ?", true), "Que sais-tu faire ?");
+        const auto without = ai::understand(input("Que sais-tu faire ?", false), "Que sais-tu faire ?");
+        check(has(withHost.text, "diagnostiquer un incident") && !has(without.text, "diagnostiquer un incident"),
+              "incidents : l'aide le dit, seulement avec l'h\xC3\xB4te");
+    }
+    // l'IA distante : le resume borne, seulement quand la demande parle d'incident
+    {
+        const std::string plainCtx = ai::contextText(input("Ajoute un bouton Marche", true));
+        const std::string incCtx = ai::contextText(input(why, true));
+        check(!has(plainCtx, "Incidents enregistr"), "incidents : une demande ordinaire n'en re\xC3\xA7oit rien");
+        check(has(incCtx, "## Incidents enregistr") && has(incCtx, "NIVEAU_HAUT") && has(incCtx, "[hypoth\xC3\xA8se]"),
+              "incidents : la demande qui en parle re\xC3\xA7oit leur r\xC3\xA9sum\xC3\xA9");
+        const std::string withoutHost = ai::contextText(input(why, false));
+        check(incCtx.size() > withoutHost.size() && incCtx.size() - withoutHost.size() <= 6000, "incidents : le r\xC3\xA9sum\xC3\xA9 tient en 6 Ko");
+    }
+}
+
 // ---- A a D par l'IA integree : une installation complete, puis la modifier -----------------------------------------
 void integrated() {
     std::printf("A-D - l'IA integree concoit et modifie\n");
@@ -521,6 +607,7 @@ int main() {
     undoRedo();
     report();
     questions();
+    incidentQuestions();   // 1.20.0
     integrated();
     large();
     std::printf("ai_plan_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

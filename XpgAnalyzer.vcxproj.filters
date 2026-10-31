@@ -1015,6 +1015,12 @@
     <ClCompile Include="src\app\ai\AiDesign.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiIncident.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiIncidentAnswers.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiKeys.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -1312,6 +1318,12 @@
     <ClCompile Include="src\app\hmi\HmiFunctionTestsPage.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiIncidentHost.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiIncidentsPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiTestRuns.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1370,6 +1382,9 @@
       <Filter>app\screens</Filter>
     </ClCompile>
     <ClCompile Include="src\app\screens\HmiLibraryWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\IncidentsWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
     <ClCompile Include="src\app\tutorial\TutorialApp.cpp">
@@ -1496,6 +1511,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiFunctionTests.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiIncident.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiLibrary.cpp">
@@ -2599,6 +2617,12 @@
     <ClInclude Include="src\app\ai\AiDesign.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\ai\AiIncident.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiIncidentAnswers.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ai\AiKeys.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
@@ -2833,6 +2857,12 @@
     <ClInclude Include="src\app\hmi\HmiFunctionTestsPage.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiIncidentHost.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiIncidentsPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiTestRuns.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3032,6 +3062,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiFunctionTests.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiIncident.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiKeys.hpp">

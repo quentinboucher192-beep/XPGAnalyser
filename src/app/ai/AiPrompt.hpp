@@ -32,6 +32,8 @@
 #include "AiOperations.hpp"
 #include "AiStore.hpp"
 
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -40,6 +42,11 @@
 namespace app::ai {
 
 namespace memory { class Registry; }
+namespace incidents { struct Item; }   // AiIncident.hpp
+
+// 1.20.0 : LES DOSSIERS D'INCIDENT du projet (en attente et valides, dans n'importe quel ordre) - ceux que la
+// surveillance a relus (IncidentHost::listing) ; nul, ou une liste nulle : aucun.
+using IncidentSource = std::function<std::shared_ptr<const std::vector<incidents::Item>>()>;
 
 // Ce que la demande voit du projet au moment de l'envoi.
 struct PromptInput {
@@ -54,6 +61,9 @@ struct PromptInput {
     std::string          request;
     // 1.15.0 (a la fin) : les connaissances (AiKnowledge.hpp) deja chargees ; nul : relues du disque.
     const memory::Registry* knowledge{nullptr};
+    // 1.20.0 (a la fin) : les dossiers d'incident (nul : aucun - un essai). L'IA integree en diagnostique les questions
+    // (AiIncidentAnswers) ; le contexte du modele en recoit un resume borne quand la demande parle d'incident.
+    IncidentSource          incidents;
 };
 
 // Les consignes et le contexte (le champ "system" de la requete).

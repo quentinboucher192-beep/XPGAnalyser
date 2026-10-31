@@ -366,6 +366,9 @@ namespace app {
             // enfant de Ressources) et Configuration > Enregistrements (le 13e sous-noeud de Configuration). Deux
             // volets. A LA FIN, toujours.
             HmiRecordings, HmiRecordingSettings,
+            // 1.20.0 : LES INCIDENTS - Ressources > Incidents (les dossiers d'incident que la surveillance cree quand une
+            // alarme apparait), le deuxieme enfant de Ressources ; son compteur : ceux en attente. A LA FIN, toujours.
+            HmiIncidents,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -824,6 +827,11 @@ namespace app {
         mutable std::string   recordingsDir_;
         mutable double        recordingsAt_{-10};
         [[nodiscard]] std::size_t recordingsCount() const;   // 1.13.0 (lot J4b) : la revision des verdicts (app::testruns) qu'ils montrent
+        // 1.20.0 : les incidents en attente (Ressources > Incidents) - les dossiers, sans les lire, au plus toutes les 2 s.
+        mutable std::size_t   incidentsCount_{0};
+        mutable std::string   incidentsDir_;
+        mutable double        incidentsAt_{-10};
+        [[nodiscard]] std::size_t incidentsCount() const;
         [[nodiscard]] const CodeOutline* outlineOf(std::uint32_t codeKind, std::uint64_t id) const;
         // 1.10 (chantier O) : les alarmes des objets, gardees par (vue, objet) et
         // oubliees quand le document change.

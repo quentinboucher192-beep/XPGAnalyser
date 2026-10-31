@@ -720,6 +720,12 @@ if(XPG_BUILD_TESTS)
     # etendre une serie, dupliquer, alarmes sur une serie, remplacer un symbole, ajouter une mesure, ranger.
     xpg_add_test_executable(ai_design_test tests/ai_design_test.cpp)
     xpg_target_link_libraries(ai_design_test PRIVATE xpg_app)
+    # 1.20.0 : l'Assistant IA diagnostique les incidents (AiIncidentAnswers) - pourquoi, la fiche, la chaine, l'origine,
+    # les simultanees, l'historique, comparer, l'equipement commun, les scripts, la communication ; rien d'invente.
+    # Sans xpg_app : ses seules sources (les dossiers d'incident se lisent sans ecran).
+    xpg_add_test_executable(ai_incident_answers_test tests/ai_incident_answers_test.cpp src/app/ai/AiIncidentAnswers.cpp
+                            src/app/ai/AiIncident.cpp src/app/ai/AiJson.cpp)
+    xpg_target_link_libraries(ai_incident_answers_test PRIVATE xpg_hmi)
     # 1.19.0 : le graphe des relations du projet, la verification globale, l'optimisation des adresses.
     xpg_add_test_executable(hmi_relations_test tests/hmi_relations_test.cpp)
     xpg_target_link_libraries(hmi_relations_test PRIVATE xpg_hmi)
@@ -887,6 +893,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiapprentissage COMMAND ai_apprentissage_test)        # 1.17.0 : l'onglet Apprentissage (modeles, vocabulaire, mesures)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
     xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
+    xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
     xpg_add_test(NAME hmiincident COMMAND hmi_incident_test)                 # 1.20.0 : les incidents (essais A a G)
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi

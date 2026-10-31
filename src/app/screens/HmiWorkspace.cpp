@@ -47,6 +47,7 @@
 #include "../../core/FieldCodec.hpp"
 #include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
 #include "../hmi/HmiAssetPanes.hpp"
+#include "../hmi/HmiIncidentsPane.hpp"              // 1.20.0 : Ressources > Incidents
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
 #include "../hmi/HmiAssist.hpp"
@@ -419,7 +420,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::VersionsFolder || k == NK::VersionItem                            // lot 21 : les versions
         || ProjectTreeModel::isNativesKind(k)                                          // 1.12.0 : les natives
         || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                      // 1.13.0 (lot J8) : les bibliotheques
-        || k == NK::HmiRecordings || k == NK::HmiRecordingSettings;                    // 1.14.0 (M4) : les enregistrements
+        || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                     // 1.14.0 (M4) : les enregistrements
+        || k == NK::HmiIncidents;                                                      // 1.20.0 : les incidents
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -698,6 +700,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiMeasureUnits:  openHmiPane("unites-mesure"); break;   // 1.13.0 (lot J6b)
         case NK::HmiRecordings:    openHmiPane("enregistrements"); break;          // 1.14.0 (M4)
         case NK::HmiRecordingSettings: openHmiPane("config-enregistrements"); break;
+        case NK::HmiIncidents:     openHmiPane("incidents"); break;                 // 1.20.0
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
         case NK::HmiStation:       openHmiPane("poste"); break;
         case NK::HmiNotify:        openHmiPane("notifications"); break;
@@ -1136,6 +1139,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         if (auto* files = dynamic_cast<HmiFilesPane*>(page)) files->refresh();
         if (auto* history = dynamic_cast<HmiHistoryPane*>(page)) history->refresh();
         if (auto* recordings = dynamic_cast<HmiRecordingsPane*>(page)) recordings->refresh();   // 1.14.0 (M4)
+        if (auto* incidents = dynamic_cast<HmiIncidentsPane*>(page)) incidents->refresh();      // 1.20.0 : relire les dossiers
         if (auto* exchange = dynamic_cast<HmiExchangePane*>(page)) {
             exchange->setNameExists(plcNames(app_.project()));
             exchange->setProjectFolder(app_.projectFolder());
@@ -2032,6 +2036,11 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Enregistrements";
         icon = Icon::Play;
+    } else if (key == "incidents") {
+        // 1.20.0 : Ressources > Incidents - les dossiers d'incident de la surveillance (IncidentsWorkspace.cpp).
+        page = buildHmiIncidentsPane();
+        title = "IHM \xC2\xB7 Incidents";
+        icon = Icon::Analyze;
     } else if (key == "config-enregistrements") {
         // 1.14.0 (M4) : Configuration > Enregistrements.
         auto pane = std::make_unique<HmiRecordingSettingsPane>("hmi.recordingSettings", doc, apply);
@@ -4226,6 +4235,7 @@ std::string placeOfNode(NK kind) {
         case NK::HmiMeasureUnits:  return "unites-mesure";   // 1.13.0 (lot J6b)
         case NK::HmiRecordings:    return "enregistrements";          // 1.14.0 (M4)
         case NK::HmiRecordingSettings: return "config-enregistrements";
+        case NK::HmiIncidents:     return "incidents";                // 1.20.0
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

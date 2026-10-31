@@ -26,7 +26,8 @@
 //  type IHM (creer_type) et une vue, aligner,
 //  repartir, dupliquer, supprimer, animer (un defaut qui clignote, une couleur
 //  selon une variable), et les questions (que sais-tu faire, combien, quelles
-//  variables, quels genres).
+//  variables, quels genres). 1.20.0 : le diagnostic des incidents (PromptInput::
+//  incidents, AiIncidentAnswers) - pourquoi cette alarme, la fiche, la chaine...
 // =============================================================================
 #pragma once
 

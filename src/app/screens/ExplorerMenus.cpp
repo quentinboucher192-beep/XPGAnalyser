@@ -2029,6 +2029,10 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         m.add("Importer un enregistrement" + kDots, Icon::Import, [this] { askHmiRecordingImport(); });
         break;
+    case NK::HmiIncidents:    // 1.20.0
+        m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.add("R\xC3\xA9glages de la surveillance" + kDots, Icon::Settings, [this] { askHmiIncidentSettings(); });
+        break;
     case NK::HmiExternalFiles:
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         m.add("Lier un fichier" + kDots, Icon::Document, [this] { askHmiLinkFile(false); });

@@ -138,6 +138,7 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
     if (id.rfind("bar.pin:", 0) == 0 || id.rfind("bar.unpin:", 0) == 0) { pinBarAction(id); return; }   // 1.12.27
     if (id == "edit.history") { toggleHistory(); return; }
     if (id == "ia.assistant") { toggleAssistant(); return; }   // 1.14.2 : Affichage > Assistant IA
+    if (id == "hmi.incidents") { openHmiPane("incidents"); return; }   // 1.20.0 : Affichage > Incidents
     if (id.rfind("ia.reponse:", 0) == 0) { showAssistantReply(std::string(id.substr(11))); return; }   // 1.16.1 : la cloche
     if (id.rfind("version.", 0) == 0) { onVersionAction(std::string(id)); return; }   // lot API 6
     if (id == "project.icon") { showIconEditor(); return; }                            // lot API 6

@@ -1947,7 +1947,7 @@ L'IA intégrée y répond sans connexion, à partir du **graphe des relations** 
 : Quand une alarme apparaît en simulation ou au poste d'exploitation, l'IHM crée toute seule un dossier d'incident : l'image et une vidéo de la vue, l'alarme telle qu'elle était, ce à quoi elle est reliée dans le projet, les valeurs du moment, la chronologie, une fiche de diagnostic et l'analyse de l'IA. Tu le consultes, le commentes et le valides.
 @depuis 1.20.0
 @mots INCIDENT, INCIDENTS, DOSSIER D'INCIDENT, EN ATTENTE, VALIDÉS, VALIDER, DIAGNOSTIC, FICHE DE DIAGNOSTIC, CHAÎNE DE DÉPENDANCES, ALARMES LIÉES, CAUSE, CAUSES POTENTIELLES, CERTITUDE, CHRONOLOGIE, CAPTURE, VIDÉO, TAMPON CIRCULAIRE, EMPREINTE, SHA-256, IMMUABLE, SURVEILLANCE, ANALYSE IA
-@lieux ai.panneau
+@lieux incidents, ai.panneau
 @voir alarmes, assistant-ia, assistant-ia-plan, enregistrements
 ### Ce qui déclenche un incident
 La surveillance suit les **fronts**, jamais chaque cycle :

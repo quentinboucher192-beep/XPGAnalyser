@@ -144,6 +144,7 @@ const PaneEntry kPanes[] = {
     {"utilisateurs", "IHM \xE2\x80\xBA Utilisateurs", -1},
     {"historiques", "IHM \xE2\x80\xBA Historiques", -1},
     {"ressources", "IHM \xE2\x80\xBA Ressources", -1},
+    {"incidents", "IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Incidents", -1},   // 1.20.0 : les dossiers d'incident
     {"fichiers", "IHM \xE2\x80\xBA Fichiers externes", -1},
     {"styles", "IHM \xE2\x80\xBA Styles", -1},
     {"essais", "IHM \xE2\x80\xBA Essais", -1},
