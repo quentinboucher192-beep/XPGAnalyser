@@ -279,10 +279,6 @@ public:
     bool askScan(const hmi::discovery::Request& request, const std::string& note = {}, std::string* why = nullptr);
     // La demande d'apres les champs du volet (le port, la plage, les ports, la cadence...).
     [[nodiscard]] hmi::discovery::Request scanRequest() const;
-    // Au clic Lancer : la demande confirmee et l'empreinte des reglages montres (vide : pas de controle).
-    // Le plan est refait ; une empreinte differente (le PC a change entre-temps) : refuse, a confirmer
-    // de nouveau. Puis l'accord (ipscan::grant), le scan, la ligne du journal.
-    bool launchScan(const hmi::discovery::Request& request, const std::string& shownSignature, std::string* why = nullptr);
     void stopScan();
     [[nodiscard]] bool scanning() const;
     [[nodiscard]] std::vector<hmi::ipscan::Host> scanResults() const;
@@ -569,6 +565,10 @@ private:
     mutable std::string      journalCacheKey_;
     void refreshScanReport(bool running);
     void journalScan(const hmi::discovery::JournalEntry& e);
+    // Au clic Lancer (la reponse de askScan, et rien d'autre : prive) : la demande confirmee et l'empreinte
+    // des reglages montres. Le plan est refait ; une empreinte differente (le PC a change entre-temps) :
+    // refuse, a confirmer de nouveau. Puis l'accord (ipscan::grant), le scan, la ligne du journal.
+    bool launchScan(const hmi::discovery::Request& request, const std::string& shownSignature, std::string* why = nullptr);
     // Lot 17 : la carte memoire.
     HmiMemoryMap*            map_{nullptr};
     ui::DropDown*            mapTargetBox_{nullptr};
