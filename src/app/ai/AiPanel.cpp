@@ -6,6 +6,9 @@
 
 #include "AiMarkdown.hpp"
 #include "AiPlanStrip.hpp"
+#include "AiContextPane.hpp"   // 1.21.0
+#include "../Dossiers.hpp"
+#include "../screens/Screens.hpp"   // MessageDialog
 
 #include "AiPreviewDialog.hpp"
 #include "AiSettingsDialog.hpp"
@@ -654,6 +657,17 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     rename_ = &static_cast<ui::InputText&>(addChild(std::move(rename)));
     chat_ = &static_cast<AiChatView&>(addChild(std::make_unique<AiChatView>(base + ".discussion", *this)));
     strip_ = &static_cast<AiPlanStrip&>(addChild(std::make_unique<AiPlanStrip>(base + ".plan", *this)));   // 1.20.2
+    // 1.21.0 : LE CONTEXTE DE LA DISCUSSION - au-dessus du plan ; ses gestes reviennent ici (le panneau confirme, ouvre).
+    {
+        AiContextPane::Callbacks cb;
+        cb.open = [this](const std::string& att) { contextAction(0, att); };
+        cb.details = [this](const std::string& att) { contextAction(1, att); };
+        cb.analyses = [this](const std::string& att) { contextAction(2, att); };
+        cb.remove = [this](const std::string& att) { contextAction(3, att); };
+        cb.restore = [this](const std::string& att) { contextAction(4, att); };
+        cb.toggled = [this](bool) { invalidateLayout(); };
+        ctxPane_ = &static_cast<AiContextPane&>(addChild(std::make_unique<AiContextPane>(base + ".contexte", std::move(cb))));
+    }
     prompt_ = &static_cast<AiPromptEdit&>(addChild(std::make_unique<AiPromptEdit>(base + ".saisie")));
     prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
     attachBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Joindre\xE2\x80\xA6", base + ".joindre")));
@@ -722,7 +736,7 @@ void AiPanel::tick(double now) {
         // 1.20.2 : le plan en cours apparait, change de hauteur ou s'en va : la discussion se replace.
         if (strip_) {
             const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
-            const float want = strip_->heightFor(bounds().w, std::max(0.f, (pendingArea_.y - 6.f - chatTop) * 0.45f));
+            const float want = strip_->heightFor(bounds().w, std::max(0.f, (pendingArea_.y - 6.f - chatTop - ctxH_) * 0.45f));
             if (std::fabs(want - stripH_) > 0.5f) invalidateLayout();
         }
     }
@@ -776,6 +790,75 @@ void AiPanel::tick(double now) {
     }
 }
 
+// 1.21.0 : un geste du contexte de la discussion (0 ouvrir, 1 detail, 2 analyses, 3 retirer, 4 remettre).
+void AiPanel::contextAction(int what, const std::string& attachmentId) {
+    const attach::ContextFile* f = ctxPane_ ? ctxPane_->context().find(attachmentId) : nullptr;
+    if (!f) return;
+    const std::string name = f->attachment.name;
+    const auto show = [this](const std::string& title, const std::string& text) {
+        if (ui_.showDialog) ui_.showDialog(std::make_unique<MessageDialog>(title, text, MessageDialog::Icon::Info), [](const menu::DialogResult&) {});
+        else say(text);
+    };
+    switch (what) {
+        case 0: {
+            if (f->availability == attach::Availability::Missing) {
+                say("Assistant IA : Â« " + name + " Â» est manquant : sa copie n'est plus dans le dossier de l'Assistant.");
+                return;
+            }
+            if (const std::string why = dossiers::ouvrirDansLeSysteme(f->path); !why.empty()) say("Assistant IA : " + why);
+            return;
+        }
+        case 1: {
+            std::string text = f->line() + "\n\n" + f->detail();
+            if (!f->attachment.sha256.empty()) text += "\nEmpreinte SHA-256 : " + f->attachment.sha256;
+            if (!f->path.empty()) text += "\nCopie : " + f->path;
+            if (f->textMissing) text += "\nLe texte extrait n'est plus dans le cache : il sera refait Ã  la prochaine ouverture de la conversation.";
+            show("Fichier joint", text);
+            return;
+        }
+        case 2: {
+            std::string text;
+            for (auto it = f->attachment.analyses.rbegin(); it != f->attachment.analyses.rend(); ++it) {
+                text += (text.empty() ? "" : "\n\n") + it->date + " â " + it->kind + " â " + it->state;
+                if (!it->summary.empty()) text += "\n" + it->summary;
+                if (!it->error.empty()) text += "\n" + it->error;
+                for (const auto& d : it->details) text += "\nâ¢ " + d;
+            }
+            show("Analyses de " + name, text.empty() ? std::string("Aucune analyse pour l'instant.") : text);
+            return;
+        }
+        case 3: {
+            const auto run = [this, attachmentId] {
+                std::string why;
+                if (!assistant_->removeFromDiscussion(attachmentId, &why)) say("Assistant IA : " + why);
+                sync();
+            };
+            if (!ui_.showDialog || f->pending) {   // pas encore envoyee : elle part simplement
+                run();
+                return;
+            }
+            HmiAskDialog::Spec spec;
+            spec.id = "dialog.ai.retirer-fichier";
+            spec.title = "Retirer de la discussion";
+            spec.text = "Retirer Â« " + name + " Â» de la discussion ?\nIl ne partira plus avec les demandes ; sa copie reste dans "
+                        "le dossier de l'Assistant et il se remet quand tu veux. L'historique garde son nom.";
+            spec.confirm = "Retirer";
+            spec.width = 520.f;
+            ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [run](const menu::DialogResult& r) {
+                if (r.accepted()) run();
+            });
+            return;
+        }
+        case 4: {
+            std::string why;
+            if (!assistant_->restoreToDiscussion(attachmentId, &why)) say("Assistant IA : " + why);
+            sync();
+            return;
+        }
+        default: return;
+    }
+}
+
 void AiPanel::ensureLoaded() {
     if (loaded_) return;
     loaded_ = true;
@@ -790,6 +873,7 @@ void AiPanel::ensureLoaded() {
 void AiPanel::sync() {
     if (assistant_->revision() != seen_) {
         seen_ = assistant_->revision();
+        if (ctxPane_) ctxPane_->setContext(assistant_->discussionContext());   // 1.21.0 (un stat par fichier)
         refreshButtons();
         chat_->rebuild();
         invalidateLayout();
@@ -1309,11 +1393,18 @@ void AiPanel::onLayout() {
     pendingArea_ = {x + kPad, promptArea_.y - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
     const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
     const float chatBottom = pendingArea_.y - 6.f;
+    // 1.21.0 : le contexte de la discussion, tout en haut (seulement s'il y a des fichiers joints) ; au plus 35 % de la place.
+    ctxH_ = ctxPane_ && !ctxPane_->context().files.empty() ? ctxPane_->heightFor(w, std::max(28.f, (chatBottom - chatTop) * 0.35f)) : 0.f;
+    if (ctxPane_) {
+        ctxPane_->setBounds({x, chatTop, w, ctxH_});
+        ctxPane_->setVisibility(ctxH_ > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    }
+    const float planTop = chatTop + ctxH_;
     // 1.20.2 : le plan en cours, au-dessus de la discussion (il ne defile pas avec elle) ; au plus 45 % de la place.
-    stripH_ = strip_->heightFor(w, std::max(0.f, (chatBottom - chatTop) * 0.45f));
-    strip_->setBounds({x, chatTop, w, stripH_});
+    stripH_ = strip_->heightFor(w, std::max(0.f, (chatBottom - planTop) * 0.45f));
+    strip_->setBounds({x, planTop, w, stripH_});
     strip_->setVisibility(stripH_ > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-    chat_->setBounds({x, chatTop + stripH_, w, std::max(40.f, chatBottom - chatTop - stripH_)});
+    chat_->setBounds({x, planTop + stripH_, w, std::max(40.f, chatBottom - planTop - stripH_)});
 }
 
 void AiPanel::onPaint(const ui::PaintContext& ctx) {

@@ -276,8 +276,11 @@ void sizes(const std::string& examplePath) {
     // demande evoque).
     // 1.19.0 (le plan d'operations) : + plusieurs vues dans une proposition (le champ "vue"), la reutilisation, une installation
     // complete en une proposition - environ 0,9 Ko : la borne passe de 40 a 41 Ko.
-    check(empty.size() + tool.size() < 41000, "une demande ordinaire (vue vide) : moins de 41 Ko avec l'outil");
-    check(station.size() + tool.size() < 41000, "la station de 31 objets : moins de 41 Ko avec l'outil");
+    // 1.21.0 (l'IA qui agit) : + la suppression intelligente (strategie, exclusions, le schema de supprimer), le bac a sable
+    // (regle 16) et le travail en plusieurs etapes (regle 17) - environ 2,5 Ko : la borne passe de 41 a 45 Ko. La partie
+    // stable des consignes est mise en cache par le fournisseur : elle n'est payee en entier qu'une fois.
+    check(empty.size() + tool.size() < 45000, "une demande ordinaire (vue vide) : moins de 45 Ko avec l'outil");
+    check(station.size() + tool.size() < 45000, "la station de 31 objets : moins de 45 Ko avec l'outil");
     check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 45000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")

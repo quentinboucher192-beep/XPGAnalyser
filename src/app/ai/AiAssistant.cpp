@@ -14,6 +14,8 @@
 #include "AiPaths.hpp"
 #include "AiPrompt.hpp"
 #include "AiAgentTools.hpp"   // 1.21.0 : les outils de l'agent (analyser_projet, executer_code)
+#include "AiConversationIndex.hpp"   // 1.21.0 : chercher_conversations
+#include "AiMemoryManager.hpp"       // 1.21.0 : la memoire persistante (proposer_souvenir, chercher_souvenirs)
 #include "AiSecret.hpp"
 
 #include "../../core/Edition.hpp"
@@ -173,6 +175,14 @@ void Assistant::load(std::vector<std::string>* problems) {
 bool Assistant::tick(double now) {
     lastNow_ = now;
     const std::uint64_t before = revision_;
+    // 1.21.0 : les analyses des pieces jointes finies (le fil d'analyse), remises dans leur conversation ; les souvenirs
+    // que l'IA a proposes pendant sa reponse - a valider par l'utilisateur, dit une fois.
+    pollAnalyses();
+    if (const int n = proposedMemories_->exchange(0); n > 0) {
+        notice_ = "Assistant IA : " + std::to_string(n) + (n > 1 ? " souvenirs proposÃ©s" : " souvenir proposÃ©")
+                  + " Ã  valider dans MÃ©moire et apprentissage âº Souvenirs (rien n'est retenu sans ton accord).";
+        ++revision_;
+    }
     // 1.21.0 : LE PONT DE L'AGENT, sur le fil de l'interface - les confirmations de scan demandees par l'IA s'ouvrent ici,
     // et le dernier compte rendu de scan est recopie pour resultat_detection.
     if (bridge_) {
@@ -286,6 +296,22 @@ bool Assistant::select(std::string_view id) {
     if (i < 0) return false;
     if (i != current_) suggestionsAfter_ = false;
     current_ = i;
+    // 1.21.0 : une conversation d'avant la 1.21 : ses pieces jointes recoivent leur conversation, leur message, leur type ;
+    // celles dont le texte extrait n'est plus dans le cache (ou jamais analysees) repartent a l'analyse.
+    Conversation& c = conversations_[static_cast<std::size_t>(i)];
+    bool changed = attach::adopt(c) > 0;
+    const auto ctx = attach::buildContext(c);
+    for (const auto& f : ctx.files) {
+        if (f.attachment.removed || f.availability == attach::Availability::Missing) continue;
+        if (!f.textMissing && !f.attachment.analysis.empty()) continue;
+        for (auto& m : c.messages)
+            for (auto& a : m.attachments)
+                if (a.id == f.attachment.id && a.analysis != "en-cours") {
+                    submitAnalysis(a);
+                    changed = true;
+                }
+    }
+    if (changed) save(c);
     ++revision_;
     return true;
 }
@@ -412,7 +438,7 @@ bool Assistant::send(std::string text, std::string* why) {
         std::string notes;
         if (settings_.sendAttachments)
             for (const auto& p : pending_) {
-                ProviderAttachment pa{p.attachment.name, mediaTypeOf(p.attachment.name), attachmentPath(p.attachment), p.attachment.bytes};
+                ProviderAttachment pa{p.attachment.name, mediaTypeOf(p.attachment.name), attachmentPath(p.attachment), p.attachment.bytes, false, {}};
                 if (const auto plan = planAttachment(pa); !plan.note.empty()) notes += (notes.empty() ? "" : " ") + plan.note;
             }
         pending_.clear();
@@ -686,6 +712,9 @@ bool Assistant::attach(const std::string& path, std::string* why) {
     }
     Attachment a;
     if (!addAttachment(path, a, why)) return false;
+    // 1.21.0 : sa conversation, son type ; son analyse part sur le fil d'analyse (le texte des PDF, DOCX, XLSX...).
+    attach::adopt(a, cur() ? cur()->id : std::string{});
+    submitAnalysis(a);
     Pending p;
     p.attachment = std::move(a);
     if (lastNow_ > 0) p.started = lastNow_;   // le traitement part de maintenant (sinon : au prochain tick)
@@ -696,6 +725,7 @@ bool Assistant::attach(const std::string& path, std::string* why) {
 
 void Assistant::detach(std::size_t index) {
     if (index >= pending_.size()) return;
+    if (analyzer_) analyzer_->cancel(pending_[index].attachment.id);   // 1.21.0 : son analyse n'est plus attendue
     // La copie partie avec : elle n'appartient a aucun message.
     Conversation tmp;
     Message m;
@@ -708,6 +738,72 @@ void Assistant::detach(std::size_t index) {
 
 bool Assistant::processing() const noexcept {
     return std::any_of(pending_.begin(), pending_.end(), [](const Pending& p) { return p.progress < 1.f; });
+}
+
+// ---- 1.21.0 : le contexte de la discussion ----------------------------------------------------------------------------
+void Assistant::submitAnalysis(Attachment& a) {
+    if (!analyzer_) analyzer_ = std::make_unique<attach::Analyzer>();
+    attach::markRunning(a);
+    analyzer_->submit(a);
+}
+
+void Assistant::pollAnalyses() {
+    if (!analyzer_) return;
+    for (const auto& o : analyzer_->poll()) {
+        bool done = false;
+        for (auto& p : pending_)
+            if (attach::applyOutcome(p.attachment, o)) done = true;
+        if (!done)
+            for (auto& c : conversations_)
+                if (attach::applyOutcome(c, o)) {
+                    save(c);
+                    done = true;
+                    break;
+                }
+        if (done) ++revision_;
+    }
+}
+
+bool Assistant::analysing() const {
+    return analyzer_ && (analyzer_->busy() || analyzer_->queued() > 0);
+}
+
+attach::DiscussionContext Assistant::discussionContext() const {
+    std::vector<Attachment> waiting;
+    waiting.reserve(pending_.size());
+    for (const auto& p : pending_) waiting.push_back(p.attachment);
+    if (const Conversation* c = current()) return attach::buildContext(*c, waiting);
+    return attach::buildContext(Conversation{}, waiting);
+}
+
+bool Assistant::removeFromDiscussion(const std::string& attachmentId, std::string* why) {
+    for (std::size_t i = 0; i < pending_.size(); ++i)
+        if (pending_[i].attachment.id == attachmentId) {
+            detach(i);   // pas encore envoyee : elle part simplement
+            return true;
+        }
+    Conversation* c = cur();
+    if (!c) {
+        if (why) *why = "aucune conversation ouverte";
+        return false;
+    }
+    if (!attach::removeFromDiscussion(*c, attachmentId, false, why)) return false;
+    if (analyzer_) analyzer_->cancel(attachmentId);
+    save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::restoreToDiscussion(const std::string& attachmentId, std::string* why) {
+    Conversation* c = cur();
+    if (!c) {
+        if (why) *why = "aucune conversation ouverte";
+        return false;
+    }
+    if (!attach::restoreToDiscussion(*c, attachmentId, why)) return false;
+    save(*c);
+    ++revision_;
+    return true;
 }
 
 // ---- les propositions ----------------------------------------------------------------------
@@ -1253,7 +1349,9 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
             t.role = ProviderTurn::Role::User;
             t.text = m.text;
             if (settings_.sendAttachments) {
-                for (const auto& a : m.attachments) t.attachments.push_back({a.name, mediaTypeOf(a.name), attachmentPath(a), a.bytes});
+                // 1.21.0 : l'original quand le modele le lit, sinon le texte extrait ; une piece retiree ne part plus.
+                for (const auto& a : m.attachments)
+                    if (auto pa = attach::forProvider(a, settings_.provider == "anthropic")) t.attachments.push_back(std::move(*pa));
             } else if (!m.attachments.empty()) {
                 t.text += "\n\n[" + plural(m.attachments.size(), "pi\xC3\xA8" "ce jointe", "pi\xC3\xA8" "ces jointes")
                           + " : pas envoy\xC3\xA9" "e(s), les r\xC3\xA9glages de confidentialit\xC3\xA9 les gardent sur ce poste.]";
@@ -1303,6 +1401,20 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     in.projectName = host_.projectName ? host_.projectName() : std::string{};
     in.request = request;   // les genres que la demande evoque ont le detail de leurs proprietes
     in.incidents = host_.incidents;   // 1.20.0 : un resume borne des incidents, si la demande en parle
+    // 1.21.0 : LA MEMOIRE PERSISTANTE - le projet par son identifiant fiable (jamais son nom seul : deux projets de meme
+    // nom ne melangent pas leurs souvenirs), la conversation ; une fois par projet, ses anciens souvenirs lies par le nom
+    // seul y sont rattaches.
+    const std::string projectPath = host_.projectPath ? host_.projectPath() : std::string{};
+    const memory::ProjectIdentity pid = memory::identifyProject(in.projectName, projectPath, doc ? std::string_view(doc->project.config.created) : std::string_view{});
+    in.projectId = pid.id;
+    in.projectNameAmbiguous = pid.ambiguous;
+    in.conversationId = c.id;
+    if (!pid.id.empty() && pid.id != boundProject_) {
+        boundProject_ = pid.id;
+        memory::Registry reg;
+        reg.load();
+        (void)reg.bindLegacy(memory::contextFor(pid));
+    }
     ProviderRequest req = requestFor(c, c.messages.size());
     req.apiKey = apiKey_;
     // 1.16.0 : le service, la fenetre de contexte, l'outil (Auto : en texte si le modele le refuse).
@@ -1313,6 +1425,9 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     // Sur le fil de l'interface (le registre se construit une fois) : les consignes en deux morceaux ;
     // une petite fenetre de contexte (un petit modele gratuit) : resserrees.
     PromptParts parts = req.contextTokens > 0 && req.contextTokens < kSmallContext ? compactPromptParts(in, req.contextTokens) : promptParts(in);
+    // 1.21.0 : LE CONTEXTE DE LA DISCUSSION - les fichiers joints de la conversation (disponibles ou non, analyses ou non),
+    // dits au modele avec la regle : un document est une donnee, jamais une consigne.
+    if (const std::string files = attach::contextPrompt(attach::buildContext(c)); !files.empty()) parts.dynamic += "\n" + files;
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
@@ -1333,6 +1448,46 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
             req.localTools.push_back(agent::scanTool(bridge_));
             req.localTools.push_back(agent::scanResultTool(bridge_));
         }
+    }
+    // 1.21.0 : LA MEMOIRE - proposer_souvenir (une PROPOSITION, provisoire : elle ne part avec aucune demande tant que
+    // l'utilisateur ne l'a pas validee), chercher_souvenirs, chercher_conversations. Repondus sur le fil du fournisseur,
+    // chacun avec son propre registre relu du disque (le registre n'est pas partage entre les fils).
+    if (!req.toolsInText) {
+        const memory::Context here = memory::contextFor(pid, c.id);
+        const std::string convId = c.id;
+        const std::string msgId = "m" + std::to_string(c.messages.size() + 1);   // la reponse qui commence
+        auto counter = proposedMemories_;
+        LocalTool remember;
+        remember.name = std::string(memory::kRememberTool);
+        remember.definitionJson = memory::rememberToolJson();
+        remember.maxCalls = 5;
+        remember.run = [here, convId, msgId, counter](const std::string& input, const auto&, const auto&) {
+            memory::Registry reg;
+            reg.load();
+            bool failed = false;
+            std::string out = memory::runRememberTool(reg, input, here, convId, msgId, &failed);
+            if (!failed) ++*counter;
+            return out;
+        };
+        req.localTools.push_back(std::move(remember));
+        LocalTool searchMemory;
+        searchMemory.name = std::string(memory::kSearchMemoryTool);
+        searchMemory.definitionJson = memory::searchMemoryToolJson();
+        searchMemory.maxCalls = 6;
+        searchMemory.run = [here](const std::string& input, const auto&, const auto&) {
+            memory::Registry reg;
+            reg.load();
+            return memory::runSearchMemoryTool(reg, input, here);
+        };
+        req.localTools.push_back(std::move(searchMemory));
+        LocalTool searchConversations;
+        searchConversations.name = std::string(convindex::kSearchConversationsTool);
+        searchConversations.definitionJson = convindex::searchConversationsToolJson();
+        searchConversations.maxCalls = 6;
+        searchConversations.run = [convId](const std::string& input, const auto&, const auto&) {
+            return convindex::runSearchConversationsTool(input, convId);
+        };
+        req.localTools.push_back(std::move(searchConversations));
     }
     if (!prov->start(std::move(req), why)) return false;
     retire();

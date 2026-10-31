@@ -48,6 +48,7 @@
 #include "AiPlan.hpp"   // 1.19.0 : le plan d'action et le compte rendu
 #include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
 #include "AiAgentTools.hpp"
+#include "AiAttachments.hpp"   // 1.21.0 : le contexte de la discussion
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -156,6 +157,14 @@ public:
     bool attach(const std::string& path, std::string* why = nullptr);
     void detach(std::size_t index);
     [[nodiscard]] bool processing() const noexcept;
+    // 1.21.0 : LE CONTEXTE DE LA DISCUSSION (AiAttachments.hpp) - les fichiers joints de la conversation ouverte et ceux
+    // du prochain message, leur disponibilite verifiee sur le disque ; une piece retiree de la discussion ne part plus
+    // avec les demandes (sa copie reste), elle se remet. Une piece en attente d'envoi retiree : detach.
+    [[nodiscard]] attach::DiscussionContext discussionContext() const;
+    bool removeFromDiscussion(const std::string& attachmentId, std::string* why = nullptr);
+    bool restoreToDiscussion(const std::string& attachmentId, std::string* why = nullptr);
+    // Une piece en cours d'analyse (le fil d'analyse : texte des PDF, DOCX, XLSX...).
+    [[nodiscard]] bool analysing() const;
 
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
@@ -372,6 +381,14 @@ private:
     bool                                   sandbox_{true};     // 1.21.0 : executer_code
     std::shared_ptr<agent::Bridge>         bridge_;            // 1.21.0 : le pont des outils de l'agent (detection reseau)
     std::string                            sandboxProgram_;
+    // 1.21.0 : le fil d'analyse des pieces jointes (cree au premier fichier joint) ; les souvenirs proposes par l'IA
+    // pendant la reponse (l'outil proposer_souvenir, sur le fil du fournisseur) ; le projet dont les anciens souvenirs
+    // (lies par le nom seul) ont ete rattaches a son identifiant.
+    std::unique_ptr<attach::Analyzer>      analyzer_;
+    std::shared_ptr<std::atomic<int>>      proposedMemories_ = std::make_shared<std::atomic<int>>(0);
+    std::string                            boundProject_;
+    void submitAnalysis(Attachment& a);
+    void pollAnalyses();
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
     // 1.20.1 : l'application de fond en cours (une a la fois).

@@ -46,6 +46,7 @@ namespace app::ai {
 
 class AiChatView;
 class AiPlanStrip;
+class AiContextPane;   // 1.21.0
 
 // Le champ de la demande : UN CHAMP DE MESSAGE, pas un editeur de code (les captures 1.14.2 :
 // la gouttiere, la bande de la ligne courante, la marque "modifie" sur l'indication, le texte
@@ -241,6 +242,9 @@ private:
     AiChatView*       chat_{nullptr};
     AiPlanStrip*      strip_{nullptr};   // 1.20.2
     float             stripH_{0.f};
+    AiContextPane*    ctxPane_{nullptr};   // 1.21.0 : le contexte de la discussion (les fichiers joints)
+    float             ctxH_{0.f};
+    void              contextAction(int what, const std::string& attachmentId);
     AiPromptEdit*     prompt_{nullptr};
     ui::Button*       attachBtn_{nullptr};
     ui::Button*       sendBtn_{nullptr};
