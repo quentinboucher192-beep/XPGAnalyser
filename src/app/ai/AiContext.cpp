@@ -5,6 +5,10 @@
 
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiGuide.hpp"   // fold : la demande sans accents ni casse
+#include "../../hmi/HmiFolders.hpp"      // 1.18.0 : les dossiers des listes
+#include "../../hmi/HmiNatives.hpp"      // 1.18.0 : les natives que la demande evoque
+#include "../../hmi/HmiPublicVars.hpp"   // 1.18.0 : les variables systeme
+#include "../../hmi/HmiScript.hpp"       // 1.18.0 : la signature d'une fonction IHM
 
 #include <algorithm>
 #include <cctype>
@@ -372,6 +376,92 @@ void viewsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
     s += ".\n";
 }
 
+// 1.18.0 : CE QUE LES OUTILS DE L'IA LISENT - les elements du projet que ses operations citent (un equipement a adresser, une
+// ressource, un dossier ou ranger), les variables systeme (SYS.*) et les natives : celles que la demande evoque (un mot commun),
+// et la liste de leurs familles. Chaque partie a sa limite (rien ne deborde la fenetre du modele).
+void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) {
+    const auto& p = *in.project;
+    const std::size_t part = std::max<std::size_t>(300, lim.toolBytes / 6);
+    std::vector<std::string> empty;
+    const auto line = [&](const char* title, const std::vector<std::string>& items) {
+        if (items.empty()) {
+            empty.push_back(title);
+            return;
+        }
+        std::string text;
+        std::size_t left = 0;
+        for (const auto& it : items) {
+            if (text.size() + it.size() > part) {
+                ++left;
+                continue;
+            }
+            text += (text.empty() ? "" : ", ") + it;
+        }
+        s += std::string(title) + " : " + text + (left > 0 ? " ... et " + std::to_string(left) + " autres" : std::string{}) + ".\n";
+    };
+    {
+        std::vector<std::string> eq;
+        for (const auto& e : p.equipments)
+            eq.push_back(e.name + " (" + std::string(hmi::equipmentTypeLabel(e.type)) + (e.host.empty() ? std::string{} : " " + e.host + ":" + std::to_string(e.port))
+                         + (e.modbus() ? ", esclave " + std::to_string(e.unit) : std::string{}) + ")");
+        line("\xC3\x89quipements", eq);
+        std::vector<std::string> rs, sc, fn, al;
+        for (const auto& r : p.assets.resources) rs.push_back(r.name);
+        for (const auto& x : p.programs.scripts) sc.push_back(x.name);
+        for (const auto& x : p.programs.functions) fn.push_back(hmi::functionSignature(x));
+        for (const auto& x : p.alarms) al.push_back(x.name);
+        line("Ressources", rs);
+        line("Scripts g\xC3\xA9n\xC3\xA9raux", sc);
+        line("Fonctions IHM", fn);
+        line("Alarmes", al);
+        std::string dirs;
+        for (int i = 0; i < static_cast<int>(hmi::fold::List::Count); ++i) {
+            const auto l = static_cast<hmi::fold::List>(i);
+            const auto all = hmi::fold::allFolders(p, l);
+            if (all.empty()) continue;
+            dirs += (dirs.empty() ? "" : " ; ") + std::string(hmi::fold::key(l)) + " :";
+            for (std::size_t k = 0; k < all.size() && k < 8; ++k) dirs += (k ? ", " : " ") + all[k];
+        }
+        if (!p.programs.folders.empty()) {
+            dirs += (dirs.empty() ? "" : " ; ") + std::string("variables :");
+            for (std::size_t k = 0; k < p.programs.folders.size() && k < 8; ++k) dirs += (k ? ", " : " ") + p.programs.folders[k];
+        }
+        if (dirs.empty()) empty.push_back("Dossiers");
+        else s += "Dossiers : " + clip(dirs, part) + ".\n";
+        if (!empty.empty()) {
+            std::string t;
+            for (const auto& e : empty) t += (t.empty() ? "" : ", ") + e;
+            s += "Aucun(e) : " + t + ".\n";
+        }
+    }
+    // Les variables systeme et les natives : seulement celles que la demande evoque (un mot commun) - jamais toutes.
+    const auto asked = wordsOf(in.request);
+    const auto evokes = [&](std::string_view a, std::string_view b) {
+        const auto ws = wordsOf(std::string(a) + " " + std::string(b));
+        for (const auto& w : ws)
+            for (const auto& q : asked)
+                if (q.size() >= 4 && w.size() >= 4 && (w.rfind(q, 0) == 0 || q.rfind(w, 0) == 0)) return true;
+        return false;
+    };
+    std::string sys, nat;
+    for (const auto& v : hmi::pub::kSysVars) {
+        if (!hmi::pub::sysDomainShown(static_cast<std::size_t>(v.domain)) || !evokes(v.name, v.text)) continue;
+        const std::string it = "\n  SYS." + std::string(v.name) + " : " + std::string(v.type) + " - " + clip(v.text, 90);
+        if (sys.size() + it.size() > lim.sysBytes) break;
+        sys += it;
+    }
+    for (const auto& f : hmi::natives::functions()) {
+        if (!evokes(f.name, f.summary)) continue;
+        std::string sig = "\n  " + std::string(f.name) + "(";
+        for (std::size_t k = 0; k < f.params.size(); ++k) sig += (k ? ", " : "") + std::string(f.params[k].name) + " : " + std::string(f.params[k].type);
+        sig += ")" + (f.returns.empty() ? std::string{} : " : " + std::string(f.returns)) + " - " + clip(f.summary, 90);
+        if (nat.size() + sig.size() > lim.nativeBytes) break;
+        nat += sig;
+    }
+    if (!sys.empty()) s += "Variables syst\xC3\xA8me que la demande \xC3\xA9voque (en lecture) :" + sys + "\n";
+    if (!nat.empty()) s += "Fonctions natives que la demande \xC3\xA9voque :" + nat + "\n";
+}
+
 } // namespace
 
 std::vector<hmi::Kind> kindsInView(const hmi::View& v) {
@@ -411,6 +501,7 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
     selectionPart(in, info, s);
     variablesPart(in, lim, info, s);
     viewsPart(in, lim, s);
+    toolsPart(in, lim, s);   // 1.18.0
     if (infoOut) *infoOut = info;
     return s;
 }

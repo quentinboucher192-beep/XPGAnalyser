@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -852,6 +853,171 @@ void assistant() {
 
 } // namespace
 
+
+// ---- 1.18.0 : les outils de l'IA -------------------------------------------------------------------
+void tools118() {
+    std::printf("1.18.0 : les outils de l'IA\n");
+    std::string why;
+    // -- un type generique, puis une variable d'une de ses instances
+    {
+        Fixture f;
+        auto t = type("T_Pile", {{"Elements", "LIST OF T", ""}, {"Taille", "INT", ""}});
+        t.generics = {"T"};
+        auto p = f.proposal({t, vars({{"Pile_1", "T_Pile<REAL>", "", ""}})});
+        auto ck = ai::validate(f.doc->project, p);
+        check(ck.ok() && ck.newTypes.size() == 1 && ck.newTypes[0].first == "T_Pile<T>", "T_Pile<T> : membres en T, une variable T_Pile<REAL> (" + errorsOf(ck) + ")");
+        check(f.apply(p, &why), "appliquee (" + why + ")");
+        const auto* tp = f.doc->project.hmiTypeByName("T_Pile");
+        check(tp && tp->generics.size() == 1 && tp->generics[0].name == "T", "le type porte son generique T");
+        auto two = type("T_Paire", {{"Cle", "K", ""}, {"Valeur", "T", ""}});
+        two.generics = {"T", "K : ANY_NUM"};
+        check(ai::validate(f.doc->project, f.proposal({two})).ok(), "T_Paire<T, K : ANY_NUM> : deux generiques");
+        auto dup = type("T_Mal", {{"A", "T", ""}});
+        dup.generics = {"T", "T"};
+        check(!ai::validate(f.doc->project, f.proposal({dup})).ok(), "deux generiques du meme nom : refuse");
+        auto noGen = type("T_Sans", {{"A", "T", ""}});
+        check(!ai::validate(f.doc->project, f.proposal({noGen})).ok(), "un membre de type T sans generique T : refuse");
+    }
+    // -- un symbole (parametres, generiques), une popup, un en-tete
+    {
+        Fixture f;
+        auto sym = op(A::View, "Sym_Jauge", {{"role", "symbole"}});
+        sym.params = {{"Valeur", "T", "la mesure", "0"}, {"Unite", "STRING", "", "'%'"}};
+        sym.generics = {"T : ANY_NUM"};
+        auto p = f.proposal({sym, create("Rectangle", "Fond", {{"x", "0"}, {"y", "0"}, {"w", "200"}, {"h", "200"}})});
+        auto ck = ai::validate(f.doc->project, p);
+        check(ck.ok() && std::any_of(ck.made.begin(), ck.made.end(), [](const ai::Check::Made& m) { return m.what == "Symbole" && has(m.detail, "Valeur : T"); }),
+              "un symbole : ses parametres montres dans l'apercu (" + errorsOf(ck) + ")");
+        const auto start = f.doc->project.config.startView;
+        check(f.apply(p, &why), "le symbole cree (" + why + ")");
+        const auto* v = f.doc->project.viewByName("Sym_Jauge");
+        check(v && v->role == "symbole" && v->params.size() == 2 && v->generics.size() == 1 && v->width == 200 && v->objects.size() == 1,
+              "Sym_Jauge : role symbole, 2 parametres, 1 generique, 200 x 200, son objet");
+        check(f.doc->project.config.startView == start, "un symbole ne devient jamais la vue de demarrage");
+        std::vector<ai::Operation> ops;
+        ai::json::Value arr;
+        check(ai::json::parse(R"([{"action":"creer_popup","nom":"Pop_Reglage","proprietes":{"titre":"Reglage","modale":"false"},"parametres":[{"nom":"Consigne","type":"REAL"}]}])", arr)
+                  && ai::operationsFromJson(arr, ops) && ops.size() == 1 && ops[0].action == A::View,
+              "creer_popup se lit comme creer_vue + role popup");
+        auto pp = f.proposal(ops);
+        check(f.apply(pp, &why), "la popup creee (" + why + ")");
+        const auto* pop = f.doc->project.viewByName("Pop_Reglage");
+        check(pop && pop->role == "popup" && pop->popup.title == "Reglage" && !pop->popup.modal && pop->params.size() == 1, "Pop_Reglage : popup, titre, non modale, 1 parametre");
+        check(f.apply(f.proposal({op(A::View, "Entete_Usine", {{"role", "entete"}})}), &why), "un en-tete cree");
+        const auto* head = f.doc->project.viewByName("Entete_Usine");
+        check(head && head->role == "entete" && head->height == 100 && head->width == 1280, "l'en-tete : 1280 x 100");
+        auto badParam = op(A::View, "Vue_P", {});
+        badParam.params = {{"X", "REAL", "", ""}};
+        check(!ai::validate(f.doc->project, f.proposal({badParam})).ok(), "des parametres sur une vue ordinaire : refuse");
+    }
+    // -- un equipement (detection proposee), des adresses, une formule de lien
+    {
+        Fixture f;
+        auto eq = op(A::Equipment, "Centrale_1", {{"adresse", "192.168.1.40"}, {"esclave", "3"}});
+        eq.detect = true;
+        auto addr = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%M5"}});
+        addr.variable = "Pompe_1_Marche";
+        auto ex = type("T_Ex", {{"Retour", "INT", ""}, {"Cmd", "INT", ""}});
+        auto table = vars({{"Ex", "ARRAY[0..3] OF T_Ex", "", ""}});
+        auto addrF = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW500"}, {"motif", "[*].Retour"}, {"formule", "%MW(1000 + 10 * i)"}});
+        addrF.variable = "Ex";
+        auto p = f.proposal({eq, addr, ex, table, addrF});
+        auto ck = ai::validate(f.doc->project, p);
+        check(ck.ok(), "equipement + adresses + formule de lien : valide (" + errorsOf(ck) + ")");
+        check(ck.detections.size() == 1 && ck.detections[0].second == "192.168.1.0/24" && anyHas(ck.warnings, "c'est toi qui la lances"),
+              "la detection : PROPOSEE sur 192.168.1.0/24, jamais lancee par l'IA");
+        const std::size_t steps = f.stack.done().size();
+        check(f.apply(p, &why) && f.stack.done().size() == steps + 1, "tout en UNE commande (" + why + ")");
+        const auto* e = f.doc->project.equipmentByName("Centrale_1");
+        const auto* v = f.doc->project.variable("Pompe_1_Marche");
+        const auto* t = f.doc->project.variable("Ex");
+        check(e && e->host == "192.168.1.40" && e->unit == 3 && e->port == 502, "Centrale_1 : 192.168.1.40:502, esclave 3");
+        check(v && v->equipment == "Centrale_1" && v->address == "%M5", "Pompe_1_Marche liee a Centrale_1, %M5");
+        check(t && t->equipment == "Centrale_1" && !t->places.empty(), "Ex : liee, ses cases placees par la formule");
+        (void)f.stack.undo();
+        check(!f.doc->project.equipmentByName("Centrale_1") && f.doc->project.variable("Pompe_1_Marche")->equipment.empty() && !f.doc->project.variable("Ex"),
+              "Ctrl+Z : l'equipement, les adresses et la variable partent ensemble");
+        auto unknown = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW1"}});
+        unknown.variable = "Pas_De_Variable";
+        auto badAddr = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "n'importe quoi"}});
+        badAddr.variable = "Pompe_1_Defaut";
+        auto eth = op(A::Equipment, "Switch_1", {{"type", "ethernet_tcp"}, {"adresse", "192.168.1.2"}});
+        auto onEth = op(A::Address, {}, {{"equipement", "Switch_1"}, {"adresse", "%MW1"}});
+        onEth.variable = "Pompe_1_Defaut";
+        const auto bk = ai::validate(f.doc->project, f.proposal({eq, unknown, badAddr, eth, onEth}));
+        check(anyHas(bk.errors, "introuvable"), "une variable inconnue : refusee (jamais inventee)");
+        check(anyHas(bk.errors, "illisible"), "une adresse illisible : refusee");
+        check(anyHas(bk.errors, "Ethernet"), "adresser un equipement Ethernet : refuse");
+    }
+    // -- un script, une fonction (ses blocs VAR deviennent ses declarations), une alarme : compiles, jamais executes
+    {
+        Fixture f;
+        auto sc = op(A::Script, "Init_Pompes", {{"langage", "ST"}, {"evenement", "demarrage"}, {"corps", "Pompe_1_Marche := FALSE;"}});
+        auto fn = op(A::Function, "Moyenne", {{"retour", "REAL"}, {"corps", "VAR_INPUT\n    a : REAL;\n    b : REAL;\nEND_VAR\nMoyenne := (a + b) / 2.0;"}});
+        auto al = op(A::Alarm, "Defaut_P1", {{"condition", "Pompe_1_Defaut"}, {"message", "Pompe 1 en defaut"}, {"priorite", "2"}});
+        auto p = f.proposal({sc, fn, al});
+        auto ck = ai::validate(f.doc->project, p);
+        check(ck.ok() && ck.made.size() == 3, "script, fonction, alarme : valides (" + errorsOf(ck) + ")");
+        check(f.apply(p, &why), "appliques (" + why + ")");
+        const auto* s1 = f.doc->project.generalScript("Init_Pompes");
+        const auto* f1 = f.doc->project.functionByName("Moyenne");
+        const auto* a1 = f.doc->project.alarmByName("Defaut_P1");
+        check(s1 && s1->event == "Demarrage" && s1->lang == hmi::ScriptLang::ST, "le script : Demarrage, ST");
+        check(f1 && f1->returnType == "REAL" && f1->decls.size() == 2 && !has(f1->body, "VAR_INPUT"), "la fonction : ses parametres devenus ses declarations");
+        check(a1 && a1->priority == 2 && a1->condition == "Pompe_1_Defaut", "l'alarme : priorite 2");
+        auto badSc = op(A::Script, "Mauvais", {{"corps", "Inconnue_X := 1;"}});
+        auto badAl = op(A::Alarm, "Mauvaise", {{"condition", "Pas_La > 3"}});
+        const auto bk = ai::validate(f.doc->project, f.proposal({badSc, badAl}));
+        check(anyHas(bk.errors, "Script Mauvais") && anyHas(bk.errors, "Alarme Mauvaise"), "un nom inconnu dans le code ou la condition : refuse (" + errorsOf(bk) + " / avert. " + std::to_string(bk.warnings.size()) + (bk.warnings.empty() ? std::string{} : " : " + bk.warnings.front()) + ")");
+        check(anyHas(ai::validate(f.doc->project, f.proposal({op(A::Script, "Vide", {})})).errors, "corps"), "un script sans code : refuse");
+    }
+    // -- une ressource depuis une piece jointe ; des dossiers, un rangement
+    {
+        Fixture f;
+        const fs::path dir = fs::temp_directory_path() / "xpg_ai_outils118";
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        {
+            std::ofstream out(dir / "logo.png", std::ios::binary);
+            out << "\x89PNG\r\n\x1a\n-- essai --";
+        }
+        ai::Env env;
+        env.attachmentPath = [&](std::string_view n) { return n == "logo.png" ? U(dir / "logo.png") : std::string{}; };
+        auto res = op(A::Resource, {}, {{"piece_jointe", "logo.png"}, {"dossier", "Logos"}});
+        auto folder = op(A::Folder, {}, {{"liste", "vues"}, {"dossier", "Ligne 1"}});
+        auto store = op(A::Store, {}, {{"liste", "vues"}, {"dossier", "Ligne 1"}});
+        store.objects = {"Accueil"};
+        auto p = f.proposal({res, folder, store});
+        auto ck = ai::validate(f.doc->project, p, env);
+        check(ck.ok() && ck.made.size() == 3, "ressource, dossier, rangement : valides (" + errorsOf(ck) + ")");
+        check(f.apply(p, &why, env), "appliques (" + why + ")");
+        const auto* r = f.doc->project.resourceByName("logo.png");
+        check(r && r->data && r->data->size() > 8 && r->folder == "Logos", "logo.png : copiee dans le projet, dans son dossier");
+        const auto* acc = f.doc->project.viewByName("Accueil");
+        check(acc && acc->folder == "Ligne 1", "Accueil rangee dans Ligne 1");
+        auto missing = op(A::Resource, {}, {{"piece_jointe", "absent.png"}});
+        check(anyHas(ai::validate(f.doc->project, f.proposal({missing}), env).errors, "pi\xC3\xA8" "ce jointe"), "une piece jointe absente : refusee");
+        auto badStore = op(A::Store, {}, {{"liste", "vues"}, {"dossier", "Ligne 1"}});
+        badStore.objects = {"Vue_Inexistante"};
+        check(!ai::validate(f.doc->project, f.proposal({badStore})).ok(), "ranger un element absent : refuse");
+        fs::remove_all(dir);
+    }
+    // -- le JSON des outils, aller-retour
+    {
+        ai::json::Value arr;
+        const bool parsed = ai::json::parse(R"([{"action":"creer_symbole","nom":"Sym_V","parametres":[{"nom":"Ouv","type":"BOOL"}],"generiques":["T"]},
+            {"action":"creer_equipement","nom":"Var_1","adresse":"10.0.0.5","port":502,"detecter":true},
+            {"action":"adresser","variable":"Pompe_1_Marche","equipement":"Var_1","adresse":"%MW10"},
+            {"action":"creer_script","nom":"S1","langage":"ST","evenement":"Cyclique","periode":500,"corps":"x := 1;"},
+            {"action":"ranger","liste":"scripts","dossier":"Outils","objets":["S1"]}])", arr);
+        std::vector<ai::Operation> ops, back;
+        check(parsed && ai::operationsFromJson(arr, ops) && ops.size() == 5, "le JSON des outils se lit");
+        check(ops.size() == 5 && ops[0].params.size() == 1 && ops[0].generics.size() == 1 && ops[1].detect && ops[3].action == A::Script && ops[4].objects.size() == 1,
+              "parametres, generiques, detecter, script, ranger");
+        check(ai::operationsFromJson(ai::operationsToJson(ops), back) && back == ops, "l'aller-retour JSON garde tout");
+    }
+}
+
 int main() {
     // Le dossier IA des essais (les connaissances relues par les consignes, les conversations).
     const fs::path root = fs::temp_directory_path() / "xpg_ai_options_racine";
@@ -869,6 +1035,7 @@ int main() {
     automate();
     context();
     assistant();
+    tools118();
     fs::remove_all(root);
     std::printf("ai_options_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

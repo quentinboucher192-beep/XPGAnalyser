@@ -34,6 +34,23 @@
 //    creer, modifier + une valeur qui commence par "=" est une FORMULE (fx), lue et
 //                    verifiee comme une formule de l'inspecteur.
 //
+//    1.18.0 (LES OUTILS DE L'IA, a la fin) :
+//    creer_vue + role   symbole, popup, modele (ecran modele), entete, pied - avec
+//                       ses parametres (nom, type, defaut) et ses generiques <T, K> ;
+//                       creer_symbole, creer_popup, creer_modele_vue : les memes ;
+//    creer_type + generiques  une structure generique (T_Pile<T>, T_Paire<T, K>) ;
+//    creer_equipement   Modbus TCP/IP ou Ethernet TCP/IP ; `detecter` PROPOSE la
+//                       detection de ce qui repond (l'utilisateur la lance, rien
+//                       ne part sur le reseau a la proposition) ;
+//    adresser           une variable IHM liee a un equipement, son adresse (%MW100),
+//                       une formule de lien pour un tableau de structures
+//                       ([*].Retour = %MW(1000 + 10 * i), HmiAddressPlan) ;
+//    creer_script, creer_fonction  du texte de projet (ST, C, C++) : compile par le
+//                       compilateur du logiciel pour les diagnostics, JAMAIS execute ;
+//    creer_alarme       condition, message, priorite... (la condition compilee) ;
+//    creer_ressource    depuis une piece jointe de la conversation ;
+//    creer_dossier, ranger  les dossiers des listes (vues, scripts, types...).
+//
 //  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
 //  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
@@ -72,7 +89,10 @@ namespace app::ai {
 
 struct Operation {
     // 1.16.0 (le contrat, a la fin) : View (creer_vue), Variables (creer_variables), Type (creer_type).
-    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code, View, Variables, Type };
+    // 1.18.0 (a la fin) : Equipment (creer_equipement), Address (adresser), Script, Function, Alarm, Resource,
+    // Folder (creer_dossier), Store (ranger).
+    enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code, View, Variables, Type,
+                                       Equipment, Address, Script, Function, Alarm, Resource, Folder, Store };
     Action                                           action{Action::Create};
     std::string                                      kind;      // creer : la cle du genre ("Tank")
     std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
@@ -102,7 +122,18 @@ struct Operation {
     std::vector<MemberSpec>                          members;
     int                                              count{1};
     bool                                             markers{false};
+    // 1.18.0 (a la fin) : LES OUTILS DE L'IA -
+    //  - creer_type, creer_vue (un symbole, une popup), creer_fonction : `generics` ("T", "K : ANY_NUM") ;
+    //  - creer_vue (un symbole, une popup) : `params` (nom, type, description, valeur : la valeur par defaut) ;
+    //  - creer_equipement : `detect` - PROPOSER la detection de ce qui repond (l'utilisateur la lance) ;
+    //  - les autres champs (equipement, adresse, langage, corps, condition, liste, dossier...) : dans `props`.
+    std::vector<std::string>                         generics;
+    std::vector<VariableSpec>                        params;
+    bool                                             detect{false};
+    bool operator==(const Operation&) const = default;
 };
+// 1.18.0 : l'operation ne touche que le projet (pas la vue ouverte) : creer_variables, creer_type, creer_vue et les outils.
+[[nodiscard]] bool projectLevel(Operation::Action) noexcept;
 [[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
 [[nodiscard]] std::optional<Operation::Action> actionFromKey(std::string_view) noexcept;
 
@@ -161,6 +192,13 @@ struct Check {
     std::string                                                             newView;
     std::vector<Operation::VariableSpec>                                    newVariables;
     std::vector<std::pair<std::string, std::vector<Operation::MemberSpec>>> newTypes;
+    // 1.18.0 (a la fin) : les autres elements crees ou touches par les outils - une ligne de l'apercu chacun ("Equipement",
+    // "Centrale_1", "Modbus TCP/IP 192.168.1.40:502, esclave 1") ; les detections PROPOSEES (l'equipement, la plage).
+    struct Made {
+        std::string what, name, detail;
+    };
+    std::vector<Made>                                   made;
+    std::vector<std::pair<std::string, std::string>>    detections;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 
@@ -185,6 +223,9 @@ struct Env {
     // son nom ("MAST.XPG") ; vide ou nul : l'automate relie (ou aucun). Ses variables servent a creer des variables
     // IHM, elles ne s'associent pas directement.
     std::function<std::string()> plcSource;
+    // 1.18.0 (a la fin) : une piece jointe de la conversation, par son nom de fichier ("logo.png") - son chemin sur le disque ;
+    // vide (ou nul) : aucune. creer_ressource n'importe que celles-la.
+    std::function<std::string(std::string_view)> attachmentPath;
 };
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);

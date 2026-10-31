@@ -12,10 +12,19 @@
 #include "../../hmi/HmiScript.hpp"       // isHmiFunction
 #include "../../hmi/HmiStore.hpp"        // parseObjectCode : le code brut
 #include "../../hmi/HmiTypes.hpp"        // 1.16.0 : les types d'une variable, d'un membre (validType)
+#include "../../hmi/HmiAddressPlan.hpp"  // 1.18.0 : adresser (la formule de lien des cases)
+#include "../../hmi/HmiAssets.hpp"       // 1.18.0 : creer_ressource (makeResource)
+#include "../../hmi/HmiCheck.hpp"        // 1.18.0 : compiler les scripts, fonctions et alarmes crees
+#include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : creer_equipement, adresser
+#include "../../hmi/HmiFolders.hpp"      // 1.18.0 : creer_dossier, ranger
+#include "../../hmi/HmiMigrate.hpp"      // 1.18.0 : les blocs VAR d'un code cree deviennent ses declarations
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 
@@ -897,11 +906,51 @@ struct Run {
             } else if (k == "fond") {
                 if (!hmi::roles::colorOk(v))
                     if (!fail("Vue " + op.name + " : fond = \xC2\xAB " + v + " \xC2\xBB : une couleur #RRGGBB est attendue.")) return false;
-            } else if (k != "description") {
-                if (!fail("Vue " + op.name + " : \xC2\xAB " + k + " \xC2\xBB n'est pas un r\xC3\xA9glage d'une vue (largeur, hauteur, fond, description).")) return false;
+            } else if (k == "role") {
+                // 1.18.0 : un symbole, une popup, un ecran modele, un en-tete, un pied de page.
+                const std::string r = lower(trimmed(v));
+                if (r != "vue" && r != "popup" && r != "symbole" && r != "modele" && r != "entete" && r != "pied")
+                    if (!fail("Vue " + op.name + " : r\xC3\xB4le \xC2\xAB " + v + " \xC2\xBB inconnu (vue, popup, symbole, modele, entete, pied).")) return false;
+            } else if (k != "description" && k != "titre" && k != "modale" && k != "dossier") {
+                if (!fail("Vue " + op.name + " : \xC2\xAB " + k + " \xC2\xBB n'est pas un r\xC3\xA9glage d'une vue (largeur, hauteur, fond, description, role, "
+                          "titre, modale, dossier).")) return false;
             }
         }
+        // 1.18.0 : les parametres et les generiques d'un symbole ou d'une popup.
+        const std::string role = lower(prop(op, "role").empty() ? std::string("vue") : prop(op, "role"));
+        const bool takesParams = role == "symbole" || role == "popup";
+        std::vector<hmi::GenericParam> gens;
+        std::string gwhy;
+        if (!op.generics.empty() && !takesParams)
+            if (!fail("Vue " + op.name + " : seuls un symbole et une popup ont des g\xC3\xA9n\xC3\xA9riques.")) return false;
+        if (!genericsOf(op.generics, gens, &gwhy))
+            if (!fail("Vue " + op.name + " : g\xC3\xA9n\xC3\xA9riques : " + gwhy + ".")) return false;
+        if (!op.params.empty() && !takesParams)
+            if (!fail("Vue " + op.name + " : seuls un symbole et une popup ont des param\xC3\xA8tres.")) return false;
+        std::vector<std::string> seen, shown;
+        for (const auto& prm : op.params) {
+            const std::string pn = trimmed(prm.name), pt = hmi::types::normalized(trimmed(prm.type));
+            std::string bad = identifierProblem(pn);
+            if (bad.empty() && std::any_of(seen.begin(), seen.end(), [&](const std::string& x) { return iequal(x, pn); })) bad = "deux param\xC3\xA8tres de ce nom";
+            if (bad.empty() && !pt.empty()) {
+                const bool generic = std::any_of(gens.begin(), gens.end(), [&](const hmi::GenericParam& g) { return iequal(g.name, pt); });
+                std::string reason;
+                if (!generic && !typeKnown(pt, &reason)) bad = unknownType(pt, reason);
+            }
+            if (!bad.empty()) {
+                if (!fail("Vue " + op.name + ", param\xC3\xA8tre \xC2\xAB " + prm.name + " \xC2\xBB : " + bad + ".")) return false;
+                continue;
+            }
+            seen.push_back(pn);
+            shown.push_back(pn + " : " + (pt.empty() ? std::string("ANY") : pt) + (trimmed(prm.initial).empty() ? std::string{} : " = " + trimmed(prm.initial)));
+        }
         if (check) check->newView = op.name;
+        if (role != "vue") {
+            static const std::map<std::string, std::string> label = {{"popup", "Popup"}, {"symbole", "Symbole"}, {"modele", "\xC3\x89" "cran mod\xC3\xA8le"},
+                                                                     {"entete", "En-t\xC3\xAAte"}, {"pied", "Pied de page"}};
+            made(label.at(role), op.name + (gens.empty() ? std::string{} : "<" + hmi::genericsText(gens) + ">"),
+                 shown.empty() ? std::string("sans param\xC3\xA8tre") : joinList(shown));
+        }
         return true;
     }
 
@@ -1027,6 +1076,8 @@ struct Run {
         if (!bad.empty()) return fail("Type \xC2\xAB " + op.name + " \xC2\xBB : " + bad + ".");
         hmi::HmiType t;
         t.name = name;
+        // 1.18.0 : une structure generique (T_Pile<T>, T_Paire<T, K>) - ses membres peuvent etre de type T, K.
+        if (std::string gwhy; !genericsOf(op.generics, t.generics, &gwhy)) return fail("Type " + name + " : g\xC3\xA9n\xC3\xA9riques : " + gwhy + ".");
         for (const auto& [k, v] : op.props)
             if (k == "description") t.description = v;
         if (t.description.empty()) t.description = "Cr\xC3\xA9\xC3\xA9 par l'Assistant IA (demande : " + p.request + ")";
@@ -1050,7 +1101,16 @@ struct Run {
             }
             if (mb.empty()) {
                 std::string reason;
-                if (!typeKnown(mt, &reason, true)) mb = unknownType(raw, reason);
+                if (!t.generics.empty()) {
+                    // Le type lui-meme (ses generiques) dans le projet d'essai : LIST OF T s'y verifie avec un type de T.
+                    hmi::Project pr;
+                    pr.programs.types = project.programs.types;
+                    pr.programs.types.insert(pr.programs.types.end(), newTypes.begin(), newTypes.end());
+                    pr.programs.types.push_back(t);
+                    if (!hmi::types::validMemberType(pr, mt, &reason, name)) mb = unknownType(raw, reason);
+                } else if (!typeKnown(mt, &reason, true)) {
+                    mb = unknownType(raw, reason);
+                }
             }
             if (!mb.empty()) {
                 if (!fail("Type " + name + ", membre \xC2\xAB " + m.name + " \xC2\xBB : " + mb + ".")) return false;
@@ -1064,9 +1124,505 @@ struct Run {
             shown.push_back({mn, mt, trimmed(m.description)});
         }
         t.id = nextId++;
-        if (check) check->newTypes.emplace_back(name, std::move(shown));
+        if (check) check->newTypes.emplace_back(t.generics.empty() ? name : name + "<" + hmi::genericsText(t.generics) + ">", std::move(shown));
         newTypes.push_back(std::move(t));
         return true;
+    }
+
+    // =========================================================================================
+    //  1.18.0 : LES OUTILS DE L'IA - des elements du projet, crees ou touches comme par l'ecran
+    //  qui les cree (memes regles, memes noms), montres dans l'apercu, poses par UNE commande.
+    // =========================================================================================
+    std::vector<hmi::Equipment>   newEquipments{};
+    std::vector<hmi::Script>      newScripts{};
+    std::vector<hmi::HmiFunction> newFunctions{};
+    std::vector<hmi::AlarmDef>    newAlarms{};
+    std::vector<hmi::Resource>    newResources{};
+    std::vector<hmi::Variable>    addressed{};   // des variables du projet, adressees (remplacent celles du meme id)
+    struct FolderOp {
+        bool                     variables{false};
+        hmi::fold::List          list{hmi::fold::List::Views};
+        std::string              path;
+        std::vector<std::string> names;          // vide : creer le dossier seulement
+    };
+    std::vector<FolderOp>         folderOps{};
+
+    [[nodiscard]] static std::string prop(const Operation& op, std::string_view key) {
+        for (const auto& [k, v] : op.props)
+            if (k == key) return trimmed(v);
+        return {};
+    }
+    void made(std::string what, std::string name, std::string detail) {
+        if (check) check->made.push_back({std::move(what), std::move(name), std::move(detail)});
+    }
+    std::string created() const { return "Cr\xC3\xA9\xC3\xA9 par l'Assistant IA (demande : " + p.request + ")"; }
+    static bool readBool(const std::string& v, bool fallback) {
+        const std::string l = lower(v);
+        if (l == "true" || l == "1" || l == "vrai" || l == "oui") return true;
+        if (l == "false" || l == "0" || l == "faux" || l == "non") return false;
+        return fallback;
+    }
+    // Un nombre entier dans [lo, hi] ; vide : `fallback`. Faux : illisible ou hors bornes.
+    static bool readInt(const std::string& v, long long lo, long long hi, long long fallback, long long& out) {
+        if (v.empty()) {
+            out = fallback;
+            return true;
+        }
+        double d = 0;
+        if (!hmi::roles::readNumber(v, d) || d != static_cast<double>(static_cast<long long>(d)) || d < static_cast<double>(lo) || d > static_cast<double>(hi))
+            return false;
+        out = static_cast<long long>(d);
+        return true;
+    }
+    [[nodiscard]] const hmi::Equipment* newEquipment(std::string_view name) const {
+        for (const auto& e : newEquipments)
+            if (iequal(e.name, name)) return &e;
+        return nullptr;
+    }
+    [[nodiscard]] const hmi::Equipment* equipmentNamed(std::string_view name) const {
+        if (const auto* e = project.equipmentByName(name)) return e;
+        return newEquipment(name);
+    }
+    hmi::Variable* newVarMut(std::string_view name) {
+        for (auto& v : newVars)
+            if (iequal(v.name, name)) return &v;
+        return nullptr;
+    }
+    // Le projet tel que la proposition le laisserait (les types, variables, equipements, scripts, fonctions, alarmes crees
+    // plus haut) : pour les controles qui lisent un projet (le plan d'adresses, le compilateur).
+    [[nodiscard]] hmi::Project probe() const {
+        hmi::Project pr = project;
+        for (const auto& t : newTypes) pr.programs.types.push_back(t);
+        for (const auto& v : newVars) pr.programs.variables.push_back(v);
+        for (const auto& v : addressed)
+            if (auto* x = pr.variableById(v.id)) *x = v;
+        for (const auto& e : newEquipments) pr.equipments.push_back(e);
+        for (const auto& s : newScripts) pr.programs.scripts.push_back(s);
+        for (const auto& f : newFunctions) pr.programs.functions.push_back(f);
+        for (const auto& a : newAlarms) pr.alarms.push_back(a);
+        return pr;
+    }
+    // Un nom d'element du projet : un identifiant ST (lettres sans accent, chiffres, _), pas un mot reserve. Vide : il convient.
+    static std::string identifierProblem(const std::string& name) {
+        if (!hmi::isIdentifier(name)) return "nom invalide (une lettre ou _, puis des lettres sans accent, des chiffres ou _)";
+        if (hmi::isReservedWord(name) || iequal(name, "SYS") || iequal(name, "API")) return "\xC2\xAB " + name + " \xC2\xBB est un mot r\xC3\xA9serv\xC3\xA9";
+        return {};
+    }
+    // "T", "K : ANY_NUM" -> les generiques ; faux et `why`.
+    static bool genericsOf(const std::vector<std::string>& in, std::vector<hmi::GenericParam>& out, std::string* why) {
+        out.clear();
+        if (in.empty()) return true;
+        std::string text;
+        for (const auto& g : in) text += (text.empty() ? "" : ", ") + trimmed(g);
+        return hmi::parseGenerics(text, out, why);
+    }
+
+    // CREER_EQUIPEMENT : comme Configuration > Equipements > Nouveau. `detecter` : la detection est PROPOSEE (la carte la
+    // montre apres Appliquer) - jamais lancee par l'IA.
+    bool equipment(const Operation& op) {
+        const std::string name = trimmed(op.name);
+        const std::string at = "\xC3\x89quipement \xC2\xAB " + op.name + " \xC2\xBB : ";
+        std::string bad;
+        if (name.empty() || name.size() > 64) bad = "son nom manque (64 caract\xC3\xA8res au plus)";
+        else if (name.find_first_of("\"';|$\n\t") != std::string::npos) bad = "caract\xC3\xA8re interdit dans le nom";
+        else if (equipmentNamed(name)) bad = "un \xC3\xA9quipement porte d\xC3\xA9j\xC3\xA0 ce nom";
+        if (!bad.empty()) return fail(at + bad + ".");
+        hmi::Equipment e;
+        e.name = name;
+        if (const std::string t = prop(op, "type"); !t.empty()) {
+            const std::string l = lower(t);
+            if (l == "modbus" || l == "modbus_tcp" || l == "modbus tcp" || l == "modbus tcp/ip") e.type = hmi::EquipmentType::ModbusTcp;
+            else if (l == "ethernet" || l == "ethernet_tcp" || l == "ethernet tcp" || l == "ethernet tcp/ip" || l == "ip") e.type = hmi::EquipmentType::EthernetTcp;
+            else if (const auto k = hmi::equipmentTypeFrom(t)) e.type = *k;
+            else return fail(at + "type \xC2\xAB " + t + " \xC2\xBB inconnu (modbus_tcp ou ethernet_tcp ; Modbus RTU n'est pas encore pris en charge).");
+        }
+        e.simulated = readBool(prop(op, "simule"), false);
+        std::string host = prop(op, "adresse");
+        if (host.empty()) host = prop(op, "ip");
+        std::uint32_t ip = 0;
+        if (host.empty() && !e.simulated) return fail(at + "son adresse IP manque (ex. 192.168.1.40).");
+        if (!host.empty()) {
+            const bool hostname = host.size() <= 253 && std::all_of(host.begin(), host.end(), [](char c) {
+                return std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-';
+            }) && std::any_of(host.begin(), host.end(), [](char c) { return std::isalpha(static_cast<unsigned char>(c)); });
+            if (!hmi::equip::parseIpv4(host, ip) && !hostname)
+                return fail(at + "adresse \xC2\xAB " + host + " \xC2\xBB illisible (une adresse IPv4 : 192.168.1.40, ou un nom de poste).");
+            e.host = host;
+        }
+        long long n = 0;
+        if (!readInt(prop(op, "port"), 0, 65535, e.modbus() ? 502 : 0, n)) return fail(at + "port : un nombre de 0 \xC3\xA0 65535.");
+        e.port = static_cast<int>(n);
+        if (!readInt(prop(op, "esclave"), 0, 255, 1, n)) return fail(at + "esclave (Unit Id) : un nombre de 0 \xC3\xA0 255.");
+        e.unit = static_cast<int>(n);
+        if (!readInt(prop(op, "periode"), 50, 60000, 500, n)) return fail(at + "p\xC3\xA9riode : de 50 \xC3\xA0 60000 ms.");
+        e.periodMs = static_cast<int>(n);
+        e.description = prop(op, "description").empty() ? created() : prop(op, "description");
+        e.id = nextId++;
+        std::string detail = std::string(hmi::equipmentTypeLabel(e.type)) + (e.host.empty() ? std::string{} : " " + e.host)
+                             + (e.port > 0 ? ":" + std::to_string(e.port) : std::string{}) + (e.modbus() ? ", esclave " + std::to_string(e.unit) : std::string{})
+                             + (e.simulated ? ", simul\xC3\xA9" : "");
+        made("\xC3\x89quipement", name, detail);
+        if (op.detect) {
+            std::string range;
+            if (ip != 0) range = hmi::equip::ipv4Text(hmi::equip::networkOf(ip, 24)) + "/24";
+            if (check) check->detections.emplace_back(name, range);
+            warn("D\xC3\xA9tecter ce qui r\xC3\xA9pond" + (range.empty() ? std::string{} : " sur " + range)
+                 + " : c'est toi qui la lances, apr\xC3\xA8s Appliquer (le bouton de la carte) - rien ne part sur le r\xC3\xA9seau avant.");
+        }
+        newEquipments.push_back(std::move(e));
+        return true;
+    }
+
+    // ADRESSER : une variable IHM (du projet ou creee plus haut) liee a un equipement Modbus, a son adresse ; une formule de
+    // lien pour les cases d'un tableau de structures (hmi::addr, << Modifier l'adresse dans toutes les cases >>).
+    bool address(const Operation& op) {
+        const std::string varName = trimmed(op.variable);
+        const std::string eqName = prop(op, "equipement");
+        const std::string addr = prop(op, "adresse");
+        const std::string formula = prop(op, "formule");
+        const std::string at = "Adresser \xC2\xAB " + varName + " \xC2\xBB : ";
+        hmi::Variable* nv = newVarMut(varName);
+        const hmi::Variable* pv = nv ? nullptr : project.variable(varName);
+        if (!nv && !pv) {
+            if (environment().plcName && environment().plcName(varName))
+                return fail(at + "c'est une variable de l'automate reli\xC3\xA9 : seule une variable IHM se lie \xC3\xA0 un \xC3\xA9quipement.");
+            std::string msg = at + "variable IHM introuvable (l'Assistant n'invente pas de variable)";
+            if (const auto near = nearVariables(project, varName); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+            return fail(msg + ".");
+        }
+        const hmi::Equipment* eq = equipmentNamed(eqName);
+        if (!eq) {
+            std::vector<std::string> names;
+            for (const auto& e : project.equipments) names.push_back(e.name);
+            for (const auto& e : newEquipments) names.push_back(e.name);
+            return fail(at + "\xC3\xA9quipement \xC2\xAB " + eqName + " \xC2\xBB introuvable"
+                        + (names.empty() ? std::string(" (le projet n'en a aucun : creer_equipement d'abord)") : " (les \xC3\xA9quipements : " + joinList(names) + ")") + ".");
+        }
+        if (!eq->modbus()) return fail(at + eq->name + " est un \xC3\xA9quipement Ethernet TCP/IP : il n'a pas d'adresses (Modbus TCP/IP seulement).");
+        hmi::Variable v = nv ? *nv : *pv;
+        for (const auto& a : addressed)
+            if (!nv && a.id == v.id) v = a;
+        v.equipment = eq->name;
+        if (!addr.empty()) {
+            std::string why;
+            if (hmi::equip::canonicalAddress(addr, &why).empty())
+                return fail(at + "adresse \xC2\xAB " + addr + " \xC2\xBB illisible" + (why.empty() ? std::string{} : " (" + why + ")")
+                            + " (ex. %MW100, %MF20, %M5, %MW10.3, 40101).");
+            v.address = addr;
+        } else if (formula.empty()) {
+            v.address = hmi::equip::nextFreeAddress(probe(), *eq, hmi::equip::typeOfName(v.type));
+            warn("Adresser " + v.name + " : aucune adresse donn\xC3\xA9" "e - la premi\xC3\xA8re libre de " + eq->name + " (" + v.address + ").");
+        }
+        if (const std::string ro = prop(op, "lecture_seule"); !ro.empty()) v.readOnly = readBool(ro, v.readOnly);
+        std::string detail = eq->name + " " + v.address;
+        if (!formula.empty()) {
+            const std::string pattern = prop(op, "motif").empty() ? std::string("[*]") : prop(op, "motif");
+            const hmi::Project pr = probe();
+            const hmi::addr::Plan plan = hmi::addr::preview(pr, v, pattern, formula);
+            if (!plan.errors.empty()) return fail(at + "formule \xC2\xAB " + pattern + " = " + formula + " \xC2\xBB : " + plan.errors.front() + ".");
+            if (plan.shared > 0)
+                warn("Adresser " + v.name + " : " + std::to_string(plan.shared) + (plan.shared > 1 ? " cases prennent une place d\xC3\xA9j\xC3\xA0 prise" : " case prend une place d\xC3\xA9j\xC3\xA0 prise")
+                     + " ailleurs (l'autre variable garde la sienne).");
+            v = hmi::addr::withFormula(v, pattern, formula);
+            detail += (detail.back() == ' ' ? "" : " ; ") + pattern + " = " + formula + " (" + std::to_string(plan.rows.size()) + " cases)";
+        }
+        // Le meme mot deja pris par une autre variable de cet equipement : dit, pas refuse (comme l'ecran).
+        if (!v.address.empty()) {
+            const std::string mine = hmi::equip::canonicalAddress(v.address);
+            const auto clash = [&](const hmi::Variable& o) {
+                return o.id != v.id && iequal(o.equipment, eq->name) && !o.address.empty() && hmi::equip::canonicalAddress(o.address) == mine;
+            };
+            for (const auto& o : project.programs.variables)
+                if (clash(o)) warn("Adresser " + v.name + " : " + v.address + " est d\xC3\xA9j\xC3\xA0 l'adresse de " + o.name + " sur " + eq->name + ".");
+        }
+        made("Adresse", v.name, detail + (v.readOnly ? " (lecture seule)" : ""));
+        if (nv) *nv = v;
+        else {
+            bool replaced = false;
+            for (auto& a : addressed)
+                if (a.id == v.id) {
+                    a = v;
+                    replaced = true;
+                }
+            if (!replaced) addressed.push_back(v);
+        }
+        return true;
+    }
+
+    // CREER_SCRIPT : un script general (Programmation generale), du TEXTE - compile pour les diagnostics, jamais execute ici.
+    bool script(const Operation& op) {
+        const std::string name = trimmed(op.name);
+        const std::string at = "Script \xC2\xAB " + op.name + " \xC2\xBB : ";
+        if (const std::string bad = identifierProblem(name); !bad.empty()) return fail(at + bad + ".");
+        if (project.generalScript(name) || std::any_of(newScripts.begin(), newScripts.end(), [&](const hmi::Script& s) { return iequal(s.name, name); }))
+            return fail(at + "un script g\xC3\xA9n\xC3\xA9ral porte d\xC3\xA9j\xC3\xA0 ce nom.");
+        hmi::Script sc;
+        sc.name = name;
+        const std::string lang = prop(op, "langage");
+        if (!lang.empty()) {
+            const auto l = hmi::scriptLangFromKey(lang);
+            if (!l) return fail(at + "langage \xC2\xAB " + lang + " \xC2\xBB inconnu (ST, C ou C++).");
+            sc.lang = *l;
+        }
+        const std::string ev = prop(op, "evenement");
+        sc.event = "Appel";
+        if (!ev.empty()) {
+            std::string found;
+            const std::string l = lower(ev);
+            for (const auto k : hmi::kGeneralEvents)
+                if (lower(k) == l) found = std::string(k);
+            if (l == "d\xC3\xA9marrage" || l == "demarrage" || l == "au demarrage" || l == "startup") found = "Demarrage";
+            if (l == "cyclique" || l == "cycle" || l == "periodique") found = "Cyclique";
+            if (l == "changement" || l == "sur changement") found = "Changement";
+            if (l == "appel" || l == "appele") found = "Appel";
+            if (found.empty()) return fail(at + "\xC3\xA9v\xC3\xA9nement \xC2\xAB " + ev + " \xC2\xBB inconnu (Demarrage, Cyclique, Changement ou Appel).");
+            sc.event = found;
+        }
+        long long n = 0;
+        if (!readInt(prop(op, "periode"), 50, 3600000, 1000, n)) return fail(at + "p\xC3\xA9riode : de 50 \xC3\xA0 3600000 ms.");
+        sc.periodMs = static_cast<int>(n);
+        sc.watch = prop(op, "surveille");
+        if (sc.event == "Changement" && sc.watch.empty()) return fail(at + "un script Changement surveille une expression (\xC2\xAB surveille \xC2\xBB).");
+        sc.body = prop(op, "corps").empty() ? op.code : prop(op, "corps");
+        if (trimmed(sc.body).empty()) return fail(at + "son code manque (\xC2\xAB corps \xC2\xBB).");
+        if (sc.body.size() > 60000) return fail(at + "code trop long (60 000 caract\xC3\xA8res au plus).");
+        sc.description = prop(op, "description").empty() ? created() : prop(op, "description");
+        sc.folder = prop(op, "dossier");
+        sc.id = nextId++;
+        std::string detail = std::string(hmi::scriptLangKey(sc.lang)) + ", " + std::string(hmi::eventLabel(sc.event));
+        if (sc.event == "Cyclique") detail += " (" + std::to_string(sc.periodMs) + " ms)";
+        if (sc.event == "Changement") detail += " (" + sc.watch + ")";
+        made("Script", name, detail);
+        newScripts.push_back(std::move(sc));
+        return true;
+    }
+
+    // CREER_FONCTION : une fonction IHM (son retour, ses generiques ; le corps declare ses parametres VAR_INPUT).
+    bool function(const Operation& op) {
+        const std::string name = trimmed(op.name);
+        const std::string at = "Fonction \xC2\xAB " + op.name + " \xC2\xBB : ";
+        if (const std::string bad = identifierProblem(name); !bad.empty()) return fail(at + bad + ".");
+        if (project.functionByName(name) || std::any_of(newFunctions.begin(), newFunctions.end(), [&](const hmi::HmiFunction& f) { return iequal(f.name, name); }))
+            return fail(at + "une fonction porte d\xC3\xA9j\xC3\xA0 ce nom (une surcharge se fait dans l'\xC3\xA9" "diteur des fonctions).");
+        if (project.variable(name) || newVar(name)) return fail(at + "une variable IHM porte ce nom.");
+        hmi::HmiFunction fn;
+        fn.name = name;
+        std::string why;
+        if (!genericsOf(op.generics, fn.generics, &why)) return fail(at + "g\xC3\xA9n\xC3\xA9riques : " + why + ".");
+        fn.returnType = hmi::types::normalized(prop(op, "retour"));
+        if (!fn.returnType.empty()) {
+            const bool generic = std::any_of(fn.generics.begin(), fn.generics.end(), [&](const hmi::GenericParam& g) { return iequal(g.name, fn.returnType); });
+            std::string reason;
+            if (!generic && !typeKnown(fn.returnType, &reason)) return fail(at + "retour : " + unknownType(fn.returnType, reason) + ".");
+        }
+        fn.body = prop(op, "corps").empty() ? op.code : prop(op, "corps");
+        if (trimmed(fn.body).empty()) return fail(at + "son code manque (\xC2\xAB corps \xC2\xBB : VAR_INPUT ... END_VAR puis le calcul ; le r\xC3\xA9sultat s'affecte \xC3\xA0 son nom).");
+        if (fn.body.size() > 60000) return fail(at + "code trop long (60 000 caract\xC3\xA8res au plus).");
+        fn.description = prop(op, "description").empty() ? created() : prop(op, "description");
+        fn.id = nextId++;
+        made("Fonction", name, (fn.returnType.empty() ? std::string("sans retour") : "retour " + fn.returnType)
+                                   + (fn.generics.empty() ? std::string{} : ", g\xC3\xA9n\xC3\xA9rique <" + hmi::genericsText(fn.generics) + ">"));
+        newFunctions.push_back(std::move(fn));
+        return true;
+    }
+
+    // CREER_ALARME : IHM > Alarmes (la condition et le message, compiles).
+    bool alarm(const Operation& op) {
+        const std::string name = trimmed(op.name);
+        const std::string at = "Alarme \xC2\xAB " + op.name + " \xC2\xBB : ";
+        if (const std::string bad = identifierProblem(name); !bad.empty()) return fail(at + bad + ".");
+        if (project.alarmByName(name) || std::any_of(newAlarms.begin(), newAlarms.end(), [&](const hmi::AlarmDef& a) { return iequal(a.name, name); }))
+            return fail(at + "une alarme porte d\xC3\xA9j\xC3\xA0 ce nom.");
+        hmi::AlarmDef a;
+        a.name = name;
+        a.condition = prop(op, "condition");
+        if (a.condition.empty()) return fail(at + "sa condition manque (une expression bool\xC3\xA9" "enne : Niveau_Cuve_1 > 90).");
+        a.message = prop(op, "message").empty() ? name : prop(op, "message");
+        long long n = 0;
+        if (!readInt(prop(op, "priorite"), 1, hmi::kAlarmPriorities, 3, n)) return fail(at + "priorit\xC3\xA9 : de 1 \xC3\xA0 " + std::to_string(hmi::kAlarmPriorities) + ".");
+        a.priority = static_cast<int>(n);
+        if (const std::string c = prop(op, "categorie"); !c.empty()) a.category = c;
+        a.group = prop(op, "groupe");
+        if (!readInt(prop(op, "delai"), 0, 3600000, 0, n)) return fail(at + "d\xC3\xA9lai : de 0 \xC3\xA0 3600000 ms.");
+        a.delayMs = static_cast<int>(n);
+        a.ackRequired = readBool(prop(op, "acquittement"), true);
+        a.instruction = prop(op, "consigne");
+        a.description = prop(op, "description").empty() ? created() : prop(op, "description");
+        a.id = nextId++;
+        made("Alarme", name, "si " + a.condition + ", priorit\xC3\xA9 " + std::to_string(a.priority) + (a.group.empty() ? std::string{} : ", groupe " + a.group));
+        newAlarms.push_back(std::move(a));
+        return true;
+    }
+
+    // CREER_RESSOURCE : une piece jointe de la conversation devient une ressource du projet (copiee, comme Importer).
+    bool resource(const Operation& op) {
+        std::string file = prop(op, "piece_jointe");
+        if (file.empty()) file = prop(op, "fichier");
+        const std::string at = "Ressource \xC2\xAB " + (op.name.empty() ? file : op.name) + " \xC2\xBB : ";
+        if (file.empty()) return fail(at + "la pi\xC3\xA8" "ce jointe manque (\xC2\xAB piece_jointe \xC2\xBB : le nom du fichier joint \xC3\xA0 la conversation).");
+        const std::string path = environment().attachmentPath ? environment().attachmentPath(file) : std::string{};
+        if (path.empty()) return fail(at + "\xC2\xAB " + file + " \xC2\xBB n'est pas une pi\xC3\xA8" "ce jointe de cette conversation (joins le fichier d'abord).");
+        const std::filesystem::path fp(std::u8string(path.begin(), path.end()));
+        std::error_code ec;
+        const auto bytes = std::filesystem::file_size(fp, ec);
+        if (ec) return fail(at + "le fichier joint ne se lit plus.");
+        if (bytes > 200ull * 1024 * 1024) return fail(at + "plus de 200 Mo : trop gros pour une ressource.");
+        std::string name = trimmed(op.name);
+        if (name.empty()) {
+            const auto u = fp.filename().u8string();
+            name = std::string(u.begin(), u.end());
+        }
+        if (name.empty() || name.size() > 128 || name.find_first_of("\"\\/:*?<>|") != std::string::npos) return fail(at + "nom de ressource invalide.");
+        if (project.resourceByName(name) || std::any_of(newResources.begin(), newResources.end(), [&](const hmi::Resource& r) { return iequal(r.name, name); }))
+            return fail(at + "une ressource porte d\xC3\xA9j\xC3\xA0 ce nom (" + name + ").");
+        hmi::Resource r;
+        if (!check && !preview) {   // appliquer : le fichier est lu (copie dans le projet)
+            std::ifstream in(fp, std::ios::binary);
+            auto data = std::make_shared<hmi::Bytes>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (!in.good() && !in.eof()) return fail(at + "le fichier joint ne se lit pas.");
+            hmi::Project ids;
+            ids.nextId = nextId;
+            r = hmi::makeResource(ids, name, std::move(data), path);
+            nextId = ids.nextId;
+        } else {
+            r.id = nextId++;
+            r.name = name;
+            const auto ext = fp.extension().u8string();
+            r.format = upperOf(std::string(ext.begin(), ext.end()).substr(ext.empty() ? 0 : 1));
+            r.bytes = bytes;
+        }
+        r.folder = prop(op, "dossier");
+        made("Ressource", name, (r.format.empty() ? std::string("fichier") : r.format) + ", " + std::to_string((bytes + 1023) / 1024) + " Ko (copi\xC3\xA9" "e dans le projet)");
+        newResources.push_back(std::move(r));
+        return true;
+    }
+
+    // CREER_DOSSIER, RANGER : les dossiers des listes (comme le clic droit > Nouveau dossier, et le glisser dans un dossier).
+    bool folder(const Operation& op, bool store) {
+        std::string list = lower(prop(op, "liste"));
+        const std::string path = prop(op, "dossier");
+        const std::string at = std::string(store ? "Ranger" : "Dossier") + " \xC2\xAB " + path + " \xC2\xBB : ";
+        FolderOp f;
+        if (list == "variables" || list == "variable") f.variables = true;
+        else {
+            if (list == "vue") list = "vues";
+            if (list == "popup") list = "popups";
+            if (list == "symbole") list = "symboles";
+            if (list == "script") list = "scripts";
+            if (list == "type") list = "types";
+            if (list == "style") list = "styles";
+            if (list == "ressource") list = "ressources";
+            if (list == "modeles" || list == "ecrans modeles" || list == "modele") list = "ecrans_modeles";
+            if (list == "entete" || list == "en-tetes") list = "entetes";
+            if (list == "pied") list = "pieds";
+            const auto l = hmi::fold::fromKey(list);
+            if (!l) return fail(at + "liste \xC2\xAB " + prop(op, "liste") + " \xC2\xBB inconnue (vues, popups, symboles, ecrans_modeles, entetes, pieds, scripts, types, styles, ressources, variables).");
+            f.list = *l;
+        }
+        if (path.empty() || path.size() > 128 || path.front() == '/' || path.back() == '/' || path.find("//") != std::string::npos
+            || path.find_first_of("\\:*?\"<>|") != std::string::npos)
+            return fail(at + "chemin de dossier invalide (\xC2\xAB Ligne 1/Pompes \xC2\xBB : des noms s\xC3\xA9par\xC3\xA9s par /).");
+        f.path = path;
+        if (store) {
+            if (op.objects.empty()) return fail(at + "rien \xC3\xA0 ranger (\xC2\xAB objets \xC2\xBB : les noms des \xC3\xA9l\xC3\xA9ments).");
+            for (const auto& raw : op.objects) {
+                const std::string n = trimmed(raw);
+                bool known = false;
+                if (f.variables) known = project.variable(n) || newVar(n);
+                else {
+                    for (const auto& it : hmi::fold::items(project, f.list))
+                        if (iequal(it.name, n)) known = true;
+                    if (f.list == hmi::fold::List::Scripts)
+                        known = known || std::any_of(newScripts.begin(), newScripts.end(), [&](const hmi::Script& s) { return iequal(s.name, n); });
+                    if (f.list == hmi::fold::List::Types)
+                        known = known || std::any_of(newTypes.begin(), newTypes.end(), [&](const hmi::HmiType& t) { return iequal(t.name, n); });
+                    if (f.list == hmi::fold::List::Resources)
+                        known = known || std::any_of(newResources.begin(), newResources.end(), [&](const hmi::Resource& r) { return iequal(r.name, n); });
+                    if (createsView(p) && iequal(newViewName(p), n)) known = true;
+                }
+                if (!known) {
+                    if (!fail(at + "\xC2\xAB " + n + " \xC2\xBB n'est pas dans la liste " + (f.variables ? std::string("variables") : std::string(hmi::fold::key(f.list))) + ".")) return false;
+                    continue;
+                }
+                f.names.push_back(n);
+            }
+            if (f.names.empty()) return true;
+            made("Rangement", path, std::to_string(f.names.size()) + (f.names.size() > 1 ? " \xC3\xA9l\xC3\xA9ments : " : " \xC3\xA9l\xC3\xA9ment : ") + joinList(f.names));
+        } else {
+            bool exists = false;
+            if (f.variables) {
+                for (const auto& d : project.programs.folders) exists = exists || iequal(d, path);
+            } else {
+                for (const auto& d : hmi::fold::allFolders(project, f.list)) exists = exists || iequal(d, path);
+            }
+            if (exists) {
+                warn("Le dossier \xC2\xAB " + path + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 : rien \xC3\xA0 cr\xC3\xA9" "er.");
+                return true;
+            }
+            made("Dossier", path, "dans " + (f.variables ? std::string("variables") : std::string(hmi::fold::key(f.list))));
+        }
+        folderOps.push_back(std::move(f));
+        return true;
+    }
+
+    // Les dossiers, poses sur le projet (apres les elements crees : ils peuvent y etre ranges).
+    void applyFolders(hmi::Project& pr) const {
+        for (const auto& f : folderOps) {
+            if (f.variables) {
+                if (std::none_of(pr.programs.folders.begin(), pr.programs.folders.end(), [&](const std::string& d) { return iequal(d, f.path); }))
+                    pr.programs.folders.push_back(f.path);
+                for (const auto& n : f.names)
+                    for (auto& v : pr.programs.variables)
+                        if (iequal(v.name, n)) v.folder = f.path;
+                continue;
+            }
+            (void)hmi::fold::addFolder(pr, f.list, f.path);
+            std::vector<hmi::Id> ids;
+            for (const auto& it : hmi::fold::items(pr, f.list))
+                for (const auto& n : f.names)
+                    if (iequal(it.name, n)) ids.push_back(it.id);
+            if (!ids.empty()) (void)hmi::fold::moveToFolder(pr, f.list, ids, f.path);
+        }
+    }
+
+    // Les scripts, fonctions et alarmes crees : COMPILES (jamais executes) par le compilateur du logiciel - une erreur est
+    // une erreur de la proposition (l'apercu et << appliquer malgre les erreurs >> laissent l'element de cote).
+    void compileCreated() {
+        if (newScripts.empty() && newFunctions.empty() && newAlarms.empty()) return;
+        if (!check && !preview) return;   // appliquer : deja valide
+        const hmi::Project pr = probe();
+        hmi::CompileFocus focus;
+        for (const auto& s : newScripts) focus.scripts.insert(s.id);
+        for (const auto& f : newFunctions) focus.functions.insert(f.id);
+        for (const auto& a : newAlarms) focus.alarms.insert(a.id);
+        // Sans automate relie : aucun nom de l'automate (un nom inconnu est une erreur, pas << peut-etre de l'automate >>).
+        const hmi::NameExists plc = environment().plcName ? hmi::NameExists(environment().plcName)
+                                                          : hmi::NameExists([](std::string_view) { return false; });
+        const auto issues = hmi::compileWith(pr, plc, hmi::exprcheck::PlcPaths{}, focus);
+        std::set<hmi::Id> bad;
+        for (const auto& is : issues) {
+            std::string who;
+            hmi::Id id = hmi::kNoId;
+            for (const auto& s : newScripts)
+                if (is.script == s.id) { who = "Script " + s.name; id = s.id; }
+            for (const auto& f : newFunctions)
+                if (is.item == f.id || is.script == f.id) { who = "Fonction " + f.name; id = f.id; }
+            for (const auto& a : newAlarms)
+                if (is.item == a.id) { who = "Alarme " + a.name; id = a.id; }
+            if (who.empty()) continue;
+            const std::string text = who + (is.line > 0 ? ", ligne " + std::to_string(is.line) : std::string{}) + " : " + is.message;
+            if (is.severity == hmi::Issue::Severity::Error) {
+                bad.insert(id);
+                (void)fail(text);
+            } else if (is.severity == hmi::Issue::Severity::Warning) {
+                warn(text);
+            }
+        }
+        if (!check && !bad.empty()) {   // l'apercu, appliquer malgre les erreurs : ce qui ne compile pas est laisse de cote
+            std::erase_if(newScripts, [&](const hmi::Script& s) { return bad.count(s.id) > 0; });
+            std::erase_if(newFunctions, [&](const hmi::HmiFunction& f) { return bad.count(f.id) > 0; });
+            std::erase_if(newAlarms, [&](const hmi::AlarmDef& a) { return bad.count(a.id) > 0; });
+        }
     }
 
     bool go() {
@@ -1086,9 +1642,20 @@ struct Run {
                 case Operation::Action::View: ok = makeView(op, index); break;
                 case Operation::Action::Variables: ok = variables(op, index); break;
                 case Operation::Action::Type: ok = makeType(op, index); break;
+                // 1.18.0 : les outils de l'IA.
+                case Operation::Action::Equipment: ok = equipment(op); break;
+                case Operation::Action::Address: ok = address(op); break;
+                case Operation::Action::Script: ok = script(op); break;
+                case Operation::Action::Function: ok = function(op); break;
+                case Operation::Action::Alarm: ok = alarm(op); break;
+                case Operation::Action::Resource: ok = resource(op); break;
+                case Operation::Action::Folder: ok = folder(op, false); break;
+                case Operation::Action::Store: ok = folder(op, true); break;
             }
             if (!ok) return false;
         }
+        compileCreated();
+        if (!why.empty() && !check && !preview) return false;
         for (const auto id : modifiedIds)
             if (removedIds.count(id) == 0 && touched && std::find(touched->modified.begin(), touched->modified.end(), id) == touched->modified.end())
                 touched->modified.push_back(id);
@@ -1120,9 +1687,7 @@ struct Run {
 
 // 1.16.0 : la proposition cree-t-elle des variables ou des types (le projet change, pas seulement une vue) ?
 bool createsProjectItems(const Proposal& p) noexcept {
-    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) {
-        return op.action == Operation::Action::Variables || op.action == Operation::Action::Type || op.action == Operation::Action::View;
-    });
+    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return projectLevel(op.action); });
 }
 
 // Les variables qu'une proposition demande (associer, la propriete variable d'un creer, d'un modifier) ;
@@ -1166,6 +1731,44 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
             }
             out += ";";
         }
+        // 1.18.0 : les outils - l'element tel qu'il est dans le projet (absent, ou ce qui le decrit).
+        const std::string name = trimmed(op.name);
+        switch (op.action) {
+            case Operation::Action::Equipment:
+                out += "E:" + name + "=";
+                if (const auto* e = project.equipmentByName(name)) out += e->host + ":" + std::to_string(e->port) + "/" + std::to_string(e->unit);
+                else out += "-";
+                out += ";";
+                break;
+            case Operation::Action::Address: {
+                const std::string v = trimmed(op.variable);
+                out += "A:" + v + "=";
+                if (const auto* x = project.variable(v)) out += x->equipment + "@" + x->address + "#" + std::to_string(x->places.size());
+                else out += "-";
+                out += ";";
+                break;
+            }
+            case Operation::Action::Script:
+                out += "S:" + name + "=" + (project.generalScript(name) ? "1" : "-") + ";";
+                break;
+            case Operation::Action::Function:
+                out += "F:" + name + "=" + (project.functionByName(name) ? "1" : "-") + ";";
+                break;
+            case Operation::Action::Alarm:
+                out += "L:" + name + "=" + (project.alarmByName(name) ? "1" : "-") + ";";
+                break;
+            case Operation::Action::Resource:
+                out += "R:" + name + "=" + (project.resourceByName(name) ? "1" : "-") + ";";
+                break;
+            case Operation::Action::Folder:
+            case Operation::Action::Store:
+                for (const auto& [k, v] : op.props)
+                    if (k == "liste" || k == "dossier") out += "D:" + k + "=" + v + ";";
+                for (const auto& n : op.objects) out += "D:" + n + ";";
+                break;
+            default:
+                break;
+        }
     }
     return out;
 }
@@ -1196,15 +1799,44 @@ std::string_view actionKey(Operation::Action a) noexcept {
         case Operation::Action::View: return "creer_vue";
         case Operation::Action::Variables: return "creer_variables";
         case Operation::Action::Type: return "creer_type";
+        case Operation::Action::Equipment: return "creer_equipement";
+        case Operation::Action::Address: return "adresser";
+        case Operation::Action::Script: return "creer_script";
+        case Operation::Action::Function: return "creer_fonction";
+        case Operation::Action::Alarm: return "creer_alarme";
+        case Operation::Action::Resource: return "creer_ressource";
+        case Operation::Action::Folder: return "creer_dossier";
+        case Operation::Action::Store: return "ranger";
     }
     return "creer";
+}
+
+bool projectLevel(Operation::Action a) noexcept {
+    switch (a) {
+        case Operation::Action::View:
+        case Operation::Action::Variables:
+        case Operation::Action::Type:
+        case Operation::Action::Equipment:
+        case Operation::Action::Address:
+        case Operation::Action::Script:
+        case Operation::Action::Function:
+        case Operation::Action::Alarm:
+        case Operation::Action::Resource:
+        case Operation::Action::Folder:
+        case Operation::Action::Store: return true;
+        default: return false;
+    }
 }
 
 std::optional<Operation::Action> actionFromKey(std::string_view k) noexcept {
     for (const auto a : {Operation::Action::Create, Operation::Action::Modify, Operation::Action::Bind, Operation::Action::Align,
                          Operation::Action::Distribute, Operation::Action::Remove, Operation::Action::Duplicate, Operation::Action::Code,
-                         Operation::Action::View, Operation::Action::Variables, Operation::Action::Type})
+                         Operation::Action::View, Operation::Action::Variables, Operation::Action::Type, Operation::Action::Equipment,
+                         Operation::Action::Address, Operation::Action::Script, Operation::Action::Function, Operation::Action::Alarm,
+                         Operation::Action::Resource, Operation::Action::Folder, Operation::Action::Store})
         if (actionKey(a) == k) return a;
+    // 1.18.0 : des noms de plus pour une vue d'un role (lus comme creer_vue + role).
+    if (k == "creer_symbole" || k == "creer_popup" || k == "creer_modele_vue") return Operation::Action::View;
     return std::nullopt;
 }
 
@@ -1286,9 +1918,7 @@ bool usesOpenView(const Proposal& p) noexcept {
     if (createsView(p)) return false;
     // Une proposition vide (une ancienne conversation) : la vue visee, comme avant.
     if (p.ops.empty()) return true;
-    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) {
-        return op.action != Operation::Action::Variables && op.action != Operation::Action::Type && op.action != Operation::Action::View;
-    });
+    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return !projectLevel(op.action); });
 }
 
 std::string proposalPrint(const hmi::Project& project, const Proposal& p, std::string_view viewPrint) {
@@ -1322,9 +1952,32 @@ std::string creationSummary(const Proposal& p) {
         if (op.action == Operation::Action::Type) ++types;
     }
     std::vector<std::string> parts;
-    if (!view.empty()) parts.push_back("la vue " + view);
+    if (!view.empty()) {
+        std::string role;
+        for (const auto& [k, v] : p.ops.front().props)
+            if (k == "role") role = lower(trimmed(v));
+        static const std::map<std::string, std::string> noun = {{"popup", "la popup "}, {"symbole", "le symbole "}, {"modele", "l'\xC3\xA9" "cran mod\xC3\xA8le "},
+                                                                {"entete", "l'en-t\xC3\xAAte "}, {"pied", "le pied de page "}};
+        const auto it = noun.find(role);
+        parts.push_back((it != noun.end() ? it->second : std::string("la vue ")) + view);
+    }
     if (vars > 0) parts.push_back(std::to_string(vars) + (vars > 1 ? " variables IHM" : " variable IHM"));
     if (types > 0) parts.push_back(std::to_string(types) + (types > 1 ? " types IHM" : " type IHM"));
+    // 1.18.0 : les outils.
+    const auto count = [&](Operation::Action a) {
+        return static_cast<std::size_t>(std::count_if(p.ops.begin(), p.ops.end(), [&](const Operation& op) { return op.action == a; }));
+    };
+    const auto add = [&](Operation::Action a, const char* one, const char* many) {
+        if (const std::size_t n = count(a); n > 0) parts.push_back(std::to_string(n) + " " + (n > 1 ? many : one));
+    };
+    add(Operation::Action::Equipment, "\xC3\xA9quipement", "\xC3\xA9quipements");
+    add(Operation::Action::Address, "adresse", "adresses");
+    add(Operation::Action::Script, "script", "scripts");
+    add(Operation::Action::Function, "fonction", "fonctions");
+    add(Operation::Action::Alarm, "alarme", "alarmes");
+    add(Operation::Action::Resource, "ressource", "ressources");
+    add(Operation::Action::Folder, "dossier", "dossiers");
+    add(Operation::Action::Store, "rangement", "rangements");
     return joinList(parts);
 }
 
@@ -1338,12 +1991,37 @@ hmi::View newViewFor(const hmi::Project& project, const Operation& op, hmi::Id& 
     hmi::View v = hmi::makeView(ids, trimmed(op.name));
     nextId = ids.nextId;
     v.role = "vue";
+    // 1.18.0 : le role (symbole, popup, ecran modele, en-tete, pied de page) et sa taille par defaut.
+    for (const auto& [k, val] : op.props)
+        if (k == "role") {
+            const std::string r = lower(trimmed(val));
+            if (r == "popup" || r == "symbole" || r == "modele" || r == "entete" || r == "pied") v.role = r;
+        }
+    if (v.role == "symbole") { v.width = 200; v.height = 200; }
+    if (v.role == "popup") { v.width = 600; v.height = 400; }
+    if (v.role == "entete" || v.role == "pied") v.height = 100;
     for (const auto& [k, val] : op.props) {
         double d = 0;
         if (k == "largeur" && hmi::roles::readNumber(val, d) && d >= 50 && d <= 20000) v.width = static_cast<int>(d);
         if (k == "hauteur" && hmi::roles::readNumber(val, d) && d >= 50 && d <= 20000) v.height = static_cast<int>(d);
         if (k == "fond" && hmi::roles::colorOk(val)) v.background = val;
         if (k == "description") v.description = val;
+        if (k == "titre") v.popup.title = trimmed(val);
+        if (k == "modale") v.popup.modal = !(lower(trimmed(val)) == "false" || lower(trimmed(val)) == "0" || lower(trimmed(val)) == "non");
+        if (k == "dossier") v.folder = trimmed(val);
+    }
+    if (v.role == "symbole" || v.role == "popup") {
+        std::string text;
+        for (const auto& g : op.generics) text += (text.empty() ? "" : ", ") + trimmed(g);
+        if (!text.empty()) (void)hmi::parseGenerics(text, v.generics);
+        for (const auto& prm : op.params) {
+            hmi::ViewParam vp;
+            vp.name = trimmed(prm.name);
+            vp.type = hmi::types::normalized(trimmed(prm.type));
+            vp.defaultValue = trimmed(prm.initial);
+            vp.description = trimmed(prm.description);
+            v.params.push_back(std::move(vp));
+        }
     }
     if (v.description.empty()) v.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA";
     return v;
@@ -1439,13 +2117,34 @@ core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std:
             }
             for (auto& t : run.newTypes) pr.programs.types.push_back(std::move(t));
             for (auto& nv : run.newVars) pr.programs.variables.push_back(std::move(nv));
+            // 1.18.0 : les outils - equipements, adresses, scripts, fonctions, alarmes, ressources.
+            for (auto& e : run.newEquipments) pr.equipments.push_back(std::move(e));
+            for (const auto& av : run.addressed)
+                if (hmi::Variable* x = pr.variableById(av.id)) *x = av;
+            std::set<hmi::Id> codes;
+            for (auto& sc : run.newScripts) {
+                codes.insert(sc.id);
+                pr.programs.scripts.push_back(std::move(sc));
+            }
+            for (auto& fn : run.newFunctions) {
+                codes.insert(fn.id);
+                pr.programs.functions.push_back(std::move(fn));
+            }
+            for (auto& al : run.newAlarms) pr.alarms.push_back(std::move(al));
+            for (auto& rs : run.newResources) pr.assets.resources.push_back(std::move(rs));
+            // Les blocs VAR d'un code cree deviennent ses declarations (comme a l'ouverture d'un projet d'avant).
+            if (!codes.empty()) {
+                const auto plan = hmi::migrate::plan(pr, [&](const hmi::migrate::Place& pl) { return codes.count(pl.id) > 0; });
+                if (!plan.items.empty()) (void)hmi::migrate::apply(pr, plan);
+            }
             if (createsView(p)) {
-                // La vue de demarrage : une vue ordinaire, s'il n'y en a pas (comme "Nouvelle vue").
-                if (pr.config.startView == hmi::kNoId) pr.config.startView = work.id;
+                // La vue de demarrage : une vue ordinaire, s'il n'y en a pas (comme "Nouvelle vue") - jamais un modele ni une popup.
+                if (pr.config.startView == hmi::kNoId && work.role == "vue") pr.config.startView = work.id;
                 pr.views.push_back(std::move(work));
             } else if (hmi::View* target = pr.view(viewId)) {
                 *target = std::move(work);
             }
+            run.applyFolders(pr);
         });
     } else {
         cmd = hmi::changeView(doc, viewId, label, [&](hmi::Project& pr, hmi::View& view) {
@@ -1546,6 +2245,19 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
                 o.set("membres", std::move(list));
                 break;
             }
+            // 1.18.0 : les outils (leurs champs : dans proprietes).
+            case Operation::Action::Equipment:
+            case Operation::Action::Script:
+            case Operation::Action::Function:
+            case Operation::Action::Alarm:
+            case Operation::Action::Resource:
+                o.set("nom", op.name);
+                break;
+            case Operation::Action::Address:
+                o.set("variable", op.variable);
+                break;
+            case Operation::Action::Folder:
+                break;
             default: {
                 json::Value list = json::Value::array();
                 for (const auto& n : op.objects) list.push(n);
@@ -1553,6 +2265,24 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
                 break;
             }
         }
+        if (!op.generics.empty()) {
+            json::Value list = json::Value::array();
+            for (const auto& g : op.generics) list.push(g);
+            o.set("generiques", std::move(list));
+        }
+        if (!op.params.empty()) {
+            json::Value list = json::Value::array();
+            for (const auto& v : op.params) {
+                json::Value x = json::Value::object();
+                x.set("nom", v.name);
+                if (!v.type.empty()) x.set("type", v.type);
+                if (!v.description.empty()) x.set("description", v.description);
+                if (!v.initial.empty()) x.set("valeur", v.initial);
+                list.push(std::move(x));
+            }
+            o.set("parametres", std::move(list));
+        }
+        if (op.detect) o.set("detecter", true);
         if (!op.props.empty() && op.action != Operation::Action::Type) {
             json::Value props = json::Value::object();
             for (const auto& [k, v] : op.props) props.set(k, v);
@@ -1593,7 +2323,9 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         Operation op;
         op.action = *action;
         op.kind = o.str("genre");
-        const bool named = *action == Operation::Action::Create || *action == Operation::Action::View || *action == Operation::Action::Type;
+        const bool named = *action == Operation::Action::Create || *action == Operation::Action::View || *action == Operation::Action::Type
+                           || *action == Operation::Action::Equipment || *action == Operation::Action::Script || *action == Operation::Action::Function
+                           || *action == Operation::Action::Alarm || *action == Operation::Action::Resource;
         op.name = named ? o.str("nom") : o.str("objet");
         for (const auto& n : o.at("objets").items()) op.objects.push_back(n.asString());
         for (const auto& [k, v] : o.at("proprietes").members())
@@ -1616,6 +2348,34 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
             op.props.emplace_back("description", o.str("description"));
         op.count = static_cast<int>(o.integer("copies", 1));
         op.markers = o.flag("reperes");
+        // 1.18.0 : les generiques, les parametres (un symbole, une popup), la detection proposee, et les champs des outils.
+        const auto scalar = [](const json::Value& v) {
+            return v.isString() ? v.asString() : v.isNumber() ? hmi::formatNumber(v.asNumber()) : v.isBool() ? std::string(v.asBool() ? "true" : "false") : std::string{};
+        };
+        for (const auto& g : o.at("generiques").items())
+            if (g.isString()) op.generics.push_back(g.asString());
+        for (const auto& v : o.at("parametres").items()) op.params.push_back({v.str("nom"), v.str("type"), v.str("description"), scalar(v.at("valeur"))});
+        op.detect = o.flag("detecter");
+        if (*action == Operation::Action::Store)
+            for (const auto& n : o.at("elements").items()) op.objects.push_back(n.asString());
+        if (projectLevel(*action) && *action != Operation::Action::Variables && *action != Operation::Action::Type) {
+            static const std::set<std::string, std::less<>> reserved = {"action", "nom", "objet", "objets", "elements", "variable", "proprietes", "variables",
+                                                                        "membres", "parametres", "generiques", "detecter", "genre", "noms", "dx", "dy",
+                                                                        "code", "copies", "reperes"};
+            for (const auto& [k, v] : o.members())
+                if (!reserved.count(k) && (v.isString() || v.isNumber() || v.isBool())) {
+                    const bool already = std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; });
+                    if (!already) op.props.emplace_back(k, scalar(v));
+                }
+        }
+        // creer_symbole, creer_popup, creer_modele_vue : une vue de ce role (sauf si proprietes le dit).
+        if (*action == Operation::Action::View) {
+            const std::string raw = o.str("action");
+            const bool hasRole = std::any_of(op.props.begin(), op.props.end(), [](const auto& kv) { return kv.first == "role"; });
+            if (!hasRole && raw == "creer_symbole") op.props.emplace_back("role", "symbole");
+            if (!hasRole && raw == "creer_popup") op.props.emplace_back("role", "popup");
+            if (!hasRole && raw == "creer_modele_vue") op.props.emplace_back("role", "modele");
+        }
         out.push_back(std::move(op));
     }
     return true;

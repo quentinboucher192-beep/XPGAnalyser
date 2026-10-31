@@ -736,6 +736,20 @@ void AiPreviewDialog::refresh() {
             if (!detail.empty()) rows.push_back({Row::Kind::Change, detail, {}, 0});
         }
     }
+    // 1.18.0 : CE QUE LES OUTILS CREENT OU TOUCHENT EN PLUS (un symbole, un equipement, une adresse, un script, une alarme,
+    // une ressource, un dossier...) : une ligne chacun, son detail dessous ; les detections PROPOSEES (lancees par toi).
+    if (!check_.made.empty()) {
+        heading("AUSSI CR\xC3\x89\xC3\x89 OU MODIFI\xC3\x89 (" + std::to_string(check_.made.size()) + ")");
+        for (const auto& m : check_.made) {
+            rows.push_back({Row::Kind::Item, m.name, m.what, 0});
+            if (!m.detail.empty()) rows.push_back({Row::Kind::Change, m.detail, {}, 0});
+        }
+    }
+    if (!check_.detections.empty()) {
+        heading("D\xC3\x89TECTION PROPOS\xC3\x89" "E (lanc\xC3\xA9" "e par toi, apr\xC3\xA8s Appliquer)");
+        for (const auto& [eq, range] : check_.detections)
+            rows.push_back({Row::Kind::Note, eq + (range.empty() ? std::string{} : " : ce qui r\xC3\xA9pond sur " + range), {}, 0});
+    }
     heading("VARIABLES ASSOCI\xC3\x89" "ES");
     if (check_.bindings.empty()) rows.push_back({Row::Kind::Note, "Aucune (l'Assistant n'invente jamais une variable).", {}, 0});
     for (const auto& bnd : check_.bindings) rows.push_back({Row::Kind::Note, bnd, {}, 0});

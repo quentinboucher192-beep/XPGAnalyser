@@ -120,7 +120,20 @@ const char* const kRules =
     "\"Marche pompe 1\"}, {\"nom\": \"Consigne_Niveau\", \"type\": \"REAL\", \"valeur\": \"75\"}]}\n"
     "- creer_type : nom (T_...), description, membres (nom, type, description) ; un membre d'un autre type IHM : ce type "
     "existe ou est cr\xC3\xA9\xC3\xA9 PLUS HAUT (l'ordre des d\xC3\xA9pendances). Exemple : {\"action\": \"creer_type\", \"nom\": \"T_Pompe\", "
-    "\"membres\": [{\"nom\": \"Marche\", \"type\": \"BOOL\"}, {\"nom\": \"Vitesse\", \"type\": \"REAL\", \"description\": \"tr/min\"}]}\n";
+    "\"membres\": [{\"nom\": \"Marche\", \"type\": \"BOOL\"}, {\"nom\": \"Vitesse\", \"type\": \"REAL\", \"description\": \"tr/min\"}]}\n"
+    // 1.18.0 : les outils de l'IA.
+    "- creer_type + generiques ([\"T\"], [\"T\", \"K : ANY_NUM\"]) : une structure g\xC3\xA9n\xC3\xA9rique (membres en T, LIST OF T).\n"
+    "- creer_vue + proprietes.role (popup, symbole, modele, entete, pied ; une popup : titre, modale) ; symbole, popup : parametres "
+    "[{nom, type, valeur}] et generiques. creer_symbole, creer_popup, creer_modele_vue : idem. Les objets qui suivent y vont.\n"
+    "- creer_equipement : nom, type (modbus_tcp, ethernet_tcp), adresse (IPv4), port, esclave, periode ; detecter: true PROPOSE la "
+    "d\xC3\xA9tection (l'utilisateur la lance ; toi, jamais).\n"
+    "- adresser : variable (IHM), equipement (Modbus), adresse (%MW100, %M5, 40101 ; absente : la premi\xC3\xA8re libre) ; un tableau "
+    "de structures : formule (%MW(1000 + 10 * i)) et motif ([*].Retour).\n"
+    "- creer_script : nom, langage (ST, C, C++), evenement (Demarrage, Cyclique + periode, Changement + surveille, Appel), corps. "
+    "creer_fonction : nom, retour, generiques, corps (VAR_INPUT ... END_VAR, puis Nom := r\xC3\xA9sultat). Compil\xC3\xA9s, jamais ex\xC3\xA9" "cut\xC3\xA9s ici.\n"
+    "- creer_alarme : nom, condition (variables existantes), message, priorite (1-4), groupe, delai (ms), consigne.\n"
+    "- creer_ressource : piece_jointe (un fichier joint \xC3\xA0 la conversation). creer_dossier : liste (vues, popups, symboles, "
+    "ecrans_modeles, entetes, pieds, scripts, types, styles, ressources, variables), dossier. ranger : liste, dossier, objets.\n";
 
 // L'exemple du code brut : un bouton qui ouvre une vue, ecrit par le logiciel lui-meme.
 const std::string& codeExample() {
@@ -203,9 +216,19 @@ const std::vector<Fields>& fieldsOf() {
         {A::Duplicate, {"objets", "noms", "dx", "dy", "copies", "reperes"}, {"objets"}},
         {A::Code, {"code"}, {"code"}},
         // 1.16.0 : la vue neuve, les variables, les types IHM.
-        {A::View, {"nom", "proprietes"}, {"nom"}},
+        {A::View, {"nom", "proprietes", "parametres", "generiques", "description"}, {"nom"}},
         {A::Variables, {"variables"}, {"variables"}},
-        {A::Type, {"nom", "description", "membres"}, {"nom", "membres"}},
+        {A::Type, {"nom", "description", "membres", "generiques"}, {"nom", "membres"}},
+        // 1.18.0 : les outils de l'IA.
+        {A::Equipment, {"nom", "type", "adresse", "port", "esclave", "periode", "simule", "description", "detecter", "proprietes"}, {"nom"}},
+        {A::Address, {"variable", "equipement", "adresse", "formule", "motif", "lecture_seule", "proprietes"}, {"variable", "equipement"}},
+        {A::Script, {"nom", "langage", "evenement", "periode", "surveille", "corps", "description", "dossier", "proprietes"}, {"nom", "corps"}},
+        {A::Function, {"nom", "retour", "corps", "description", "generiques", "proprietes"}, {"nom", "corps"}},
+        {A::Alarm, {"nom", "condition", "message", "priorite", "categorie", "groupe", "delai", "acquittement", "consigne", "description", "proprietes"},
+         {"nom", "condition"}},
+        {A::Resource, {"nom", "piece_jointe", "dossier", "proprietes"}, {"piece_jointe"}},
+        {A::Folder, {"liste", "dossier", "proprietes"}, {"liste", "dossier"}},
+        {A::Store, {"liste", "dossier", "objets", "proprietes"}, {"liste", "dossier", "objets"}},
     };
     return f;
 }
@@ -439,9 +462,10 @@ std::string operationsTool() {
         g.set("description", "creer : la cl\xC3\xA9 du genre.");
         props.set("genre", g);
     }
-    props.set("nom", str("creer : un nom neuf ; creer_vue : le nom de la vue neuve ; creer_type : le nom du type IHM (T_...)."));
+    props.set("nom", str("creer : un nom neuf ; creer_vue : le nom de la vue neuve ; creer_type : le nom du type IHM (T_...) ; creer_equipement, "
+                         "creer_script, creer_fonction, creer_alarme, creer_ressource : le nom neuf."));
     props.set("objet", str("modifier, associer : un objet existant."));
-    props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants."));
+    props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants ; ranger : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 ranger."));
     {
         Value p = Value::object();
         p.set("type", "object");
@@ -452,7 +476,7 @@ std::string operationsTool() {
                              "hauteur, fond, description.");
         props.set("proprietes", p);
     }
-    props.set("variable", str("associer : une variable EXISTANTE du contexte."));
+    props.set("variable", str("associer : une variable EXISTANTE du contexte ; adresser : la variable IHM \xC3\xA0 lier."));
     props.set("bord", choice({"haut", "bas", "gauche", "droite", "centre-h", "centre-v"}, "aligner."));
     props.set("sens", choice({"horizontal", "vertical"}, "distribuer."));
     props.set("noms", names("dupliquer : les noms neufs des copies."));
@@ -499,7 +523,39 @@ std::string operationsTool() {
                                    "creer_variables : les variables IHM neuves (type : BOOL, INT, REAL, STRING, TIME, ARRAY[a..b] OF ..., "
                                    "un type IHM)."));
     props.set("membres", entries({"nom", "type", "description"}, "creer_type : les membres du type (un type IHM cit\xC3\xA9 : existant ou cr\xC3\xA9\xC3\xA9 plus haut)."));
-    props.set("description", str("creer_type : la description du type."));
+    props.set("description", str("creer_type, creer_equipement, creer_script, creer_fonction, creer_alarme : la description."));
+    // 1.18.0 : les outils de l'IA - leurs champs (des textes ; un nombre peut s'ecrire en texte).
+    props.set("generiques", names("creer_type, creer_vue, creer_fonction."));
+    {
+        Value e = Value::object();
+        e.set("type", "object");
+        Value fields = Value::object();
+        for (const char* k : {"nom", "type", "description", "valeur"}) fields.set(k, str(std::string(k) == "valeur" ? "la valeur par d\xC3\xA9" "faut." : std::string(k) + "."));
+        e.set("properties", fields);
+        Value required = Value::array();
+        required.push("nom");
+        e.set("required", required);
+        e.set("additionalProperties", false);
+        Value v = Value::object();
+        v.set("type", "array");
+        v.set("items", e);
+        v.set("description", "creer_vue (symbole, popup).");
+        props.set("parametres", v);
+        Value b = Value::object();
+        b.set("type", "boolean");
+        b.set("description", "creer_equipement : proposer la d\xC3\xA9tection (l'utilisateur la lance).");
+        props.set("detecter", b);
+    }
+    for (const auto& [k, d] : std::initializer_list<std::pair<const char*, const char*>>{
+             {"type", "creer_equipement."}, {"adresse", "creer_equipement (IPv4), adresser (%MW100)."}, {"port", "creer_equipement."},
+             {"esclave", "creer_equipement."}, {"periode", "ms."}, {"simule", "creer_equipement."}, {"equipement", "adresser."},
+             {"formule", "adresser."}, {"motif", "adresser."}, {"lecture_seule", "adresser."}, {"langage", "creer_script."},
+             {"evenement", "creer_script."}, {"surveille", "creer_script."}, {"corps", "creer_script, creer_fonction."},
+             {"retour", "creer_fonction."}, {"condition", "creer_alarme."}, {"message", "creer_alarme."}, {"priorite", "creer_alarme."},
+             {"categorie", "creer_alarme."}, {"groupe", "creer_alarme."}, {"delai", "creer_alarme (ms)."}, {"acquittement", "creer_alarme."},
+             {"consigne", "creer_alarme."}, {"piece_jointe", "creer_ressource."}, {"liste", "creer_dossier, ranger."},
+             {"dossier", "creer_dossier, ranger..."}})
+        props.set(k, str(d));
     item.set("properties", props);
     Value req = Value::array();
     req.push("action");
@@ -525,7 +581,8 @@ std::string operationsTool() {
     tool.set("description",
              "Propose des modifications de la vue active d'IHM Studio. Appelle-le pour TOUTE demande qui modifie la vue (cr\xC3\xA9" "er, "
              "modifier, d\xC3\xA9placer, redimensionner, colorer, associer une variable, aligner, r\xC3\xA9partir, dupliquer, supprimer) "
-             "ou qui cr\xC3\xA9" "e une vue, des variables, des types IHM, avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
+             "ou qui cr\xC3\xA9" "e une vue (un symbole, une popup, un mod\xC3\xA8le, un en-t\xC3\xAAte, un pied), des variables, des types IHM (g\xC3\xA9n\xC3\xA9riques), des "
+             "\xC3\xA9quipements et leurs adresses, des scripts, des fonctions, des alarmes, des ressources, des dossiers, avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
              "valeurs, objets, variables) et montre un aper\xC3\xA7u : rien ne change avant que l'utilisateur applique (un Ctrl+Z annule "
              "tout). N'invente ni genre, ni propri\xC3\xA9t\xC3\xA9, ni variable : seulement ceux du registre et du contexte.");
     tool.set("input_schema", schema);

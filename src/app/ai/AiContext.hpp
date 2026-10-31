@@ -44,6 +44,11 @@ struct ContextLimits {
     std::size_t viewBytes{1500};       // les noms des autres vues
     // 1.16.0 (a la fin) : les types (DDT) de l'automate relie, resumes (leur nom, leurs membres).
     std::size_t plcTypeBytes{2500};
+    // 1.18.0 (a la fin) : ce que les outils de l'IA lisent - les elements du projet (equipements, ressources, scripts,
+    // fonctions, alarmes, dossiers), les variables systeme et les natives que la demande evoque.
+    std::size_t toolBytes{3000};
+    std::size_t sysBytes{2000};
+    std::size_t nativeBytes{2500};
 };
 
 // Ce que le texte contient (les essais, le rapport).

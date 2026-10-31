@@ -11,6 +11,7 @@
 #include "AiKeys.hpp"          // 1.18.0 : le gestionnaire des cles API
 #include "AiLocal.hpp"
 #include "AiOpenAI.hpp"
+#include "AiPaths.hpp"
 #include "AiPrompt.hpp"
 #include "AiSecret.hpp"
 
@@ -88,7 +89,22 @@ std::string_view phaseLabel(Assistant::Phase p) noexcept {
     return "";
 }
 
-Assistant::Assistant(Host host) : host_(std::move(host)) {}
+Assistant::Assistant(Host host) : host_(std::move(host)) {
+    // 1.18.0 : creer_ressource - une piece jointe de la conversation ouverte, par son nom (le plus recent d'abord) ; son chemin
+    // (copiee dans IA/pieces-jointes/, ou le fichier d'origine sans racine). Un hote qui donne deja la sienne la garde.
+    if (!host_.env.attachmentPath)
+        host_.env.attachmentPath = [this](std::string_view name) -> std::string {
+            const Conversation* c = current();
+            if (!c) return {};
+            for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
+                for (const auto& a : m->attachments) {
+                    if (a.name != name) continue;
+                    if (!a.file.empty() && !root().empty()) return detail::join(root(), a.file);
+                    if (!a.source.empty()) return a.source;
+                }
+            return {};
+        };
+}
 
 // Le fournisseur en cours est arrete et part finir sur son fil (son destructeur attend le fil :
 // jamais sur celui de l'interface tant qu'il travaille - tick le libere quand il a fini).

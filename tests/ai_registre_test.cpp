@@ -269,8 +269,12 @@ void sizes(const std::string& examplePath) {
                 bigCtx.size(), info.detailed, info.named);
     // 1.16.0 (chantier OPTIONS) : + creer_vue, creer_variables, creer_type, les copies et les reperes, les formules - leurs
     // consignes, un exemple de chaque et leur schema (environ 3,5 Ko) : la borne passe de 30 a 34 Ko.
-    check(empty.size() + tool.size() < 34000, "une demande ordinaire (vue vide) : moins de 34 Ko avec l'outil");
-    check(station.size() + tool.size() < 34000, "la station de 31 objets : moins de 34 Ko avec l'outil");
+    // 1.18.0 (les outils de l'IA) : + creer_equipement, adresser, creer_script, creer_fonction, creer_alarme, creer_ressource,
+    // creer_dossier, ranger, les roles et parametres d'une vue, les generiques - leurs consignes (environ 2,5 Ko) et leur
+    // schema (environ 2,5 Ko) : la borne passe de 34 a 40 Ko. Le contexte des outils ne montre que ce qui existe (ou que la
+    // demande evoque).
+    check(empty.size() + tool.size() < 40000, "une demande ordinaire (vue vide) : moins de 40 Ko avec l'outil");
+    check(station.size() + tool.size() < 40000, "la station de 31 objets : moins de 40 Ko avec l'outil");
     check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 45000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")
@@ -447,9 +451,11 @@ void toolSchema() {
     std::set<std::string> a;
     for (const auto& x : actions.items()) a.insert(x.asString());
     // 1.16.0 : + creer_vue, creer_variables, creer_type (le chantier OPTIONS).
+    // 1.18.0 : + les huit outils (creer_symbole, creer_popup, creer_modele_vue se lisent comme creer_vue + role).
     check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code", "creer_vue",
-                                     "creer_variables", "creer_type"},
-          "action : les onze operations");
+                                     "creer_variables", "creer_type", "creer_equipement", "adresser", "creer_script", "creer_fonction",
+                                     "creer_alarme", "creer_ressource", "creer_dossier", "ranger"},
+          "action : les dix-neuf operations");
     check(item.at("properties").has("proprietes") && item.at("properties").has("variable") && item.at("properties").has("noms")
               && item.at("properties").has("code") && schema.at("properties").has("resume"),
           "les champs du format existant (+ noms, dx, dy, code)");
