@@ -38,9 +38,11 @@
 #include "AiDemo.hpp"
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
+#include "AiUsage.hpp"
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -195,6 +197,25 @@ public:
     // Le contexte d'une demande (la vue active, la selection), comme a l'envoi.
     [[nodiscard]] DemoContext context() const;
 
+    // ---- 1.16.0 (FOURNISSEURS) : la limite et la consommation en direct, le budget ---------------
+    // Ce qu'on sait de la limite du service et des jetons (les evenements Usage du fournisseur).
+    [[nodiscard]] const LimitState& limitState() const noexcept { return limit_; }
+    // La bande du panneau a l'instant `now` (la seconde de l'application : le compte a rebours avance).
+    [[nodiscard]] UsageBand usageBand(double now) const;
+    // Les cumuls du jour et du mois (IA/usage.json, relus apres chaque reponse).
+    [[nodiscard]] const UsageTotals& usageTotals() const;
+    // Le budget est atteint : un envoi a un fournisseur relie demande d'abord confirmation (vrai et
+    // `question`, en francais). allowOverBudget : l'utilisateur a confirme, le prochain envoi passe.
+    [[nodiscard]] bool budgetBlocks(std::string* question = nullptr) const;
+    void allowOverBudget() noexcept { overBudgetOk_ = true; }
+    // La fenetre de contexte du modele : celle des reglages, sinon celle que le service a dite
+    // (Lister les modeles) ; 0 : inconnue.
+    [[nodiscard]] int contextWindow() const;
+    // La proposition part en texte (Outil : JSON dans le texte, ou un modele qui a refuse l'outil).
+    [[nodiscard]] bool toolsInText() const;
+    // Le service est sur ce PC (Ollama, LM Studio, le reseau de l'usine) : pas de limite.
+    [[nodiscard]] bool localService() const;
+
 private:
     Conversation* cur() noexcept;
     Conversation* generatingConversation() noexcept;
@@ -229,6 +250,9 @@ private:
         std::string             provider, model;
         hmi::Id                 viewId{hmi::kNoId};
         std::string             fingerprint;   // l'empreinte de la vue a l'envoi
+        // 1.16.0 (FOURNISSEURS) : les jetons recus (le dernier Usage fait foi) ; la proposition en texte.
+        ProviderUsage           usage;
+        bool                    textTool{false};
     };
 
     Host                      host_;
@@ -249,6 +273,16 @@ private:
     std::unique_ptr<ModelQuery>            modelQuery_;
     std::optional<ModelsResult>            models_;
     std::uint64_t                          modelsRev_{0};
+    // 1.16.0 (FOURNISSEURS) : la limite, les cumuls (et leur jour), le budget confirme, les fenetres de
+    // contexte dites par les services (fournisseur|modele), le modele qui refuse l'outil.
+    void recordLive();
+    LimitState                             limit_;
+    mutable UsageTotals                    totals_;
+    mutable std::string                    totalsDay_;
+    bool                                   overBudgetOk_{false};
+    std::map<std::string, long long>       modelContext_;
+    std::string                            noTools_;
+    std::string                            modelsProvider_;
 };
 
 [[nodiscard]] std::string_view phaseLabel(Assistant::Phase) noexcept;   // "En attente", "R\xC3\xA9" "flexion"...

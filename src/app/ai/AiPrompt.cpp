@@ -497,4 +497,126 @@ std::string feedback(const Check& check, const Proposal& proposal) {
     return s;
 }
 
+// =============================================================================
+//  1.16.0 (FOURNISSEURS) : les modeles gratuits, petits ou sans appel d'outil
+// =============================================================================
+namespace {
+
+// Les regles en bref (une petite fenetre de contexte : quelques milliers de jetons).
+const char* const kRulesShort =
+    "Tu es l'Assistant IA d'IHM Studio (conception d'IHM industrielles). Tu r\xC3\xA9ponds en fran\xC3\xA7" "ais, en tutoyant, "
+    "bri\xC3\xA8vement.\n"
+    "- Une demande qui modifie la VUE ACTIVE (cr\xC3\xA9" "er, modifier, d\xC3\xA9placer, colorer, associer une variable, aligner, "
+    "r\xC3\xA9partir, dupliquer, supprimer) : UNE proposition d'op\xC3\xA9rations (le logiciel v\xC3\xA9rifie, montre un aper\xC3\xA7u, "
+    "l'utilisateur applique). Une question : du texte seulement.\n"
+    "- Seulement les genres list\xC3\xA9s, leurs propri\xC3\xA9t\xC3\xA9s, les variables du contexte, les objets de la vue : n'invente "
+    "rien. Une demande ambigu\xC3\xAB : demande une pr\xC3\xA9" "cision.\n"
+    "- Noms neufs uniques (lettres, chiffres, _). Coordonn\xC3\xA9" "es en pixels, origine en haut \xC3\xA0 gauche ; tout tient dans "
+    "la vue, sans recouvrir. Valeurs en texte : nombres avec un point, TRUE/FALSE, couleurs #RRGGBB.\n"
+    "- Op\xC3\xA9rations : creer (genre, nom, proprietes), modifier (objet, proprietes), associer (objet, variable), "
+    "aligner (objets, bord : haut|bas|gauche|droite|centre-h|centre-v), distribuer (objets, sens : horizontal|vertical), "
+    "supprimer (objets), dupliquer (objets, noms, dx, dy), code (code). Jamais de code \xC3\xA0 ex\xC3\xA9" "cuter.\n"
+    "- Une proposition refus\xC3\xA9" "e te revient avec ses raisons : corrige-la.\n";
+
+bool blankChar(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'; }
+
+std::string trimmed(std::string_view s) {
+    std::size_t a = 0, b = s.size();
+    while (a < b && blankChar(s[a])) ++a;
+    while (b > a && blankChar(s[b - 1])) --b;
+    return std::string(s.substr(a, b - a));
+}
+
+} // namespace
+
+std::string textToolInstructions() {
+    return "\n## Ta proposition : EN TEXTE (ce mod\xC3\xA8le n'a pas d'appel d'outil)\n"
+           "L'outil proposer_operations n'est pas disponible ici : quand une demande modifie la vue, \xC3\xA9" "cris d'abord une ou deux "
+           "phrases, puis \xC3\xA0 la FIN de ta r\xC3\xA9ponse UN SEUL bloc de code json, exactement sous cette forme (les m\xC3\xAA" "mes champs "
+           "que l'entr\xC3\xA9" "e de l'outil, rien d'autre dans le bloc) :\n"
+           "```json\n"
+           "{\"resume\": \"Une cuve\", \"operations\": [{\"action\": \"creer\", \"genre\": \"Tank\", \"nom\": \"Cuve_1\", \"proprietes\": "
+           "{\"x\": \"80\", \"y\": \"120\", \"w\": \"150\", \"h\": \"200\"}}]}\n"
+           "```\n"
+           "Le logiciel lit ce bloc strictement (un champ inconnu, une op\xC3\xA9ration inconnue : refus\xC3\xA9) et le v\xC3\xA9rifie comme "
+           "un appel d'outil. Une question qui ne modifie rien : pas de bloc. Le r\xC3\xA9sultat de ta proposition pr\xC3\xA9" "c\xC3\xA9" "dente "
+           "t'arrive en t\xC3\xAA" "te du message suivant, entre crochets.\n";
+}
+
+bool extractProposalBlock(std::string_view text, std::string* json, std::string* rest) {
+    struct Block { std::size_t open{0}, bodyFrom{0}, bodyTo{0}, close{0}; };
+    std::vector<Block> blocks;
+    std::size_t at = 0;
+    while ((at = text.find("```", at)) != std::string_view::npos) {
+        std::size_t p = at + 3;
+        std::size_t lineEnd = text.find('\n', p);
+        const std::string_view tag = text.substr(p, (lineEnd == std::string_view::npos ? text.size() : lineEnd) - p);
+        std::string t = trimmed(tag);
+        for (auto& c : t)
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        // Un bloc json (ou sans langue, qui commence par une accolade).
+        const bool jsonTag = t == "json";
+        const bool bare = t.empty() && lineEnd != std::string_view::npos && trimmed(text.substr(lineEnd + 1, 8)).rfind('{', 0) == 0;
+        if (!jsonTag && !bare) {
+            // Le bloc d'une autre langue : sauter jusqu'a sa fermeture.
+            const std::size_t close = lineEnd == std::string_view::npos ? std::string_view::npos : text.find("```", lineEnd);
+            if (close == std::string_view::npos) break;
+            at = close + 3;
+            continue;
+        }
+        Block b;
+        b.open = at;
+        b.bodyFrom = lineEnd == std::string_view::npos ? text.size() : lineEnd + 1;
+        const std::size_t close = text.find("```", b.bodyFrom);
+        b.bodyTo = close == std::string_view::npos ? text.size() : close;   // sans fermeture : jusqu'au bout
+        b.close = close == std::string_view::npos ? text.size() : close + 3;
+        blocks.push_back(b);
+        at = b.close;
+        if (close == std::string_view::npos) break;
+    }
+    if (blocks.empty()) return false;
+    const Block* chosen = &blocks.back();
+    for (auto it = blocks.rbegin(); it != blocks.rend(); ++it)
+        if (text.substr(it->bodyFrom, it->bodyTo - it->bodyFrom).find("\"operations\"") != std::string_view::npos) {
+            chosen = &*it;
+            break;
+        }
+    if (json) *json = trimmed(text.substr(chosen->bodyFrom, chosen->bodyTo - chosen->bodyFrom));
+    if (rest) *rest = trimmed(std::string(text.substr(0, chosen->open)) + std::string(text.substr(chosen->close)));
+    return true;
+}
+
+std::string proposalBlock(std::string_view inputJson) { return "```json\n" + trimmed(inputJson) + "\n```"; }
+
+PromptParts compactPromptParts(const PromptInput& in, int contextTokens) {
+    PromptParts out;
+    const KindRegistry& reg = registry();
+    // Les budgets a la taille de la fenetre : environ trois caracteres par jeton, la moitie pour les
+    // consignes (le reste : la conversation et la reponse).
+    const std::size_t room = static_cast<std::size_t>(std::clamp(contextTokens, 2048, kSmallContext)) * 3 / 2;
+    std::string& s = out.stable;
+    s = kRulesShort;
+    std::string& d = out.dynamic;
+    d += "\n## Genres d'objets (seulement ceux-ci ; une ligne : cl\xC3\xA9 (libell\xC3\xA9) taille, propri\xC3\xA9t\xC3\xA9s cl\xC3\xA9(r\xC3\xB4le)=d\xC3\xA9" "faut ; "
+         "communes : x, y, w, h, visible, variable)\n";
+    std::size_t n = 0;
+    const std::size_t kindBytes = room / 3;
+    for (const auto k : detailKinds(in, true)) {
+        const auto* e = reg.find(k);
+        if (!e) continue;
+        const std::string line = reg.detailLine(*e);
+        if (n > 0 && d.size() + line.size() > kindBytes) break;
+        d += line;
+        ++n;
+    }
+    ContextLimits lim;
+    lim.objectBytes = room / 4;
+    lim.nameBytes = room / 12;
+    lim.variableBytes = room / 8;
+    lim.plcBytes = room / 10;
+    lim.viewBytes = room / 24;
+    d += "\n" + contextText(in, lim);
+    return out;
+}
+
 } // namespace app::ai
