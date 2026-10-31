@@ -160,7 +160,7 @@ const std::vector<Note>& table() {
          "assistant-ia-integree", ""),
         note("1.16.1", "Assistant IA", Kind::New,
          "L'IA INT\xC3\x89GR\xC3\x89" "E D'ABORD, L'IA CONNECT\xC3\x89" "E POUR LE RESTE : avec Anthropic ou un service compatible OpenAI "
-         "(Ollama...), la case \xC2\xAB Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e \xC2\xBB des param\xC3\xA8tres de l'Assistant fait passer chaque "
+         "(Ollama...), la case \xC2\xAB IA int\xC3\xA9gr\xC3\xA9" "e d'abord \xC2\xBB des param\xC3\xA8tres de l'Assistant fait passer chaque "
          "demande par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, sans connexion ni jeton (la r\xC3\xA9ponse "
          "le dit) ; le reste part \xC3\xA0 l'IA connect\xC3\xA9" "e avec la conversation. Une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 "
          "l'IA connect\xC3\xA9" "e. Commande de s\xC3\xA9" "ance : ia dabord oui|non.",
@@ -198,6 +198,13 @@ const std::vector<Note>& table() {
          "UN REP\xC3\x88RE ASSOCI\xC3\x89 N'EST PLUS DIT INTROUVABLE : une proposition qui associe un objet \xC3\xA0 $Armoires[0]$.Prete (un "
          "rep\xC3\xA8re que Dupliquer avec rep\xC3\xA8res fera avancer) disait \xC2\xAB n'existe pas \xC2\xBB alors que la variable Armoires existe : "
          "le rep\xC3\xA8re se lit maintenant sans ses $.",
+         "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::Fixed,
+         "VUS AUX ESSAIS SOUS WINDOWS : \xC2\xAB Ajoute un voyant li\xC3\xA9 (associ\xC3\xA9) \xC3\xA0 Pompe_1_Marche \xC2\xBB cr\xC3\xA9" "e le voyant ET "
+         "l'associe (une variable inconnue : le voyant seul, et pourquoi - jamais invent\xC3\xA9" "e) ; un membre \xC2\xAB Duree en INT \xC2\xBB "
+         "n'est plus perdu ; une demande hors sujet (\xC2\xAB \xC3\xA9" "cris-moi un po\xC3\xA8me \xC2\xBB) part \xC3\xA0 l'IA connect\xC3\xA9" "e avec "
+         "\xC2\xAB IA int\xC3\xA9gr\xC3\xA9" "e d'abord \xC2\xBB ; Refuser\xE2\x80\xA6 de la carte pose la question, comme l'aper\xC3\xA7u ; la note "
+         "\xC2\xAB laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 \xC2\xBB va \xC3\xA0 la ligne.",
          "assistant-ia", ""),
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
         note("1.16.0", "Assistant IA", Kind::New,

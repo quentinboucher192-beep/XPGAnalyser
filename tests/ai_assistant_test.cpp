@@ -714,8 +714,13 @@ void testApplyRefuseDirect() {
         f.panel->layout();
     }
     auto* refuseBtn = f.panel->chat().cardButton(r, 2);
-    check(refuseBtn && refuseBtn->text() == "Refuser", "la carte : Refuser");
+    check(refuseBtn && refuseBtn->text() == "Refuser\xE2\x80\xA6", "la carte : Refuser... (une question d'abord)");
     if (refuseBtn) refuseBtn->clicked->emit();
+    f.mm.applyPending();
+    // 1.16.1 (captures) : la carte aussi pose la question (Refuser / Garder) - comme l'apercu, comme l'aide le dit
+    check(f.mm.top() && f.mm.top()->id() == "dialog.ai.refuser" && f.as().proposal(r)->state == "proposee", "Refuser... de la carte : la question d'abord");
+    f.mm.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, {}});   // Refuser
+    f.mm.applyPending();
     f.step();
     check(f.as().proposal(r)->state == "refusee" && f.v().objects.size() == 31, "refusee : le projet n'a pas change");
     std::string why;

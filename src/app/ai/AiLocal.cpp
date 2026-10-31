@@ -735,6 +735,19 @@ private:
         return std::any_of(t_.begin(), t_.end(), [&](const Tok& t) { return !t.quoted && t.f.rfind(p, 0) == 0; });
     }
     [[nodiscard]] bool phrase(std::string_view p) const { return f_.find(" " + std::string(p) + " ") != std::string::npos; }
+    // 1.16.1 (captures) : le MOT "variable(s)" - pas un nom qui commence par lui (Variable_Qui_N_Existe_Pas)
+    [[nodiscard]] bool variableWord() const {
+        return std::any_of(t_.begin(), t_.end(), [](const Tok& t) { return !t.quoted && t.f.rfind("variable", 0) == 0 && t.raw.find('_') == std::string::npos; });
+    }
+    // 1.16.1 (captures) : le mot qui lie un objet a une variable ("lie a", "associe a", "relie a", "branche sur") ; npos : aucun
+    [[nodiscard]] std::size_t linkWordAt() const {
+        static const std::set<std::string> w = {"lie", "liee", "lies", "liees", "associe", "associee", "associes", "associees", "relie", "reliee",
+                                                "relies", "reliees", "branche", "branchee", "branches", "branchees"};
+        for (std::size_t i = 0; i + 1 < t_.size(); ++i)
+            if (!t_[i].quoted && w.count(t_[i].f) && (t_[i + 1].f == "a" || t_[i + 1].f == "au" || t_[i + 1].f == "sur" || t_[i + 1].f == "avec"))
+                return i;
+        return std::string::npos;
+    }
     [[nodiscard]] std::size_t indexOf(std::string_view w, std::size_t from = 0) const {
         for (std::size_t i = from; i < t_.size(); ++i)
             if (t_[i].f == w) return i;
@@ -905,6 +918,7 @@ private:
         hmi::Kind   kind;
         std::string text, color, name;
         std::string colorName;   // la couleur dite ("rouge", "bleu clair") ; vide : le #RRGGBB
+        std::string variable;    // 1.16.1 : "un voyant lie a Pompe_1_Marche" - une variable qui existe (jamais inventee)
     };
     // `into` : la vue neuve d'un creer_vue (les objets s'y posent) ; nul : la vue ouverte.
     LocalReply create(std::vector<NewObject> wanted, const Position& pos, std::string intro = {}, const hmi::View* into = nullptr) const;
@@ -1817,6 +1831,7 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
     Proposal p = base("");
     std::vector<std::pair<std::string, std::vector<std::string>>> colored;   // "rouge" -> les objets
     std::vector<std::string> texts;
+    std::vector<std::string> bound;
     for (std::size_t i = 0; i < wanted.size(); ++i) {
         const auto& w = wanted[i];
         if (!perKind[w.kind]++) order.push_back(w.kind);
@@ -1852,6 +1867,10 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
                 else it->second.push_back(names[i]);
             }
         }
+        if (!w.variable.empty() && tmpl.find("variable")) {
+            op.props.emplace_back("variable", w.variable);
+            bound.push_back(names[i]);
+        }
         p.ops.push_back(std::move(op));
     }
     std::vector<std::string> parts;
@@ -1864,10 +1883,11 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
     for (std::size_t c = 0; c < colored.size(); ++c)
         text += std::string(c == 0 ? " En " : " ; en ") + colored[c].first + " : " + codes(colored[c].second) + (c + 1 == colored.size() ? "." : "");
     text += capped;
+    if (!bound.empty()) text += " Associ\xC3\xA9" + std::string(bound.size() > 1 ? "s" : "") + " \xC3\xA0 la variable **" + wanted.front().variable + "** (sa propri\xC3\xA9t\xC3\xA9 `variable`).";
     bool needVariable = false;
     for (const auto& w : wanted) {
         const auto* e = registry().find(w.kind);
-        if (e && (e->shows || e->writes)) needVariable = true;
+        if (e && (e->shows || e->writes) && w.variable.empty()) needVariable = true;
     }
     if (needVariable)
         text += "\nAucune variable n'est associ\xC3\xA9" "e : je n'invente pas de nom. Dis-moi laquelle relier, par exemple `Associe "
@@ -1880,8 +1900,11 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
     const Position pos = into ? Position{} : position();
     std::vector<NewObject> wanted;
     std::vector<const Mention*> news;
+    // 1.16.1 (captures) : "un voyant lie a Pompe_1_Marche" - ce qui suit le lien est la variable, pas un objet ni un nom
+    const std::size_t linkAt = into ? std::string::npos : linkWordAt();
     for (const auto& m : mentions_) {
         if (pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end) continue;   // l'objet de reference
+        if (linkAt != std::string::npos && m.at > linkAt) continue;
         if (m.definite && !m.indefinite) continue;
         // 1.16.1 : "3 pompes en ligne" : une disposition, pas une Ligne a poser
         if (m.kind == hmi::Kind::Line && m.at > 0 && (t_[m.at - 1].f == "en" || t_[m.at - 1].f == "a")) continue;
@@ -1897,7 +1920,8 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
     if (news.empty()) return notUnderstood();
     for (std::size_t k = 0; k < news.size(); ++k) {
         const Mention& m = *news[k];
-        const std::size_t stop = k + 1 < news.size() ? news[k + 1]->at : (pos.rel != Rel::None && pos.at > m.at ? pos.at : t_.size());
+        std::size_t stop = k + 1 < news.size() ? news[k + 1]->at : (pos.rel != Rel::None && pos.at > m.at ? pos.at : t_.size());
+        if (linkAt != std::string::npos && linkAt > m.at) stop = std::min(stop, linkAt);
         // apres le genre : une couleur, des textes (Marche et Arret, "Marche"), un nom (appele X)
         std::string color, colorName, name;
         std::vector<std::string> texts;
@@ -1980,7 +2004,34 @@ LocalReply Engine::createFromMentions(const hmi::View* into) const {
             wanted.push_back(std::move(w));
         }
     }
-    return create(std::move(wanted), pos, {}, into);
+    if (linkAt == std::string::npos) return create(std::move(wanted), pos, {}, into);
+    // LA VARIABLE DITE APRES LE LIEN : une qui existe, associee a l'objet neuf ; sinon l'objet seul, et pourquoi (jamais
+    // une variable inventee)
+    const VarFind vf = findVariable(linkAt + 1, t_.size(), nullptr);
+    if (!vf.name.empty() && wanted.size() == 1) {
+        wanted.front().variable = vf.name;
+        return create(std::move(wanted), pos, {}, into);
+    }
+    LocalReply r = create(std::move(wanted), pos, {}, into);
+    if (!r.proposal) return r;
+    if (!vf.name.empty()) {
+        r.text += "\nJ'associe un objet \xC3\xA0 la fois : demande ensuite `Associe <nom> \xC3\xA0 " + vf.name + "` pour chacun.";
+    } else if (!vf.asked.empty()) {
+        const std::string ty = !r.proposal->ops.empty() && hmi::kindFromKey(r.proposal->ops.front().kind)
+                                       && hmi::roles::valueRole(*hmi::kindFromKey(r.proposal->ops.front().kind)) == hmi::roles::Role::Number
+                                   ? "REAL"
+                                   : "BOOL";
+        r.text += "\n**La variable " + vf.asked + " n'existe pas** dans ce projet, et je ne l'invente pas : l'objet est propos\xC3\xA9 sans "
+                  "variable." + (vf.candidates.empty() ? std::string{} : " Les plus proches : " + codes(vf.candidates) + ".")
+                  + (hmi::isIdentifier(vf.asked) ? " Pour la cr\xC3\xA9" "er : `Cr\xC3\xA9" "e la variable " + vf.asked + " en " + ty + "`, puis `Associe "
+                                                       + r.proposal->ops.front().name + " \xC3\xA0 " + vf.asked + "`."
+                                                 : std::string{});
+        if (hmi::isIdentifier(vf.asked)) r.suggestions.insert(r.suggestions.begin(), "Cr\xC3\xA9" "e la variable " + vf.asked + " en " + ty);
+    } else if (!vf.candidates.empty()) {
+        r.text += "\nPlusieurs variables conviennent (" + codes(vf.candidates) + ") : l'objet est propos\xC3\xA9 sans variable ; dis laquelle avec `Associe "
+                  + r.proposal->ops.front().name + " \xC3\xA0 ...`.";
+    }
+    return r;
 }
 
 // ---- "et une autre", "la meme en bleu", "pareil pour P2" -----------------------------------------
@@ -2316,6 +2367,8 @@ LocalReply Engine::createVariables() const {
         std::string ty = tk.quoted ? std::string{} : typeWord(tk.f);
         if (ty.empty() && !tk.quoted)
             if (const auto* ht = in_.project->hmiTypeByName(tk.raw)) ty = ht->name;
+        // 1.16.1 (captures) : "Duree en INT" - le mot est le nom, son type suit
+        if (!ty.empty() && i + 2 < t_.size() && t_[i + 1].f == "en" && !typeWord(t_[i + 2].f).empty()) ty.clear();
         if (!ty.empty()) {
             if (pending.empty() && specs.empty()) leading = ty;
             for (const auto k : pending) specs[k].type = ty;
@@ -2750,7 +2803,11 @@ LocalReply Engine::createType() const {
             close();
             continue;
         }
-        if (const std::string ty = typeOf(tk); !ty.empty()) {
+        // 1.16.1 (captures) : "Duree en INT" - un mot qui dit aussi un type (duree, entier...), suivi de SON type, est un nom
+        const bool namedType = i + 2 < u.size() && !typeOf(tk).empty() && !tk.quoted
+                            && ((u[i + 1].f == "en" && !typeOf(u[i + 2]).empty())
+                                || (i + 3 < u.size() && u[i + 1].f == "de" && u[i + 2].f == "type" && !typeOf(u[i + 3]).empty()));
+        if (const std::string ty = namedType ? std::string{} : typeOf(tk); !ty.empty()) {
             close();
             if (pending.empty() && members.empty()) leading = ty;
             for (const auto m : pending) {
@@ -3536,7 +3593,14 @@ LocalReply Engine::setText() const {
             for (std::size_t i = at + 1; i < t_.size(); ++i) text += (text.empty() ? "" : " ") + t_[i].raw;
         }
     }
-    if (text.empty()) return ask("Quel texte ? \xC3\x89" "cris-le entre guillemets, par exemple `Change le texte de Bouton_1 en \"D\xC3\xA9marrer\"`.");
+    if (text.empty()) {
+        // 1.16.1 (captures) : "ecris-moi un poeme sur les pompes" - aucun texte d'objet dit : pas comprise (une IA connectee,
+        // si elle est reglee, peut la reprendre) ; "change le texte de Bouton_1" sans le texte : la question, pas comprise non plus
+        if (!(has("texte") || has("libelle") || has("intitule") || has("titre"))) return notUnderstood();
+        LocalReply r = ask("Quel texte ? \xC3\x89" "cris-le entre guillemets, par exemple `Change le texte de Bouton_1 en \"D\xC3\xA9marrer\"`.");
+        r.understood = false;
+        return r;
+    }
     // l'objet : le texte d'un bouton, d'un libelle (pas le genre Texte dit comme mot)
     Target t = targets(0, at < t_.size() && t_[at].quoted ? t_.size() : at, true);
     if (!t.question.empty()) return ask(t.question, t.suggestions);
@@ -3658,10 +3722,10 @@ LocalReply Engine::run() {
     const std::size_t typeAt = typeNoun(t_);
     const bool typeAlone = typeAt == 1 && (t_[0].f == "un" || t_[0].f == "une" || t_[0].f == "nouveau" || t_[0].f == "nouvelle");
     if (typeAt != std::string::npos && (createVerb || wantVerb || makeVerb || hasPrefix("defini") || typeAlone) && !has("types") && !has("structures")
-        && !has("automate") && !has("api") && !has("plc") && !has("ddt") && !has("ddts") && !hasPrefix("variable"))
+        && !has("automate") && !has("api") && !has("plc") && !has("ddt") && !has("ddts") && !variableWord())
         return createType();
     // des variables
-    if ((createVerb || wantVerb || makeVerb || hasPrefix("propos") || hasPrefix("import")) && (hasPrefix("variable") || has("ddt") || has("ddts")
+    if ((createVerb || wantVerb || makeVerb || hasPrefix("propos") || hasPrefix("import")) && (variableWord() || has("ddt") || has("ddts")
                                                                        || ((has("types") || has("type")) && (has("automate") || has("ihm")))))
         return createVariables();
     // creer des objets neufs ("cree 4 voyants alignes") : avant les gestes d'edition que la phrase peut citer
@@ -3670,7 +3734,12 @@ LocalReply Engine::run() {
         const bool fresh = std::any_of(mentions_.begin(), mentions_.end(), [&](const Mention& m) {
             return m.indefinite && !(early.rel != Rel::None && m.at >= early.refAt && m.at < early.end);
         });
-        if (createVerb && fresh && !hasPrefix("associ") && !hasPrefix("reli")) return createFromMentions();
+        // 1.16.1 (captures) : "ajoute un voyant associe a X" - creer, puis associer (le lien apres l'objet neuf)
+        const std::size_t link = linkWordAt();
+        const bool createThenLink = link != std::string::npos && std::any_of(mentions_.begin(), mentions_.end(), [&](const Mention& m) {
+            return m.indefinite && m.at < link;
+        });
+        if (createVerb && fresh && ((!hasPrefix("associ") && !hasPrefix("reli")) || createThenLink)) return createFromMentions();
     }
     // associer
     if (hasPrefix("associ") || hasPrefix("reli") || has("lie") || has("lier") || hasPrefix("branch") || hasPrefix("connect")

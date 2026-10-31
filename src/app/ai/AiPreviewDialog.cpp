@@ -693,7 +693,12 @@ void AiPreviewDialog::refresh() {
     std::vector<Row> rows;
     const auto heading = [&](std::string t) { rows.push_back({Row::Kind::Heading, std::move(t), {}, 0}); };
     if (!check_.errors.empty()) {
-        heading("ERREURS (" + std::to_string(check_.errors.size()) + ") \xE2\x80\x94 rien ne s'applique tant qu'il y en a");
+        // 1.16.1 (captures) : avec << Appliquer malgre les erreurs >>, le titre le dit (il disait encore << rien ne s'applique >>)
+        const bool anywayTitle = !check_.stale && !check_.viewMissing && a.settings().applyWithErrors;
+        heading("ERREURS (" + std::to_string(check_.errors.size()) + ") \xE2\x80\x94 "
+                + (anywayTitle ? std::string(check_.errors.size() > 1 ? "laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB"
+                                                                      : "laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB")
+                               : std::string("rien ne s'applique tant qu'il y en a")));
         for (const auto& e : check_.errors) rows.push_back({Row::Kind::Error, e, {}, 0});
     }
     if (!check_.warnings.empty()) {
@@ -715,7 +720,7 @@ void AiPreviewDialog::refresh() {
             std::size_t shown = 0;
             for (const auto& m : members) {
                 if (shown++ >= 8) {
-                    rows.push_back({Row::Kind::Change, "\xE2\x80\xA6 et " + std::to_string(members.size() - 8) + " autres", {}, 0});
+                    rows.push_back({Row::Kind::Change, "\xE2\x80\xA6 et " + std::to_string(members.size() - 8) + (members.size() - 8 > 1 ? " autres" : " autre"), {}, 0});
                     break;
                 }
                 rows.push_back({Row::Kind::Change, m.name + " : " + m.type + (m.description.empty() ? std::string{} : " \xE2\x80\x94 " + m.description), {}, 0});

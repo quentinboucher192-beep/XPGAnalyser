@@ -109,8 +109,18 @@ protected:
         for (std::size_t i = 0; i < boxes_.size(); ++i) {
             const auto r = boxes_[i]->bounds();
             if (i % 2 == 1) ctx.r.fillRect({b.x, r.y - 1.f, b.w, 28.f}, gfx::Color{128, 128, 128, 18});
-            if (plain)
-                ctx.r.drawText({r.x, r.y + (r.h - ctx.r.lineHeight(gfx::FontId{16})) * 0.5f}, boxes_[i]->label(), gfx::FontId{16}, ctx.theme.color.text);
+            if (plain) {
+                // 1.16.1 (captures) : une ligne trop longue finit par << ... >> (elle etait coupee net a droite)
+                std::string label = boxes_[i]->label();
+                const float room = b.x + b.w - 12.f - r.x;
+                if (ctx.r.measure(label, gfx::FontId{16}).width > room) {
+                    const float dots = ctx.r.measure("\xE2\x80\xA6", gfx::FontId{16}).width;
+                    std::size_t n = std::min(label.size(), ctx.r.fitCharacters(label, gfx::FontId{16}, std::max(0.f, room - dots)));
+                    while (n > 0 && n < label.size() && (static_cast<unsigned char>(label[n]) & 0xC0u) == 0x80u) --n;
+                    label = label.substr(0, n) + "\xE2\x80\xA6";
+                }
+                ctx.r.drawText({r.x, r.y + (r.h - ctx.r.lineHeight(gfx::FontId{16})) * 0.5f}, label, gfx::FontId{16}, ctx.theme.color.text);
+            }
             const float x = r.x + r.w + 10.f;
             if (x < b.x + b.w - 20.f && !details_[i].empty())
                 ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(kSmall)) * 0.5f}, details_[i], kSmall, ctx.theme.color.textMuted);

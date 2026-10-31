@@ -1093,6 +1093,46 @@ void testUnderstoodFlag() {
     }
 }
 
+// 1.16.1 (captures sous Wine) : les defauts vus - un membre << Duree en INT >>, un poeme, un objet cree ET associe.
+void testCaptures1161() {
+    std::printf("[1.16.1 : captures]\n");
+    Bench b;
+    auto r = b.ask("Cr\xC3\xA9" "e un type T_CfgPurge avec Debit en REAL, Duree en INT et Active en BOOL");
+    const ai::Operation* op = firstOp(r);
+    const auto member = [&](const char* n, const char* t) {
+        return op && std::any_of(op->members.begin(), op->members.end(), [&](const auto& m) { return m.name == n && m.type == t; });
+    };
+    check(op && op->members.size() == 3 && member("Debit", "REAL") && member("Duree", "INT") && member("Active", "BOOL"),
+          "Duree en INT : un membre (le mot << duree >> n'est plus pris pour le type TIME)");
+    r = b.ask("Cr\xC3\xA9" "e un type T_Cycle avec Temps en TIME, Duree en INT et Compteur en DINT");
+    op = firstOp(r);
+    check(op && op->members.size() == 3 && member("Temps", "TIME") && member("Duree", "INT") && member("Compteur", "DINT"), "Temps, Duree, Compteur");
+    r = ai::understand(b.input(), "\xC3\x89" "cris-moi un po\xC3\xA8me sur les pompes centrifuges", {});
+    check(!r.proposal && !r.understood, "un poeme : pas comprise (une IA connectee peut la reprendre)");
+    r = ai::understand(b.input(), "change le texte du bouton", {});
+    check(!r.proposal && !r.understood && has(r.text, "Quel texte"), "le texte sans le texte : la question, pas comprise");
+    const auto prop = [](const ai::Operation* o, const char* k) {
+        std::string v;
+        if (o)
+            for (const auto& [kk, vv] : o->props)
+                if (kk == k) v = vv;
+        return v;
+    };
+    r = b.ask("Ajoute un voyant li\xC3\xA9 \xC3\xA0 Pompe_1_Marche");
+    op = firstOp(r);
+    check(op && op->action == ai::Operation::Action::Create && prop(op, "variable") == "Pompe_1_Marche" && op->name != "Pompe_1_Marche"
+              && r.proposal->ops.size() == 1,
+          "un voyant lie a Pompe_1_Marche : cree ET associe (" + r.text + ")");
+    if (op) valid(b, r, "voyant lie");
+    r = b.ask("Ajoute un voyant associ\xC3\xA9 \xC3\xA0 Pompe_2_Marche");
+    op = firstOp(r);
+    check(op && op->action == ai::Operation::Action::Create && prop(op, "variable") == "Pompe_2_Marche", "associe a : pareil (" + r.text + ")");
+    r = b.ask("Ajoute un voyant li\xC3\xA9 \xC3\xA0 Variable_Qui_N_Existe_Pas");
+    op = firstOp(r);
+    check(op && op->action == ai::Operation::Action::Create && prop(op, "variable").empty() && r.proposal->ops.size() == 1 && has(r.text, "n'existe pas"),
+          "une variable inconnue : le voyant seul, et pourquoi - jamais inventee (" + r.text + ")");
+}
+
 // 1.16.1 - 5. Un corpus de robustesse : des phrases d'automaticien. Chacune donne la bonne proposition, ou
 // une question, ou understood = false - jamais une proposition absurde (un nom pris dans un mot-outil).
 using Pred = std::function<bool(const ai::LocalReply&)>;
@@ -1370,6 +1410,7 @@ int main(int argc, char** argv) {
     testTypeModels();
     testNameGuard();
     testUnderstoodFlag();
+    testCaptures1161();
     testCorpus();
     testPlcFile(argc > 1 ? argv[1] : nullptr);
     std::printf("ai_integree_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

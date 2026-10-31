@@ -101,7 +101,28 @@ const std::string& welcomeText(bool live = false, bool local = false) {
 
 // 1.14.2 : un texte simple a la ligne, au mot (un mot plus large que la place : coupe ; une
 // ponctuation seule - le ":" francais - reste sur sa ligne).
+std::vector<std::string> wrapPlainLine(const std::string& text, gfx::FontId f, float width);
+// 1.16.1 (captures) : un saut de ligne du texte (la note << laissee de cote : >> et sa liste) commence une ligne - il
+// s'affichait comme un caractere inconnu.
 std::vector<std::string> wrapPlain(const std::string& text, gfx::FontId f, float width) {
+    if (text.find('\n') == std::string::npos) return wrapPlainLine(text, f, width);
+    std::vector<std::string> out;
+    std::size_t from = 0;
+    while (from <= text.size()) {
+        auto nl = text.find('\n', from);
+        if (nl == std::string::npos) nl = text.size();
+        std::string part = text.substr(from, nl - from);
+        if (!part.empty() && part.back() == '\r') part.pop_back();
+        auto lines = wrapPlainLine(part, f, width);
+        if (lines.empty()) lines.emplace_back();
+        for (auto& l : lines) out.push_back(std::move(l));
+        from = nl + 1;
+    }
+    while (!out.empty() && out.back().empty()) out.pop_back();
+    return out;
+}
+
+std::vector<std::string> wrapPlainLine(const std::string& text, gfx::FontId f, float width) {
     std::vector<std::string> out;
     std::string line;
     width = std::max(width, 30.f);
@@ -989,9 +1010,9 @@ bool AiPanel::applyProposal(int message) {
         spec.title = "Appliquer malgr\xC3\xA9 " + std::to_string(ck.errors.size()) + (ck.errors.size() > 1 ? " erreurs" : " erreur");
         spec.text = "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) "
                     "et not\xC3\xA9 sous la r\xC3\xA9ponse et dans le journal.\nCtrl+Z reprend tout d'un coup.";
-        spec.listTitle = "Laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9";
-        for (const auto& e : ck.errors) spec.items.push_back({e, std::string{}, true});
-        spec.plainItems = true;
+        // 1.16.1 (captures) : les erreurs dans le paragraphe, qui va a la ligne (une ligne de liste les coupait a droite)
+        spec.text += "\n\nLaiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 :";
+        for (const auto& e : ck.errors) spec.text += "\n\xE2\x80\xA2 " + e;
         spec.confirm = "Appliquer quand m\xC3\xAAme";
         spec.width = 620.f;
         ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, message](const menu::DialogResult& r) {
@@ -1706,7 +1727,7 @@ void AiChatView::measure() {
                                                              + (t.check.errors.size() > 1 ? " erreurs\xE2\x80\xA6" : " erreur\xE2\x80\xA6")
                                                        : std::string("Appliquer"));
                         }
-                        b.buttons.push_back(stale ? "Redemander" : "Refuser");
+                        b.buttons.push_back(stale ? "Redemander" : "Refuser\xE2\x80\xA6");
                         // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
                         std::size_t lines = 0;
                         const auto note = [&](const std::string& what, bool error) {
@@ -1828,7 +1849,7 @@ void AiChatView::rebuild() {
             links_ += cb.third->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
                 if (cards_[k].stale) panel_.editRequest(cards_[k].message);
-                else (void)panel_.refuseProposal(cards_[k].message);
+                else panel_.askRefuse(cards_[k].message);   // 1.16.1 (captures) : une question d'abord, comme l'apercu
             });
             cards_.push_back(cb);
         }
@@ -1862,8 +1883,9 @@ void AiChatView::rebuild() {
         cb.apply->setTooltip(anyway ? "Appliquer ce qui est valide ; les erreurs sont laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9" "es au journal (une confirmation les liste)."
                                     : "Appliquer au projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
         cb.apply->setEnabled(t.check.ok() || anyway);
-        cb.third->setText(cb.stale ? "Redemander" : "Refuser");
-        cb.third->setTooltip(cb.stale ? "La vue a chang\xC3\xA9 : remettre la demande dans la saisie." : "Refuser : le projet ne change pas.");
+        cb.third->setText(cb.stale ? "Redemander" : "Refuser\xE2\x80\xA6");
+        cb.third->setTooltip(cb.stale ? "La vue a chang\xC3\xA9 : remettre la demande dans la saisie."
+                                      : "Refuser (une question d'abord) : le projet ne change pas ; la carte pourra revenir sur ce refus.");
         cb.preview->setVisibility(ui::Visibility::Visible);
         cb.apply->setVisibility(cb.stale ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         cb.third->setVisibility(ui::Visibility::Visible);
