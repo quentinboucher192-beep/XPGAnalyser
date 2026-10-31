@@ -4262,6 +4262,42 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Par exemple : \xC2\xAB Cr\xC3\xA9" "e une station de pompage compl\xC3\xA8te avec "
                          "deux pompes, une cuve, les \xC3\xA9quipements Modbus, les variables, les alarmes, "
                          "les scripts, les symboles, les popups et la vue de supervision. \xC2\xBB", {}},
+             {K::Heading, "Concevoir une installation, modifier l'existant", {}},
+             {K::Paragraph, "L'IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion) con\xC3\xA7oit quatre "
+                         "installations compl\xC3\xA8tes en une proposition \xE2\x80\x93 types, variables, "
+                         "un \xC3\xA9quipement Modbus simul\xC3\xA9 et ses adresses libres, alarmes, "
+                         "scripts, symbole, popup, vue de supervision et dossier \xE2\x80\x93 en "
+                         "r\xC3\xA9utilisant ce qui existe d\xC3\xA9j\xC3\xA0 (un type T_Pompe identique, "
+                         "une variable du m\xC3\xAAme type, un \xC3\xA9quipement, un symbole) :", {}},
+             {K::Table, "Demande\tCe qu'elle propose\n\xC2\xAB Cr\xC3\xA9" "e une station de pompage "
+                         "compl\xC3\xA8te avec deux pompes et une cuve \xC2\xBB\tT_Pompe (Marche, Defaut, "
+                         "Disponible, Mode_Auto, Consigne, Intensite, Heures_Fonctionnement), T_Cuve, "
+                         "Pompe_1, Pompe_2, Cuve_1, Station_Modbus, les alarmes de d\xC3\xA9" "faut et de "
+                         "niveau, un script de d\xC3\xA9marrage et un script cyclique, Sym_Pompe, Pop_Pompe, "
+                         "Vue_Station. \xC2\xAB sans alarmes \xC2\xBB, \xC2\xAB sans popup "
+                         "\xC2\xBB\xE2\x80\xA6 se disent.\n\xC2\xAB Cr\xC3\xA9" "e une ligne de production "
+                         "avec 3 convoyeurs \xC2\xBB\tT_Convoyeur, les convoyeurs, la marche de la ligne, "
+                         "ses alarmes et sa vue.\n\xC2\xAB Cr\xC3\xA9" "e un parc de 4 cuves "
+                         "\xC2\xBB\tT_Cuve, T_Vanne, les cuves et leurs vannes, les alarmes de "
+                         "niveau.\n\xC2\xAB Cr\xC3\xA9" "e une r\xC3\xA9gulation avec 2 boucles "
+                         "\xC2\xBB\tT_Boucle, T_Vanne_Reglante, les boucles, le script qui recopie la sortie "
+                         "en automatique.", {}},
+             {K::Paragraph, "Modifier l'existant \xE2\x80\x93 le nombre d'\xC3\xA9l\xC3\xA9ments "
+                         "concern\xC3\xA9s est dit d'abord :", {}},
+             {K::Bullet, "\xC2\xAB Ajoute une troisi\xC3\xA8me pompe sur le m\xC3\xAAme mod\xC3\xA8le "
+                         "\xC2\xBB : la variable du m\xC3\xAAme type, ses adresses \xC3\xA0 la suite, son "
+                         "alarme, ses objets d\xC3\xA9" "cal\xC3\xA9s ;", {}},
+             {K::Bullet, "\xC2\xAB Duplique la cuve 1 en cuve 4 \xC2\xBB ;", {}},
+             {K::Bullet, "\xC2\xAB Ajoute une alarme de niveau haut au-dessus de 90 sur toutes les cuves "
+                         "\xC2\xBB (sans seuil, elle le demande : elle ne l'invente pas) ;", {}},
+             {K::Bullet, "\xC2\xAB Ajoute une mesure de pression sur la pompe 2 \xC2\xBB ;", {}},
+             {K::Bullet, "\xC2\xAB Remplace le symbole de toutes les pompes par Sym_Pompe_2 \xC2\xBB ;", {}},
+             {K::Bullet, "\xC2\xAB D\xC3\xA9place toutes les vues de production dans le dossier Production "
+                         "\xC2\xBB.", {}},
+             {K::Warning, "Ce qu'une op\xC3\xA9ration ne sait pas faire est dit dans la r\xC3\xA9ponse "
+                         "(\xC2\xAB \xC3\x80 savoir \xC2\xBB) : par exemple, un membre ne s'ajoute pas "
+                         "\xC3\xA0 un type qui existe (une mesure devient une variable \xC3\xA0 part), un "
+                         "script existant n'est pas r\xC3\xA9\xC3\xA9" "crit.", {}},
              {K::Heading, "Le plan d'action", {}},
              {K::Paragraph, "Chaque op\xC3\xA9ration propos\xC3\xA9" "e devient une **\xC3\xA9tape** (E1, "
                          "E2\xE2\x80\xA6) : ce qu'elle cr\xC3\xA9" "e, modifie ou r\xC3\xA9utilise, ce "

@@ -1895,6 +1895,21 @@ OpenRouter (certains modèles marqués « free »), Groq, Google Gemini et Mistr
 @lieux ai.panneau, dialog.ai.apercu
 @voir assistant-ia, assistant-ia-integree, assistant-ia-registre, communication
 Par exemple : « Crée une station de pompage complète avec deux pompes, une cuve, les équipements Modbus, les variables, les alarmes, les scripts, les symboles, les popups et la vue de supervision. »
+### Concevoir une installation, modifier l'existant
+L'IA intégrée (sans connexion) conçoit quatre installations complètes en une proposition – types, variables, un équipement Modbus simulé et ses adresses libres, alarmes, scripts, symbole, popup, vue de supervision et dossier – en réutilisant ce qui existe déjà (un type T_Pompe identique, une variable du même type, un équipement, un symbole) :
+| Demande | Ce qu'elle propose |
+| « Crée une station de pompage complète avec deux pompes et une cuve » | T_Pompe (Marche, Defaut, Disponible, Mode_Auto, Consigne, Intensite, Heures_Fonctionnement), T_Cuve, Pompe_1, Pompe_2, Cuve_1, Station_Modbus, les alarmes de défaut et de niveau, un script de démarrage et un script cyclique, Sym_Pompe, Pop_Pompe, Vue_Station. « sans alarmes », « sans popup »… se disent. |
+| « Crée une ligne de production avec 3 convoyeurs » | T_Convoyeur, les convoyeurs, la marche de la ligne, ses alarmes et sa vue. |
+| « Crée un parc de 4 cuves » | T_Cuve, T_Vanne, les cuves et leurs vannes, les alarmes de niveau. |
+| « Crée une régulation avec 2 boucles » | T_Boucle, T_Vanne_Reglante, les boucles, le script qui recopie la sortie en automatique. |
+Modifier l'existant – le nombre d'éléments concernés est dit d'abord :
+- « Ajoute une troisième pompe sur le même modèle » : la variable du même type, ses adresses à la suite, son alarme, ses objets décalés ;
+- « Duplique la cuve 1 en cuve 4 » ;
+- « Ajoute une alarme de niveau haut au-dessus de 90 sur toutes les cuves » (sans seuil, elle le demande : elle ne l'invente pas) ;
+- « Ajoute une mesure de pression sur la pompe 2 » ;
+- « Remplace le symbole de toutes les pompes par Sym_Pompe_2 » ;
+- « Déplace toutes les vues de production dans le dossier Production ».
+! Ce qu'une opération ne sait pas faire est dit dans la réponse (« À savoir ») : par exemple, un membre ne s'ajoute pas à un type qui existe (une mesure devient une variable à part), un script existant n'est pas réécrit.
 ### Le plan d'action
 Chaque opération proposée devient une **étape** (E1, E2…) : ce qu'elle crée, modifie ou réutilise, ce qu'elle lit, sa catégorie. Les étapes sont rangées dans l'ordre de leurs **dépendances réelles** – le type avant ses variables, l'équipement avant les adresses, la variable avant l'alarme qui la surveille, la vue avant ses objets – jamais dans l'ordre où l'IA les a écrites. Deux fonctions qui s'appellent l'une l'autre sont permises (le code est compilé une fois tout créé) ; deux types qui se contiennent sont une erreur bloquante.
 La carte de la proposition montre :

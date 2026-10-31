@@ -34,6 +34,7 @@
 #include "AiDemo.hpp"       // fold
 #include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
 #include "AiProjectAnswers.hpp"   // 1.19.0 : les relations, verifier le projet, optimiser les adresses
+#include "AiDesign.hpp"           // 1.19.0 : concevoir une installation, modifier l'existant
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : une adresse IP, un equipement
@@ -923,6 +924,8 @@ private:
     LocalReply tools() const;        // 1.18.0 : un outil (symbole, popup, equipement, adresse, alarme, script, fonction, dossier)
     LocalReply listSystem() const;   // 1.18.0 : les variables systeme
     LocalReply projectQuestion() const;   // 1.19.0 : les relations, verifier le projet, optimiser les adresses (vide : pas une telle demande)
+    LocalReply design() const;            // 1.19.0 : une installation complete, modifier l'existant (vide : pas une telle demande)
+    LocalReply designReply(design::Design d) const;
     struct NewObject {
         hmi::Kind   kind;
         std::string text, color, name;
@@ -4318,6 +4321,189 @@ LocalReply Engine::projectQuestion() const {
     return r;
 }
 
+// ---- 1.19.0 : concevoir une installation, modifier l'existant (AiDesign) -----------------------------------------
+LocalReply Engine::designReply(design::Design d) const {
+    std::string text = std::move(d.text);
+    if (!d.limits.empty()) {
+        text += "\n**\xC3\x80 savoir**\n";
+        for (const auto& l : d.limits) text += "- " + l + "\n";
+    }
+    if (d.proposal.ops.empty()) return ask(std::move(text));
+    d.proposal.request = request_;
+    return finish(std::move(d.proposal), std::move(text));
+}
+
+LocalReply Engine::design() const {
+    if (!in_.project) return {};
+    using design::Installation;
+    const bool create = hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("genere")
+                     || hasPrefix("fabriqu") || hasPrefix("construi") || has("fais") || has("faire") || hasPrefix("prepar") || hasPrefix("concoi")
+                     || hasPrefix("concev") || phrase("je veux") || has("voudrais") || has("faudrait") || has("besoin") || phrase("il me faut");
+    const auto singular = [](std::string w) {
+        if (w.size() > 3 && (w.back() == 's' || w.back() == 'x')) w.pop_back();
+        return w;
+    };
+    // un nombre juste avant un mot ("deux pompes", "3 boucles")
+    const auto countBefore = [&](std::initializer_list<std::string_view> words, int dflt) {
+        for (std::size_t i = 1; i < t_.size(); ++i)
+            for (const auto w : words)
+                if (singular(t_[i].f) == w) {
+                    const int n = numberOf(t_[i - 1].f);
+                    if (n > 0) return n;
+                }
+        return dflt;
+    };
+    // une serie du projet nommee par un nom commun ("pompe", "cuves") : le prefixe des variables (Pompe_1 -> "Pompe")
+    const auto seriesPrefix = [&](const std::string& noun) -> std::string {
+        if (noun.size() < 3) return {};
+        for (const auto& v : in_.project->programs.variables) {
+            const std::string f = fold(v.name);
+            if (f.rfind(noun, 0) != 0 || f.size() <= noun.size()) continue;
+            const char next = f[noun.size()];
+            if (next == '_' || std::isdigit(static_cast<unsigned char>(next))) return v.name.substr(0, noun.size());
+        }
+        return {};
+    };
+    // "la pompe 2", "cuve 1", ou un nom ecrit tel quel (Pompe_2)
+    const auto itemAt = [&](std::size_t i) -> std::string {
+        if (i < t_.size() && in_.project->variable(t_[i].raw)) return t_[i].raw;
+        if (i + 1 < t_.size() && numberOf(t_[i + 1].f) > 0 && isDigits(t_[i + 1].f)) return t_[i].raw + " " + t_[i + 1].raw;
+        return {};
+    };
+    const auto ordinal = [](const std::string& f) {
+        static const std::map<std::string, int> k = {{"premiere", 1}, {"premier", 1}, {"deuxieme", 2}, {"seconde", 2}, {"second", 2},
+                                                     {"troisieme", 3}, {"quatrieme", 4}, {"cinquieme", 5}, {"sixieme", 6}, {"septieme", 7},
+                                                     {"huitieme", 8}, {"neuvieme", 9}, {"dixieme", 10}};
+        const auto it = k.find(f);
+        return it == k.end() ? -1 : it->second;
+    };
+    // 1. UNE INSTALLATION COMPLETE
+    std::optional<Installation> kind;
+    if (has("station") && hasPrefix("pompage")) kind = Installation::PumpingStation;
+    else if (phrase("ligne de production") || phrase("ligne de fabrication") || phrase("ligne de convoyage") || phrase("ligne de conditionnement"))
+        kind = Installation::ProductionLine;
+    else if (phrase("parc de cuves") || phrase("gestion des cuves") || phrase("gestion de cuves") || phrase("stockage de cuves") || phrase("parc a cuves"))
+        kind = Installation::TankFarm;
+    else if (hasPrefix("regulation")) kind = Installation::Regulation;
+    const bool full = has("complete") || has("complet") || has("entiere") || hasPrefix("equipement") || has("alarmes") || has("scripts") || has("popups")
+                   || has("popup") || has("symboles") || has("supervision") || phrase("de bout en bout");
+    if (kind && create && (full || *kind != Installation::PumpingStation)) {
+        design::InstallationSpec spec;
+        spec.kind = *kind;
+        if (*kind == Installation::ProductionLine) spec.pumps = countBefore({"convoyeur", "tapis", "moteur", "poste"}, 2);
+        else if (*kind == Installation::Regulation) {
+            spec.loops = countBefore({"boucle"}, 1);
+            spec.pumps = countBefore({"vanne"}, spec.loops);
+        } else spec.pumps = countBefore({"pompe"}, *kind == Installation::TankFarm ? 0 : 2);
+        spec.tanks = countBefore({"cuve", "bac", "reservoir"}, *kind == Installation::TankFarm ? 3 : 1);
+        for (std::size_t i = 0; i + 1 < t_.size(); ++i)
+            if (t_[i].f == "nommee" || t_[i].f == "nomme" || t_[i].f == "appelee" || t_[i].f == "appele") spec.name = t_[i + 1].raw;
+        spec.alarms = !(phrase("sans alarme") || phrase("sans alarmes"));
+        spec.scripts = !(phrase("sans script") || phrase("sans scripts"));
+        spec.popups = !(phrase("sans popup") || phrase("sans popups"));
+        spec.symbols = !(phrase("sans symbole") || phrase("sans symboles"));
+        spec.equipment = !(phrase("sans equipement") || phrase("sans equipements"));
+        if (spec.pumps > 30 || spec.tanks > 20 || spec.loops > 20)
+            return ask("C'est beaucoup pour une seule proposition : au plus 30 pompes, 20 cuves, 20 boucles. Redemande en plusieurs fois.");
+        return designReply(design::installation(*in_.project, spec));
+    }
+    // 2. ETENDRE UNE SERIE : "Ajoute une troisieme pompe sur le meme modele", "Ajoute deux pompes comme les autres"
+    if ((hasPrefix("ajout") || hasPrefix("rajout")) && (phrase("meme modele") || phrase("le modele") || phrase("comme les autres") || phrase("de plus")
+                                                      || phrase("comme la") || phrase("comme le"))) {
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            const std::string prefix = seriesPrefix(singular(t_[i].f));
+            if (prefix.empty()) continue;
+            int count = 1;
+            if (i > 0 && ordinal(t_[i - 1].f) > 0) {
+                std::size_t have = 0;
+                for (int k = 1; k < 200; ++k)
+                    if (in_.project->variable(prefix + "_" + std::to_string(k))) have = static_cast<std::size_t>(k);
+                count = std::max(1, ordinal(t_[i - 1].f) - static_cast<int>(have));
+            } else if (i > 0 && numberOf(t_[i - 1].f) > 0) {
+                count = numberOf(t_[i - 1].f);
+            }
+            return designReply(design::extendSeries(*in_.project, prefix, count));
+        }
+    }
+    // 3. DUPLIQUER UN ELEMENT : "Duplique la cuve 1 en cuve 4"
+    if (hasPrefix("dupliqu")) {
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (t_[i].f != "en" || i == 0) continue;
+            const std::string to = itemAt(i + 1);
+            std::string from;
+            for (std::size_t j = 0; j < i && from.empty(); ++j) from = itemAt(j);
+            if (from.empty() || to.empty()) break;
+            const std::string root = from.find(' ') == std::string::npos ? from : seriesPrefix(fold(from.substr(0, from.find(' '))));
+            if (root.empty() && !in_.project->variable(from)) break;
+            return designReply(design::duplicateItem(*in_.project, from, to));
+        }
+    }
+    static const std::set<std::string> measures = {"temperature", "pression", "debit", "niveau", "courant", "intensite", "vitesse", "frequence",
+                                                   "puissance", "humidite", "position", "defaut"};
+    // 4. UNE ALARME SUR UNE SERIE : "Ajoute une alarme de temperature haute sur les quatre cuves"
+    if ((create || hasPrefix("mets") || hasPrefix("pose")) && (has("alarme") || has("alarmes"))
+        && (phrase("sur les") || phrase("sur toutes les") || phrase("pour les") || phrase("pour toutes les") || phrase("sur chaque") || phrase("a chaque")
+            || phrase("sur tous les") || phrase("pour tous les"))) {
+        std::string prefix, member, cmp, threshold;
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (prefix.empty() && i > 0) prefix = seriesPrefix(singular(t_[i].f));
+            if (member.empty() && measures.count(t_[i].f)) member = t_[i].f;
+            if (cmp.empty() && (t_[i].f == "haute" || t_[i].f == "haut" || t_[i].f == "maxi" || t_[i].f == "max")) cmp = "haut";
+            if (cmp.empty() && (t_[i].f == "basse" || t_[i].f == "bas" || t_[i].f == "mini" || t_[i].f == "min")) cmp = "bas";
+            if (threshold.empty() && isDigits(t_[i].f) && !(i + 1 < t_.size() && !seriesPrefix(singular(t_[i + 1].f)).empty()))
+                threshold = t_[i].raw;
+        }
+        if (!prefix.empty() && !member.empty()) {
+            std::string label = member;
+            if (!label.empty()) label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
+            if (cmp == "haut") label += " haute";
+            else if (cmp == "bas") label += " basse";
+            return designReply(design::alarmOnSeries(*in_.project, prefix, member, cmp, threshold, label));
+        }
+    }
+    // 5. REMPLACER LE SYMBOLE : "Remplace le symbole de toutes les pompes par Sym_Pompe_2"
+    if (hasPrefix("remplac") && (has("symbole") || has("symboles")) && has("par")) {
+        std::string prefix, symbol;
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (prefix.empty()) prefix = seriesPrefix(singular(t_[i].f));
+            if (t_[i].f == "par" && i + 1 < t_.size()) {
+                std::size_t j = i + 1;
+                while (j + 1 < t_.size() && (t_[j].f == "le" || t_[j].f == "la" || t_[j].f == "un" || t_[j].f == "symbole" || t_[j].f == "celui")) ++j;
+                symbol = t_[j].raw;
+            }
+        }
+        if (!prefix.empty() && !symbol.empty()) return designReply(design::replaceSymbol(*in_.project, prefix, symbol));
+    }
+    // 6. UNE MESURE : "Ajoute une mesure de pression sur la pompe 2"
+    if ((hasPrefix("ajout") || hasPrefix("rajout") || has("cree") || hasPrefix("mets")) && (has("mesure") || has("capteur"))) {
+        std::string what, on;
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (what.empty() && measures.count(t_[i].f) && t_[i].f != "defaut") what = t_[i].f;
+            if (on.empty() && (t_[i].f == "sur" || t_[i].f == "de" || t_[i].f == "a" || t_[i].f == "pour") && i > 0) {
+                std::size_t j = i + 1;
+                if (j < t_.size() && (t_[j].f == "la" || t_[j].f == "le" || t_[j].f == "l")) ++j;
+                const std::string item = itemAt(j);
+                if (!item.empty() && !measures.count(fold(item))) on = item;
+            }
+        }
+        if (!what.empty() && !on.empty()) return designReply(design::addMeasure(*in_.project, on, what));
+    }
+    // 7. RANGER UNE FAMILLE : "Deplace toutes les vues de production dans le dossier Production"
+    if ((hasPrefix("deplac") || hasPrefix("range") || hasPrefix("mets") || has("met")) && has("dossier")) {
+        static const std::set<std::string> lists = {"vues", "popups", "symboles", "scripts", "types", "variables", "styles", "ressources"};
+        std::string list, filter, folder;
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (list.empty() && lists.count(t_[i].f) && i + 2 < t_.size() && (t_[i + 1].f == "de" || t_[i + 1].f == "du" || t_[i + 1].f == "des")) {
+                list = t_[i].f;
+                filter = t_[i + 2].raw;
+            }
+            if (t_[i].f == "dossier" && i + 1 < t_.size()) folder = t_[i + 1].raw;
+        }
+        if (!list.empty() && !filter.empty() && !folder.empty()) return designReply(design::moveToFolder(*in_.project, list, filter, folder));
+    }
+    return {};
+}
+
 LocalReply Engine::run() {
     if (t_.empty()) return help();
     const bool question = request_.find('?') != std::string::npos;
@@ -4339,6 +4525,8 @@ LocalReply Engine::run() {
                        || has("donne") || has("donnez");
     // 1.19.0 : les questions sur le projet - les relations, verifier, optimiser les adresses (avant les listes et les outils)
     if (LocalReply r = projectQuestion(); !r.text.empty()) return r;
+    // 1.19.0 : concevoir une installation complete, modifier l'existant (avant les outils et le synoptique)
+    if (LocalReply r = design(); !r.text.empty()) return r;
     // 1.18.0 : les variables systeme (une question)
     if ((question || has("quelles") || has("liste") || phrase("montre moi")) && !createVerb && (has("systeme") || has("sys")) && (variableWord() || has("sys")))
         return listSystem();

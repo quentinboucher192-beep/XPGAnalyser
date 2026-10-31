@@ -148,6 +148,17 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.19.0 : l'IA qui concoit et construit des projets complets
         note("1.19.0", "Assistant IA", Kind::New,
+         "UNE INSTALLATION COMPL\xC3\x88TE, SANS CONNEXION : l'IA int\xC3\xA9gr\xC3\xA9" "e con\xC3\xA7oit une station de pompage (\xC2\xAB Cr\xC3\xA9" "e une "
+         "station de pompage compl\xC3\xA8te avec deux pompes et une cuve \xC2\xBB), une ligne de production, un parc de cuves ou une "
+         "r\xC3\xA9gulation : les types (T_Pompe : Marche, Defaut, Disponible, Mode_Auto, Consigne, Intensite, Heures_Fonctionnement), les "
+         "variables, un \xC3\xA9quipement Modbus simul\xC3\xA9 et des adresses libres, les alarmes, les scripts, le symbole, la popup, la vue de "
+         "supervision et son dossier - en r\xC3\xA9utilisant ce qui existe. Et elle modifie l'existant : \xC2\xAB Ajoute une troisi\xC3\xA8me "
+         "pompe sur le m\xC3\xAAme mod\xC3\xA8le \xC2\xBB, \xC2\xAB Duplique la cuve 1 en cuve 4 \xC2\xBB, \xC2\xAB Ajoute une alarme de niveau haut "
+         "au-dessus de 90 sur toutes les cuves \xC2\xBB, \xC2\xAB Ajoute une mesure de pression sur la pompe 2 \xC2\xBB, \xC2\xAB Remplace le "
+         "symbole de toutes les pompes par Sym_Pompe_2 \xC2\xBB, \xC2\xAB D\xC3\xA9place toutes les vues de production dans le dossier Production "
+         "\xC2\xBB - en disant d'abord combien d'\xC3\xA9l\xC3\xA9ments sont concern\xC3\xA9s, et ce qu'elle ne sait pas faire.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
          "LE PLAN D'ACTION : une demande complexe (\xC2\xAB une station de pompage avec deux pompes, une cuve, l'\xC3\xA9quipement Modbus, les "
          "variables, les alarmes, les scripts, le symbole, la popup et la vue \xC2\xBB) devient un plan d'\xC3\xA9tapes num\xC3\xA9rot\xC3\xA9" "es "
          "(E1, E2...), dans l'ordre de leurs d\xC3\xA9pendances r\xC3\xA9" "elles - jamais celui dans lequel l'IA les a \xC3\xA9" "crites. La carte "

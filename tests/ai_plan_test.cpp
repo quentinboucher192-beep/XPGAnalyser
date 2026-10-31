@@ -412,6 +412,58 @@ void questions() {
     }
 }
 
+// ---- A a D par l'IA integree : une installation complete, puis la modifier -----------------------------------------
+void integrated() {
+    std::printf("A-D - l'IA integree concoit et modifie\n");
+    Fixture f;
+    std::string why;
+    const auto say = [&](const std::string& text, const char* what, std::size_t minOps = 1) -> bool {
+        const ai::LocalReply r = ask(f.doc->project, f.doc->project.view(f.view), text);
+        if (!r.proposal) {
+            check(false, std::string(what) + " : une proposition (" + r.text.substr(0, 200) + ")");
+            return false;
+        }
+        ai::Proposal p = *r.proposal;
+        const auto ck = ai::validate(f.doc->project, p);
+        check(ck.ok() && p.ops.size() >= minOps, std::string(what) + " : validee, " + std::to_string(p.ops.size()) + " operations (" + errorsOf(ck).substr(0, 200) + ")");
+        const std::size_t steps = f.stack.done().size();
+        const bool ok = f.apply(p, &why);
+        check(ok && f.stack.done().size() == steps + 1, std::string(what) + " : appliquee en une commande (" + why + ")");
+        return ok;
+    };
+    // A : la station du prompt
+    if (say("Cr\xC3\xA9" "e une station de pompage compl\xC3\xA8te avec deux pompes, une cuve, les \xC3\xA9quipements Modbus, les variables, les alarmes, "
+            "les scripts, les symboles, les popups et la vue de supervision.", "A station", 30)) {
+        const auto& pr = f.doc->project;
+        const auto* tp = pr.hmiTypeByName("T_Pompe");
+        check(tp && tp->members.size() == 7 && pr.variable("Pompe_1") && pr.variable("Pompe_2") && pr.variable("Cuve_1") && !pr.variable("Pompe_3"),
+              "A : T_Pompe (7 membres), Pompe_1, Pompe_2, Cuve_1");
+        check(!pr.equipments.empty() && !pr.alarms.empty() && pr.viewByName("Vue_Station") && pr.viewByName("Sym_Pompe") && pr.viewByName("Pop_Pompe"),
+              "A : l'equipement, les alarmes, la vue, le symbole, la popup");
+        check(hmi::audit::overlaps(pr).empty(), "A : aucune adresse en conflit");
+    }
+    // C et D : modifier l'existant
+    if (say("Ajoute une troisi\xC3\xA8me pompe sur le m\xC3\xAAme mod\xC3\xA8le", "D pompe 3"))
+        check(f.doc->project.variable("Pompe_3") && f.doc->project.variable("Pompe_3")->type == "T_Pompe", "D : Pompe_3 du type T_Pompe");
+    if (say("Duplique la cuve 1 en cuve 4", "C cuve 4")) check(f.doc->project.variable("Cuve_4") != nullptr, "C : Cuve_4");
+    if (say("Ajoute une alarme de niveau haut au-dessus de 90 sur toutes les cuves", "D alarmes"))
+        check(std::count_if(f.doc->project.alarms.begin(), f.doc->project.alarms.end(), [](const hmi::AlarmDef& a) { return has(a.condition, "Cuve_4"); }) >= 1,
+              "D : une alarme de niveau sur Cuve_4 aussi");
+    if (say("Ajoute une mesure de pression sur la pompe 2", "D pression")) check(f.doc->project.variable("Pompe_2_Pression") != nullptr, "D : Pompe_2_Pression");
+    const std::size_t steps = f.stack.done().size();
+    for (std::size_t k = 0; k < steps; ++k) (void)f.stack.undo();
+    check(!f.doc->project.variable("Pompe_1") && f.doc->project.programs.types.size() == 1, "tout repris par Ctrl+Z, etape par etape");
+    // B : une ligne de production, une regulation
+    {
+        Fixture g;
+        const ai::LocalReply r = ask(g.doc->project, g.doc->project.view(g.view), "Cr\xC3\xA9" "e une ligne de production avec 3 convoyeurs");
+        check(r.proposal && ai::validate(g.doc->project, *r.proposal).ok() && plan::build(g.doc->project, *r.proposal, ai::validate(g.doc->project, *r.proposal)).worthShowing(),
+              "B : la ligne de production - une proposition valide, un plan affiche");
+        const ai::LocalReply q = ask(g.doc->project, g.doc->project.view(g.view), "Cr\xC3\xA9" "e une r\xC3\xA9gulation avec 2 boucles");
+        check(q.proposal && ai::validate(g.doc->project, *q.proposal).ok(), "la regulation : une proposition valide");
+    }
+}
+
 // ---- G : la taille ---------------------------------------------------------------------------------------------------
 void large() {
     std::printf("G - une grande installation\n");
@@ -469,6 +521,7 @@ int main() {
     undoRedo();
     report();
     questions();
+    integrated();
     large();
     std::printf("ai_plan_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
