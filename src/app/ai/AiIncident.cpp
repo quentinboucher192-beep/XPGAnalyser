@@ -623,9 +623,10 @@ bool Store::addVideo(const std::string& folder, const Video& v, std::string* why
     std::vector<std::string> written;
     std::string w;
     if (v.frames.size() >= 2 && v.width > 0 && v.height > 0 && v.fps > 0) {
-        std::vector<hmi::Bytes> frames;
+        static const hmi::Bytes kNone;
+        std::vector<const hmi::Bytes*> frames;   // 1.21.0 : sans copie
         frames.reserve(v.frames.size());
-        for (const auto& f : v.frames) frames.emplace_back(f.begin(), f.end());
+        for (const auto& f : v.frames) frames.push_back(f ? f.get() : &kNone);
         const hmi::Bytes avi = hmi::video::writeMjpegAvi(v.width, v.height, v.fps, frames);
         if (!write(join(folder, "video.avi"), std::string_view(reinterpret_cast<const char*>(avi.data()), avi.size()), &w)) {
             if (why) *why = w;

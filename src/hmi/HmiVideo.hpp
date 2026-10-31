@@ -54,6 +54,8 @@ bool decodeAviFrame(const Bytes& data, const AviInfo& info, std::size_t index, R
 bool decodeMjpegFrame(const std::uint8_t* data, std::size_t size, Rgba& out, std::string* error = nullptr);
 // Ecrire un AVI Motion-JPEG (les essais, les exemples) : des images JPEG deja codees, leur cadence.
 [[nodiscard]] Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<Bytes>& jpegFrames);
+// 1.21.0 : les memes images sans les copier (les videos des incidents : une image repetee n'est qu'un pointeur de plus).
+[[nodiscard]] Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<const Bytes*>& jpegFrames);
 
 // ---- ce que la plateforme decode -----------------------------------------------------------
 // Le conseil de Generer (une information) : vide pour un AVI Motion-JPEG (decode partout) ; sinon

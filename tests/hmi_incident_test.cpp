@@ -381,7 +381,7 @@ void storage() {
     v.before = 1;
     v.after = 1;
     for (int i = 0; i < 4; ++i) {
-        v.frames.push_back(fakeJpeg());
+        v.frames.push_back(std::make_shared<const std::vector<std::uint8_t>>(fakeJpeg()));
         v.times.push_back(-1.0 + 0.5 * i);
     }
     check(store.addVideo(folder, v, &why), "D2 la video ajoutee : " + why);

@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,7 +56,10 @@ struct Capture {
     std::string               note;        // pourquoi il n'y en a pas ("aucune vue en marche n'etait affichee")
 };
 struct Video {
-    std::vector<std::vector<std::uint8_t>> frames;   // JPEG
+    // 1.21.0 (plantage 1.20.2, std::bad_alloc) : les images sont PARTAGEES avec le tampon de l'hote, jamais copiees - une image
+    // repetee a chaque top de la cadence, plusieurs incidents declenches ensemble ne multiplient plus la memoire.
+    using Frame = std::shared_ptr<const std::vector<std::uint8_t>>;
+    std::vector<Frame>                     frames;   // JPEG
     std::vector<double>                    times;    // secondes depuis le declenchement (negatif : avant)
     int                                    width{0}, height{0};
     double                                 fps{0};

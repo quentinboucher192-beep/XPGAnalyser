@@ -526,12 +526,12 @@ void IncidentHost::tick(double now) {
                     std::size_t k = 0;
                     for (double at = t0; at <= t1 + 1e-6 && v.frames.size() < 20000; at += step) {
                         while (k + 1 < same.size() && same[k + 1]->t <= at + 1e-6) ++k;
-                        v.frames.push_back(*same[k]->jpeg);
+                        v.frames.push_back(same[k]->jpeg);   // 1.21.0 : partagee, pas copiee
                         v.times.push_back(at - rec.trigger);
                     }
                 } else {
                     for (const Frame* f : same) {
-                        v.frames.push_back(*f->jpeg);
+                        v.frames.push_back(f->jpeg);
                         v.times.push_back(f->t - rec.trigger);
                     }
                 }

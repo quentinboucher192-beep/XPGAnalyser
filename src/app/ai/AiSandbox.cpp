@@ -275,8 +275,13 @@ void runSt(const Job& job, const hmi::Project& source, Outcome& o) {
         analyse.state = State::Ok;
         analyse.detail = "la fonction du projet, telle qu'elle est";
     } else {
-        // L'analyse syntaxique : le code tel que l'IA l'a ecrit (ses blocs VAR compris).
-        const auto diags = hmi::checkScript(hmi::ScriptLang::ST, job.code, job.name);
+        // L'analyse syntaxique : le code tel que l'IA l'a ecrit (ses blocs VAR compris), lu COMME UNE FONCTION (VAR_INPUT,
+        // VAR_OUTPUT sont ses parametres ; un script les refuserait).
+        hmi::HmiFunction candidate;
+        candidate.name = job.name;
+        candidate.returnType = hmi::types::normalized(job.returnType);
+        candidate.body = job.code;
+        const auto diags = hmi::checkFunction(candidate);
         const std::size_t errors = countOf(diags, hmi::ScriptDiagnostic::Severity::Error);
         if (errors > 0) {
             analyse.state = State::Failed;

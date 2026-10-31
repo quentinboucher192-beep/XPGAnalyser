@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 // -----------------------------------------------------------------------------
 //  Les bibliotheques d'un seul fichier. Leurs implementations ne sont compilees
@@ -723,9 +724,17 @@ bool decodeJpeg(const std::uint8_t* data, std::size_t size, Rgba& out, std::stri
         if (error) *error = stbi_failure_reason() ? stbi_failure_reason() : "image JPEG illisible";
         return false;
     }
+    // 1.21.0 (plantage 1.20.2) : la memoire manque - l'image est dite illisible, le dessin garde la precedente.
+    try {
+        out.pixels.assign(px, px + static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+    } catch (const std::bad_alloc&) {
+        stbi_image_free(px);
+        out = {};
+        if (error) *error = "m\xC3\xA9moire insuffisante pour d\xC3\xA9" "coder l'image";
+        return false;
+    }
     out.width = w;
     out.height = h;
-    out.pixels.assign(px, px + static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
     stbi_image_free(px);
     return true;
 }

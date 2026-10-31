@@ -247,7 +247,20 @@ bool decodeAviFrame(const Bytes& d, const AviInfo& info, std::size_t index, Rgba
 }
 
 Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<Bytes>& jpegFrames) {
+    std::vector<const Bytes*> frames;
+    frames.reserve(jpegFrames.size());
+    for (const auto& f : jpegFrames) frames.push_back(&f);
+    return writeMjpegAvi(width, height, fps, frames);
+}
+
+Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<const Bytes*>& jpegFramePtrs) {
+    // 1.21.0 : la taille finale reservee d'avance (pas de reallocation qui double la memoire en pointe)
+    static const Bytes kNone;
+    std::size_t total = 512 + jpegFramePtrs.size() * 26;
+    for (const Bytes* f : jpegFramePtrs) total += (f ? f->size() : 0) + 1;
     Bytes out;
+    out.reserve(total);
+    const auto frameAt = [&](std::size_t i) -> const Bytes& { return jpegFramePtrs[i] ? *jpegFramePtrs[i] : kNone; };
     const auto u32 = [&](std::uint32_t v) {
         for (int k = 0; k < 4; ++k) out.push_back(static_cast<std::uint8_t>(v >> (8 * k)));
     };
@@ -266,8 +279,8 @@ Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<Bytes>&
         rate = static_cast<std::uint32_t>(std::lround(fps * 1000.0));
     }
     std::uint32_t biggest = 0;
-    for (const auto& f : jpegFrames) biggest = std::max(biggest, static_cast<std::uint32_t>(f.size()));
-    const auto n = static_cast<std::uint32_t>(jpegFrames.size());
+    for (std::size_t i = 0; i < jpegFramePtrs.size(); ++i) biggest = std::max(biggest, static_cast<std::uint32_t>(frameAt(i).size()));
+    const auto n = static_cast<std::uint32_t>(jpegFramePtrs.size());
     tag("RIFF");
     u32(0);
     tag("AVI ");
@@ -331,7 +344,9 @@ Bytes writeMjpegAvi(int width, int height, double fps, const std::vector<Bytes>&
     u32(0);
     tag("movi");
     std::vector<std::pair<std::uint32_t, std::uint32_t>> index;
-    for (const auto& f : jpegFrames) {
+    index.reserve(jpegFramePtrs.size());
+    for (std::size_t i = 0; i < jpegFramePtrs.size(); ++i) {
+        const Bytes& f = frameAt(i);
         index.emplace_back(static_cast<std::uint32_t>(out.size() - (moviSize + 4)), static_cast<std::uint32_t>(f.size()));
         tag("00dc");
         u32(static_cast<std::uint32_t>(f.size()));
