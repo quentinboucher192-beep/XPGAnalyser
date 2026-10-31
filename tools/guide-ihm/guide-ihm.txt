@@ -1771,8 +1771,8 @@ Chaque changement est écrit au journal.
 == assistant-ia | L'Assistant IA
 : Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Il travaille d'emblée avec l'**IA intégrée** (sans connexion : rien ne quitte le PC), et se branche sur une IA en ligne – Anthropic (Claude), avec ta clé API ou le relais de ton entreprise – ou sur un service **compatible OpenAI** : une IA gratuite sur ce PC (Ollama, LM Studio, sans clé ni connexion) ou un service en ligne (OpenRouter, Groq, Google Gemini, Mistral…). Une bande sous l'en-tête montre **en direct** la limite du service et ce que tu as consommé.
 @depuis 1.14.2
-@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLAUDE, ANTHROPIC, RELAIS, MODÈLE, IA INTÉGRÉE, OPENAI, COMPATIBLE OPENAI, OLLAMA, LM STUDIO, OPENROUTER, GROQ, GEMINI, MISTRAL, IA GRATUITE, LIMITE, JETONS, BUDGET, FENÊTRE DE CONTEXTE, IA INTÉGRÉE D'ABORD
-@lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres
+@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLÉS API, GÉRER LES CLÉS, GESTIONNAIRE DES CLÉS, CLAUDE, ANTHROPIC, RELAIS, MODÈLE, IA INTÉGRÉE, OPENAI, COMPATIBLE OPENAI, OLLAMA, LM STUDIO, OPENROUTER, GROQ, GEMINI, MISTRAL, IA GRATUITE, LIMITE, JETONS, BUDGET, FENÊTRE DE CONTEXTE, IA INTÉGRÉE D'ABORD
+@lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres, dialog.ai.cles
 @voir editeur, objets, historique, assistant-ia-integree, assistant-ia-registre, memoire-ia
 - **Ctrl+Maj+I** le montre ou le replie (« I » comme IA).
 - **Affichage › Assistant IA**, ou la case « Assistant IA (Ctrl+Maj+I) » d'Affichage › Panneaux à afficher.
@@ -1829,12 +1829,24 @@ Le bouton Paramètres de l'en-tête (ou un clic sur l'état de connexion) :
 | Effort | Auto (celui du modèle), Bas, Moyen, Haut : combien l'IA réfléchit avant de répondre. Haut est plus soigné, Bas plus rapide et moins cher. |
 | Adresse | Anthropic : vide, ou le **relais de ton entreprise** (https://…). Compatible OpenAI : l'adresse du service jusqu'à /v1 (la demande part à <adresse>/chat/completions). http:// est accepté vers ce PC, et vers une machine de l'usine (192.168.x.x, 10.x.x.x, 172.16 à 31.x.x) **seulement sans clé** : la clé passerait en clair sur le réseau. |
 | Délai | Les secondes sans rien recevoir avant de dire « Délai dépassé » (60 par défaut). |
-| Clé API | Masquée ; Afficher, Effacer. **Mémoriser la clé (protégée par Windows)** la garde d'une séance à l'autre. Facultative pour un modèle sur ce PC. Un service en ligne donne la sienne, selon ses conditions (souvent avec une offre gratuite limitée). |
+| Clé API | Masquée ; Afficher, Effacer. **Mémoriser la clé (protégée par Windows)** la garde d'une séance à l'autre - **cochée au départ** depuis la 1.18.0. Facultative pour un modèle sur ce PC. Un service en ligne donne la sienne, selon ses conditions (souvent avec une offre gratuite limitée). |
+| Clés (1.18.0) | La liste des clés enregistrées de ce fournisseur (celle utilisée est choisie) ; **Gérer les clés…** ouvre le gestionnaire des clés (ci-dessous). Une clé saisie ici et enregistrée y entre sous le nom « Ma clé (Anthropic) ». |
 | Tester la connexion | Demande la liste des modèles avec ces réglages (gratuit, sans consommer de jetons) : « Connexion réussie : 12 modèles », ou l'erreur en clair (clé refusée, adresse introuvable, hors ligne…). |
 | Fenêtre de contexte | Vide : **Auto** (celle que le service dit dans sa liste des modèles, quand il la dit). Sinon, un nombre de jetons. Sous 16 000, les consignes envoyées sont resserrées : seuls les genres de la vue et de ta demande, la vue résumée. |
 | Outil | **Auto** : l'IA propose par l'appel d'outil ; si le modèle ne le connaît pas (beaucoup de petits modèles gratuits), l'Assistant redemande aussitôt une proposition écrite en JSON dans sa réponse, et s'en souvient. **Appel d'outil** : toujours l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la même vérification stricte, le même aperçu, le même Ctrl+Z. |
 | Budget | Les jetons par jour ou par mois (0 : aucun) – voir plus haut. |
 Puis le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui part avec chaque demande : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
+@nouveau 1.18.0
+### Le gestionnaire des clés API
+**Gérer les clés…** (Paramètres de l'Assistant) ouvre la fenêtre **Clés API** : plusieurs clés nommées (« Anthropic - travail », « OpenRouter - essais »…), une **utilisée** par fournisseur (l'étoile).
+| Colonne | Ce qu'elle montre |
+| Nom, Fournisseur | Ce que tu as choisi ; le fournisseur (Anthropic, compatible OpenAI). |
+| Clé | Masquée : son début connu (sk-ant-…) et ses 4 derniers caractères, jamais plus. |
+| Ajoutée, Dernier essai | Sa date ; le dernier **Tester** (acceptée, refusée, et pourquoi). |
+| Utilisée par | ★ : la clé de l'Assistant pour ce fournisseur. |
+**Ajouter une clé**, **★ Utiliser** (elle devient celle de son fournisseur), **Tester** (la liste des modèles du fournisseur : gratuit, sur un fil - l'écran ne gèle pas), **Remplacer la clé** (le secret seulement : le nom et l'étoile restent), **Supprimer** (un second clic confirme). Le détail : le nom, le fournisseur, l'adresse et le modèle préférés, la clé (Afficher), **Mémoriser sur ce PC (protégée par Windows)** - cochée au départ - ou pour cette séance seulement.
+Les clés sont dans le dossier de l'Assistant (IA\cles, dans tes réglages) : **une réinstallation n'y touche pas** - le journal de l'installateur le dit (« Clés API : 2 gardées »). La clé mémorisée avant la 1.18.0 est reprise au premier lancement sous le nom « Ma clé (Anthropic) ».
+@nouveau -
 ! La clé API n'est jamais écrite en clair, ni dans les paramètres, ni dans un journal. Sous Windows, « Mémoriser la clé » la chiffre par Windows (DPAPI), liée à ta session : un autre compte, ou le fichier copié sur un autre PC, ne la relit pas. Sous Linux, elle est gardée le temps de la séance seulement. Avec le relais de l'entreprise, la clé peut rester sur son serveur : laisse alors la case vide.
 > Pour une entreprise, le relais est la meilleure façon de protéger la clé : un serveur interne la détient, IHM Studio ne parle qu'à lui (Adresse), et rien ne change pour l'utilisateur.
 Dans le dossier **IA** des réglages de l'utilisateur (à côté de Mes images), jamais dans le projet : un fichier par conversation (ses messages, ses pièces jointes, l'état de ses propositions), la copie des pièces jointes, les paramètres. Fermer et rouvrir l'application retrouve tout.
@@ -1917,7 +1929,7 @@ L'en-tête du panneau dit « IA intégrée – sans connexion ». Aucun réglage
 == assistant-ia-registre | Ce que l'Assistant IA sait et ce qu'il peut proposer
 : Avec chaque demande, l'Assistant reçoit les objets que le logiciel connaît vraiment (les 116 genres, tirés de ses tables), la vue ouverte et ses variables selon tes réglages de confidentialité, les types IHM du projet, les types (DDT) de l'automate lu dans un .XPG joint, et les connaissances actives de sa mémoire. Il ne fait que proposer : le logiciel vérifie chaque opération avant de te la montrer. Depuis la 1.16.0, il peut aussi proposer une vue neuve, des variables et des types IHM, dupliquer avec les repères $…$ et poser des formules (fx).
 @depuis 1.15.0
-@mots REGISTRE, GENRES D'OBJETS, CONTEXTE, CONFIDENTIALITÉ, DUPLIQUER, CODE BRUT, PROPOSER_OPERATIONS, OPÉRATIONS PROPOSÉES, CRÉER UNE VUE, CRÉER DES VARIABLES, TYPES IHM, DDT, AUTOMATE, REPÈRES, FORMULE, FX
+@mots REGISTRE, GENRES D'OBJETS, CONTEXTE, CONFIDENTIALITÉ, DUPLIQUER, CODE BRUT, PROPOSER_OPERATIONS, OPÉRATIONS PROPOSÉES, CRÉER UNE VUE, CRÉER DES VARIABLES, TYPES IHM, DDT, AUTOMATE, REPÈRES, FORMULE, FX, SYMBOLE, POPUP, ÉCRAN MODÈLE, EN-TÊTE, PIED DE PAGE, GÉNÉRIQUE, ÉQUIPEMENT, DÉTECTER CE QUI RÉPOND, SCANNER IP, ADRESSE, FORMULE DE LIEN, SCRIPT, FONCTION IHM, ALARME, RESSOURCE, DOSSIER, RANGER, VARIABLES SYSTÈME, NATIVES
 @lieux ai.panneau, dialog.ai.parametres, dialog.ai.apercu
 @voir assistant-ia, memoire-ia, objets, historique
 ### Ce qui part avec chaque demande
@@ -1945,6 +1957,23 @@ Une grande vue se résume : la sélection et les objets les plus proches d'elle 
 | Créer un type | (1.16.0) Un type IHM (une structure) : son nom, ses membres (nom, type, description) - comme Types IHM › Nouveau. |
 Toute la proposition s'applique en une seule étape d'annulation : un Ctrl+Z la reprend entière - la vue neuve, ses objets, les variables et les types partent ensemble.
 ! L'Assistant ne crée une vue, une variable ou un type que si tu le demandes (ou acceptes qu'il le propose) ; jamais pour masquer une variable absente. Rien n'est créé en silence : la carte le dit (« Crée aussi : la vue Vue_Pompes, 12 variables IHM, 2 types IHM ») et l'aperçu en donne la liste, avant que tu appliques.
+@nouveau 1.18.0
+### Les outils du projet
+Au-delà de la vue ouverte, l'Assistant propose aussi ce qui fait un projet - toujours vérifié, montré dans l'aperçu (« Aussi créé ou modifié ») et repris par un seul Ctrl+Z :
+| Outil | Ce qu'il crée |
+| Symbole, popup | Une vue de ce rôle (un symbole 200 × 200, une popup 600 × 400 avec son titre, modale ou non), ses **paramètres** (nom et type) et ses **génériques** <T> ou <T, K> - comme Nouveau symbole / Nouvelle popup. |
+| Écran modèle, en-tête, pied de page | Une vue de ce rôle (l'en-tête et le pied : la largeur du projet, 100 de haut), rangée dans sa liste. |
+| Type générique | Un type IHM T_Pile<T>, <T, K> : ses membres peuvent être « en T ». |
+| Équipement | Un équipement Modbus TCP ou Ethernet TCP : son adresse IP, son port, son esclave (Unit Id), sa période, simulé ou non. **Détecter ce qui répond** n'est jamais lancé par l'IA : elle le **propose** ; après Appliquer, la carte offre **Détecter ce qui répond…**, qui ouvre Communication › Scanner IP avec la plage remplie (192.168.1.0/24) - c'est toi qui cliques Démarrer. Rien ne part sur le réseau avant. |
+| Adresses | Lier une variable IHM à un équipement, à une adresse (%MW100) ; sans adresse : la suivante libre. Une structure ou un tableau de structures : une **formule de lien** (100 + 10*i, motif [*]), comme « Modifier l'adresse dans toutes les cases… » ; les chevauchements sont signalés. |
+| Script général | Un script ST, C ou C++ : au démarrage, cyclique (sa période), sur changement (ce qu'il surveille) ou appelé ; son code est compilé avant d'être proposé. |
+| Fonction IHM | Une fonction (ses génériques, son retour, VAR_INPUT et son calcul), compilée avant d'être proposée. |
+| Alarme | Une alarme : sa condition (compilée : chaque nom lu existe), son message, sa priorité, son groupe. |
+| Ressource | Une ressource à partir d'un **fichier joint** à la demande (une image, un PDF…), lu seulement à Appliquer. |
+| Dossiers, ranger | Un dossier dans une liste (vues, popups, symboles, scripts, types, variables…), et y ranger des éléments qui existent. |
+Avec chaque demande, l'Assistant reçoit aussi la liste des équipements, des ressources, des scripts généraux, des fonctions IHM, des alarmes et des dossiers du projet ; et, quand ta demande en parle, les **variables système** (SYS.…) et les **fonctions natives** par thème. L'IA intégrée comprend aussi ces outils : « Crée un symbole Sym_Pompe<T> », « Crée une popup modale Reglage_P1 », « Crée un équipement Centrale_1 en 192.168.1.40 et détecte ce qui répond », « Lie Niveau_Cuve_1 à Centrale_1 en %MW100 », « Crée une alarme Haut quand Niveau_Cuve_1 > 90 », « Crée un script Init au démarrage », « Range Vue_1 dans le dossier Process », « Quelles variables système ? ».
+! Un code proposé (un script, une fonction, une condition) n'est jamais exécuté par l'Assistant : il est compilé pour être vérifié, puis il tourne seulement quand tu lances l'IHM, comme ce que tu écris toi-même.
+@nouveau -
 ### Ce que le logiciel vérifie
 - **Le genre** : il existe, et la bibliothèque le propose (un groupe naît d'une sélection) ; un genre inconnu est refusé, avec les genres proches.
 - **Les propriétés** : seulement celles du genre ; chaque valeur selon son rôle - un nombre, TRUE ou FALSE, une couleur #RRGGBB, un mot de la liste de l'inspecteur, une durée.

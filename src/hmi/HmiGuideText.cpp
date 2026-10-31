@@ -4063,12 +4063,17 @@ const std::vector<Topic>& topics() {
                          "de dire \xC2\xAB D\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 \xC2\xBB (60 par "
                          "d\xC3\xA9" "faut).\nCl\xC3\xA9 API\tMasqu\xC3\xA9" "e ; Afficher, Effacer. "
                          "**M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)** la "
-                         "garde d'une s\xC3\xA9" "ance \xC3\xA0 l'autre. Facultative pour un mod\xC3\xA8le "
-                         "sur ce PC. Un service en ligne donne la sienne, selon ses conditions (souvent avec "
-                         "une offre gratuite limit\xC3\xA9" "e).\nTester la connexion\tDemande la liste des "
-                         "mod\xC3\xA8les avec ces r\xC3\xA9glages (gratuit, sans consommer de jetons) : "
-                         "\xC2\xAB Connexion r\xC3\xA9ussie : 12 mod\xC3\xA8les \xC2\xBB, ou l'erreur en "
-                         "clair (cl\xC3\xA9 refus\xC3\xA9" "e, adresse introuvable, hors "
+                         "garde d'une s\xC3\xA9" "ance \xC3\xA0 l'autre - **coch\xC3\xA9" "e au "
+                         "d\xC3\xA9part** depuis la 1.18.0. Facultative pour un mod\xC3\xA8le sur ce PC. Un "
+                         "service en ligne donne la sienne, selon ses conditions (souvent avec une offre "
+                         "gratuite limit\xC3\xA9" "e).\nCl\xC3\xA9s (1.18.0)\tLa liste des cl\xC3\xA9s "
+                         "enregistr\xC3\xA9" "es de ce fournisseur (celle utilis\xC3\xA9" "e est choisie) ; "
+                         "**G\xC3\xA9rer les cl\xC3\xA9s\xE2\x80\xA6** ouvre le gestionnaire des cl\xC3\xA9s "
+                         "(ci-dessous). Une cl\xC3\xA9 saisie ici et enregistr\xC3\xA9" "e y entre sous le "
+                         "nom \xC2\xAB Ma cl\xC3\xA9 (Anthropic) \xC2\xBB.\nTester la connexion\tDemande la "
+                         "liste des mod\xC3\xA8les avec ces r\xC3\xA9glages (gratuit, sans consommer de "
+                         "jetons) : \xC2\xAB Connexion r\xC3\xA9ussie : 12 mod\xC3\xA8les \xC2\xBB, ou "
+                         "l'erreur en clair (cl\xC3\xA9 refus\xC3\xA9" "e, adresse introuvable, hors "
                          "ligne\xE2\x80\xA6).\nFen\xC3\xAAtre de contexte\tVide : **Auto** (celle que le "
                          "service dit dans sa liste des mod\xC3\xA8les, quand il la dit). Sinon, un nombre "
                          "de jetons. Sous 16 000, les consignes envoy\xC3\xA9" "es sont resserr\xC3\xA9" "es "
@@ -4086,6 +4091,31 @@ const std::vector<Topic>& topics() {
                          "avec chaque demande : la vue active, la s\xC3\xA9lection, les noms et types des "
                          "variables, les pi\xC3\xA8" "ces jointes \xE2\x80\x93 chacun se d\xC3\xA9" "coche) "
                          "et **M\xC3\xA9moire et apprentissage\xE2\x80\xA6**.", {}},
+             {K::Heading, "Le gestionnaire des cl\xC3\xA9s API", {}, "1.18.0"},
+             {K::Paragraph, "**G\xC3\xA9rer les cl\xC3\xA9s\xE2\x80\xA6** (Param\xC3\xA8tres de l'Assistant) "
+                         "ouvre la fen\xC3\xAAtre **Cl\xC3\xA9s API** : plusieurs cl\xC3\xA9s "
+                         "nomm\xC3\xA9" "es (\xC2\xAB Anthropic - travail \xC2\xBB, \xC2\xAB OpenRouter - "
+                         "essais \xC2\xBB\xE2\x80\xA6), une **utilis\xC3\xA9" "e** par fournisseur "
+                         "(l'\xC3\xA9toile).", {}, "1.18.0"},
+             {K::Table, "Colonne\tCe qu'elle montre\nNom, Fournisseur\tCe que tu as choisi ; le fournisseur "
+                         "(Anthropic, compatible OpenAI).\nCl\xC3\xA9\tMasqu\xC3\xA9" "e : son "
+                         "d\xC3\xA9" "but connu (sk-ant-\xE2\x80\xA6) et ses 4 derniers caract\xC3\xA8res, "
+                         "jamais plus.\nAjout\xC3\xA9" "e, Dernier essai\tSa date ; le dernier **Tester** "
+                         "(accept\xC3\xA9" "e, refus\xC3\xA9" "e, et pourquoi).\nUtilis\xC3\xA9" "e "
+                         "par\t\xE2\x98\x85 : la cl\xC3\xA9 de l'Assistant pour ce fournisseur.", {}, "1.18.0"},
+             {K::Paragraph, "**Ajouter une cl\xC3\xA9**, **\xE2\x98\x85 Utiliser** (elle devient celle de son "
+                         "fournisseur), **Tester** (la liste des mod\xC3\xA8les du fournisseur : gratuit, "
+                         "sur un fil - l'\xC3\xA9" "cran ne g\xC3\xA8le pas), **Remplacer la cl\xC3\xA9** "
+                         "(le secret seulement : le nom et l'\xC3\xA9toile restent), **Supprimer** (un "
+                         "second clic confirme). Le d\xC3\xA9tail : le nom, le fournisseur, l'adresse et le "
+                         "mod\xC3\xA8le pr\xC3\xA9" "f\xC3\xA9r\xC3\xA9s, la cl\xC3\xA9 (Afficher), "
+                         "**M\xC3\xA9moriser sur ce PC (prot\xC3\xA9g\xC3\xA9" "e par Windows)** - "
+                         "coch\xC3\xA9" "e au d\xC3\xA9part - ou pour cette s\xC3\xA9" "ance seulement. Les "
+                         "cl\xC3\xA9s sont dans le dossier de l'Assistant (IA\\cles, dans tes "
+                         "r\xC3\xA9glages) : **une r\xC3\xA9installation n'y touche pas** - le journal de "
+                         "l'installateur le dit (\xC2\xAB Cl\xC3\xA9s API : 2 gard\xC3\xA9" "es \xC2\xBB). "
+                         "La cl\xC3\xA9 m\xC3\xA9moris\xC3\xA9" "e avant la 1.18.0 est reprise au premier "
+                         "lancement sous le nom \xC2\xAB Ma cl\xC3\xA9 (Anthropic) \xC2\xBB.", {}, "1.18.0"},
              {K::Warning, "La cl\xC3\xA9 API n'est jamais \xC3\xA9" "crite en clair, ni dans les "
                          "param\xC3\xA8tres, ni dans un journal. Sous Windows, \xC2\xAB M\xC3\xA9moriser la "
                          "cl\xC3\xA9 \xC2\xBB la chiffre par Windows (DPAPI), li\xC3\xA9" "e \xC3\xA0 ta "
@@ -4095,7 +4125,7 @@ const std::vector<Topic>& topics() {
                          "serveur : laisse alors la case vide.", {}},
              {K::Tip, "Pour une entreprise, le relais est la meilleure fa\xC3\xA7on de prot\xC3\xA9ger la "
                          "cl\xC3\xA9 : un serveur interne la d\xC3\xA9tient, IHM Studio ne parle qu'\xC3\xA0 "
-                         "lui (Adresse), et rien ne change pour l'utilisateur.", {}},
+                         "lui (Adresse), et rien ne change pour l'utilisateur.", {}, "1.18.0"},
              {K::Paragraph, "Dans le dossier **IA** des r\xC3\xA9glages de l'utilisateur (\xC3\xA0 "
                          "c\xC3\xB4t\xC3\xA9 de Mes images), jamais dans le projet : un fichier par "
                          "conversation (ses messages, ses pi\xC3\xA8" "ces jointes, l'\xC3\xA9tat de ses "
@@ -4116,7 +4146,7 @@ const std::vector<Topic>& topics() {
                          "comprend le langage courant (les fautes, les abr\xC3\xA9viations, \xC2\xAB celle "
                          "de droite \xC2\xBB), mais ses propositions passent toujours par la m\xC3\xAAme "
                          "validation, le m\xC3\xAAme aper\xC3\xA7u et le m\xC3\xAAme Ctrl+Z : elle ne peut "
-                         "rien modifier sans eux.", {}},
+                         "rien modifier sans eux.", {}, "1.18.0"},
              {K::Heading, "La limite et la consommation, en direct", {}},
              {K::Paragraph, "Sous l'\xC3\xA9tat de connexion, une bande fine dit ce que le service te laisse et "
                          "ce que tu as consomm\xC3\xA9. Elle est toujours \xC3\xA0 jour : le compte \xC3\xA0 "
@@ -4214,8 +4244,8 @@ const std::vector<Topic>& topics() {
                          "gratuites se r\xC3\xA9servent le droit d'utiliser les demandes.", {}},
          },
          {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
-         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
-         {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres"},
+         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CL\xC3\x89S API", "G\xC3\x89RER LES CL\xC3\x89S", "GESTIONNAIRE DES CL\xC3\x89S", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
+         {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres", "dialog.ai.cles"},
          {},
          "",
          {},
@@ -4455,6 +4485,58 @@ const std::vector<Topic>& topics() {
                          "absente. Rien n'est cr\xC3\xA9\xC3\xA9 en silence : la carte le dit (\xC2\xAB "
                          "Cr\xC3\xA9" "e aussi : la vue Vue_Pompes, 12 variables IHM, 2 types IHM \xC2\xBB) "
                          "et l'aper\xC3\xA7u en donne la liste, avant que tu appliques.", {}},
+             {K::Heading, "Les outils du projet", {}, "1.18.0"},
+             {K::Paragraph, "Au-del\xC3\xA0 de la vue ouverte, l'Assistant propose aussi ce qui fait un projet "
+                         "- toujours v\xC3\xA9rifi\xC3\xA9, montr\xC3\xA9 dans l'aper\xC3\xA7u (\xC2\xAB "
+                         "Aussi cr\xC3\xA9\xC3\xA9 ou modifi\xC3\xA9 \xC2\xBB) et repris par un seul Ctrl+Z :", {}, "1.18.0"},
+             {K::Table, "Outil\tCe qu'il cr\xC3\xA9" "e\nSymbole, popup\tUne vue de ce r\xC3\xB4le (un "
+                         "symbole 200 \xC3\x97 200, une popup 600 \xC3\x97 400 avec son titre, modale ou "
+                         "non), ses **param\xC3\xA8tres** (nom et type) et ses **g\xC3\xA9n\xC3\xA9riques** "
+                         "<T> ou <T, K> - comme Nouveau symbole / Nouvelle popup.\n\xC3\x89" "cran "
+                         "mod\xC3\xA8le, en-t\xC3\xAAte, pied de page\tUne vue de ce r\xC3\xB4le "
+                         "(l'en-t\xC3\xAAte et le pied : la largeur du projet, 100 de haut), "
+                         "rang\xC3\xA9" "e dans sa liste.\nType g\xC3\xA9n\xC3\xA9rique\tUn type IHM "
+                         "T_Pile<T>, <T, K> : ses membres peuvent \xC3\xAAtre \xC2\xAB en T "
+                         "\xC2\xBB.\n\xC3\x89quipement\tUn \xC3\xA9quipement Modbus TCP ou Ethernet TCP : "
+                         "son adresse IP, son port, son esclave (Unit Id), sa p\xC3\xA9riode, simul\xC3\xA9 "
+                         "ou non. **D\xC3\xA9tecter ce qui r\xC3\xA9pond** n'est jamais lanc\xC3\xA9 par "
+                         "l'IA : elle le **propose** ; apr\xC3\xA8s Appliquer, la carte offre "
+                         "**D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6**, qui ouvre Communication "
+                         "\xE2\x80\xBA Scanner IP avec la plage remplie (192.168.1.0/24) - c'est toi qui "
+                         "cliques D\xC3\xA9marrer. Rien ne part sur le r\xC3\xA9seau avant.\nAdresses\tLier "
+                         "une variable IHM \xC3\xA0 un \xC3\xA9quipement, \xC3\xA0 une adresse (%MW100) ; "
+                         "sans adresse : la suivante libre. Une structure ou un tableau de structures : une "
+                         "**formule de lien** (100 + 10*i, motif [*]), comme \xC2\xAB Modifier l'adresse "
+                         "dans toutes les cases\xE2\x80\xA6 \xC2\xBB ; les chevauchements sont "
+                         "signal\xC3\xA9s.\nScript g\xC3\xA9n\xC3\xA9ral\tUn script ST, C ou C++ : au "
+                         "d\xC3\xA9marrage, cyclique (sa p\xC3\xA9riode), sur changement (ce qu'il "
+                         "surveille) ou appel\xC3\xA9 ; son code est compil\xC3\xA9 avant d'\xC3\xAAtre "
+                         "propos\xC3\xA9.\nFonction IHM\tUne fonction (ses g\xC3\xA9n\xC3\xA9riques, son "
+                         "retour, VAR_INPUT et son calcul), compil\xC3\xA9" "e avant d'\xC3\xAAtre "
+                         "propos\xC3\xA9" "e.\nAlarme\tUne alarme : sa condition (compil\xC3\xA9" "e : "
+                         "chaque nom lu existe), son message, sa priorit\xC3\xA9, son "
+                         "groupe.\nRessource\tUne ressource \xC3\xA0 partir d'un **fichier joint** \xC3\xA0 "
+                         "la demande (une image, un PDF\xE2\x80\xA6), lu seulement \xC3\xA0 "
+                         "Appliquer.\nDossiers, ranger\tUn dossier dans une liste (vues, popups, symboles, "
+                         "scripts, types, variables\xE2\x80\xA6), et y ranger des \xC3\xA9l\xC3\xA9ments qui "
+                         "existent.", {}, "1.18.0"},
+             {K::Paragraph, "Avec chaque demande, l'Assistant re\xC3\xA7oit aussi la liste des "
+                         "\xC3\xA9quipements, des ressources, des scripts g\xC3\xA9n\xC3\xA9raux, des "
+                         "fonctions IHM, des alarmes et des dossiers du projet ; et, quand ta demande en "
+                         "parle, les **variables syst\xC3\xA8me** (SYS.\xE2\x80\xA6) et les **fonctions "
+                         "natives** par th\xC3\xA8me. L'IA int\xC3\xA9gr\xC3\xA9" "e comprend aussi ces "
+                         "outils : \xC2\xAB Cr\xC3\xA9" "e un symbole Sym_Pompe<T> \xC2\xBB, \xC2\xAB "
+                         "Cr\xC3\xA9" "e une popup modale Reglage_P1 \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e un "
+                         "\xC3\xA9quipement Centrale_1 en 192.168.1.40 et d\xC3\xA9tecte ce qui "
+                         "r\xC3\xA9pond \xC2\xBB, \xC2\xAB Lie Niveau_Cuve_1 \xC3\xA0 Centrale_1 en %MW100 "
+                         "\xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e une alarme Haut quand Niveau_Cuve_1 > 90 "
+                         "\xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e un script Init au d\xC3\xA9marrage \xC2\xBB, "
+                         "\xC2\xAB Range Vue_1 dans le dossier Process \xC2\xBB, \xC2\xAB Quelles variables "
+                         "syst\xC3\xA8me ? \xC2\xBB.", {}, "1.18.0"},
+             {K::Warning, "Un code propos\xC3\xA9 (un script, une fonction, une condition) n'est jamais "
+                         "ex\xC3\xA9" "cut\xC3\xA9 par l'Assistant : il est compil\xC3\xA9 pour \xC3\xAAtre "
+                         "v\xC3\xA9rifi\xC3\xA9, puis il tourne seulement quand tu lances l'IHM, comme ce "
+                         "que tu \xC3\xA9" "cris toi-m\xC3\xAAme.", {}, "1.18.0"},
              {K::Heading, "Ce que le logiciel v\xC3\xA9rifie", {}},
              {K::Bullet, "**Le genre** : il existe, et la biblioth\xC3\xA8que le propose (un groupe "
                          "na\xC3\xAEt d'une s\xC3\xA9lection) ; un genre inconnu est refus\xC3\xA9, avec les "
@@ -4528,7 +4610,7 @@ const std::vector<Topic>& topics() {
                          "et les plus proches).", {}},
          },
          {"assistant-ia", "memoire-ia", "objets", "historique"},
-         {"REGISTRE", "GENRES D'OBJETS", "CONTEXTE", "CONFIDENTIALIT\xC3\x89", "DUPLIQUER", "CODE BRUT", "PROPOSER_OPERATIONS", "OP\xC3\x89RATIONS PROPOS\xC3\x89" "ES", "CR\xC3\x89" "ER UNE VUE", "CR\xC3\x89" "ER DES VARIABLES", "TYPES IHM", "DDT", "AUTOMATE", "REP\xC3\x88RES", "FORMULE", "FX"},
+         {"REGISTRE", "GENRES D'OBJETS", "CONTEXTE", "CONFIDENTIALIT\xC3\x89", "DUPLIQUER", "CODE BRUT", "PROPOSER_OPERATIONS", "OP\xC3\x89RATIONS PROPOS\xC3\x89" "ES", "CR\xC3\x89" "ER UNE VUE", "CR\xC3\x89" "ER DES VARIABLES", "TYPES IHM", "DDT", "AUTOMATE", "REP\xC3\x88RES", "FORMULE", "FX", "SYMBOLE", "POPUP", "\xC3\x89" "CRAN MOD\xC3\x88LE", "EN-T\xC3\x8ATE", "PIED DE PAGE", "G\xC3\x89N\xC3\x89RIQUE", "\xC3\x89QUIPEMENT", "D\xC3\x89TECTER CE QUI R\xC3\x89POND", "SCANNER IP", "ADRESSE", "FORMULE DE LIEN", "SCRIPT", "FONCTION IHM", "ALARME", "RESSOURCE", "DOSSIER", "RANGER", "VARIABLES SYST\xC3\x88ME", "NATIVES"},
          {"ai.panneau", "dialog.ai.parametres", "dialog.ai.apercu"},
          {},
          "",

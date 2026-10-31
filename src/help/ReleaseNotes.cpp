@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.17.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.18.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.17.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin de matin\xC3\xA9" "e"},
     {"1.16.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.16.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 au matin"},
     {"1.15.0", "30/10/2026", "livr\xC3\xA9" "e dans la nuit du 30 au 31/10"},
@@ -144,6 +145,47 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.18.0 : les outils de l'IA, le gestionnaire des cles API, l'etape IA de l'installateur, la fleche des Types IHM
+        note("1.18.0", "Assistant IA", Kind::New,
+         "LES OUTILS DU PROJET : l'Assistant propose aussi un symbole, une popup (son titre, modale), un \xC3\xA9" "cran mod\xC3\xA8le, un "
+         "en-t\xC3\xAAte, un pied de page - leurs param\xC3\xA8tres et leurs g\xC3\xA9n\xC3\xA9riques <T> ou <T, K> - et un type IHM "
+         "g\xC3\xA9n\xC3\xA9rique (T_Pile<T>). Tout est v\xC3\xA9rifi\xC3\xA9, montr\xC3\xA9 dans l'aper\xC3\xA7u (Aussi cr\xC3\xA9\xC3\xA9 ou "
+         "modifi\xC3\xA9) et repris par un seul Ctrl+Z.",
+         "assistant-ia-registre", ""),
+        note("1.18.0", "Assistant IA", Kind::New,
+         "\xC3\x89QUIPEMENTS ET ADRESSES : l'Assistant cr\xC3\xA9" "e un \xC3\xA9quipement (Modbus TCP, son adresse IP, son port, son esclave) "
+         "et lie des variables IHM \xC3\xA0 ses adresses (%MW100, ou la suivante libre ; une formule de lien pour une structure ou un "
+         "tableau de structures). D\xC3\xA9tecter ce qui r\xC3\xA9pond n'est que PROPOS\xC3\x89 : apr\xC3\xA8s Appliquer, la carte ouvre "
+         "Communication \xE2\x80\xBA Scanner IP, la plage remplie - c'est toi qui cliques D\xC3\xA9marrer.",
+         "assistant-ia-registre", ""),
+        note("1.18.0", "Assistant IA", Kind::New,
+         "SCRIPTS, FONCTIONS, ALARMES, RESSOURCES, DOSSIERS : un script g\xC3\xA9n\xC3\xA9ral (au d\xC3\xA9marrage, cyclique, sur "
+         "changement), une fonction IHM (g\xC3\xA9n\xC3\xA9rique), une alarme - compil\xC3\xA9s avant d'\xC3\xAAtre propos\xC3\xA9s, jamais "
+         "ex\xC3\xA9" "cut\xC3\xA9s par l'Assistant ; une ressource \xC3\xA0 partir d'un fichier joint ; un dossier, et ranger. L'Assistant "
+         "re\xC3\xA7oit aussi les \xC3\xA9quipements, ressources, scripts, fonctions, alarmes et dossiers du projet, et quand la demande en "
+         "parle, les variables syst\xC3\xA8me et les natives.",
+         "assistant-ia-registre", ""),
+        note("1.18.0", "Assistant IA", Kind::New,
+         "L'IA INT\xC3\x89GR\xC3\x89" "E COMPREND LES OUTILS : \xC2\xAB Cr\xC3\xA9" "e un symbole Sym_Pompe<T> \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e une "
+         "popup modale Reglage_P1 \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e un \xC3\xA9quipement Centrale_1 en 192.168.1.40 et d\xC3\xA9tecte ce qui "
+         "r\xC3\xA9pond \xC2\xBB, \xC2\xAB Lie Niveau_Cuve_1 \xC3\xA0 Centrale_1 en %MW100 \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e une alarme Haut quand "
+         "Niveau_Cuve_1 d\xC3\xA9passe 90 \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e un script Init au d\xC3\xA9marrage \xC2\xBB, \xC2\xAB Range Vue_1 dans "
+         "le dossier Process \xC2\xBB, \xC2\xAB Quelles variables syst\xC3\xA8me ? \xC2\xBB.",
+         "assistant-ia-integree", ""),
+        note("1.18.0", "Assistant IA", Kind::New,
+         "LE GESTIONNAIRE DES CL\xC3\x89S API : G\xC3\xA9rer les cl\xC3\xA9s... (Param\xC3\xA8tres de l'Assistant) - plusieurs cl\xC3\xA9s "
+         "nomm\xC3\xA9" "es, celle utilis\xC3\xA9" "e par fournisseur (l'\xC3\xA9toile), Tester, Remplacer la cl\xC3\xA9, Supprimer. Une cl\xC3\xA9 "
+         "saisie est M\xC3\xA9moris\xC3\xA9" "e (prot\xC3\xA9g\xC3\xA9" "e par Windows) au d\xC3\xA9part : une r\xC3\xA9installation ne la "
+         "perd plus. La cl\xC3\xA9 d'avant est reprise sous le nom \xC2\xAB Ma cl\xC3\xA9 (Anthropic) \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.18.0", "Installation", Kind::Changed,
+         "L'\xC3\x89TAPE IA : la colonne des \xC3\xA9tapes de l'installateur a une \xC3\xA9tape \xC2\xAB IA \xC2\xBB (les pages Assistant IA "
+         "et Un apprentissage d'un autre PC ne montrent plus \xC2\xAB Termin\xC3\xA9 \xC2\xBB) ; le journal dit les cl\xC3\xA9s API gard\xC3\xA9" "es.",
+         "memoire-ia", ""),
+        note("1.18.0", "Types IHM", Kind::Fixed,
+         "LA FL\xC3\x88" "CHE D'UN MEMBRE D\xC3\x89PLI\xC3\x89 : un clic sur la fl\xC3\xA8" "che d'un membre (une structure dans une structure, "
+         "dans Types IHM) pouvait fermer le logiciel (\xC2\xAB basic_string::_M_create \xC2\xBB) : il d\xC3\xA9plie et replie sans risque.",
+         "types-ihm", ""),
         // 1.17.0 : l'apprentissage, un tableau de bord ; dans un fichier ; l'installateur relie l'IA
         note("1.17.0", "Assistant IA", Kind::New,
          "L'APPRENTISSAGE, UN TABLEAU DE BORD : l'onglet Apprentissage de la fen\xC3\xAAtre M\xC3\xA9moire et apprentissage de l'IA montre ce "
