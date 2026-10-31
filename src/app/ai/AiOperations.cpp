@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <set>
 
 namespace app::ai {
@@ -1166,6 +1167,23 @@ struct Run {
     std::vector<hmi::AlarmDef>    newAlarms{};
     std::vector<hmi::Resource>    newResources{};
     std::vector<hmi::Variable>    addressed{};   // des variables du projet, adressees (remplacent celles du meme id)
+    // 1.20.0 : beaucoup d'adresses a la suite sans geler l'appli - partage par toutes les unites d'une proposition
+    // (runStaged : une Run par unite) : la prochaine adresse libre de chaque equipement (lue une fois, avancee a chaque
+    // variable placee) et les adresses deja prises (indexees une fois, tenues a jour).
+    struct FreeState {
+        hmi::equip::FreeCursor cursor;
+        std::size_t            vars{0}, types{0}, equipments{0};
+        bool                   valid{false};
+    };
+    struct Shared {
+        std::map<std::string, FreeState>                                     cursors;
+        std::map<std::string, std::vector<std::pair<hmi::Id, std::string>>> taken;   // EQUIPEMENT|adresse -> variables
+        bool                                                                 takenBuilt{false};
+    };
+    Shared                        ownShared{};
+    Shared*                       shared{nullptr};   // runStaged : celui de la proposition ; nul : celui de cette Run
+    std::shared_ptr<hmi::Project> typesProbe{};      // construit a la demande (un projet coute)
+    std::size_t                   typesProbeN{static_cast<std::size_t>(-1)};
     struct FolderOp {
         bool                     variables{false};
         hmi::fold::List          list{hmi::fold::List::Views};
@@ -1323,6 +1341,66 @@ struct Run {
         return true;
     }
 
+    // 1.20.0 : le projet des types (ceux du projet et ceux crees plus haut) - sans copier tout le projet.
+    const hmi::Project& typesProject() {
+        if (newTypes.empty()) return project;
+        if (!typesProbe || typesProbeN != newTypes.size()) {
+            typesProbe = std::make_shared<hmi::Project>();
+            typesProbe->programs.types = project.programs.types;
+            typesProbe->programs.types.insert(typesProbe->programs.types.end(), newTypes.begin(), newTypes.end());
+            typesProbeN = newTypes.size();
+        }
+        return *typesProbe;
+    }
+    Shared& sh() { return shared ? *shared : ownShared; }
+    // La premiere adresse libre de `eq` (comme hmi::equip::nextFreeAddress sur le projet de travail), sans le relire a
+    // chaque variable : le curseur est relu quand une variable, un type ou un equipement s'ajoute.
+    std::string nextFree(const hmi::Equipment& eq, sim::Type type) {
+        auto& st = sh().cursors[upperOf(eq.name)];
+        const std::size_t vars = project.programs.variables.size() + newVars.size(), types = project.programs.types.size() + newTypes.size(),
+                          equipments = project.equipments.size() + newEquipments.size();
+        if (!st.valid || st.vars != vars || st.types != types || st.equipments != equipments) {
+            st.cursor = hmi::equip::freeCursor(probe(), eq);
+            st.vars = vars;
+            st.types = types;
+            st.equipments = equipments;
+            st.valid = true;
+        }
+        return hmi::equip::freeAddress(st.cursor, type);
+    }
+    // Les variables du projet qui ont deja cette adresse sur cet equipement (l'index fait une fois).
+    const std::vector<std::pair<hmi::Id, std::string>>& takenBy(const std::string& equipment, const std::string& canonical) {
+        auto& s = sh();
+        if (!s.takenBuilt) {
+            for (const auto& o : project.programs.variables)
+                if (!o.address.empty() && !o.equipment.empty())
+                    s.taken[upperOf(o.equipment) + "|" + hmi::equip::canonicalAddress(o.address)].emplace_back(o.id, o.name);
+            s.takenBuilt = true;
+        }
+        static const std::vector<std::pair<hmi::Id, std::string>> none;
+        const auto it = s.taken.find(upperOf(equipment) + "|" + canonical);
+        return it == s.taken.end() ? none : it->second;
+    }
+    // Une variable placee : l'index des adresses prises et le curseur de son equipement suivent ; une variable qui avait
+    // deja une place (elle la quitte) : les curseurs seront relus (rare).
+    void notePlaced(const hmi::Variable& before, const hmi::Variable& after) {
+        auto& s = sh();
+        if (s.takenBuilt) {
+            if (!before.equipment.empty() && !before.address.empty()) {
+                auto& list = s.taken[upperOf(before.equipment) + "|" + hmi::equip::canonicalAddress(before.address)];
+                std::erase_if(list, [&](const auto& x) { return x.first == before.id; });
+            }
+            if (!after.equipment.empty() && !after.address.empty())
+                s.taken[upperOf(after.equipment) + "|" + hmi::equip::canonicalAddress(after.address)].emplace_back(after.id, after.name);
+        }
+        if (!before.equipment.empty() && (!before.address.empty() || !before.places.empty())) {
+            for (auto& [k, st] : s.cursors) st.valid = false;
+            return;
+        }
+        if (const auto it = s.cursors.find(upperOf(after.equipment)); it != s.cursors.end() && it->second.valid)
+            hmi::equip::advance(it->second.cursor, typesProject(), after);
+    }
+
     // 1.20.0 : ADRESSER UN MEMBRE. La variable (la racine du chemin) doit exister ; le chemin doit etre un membre de son
     // type (lu dans le type deplie : structures imbriquees, tableaux) - jamais invente. La variable suit un seul
     // equipement : liee a un autre, c'est refuse ; pas encore liee, elle l'est (dit). L'adresse du membre va dans
@@ -1347,10 +1425,9 @@ struct Run {
         hmi::Variable v = nv ? *nv : *pv;
         for (const auto& a : addressed)
             if (!nv && a.id == v.id) v = a;
+        const hmi::Variable before = v;
         // le membre existe-t-il ? (le type deplie : une feuille de ce nom, ou un membre compose qui en a dessous)
-        hmi::Project probed;
-        if (!newTypes.empty()) probed = probe();
-        const hmi::Project& types = newTypes.empty() ? project : probed;
+        const hmi::Project& types = typesProject();
         std::string error;
         const auto leaves = hmi::types::leafVariables(types, v, nullptr, nullptr, &error);
         const std::string full = upperOf(v.name + "." + rel), fullIdx = upperOf(v.name + rel);
@@ -1416,6 +1493,7 @@ struct Run {
             if (!replaced) v.places.push_back({rel, addr});
             made("Adresse", path, eq->name + " " + addr);
         }
+        notePlaced(before, v);
         if (nv) *nv = v;
         else {
             bool replaced = false;
@@ -1461,6 +1539,7 @@ struct Run {
         hmi::Variable v = nv ? *nv : *pv;
         for (const auto& a : addressed)
             if (!nv && a.id == v.id) v = a;
+        const hmi::Variable before = v;
         v.equipment = eq->name;
         if (!addr.empty()) {
             std::string why;
@@ -1469,7 +1548,7 @@ struct Run {
                             + " (ex. %MW100, %MF20, %M5, %MW10.3, 40101).");
             v.address = addr;
         } else if (formula.empty()) {
-            v.address = hmi::equip::nextFreeAddress(probe(), *eq, hmi::equip::typeOfName(v.type));
+            v.address = nextFree(*eq, hmi::equip::typeOfName(v.type));
             warn("Adresser " + v.name + " : aucune adresse donn\xC3\xA9" "e - la premi\xC3\xA8re libre de " + eq->name + " (" + v.address + ").");
         }
         if (const std::string ro = prop(op, "lecture_seule"); !ro.empty()) v.readOnly = readBool(ro, v.readOnly);
@@ -1488,12 +1567,10 @@ struct Run {
         // Le meme mot deja pris par une autre variable de cet equipement : dit, pas refuse (comme l'ecran).
         if (!v.address.empty()) {
             const std::string mine = hmi::equip::canonicalAddress(v.address);
-            const auto clash = [&](const hmi::Variable& o) {
-                return o.id != v.id && iequal(o.equipment, eq->name) && !o.address.empty() && hmi::equip::canonicalAddress(o.address) == mine;
-            };
-            for (const auto& o : project.programs.variables)
-                if (clash(o)) warn("Adresser " + v.name + " : " + v.address + " est d\xC3\xA9j\xC3\xA0 l'adresse de " + o.name + " sur " + eq->name + ".");
+            for (const auto& [id, name] : takenBy(eq->name, mine))
+                if (id != v.id) warn("Adresser " + v.name + " : " + v.address + " est d\xC3\xA9j\xC3\xA0 l'adresse de " + name + " sur " + eq->name + ".");
         }
+        notePlaced(before, v);
         made("Adresse", v.name, detail + (v.readOnly ? " (lecture seule)" : ""));
         if (nv) *nv = v;
         else {
@@ -2336,6 +2413,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         }
     }
     std::set<std::string>          plannedVars;    // les variables creees par les unites precedentes
+    Run::Shared                    shared;         // 1.20.0 : les adresses libres et prises, d'une unite a l'autre
     std::map<hmi::Id, std::size_t> codeOwner;      // un code cree -> l'operation qui le cree
     std::map<hmi::Id, std::string> codeLabel;
     for (const auto& unit : sch.units) {
@@ -2409,6 +2487,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         r.preview = mode == Mode::Preview;
         r.deferCompile = true;
         r.plannedVars = &plannedVars;
+        r.shared = &shared;
         const bool ok = r.go();
         if (mode == Mode::Apply && !ok) {
             if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;

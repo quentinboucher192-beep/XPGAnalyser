@@ -68,6 +68,15 @@ bool placeEquipmentAddress(std::string_view address, sim::Type type, comm::Point
 // registre qui suit le plus haut deja pris (%MW0 s'il n'y en a pas), dans
 // l'ecriture de ses autres variables (40001 ou %MW).
 [[nodiscard]] std::string nextFreeAddress(const Project&, const Equipment&, sim::Type type);
+// 1.20.0 : la meme chose en morceaux, pour adresser beaucoup de variables a la suite sans tout relire a chaque fois
+// (l'Assistant IA) : le curseur lu une fois, avance par chaque variable placee, l'adresse libre qu'il donne.
+struct FreeCursor {
+    long long nextWord{0}, nextBit{0};
+    bool      modicon{false};
+};
+[[nodiscard]] FreeCursor  freeCursor(const Project&, const Equipment&);
+void                      advance(FreeCursor&, const Project& types, const Variable& placed);
+[[nodiscard]] std::string freeAddress(const FreeCursor&, sim::Type type);
 
 // ------------------------------------------------------------ mise a l'echelle ---
 [[nodiscard]] double scaleIn(const Variable&, double raw) noexcept;

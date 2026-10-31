@@ -231,36 +231,43 @@ comm::Settings settingsOf(const Equipment& e, int twinPort) {
     return s;
 }
 
-std::string nextFreeAddress(const Project& p, const Equipment& e, sim::Type type) {
-    long long nextWord = 0, nextBit = 0;
-    bool modicon = false;
-    for (const auto* top : boundVariables(p, e)) {
-        const std::string a = trimmed(top->address);
-        if (!a.empty() && a.front() != '%') modicon = true;
-        // Lot 16 : une structure ou un tableau occupe toutes ses cases.
-        for (const auto& leaf : types::leafVariables(p, *top)) {
-            comm::Point pt;
-            if (!placeEquipmentAddress(leaf.address, registerType(leaf), pt)) continue;
-            if (pt.area == comm::Area::Holding)
-                nextWord = std::max<long long>(nextWord, static_cast<long long>(pt.offset) + pt.size);
-            else if (pt.area == comm::Area::Coils)
-                nextBit = std::max<long long>(nextBit, static_cast<long long>(pt.offset) + 1);
-        }
+void advance(FreeCursor& c, const Project& types, const Variable& top) {
+    const std::string a = trimmed(top.address);
+    if (!a.empty() && a.front() != '%') c.modicon = true;
+    // Lot 16 : une structure ou un tableau occupe toutes ses cases.
+    for (const auto& leaf : types::leafVariables(types, top)) {
+        comm::Point pt;
+        if (!placeEquipmentAddress(leaf.address, registerType(leaf), pt)) continue;
+        if (pt.area == comm::Area::Holding)
+            c.nextWord = std::max<long long>(c.nextWord, static_cast<long long>(pt.offset) + pt.size);
+        else if (pt.area == comm::Area::Coils)
+            c.nextBit = std::max<long long>(c.nextBit, static_cast<long long>(pt.offset) + 1);
     }
+}
+
+FreeCursor freeCursor(const Project& p, const Equipment& e) {
+    FreeCursor c;
+    for (const auto* top : boundVariables(p, e)) advance(c, p, *top);
+    return c;
+}
+
+std::string freeAddress(const FreeCursor& c, sim::Type type) {
     char b[24];
     if (type == sim::Type::Bool) {
-        if (modicon) std::snprintf(b, sizeof b, "0%04lld", nextBit + 1);
-        else std::snprintf(b, sizeof b, "%%M%lld", nextBit);
+        if (c.modicon) std::snprintf(b, sizeof b, "0%04lld", c.nextBit + 1);
+        else std::snprintf(b, sizeof b, "%%M%lld", c.nextBit);
         return b;
     }
-    if (modicon) {
-        if (nextWord + 1 <= 9999) std::snprintf(b, sizeof b, "4%04lld", nextWord + 1);
-        else std::snprintf(b, sizeof b, "4%05lld", nextWord + 1);
+    if (c.modicon) {
+        if (c.nextWord + 1 <= 9999) std::snprintf(b, sizeof b, "4%04lld", c.nextWord + 1);
+        else std::snprintf(b, sizeof b, "4%05lld", c.nextWord + 1);
     } else {
-        std::snprintf(b, sizeof b, "%%MW%lld", nextWord);
+        std::snprintf(b, sizeof b, "%%MW%lld", c.nextWord);
     }
     return b;
 }
+
+std::string nextFreeAddress(const Project& p, const Equipment& e, sim::Type type) { return freeAddress(freeCursor(p, e), type); }
 
 // ------------------------------------------------------------ mise a l'echelle ---
 double scaleIn(const Variable& v, double raw) noexcept {

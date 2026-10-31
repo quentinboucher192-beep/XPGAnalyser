@@ -24,9 +24,11 @@
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiDuplicate.hpp"
 #include "../src/hmi/HmiEdit.hpp"
+#include "../src/hmi/HmiEquipment.hpp"
 #include "../src/hmi/HmiModel.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
@@ -1075,6 +1077,90 @@ void tools118() {
     }
 }
 
+// ---- 1.20.0 : une GROSSE proposition (des centaines d'operations) - la mesure du temps ----------------
+void bigProposal() {
+    std::printf("grosse proposition\n");
+    Fixture f;
+    auto& pr = f.doc->project;
+    for (int i = 0; i < 1500; ++i) {
+        hmi::Variable v;
+        v.id = pr.allocate();
+        v.name = "Var_" + std::to_string(i);
+        v.type = i % 3 == 0 ? "BOOL" : "INT";
+        pr.programs.variables.push_back(v);
+    }
+    std::vector<ai::Operation> ops;
+    auto eq = op(A::Equipment, "Centrale_1", {{"adresse", "192.168.1.40"}, {"esclave", "3"}});
+    ops.push_back(eq);
+    for (int i = 0; i < 300; ++i) {
+        auto a = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW" + std::to_string(1000 + i)}});
+        a.variable = "Var_" + std::to_string(i);
+        ops.push_back(a);
+    }
+    for (int i = 300; i < 400; ++i) {   // sans adresse : la suivante libre
+        auto a = op(A::Address, {}, {{"equipement", "Centrale_1"}});
+        a.variable = "Var_" + std::to_string(i);
+        ops.push_back(a);
+    }
+    std::vector<ai::Operation::VariableSpec> list;
+    for (int i = 0; i < 200; ++i) list.push_back({"Neuve_" + std::to_string(i), "REAL", "", ""});
+    ops.push_back(vars(list));
+    for (int i = 0; i < 200; ++i)
+        ops.push_back(create("Rectangle", "R_" + std::to_string(i), {{"x", std::to_string(10 + (i % 20) * 50)}, {"y", std::to_string(10 + (i / 20) * 40)}, {"w", "40"}, {"h", "30"}}));
+    const auto p = f.proposal(ops);
+    // les adresses automatiques attendues : celles de l'ancien calcul (le projet relu a chaque variable)
+    std::vector<std::string> expected;
+    {
+        hmi::Project ref = pr;
+        hmi::Equipment e;
+        e.id = ref.allocate();
+        e.name = "Centrale_1";
+        e.host = "192.168.1.40";
+        e.unit = 3;
+        ref.equipments.push_back(e);
+        const auto mut = [&](const std::string& name) -> hmi::Variable* {
+            for (auto& x : ref.programs.variables)
+                if (x.name == name) return &x;
+            return nullptr;
+        };
+        for (int i = 0; i < 300; ++i) {
+            auto* v = mut("Var_" + std::to_string(i));
+            v->equipment = "Centrale_1";
+            v->address = "%MW" + std::to_string(1000 + i);
+        }
+        for (int i = 300; i < 400; ++i) {
+            auto* v = mut("Var_" + std::to_string(i));
+            const std::string a = hmi::equip::nextFreeAddress(ref, *ref.equipmentByName("Centrale_1"), hmi::equip::typeOfName(v->type));
+            v->equipment = "Centrale_1";
+            v->address = a;
+            expected.push_back(a);
+        }
+    }
+    const auto tp0 = std::chrono::steady_clock::now();
+    for (int k = 0; k < 10; ++k) (void)ai::proposalPrint(f.doc->project, p);
+    const auto tp1 = std::chrono::steady_clock::now();
+    std::printf("  empreinte (x10) : %lld ms\n", static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(tp1 - tp0).count()));
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto ck = ai::validate(f.doc->project, p);
+    const auto t1 = std::chrono::steady_clock::now();
+    const auto pv = ai::preview(f.doc->project, p);
+    const auto t2 = std::chrono::steady_clock::now();
+    std::string why;
+    const bool ok = f.apply(p, &why);
+    const auto t3 = std::chrono::steady_clock::now();
+    const auto ms = [](auto a, auto b) { return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count()); };
+    std::printf("  %zu operations : valider %lld ms, apercu %lld ms, appliquer %lld ms\n", ops.size(), ms(t0, t1), ms(t1, t2), ms(t2, t3));
+    check(ck.ok() && pv.ok && ok, "600 operations : valides, apercu, appliquees (" + errorsOf(ck) + why + ")");
+    bool same = true;
+    for (int i = 300; i < 400 && same; ++i) {
+        const auto* v = f.doc->project.variable("Var_" + std::to_string(i));
+        same = v && v->address == expected[static_cast<std::size_t>(i - 300)];
+        if (!same) std::printf("  Var_%d : %s au lieu de %s\n", i, v ? v->address.c_str() : "?", expected[static_cast<std::size_t>(i - 300)].c_str());
+    }
+    check(same, "les 100 adresses automatiques : les memes que l'ancien calcul (le curseur partage ne change rien)");
+    check(ms(t0, t1) < 2000 && ms(t2, t3) < 4000, "600 operations : valider et appliquer restent sous la seconde (hors Debug lent)");
+}
+
 int main() {
     // Le dossier IA des essais (les connaissances relues par les consignes, les conversations).
     const fs::path root = fs::temp_directory_path() / "xpg_ai_options_racine";
@@ -1093,6 +1179,7 @@ int main() {
     context();
     assistant();
     tools118();
+    bigProposal();
     fs::remove_all(root);
     std::printf("ai_options_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
