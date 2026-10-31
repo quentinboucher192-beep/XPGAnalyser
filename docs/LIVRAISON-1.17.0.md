@@ -68,7 +68,32 @@ L'aide : 267 sujets, le guide et son C++ disent la même chose. Le projet Visual
 
 ## 4. Installer
 
-(à compléter)
+Fichiers livrés :
+- `API-IHM-Studio-Setup-1.17.0.exe` : l'installateur ;
+- `API-Studio-1.17.0-portable.zip` et `IHM-Studio-1.17.0-portable.zip` : chaque application, sans installation ;
+- ce document.
+
+1. Lance `API-IHM-Studio-Setup-1.17.0.exe`. Il met à jour la version installée au même endroit, garde tes données (le dossier `IA\`, tes conversations et ton apprentissage compris) et reprend ton choix d'applications. Deux pages nouvelles : **L'Assistant IA** (laisse « Garder le réglage actuel » si rien ne change) et **Un apprentissage d'un autre PC** (laisse vide).
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisis « Informations complémentaires », puis « Exécuter quand même ».
+
+Le format des projets ne change pas (33).
+
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.17.0.exe` (41,1 Mo, 43 129 454 octets) :
+`D9E7B4FCA137629BD30B4EF23BD7F00C33D4F44307E3B9C103F793878FAE77CA`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.17.0-portable.zip` (31,9 Mo) :
+  `66F29EB2DC0502AB33F514DF0F8480826A9568CCC089113E793E6C3CA1161B10`
+- `IHM-Studio-1.17.0-portable.zip` (31,9 Mo) :
+  `FD103555948C452554B3FD166E3A058BC8CAFF70CE4F37DE1EF7F32B081B5D3A`
+
+### Les vérifications sous Windows
+
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.17.0` et `IHM Studio 1.17.0` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, par-dessus la 1.16.1 livrée, avec `/IA=ollama /IAMODELE=qwen2.5:7b /IADABORD=oui /APPRENTISSAGE=appris-atelier.xia` : « Installation process succeeded ».
+- `ProgramData\XPGAnalyser\IA\installation.json` dit bien Ollama, `http://localhost:11434/v1`, qwen2.5:7b, IA intégrée d'abord ; `apprentissage.xia` est la copie exacte du fichier donné ; le journal de l'installation le dit.
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; le manifeste compte 167 fichiers ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.16.1 est faite.
 
 ## 5. Les fichiers modifiés
 
