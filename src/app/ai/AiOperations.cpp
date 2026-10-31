@@ -259,7 +259,7 @@ struct Run {
         return out;
     }
     std::string unknownType(const std::string& type, const std::string& reason) const {
-        std::string msg = reason.empty() ? "type inconnu \xC2\xAB " + type + " \xC2\xBB" : reason;
+        std::string msg = "type \xC2\xAB " + type + " \xC2\xBB inconnu" + (reason.empty() ? std::string{} : " (" + reason + ")");
         msg += " (les types : BOOL, INT, DINT, REAL, STRING, TIME..., un tableau ARRAY[0..9] OF REAL, ou un type IHM du projet)";
         if (const auto near = nearTypes(hmi::types::normalized(type)); !near.empty()) msg += " ; les plus proches : " + joinList(near);
         return msg;

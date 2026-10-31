@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiAutomate.hpp"
 
+#include "../../hmi/HmiTypeRegistry.hpp"
 #include "../../hmi/HmiTypes.hpp"
 
 #include <algorithm>
@@ -126,6 +127,12 @@ std::string hmiTypeOfPlc(std::string_view plcType, const std::vector<std::string
     if (const std::string e = elementary(t); !e.empty()) return e;
     if (const std::string* d = ddtNamed(ddts, t)) return *d;
     if (const auto* ht = project.hmiTypeByName(t)) return ht->name;
+    // Un type que l'IHM connait, mais pas pour une variable (TOD, DATE, DT : ni place Modbus ni variable IHM).
+    std::string u2 = u == "TOD" ? std::string("TIME_OF_DAY") : u == "DT" ? std::string("DATE_AND_TIME") : u;
+    if (hmi::typereg::baseRegistry().byName(u2)) {
+        if (why) *why = "un " + u2 + " ne se range pas dans une variable IHM";
+        return {};
+    }
     if (why) *why = "le type " + t + " n'a pas d'\xC3\xA9quivalent dans l'IHM (une instance de bloc, un type d'\xC3\xA9quipement)";
     return {};
 }
