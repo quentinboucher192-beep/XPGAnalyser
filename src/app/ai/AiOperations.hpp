@@ -155,6 +155,12 @@ struct Check {
     bool                     stale{false};      // la vue a change depuis la proposition
     bool                     viewMissing{false};
     bool                     confirmRemoval{false};   // plusieurs suppressions : demander avant
+    // 1.16.0 (a la fin) : ce que la proposition cree en plus des objets, tel que le logiciel le fera - la
+    // vue neuve (son nom ; vide : aucune), les variables IHM (le type remis en forme, la valeur initiale
+    // lue, la description posee) et les types IHM (nom, membres). L'apercu les liste, la carte les compte.
+    std::string                                                             newView;
+    std::vector<Operation::VariableSpec>                                    newVariables;
+    std::vector<std::pair<std::string, std::vector<Operation::MemberSpec>>> newTypes;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 
@@ -172,9 +178,33 @@ struct Env {
         std::vector<Operation::MemberSpec>    members;
     };
     std::function<std::vector<PlcType>()> plcTypes;
+    // 1.16.0 (a la fin, chantier OPTIONS) : le commentaire d'une globale de l'automate (son nom, sans "API.") ;
+    // vide : aucun. AiAutomate en fait la description d'une variable IHM proposee. Nul : aucun commentaire.
+    std::function<std::string(std::string_view)> plcComment;
 };
 
 [[nodiscard]] std::string fingerprint(const hmi::View&);
+// 1.16.0 : LA PORTEE D'UNE PROPOSITION.
+//  - createsView : elle commence par creer_vue (une seule, en premier) : ses operations visent la vue neuve,
+//    jamais la vue ouverte ;
+//  - usesOpenView : sans creer_vue, elle touche des objets (creer, modifier...) : la vue ouverte a la demande ;
+//  - ni l'un ni l'autre : elle ne cree que des variables ou des types IHM (le projet seul, aucune vue).
+[[nodiscard]] bool createsView(const Proposal&) noexcept;
+[[nodiscard]] bool usesOpenView(const Proposal&) noexcept;
+// 1.16.0 : L'EMPREINTE DE CE QUE LA PROPOSITION TOUCHE, telle qu'elle est dans le projet : la vue visee
+// (fingerprint, comme en 1.15.0 : une proposition qui ne cree que des objets garde la meme empreinte) ;
+// la vue neuve d'un creer_vue (absente, ou son empreinte) ; + l'etat des variables et des types qu'elle cree
+// (absents, ou leur definition). Gardee a la proposition (Proposal::fingerprint) et juste apres Appliquer
+// (fingerprintAfter) : la carte dit perimee, appliquee, annulee (Ctrl+Z) ou changee depuis.
+// `viewPrint` : l'empreinte de la vue ouverte a prendre (celle de l'envoi) a la place de celle du moment.
+[[nodiscard]] std::string proposalPrint(const hmi::Project&, const Proposal&);
+[[nodiscard]] std::string proposalPrint(const hmi::Project&, const Proposal&, std::string_view viewPrint);
+// Ce que la proposition cree en plus des objets, en une ligne : "la vue Vue_Pompes, 12 variables IHM, 2 types
+// IHM" ; vide : rien de plus.
+[[nodiscard]] std::string creationSummary(const Proposal&);
+// La vue neuve d'un creer_vue (son nom, sa taille, son fond, sa description ; un premier calque), comme
+// "Nouvelle vue" de l'arbre : les identifiants viennent de `nextId`.
+[[nodiscard]] hmi::View newViewFor(const hmi::Project&, const Operation&, hmi::Id& nextId);
 [[nodiscard]] bool        variableExists(const hmi::Project&, std::string_view name, const Env& = {});
 // Les variables de l'IHM les plus proches d'un nom (les memes lettres, les memes mots).
 [[nodiscard]] std::vector<std::string> nearVariables(const hmi::Project&, std::string_view name, std::size_t max = 4);

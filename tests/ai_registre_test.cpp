@@ -444,8 +444,10 @@ void toolSchema() {
     const auto& actions = item.at("properties").at("action").at("enum");
     std::set<std::string> a;
     for (const auto& x : actions.items()) a.insert(x.asString());
-    check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code"},
-          "action : les huit operations");
+    // 1.16.0 : + creer_vue, creer_variables, creer_type (le chantier OPTIONS).
+    check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code", "creer_vue",
+                                     "creer_variables", "creer_type"},
+          "action : les onze operations");
     check(item.at("properties").has("proprietes") && item.at("properties").has("variable") && item.at("properties").has("noms")
               && item.at("properties").has("code") && schema.at("properties").has("resume"),
           "les champs du format existant (+ noms, dx, dy, code)");

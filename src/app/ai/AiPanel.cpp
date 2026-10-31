@@ -1440,8 +1440,9 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     std::string key;
     if (p) {
         key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+        // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
         if (auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr)
-            if (const auto* v = targetView(doc->project, *p)) key += "|" + fingerprint(*v);
+            key += "|" + proposalPrint(doc->project, *p);
     }
     if (t.key != key || key.empty()) {
         t.key = key;
@@ -1508,6 +1509,11 @@ void AiChatView::measure() {
                     const Thumb& t = thumb(static_cast<int>(i));
                     const float cw = inner - 4.f;
                     float ch = 8.f + 24.f + 22.f;
+                    // 1.16.0 : la vue, les variables, les types crees - une ligne sous les comptes.
+                    if (const std::string made = creationSummary(*m.proposal); !made.empty()) {
+                        b.createLines = wrapPlain("Cr\xC3\xA9" "e aussi : " + made, kMeta, cw - 24.f);
+                        ch += static_cast<float>(b.createLines.size()) * kNoteH + 2.f;
+                    }
                     if (open) {
                         const bool stale = t.check.stale || t.check.viewMissing;
                         b.buttons = {"Pr\xC3\xA9visualiser\xE2\x80\xA6"};
@@ -1535,8 +1541,11 @@ void AiChatView::measure() {
                         std::string done;
                         switch (b.applied) {
                             case Assistant::Applied::Undone:
-                                done = "Annul\xC3\xA9" "e : la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant (Ctrl+Z, ou le projet rouvert sans "
-                                       "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer la remet.";
+                                done = usesOpenView(*m.proposal)
+                                           ? "Annul\xC3\xA9" "e : la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant (Ctrl+Z, ou le projet rouvert sans "
+                                             "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer la remet."
+                                           : "Annul\xC3\xA9" "e : ce qu'elle a cr\xC3\xA9\xC3\xA9 n'est plus dans le projet (Ctrl+Z, ou le projet rouvert sans "
+                                             "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer le remet.";
                                 b.buttons = {"R\xC3\xA9" "appliquer"};
                                 break;
                             case Assistant::Applied::Changed:
@@ -1847,6 +1856,11 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     count("Modifier", nm, c.info, cx);
     count("Supprimer", nr, c.error, cx);
     y += 22.f;
+    for (const auto& l : b.createLines) {   // 1.16.0 : la vue, les variables, les types crees
+        ctx.r.drawText({card.x + 12.f, y}, l, kMeta, c.ok);
+        y += kNoteH;
+    }
+    if (!b.createLines.empty()) y += 2.f;
     if (p->state != "proposee") {
         for (const auto& l : b.doneLines) {
             ctx.r.drawText({card.x + 12.f, y + 2.f}, l, kMeta, b.applied == Assistant::Applied::Undone ? c.warning : c.textMuted);

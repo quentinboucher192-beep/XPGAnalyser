@@ -33,7 +33,7 @@ const char* const kRules =
     "\n"
     "## Ce que tu fais\n"
     "- Tu proposes des modifications de la VUE ACTIVE (l'onglet ouvert dans l'\xC3\xA9" "diteur, d\xC3\xA9" "crite par le contexte \xC3\xA0 "
-    "la fin) en appelant l'outil proposer_operations. Tu ne modifies rien toi-m\xC3\xAAme : le logiciel v\xC3\xA9rifie chaque "
+    "la fin) - ou, si l'utilisateur le demande, une VUE NEUVE, des VARIABLES IHM, des TYPES IHM - en appelant l'outil proposer_operations. Tu ne modifies rien toi-m\xC3\xAAme : le logiciel v\xC3\xA9rifie chaque "
     "op\xC3\xA9ration, montre un aper\xC3\xA7u et n'applique qu'avec l'accord de l'utilisateur (un Ctrl+Z annule tout).\n"
     "- Toute demande qui modifie la vue (cr\xC3\xA9" "er, modifier, d\xC3\xA9placer, redimensionner, colorer, associer une "
     "variable, aligner, r\xC3\xA9partir, dupliquer, supprimer) donne UN appel de l'outil, avec toutes ses op\xC3\xA9rations et "
@@ -78,6 +78,18 @@ const char* const kRules =
     "nouvel appel), ou explique \xC3\xA0 l'utilisateur pourquoi c'est impossible.\n"
     "12. Tu n'es pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9 par l'utilisation : tu lis \xC3\xA0 chaque demande les connaissances jointes ci-dessous ; "
     "ne pr\xC3\xA9tends pas te souvenir au-del\xC3\xA0 d'elles et de la conversation.\n"
+    "13. Cr\xC3\xA9" "er une vue, des variables, des types IHM : SEULEMENT si l'utilisateur le demande (ou accepte ta proposition "
+    "de le faire). Jamais pour masquer une variable absente : si une variable manque, dis-le d'abord. Les variables et les "
+    "types cr\xC3\xA9\xC3\xA9s se voient dans l'aper\xC3\xA7u avant d'appliquer. Les variables et les types (DDT) de l'automate reli\xC3\xA9 "
+    "(dans le contexte) servent de mod\xC3\xA8le : m\xC3\xAAmes noms, types convertis (EBOOL -> BOOL, STRING[n] -> STRING, un DDT -> un type IHM "
+    "du m\xC3\xAAme nom, cr\xC3\xA9\xC3\xA9 avant les variables qui l'emploient).\n"
+    "14. Formules (fx) : dans creer ou modifier, une valeur qui commence par = pilote la propri\xC3\xA9t\xC3\xA9 (comme =... dans l'inspecteur) : "
+    "du ST en lecture seule, qui ne lit que des variables existantes (ou cr\xC3\xA9\xC3\xA9" "es plus haut). Pour animer : \"visible\": "
+    "\"=Defaut_P1\", \"fill\": \"=SEL(Marche_P1, '#5B6270', '#2ECC71')\" (SEL(condition, si FAUX, si VRAI) ; les couleurs entre "
+    "apostrophes).\n"
+    "15. Rep\xC3\xA8res $...$ : un morceau entour\xC3\xA9 de $ ($Cuves[0]$.Niveau) se lit comme sans les $, et avance d'une copie \xC3\xA0 l'autre "
+    "quand on duplique avec reperes (Cuves[0] -> Cuves[1] -> Cuves[2], comme Dupliquer... Ctrl+Maj+D). Pour poser une s\xC3\xA9rie "
+    "d'objets semblables : cr\xC3\xA9" "e le premier avec ses rep\xC3\xA8res, puis dupliquer avec copies et reperes.\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
     "- creer : genre (une cl\xC3\xA9), nom (neuf), proprietes (x, y, w, h compris ; variable : une variable existante). "
@@ -94,7 +106,21 @@ const char* const kRules =
     "- dupliquer : objets, noms (ceux des copies, dans le m\xC3\xAAme ordre), dx, dy (le d\xC3\xA9" "calage en pixels). Exemple : "
     "{\"action\": \"dupliquer\", \"objets\": [\"Vanne_1\"], \"noms\": [\"Vanne_4\"], \"dx\": 0, \"dy\": 120}\n"
     "- code : code (le code brut d'objets, le format de l'onglet Code brut de l'inspecteur), pour un objet riche "
-    "(ses actions) ; une propri\xC3\xA9t\xC3\xA9 absente garde sa valeur par d\xC3\xA9" "faut ; tout est v\xC3\xA9rifi\xC3\xA9 comme le reste.\n";
+    "(ses actions) ; une propri\xC3\xA9t\xC3\xA9 absente garde sa valeur par d\xC3\xA9" "faut ; tout est v\xC3\xA9rifi\xC3\xA9 comme le reste.\n"
+    "- dupliquer, en plus : copies (1 \xC3\xA0 50 ; la copie k est d\xC3\xA9" "cal\xC3\xA9" "e de k fois dx, dy), reperes (true : les rep\xC3\xA8res "
+    "$...$ \xC3\xA0 indices avancent comme Ctrl+Maj+D, les noms suivent la s\xC3\xA9rie). Exemple : {\"action\": \"dupliquer\", \"objets\": "
+    "[\"Cuve_1\"], \"copies\": 3, \"reperes\": true, \"dx\": 180, \"dy\": 0}\n"
+    "- creer_vue : nom (neuf, unique), proprietes (largeur, hauteur en px, fond #RRGGBB, description). EN PREMIER et une seule "
+    "fois : les op\xC3\xA9rations qui suivent visent la vue neuve (y cr\xC3\xA9" "er les objets) ; elle s'ouvre apr\xC3\xA8s Appliquer. Exemple : "
+    "{\"action\": \"creer_vue\", \"nom\": \"Vue_Pompes\", \"proprietes\": {\"largeur\": \"1280\", \"hauteur\": \"800\", \"description\": "
+    "\"Les pompes du poste\"}}\n"
+    "- creer_variables : variables (nom neuf, type, description, valeur initiale). Types : BOOL, INT, DINT, REAL, STRING, "
+    "TIME, ARRAY[0..9] OF REAL, ou un type IHM du projet (ou cr\xC3\xA9\xC3\xA9 plus haut). Une op\xC3\xA9ration plus bas peut les citer. "
+    "Exemple : {\"action\": \"creer_variables\", \"variables\": [{\"nom\": \"Marche_P1\", \"type\": \"BOOL\", \"description\": "
+    "\"Marche pompe 1\"}, {\"nom\": \"Consigne_Niveau\", \"type\": \"REAL\", \"valeur\": \"75\"}]}\n"
+    "- creer_type : nom (T_...), description, membres (nom, type, description) ; un membre d'un autre type IHM : ce type "
+    "existe ou est cr\xC3\xA9\xC3\xA9 PLUS HAUT (l'ordre des d\xC3\xA9pendances). Exemple : {\"action\": \"creer_type\", \"nom\": \"T_Pompe\", "
+    "\"membres\": [{\"nom\": \"Marche\", \"type\": \"BOOL\"}, {\"nom\": \"Vitesse\", \"type\": \"REAL\", \"description\": \"tr/min\"}]}\n";
 
 // L'exemple du code brut : un bouton qui ouvre une vue, ecrit par le logiciel lui-meme.
 const std::string& codeExample() {
@@ -174,8 +200,12 @@ const std::vector<Fields>& fieldsOf() {
         {A::Align, {"objets", "bord"}, {"objets", "bord"}},
         {A::Distribute, {"objets", "sens"}, {"objets"}},
         {A::Remove, {"objets"}, {"objets"}},
-        {A::Duplicate, {"objets", "noms", "dx", "dy"}, {"objets"}},
+        {A::Duplicate, {"objets", "noms", "dx", "dy", "copies", "reperes"}, {"objets"}},
         {A::Code, {"code"}, {"code"}},
+        // 1.16.0 : la vue neuve, les variables, les types IHM.
+        {A::View, {"nom", "proprietes"}, {"nom"}},
+        {A::Variables, {"variables"}, {"variables"}},
+        {A::Type, {"nom", "description", "membres"}, {"nom", "membres"}},
     };
     return f;
 }
@@ -231,6 +261,47 @@ std::string malformed(const json::Value& o, std::size_t n) {
             if (!(value.isString() || value.isNumber() || value.isBool()))
                 return what + " : la valeur de \xC2\xAB " + key + " \xC2\xBB doit \xC3\xAAtre un texte, un nombre ou un bool\xC3\xA9" "en.";
     }
+    // 1.16.0 : la vue neuve, le type (un nom non vide), les copies, les reperes, les variables, les membres.
+    if ((*action == Operation::Action::View || *action == Operation::Action::Type) && o.str("nom").empty())
+        return what + " : \xC2\xAB nom \xC2\xBB est vide.";
+    if (o.has("description") && !o.at("description").isString()) return what + " : \xC2\xAB description \xC2\xBB doit \xC3\xAAtre un texte.";
+    if (o.has("copies")) {
+        const auto& c = o.at("copies");
+        if (!c.isNumber() || c.asNumber() != static_cast<double>(static_cast<long long>(c.asNumber())) || c.asNumber() < 1 || c.asNumber() > 50)
+            return what + " : \xC2\xAB copies \xC2\xBB est un nombre entier de 1 \xC3\xA0 50.";
+    }
+    if (o.has("reperes") && !o.at("reperes").isBool()) return what + " : \xC2\xAB reperes \xC2\xBB vaut true ou false.";
+    const auto entries = [&](std::string_view key, std::initializer_list<std::string_view> allowedKeys, bool withValue) -> std::string {
+        const auto& list = o.at(key);
+        const std::string k(key);
+        if (!list.isArray()) return what + " : \xC2\xAB " + k + " \xC2\xBB doit \xC3\xAAtre une liste d'objets {\"nom\": ..., \"type\": ...}.";
+        if (list.items().empty()) return what + " : \xC2\xAB " + k + " \xC2\xBB est vide.";
+        std::size_t i = 0;
+        for (const auto& e : list.items()) {
+            ++i;
+            const std::string at2 = what + ", " + k + " n\xC2\xB0" + std::to_string(i);
+            if (!e.isObject()) return at2 + " : ce n'est pas un objet {\"nom\": ..., \"type\": ...}.";
+            for (const auto& [mk, mv] : e.members()) {
+                if (std::find(allowedKeys.begin(), allowedKeys.end(), mk) == allowedKeys.end()) {
+                    std::vector<std::string> names;
+                    for (const auto a : allowedKeys) names.emplace_back(a);
+                    return at2 + " : le champ \xC2\xAB " + mk + " \xC2\xBB n'en fait pas partie (ses champs : " + join(names, ", ") + ").";
+                }
+                if (mk == "valeur" && withValue) {
+                    if (!(mv.isString() || mv.isNumber() || mv.isBool())) return at2 + " : \xC2\xAB valeur \xC2\xBB est un texte, un nombre ou un bool\xC3\xA9" "en.";
+                } else if (!mv.isString()) {
+                    return at2 + " : \xC2\xAB " + mk + " \xC2\xBB doit \xC3\xAAtre un texte.";
+                }
+            }
+            for (const char* req : {"nom", "type"})
+                if (e.str(req).empty()) return at2 + " : \xC2\xAB " + std::string(req) + " \xC2\xBB manque ou est vide.";
+        }
+        return {};
+    };
+    if (o.has("variables"))
+        if (auto bad = entries("variables", {"nom", "type", "description", "valeur"}, true); !bad.empty()) return bad;
+    if (o.has("membres"))
+        if (auto bad = entries("membres", {"nom", "type", "description"}, false); !bad.empty()) return bad;
     if (*action == Operation::Action::Align) {
         const std::string e = o.str("bord");
         if (e != "haut" && e != "bas" && e != "gauche" && e != "droite" && e != "centre-h" && e != "centre-v")
@@ -368,7 +439,7 @@ std::string operationsTool() {
         g.set("description", "creer : la cl\xC3\xA9 du genre.");
         props.set("genre", g);
     }
-    props.set("nom", str("creer : un nom neuf."));
+    props.set("nom", str("creer : un nom neuf ; creer_vue : le nom de la vue neuve ; creer_type : le nom du type IHM (T_...)."));
     props.set("objet", str("modifier, associer : un objet existant."));
     props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants."));
     {
@@ -377,7 +448,8 @@ std::string operationsTool() {
         Value any = Value::object();
         any.set("type", "string");
         p.set("additionalProperties", any);
-        p.set("description", "creer, modifier : cl\xC3\xA9 du genre -> valeur en texte.");
+        p.set("description", "creer, modifier : cl\xC3\xA9 du genre -> valeur en texte (=... : une formule fx) ; creer_vue : largeur, "
+                             "hauteur, fond, description.");
         props.set("proprietes", p);
     }
     props.set("variable", str("associer : une variable EXISTANTE du contexte."));
@@ -393,6 +465,41 @@ std::string operationsTool() {
         props.set("dy", n);
     }
     props.set("code", str("code : le code brut d'objets, sans script."));
+    // 1.16.0 : les copies et les reperes (dupliquer), les variables, le type IHM.
+    {
+        Value n = Value::object();
+        n.set("type", "integer");
+        n.set("minimum", 1);
+        n.set("maximum", 50);
+        n.set("description", "dupliquer : le nombre de copies (la copie k d\xC3\xA9" "cal\xC3\xA9" "e de k fois dx, dy).");
+        props.set("copies", n);
+        Value b = Value::object();
+        b.set("type", "boolean");
+        b.set("description", "dupliquer : true - les rep\xC3\xA8res $...$ \xC3\xA0 indices avancent d'une copie \xC3\xA0 l'autre (Ctrl+Maj+D).");
+        props.set("reperes", b);
+    }
+    const auto entries = [&](std::initializer_list<const char*> keys, std::string description) {
+        Value e = Value::object();
+        e.set("type", "object");
+        Value fields = Value::object();
+        for (const char* k : keys) fields.set(k, str(std::string(k) == "valeur" ? "la valeur initiale (selon le type ; vide : 0, FALSE, '')." : std::string(k) + "."));
+        e.set("properties", fields);
+        Value required = Value::array();
+        required.push("nom");
+        required.push("type");
+        e.set("required", required);
+        e.set("additionalProperties", false);
+        Value v = Value::object();
+        v.set("type", "array");
+        v.set("items", e);
+        v.set("description", std::move(description));
+        return v;
+    };
+    props.set("variables", entries({"nom", "type", "description", "valeur"},
+                                   "creer_variables : les variables IHM neuves (type : BOOL, INT, REAL, STRING, TIME, ARRAY[a..b] OF ..., "
+                                   "un type IHM)."));
+    props.set("membres", entries({"nom", "type", "description"}, "creer_type : les membres du type (un type IHM cit\xC3\xA9 : existant ou cr\xC3\xA9\xC3\xA9 plus haut)."));
+    props.set("description", str("creer_type : la description du type."));
     item.set("properties", props);
     Value req = Value::array();
     req.push("action");
@@ -417,8 +524,8 @@ std::string operationsTool() {
     tool.set("name", std::string(kOperationsTool));
     tool.set("description",
              "Propose des modifications de la vue active d'IHM Studio. Appelle-le pour TOUTE demande qui modifie la vue (cr\xC3\xA9" "er, "
-             "modifier, d\xC3\xA9placer, redimensionner, colorer, associer une variable, aligner, r\xC3\xA9partir, dupliquer, supprimer), "
-             "avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
+             "modifier, d\xC3\xA9placer, redimensionner, colorer, associer une variable, aligner, r\xC3\xA9partir, dupliquer, supprimer) "
+             "ou qui cr\xC3\xA9" "e une vue, des variables, des types IHM, avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
              "valeurs, objets, variables) et montre un aper\xC3\xA7u : rien ne change avant que l'utilisateur applique (un Ctrl+Z annule "
              "tout). N'invente ni genre, ni propri\xC3\xA9t\xC3\xA9, ni variable : seulement ceux du registre et du contexte.");
     tool.set("input_schema", schema);
@@ -437,7 +544,6 @@ std::optional<Proposal> proposalFromTool(std::string_view inputJson, const Promp
     std::string err;
     if (!json::parse(inputJson, v, &err)) return refuse("L'entr\xC3\xA9" "e de l'outil est illisible (" + err + ") : rien n'est propos\xC3\xA9.");
     if (!v.isObject()) return refuse("L'entr\xC3\xA9" "e de l'outil doit \xC3\xAAtre un objet {\"resume\": ..., \"operations\": [...]}.");
-    if (!in.view) return refuse("Aucune vue n'est ouverte dans l'\xC3\xA9" "diteur : la proposition ne vise rien. Demande d'ouvrir une vue.");
     const json::Value* ops = v.find("operations");
     if (!ops) return refuse("\xC2\xAB operations \xC2\xBB manque : l'entr\xC3\xA9" "e de l'outil est {\"resume\": ..., \"operations\": [...]}.");
     if (!ops->isArray()) return refuse("\xC2\xAB operations \xC2\xBB doit \xC3\xAAtre une liste.");
@@ -447,13 +553,22 @@ std::optional<Proposal> proposalFromTool(std::string_view inputJson, const Promp
         if (auto bad = malformed(o, ++n); !bad.empty()) return refuse(std::move(bad));
     Proposal p;
     if (!operationsFromJson(*ops, p.ops, why)) return std::nullopt;
+    // 1.16.0 : la vue visee - la vue neuve d'un creer_vue, la vue ouverte si la proposition touche des objets, aucune
+    // si elle ne cree que des variables ou des types (elle ne depend pas de la vue ouverte).
+    if (usesOpenView(p) && !in.view)
+        return refuse("Aucune vue n'est ouverte dans l'\xC3\xA9" "diteur : la proposition ne vise rien. Demande d'ouvrir une vue, ou "
+                      "propose une vue neuve (creer_vue en premier).");
     p.id = newId("op");
     p.request = std::string(request);
     p.summary = v.at("resume").isString() ? v.str("resume") : std::string{};
     if (p.summary.empty()) p.summary = "Proposition de l'Assistant";
-    p.view = in.view->name;
-    p.viewId = in.view->id;
-    p.fingerprint = fingerprint(*in.view);
+    if (createsView(p)) {
+        p.view = p.ops.front().name;
+    } else if (usesOpenView(p)) {
+        p.view = in.view->name;
+        p.viewId = in.view->id;
+    }
+    p.fingerprint = in.project ? proposalPrint(*in.project, p) : in.view && usesOpenView(p) ? fingerprint(*in.view) : std::string{};
     return p;
 }
 

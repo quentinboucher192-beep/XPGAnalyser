@@ -283,6 +283,54 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
     } else if (in.env.plcName) {
         s += "Un automate est reli\xC3\xA9 : ses variables existent aussi (non list\xC3\xA9" "es ici) ; n'en cite que si l'utilisateur te donne le nom.\n";
     }
+    // 1.16.0 : les types IHM du projet (leurs noms : une variable creee peut en etre).
+    {
+        const auto& types = in.project->programs.types;
+        info.hmiTypes = types.size();
+        if (!types.empty()) {
+            std::string names;
+            std::size_t left = 0;
+            for (const auto& t : types) {
+                if (names.size() >= 1200) {
+                    ++left;
+                    continue;
+                }
+                names += (names.empty() ? "" : ", ") + t.name;
+            }
+            s += "Types IHM du projet (" + std::to_string(types.size()) + ") : " + names + (left ? " ... et " + std::to_string(left) + " autres" : std::string{}) + ".\n";
+        }
+    }
+    // 1.16.0 : les types (DDT) de l'automate relie, resumes : quand la demande parle de types, de structures,
+    // de DDT ou de l'automate, ou qu'il y en a peu - pour que l'IA propose des types IHM du meme nom.
+    if (in.env.plcTypes) {
+        const auto ddts = in.env.plcTypes();
+        info.plcTypes = ddts.size();
+        std::string lowered;
+        for (const char c : in.request) lowered += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        bool asked = false;
+        for (const char* w : {"type", "ddt", "structure", "automate", "api", "plc", "variables de l"})
+            if (lowered.find(w) != std::string::npos) asked = true;
+        if (!ddts.empty() && (asked || ddts.size() <= 10)) {
+            std::string lines;
+            for (const auto& t : ddts) {
+                if (lines.size() >= lim.plcTypeBytes) break;
+                lines += t.name + " :";
+                bool first = true;
+                for (const auto& m : t.members) {
+                    lines += (first ? " " : ", ") + m.name + " " + m.type;
+                    first = false;
+                }
+                lines += "\n";
+                ++info.plcTypesListed;
+            }
+            s += "Types (DDT) de l'automate reli\xC3\xA9 (" + std::to_string(ddts.size()) + ") : nom : membres (pour cr\xC3\xA9" "er des types IHM du "
+                 "m\xC3\xAAme nom, \xC3\xA0 la demande) :\n" + lines;
+            if (info.plcTypesListed < ddts.size())
+                s += "... et " + std::to_string(ddts.size() - info.plcTypesListed) + " autres DDT, non list\xC3\xA9s.\n";
+        } else if (!ddts.empty()) {
+            s += "L'automate reli\xC3\xA9 a " + std::to_string(ddts.size()) + " types (DDT), non list\xC3\xA9s ici (demande-les si on te parle de types).\n";
+        }
+    }
 }
 
 void viewsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) {
@@ -351,8 +399,8 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
     }
     if (in.view) viewPart(in, lim, info, s);
     else
-        s += "Aucune vue n'est ouverte dans l'\xC3\xA9" "diteur : tu ne peux rien proposer. Demande d'ouvrir une vue (double-clic sur une vue "
-             "de l'arbre du projet).\n";
+        s += "Aucune vue n'est ouverte dans l'\xC3\xA9" "diteur : pour modifier une vue, demande de l'ouvrir (double-clic sur une vue de "
+             "l'arbre du projet) ; tu peux quand m\xC3\xAAme proposer une vue neuve (creer_vue en premier), des variables ou des types IHM.\n";
     selectionPart(in, info, s);
     variablesPart(in, lim, info, s);
     viewsPart(in, lim, s);

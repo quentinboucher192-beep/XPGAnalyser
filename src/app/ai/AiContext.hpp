@@ -12,6 +12,9 @@
 //    - les variables de l'IHM (noms et types, la description courte ; JAMAIS
 //      leurs valeurs en marche), les types qu'elles utilisent, et les variables
 //      de l'automate relie (Env::plcVariables) ;
+//    - 1.16.0 : les noms des types IHM du projet (une variable creee peut en
+//      etre) ; les types (DDT) de l'automate relie, resumes (nom et membres),
+//      quand la demande parle de types ou de l'automate, ou qu'il y en a peu ;
 //    - les autres vues (leurs noms : une navigation les cite).
 //
 //  UNE GRANDE VUE SE RESUME. Le detail des objets a un budget (des octets) : la
@@ -39,6 +42,8 @@ struct ContextLimits {
     std::size_t variableBytes{6000};   // les variables de l'IHM (les plus proches de la demande d'abord)
     std::size_t plcBytes{4000};        // les variables de l'automate relie
     std::size_t viewBytes{1500};       // les noms des autres vues
+    // 1.16.0 (a la fin) : les types (DDT) de l'automate relie, resumes (leur nom, leurs membres).
+    std::size_t plcTypeBytes{2500};
 };
 
 // Ce que le texte contient (les essais, le rapport).
@@ -48,6 +53,8 @@ struct ContextInfo {
     std::size_t plc{0}, plcListed{0};                   // celles de l'automate relie
     bool        viewSent{false}, selectionSent{false}, variablesSent{false};
     bool        summarized{false};                      // une vue trop grande : resumee
+    // 1.16.0 (a la fin) : les DDT de l'automate relie (combien, combien resumes) ; les types IHM du projet nommes.
+    std::size_t plcTypes{0}, plcTypesListed{0}, hmiTypes{0};
 };
 
 // Le contexte de la demande (la fin du champ "system").

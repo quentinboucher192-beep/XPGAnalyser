@@ -528,13 +528,22 @@ bool Assistant::apply(int message, std::string* why) {
     if (host_.apply) host_.apply(std::move(cmd));
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
-    // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise.
+    // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise. 1.16.0 : proposalPrint (la vue
+    // neuve, les variables et les types crees comptent) ; la vue neuve retient son identifiant.
     prop.fingerprintAfter.clear();
-    if (const auto after = host_.document ? host_.document() : nullptr)
-        if (const auto* v = targetView(after->project, prop)) prop.fingerprintAfter = fingerprint(*v);
+    hmi::Id opened = hmi::kNoId;
+    if (const auto after = host_.document ? host_.document() : nullptr) {
+        if (createsView(prop))
+            if (const auto* nv = after->project.viewByName(prop.view)) prop.viewId = opened = nv->id;
+        prop.fingerprintAfter = proposalPrint(after->project, prop);
+    }
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
+    if (const std::string made = creationSummary(prop); !made.empty())
+        notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e - cr\xC3\xA9\xC3\xA9" "s : " + made + " (Ctrl+Z reprend tout d'un coup).";
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
+    // 1.16.0 : la vue creee s'ouvre dans l'editeur.
+    if (opened != hmi::kNoId && host_.openView) host_.openView(opened);
     return true;
 }
 
@@ -548,9 +557,10 @@ Assistant::Applied Assistant::appliedOf(const Proposal& prop) const {
     if (p->state != "appliquee") return Applied::NotApplied;
     const auto doc = host_.document ? host_.document() : nullptr;
     if (!doc) return Applied::Applied;   // pas de projet ouvert : rien a comparer
-    const auto* v = targetView(doc->project, *p);
-    if (!v) return Applied::Changed;
-    const std::string now = fingerprint(*v);
+    // 1.16.0 : l'empreinte de ce que la proposition touche (proposalPrint) - la vue visee comme avant ; la vue
+    // neuve, les variables et les types crees (Ctrl+Z les retire : annulee).
+    if (usesOpenView(*p) && !targetView(doc->project, *p)) return Applied::Changed;
+    const std::string now = proposalPrint(doc->project, *p);
     if (now == p->fingerprintAfter) return Applied::Applied;
     if (now == p->fingerprint) return Applied::Undone;
     // Un fichier d'avant 1.14.2 n'a pas l'empreinte d'apres : on ne sait pas mieux qu'"appliquee".
@@ -890,7 +900,8 @@ void Assistant::finishLive(const std::string& stopReason) {
             } else {
                 // L'empreinte de la vue A L'ENVOI : si l'utilisateur l'a changee pendant la reponse,
                 // la proposition est perimee (elle ne s'applique jamais sur une vue changee).
-                if (!gen_.fingerprint.empty()) p->fingerprint = gen_.fingerprint;
+                // 1.16.0 : avec ce que la proposition cree (proposalPrint) ; une vue neuve ne depend pas de la vue ouverte.
+                if (!gen_.fingerprint.empty() && doc) p->fingerprint = proposalPrint(doc->project, *p, gen_.fingerprint);
                 if (p->summary.empty()) p->summary = "Proposition de l'Assistant";
                 if (p->request.empty()) p->request = gen_.request;
                 p->state = "proposee";
