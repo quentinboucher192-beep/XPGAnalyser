@@ -107,6 +107,8 @@ void markRunning(Attachment& a);
 // Faux : la piece n'y est pas (une autre conversation, retiree entre-temps).
 bool applyOutcome(Conversation& c, const Outcome& o);
 bool applyOutcome(std::vector<Attachment>& list, const Outcome& o);
+// Une seule piece (une piece en attente d'envoi : Assistant::Pending) ; faux : ce n'est pas elle.
+bool applyOutcome(Attachment& a, const Outcome& o);
 
 // LE FIL D'ANALYSE : un travail a la fois, dans l'ordre ; rien ne touche l'interface.
 class Analyzer {

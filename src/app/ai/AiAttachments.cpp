@@ -727,6 +727,12 @@ bool applyOutcome(std::vector<Attachment>& list, const Outcome& o) {
     return false;
 }
 
+bool applyOutcome(Attachment& a, const Outcome& o) {
+    if (a.id != o.attachment) return false;
+    put(a, o);
+    return true;
+}
+
 bool applyOutcome(Conversation& c, const Outcome& o) {
     if (!o.conversation.empty() && !c.id.empty() && o.conversation != c.id) return false;
     auto all = allOf(c);
