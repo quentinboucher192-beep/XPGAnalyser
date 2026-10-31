@@ -1447,6 +1447,9 @@
     <ClCompile Include="src\hmi\HmiApiVars.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiAudit.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiBuildState.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1571,6 +1574,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRanges.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRelations.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRoles.cpp">
@@ -1715,6 +1721,9 @@
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiPlan.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
   </ItemGroup>
@@ -2962,6 +2971,9 @@
     <ClInclude Include="src\hmi\HmiApiVars.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiAudit.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiBuildState.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -3077,6 +3089,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRanges.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiRelations.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRoles.hpp">
@@ -3221,6 +3236,9 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiPaths.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiPlan.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
   </ItemGroup>

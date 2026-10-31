@@ -606,6 +606,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiAlarmGroupCommands.cpp" />
     <ClCompile Include="src\hmi\HmiAlarmGroups.cpp" />
     <ClCompile Include="src\hmi\HmiApiVars.cpp" />
+    <ClCompile Include="src\hmi\HmiAudit.cpp" />
     <ClCompile Include="src\hmi\HmiBuildState.cpp" />
     <ClCompile Include="src\hmi\HmiCallCheck.cpp" />
     <ClCompile Include="src\hmi\HmiCalc.cpp" />
@@ -668,6 +669,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRuntimePid.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeRecord.cpp" />
     <ClCompile Include="src\hmi\HmiRecording.cpp" />
+    <ClCompile Include="src\hmi\HmiRelations.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
@@ -696,6 +698,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiMemory.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryDialog.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp" />
+    <ClCompile Include="src\app\ai\AiPlan.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1117,6 +1120,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiAlarmGroupCommands.hpp" />
     <ClInclude Include="src\hmi\HmiAlarmGroups.hpp" />
     <ClInclude Include="src\hmi\HmiApiVars.hpp" />
+    <ClInclude Include="src\hmi\HmiAudit.hpp" />
     <ClInclude Include="src\hmi\HmiBuildState.hpp" />
     <ClInclude Include="src\hmi\HmiCallCheck.hpp" />
     <ClInclude Include="src\hmi\HmiCalc.hpp" />
@@ -1156,6 +1160,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiPrompt.hpp" />
     <ClInclude Include="src\hmi\HmiRetain.hpp" />
     <ClInclude Include="src\hmi\HmiRanges.hpp" />
+    <ClInclude Include="src\hmi\HmiRelations.hpp" />
     <ClInclude Include="src\hmi\HmiRoles.hpp" />
     <ClInclude Include="src\hmi\HmiScriptCheck.hpp" />
     <ClInclude Include="src\hmi\HmiScriptCheck110.hpp" />
@@ -1204,6 +1209,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiMemoryDialog.hpp" />
     <ClInclude Include="src\app\ai\AiMemoryJson.hpp" />
     <ClInclude Include="src\app\ai\AiPaths.hpp" />
+    <ClInclude Include="src\app\ai\AiPlan.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
