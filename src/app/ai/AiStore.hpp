@@ -121,6 +121,11 @@ struct Settings {
     // 1.16.1 : avec une IA connectee (anthropic, openai), essayer d'abord l'IA integree - instantanee et sans
     // connexion - et n'envoyer a l'IA connectee que ce qu'elle ne comprend pas (LocalReply::understood).
     bool        localFirst{false};
+    // 1.16.1 : m'avertir quand une reponse arrive et que je ne regarde pas (la cloche, la barre des taches, un son)
+    bool        notifyReplies{true};
+    // 1.16.1 : appliquer une proposition MEME S'IL RESTE DES ERREURS (apres une confirmation) : ce qui est en erreur
+    // est laisse de cote, et note au journal. Decochee : une erreur bloque (comme avant).
+    bool        applyWithErrors{false};
     json::Value extra;
     bool operator==(const Settings&) const = default;
 };

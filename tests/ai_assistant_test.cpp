@@ -967,20 +967,31 @@ void testPreviewPainters() {
     check(big.saw("Pr\xC3\xA9visualisation des modifications") && big.saw("OBJETS CONCERN") && big.saw("Cuve_1"), "la liste des objets");
     check(big.saw("Cuve 1") && big.saw("P32") && big.shapes > 200, "l'apercu : la vue dessinee par les painters (" + std::to_string(big.shapes) + " formes)");
     check(big.saw("nouveau") && big.saw("modifi\xC3\xA9") && big.saw("supprim\xC3\xA9"), "la legende");
-    // Modifier la demande : le texte revient, la proposition est mise de cote.
+    // Modifier la demande : le texte revient ; 1.16.1 : la proposition n'est plus refusee en silence (elle reste a decider).
     d->editRequest();
     f.mm.applyPending();
     check(f.mm.top() != d && f.panel->prompt().text() == ai::demoSuggestions()[0], "Modifier la demande : la saisie la reprend");
-    check(f.as().proposal(m)->state == "refusee" && f.v().objects.empty(), "et rien ne s'applique");
-    // Annuler (dans l'apercu) : refusee.
+    check(f.as().proposal(m)->state == "proposee" && f.v().objects.empty(), "et rien ne s'applique ; la proposition reste a decider");
+    // 1.16.1 : Refuser... (dans l'apercu) : une question d'abord - Garder ne change rien, Refuser refuse.
     (void)f.sendAndWait("Ajoute une cuve avec un indicateur de niveau");
-    f.panel->openPreview(f.lastProposal());
+    const int r = f.lastProposal();
+    f.panel->openPreview(r);
     f.mm.applyPending();
     if (auto* d2 = dynamic_cast<ai::AiPreviewDialog*>(f.mm.top())) {
         d2->cancel();
         f.mm.applyPending();
+        check(f.mm.top() && f.mm.top()->id() == "dialog.ai.refuser" && f.as().proposal(r)->state == "proposee", "Refuser... : la question d'abord, rien n'a change");
+        f.mm.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});   // Garder (ou Echap)
+        f.mm.applyPending();
+        check(f.as().proposal(r)->state == "proposee", "Garder : toujours proposee");
+        d2->cancel();
+        f.mm.applyPending();
+        f.mm.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, {}});   // Refuser
+        f.mm.applyPending();
+        f.step();
     }
-    check(f.as().proposal(f.lastProposal())->state == "refusee", "Annuler : refusee");
+    check(f.as().proposal(r)->state == "refusee", "Refuser confirme : refusee");
+    check(f.panel->unrefuseProposal(r) && f.as().proposal(r)->state == "proposee", "Revenir sur le refus : de nouveau proposee");
     // Appliquer depuis l'apercu.
     (void)f.sendAndWait("Ajoute une cuve avec un indicateur de niveau");
     f.panel->openPreview(f.lastProposal());
@@ -1113,6 +1124,40 @@ void testSecondPass() {
     }
 }
 
+// ---- 1.16.1 : Echap dans l'apercu ne refuse JAMAIS, quel que soit le focus ----
+void collectButtons(ui::Widget& w, std::vector<ui::Button*>& out) {
+    if (auto* b = dynamic_cast<ui::Button*>(&w)) out.push_back(b);
+    for (const auto& c : w.children()) collectButtons(*c, out);
+}
+void testPreviewEscapeNeverRefuses() {
+    std::printf("[echap dans l'apercu]\n");
+    Fixture f("echap_apercu");
+    f.panel->newConversation();
+    (void)f.sendAndWait(ai::demoSuggestions()[0]);
+    const int m = f.lastProposal();
+    const ui::Theme theme = ui::Theme::dark();
+    const menu::FrameContext fc{0.016, f.t, &theme, {1280.f, 800.f}, 1.f};
+    for (int round = 0; round < 6; ++round) {
+        f.panel->openPreview(m);
+        f.mm.applyPending();
+        auto* pv = dynamic_cast<ai::AiPreviewDialog*>(f.mm.top());
+        if (!pv) { check(false, "sonde : l'apercu s'ouvre"); return; }
+        f.mm.Update(fc);
+        std::vector<ui::Button*> bs;
+        collectButtons(*pv->widgetRoot(), bs);
+        std::string who = "rien";
+        if (round > 0 && static_cast<std::size_t>(round - 1) < bs.size()) { bs[round - 1]->takeFocus(); who = bs[round - 1]->text(); }
+        (void)f.mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+        f.mm.applyPending();
+        (void)f.mm.HandleEvent(ui::KeyUp{ui::Key::Escape, {}});
+        f.mm.Update(fc);
+        f.mm.applyPending();
+        f.step();
+        check(f.as().proposal(m)->state == "proposee" && !dynamic_cast<ai::AiPreviewDialog*>(f.mm.top()),
+              "Echap (focus : " + who + ") : la fenetre se ferme, la proposition reste proposee");
+    }
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1135,6 +1180,7 @@ int main() {
     testPersistence();
     testStale();
     testPreviewPainters();
+    testPreviewEscapeNeverRefuses();
     testMarkdown();
     testSecondPass();
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

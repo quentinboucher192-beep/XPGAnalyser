@@ -122,10 +122,13 @@ protected:
         };
         // ---- la colonne de gauche
         heading("G\xC3\x89N\xC3\x89RAL");
-        d_.enabled_->setBounds({x, y, colW, kRow - 4.f});
+        // 1.16.1 : << M'avertir des reponses >> sur la meme ligne (la fenetre tient a 1280 x 800)
+        d_.enabled_->setBounds({x, y, colW * 0.5f - 6.f, kRow - 4.f});
+        d_.notify_->setBounds({x + colW * 0.5f, y, colW * 0.5f, kRow - 4.f});
         y += kRow;
         row("Fournisseur", d_.provider_);
-        d_.localFirst_->setBounds({x, y, colW, kRow - 6.f});   // 1.16.1 : l'IA integree d'abord
+        d_.localFirst_->setBounds({x, y, colW * 0.5f - 6.f, kRow - 6.f});   // 1.16.1 : l'IA integree d'abord
+        d_.anyway_->setBounds({x + colW * 0.5f, y, colW * 0.5f, kRow - 6.f});    // 1.16.1 : appliquer malgre les erreurs
         y += kRow - 4.f;
         heading("CONNEXION");
         const bool openai = d_.openAIShown();   // 1.16.0 : le Service a la place de l'Effort
@@ -289,6 +292,12 @@ core::Status AiSettingsDialog::buildUi() {
         return &static_cast<ui::InputText&>(b->addChild(std::move(in)));
     };
     enabled_ = check("Activer l'Assistant IA", ".actif", s.enabled);
+    // 1.16.1 : m'avertir quand une reponse arrive (seulement quand je ne regarde pas le panneau)
+    notify_ = check("M'avertir des r\xC3\xA9ponses", ".avertir", s.notifyReplies);
+    notify_->setTooltip("Quand une r\xC3\xA9ponse de l'IA arrive et que tu ne regardes pas le panneau de l'Assistant (une autre "
+                        "fen\xC3\xAAtre devant, le panneau repli\xC3\xA9, une autre conversation ouverte) : un avis dans la cloche (Voir "
+                        "ouvre la conversation) et, la fen\xC3\xAAtre en arri\xC3\xA8re-plan, son bouton clignote dans la barre des "
+                        "t\xC3\xA2" "ches avec un son court. D\xC3\xA9" "coch\xC3\xA9" "e : rien.");
     provider_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".fournisseur")));
     {
         std::vector<ui::DropDown::Item> items;
@@ -409,8 +418,14 @@ core::Status AiSettingsDialog::buildUi() {
     period_->setItems({{"par jour", "jour"}, {"par mois", "mois"}});
     period_->setSelectedIndex(s.budgetPeriod == "mois" ? 1 : 0);
     // 1.16.1 : l'IA integree d'abord, l'IA connectee pour ce qu'elle ne comprend pas
-    localFirst_ = check("Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e (instantan\xC3\xA9" "e, sans connexion)", ".dabord", s.localFirst);
-    localFirst_->setTooltip("Chaque demande passe d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, "
+    localFirst_ = check("IA int\xC3\xA9gr\xC3\xA9" "e d'abord", ".dabord", s.localFirst);
+    // 1.16.1 : appliquer meme s'il reste des erreurs (une confirmation les liste ; elles vont au journal)
+    anyway_ = check("Appliquer malgr\xC3\xA9 les erreurs", ".malgre", s.applyWithErrors);
+    anyway_->setTooltip("Une proposition qui garde des erreurs peut s'appliquer quand m\xC3\xAAme : ce qui est valide s'applique, ce qui "
+                        "est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) et not\xC3\xA9 sous la r\xC3\xA9ponse et "
+                        "dans le journal d'activit\xC3\xA9. Toujours apr\xC3\xA8s une confirmation qui liste les erreurs ; Ctrl+Z reprend tout. "
+                        "Une vue qui a chang\xC3\xA9 depuis la proposition bloque toujours. D\xC3\xA9" "coch\xC3\xA9" "e : une erreur bloque.");
+    localFirst_->setTooltip("Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e (instantan\xC3\xA9" "e, sans connexion). Chaque demande passe d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, "
                             "sans connexion ni jeton. L'IA connect\xC3\xA9" "e ne re\xC3\xA7oit que ce qu'elle ne comprend pas (et les demandes "
                             "avec une pi\xC3\xA8" "ce jointe).");
     sendView_ = check("La vue active (ses objets et leurs propri\xC3\xA9t\xC3\xA9s)", ".vue", s.sendView);
@@ -494,6 +509,7 @@ bool AiSettingsDialog::chooseService(std::string_view key) {
 
 ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "actif") return enabled_;
+    if (name == "avertir") return notify_;
     if (name == "fournisseur") return provider_;
     if (name == "modele") return model_;
     if (name == "lister") return listModels_;
@@ -517,12 +533,14 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "budget") return budget_;
     if (name == "periode") return period_;
     if (name == "dabord") return localFirst_;
+    if (name == "malgre") return anyway_;
     return nullptr;
 }
 
 Settings AiSettingsDialog::draft() const {
     Settings s = panel_.assistant().settings();
     s.enabled = enabled_->isChecked();
+    s.notifyReplies = notify_->isChecked();
     if (const auto* it = provider_->selectedItem(); it && it->enabled) s.provider = it->value;
     s.model = model_->text();
     s.endpoint = endpoint_->text();
@@ -545,6 +563,7 @@ Settings AiSettingsDialog::draft() const {
     s.sendVariables = sendVariables_->isChecked();
     s.sendAttachments = sendAttachments_->isChecked();
     s.localFirst = localFirst_->isChecked();
+    s.applyWithErrors = anyway_->isChecked();
     // 1.16.0 : le service, la fenetre de contexte (vide : Auto), l'outil, le budget.
     if (s.provider == "openai")
         if (const auto* it = service_->selectedItem()) s.preset = it->value;

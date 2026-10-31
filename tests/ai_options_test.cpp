@@ -376,6 +376,51 @@ void formulas() {
     check(bk.errors.size() == 6, "six erreurs (" + std::to_string(bk.errors.size()) + ")");
 }
 
+// ---- 1.16.1 : un repere associe ; appliquer malgre les erreurs ---------------------------------
+void markersAndLenient() {
+    std::printf("1.16.1 : repere associe, appliquer malgre les erreurs\n");
+    Fixture f;
+    {   // une structure Armoires (ARRAY OF T_Armoire) et un voyant associe a $Armoires[0]$.Prete
+        auto& p = f.doc->project;
+        hmi::HmiType t;
+        t.id = p.allocate();
+        t.name = "T_Armoire";
+        t.members = {{"Prete", "BOOL"}, {"Defaut", "BOOL"}};
+        p.programs.types.push_back(t);
+        hmi::Variable v;
+        v.id = p.allocate();
+        v.name = "Armoires";
+        v.type = "ARRAY[0..3] OF T_Armoire";
+        p.programs.variables.push_back(v);
+    }
+    ai::Operation bind = op(A::Bind, "Voyant_Pret");
+    bind.variable = "$Armoires[0]$.Prete";
+    auto p = f.proposal({create("Indicator", "Voyant_Pret", {{"x", "40"}, {"y", "40"}}), bind});
+    const auto ck = ai::validate(f.doc->project, p);
+    check(ck.ok(), "associer a $Armoires[0]$.Prete (la variable existe) : pas d'erreur (" + errorsOf(ck) + ")");
+    // Appliquer malgre les erreurs : ce qui est valide s'applique, l'erreur est rendue (pour le journal).
+    auto mixed = f.proposal({create("Rectangle", "Bon_1", {{"x", "40"}, {"y", "300"}}),
+                             create("Rectangle", "Mauvais_1", {{"x", "200"}, {"y", "300"}, {"visible", "=Vanne_Inconnue"}}),
+                             op(A::Modify, "Objet_Absent", {{"fill", "#FF0000"}})});
+    const auto mk = ai::validate(f.doc->project, mixed);
+    check(!mk.ok() && mk.errors.size() == 2, "deux erreurs (" + errorsOf(mk) + ")");
+    std::string why;
+    check(!ai::makeCommand(f.doc, mixed, &why), "sans l'option : une erreur bloque");
+    std::vector<std::string> skipped;
+    auto cmd = ai::makeCommandLenient(f.doc, mixed, skipped, &why);
+    check(cmd && skipped.size() == 2, "malgre les erreurs : la commande, et les deux erreurs rendues (" + why + ")");
+    if (cmd) (void)f.stack.push(std::move(cmd));
+    check(f.object(f.v(), "Bon_1") != nullptr, "ce qui est valide est applique");
+    const auto* m1 = f.object(f.v(), "Mauvais_1");
+    check(!m1 || m1->expr("visible").empty(), "la formule en erreur n'est pas posee");
+    check(f.stack.canUndo(), "un seul Ctrl+Z la reprend");
+    // Une vue qui a change depuis : bloque toujours, meme malgre les erreurs.
+    auto stale = f.proposal({create("Rectangle", "Tard_1", {{"x", "40"}, {"y", "500"}})});
+    (void)f.apply(f.proposal({create("Rectangle", "Entre_Deux", {{"x", "400"}, {"y", "500"}})}));
+    skipped.clear();
+    check(!ai::makeCommandLenient(f.doc, stale, skipped, &why), "une vue changee depuis : bloque toujours (" + why + ")");
+}
+
 // ---- dupliquer avec reperes ------------------------------------------------------------------
 void duplicateMarkers() {
     std::printf("dupliquer avec reperes\n");
@@ -817,6 +862,7 @@ int main() {
     createVariables();
     createTypes();
     formulas();
+    markersAndLenient();
     duplicateMarkers();
     json();
     toolReading();

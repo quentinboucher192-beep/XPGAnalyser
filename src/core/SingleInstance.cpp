@@ -357,6 +357,17 @@ bool Guard::forward(const std::vector<std::string>& args, std::string* why) {
     return ok;
 }
 
+void attention(void* nativeWindow, bool sound) noexcept {
+    HWND hwnd = static_cast<HWND>(nativeWindow);
+    if (!hwnd || !IsWindow(hwnd)) return;
+    FLASHWINFO flash{};
+    flash.cbSize = sizeof flash;
+    flash.hwnd = hwnd;
+    flash.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;   // jusqu'au retour de la fenetre devant
+    (void)FlashWindowEx(&flash);
+    if (sound) (void)MessageBeep(MB_ICONASTERISK);
+}
+
 void bringToFront(void* nativeWindow) noexcept {
     HWND hwnd = static_cast<HWND>(nativeWindow);
     if (!hwnd || !IsWindow(hwnd)) return;
@@ -602,6 +613,7 @@ bool Guard::forward(const std::vector<std::string>& args, std::string* why) {
 }
 
 void bringToFront(void*) noexcept {}
+void attention(void*, bool) noexcept {}
 
 void alert(const std::string& utf8Title, const std::string& utf8Text) noexcept {
     std::fprintf(stderr, "%s : %s\n", utf8Title.c_str(), utf8Text.c_str());

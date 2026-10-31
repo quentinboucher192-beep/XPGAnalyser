@@ -115,6 +115,8 @@ public:
     [[nodiscard]] bool  generating() const noexcept { return gen_.phase != Phase::Idle; }
     // Le message de l'assistant en cours d'ecriture (son indice ; -1 : aucun) et ce qui en est ecrit.
     [[nodiscard]] int         generatingMessage() const noexcept;
+    // 1.16.1 : la conversation de la reponse en cours (vide : aucune) - l'avertissement de fin de reponse.
+    [[nodiscard]] std::string generatingConversationId() const { return generating() ? gen_.conversation : std::string{}; }
     [[nodiscard]] std::string shownText() const;
     // Les suggestions a montrer sous la derniere reponse (une demande non reconnue).
     [[nodiscard]] bool suggestionsAfterLast() const noexcept { return suggestionsAfter_ && !generating(); }
@@ -143,7 +145,13 @@ public:
     // Appliquer : UN pas d'annulation. Faux et `why` : perimee, vue absente, erreurs, plus a
     // l'etat "proposee". La confirmation d'une suppression multiple est a l'appelant (needsConfirm).
     bool apply(int message, std::string* why = nullptr);
+    // 1.16.1 : appliquer en laissant de cote ce qui est en erreur (l'option << Appliquer malgre les erreurs >> ; le
+    // panneau a demande confirmation). Les erreurs sont notees sous la reponse et dans le journal d'activite.
+    bool applyIgnoringErrors(int message, std::string* why = nullptr);
     bool refuse(int message);
+    // 1.16.1 : REVENIR SUR UN REFUS (un refus par megarde) - la proposition redevient << proposee >> ; la carte la
+    // revalide (une vue changee depuis : elle le dit, et propose de redemander).
+    bool unrefuse(int message);
     [[nodiscard]] bool needsConfirm(int message) const;
     // Le choix de l'utilisateur pour une variable introuvable (une variable existante, ou la creer).
     bool chooseVariable(int message, VariableChoice choice);
@@ -241,6 +249,7 @@ public:
 
 private:
     Conversation* cur() noexcept;
+    bool          applyWith(int message, std::string* why, bool ignoringErrors);   // 1.16.1
     Conversation* generatingConversation() noexcept;
     Conversation* touch(Conversation& c);   // la date ; la liste retriee : rend la conversation (deplacee)
     void save(Conversation& c);

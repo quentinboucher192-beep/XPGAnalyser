@@ -229,10 +229,16 @@ struct Touched {
 };
 // 1.15.0 : `env` (a la fin) - les noms de l'automate relie (sans lui, une variable de l'automate est introuvable).
 bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, const Proposal&, Touched* touched = nullptr,
-              std::string* why = nullptr, bool skipRemovals = false, const Env* env = nullptr);
+              std::string* why = nullptr, bool skipRemovals = false, const Env* env = nullptr, bool lenient = false);
 // La commande d'une proposition validee : UN pas d'annulation. nullptr et `why` : rien a faire.
 // 1.15.0 : `env` (a la fin), celui de validate - sans lui, une association a une variable de l'automate est refusee.
 [[nodiscard]] core::CommandPtr makeCommand(const hmi::DocumentPtr&, const Proposal&, std::string* why = nullptr, const Env& env = {});
+// 1.16.1 : APPLIQUER MALGRE LES ERREURS (l'option des parametres, apres une confirmation) - ce qui est valide
+// s'applique, ce qui est en erreur est laisse de cote, comme l'apercu le montre ; `skipped` recoit les erreurs
+// (l'appelant les note au journal). Une vue qui a change depuis la proposition, ou qui n'existe plus, bloque
+// toujours.
+[[nodiscard]] core::CommandPtr makeCommandLenient(const hmi::DocumentPtr&, const Proposal&, std::vector<std::string>& skipped,
+                                                  std::string* why = nullptr, const Env& env = {});
 
 // L'apercu : la copie de la vue, modifiee (les objets a supprimer y sont encore).
 struct Preview {

@@ -122,6 +122,10 @@ public:
         std::function<void()>                   close;           // replier le panneau
         std::function<bool()>                   memoryAvailable; // la commande ia.memoire existe-t-elle ?
         std::function<void()>                   openMemory;      // Memoire et apprentissage...
+        // 1.16.1 : une reponse vient de finir (l'option << M'avertir des reponses >> cochee) : l'ecran avertit si
+        // l'utilisateur ne regarde pas (la cloche, la barre des taches). conversation : son identifiant ; excerpt : le
+        // debut de la reponse ; error : elle a fini en erreur.
+        std::function<void(const std::string& conversation, const std::string& title, const std::string& excerpt, bool error)> replied;
     };
 
     AiPanel(std::string id, Assistant::Host core, UiHost ui);
@@ -156,6 +160,10 @@ public:
     bool applyProposal(int message);               // la confirmation d'une suppression multiple d'abord
     bool reapplyProposal(int message);             // une proposition annulee (Ctrl+Z) : de nouveau
     bool refuseProposal(int message);
+    bool unrefuseProposal(int message);            // 1.16.1 : revenir sur un refus
+    // 1.16.1 : REFUSER AVEC UNE QUESTION (la Previsualisation) - << Refuser cette proposition ? >> [Refuser] [Garder] ;
+    // Echap ou Garder : rien ne change.
+    void askRefuse(int message);
     void editRequest(int message);                 // Modifier la demande : le texte remis dans la saisie
     void openSettings();
     // 1.15.0 : Reessayer (le dernier message est une erreur ou un arret d'un vrai fournisseur).
@@ -240,6 +248,7 @@ private:
     std::string            lastStatus_;
     std::string            appliedKey_;      // l'etat reel des propositions appliquees deja montre
     double                 appliedCheck_{-1.0};
+    std::string            watchingReply_;   // 1.16.1 : la conversation de la reponse en cours (l'avertissement)
     mutable std::vector<std::pair<gfx::Rect, std::string>> tips_;   // les textes coupes du dernier dessin
     float                  autoRatio_{-1.f};
     bool                   syncing_{false};
@@ -337,6 +346,7 @@ private:
         ui::Button* third{nullptr};       // Refuser, ou Redemander (perimee)
         bool        stale{false};
         bool        undone{false};        // appliquee puis annulee : `apply` dit Reappliquer
+        bool        refused{false};       // 1.16.1 : refusee : `apply` dit Revenir sur le refus
     };
     void measure();
     void placeCards();             // les boutons des cartes, au decalage du moment

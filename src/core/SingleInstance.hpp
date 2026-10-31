@@ -96,6 +96,11 @@ Guard* current() noexcept;
 // clignote. Ailleurs : rien (SDL_RaiseWindow suffit).
 void bringToFront(void* nativeWindow) noexcept;
 
+// 1.16.1 : attirer l'attention SANS prendre le premier plan (une reponse de l'Assistant IA est arrivee) : sous
+// Windows, le bouton de la barre des taches clignote jusqu'a ce que la fenetre revienne devant, et `sound` joue le
+// son de notification du systeme. Ailleurs : rien.
+void attention(void* nativeWindow, bool sound) noexcept;
+
 // Dire a l'utilisateur ce qui empeche de demarrer (Windows : une boite de message ;
 // ailleurs : la sortie d'erreur).
 void alert(const std::string& utf8Title, const std::string& utf8Text) noexcept;

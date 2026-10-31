@@ -343,10 +343,13 @@ core::Status AiPreviewDialog::buildUi() {
     variable_->setVisibility(ui::Visibility::Collapsed);
     links_ += variable_->selectionChanged->connect([this](int i) { if (!syncing_) (void)chooseVariable(i); });
     edit_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Modifier la demande", base + ".modifier")));
-    edit_->setTooltip("Remettre la demande dans la saisie pour la reformuler (cette proposition est mise de c\xC3\xB4t\xC3\xA9).");
+    edit_->setTooltip("Remettre la demande dans la saisie pour la reformuler (cette proposition reste \xC3\xA0 d\xC3\xA9" "cider, sur sa carte).");
     links_ += edit_->clicked->connect([this] { editRequest(); });
-    cancel_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Annuler", base + ".annuler")));
-    cancel_->setTooltip("Refuser la proposition : le projet ne change pas. (\xC3\x89" "chap ferme sans d\xC3\xA9" "cider.)");
+    // 1.16.1 : << Refuser... >> (une question d'abord) - plus << Annuler >>, qu'on prenait pour << fermer >>.
+    cancel_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", base + ".refuser")));
+    cancel_->setStyle(ui::Button::Style::Flat);
+    cancel_->setTooltip("Refuser la proposition (une question d'abord) : le projet ne change pas ; sa carte pourra revenir sur ce refus. "
+                        "\xC3\x89" "chap ferme cette fen\xC3\xAAtre SANS d\xC3\xA9" "cider.");
     links_ += cancel_->clicked->connect([this] { cancel(); });
     apply_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Appliquer", base + ".appliquer")));
     apply_->setStyle(ui::Button::Style::Primary);
@@ -517,8 +520,8 @@ bool AiPreviewDialog::apply() {
 }
 
 void AiPreviewDialog::cancel() {
-    (void)panel_.refuseProposal(message_);
-    finish(false);
+    // 1.16.1 : la question d'abord ; refusee, la fenetre se ferme seule (Update voit l'etat changer).
+    panel_.askRefuse(message_);
 }
 
 void AiPreviewDialog::editRequest() {

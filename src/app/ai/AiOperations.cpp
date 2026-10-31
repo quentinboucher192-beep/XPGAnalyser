@@ -72,7 +72,13 @@ bool valueBearing(hmi::Kind k) {
 
 // Le nom d'une variable, ramene a sa racine (Pompe.Marche, Pompes[3] -> Pompe, Pompes).
 std::string rootOf(std::string_view name) {
-    std::string_view n = name;
+    // 1.16.1 : un REPERE ($Armoires[0]$.Prete : ce que Dupliquer avec reperes fait avancer) se lit sans ses $ - la
+    // variable visee est Armoires (avant : << $Armoires >>, introuvable, alors que la variable existe).
+    std::string plain;
+    plain.reserve(name.size());
+    for (char ch : name)
+        if (ch != '$') plain += ch;
+    std::string_view n = plain;
     if (n.size() > 4 && iequal(n.substr(0, 4), "API.")) n.remove_prefix(4);
     const auto cut = n.find_first_of(".[");
     return std::string(n.substr(0, cut));
@@ -1373,23 +1379,27 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
 }
 
 bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, const Proposal& p, Touched* touched, std::string* why,
-              bool skipRemovals, const Env* env) {
+              bool skipRemovals, const Env* env, bool lenient) {
     Run run{project, view, nextId, p, env, nullptr, touched, skipRemovals};
+    run.preview = lenient;   // 1.16.1 : ce qui est en erreur est laisse de cote (comme l'apercu)
     const bool ok = run.go();
     if (!ok && why) *why = run.why;
     return ok;
 }
 
-core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std::string* why, const Env& env) {
+namespace {
+core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std::string* why, const Env& env, std::vector<std::string>* skipped) {
     if (!doc) {
         if (why) *why = "Pas de projet IHM ouvert.";
         return nullptr;
     }
     const Check check = validate(doc->project, p, env);
-    if (!check.ok()) {
+    const bool lenient = skipped != nullptr && !check.stale && !check.viewMissing;
+    if (!check.ok() && !lenient) {
         if (why) *why = check.errors.front();
         return nullptr;
     }
+    if (skipped) *skipped = check.errors;
     const bool onView = usesOpenView(p);
     const hmi::View* v = onView ? targetView(doc->project, p) : nullptr;
     const hmi::Id viewId = v ? v->id : hmi::kNoId;
@@ -1420,6 +1430,7 @@ core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std
             if (createsView(p)) work = newViewFor(pr, p.ops.front(), pr.nextId);
             else if (const hmi::View* target = pr.view(viewId)) work = *target;
             Run run{pr, work, pr.nextId, p, &env, nullptr, nullptr, false};
+            run.preview = lenient && !check.ok();   // 1.16.1 : appliquer malgre les erreurs
             if (!run.go()) {
                 failed = run.why.empty() ? std::string("La proposition ne s'applique pas.") : run.why;
                 pr.programs.variables.resize(savedVars);
@@ -1439,7 +1450,7 @@ core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std
     } else {
         cmd = hmi::changeView(doc, viewId, label, [&](hmi::Project& pr, hmi::View& view) {
             hmi::View work = view;
-            if (applyOps(pr, work, pr.nextId, p, nullptr, &failed, false, &env)) view = std::move(work);
+            if (applyOps(pr, work, pr.nextId, p, nullptr, &failed, false, &env, lenient && !check.ok())) view = std::move(work);
         });
     }
     if (!failed.empty()) {
@@ -1448,6 +1459,16 @@ core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std
     }
     if (!cmd && why) *why = "La proposition ne change rien au projet.";
     return cmd;
+}
+} // namespace
+
+core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std::string* why, const Env& env) {
+    return commandFor(doc, p, why, env, nullptr);
+}
+
+core::CommandPtr makeCommandLenient(const hmi::DocumentPtr& doc, const Proposal& p, std::vector<std::string>& skipped, std::string* why,
+                                    const Env& env) {
+    return commandFor(doc, p, why, env, &skipped);
 }
 
 Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) {

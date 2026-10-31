@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <utility>
 
 namespace app::ai {
 
@@ -652,6 +653,26 @@ void AiPanel::refreshButtons() {
 void AiPanel::tick(double now) {
     (void)assistant_->tick(now);
     sync();
+    // 1.16.1 : une reponse vient de finir - l'ecran avertit (s'il le faut : l'utilisateur ne regarde pas).
+    if (assistant_->generating()) {
+        watchingReply_ = assistant_->generatingConversationId();
+    } else if (!watchingReply_.empty()) {
+        const std::string id = std::exchange(watchingReply_, std::string{});
+        if (assistant_->settings().notifyReplies && ui_.replied)
+            for (const auto& c : assistant_->conversations())
+                if (c.id == id && !c.messages.empty() && c.messages.back().role == "assistant") {
+                    const Message& m = c.messages.back();
+                    std::string excerpt = m.text.empty() ? m.note : m.text;
+                    for (char& ch : excerpt)
+                        if (ch == '\n' || ch == '\r' || ch == '*' || ch == '`') ch = ' ';
+                    if (excerpt.size() > 110) {
+                        std::size_t cut = 110;
+                        while (cut > 0 && (static_cast<unsigned char>(excerpt[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
+                        excerpt = excerpt.substr(0, cut) + "\xE2\x80\xA6";
+                    }
+                    ui_.replied(id, c.title, excerpt, m.state == "erreur");
+                }
+    }
     refreshBand(now);   // 1.16.0 : la limite en direct (le compte a rebours avance chaque seconde)
     // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
     // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
@@ -886,6 +907,7 @@ bool AiPanel::sendText(const std::string& text) {
         say(why);
         return false;
     }
+    watchingReply_ = assistant_->generatingConversationId();   // 1.16.1 : une reponse d'un seul pas se voit aussi
     seen_ = 0;
     sync();
     chat_->scrollToBottom();
@@ -960,6 +982,26 @@ bool AiPanel::applyProposal(int message) {
         return ok;
     };
     const Check ck = assistant_->check(message);
+    // 1.16.1 : APPLIQUER MALGRE LES ERREURS (l'option des parametres) - toujours une confirmation qui les liste.
+    if (!ck.ok() && !ck.stale && !ck.viewMissing && assistant_->settings().applyWithErrors && ui_.showDialog) {
+        HmiAskDialog::Spec spec;
+        spec.id = "dialog.ai.malgre";
+        spec.title = "Appliquer malgr\xC3\xA9 " + std::to_string(ck.errors.size()) + (ck.errors.size() > 1 ? " erreurs" : " erreur");
+        spec.text = "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) "
+                    "et not\xC3\xA9 sous la r\xC3\xA9ponse et dans le journal.\nCtrl+Z reprend tout d'un coup.";
+        spec.listTitle = "Laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9";
+        for (const auto& e : ck.errors) spec.items.push_back({e, std::string{}, true});
+        spec.plainItems = true;
+        spec.confirm = "Appliquer quand m\xC3\xAAme";
+        spec.width = 620.f;
+        ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, message](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            std::string why;
+            if (!assistant_->applyIgnoringErrors(message, &why)) say(why);
+            sync();
+        });
+        return false;   // la reponse viendra
+    }
     if (ck.confirmRemoval && ui_.showDialog) {
         HmiAskDialog::Spec spec;
         spec.id = "dialog.ai.confirmer";
@@ -992,6 +1034,33 @@ bool AiPanel::reapplyProposal(int message) {
 bool AiPanel::refuseProposal(int message) {
     const bool ok = assistant_->refuse(message);
     sync();
+    if (ok) say("Proposition refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9. \xC2\xAB Revenir sur le refus \xC2\xBB, sur sa carte, la remet.");
+    return ok;
+}
+
+void AiPanel::askRefuse(int message) {
+    const Proposal* p = assistant_->proposal(message);
+    if (!p || p->state != "proposee") return;
+    if (!ui_.showDialog) {
+        (void)refuseProposal(message);
+        return;
+    }
+    HmiAskDialog::Spec spec;
+    spec.id = "dialog.ai.refuser";
+    spec.title = "Refuser la proposition";
+    spec.text = "Refuser \xC2\xAB " + (p->summary.empty() ? std::string("cette proposition") : p->summary)
+                + " \xC2\xBB ? Le projet ne change pas.\nTu pourras revenir sur ce refus depuis sa carte (\xC2\xAB Revenir sur le refus \xC2\xBB).";
+    spec.confirm = "Refuser";
+    spec.cancel = "Garder";
+    spec.width = 520.f;
+    ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, message](const menu::DialogResult& r) {
+        if (r.accepted()) (void)refuseProposal(message);
+    });
+}
+
+bool AiPanel::unrefuseProposal(int message) {
+    const bool ok = assistant_->unrefuse(message);
+    sync();
     return ok;
 }
 
@@ -999,7 +1068,7 @@ void AiPanel::editRequest(int message) {
     const Proposal* p = assistant_->proposal(message);
     if (!p) return;
     const std::string request = p->request;
-    if (p->state == "proposee") (void)assistant_->refuse(message);
+    // 1.16.1 : la proposition n'est plus refusee en silence - elle reste a decider (sa carte la garde).
     prompt_->setText(request);
     prompt_->takeFocus();
     sync();
@@ -1018,6 +1087,7 @@ bool AiPanel::retry() {
     std::string why;
     const bool ok = assistant_->retry(&why);
     if (!ok) say(why);
+    if (ok) watchingReply_ = assistant_->generatingConversationId();   // 1.16.1 : l'avis de fin de reponse
     seen_ = 0;
     sync();
     if (ok) chat_->scrollToBottom();
@@ -1630,7 +1700,12 @@ void AiChatView::measure() {
                     if (open) {
                         const bool stale = t.check.stale || t.check.viewMissing;
                         b.buttons = {"Pr\xC3\xA9visualiser\xE2\x80\xA6"};
-                        if (!stale) b.buttons.push_back("Appliquer");
+                        if (!stale) {   // 1.16.1 : le meme texte que le bouton (malgre les erreurs)
+                            const bool anyway = !t.check.ok() && a.settings().applyWithErrors;
+                            b.buttons.push_back(anyway ? "Appliquer malgr\xC3\xA9 " + std::to_string(t.check.errors.size())
+                                                             + (t.check.errors.size() > 1 ? " erreurs\xE2\x80\xA6" : " erreur\xE2\x80\xA6")
+                                                       : std::string("Appliquer"));
+                        }
                         b.buttons.push_back(stale ? "Redemander" : "Refuser");
                         // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
                         std::size_t lines = 0;
@@ -1667,7 +1742,10 @@ void AiChatView::measure() {
                             case Assistant::Applied::Applied:
                                 done = "Appliqu\xC3\xA9" "e au projet : Ctrl+Z la reprend d'un coup.";
                                 break;
-                            default: done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9."; break;
+                            default:
+                                done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
+                                if (m.proposal->state == "refusee") b.buttons = {"Revenir sur le refus"};   // 1.16.1
+                                break;
                         }
                         b.doneLines = wrapPlain(done, kMeta, cw - 24.f);
                         ch += static_cast<float>(b.doneLines.size()) * kNoteH + 2.f;
@@ -1743,7 +1821,8 @@ void AiChatView::rebuild() {
             });
             links_ += cb.apply->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
-                if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
+                if (cards_[k].refused) (void)panel_.unrefuseProposal(cards_[k].message);   // 1.16.1
+                else if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
                 else (void)panel_.applyProposal(cards_[k].message);
             });
             links_ += cb.third->clicked->connect([this, k] {
@@ -1755,7 +1834,16 @@ void AiChatView::rebuild() {
         }
         CardButtons& cb = cards_[slot++];
         cb.message = b.message;
-        cb.undone = p->state != "proposee";
+        cb.refused = p->state == "refusee";
+        cb.undone = p->state != "proposee" && !cb.refused;
+        if (cb.refused) {   // 1.16.1 : refusee (par megarde, peut-etre) : Revenir sur le refus, seul
+            cb.stale = false;
+            cb.apply->setText("Revenir sur le refus");
+            cb.apply->setTooltip("Remettre la proposition \xC3\xA0 d\xC3\xA9" "cider : la pr\xC3\xA9visualiser, l'appliquer ou la refuser. Rien ne change dans le projet.");
+            cb.apply->setEnabled(true);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            continue;
+        }
         if (cb.undone) {   // appliquee puis annulee (Ctrl+Z) : Reappliquer, seul
             cb.stale = false;
             cb.apply->setText("R\xC3\xA9" "appliquer");
@@ -1767,9 +1855,13 @@ void AiChatView::rebuild() {
         cb.stale = t.check.stale || t.check.viewMissing;
         cb.preview->setText("Pr\xC3\xA9visualiser\xE2\x80\xA6");
         cb.preview->setTooltip("L'aper\xC3\xA7u : les objets, les propri\xC3\xA9t\xC3\xA9s avant \xE2\x86\x92 apr\xC3\xA8s, les variables, les avertissements, et la vue dessin\xC3\xA9" "e.");
-        cb.apply->setText("Appliquer");
-        cb.apply->setTooltip("Appliquer au projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
-        cb.apply->setEnabled(t.check.ok());
+        // 1.16.1 : des erreurs, et l'option << Appliquer malgre les erreurs >> : le bouton le dit (une confirmation suit).
+        const bool anyway = !t.check.ok() && panel_.assistant().settings().applyWithErrors;
+        cb.apply->setText(anyway ? "Appliquer malgr\xC3\xA9 " + std::to_string(t.check.errors.size()) + (t.check.errors.size() > 1 ? " erreurs\xE2\x80\xA6" : " erreur\xE2\x80\xA6")
+                                 : std::string("Appliquer"));
+        cb.apply->setTooltip(anyway ? "Appliquer ce qui est valide ; les erreurs sont laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9" "es au journal (une confirmation les liste)."
+                                    : "Appliquer au projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
+        cb.apply->setEnabled(t.check.ok() || anyway);
         cb.third->setText(cb.stale ? "Redemander" : "Refuser");
         cb.third->setTooltip(cb.stale ? "La vue a chang\xC3\xA9 : remettre la demande dans la saisie." : "Refuser : le projet ne change pas.");
         cb.preview->setVisibility(ui::Visibility::Visible);

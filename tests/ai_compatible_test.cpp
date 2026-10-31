@@ -850,6 +850,8 @@ struct Fixture {
     menu::MenuManager            mm{menu::MenuFactory{}};
     std::unique_ptr<ai::AiPanel> panel;
     double                       t{100.0};
+    int                          replied{0};          // 1.16.1 : les avis de reponse demandes a l'ecran
+    std::string                  repliedText;
 
     explicit Fixture(const std::string& name) {
         dir = fs::temp_directory_path() / ("xpg_ai_compatible_" + name);
@@ -868,6 +870,10 @@ struct Fixture {
         core.projectPath = [this] { return U(dir / "Station"); };
         ai::AiPanel::UiHost ui;
         ui.showDialog = [this](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> cb) { mm.ShowDialog(std::move(d), std::move(cb)); };
+        ui.replied = [this](const std::string&, const std::string& title, const std::string& excerpt, bool) {
+            ++replied;
+            repliedText = title + " : " + excerpt;
+        };
         panel = std::make_unique<ai::AiPanel>("ai.panneau", std::move(core), std::move(ui));
         panel->setBounds({0, 0, 440, 900});
         panel->ensureLoaded();
@@ -1079,6 +1085,26 @@ void testLocalFirst() {
     check(m && m->role == "assistant" && m->proposal && has(m->text, "R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e"),
           "la reponse de l'IA integree, sa proposition, la mention (" + (m ? m->text : std::string("aucune")) + ")");
     check(f.as().usageTotals().tokensToday == 0, "aucun jeton compte");
+    // 1.16.1 : un refus par megarde se reprend (la carte : Revenir sur le refus).
+    {
+        const int msg = static_cast<int>(f.as().current()->messages.size()) - 1;
+        check(f.panel->refuseProposal(msg) && f.as().proposal(msg)->state == "refusee", "refuser la proposition");
+        check(f.panel->unrefuseProposal(msg) && f.as().proposal(msg)->state == "proposee", "revenir sur le refus : de nouveau proposee");
+        check(!f.panel->unrefuseProposal(msg), "revenir sur un refus qui n'en est pas un : rien");
+    }
+    // 1.16.1 : l'avis de reponse - demande a l'ecran a la fin de chaque reponse (l'ecran decide si l'utilisateur regarde).
+    check(f.replied >= 2 && !f.repliedText.empty(), "l'avis de fin de reponse : " + std::to_string(f.replied) + " (" + f.repliedText + ")");
+    {
+        const int before = f.replied;
+        ai::Settings st = f.as().settings();
+        st.notifyReplies = false;
+        f.as().setSettings(st);
+        check(f.panel->sendText("Ajoute une cuve"), "l'option decochee : envoyer");
+        wait();
+        check(f.replied == before, "l'option decochee : aucun avis");
+        st.notifyReplies = true;
+        f.as().setSettings(st);
+    }
     // Ce qu'elle ne comprend pas part a l'IA connectee, avec la conversation.
     s.replies.push_back({textEv("Voici un poeme."), doneEv()});
     check(f.panel->sendText("Quelle est la capitale de l'Australie ?"), "une demande hors de ses regles : envoyer");
@@ -1164,6 +1190,11 @@ void testSettings() {
     period->setSelectedIndex(1);
     model->setText("mistral-small-latest");
     // 1.16.1 : la case << Essayer d'abord l'IA integree >> - active avec un fournisseur relie, dans le brouillon
+    auto* avertir = dynamic_cast<ui::Checkbox*>(d->field("avertir"));
+    check(avertir && avertir->isChecked(), "la case M'avertir des reponses : cochee par defaut");
+    if (avertir) avertir->setState(ui::Checkbox::State::Unchecked);
+    check(!d->draft().notifyReplies, "decochee : dans le brouillon");
+    if (avertir) avertir->setState(ui::Checkbox::State::Checked);
     auto* dabord = dynamic_cast<ui::Checkbox*>(d->field("dabord"));
     check(dabord && dabord->enabled() && !dabord->isChecked(), "la case IA integree d'abord : active, decochee par defaut");
     if (dabord) dabord->setState(ui::Checkbox::State::Checked);

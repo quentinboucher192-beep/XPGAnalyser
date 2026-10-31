@@ -23,6 +23,7 @@
 #include "AiPanel.hpp"
 
 #include "../App.hpp"
+#include "../BackgroundTasks.hpp"   // 1.16.1 : la cloche (une reponse de l'Assistant arrivee)
 #include "../../core/Edition.hpp"
 #include "../hmi/HmiEditor.hpp"
 #include "../screens/Screens.hpp"
@@ -147,6 +148,26 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     ui.close = [this] { showAssistant(false); };
     ui.memoryAvailable = [this] { return app_.actions().find("ia.memoire") != nullptr; };
     ui.openMemory = [this] { (void)app_.actions().trigger("ia.memoire", app_.commands()); };
+    // 1.16.1 : << M'avertir des reponses >> - seulement si l'utilisateur ne regarde pas : la fenetre derriere une autre,
+    // le panneau replie, ou une autre conversation ouverte. La cloche (Voir ouvre la conversation) ; la fenetre en
+    // arriere-plan : son bouton clignote dans la barre des taches, avec le son de notification du systeme.
+    ui.replied = [this](const std::string& conversation, const std::string& title, const std::string& excerpt, bool error) {
+        const bool focused = app_.windowFocused();
+        const auto* cur = aiPanel_ ? aiPanel_->assistant().current() : nullptr;
+        if (focused && assistantShown() && cur && cur->id == conversation) return;   // il la voit arriver
+        bgtasks::Notice n;
+        n.key = "ia.reponse";
+        n.group = "Assistant IA";
+        n.title = error ? std::string("L'Assistant IA n'a pas pu r\xC3\xA9pondre") : std::string("R\xC3\xA9ponse de l'Assistant IA");
+        n.detail = "\xC2\xAB " + title + " \xC2\xBB : " + excerpt;
+        n.button = "Voir";
+        n.action = "ia.reponse:" + conversation;
+        n.tone = error ? "warning" : "info";
+        bgtasks::post(std::move(n));
+        if (!focused) app_.drawAttention(true);
+        if (status_) status_->setTransientMessage(error ? "Assistant IA : la r\xC3\xA9ponse a \xC3\xA9" "chou\xC3\xA9" "e (la cloche)."
+                                                       : "Assistant IA : une r\xC3\xA9ponse est arriv\xC3\xA9" "e (la cloche).", 6.0);
+    };
 
     auto panel = std::make_unique<ai::AiPanel>("ai.panneau", std::move(core), std::move(ui));
     aiPanel_ = panel.get();
@@ -170,6 +191,7 @@ void MainAnalysisScreen::showAssistant(bool show) {
     if (show) {
         aiPanel_->ensureLoaded();
         aiPanel_->prompt().takeFocus();
+        bgtasks::withdraw("ia.reponse");   // 1.16.1 : l'avis de reponse est lu
     }
     if (status_)
         status_->setTransientMessage(show ? "Assistant IA (" + aiPanel_->assistant().connectionText()
@@ -179,6 +201,14 @@ void MainAnalysisScreen::showAssistant(bool show) {
 }
 
 void MainAnalysisScreen::toggleAssistant() { showAssistant(!assistantShown()); }
+
+// 1.16.1 : << Voir >> sur l'avis d'une reponse : le panneau, ouvert sur cette conversation.
+void MainAnalysisScreen::showAssistantReply(const std::string& conversation) {
+    showAssistant(true);
+    if (!aiPanel_) return;
+    (void)aiPanel_->assistant().select(conversation);
+    aiPanel_->sync();
+}
 
 void MainAnalysisScreen::tickAssistant(double now) {
     if (!aiPanel_) return;

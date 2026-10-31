@@ -2149,6 +2149,23 @@ void App::bringToFront() {
 #endif
 }
 
+bool App::windowFocused() const {
+#if XPG_HAVE_SDL3
+    return window_ && (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
+#else
+    return true;
+#endif
+}
+
+void App::drawAttention(bool sound) {
+#if XPG_HAVE_SDL3
+    if (!window_) return;
+    core::instance::attention(SDL_GetPointerProperty(SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr), sound);
+#else
+    (void)sound;
+#endif
+}
+
 // 1.14.0 (M4) : la reponse a une autre application - "<code>\n<texte>\n#fin\n". 1.14.0 (relecture M4b) : seulement un
 // fichier NEUF du dossier temporaire, nomme xpg-enregistrement-<chiffres>.txt, cree en exclusivite (hmi::rec::writeReply) :
 // une commande --reponse ne fait jamais ecrire ailleurs, ni ecraser un fichier.

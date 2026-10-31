@@ -1212,6 +1212,7 @@ private:
     //  modifications de la vue de l'onglet ouvert ; elles passent par la pile (un Ctrl+Z).
 public:
     void toggleAssistant();
+    void showAssistantReply(const std::string& conversation);   // 1.16.1 : << Voir >> sur l'avis d'une reponse
     void showAssistant(bool show);
     [[nodiscard]] bool assistantShown() const;
     [[nodiscard]] ai::AiPanel* assistantPanel() const noexcept { return aiPanel_; }

@@ -297,6 +297,10 @@ public:
     }
     // Lot 14 : les notifications des alarmes (courriel, SMS) et la boite d'essai.
     [[nodiscard]] NotifyHost& notify() noexcept { return notify_; }
+    // 1.16.1 : la fenetre a-t-elle le clavier (l'utilisateur la regarde) ; attirer son attention sans la ramener devant
+    // (le bouton de la barre des taches clignote ; `sound` : le son de notification du systeme).
+    [[nodiscard]] bool windowFocused() const;
+    void               drawAttention(bool sound);
     // Lot 14 : l'acces par navigateur (le serveur web integre).
     [[nodiscard]] WebHost& web() noexcept { return web_; }
     // La vue IHM en marche a l'ecran : le poste d'exploitation, ou la simulation

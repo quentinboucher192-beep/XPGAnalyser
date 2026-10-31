@@ -616,7 +616,17 @@ Preview Assistant::previewOf(int message) const {
 
 bool Assistant::needsConfirm(int message) const { return check(message).confirmRemoval; }
 
-bool Assistant::apply(int message, std::string* why) {
+bool Assistant::apply(int message, std::string* why) { return applyWith(message, why, false); }
+
+bool Assistant::applyIgnoringErrors(int message, std::string* why) {
+    if (!settings_.applyWithErrors) {
+        if (why) *why = "Appliquer malgr\xC3\xA9 les erreurs est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).";
+        return false;
+    }
+    return applyWith(message, why, true);
+}
+
+bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
     auto* c = cur();
     const Proposal* p = proposal(message);
     if (!c || !p) {
@@ -629,7 +639,8 @@ bool Assistant::apply(int message, std::string* why) {
     }
     const auto doc = host_.document ? host_.document() : nullptr;
     std::string w;
-    auto cmd = makeCommand(doc, *p, &w, host_.env);
+    std::vector<std::string> skipped;   // 1.16.1 : ce qui est laisse de cote (appliquer malgre les erreurs)
+    auto cmd = ignoringErrors ? makeCommandLenient(doc, *p, skipped, &w, host_.env) : makeCommand(doc, *p, &w, host_.env);
     if (!cmd) {
         if (why) *why = w;
         notice_ = w;
@@ -651,6 +662,18 @@ bool Assistant::apply(int message, std::string* why) {
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
     if (const std::string made = creationSummary(prop); !made.empty())
         notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e - cr\xC3\xA9\xC3\xA9" "s : " + made + " (Ctrl+Z reprend tout d'un coup).";
+    // 1.16.1 : les erreurs laissees de cote - sous la reponse (la note du logiciel) et dans le journal d'activite.
+    if (!skipped.empty()) {
+        std::string list;
+        for (const auto& e : skipped) list += "\n- " + e;
+        auto& msg = c->messages[static_cast<std::size_t>(message)];
+        msg.note += (msg.note.empty() ? "" : "\n") + std::string("Appliqu\xC3\xA9" "e malgr\xC3\xA9 ") + std::to_string(skipped.size())
+                    + (skipped.size() > 1 ? " erreurs, laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 :" : " erreur, laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 :") + list;
+        for (const auto& e : skipped) appendActivity("conversation", "Appliqu\xC3\xA9" "e malgr\xC3\xA9 l'erreur (laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9) : " + e);
+        notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e, " + std::to_string(skipped.size())
+                  + (skipped.size() > 1 ? " erreurs laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal)."
+                                        : " erreur laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal).");
+    }
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     // 1.16.0 : la vue creee s'ouvre dans l'editeur.
@@ -690,6 +713,17 @@ bool Assistant::reapply(int message, std::string* why) {
         again->messages[static_cast<std::size_t>(message)].proposal->state = "appliquee";
     ++revision_;
     return false;
+}
+
+bool Assistant::unrefuse(int message) {
+    auto* c = cur();
+    const Proposal* p = proposal(message);
+    if (!c || !p || p->state != "refusee") return false;
+    c->messages[static_cast<std::size_t>(message)].proposal->state = "proposee";
+    notice_ = "Refus annul\xC3\xA9 : la proposition est de nouveau \xC3\xA0 pr\xC3\xA9visualiser, appliquer ou refuser.";
+    save(*c);
+    ++revision_;
+    return true;
 }
 
 bool Assistant::refuse(int message) {

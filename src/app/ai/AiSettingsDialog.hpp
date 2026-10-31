@@ -96,6 +96,7 @@ private:
 
     AiPanel&          panel_;
     ui::Checkbox*     enabled_{nullptr};
+    ui::Checkbox*     notify_{nullptr};       // 1.16.1 : m'avertir des reponses
     ui::DropDown*     provider_{nullptr};
     ui::InputText*    model_{nullptr};
     ui::Button*       listModels_{nullptr};
@@ -123,6 +124,7 @@ private:
     ui::InputText*    budget_{nullptr};
     ui::DropDown*     period_{nullptr};
     ui::Checkbox*     localFirst_{nullptr};   // 1.16.1 : l'IA integree d'abord
+    ui::Checkbox*     anyway_{nullptr};       // 1.16.1 : appliquer malgre les erreurs
     void              providerChanged();
     ui::Button*       cancel_{nullptr};
     ui::Button*       ok_{nullptr};
