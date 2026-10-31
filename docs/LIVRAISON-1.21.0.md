@@ -80,4 +80,25 @@ Une alarme qui réapparaît sans cesse (toutes les 2 s, des jours durant) **ne c
 
 **À propos d'IHM Studio** (et d'API Studio) montre maintenant un **arbre de tous les fichiers de l'application** : le programme installé, les réglages de l'utilisateur (Assistant IA, rapports de plantage, thèmes…), les données, les projets (avec leurs incidents et leurs enregistrements), la bibliothèque, les captures, les journaux – chaque ligne avec son **poids** et, pour un dossier, son nombre de fichiers, et le **poids total** bien en vue. Le compte se fait en arrière-plan (la fenêtre s'ouvre tout de suite, un compteur avance) ; un dossier contenu dans un autre n'est jamais compté deux fois ; ce qui ne se lit pas est compté à part. Ouvrir le dossier, trier par nom ou par poids, actualiser, copier le résumé.
 
+## 11. Un aperçu de tous les types de fichiers
+
+Le même aperçu partout : **IHM › Ressources**, **Fichiers externes**, l'objet **Explorateur de fichiers** (en marche) et l'explorateur de l'appli (bouton **Aperçu complet**).
+
+| Type | Ce qu'on voit |
+|---|---|
+| Images (PNG, JPEG, BMP, GIF, ICO, SVG) | l'image ajustée sur damier, −, +, Ajuster, 100 %, Ctrl+molette, double-clic ; un GIF animé tourne |
+| Vidéo | Lecture/Pause, temps, durée, dimensions, codec (ou le conseil quand elle ne se décode pas ici) |
+| Son (WAV, MP3) | l'onde, Lire/Pause avec le curseur, durée, canaux, fréquence |
+| PDF | page à page, « Page n / N », zoom |
+| Texte, code | lignes numérotées, encodage (UTF-8, UTF-8 BOM, UTF-16, Windows-1252), fins de ligne |
+| CSV, TSV, XLSX, XLSM | une grille A, B, C… avec ses onglets (masqués signalés), « avec macros » |
+| JSON, XML | indenté, repliable ligne par ligne, Tout replier / Tout déplier ; mal formé : montré tel quel avec la ligne fautive |
+| DOCX | les titres, les listes, les tableaux |
+| ZIP (et .xihm, .xapi) | les entrées : nom, taille, compressé, chiffré |
+| Polices (TTF, OTF) | famille, style, quatre lignes d'échantillon |
+| .XPG, .XHW | ce que l'explorateur savait déjà |
+| Tout le reste | le type reconnu à sa signature (exe, ELF, SQLite, 7z, RAR…) et un vidage hexadécimal des 4 premiers Ko |
+
+En tête : nom, type, taille, date ; un fichier dont le contenu ne correspond pas à l'extension est signalé. Ce qui est lent se lit **en arrière-plan** (« Chargement… »), jamais sur le fil de l'interface ; tout est borné (texte 4 Mo et 20 000 lignes, grilles 500 lignes, zip 5 000 entrées, images ramenées à 4 096 px…). L'objet Explorateur de fichiers gagne deux propriétés : **Aperçu** (coché : dans l'objet dès 760 pixels de large, sinon dans une fenêtre qui suit les choix) et **Ouvrir avec le système permis** (décoché d'office : un poste d'exploitation ne lance aucun programme).
+
 <!-- SECTIONS-SUITE -->
