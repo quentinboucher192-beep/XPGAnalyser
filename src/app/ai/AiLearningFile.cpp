@@ -8,6 +8,10 @@
 //      "reglages": { "fournisseur", "service", "adresse", "modele", (settings - JAMAIS la cle)
 //                    "integreeDabord", "avertirReponses", "appliquerMalgreErreurs" },
 //      "conversations": [ <conversation> ] }                         (conversations)
+//  1.21.0 : "revision": 2 et "modelesFichiers": <nombre> - les MODELES DE FICHIERS (AiFileModels.hpp) sont des
+//  connaissances de "connaissances" (categorie "modele-fichier", leur modele dans "donnees") ; la version reste 1 pour
+//  qu'une version precedente lise encore le fichier (elle refuse une version plus grande), et un .xia d'avant se lit
+//  tel quel.
 //
 //  LA FUSION : une connaissance de meme identifiant est gardee (ou remplacee si
 //  `replaceSame`) ; un identifiant suspect (un chemin, des caracteres hors
@@ -181,6 +185,11 @@ Plan makePlan(const Json& file, bool replaceSame, ImportReport& report) {
                 ++report.added;
                 report.lines.push_back("ajout\xC3\xA9" "e : " + it.name);
             }
+            // 1.21.0 : un modele de fichier (une liste d'E/S, un fichier reseau, des reports deja vus) - dit comme tel
+            if (k.str("categorie") == "modele-fichier" && it.what != Plan::Item::What::Skip) {
+                report.lines.back() += " (mod\xC3\xA8le de fichier)";
+                if (it.what == Plan::Item::What::Add || it.what == Plan::Item::What::Replace) ++report.models;
+            }
             plan.items.push_back(std::move(it));
         }
     }
@@ -246,16 +255,35 @@ bool exportTo(const std::string& path, const FileOptions& options, std::string* 
     Json file = Json::makeObject();
     file.set("format", Json::makeString("xia"));
     file.set("version", Json::makeNumber(kFormatVersion));
+    file.set("revision", Json::makeNumber(kFormatRevision));   // 1.21.0 : les modeles de fichiers (la version reste 1)
     file.set("logiciel", Json::makeString(XPG_ANALYZER_VERSION));
     file.set("date", Json::makeString(isoDate(now())));
     file.set("pc", Json::makeString(hmi::netinfo::computerName()));
-    int count = 0;
+    int count = 0, models = 0;
+    // 1.21.0 : sans les connaissances, les modeles de fichiers seuls (s'ils sont demandes)
+    if (!options.knowledge && options.fileModels) {
+        memory::Registry reg;
+        reg.load();
+        Json list = Json::makeArray();
+        for (const auto& k : reg.all()) {
+            if (k.builtIn || !safeId(k.id) || k.category != "modele-fichier") continue;
+            Json raw = k.raw.isObject() ? k.raw : Json::makeObject();
+            if (!raw.get("id")) raw.set("id", Json::makeString(k.id));
+            list.items.push_back(std::move(raw));
+            ++count;
+            ++models;
+        }
+        file.set("connaissances", std::move(list));
+    }
     if (options.knowledge) {
         memory::Registry reg;
         reg.load();
         Json list = Json::makeArray();
         for (const auto& k : reg.all()) {
             if (k.builtIn || !safeId(k.id)) continue;
+            // 1.21.0 : les modeles de fichiers partent avec les connaissances, sauf si on les retire
+            if (k.category == "modele-fichier" && !options.fileModels) continue;
+            if (k.category == "modele-fichier") ++models;
             Json raw = k.raw.isObject() ? k.raw : Json::makeObject();
             if (!raw.get("id")) raw.set("id", Json::makeString(k.id));
             list.items.push_back(std::move(raw));
@@ -288,10 +316,12 @@ bool exportTo(const std::string& path, const FileOptions& options, std::string* 
         for (const auto& c : loadConversations()) list.items.push_back(toMemory(toJson(c)));
         file.set("conversations", std::move(list));
     }
+    file.set("modelesFichiers", Json::makeNumber(models));
     std::string err;
     if (!memory::writeText(path, memory::writeJson(file, true), &err)) return fail(why, err.empty() ? "\xC3\xA9" "criture impossible : " + path : err);
-    (void)memory::appendActivity("connaissance", "Apprentissage export\xC3\xA9 : " + pluralize(count, "connaissance", "connaissances") + " ("
-                                                      + dossiers::utf8De(dossiers::cheminDe(path).filename()) + ")");
+    (void)memory::appendActivity("connaissance", "Apprentissage export\xC3\xA9 : " + pluralize(count, "connaissance", "connaissances")
+                                                      + (models ? " dont " + pluralize(models, "mod\xC3\xA8le de fichier", "mod\xC3\xA8les de fichiers") : std::string{})
+                                                      + " (" + dossiers::utf8De(dossiers::cheminDe(path).filename()) + ")");
     return true;
 }
 
@@ -321,6 +351,7 @@ bool importFrom(const std::string& path, ImportReport& report, bool replaceSame,
         if (!memory::writeText(knowledgeDir() + "/" + it.id + ".json", memory::writeJson(it.raw, true), &err)) {
             report.lines.push_back("non \xC3\xA9" "crite : " + it.name + (err.empty() ? std::string{} : " (" + err + ")"));
             (it.what == Plan::Item::What::Add ? report.added : report.replaced)--;
+            if (it.raw.str("categorie") == "modele-fichier") --report.models;
             ++report.skipped;
             continue;
         }
@@ -336,7 +367,8 @@ bool importFrom(const std::string& path, ImportReport& report, bool replaceSame,
     (void)memory::appendActivity("connaissance", "Apprentissage import\xC3\xA9 de " + report.from + " : "
                                                       + pluralize(report.added, "connaissance ajout\xC3\xA9" "e", "connaissances ajout\xC3\xA9" "es")
                                                       + (report.replaced ? ", " + pluralize(report.replaced, "remplac\xC3\xA9" "e", "remplac\xC3\xA9" "es") : std::string{})
-                                                      + (report.kept ? ", " + pluralize(report.kept, "gard\xC3\xA9" "e", "gard\xC3\xA9" "es") : std::string{}));
+                                                      + (report.kept ? ", " + pluralize(report.kept, "gard\xC3\xA9" "e", "gard\xC3\xA9" "es") : std::string{})
+                                                      + (report.models ? " ; " + pluralize(report.models, "mod\xC3\xA8le de fichier", "mod\xC3\xA8les de fichiers") : std::string{}));
     (void)written;
     return true;
 }

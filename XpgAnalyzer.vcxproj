@@ -467,6 +467,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiConversationIndex.cpp" />
     <ClCompile Include="src\app\ai\AiDelete.cpp" />
     <ClCompile Include="src\app\ai\AiDesign.cpp" />
+    <ClCompile Include="src\app\ai\AiFileModelDialog.cpp" />
+    <ClCompile Include="src\app\ai\AiFileModels.cpp" />
     <ClCompile Include="src\app\ai\AiIncident.cpp" />
     <ClCompile Include="src\app\ai\AiIncidentAnswers.cpp" />
     <ClCompile Include="src\app\ai\AiTextParts.cpp" />
@@ -720,6 +722,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiPlanStrip.cpp" />
     <ClCompile Include="src\app\ai\AiProjectAnswers.cpp" />
     <ClCompile Include="src\app\ai\AiSandbox.cpp" />
+    <ClCompile Include="src\app\ai\AiWorkbook.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1020,6 +1023,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiConversationIndex.hpp" />
     <ClInclude Include="src\app\ai\AiDelete.hpp" />
     <ClInclude Include="src\app\ai\AiDesign.hpp" />
+    <ClInclude Include="src\app\ai\AiFileModelDialog.hpp" />
+    <ClInclude Include="src\app\ai\AiFileModels.hpp" />
     <ClInclude Include="src\app\ai\AiIncident.hpp" />
     <ClInclude Include="src\app\ai\AiIncidentAnswers.hpp" />
     <ClInclude Include="src\app\ai\AiTextParts.hpp" />
@@ -1251,6 +1256,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiPlanStrip.hpp" />
     <ClInclude Include="src\app\ai\AiProjectAnswers.hpp" />
     <ClInclude Include="src\app\ai\AiSandbox.hpp" />
+    <ClInclude Include="src\app\ai\AiWorkbook.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

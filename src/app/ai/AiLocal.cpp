@@ -32,6 +32,7 @@
 
 #include "AiAutomate.hpp"
 #include "AiDemo.hpp"       // fold
+#include "AiFileModels.hpp" // 1.21.0 : les classeurs joints (liste d'E/S, reseau, reports) et leurs modeles
 #include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
 #include "AiProjectAnswers.hpp"   // 1.19.0 : les relations, verifier le projet, optimiser les adresses
 #include "AiDesign.hpp"           // 1.19.0 : concevoir une installation, modifier l'existant
@@ -833,7 +834,7 @@ private:
     struct Target {
         std::vector<const hmi::Object*> objects;
         std::string                     question;   // non vide : il faut demander
-        std::string                     how;        // "la s\xC3\xA9lection", "la derniere cr\xC3\xA9\xC3\xA9e"
+        std::string                     how;        // "la selection", "la derniere creee"
         std::vector<std::string>        suggestions;   // avec la question : la demande refaite sur chaque candidat
     };
     // Un nom de variable du projet ou de l'automate relie (pas un objet manquant).
@@ -927,6 +928,7 @@ private:
     LocalReply projectQuestion() const;   // 1.19.0 : les relations, verifier le projet, optimiser les adresses (vide : pas une telle demande)
     LocalReply incidentQuestion() const;  // 1.20.0 : le diagnostic des incidents (vide : pas une telle demande, ou pas d'hote)
     LocalReply design() const;            // 1.19.0 : une installation complete, modifier l'existant (vide : pas une telle demande)
+    LocalReply workbookRequest() const;   // 1.21.0 : un classeur joint - variables, types, equipements, adresses (vide : pas une telle demande)
     LocalReply designReply(design::Design d) const;
     struct NewObject {
         hmi::Kind   kind;
@@ -1614,6 +1616,12 @@ LocalReply Engine::help() const {
             r.text.insert(at, "- **diagnostiquer un incident** (une alarme apparue en simulation, la surveillance active) : "
                               "`Pourquoi cette alarme est-elle apparue ?`, `Cha\xC3\xAEne de d\xC3\xA9pendances de cette alarme`, "
                               "`Quel \xC3\xA9quipement est commun aux d\xC3\xA9" "fauts ?` - depuis ses dossiers, jamais invent\xC3\xA9 ;\n");
+    // 1.21.0 : les classeurs joints (liste d'E/S, reseau, reports) - seulement quand il y en a un
+    if (!in_.workbooks.empty())
+        if (const auto at = r.text.find("- des **questions**"); at != std::string::npos)
+            r.text.insert(at, "- **un classeur joint** (liste d'E/S, fichier r\xC3\xA9seau, reports %MW) : `Cr\xC3\xA9" "e les variables du fichier joint`, "
+                              "`Cr\xC3\xA9" "e les types IHM du fichier joint`, `Cr\xC3\xA9" "e les \xC3\xA9quipements du fichier r\xC3\xA9seau`, "
+                              "`Adresse les variables du fichier joint sur l'\xC3\xA9quipement API_1`, `Que contient le fichier joint ?` ;\n");
     r.suggestions = examples();
     return r;
 }
@@ -4527,7 +4535,93 @@ LocalReply Engine::design() const {
     return {};
 }
 
+// ---- 1.21.0 : un classeur joint (liste d'E/S, fichier reseau, reports) --------------------------------------------------
+//  << Cree les variables de la liste d'E/S jointe >>, << Cree les types IHM du fichier joint >>, << Cree les equipements du
+//  fichier reseau >>, << Adresse les variables du fichier de reports sur l'equipement API_1 >>, << Que contient le fichier
+//  joint ? >>. Toujours une PROPOSITION (AiFileModels : planVariables, planEquipments) - jamais un nom, une adresse, une
+//  ligne inventes. Vide : la demande ne parle pas d'un classeur joint.
+LocalReply Engine::workbookRequest() const {
+    const auto& books = in_.workbooks;
+    if (books.empty()) return {};
+    // la demande parle-t-elle d'un fichier joint ? (son nom, ou les mots du metier)
+    const sheets::Attached* named = nullptr;
+    for (const auto& b : books) {
+        std::string stem = fold(b.name);
+        if (const auto dot = stem.rfind('.'); dot != std::string::npos) stem.erase(dot);
+        if (stem.size() >= 3 && fold(request_).find(stem) != std::string::npos) {
+            named = &b;
+            break;
+        }
+    }
+    const bool fileWord = named || has("joint") || has("jointe") || has("joints") || has("jointes") || hasPrefix("fichier") || hasPrefix("classeur")
+                          || hasPrefix("tableur") || has("excel") || has("xlsx") || has("xlsm") || phrase("e s") || phrase("entrees sorties")
+                          || phrase("entree sortie") || hasPrefix("report") || phrase("table d echange") || phrase("liste d io") || phrase("i o")
+                          || (has("liste") && (has("es") || has("io")));
+    if (!fileWord && !t_.empty()) return {};
+    // le classeur vise : celui qu'on nomme, sinon celui du genre dit, sinon le plus recent
+    const sheets::Attached* f = named;
+    const auto ofGenre = [&](sheets::Genre g) -> const sheets::Attached* {
+        for (const auto& b : books)
+            if (b.hasLayout && b.layout.genre == g) return &b;
+        return nullptr;
+    };
+    const bool netWord = hasPrefix("reseau") || phrase("adressage ip") || phrase("adresses ip") || phrase("adresse ip");
+    const bool ioWord = phrase("e s") || phrase("entrees sorties") || phrase("entree sortie") || phrase("i o") || has("io");
+    const bool exWord = hasPrefix("report") || phrase("table d echange") || hasPrefix("echange");
+    if (!f && netWord) f = ofGenre(sheets::Genre::Network);
+    if (!f && ioWord) f = ofGenre(sheets::Genre::IoList);
+    if (!f && exWord) f = ofGenre(sheets::Genre::Exchange);
+    if (!f) f = &books.front();
+    // ce que veut la demande
+    const bool create = t_.empty() ? false
+                                   : (hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("ajout") || hasPrefix("genere") || hasPrefix("import")
+                                      || hasPrefix("fabriqu") || hasPrefix("propos") || hasPrefix("prepar") || hasPrefix("construi") || has("fais")
+                                      || has("faire") || phrase("je veux") || has("voudrais") || has("besoin") || phrase("il faut"));
+    const bool addressVerb = !t_.empty() && (t_.front().f.rfind("adress", 0) == 0 || phrase("pose les adresses") || phrase("poser les adresses")
+                                             || phrase("mets les adresses") || phrase("lie les variables") || phrase("relie les variables"));
+    const bool typesWord = has("type") || has("types") || hasPrefix("structure") || has("ddt") || has("ddts");
+    const bool equipWord = hasPrefix("equipement") || has("automates") || has("appareils") || has("stations");
+    const bool varWord = variableWord() || has("tags") || has("signaux") || has("points");
+    const auto reply = [&](sheets::Plan plan) {
+        if (!plan.ok) return ask(std::move(plan.text));
+        Proposal p = base(plan.summary);
+        p.ops = std::move(plan.ops);
+        return finish(std::move(p), std::move(plan.text));
+    };
+    if (!f->workbook) {
+        LocalReply r = ask("Je lis encore " + guill(f->name) + " (sa lecture et sa reconnaissance se font \xC3\xA0 part, sans bloquer l'\xC3\xA9" "cran) : "
+                           "redemande dans un instant.");
+        return r;
+    }
+    if (!f->hasLayout) {
+        if (!create && !addressVerb) return ask(sheets::describeFile(*f, {}));
+        return ask(guill(f->name) + " n'est reconnu ni comme une liste d'E/S, ni comme un fichier r\xC3\xA9seau, ni comme des reports : je ne devine pas ses "
+                   "colonnes. Choisis sa correspondance dans **Contexte de la discussion \xE2\x80\xBA " + f->name + " \xE2\x80\xBA Mod\xC3\xA8le\xE2\x80\xA6**, puis redemande.");
+    }
+    const auto readings = sheets::readAll(*f->workbook, f->layout);
+    // l'equipement nomme (<< sur l'equipement API_1 >>) : le mot qui suit
+    std::string equipment;
+    for (std::size_t i = 0; i + 1 < t_.size(); ++i)
+        if (t_[i].f.rfind("equipement", 0) == 0 && !stopWord(t_[i + 1].f)) {
+            equipment = t_[i + 1].raw;
+            break;
+        }
+    if (t_.empty() || (!create && !addressVerb)) return ask(sheets::describeFile(*f, readings));
+    if (equipWord && (f->layout.genre == sheets::Genre::Network || f->layout.has("ip")) && !varWord) return reply(sheets::planEquipments(*f, readings, in_.project));
+    sheets::PlanOptions o;
+    o.types = typesWord;
+    o.equipment = equipment;
+    if (addressVerb && !create) {
+        o.onlyExisting = true;
+        return reply(sheets::planVariables(*f, readings, in_.project, o));
+    }
+    if (f->layout.genre == sheets::Genre::Network && !varWord) return reply(sheets::planEquipments(*f, readings, in_.project));
+    return reply(sheets::planVariables(*f, readings, in_.project, o));
+}
+
 LocalReply Engine::run() {
+    // 1.21.0 : un classeur joint sans demande : ce qu'il contient, ce que l'IA peut en faire
+    if (t_.empty() && !in_.workbooks.empty()) return workbookRequest();
     if (t_.empty()) return help();
     const bool question = request_.find('?') != std::string::npos;
     // les questions
@@ -4537,6 +4631,8 @@ LocalReply Engine::run() {
         return help();
     // 1.20.0 : le diagnostic des incidents (avant << combien >> : << combien de fois cette alarme est-elle apparue ? >>)
     if (LocalReply r = incidentQuestion(); !r.text.empty()) return r;
+    // 1.21.0 : un classeur joint (liste d'E/S, reseau, reports) : ses variables, ses types, ses equipements, ses adresses
+    if (LocalReply r = workbookRequest(); !r.text.empty()) return r;
     if (has("combien")) return countQuestion();
     const bool createVerb = hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("insere")
                          || hasPrefix("dessin") || phrase("il me faut") || phrase("je veux") || hasPrefix("genere") || hasPrefix("fabriqu");

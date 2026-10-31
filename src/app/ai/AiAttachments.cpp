@@ -3,9 +3,11 @@
 // =============================================================================
 #include "AiAttachments.hpp"
 
+#include "AiFileModels.hpp"   // 1.21.0 : le classeur reconnu (un modele de fichier, sinon la detection)
 #include "AiMemoryJson.hpp"
 #include "AiPaths.hpp"
 #include "AiTextParts.hpp"
+#include "AiWorkbook.hpp"
 #include "../../core/AtomicFile.hpp"
 #include "../../hmi/HmiCrypto.hpp"
 #include "../../hmi/HmiPdf.hpp"
@@ -294,108 +296,20 @@ bool extractDocx(std::string_view bytes, const Limits& L, Extraction& x, std::st
 
 bool extractXlsx(std::string_view bytes, const Limits& L, Extraction& x, std::string& why) {
     auto& an = x.analysis;
-    if (!isZip(bytes)) {
-        why = "pas un classeur lisible : ce n'est pas une archive (fichier ab\xC3\xAEm\xC3\xA9 ou mal nomm\xC3\xA9 ; un .xls ancien n'est pas lu)";
-        return false;
-    }
-    Zip zip(bytes);
-    if (!zip.ok()) {
-        why = "archive ab\xC3\xAEm\xC3\xA9" "e : le classeur ne s'ouvre pas";
-        return false;
-    }
-    const std::uint64_t max = L.maxTextBytes * 8;
-    std::string wb, rels, sst;
-    if (!zip.read("xl/workbook.xml", wb, max)) {
-        why = "xl/workbook.xml absent : l'archive s'ouvre mais ce n'est pas un classeur";
-        return false;
-    }
-    (void)zip.read("xl/_rels/workbook.xml.rels", rels, max);
-    (void)zip.read("xl/sharedStrings.xml", sst, max);
-    // rId -> la feuille (comme xls::inspect : une cible absolue part de la racine du paquet)
-    std::map<std::string, std::string> targets;
-    {
-        importer::XmlReader r(rels);
-        while (auto ev = r.next()) {
-            if (*ev == importer::XmlEvent::EndOfDocument) break;
-            if (*ev != importer::XmlEvent::StartElement || localName(r.name()) != "Relationship") continue;
-            std::string t = r.attr("Target");
-            if (!t.empty() && t[0] == '/') t.erase(0, 1);
-            else if (!t.empty()) t = "xl/" + t;
-            targets[r.attr("Id")] = t;
-        }
-    }
-    struct Sheet {
-        std::string name, path;
-        bool        hidden{false};
-    };
-    std::vector<Sheet> sheets;
-    {
-        importer::XmlReader r(wb);
-        while (auto ev = r.next()) {
-            if (*ev == importer::XmlEvent::EndOfDocument) break;
-            if (*ev != importer::XmlEvent::StartElement || localName(r.name()) != "sheet") continue;
-            Sheet s;
-            s.name = r.attr("name");
-            const std::string state = r.attr("state");
-            s.hidden = state == "hidden" || state == "veryHidden";
-            std::string rid = r.attr("r:id");
-            if (rid.empty())
-                for (const auto& a : r.attributes())
-                    if (a.name.size() >= 3 && a.name.substr(a.name.size() - 3) == ":id") rid = std::string(a.rawValue);
-            if (const auto it = targets.find(rid); it != targets.end()) s.path = it->second;
-            sheets.push_back(std::move(s));
-        }
-    }
-    if (sheets.empty()) {
-        why = "aucune feuille dans le classeur";
-        return false;
-    }
-    // les chaines partagees : chaque <si>, ses <t> mis bout a bout
-    std::vector<std::string> shared;
-    {
-        importer::XmlReader r(sst);
-        bool inSi = false, inPh = false;
-        std::string cur;
-        while (auto ev = r.next()) {
-            if (*ev == importer::XmlEvent::EndOfDocument) break;
-            const auto name = localName(r.name());
-            if (*ev == importer::XmlEvent::StartElement) {
-                if (name == "si") {
-                    inSi = true;
-                    cur.clear();
-                } else if (name == "t" && inSi && !inPh && !r.selfClosing()) {
-                    if (auto raw = r.readElementRaw()) cur += elementText(*raw);
-                } else if (name == "rPh") {
-                    inPh = true;   // la phonetique (japonais) : pas le texte
-                }
-            } else if (*ev == importer::XmlEvent::EndElement) {
-                if (name == "rPh") inPh = false;
-                else if (name == "si") {
-                    shared.push_back(cur);
-                    inSi = false;
-                }
-            }
-        }
-    }
-    bool formulas = false;
+    // 1.21.0 : le classeur lu une fois (AiWorkbook.hpp : les cases a leur place, les fusions) - son texte ici, sa
+    // reconnaissance ensuite (analyzeNow : un modele de fichier, sinon la detection).
+    auto wb = std::make_shared<sheets::Workbook>();
+    sheets::ReadLimits rl;
+    rl.maxSheets = static_cast<std::size_t>(std::max(1, L.maxSheets));
+    rl.maxRows = L.maxRows;
+    rl.maxXmlBytes = L.maxTextBytes * 8;
+    if (!sheets::readWorkbook(bytes, *wb, &why, rl)) return false;
     int read = 0;
-    for (const auto& s : sheets) {
-        if (read >= L.maxSheets) {
-            an.details.push_back(std::to_string(sheets.size() - static_cast<std::size_t>(read)) + " feuille(s) de plus non lue(s) (la limite)");
-            break;
-        }
-        std::string xml;
-        if (s.path.empty() || !zip.read(s.path.c_str(), xml, max)) {
-            an.details.push_back("feuille " + guill(s.name) + " illisible");
-            continue;
-        }
-        bool f = false;
-        const auto rows = xls::parseSheet(xml, shared, L.maxRows, &f);
-        formulas = formulas || f;
+    for (const auto& s : wb->sheets) {
         std::size_t width = 0, filled = 0;
         std::string body;
-        for (std::size_t i = 0; i < rows.size(); ++i) {
-            auto row = rows[i];
+        for (std::size_t i = 0; i < s.rows.size(); ++i) {
+            auto row = s.rows[i];
             while (!row.empty() && row.back().empty()) row.pop_back();
             if (row.empty()) continue;
             width = std::max(width, row.size());
@@ -415,6 +329,10 @@ bool extractXlsx(std::string_view bytes, const Limits& L, Extraction& x, std::st
         ++read;
         if (x.text.size() > L.maxTextBytes + 1024) break;
     }
+    for (const auto& note : wb->notes) an.details.push_back(note);
+    const bool formulas = wb->formulas;
+    if (wb->macros) an.details.push_back("des macros (vbaProject.bin) : jamais ex\xC3\xA9" "cut\xC3\xA9" "es, seulement signal\xC3\xA9" "es");
+    x.workbook = std::move(wb);
     if (formulas)
         an.details.push_back("des cellules sont calcul\xC3\xA9" "es : la valeur lue est le dernier r\xC3\xA9sultat enregistr\xC3\xA9 par le tableur");
     capText(x.text, L.maxTextBytes, an);
@@ -646,7 +564,7 @@ Extraction extractBytes(std::string_view bytes, std::string_view extIn, const Li
     else if (textExt(ext)) ok = extractText(bytes, ext, L, x, why);
     else if (ext == "pdf") ok = extractPdf(bytes, L, x, why);
     else if (ext == "docx") ok = extractDocx(bytes, L, x, why);
-    else if (ext == "xlsx") ok = extractXlsx(bytes, L, x, why);
+    else if (ext == "xlsx" || ext == "xlsm") ok = extractXlsx(bytes, L, x, why);   // 1.21.0 : le .xlsm aussi
     else if (imageExt(ext)) ok = extractImage(bytes, ext, x, why);
     else if (ext == "xihm" || ext == "xapi" || ext == "zef" || ext == "xpgproj") ok = extractNative(bytes, ext, x, why);
     else why = "format non pris en charge par l'analyse (." + ext + ")";
@@ -706,6 +624,14 @@ Outcome analyzeNow(const Attachment& a, const Limits& L) {
     }
     o.sha256 = sha256Hex(bytes);
     Extraction x = extractBytes(bytes, extOf(a), L);
+    // 1.21.0 : UN CLASSEUR RECONNU - compare d'abord aux modeles de fichiers de la memoire (lu tout de suite s'il en
+    // reconnait un), sinon la detection (liste d'E/S, reseau, reports) ; ici, sur le fil d'analyse.
+    if (x.ok && x.workbook) {
+        const sheets::Recognition rec = sheets::recognize(*x.workbook, sheets::loadModels());
+        sheets::applyRecognition(x.analysis, rec);
+        o.model = rec.modelId;
+        o.workbook = x.workbook;
+    }
     if (av == Availability::Moved) x.analysis.details.push_back("copie retrouv\xC3\xA9" "e ailleurs : " + where);
     if (x.ok && !x.textIsOriginal && !x.text.empty()) {
         const std::string cache = cacheTextPath(a);
@@ -1241,7 +1167,7 @@ Reference resolveReference(const DiscussionContext& ctx, std::string_view reques
         };
         std::vector<std::string> exts;
         if (has({"pdf"})) exts = {"pdf"};
-        else if (has({"tableur", "excel", "classeur", "xlsx", "feuille de calcul"})) exts = {"xlsx", "csv"};
+        else if (has({"tableur", "excel", "classeur", "xlsx", "xlsm", "feuille de calcul"})) exts = {"xlsx", "xlsm", "csv"};
         else if (has({"word", "docx"})) exts = {"docx"};
         else if (has({"image", "photo", "capture", "png", "jpg", "jpeg"})) exts = {"png", "jpg", "jpeg"};
         else if (has({"programme", "script", "code", "source", " st ", "texte structure"})) exts = {"st", "c", "cpp", "h", "hpp", "txt", "xef", "xpg"};

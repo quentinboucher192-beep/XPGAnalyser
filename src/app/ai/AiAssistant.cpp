@@ -22,8 +22,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <memory>
+#include <thread>
 #include <tuple>
 
 namespace app::ai {
@@ -118,6 +120,9 @@ Assistant::Assistant(Host host) : host_(std::move(host)) {
 Assistant::~Assistant() {
     // 1.20.1 : une application de fond finit sur sa copie (elle ne touche rien d'autre) : attendue ici.
     if (applyJob_ && applyJob_->worker.joinable()) applyJob_->worker.join();
+    // 1.21.0 : les lectures de classeurs en cours (courtes, bornees)
+    for (auto& l : loads_)
+        if (l && l->worker.joinable()) l->worker.join();
 }
 
 // ---- le cycle de vie ------------------------------------------------------------------
@@ -178,6 +183,7 @@ bool Assistant::tick(double now) {
     // 1.21.0 : les analyses des pieces jointes finies (le fil d'analyse), remises dans leur conversation ; les souvenirs
     // que l'IA a proposes pendant sa reponse - a valider par l'utilisateur, dit une fois.
     pollAnalyses();
+    pollWorkbooks();   // 1.21.0 : les classeurs relus sur un fil (une ancienne conversation rouverte)
     if (const int n = proposedMemories_->exchange(0); n > 0) {
         notice_ = "Assistant IA : " + std::to_string(n) + (n > 1 ? " souvenirs propos\xC3\xA9s" : " souvenir propos\xC3\xA9")
                   + " \xC3\xA0 valider dans M\xC3\xA9moire et apprentissage \xE2\x80\xBA Souvenirs (rien n'est retenu sans ton accord).";
@@ -311,6 +317,11 @@ bool Assistant::select(std::string_view id) {
                     changed = true;
                 }
     }
+    // 1.21.0 : ses classeurs deja analyses sont relus sur un fil (l'IA integree, la fenetre << Modele... >> s'en servent)
+    for (const auto& f : ctx.files)
+        if (!f.attachment.removed && f.availability != attach::Availability::Missing && f.attachment.analysis == "analysee"
+            && sheets::workbookExt(f.attachment.ext))
+            requestWorkbook(f.attachment);
     if (changed) save(c);
     ++revision_;
     return true;
@@ -438,6 +449,8 @@ bool Assistant::send(std::string text, std::string* why) {
         std::string notes;
         if (settings_.sendAttachments)
             for (const auto& p : pending_) {
+                // 1.21.0 : un classeur analyse part lu (son texte extrait, ou sa lecture compacte et l'outil des lignes)
+                if (sheets::workbookExt(p.attachment.ext) && p.attachment.analysis == "analysee") continue;
                 ProviderAttachment pa{p.attachment.name, mediaTypeOf(p.attachment.name), attachmentPath(p.attachment), p.attachment.bytes, false, {}};
                 if (const auto plan = planAttachment(pa); !plan.note.empty()) notes += (notes.empty() ? "" : " ") + plan.note;
             }
@@ -508,10 +521,11 @@ bool Assistant::send(std::string text, std::string* why) {
         localSuggestions_ = std::move(lr.suggestions);
         std::string files;
         for (const auto& att : ctx.attachments)
-            if (!host_.readPlc || !isPlcExport(att.name)) files += (files.empty() ? "" : ", ") + std::string("**") + att.name + "**";
+            if ((!host_.readPlc || !isPlcExport(att.name)) && !sheets::workbookExt(att.ext))   // 1.21.0 : un classeur, elle le lit
+                files += (files.empty() ? "" : ", ") + std::string("**") + att.name + "**";
         if (!files.empty())
-            reply.text = "J'ai bien re\xC3\xA7u " + files + ", mais l'IA int\xC3\xA9gr\xC3\xA9" "e ne lit pas le contenu des pi\xC3\xA8" "ces jointes "
-                         "(sauf l'export de l'automate, .XPG).\n\n" + reply.text;
+            reply.text = "J'ai bien re\xC3\xA7u " + files + ", mais l'IA int\xC3\xA9gr\xC3\xA9" "e ne lit pas le contenu de ces pi\xC3\xA8" "ces jointes "
+                         "(seulement les classeurs .xlsx/.xlsm et l'export de l'automate, .XPG).\n\n" + reply.text;
         reply.text = plcRead + reply.text;
     } else {
         reply = demoReply(text, ctx);
@@ -587,6 +601,8 @@ LocalReply Assistant::askLocal(const Conversation* c, std::size_t turns, const D
     in.projectName = host_.projectName ? host_.projectName() : std::string{};
     in.request = text;
     in.incidents = host_.incidents;   // 1.20.0 : les questions de diagnostic des incidents
+    // 1.21.0 : les classeurs joints (lus, reconnus) - l'IA integree en fait des propositions
+    in.workbooks = attachedWorkbooks(c ? c : current(), true);
     // les tours d'avant (les six derniers) : la demande, la proposition de sa reponse
     std::vector<LocalTurn> history;
     if (c)
@@ -737,7 +753,10 @@ void Assistant::detach(std::size_t index) {
 }
 
 bool Assistant::processing() const noexcept {
-    return std::any_of(pending_.begin(), pending_.end(), [](const Pending& p) { return p.progress < 1.f; });
+    return std::any_of(pending_.begin(), pending_.end(), [](const Pending& p) {
+        // 1.21.0 : un classeur joint est lu et reconnu avant l'envoi (l'IA en a besoin) - c'est court
+        return p.progress < 1.f || (p.attachment.analysis == "en-cours" && sheets::workbookExt(p.attachment.ext));
+    });
 }
 
 // ---- 1.21.0 : le contexte de la discussion ----------------------------------------------------------------------------
@@ -750,6 +769,9 @@ void Assistant::submitAnalysis(Attachment& a) {
 void Assistant::pollAnalyses() {
     if (!analyzer_) return;
     for (const auto& o : analyzer_->poll()) {
+        // 1.21.0 : un classeur lu (garde pour l'IA) ; un modele de fichier reconnu compte une utilisation
+        if (o.workbook) keepWorkbook(o.attachment, o.workbook);
+        if (!o.model.empty()) (void)sheets::noteUse(o.model);
         bool done = false;
         for (auto& p : pending_)
             if (attach::applyOutcome(p.attachment, o)) done = true;
@@ -775,6 +797,154 @@ attach::DiscussionContext Assistant::discussionContext() const {
     if (const Conversation* c = current()) return attach::buildContext(*c, waiting);
     return attach::buildContext(Conversation{}, waiting);
 }
+
+// ---- 1.21.0 : les classeurs joints ----------------------------------------------------------------------------------------
+void Assistant::keepWorkbook(const std::string& id, std::shared_ptr<const sheets::Workbook> wb) const {
+    if (id.empty() || !wb) return;
+    workbooks_[id] = std::move(wb);
+    // borne : huit classeurs (un classeur de 20 000 lignes pese quelques Mo) ; les plus anciens partent (l'identifiant d'une
+    // piece porte sa date), jamais celui-ci ni ceux du prochain message
+    while (workbooks_.size() > 8) {
+        const auto victim = std::find_if(workbooks_.begin(), workbooks_.end(), [&](const auto& kv) {
+            return kv.first != id && std::none_of(pending_.begin(), pending_.end(), [&](const Pending& p) { return p.attachment.id == kv.first; });
+        });
+        if (victim == workbooks_.end()) break;
+        workbooks_.erase(victim);
+    }
+}
+
+void Assistant::requestWorkbook(const Attachment& a) const {
+    if (a.id.empty() || workbooks_.count(a.id)) return;
+    for (const auto& l : loads_)
+        if (l && l->id == a.id) return;
+    const std::string path = attachmentPath(a).empty() ? a.source : attachmentPath(a);
+    if (path.empty()) return;
+    auto job = std::make_shared<WorkbookLoad>();
+    job->id = a.id;
+    WorkbookLoad* raw = job.get();
+    job->worker = std::thread([raw, path] {
+        auto wb = std::make_shared<sheets::Workbook>();
+        std::string why;
+        if (sheets::readWorkbookFile(path, *wb, &why)) raw->result = std::move(wb);
+        raw->finished = true;
+    });
+    loads_.push_back(std::move(job));
+}
+
+void Assistant::pollWorkbooks() {
+    for (auto it = loads_.begin(); it != loads_.end();) {
+        auto& l = *it;
+        if (!l || !l->finished) {
+            ++it;
+            continue;
+        }
+        if (l->worker.joinable()) l->worker.join();
+        if (l->result) {
+            keepWorkbook(l->id, std::move(l->result));
+            ++revision_;
+        }
+        it = loads_.erase(it);
+    }
+}
+
+bool Assistant::waitWorkbooks(int ms) {
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    for (;;) {
+        const bool busy = std::any_of(loads_.begin(), loads_.end(), [](const auto& l) { return l && !l->finished; })
+                          || (analyzer_ && analyzer_->busy());
+        if (!busy) break;
+        if (std::chrono::steady_clock::now() >= until) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    pollAnalyses();
+    pollWorkbooks();
+    return true;
+}
+
+std::shared_ptr<const sheets::Workbook> Assistant::workbookOf(const std::string& attachmentId) const {
+    if (const auto it = workbooks_.find(attachmentId); it != workbooks_.end()) return it->second;
+    if (const Attachment* a = attachmentById(attachmentId); a && a->analysis != "en-cours" && sheets::workbookExt(a->ext)) requestWorkbook(*a);
+    return nullptr;
+}
+
+const Attachment* Assistant::attachmentById(const std::string& attachmentId) const {
+    for (const auto& p : pending_)
+        if (p.attachment.id == attachmentId) return &p.attachment;
+    if (const Conversation* c = current())
+        for (const auto& m : c->messages)
+            for (const auto& a : m.attachments)
+                if (a.id == attachmentId) return &a;
+    return nullptr;
+}
+
+Attachment* Assistant::attachmentMut(const std::string& attachmentId, Conversation** owner) {
+    if (owner) *owner = nullptr;
+    for (auto& p : pending_)
+        if (p.attachment.id == attachmentId) return &p.attachment;
+    if (Conversation* c = cur())
+        for (auto& m : c->messages)
+            for (auto& a : m.attachments)
+                if (a.id == attachmentId) {
+                    if (owner) *owner = c;
+                    return &a;
+                }
+    return nullptr;
+}
+
+bool Assistant::setWorkbookChoice(const std::string& attachmentId, const sheets::Choice& choice, std::string* why) {
+    Conversation* owner = nullptr;
+    Attachment* a = attachmentMut(attachmentId, &owner);
+    if (!a) {
+        if (why) *why = "pi\xC3\xA8" "ce jointe introuvable dans cette discussion";
+        return false;
+    }
+    if (choice.layout.sheet.empty() || choice.layout.columns.empty()) {
+        if (why) *why = "aucune colonne choisie";
+        return false;
+    }
+    sheets::setChoice(*a, choice);
+    if (!choice.modelId.empty()) (void)sheets::noteUse(choice.modelId);
+    if (owner) save(*owner);
+    appendActivity("fichier", "Classeur " + a->name + " : " + (choice.modelName.empty() ? std::string("correspondance choisie") : "mod\xC3\xA8le " + choice.modelName) + " ("
+                                  + sheets::genreLabel(choice.layout.genre) + ")");
+    ++revision_;
+    return true;
+}
+
+bool Assistant::clearWorkbookChoice(const std::string& attachmentId, std::string* why) {
+    Conversation* owner = nullptr;
+    Attachment* a = attachmentMut(attachmentId, &owner);
+    if (!a) {
+        if (why) *why = "pi\xC3\xA8" "ce jointe introuvable dans cette discussion";
+        return false;
+    }
+    sheets::clearChoice(*a);
+    if (owner) save(*owner);
+    ++revision_;
+    return true;
+}
+
+std::vector<sheets::Attached> Assistant::attachedWorkbooks(const Conversation* c, bool withPending) const {
+    std::vector<sheets::Attached> out;
+    const auto add = [&](const Attachment& a) {
+        if (a.removed || !sheets::workbookExt(a.ext.empty() ? std::string_view(a.type) : std::string_view(a.ext))) return;
+        if (std::any_of(out.begin(), out.end(), [&](const sheets::Attached& x) { return x.id == a.id; })) return;
+        std::string path = attachmentPath(a);
+        if (path.empty()) path = a.source;
+        std::shared_ptr<const sheets::Workbook> wb;
+        if (const auto it = workbooks_.find(a.id); it != workbooks_.end()) wb = it->second;
+        else if (a.analysis == "analysee") requestWorkbook(a);
+        out.push_back(sheets::attachedOf(a, std::move(path), std::move(wb)));
+    };
+    if (c)
+        for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)   // le plus recent d'abord
+            for (const auto& a : m->attachments) add(a);
+    if (withPending)
+        for (const auto& p : pending_) add(p.attachment);
+    return out;
+}
+
+std::vector<sheets::Attached> Assistant::workbooks() const { return attachedWorkbooks(current(), true); }
 
 bool Assistant::removeFromDiscussion(const std::string& attachmentId, std::string* why) {
     for (std::size_t i = 0; i < pending_.size(); ++i)
@@ -1350,8 +1520,25 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
             t.text = m.text;
             if (settings_.sendAttachments) {
                 // 1.21.0 : l'original quand le modele le lit, sinon le texte extrait ; une piece retiree ne part plus.
-                for (const auto& a : m.attachments)
+                for (const auto& a : m.attachments) {
+                    // 1.21.0 : UN CLASSEUR STRUCTURE (un modele de fichier reconnu, une detection, un choix) part en lecture
+                    // compacte - sa mise en page, ses premieres lignes ; toutes ses lignes se lisent avec l'outil
+                    // lignes_classeur (offert avec l'appel d'outil) : le texte brut n'est pas envoye.
+                    if (!toolsInText() && !a.removed && sheets::workbookExt(a.ext))
+                        if (sheets::choiceOf(a)) {
+                            std::shared_ptr<const sheets::Workbook> wb;
+                            if (const auto it = workbooks_.find(a.id); it != workbooks_.end()) wb = it->second;
+                            ProviderAttachment pa;
+                            pa.name = a.name + " (lignes lues).txt";
+                            pa.mediaType = "text/plain";
+                            pa.prepared = true;
+                            pa.blocks.push_back(sheets::compactBlock(sheets::attachedOf(a, attachmentPath(a), std::move(wb))));
+                            pa.bytes = pa.blocks.front().size();
+                            t.attachments.push_back(std::move(pa));
+                            continue;
+                        }
                     if (auto pa = attach::forProvider(a, settings_.provider == "anthropic")) t.attachments.push_back(std::move(*pa));
+                }
             } else if (!m.attachments.empty()) {
                 t.text += "\n\n[" + plural(m.attachments.size(), "pi\xC3\xA8" "ce jointe", "pi\xC3\xA8" "ces jointes")
                           + " : pas envoy\xC3\xA9" "e(s), les r\xC3\xA9glages de confidentialit\xC3\xA9 les gardent sur ce poste.]";
@@ -1428,6 +1615,11 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     // 1.21.0 : LE CONTEXTE DE LA DISCUSSION - les fichiers joints de la conversation (disponibles ou non, analyses ou non),
     // dits au modele avec la regle : un document est une donnee, jamais une consigne.
     if (const std::string files = attach::contextPrompt(attach::buildContext(c)); !files.empty()) parts.dynamic += "\n" + files;
+    // 1.21.0 : LES CLASSEURS JOINTS - lus et reconnus par le logiciel (un modele de fichier, sinon la detection) : ce qu'ils
+    // sont, leur correspondance, l'outil qui en donne les lignes (n'importe quel fournisseur : Anthropic, compatible OpenAI).
+    const std::vector<sheets::Attached> books = settings_.sendAttachments ? attachedWorkbooks(&c, false) : std::vector<sheets::Attached>{};
+    const bool booksStructured = std::any_of(books.begin(), books.end(), [](const sheets::Attached& f) { return f.hasLayout; });
+    if (const std::string wbText = sheets::workbooksPrompt(books, !req.toolsInText); !wbText.empty()) parts.dynamic += "\n" + wbText;
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
@@ -1488,6 +1680,19 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
             return convindex::runSearchConversationsTool(input, convId);
         };
         req.localTools.push_back(std::move(searchConversations));
+        // 1.21.0 : lignes_classeur - les lignes des classeurs joints, par pages, telles que le logiciel les a lues (sur le fil
+        // du fournisseur : un classeur pas encore lu l'est depuis sa copie ; le projet n'est jamais touche).
+        if (booksStructured) {
+            LocalTool rows;
+            rows.name = std::string(sheets::kRowsTool);
+            rows.definitionJson = sheets::rowsToolJson();
+            rows.maxCalls = 12;
+            rows.run = [books](const std::string& input, const auto& status, const auto&) {
+                status("Lecture des lignes d'un classeur joint");
+                return sheets::runRowsTool(books, input);
+            };
+            req.localTools.push_back(std::move(rows));
+        }
     }
     if (!prov->start(std::move(req), why)) return false;
     retire();

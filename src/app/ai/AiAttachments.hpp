@@ -16,8 +16,10 @@
 //    - L'ANALYSE (extract), sur un fil de travail (Analyzer) : le texte d'un
 //      fichier texte ou de code (tel quel : son encodage et ses fins de ligne
 //      sont dits, rien n'est reecrit), d'un PDF (PDFium : hmi::pdf::extractText),
-//      d'un DOCX (word/document.xml), d'un XLSX (les feuilles et leurs cellules,
-//      xls::parseSheet), la taille d'une image PNG ou JPEG (l'analyse visuelle
+//      d'un DOCX (word/document.xml), d'un XLSX ou d'un XLSM (les feuilles et leurs
+//      cellules, AiWorkbook.hpp ; 1.21.0 : le classeur RECONNU - un modele de
+//      fichier de la memoire, sinon la detection : liste d'E/S, reseau, reports,
+//      AiFileModels.hpp), la taille d'une image PNG ou JPEG (l'analyse visuelle
 //      reste celle du modele), un fichier natif reconnu. Un fichier manquant,
 //      abime, trop volumineux : un echec, et pourquoi. Le texte extrait va dans
 //      cache/documents/<id>.txt (il se regenere : vider le cache ne perd rien, la
@@ -49,12 +51,15 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
+
+namespace app::ai::sheets { struct Workbook; }   // AiWorkbook.hpp
 
 namespace app::ai::attach {
 
@@ -82,6 +87,9 @@ struct Extraction {
     std::string        text;               // le texte (UTF-8) ; vide : une image, un fichier natif
     bool               textIsOriginal{false};   // un fichier texte : son texte EST l'original (normalise en UTF-8)
     AttachmentAnalysis analysis;           // date, genre "extraction", etat, resume, details, pages...
+    // 1.21.0 (les modeles de fichiers, a la fin) : un classeur lu - ses feuilles, ses cases a leur place, ses fusions
+    // (AiWorkbook.hpp) ; nul : pas un classeur.
+    std::shared_ptr<const sheets::Workbook> workbook;
 };
 // Analyse des octets (sans disque) selon l'extension ; de n'importe quel fil (PDFium : son verrou).
 [[nodiscard]] Extraction extractBytes(std::string_view bytes, std::string_view ext, const Limits& limits = {});
@@ -96,6 +104,11 @@ struct Outcome {
     std::string        conversation, attachment;
     std::string        sha256;      // vide : le fichier n'a pas pu etre lu
     AttachmentAnalysis analysis;
+    // 1.21.0 (les modeles de fichiers, a la fin) : un classeur lu (l'Assistant le garde : l'IA integree, l'outil des lignes)
+    // et RECONNU (AiFileModels.hpp : un modele de la memoire, sinon la detection - analysis.extra "classeur") ; `model` :
+    // le modele reconnu (une utilisation de plus, notee sur le fil de l'interface).
+    std::shared_ptr<const sheets::Workbook> workbook;
+    std::string                             model;
 };
 // Analyse maintenant (sur ce fil : les essais, un outil du fournisseur) : la copie, son empreinte, le texte ecrit dans le
 // cache quand il n'est pas l'original.

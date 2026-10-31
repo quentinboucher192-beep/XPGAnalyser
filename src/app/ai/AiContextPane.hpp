@@ -50,8 +50,12 @@ public:
         std::function<void(const std::string& attachmentId)> restore;    // remettre une piece retiree
         std::function<void(const std::string& query)>        search;     // la recherche a change (le volet filtre deja)
         std::function<void(bool expanded)>                   toggled;    // ouvert ou ferme : refaire la mise en page
+        // 1.21.0 (a la fin) : << Modele... >> d'un classeur (.xlsx, .xlsm) - son genre, sa correspondance, les modeles de
+        // fichiers (AiFileModels.hpp) ; nul : pas de geste.
+        std::function<void(const std::string& attachmentId)> model;
     };
-    enum class Action : std::uint8_t { Open, Details, Analyses, Remove };
+    // 1.21.0 : Model (a la fin) - seulement sur la ligne d'un classeur.
+    enum class Action : std::uint8_t { Open, Details, Analyses, Remove, Model };
 
     AiContextPane(std::string id, Callbacks callbacks);
 
@@ -76,7 +80,10 @@ public:
     [[nodiscard]] gfx::Rect headRect() const;
     // La ligne du fichier montre `index` (vide : hors de la vue), le bouton d'un geste sur elle.
     [[nodiscard]] gfx::Rect rowRect(std::size_t index) const;
+    // Le bouton d'un geste ; vide : hors de la vue, ou pas pour ce fichier (Model : un classeur seulement).
     [[nodiscard]] gfx::Rect actionRect(std::size_t index, Action a) const;
+    // 1.21.0 : ce que la ligne d'un classeur dit de lui (<< Modele : Liste E/S >>, << E/S 85 % >>) ; vide : rien.
+    [[nodiscard]] static std::string workbookChip(const attach::ContextFile& f);
 
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
     [[nodiscard]] bool        hasTooltip() const override { return true; }

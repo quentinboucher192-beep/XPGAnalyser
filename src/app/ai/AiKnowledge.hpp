@@ -81,6 +81,9 @@ inline constexpr CategoryInfo kCategories[] = {
     {"regles", "R\xC3\xA8gles de cr\xC3\xA9" "ation"},
     {"preferences", "Pr\xC3\xA9" "f\xC3\xA9rences de conception"},
     {"projet", "Contexte de projet"},
+    // 1.21.0 : les modeles de fichiers (AiFileModels.hpp : une liste d'E/S, un fichier reseau, des reports deja vus,
+    // relus sans analyse) - avant << metier >>, qui reste la derniere (la categorie par defaut de l'editeur).
+    {"modele-fichier", "Mod\xC3\xA8les de fichiers"},
     {"metier", "Connaissances m\xC3\xA9tier"},
 };
 // Les sources (le champ "source").

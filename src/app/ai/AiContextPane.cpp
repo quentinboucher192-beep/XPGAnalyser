@@ -3,6 +3,8 @@
 // =============================================================================
 #include "AiContextPane.hpp"
 
+#include "AiFileModels.hpp"   // 1.21.0 : le classeur reconnu (un modele de fichier, une detection)
+#include "AiWorkbook.hpp"
 #include "../../ui/Icons.hpp"
 #include "../../ui/TextSearch.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -36,7 +38,7 @@ std::string elide(gfx::IRenderer& r, const std::string& text, gfx::FontId f, flo
 
 ui::Icon iconFor(const std::string& ext) {
     if (ext == "png" || ext == "jpg" || ext == "jpeg") return ui::Icon::Image;
-    if (ext == "xlsx" || ext == "csv") return ui::Icon::Chart;
+    if (ext == "xlsx" || ext == "xlsm" || ext == "csv") return ui::Icon::Chart;
     if (ext == "st" || ext == "c" || ext == "cpp" || ext == "h" || ext == "hpp" || ext == "json" || ext == "xml") return ui::Icon::Code;
     if (ext == "xihm" || ext == "xapi" || ext == "xpgproj" || ext == "xef" || ext == "xpg" || ext == "zef") return ui::Icon::Project;
     return ui::Icon::Document;
@@ -80,6 +82,9 @@ std::string actionTip(AiContextPane::Action a, bool removed) {
         case AiContextPane::Action::Analyses: return "Les analyses pr\xC3\xA9" "c\xC3\xA9" "dentes";
         case AiContextPane::Action::Remove:
             return removed ? std::string("Remettre dans la discussion") : std::string("Retirer de la discussion (sa copie reste, selon les r\xC3\xA8gles de conservation)");
+        case AiContextPane::Action::Model:
+            return "Mod\xC3\xA8le\xE2\x80\xA6 : le genre d\xC3\xA9tect\xC3\xA9 (E/S, r\xC3\xA9seau, reports), la correspondance des colonnes, choisir un "
+                   "mod\xC3\xA8le de fichier ou enregistrer celui-ci comme mod\xC3\xA8le";
     }
     return {};
 }
@@ -90,9 +95,13 @@ ui::Icon actionIcon(AiContextPane::Action a, bool removed) {
         case AiContextPane::Action::Details: return ui::Icon::Info;
         case AiContextPane::Action::Analyses: return ui::Icon::History;
         case AiContextPane::Action::Remove: return removed ? ui::Icon::Undo : ui::Icon::Close;
+        case AiContextPane::Action::Model: return ui::Icon::Columns;
     }
     return ui::Icon::None;
 }
+
+// 1.21.0 : un classeur (.xlsx, .xlsm) a le geste << Modele... >> (pas une piece retiree).
+bool isWorkbook(const attach::ContextFile& f) { return !f.attachment.removed && sheets::workbookExt(f.attachment.ext); }
 
 constexpr AiContextPane::Action kActions[] = {AiContextPane::Action::Open, AiContextPane::Action::Details, AiContextPane::Action::Analyses,
                                               AiContextPane::Action::Remove};
@@ -184,7 +193,10 @@ std::vector<std::string> AiContextPane::lines() const {
     out.push_back("Fichiers joints");
     const auto list = shown();
     if (list.empty()) out.push_back(ctx_.count() == 0 ? "Aucun fichier joint dans cette discussion." : "Aucun fichier ne correspond.");
-    for (const auto* f : list) out.push_back(f->line());
+    for (const auto* f : list) {
+        const std::string chip = workbookChip(*f);   // 1.21.0 : le genre ou le modele d'un classeur
+        out.push_back(chip.empty() ? f->line() : f->line() + " \xE2\x80\x94 " + chip);
+    }
     return out;
 }
 
@@ -210,10 +222,23 @@ gfx::Rect AiContextPane::rowRect(std::size_t index) const {
     return {b.x + 6.f, listTop() + static_cast<float>(index - first) * kRowH, b.w - 12.f, kRowH - 2.f};
 }
 
+std::string AiContextPane::workbookChip(const attach::ContextFile& f) {
+    if (!isWorkbook(f)) return {};
+    const auto c = sheets::choiceOf(f.attachment);
+    if (!c) return {};
+    if (!c->modelName.empty()) return "Mod\xC3\xA8le : " + c->modelName;
+    if (c->byUser) return sheets::genreShort(c->layout.genre) + " (choisi)";
+    return sheets::genreShort(c->layout.genre) + " " + std::to_string(static_cast<int>(c->confidence * 100.0 + 0.5)) + " %";
+}
+
 gfx::Rect AiContextPane::actionRect(std::size_t index, Action a) const {
     const gfx::Rect row = rowRect(index);
     if (row.w <= 0.f) return {};
-    const auto k = static_cast<float>(3 - static_cast<int>(a));   // de droite a gauche : retirer, analyses, detail, ouvrir
+    if (a == Action::Model) {   // 1.21.0 : a gauche des autres, sur un classeur seulement
+        const auto list = shown();
+        if (index >= list.size() || !isWorkbook(*list[index])) return {};
+    }
+    const auto k = a == Action::Model ? 4.f : static_cast<float>(3 - static_cast<int>(a));   // de droite a gauche : retirer, analyses, detail, ouvrir, modele
     return {row.right() - 8.f - kIcon - k * (kIcon + 4.f), row.y + (row.h - kIcon) * 0.5f, kIcon, kIcon};
 }
 
@@ -315,10 +340,17 @@ void AiContextPane::onPaint(const ui::PaintContext& ctx) {
                 tips_.emplace_back(r, actionTip(a, f.attachment.removed));
             }
             right = actionRect(i, Action::Open).x - 6.f;
+            if (const gfx::Rect r = actionRect(i, Action::Model); r.w > 0.f) {   // 1.21.0 : << Modele... >> d'un classeur
+                ctx.r.fillRoundedRect(r, alpha(c.accent, 46), 4.f);
+                ui::drawIcon(ctx.r, actionIcon(Action::Model, false), {r.x + 3.f, r.y + 3.f, r.w - 6.f, r.h - 6.f}, c.accent);
+                tips_.emplace_back(r, actionTip(Action::Model, false));
+                right = r.x - 6.f;
+            }
         } else {
             std::vector<std::pair<std::string, int>> looks;
             if (!f.attachment.removed) looks.push_back(analysisLook(f));
             looks.push_back(availabilityLook(f));   // une piece retiree : << Retire >> seul
+            if (const std::string chip = workbookChip(f); !chip.empty()) looks.emplace_back(chip, 4);   // 1.21.0 : le genre, le modele
             for (const auto& look : looks) {
                 const gfx::Color tone = toneColor(ctx.theme, look.second);
                 const float cw = ctx.r.measure(look.first, kMeta).width + 14.f;
@@ -399,6 +431,10 @@ ui::EventResult AiContextPane::onEvent(const ui::InputEvent& ev) {
     for (std::size_t i = 0; i < list.size(); ++i) {
         if (!rowRect(i).contains(d->pos)) continue;
         const bool removed = list[i]->attachment.removed;
+        if (const gfx::Rect m = actionRect(i, Action::Model); m.w > 0.f && m.contains(d->pos)) {   // 1.21.0
+            fire(cb_.model, i);
+            return ui::EventResult::Consumed;
+        }
         for (const Action a : kActions) {
             if (!actionRect(i, a).contains(d->pos)) continue;
             switch (a) {
@@ -406,6 +442,7 @@ ui::EventResult AiContextPane::onEvent(const ui::InputEvent& ev) {
                 case Action::Details: fire(cb_.details, i); break;
                 case Action::Analyses: fire(cb_.analyses, i); break;
                 case Action::Remove: fire(removed ? cb_.restore : cb_.remove, i); break;
+                case Action::Model: fire(cb_.model, i); break;
             }
             return ui::EventResult::Consumed;
         }

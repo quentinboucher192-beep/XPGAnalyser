@@ -1030,6 +1030,12 @@
     <ClCompile Include="src\app\ai\AiDesign.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiFileModelDialog.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiFileModels.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiIncident.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -1787,6 +1793,9 @@
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiSandbox.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiWorkbook.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
   </ItemGroup>
@@ -2671,6 +2680,12 @@
     <ClInclude Include="src\app\ai\AiDesign.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\ai\AiFileModelDialog.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiFileModels.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ai\AiIncident.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
@@ -3362,6 +3377,9 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiSandbox.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiWorkbook.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
   </ItemGroup>

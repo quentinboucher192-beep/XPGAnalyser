@@ -49,6 +49,7 @@
 #include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
 #include "AiAgentTools.hpp"
 #include "AiAttachments.hpp"   // 1.21.0 : le contexte de la discussion
+#include "AiFileModels.hpp"    // 1.21.0 : les classeurs joints, les modeles de fichiers
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -165,6 +166,22 @@ public:
     bool restoreToDiscussion(const std::string& attachmentId, std::string* why = nullptr);
     // Une piece en cours d'analyse (le fil d'analyse : texte des PDF, DOCX, XLSX...).
     [[nodiscard]] bool analysing() const;
+
+    // ---- 1.21.0 : LES CLASSEURS JOINTS (AiWorkbook.hpp, AiFileModels.hpp) ----------------------------------------------
+    // Les classeurs (.xlsx, .xlsm) de la conversation ouverte et du prochain message, pour l'IA : lus (nul : pas encore -
+    // leur lecture part alors sur un fil, tick la recoit) et la mise en page retenue (le choix de l'utilisateur, sinon le
+    // modele reconnu, sinon la detection).
+    [[nodiscard]] std::vector<sheets::Attached> workbooks() const;
+    // Le classeur lu d'une piece ; nul : pas encore (sa lecture part sur un fil).
+    [[nodiscard]] std::shared_ptr<const sheets::Workbook> workbookOf(const std::string& attachmentId) const;
+    // La piece (de la conversation ouverte, ou en attente d'envoi) ; nul : introuvable.
+    [[nodiscard]] const Attachment* attachmentById(const std::string& attachmentId) const;
+    // LE CHOIX de la fenetre << Modele... >> (une correspondance, un modele existant) : garde avec la piece et enregistre ;
+    // un modele choisi compte une utilisation. clear : revenir a la reconnaissance de l'analyse.
+    bool setWorkbookChoice(const std::string& attachmentId, const sheets::Choice& choice, std::string* why = nullptr);
+    bool clearWorkbookChoice(const std::string& attachmentId, std::string* why = nullptr);
+    // Les lectures de classeurs finies (les essais : attendre, puis tick).
+    bool waitWorkbooks(int ms);
 
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
@@ -389,6 +406,21 @@ private:
     std::string                            boundProject_;
     void submitAnalysis(Attachment& a);
     void pollAnalyses();
+    // 1.21.0 : les classeurs lus (par piece jointe), et leurs lectures en cours (une ancienne conversation rouverte : ses
+    // classeurs relus sur un fil, jamais sur celui de l'interface).
+    struct WorkbookLoad {
+        std::string                       id;
+        std::shared_ptr<sheets::Workbook> result;
+        std::atomic<bool>                 finished{false};
+        std::thread                       worker;
+    };
+    mutable std::map<std::string, std::shared_ptr<const sheets::Workbook>> workbooks_;
+    mutable std::vector<std::shared_ptr<WorkbookLoad>>                     loads_;
+    void requestWorkbook(const Attachment& a) const;
+    void pollWorkbooks();
+    void keepWorkbook(const std::string& id, std::shared_ptr<const sheets::Workbook> wb) const;
+    [[nodiscard]] std::vector<sheets::Attached> attachedWorkbooks(const Conversation* c, bool withPending) const;
+    Attachment* attachmentMut(const std::string& attachmentId, Conversation** owner);
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
     // 1.20.1 : l'application de fond en cours (une a la fois).

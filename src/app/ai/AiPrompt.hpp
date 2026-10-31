@@ -31,6 +31,7 @@
 
 #include "AiOperations.hpp"
 #include "AiStore.hpp"
+#include "AiWorkbook.hpp"   // 1.21.0 : les classeurs joints (PromptInput::workbooks)
 
 #include <functional>
 #include <memory>
@@ -70,6 +71,10 @@ struct PromptInput {
     std::string             projectId;
     bool                    projectNameAmbiguous{false};
     std::string             conversationId;
+    // 1.21.0 (a la fin) : LES CLASSEURS JOINTS a la conversation (AiWorkbook.hpp, AiFileModels.hpp) - lus, reconnus (un
+    // modele de fichier, sinon la detection), la mise en page retenue. L'IA integree en fait des propositions (variables,
+    // types, equipements, adresses) ; vide : aucun.
+    std::vector<sheets::Attached> workbooks;
 };
 
 // Les consignes et le contexte (le champ "system" de la requete).

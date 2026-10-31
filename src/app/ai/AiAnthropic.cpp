@@ -75,7 +75,7 @@ std::string imageType(std::string_view bytes, const std::string& fallback) {
 }
 
 std::string kindLabel(std::string_view ext) {
-    if (ext == "xlsx") return "classeur Excel";
+    if (ext == "xlsx" || ext == "xlsm") return "classeur Excel";
     if (ext == "xihm") return "projet IHM .xihm";
     if (ext == "xapi") return "projet API .xapi";
     if (ext == "xpgproj") return "projet";
