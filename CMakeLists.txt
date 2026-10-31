@@ -723,6 +723,10 @@ if(XPG_BUILD_TESTS)
     # 1.19.0 : le graphe des relations du projet, la verification globale, l'optimisation des adresses.
     xpg_add_test_executable(hmi_relations_test tests/hmi_relations_test.cpp)
     xpg_target_link_libraries(hmi_relations_test PRIVATE xpg_hmi)
+    # 1.20.0 : les incidents - le detecteur, le contexte du defaut, le dossier immuable, l'hote (le tampon d'images,
+    # le fil d'ecriture, l'analyse IA en arriere-plan) : xpg_app.
+    xpg_add_test_executable(hmi_incident_test tests/hmi_incident_test.cpp)
+    xpg_target_link_libraries(hmi_incident_test PRIVATE xpg_app)
     # 1.15.0 (la vraie IA, chantier du registre) : le registre des 116 genres tire du code, le contexte et ses
     # reglages de confidentialite, les consignes et les connaissances actives, le schema de l'outil, la lecture de
     # son entree, les nouvelles operations (dupliquer, code) en un Ctrl+Z (xpg_app : rien a recompiler).
@@ -730,6 +734,9 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(ai_registre_test PRIVATE xpg_app)
     file(GLOB HMI_EDITOR_SOURCES CONFIGURE_DEPENDS
          ${CMAKE_CURRENT_SOURCE_DIR}/src/app/hmi/*.cpp)
+    # 1.20.0 : la surveillance des incidents (l'hote et son volet) tire l'IA (app/ai : JSON, fournisseurs) - elle
+    # vit dans xpg_app ; ses essais (hmi_incident_test) la lient par la.
+    list(FILTER HMI_EDITOR_SOURCES EXCLUDE REGEX "HmiIncident[^/]*\\.cpp$")
     # Lot 13 : Capture.cpp pour le JPEG des vignettes du dossier de l'IHM.
     # Lot 15 : Recovery.cpp, la reprise apres un arret brutal.
     # Lot 19 : HistoryPanel.cpp, le tiroir de l'historique.
@@ -881,6 +888,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
     xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
+    xpg_add_test(NAME hmiincident COMMAND hmi_incident_test)                 # 1.20.0 : les incidents (essais A a G)
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----

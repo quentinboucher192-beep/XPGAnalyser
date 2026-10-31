@@ -21,6 +21,7 @@
 #include "hmi/HmiEquipmentHost.hpp"
 #include "Recovery.hpp"
 #include "hmi/HmiNotifyHost.hpp"
+#include "hmi/HmiIncidentHost.hpp"
 #include "hmi/HmiWebHost.hpp"
 #include "Settings.hpp"
 #include "DetachedWindows.hpp"
@@ -297,6 +298,8 @@ public:
     }
     // Lot 14 : les notifications des alarmes (courriel, SMS) et la boite d'essai.
     [[nodiscard]] NotifyHost& notify() noexcept { return notify_; }
+    // 1.20.0 : la surveillance des incidents (HmiIncidentHost.hpp).
+    [[nodiscard]] IncidentHost& incidents() noexcept { return incidents_; }
     // 1.16.1 : la fenetre a-t-elle le clavier (l'utilisateur la regarde) ; attirer son attention sans la ramener devant
     // (le bouton de la barre des taches clignote ; `sound` : le son de notification du systeme).
     [[nodiscard]] bool windowFocused() const;
@@ -385,6 +388,7 @@ public:
 
 private:
     App() = default;
+    void wireIncidents();   // 1.20.0 : la vue en marche et l'IA choisie, pour la surveillance des incidents
     core::Status initPlatform(const AppOptions&);
     [[nodiscard]] menu::MenuFactory buildMenuFactory();
     void         registerActions();
@@ -430,6 +434,7 @@ private:
     std::string                                helpTopic_;          // lot 15
     void                                       openRecovered(const Recovery::Found& found);
     NotifyHost                                 notify_;          // lot 14
+    IncidentHost                               incidents_;       // 1.20.0
     WebHost                                    web_;             // lot 14
     const domain::Project*                     demoPrepared_{nullptr};   // lot 14 : le simulateur prepare pour le serveur
     // Lot 14 : le poste d'exploitation.

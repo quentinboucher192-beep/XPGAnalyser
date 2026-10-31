@@ -48,6 +48,11 @@
 #include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
 #include "ai/AiPaths.hpp"           // 1.14.2 (Assistant IA) : le dossier IA/ de l'utilisateur
 #include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
+#include "ai/AiAssistant.hpp"       // 1.20.0 : l'IA choisie analyse les incidents
+#include "ai/AiKeys.hpp"
+#include "ai/AiPanel.hpp"
+#include "ai/AiStore.hpp"
+#include "ai/AiOpenAI.hpp"
 #include "../hmi/HmiStore.hpp"
 #include "../hmi/HmiEditHistory.hpp"   // 1.12.25 : l'historique des objets
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les nouveautes se voient
@@ -456,6 +461,7 @@ App::~App() {
     equip_.shutdown();      // lot 15
     recovery_.stop();       // lot 15 : une sortie normale - le verrou s'efface
     notify_.shutdown();
+    incidents_.shutdown();  // 1.20.0 : les ecritures en cours finissent
     web_.shutdown();
     // Persist on the way out: the workspace a user arranged should survive
     // closing the program, including when they close it with the window button.
@@ -2628,6 +2634,89 @@ void App::showThemeGallery() {
     });
 }
 
+// 1.20.0 : ce que la surveillance des incidents lit de l'application - la vue en marche (le projet qu'elle fait
+// tourner, ses valeurs, ses equipements) et l'IA choisie dans l'Assistant. Tout sur le fil de l'interface.
+void App::wireIncidents() {
+    incidents_.setContextSource([this]() -> std::optional<IncidentContext> {
+        auto* pane = liveHmiPane();
+        if (!pane || !pane->runtime().running()) return std::nullopt;
+        hmi::Runtime& rt = pane->runtime();
+        IncidentContext c;
+        c.project = rt.project() ? rt.project() : (hmi_ ? &hmi_->project : nullptr);
+        c.projectFolder = projectFolder_;
+        if (hmi_) {
+            c.projectName = hmi_->project.config.name;
+            c.projectVersion = hmi_->project.config.version;
+        }
+        c.read = [&rt](std::string_view path) -> std::optional<std::pair<std::string, std::string>> {
+            sim::Value v;
+            bool ok = rt.environment().read(path, v);
+            if (!ok)
+                if (const auto* pv = rt.variable(path)) {
+                    v = *pv;
+                    ok = true;
+                }
+            if (!ok) return std::nullopt;
+            std::string why;
+            const auto q = rt.plcQuality(path, &why);
+            return std::make_pair(v.display(), std::string(hmi::comm::qualityName(q)));
+        };
+        c.equipments = rt.equipmentStatuses();
+        if (c.project)
+            if (const auto* v = c.project->view(rt.currentView())) c.openView = v->name;
+        return c;
+    });
+    incidents_.setAnalyst([this](std::string* why) -> std::optional<IncidentAnalyst> {
+        // l'Assistant ouvert : ses reglages et sa cle (gardee en memoire) ; sinon ceux enregistres
+        ai::Settings s;
+        std::string key;
+        int context = 0;
+        bool fromPanel = false;
+        if (auto* screen = dynamic_cast<MainAnalysisScreen*>(menus_ ? menus_->top() : nullptr))
+            if (auto* panel = screen->assistantPanel()) {
+                panel->ensureLoaded();
+                const auto& as = panel->assistant();
+                s = as.settings();
+                key = as.apiKey();
+                context = as.contextWindow();
+                fromPanel = true;
+            }
+        if (!fromPanel) {
+            s = ai::loadSettings();
+            const std::string provider = ai::keys::providerOf(s.provider);
+            if (!provider.empty())
+                if (const std::string id = ai::keys::activeId(provider); !id.empty())
+                    if (auto k = ai::keys::secret(id)) key = *k;
+        }
+        if (!s.enabled || !ai::providerUsesNetwork(s.provider)) {
+            IncidentAnalyst a;
+            a.provider = "integree";
+            a.label = "IA int\xC3\xA9gr\xC3\xA9" "e";
+            return a;
+        }
+        if (s.model.empty()) {
+            if (why) *why = "aucun mod\xC3\xA8le choisi dans les param\xC3\xA8tres de l'Assistant";
+            return std::nullopt;
+        }
+        if (key.empty() && !ai::localService(s.endpoint, s.preset)) {
+            if (why) *why = "pas de cl\xC3\xA9 API pour " + s.provider + " (Param\xC3\xA8tres de l'Assistant)";
+            return std::nullopt;
+        }
+        IncidentAnalyst a;
+        a.provider = s.provider;
+        a.label = s.provider + " (" + s.model + ")";
+        a.base.model = s.model;
+        a.base.endpoint = s.endpoint;
+        a.base.apiKey = key;
+        a.base.timeoutSeconds = s.timeoutSeconds;
+        a.base.effort = s.effort;
+        a.base.preset = s.preset;
+        a.base.contextTokens = context > 0 ? context : s.contextTokens;
+        a.base.textFallback = false;
+        return a;
+    });
+}
+
 int App::run() {
 #if XPG_HAVE_SDL3
     using Clock = std::chrono::steady_clock;
@@ -2636,6 +2725,7 @@ int App::run() {
     // Lot API 7 : ou poser les onglets detaches, et quelle fenetre montrer
     // quand une question y attend.
     detached_.setMainWindow(window_);
+    wireIncidents();   // 1.20.0
 
     while (running && !quit_) {
         const auto now = Clock::now();
@@ -3100,6 +3190,9 @@ void App::frame(double dt) {
     // 2d. Lot 14 : les notifications suivent la configuration (la boite d'essai,
     //     les delais ecoules).
     notify_.tick(hmi_ ? &hmi_->project : nullptr);
+    // 2d bis. 1.20.0 : la surveillance des incidents (le dossier du projet IHM, les fronts, les videos, les analyses).
+    incidents_.setProjectFolder(hmi_ ? projectFolder_ : std::string{});
+    incidents_.tick(time_);
     // 2e. Lot 14 : l'acces web suit la configuration ; les clics des navigateurs
     //     (commande permise) sont des clics sur la vue en marche.
     web_.tick(hmi_ ? &hmi_->project : nullptr);
@@ -3152,6 +3245,9 @@ void App::frame(double dt) {
                 if (const auto* v = hmi_->project.view(pane->currentView())) view = v->name;
             web_.publish(*renderer_, live ? pane->canvas().screenRect() : gfx::Rect{}, view, live, time_);
         }
+        // 4d. 1.20.0 : l'image de la vue en marche pour les incidents (le tampon circulaire, la capture d'un defaut).
+        if (incidents_.wantsFrame(time_))
+            if (auto* pane = liveHmiPane(); pane && pane->runtime().running()) incidents_.offerFrame(*renderer_, pane->canvas().screenRect(), time_);
         if (script_ && !script_->afterRender(*renderer_)) quit_ = true;
         renderer_->endFrame();            // 5. present
     }

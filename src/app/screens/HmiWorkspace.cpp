@@ -1470,7 +1470,10 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         if (plc) host.commDemo = [this] { return std::make_pair(app_.comm().running(), app_.comm().demoPort()); };
         // Lot 14 : les notifications des alarmes, et les rapports a envoyer.
-        host.alarmNotice = [this](const hmi::AlarmNotice& n) { app_.notify().notice(n); };
+        host.alarmNotice = [this](const hmi::AlarmNotice& n) {
+            app_.notify().notice(n);
+            app_.incidents().notice(n);   // 1.20.0 : la surveillance des incidents
+        };
         host.notifyStats = [this] {
             auto st = app_.notify().stats();
             st.webClients = app_.web().clientCount();
@@ -1479,6 +1482,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.notifyEvents = [this] {
             auto events = app_.notify().takeEvents();
             for (auto& e : app_.web().takeEvents()) events.push_back(std::move(e));
+            for (auto& e : app_.incidents().takeEvents()) events.push_back(std::move(e));   // 1.20.0
             return events;
         };
         host.reportWritten = [this](const hmi::ReportOutput& r) { app_.notify().report(r); };
