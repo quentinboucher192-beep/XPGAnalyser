@@ -44213,6 +44213,24 @@ void deballagesTypes1161() {
     check(folders.detailCount() == 0, "Tout replier : plus aucune ligne d\xC3\xA9pli\xC3\xA9" "e");
     types.unfoldList(true);
     check(folders.rowOfDetail(gaz, "Purge.Debit") >= 0 && folders.rowOfDetail(purge, "Debit") >= 0, "Tout d\xC3\xA9plier : chaque type, a toute profondeur");
+    // 1.17.1 : LA FLECHE d'une ligne depliee, le geste de la souris (pas l'appel direct) - avant, le chemin passe par
+    // reference etait detruit par la liste refaite, puis relu pour garder la ligne choisie : plantage
+    // basic_string::_M_create (rapport du 31/10, 1.16.1).
+    types.unfoldList(false);
+    (void)types.setListUnfolded(gaz, {}, true);
+    {
+        const int row = folders.rowOfDetail(gaz, "Purge");
+        types.typeTable().expanderClicked->emit(static_cast<ui::RowIndex>(row));
+        const int after = folders.rowOfDetail(gaz, "Purge");
+        auto sel = types.typeTable().selectedModelRows();
+        check(row >= 0 && folders.rowOfDetail(gaz, "Purge.Debit") > after && sel.size() == 1 && sel.front() == static_cast<ui::RowIndex>(after),
+              "la fl\xC3\xA8" "che de Purge (clic) : d\xC3\xA9pli\xC3\xA9, et Purge reste choisie");
+        types.typeTable().expanderClicked->emit(static_cast<ui::RowIndex>(after));
+        sel = types.typeTable().selectedModelRows();
+        check(folders.rowOfDetail(gaz, "Purge.Debit") < 0 && sel.size() == 1 && sel.front() == static_cast<ui::RowIndex>(folders.rowOfDetail(gaz, "Purge")),
+              "la fl\xC3\xA8" "che de Purge, encore : repli\xC3\xA9, Purge toujours choisie");
+    }
+    types.unfoldList(true);
     // ---- le tableau des membres
     types.selectType(gaz);
     auto& members = types.memberTable();

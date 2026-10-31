@@ -359,7 +359,10 @@ core::Status AiSettingsDialog::buildUi() {
     clearKey_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Effacer", base + ".effacer")));
     clearKey_->setTooltip("Effacer la cl\xC3\xA9 : de la s\xC3\xA9" "ance, et du PC si elle y \xC3\xA9tait m\xC3\xA9moris\xC3\xA9" "e.");
     links_ += clearKey_->clicked->connect([this] { clearKey(); });
-    remember_ = check("M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)", ".memoriser", panel_.assistant().keyRemembered());
+    // 1.17.1 : COCHEE PAR DEFAUT pour une cle a saisir (decochee, une cle tapee etait perdue au redemarrage - une
+    // reinstallation l'effacait). Une cle deja gardee pour la seance seulement (un choix) reste decochee.
+    remember_ = check("M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)", ".memoriser",
+                      panel_.assistant().keyRemembered() || (keyProtectionAvailable() && panel_.assistant().apiKey().empty()));
     remember_->setEnabled(keyProtectionAvailable());
     remember_->setTooltip(keyProtectionAvailable()
                               ? "La cl\xC3\xA9 est chiffr\xC3\xA9" "e par Windows (DPAPI), li\xC3\xA9" "e \xC3\xA0 ta session : un autre compte, ou un autre PC, ne la relit pas."

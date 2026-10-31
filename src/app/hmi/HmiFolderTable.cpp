@@ -132,7 +132,13 @@ HmiFolderTable::HmiFolderTable(ui::TableView& table, hmi::DocumentPtr doc, Apply
     links_ += table_.expanderClicked->connect([this](ui::RowIndex r) {
         const auto* row = this->row(r);
         if (row && row->folder) setCollapsed(row->path, !collapsed(row->path));
-        else if (row && unfold_) unfoldToggled->emit(row->id, row->detail);   // 1.16.1 : le volet deplie, puis refait la liste
+        else if (row && unfold_) {
+            // 1.17.1 : des COPIES - le volet deplie puis refait la liste (rows_) : une reference a row->detail
+            // pendrait (plantage basic_string::_M_create a la fleche d'un membre deplie des Types IHM).
+            const hmi::Id id = row->id;
+            const std::string detail = row->detail;
+            unfoldToggled->emit(id, detail);
+        }
     });
     links_ += table_.rowsDropped->connect([this](const std::vector<ui::RowIndex>& rows, ui::RowIndex to, Where where) {
         (void)drop(rows, to, where);

@@ -6090,7 +6090,9 @@ bool HmiTypesPane::listUnfolded(Id type, const std::string& path) const {
     return listOpen_.count(key) > 0;
 }
 
-bool HmiTypesPane::setListUnfolded(Id type, const std::string& path, bool open) {
+// 1.17.1 : `path` par VALEUR - refresh() refait la liste d'ou il vient souvent (la ligne de la fleche) ; il sert encore
+// apres (la ligne reste choisie).
+bool HmiTypesPane::setListUnfolded(Id type, std::string path, bool open) {
     const std::string key = listKey(type, path);
     const bool was = listOpen_.count(key) > 0;
     if (was == open) return false;
@@ -6257,7 +6259,7 @@ bool HmiTypesPane::memberUnfolded(const std::string& rel) const {
     return memberOpen_.count(key) > 0;
 }
 
-bool HmiTypesPane::setMemberUnfolded(const std::string& rel, bool open) {
+bool HmiTypesPane::setMemberUnfolded(std::string rel, bool open) {   // 1.17.1 : par valeur (comme setListUnfolded)
     const std::string key = memberKey(rel);
     const bool was = memberOpen_.count(key) > 0;
     if (was == open) return false;

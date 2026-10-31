@@ -446,11 +446,11 @@ public:
     //  Tout replier. Ce qui est deplie se garde par chemin (d'un type a l'autre ; un membre renomme ou retire : sa ligne
     //  s'en va).
     //  `path` : le chemin sous le type ("" : le type lui-meme ; "Purge.Debit" ; une valeur : "Mode#Auto").
-    bool setListUnfolded(hmi::Id type, const std::string& path, bool open);
+    bool setListUnfolded(hmi::Id type, std::string path, bool open);
     [[nodiscard]] bool listUnfolded(hmi::Id type, const std::string& path) const;
     void unfoldList(bool open);                                    // Tout deplier / Tout replier (la liste)
     // `rel` : le chemin dans le type choisi ("Purge", "Purge[1]", "Purge[1].Debit").
-    bool setMemberUnfolded(const std::string& rel, bool open);
+    bool setMemberUnfolded(std::string rel, bool open);
     [[nodiscard]] bool memberUnfolded(const std::string& rel) const;
     void unfoldMembers(bool open);                                 // Tout deplier / Tout replier (le tableau des membres)
     [[nodiscard]] int memberRowOf(const std::string& rel) const;   // sa ligne dans le tableau des membres ; -1 : pas montree
