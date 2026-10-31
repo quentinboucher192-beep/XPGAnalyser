@@ -44,6 +44,7 @@
 
 #include "AiAnthropic.hpp"
 #include "AiDemo.hpp"
+#include "AiLearning.hpp"
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -227,6 +228,9 @@ public:
     [[nodiscard]] const Host& host() const noexcept { return host_; }
     // Le contexte d'une demande (la vue active, la selection), comme a l'envoi.
     [[nodiscard]] DemoContext context() const;
+    // 1.17.0 : << Essayer une phrase >> (l'onglet Apprentissage) - l'IA integree la lit sur le projet et la vue
+    // ouverts, SANS RIEN APPLIQUER ni rien mesurer : comprise ou non, et ce qu'elle proposerait.
+    [[nodiscard]] learning::Trial tryPhrase(const std::string& phrase) const;
 
     // ---- 1.16.0 (FOURNISSEURS) : la limite et la consommation en direct, le budget ---------------
     // Ce qu'on sait de la limite du service et des jetons (les evenements Usage du fournisseur).

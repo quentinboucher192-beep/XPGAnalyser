@@ -459,6 +459,40 @@ bool Assistant::send(std::string text, std::string* why) {
     return true;
 }
 
+learning::Trial Assistant::tryPhrase(const std::string& phrase) const {
+    const DemoContext ctx = context();
+    if (!ctx.project) return {false, "Pas de projet ouvert : ouvre un projet d'IHM Studio pour essayer une phrase."};
+    const LocalReply lr = askLocal(nullptr, 0, ctx, phrase);
+    learning::Trial t;
+    t.understood = lr.understood;
+    // le resume : la proposition (et les membres d'un type) ; sinon la premiere ligne de la reponse, sans sa mise en forme
+    if (lr.proposal) {
+        t.summary = lr.proposal->summary;
+        for (const auto& op : lr.proposal->ops)
+            if (op.action == Operation::Action::Type && !op.members.empty()) {
+                std::string list;
+                for (std::size_t i = 0; i < op.members.size() && i < 6; ++i)
+                    list += (i ? ", " : "") + op.members[i].name + " (" + op.members[i].type + ")";
+                if (op.members.size() > 6) list += ", \xE2\x80\xA6";
+                t.summary += " : " + list;
+                break;
+            }
+    } else {
+        std::string line = lr.text.substr(0, lr.text.find('\n'));
+        std::string clean;
+        for (const char ch : line)
+            if (ch != '*' && ch != '`') clean += ch;
+        if (clean.size() > 220) {
+            std::size_t n = 220;
+            while (n > 0 && (static_cast<unsigned char>(clean[n]) & 0xC0u) == 0x80u) --n;
+            clean = clean.substr(0, n) + "\xE2\x80\xA6";
+        }
+        t.summary = clean;
+    }
+    if (!t.understood && t.summary.empty()) t.summary = "pas comprise";
+    return t;
+}
+
 LocalReply Assistant::askLocal(const Conversation* c, std::size_t turns, const DemoContext& ctx, const std::string& text) const {
     PromptInput in;
     in.project = ctx.project;

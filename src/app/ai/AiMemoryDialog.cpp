@@ -8,8 +8,11 @@
 //  mi-saturation pour les parts, les couleurs d'etat pour ce qui en est un).
 // =============================================================================
 #include "AiMemoryDialog.hpp"
+#include "AiLearning.hpp"
+#include "AiLearningFile.hpp"
 #include "AiPaths.hpp"
 #include "AiStore.hpp"
+#include "../../hmi/HmiModel.hpp"
 #include "../Dossiers.hpp"
 #include "../../core/Edition.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -21,12 +24,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <iterator>
+#include <set>
 
 namespace app {
 
 namespace mem = ai::memory;
+namespace ln = ai::learning;
 
 namespace {
 
@@ -715,17 +721,19 @@ public:
     ui::Button*        edCancel{nullptr};
     ui::Button*        edToEdit{nullptr};
     bool               editorOn{false};
+    bool               embedded{false};   // 1.17.0 : dans le tableau de bord (son theme tient lieu de categorie)
 
 protected:
     void onLayout() override {
         const auto r = bounds();
         const float x0 = r.x + kPad, W = r.w - 2.f * kPad;
-        info_ = {x0, r.y + 10.f, W, 34.f};
-        const float fy = info_.bottom() + 8.f;
+        info_ = embedded ? gfx::Rect{x0, r.y, W, 0.f} : gfx::Rect{x0, r.y + 10.f, W, 34.f};
+        const float fy = embedded ? r.y + 2.f : info_.bottom() + 8.f;
         catLabelX_ = x0;
         const float catLw = ui::measureWidth("Cat\xC3\xA9gorie", kSmall) + 8.f;
+        catBox->setVisibility(embedded ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         catBox->setBounds({x0 + catLw, fy, 230.f, 30.f});
-        projLabelX_ = x0 + catLw + 230.f + 18.f;
+        projLabelX_ = embedded ? x0 : x0 + catLw + 230.f + 18.f;
         const float projLw = ui::measureWidth("Projet", kSmall) + 8.f;
         projBox->setBounds({projLabelX_ + projLw, fy, 220.f, 30.f});
         countX_ = projLabelX_ + projLw + 220.f + 16.f;
@@ -767,12 +775,20 @@ protected:
             }
             return;
         }
+        if (embedded) {
+            // dans le tableau de bord : la liste a gauche, le detail a droite (la place est en largeur)
+            const float tw = std::floor(W * 0.56f);
+            table->setBounds({x0, top, tw, avail});
+            detail_ = {x0 + tw + kGap, top, W - tw - kGap, avail};
+            recent_ = {};
+        } else {
         const float tableH = std::max(140.f, std::floor(avail * 0.48f));
         table->setBounds({x0, top, W, tableH});
         const float by = top + tableH + 10.f;
         const float bh = r.bottom() - 10.f - by;
         detail_ = {x0, by, std::floor(W * 0.6f), bh};
         recent_ = {detail_.right() + kGap, by, x0 + W - detail_.right() - kGap, bh};
+        }
         float bx = detail_.x + 12.f;
         const float bY = detail_.bottom() - 42.f;
         for (ui::Button* b : {view, edit, toggle}) {
@@ -788,7 +804,8 @@ protected:
         const TipScope tips(tips_);
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(bounds(), c.windowBg);
-        // l'encart franc
+        // l'encart franc (dans le tableau de bord : son bandeau le dit deja)
+        if (!embedded) {
         ctx.r.fillRoundedRect(info_, c.accent.withAlpha(ctx.theme.isDark() ? 34 : 22), 6.f);
         ctx.r.fillRoundedRect({info_.x, info_.y, 3.f, info_.h}, c.accent, 1.5f);
         ui::drawIcon(ctx.r, ui::Icon::Info, {info_.x + 12.f, info_.y + 10.f, 14.f, 14.f}, c.accent);
@@ -797,9 +814,10 @@ protected:
         const float lx = info_.x + 34.f + textW(ctx, lead, kText) + 8.f;
         if (lx < info_.right() - 40.f)
             textMid(ctx, lx, info_, fit(ctx, "Le mod\xC3\xA8le distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9.", kText, info_.right() - 10.f - lx), kText, c.text);
+        }
         // les filtres
         const gfx::Rect fb{0.f, filtersY_, 0.f, 30.f};
-        textMid(ctx, catLabelX_, fb, "Cat\xC3\xA9gorie", kSmall, c.textMuted);
+        if (!embedded) textMid(ctx, catLabelX_, fb, "Cat\xC3\xA9gorie", kSmall, c.textMuted);
         textMid(ctx, projLabelX_, fb, "Projet", kSmall, c.textMuted);
         {
             std::size_t shown = d_.shownKnowledge().size(), here = 0;
@@ -813,7 +831,7 @@ protected:
             return;
         }
         paintDetail(ctx);
-        paintRecent(ctx);
+        if (!embedded) paintRecent(ctx);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -948,6 +966,1239 @@ private:
     gfx::Point contentLabel_{};
     std::vector<float> labelsY_;
     float catLabelX_{0}, projLabelX_{0}, countX_{0}, countW_{0}, filtersY_{0};
+};
+
+// ============================================================ Apprentissage (1.17.0) : le tableau de bord ===
+//  CE QU'ELLE SAIT, ET QU'ELLE PROGRESSE. En haut : le bandeau honnete (la memoire locale ; le modele distant n'est
+//  pas reentraine), Importer... et Exporter l'apprentissage... ; quatre tuiles ; deux graphiques mesures sur ce PC
+//  (les demandes comprises et les propositions gardees, par semaine ; ce qu'elle a appris, par origine). En bas : les
+//  THEMES a gauche, la liste du theme au centre (Rechercher, filtres, tri), le detail modifiable a droite ; en pied,
+//  << Essayer une phrase >>. Les connaissances en texte gardent leur page (LearningPage, dans ce cadre).
+namespace {
+// Les couleurs des series (validees) : clair / sombre.
+gfx::Color seriesColor(const ui::PaintContext& ctx, int i) {
+    static const std::uint32_t light[] = {0x2a78d6, 0xeb6834, 0x1baf7a};
+    static const std::uint32_t dark[] = {0x3987e5, 0xd95926, 0x199e70};
+    return gfx::Color::rgb(ctx.theme.isDark() ? dark[i % 3] : light[i % 3]);
+}
+std::string pct(int part, int whole) {
+    if (whole <= 0) return "\xE2\x80\x94";
+    return std::to_string(static_cast<int>(std::lround(100.0 * part / whole))) + " %";
+}
+std::string weekLabel(long long start) {
+    std::time_t tt = static_cast<std::time_t>(start);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &tt);
+#else
+    localtime_r(&tt, &tm);
+#endif
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%02d/%02d", tm.tm_mday, tm.tm_mon + 1);
+    return buf;
+}
+const char* const kTypeChoices[] = {"BOOL", "INT", "DINT", "UINT", "UDINT", "REAL", "LREAL", "STRING", "TIME", "WORD", "DWORD"};
+
+// La table des membres d'un modele : modifiable (Nom, Type, Description).
+class MembersModel final : public ui::ITableModel {
+public:
+    std::vector<ln::ModelMember> rows;
+    [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 3; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override {
+        return c == 0 ? "Membre" : c == 1 ? "Type" : "Description";
+    }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        if (r >= rows.size()) return {};
+        return c == 0 ? rows[r].name : c == 1 ? rows[r].type : rows[r].description;
+    }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return folded(cellText(a, c)) < folded(cellText(b, c)); }
+    [[nodiscard]] bool editable(ui::RowIndex r, std::size_t) const override { return r < rows.size(); }
+    bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {
+        if (r >= rows.size()) return false;
+        std::string t(text);
+        if (c == 0) rows[r].name = t;
+        else if (c == 1) {
+            std::string why;
+            if (!ln::validMemberType(t, &why)) return false;
+            rows[r].type = t;
+        } else rows[r].description = t;
+        changed->emit();
+        return true;
+    }
+    [[nodiscard]] std::vector<std::string> cellChoices(ui::RowIndex, std::size_t c) const override {
+        if (c != 1) return {};
+        return std::vector<std::string>(std::begin(kTypeChoices), std::end(kTypeChoices));
+    }
+    void reset() { modelReset->emit(); }
+    const core::SignalPtr<> changed = core::Signal<>::create();
+};
+} // namespace
+
+class AiMemoryDialog::LearningHub final : public ui::Widget {
+public:
+    explicit LearningHub(AiMemoryDialog& d) : ui::Widget("ia.memoire.apprentissage.tableau"), d_(d) {
+        const std::string base = "ia.memoire.apprentissage.";
+        importB = &button(base + "importer", "Importer\xE2\x80\xA6", ui::Icon::Import);
+        exportB = &button(base + "exporter", "Exporter l'apprentissage\xE2\x80\xA6", ui::Icon::Export);
+        period = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "periode")));
+        period->setItems({{"8 semaines", "8"}, {"3 mois", "13"}, {"6 mois", "26"}});
+        period->setSelectedIndex(0);
+        search = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + "rechercher")));
+        search->setPlaceholder("Rechercher : un nom, un mot, un membre, un type\xE2\x80\xA6");
+        stateBox = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "etat")));
+        stateBox->setItems({{"Actifs et d\xC3\xA9sactiv\xC3\xA9s", ""}, {"Actifs", "actifs"}, {"D\xC3\xA9sactiv\xC3\xA9s", "inactifs"},
+                            {"Modifi\xC3\xA9s \xC3\xA0 la main", "main"}});
+        stateBox->setSelectedIndex(0);
+        sortBox = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "tri")));
+        sortBox->setItems({{"Trier : r\xC3\xA9" "cents", "recents"}, {"Trier : nom", "nom"}});
+        sortBox->setSelectedIndex(0);
+        listModel = std::make_shared<Rows>();
+        list = &makeTable(*this, base + "theme", listModel, {});
+        // le detail d'un modele
+        mName = &input(base + "modele.nom", "T_Modele");
+        mWords = &input(base + "modele.mots", "les mots qui l'appellent, s\xC3\xA9par\xC3\xA9s par des virgules");
+        members = std::make_shared<MembersModel>();
+        mMembers = &makeTable(*this, base + "modele.membres", members,
+                              {col("Membre", 120.f), col("Type", 90.f), col("Description", 200.f)});
+        mMembers->setSelectionMode(ui::SelectionMode::Single);
+        mAdd = &button(base + "modele.ajouterMembre", "+ Membre", ui::Icon::Plus);
+        mRemove = &button(base + "modele.retirerMembre", "Retirer", ui::Icon::Delete);
+        mUp = &button(base + "modele.monter", "", ui::Icon::ArrowUp);
+        mUp->setTooltip("Monter le membre choisi");
+        mDown = &button(base + "modele.descendre", "", ui::Icon::ArrowDown);
+        mDown->setTooltip("Descendre le membre choisi");
+        // le detail d'un mot
+        wWord = &input(base + "mot.mot", "le mot (b\xC3\xA2" "che, surpresseur\xE2\x80\xA6)");
+        wMeaning = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "mot.sens")));
+        wMeaning->setItems({{"un genre d'objet", "genre"}, {"un mod\xC3\xA8le m\xC3\xA9tier", "modele"}, {"un mot \xC3\xA0 ignorer", "ignorer"}});
+        wMeaning->setSelectedIndex(0);
+        wTarget = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "mot.cible")));
+        wTarget->setMaxVisibleRows(14);
+        // les boutons communs du detail
+        save = &button(base + "enregistrer", "Enregistrer", ui::Icon::None);
+        save->setStyle(ui::Button::Style::Primary);
+        revert = &button(base + "original", "Revenir \xC3\xA0 l'original", ui::Icon::Undo);
+        toggle = &button(base + "basculer", "D\xC3\xA9sactiver", ui::Icon::None);
+        remove = &button(base + "supprimer", "Supprimer", ui::Icon::Delete);
+        remove->setStyle(ui::Button::Style::Danger);
+        addNew = &button(base + "nouveau", "Nouveau mod\xC3\xA8le\xE2\x80\xA6", ui::Icon::Plus);
+        // A lui apprendre
+        teachLearn = &button(base + "apprendre", "Lui apprendre", ui::Icon::Library);
+        teachIgnore = &button(base + "ignorer", "Ignorer", ui::Icon::None);
+        teachWord = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "apprendre.mot")));
+        // essayer une phrase
+        tryIn = &input(base + "essayer", "Essayer une phrase : \xC2\xAB Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs \xC2\xBB\xE2\x80\xA6");
+        tryB = &button(base + "essayerBouton", "Essayer", ui::Icon::Play);
+        // la page des connaissances en texte (les autres themes), dans ce cadre
+        auto page = std::make_unique<LearningPage>(d);
+        page->embedded = true;
+        knowledge = &static_cast<LearningPage&>(addChild(std::move(page)));
+
+        links_ += importB->clicked->connect([this] { askImport(); });
+        links_ += exportB->clicked->connect([this] { askExport(); });
+        links_ += period->selectionChanged->connect([this](int) { refreshData(); });
+        links_ += search->textChanged->connect([this](const std::string& t) {
+            d_.setLearningSearchQuiet(t);   // les themes en texte : leurs connaissances aussi
+            fillList();
+        });
+        links_ += stateBox->selectionChanged->connect([this](int) { fillList(); });
+        links_ += sortBox->selectionChanged->connect([this](int) { fillList(); });
+        links_ += list->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
+            if (syncing_) return;
+            selected = rows.empty() || rows.front() >= listModel->rows.size() ? std::string{} : listModel->rows[rows.front()].key;
+            fillDetail();
+        });
+        links_ += wMeaning->selectionChanged->connect([this](int) { fillTargets(); });
+        links_ += save->clicked->connect([this] { (void)saveDetail(); });
+        links_ += revert->clicked->connect([this] { (void)revertDetail(); });
+        links_ += toggle->clicked->connect([this] { (void)toggleDetail(); });
+        links_ += remove->clicked->connect([this] { (void)removeDetail(); });
+        links_ += addNew->clicked->connect([this] { beginNew(); });
+        links_ += mAdd->clicked->connect([this] {
+            members->rows.push_back({"Membre" + std::to_string(members->rows.size() + 1), "BOOL", {}});
+            members->reset();
+            mMembers->selectModelRows({static_cast<ui::RowIndex>(members->rows.size() - 1)});
+        });
+        links_ += mRemove->clicked->connect([this] {
+            const auto r = mMembers->selectedModelRows();
+            if (r.empty() || r.front() >= members->rows.size()) return;
+            members->rows.erase(members->rows.begin() + static_cast<std::ptrdiff_t>(r.front()));
+            members->reset();
+        });
+        const auto move = [this](int delta) {
+            const auto r = mMembers->selectedModelRows();
+            if (r.empty()) return;
+            const int i = static_cast<int>(r.front()), j = i + delta;
+            if (j < 0 || j >= static_cast<int>(members->rows.size())) return;
+            std::swap(members->rows[static_cast<std::size_t>(i)], members->rows[static_cast<std::size_t>(j)]);
+            members->reset();
+            mMembers->selectModelRows({static_cast<ui::RowIndex>(j)});
+        };
+        links_ += mUp->clicked->connect([move] { move(-1); });
+        links_ += mDown->clicked->connect([move] { move(1); });
+        links_ += teachLearn->clicked->connect([this] { (void)teachSelected(); });
+        links_ += teachIgnore->clicked->connect([this] { (void)ignoreSelected(); });
+        links_ += tryB->clicked->connect([this] { (void)tryNow(tryIn->text()); });
+        links_ += tryIn->editingDone->connect([this](const std::string& t) { (void)tryNow(t); });
+        refreshData();
+    }
+
+    // ---- les donnees du moment (mesurees sur ce PC) ----
+    void refreshData() {
+        allModels = ln::models(true);
+        allWords = ln::words(true);
+        measures = ln::readMeasures();
+        decided = ln::decisions();
+        const long long nowT = static_cast<long long>(ai::now());
+        const int n = period && period->selectedItem() ? std::max(4, std::atoi(period->selectedItem()->value.c_str())) : 8;
+        weeks = ln::weeks(n, nowT, measures, decided);
+        toTeach = ln::notUnderstood(7, nowT);
+        // les taux sur 30 jours, et les 30 d'avant
+        const auto rate = [&](long long from, long long to, bool understood) {
+            int a = 0, b = 0;
+            if (understood) {
+                for (const auto& m : measures)
+                    if (const long long t = static_cast<long long>(ai::parseIso(m.date)); t >= from && t < to) {
+                        ++b;
+                        if (m.understood) ++a;
+                    }
+            } else {
+                for (const auto& x : decided)
+                    if (const long long t = static_cast<long long>(ai::parseIso(x.date)); t >= from && t < to) {
+                        ++b;
+                        if (x.kept) ++a;
+                    }
+            }
+            return std::pair<int, int>{a, b};
+        };
+        const long long d30 = 30LL * 86400;
+        nowUnderstood = rate(nowT - d30, nowT + 1, true);
+        beforeUnderstood = rate(nowT - 2 * d30, nowT - d30, true);
+        nowKept = rate(nowT - d30, nowT + 1, false);
+        beforeKept = rate(nowT - 2 * d30, nowT - d30, false);
+        // le theme : sa liste, son detail
+        fillTargets();
+        fillList();
+        invalidate();
+    }
+
+    // Les themes : (cle, libelle, nombre, appris ces 4 semaines).
+    struct ThemeLine {
+        std::string key, label;
+        std::size_t count{0}, recent{0};
+        ui::Icon    icon{ui::Icon::Library};
+    };
+    [[nodiscard]] std::vector<ThemeLine> themes() const {
+        std::vector<ThemeLine> out;
+        const long long nowT = static_cast<long long>(ai::now());
+        const auto recentDate = [&](const std::string& iso) {
+            const long long t = static_cast<long long>(ai::parseIso(iso));
+            return t > 0 && nowT - t < 28LL * 86400;
+        };
+        const std::string q = folded(search ? search->text() : std::string{});
+        ThemeLine m{"modeles", "Mod\xC3\xA8les m\xC3\xA9tier", 0, 0, ui::Icon::DerivedType};
+        for (const auto& x : allModels)
+            if (q.empty() || modelMatches(x, q)) {
+                ++m.count;
+                if (!x.builtIn || x.corrected) m.recent += recentDate(x.modified) ? 1 : 0;
+            }
+        out.push_back(m);
+        ThemeLine w{"vocabulaire", "Vocabulaire et synonymes", 0, 0, ui::Icon::Comment};
+        for (const auto& x : allWords)
+            if (q.empty() || wordMatches(x, q)) {
+                ++w.count;
+                if (!x.builtIn) w.recent += recentDate(x.modified) ? 1 : 0;
+            }
+        out.push_back(w);
+        for (const auto& c : mem::kCategories) {
+            if (c.key == "modeles" || c.key == "vocabulaire") continue;
+            ThemeLine t{std::string(c.key), std::string(c.label), 0, 0, ui::Icon::Document};
+            for (const auto& k : d_.registry_.all())
+                if (k.category == c.key && (q.empty() || folded(k.name + " " + k.content).find(q) != std::string::npos)) {
+                    ++t.count;
+                    if (!k.builtIn && recentDate(k.modified.empty() ? k.added : k.modified)) ++t.recent;
+                }
+            out.push_back(t);
+        }
+        out.push_back({"apprendre", "\xC3\x80 lui apprendre", toTeach.size(), 0, ui::Icon::Warning});
+        return out;
+    }
+    [[nodiscard]] static bool modelMatches(const ln::BusinessModel& m, const std::string& q) {
+        std::string all = m.key + " " + m.name + " " + m.label + " " + m.description;
+        for (const auto& w : m.words) all += " " + w;
+        for (const auto& x : m.members) all += " " + x.name + " " + x.type + " " + x.description;
+        return folded(all).find(q) != std::string::npos;
+    }
+    [[nodiscard]] static bool wordMatches(const ln::WordEntry& w, const std::string& q) {
+        return folded(w.word + " " + w.target + " " + ln::describe(w)).find(q) != std::string::npos;
+    }
+
+    bool showTheme(const std::string& key) {
+        const auto all = themes();
+        if (std::none_of(all.begin(), all.end(), [&](const ThemeLine& t) { return t.key == key; })) return false;
+        theme = key;
+        selected.clear();
+        adding_ = false;
+        if (key != "modeles" && key != "vocabulaire" && key != "apprendre") d_.setCategoryFilter(key);
+        fillList();
+        invalidateLayout();
+        invalidate();
+        return true;
+    }
+    [[nodiscard]] bool textTheme() const { return theme != "modeles" && theme != "vocabulaire" && theme != "apprendre"; }
+
+    // ---- la liste du theme ----
+    void fillList() {
+        if (!listModel) return;
+        const std::string q = folded(search ? search->text() : std::string{});
+        const std::string state = stateBox && stateBox->selectedItem() ? stateBox->selectedItem()->value : std::string{};
+        const bool byName = sortBox && sortBox->selectedItem() && sortBox->selectedItem()->value == "nom";
+        auto& m = *listModel;
+        m.rows.clear();
+        const auto passState = [&](bool active, bool hand) {
+            return state.empty() || (state == "actifs" && active) || (state == "inactifs" && !active) || (state == "main" && hand);
+        };
+        const auto stateCell = [](bool active) { return active ? std::string("\xE2\x9C\x93 Actif") : std::string("D\xC3\xA9sactiv\xC3\xA9"); };
+        const auto origin = [](const std::string& source, bool builtIn, bool corrected) {
+            if (builtIn) return corrected ? std::string("Logiciel, corrig\xC3\xA9 par toi") : std::string("Logiciel");
+            return source == "assistant" ? std::string("Retenu par l'Assistant") : source == "fichier" ? std::string("Lu dans un fichier")
+                                                                                                    : std::string("Toi");
+        };
+        if (theme == "modeles") {
+            m.headers = {"Mod\xC3\xA8le", "Ce qu'elle en sait", "D'o\xC3\xB9 \xC3\xA7" "a vient", "Mis \xC3\xA0 jour", "\xC3\x89tat"};
+            for (const auto& x : allModels) {
+                if (!q.empty() && !modelMatches(x, q)) continue;
+                if (!passState(x.active, !x.builtIn || x.corrected)) continue;
+                std::string know;
+                for (std::size_t i = 0; i < x.members.size(); ++i) know += (i ? kDot : std::string{}) + x.members[i].name + " " + x.members[i].type;
+                Rows::Row r;
+                r.key = x.key;
+                r.cells = {x.name, know, origin(x.source, x.builtIn, x.corrected), x.modified.empty() ? std::string("int\xC3\xA9gr\xC3\xA9") : ai::shortDate(x.modified),
+                           stateCell(x.active)};
+                r.styles.resize(5);
+                r.styles[0].bold = true;
+                if (!x.active)
+                    for (auto& s : r.styles) s.fgTone = ui::Tone::Muted;
+                r.tip = ln::describe(x);
+                r.sort = {std::nan(""), std::nan(""), std::nan(""), static_cast<double>(ai::parseIso(x.modified))};
+                m.rows.push_back(std::move(r));
+            }
+        } else if (theme == "vocabulaire") {
+            m.headers = {"Mot", "Ce qu'il d\xC3\xA9signe", "D'o\xC3\xB9 \xC3\xA7" "a vient", "Mis \xC3\xA0 jour", "\xC3\x89tat"};
+            for (const auto& x : allWords) {
+                if (!q.empty() && !wordMatches(x, q)) continue;
+                if (!passState(x.active, !x.builtIn)) continue;
+                Rows::Row r;
+                r.key = x.word;
+                std::string meaning = x.means == ln::Meaning::Ignore ? std::string("(un mot \xC3\xA0 ignorer)") : x.target;
+                if (x.means == ln::Meaning::Kind)
+                    if (const auto k = hmi::kindFromKey(x.target)) meaning = "un objet " + std::string(hmi::kindLabel(*k));
+                if (x.means == ln::Meaning::Model) meaning = "le mod\xC3\xA8le " + x.target;
+                r.cells = {x.word, meaning, origin(x.source, x.builtIn, false), x.modified.empty() ? std::string("int\xC3\xA9gr\xC3\xA9") : ai::shortDate(x.modified),
+                           stateCell(x.active)};
+                r.styles.resize(5);
+                r.styles[0].bold = !x.builtIn;
+                if (!x.active)
+                    for (auto& s : r.styles) s.fgTone = ui::Tone::Muted;
+                r.tip = ln::describe(x);
+                r.sort = {std::nan(""), std::nan(""), std::nan(""), static_cast<double>(ai::parseIso(x.modified))};
+                m.rows.push_back(std::move(r));
+            }
+        } else if (theme == "apprendre") {
+            m.headers = {"Demande non comprise", "Quand"};
+            for (const auto& x : toTeach) {
+                if (!q.empty() && folded(x.request).find(q) == std::string::npos) continue;
+                Rows::Row r;
+                r.key = x.request;
+                r.cells = {x.request, ai::shortDate(x.date)};
+                r.tip = x.request;
+                m.rows.push_back(std::move(r));
+            }
+        }
+        if (theme == "modeles" || theme == "vocabulaire") {
+            std::stable_sort(m.rows.begin(), m.rows.end(), [&](const Rows::Row& a, const Rows::Row& b) {
+                if (byName) return folded(a.cells[0]) < folded(b.cells[0]);
+                const double x = a.sort.size() > 3 ? a.sort[3] : 0.0, y = b.sort.size() > 3 ? b.sort[3] : 0.0;
+                return (std::isnan(x) ? 0.0 : x) > (std::isnan(y) ? 0.0 : y);
+            });
+        }
+        std::vector<ui::TableView::Column> cols;
+        if (theme == "apprendre") cols = {col(m.headers[0], 380.f), col(m.headers[1], 110.f)};
+        else if (!textTheme()) cols = {col(m.headers[0], 120.f), col(m.headers[1], 250.f), col(m.headers[2], 130.f), col(m.headers[3], 80.f), col(m.headers[4], 90.f)};
+        syncing_ = true;
+        if (!cols.empty() && colsTheme_ != theme) {
+            list->setColumns(std::move(cols));
+            colsTheme_ = theme;
+        }
+        m.reset();
+        selectKey(list, m.find(selected));
+        if (m.find(selected) < 0) selected.clear();
+        syncing_ = false;
+        if (!textTheme() && selected.empty() && !m.rows.empty() && !adding_) {
+            selected = m.rows.front().key;
+            syncing_ = true;
+            selectKey(list, 0);
+            syncing_ = false;
+        }
+        fillDetail();
+        invalidate();
+    }
+
+    // ---- le detail modifiable ----
+    void fillTargets() {
+        if (!wTarget || !wMeaning) return;
+        const std::string means = wMeaning->selectedItem() ? wMeaning->selectedItem()->value : std::string("genre");
+        std::vector<ui::DropDown::Item> items;
+        if (means == "genre") {
+            for (const auto k : hmi::kPlaceableKinds) {
+                const std::string label(hmi::kindLabel(k));
+                if (label.empty()) continue;
+                items.push_back({label, std::string(hmi::kindKey(k)), {}, true});
+            }
+            std::sort(items.begin(), items.end(), [](const auto& a, const auto& b) { return folded(a.label) < folded(b.label); });
+        } else if (means == "modele") {
+            for (const auto& m : allModels) items.push_back({m.name + " (" + m.label + ")", m.key, {}, true});
+        }
+        wTarget->setItems(std::move(items));
+        wTarget->setSelectedIndex(0);
+        wTarget->setEnabled(means != "ignorer");
+    }
+    const ln::BusinessModel* selectedModel() const {
+        for (const auto& m : allModels)
+            if (m.key == selected) return &m;
+        return nullptr;
+    }
+    const ln::WordEntry* selectedWord() const {
+        for (const auto& w : allWords)
+            if (w.word == selected) return &w;
+        return nullptr;
+    }
+    void fillDetail() {
+        if (theme == "modeles") {
+            const auto* m = adding_ ? nullptr : selectedModel();
+            mName->setText(m ? m->name : std::string{});
+            std::string ws;
+            if (m)
+                for (std::size_t i = 0; i < m->words.size(); ++i) ws += (i ? ", " : "") + m->words[i];
+            mWords->setText(ws);
+            members->rows = m ? m->members : std::vector<ln::ModelMember>{{"Marche", "BOOL", "En marche"}};
+            members->reset();
+            toggle->setText(m && !m->active ? "Activer" : "D\xC3\xA9sactiver");
+            const bool hand = m && m->builtIn && m->corrected;
+            revert->setEnabled(hand);
+            remove->setEnabled(m && !m->builtIn);
+            toggle->setEnabled(m != nullptr);
+            addNew->setText("Nouveau mod\xC3\xA8le\xE2\x80\xA6");
+        } else if (theme == "vocabulaire") {
+            const auto* w = adding_ ? nullptr : selectedWord();
+            wWord->setText(w ? w->word : std::string{});
+            wWord->setReadOnly(w && w->builtIn);
+            const int means = !w ? 0 : w->means == ln::Meaning::Kind ? 0 : w->means == ln::Meaning::Model ? 1 : 2;
+            wMeaning->setSelectedIndex(means);
+            fillTargets();
+            if (w)
+                for (std::size_t i = 0; i < wTarget->items().size(); ++i)
+                    if (wTarget->items()[i].value == w->target) wTarget->setSelectedIndex(static_cast<int>(i));
+            toggle->setText(w && !w->active ? "Activer" : "D\xC3\xA9sactiver");
+            toggle->setEnabled(w && !w->builtIn);
+            remove->setEnabled(w && !w->builtIn);
+            save->setEnabled(!w || !w->builtIn);
+            addNew->setText("Nouveau mot\xE2\x80\xA6");
+        } else if (theme == "apprendre") {
+            // les mots de la demande : celui qu'elle n'a pas compris est peut-etre l'un d'eux
+            std::vector<ui::DropDown::Item> items;
+            std::set<std::string> seen;
+            std::string w;
+            const auto push = [&] {
+                if (w.size() >= 3 && seen.insert(folded(w)).second) items.push_back({w, w, {}, true});
+                w.clear();
+            };
+            for (const char c : selected) {
+                if (std::isalnum(static_cast<unsigned char>(c)) || (static_cast<unsigned char>(c) & 0x80) || c == '_') w += c;
+                else push();
+            }
+            push();
+            teachWord->setItems(std::move(items));
+            teachWord->setSelectedIndex(teachWord->items().empty() ? -1 : 0);
+            wMeaning->setSelectedIndex(0);
+            fillTargets();
+        }
+        invalidateLayout();
+        invalidate();
+    }
+
+    void beginNew() {
+        adding_ = true;
+        selected.clear();
+        syncing_ = true;
+        selectKey(list, -1);
+        syncing_ = false;
+        fillDetail();
+        d_.say(theme == "modeles" ? "Nouveau mod\xC3\xA8le : son nom (T_Compresseur), ses mots, ses membres, puis Enregistrer."
+                                  : "Nouveau mot : le mot, ce qu'il d\xC3\xA9signe, puis Enregistrer.");
+    }
+
+    bool saveDetail() {
+        std::string why;
+        if (theme == "modeles") {
+            ln::BusinessModel m;
+            if (const auto* cur = adding_ ? nullptr : selectedModel()) m = *cur;
+            m.name = mName->text();
+            if (adding_ || m.key.empty()) {
+                std::string k = folded(m.name);
+                if (k.rfind("t_", 0) == 0) k = k.substr(2);
+                m.key = k;
+                m.label = k;
+            }
+            m.words.clear();
+            std::string cur;
+            for (const char c : mWords->text() + ",") {
+                if (c == ',' || c == ';') {
+                    while (!cur.empty() && cur.front() == ' ') cur.erase(cur.begin());
+                    while (!cur.empty() && cur.back() == ' ') cur.pop_back();
+                    if (!cur.empty()) m.words.push_back(cur);
+                    cur.clear();
+                } else cur += c;
+            }
+            m.members = members->rows;
+            if (!ln::saveModel(m, &why)) {
+                d_.say("Refus\xC3\xA9 : " + why, true);
+                return false;
+            }
+            selected = m.key;
+            adding_ = false;
+            d_.say("Enregistr\xC3\xA9 : " + m.name + ". L'IA int\xC3\xA9gr\xC3\xA9" "e s'en sert d\xC3\xA8s la prochaine demande.");
+        } else if (theme == "vocabulaire") {
+            ln::WordEntry w;
+            w.word = wWord->text();
+            const std::string means = wMeaning->selectedItem() ? wMeaning->selectedItem()->value : std::string("genre");
+            w.means = means == "modele" ? ln::Meaning::Model : means == "ignorer" ? ln::Meaning::Ignore : ln::Meaning::Kind;
+            w.target = wTarget->selectedItem() ? wTarget->selectedItem()->value : std::string{};
+            if (!ln::learnWord(w, &why)) {
+                d_.say("Refus\xC3\xA9 : " + why, true);
+                return false;
+            }
+            selected = w.word;
+            adding_ = false;
+            d_.say("Appris : " + ln::describe(w));
+        } else {
+            return false;
+        }
+        d_.refresh();
+        return true;
+    }
+    bool revertDetail() {
+        std::string why;
+        const auto* m = selectedModel();
+        if (theme != "modeles" || !m || !ln::revertModel(m->key, &why)) {
+            if (!why.empty()) d_.say("Refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        d_.say(m->name + " : revenu \xC3\xA0 l'original du logiciel.");
+        d_.refresh();
+        return true;
+    }
+    bool toggleDetail() {
+        std::string why;
+        bool ok = false;
+        if (theme == "modeles") {
+            if (const auto* m = selectedModel()) ok = ln::setModelActive(m->key, !m->active, &why);
+        } else if (theme == "vocabulaire") {
+            if (const auto* w = selectedWord()) ok = ln::setWordActive(w->word, !w->active, &why);
+        }
+        if (!ok) {
+            if (!why.empty()) d_.say("Refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        d_.refresh();
+        return true;
+    }
+    bool removeDetail() {
+        std::string why;
+        bool ok = false;
+        std::string what;
+        if (theme == "modeles") {
+            if (const auto* m = selectedModel()) {
+                what = m->name;
+                ok = ln::removeModel(m->key, &why);
+            }
+        } else if (theme == "vocabulaire") {
+            if (const auto* w = selectedWord()) {
+                what = w->word;
+                ok = ln::forgetWord(w->word, &why);
+            }
+        }
+        if (!ok) {
+            if (!why.empty()) d_.say("Refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        selected.clear();
+        d_.say(what + " : retir\xC3\xA9.");
+        d_.refresh();
+        return true;
+    }
+    // A lui apprendre : le mot choisi de la demande = ce que dit << sens >> (un genre, un modele, un mot a ignorer).
+    bool teachSelected() {
+        if (theme != "apprendre" || selected.empty() || !teachWord->selectedItem()) {
+            d_.say("Choisis une demande, puis le mot qu'elle n'a pas compris.", true);
+            return false;
+        }
+        ln::WordEntry w;
+        w.word = teachWord->selectedItem()->value;
+        const std::string means = wMeaning->selectedItem() ? wMeaning->selectedItem()->value : std::string("genre");
+        w.means = means == "modele" ? ln::Meaning::Model : means == "ignorer" ? ln::Meaning::Ignore : ln::Meaning::Kind;
+        w.target = wTarget->selectedItem() ? wTarget->selectedItem()->value : std::string{};
+        std::string why;
+        if (!ln::learnWord(w, &why)) {
+            d_.say("Refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        const std::string phrase = selected;
+        const auto t = ln::tryPhrase(phrase);
+        lastTry = {phrase, t};
+        if (t.understood) ln::dismissRequest(phrase);
+        d_.say("Appris : " + ln::describe(w) + (t.understood ? " La demande est maintenant comprise." : " La demande n'est toujours pas comprise : un autre mot ?"),
+               !t.understood);
+        d_.refresh();
+        return true;
+    }
+    bool ignoreSelected() {
+        if (theme != "apprendre" || selected.empty()) return false;
+        ln::dismissRequest(selected);
+        d_.say("Ignor\xC3\xA9" "e : \xC2\xAB " + selected + " \xC2\xBB ne sera plus propos\xC3\xA9" "e.");
+        selected.clear();
+        refreshData();
+        return true;
+    }
+    bool tryNow(const std::string& phrase) {
+        if (phrase.empty()) return false;
+        lastTry = {phrase, ln::tryPhrase(phrase)};
+        invalidate();
+        return lastTry.second.understood;
+    }
+
+    // Importer : voir d'abord ce que ferait l'import, puis confirmer.
+    void askImport() {
+        ui::FilePick pick;
+        pick.title = "Importer un apprentissage (.xia)";
+        pick.filters = {{"Apprentissage de l'IA", "xia"}};
+        const std::weak_ptr<int> alive = d_.alive_;
+        if (!ui::pickFile(pick, [this, alive](std::string path) {
+                if (alive.expired() || path.empty()) return;
+                (void)previewImport(path);
+            }))
+            d_.say("Pas de s\xC3\xA9lecteur de fichiers ici.", true);
+    }
+    bool previewImport(const std::string& path) {
+        ln::ImportReport r;
+        std::string why;
+        if (!ln::peek(path, r, &why)) {
+            d_.say("Import refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        pendingImport = path;
+        std::string text = "Importer l'apprentissage de " + r.from + " ? " + plural(static_cast<std::size_t>(r.added), "connaissance ajout\xC3\xA9" "e", "connaissances ajout\xC3\xA9" "es")
+                         + ", " + plural(static_cast<std::size_t>(r.kept), "gard\xC3\xA9" "e (d\xC3\xA9j\xC3\xA0 l\xC3\xA0)", "gard\xC3\xA9" "es (d\xC3\xA9j\xC3\xA0 l\xC3\xA0)")
+                         + (r.skipped ? ", " + plural(static_cast<std::size_t>(r.skipped), "ignor\xC3\xA9" "e", "ignor\xC3\xA9" "es") : std::string{}) + ".";
+        d_.ask(Confirm::ImportLearning, std::move(text), "Importer");
+        return true;
+    }
+    bool doImport() {
+        if (pendingImport.empty()) return false;
+        ln::ImportReport r;
+        std::string why;
+        const bool ok = ln::importFrom(pendingImport, r, false, &why);
+        pendingImport.clear();
+        if (!ok) {
+            d_.say("Import refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        ln::invalidate();
+        d_.say("Apprentissage import\xC3\xA9 de " + r.from + " : " + plural(static_cast<std::size_t>(r.added), "connaissance ajout\xC3\xA9" "e", "connaissances ajout\xC3\xA9" "es")
+               + (r.kept ? ", " + plural(static_cast<std::size_t>(r.kept), "gard\xC3\xA9" "e", "gard\xC3\xA9" "es") : std::string{}) + ".");
+        d_.refresh();
+        return true;
+    }
+    void askExport() {
+        ui::FilePick pick;
+        pick.title = "Exporter l'apprentissage (.xia)";
+        pick.filters = {{"Apprentissage de l'IA", "xia"}};
+        pick.save = true;
+        pick.start = "apprentissage.xia";
+        const std::weak_ptr<int> alive = d_.alive_;
+        if (!ui::pickFile(pick, [this, alive](std::string path) {
+                if (alive.expired() || path.empty()) return;
+                (void)exportTo(path);
+            }))
+            d_.say("Pas de s\xC3\xA9lecteur de fichiers ici.", true);
+    }
+    bool exportTo(std::string path) {
+        if (path.size() < 4 || folded(path.substr(path.size() - 4)) != ".xia") path += ".xia";
+        std::string why;
+        ln::FileOptions o;
+        if (!ln::exportTo(path, o, &why)) {
+            d_.say("Export refus\xC3\xA9 : " + why, true);
+            return false;
+        }
+        d_.say("Apprentissage export\xC3\xA9 : " + path + " (sans la cl\xC3\xA9 API). Sur un autre PC : Importer\xE2\x80\xA6, ou l'installateur.");
+        d_.refresh();
+        return true;
+    }
+
+    // Une ligne du theme, par sa cle ou le texte de sa premiere case (sans casse ni accents).
+    bool selectRow(std::string_view key) {
+        if (textTheme()) return false;
+        const std::string want = folded(key);
+        for (std::size_t i = 0; i < listModel->rows.size(); ++i) {
+            const auto& r = listModel->rows[i];
+            if (folded(r.key) == want || (!r.cells.empty() && folded(r.cells[0]) == want)) {
+                selected = r.key;
+                adding_ = false;
+                syncing_ = true;
+                selectKey(list, static_cast<int>(i));
+                syncing_ = false;
+                fillDetail();
+                return true;
+            }
+        }
+        return false;
+    }
+    // A lui apprendre, sans les listes : le mot, son sens (genre, modele, ignorer), sa cible.
+    bool teach(std::string_view word, std::string_view meaning, std::string_view target) {
+        if (theme != "apprendre" || selected.empty()) return false;
+        int wi = -1;
+        for (std::size_t i = 0; i < teachWord->items().size(); ++i)
+            if (folded(teachWord->items()[i].value) == folded(word)) wi = static_cast<int>(i);
+        if (wi < 0) {
+            d_.say("\xC2\xAB " + std::string(word) + " \xC2\xBB n'est pas un mot de cette demande.", true);
+            return false;
+        }
+        teachWord->setSelectedIndex(wi);
+        for (std::size_t i = 0; i < wMeaning->items().size(); ++i)
+            if (wMeaning->items()[i].value == meaning) wMeaning->setSelectedIndex(static_cast<int>(i));
+        fillTargets();
+        for (std::size_t i = 0; i < wTarget->items().size(); ++i)
+            if (folded(wTarget->items()[i].value) == folded(target)) wTarget->setSelectedIndex(static_cast<int>(i));
+        return teachSelected();
+    }
+    // Un geste sur une connaissance (la consulter, l'ajouter) : son theme, s'il n'est pas deja montre.
+    void followKnowledge(const std::string& category) {
+        if (textTheme() && (category.empty() || category == theme)) return;
+        std::string want = category;
+        if (want.empty() || want == "modeles" || want == "vocabulaire") want = textTheme() ? theme : std::string("metier");
+        theme = want;
+        selected.clear();
+        adding_ = false;
+        if (d_.catFilter_ != want) {   // la page des connaissances suit son theme (sans repasser par showTheme)
+            d_.catFilter_ = want;
+            d_.rebuildTables();
+            d_.syncWidgets();
+        }
+        fillList();
+        invalidateLayout();
+        invalidate();
+    }
+
+    // ---- la place ----
+    ui::Button* importB{nullptr};
+    ui::Button* exportB{nullptr};
+    ui::DropDown* period{nullptr};
+    ui::InputText* search{nullptr};
+    ui::DropDown* stateBox{nullptr};
+    ui::DropDown* sortBox{nullptr};
+    std::shared_ptr<Rows> listModel;
+    ui::TableView* list{nullptr};
+    ui::InputText* mName{nullptr};
+    ui::InputText* mWords{nullptr};
+    std::shared_ptr<MembersModel> members;
+    ui::TableView* mMembers{nullptr};
+    ui::Button *mAdd{nullptr}, *mRemove{nullptr}, *mUp{nullptr}, *mDown{nullptr};
+    ui::InputText* wWord{nullptr};
+    ui::DropDown* wMeaning{nullptr};
+    ui::DropDown* wTarget{nullptr};
+    ui::Button *save{nullptr}, *revert{nullptr}, *toggle{nullptr}, *remove{nullptr}, *addNew{nullptr};
+    ui::Button *teachLearn{nullptr}, *teachIgnore{nullptr};
+    ui::DropDown* teachWord{nullptr};
+    ui::InputText* tryIn{nullptr};
+    ui::Button* tryB{nullptr};
+    LearningPage* knowledge{nullptr};
+
+    std::string theme{"modeles"};
+    std::string selected;
+    std::string pendingImport;
+    std::pair<std::string, ln::Trial> lastTry;
+    std::vector<ln::BusinessModel> allModels;
+    std::vector<ln::WordEntry> allWords;
+    std::vector<ln::Measure> measures;
+    std::vector<ln::Decision> decided;
+    std::vector<ln::Week> weeks;
+    std::vector<ln::Measure> toTeach;
+    std::pair<int, int> nowUnderstood, beforeUnderstood, nowKept, beforeKept;
+
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override {
+        for (auto it = hits_.rbegin(); it != hits_.rend(); ++it)
+            if (it->rect.contains(mouse)) return it->text;
+        return tipAt(tips_, mouse);
+    }
+    [[nodiscard]] bool hasTooltip() const override { return true; }
+
+    // Les places (essais) : les tuiles, les graphiques, un theme.
+    [[nodiscard]] gfx::Rect tileRect(int i) const { return i >= 0 && i < 4 ? tiles_[i] : gfx::Rect{}; }
+    [[nodiscard]] gfx::Rect rateChart() const { return chartA_; }
+    [[nodiscard]] gfx::Rect learnChart() const { return chartB_; }
+    [[nodiscard]] gfx::Rect themeRect(const std::string& key) const {
+        for (const auto& [k, r] : themeRects_)
+            if (k == key) return r;
+        return {};
+    }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float x0 = r.x + kPad, W = r.w - 2.f * kPad;
+        float y = r.y + 8.f;
+        // le bandeau, et Importer / Exporter a droite
+        const float ew = std::max(200.f, ui::measureWidth(exportB->text(), gfx::FontId{16}) + 50.f);
+        const float iw = std::max(110.f, ui::measureWidth(importB->text(), gfx::FontId{16}) + 50.f);
+        banner_ = {x0, y, W, 34.f};
+        exportB->setBounds({x0 + W - ew - 6.f, y + 3.f, ew, 28.f});
+        importB->setBounds({exportB->bounds().x - 8.f - iw, y + 3.f, iw, 28.f});
+        y += 34.f + 8.f;
+        // les tuiles
+        const float tw = (W - 3.f * kGap) / 4.f;
+        for (int i = 0; i < 4; ++i) tiles_[i] = {x0 + static_cast<float>(i) * (tw + kGap), y, tw, 62.f};
+        y += 62.f + 8.f;
+        // les graphiques
+        const float ch = std::clamp((r.bottom() - y) * 0.36f, 120.f, 200.f);
+        const float aw = std::floor((W - kGap) * 0.56f);
+        chartA_ = {x0, y, aw, ch};
+        chartB_ = {x0 + aw + kGap, y, W - aw - kGap, ch};
+        period->setBounds({chartA_.right() - 136.f, chartA_.y + 6.f, 128.f, 24.f});
+        y += ch + 8.f;
+        // en pied : essayer une phrase
+        const float tryY = r.bottom() - 36.f;
+        tryIn->setBounds({x0 + 200.f + kGap, tryY + 3.f, std::max(200.f, W * 0.42f), 28.f});
+        tryB->setBounds({tryIn->bounds().right() + 8.f, tryY + 3.f, 100.f, 28.f});
+        tryRow_ = {x0, tryY, W, 34.f};
+        // en bas : les themes, la liste, le detail
+        const float bottom = tryY - 6.f;
+        themes_ = {x0, y, 200.f, std::max(80.f, bottom - y)};
+        const float detailW = std::clamp(W * 0.32f, 300.f, 420.f);
+        detail_ = {x0 + W - detailW, y, detailW, themes_.h};
+        center_ = {themes_.right() + kGap, y, detail_.x - kGap - themes_.right() - kGap, themes_.h};
+        // la recherche et les filtres, au-dessus de la liste
+        const float fx = center_.x;
+        const float sw = std::max(160.f, center_.w - 2.f * 160.f - 2.f * 8.f);
+        search->setBounds({fx, center_.y, sw, 28.f});
+        stateBox->setBounds({fx + sw + 8.f, center_.y, 160.f, 28.f});
+        sortBox->setBounds({stateBox->bounds().right() + 8.f, center_.y, 152.f, 28.f});
+        const bool text = textTheme();
+        const auto show = [](ui::Widget* w, bool on) { w->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed); };
+        show(knowledge, text);
+        emptyTeach_ = theme == "apprendre" && listModel->rows.empty();
+        show(list, !text && !emptyTeach_);
+        if (text) {
+            knowledge->setBounds({center_.x - 6.f, center_.y + 32.f, detail_.right() - center_.x + 6.f + 6.f, center_.h - 32.f});
+        } else {
+            list->setBounds({center_.x, center_.y + 34.f, center_.w, center_.h - 34.f});
+        }
+        // le detail : selon le theme
+        const bool models = theme == "modeles", words = theme == "vocabulaire", teach = theme == "apprendre";
+        for (ui::Widget* w : {static_cast<ui::Widget*>(mName), static_cast<ui::Widget*>(mWords), static_cast<ui::Widget*>(mMembers),
+                              static_cast<ui::Widget*>(mAdd), static_cast<ui::Widget*>(mRemove), static_cast<ui::Widget*>(mUp),
+                              static_cast<ui::Widget*>(mDown)})
+            show(w, models);
+        show(wWord, words);
+        show(wMeaning, words || teach);
+        show(wTarget, words || teach);
+        show(teachWord, teach);
+        show(teachLearn, teach);
+        show(teachIgnore, teach);
+        for (ui::Widget* w : {static_cast<ui::Widget*>(save), static_cast<ui::Widget*>(toggle), static_cast<ui::Widget*>(remove),
+                              static_cast<ui::Widget*>(addNew)})
+            show(w, models || words);
+        show(revert, models);
+        const float dx = detail_.x + 12.f, dw = detail_.w - 24.f;
+        float dy = detail_.y + 34.f;
+        const auto field = [&](ui::Widget* w, float h) {
+            fieldsAt_.push_back({dx, dy});
+            w->setBounds({dx, dy + 16.f, dw, h});
+            dy += 16.f + h + 8.f;
+        };
+        fieldsAt_.clear();
+        const float buttonsY = detail_.bottom() - 74.f;
+        if (models) {
+            // le nom et les mots cote a cote (la place va aux membres)
+            const float nw = std::floor(dw * 0.38f);
+            fieldsAt_.push_back({dx, dy});
+            fieldsAt_.push_back({dx + nw + 8.f, dy});
+            mName->setBounds({dx, dy + 16.f, nw, 26.f});
+            mWords->setBounds({dx + nw + 8.f, dy + 16.f, dw - nw - 8.f, 26.f});
+            dy += 16.f + 26.f + 8.f;
+            fieldsAt_.push_back({dx, dy});
+            // les boutons des membres sur la ligne de leur titre, a droite (la table garde la hauteur)
+            float bx = dx + dw;
+            for (ui::Button* b : {mDown, mUp, mRemove, mAdd}) {
+                const float bw = b->text().empty() ? 28.f : ui::measureWidth(b->text(), gfx::FontId{16}) + 36.f;
+                bx -= bw;
+                b->setBounds({bx, dy - 5.f, bw, 23.f});
+                bx -= 4.f;
+            }
+            membersLabelRoom_ = bx - 4.f - dx;
+            const float mh = std::max(56.f, buttonsY - 6.f - (dy + 22.f));
+            mMembers->setBounds({dx, dy + 22.f, dw, mh});
+        } else if (words) {
+            field(wWord, 26.f);
+            field(wMeaning, 26.f);
+            field(wTarget, 26.f);
+        } else if (teach) {
+            dy += 40.f;   // la demande, en clair
+            field(teachWord, 26.f);
+            field(wMeaning, 26.f);
+            field(wTarget, 26.f);
+            const float bw = (dw - 8.f) / 2.f;
+            teachLearn->setBounds({dx, dy + 4.f, bw, 30.f});
+            teachIgnore->setBounds({dx + bw + 8.f, dy + 4.f, bw, 30.f});
+        }
+        if (models || words) {
+            // deux rangees de boutons, sans chevauchement
+            const float bw = (dw - 8.f) / 2.f;
+            save->setBounds({dx, buttonsY, bw, 30.f});
+            addNew->setBounds({dx + bw + 8.f, buttonsY, bw, 30.f});
+            const int n = models ? 3 : 2;
+            const float bw3 = (dw - 8.f * static_cast<float>(n - 1)) / static_cast<float>(n);
+            float bx = dx;
+            if (models) {
+                revert->setBounds({bx, buttonsY + 36.f, bw3, 30.f});
+                bx += bw3 + 8.f;
+            }
+            toggle->setBounds({bx, buttonsY + 36.f, bw3, 30.f});
+            remove->setBounds({bx + bw3 + 8.f, buttonsY + 36.f, bw3, 30.f});
+        }
+    }
+
+    void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
+        hits_.clear();
+        const auto& c = ctx.theme.color;
+        ctx.r.fillRect(bounds(), c.windowBg);
+        // le bandeau honnete
+        ctx.r.fillRoundedRect(banner_, c.accent.withAlpha(ctx.theme.isDark() ? 34 : 22), 6.f);
+        ctx.r.fillRoundedRect({banner_.x, banner_.y, 3.f, banner_.h}, c.accent, 1.5f);
+        ui::drawIcon(ctx.r, ui::Icon::Info, {banner_.x + 12.f, banner_.y + 10.f, 14.f, 14.f}, c.accent);
+        drawFit(ctx, {banner_.x + 34.f, banner_.y + (banner_.h - ctx.r.lineHeight(kSmall)) * 0.5f},
+                "Elle apprend sur ce PC : tes corrections, tes mots, tes mod\xC3\xA8les m\xC3\xA9tier. L'IA int\xC3\xA9gr\xC3\xA9" "e s'en sert directement ; "
+                "les IA connect\xC3\xA9" "es les re\xC3\xA7oivent avec chaque demande. Le mod\xC3\xA8le distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9.",
+                kSmall, importB->bounds().x - 12.f - (banner_.x + 34.f), c.text);
+        paintTiles(ctx);
+        paintRates(ctx);
+        paintLearned(ctx);
+        paintThemes(ctx);
+        if (!textTheme()) paintDetail(ctx);
+        if (emptyTeach_)
+            for (const auto& [i, line] : enumerateLines(ctx, search->text().empty() ? "Rien \xC3\xA0 lui apprendre : les demandes de ces 7 jours ont toutes \xC3\xA9t\xC3\xA9 "
+                                                                                    "comprises (ou tu les as ignor\xC3\xA9" "es)."
+                                                                                  : "Aucune demande non comprise ne contient ce texte.",
+                                                       center_.w - 8.f))
+                ctx.r.drawText({center_.x + 4.f, center_.y + 44.f + 18.f * static_cast<float>(i)}, line, kSmall, c.textMuted);
+        // en pied
+        textMid(ctx, tryRow_.x, tryRow_, "ESSAYER UNE PHRASE", kCaption, c.textMuted);
+        if (!lastTry.first.empty()) {
+            const float rx = tryB->bounds().right() + 12.f;
+            const auto& t = lastTry.second;
+            const std::string res = (t.understood ? "\xE2\x9C\x93 Comprise \xE2\x86\x92 " : "\xE2\x9C\x97 Pas comprise : ") + t.summary;
+            drawFit(ctx, {rx, tryRow_.y + (tryRow_.h - ctx.r.lineHeight(kSmall)) * 0.5f}, res, kSmall, tryRow_.right() - rx, t.understood ? c.ok : c.warning);
+        } else if (!ln::hasPhraseTester()) {
+            const float rx = tryB->bounds().right() + 12.f;
+            drawFit(ctx, {rx, tryRow_.y + (tryRow_.h - ctx.r.lineHeight(kSmall)) * 0.5f}, "(un projet ouvert : l'IA int\xC3\xA9gr\xC3\xA9" "e la lit sans rien appliquer)",
+                    kSmall, tryRow_.right() - rx, c.textMuted);
+        }
+    }
+
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Left) {
+            for (const auto& [key, rect] : themeRects_)
+                if (rect.contains(m->pos)) {
+                    (void)showTheme(key);
+                    return ui::EventResult::Consumed;
+                }
+            if (tiles_[3].contains(m->pos)) {
+                (void)showTheme("apprendre");
+                return ui::EventResult::Consumed;
+            }
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    ui::Button& button(const std::string& id, const std::string& text, ui::Icon icon) {
+        auto& b = static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(text, id)));
+        if (icon != ui::Icon::None) b.setIcon(icon);
+        return b;
+    }
+    ui::InputText& input(const std::string& id, const std::string& placeholder) {
+        auto& t = static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(id)));
+        t.setPlaceholder(placeholder);
+        return t;
+    }
+
+    void tile(const ui::PaintContext& ctx, const gfx::Rect& r, const std::string& title, const std::string& big, const std::string& unit,
+              const std::string& foot, gfx::Color footColor, bool warm) {
+        const auto& c = ctx.theme.color;
+        card(ctx, r, warm ? c.warning : c.border);
+        drawFit(ctx, {r.x + 12.f, r.y + 7.f}, title, kSmall, r.w - 24.f, c.textMuted);
+        drawBold(ctx, {r.x + 12.f, r.y + 22.f}, big, kBig, c.text);
+        const float bw = textW(ctx, big, kBig) + 8.f;
+        drawFit(ctx, {r.x + 12.f + bw, r.y + 30.f}, unit, kSmall, r.w - 24.f - bw, c.text);
+        drawFit(ctx, {r.x + 12.f, r.y + r.h - 16.f}, foot, kCaption, r.w - 24.f, footColor);
+    }
+    void paintTiles(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        std::size_t total = 0, themeCount = 0, recent = 0, mine = 0;
+        const long long nowT = static_cast<long long>(ai::now());
+        for (const auto& t : themes()) {
+            if (t.key == "apprendre") continue;
+            total += t.count;
+            if (t.count) ++themeCount;
+        }
+        for (const auto& k : d_.registry_.all()) {
+            if (k.builtIn) continue;
+            const long long t = static_cast<long long>(ai::parseIso(k.modified.empty() ? k.added : k.modified));
+            if (t > 0 && nowT - t < 28LL * 86400) {
+                ++recent;
+                if (k.source == "utilisateur") ++mine;
+            }
+        }
+        tile(ctx, tiles_[0], "Ce qu'elle sait", std::to_string(total), "\xC3\xA9l\xC3\xA9ments, en " + std::to_string(themeCount) + " th\xC3\xA8mes",
+             recent ? "+" + std::to_string(recent) + " en 4 semaines, dont " + std::to_string(mine) + " de ta main" : std::string("rien appris ces 4 semaines"),
+             recent ? c.ok : c.textMuted, false);
+        const auto deltaText = [](std::pair<int, int> now, std::pair<int, int> before) -> std::string {
+            if (now.second == 0 || before.second == 0) return {};
+            const int d = static_cast<int>(std::lround(100.0 * now.first / now.second - 100.0 * before.first / before.second));
+            return (d >= 0 ? "+" : "") + std::to_string(d) + " pts sur les 30 jours d'avant";
+        };
+        {
+            const auto& n = nowUnderstood;
+            const std::string d = deltaText(n, beforeUnderstood);
+            tile(ctx, tiles_[1], "Demandes comprises par l'IA int\xC3\xA9gr\xC3\xA9" "e", pct(n.first, n.second),
+                 n.second ? "sur " + plural(static_cast<std::size_t>(n.second), "demande", "demandes") + " (30 jours)" : std::string{},
+                 n.second ? (d.empty() ? std::string("pas encore de mesure plus ancienne") : d) : std::string("pas encore de mesure"),
+                 c.textMuted, false);
+        }
+        {
+            const auto& n = nowKept;
+            const std::string d = deltaText(n, beforeKept);
+            tile(ctx, tiles_[2], "Propositions gard\xC3\xA9" "es", pct(n.first, n.second),
+                 n.second ? "appliqu\xC3\xA9" "es sur " + std::to_string(n.second) + " d\xC3\xA9" "cid\xC3\xA9" "es (30 jours)" : std::string{},
+                 n.second ? (d.empty() ? std::string("appliqu\xC3\xA9" "es, pas refus\xC3\xA9" "es") : d) : std::string("pas encore de proposition d\xC3\xA9" "cid\xC3\xA9" "e"),
+                 c.textMuted, false);
+        }
+        tile(ctx, tiles_[3], "\xC3\x80 lui apprendre", std::to_string(toTeach.size()),
+             toTeach.size() > 1 ? "demandes non comprises" : "demande non comprise",
+             toTeach.empty() ? std::string("cette semaine, tout a \xC3\xA9t\xC3\xA9 compris") : std::string("cette semaine \xC2\xB7 un clic pour lui montrer"),
+             toTeach.empty() ? c.textMuted : c.warning, !toTeach.empty());
+    }
+
+    // (a) les deux taux par semaine : un seul axe en %, une legende, la valeur au dernier point, une infobulle par point.
+    void paintRates(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, chartA_, c.border);
+        drawFit(ctx, {chartA_.x + 12.f, chartA_.y + 8.f}, "Elle progresse : demandes comprises et propositions gard\xC3\xA9" "es, par semaine", kSmall,
+                period->bounds().x - 16.f - chartA_.x, c.text);
+        // la legende
+        float lx = chartA_.x + 12.f;
+        const float ly = chartA_.y + 28.f;
+        for (int s = 0; s < 2; ++s) {
+            const std::string label = s == 0 ? "Demandes comprises (IA int\xC3\xA9gr\xC3\xA9" "e)" : "Propositions gard\xC3\xA9" "es";
+            ctx.r.line({lx, ly + 7.f}, {lx + 16.f, ly + 7.f}, seriesColor(ctx, s), 2.f);
+            ctx.r.drawText({lx + 20.f, ly}, label, kCaption, c.textMuted);
+            lx += 32.f + textW(ctx, label, kCaption);
+        }
+        const gfx::Rect plot{chartA_.x + 48.f, chartA_.y + 48.f, chartA_.w - 100.f, chartA_.h - 70.f};
+        int measured = 0;
+        for (const auto& w : weeks) measured += w.asked;
+        if (measured < 3) {
+            const std::string msg = "La courbe appara\xC3\xAEtra apr\xC3\xA8s quelques jours d'utilisation : "
+                                  + plural(static_cast<std::size_t>(measured), "demande mesur\xC3\xA9" "e", "demandes mesur\xC3\xA9" "es") + " pour l'instant.";
+            for (const auto& [i, line] : enumerateLines(ctx, msg, plot.w))
+                ctx.r.drawText({plot.x, plot.y + 20.f + 18.f * static_cast<float>(i)}, line, kSmall, c.textMuted);
+            return;
+        }
+        // l'axe : 0 a 100 %, des lignes discretes
+        for (int g = 0; g <= 4; ++g) {
+            const float y = plot.bottom() - plot.h * static_cast<float>(g) / 4.f;
+            ctx.r.line({plot.x, y}, {plot.right(), y}, c.border, 1.f);
+            const std::string t = std::to_string(g * 25) + " %";
+            ctx.r.drawText({plot.x - 6.f - textW(ctx, t, kCaption), y - 6.f}, t, kCaption, c.textMuted);
+        }
+        const std::size_t n = weeks.size();
+        const auto xAt = [&](std::size_t i) { return plot.x + (n <= 1 ? 0.f : plot.w * static_cast<float>(i) / static_cast<float>(n - 1)); };
+        for (std::size_t i = 0; i < n; ++i)
+            if (n <= 10 || i % 2 == (n - 1) % 2) {
+                const std::string t = weekLabel(weeks[i].start);
+                ctx.r.drawText({xAt(i) - textW(ctx, t, kCaption) * 0.5f, plot.bottom() + 4.f}, t, kCaption, c.textMuted);
+            }
+        for (int s = 0; s < 2; ++s) {
+            const gfx::Color col = seriesColor(ctx, s);
+            bool have = false;
+            gfx::Point prev{};
+            gfx::Point last{};
+            int lastValue = 0;
+            for (std::size_t i = 0; i < n; ++i) {
+                const int whole = s == 0 ? weeks[i].asked : weeks[i].decided;
+                if (whole <= 0) continue;
+                const int part = s == 0 ? weeks[i].understood : weeks[i].kept;
+                const float v = static_cast<float>(part) / static_cast<float>(whole);
+                const gfx::Point p{xAt(i), plot.bottom() - plot.h * v};
+                if (have) ctx.r.line(prev, p, col, 2.f);
+                ctx.r.fillRoundedRect({p.x - 4.f, p.y - 4.f, 8.f, 8.f}, c.panelBg, 4.f);
+                ctx.r.fillRoundedRect({p.x - 3.f, p.y - 3.f, 6.f, 6.f}, col, 3.f);
+                hits_.push_back({{p.x - 8.f, p.y - 8.f, 16.f, 16.f},
+                                 std::string(s == 0 ? "Demandes comprises" : "Propositions gard\xC3\xA9" "es") + ", semaine du " + weekLabel(weeks[i].start) + " : "
+                                     + pct(part, whole) + " (" + std::to_string(part) + " sur " + std::to_string(whole) + ")"});
+                prev = p;
+                last = p;
+                lastValue = static_cast<int>(std::lround(100.0 * v));
+                have = true;
+            }
+            if (have) ctx.r.drawText({last.x + 8.f, last.y - 7.f + static_cast<float>(s) * 12.f}, std::to_string(lastValue) + " %", kCaption, c.text);
+        }
+    }
+    // (b) ce qu'elle a appris par semaine : des barres empilees par origine, le total au-dessus.
+    void paintLearned(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, chartB_, c.border);
+        int total = 0, peak = 1;
+        for (const auto& w : weeks) {
+            const int t = w.byUser + w.byAssistant + w.byFile;
+            total += t;
+            peak = std::max(peak, t);
+        }
+        drawFit(ctx, {chartB_.x + 12.f, chartB_.y + 8.f}, "Ce qu'elle a appris chaque semaine" + kDot + plural(static_cast<std::size_t>(total), "\xC3\xA9l\xC3\xA9ment", "\xC3\xA9l\xC3\xA9ments"),
+                kSmall, chartB_.w - 24.f, c.text);
+        float lx = chartB_.x + 12.f;
+        const float ly = chartB_.y + 28.f;
+        const char* labels[] = {"Tes corrections", "Retenu par l'Assistant", "Lu dans tes fichiers"};
+        for (int s = 0; s < 3; ++s) {
+            if (lx + 30.f + textW(ctx, labels[s], kCaption) > chartB_.right() - 8.f) break;
+            ctx.r.fillRoundedRect({lx, ly + 2.f, 10.f, 10.f}, seriesColor(ctx, s), 2.f);
+            ctx.r.drawText({lx + 14.f, ly}, labels[s], kCaption, c.textMuted);
+            lx += 26.f + textW(ctx, labels[s], kCaption);
+        }
+        const gfx::Rect plot{chartB_.x + 16.f, chartB_.y + 52.f, chartB_.w - 32.f, chartB_.h - 72.f};
+        ctx.r.line({plot.x, plot.bottom()}, {plot.right(), plot.bottom()}, c.border, 1.f);
+        if (total == 0) {
+            drawFit(ctx, {plot.x, plot.y + 20.f}, "Rien d'appris sur cette p\xC3\xA9riode : corrige un mod\xC3\xA8le, apprends-lui un mot.", kSmall, plot.w,
+                    c.textMuted);
+            return;
+        }
+        const std::size_t n = weeks.size();
+        const float slot = plot.w / static_cast<float>(std::max<std::size_t>(1, n));
+        const float bw = std::max(4.f, std::min(28.f, slot * 0.6f));
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto& w = weeks[i];
+            const int parts[] = {w.byUser, w.byAssistant, w.byFile};
+            const float x = plot.x + slot * (static_cast<float>(i) + 0.5f) - bw * 0.5f;
+            float y = plot.bottom();
+            int sum = 0;
+            for (int s = 0; s < 3; ++s) {
+                if (parts[s] <= 0) continue;
+                const float h = plot.h * static_cast<float>(parts[s]) / static_cast<float>(peak);
+                ctx.r.fillRect({x, y - h, bw, std::max(1.f, h - 2.f)}, seriesColor(ctx, s));
+                y -= h;
+                sum += parts[s];
+            }
+            if (sum > 0) {
+                const std::string t = std::to_string(sum);
+                ctx.r.drawText({x + bw * 0.5f - textW(ctx, t, kCaption) * 0.5f, y - 14.f}, t, kCaption, c.text);
+                hits_.push_back({{x - 4.f, y - 16.f, bw + 8.f, plot.bottom() - y + 16.f},
+                                 "Semaine du " + weekLabel(w.start) + " : " + std::to_string(sum) + " (" + std::to_string(w.byUser) + " de toi, "
+                                     + std::to_string(w.byAssistant) + " par l'Assistant, " + std::to_string(w.byFile) + " de tes fichiers)"});
+            }
+            if (n <= 10 || i % 2 == (n - 1) % 2) {
+                const std::string t = weekLabel(w.start);
+                if (plot.x + slot * (static_cast<float>(i) + 0.5f) - textW(ctx, t, kCaption) * 0.5f >= chartB_.x + 4.f)
+                    ctx.r.drawText({plot.x + slot * (static_cast<float>(i) + 0.5f) - textW(ctx, t, kCaption) * 0.5f, plot.bottom() + 4.f}, t, kCaption, c.textMuted);
+            }
+        }
+    }
+    void paintThemes(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, themes_, c.border);
+        caption(ctx, themes_.x + 10.f, themes_.y + 10.f, ui::Icon::Library, "PAR TH\xC3\x88ME", c.textMuted);
+        themeRects_.clear();
+        float y = themes_.y + 32.f;
+        const float rowH = 24.f;
+        for (const auto& t : themes()) {
+            if (y + rowH > themes_.bottom() - 4.f) break;
+            const gfx::Rect r{themes_.x + 4.f, y, themes_.w - 8.f, rowH};
+            const bool on = t.key == theme;
+            if (on) ctx.r.fillRoundedRect(r, c.accent.withAlpha(ctx.theme.isDark() ? 50 : 30), 4.f);
+            ui::drawIcon(ctx.r, t.icon, {r.x + 6.f, r.y + 5.f, 14.f, 14.f}, t.key == "apprendre" && t.count ? c.warning : c.textMuted);
+            const std::string count = std::to_string(t.count) + (t.recent ? " +" + std::to_string(t.recent) : std::string{});
+            const float cw = textW(ctx, count, kSmall);
+            drawFit(ctx, {r.x + 26.f, r.y + (rowH - ctx.r.lineHeight(kSmall)) * 0.5f}, t.label, kSmall, r.w - 34.f - cw, on ? c.text : c.text);
+            ctx.r.drawText({r.right() - 6.f - cw, r.y + (rowH - ctx.r.lineHeight(kSmall)) * 0.5f}, count, kSmall, t.recent ? c.ok : c.textMuted);
+            themeRects_.emplace_back(t.key, r);
+            addTip(r, t.label + " : " + std::to_string(t.count) + (t.recent ? " (+" + std::to_string(t.recent) + " ces 4 semaines)" : std::string{}));
+            y += rowH;
+        }
+    }
+    void paintDetail(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, detail_, c.border);
+        const float x = detail_.x + 12.f, w = detail_.w - 24.f;
+        std::string title, sub;
+        std::vector<std::string> labels;
+        if (theme == "modeles") {
+            const auto* m = adding_ ? nullptr : selectedModel();
+            title = m ? m->name : std::string("Nouveau mod\xC3\xA8le");
+            sub = !m ? std::string("un mod\xC3\xA8le de toi") : m->builtIn ? (m->corrected ? std::string("du logiciel, corrig\xC3\xA9 par toi") : std::string("du logiciel"))
+                                                                          : std::string("ajout\xC3\xA9 par toi");
+            labels = {"Nom du type", "Les mots qui l'appellent (virgules)", "Ses membres"};
+        } else if (theme == "vocabulaire") {
+            const auto* wd = adding_ ? nullptr : selectedWord();
+            title = wd ? "\xC2\xAB " + wd->word + " \xC2\xBB" : std::string("Nouveau mot");
+            sub = !wd ? std::string("un mot de toi") : wd->builtIn ? std::string("du logiciel (en lecture seule)") : std::string("appris");
+            labels = {"Le mot", "Il d\xC3\xA9signe", "Lequel"};
+        } else {
+            title = selected.empty() ? std::string("\xC3\x80 lui apprendre") : std::string("Lui apprendre");
+            sub = selected.empty() ? std::string("choisis une demande non comprise") : std::string{};
+            labels = {"Le mot qu'elle n'a pas compris", "Il d\xC3\xA9signe", "Lequel"};
+            if (!selected.empty())
+                for (const auto& [i, line] : enumerateLines(ctx, "\xC2\xAB " + selected + " \xC2\xBB", w))
+                    if (i < 2) ctx.r.drawText({x, detail_.y + 34.f + 16.f * static_cast<float>(i)}, line, kSmall, c.text);
+        }
+        drawBold(ctx, {x, detail_.y + 10.f}, fit(ctx, title, kText, w * 0.6f), kText, c.text);
+        const float tw = textW(ctx, fit(ctx, title, kText, w * 0.6f), kText) + 10.f;
+        drawFit(ctx, {x + tw, detail_.y + 12.f}, sub, kSmall, w - tw, c.textMuted);
+        for (std::size_t i = 0; i < labels.size() && i < fieldsAt_.size(); ++i) {
+            float room = i + 1 < fieldsAt_.size() && fieldsAt_[i + 1].y == fieldsAt_[i].y ? fieldsAt_[i + 1].x - 8.f - fieldsAt_[i].x
+                                                                                          : detail_.right() - 12.f - fieldsAt_[i].x;
+            if (theme == "modeles" && i == 2) room = membersLabelRoom_;
+            drawFit(ctx, fieldsAt_[i], labels[i], kCaption, room, c.textMuted);
+        }
+    }
+    static std::vector<std::pair<std::size_t, std::string>> enumerateLines(const ui::PaintContext& ctx, const std::string& s, float w) {
+        std::vector<std::pair<std::size_t, std::string>> out;
+        std::size_t i = 0;
+        for (auto& l : wrap(ctx, s, kSmall, w, 3)) out.emplace_back(i++, std::move(l));
+        return out;
+    }
+
+    AiMemoryDialog& d_;
+    bool syncing_{false};
+    bool adding_{false};
+    bool emptyTeach_{false};
+    std::string colsTheme_;
+    float membersLabelRoom_{0.f};
+    gfx::Rect banner_{}, tiles_[4]{}, chartA_{}, chartB_{}, themes_{}, center_{}, detail_{}, tryRow_{};
+    std::vector<gfx::Point> fieldsAt_;
+    std::vector<std::pair<std::string, gfx::Rect>> themeRects_;
+    std::vector<Tip> tips_;
+    std::vector<Tip> hits_;
+    core::ConnectionScope links_;
 };
 
 // ============================================================================= Memoire ===
@@ -1526,6 +2777,7 @@ void AiMemoryDialog::refresh() {
     if (!selectedKnowledge_.empty() && !registry_.find(selectedKnowledge_)) selectedKnowledge_.clear();
     rebuildTables();
     syncWidgets();
+    if (hub_) hub_->refreshData();
     if (body_) {
         body_->invalidateLayout();
         body_->invalidate();
@@ -1572,6 +2824,54 @@ bool AiMemoryDialog::showTab(std::string_view title) {
     }
     return false;
 }
+
+
+// ---- Apprentissage : le tableau de bord (1.17.0) -------------------------------------------------
+void AiMemoryDialog::setLearningSearchQuiet(std::string text) {
+    if (text == learnSearch_) return;
+    learnSearch_ = std::move(text);
+    rebuildTables();
+    syncWidgets();
+}
+bool AiMemoryDialog::showLearningTheme(std::string_view key) {
+    showTab(Tab::Learning);
+    return hub_ && hub_->showTheme(std::string(key));
+}
+std::string AiMemoryDialog::learningTheme() const { return hub_ ? hub_->theme : std::string{}; }
+void AiMemoryDialog::setLearningSearch(std::string text) {
+    if (hub_ && hub_->search) hub_->search->setText(text);   // textChanged suit (la liste, les connaissances)
+    setLearningSearchQuiet(std::move(text));
+    if (hub_) hub_->fillList();
+}
+std::size_t AiMemoryDialog::learningRowCount() const {
+    if (!hub_) return 0;
+    return hub_->textTheme() ? shownKnowledge().size() : hub_->listModel->rows.size();
+}
+bool AiMemoryDialog::selectLearningRow(std::string_view key) { return hub_ && hub_->selectRow(key); }
+bool AiMemoryDialog::beginLearningNew() {
+    if (!hub_ || (hub_->theme != "modeles" && hub_->theme != "vocabulaire")) return false;
+    hub_->beginNew();
+    return true;
+}
+bool AiMemoryDialog::saveLearningDetail() { return hub_ && hub_->saveDetail(); }
+bool AiMemoryDialog::revertLearningDetail() { return hub_ && hub_->revertDetail(); }
+bool AiMemoryDialog::toggleLearningDetail() { return hub_ && hub_->toggleDetail(); }
+bool AiMemoryDialog::removeLearningDetail() { return hub_ && hub_->removeDetail(); }
+bool AiMemoryDialog::teachLearning(std::string_view word, std::string_view meaning, std::string_view target) {
+    return hub_ && hub_->teach(word, meaning, target);
+}
+bool AiMemoryDialog::ignoreLearningRequest() { return hub_ && hub_->ignoreSelected(); }
+bool AiMemoryDialog::tryLearningPhrase(const std::string& phrase) {
+    if (!hub_) return false;
+    if (hub_->tryIn) hub_->tryIn->setText(phrase);
+    return hub_->tryNow(phrase);
+}
+std::string AiMemoryDialog::learningTrial() const {
+    if (!hub_ || hub_->lastTry.first.empty()) return {};
+    return (hub_->lastTry.second.understood ? "Comprise : " : "Pas comprise : ") + hub_->lastTry.second.summary;
+}
+bool AiMemoryDialog::exportLearning(const std::string& path) { return hub_ && hub_->exportTo(path); }
+bool AiMemoryDialog::importLearning(const std::string& path) { return hub_ && hub_->previewImport(path); }
 
 // ---- les tables ---------------------------------------------------------------------------
 void AiMemoryDialog::rebuildTables() {
@@ -1936,6 +3236,8 @@ void AiMemoryDialog::syncWidgets() {
         yes_->setVisibility(vis);
         no_->setVisibility(vis);
         if (confirming()) yes_->setText(confirm_.yes);
+        // 1.17.0 : importer n'efface rien - le bouton n'est pas rouge
+        yes_->setStyle(confirm_.kind == Confirm::ImportLearning ? ui::Button::Style::Primary : ui::Button::Style::Danger);
     }
     syncing_ = false;
 }
@@ -1959,6 +3261,7 @@ std::vector<const mem::Knowledge*> AiMemoryDialog::shownKnowledge() const {
         if (!catFilter_.empty() && k.category != catFilter_) continue;
         if (projectFilter_ == "*" && !k.project.empty()) continue;
         if (!projectFilter_.empty() && projectFilter_ != "*" && k.project != projectFilter_) continue;
+        if (!learnSearch_.empty() && folded(k.name + " " + k.description + " " + k.content).find(folded(learnSearch_)) == std::string::npos) continue;
         out.push_back(&k);
     }
     return out;
@@ -1978,6 +3281,7 @@ bool AiMemoryDialog::selectKnowledge(std::string_view idOrName) {
             }
     if (!found) return false;
     selectedKnowledge_ = found->id;
+    if (hub_) hub_->followKnowledge(found->category);
     // un filtre qui la cache : retire
     bool shown = false;
     for (const auto* k : shownKnowledge()) shown = shown || k == found;
@@ -2101,6 +3405,7 @@ void AiMemoryDialog::fillEditor(const mem::Knowledge* k, bool readOnly) {
 
 void AiMemoryDialog::beginAdd() {
     showTab(Tab::Learning);
+    if (hub_) hub_->followKnowledge(catFilter_);
     editorAdding_ = true;
     fillEditor(nullptr, false);
 }
@@ -2109,6 +3414,7 @@ void AiMemoryDialog::beginEdit() {
     const auto* k = selectedKnowledge();
     if (!k || k->builtIn) return;
     showTab(Tab::Learning);
+    if (hub_) hub_->followKnowledge(k->category);
     editorAdding_ = false;
     fillEditor(k, false);
 }
@@ -2117,6 +3423,7 @@ void AiMemoryDialog::beginView() {
     const auto* k = selectedKnowledge();
     if (!k) return;
     showTab(Tab::Learning);
+    if (hub_) hub_->followKnowledge(k->category);
     editorAdding_ = false;
     fillEditor(k, true);
 }
@@ -2525,6 +3832,7 @@ bool AiMemoryDialog::confirmYes() {
         case Confirm::DeleteCategory: ok = doDeleteCategory(); break;
         case Confirm::ClearCache: ok = doClearCache(); break;
         case Confirm::DeletePersistent: ok = doDeletePersistent(); break;
+        case Confirm::ImportLearning: ok = hub_ && hub_->doImport(); break;
         case Confirm::None: break;
     }
     syncWidgets();
@@ -2534,8 +3842,10 @@ bool AiMemoryDialog::confirmYes() {
 
 void AiMemoryDialog::confirmNo() {
     const bool cache = confirm_.kind == Confirm::ClearCache;
+    const bool import = confirm_.kind == Confirm::ImportLearning;
     confirm_ = {};
-    say(cache ? "Le cache n'a pas \xC3\xA9t\xC3\xA9 vid\xC3\xA9." : "Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
+    if (import && hub_) hub_->pendingImport.clear();
+    say(import ? "Rien n'a \xC3\xA9t\xC3\xA9 import\xC3\xA9." : cache ? "Le cache n'a pas \xC3\xA9t\xC3\xA9 vid\xC3\xA9." : "Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
     syncWidgets();
     if (body_) body_->invalidateLayout();
 }
@@ -2548,7 +3858,9 @@ void AiMemoryDialog::say(std::string text, bool bad) {
 
 ui::TableView* AiMemoryDialog::currentTable() const {
     switch (tab()) {
-        case Tab::Learning: return learning_ && !learning_->editorOn ? learning_->table : nullptr;
+        case Tab::Learning:
+            if (hub_ && !hub_->textTheme()) return hub_->list;
+            return learning_ && !learning_->editorOn ? learning_->table : nullptr;
         case Tab::Memory: return memory_ ? memory_->table : nullptr;
         case Tab::Storage: return storage_ ? storage_->table : nullptr;
         case Tab::Activity: return activityPage_ ? activityPage_->table : nullptr;
@@ -2558,7 +3870,7 @@ ui::TableView* AiMemoryDialog::currentTable() const {
 
 bool AiMemoryDialog::selectRow(std::string_view text) {
     switch (tab()) {
-        case Tab::Learning: return selectKnowledge(text);
+        case Tab::Learning: return hub_ && !hub_->textTheme() ? selectLearningRow(text) : selectKnowledge(text);
         case Tab::Memory: return selectMemoryRow(text);
         default: break;
     }
@@ -2592,8 +3904,9 @@ core::Status AiMemoryDialog::buildUi() {
         tabs->addTab(ui::TabControl::Tab{tabTitle(Tab::Overview), ui::Icon::Chart}, std::move(p));
     }
     {
-        auto p = std::make_unique<LearningPage>(*this);
-        learning_ = p.get();
+        auto p = std::make_unique<LearningHub>(*this);   // 1.17.0 : le tableau de bord (la page des connaissances dedans)
+        hub_ = p.get();
+        learning_ = p->knowledge;
         tabs->addTab(ui::TabControl::Tab{tabTitle(Tab::Learning), ui::Icon::Library}, std::move(p));
     }
     {

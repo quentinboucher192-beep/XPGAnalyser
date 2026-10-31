@@ -593,6 +593,8 @@ float defaultPanelWidth(float windowWidth) noexcept { return std::clamp(0.22f * 
 // =============================================================================
 AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     : ui::Widget(std::move(id)), assistant_(std::make_unique<Assistant>(std::move(core))), ui_(std::move(uiHost)) {
+    // 1.17.0 : << Essayer une phrase >> (l'onglet Apprentissage) passe par l'Assistant de ce panneau (le projet ouvert)
+    learning::setPhraseTester([a = assistant_.get()](const std::string& p) { return a->tryPhrase(p); });
     setFocusPolicy(true);
     setZoomSupport(ui::ZoomSupport::Scaled);
     const std::string base = this->id();
@@ -644,7 +646,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     refreshButtons();
 }
 
-AiPanel::~AiPanel() = default;
+AiPanel::~AiPanel() { learning::setPhraseTester(nullptr); }
 
 void AiPanel::say(const std::string& text) {
     if (text.empty()) return;

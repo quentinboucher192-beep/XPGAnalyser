@@ -16,6 +16,7 @@
 //  8. la fenetre : les jauges et les comptes qui suivent chaque operation, les confirmations, et le dessin des
 //     six onglets (aucun texte hors de la fenetre) en 1920 x 1200 et 1280 x 800.
 #include "../src/app/ai/AiKnowledge.hpp"
+#include "../src/app/ai/AiLearning.hpp"
 #include "../src/app/ai/AiMemory.hpp"
 #include "../src/app/ai/AiMemoryDialog.hpp"
 #include "../src/app/ai/AiMemoryJson.hpp"
@@ -25,6 +26,7 @@
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
 #include "../src/ui/widgets/Controls.hpp"
+#include "../src/ui/widgets/DataViews.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -752,6 +754,135 @@ void dialog() {
     paintAll(d, edit, ui::Theme::dark(), "l'editeur ouvert");
 }
 
+// 1.17.0 : l'onglet Apprentissage, un tableau de bord - ses themes, sa recherche, la correction a la main, A lui apprendre,
+// Essayer une phrase, l'export et l'import ; et son dessin, theme par theme, aux deux tailles, sans texte dehors.
+void paintLearning(app::AiMemoryDialog& d, Recorder& rec, const ui::Theme& theme, const std::string& label) {
+    ui::Widget* root = d.widgetRoot();
+    root->setBounds({0.f, 0.f, rec.size.w, rec.size.h});
+    const float w = std::min(1240.f, rec.size.w - 40.f), h = std::min(800.f, rec.size.h - 40.f);
+    rec.panel = {std::floor((rec.size.w - w) * 0.5f), std::floor((rec.size.h - h) * 0.5f), w, h};
+    root->layout();
+    std::vector<ui::Widget*> overlays;
+    rec.outside.clear();
+    rec.texts = 0;
+    const ui::PaintContext ctx{rec, theme, {0.f, 0.f, rec.size.w, rec.size.h}, 0.0, &overlays};
+    root->invalidate();
+    root->render(ctx);
+    check(rec.texts > 20, label + " : le tableau de bord se dessine (" + std::to_string(rec.texts) + " textes)");
+    check(rec.outside.empty(), label + " : aucun texte hors de la fenetre" + (rec.outside.empty() ? std::string{} : " (" + rec.outside.front() + ")"));
+}
+
+void learningHub() {
+    namespace ln = app::ai::learning;
+    std::printf("== 9. l'apprentissage, un tableau de bord (1.17.0) ==\n");
+    app::AiMemoryDialog d(app::AiMemoryDialog::Spec{});
+    check(static_cast<bool>(d.Initialize()), "la fenetre se construit");
+    ui::Widget* root = d.widgetRoot();
+    check(d.showLearningTheme("modeles") && d.tab() == app::AiMemoryDialog::Tab::Learning && d.learningTheme() == "modeles",
+          "le theme Modeles metier");
+    const std::size_t all = d.learningRowCount();
+    check(all >= 8, "les modeles du logiciel : " + std::to_string(all));
+    d.setLearningSearch("vanne");
+    check(d.learningRowCount() >= 1 && d.learningRowCount() < all, "Rechercher << vanne >> : " + std::to_string(d.learningRowCount()) + " ligne(s)");
+    d.setLearningSearch("");
+    check(d.learningRowCount() == all, "la recherche videe : toutes les lignes");
+    check(!d.showLearningTheme("inconnu") && d.learningTheme() == "modeles", "un theme inconnu : refuse");
+    // corriger un modele du logiciel : un membre de plus, garde a part, puis revenir a l'original
+    check(d.selectLearningRow("T_Pompe"), "choisir T_Pompe");
+    auto* members = dynamic_cast<ui::TableView*>(root->findById("ia.memoire.apprentissage.modele.membres"));
+    auto* add = dynamic_cast<ui::Button*>(root->findById("ia.memoire.apprentissage.modele.ajouterMembre"));
+    check(members && members->model() && add, "la table des membres et + Membre");
+    if (members && members->model() && add) {
+        const std::size_t n0 = members->model()->rowCount();
+        add->clicked->emit();
+        const std::size_t r = members->model()->rowCount() - 1;
+        check(members->model()->rowCount() == n0 + 1, "+ Membre : une ligne");
+        check(members->model()->setCellText(r, 0, "Debit") && members->model()->setCellText(r, 1, "REAL"), "le nom et le type du membre");
+        check(!members->model()->setCellText(r, 1, "pas un type") && members->model()->cellText(r, 1) == "REAL", "un type illisible : refuse");
+        check(!members->model()->cellChoices(r, 1).empty(), "le type se choisit dans une liste");
+        check(d.saveLearningDetail(), "Enregistrer");
+        const auto m = ln::model("pompe");
+        check(m && m->corrected && std::any_of(m->members.begin(), m->members.end(), [](const auto& x) { return x.name == "Debit" && x.type == "REAL"; }),
+              "T_Pompe corrige : Debit REAL, lu par l'IA integree");
+        check(d.selectLearningRow("T_Pompe") && d.revertLearningDetail(), "Revenir a l'original");
+        const auto back = ln::model("pompe");
+        check(back && !back->corrected && std::none_of(back->members.begin(), back->members.end(), [](const auto& x) { return x.name == "Debit"; }),
+              "T_Pompe : celui du logiciel");
+    }
+    // un modele de l'utilisateur
+    check(d.beginLearningNew(), "Nouveau modele...");
+    auto* name = dynamic_cast<ui::InputText*>(root->findById("ia.memoire.apprentissage.modele.nom"));
+    auto* words = dynamic_cast<ui::InputText*>(root->findById("ia.memoire.apprentissage.modele.mots"));
+    check(name && words, "le nom et les mots");
+    if (name && words) {
+        name->setText("T_Compresseur");
+        words->setText("compresseur, compresseurs");
+        check(d.saveLearningDetail() && ln::model("compresseur").has_value(), "T_Compresseur enregistre");
+        check(d.selectLearningRow("T_Compresseur") && d.toggleLearningDetail() && !ln::model("compresseur"), "desactive : l'IA integree ne s'en sert plus");
+        check(d.toggleLearningDetail() && ln::model("compresseur"), "reactive");
+        check(d.removeLearningDetail() && !ln::model("compresseur"), "supprime");
+    }
+    // le vocabulaire : un mot de plus
+    check(d.showLearningTheme("vocabulaire") && d.learningRowCount() > 0, "le theme Vocabulaire : les mots du logiciel");
+    check(d.beginLearningNew(), "Nouveau mot...");
+    auto* word = dynamic_cast<ui::InputText*>(root->findById("ia.memoire.apprentissage.mot.mot"));
+    auto* target = dynamic_cast<ui::DropDown*>(root->findById("ia.memoire.apprentissage.mot.cible"));
+    check(word && target, "le mot et sa cible");
+    if (word && target) {
+        word->setText("surpresseur");
+        for (std::size_t i = 0; i < target->items().size(); ++i)
+            if (target->items()[i].value == hmi::kindKey(hmi::Kind::Pump)) target->setSelectedIndex(static_cast<int>(i));
+        check(d.saveLearningDetail(), "Enregistrer le mot");
+        const auto ws = ln::words(true);
+        check(std::any_of(ws.begin(), ws.end(), [](const ln::WordEntry& w) { return w.word == "surpresseur" && w.target == hmi::kindKey(hmi::Kind::Pump); }),
+              "surpresseur = une pompe");
+    }
+    // A lui apprendre : une demande non comprise
+    ln::recordReply(false, "ajoute un surchauffeur", false);
+    d.refresh();
+    check(d.showLearningTheme("apprendre") && d.learningRowCount() == 1, "A lui apprendre : la demande non comprise");
+    check(d.selectLearningRow("ajoute un surchauffeur") && d.teachLearning("surchauffeur", "genre", hmi::kindKey(hmi::Kind::Tank)), "Lui apprendre : surchauffeur");
+    {
+        const auto ws = ln::words(true);
+        check(std::any_of(ws.begin(), ws.end(), [](const ln::WordEntry& w) { return w.word == "surchauffeur"; }), "le mot appris");
+    }
+    check(d.selectLearningRow("ajoute un surchauffeur") && d.ignoreLearningRequest() && d.learningRowCount() == 0, "Ignorer : la demande quitte la liste");
+    // Essayer une phrase : sans projet, rien a essayer ; avec, ce qu'elle comprend
+    check(!d.tryLearningPhrase("ajoute 3 pompes") && d.learningTrial().find("projet") != std::string::npos, "sans projet : le dire");
+    ln::setPhraseTester([](const std::string& p) { return ln::Trial{true, "3 pompes (" + p + ")"}; });
+    check(d.tryLearningPhrase("ajoute 3 pompes") && d.learningTrial().find("Comprise") == 0, "avec un projet : " + d.learningTrial());
+    ln::setPhraseTester(nullptr);
+    // des mesures : les graphiques ont de quoi dessiner
+    for (int i = 0; i < 4; ++i) ln::recordReply(i != 1, "ajoute une pompe", true);
+    d.refresh();
+    // exporter, importer (ce que ferait l'import, puis la confirmation)
+    const fs::path xia = scratch() / "appris.xia";
+    check(d.exportLearning(xia.string()) && fs::exists(xia), "Exporter l'apprentissage");
+    check(d.importLearning(xia.string()) && d.confirming() && d.confirmText().find("Importer l'apprentissage") != std::string::npos,
+          "Importer : ce qu'il ferait d'abord (" + d.confirmText() + ")");
+    check(d.confirmYes() && !d.confirming(), "importe");
+    check(!d.importLearning((scratch() / "absent.xia").string()) && d.messageBad(), "un fichier absent : refuse");
+    // le dessin, theme par theme
+    for (const char* t : {"modeles", "vocabulaire", "apprendre", "regles", "metier"}) {
+        check(d.showLearningTheme(t), std::string("le theme ") + t);
+        Recorder big;
+        paintLearning(d, big, ui::Theme::dark(), std::string("1920 x 1200, ") + t);
+        Recorder small;
+        small.size = {1280.f, 800.f};
+        paintLearning(d, small, ui::Theme::light(), std::string("1280 x 800, ") + t);
+    }
+    check(d.showLearningTheme("modeles") && d.selectLearningRow("T_Capteur"), "un modele choisi");
+    Recorder small;
+    small.size = {1280.f, 800.f};
+    paintLearning(d, small, ui::Theme::light(), "1280 x 800, T_Capteur");
+    check(d.beginLearningNew(), "un nouveau modele");
+    paintLearning(d, small, ui::Theme::dark(), "1280 x 800, nouveau modele");
+    // un geste sur une connaissance montre son theme
+    d.beginAdd();
+    check(d.learningTheme() != "modeles" && d.editorOpen(), "Ajouter une connaissance : un theme en texte, l'editeur ouvert");
+    d.closeEditor();
+}
+
 } // namespace
 
 int main() {
@@ -767,6 +898,7 @@ int main() {
     persistent();
     ramActivitySearch();
     dialog();
+    learningHub();
     if (!std::getenv("AI_MEMOIRE_GARDER")) fs::remove_all(scratch(), ec);
     else std::printf("garde : %s\n", scratch().string().c_str());
     std::printf("%d verification(s), %d echec(s)\n", checks, failures);

@@ -21,9 +21,15 @@
 //      connaissances, genres connus 116/116), les tailles, l'espace libre ; deux
 //      blocs separes, la memoire vive de l'application et le stockage permanent ;
 //      le modele distant n'occupe rien sur ce PC, c'est dit ;
-//    - APPRENTISSAGE : les connaissances (filtrees par categorie et par projet),
-//      consulter, modifier, activer, desactiver, supprimer, ajouter ; l'activite
-//      recente ; "Apprendre ici = enrichir la memoire locale..." ;
+//    - APPRENTISSAGE (1.17.0 : un tableau de bord) : ce qu'elle sait et qu'elle
+//      progresse - le bandeau honnete, Importer... / Exporter l'apprentissage...
+//      (un fichier .xia), quatre tuiles, deux graphiques mesures sur ce PC ;
+//      en bas, les THEMES (Modeles metier, Vocabulaire, les categories des
+//      connaissances, A lui apprendre), la liste du theme (Rechercher, filtres,
+//      tri) et son detail MODIFIABLE (un modele : son nom, ses mots, ses
+//      membres ; un mot : ce qu'il designe) ; << Essayer une phrase >>. Un
+//      theme en texte garde la page des connaissances (consulter, modifier,
+//      activer, desactiver, supprimer, ajouter) ;
 //    - MEMOIRE : les informations persistantes par categorie, la recherche,
 //      supprimer une conversation, une memoire, une categorie entiere ;
 //    - STOCKAGE PC : la repartition (tableau et anneau), le total, l'espace libre,
@@ -116,6 +122,28 @@ public:
     [[nodiscard]] bool editorOpen() const noexcept;
     [[nodiscard]] bool editorReadOnly() const noexcept { return editorReadOnly_; }
 
+    // ---- Apprentissage : le tableau de bord (1.17.0) -------------------------------------------
+    // Un theme : "modeles", "vocabulaire", "apprendre" (les demandes non comprises) ou une categorie des
+    // connaissances ("regles", "metier"...) ; faux : inconnu.
+    bool showLearningTheme(std::string_view key);
+    [[nodiscard]] std::string learningTheme() const;
+    void setLearningSearch(std::string text);           // le theme et ses comptes ; les connaissances aussi
+    [[nodiscard]] std::size_t learningRowCount() const; // la liste du theme (un theme en texte : ses connaissances)
+    bool selectLearningRow(std::string_view key);       // un modele (sa cle ou son nom), un mot, une demande
+    bool beginLearningNew();                            // Nouveau modele... / Nouveau mot...
+    bool saveLearningDetail();                          // Enregistrer (ce que montre le detail)
+    bool revertLearningDetail();                        // un modele du logiciel : revenir a l'original
+    bool toggleLearningDetail();                        // activer / desactiver
+    bool removeLearningDetail();
+    // A lui apprendre : le mot choisi de la demande choisie = un genre ("genre", cle hmi::kindKey), un modele
+    // ("modele", sa cle) ou un mot a ignorer ("ignorer").
+    bool teachLearning(std::string_view word, std::string_view meaning, std::string_view target);
+    bool ignoreLearningRequest();
+    bool tryLearningPhrase(const std::string& phrase);  // << Essayer une phrase >> (rien ne s'applique)
+    [[nodiscard]] std::string learningTrial() const;    // ce que l'essai a dit
+    bool exportLearning(const std::string& path);       // un .xia (sans la cle API)
+    bool importLearning(const std::string& path);       // ce que ferait l'import, puis la confirmation (confirmYes)
+
     // ---- Memoire ------------------------------------------------------------------------------
     void showMemoryCategory(MemCat c);
     [[nodiscard]] MemCat memoryCategory() const noexcept { return memCat_; }
@@ -174,6 +202,7 @@ private:
     class StoragePage;
     class CleaningPage;
     class ActivityPage;
+    class LearningHub;
     friend class Body;
     friend class OverviewPage;
     friend class LearningPage;
@@ -181,8 +210,9 @@ private:
     friend class StoragePage;
     friend class CleaningPage;
     friend class ActivityPage;
+    friend class LearningHub;
 
-    enum class Confirm : std::uint8_t { None, DeleteKnowledge, DeleteMemory, DeleteCategory, ClearCache, DeletePersistent };
+    enum class Confirm : std::uint8_t { None, DeleteKnowledge, DeleteMemory, DeleteCategory, ClearCache, DeletePersistent, ImportLearning };
     struct Pending {
         Confirm     kind{Confirm::None};
         std::string text;
@@ -190,6 +220,7 @@ private:
     };
     void ask(Confirm kind, std::string text, std::string yes);
     void say(std::string text, bool bad = false);
+    void setLearningSearchQuiet(std::string text);      // la recherche du tableau de bord, pour les connaissances
     void finish();
     void rebuildTables();
     void syncWidgets();
@@ -214,6 +245,7 @@ private:
 
     // Apprentissage
     std::string                           catFilter_, projectFilter_;
+    std::string                           learnSearch_;          // 1.17.0 : la recherche du tableau de bord
     std::string                           selectedKnowledge_;
     bool                                  editorReadOnly_{false};
     bool                                  editorAdding_{false};
@@ -237,7 +269,8 @@ private:
     Body*                                 body_{nullptr};
     ui::TabControl*                       tabs_{nullptr};
     OverviewPage*                         overview_{nullptr};
-    LearningPage*                         learning_{nullptr};
+    LearningPage*                         learning_{nullptr};   // la page des connaissances (dans le tableau de bord)
+    LearningHub*                          hub_{nullptr};
     MemoryPage*                           memory_{nullptr};
     StoragePage*                          storage_{nullptr};
     CleaningPage*                         cleaning_{nullptr};
