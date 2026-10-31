@@ -120,8 +120,12 @@ protected:
         ctx.r.drawText({x + 28.f, panel_.y + 10.f}, "Pr\xC3\xA9visualisation des modifications", kTitleFont, c.text);
         ui::drawIcon(ctx.r, ui::Icon::Close, {close_.x + 6.f, close_.y + 4.f, 16.f, 16.f}, c.textMuted);
         if (!p) return;
-        const std::string sub = "Vue \xC2\xAB " + p->view + " \xC2\xBB \xC2\xB7 " + (p->summary.empty() ? std::string("proposition") : p->summary)
-                                + " \xC2\xB7 la vue n'est pas modifi\xC3\xA9" "e avant Appliquer";
+        // 1.16.0 : une vue neuve, ou le projet seul (des variables, des types).
+        const std::string where = createsView(*p) ? "Vue neuve \xC2\xAB " + p->view + " \xC2\xBB"
+                                : usesOpenView(*p) ? "Vue \xC2\xAB " + p->view + " \xC2\xBB"
+                                                   : std::string("Le projet (variables, types IHM)");
+        const std::string sub = where + " \xC2\xB7 " + (p->summary.empty() ? std::string("proposition") : p->summary)
+                                + " \xC2\xB7 rien ne change avant Appliquer";
         ctx.r.drawText({x, panel_.y + 38.f}, elide(ctx.r, sub, kSmall, panel_.w - 32.f), kSmall, c.textMuted);
         // Les comptes : trois tuiles. Perimee (la vue a change, ou n'existe plus) : ceux de la
         // proposition (son texte les annonce), pas ceux d'une validation qui n'a rien pu lire.
@@ -143,6 +147,9 @@ protected:
                            c.textMuted);
             tx += tw + 10.f;
         }
+        if (const std::string made = creationSummary(*p); !made.empty() && !(ck.stale || ck.viewMissing))
+            ctx.r.drawText({tx + 8.f, counts_.y + (counts_.h - ctx.r.lineHeight(kSmall)) / 2.f},
+                           elide(ctx.r, "+ " + made, kSmall, counts_.right() - tx - 8.f), kSmall, c.ok);
         if (ck.stale || ck.viewMissing) {
             ctx.r.drawText({tx + 8.f, counts_.y + (counts_.h - ctx.r.lineHeight(kSmall)) / 2.f},
                            elide(ctx.r, "P\xC3\xA9rim\xC3\xA9" "e : redemande-la (Modifier la demande).", kSmall, counts_.right() - tx - 8.f), kSmall,
@@ -367,6 +374,37 @@ void AiPreviewDialog::refresh() {
     if (!check_.warnings.empty()) {
         heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size()) + ")");
         for (const auto& w : check_.warnings) rows.push_back({Row::Kind::Warning, w, {}, 0});
+    }
+    // 1.16.0 : CE QUI SERA CREE en plus des objets - la vue neuve, les variables, les types IHM (jamais en silence).
+    if (!check_.newView.empty()) {
+        heading("VUE \xC3\x80 CR\xC3\x89" "ER (elle s'ouvre apr\xC3\xA8s Appliquer)");
+        std::string size;
+        if (preview_.view.width > 0) size = std::to_string(preview_.view.width) + " \xC3\x97 " + std::to_string(preview_.view.height);
+        rows.push_back({Row::Kind::Item, check_.newView, size, 0});
+        if (!preview_.view.description.empty()) rows.push_back({Row::Kind::Change, preview_.view.description, {}, 0});
+    }
+    if (!check_.newTypes.empty()) {
+        heading("TYPES IHM \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(check_.newTypes.size()) + ")");
+        for (const auto& [name, members] : check_.newTypes) {
+            rows.push_back({Row::Kind::Item, name, std::to_string(members.size()) + (members.size() > 1 ? " membres" : " membre"), 0});
+            std::size_t shown = 0;
+            for (const auto& m : members) {
+                if (shown++ >= 8) {
+                    rows.push_back({Row::Kind::Change, "\xE2\x80\xA6 et " + std::to_string(members.size() - 8) + " autres", {}, 0});
+                    break;
+                }
+                rows.push_back({Row::Kind::Change, m.name + " : " + m.type + (m.description.empty() ? std::string{} : " \xE2\x80\x94 " + m.description), {}, 0});
+            }
+        }
+    }
+    if (!check_.newVariables.empty()) {
+        heading("VARIABLES IHM \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(check_.newVariables.size()) + ")");
+        for (const auto& v : check_.newVariables) {
+            rows.push_back({Row::Kind::Item, v.name, v.type, 0});
+            std::string detail = v.initial.empty() ? std::string{} : "valeur initiale " + v.initial;
+            if (!v.description.empty()) detail += (detail.empty() ? "" : " \xE2\x80\x94 ") + v.description;
+            if (!detail.empty()) rows.push_back({Row::Kind::Change, detail, {}, 0});
+        }
     }
     heading("VARIABLES ASSOCI\xC3\x89" "ES");
     if (check_.bindings.empty()) rows.push_back({Row::Kind::Note, "Aucune (l'Assistant n'invente jamais une variable).", {}, 0});

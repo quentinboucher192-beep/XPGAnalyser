@@ -267,8 +267,10 @@ void sizes(const std::string& examplePath) {
     std::printf("  station de 31 objets + une suite : %zu octets (system)\n", station.size());
     std::printf("  vue de %zu objets : %zu octets (system), contexte %zu octets : %zu detailles, %zu nommes\n", big.v().objects.size(), bigPrompt.size(),
                 bigCtx.size(), info.detailed, info.named);
-    check(empty.size() + tool.size() < 30000, "une demande ordinaire (vue vide) : moins de 30 Ko avec l'outil");
-    check(station.size() + tool.size() < 30000, "la station de 31 objets : moins de 30 Ko avec l'outil");
+    // 1.16.0 (chantier OPTIONS) : + creer_vue, creer_variables, creer_type, les copies et les reperes, les formules - leurs
+    // consignes, un exemple de chaque et leur schema (environ 3,5 Ko) : la borne passe de 30 a 34 Ko.
+    check(empty.size() + tool.size() < 34000, "une demande ordinaire (vue vide) : moins de 34 Ko avec l'outil");
+    check(station.size() + tool.size() < 34000, "la station de 31 objets : moins de 34 Ko avec l'outil");
     check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 45000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")
@@ -444,8 +446,10 @@ void toolSchema() {
     const auto& actions = item.at("properties").at("action").at("enum");
     std::set<std::string> a;
     for (const auto& x : actions.items()) a.insert(x.asString());
-    check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code"},
-          "action : les huit operations");
+    // 1.16.0 : + creer_vue, creer_variables, creer_type (le chantier OPTIONS).
+    check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code", "creer_vue",
+                                     "creer_variables", "creer_type"},
+          "action : les onze operations");
     check(item.at("properties").has("proprietes") && item.at("properties").has("variable") && item.at("properties").has("noms")
               && item.at("properties").has("code") && schema.at("properties").has("resume"),
           "les champs du format existant (+ noms, dx, dy, code)");

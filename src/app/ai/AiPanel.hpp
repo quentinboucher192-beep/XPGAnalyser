@@ -316,6 +316,8 @@ private:
         std::vector<std::string> noteLines;
         bool                     noteError{false};
         float                    noteY{0.f}, retryY{0.f};
+        // 1.16.0 : ce que la proposition cree en plus des objets (la vue, les variables, les types), sous les comptes.
+        std::vector<std::string> createLines;
     };
     struct CardButtons {
         int         message{-1};

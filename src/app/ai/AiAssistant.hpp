@@ -58,6 +58,9 @@ public:
         std::function<void(core::CommandPtr)> apply;        // empiler (Ctrl+Z)
         std::function<std::string()>          projectName, projectPath;
         Env                                   env;          // les noms de l'automate relie
+        // 1.16.0 (a la fin) : ouvrir une vue dans l'editeur (son onglet) - apres Appliquer une proposition qui
+        // cree une vue (creer_vue), l'editeur l'ouvre. Nul : rien ne s'ouvre (un essai).
+        std::function<void(hmi::Id)>          openView;
     };
 
     // Les etats de la generation, dans l'ordre. 1.15.0 : Proposing, l'appel d'outil s'ecrit (un
