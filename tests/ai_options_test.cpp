@@ -782,6 +782,26 @@ void assistant() {
     const ai::Proposal* r = b.proposal(m);
     check(r && ai::createsView(*r) && r->fingerprintAfter == a.proposal(m)->fingerprintAfter && b.appliedState(m) == ai::Assistant::Applied::Applied,
           "relue d'une conversation : appliquee, la meme empreinte");
+    // 1.16.0 (captures) : par l'IA integree, la proposition garde le nom de la vue OUVERTE a la demande ; la vue
+    // neuve se lit dans creer_vue - elle s'ouvre apres Appliquer, et Ctrl+Z rend la carte annulee.
+    active = f.view;
+    s = a.settings();
+    s.provider = "integree";
+    a.setSettings(s);
+    const std::size_t before = opened.size();
+    check(run("Cr\xC3\xA9" "e une vue Vue_Process avec 2 pompes"), "IA integree : envoyee");
+    const int m3 = last();
+    const ai::Proposal* p3 = m3 > m2 ? a.proposal(m3) : nullptr;
+    check(p3 && ai::createsView(*p3) && ai::newViewName(*p3) == "Vue_Process", "IA integree : une vue neuve, Vue_Process");
+    check(p3 && a.apply(m3, &why), "IA integree : appliquee (" + why + ")");
+    const auto* pv = f.doc->project.viewByName("Vue_Process");
+    check(pv && opened.size() == before + 1 && opened.back() == pv->id, "IA integree : la vue creee s'ouvre (pas la vue ouverte a la demande)");
+    check(a.appliedState(m3) == ai::Assistant::Applied::Applied, "IA integree : la carte dit appliquee");
+    (void)f.stack.undo();
+    check(!f.doc->project.viewByName("Vue_Process") && a.appliedState(m3) == ai::Assistant::Applied::Undone,
+          "IA integree : Ctrl+Z, la carte dit annulee (" + (p3 ? a.proposal(m3)->fingerprint + " / " + a.proposal(m3)->fingerprintAfter + " / "
+                                                                    + ai::proposalPrint(f.doc->project, *a.proposal(m3)) : std::string{}) + ")");
+    check(a.reapply(m3, &why) && f.doc->project.viewByName("Vue_Process"), "IA integree : Reappliquer la remet (" + why + ")");
     fs::remove_all(dir);
 }
 

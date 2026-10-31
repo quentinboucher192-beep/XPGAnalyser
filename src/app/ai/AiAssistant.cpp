@@ -102,7 +102,7 @@ void Assistant::load(std::vector<std::string>* problems) {
     conversations_ = loadConversations(problems);
     if (!found && conversations_.empty()) {
         // La premiere ouverture : les conversations de demonstration (marquees "demo"), et les reglages.
-        conversations_ = demoConversations();
+        conversations_ = demoConversations(settings_.provider);
         for (auto& c : conversations_) (void)saveConversation(c);
         (void)saveSettings(settings_);
         appendActivity("conversation", "Premi\xC3\xA8re ouverture de l'Assistant : " + std::to_string(conversations_.size())
@@ -387,6 +387,15 @@ bool Assistant::send(std::string text, std::string* why) {
         LocalReply lr = understand(in, text, history);
         reply.text = std::move(lr.text);
         reply.proposal = std::move(lr.proposal);
+        // 1.16.0 (captures) : l'empreinte d'avant, celle de ce que la proposition touche (la vue ouverte, ou la vue
+        // neuve encore absente, les variables et types crees) - la carte saura dire qu'un Ctrl+Z l'a reprise.
+        if (reply.proposal && ctx.project) {
+            if (createsView(*reply.proposal)) {   // la vue neuve : ni le nom ni l'identifiant de la vue ouverte
+                reply.proposal->view = newViewName(*reply.proposal);
+                reply.proposal->viewId = hmi::kNoId;
+            }
+            reply.proposal->fingerprint = proposalPrint(*ctx.project, *reply.proposal, ctx.view ? fingerprint(*ctx.view) : std::string{});
+        }
         reply.suggestions = !lr.suggestions.empty();
         localSuggestions_ = std::move(lr.suggestions);
         if (!ctx.attachments.empty()) {
@@ -585,7 +594,7 @@ bool Assistant::apply(int message, std::string* why) {
     hmi::Id opened = hmi::kNoId;
     if (const auto after = host_.document ? host_.document() : nullptr) {
         if (createsView(prop))
-            if (const auto* nv = after->project.viewByName(prop.view)) prop.viewId = opened = nv->id;
+            if (const auto* nv = after->project.viewByName(newViewName(prop))) prop.viewId = opened = nv->id;
         prop.fingerprintAfter = proposalPrint(after->project, prop);
     }
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
@@ -672,6 +681,12 @@ void Assistant::setDirectMode(bool direct) {
 }
 
 void Assistant::setSettings(Settings s) {
+    // 1.16.0 : un autre service (fournisseur, adresse) - la limite lue sur l'ancien ne vaut plus.
+    if (s.provider != settings_.provider || trim(s.endpoint) != trim(settings_.endpoint) || s.preset != settings_.preset) {
+        const long long conversation = limit_.conversation;
+        limit_ = LimitState{};
+        limit_.conversation = conversation;
+    }
     settings_ = std::move(s);
     (void)saveSettings(settings_);
     ++revision_;

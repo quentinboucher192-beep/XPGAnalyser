@@ -50,7 +50,8 @@ struct DemoReply {
 // Un titre de conversation tire de la premiere demande ("Station de pompage").
 [[nodiscard]] std::string titleFor(std::string_view request);
 // Les conversations de demonstration (premiere ouverture : marquees "demo").
-[[nodiscard]] std::vector<Conversation> demoConversations();
+// 1.16.0 : provider "integree" (une installation neuve) - la premiere conversation decrit l'IA integree.
+[[nodiscard]] std::vector<Conversation> demoConversations(std::string_view provider = "demo");
 // La demande sans accents, en minuscules, les blancs reduits (ce que la reconnaissance lit).
 [[nodiscard]] std::string fold(std::string_view text);
 

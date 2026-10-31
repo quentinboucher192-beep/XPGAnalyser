@@ -1480,6 +1480,37 @@ std::vector<AiChatView::Line> AiChatView::layoutText(const std::string& md, floa
             word += ch;
         }
         flush();
+        // 1.16.0 (captures) : un `code` plus large que la ligne (une formulation longue a cliquer) se coupe a
+        // ses espaces, en morceaux qui tiennent - sinon il depassait le bord du panneau.
+        {
+            const float room = width - indent;
+            std::vector<Tok> fitted;
+            for (auto& t : toks) {
+                if (t.style != 2 || ui::measureWidth(t.text, kBody) + 8.f <= room) {
+                    fitted.push_back(std::move(t));
+                    continue;
+                }
+                std::string cur;
+                bool first = true;
+                std::size_t p = 0;
+                while (p <= t.text.size()) {
+                    std::size_t sp = t.text.find(' ', p);
+                    if (sp == std::string::npos) sp = t.text.size();
+                    const std::string w = t.text.substr(p, sp - p);
+                    const std::string cand = cur.empty() ? w : cur + " " + w;
+                    if (!cur.empty() && ui::measureWidth(cand, kBody) + 8.f > room) {
+                        fitted.push_back({cur, 2, first ? t.space : true});
+                        first = false;
+                        cur = w;
+                    } else {
+                        cur = cand;
+                    }
+                    p = sp + 1;
+                }
+                if (!cur.empty()) fitted.push_back({cur, 2, first ? t.space : true});
+            }
+            toks = std::move(fitted);
+        }
         // Le placement, mot a mot.
         const float lh = base == 3 ? lhHead : lhBody;
         Line line = proto;

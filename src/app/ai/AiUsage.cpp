@@ -142,16 +142,6 @@ std::string clockText(std::time_t t) {
     return iso.size() >= 19 ? iso.substr(11, 8) : iso;
 }
 
-std::string providerLabel(std::string_view key) {
-    for (const auto& p : providers())
-        if (p.key == key) {
-            std::string l(p.label);
-            if (const auto par = l.find(" ("); par != std::string::npos) l.resize(par);
-            return l;
-        }
-    return std::string(key);
-}
-
 } // namespace
 
 // ---- le fichier ---------------------------------------------------------------------------------
@@ -374,7 +364,7 @@ bool budgetExceeded(const Settings& s, const UsageTotals& t, std::string* questi
     if (used < s.budgetTokens) return false;
     if (question)
         *question = std::string("Ton budget ") + (month ? "du mois" : "du jour") + " est atteint (" + tokensText(used) + " / " + tokensText(s.budgetTokens)
-                    + " jetons). Envoyer quand m\xC3\xAAme ?";
+                    + " jetons). Envoyer quand m\xC3\xAAme\xC2\xA0?";
     return true;
 }
 
@@ -399,9 +389,19 @@ UsageBand usageBand(const Settings& s, const LimitState& st, const UsageTotals& 
         l1 = "Limite atteinte : le service demande d'attendre " + w;
         s1 = "Limite atteinte : attends " + w;
         b.waiting = true;
-    } else if (local || (haveLimits && l.local)) {
-        l1 = s1 = "Sur ce PC : pas de limite";
-    } else if (haveLimits) {
+    } else if (!haveLimits || l.local) {
+        if (local || (haveLimits && l.local)) {
+            l1 = s1 = "Sur ce PC : pas de limite";
+        } else if (sameProvider && st.answered) {
+            l1 = "Le service ne dit pas sa limite";
+            s1 = "Limite non dite";
+        } else {
+            l1 = "La limite s'affichera apr\xC3\xA8s la premi\xC3\xA8re r\xC3\xA9ponse";
+            s1 = "Limite : apr\xC3\xA8s la 1re r\xC3\xA9ponse";
+        }
+    } else {
+        // 1.16.0 (captures) : une limite annoncee s'affiche, meme d'un serveur de ce PC ou de l'usine (un proxy
+        // qui limite le debit) ; "Sur ce PC : pas de limite" seulement quand aucune n'est dite.
         std::vector<std::string> parts, shorts;
         if (l.requestsRemaining >= 0 || l.requestsLimit >= 0) {
             const std::string r = (l.requestsRemaining >= 0 ? std::to_string(l.requestsRemaining) : std::string("?")) + (l.requestsLimit >= 0 ? "/" + std::to_string(l.requestsLimit) : std::string{});
@@ -433,12 +433,6 @@ UsageBand usageBand(const Settings& s, const LimitState& st, const UsageTotals& 
             l1 += " \xC2\xB7 " + when;
             s1 += " \xC2\xB7 " + (when == "remise faite" ? when : waitText(left(reset)));
         }
-    } else if (sameProvider && st.answered) {
-        l1 = "Le service ne dit pas sa limite";
-        s1 = "Limite non dite";
-    } else {
-        l1 = "La limite s'affichera apr\xC3\xA8s la premi\xC3\xA8re r\xC3\xA9ponse";
-        s1 = "Limite : apr\xC3\xA8s la 1re r\xC3\xA9ponse";
     }
     b.lines.push_back(l1);
     b.shortLines.push_back(s1);
@@ -467,8 +461,8 @@ UsageBand usageBand(const Settings& s, const LimitState& st, const UsageTotals& 
     }
     // ---- l'infobulle : le detail exact
     if (haveLimits && !l.local) {
-        tip += "Limite de " + providerLabel(st.provider.empty() ? s.provider : st.provider) + ", lue \xC3\xA0 " + clockText(st.clock)
-               + " dans les en-t\xC3\xAAtes de sa derni\xC3\xA8re r\xC3\xA9ponse :";
+        tip += std::string(local ? "Limite annonc\xC3\xA9" "e par le serveur (sur ce PC ou de l'usine)" : "Limite annonc\xC3\xA9" "e par le service")
+               + ", lue \xC3\xA0 " + clockText(st.clock) + " dans les en-t\xC3\xAAtes de sa derni\xC3\xA8re r\xC3\xA9ponse :";
         if (l.requestsRemaining >= 0 || l.requestsLimit >= 0)
             tip += "\n- requ\xC3\xAA" "tes : " + (l.requestsRemaining >= 0 ? thousands(l.requestsRemaining) : std::string("?")) + " restantes sur "
                    + (l.requestsLimit >= 0 ? thousands(l.requestsLimit) : std::string("?"))

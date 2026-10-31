@@ -150,7 +150,7 @@ const std::vector<ProviderInfo>& providers() {
         {"integree", "IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion)", true},
         {"demo", "D\xC3\xA9monstration (sans IA)", true},
         {"anthropic", "Anthropic (Claude)", true},
-        {"openai", "Compatible OpenAI (Ollama, LM Studio, services gratuits...)", true},
+        {"openai", "Compatible OpenAI (Ollama...)", true},
     };
     return k;
 }

@@ -121,7 +121,7 @@ protected:
         ui::drawIcon(ctx.r, ui::Icon::Close, {close_.x + 6.f, close_.y + 4.f, 16.f, 16.f}, c.textMuted);
         if (!p) return;
         // 1.16.0 : une vue neuve, ou le projet seul (des variables, des types).
-        const std::string where = createsView(*p) ? "Vue neuve \xC2\xAB " + p->view + " \xC2\xBB"
+        const std::string where = createsView(*p) ? "Vue neuve \xC2\xAB " + newViewName(*p) + " \xC2\xBB"
                                 : usesOpenView(*p) ? "Vue \xC2\xAB " + p->view + " \xC2\xBB"
                                                    : std::string("Le projet (variables, types IHM)");
         const std::string sub = where + " \xC2\xB7 " + (p->summary.empty() ? std::string("proposition") : p->summary)

@@ -191,6 +191,9 @@ struct Env {
 //  - ni l'un ni l'autre : elle ne cree que des variables ou des types IHM (le projet seul, aucune vue).
 [[nodiscard]] bool createsView(const Proposal&) noexcept;
 [[nodiscard]] bool usesOpenView(const Proposal&) noexcept;
+// Le nom de la vue neuve (celui de creer_vue), vide sans creer_vue. Proposal::view peut dire la vue ouverte a la
+// demande (l'IA integree) : la vue neuve se lit ici.
+[[nodiscard]] std::string newViewName(const Proposal&);
 // 1.16.0 : L'EMPREINTE DE CE QUE LA PROPOSITION TOUCHE, telle qu'elle est dans le projet : la vue visee
 // (fingerprint, comme en 1.15.0 : une proposition qui ne cree que des objets garde la meme empreinte) ;
 // la vue neuve d'un creer_vue (absente, ou son empreinte) ; + l'etat des variables et des types qu'elle cree

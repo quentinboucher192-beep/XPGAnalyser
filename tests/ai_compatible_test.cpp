@@ -986,6 +986,27 @@ void testPanelBand() {
     f.step();
     check(has(f.lines(), "Sur ce PC : pas de limite"), "Ollama : " + f.lines());
     check(f.as().ready(), "Ollama : pret sans cle");
+    // 1.16.0 (captures) : un serveur de ce PC ou de l'usine qui ANNONCE une limite (un relais qui limite le debit) -
+    // la bande et l'infobulle disent la meme chose : la limite annoncee.
+    s.replies.push_back({[] {
+                             ai::ProviderEvent e;
+                             e.type = ai::ProviderEvent::Type::Usage;
+                             e.limits.requestsRemaining = 16;
+                             e.limits.requestsLimit = 20;
+                             e.limits.requestsResetSeconds = 25;
+                             return e;
+                         }(),
+                         textEv("Ok."), doneEv()});
+    f.as().allowOverBudget();
+    (void)f.panel->sendText("Une cuve");
+    f.step();
+    f.step();
+    check(has(f.lines(), "16/20") && !has(f.lines(), "Sur ce PC") && has(f.panel->usageBand().tooltip, "annonc\xC3\xA9" "e par le serveur"),
+          "un serveur local qui annonce sa limite : la bande et l'infobulle la disent (" + f.lines() + ")");
+    // Un autre service : la limite lue sur l'ancien ne vaut plus.
+    f.configure("groq", "https://api.groq.com/openai/v1");
+    f.step();
+    check(!has(f.lines(), "16/20"), "un autre service : l'ancienne limite s'efface (" + f.lines() + ")");
     // Une 429 : l'attente.
     s.replies.push_back({[] {
                              ai::ProviderEvent e;

@@ -1834,7 +1834,7 @@ Sous l'état de connexion, une bande fine dit ce que le service te laisse et ce 
 | « Limite : 47/50 requêtes · 38,4 k/40 k jetons · remise dans 12 s » | Un service en ligne (Anthropic, OpenRouter, Groq…) : ce qui reste de sa limite, lue dans sa dernière réponse. Une ligne étroite l'abrège (« 47/50 req. · 38,4 k/40 k jetons · 12 s »). |
 | « Cette conversation : 12,3 k jetons · aujourd'hui 45 k » | Ce que la conversation ouverte et la journée ont consommé (tous les fournisseurs reliés). |
 | « Contexte de la dernière demande : 9,8 k / 32 k » | Quand la fenêtre de contexte du modèle est connue : ce que la dernière demande en a utilisé. |
-| « Sur ce PC : pas de limite » | Un modèle sur ce PC (Ollama, LM Studio) ou sur un serveur de l'usine. |
+| « Sur ce PC : pas de limite » | Un modèle sur ce PC (Ollama, LM Studio) ou sur un serveur de l'usine, qui n'annonce pas de limite. Un serveur de l'usine qui en annonce une (un relais qui limite le débit) : elle s'affiche comme celle d'un service en ligne. |
 | « Sans connexion : gratuit, sans limite » | La démonstration et l'IA intégrée. |
 | « La limite s'affichera après la première réponse » | Un service en ligne, avant sa première réponse. |
 | « Limite atteinte : le service demande d'attendre 20 s » | Une réponse 429 (trop de demandes) : le temps d'attente, qui décompte. |

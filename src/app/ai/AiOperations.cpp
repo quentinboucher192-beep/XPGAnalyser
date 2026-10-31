@@ -1274,6 +1274,8 @@ const hmi::View* targetView(const hmi::Project& p, const Proposal& pr) {
 // ---- 1.16.0 : la portee, l'empreinte, la vue neuve ---------------------------------------------
 bool createsView(const Proposal& p) noexcept { return !p.ops.empty() && p.ops.front().action == Operation::Action::View; }
 
+std::string newViewName(const Proposal& p) { return createsView(p) ? trimmed(p.ops.front().name) : std::string{}; }
+
 bool usesOpenView(const Proposal& p) noexcept {
     if (createsView(p)) return false;
     // Une proposition vide (une ancienne conversation) : la vue visee, comme avant.

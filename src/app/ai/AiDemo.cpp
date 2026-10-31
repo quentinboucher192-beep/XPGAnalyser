@@ -457,7 +457,7 @@ std::string titleFor(std::string_view request) {
     return t.empty() ? std::string("Nouvelle conversation") : t;
 }
 
-std::vector<Conversation> demoConversations() {
+std::vector<Conversation> demoConversations(std::string_view provider) {
     std::vector<Conversation> out;
     const std::time_t t = now();
     {
@@ -490,6 +490,18 @@ std::vector<Conversation> demoConversations() {
                  "- **supprimer les vannes** (avec confirmation).\n"
                  "Chaque proposition passe par l'**aper\xC3\xA7u** (mode Pr\xC3\xA9visualisation) ou s'applique tout de suite (mode Direct) ; "
                  "dans les deux cas, **Ctrl+Z** la reprend d'un coup. Aucune IA n'est connect\xC3\xA9" "e : rien ne quitte ce PC.";
+        if (provider == "integree")
+            a.text = "## Ce que sait faire l'IA int\xC3\xA9gr\xC3\xA9" "e\n"
+                     "Je suis l'**IA int\xC3\xA9gr\xC3\xA9" "e** : un moteur de r\xC3\xA8gles \xC3\xA9" "crit dans le logiciel, sans connexion - rien ne "
+                     "quitte ce PC. Je travaille sur **la vue ouverte**, avec les vrais objets du logiciel. Par exemple :\n"
+                     "- `Ajoute 3 pompes`, `Mets deux boutons Marche et Arr\xC3\xAAt sous P1` ;\n"
+                     "- `Cr\xC3\xA9" "e un synoptique de station de pompage` ;\n"
+                     "- `Mets P1 en rouge`, `Associe P1 \xC3\xA0 Pompe_1_Marche` ;\n"
+                     "- `Cr\xC3\xA9" "e une vue Vue_Process`, `Cr\xC3\xA9" "e la variable Marche_P3 en BOOL` ;\n"
+                     "- `Fais clignoter V1 quand Defaut_V1`.\n"
+                     "Je comprends des phrases simples, pas tout le fran\xC3\xA7" "ais : demande `Que sais-tu faire ?` pour la liste. Chaque "
+                     "proposition passe par l'**aper\xC3\xA7u** (ou s'applique tout de suite en mode Direct) ; **Ctrl+Z** la reprend d'un "
+                     "coup. Pour le langage courant, branche une IA sur ce PC ou en ligne (Param\xC3\xA8tres de l'Assistant).";
         c.messages = {u, a};
         out.push_back(std::move(c));
     }

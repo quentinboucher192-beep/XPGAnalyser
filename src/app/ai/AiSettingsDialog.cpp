@@ -74,7 +74,7 @@ const char* const kPrivacyNote = "Ce qui part chez le fournisseur avec chaque de
                                  "En d\xC3\xA9monstration, rien ne quitte ce PC.";
 const char* const kEfforts[][2] = {{"Auto (celui du mod\xC3\xA8le)", ""}, {"Bas", "low"}, {"Moyen", "medium"}, {"Haut", "high"}};
 // 1.16.0 : l'outil, et la note de la cle d'un service compatible OpenAI.
-const char* const kTools[][2] = {{"Auto (l'appel d'outil, sinon le JSON dans le texte)", "auto"}, {"Appel d'outil", "outil"}, {"JSON dans le texte", "texte"}};
+const char* const kTools[][2] = {{"Auto (outil, sinon JSON)", "auto"}, {"Appel d'outil", "outil"}, {"JSON dans le texte", "texte"}};
 std::string openAIKeyNote() {
     return "Facultative pour un mod\xC3\xA8le sur ce PC (Ollama, LM Studio) ; un service en ligne donne la sienne (selon ses conditions, "
            "parfois gratuite). " + std::string(keyProtectionAvailable() ? "M\xC3\xA9moris\xC3\xA9" "e, elle est prot\xC3\xA9g\xC3\xA9" "e par Windows. "
@@ -454,6 +454,16 @@ void AiSettingsDialog::providerChanged() {
     }
     if (model_) model_->setPlaceholder(openai ? "ex. llama3.2 (Lister les mod\xC3\xA8les)" : "ex. claude-opus-5-5");
     if (key_) key_->setPlaceholder(openai ? "facultative pour un mod\xC3\xA8le sur ce PC" : "la cl\xC3\xA9 du fournisseur");
+    // 1.16.0 (captures) : l'IA integree et la demonstration ne se connectent pas - la connexion, le modele, la cle,
+    // la fenetre de contexte, l'outil et le budget ne servent pas : grises.
+    const auto* it = provider_ ? provider_->selectedItem() : nullptr;
+    const bool net = it && providerUsesNetwork(it->value);
+    for (ui::Widget* w : {static_cast<ui::Widget*>(model_), static_cast<ui::Widget*>(listModels_), static_cast<ui::Widget*>(key_),
+                          static_cast<ui::Widget*>(test_), static_cast<ui::Widget*>(endpoint_), static_cast<ui::Widget*>(timeout_),
+                          static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_),
+                          static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_)})
+        if (w) w->setEnabled(net);
+    if (remember_) remember_->setEnabled(net && keyProtectionAvailable());
     if (auto* r = widgetRoot()) r->invalidateLayout();
 }
 
