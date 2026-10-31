@@ -55,7 +55,12 @@ L'installateur dépose `installation.json` et la copie du `.xia` dans `ProgramDa
 
 ## 2. Les essais
 
-(à compléter)
+**102 suites sur 102.** Les vérifications ajoutées :
+- `aimemoire` : 274 vérifications (205 à la 1.16.1) - le tableau de bord : les thèmes, Rechercher, corriger T_Pompe (un membre de plus, un type illisible refusé, Revenir à l'original), un modèle de l'utilisateur (enregistrer, désactiver, réactiver, supprimer), un mot de vocabulaire, À lui apprendre et Ignorer, Essayer une phrase (sans projet, puis avec), Exporter puis Importer avec sa confirmation, un fichier absent refusé, et le dessin de chaque thème à 1920 x 1200 et 1280 x 800 sans texte hors de la fenêtre ;
+- `aiapprentissage` (45) et `aiapprentissagefichier` (43) : le moteur (déjà dans la 1.16.1) ;
+- `hmieditor` : 73 versions, 517 notes.
+
+L'aide : 267 sujets, le guide et son C++ disent la même chose. Le projet Visual Studio compte les mêmes fichiers que CMake.
 
 ## 3. Les captures
 
