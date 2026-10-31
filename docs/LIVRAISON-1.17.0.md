@@ -1,6 +1,6 @@
 # API Studio et IHM Studio 1.17.0 : l'apprentissage de l'IA, visible, corrigeable, transportable
 
-Livrée le 31/10/2026 en fin d'après-midi. Elle suit la 1.16.1 (`docs/LIVRAISON-1.16.1.md`), livrée l'après-midi même.
+Livrée le 31/10/2026 en début d'après-midi (avancée : prévue vers 18 h). Elle suit la 1.16.1 (`docs/LIVRAISON-1.16.1.md`), livrée l'après-midi même.
 
 Tes demandes :
 - « dans apprentissage l'onglet on comprend pas vraiment s'il progresse, y'a pas de graphique, rien ; améliore et trie par thème et ce qu'il sait, et qu'on puisse corriger à la main si nécessaire, avec options rechercher » (la maquette, vue et validée le matin) ;
@@ -13,7 +13,7 @@ En bref :
 - **L'apprentissage dans un fichier `.xia`** : Exporter, Importer (avec ce qu'il ferait avant de confirmer).
 - **L'installateur relie l'IA** (intégrée, Ollama, Claude, un service compatible) et **reprend un `.xia`** d'un autre PC.
 
-**Ce qui reste à faire, et quand** : la **1.18.0** (demain vers 10 h) - les nouveaux outils de l'IA (types génériques `<T, K>`, symboles, vues modèles en-tête et pied de page, popups, équipements avec détection de ce qui répond sur chaque port, scripts, fonctions, variables système, ressources et fichiers joints, alarmes, dossiers, natives), les adresses, les variables liées aux équipements et les formules de lien dans les structures.
+**Ce qui reste à faire, et quand** : la **1.18.0** (demain matin) - les nouveaux outils de l'IA (types génériques `<T, K>`, symboles, vues modèles en-tête et pied de page, popups, équipements avec détection de ce qui répond sur chaque port, scripts, fonctions, variables système, ressources et fichiers joints, alarmes, dossiers, natives), les adresses, les variables liées aux équipements et les formules de lien dans les structures.
 
 ## 1. Ce qui change
 
@@ -64,7 +64,7 @@ L'aide : 267 sujets, le guide et son C++ disent la même chose. Le projet Visual
 
 ## 3. Les captures
 
-(à compléter)
+À ta demande, pas de passe de captures : à leur place, les essais automatiques **dessinent** le tableau de bord, thème par thème (Modèles métier, Vocabulaire, À lui apprendre, Règles, Connaissances métier, un modèle choisi, un nouveau modèle), à 1920 x 1200 et à 1280 x 800, en thème clair et sombre, et vérifient qu'aucun texte ne sort de la fenêtre et qu'aucun nom technique n'est affiché. L'installateur est vérifié sous Wine en silencieux (voir plus bas).
 
 ## 4. Installer
 
@@ -84,4 +84,5 @@ Le moteur de l'apprentissage était déjà dans la 1.16.1 (`AiLearning`, `AiLear
 
 - Les courbes se remplissent avec l'usage : les mesures de l'IA intégrée datent de la 1.16.1 (aujourd'hui). Les propositions gardées comptent aussi celles des IA connectées (leur état, dans les conversations).
 - « Apprendre » reste la mémoire locale : l'IA intégrée lit tes corrections ; une IA connectée les reçoit avec chaque demande ; **aucun modèle distant n'est réentraîné**.
-- Les pages de l'installateur ont été essayées sous Wine (en silencieux et à l'écran) ; pas encore sur un vrai Windows.
+- Les pages de l'installateur ont été essayées sous Wine en silencieux (le réglage et le .xia déposés, vérifiés) ; leur affichage à l'écran n'a pas été capturé, et rien n'a été essayé sur un vrai Windows.
+- Pas de captures de l'onglet : son dessin est vérifié par les essais (place, débordements), pas par l'œil.
