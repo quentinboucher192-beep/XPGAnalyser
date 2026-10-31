@@ -293,6 +293,7 @@ json::Value toJson(const Settings& s) {
     budget.set("jetons", static_cast<std::int64_t>(s.budgetTokens));
     budget.set("periode", s.budgetPeriod);
     o.set("budget", std::move(budget));
+    o.set("integreeDabord", s.localFirst);
     json::addMembers(o, s.extra);
     return o;
 }
@@ -320,9 +321,11 @@ Settings settingsFromJson(const json::Value& o) {
     if (s.toolMode != "outil" && s.toolMode != "texte") s.toolMode = "auto";
     s.budgetTokens = std::max<std::int64_t>(0, o.at("budget").integer("jetons", 0));
     s.budgetPeriod = o.at("budget").str("periode", "jour") == "mois" ? "mois" : "jour";
+    s.localFirst = o.flag("integreeDabord", false);
     // Une cle API ecrite par erreur (un fichier retouche a la main) n'est jamais relue ni reecrite.
     s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "effort", "mode", "historique",
-                                       "confidentialite", "service", "contexte", "outil", "budget", "cle", "cleApi", "apiKey", "api_key"});
+                                       "confidentialite", "service", "contexte", "outil", "budget", "integreeDabord", "cle", "cleApi", "apiKey",
+                                       "api_key"});
     return s;
 }
 

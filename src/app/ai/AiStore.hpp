@@ -118,6 +118,9 @@ struct Settings {
     std::string toolMode{"auto"};
     long long   budgetTokens{0};
     std::string budgetPeriod{"jour"};
+    // 1.16.1 : avec une IA connectee (anthropic, openai), essayer d'abord l'IA integree - instantanee et sans
+    // connexion - et n'envoyer a l'IA connectee que ce qu'elle ne comprend pas (LocalReply::understood).
+    bool        localFirst{false};
     json::Value extra;
     bool operator==(const Settings&) const = default;
 };

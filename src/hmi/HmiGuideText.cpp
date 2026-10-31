@@ -4005,14 +4005,19 @@ const std::vector<Topic>& topics() {
              {K::Table, "R\xC3\xA9glage\tCe qu'il fait\nFournisseur\t**IA int\xC3\xA9gr\xC3\xA9" "e** (sans "
                          "connexion), **D\xC3\xA9monstration** (sans IA, rien ne quitte le PC), **Anthropic "
                          "(Claude)**, ou **Compatible OpenAI** (Ollama, LM Studio, services "
-                         "gratuits\xE2\x80\xA6).\nService\t(Compatible OpenAI, \xC3\xA0 la place de "
-                         "l'Effort) **Ollama** ou **LM Studio** (sur ce PC, gratuits, sans cl\xC3\xA9), "
-                         "**OpenRouter**, **Groq**, **Google Gemini**, **Mistral** (en ligne, avec une "
-                         "cl\xC3\xA9), ou **Autre**. Choisir un service remplit l'Adresse ; \xC2\xAB Autre "
-                         "\xC2\xBB : l'adresse \xC3\xA0 la main.\nMod\xC3\xA8le\tUne case libre, vide au "
-                         "d\xC3\xA9part : rien n'est impos\xC3\xA9 par le logiciel (exemples : "
-                         "claude-opus-5-5, llama3.2). **Lister les mod\xC3\xA8les** demande au service ceux "
-                         "qu'il propose (gratuit) : un clic en choisit un.\nEffort\tAuto (celui du "
+                         "gratuits\xE2\x80\xA6).", {}},
+             {K::Table, "Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e\t(Anthropic ou Compatible OpenAI) "
+                         "Chaque demande passe d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle "
+                         "comprend est r\xC3\xA9pondu tout de suite, sans connexion ni jeton ; l'IA "
+                         "connect\xC3\xA9" "e ne re\xC3\xA7oit que le reste (voir plus bas). "
+                         "D\xC3\xA9" "coch\xC3\xA9" "e au d\xC3\xA9part.\nService\t(Compatible OpenAI, "
+                         "\xC3\xA0 la place de l'Effort) **Ollama** ou **LM Studio** (sur ce PC, gratuits, "
+                         "sans cl\xC3\xA9), **OpenRouter**, **Groq**, **Google Gemini**, **Mistral** (en "
+                         "ligne, avec une cl\xC3\xA9), ou **Autre**. Choisir un service remplit l'Adresse ; "
+                         "\xC2\xAB Autre \xC2\xBB : l'adresse \xC3\xA0 la main.\nMod\xC3\xA8le\tUne case "
+                         "libre, vide au d\xC3\xA9part : rien n'est impos\xC3\xA9 par le logiciel (exemples "
+                         ": claude-opus-5-5, llama3.2). **Lister les mod\xC3\xA8les** demande au service "
+                         "ceux qu'il propose (gratuit) : un clic en choisit un.\nEffort\tAuto (celui du "
                          "mod\xC3\xA8le), Bas, Moyen, Haut : combien l'IA r\xC3\xA9" "fl\xC3\xA9" "chit "
                          "avant de r\xC3\xA9pondre. Haut est plus soign\xC3\xA9, Bas plus rapide et moins "
                          "cher.\nAdresse\tAnthropic : vide, ou le **relais de ton entreprise** "
@@ -4041,7 +4046,7 @@ const std::vector<Topic>& topics() {
                          "l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la "
                          "m\xC3\xAAme v\xC3\xA9rification stricte, le m\xC3\xAAme aper\xC3\xA7u, le "
                          "m\xC3\xAAme Ctrl+Z.\nBudget\tLes jetons par jour ou par mois (0 : aucun) "
-                         "\xE2\x80\x93 voir plus haut.", {}},
+                         "\xE2\x80\x93 voir plus haut.", {}, "1.16.1"},
              {K::Paragraph, "Puis le mode par d\xC3\xA9" "faut, la conservation de l'historique "
                          "(dur\xC3\xA9" "e, nombre de conversations), la confidentialit\xC3\xA9 (ce qui part "
                          "avec chaque demande : la vue active, la s\xC3\xA9lection, les noms et types des "
@@ -4115,17 +4120,44 @@ const std::vector<Topic>& topics() {
                          "l'envoi demande d'abord confirmation (\xC2\xAB Ton budget du jour est atteint (210 "
                          "k / 200 k jetons). Envoyer quand m\xC3\xAAme ? \xC2\xBB) : rien n'est "
                          "bloqu\xC3\xA9 sans te le dire.", {}},
+             {K::Heading, "Les deux ensemble : l'IA int\xC3\xA9gr\xC3\xA9" "e d'abord", {}, "1.16.1"},
+             {K::Paragraph, "Avec une IA connect\xC3\xA9" "e (Anthropic, Ollama, un service en ligne), coche "
+                         "**Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e** dans les param\xC3\xA8tres. "
+                         "Chaque demande passe alors d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e :", {}, "1.16.1"},
+             {K::Bullet, "ce qu'elle comprend (\xC2\xAB Ajoute 3 pompes \xC2\xBB, \xC2\xAB Mets P1 en rouge "
+                         "\xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL \xC2\xBB) "
+                         "est r\xC3\xA9pondu **tout de suite**, sans connexion ni jeton ; la r\xC3\xA9ponse "
+                         "le dit (\xC2\xAB R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e, sans connexion "
+                         "\xC2\xBB) ;", {}, "1.16.1"},
+             {K::Bullet, "ce qu'elle ne comprend pas part \xC3\xA0 l'IA connect\xC3\xA9" "e, avec la "
+                         "conversation (les r\xC3\xA9ponses de l'IA int\xC3\xA9gr\xC3\xA9" "e comprises) : "
+                         "rien n'est \xC3\xA0 redemander ;", {}, "1.16.1"},
+             {K::Bullet, "une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 l'IA connect\xC3\xA9" "e "
+                         "(elle la lit).", {}, "1.16.1"},
+             {K::Paragraph, "Les deux proposent les m\xC3\xAAmes op\xC3\xA9rations : la m\xC3\xAAme validation, "
+                         "le m\xC3\xAAme aper\xC3\xA7u, le m\xC3\xAAme Ctrl+Z.", {}, "1.16.1"},
+             {K::Tip, "Avec un mod\xC3\xA8le sur ce PC un peu lent (Ollama sans carte graphique), les "
+                         "demandes simples restent instantan\xC3\xA9" "es : le mod\xC3\xA8le ne travaille "
+                         "que pour les autres.", {}, "1.16.1"},
              {K::Heading, "Une IA gratuite sur ce PC : Ollama", {}},
              {K::Paragraph, "Ollama fait tourner un mod\xC3\xA8le d'IA sur ton PC : gratuit, sans cl\xC3\xA9, "
-                         "sans connexion, rien ne quitte le PC.", {}},
-             {K::Step, "Installe Ollama (ollama.com) ; il tourne en arri\xC3\xA8re-plan.", "1"},
+                         "sans connexion, rien ne quitte le PC. C'est un logiciel \xC3\xA0 part, \xC3\xA0 "
+                         "t\xC3\xA9l\xC3\xA9" "charger une fois.", {}},
+             {K::Step, "Installe Ollama : ollama.com \xE2\x80\xBA Download \xE2\x80\xBA Windows "
+                         "(OllamaSetup.exe). Il tourne ensuite en arri\xC3\xA8re-plan (son ic\xC3\xB4ne "
+                         "pr\xC3\xA8s de l'horloge).", "1"},
              {K::Step, "T\xC3\xA9l\xC3\xA9" "charge un mod\xC3\xA8le, dans une invite de commandes : "
-                         "**ollama pull llama3.2** (environ 2 Go ; un mod\xC3\xA8le plus gros comprend "
-                         "mieux, mais demande plus de m\xC3\xA9moire et r\xC3\xA9pond plus lentement).", "2"},
+                         "**ollama pull qwen2.5:7b** (environ 4,7 Go, 8 Go de m\xC3\xA9moire au moins, 16 "
+                         "conseill\xC3\xA9s) ou **ollama pull llama3.1:8b** ; plus l\xC3\xA9ger, pour un "
+                         "petit PC : **ollama pull qwen2.5:3b** (environ 2 Go). Un mod\xC3\xA8le plus gros "
+                         "comprend mieux, mais r\xC3\xA9pond plus lentement.", "2"},
              {K::Step, "Dans les param\xC3\xA8tres de l'Assistant : Fournisseur **Compatible OpenAI**, "
                          "Service **Ollama** (l'adresse se remplit : http://localhost:11434/v1), **Lister "
                          "les mod\xC3\xA8les**, choisis le tien, **Enregistrer**. Pas de cl\xC3\xA9.", "3"},
              {K::Step, "La bande dit \xC2\xAB Sur ce PC : pas de limite \xC2\xBB.", "4"},
+             {K::Tip, "Un PC de l'usine sans Internet : installe Ollama et t\xC3\xA9l\xC3\xA9" "charge le "
+                         "mod\xC3\xA8le sur un autre PC, puis copie le dossier des mod\xC3\xA8les "
+                         "(C:\\Users\\<toi>\\.ollama\\models) au m\xC3\xAAme endroit.", {}},
              {K::Paragraph, "LM Studio se r\xC3\xA8gle de la m\xC3\xAAme fa\xC3\xA7on (Service **LM Studio**, "
                          "son serveur local d\xC3\xA9marr\xC3\xA9).", {}},
              {K::Warning, "Ollama coupe en silence ce qui d\xC3\xA9passe la fen\xC3\xAAtre de contexte du "
@@ -4148,7 +4180,7 @@ const std::vector<Topic>& topics() {
                          "gratuites se r\xC3\xA9servent le droit d'utiliser les demandes.", {}},
          },
          {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
-         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE"},
+         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
          {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres"},
          {},
          "",
@@ -4282,6 +4314,10 @@ const std::vector<Topic>& topics() {
                          "branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de l'Assistant IA "
                          "\xE2\x80\xBA Fournisseur) : ses propositions passent par les m\xC3\xAAmes "
                          "contr\xC3\xB4les.", {}},
+             {K::Tip, "Les deux \xC3\xA0 la fois : avec une IA connect\xC3\xA9" "e, coche **Essayer "
+                         "d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e** \xE2\x80\x93 elle r\xC3\xA9pond tout de "
+                         "suite \xC3\xA0 ce qu'elle comprend, et passe le reste \xC3\xA0 l'IA "
+                         "connect\xC3\xA9" "e (voir L'Assistant IA).", {}, "1.16.1"},
              {K::Tip, "Renommer n'est pas une op\xC3\xA9ration de l'Assistant : \xC2\xAB Renomme Cuve_1 "
                          "en Bac_Eau \xC2\xBB propose une copie exacte \xC3\xA0 la m\xC3\xAAme place sous le "
                          "nouveau nom, puis le retrait de l'original (l'aper\xC3\xA7u le montre, Ctrl+Z "

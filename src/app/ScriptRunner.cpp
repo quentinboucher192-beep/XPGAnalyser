@@ -666,6 +666,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia budget N [jour | mois]           le budget en jetons (0 : aucun)
     //  ia contexte N                       la fenetre de contexte du modele (0 : Auto)
     //  ia outil auto | outil | texte       l'appel d'outil, ou le JSON dans le texte
+    //  ia dabord oui | non                 1.16.1 : l'IA integree d'abord, l'IA connectee pour le reste
     //  ia limite                           au journal : la bande de la limite (ses lignes) et les cumuls
     if (cmd == "ia") {
         const std::string sub = lower(arg(1));
@@ -721,6 +722,16 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         if (sub == "cle") { as.setApiKey(arg(2)); panel->sync(); return Step::Yield; }   // jamais au journal
         // ---- 1.16.0 : le service, le budget, la fenetre de contexte, l'outil, la limite ----
+        // 1.16.1 : ia dabord oui|non - l'IA integree d'abord, l'IA connectee pour ce qu'elle ne comprend pas
+        if (sub == "dabord") {
+            const std::string v = lower(arg(2));
+            if (v != "oui" && v != "non") { fail("ia dabord " + v + " : oui ou non"); return Step::Next; }
+            ai::Settings st = as.settings();
+            st.localFirst = v == "oui";
+            as.setSettings(st);
+            panel->sync();
+            return Step::Yield;
+        }
         if (sub == "service" || sub == "budget" || sub == "contexte" || sub == "outil") {
             ai::Settings st = as.settings();
             const std::string v = lower(arg(2));

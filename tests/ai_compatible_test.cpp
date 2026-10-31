@@ -1046,6 +1046,50 @@ void testPanelBand() {
     ai::setRoot({});
 }
 
+// 1.16.1 : l'IA integree d'abord - ce qu'elle comprend ne part pas ; le reste part a l'IA connectee.
+void testLocalFirst() {
+    std::printf("[assistant, IA integree d'abord]\n");
+    g_now = at(2026, 10, 31);
+    Fixture f("dabord");
+    FakeScript s;
+    f.as().setProviderFactory([&s](std::string_view) { return std::make_unique<FakeProvider>(s); });
+    f.configure("ollama", "http://localhost:11434/v1", "llama3.2", "");
+    const auto wait = [&] {
+        for (int k = 0; k < 400 && f.as().generating(); ++k) f.step(0.05);
+        f.step();
+    };
+    // Sans la case : tout part a l'IA connectee (comme en 1.16.0).
+    s.replies.push_back({textEv("Ok."), doneEv()});
+    check(f.panel->sendText("Ajoute une cuve"), "sans la case : envoyer");
+    wait();
+    check(s.requests.size() == 1, "sans la case : la demande part a l'IA connectee");
+    // Avec la case.
+    {
+        ai::Settings st = f.as().settings();
+        st.localFirst = true;
+        f.as().setSettings(st);
+        f.as().newConversation();
+        f.panel->sync();
+    }
+    check(f.panel->sendText("Ajoute une cuve"), "avec la case : envoyer");
+    wait();
+    const auto* c = f.as().current();
+    const auto* m = c && !c->messages.empty() ? &c->messages.back() : nullptr;
+    check(s.requests.size() == 1, "ce que l'IA integree comprend ne part pas");
+    check(m && m->role == "assistant" && m->proposal && has(m->text, "R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e"),
+          "la reponse de l'IA integree, sa proposition, la mention (" + (m ? m->text : std::string("aucune")) + ")");
+    check(f.as().usageTotals().tokensToday == 0, "aucun jeton compte");
+    // Ce qu'elle ne comprend pas part a l'IA connectee, avec la conversation.
+    s.replies.push_back({textEv("Voici un poeme."), doneEv()});
+    check(f.panel->sendText("Quelle est la capitale de l'Australie ?"), "une demande hors de ses regles : envoyer");
+    wait();
+    check(s.requests.size() == 2, "ce qu'elle ne comprend pas part a l'IA connectee");
+    m = f.as().current() && !f.as().current()->messages.empty() ? &f.as().current()->messages.back() : nullptr;
+    check(m && has(m->text, "Voici un poeme") && !has(m->text, "R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e"), "la reponse de l'IA connectee");
+    check(s.requests.size() == 2 && s.requests.back().turns.size() >= 3, "l'IA connectee recoit la conversation (la reponse de l'IA integree comprise)");
+    ai::setRoot({});
+}
+
 // L'Assistant et le vrai fournisseur sur le faux transport : un modele sans outil.
 void testAssistantTextTool() {
     std::printf("[assistant : modele sans outil]\n");
@@ -1119,7 +1163,12 @@ void testSettings() {
     budget->setText("200000");
     period->setSelectedIndex(1);
     model->setText("mistral-small-latest");
+    // 1.16.1 : la case << Essayer d'abord l'IA integree >> - active avec un fournisseur relie, dans le brouillon
+    auto* dabord = dynamic_cast<ui::Checkbox*>(d->field("dabord"));
+    check(dabord && dabord->enabled() && !dabord->isChecked(), "la case IA integree d'abord : active, decochee par defaut");
+    if (dabord) dabord->setState(ui::Checkbox::State::Checked);
     const ai::Settings draft = d->draft();
+    check(draft.localFirst, "la case cochee : dans le brouillon");
     check(draft.provider == "openai" && draft.preset == "mistral" && draft.endpoint == "https://api.mistral.ai/v1" && draft.contextTokens == 8192
               && draft.toolMode == "texte" && draft.budgetTokens == 200000 && draft.budgetPeriod == "mois",
           "le brouillon : le service, l'adresse, la fenetre, l'outil, le budget");
@@ -1132,7 +1181,7 @@ void testSettings() {
         check(rec.saw("Service") && rec.saw("Fen\xC3\xAAtre de contexte") && rec.saw("Budget (jetons)") && rec.saw("Outil"), "dessinee a 1280 x 800 : les nouvelles lignes");
         const auto ok = findButton(*d->widgetRoot(), "Enregistrer");
         bool inside = ok != nullptr;
-        for (ui::Widget* w : {d->field("budget"), d->field("periode"), d->field("memoire"), d->field("tester")})
+        for (ui::Widget* w : {d->field("budget"), d->field("periode"), d->field("memoire"), d->field("tester"), d->field("dabord")})
             inside = inside && w && w->bounds().bottom() <= ok->bounds().y;
         check(inside, "a 1280 x 800 : tout tient au-dessus des boutons");
     }
@@ -1159,6 +1208,7 @@ void testSettings() {
     check(f.as().settings().preset == "openrouter" && f.as().contextWindow() == 32768, "la fenetre Auto : celle que le service dit (32 768)");
     const std::string json = readAll(f.dir / "IA" / "parametres.json");
     check(has(json, "\"service\": \"openrouter\"") && has(json, "\"budget\"") && !has(json, "cle-or"), "parametres.json : le service, le budget, sans la cle");
+    check(f.as().settings().localFirst && has(json, "\"integreeDabord\": true"), "parametres.json : l'IA integree d'abord");
     ai::setHttpFactory(nullptr);
     ai::setRoot({});
 }
@@ -1332,6 +1382,7 @@ int main() {
     testUsage();
     testProvider();
     testPanelBand();
+    testLocalFirst();
     testAssistantTextTool();
     testSettings();
     testCurl();

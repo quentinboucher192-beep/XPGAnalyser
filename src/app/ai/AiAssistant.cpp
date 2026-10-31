@@ -293,10 +293,21 @@ bool Assistant::send(std::string text, std::string* why) {
     if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
     if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
     if (text.empty() && pending_.empty()) return fail("Rien \xC3\xA0 envoyer.");
-    if (live()) {
+    // 1.16.1 : L'IA INTEGREE D'ABORD (Settings::localFirst) - ce qu'elle comprend est repondu tout de suite, sans
+    // connexion ni jeton ; l'IA connectee ne recoit que ce qu'elle ne comprend pas. Une piece jointe va a l'IA
+    // connectee (elle la lit).
+    std::optional<LocalReply> localFirst;
+    if (live() && settings_.localFirst && pending_.empty() && !text.empty()) {
+        const auto keep = host_.document ? host_.document() : nullptr;   // tenu le temps de la lecture
+        const Conversation* c0 = cur();
+        LocalReply lr = askLocal(c0, c0 ? c0->messages.size() : 0, context(), text);
+        if (lr.understood) localFirst = std::move(lr);
+    }
+    if (live() && !localFirst) {
         // 1.15.0 : un vrai fournisseur. Rien ne change dans la conversation si l'envoi ne part pas.
         std::string w;
         if (!ready(&w)) return fail(w);
+        localSuggestions_.clear();
         // 1.16.0 : le budget atteint - l'envoi demande confirmation (le panneau la pose ; rien n'est
         // bloque sans le dire).
         if (budgetBlocks(&w)) return fail(w);
@@ -377,26 +388,12 @@ bool Assistant::send(std::string text, std::string* why) {
     // 1.16.0 : l'IA integree (sur ce PC, des regles) ; sinon la demonstration.
     DemoReply reply;
     localSuggestions_.clear();
-    if (local()) {
-        PromptInput in;
-        in.project = ctx.project;
-        in.view = ctx.view;
-        in.selection = ctx.selection;
-        in.settings = settings_;
-        in.env = host_.env;
-        in.projectName = host_.projectName ? host_.projectName() : std::string{};
-        in.request = text;
-        // les tours d'avant (les six derniers) : la demande, la proposition de sa reponse
-        std::vector<LocalTurn> history;
-        for (std::size_t i = 0; i + 1 < c.messages.size(); ++i) {
-            if (c.messages[i].role != "utilisateur") continue;
-            LocalTurn turn;
-            turn.request = c.messages[i].text;
-            if (i + 1 < c.messages.size() - 1 && c.messages[i + 1].role == "assistant") turn.proposal = c.messages[i + 1].proposal;
-            history.push_back(std::move(turn));
-        }
-        if (history.size() > 6) history.erase(history.begin(), history.end() - 6);
-        LocalReply lr = understand(in, text, history);
+    const bool byLocal = local() || localFirst.has_value();
+    if (byLocal) {
+        // les tours d'avant : ceux de la conversation, sans la demande qu'on vient d'y mettre
+        LocalReply lr = localFirst ? std::move(*localFirst) : askLocal(&c, c.messages.size() - 1, ctx, text);
+        if (localFirst)
+            lr.text += "\n\n*(R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e, sans connexion. Ce qu'elle ne comprend pas part \xC3\xA0 l'IA connect\xC3\xA9" "e.)*";
         reply.text = std::move(lr.text);
         reply.proposal = std::move(lr.proposal);
         // 1.16.0 (captures) : l'empreinte d'avant, celle de ce que la proposition touche (la vue ouverte, ou la vue
@@ -435,7 +432,7 @@ bool Assistant::send(std::string text, std::string* why) {
     gen_.words = countWords(gen_.full);
     gen_.proposal = std::move(reply.proposal);
     gen_.suggestions = reply.suggestions;
-    gen_.local = local();
+    gen_.local = byLocal;
     suggestionsAfter_ = false;
     (void)touch(c);
     if (first) appendActivity("conversation", "Nouvelle conversation : " + cur()->title);
@@ -445,6 +442,29 @@ bool Assistant::send(std::string text, std::string* why) {
     ++revision_;
     (void)doc;
     return true;
+}
+
+LocalReply Assistant::askLocal(const Conversation* c, std::size_t turns, const DemoContext& ctx, const std::string& text) const {
+    PromptInput in;
+    in.project = ctx.project;
+    in.view = ctx.view;
+    in.selection = ctx.selection;
+    in.settings = settings_;
+    in.env = host_.env;
+    in.projectName = host_.projectName ? host_.projectName() : std::string{};
+    in.request = text;
+    // les tours d'avant (les six derniers) : la demande, la proposition de sa reponse
+    std::vector<LocalTurn> history;
+    if (c)
+        for (std::size_t i = 0; i < turns && i < c->messages.size(); ++i) {
+            if (c->messages[i].role != "utilisateur") continue;
+            LocalTurn turn;
+            turn.request = c->messages[i].text;
+            if (i + 1 < turns && c->messages[i + 1].role == "assistant") turn.proposal = c->messages[i + 1].proposal;
+            history.push_back(std::move(turn));
+        }
+    if (history.size() > 6) history.erase(history.begin(), history.end() - 6);
+    return understand(in, text, history);
 }
 
 std::string Assistant::readPlcAttachments(const std::vector<Attachment>& attachments) {
@@ -750,6 +770,8 @@ const std::vector<std::string>& Assistant::suggestions() const {
     // 1.16.0 (captures) : une IA en ligne ou sur ce PC - des demandes ordinaires (celles de la demonstration citent
     // des objets et une variable de son scenario).
     if (live()) {
+        // 1.16.1 : la derniere reponse venait de l'IA integree (essayee d'abord) - ses suggestions de suite
+        if (settings_.localFirst && suggestionsAfter_ && !localSuggestions_.empty()) return localSuggestions_;
         static const std::vector<std::string> k = {
             "Cr\xC3\xA9" "e un synoptique de station de pompage",
             "Ajoute une cuve avec un indicateur de niveau",

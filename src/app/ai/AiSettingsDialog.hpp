@@ -122,6 +122,7 @@ private:
     ui::DropDown*     tool_{nullptr};
     ui::InputText*    budget_{nullptr};
     ui::DropDown*     period_{nullptr};
+    ui::Checkbox*     localFirst_{nullptr};   // 1.16.1 : l'IA integree d'abord
     void              providerChanged();
     ui::Button*       cancel_{nullptr};
     ui::Button*       ok_{nullptr};

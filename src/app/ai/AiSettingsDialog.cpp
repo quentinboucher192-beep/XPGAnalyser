@@ -125,6 +125,8 @@ protected:
         d_.enabled_->setBounds({x, y, colW, kRow - 4.f});
         y += kRow;
         row("Fournisseur", d_.provider_);
+        d_.localFirst_->setBounds({x, y, colW, kRow - 6.f});   // 1.16.1 : l'IA integree d'abord
+        y += kRow - 4.f;
         heading("CONNEXION");
         const bool openai = d_.openAIShown();   // 1.16.0 : le Service a la place de l'Effort
         if (openai) row("Service", d_.service_);
@@ -406,6 +408,11 @@ core::Status AiSettingsDialog::buildUi() {
     period_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".periode")));
     period_->setItems({{"par jour", "jour"}, {"par mois", "mois"}});
     period_->setSelectedIndex(s.budgetPeriod == "mois" ? 1 : 0);
+    // 1.16.1 : l'IA integree d'abord, l'IA connectee pour ce qu'elle ne comprend pas
+    localFirst_ = check("Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e (instantan\xC3\xA9" "e, sans connexion)", ".dabord", s.localFirst);
+    localFirst_->setTooltip("Chaque demande passe d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, "
+                            "sans connexion ni jeton. L'IA connect\xC3\xA9" "e ne re\xC3\xA7oit que ce qu'elle ne comprend pas (et les demandes "
+                            "avec une pi\xC3\xA8" "ce jointe).");
     sendView_ = check("La vue active (ses objets et leurs propri\xC3\xA9t\xC3\xA9s)", ".vue", s.sendView);
     sendSelection_ = check("La s\xC3\xA9lection", ".selection", s.sendSelection);
     sendVariables_ = check("Les variables (noms et types, jamais leurs valeurs)", ".variables", s.sendVariables);
@@ -462,7 +469,7 @@ void AiSettingsDialog::providerChanged() {
                           static_cast<ui::Widget*>(test_), static_cast<ui::Widget*>(endpoint_), static_cast<ui::Widget*>(timeout_),
                           static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_),
                           static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_),
-                          static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_)})
+                          static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_), static_cast<ui::Widget*>(localFirst_)})
         if (w) w->setEnabled(net);
     if (remember_) remember_->setEnabled(net && keyProtectionAvailable());
     if (auto* r = widgetRoot()) r->invalidateLayout();
@@ -509,6 +516,7 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "outil") return tool_;
     if (name == "budget") return budget_;
     if (name == "periode") return period_;
+    if (name == "dabord") return localFirst_;
     return nullptr;
 }
 
@@ -536,6 +544,7 @@ Settings AiSettingsDialog::draft() const {
     s.sendSelection = sendSelection_->isChecked();
     s.sendVariables = sendVariables_->isChecked();
     s.sendAttachments = sendAttachments_->isChecked();
+    s.localFirst = localFirst_->isChecked();
     // 1.16.0 : le service, la fenetre de contexte (vide : Auto), l'outil, le budget.
     if (s.provider == "openai")
         if (const auto* it = service_->selectedItem()) s.preset = it->value;

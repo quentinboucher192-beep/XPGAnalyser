@@ -58,6 +58,8 @@
 
 namespace app::ai {
 
+struct LocalReply;   // AiLocal.hpp
+
 class Assistant {
 public:
     // Ce que l'application donne (l'ecran du projet ; un essai, les siens).
@@ -249,6 +251,9 @@ private:
     // 1.16.0 (captures) : les exports de Control Expert joints (.XPG...) lus comme l'automate de la seance
     // (Host::readPlc) ; le texte a dire (vide : aucun).
     [[nodiscard]] std::string readPlcAttachments(const std::vector<Attachment>& attachments);
+    // 1.16.1 : l'IA integree sur la demande `text`, avec les `turns` premiers messages de `c` pour la suite des
+    // demandes (<< et une autre >>).
+    [[nodiscard]] LocalReply askLocal(const Conversation* c, std::size_t turns, const DemoContext& ctx, const std::string& text) const;
     void pollLive();
     void finishLive(const std::string& stopReason);
     void failLive(const ProviderEvent& e);
