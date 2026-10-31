@@ -16123,10 +16123,11 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Le tableau des membres** : un membre structure ou tableau se d\xC3\xA9plie sur "
                          "place - ses cases (`Purge[0]`, `Purge[1]`\xE2\x80\xA6 : les 200 premi\xC3\xA8res), "
                          "puis leurs membres, en retrait, avec leur type, leur unit\xC3\xA9, leur valeur "
-                         "initiale et leur **D\xC3\xA9" "calage depuis le d\xC3\xA9" "but du type** "
-                         "(`Purge[1].Debit` : mot 11). Ces lignes se lisent : elles se changent dans leur "
-                         "propre type (un double-clic l'ouvre) ; Monter, Descendre, Renommer, Supprimer le "
-                         "membre ne les visent pas.", {}, "1.16.1"},
+                         "initiale et leur **D\xC3\xA9" "calage depuis le d\xC3\xA9" "but du type** (celui "
+                         "de `Purge[1].Debit` compte depuis le premier mot de T_ConfigGaz, comme la colonne "
+                         "D\xC3\xA9" "calage des membres). Ces lignes se lisent : elles se changent dans "
+                         "leur propre type (un double-clic l'ouvre) ; Monter, Descendre, Renommer, Supprimer "
+                         "le membre ne les visent pas.", {}, "1.16.1"},
              {K::Bullet, "Partout : la fl\xC3\xA8" "che, **Droite** d\xC3\xA9plie, **Gauche** replie (ou "
                          "remonte \xC3\xA0 la ligne parente) ; le clic droit \xE2\x80\xBA **Tout "
                          "d\xC3\xA9plier**, **Tout replier**. Ce qui est d\xC3\xA9pli\xC3\xA9 se garde d'un "
