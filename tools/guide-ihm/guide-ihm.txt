@@ -1869,7 +1869,7 @@ L'en-tête du panneau dit « IA intégrée – sans connexion ». Aucun réglage
 | Un synoptique | « Crée un synoptique de station de pompage avec 3 cuves et 2 pompes par cuve » (« sans boutons », « sans vannes » se disent). |
 | Modifier | « Mets P1 en rouge », « Mets la cuve en bleu clair », « Change le texte de Bouton_1 en Démarrer », « Agrandis la cuve », « Largeur 200 pour Bouton_3 », « Déplace V1 à droite de P2 », « Monte P1 de 50 », « Cache V1 », « Renomme Cuve_1 en Bac_Eau ». |
 | Associer une variable | « Associe P1 à Pompe_1_Marche », « Relie la cuve au niveau ». |
-| Créer des variables, une vue | « Crée les variables Pompe_3_Marche et Pompe_4_Marche en BOOL », « Crée les variables de l'automate qui commencent par PT », « Crée une vue Vue_Process en 1920x1080 ». |
+| Créer des variables, une vue | « Crée les variables Pompe_3_Marche et Pompe_4_Marche en BOOL » (sans type dit, elle le tire du nom et le dit), « Crée les variables de l'automate qui commencent par PT » (les types qu'elles emploient d'abord), « Propose les types IHM des DDT », « Crée une vue Vue_Process en 1920x1080 », « Crée une vue Vue_Pompes avec 3 pompes et un voyant » (la vue et ses objets, un seul Ctrl+Z). |
 | Aligner, répartir, dupliquer, supprimer | « Aligne les boutons en haut », « Répartis les boutons », « Duplique P1 3 fois vers la droite », « Supprime les vannes ». |
 | Animer | « Fais clignoter V1 quand Defaut_V1 », « P1 verte si Pompe_1_Marche sinon rouge », « Cache Texte_1 quand Pompe_1_Marche ». |
 | Questions | « Que sais-tu faire ? », « Combien d'objets ? », « Combien de pompes ? », « Quelles variables ? », « Quels genres d'objets ? », « Quelles vues ? ». |
