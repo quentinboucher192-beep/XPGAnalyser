@@ -334,6 +334,12 @@ void testVariablesAndView() {
     check(op && op->action == ai::Operation::Action::Variables && op->variables.size() == 2 && op->variables[0].name == "Pompe_3_Marche"
               && op->variables[1].type == "BOOL",
           "creer deux variables BOOL (l'operation creer_variables)");
+    if (valid(b, r, "creer des variables")) {
+        const std::size_t vars = b.doc->project.programs.variables.size();
+        check(b.applyUndo(r, [&] { return b.doc->project.programs.variables.size() == vars + 2; })
+                  && b.doc->project.programs.variables.size() == vars,
+              "les variables creees en un pas, retirees par Ctrl+Z");
+    }
     op = firstOp(r = b.ask("cree une variable Niveau_Cuve REAL"));
     check(op && op->variables.size() == 1 && op->variables[0].type == "REAL" && op->variables[0].initial == "0", "une variable REAL");
     op = firstOp(r = b.ask("cree la variable Temperature_Four"));
@@ -342,15 +348,26 @@ void testVariablesAndView() {
     check(!r.proposal && has(r.text, "existe d\xC3\xA9j\xC3\xA0"), "une variable qui existe : rien a creer");
     r = b.ask("cr\xC3\xA9" "e les variables de l'automate");
     check(!r.proposal && has(r.text, "Aucun automate"), "sans automate relie : dit");
-    b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{{"PT101", "REAL"}}; };
+    b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{{"PT101", "REAL"}, {"PT102", "REAL"}, {"FT201", "REAL"}}; };
     r = b.ask("cree les variables de l'automate qui commencent par PT");
-    check(r.proposal || has(r.text, "Rien \xC3\xA0 cr\xC3\xA9" "er"), "avec un automate : la proposition, ou rien a creer (dit)");
+    op = firstOp(r);
+    check(op && op->action == ai::Operation::Action::Variables && op->variables.size() == 2 && op->variables[0].name == "PT101",
+          "les variables de l'automate qui commencent par PT : les deux (fromPlc)");
+    if (r.proposal) valid(b, r, "variables de l'automate");
+    r = b.ask("cree les variables de l'automate qui commencent par ZZ");
+    check(!r.proposal && has(r.text, "Rien \xC3\xA0 cr\xC3\xA9" "er"), "rien ne commence par ZZ : rien a creer (dit)");
     r = b.ask("propose les types IHM des DDT de l'automate");
     check(r.proposal || has(r.text, "automate"), "les types des DDT : proposes, ou dit");
     b.env = {};
     op = firstOp(r = b.ask("cr\xC3\xA9" "e une vue Vue_Process en 1920x1080"));
     check(op && op->action == ai::Operation::Action::View && op->name == "Vue_Process" && prop(*op, "largeur") == "1920" && prop(*op, "hauteur") == "1080",
           "creer une vue (creer_vue) : son nom, sa taille");
+    if (valid(b, r, "creer une vue")) {
+        const std::size_t views = b.doc->project.views.size();
+        check(b.applyUndo(r, [&] { return b.doc->project.views.size() == views + 1 && b.doc->project.viewByName("Vue_Process"); })
+                  && b.doc->project.views.size() == views,
+              "la vue creee en un pas, retiree par Ctrl+Z");
+    }
     op = firstOp(r = b.ask("cree une nouvelle vue de 1280 x 800"));
     check(op && op->action == ai::Operation::Action::View && prop(*op, "largeur") == "1280" && op->name == "Vue_1", "une vue sans nom : Vue_1, 1280x800");
     r = b.ask("cree une vue Vue_Test");
@@ -376,7 +393,10 @@ void testArrange() {
     op = firstOp(r = b.ask("duplique P1 3 fois vers la droite"));
     check(op && op->action == ai::Operation::Action::Duplicate && op->count == 3 && op->dx > 0 && op->dy == 0 && op->objects.front() == "Pompe_1",
           "dupliquer 3 fois vers la droite");
-    valid(b, r, "dupliquer");
+    if (valid(b, r, "dupliquer")) {
+        const std::size_t n = b.v().objects.size();
+        check(b.applyUndo(r, [&] { return b.v().objects.size() == n + 3; }), "trois copies en un pas, reprises par Ctrl+Z");
+    }
     op = firstOp(r = b.ask("copie la cuve vers le bas"));
     check(op && op->count == 1 && op->dy > 0 && op->dx == 0, "copier vers le bas");
     // des reperes $...$ : ils avancent
@@ -406,8 +426,11 @@ void testAnimate() {
     valid(b, r, "verte si sinon rouge");
     op = firstOp(r = b.ask("Texte_1 en rouge si Defaut_V1 sinon blanc"));
     check(op && has(prop(*op, "textColor"), "=SEL(Defaut_V1") && has(prop(*op, "textColor"), "#E5534B"), "un texte : une formule SEL (fx)");
+    if (valid(b, r, "formule SEL"))
+        check(b.applyUndo(r, [&] { return has(b.object("Texte_1")->expr("textColor"), "SEL(Defaut_V1"); }), "la formule posee (fx), reprise par Ctrl+Z");
     op = firstOp(r = b.ask("cache Texte_1 quand Pompe_1_Marche"));
     check(op && prop(*op, "visible") == "=NOT Pompe_1_Marche", "cacher quand : la formule de visible");
+    valid(b, r, "visible selon une variable");
     r = b.ask("fais clignoter V1 quand Defaut_Inconnu");
     check(!r.proposal && has(r.text, "n'existe pas"), "une condition sur une variable inconnue : jamais inventee");
 }

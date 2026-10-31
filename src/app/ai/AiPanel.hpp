@@ -175,6 +175,11 @@ public:
     // 1.15.0 : la ligne "ce qui part" sous la saisie (vide : pas montree), et l'etat de connexion.
     [[nodiscard]] gfx::Rect      outgoingRect() const noexcept { return outgoing_; }
     [[nodiscard]] gfx::Rect      statusRect() const noexcept { return statusLine_; }
+    // 1.16.0 : la bande de la limite et de la consommation, sous l'etat de connexion (toujours a jour :
+    // le compte a rebours avance sans envoi), ses lignes montrees et ce qu'elle dit (essais).
+    [[nodiscard]] gfx::Rect      limitRect() const noexcept { return limitLine_; }
+    [[nodiscard]] const std::vector<std::string>& limitLines() const noexcept { return bandLines_; }
+    [[nodiscard]] const UsageBand& usageBand() const noexcept { return band_; }
     [[nodiscard]] gfx::Rect      chatRect() const;
     [[nodiscard]] std::string    lastStatus() const { return lastStatus_; }
     // Le menu du clic droit d'une conversation (Renommer, Supprimer...).
@@ -240,6 +245,12 @@ private:
     bool                   syncing_{false};
     bool                   loaded_{false};
     core::ConnectionScope  links_;
+    // 1.16.0 (FOURNISSEURS) : la bande de la limite (sa place, ses lignes a la largeur, ce qu'elle dit).
+    void                     refreshBand(double now);
+    gfx::Rect                limitLine_{};
+    UsageBand                band_;
+    std::vector<std::string> bandLines_;
+    std::string              bandKey_;
 };
 
 // =============================================================================
@@ -316,6 +327,8 @@ private:
         std::vector<std::string> noteLines;
         bool                     noteError{false};
         float                    noteY{0.f}, retryY{0.f};
+        // 1.16.0 : ce que la proposition cree en plus des objets (la vue, les variables, les types), sous les comptes.
+        std::vector<std::string> createLines;
     };
     struct CardButtons {
         int         message{-1};

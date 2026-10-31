@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiSettingsDialog.hpp"
 
+#include "AiOpenAI.hpp"
 #include "AiPanel.hpp"
 #include "AiPaths.hpp"
 #include "AiSecret.hpp"
@@ -72,6 +73,14 @@ std::string keyNote() {
 const char* const kPrivacyNote = "Ce qui part chez le fournisseur avec chaque demande, en plus de la demande et de la conversation. "
                                  "En d\xC3\xA9monstration, rien ne quitte ce PC.";
 const char* const kEfforts[][2] = {{"Auto (celui du mod\xC3\xA8le)", ""}, {"Bas", "low"}, {"Moyen", "medium"}, {"Haut", "high"}};
+// 1.16.0 : l'outil, et la note de la cle d'un service compatible OpenAI.
+const char* const kTools[][2] = {{"Auto (l'appel d'outil, sinon le JSON dans le texte)", "auto"}, {"Appel d'outil", "outil"}, {"JSON dans le texte", "texte"}};
+std::string openAIKeyNote() {
+    return "Facultative pour un mod\xC3\xA8le sur ce PC (Ollama, LM Studio) ; un service en ligne donne la sienne (selon ses conditions, "
+           "parfois gratuite). " + std::string(keyProtectionAvailable() ? "M\xC3\xA9moris\xC3\xA9" "e, elle est prot\xC3\xA9g\xC3\xA9" "e par Windows. "
+                                                                   : "Gard\xC3\xA9" "e pour cette s\xC3\xA9" "ance seulement (Linux). ")
+           + "Jamais en clair, ni dans un journal.";
+}
 
 } // namespace
 
@@ -117,6 +126,8 @@ protected:
         y += kRow;
         row("Fournisseur", d_.provider_);
         heading("CONNEXION");
+        const bool openai = d_.openAIShown();   // 1.16.0 : le Service a la place de l'Effort
+        if (openai) row("Service", d_.service_);
         {   // le modele : la case sur toute la largeur (l'indication grise se lit en entier), puis
             // "Lister les modeles" dessous, a droite
             const float lw = ui::measureWidth(d_.listModels_->text(), gfx::FontId{16}) + 28.f;
@@ -124,7 +135,7 @@ protected:
             d_.listModels_->setBounds({x + colW - lw, y, lw, kRow - 4.f});
             y += kRow;
         }
-        row("Effort", d_.effort_);
+        if (!openai) row("Effort", d_.effort_);
         row("Adresse", d_.endpoint_);
         row("D\xC3\xA9lai (secondes)", d_.timeout_, 90.f);
         heading("CL\xC3\x89 API");
@@ -139,7 +150,7 @@ protected:
         }
         d_.remember_->setBounds({x, y, colW, kRow - 6.f});
         y += kRow - 4.f;
-        note(keyNote());
+        note(openai ? openAIKeyNote() : keyNote());
         {   // Tester la connexion, et son resultat a cote (a la ligne)
             const float tw = ui::measureWidth(d_.test_->text(), gfx::FontId{16}) + 34.f;
             d_.test_->setBounds({x, y, tw, kRow - 2.f});
@@ -153,6 +164,14 @@ protected:
         }
         heading("FONCTIONNEMENT");
         row("Mode par d\xC3\xA9" "faut", d_.mode_);
+        // 1.16.0 : la fenetre de contexte, l'outil, le budget (un fournisseur relie).
+        row("Fen\xC3\xAAtre de contexte", d_.context_, 150.f);
+        row("Outil", d_.tool_);
+        {
+            const float bw = 130.f;
+            row("Budget (jetons)", d_.budget_, bw);
+            d_.period_->setBounds({x + labelW + bw + 8.f, y - kRow, colW - labelW - bw - 8.f, kRow - 4.f});
+        }
         heading("HISTORIQUE DES CONVERSATIONS");
         row("Conserver", d_.days_);
         row("Au plus", d_.count_);
@@ -301,6 +320,25 @@ core::Status AiSettingsDialog::buildUi() {
     endpoint_ = input(".adresse", s.endpoint, "vide : l'adresse du fournisseur");
     endpoint_->setTooltip("Vide : l'adresse du fournisseur. Sinon, le relais de l'entreprise (https://\xE2\x80\xA6), qui d\xC3\xA9tient alors la cl\xC3\xA9 : "
                           "la demande part \xC3\xA0 <adresse>/v1/messages. http:// seulement vers ce poste (127.0.0.1).");
+    // 1.16.0 : le service compatible OpenAI (choisir remplit l'adresse ; le modele reste une case libre).
+    service_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".service")));
+    {
+        std::vector<ui::DropDown::Item> items;
+        int sel = static_cast<int>(servicePresets().size()) - 1;   // Autre
+        for (std::size_t i = 0; i < servicePresets().size(); ++i) {
+            const auto& sp = servicePresets()[i];
+            items.push_back({std::string(sp.label), std::string(sp.key)});
+            if (sp.key == s.preset) sel = static_cast<int>(i);
+        }
+        if (s.preset.empty()) sel = 0;   // Ollama : gratuit, sur ce PC
+        service_->setItems(std::move(items));
+        service_->setSelectedIndex(sel);
+        service_->setTooltip("Le service compatible OpenAI : choisir remplit l'Adresse (Autre : l'adresse \xC3\xA0 la main). Ollama et LM Studio "
+                             "tournent sur ce PC, gratuits et sans cl\xC3\xA9.");
+        links_ += service_->selectionChanged->connect([this](int i) {
+            if (const auto* it = service_->selectedItem(); it && i >= 0) (void)chooseService(it->value);
+        });
+    }
     timeout_ = input(".delai", std::to_string(s.timeoutSeconds), "60");
     timeout_->setValidator([](std::string_view t) { return t.size() <= 3 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
     key_ = input(".cle", panel_.assistant().apiKey(), "la cl\xC3\xA9 du fournisseur");
@@ -343,6 +381,31 @@ core::Status AiSettingsDialog::buildUi() {
         count_->setItems(std::move(items));
         count_->setSelectedIndex(sel);
     }
+    // 1.16.0 : la fenetre de contexte (vide : Auto), l'outil, le budget.
+    context_ = input(".contexte", s.contextTokens > 0 ? std::to_string(s.contextTokens) : std::string{}, "Auto");
+    context_->setValidator([](std::string_view t) { return t.size() <= 8 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
+    context_->setTooltip("La fen\xC3\xAAtre de contexte du mod\xC3\xA8le, en jetons. Vide : Auto (celle que le service dit dans la liste des mod\xC3\xA8les). "
+                         "Sous 16 000, les consignes sont resserr\xC3\xA9" "es. Ollama coupe en silence au-del\xC3\xA0 de sa fen\xC3\xAAtre : voir l'aide (F1).");
+    tool_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".outil")));
+    {
+        std::vector<ui::DropDown::Item> items;
+        int sel = 0;
+        for (std::size_t i = 0; i < std::size(kTools); ++i) {
+            items.push_back({kTools[i][0], kTools[i][1]});
+            if (s.toolMode == kTools[i][1]) sel = static_cast<int>(i);
+        }
+        tool_->setItems(std::move(items));
+        tool_->setSelectedIndex(sel);
+        tool_->setTooltip("Comment le mod\xC3\xA8le propose ses op\xC3\xA9rations : l'appel d'outil, ou un bloc JSON dans sa r\xC3\xA9ponse (les petits "
+                          "mod\xC3\xA8les gratuits). Les deux passent par la m\xC3\xAAme v\xC3\xA9rification et le m\xC3\xAAme aper\xC3\xA7u.");
+    }
+    budget_ = input(".budget", s.budgetTokens > 0 ? std::to_string(s.budgetTokens) : std::string{}, "0 : aucun");
+    budget_->setValidator([](std::string_view t) { return t.size() <= 11 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
+    budget_->setTooltip("Les jetons que tu t'accordes (tous les fournisseurs reli\xC3\xA9s). La jauge du panneau passe \xC3\xA0 l'orange \xC3\xA0 80 %, au "
+                        "rouge au-del\xC3\xA0 ; le budget atteint, l'envoi demande confirmation. Vide ou 0 : aucun.");
+    period_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".periode")));
+    period_->setItems({{"par jour", "jour"}, {"par mois", "mois"}});
+    period_->setSelectedIndex(s.budgetPeriod == "mois" ? 1 : 0);
     sendView_ = check("La vue active (ses objets et leurs propri\xC3\xA9t\xC3\xA9s)", ".vue", s.sendView);
     sendSelection_ = check("La s\xC3\xA9lection", ".selection", s.sendSelection);
     sendVariables_ = check("Les variables (noms et types, jamais leurs valeurs)", ".variables", s.sendVariables);
@@ -363,8 +426,52 @@ core::Status AiSettingsDialog::buildUi() {
     ok_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Enregistrer", base + ".enregistrer")));
     ok_->setStyle(ui::Button::Style::Primary);
     links_ += ok_->clicked->connect([this] { save(); });
+    links_ += provider_->selectionChanged->connect([this](int) { providerChanged(); });
     setRoot(std::move(body));
+    providerChanged();
     return core::ok();
+}
+
+// ---- 1.16.0 : le fournisseur choisi, le service --------------------------------------------------
+bool AiSettingsDialog::openAIShown() const {
+    const auto* it = provider_ ? provider_->selectedItem() : nullptr;
+    return it && it->value == "openai";
+}
+
+void AiSettingsDialog::providerChanged() {
+    const bool openai = openAIShown();
+    if (service_) service_->setVisibility(openai ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    if (effort_) effort_->setVisibility(openai ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+    if (endpoint_) {
+        endpoint_->setPlaceholder(openai ? "l'adresse du service (choisis-le au-dessus)" : "vide : l'adresse du fournisseur");
+        endpoint_->setTooltip(openai ? "L'adresse du service compatible OpenAI, jusqu'\xC3\xA0 /v1 (la demande part \xC3\xA0 <adresse>/chat/completions). "
+                                       "http:// vers ce PC ; vers une adresse priv\xC3\xA9" "e de l'usine (192.168.x, 10.x) seulement sans cl\xC3\xA9."
+                                     : "Vide : l'adresse du fournisseur. Sinon, le relais de l'entreprise (https://\xE2\x80\xA6), qui d\xC3\xA9tient alors la cl\xC3\xA9 : "
+                                       "la demande part \xC3\xA0 <adresse>/v1/messages. http:// seulement vers ce poste (127.0.0.1).");
+        // Le fournisseur compatible choisi, l'adresse vide : celle du service.
+        if (openai && endpoint_->text().empty())
+            if (const auto* it = service_->selectedItem()) (void)chooseService(it->value);
+    }
+    if (model_) model_->setPlaceholder(openai ? "ex. llama3.2 (Lister les mod\xC3\xA8les)" : "ex. claude-opus-5-5");
+    if (key_) key_->setPlaceholder(openai ? "facultative pour un mod\xC3\xA8le sur ce PC" : "la cl\xC3\xA9 du fournisseur");
+    if (auto* r = widgetRoot()) r->invalidateLayout();
+}
+
+bool AiSettingsDialog::chooseService(std::string_view key) {
+    const ServicePreset* sp = findServicePreset(key);
+    if (!sp) return false;
+    if (service_) {
+        const auto& items = service_->items();
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].value == key && service_->selectedIndex() != static_cast<int>(i)) service_->setSelectedIndex(static_cast<int>(i));
+    }
+    // "Autre" : l'adresse a la main (celle d'un service connu s'efface ; une adresse ecrite reste).
+    const std::string current = endpoint_->text();
+    bool known = current.empty();
+    for (const auto& p : servicePresets()) known = known || (!p.endpoint.empty() && current == p.endpoint);
+    if (!sp->endpoint.empty()) endpoint_->setText(std::string(sp->endpoint));
+    else if (known) endpoint_->setText({});
+    return true;
 }
 
 ui::Widget* AiSettingsDialog::field(const std::string& name) const {
@@ -386,6 +493,11 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "variables") return sendVariables_;
     if (name == "pieces") return sendAttachments_;
     if (name == "memoire") return memory_;
+    if (name == "service") return service_;
+    if (name == "contexte") return context_;
+    if (name == "outil") return tool_;
+    if (name == "budget") return budget_;
+    if (name == "periode") return period_;
     return nullptr;
 }
 
@@ -413,6 +525,13 @@ Settings AiSettingsDialog::draft() const {
     s.sendSelection = sendSelection_->isChecked();
     s.sendVariables = sendVariables_->isChecked();
     s.sendAttachments = sendAttachments_->isChecked();
+    // 1.16.0 : le service, la fenetre de contexte (vide : Auto), l'outil, le budget.
+    if (s.provider == "openai")
+        if (const auto* it = service_->selectedItem()) s.preset = it->value;
+    s.contextTokens = std::clamp(std::atoi(context_->text().c_str()), 0, 10000000);
+    if (const auto* it = tool_->selectedItem()) s.toolMode = it->value;
+    s.budgetTokens = std::max(0LL, std::atoll(budget_->text().c_str()));
+    if (const auto* it = period_->selectedItem()) s.budgetPeriod = it->value;
     return s;
 }
 
@@ -436,8 +555,8 @@ bool AiSettingsDialog::querying() const { return query_ != Query::None && panel_
 bool AiSettingsDialog::startQuery(bool listing) {
     const Settings s = draft();
     resultOk_ = false;
-    if (s.provider == "demo") {
-        result_ = "La d\xC3\xA9monstration n'a pas de connexion : choisis le fournisseur Anthropic (Claude).";
+    if (!providerUsesNetwork(s.provider)) {
+        result_ = "La d\xC3\xA9monstration et l'IA int\xC3\xA9gr\xC3\xA9" "e n'ont pas de connexion : choisis Anthropic (Claude) ou un service compatible OpenAI.";
         query_ = Query::None;
         return false;
     }
@@ -548,7 +667,7 @@ void AiSettingsDialog::finish(bool ok) {
 ui::EventResult AiSettingsDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
         bool listOpen = false;
-        for (ui::DropDown* d : {provider_, effort_, mode_, days_, count_})
+        for (ui::DropDown* d : {provider_, effort_, mode_, days_, count_, service_, tool_, period_})
             if (d && d->isOpen()) listOpen = true;
         if (modelsMenu_ && modelsMenu_->isOpen()) {
             modelsMenu_->close();

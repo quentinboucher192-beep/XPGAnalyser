@@ -43,12 +43,17 @@ struct Url {
     std::string path{"/"};      // le chemin et la requete, "/" au moins
     bool        hasPath{false}; // l'adresse ecrite avait un chemin (autre que "/")
     [[nodiscard]] bool        loopback() const;   // 127.x.x.x, localhost, ::1
+    // 1.16.0 : une adresse privee du reseau local (10.x, 192.168.x, 172.16-31.x) - un serveur Ollama de l'usine.
+    [[nodiscard]] bool        privateLan() const;
     [[nodiscard]] std::string text() const;       // l'adresse recomposee
     [[nodiscard]] std::string base() const;       // https://hote[:port], sans chemin
 };
 // Faux et `why` (en francais) : pas une adresse http(s), un hote vide, un port faux, ou
 // http:// vers un autre poste que celui-ci.
 bool parseUrl(std::string_view text, Url& out, std::string* why = nullptr);
+// 1.16.0 : `allowPrivateHttp` accepte aussi http:// vers une adresse privee du reseau local (un serveur
+// sans cle : la requete ne porte aucun secret) ; l'appelant le demande seulement sans cle.
+bool parseUrl(std::string_view text, Url& out, std::string* why, bool allowPrivateHttp);
 
 struct HttpRequest {
     std::string method{"POST"};           // "POST" | "GET"
@@ -57,6 +62,9 @@ struct HttpRequest {
     std::string body;
     int         connectTimeoutSeconds{20};
     int         idleTimeoutSeconds{60};   // rien recu pendant ce delai : Timeout
+    // 1.16.0 (a la fin) : http:// vers une adresse privee du reseau local est accepte (une requete
+    // SANS cle, vers un serveur de l'usine : parseUrl(..., true)).
+    bool        allowPrivateHttp{false};
 };
 
 struct HttpResponse {

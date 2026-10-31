@@ -652,6 +652,7 @@ void AiPanel::refreshButtons() {
 void AiPanel::tick(double now) {
     (void)assistant_->tick(now);
     sync();
+    refreshBand(now);   // 1.16.0 : la limite en direct (le compte a rebours avance chaque seconde)
     // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
     // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
     if (now - appliedCheck_ >= 0.25 || now < appliedCheck_) {
@@ -859,6 +860,28 @@ bool AiPanel::send() {
 bool AiPanel::sendText(const std::string& text) {
     cancelRename();
     std::string why;
+    // 1.16.0 : le budget atteint - une fenetre du logiciel demande confirmation (rien n'est bloque sans le dire).
+    if (std::string question; assistant_->budgetBlocks(&question)) {
+        if (!ui_.showDialog) {
+            say(question);
+            return false;
+        }
+        HmiAskDialog::Spec spec;
+        spec.id = "dialog.ai.budget";
+        spec.title = "Budget de l'Assistant IA";
+        spec.text = question + "\nLe budget se r\xC3\xA8gle dans les Param\xC3\xA8tres de l'Assistant IA (0 : aucun).";
+        spec.confirm = "Envoyer quand m\xC3\xAAme";
+        spec.width = 520.f;
+        ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, text](const menu::DialogResult& r) {
+            if (!r.accepted()) {
+                say("Envoi annul\xC3\xA9 : le budget est atteint.");
+                return;
+            }
+            assistant_->allowOverBudget();
+            if (sendText(text) && prompt_->text() == text) prompt_->setText({});
+        });
+        return false;
+    }
     if (!assistant_->send(text, &why)) {
         say(why);
         return false;
@@ -1040,7 +1063,22 @@ void AiPanel::onLayout() {
     settingsBtn_->setBounds({closeBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
     newBtn_->setBounds({settingsBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
     statusLine_ = {x, header_.bottom(), w, kStatusH};
-    modeRow_ = {x, statusLine_.bottom(), w, kModeH};
+    // 1.16.0 : la bande de la limite, sous l'etat de connexion - chaque ligne longue si elle tient,
+    // sinon courte (le detail est dans l'infobulle).
+    {
+        if (bandKey_.empty()) refreshBand(0.0);
+        bandLines_.clear();
+        const float tw = w - 2 * kPad - 22.f;
+        for (std::size_t i = 0; i < band_.lines.size(); ++i) {
+            const std::string& longer = band_.lines[i];
+            const std::string& shorter = i < band_.shortLines.size() ? band_.shortLines[i] : longer;
+            bandLines_.push_back(ui::measureWidth(longer, kMeta) <= tw ? longer : shorter);
+        }
+        const float lh = ui::lineHeight(kMeta) + 2.f;
+        const float bh = static_cast<float>(bandLines_.size()) * lh + 4.f + (band_.ratio >= 0 ? 4.f : 0.f);
+        limitLine_ = {x, statusLine_.bottom(), w, bh};
+    }
+    modeRow_ = {x, limitLine_.bottom(), w, kModeH};
     const float pw = ui::measureWidth("Pr\xC3\xA9visualisation", gfx::FontId{16}) + 22.f;
     const float dw = ui::measureWidth("Direct", gfx::FontId{16}) + 26.f;
     modePreview_->setBounds({x + kPad, modeRow_.y + 3.f, pw, kModeH - 8.f});
@@ -1110,6 +1148,24 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRoundedRect({statusLine_.x + kPad + 6.f, dotY - 4.f, 8.f, 8.f}, dot, 4.f);
     ctx.r.drawText({statusLine_.x + kPad + 22.f, statusLine_.y + (statusLine_.h - lhCap) / 2.f},
                    elideTip(ctx.r, a.connectionText(), f.caption, statusLine_.w - 2 * kPad - 24.f, statusLine_, tips_), f.caption, c.textMuted);
+    // ---- 1.16.0 : la limite et la consommation, en direct
+    if (limitLine_.h > 0.f) {
+        const float lh = ctx.r.lineHeight(kMeta) + 2.f;
+        const gfx::Color tone = band_.waiting ? c.warning : c.textMuted;
+        ui::drawIcon(ctx.r, ui::Icon::Info, {limitLine_.x + kPad + 3.f, limitLine_.y + 3.f, 13.f, 13.f}, band_.waiting ? c.warning : c.textMuted);
+        float ly = limitLine_.y + 2.f;
+        for (const auto& l : bandLines_) {
+            ctx.r.drawText({limitLine_.x + kPad + 22.f, ly}, elide(ctx.r, l, kMeta, limitLine_.w - 2 * kPad - 22.f), kMeta, tone);
+            ly += lh;
+        }
+        if (band_.ratio >= 0) {   // la jauge du budget : orange a 80 %, rouge au-dela
+            const gfx::Rect g{limitLine_.x + kPad + 22.f, limitLine_.bottom() - 5.f, limitLine_.w - 2 * kPad - 22.f, 3.f};
+            const gfx::Color fill = band_.level >= 2 ? c.error : band_.level == 1 ? c.warning : c.ok;
+            ctx.r.fillRect(g, alpha(c.border, 160));
+            ctx.r.fillRect({g.x, g.y, g.w * static_cast<float>(std::clamp(band_.ratio, 0.0, 1.0)), g.h}, fill);
+        }
+        tips_.emplace_back(limitLine_, band_.tooltip);
+    }
     // ---- le mode et la vue visee
     {
         const auto ctx2 = a.context();
@@ -1223,6 +1279,26 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
 
 std::string AiPanel::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, mouse); }
 
+// 1.16.0 : ce que dit la bande de la limite, a l'instant `now` ; la mise en page suit si le texte change.
+void AiPanel::refreshBand(double now) {
+    band_ = assistant_->usageBand(now);
+    std::string key = std::to_string(band_.level) + "|" + std::to_string(band_.ratio) + "|";
+    for (const auto& l : band_.lines) key += l + "\n";
+    for (const auto& l : band_.shortLines) key += l + "\n";
+    if (key == bandKey_) return;
+    const bool linesChanged = bandKey_.empty() || band_.lines.size() != bandLines_.size();
+    bandKey_ = std::move(key);
+    if (linesChanged) invalidateLayout();
+    else {
+        // Les memes lignes, d'autres mots : la longueur choisie peut changer (longue ou courte).
+        bandLines_.clear();
+        const float tw = bounds().w - 2 * kPad - 22.f;
+        for (std::size_t i = 0; i < band_.lines.size(); ++i)
+            bandLines_.push_back(ui::measureWidth(band_.lines[i], kMeta) <= tw || i >= band_.shortLines.size() ? band_.lines[i] : band_.shortLines[i]);
+    }
+    invalidate();
+}
+
 int AiPanel::rowAt(gfx::Point p) const {
     for (std::size_t i = 0; i < rows_.size(); ++i)
         if (rows_[i].h > 0.f && rows_[i].contains(p)) return static_cast<int>(i);
@@ -1277,7 +1353,7 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         // 1.15.0 : l'etat de connexion ouvre les parametres ("A configurer" : un clic).
-        if (statusLine_.contains(d->pos) && d->button == ui::MouseButton::Left) {
+        if ((statusLine_.contains(d->pos) || limitLine_.contains(d->pos)) && d->button == ui::MouseButton::Left) {
             openSettings();
             return ui::EventResult::Consumed;
         }
@@ -1446,8 +1522,9 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     std::string key;
     if (p) {
         key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
+        // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
         if (auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr)
-            if (const auto* v = targetView(doc->project, *p)) key += "|" + fingerprint(*v);
+            key += "|" + proposalPrint(doc->project, *p);
     }
     if (t.key != key || key.empty()) {
         t.key = key;
@@ -1514,6 +1591,11 @@ void AiChatView::measure() {
                     const Thumb& t = thumb(static_cast<int>(i));
                     const float cw = inner - 4.f;
                     float ch = 8.f + 24.f + 22.f;
+                    // 1.16.0 : la vue, les variables, les types crees - une ligne sous les comptes.
+                    if (const std::string made = creationSummary(*m.proposal); !made.empty()) {
+                        b.createLines = wrapPlain("Cr\xC3\xA9" "e aussi : " + made, kMeta, cw - 24.f);
+                        ch += static_cast<float>(b.createLines.size()) * kNoteH + 2.f;
+                    }
                     if (open) {
                         const bool stale = t.check.stale || t.check.viewMissing;
                         b.buttons = {"Pr\xC3\xA9visualiser\xE2\x80\xA6"};
@@ -1541,8 +1623,11 @@ void AiChatView::measure() {
                         std::string done;
                         switch (b.applied) {
                             case Assistant::Applied::Undone:
-                                done = "Annul\xC3\xA9" "e : la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant (Ctrl+Z, ou le projet rouvert sans "
-                                       "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer la remet.";
+                                done = usesOpenView(*m.proposal)
+                                           ? "Annul\xC3\xA9" "e : la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant (Ctrl+Z, ou le projet rouvert sans "
+                                             "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer la remet."
+                                           : "Annul\xC3\xA9" "e : ce qu'elle a cr\xC3\xA9\xC3\xA9 n'est plus dans le projet (Ctrl+Z, ou le projet rouvert sans "
+                                             "avoir \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9). R\xC3\xA9" "appliquer le remet.";
                                 b.buttons = {"R\xC3\xA9" "appliquer"};
                                 break;
                             case Assistant::Applied::Changed:
@@ -1853,6 +1938,11 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     count("Modifier", nm, c.info, cx);
     count("Supprimer", nr, c.error, cx);
     y += 22.f;
+    for (const auto& l : b.createLines) {   // 1.16.0 : la vue, les variables, les types crees
+        ctx.r.drawText({card.x + 12.f, y}, l, kMeta, c.ok);
+        y += kNoteH;
+    }
+    if (!b.createLines.empty()) y += 2.f;
     if (p->state != "proposee") {
         for (const auto& l : b.doneLines) {
             ctx.r.drawText({card.x + 12.f, y + 2.f}, l, kMeta, b.applied == Assistant::Applied::Undone ? c.warning : c.textMuted);

@@ -20,6 +20,14 @@
 //                    variables, les pieces jointes) - chacun se decoche ;
 //    Memoire et apprentissage...  la commande ia.memoire (grisee si elle n'existe pas).
 //
+//  1.16.0 (FOURNISSEURS) : le fournisseur "Compatible OpenAI" montre la liste
+//  Service (Ollama, LM Studio, OpenRouter, Groq, Google Gemini, Mistral, Autre :
+//  choisir remplit l'Adresse) a la place de l'Effort ; la cle y est facultative
+//  pour un modele sur ce PC (la note le dit). Fonctionnement : la Fenetre de
+//  contexte (vide : Auto, celle que le service dit), l'Outil (Auto, Appel
+//  d'outil, JSON dans le texte), le Budget (jetons, par jour ou par mois ; 0 :
+//  aucun) - pour tous les fournisseurs relies.
+//
 //  Enregistrer ecrit IA/parametres.json (sans la cle) ; Annuler, Echap : rien.
 //  Lister et Tester partent sur un fil (ai::ModelQuery) : la fenetre lit leur
 //  resultat a chaque image (Update), l'interface ne gele jamais.
@@ -31,6 +39,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ui { class Button; class Checkbox; class DropDown; class InputText; class PopupMenu; class ToggleButton; }
@@ -70,7 +79,11 @@ public:
 
     // Les champs, par leur nom (essais) : "actif", "fournisseur", "modele", "lister", "effort",
     // "adresse", "delai", "cle", "memoriser", "tester", "mode", "jours", "nombre", "vue",
-    // "selection", "variables", "pieces", "memoire".
+    // "selection", "variables", "pieces", "memoire" ; 1.16.0 : "service", "contexte", "outil",
+    // "budget", "periode".
+    // 1.16.0 : choisir un service (sa cle) remplit l'adresse ; la fenetre suit le fournisseur choisi.
+    bool chooseService(std::string_view key);
+    [[nodiscard]] bool openAIShown() const;
     [[nodiscard]] ui::Widget* field(const std::string& name) const;
 
 protected:
@@ -103,6 +116,13 @@ private:
     ui::Checkbox*     sendVariables_{nullptr};
     ui::Checkbox*     sendAttachments_{nullptr};
     ui::Button*       memory_{nullptr};
+    // 1.16.0 : le service compatible OpenAI, la fenetre de contexte, l'outil, le budget.
+    ui::DropDown*     service_{nullptr};
+    ui::InputText*    context_{nullptr};
+    ui::DropDown*     tool_{nullptr};
+    ui::InputText*    budget_{nullptr};
+    ui::DropDown*     period_{nullptr};
+    void              providerChanged();
     ui::Button*       cancel_{nullptr};
     ui::Button*       ok_{nullptr};
     bool              done_{false};

@@ -1113,6 +1113,8 @@ std::string Engine::colorKey(const hmi::Object& o, std::string* what) const {
 LocalReply Engine::finish(Proposal p, std::string text) const {
     LocalReply r;
     if (in_.project) {
+        // l'empreinte de la proposition : la vue ouverte, et ce qu'elle cree (une vue, des variables, des types)
+        p.fingerprint = proposalPrint(*in_.project, p);
         const Check ck = validate(*in_.project, p, in_.env);
         std::vector<std::string> real;
         // ce que le contrat ne valide pas encore (creer_vue, creer_variables ; une formule "=..." dans une
@@ -1796,9 +1798,10 @@ LocalReply Engine::createVariables() const {
         specs.push_back(std::move(s));
     }
     if (specs.empty() && plc) {
-        // l'automate relie : ses variables, ses types
-        auto ops = types ? typesFromPlc(*in_.project, in_.env, filter) : variablesFromPlc(*in_.project, in_.env, filter);
-        const bool linked = types ? static_cast<bool>(in_.env.plcTypes) : static_cast<bool>(in_.env.plcVariables);
+        // l'automate relie : ses types (DDT) ; ou ses variables, avec les types qu'elles emploient (fromPlc : une
+        // proposition entiere, chaque type une fois)
+        auto ops = types && !hasPrefix("variable") ? typesFromPlc(*in_.project, in_.env, filter) : fromPlc(*in_.project, in_.env, filter);
+        const bool linked = static_cast<bool>(in_.env.plcTypes) || static_cast<bool>(in_.env.plcVariables);
         if (ops.empty()) {
             if (!linked)
                 return ask("Aucun automate n'est reli\xC3\xA9 au projet : je n'ai rien \xC3\xA0 lire. Relie l'automate (Communication), puis redemande.");
@@ -1806,13 +1809,20 @@ LocalReply Engine::createVariables() const {
                        + (filter.empty() ? std::string{} : " qui r\xC3\xA9pond \xC3\xA0 " + code(filter)) + " a d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent dans l'IHM"
                        + " (ou l'automate n'en donne aucun).");
         }
-        std::size_t n = 0;
-        for (const auto& op : ops) n += types ? 1 : op.variables.size();
-        Proposal p = base(types ? "Types IHM depuis l'automate" : "Variables depuis l'automate");
+        std::size_t nv = 0, nt = 0;
+        for (const auto& op : ops) {
+            if (op.action == Operation::Action::Variables) nv += op.variables.size();
+            if (op.action == Operation::Action::Type) ++nt;
+        }
+        std::vector<std::string> what;
+        if (nt) what.push_back(plural(nt, "type IHM", "types IHM"));
+        if (nv) what.push_back(plural(nv, "variable", "variables"));
+        Proposal p = base(nv ? "Variables depuis l'automate" : "Types IHM depuis l'automate");
         p.ops = std::move(ops);
-        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + plural(n, types ? "type IHM" : "variable", types ? "types IHM" : "variables")
-                                        + "** depuis l'automate reli\xC3\xA9" + (filter.empty() ? std::string{} : " (ceux qui r\xC3\xA9pondent \xC3\xA0 " + code(filter) + ")")
-                                        + ". L'aper\xC3\xA7u les montre tous ; rien n'est cr\xC3\xA9\xC3\xA9 avant Appliquer.");
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + joinAnd(what) + "** depuis l'automate reli\xC3\xA9"
+                                        + (filter.empty() ? std::string{} : " (ceux qui r\xC3\xA9pondent \xC3\xA0 " + code(filter) + ")")
+                                        + " : les types d'abord, dans l'ordre o\xC3\xB9 ils s'emploient. L'aper\xC3\xA7u les montre tous ; rien n'est "
+                                          "cr\xC3\xA9\xC3\xA9 avant Appliquer.");
     }
     if (specs.empty()) {
         std::string why;

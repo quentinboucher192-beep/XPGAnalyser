@@ -26,13 +26,46 @@
 #  GET /v1/models rend trois modeles d'essai. Un prefixe de relais est accepte
 #  (/relais/v1/messages). Le journal (stderr) ne montre jamais la cle.
 #
-#  LANCER :  python3 -I tests/fixtures/ia/faux_fournisseur.py [--port 8765]
+#  1.16.0 : LES SERVICES COMPATIBLES OPENAI (Ollama, LM Studio, OpenRouter...) et
+#  LA LIMITE EN DIRECT, sur le meme port :
+#
+#    POST /v1/chat/completions   le flux "data: {...}" (choices[0].delta.content,
+#                                delta.tool_calls coupes en morceaux de 97 caracteres,
+#                                finish_reason, le morceau "usage" si stream_options
+#                                le demande, puis "data: [DONE]") ; les memes demandes
+#                                que ci-dessus (station, cuve, inventee, illisible,
+#                                longue, coupure, lent, surcharge...) ;
+#    GET /v1/models              sans l'en-tete anthropic-version : la liste au format
+#                                OpenAI, avec context_length (modele-essai 32768,
+#                                sans-outil 8192, petit 4096) ;
+#    le modele "sans-outil"      repond 400 "does not support tools" a une demande avec
+#                                outil ; sans outil, il ecrit sa proposition dans un bloc
+#                                ```json du texte (l'Outil "Auto" de l'Assistant) ;
+#    le modele "petit"           annonce une fenetre de 4096 jetons (/v1/models) ;
+#    la demande "json casse"     (sans outil) un bloc ```json illisible : refuse ;
+#    LA LIMITE                   chaque reponse porte ses en-tetes : Anthropic
+#                                (anthropic-ratelimit-requests-limit/-remaining/-reset en
+#                                date RFC 3339, -tokens-*), OpenAI (x-ratelimit-limit-
+#                                requests, x-ratelimit-remaining-tokens, -reset-* en duree
+#                                "6m0s") ; 20 demandes et 40 000 jetons par minute, qui
+#                                baissent a chaque demande ; epuisee (ou la demande
+#                                "epuise") : 429 avec retry-after ;
+#    l'usage                     message_start / message_delta (Anthropic), le dernier
+#                                morceau "usage" (OpenAI : prompt_tokens, completion_tokens).
+#  --sans-limite : aucun en-tete de limite (comme Ollama sur ce PC : "pas de limite").
+#
+#  LANCER :  python3 -I tests/fixtures/ia/faux_fournisseur.py [--port 8765] [--sans-limite]
 #  puis, dans IHM Studio (Parametres de l'Assistant IA, ou une seance) :
 #     ia fournisseur anthropic
 #     ia adresse "http://127.0.0.1:8765"
 #     ia modele "modele-essai"
 #     ia cle "cle-essai"
 #  (sous Wine, l'exe Windows parle a ce serveur par WinHTTP, comme a un relais.)
+#  ou, compatible OpenAI (1.16.0) :
+#     ia fournisseur openai
+#     ia service autre
+#     ia adresse "http://127.0.0.1:8765/v1"
+#     ia modele "modele-essai"        (ou "sans-outil", "petit")
 # =============================================================================
 import argparse
 import json
@@ -44,6 +77,48 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 COUNTERS = {}
 LOCK = threading.Lock()
+
+# 1.16.0 : la limite (une fenetre d'une minute), commune aux deux familles.
+WINDOW = 60.0
+LIMIT = {"requetes": 20, "jetons": 40000, "debut": time.time(), "fait_requetes": 0, "fait_jetons": 0}
+SANS_LIMITE = False
+
+
+def limit_take(tokens, exhaust=False):
+    """Compte une demande ; rend (ok, attente en secondes)."""
+    with LOCK:
+        now = time.time()
+        if now - LIMIT["debut"] >= WINDOW:
+            LIMIT.update(debut=now, fait_requetes=0, fait_jetons=0)
+        if exhaust:
+            LIMIT["fait_requetes"] = LIMIT["requetes"]
+        if LIMIT["fait_requetes"] >= LIMIT["requetes"]:
+            return False, max(1, int(WINDOW - (now - LIMIT["debut"]) + 0.999))
+        LIMIT["fait_requetes"] += 1
+        LIMIT["fait_jetons"] = min(LIMIT["jetons"], LIMIT["fait_jetons"] + tokens)
+        return True, 0
+
+
+def limit_headers(family):
+    if SANS_LIMITE:
+        return {}
+    with LOCK:
+        left = max(0.0, WINDOW - (time.time() - LIMIT["debut"]))
+        rr = LIMIT["requetes"] - LIMIT["fait_requetes"]
+        rt = LIMIT["jetons"] - LIMIT["fait_jetons"]
+    if family == "anthropic":
+        reset = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + left))
+        return {"anthropic-ratelimit-requests-limit": str(LIMIT["requetes"]), "anthropic-ratelimit-requests-remaining": str(rr),
+                "anthropic-ratelimit-requests-reset": reset, "anthropic-ratelimit-tokens-limit": str(LIMIT["jetons"]),
+                "anthropic-ratelimit-tokens-remaining": str(rt), "anthropic-ratelimit-tokens-reset": reset}
+    m, sec = divmod(left, 60)
+    dur = "%dm%.1fs" % (m, sec) if m else "%.2fs" % sec
+    return {"x-ratelimit-limit-requests": str(LIMIT["requetes"]), "x-ratelimit-remaining-requests": str(rr), "x-ratelimit-reset-requests": dur,
+            "x-ratelimit-limit-tokens": str(LIMIT["jetons"]), "x-ratelimit-remaining-tokens": str(rt), "x-ratelimit-reset-tokens": dur}
+
+
+def estimate_tokens(raw):
+    return max(1, len(raw) // 4)
 
 
 def fold(text):
@@ -82,10 +157,10 @@ def station_ops():
     return ops
 
 
-def message_start(model):
+def message_start(model, input_tokens=100):
     return sse("message_start", {"type": "message_start", "message": {
         "id": "msg_faux", "type": "message", "role": "assistant", "model": model, "content": [],
-        "stop_reason": None, "usage": {"input_tokens": 100, "output_tokens": 1}}})
+        "stop_reason": None, "usage": {"input_tokens": input_tokens, "cache_read_input_tokens": 0, "output_tokens": 1}}})
 
 
 def text_block(index, text, words_per_chunk=3):
@@ -143,12 +218,15 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("[faux fournisseur] " + (fmt % args) + "\n")
 
-    def error(self, status, kind, message, headers=None):
-        body = json.dumps({"type": "error", "error": {"type": kind, "message": message}}).encode("utf-8")
+    def error(self, status, kind, message, headers=None, family="anthropic"):
+        if family == "openai":
+            body = json.dumps({"error": {"message": message, "type": kind, "code": status}}).encode("utf-8")
+        else:
+            body = json.dumps({"type": "error", "error": {"type": kind, "message": message}}).encode("utf-8")
         self.send_response(status)
         self.send_header("content-type", "application/json")
         self.send_header("content-length", str(len(body)))
-        for k, v in (headers or {}).items():
+        for k, v in list(limit_headers(family).items()) + list((headers or {}).items()):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -165,6 +243,21 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.split("?")[0].endswith("/v1/models"):
             self.error(404, "not_found_error", "Not Found")
             return
+        if not self.headers.get("anthropic-version"):   # 1.16.0 : un client compatible OpenAI
+            if self.headers.get("authorization") == "Bearer cle-refusee":
+                self.error(401, "invalid_api_key", "Incorrect API key provided", family="openai")
+                return
+            data = {"object": "list", "data": [
+                {"id": "modele-essai", "object": "model", "owned_by": "faux", "context_length": 32768},
+                {"id": "sans-outil", "object": "model", "owned_by": "faux", "context_length": 8192},
+                {"id": "petit", "object": "model", "owned_by": "faux", "context_length": 4096}]}
+            body = json.dumps(data).encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not self.key_ok():
             return
         data = {"data": [{"type": "model", "id": "modele-essai", "display_name": "Modèle d'essai"},
@@ -178,11 +271,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def stream(self, parts, cut=False, delay=0.0):
+    def stream(self, parts, cut=False, delay=0.0, family="anthropic"):
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.send_header("cache-control", "no-cache")
         self.send_header("transfer-encoding", "chunked")
+        for k, v in limit_headers(family).items():
+            self.send_header(k, v)
         self.end_headers()
         for p in parts:
             self.wfile.write(b"%x\r\n%s\r\n" % (len(p), p))
@@ -200,6 +295,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("content-length") or 0)
         raw = self.rfile.read(length)
+        if self.path.split("?")[0].endswith("/chat/completions"):
+            self.chat(raw)
+            return
         if not self.path.split("?")[0].endswith("/v1/messages"):
             self.error(404, "not_found_error", "Not Found")
             return
@@ -221,6 +319,10 @@ class Handler(BaseHTTPRequestHandler):
         text, result = last_user(body)
         f = fold(text)
         sys.stderr.write("[faux fournisseur] demande : %r%s\n" % (text.strip()[:80], " ; resultat : %r" % result if result else ""))
+        ok, wait = limit_take(estimate_tokens(raw), "epuise" in f)
+        if not ok:
+            self.error(429, "rate_limit_error", "Number of requests has exceeded your rate limit", {"retry-after": str(wait)})
+            return
         if "surcharge" in f:
             with LOCK:
                 COUNTERS[f] = COUNTERS.get(f, 0) + 1
@@ -228,7 +330,7 @@ class Handler(BaseHTTPRequestHandler):
             if "totale" in f or n <= 2:
                 self.error(529, "overloaded_error", "Overloaded", {"retry-after": "1"})
                 return
-        start = [message_start(model)]
+        start = [message_start(model, estimate_tokens(raw))]
         if "erreur flux" in f:
             self.stream(start + [sse("error", {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})])
             return
@@ -274,11 +376,145 @@ class Handler(BaseHTTPRequestHandler):
             reply = "Bonjour, je suis le faux fournisseur local : je rejoue des réponses enregistrées (demande-moi une station de pompage)."
         self.stream(start + text_block(0, reply) + finish("end_turn"))
 
+    # ---- 1.16.0 : compatible OpenAI ----------------------------------------------------------
+    def chat(self, raw):
+        key = (self.headers.get("authorization") or "")
+        sys.stderr.write("[faux fournisseur] openai : cle %s\n" % ("presente" if key else "absente"))
+        if key == "Bearer cle-refusee":
+            self.error(401, "invalid_api_key", "Incorrect API key provided", family="openai")
+            return
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except Exception as e:  # noqa
+            self.error(400, "invalid_request_error", "corps illisible : %s" % e, family="openai")
+            return
+        model = body.get("model", "")
+        tools = bool(body.get("tools"))
+        usage_on = bool((body.get("stream_options") or {}).get("include_usage"))
+        if model == "introuvable":
+            self.error(404, "not_found_error", "model \"%s\" not found, try pulling it first" % model, family="openai")
+            return
+        if model == "sans-outil" and tools:
+            self.error(400, "invalid_request_error", "registry.ollama.ai/library/sans-outil does not support tools", family="openai")
+            return
+        msgs = body.get("messages") or []
+        text = ""
+        result = None
+        for m in msgs[::-1]:
+            if m.get("role") == "user":
+                c = m.get("content")
+                text = c if isinstance(c, str) else " ".join(p.get("text", "") for p in (c or []) if p.get("type") == "text")
+                break
+        for m in msgs[::-1]:
+            if m.get("role") == "tool":
+                result = m.get("content")
+                break
+            if m.get("role") == "user":
+                break
+        # La derniere demande seulement (apres un resultat entre crochets, ou des demandes jointes).
+        f = fold(text.split("\n\n")[-1] if text else "")
+        sys.stderr.write("[faux fournisseur] openai : %r (outils : %s)\n" % (text.strip()[:80], "oui" if tools else "non"))
+        prompt_tokens = estimate_tokens(raw)
+        ok, wait = limit_take(prompt_tokens, "epuise" in f)
+        if not ok:
+            self.error(429, "rate_limit_exceeded", "Rate limit reached for requests", {"retry-after": str(wait)}, family="openai")
+            return
+        if "surcharge" in f:
+            with LOCK:
+                COUNTERS["oa" + f] = COUNTERS.get("oa" + f, 0) + 1
+                n = COUNTERS["oa" + f]
+            if "totale" in f or n <= 2:
+                self.error(503, "server_error", "The server is overloaded", {"retry-after": "1"}, family="openai")
+                return
+
+        def chunk(delta=None, finish=None, usage=None):
+            d = {"id": "chatcmpl-faux", "object": "chat.completion.chunk", "model": model,
+                 "choices": [] if delta is None and finish is None else [{"index": 0, "delta": delta or {}, "finish_reason": finish}]}
+            if usage is not None:
+                d["usage"] = usage
+            return ("data: %s\n\n" % json.dumps(d, ensure_ascii=False)).encode("utf-8")
+
+        def words(t, n=3):
+            w = t.split(" ")
+            return [chunk({"content": " ".join(w[i:i + n]) + (" " if i + n < len(w) else "")}) for i in range(0, len(w), n)]
+
+        def call(tool_id, payload, cut_at=None):
+            raw_args = json.dumps(payload, ensure_ascii=False)
+            if cut_at is not None:
+                raw_args = raw_args[:cut_at]
+            out = [chunk({"tool_calls": [{"index": 0, "id": tool_id, "type": "function", "function": {"name": "proposer_operations", "arguments": ""}}]})]
+            for i in range(0, len(raw_args), 97):
+                out.append(chunk({"tool_calls": [{"index": 0, "function": {"arguments": raw_args[i:i + 97]}}]}))
+            return out
+
+        def end(reason, out_text=""):
+            parts = [chunk({}, reason)]
+            if usage_on:
+                parts.append(chunk(usage={"prompt_tokens": prompt_tokens, "completion_tokens": max(1, len(out_text) // 4),
+                                          "total_tokens": prompt_tokens + max(1, len(out_text) // 4)}))
+            parts.append(b"data: [DONE]\n\n")
+            return parts
+
+        head = [chunk({"role": "assistant", "content": ""})]
+        if "coupure" in f:
+            self.stream(head + words("Je commence a repondre, puis la connexion"), cut=True, family="openai")
+            return
+        if "lent" in f:
+            t = " ".join("mot%d" % i for i in range(1, 41))
+            self.stream(head + words(t, 1) + end("stop", t), delay=0.15, family="openai")
+            return
+        if "erreur flux" in f:
+            self.stream(head + [("data: %s\n\n" % json.dumps({"error": {"message": "Overloaded", "code": 503}})).encode("utf-8")], family="openai")
+            return
+        payload = None
+        intro = ""
+        if "station" in f or "pompage" in f:
+            payload = {"resume": "Synoptique de station de pompage", "operations": station_ops()}
+            intro = "Je propose un synoptique de station de pompage."
+        elif "longue" in f:
+            payload = {"resume": "Synoptique coupe", "operations": station_ops()}
+            intro = "Je propose beaucoup d'objets."
+        elif "inventee" in f:
+            payload = {"resume": "Une cuve", "operations": [create("Tank", "Cuve_X", 100, 100, 150, 200, couleurInventee="#FF0000")]}
+            intro = "Voici une cuve."
+        elif "illisible" in f:
+            payload = {"resume": "Rien", "operations": [{"action": "executer", "code": "system('x')"}]}
+            intro = "Voici."
+        elif "cuve" in f:
+            payload = {"resume": "Une cuve et son niveau", "operations": [
+                create("Tank", "Cuve_A", 120, 120, 150, 200, label="Cuve A", max=100, unit="%"),
+                create("Bargraph", "Niveau_Cuve_A", 294, 120, 56, 200, unit="%")]}
+            intro = "Je propose une cuve avec son indicateur de niveau."
+        if "json casse" in f and not tools:
+            t = "Voici ma proposition.\n\n```json\n{\"resume\": \"Casse\", \"operations\": [{\"action\": \"creer\",\n```"
+            self.stream(head + words(t) + end("stop", t), family="openai")
+            return
+        if payload is not None and tools:
+            cut = 500 if "longue" in f else None
+            self.stream(head + words(intro) + call("call_faux_1", payload, cut) + end("length" if cut else "tool_calls", intro), family="openai")
+            return
+        if payload is not None:   # sans outil : la proposition en bloc json dans le texte
+            t = intro + "\n\n```json\n" + json.dumps(payload, ensure_ascii=False) + "\n```"
+            if "longue" in f:
+                t = t[:400]
+            self.stream(head + words(t) + end("length" if "longue" in f else "stop", t), family="openai")
+            return
+        if result is not None:
+            reply = "Bien reçu : ma proposition précédente est « %s »." % result
+        elif "[resultat de ta proposition" in fold(text):
+            reply = "Bien reçu : " + text.split("]")[0].lstrip("[") + "."
+        else:
+            reply = "Bonjour, je suis le faux service compatible OpenAI : je rejoue des réponses enregistrées (demande-moi une cuve)."
+        self.stream(head + words(reply) + end("stop", reply), family="openai")
+
 
 def main():
     ap = argparse.ArgumentParser(description="Faux fournisseur d'IA (API Messages) pour essayer l'Assistant sans cle.")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--sans-limite", action="store_true", help="aucun en-tete de limite (comme Ollama sur ce PC)")
     args = ap.parse_args()
+    global SANS_LIMITE
+    SANS_LIMITE = args.sans_limite
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     sys.stderr.write("[faux fournisseur] http://127.0.0.1:%d\n" % server.server_address[1])
     sys.stderr.flush()

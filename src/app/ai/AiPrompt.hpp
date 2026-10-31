@@ -75,4 +75,20 @@ struct PromptParts {
 // erreurs, et le detail des genres qu'elles citent ; vide : `check` n'a pas d'erreur.
 [[nodiscard]] std::string feedback(const Check& check, const Proposal& proposal);
 
+// ---- 1.16.0 (FOURNISSEURS, a la fin) : les modeles gratuits, petits ou sans appel d'outil ----------
+// Sous cette fenetre de contexte (jetons), les consignes sont resserrees (compactPromptParts).
+inline constexpr int kSmallContext = 16000;
+// Les consignes d'un modele SANS appel d'outil : la proposition dans UN bloc ```json {"resume": ...,
+// "operations": [...]} a la fin du texte (le format de l'entree de l'outil : la meme lecture stricte,
+// proposalFromTool, et la meme validation).
+[[nodiscard]] std::string textToolInstructions();
+// Le bloc ```json de la proposition dans une reponse en texte : le dernier qui contient "operations"
+// (sinon le dernier bloc). Faux : aucun. `json` : son contenu brut ; `rest` : le texte sans le bloc.
+bool extractProposalBlock(std::string_view text, std::string* json, std::string* rest = nullptr);
+// Un appel d'outil precedent ecrit en bloc (le tour de l'assistant, relu par un modele sans outil).
+[[nodiscard]] std::string proposalBlock(std::string_view inputJson);
+// Les consignes resserrees d'une petite fenetre (`contextTokens` jetons) : les regles en bref, le
+// registre reduit aux genres de la vue et de la demande, la vue resumee (des budgets a sa taille).
+[[nodiscard]] PromptParts compactPromptParts(const PromptInput&, int contextTokens);
+
 } // namespace app::ai

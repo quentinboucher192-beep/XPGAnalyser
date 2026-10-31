@@ -5,6 +5,7 @@
 
 #include "AiHttp.hpp"
 #include "AiLocal.hpp"
+#include "AiOpenAI.hpp"
 #include "AiPrompt.hpp"
 #include "AiSecret.hpp"
 
@@ -122,6 +123,7 @@ void Assistant::load(std::vector<std::string>* problems) {
     retire();
     gen_ = {};
     pending_.clear();
+    totalsDay_.clear();   // 1.16.0 : les cumuls relus
     ++revision_;
 }
 
@@ -293,6 +295,10 @@ bool Assistant::send(std::string text, std::string* why) {
         // 1.15.0 : un vrai fournisseur. Rien ne change dans la conversation si l'envoi ne part pas.
         std::string w;
         if (!ready(&w)) return fail(w);
+        // 1.16.0 : le budget atteint - l'envoi demande confirmation (le panneau la pose ; rien n'est
+        // bloque sans le dire).
+        if (budgetBlocks(&w)) return fail(w);
+        overBudgetOk_ = false;
         if (!cur()) newConversation();
         Conversation& c = *cur();
         const Conversation before = c;
@@ -420,6 +426,11 @@ bool Assistant::send(std::string text, std::string* why) {
 }
 
 std::string Assistant::shownText() const {
+    if (gen_.live && gen_.textTool) {
+        // 1.16.0 : la proposition en texte (un bloc ```json) ne s'ecrit pas dans la bulle : la carte la montre.
+        const auto at = gen_.text.find("```");
+        return at == std::string::npos ? gen_.text : gen_.text.substr(0, at);
+    }
     if (gen_.live) return gen_.text;   // un vrai fournisseur : ce qui est arrive
     if (gen_.phase != Phase::Writing) return {};
     return firstWords(gen_.full, gen_.shownWords);
@@ -568,13 +579,22 @@ bool Assistant::apply(int message, std::string* why) {
     if (host_.apply) host_.apply(std::move(cmd));
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
-    // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise.
+    // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise. 1.16.0 : proposalPrint (la vue
+    // neuve, les variables et les types crees comptent) ; la vue neuve retient son identifiant.
     prop.fingerprintAfter.clear();
-    if (const auto after = host_.document ? host_.document() : nullptr)
-        if (const auto* v = targetView(after->project, prop)) prop.fingerprintAfter = fingerprint(*v);
+    hmi::Id opened = hmi::kNoId;
+    if (const auto after = host_.document ? host_.document() : nullptr) {
+        if (createsView(prop))
+            if (const auto* nv = after->project.viewByName(prop.view)) prop.viewId = opened = nv->id;
+        prop.fingerprintAfter = proposalPrint(after->project, prop);
+    }
     notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e (Ctrl+Z l'annule d'un coup).";
+    if (const std::string made = creationSummary(prop); !made.empty())
+        notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e - cr\xC3\xA9\xC3\xA9" "s : " + made + " (Ctrl+Z reprend tout d'un coup).";
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
+    // 1.16.0 : la vue creee s'ouvre dans l'editeur.
+    if (opened != hmi::kNoId && host_.openView) host_.openView(opened);
     return true;
 }
 
@@ -588,9 +608,10 @@ Assistant::Applied Assistant::appliedOf(const Proposal& prop) const {
     if (p->state != "appliquee") return Applied::NotApplied;
     const auto doc = host_.document ? host_.document() : nullptr;
     if (!doc) return Applied::Applied;   // pas de projet ouvert : rien a comparer
-    const auto* v = targetView(doc->project, *p);
-    if (!v) return Applied::Changed;
-    const std::string now = fingerprint(*v);
+    // 1.16.0 : l'empreinte de ce que la proposition touche (proposalPrint) - la vue visee comme avant ; la vue
+    // neuve, les variables et les types crees (Ctrl+Z les retire : annulee).
+    if (usesOpenView(*p) && !targetView(doc->project, *p)) return Applied::Changed;
+    const std::string now = proposalPrint(doc->project, *p);
     if (now == p->fingerprintAfter) return Applied::Applied;
     if (now == p->fingerprint) return Applied::Undone;
     // Un fichier d'avant 1.14.2 n'a pas l'empreinte d'apres : on ne sait pas mieux qu'"appliquee".
@@ -666,6 +687,15 @@ std::string Assistant::connectionText() const {
         return why;
     }
     if (needsSetup()) return "\xC3\x80 configurer : choisis un mod\xC3\xA8le et une cl\xC3\xA9";
+    // 1.16.0 : un service compatible OpenAI se nomme par son service ("Ollama - llama3.2").
+    if (settings_.provider == "openai") {
+        std::string name = "Compatible OpenAI";
+        if (const auto* sp = findServicePreset(settings_.preset); sp && sp->key != "autre") {
+            name = std::string(sp->label);
+            if (const auto par = name.find(" ("); par != std::string::npos) name.resize(par);
+        }
+        return name + " \xE2\x80\x93 " + settings_.model;
+    }
     return providerName(settings_.provider) + " \xE2\x80\x93 " + settings_.model + (settings_.endpoint.empty() ? std::string{} : std::string(" (relais)"));
 }
 
@@ -813,8 +843,14 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     in.request = request;   // les genres que la demande evoque ont le detail de leurs proprietes
     ProviderRequest req = requestFor(c, c.messages.size());
     req.apiKey = apiKey_;
-    // Sur le fil de l'interface (le registre se construit une fois) : les consignes en deux morceaux.
-    PromptParts parts = promptParts(in);
+    // 1.16.0 : le service, la fenetre de contexte, l'outil (Auto : en texte si le modele le refuse).
+    req.preset = settings_.preset;
+    req.contextTokens = contextWindow();
+    req.toolsInText = toolsInText();
+    req.textFallback = settings_.toolMode != "outil";
+    // Sur le fil de l'interface (le registre se construit une fois) : les consignes en deux morceaux ;
+    // une petite fenetre de contexte (un petit modele gratuit) : resserrees.
+    PromptParts parts = req.contextTokens > 0 && req.contextTokens < kSmallContext ? compactPromptParts(in, req.contextTokens) : promptParts(in);
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
@@ -835,6 +871,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     gen_.request = std::move(request);
     gen_.provider = settings_.provider;
     gen_.model = trim(settings_.model);
+    gen_.textTool = toolsInText();
     if (ctx.view) {
         gen_.viewId = ctx.view->id;
         gen_.fingerprint = fingerprint(*ctx.view);
@@ -862,7 +899,14 @@ void Assistant::pollLive() {
                 else if (e.text == "reflexion") ph = Phase::Thinking;
                 else if (e.text == "ecriture") ph = Phase::Writing;
                 else if (e.text == "operations") ph = Phase::Proposing;
-                const std::string detail = e.text == "reprise" ? e.detail : e.text == "connexion" ? gen_.detail : std::string{};
+                // 1.16.0 : le modele refuse l'appel d'outil - la proposition en texte, maintenant et ensuite.
+                if (e.text == "sans-outil") {
+                    noTools_ = settings_.provider + "|" + trim(settings_.endpoint) + "|" + gen_.model;
+                    gen_.textTool = true;
+                    notice_ = "Assistant IA : " + e.detail;
+                    ph = Phase::Waiting;
+                }
+                const std::string detail = e.text == "reprise" || e.text == "sans-outil" ? e.detail : e.text == "connexion" ? gen_.detail : std::string{};
                 if (detail != gen_.detail) {
                     gen_.detail = detail;
                     ++revision_;
@@ -876,7 +920,20 @@ void Assistant::pollLive() {
             case ProviderEvent::Type::Text:
                 gen_.text += e.text;
                 if (gen_.phase != Phase::Proposing) gen_.phase = Phase::Writing;
+                // 1.16.0 : le bloc de la proposition en texte commence - "Preparation des operations".
+                if (gen_.textTool && gen_.text.find("```") != std::string::npos) gen_.phase = Phase::Proposing;
                 gen_.detail.clear();
+                ++revision_;
+                break;
+            case ProviderEvent::Type::Usage:
+                // 1.16.0 : la limite du service (les en-tetes) et les jetons de la reponse (le dernier fait foi).
+                if (e.limits.known() || e.limits.retryAfterSeconds >= 0) {
+                    limit_.limits = e.limits;
+                    limit_.at = lastNow_;
+                    limit_.clock = now();
+                    limit_.provider = gen_.provider;
+                }
+                if (!e.usage.empty()) gen_.usage = e.usage;
                 ++revision_;
                 break;
             case ProviderEvent::Type::ToolUse:
@@ -895,6 +952,7 @@ void Assistant::pollLive() {
 
 void Assistant::finishLive(const std::string& stopReason) {
     retire();
+    recordLive();
     Conversation* c = generatingConversation();
     if (!c || gen_.message < 0 || gen_.message >= static_cast<int>(c->messages.size())) {
         gen_ = {};
@@ -911,6 +969,13 @@ void Assistant::finishLive(const std::string& stopReason) {
     m.date = isoDate(now());
     m.provider = gen_.provider;
     m.model = gen_.model;
+    // 1.16.0 : les jetons de la reponse (le cumul de la conversation) ; la proposition en texte : le
+    // bloc ```json sort de la bulle (la carte la montre ; le tour suivant la reecrit pour le modele).
+    if (!gen_.usage.empty()) m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total()));
+    if (gen_.textTool && gen_.tool) {
+        std::string rest;
+        if (extractProposalBlock(m.text, nullptr, &rest)) m.text = rest;
+    }
     if (stopReason == "refusal") {
         m.note = "La demande a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "clin\xC3\xA9" "e par le mod\xC3\xA8le : rien n'est propos\xC3\xA9.";
     } else if (stopReason == "max_tokens") {
@@ -937,7 +1002,8 @@ void Assistant::finishLive(const std::string& stopReason) {
             } else {
                 // L'empreinte de la vue A L'ENVOI : si l'utilisateur l'a changee pendant la reponse,
                 // la proposition est perimee (elle ne s'applique jamais sur une vue changee).
-                if (!gen_.fingerprint.empty()) p->fingerprint = gen_.fingerprint;
+                // 1.16.0 : avec ce que la proposition cree (proposalPrint) ; une vue neuve ne depend pas de la vue ouverte.
+                if (!gen_.fingerprint.empty() && doc) p->fingerprint = proposalPrint(doc->project, *p, gen_.fingerprint);
                 if (p->summary.empty()) p->summary = "Proposition de l'Assistant";
                 if (p->request.empty()) p->request = gen_.request;
                 p->state = "proposee";
@@ -965,10 +1031,12 @@ void Assistant::finishLive(const std::string& stopReason) {
 
 void Assistant::failLive(const ProviderEvent& e) {
     retire();
+    recordLive();
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
         m.text = trim(gen_.text);
+        if (!gen_.usage.empty()) m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total()));   // 1.16.0
         m.note = e.text.empty() ? std::string("Erreur inconnue.") : e.text;
         m.state = "erreur";
         m.date = isoDate(now());
@@ -1039,7 +1107,15 @@ std::string Assistant::outgoingSummary() const {
 // ---- la liste des modeles --------------------------------------------------------------------------
 bool Assistant::queryModels(const Settings& s, const std::string& key, std::string* why) {
     if (!modelQuery_) modelQuery_ = std::make_unique<ModelQuery>();
-    if (!modelQuery_->start(s.endpoint, key, s.timeoutSeconds, why)) return false;
+    if (s.provider == "openai") {
+        // 1.16.0 : un service compatible OpenAI - GET <adresse>/models (la cle en Authorization, si donnee).
+        OpenAITarget t;
+        if (!openAITarget(s.endpoint, s.preset, !key.empty(), t, why)) return false;
+        if (!modelQuery_->startUrl(t.models, openAIHeaders(key), s.timeoutSeconds, true, t.privateHttp && key.empty(), why)) return false;
+    } else if (!modelQuery_->start(s.endpoint, key, s.timeoutSeconds, why)) {
+        return false;
+    }
+    modelsProvider_ = s.provider;
     models_.reset();
     ++revision_;
     return true;
@@ -1049,10 +1125,63 @@ bool Assistant::pollModels() {
     if (!modelQuery_) return false;
     auto r = modelQuery_->poll();
     if (!r) return false;
+    // 1.16.0 : les fenetres de contexte que le service dit (la fenetre "Auto").
+    for (const auto& m : r->models)
+        if (m.contextTokens > 0) modelContext_[modelsProvider_ + "|" + m.id] = m.contextTokens;
     models_ = std::move(*r);
     ++modelsRev_;
     ++revision_;
     return true;
+}
+
+// ---- 1.16.0 (FOURNISSEURS) : la limite et la consommation en direct, le budget -----------------------
+void Assistant::recordLive() {
+    if (gen_.usage.empty() || gen_.provider.empty()) return;
+    recordUsage(gen_.provider, gen_.usage, gen_.conversation);
+    limit_.last = gen_.usage;
+    limit_.contextUsed = gen_.usage.input + gen_.usage.cacheRead + gen_.usage.cacheWrite;
+    limit_.answered = true;
+    if (limit_.provider.empty()) limit_.provider = gen_.provider;
+    totalsDay_.clear();   // relus au prochain affichage
+}
+
+const UsageTotals& Assistant::usageTotals() const {
+    // Relus apres une reponse, et quand le jour change (minuit pendant la seance).
+    const std::string day = isoDate(now()).substr(0, 10);
+    if (day != totalsDay_) {
+        totals_ = app::ai::usageTotals();
+        totalsDay_ = day;
+    }
+    return totals_;
+}
+
+bool Assistant::budgetBlocks(std::string* question) const {
+    if (!live() || overBudgetOk_) return false;   // confirme : le prochain envoi passe
+    return budgetExceeded(settings_, usageTotals(), question);
+}
+
+int Assistant::contextWindow() const {
+    if (settings_.contextTokens > 0) return settings_.contextTokens;
+    const auto it = modelContext_.find(settings_.provider + "|" + trim(settings_.model));
+    return it == modelContext_.end() ? 0 : static_cast<int>(std::min<long long>(it->second, 100000000));
+}
+
+bool Assistant::toolsInText() const {
+    if (settings_.provider != "openai") return false;   // Anthropic : toujours l'appel d'outil
+    if (settings_.toolMode == "texte") return true;
+    return settings_.toolMode == "auto" && noTools_ == settings_.provider + "|" + trim(settings_.endpoint) + "|" + trim(settings_.model);
+}
+
+bool Assistant::localService() const { return settings_.provider == "openai" && app::ai::localService(settings_.endpoint, settings_.preset); }
+
+UsageBand Assistant::usageBand(double now) const {
+    LimitState st = limit_;
+    st.conversation = 0;
+    if (const auto* c = current())
+        for (const auto& m : c->messages) st.conversation += m.extra.integer("jetons");
+    if (gen_.live && gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += gen_.usage.total();   // en cours
+    st.contextWindow = contextWindow();
+    return app::ai::usageBand(settings_, st, usageTotals(), localService(), now);
 }
 
 } // namespace app::ai

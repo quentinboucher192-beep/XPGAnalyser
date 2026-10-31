@@ -138,6 +138,7 @@ private:
     std::string                stopReason_, phase_, model_;
     bool                       stopped_{false}, finished_{false}, failed_{false}, emitted_{false};
     ApiError                   error_;
+    ProviderUsage              usage_;   // 1.16.0 : les jetons (message_start, message_delta) - un evenement Usage
 };
 
 // ---- le fournisseur ----------------------------------------------------------------------
@@ -178,6 +179,9 @@ private:
 // ---- la liste des modeles ------------------------------------------------------------------
 struct ModelInfo {
     std::string id, name;   // "claude-...", le nom lisible (display_name)
+    // 1.16.0 (a la fin) : la fenetre de contexte que le service dit (Anthropic : max_input_tokens ;
+    // OpenRouter : context_length...) ; 0 : il ne la dit pas.
+    long long   contextTokens{0};
 };
 struct ModelsResult {
     bool                   ok{false};
@@ -194,6 +198,9 @@ public:
     ~ModelQuery();
     // Faux et `why` : deja en cours, adresse refusee, pas de transport.
     bool start(std::string endpoint, std::string apiKey, int timeoutSeconds, std::string* why = nullptr);
+    // 1.16.0 : GET `url` avec ces en-tetes (un service compatible OpenAI : <adresse>/models, sa cle en
+    // Authorization) ; `openai` : la liste se lit au format OpenAI (parseOpenAIModels, AiOpenAI.hpp).
+    bool startUrl(std::string url, HttpHeaders headers, int timeoutSeconds, bool openai, bool allowPrivateHttp, std::string* why = nullptr);
     // Le resultat, une fois (nullopt : pas encore, ou deja pris).
     [[nodiscard]] std::optional<ModelsResult> poll();
     void cancel();

@@ -13,6 +13,9 @@
 //    - empiler une commande : App::apply, comme l'editeur (un pas d'annulation) ;
 //    - les noms de l'automate relie (les globales) : une variable de l'automate
 //      existe aussi ; 1.15.0 : leur liste et leur type, pour le contexte du modele ;
+//      1.16.0 : leurs commentaires et les types (DDT) de l'automate - l'Assistant
+//      en propose des variables et des types IHM (AiAutomate.hpp) ;
+//    - 1.16.0 : ouvrir la vue qu'une proposition vient de creer (son onglet) ;
 //    - les fenetres (MenuManager::ShowDialog), la barre d'etat, la commande
 //      ia.memoire (le centre de memoire, s'il est la).
 // =============================================================================
@@ -113,6 +116,38 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
                 out.emplace_back("API." + std::string(plc->strings.text(v.name)), std::string(plc->strings.text(v.type.name)));
         return out;
     };
+
+    // 1.16.0 : le commentaire d'une globale (la description d'une variable IHM proposee depuis l'automate).
+    core.env.plcComment = [this](std::string_view name) {
+        const auto plc = app_.project();
+        if (!plc) return std::string{};
+        const std::string want = upper(name);
+        for (const auto& v : plc->variables)
+            if (v.scope == domain::VariableScope::Global && upper(plc->strings.text(v.name)) == want) return std::string(plc->strings.text(v.comment));
+        return std::string{};
+    };
+    // 1.16.0 : les types (DDT) de l'automate relie : leur nom, leur commentaire, leurs membres (nom, type tel
+    // qu'ecrit - ARRAY[0..3] OF T_Vanne, STRING[32], EBOOL -, commentaire). Les DDT d'equipement en sont aussi.
+    core.env.plcTypes = [this] {
+        std::vector<ai::Env::PlcType> out;
+        const auto plc = app_.project();
+        if (!plc) return out;
+        for (const auto& d : plc->derivedTypes) {
+            ai::Env::PlcType t;
+            t.name = std::string(plc->strings.text(d.name));
+            t.comment = std::string(plc->strings.text(d.comment));
+            for (const auto fi : d.fields) {
+                if (fi >= plc->variables.size()) continue;
+                const auto& f = plc->variables[fi];
+                t.members.push_back({std::string(plc->strings.text(f.name)), std::string(plc->strings.text(f.type.name)),
+                                     std::string(plc->strings.text(f.comment))});
+            }
+            out.push_back(std::move(t));
+        }
+        return out;
+    };
+    // 1.16.0 : la vue qu'une proposition vient de creer s'ouvre dans l'editeur.
+    core.openView = [this](hmi::Id id) { openHmiView(id); };
 
     ai::AiPanel::UiHost ui;
     ui.showDialog = [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
