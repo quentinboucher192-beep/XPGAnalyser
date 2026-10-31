@@ -12,6 +12,7 @@
 #include "ai/AiPanel.hpp"            // 1.14.2 : l'Assistant IA (ia ...)
 #include "ai/AiOpenAI.hpp"           // 1.16.0 : les services compatibles OpenAI (ia service)
 #include "ai/AiPreviewDialog.hpp"
+#include "ai/AiLearningFile.hpp"   // 1.17.0 : ia apprentissage exporter / voir / importer
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les commandes nouveautes-*
 #include "../ui/NoveltyBoard.hpp"
 
@@ -668,6 +669,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia outil auto | outil | texte       l'appel d'outil, ou le JSON dans le texte
     //  ia dabord oui | non                 1.16.1 : l'IA integree d'abord, l'IA connectee pour le reste
     //  ia avertir oui | non                1.16.1 : m'avertir quand une reponse arrive (la cloche, la barre des taches)
+    //  ---- 1.17.0 : l'apprentissage dans un fichier (.xia) ----
+    //  ia apprentissage exporter "chemin" [reglages] [conversations]   au journal : le chemin et le compte
+    //  ia apprentissage voir "chemin"      au journal : ce que ferait l'import (ajoutees, remplacees, gardees, ignorees)
+    //  ia apprentissage importer "chemin" [remplacer]                   au journal : le rapport
     //  ia limite                           au journal : la bande de la limite (ses lignes) et les cumuls
     if (cmd == "ia") {
         const std::string sub = lower(arg(1));
@@ -733,6 +738,31 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             as.setSettings(st);
             panel->sync();
             return Step::Yield;
+        }
+        if (sub == "apprentissage") {   // 1.17.0
+            const std::string what = lower(arg(2)), path = arg(3);
+            std::string why;
+            if (path.empty()) { fail("ia apprentissage " + what + " : le chemin du fichier .xia"); return Step::Next; }
+            if (what == "exporter") {
+                ai::learning::FileOptions opt;
+                opt.settings = has("reglages");
+                opt.conversations = has("conversations");
+                if (!ai::learning::exportTo(path, opt, &why)) fail("ia apprentissage exporter : " + why);
+                else std::printf("[script] apprentissage export\xC3\xA9 : %s\n", path.c_str());
+                return Step::Yield;
+            }
+            if (what == "voir" || what == "importer") {
+                ai::learning::ImportReport r;
+                const bool ok = what == "voir" ? ai::learning::peek(path, r, &why) : ai::learning::importFrom(path, r, has("remplacer"), &why);
+                if (!ok) { fail("ia apprentissage " + what + " : " + why); return Step::Yield; }
+                std::printf("[script] apprentissage %s (%s) : %d ajout\xC3\xA9" "es, %d remplac\xC3\xA9" "es, %d gard\xC3\xA9" "es, %d ignor\xC3\xA9" "es\n",
+                            what == "voir" ? "vu" : "import\xC3\xA9", r.from.c_str(), r.added, r.replaced, r.kept, r.skipped);
+                for (const auto& l : r.lines) std::printf("[script]   %s\n", l.c_str());
+                if (what == "importer") panel->sync();
+                return Step::Yield;
+            }
+            fail("ia apprentissage " + what + " : exporter, voir ou importer");
+            return Step::Next;
         }
         if (sub == "dabord") {
             const std::string v = lower(arg(2));

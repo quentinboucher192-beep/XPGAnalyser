@@ -464,11 +464,11 @@ protected:
             ctx.r.strokeRect(page, c.border, 1.f);
             ctx.r.popClip();
             // 1.16.1 : les boutons du zoom (en haut a droite de l'apercu) et le zoom en %.
-            const auto button = [&](const gfx::Rect& r, const std::string& text) {
-                ctx.r.fillRoundedRect(r, alpha(c.panelBg, 230), 4.f);
-                ctx.r.strokeRect(r, c.border, 1.f);
+            const auto button = [&](const gfx::Rect& b, const std::string& text) {
+                ctx.r.fillRoundedRect(b, alpha(c.panelBg, 230), 4.f);
+                ctx.r.strokeRect(b, c.border, 1.f);
                 const float tw = ctx.r.measure(text, kSmall).width;
-                ctx.r.drawText({r.x + (r.w - tw) / 2.f, r.y + (r.h - ctx.r.lineHeight(kSmall)) / 2.f}, text, kSmall, c.text);
+                ctx.r.drawText({b.x + (b.w - tw) / 2.f, b.y + (b.h - ctx.r.lineHeight(kSmall)) / 2.f}, text, kSmall, c.text);
             };
             button(zoomOut_, "\xE2\x88\x92");
             button(zoomFit_, "Ajuster");

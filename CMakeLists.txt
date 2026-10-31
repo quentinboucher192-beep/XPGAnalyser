@@ -707,6 +707,9 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(ai_compatible_test PRIVATE xpg_app)
     xpg_add_test_executable(ai_options_test tests/ai_options_test.cpp)
     xpg_target_link_libraries(ai_options_test PRIVATE xpg_app)
+    # 1.17.0 : l'apprentissage de l'IA dans un fichier (.xia) - exporter, importer, l'installation.
+    xpg_add_test_executable(ai_apprentissage_fichier_test tests/ai_apprentissage_fichier_test.cpp)
+    xpg_target_link_libraries(ai_apprentissage_fichier_test PRIVATE xpg_app)
     # 1.15.0 (la vraie IA, chantier du registre) : le registre des 116 genres tire du code, le contexte et ses
     # reglages de confidentialite, les consignes et les connaissances actives, le schema de l'outil, la lecture de
     # son entree, les nouvelles operations (dupliquer, code) en un Ctrl+Z (xpg_app : rien a recompiler).
@@ -860,6 +863,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiintegree COMMAND ai_integree_test ${XPG_FIXTURE})                   # 1.16.0 : l'IA integree (sans connexion)
     xpg_add_test(NAME aicompatible COMMAND ai_compatible_test)               # 1.16.0 : compatible OpenAI, la limite en direct
     xpg_add_test(NAME aioptions COMMAND ai_options_test)                     # 1.16.0 : vue, variables, types, reperes, formules
+    xpg_add_test(NAME aiapprentissagefichier COMMAND ai_apprentissage_fichier_test)   # 1.17.0 : l'apprentissage dans un fichier (.xia)
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----

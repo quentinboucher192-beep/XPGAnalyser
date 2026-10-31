@@ -689,6 +689,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
     <ClCompile Include="src\app\ai\AiKnowledge.cpp" />
+    <ClCompile Include="src\app\ai\AiLearningFile.cpp" />
     <ClCompile Include="src\app\ai\AiMemory.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryDialog.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp" />

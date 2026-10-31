@@ -2,6 +2,7 @@
 //  app/ai/AiAssistant.cpp - voir AiAssistant.hpp
 // =============================================================================
 #include "AiAssistant.hpp"
+#include "AiLearningFile.hpp"   // 1.17.0 : ce que l'installateur a depose
 
 #include "AiAutomate.hpp"
 
@@ -109,6 +110,15 @@ void Assistant::load(std::vector<std::string>* problems) {
         (void)saveSettings(settings_);
         appendActivity("conversation", "Premi\xC3\xA8re ouverture de l'Assistant : " + std::to_string(conversations_.size())
                                            + " conversations de d\xC3\xA9monstration.");
+    }
+    // 1.17.0 : CE QUE L'INSTALLATEUR A DEPOSE (le dossier commun des donnees du programme) - le fournisseur choisi a
+    // l'installation, un apprentissage d'un autre PC : applique une fois par utilisateur, puis le panneau le dit.
+    {
+        std::string said;
+        if (learning::applyInstallation(&said)) {
+            settings_ = loadSettings();
+            if (!said.empty()) notice_ = said;
+        }
     }
     // La retention (Parametres > Historique) : les plus anciennes au-dela des limites.
     const auto expired = expiredConversations(conversations_, settings_);
