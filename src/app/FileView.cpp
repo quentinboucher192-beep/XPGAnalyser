@@ -20,6 +20,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <initializer_list>
 #include <fstream>
 #include <map>
 #include <set>
@@ -314,6 +315,19 @@ std::string dims(int w, int h) { return std::to_string(w) + " \xC3\x97 " + std::
 
 bool startsWith(std::string_view s, std::string_view p) { return s.size() >= p.size() && s.compare(0, p.size(), p) == 0; }
 
+// Une signature de fichier (PNG, JPEG, ELF...) : des octets, jamais du texte affiche - ecrits en nombres, pas en chaine
+// (une chaine qui n'est pas de l'UTF-8 n'a pas sa place dans les sources de l'interface).
+struct Octets {
+    char b[16]{};
+    std::size_t n = 0;
+    operator std::string_view() const { return {b, n}; }
+};
+constexpr Octets octets(std::initializer_list<int> v) {
+    Octets r{};
+    for (const int x : v) r.b[r.n++] = static_cast<char>(x);
+    return r;
+}
+
 // Le debut d'un texte apres sa marque d'ordre et ses blancs.
 std::string_view trimmedHead(std::string_view s) {
     if (startsWith(s, "\xEF\xBB\xBF")) s.remove_prefix(3);
@@ -435,8 +449,8 @@ Signature signatureOf(const std::uint8_t* d, std::size_t n) {
         return s;
     };
     if (!d || n == 0) return s;
-    if (has(0, std::string_view("\x89PNG\r\n\x1A\n", 8))) return set("PNG", "Image PNG", Kind::Image);
-    if (has(0, "\xFF\xD8\xFF")) return set("JPEG", "Image JPEG", Kind::Image);
+    if (has(0, octets({0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'}))) return set("PNG", "Image PNG", Kind::Image);
+    if (has(0, octets({0xFF, 0xD8, 0xFF}))) return set("JPEG", "Image JPEG", Kind::Image);
     if (has(0, "GIF87a") || has(0, "GIF89a")) return set("GIF", "Image GIF", Kind::Image);
     if (has(0, "BM") && n >= 18) {
         const std::uint32_t hdr = static_cast<std::uint32_t>(d[14]) | (static_cast<std::uint32_t>(d[15]) << 8)
@@ -454,8 +468,8 @@ Signature signatureOf(const std::uint8_t* d, std::size_t n) {
         if (has(8, "M4A ")) return set("M4A", "Son AAC (M4A)", Kind::Sound);
         return set("MP4", "Vid\xC3\xA9o MP4", Kind::Video);
     }
-    if (has(0, "\x1A\x45\xDF\xA3")) return set("WEBM", "Vid\xC3\xA9o WebM / Matroska", Kind::Video);
-    if (has(0, "\x30\x26\xB2\x75\x8E\x66\xCF\x11")) return set("WMV", "Vid\xC3\xA9o Windows Media (ASF)", Kind::Video);
+    if (has(0, octets({0x1A, 0x45, 0xDF, 0xA3}))) return set("WEBM", "Vid\xC3\xA9o WebM / Matroska", Kind::Video);
+    if (has(0, octets({0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11}))) return set("WMV", "Vid\xC3\xA9o Windows Media (ASF)", Kind::Video);
     if (has(0, "ID3") || (n >= 2 && d[0] == 0xFF && (d[1] & 0xE6) == 0xE2)) return set("MP3", "Son MP3", Kind::Sound);
     if (has(0, "OggS")) return set("OGG", "Son Ogg", Kind::Sound);
     if (has(0, "fLaC")) return set("FLAC", "Son FLAC", Kind::Sound);
@@ -472,12 +486,12 @@ Signature signatureOf(const std::uint8_t* d, std::size_t n) {
         if (head.find("xl/") != std::string_view::npos) return set("XLSX", "Classeur Excel", Kind::Workbook);
         return set("ZIP", "Archive zip", Kind::Zip);
     }
-    if (has(0, "\x37\x7A\xBC\xAF\x27\x1C")) return set("7Z", "Archive 7-Zip", Kind::Binary);
+    if (has(0, octets({0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C}))) return set("7Z", "Archive 7-Zip", Kind::Binary);
     if (has(0, "Rar!\x1A\x07")) return set("RAR", "Archive RAR", Kind::Binary);
-    if (has(0, "\x1F\x8B")) return set("GZ", "Archive gzip", Kind::Binary);
+    if (has(0, octets({0x1F, 0x8B}))) return set("GZ", "Archive gzip", Kind::Binary);
     if (has(0, "BZh")) return set("BZ2", "Archive bzip2", Kind::Binary);
-    if (has(0, "\xFD" "7zXZ")) return set("XZ", "Archive xz", Kind::Binary);
-    if (has(0, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")) return set("OLE", "Document Office 97-2003 (OLE)", Kind::Binary);
+    if (has(0, octets({0xFD, '7', 'z', 'X', 'Z'}))) return set("XZ", "Archive xz", Kind::Binary);
+    if (has(0, octets({0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}))) return set("OLE", "Document Office 97-2003 (OLE)", Kind::Binary);
     if (has(0, std::string_view("SQLite format 3\0", 16))) return set("SQLITE", "Base SQLite", Kind::Binary);
     if (has(0, "MZ") && n >= 64) {
         // Un programme : l'en-tete PE la ou l'en-tete DOS le dit, ou au moins des octets nuls (un texte "MZ..." n'en est pas un).
@@ -486,10 +500,10 @@ Signature signatureOf(const std::uint8_t* d, std::size_t n) {
         if (pe + 4 <= n && std::memcmp(d + pe, "PE\0\0", 4) == 0) return set("EXE", "Programme Windows (EXE ou DLL)", Kind::Binary);
         if (std::memchr(d, 0, 64) != nullptr) return set("EXE", "Programme DOS ou Windows (MZ)", Kind::Binary);
     }
-    if (has(0, "\x7F" "ELF")) return set("ELF", "Programme Linux (ELF)", Kind::Binary);
-    if (has(0, "\xCF\xFA\xED\xFE") || has(0, "\xCE\xFA\xED\xFE") || has(0, "\xFE\xED\xFA\xCF") || has(0, "\xFE\xED\xFA\xCE"))
+    if (has(0, octets({0x7F, 'E', 'L', 'F'}))) return set("ELF", "Programme Linux (ELF)", Kind::Binary);
+    if (has(0, octets({0xCF, 0xFA, 0xED, 0xFE})) || has(0, octets({0xCE, 0xFA, 0xED, 0xFE})) || has(0, octets({0xFE, 0xED, 0xFA, 0xCF})) || has(0, octets({0xFE, 0xED, 0xFA, 0xCE})))
         return set("MACHO", "Programme macOS (Mach-O)", Kind::Binary);
-    if (has(0, "\xCA\xFE\xBA\xBE")) return set("CLASS", "Classe Java (ou programme macOS universel)", Kind::Binary);
+    if (has(0, octets({0xCA, 0xFE, 0xBA, 0xBE}))) return set("CLASS", "Classe Java (ou programme macOS universel)", Kind::Binary);
     if (has(0, "MSCF")) return set("CAB", "Archive CAB", Kind::Binary);
     if (has(0, "%!PS")) return set("PS", "Document PostScript", Kind::Text);
     if (has(0, "{\\rtf")) return set("RTF", "Document RTF", Kind::Text);
@@ -595,8 +609,8 @@ std::string_view encodingLabel(Encoding e) noexcept {
 
 Encoding detectEncoding(std::string_view b) {
     if (startsWith(b, "\xEF\xBB\xBF")) return Encoding::Utf8Bom;
-    if (startsWith(b, "\xFF\xFE")) return Encoding::Utf16Le;
-    if (startsWith(b, "\xFE\xFF")) return Encoding::Utf16Be;
+    if (startsWith(b, octets({0xFF, 0xFE}))) return Encoding::Utf16Le;
+    if (startsWith(b, octets({0xFE, 0xFF}))) return Encoding::Utf16Be;
     // L'UTF-16 sans marque : un octet sur deux est nul (du texte latin).
     const std::size_t n = std::min<std::size_t>(b.size(), 4096) & ~static_cast<std::size_t>(1);
     if (n >= 8) {
@@ -637,7 +651,7 @@ std::string toUtf8(std::string_view b, Encoding e) {
                 const int n = sequenceAt(b, i);
                 if (n == -1) break;   // coupee par la fin du morceau lu
                 if (n == 0) {
-                    out += "\xEF\xBF\xBD";
+                    putCode(out, 0xFFFD);
                     ++i;
                     continue;
                 }

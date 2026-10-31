@@ -682,7 +682,10 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(fileexplorer_test PRIVATE xpg_ui xpg_hmi)
     # 1.21.0 : l'apercu de tous les fichiers, sans ecran (src/app/FileView.cpp : signatures, encodages, CSV, zip,
     # classeurs, DOCX, JSON, XML, vidage hexadecimal ; les dossiers et les .XPG par src/app/FilePreview.cpp)
-    xpg_add_test_executable(fileview_test tests/fileview_test.cpp src/app/FileView.cpp src/app/FilePreview.cpp)
+    # Le lecteur de classeurs (xpg_xls) appelle project::Table::parse (xpg_import), lie avant lui : rien d'autre ne
+    # tire Table dans cet essai, d'ou sa source ici (les exe l'ont deja par ailleurs).
+    xpg_add_test_executable(fileview_test tests/fileview_test.cpp src/app/FileView.cpp src/app/FilePreview.cpp
+                            src/project/Table.cpp)
     xpg_target_link_libraries(fileview_test PRIVATE xpg_ui xpg_hmi)
     # ---- fin Lot API 8 : l'explorateur de fichiers ----
     # 1.12.30 : les echanges de projets - les archives .xihm et .xapi (aller-retour fichier par
