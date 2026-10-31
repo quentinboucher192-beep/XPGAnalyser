@@ -4436,9 +4436,53 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9placement et sa raison \xE2\x80\x93 et sa proposition. Une adresse "
                          "existante ne change jamais en silence ; un appareil r\xC3\xA9" "el doit utiliser "
                          "les m\xC3\xAAmes adresses.", {}},
+             {K::Heading, "Essayer avant de proposer : le bac \xC3\xA0 sable (1.21.0)", {}},
+             {K::Paragraph, "Avec une IA connect\xC3\xA9" "e (et l'appel d'outil), l'Assistant peut **essayer "
+                         "une fonction ST** avant de te la proposer : il l'\xC3\xA9" "crit, la fait "
+                         "v\xC3\xA9rifier et ex\xC3\xA9" "cuter ici, lit le r\xC3\xA9sultat, corrige et "
+                         "recommence (5 essais au plus par demande). L'\xC3\xA9tat de la conversation le dit "
+                         "(\xC2\xAB Bac \xC3\xA0 sable : Moyenne\xE2\x80\xA6 \xC2\xBB).", {}},
+             {K::Bullet, "**\xC3\x80 part** : chaque essai tourne dans un **processus s\xC3\xA9par\xC3\xA9** "
+                         "(IHM Studio relanc\xC3\xA9 en bac \xC3\xA0 sable), jamais dans l'application : "
+                         "temps born\xC3\xA9 (10 s par d\xC3\xA9" "faut, 60 au plus), m\xC3\xA9moire "
+                         "born\xC3\xA9" "e, sortie born\xC3\xA9" "e, dossier de travail temporaire "
+                         "effac\xC3\xA9 apr\xC3\xA8s, environnement vide (ni cl\xC3\xA9, ni chemin de "
+                         "l'utilisateur).", {}},
+             {K::Bullet, "**Sans r\xC3\xA9seau, sans automate, sans tes fichiers** : sous Linux, le "
+                         "processus n'a aucun acc\xC3\xA8s au r\xC3\xA9seau ; sous Windows, rien ne l'isole "
+                         "du r\xC3\xA9seau sans droits d'administrateur, mais le code essay\xC3\xA9 n'a "
+                         "aucune fonction r\xC3\xA9seau, et c'est dit. Le banc d'essai n'a aucune connexion "
+                         "\xC3\xA0 un automate : rien n'est jamais \xC3\xA9" "crit dans un "
+                         "\xC3\xA9quipement. Les fonctions de fichiers (FILE_READ, FILE_WRITE\xE2\x80\xA6) "
+                         "ne voient que le dossier de travail : un chemin complet est refus\xC3\xA9.", {}},
+             {K::Bullet, "**Des \xC3\xA9tapes distinctes, chacune avec son \xC3\xA9tat r\xC3\xA9" "el** : "
+                         "analyse syntaxique, compilation (le Compiler du logiciel : noms, types, appels du "
+                         "projet), ex\xC3\xA9" "cution des cas sur un banc neuf (une simulation), tests "
+                         "r\xC3\xA9ussis (N/M). Ce qui n'a pas \xC3\xA9t\xC3\xA9 fait est dit (\xC2\xAB non "
+                         "fait : l'analyse a \xC3\xA9" "chou\xC3\xA9 \xC2\xBB) ; une fonction qui compile "
+                         "n'est jamais pr\xC3\xA9sent\xC3\xA9" "e comme \xC2\xAB qui marche \xC2\xBB.", {}},
+             {K::Bullet, "**Le C et le C++** ne sont que relus (accolades, parenth\xC3\xA8ses, "
+                         "cha\xC3\xAEnes, noms du projet) : jamais compil\xC3\xA9s ni "
+                         "ex\xC3\xA9" "cut\xC3\xA9s.", {}},
+             {K::Bullet, "**Rien n'est ajout\xC3\xA9 au projet** : l'int\xC3\xA9gration reste une "
+                         "proposition (cr\xC3\xA9" "er la fonction) que tu valides. Le projet essay\xC3\xA9 "
+                         "est une copie, prise au d\xC3\xA9" "but de la demande.", {}},
+             {K::Bullet, "Chaque essai s'inscrit au journal **IA/journaux/bac-a-sable.jsonl** (quand, quelle "
+                         "fonction, l'\xC3\xA9tat de chaque \xC3\xA9tape) \xE2\x80\x93 jamais le code.", {}},
+             {K::Heading, "Plusieurs \xC3\xA9tapes, seul : l'agent (1.21.0)", {}},
+             {K::Paragraph, "Pour une demande large (\xC2\xAB v\xC3\xA9rifie mon projet, supprime ce qui ne "
+                         "sert pas, teste les fonctions \xC2\xBB), l'IA connect\xC3\xA9" "e "
+                         "**encha\xC3\xAEne seule ce qui ne change rien** : elle interroge le projet "
+                         "(**analyser_projet**, en lecture seule : qui utilise quoi, ce qu'une suppression "
+                         "toucherait, les \xC3\xA9l\xC3\xA9ments orphelins, la v\xC3\xA9rification globale, "
+                         "les conventions) et essaie le code (le bac \xC3\xA0 sable). Elle **propose** "
+                         "ensuite les modifications : rien ne change avant ta validation, une suppression "
+                         "jamais sans elle. Son compte rendu suit les r\xC3\xA9sultats r\xC3\xA9" "els : ce "
+                         "qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce qui est propos\xC3\xA9, ce qui attend "
+                         "ta validation.", {}},
          },
          {"assistant-ia", "assistant-ia-integree", "assistant-ia-registre", "communication"},
-         {"PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
+         {"BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
          {"ai.panneau", "dialog.ai.apercu"},
          {},
          "",
