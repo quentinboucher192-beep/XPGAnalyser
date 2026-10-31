@@ -716,6 +716,10 @@ if(XPG_BUILD_TESTS)
     # 1.19.0 : le plan d'operations de l'Assistant, le compte rendu, les scenarios de projets complets (A a H).
     xpg_add_test_executable(ai_plan_test tests/ai_plan_test.cpp)
     xpg_target_link_libraries(ai_plan_test PRIVATE xpg_app)
+    # 1.19.0 : l'IA qui concoit et construit des projets complets (AiDesign) - station de pompage, ligne, cuves, regulation ;
+    # etendre une serie, dupliquer, alarmes sur une serie, remplacer un symbole, ajouter une mesure, ranger.
+    xpg_add_test_executable(ai_design_test tests/ai_design_test.cpp)
+    xpg_target_link_libraries(ai_design_test PRIVATE xpg_app)
     # 1.19.0 : le graphe des relations du projet, la verification globale, l'optimisation des adresses.
     xpg_add_test_executable(hmi_relations_test tests/hmi_relations_test.cpp)
     xpg_target_link_libraries(hmi_relations_test PRIVATE xpg_hmi)
@@ -875,6 +879,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiapprentissagefichier COMMAND ai_apprentissage_fichier_test)   # 1.17.0 : l'apprentissage dans un fichier (.xia)
     xpg_add_test(NAME aiapprentissage COMMAND ai_apprentissage_test)        # 1.17.0 : l'onglet Apprentissage (modeles, vocabulaire, mesures)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
+    xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----

@@ -1012,6 +1012,9 @@
     <ClCompile Include="src\app\ai\AiContext.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiDesign.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiKeys.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -2591,6 +2594,9 @@
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiContext.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiDesign.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiKeys.hpp">

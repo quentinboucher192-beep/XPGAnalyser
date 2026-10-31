@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiContext.hpp"
 
+#include "../../hmi/HmiRelations.hpp"   // 1.19.0 : ce qui utilise les elements nommes
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiGuide.hpp"   // fold : la demande sans accents ni casse
 #include "../../hmi/HmiFolders.hpp"      // 1.18.0 : les dossiers des listes
@@ -460,6 +461,45 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
     }
     if (!sys.empty()) s += "Variables syst\xC3\xA8me que la demande \xC3\xA9voque (en lecture) :" + sys + "\n";
     if (!nat.empty()) s += "Fonctions natives que la demande \xC3\xA9voque :" + nat + "\n";
+    // 1.19.0 : LES RELATIONS DES ELEMENTS QUE LA DEMANDE NOMME (une variable, un type, une vue... ecrits tels quels) - lues
+    // dans le graphe du projet (hmi::rel), pour que l'IA reponde sur ce qui l'utilise sans rien inventer. Bornees.
+    if (in.project) {
+        std::vector<std::string> named;
+        std::string req;
+        for (const char c : in.request) req += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+        const auto mentioned = [&](const std::string& n) {
+            if (n.size() < 4 || named.size() >= 3) return;
+            std::string ln;
+            for (const char c : n) ln += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (std::size_t at = req.find(ln); at != std::string::npos; at = req.find(ln, at + 1))
+                if ((at == 0 || !word(req[at - 1])) && (at + ln.size() >= req.size() || !word(req[at + ln.size()]))) {
+                    named.push_back(n);
+                    return;
+                }
+        };
+        for (const auto& v : in.project->programs.variables) mentioned(v.name);
+        for (const auto& t : in.project->programs.types) mentioned(t.name);
+        for (const auto& v : in.project->views) mentioned(v.name);
+        for (const auto& e : in.project->equipments) mentioned(e.name);
+        if (!named.empty()) {
+            const hmi::rel::Graph g = hmi::rel::build(*in.project);
+            std::string rel;
+            for (const auto& n : named) {
+                const auto all = g.findAll(n);
+                if (all.empty()) continue;
+                const auto users = hmi::rel::users(g, all.front());
+                std::string line = "\n  " + n + " : ";
+                if (users.empty()) line += "rien ne l'utilise";
+                for (std::size_t k = 0; k < users.size() && k < 5; ++k) line += (k ? ", " : "") + hmi::rel::describe(g, users[k]);
+                if (users.size() > 5) line += "... (" + std::to_string(users.size()) + " en tout)";
+                line = clip(line, 200);
+                if (rel.size() + line.size() > 560) break;
+                rel += line;
+            }
+            if (!rel.empty()) s += "Ce qui utilise les \xC3\xA9l\xC3\xA9ments nomm\xC3\xA9s (graphe du projet) :" + rel + "\n";
+        }
+    }
 }
 
 } // namespace

@@ -18,6 +18,7 @@
 #include "../src/app/ai/AiLocal.hpp"
 #include "../src/app/ai/AiOperations.hpp"
 #include "../src/app/ai/AiPlan.hpp"
+#include "../src/app/ai/AiPrompt.hpp"
 #include "../src/app/ai/AiProjectAnswers.hpp"
 #include "../src/core/Command.hpp"
 #include "../src/hmi/HmiAudit.hpp"
@@ -361,6 +362,17 @@ void questions() {
     r = ask(pr, open, "Quelles sont les conventions du projet ?");
     check(has(r.text, "Types : 2") && has(r.text, "`T_`") && has(r.text, "m\xC3\xA9moire") && !r.proposal,
           "les conventions : le prefixe T_ des types, la memoire (rien d'ecrit) - " + r.text.substr(0, 160));
+    {
+        // l'IA connectee recoit ce qui utilise les elements que la demande nomme (le graphe), borne
+        ai::PromptInput in;
+        in.project = &pr;
+        in.view = open;
+        in.request = "Quels objets utilisent Pompe_A ?";
+        const std::string sys = ai::systemPrompt(in);
+        check(has(sys, "Ce qui utilise les \xC3\xA9l\xC3\xA9ments nomm\xC3\xA9s") && has(sys, "Voyant_P"), "le contexte de l'IA connectee : ce qui utilise Pompe_A");
+        in.request = "Ajoute un bouton";
+        check(!has(ai::systemPrompt(in), "Ce qui utilise les \xC3\xA9l\xC3\xA9ments nomm\xC3\xA9s"), "rien de plus quand la demande ne nomme rien");
+    }
     r = ask(pr, open, "Quels objets utilisent Variable_Inventee ?");
     check(has(r.text, "aucun") || has(r.text, "De quel"), "un nom absent : rien d'invente");
     // verifier : un chevauchement volontaire, sa correction proposee, jamais appliquee seule
