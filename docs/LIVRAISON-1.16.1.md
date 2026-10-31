@@ -125,11 +125,9 @@ Prises sous Wine, avec l'exe livré, par 8 séances de script (`captures-1.16.1.
 | 6-apercu | Ajuster, la molette sur la cuve, l'infobulle d'un objet, un groupe replié, la liste masquée, 1280 x 800 | bon |
 | 7-types-ihm | T_ConfigGaz déplié dans la liste et dans le tableau des membres (Purge[1] : Debit mot 9, Duree mot 11, Active mot 12 bit 0) ; Tout déplier | bon |
 | 8-aide | l'aide de la Prévisualisation, des réglages, des déballages ; les notes 1.16.1 | bon |
-| 9-corrections | les défauts ci-dessous, revérifiés avec l'exe corrigé | voir plus bas |
 
 Cette passe a trouvé **5 défauts et 4 petits**, tous corrigés avant la livraison (voir « Vu aux essais sous Windows » plus haut) : le membre « Duree en INT » perdu, le poème jamais transmis à l'IA connectée, « un voyant lié à X » mal compris, Refuser… de la carte sans question, la note « laissée de côté » et sa ligne coupée ; « 1 autres », le titre ERREURS, le tableau de l'aide, le nom de la case dans la note.
-
-(la revérification : à compléter)
+Chaque correction a son essai automatique (612 vérifications dans `aiintegree`, 264 dans `aiassistant`). À ta demande, il n'y a plus de nouvelle passe de captures : les corrections ne sont pas capturées une seconde fois sous Wine.
 
 ## 4. Installer
 
