@@ -143,6 +143,28 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.16.1 : l'IA integree lit les phrases, les modeles metier, le relais vers l'IA connectee.
+        note("1.16.1", "Assistant IA", Kind::Changed,
+         "L'IA INT\xC3\x89GR\xC3\x89" "E COMPREND MIEUX TES PHRASES : elle lit la phrase au lieu de la d\xC3\xA9" "couper. Un type se dit en "
+         "langage courant - \xC2\xAB Cr\xC3\xA9" "e une structure qui s'appelle Capteur avec son type, sa mesure et ses d\xC3\xA9" "fauts \xC2\xBB "
+         "donne le type Capteur et ses trois membres ; le nom vient de \xC2\xAB qui s'appelle \xC2\xBB, \xC2\xAB nomm\xC3\xA9 \xC2\xBB, \xC2\xAB la "
+         "structure X \xC2\xBB, jamais d'un mot-outil (plus de type \xC2\xAB pour \xC2\xBB ou \xC2\xAB qui \xC2\xBB) ; sans nom s\xC3\xBBr, elle demande. "
+         "Les articles, les possessifs et le remplissage (\xC2\xAB par exemple \xC2\xBB, \xC2\xAB etc \xC2\xBB) ne deviennent plus des membres.",
+         "assistant-ia-integree", ""),
+        note("1.16.1", "Assistant IA", Kind::New,
+         "LES MOD\xC3\x88LES M\xC3\x89TIER : \xC2\xAB Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs \xC2\xBB part d'un mod\xC3\xA8le de "
+         "l'industrie - T_Capteur : la mesure, son unit\xC3\xA9, son \xC3\xA9" "chelle, ses seuils, son d\xC3\xA9" "faut. Huit mod\xC3\xA8les : capteur "
+         "analogique, capteur TOR, pompe, vanne, moteur, variateur, cuve, r\xC3\xA9gulateur. La r\xC3\xA9ponse dit qu'elle part d'un mod\xC3\xA8le ; "
+         "l'aper\xC3\xA7u montre chaque membre avant d'appliquer. Une demande qu'elle comprend trop mal n'est plus transform\xC3\xA9" "e en "
+         "proposition : elle le dit, et propose des formulations \xC3\xA0 cliquer.",
+         "assistant-ia-integree", ""),
+        note("1.16.1", "Assistant IA", Kind::New,
+         "L'IA INT\xC3\x89GR\xC3\x89" "E D'ABORD, L'IA CONNECT\xC3\x89" "E POUR LE RESTE : avec Anthropic ou un service compatible OpenAI "
+         "(Ollama...), la case \xC2\xAB Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e \xC2\xBB des param\xC3\xA8tres de l'Assistant fait passer chaque "
+         "demande par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, sans connexion ni jeton (la r\xC3\xA9ponse "
+         "le dit) ; le reste part \xC3\xA0 l'IA connect\xC3\xA9" "e avec la conversation. Une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 "
+         "l'IA connect\xC3\xA9" "e. Commande de s\xC3\xA9" "ance : ia dabord oui|non.",
+         "assistant-ia", ""),
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
         note("1.16.0", "Assistant IA", Kind::New,
          "L'IA INT\xC3\x89GR\xC3\x89" "E, SANS CONNEXION : l'Assistant IA a maintenant une IA \xC3\xA9" "crite dans le logiciel, gratuite et "

@@ -4220,8 +4220,18 @@ const std::vector<Topic>& topics() {
                          "\xC2\xBB, \xC2\xAB D\xC3\xA9place V1 \xC3\xA0 droite de P2 \xC2\xBB, \xC2\xAB "
                          "Monte P1 de 50 \xC2\xBB, \xC2\xAB Cache V1 \xC2\xBB, \xC2\xAB Renomme Cuve_1 en "
                          "Bac_Eau \xC2\xBB.\nAssocier une variable\t\xC2\xAB Associe P1 \xC3\xA0 "
-                         "Pompe_1_Marche \xC2\xBB, \xC2\xAB Relie la cuve au niveau "
-                         "\xC2\xBB.\nCr\xC3\xA9" "er des variables, un type, une vue\t\xC2\xAB "
+                         "Pompe_1_Marche \xC2\xBB, \xC2\xAB Relie la cuve au niveau \xC2\xBB.", {}},
+             {K::Table, "Un type en langage courant\t\xC2\xAB Cr\xC3\xA9" "e une structure qui s'appelle "
+                         "Capteur avec son type, sa mesure et ses d\xC3\xA9" "fauts \xC2\xBB, \xC2\xAB "
+                         "Cr\xC3\xA9" "e un type pour g\xC3\xA9rer les capteurs \xC2\xBB (le mod\xC3\xA8le "
+                         "m\xC3\xA9tier T_Capteur), \xC2\xAB Cr\xC3\xA9" "e un type moteur avec marche, "
+                         "d\xC3\xA9" "faut et courant \xC2\xBB. Le nom vient de \xC2\xAB qui s'appelle "
+                         "\xC2\xBB, \xC2\xAB nomm\xC3\xA9 \xC2\xBB, \xC2\xAB la structure X \xC2\xBB, "
+                         "\xC2\xAB un type X \xC2\xBB \xE2\x80\x93 jamais d'un mot-outil (pour, qui, avec) ; "
+                         "sans nom s\xC3\xBBr, elle demande. Un \xC3\xA9quipement sans membres dits part "
+                         "d'un **mod\xC3\xA8le m\xC3\xA9tier** : capteur analogique, capteur TOR, pompe, "
+                         "vanne, moteur, variateur, cuve, r\xC3\xA9gulateur (elle le dit, l'aper\xC3\xA7u "
+                         "montre chaque membre).\nCr\xC3\xA9" "er des variables, un type, une vue\t\xC2\xAB "
                          "Cr\xC3\xA9" "e les variables Pompe_3_Marche et Pompe_4_Marche en BOOL \xC2\xBB, "
                          "\xC2\xAB Cr\xC3\xA9" "e les variables Niveau_Cuve_1 en REAL et Defaut_P1 en BOOL "
                          "\xC2\xBB (chacune son type ; sans type dit, elle le tire du nom et le dit), "
@@ -4245,7 +4255,7 @@ const std::vector<Topic>& topics() {
                          "d'objets ? \xC2\xBB, \xC2\xAB Quelles vues ? \xC2\xBB.\nUne suite\t\xC2\xAB Et une "
                          "autre \xC2\xBB, \xC2\xAB Encore deux \xC2\xBB, \xC2\xAB La m\xC3\xAAme en bleu "
                          "\xC2\xBB, \xC2\xAB Mets-la en rouge \xC2\xBB (le dernier objet cr\xC3\xA9\xC3\xA9 "
-                         "ou cit\xC3\xA9), \xC2\xAB Pareil pour P2 \xC2\xBB.", {}},
+                         "ou cit\xC3\xA9), \xC2\xAB Pareil pour P2 \xC2\xBB.", {}, "1.16.1"},
              {K::Heading, "Comment elle lit", {}},
              {K::Bullet, "**Les genres** : par leur libell\xC3\xA9 (\xC2\xAB bouton \xC3\xA0 impulsion "
                          "\xC2\xBB, \xC2\xAB afficheur num\xC3\xA9rique \xC2\xBB), au pluriel, une faute de "
@@ -4303,7 +4313,9 @@ const std::vector<Topic>& topics() {
                          "quand deux objets portent ce libell\xC3\xA9, \xC2\xAB des pompes \xC2\xBB sans "
                          "nombre : elle demande. Une demande qu'elle ne comprend pas re\xC3\xA7oit une "
                          "r\xC3\xA9ponse honn\xC3\xAAte et des formulations qu'elle comprend, \xC3\xA0 "
-                         "cliquer.", {}},
+                         "cliquer \xE2\x80\x93 jamais une proposition \xC3\xA0 moiti\xC3\xA9 comprise "
+                         "(1.16.1) ; avec \xC2\xAB Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e \xC2\xBB, "
+                         "elle part alors \xC3\xA0 l'IA connect\xC3\xA9" "e.", {}},
              {K::Bullet, "**Proposer ce qui ne change rien.** Des boutons d\xC3\xA9j\xC3\xA0 align\xC3\xA9s, "
                          "une pompe d\xC3\xA9j\xC3\xA0 rouge, des objets d\xC3\xA9j\xC3\xA0 r\xC3\xA9partis "
                          ": elle le dit, sans carte.", {}},
