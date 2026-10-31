@@ -33,6 +33,7 @@
 #include "AiAutomate.hpp"
 #include "AiDemo.hpp"       // fold
 #include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
+#include "AiProjectAnswers.hpp"   // 1.19.0 : les relations, verifier le projet, optimiser les adresses
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : une adresse IP, un equipement
@@ -921,6 +922,7 @@ private:
     LocalReply color() const;
     LocalReply tools() const;        // 1.18.0 : un outil (symbole, popup, equipement, adresse, alarme, script, fonction, dossier)
     LocalReply listSystem() const;   // 1.18.0 : les variables systeme
+    LocalReply projectQuestion() const;   // 1.19.0 : les relations, verifier le projet, optimiser les adresses (vide : pas une telle demande)
     struct NewObject {
         hmi::Kind   kind;
         std::string text, color, name;
@@ -4250,6 +4252,70 @@ LocalReply Engine::listSystem() const {
 }
 
 // ---- l'aiguillage -------------------------------------------------------------------------------------
+// ---- 1.19.0 : les questions sur le projet (AiProjectAnswers) ---------------------------------------
+LocalReply Engine::projectQuestion() const {
+    if (!in_.project) return {};
+    using answers::Question;
+    using hmi::rel::Kind;
+    const bool asking = request_.find('?') != std::string::npos || has("quels") || has("quelles") || has("quel") || has("quelle") || phrase("montre moi")
+                     || has("liste") || has("lister") || phrase("dis moi") || phrase("donne moi") || phrase("cherche") || hasPrefix("retrouv");
+    // le sujet ecrit, sinon << cette variable >> : celle de l'objet choisi dans la vue
+    const auto subject = [&](const std::vector<Kind>& prefer) {
+        std::string s = answers::subjectOf(hmi::rel::build(*in_.project), request_, prefer);
+        if (s.empty() && in_.view && in_.selection.size() == 1)
+            for (const auto& o : in_.view->objects)
+                if (o.id == in_.selection.front() && !o.text("variable").empty()) s = o.text("variable");
+        return s;
+    };
+    std::optional<answers::Answer> a;
+    if ((hasPrefix("verifi") || hasPrefix("control") || hasPrefix("audit")) && (has("projet") || has("tout") || has("tous") || has("ensemble"))) {
+        a = answers::verify(*in_.project, in_.env.plcName ? hmi::NameExists(in_.env.plcName) : hmi::NameExists{});
+    } else if (hasPrefix("optimis") && (hasPrefix("adress") || has("registres") || has("memoire") || has("modbus"))) {
+        // le filtre : les noms ecrits, ou une serie au pluriel (<< les pompes >> -> Pompe*)
+        std::vector<std::string> filter;
+        for (const auto& tk : t_) {
+            if (tk.quoted || tk.f.size() < 4) continue;
+            if (const hmi::Variable* v = in_.project->variable(tk.raw)) {
+                filter.push_back(v->name);
+                continue;
+            }
+            std::string stem = tk.f;
+            if (stem.size() > 4 && stem.back() == 's') stem.pop_back();
+            if (stem == "adresse" || stem == "optimise" || stem == "registre" || stem == "memoire" || stem == "modbu" || stem == "variable") continue;
+            for (const auto& v : in_.project->programs.variables)
+                if (!v.equipment.empty() && fold(v.name).rfind(stem, 0) == 0) {
+                    filter.push_back(v.name.substr(0, stem.size()) + "*");
+                    break;
+                }
+        }
+        a = answers::optimizeAddresses(*in_.project, filter);
+    } else if (hasPrefix("orphelin") || phrase("jamais utilise") || phrase("jamais utilises") || phrase("jamais utilisee") || phrase("jamais utilisees")
+               || phrase("ne sert a rien") || phrase("ne servent a rien")) {
+        a = answers::relations(*in_.project, Question::Orphans, {});
+    } else if (phrase("si je supprime") || phrase("si on supprime") || phrase("si je retire") || phrase("si j enleve") || phrase("si je supprimais")
+               || (hasPrefix("impact") && (hasPrefix("supprim") || hasPrefix("suppression")))) {
+        a = answers::relations(*in_.project, Question::Impact, subject({Kind::Type, Kind::Variable, Kind::View, Kind::Symbol, Kind::Popup}));
+    } else if (asking && hasPrefix("equipement") && (has("vue") || has("ecran") || has("synoptique") || has("page"))) {
+        a = answers::relations(*in_.project, Question::ViewEquipments, subject({Kind::View, Kind::Symbol, Kind::Popup}), in_.view ? in_.view->name : std::string{});
+    } else if (asking && (has("alarmes") || has("alarme")) && (hasPrefix("concern") || has("liees") || has("lie") || hasPrefix("port") || has("sur")
+                                                               || has("de") || has("du") || has("la") || has("le"))) {
+        a = answers::relations(*in_.project, Question::AlarmsOf, subject({Kind::Variable, Kind::Object, Kind::Equipment}));
+    } else if (asking && (has("scripts") || has("script") || has("fonctions") || has("code")) && (hasPrefix("utilis") || hasPrefix("lis") || hasPrefix("ecriv")
+                                                                                                 || hasPrefix("modifi") || hasPrefix("emploi"))) {
+        a = answers::relations(*in_.project, Question::ScriptsUsing, subject({Kind::Variable}));
+    } else if (asking && (has("objets") || has("objet")) && (hasPrefix("utilis") || hasPrefix("affich") || hasPrefix("emploi") || hasPrefix("lis"))) {
+        a = answers::relations(*in_.project, Question::ObjectsUsing, subject({Kind::Variable}));
+    } else if (asking && (phrase("qui utilise") || phrase("ou est utilise") || phrase("ou est utilisee") || hasPrefix("utilisation") || phrase("a quoi sert"))) {
+        a = answers::relations(*in_.project, Question::Users, subject({Kind::Variable, Kind::Type, Kind::Function}));
+    }
+    if (!a) return {};
+    LocalReply r;
+    if (a->proposal) r = finish(std::move(*a->proposal), std::move(a->text));
+    else r = ask(std::move(a->text), std::move(a->suggestions));
+    r.understood = a->understood;
+    return r;
+}
+
 LocalReply Engine::run() {
     if (t_.empty()) return help();
     const bool question = request_.find('?') != std::string::npos;
@@ -4269,6 +4335,8 @@ LocalReply Engine::run() {
                        || has("faudrait") || phrase("il faut") || has("besoin") || phrase("je veux") || phrase("on veut");
     const bool makeVerb = has("fais") || has("faire") || has("faites") || hasPrefix("prevoi") || hasPrefix("prepar") || hasPrefix("construi")
                        || has("donne") || has("donnez");
+    // 1.19.0 : les questions sur le projet - les relations, verifier, optimiser les adresses (avant les listes et les outils)
+    if (LocalReply r = projectQuestion(); !r.text.empty()) return r;
     // 1.18.0 : les variables systeme (une question)
     if ((question || has("quelles") || has("liste") || phrase("montre moi")) && !createVerb && (has("systeme") || has("sys")) && (variableWord() || has("sys")))
         return listSystem();

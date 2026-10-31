@@ -699,6 +699,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiMemoryDialog.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp" />
     <ClCompile Include="src\app\ai\AiPlan.cpp" />
+    <ClCompile Include="src\app\ai\AiProjectAnswers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1210,6 +1211,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiMemoryJson.hpp" />
     <ClInclude Include="src\app\ai\AiPaths.hpp" />
     <ClInclude Include="src\app\ai\AiPlan.hpp" />
+    <ClInclude Include="src\app\ai\AiProjectAnswers.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
