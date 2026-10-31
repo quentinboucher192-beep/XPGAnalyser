@@ -151,13 +151,37 @@ const std::vector<Topic>& topics() {
                          "cela dans le presse-papiers, pr\xC3\xAAt \xC3\xA0 coller dans un message : la "
                          "version, le syst\xC3\xA8me, les dossiers et le r\xC3\xA9sum\xC3\xA9 du projet, "
                          "jamais ses donn\xC3\xA9" "es.", {}},
+             {K::Heading, "Les fichiers de l'application (1.21.0)", {}},
+             {K::Paragraph, "**Fichiers de l'application**, dans \xC3\x80 propos : un arbre de tous les "
+                         "fichiers de l'application \xE2\x80\x93 le **programme install\xC3\xA9**, les "
+                         "**r\xC3\xA9glages de l'utilisateur** (dont l'Assistant IA, les rapports de "
+                         "plantage, les th\xC3\xA8mes, Mes images), les **donn\xC3\xA9" "es**, les "
+                         "**projets** (avec leurs incidents et leurs enregistrements), la "
+                         "**biblioth\xC3\xA8que**, les **captures**, les **journaux** \xE2\x80\x93 chaque "
+                         "ligne avec son poids (Ko, Mo, Go) et, pour un dossier, son nombre de fichiers ; le "
+                         "**poids total** en haut \xC3\xA0 droite, celui de chaque dossier racine sur sa "
+                         "ligne, son chemin en infobulle.", {}},
+             {K::Bullet, "Un dossier contenu dans un autre n'est compt\xC3\xA9 qu'une fois (il est "
+                         "nomm\xC3\xA9 dans l'arbre : \xC2\xAB Assistant IA \xC2\xBB\xE2\x80\xA6) ; les "
+                         "liens symboliques ne sont pas suivis ; ce qui ne se lit pas (droits, fichier "
+                         "verrouill\xC3\xA9) est ignor\xC3\xA9 et compt\xC3\xA9 (\xC2\xAB 3 "
+                         "\xC3\xA9l\xC3\xA9ments illisibles \xC2\xBB).", {}},
+             {K::Bullet, "Le compte se fait en arri\xC3\xA8re-plan : la fen\xC3\xAAtre s'ouvre tout de suite "
+                         "sur \xC2\xAB Calcul en cours\xE2\x80\xA6 \xC2\xBB et un compteur, puis l'arbre "
+                         "appara\xC3\xAEt (chaque racine d\xC3\xA9pli\xC3\xA9" "e d'un niveau) ; fermer la "
+                         "fen\xC3\xAAtre arr\xC3\xAAte le compte.", {}},
+             {K::Bullet, "**Ouvrir le dossier** (ou le clic droit sur une ligne), **Trier par nom** / "
+                         "**Trier par poids**, **Actualiser**, **Copier le r\xC3\xA9sum\xC3\xA9** (le poids "
+                         "total et celui de chaque dossier avec son chemin). **Copier les informations pour "
+                         "le support** ne ferme plus la fen\xC3\xAAtre. Elle se d\xC3\xA9place par sa barre "
+                         "de titre et s'agrandit par un bord ; \xC3\x89" "chap la ferme.", {}},
              {K::Heading, "Aller \xC3\xA0 / Faire\xE2\x80\xA6", {}},
              {K::Paragraph, "Ctrl+K : les commandes de l'application s'y cherchent en fran\xC3\xA7" "ais "
                          "(Ouvrir un projet\xE2\x80\xA6, Enregistrer le projet, Fermer le projet, Revenir au "
                          "menu principal\xE2\x80\xA6), avec leur raccourci \xC3\xA0 droite.", {}},
          },
          {"reperes-nouveautes"},
-         {"menu Aide", "Aide", "centre d'aide", "F1", "Raccourcis clavier", "guides", "didacticiel", "Nouveaut\xC3\xA9s", "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "\xC3\x80 propos d'IHM Studio", "support", "Copier les informations pour le support", "pastille", "Aller \xC3\xA0 / Faire", "Signaler un probl\xC3\xA8me", "notes de version", "favoris", "r\xC3\xA9" "cents"},
+         {"menu Aide", "Aide", "centre d'aide", "F1", "Raccourcis clavier", "guides", "didacticiel", "Nouveaut\xC3\xA9s", "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "\xC3\x80 propos d'IHM Studio", "support", "Copier les informations pour le support", "poids", "poids total", "fichiers de l'application", "arbre des fichiers", "espace disque", "Copier le r\xC3\xA9sum\xC3\xA9", "pastille", "Aller \xC3\xA0 / Faire", "Signaler un probl\xC3\xA8me", "notes de version", "favoris", "r\xC3\xA9" "cents"},
          {"api", "ihm"},
          {},
          "",
@@ -4515,9 +4539,84 @@ const std::vector<Topic>& topics() {
                          "avant ta validation, une suppression jamais sans elle. Son compte rendu suit les "
                          "r\xC3\xA9sultats r\xC3\xA9" "els : ce qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce "
                          "qui est propos\xC3\xA9, ce qui attend ta validation.", {}},
+             {K::Heading, "Les souvenirs (1.21.0)", {}},
+             {K::Paragraph, "L'Assistant garde **sur ce PC** des souvenirs : tes pr\xC3\xA9" "f\xC3\xA9rences "
+                         "(port\xC3\xA9" "e **Utilisateur**), les conventions et d\xC3\xA9" "cisions d'un "
+                         "projet (**Projet**), les d\xC3\xA9" "cisions d'une conversation "
+                         "(**Conversation**), les solutions techniques (**Technique**). Ils sont relus et "
+                         "envoy\xC3\xA9s avec les demandes o\xC3\xB9 ils s'appliquent : **le mod\xC3\xA8le "
+                         "distant n'est pas r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9**, il lit cette "
+                         "m\xC3\xA9moire locale \xC3\xA0 chaque demande.", {}},
+             {K::Bullet, "**Un projet est reconnu par un identifiant**, jamais par son nom seul : deux "
+                         "projets de m\xC3\xAAme nom ne m\xC3\xA9langent jamais leurs souvenirs ; un projet "
+                         "d\xC3\xA9plac\xC3\xA9 garde les siens, une copie en re\xC3\xA7oit un autre.", {}},
+             {K::Bullet, "**L'Assistant propose, tu valides** : quand il veut retenir quelque chose (outil "
+                         "*proposer_souvenir*), la proposition reste **\xC3\xA0 valider** et ne part avec "
+                         "aucune demande ; l'\xC3\xA9tat de la conversation le dit. Dans **M\xC3\xA9moire et "
+                         "apprentissage \xE2\x80\xBA Souvenirs** : confirmer, garder comme hypoth\xC3\xA8se, "
+                         "refuser, \xC3\xA9pingler, associer \xC3\xA0 un projet, modifier, supprimer, "
+                         "sauvegarder et restaurer.", {}},
+             {K::Bullet, "**Une contradiction n'\xC3\xA9" "crase jamais** : les deux souvenirs restent, "
+                         "marqu\xC3\xA9s \xC2\xAB en conflit \xC2\xBB, et l'IA te demande lequel est juste.", {}},
+             {K::Bullet, "L'IA peut aussi **chercher dans ses souvenirs** et **dans tes anciennes "
+                         "conversations** (mots, objets, \xC3\xA9quipements, langages, dates, "
+                         "probl\xC3\xA8mes et solutions, avec la chronologie).", {}},
+             {K::Heading, "Le contexte de la discussion : les fichiers joints (1.21.0)", {}},
+             {K::Paragraph, "En haut de la conversation, le panneau **Contexte de la discussion** (\xC2\xAB "
+                         "Fichiers joints : 4 \xC2\xBB) liste les fichiers joints : leur type, leur taille, "
+                         "leur date d'ajout, leur **disponibilit\xC3\xA9** (Disponible, "
+                         "D\xC3\xA9plac\xC3\xA9, Manquant) et leur **\xC3\xA9tat d'analyse** (Non "
+                         "analys\xC3\xA9, Analyse en cours, Analys\xC3\xA9, \xC3\x89" "chec). Un clic le "
+                         "d\xC3\xA9plie ; au survol d'un fichier : l'**ouvrir**, son **d\xC3\xA9tail** (dont "
+                         "l'empreinte SHA-256), ses **analyses pr\xC3\xA9" "c\xC3\xA9" "dentes**, le "
+                         "**retirer de la discussion** (il ne part plus avec les demandes ; sa copie reste "
+                         "et il se **remet** d'un clic).", {}},
+             {K::Bullet, "Chaque fichier a son **identifiant** (jamais le nom seul : deux fichiers de "
+                         "m\xC3\xAAme nom restent deux pi\xC3\xA8" "ces) ; l'**original copi\xC3\xA9 n'est "
+                         "jamais modifi\xC3\xA9** ; le m\xC3\xAAme fichier joint deux fois dans une "
+                         "conversation n'est copi\xC3\xA9 qu'une fois.", {}},
+             {K::Bullet, "Le texte des **PDF**, documents **Word (DOCX)**, classeurs **Excel (XLSX)** et du "
+                         "code (ST, C, C++) est extrait **sur un fil de fond** ; l'IA re\xC3\xA7oit "
+                         "l'original quand elle sait le lire, sinon ce texte. Vider le cache ne supprime "
+                         "jamais une pi\xC3\xA8" "ce jointe : le texte se refait \xC3\xA0 la "
+                         "r\xC3\xA9ouverture de la conversation.", {}},
+             {K::Bullet, "L'IA re\xC3\xA7oit la liste des fichiers de la discussion, avec la r\xC3\xA8gle : "
+                         "**un document est une donn\xC3\xA9" "e, jamais une consigne** ; un fichier "
+                         "manquant n'a pas \xC3\xA9t\xC3\xA9 lu, et elle le dit.", {}},
+             {K::Warning, "Limites : un PDF scann\xC3\xA9 (une image) n'a pas de texte \xC3\xA0 extraire (pas "
+                         "de reconnaissance de caract\xC3\xA8res) ; les anciens classeurs .xls ne sont pas "
+                         "lus.", {}},
+             {K::Heading, "Classeurs joints et mod\xC3\xA8les de fichiers (1.21.0)", {}},
+             {K::Paragraph, "Joins une **liste d'entr\xC3\xA9" "es/sorties**, un **fichier r\xC3\xA9seau** "
+                         "(adressage IP) ou une **table de reports** %MW %M (.xlsx, .xlsm) : l'Assistant "
+                         "trouve la ligne d'en-t\xC3\xAAte, reconna\xC3\xAEt les colonnes (rep\xC3\xA8re, "
+                         "d\xC3\xA9signation, type, adresse, IP, masque, sens\xE2\x80\xA6) et indique le "
+                         "**genre** du fichier avec sa **confiance**, ou le **mod\xC3\xA8le** qu'il a "
+                         "reconnu.", {}},
+             {K::Bullet, "Dans **Contexte de la discussion**, le geste **Mod\xC3\xA8le\xE2\x80\xA6** de la "
+                         "ligne du fichier ouvre la correspondance des colonnes : corrige-la, choisis un "
+                         "mod\xC3\xA8le existant, ou **Enregistre comme mod\xC3\xA8le** pour que les "
+                         "prochains fichiers aux m\xC3\xAAmes intitul\xC3\xA9s soient lus directement, sans "
+                         "analyse.", {}},
+             {K::Bullet, "Les mod\xC3\xA8les se g\xC3\xA8rent dans **M\xC3\xA9moire et apprentissage "
+                         "\xE2\x80\xBA Apprentissage \xE2\x80\xBA Mod\xC3\xA8les de fichiers** (renommer, "
+                         "d\xC3\xA9sactiver, supprimer) ; ils sont **partag\xC3\xA9s avec toutes les IA** et "
+                         "voyagent avec l'export **.xia**.", {}},
+             {K::Bullet, "Demande ensuite par exemple \xC2\xAB Cr\xC3\xA9" "e les variables du fichier joint "
+                         "\xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e les types IHM du fichier joint \xC2\xBB, "
+                         "\xC2\xAB Cr\xC3\xA9" "e les \xC3\xA9quipements du fichier r\xC3\xA9seau \xC2\xBB "
+                         "ou \xC2\xAB Adresse les variables du fichier joint sur l'\xC3\xA9quipement API_1 "
+                         "\xC2\xBB : l'Assistant pr\xC3\xA9pare une **proposition**, que tu v\xC3\xA9rifies "
+                         "dans l'aper\xC3\xA7u avant **Appliquer**.", {}},
+             {K::Bullet, "Il n'invente jamais un nom ni une adresse, et dit les lignes sans rep\xC3\xA8re, "
+                         "illisibles ou en double. Une adresse %I/%Q n'est jamais adress\xC3\xA9" "e en "
+                         "Modbus.", {}},
+             {K::Warning, "Limites : la d\xC3\xA9tection repose sur des mots-cl\xC3\xA9s (un en-t\xC3\xAAte "
+                         "atypique se corrige dans la fen\xC3\xAAtre Mod\xC3\xA8le\xE2\x80\xA6) ; ni ancien "
+                         ".xls, ni Modbus RTU ; 8 classeurs au plus gard\xC3\xA9s en m\xC3\xA9moire.", {}},
          },
          {"assistant-ia", "assistant-ia-integree", "assistant-ia-registre", "communication"},
-         {"SUPPRIMER", "SUPPRESSIONS", "STRAT\xC3\x89GIE", "REMPLACER", "R\xC3\x89" "F\xC3\x89RENCES", "INUTILES", "BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
+         {"CLASSEUR", "XLSM", "MOD\xC3\x88LE DE FICHIER", "MOD\xC3\x88LES DE FICHIERS", "LISTE D'E/S", "FICHIER R\xC3\x89SEAU", "REPORTS", "SUPPRIMER", "SUPPRESSIONS", "STRAT\xC3\x89GIE", "REMPLACER", "R\xC3\x89" "F\xC3\x89RENCES", "INUTILES", "BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
          {"ai.panneau", "dialog.ai.apercu"},
          {},
          "",
@@ -4675,6 +4774,58 @@ const std::vector<Topic>& topics() {
              {K::Warning, "XPGAnalyser aide \xC3\xA0 comprendre un \xC3\xA9v\xC3\xA9nement. Ce n'est pas un "
                          "syst\xC3\xA8me de s\xC3\xA9" "curit\xC3\xA9 ni une surveillance "
                          "d\xC3\xA9terministe de la logique de l'automate.", {}},
+             {K::Heading, "Une alarme qui bat (1.21.0)", {}},
+             {K::Paragraph, "Quand la m\xC3\xAAme alarme r\xC3\xA9" "appara\xC3\xAEt sans cesse (toutes les 2 "
+                         "s, des jours durant), elle ne fait pas des centaines de milliers d'incidents. Une "
+                         "r\xC3\xA9" "apparition survenue moins de **Regroupement des "
+                         "r\xC3\xA9" "apparitions** secondes (600 par d\xC3\xA9" "faut) apr\xC3\xA8s la "
+                         "derni\xC3\xA8re activit\xC3\xA9 de l'alarme (son incident, une "
+                         "r\xC3\xA9" "apparition ou sa disparition ; la fen\xC3\xAAtre glisse \xC3\xA0 "
+                         "chaque fois) est **compt\xC3\xA9" "e dans son incident**, sans nouveau dossier, ni "
+                         "image, ni vid\xC3\xA9o. Seule une alarme rest\xC3\xA9" "e calme plus longtemps "
+                         "rouvre un incident ; un incident valid\xC3\xA9 (ou supprim\xC3\xA9) est clos, et "
+                         "la r\xC3\xA9" "apparition suivante en ouvre un nouveau.", {}},
+             {K::Bullet, "La ligne de l'incident porte un badge \xC2\xAB \xC3\x97" "327 \xC2\xBB ; sa fiche "
+                         "a une section **R\xC3\xA9" "apparitions** : le nombre exact, la premi\xC3\xA8re et "
+                         "la derni\xC3\xA8re, la fr\xC3\xA9quence (\xC2\xAB toutes les 10 s environ "
+                         "\xC2\xBB), un histogramme par heure (24 h) et par minute (derni\xC3\xA8re heure), "
+                         "les derni\xC3\xA8res r\xC3\xA9" "apparitions (l'heure, la dur\xC3\xA9" "e active, "
+                         "la valeur lue) et le diagnostic d'une alarme instable avec les pistes \xC3\xA0 "
+                         "v\xC3\xA9rifier (hyst\xC3\xA9r\xC3\xA9sis du seuil, temporisation d'apparition, "
+                         "capteur ou contact d\xC3\xA9" "fectueux), sans cause affirm\xC3\xA9" "e.", {}},
+             {K::Bullet, "Le tri **Nombre de r\xC3\xA9" "apparitions** range les alarmes qui battent le plus "
+                         "en t\xC3\xAAte ; **Nouvelle analyse** envoie leur r\xC3\xA9sum\xC3\xA9 \xC3\xA0 "
+                         "l'IA.", {}},
+             {K::Bullet, "Tout est gard\xC3\xA9 dans `reapparitions.json`, dans le dossier de l'incident, "
+                         "**hors des empreintes** (c'est le seul fichier r\xC3\xA9\xC3\xA9" "crit) ; sa "
+                         "taille est born\xC3\xA9" "e, quel que soit le nombre de r\xC3\xA9" "apparitions.", {}},
+             {K::Bullet, "Deux garde-fous, dans les **R\xC3\xA9glages** : **Nouveaux incidents par heure, au "
+                         "plus** (60 ; au-del\xC3\xA0, les incidents sont compt\xC3\xA9s sans dossier, et "
+                         "c'est dit dans la barre d'\xC3\xA9tat du volet et au journal) et **Quota des "
+                         "images et vid\xC3\xA9os (Mo)** (2048 ; au-del\xC3\xA0, les nouveaux incidents sont "
+                         "cr\xC3\xA9\xC3\xA9s sans image ni vid\xC3\xA9o, et c'est dit).", {}},
+             {K::Warning, "Rien n'est jamais supprim\xC3\xA9 automatiquement. 0 d\xC3\xA9sactive chacun de "
+                         "ces trois r\xC3\xA9glages.", {}},
+             {K::Heading, "Lire la vid\xC3\xA9o d'un incident (1.21.0)", {}},
+             {K::Paragraph, "Dans la fiche, groupe **Capture et vid\xC3\xA9o**, **Lire la vid\xC3\xA9o ici** "
+                         "lance la lecture depuis le d\xC3\xA9" "but ; sous l'image, la barre de lecture "
+                         "fonctionne comme celle des enregistrements. La barre de temps se clique ou se "
+                         "glisse ; son **rep\xC3\xA8re rouge** marque le d\xC3\xA9" "clenchement de l'alarme "
+                         "(t = 0). Dessous : la position et la dur\xC3\xA9" "e, t (les secondes depuis le "
+                         "d\xC3\xA9" "clenchement, n\xC3\xA9gatives avant) et le num\xC3\xA9ro de l'image.", {}},
+             {K::Table, "Commande\tTouche\nLecture / Pause\tEspace\n-10 s, +10 s\t\xE2\x86\x90 "
+                         "\xE2\x86\x92\nimage pr\xC3\xA9" "c\xC3\xA9" "dente, image suivante (en "
+                         "pause)\tMaj+\xE2\x86\x90 Maj+\xE2\x86\x92, ou la virgule et le "
+                         "point\nD\xC3\xA9" "but, Fin\tD\xC3\xA9" "but, Fin\nD\xC3\xA9" "clenchement (aller "
+                         "\xC3\xA0 t = 0)\tD\nBoucle\tB\nvitesse \xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8\t+ et "
+                         "-\narr\xC3\xAAter la vid\xC3\xA9o\t\xC3\x89" "chap", {}},
+             {K::Paragraph, "Au bout, sans la boucle, la derni\xC3\xA8re image reste \xC3\xA0 l'\xC3\xA9" "cran "
+                         "; Lecture repart du d\xC3\xA9" "but. Les touches marchent une fois la fiche "
+                         "cliqu\xC3\xA9" "e. **Zoom**, sur la vid\xC3\xA9o comme sur la capture : la molette "
+                         "sur l'image zoome autour de la souris ; les boutons **-** / **Ajuster** / **+** "
+                         "sont en haut \xC3\xA0 droite, avec le pourcentage ; on glisse l'image "
+                         "zoom\xC3\xA9" "e pour la d\xC3\xA9placer ; un double-clic la remet enti\xC3\xA8re. "
+                         "**Ouvrir avec le lecteur du syst\xC3\xA8me** reste disponible.", {}},
          },
          {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
          {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},
@@ -15733,6 +15884,20 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9l\xC3\xA9ments, et le dit) ; pour un **zip**, ses entr\xC3\xA9" "es ; pour "
                          "une **image**, ses dimensions ; pour un **texte** ou un **CSV**, ses "
                          "premi\xC3\xA8res lignes.", {}},
+             {K::Heading, "L'aper\xC3\xA7u (1.21.0)", {}},
+             {K::Paragraph, "**Aper\xC3\xA7u** (coch\xC3\xA9 d'office) montre le fichier choisi. Si l'objet "
+                         "fait au moins 760 pixels de large, l'aper\xC3\xA7u est dans l'objet : la liste "
+                         "\xC3\xA0 gauche, l'aper\xC3\xA7u \xC3\xA0 droite, la ligne d'\xC3\xA9tat dessous. "
+                         "Sinon, il s'ouvre dans une fen\xC3\xAAtre d\xC3\xA9pla\xC3\xA7" "able et "
+                         "redimensionnable qui suit les choix suivants. C'est le m\xC3\xAAme aper\xC3\xA7u "
+                         "que IHM \xE2\x80\xBA Ressources : image, PDF, texte, grille, JSON, XML, DOCX, zip, "
+                         "son, vid\xC3\xA9o, police, sinon le type et les premiers octets. Une "
+                         "entr\xC3\xA9" "e d'un zip se montre sans \xC3\xAAtre extraite ; un dossier choisi "
+                         "montre son contenu r\xC3\xA9sum\xC3\xA9. Les boutons **Ouvrir avec le programme du "
+                         "syst\xC3\xA8me** et **Ouvrir le dossier** n'apparaissent que si **Ouvrir avec le "
+                         "syst\xC3\xA8me permis** est coch\xC3\xA9 (d\xC3\xA9" "coch\xC3\xA9 d'office : un "
+                         "poste d'exploitation ne lance aucun programme). Pilotable d\xC3\xA9" "coch\xC3\xA9 "
+                         "bloque aussi les gestes de l'aper\xC3\xA7u.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nSource (dossier ou "
                          ".zip)\t(vide)\tUn dossier ou un .zip ; relative : au dossier du projet ; vide : "
@@ -15744,13 +15909,17 @@ const std::vector<Topic>& topics() {
                          "taille de chaque fichier.\nColonne Date\tTRUE\tLa date de modification.\nChoix "
                          "vers\t(vide)\tUne variable STRING : le chemin complet de la ligne "
                          "choisie.\nRafra\xC3\xAE" "chir permis\tTRUE\tLe bouton qui relit la "
-                         "source.\nExtraire permis\tFALSE\tLe bouton Extraire (un fichier d'un "
-                         "zip).\nDossier d'extraction\tdonnees/extraits\tRelatif : au dossier du projet ; "
-                         "jamais dans le projet lui-m\xC3\xAAme (ihm/).\n\xC3\x89l\xC3\xA9ments au "
-                         "plus\t2000\tLa liste s'arr\xC3\xAAte l\xC3\xA0, et le dit.\nPolice\tSans\tLa "
-                         "police de l'objet.\nTaille du texte\t13\tEn pixels de la vue.\nCouleur du "
-                         "texte\t#DDE3EA\tLes noms, les titres.\nFond\t#1F252E\tLe fond de "
-                         "l'objet.\nContour\t#3A4556\tSon bord, ses s\xC3\xA9parations.\nCouleur "
+                         "source.\nAper\xC3\xA7u\tTRUE\tLe fichier choisi se montre : dans l'objet "
+                         "d\xC3\xA8s 760 pixels de large, sinon dans une fen\xC3\xAAtre "
+                         "d'aper\xC3\xA7u.\nOuvrir avec le syst\xC3\xA8me permis\tFALSE\tLes boutons "
+                         "\xC2\xAB Ouvrir avec le programme du syst\xC3\xA8me \xC2\xBB et \xC2\xAB Ouvrir le "
+                         "dossier \xC2\xBB de l'aper\xC3\xA7u.\nExtraire permis\tFALSE\tLe bouton Extraire "
+                         "(un fichier d'un zip).\nDossier d'extraction\tdonnees/extraits\tRelatif : au "
+                         "dossier du projet ; jamais dans le projet lui-m\xC3\xAAme "
+                         "(ihm/).\n\xC3\x89l\xC3\xA9ments au plus\t2000\tLa liste s'arr\xC3\xAAte l\xC3\xA0, "
+                         "et le dit.\nPolice\tSans\tLa police de l'objet.\nTaille du texte\t13\tEn pixels de "
+                         "la vue.\nCouleur du texte\t#DDE3EA\tLes noms, les titres.\nFond\t#1F252E\tLe fond "
+                         "de l'objet.\nContour\t#3A4556\tSon bord, ses s\xC3\xA9parations.\nCouleur "
                          "d'accent\t#2F6FD6\tLa ligne choisie, le fil d'Ariane, le bouton Extraire.\nRayon "
                          "des coins\t6\t0 : coins carr\xC3\xA9s.\nPilotable (parcourir, choisir, "
                          "trier)\tTRUE\tD\xC3\xA9" "coch\xC3\xA9 : il montre la source sans r\xC3\xA9" "agir.", {}},
@@ -15796,6 +15965,12 @@ const std::vector<Topic>& topics() {
             "Une variable STRING : le chemin complet de la ligne choisie."},
            {"allowRefresh", "Rafra\xC3\xAE" "chir permis", "TRUE",
             "Le bouton qui relit la source."},
+           {"showPreview", "Aper\xC3\xA7u", "TRUE",
+            "Le fichier choisi se montre : dans l'objet d\xC3\xA8s 760 pixels de large, sinon dans une "
+            "fen\xC3\xAAtre d'aper\xC3\xA7u."},
+           {"allowOpen", "Ouvrir avec le syst\xC3\xA8me permis", "FALSE",
+            "Les boutons \xC2\xAB Ouvrir avec le programme du syst\xC3\xA8me \xC2\xBB et \xC2\xAB Ouvrir le "
+            "dossier \xC2\xBB de l'aper\xC3\xA7u."},
            {"allowExtract", "Extraire permis", "FALSE",
             "Le bouton Extraire (un fichier d'un zip)."},
            {"extractTo", "Dossier d'extraction", "donnees/extraits",
@@ -21501,6 +21676,26 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.12 : les vid\xC3\xA9os AVI, MOV et WMV s'importent ; la fiche montre la "
                          "premi\xC3\xA8re image quand elle se d\xC3\xA9" "code ici (un AVI Motion-JPEG "
                          "partout, le reste sous Windows), sa dur\xC3\xA9" "e, sa taille, son codec.", {}, "1.12.12"},
+             {K::Heading, "L'aper\xC3\xA7u de tous les fichiers (1.21.0)", {}},
+             {K::Paragraph, "Choisir une ressource la montre \xC3\xA0 droite, quel que soit son genre. Une "
+                         "image s'ajuste (\xE2\x88\x92, +, Ajuster, 100 %, Ctrl+molette ; un double-clic "
+                         "bascule) et un GIF anim\xC3\xA9 tourne. Un son montre son onde (Lire / Pause), une "
+                         "vid\xC3\xA9o sa premi\xC3\xA8re image (Lire quand elle se d\xC3\xA9" "code ici), "
+                         "une police s'\xC3\xA9" "crit sur quatre lignes. Pour un document : un PDF page "
+                         "\xC3\xA0 page avec son nombre de pages ; un texte ou du code "
+                         "num\xC3\xA9rot\xC3\xA9 (encodage d\xC3\xA9tect\xC3\xA9 : UTF-8, UTF-16, "
+                         "Windows-1252) ; une grille CSV ou Excel avec ses onglets et ses 500 "
+                         "premi\xC3\xA8res lignes ; un JSON ou un XML indent\xC3\xA9 qu'on replie et "
+                         "d\xC3\xA9plie ; un DOCX avec ses titres ; la liste d'un zip ; sinon le type "
+                         "reconnu et les premiers octets en hexad\xC3\xA9" "cimal.", {}},
+             {K::Bullet, "La molette fait d\xC3\xA9" "filer, Maj+molette en largeur. **Ouvrir avec le "
+                         "programme du syst\xC3\xA8me** ouvre une copie ; **Ouvrir le dossier** ouvre le "
+                         "dossier des ressources du projet enregistr\xC3\xA9.", {}},
+             {K::Bullet, "Ce qui est long \xC3\xA0 lire se charge en arri\xC3\xA8re-plan (\xC2\xAB "
+                         "Chargement\xE2\x80\xA6 \xC2\xBB) ; un fichier ab\xC3\xAEm\xC3\xA9 dit pourquoi. Le "
+                         "m\xC3\xAAme aper\xC3\xA7u sert dans **Fichiers externes**, dans l'objet "
+                         "**Explorateur de fichiers** et dans l'explorateur de l'appli (**Aper\xC3\xA7u "
+                         "complet**).", {}},
          },
          {"fichiers", "actions-ressources", "objets", "dossiers"},
          {},

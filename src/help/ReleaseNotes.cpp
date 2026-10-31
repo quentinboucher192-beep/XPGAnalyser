@@ -197,6 +197,22 @@ const std::vector<Note>& table() {
          "Le texte des PDF, documents Word, classeurs Excel et du code est extrait en arri\xC3\xA8re-plan ; l'original n'est "
          "jamais modifi\xC3\xA9, un doublon n'est copi\xC3\xA9 qu'une fois.",
          "assistant-ia-plan", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "LES CLASSEURS JOINTS SONT RECONNUS : l'Assistant reconna\xC3\xAEt un classeur Excel joint (.xlsx ou .xlsm) - liste "
+         "d'entr\xC3\xA9" "es/sorties, fichier r\xC3\xA9seau et adressage IP, ou reports / table d'\xC3\xA9" "change %MW "
+         "%M - avec sa ligne d'en-t\xC3\xAAte, la correspondance de ses colonnes et une confiance. Le geste \xC2\xAB Mod\xC3\xA8le\xE2\x80\xA6 "
+         "\xC2\xBB du contexte de la discussion montre ce qui a \xC3\xA9t\xC3\xA9 trouv\xC3\xA9, permet de corriger la correspondance, "
+         "de choisir un mod\xC3\xA8le existant ou d'enregistrer celui-ci comme mod\xC3\xA8le.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "MOD\xC3\x88LES DE FICHIERS ET PROPOSITIONS : les mod\xC3\xA8les de fichiers sont gard\xC3\xA9s dans la m\xC3\xA9moire "
+         "de l'IA (M\xC3\xA9moire et apprentissage \xE2\x80\xBA Apprentissage \xE2\x80\xBA Mod\xC3\xA8les de fichiers), "
+         "partag\xC3\xA9s avec toutes les IA et emport\xC3\xA9s par le fichier d'apprentissage .xia : un classeur aux m\xC3\xAAmes "
+         "intitul\xC3\xA9s est lu directement, sans analyse. \xC3\x80 partir d'un classeur lu, l'IA propose les variables "
+         "IHM, les types IHM (une structure par famille d'\xC3\xA9quipements), les \xC3\xA9quipements d'un fichier r\xC3\xA9seau "
+         "ou les adresses %MW/%M : toujours une proposition \xC3\xA0 v\xC3\xA9rifier dans l'aper\xC3\xA7u, sans nom ni adresse "
+         "invent\xC3\xA9s, les lignes \xC3\xA9" "cart\xC3\xA9" "es \xC3\xA9tant dites.",
+         "assistant-ia-plan", ""),
         note("1.21.0", "Incidents", Kind::New,
          "LA VID\xC3\x89O D'UN INCIDENT SE LIT COMME UN ENREGISTREMENT : sous l'image, une barre de temps qu'on clique ou "
          "qu'on glisse, avec un rep\xC3\xA8re rouge au d\xC3\xA9" "clenchement (t = 0), et les commandes de la relecture "

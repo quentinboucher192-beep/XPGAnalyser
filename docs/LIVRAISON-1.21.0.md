@@ -101,4 +101,21 @@ Le même aperçu partout : **IHM › Ressources**, **Fichiers externes**, l'obje
 
 En tête : nom, type, taille, date ; un fichier dont le contenu ne correspond pas à l'extension est signalé. Ce qui est lent se lit **en arrière-plan** (« Chargement… »), jamais sur le fil de l'interface ; tout est borné (texte 4 Mo et 20 000 lignes, grilles 500 lignes, zip 5 000 entrées, images ramenées à 4 096 px…). L'objet Explorateur de fichiers gagne deux propriétés : **Aperçu** (coché : dans l'objet dès 760 pixels de large, sinon dans une fenêtre qui suit les choix) et **Ouvrir avec le système permis** (décoché d'office : un poste d'exploitation ne lance aucun programme).
 
+## 12. Les classeurs joints et les modèles de fichiers
+
+Un classeur Excel joint (.xlsx ou .xlsm) est reconnu, sur le fil d'analyse :
+
+| Genre | Ce qui le trahit |
+|---|---|
+| Liste d'entrées/sorties | adresses d'E/S (`%I0.1`, `%IW0.3.2`, `I0.0`, `PEW256`…), types de signal (DI/DO/AI/AO, TOR/ANA…) |
+| Fichier réseau | adresses IPv4 (et MAC), intitulés IP, masque, passerelle, VLAN, port |
+| Reports / table d'échange | adresses mémoire (`%M`, `%MW`, `%MD`, `%MF`, `DB1.DBX0.0`…), « report », « échange » dans le nom de la feuille |
+
+- **La ligne d'en-tête** est cherchée dans les 40 premières lignes ; 24 rôles de colonne en français et en anglais (repère, désignation, type, adresse, rack, voie, IP, masque, sens…). Une confiance est donnée ; sous 35 %, le fichier est « autre » et rien ne change.
+- **Le geste « Modèle… »** du contexte de la discussion montre ce qui a été trouvé, corrige la correspondance des colonnes, choisit un modèle existant ou **enregistre** celui-ci.
+- **Les modèles** vivent dans la mémoire de l'IA (**Apprentissage › Modèles de fichiers** : renommer, désactiver, supprimer), comme une connaissance : **toutes les IA** les reçoivent, et le fichier **.xia** les emporte (la version du format reste 1 : une ancienne version les lit comme des connaissances ordinaires). Un classeur aux mêmes intitulés (90 % et chaque rôle identique) est lu directement, sans analyse, même si un titre a été ajouté au-dessus.
+- **Les actions**, toujours en proposition vérifiée dans l'aperçu : créer les **variables IHM**, les **types IHM** (une structure par famille d'équipements), les **équipements** d'un fichier réseau (Modbus TCP ou Ethernet TCP), **adresser** des `%M`/`%MW` sur un équipement Modbus. Aucun nom ni adresse inventé ; les lignes sans repère, illisibles ou en double sont dites ; un `%I`/`%Q` n'est jamais adressé en Modbus.
+- **L'IA connectée** reçoit un résumé compact au lieu du texte brut, et l'outil `lignes_classeur` pour lire les lignes par pages (200 au plus), sur le fil du fournisseur. L'IA intégrée comprend « Crée les variables de la liste d'E/S jointe », « Crée les équipements du fichier réseau », « Adresse les variables du fichier joint sur l'équipement API_1 », « Que contient le fichier joint ? ».
+- Essai `ai_modeles_fichiers_test` : 149 vérifications (lecture, fusions, .xlsm, les trois genres en français et en anglais, enregistrer puis reconnaître un modèle, .xia aller-retour et ancien .xia, propositions validées, IA intégrée, outil par pages). Vérifié aussi, en local seulement, sur un classeur de reports réel (4 feuilles reconnues, 1 760 lignes lues en 0,3 s) : **aucune donnée client dans le dépôt**.
+
 <!-- SECTIONS-SUITE -->
