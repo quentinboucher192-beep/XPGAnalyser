@@ -3187,6 +3187,9 @@
     <ClInclude Include="src\app\ai\AiKnowledge.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\ai\AiLearningFile.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ai\AiMemory.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>

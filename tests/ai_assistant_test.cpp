@@ -1158,6 +1158,74 @@ void testPreviewEscapeNeverRefuses() {
     }
 }
 
+// 1.16.1 : la Previsualisation - le zoom, les infobulles des objets, la liste repliable (par groupe, toute).
+void testPreviewZoomTooltips() {
+    std::printf("[apercu : zoom, infobulles, liste repliable]\n");
+    Fixture f("apercu_zoom");
+    f.panel->newConversation();
+    (void)f.sendAndWait(ai::demoSuggestions()[0]);
+    const int m = f.lastProposal();
+    f.panel->openPreview(m);
+    f.mm.applyPending();
+    auto* d = dynamic_cast<ai::AiPreviewDialog*>(f.mm.top());
+    check(d != nullptr, "la fenetre s'ouvre");
+    if (!d) return;
+    d->widgetRoot()->setBounds({0, 0, 1280, 800});
+    d->widgetRoot()->layout();
+    const auto paint = [&] {
+        Recorder rec;
+        d->widgetRoot()->render(ui::PaintContext{rec, ui::Theme::dark(), {0, 0, 1280, 800}, 0.0, nullptr});
+        return rec;
+    };
+    Recorder first = paint();
+    check(first.saw("Ajuster") && first.saw("+") && d->previewZoom() == 1.f, "les boutons du zoom ; la vue entiere au depart");
+    // Le zoom : la molette sur l'apercu, Ctrl+0, les bornes.
+    const auto area = d->previewArea();
+    const gfx::Point mid{area.x + area.w / 2.f, area.y + area.h / 2.f};
+    (void)f.mm.HandleEvent(ui::MouseWheel{mid, 0.f, 1.f, {}});
+    check(d->previewZoom() > 1.2f && d->previewZoom() < 1.3f, "la molette sur l'apercu : zoom avant (" + std::to_string(d->previewZoom()) + ")");
+    d->setPreviewZoom(50.f);
+    check(d->previewZoom() == 10.f, "le zoom s'arrete a 10");
+    ui::KeyDown ctrl0{ui::Key::Num0, {}, false};
+    ctrl0.mods.ctrl = true;
+    (void)f.mm.HandleEvent(ctrl0);
+    check(d->previewZoom() == 1.f && f.mm.top() == d, "Ctrl+0 : la vue entiere (la fenetre reste)");
+    // L'infobulle d'un objet de l'apercu : son nom, son genre, nouveau.
+    std::string name;
+    for (const auto& o : d->preview().view.objects)
+        if (!o.name.empty() && std::find(d->preview().touched.created.begin(), d->preview().touched.created.end(), o.id) != d->preview().touched.created.end()) {
+            name = o.name;
+            break;
+        }
+    const gfx::Point at = d->objectPoint(name);
+    const std::string tip = d->previewTooltip(at);
+    check(!name.empty() && tip.find(name) != std::string::npos && tip.find("NOUVEAU") != std::string::npos,
+          "l'infobulle d'un objet : " + tip.substr(0, std::min<std::size_t>(tip.size(), 80)));
+    // La molette zoome autour de la souris : l'objet sous elle y reste, et garde son infobulle.
+    (void)f.mm.HandleEvent(ui::MouseWheel{at, 0.f, 1.f, {}});
+    (void)f.mm.HandleEvent(ui::MouseWheel{at, 0.f, 1.f, {}});
+    const gfx::Point at3 = d->objectPoint(name);
+    check(d->previewZoom() > 1.5f && std::abs(at3.x - at.x) < 1.f && std::abs(at3.y - at.y) < 1.f && d->previewTooltip(at3).find(name) != std::string::npos,
+          "zoome sous la souris : l'objet reste sous elle, avec son infobulle");
+    d->setPreviewZoom(1.f);
+    // La liste : un groupe se replie (un clic sur son titre), toute la liste se masque.
+    const std::string objets = "OBJETS CONCERN\xC3\x89S";
+    const std::size_t all = d->shownRows();
+    check(d->foldGroup(objets, true) && d->groupFolded(objets) && d->shownRows() < all, "OBJETS CONCERNES replie : ses lignes s'en vont");
+    (void)paint();
+    const gfx::Rect head = d->groupRect(objets);
+    (void)f.mm.HandleEvent(ui::MouseDown{{head.x + 40.f, head.y + head.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    check(head.w > 0.f && !d->groupFolded(objets) && d->shownRows() == all, "un clic sur son titre : il se deplie");
+    const float wide = d->previewArea().w;
+    d->setListHidden(true);
+    d->widgetRoot()->layout();
+    check(d->listHidden() && d->listArea().w == 0.f && d->previewArea().w > wide + 200.f, "la liste masquee : l'apercu prend la largeur");
+    d->setListHidden(false);
+    d->widgetRoot()->layout();
+    check(!d->listHidden() && d->listArea().w > 200.f, "la liste revient");
+    check(f.as().proposal(m)->state == "proposee", "rien de tout cela ne decide de la proposition");
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1181,6 +1249,7 @@ int main() {
     testStale();
     testPreviewPainters();
     testPreviewEscapeNeverRefuses();
+    testPreviewZoomTooltips();
     testMarkdown();
     testSecondPass();
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

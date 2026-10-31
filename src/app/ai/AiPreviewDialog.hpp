@@ -14,9 +14,17 @@
 //    a droite    L'APERCU : une COPIE de la vue, modifiee, dessinee par les
 //                painters du logiciel ; les objets nouveaux encadres en vert, les
 //                modifies en bleu, ceux a supprimer barres de rouge ;
-//    en bas      Modifier la demande (le texte revient dans la saisie), Annuler
-//                (la proposition est refusee), Appliquer (un seul Ctrl+Z ; une
-//                suppression multiple se confirme). Echap ferme sans decider.
+//    en bas      Modifier la demande (le texte revient dans la saisie ; la
+//                proposition reste a decider), Refuser... (une question d'abord),
+//                Appliquer (un seul Ctrl+Z ; une suppression multiple se
+//                confirme). Echap ferme sans decider.
+//
+//  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
+//  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
+//  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
+//  nouveau / modifie / supprime et ce qui change, sa place) ; la LISTE DE GAUCHE
+//  se replie par groupe (le clic sur un titre) et se masque toute (le bouton
+//  entre elle et l'apercu) pour laisser la largeur a l'apercu.
 // =============================================================================
 #pragma once
 
@@ -53,6 +61,21 @@ public:
     [[nodiscard]] ui::Button*        applyButton() const noexcept { return apply_; }
     [[nodiscard]] ui::DropDown*      variableChoice() const noexcept { return variable_; }
     [[nodiscard]] std::vector<std::string> variableItems() const;
+
+    // 1.16.1 : le zoom (1 : la vue entiere ; jusqu'a 10), les groupes de la liste ("OBJETS CONCERN\xC3\x89S", "ERREURS"...),
+    // la liste masquee, l'infobulle sous un point de l'ecran ; les places (essais).
+    void  setPreviewZoom(float z);
+    [[nodiscard]] float previewZoom() const;
+    bool  foldGroup(const std::string& heading, bool folded);
+    [[nodiscard]] bool groupFolded(const std::string& heading) const;
+    [[nodiscard]] std::size_t shownRows() const;              // les lignes de la liste montrees (groupes replies : leur titre)
+    void  setListHidden(bool hidden);
+    [[nodiscard]] bool listHidden() const;
+    [[nodiscard]] std::string previewTooltip(gfx::Point at) const;
+    [[nodiscard]] gfx::Rect  previewArea() const;
+    [[nodiscard]] gfx::Rect  listArea() const;
+    [[nodiscard]] gfx::Rect  groupRect(const std::string& heading) const;
+    [[nodiscard]] gfx::Point objectPoint(const std::string& name) const;   // le centre d'un objet de l'apercu a l'ecran
 
 protected:
     core::Status buildUi() override;

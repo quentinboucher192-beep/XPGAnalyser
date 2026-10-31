@@ -165,6 +165,12 @@ const std::vector<Note>& table() {
          "le dit) ; le reste part \xC3\xA0 l'IA connect\xC3\xA9" "e avec la conversation. Une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 "
          "l'IA connect\xC3\xA9" "e. Commande de s\xC3\xA9" "ance : ia dabord oui|non.",
          "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::New,
+         "LA PR\xC3\x89VISUALISATION SE ZOOME : la molette sur l'aper\xC3\xA7u (autour de la souris), les boutons \xE2\x88\x92 / Ajuster / +, "
+         "Ctrl+plus / moins / 0 ; zoom\xC3\xA9, il se d\xC3\xA9place au glisser. Une infobulle sur chaque objet (nouveau, modifi\xC3\xA9, "
+         "supprim\xC3\xA9, ce qui change). La liste de gauche se replie par groupe (un clic sur un titre) et se masque toute pour "
+         "laisser la largeur \xC3\xA0 l'aper\xC3\xA7u.",
+         "assistant-ia", ""),
         note("1.16.1", "Types IHM", Kind::New,
          "LES D\xC3\x89" "BALLAGES : dans la liste des types, une structure se d\xC3\xA9plie (ses membres, leur type, leurs mots), une "
          "\xC3\xA9num\xC3\xA9ration aussi (ses valeurs), et un membre structure ou tableau de structures \xC3\xA0 son tour. Dans le tableau "

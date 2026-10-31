@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <set>
 
 namespace app::ai {
@@ -60,6 +61,29 @@ std::vector<std::string> wrap(const std::string& text, gfx::FontId f, float widt
     return out;
 }
 
+// 1.16.1 : une fleche (un chevron) : 0 vers la droite, 1 vers le bas, 2 vers la gauche.
+void chevron(gfx::IRenderer& r, gfx::Rect b, int dir, gfx::Color col) {
+    const float cx = b.x + b.w / 2.f, cy = b.y + b.h / 2.f, s = std::min(b.w, b.h) * 0.3f;
+    if (dir == 0) {
+        r.line({cx - s / 2.f, cy - s}, {cx + s / 2.f, cy}, col, 1.6f);
+        r.line({cx + s / 2.f, cy}, {cx - s / 2.f, cy + s}, col, 1.6f);
+    } else if (dir == 1) {
+        r.line({cx - s, cy - s / 2.f}, {cx, cy + s / 2.f}, col, 1.6f);
+        r.line({cx, cy + s / 2.f}, {cx + s, cy - s / 2.f}, col, 1.6f);
+    } else {
+        r.line({cx + s / 2.f, cy - s}, {cx - s / 2.f, cy}, col, 1.6f);
+        r.line({cx - s / 2.f, cy}, {cx + s / 2.f, cy + s}, col, 1.6f);
+    }
+}
+
+// 1.16.1 : la cle d'un groupe de la liste - son titre sans son compte ("OBJETS CONCERNES (3)" -> "OBJETS CONCERNES").
+std::string groupKey(const std::string& heading) {
+    std::size_t cut = heading.find(" (");
+    const std::size_t dash = heading.find(" \xE2\x80\x94");
+    if (dash != std::string::npos && (cut == std::string::npos || dash < cut)) cut = dash;
+    return cut == std::string::npos ? heading : heading.substr(0, cut);
+}
+
 // Une ligne de la liste de gauche.
 struct Row {
     enum class Kind : std::uint8_t { Heading, Item, Change, Note, Warning, Error } kind{Kind::Note};
@@ -75,6 +99,135 @@ public:
     explicit AiPreviewBody(AiPreviewDialog& d) : ui::Widget("ai.apercu.corps"), d_(d) {}
     std::vector<Row> rows;
     float            scroll{0.f};
+    // 1.16.1 : LE ZOOM DE L'APERCU (1 : la vue entiere, jusqu'a 10), le decalage (glisser), la liste de gauche
+    // (ses groupes replies, elle-meme masquee).
+    float                 zoom{1.f};
+    gfx::Point            pan{0.f, 0.f};
+    std::set<std::string> folded;
+    bool                  listHidden{false};
+
+    [[nodiscard]] bool hidden(std::size_t i) const {   // une ligne d'un groupe replie
+        for (std::size_t k = i + 1; k-- > 0;)
+            if (rows[k].kind == Row::Kind::Heading) return k != i && folded.count(groupKey(rows[k].text)) > 0;
+        return false;
+    }
+    // La page de la vue dans l'apercu, a ce zoom et ce decalage (vide : pas d'apercu).
+    [[nodiscard]] bool pageGeometry(HmiViewport& vp, gfx::Rect& page) const {
+        const Preview& pv = d_.preview_;
+        if (!pv.ok || pv.view.width <= 0 || pv.view.height <= 0) return false;
+        const float vw = static_cast<float>(pv.view.width), vh = static_cast<float>(pv.view.height);
+        const float fit = std::min(area_.w / vw, area_.h / vh);
+        const float z = fit * zoom;
+        vp = HmiViewport{area_.x + (area_.w - vw * z) / 2.f + pan.x, area_.y + (area_.h - vh * z) / 2.f + pan.y, z};
+        page = {vp.originX, vp.originY, vw * z, vh * z};
+        return true;
+    }
+    void clampPan() {
+        const Preview& pv = d_.preview_;
+        if (!pv.ok || pv.view.width <= 0 || pv.view.height <= 0 || zoom <= 1.f) {
+            pan = {0.f, 0.f};
+            return;
+        }
+        const float fit = std::min(area_.w / static_cast<float>(pv.view.width), area_.h / static_cast<float>(pv.view.height));
+        const float pw = static_cast<float>(pv.view.width) * fit * zoom, ph = static_cast<float>(pv.view.height) * fit * zoom;
+        // La page se deplace tant qu'il en reste 40 points a voir (zoomer sous la souris garde l'objet sous elle).
+        const float mx = std::max(0.f, (pw + area_.w) / 2.f - 40.f), my = std::max(0.f, (ph + area_.h) / 2.f - 40.f);
+        pan.x = std::clamp(pan.x, -mx, mx);
+        pan.y = std::clamp(pan.y, -my, my);
+    }
+    // Zoomer en gardant `at` (un point de l'ecran) sous la souris ; sans point : le centre de l'apercu.
+    void setZoom(float z, std::optional<gfx::Point> at = std::nullopt) {
+        z = std::clamp(z, 1.f, 10.f);
+        HmiViewport vp;
+        gfx::Rect page;
+        if (!pageGeometry(vp, page)) {
+            zoom = z;
+            return;
+        }
+        const gfx::Point s = at.value_or(gfx::Point{area_.x + area_.w / 2.f, area_.y + area_.h / 2.f});
+        const float vx = (s.x - vp.originX) / vp.zoom, vy = (s.y - vp.originY) / vp.zoom;
+        zoom = z;
+        pan = {0.f, 0.f};
+        HmiViewport centered;
+        if (pageGeometry(centered, page)) pan = {s.x - vx * centered.zoom - centered.originX, s.y - vy * centered.zoom - centered.originY};
+        clampPan();
+        invalidate();
+    }
+    // L'objet de la vue sous ce point de l'ecran (le dernier dessine) ; nul : aucun.
+    [[nodiscard]] const hmi::Object* objectAt(gfx::Point at) const {
+        HmiViewport vp;
+        gfx::Rect page;
+        if (!pageGeometry(vp, page) || !area_.contains(at) || !page.contains(at)) return nullptr;
+        const double x = (at.x - vp.originX) / vp.zoom, y = (at.y - vp.originY) / vp.zoom;
+        const auto& objects = d_.preview_.view.objects;
+        for (auto it = objects.rbegin(); it != objects.rend(); ++it) {
+            const auto b = hmi::edit::rotatedBounds(*it);
+            if (x >= b.x && x <= b.right() && y >= b.y && y <= b.bottom()) return &*it;
+        }
+        return nullptr;
+    }
+    [[nodiscard]] std::string objectTip(const hmi::Object& o) const {
+        const Preview& pv = d_.preview_;
+        const auto in = [&](const std::vector<hmi::Id>& ids) { return std::find(ids.begin(), ids.end(), o.id) != ids.end(); };
+        const bool made = in(pv.touched.created), changed = in(pv.touched.modified), gone = in(pv.touched.removed);
+        std::string tip = (o.name.empty() ? std::string("(sans nom)") : o.name) + " \xE2\x80\x94 " + std::string(hmi::kindLabel(o.kind));
+        tip += made ? "\nNOUVEAU (cr\xC3\xA9\xC3\xA9 par la proposition)" : changed ? "\nMODIFI\xC3\x89 par la proposition"
+             : gone ? "\nSUPPRIM\xC3\x89 par la proposition" : "\ninchang\xC3\xA9";
+        for (const auto& it : d_.check_.items) {
+            if (it.name != o.name) continue;
+            std::size_t shown = 0;
+            for (const auto& ch : it.changes) {
+                if (made && (ch.key == "x" || ch.key == "y" || ch.key == "w" || ch.key == "h")) continue;
+                if (shown++ >= 8) {
+                    tip += "\n\xE2\x80\xA6";
+                    break;
+                }
+                tip += "\n" + (made ? ch.key + " = " + ch.after
+                                     : ch.key + " : " + (ch.before.empty() ? std::string("(vide)") : ch.before) + " \xE2\x86\x92 " + ch.after);
+            }
+            break;
+        }
+        const auto b = hmi::edit::rotatedBounds(o);
+        tip += "\nx " + std::to_string(static_cast<long long>(std::lround(b.x))) + ", y " + std::to_string(static_cast<long long>(std::lround(b.y))) + " \xC2\xB7 "
+             + std::to_string(static_cast<long long>(std::lround(b.w))) + " \xC3\x97 " + std::to_string(static_cast<long long>(std::lround(b.h)));
+        return tip;
+    }
+    [[nodiscard]] gfx::Rect previewArea() const noexcept { return area_; }
+    [[nodiscard]] gfx::Rect toggleRect() const noexcept { return toggle_; }
+    [[nodiscard]] gfx::Rect zoomInRect() const noexcept { return zoomIn_; }
+    [[nodiscard]] gfx::Rect listRect() const noexcept { return list_; }
+    [[nodiscard]] int headingAt(gfx::Point at) const {   // la ligne de titre sous ce point (-1 : aucune)
+        for (const auto& [r, i] : hits_)
+            if (r.contains(at) && i < rows.size() && rows[i].kind == Row::Kind::Heading) return static_cast<int>(i);
+        return -1;
+    }
+    [[nodiscard]] gfx::Rect headingRect(const std::string& key) const {
+        for (const auto& [r, i] : hits_)
+            if (i < rows.size() && rows[i].kind == Row::Kind::Heading && groupKey(rows[i].text) == key) return r;
+        return {};
+    }
+
+    bool hasTooltip() const override { return true; }
+    std::string liveTooltip(gfx::Point mouse) const override {
+        if (zoomOut_.contains(mouse)) return "Zoom arri\xC3\xA8re (Ctrl+moins, ou la molette sur l'aper\xC3\xA7u)";
+        if (zoomFit_.contains(mouse)) return "Ajuster : la vue enti\xC3\xA8re (Ctrl+0, ou un double-clic sur l'aper\xC3\xA7u)";
+        if (zoomIn_.contains(mouse)) return "Zoom avant (Ctrl+plus, ou la molette sur l'aper\xC3\xA7u)";
+        if (toggle_.contains(mouse))
+            return listHidden ? "Montrer la liste (ce que fait la proposition)" : "Masquer la liste : l'aper\xC3\xA7u prend toute la largeur";
+        if (list_.contains(mouse))
+            for (const auto& [r, i] : hits_) {
+                if (!r.contains(mouse) || i >= rows.size()) continue;
+                const auto& row = rows[i];
+                if (row.kind == Row::Kind::Heading)
+                    return folded.count(groupKey(row.text)) ? "Clic : d\xC3\xA9plier ce groupe" : "Clic : replier ce groupe";
+                return row.text + (row.right.empty() ? std::string{} : " \xE2\x80\x94 " + row.right);
+            }
+        if (area_.contains(mouse)) {
+            if (const auto* o = objectAt(mouse)) return objectTip(*o);
+            return "Molette : zoomer \xC2\xB7 glisser : d\xC3\xA9placer (zoom\xC3\xA9) \xC2\xB7 double-clic : ajuster";
+        }
+        return {};
+    }
 
 protected:
     void onLayout() override {
@@ -87,16 +240,30 @@ protected:
         counts_ = {x, panel_.y + 58.f, right - x, 30.f};
         const float top = counts_.bottom() + 12.f;
         const float bottom = panel_.bottom() - 56.f;
-        const float leftW = std::clamp((right - x) * 0.42f, 300.f, 520.f);
-        float listTop = top;
-        if (d_.variable_ && d_.variable_->visibility() == ui::Visibility::Visible) {
-            varLabel_ = {x, top, leftW, 20.f};
-            d_.variable_->setBounds({x, top + 22.f, leftW, 28.f});
+        const float leftW = listHidden ? 0.f : std::clamp((right - x) * 0.42f, 300.f, 520.f);
+        float listTop = top, previewTop = top;
+        const bool choice = d_.variable_ && d_.variable_->visibility() == ui::Visibility::Visible;
+        if (choice) {
+            // 1.16.1 : la liste masquee - le choix de la variable passe au-dessus de l'apercu.
+            const float cw = listHidden ? std::min(520.f, right - x - 20.f) : leftW;
+            const float cx = listHidden ? x + 20.f : x;
+            varLabel_ = {cx, top, cw, 20.f};
+            d_.variable_->setBounds({cx, top + 22.f, cw, 28.f});
             listTop = top + 60.f;
+            if (listHidden) previewTop = top + 60.f;
         }
         list_ = {x, listTop, leftW, std::max(60.f, bottom - listTop)};
-        preview_ = {x + leftW + 16.f, top, right - (x + leftW + 16.f), std::max(80.f, bottom - top - 24.f)};
+        if (listHidden) list_.w = 0.f;
+        // 1.16.1 : le bouton qui masque / montre la liste (entre elle et l'apercu).
+        toggle_ = listHidden ? gfx::Rect{x, previewTop, 14.f, 48.f} : gfx::Rect{x + leftW + 1.f, previewTop, 14.f, 48.f};
+        const float px = listHidden ? x + 20.f : x + leftW + 16.f;
+        preview_ = {px, previewTop, right - px, std::max(80.f, bottom - previewTop - 24.f)};
         legend_ = {preview_.x, preview_.bottom() + 6.f, preview_.w, 18.f};
+        area_ = {preview_.x + 8.f, preview_.y + 8.f, preview_.w - 16.f, preview_.h - 16.f};
+        zoomIn_ = {preview_.right() - 34.f, preview_.y + 6.f, 28.f, 24.f};
+        zoomFit_ = {zoomIn_.x - 66.f, zoomIn_.y, 64.f, 24.f};
+        zoomOut_ = {zoomFit_.x - 30.f, zoomIn_.y, 28.f, 24.f};
+        clampPan();
         float bx = right;
         for (ui::Button* b : {d_.apply_, d_.cancel_}) {
             if (!b) continue;
@@ -178,7 +345,10 @@ protected:
         const float w0 = list_.w - 24.f;
         std::vector<std::vector<std::string>> wrapped(rows.size());
         float content = 8.f;
+        hits_.clear();
+        if (list_.w <= 1.f) return;   // 1.16.1 : la liste masquee
         for (std::size_t i = 0; i < rows.size(); ++i) {
+            if (hidden(i)) continue;   // 1.16.1 : un groupe replie
             const bool multi = rows[i].kind == Row::Kind::Warning || rows[i].kind == Row::Kind::Error;
             wrapped[i] = multi ? wrap(rows[i].text, kSmall, w0 - 28.f) : std::vector<std::string>{rows[i].text};
             content += multi ? std::max(lh, static_cast<float>(wrapped[i].size()) * lhSmall + 6.f) : lh;
@@ -189,17 +359,24 @@ protected:
         ctx.r.pushClip(list_);
         float y = list_.y + 4.f - scroll;
         for (std::size_t i = 0; i < rows.size(); ++i) {
+            if (hidden(i)) continue;
             const auto& row = rows[i];
             const bool multi = row.kind == Row::Kind::Warning || row.kind == Row::Kind::Error;
             const float rh = multi ? std::max(lh, static_cast<float>(wrapped[i].size()) * lhSmall + 6.f) : lh;
+            const gfx::Rect rowRect{list_.x, y, list_.w - space, rh};
+            if (rowRect.bottom() > list_.y && rowRect.y < list_.bottom()) hits_.emplace_back(rowRect, i);
             if (y + rh >= list_.y && y <= list_.bottom()) {
                 const float ty = y + 3.f;
                 const float w = list_.w - space - 12.f;
                 switch (row.kind) {
-                    case Row::Kind::Heading:
+                    case Row::Kind::Heading: {
+                        // 1.16.1 : un groupe se replie (sa fleche ; le clic sur son titre).
+                        const bool shut = folded.count(groupKey(row.text)) > 0;
                         ctx.r.fillRect({list_.x + 1.f, y, list_.w - 2.f, lh}, c.rowAltBg);
-                        ctx.r.drawText({list_.x + 8.f, ty}, elide(ctx.r, row.text, kSmall, w), kSmall, c.textMuted);
+                        chevron(ctx.r, {list_.x + 5.f, y + (lh - 14.f) / 2.f, 14.f, 14.f}, shut ? 0 : 1, c.textMuted);
+                        ctx.r.drawText({list_.x + 22.f, ty}, elide(ctx.r, row.text, kSmall, w - 14.f), kSmall, c.textMuted);
                         break;
+                    }
                     case Row::Kind::Item: {
                         const gfx::Color col = row.what == 0 ? c.ok : row.what == 1 ? c.info : c.error;
                         const char* tag = row.what == 0 ? "+" : row.what == 1 ? "~" : "\xE2\x88\x92";
@@ -246,10 +423,12 @@ protected:
                            kText, c.textMuted);
         } else {
             const auto& v = pv.view;
-            const gfx::Rect area{preview_.x + 8.f, preview_.y + 8.f, preview_.w - 16.f, preview_.h - 16.f};
-            const float z = std::min(area.w / static_cast<float>(v.width), area.h / static_cast<float>(v.height));
-            const HmiViewport vp{area.x + (area.w - static_cast<float>(v.width) * z) / 2.f, area.y + (area.h - static_cast<float>(v.height) * z) / 2.f, z};
-            const gfx::Rect page{vp.originX, vp.originY, static_cast<float>(v.width) * z, static_cast<float>(v.height) * z};
+            // 1.16.1 : le zoom et le decalage de l'apercu (pageGeometry) ; tout se dessine dans sa zone.
+            HmiViewport vp;
+            gfx::Rect page;
+            (void)pageGeometry(vp, page);
+            const float z = vp.zoom;
+            ctx.r.pushClip(area_);
             ctx.r.fillRect(page, parseColor(v.background, gfx::Color::rgb(0x20242B)));
             HmiPaintOptions opt;
             const auto doc = d_.panel_.assistant().host().document ? d_.panel_.assistant().host().document() : nullptr;
@@ -283,7 +462,27 @@ protected:
                 }
             ctx.r.popClip();
             ctx.r.strokeRect(page, c.border, 1.f);
+            ctx.r.popClip();
+            // 1.16.1 : les boutons du zoom (en haut a droite de l'apercu) et le zoom en %.
+            const auto button = [&](const gfx::Rect& r, const std::string& text) {
+                ctx.r.fillRoundedRect(r, alpha(c.panelBg, 230), 4.f);
+                ctx.r.strokeRect(r, c.border, 1.f);
+                const float tw = ctx.r.measure(text, kSmall).width;
+                ctx.r.drawText({r.x + (r.w - tw) / 2.f, r.y + (r.h - ctx.r.lineHeight(kSmall)) / 2.f}, text, kSmall, c.text);
+            };
+            button(zoomOut_, "\xE2\x88\x92");
+            button(zoomFit_, "Ajuster");
+            button(zoomIn_, "+");
+            const std::string pct = std::to_string(static_cast<int>(std::lround(z * 100.f))) + " %";
+            const float pw = ctx.r.measure(pct, kSmall).width + 12.f;
+            const gfx::Rect pr{zoomOut_.x - pw - 4.f, zoomOut_.y, pw, zoomOut_.h};
+            ctx.r.fillRoundedRect(pr, alpha(c.panelBg, 230), 4.f);
+            ctx.r.drawText({pr.x + 6.f, pr.y + (pr.h - ctx.r.lineHeight(kSmall)) / 2.f}, pct, kSmall, c.textMuted);
         }
+        // 1.16.1 : le bouton de la liste (la masquer, la montrer).
+        ctx.r.fillRoundedRect(toggle_, c.rowAltBg, 3.f);
+        ctx.r.strokeRect(toggle_, c.border, 1.f);
+        chevron(ctx.r, {toggle_.x, toggle_.y + (toggle_.h - 14.f) / 2.f, 14.f, 14.f}, listHidden ? 0 : 2, c.textMuted);
         // La legende.
         float lx = legend_.x;
         const auto mark = [&](gfx::Color col, const char* text, bool cross) {
@@ -295,22 +494,69 @@ protected:
         mark(c.ok, "nouveau", false);
         mark(c.info, "modifi\xC3\xA9", false);
         mark(c.error, "supprim\xC3\xA9", true);
-        ctx.r.drawText({lx, legend_.y}, elide(ctx.r, "Aper\xC3\xA7u : une copie de la vue, dessin\xC3\xA9" "e par les painters du logiciel.", kSmall,
+        ctx.r.drawText({lx, legend_.y}, elide(ctx.r, "Aper\xC3\xA7u : une copie de la vue \xC2\xB7 molette : zoom \xC2\xB7 survol : l'objet", kSmall,
                                               legend_.right() - lx), kSmall, c.textMuted);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
         const float lh = ui::lineHeight(kText) + 6.f;
         const float content = content_;
-        if (bar_.handle(*this, ev, list_, content, list_.h, scroll)) return ui::EventResult::Consumed;
+        if (list_.w > 1.f && bar_.handle(*this, ev, list_, content, list_.h, scroll)) return ui::EventResult::Consumed;
         if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && list_.contains(w->pos)) {
             scroll = std::clamp(scroll - w->dy * 3.f * lh, 0.f, std::max(0.f, content - list_.h));
             invalidate();
             return ui::EventResult::Consumed;
         }
-        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && close_.contains(d->pos)) {
-            d_.close();
+        // 1.16.1 : la molette sur l'apercu zoome (autour de la souris).
+        if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && area_.contains(w->pos) && w->dy != 0.f) {
+            setZoom(zoom * (w->dy > 0.f ? 1.25f : 0.8f), w->pos);
             return ui::EventResult::Consumed;
+        }
+        // Le glisser de l'apercu zoome.
+        if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && dragging_) {
+            pan = {pan0_.x + m->pos.x - dragFrom_.x, pan0_.y + m->pos.y - dragFrom_.y};
+            clampPan();
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+        if (const auto* u = std::get_if<ui::MouseUp>(&ev); u && dragging_) {
+            dragging_ = false;
+            releaseMouse();
+            return ui::EventResult::Consumed;
+        }
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
+            if (close_.contains(d->pos)) {
+                d_.close();
+                return ui::EventResult::Consumed;
+            }
+            if (zoomOut_.contains(d->pos) || zoomIn_.contains(d->pos) || zoomFit_.contains(d->pos)) {
+                if (zoomFit_.contains(d->pos)) setZoom(1.f);
+                else setZoom(zoom * (zoomIn_.contains(d->pos) ? 1.25f : 0.8f));
+                return ui::EventResult::Consumed;
+            }
+            if (toggle_.contains(d->pos)) {
+                listHidden = !listHidden;
+                invalidateLayout();
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            if (const int h = headingAt(d->pos); h >= 0) {
+                const std::string key = groupKey(rows[static_cast<std::size_t>(h)].text);
+                if (!folded.erase(key)) folded.insert(key);
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            if (area_.contains(d->pos)) {
+                if (d->clickCount >= 2) {
+                    setZoom(1.f);
+                } else if (zoom > 1.f) {
+                    dragging_ = true;
+                    dragFrom_ = d->pos;
+                    pan0_ = pan;
+                    captureMouse();
+                }
+                return ui::EventResult::Consumed;
+            }
         }
         return ui::EventResult::Ignored;
     }
@@ -319,8 +565,84 @@ private:
     AiPreviewDialog&  d_;
     float             content_{0.f};
     gfx::Rect         panel_{}, close_{}, counts_{}, list_{}, preview_{}, legend_{}, varLabel_{};
+    gfx::Rect         area_{}, toggle_{}, zoomIn_{}, zoomOut_{}, zoomFit_{};   // 1.16.1
+    std::vector<std::pair<gfx::Rect, std::size_t>> hits_;                    // 1.16.1 : les lignes montrees de la liste
+    bool              dragging_{false};
+    gfx::Point        dragFrom_{}, pan0_{};
     ui::EdgeScrollBar bar_;
 };
+
+// ---- 1.16.1 : le zoom, la liste repliable, les infobulles (les gestes, pour les essais et les scripts) ----
+void AiPreviewDialog::setPreviewZoom(float z) {
+    if (auto* b = dynamic_cast<AiPreviewBody*>(widgetRoot())) b->setZoom(z);
+}
+float AiPreviewDialog::previewZoom() const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b ? b->zoom : 1.f;
+}
+bool AiPreviewDialog::foldGroup(const std::string& heading, bool folded) {
+    auto* b = dynamic_cast<AiPreviewBody*>(widgetRoot());
+    if (!b) return false;
+    const bool known = std::any_of(b->rows.begin(), b->rows.end(),
+                                   [&](const Row& r) { return r.kind == Row::Kind::Heading && groupKey(r.text) == heading; });
+    if (!known) return false;
+    if (folded) b->folded.insert(heading);
+    else b->folded.erase(heading);
+    b->invalidate();
+    return true;
+}
+bool AiPreviewDialog::groupFolded(const std::string& heading) const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b && b->folded.count(heading) > 0;
+}
+std::size_t AiPreviewDialog::shownRows() const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    if (!b) return 0;
+    std::size_t n = 0;
+    for (std::size_t i = 0; i < b->rows.size(); ++i)
+        if (!b->hidden(i)) ++n;
+    return n;
+}
+void AiPreviewDialog::setListHidden(bool hidden) {
+    auto* b = dynamic_cast<AiPreviewBody*>(widgetRoot());
+    if (!b || b->listHidden == hidden) return;
+    b->listHidden = hidden;
+    b->invalidateLayout();
+    b->invalidate();
+}
+bool AiPreviewDialog::listHidden() const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b && b->listHidden;
+}
+std::string AiPreviewDialog::previewTooltip(gfx::Point at) const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b ? b->liveTooltip(at) : std::string{};
+}
+gfx::Rect AiPreviewDialog::previewArea() const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b ? b->previewArea() : gfx::Rect{};
+}
+gfx::Rect AiPreviewDialog::listArea() const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b ? b->listRect() : gfx::Rect{};
+}
+gfx::Rect AiPreviewDialog::groupRect(const std::string& heading) const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    return b ? b->headingRect(heading) : gfx::Rect{};
+}
+gfx::Point AiPreviewDialog::objectPoint(const std::string& name) const {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(const_cast<AiPreviewDialog*>(this)->widgetRoot());
+    if (!b) return {-1.f, -1.f};
+    HmiViewport vp;
+    gfx::Rect page;
+    if (!b->pageGeometry(vp, page)) return {-1.f, -1.f};
+    for (const auto& o : preview_.view.objects)
+        if (o.name == name) {
+            const auto bx = hmi::edit::rotatedBounds(o);
+            return vp.toScreen(bx.x + bx.w / 2.0, bx.y + bx.h / 2.0);
+        }
+    return {-1.f, -1.f};
+}
 
 AiPreviewDialog::AiPreviewDialog(AiPanel& panel, int message)
     : menu::WidgetMenu("dialog.ai.apercu"), panel_(panel), message_(message) {}
@@ -475,7 +797,17 @@ void AiPreviewDialog::refresh() {
         }
         syncing_ = false;
     }
-    if (apply_) apply_->setEnabled(p->state == "proposee" && check_.ok());
+    // 1.16.1 : << Appliquer malgre les erreurs >> (l'option des parametres) - le bouton le dit, la confirmation les liste.
+    const bool anyway = !check_.ok() && !check_.stale && !check_.viewMissing && a.settings().applyWithErrors;
+    if (apply_) {
+        const std::size_t n = check_.errors.size();
+        apply_->setText(anyway ? "Appliquer malgr\xC3\xA9 " + std::to_string(n) + (n > 1 ? " erreurs\xE2\x80\xA6" : " erreur\xE2\x80\xA6")
+                               : std::string("Appliquer"));
+        apply_->setTooltip(anyway ? "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9 dans le journal "
+                                    "(une confirmation les liste d'abord). Un seul Ctrl+Z reprend tout."
+                                  : "Modifier le projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
+        apply_->setEnabled(p->state == "proposee" && (check_.ok() || anyway));
+    }
     if (cancel_) cancel_->setEnabled(p->state == "proposee");
     key_ = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
     if (widgetRoot()) widgetRoot()->invalidateLayout();
@@ -541,6 +873,13 @@ ui::EventResult AiPreviewDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && !(variable_ && variable_->isOpen())) {
         close();
         return ui::EventResult::Consumed;
+    }
+    // 1.16.1 : Ctrl+plus, Ctrl+moins, Ctrl+0 zooment l'apercu (pas l'appli derriere).
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+        if (const int step = ui::zoomKeyStep(*k); step != ui::kNotZoomKey) {
+            setPreviewZoom(step == 0 ? 1.f : previewZoom() * (step > 0 ? 1.25f : 0.8f));
+            return ui::EventResult::Consumed;
+        }
     }
     return menu::WidgetMenu::HandleEvent(ev);
 }
