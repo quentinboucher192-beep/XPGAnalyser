@@ -1888,6 +1888,46 @@ LM Studio se règle de la même façon (Service **LM Studio**, son serveur local
 OpenRouter (certains modèles marqués « free »), Groq, Google Gemini et Mistral ont souvent une offre gratuite, limitée en demandes par minute ou par jour : crée un compte chez eux, copie leur clé dans **Clé API**, choisis le Service, puis **Lister les modèles**. Leurs conditions changent : la bande montre en direct ce qu'il te reste.
 ! Un service en ligne reçoit ta demande et le contexte de la vue (selon tes réglages de confidentialité). Lis ses conditions : certaines offres gratuites se réservent le droit d'utiliser les demandes.
 
+== assistant-ia-plan | Le plan d'action, le compte rendu et les questions sur le projet
+: Une demande complexe devient un plan d'action : des étapes rangées par leurs dépendances, vérifiées sur une copie du projet, appliquées d'un bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant répond aussi aux questions sur les relations du projet, le vérifie en entier et propose de ranger ses adresses.
+@depuis 1.19.0
+@mots PLAN D'ACTION, PLAN, ÉTAPES, DÉPENDANCES, ORDRE, COMPTE RENDU, TRANSACTION, RÉUTILISER, RÉUTILISÉ, RETIRER UNE ÉTAPE, PHASES, RELATIONS, QUI UTILISE, ORPHELINS, IMPACT, SI JE SUPPRIME, VÉRIFIER LE PROJET, VÉRIFIE TOUT MON PROJET, OPTIMISER LES ADRESSES, CHEVAUCHEMENT, INSTALLATION COMPLÈTE, STATION DE POMPAGE
+@lieux ai.panneau, dialog.ai.apercu
+@voir assistant-ia, assistant-ia-integree, assistant-ia-registre, communication
+Par exemple : « Crée une station de pompage complète avec deux pompes, une cuve, les équipements Modbus, les variables, les alarmes, les scripts, les symboles, les popups et la vue de supervision. »
+### Le plan d'action
+Chaque opération proposée devient une **étape** (E1, E2…) : ce qu'elle crée, modifie ou réutilise, ce qu'elle lit, sa catégorie. Les étapes sont rangées dans l'ordre de leurs **dépendances réelles** – le type avant ses variables, l'équipement avant les adresses, la variable avant l'alarme qui la surveille, la vue avant ses objets – jamais dans l'ordre où l'IA les a écrites. Deux fonctions qui s'appellent l'une l'autre sont permises (le code est compilé une fois tout créé) ; deux types qui se contiennent sont une erreur bloquante.
+La carte de la proposition montre :
+| Partie | Ce qu'elle dit |
+| Les phases | Analyse › Planification (N étapes) › Vérification › Proposition (en attente de ta validation), puis Application › Compte rendu. Seules les phases qui ont eu lieu. |
+| Plan d'action | « Plan d'action — 24 étapes, 24 validées » : un clic le déplie. Une ligne par étape, dans l'ordre d'exécution, une pastille pour son état : à faire, validée (bleu), appliquée (vert), échouée (rouge, avec la raison), ignorée (orange : elle dépend d'une étape échouée ou retirée), annulée (Ctrl+Z). |
+| retirer / remettre | Sur une étape facultative (rien n'en dépend) : la retirer du plan avant d'appliquer ; le plan est recalculé. |
+| Compte rendu | Après Appliquer : Créé, Modifié, Réutilisé, À faire, Erreurs, puis le résultat chiffré (« 24 opérations appliquées, aucune erreur bloquante »). |
+Une simple question, ou une seule opération, n'a pas de plan : la carte reste celle d'avant.
+**Prévisualiser…** montre en tête l'**aperçu global par catégorie** : l'architecture (combien de créations, de modifications, de réutilisations), puis Types et variables, Équipements, Adresses et liaisons, Scripts et fonctions, Alarmes, Vues et symboles, Popups, Ressources, Dossiers – chaque étape avec son action, son état, ce dont elle dépend, ce qu'elle réutilise, ses avertissements. Les catégories sont repliées au départ : un clic sur un titre les déplie.
+### Vérifié, puis appliqué d'un bloc
+- Pendant la planification et la vérification, **rien ne change** dans le projet : tout se passe sur une copie.
+- **Appliquer** pose tout en une seule transaction. Si une étape échoue au dernier moment, le projet reste exactement tel qu'il était (la carte le dit). Un seul Ctrl+Z reprend tout ; Ctrl+Y le remet.
+- Une proposition qui a des erreurs ne s'applique pas ; avec « Appliquer malgré les erreurs » (Paramètres de l'Assistant), seules les étapes validées s'appliquent, et les autres sont dites.
+- **Réutiliser** : une variable, un type ou un équipement qui existe déjà **à l'identique** est réutilisé (le plan et le compte rendu le disent, il n'est pas compté comme créé) ; le même nom avec un autre type est **refusé** – jamais remplacé en silence.
+- Une proposition peut créer plusieurs vues (la vue, son symbole, sa popup) : chaque objet va dans la vue qu'il nomme, ou dans la dernière vue créée au-dessus de lui, sinon dans la vue ouverte.
+! Une action hors du projet (lancer la détection de ce qui répond sur le réseau) n'est jamais faite par l'Assistant et ne se reprend pas par Ctrl+Z : le compte rendu la range dans « À faire ».
+### Le compte rendu
+Il est **lu dans le projet** (ce qu'il était avant Appliquer, ce qu'il est après), jamais recopié de ce que l'IA avait annoncé : une étape n'est « appliquée » que si son résultat est bien dans le projet. Un clic sur une étape appliquée ouvre ce qu'elle a créé (la vue, la variable, la fonction, le script, le volet des alarmes, des équipements ou des ressources). Le plan et le compte rendu restent avec la conversation (ils se relisent à sa réouverture) ; le journal d'activité garde le résultat et les étapes non appliquées.
+### Les questions sur le projet
+L'IA intégrée y répond sans connexion, à partir du **graphe des relations** du projet (vues, objets, symboles, popups, types, variables, équipements, alarmes, scripts, fonctions, ressources, dossiers) :
+| Question | Ce qu'elle répond |
+| « Quels objets utilisent Niveau_Cuve_1 ? » | Les objets qui lisent ou écrivent la variable (ou un de ses membres), et où (la propriété, l'action). « Cette variable » : celle de l'objet choisi. |
+| « Montre-moi les scripts qui utilisent Niveau_Cuve_1 » | Les scripts et fonctions, avec la ligne. |
+| « Quelles alarmes concernent la pompe 2 ? » | Les alarmes dont la condition ou le message lit Pompe_2 (« la pompe 2 » se lit Pompe_2 quand elle existe). |
+| « Quels équipements sont utilisés dans cette vue ? » | Les équipements des variables que ses objets, ses actions et ses scripts lisent ou écrivent. |
+| « Si je supprime le type T_Pompe ? » | Ce qui serait supprimé avec lui, touché (les variables de ce type, ce qui les lit) ou déplacé – une simulation : rien n'est supprimé. |
+| « Quels objets sont orphelins ? » | Les éléments jamais employés (une variable jamais lue ni écrite, une popup jamais ouverte, une fonction jamais appelée…), avec la raison. |
+! Le graphe suit les noms écrits dans les propriétés, les formules, les actions et le code. Un nom calculé en marche (une cible =expression) n'y est pas suivi : la réponse le rappelle. Jamais une dépendance inventée.
+### Vérifier tout le projet, ranger les adresses
+« **Vérifie tout mon projet et propose les corrections** » : Générer, Compiler, les adresses qui se chevauchent, les orphelins et les dossiers, rangés en **erreurs bloquantes**, **avertissements** et **informations**, avec la correction proposée pour chacun. Les corrections d'adresse forment une proposition : rien ne change avant que tu la valides (Prévisualiser, puis Appliquer).
+« **Optimise les adresses des pompes** » (ou de toutes les variables) : le plan avant / après – l'emprise de chaque table, les chevauchements, chaque déplacement et sa raison – et sa proposition. Une adresse existante ne change jamais en silence ; un appareil réel doit utiliser les mêmes adresses.
+
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0

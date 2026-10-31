@@ -4251,6 +4251,127 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.14.2"},
+        // ---- Concevoir les vues  L'Assistant IA / assistant-ia-plan
+        {"assistant-ia-plan", "Le plan d'action, le compte rendu et les questions sur le projet", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Une demande complexe devient un plan d'action : des \xC3\xA9tapes rang\xC3\xA9" "es par leurs "
+         "d\xC3\xA9pendances, v\xC3\xA9rifi\xC3\xA9" "es sur une copie du projet, appliqu\xC3\xA9" "es d'un "
+         "bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant r\xC3\xA9pond aussi aux "
+         "questions sur les relations du projet, le v\xC3\xA9rifie en entier et propose de ranger ses "
+         "adresses.",
+         {
+             {K::Paragraph, "Par exemple : \xC2\xAB Cr\xC3\xA9" "e une station de pompage compl\xC3\xA8te avec "
+                         "deux pompes, une cuve, les \xC3\xA9quipements Modbus, les variables, les alarmes, "
+                         "les scripts, les symboles, les popups et la vue de supervision. \xC2\xBB", {}},
+             {K::Heading, "Le plan d'action", {}},
+             {K::Paragraph, "Chaque op\xC3\xA9ration propos\xC3\xA9" "e devient une **\xC3\xA9tape** (E1, "
+                         "E2\xE2\x80\xA6) : ce qu'elle cr\xC3\xA9" "e, modifie ou r\xC3\xA9utilise, ce "
+                         "qu'elle lit, sa cat\xC3\xA9gorie. Les \xC3\xA9tapes sont rang\xC3\xA9" "es dans "
+                         "l'ordre de leurs **d\xC3\xA9pendances r\xC3\xA9" "elles** \xE2\x80\x93 le type "
+                         "avant ses variables, l'\xC3\xA9quipement avant les adresses, la variable avant "
+                         "l'alarme qui la surveille, la vue avant ses objets \xE2\x80\x93 jamais dans "
+                         "l'ordre o\xC3\xB9 l'IA les a \xC3\xA9" "crites. Deux fonctions qui s'appellent "
+                         "l'une l'autre sont permises (le code est compil\xC3\xA9 une fois tout "
+                         "cr\xC3\xA9\xC3\xA9) ; deux types qui se contiennent sont une erreur bloquante. La "
+                         "carte de la proposition montre :", {}},
+             {K::Table, "Partie\tCe qu'elle dit\nLes phases\tAnalyse \xE2\x80\xBA Planification (N "
+                         "\xC3\xA9tapes) \xE2\x80\xBA V\xC3\xA9rification \xE2\x80\xBA Proposition (en "
+                         "attente de ta validation), puis Application \xE2\x80\xBA Compte rendu. Seules les "
+                         "phases qui ont eu lieu.\nPlan d'action\t\xC2\xAB Plan d'action \xE2\x80\x94 24 "
+                         "\xC3\xA9tapes, 24 valid\xC3\xA9" "es \xC2\xBB : un clic le d\xC3\xA9plie. Une "
+                         "ligne par \xC3\xA9tape, dans l'ordre d'ex\xC3\xA9" "cution, une pastille pour son "
+                         "\xC3\xA9tat : \xC3\xA0 faire, valid\xC3\xA9" "e (bleu), appliqu\xC3\xA9" "e "
+                         "(vert), \xC3\xA9" "chou\xC3\xA9" "e (rouge, avec la raison), ignor\xC3\xA9" "e "
+                         "(orange : elle d\xC3\xA9pend d'une \xC3\xA9tape \xC3\xA9" "chou\xC3\xA9" "e ou "
+                         "retir\xC3\xA9" "e), annul\xC3\xA9" "e (Ctrl+Z).\nretirer / remettre\tSur une "
+                         "\xC3\xA9tape facultative (rien n'en d\xC3\xA9pend) : la retirer du plan avant "
+                         "d'appliquer ; le plan est recalcul\xC3\xA9.\nCompte rendu\tApr\xC3\xA8s Appliquer "
+                         ": Cr\xC3\xA9\xC3\xA9, Modifi\xC3\xA9, R\xC3\xA9utilis\xC3\xA9, \xC3\x80 faire, "
+                         "Erreurs, puis le r\xC3\xA9sultat chiffr\xC3\xA9 (\xC2\xAB 24 op\xC3\xA9rations "
+                         "appliqu\xC3\xA9" "es, aucune erreur bloquante \xC2\xBB).", {}},
+             {K::Paragraph, "Une simple question, ou une seule op\xC3\xA9ration, n'a pas de plan : la carte "
+                         "reste celle d'avant. **Pr\xC3\xA9visualiser\xE2\x80\xA6** montre en t\xC3\xAAte "
+                         "l'**aper\xC3\xA7u global par cat\xC3\xA9gorie** : l'architecture (combien de "
+                         "cr\xC3\xA9" "ations, de modifications, de r\xC3\xA9utilisations), puis Types et "
+                         "variables, \xC3\x89quipements, Adresses et liaisons, Scripts et fonctions, "
+                         "Alarmes, Vues et symboles, Popups, Ressources, Dossiers \xE2\x80\x93 chaque "
+                         "\xC3\xA9tape avec son action, son \xC3\xA9tat, ce dont elle d\xC3\xA9pend, ce "
+                         "qu'elle r\xC3\xA9utilise, ses avertissements. Les cat\xC3\xA9gories sont "
+                         "repli\xC3\xA9" "es au d\xC3\xA9part : un clic sur un titre les d\xC3\xA9plie.", {}},
+             {K::Heading, "V\xC3\xA9rifi\xC3\xA9, puis appliqu\xC3\xA9 d'un bloc", {}},
+             {K::Bullet, "Pendant la planification et la v\xC3\xA9rification, **rien ne change** dans le "
+                         "projet : tout se passe sur une copie.", {}},
+             {K::Bullet, "**Appliquer** pose tout en une seule transaction. Si une \xC3\xA9tape "
+                         "\xC3\xA9" "choue au dernier moment, le projet reste exactement tel qu'il "
+                         "\xC3\xA9tait (la carte le dit). Un seul Ctrl+Z reprend tout ; Ctrl+Y le remet.", {}},
+             {K::Bullet, "Une proposition qui a des erreurs ne s'applique pas ; avec \xC2\xAB Appliquer "
+                         "malgr\xC3\xA9 les erreurs \xC2\xBB (Param\xC3\xA8tres de l'Assistant), seules les "
+                         "\xC3\xA9tapes valid\xC3\xA9" "es s'appliquent, et les autres sont dites.", {}},
+             {K::Bullet, "**R\xC3\xA9utiliser** : une variable, un type ou un \xC3\xA9quipement qui existe "
+                         "d\xC3\xA9j\xC3\xA0 **\xC3\xA0 l'identique** est r\xC3\xA9utilis\xC3\xA9 (le plan "
+                         "et le compte rendu le disent, il n'est pas compt\xC3\xA9 comme cr\xC3\xA9\xC3\xA9) "
+                         "; le m\xC3\xAAme nom avec un autre type est **refus\xC3\xA9** \xE2\x80\x93 jamais "
+                         "remplac\xC3\xA9 en silence.", {}},
+             {K::Bullet, "Une proposition peut cr\xC3\xA9" "er plusieurs vues (la vue, son symbole, sa "
+                         "popup) : chaque objet va dans la vue qu'il nomme, ou dans la derni\xC3\xA8re vue "
+                         "cr\xC3\xA9\xC3\xA9" "e au-dessus de lui, sinon dans la vue ouverte.", {}},
+             {K::Warning, "Une action hors du projet (lancer la d\xC3\xA9tection de ce qui r\xC3\xA9pond sur "
+                         "le r\xC3\xA9seau) n'est jamais faite par l'Assistant et ne se reprend pas par "
+                         "Ctrl+Z : le compte rendu la range dans \xC2\xAB \xC3\x80 faire \xC2\xBB.", {}},
+             {K::Heading, "Le compte rendu", {}},
+             {K::Paragraph, "Il est **lu dans le projet** (ce qu'il \xC3\xA9tait avant Appliquer, ce qu'il est "
+                         "apr\xC3\xA8s), jamais recopi\xC3\xA9 de ce que l'IA avait annonc\xC3\xA9 : une "
+                         "\xC3\xA9tape n'est \xC2\xAB appliqu\xC3\xA9" "e \xC2\xBB que si son "
+                         "r\xC3\xA9sultat est bien dans le projet. Un clic sur une \xC3\xA9tape "
+                         "appliqu\xC3\xA9" "e ouvre ce qu'elle a cr\xC3\xA9\xC3\xA9 (la vue, la variable, la "
+                         "fonction, le script, le volet des alarmes, des \xC3\xA9quipements ou des "
+                         "ressources). Le plan et le compte rendu restent avec la conversation (ils se "
+                         "relisent \xC3\xA0 sa r\xC3\xA9ouverture) ; le journal d'activit\xC3\xA9 garde le "
+                         "r\xC3\xA9sultat et les \xC3\xA9tapes non appliqu\xC3\xA9" "es.", {}},
+             {K::Heading, "Les questions sur le projet", {}},
+             {K::Paragraph, "L'IA int\xC3\xA9gr\xC3\xA9" "e y r\xC3\xA9pond sans connexion, \xC3\xA0 partir du "
+                         "**graphe des relations** du projet (vues, objets, symboles, popups, types, "
+                         "variables, \xC3\xA9quipements, alarmes, scripts, fonctions, ressources, dossiers) :", {}},
+             {K::Table, "Question\tCe qu'elle r\xC3\xA9pond\n\xC2\xAB Quels objets utilisent Niveau_Cuve_1 "
+                         "? \xC2\xBB\tLes objets qui lisent ou \xC3\xA9" "crivent la variable (ou un de ses "
+                         "membres), et o\xC3\xB9 (la propri\xC3\xA9t\xC3\xA9, l'action). \xC2\xAB Cette "
+                         "variable \xC2\xBB : celle de l'objet choisi.\n\xC2\xAB Montre-moi les scripts qui "
+                         "utilisent Niveau_Cuve_1 \xC2\xBB\tLes scripts et fonctions, avec la "
+                         "ligne.\n\xC2\xAB Quelles alarmes concernent la pompe 2 ? \xC2\xBB\tLes alarmes "
+                         "dont la condition ou le message lit Pompe_2 (\xC2\xAB la pompe 2 \xC2\xBB se lit "
+                         "Pompe_2 quand elle existe).\n\xC2\xAB Quels \xC3\xA9quipements sont "
+                         "utilis\xC3\xA9s dans cette vue ? \xC2\xBB\tLes \xC3\xA9quipements des variables "
+                         "que ses objets, ses actions et ses scripts lisent ou \xC3\xA9" "crivent.\n\xC2\xAB "
+                         "Si je supprime le type T_Pompe ? \xC2\xBB\tCe qui serait supprim\xC3\xA9 avec lui, "
+                         "touch\xC3\xA9 (les variables de ce type, ce qui les lit) ou d\xC3\xA9plac\xC3\xA9 "
+                         "\xE2\x80\x93 une simulation : rien n'est supprim\xC3\xA9.\n\xC2\xAB Quels objets "
+                         "sont orphelins ? \xC2\xBB\tLes \xC3\xA9l\xC3\xA9ments jamais employ\xC3\xA9s (une "
+                         "variable jamais lue ni \xC3\xA9" "crite, une popup jamais ouverte, une fonction "
+                         "jamais appel\xC3\xA9" "e\xE2\x80\xA6), avec la raison.", {}},
+             {K::Warning, "Le graphe suit les noms \xC3\xA9" "crits dans les propri\xC3\xA9t\xC3\xA9s, les "
+                         "formules, les actions et le code. Un nom calcul\xC3\xA9 en marche (une cible "
+                         "=expression) n'y est pas suivi : la r\xC3\xA9ponse le rappelle. Jamais une "
+                         "d\xC3\xA9pendance invent\xC3\xA9" "e.", {}},
+             {K::Heading, "V\xC3\xA9rifier tout le projet, ranger les adresses", {}},
+             {K::Paragraph, "\xC2\xAB **V\xC3\xA9rifie tout mon projet et propose les corrections** \xC2\xBB : "
+                         "G\xC3\xA9n\xC3\xA9rer, Compiler, les adresses qui se chevauchent, les orphelins et "
+                         "les dossiers, rang\xC3\xA9s en **erreurs bloquantes**, **avertissements** et "
+                         "**informations**, avec la correction propos\xC3\xA9" "e pour chacun. Les "
+                         "corrections d'adresse forment une proposition : rien ne change avant que tu la "
+                         "valides (Pr\xC3\xA9visualiser, puis Appliquer). \xC2\xAB **Optimise les adresses "
+                         "des pompes** \xC2\xBB (ou de toutes les variables) : le plan avant / apr\xC3\xA8s "
+                         "\xE2\x80\x93 l'emprise de chaque table, les chevauchements, chaque "
+                         "d\xC3\xA9placement et sa raison \xE2\x80\x93 et sa proposition. Une adresse "
+                         "existante ne change jamais en silence ; un appareil r\xC3\xA9" "el doit utiliser "
+                         "les m\xC3\xAAmes adresses.", {}},
+         },
+         {"assistant-ia", "assistant-ia-integree", "assistant-ia-registre", "communication"},
+         {"PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
+         {"ai.panneau", "dialog.ai.apercu"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.19.0"},
         // ---- Concevoir les vues  L'Assistant IA / assistant-ia-integree
         {"assistant-ia-integree", "L'IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion)", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
          "Une IA \xC3\xA9" "crite dans le logiciel : elle comprend des demandes simples en "

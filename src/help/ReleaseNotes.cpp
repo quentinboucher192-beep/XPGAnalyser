@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.18.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.19.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.18.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.17.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin de matin\xC3\xA9" "e"},
     {"1.16.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.16.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 au matin"},
@@ -145,6 +146,48 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.19.0 : l'IA qui concoit et construit des projets complets
+        note("1.19.0", "Assistant IA", Kind::New,
+         "LE PLAN D'ACTION : une demande complexe (\xC2\xAB une station de pompage avec deux pompes, une cuve, l'\xC3\xA9quipement Modbus, les "
+         "variables, les alarmes, les scripts, le symbole, la popup et la vue \xC2\xBB) devient un plan d'\xC3\xA9tapes num\xC3\xA9rot\xC3\xA9" "es "
+         "(E1, E2...), dans l'ordre de leurs d\xC3\xA9pendances r\xC3\xA9" "elles - jamais celui dans lequel l'IA les a \xC3\xA9" "crites. La carte "
+         "montre les phases r\xC3\xA9" "elles (Analyse, Planification, V\xC3\xA9rification, Proposition, Application, Compte rendu) et le plan "
+         "d\xC3\xA9pliable, chaque \xC3\xA9tape avec son \xC3\xA9tat (valid\xC3\xA9" "e, appliqu\xC3\xA9" "e, \xC3\xA9" "chou\xC3\xA9" "e, ignor\xC3\xA9" "e, "
+         "annul\xC3\xA9" "e) ; une \xC3\xA9tape facultative se retire (\xC2\xAB retirer \xC2\xBB), le plan est recalcul\xC3\xA9. Une simple "
+         "question n'a pas de plan.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
+         "V\xC3\x89RIFI\xC3\x89 PUIS APPLIQU\xC3\x89 D'UN BLOC : le plan est valid\xC3\xA9 \xC3\xA9tape par \xC3\xA9tape sur une COPIE du projet "
+         "(rien ne change pendant la planification), puis appliqu\xC3\xA9 en une seule transaction : un \xC3\xA9" "chec laisse le projet tel "
+         "qu'il \xC3\xA9tait, un seul Ctrl+Z reprend tout, Ctrl+Y le remet. Une \xC3\xA9tape en erreur dit pourquoi, et celles qui en "
+         "d\xC3\xA9pendent sont ignor\xC3\xA9" "es (\xC2\xAB d\xC3\xA9pend de E3 \xC2\xBB). Une proposition peut cr\xC3\xA9" "er plusieurs vues (une "
+         "vue, son symbole, sa popup) : chaque objet va dans la sienne.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
+         "R\xC3\x89UTILISER PLUT\xC3\x94T QUE RECR\xC3\x89" "ER : une variable, un type ou un \xC3\xA9quipement qui existe d\xC3\xA9j\xC3\xA0 "
+         "\xC3\xA0 l'identique est r\xC3\xA9utilis\xC3\xA9 (et dit comme tel) ; le m\xC3\xAAme nom avec un autre type est refus\xC3\xA9 - "
+         "jamais remplac\xC3\xA9 en silence.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
+         "LE COMPTE RENDU R\xC3\x89" "EL : apr\xC3\xA8s Appliquer, la carte dit ce qui a \xC3\xA9t\xC3\xA9 cr\xC3\xA9\xC3\xA9, modifi\xC3\xA9, "
+         "r\xC3\xA9utilis\xC3\xA9 et ce qui reste \xC3\xA0 faire (l'adresse IP d\xC3\xA9" "finitive d'un \xC3\xA9quipement simul\xC3\xA9...) - lu "
+         "dans le projet d'avant et d'apr\xC3\xA8s, jamais recopi\xC3\xA9 de ce que l'IA avait annonc\xC3\xA9. Un clic sur une \xC3\xA9tape "
+         "appliqu\xC3\xA9" "e ouvre ce qu'elle a cr\xC3\xA9\xC3\xA9. Le plan et le compte rendu restent avec la conversation, et le journal "
+         "d'activit\xC3\xA9 les garde.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
+         "LES RELATIONS DU PROJET : \xC2\xAB Quels objets utilisent Niveau_Cuve_1 ? \xC2\xBB, \xC2\xAB Si je supprime le type T_Pompe ? \xC2\xBB, "
+         "\xC2\xAB Quels \xC3\xA9quipements sont utilis\xC3\xA9s dans cette vue ? \xC2\xBB, \xC2\xAB Quelles alarmes concernent la pompe 2 ? \xC2\xBB, "
+         "\xC2\xAB Montre-moi les scripts qui utilisent Niveau_Cuve_1 \xC2\xBB, \xC2\xAB Quels objets sont orphelins ? \xC2\xBB - r\xC3\xA9pondues "
+         "par l'IA int\xC3\xA9gr\xC3\xA9" "e, sans connexion, \xC3\xA0 partir du graphe des relations (vues, objets, symboles, popups, types, "
+         "variables, \xC3\xA9quipements, alarmes, scripts, fonctions, ressources, dossiers). Jamais une d\xC3\xA9pendance invent\xC3\xA9" "e.",
+         "assistant-ia-plan", ""),
+        note("1.19.0", "Assistant IA", Kind::New,
+         "V\xC3\x89RIFIER TOUT LE PROJET : \xC2\xAB V\xC3\xA9rifie tout mon projet et propose les corrections \xC2\xBB - G\xC3\xA9n\xC3\xA9rer, "
+         "Compiler, les adresses qui se chevauchent, les orphelins et les dossiers, en erreurs bloquantes, avertissements et informations. "
+         "Les corrections d'adresse forment une proposition (rien ne change sans ta validation). \xC2\xAB Optimise les adresses des pompes "
+         "\xC2\xBB montre le plan avant / apr\xC3\xA8s : une adresse existante ne change jamais en silence.",
+         "assistant-ia-plan", ""),
         // 1.18.0 : les outils de l'IA, le gestionnaire des cles API, l'etape IA de l'installateur, la fleche des Types IHM
         note("1.18.0", "Assistant IA", Kind::New,
          "LES OUTILS DU PROJET : l'Assistant propose aussi un symbole, une popup (son titre, modale), un \xC3\xA9" "cran mod\xC3\xA8le, un "
