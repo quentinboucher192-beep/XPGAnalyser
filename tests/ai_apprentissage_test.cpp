@@ -15,6 +15,7 @@
 #include "../src/app/ai/AiLocal.hpp"
 #include "../src/app/ai/AiOperations.hpp"
 #include "../src/app/ai/AiPaths.hpp"
+#include "../src/app/ai/AiStore.hpp"
 #include "../src/hmi/HmiModel.hpp"
 
 #include <algorithm>
@@ -205,6 +206,66 @@ void testStorage() {
           "l'autre PC comprend << bache >>");
 }
 
+void testMeasures() {
+    std::printf("[les mesures]\n");
+    const fs::path r = scratch() / "mesures";
+    fs::create_directories(r);
+    ai::setRoot(r.string());
+    // Le mercredi 28/10/2026 a midi (heure du PC) ; la semaine d'avant, le mercredi 21.
+    std::tm tm{};
+    tm.tm_year = 2026 - 1900;
+    tm.tm_mon = 9;
+    tm.tm_mday = 28;
+    tm.tm_hour = 12;
+    tm.tm_isdst = -1;
+    const std::time_t thisWeek = std::mktime(&tm);
+    tm.tm_mday = 21;
+    tm.tm_isdst = -1;
+    const std::time_t lastWeek = std::mktime(&tm);
+    // Aucune mesure : des semaines vides, pas de chiffre invente.
+    auto w = ln::weeks(8, static_cast<long long>(thisWeek), ln::readMeasures(), {});
+    check(w.size() == 8 && std::all_of(w.begin(), w.end(), [](const ln::Week& x) { return x.asked == 0 && x.decided == 0; }), "aucune mesure : 8 semaines vides");
+    ai::setClock([&] { return lastWeek; });
+    ln::recordReply(true, "Ajoute une pompe", true);
+    ln::recordReply(false, "Quelle est la capitale de l'Australie ?", false);
+    ai::setClock([&] { return thisWeek; });
+    ln::recordReply(true, "Ajoute 3 pompes", true);
+    ln::recordReply(true, "Combien d'objets ?", false);
+    ln::recordReply(true, "Mets P1 en rouge", true);
+    ln::recordReply(false, "Fais un truc joli", false);
+    const auto m = ln::readMeasures();
+    check(m.size() == 6, "6 mesures relues");
+    std::vector<ln::Decision> d = {{ai::isoDate(lastWeek), true}, {ai::isoDate(thisWeek), true}, {ai::isoDate(thisWeek), false}};
+    w = ln::weeks(8, static_cast<long long>(thisWeek), m, d);
+    check(w.back().asked == 4 && w.back().understood == 3 && w[6].asked == 2 && w[6].understood == 1,
+          "les taux par semaine : 3/4 cette semaine, 1/2 la pr\xC3\xA9" "c\xC3\xA9" "dente");
+    check(w.back().decided == 2 && w.back().kept == 1 && w[6].decided == 1 && w[6].kept == 1, "les propositions gard\xC3\xA9" "es : 1/2, 1/1");
+    // A lui apprendre : les non comprises de la semaine, sans doublon ; Ignorer la retire.
+    ln::recordReply(false, "Fais un truc joli", false);
+    auto todo = ln::notUnderstood(7, static_cast<long long>(thisWeek));
+    check(todo.size() == 1 && todo.front().request == "Fais un truc joli", "\xC3\x80 lui apprendre : 1 demande (la capitale a plus de 7 jours)");
+    ln::dismissRequest("Fais un truc joli");
+    check(ln::notUnderstood(7, static_cast<long long>(thisWeek)).empty(), "Ignorer : la demande quitte la liste");
+    // Une demande longue : 200 caracteres au plus.
+    ln::recordReply(false, std::string(500, 'x'), false);
+    check(ln::readMeasures().back().request.size() == 200, "la demande gard\xC3\xA9" "e : 200 caract\xC3\xA8res au plus");
+    // Les elements appris par origine.
+    ln::BusinessModel c;
+    c.key = "agitateur";
+    c.name = "T_Agitateur";
+    c.members = {{"Marche", "BOOL", ""}};
+    std::string why;
+    check(ln::saveModel(c, &why), "un mod\xC3\xA8le appris cette semaine");
+    ln::WordEntry word;
+    word.word = "malaxeur";
+    word.means = ln::Meaning::Model;
+    word.target = "agitateur";
+    check(ln::learnWord(word, &why, "assistant"), "un mot appris par l'Assistant");
+    w = ln::weeks(8, static_cast<long long>(thisWeek), ln::readMeasures(), {});
+    check(w.back().byUser == 1 && w.back().byAssistant == 1, "appris cette semaine : 1 par toi, 1 par l'Assistant");
+    ai::setClock(nullptr);
+}
+
 } // namespace
 
 int main() {
@@ -215,6 +276,7 @@ int main() {
     testModels();
     testWords();
     testStorage();
+    testMeasures();
     std::error_code ec;
     fs::remove_all(scratch(), ec);
     std::printf("ai_apprentissage_test : %d verifications, %d echecs\n", checks, failures);

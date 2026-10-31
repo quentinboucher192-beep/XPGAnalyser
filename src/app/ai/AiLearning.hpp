@@ -96,4 +96,36 @@ bool forgetWord(std::string_view word, std::string* why = nullptr);
 
 void invalidate();   // apres une ecriture faite ailleurs (un import) : relire au prochain acces
 
+// ---- LES MESURES (apprentissage.jsonl, a cote d'activite.jsonl) ---------------------------------------------------
+//  Une ligne par reponse de l'IA INTEGREE (son fournisseur, ou << IA integree d'abord >>) : la date, comprise ou non, la
+//  demande (200 caracteres au plus), une proposition ou non. A part d'activite.jsonl : une ligne par demande noierait le
+//  journal d'activite (son onglet). Ce que deviennent les propositions se lit dans les conversations (leur etat).
+struct Measure {
+    std::string date, request;
+    bool        understood{false}, proposal{false};
+};
+[[nodiscard]] std::string measuresFile();
+void recordReply(bool understood, std::string_view request, bool proposal);
+[[nodiscard]] std::vector<Measure> readMeasures();
+
+// Une proposition (de n'importe quelle IA) et ce qu'elle est devenue : sa date, gardee (appliquee) ou non (refusee) ;
+// une proposition encore a decider ne compte pas.
+struct Decision {
+    std::string date;
+    bool        kept{false};
+};
+
+// Une semaine (du lundi 0 h au lundi suivant, heure du PC).
+struct Week {
+    long long start{0};                      // time_t du lundi
+    int       asked{0}, understood{0};       // les demandes a l'IA integree, comprises
+    int       decided{0}, kept{0};           // les propositions decidees, gardees
+    int       byUser{0}, byAssistant{0}, byFile{0};   // les elements appris (ajoutes ou corriges), par origine
+};
+// Les `count` dernieres semaines (la plus ancienne d'abord), jusqu'a celle de `nowT` comprise.
+[[nodiscard]] std::vector<Week> weeks(int count, long long nowT, const std::vector<Measure>& measures, const std::vector<Decision>& decisions);
+// Les demandes non comprises des `days` derniers jours (les plus recentes d'abord, sans doublon), sauf celles qu'on a ecartees.
+[[nodiscard]] std::vector<Measure> notUnderstood(int days, long long nowT);
+void dismissRequest(std::string_view request);   // << Ignorer >> : la demande quitte << A lui apprendre >>
+
 } // namespace app::ai::learning

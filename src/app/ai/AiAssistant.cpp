@@ -2,6 +2,7 @@
 //  app/ai/AiAssistant.cpp - voir AiAssistant.hpp
 // =============================================================================
 #include "AiAssistant.hpp"
+#include "AiLearning.hpp"       // 1.17.0 : les mesures de l'IA integree
 #include "AiLearningFile.hpp"   // 1.17.0 : ce que l'installateur a depose
 
 #include "AiAutomate.hpp"
@@ -311,6 +312,8 @@ bool Assistant::send(std::string text, std::string* why) {
         const auto keep = host_.document ? host_.document() : nullptr;   // tenu le temps de la lecture
         const Conversation* c0 = cur();
         LocalReply lr = askLocal(c0, c0 ? c0->messages.size() : 0, context(), text);
+        // 1.17.0 : la mesure (comprise ici, ou partie a l'IA connectee) - l'onglet Apprentissage en tire ses courbes
+        learning::recordReply(lr.understood, text, lr.understood && lr.proposal.has_value());
         if (lr.understood) localFirst = std::move(lr);
     }
     if (live() && !localFirst) {
@@ -401,7 +404,9 @@ bool Assistant::send(std::string text, std::string* why) {
     const bool byLocal = local() || localFirst.has_value();
     if (byLocal) {
         // les tours d'avant : ceux de la conversation, sans la demande qu'on vient d'y mettre
+        const bool measured = localFirst.has_value();   // deja mesuree (le relais)
         LocalReply lr = localFirst ? std::move(*localFirst) : askLocal(&c, c.messages.size() - 1, ctx, text);
+        if (!measured && !text.empty()) learning::recordReply(lr.understood, text, lr.proposal.has_value());   // 1.17.0
         if (localFirst)
             lr.text += "\n\n*(R\xC3\xA9pondu par l'IA int\xC3\xA9gr\xC3\xA9" "e, sans connexion. Ce qu'elle ne comprend pas part \xC3\xA0 l'IA connect\xC3\xA9" "e.)*";
         reply.text = std::move(lr.text);

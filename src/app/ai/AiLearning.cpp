@@ -21,8 +21,10 @@
 #include "../../hmi/HmiTypes.hpp"
 
 #include <algorithm>
+#include <ctime>
 #include <filesystem>
 #include <mutex>
+#include <set>
 #include <system_error>
 
 namespace app::ai::learning {
@@ -467,6 +469,159 @@ bool forgetWord(std::string_view word, std::string* why) {
     if (!removeFile("mot." + idPart(f), why)) return false;
     (void)memory::appendActivity("connaissance", "Mot oubli\xC3\xA9 : " + std::string(word));
     return true;
+}
+
+// ------------------------------------------------------------------ mesures --
+std::string measuresFile() { return root().empty() ? std::string{} : root() + "/apprentissage.jsonl"; }
+
+namespace {
+std::string ignoredFile() { return root().empty() ? std::string{} : root() + "/apprentissage-ecartees.json"; }
+std::string clip(std::string_view s, std::size_t n) {
+    std::string out(s.substr(0, std::min(s.size(), n * 2)));
+    // couper sur une frontiere UTF-8, a n caracteres au plus
+    std::size_t chars = 0, i = 0;
+    for (; i < out.size(); ++i) {
+        if ((static_cast<unsigned char>(out[i]) & 0xC0) != 0x80) {
+            if (chars == n) break;
+            ++chars;
+        }
+    }
+    out.resize(i);
+    for (auto& c : out)
+        if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+    return out;
+}
+long long weekStart(long long t) {
+    std::time_t tt = static_cast<std::time_t>(t);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &tt);
+#else
+    localtime_r(&tt, &tm);
+#endif
+    const int back = (tm.tm_wday + 6) % 7;   // lundi : 0
+    tm.tm_hour = 0;
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
+    tm.tm_mday -= back;
+    tm.tm_isdst = -1;
+    return static_cast<long long>(std::mktime(&tm));
+}
+std::set<std::string> dismissed() {
+    std::set<std::string> out;
+    std::string text;
+    if (ignoredFile().empty() || !memory::readText(ignoredFile(), text)) return out;
+    Json j;
+    if (!memory::parseJson(text, j) || !j.isArray()) return out;
+    for (const auto& x : j.items)
+        if (x.isString()) out.insert(x.text);
+    return out;
+}
+} // namespace
+
+void recordReply(bool understood, std::string_view request, bool proposal) {
+    const std::string file = measuresFile();
+    if (file.empty()) return;
+    Json j = Json::makeObject();
+    j.set("date", Json::makeString(isoDate(now())));
+    j.set("comprise", Json::makeBool(understood));
+    j.set("demande", Json::makeString(clip(request, 200)));
+    j.set("proposition", Json::makeBool(proposal));
+    std::string text;
+    (void)memory::readText(file, text);
+    if (!text.empty() && text.back() != '\n') text += '\n';
+    text += memory::writeJson(j, false) + "\n";
+    (void)memory::writeText(file, text);
+}
+
+std::vector<Measure> readMeasures() {
+    std::vector<Measure> out;
+    std::string text;
+    if (measuresFile().empty() || !memory::readText(measuresFile(), text)) return out;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const auto end = text.find('\n', at);
+        const std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        at = end == std::string::npos ? text.size() : end + 1;
+        Json j;
+        if (line.empty() || !memory::parseJson(line, j) || !j.isObject()) continue;   // une ligne abimee est sautee
+        out.push_back({j.str("date"), j.str("demande"), j.flag("comprise"), j.flag("proposition")});
+    }
+    return out;
+}
+
+std::vector<Week> weeks(int count, long long nowT, const std::vector<Measure>& measures, const std::vector<Decision>& decisions) {
+    std::vector<Week> out;
+    if (count <= 0) return out;
+    const long long last = weekStart(nowT);
+    for (int i = count - 1; i >= 0; --i) {
+        // le lundi i semaines avant (par mktime : les changements d'heure restent justes)
+        std::time_t tt = static_cast<std::time_t>(last);
+        std::tm tm{};
+#if defined(_WIN32)
+        localtime_s(&tm, &tt);
+#else
+        localtime_r(&tt, &tm);
+#endif
+        tm.tm_mday -= 7 * i;
+        tm.tm_isdst = -1;
+        Week w;
+        w.start = static_cast<long long>(std::mktime(&tm));
+        out.push_back(w);
+    }
+    const auto slot = [&](const std::string& iso) -> Week* {
+        const long long t = static_cast<long long>(parseIso(iso));
+        if (t <= 0) return nullptr;
+        for (std::size_t i = out.size(); i-- > 0;)
+            if (t >= out[i].start) return i + 1 < out.size() || t < out[i].start + 8 * 86400 ? &out[i] : nullptr;
+        return nullptr;
+    };
+    for (const auto& m : measures)
+        if (Week* w = slot(m.date)) {
+            ++w->asked;
+            if (m.understood) ++w->understood;
+        }
+    for (const auto& d : decisions)
+        if (Week* w = slot(d.date)) {
+            ++w->decided;
+            if (d.kept) ++w->kept;
+        }
+    memory::Registry reg;
+    reg.load();
+    for (const auto& k : reg.all()) {
+        if (k.builtIn) continue;
+        Week* w = slot(k.modified.empty() ? k.added : k.modified);
+        if (!w) continue;
+        if (k.source == "assistant") ++w->byAssistant;
+        else if (k.source == "fichier") ++w->byFile;
+        else ++w->byUser;
+    }
+    return out;
+}
+
+std::vector<Measure> notUnderstood(int days, long long nowT) {
+    std::vector<Measure> out;
+    const auto skip = dismissed();
+    std::set<std::string> seen;
+    const auto all = readMeasures();
+    for (auto it = all.rbegin(); it != all.rend(); ++it) {
+        if (it->understood || it->request.empty()) continue;
+        const long long t = static_cast<long long>(parseIso(it->date));
+        if (t <= 0 || nowT - t >= static_cast<long long>(days) * 86400) continue;
+        const std::string key = fold(it->request);
+        if (skip.count(key) || !seen.insert(key).second) continue;
+        out.push_back(*it);
+    }
+    return out;
+}
+
+void dismissRequest(std::string_view request) {
+    if (ignoredFile().empty()) return;
+    auto all = dismissed();
+    all.insert(fold(request));
+    Json j = Json::makeArray();
+    for (const auto& x : all) j.items.push_back(Json::makeString(x));
+    (void)memory::writeText(ignoredFile(), memory::writeJson(j, true));
 }
 
 } // namespace app::ai::learning
