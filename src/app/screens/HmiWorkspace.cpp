@@ -1821,6 +1821,13 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         hosts.askBindAt = [this](const std::string& equipment, const std::string& address, const std::string& type) { askHmiBind(equipment, address, type); };
         hosts.askImportTwin = [this](const std::string& equipment) { askHmiImportTwin(equipment); };
+        // 1.21.0 : la confirmation d'une decouverte reseau (rien ne part avant Lancer) ; le journal des scans dans le projet.
+        hosts.askScan = [this](HmiScanDialog::Spec spec, std::function<void(bool, const std::string&)> done) {
+            app_.menus().ShowDialog(std::make_unique<HmiScanDialog>(std::move(spec)), [done](const menu::DialogResult& r) {
+                if (done) done(r.accepted(), r.payload);
+            });
+        };
+        hosts.projectFolder = [this] { return app_.projectFolder(); };
         // Lot 16 : le double-clic d'une variable IHM du plan d'adressage l'ouvre la ou elle se declare.
         hosts.openVariable = [this](const std::string& path) {
             openHmiPane("scripts");

@@ -739,6 +739,10 @@ if(XPG_BUILD_TESTS)
     # le fil d'ecriture, l'analyse IA en arriere-plan) : xpg_app.
     xpg_add_test_executable(hmi_incident_test tests/hmi_incident_test.cpp)
     xpg_target_link_libraries(hmi_incident_test PRIVATE xpg_app)
+    # 1.21.0 : la decouverte reseau sans intrusion - la confirmation, la cadence, la lecture seule, la fiche
+    # (confirme, annonce, suppose), la comparaison avec le projet, le journal ; un faux reseau, un faux temps.
+    xpg_add_test_executable(hmi_discovery_test tests/hmi_discovery_test.cpp)
+    xpg_target_link_libraries(hmi_discovery_test PRIVATE xpg_hmi)
     # 1.15.0 (la vraie IA, chantier du registre) : le registre des 116 genres tire du code, le contexte et ses
     # reglages de confidentialite, les consignes et les connaissances actives, le schema de l'outil, la lecture de
     # son entree, les nouvelles operations (dupliquer, code) en un Ctrl+Z (xpg_app : rien a recompiler).
@@ -903,6 +907,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
     xpg_add_test(NAME hmiincident COMMAND hmi_incident_test)                 # 1.20.0 : les incidents (essais A a G)
+    xpg_add_test(NAME hmidiscovery COMMAND hmi_discovery_test)               # 1.21.0 : la decouverte reseau sans intrusion
     xpg_add_test(NAME coreprocess COMMAND core_process_test)                 # 1.21.0 : un programme a part, borne
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----

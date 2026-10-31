@@ -54,6 +54,8 @@ enum : int {
     CSimPortAdd, CSimCopy, CSimPortRemove,
     // lot 18
     CValAnimateAll, CValStopAll, CValUnforce, CValAdd,
+    // 1.21.0 : la proposition d'une adresse trouvee (a la fin : les numeros d'avant ne bougent pas)
+    CScanApply,
 };
 
 ui::Tone toneOf(int t) {
@@ -258,13 +260,21 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     // Lot 15 : le reseau du PC, les equipements.
     tools->add(CRefreshNet, HmiGlyph::Refresh, "Actualiser : relire les ports du PC et leurs adresses", "Actualiser");
     tools->add(CTestAll, HmiGlyph::Check, "Tester tous les \xC3\xA9quipements : un ping (et leur port), tout de suite", "Tester tous les \xC3\xA9quipements");
-    tools->add(CScanStart, HmiGlyph::Search, "Scanner : essayer chaque adresse de la plage (ping, ARP, ports TCP, Modbus)", "Scanner");
+    tools->add(CScanStart, HmiGlyph::Search,
+               "Scanner : choisir l'interface, la plage, les protocoles et la cadence, puis confirmer - rien ne part avant Lancer (ping, ports TCP, "
+               "identification Modbus en lecture seule)",
+               "Scanner");
     tools->add(CScanStop, HmiGlyph::Stop, "Arr\xC3\xAAter le scan", "Arr\xC3\xAAter");
     tools->separator();
     tools->add(CAddEquip, HmiGlyph::Plus, "Ajouter un \xC3\xA9quipement (Modbus TCP/IP ou Ethernet TCP/IP), dans le r\xC3\xA9seau du port choisi",
                "\xC3\x89quipement");
     tools->add(CScanAdd, HmiGlyph::Plus, "Ajouter comme \xC3\xA9quipement l'adresse choisie (Modbus TCP/IP si le port 502 r\xC3\xA9pond)",
                "Ajouter comme \xC3\xA9quipement");
+    // 1.21.0 : la proposition du compte rendu (ajouter, mettre a jour l'adresse, associer) - une commande, Ctrl+Z.
+    tools->add(CScanApply, HmiGlyph::Check,
+               "Appliquer la proposition faite pour l'adresse choisie : ajouter l'\xC3\xA9quipement, mettre \xC3\xA0 jour son adresse ou l'associer "
+               "(une commande, Ctrl+Z ; rien n'est envoy\xC3\xA9 \xC3\xA0 l'appareil)",
+               "Appliquer la proposition");
     tools->add(CAddVirtual, HmiGlyph::Plus, "Ajouter un esclave virtuel : un \xC3\xA9quipement seulement simul\xC3\xA9 (pas encore d'appareil), un esclave Modbus dans l'application",
                "Esclave virtuel");
     tools->add(CCreateTwin, HmiGlyph::Duplicate,
@@ -346,6 +356,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setVisibleWhen(CScanStop, on({TScanner}));
     tools_->setVisibleWhen(CAddEquip, real({TNetwork, TEquipments}));
     tools_->setVisibleWhen(CScanAdd, on({TScanner}));
+    tools_->setVisibleWhen(CScanApply, on({TScanner}));
     tools_->setVisibleWhen(CRemoveEquip, on({TEquipments, TNetwork}));
     tools_->setVisibleWhen(CAddVirtual, [on, simNet] { return on({TEquipments})() || simNet(); });
     tools_->setVisibleWhen(CCreateTwin, on({TEquipments, TNetwork}));
@@ -457,6 +468,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setEnabledWhen(CScanStart, [this] { return !scanning(); });
     tools_->setEnabledWhen(CScanStop, [this] { return scanning(); });
     tools_->setEnabledWhen(CScanAdd, [this] { return !selectedScanned().empty(); });
+    tools_->setEnabledWhen(CScanApply, [this] { return !selectedScanned().empty() && scanReport().proposalFor(selectedScanned()); });
     tools_->setEnabledWhen(CScanExport, [this] { return scanner_ && !scanner_->results().empty(); });
     tools_->setEnabledWhen(CRestore, [this] {
         auto* h = host();
@@ -735,6 +747,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             case CScanStart: (void)startScan(); break;
             case CScanStop: stopScan(); break;
             case CScanAdd: if (!selectedScanned().empty()) (void)addScanned(selectedScanned()); break;
+            case CScanApply: if (!selectedScanned().empty()) (void)applyScanProposal(selectedScanned()); break;
             case CScanExport: if (!askExportTarget("le r\xC3\xA9sultat du scan (CSV)", "Fichiers CSV|*.csv", [this] { (void)exportScan(); })) (void)exportScan(); break;
             default: break;
         }

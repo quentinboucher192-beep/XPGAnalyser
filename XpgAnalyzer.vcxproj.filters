@@ -1357,6 +1357,9 @@
     <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiScanDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiSimMarks.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1493,6 +1496,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDiscovery.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDocument.cpp">
@@ -2917,6 +2923,9 @@
     <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiScanDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiSimMarks.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3059,6 +3068,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDiscovery.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDocument.hpp">
