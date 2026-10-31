@@ -12,13 +12,18 @@
 //  Elle ne devine pas : une demande qu'elle ne comprend pas recoit une reponse
 //  honnete et des formulations qu'elle comprend. Elle n'invente jamais un nom de
 //  variable : elle cherche dans le projet (sans casse, sans accents, une faute
-//  pres, "P1" pour Pompe_1) ; si elle hesite, elle demande.
+//  pres, "P1" pour Pompe_1) ; si elle hesite, elle demande. Un objet cite qui
+//  n'est pas dans la vue (Bouton_9) est dit, avec les plus proches - jamais
+//  remplace par le dernier objet cite. Un nom exact passe avant un libelle ou un
+//  texte, puis l'abrege ; une designation au singulier qui repond a plusieurs
+//  objets fait demander lequel. Une operation qui ne change rien ne se propose pas.
 //
 //  CE QU'ELLE COMPREND : creer des objets (le genre par son libelle ou un
 //  synonyme metier, au pluriel, les nombres en chiffres ou en lettres, une place
 //  libre ou a cote d'un objet), un synoptique de station de pompage (ses nombres
 //  lus dans la phrase), modifier (couleur, texte, taille, place, visibilite,
-//  renommer), associer une variable, creer des variables et une vue, aligner,
+//  renommer), associer une variable, creer des variables (chacune son type), un
+//  type IHM (creer_type) et une vue, aligner,
 //  repartir, dupliquer, supprimer, animer (un defaut qui clignote, une couleur
 //  selon une variable), et les questions (que sais-tu faire, combien, quelles
 //  variables, quels genres).

@@ -17,6 +17,7 @@
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiLocal.hpp"
+#include "../src/app/ai/AiRegistry.hpp"
 #include "../src/core/Command.hpp"
 #include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiModel.hpp"
@@ -242,8 +243,11 @@ void testModify() {
     const auto* op = firstOp(r);
     check(op && op->action == ai::Operation::Action::Modify && op->name == "Pompe_1" && prop(*op, "colorOn") == "#E5534B", "mets P1 en rouge : colorOn");
     if (valid(b, r, "P1 en rouge")) check(b.applyUndo(r, [&] { return b.object("Pompe_1")->text("colorOn") == "#E5534B"; }), "appliquee, reprise");
-    op = firstOp(r = b.ask("Mets pompe 1 en vert"));
-    check(op && op->name == "Pompe_1" && prop(*op, "colorOn") == "#2ECC71", "pompe 1 (deux mots) en vert");
+    op = firstOp(r = b.ask("Mets pompe 1 en jaune"));
+    check(op && op->name == "Pompe_1" && prop(*op, "colorOn") == "#F2C94C", "pompe 1 (deux mots) en jaune");
+    // 1.16.0 (correctif) : sa couleur en marche est deja verte - rien a proposer, et dit
+    r = b.ask("Mets pompe 1 en vert");
+    check(!r.proposal && has(r.text, "d\xC3\xA9j\xC3\xA0 en **vert**"), "pompe 1 en vert : deja verte, rien de propose (" + r.text + ")");
     op = firstOp(r = b.ask("mets pompe_1 en bleu clair"));
     check(op && op->name == "Pompe_1" && !prop(*op, "colorOn").empty() && prop(*op, "colorOn") != "#2F6FD6", "pompe_1 (casse) en bleu clair");
     op = firstOp(r = b.ask("mets la cuve en jaune"));
@@ -291,8 +295,15 @@ void testModify() {
     op = firstOp(r = b.ask("cache V1"));
     check(op && prop(*op, "visible") == "FALSE", "cacher : visible FALSE");
     valid(b, r, "cacher");
+    // rendre visible un objet cache (deja visible : rien a proposer, dit)
+    r = b.ask("rends visible V1");
+    check(!r.proposal && has(r.text, "Rien ne changerait"), "rendre visible V1, deja visible : rien de propose");
+    for (auto& o : b.v().objects)
+        if (o.name == "Vanne_1") o.set("visible", "FALSE");
     op = firstOp(r = b.ask("rends visible V1"));
     check(op && prop(*op, "visible") == "TRUE", "rendre visible");
+    for (auto& o : b.v().objects)
+        if (o.name == "Vanne_1") o.set("visible", "TRUE");
 }
 
 // ---------------------------------------------------------------- associer ----
@@ -572,6 +583,307 @@ void testAssistant() {
           "la demonstration : ses suggestions, son en-tete");
 }
 
+
+// ======================================= 1.16.0 : les correctifs des captures (IA integree) ====
+std::size_t chars(const std::string& s) {
+    return static_cast<std::size_t>(std::count_if(s.begin(), s.end(), [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }));
+}
+bool shortAll(const std::vector<std::string>& v) {
+    return std::all_of(v.begin(), v.end(), [](const std::string& s) { return chars(s) <= 45; });
+}
+std::size_t opsOn(const ai::LocalReply& r, const std::string& name) {
+    if (!r.proposal) return 0;
+    return static_cast<std::size_t>(std::count_if(r.proposal->ops.begin(), r.proposal->ops.end(), [&](const ai::Operation& o) { return o.name == name; }));
+}
+void addObject(Bench& b, hmi::Kind k, const std::string& name, double x, double y, const char* key = nullptr, const std::string& value = {}) {
+    auto& v = b.v();
+    hmi::Object o = hmi::makeObject(k, b.doc->project.allocate(), name, x, y, v.layers.empty() ? hmi::kNoId : v.layers.front().id);
+    if (key) o.set(key, value);
+    v.objects.push_back(std::move(o));
+}
+void removeObject(Bench& b, const std::string& name) {
+    auto& objs = b.v().objects;
+    objs.erase(std::remove_if(objs.begin(), objs.end(), [&](const hmi::Object& o) { return o.name == name; }), objs.end());
+}
+
+// 1. Un objet cite qui n'existe pas : dit, jamais remplace par le dernier objet cite.
+void testMissingObject() {
+    std::printf("[correctifs : un objet introuvable]\n");
+    Bench b;
+    auto r = b.ask("mets la cuve en jaune");   // le dernier objet cite : Cuve_1
+    check(firstOp(r) && firstOp(r)->name == "Cuve_1", "la cuve citee");
+    r = b.ask("Mets Bouton_9 en rouge");
+    check(!r.proposal, "Bouton_9 n'existe pas : aucune proposition (" + (r.proposal ? r.proposal->ops.front().name : std::string("-")) + ")");
+    check(has(r.text, "Je ne trouve pas \xC2\xAB Bouton_9 \xC2\xBB dans la vue") && has(r.text, "`Bouton_1`") && !has(r.text, "Cuve_1"),
+          "Bouton_9 : je ne le trouve pas, les plus proches (Bouton_1...) : " + r.text);
+    check(std::any_of(r.suggestions.begin(), r.suggestions.end(), [](const std::string& s) { return s == "Mets Bouton_1 en rouge"; }),
+          "la demande refaite sur le plus proche, a cliquer");
+    r = b.ask("Largeur 200 pour Bouton_9");
+    check(!r.proposal && has(r.text, "Bouton_9"), "largeur 200 pour Bouton_9 : rien sur Cuve_1");
+    r = b.ask("Cache Texte_9 quand Pompe_1_Marche");
+    check(!r.proposal && has(r.text, "Texte_9"), "cache Texte_9 quand... : rien de cache");
+    r = b.ask("Ajoute un voyant \xC3\xA0 droite de Pompe_9");
+    check(!r.proposal && has(r.text, "Pompe_9"), "un voyant a droite de Pompe_9 (absente) : dit, rien pose ailleurs");
+    r = b.ask("Supprime P7");
+    check(!r.proposal && has(r.text, "P7"), "supprime P7 (absent) : rien supprime");
+    r = b.ask("mets la cuve en vert");
+    r = b.ask("Mets D\xC3\xA9marreur en rouge");
+    check(!r.proposal && has(r.text, "Je ne trouve pas \xC2\xAB D\xC3\xA9marreur"), "un mot a majuscule qui n'est rien de connu : dit, pas la cuve (" + r.text + ")");
+    // le repli sur le dernier objet cite reste pour un pronom
+    r = b.ask("mets la cuve en jaune");
+    auto* op = firstOp(r = b.ask("Mets-la en rouge"));
+    check(op && op->name == "Cuve_1" && prop(*op, "fillColor") == "#E5534B", "mets-la en rouge : la cuve citee juste avant");
+}
+
+// 2. "Le texte de X" : une propriete de X, pas le genre Texte.
+void testTextOf() {
+    std::printf("[correctifs : le texte de]\n");
+    Bench b;
+    for (auto& o : b.v().objects)
+        if (o.name == "Texte_1") o.set("text", "Texte");   // le texte par defaut d'un Texte neuf
+    auto r = b.ask("Change le texte de Bouton_1 en D\xC3\xA9marrer");
+    check(r.proposal && r.proposal->ops.size() == 1 && opsOn(r, "Bouton_1") == 1 && opsOn(r, "Texte_1") == 0,
+          "le texte de Bouton_1 : Bouton_1 seul, pas Texte_1 (" + r.text + ")");
+    valid(b, r, "le texte de Bouton_1");
+    r = b.ask("Mets le texte de Bouton_2 en rouge");
+    check(firstOp(r) && firstOp(r)->name == "Bouton_2" && prop(*firstOp(r), "textColor") == "#E5534B", "le texte de Bouton_2 en rouge : sa couleur de texte");
+    removeObject(b, "Bouton_1");
+    r = b.ask("Change le texte de Bouton_1 en D\xC3\xA9marrer");
+    check(!r.proposal && has(r.text, "Je ne trouve pas \xC2\xAB Bouton_1") && !has(r.text, "pas de texte"),
+          "sans Bouton_1 : je ne le trouve pas (pas \"il n'y a pas de texte\") : " + r.text);
+}
+
+// 3, 4. Une designation ambigue : demander ; le clignotement des objets qui savent.
+void testAmbiguous() {
+    std::printf("[correctifs : V1, P1 ambigus, clignoter]\n");
+    Bench b;
+    addObject(b, hmi::Kind::Indicator, "Voyant_1", 900, 100);   // son abrege : v1 (comme Vanne_1)
+    auto r = b.ask("Cache V1");
+    check(r.proposal && r.proposal->ops.size() == 1 && opsOn(r, "Vanne_1") == 1, "cache V1 : la vanne (son libelle V1), pas aussi Voyant_1");
+    r = b.ask("D\xC3\xA9place V1 \xC3\xA0 droite de P2");
+    check(r.proposal && r.proposal->ops.size() == 1 && opsOn(r, "Vanne_1") == 1, "deplace V1 : la vanne seule");
+    r = b.ask("Fais clignoter V1 quand Defaut_V1");
+    check(r.proposal && opsOn(r, "Vanne_1") == 1 && opsOn(r, "Voyant_1") == 0 && prop(r.proposal->ops.front(), "fault") == "Defaut_V1",
+          "fais clignoter V1 (une vanne et un voyant dans la vue) : la vanne (" + r.text + ")");
+    check(!has(r.text, "La formule ne lit"), "pas de formule posee : pas de phrase sur la formule");
+    // plusieurs objets : ceux qui savent clignoter ; les autres dits a part
+    r = b.ask("Fais clignoter la vanne et le voyant quand Defaut_V1");
+    check(r.proposal && opsOn(r, "Vanne_1") == 1 && opsOn(r, "Voyant_1") == 0 && has(r.text, "Voyant_1"),
+          "la vanne et le voyant : la vanne clignote, le voyant est dit a part (" + r.text + ")");
+    // deux objets portent le libelle P1 (Dupliquer garde le libelle) : demander
+    r = b.ask("duplique P1 3 fois vers la droite");
+    check(b.apply(r) && b.object("Pompe_3") && b.object("Pompe_3")->text("label") == "P1", "trois copies de P1 (libelle P1 garde)");
+    r = b.ask("P1 verte si Pompe_1_Marche sinon rouge");
+    check(!r.proposal && has(r.text, "Pompe_1") && has(r.text, "Pompe_3") && has(r.text, "Lequel"),
+          "P1 designe 4 pompes : une question, pas 4 modifications (" + r.text + ")");
+    check(std::any_of(r.suggestions.begin(), r.suggestions.end(), [](const std::string& s) { return s == "Pompe_1 verte si Pompe_1_Marche sinon rouge"; }),
+          "la demande refaite sur chaque candidat");
+    r = b.ask("Pompe_1 verte si Pompe_1_Marche sinon rouge");
+    check(r.proposal && r.proposal->ops.size() == 1 && opsOn(r, "Pompe_1") == 1, "le nom exact : un seul objet");
+    r = b.ask("mets les pompes en orange");
+    check(countOps(r, ai::Operation::Action::Modify) == 5, "les pompes (un pluriel) : toutes");
+    // un texte qui designe : "Marche" est le texte de Bouton_1
+    r = b.ask("mets Marche en vert");
+    check(r.proposal && opsOn(r, "Bouton_1") == 1, "par son texte : Marche -> Bouton_1");
+}
+
+// 5. Les placements : sans recouvrir, dans la vue.
+void testPlacement() {
+    std::printf("[correctifs : placer]\n");
+    Bench b;
+    addObject(b, hmi::Kind::Pump, "Pompe_3", 676, 100, "label", "P3");   // la place juste a droite de P2
+    auto r = b.ask("D\xC3\xA9place V1 \xC3\xA0 droite de P2");
+    const auto* op = firstOp(r);
+    bool clear = op != nullptr;
+    if (op) {
+        const auto* v1 = b.object("Vanne_1");
+        const hmi::Box nb{std::stod(prop(*op, "x")), std::stod(prop(*op, "y")), v1->box().w, v1->box().h};
+        for (const auto& o : b.v().objects)
+            if (o.name != "Vanne_1" && hmi::edit::rotatedBounds(o).intersects(nb)) clear = false;
+        check(nb.x >= b.object("Pompe_2")->box().right() && nb.right() <= b.v().width, "a droite de P2, dans la vue");
+    }
+    check(clear, "V1 a droite de P2 sans recouvrir P3 (la place prise)");
+    check(has(r.text, "prise par `Pompe_3`"), "la reponse dit le decalage : " + r.text);
+    valid(b, r, "deplacer sans recouvrir");
+    op = firstOp(r = b.ask("Monte P1 de 150"));
+    check(op && prop(*op, "y") == "0" && has(r.text, "bord de la vue"), "monte P1 de 150 (y = 100) : borne a y = 0, et dit (" + r.text + ")");
+    r = b.ask("Monte Texte_1 de 50");
+    check(op && firstOp(r) && prop(*firstOp(r), "y") == "0", "monte Texte_1 de 50 (y = 20) : y = 0");
+}
+
+// 6. Une operation qui ne change rien ne se propose pas.
+void testAlreadyDone() {
+    std::printf("[correctifs : deja fait]\n");
+    Bench b;
+    for (auto& o : b.v().objects)
+        if (o.name.rfind("Bouton_", 0) == 0) {
+            auto bx = o.box();
+            bx.y = 420;
+            o.setBox(bx);
+        }
+    auto r = b.ask("Aligne les boutons en haut");
+    check(!r.proposal && has(r.text, "Les boutons sont d\xC3\xA9j\xC3\xA0 align\xC3\xA9s en haut"),
+          "deux boutons deja alignes : dit, rien de propose (" + r.text + ")");
+    // repartis a ecarts egaux
+    double x = 100;
+    for (auto& o : b.v().objects)
+        if (o.name.rfind("Bouton_", 0) == 0) {
+            auto bx = o.box();
+            bx.x = x;
+            o.setBox(bx);
+            x += bx.w + 50;
+        }
+    r = b.ask("R\xC3\xA9partis les boutons");
+    check(!r.proposal && has(r.text, "d\xC3\xA9j\xC3\xA0 r\xC3\xA9partis"), "deja repartis : dit, rien de propose (" + r.text + ")");
+    r = b.ask("Aligne les pompes en haut");   // Pompe_1 et Pompe_2 : y = 100
+    check(!r.proposal && has(r.text, "Les pompes sont d\xC3\xA9j\xC3\xA0 align\xC3\xA9" "es en haut"), "les pompes deja alignees (accorde) : " + r.text);
+    r = b.ask("mets P1 en rouge");
+    check(b.apply(r), "P1 en rouge, applique");
+    r = b.ask("mets P1 en rouge");
+    check(!r.proposal && has(r.text, "d\xC3\xA9j\xC3\xA0 en **rouge**"), "P1 deja rouge : rien de propose");
+}
+
+// 7, 8. Chaque variable son type ; creer un type IHM.
+void testTypes() {
+    std::printf("[correctifs : types]\n");
+    Bench b;
+    auto r = b.ask("Cr\xC3\xA9" "e les variables Niveau_Cuve_3 en REAL et Defaut_P1 en BOOL");
+    auto* op = firstOp(r);
+    check(op && op->variables.size() == 2 && op->variables[0].type == "REAL" && op->variables[1].type == "BOOL" && op->variables[0].initial == "0",
+          "X en REAL et Y en BOOL : chacune son type");
+    op = firstOp(r = b.ask("Cr\xC3\xA9" "e les variables Niveau_A et Niveau_B en BOOL"));
+    check(op && op->variables.size() == 2 && op->variables[0].type == "BOOL" && op->variables[1].type == "BOOL" && !has(r.text, "tir\xC3\xA9 du nom"),
+          "X et Y en BOOL : les deux en BOOL (pas tire du nom)");
+    op = firstOp(r = b.ask("Cr\xC3\xA9" "e les variables Vitesse_X : REAL, Marche_X : BOOL"));
+    check(op && op->variables.size() == 2 && op->variables[0].type == "REAL" && op->variables[1].type == "BOOL", "X : REAL, Y : BOOL");
+    op = firstOp(r = b.ask("Cr\xC3\xA9" "e les variables Vitesse_P9 et Defaut_P9"));
+    check(op && op->variables.size() == 2 && op->variables[0].type == "REAL" && op->variables[1].type == "BOOL" && has(r.text, "tir\xC3\xA9 du nom"),
+          "sans type dit : tire du nom, et dit");
+    // un type IHM
+    r = b.ask("Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL et Vitesse en REAL");
+    op = firstOp(r);
+    check(op && op->action == ai::Operation::Action::Type && op->name == "T_Pompe" && op->members.size() == 2 && op->members[0].name == "Marche"
+              && op->members[0].type == "BOOL" && op->members[1].name == "Vitesse" && op->members[1].type == "REAL",
+          "cree un type T_Pompe avec Marche en BOOL et Vitesse en REAL : creer_type (" + r.text + ")");
+    if (valid(b, r, "creer un type"))
+        check(b.applyUndo(r, [&] { return b.doc->project.hmiTypeByName("T_Pompe") != nullptr; }) && !b.doc->project.hmiTypeByName("T_Pompe"),
+              "le type cree en un pas, retire par Ctrl+Z");
+    op = firstOp(r = b.ask("Cr\xC3\xA9" "e une structure T_Vanne avec Ouverte, Fermee et Niveau"));
+    check(op && op->action == ai::Operation::Action::Type && op->members.size() == 3 && op->members[0].type == "BOOL" && op->members[2].type == "REAL"
+              && has(r.text, "tir\xC3\xA9 du nom"),
+          "une structure, des membres sans type : tires du nom, et dit");
+    r = b.ask("Cr\xC3\xA9" "e un type");
+    check(!r.proposal && has(r.text, "Quel nom"), "un type sans nom : demande son nom");
+    // la portee : une vue neuve est visee par son nom (comme les IA en ligne), des variables ne visent aucune vue
+    r = b.ask("Cr\xC3\xA9" "e une vue Vue_Process avec 2 pompes");
+    check(r.proposal && r.proposal->view == "Vue_Process" && r.proposal->viewId == hmi::kNoId && r.proposal->fingerprint.rfind("vue:absente", 0) == 0,
+          "creer une vue : la proposition vise la vue neuve (son nom, vue:absente) : " + (r.proposal ? r.proposal->view : std::string("-")));
+    r = b.ask("Cr\xC3\xA9" "e la variable Debit_Z en REAL");
+    check(r.proposal && r.proposal->view.empty() && r.proposal->viewId == hmi::kNoId, "des variables seules : aucune vue visee");
+}
+
+// 9. Les textes.
+void testTexts() {
+    std::printf("[correctifs : textes]\n");
+    Bench b;
+    auto r = b.ask("Combien d'objets ?");
+    check(has(r.text, "2 pompes") && has(r.text, "3 boutons \xC3\xA0 impulsion") && !has(r.text, "2 pompe,"), "les pluriels accordes : " + r.text);
+    r = b.ask("ajoute deux afficheurs num\xC3\xA9riques");
+    check(countKind(r, "NumericDisplay") == 2 && has(r.text, "2 afficheurs num\xC3\xA9riques"), "2 afficheurs numeriques (le nom et l'adjectif)");
+    r = b.ask("ajoute un voyant rouge \xC3\xA0 droite de la cuve");
+    check(has(r.text, "En rouge : `Voyant_1`"), "la couleur dite : " + r.text);
+    r = b.ask("Fais clignoter V1 quand Defaut_V1");
+    check(!has(r.text, "La formule"), "un defaut lie par une variable : pas de phrase sur une formule");
+    r = b.ask("Texte_1 en rouge si Defaut_V1 sinon blanc");
+    check(has(r.text, "La formule"), "une formule posee : la phrase sur la formule");
+    r = b.ask("Quels genres d'objets ?");
+    check(has(r.text, std::to_string(ai::registry().kinds().size()) + " genres"), "quels genres : le compte du registre (" + std::to_string(ai::registry().kinds().size()) + ")");
+    // relie la cuve au niveau, sans variable de niveau : les candidates d'abord, puis la phrase pour la creer
+    auto& vars = b.doc->project.programs.variables;
+    vars.erase(std::remove_if(vars.begin(), vars.end(), [](const hmi::Variable& v) { return v.name.rfind("Niveau", 0) == 0; }), vars.end());
+    r = b.ask("Relie la cuve au niveau");
+    const auto create = r.text.find("cr\xC3\xA9" "e-la d'abord");
+    const auto first = r.text.find("\n- ");
+    check(!r.proposal && create != std::string::npos && first != std::string::npos && (first == create - 3 || has(r.text, "les plus proches")),
+          "la liste commence par les candidates (ou par la creation, sans \"ou\") : " + r.text);
+    check(!has(r.text, "\n- ou cr") || r.text.find("les plus proches") < r.text.find("\n- ou cr"), "\"ou cree-la\" seulement apres des candidates");
+    check(has(r.text, "Niveau_Cuve_1"), "un nom parlant propose a la creation (Niveau_Cuve_1), pas \"niveau\"");
+}
+
+// 10. Sans automate relie.
+void testNoPlc() {
+    std::printf("[correctifs : sans automate]\n");
+    Bench b;
+    // comme dans le logiciel : les listes sont branchees, mais vides sans automate
+    b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{}; };
+    b.env.plcTypes = [] { return std::vector<ai::Env::PlcType>{}; };
+    auto r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT");
+    check(!r.proposal && has(r.text, "Aucun automate n'est reli\xC3\xA9 \xC3\xA0 ce projet") && !has(r.text, "Rien \xC3\xA0 cr\xC3\xA9" "er"),
+          "variables de l'automate, sans automate : dit (" + r.text + ")");
+    r = b.ask("Propose les types IHM des DDT");
+    check(!r.proposal && has(r.text, "Aucun automate n'est reli\xC3\xA9"), "les types des DDT, sans automate : dit");
+    // avec un automate : les types qu'elles emploient d'abord
+    b.env.plcVariables = [] { return std::vector<std::pair<std::string, std::string>>{{"PT101", "T_Mesure"}, {"PT102", "REAL"}}; };
+    b.env.plcTypes = [] { return std::vector<ai::Env::PlcType>{{"T_Mesure", "", {{"Valeur", "REAL", ""}, {"Defaut", "BOOL", ""}}}}; };
+    r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT");
+    check(r.proposal && r.proposal->ops.size() == 2 && r.proposal->ops[0].action == ai::Operation::Action::Type && r.proposal->ops[0].name == "T_Mesure"
+              && r.proposal->ops[1].action == ai::Operation::Action::Variables,
+          "les variables de l'automate : le type qu'elles emploient d'abord");
+    r = b.ask("Propose les types IHM des DDT");
+    check(firstOp(r) && firstOp(r)->action == ai::Operation::Action::Type && firstOp(r)->name == "T_Mesure", "propose les types IHM des DDT : creer_type");
+}
+
+// 11. Les suggestions : des objets qui existent, courtes.
+void testSuggestions() {
+    std::printf("[correctifs : suggestions]\n");
+    Bench b;
+    b.v().objects.clear();
+    auto r = b.ask("blabla");
+    check(!r.suggestions.empty() && std::none_of(r.suggestions.begin(), r.suggestions.end(), [](const std::string& s) { return has(s, "Pompe_1") || has(s, "Mets "); }),
+          "vue vide : des suggestions pour creer, aucun objet cite");
+    check(shortAll(r.suggestions), "vue vide : des suggestions courtes");
+    Bench c;
+    r = c.ask("Que sais-tu faire ?");
+    check(shortAll(r.suggestions) && shortAll(ai::localSuggestions()), "des suggestions de 45 caracteres au plus");
+    // les formulations du texte (entre `...`) tiennent aussi sur une ligne
+    bool ok = true;
+    for (std::size_t a = r.text.find('`'); a != std::string::npos; a = r.text.find('`', a + 1)) {
+        const auto z = r.text.find('`', a + 1);
+        if (z == std::string::npos) break;
+        if (chars(r.text.substr(a + 1, z - a - 1)) > 45) ok = false;
+        a = z;
+    }
+    check(ok, "que sais-tu faire : chaque formulation tient en 45 caracteres");
+    check(has(r.text, "type T_Pompe"), "que sais-tu faire : creer un type");
+    r = c.ask("Mets Bouton_9 en rouge");
+    check(shortAll(r.suggestions), "les suggestions d'un objet introuvable : courtes");
+}
+
+// Les phrases de l'aide (F1, Ce qu'elle comprend) qui n'avaient pas leur essai.
+void testHelpPhrases() {
+    std::printf("[les phrases de l'aide]\n");
+    Bench b;
+    auto r = b.ask("Mets la cuve en bleu clair");
+    check(firstOp(r) && firstOp(r)->name == "Cuve_1" && !prop(*firstOp(r), "fillColor").empty() && prop(*firstOp(r), "fillColor") != "#2F6FD6",
+          "mets la cuve en bleu clair");
+    r = b.ask("Cr\xC3\xA9" "e un synoptique de station de pompage avec 3 cuves et 2 pompes par cuve sans vannes");
+    check(countKind(r, "Tank") == 3 && countKind(r, "Valve") == 0, "un synoptique sans vannes");
+    r = b.ask("Quels genres d'objets ?");
+    check(!r.proposal && has(r.text, "Synoptique"), "quels genres d'objets ?");
+    r = b.ask("Synoptique de 3 cuves et 2 pompes par cuve");
+    check(countKind(r, "Tank") == 3 && countKind(r, "Pump") == 6, "la suggestion courte du synoptique");
+    Bench c;
+    r = c.ask("ajoute un voyant");
+    check(c.apply(r), "un voyant, applique");
+    auto* op = firstOp(r = c.ask("Mets-la en rouge"));
+    check(op && op->name == "Voyant_1", "mets-la en rouge : le dernier cree");
+    for (const auto& s : ai::localSuggestions()) {
+        Bench d;
+        r = d.ask(s);
+        check(r.proposal || has(r.text, "Ce que je comprends") || has(r.text, "objets"), "la suggestion " + s + " : comprise");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -585,6 +897,16 @@ int main() {
     testQuestions();
     testFollowUp();
     testAssistant();
+    testMissingObject();
+    testTextOf();
+    testAmbiguous();
+    testPlacement();
+    testAlreadyDone();
+    testTypes();
+    testTexts();
+    testNoPlc();
+    testSuggestions();
+    testHelpPhrases();
     std::printf("ai_integree_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
