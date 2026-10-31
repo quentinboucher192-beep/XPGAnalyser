@@ -22365,7 +22365,19 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un enregistrement n'est pas une vid\xC3\xA9o : ce sont les **valeurs** et les "
                          "**\xC3\xA9v\xC3\xA9nements**, rejou\xC3\xA9s par l'IHM elle-m\xC3\xAAme. Il est "
                          "l\xC3\xA9ger (quelques centaines de Ko pour dix minutes) et net \xC3\xA0 tout zoom "
-                         "; il se rejoue avec le projet qui l'a fait.", {}},
+                         "; il se rejoue avec le projet qui l'a fait. 1.20.2 : **fid\xC3\xA8le m\xC3\xAAme "
+                         "si le projet a chang\xC3\xA9** - chaque enregistrement garde une **copie du projet "
+                         "de son moment** (les vues, les popups, les objets, les variables, les types, les "
+                         "scripts\xE2\x80\xA6), compress\xC3\xA9" "e et chiffr\xC3\xA9" "e comme sa piste "
+                         "(avec son mot de passe s'il en a un). La relecture se fait avec cette copie : une "
+                         "vue renomm\xC3\xA9" "e, un objet supprim\xC3\xA9, une variable retir\xC3\xA9" "e "
+                         "depuis se rejouent tels qu'ils \xC3\xA9taient, et la barre dit \xC2\xAB "
+                         "rejou\xC3\xA9 avec le projet de son moment \xC2\xBB. En quittant la relecture, "
+                         "l'IHM revient au projet d'aujourd'hui ; l'\xC3\xA9" "diteur n'est jamais "
+                         "modifi\xC3\xA9. Les images et les sons ne sont pas copi\xC3\xA9s : ils viennent du "
+                         "projet actuel. Un enregistrement fait avant la 1.20.2 (sans copie) se rejoue comme "
+                         "avant, avec le projet actuel ; une copie ab\xC3\xAEm\xC3\xA9" "e aussi, et c'est "
+                         "dit.", {}},
              {K::Heading, "Ce qui est enregistr\xC3\xA9", {}},
              {K::Table, "Quoi\tLe d\xC3\xA9tail\nLes valeurs\tToutes les variables IHM, et ce que "
                          "l'\xC3\xA9" "cran lit de l'automate, des variables syst\xC3\xA8me et des "

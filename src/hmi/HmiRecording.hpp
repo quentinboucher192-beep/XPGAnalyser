@@ -18,13 +18,33 @@
 //    - LES EVENEMENTS : les alarmes (la liste ; apparition, acquittement,
 //      disparition), les sons joues (la ressource, le canal), le journal.
 //
-//  LE FICHIER .xrec : un zip (un outil zip l'ouvre) de deux entrees stockees -
+//  LE FICHIER .xrec : un zip (un outil zip l'ouvre) d'entrees stockees, dans cet
+//  ordre -
 //    entete.json : l'en-tete, lisible (nom, description, date, duree, projet et
 //                  version, empreinte du projet, vue de depart, ou, par qui, les
-//                  comptes) ; il ne contient aucune valeur. Il est EN PREMIER, et
-//                  complete de blancs jusqu'a une place fixe (16 Kio) : la liste
-//                  du dossier ne lit que lui (quelques Kio), et l'arret, une
-//                  description, un nom le reecrivent SUR PLACE ;
+//                  comptes, s'il garde la copie du projet) ; il ne contient
+//                  aucune valeur. Il est EN PREMIER, et complete de blancs
+//                  jusqu'a une place fixe (16 Kio) : la liste du dossier ne lit
+//                  que lui (quelques Kio), et l'arret, une description, un nom le
+//                  reecrivent SUR PLACE ;
+//    projet.bin  : 1.20.2 - LA COPIE DU PROJET tel qu'il etait au depart de
+//                  l'enregistrement (format 3) : les fichiers que l'enregistrement
+//                  du projet ecrit (ihm.txt, les vues, les scripts, les
+//                  fonctions...) en UN SEUL BLOC, compresse et chiffre par la cle
+//                  du fichier comme ceux de la piste (sur son propre flux : le
+//                  nombre unique suivi de "|projet") - sans le mot de passe, ni
+//                  ses vues, ni ses objets, ni ses scripts ne se lisent. Ecrite
+//                  des l'ouverture, avant la piste : la piste s'ajoute ensuite a
+//                  la fin comme avant, et un .part coupe net la garde. Les
+//                  ressources (images, sons, videos, polices) et les modeles de
+//                  vues N'Y SONT PAS : leurs fichiers restent dans le dossier du
+//                  projet, la relecture les y reprend (par leur identifiant, sinon
+//                  leur nom). LA RELECTURE REJOUE CETTE COPIE (vues, popups,
+//                  objets, parametres, variables, types, styles...) : ce que
+//                  l'ecran montrait alors, meme si le projet a change depuis. Un
+//                  fichier d'avant (deux entrees, format 2 ou 1) n'en a pas : il
+//                  se rejoue avec le projet actuel, comme avant ; un fichier fait
+//                  sans copie s'ecrit encore au format 2 ;
 //    piste.bin   : la piste, une suite de BLOCS (un par seconde a peu pres),
 //                  chacun compresse (deflate) et chiffre, avec sa longueur, son
 //                  CRC et l'instant de sa fin. Un bloc abime ou coupe arrete la
@@ -45,8 +65,9 @@
 //  cle tiree du mot de passe (SHA-256 itere, un second sel) ; sans mot de passe,
 //  elle y est en clair. Donner (ou retirer) le mot de passe a l'arret ne change
 //  que l'en-tete ; Mot de passe... (Ressources) tire une cle neuve et rechiffre
-//  la piste. CE QUE CA PROTEGE : qui n'a pas le mot de passe ne rejoue pas
-//  l'enregistrement et ne lit pas ses valeurs. CE QUE CA NE PROTEGE PAS :
+//  la piste (1.20.2 : et la copie du projet). CE QUE CA PROTEGE : qui n'a pas le
+//  mot de passe ne rejoue pas l'enregistrement, ne lit pas ses valeurs, ni le
+//  projet garde avec lui. CE QUE CA NE PROTEGE PAS :
 //  l'en-tete (nom, description, date, duree, vues, qui l'a fait) reste lisible ;
 //  le fichier peut etre supprime, copie ou abime ; la piste n'est pas signee ;
 //  pendant l'enregistrement, un .part commence sans mot de passe a sa cle en
@@ -55,8 +76,10 @@
 //  UN FICHIER HOSTILE (un .xrec fabrique) ne fait pas allouer sans fin : l'en-tete
 //  fait 1 Mio au plus, la piste est lue bloc par bloc (64 Mio decompresses au plus
 //  chacun, et pas plus que ce que deflate peut donner), 1 Gio decompresse et 12
-//  millions de valeurs en tout (limits()) ; au-dela, le fichier est refuse et dit
-//  pourquoi.
+//  millions de valeurs en tout (limits()) ; la copie du projet, 64 Mio
+//  decompresses au plus ; au-dela, le fichier est refuse et dit pourquoi (une
+//  copie du projet refusee : la relecture se fait avec le projet actuel, et le
+//  dit).
 //
 //  LA RELECTURE (Player) : l'etat a un instant = l'image complete d'avant, puis
 //  les changements jusqu'a lui - le meme que celui d'une lecture continue. Une
@@ -86,8 +109,12 @@ inline constexpr std::string_view kExtension = ".xrec";
 inline constexpr std::string_view kPartSuffix = ".part";          // "<nom>.xrec.part" : un enregistrement en cours
 inline constexpr std::string_view kHeaderEntry = "entete.json";
 inline constexpr std::string_view kTrackEntry = "piste.bin";
+inline constexpr std::string_view kProjectEntry = "projet.bin";   // 1.20.2 : la copie du projet (entre l'en-tete et la piste)
 inline constexpr std::string_view kNativeFolder = "ihm/ressources/enregistrements";   // relatif au dossier du projet
-inline constexpr int              kFormat = 2;                    // 2 (1.14.0) : la cle du fichier dans l'en-tete ; 1 se relit
+// 3 (1.20.2) : la copie du projet (projet.bin) - un fichier sans copie s'ecrit encore au format 2 ; 2 (1.14.0) : la cle
+// du fichier dans l'en-tete ; 1 se relit.
+inline constexpr int              kFormat = 3;
+inline constexpr int              kFormatNoProject = 2;           // 1.20.2 : le format d'un fichier sans copie du projet
 inline constexpr double           kKeyframeEvery = 5.0;           // s : une image complete
 inline constexpr double           kSpeeds[] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
 
@@ -134,6 +161,10 @@ struct Header {
     // 1.14.1 (N3) : Configuration > Enregistrements > Sons cochee a l'enregistrement. Faux : aucun son n'a ete garde (la
     // relecture le dit). Un fichier d'avant (sans la cle) : vrai.
     bool          soundsKept{true};
+    // 1.20.2 : LA COPIE DU PROJET (projet.bin) gardee dans le fichier - la relecture rejoue le projet de son moment.
+    // Faux : un fichier d'avant (sans la cle), ou fait sans elle - il se rejoue avec le projet actuel.
+    bool          projectKept{false};
+    std::uint64_t projectBytes{0};             // sa taille dans le fichier (compressee, chiffree)
     std::uint64_t trackBytes{0};
     [[nodiscard]] bool locked() const noexcept { return !hash.empty(); }
 };
@@ -251,6 +282,10 @@ struct RecorderOptions {
     std::string password;             // le mot de passe qui chiffre le fichier en cours (vide : en clair)
     double      keyframeEvery{kKeyframeEvery};
     double      blockEvery{1.0};      // s : un bloc ecrit
+    // 1.20.2 : la copie du projet (packProject), ecrite des l'ouverture dans projet.bin ; vide : sans copie (le
+    // fichier est alors celui d'avant, format 2). Plus grande que limits().projectRaw : pas gardee non plus (elle ne
+    // se relirait pas) - qui la donne verifie avant (le moteur le dit a la Console).
+    std::string project;
 };
 class Recorder {
 public:
@@ -303,6 +338,9 @@ private:
     bool                      open_{false};
     std::string               key_;              // la cle du fichier (32 octets, tiree au sort)
     std::size_t               room_{0};          // la place de l'en-tete
+    // 1.20.2 : la copie du projet (projet.bin) : son en-tete local, sa taille, son CRC (0 octet : pas de copie)
+    std::uint64_t             projectLocalAt_{0}, projectSize_{0};
+    std::uint32_t             projectCrc_{0};
     std::uint64_t             trackLocalAt_{0}, trackDataAt_{0};
     std::uint32_t             trackCrc_{0};
     std::uint32_t             stampTime_{0}, stampDate_{0};
@@ -380,7 +418,21 @@ Status readTrack(const std::string& path, const std::string& password, Header& h
 struct Limits {
     std::uint64_t trackRaw{1ull << 30};      // octets decompresses de la piste, en tout
     std::uint64_t items{12'000'000};         // valeurs, images, evenements... en tout
+    std::uint64_t projectRaw{64ull << 20};   // 1.20.2 : octets decompresses de la copie du projet (64 Mio : un bloc, au plus)
 };
+
+// ---- 1.20.2 : LA COPIE DU PROJET (projet.bin) -----------------------------------------------------
+// Le projet en un bloc d'octets : les fichiers que l'enregistrement du projet ecrit (ihm.txt, les vues, les scripts, les
+// fonctions...), SANS les ressources (images, sons, videos, polices) ni les modeles de vues - leurs fichiers restent dans
+// le dossier du projet. Le meme projet donne les memes octets.
+[[nodiscard]] std::string packProject(const Project&);
+// Le projet relu de ces octets (ses ressources sans leurs donnees : `data` nul). Faux et `why` : illisible.
+bool unpackProject(std::string_view raw, Project& out, std::string* why = nullptr);
+// La copie du projet d'un enregistrement : Ok ; NotFound : il n'en a pas (un .xrec d'avant la 1.20.2, ou fait sans) ;
+// PasswordNeeded, BadPassword ; Unreadable : abimee, ou au-dela des limites (`why` le dit). `raw` : ses octets
+// (packProject) - la relecture les compare au projet actuel.
+Status readProject(const std::string& path, const std::string& password, Project& out, std::string* why = nullptr,
+                   std::string* raw = nullptr);
 [[nodiscard]] Limits limits() noexcept;
 void setLimits(const Limits&) noexcept;
 // Ce qui a ete lu des fichiers d'enregistrement depuis le lancement (les essais : la liste ne relit pas tout).

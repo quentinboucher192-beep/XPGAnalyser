@@ -24,12 +24,27 @@
 //  En simulation, l'automate simule est mis en pause pendant la relecture (par
 //  l'ecran : HmiSimulation.cpp) ; au poste, l'automate reel continue : l'IHM
 //  reprend ses vraies valeurs en quittant.
+//
+//  1.20.2 : LE PROJET DE SON MOMENT. Un enregistrement garde la copie du projet
+//  tel qu'il etait a son depart (projet.bin, HmiRecording.hpp) ; la relecture la
+//  rejoue A LA PLACE du projet en marche - project_ la designe le temps de la
+//  relecture (vues, popups, objets, parametres, variables, types, styles... : ce
+//  que l'ecran montrait alors, meme si le projet a change depuis), et l'ecran
+//  dessine avec elle (project(), replayProject()). Le projet de l'editeur n'est
+//  jamais touche ; quitter (ou l'arret, la fermeture) rend le projet en marche, et
+//  ce que le moteur en garde se relit dans les deux sens (resetProjectCaches,
+//  l'etat mis de cote). Les ressources (images, sons...) ne sont pas dans la
+//  copie : celles du dossier du projet (que le projet en marche tient en memoire)
+//  servent, par leur identifiant sinon leur nom ; les bibliotheques reliees se
+//  relisent depuis leur fichier. Un .xrec d'avant (sans copie) se rejoue avec le
+//  projet actuel, comme avant ; une copie illisible aussi, et la note le dit.
 // =============================================================================
 #include "HmiRuntime.hpp"
 
 #include "HmiActionKinds.hpp"
 #include "HmiCrypto.hpp"
 #include "HmiExpr.hpp"
+#include "HmiLibrary.hpp"  // 1.20.2 : les bibliotheques reliees de la copie du projet
 #include "HmiMarkers.hpp"
 #include "HmiNetInfo.hpp"
 #include "HmiNotify.hpp"   // unmaskSecret : le mot de passe d'un Enregistreur, d'une action
@@ -130,6 +145,13 @@ struct Runtime::RecordState {
     // les sons de la piste qui ne sont pas des ressources du projet (dits une fois chacun).
     bool                                                        soundsInclusive{true};
     std::set<std::string>                                       soundsMissing;
+    // 1.20.2 : LE PROJET DE SON MOMENT - la copie gardee dans l'enregistrement, que project_ designe pendant la relecture
+    // (nulle : le projet actuel) ; le projet en marche, rendu en quittant (bind le tient a jour pendant la relecture) ;
+    // la copie d'une relecture quittee, liberee au prochain bind (rien du moteur ne la designe plus ; l'ecran garde la
+    // sienne).
+    std::shared_ptr<const Project>                              frozen;
+    const Project*                                              liveProject{nullptr};
+    std::shared_ptr<const Project>                              retired;
     struct Live {
         Id                                   current{kNoId};
         std::string                          currentArgs;
@@ -160,10 +182,49 @@ Runtime::RecordState& Runtime::recState() const {
 }
 
 std::string Runtime::recordingsFolder() const {
-    if (!project_) return {};
+    // 1.20.2 : celui du projet en marche (pendant une relecture, project_ est la copie de l'enregistrement).
+    const Project* live = liveProject();
+    if (!live) return {};
     const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
-    return rec::folderOf(project_->recording, pf);
+    return rec::folderOf(live->recording, pf);
 }
+
+// ======================================================================== 1.20.2 : le projet de son moment ==
+const Project* Runtime::liveProject() const noexcept {
+    return rec_ && replayOn_ && rec_->frozen ? rec_->liveProject : project_;
+}
+
+std::shared_ptr<const Project> Runtime::replayProject() const {
+    return rec_ && replayOn_ ? rec_->frozen : nullptr;
+}
+
+bool Runtime::replayBind(const Project* project) {
+    if (!rec_) return false;
+    if (replayOn_ && rec_->frozen) {
+        rec_->liveProject = project;                  // rendu en quittant
+        return true;
+    }
+    rec_->retired.reset();                            // la copie d'une relecture quittee : plus rien ne la designe
+    return false;
+}
+
+namespace {
+// Les ressources de la copie (sans leurs octets : ils ne sont pas dans l'enregistrement) prennent ceux du projet en marche
+// (le dossier du projet, tel qu'il est maintenant) - la meme ressource (son identifiant et son nom), sinon une du meme
+// nom, sinon la meme renommee depuis. Rien : elle manque (un son ne se rejoue pas, une image ne se dessine pas, comme un
+// fichier absent).
+void borrowResources(Project& frozen, const Project& live) {
+    for (auto& r : frozen.assets.resources) {
+        if (r.data) continue;
+        const Resource* same = live.resource(r.id);
+        if (!same || !sameText(same->name, r.name)) {
+            const Resource* named = live.resourceByName(r.name);
+            if (named) same = named;
+        }
+        if (same) r.data = same->data;
+    }
+}
+} // namespace
 
 bool Runtime::recording() const noexcept { return recordOn_; }
 
@@ -228,6 +289,21 @@ bool Runtime::startRecording(const RecordingStart& req, double now, std::string*
     o.header.rateHz = std::clamp(project_->recording.rateHz, 1, 50);
     o.header.soundsKept = project_->recording.sounds;   // 1.14.1 (N3) : la relecture dira s'il a ete fait sans les sons
     o.password = req.password;
+    // 1.20.2 : LA COPIE DU PROJET tel qu'il est maintenant (chiffree avec la piste) - la relecture montrera ce que l'ecran
+    // montrait, meme si le projet change ensuite. Trop grosse pour etre relue (rec::limits().projectRaw) : sans copie, et
+    // la Console le dit.
+    std::string projectSaid;
+    if (req.keepProject) {
+        try {
+            std::string packed = rec::packProject(*project_);
+            if (packed.size() <= rec::limits().projectRaw) o.project = std::move(packed);
+            else
+                projectSaid = "projet trop grand pour \xC3\xAA" "tre gard\xC3\xA9 avec l'enregistrement (" + rec::sizeText(packed.size()) + ", "
+                            + rec::sizeText(rec::limits().projectRaw) + " au plus) : il se rejouera avec le projet tel qu'il sera alors";
+        } catch (const std::exception& e) {
+            projectSaid = std::string("copie du projet impossible (") + e.what() + ") : il se rejouera avec le projet tel qu'il sera alors";
+        }
+    }
     auto recorder = std::make_unique<rec::Recorder>();
     std::string err;
     if (!recorder->open(std::move(o), &err)) return no(err);
@@ -245,6 +321,7 @@ bool Runtime::startRecording(const RecordingStart& req, double now, std::string*
     recordOn_ = true;
     log("Enregistrement", req.source.empty() ? std::string("IHM") : req.source,
         "d\xC3\xA9" "but : " + partName + (req.password.empty() ? std::string{} : std::string(" (prot\xC3\xA9g\xC3\xA9 par un mot de passe)")));
+    if (!projectSaid.empty()) logAt(LogLevel::Warning, "Enregistrement", partName, projectSaid);   // 1.20.2
     recordEvent(rec::EventKind::Note, "d\xC3\xA9" "but", req.source);
     recordSample(now_);
     return true;
@@ -531,7 +608,20 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     std::string err;
     const rec::Status st = rec::readTrack(path, req.password, header, *track, &err);
     if (st != rec::Status::Ok) return no(st, err);
+    // 1.20.2 : LA COPIE DU PROJET (un .xrec de la 1.20.2), lue avant de rien mettre de cote. Absente (un fichier d'avant,
+    // ou fait sans) : le projet actuel, comme avant ; illisible (abimee, au-dela des limites) : le projet actuel aussi,
+    // et la note le dit.
+    std::shared_ptr<Project> frozen;
+    std::string frozenRaw, frozenWhy;
+    bool frozenBad = false;
+    {
+        auto copy = std::make_shared<Project>();
+        const rec::Status ps = rec::readProject(path, req.password, *copy, &frozenWhy, &frozenRaw);
+        if (ps == rec::Status::Ok) frozen = std::move(copy);
+        else frozenBad = ps != rec::Status::NotFound || header.projectKept;
+    }
     if (replayOn_) (void)quitReplay(now_, req.source);
+    const Project* live = project_;                    // le projet en marche (une relecture d'avant est quittee)
     // ---- ce qui est mis de cote
     s.live = RecordState::Live{};
     s.live.current = current_;
@@ -561,6 +651,18 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     animation_.reset();
     unfollowAll();                                     // les liaisons ne suivent plus rien pour l'IHM
     if (hooks_.stopSounds) hooks_.stopSounds();
+    // ---- 1.20.2 : le projet de son moment - project_ designe la copie jusqu'a la sortie (bind ne la remplace pas) ; ses
+    // ressources : celles du dossier du projet (le projet en marche les tient) ; ses bibliotheques : relues de leur fichier.
+    if (frozen) {
+        if (live) borrowResources(*frozen, *live);
+        if (!frozen->libraries.empty())
+            if (const std::string folder = hooks_.projectFolder ? hooks_.projectFolder() : std::string{}; !folder.empty())
+                biblio::resolve(*frozen, folder);
+        s.frozen = std::move(frozen);
+        s.liveProject = live;
+        project_ = s.frozen.get();
+        resetProjectCaches();
+    }
     // ---- la piste
     s.track = track;
     s.player = std::make_unique<rec::Player>(track);
@@ -583,50 +685,67 @@ rec::Status Runtime::startReplay(const ReplayRequest& req, double now, std::stri
     s.player->seek(std::max(0.0, req.from));
     s.soundsInclusive = true;                          // 1.14.1 (N3) : un son a l'instant de depart (t = 0) se rejoue
     s.soundsMissing.clear();
-    // ---- ce qui n'existe plus dans le projet : ignore, dit une fois
-    std::vector<std::string> vars, views, objects;
-    for (const auto& k : track->keys)
-        if (k.kind == rec::KeyKind::Variable && !const_cast<Runtime*>(this)->ihmSlot(k.key)
-            && std::find(vars.begin(), vars.end(), rootOf(k.key)) == vars.end())
-            vars.push_back(rootOf(k.key));
-    const auto viewMissing = [&](const std::string& name) {
-        if (!name.empty() && !project_->viewByName(name) && std::find(views.begin(), views.end(), name) == views.end()) views.push_back(name);
-    };
-    for (const auto& sc : track->screens) {
-        viewMissing(sc.view);
-        for (const auto& p : sc.popups) viewMissing(p.view);
-    }
-    const auto objectMissing = [&](const std::string& full) {
-        const auto dot = full.find('.');
-        if (dot == std::string::npos) return;
-        const View* v = project_->viewByName(full.substr(0, dot));
-        if (v && !v->objectByName(full.substr(dot + 1)) && std::find(objects.begin(), objects.end(), full) == objects.end()) objects.push_back(full);
-    };
-    for (const auto& e : track->events)
-        if (e.kind == rec::EventKind::Click || e.kind == rec::EventKind::LongPress || e.kind == rec::EventKind::DoubleClick) objectMissing(e.a);
-    for (const auto& o : track->overrides)
-        for (const auto& x : o.list) objectMissing(x.view + "." + x.object);
-    const auto list = [](const std::vector<std::string>& l) {
-        std::string out;
-        for (std::size_t i = 0; i < l.size() && i < 5; ++i) out += (i ? ", " : "") + l[i];
-        if (l.size() > 5) out += "\xE2\x80\xA6";
-        return out;
-    };
-    std::vector<std::string> parts;
-    if (!vars.empty()) parts.push_back(std::to_string(vars.size()) + (vars.size() > 1 ? " variables" : " variable"));
-    if (!views.empty()) parts.push_back(std::to_string(views.size()) + (views.size() > 1 ? " vues" : " vue"));
-    if (!objects.empty()) parts.push_back(std::to_string(objects.size()) + (objects.size() > 1 ? " objets" : " objet"));
     s.note.clear();
-    if (!parts.empty()) {
-        std::string what;
-        for (std::size_t i = 0; i < parts.size(); ++i) what += (i == 0 ? "" : i + 1 == parts.size() ? " et " : ", ") + parts[i];
-        s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : ce qui n'existe plus est ignor\xC3\xA9 (" + what + ") - la Console le d\xC3\xA9taille";
-        if (!vars.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "variables absentes du projet, ignor\xC3\xA9" "es : " + list(vars));
-        if (!views.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "vues absentes du projet, ignor\xC3\xA9" "es : " + list(views));
-        if (!objects.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "objets absents du projet, ignor\xC3\xA9" "s : " + list(objects));
-    } else if (!header.fingerprint.empty() && header.fingerprint != fingerprint(*project_)) {
-        s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : il se rejoue quand m\xC3\xAAme";
-        logAt(LogLevel::Info, "Relecture", header.name, s.note);
+    // ---- 1.20.2 : rejoue avec le projet de son moment - rien n'est ignore ; un projet change depuis se dit (son empreinte,
+    // ou ce que la copie contient).
+    if (s.frozen) {
+        const bool changed = !live || (!header.fingerprint.empty() && header.fingerprint != fingerprint(*live)) || rec::packProject(*live) != frozenRaw;
+        if (changed) {
+            s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : rejou\xC3\xA9 avec le projet de son moment (copie gard\xC3\xA9" "e dans "
+                     "l'enregistrement)";
+            logAt(LogLevel::Info, "Relecture", header.name, s.note);
+        }
+    } else {
+        // ---- ce qui n'existe plus dans le projet : ignore, dit une fois (un .xrec sans copie du projet, ou sa copie illisible)
+        std::vector<std::string> vars, views, objects;
+        for (const auto& k : track->keys)
+            if (k.kind == rec::KeyKind::Variable && !const_cast<Runtime*>(this)->ihmSlot(k.key)
+                && std::find(vars.begin(), vars.end(), rootOf(k.key)) == vars.end())
+                vars.push_back(rootOf(k.key));
+        const auto viewMissing = [&](const std::string& name) {
+            if (!name.empty() && !project_->viewByName(name) && std::find(views.begin(), views.end(), name) == views.end()) views.push_back(name);
+        };
+        for (const auto& sc : track->screens) {
+            viewMissing(sc.view);
+            for (const auto& p : sc.popups) viewMissing(p.view);
+        }
+        const auto objectMissing = [&](const std::string& full) {
+            const auto dot = full.find('.');
+            if (dot == std::string::npos) return;
+            const View* v = project_->viewByName(full.substr(0, dot));
+            if (v && !v->objectByName(full.substr(dot + 1)) && std::find(objects.begin(), objects.end(), full) == objects.end()) objects.push_back(full);
+        };
+        for (const auto& e : track->events)
+            if (e.kind == rec::EventKind::Click || e.kind == rec::EventKind::LongPress || e.kind == rec::EventKind::DoubleClick) objectMissing(e.a);
+        for (const auto& o : track->overrides)
+            for (const auto& x : o.list) objectMissing(x.view + "." + x.object);
+        const auto list = [](const std::vector<std::string>& l) {
+            std::string out;
+            for (std::size_t i = 0; i < l.size() && i < 5; ++i) out += (i ? ", " : "") + l[i];
+            if (l.size() > 5) out += "\xE2\x80\xA6";
+            return out;
+        };
+        std::vector<std::string> parts;
+        if (!vars.empty()) parts.push_back(std::to_string(vars.size()) + (vars.size() > 1 ? " variables" : " variable"));
+        if (!views.empty()) parts.push_back(std::to_string(views.size()) + (views.size() > 1 ? " vues" : " vue"));
+        if (!objects.empty()) parts.push_back(std::to_string(objects.size()) + (objects.size() > 1 ? " objets" : " objet"));
+        if (!parts.empty()) {
+            std::string what;
+            for (std::size_t i = 0; i < parts.size(); ++i) what += (i == 0 ? "" : i + 1 == parts.size() ? " et " : ", ") + parts[i];
+            s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : ce qui n'existe plus est ignor\xC3\xA9 (" + what + ") - la Console le d\xC3\xA9taille";
+            if (!vars.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "variables absentes du projet, ignor\xC3\xA9" "es : " + list(vars));
+            if (!views.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "vues absentes du projet, ignor\xC3\xA9" "es : " + list(views));
+            if (!objects.empty()) logAt(LogLevel::Warning, "Relecture", header.name, "objets absents du projet, ignor\xC3\xA9" "s : " + list(objects));
+        } else if (!header.fingerprint.empty() && header.fingerprint != fingerprint(*project_)) {
+            s.note = "Le projet a chang\xC3\xA9 depuis l'enregistrement : il se rejoue quand m\xC3\xAAme";
+            logAt(LogLevel::Info, "Relecture", header.name, s.note);
+        }
+        // 1.20.2 : la copie du projet de l'enregistrement ne se relit pas - le projet actuel, et la note le dit d'abord.
+        if (frozenBad) {
+            const std::string said = "la copie du projet de l'enregistrement est illisible : relu avec le projet actuel";
+            s.note = said + (s.note.empty() ? std::string{} : " \xC2\xB7 " + s.note);
+            logAt(LogLevel::Warning, "Relecture", header.name, said + (frozenWhy.empty() ? std::string{} : " (" + frozenWhy + ")"));
+        }
     }
     // 1.14.0 (relecture M4b) : CE QUI N'EST PAS DANS LA PISTE - une fleche de tendance, un compteur de production gardent
     // leur memoire du direct (figee) : le bandeau le dit, quand une vue rejouee en a.
@@ -848,7 +967,12 @@ void Runtime::replaySounds(double from, double to, double wall) {
     for (const rec::Event* e : s.player->eventsIn(inclusive ? from - 1e-6 : from, to)) {
         if (e->kind != rec::EventKind::Sound) continue;
         if (alarmsOnly && soundChannelFrom(e->b) != SoundChannel::Alarms) continue;
-        if (!project_->resourceByName(e->a)) {
+        // 1.20.2 : rejoue avec la copie du projet - la copie ne garde pas les sons : une ressource que le projet en marche
+        // n'a plus (ni son identifiant, ni son nom) manque aussi.
+        const Resource* sound = project_->resourceByName(e->a);
+        const bool gone = sound && s.frozen && !sound->data && s.liveProject && !s.liveProject->resource(sound->id)
+                       && !s.liveProject->resourceByName(e->a);
+        if (!sound || gone) {
             if (s.soundsMissing.insert(e->a).second)
                 logAt(LogLevel::Warning, "Relecture", s.header.name,
                       "son \xC2\xAB " + e->a + " \xC2\xBB : ce n'est plus une ressource du projet, il ne se rejoue pas");
@@ -943,6 +1067,16 @@ bool Runtime::quitReplay(double now, const std::string& source) {
     if (!replayOn_ || !rec_) return false;
     auto& s = *rec_;
     const double at = s.player ? s.player->position() : 0;
+    // 1.20.2 : le projet en marche revient d'abord (la vue, les popups, les alarmes d'avant sont les siennes). La copie de
+    // l'enregistrement est mise de cote jusqu'au prochain bind (un appel en cours peut encore la tenir) ; l'ecran garde
+    // la sienne tant qu'il la dessine.
+    if (s.frozen) {
+        project_ = s.liveProject;
+        s.retired = std::move(s.frozen);
+        s.frozen.reset();
+        s.liveProject = nullptr;
+        resetProjectCaches();
+    }
     current_ = s.live.current;
     currentArgs_ = s.live.currentArgs;
     currentScope_ = s.live.currentScope;
@@ -999,6 +1133,7 @@ ReplayInfo Runtime::replayInfo() const {
     i.paused = s.paused;
     i.ended = s.ended;
     i.note = s.note;
+    i.frozenProject = s.frozen != nullptr;                              // 1.20.2 : le projet de son moment
     i.soundsMuted = soundMuted(settings_, SoundChannel::Replay);       // 1.14.1 (N3) : le bouton Sons de la barre
     i.soundsGeneralMuted = soundMuted(settings_, SoundChannel::General);
     i.alarmSoundsOnly = s.speed > 2.0;
@@ -1190,9 +1325,11 @@ int Runtime::runCommand(const rec::Command& c, double now, std::string* message)
         return code;
     };
     if (!c.error.empty()) return say(rec::kExitBadOption, c.error);
-    if (!project_ || !running_) return say(rec::kExitNoHmi, "aucune IHM en marche");
-    if (!project_->recording.external)
-        return say(rec::kExitRefused, "refus\xC3\xA9 : le projet " + project_->config.name
+    // 1.20.2 : la configuration du projet en marche (pendant une relecture, project_ est la copie de l'enregistrement).
+    const Project* live = liveProject();
+    if (!live || !running_) return say(rec::kExitNoHmi, "aucune IHM en marche");
+    if (!live->recording.external)
+        return say(rec::kExitRefused, "refus\xC3\xA9 : le projet " + live->config.name
                                           + " n'accepte pas les commandes d'une autre application (Configuration \xE2\x80\xBA Enregistrements)");
     const std::string source = "autre application";
     std::string why;

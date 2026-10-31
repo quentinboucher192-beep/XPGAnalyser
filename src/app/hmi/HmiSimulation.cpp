@@ -3735,7 +3735,9 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         else status_->setTransientMessage("Changer d'utilisateur : " + login + " (aucun dialogue ici)", 6.0);
     };
     hooks.playSound = [this](const std::string& name) {
-        if (const auto* r = doc_->project.resourceByName(name)) {
+        // 1.20.2 : le projet que lit le moteur (en relecture, la copie de l'enregistrement : ses sons sont ceux du dossier).
+        const hmi::Project& sounds = runtime_.project() ? *runtime_.project() : doc_->project;
+        if (const auto* r = sounds.resourceByName(name)) {
             std::string why;
             // Lot 10 : au volume regle dans Parametres systeme. 1.14.0 : sur son canal (le moteur le dit pendant
             // l'appel ; sans : Actions) - volume general x volume du canal, rien si l'un est muet.
@@ -5319,6 +5321,18 @@ void HmiSimulationPane::followClock(double now, ClockSource source) {
     clock = std::max(clock, mine);
 }
 
+// 1.20.2 : LE PROJET DESSINE SUIT CELUI DU MOTEUR. Une relecture qui rejoue le projet de son moment (la copie gardee dans
+// l'enregistrement) : le canevas dessine ses vues, ses ressources, ses langues avec elle ; en quittant, le document revient.
+// La copie est tenue ici (un pointeur partage) tant que le canevas la designe. Les vues liees d'un autre projet : refaites.
+void HmiSimulationPane::syncShownProject() {
+    auto frozen = runtime_.replayProject();
+    if (frozen == shownProject_) return;
+    shownProject_ = std::move(frozen);
+    canvas_->setProject(&shownProject());
+    canvas_->setAssets(&shownProject().assets);
+    bound_ = false;
+}
+
 // ---- 1.14.0 (M4) : ENREGISTRER ET REJOUER L'IHM ---------------------------------------------------------------
 //  LA RELECTURE TIENT L'HEURE DE L'IHM : now_ ne bouge plus (le moteur est mis de cote ; ses temporisations, ses
 //  cycles, ses courbes reprennent a la sortie la ou ils etaient) ; replayWall_ avance a sa place et fait avancer la
@@ -5665,12 +5679,13 @@ void HmiSimulationPane::refreshPane() {
             scenario_.reset();
         }
     }
+    syncShownProject();                                                      // 1.20.2 : le projet de son moment
     if (!bound_) { layers_.reset(); bound_ = true; }
     const auto& anim = runtime_.animation();
     const double p = runtime_.animationProgress(now_);
     const std::size_t before = values_.size();
     const auto evalStart = std::chrono::steady_clock::now();
-    auto layers = layers_.build(runtime_, doc_->project, now_, &values_);
+    auto layers = layers_.build(runtime_, shownProject(), now_, &values_);
     // 1.12.18 : Ajouter aux expressions - les chemins ajoutes, sous « Ajoutees ».
     for (const auto& path : addedExprs_) {
         hmi::LiveValue lv;
@@ -5733,10 +5748,10 @@ void HmiSimulationPane::refreshPane() {
     std::size_t bad = 0;
     // 1.11 (REP) : une expression a repere se calcule ; plus de "repere non remplace" a part.
     for (const auto& lv : values_) bad += lv.error;
-    const auto* current = doc_->project.view(runtime_.currentView());
+    const auto* current = shownProject().view(runtime_.currentView());          // 1.20.2 : le projet rejoue, s'il le faut
     std::string line = current ? current->name : std::string("(aucune vue)");
     for (const Id popupId : runtime_.popups())
-        if (const auto* pv = doc_->project.view(popupId)) line += "  +  popup " + pv->name;
+        if (const auto* pv = shownProject().view(popupId)) line += "  +  popup " + pv->name;
     line += "  \xC2\xB7  " + std::to_string(values_.size()) + " expression(s)";
     if (bad) line += ", " + std::to_string(bad) + " en erreur";
     if (anim) line += "  \xC2\xB7  transition " + std::string(hmi::transitionLabel(anim->spec.kind)) + " "
@@ -6414,7 +6429,7 @@ std::vector<ui::PopupMenu::Item> HmiSimulationPane::exprMenuItems() {
 }
 
 void HmiSimulationPane::updateViewFilter() {
-    const auto& project = doc_->project;
+    const auto& project = shownProject();                // 1.20.2 : en relecture, le projet de son moment
     const Id current = started_ ? runtime_.currentView() : shownView_;
     std::vector<Id> ids;
     if (current != kNoId) ids.push_back(current);
@@ -6449,7 +6464,7 @@ void HmiSimulationPane::updateViewFilter() {
 }
 
 void HmiSimulationPane::updateTables() {
-    if (tabs_) hmiparams::updatePopupsTab(*tabs_, runtime_, doc_->project);   // 1.9 : l'onglet Popups
+    if (tabs_) hmiparams::updatePopupsTab(*tabs_, runtime_, shownProject());   // 1.9 : l'onglet Popups (1.20.2 : le projet rejoue)
     updateTwinPlaces();                                                         // 1.11.7 : le forcage commun
     updateViewFilter();                                                         // 1.11.6
     applyMotions();                                                             // 1.11.6 : le forcage par type et bornes

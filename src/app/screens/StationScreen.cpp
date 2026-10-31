@@ -325,24 +325,33 @@ void StationScreen::paintSecondaries(double time) {
     lastSecondary_ = time;
     auto& rt = pane_->runtime();
     static const ui::Theme theme = ui::Theme::dark();
+    // 1.20.2 : le projet que lit le moteur - pendant une relecture qui rejoue le projet de son moment, la copie de
+    // l'enregistrement (tenue le temps de ce dessin) ; sinon le document.
+    const auto frozen = rt.replayProject();
+    const hmi::Project& shown = frozen ? *frozen : doc->project;
     for (auto& sec : screens_) {
         auto& r = *sec->renderer;
-        const auto* v = doc->project.viewByName(sec->viewName);
+        const auto* v = shown.viewByName(sec->viewName);
+        if (!v && frozen)                                      // 1.20.2 : renommee depuis - la meme vue (son identifiant)
+            if (const auto* named = doc->project.viewByName(sec->viewName)) v = shown.view(named->id);
         HmiImageCache::Scope scope(sec->images);
         r.beginFrame(gfx::Color{0, 0, 0, 255});
         const auto size = r.surfaceSize();
         if (v && rt.running()) {
-            auto layers = sec->builder.build(rt, doc->project, rt.now(), nullptr, v->id);
+            auto layers = sec->builder.build(rt, shown, rt.now(), nullptr, v->id);
             sec->canvas.setStation(true);
             sec->canvas.setScreenFit(doc->project.station.screenFit);   // 1.12.24 : comme l'ecran principal
-            sec->canvas.setAssets(&doc->project.assets);
+            sec->canvas.setAssets(&shown.assets);
             sec->canvas.setLive(&rt, &doc->history);
-            sec->canvas.setProject(&doc->project);
+            sec->canvas.setProject(&shown);
             sec->canvas.showLayers(std::move(layers), false);
             sec->canvas.setBounds({0.f, 0.f, static_cast<float>(size.w), static_cast<float>(size.h)});
             sec->canvas.layout();
             const ui::PaintContext ctx{r, theme, {0.f, 0.f, static_cast<float>(size.w), static_cast<float>(size.h)}, time, nullptr};
             sec->canvas.render(ctx);
+            // 1.20.2 : la copie n'est tenue que le temps de ce dessin - le canevas ne la designe plus apres.
+            sec->canvas.setAssets(&doc->project.assets);
+            sec->canvas.setProject(&doc->project);
         } else {
             r.drawText({24.f, 24.f}, v ? std::string_view("L'IHM d\xC3\xA9marre...") : std::string_view("Vue introuvable"), theme.font.ui,
                        gfx::Color::rgb(0xC8D0DC));

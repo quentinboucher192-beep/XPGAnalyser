@@ -889,6 +889,12 @@ private:
     double                replayWall_{0};
     bool                  plcPausedForReplay_{false};
     std::optional<hmi::ReplayRequest> pendingReplay_;   // l'IHM demarre d'abord (son build) : la relecture attend
+    // 1.20.2 : LE PROJET DESSINE - pendant une relecture qui rejoue le projet de son moment, la copie de l'enregistrement
+    // (le meme que le moteur : Runtime::replayProject), tenue ici tant que le canevas la designe (quitter la relecture ne
+    // la detruit pas sous lui) ; nul : le document. syncShownProject la suit a chaque image.
+    std::shared_ptr<const hmi::Project> shownProject_;
+    void                  syncShownProject();
+    [[nodiscard]] const hmi::Project& shownProject() const { return shownProject_ ? *shownProject_ : doc_->project; }
     ui::Button*           recordBtn_{nullptr};
     std::shared_ptr<char> recordAlive_{std::make_shared<char>('\0')};
     bool                  fullScreen_{false};     // 1.10 : le plein ecran

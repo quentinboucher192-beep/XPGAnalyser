@@ -25,10 +25,18 @@
 //  ecrit l'en-tete final a sa place, la taille et le CRC de la piste, puis le
 //  repertoire a la fin. Le format 1 (le .part "XRECPART", la piste chiffree par
 //  le mot de passe lui-meme) se relit encore.
+//  1.20.2 (format 3) : [en-tete local entete.json][JSON][en-tete local
+//  projet.bin][UN bloc : la copie du projet][en-tete local piste.bin][blocs]...
+//  - la copie est entiere des l'ouverture (sa taille et son CRC dans son en-tete
+//  local) ; le reste ne change pas. Son bloc a la forme de ceux de la piste
+//  (numero 0, instant 0), chiffre sur le flux "<nombre unique>|projet" : jamais
+//  le meme que celui d'un bloc de la piste. Ses octets (packProject) : "XRP1",
+//  puis pour chaque fichier du projet son chemin et son contenu (des textes).
 // =============================================================================
 #include "HmiRecording.hpp"
 
 #include "HmiCrypto.hpp"
+#include "HmiStore.hpp"            // 1.20.2 : la copie du projet (serializeProject, parseProject)
 #include "../../third_party/miniz.h"
 
 #include <algorithm>
@@ -75,6 +83,13 @@ constexpr std::uint64_t kMaxFile = 0xFFF00000ull;  // un zip sans zip64 : un peu
 
 std::atomic<std::uint64_t> g_opens{0}, g_bytes{0};
 std::atomic<std::uint64_t> g_maxRaw{1ull << 30}, g_maxItems{12'000'000};
+std::atomic<std::uint64_t> g_maxProject{64ull << 20};   // 1.20.2 : la copie du projet, decompressee
+
+// 1.20.2 : la copie du projet - ses octets commencent par "XRP1" ; son bloc est chiffre sur un flux a lui (le nombre
+// unique du fichier suivi de "|projet" : les messages du flux n'ont pas la longueur de ceux de la piste, jamais le meme
+// flux que celui d'un bloc de la piste).
+constexpr char kProjectMagic[4] = {'X', 'R', 'P', '1'};
+std::string projectNonce(const std::string& nonce) { return nonce + "|projet"; }
 
 enum Rec : std::uint8_t { RKey = 1, RValues = 2, RKeyframe = 3, RScreen = 4, ROverrides = 5, RAlarms = 6, RPointer = 7, REvent = 8, REnd = 9 };
 
@@ -547,9 +562,10 @@ bool localAt(InFile& f, std::uint64_t at, ZipEntry& e) {
 }
 // Ou sont l'en-tete et la piste. LES NOTRES : entete.json en premier, piste.bin juste apres (deux petites lectures) ;
 // un zip refait par un autre outil : son repertoire (a la fin). `cut` : la piste depasse la fin du fichier.
+// 1.20.2 : la copie du projet (projet.bin), entre les deux s'il y en a une (une petite lecture de plus).
 struct Layout {
-    ZipEntry header, track;
-    bool     hasHeader{false}, hasTrack{false}, cut{false}, fast{false};
+    ZipEntry header, track, project;
+    bool     hasHeader{false}, hasTrack{false}, hasProject{false}, cut{false}, fast{false};
     std::uint64_t centralAt{0};     // le repertoire (fast : derriere la piste)
 };
 bool layoutOf(InFile& f, Layout& L, std::string* why) {
@@ -563,8 +579,17 @@ bool layoutOf(InFile& f, Layout& L, std::string* why) {
         L.hasHeader = true;
         L.fast = true;
         ZipEntry second;
-        const std::uint64_t at = first.data + first.csize;
-        if (at <= f.size() && localAt(f, at, second) && second.name == kTrackEntry && (second.flags & 0x08) == 0) {
+        std::uint64_t at = first.data + first.csize;
+        bool found = at <= f.size() && localAt(f, at, second);
+        // 1.20.2 : la copie du projet, avant la piste (puis l'en-tete local de la piste, juste derriere elle).
+        if (found && second.name == kProjectEntry && (second.flags & 0x08) == 0) {
+            L.project = second;
+            L.hasProject = true;
+            at = second.data + second.csize;
+            second = ZipEntry{};
+            found = at <= f.size() && localAt(f, at, second);
+        }
+        if (found && second.name == kTrackEntry && (second.flags & 0x08) == 0) {
             L.track = second;
             L.hasTrack = true;
             L.cut = second.data + second.csize > f.size();
@@ -602,13 +627,16 @@ bool layoutOf(InFile& f, Layout& L, std::string* why) {
         if (p + 46 + nlen > cd.size()) break;
         e.name.assign(cd.data() + p + 46, nlen);
         p += 46 + nlen + xlen + clen;
-        if (e.name != kHeaderEntry && e.name != kTrackEntry) continue;
+        if (e.name != kHeaderEntry && e.name != kTrackEntry && e.name != kProjectEntry) continue;
         ZipEntry local;
         if (!localAt(f, e.local, local)) continue;
         e.data = local.data;
         if (e.name == kHeaderEntry) {
             L.header = e;
             L.hasHeader = true;
+        } else if (e.name == kProjectEntry) {      // 1.20.2 : la copie du projet
+            L.project = e;
+            L.hasProject = true;
         } else {
             L.track = e;
             L.hasTrack = true;
@@ -637,6 +665,34 @@ bool headerText(InFile& f, const ZipEntry& e, std::string& out, std::string* why
     return true;
 }
 
+// 1.20.2 : LA COPIE DU PROJET DANS LE FICHIER - ou est son entree (projet.bin), sa taille, son CRC. Absente : un
+// fichier sans copie (celui d'avant).
+struct ProjectPart {
+    bool          present{false};
+    std::uint64_t localAt{0}, dataAt{0}, size{0};
+    std::uint32_t crc{0};
+};
+// Le bloc de la copie du projet, tel qu'il est stocke (stockee : lue telle quelle ; compressee par un autre outil : sa
+// taille bornee, puis decompressee). Un bloc fait au plus 64 Mio : une entree annoncee plus grande est fausse, rien
+// n'est alloue.
+bool projectStored(InFile& f, const ZipEntry& e, std::string& out, std::string* why) {
+    const auto fail = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::uint64_t most = kBlockHead + static_cast<std::uint64_t>(kMaxBlock);
+    if (e.method == 0) {
+        if (e.csize > most) return fail("copie du projet annonc\xC3\xA9" "e trop grande");
+        if (!f.read(e.data, e.csize, out)) return fail("copie du projet coup\xC3\xA9" "e");
+        return true;
+    }
+    if (e.method != 8) return fail("copie du projet : compression inconnue (" + std::to_string(e.method) + ")");
+    if (e.csize > most || e.usize > most || e.usize > inflateBound(e.csize)) return fail("copie du projet annonc\xC3\xA9" "e trop grande");
+    std::string z;
+    if (!f.read(e.data, e.csize, z) || !inflate(z, static_cast<std::size_t>(e.usize), out)) return fail("copie du projet illisible (compression)");
+    return true;
+}
+
 // CE QUE LA PISTE PEUT FAIRE ALLOUER : les octets decompresses et les elements (valeurs, images, evenements...).
 struct Budget {
     std::uint64_t raw{0}, items{0};
@@ -661,10 +717,11 @@ struct Budget {
 // `f` : le fichier ouvert en ecriture (l'en-tete local de entete.json a 0, sa place `room`, celui de piste.bin a
 // `trackLocalAt`, les blocs de `trackDataAt` a + `trackSize`). Ecrit l'en-tete et le repertoire, ferme, coupe ce
 // qui depasse, renomme `from` en `to` (vide : garde le nom). L'en-tete trop long pour sa place : tout est recopie
-// (par morceaux) dans un fichier neuf.
+// (par morceaux) dans un fichier neuf. 1.20.2 : `project` - la copie du projet (projet.bin, entre les deux), dans le
+// repertoire elle aussi (et recopiee avec le reste).
 bool finalizeFile(std::FILE* f, const std::string& from, const std::string& to, const std::string& json, std::size_t room,
                   std::uint64_t trackLocalAt, std::uint64_t trackDataAt, std::uint64_t trackSize, std::uint32_t trackCrc,
-                  const DosStamp& d, std::string* why);
+                  const DosStamp& d, std::string* why, const ProjectPart& project = {});
 bool copyRange(std::FILE* out, InFile& in, std::uint64_t at, std::uint64_t n, std::uint32_t* crc) {
     std::string chunk;
     while (n > 0) {
@@ -693,10 +750,12 @@ bool replaceFile(const std::string& tmp, const std::string& target, std::string*
 }
 // Un enregistrement neuf a `target` (un .tmp renomme) : l'en-tete que `jsonOf` donne (la taille de la piste et si
 // elle est coupee, connues a la fin), puis la piste que `track` ecrit (elle rend faux si elle echoue) ; `crc`,
-// `size` : ce qu'elle a ecrit ; `cut` : elle s'est arretee sur un bloc abime.
+// `size` : ce qu'elle a ecrit ; `cut` : elle s'est arretee sur un bloc abime. 1.20.2 : `project` - le bloc de la copie
+// du projet, tel quel, entre les deux (nul : sans copie).
 using TrackWriter = std::function<bool(std::FILE*, std::uint32_t& crc, std::uint64_t& size, bool& cut)>;
 using JsonOf = std::function<std::string(std::uint64_t size, bool cut)>;
-bool writeRecording(const std::string& target, const JsonOf& jsonOf, const TrackWriter& track, std::string* why) {
+bool writeRecording(const std::string& target, const JsonOf& jsonOf, const TrackWriter& track, std::string* why,
+                    const std::string* project = nullptr) {
     std::error_code ec;
     if (P(target).has_parent_path()) fs::create_directories(P(target).parent_path(), ec);
     const std::string tmp = target + ".tmp";
@@ -709,38 +768,55 @@ bool writeRecording(const std::string& target, const JsonOf& jsonOf, const Track
     const std::string first = jsonOf(0, false);
     const std::size_t room = std::max<std::size_t>(kHeaderRoom, first.size() + 1024);
     const std::string head = localHeader(kHeaderEntry, crcOf(padded(first, room)), static_cast<std::uint32_t>(room), d) + padded(first, room);
-    const std::uint64_t trackLocalAt = head.size();
+    // 1.20.2 : la copie du projet, juste apres l'en-tete.
+    ProjectPart part;
+    std::string projectHead;
+    if (project && !project->empty()) {
+        part.present = true;
+        part.localAt = head.size();
+        part.size = project->size();
+        part.crc = crcOf(*project);
+        projectHead = localHeader(kProjectEntry, part.crc, static_cast<std::uint32_t>(part.size), d);
+        part.dataAt = part.localAt + projectHead.size();
+    }
+    const std::uint64_t trackLocalAt = head.size() + (part.present ? projectHead.size() + part.size : 0);
     const std::string trackHead = localHeader(kTrackEntry, 0, 0, d);
     const std::uint64_t trackDataAt = trackLocalAt + trackHead.size();
     std::uint32_t crc = 0;
     std::uint64_t size = 0;
     bool cut = false;
-    if (std::fwrite(head.data(), 1, head.size(), f) != head.size() || std::fwrite(trackHead.data(), 1, trackHead.size(), f) != trackHead.size()
+    if (std::fwrite(head.data(), 1, head.size(), f) != head.size()
+        || (part.present && (std::fwrite(projectHead.data(), 1, projectHead.size(), f) != projectHead.size()
+                             || std::fwrite(project->data(), 1, project->size(), f) != project->size()))
+        || std::fwrite(trackHead.data(), 1, trackHead.size(), f) != trackHead.size()
         || !track(f, crc, size, cut) || trackDataAt + size > kMaxFile) {
         std::fclose(f);
         fs::remove(P(tmp), ec);
         if (why && why->empty()) *why = "\xC3\xA9" "criture interrompue : " + target;
         return false;
     }
-    return finalizeFile(f, tmp, target, jsonOf(size, cut), room, trackLocalAt, trackDataAt, size, crc, d, why);
+    return finalizeFile(f, tmp, target, jsonOf(size, cut), room, trackLocalAt, trackDataAt, size, crc, d, why, part);
 }
 bool finalizeFile(std::FILE* f, const std::string& from, const std::string& to, const std::string& json, std::size_t room,
                   std::uint64_t trackLocalAt, std::uint64_t trackDataAt, std::uint64_t trackSize, std::uint32_t trackCrc,
-                  const DosStamp& d, std::string* why) {
+                  const DosStamp& d, std::string* why, const ProjectPart& project) {
     std::error_code ec;
     if (json.size() > room) {
-        // L'en-tete ne tient pas a sa place (une description tres longue) : un fichier neuf, la piste recopiee.
+        // L'en-tete ne tient pas a sa place (une description tres longue) : un fichier neuf, la piste recopiee (1.20.2 :
+        // et la copie du projet).
         std::fflush(f);
         std::fclose(f);
         const std::string target = to.empty() ? from : to;
         bool ok = false;
         {
             InFile in(from);                         // ferme avant de retirer `from` (Windows)
-            ok = in.ok() && writeRecording(target + ".neuf", [&](std::uint64_t, bool) { return json; },
-                                           [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool&) {
-                                               size = trackSize;
-                                               return copyRange(out, in, trackDataAt, trackSize, &crc);
-                                           }, why);
+            std::string kept;
+            ok = in.ok() && (!project.present || in.read(project.dataAt, project.size, kept))
+              && writeRecording(target + ".neuf", [&](std::uint64_t, bool) { return json; },
+                                [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool&) {
+                                    size = trackSize;
+                                    return copyRange(out, in, trackDataAt, trackSize, &crc);
+                                }, why, project.present ? &kept : nullptr);
         }
         if (!ok) return false;
         fs::remove(P(from), ec);
@@ -749,10 +825,11 @@ bool finalizeFile(std::FILE* f, const std::string& from, const std::string& to, 
     const std::string head = padded(json, room);
     const std::uint32_t headCrc = crcOf(head);
     const std::uint64_t end = trackDataAt + trackSize;
-    const std::string central = centralAndEnd({{std::string(kHeaderEntry), headCrc, static_cast<std::uint32_t>(room), 0},
-                                               {std::string(kTrackEntry), trackCrc, static_cast<std::uint32_t>(trackSize),
-                                                static_cast<std::uint32_t>(trackLocalAt)}},
-                                              static_cast<std::uint32_t>(end), d);
+    std::vector<CentralItem> items{{std::string(kHeaderEntry), headCrc, static_cast<std::uint32_t>(room), 0}};
+    if (project.present)                              // 1.20.2 : la copie du projet
+        items.push_back({std::string(kProjectEntry), project.crc, static_cast<std::uint32_t>(project.size), static_cast<std::uint32_t>(project.localAt)});
+    items.push_back({std::string(kTrackEntry), trackCrc, static_cast<std::uint32_t>(trackSize), static_cast<std::uint32_t>(trackLocalAt)});
+    const std::string central = centralAndEnd(items, static_cast<std::uint32_t>(end), d);
     bool ok = writeAt(f, 30 + kHeaderEntry.size(), head) && writeAt(f, 14, le32(headCrc))
            && writeAt(f, trackLocalAt + 14, le32(trackCrc) + le32(static_cast<std::uint32_t>(trackSize)) + le32(static_cast<std::uint32_t>(trackSize)))
            && writeAt(f, end, central);
@@ -831,6 +908,9 @@ bool rewriteHeader(const std::string& path, const Header& h, std::string* why) {
         }
     }
     const std::uint64_t avail = L.hasTrack ? std::min<std::uint64_t>(L.track.csize, in.size() - std::min(in.size(), L.track.data)) : 0;
+    // 1.20.2 : la copie du projet suit, telle quelle (abimee ou illisible : elle ne suit pas - la relecture le dira).
+    std::string kept;
+    const bool keepProject = L.hasProject && projectStored(in, L.project, kept, nullptr);
     if (!writeRecording(path + ".neuf", [&](std::uint64_t, bool) { return json; }, [&](std::FILE* out, std::uint32_t& crc, std::uint64_t& size, bool&) {
             if (L.hasTrack && L.track.method == 8) {
                 size = inflated.size();
@@ -839,7 +919,7 @@ bool rewriteHeader(const std::string& path, const Header& h, std::string* why) {
             }
             size = avail;
             return copyRange(out, in, L.track.data, avail, &crc);
-        }, why))
+        }, why, keepProject ? &kept : nullptr))
         return false;
     }
     return replaceFile(path + ".neuf", path, why);
@@ -1308,6 +1388,8 @@ std::string toJson(const Header& h) {
     s("ecran_40", h.at40);
     b("coupe", h.cut);
     b("sons_gardes", h.soundsKept);   // 1.14.1 (N3)
+    b("projet_fige", h.projectKept);  // 1.20.2 : la copie du projet (projet.bin)
+    n("taille_projet", static_cast<double>(h.projectBytes));
     o += "  " + jsonString("taille_piste") + ": " + number(static_cast<double>(h.trackBytes)) + "\n}\n";
     return o;
 }
@@ -1362,6 +1444,8 @@ bool fromJson(std::string_view text, Header& h, std::string* why) {
     h.at40 = get("ecran_40");
     h.cut = get("coupe") == "true";
     h.soundsKept = get("sons_gardes") != "false";   // 1.14.1 (N3) : absente (un fichier d'avant) : vrai
+    h.projectKept = get("projet_fige") == "true";   // 1.20.2 : absente (un fichier d'avant) : faux
+    h.projectBytes = static_cast<std::uint64_t>(num("taille_projet", 0));
     h.trackBytes = static_cast<std::uint64_t>(num("taille_piste", 0));
     return true;
 }
@@ -1408,12 +1492,20 @@ bool Recorder::open(RecorderOptions o, std::string* why) {
     options_ = std::move(o);
     if (options_.header.application.empty()) options_.header.application = "IHM Studio";
     if (options_.header.date.empty()) options_.header.date = stamp();
-    options_.header.format = kFormat;
     // LA CLE DU FICHIER, tiree au sort : elle chiffre chaque bloc. Le mot de passe (s'il y en a un) la chiffre dans
     // l'en-tete - le donner, le changer ou le retirer a l'arret ne touche que l'en-tete.
     key_ = fromHex(randomHex(32));
     options_.header.nonce = randomHex(16);
     protect(options_.header, options_.password, key_);
+    // 1.20.2 : LA COPIE DU PROJET - un bloc, compresse et chiffre par la cle du fichier (sur son flux a lui), ecrit tout
+    // de suite apres l'en-tete : la piste s'ajoute ensuite a la fin comme avant. Sans elle : le fichier d'avant (format 2).
+    std::string projectBlock;
+    if (!options_.project.empty() && options_.project.size() <= std::min<std::uint64_t>(g_maxProject.load(), kMaxBlock))
+        projectBlock = makeBlock(options_.project, 0, 0, key_, projectNonce(options_.header.nonce));
+    std::string().swap(options_.project);             // les octets en clair ne restent pas en memoire
+    options_.header.projectKept = !projectBlock.empty();
+    options_.header.projectBytes = projectBlock.size();
+    options_.header.format = projectBlock.empty() ? kFormatNoProject : kFormat;
     std::error_code ec;
     const fs::path part = P(options_.partPath);
     if (part.has_parent_path()) fs::create_directories(part.parent_path(), ec);
@@ -1435,13 +1527,24 @@ bool Recorder::open(RecorderOptions o, std::string* why) {
     const std::string json = toJson(options_.header);
     room_ = std::max<std::size_t>(kHeaderRoom, json.size() + 4096);
     const std::string head = localHeader(kHeaderEntry, crcOf(padded(json, room_)), static_cast<std::uint32_t>(room_), d) + padded(json, room_);
-    trackLocalAt_ = head.size();
+    // 1.20.2 : la copie du projet, entiere des maintenant (sa taille et son CRC dans son en-tete local).
+    std::string projectPart;
+    projectLocalAt_ = projectSize_ = 0;
+    projectCrc_ = 0;
+    if (!projectBlock.empty()) {
+        projectLocalAt_ = head.size();
+        projectSize_ = projectBlock.size();
+        projectCrc_ = crcOf(projectBlock);
+        projectPart = localHeader(kProjectEntry, projectCrc_, static_cast<std::uint32_t>(projectSize_), d) + projectBlock;
+    }
+    trackLocalAt_ = head.size() + projectPart.size();
     const std::string trackHead = localHeader(kTrackEntry, 0, 0, d);
     trackDataAt_ = trackLocalAt_ + trackHead.size();
     trackCrc_ = 0;
     written_ = 0;
-    const bool ok = std::fwrite(head.data(), 1, head.size(), f) == head.size() && std::fwrite(trackHead.data(), 1, trackHead.size(), f) == trackHead.size()
-                 && std::fflush(f) == 0;
+    const bool ok = std::fwrite(head.data(), 1, head.size(), f) == head.size()
+                 && std::fwrite(projectPart.data(), 1, projectPart.size(), f) == projectPart.size()
+                 && std::fwrite(trackHead.data(), 1, trackHead.size(), f) == trackHead.size() && std::fflush(f) == 0;
     if (!ok) {
         std::fclose(f);
         file_ = nullptr;
@@ -1719,7 +1822,16 @@ bool Recorder::close(double t, bool keep, const std::string& finalPath, const st
     DosStamp d;
     d.time = stampTime_;
     d.date = stampDate_;
-    if (!finalizeFile(f, options_.partPath, finalPath, toJson(h), room_, trackLocalAt_, trackDataAt_, written_, trackCrc_, d, why)) return false;
+    ProjectPart project;                              // 1.20.2 : la copie du projet, dans le repertoire aussi
+    if (projectSize_ > 0) {
+        project.present = true;
+        project.localAt = projectLocalAt_;
+        project.dataAt = projectLocalAt_ + 30 + kProjectEntry.size();
+        project.size = projectSize_;
+        project.crc = projectCrc_;
+    }
+    if (!finalizeFile(f, options_.partPath, finalPath, toJson(h), room_, trackLocalAt_, trackDataAt_, written_, trackCrc_, d, why, project))
+        return false;
     if (written) *written = h;
     return true;
 }
@@ -1894,11 +2006,13 @@ Limits limits() noexcept {
     Limits l;
     l.trackRaw = g_maxRaw.load();
     l.items = g_maxItems.load();
+    l.projectRaw = g_maxProject.load();
     return l;
 }
 void setLimits(const Limits& l) noexcept {
     g_maxRaw = l.trackRaw;
     g_maxItems = l.items;
+    g_maxProject = std::min<std::uint64_t>(l.projectRaw, kMaxBlock);   // 1.20.2 : un bloc, au plus
 }
 FileStats fileStats() noexcept {
     FileStats s;
@@ -1991,6 +2105,97 @@ Status readTrack(const std::string& path, const std::string& password, Header& h
         out = Track{};
         if (why) *why = "m\xC3\xA9moire insuffisante pour relire la piste : " + path;
         return Status::Unreadable;
+    }
+}
+
+// ======================================================================= 1.20.2 : la copie du projet ==
+std::string packProject(const Project& p) {
+    std::string out(kProjectMagic, 4);
+    for (const auto& f : serializeProject(p)) {
+        // Les ressources (images, sons, videos, polices) et les modeles de vues ne sont pas dans la copie : leurs
+        // fichiers restent dans le dossier du projet, la relecture les y reprend (ils peuvent peser des centaines de Mo).
+        if (f.path.rfind("ressources/", 0) == 0 || f.path.rfind("modeles/", 0) == 0) continue;
+        putStr(out, f.path);
+        if (f.data) putStr(out, std::string_view(reinterpret_cast<const char*>(f.data->data()), f.data->size()));
+        else putStr(out, {});
+    }
+    return out;
+}
+
+bool unpackProject(std::string_view raw, Project& out, std::string* why) {
+    const auto fail = [why](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (raw.size() < 4 || std::memcmp(raw.data(), kProjectMagic, 4) != 0) return fail("copie du projet illisible (pas une copie d'IHM Studio)");
+    // UNE COPIE FABRIQUEE ne fait pas travailler sans fin : 100 000 fichiers au plus ; ce que la lecture du projet en
+    // demande, borne (quatre fois la copie, quatre lectures par fichier : un index qui cite mille fois le meme gros
+    // fichier est refuse) - le tout sous la taille de la copie (64 Mio).
+    constexpr std::size_t kMaxFiles = 100000;
+    std::map<std::string, std::string> files;
+    In in(raw.data() + 4, raw.data() + raw.size());
+    while (in.more()) {
+        std::string path = in.str();
+        std::string data = in.str();
+        if (!in.ok) return fail("copie du projet coup\xC3\xA9" "e");
+        if (files.size() >= kMaxFiles) return fail("copie du projet : trop de fichiers (plus de 100 000) - refus\xC3\xA9" "e");
+        files[std::move(path)] = std::move(data);
+    }
+    const std::uint64_t maxServed = 4ull * raw.size() + (1u << 20), maxReads = 4ull * files.size() + 64;
+    std::uint64_t served = 0, reads = 0;
+    try {
+        auto p = parseProject([&](const std::string& rel, std::string& content) {
+            const auto it = files.find(rel);
+            if (it == files.end() || ++reads > maxReads || (served += it->second.size()) > maxServed) return false;
+            content = it->second;
+            return true;
+        });
+        if (!p) return fail("copie du projet illisible : " + (p.error().context.empty() ? p.error().message() : p.error().context));
+        out = std::move(*p);
+    } catch (const std::exception& e) {
+        return fail(std::string("copie du projet illisible : ") + e.what());
+    }
+    return true;
+}
+
+Status readProject(const std::string& path, const std::string& password, Project& out, std::string* why, std::string* raw) {
+    const auto fail = [&](Status st, std::string w) {
+        if (why) *why = std::move(w);
+        return st;
+    };
+    try {
+        std::error_code ec;
+        if (!fs::is_regular_file(P(path), ec)) return fail(Status::NotFound, "introuvable : " + path);
+        InFile f(path);
+        if (!f.ok()) return fail(Status::Unreadable, "illisible : " + path);
+        Layout L;
+        Header header;
+        std::string w, json;
+        if (!layoutOf(f, L, &w) || !headerText(f, L.header, json, &w) || !fromJson(json, header, &w))
+            return fail(Status::Unreadable, (w.empty() ? std::string("illisible") : w) + " : " + path);
+        if (!L.hasProject) return fail(Status::NotFound, "pas de copie du projet dans cet enregistrement");
+        // Le mot de passe d'abord : un refus ne lit rien de la copie.
+        if (header.locked()) {
+            if (password.empty()) return fail(Status::PasswordNeeded, "\xC2\xAB " + header.name + " \xC2\xBB est prot\xC3\xA9g\xC3\xA9 par un mot de passe");
+            if (!passwordOk(header, password)) return fail(Status::BadPassword, "mot de passe incorrect");
+        }
+        std::string stored;
+        if (!projectStored(f, L.project, stored, &w)) return fail(Status::Unreadable, w);
+        BlockView b;
+        if (!blockAt(stored, 0, b)) return fail(Status::Unreadable, "copie du projet ab\xC3\xAEm\xC3\xA9" "e (contr\xC3\xB4le CRC)");
+        if (b.rawLen > g_maxProject.load())
+            return fail(Status::Unreadable, "copie du projet trop grande : plus de " + std::to_string(g_maxProject.load() >> 20)
+                                                + " Mio d\xC3\xA9" "compress\xC3\xA9s - refus\xC3\xA9" "e");
+        std::string bytes;
+        if (!openBlock(b, trackKey(header, password), projectNonce(header.nonce), bytes))
+            return fail(Status::Unreadable, "copie du projet illisible (elle ne se d\xC3\xA9" "chiffre ou ne se d\xC3\xA9" "compresse pas)");
+        Project p;
+        if (!unpackProject(bytes, p, &w)) return fail(Status::Unreadable, w);
+        out = std::move(p);
+        if (raw) *raw = std::move(bytes);
+        return Status::Ok;
+    } catch (const std::bad_alloc&) {
+        return fail(Status::Unreadable, "m\xC3\xA9moire insuffisante pour relire la copie du projet : " + path);
     }
 }
 
@@ -2089,6 +2294,7 @@ bool recoverPart(const std::string& partPath, std::string* finalPath, std::strin
     }
     Header h;
     ZipEntry first, second;
+    ProjectPart project;                              // 1.20.2 : la copie du projet (ecrite des l'ouverture)
     std::uint64_t validEnd = 0;
     std::uint32_t crc = 0;
     Track tr;
@@ -2099,7 +2305,18 @@ bool recoverPart(const std::string& partPath, std::string* finalPath, std::strin
         std::string json, w;
         if (!in.ok() || !localAt(in, 0, first) || first.name != kHeaderEntry || !headerText(in, first, json, &w) || !fromJson(json, h, &w))
             return giveBack("pas un enregistrement en cours lisible : " + partPath + (w.empty() ? std::string{} : " (" + w + ")"));
-        if (!localAt(in, first.data + first.csize, second) || second.name != kTrackEntry)
+        std::uint64_t trackAt = first.data + first.csize;
+        if (ZipEntry kept; localAt(in, trackAt, kept) && kept.name == kProjectEntry && kept.data + kept.csize <= in.size()) {
+            project.present = true;
+            project.localAt = kept.local;
+            project.dataAt = kept.data;
+            project.size = kept.csize;
+            project.crc = kept.crc;
+            trackAt = kept.data + kept.csize;
+        }
+        h.projectKept = project.present;
+        h.projectBytes = project.size;
+        if (!localAt(in, trackAt, second) || second.name != kTrackEntry)
             return giveBack("piste introuvable : " + partPath);
         // Les blocs entiers, jusqu'au premier abime (la fin d'un bloc a moitie ecrit) ; les comptes, la piste en clair.
         const std::string key = trackKey(h, {});
@@ -2156,7 +2373,7 @@ bool recoverPart(const std::string& partPath, std::string* finalPath, std::strin
     std::FILE* out = f;
     f = nullptr;
     if (!finalizeFile(out, claimed, target, toJson(h), static_cast<std::size_t>(first.csize), second.local, second.data, validEnd - second.data, crc,
-                      dosNow(), why)) {
+                      dosNow(), why, project)) {
         fs::rename(P(claimed), P(partPath), ec);
         return false;
     }
@@ -2421,10 +2638,23 @@ Status setPassword(const std::string& path, const std::string& current, const st
             const std::string oldKey = trackKey(h, current);
             const std::string oldNonce = h.nonce;
             n = h;
-            n.format = kFormat;
             n.nonce = randomHex(16);
             const std::string newKey = fromHex(randomHex(32));
             protect(n, fresh, newKey);
+            // 1.20.2 : LA COPIE DU PROJET, rechiffree elle aussi (la meme cle neuve, son flux a elle). Abimee (elle ne
+            // se relirait pas) : elle ne suit pas - rien de l'ancienne cle ne reste dans le fichier.
+            std::string project;
+            if (L.hasProject) {
+                std::string stored;
+                BlockView b;
+                bool good = false;
+                if (projectStored(in, L.project, stored, nullptr) && blockAt(stored, 0, b))
+                    project = recipher(b, oldKey, projectNonce(oldNonce), newKey, projectNonce(n.nonce), &good);
+                if (!good) project.clear();
+            }
+            n.projectKept = !project.empty();
+            n.projectBytes = project.size();
+            n.format = project.empty() ? kFormatNoProject : kFormat;
             int r = 1;
             const bool ok = writeRecording(path + ".neuf", [&](std::uint64_t size, bool cut) {
                 n.trackBytes = size;
@@ -2445,7 +2675,7 @@ Status setPassword(const std::string& path, const std::string& current, const st
                 }, truncated, &w);
                 cut = truncated;
                 return r > 0 && !bad;
-            }, &w);
+            }, &w, project.empty() ? nullptr : &project);
             if (!ok) {
                 if (why) *why = bad ? std::string("la piste ne se rechiffre pas") : (w.empty() ? std::string("\xC3\xA9" "criture impossible : ") + path : w);
                 return Status::Unreadable;

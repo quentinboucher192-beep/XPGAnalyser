@@ -497,6 +497,9 @@ struct RecordingStart {
     double      maxSeconds{0};     // 0 : la duree de la configuration
     bool        askAtStop{false};  // a l'arret, l'ecran demande le nom (Hooks::recordingStop)
     std::string source;            // qui le demande (le journal)
+    // 1.20.2 : garder la copie du projet dans l'enregistrement (la relecture rejoue le projet de son moment). Faux : le
+    // fichier d'avant (format 2, sans copie) - les essais s'en servent.
+    bool        keepProject{true};
 };
 // Ce que l'ecran demande a l'arret de l'Enregistreur (la fenetre Arreter l'enregistrement).
 struct RecordingStopAsk {
@@ -531,6 +534,9 @@ struct ReplayInfo {
     bool        paused{false};
     bool        ended{false};      // arrivee au bout (en pause)
     std::string note;              // ce qui a change dans le projet depuis ('' : rien)
+    // 1.20.2 : rejoue avec le projet de son moment (la copie gardee dans l'enregistrement) ; faux : avec le projet actuel
+    // (un .xrec d'avant, ou sa copie illisible - la note le dit).
+    bool        frozenProject{false};
     // 1.14.1 (N3) : LES SONS DE LA RELECTURE - le canal Relecture coupe (le bouton Sons de la barre, la touche S, le M de
     // la piste Relecture du Melangeur, SYS.MuteReplay) ; tout le son coupe (le General) ; a x4 et x8, seuls les sons
     // d'alarme se rejouent. Un enregistrement fait sans les sons : header.soundsKept faux.
@@ -629,8 +635,17 @@ public:
 
     // Le projet est relu a chaque cycle : l'editeur peut le changer en marche.
     // `plc` peut etre nul (pas de simulateur) : seules les variables IHM existent.
+    // 1.20.2 : pendant une relecture qui rejoue le projet de son moment, le projet donne est celui que la relecture rend
+    // en quittant (project() reste la copie de l'enregistrement).
     void bind(const Project* project, sim::Environment* plc);
+    // Le projet que le moteur lit : 1.20.2 - pendant une relecture qui le garde, LA COPIE DU PROJET DE L'ENREGISTREMENT
+    // (ce que l'ecran montrait alors) ; l'ecran dessine avec lui.
     [[nodiscard]] const Project* project() const noexcept { return project_; }   // lot 12 : le menu de connexion le dessine
+    // 1.20.2 : le projet en marche (celui de bind), meme pendant une relecture ; et la copie rejouee (nulle : aucune -
+    // pas de relecture, ou un .xrec sans copie). L'ecran garde ce pointeur partage tant qu'il la dessine : quitter la
+    // relecture ne la detruit pas sous lui.
+    [[nodiscard]] const Project* liveProject() const noexcept;
+    [[nodiscard]] std::shared_ptr<const Project> replayProject() const;
     // 1.13.0 (le debogueur) : un crochet qui agit sur l'ecran (un son, la Console, une question, la barre d'etat),
     // appele depuis une tache (un script detache, un travail du debogueur), tourne sur le fil de l'IHM.
     void setHooks(Hooks h);
@@ -2581,6 +2596,10 @@ private:
     void recordEvent(rec::EventKind kind, std::string a, std::string b = {}, double x = 0, double y = 0);
     void recordClick(rec::EventKind kind, Id object);
     void replayApply(bool force);                                       // l'ecran de la piste a la position
+    // 1.20.2 : le projet de son moment - bind pendant une relecture qui le garde (vrai : project_ reste la copie) ; ce
+    // que le moteur garde du projet, a relire quand project_ change d'un coup (la copie, puis le projet en marche).
+    bool replayBind(const Project* project);
+    void resetProjectCaches();
     // 1.14.1 (N3) : les sons de (from, to] de la piste - [from, to] juste apres le depart, un saut, Debut (soundsInclusive) ;
     // `wall` : le temps du PC passe (un pas plus long qu'une seconde : rien, pas de rafale).
     void replaySounds(double from, double to, double wall);

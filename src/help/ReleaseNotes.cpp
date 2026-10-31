@@ -176,6 +176,13 @@ const std::vector<Note>& table() {
          "cr\xC3\xA9" "ation de dossier, quelle que soit l'alarme (les incidents d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent) ; \xC2\xAB Reprendre les "
          "incidents \xC2\xBB la relance. Le choix est gard\xC3\xA9 avec le projet.",
          "incidents", ""),
+        note("1.20.2", "Enregistrements", Kind::Changed,
+         "UN ENREGISTREMENT RESTE FID\xC3\x88LE M\xC3\x8AME SI LE PROJET A CHANG\xC3\x89 : il garde une copie du projet de son moment (vues, "
+         "popups, objets, variables, types, scripts), compress\xC3\xA9" "e et chiffr\xC3\xA9" "e comme sa piste. La relecture se fait avec "
+         "elle : une vue renomm\xC3\xA9" "e, un objet ou une variable supprim\xC3\xA9s depuis se rejouent tels qu'ils \xC3\xA9taient (\xC2\xAB rejou\xC3\xA9 "
+         "avec le projet de son moment \xC2\xBB) ; en quittant, l'IHM revient au projet d'aujourd'hui, l'\xC3\xA9" "diteur n'est jamais "
+         "touch\xC3\xA9. Les enregistrements d'avant (sans copie) se rejouent comme avant.",
+         "enregistrements", ""),
         note("1.20.2", "Incidents", Kind::Fixed,
          "DES IMAGES ET DES VID\xC3\x89OS NETTES : les couleurs ne bavent plus (JPEG sans sous-\xC3\xA9" "chantillonnage des couleurs, "
          "qualit\xC3\xA9 92 pour la vid\xC3\xA9o, 95 pour l'image du d\xC3\xA9" "faut), une vue large n'est plus divis\xC3\xA9" "e par deux (r\xC3\xA9" "duite "

@@ -1270,6 +1270,9 @@ void HmiRecordingsPane::showDetail() {
     // du bas (et Ouvrir le dossier).
     ro("Projet", h.project);
     if (!h.projectVersion.empty()) ro("Version", h.projectVersion);
+    // 1.20.2 : la copie du projet gardee avec lui (il se rejoue avec le projet de son moment) ; non : un enregistrement
+    // d'avant, rejoue avec le projet actuel.
+    ro("Projet gard\xC3\xA9", h.projectKept ? "oui (" + hmi::rec::sizeText(h.projectBytes) + ")" : std::string("non"));
     ro("Enregistr\xC3\xA9 le", recDate(h.date));
     ro("O\xC3\xB9", h.where);
     if (!h.by.empty()) ro("Par", h.by);

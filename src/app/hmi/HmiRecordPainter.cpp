@@ -258,6 +258,12 @@ std::string replayNote(gfx::IRenderer& r, gfx::FontId font, const std::string& n
         const bool project = part.rfind("Le projet a chang", 0) == 0;
         const bool frozen = part.rfind("les fl\xC3\xA8" "ches de tendance", 0) == 0;
         const bool silent = part.rfind("enregistr\xC3\xA9 sans les sons", 0) == 0;
+        // 1.20.2 : rejoue avec le projet de son moment (la copie gardee dans l'enregistrement), ou sa copie illisible.
+        const bool moment = project && part.find("projet de son moment") != std::string::npos;
+        const bool unreadable = part.rfind("la copie du projet", 0) == 0;
+        if (moment) return level == 1 ? "Projet chang\xC3\xA9 : rejou\xC3\xA9 avec le projet de son moment"
+                         : level == 2 ? "Rejou\xC3\xA9 avec le projet de son moment" : "Projet de son moment";
+        if (unreadable && level >= 2) return level == 2 ? "Copie du projet illisible : projet actuel" : "Copie illisible";
         if (level == 1) return head;
         if (project) return level == 2 ? "Projet chang\xC3\xA9 depuis l'enregistrement" : "Projet chang\xC3\xA9";
         if (frozen) return level == 2 ? "Tendances et compteurs : le direct" : "Direct fig\xC3\xA9";

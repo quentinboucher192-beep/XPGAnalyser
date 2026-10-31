@@ -16,7 +16,11 @@
 //     lui), change, retire ; un fichier tronque relu jusqu'au dernier bloc ; un
 //     enregistrement coupe net (.part) relu ; importer, exporter, renommer,
 //     supprimer (vers la corbeille), la description ; la taille du dossier ;
-//   - le projet change depuis : une variable supprimee ignoree et signalee ;
+//   - le projet change depuis : une variable supprimee ignoree et signalee (un
+//     fichier sans copie du projet) ; 1.20.2 : la copie du projet gardee dans
+//     l'enregistrement - la vue, l'objet et la variable d'alors rejoues meme
+//     renommes ou supprimes depuis, le projet en marche rendu en quittant, la
+//     copie chiffree (mot de passe, Mot de passe...), une copie abimee ;
 //   - les natives, les actions et les variables systeme, chacune ;
 //   - l'Enregistreur (la question a l'arret) et le Lecteur en marche ;
 //   - la ligne de commande : les options, les codes, le refus de la configuration.
@@ -646,9 +650,17 @@ void testProjectChanged() {
         rt.start(0.0);
         double now = 0;
         std::string why;
-        (void)rt.startRecording(RecordingStart{"Avant", {}, {}, 0, false, "essai"}, now, &why);
+        // 1.20.2 : SANS la copie du projet - le fichier d'avant (format 2, deux entrees) : il se rejoue avec le projet
+        // actuel, comme avant (le projet de son moment : testProjetDeSonMoment1202).
+        (void)rt.startRecording(RecordingStart{"Avant", {}, {}, 0, false, "essai", false}, now, &why);
         for (int step = 1; step <= 20; ++step) rt.tick(now = step / 10.0);
         (void)rt.stopRecording(true, now);
+        const std::string path = rec::pathOf(rt.recordingsFolder(), "Avant");
+        rec::Header h;
+        Project none;
+        check(rec::readHeader(path, h) == rec::Status::Ok && !h.projectKept && h.projectBytes == 0 && h.format == rec::kFormatNoProject
+                  && fileBytes(path).find("projet.bin") == std::string::npos && rec::readProject(path, "", none, &why) == rec::Status::NotFound,
+              "1.20.2 : sans copie, le fichier d'avant (format 2, ni projet.bin ni projet_fige)");
     }
     // Mode disparait du projet ; la popup aussi.
     auto& vars = st.p.programs.variables;
@@ -661,6 +673,7 @@ void testProjectChanged() {
     check(rt.startReplay(ReplayRequest{"Avant", {}, 1.0, 0, {}, "essai"}, 1.0, &why) == rec::Status::Ok, "il se rejoue quand meme");
     const auto info = rt.replayInfo();
     check(info.note.find("1 variable") != std::string::npos && info.note.find("n'existe plus") != std::string::npos, "le bandeau le dit : " + info.note);
+    check(!info.frozenProject && rt.project() == &st.p && !rt.replayProject(), "1.20.2 : sans copie, avec le projet actuel (comme avant)");
     std::size_t said = 0;
     for (const auto& e : rt.journal()) said += e.message.find("variables absentes du projet") != std::string::npos ? 1 : 0;
     check(said == 1, "la Console le dit une fois");
@@ -1867,6 +1880,248 @@ void testSonsRelecture1141() {
     check(rec::fromJson(rec::toJson(hh), back) && !back.soundsKept, "sons_gardes : false se relit");
 }
 
+// ======================================================================= 1.20.2 : le projet de son moment ==
+//  << Les enregistrements classiques doivent aussi rester fideles meme si l'appli a change >> : un enregistrement garde la
+//  copie du projet de son depart (projet.bin, chiffree avec la piste) et la relecture la rejoue - la vue, l'objet et la
+//  variable d'alors, meme renommes ou supprimes depuis ; en quittant, le projet en marche revient ; le projet de
+//  l'editeur n'est jamais touche. Sans le mot de passe, la copie ne se lit pas ; Mot de passe... la rechiffre ; une
+//  copie abimee : la relecture se fait avec le projet actuel, et le dit.
+std::string viewNameIn(Runtime& rt) {
+    const View* v = rt.project() ? rt.project()->view(rt.currentView()) : nullptr;
+    return v ? v->name : std::string{};
+}
+
+void testProjetDeSonMoment1202() {
+    std::printf("1.20.2 : le projet de son moment (la copie du projet gardee dans l'enregistrement)\n");
+    // ---- V1 (Vue_Station), O1 (Txt_Hauteur, un texte qui montre X), X (Hauteur, ecrite par le script cyclique) ----------
+    Station st("fige");
+    st.p.programs.variables.push_back(variable(st.p, "Hauteur", "INT", "0"));
+    st.p.programs.scripts.front().body += "Hauteur := Hauteur + 2;\n";
+    const Id txt = edit::add(st.p, *st.p.view(st.view), Kind::Text, 300, 400);
+    st.p.view(st.view)->object(txt)->name = "Txt_Hauteur";
+    st.p.view(st.view)->object(txt)->setExpr("text", "Hauteur");
+    // Une ressource : ses octets restent dans le dossier du projet (pas dans la copie).
+    Resource logo;
+    logo.id = st.p.allocate();
+    logo.name = "Logo.png";
+    logo.format = "PNG";
+    const std::string logoBytes = "PNG-SECRET-OCTETS-DU-LOGO";
+    logo.data = std::make_shared<const Bytes>(logoBytes.begin(), logoBytes.end());
+    st.p.assets.resources.push_back(logo);
+    std::map<int, std::string> hauteurAt, shownAt;
+    std::string folder, path;
+    {
+        Runtime rt;
+        st.hooks(rt);
+        rt.bind(&st.p, nullptr);
+        rt.start(0.0);
+        double now = 0;
+        std::string why;
+        check(rt.startRecording(RecordingStart{"Fige", {}, {}, 0, false, "essai"}, now, &why), "enregistrer (" + why + ")");
+        for (int step = 1; step <= 30; ++step) {
+            rt.tick(now = step / 10.0);
+            if (step % 5 == 0) {
+                hauteurAt[step] = readText(rt, "Hauteur");
+                shownAt[step] = rt.shownText(st.view, *rt.project()->view(st.view)->object(txt), "text");
+            }
+        }
+        check(rt.stopRecording(true, now) == "Fige", "garde : Fige");
+        folder = rt.recordingsFolder();
+        path = rec::pathOf(folder, "Fige");
+        rec::Header h;
+        check(rec::readHeader(path, h, &why) == rec::Status::Ok && h.projectKept && h.projectBytes > 0 && h.format == rec::kFormat,
+              "l'en-tete dit que la copie du projet est gardee (projet_fige, " + rec::sizeText(h.projectBytes) + ", format 3)");
+        const std::string data = fileBytes(path);
+        const auto project = data.find("projet.bin"), track = data.find("piste.bin");
+        check(project != std::string::npos && track != std::string::npos && project < track, "projet.bin est dans le zip, avant piste.bin");
+        check(data.find(logoBytes) == std::string::npos, "les octets des ressources ne sont pas dans la copie");
+        Project back;
+        check(rec::readProject(path, "", back, &why) == rec::Status::Ok && back.viewByName("Vue_Station") && back.variable("Hauteur")
+                  && back.view(st.view) && back.view(st.view)->objectByName("Txt_Hauteur"),
+              "la copie se relit : la vue, l'objet, la variable (" + why + ")");
+        const Resource* backLogo = back.resourceByName("Logo.png");
+        check(backLogo && !backLogo->data, "la ressource est dans la copie, sans ses octets");
+        // Le projet n'a pas change : rejoue avec la copie, et rien a dire.
+        check(rt.startReplay(ReplayRequest{"Fige", {}, 1.0, 0, {}, "essai"}, now, &why) == rec::Status::Ok, "rejouer sur le meme projet");
+        check(rt.replayInfo().frozenProject && rt.replayInfo().note.find("chang") == std::string::npos,
+              "le meme projet : pas de << projet change >> (" + rt.replayInfo().note + ")");
+        (void)rt.quitReplay(now, "essai");
+        check(rt.project() == &st.p, "quitte : le projet en marche");
+    }
+    // ---- L'APPLI CHANGE : la vue renommee, l'objet supprime, la variable supprimee (et ce qui l'ecrivait) ----------------
+    st.p.view(st.view)->name = "Vue_Renommee";
+    edit::remove(*st.p.view(st.view), {txt});
+    auto& vars = st.p.programs.variables;
+    vars.erase(std::remove_if(vars.begin(), vars.end(), [](const Variable& v) { return v.name == "Hauteur"; }), vars.end());
+    {
+        auto& body = st.p.programs.scripts.front().body;
+        const auto at = body.find("Hauteur := Hauteur + 2;\n");
+        if (at != std::string::npos) body.erase(at, std::string("Hauteur := Hauteur + 2;\n").size());
+    }
+    const Project editorBefore = st.p;
+    Runtime rt;
+    st.hooks(rt);
+    rt.bind(&st.p, nullptr);
+    rt.start(0.0);
+    std::string why;
+    check(viewNameIn(rt) == "Vue_Renommee" && readText(rt, "Hauteur") == "(rien)", "en direct : le projet modifie (Vue_Renommee, sans Hauteur)");
+    check(rt.startReplay(ReplayRequest{"Fige", {}, 1.0, 0, {}, "essai"}, 1.0, &why) == rec::Status::Ok, "il se rejoue (" + why + ")");
+    const auto info = rt.replayInfo();
+    check(info.frozenProject && info.header.projectKept, "rejoue avec la copie du projet de l'enregistrement");
+    check(info.note.find("projet de son moment") != std::string::npos && info.note.find("n'existe plus") == std::string::npos,
+          "le bandeau : rejoue avec le projet de son moment, rien d'ignore (" + info.note + ")");
+    const Project* shown = rt.project();
+    check(shown && shown != &st.p && rt.replayProject().get() == shown && rt.liveProject() == &st.p,
+          "le moteur lit la copie ; le projet en marche reste celui de l'editeur");
+    check(shown && shown->viewByName("Vue_Station") && !shown->viewByName("Vue_Renommee"), "la copie : la vue sous son nom d'alors");
+    rt.bind(&st.p, nullptr);                          // l'ecran relie le projet a chaque image : la copie reste
+    check(rt.project() == shown && rt.liveProject() == &st.p, "relie pendant la relecture : le moteur lit toujours la copie");
+    bool viewOk = true, objectOk = true, valuesOk = true;
+    std::string first;
+    for (const auto& [step, expected] : hauteurAt) {
+        (void)rt.replaySeek(step / 10.0);
+        if (viewNameIn(rt) != "Vue_Station") {
+            viewOk = false;
+            if (first.empty()) first = "vue " + viewNameIn(rt);
+        }
+        const View* cv = rt.project()->view(rt.currentView());
+        const Object* o = cv ? cv->objectByName("Txt_Hauteur") : nullptr;
+        const View* composed = rt.composedView(rt.currentView());
+        if (!o || !composed || !composed->objectByName("Txt_Hauteur") || rt.shownText(rt.currentView(), *o, "text") != shownAt[step]) {
+            objectOk = false;
+            if (first.empty()) first = "objet a " + std::to_string(step) + " : " + (o ? rt.shownText(rt.currentView(), *o, "text") : std::string("absent"));
+        }
+        if (readText(rt, "Hauteur") != expected) {
+            valuesOk = false;
+            if (first.empty()) first = "Hauteur a " + std::to_string(step) + " : " + readText(rt, "Hauteur") + " au lieu de " + expected;
+        }
+    }
+    check(viewOk, "la relecture montre V1 (Vue_Station, renommee depuis) " + first);
+    check(objectOk, "O1 (Txt_Hauteur, supprime depuis) est la et montre ce qu'il montrait " + first);
+    check(valuesOk, "X (Hauteur, supprimee depuis) rend ses valeurs enregistrees " + first);
+    const Resource* logoShown = rt.project()->resourceByName("Logo.png");
+    const Resource* logoLive = st.p.resourceByName("Logo.png");
+    check(logoShown && logoLive && logoShown->data && logoShown->data == logoLive->data, "la ressource : ses octets du dossier du projet (le projet en marche)");
+    // Quitter : le projet en marche, modifie, revient.
+    check(rt.quitReplay(2.0, "essai") && !rt.replaying(), "quitter la relecture");
+    check(rt.project() == &st.p && rt.liveProject() == &st.p && !rt.replayProject(), "apres : le moteur lit le projet en marche");
+    const View* after = rt.composedView(rt.currentView());
+    check(viewNameIn(rt) == "Vue_Renommee" && after && !after->objectByName("Txt_Hauteur") && readText(rt, "Hauteur") == "(rien)",
+          "apres : Vue_Renommee, sans Txt_Hauteur ni Hauteur (le projet modifie)");
+    const std::string compteur = readText(rt, "Compteur");
+    for (int i = 1; i <= 5; ++i) rt.tick(2.0 + i / 10.0);
+    check(readText(rt, "Compteur") != compteur, "l'IHM reprend en direct (les scripts tournent)");
+    check(st.p == editorBefore, "le projet de l'editeur n'a pas bouge");
+    (void)rt.startReplay(ReplayRequest{"Fige", {}, 1.0, 0, {}, "essai"}, 2.6, &why);
+    check(rt.replaying() && rt.project() != &st.p, "rejouee a nouveau : la copie");
+    rt.stop(2.7);
+    check(!rt.replaying() && rt.project() == &st.p, "l'arret de l'IHM quitte la relecture : le projet en marche revient");
+    // ---- les limites : une copie au-dela (un fichier fabrique) est refusee ----------------------------------------------
+    {
+        const rec::Limits saved = rec::limits();
+        rec::Limits small = saved;
+        small.projectRaw = 64;
+        rec::setLimits(small);
+        Project back;
+        check(rec::readProject(path, "", back, &why) == rec::Status::Unreadable && why.find("trop grande") != std::string::npos,
+              "une copie au-dela des limites : refusee et dite (" + why + ")");
+        rec::setLimits(saved);
+    }
+    // ---- LE MOT DE PASSE : la copie ne se lit pas sans lui ; Mot de passe... la rechiffre --------------------------------
+    {
+        Station sp("fige-motdepasse");
+        Runtime r2;
+        sp.hooks(r2);
+        r2.bind(&sp.p, nullptr);
+        r2.start(0.0);
+        double now = 0;
+        check(r2.startRecording(RecordingStart{"Secret", {}, "fat2026", 0, false, "essai"}, now, &why), "un enregistrement protege (" + why + ")");
+        for (int step = 1; step <= 20; ++step) r2.tick(now = step / 10.0);
+        (void)r2.stopRecording(true, now);
+        const std::string secret = rec::pathOf(r2.recordingsFolder(), "Secret");
+        const std::string data = fileBytes(secret);
+        check(data.find("projet.bin") != std::string::npos, "la copie du projet est dans le fichier");
+        check(data.find("Btn_Pompe") == std::string::npos && data.find("Niveau := Niveau") == std::string::npos && data.find("Procede") == std::string::npos
+                  && data.find("tr\xC3\xA8s haut") == std::string::npos,
+              "ni les objets, ni les scripts, ni les alarmes du projet en clair dans le fichier");
+        Project back;
+        check(rec::readProject(secret, "", back, &why) == rec::Status::PasswordNeeded, "sans mot de passe : la copie ne se lit pas");
+        check(rec::readProject(secret, "faux", back, &why) == rec::Status::BadPassword, "un faux : refuse");
+        check(rec::readProject(secret, "fat2026", back, &why) == rec::Status::Ok && back.view(sp.view) && back.view(sp.view)->objectByName("Btn_Pompe"),
+              "le bon : la copie se lit (" + why + ")");
+        check(r2.startReplay(ReplayRequest{"Secret", {}, 1.0, 0, "fat2026", "essai"}, now, &why) == rec::Status::Ok && r2.replayInfo().frozenProject,
+              "rejoue avec le bon mot de passe : avec la copie");
+        (void)r2.quitReplay(now, "essai");
+        // Mot de passe... : une cle neuve - la copie est rechiffree avec la piste.
+        check(rec::setPassword(secret, "fat2026", "neuf", &why) == rec::Status::Ok, "changer le mot de passe (" + why + ")");
+        rec::Header h;
+        check(rec::readProject(secret, "fat2026", back) == rec::Status::BadPassword && rec::readProject(secret, "neuf", back, &why) == rec::Status::Ok
+                  && back.viewByName("Vue_Station") && rec::readHeader(secret, h) == rec::Status::Ok && h.projectKept && h.format == rec::kFormat,
+              "l'ancien ne lit plus la copie, le nouveau oui (" + why + ")");
+        check(fileBytes(secret).find("Btn_Pompe") == std::string::npos, "rechiffree : toujours rien en clair");
+        check(rec::setPassword(secret, "neuf", "", &why) == rec::Status::Ok && rec::readProject(secret, "", back, &why) == rec::Status::Ok,
+              "sans protection : la copie se lit sans mot de passe");
+        // Une description trop longue pour sa place : un fichier neuf - la copie suit.
+        check(rec::setDescription(secret, std::string(20000, 'd'), &why) && rec::readProject(secret, "", back, &why) == rec::Status::Ok
+                  && back.viewByName("Vue_Station"),
+              "une description de 20 000 caracteres (un fichier neuf) : la copie suit (" + why + ")");
+        rec::Track tr;
+        check(rec::readTrack(secret, "", h, tr, &why) == rec::Status::Ok && !tr.frames.empty() && h.description.size() == 20000, "... et la piste aussi");
+        // Coupe net : le .part a deja la copie, le .xrec recupere la garde.
+        double t = now;
+        check(r2.startRecording(RecordingStart{"Panne", {}, {}, 0, false, "essai"}, t, &why), "un enregistrement qui sera coupe net");
+        for (int step = 1; step <= 25; ++step) r2.tick(t += 0.1);
+        const std::string part = rec::pathOf(r2.recordingsFolder(), "Panne") + ".part";
+        const std::string copy = r2.recordingsFolder() + "/Panne2.xrec.part";
+        writeBytes(copy, fileBytes(part));
+        (void)r2.stopRecording(false, t);
+        std::string target;
+        check(rec::recoverPart(copy, &target, &why) && rec::readHeader(target, h) == rec::Status::Ok && h.cut && h.projectKept
+                  && rec::readProject(target, "", back, &why) == rec::Status::Ok && back.viewByName("Vue_Station"),
+              "un .part coupe net : la copie du projet est relue avec lui (" + why + ")");
+    }
+    // ---- UNE COPIE ABIMEE : la relecture se fait avec le projet actuel, et le dit ----------------------------------------
+    {
+        Station sc("fige-abime");
+        {
+            Runtime r3;
+            sc.hooks(r3);
+            r3.bind(&sc.p, nullptr);
+            r3.start(0.0);
+            double now = 0;
+            (void)r3.startRecording(RecordingStart{"Abime", {}, {}, 0, false, "essai"}, now, &why);
+            for (int step = 1; step <= 20; ++step) r3.tick(now = step / 10.0);
+            (void)r3.stopRecording(true, now);
+            folder = r3.recordingsFolder();
+        }
+        const std::string abime = rec::pathOf(folder, "Abime");
+        std::string data = fileBytes(abime);
+        const auto at = data.find("projet.bin");
+        const std::size_t inside = at + std::string("projet.bin").size() + 25 + 3;   // l'en-tete local, la tete du bloc, puis ses octets
+        check(at != std::string::npos && inside < data.size(), "la copie du projet a abimer");
+        if (at != std::string::npos && inside < data.size()) data[inside] = static_cast<char>(data[inside] ^ 0x5A);
+        writeBytes(abime, data);
+        Project back;
+        check(rec::readProject(abime, "", back, &why) == rec::Status::Unreadable, "abimee : elle ne se relit pas (" + why + ")");
+        auto& vs = sc.p.programs.variables;
+        vs.erase(std::remove_if(vs.begin(), vs.end(), [](const Variable& v) { return v.name == "Mode"; }), vs.end());
+        Runtime r4;
+        sc.hooks(r4);
+        r4.bind(&sc.p, nullptr);
+        r4.start(0.0);
+        check(r4.startReplay(ReplayRequest{"Abime", {}, 1.0, 0, {}, "essai"}, 1.0, &why) == rec::Status::Ok, "elle se rejoue quand meme (" + why + ")");
+        const auto ri = r4.replayInfo();
+        check(!ri.frozenProject && r4.project() == &sc.p, "avec le projet actuel");
+        check(ri.note.rfind("la copie du projet de l'enregistrement est illisible : relu avec le projet actuel", 0) == 0
+                  && ri.note.find("1 variable") != std::string::npos,
+              "le bandeau le dit, puis ce qui n'existe plus (" + ri.note + ")");
+        check(journalHas(r4, "copie du projet de l'enregistrement est illisible"), "la Console le dit");
+        r4.replaySeek(1.0);
+        check(readText(r4, "Niveau") != "(rien)", "les valeurs se rejouent");
+        (void)r4.quitReplay(2.0, "essai");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1886,6 +2141,7 @@ int main() {
     testGenerateAndStore();
     testRelectureM4b();      // 1.14.0 : la relecture contradictoire du lot
     testSonsRelecture1141(); // 1.14.1 (N3) : les sons a la relecture
+    testProjetDeSonMoment1202();   // 1.20.2 : le projet de son moment (la copie gardee dans l'enregistrement)
     // Les dossiers de l'essai (xpg-m4-<pid>-*) : retires.
     {
         std::error_code ec;

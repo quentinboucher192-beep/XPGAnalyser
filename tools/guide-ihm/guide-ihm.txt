@@ -10563,6 +10563,7 @@ Une action inconnue, une vue ou un objet introuvable, une vérification sans exp
 - Former : un scénario de conduite rejoué au poste, à la vitesse qu'on veut.
 - Comprendre un défaut : revenir 10 s en arrière, voir la vue et les valeurs à cet instant.
 Un enregistrement n'est pas une vidéo : ce sont les **valeurs** et les **événements**, rejoués par l'IHM elle-même. Il est léger (quelques centaines de Ko pour dix minutes) et net à tout zoom ; il se rejoue avec le projet qui l'a fait.
+1.20.2 : **fidèle même si le projet a changé** - chaque enregistrement garde une **copie du projet de son moment** (les vues, les popups, les objets, les variables, les types, les scripts…), compressée et chiffrée comme sa piste (avec son mot de passe s'il en a un). La relecture se fait avec cette copie : une vue renommée, un objet supprimé, une variable retirée depuis se rejouent tels qu'ils étaient, et la barre dit « rejoué avec le projet de son moment ». En quittant la relecture, l'IHM revient au projet d'aujourd'hui ; l'éditeur n'est jamais modifié. Les images et les sons ne sont pas copiés : ils viennent du projet actuel. Un enregistrement fait avant la 1.20.2 (sans copie) se rejoue comme avant, avec le projet actuel ; une copie abîmée aussi, et c'est dit.
 ### Ce qui est enregistré
 | Quoi | Le détail |
 | Les valeurs | Toutes les variables IHM, et ce que l'écran lit de l'automate, des variables système et des propriétés d'objets ; 10 fois par seconde (Configuration › Enregistrements). Seul ce qui change s'écrit ; une image complète toutes les 5 s. |

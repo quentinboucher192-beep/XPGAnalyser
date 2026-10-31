@@ -2057,8 +2057,28 @@ Runtime::~Runtime() {
 }
 
 void Runtime::bind(const Project* project, sim::Environment* plc) {
-    project_ = project;
     plc_ = plc;
+    // 1.20.2 : une relecture rejoue le projet de son moment (la copie gardee dans l'enregistrement) : project_ reste la
+    // copie, le projet donne est celui que la relecture rend en quittant (HmiRuntimeRecord.cpp).
+    if (replayBind(project)) return;
+    project_ = project;
+}
+
+// 1.20.2 : LE PROJET CHANGE D'UN COUP - une relecture rejoue le projet de son moment, puis rend le projet en marche. Ce que
+// le moteur garde du projet se relit : les vues composees et les appels lies (refaits), les jokers, les liaisons
+// Equipement et les plages des vues, les unites et le prive (Env). Les programmes prets (programs_) et les expressions
+// compilees (expressions_) sont ranges par leur texte : ils restent justes (et un code en cours peut en tenir un).
+void Runtime::resetProjectCaches() {
+    composed_.clear();
+    boundCalls_.clear();
+    jokerViews_.clear();
+    linkViews_.clear();
+    rangeViews_.clear();
+    env_->anyUnit = -1;
+    env_->unitCache.clear();
+    env_->unitCatalog.reset();
+    env_->anyPrivate = -1;
+    env_->privateSeen.clear();
 }
 
 namespace {
