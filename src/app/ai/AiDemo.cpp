@@ -441,14 +441,18 @@ DemoReply demoReply(std::string_view request, const DemoContext& c) {
     return fallback(c);
 }
 
-std::string titleFor(std::string_view request) {
+std::string titleFor(std::string_view request, bool demo) {
     const std::string f = fold(request);
-    if (has(f, "station") && has(f, "pompage")) return "Station de pompage";
-    if (has(f, "cuve")) return "Cuve et niveau";
-    if (has(f, "rouge")) return "Couleur de la s\xC3\xA9lection";
-    if (has(f, "align")) return "Aligner les boutons";
-    if (has(f, "associ") || has(f, "variable")) return "Association de variable";
-    if (has(f, "vanne")) return "Supprimer les vannes";
+    // 1.16.0 (captures) : les titres par mots-cles sont ceux des scenarios de la demonstration ; ailleurs (une
+    // vraie IA, l'IA integree), le debut de la demande (« Ajoute une vanne » n'est pas « Supprimer les vannes »).
+    if (demo) {
+        if (has(f, "station") && has(f, "pompage")) return "Station de pompage";
+        if (has(f, "cuve")) return "Cuve et niveau";
+        if (has(f, "rouge")) return "Couleur de la s\xC3\xA9lection";
+        if (has(f, "align")) return "Aligner les boutons";
+        if (has(f, "associ") || has(f, "variable")) return "Association de variable";
+        if (has(f, "vanne")) return "Supprimer les vannes";
+    }
     std::string t(request.substr(0, std::min<std::size_t>(request.size(), 48)));
     // Pas de lettre coupee au milieu (UTF-8).
     while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();

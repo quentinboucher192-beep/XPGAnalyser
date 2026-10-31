@@ -311,7 +311,7 @@ bool Assistant::send(std::string text, std::string* why) {
         u.text = text;
         for (const auto& p : pending_) u.attachments.push_back(p.attachment);
         const bool first = c.messages.empty();
-        if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text);
+        if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text, settings_.provider == "demo");
         if (first) {
             c.project.name = host_.projectName ? host_.projectName() : std::string{};
             c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
@@ -364,7 +364,7 @@ bool Assistant::send(std::string text, std::string* why) {
     pending_.clear();
     ctx.attachments = u.attachments;
     const bool first = c.messages.empty();
-    if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text);
+    if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text, settings_.provider == "demo");
     if (first) {
         c.project.name = host_.projectName ? host_.projectName() : std::string{};
         c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
@@ -747,6 +747,18 @@ std::string Assistant::connectionText() const {
 
 // 1.16.0 : les suggestions de l'IA integree, ou celles de la demonstration.
 const std::vector<std::string>& Assistant::suggestions() const {
+    // 1.16.0 (captures) : une IA en ligne ou sur ce PC - des demandes ordinaires (celles de la demonstration citent
+    // des objets et une variable de son scenario).
+    if (live()) {
+        static const std::vector<std::string> k = {
+            "Cr\xC3\xA9" "e un synoptique de station de pompage",
+            "Ajoute une cuve avec un indicateur de niveau",
+            "Cr\xC3\xA9" "e une vue avec 3 pompes et leurs voyants",
+            "Aligne les boutons en haut",
+            "Que sais-tu faire ?",
+        };
+        return k;
+    }
     if (!local()) return demoSuggestions();
     return suggestionsAfter_ && !localSuggestions_.empty() ? localSuggestions_ : localSuggestions();
 }

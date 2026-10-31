@@ -48,7 +48,7 @@ struct DemoReply {
 // Les demandes proposees (les puces cliquables du panneau), dans l'ordre.
 [[nodiscard]] const std::vector<std::string>& demoSuggestions();
 // Un titre de conversation tire de la premiere demande ("Station de pompage").
-[[nodiscard]] std::string titleFor(std::string_view request);
+[[nodiscard]] std::string titleFor(std::string_view request, bool demo = true);
 // Les conversations de demonstration (premiere ouverture : marquees "demo").
 // 1.16.0 : provider "integree" (une installation neuve) - la premiere conversation decrit l'IA integree.
 [[nodiscard]] std::vector<Conversation> demoConversations(std::string_view provider = "demo");

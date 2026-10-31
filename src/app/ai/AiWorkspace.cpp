@@ -113,11 +113,14 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     // sans automate relie (IHM Studio), celui d'un export de Control Expert JOINT a la conversation (.XPG) - lu par
     // readPlc, garde le temps de la seance.
     auto plcFile = std::make_shared<ai::PlcFile>();
+    // Le .XPG joint passe d'abord (un choix explicite) ; sinon l'automate relie, dans l'edition qui en a un. Dans IHM
+    // Studio, app_.project() n'est pas nul (le modele de l'application) mais vide d'automate : on ne le lit pas
+    // (seconde passe des captures : le .XPG lu etait ignore).
     ai::fillPlcEnv(core.env, [this, plcFile]() -> std::shared_ptr<const domain::Project> {
-        if (auto plc = app_.project()) return plc;
-        return plcFile->project;
+        if (plcFile->project) return plcFile->project;
+        return core::hasApi() ? app_.project() : nullptr;
     });
-    core.env.plcSource = [this, plcFile] { return app_.project() ? std::string{} : plcFile->name; };
+    core.env.plcSource = [plcFile] { return plcFile->project ? plcFile->name : std::string{}; };
     core.readPlc = [plcFile](const std::string& path, std::string* said) {
         std::string why;
         auto f = ai::readPlcFile(path, &why);

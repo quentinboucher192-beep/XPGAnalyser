@@ -461,7 +461,8 @@ void AiSettingsDialog::providerChanged() {
     for (ui::Widget* w : {static_cast<ui::Widget*>(model_), static_cast<ui::Widget*>(listModels_), static_cast<ui::Widget*>(key_),
                           static_cast<ui::Widget*>(test_), static_cast<ui::Widget*>(endpoint_), static_cast<ui::Widget*>(timeout_),
                           static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_),
-                          static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_)})
+                          static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_),
+                          static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_)})
         if (w) w->setEnabled(net);
     if (remember_) remember_->setEnabled(net && keyProtectionAvailable());
     if (auto* r = widgetRoot()) r->invalidateLayout();
