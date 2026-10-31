@@ -999,6 +999,67 @@ void testTextParts() {
               "compatible OpenAI : l'outil offert, le texte exact en role tool");
         check(!toolSeen2 && dones2 == 1 && readStatus2 && allText(ev2) == "Je lis la ligne. La ligne 5000 dit Pompe_5000.",
               "compatible OpenAI : le panneau, une seule fin, aucun appel d'outil visible");
+        // 1.21.0 : UN OUTIL LOCAL (LocalTool : le bac a sable) - repondu sur le fil du fournisseur, comme la lecture exacte.
+        {
+            g_net.reset();
+            ai::ProviderRequest rl = simpleRequest("Essaie la fonction.");
+            ai::LocalTool tool;
+            tool.name = "outil_essai";
+            tool.definitionJson = R"({"name":"outil_essai","description":"essai","input_schema":{"type":"object","properties":{"nom":{"type":"string"}}}})";
+            tool.maxCalls = 2;
+            int calls = 0;
+            std::string seenInput;
+            tool.run = [&](const std::string& input, const std::function<void(const std::string&)>& say, const std::atomic<bool>&) {
+                ++calls;
+                seenInput = input;
+                say("Bac \xC3\xA0 sable : Moyenne\xE2\x80\xA6");
+                return std::string("Tests : 2/2 r\xC3\xA9ussis (RESULTAT_LOCAL)");
+            };
+            rl.localTools.push_back(tool);
+            g_net.push(sseReply(msgStart() + textStart(0) + textDelta(0, "J'essaie. ") + blockStop(0) + toolStart(1, "toolu_essai", "outil_essai")
+                                + jsonDelta(1, "{\"nom\": \"Moyenne\"}") + blockStop(1) + msgDelta("tool_use") + msgStop()));
+            g_net.push(sseReply(streamText("Les 2 cas passent.")));
+            ai::AnthropicProvider pl(fastRetries());
+            (void)pl.start(rl);
+            const auto evl = runToEnd(pl, 10000);
+            const std::size_t nl = g_net.count();
+            int donesL = 0;
+            bool toolSeenL = false, outilStatus = false;
+            for (const auto& e : evl) {
+                if (e.type == ai::ProviderEvent::Type::Done) ++donesL;
+                if (e.type == ai::ProviderEvent::Type::ToolUse) toolSeenL = true;
+                if (e.type == ai::ProviderEvent::Type::Status && e.text == "outil" && has(e.detail, "Bac \xC3\xA0 sable")) outilStatus = true;
+            }
+            check(nl >= 2 && has(g_net.at(nl - 2).body, "outil_essai") && has(g_net.at(nl - 1).body, "RESULTAT_LOCAL") && has(g_net.at(nl - 1).body, "toolu_essai"),
+                  "outil local (Anthropic) : offert, sa reponse en tool_result");
+            check(calls == 1 && has(seenInput, "Moyenne") && !toolSeenL && donesL == 1 && outilStatus && allText(evl) == "J'essaie. Les 2 cas passent.",
+                  "outil local (Anthropic) : appele une fois sur le fil, l'etat << outil >>, aucun appel visible, une fin");
+            // compatible OpenAI : pareil
+            g_net.reset();
+            calls = 0;
+            const auto oaD = [](const std::string& json) { return "data: " + json + "\n\n"; };
+            g_net.push(sseReply(oaD(R"({"choices":[{"index":0,"delta":{"role":"assistant","content":"J'essaie. "},"finish_reason":null}]})")
+                                + oaD(R"({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_essai","type":"function","function":{"name":"outil_essai","arguments":"{\"nom\": \"Moyenne\"}"}}]},"finish_reason":null}]})")
+                                + oaD(R"({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]})") + "data: [DONE]\n\n"));
+            g_net.push(sseReply(oaD(R"({"choices":[{"index":0,"delta":{"content":"Les 2 cas passent."},"finish_reason":"stop"}]})") + "data: [DONE]\n\n"));
+            ai::OpenAIProvider::Options ol;
+            ol.firstDelay = 0.01;
+            ai::OpenAIProvider ql(ol);
+            ai::ProviderRequest rlo = rl;
+            rlo.endpoint = "https://service.exemple/v1";
+            (void)ql.start(rlo);
+            const auto evo = runToEnd(ql, 10000);
+            const std::size_t no = g_net.count();
+            int donesO = 0;
+            bool toolSeenO = false;
+            for (const auto& e : evo) {
+                if (e.type == ai::ProviderEvent::Type::Done) ++donesO;
+                if (e.type == ai::ProviderEvent::Type::ToolUse) toolSeenO = true;
+            }
+            check(no >= 2 && has(g_net.at(no - 2).body, "outil_essai") && has(g_net.at(no - 1).body, "RESULTAT_LOCAL") && has(g_net.at(no - 1).body, "call_essai"),
+                  "outil local (compatible OpenAI) : offert, sa reponse en role tool");
+            check(calls == 1 && !toolSeenO && donesO == 1 && allText(evo) == "J'essaie. Les 2 cas passent.", "outil local (compatible OpenAI) : une fin, aucun appel visible");
+        }
         ai::textparts::Library lib;
         ai::textparts::Library::File file;
         file.name = "a.txt";
