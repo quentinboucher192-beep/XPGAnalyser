@@ -3869,8 +3869,12 @@ const std::vector<Topic>& topics() {
          "Un panneau \xC3\xA0 droite de l'\xC3\xA9" "diteur de vues : on y d\xC3\xA9" "crit en "
          "fran\xC3\xA7" "ais ce qu'on veut dans la vue ouverte, l'Assistant propose des op\xC3\xA9rations "
          "sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les "
-         "reprend. Il se branche sur une vraie IA (Anthropic, Claude) avec ta cl\xC3\xA9 API ou le relais de "
-         "ton entreprise ; sans r\xC3\xA9glage, il reste en d\xC3\xA9monstration (rien ne quitte le PC).",
+         "reprend. Il travaille d'embl\xC3\xA9" "e avec l'**IA int\xC3\xA9gr\xC3\xA9" "e** (sans connexion : "
+         "rien ne quitte le PC), et se branche sur une IA en ligne \xE2\x80\x93 Anthropic (Claude), avec ta "
+         "cl\xC3\xA9 API ou le relais de ton entreprise \xE2\x80\x93 ou sur un service **compatible OpenAI** "
+         ": une IA gratuite sur ce PC (Ollama, LM Studio, sans cl\xC3\xA9 ni connexion) ou un service en "
+         "ligne (OpenRouter, Groq, Google Gemini, Mistral\xE2\x80\xA6). Une bande sous l'en-t\xC3\xAAte "
+         "montre **en direct** la limite du service et ce que tu as consomm\xC3\xA9.",
          {
              {K::Bullet, "**Ctrl+Maj+I** le montre ou le replie (\xC2\xAB I \xC2\xBB comme IA).", {}},
              {K::Bullet, "**Affichage \xE2\x80\xBA Assistant IA**, ou la case \xC2\xAB Assistant IA "
@@ -3886,31 +3890,33 @@ const std::vector<Topic>& topics() {
                          "se lit en entier au survol. Au d\xC3\xA9part, sa largeur suit la fen\xC3\xAAtre "
                          "(22 %, entre 280 et 460 px) ; tir\xC3\xA9" "e, elle reste.", {}},
              {K::Table, "Partie\tCe qu'elle montre\nEn-t\xC3\xAAte\tL'ic\xC3\xB4ne, \xC2\xAB Assistant IA "
-                         "\xC2\xBB, l'\xC3\xA9tat de connexion \xE2\x80\x93 \xC2\xAB D\xC3\xA9monstration "
-                         "\xE2\x80\x93 aucune IA connect\xC3\xA9" "e \xC2\xBB, \xC2\xAB Anthropic "
+                         "\xC2\xBB, l'\xC3\xA9tat de connexion \xE2\x80\x93 \xC2\xAB IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e \xE2\x80\x93 sans connexion \xC2\xBB, \xC2\xAB Anthropic "
                          "\xE2\x80\x93 <le mod\xC3\xA8le> \xC2\xBB (\xC2\xAB (relais) \xC2\xBB avec une "
-                         "adresse d'entreprise), ou \xC2\xAB \xC3\x80 configurer : choisis un mod\xC3\xA8le "
-                         "et une cl\xC3\xA9 \xC2\xBB ; un clic sur cet \xC3\xA9tat ouvre les "
+                         "adresse d'entreprise), \xC2\xAB Ollama \xE2\x80\x93 <le mod\xC3\xA8le> \xC2\xBB "
+                         "(le service compatible choisi), \xC2\xAB D\xC3\xA9monstration \xE2\x80\x93 aucune "
+                         "IA connect\xC3\xA9" "e \xC2\xBB, ou \xC2\xAB \xC3\x80 configurer : choisis un "
+                         "mod\xC3\xA8le et une cl\xC3\xA9 \xC2\xBB ; un clic sur cet \xC3\xA9tat ouvre les "
                          "param\xC3\xA8tres. Puis Nouvelle conversation (+), Param\xC3\xA8tres, Replier. "
-                         "Dessous, le mode **Pr\xC3\xA9visualisation** ou **Direct**, et la vue "
-                         "vis\xC3\xA9" "e (celle de l'onglet ouvert).\nConversations\tLes plus "
-                         "r\xC3\xA9" "centes d'abord, avec leur date. Un clic en ouvre une (elle s'ouvre sur "
-                         "sa derni\xC3\xA8re demande) ; un double-clic ou **F2** la renomme sur place "
-                         "(Entr\xC3\xA9" "e garde, \xC3\x89" "chap annule) ; **Suppr** ou le clic droit "
-                         "\xE2\x80\xBA Supprimer\xE2\x80\xA6 la supprime, apr\xC3\xA8s une confirmation. "
-                         "\xC2\xAB d\xC3\xA9mo \xC2\xBB marque les conversations de d\xC3\xA9monstration. Un "
-                         "clic sur l'en-t\xC3\xAAte replie la liste.\nDiscussion\tTes demandes \xC3\xA0 "
-                         "droite (sous \xC2\xAB Moi \xC2\xBB), les r\xC3\xA9ponses \xC3\xA0 gauche, avec "
-                         "leur heure. Les r\xC3\xA9ponses sont mises en forme : titres, **gras**, listes, "
-                         "`code`. Elle d\xC3\xA9" "file seule (la molette, sa barre) : la saisie reste "
-                         "toujours visible en bas.\nPi\xC3\xA8" "ces jointes\tLes fichiers joints au "
-                         "prochain message : leur type, leur taille, leur traitement, la croix pour les "
-                         "retirer.\nSaisie\tUn champ de message : le texte passe \xC3\xA0 la ligne, le champ "
-                         "grandit jusqu'\xC3\xA0 5 lignes puis d\xC3\xA9" "file. **Entr\xC3\xA9" "e** "
-                         "envoie, **Maj+Entr\xC3\xA9" "e** passe \xC3\xA0 la ligne (Ctrl+Entr\xC3\xA9" "e "
-                         "envoie aussi). Le trombone joint un fichier ; un fichier l\xC3\xA2" "ch\xC3\xA9 "
-                         "sur le panneau aussi. Pendant une r\xC3\xA9ponse, Envoyer devient "
-                         "**Arr\xC3\xAAter**.", {}},
+                         "Dessous, **la bande de la limite** (voir plus bas), le mode "
+                         "**Pr\xC3\xA9visualisation** ou **Direct**, et la vue vis\xC3\xA9" "e (celle de "
+                         "l'onglet ouvert).\nConversations\tLes plus r\xC3\xA9" "centes d'abord, avec leur "
+                         "date. Un clic en ouvre une (elle s'ouvre sur sa derni\xC3\xA8re demande) ; un "
+                         "double-clic ou **F2** la renomme sur place (Entr\xC3\xA9" "e garde, "
+                         "\xC3\x89" "chap annule) ; **Suppr** ou le clic droit \xE2\x80\xBA "
+                         "Supprimer\xE2\x80\xA6 la supprime, apr\xC3\xA8s une confirmation. \xC2\xAB "
+                         "d\xC3\xA9mo \xC2\xBB marque les conversations de d\xC3\xA9monstration. Un clic sur "
+                         "l'en-t\xC3\xAAte replie la liste.\nDiscussion\tTes demandes \xC3\xA0 droite (sous "
+                         "\xC2\xAB Moi \xC2\xBB), les r\xC3\xA9ponses \xC3\xA0 gauche, avec leur heure. Les "
+                         "r\xC3\xA9ponses sont mises en forme : titres, **gras**, listes, `code`. Elle "
+                         "d\xC3\xA9" "file seule (la molette, sa barre) : la saisie reste toujours visible "
+                         "en bas.\nPi\xC3\xA8" "ces jointes\tLes fichiers joints au prochain message : leur "
+                         "type, leur taille, leur traitement, la croix pour les retirer.\nSaisie\tUn champ "
+                         "de message : le texte passe \xC3\xA0 la ligne, le champ grandit jusqu'\xC3\xA0 5 "
+                         "lignes puis d\xC3\xA9" "file. **Entr\xC3\xA9" "e** envoie, "
+                         "**Maj+Entr\xC3\xA9" "e** passe \xC3\xA0 la ligne (Ctrl+Entr\xC3\xA9" "e envoie "
+                         "aussi). Le trombone joint un fichier ; un fichier l\xC3\xA2" "ch\xC3\xA9 sur le "
+                         "panneau aussi. Pendant une r\xC3\xA9ponse, Envoyer devient **Arr\xC3\xAAter**.", {}},
              {K::Step, "Ouvre la vue \xC3\xA0 modifier dans l'\xC3\xA9" "diteur (son onglet devant).", "1"},
              {K::Step, "\xC3\x89" "cris la demande, ou clique une suggestion (une conversation vide les "
                          "propose).", "2"},
@@ -3993,27 +3999,49 @@ const std::vector<Topic>& topics() {
                          "son nom (les 200 premiers Ko ; un CSV d'Excel est relu correctement).\nXLSX, "
                          ".xihm, .xapi, projet\tSeulement son nom : ces fichiers ne sont pas lus par l'IA "
                          "dans cette version (le panneau le dit \xC3\xA0 l'envoi).", {}},
-             {K::Paragraph, "En d\xC3\xA9monstration, leur contenu n'est pas lu. Le bouton Param\xC3\xA8tres de "
-                         "l'en-t\xC3\xAAte (ou un clic sur l'\xC3\xA9tat de connexion) :", {}},
-             {K::Table, "R\xC3\xA9glage\tCe qu'il fait\nFournisseur\t**D\xC3\xA9monstration** (sans IA, "
-                         "rien ne quitte le PC) ou **Anthropic (Claude)** ; les autres sont \xC3\xA0 "
-                         "venir.\nMod\xC3\xA8le\tUne case libre, vide au d\xC3\xA9part : rien n'est "
-                         "impos\xC3\xA9 par le logiciel (exemple : claude-opus-5-5). **Lister les "
-                         "mod\xC3\xA8les** demande au fournisseur ceux que ta cl\xC3\xA9 peut utiliser "
-                         "(gratuit) : un clic en choisit un.\nEffort\tAuto (celui du mod\xC3\xA8le), Bas, "
-                         "Moyen, Haut : combien l'IA r\xC3\xA9" "fl\xC3\xA9" "chit avant de r\xC3\xA9pondre. "
-                         "Haut est plus soign\xC3\xA9, Bas plus rapide et moins cher.\nAdresse\tVide : celle "
-                         "du fournisseur. Sinon, le **relais de ton entreprise** (https://\xE2\x80\xA6) : la "
-                         "demande part \xC3\xA0 <adresse>/v1/messages. http:// n'est accept\xC3\xA9 que vers "
-                         "ce PC (127.0.0.1).\nD\xC3\xA9lai\tLes secondes sans rien recevoir avant de dire "
-                         "\xC2\xAB D\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 \xC2\xBB (60 par "
+             {K::Paragraph, "Avec l'IA int\xC3\xA9gr\xC3\xA9" "e ou en d\xC3\xA9monstration, leur contenu n'est "
+                         "pas lu. Le bouton Param\xC3\xA8tres de l'en-t\xC3\xAAte (ou un clic sur "
+                         "l'\xC3\xA9tat de connexion) :", {}},
+             {K::Table, "R\xC3\xA9glage\tCe qu'il fait\nFournisseur\t**IA int\xC3\xA9gr\xC3\xA9" "e** (sans "
+                         "connexion), **D\xC3\xA9monstration** (sans IA, rien ne quitte le PC), **Anthropic "
+                         "(Claude)**, ou **Compatible OpenAI** (Ollama, LM Studio, services "
+                         "gratuits\xE2\x80\xA6).\nService\t(Compatible OpenAI, \xC3\xA0 la place de "
+                         "l'Effort) **Ollama** ou **LM Studio** (sur ce PC, gratuits, sans cl\xC3\xA9), "
+                         "**OpenRouter**, **Groq**, **Google Gemini**, **Mistral** (en ligne, avec une "
+                         "cl\xC3\xA9), ou **Autre**. Choisir un service remplit l'Adresse ; \xC2\xAB Autre "
+                         "\xC2\xBB : l'adresse \xC3\xA0 la main.\nMod\xC3\xA8le\tUne case libre, vide au "
+                         "d\xC3\xA9part : rien n'est impos\xC3\xA9 par le logiciel (exemples : "
+                         "claude-opus-5-5, llama3.2). **Lister les mod\xC3\xA8les** demande au service ceux "
+                         "qu'il propose (gratuit) : un clic en choisit un.\nEffort\tAuto (celui du "
+                         "mod\xC3\xA8le), Bas, Moyen, Haut : combien l'IA r\xC3\xA9" "fl\xC3\xA9" "chit "
+                         "avant de r\xC3\xA9pondre. Haut est plus soign\xC3\xA9, Bas plus rapide et moins "
+                         "cher.\nAdresse\tAnthropic : vide, ou le **relais de ton entreprise** "
+                         "(https://\xE2\x80\xA6). Compatible OpenAI : l'adresse du service jusqu'\xC3\xA0 "
+                         "/v1 (la demande part \xC3\xA0 <adresse>/chat/completions). http:// est "
+                         "accept\xC3\xA9 vers ce PC, et vers une machine de l'usine (192.168.x.x, 10.x.x.x, "
+                         "172.16 \xC3\xA0 31.x.x) **seulement sans cl\xC3\xA9** : la cl\xC3\xA9 passerait en "
+                         "clair sur le r\xC3\xA9seau.\nD\xC3\xA9lai\tLes secondes sans rien recevoir avant "
+                         "de dire \xC2\xAB D\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 \xC2\xBB (60 par "
                          "d\xC3\xA9" "faut).\nCl\xC3\xA9 API\tMasqu\xC3\xA9" "e ; Afficher, Effacer. "
                          "**M\xC3\xA9moriser la cl\xC3\xA9 (prot\xC3\xA9g\xC3\xA9" "e par Windows)** la "
-                         "garde d'une s\xC3\xA9" "ance \xC3\xA0 l'autre.\nTester la connexion\tDemande la "
-                         "liste des mod\xC3\xA8les avec ces r\xC3\xA9glages (gratuit, sans consommer de "
-                         "jetons) : \xC2\xAB Connexion r\xC3\xA9ussie : 12 mod\xC3\xA8les \xC2\xBB, ou "
-                         "l'erreur en clair (cl\xC3\xA9 refus\xC3\xA9" "e, adresse introuvable, hors "
-                         "ligne\xE2\x80\xA6).", {}},
+                         "garde d'une s\xC3\xA9" "ance \xC3\xA0 l'autre. Facultative pour un mod\xC3\xA8le "
+                         "sur ce PC. Un service en ligne donne la sienne, selon ses conditions (souvent avec "
+                         "une offre gratuite limit\xC3\xA9" "e).\nTester la connexion\tDemande la liste des "
+                         "mod\xC3\xA8les avec ces r\xC3\xA9glages (gratuit, sans consommer de jetons) : "
+                         "\xC2\xAB Connexion r\xC3\xA9ussie : 12 mod\xC3\xA8les \xC2\xBB, ou l'erreur en "
+                         "clair (cl\xC3\xA9 refus\xC3\xA9" "e, adresse introuvable, hors "
+                         "ligne\xE2\x80\xA6).\nFen\xC3\xAAtre de contexte\tVide : **Auto** (celle que le "
+                         "service dit dans sa liste des mod\xC3\xA8les, quand il la dit). Sinon, un nombre "
+                         "de jetons. Sous 16 000, les consignes envoy\xC3\xA9" "es sont resserr\xC3\xA9" "es "
+                         ": seuls les genres de la vue et de ta demande, la vue "
+                         "r\xC3\xA9sum\xC3\xA9" "e.\nOutil\t**Auto** : l'IA propose par l'appel d'outil ; si "
+                         "le mod\xC3\xA8le ne le conna\xC3\xAEt pas (beaucoup de petits mod\xC3\xA8les "
+                         "gratuits), l'Assistant redemande aussit\xC3\xB4t une proposition \xC3\xA9" "crite "
+                         "en JSON dans sa r\xC3\xA9ponse, et s'en souvient. **Appel d'outil** : toujours "
+                         "l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la "
+                         "m\xC3\xAAme v\xC3\xA9rification stricte, le m\xC3\xAAme aper\xC3\xA7u, le "
+                         "m\xC3\xAAme Ctrl+Z.\nBudget\tLes jetons par jour ou par mois (0 : aucun) "
+                         "\xE2\x80\x93 voir plus haut.", {}},
              {K::Paragraph, "Puis le mode par d\xC3\xA9" "faut, la conservation de l'historique "
                          "(dur\xC3\xA9" "e, nombre de conversations), la confidentialit\xC3\xA9 (ce qui part "
                          "avec chaque demande : la vue active, la s\xC3\xA9lection, les noms et types des "
@@ -4033,35 +4061,210 @@ const std::vector<Topic>& topics() {
                          "c\xC3\xB4t\xC3\xA9 de Mes images), jamais dans le projet : un fichier par "
                          "conversation (ses messages, ses pi\xC3\xA8" "ces jointes, l'\xC3\xA9tat de ses "
                          "propositions), la copie des pi\xC3\xA8" "ces jointes, les param\xC3\xA8tres. "
-                         "Fermer et rouvrir l'application retrouve tout. En **d\xC3\xA9monstration** (le "
-                         "fournisseur par d\xC3\xA9" "faut), elle reconna\xC3\xAEt six demandes : le "
-                         "synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, "
-                         "indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un "
-                         "indicateur de niveau, \xC2\xAB Mets celle de droite en rouge \xC2\xBB (sur la "
-                         "s\xC3\xA9lection), \xC2\xAB Aligne les quatre boutons \xC2\xBB, \xC2\xAB Associe "
-                         "cette pompe \xC3\xA0 la variable \xE2\x80\xA6 \xC2\xBB et \xC2\xAB Supprime les "
-                         "vannes \xC2\xBB. \xC3\x80 toute autre demande, elle r\xC3\xA9pond "
-                         "honn\xC3\xAAtement qu'elle ne la comprend pas encore, et propose les suggestions. "
-                         "Rien ne quitte le PC. Branch\xC3\xA9" "e sur une vraie IA, elle comprend le "
-                         "langage courant (les fautes, les abr\xC3\xA9viations, \xC2\xAB celle de droite "
-                         "\xC2\xBB), mais ses propositions passent toujours par la m\xC3\xAAme validation, "
-                         "le m\xC3\xAAme aper\xC3\xA7u et le m\xC3\xAAme Ctrl+Z : elle ne peut rien modifier "
-                         "sans eux.", {}},
+                         "Fermer et rouvrir l'application retrouve tout. Avec l'**IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e** (le fournisseur d'une installation neuve), l'Assistant "
+                         "comprend des phrases simples et vari\xC3\xA9" "es sur la vue ouverte : voir L'IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e. En **d\xC3\xA9monstration** (le fournisseur des "
+                         "versions d'avant, gard\xC3\xA9 par une installation existante), il "
+                         "reconna\xC3\xAEt six demandes : le synoptique de station de pompage (trois cuves, "
+                         "deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 "
+                         "objets), une cuve avec un indicateur de niveau, \xC2\xAB Mets celle de droite en "
+                         "rouge \xC2\xBB (sur la s\xC3\xA9lection), \xC2\xAB Aligne les quatre boutons "
+                         "\xC2\xBB, \xC2\xAB Associe cette pompe \xC3\xA0 la variable \xE2\x80\xA6 \xC2\xBB "
+                         "et \xC2\xAB Supprime les vannes \xC2\xBB. \xC3\x80 toute autre demande, elle "
+                         "r\xC3\xA9pond honn\xC3\xAAtement qu'elle ne la comprend pas encore, et propose les "
+                         "suggestions. Rien ne quitte le PC. Branch\xC3\xA9" "e sur une vraie IA, elle "
+                         "comprend le langage courant (les fautes, les abr\xC3\xA9viations, \xC2\xAB celle "
+                         "de droite \xC2\xBB), mais ses propositions passent toujours par la m\xC3\xAAme "
+                         "validation, le m\xC3\xAAme aper\xC3\xA7u et le m\xC3\xAAme Ctrl+Z : elle ne peut "
+                         "rien modifier sans eux.", {}},
+             {K::Heading, "La limite et la consommation, en direct", {}},
+             {K::Paragraph, "Sous l'\xC3\xA9tat de connexion, une bande fine dit ce que le service te laisse et "
+                         "ce que tu as consomm\xC3\xA9. Elle est toujours \xC3\xA0 jour : le compte \xC3\xA0 "
+                         "rebours de la remise \xC3\xA0 z\xC3\xA9ro avance chaque seconde, sans rien envoyer.", {}},
+             {K::Table, "Ce qu'elle dit\tQuand\n\xC2\xAB Limite : 47/50 requ\xC3\xAAtes \xC2\xB7 38,4 k/40 "
+                         "k jetons \xC2\xB7 remise dans 12 s \xC2\xBB\tUn service en ligne (Anthropic, "
+                         "OpenRouter, Groq\xE2\x80\xA6) : ce qui reste de sa limite, lue dans sa "
+                         "derni\xC3\xA8re r\xC3\xA9ponse. Une ligne \xC3\xA9troite l'abr\xC3\xA8ge (\xC2\xAB "
+                         "47/50 req. \xC2\xB7 38,4 k/40 k jetons \xC2\xB7 12 s \xC2\xBB).\n\xC2\xAB Cette "
+                         "conversation : 12,3 k jetons \xC2\xB7 aujourd'hui 45 k \xC2\xBB\tCe que la "
+                         "conversation ouverte et la journ\xC3\xA9" "e ont consomm\xC3\xA9 (tous les "
+                         "fournisseurs reli\xC3\xA9s).\n\xC2\xAB Contexte de la derni\xC3\xA8re demande : "
+                         "9,8 k / 32 k \xC2\xBB\tQuand la fen\xC3\xAAtre de contexte du mod\xC3\xA8le est "
+                         "connue : ce que la derni\xC3\xA8re demande en a utilis\xC3\xA9.\n\xC2\xAB Sur ce "
+                         "PC : pas de limite \xC2\xBB\tUn mod\xC3\xA8le sur ce PC (Ollama, LM Studio) ou sur "
+                         "un serveur de l'usine.\n\xC2\xAB Sans connexion : gratuit, sans limite "
+                         "\xC2\xBB\tLa d\xC3\xA9monstration et l'IA int\xC3\xA9gr\xC3\xA9" "e.\n\xC2\xAB La "
+                         "limite s'affichera apr\xC3\xA8s la premi\xC3\xA8re r\xC3\xA9ponse \xC2\xBB\tUn "
+                         "service en ligne, avant sa premi\xC3\xA8re r\xC3\xA9ponse.\n\xC2\xAB Limite "
+                         "atteinte : le service demande d'attendre 20 s \xC2\xBB\tUne r\xC3\xA9ponse 429 "
+                         "(trop de demandes) : le temps d'attente, qui d\xC3\xA9" "compte.", {}},
+             {K::Paragraph, "Au survol, l'infobulle donne le d\xC3\xA9tail : les chiffres exacts, l'heure de la "
+                         "derni\xC3\xA8re mise \xC3\xA0 jour, d'o\xC3\xB9 ils viennent (les en-t\xC3\xAAtes "
+                         "de la r\xC3\xA9ponse du service), les jetons de la derni\xC3\xA8re r\xC3\xA9ponse "
+                         "(entr\xC3\xA9" "e, sortie, cache). Un clic sur la bande ouvre les "
+                         "param\xC3\xA8tres. Les jetons sont ceux que le service compte. Leur cumul (par "
+                         "jour, par mois, par conversation) est gard\xC3\xA9 dans le dossier IA, fichier "
+                         "usage.json : jamais ta demande, jamais ta cl\xC3\xA9.", {}},
+             {K::Heading, "Le budget", {}},
+             {K::Paragraph, "Dans les param\xC3\xA8tres, **Budget** : les jetons que tu t'accordes, par jour ou "
+                         "par mois (0 : aucun). La bande montre alors une jauge (\xC2\xAB 45 k / 200 k "
+                         "\xC2\xBB) : verte, orange \xC3\xA0 80 %, rouge au-del\xC3\xA0. Le budget atteint, "
+                         "l'envoi demande d'abord confirmation (\xC2\xAB Ton budget du jour est atteint (210 "
+                         "k / 200 k jetons). Envoyer quand m\xC3\xAAme ? \xC2\xBB) : rien n'est "
+                         "bloqu\xC3\xA9 sans te le dire.", {}},
+             {K::Heading, "Une IA gratuite sur ce PC : Ollama", {}},
+             {K::Paragraph, "Ollama fait tourner un mod\xC3\xA8le d'IA sur ton PC : gratuit, sans cl\xC3\xA9, "
+                         "sans connexion, rien ne quitte le PC.", {}},
+             {K::Step, "Installe Ollama (ollama.com) ; il tourne en arri\xC3\xA8re-plan.", "1"},
+             {K::Step, "T\xC3\xA9l\xC3\xA9" "charge un mod\xC3\xA8le, dans une invite de commandes : "
+                         "**ollama pull llama3.2** (environ 2 Go ; un mod\xC3\xA8le plus gros comprend "
+                         "mieux, mais demande plus de m\xC3\xA9moire et r\xC3\xA9pond plus lentement).", "2"},
+             {K::Step, "Dans les param\xC3\xA8tres de l'Assistant : Fournisseur **Compatible OpenAI**, "
+                         "Service **Ollama** (l'adresse se remplit : http://localhost:11434/v1), **Lister "
+                         "les mod\xC3\xA8les**, choisis le tien, **Enregistrer**. Pas de cl\xC3\xA9.", "3"},
+             {K::Step, "La bande dit \xC2\xAB Sur ce PC : pas de limite \xC2\xBB.", "4"},
+             {K::Paragraph, "LM Studio se r\xC3\xA8gle de la m\xC3\xAAme fa\xC3\xA7on (Service **LM Studio**, "
+                         "son serveur local d\xC3\xA9marr\xC3\xA9).", {}},
+             {K::Warning, "Ollama coupe en silence ce qui d\xC3\xA9passe la fen\xC3\xAAtre de contexte du "
+                         "mod\xC3\xA8le (souvent 4 096 jetons par d\xC3\xA9" "faut) : l'IA \xC2\xAB oublie "
+                         "\xC2\xBB alors le d\xC3\xA9" "but des consignes. Agrandis-la (dans Ollama : la "
+                         "variable OLLAMA_CONTEXT_LENGTH, par exemple 16384, puis relance Ollama) et donne "
+                         "le m\xC3\xAAme nombre dans **Fen\xC3\xAAtre de contexte**. Sous 16 000 jetons, "
+                         "l'Assistant resserre d\xC3\xA9j\xC3\xA0 ses consignes.", {}},
+             {K::Tip, "Un serveur Ollama de l'usine (un PC plus puissant) : Service **Autre**, Adresse "
+                         "http://<son adresse>:11434/v1, sans cl\xC3\xA9.", {}},
+             {K::Heading, "Un service en ligne gratuit", {}},
+             {K::Paragraph, "OpenRouter (certains mod\xC3\xA8les marqu\xC3\xA9s \xC2\xAB free \xC2\xBB), Groq, "
+                         "Google Gemini et Mistral ont souvent une offre gratuite, limit\xC3\xA9" "e en "
+                         "demandes par minute ou par jour : cr\xC3\xA9" "e un compte chez eux, copie leur "
+                         "cl\xC3\xA9 dans **Cl\xC3\xA9 API**, choisis le Service, puis **Lister les "
+                         "mod\xC3\xA8les**. Leurs conditions changent : la bande montre en direct ce qu'il "
+                         "te reste.", {}},
+             {K::Warning, "Un service en ligne re\xC3\xA7oit ta demande et le contexte de la vue (selon tes "
+                         "r\xC3\xA9glages de confidentialit\xC3\xA9). Lis ses conditions : certaines offres "
+                         "gratuites se r\xC3\xA9servent le droit d'utiliser les demandes.", {}},
          },
-         {"editeur", "objets", "historique", "assistant-ia-registre", "memoire-ia"},
-         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE"},
+         {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
+         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE"},
          {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres"},
          {},
          "",
          {},
          "",
          {}, "1.14.2"},
+        // ---- Concevoir les vues  L'Assistant IA / assistant-ia-integree
+        {"assistant-ia-integree", "L'IA int\xC3\xA9gr\xC3\xA9" "e (sans connexion)", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Une IA \xC3\xA9" "crite dans le logiciel : elle comprend des demandes simples en "
+         "fran\xC3\xA7" "ais et propose des op\xC3\xA9rations sur la vue ouverte, sans compte, sans "
+         "r\xC3\xA9seau, sans mod\xC3\xA8le \xC3\xA0 t\xC3\xA9l\xC3\xA9" "charger. Rien ne quitte le PC. "
+         "C'est le fournisseur d'une installation neuve.",
+         {
+             {K::Paragraph, "Ce n'est pas un grand mod\xC3\xA8le de langage : c'est un moteur de r\xC3\xA8gles. "
+                         "Il lit ta phrase (les verbes, les genres d'objets et leurs synonymes, les nombres, "
+                         "les couleurs, les positions) et la rapproche de ce que le logiciel sait "
+                         "d\xC3\xA9j\xC3\xA0 : les 116 genres de la biblioth\xC3\xA8que, les objets de la "
+                         "vue ouverte, la s\xC3\xA9lection, les variables du projet et celles de l'automate "
+                         "reli\xC3\xA9. Sa proposition est faite des m\xC3\xAAmes op\xC3\xA9rations qu'une "
+                         "IA en ligne : la m\xC3\xAAme validation, la m\xC3\xAAme carte, le m\xC3\xAAme "
+                         "aper\xC3\xA7u, le mode Direct, et **un seul Ctrl+Z**. L'en-t\xC3\xAAte du panneau "
+                         "dit \xC2\xAB IA int\xC3\xA9gr\xC3\xA9" "e \xE2\x80\x93 sans connexion \xC2\xBB. "
+                         "Aucun r\xC3\xA9glage : ni mod\xC3\xA8le, ni cl\xC3\xA9. Pour la choisir (ou la "
+                         "quitter), Param\xC3\xA8tres de l'Assistant IA \xE2\x80\xBA Fournisseur.", {}},
+             {K::Heading, "Ce qu'elle comprend", {}},
+             {K::Table, "Demande\tExemples\nCr\xC3\xA9" "er des objets\t\xC2\xAB Ajoute 3 pompes \xC2\xBB, "
+                         "\xC2\xAB Cr\xC3\xA9" "e une cuve et un bargraphe \xC2\xBB, \xC2\xAB Mets deux "
+                         "boutons Marche et Arr\xC3\xAAt sous la pompe P1 \xC2\xBB, \xC2\xAB Ajoute un "
+                         "voyant rouge \xC3\xA0 droite de la cuve \xC2\xBB.\nUn synoptique\t\xC2\xAB "
+                         "Cr\xC3\xA9" "e un synoptique de station de pompage avec 3 cuves et 2 pompes par "
+                         "cuve \xC2\xBB (\xC2\xAB sans boutons \xC2\xBB, \xC2\xAB sans vannes \xC2\xBB se "
+                         "disent).\nModifier\t\xC2\xAB Mets P1 en rouge \xC2\xBB, \xC2\xAB Mets la cuve en "
+                         "bleu clair \xC2\xBB, \xC2\xAB Change le texte de Bouton_1 en D\xC3\xA9marrer "
+                         "\xC2\xBB, \xC2\xAB Agrandis la cuve \xC2\xBB, \xC2\xAB Largeur 200 pour Bouton_3 "
+                         "\xC2\xBB, \xC2\xAB D\xC3\xA9place V1 \xC3\xA0 droite de P2 \xC2\xBB, \xC2\xAB "
+                         "Monte P1 de 50 \xC2\xBB, \xC2\xAB Cache V1 \xC2\xBB, \xC2\xAB Renomme Cuve_1 en "
+                         "Bac_Eau \xC2\xBB.\nAssocier une variable\t\xC2\xAB Associe P1 \xC3\xA0 "
+                         "Pompe_1_Marche \xC2\xBB, \xC2\xAB Relie la cuve au niveau "
+                         "\xC2\xBB.\nCr\xC3\xA9" "er des variables, une vue\t\xC2\xAB Cr\xC3\xA9" "e les "
+                         "variables Pompe_3_Marche et Pompe_4_Marche en BOOL \xC2\xBB, \xC2\xAB "
+                         "Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT \xC2\xBB, "
+                         "\xC2\xAB Cr\xC3\xA9" "e une vue Vue_Process en 1920x1080 \xC2\xBB.\nAligner, "
+                         "r\xC3\xA9partir, dupliquer, supprimer\t\xC2\xAB Aligne les boutons en haut "
+                         "\xC2\xBB, \xC2\xAB R\xC3\xA9partis les boutons \xC2\xBB, \xC2\xAB Duplique P1 3 "
+                         "fois vers la droite \xC2\xBB, \xC2\xAB Supprime les vannes "
+                         "\xC2\xBB.\nAnimer\t\xC2\xAB Fais clignoter V1 quand Defaut_V1 \xC2\xBB, \xC2\xAB "
+                         "P1 verte si Pompe_1_Marche sinon rouge \xC2\xBB, \xC2\xAB Cache Texte_1 quand "
+                         "Pompe_1_Marche \xC2\xBB.\nQuestions\t\xC2\xAB Que sais-tu faire ? \xC2\xBB, "
+                         "\xC2\xAB Combien d'objets ? \xC2\xBB, \xC2\xAB Combien de pompes ? \xC2\xBB, "
+                         "\xC2\xAB Quelles variables ? \xC2\xBB, \xC2\xAB Quels genres d'objets ? \xC2\xBB, "
+                         "\xC2\xAB Quelles vues ? \xC2\xBB.\nUne suite\t\xC2\xAB Et une autre \xC2\xBB, "
+                         "\xC2\xAB Encore deux \xC2\xBB, \xC2\xAB La m\xC3\xAAme en bleu \xC2\xBB, \xC2\xAB "
+                         "Mets-la en rouge \xC2\xBB (le dernier objet cr\xC3\xA9\xC3\xA9 ou cit\xC3\xA9), "
+                         "\xC2\xAB Pareil pour P2 \xC2\xBB.", {}},
+             {K::Heading, "Comment elle lit", {}},
+             {K::Bullet, "**Les genres** : par leur libell\xC3\xA9 (\xC2\xAB bouton \xC3\xA0 impulsion "
+                         "\xC2\xBB, \xC2\xAB afficheur num\xC3\xA9rique \xC2\xBB), au pluriel, une faute de "
+                         "frappe pr\xC3\xA8s, et des mots du m\xC3\xA9tier : bac, r\xC3\xA9servoir ou "
+                         "citerne pour une cuve, bouton poussoir, voyant TOR, tuyau pour une tuyauterie, "
+                         "\xC3\xA9lectrovanne, capteur pour un instrument ISA.", {}},
+             {K::Bullet, "**Les nombres** : en chiffres ou en lettres (un \xC3\xA0 vingt).", {}},
+             {K::Bullet, "**Les objets** : par leur nom (sans casse : \xC2\xAB pompe_1 \xC2\xBB), en deux "
+                         "mots (\xC2\xAB pompe 1 \xC2\xBB), par leur libell\xC3\xA9 ou leur texte (\xC2\xAB "
+                         "P1 \xC2\xBB, \xC2\xAB Marche \xC2\xBB), par leur genre (\xC2\xAB la cuve \xC2\xBB "
+                         "s'il n'y en a qu'une, \xC2\xAB les pompes \xC2\xBB), par la s\xC3\xA9lection "
+                         "(\xC2\xAB celle de droite \xC2\xBB, \xC2\xAB mets-les en rouge \xC2\xBB).", {}},
+             {K::Bullet, "**Les couleurs** : rouge, vert, bleu, jaune, orange, gris, blanc, noir, violet, "
+                         "rose, cyan, turquoise, marron, beige, avec \xC2\xAB clair \xC2\xBB ou \xC2\xAB "
+                         "fonc\xC3\xA9 \xC2\xBB, ou un #RRGGBB \xE2\x80\x93 les couleurs du logiciel (le "
+                         "rouge est celui des d\xC3\xA9" "fauts). Elle choisit la propri\xC3\xA9t\xC3\xA9 "
+                         "qui se voit : le contenu d'une cuve, la couleur en marche d'un symbole, le "
+                         "remplissage d'un bouton, la couleur d'un texte ; \xC2\xAB le texte de \xC2\xBB, "
+                         "\xC2\xAB le fond \xC2\xBB, \xC2\xAB le contour \xC2\xBB, \xC2\xAB \xC3\xA0 "
+                         "l'arr\xC3\xAAt \xC2\xBB, \xC2\xAB en d\xC3\xA9" "faut \xC2\xBB la "
+                         "pr\xC3\xA9" "cisent.", {}},
+             {K::Bullet, "**Les objets neufs** : des noms parlants et libres (Pompe_3 apr\xC3\xA8s Pompe_2, "
+                         "Marche_Pompe_1 pour un bouton pos\xC3\xA9 sous Pompe_1), leur taille par "
+                         "d\xC3\xA9" "faut, une place libre de la vue (sur une grille, sans recouvrir "
+                         "l'existant), ou \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'objet cit\xC3\xA9 (\xC3\xA0 "
+                         "droite de, \xC3\xA0 gauche de, sous, au-dessus de).", {}},
+             {K::Heading, "Ce qu'elle ne fait jamais", {}},
+             {K::Bullet, "**Inventer une variable.** Un nom introuvable est dit, avec les plus proches du "
+                         "projet et la phrase pour la cr\xC3\xA9" "er (un clic). Une variable "
+                         "d\xC3\xA9" "crite par des mots (\xC2\xAB au niveau \xC2\xBB) n'est prise que si "
+                         "une seule convient ; sinon elle cite les candidates et demande.", {}},
+             {K::Bullet, "**Deviner.** \xC2\xAB La pompe \xC2\xBB quand il y en a deux, \xC2\xAB des pompes "
+                         "\xC2\xBB sans nombre : elle demande. Une demande qu'elle ne comprend pas "
+                         "re\xC3\xA7oit une r\xC3\xA9ponse honn\xC3\xAAte et des formulations qu'elle "
+                         "comprend, \xC3\xA0 cliquer.", {}},
+             {K::Bullet, "**Lire les pi\xC3\xA8" "ces jointes.** Elle le dit.", {}},
+             {K::Warning, "Elle comprend des phrases simples, pas tout le fran\xC3\xA7" "ais : une demande "
+                         "longue ou inhabituelle peut lui \xC3\xA9" "chapper. Pour le langage courant, "
+                         "branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de l'Assistant IA "
+                         "\xE2\x80\xBA Fournisseur) : ses propositions passent par les m\xC3\xAAmes "
+                         "contr\xC3\xB4les.", {}},
+             {K::Tip, "Renommer n'est pas une op\xC3\xA9ration de l'Assistant : \xC2\xAB Renomme Cuve_1 "
+                         "en Bac_Eau \xC2\xBB propose une copie exacte \xC3\xA0 la m\xC3\xAAme place sous le "
+                         "nouveau nom, puis le retrait de l'original (l'aper\xC3\xA7u le montre, Ctrl+Z "
+                         "reprend tout). Une formule ailleurs qui citait l'ancien nom est \xC3\xA0 revoir ; "
+                         "un groupe se renomme dans l'inspecteur.", {}},
+         },
+         {"assistant-ia", "assistant-ia-registre", "objets"},
+         {"IA INT\xC3\x89GR\xC3\x89" "E", "SANS CONNEXION", "HORS LIGNE", "GRATUITE", "ASSISTANT", "PHRASES COMPRISES", "SUGGESTIONS"},
+         {"ai.panneau", "dialog.ai.parametres"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.16.0"},
         // ---- Concevoir les vues  L'Assistant IA / assistant-ia-registre
         {"assistant-ia-registre", "Ce que l'Assistant IA sait et ce qu'il peut proposer", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
          "Avec chaque demande, l'Assistant re\xC3\xA7oit les objets que le logiciel conna\xC3\xAEt vraiment "
          "(les 116 genres, tir\xC3\xA9s de ses tables), la vue ouverte et ses variables selon tes "
-         "r\xC3\xA9glages de confidentialit\xC3\xA9, et les connaissances actives de sa m\xC3\xA9moire. Il "
-         "ne fait que proposer : le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration avant de te la montrer.",
+         "r\xC3\xA9glages de confidentialit\xC3\xA9, les types IHM du projet, les types (DDT) de l'automate "
+         "reli\xC3\xA9, et les connaissances actives de sa m\xC3\xA9moire. Il ne fait que proposer : le "
+         "logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration avant de te la montrer. Depuis la 1.16.0, il peut "
+         "aussi proposer une vue neuve, des variables et des types IHM, dupliquer avec les rep\xC3\xA8res "
+         "$\xE2\x80\xA6$ et poser des formules (fx).",
          {
              {K::Heading, "Ce qui part avec chaque demande", {}},
              {K::Bullet, "**Les consignes** : en fran\xC3\xA7" "ais, au tutoiement ; les r\xC3\xA8gles "
@@ -4082,8 +4285,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Le contexte** : le projet, la vue ouverte (sa taille, son fond, ses calques), "
                          "ses objets (nom, genre, position, taille et ce qui diff\xC3\xA8re du "
                          "d\xC3\xA9" "faut), la s\xC3\xA9lection (de gauche \xC3\xA0 droite), les variables "
-                         "de l'IHM (noms, types, description), celles de l'automate reli\xC3\xA9, les noms "
-                         "des autres vues.", {}},
+                         "de l'IHM (noms, types, description), les noms des types IHM du projet, les "
+                         "variables de l'automate reli\xC3\xA9, ses types (DDT) r\xC3\xA9sum\xC3\xA9s - leur "
+                         "nom et leurs membres, quand ta demande parle de types ou de l'automate, ou qu'il y "
+                         "en a peu -, les noms des autres vues.", {}},
              {K::Warning, "La valeur d'une variable ne part jamais (ni en marche, ni sa valeur initiale) : "
                          "seulement son nom, son type et sa description.", {}},
              {K::Table, "Confidentialit\xC3\xA9 (Param\xC3\xA8tres de "
@@ -4103,15 +4308,31 @@ const std::vector<Topic>& topics() {
                          "biblioth\xC3\xA8que, son nom, ses propri\xC3\xA9t\xC3\xA9s (dont sa position et sa "
                          "taille).\nModifier\tLes propri\xC3\xA9t\xC3\xA9s d'un objet. **D\xC3\xA9placer** "
                          "et **redimensionner**, c'est modifier X, Y, Largeur et Hauteur : un groupe garde "
-                         "ses enfants \xC3\xA0 leur place.\nAssocier\tUn objet et une variable qui "
-                         "existe.\nAligner, R\xC3\xA9partir\tComme les boutons de l'\xC3\xA9" "diteur "
-                         "(r\xC3\xA9partir : trois objets ou plus, des \xC3\xA9" "carts "
-                         "\xC3\xA9gaux).\nDupliquer\tDes objets avec leurs enfants, "
-                         "d\xC3\xA9" "cal\xC3\xA9s, les copies nomm\xC3\xA9" "es comme il le "
-                         "dit.\nSupprimer\tDes objets ; plusieurs : une confirmation.\nCode brut\tUn objet "
-                         "riche (un bouton et ses actions), au format de l'onglet Code brut de l'inspecteur.", {}},
+                         "ses enfants \xC3\xA0 leur place.\nAssocier\tUn objet et une variable qui existe "
+                         "(ou cr\xC3\xA9\xC3\xA9" "e plus haut dans la m\xC3\xAAme proposition).\nAligner, "
+                         "R\xC3\xA9partir\tComme les boutons de l'\xC3\xA9" "diteur (r\xC3\xA9partir : trois "
+                         "objets ou plus, des \xC3\xA9" "carts \xC3\xA9gaux).\nDupliquer\tDes objets avec "
+                         "leurs enfants, d\xC3\xA9" "cal\xC3\xA9s, les copies nomm\xC3\xA9" "es comme il le "
+                         "dit. Depuis la 1.16.0 : plusieurs copies d'un coup (1 \xC3\xA0 50, la copie 3 "
+                         "d\xC3\xA9" "cal\xC3\xA9" "e de trois fois le d\xC3\xA9" "calage), et **avec les "
+                         "rep\xC3\xA8res** - comme Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D).\nSupprimer\tDes "
+                         "objets ; plusieurs : une confirmation.\nCode brut\tUn objet riche (un bouton et "
+                         "ses actions), au format de l'onglet Code brut de l'inspecteur.\nCr\xC3\xA9" "er "
+                         "une vue\t(1.16.0) Une vue neuve : son nom, sa taille, son fond, sa description - "
+                         "comme \xC2\xAB Nouvelle vue \xC2\xBB de l'arbre. Elle vient en premier : les "
+                         "objets propos\xC3\xA9s ensuite se posent dedans. Apr\xC3\xA8s Appliquer, elle "
+                         "s'ouvre dans l'\xC3\xA9" "diteur.\nCr\xC3\xA9" "er des variables\t(1.16.0) Des "
+                         "variables de l'IHM : nom, type, description, valeur initiale.\nCr\xC3\xA9" "er un "
+                         "type\t(1.16.0) Un type IHM (une structure) : son nom, ses membres (nom, type, "
+                         "description) - comme Types IHM \xE2\x80\xBA Nouveau.", {}},
              {K::Paragraph, "Toute la proposition s'applique en une seule \xC3\xA9tape d'annulation : un Ctrl+Z "
-                         "la reprend enti\xC3\xA8re.", {}},
+                         "la reprend enti\xC3\xA8re - la vue neuve, ses objets, les variables et les types "
+                         "partent ensemble.", {}},
+             {K::Warning, "L'Assistant ne cr\xC3\xA9" "e une vue, une variable ou un type que si tu le "
+                         "demandes (ou acceptes qu'il le propose) ; jamais pour masquer une variable "
+                         "absente. Rien n'est cr\xC3\xA9\xC3\xA9 en silence : la carte le dit (\xC2\xAB "
+                         "Cr\xC3\xA9" "e aussi : la vue Vue_Pompes, 12 variables IHM, 2 types IHM \xC2\xBB) "
+                         "et l'aper\xC3\xA7u en donne la liste, avant que tu appliques.", {}},
              {K::Heading, "Ce que le logiciel v\xC3\xA9rifie", {}},
              {K::Bullet, "**Le genre** : il existe, et la biblioth\xC3\xA8que le propose (un groupe "
                          "na\xC3\xAEt d'une s\xC3\xA9lection) ; un genre inconnu est refus\xC3\xA9, avec les "
@@ -4136,9 +4357,50 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Une proposition refus\xC3\xA9" "e revient \xC3\xA0 l'IA avec les raisons (et les "
                          "vraies propri\xC3\xA9t\xC3\xA9s des genres en cause) : elle corrige "
                          "d'elle-m\xC3\xAAme au tour suivant.", {}},
+             {K::Heading, "Les variables et les types de l'automate reli\xC3\xA9", {}},
+             {K::Paragraph, "Avec un automate reli\xC3\xA9, demande par exemple \xC2\xAB cr\xC3\xA9" "e les "
+                         "variables IHM de l'automate qui commencent par Cuve \xC2\xBB ou \xC2\xAB fais les "
+                         "types IHM des DDT de l'automate \xC2\xBB : l'Assistant propose ses globales qui "
+                         "n'ont pas encore de variable IHM, et ses DDT qui n'ont pas encore de type IHM - ce "
+                         "qui existe d\xC3\xA9j\xC3\xA0 n'est pas repropos\xC3\xA9.", {}},
+             {K::Table, "De l'automate\tDans l'IHM\nBOOL, EBOOL\tBOOL\nINT, DINT, REAL, "
+                         "TIME\xE2\x80\xA6\tLe m\xC3\xAAme type\nSTRING[32]\tSTRING\nTOD, DATE, "
+                         "DT\t\xC3\x89" "cart\xC3\xA9s : l'IHM n'en fait pas de variable (l'aper\xC3\xA7u ne "
+                         "les propose pas)\nARRAY[0..9] OF EBOOL\tARRAY[0..9] OF BOOL "
+                         "(l'\xC3\xA9l\xC3\xA9ment converti)\nUn DDT (T_Vanne)\tLe type IHM du m\xC3\xAAme "
+                         "nom, cr\xC3\xA9\xC3\xA9 avant les variables qui l'emploient (l'ordre des "
+                         "d\xC3\xA9pendances)\nUne instance de bloc (TON, un "
+                         "DFB)\t\xC3\x89" "cart\xC3\xA9" "e : pas de variable IHM \xC3\xA9quivalente", {}},
+             {K::Paragraph, "La description d'une variable est le commentaire de l'automate (sinon \xC2\xAB La "
+                         "variable API.Nom de l'automate reli\xC3\xA9 \xC2\xBB). C'est la m\xC3\xAAme "
+                         "conversion que la migration 1.12.0 (une IHM rendue autonome). Une variable IHM qui "
+                         "porte le nom d'une globale est signal\xC3\xA9" "e dans l'aper\xC3\xA7u : c'est "
+                         "voulu pour une IHM autonome, l'automate reli\xC3\xA9 s'\xC3\xA9" "crit toujours "
+                         "API.Nom.", {}},
+             {K::Heading, "Dupliquer avec les rep\xC3\xA8res", {}},
+             {K::Paragraph, "Pose le premier objet avec ses rep\xC3\xA8res ($Cuves[0]$.Niveau dans une formule, "
+                         "un texte, une action), puis demande \xC2\xAB duplique-le trois fois avec les "
+                         "rep\xC3\xA8res, 180 px \xC3\xA0 droite \xC2\xBB : les copies sont faites par le "
+                         "moteur de Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D) - les noms en s\xC3\xA9rie (Cuve_2, "
+                         "Cuve_3, Cuve_4), un rep\xC3\xA8re \xC3\xA0 indice avance d'une copie \xC3\xA0 "
+                         "l'autre ($Cuves[1]$, $Cuves[2]$, $Cuves[3]$) et garde ses $ (la copie se duplique "
+                         "\xC3\xA0 son tour). Un rep\xC3\xA8re sans indice ($Vanne$) reste tel quel : "
+                         "l'aper\xC3\xA7u le dit, Dupliquer\xE2\x80\xA6 le remplit \xC3\xA0 la main.", {}},
+             {K::Heading, "Les formules (fx)", {}},
+             {K::Paragraph, "Dans une proposition, une valeur qui commence par = est une formule, exactement "
+                         "comme =\xE2\x80\xA6 tap\xC3\xA9 dans l'inspecteur : la propri\xC3\xA9t\xC3\xA9 est "
+                         "pilot\xC3\xA9" "e (\xC6\x92), sa valeur fixe reste dessous. C'est ce qui anime : "
+                         "une couleur selon un \xC3\xA9tat (=SEL(Marche_P1, '#5B6270', '#2ECC71')), visible "
+                         "si (=Defaut_P1), une opacit\xC3\xA9, un clignotement.", {}},
+             {K::Bullet, "Le logiciel la v\xC3\xA9rifie comme l'inspecteur : lisible, en lecture seule (ni "
+                         ":= ni ;), et chaque nom lu existe (variable IHM, de l'automate, ou "
+                         "cr\xC3\xA9\xC3\xA9" "e plus haut dans la proposition). Les rep\xC3\xA8res "
+                         "$\xE2\x80\xA6$ y sont permis : ils ne changent pas le calcul.", {}},
+             {K::Bullet, "Une formule refus\xC3\xA9" "e revient \xC3\xA0 l'IA avec la raison (le nom inconnu "
+                         "et les plus proches).", {}},
          },
          {"assistant-ia", "memoire-ia", "objets", "historique"},
-         {"REGISTRE", "GENRES D'OBJETS", "CONTEXTE", "CONFIDENTIALIT\xC3\x89", "DUPLIQUER", "CODE BRUT", "PROPOSER_OPERATIONS", "OP\xC3\x89RATIONS PROPOS\xC3\x89" "ES"},
+         {"REGISTRE", "GENRES D'OBJETS", "CONTEXTE", "CONFIDENTIALIT\xC3\x89", "DUPLIQUER", "CODE BRUT", "PROPOSER_OPERATIONS", "OP\xC3\x89RATIONS PROPOS\xC3\x89" "ES", "CR\xC3\x89" "ER UNE VUE", "CR\xC3\x89" "ER DES VARIABLES", "TYPES IHM", "DDT", "AUTOMATE", "REP\xC3\x88RES", "FORMULE", "FX"},
          {"ai.panneau", "dialog.ai.parametres", "dialog.ai.apercu"},
          {},
          "",

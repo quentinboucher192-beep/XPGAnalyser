@@ -1769,18 +1769,18 @@ Chaque changement est écrit au journal.
 = Concevoir les vues › L'Assistant IA
 
 == assistant-ia | L'Assistant IA
-: Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Il se branche sur une vraie IA (Anthropic, Claude) avec ta clé API ou le relais de ton entreprise ; sans réglage, il reste en démonstration (rien ne quitte le PC).
+: Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Il travaille d'emblée avec l'**IA intégrée** (sans connexion : rien ne quitte le PC), et se branche sur une IA en ligne – Anthropic (Claude), avec ta clé API ou le relais de ton entreprise – ou sur un service **compatible OpenAI** : une IA gratuite sur ce PC (Ollama, LM Studio, sans clé ni connexion) ou un service en ligne (OpenRouter, Groq, Google Gemini, Mistral…). Une bande sous l'en-tête montre **en direct** la limite du service et ce que tu as consommé.
 @depuis 1.14.2
-@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLAUDE, ANTHROPIC, RELAIS, MODÈLE
+@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLAUDE, ANTHROPIC, RELAIS, MODÈLE, IA INTÉGRÉE, OPENAI, COMPATIBLE OPENAI, OLLAMA, LM STUDIO, OPENROUTER, GROQ, GEMINI, MISTRAL, IA GRATUITE, LIMITE, JETONS, BUDGET, FENÊTRE DE CONTEXTE
 @lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres
-@voir editeur, objets, historique, assistant-ia-registre, memoire-ia
+@voir editeur, objets, historique, assistant-ia-integree, assistant-ia-registre, memoire-ia
 - **Ctrl+Maj+I** le montre ou le replie (« I » comme IA).
 - **Affichage › Assistant IA**, ou la case « Assistant IA (Ctrl+Maj+I) » d'Affichage › Panneaux à afficher.
 - **Projet › Disposition…** : la ligne « Assistant IA » de La fenêtre (caché au départ, toujours, en édition, en simulation).
 - **Ctrl+K** (Aller à / Faire) : « Assistant IA ».
 Il se place à droite de l'éditeur de vues et le pousse, sans le cacher : la vue reste visible pendant qu'on dialogue. Son séparateur se tire comme les autres ; sa largeur et son état sont retenus. Un texte coupé (un titre, la vue visée, un nom de pièce jointe) se lit en entier au survol. Au départ, sa largeur suit la fenêtre (22 %, entre 280 et 460 px) ; tirée, elle reste.
 | Partie | Ce qu'elle montre |
-| En-tête | L'icône, « Assistant IA », l'état de connexion – « Démonstration – aucune IA connectée », « Anthropic – <le modèle> » (« (relais) » avec une adresse d'entreprise), ou « À configurer : choisis un modèle et une clé » ; un clic sur cet état ouvre les paramètres. Puis Nouvelle conversation (+), Paramètres, Replier. Dessous, le mode **Prévisualisation** ou **Direct**, et la vue visée (celle de l'onglet ouvert). |
+| En-tête | L'icône, « Assistant IA », l'état de connexion – « IA intégrée – sans connexion », « Anthropic – <le modèle> » (« (relais) » avec une adresse d'entreprise), « Ollama – <le modèle> » (le service compatible choisi), « Démonstration – aucune IA connectée », ou « À configurer : choisis un modèle et une clé » ; un clic sur cet état ouvre les paramètres. Puis Nouvelle conversation (+), Paramètres, Replier. Dessous, **la bande de la limite** (voir plus bas), le mode **Prévisualisation** ou **Direct**, et la vue visée (celle de l'onglet ouvert). |
 | Conversations | Les plus récentes d'abord, avec leur date. Un clic en ouvre une (elle s'ouvre sur sa dernière demande) ; un double-clic ou **F2** la renomme sur place (Entrée garde, Échap annule) ; **Suppr** ou le clic droit › Supprimer… la supprime, après une confirmation. « démo » marque les conversations de démonstration. Un clic sur l'en-tête replie la liste. |
 | Discussion | Tes demandes à droite (sous « Moi »), les réponses à gauche, avec leur heure. Les réponses sont mises en forme : titres, **gras**, listes, `code`. Elle défile seule (la molette, sa barre) : la saisie reste toujours visible en bas. |
 | Pièces jointes | Les fichiers joints au prochain message : leur type, leur taille, leur traitement, la croix pour les retirer. |
@@ -1808,34 +1808,95 @@ Images (PNG, JPG), PDF, texte (TXT), CSV, Excel (XLSX), XML, JSON et les fichier
 | PDF | Le document (20 Mo au plus) : un plan, un cahier des charges. |
 | TXT, CSV, JSON, XML | Le texte, avec son nom (les 200 premiers Ko ; un CSV d'Excel est relu correctement). |
 | XLSX, .xihm, .xapi, projet | Seulement son nom : ces fichiers ne sont pas lus par l'IA dans cette version (le panneau le dit à l'envoi). |
-En démonstration, leur contenu n'est pas lu.
+Avec l'IA intégrée ou en démonstration, leur contenu n'est pas lu.
 Le bouton Paramètres de l'en-tête (ou un clic sur l'état de connexion) :
 | Réglage | Ce qu'il fait |
-| Fournisseur | **Démonstration** (sans IA, rien ne quitte le PC) ou **Anthropic (Claude)** ; les autres sont à venir. |
-| Modèle | Une case libre, vide au départ : rien n'est imposé par le logiciel (exemple : claude-opus-5-5). **Lister les modèles** demande au fournisseur ceux que ta clé peut utiliser (gratuit) : un clic en choisit un. |
+| Fournisseur | **IA intégrée** (sans connexion), **Démonstration** (sans IA, rien ne quitte le PC), **Anthropic (Claude)**, ou **Compatible OpenAI** (Ollama, LM Studio, services gratuits…). |
+| Service | (Compatible OpenAI, à la place de l'Effort) **Ollama** ou **LM Studio** (sur ce PC, gratuits, sans clé), **OpenRouter**, **Groq**, **Google Gemini**, **Mistral** (en ligne, avec une clé), ou **Autre**. Choisir un service remplit l'Adresse ; « Autre » : l'adresse à la main. |
+| Modèle | Une case libre, vide au départ : rien n'est imposé par le logiciel (exemples : claude-opus-5-5, llama3.2). **Lister les modèles** demande au service ceux qu'il propose (gratuit) : un clic en choisit un. |
 | Effort | Auto (celui du modèle), Bas, Moyen, Haut : combien l'IA réfléchit avant de répondre. Haut est plus soigné, Bas plus rapide et moins cher. |
-| Adresse | Vide : celle du fournisseur. Sinon, le **relais de ton entreprise** (https://…) : la demande part à <adresse>/v1/messages. http:// n'est accepté que vers ce PC (127.0.0.1). |
+| Adresse | Anthropic : vide, ou le **relais de ton entreprise** (https://…). Compatible OpenAI : l'adresse du service jusqu'à /v1 (la demande part à <adresse>/chat/completions). http:// est accepté vers ce PC, et vers une machine de l'usine (192.168.x.x, 10.x.x.x, 172.16 à 31.x.x) **seulement sans clé** : la clé passerait en clair sur le réseau. |
 | Délai | Les secondes sans rien recevoir avant de dire « Délai dépassé » (60 par défaut). |
-| Clé API | Masquée ; Afficher, Effacer. **Mémoriser la clé (protégée par Windows)** la garde d'une séance à l'autre. |
+| Clé API | Masquée ; Afficher, Effacer. **Mémoriser la clé (protégée par Windows)** la garde d'une séance à l'autre. Facultative pour un modèle sur ce PC. Un service en ligne donne la sienne, selon ses conditions (souvent avec une offre gratuite limitée). |
 | Tester la connexion | Demande la liste des modèles avec ces réglages (gratuit, sans consommer de jetons) : « Connexion réussie : 12 modèles », ou l'erreur en clair (clé refusée, adresse introuvable, hors ligne…). |
+| Fenêtre de contexte | Vide : **Auto** (celle que le service dit dans sa liste des modèles, quand il la dit). Sinon, un nombre de jetons. Sous 16 000, les consignes envoyées sont resserrées : seuls les genres de la vue et de ta demande, la vue résumée. |
+| Outil | **Auto** : l'IA propose par l'appel d'outil ; si le modèle ne le connaît pas (beaucoup de petits modèles gratuits), l'Assistant redemande aussitôt une proposition écrite en JSON dans sa réponse, et s'en souvient. **Appel d'outil** : toujours l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la même vérification stricte, le même aperçu, le même Ctrl+Z. |
+| Budget | Les jetons par jour ou par mois (0 : aucun) – voir plus haut. |
 Puis le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui part avec chaque demande : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
 ! La clé API n'est jamais écrite en clair, ni dans les paramètres, ni dans un journal. Sous Windows, « Mémoriser la clé » la chiffre par Windows (DPAPI), liée à ta session : un autre compte, ou le fichier copié sur un autre PC, ne la relit pas. Sous Linux, elle est gardée le temps de la séance seulement. Avec le relais de l'entreprise, la clé peut rester sur son serveur : laisse alors la case vide.
 > Pour une entreprise, le relais est la meilleure façon de protéger la clé : un serveur interne la détient, IHM Studio ne parle qu'à lui (Adresse), et rien ne change pour l'utilisateur.
 Dans le dossier **IA** des réglages de l'utilisateur (à côté de Mes images), jamais dans le projet : un fichier par conversation (ses messages, ses pièces jointes, l'état de ses propositions), la copie des pièces jointes, les paramètres. Fermer et rouvrir l'application retrouve tout.
-En **démonstration** (le fournisseur par défaut), elle reconnaît six demandes : le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un indicateur de niveau, « Mets celle de droite en rouge » (sur la sélection), « Aligne les quatre boutons », « Associe cette pompe à la variable … » et « Supprime les vannes ». À toute autre demande, elle répond honnêtement qu'elle ne la comprend pas encore, et propose les suggestions. Rien ne quitte le PC.
+Avec l'**IA intégrée** (le fournisseur d'une installation neuve), l'Assistant comprend des phrases simples et variées sur la vue ouverte : voir L'IA intégrée. En **démonstration** (le fournisseur des versions d'avant, gardé par une installation existante), il reconnaît six demandes : le synoptique de station de pompage (trois cuves, deux pompes par cuve, vannes, indicateurs de niveau et boutons de commande : 31 objets), une cuve avec un indicateur de niveau, « Mets celle de droite en rouge » (sur la sélection), « Aligne les quatre boutons », « Associe cette pompe à la variable … » et « Supprime les vannes ». À toute autre demande, elle répond honnêtement qu'elle ne la comprend pas encore, et propose les suggestions. Rien ne quitte le PC.
 Branchée sur une vraie IA, elle comprend le langage courant (les fautes, les abréviations, « celle de droite »), mais ses propositions passent toujours par la même validation, le même aperçu et le même Ctrl+Z : elle ne peut rien modifier sans eux.
+### La limite et la consommation, en direct
+Sous l'état de connexion, une bande fine dit ce que le service te laisse et ce que tu as consommé. Elle est toujours à jour : le compte à rebours de la remise à zéro avance chaque seconde, sans rien envoyer.
+| Ce qu'elle dit | Quand |
+| « Limite : 47/50 requêtes · 38,4 k/40 k jetons · remise dans 12 s » | Un service en ligne (Anthropic, OpenRouter, Groq…) : ce qui reste de sa limite, lue dans sa dernière réponse. Une ligne étroite l'abrège (« 47/50 req. · 38,4 k/40 k jetons · 12 s »). |
+| « Cette conversation : 12,3 k jetons · aujourd'hui 45 k » | Ce que la conversation ouverte et la journée ont consommé (tous les fournisseurs reliés). |
+| « Contexte de la dernière demande : 9,8 k / 32 k » | Quand la fenêtre de contexte du modèle est connue : ce que la dernière demande en a utilisé. |
+| « Sur ce PC : pas de limite » | Un modèle sur ce PC (Ollama, LM Studio) ou sur un serveur de l'usine. |
+| « Sans connexion : gratuit, sans limite » | La démonstration et l'IA intégrée. |
+| « La limite s'affichera après la première réponse » | Un service en ligne, avant sa première réponse. |
+| « Limite atteinte : le service demande d'attendre 20 s » | Une réponse 429 (trop de demandes) : le temps d'attente, qui décompte. |
+Au survol, l'infobulle donne le détail : les chiffres exacts, l'heure de la dernière mise à jour, d'où ils viennent (les en-têtes de la réponse du service), les jetons de la dernière réponse (entrée, sortie, cache). Un clic sur la bande ouvre les paramètres.
+Les jetons sont ceux que le service compte. Leur cumul (par jour, par mois, par conversation) est gardé dans le dossier IA, fichier usage.json : jamais ta demande, jamais ta clé.
+### Le budget
+Dans les paramètres, **Budget** : les jetons que tu t'accordes, par jour ou par mois (0 : aucun). La bande montre alors une jauge (« 45 k / 200 k ») : verte, orange à 80 %, rouge au-delà. Le budget atteint, l'envoi demande d'abord confirmation (« Ton budget du jour est atteint (210 k / 200 k jetons). Envoyer quand même ? ») : rien n'est bloqué sans te le dire.
+### Une IA gratuite sur ce PC : Ollama
+Ollama fait tourner un modèle d'IA sur ton PC : gratuit, sans clé, sans connexion, rien ne quitte le PC.
+1. Installe Ollama (ollama.com) ; il tourne en arrière-plan.
+2. Télécharge un modèle, dans une invite de commandes : **ollama pull llama3.2** (environ 2 Go ; un modèle plus gros comprend mieux, mais demande plus de mémoire et répond plus lentement).
+3. Dans les paramètres de l'Assistant : Fournisseur **Compatible OpenAI**, Service **Ollama** (l'adresse se remplit : http://localhost:11434/v1), **Lister les modèles**, choisis le tien, **Enregistrer**. Pas de clé.
+4. La bande dit « Sur ce PC : pas de limite ».
+LM Studio se règle de la même façon (Service **LM Studio**, son serveur local démarré).
+! Ollama coupe en silence ce qui dépasse la fenêtre de contexte du modèle (souvent 4 096 jetons par défaut) : l'IA « oublie » alors le début des consignes. Agrandis-la (dans Ollama : la variable OLLAMA_CONTEXT_LENGTH, par exemple 16384, puis relance Ollama) et donne le même nombre dans **Fenêtre de contexte**. Sous 16 000 jetons, l'Assistant resserre déjà ses consignes.
+> Un serveur Ollama de l'usine (un PC plus puissant) : Service **Autre**, Adresse http://<son adresse>:11434/v1, sans clé.
+### Un service en ligne gratuit
+OpenRouter (certains modèles marqués « free »), Groq, Google Gemini et Mistral ont souvent une offre gratuite, limitée en demandes par minute ou par jour : crée un compte chez eux, copie leur clé dans **Clé API**, choisis le Service, puis **Lister les modèles**. Leurs conditions changent : la bande montre en direct ce qu'il te reste.
+! Un service en ligne reçoit ta demande et le contexte de la vue (selon tes réglages de confidentialité). Lis ses conditions : certaines offres gratuites se réservent le droit d'utiliser les demandes.
 
+== assistant-ia-integree | L'IA intégrée (sans connexion)
+: Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
+@depuis 1.16.0
+@mots IA INTÉGRÉE, SANS CONNEXION, HORS LIGNE, GRATUITE, ASSISTANT, PHRASES COMPRISES, SUGGESTIONS
+@lieux ai.panneau, dialog.ai.parametres
+@voir assistant-ia, assistant-ia-registre, objets
+Ce n'est pas un grand modèle de langage : c'est un moteur de règles. Il lit ta phrase (les verbes, les genres d'objets et leurs synonymes, les nombres, les couleurs, les positions) et la rapproche de ce que le logiciel sait déjà : les 116 genres de la bibliothèque, les objets de la vue ouverte, la sélection, les variables du projet et celles de l'automate relié. Sa proposition est faite des mêmes opérations qu'une IA en ligne : la même validation, la même carte, le même aperçu, le mode Direct, et **un seul Ctrl+Z**.
+L'en-tête du panneau dit « IA intégrée – sans connexion ». Aucun réglage : ni modèle, ni clé. Pour la choisir (ou la quitter), Paramètres de l'Assistant IA › Fournisseur.
+### Ce qu'elle comprend
+| Demande | Exemples |
+| Créer des objets | « Ajoute 3 pompes », « Crée une cuve et un bargraphe », « Mets deux boutons Marche et Arrêt sous la pompe P1 », « Ajoute un voyant rouge à droite de la cuve ». |
+| Un synoptique | « Crée un synoptique de station de pompage avec 3 cuves et 2 pompes par cuve » (« sans boutons », « sans vannes » se disent). |
+| Modifier | « Mets P1 en rouge », « Mets la cuve en bleu clair », « Change le texte de Bouton_1 en Démarrer », « Agrandis la cuve », « Largeur 200 pour Bouton_3 », « Déplace V1 à droite de P2 », « Monte P1 de 50 », « Cache V1 », « Renomme Cuve_1 en Bac_Eau ». |
+| Associer une variable | « Associe P1 à Pompe_1_Marche », « Relie la cuve au niveau ». |
+| Créer des variables, une vue | « Crée les variables Pompe_3_Marche et Pompe_4_Marche en BOOL », « Crée les variables de l'automate qui commencent par PT », « Crée une vue Vue_Process en 1920x1080 ». |
+| Aligner, répartir, dupliquer, supprimer | « Aligne les boutons en haut », « Répartis les boutons », « Duplique P1 3 fois vers la droite », « Supprime les vannes ». |
+| Animer | « Fais clignoter V1 quand Defaut_V1 », « P1 verte si Pompe_1_Marche sinon rouge », « Cache Texte_1 quand Pompe_1_Marche ». |
+| Questions | « Que sais-tu faire ? », « Combien d'objets ? », « Combien de pompes ? », « Quelles variables ? », « Quels genres d'objets ? », « Quelles vues ? ». |
+| Une suite | « Et une autre », « Encore deux », « La même en bleu », « Mets-la en rouge » (le dernier objet créé ou cité), « Pareil pour P2 ». |
+### Comment elle lit
+- **Les genres** : par leur libellé (« bouton à impulsion », « afficheur numérique »), au pluriel, une faute de frappe près, et des mots du métier : bac, réservoir ou citerne pour une cuve, bouton poussoir, voyant TOR, tuyau pour une tuyauterie, électrovanne, capteur pour un instrument ISA.
+- **Les nombres** : en chiffres ou en lettres (un à vingt).
+- **Les objets** : par leur nom (sans casse : « pompe_1 »), en deux mots (« pompe 1 »), par leur libellé ou leur texte (« P1 », « Marche »), par leur genre (« la cuve » s'il n'y en a qu'une, « les pompes »), par la sélection (« celle de droite », « mets-les en rouge »).
+- **Les couleurs** : rouge, vert, bleu, jaune, orange, gris, blanc, noir, violet, rose, cyan, turquoise, marron, beige, avec « clair » ou « foncé », ou un #RRGGBB – les couleurs du logiciel (le rouge est celui des défauts). Elle choisit la propriété qui se voit : le contenu d'une cuve, la couleur en marche d'un symbole, le remplissage d'un bouton, la couleur d'un texte ; « le texte de », « le fond », « le contour », « à l'arrêt », « en défaut » la précisent.
+- **Les objets neufs** : des noms parlants et libres (Pompe_3 après Pompe_2, Marche_Pompe_1 pour un bouton posé sous Pompe_1), leur taille par défaut, une place libre de la vue (sur une grille, sans recouvrir l'existant), ou à côté de l'objet cité (à droite de, à gauche de, sous, au-dessus de).
+### Ce qu'elle ne fait jamais
+- **Inventer une variable.** Un nom introuvable est dit, avec les plus proches du projet et la phrase pour la créer (un clic). Une variable décrite par des mots (« au niveau ») n'est prise que si une seule convient ; sinon elle cite les candidates et demande.
+- **Deviner.** « La pompe » quand il y en a deux, « des pompes » sans nombre : elle demande. Une demande qu'elle ne comprend pas reçoit une réponse honnête et des formulations qu'elle comprend, à cliquer.
+- **Lire les pièces jointes.** Elle le dit.
+! Elle comprend des phrases simples, pas tout le français : une demande longue ou inhabituelle peut lui échapper. Pour le langage courant, branche une IA en ligne ou sur ce PC (Paramètres de l'Assistant IA › Fournisseur) : ses propositions passent par les mêmes contrôles.
+> Renommer n'est pas une opération de l'Assistant : « Renomme Cuve_1 en Bac_Eau » propose une copie exacte à la même place sous le nouveau nom, puis le retrait de l'original (l'aperçu le montre, Ctrl+Z reprend tout). Une formule ailleurs qui citait l'ancien nom est à revoir ; un groupe se renomme dans l'inspecteur.
 == assistant-ia-registre | Ce que l'Assistant IA sait et ce qu'il peut proposer
-: Avec chaque demande, l'Assistant reçoit les objets que le logiciel connaît vraiment (les 116 genres, tirés de ses tables), la vue ouverte et ses variables selon tes réglages de confidentialité, et les connaissances actives de sa mémoire. Il ne fait que proposer : le logiciel vérifie chaque opération avant de te la montrer.
+: Avec chaque demande, l'Assistant reçoit les objets que le logiciel connaît vraiment (les 116 genres, tirés de ses tables), la vue ouverte et ses variables selon tes réglages de confidentialité, les types IHM du projet, les types (DDT) de l'automate relié, et les connaissances actives de sa mémoire. Il ne fait que proposer : le logiciel vérifie chaque opération avant de te la montrer. Depuis la 1.16.0, il peut aussi proposer une vue neuve, des variables et des types IHM, dupliquer avec les repères $…$ et poser des formules (fx).
 @depuis 1.15.0
-@mots REGISTRE, GENRES D'OBJETS, CONTEXTE, CONFIDENTIALITÉ, DUPLIQUER, CODE BRUT, PROPOSER_OPERATIONS, OPÉRATIONS PROPOSÉES
+@mots REGISTRE, GENRES D'OBJETS, CONTEXTE, CONFIDENTIALITÉ, DUPLIQUER, CODE BRUT, PROPOSER_OPERATIONS, OPÉRATIONS PROPOSÉES, CRÉER UNE VUE, CRÉER DES VARIABLES, TYPES IHM, DDT, AUTOMATE, REPÈRES, FORMULE, FX
 @lieux ai.panneau, dialog.ai.parametres, dialog.ai.apercu
 @voir assistant-ia, memoire-ia, objets, historique
 ### Ce qui part avec chaque demande
 - **Les consignes** : en français, au tutoiement ; les règles (n'inventer ni genre, ni propriété, ni variable ; demander quand la demande est ambiguë ; placer les objets dans la vue, alignés et espacés).
 - **Le registre des genres** : les 116 genres d'objets (clé, libellé, famille de la bibliothèque), tirés des tables d'IHM Studio, et les propriétés communes à tous. Le détail des propriétés (valeur par défaut, rôle, mots d'une liste à choix) part pour les genres déjà dans la vue et pour ceux que ta demande cite : « pompe », « cuve », « vanne », « variateur »…
 - **Les connaissances actives** du centre de mémoire : celles du logiciel que tu n'as pas désactivées, et celles que tu as ajoutées pour tous les projets ou pour ce projet. Une connaissance désactivée, ou d'un autre projet, ne part pas.
-- **Le contexte** : le projet, la vue ouverte (sa taille, son fond, ses calques), ses objets (nom, genre, position, taille et ce qui diffère du défaut), la sélection (de gauche à droite), les variables de l'IHM (noms, types, description), celles de l'automate relié, les noms des autres vues.
+- **Le contexte** : le projet, la vue ouverte (sa taille, son fond, ses calques), ses objets (nom, genre, position, taille et ce qui diffère du défaut), la sélection (de gauche à droite), les variables de l'IHM (noms, types, description), les noms des types IHM du projet, les variables de l'automate relié, ses types (DDT) résumés - leur nom et leurs membres, quand ta demande parle de types ou de l'automate, ou qu'il y en a peu -, les noms des autres vues.
 ! La valeur d'une variable ne part jamais (ni en marche, ni sa valeur initiale) : seulement son nom, son type et sa description.
 | Confidentialité (Paramètres de l'Assistant) | Décochée |
 | La vue active | Ses objets ne partent pas (son nom et sa taille, si : il faut bien placer les objets). L'Assistant le sait : pour modifier un objet existant, il te demande son nom. |
@@ -1846,12 +1907,16 @@ Une grande vue se résume : la sélection et les objets les plus proches d'elle 
 | Opération | Ce qu'elle fait |
 | Créer | Un objet d'un genre de la bibliothèque, son nom, ses propriétés (dont sa position et sa taille). |
 | Modifier | Les propriétés d'un objet. **Déplacer** et **redimensionner**, c'est modifier X, Y, Largeur et Hauteur : un groupe garde ses enfants à leur place. |
-| Associer | Un objet et une variable qui existe. |
+| Associer | Un objet et une variable qui existe (ou créée plus haut dans la même proposition). |
 | Aligner, Répartir | Comme les boutons de l'éditeur (répartir : trois objets ou plus, des écarts égaux). |
-| Dupliquer | Des objets avec leurs enfants, décalés, les copies nommées comme il le dit. |
+| Dupliquer | Des objets avec leurs enfants, décalés, les copies nommées comme il le dit. Depuis la 1.16.0 : plusieurs copies d'un coup (1 à 50, la copie 3 décalée de trois fois le décalage), et **avec les repères** - comme Dupliquer… (Ctrl+Maj+D). |
 | Supprimer | Des objets ; plusieurs : une confirmation. |
 | Code brut | Un objet riche (un bouton et ses actions), au format de l'onglet Code brut de l'inspecteur. |
-Toute la proposition s'applique en une seule étape d'annulation : un Ctrl+Z la reprend entière.
+| Créer une vue | (1.16.0) Une vue neuve : son nom, sa taille, son fond, sa description - comme « Nouvelle vue » de l'arbre. Elle vient en premier : les objets proposés ensuite se posent dedans. Après Appliquer, elle s'ouvre dans l'éditeur. |
+| Créer des variables | (1.16.0) Des variables de l'IHM : nom, type, description, valeur initiale. |
+| Créer un type | (1.16.0) Un type IHM (une structure) : son nom, ses membres (nom, type, description) - comme Types IHM › Nouveau. |
+Toute la proposition s'applique en une seule étape d'annulation : un Ctrl+Z la reprend entière - la vue neuve, ses objets, les variables et les types partent ensemble.
+! L'Assistant ne crée une vue, une variable ou un type que si tu le demandes (ou acceptes qu'il le propose) ; jamais pour masquer une variable absente. Rien n'est créé en silence : la carte le dit (« Crée aussi : la vue Vue_Pompes, 12 variables IHM, 2 types IHM ») et l'aperçu en donne la liste, avant que tu appliques.
 ### Ce que le logiciel vérifie
 - **Le genre** : il existe, et la bibliothèque le propose (un groupe naît d'une sélection) ; un genre inconnu est refusé, avec les genres proches.
 - **Les propriétés** : seulement celles du genre ; chaque valeur selon son rôle - un nombre, TRUE ou FALSE, une couleur #RRGGBB, un mot de la liste de l'inspecteur, une durée.
@@ -1861,6 +1926,23 @@ Toute la proposition s'applique en une seule étape d'annulation : un Ctrl+Z la 
 - **Le code brut** : ni script, ni appel de fonction, ni calcul Maths, ni fonction redéfinie ; une propriété absente garde sa valeur par défaut.
 ! Rien de ce que l'IA écrit n'est exécuté : elle ne peut qu'appeler l'outil des opérations, et une opération inconnue est refusée.
 > Une proposition refusée revient à l'IA avec les raisons (et les vraies propriétés des genres en cause) : elle corrige d'elle-même au tour suivant.
+### Les variables et les types de l'automate relié
+Avec un automate relié, demande par exemple « crée les variables IHM de l'automate qui commencent par Cuve » ou « fais les types IHM des DDT de l'automate » : l'Assistant propose ses globales qui n'ont pas encore de variable IHM, et ses DDT qui n'ont pas encore de type IHM - ce qui existe déjà n'est pas reproposé.
+| De l'automate | Dans l'IHM |
+| BOOL, EBOOL | BOOL |
+| INT, DINT, REAL, TIME… | Le même type |
+| STRING[32] | STRING |
+| TOD, DATE, DT | Écartés : l'IHM n'en fait pas de variable (l'aperçu ne les propose pas) |
+| ARRAY[0..9] OF EBOOL | ARRAY[0..9] OF BOOL (l'élément converti) |
+| Un DDT (T_Vanne) | Le type IHM du même nom, créé avant les variables qui l'emploient (l'ordre des dépendances) |
+| Une instance de bloc (TON, un DFB) | Écartée : pas de variable IHM équivalente |
+La description d'une variable est le commentaire de l'automate (sinon « La variable API.Nom de l'automate relié »). C'est la même conversion que la migration 1.12.0 (une IHM rendue autonome). Une variable IHM qui porte le nom d'une globale est signalée dans l'aperçu : c'est voulu pour une IHM autonome, l'automate relié s'écrit toujours API.Nom.
+### Dupliquer avec les repères
+Pose le premier objet avec ses repères ($Cuves[0]$.Niveau dans une formule, un texte, une action), puis demande « duplique-le trois fois avec les repères, 180 px à droite » : les copies sont faites par le moteur de Dupliquer… (Ctrl+Maj+D) - les noms en série (Cuve_2, Cuve_3, Cuve_4), un repère à indice avance d'une copie à l'autre ($Cuves[1]$, $Cuves[2]$, $Cuves[3]$) et garde ses $ (la copie se duplique à son tour). Un repère sans indice ($Vanne$) reste tel quel : l'aperçu le dit, Dupliquer… le remplit à la main.
+### Les formules (fx)
+Dans une proposition, une valeur qui commence par = est une formule, exactement comme =… tapé dans l'inspecteur : la propriété est pilotée (ƒ), sa valeur fixe reste dessous. C'est ce qui anime : une couleur selon un état (=SEL(Marche_P1, '#5B6270', '#2ECC71')), visible si (=Defaut_P1), une opacité, un clignotement.
+- Le logiciel la vérifie comme l'inspecteur : lisible, en lecture seule (ni := ni ;), et chaque nom lu existe (variable IHM, de l'automate, ou créée plus haut dans la proposition). Les repères $…$ y sont permis : ils ne changent pas le calcul.
+- Une formule refusée revient à l'IA avec la raison (le nom inconnu et les plus proches).
 
 == memoire-ia | Mémoire et apprentissage de l'IA
 : Ce que l'Assistant IA connaît, ce qu'il garde d'une séance à l'autre et la place que tout cela prend sur ce PC : six onglets, tous calculés sur les vrais fichiers du dossier IA/. Apprendre ici, c'est enrichir la mémoire locale que l'Assistant joint à ses demandes : le modèle distant n'est pas réentraîné.

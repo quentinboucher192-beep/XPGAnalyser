@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.15.0", "30/10/2026", "\xC3\xA0 venir"},
+    {"1.16.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.15.0", "30/10/2026", "livr\xC3\xA9" "e dans la nuit du 30 au 31/10"},
     {"1.14.2", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au soir"},
     {"1.14.1", "30/10/2026", "livr\xC3\xA9" "e le 30/10 dans l'apr\xC3\xA8s-midi"},
     {"1.14.0", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au matin"},
@@ -142,6 +143,94 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
+        note("1.16.0", "Assistant IA", Kind::New,
+         "L'IA INT\xC3\x89GR\xC3\x89" "E, SANS CONNEXION : l'Assistant IA a maintenant une IA \xC3\xA9" "crite dans le logiciel, gratuite et "
+         "imm\xC3\xA9" "diate - ni compte, ni r\xC3\xA9seau, ni mod\xC3\xA8le \xC3\xA0 t\xC3\xA9l\xC3\xA9" "charger ; rien ne quitte le PC. Elle comprend des phrases "
+         "simples et vari\xC3\xA9" "es sur la vue ouverte : cr\xC3\xA9" "er des objets (\xC2\xAB Ajoute 3 pompes \xC2\xBB, \xC2\xAB Mets deux boutons Marche et "
+         "Arr\xC3\xAAt sous la pompe P1 \xC2\xBB, \xC2\xAB Ajoute un voyant rouge \xC3\xA0 droite de la cuve \xC2\xBB), un synoptique de station de "
+         "pompage avec les nombres de ta phrase, modifier (couleur, texte, taille, place, visibilit\xC3\xA9, renommer), "
+         "associer une variable, cr\xC3\xA9" "er des variables et une vue, aligner, r\xC3\xA9partir, dupliquer, supprimer, animer (\xC2\xAB "
+         "Fais clignoter V1 quand Defaut_V1 \xC2\xBB, \xC2\xAB P1 verte si Pompe_1_Marche sinon rouge \xC2\xBB), et r\xC3\xA9pondre aux questions "
+         "(\xC2\xAB Que sais-tu faire ? \xC2\xBB, \xC2\xAB Combien d'objets ? \xC2\xBB, \xC2\xAB Quelles variables ? \xC2\xBB). Ses propositions passent par la "
+         "m\xC3\xAAme validation, le m\xC3\xAAme aper\xC3\xA7u et le m\xC3\xAAme Ctrl+Z qu'une IA en ligne. C'est le fournisseur d'une installation "
+         "neuve ; une installation existante garde le sien.\n",
+         "assistant-ia-integree", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "L'IA INT\xC3\x89GR\xC3\x89" "E LIT TON PROJET, ET N'INVENTE RIEN : les genres par leur libell\xC3\xA9, au pluriel, une faute pr\xC3\xA8s, et "
+         "les mots du m\xC3\xA9tier (bac ou r\xC3\xA9servoir pour une cuve, bouton poussoir, voyant TOR, tuyau) ; les nombres en "
+         "chiffres ou en lettres ; les objets par leur nom, sans casse, \xC2\xAB pompe 1 \xC2\xBB ou \xC2\xAB P1 \xC2\xBB, la s\xC3\xA9lection (\xC2\xAB celle de "
+         "droite \xC2\xBB) et le dernier objet cr\xC3\xA9\xC3\xA9 ou cit\xC3\xA9 (\xC2\xAB et une autre \xC2\xBB, \xC2\xAB la m\xC3\xAAme en bleu \xC2\xBB, \xC2\xAB mets-la en rouge \xC2\xBB). Les "
+         "objets neufs ont des noms parlants et libres, leur taille par d\xC3\xA9" "faut et une place libre de la vue (ou \xC3\xA0 c\xC3\xB4t\xC3\xA9 "
+         "de l'objet cit\xC3\xA9). Une variable introuvable n'est jamais invent\xC3\xA9" "e : la r\xC3\xA9ponse cite les plus proches et "
+         "propose la phrase pour la cr\xC3\xA9" "er ; quand elle h\xC3\xA9site (deux pompes, deux variables possibles), elle demande ; "
+         "une demande qu'elle ne comprend pas re\xC3\xA7oit une r\xC3\xA9ponse honn\xC3\xAAte et des formulations \xC3\xA0 cliquer.\n",
+         "assistant-ia-integree", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "L'ASSISTANT IA SE BRANCHE SUR UNE IA GRATUITE : le fournisseur \xC2\xAB Compatible OpenAI \xC2\xBB parle la langue que "
+         "comprennent Ollama et LM Studio (un mod\xC3\xA8le sur ton PC : gratuit, sans cl\xC3\xA9, rien ne quitte le PC) et "
+         "beaucoup de services en ligne (OpenRouter et ses mod\xC3\xA8les gratuits, Groq, Google Gemini, Mistral). Dans "
+         "ses param\xC3\xA8tres, la liste Service remplit l'adresse ; le mod\xC3\xA8le reste une case libre (Lister les mod\xC3\xA8les) "
+         "; la cl\xC3\xA9 est facultative pour un mod\xC3\xA8le sur ce PC. Un serveur Ollama de l'usine (http:// vers une "
+         "adresse priv\xC3\xA9" "e) est accept\xC3\xA9 sans cl\xC3\xA9 seulement : une cl\xC3\xA9 n'y passe jamais en clair.",
+         "assistant-ia", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "LA LIMITE EN DIRECT : sous l'en-t\xC3\xAAte du panneau, une bande dit ce que le service te laisse (\xC2\xAB Limite : "
+         "47/50 requ\xC3\xAAtes \xC2\xB7 38,4 k/40 k jetons \xC2\xB7 remise dans 12 s \xC2\xBB, lue dans chaque r\xC3\xA9ponse, pour Anthropic comme "
+         "pour les services compatibles) et ce que tu as consomm\xC3\xA9 (\xC2\xAB Cette conversation : 12,3 k jetons \xC2\xB7 "
+         "aujourd'hui 45 k \xC2\xBB, le contexte de la derni\xC3\xA8re demande). Le compte \xC3\xA0 rebours avance chaque seconde, sans "
+         "rien envoyer ; une r\xC3\xA9ponse 429 montre le temps d'attente ; un mod\xC3\xA8le sur ce PC : \xC2\xAB Sur ce PC : pas de "
+         "limite \xC2\xBB. Au survol, le d\xC3\xA9tail exact et son heure.",
+         "assistant-ia", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "UN BUDGET DE JETONS : par jour ou par mois, dans les param\xC3\xA8tres. La bande montre sa jauge (orange \xC3\xA0 80 "
+         "%, rouge au-del\xC3\xA0) ; atteint, l'envoi demande d'abord confirmation (\xC2\xAB Ton budget du jour est atteint\xE2\x80\xA6 "
+         "Envoyer quand m\xC3\xAAme ? \xC2\xBB) - rien n'est bloqu\xC3\xA9 sans te le dire. Les cumuls sont gard\xC3\xA9s dans IA/usage.json : "
+         "des nombres seulement, jamais ta demande ni ta cl\xC3\xA9.",
+         "assistant-ia", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "LES PETITS MOD\xC3\x88LES GRATUITS : un mod\xC3\xA8le sans appel d'outil (le service r\xC3\xA9pond \xC2\xAB does not support tools "
+         "\xC2\xBB) est redemand\xC3\xA9 aussit\xC3\xB4t avec la proposition \xC3\xA9" "crite en JSON dans sa r\xC3\xA9ponse - lue par la m\xC3\xAAme "
+         "v\xC3\xA9rification stricte, montr\xC3\xA9" "e par le m\xC3\xAAme aper\xC3\xA7u, reprise par le m\xC3\xAAme Ctrl+Z ; l'Assistant s'en souvient "
+         "pour la suite (r\xC3\xA9glage Outil : Auto, Appel d'outil, JSON dans le texte). Une petite fen\xC3\xAAtre de contexte "
+         "(Ollama : souvent 4 096 jetons) re\xC3\xA7oit des consignes resserr\xC3\xA9" "es : r\xC3\xA9glage Fen\xC3\xAAtre de contexte, ou Auto "
+         "(celle que le service dit).",
+         "assistant-ia", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "L'ASSISTANT IA CR\xC3\x89" "E UNE VUE : demande-lui \xC2\xAB une vue des pompes avec trois pompes et leurs voyants \xC2\xBB : sa "
+         "proposition commence par la vue neuve (son nom, sa taille, son fond, sa description - comme Nouvelle vue de "
+         "l'arbre) et les objets se posent dedans. Apr\xC3\xA8s Appliquer, la vue s'ouvre dans l'\xC3\xA9" "diteur ; un seul Ctrl+Z "
+         "retire la vue et ses objets. Une telle proposition ne d\xC3\xA9pend pas de la vue ouverte : la carte reste juste "
+         "(appliqu\xC3\xA9" "e, annul\xC3\xA9" "e par Ctrl+Z, R\xC3\xA9" "appliquer).",
+         "assistant-ia-registre", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "L'ASSISTANT IA CR\xC3\x89" "E DES VARIABLES ET DES TYPES IHM, \xC3\xA0 ta demande seulement et jamais en silence : la carte le "
+         "dit (\xC2\xAB Cr\xC3\xA9" "e aussi : 12 variables IHM, 2 types IHM \xC2\xBB) et l'aper\xC3\xA7u en donne la liste - chaque variable avec son "
+         "type, sa valeur initiale et sa description, chaque type avec ses membres - avant que tu appliques. Les r\xC3\xA8gles "
+         "sont celles du logiciel : un nom libre, un type connu (sinon les plus proches : REEL -> REAL), une valeur "
+         "initiale lue selon le type, un type employ\xC3\xA9 cr\xC3\xA9\xC3\xA9 avant ceux qui l'emploient. Une op\xC3\xA9ration plus bas dans la "
+         "m\xC3\xAAme proposition peut les citer (associer un voyant \xC3\xA0 la variable cr\xC3\xA9\xC3\xA9" "e, une formule). Tout part ensemble au "
+         "Ctrl+Z.",
+         "assistant-ia-registre", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "LES VARIABLES ET LES DDT DE L'AUTOMATE RELI\xC3\x89 VERS L'IHM : l'Assistant voit les types (DDT) de l'automate "
+         "reli\xC3\xA9, r\xC3\xA9sum\xC3\xA9s, et peut proposer ses globales qui n'ont pas encore de variable IHM et ses DDT qui n'ont pas "
+         "encore de type IHM (un morceau de nom les filtre), avec la conversion de la migration 1.12.0 : EBOOL -> BOOL, "
+         "STRING[32] -> STRING, un tableau garde ses bornes, un DDT devient le type IHM du m\xC3\xAAme nom (dans l'ordre des "
+         "d\xC3\xA9pendances) ; la description est le commentaire de l'automate. Une instance de bloc (TON, un DFB) est "
+         "\xC3\xA9" "cart\xC3\xA9" "e.",
+         "assistant-ia-registre", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "DUPLIQUER AVEC LES REP\xC3\x88RES, PAR L'ASSISTANT : \xC2\xAB duplique Cuve_1 trois fois avec les rep\xC3\xA8res, 180 px \xC3\xA0 droite \xC2\xBB "
+         "- les copies sont faites par le moteur de Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D) : les noms en s\xC3\xA9rie, $Cuves[0]$ devient "
+         "$Cuves[1]$, $Cuves[2]$, $Cuves[3]$, le r\xC3\xA9sultat est exactement celui de l'\xC3\xA9" "diteur. Sans rep\xC3\xA8res, plusieurs "
+         "copies d'un coup (jusqu'\xC3\xA0 50), chacune d\xC3\xA9" "cal\xC3\xA9" "e d'un pas de plus.",
+         "assistant-ia-registre", ""),
+        note("1.16.0", "Assistant IA", Kind::New,
+         "LES FORMULES (FX) DANS LES PROPOSITIONS : une valeur qui commence par = pilote la propri\xC3\xA9t\xC3\xA9, comme =\xE2\x80\xA6 dans "
+         "l'inspecteur - une couleur selon un \xC3\xA9tat (=SEL(Marche_P1, '#5B6270', '#2ECC71')), visible si, une opacit\xC3\xA9. Le "
+         "logiciel la v\xC3\xA9rifie comme l'inspecteur (lisible, en lecture seule, chaque nom lu existe, les rep\xC3\xA8res $\xE2\x80\xA6$ "
+         "permis) ; refus\xC3\xA9" "e, elle revient \xC3\xA0 l'IA avec la raison et les noms les plus proches.",
+         "assistant-ia-registre", ""),
         note("1.15.0", "Assistant IA", Kind::New,
          "L'ASSISTANT IA SE BRANCHE SUR UNE VRAIE IA : dans ses param\xC3\xA8tres, le fournisseur Anthropic (Claude), le mod\xC3\xA8le "
          "(une case libre, vide au d\xC3\xA9part : Lister les mod\xC3\xA8les donne ceux que ta cl\xC3\xA9 peut utiliser) et ta cl\xC3\xA9 API. L'en-t\xC3\xAAte "
