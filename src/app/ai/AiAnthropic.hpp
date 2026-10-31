@@ -78,7 +78,9 @@ bool anthropicUrls(std::string_view endpoint, std::string& messages, std::string
 // ---- les pieces jointes ---------------------------------------------------------------
 inline constexpr std::uintmax_t kMaxImageBytes = 5ull * 1024 * 1024;       // par image
 inline constexpr std::uintmax_t kMaxDocumentBytes = 20ull * 1024 * 1024;   // par PDF
-inline constexpr std::uintmax_t kMaxTextBytes = 200ull * 1024;             // par texte (au-dela : coupe)
+// 1.20.0 : un texte n'a plus de limite fixe (avant : coupe a 200 Ko) - il part en parties, a la mesure de la fenetre
+// du modele (AiTextParts.hpp) ; kAnthropicWindow : la fenetre supposee quand la liste des modeles ne l'a pas dite.
+inline constexpr int            kAnthropicWindow = 200000;
 inline constexpr std::uintmax_t kMaxRequestBytes = 28ull * 1024 * 1024;    // le corps entier (la limite de l'API : 32 Mo)
 
 struct AttachmentPlan {

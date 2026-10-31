@@ -5,6 +5,7 @@
 
 #include "AiJson.hpp"
 #include "AiOpenAI.hpp"
+#include "AiTextParts.hpp"
 #include "AiUsage.hpp"
 #include "../../core/AtomicFile.hpp"
 
@@ -15,6 +16,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <initializer_list>
+#include <optional>
 
 namespace app::ai {
 
@@ -47,62 +49,6 @@ std::string guillemets(std::string_view name) { return "\xC2\xAB " + std::string
 
 bool blank(std::string_view s) {
     return std::all_of(s.begin(), s.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)); });
-}
-
-// Le texte est-il de l'UTF-8 valide ?
-bool validUtf8(std::string_view s) {
-    for (std::size_t i = 0; i < s.size();) {
-        const auto c = static_cast<unsigned char>(s[i]);
-        std::size_t n = 0;
-        if (c < 0x80) {
-            ++i;
-            continue;
-        }
-        if ((c >> 5) == 0x6) n = 1;
-        else if ((c >> 4) == 0xE) n = 2;
-        else if ((c >> 3) == 0x1E) n = 3;
-        else return false;
-        if (i + n >= s.size()) return false;
-        for (std::size_t k = 1; k <= n; ++k)
-            if ((static_cast<unsigned char>(s[i + k]) >> 6) != 0x2) return false;
-        i += n + 1;
-    }
-    return true;
-}
-
-void putUtf8(std::string& out, unsigned cp) {
-    if (cp < 0x80) out += static_cast<char>(cp);
-    else if (cp < 0x800) {
-        out += static_cast<char>(0xC0 | (cp >> 6));
-        out += static_cast<char>(0x80 | (cp & 0x3F));
-    } else {
-        out += static_cast<char>(0xE0 | (cp >> 12));
-        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-        out += static_cast<char>(0x80 | (cp & 0x3F));
-    }
-}
-
-// Un texte qui n'est pas de l'UTF-8 (un CSV d'Excel francais) : lu comme du Windows-1252.
-std::string fromCp1252(std::string_view s) {
-    static const unsigned k80[32] = {0x20AC, 0x81,   0x201A, 0x192,  0x201E, 0x2026, 0x2020, 0x2021, 0x2C6,  0x2030, 0x160,
-                                     0x2039, 0x152,  0x8D,   0x17D,  0x8F,   0x90,   0x2018, 0x2019, 0x201C, 0x201D, 0x2022,
-                                     0x2013, 0x2014, 0x2DC,  0x2122, 0x161,  0x203A, 0x153,  0x9D,   0x17E,  0x178};
-    std::string out;
-    out.reserve(s.size() + s.size() / 8);
-    for (const char ch : s) {
-        const auto c = static_cast<unsigned char>(ch);
-        putUtf8(out, c >= 0x80 && c < 0xA0 ? k80[c - 0x80] : c);
-    }
-    return out;
-}
-
-// Coupe a `max` octets sans couper un caractere UTF-8.
-std::string cutUtf8(std::string s, std::size_t max) {
-    if (s.size() <= max) return s;
-    std::size_t n = max;
-    while (n > 0 && (static_cast<unsigned char>(s[n]) >> 6) == 0x2) --n;
-    s.resize(n);
-    return s;
 }
 
 bool readFile(const std::string& path, std::string& out) {
@@ -242,10 +188,9 @@ AttachmentPlan planAttachment(const ProviderAttachment& a) {
         return p;
     }
     if (e == "txt" || e == "csv" || e == "json" || e == "xml") {
+        // 1.20.0 : plus de coupure a 200 Ko - le texte part entier, en parties, a la mesure du modele (AiTextParts.hpp)
         p.as = AttachmentPlan::As::Text;
         p.mediaType = "text/plain";
-        if (a.bytes > kMaxTextBytes)
-            p.note = guillemets(a.name) + " est coup\xC3\xA9 : seuls ses " + sizeText(kMaxTextBytes) + " premiers sont envoy\xC3\xA9s (" + sizeText(a.bytes) + " en tout).";
         return p;
     }
     p.as = AttachmentPlan::As::NotRead;
@@ -256,11 +201,17 @@ AttachmentPlan planAttachment(const ProviderAttachment& a) {
 // ---- la requete --------------------------------------------------------------------------------
 std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* notes) {
     std::uintmax_t heavy = 0;   // les octets en base64 deja mis
+    std::size_t textBudget = textparts::budgetBytes(req, kAnthropicWindow);   // les textes que prepare n'a pas vus
     const auto note = [&](std::string n) {
         if (notes && !n.empty() && std::find(notes->begin(), notes->end(), n) == notes->end()) notes->push_back(std::move(n));
     };
     const auto attachmentBlock = [&](const ProviderAttachment& a) -> json::Value {
         const AttachmentPlan plan = planAttachment(a);
+        if (plan.as == AttachmentPlan::As::Text && a.prepared) {   // 1.20.0 : decoupe sur le fil (ses parties, en blocs)
+            json::Value list = json::Value::array();
+            for (const auto& b : a.blocks) list.push(textBlock(b));
+            return list;
+        }
         const std::string head = "Pi\xC3\xA8" "ce jointe " + guillemets(a.name) + " (" + sizeText(a.bytes) + ")";
         if (plan.as == AttachmentPlan::As::NotRead || plan.as == AttachmentPlan::As::TooBig) {
             note(plan.note);
@@ -274,16 +225,15 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
             return textBlock("[" + head + " : le fichier est introuvable sur le poste.]");
         }
         if (plan.as == AttachmentPlan::As::Text) {
-            if (bytes.rfind("\xEF\xBB\xBF", 0) == 0) bytes.erase(0, 3);
-            if (!validUtf8(bytes)) bytes = fromCp1252(bytes);
-            const bool cut = bytes.size() > kMaxTextBytes;
-            if (cut) {
-                bytes = cutUtf8(std::move(bytes), static_cast<std::size_t>(kMaxTextBytes));
-                note(plan.note.empty() ? guillemets(a.name) + " est coup\xC3\xA9." : plan.note);
+            // 1.20.0 : la limite verifiee (la fenetre du modele) ; le texte part en parties, ce qui ne tient pas est dit
+            auto prep = textparts::prepareOne(a, textparts::normalize(std::move(bytes)), textBudget);
+            note(prep.note);
+            json::Value list = json::Value::array();
+            for (auto& b : prep.blocks) {
+                textBudget = textBudget > b.size() ? textBudget - b.size() : 0;
+                list.push(textBlock(std::move(b)));
             }
-            std::string text = head + " :\n" + bytes;
-            if (cut) text += "\n[... coup\xC3\xA9" "e : seuls les " + sizeText(kMaxTextBytes) + " premiers sont envoy\xC3\xA9s.]";
-            return textBlock(std::move(text));
+            return list;
         }
         std::string data = base64(bytes);
         if (heavy + data.size() > kMaxRequestBytes) {
@@ -326,7 +276,13 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
                 if (matches && t.toolResultError) r.set("is_error", true);
                 m.content.push(std::move(r));
             }
-            for (const auto& a : t.attachments) m.content.push(attachmentBlock(a));
+            for (const auto& a : t.attachments) {
+                json::Value b = attachmentBlock(a);
+                if (b.isArray())
+                    for (auto& x : b.items()) m.content.push(std::move(x));
+                else
+                    m.content.push(std::move(b));
+            }
             if (!blank(t.text)) m.content.push(textBlock(t.text));
             if (m.content.items().empty()) m.content.push(textBlock("(message sans texte)"));
         } else {
@@ -657,6 +613,77 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
     hr.method = "POST";
     hr.url = url;
     hr.headers = anthropicHeaders(request.apiKey);
+    // 1.20.0 : les textes joints, a la mesure de la fenetre du modele - entiers en parties, ou les parties en trop lues a
+    // part (une demande chacune, sans outil) ; ici, sur le fil, jamais sur celui de l'interface.
+    {
+        std::vector<std::string> notes;
+        const auto ask = [&](const ProviderRequest& mini, std::string* err) -> std::optional<std::string> {
+            HttpRequest q = hr;
+            q.body = anthropicBody(mini);
+            double wait = opt_.firstDelay;
+            for (int attempt = 0;; ++attempt) {
+                if (cancelled_) return std::nullopt;
+                AnthropicStream st;
+                st.setModel(mini.model);
+                int status = 0;
+                std::string errBody, text;
+                ProviderUsage used;
+                const auto take = [&] {
+                    for (auto& e : st.take()) {
+                        if (e.type == ProviderEvent::Type::Text) text += e.text;
+                        else if (e.type == ProviderEvent::Type::Usage && !e.usage.empty()) used = e.usage;
+                    }
+                };
+                HttpSink sink;
+                sink.onHeaders = [&](int s, const HttpHeaders&) { status = s; };
+                sink.onData = [&](std::string_view chunk) {
+                    if (status == 200) {
+                        st.feed(chunk);
+                        take();
+                    } else if (errBody.size() < 64 * 1024) {
+                        errBody.append(chunk.data(), std::min<std::size_t>(chunk.size(), 64 * 1024 - errBody.size()));
+                    }
+                };
+                HttpResponse r = http->perform(q, sink);
+                if (cancelled_ || r.failure == HttpResponse::Failure::Cancelled) return std::nullopt;
+                if (status == 0) status = r.status;
+                std::optional<ApiError> retry;
+                if (status == 200) {
+                    st.end();
+                    take();
+                    if (!used.empty()) {
+                        ProviderEvent u;
+                        u.type = ProviderEvent::Type::Usage;
+                        u.usage = used;
+                        u.preread = true;
+                        push(std::move(u));
+                    }
+                    if (st.finished() && !text.empty()) return text;
+                    if (err) *err = !r.ok() ? r.error : st.error().text.empty() ? std::string("r\xC3\xA9ponse vide") : st.error().text;
+                    if (!autoRetry(st.error()) || attempt >= opt_.maxRetries) return std::nullopt;
+                } else if (status == 0) {
+                    if (err) *err = r.error;
+                    return std::nullopt;
+                } else {
+                    const ApiError e = apiError(status, errBody, mini.model);
+                    if (err) *err = e.text;
+                    if (!autoRetry(e) || attempt >= opt_.maxRetries) return std::nullopt;
+                }
+                if (!waitFor(wait)) return std::nullopt;
+                wait *= opt_.factor;
+            }
+        };
+        textparts::prepare(
+            request, request.contextTokens > 0 ? request.contextTokens : kAnthropicWindow, ask,
+            [this](const std::string& detail) { push(statusEvent("lecture", detail)); }, [this] { return cancelled_.load(); }, &notes);
+        if (cancelled_) return finish(doneEvent("arrete"));
+        if (!notes.empty()) {
+            std::string all;
+            for (const auto& n : notes) all += (all.empty() ? "" : " ") + n;
+            push(statusEvent("note", all));
+            push(statusEvent("connexion"));
+        }
+    }
     hr.body = anthropicBody(request);   // lit les pieces jointes : ici, sur le fil
     hr.connectTimeoutSeconds = opt_.connectTimeout;
     hr.idleTimeoutSeconds = std::clamp(request.timeoutSeconds, 5, 600);

@@ -2,6 +2,7 @@
 //  app/ai/AiOpenAI.cpp - un service compatible OpenAI (1.16.0) : voir AiOpenAI.hpp
 // =============================================================================
 #include "AiOpenAI.hpp"
+#include "AiTextParts.hpp"
 
 #include "AiJson.hpp"
 #include "AiPrompt.hpp"
@@ -15,6 +16,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <functional>
+#include <optional>
 #include <filesystem>
 
 namespace app::ai {
@@ -101,13 +103,11 @@ std::string imageType(std::string_view bytes, const std::string& fallback) {
     return fallback;
 }
 
-// Coupe a `max` octets sans couper un caractere UTF-8.
-std::string cutUtf8(std::string s, std::size_t max) {
-    if (s.size() <= max) return s;
-    std::size_t n = max;
-    while (n > 0 && (static_cast<unsigned char>(s[n]) >> 6) == 0x2) --n;
-    s.resize(n);
-    return s;
+// 1.20.0 : la fenetre supposee d'un modele dont la liste ne dit rien - un service sur ce PC (Ollama, LM Studio :
+// souvent 8 a 32 k), un service en ligne (128 k).
+int openAIWindow(const ProviderRequest& req) {
+    if (req.contextTokens > 0) return req.contextTokens;
+    return localService(req.endpoint, req.preset) ? 32768 : textparts::kUnknownWindow;
 }
 
 // Le contenu d'un message en cours de construction : du texte, des images.
@@ -203,8 +203,13 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
     const bool hasTool = !req.toolsJson.empty();
     const bool textTool = hasTool && !withTools;
     std::uintmax_t heavy = 0;
+    std::size_t textBudget = textparts::budgetBytes(req, openAIWindow(req));   // les textes que prepare n'a pas vus
     const auto attachmentParts = [&](const ProviderAttachment& a, std::vector<Part>& parts) {
         const AttachmentPlan plan = planAttachment(a);
+        if (plan.as == AttachmentPlan::As::Text && a.prepared) {   // 1.20.0 : decoupe sur le fil (ses parties)
+            for (const auto& b : a.blocks) parts.push_back({false, b});
+            return;
+        }
         const std::string head = "Pi\xC3\xA8" "ce jointe " + guillemets(a.name);
         if (plan.as == AttachmentPlan::As::NotRead || plan.as == AttachmentPlan::As::TooBig) {
             note(plan.note);
@@ -223,13 +228,13 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
             return;
         }
         if (plan.as == AttachmentPlan::As::Text) {
-            if (bytes.rfind("\xEF\xBB\xBF", 0) == 0) bytes.erase(0, 3);
-            const bool cut = bytes.size() > kMaxTextBytes;
-            if (cut) {
-                bytes = cutUtf8(std::move(bytes), static_cast<std::size_t>(kMaxTextBytes));
-                note(plan.note.empty() ? guillemets(a.name) + " est coup\xC3\xA9." : plan.note);
+            // 1.20.0 : la limite verifiee (la fenetre du modele) ; le texte part en parties, ce qui ne tient pas est dit
+            auto prep = textparts::prepareOne(a, textparts::normalize(std::move(bytes)), textBudget);
+            note(prep.note);
+            for (auto& b : prep.blocks) {
+                textBudget = textBudget > b.size() ? textBudget - b.size() : 0;
+                parts.push_back({false, std::move(b)});
             }
-            parts.push_back({false, head + " :\n" + bytes});
             return;
         }
         std::string data = base64(bytes);
@@ -694,6 +699,76 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
     hr.idleTimeoutSeconds = std::clamp(request.timeoutSeconds, 5, 600);
     hr.allowPrivateHttp = target.privateHttp && request.apiKey.empty();
     request.apiKey.clear();
+    // 1.20.0 : les textes joints, a la mesure de la fenetre du modele - entiers en parties, ou les parties en trop lues a
+    // part (une demande chacune, sans outil) ; ici, sur le fil, jamais sur celui de l'interface.
+    {
+        std::vector<std::string> notes;
+        const auto ask = [&](const ProviderRequest& mini, std::string* err) -> std::optional<std::string> {
+            HttpRequest q = hr;
+            q.body = openAIBody(mini, false, streamUsage);
+            double wait = opt_.firstDelay;
+            for (int tries = 0;; ++tries) {
+                if (cancelled_) return std::nullopt;
+                OpenAIStream st;
+                st.setModel(mini.model);
+                int status = 0;
+                std::string errBody, text;
+                ProviderUsage used;
+                const auto take = [&] {
+                    for (auto& e : st.take()) {
+                        if (e.type == ProviderEvent::Type::Text) text += e.text;
+                        else if (e.type == ProviderEvent::Type::Usage && !e.usage.empty()) used = e.usage;
+                    }
+                };
+                HttpSink sink;
+                sink.onHeaders = [&](int s, const HttpHeaders&) { status = s; };
+                sink.onData = [&](std::string_view chunk) {
+                    if (status == 200) {
+                        st.feed(chunk);
+                        take();
+                    } else if (errBody.size() < 64 * 1024) {
+                        errBody.append(chunk.data(), std::min<std::size_t>(chunk.size(), 64 * 1024 - errBody.size()));
+                    }
+                };
+                HttpResponse r = http->perform(q, sink);
+                if (cancelled_ || r.failure == HttpResponse::Failure::Cancelled) return std::nullopt;
+                if (status == 0) status = r.status;
+                if (status == 200) {
+                    st.end();
+                    take();
+                    if (!used.empty()) {
+                        ProviderEvent u;
+                        u.type = ProviderEvent::Type::Usage;
+                        u.usage = used;
+                        u.preread = true;
+                        push(std::move(u));
+                    }
+                    if (st.finished() && !text.empty()) return text;
+                    if (err) *err = !r.ok() ? r.error : st.error().text.empty() ? std::string("r\xC3\xA9ponse vide") : st.error().text;
+                    if (!autoRetry(st.error()) || tries >= opt_.maxRetries) return std::nullopt;
+                } else if (status == 0) {
+                    if (err) *err = r.error;
+                    return std::nullopt;
+                } else {
+                    const ApiError e = openAIError(status, errBody, mini.model);
+                    if (err) *err = e.text;
+                    if (!autoRetry(e) || tries >= opt_.maxRetries) return std::nullopt;
+                }
+                if (!waitFor(wait)) return std::nullopt;
+                wait *= opt_.factor;
+            }
+        };
+        textparts::prepare(
+            request, openAIWindow(request), ask, [this](const std::string& detail) { push(statusEvent("lecture", detail)); },
+            [this] { return cancelled_.load(); }, &notes);
+        if (cancelled_) return finish(doneEvent("arrete"));
+        if (!notes.empty()) {
+            std::string all;
+            for (const auto& n : notes) all += (all.empty() ? "" : " ") + n;
+            push(statusEvent("note", all));
+            push(statusEvent("connexion"));
+        }
+    }
     double delay = opt_.firstDelay;
     int attempt = 0;
     for (int round = 0; round < 8; ++round) {

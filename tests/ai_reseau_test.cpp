@@ -24,12 +24,14 @@
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiHttp.hpp"
 #include "../src/app/ai/AiJson.hpp"
+#include "../src/app/ai/AiOpenAI.hpp"
 #include "../src/app/ai/AiPanel.hpp"
 #include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/ai/AiPrompt.hpp"
 #include "../src/app/ai/AiSecret.hpp"
 #include "../src/app/ai/AiSettingsDialog.hpp"
 #include "../src/app/ai/AiSse.hpp"
+#include "../src/app/ai/AiTextParts.hpp"
 #include "../src/core/AtomicFile.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/menu/MenuManager.hpp"
@@ -799,6 +801,159 @@ void testProvider() {
         check(!ai::parseModels(200, "<html>").ok, "une reponse qui n'est pas la liste : dite");
     }
     ai::setHttpFactory(nullptr);
+}
+
+// =============================================================================
+//  6 bis. 1.20.0 : les textes joints a la mesure du modele (plus de coupure a 200 Ko)
+// =============================================================================
+void testTextParts() {
+    std::printf("[textes joints decoupes]\n");
+    namespace tp = ai::textparts;
+    // le decoupage : aux fins de ligne, les lignes comptees, rien de perdu ; une ligne trop longue : sur un caractere entier
+    {
+        std::string t;
+        for (int i = 1; i <= 40; ++i) t += "ligne " + std::to_string(i) + " ; d\xC3\xA9" "bit " + std::to_string(i * 3) + "\n";
+        const auto parts = tp::split(t, 200);
+        std::string back;
+        bool lines = true, ends = true;
+        std::size_t next = 1;
+        for (const auto& p : parts) {
+            back += p.text;
+            lines = lines && p.firstLine == next && p.lastLine >= p.firstLine && p.text.size() <= 200;
+            ends = ends && (p.text.empty() || p.text.back() == '\n');
+            next = p.lastLine + 1;
+        }
+        check(parts.size() > 3 && back == t && lines && ends && parts.back().lastLine == 40,
+              "les parties : aux fins de ligne, lignes 1 a 40 suivies, rien de perdu (" + std::to_string(parts.size()) + " parties)");
+        std::string longLine;
+        for (int i = 0; i < 300; ++i) longLine += "\xC3\xA9";   // 600 octets, sans fin de ligne
+        const auto cut = tp::split(longLine, 101);
+        bool whole = true;
+        std::string back2;
+        for (const auto& p : cut) {
+            back2 += p.text;
+            whole = whole && !p.text.empty() && (static_cast<unsigned char>(p.text[0]) >> 6) != 0x2;
+        }
+        check(back2 == longLine && whole && cut.size() >= 6, "une ligne trop longue : coupee sur des caracteres entiers");
+        check(tp::normalize(std::string("\xEF\xBB\xBF" "D\xE9" "bit")) == "D\xC3\xA9" "bit", "BOM retire, Windows-1252 converti");
+    }
+    // le budget : d'apres la fenetre du modele
+    {
+        ai::ProviderRequest r = simpleRequest();
+        r.contextTokens = 1000;
+        check(tp::budgetBytes(r, 0) == 0, "une fenetre de 1 000 jetons : aucune place pour un texte");
+        r.contextTokens = 200000;
+        const auto b200 = tp::budgetBytes(r, 0);
+        r.contextTokens = 1000000;
+        const auto b1m = tp::budgetBytes(r, 0);
+        check(b200 > 300 * 1024 && b1m > 5 * b200, "200 000 jetons : plus de 300 Ko ; 1 000 000 : bien plus (" + std::to_string(b200 / 1024) + " Ko, "
+                                                    + std::to_string(b1m / 1024) + " Ko)");
+    }
+    const fs::path dir = fs::temp_directory_path() / "xpg_ai_reseau_parties";
+    fs::remove_all(dir);
+    std::string big;   // ~ 420 Ko, une derniere ligne reconnaissable
+    for (int i = 1; big.size() < 420 * 1024; ++i) big += "Pompe_" + std::to_string(i) + ";marche;" + std::to_string(i % 97) + ";defaut " + std::to_string(i % 13) + "\n";
+    big += "DERNIERE_LIGNE;fin\n";
+    writeFile(dir / "mesures.csv", big);
+    const auto att = [&] {
+        ai::ProviderAttachment a;
+        a.name = "mesures.csv";
+        a.mediaType = "text/csv";
+        a.path = U(dir / "mesures.csv");
+        a.bytes = fs::file_size(dir / "mesures.csv");
+        return a;
+    };
+    check(ai::planAttachment(att()).note.empty(), "un texte de 420 Ko : plus d'annonce << coupe >>");
+    // le corps : un grand modele (1 000 000 de jetons) - le fichier part ENTIER, en parties
+    {
+        ai::ProviderRequest r = simpleRequest("Quelles pompes sont en defaut ?");
+        r.contextTokens = 1000000;
+        r.turns[0].attachments = {att()};
+        std::vector<std::string> notes;
+        const std::string body = ai::anthropicBody(r, &notes);
+        check(has(body, "DERNIERE_LIGNE") && has(body, "partie 1/5") && has(body, "partie 5/5") && notes.empty() && !has(body, "coup\xC3\xA9"),
+              "1 000 000 de jetons : 420 Ko partent entiers, en 5 parties, sans note");
+        const std::string oa = ai::openAIBody(r, true, true, &notes);
+        check(has(oa, "DERNIERE_LIGNE") && has(oa, "partie 5/5") && notes.empty(), "compatible OpenAI : pareil");
+    }
+    // le corps sans lecture prealable : une petite fenetre - les premieres parties, le reste DIT (a l'IA et a l'utilisateur)
+    {
+        ai::ProviderRequest r = simpleRequest("Quelles pompes sont en defaut ?");
+        r.contextTokens = 120000;
+        r.turns[0].attachments = {att()};
+        std::vector<std::string> notes;
+        const std::string body = ai::anthropicBody(r, &notes);
+        check(has(body, "partie 1/5") && !has(body, "DERNIERE_LIGNE") && has(body, "ne sont pas envoy") && notes.size() == 1
+                  && has(notes[0], "ne tient pas entier"),
+              "120 000 jetons, sans lecture prealable : les parties qui tiennent, le reste dit (" + (notes.empty() ? std::string{} : notes[0]) + ")");
+    }
+    // le fournisseur : les parties en trop LUES A PART (une demande chacune, sur le fil), leurs extraits a leur place
+    useFakeNet();
+    tp::forgetExtracts();
+    {
+        ai::ProviderRequest r = simpleRequest("Quelles pompes sont en defaut ?");
+        r.contextTokens = 138000;   // ~ 255 Ko de place : 2 parties telles quelles (192 Ko), 3 lues a part
+        r.turns[0].attachments = {att()};
+        const auto room = tp::budgetBytes(r, 0);
+        check(room > 225 * 1024 && room < 300 * 1024, "la place de l'essai : " + std::to_string(room / 1024) + " Ko");
+        for (int i = 3; i <= 5; ++i) g_net.push(sseReply(streamText("EXTRAIT_" + std::to_string(i) + " : Pompe_9 en defaut")));
+        g_net.push(sseReply(streamText("Pompe_9 est en defaut.")));
+        ai::AnthropicProvider p(fastRetries());
+        check(p.start(r), "start : la main rendue tout de suite (la lecture se fait sur le fil)");
+        const auto ev = runToEnd(p, 10000);
+        const std::size_t n = g_net.count();
+        const std::string first = g_net.at(0).body, last = g_net.at(n - 1).body;
+        int lectures = 0, prereadUsage = 0;
+        std::string note;
+        for (const auto& e : ev) {
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "lecture") ++lectures;
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "note") note = e.detail;
+            if (e.type == ai::ProviderEvent::Type::Usage && e.preread) ++prereadUsage;
+        }
+        check(n == 4, "3 lectures prealables puis la demande : 4 requetes (" + std::to_string(n) + ")");
+        check(has(first, "partie 3/5") && has(first, "Quelles pompes sont en defaut") && !has(first, "proposer_operations"),
+              "une lecture prealable : la partie, la demande, sans outil");
+        check(has(last, "partie 1/5") && has(last, "partie 2/5") && has(last, "EXTRAIT_3") && has(last, "EXTRAIT_5") && has(last, "lue \xC3\xA0 part")
+                  && !has(last, "DERNIERE_LIGNE"),
+              "la demande : 2 parties telles quelles + 3 extraits (rien de coupe en silence)");
+        check(lectures == 3 && prereadUsage == 3 && allText(ev) == "Pompe_9 est en defaut.", "l'etat << Lecture de ... partie i/5 >> et les jetons des lectures");
+        check(has(note, "ne tient pas entier") && has(note, "lue(s) \xC3\xA0 part"), "la note pour l'utilisateur : " + note);
+        // la meme demande encore (un tour de plus, la piece dans un tour ancien) : les extraits gardes, pas relus
+        g_net.reset();
+        ai::ProviderRequest r2 = r;
+        ai::ProviderTurn a1;
+        a1.role = ai::ProviderTurn::Role::Assistant;
+        a1.text = "Pompe_9 est en defaut.";
+        ai::ProviderTurn u2;
+        u2.text = "Et la pompe 12 ?";
+        r2.turns.push_back(a1);
+        r2.turns.push_back(u2);
+        g_net.push(sseReply(streamText("Non.")));
+        ai::AnthropicProvider p2(fastRetries());
+        check(p2.start(r2), "le tour suivant : start");
+        (void)runToEnd(p2, 10000);
+        check(g_net.count() == 1 && has(g_net.at(0).body, "EXTRAIT_4"), "le tour suivant : les extraits gardes, aucune nouvelle lecture");
+    }
+    // une lecture qui echoue : la partie est DITE non lue, la demande part quand meme
+    tp::forgetExtracts();
+    g_net.reset();
+    {
+        ai::ProviderRequest r = simpleRequest("Quelles pompes sont en defaut ?");
+        r.contextTokens = 138000;
+        r.turns[0].attachments = {att()};
+        g_net.push(errorReply(400, "invalid_request_error", "mauvaise demande"));
+        g_net.push(errorReply(400, "invalid_request_error", "mauvaise demande"));
+        g_net.push(errorReply(400, "invalid_request_error", "mauvaise demande"));
+        g_net.push(sseReply(streamText("Je n'ai pas tout lu.")));
+        ai::AnthropicProvider p(fastRetries());
+        (void)p.start(r);
+        const auto ev = runToEnd(p, 10000);
+        const std::string last = g_net.at(g_net.count() - 1).body;
+        check(allText(ev) == "Je n'ai pas tout lu." && has(last, "ne sont pas envoy") && has(last, "partie 1/5"),
+              "les lectures echouent : la demande part, les parties non lues sont dites");
+    }
+    tp::forgetExtracts();
+    fs::remove_all(dir);
 }
 
 // =============================================================================
@@ -1719,6 +1874,7 @@ int main() {
     testStream();
     testApiErrors();
     testProvider();
+    testTextParts();
     testCurl();
     testSecret();
     testAssistantLive();

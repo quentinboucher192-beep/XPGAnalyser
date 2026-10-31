@@ -39,6 +39,10 @@ struct ProviderAttachment {
     std::string    mediaType;   // "image/png", "application/pdf", "text/csv"...
     std::string    path;        // la copie dans IA/pieces-jointes/<id>/ (UTF-8)
     std::uintmax_t bytes{0};
+    // 1.20.0 : un texte prepare sur le fil du fournisseur (AiTextParts.hpp) - les blocs qui partent a sa place
+    // (ses parties, les extraits des parties lues a part, ce qui n'a pas pu partir). Faux : le corps le lit lui-meme.
+    bool                     prepared{false};
+    std::vector<std::string> blocks;
 };
 
 // Un tour de la conversation, dans l'ordre.
@@ -109,7 +113,9 @@ struct ProviderLimits {
 struct ProviderEvent {
     enum class Type : std::uint8_t {
         Status,    // text : "connexion", "reflexion", "ecriture", "operations" (l'appel d'outil
-                   //        s'ecrit), "reprise" (une nouvelle tentative : detail) - l'indicateur
+                   //        s'ecrit), "reprise" (une nouvelle tentative : detail) - l'indicateur ;
+                   //        1.20.0 : "lecture" (une partie d'un gros texte joint lue a part : detail),
+                   //        "note" (ce qui n'est pas parti entier : detail, pour l'utilisateur)
         Text,      // text : un morceau de la reponse
         ToolUse,   // un appel d'outil COMPLET : toolUseId, toolName, toolInputJson
         Done,      // la fin : stopReason ("end_turn", "tool_use", "max_tokens", "refusal", "arrete")
@@ -130,6 +136,9 @@ struct ProviderEvent {
     // limite du service (known() : dite).
     ProviderUsage  usage;
     ProviderLimits limits;
+    // 1.20.0 : Usage d'une lecture prealable (une partie d'un gros texte joint, lue a part) : a AJOUTER a la
+    // consommation de la demande (pas le dernier recu : celui de la reponse elle-meme).
+    bool           preread{false};
 };
 
 class Provider {

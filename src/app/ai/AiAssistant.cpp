@@ -1209,7 +1209,16 @@ void Assistant::pollLive() {
                     notice_ = "Assistant IA : " + e.detail;
                     ph = Phase::Waiting;
                 }
-                const std::string detail = e.text == "reprise" || e.text == "sans-outil" ? e.detail : e.text == "connexion" ? gen_.detail : std::string{};
+                // 1.20.0 : une partie d'un gros texte joint lue a part (l'etat le dit) ; ce qui n'est pas parti entier (dit).
+                if (e.text == "lecture") ph = Phase::Waiting;
+                if (e.text == "note") {
+                    notice_ = "Assistant IA : " + e.detail;
+                    ++revision_;
+                    break;
+                }
+                const std::string detail = e.text == "reprise" || e.text == "sans-outil" || e.text == "lecture" ? e.detail
+                                           : e.text == "connexion" && gen_.detail.rfind("Lecture de ", 0) != 0 ? gen_.detail
+                                                                                                                : std::string{};
                 if (detail != gen_.detail) {
                     gen_.detail = detail;
                     ++revision_;
@@ -1236,7 +1245,14 @@ void Assistant::pollLive() {
                     limit_.clock = now();
                     limit_.provider = gen_.provider;
                 }
-                if (!e.usage.empty()) gen_.usage = e.usage;
+                if (e.preread) {   // 1.20.0 : une lecture prealable - ajoutee, pas remplacee
+                    gen_.preread.input += e.usage.input;
+                    gen_.preread.output += e.usage.output;
+                    gen_.preread.cacheRead += e.usage.cacheRead;
+                    gen_.preread.cacheWrite += e.usage.cacheWrite;
+                } else if (!e.usage.empty()) {
+                    gen_.usage = e.usage;
+                }
                 ++revision_;
                 break;
             case ProviderEvent::Type::ToolUse:
@@ -1274,7 +1290,8 @@ void Assistant::finishLive(const std::string& stopReason) {
     m.model = gen_.model;
     // 1.16.0 : les jetons de la reponse (le cumul de la conversation) ; la proposition en texte : le
     // bloc ```json sort de la bulle (la carte la montre ; le tour suivant la reecrit pour le modele).
-    if (!gen_.usage.empty()) m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total()));
+    if (!gen_.usage.empty() || !gen_.preread.empty())
+        m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total()));
     if (gen_.textTool && gen_.tool) {
         std::string rest;
         if (extractProposalBlock(m.text, nullptr, &rest)) m.text = rest;
@@ -1339,7 +1356,8 @@ void Assistant::failLive(const ProviderEvent& e) {
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
         m.text = trim(gen_.text);
-        if (!gen_.usage.empty()) m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total()));   // 1.16.0
+        if (!gen_.usage.empty() || !gen_.preread.empty())
+            m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total()));   // 1.16.0
         m.note = e.text.empty() ? std::string("Erreur inconnue.") : e.text;
         m.state = "erreur";
         m.date = isoDate(now());
@@ -1439,8 +1457,13 @@ bool Assistant::pollModels() {
 
 // ---- 1.16.0 (FOURNISSEURS) : la limite et la consommation en direct, le budget -----------------------
 void Assistant::recordLive() {
-    if (gen_.usage.empty() || gen_.provider.empty()) return;
-    recordUsage(gen_.provider, gen_.usage, gen_.conversation);
+    if ((gen_.usage.empty() && gen_.preread.empty()) || gen_.provider.empty()) return;
+    ProviderUsage all = gen_.usage;   // 1.20.0 : la reponse et ses lectures prealables
+    all.input += gen_.preread.input;
+    all.output += gen_.preread.output;
+    all.cacheRead += gen_.preread.cacheRead;
+    all.cacheWrite += gen_.preread.cacheWrite;
+    recordUsage(gen_.provider, all, gen_.conversation);
     limit_.last = gen_.usage;
     limit_.contextUsed = gen_.usage.input + gen_.usage.cacheRead + gen_.usage.cacheWrite;
     limit_.answered = true;
@@ -1482,7 +1505,7 @@ UsageBand Assistant::usageBand(double now) const {
     st.conversation = 0;
     if (const auto* c = current())
         for (const auto& m : c->messages) st.conversation += m.extra.integer("jetons");
-    if (gen_.live && gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += gen_.usage.total();   // en cours
+    if (gen_.live && gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += gen_.usage.total() + gen_.preread.total();   // en cours
     st.contextWindow = contextWindow();
     return app::ai::usageBand(settings_, st, usageTotals(), localService(), now);
 }

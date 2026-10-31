@@ -318,6 +318,8 @@ private:
         // 1.16.0 (FOURNISSEURS) : les jetons recus (le dernier Usage fait foi) ; la proposition en texte.
         ProviderUsage           usage;
         bool                    textTool{false};
+        // 1.20.0 : les lectures prealables (les parties d'un gros texte joint lues a part) - ajoutees a la consommation.
+        ProviderUsage           preread;
     };
 
     Host                      host_;
