@@ -67,7 +67,13 @@ L'installateur dépose `installation.json` et la copie du `.xia` dans `ProgramDa
 
 ## 5. Les fichiers modifiés
 
-(à compléter)
+Le moteur de l'apprentissage était déjà dans la 1.16.1 (`AiLearning`, `AiLearningFile`, les mesures). Depuis la 1.16.1, 15 fichiers :
+- `AiMemoryDialog` (.cpp, .hpp) : le tableau de bord (les tuiles, les deux graphiques, les thèmes, la liste, le détail modifiable, À lui apprendre, Essayer une phrase, Importer et Exporter) ; la page des connaissances dedans ;
+- `AiAssistant` (.cpp, .hpp) et `AiPanel.cpp` : « Essayer une phrase » sur le projet ouvert (sans rien appliquer ni mesurer) ;
+- `ScriptRunner.cpp` : les commandes de séance du tableau de bord ;
+- `installateur/XPGAnalyser.iss` : les pages Assistant IA et Un apprentissage d'un autre PC, `installation.json`, les paramètres du silencieux ;
+- la version (CMake, `Version.hpp`, `outils/config.ini`), les notes, l'aide (`guide-ihm.txt`, `HmiGuideText.cpp`) ;
+- les essais : `ai_memoire_test.cpp` (le tableau de bord), `hmi_editor_test.cpp` (73 versions, 517 notes).
 
 ## 6. Les limites
 
