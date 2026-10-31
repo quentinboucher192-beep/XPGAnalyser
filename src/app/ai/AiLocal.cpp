@@ -694,8 +694,9 @@ private:
         hmi::Kind   kind;
         std::string text, color, name;
     };
-    LocalReply create(std::vector<NewObject> wanted, const Position& pos, std::string intro = {}) const;
-    LocalReply createFromMentions() const;
+    // `into` : la vue neuve d'un creer_vue (les objets s'y posent) ; nul : la vue ouverte.
+    LocalReply create(std::vector<NewObject> wanted, const Position& pos, std::string intro = {}, const hmi::View* into = nullptr) const;
+    LocalReply createFromMentions(const hmi::View* into = nullptr) const;
 
     // Une variable dite : son nom exact s'il existe ; sinon les candidates.
     struct VarFind {
@@ -1274,10 +1275,10 @@ LocalReply Engine::listViews() const {
 }
 
 // ---- creer des objets ---------------------------------------------------------------------------
-LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, std::string intro) const {
-    if (!view()) return needView();
+LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, std::string intro, const hmi::View* into) const {
+    if (!view() && !into) return needView();
     if (wanted.empty()) return notUnderstood();
-    const hmi::View& v = *view();
+    const hmi::View& v = into ? *into : *view();
     constexpr std::size_t kMax = 60;
     std::string capped;
     if (wanted.size() > kMax) {
@@ -1286,7 +1287,7 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
     }
     // la reference d'une position relative
     const hmi::Object* ref = nullptr;
-    if (pos.rel != Rel::None) {
+    if (pos.rel != Rel::None && !into) {
         const Target t = firstTarget(pos.refAt, pos.end);
         if (!t.question.empty()) return ask(t.question);
         if (!t.objects.empty()) ref = t.objects.front();
@@ -1397,7 +1398,7 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
             boxes[i].y = cy;
             cx += boxes[i].w + gap;
         }
-        where = "\xC3\xA0 un endroit libre de " + viewName() + " (x = " + num(boxes.front().x) + ", y = " + num(boxes.front().y) + ")";
+        where = "\xC3\xA0 un endroit libre de " + (into ? guill(into->name) : viewName()) + " (x = " + num(boxes.front().x) + ", y = " + num(boxes.front().y) + ")";
     }
     // les operations
     std::map<hmi::Kind, std::size_t> perKind;
@@ -1457,9 +1458,9 @@ LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, st
     return finish(std::move(p), std::move(text));
 }
 
-LocalReply Engine::createFromMentions() const {
-    if (!view()) return needView();
-    const Position pos = position();
+LocalReply Engine::createFromMentions(const hmi::View* into) const {
+    if (!view() && !into) return needView();
+    const Position pos = into ? Position{} : position();
     std::vector<NewObject> wanted;
     std::vector<const Mention*> news;
     for (const auto& m : mentions_) {
@@ -1526,7 +1527,7 @@ LocalReply Engine::createFromMentions() const {
             wanted.push_back(std::move(w));
         }
     }
-    return create(std::move(wanted), pos);
+    return create(std::move(wanted), pos, {}, into);
 }
 
 // ---- "et une autre", "la meme en bleu", "pareil pour P2" -----------------------------------------
@@ -1747,8 +1748,22 @@ LocalReply Engine::createView() const {
     op.props = {{"largeur", std::to_string(w)}, {"hauteur", std::to_string(h)}};
     if (!bg.empty()) op.props.emplace_back("fond", bg);
     p.ops.push_back(std::move(op));
-    return finish(std::move(p), "Je propose de cr\xC3\xA9" "er la vue **" + name + "** en " + std::to_string(w) + "\xC3\x97" + std::to_string(h)
-                                    + (bg.empty() ? std::string{} : ", fond " + bg) + ". Elle s'ouvrira apr\xC3\xA8s Appliquer ; Ctrl+Z la retire.");
+    std::string text = "Je propose de cr\xC3\xA9" "er la vue **" + name + "** en " + std::to_string(w) + "\xC3\x97" + std::to_string(h)
+                       + (bg.empty() ? std::string{} : ", fond " + bg) + ".";
+    // "une vue Vue_Pompes avec 3 pompes" : les objets se posent dans la vue neuve (les operations qui suivent
+    // un creer_vue la visent)
+    if (std::any_of(mentions_.begin(), mentions_.end(), [](const Mention& m) { return m.indefinite; })) {
+        hmi::View fresh;
+        fresh.name = name;
+        fresh.width = w;
+        fresh.height = h;
+        LocalReply objs = createFromMentions(&fresh);
+        if (!objs.proposal) return objs;   // une question (combien ?), dite telle quelle
+        for (auto& o : objs.proposal->ops) p.ops.push_back(std::move(o));
+        text += " Dedans : " + objs.text;
+    }
+    text += "\nElle s'ouvrira apr\xC3\xA8s Appliquer ; Ctrl+Z retire tout.";
+    return finish(std::move(p), std::move(text));
 }
 
 // ---- des variables -----------------------------------------------------------------------------
@@ -2450,13 +2465,21 @@ LocalReply Engine::run() {
     // le synoptique
     if (has("synoptique") || (has("station") && has("pompage"))) return synoptic();
     // une vue neuve
-    if (createVerb && (phrase("une vue") || phrase("nouvelle vue") || phrase("un ecran") || phrase("une page") || phrase("la vue")) && mentions_.empty()
+    if (createVerb && (phrase("une vue") || phrase("nouvelle vue") || phrase("un ecran") || phrase("une page") || (phrase("la vue") && mentions_.empty()))
         && !(has("variable") || has("variables")))
         return createView();
     // des variables
     if ((createVerb || hasPrefix("propos") || hasPrefix("import")) && (hasPrefix("variable") || has("ddt") || has("ddts")
                                                                        || ((has("types") || has("type")) && (has("automate") || has("ihm")))))
         return createVariables();
+    // creer des objets neufs ("cree 4 voyants alignes") : avant les gestes d'edition que la phrase peut citer
+    {
+        const Position early = position();
+        const bool fresh = std::any_of(mentions_.begin(), mentions_.end(), [&](const Mention& m) {
+            return m.indefinite && !(early.rel != Rel::None && m.at >= early.refAt && m.at < early.end);
+        });
+        if (createVerb && fresh && !hasPrefix("associ") && !hasPrefix("reli")) return createFromMentions();
+    }
     // associer
     if (hasPrefix("associ") || hasPrefix("reli") || has("lie") || has("lier") || hasPrefix("branch") || hasPrefix("connect"))
         return bind();

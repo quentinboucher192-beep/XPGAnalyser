@@ -187,6 +187,8 @@ void testCreate() {
     check(countKind(b.ask("ajoute un moteur"), "Motor") == 1, "un moteur");
     check(countKind(b.ask("ajoute un voyant TOR"), "Indicator") == 1, "un voyant TOR");
     check(countKind(b.ask("ajoute un bouton poussoir"), "PushButton") == 1, "un bouton poussoir");
+    check(countKind(b.ask("cr\xC3\xA9" "e 4 voyants align\xC3\xA9s"), "Indicator") == 4, "cree 4 voyants alignes : creer l'emporte sur aligner");
+    check(countKind(b.ask("ajoute un bouton D\xC3\xA9marrer"), "PushButton") == 1, "un bouton Demarrer : un bouton de commande");
     // des boutons Marche et Arret sous la pompe P1
     r = b.ask("mets deux boutons Marche et Arr\xC3\xAAt sous la pompe P1");
     check(countKind(r, "PushButton") == 2, "deux boutons (de commande) Marche et Arret");
@@ -370,6 +372,18 @@ void testVariablesAndView() {
     }
     op = firstOp(r = b.ask("cree une nouvelle vue de 1280 x 800"));
     check(op && op->action == ai::Operation::Action::View && prop(*op, "largeur") == "1280" && op->name == "Vue_1", "une vue sans nom : Vue_1, 1280x800");
+    r = b.ask("cr\xC3\xA9" "e une vue Vue_Pompes avec 3 pompes et un voyant");
+    check(firstOp(r) && firstOp(r)->action == ai::Operation::Action::View && countKind(r, "Pump") == 3 && countKind(r, "Indicator") == 1
+              && r.proposal->ops[1].name == "Pompe_1",
+          "une vue neuve et ses objets (les noms de la vue neuve : Pompe_1)");
+    if (valid(b, r, "vue et objets")) {
+        const std::size_t views = b.doc->project.views.size();
+        check(b.applyUndo(r, [&] {
+                  const auto* nv = b.doc->project.viewByName("Vue_Pompes");
+                  return nv && nv->objects.size() == 4;
+              }) && b.doc->project.views.size() == views,
+              "la vue et ses 4 objets en un pas, repris par Ctrl+Z");
+    }
     r = b.ask("cree une vue Vue_Test");
     check(!r.proposal && has(r.text, "existe d\xC3\xA9j\xC3\xA0"), "une vue qui existe : refusee");
 }
