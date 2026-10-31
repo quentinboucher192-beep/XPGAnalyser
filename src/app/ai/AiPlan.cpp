@@ -956,7 +956,7 @@ Report report(const hmi::Project& before, const hmi::Project& after, Plan& plan,
         std::vector<std::string> addressed, retyped;
         for (const auto& v : after.programs.variables)
             if (const hmi::Variable* old = before.variable(v.name)) {
-                if (old->equipment != v.equipment || old->address != v.address || old->places.size() != v.places.size())
+                if (old->equipment != v.equipment || old->address != v.address || old->places != v.places)
                     addressed.push_back(v.name + (old->address.empty() ? std::string{} : " (" + old->address + " \xE2\x86\x92 " + v.address + ")"));
                 if (old->type != v.type) retyped.push_back(v.name);
             }

@@ -968,6 +968,43 @@ void tools118() {
         check(anyHas(bk.errors, "introuvable"), "une variable inconnue : refusee (jamais inventee)");
         check(anyHas(bk.errors, "illisible"), "une adresse illisible : refusee");
         check(anyHas(bk.errors, "Ethernet"), "adresser un equipement Ethernet : refuse");
+        // 1.20.0 : un MEMBRE de structure, a toute profondeur (Config.Poids, Config.Sous.Valeur) : sa place propre
+        auto sub = type("T_Sous", {{"Valeur", "INT", ""}, {"Seuil", "REAL", ""}});
+        auto conf = type("T_Conf", {{"Poids", "INT", ""}, {"Sous", "T_Sous", ""}});
+        auto cv = vars({{"Config", "T_Conf", "", ""}});
+        auto m1 = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW200"}});
+        m1.variable = "Config.Poids";
+        auto m2 = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW210"}});
+        m2.variable = "Config.Sous.Valeur";
+        auto pm = f.proposal({eq, sub, conf, cv, m1, m2});
+        const auto mk = ai::validate(f.doc->project, pm);
+        check(mk.ok(), "adresser des membres imbriques : valide (" + errorsOf(mk) + ")");
+        check(f.apply(pm, &why), "appliques (" + why + ")");
+        const auto* cfg = f.doc->project.variable("Config");
+        auto placeOf = [&](const std::string& path) {
+            if (cfg)
+                for (const auto& pl : cfg->places)
+                    if (pl.path == path) return pl.address;
+            return std::string{};
+        };
+        check(cfg && cfg->equipment == "Centrale_1" && placeOf("Poids") == "%MW200" && placeOf("Sous.Valeur") == "%MW210",
+              "Config liee a Centrale_1 ; Poids en %MW200, Sous.Valeur en %MW210");
+        // sur la variable existante : une nouvelle adresse remplace l'ancienne (meme chemin)
+        auto m3 = op(A::Address, {}, {{"adresse", "%MW220"}});
+        m3.variable = "Config.Sous.Valeur";
+        check(f.apply(f.proposal({m3}), &why) && placeOf("Sous.Valeur") == "%MW220" && cfg->places.size() == 2,
+              "readresser Config.Sous.Valeur (variable existante) : remplacee, pas doublee (" + why + ")");
+        auto unknownMember = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW230"}});
+        unknownMember.variable = "Config.Sous.Inconnu";
+        auto otherEq = op(A::Address, {}, {{"equipement", "Centrale_2"}, {"adresse", "%MW240"}});
+        otherEq.variable = "Config.Poids";
+        auto eq2 = op(A::Equipment, "Centrale_2", {{"adresse", "192.168.1.41"}});
+        auto noRoot = op(A::Address, {}, {{"equipement", "Centrale_1"}, {"adresse", "%MW250"}});
+        noRoot.variable = "Pas_De_Config.Poids";
+        const auto mb = ai::validate(f.doc->project, f.proposal({unknownMember, eq2, otherEq, noRoot}));
+        check(anyHas(mb.errors, "n'est pas un membre") && anyHas(mb.errors, "Valeur"), "un membre inconnu : refuse, les membres listes");
+        check(anyHas(mb.errors, "tous ses membres suivent"), "un membre vers un autre equipement : refuse");
+        check(anyHas(mb.errors, "Pas_De_Config") && anyHas(mb.errors, "introuvable"), "une racine inconnue : refusee (jamais inventee)");
     }
     // -- un script, une fonction (ses blocs VAR deviennent ses declarations), une alarme : compiles, jamais executes
     {

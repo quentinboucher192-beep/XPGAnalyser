@@ -1323,6 +1323,112 @@ struct Run {
         return true;
     }
 
+    // 1.20.0 : ADRESSER UN MEMBRE. La variable (la racine du chemin) doit exister ; le chemin doit etre un membre de son
+    // type (lu dans le type deplie : structures imbriquees, tableaux) - jamais invente. La variable suit un seul
+    // equipement : liee a un autre, c'est refuse ; pas encore liee, elle l'est (dit). L'adresse du membre va dans
+    // Variable::places (remplace celle du meme chemin).
+    bool addressMember(const Operation& op, const std::string& path, std::size_t cut) {
+        const std::string rootName = path.substr(0, cut);
+        std::string rel = path.substr(cut);
+        if (!rel.empty() && rel.front() == '.') rel.erase(0, 1);
+        const std::string eqName = prop(op, "equipement");
+        const std::string addr = prop(op, "adresse");
+        const std::string at = "Adresser \xC2\xAB " + path + " \xC2\xBB : ";
+        if (!prop(op, "formule").empty()) return fail(at + "une formule d'adresse se donne sur la variable enti\xC3\xA8re (" + rootName + "), pas sur un membre.");
+        hmi::Variable* nv = newVarMut(rootName);
+        const hmi::Variable* pv = nv ? nullptr : project.variable(rootName);
+        if (!nv && !pv) {
+            if (environment().plcName && environment().plcName(rootName))
+                return fail(at + "c'est une variable de l'automate reli\xC3\xA9 : seule une variable IHM se lie \xC3\xA0 un \xC3\xA9quipement.");
+            std::string msg = at + "variable IHM \xC2\xAB " + rootName + " \xC2\xBB introuvable (l'Assistant n'invente pas de variable)";
+            if (const auto near = nearVariables(project, rootName); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+            return fail(msg + ".");
+        }
+        hmi::Variable v = nv ? *nv : *pv;
+        for (const auto& a : addressed)
+            if (!nv && a.id == v.id) v = a;
+        // le membre existe-t-il ? (le type deplie : une feuille de ce nom, ou un membre compose qui en a dessous)
+        hmi::Project probed;
+        if (!newTypes.empty()) probed = probe();
+        const hmi::Project& types = newTypes.empty() ? project : probed;
+        std::string error;
+        const auto leaves = hmi::types::leafVariables(types, v, nullptr, nullptr, &error);
+        const std::string full = upperOf(v.name + "." + rel), fullIdx = upperOf(v.name + rel);
+        bool found = false;
+        // pour l'aide : les membres du niveau ou le chemin s'arrete (Config.Sous.Inconnu : ceux de Config.Sous), sinon du premier
+        const auto lastSep = rel.find_last_of(".[");
+        const std::string parent = upperOf(v.name + (lastSep == std::string::npos ? std::string{} : (rel.front() == '[' ? "" : ".") + rel.substr(0, lastSep)));
+        std::vector<std::string> firstLevel, level;
+        auto headAfter = [](const std::string& name, std::size_t from) {
+            std::string tail = name.size() > from ? name.substr(from) : std::string{};
+            if (!tail.empty() && tail.front() == '.') tail.erase(0, 1);
+            const auto stop = tail.find_first_of(".[", tail.empty() || tail.front() != '[' ? 0 : 1);
+            return stop == std::string::npos ? tail : tail.substr(0, stop);
+        };
+        auto keep = [](std::vector<std::string>& list, const std::string& head) {
+            if (!head.empty() && std::find(list.begin(), list.end(), head) == list.end() && list.size() < 12) list.push_back(head);
+        };
+        for (const auto& l : leaves) {
+            const std::string n = upperOf(l.name);
+            for (const auto& want : {full, fullIdx})
+                if (n == want || (n.size() > want.size() && n.compare(0, want.size(), want) == 0 && (n[want.size()] == '.' || n[want.size()] == '[')))
+                    found = true;
+            keep(firstLevel, headAfter(l.name, v.name.size()));
+            if (n.size() > parent.size() && n.compare(0, parent.size(), parent) == 0 && (n[parent.size()] == '.' || n[parent.size()] == '['))
+                keep(level, headAfter(l.name, parent.size()));
+        }
+        std::string owner = v.name;
+        if (!level.empty() && lastSep != std::string::npos) {
+            firstLevel = std::move(level);
+            owner += (rel.front() == '[' ? "" : ".") + rel.substr(0, lastSep);
+        }
+        if (!found)
+            return fail(at + "\xC2\xAB " + rel + " \xC2\xBB n'est pas un membre de " + v.name + " (" + v.type + ")"
+                        + (!error.empty() ? " - le type ne se d\xC3\xA9plie pas : " + error
+                                          : firstLevel.empty() ? std::string{} : " ; les membres de " + owner + " : " + joinList(firstLevel))
+                        + " (l'Assistant n'invente pas de membre).");
+        if (hmi::types::isInternalMember(v, rel))
+            return fail(at + "ce membre est interne (il reste dans l'IHM, l'\xC3\xA9quipement ne le lit pas) : retire-le des membres internes d'abord.");
+        const hmi::Equipment* eq = equipmentNamed(eqName.empty() ? v.equipment : eqName);
+        if (!eq) return fail(at + "\xC3\xA9quipement \xC2\xAB " + (eqName.empty() ? v.equipment : eqName) + " \xC2\xBB introuvable.");
+        if (!eq->modbus()) return fail(at + eq->name + " est un \xC3\xA9quipement Ethernet TCP/IP : il n'a pas d'adresses (Modbus TCP/IP seulement).");
+        if (!v.equipment.empty() && !iequal(v.equipment, eq->name))
+            return fail(at + v.name + " est li\xC3\xA9" "e \xC3\xA0 " + v.equipment + " : tous ses membres suivent cet \xC3\xA9quipement (pas " + eq->name + ").");
+        if (v.equipment.empty()) {
+            v.equipment = eq->name;
+            warn("Adresser " + path + " : " + v.name + " n'\xC3\xA9tait li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement - elle l'est \xC3\xA0 " + eq->name
+                 + (v.address.empty() ? std::string(" (sans adresse de d\xC3\xA9part : seuls les membres adress\xC3\xA9s sont lus)") : std::string{}) + ".");
+        }
+        if (addr.empty()) {
+            if (v.address.empty()) return fail(at + "donne l'adresse du membre (" + v.name + " n'a pas d'adresse de d\xC3\xA9part d'o\xC3\xB9 la calculer).");
+            made("Adresse", path, eq->name + " : suit l'adresse de " + v.name + " (" + v.address + ")");
+        } else {
+            std::string bad;
+            if (hmi::equip::canonicalAddress(addr, &bad).empty())
+                return fail(at + "adresse \xC2\xAB " + addr + " \xC2\xBB illisible" + (bad.empty() ? std::string{} : " (" + bad + ")")
+                            + " (ex. %MW100, %MF20, %M5, %MW10.3, 40101).");
+            bool replaced = false;
+            for (auto& pl : v.places)
+                if (iequal(pl.path, rel)) {
+                    pl.address = addr;
+                    replaced = true;
+                }
+            if (!replaced) v.places.push_back({rel, addr});
+            made("Adresse", path, eq->name + " " + addr);
+        }
+        if (nv) *nv = v;
+        else {
+            bool replaced = false;
+            for (auto& a : addressed)
+                if (a.id == v.id) {
+                    a = v;
+                    replaced = true;
+                }
+            if (!replaced) addressed.push_back(v);
+        }
+        return true;
+    }
+
     // ADRESSER : une variable IHM (du projet ou creee plus haut) liee a un equipement Modbus, a son adresse ; une formule de
     // lien pour les cases d'un tableau de structures (hmi::addr, << Modifier l'adresse dans toutes les cases >>).
     bool address(const Operation& op) {
@@ -1331,6 +1437,9 @@ struct Run {
         const std::string addr = prop(op, "adresse");
         const std::string formula = prop(op, "formule");
         const std::string at = "Adresser \xC2\xAB " + varName + " \xC2\xBB : ";
+        // 1.20.0 : UN MEMBRE d'une structure, a toute profondeur ("Config.ConfPoids", "Config.Sous.Valeur", "Tab[2].Pos") :
+        // son adresse va dans les adresses corrigees de sa variable (Variable::places), comme l'ecran des variables.
+        if (const auto cut = varName.find_first_of(".["); cut != std::string::npos && cut > 0) return addressMember(op, varName, cut);
         hmi::Variable* nv = newVarMut(varName);
         const hmi::Variable* pv = nv ? nullptr : project.variable(varName);
         if (!nv && !pv) {
