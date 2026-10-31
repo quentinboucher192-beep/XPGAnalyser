@@ -104,11 +104,24 @@ Fichiers livrés :
 1. Lance `API-IHM-Studio-Setup-1.20.2.exe` : il met à jour la version installée au même endroit et garde tes données.
 2. Windows SmartScreen peut avertir (installateur non signé) : « Informations complémentaires », puis « Exécuter quand même ».
 
-EMPREINTES
+Le format des projets ne change pas (33) : la case Incidents ne s'écrit que décochée. Les enregistrements passent au format 3 (avec la copie du projet).
+
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.20.2.exe` (42,7 Mo, 44 767 233 octets) :
+`1354211662F89CAC0FA7877C5F905A5B6F24B81DE62405D7CB68BEE5CA8830F7`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.20.2-portable.zip` (33,1 Mo) :
+  `729C5B5BE9A4D7AF05F84B2A9ED1EA68D441E87DBA2E306397F3862E26719C52`
+- `IHM-Studio-1.20.2-portable.zip` (33,1 Mo) :
+  `6D77D78E8C103204820EA4E37126160FC05B944207853142B3A5D6D3A5933384`
 
 ### Les vérifications sous Windows (Wine)
 
-VERIFICATIONS
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.20.2` et `IHM Studio 1.20.2` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, par-dessus la 1.20.1 livrée, avec **une clé API d'essai** déposée dans `%APPDATA%\XpgAnalyzer\IA\cles` : « Installation process succeeded ».
+- La clé est **intacte** après l'installation (même empreinte avant et après) ; le journal dit « Clés API : 1 gardée (protégée par Windows ; la réinstallation n'y touche pas) ».
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.20.1 est faite.
 
 Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 
@@ -124,6 +137,8 @@ Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 ## 8. Ce qui a été optimisé pour livrer plus tôt
 
 - **Trois agents en parallèle** de mon travail, chacun dans ses fichiers (le volet Incidents ; les enregistrements ; les alarmes), vérifiés à la compilation sans toucher au dossier de construction ; relus, construits et essayés par moi avant d'être commités.
-- **La 1.20.1 fabriquée et vérifiée sous Wine pendant que j'écrivais la 1.20.2.**
-- Rien de recréé : le plan d'action et la vérification de fond de la 1.19/1.20, le presse-papiers et le bouton Copier de l'aide, le codeur JPEG et l'écrivain AVI, la recherche des listes du logiciel.
+- **La compilation Windows lancée pendant la compilation Linux** (les deux places de compilation de la machine occupées), puis reprise là où elle s'était arrêtée : seuls 64 fichiers restaient.
+- **La 1.21.0 commencée pendant que la 1.20.2 se compilait**, dans des copies séparées du dépôt (trois agents et moi), pour que rien ne se mélange à la version livrée.
+- **Les essais lancés en parallèle** (108 suites en 3 min 43 s).
+- Rien de recréé : le plan d'action et la vérification de fond de la 1.19/1.20, le presse-papiers et le bouton Copier de l'aide, le codeur JPEG et l'écrivain AVI, la recherche des listes du logiciel, la copie compressée et chiffrée des enregistrements.
 - Pas de captures ; l'installateur vérifié en silencieux sous Wine.
