@@ -3020,17 +3020,20 @@ namespace ui {
     void ToggleButton::onPaint(const PaintContext& ctx) {
         const auto& c = ctx.theme.color;
         const auto  r = bounds();
-        const gfx::Color fill = checked_ ? c.accent : hovered() ? c.rowAltBg : c.panelBg;
+        // 1.16.0 : grise, il se dessine grise (le bouton Afficher de la cle, sans connexion).
+        const bool on = enabled();
+        const gfx::Color fill = !on ? c.panelBg : checked_ ? c.accent : hovered() ? c.rowAltBg : c.panelBg;
         ctx.r.fillRoundedRect(r, fill, ctx.theme.metric.radius);
         ctx.r.strokeRect(r, c.border, 1.f);
-        if (focused()) drawFocusRing(ctx, r);
+        if (focused() && on) drawFocusRing(ctx, r);
 
         const auto m = ctx.r.measure(text_, ctx.theme.font.ui);
         ctx.r.drawText({ r.x + (r.w - m.width) * 0.5f, r.y + (r.h - m.height) * 0.5f },
-            text_, ctx.theme.font.ui, checked_ ? c.textInverted : c.text);
+            text_, ctx.theme.font.ui, !on ? c.textDisabled : checked_ ? c.textInverted : c.text);
     }
 
     EventResult ToggleButton::onEvent(const InputEvent& ev) {
+        if (!enabled()) return EventResult::Ignored;
         if (const auto* d = std::get_if<MouseDown>(&ev)) {
             if (d->button == MouseButton::Left && bounds().contains(d->pos)) {
                 grabFocus();

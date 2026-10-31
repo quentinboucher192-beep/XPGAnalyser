@@ -38,6 +38,12 @@ bool contains(std::string_view text, std::string_view piece) {
     return piece.empty() || upper(text).find(upper(trim(piece))) != std::string::npos;
 }
 
+// 1.16.0 : d'ou vient l'automate - "l'automate relie", ou "l'automate de MAST.XPG" (un .XPG joint).
+std::string sourceOf(const Env& env) {
+    const std::string s = env.plcSource ? env.plcSource() : std::string{};
+    return s.empty() ? std::string("l'automate reli\xC3\xA9") : "l'automate de " + s;
+}
+
 // "API.Niveau" -> "Niveau" (le nom tel que l'automate le declare).
 std::string bareName(std::string_view n) {
     if (n.size() > 4 && upper(n.substr(0, 4)) == "API.") n.remove_prefix(4);
@@ -77,7 +83,8 @@ std::vector<std::string> ddtNames(const std::vector<Env::PlcType>& types) {
 
 // Les DDT de l'automate a creer, dans l'ordre des dependances : `wanted` (des noms, sans casse) et ce qu'ils
 // emploient, sans ceux que l'IHM a deja ; un cycle n'est suivi qu'une fois.
-std::vector<Operation> orderedTypes(const hmi::Project& project, const std::vector<Env::PlcType>& all, const std::set<std::string>& wanted) {
+std::vector<Operation> orderedTypes(const hmi::Project& project, const std::vector<Env::PlcType>& all, const std::set<std::string>& wanted,
+                                    const std::string& from) {
     std::vector<Operation> out;
     const auto names = ddtNames(all);
     std::set<std::string> done, doing;
@@ -96,7 +103,7 @@ std::vector<Operation> orderedTypes(const hmi::Project& project, const std::vect
         Operation op;
         op.action = Operation::Action::Type;
         op.name = t.name;
-        op.props.emplace_back("description", t.comment.empty() ? "Le DDT " + t.name + " de l'automate reli\xC3\xA9" : t.comment);
+        op.props.emplace_back("description", t.comment.empty() ? "Le DDT " + t.name + " de " + from : t.comment);
         for (const auto& m : t.members) {
             const std::string type = hmiTypeOfPlc(m.type, names, project);
             if (type.empty()) continue;   // un membre sans equivalent (une instance de bloc) : ecarte
@@ -155,7 +162,9 @@ std::vector<Operation> variablesFromPlc(const hmi::Project& project, const Env& 
         const std::string hmiType = hmiTypeOfPlc(type, names, project);
         if (hmiType.empty()) continue;   // une instance de bloc (TON, un DFB) : pas une variable IHM
         std::string description = env.plcComment ? trim(env.plcComment(name)) : std::string{};
-        if (description.empty()) description = "La variable API." + name + " de l'automate reli\xC3\xA9";
+        if (description.empty())   // un automate relie s'ecrit API.Nom ; un .XPG lu se nomme par son fichier
+            description = env.plcSource && !env.plcSource().empty() ? "La variable " + name + " de " + sourceOf(env)
+                                                                    : "La variable API." + name + " de " + sourceOf(env);
         op.variables.push_back({name, hmiType, description, {}});
     }
     if (op.variables.empty()) return {};
@@ -168,7 +177,7 @@ std::vector<Operation> typesFromPlc(const hmi::Project& project, const Env& env,
     std::set<std::string> wanted;
     for (const auto& t : all)
         if (contains(t.name, filter)) wanted.insert(upper(t.name));
-    return orderedTypes(project, all, wanted);
+    return orderedTypes(project, all, wanted, sourceOf(env));
 }
 
 std::vector<Operation> fromPlc(const hmi::Project& project, const Env& env, std::string_view filter) {
@@ -179,7 +188,7 @@ std::vector<Operation> fromPlc(const hmi::Project& project, const Env& env, std:
         if (contains(t.name, filter)) wanted.insert(upper(t.name));
     for (const auto& op : vars)
         for (const auto& v : op.variables) wanted.insert(upper(elementOf(v.type)));
-    auto out = orderedTypes(project, all, wanted);
+    auto out = orderedTypes(project, all, wanted, sourceOf(env));
     for (auto& op : vars) out.push_back(std::move(op));
     return out;
 }

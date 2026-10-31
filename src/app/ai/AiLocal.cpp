@@ -1479,7 +1479,8 @@ LocalReply Engine::countQuestion() const {
         std::size_t plc = 0;
         for (const auto& v : vars) plc += v.plc ? 1 : 0;
         return ask("Le projet a **" + plural(vars.size() - plc, "variable", "variables") + "** dans l'IHM"
-                   + (in_.env.plcVariables ? std::string(", et l'automate reli\xC3\xA9 en donne ") + std::to_string(plc) + " de plus" : std::string{}) + ".");
+                   + (plc > 0 ? std::string(", et l'automate ") + (in_.env.plcSource && !in_.env.plcSource().empty() ? "de **" + in_.env.plcSource() + "**" : std::string("reli\xC3\xA9"))
+                                    + " en donne " + std::to_string(plc) + " de plus" : std::string{}) + ".");
     }
     if (!view()) return needView();
     for (const auto& m : mentions_) {
@@ -2165,6 +2166,28 @@ LocalReply Engine::createVariables() const {
                            "n'est qu'une liaison Modbus : ses adresses, pas un programme dont je lirais les variables. Sinon, cr\xC3\xA9" "e-les par "
                            "leur nom et leur type, ou d\xC3\xA9" "cris le type IHM :",
                            {"Cr\xC3\xA9" "e la variable PT101 en REAL", "Cr\xC3\xA9" "e un type T_Pompe avec Marche en BOOL"});
+            // 1.16.0 (captures) : des instances de bloc (un DFB, un TON) n'ont pas d'equivalent IHM - le dire, plutot
+            // que "deja dans l'IHM".
+            if (!types) {
+                std::vector<std::string> ddtNames, blocks;
+                if (in_.env.plcTypes)
+                    for (const auto& d : in_.env.plcTypes()) ddtNames.push_back(d.name);
+                std::size_t matched = 0;
+                for (const auto& [n, ty] : in_.env.plcVariables()) {
+                    std::string bare = n.size() > 4 && fold(n.substr(0, 4)) == "api." ? n.substr(4) : n;
+                    if (!filter.empty() && fold(bare).find(fold(filter)) == std::string::npos) continue;
+                    ++matched;
+                    if (hmiTypeOfPlc(ty, ddtNames, *in_.project).empty()) blocks.push_back(bare + " : " + ty);
+                }
+                if (matched > 0 && blocks.size() == matched) {
+                    std::vector<std::string> shown(blocks.begin(), blocks.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(blocks.size(), 6)));
+                    return ask("Rien \xC3\xA0 cr\xC3\xA9" "er : " + std::string(blocks.size() > 1 ? "les variables de l'automate" : "la variable de l'automate")
+                               + (filter.empty() ? std::string{} : " qui r\xC3\xA9pondent \xC3\xA0 " + code(filter)) + " sont des **instances de bloc** ("
+                               + codes(shown) + (blocks.size() > shown.size() ? ", ..." : "") + ") : un bloc fonction n'a pas d'\xC3\xA9quivalent "
+                               "dans l'IHM. Cr\xC3\xA9" "e les variables IHM de ses sorties par leur nom et leur type, par exemple "
+                               "`Cr\xC3\xA9" "e la variable PT1_Mesure en REAL`.");
+                }
+            }
             return ask(std::string("Rien \xC3\xA0 cr\xC3\xA9" "er : ") + (types ? "chaque type de l'automate" : "chaque variable de l'automate")
                        + (filter.empty() ? std::string{} : " qui r\xC3\xA9pond \xC3\xA0 " + code(filter)) + " a d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent dans l'IHM"
                        + " (ou l'automate n'en donne aucun).");
@@ -2179,7 +2202,9 @@ LocalReply Engine::createVariables() const {
         if (nv) what.push_back(plural(nv, "variable", "variables"));
         Proposal p = base(nv ? "Variables depuis l'automate" : "Types IHM depuis l'automate");
         p.ops = std::move(ops);
-        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + joinAnd(what) + "** depuis l'automate reli\xC3\xA9"
+        const std::string source = in_.env.plcSource ? in_.env.plcSource() : std::string{};
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + joinAnd(what) + "** depuis "
+                                        + (source.empty() ? std::string("l'automate reli\xC3\xA9") : "l'automate de **" + source + "**")
                                         + (filter.empty() ? std::string{} : " (ceux qui r\xC3\xA9pondent \xC3\xA0 " + code(filter) + ")")
                                         + " : les types d'abord, dans l'ordre o\xC3\xB9 ils s'emploient. L'aper\xC3\xA7u les montre tous ; rien n'est "
                                           "cr\xC3\xA9\xC3\xA9 avant Appliquer.");

@@ -930,6 +930,10 @@ void testPlcFile(const char* xpg) {
     if (r.proposal)
         for (const auto& op : r.proposal->ops)
             for (const auto& v : op.variables) check(v.name.rfind("API.", 0) != 0 && v.type != "EBOOL", "le nom IHM sans API., le type converti : " + v.name + " " + v.type);
+    check(r.proposal && has(r.text, "MAST.XPG"), "la reponse dit d'ou vient l'automate (MAST.XPG), pas \"l'automate relie\"");
+    // des instances de bloc (PT1_A : CAPTEUR, un DFB) : dit, pas "deja dans l'IHM"
+    r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT");
+    check(!r.proposal && has(r.text, "instances de bloc") && !has(r.text, "d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent"), "des instances de bloc : dit (" + r.text + ")");
 }
 
 int main(int argc, char** argv) {
