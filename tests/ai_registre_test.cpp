@@ -273,8 +273,10 @@ void sizes(const std::string& examplePath) {
     // creer_dossier, ranger, les roles et parametres d'une vue, les generiques - leurs consignes (environ 2,5 Ko) et leur
     // schema (environ 2,5 Ko) : la borne passe de 34 a 40 Ko. Le contexte des outils ne montre que ce qui existe (ou que la
     // demande evoque).
-    check(empty.size() + tool.size() < 40000, "une demande ordinaire (vue vide) : moins de 40 Ko avec l'outil");
-    check(station.size() + tool.size() < 40000, "la station de 31 objets : moins de 40 Ko avec l'outil");
+    // 1.19.0 (le plan d'operations) : + plusieurs vues dans une proposition (le champ "vue"), la reutilisation, une installation
+    // complete en une proposition - environ 0,9 Ko : la borne passe de 40 a 41 Ko.
+    check(empty.size() + tool.size() < 41000, "une demande ordinaire (vue vide) : moins de 41 Ko avec l'outil");
+    check(station.size() + tool.size() < 41000, "la station de 31 objets : moins de 41 Ko avec l'outil");
     check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 45000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")

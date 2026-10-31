@@ -110,16 +110,19 @@ const char* const kRules =
     "- dupliquer, en plus : copies (1 \xC3\xA0 50 ; la copie k est d\xC3\xA9" "cal\xC3\xA9" "e de k fois dx, dy), reperes (true : les rep\xC3\xA8res "
     "$...$ \xC3\xA0 indices avancent comme Ctrl+Maj+D, les noms suivent la s\xC3\xA9rie). Exemple : {\"action\": \"dupliquer\", \"objets\": "
     "[\"Cuve_1\"], \"copies\": 3, \"reperes\": true, \"dx\": 180, \"dy\": 0}\n"
-    "- creer_vue : nom (neuf, unique), proprietes (largeur, hauteur en px, fond #RRGGBB, description). EN PREMIER et une seule "
-    "fois : les op\xC3\xA9rations qui suivent visent la vue neuve (y cr\xC3\xA9" "er les objets) ; elle s'ouvre apr\xC3\xA8s Appliquer. Exemple : "
+    "- creer_vue : nom (neuf, unique), proprietes (largeur, hauteur en px, fond #RRGGBB, description). Les objets qui suivent "
+    "visent la vue neuve (y cr\xC3\xA9" "er les objets) ; elle s'ouvre apr\xC3\xA8s Appliquer. Exemple : "
     "{\"action\": \"creer_vue\", \"nom\": \"Vue_Pompes\", \"proprietes\": {\"largeur\": \"1280\", \"hauteur\": \"800\", \"description\": "
     "\"Les pompes du poste\"}}\n"
+    // 1.19.0 : plusieurs vues.
+    "  Plusieurs creer_vue possibles : un objet va dans sa \"vue\", sinon la derni\xC3\xA8re creer_vue au-dessus, sinon la vue ouverte.\n"
     "- creer_variables : variables (nom neuf, type, description, valeur initiale). Types : BOOL, INT, DINT, REAL, STRING, "
-    "TIME, ARRAY[0..9] OF REAL, ou un type IHM du projet (ou cr\xC3\xA9\xC3\xA9 plus haut). Une op\xC3\xA9ration plus bas peut les citer. "
+    "TIME, ARRAY[0..9] OF REAL, ou un type IHM du projet (ou cr\xC3\xA9\xC3\xA9 dans la proposition). Les autres op\xC3\xA9rations peuvent les citer. "
+    "M\xC3\xAAme nom et m\xC3\xAAme type : r\xC3\xA9utilis\xC3\xA9" "e ; autre type : refus\xC3\xA9" "e. "
     "Exemple : {\"action\": \"creer_variables\", \"variables\": [{\"nom\": \"Marche_P1\", \"type\": \"BOOL\", \"description\": "
     "\"Marche pompe 1\"}, {\"nom\": \"Consigne_Niveau\", \"type\": \"REAL\", \"valeur\": \"75\"}]}\n"
     "- creer_type : nom (T_...), description, membres (nom, type, description) ; un membre d'un autre type IHM : ce type "
-    "existe ou est cr\xC3\xA9\xC3\xA9 PLUS HAUT (l'ordre des d\xC3\xA9pendances). Exemple : {\"action\": \"creer_type\", \"nom\": \"T_Pompe\", "
+    "existe ou est cr\xC3\xA9\xC3\xA9 dans la proposition (identique : r\xC3\xA9utilis\xC3\xA9). Exemple : {\"action\": \"creer_type\", \"nom\": \"T_Pompe\", "
     "\"membres\": [{\"nom\": \"Marche\", \"type\": \"BOOL\"}, {\"nom\": \"Vitesse\", \"type\": \"REAL\", \"description\": \"tr/min\"}]}\n"
     // 1.18.0 : les outils de l'IA.
     "- creer_type + generiques ([\"T\"], [\"T\", \"K : ANY_NUM\"]) : une structure g\xC3\xA9n\xC3\xA9rique (membres en T, LIST OF T).\n"
@@ -133,7 +136,12 @@ const char* const kRules =
     "creer_fonction : nom, retour, generiques, corps (VAR_INPUT ... END_VAR, puis Nom := r\xC3\xA9sultat). Compil\xC3\xA9s, jamais ex\xC3\xA9" "cut\xC3\xA9s ici.\n"
     "- creer_alarme : nom, condition (variables existantes), message, priorite (1-4), groupe, delai (ms), consigne.\n"
     "- creer_ressource : piece_jointe (un fichier joint \xC3\xA0 la conversation). creer_dossier : liste (vues, popups, symboles, "
-    "ecrans_modeles, entetes, pieds, scripts, types, styles, ressources, variables), dossier. ranger : liste, dossier, objets.\n";
+    "ecrans_modeles, entetes, pieds, scripts, types, styles, ressources, variables), dossier. ranger : liste, dossier, objets.\n"
+    // 1.19.0 : concevoir une installation complete.
+    "INSTALLATION COMPL\xC3\x88TE (station, ligne, cuves, r\xC3\xA9gulation) : UNE proposition avec tout (types, variables, \xC3\xA9quipements, "
+    "adresses, alarmes, scripts, symboles, popups, vues), dans n'importe quel ordre : le logiciel l'ordonne, la v\xC3\xA9rifie et "
+    "l'applique d'un seul Ctrl+Z. R\xC3\xA9utilise l'existant ; une s\xC3\xA9rie suit un mod\xC3\xA8le. Modifier en masse : dis combien "
+    "d'\xC3\xA9l\xC3\xA9ments. Ne promets que ce que contient la proposition.\n";
 
 // L'exemple du code brut : un bouton qui ouvre une vue, ecrit par le logiciel lui-meme.
 const std::string& codeExample() {
@@ -465,6 +473,8 @@ std::string operationsTool() {
     props.set("nom", str("creer : un nom neuf ; creer_vue : le nom de la vue neuve ; creer_type : le nom du type IHM (T_...) ; creer_equipement, "
                          "creer_script, creer_fonction, creer_alarme, creer_ressource : le nom neuf."));
     props.set("objet", str("modifier, associer : un objet existant."));
+    // 1.19.0 : la vue visee par un objet (plusieurs vues dans une proposition).
+    props.set("vue", str("un objet : sa vue ; absente : la derni\xC3\xA8re creer_vue au-dessus, sinon la vue ouverte."));
     props.set("objets", names("aligner, distribuer, supprimer, dupliquer : des objets existants ; ranger : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 ranger."));
     {
         Value p = Value::object();
