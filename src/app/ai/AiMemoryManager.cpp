@@ -10,6 +10,7 @@
 #include "../../ui/TextSearch.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
@@ -245,10 +246,20 @@ bool backupMemory(std::string_view reason, std::string* name, std::string* why) 
     fs::path dir;
     std::string folderName;
     std::error_code ec;
-    for (int n = 1;; ++n) {
+    // Le numero suit le PLUS GRAND de cette seconde (jamais un numero libere par la rotation : la nouvelle sauvegarde
+    // serait alors la << plus ancienne >> par son nom, et supprimee aussitot).
+    int last = 0;
+    const std::string prefix = "memoire-" + stamp + "-";
+    for (fs::directory_iterator it(base, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string n = U(it->path().filename());
+        if (n.size() > prefix.size() && n.compare(0, prefix.size(), prefix) == 0)
+            last = std::max(last, std::atoi(n.c_str() + prefix.size()));
+    }
+    ec.clear();
+    for (int n = last + 1;; ++n) {
         char seq[16];
         std::snprintf(seq, sizeof seq, "%03d", n);   // trois chiffres : le nom se trie comme la date
-        folderName = "memoire-" + stamp + "-" + seq;
+        folderName = prefix + seq;
         dir = base / P(folderName);
         if (!fs::exists(dir, ec)) break;
     }
