@@ -36,6 +36,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -44,6 +45,7 @@
 namespace app::ai {
 
 class AiChatView;
+class AiPlanStrip;
 
 // Le champ de la demande : UN CHAMP DE MESSAGE, pas un editeur de code (les captures 1.14.2 :
 // la gouttiere, la bande de la ligne courante, la marque "modifie" sur l'indication, le texte
@@ -186,6 +188,7 @@ public:
     // ---- ce qu'on lit (essais, scripts) --------------------------------------------------
     [[nodiscard]] AiPromptEdit&  prompt() noexcept { return *prompt_; }
     [[nodiscard]] AiChatView&    chat() noexcept { return *chat_; }
+    [[nodiscard]] AiPlanStrip&   planStrip() noexcept { return *strip_; }   // 1.20.2 : le plan en cours, en haut
     [[nodiscard]] ui::InputText& renameField() noexcept { return *rename_; }
     [[nodiscard]] ui::PopupMenu* menu() const noexcept { return menu_; }
     [[nodiscard]] gfx::Rect      rowRect(int index) const;     // une conversation, apres un dessin (vide : cachee)
@@ -236,6 +239,8 @@ private:
     ui::ToggleButton* modeDirect_{nullptr};
     ui::InputText*    rename_{nullptr};
     AiChatView*       chat_{nullptr};
+    AiPlanStrip*      strip_{nullptr};   // 1.20.2
+    float             stripH_{0.f};
     AiPromptEdit*     prompt_{nullptr};
     ui::Button*       attachBtn_{nullptr};
     ui::Button*       sendBtn_{nullptr};
@@ -302,7 +307,7 @@ public:
     struct Run {
         std::string text;
         float       x{0.f}, w{0.f};
-        std::uint8_t style{0};   // 0 normal, 1 gras, 2 code, 3 titre, 4 attenue
+        std::uint8_t style{0};   // 0 normal, 1 gras, 2 code, 3 titre, 4 attenue, 5 ligne d'un bloc de code
     };
     struct Line {
         std::vector<Run> runs;
@@ -310,10 +315,38 @@ public:
         float            gapBefore{0.f};
         std::string      bullet;     // "\xE2\x80\xA2", "1."
         float            bulletX{0.f};
+        // 1.20.2 : LES BLOCS DE CODE (```lang ... ```) - montres a part, avec la langue et un bouton Copier. La ligne
+        // d'en-tete porte la langue et le code exact (sans les balises) ; les lignes du bloc ont le meme `code`.
+        int              code{-1};          // l'index du bloc dans le message ; -1 : du texte
+        bool             codeHead{false};   // la ligne d'en-tete du bloc
+        bool             codeOpen{false};   // le bloc n'est pas encore ferme (la reponse arrive)
+        std::string      codeLang, codeText;
     };
     [[nodiscard]] static std::vector<Line> layoutText(const std::string& markdown, float width);
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
     [[nodiscard]] bool        hasTooltip() const override { return true; }
+    // 1.20.2 : LE PLAN EN COURS (la bande du haut, AiPlanStrip) - la proposition qui se verifie ou s'applique sur un
+    // fil de fond, sinon la derniere de la conversation qui a un plan (a valider, appliquee) ; rien : nullopt.
+    struct LivePlan {
+        int               message{-1};
+        std::string       id;               // la proposition
+        const plan::Plan* plan{nullptr};    // ses etapes (lues aussitot : valides jusqu'au prochain changement)
+        std::string       head;             // << Plan d'action - 12 etapes, 12 validees >>
+        std::string       phases;           // << Analyse > Planification > Verification > ... >>
+        std::string       status;           // << Application... >>, << Verification... >>, << Validation requise >>...
+        std::uint8_t      tone{0};          // 0 info, 1 ok, 2 attention, 3 erreur
+        float             progress{-1.f};   // 0..1 : le travail de fond ; -1 : aucun
+        bool              applying{false}, checking{false}, open{false};   // open : a decider (proposee)
+        std::size_t       ops{0};
+    };
+    [[nodiscard]] std::optional<LivePlan> livePlan() const;
+    // Fait defiler jusqu'a la carte de ce message (`openPlan` : son plan deplie).
+    void revealMessage(int message, bool openPlan);
+    // 1.20.2 : les boutons Copier des blocs de code du dernier dessin (leur place, le code qu'ils copient) ; le code
+    // copie en dernier (vide : aucun, ou plus de 2 s : la pastille redit << Copier >>).
+    [[nodiscard]] const std::vector<std::pair<gfx::Rect, std::string>>& copyButtons() const noexcept { return copySpots_; }
+    [[nodiscard]] bool copyFlash() const noexcept { return !copied_.empty(); }
+    bool copyCode(const std::string& code);
 
 protected:
     void onLayout() override;
@@ -321,6 +354,9 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent&) override;
 
 private:
+    mutable std::vector<std::pair<gfx::Rect, std::string>> copySpots_;
+    mutable std::string copied_;
+    mutable double      copiedAt_{-1.0};
     struct Block {                 // un message mis en page
         int               message{-1};
         bool              user{false};

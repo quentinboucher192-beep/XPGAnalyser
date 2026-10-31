@@ -6,6 +6,7 @@
 #include "../../hmi/HmiRecording.hpp"
 #include "../../hmi/HmiVideo.hpp"
 #include "../../ui/Icons.hpp"
+#include "../../ui/TextSearch.hpp"   // 1.20.2 : les alarmes pliees (dossiers, tri)
 
 #include <algorithm>
 #include <array>
@@ -252,6 +253,18 @@ std::string dateText(std::string_view s) {
     if (const auto dot = time.find('.'); dot != std::string_view::npos) time = time.substr(0, dot);
     return t + " " + std::string(time);
 }
+
+// 1.20.2 : l'alarme, la criticite, l'horodatage d'un incident (la liste, les dossiers, la recherche, le tri).
+std::string alarmOf(const st::Item& it) { return it.snapshot.alarm.name.empty() ? it.snapshot.trigger.name : it.snapshot.alarm.name; }
+
+int criticalityOf(const st::Item& it) {
+    if (!it.readable) return 0;
+    // comme le contexte (hmi::incident::snapshot) : la priorite de l'alarme du projet, sinon celle de l'avis
+    const int p = it.snapshot.alarm.known ? it.snapshot.alarm.priority : it.snapshot.trigger.priority;
+    return p >= 1 && p <= hmi::kAlarmPriorities ? p : 0;
+}
+
+std::string stampOf(const st::Item& it) { return it.snapshot.createdAt.empty() ? it.snapshot.trigger.at : it.snapshot.createdAt; }
 
 std::string validationLabel(const st::Item& it) {
     if (it.state == st::State::Pending) return "En attente";
@@ -514,23 +527,41 @@ Tone toneOfWords(std::string_view s) {
     return Tone::Muted;
 }
 
+// 1.20.2 : la couleur d'une criticite, comme la colonne Priorite des alarmes (1 Critique : erreur, 2 Haute :
+// avertissement, 3 Moyenne : accent, 4 Basse et inconnue : grise) ; son nom ("Critique" ; 0 : "criticit\xC3\xA9 inconnue").
+Tone toneOfCriticality(int p) {
+    switch (p) {
+        case 1:  return Tone::Error;
+        case 2:  return Tone::Warning;
+        case 3:  return Tone::Accent;
+        default: return Tone::Muted;
+    }
+}
+std::string criticalityLabel(int p) {
+    return p >= 1 && p <= hmi::kAlarmPriorities ? std::string(hmi::alarmPriorityLabel(p)) : std::string("criticit\xC3\xA9 inconnue");
+}
+std::string incidentsWord(std::size_t n) { return std::to_string(n) + (n > 1 ? " incidents" : " incident"); }
+
 } // namespace
 
 // ============================================================================================== la liste ==
 //  Une ligne par incident : la miniature, le nom et la date, l'alarme, l'equipement et la vue, la synthese, puis la
 //  certitude, l'analyse et la validation. Dans un ScrollablePanel (la molette, la barre) ; seules les lignes visibles
 //  se dessinent.
+//  1.20.2 : les lignes sont celles du volet (rows_) - un incident, ou le DOSSIER d'une alarme (le chevron, l'icone,
+//  l'alarme, le nombre d'incidents, la criticite, la date du plus recent et sa miniature sur une pile) ; deplie, ses
+//  incidents en retrait. Toutes de la meme hauteur : rowAt et reveal restent une division.
 class HmiIncidentList final : public ui::Widget {
 public:
     static constexpr float kRowH = 92.f, kThumbW = 136.f, kThumbH = 76.f;
+    static constexpr float kIndent = 22.f;   // 1.20.2 : le retrait d'un incident dans un dossier deplie
 
     HmiIncidentList(HmiIncidentsPane& pane, int tab) : ui::Widget(pane.id() + (tab ? ".valides" : ".attente")), pane_(pane), tab_(tab) {
         setFocusPolicy(true);
     }
     [[nodiscard]] ui::SizeHint sizeHint() const override {
         ui::SizeHint h;
-        const auto* items = pane_.items_[tab_];
-        const std::size_t n = items ? items->size() : 0u;
+        const std::size_t n = pane_.rows_[tab_].size();   // 1.20.2 : les lignes affichees
         h.preferred = {0.f, static_cast<float>(std::max<std::size_t>(n, 1)) * kRowH + 8.f};
         h.stretchX = h.stretchY = 1.f;
         return h;
@@ -547,8 +578,13 @@ protected:
         const auto b = bounds();
         ctx.r.fillRect(b, c.panelBg);
         const auto* items = pane_.items_[tab_];
-        if (!items || items->empty()) {
-            const std::string text = !pane_.host_ ? std::string("La surveillance des incidents n'est pas branch\xC3\xA9" "e ici.")
+        const auto& rows = pane_.rows_[tab_];
+        if (!items || items->empty() || rows.empty()) {
+            const std::string text = items && !items->empty()
+                                       // 1.20.2 : tout est cache par la recherche ou la criticite
+                                       ? "Aucun incident ne correspond \xC3\xA0 la recherche ou \xC3\xA0 la criticit\xC3\xA9 choisie ("
+                                             + incidentsWord(items->size()) + " dans cet onglet)."
+                                   : !pane_.host_ ? std::string("La surveillance des incidents n'est pas branch\xC3\xA9" "e ici.")
                                    : pane_.host_->projectFolder().empty()
                                        ? std::string("Le projet n'est pas encore enregistr\xC3\xA9 : pas de dossier d'incident. Enregistre-le, "
                                                      "puis les alarmes en feront ici.")
@@ -567,17 +603,21 @@ protected:
             return;
         }
         const auto clip = ctx.clip;
-        const int n = static_cast<int>(items->size());
+        const int n = static_cast<int>(rows.size());
         const int first = std::max(0, static_cast<int>((clip.y - b.y) / kRowH));
         const int last = std::min(n - 1, static_cast<int>((clip.bottom() - b.y) / kRowH));
         bool waiting = false;
-        for (int i = first; i <= last; ++i) waiting |= paintRow(ctx, (*items)[static_cast<std::size_t>(i)], i);
+        for (int i = first; i <= last; ++i) {
+            const auto& row = rows[static_cast<std::size_t>(i)];
+            if (row.item < 0 || static_cast<std::size_t>(row.item) >= items->size()) continue;
+            waiting |= row.group ? paintGroup(ctx, *items, row, i) : paintRow(ctx, (*items)[static_cast<std::size_t>(row.item)], i, row.depth);
+        }
         if (waiting) invalidate();   // une miniature se decode : on la redemande a la prochaine image
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
-        const auto* items = pane_.items_[tab_];
-        const int n = items ? static_cast<int>(items->size()) : 0;
+        const auto& rows = pane_.rows_[tab_];   // 1.20.2 : les lignes affichees
+        const int n = static_cast<int>(rows.size());
         const auto rowAt = [&](gfx::Point p) {
             const int r = static_cast<int>((p.y - bounds().y) / kRowH);
             return r >= 0 && r < n ? r : -1;
@@ -595,17 +635,21 @@ protected:
             grabFocus();
             const int row = rowAt(d->pos);
             if (row < 0) return ui::EventResult::Consumed;
+            const bool group = rows[static_cast<std::size_t>(row)].group;
             pane_.selectRow(tab_, row);
             if (d->button == ui::MouseButton::Right) {
                 pane_.openContextMenu(toSurface(d->pos));
             } else if (d->button == ui::MouseButton::Left && d->clickCount >= 2) {
                 pane_.consult();
+            } else if (d->button == ui::MouseButton::Left && group) {
+                pane_.toggleGroupAt(tab_, row);   // 1.20.2 : un clic sur un dossier le deplie ou le replie
             }
             return ui::EventResult::Consumed;
         }
         if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
             if (!focused() || n == 0) return ui::EventResult::Ignored;
             const int cur = pane_.row_[tab_];
+            const HmiIncidentsPane::Row* at = cur >= 0 && cur < n ? &rows[static_cast<std::size_t>(cur)] : nullptr;
             const int page = std::max(1, static_cast<int>(parent() ? parent()->bounds().h / kRowH : 5.f) - 1);
             int to = -2;
             if (ui::isContextMenuKey(*k)) {
@@ -620,11 +664,26 @@ protected:
                 case ui::Key::End:      to = n - 1; break;
                 case ui::Key::PageUp:   to = std::max(0, cur - page); break;
                 case ui::Key::PageDown: to = std::min(n - 1, cur + page); break;
+                case ui::Key::Right:    // 1.20.2 : deplier le dossier choisi ; deja deplie : son premier incident
+                    if (!at || !at->group) return ui::EventResult::Ignored;
+                    if (!at->open) {
+                        pane_.toggleGroupAt(tab_, cur);
+                        return ui::EventResult::Consumed;
+                    }
+                    to = std::min(n - 1, cur + 1);
+                    break;
+                case ui::Key::Left: {   // 1.20.2 : replier le dossier choisi, ou celui de l'incident choisi
+                    if (!at || (at->group ? !at->open : at->depth == 0)) return ui::EventResult::Ignored;
+                    const std::string key = at->key;   // une copie : les lignes se refont
+                    pane_.setGroupOpen(tab_, key, false);
+                    return ui::EventResult::Consumed;
+                }
                 case ui::Key::Return:
-                    pane_.consult();
+                    if (at && at->group) pane_.toggleGroupAt(tab_, cur);   // 1.20.2 : Entree deplie ou replie un dossier
+                    else pane_.consult();
                     return ui::EventResult::Consumed;
                 case ui::Key::Delete:
-                    if (tab_ == 0) pane_.askRemove();
+                    if (tab_ == 0) pane_.askRemove();   // un dossier choisi : l'incident qu'il montre (le dialogue le nomme)
                     return ui::EventResult::Consumed;
                 default: break;
             }
@@ -637,18 +696,10 @@ protected:
     }
 
 private:
-    // Vrai : sa miniature n'est pas encore prete.
-    bool paintRow(const ui::PaintContext& ctx, const st::Item& it, int i) {
+    // La miniature de `it` dans `box` (sinon un cadre et la raison) ; vrai : pas encore prete.
+    static bool paintThumb(const ui::PaintContext& ctx, const st::Item& it, const gfx::Rect& box) {
         const auto& th = ctx.theme;
         const auto& c = th.color;
-        const auto b = bounds();
-        const gfx::Rect r{b.x, b.y + static_cast<float>(i) * kRowH, b.w, kRowH};
-        const bool sel = pane_.row_[tab_] == i;
-        if (sel) ctx.r.fillRect(r, c.selectionBg);
-        else if (hover_ == i) ctx.r.fillRect(r, th.brand.hover);
-        ctx.r.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, c.border, 1.f);
-        // la miniature
-        const gfx::Rect box{r.x + 8.f, r.y + 8.f, kThumbW, kThumbH};
         ctx.r.fillRect(box, c.windowBg);
         bool waiting = false;
         const auto small = th.font.smallUi;
@@ -676,11 +727,35 @@ private:
             }
         }
         ctx.r.strokeRect(box, c.border, 1.f);
+        return waiting;
+    }
+
+    // Vrai : sa miniature n'est pas encore prete. 1.20.2 : `depth` 1, dans un dossier deplie (en retrait).
+    bool paintRow(const ui::PaintContext& ctx, const st::Item& it, int i, int depth) {
+        const auto& th = ctx.theme;
+        const auto& c = th.color;
+        const auto b = bounds();
+        const gfx::Rect r{b.x, b.y + static_cast<float>(i) * kRowH, b.w, kRowH};
+        const bool sel = pane_.row_[tab_] == i;
+        if (sel) ctx.r.fillRect(r, c.selectionBg);
+        else if (hover_ == i) ctx.r.fillRect(r, th.brand.hover);
+        ctx.r.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, c.border, 1.f);
+        // 1.20.2 : dans un dossier deplie - en retrait, le filet du dossier a gauche
+        const float indent = static_cast<float>(std::max(0, depth)) * kIndent;
+        if (depth > 0) {
+            const float gx = std::floor(r.x + 8.f + kIndent * 0.5f) + 0.5f;
+            ctx.r.line({gx, r.y}, {gx, r.bottom()}, colorOf(th, toneOfCriticality(ui_::criticalityOf(it))), 2.f);
+        }
+        // la miniature
+        const gfx::Rect box{r.x + 8.f + indent, r.y + 8.f, kThumbW, kThumbH};
+        const bool waiting = paintThumb(ctx, it, box);
+        const auto small = th.font.smallUi;
+        const float sl = ctx.r.lineHeight(small);
         // le texte
         const float x = box.right() + 12.f, w = std::max(40.f, r.right() - x - 10.f);
         const auto font = th.font.ui;
         const float y0 = r.y + 7.f;
-        const std::string date = ui_::dateText(it.snapshot.createdAt.empty() ? it.snapshot.trigger.at : it.snapshot.createdAt);
+        const std::string date = ui_::dateText(ui_::stampOf(it));
         const float dw = ctx.r.measure(date, small).width;
         const std::string name = ellipsize(ctx.r, it.name, font, w - dw - 10.f);
         ctx.r.drawText({x, y0}, name, font, sel ? c.selectionText : c.text);
@@ -691,14 +766,14 @@ private:
             ctx.r.drawText({x, y1}, ellipsize(ctx.r, "illisible : " + it.why, small, w), small, c.error);
             return waiting;
         }
-        const std::string alarm = it.snapshot.alarm.name.empty() ? it.snapshot.trigger.name : it.snapshot.alarm.name;
+        const std::string alarm = ui_::alarmOf(it);
         const std::string equipment = it.equipment();
         std::string facts = "Alarme : " + alarm + " \xC2\xB7 \xC3\x89quipement : " + (equipment.empty() ? std::string("\xE2\x80\x94") : equipment)
                             + " \xC2\xB7 Vue : " + (it.snapshot.openView.empty() ? std::string("\xE2\x80\x94") : it.snapshot.openView);
         ctx.r.drawText({x, y1}, ellipsize(ctx.r, facts, small, w), small, sel ? c.selectionText : c.text);
         const float y2 = y1 + sl + 2.f;
         ctx.r.drawText({x, y2}, ellipsize(ctx.r, it.synthesis(), small, w), small, c.textMuted);
-        // certitude, analyse, validation
+        // criticite (1.20.2), certitude, analyse, validation
         const float y3 = y2 + sl + 3.f;
         float cx = x;
         const auto chip = [&](const std::string& text, Tone tone) {
@@ -707,6 +782,9 @@ private:
             ctx.r.drawText({cx, y3}, t, small, colorOf(th, tone));
             cx += ctx.r.measure(t, small).width;
         };
+        const int crit = ui_::criticalityOf(it);
+        chip(criticalityLabel(crit), toneOfCriticality(crit));
+        chip(" \xC2\xB7 ", Tone::Muted);
         const std::string certainty = it.certainty();
         chip("certitude : " + certainty, toneOfWords(certainty));
         chip(" \xC2\xB7 ", Tone::Muted);
@@ -719,6 +797,77 @@ private:
             chip(" \xC2\xB7 ", Tone::Muted);
             chip(std::to_string(it.comments.size()) + (it.comments.size() > 1 ? " commentaires" : " commentaire"), Tone::Muted);
         }
+        return waiting;
+    }
+
+    // 1.20.2 : LA LIGNE D'UN DOSSIER - la miniature du plus recent sur une pile, le chevron, l'icone et l'alarme, la date
+    // du plus recent ; le nombre d'incidents, la criticite, du premier au dernier ; l'equipement et la vue ; la synthese
+    // du plus recent. Un filet de la couleur de la criticite a gauche. Vrai : la miniature n'est pas encore prete.
+    bool paintGroup(const ui::PaintContext& ctx, const std::vector<st::Item>& items, const HmiIncidentsPane::Row& row, int i) {
+        const auto& th = ctx.theme;
+        const auto& c = th.color;
+        const auto b = bounds();
+        const gfx::Rect r{b.x, b.y + static_cast<float>(i) * kRowH, b.w, kRowH};
+        const bool sel = pane_.row_[tab_] == i;
+        if (sel) ctx.r.fillRect(r, c.selectionBg);
+        else if (hover_ == i) ctx.r.fillRect(r, th.brand.hover);
+        ctx.r.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, c.border, 1.f);
+        const gfx::Color critColor = colorOf(th, toneOfCriticality(row.criticality));
+        ctx.r.fillRect({r.x, r.y + 6.f, 3.f, kRowH - 12.f}, critColor);
+        const st::Item& latest = items[static_cast<std::size_t>(row.item)];
+        const st::Item* oldest = &latest;
+        for (const int m : row.members)
+            if (m >= 0 && static_cast<std::size_t>(m) < items.size()) oldest = &items[static_cast<std::size_t>(m)];
+        // la pile : deux cadres derriere la miniature du plus recent
+        const float tw = kThumbW - 6.f, tht = kThumbH - 6.f;
+        for (const float off : {6.f, 3.f}) {
+            const gfx::Rect back{r.x + 8.f + off, r.y + 12.f - off, tw, tht};
+            ctx.r.fillRect(back, c.windowBg);
+            ctx.r.strokeRect(back, c.border, 1.f);
+        }
+        const bool waiting = paintThumb(ctx, latest, {r.x + 8.f, r.y + 12.f, tw, tht});
+        // le texte
+        const auto font = th.font.ui;
+        const auto small = th.font.smallUi;
+        const float sl = ctx.r.lineHeight(small);
+        const gfx::Color ink = sel ? c.selectionText : c.text;
+        const float x = r.x + 8.f + kThumbW + 12.f, w = std::max(40.f, r.right() - x - 10.f);
+        const float y0 = r.y + 7.f, lh = ctx.r.lineHeight(font);
+        ui::drawIcon(ctx.r, row.open ? ui::Icon::Collapse : ui::Icon::Expand, {x, y0 + (lh - 14.f) * 0.5f, 14.f, 14.f}, sel ? c.selectionText : c.textMuted);
+        ui::drawIcon(ctx.r, row.open ? ui::Icon::FolderOpen : ui::Icon::Folder, {x + 18.f, y0 + (lh - 16.f) * 0.5f, 16.f, 16.f}, critColor);
+        const std::string date = "dernier : " + ui_::dateText(ui_::stampOf(latest));
+        const float dw = ctx.r.measure(date, small).width;
+        const float nx = x + 40.f;
+        const std::string name = ellipsize(ctx.r, row.alarm, font, std::max(0.f, x + w - nx - dw - 10.f));
+        ctx.r.drawText({nx, y0}, name, font, ink);
+        ctx.r.drawText({nx + 0.6f, y0}, name, font, ink);   // en gras (simule)
+        ctx.r.drawText({r.right() - 10.f - dw, y0 + 2.f}, date, small, c.textMuted);
+        // le nombre, la criticite, du premier au dernier
+        const float y1 = y0 + lh + 3.f;
+        float cx = x;
+        const auto chip = [&](const std::string& text, gfx::Color col, float yy) {
+            if (cx >= x + w) return;
+            const std::string t = ellipsize(ctx.r, text, small, x + w - cx);
+            ctx.r.drawText({cx, yy}, t, small, col);
+            cx += ctx.r.measure(t, small).width;
+        };
+        const std::string count = incidentsWord(row.members.size());
+        ctx.r.drawText({x + 0.6f, y1}, count, small, ink);   // en gras (simule)
+        chip(count, ink, y1);
+        chip(" \xC2\xB7 ", c.textMuted, y1);
+        chip(criticalityLabel(row.criticality), critColor, y1);
+        chip(" \xC2\xB7 du " + ui_::dateText(ui_::stampOf(*oldest)) + " au " + ui_::dateText(ui_::stampOf(latest)), c.textMuted, y1);
+        // l'equipement et la vue du plus recent ; sa synthese
+        const float y2 = y1 + sl + 2.f;
+        const std::string equipment = latest.equipment();
+        ctx.r.drawText({x, y2},
+                       ellipsize(ctx.r,
+                                 "\xC3\x89quipement : " + (equipment.empty() ? std::string("\xE2\x80\x94") : equipment) + " \xC2\xB7 Vue : "
+                                     + (latest.snapshot.openView.empty() ? std::string("\xE2\x80\x94") : latest.snapshot.openView),
+                                 small, w),
+                       small, ink);
+        const float y3 = y2 + sl + 3.f;
+        ctx.r.drawText({x, y3}, ellipsize(ctx.r, "le plus r\xC3\xA9" "cent : " + latest.synthesis(), small, w), small, c.textMuted);
         return waiting;
     }
 
@@ -1535,8 +1684,8 @@ private:
 
 // ============================================================================================== le volet ==
 namespace {
-enum Tool : int { TRefresh = 1, TConsult, TFull, TChain, TComment, TAnalyze, TValidate, TDelete, TFolder, TSettings };
-enum MenuItem : int { MConsult = 1, MFull, MChain, MComment, MAnalyze, MValidate, MDelete, MFolder, MVerify };
+enum Tool : int { TRefresh = 1, TConsult, TFull, TChain, TComment, TAnalyze, TValidate, TDelete, TFolder, TSettings, TOnOff /* 1.20.2 */ };
+enum MenuItem : int { MConsult = 1, MFull, MChain, MComment, MAnalyze, MValidate, MDelete, MFolder, MVerify, MToggle /* 1.20.2 */ };
 } // namespace
 
 HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, IncidentHost* host)
@@ -1560,7 +1709,9 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
     tools->add(TValidate, HmiGlyph::Check,
                "Valider : une copie v\xC3\xA9rifi\xC3\xA9" "e (empreintes SHA-256) va dans \xC2\xAB valides \xC2\xBB, puis l'original est retir\xC3\xA9",
                "Valider\xE2\x80\xA6");
-    tools->add(TDelete, HmiGlyph::Delete, "Supprimer l'incident en attente : son dossier entier (un incident valid\xC3\xA9 ne se supprime pas d'ici)",
+    tools->add(TDelete, HmiGlyph::Delete,
+               "Supprimer l'incident en attente : son dossier entier (un incident valid\xC3\xA9 ne se supprime pas d'ici ; un dossier d'alarme "
+               "choisi : l'incident qu'il montre, pas tout le dossier)",
                "Supprimer");
     tools->separator();
     tools->add(TFolder, HmiGlyph::Link, "Ouvrir le dossier de l'incident choisi (sans choix : celui des incidents en attente)", "Ouvrir le dossier");
@@ -1568,7 +1719,15 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
                "R\xC3\xA9glages de la surveillance : activ\xC3\xA9" "e, les alarmes surveill\xC3\xA9" "es ou ignor\xC3\xA9" "es, les secondes avant et "
                "apr\xC3\xA8s, les images par seconde, le maintien, l'anti-rebond",
                "R\xC3\xA9glages\xE2\x80\xA6");
+    // 1.20.2 : L'INTERRUPTEUR GENERAL - arreter (ou reprendre) toute creation d'incident, en un clic ; garde avec le projet
+    // (le reglage << surveillance active >>).
+    tools->separator();
+    tools->add(TOnOff, HmiGlyph::Stop,
+               "Arr\xC3\xAAter la cr\xC3\xA9" "ation des incidents : plus aucun dossier n'est cr\xC3\xA9\xC3\xA9, quelle que soit l'alarme "
+               "(les incidents d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent) ; un second clic la reprend",
+               "Arr\xC3\xAAter les incidents");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    tools_->setEnabledWhen(TOnOff, [this] { return host_ != nullptr; });
     for (const int a : {TConsult, TFull, TChain, TComment, TAnalyze})
         tools_->setEnabledWhen(a, [this] { return selected() != nullptr; });
     for (const int a : {TValidate, TDelete})
@@ -1578,6 +1737,32 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
         });
     tools_->setEnabledWhen(TRefresh, [this] { return host_ != nullptr; });
     tools_->setEnabledWhen(TSettings, [this] { return host_ != nullptr; });
+
+    // 1.20.2 : LA LIGNE DES FILTRES - la recherche de toute l'application, la criticite, le tri.
+    search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
+        base + ".search", "Rechercher : alarme, \xC3\xA9quipement, vue, synth\xC3\xA8se, commentaire, date\xE2\x80\xA6",
+        "Chaque mot est cherch\xC3\xA9 dans l'alarme, l'\xC3\xA9quipement, la vue, la synth\xC3\xA8se, les commentaires, la date, le nom du "
+        "dossier, le groupe, la cat\xC3\xA9gorie et la criticit\xC3\xA9 de chaque incident - tous les mots (ET), sans casse ni accents ; "
+        "\"une phrase\" entre guillemets ; -mot : l'exclure.")));
+    {
+        auto crit = std::make_unique<ui::DropDown>(base + ".criticite");
+        std::vector<ui::DropDown::Item> levels{{"Toutes les criticit\xC3\xA9s", "", {}, true}};
+        for (int p = 1; p <= hmi::kAlarmPriorities; ++p) levels.push_back({std::string(hmi::alarmPriorityLabel(p)), std::to_string(p), {}, true});
+        crit->setItems(std::move(levels));
+        crit->setSelectedIndex(0);
+        crit->setTooltip("Criticit\xC3\xA9 : seulement les incidents des alarmes de cette priorit\xC3\xA9 (Critique, Haute, Moyenne, Basse)");
+        criticality_ = &static_cast<ui::DropDown&>(addChild(std::move(crit)));
+        auto order = std::make_unique<ui::DropDown>(base + ".tri");
+        order->setItems({{"Plus r\xC3\xA9" "cents d'abord", "recents", {}, true},
+                        {"Plus anciens d'abord", "anciens", {}, true},
+                        {"Criticit\xC3\xA9 (critique d'abord)", "criticite", {}, true},
+                        {"Alarme (A \xE2\x86\x92 Z)", "alarme", {}, true},
+                        {"Nombre d'incidents", "nombre", {}, true}});
+        order->setSelectedIndex(SortRecent);
+        order->setTooltip("Trier les lignes : les dossiers d'alarme et les incidents seuls ensemble ; dans un dossier, le plus r\xC3\xA9" "cent "
+                         "d'abord");
+        sort_ = &static_cast<ui::DropDown&>(addChild(std::move(order)));
+    }
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto tabs = std::make_unique<ui::TabControl>(base + ".onglets");
@@ -1621,14 +1806,23 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
                 if (hosts_.settings) hosts_.settings();
                 else say("Les r\xC3\xA9glages se changent depuis IHM Studio.", true);
                 break;
+            case TOnOff: (void)setIncidentsEnabled(!incidentsEnabled()); break;   // 1.20.2
+
             default: break;
         }
     });
     links_ += tabs_->currentChanged->connect([this](std::size_t i) {
         validatedTab_ = i == 1;
         showSelected();
+        updateStatus();   // 1.20.2 : le compte de la recherche suit l'onglet
     });
     if (doc_) links_ += doc_->changed->connect([this](hmi::Id) { sheet_->dirty(); });   // un element renomme, supprime
+    // 1.20.2 : la recherche, la criticite, le tri refont les lignes ; la recherche branchee, puis relue (retenue d'une
+    // seance a l'autre, comme les autres volets).
+    links_ += criticality_->selectionChanged->connect([this](int) { refilter(); });
+    links_ += sort_->selectionChanged->connect([this](int) { refilter(); });
+    links_ += search_->changed->connect([this] { refilter(); });
+    search_->recall();
     (void)poll();
     refresh();
 }
@@ -1659,15 +1853,11 @@ bool HmiIncidentsPane::poll() {
     revision_ = listing_->revision;
     items_[0] = &listing_->pending;
     items_[1] = &listing_->validated;
-    // la selection suit le NOM (une relecture refait la liste) ; disparu (valide, supprime) : la ligne d'a cote
+    // la selection suit le NOM (une relecture refait la liste) ; disparu (valide, supprime) : la ligne d'a cote.
+    // 1.20.2 : par les lignes affichees (la recherche, la criticite, les dossiers d'alarme, le tri).
     for (int t = 0; t < 2; ++t) {
-        const auto& v = *items_[t];
-        int found = -1;
-        for (std::size_t i = 0; i < v.size(); ++i)
-            if (v[i].name == chosen_[t]) found = static_cast<int>(i);
-        if (found < 0 && !v.empty()) found = std::clamp(row_[t], 0, static_cast<int>(v.size()) - 1);
-        row_[t] = found;
-        chosen_[t] = found >= 0 ? v[static_cast<std::size_t>(found)].name : std::string{};
+        rebuildRows(t);
+        placeSelection(t);
         lists_[t]->invalidateLayout();
     }
     // les analyses demandees d'ici qui sont arrivees
@@ -1684,10 +1874,8 @@ bool HmiIncidentsPane::poll() {
         }
     }
     tabs_->setTabBadge(0, std::to_string(items_[0]->size()), items_[0]->empty() ? ui::Tone::None : ui::Tone::Warning);
-    tabs_->setTabBadge(1, std::to_string(items_[1]->size()));
-    status_->setMessage(std::to_string(items_[0]->size()) + " en attente \xC2\xB7 " + std::to_string(items_[1]->size()) + " valid\xC3\xA9(s)"
-                        + (host_->projectFolder().empty() ? std::string(" \xC2\xB7 projet non enregistr\xC3\xA9 : aucun dossier d'incident")
-                                                          : std::string(" \xC2\xB7 ") + std::string(hmi::rec::kNativeFolder)));
+    tabs_->setTabBadge(1, std::to_string(items_[1]->size()));   // les badges : TOUS les incidents (les filtres n'y font rien)
+    updateStatus();
     showSelected();
     invalidate();
     return true;
@@ -1697,19 +1885,18 @@ void HmiIncidentsPane::showValidated(bool validated) {
     validatedTab_ = validated;
     if (tabs_ && tabs_->currentIndex() != (validated ? 1u : 0u)) tabs_->setCurrentIndex(validated ? 1 : 0);
     showSelected();
+    updateStatus();
 }
 
-std::size_t HmiIncidentsPane::rowCount() const {
-    const auto* v = items_[validatedTab_ ? 1 : 0];
-    return v ? v->size() : 0;
-}
+std::size_t HmiIncidentsPane::rowCount() const { return rows_[validatedTab_ ? 1 : 0].size(); }
 std::size_t HmiIncidentsPane::pendingCount() const { return items_[0] ? items_[0]->size() : 0; }
 std::size_t HmiIncidentsPane::validatedCount() const { return items_[1] ? items_[1]->size() : 0; }
+std::size_t HmiIncidentsPane::shownCount() const { return shown_[validatedTab_ ? 1 : 0]; }
+int HmiIncidentsPane::selectedRow() const { return row_[validatedTab_ ? 1 : 0]; }
 
 const st::Item* HmiIncidentsPane::selected() const {
     const int t = validatedTab_ ? 1 : 0;
-    const auto* v = items_[t];
-    return v && row_[t] >= 0 && static_cast<std::size_t>(row_[t]) < v->size() ? &(*v)[static_cast<std::size_t>(row_[t])] : nullptr;
+    return rowItem(t, row_[t]);
 }
 
 std::string HmiIncidentsPane::selectedName() const {
@@ -1718,12 +1905,17 @@ std::string HmiIncidentsPane::selectedName() const {
 }
 
 void HmiIncidentsPane::selectRow(int tab, int row) {
-    const auto* v = items_[tab];
-    if (!v || row < 0 || static_cast<std::size_t>(row) >= v->size()) return;
+    const Row* r = row >= 0 ? rowAt(tab, static_cast<std::size_t>(row)) : nullptr;
+    if (!r) return;
     row_[tab] = row;
-    chosen_[tab] = (*v)[static_cast<std::size_t>(row)].name;
+    // 1.20.2 : un dossier deplie choisi montre son plus recent ; replie, celui qu'il cache deja (sinon son plus recent)
+    const st::Item* it = r->group && r->open ? itemAt(tab, r->item) : rowItem(tab, row);
+    if (it) chosen_[tab] = it->name;
     lists_[tab]->reveal(row);
-    if ((tab == 1) == validatedTab_) showSelected();
+    if ((tab == 1) == validatedTab_) {
+        showSelected();
+        updateStatus();
+    }
     invalidate();
 }
 
@@ -1733,8 +1925,18 @@ bool HmiIncidentsPane::select(const std::string& key) {
         if (!v) continue;
         for (std::size_t i = 0; i < v->size(); ++i)
             if ((*v)[i].name == key || (*v)[i].folder == key) {
+                // 1.20.2 : sa ligne, ou son dossier ferme ; cache par la recherche ou la criticite : pas choisi
+                const std::string name = (*v)[i].name, before = chosen_[t];
+                const int beforeRow = row_[t];
+                chosen_[t] = name;
+                placeSelection(t);
+                if (chosen_[t] != name || row_[t] < 0) {
+                    chosen_[t] = before;
+                    row_[t] = beforeRow;
+                    return false;
+                }
                 if ((t == 1) != validatedTab_) showValidated(t == 1);
-                selectRow(t, static_cast<int>(i));
+                selectRow(t, row_[t]);
                 return true;
             }
     }
@@ -1742,17 +1944,291 @@ bool HmiIncidentsPane::select(const std::string& key) {
 }
 
 std::string HmiIncidentsPane::rowText(std::size_t row) const {
-    const auto* v = items_[validatedTab_ ? 1 : 0];
-    if (!v || row >= v->size()) return {};
-    const auto& it = (*v)[row];
-    return it.name + " | " + incidentsui::dateText(it.snapshot.createdAt) + " | "
-           + (it.snapshot.alarm.name.empty() ? it.snapshot.trigger.name : it.snapshot.alarm.name) + " | " + it.equipment() + " | "
+    const int t = validatedTab_ ? 1 : 0;
+    const Row* r = rowAt(t, row);
+    const st::Item* item = r ? itemAt(t, r->item) : nullptr;
+    if (!item) return {};
+    const auto& it = *item;
+    if (r->group)   // 1.20.2 : une ligne-dossier
+        return "Dossier | " + r->alarm + " | " + incidentsWord(r->members.size()) + " | " + criticalityLabel(r->criticality) + " | dernier : "
+               + incidentsui::dateText(incidentsui::stampOf(it)) + " | " + it.name;
+    return it.name + " | " + incidentsui::dateText(it.snapshot.createdAt) + " | " + incidentsui::alarmOf(it) + " | " + it.equipment() + " | "
            + it.snapshot.openView + " | " + it.synthesis() + " | " + it.certainty() + " | " + it.analysisState() + " | "
            + incidentsui::validationLabel(it);
 }
 
 void HmiIncidentsPane::showSelected() {
     if (sheet_) sheet_->setItem(selected());
+}
+
+// ---- 1.20.2 : les lignes affichees (les dossiers par alarme, la recherche, la criticite, le tri) ----
+bool HmiIncidentsPane::rowIsGroup(std::size_t row) const {
+    const Row* r = rowAt(validatedTab_ ? 1 : 0, row);
+    return r && r->group;
+}
+bool HmiIncidentsPane::rowIsOpen(std::size_t row) const {
+    const Row* r = rowAt(validatedTab_ ? 1 : 0, row);
+    return r && r->group && r->open;
+}
+int HmiIncidentsPane::rowDepth(std::size_t row) const {
+    const Row* r = rowAt(validatedTab_ ? 1 : 0, row);
+    return r ? r->depth : 0;
+}
+std::size_t HmiIncidentsPane::rowIncidents(std::size_t row) const {
+    const Row* r = rowAt(validatedTab_ ? 1 : 0, row);
+    return !r ? 0u : r->group ? r->members.size() : 1u;
+}
+void HmiIncidentsPane::toggleGroup(std::size_t row) { toggleGroupAt(validatedTab_ ? 1 : 0, static_cast<int>(row)); }
+
+const st::Item* HmiIncidentsPane::itemAt(int tab, int index) const {
+    const auto* v = items_[tab];
+    return v && index >= 0 && static_cast<std::size_t>(index) < v->size() ? &(*v)[static_cast<std::size_t>(index)] : nullptr;
+}
+
+const HmiIncidentsPane::Row* HmiIncidentsPane::rowAt(int tab, std::size_t row) const {
+    return row < rows_[tab].size() ? &rows_[tab][row] : nullptr;
+}
+
+const st::Item* HmiIncidentsPane::rowItem(int tab, int row) const {
+    const Row* r = row >= 0 ? rowAt(tab, static_cast<std::size_t>(row)) : nullptr;
+    if (!r) return nullptr;
+    if (r->group)   // un dossier : l'incident choisi s'il en est, sinon le plus recent
+        for (const int m : r->members)
+            if (const auto* it = itemAt(tab, m); it && it->name == chosen_[tab]) return it;
+    return itemAt(tab, r->item);
+}
+
+bool HmiIncidentsPane::filtering() const {
+    return (search_ && !search_->query().empty()) || (criticality_ && criticality_->selectedIndex() > 0);
+}
+
+void HmiIncidentsPane::rebuildRows(int tab) {
+    auto& out = rows_[tab];
+    out.clear();
+    shown_[tab] = 0;
+    const auto* v = items_[tab];
+    if (!v) return;
+    const ui::SearchQuery none;
+    const ui::SearchQuery& query = search_ ? search_->query() : none;
+    const int wanted = criticality_ ? std::max(0, criticality_->selectedIndex()) : 0;   // 0 : toutes
+    const int order = sort_ ? std::max(0, sort_->selectedIndex()) : static_cast<int>(SortRecent);
+    // 1. ce que la criticite et la recherche retiennent ; 2. rassemble par alarme (pliee : sans casse ni accents), dans
+    //    l'ordre de la liste - le plus recent d'abord. Un incident illisible (sans alarme) reste seul.
+    struct Entry {
+        std::string      key, alarm;
+        std::vector<int> members;
+        int              criticality{0};
+    };
+    std::vector<Entry> entries;
+    std::map<std::string, std::size_t> byKey;
+    for (std::size_t i = 0; i < v->size(); ++i) {
+        const auto& it = (*v)[i];
+        const int crit = incidentsui::criticalityOf(it);
+        if (wanted > 0 && crit != wanted) continue;
+        if (!query.empty()) {
+            const std::string stamp = incidentsui::stampOf(it);
+            std::vector<std::string> texts{it.name,
+                                           incidentsui::alarmOf(it),
+                                           it.equipment(),
+                                           it.snapshot.openView,
+                                           it.synthesis(),
+                                           incidentsui::dateText(stamp),
+                                           stamp,
+                                           it.snapshot.alarm.group,
+                                           it.snapshot.alarm.category,
+                                           it.snapshot.alarm.message,
+                                           it.snapshot.alarm.description,
+                                           crit ? std::string(hmi::alarmPriorityLabel(crit)) : std::string{},
+                                           it.certainty(),
+                                           it.analysisState(),
+                                           incidentsui::validationLabel(it)};
+            if (!it.readable) texts.push_back(it.why);
+            for (const auto& c : it.comments) {
+                texts.push_back(c.text);
+                texts.push_back(c.author);
+            }
+            if (!query.matches(texts)) continue;
+        }
+        ++shown_[tab];
+        const int index = static_cast<int>(i);
+        const std::string alarm = it.readable ? incidentsui::alarmOf(it) : std::string{};
+        const std::string key = alarm.empty() ? std::string{} : ui::foldForSearch(alarm);
+        if (!key.empty()) {
+            if (const auto found = byKey.find(key); found != byKey.end()) {
+                auto& e = entries[found->second];
+                e.members.push_back(index);
+                if (crit > 0 && (e.criticality == 0 || crit < e.criticality)) e.criticality = crit;
+                continue;
+            }
+            byKey.emplace(key, entries.size());
+        }
+        entries.push_back({key, alarm, {index}, crit});
+    }
+    // 3. le tri des lignes du haut (dossiers et incidents seuls ensemble) ; a egalite, le plus recent d'abord. La liste
+    //    de l'hote va du plus recent au plus ancien : l'index du premier membre est la date du plus recent.
+    const auto rank = [](int crit) { return crit > 0 ? crit : hmi::kAlarmPriorities + 1; };   // l'inconnue en dernier
+    std::sort(entries.begin(), entries.end(), [&](const Entry& a, const Entry& b) {
+        const int na = a.members.front(), nb = b.members.front();
+        switch (order) {
+            case SortOldest: return na > nb;
+            case SortCriticality:
+                if (rank(a.criticality) != rank(b.criticality)) return rank(a.criticality) < rank(b.criticality);
+                break;
+            case SortAlarm: {
+                const bool ea = a.alarm.empty(), eb = b.alarm.empty();   // sans alarme : en dernier
+                if (ea != eb) return eb;
+                const std::string fa = ui::foldForSearch(a.alarm), fb = ui::foldForSearch(b.alarm);
+                if (fa != fb) return fa < fb;
+                break;
+            }
+            case SortCount:
+                if (a.members.size() != b.members.size()) return a.members.size() > b.members.size();
+                break;
+            default: break;
+        }
+        return na < nb;
+    });
+    // 4. les lignes : un dossier pour deux incidents ou plus de la meme alarme ; deplie, ses incidents en retrait (le
+    //    plus recent d'abord, quel que soit le tri)
+    for (auto& e : entries) {
+        Row r;
+        r.key = e.key;
+        r.alarm = e.alarm;
+        r.item = e.members.front();
+        r.criticality = e.criticality;
+        if (e.members.size() < 2) {
+            out.push_back(std::move(r));
+            continue;
+        }
+        r.group = true;
+        r.open = openGroups_[tab].count(e.key) != 0;
+        r.members = e.members;
+        const bool open = r.open;
+        out.push_back(std::move(r));
+        if (!open) continue;
+        for (const int m : e.members) {
+            Row child;
+            child.key = e.key;
+            child.alarm = e.alarm;
+            child.item = m;
+            child.depth = 1;
+            if (const auto* it = itemAt(tab, m)) child.criticality = incidentsui::criticalityOf(*it);
+            out.push_back(std::move(child));
+        }
+    }
+}
+
+void HmiIncidentsPane::placeSelection(int tab) {
+    const auto& rows = rows_[tab];
+    if (rows.empty()) {
+        // rien d'affiche : plus d'incident (le choix s'oublie), ou tout cache par un filtre (il revient avec la liste)
+        row_[tab] = -1;
+        if (!items_[tab] || items_[tab]->empty()) chosen_[tab].clear();
+        return;
+    }
+    const auto named = [&](int index) {
+        const auto* it = itemAt(tab, index);
+        return it && !chosen_[tab].empty() && it->name == chosen_[tab];
+    };
+    int found = -1;
+    // la ligne de l'incident choisi ; cache dans un dossier ferme : le dossier (l'incident reste celui des gestes)
+    for (std::size_t r = 0; r < rows.size() && found < 0; ++r)
+        if (!rows[r].group && named(rows[r].item)) found = static_cast<int>(r);
+    for (std::size_t r = 0; r < rows.size() && found < 0; ++r)
+        if (rows[r].group && !rows[r].open && std::any_of(rows[r].members.begin(), rows[r].members.end(), named)) found = static_cast<int>(r);
+    if (found < 0) found = std::clamp(row_[tab], 0, static_cast<int>(rows.size()) - 1);   // disparu ou cache : la ligne d'a cote
+    row_[tab] = found;
+    if (const auto* it = rowItem(tab, found)) chosen_[tab] = it->name;
+}
+
+void HmiIncidentsPane::refilter() {
+    for (int t = 0; t < 2; ++t) {
+        rebuildRows(t);
+        placeSelection(t);
+        if (lists_[t]) {
+            lists_[t]->invalidateLayout();
+            lists_[t]->reveal(row_[t]);
+        }
+    }
+    showSelected();
+    updateStatus();
+    invalidate();
+}
+
+void HmiIncidentsPane::toggleGroupAt(int tab, int row) {
+    const Row* r = row >= 0 ? rowAt(tab, static_cast<std::size_t>(row)) : nullptr;
+    if (!r || !r->group) return;
+    setGroupOpen(tab, r->key, !r->open);
+}
+
+void HmiIncidentsPane::setGroupOpen(int tab, std::string key, bool open) {
+    if (key.empty()) return;
+    if (open) openGroups_[tab].insert(key);
+    else openGroups_[tab].erase(key);
+    // l'incident choisi garde sa ligne ; un dossier replie sur lui le montre a sa place, deplie il le rend
+    rebuildRows(tab);
+    placeSelection(tab);
+    lists_[tab]->invalidateLayout();
+    lists_[tab]->reveal(row_[tab]);
+    if ((tab == 1) == validatedTab_) {
+        showSelected();
+        updateStatus();
+    }
+    invalidate();
+}
+
+bool HmiIncidentsPane::incidentsEnabled() const { return host_ && host_->settings().enabled; }
+
+bool HmiIncidentsPane::setIncidentsEnabled(bool on, std::string* why) {
+    if (!host_) {
+        if (why) *why = "pas de surveillance ici";
+        return false;
+    }
+    auto s = host_->settings();
+    if (s.enabled == on) return true;
+    s.enabled = on;
+    std::string err;
+    if (!host_->setSettings(s, &err)) {
+        say("Incidents : " + err, true);
+        if (why) *why = err;
+        return false;
+    }
+    say(on ? std::string("Cr\xC3\xA9" "ation des incidents reprise : chaque alarme coch\xC3\xA9" "e \xC2\xAB Incidents \xC2\xBB fera de nouveau son dossier.")
+           : std::string("Cr\xC3\xA9" "ation des incidents arr\xC3\xAAt\xC3\xA9" "e : plus aucun dossier n'est cr\xC3\xA9\xC3\xA9 (les incidents d\xC3\xA9j\xC3\xA0 "
+                         "enregistr\xC3\xA9s restent). Un clic sur \xC2\xAB Reprendre les incidents \xC2\xBB la relance."));
+    updateStatus();
+    return true;
+}
+
+void HmiIncidentsPane::updateStatus() {
+    // 1.20.2 : l'interrupteur dit ce qu'il fera
+    if (tools_) {
+        const bool on = incidentsEnabled();
+        tools_->setText(TOnOff,
+                        on ? std::string("Arr\xC3\xAAter la cr\xC3\xA9" "ation des incidents : plus aucun dossier n'est cr\xC3\xA9\xC3\xA9, quelle que soit "
+                                         "l'alarme (les incidents d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent) ; un second clic la reprend")
+                           : std::string("La cr\xC3\xA9" "ation des incidents est ARR\xC3\x8AT\xC3\x89" "E : un clic la reprend (les alarmes coch\xC3\xA9" "es "
+                                         "\xC2\xAB Incidents \xC2\xBB refont leur dossier)"),
+                        on ? std::string("Arr\xC3\xAAter les incidents") : std::string("Reprendre les incidents"));
+    }
+    const int t = validatedTab_ ? 1 : 0;
+    const std::size_t total = items_[t] ? items_[t]->size() : 0;
+    if (search_) search_->setCount(shown_[t], total);
+    if (!status_ || !host_ || !items_[0] || !items_[1]) return;
+    std::string msg = std::to_string(items_[0]->size()) + " en attente \xC2\xB7 " + std::to_string(items_[1]->size()) + " valid\xC3\xA9(s)"
+                      + (host_->projectFolder().empty() ? std::string(" \xC2\xB7 projet non enregistr\xC3\xA9 : aucun dossier d'incident")
+                                                        : std::string(" \xC2\xB7 ") + std::string(hmi::rec::kNativeFolder));
+    // la recherche ou la criticite : ce qui est affiche dans l'onglet ouvert
+    if (filtering())
+        msg = std::to_string(shown_[t]) + (shown_[t] > 1 ? " incidents affich\xC3\xA9s sur " : " incident affich\xC3\xA9 sur ") + std::to_string(total)
+              + " \xC2\xB7 " + msg;
+    // un dossier choisi : les gestes portent sur l'incident qu'il montre
+    const Row* r = row_[t] >= 0 ? rowAt(t, static_cast<std::size_t>(row_[t])) : nullptr;
+    if (r && r->group)
+        if (const auto* it = selected())
+            msg += " \xC2\xB7 dossier \xC2\xAB " + r->alarm + " \xC2\xBB (" + incidentsWord(r->members.size()) + ") : les gestes portent sur \xC2\xAB "
+                   + it->name + " \xC2\xBB";
+    status_->setMessage(std::move(msg));
 }
 
 // ---- les gestes ----
@@ -1937,11 +2413,20 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
                     if (!lines.empty()) say("Int\xC3\xA9grit\xC3\xA9 : " + lines.front(), lines.front().rfind("intact", 0) != 0);
                     break;
                 }
+                case MToggle: {   // 1.20.2 : le dossier d'alarme choisi (ou celui de l'incident choisi)
+                    const int t = validatedTab_ ? 1 : 0;
+                    if (const Row* r = row_[t] >= 0 ? rowAt(t, static_cast<std::size_t>(row_[t])) : nullptr; r && (r->group || r->depth > 0))
+                        setGroupOpen(t, r->key, r->group && !r->open);
+                    break;
+                }
                 default: break;
             }
         });
     }
     const bool pending = it->state == st::State::Pending;
+    // 1.20.2 : un dossier d'alarme choisi - son nom en tete, puis l'incident sur lequel portent les gestes
+    const int tab = validatedTab_ ? 1 : 0;
+    const Row* row = row_[tab] >= 0 ? rowAt(tab, static_cast<std::size_t>(row_[tab])) : nullptr;
     const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
         ui::PopupMenu::Item e;
         e.label = std::move(label);
@@ -1952,12 +2437,28 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
         return e;
     };
     std::vector<ui::PopupMenu::Item> items;
+    if (row && row->group) {
+        ui::PopupMenu::Item folder;
+        folder.heading = true;
+        folder.label = "Dossier \xC2\xAB " + row->alarm + " \xC2\xBB";
+        folder.shortcut = incidentsWord(row->members.size());
+        items.push_back(std::move(folder));
+    }
     ui::PopupMenu::Item head;
     head.heading = true;
     head.label = it->name;
     head.shortcut = pending ? "en attente" : "valid\xC3\xA9";
     items.push_back(std::move(head));
-    items.push_back(entry("Consulter", MConsult, "Entr\xC3\xA9" "e"));
+    const bool folderRow = row && row->group;
+    if (folderRow || (row && row->depth > 0)) {
+        // Entree (ou un clic) deplie / replie le dossier choisi ; fleche gauche replie celui de l'incident choisi
+        items.push_back(entry(folderRow && !row->open ? "D\xC3\xA9plier le dossier" : "Replier le dossier", MToggle,
+                              folderRow ? "Entr\xC3\xA9" "e" : "\xE2\x86\x90"));
+        ui::PopupMenu::Item sep;
+        sep.separator = true;
+        items.push_back(sep);
+    }
+    items.push_back(entry("Consulter", MConsult, folderRow ? std::string{} : std::string("Entr\xC3\xA9" "e")));
     items.push_back(entry("Voir l'analyse compl\xC3\xA8te", MFull));
     items.push_back(entry("Explorer les d\xC3\xA9pendances", MChain));
     ui::PopupMenu::Item rule;
@@ -1979,7 +2480,26 @@ void HmiIncidentsPane::onLayout() {
     const auto b = bounds();
     tools_->setBounds({b.x, b.y, b.w, 38});
     status_->setBounds({b.x, b.y + b.h - 24, b.w, 24});
-    split_->setBounds({b.x, b.y + 38, b.w, std::max(0.f, b.h - 62)});
+    // 1.20.2 : la ligne des filtres sous la barre (comme celle des alarmes) - la recherche, la criticite, le tri ; un
+    // volet etroit serre d'abord les deux listes.
+    {
+        const float y = b.y + 41.f, h = 28.f, gap = 8.f;
+        const float room = std::max(0.f, b.w - 4.f * gap);
+        float critW = 176.f, sortW = 226.f;
+        if (room - critW - sortW < 200.f) {
+            const float k = std::max(0.f, room - 200.f) / (critW + sortW);
+            critW = std::floor(critW * std::min(1.f, std::max(k, 0.45f)));
+            sortW = std::floor(sortW * std::min(1.f, std::max(k, 0.45f)));
+        }
+        const float searchW = std::clamp(room - critW - sortW, 0.f, 600.f);
+        float x = b.x + gap;
+        search_->setBounds({x, y, searchW, h});
+        x += searchW + gap;
+        criticality_->setBounds({x, y, critW, h});
+        x += critW + gap;
+        sort_->setBounds({x, y, sortW, h});
+    }
+    split_->setBounds({b.x, b.y + 73, b.w, std::max(0.f, b.h - 97)});
     if (menu_) menu_->setBounds(b);
 }
 

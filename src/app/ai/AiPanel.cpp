@@ -3,6 +3,9 @@
 // =============================================================================
 #include "AiPanel.hpp"
 
+#include "AiMarkdown.hpp"
+#include "AiPlanStrip.hpp"
+
 #include "AiPreviewDialog.hpp"
 #include "AiSettingsDialog.hpp"
 #include "../hmi/HmiAskDialog.hpp"
@@ -649,6 +652,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     rename->setVisibility(ui::Visibility::Hidden);
     rename_ = &static_cast<ui::InputText&>(addChild(std::move(rename)));
     chat_ = &static_cast<AiChatView&>(addChild(std::make_unique<AiChatView>(base + ".discussion", *this)));
+    strip_ = &static_cast<AiPlanStrip&>(addChild(std::make_unique<AiPlanStrip>(base + ".plan", *this)));   // 1.20.2
     prompt_ = &static_cast<AiPromptEdit&>(addChild(std::make_unique<AiPromptEdit>(base + ".saisie")));
     prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
     attachBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Joindre\xE2\x80\xA6", base + ".joindre")));
@@ -713,7 +717,13 @@ void AiPanel::tick(double now) {
             chat_->rebuild();
             invalidateLayout();
         }
-        if (chat_->anyChecking() || assistant_->applyingAny()) invalidate();
+        if (chat_->anyChecking() || assistant_->applyingAny() || chat_->copyFlash()) invalidate();
+        // 1.20.2 : le plan en cours apparait, change de hauteur ou s'en va : la discussion se replace.
+        if (strip_) {
+            const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
+            const float want = strip_->heightFor(bounds().w, std::max(0.f, (pendingArea_.y - 6.f - chatTop) * 0.45f));
+            if (std::fabs(want - stripH_) > 0.5f) invalidateLayout();
+        }
     }
     // 1.16.1 : une reponse vient de finir - l'ecran avertit (s'il le faut : l'utilisateur ne regarde pas).
     if (assistant_->generating()) {
@@ -1298,7 +1308,11 @@ void AiPanel::onLayout() {
     pendingArea_ = {x + kPad, promptArea_.y - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
     const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
     const float chatBottom = pendingArea_.y - 6.f;
-    chat_->setBounds({x, chatTop, w, std::max(40.f, chatBottom - chatTop)});
+    // 1.20.2 : le plan en cours, au-dessus de la discussion (il ne defile pas avec elle) ; au plus 45 % de la place.
+    stripH_ = strip_->heightFor(w, std::max(0.f, (chatBottom - chatTop) * 0.45f));
+    strip_->setBounds({x, chatTop, w, stripH_});
+    strip_->setVisibility(stripH_ > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    chat_->setBounds({x, chatTop + stripH_, w, std::max(40.f, chatBottom - chatTop - stripH_)});
 }
 
 void AiPanel::onPaint(const ui::PaintContext& ctx) {
@@ -1584,10 +1598,87 @@ void AiChatView::scrollBy(float dy) {
     invalidateLayout();
 }
 
+namespace {
+// 1.20.2 : un bloc de code mis en page - l'en-tete (la langue, Copier), puis chaque ligne du code, coupee a la largeur
+// sur un caractere entier (rien n'est perdu : le bouton copie le code exact, pas ce qui est montre), puis une marge.
+void layoutCode(std::vector<AiChatView::Line>& out, const markdown::Segment& seg, int index, float width, bool first) {
+    AiChatView::Line head;
+    head.code = index;
+    head.codeHead = true;
+    head.codeOpen = !seg.closed;
+    head.codeLang = markdown::languageLabel(seg.lang);
+    head.codeText = seg.text;
+    head.h = ui::lineHeight(kMeta) + 12.f;
+    head.gapBefore = first ? 0.f : 8.f;
+    out.push_back(std::move(head));
+    const float lh = ui::lineHeight(kBody) + 2.f;
+    const float room = std::max(40.f, width - 20.f);
+    std::size_t from = 0;
+    while (from <= seg.text.size()) {
+        std::size_t nl = seg.text.find('\n', from);
+        if (nl == std::string::npos) nl = seg.text.size();
+        std::string raw;
+        for (const char ch : std::string_view(seg.text).substr(from, nl - from)) {
+            if (ch == '\t') raw += "    ";
+            else if (ch != '\r') raw += ch;
+        }
+        from = nl + 1;
+        bool firstPiece = true;
+        while (firstPiece || !raw.empty()) {
+            // la plus longue tete qui tient (sur une frontiere de caractere UTF-8), au moins un caractere
+            std::vector<std::size_t> ends;
+            for (std::size_t i = 1; i <= raw.size(); ++i)
+                if (i == raw.size() || (static_cast<unsigned char>(raw[i]) >> 6) != 0x2) ends.push_back(i);
+            std::size_t take = raw.size();
+            if (!raw.empty() && ui::measureWidth(raw, kBody) > room) {
+                std::size_t lo = 0, hi = ends.size() - 1;
+                while (lo < hi) {
+                    const std::size_t mid = (lo + hi + 1) / 2;
+                    if (ui::measureWidth(raw.substr(0, ends[mid]), kBody) <= room) lo = mid;
+                    else hi = mid - 1;
+                }
+                take = ends[lo];
+            }
+            AiChatView::Line line;
+            line.code = index;
+            line.h = lh;
+            const std::string piece = raw.substr(0, take);
+            line.runs.push_back({piece, firstPiece ? 10.f : 22.f, ui::measureWidth(piece, kBody), 5});
+            out.push_back(std::move(line));
+            raw = raw.substr(take);
+            firstPiece = false;
+        }
+        if (nl >= seg.text.size()) break;
+    }
+    AiChatView::Line tail;   // la marge du bas du bloc
+    tail.code = index;
+    tail.h = 6.f;
+    out.push_back(std::move(tail));
+}
+} // namespace
+
 std::vector<AiChatView::Line> AiChatView::layoutText(const std::string& md, float width) {
     const std::string key = std::to_string(static_cast<int>(width)) + "|" + md;
     auto& cache = layoutCache();
     if (auto it = cache.find(key); it != cache.end()) return it->second;
+    // 1.20.2 : les blocs de code a part ; le texte autour, comme avant.
+    if (markdown::hasCode(md)) {
+        std::vector<Line> out;
+        int index = 0;
+        bool first = true;
+        for (const auto& seg : markdown::split(md)) {
+            if (seg.kind == markdown::Segment::Kind::Code) {
+                layoutCode(out, seg, index++, width, first);
+            } else {
+                auto part = layoutText(seg.text, width);
+                if (!part.empty() && !first) part.front().gapBefore = std::max(part.front().gapBefore, 8.f);
+                for (auto& l : part) out.push_back(std::move(l));
+            }
+            first = false;
+        }
+        cache.emplace(key, out);
+        return out;
+    }
     std::vector<Line> out;
     const float lhBody = ui::lineHeight(kBody) + 4.f;
     const float lhHead = ui::lineHeight(kHead) + 6.f;
@@ -1793,6 +1884,75 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     // 1.19.0 : le plan - celui de la validation (sans la refaire), ou celui garde a l'application.
     t.plan = p && doc ? plan::build(doc->project, *p, t.check) : as.planOf(message);
     return t;
+}
+
+std::optional<AiChatView::LivePlan> AiChatView::livePlan() const {
+    const auto& a = panel_.assistant();
+    const auto* conv = a.current();
+    if (!conv) return std::nullopt;
+    const int n = static_cast<int>(conv->messages.size());
+    int found = -1;
+    for (int i = n - 1; i >= 0 && found < 0; --i)   // d'abord celle qui travaille sur un fil de fond
+        if (conv->messages[static_cast<std::size_t>(i)].proposal && (a.applying(i) || checking(i))) found = i;
+    for (int i = n - 1; i >= 0 && found < 0; --i)   // sinon la derniere proposition
+        if (conv->messages[static_cast<std::size_t>(i)].proposal) found = i;
+    if (found < 0) return std::nullopt;
+    const Proposal* p = a.proposal(found);
+    if (!p || p->state == "refusee") return std::nullopt;
+    const Thumb& t = thumb(found);
+    LivePlan lp;
+    lp.message = found;
+    lp.id = p->id;
+    lp.plan = &t.plan;
+    lp.applying = a.applying(found);
+    lp.checking = !lp.applying && t.pending();
+    lp.open = p->state == "proposee";
+    lp.ops = p->ops.size();
+    if (!lp.applying && !lp.checking && !t.plan.worthShowing()) return std::nullopt;
+    const auto applied = p->state == "appliquee" ? a.appliedState(found) : Assistant::Applied::NotApplied;
+    lp.head = lp.checking ? "Plan d'action \xE2\x80\x94 " + std::to_string(lp.ops) + " op\xC3\xA9rations en v\xC3\xA9rification"
+                          : planHeadOf(*p, t.plan);
+    if (!lp.checking) lp.phases = phasesOf(*p, t.plan, applied, t.check.ok());
+    if (lp.applying) {
+        lp.status = "Application\xE2\x80\xA6";
+        lp.progress = a.applyProgress();
+    } else if (lp.checking) {
+        lp.status = "V\xC3\xA9rification\xE2\x80\xA6";
+        lp.progress = checkProgress(found);
+    } else if (p->state == "appliquee" && applied == Assistant::Applied::Undone) {
+        lp.status = "Annul\xC3\xA9 (Ctrl+Z)";
+        lp.tone = 2;
+    } else if (p->state == "appliquee") {
+        const bool failed = t.plan.count(plan::State::Failed) > 0;
+        lp.status = failed ? "Appliqu\xC3\xA9 avec des \xC3\xA9" "checs" : "Appliqu\xC3\xA9";
+        lp.tone = failed ? 2 : 1;
+    } else if (t.check.stale || t.check.viewMissing) {
+        lp.status = "P\xC3\xA9rim\xC3\xA9";
+        lp.tone = 2;
+    } else if (!t.check.ok()) {
+        lp.status = t.check.missingVariable.empty() ? "Non valide" : "\xC3\x80 compl\xC3\xA9ter";
+        lp.tone = 3;
+    } else {
+        lp.status = "Validation requise";   // a toi de dire Appliquer (ou Refuser)
+    }
+    return lp;
+}
+
+void AiChatView::revealMessage(int message, bool openPlan) {
+    const Proposal* p = panel_.assistant().proposal(message);
+    if (openPlan && p) planOpen_.insert(p->id);
+    measure();
+    for (const auto& b : blocks_)
+        if (b.message == message) {
+            const float target = b.card.h > 0.f ? b.y + b.card.y + b.planY - 8.f : b.y;
+            offset_ = std::clamp(target, 0.f, std::max(0.f, content_ - viewHeight()));
+            break;
+        }
+    stick_ = atBottom();
+    anchor_ = false;
+    anchored_ = false;
+    placeCards();
+    invalidate();
 }
 
 bool AiChatView::pollThumbs() {
@@ -2504,6 +2664,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto bb = bounds();
     tips_.clear();
+    copySpots_.clear();
     const auto& a = panel_.assistant();
     const auto* conv = a.current();
     ctx.r.pushClip(bb);
@@ -2546,8 +2707,45 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({bb.x + kPad + 22.f, top}, who, kMeta, m.state == "erreur" ? c.error : c.textMuted);
         float ly = top + meta + 4.f;
         const float tx = bb.x + kPad + 4.f;
-        for (const auto& l : b.lines) {
+        const float textW = std::max(80.f, bb.w - 2 * kPad - 12.f) - 8.f;
+        for (std::size_t li = 0; li < b.lines.size(); ++li) {
+            const auto& l = b.lines[li];
             ly += l.gapBefore;
+            // 1.20.2 : un bloc de code - son fond (tout le bloc), sa langue, Copier.
+            if (l.codeHead) {
+                float blockH = l.h;
+                for (std::size_t k = li + 1; k < b.lines.size() && b.lines[k].code == l.code && !b.lines[k].codeHead; ++k)
+                    blockH += b.lines[k].gapBefore + b.lines[k].h;
+                const gfx::Rect box{tx - 2.f, ly, textW + 4.f, blockH};
+                const gfx::Color bg = ctx.theme.brand.codeBg.a ? ctx.theme.brand.codeBg : c.inputBg;
+                ctx.r.fillRoundedRect(box, bg, 6.f);
+                ctx.r.strokeRect(box, alpha(c.border, 160), 1.f);
+                ctx.r.fillRect({box.x + 1.f, box.y + l.h - 1.f, box.w - 2.f, 1.f}, alpha(c.border, 140));
+                const float capY = ly + (l.h - meta) / 2.f;
+                const std::string lang = l.codeLang + (l.codeOpen ? std::string("  \xC2\xB7  en cours\xE2\x80\xA6") : std::string());
+                ctx.r.drawText({box.x + 10.f, capY}, lang, kMeta, c.textMuted);
+                if (!copied_.empty() && copiedAt_ < 0.0) copiedAt_ = ctx.time;
+                if (!copied_.empty() && ctx.time - copiedAt_ > 2.0) {
+                    copied_.clear();
+                    copiedAt_ = -1.0;
+                }
+                const bool done = !copied_.empty() && copied_ == l.codeText;
+                const std::string label = done ? std::string("\xE2\x9C\x93 Copi\xC3\xA9") : std::string("Copier");
+                const float pw = ctx.r.measure(label, kMeta).width + 30.f;
+                const gfx::Rect pill{box.right() - 8.f - pw, ly + 3.f, pw, l.h - 6.f};
+                ctx.r.fillRoundedRect(pill, done ? alpha(c.ok, 46) : alpha(c.accent, 40), 5.f);
+                ui::drawIcon(ctx.r, ui::Icon::Copy, {pill.x + 6.f, pill.y + (pill.h - 14.f) / 2.f, 14.f, 14.f}, done ? c.ok : c.accent);
+                ctx.r.drawText({pill.x + 24.f, pill.y + (pill.h - meta) / 2.f}, label, kMeta, done ? c.ok : c.text);
+                copySpots_.emplace_back(pill, l.codeText);
+                tips_.emplace_back(pill, "Copier ce code dans le presse-papiers (le code exact, sans les balises).");
+                ly += l.h;
+                continue;
+            }
+            if (l.code >= 0) {   // une ligne du bloc
+                for (const auto& r : l.runs) ctx.r.drawText({tx + r.x, ly + 1.f}, r.text, kBody, c.syntaxString.a ? c.syntaxString : c.text);
+                ly += l.h;
+                continue;
+            }
             if (!l.bullet.empty()) ctx.r.drawText({tx + l.bulletX, ly}, l.bullet, kBody, c.textMuted);
             for (const auto& r : l.runs) {
                 const gfx::Point at{tx + r.x, ly + (r.style == 3 ? 0.f : 0.f)};
@@ -2644,6 +2842,15 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
     bar_.paint(ctx, bb, content_, viewHeight(), offset_);
 }
 
+bool AiChatView::copyCode(const std::string& code) {
+    ui::setClipboardText(code);
+    copied_ = code;
+    copiedAt_ = -1.0;   // l'heure : au prochain dessin
+    panel_.say("Code copi\xC3\xA9 (" + std::to_string(std::count(code.begin(), code.end(), '\n') + (code.empty() ? 0 : 1)) + " lignes).");
+    invalidate();
+    return true;
+}
+
 ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
     if (bar_.handle(*this, ev, bounds(), content_, viewHeight(), offset_)) {
         stick_ = atBottom();
@@ -2671,6 +2878,12 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
         for (std::size_t i = 0; i < suggestionRects_.size(); ++i)
             if (suggestionRect(i).contains(d->pos)) {
                 (void)panel_.clickSuggestion(i);
+                return ui::EventResult::Consumed;
+            }
+        // 1.20.2 : Copier un bloc de code.
+        for (const auto& [at, code] : copySpots_)
+            if (at.contains(d->pos)) {
+                (void)copyCode(code);
                 return ui::EventResult::Consumed;
             }
         // 1.19.0 : le plan d'action - l'en-tete le deplie ; << retirer >> / << remettre >> une etape facultative ; une

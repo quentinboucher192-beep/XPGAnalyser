@@ -25,7 +25,9 @@
 #include "../src/app/ai/AiHttp.hpp"
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiOpenAI.hpp"
+#include "../src/app/ai/AiMarkdown.hpp"
 #include "../src/app/ai/AiPanel.hpp"
+#include "../src/app/ai/AiPlanStrip.hpp"
 #include "../src/app/ai/AiPreviewDialog.hpp"
 #include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/ai/AiPrompt.hpp"
@@ -1732,6 +1734,10 @@ void testAssistantRealProvider() {
 // =============================================================================
 //  1.20.0 : une GROSSE proposition se verifie sur un fil de fond - la carte montre l'avancement, l'interface ne gele pas
 // =============================================================================
+bool anyLine(const std::vector<std::string>& lines, std::string_view what) {
+    return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.find(what) != std::string::npos; });
+}
+
 void testBackgroundCard() {
     std::printf("[grosse proposition : verification de fond]\n");
     useFakeNet();
@@ -1759,6 +1765,16 @@ void testBackgroundCard() {
     bool said = false;
     for (const auto& tx : rec.texts) said = said || has(tx, "rification");
     check(said, "la carte dit << Verification... >> pendant le travail de fond");
+    // 1.20.2 : LE PLAN EN COURS, en haut : la verification de fond, son avancement.
+    auto& strip = f.panel->planStrip();
+    {
+        const auto lp = f.panel->chat().livePlan();
+        const auto lines = strip.lines();
+        check(lp && lp->checking && lp->message == m && strip.bounds().h > 0.f && anyLine(lines, "Plan en cours") && anyLine(lines, "rification")
+                  && anyLine(lines, "%"),
+              "la bande du haut : << Plan en cours >>, la verification de fond et son avancement en %");
+        check(rec.saw("Plan en cours"), "la bande se dessine au-dessus de la discussion");
+    }
     // 1.20.1 : Previsualiser pendant ce temps : la fenetre attend le resultat de fond (pas de revalidation sur ce fil).
     f.panel->openPreview(m);
     f.mm.applyPending();
@@ -1779,6 +1795,19 @@ void testBackgroundCard() {
     f.panel->layout();
     auto* apply = f.panel->chat().cardButton(m, 1);
     check(apply && apply->enabled(), "le resultat est la : Appliquer est disponible");
+    {
+        const auto lines = strip.lines();
+        check(anyLine(lines, "Validation requise") && anyLine(lines, "80/80 v\xC3\xA9rifi\xC3\xA9" "es") && !strip.expanded(),
+              "verifiee : la bande dit << Validation requise >>, 80/80 etapes verifiees, repliee");
+        const float folded = strip.bounds().h;
+        const auto hr = strip.headRect();
+        (void)strip.dispatch(ui::MouseDown{{hr.x + 60.f, hr.y + 10.f}, ui::MouseButton::Left, 1, {}});
+        f.panel->layout();
+        const auto open = strip.lines();
+        check(strip.expanded() && strip.bounds().h > folded && anyLine(open, "E1  ") && anyLine(open, "V\xC3\xA9rifi\xC3\xA9" "e"),
+              "un clic la deplie : chaque etape et son etat (Verifiee)");
+        check(strip.bounds().h <= f.panel->bounds().h * 0.5f, "depliee, elle reste bornee (la discussion garde sa place)");
+    }
     // 1.20.1 : Appliquer une grosse proposition : sur un fil de fond (la carte : << Application... >>), puis UNE commande.
     const std::size_t steps = f.stack.done().size();
     if (apply) apply->clicked->emit();
@@ -1788,6 +1817,11 @@ void testBackgroundCard() {
     bool applyingSaid = false;
     for (const auto& tx : rec2.texts) applyingSaid = applyingSaid || has(tx, "Application");
     check(applyingSaid, "la carte dit << Application... >> et son avancement");
+    {
+        const auto lines = strip.lines();
+        check(anyLine(lines, "Application") && anyLine(lines, "En cours") && !anyLine(lines, "R\xC3\xA9ussie"),
+              "en application : la bande dit << Application... >>, les etapes << En cours >> (aucune reussite inventee)");
+    }
     for (int k = 0; k < 2500 && f.as().applyingAny(); ++k) {
         f.step(0.002);
         pause(2);
@@ -1795,6 +1829,21 @@ void testBackgroundCard() {
     check(!f.as().applyingAny() && f.object("R_79") && f.object("R_0") && f.stack.done().size() == steps + 1
               && f.last().proposal->state == "appliquee",
           "appliquee : les 80 rectangles, en UNE commande");
+    {
+        f.step();
+        const auto lines = strip.lines();
+        check(anyLine(lines, "Appliqu\xC3\xA9") && anyLine(lines, "R\xC3\xA9ussie") && anyLine(lines, "80/80 r\xC3\xA9ussies"),
+              "appliquee : la bande dit << Applique >>, chaque etape << Reussie >>, 80/80");
+        const auto first = strip.stepRect(0);
+        f.panel->chat().scrollToBottom();
+        const float before = f.panel->chat().scrollOffset();
+        if (first.w > 0.f) (void)strip.dispatch(ui::MouseDown{{first.x + 20.f, first.y + 5.f}, ui::MouseButton::Left, 1, {}});
+        check(first.w > 0.f && f.panel->chat().scrollOffset() != before, "un clic sur une etape : la discussion va a la carte");
+        const auto cr = strip.closeRect();
+        (void)strip.dispatch(ui::MouseDown{{cr.x + 5.f, cr.y + 5.f}, ui::MouseButton::Left, 1, {}});
+        f.panel->layout();
+        check(strip.lines().empty() && strip.bounds().h == 0.f, "la croix : la bande se cache pour ce plan");
+    }
     (void)f.stack.undo();
     check(!f.object("R_0") && !f.object("R_79"), "Ctrl+Z : les 80 rectangles partent d'un coup");
     (void)f.stack.redo();
@@ -2043,10 +2092,68 @@ void testWritingBeforeText() {
     f.step();
 }
 
+std::string g_clipboard;   // 1.20.2 : le presse-papiers des essais (Copier un bloc de code)
+
+// 1.20.2 : LES BLOCS DE CODE des reponses - le decoupage, le dessin (la langue, Copier), le code exact copie.
+void testCodeBlocks() {
+    std::printf("[blocs de code copiables]\n");
+    namespace md = ai::markdown;
+    {
+        const auto segs = md::split("Voici :\n\n```st\nIF A THEN\n  B := 1;\nEND_IF;\n```\nPuis.\n```cpp\nint x;");
+        check(segs.size() == 4 && segs[1].kind == md::Segment::Kind::Code && segs[1].lang == "st" && segs[1].text == "IF A THEN\n  B := 1;\nEND_IF;"
+                  && segs[1].closed && segs[2].text == "Puis." && !segs[3].closed && segs[3].text == "int x;",
+              "le decoupage : texte, bloc ST ferme (code exact, sans balises), texte, bloc C++ pas encore ferme");
+        check(!md::hasCode("pas de ```code``` ici") && md::languageLabel("cpp") == "C++" && md::languageLabel("") == "Code",
+              "``` au milieu d'une ligne : pas un bloc ; les noms des langues");
+        const auto lines = ai::AiChatView::layoutText("Avant\n```st\nX := 1;\nY := 2;\n```\nApres", 400.f);
+        int heads = 0, codeLines = 0;
+        for (const auto& l : lines) {
+            if (l.codeHead) ++heads;
+            else if (l.code >= 0 && !l.runs.empty()) ++codeLines;
+        }
+        check(heads == 1 && codeLines == 2 && lines.front().code < 0 && lines.back().code < 0, "la mise en page : un en-tete, deux lignes de code, le texte autour");
+        std::string longLine;
+        for (int i = 0; i < 120; ++i) longLine += "A_" + std::to_string(i) + " ";
+        const auto wrapped = ai::AiChatView::layoutText("```\n" + longLine + "\n```", 300.f);
+        int pieces = 0;
+        std::string back;
+        for (const auto& l : wrapped)
+            if (l.code >= 0 && !l.codeHead)
+                for (const auto& r : l.runs) {
+                    ++pieces;
+                    back += r.text;
+                }
+        check(pieces > 3 && back == longLine && wrapped.front().codeText == longLine, "une longue ligne : coupee a la largeur, rien de perdu ; Copier rend la ligne entiere");
+    }
+    useFakeNet();
+    Fixture f("code");
+    f.configure();
+    const std::string code = "IF Niveau > 80.0 THEN\n    Alarme_Haute := TRUE;\nEND_IF;";
+    g_net.push(sseReply(streamText("Voici le script :\n\n```st\n" + code + "\n```\n\nColle-le dans le script de la vue.")));
+    check(f.panel->sendText("Ecris un script d'alarme haute"), "envoyer");
+    f.waitLive();
+    Recorder rec;
+    f.render(rec);
+    const auto& spots = f.panel->chat().copyButtons();
+    check(rec.saw("Copier") && rec.saw("ST") && rec.saw("Alarme_Haute := TRUE;") && rec.saw("Colle-le") && !rec.saw("```"),
+          "la reponse : le bloc dessine a part (la langue, Copier, le code), sans les balises, le texte autour");
+    check(spots.size() == 1 && spots.front().second == code, "un bouton Copier, qui porte le code exact");
+    g_clipboard.clear();
+    if (!spots.empty()) {
+        const auto r = spots.front().first;
+        (void)f.panel->chat().dispatch(ui::MouseDown{{r.x + r.w / 2.f, r.y + r.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    }
+    check(g_clipboard == code, "le clic sur Copier : le code exact dans le presse-papiers (sans les balises)");
+    Recorder rec2;
+    f.render(rec2);
+    check(rec2.saw("Copi\xC3\xA9") && f.panel->chat().copyFlash(), "la pastille dit << Copie >> un moment");
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
         ui::PlatformServices s;
+        s.clipboardSet = [](std::string_view t) { g_clipboard = std::string(t); };
         s.measureWidth = [](std::string_view t, gfx::FontId f) { return static_cast<float>(t.size()) * f.v * 0.5f; };
         s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v); };
         ui::installPlatformServices(std::move(s));
@@ -2065,6 +2172,7 @@ int main() {
     testDirectAndDemo();
     testAssistantRealProvider();
     testBackgroundCard();
+    testCodeBlocks();
     testSettingsDialog();
     testFauxFournisseur();
     std::printf("ai_reseau_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);

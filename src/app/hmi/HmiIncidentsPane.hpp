@@ -28,6 +28,23 @@
 //  Rien de lourd au dessin : la fiche se met en page quand l'incident, la
 //  largeur ou un depli change ; les images se decodent une fois, hors du fil
 //  de l'interface ; les textures se font sur lui.
+//
+//  1.20.2 : LES DOSSIERS PAR ALARME, LA RECHERCHE, LA CRITICITE, LE TRI. Sous
+//  la barre, une ligne de filtres : la recherche (ui::SearchField : l'alarme,
+//  l'equipement, la vue, la synthese, les commentaires, la date, le dossier, le
+//  groupe, la categorie, la criticite...), la criticite (Toutes, Critique,
+//  Haute, Moyenne, Basse) et le tri (plus recents, plus anciens, criticite,
+//  alarme, nombre d'incidents). Dans chaque onglet, les incidents RETENUS d'une
+//  meme alarme (deux ou plus) se rangent sous une ligne-dossier (ferme au
+//  depart ; un clic, Entree ou les fleches gauche / droite le deplient) ; une
+//  alarme d'un seul incident reste une ligne simple. Le tri range les lignes
+//  du haut (dossiers et lignes simples ensemble) ; dans un dossier, le plus
+//  recent d'abord. Les lignes affichees (rows_) sont refaites quand la liste,
+//  la recherche, les filtres, le tri ou un dossier change : tout ce qui va
+//  d'une ligne a un incident passe par elles. LA SELECTION reste un incident
+//  (chosen_) : cache dans un dossier ferme, c'est le dossier qui est choisi,
+//  et les gestes (consulter, commenter, valider, supprimer...) portent sur
+//  lui - le plus recent du dossier quand on choisit le dossier lui-meme.
 // =============================================================================
 #pragma once
 
@@ -38,6 +55,7 @@
 #include "../../hmi/HmiIncident.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "../../ui/widgets/SearchField.hpp"   // 1.20.2 : la recherche des incidents
 
 #include <cstdint>
 #include <functional>
@@ -88,6 +106,13 @@ bool settingsFrom(const std::vector<std::string>& values, hmi::incident::Setting
 // "2026-10-31 17:40:12.350" -> "31/10/2026 17:40:12" (illisible : tel quel).
 [[nodiscard]] std::string dateText(std::string_view stamp);
 
+// 1.20.2 : l'alarme d'un incident (celle du contexte, sinon le nom du declencheur) ; sa criticite (1 Critique,
+// 2 Haute, 3 Moyenne, 4 Basse - celle de l'alarme du projet, sinon celle de l'avis ; 0 : inconnue, un incident
+// illisible) ; son horodatage (la creation, sinon le declencheur).
+[[nodiscard]] std::string alarmOf(const ai::incidents::Item&);
+[[nodiscard]] int         criticalityOf(const ai::incidents::Item&);
+[[nodiscard]] std::string stampOf(const ai::incidents::Item&);
+
 // Un maillon de la chaine -> l'element a ouvrir (son genre, son nom, sa vue) et s'il existe encore dans `project`.
 struct Target {
     std::string kind, name, view;
@@ -125,16 +150,41 @@ public:
     // ---- la liste ----
     void showValidated(bool validated);
     [[nodiscard]] bool showingValidated() const noexcept { return validatedTab_; }
+    // 1.20.2 : les lignes AFFICHEES de l'onglet ouvert (dossiers d'alarme et incidents, apres la recherche et les
+    // filtres) ; sans dossier ni filtre : un incident par ligne, comme avant.
     [[nodiscard]] std::size_t rowCount() const;
-    [[nodiscard]] std::size_t pendingCount() const;
+    [[nodiscard]] std::size_t pendingCount() const;     // tous les incidents en attente (les filtres n'y font rien)
     [[nodiscard]] std::size_t validatedCount() const;
+    // 1.20.2 : les incidents de l'onglet ouvert que la recherche et la criticite retiennent.
+    [[nodiscard]] std::size_t shownCount() const;
+    // L'incident choisi ; une ligne-dossier choisie : celui qu'elle cache (le plus recent, sauf un autre choisi avant).
     [[nodiscard]] const ai::incidents::Item* selected() const;
     [[nodiscard]] std::string selectedName() const;
-    // Par le nom du dossier ou son chemin, dans l'onglet ouvert puis dans l'autre (qui s'ouvre).
+    [[nodiscard]] int selectedRow() const;              // 1.20.2 : la ligne choisie de l'onglet ouvert (-1 : aucune)
+    // Par le nom du dossier ou son chemin, dans l'onglet ouvert puis dans l'autre (qui s'ouvre). 1.20.2 : dans un
+    // dossier d'alarme ferme, c'est le dossier qui est choisi (l'incident reste celui des gestes) ; un incident que
+    // la recherche ou la criticite cachent n'est pas choisi (faux).
     bool select(const std::string& nameOrFolder);
     // Le texte d'une ligne (les essais, les scripts) : nom, date, alarme, equipement, vue, synthese, certitude, analyse,
-    // validation, separes par " | ".
+    // validation, separes par " | ". 1.20.2 : une ligne-dossier : "Dossier | alarme | N incidents | criticite |
+    // dernier : date | nom du plus recent".
     [[nodiscard]] std::string rowText(std::size_t row) const;
+
+    // ---- 1.20.2 : les dossiers par alarme, la recherche, la criticite, le tri ----
+    enum Sort : int { SortRecent = 0, SortOldest, SortCriticality, SortAlarm, SortCount };
+    [[nodiscard]] bool rowIsGroup(std::size_t row) const;      // une ligne-dossier (deux incidents ou plus d'une alarme)
+    [[nodiscard]] bool rowIsOpen(std::size_t row) const;       // ... depliee
+    [[nodiscard]] int  rowDepth(std::size_t row) const;        // 1 : un incident dans un dossier deplie
+    [[nodiscard]] std::size_t rowIncidents(std::size_t row) const;   // ses incidents (1 : une ligne d'incident)
+    void toggleGroup(std::size_t row);                         // deplier / replier un dossier (autre ligne : rien)
+    [[nodiscard]] ui::SearchField& search() noexcept { return *search_; }
+    [[nodiscard]] ui::DropDown&    criticality() noexcept { return *criticality_; }   // 0 toutes, 1 Critique ... 4 Basse
+    [[nodiscard]] ui::DropDown&    sortOrder() noexcept { return *sort_; }            // un Sort
+
+    // 1.20.2 : L'INTERRUPTEUR GENERAL des incidents (le reglage << surveillance active >>, garde avec le projet) : faux
+    // arrete toute creation de dossier, quelle que soit l'alarme ; les incidents deja enregistres restent.
+    [[nodiscard]] bool incidentsEnabled() const;
+    bool               setIncidentsEnabled(bool on, std::string* why = nullptr);
 
     // ---- les gestes (sans dialogue ; les hotes demandent d'abord) ----
     bool commentSelected(const std::string& text, std::string* why = nullptr);
@@ -173,8 +223,31 @@ protected:
 private:
     friend class HmiIncidentList;
     friend class HmiIncidentSheet;
+    // 1.20.2 : une ligne affichee - un incident (une ligne simple, ou dans un dossier deplie : depth 1), ou le
+    // dossier d'une alarme (group : ses incidents retenus, le plus recent d'abord ; item : le plus recent).
+    struct Row {
+        bool             group{false};
+        std::string      key;              // l'alarme pliee (sans casse ni accents) : la cle du dossier
+        std::string      alarm;            // l'alarme, telle qu'ecrite
+        int              item{-1};         // l'index dans items_[onglet]
+        std::vector<int> members;          // un dossier : ses incidents
+        bool             open{false};
+        int              depth{0};
+        int              criticality{0};   // un dossier : la plus haute (1 Critique ; 0 inconnue)
+    };
     void selectRow(int tab, int row);
     void showSelected();
+    // 1.20.2 : les lignes affichees
+    void rebuildRows(int tab);             // la recherche, la criticite, les dossiers, le tri
+    void placeSelection(int tab);          // la ligne de l'incident choisi (ou son dossier ferme, ou la voisine)
+    void refilter();                       // la recherche, un filtre ou le tri a change : les deux onglets
+    void toggleGroupAt(int tab, int row);
+    void setGroupOpen(int tab, std::string key, bool open);
+    void updateStatus();                   // la barre : les comptes, ce qui est affiche, le dossier choisi
+    [[nodiscard]] bool filtering() const;  // une recherche ou une criticite choisie
+    [[nodiscard]] const ai::incidents::Item* itemAt(int tab, int index) const;
+    [[nodiscard]] const ai::incidents::Item* rowItem(int tab, int row) const;   // l'incident d'une ligne (dossier : celui des gestes)
+    [[nodiscard]] const Row* rowAt(int tab, std::size_t row) const;
     void openContextMenu(gfx::Point surface);
     [[nodiscard]] std::string author() const;
     // Une analyse demandee d'ici qui attend encore (l'hote en a une en cours ou en file) ; sinon elle se redemande.
@@ -184,6 +257,9 @@ private:
     IncidentHost*                         host_{nullptr};
     Hosts                                 hosts_;
     HmiToolStrip*                         tools_{nullptr};
+    ui::SearchField*                      search_{nullptr};        // 1.20.2 : la ligne des filtres
+    ui::DropDown*                         criticality_{nullptr};
+    ui::DropDown*                         sort_{nullptr};
     ui::Splitter*                         split_{nullptr};
     ui::TabControl*                       tabs_{nullptr};
     ui::ScrollablePanel*                  scrolls_[2]{nullptr, nullptr};
@@ -196,8 +272,11 @@ private:
     const std::vector<ai::incidents::Item>* items_[2]{nullptr, nullptr};
     std::uint64_t                         revision_{~std::uint64_t{0}};
     bool                                  validatedTab_{false};
-    int                                   row_[2]{-1, -1};
+    int                                   row_[2]{-1, -1};   // 1.20.2 : la ligne AFFICHEE choisie (rows_)
     std::string                           chosen_[2];        // le nom choisi dans chaque onglet (suit les relectures)
+    std::vector<Row>                      rows_[2];          // 1.20.2 : les lignes affichees de chaque onglet
+    std::set<std::string>                 openGroups_[2];    // 1.20.2 : les dossiers deplies (par cle d'alarme), la seance
+    std::size_t                           shown_[2]{0, 0};   // 1.20.2 : les incidents retenus par la recherche et le filtre
     std::set<std::string>                 requested_;        // les analyses demandees d'ici, pas encore arrivees
     std::map<std::string, std::size_t>    analysesSeen_;     // ... et le nombre d'analyses qu'elles avaient
     std::string                           message_;

@@ -561,8 +561,27 @@ std::string Assistant::readPlcAttachments(const std::vector<Attachment>& attachm
 std::string Assistant::shownText() const {
     if (gen_.live && gen_.textTool) {
         // 1.16.0 : la proposition en texte (un bloc ```json) ne s'ecrit pas dans la bulle : la carte la montre.
-        const auto at = gen_.text.find("```");
-        return at == std::string::npos ? gen_.text : gen_.text.substr(0, at);
+        // 1.20.2 : SEULEMENT elle (```json, ou un bloc sans langue qui commence par une accolade) - les autres blocs de
+        // code (ST, C++...) s'ecrivent dans la bulle, avec leur bouton Copier.
+        const std::string& t = gen_.text;
+        std::size_t at = 0;
+        while ((at = t.find("```", at)) != std::string::npos) {
+            const std::size_t lineEnd = t.find('\n', at + 3);
+            std::string tag;
+            for (const char ch : std::string_view(t).substr(at + 3, lineEnd == std::string::npos ? std::string::npos : lineEnd - at - 3))
+                if (ch != ' ' && ch != '\t' && ch != '\r') tag += static_cast<char>(ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch);
+            if (lineEnd == std::string::npos)   // la langue arrive : cachee tant qu'elle peut devenir << json >>
+                return std::string_view("json").substr(0, tag.size()) == tag ? t.substr(0, at) : t;
+            if (tag == "json") return t.substr(0, at);
+            if (tag.empty()) {
+                const std::size_t q = t.find_first_not_of(" \t\r\n", lineEnd + 1);
+                if (q == std::string::npos || t[q] == '{') return t.substr(0, at);
+            }
+            const std::size_t close = t.find("```", lineEnd + 1);   // un autre bloc : montre, jusqu'a sa fin
+            if (close == std::string::npos) return t;
+            at = close + 3;
+        }
+        return t;
     }
     if (gen_.live) return gen_.text;   // un vrai fournisseur : ce qui est arrive
     if (gen_.phase != Phase::Writing) return {};

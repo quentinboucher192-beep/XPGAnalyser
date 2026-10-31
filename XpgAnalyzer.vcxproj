@@ -594,6 +594,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\CallTrail.cpp" />
     <ClCompile Include="src\core\CrashGuard.cpp" />
     <ClCompile Include="src\core\Edition.cpp" />
+    <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
     <ClCompile Include="src\help\CenterPages.cpp" />
@@ -703,10 +704,12 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiKnowledge.cpp" />
     <ClCompile Include="src\app\ai\AiLearning.cpp" />
     <ClCompile Include="src\app\ai\AiLearningFile.cpp" />
+    <ClCompile Include="src\app\ai\AiMarkdown.cpp" />
     <ClCompile Include="src\app\ai\AiMemory.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryDialog.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp" />
     <ClCompile Include="src\app\ai\AiPlan.cpp" />
+    <ClCompile Include="src\app\ai\AiPlanStrip.cpp" />
     <ClCompile Include="src\app\ai\AiProjectAnswers.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -1113,6 +1116,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\CodeStats.hpp" />
     <ClInclude Include="src\core\CrashGuard.hpp" />
     <ClInclude Include="src\core\Edition.hpp" />
+    <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />
     <ClInclude Include="src\help\CenterPages.hpp" />
@@ -1221,11 +1225,13 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiKnowledge.hpp" />
     <ClInclude Include="src\app\ai\AiLearning.hpp" />
     <ClInclude Include="src\app\ai\AiLearningFile.hpp" />
+    <ClInclude Include="src\app\ai\AiMarkdown.hpp" />
     <ClInclude Include="src\app\ai\AiMemory.hpp" />
     <ClInclude Include="src\app\ai\AiMemoryDialog.hpp" />
     <ClInclude Include="src\app\ai\AiMemoryJson.hpp" />
     <ClInclude Include="src\app\ai\AiPaths.hpp" />
     <ClInclude Include="src\app\ai\AiPlan.hpp" />
+    <ClInclude Include="src\app\ai\AiPlanStrip.hpp" />
     <ClInclude Include="src\app\ai\AiProjectAnswers.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

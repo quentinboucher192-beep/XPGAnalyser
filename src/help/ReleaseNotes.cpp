@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.20.1", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.2", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.19.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.18.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
@@ -148,6 +149,39 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.20.2 : la conversation (le plan en cours en haut, les blocs de code copiables), les incidents (la qualite)
+        note("1.20.2", "Assistant IA", Kind::New,
+         "LE PLAN EN COURS, EN HAUT DE LA CONVERSATION : une bande au-dessus de la discussion, qui ne d\xC3\xA9" "file pas, montre "
+         "le plan de la proposition qui se v\xC3\xA9rifie ou s'applique (sinon celui de la derni\xC3\xA8re proposition) : son \xC3\xA9tat "
+         "(V\xC3\xA9rification\xE2\x80\xA6, Application\xE2\x80\xA6, Validation requise, Appliqu\xC3\xA9) et sa barre d'avancement. Un clic la "
+         "d\xC3\xA9plie : chaque \xC3\xA9tape et son \xC3\xA9tat (En attente, V\xC3\xA9rifi\xC3\xA9" "e, En cours, R\xC3\xA9ussie, \xC3\x89" "chec, Ignor\xC3\xA9" "e, "
+         "Annul\xC3\xA9" "e) ; un clic sur une \xC3\xA9tape am\xC3\xA8ne \xC3\xA0 sa carte. Jamais une r\xC3\xA9ussite qui n'a pas eu lieu.",
+         "assistant-ia", ""),
+        note("1.20.2", "Assistant IA", Kind::New,
+         "DES BLOCS DE CODE COPIABLES DANS LES R\xC3\x89PONSES : un code entre balises (```st \xE2\x80\xA6 ```) est montr\xC3\xA9 \xC3\xA0 part, sur "
+         "son fond, avec sa langue (ST, C++, JSON\xE2\x80\xA6) et un bouton Copier qui met le code EXACT dans le presse-papiers, sans "
+         "les balises. Pendant que la r\xC3\xA9ponse s'\xC3\xA9" "crit, le bloc appara\xC3\xAEt d\xC3\xA9j\xC3\xA0 (seul le bloc JSON d'une "
+         "proposition reste dans sa carte).",
+         "assistant-ia", ""),
+        note("1.20.2", "Incidents", Kind::New,
+         "UN DOSSIER PAR ALARME, UNE RECHERCHE, LE TRI PAR CRITICIT\xC3\x89 : dans le volet Incidents, les incidents d'une m\xC3\xAAme "
+         "alarme (deux ou plus) se rangent sous une ligne-dossier (\xC2\xAB Defaut_Pompe_2 \xE2\x80\x94 3 incidents \xC2\xBB, sa criticit\xC3\xA9, le "
+         "premier et le dernier), ferm\xC3\xA9" "e au d\xC3\xA9part : un clic ou les fl\xC3\xA8" "ches la d\xC3\xA9plient. Au-dessus de la liste : une "
+         "recherche (alarme, \xC3\xA9quipement, vue, synth\xC3\xA8se, commentaires, date\xE2\x80\xA6), un filtre de criticit\xC3\xA9 (Critique, Haute, "
+         "Moyenne, Basse) et le tri (plus r\xC3\xA9" "cents, plus anciens, criticit\xC3\xA9, alarme, nombre d'incidents). Les badges comptent "
+         "toujours tout ; la barre dit combien sont affich\xC3\xA9s.",
+         "incidents", ""),
+        note("1.20.2", "Incidents", Kind::New,
+         "ARR\xC3\x8ATER LES INCIDENTS EN UN CLIC : le bouton \xC2\xAB Arr\xC3\xAAter les incidents \xC2\xBB du volet Incidents coupe toute "
+         "cr\xC3\xA9" "ation de dossier, quelle que soit l'alarme (les incidents d\xC3\xA9j\xC3\xA0 enregistr\xC3\xA9s restent) ; \xC2\xAB Reprendre les "
+         "incidents \xC2\xBB la relance. Le choix est gard\xC3\xA9 avec le projet.",
+         "incidents", ""),
+        note("1.20.2", "Incidents", Kind::Fixed,
+         "DES IMAGES ET DES VID\xC3\x89OS NETTES : les couleurs ne bavent plus (JPEG sans sous-\xC3\xA9" "chantillonnage des couleurs, "
+         "qualit\xC3\xA9 92 pour la vid\xC3\xA9o, 95 pour l'image du d\xC3\xA9" "faut), une vue large n'est plus divis\xC3\xA9" "e par deux (r\xC3\xA9" "duite "
+         "\xC3\xA0 la juste taille, 1920 pixels au plus), 5 images par seconde par d\xC3\xA9" "faut (2 avant), et la vid\xC3\xA9o a une cadence "
+         "juste : chaque image \xC3\xA0 son heure r\xC3\xA9" "elle, la vid\xC3\xA9o dure ce qu'a dur\xC3\xA9 la sc\xC3\xA8ne.",
+         "incidents", ""),
         // 1.20.1 : ce que la 1.20.0 laissait au premier plan, et le texte exact des pieces jointes
         note("1.20.1", "Assistant IA", Kind::Fixed,
          "APPLIQUER ET PR\xC3\x89VISUALISER UNE GROSSE PROPOSITION NE BLOQUENT PLUS L'APPLI : \xC3\xA0 partir de 40 op\xC3\xA9rations, "

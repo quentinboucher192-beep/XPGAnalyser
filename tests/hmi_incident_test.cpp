@@ -14,6 +14,7 @@
 // =============================================================================
 #include "../src/app/ai/AiIncident.hpp"
 #include "../src/app/hmi/HmiIncidentHost.hpp"
+#include "../src/app/hmi/HmiIncidentsPane.hpp"   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
 #include "../src/core/AtomicFile.hpp"
 #include "../src/hmi/HmiIncident.hpp"
 #include "../src/hmi/HmiRelations.hpp"
@@ -749,6 +750,155 @@ void volume() {
     check(m.timeline(-1, 1e9).size() <= 2000, "G la chronologie gardee est bornee");
 }
 
+// ---- 1.20.2 : le volet - les dossiers par alarme, la recherche, la criticite, le tri ------------------------------
+void incidentsPane() {
+    std::printf("1.20.2 le volet : dossiers par alarme, recherche, criticite, tri\n");
+    const fs::path proj = tempRoot("volet");
+    const Project p = station();
+    {
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        check(h.drain(3000), "V l'hote pret (la reprise, la premiere liste)");
+        st::Store* store = h.storeForTests();
+        check(store != nullptr, "V le stockage de l'hote");
+        // A = Defaut_Pompe_2 (Critique) trois fois ; B = Niveau_Haut (Haute) une fois, le plus recent
+        struct Def {
+            const char* alarm;
+            const char* at;
+        };
+        const Def defs[] = {{"Defaut_Pompe_2", "2026-10-31 10:00:00.000"},
+                            {"Defaut_Pompe_2", "2026-10-31 10:05:00.000"},
+                            {"Defaut_Pompe_2", "2026-10-31 10:10:00.000"},
+                            {"Niveau_Haut", "2026-10-31 11:47:33.000"}};
+        std::vector<std::string> names;   // les noms des dossiers, dans l'ordre de defs
+        for (const auto& d : defs) {
+            if (!store) break;
+            inc::SnapshotInput in;
+            in.project = &p;
+            in.trigger.kind = inc::EventKind::Appear;
+            in.trigger.name = d.alarm;
+            in.trigger.at = d.at;
+            in.openView = "Vue_Station";
+            in.projectName = p.config.name;
+            in.projectVersion = p.config.version;
+            in.id = st::newId();
+            in.createdAt = d.at;
+            const inc::Snapshot s = inc::snapshot(in);
+            std::string folder, why;
+            check(store->create(s, {}, st::initialAnalysis(s, s.createdAt), folder, &why), std::string("V l'incident ") + d.alarm + " " + why);
+            names.push_back(fs::path(folder).filename().string());
+        }
+        if (store && names.size() == 4) {
+            st::Comment cm;
+            cm.text = "Fuite_Vanne_Quatre constatee sur site";
+            cm.author = "essai";
+            std::string why;
+            check(store->addComment((fs::path(store->pendingFolder()) / names[3]).string(), cm, &why), "V un commentaire sur B " + why);
+        }
+        auto doc = std::make_shared<hmi::Document>();
+        app::HmiIncidentsPane pane("hmi.incidents", doc, &h);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        check(h.drain(3000), "V la relecture des dossiers");
+        (void)pane.poll();
+        pane.layout();
+        check(pane.pendingCount() == 4 && names.size() == 4, "V quatre incidents en attente (" + std::to_string(pane.pendingCount()) + ")");
+        if (names.size() == 4) {
+            const auto groupRow = [&](std::size_t incidents) {
+                for (std::size_t r = 0; r < pane.rowCount(); ++r)
+                    if (pane.rowIsGroup(r) && pane.rowIncidents(r) == incidents) return static_cast<int>(r);
+                return -1;
+            };
+            // 1. deux lignes : B seul (le plus recent d'abord), puis le dossier ferme de A et ses trois incidents
+            check(pane.rowCount() == 2, "V1 deux lignes : un dossier pour A, une ligne pour B (" + std::to_string(pane.rowCount()) + ")");
+            check(!pane.rowIsGroup(0) && has(pane.rowText(0), "Niveau_Haut"), "V1 B, le plus recent, en premier : une ligne simple");
+            check(pane.rowIsGroup(1) && !pane.rowIsOpen(1) && pane.rowIncidents(1) == 3, "V1 le dossier de A : trois incidents, ferme au depart");
+            check(has(pane.rowText(1), "Defaut_Pompe_2") && has(pane.rowText(1), "3 incidents") && has(pane.rowText(1), "Critique"),
+                  "V1 le texte du dossier : l'alarme, << 3 incidents >>, la criticite (" + pane.rowText(1) + ")");
+            check(has(pane.rowText(1), names[2]), "V1 le dossier montre le plus recent de A");
+            check(pane.selectedRow() == 0 && pane.selectedName() == names[3], "V1 la premiere ligne choisie, comme avant");
+            // 2. deplier : cinq lignes, les incidents de A en retrait, du plus recent au plus ancien ; B reste choisi
+            pane.toggleGroup(1);
+            check(pane.rowCount() == 5 && pane.rowIsOpen(1), "V2 deplie : cinq lignes");
+            check(pane.rowDepth(0) == 0 && pane.rowDepth(1) == 0 && pane.rowDepth(2) == 1 && pane.rowDepth(4) == 1, "V2 les incidents du dossier en retrait");
+            check(has(pane.rowText(2), names[2]) && has(pane.rowText(3), names[1]) && has(pane.rowText(4), names[0]), "V2 dans le dossier : le plus recent d'abord");
+            check(has(pane.rowText(2), "10:10:00") && has(pane.rowText(4), "10:00:00"), "V2 les dates des incidents du dossier");
+            check(pane.selectedRow() == 0 && pane.selectedName() == names[3], "V2 deplier ne change pas l'incident choisi");
+            // 3. un incident du dossier choisi, puis replie : le dossier est choisi, l'incident reste celui des gestes
+            check(pane.select(names[1]) && pane.selectedRow() == 3, "V3 choisir le deuxieme incident de A");
+            pane.toggleGroup(1);
+            check(pane.rowCount() == 2 && pane.selectedRow() == 1 && pane.selectedName() == names[1], "V3 replie : le dossier choisi, l'incident garde");
+            pane.toggleGroup(1);
+            check(pane.selectedRow() == 3 && pane.selectedName() == names[1], "V3 deplie de nouveau : l'incident rechoisi");
+            pane.toggleGroup(1);
+            check(pane.select(names[0]) && pane.selectedRow() == 1 && pane.selectedName() == names[0] && !pane.rowIsOpen(1),
+                  "V3 choisir un incident d'un dossier ferme : le dossier est choisi, sans le deplier");
+            // 4. la recherche : un mot du commentaire de B ; la date affichee ; l'alarme
+            pane.search().setText("fuite_vanne");
+            check(pane.rowCount() == 1 && !pane.rowIsGroup(0) && has(pane.rowText(0), "Niveau_Haut") && pane.shownCount() == 1,
+                  "V4 la recherche dans les commentaires : B seul");
+            check(pane.search().countText() == "1 sur 4", "V4 le compte de la recherche (" + pane.search().countText() + ")");
+            check(pane.selectedName() == names[3], "V4 cache par la recherche : la ligne restante est choisie");
+            pane.search().setText("31/10/2026 10:05");
+            check(pane.rowCount() == 1 && !pane.rowIsGroup(0) && has(pane.rowText(0), names[1]),
+                  "V4 la date affichee : un seul incident de A retenu, une ligne simple (pas de dossier pour un seul)");
+            pane.search().setText("Defaut_Pompe_2");
+            check(groupRow(3) >= 0 && pane.shownCount() >= 3, "V4 l'alarme : ses trois incidents, en dossier");
+            pane.search().setText("Defaut_Pompe_2 -10:05");
+            check(groupRow(2) >= 0 && groupRow(3) < 0, "V4 un mot exclu : le dossier de A n'a plus que deux incidents");
+            pane.search().setText("");
+            check(pane.rowCount() == 2 && pane.search().countText().empty(), "V4 la recherche effacee : tout revient");
+            // 5. la criticite
+            check(pane.select(names[3]), "V5 B choisi");
+            pane.criticality().setSelectedIndex(1);
+            check(pane.rowCount() == 1 && pane.rowIsGroup(0) && pane.rowIncidents(0) == 3 && pane.shownCount() == 3, "V5 Critique : le dossier de A seul");
+            pane.criticality().setSelectedIndex(2);
+            check(pane.rowCount() == 1 && !pane.rowIsGroup(0) && has(pane.rowText(0), "Niveau_Haut"), "V5 Haute : B seul");
+            pane.criticality().setSelectedIndex(4);
+            check(pane.rowCount() == 0 && pane.selected() == nullptr && pane.shownCount() == 0, "V5 Basse : rien");
+            check(pane.pendingCount() == 4, "V5 le badge compte tous les incidents (les filtres n'y font rien)");
+            pane.criticality().setSelectedIndex(0);
+            check(pane.rowCount() == 2 && pane.selectedName() == names[3], "V5 toutes : tout revient, le choix d'avant aussi");
+            // 6. le tri
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortCriticality);
+            check(pane.rowIsGroup(0) && has(pane.rowText(0), "Defaut_Pompe_2") && has(pane.rowText(1), "Niveau_Haut"), "V6 Criticite : le dossier Critique d'abord");
+            check(pane.selectedName() == names[3] && pane.selectedRow() == 1, "V6 le tri garde l'incident choisi");
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortCount);
+            check(pane.rowIsGroup(0) && pane.rowIncidents(0) == 3 && pane.rowIncidents(1) == 1, "V6 Nombre d'incidents : le dossier de trois d'abord");
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortAlarm);
+            check(has(pane.rowText(0), "Defaut_Pompe_2") && has(pane.rowText(1), "Niveau_Haut"), "V6 Alarme : de A a Z");
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortOldest);
+            check(pane.rowIsGroup(0) && has(pane.rowText(1), "Niveau_Haut"), "V6 Plus anciens : le dossier (dernier a 10:10) avant B (11:47)");
+            pane.toggleGroup(0);
+            check(pane.rowCount() == 5 && has(pane.rowText(1), names[2]) && has(pane.rowText(3), names[0]) && has(pane.rowText(4), "Niveau_Haut"),
+                  "V6 dans un dossier, le plus recent d'abord, quel que soit le tri");
+            pane.sortOrder().setSelectedIndex(app::HmiIncidentsPane::SortRecent);
+            check(has(pane.rowText(0), "Niveau_Haut") && pane.rowIsGroup(1) && pane.rowIsOpen(1), "V6 Plus recents : B d'abord ; le dossier reste deplie");
+            pane.toggleGroup(1);
+            // 7. une relecture garde les dossiers et le choix ; les gestes d'un dossier portent sur l'incident qu'il montre
+            check(pane.select(names[2]) && pane.selectedRow() == 1, "V7 le plus recent de A : son dossier ferme choisi");
+            h.comment((fs::path(store->pendingFolder()) / names[0]).string(), "Vu", "essai");
+            check(h.drain(3000) && pane.poll(), "V7 une relecture (un commentaire ajoute)");
+            check(pane.rowCount() == 2 && pane.selectedRow() == 1 && pane.selectedName() == names[2], "V7 apres la relecture : le dossier ferme, le meme incident");
+            std::string why;
+            check(pane.removeSelected(&why), "V7 supprimer depuis le dossier : " + why);
+            check(h.drain(3000) && pane.poll(), "V7 la relecture apres la suppression");
+            check(pane.pendingCount() == 3 && pane.rowCount() == 2 && pane.rowIsGroup(1) && pane.rowIncidents(1) == 2,
+                  "V7 un seul incident supprime (celui que le dossier montrait), pas tout le dossier");
+            check(pane.selectedRow() == 1 && pane.selectedName() == names[1], "V7 le dossier reste choisi : son plus recent desormais");
+            // 8. 1.20.2 : l'interrupteur general - arreter la creation des incidents, puis la reprendre (garde avec le projet)
+            check(pane.incidentsEnabled() && pane.setIncidentsEnabled(false) && !pane.incidentsEnabled() && !h.settings().enabled,
+                  "V8 l'interrupteur : la creation des incidents arretee");
+            check(fs::exists(fs::path(proj) / "ihm" / "ressources" / "enregistrements" / "reglages-incidents.json"),
+                  "V8 l'arret est garde avec le projet (reglages-incidents.json)");
+            check(pane.setIncidentsEnabled(true) && pane.incidentsEnabled() && h.settings().enabled, "V8 un second clic la reprend");
+        }
+        h.shutdown();
+    }
+    std::error_code ec;
+    fs::remove_all(proj, ec);
+}
+
 } // namespace
 
 int main() {
@@ -758,6 +908,7 @@ int main() {
     disk();
     host();
     volume();
+    incidentsPane();   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

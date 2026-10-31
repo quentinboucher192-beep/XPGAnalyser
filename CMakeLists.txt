@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.20.1 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.20.2 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -726,6 +726,10 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(ai_incident_answers_test tests/ai_incident_answers_test.cpp src/app/ai/AiIncidentAnswers.cpp
                             src/app/ai/AiIncident.cpp src/app/ai/AiJson.cpp)
     xpg_target_link_libraries(ai_incident_answers_test PRIVATE xpg_hmi)
+    # 1.21.0 : lancer un programme a part, borne (le temps, la memoire, la sortie), sans reseau quand le systeme le
+    # permet : le bac a sable de l'IA. L'essai se relance lui-meme comme enfant.
+    xpg_add_test_executable(core_process_test tests/core_process_test.cpp)
+    xpg_target_link_libraries(core_process_test PRIVATE xpg_core)
     # 1.19.0 : le graphe des relations du projet, la verification globale, l'optimisation des adresses.
     xpg_add_test_executable(hmi_relations_test tests/hmi_relations_test.cpp)
     xpg_target_link_libraries(hmi_relations_test PRIVATE xpg_hmi)
@@ -896,6 +900,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
     xpg_add_test(NAME hmiincident COMMAND hmi_incident_test)                 # 1.20.0 : les incidents (essais A a G)
+    xpg_add_test(NAME coreprocess COMMAND core_process_test)                 # 1.21.0 : un programme a part, borne
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
