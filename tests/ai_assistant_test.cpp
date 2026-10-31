@@ -176,6 +176,13 @@ struct Fixture {
         panel = std::make_unique<ai::AiPanel>("ai.panneau", std::move(core), std::move(ui));
         panel->setBounds({0, 0, 440, 900});
         panel->ensureLoaded();
+        // 1.16.0 : l'IA integree est le choix d'une installation neuve ; ces essais sont ceux de la
+        // demonstration (ses six demandes) : elle est choisie explicitement.
+        if (panel->assistant().settings().provider != "demo") {
+            ai::Settings st = panel->assistant().settings();
+            st.provider = "demo";
+            panel->assistant().setSettings(st);
+        }
         panel->layout();
     }
     [[nodiscard]] ai::Assistant& as() { return panel->assistant(); }

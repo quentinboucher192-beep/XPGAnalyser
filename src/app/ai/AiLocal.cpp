@@ -1,15 +1,2561 @@
 // =============================================================================
 //  app/ai/AiLocal.cpp - l'IA integree (1.16.0) : voir AiLocal.hpp
+// -----------------------------------------------------------------------------
+//  UN MOTEUR PAR REGLES, PAS UN MODELE DE LANGAGE. La demande est coupee en mots
+//  (le texte tel qu'ecrit, et replie : minuscules, sans accents) ; on y lit :
+//
+//    - l'intention, par ses verbes et ses mots (ajoute, associe, supprime...),
+//      dans un ordre fixe (une question, une suite, un synoptique, une vue, des
+//      variables, associer, animer, supprimer, dupliquer, aligner, repartir,
+//      renommer, cacher, deplacer, la taille, le texte, la couleur, creer) ;
+//    - les genres (le libelle du registre, sa cle, des synonymes metier, le
+//      pluriel, une faute pres) et leur determinant (un, deux, les, la...) ;
+//    - les objets de la vue (leur nom, leur libelle, leur texte, "P1" pour
+//      Pompe_1, "pompe 1"), la selection, et le dernier objet cree ou cite ;
+//    - les variables du projet et de l'automate relie (jamais inventees) ;
+//    - les couleurs (les noms francais -> les couleurs du logiciel), les
+//      nombres (chiffres, un..vingt), les positions (a droite de, sous...).
+//
+//  Elle rend une PROPOSITION faite des operations du contrat (AiOperations.hpp) :
+//  la meme validation, le meme apercu, le meme Ctrl+Z qu'un vrai fournisseur. Elle
+//  se verifie elle-meme (validate) : une proposition qu'elle saurait fausse n'est
+//  pas montree, la reponse dit pourquoi.
 // =============================================================================
 #include "AiLocal.hpp"
 
+#include "AiAutomate.hpp"
+#include "AiDemo.hpp"       // fold
+#include "AiRegistry.hpp"
+#include "../../hmi/HmiEdit.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <map>
+#include <set>
+
 namespace app::ai {
 
-// Le contrat : une forme simple, que le chantier INTEGREE remplace.
-LocalReply understand(const PromptInput&, std::string_view) {
-    LocalReply r;
-    r.text = "L'IA int\xC3\xA9gr\xC3\xA9" "e ne comprend pas encore cette demande.";
+namespace {
+
+// Les mots accentues qui reviennent, ecrits une fois.
+const char* const kOpen = "\xC2\xAB ";
+const char* const kClose = " \xC2\xBB";
+const char* const kArrow = " \xE2\x86\x92 ";
+
+std::string num(double d) { return hmi::formatNumber(std::round(d)); }
+std::string code(std::string_view s) { return "`" + std::string(s) + "`"; }
+std::string guill(std::string_view s) { return std::string(kOpen) + std::string(s) + kClose; }
+
+// "a, b et c"
+std::string joinAnd(const std::vector<std::string>& items, std::size_t max = 8) {
+    std::string s;
+    const std::size_t n = std::min(items.size(), max);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (i > 0) s += (i + 1 == n && n == items.size()) ? " et " : ", ";
+        s += items[i];
+    }
+    if (items.size() > max) s += ", \xE2\x80\xA6 (" + std::to_string(items.size()) + " en tout)";
+    return s;
+}
+std::string codes(const std::vector<std::string>& names, std::size_t max = 8) {
+    std::vector<std::string> c;
+    for (const auto& n : names) c.push_back(code(n));
+    return joinAnd(c, max);
+}
+std::string plural(std::size_t n, std::string_view one, std::string_view many) {
+    return std::to_string(n) + " " + std::string(n > 1 ? many : one);
+}
+
+// ---- les mots de la demande ------------------------------------------------------------
+struct Tok {
+    std::string raw;        // tel qu'ecrit (un nom : Pompe_1_Marche)
+    std::string f;          // replie : minuscules, sans accents (pompe_1_marche)
+    bool        quoted{false};
+};
+
+std::string foldWord(std::string_view raw) {
+    std::string f = fold(raw);
+    f.erase(std::remove(f.begin(), f.end(), ' '), f.end());
+    return f;
+}
+
+// La demande en mots. Un texte entre guillemets ("Marche", << Marche >>) est un seul mot ; une
+// apostrophe, un tiret, une ponctuation separent ; le point reste dans un nom (Pompe.Marche, 1.5) ;
+// < > = forment leurs propres mots (une condition).
+std::vector<Tok> tokenize(std::string_view s) {
+    std::vector<Tok> out;
+    std::string cur;
+    const auto flush = [&] {
+        if (!cur.empty()) out.push_back({cur, foldWord(cur), false});
+        cur.clear();
+    };
+    const auto starts = [&](std::size_t i, std::string_view seq) { return s.substr(i, seq.size()) == seq; };
+    std::size_t i = 0;
+    while (i < s.size()) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        // les guillemets : un texte entier
+        std::string_view close;
+        std::size_t open = 0;
+        if (c == '"') { close = "\""; open = 1; }
+        else if (starts(i, "\xC2\xAB")) { close = "\xC2\xBB"; open = 2; }
+        else if (starts(i, "\xE2\x80\x9C")) { close = "\xE2\x80\x9D"; open = 3; }
+        if (open > 0) {
+            flush();
+            const std::size_t end = s.find(close, i + open);
+            std::string inner(s.substr(i + open, end == std::string_view::npos ? std::string_view::npos : end - i - open));
+            // sans les blancs (et les espaces insecables) du bord
+            const auto blank = [](const std::string& t, std::size_t k) {
+                return t[k] == ' ' || (k + 1 < t.size() && static_cast<unsigned char>(t[k]) == 0xC2 && static_cast<unsigned char>(t[k + 1]) == 0xA0);
+            };
+            while (!inner.empty() && blank(inner, 0)) inner.erase(0, inner[0] == ' ' ? 1 : 2);
+            while (!inner.empty() && (inner.back() == ' ' || (inner.size() >= 2 && static_cast<unsigned char>(inner[inner.size() - 2]) == 0xC2
+                                                              && static_cast<unsigned char>(inner.back()) == 0xA0)))
+                inner.resize(inner.back() == ' ' ? inner.size() - 1 : inner.size() - 2);
+            if (!inner.empty()) out.push_back({inner, foldWord(inner), true});
+            i = end == std::string_view::npos ? s.size() : end + close.size();
+            continue;
+        }
+        if (starts(i, "\xE2\x80\x99") || starts(i, "\xE2\x80\x98") || starts(i, "\xE2\x80\x9D")) { flush(); i += 3; continue; }
+        if (starts(i, "\xC2\xA0") || starts(i, "\xC2\xBB")) { flush(); i += 2; continue; }
+        if (c == '<' || c == '>' || c == '=' || c == '!') {
+            flush();
+            std::string op(1, static_cast<char>(c));
+            if (i + 1 < s.size() && s[i + 1] == '=') op += '=';
+            if (c == '<' && i + 1 < s.size() && s[i + 1] == '>') op = "<>";
+            if (!(c == '!' && op.size() == 1)) out.push_back({op, op, false});
+            i += op.size();
+            continue;
+        }
+        if (c == '.' && !cur.empty() && i + 1 < s.size() && std::isalnum(static_cast<unsigned char>(s[i + 1]))
+            && std::isalnum(static_cast<unsigned char>(cur.back()))) {
+            cur += '.';
+            ++i;
+            continue;
+        }
+        if (std::isalnum(c) || c == '_' || c == '#' || c == '$' || c >= 0x80) {
+            cur += static_cast<char>(c);
+            ++i;
+            continue;
+        }
+        flush();
+        ++i;
+    }
+    flush();
+    return out;
+}
+
+bool isDigits(std::string_view s) { return !s.empty() && std::all_of(s.begin(), s.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); }); }
+
+// Un nombre ecrit en chiffres ou en lettres (un..vingt) ; -1 : pas un nombre.
+int numberOf(const std::string& f) {
+    if (isDigits(f) && f.size() <= 6) return std::stoi(f);
+    static const std::map<std::string, int> words = {
+        {"un", 1}, {"une", 1}, {"deux", 2}, {"trois", 3}, {"quatre", 4}, {"cinq", 5}, {"six", 6}, {"sept", 7}, {"huit", 8},
+        {"neuf", 9}, {"dix", 10}, {"onze", 11}, {"douze", 12}, {"treize", 13}, {"quatorze", 14}, {"quinze", 15}, {"seize", 16},
+        {"vingt", 20}, {"double", 2}, {"triple", 3}};
+    const auto it = words.find(f);
+    return it == words.end() ? -1 : it->second;
+}
+
+// Les mots qui ne designent rien (les determinants, les prepositions...).
+bool stopWord(const std::string& f) {
+    static const std::set<std::string> k = {
+        "le", "la", "les", "l", "un", "une", "des", "du", "de", "d", "au", "aux", "a", "et", "ou", "en", "sur", "dans", "avec", "pour", "par",
+        "ce", "cet", "cette", "ces", "son", "sa", "ses", "mon", "ma", "mes", "ton", "ta", "tes", "moi", "toi", "me", "te", "se", "il", "elle",
+        "ils", "elles", "on", "je", "tu", "nous", "vous", "qui", "que", "qu", "quoi", "y", "s", "n", "ne", "pas", "plus", "tout", "tous",
+        "toute", "toutes", "svp", "stp", "merci", "peux", "peut", "pourrais", "veux", "voudrais", "aimerais", "fais", "faire", "fait",
+        "variable", "variables", "objet", "objets", "vue", "nouvelle", "nouveau", "nouvelles", "nouveaux", "autre", "autres", "est",
+        "sont", "etre", "c", "j", "m", "t", "via", "vers", "depuis", "sous", "entre", "chez", "si", "sinon", "quand", "lorsque"};
+    return k.count(f) != 0;
+}
+
+std::size_t distance(std::string_view a, std::string_view b) {
+    std::vector<std::size_t> prev(b.size() + 1), cur(b.size() + 1);
+    for (std::size_t j = 0; j <= b.size(); ++j) prev[j] = j;
+    for (std::size_t i = 1; i <= a.size(); ++i) {
+        cur[0] = i;
+        for (std::size_t j = 1; j <= b.size(); ++j) cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)});
+        std::swap(prev, cur);
+    }
+    return prev[b.size()];
+}
+
+// Un nom ramene a ses lettres et chiffres, replie : "Pompe_1" -> "pompe1", "pompe 1" -> "pompe1".
+std::string norm(std::string_view s) {
+    std::string out;
+    for (const char c : fold(s))
+        if (std::isalnum(static_cast<unsigned char>(c))) out += c;
+    return out;
+}
+
+// Le mot dit est-il ce mot, son pluriel (-s, -x, -aux), ou (`typo`) a une faute pres ?
+bool sameWord(const std::string& said, const std::string& word, bool typo) {
+    if (said == word) return true;
+    if (said.size() == word.size() + 1 && said.compare(0, word.size(), word) == 0 && (said.back() == 's' || said.back() == 'x')) return true;
+    if (word.size() > 2 && word.compare(word.size() - 2, 2, "al") == 0 && said == word.substr(0, word.size() - 2) + "aux") return true;
+    if (typo && word.size() >= 5 && said.size() >= 4) {
+        if (distance(said, word) <= 1) return true;
+        if (said.back() == 's' && distance(said.substr(0, said.size() - 1), word) <= 1) return true;
+    }
+    return false;
+}
+
+// ---- les couleurs ---------------------------------------------------------------------
+struct ColorWord {
+    const char* word;   // replie, au masculin singulier
+    const char* hex;    // une couleur du logiciel (le theme, les symboles)
+};
+const ColorWord kColors[] = {
+    {"rouge", "#E5534B"}, {"vert", "#2ECC71"}, {"bleu", "#2F6FD6"}, {"jaune", "#F2C94C"}, {"orange", "#F39C12"}, {"gris", "#5A6577"},
+    {"blanc", "#FFFFFF"}, {"noir", "#1B1F26"}, {"violet", "#9B59B6"}, {"rose", "#E91E8C"}, {"cyan", "#4FA3FF"}, {"turquoise", "#1ABC9C"},
+    {"marron", "#8B5A2B"}, {"beige", "#D9C7A3"}};
+
+std::string mix(std::string_view hex, int toward, double amount) {
+    if (hex.size() != 7) return std::string(hex);
+    std::string out = "#";
+    for (int k = 0; k < 3; ++k) {
+        const int v = std::stoi(std::string(hex.substr(1 + 2 * k, 2)), nullptr, 16);
+        const int m = static_cast<int>(std::lround(v + (toward - v) * amount));
+        static const char* const hx = "0123456789ABCDEF";
+        out += hx[(m >> 4) & 15];
+        out += hx[m & 15];
+    }
+    return out;
+}
+
+// La couleur dite au rang `i` (un nom, un #RRGGBB) ; vide : aucune. `len` : les mots pris (bleu clair : 2).
+std::string colorAt(const std::vector<Tok>& t, std::size_t i, std::size_t* len = nullptr, std::string* label = nullptr) {
+    if (i >= t.size()) return {};
+    const std::string& f = t[i].f;
+    if (f.size() == 7 && f[0] == '#' && std::all_of(f.begin() + 1, f.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)); })) {
+        if (len) *len = 1;
+        if (label) *label = t[i].raw;
+        std::string up = t[i].raw;
+        for (auto& c : up) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return up;
+    }
+    for (const auto& c : kColors) {
+        const std::string w = c.word;
+        // le feminin et le pluriel : verte, vertes, bleue, blanche, grise, violette
+        const bool match = f == w || f == w + "s" || f == w + "e" || f == w + "es" || (w == "blanc" && (f == "blanche" || f == "blanches"))
+                        || (w == "violet" && (f == "violette" || f == "violettes"));
+        if (!match) continue;
+        std::string hex = c.hex;
+        std::string name = w;
+        std::size_t n = 1;
+        if (i + 1 < t.size()) {
+            const std::string& m = t[i + 1].f;
+            if (m == "clair" || m == "claire" || m == "clairs" || m == "claires") { hex = mix(hex, 255, 0.35); name += " clair"; n = 2; }
+            else if (m == "fonce" || m == "foncee" || m == "fonces" || m == "foncees") { hex = mix(hex, 0, 0.35); name += " fonc\xC3\xA9"; n = 2; }
+        }
+        if (len) *len = n;
+        if (label) *label = name;
+        return hex;
+    }
+    return {};
+}
+
+// ---- les genres ------------------------------------------------------------------------
+struct KindWord {
+    std::vector<std::string> words;
+    hmi::Kind                kind;
+};
+
+std::vector<std::string> splitWords(std::string_view folded) {
+    std::vector<std::string> out;
+    std::string w;
+    for (const char c : folded) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') w += c;
+        else if (!w.empty()) {
+            out.push_back(w);
+            w.clear();
+        }
+    }
+    if (!w.empty()) out.push_back(w);
+    return out;
+}
+
+// Les mots qui designent un genre : les synonymes metier, le libelle et la cle de chaque genre de la
+// bibliotheque (registre), le premier mot d'un libelle s'il n'est a aucun autre ; les plus longs d'abord.
+const std::vector<KindWord>& kindWords() {
+    static const std::vector<KindWord> k = [] {
+        using K = hmi::Kind;
+        std::vector<KindWord> out;
+        std::set<std::string> taken;
+        const auto add = [&](std::string_view phrase, K kind) {
+            auto w = splitWords(fold(phrase));
+            if (w.empty()) return;
+            std::string joined;
+            for (const auto& x : w) joined += x + " ";
+            if (!taken.insert(joined).second) return;
+            out.push_back({std::move(w), kind});
+        };
+        // les synonymes du metier (avant le registre : ils l'emportent a longueur egale)
+        add("bouton poussoir", K::PushButton);
+        add("bouton a impulsion", K::PushButton);
+        add("bouton de commande", K::PushButton);
+        add("bp", K::PushButton);
+        add("bac", K::Tank);
+        add("reservoir", K::Tank);
+        add("citerne", K::Tank);
+        add("voyant tor", K::Indicator);
+        add("led", K::Indicator);
+        add("tor", K::Indicator);
+        add("indicateur de niveau", K::Bargraph);
+        add("barre de niveau", K::Bargraph);
+        add("bargraph", K::Bargraph);
+        add("titre", K::Text);
+        add("libelle", K::Text);
+        add("etiquette", K::Text);
+        add("tuyau", K::Pipe);
+        add("conduite", K::Pipe);
+        add("canalisation", K::Pipe);
+        add("electrovanne", K::Valve);
+        add("ventilo", K::Fan);
+        add("tapis", K::Conveyor);
+        add("commutateur", K::Switch);
+        add("cercle", K::Ellipse);
+        add("trait", K::Line);
+        add("champ de saisie", K::InputField);
+        add("tendance", K::Trend);
+        add("capteur", K::IsaInstrument);
+        add("afficheur", K::NumericDisplay);
+        add("variateur", K::SpeedDrive);
+        const auto& reg = registry();
+        std::map<std::string, int> firsts;
+        for (const auto& e : reg.kinds()) {
+            if (e.family.empty()) continue;
+            const auto w = splitWords(fold(e.label));
+            if (!w.empty()) ++firsts[w.front()];
+        }
+        for (const auto& e : reg.kinds()) {
+            if (e.family.empty()) continue;   // hors bibliotheque : ne se cree pas
+            add(e.label, e.kind);
+            add(e.key, e.kind);
+        }
+        for (const auto& e : reg.kinds()) {
+            if (e.family.empty()) continue;
+            const auto w = splitWords(fold(e.label));
+            if (w.size() > 1 && w.front().size() >= 4 && firsts[w.front()] == 1) add(w.front(), e.kind);
+        }
+        std::stable_sort(out.begin(), out.end(), [](const KindWord& a, const KindWord& b) { return a.words.size() > b.words.size(); });
+        return out;
+    }();
+    return k;
+}
+
+// Le nom de base des objets neufs d'un genre ("Pompe", "Bouton", "Bargraphe") : le premier mot du libelle,
+// sans accents.
+std::string baseName(hmi::Kind k) {
+    const auto w = splitWords(fold(hmi::kindLabel(k)));
+    std::string b = w.empty() ? std::string(hmi::kindKey(k)) : w.front();
+    if (!b.empty()) b[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(b[0])));
+    return b;
+}
+
+std::string kindPlural(hmi::Kind k, std::size_t n) {
+    std::string l(hmi::kindLabel(k));
+    if (n <= 1) return l;
+    // le premier mot au pluriel (Bouton a impulsion -> Boutons a impulsion)
+    const auto sp = l.find(' ');
+    std::string first = l.substr(0, sp), rest = sp == std::string::npos ? std::string{} : l.substr(sp);
+    if (!first.empty() && first.back() != 's' && first.back() != 'x') first += (first.size() > 2 && first.compare(first.size() - 2, 2, "au") == 0) ? "x" : "s";
+    return first + rest;
+}
+std::string lowerFirst(std::string s) {
+    if (!s.empty() && std::isupper(static_cast<unsigned char>(s[0]))) s[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[0])));
+    return s;
+}
+std::string countKind(hmi::Kind k, std::size_t n) { return std::to_string(n) + " " + lowerFirst(kindPlural(k, n)); }
+
+bool isButtonKind(hmi::Kind k) {
+    switch (k) {
+        case hmi::Kind::Button: case hmi::Kind::PushButton: case hmi::Kind::IlluminatedButton: case hmi::Kind::Switch:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// ---- la vue : les objets et leurs noms ---------------------------------------------------
+const hmi::Object* byId(const hmi::View& v, hmi::Id id) {
+    for (const auto& o : v.objects)
+        if (o.id == id) return &o;
+    return nullptr;
+}
+const hmi::Object* byName(const hmi::View& v, std::string_view name) {
+    for (const auto& o : v.objects)
+        if (o.name == name) return &o;
+    std::string n(name);
+    for (const auto& o : v.objects)
+        if (norm(o.name) == norm(n) && !norm(n).empty()) return &o;
+    return nullptr;
+}
+
+// Les cles par lesquelles une demande designe un objet : son nom, son libelle, son texte (courts), et
+// l'abrege "P1" d'un nom Pompe_1.
+std::map<std::string, std::vector<hmi::Id>> objectKeys(const hmi::View& v) {
+    std::map<std::string, std::vector<hmi::Id>> keys;
+    const auto add = [&](const std::string& k, hmi::Id id) {
+        if (k.empty() || isDigits(k)) return;
+        auto& ids = keys[k];
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
+    };
+    for (const auto& o : v.objects) {
+        add(norm(o.name), o.id);
+        for (const char* key : {"label", "text"}) {
+            const std::string t = o.text(key);
+            if (!t.empty() && t.size() <= 24) add(norm(t), o.id);
+        }
+        // l'abrege : Pompe_12 -> p12 (la premiere lettre, le numero de la fin)
+        const auto us = o.name.rfind('_');
+        if (us != std::string::npos && us > 0 && us + 1 < o.name.size() && isDigits(o.name.substr(us + 1))
+            && o.name.find('_') == us && std::isalpha(static_cast<unsigned char>(o.name[0])))
+            add(std::string(1, static_cast<char>(std::tolower(static_cast<unsigned char>(o.name[0])))) + o.name.substr(us + 1), o.id);
+    }
+    // une cle ecrite en entier l'emporte sur un abrege : rien a faire, les deux designent
+    return keys;
+}
+
+// Le numero libre suivant pour un nom "Base_N" (1 + le plus grand deja pris), au moins `from`.
+int nextNumber(const hmi::View& v, const std::string& base, const std::set<std::string>& reserved) {
+    int best = 0;
+    const auto look = [&](const std::string& n) {
+        if (n.size() > base.size() + 1 && n.compare(0, base.size() + 1, base + "_") == 0 && isDigits(n.substr(base.size() + 1)))
+            best = std::max(best, std::stoi(n.substr(base.size() + 1)));
+    };
+    for (const auto& o : v.objects) look(o.name);
+    for (const auto& n : reserved) look(n);
+    return best + 1;
+}
+
+bool nameFree(const hmi::View& v, const std::string& name, const std::set<std::string>& reserved) {
+    if (reserved.count(name)) return false;
+    return std::none_of(v.objects.begin(), v.objects.end(), [&](const hmi::Object& o) { return norm(o.name) == norm(name); });
+}
+
+std::string sanitize(std::string_view s) {
+    std::string out;
+    for (const char c : fold(s)) {
+        if (std::isalnum(static_cast<unsigned char>(c))) out += c;
+        else if (!out.empty() && out.back() != '_') out += '_';
+    }
+    while (!out.empty() && out.back() == '_') out.pop_back();
+    if (!out.empty()) out[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
+    if (!out.empty() && std::isdigit(static_cast<unsigned char>(out[0]))) out.insert(out.begin(), '_');
+    return out;
+}
+
+// ---- la place libre -----------------------------------------------------------------------
+// Une grille de 20 px, une marge de 16 px autour de l'existant, dans le cadre de la vue.
+struct Placer {
+    const hmi::View&      v;
+    std::vector<hmi::Box> taken;
+
+    explicit Placer(const hmi::View& view) : v(view) {
+        for (const auto& o : v.objects)
+            if (o.parent == hmi::kNoId) {
+                hmi::Box b = hmi::edit::rotatedBounds(o);
+                if (hmi::kindIsSynoptic(o.kind) && o.text("labelPosition", "dessous") == "dessous" && !o.text("label").empty()) b.h += 20;
+                taken.push_back(b);
+            }
+    }
+    [[nodiscard]] bool inside(const hmi::Box& b) const { return b.x >= 0 && b.y >= 0 && b.right() <= v.width && b.bottom() <= v.height; }
+    [[nodiscard]] bool clear(const hmi::Box& b) const {
+        const hmi::Box g{b.x - 16, b.y - 16, b.w + 32, b.h + 32};
+        return std::none_of(taken.begin(), taken.end(), [&](const hmi::Box& t) { return t.intersects(g); });
+    }
+    [[nodiscard]] double bottom() const {
+        double b = 0;
+        for (const auto& t : taken) b = std::max(b, t.bottom());
+        return b;
+    }
+    // La premiere place libre (de haut en bas, de gauche a droite) pour un cadre w x h.
+    hmi::Box find(double w, double h) const {
+        for (double y = 40; y + h <= v.height; y += 20)
+            for (double x = 40; x + w <= v.width; x += 20) {
+                const hmi::Box b{x, y, w, h};
+                if (clear(b)) return b;
+            }
+        return {40, std::round((bottom() + 40) / 20) * 20, w, h};   // plus de place : dessous (la validation le dira)
+    }
+    void take(const hmi::Box& b) { taken.push_back(b); }
+};
+
+// ---- ce que la demande contient ------------------------------------------------------------
+struct Mention {
+    std::size_t at{0}, len{0};
+    hmi::Kind   kind{hmi::Kind::Rectangle};
+    bool        plural{false};
+    int         count{-1};        // un nombre dit avant (-1 : aucun)
+    bool        definite{false};  // le, la, les, ce... : un objet qui existe
+    bool        indefinite{false};// un, une, des, deux... : un objet neuf
+    bool        all{false};       // tous, toutes
+};
+
+struct NameRef {
+    std::size_t          at{0}, len{0};
+    std::vector<hmi::Id> ids;
+};
+
+enum class Rel : std::uint8_t { None, Right, Left, Below, Above };
+struct Position {
+    Rel         rel{Rel::None};
+    std::size_t at{0};          // le premier mot de la position
+    std::size_t refAt{0};       // le premier mot de l'objet de reference
+    std::size_t end{0};         // apres l'objet de reference
+};
+
+struct Memory {
+    std::vector<std::string> names;       // les objets crees ou cites au tour d'avant (dans l'ordre)
+    std::vector<Operation>   creates;     // les creations du tour d'avant
+    std::vector<Operation>   modifies;    // ses modifications
+    std::string              request;
+};
+
+class Engine {
+public:
+    Engine(const PromptInput& in, std::string_view request, const std::vector<LocalTurn>& history)
+        : in_(in), request_(request), t_(tokenize(request)) {
+        f_ = " ";
+        for (const auto& tk : t_) f_ += tk.f + " ";
+        if (in_.view) keys_ = objectKeys(*in_.view);
+        for (auto it = history.rbegin(); it != history.rend(); ++it) {
+            if (!it->proposal) continue;
+            mem_.request = it->request;
+            for (const auto& op : it->proposal->ops) {
+                if (op.action == Operation::Action::Create) {
+                    mem_.creates.push_back(op);
+                    mem_.names.push_back(op.name);
+                } else if (op.action == Operation::Action::Modify || op.action == Operation::Action::Bind) {
+                    if (op.action == Operation::Action::Modify) mem_.modifies.push_back(op);
+                    mem_.names.push_back(op.name);
+                } else {
+                    for (const auto& n : op.objects) mem_.names.push_back(n);
+                }
+            }
+            break;
+        }
+        scanMentions();
+        scanNames();
+    }
+
+    LocalReply run();
+
+private:
+    const PromptInput&             in_;
+    std::string                    request_;
+    std::vector<Tok>               t_;
+    std::string                    f_;   // les mots replies, entre des blancs : " ajoute 3 pompes "
+    std::map<std::string, std::vector<hmi::Id>> keys_;
+    std::vector<Mention>           mentions_;
+    std::vector<NameRef>           names_;
+    Memory                         mem_;
+
+    // ---- les mots
+    [[nodiscard]] bool has(std::string_view w) const { return f_.find(" " + std::string(w) + " ") != std::string::npos; }
+    [[nodiscard]] bool hasPrefix(std::string_view p) const {
+        return std::any_of(t_.begin(), t_.end(), [&](const Tok& t) { return !t.quoted && t.f.rfind(p, 0) == 0; });
+    }
+    [[nodiscard]] bool phrase(std::string_view p) const { return f_.find(" " + std::string(p) + " ") != std::string::npos; }
+    [[nodiscard]] std::size_t indexOf(std::string_view w, std::size_t from = 0) const {
+        for (std::size_t i = from; i < t_.size(); ++i)
+            if (t_[i].f == w) return i;
+        return std::string::npos;
+    }
+    [[nodiscard]] std::size_t indexOfPrefix(std::string_view p, std::size_t from = 0) const {
+        for (std::size_t i = from; i < t_.size(); ++i)
+            if (!t_[i].quoted && t_[i].f.rfind(p, 0) == 0) return i;
+        return std::string::npos;
+    }
+
+    // ---- le contexte
+    [[nodiscard]] const hmi::View* view() const { return in_.view; }
+    [[nodiscard]] const hmi::Object* object(hmi::Id id) const { return view() ? byId(*view(), id) : nullptr; }
+    [[nodiscard]] std::vector<const hmi::Object*> selection() const {
+        std::vector<const hmi::Object*> out;
+        if (!view()) return out;
+        for (const auto id : in_.selection)
+            if (const auto* o = object(id)) out.push_back(o);
+        return out;
+    }
+    [[nodiscard]] std::vector<const hmi::Object*> remembered() const {
+        std::vector<const hmi::Object*> out;
+        if (!view()) return out;
+        for (const auto& n : mem_.names)
+            if (const auto* o = byName(*view(), n); o && std::find(out.begin(), out.end(), o) == out.end()) out.push_back(o);
+        return out;
+    }
+    [[nodiscard]] std::vector<const hmi::Object*> ofKind(hmi::Kind k) const {
+        std::vector<const hmi::Object*> out;
+        if (!view()) return out;
+        for (const auto& o : view()->objects)
+            if (sameFamily(k, o.kind)) out.push_back(&o);
+        return out;
+    }
+    // "bouton" dit tous les boutons (a impulsion, lumineux, interrupteur) ; "vanne", aussi la vanne 3 voies
+    [[nodiscard]] static bool sameFamily(hmi::Kind said, hmi::Kind k) {
+        if (said == k) return true;
+        if (said == hmi::Kind::Button) return isButtonKind(k);
+        if (said == hmi::Kind::Valve) return k == hmi::Kind::ThreeWayValve;
+        return false;
+    }
+    [[nodiscard]] std::string viewName() const { return view() ? guill(view()->name) : std::string("la vue"); }
+
+    // ---- les variables (IHM, puis l'automate relie)
+    struct Var {
+        std::string name, type;
+        bool        plc{false};
+    };
+    [[nodiscard]] std::vector<Var> variables() const {
+        std::vector<Var> out;
+        if (in_.project)
+            for (const auto& v : in_.project->programs.variables) out.push_back({v.name, v.type, false});
+        if (in_.env.plcVariables)
+            for (const auto& [n, ty] : in_.env.plcVariables())
+                if (std::none_of(out.begin(), out.end(), [&](const Var& v) { return norm(v.name) == norm(n); })) out.push_back({n, ty, true});
+        return out;
+    }
+    [[nodiscard]] bool exists(const std::string& name) const { return in_.project && variableExists(*in_.project, name, in_.env); }
+
+    // ---- les analyses
+    void scanMentions();
+    void scanNames();
+    [[nodiscard]] const Mention* mentionAt(std::size_t i) const {
+        for (const auto& m : mentions_)
+            if (i >= m.at && i < m.at + m.len) return &m;
+        return nullptr;
+    }
+    [[nodiscard]] const NameRef* nameAt(std::size_t i) const {
+        for (const auto& n : names_)
+            if (i >= n.at && i < n.at + n.len) return &n;
+        return nullptr;
+    }
+    [[nodiscard]] Position position(std::size_t from = 0) const;
+    struct Target {
+        std::vector<const hmi::Object*> objects;
+        std::string                     question;   // non vide : il faut demander
+        std::string                     how;        // "la s\xC3\xA9lection", "la derniere cr\xC3\xA9\xC3\xA9e"
+    };
+    // Les objets designes entre [from, to) : les noms, les genres (les, la), "celle de droite", la
+    // selection, le dernier objet cite. `kindHint` : un genre impose (aligner les boutons).
+    [[nodiscard]] Target targets(std::size_t from, std::size_t to, bool many, bool fallback = true) const;
+    [[nodiscard]] Target firstTarget(std::size_t from, std::size_t to) const;
+
+    // ---- les reponses
+    Proposal base(std::string summary) const {
+        Proposal p;
+        p.id = newId("op");
+        p.view = view() ? view()->name : std::string{};
+        p.viewId = view() ? view()->id : hmi::kNoId;
+        p.fingerprint = view() ? fingerprint(*view()) : std::string{};
+        p.request = request_;
+        p.summary = std::move(summary);
+        return p;
+    }
+    LocalReply finish(Proposal p, std::string text) const;
+    LocalReply needView() const {
+        LocalReply r;
+        r.text = "Ouvre d'abord une vue dans l'\xC3\xA9" "diteur (double-clic sur une vue de l'arbre du projet) : je propose mes "
+                 "modifications sur la vue de l'onglet ouvert.";
+        return r;
+    }
+    LocalReply ask(std::string text, std::vector<std::string> suggestions = {}) const {
+        LocalReply r;
+        r.text = std::move(text);
+        r.suggestions = std::move(suggestions);
+        return r;
+    }
+    LocalReply notUnderstood() const;
+    std::vector<std::string> examples() const;
+
+    LocalReply help() const;
+    LocalReply countQuestion() const;
+    LocalReply listVariables() const;
+    LocalReply listKinds() const;
+    LocalReply listViews() const;
+    LocalReply followUp() const;
+    LocalReply synoptic() const;
+    LocalReply createView() const;
+    LocalReply createVariables() const;
+    LocalReply bind() const;
+    LocalReply animate() const;
+    LocalReply remove() const;
+    LocalReply duplicate() const;
+    LocalReply arrange(bool align) const;
+    LocalReply rename() const;
+    LocalReply visibility(bool show) const;
+    LocalReply move() const;
+    LocalReply resize() const;
+    LocalReply setText() const;
+    LocalReply color() const;
+    struct NewObject {
+        hmi::Kind   kind;
+        std::string text, color, name;
+    };
+    // `into` : la vue neuve d'un creer_vue (les objets s'y posent) ; nul : la vue ouverte.
+    LocalReply create(std::vector<NewObject> wanted, const Position& pos, std::string intro = {}, const hmi::View* into = nullptr) const;
+    LocalReply createFromMentions(const hmi::View* into = nullptr) const;
+
+    // Une variable dite : son nom exact s'il existe ; sinon les candidates.
+    struct VarFind {
+        std::string              name;        // trouvee (sure)
+        std::string              asked;       // le nom ecrit (introuvable)
+        std::vector<std::string> candidates;  // plusieurs possibles, ou les plus proches
+    };
+    [[nodiscard]] VarFind findVariable(std::size_t from, std::size_t to, const hmi::Object* about) const;
+    [[nodiscard]] std::string colorKey(const hmi::Object& o, std::string* what = nullptr) const;
+};
+
+// ---- les genres dits, et leur determinant ---------------------------------------------------
+void Engine::scanMentions() {
+    const auto& words = kindWords();
+    for (std::size_t i = 0; i < t_.size();) {
+        if (t_[i].quoted || t_[i].raw.find('_') != std::string::npos) {
+            ++i;
+            continue;
+        }
+        bool found = false;
+        // d'abord le mot exact (ou son pluriel) ; puis, seul, a une faute pres - pas une couleur, pas un mot
+        // courant (aligne n'est pas une ligne, jaune pas une jauge), les deux premieres lettres justes
+        static const std::set<std::string> common = {
+            "aligne", "alignes", "ligne", "jaune", "cache", "monte", "texte", "teste", "pose", "place", "trace", "barre", "grande", "grand",
+            "petite", "porte", "carte", "marche", "change", "changer", "changes", "modifie", "modifier", "ajoute", "ajouter", "supprime",
+            "deplace", "renomme", "associe", "relie", "duplique", "copie", "montre", "affiche", "ecris", "ecrire", "rends", "agrandis",
+            "reduis", "descends", "decale", "efface", "retire", "enleve", "repartis", "branche", "mettre", "creer", "cree", "pareil"};
+        const bool typoOk = colorAt(t_, i).empty() && !common.count(t_[i].f) && !stopWord(t_[i].f);
+        for (int pass = 0; pass < 2 && !found; ++pass)
+        for (const auto& kw : words) {
+            const std::size_t n = kw.words.size();
+            if (i + n > t_.size()) continue;
+            if (pass == 1 && (n != 1 || !typoOk || t_[i].f.size() < 2 || kw.words[0].compare(0, 2, t_[i].f, 0, 2) != 0)) continue;
+            bool ok = true;
+            for (std::size_t j = 0; j < n && ok; ++j) ok = !t_[i + j].quoted && sameWord(t_[i + j].f, kw.words[j], pass == 1);
+            if (!ok) continue;
+            Mention m;
+            m.at = i;
+            m.len = n;
+            m.kind = kw.kind;
+            m.plural = t_[i].f != kw.words[0] && (t_[i].f.back() == 's' || t_[i].f.back() == 'x');
+            // le determinant, avant (des adjectifs sautes : nouvelle, autre, petite...)
+            static const std::set<std::string> skip = {"nouvelle", "nouvelles", "nouveau", "nouveaux", "autre", "autres", "petit", "petite",
+                                                       "petits", "petites", "grand", "grande", "grands", "grandes", "gros", "grosse", "seule"};
+            std::size_t j = i;
+            while (j > 0 && skip.count(t_[j - 1].f)) --j;
+            if (j > 0) {
+                const std::string& d = t_[j - 1].f;
+                const int nb = numberOf(d);
+                if (nb > 0 && d != "un" && d != "une") {
+                    m.count = nb;
+                    m.indefinite = true;
+                    m.plural = m.plural || nb > 1;
+                } else if (d == "un" || d == "une") {
+                    m.count = 1;
+                    m.indefinite = true;
+                } else if (d == "des" || d == "quelques" || d == "plusieurs" || d == "d") {
+                    m.indefinite = true;
+                    m.plural = true;
+                } else if (d == "le" || d == "la" || d == "les" || d == "l" || d == "du" || d == "au" || d == "aux" || d == "ce"
+                           || d == "cet" || d == "cette" || d == "ces" || d == "son" || d == "sa" || d == "ses") {
+                    m.definite = true;
+                    if (d == "les" || d == "ces" || d == "aux" || d == "ses") m.plural = true;
+                    if (j >= 2 && (t_[j - 2].f == "tous" || t_[j - 2].f == "toutes")) m.all = true;
+                } else if (d == "tous" || d == "toutes") {
+                    m.definite = true;
+                    m.all = true;
+                    m.plural = true;
+                }
+            }
+            mentions_.push_back(m);
+            i += n;
+            found = true;
+            break;
+        }
+        if (!found) ++i;
+    }
+}
+
+// ---- les objets nommes ------------------------------------------------------------------------
+void Engine::scanNames() {
+    if (!view()) return;
+    for (std::size_t i = 0; i < t_.size();) {
+        bool found = false;
+        for (std::size_t n = std::min<std::size_t>(4, t_.size() - i); n >= 1; --n) {
+            // une fenetre de mots : pas un mot vide seul, pas un nombre seul
+            if (n == 1 && (stopWord(t_[i].f) || isDigits(t_[i].f) || numberOf(t_[i].f) > 0)) break;
+            if (stopWord(t_[i].f) || (n > 1 && stopWord(t_[i + n - 1].f))) continue;
+            bool quotedIn = false;
+            for (std::size_t j = 0; j < n; ++j) quotedIn = quotedIn || t_[i + j].quoted;
+            if (quotedIn) continue;
+            std::string key;
+            for (std::size_t j = 0; j < n; ++j) key += norm(t_[i + j].raw);
+            const auto it = keys_.find(key);
+            if (it == keys_.end()) continue;
+            names_.push_back({i, n, it->second});
+            i += n;
+            found = true;
+            break;
+        }
+        if (!found) ++i;
+    }
+}
+
+Position Engine::position(std::size_t from) const {
+    Position p;
+    for (std::size_t i = from; i < t_.size(); ++i) {
+        const std::string& w = t_[i].f;
+        Rel r = Rel::None;
+        std::size_t next = i + 1;
+        if ((w == "droite" || w == "gauche") && i > 0 && (t_[i - 1].f == "a" || t_[i - 1].f == "la")) {
+            r = w == "droite" ? Rel::Right : Rel::Left;
+        } else if (w == "cote" && i > 0 && t_[i - 1].f == "a") {
+            r = Rel::Right;
+        } else if (w == "pres") {
+            r = Rel::Right;
+        } else if (w == "sous" || w == "dessous" || w == "en-dessous") {
+            r = Rel::Below;
+        } else if (w == "dessus" || w == "audessus") {
+            r = Rel::Above;
+        }
+        if (r == Rel::None) continue;
+        // "a droite DE <objet>" : il faut un objet apres ; "vers la droite" seul n'est pas une position relative
+        while (next < t_.size() && (t_[next].f == "de" || t_[next].f == "d" || t_[next].f == "du" || t_[next].f == "des"
+                                    || t_[next].f == "la" || t_[next].f == "le" || t_[next].f == "l" || t_[next].f == "les"
+                                    || t_[next].f == "cette" || t_[next].f == "ce" || t_[next].f == "chaque"))
+            ++next;
+        if (next >= t_.size()) continue;
+        if (!nameAt(next) && !mentionAt(next)) continue;
+        p.rel = r;
+        p.at = i > 0 && (t_[i - 1].f == "a" || t_[i - 1].f == "la" || t_[i - 1].f == "au") ? i - 1 : i;
+        p.refAt = next;
+        std::size_t end = next;
+        if (const auto* m = mentionAt(next)) end = m->at + m->len;
+        if (const auto* n = nameAt(end)) end = n->at + n->len;
+        else if (const auto* n2 = nameAt(next)) end = std::max(end, n2->at + n2->len);
+        p.end = end;
+        return p;
+    }
+    return p;
+}
+
+// ---- les objets designes ----------------------------------------------------------------------
+Engine::Target Engine::targets(std::size_t from, std::size_t to, bool many, bool fallback) const {
+    Target t;
+    if (!view()) return t;
+    to = std::min(to, t_.size());
+    std::vector<const hmi::Object*> out;
+    const auto push = [&](const hmi::Object* o) {
+        if (o && std::find(out.begin(), out.end(), o) == out.end()) out.push_back(o);
+    };
+    // "celle de droite", "celui du haut" : parmi la selection, sinon les derniers cites, sinon le genre dit
+    std::string side;
+    for (std::size_t i = from; i + 2 < to + 1 && i + 2 <= t_.size(); ++i) {
+        const std::string& a = t_[i].f;
+        if (a == "celle" || a == "celui" || a == "celles" || a == "ceux" || a == "le" || a == "la") {
+            const std::string& b = i + 1 < t_.size() ? t_[i + 1].f : std::string{};
+            const std::string& c = i + 2 < t_.size() ? t_[i + 2].f : std::string{};
+            if ((b == "de" || b == "du") && (c == "droite" || c == "gauche" || c == "haut" || c == "bas")) side = c;
+            if (b == "plus" && (c == "a" || c == "en") && i + 3 < t_.size()) {
+                const std::string& d = t_[i + 3].f;
+                if (d == "droite" || d == "gauche" || d == "haut" || d == "bas") side = d;
+            }
+        }
+    }
+    bool namedSomething = false;
+    std::vector<std::string> ambiguous;
+    for (const auto& n : names_) {
+        if (n.at < from || n.at >= to) continue;
+        namedSomething = true;
+        if (n.ids.size() == 1 || many) {
+            for (const auto id : n.ids) push(object(id));
+        } else {
+            for (const auto id : n.ids)
+                if (const auto* o = object(id)) ambiguous.push_back(o->name);
+        }
+    }
+    for (const auto& m : mentions_) {
+        if (m.at < from || m.at >= to) continue;
+        // un genre suivi d'un nom (la pompe P1) : le nom suffit ; "le texte DE Bouton_1" : une partie, pas un objet
+        if (nameAt(m.at + m.len)) continue;
+        if (m.at + m.len < t_.size() && (t_[m.at + m.len].f == "de" || t_[m.at + m.len].f == "du" || t_[m.at + m.len].f == "d")
+            && std::any_of(names_.begin(), names_.end(), [&](const NameRef& n) { return n.at >= from && n.at < to; }))
+            continue;
+        if (m.indefinite && !m.definite) continue;
+        namedSomething = true;
+        auto all = ofKind(m.kind);
+        // la selection d'abord : "les pompes" choisies, "la cuve" choisie
+        std::vector<const hmi::Object*> chosen;
+        for (const auto* o : selection())
+            if (sameFamily(m.kind, o->kind)) chosen.push_back(o);
+        if (!m.all && !chosen.empty()) all = chosen;
+        if (all.empty()) {
+            t.question = "Il n'y a pas de " + lowerFirst(std::string(hmi::kindLabel(m.kind))) + " dans " + viewName() + ".";
+            return t;
+        }
+        if (!side.empty() && all.size() > 1) {
+            const auto key = [&](const hmi::Object* o) {
+                const auto b = hmi::edit::rotatedBounds(*o);
+                return side == "droite" ? b.cx() : side == "gauche" ? -b.cx() : side == "bas" ? b.cy() : -b.cy();
+            };
+            push(*std::max_element(all.begin(), all.end(), [&](const auto* a, const auto* b) { return key(a) < key(b); }));
+            t.how = "celui " + std::string(side == "droite" || side == "gauche" ? "de " : "du ") + side;
+            side.clear();
+            continue;
+        }
+        if (m.plural || m.all) {
+            for (const auto* o : all) push(o);
+        } else if (all.size() == 1) {
+            push(all.front());
+        } else {
+            std::vector<std::string> list;
+            for (const auto* o : all) list.push_back(o->name);
+            t.question = "Il y a " + countKind(m.kind, all.size()) + " dans " + viewName() + " : " + codes(list)
+                         + ". Laquelle ? \xC3\x89" "cris son nom, ou s\xC3\xA9lectionne-la, puis redemande.";
+            return t;
+        }
+    }
+    if (!ambiguous.empty() && out.empty()) {
+        t.question = "Plusieurs objets r\xC3\xA9pondent \xC3\xA0 ce nom : " + codes(ambiguous) + ". Lequel ? \xC3\x89" "cris son nom exact.";
+        return t;
+    }
+    if (out.empty() && fallback && !namedSomething) {
+        auto sel = selection();
+        const bool selWords = phrase("la selection") || phrase("les objets choisis") || has("selectionnes") || has("selectionnee")
+                           || has("selectionne") || has("selectionnees");
+        if (!sel.empty()) {
+            t.how = "la s\xC3\xA9lection";
+            if (!side.empty() && sel.size() > 1) {
+                const auto key = [&](const hmi::Object* o) {
+                    const auto b = hmi::edit::rotatedBounds(*o);
+                    return side == "droite" ? b.cx() : side == "gauche" ? -b.cx() : side == "bas" ? b.cy() : -b.cy();
+                };
+                out.push_back(*std::max_element(sel.begin(), sel.end(), [&](const auto* a, const auto* b) { return key(a) < key(b); }));
+                t.how = "celui " + std::string(side == "droite" || side == "gauche" ? "de " : "du ") + side + " de la s\xC3\xA9lection";
+            } else {
+                out = sel;
+            }
+        } else if (!selWords) {
+            auto rem = remembered();
+            if (!rem.empty()) {
+                if (!side.empty() && rem.size() > 1) {
+                    const auto key = [&](const hmi::Object* o) {
+                        const auto b = hmi::edit::rotatedBounds(*o);
+                        return side == "droite" ? b.cx() : side == "gauche" ? -b.cx() : side == "bas" ? b.cy() : -b.cy();
+                    };
+                    out.push_back(*std::max_element(rem.begin(), rem.end(), [&](const auto* a, const auto* b) { return key(a) < key(b); }));
+                } else {
+                    out = many ? rem : std::vector<const hmi::Object*>{rem.back()};
+                    if (!many && rem.size() > 1) out = {rem.front()};
+                }
+                t.how = "le dernier objet cit\xC3\xA9";
+            }
+        }
+        if (out.empty()) {
+            t.question = "Quel objet ? \xC3\x89" "cris son nom (par exemple " + std::string(view()->objects.empty() ? "`Pompe_1`" : code(view()->objects.front().name))
+                         + "), ou s\xC3\xA9lectionne-le dans la vue, puis redemande.";
+            return t;
+        }
+    }
+    t.objects = std::move(out);
+    return t;
+}
+
+Engine::Target Engine::firstTarget(std::size_t from, std::size_t to) const {
+    Target t = targets(from, to, false);
+    if (t.objects.size() > 1) t.objects.resize(1);
+    return t;
+}
+
+// ---- les variables ----------------------------------------------------------------------------
+Engine::VarFind Engine::findVariable(std::size_t from, std::size_t to, const hmi::Object* about) const {
+    VarFind r;
+    const auto vars = variables();
+    to = std::min(to, t_.size());
+    // un nom ecrit tel quel (Pompe_1_Marche, PT101, API.Moteur) : exact, ou sans casse ni soulignes
+    std::vector<std::string> words;
+    for (std::size_t i = from; i < to; ++i) {
+        const Tok& tk = t_[i];
+        if (tk.quoted) continue;
+        // l'objet vise lui-meme (son nom ecrit) n'est pas la variable ; un mot qui est aussi le texte d'un autre
+        // objet (Marche) peut l'etre
+        if (const auto* n = nameAt(i); n && about && tk.raw.find('_') == std::string::npos
+                                       && std::find(n->ids.begin(), n->ids.end(), about->id) != n->ids.end())
+            continue;
+        const bool identifier = tk.raw.find('_') != std::string::npos || tk.raw.find('.') != std::string::npos
+                             || (std::any_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })
+                                 && std::any_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isalpha(static_cast<unsigned char>(c)); }))
+                             || (tk.raw.size() >= 2 && std::all_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isupper(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)); }));
+        if (identifier) {
+            if (exists(tk.raw)) {
+                // le nom tel que le projet l'ecrit
+                for (const auto& v : vars)
+                    if (norm(v.name) == norm(tk.raw)) {
+                        r.name = v.name;
+                        return r;
+                    }
+                r.name = tk.raw;
+                return r;
+            }
+            for (const auto& v : vars)
+                if (norm(v.name) == norm(tk.raw)) {
+                    r.name = v.name;
+                    return r;
+                }
+            // une faute (une lettre) sur un long nom : sure si une seule ressemble
+            std::vector<std::string> close;
+            for (const auto& v : vars)
+                if (norm(tk.raw).size() >= 6 && distance(norm(v.name), norm(tk.raw)) <= 1) close.push_back(v.name);
+            if (close.size() == 1) {
+                r.name = close.front();
+                return r;
+            }
+            r.asked = tk.raw;
+            if (in_.project) r.candidates = nearVariables(*in_.project, tk.raw);
+            if (r.candidates.empty())
+                for (const auto& c : close) r.candidates.push_back(c);
+            return r;
+        }
+        if (!stopWord(tk.f) && tk.f.size() >= 3 && numberOf(tk.f) < 0 && colorAt(t_, i).empty()) words.push_back(tk.f);
+    }
+    if (words.empty()) return r;
+    // des mots (le niveau, la marche de la pompe 1) : les variables qui les contiennent tous
+    const auto varWords = [](const std::string& n) {
+        std::vector<std::string> out;
+        std::string w;
+        for (const char c : fold(n)) {
+            if (std::isalpha(static_cast<unsigned char>(c))) w += c;
+            else {
+                if (!w.empty()) out.push_back(w);
+                w.clear();
+                if (std::isdigit(static_cast<unsigned char>(c))) out.push_back(std::string(1, c));
+            }
+        }
+        if (!w.empty()) out.push_back(w);
+        return out;
+    };
+    struct Scored {
+        int         score;
+        std::string name;
+    };
+    std::vector<Scored> scored;
+    for (const auto& v : vars) {
+        const auto vw = varWords(v.name);
+        int hit = 0;
+        bool all = true;
+        for (const auto& w : words) {
+            const bool in = std::any_of(vw.begin(), vw.end(), [&](const std::string& x) {
+                return x == w || (w.size() >= 4 && x.rfind(w.substr(0, 4), 0) == 0) || sameWord(w, x, true);
+            });
+            hit += in ? 1 : 0;
+            all = all && in;
+        }
+        if (!all) continue;
+        int score = hit * 10;
+        // l'objet vise aide a choisir : Cuve_1 -> Niveau_Cuve_1 plutot que Niveau_Cuve_2 (son numero ne
+        // compte que si un de ses mots concorde aussi : Vanne_1 ne choisit pas Pompe_1_Marche)
+        if (about) {
+            int alpha = 0, digit = 0;
+            for (const auto& w : varWords(about->name))
+                if (std::find(vw.begin(), vw.end(), w) != vw.end()) (std::isdigit(static_cast<unsigned char>(w[0])) ? digit : alpha) += 1;
+            score += alpha * 3 + (alpha > 0 ? digit * 3 : 0);
+        }
+        scored.push_back({score, v.name});
+    }
+    if (scored.empty()) {
+        r.asked = words.front();
+        if (in_.project) r.candidates = nearVariables(*in_.project, words.front());
+        return r;
+    }
+    std::stable_sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.score > b.score; });
+    if (scored.size() == 1 || scored[0].score > scored[1].score) {
+        r.name = scored[0].name;
+        return r;
+    }
+    for (const auto& s : scored)
+        if (s.score == scored[0].score && r.candidates.size() < 6) r.candidates.push_back(s.name);
     return r;
+}
+
+// La propriete de couleur d'un objet : celle qui se voit le plus (le liquide d'une cuve, la couleur
+// en marche d'un symbole, le remplissage, le texte).
+std::string Engine::colorKey(const hmi::Object& o, std::string* what) const {
+    const auto pick = [&](const char* key, const char* label) {
+        if (!o.find(key)) return false;
+        if (what) *what = label;
+        return true;
+    };
+    // la partie dite : le texte, le fond, le contour, a l'arret, en defaut
+    if (has("texte") || phrase("du texte") || has("ecriture")) {
+        if (pick("textColor", "la couleur de son texte")) return "textColor";
+    }
+    if (has("contour") || has("bordure") || has("bord")) {
+        if (pick("stroke", "son contour")) return "stroke";
+    }
+    if (has("fond") || has("remplissage")) {
+        if (pick("fill", "son fond")) return "fill";
+    }
+    if (has("arret") || has("eteint") || has("eteinte")) {
+        if (pick("colorOff", "sa couleur \xC3\xA0 l'arr\xC3\xAAt")) return "colorOff";
+    }
+    if (has("defaut")) {
+        if (pick("colorFault", "sa couleur en d\xC3\xA9" "faut")) return "colorFault";
+    }
+    if (hmi::kindHasLevel(o.kind) && pick("fillColor", "la couleur de son contenu")) return "fillColor";
+    if (o.find("colorOn") && pick("colorOn", "sa couleur en marche")) return "colorOn";
+    if (o.kind == hmi::Kind::Text && pick("textColor", "la couleur de son texte")) return "textColor";
+    if (pick("fill", "son remplissage")) return "fill";
+    if (pick("textColor", "la couleur de son texte")) return "textColor";
+    if (pick("stroke", "son trait")) return "stroke";
+    return {};
+}
+
+// ---- la fin d'une reponse : la verification ---------------------------------------------------
+LocalReply Engine::finish(Proposal p, std::string text) const {
+    LocalReply r;
+    if (in_.project) {
+        // l'empreinte de la proposition : la vue ouverte, et ce qu'elle cree (une vue, des variables, des types)
+        p.fingerprint = proposalPrint(*in_.project, p);
+        const Check ck = validate(*in_.project, p, in_.env);
+        std::vector<std::string> real;
+        // ce que le contrat ne valide pas encore (creer_vue, creer_variables ; une formule "=..." dans une
+        // propriete) : la validation complete en decidera, la carte le dira
+        for (const auto& e : ck.errors)
+            if (e.find("pas encore disponible") == std::string::npos && e.find(" = \xC2\xAB =") == std::string::npos) real.push_back(e);
+        if (!real.empty()) {
+            r.text = "Je n'ai pas pu pr\xC3\xA9parer une proposition valable : " + real.front()
+                     + (real.size() > 1 ? " (et " + plural(real.size() - 1, "autre probl\xC3\xA8me", "autres probl\xC3\xA8mes") + ")" : std::string{})
+                     + "\nReformule, ou choisis l'objet dans la vue.";
+            r.suggestions = examples();
+            return r;
+        }
+    }
+    r.text = std::move(text);
+    r.proposal = std::move(p);
+    return r;
+}
+
+std::vector<std::string> Engine::examples() const {
+    // des exemples sur les vrais noms de la vue, quand il y en a
+    std::string pump, any;
+    if (view()) {
+        for (const auto& o : view()->objects) {
+            if (any.empty() && o.parent == hmi::kNoId) any = o.name;
+            if (pump.empty() && o.kind == hmi::Kind::Pump) pump = o.name;
+        }
+        for (const auto& o : view()->objects)
+            if (pump.empty() && hmi::kindIsSynoptic(o.kind) && o.find("variable")) pump = o.name;
+    }
+    if (pump.empty()) pump = any.empty() ? std::string("Pompe_1") : any;
+    std::string var = "Pompe_1_Marche";
+    if (in_.project && !in_.project->programs.variables.empty()) var = in_.project->programs.variables.front().name;
+    return {"Ajoute 3 pompes",
+            "Cr\xC3\xA9" "e un synoptique de station de pompage avec 2 cuves et 2 pompes par cuve",
+            "Mets " + pump + " en rouge",
+            "Associe " + pump + " \xC3\xA0 " + var,
+            "Ajoute un voyant vert \xC3\xA0 droite de " + pump,
+            "Que sais-tu faire ?"};
+}
+
+LocalReply Engine::notUnderstood() const {
+    LocalReply r;
+    r.text = "Je n'ai pas compris cette demande. Je suis l'**IA int\xC3\xA9gr\xC3\xA9" "e** : je comprends des phrases simples sur la vue "
+             "ouverte (cr\xC3\xA9" "er, modifier, associer, aligner, supprimer...), pas tout le fran\xC3\xA7" "ais. Essaie une de ces "
+             "formulations, ou demande-moi **ce que je sais faire**.";
+    r.suggestions = examples();
+    return r;
+}
+
+// ---- les questions -----------------------------------------------------------------------------
+LocalReply Engine::help() const {
+    LocalReply r;
+    r.text = "## Ce que je comprends\n"
+             "Je suis l'**IA int\xC3\xA9gr\xC3\xA9" "e** au logiciel : sans connexion, sans compte, rien ne quitte ce PC. Je comprends des "
+             "phrases simples sur **la vue ouverte** :\n"
+             "- **cr\xC3\xA9" "er** des objets : `Ajoute 3 pompes`, `Mets deux boutons Marche et Arr\xC3\xAAt sous P1`, "
+             "`Ajoute un voyant rouge \xC3\xA0 droite de la cuve` ;\n"
+             "- un **synoptique** : `Cr\xC3\xA9" "e un synoptique de station de pompage avec 3 cuves et 2 pompes par cuve` ;\n"
+             "- **modifier** : `Mets P1 en rouge`, `Change le texte de Bouton_1 en D\xC3\xA9marrer`, `Agrandis la cuve`, "
+             "`D\xC3\xA9place V1 \xC3\xA0 droite de P1`, `Monte P1 de 50`, `Cache V1`, `Renomme Cuve_1 en Bac_Eau` ;\n"
+             "- **associer** une variable : `Associe P1 \xC3\xA0 Pompe_1_Marche`, `Relie la cuve au niveau` ;\n"
+             "- **cr\xC3\xA9" "er des variables** et **une vue** : `Cr\xC3\xA9" "e les variables Pompe_3_Marche et Pompe_4_Marche en BOOL`, "
+             "`Cr\xC3\xA9" "e les variables de l'automate`, `Cr\xC3\xA9" "e une vue Vue_Process en 1920x1080` ;\n"
+             "- **aligner, r\xC3\xA9partir, dupliquer, supprimer** : `Aligne les boutons en haut`, `R\xC3\xA9partis les pompes`, "
+             "`Duplique P1 3 fois vers la droite`, `Supprime les vannes` ;\n"
+             "- **animer** : `Fais clignoter V1 quand Defaut_V1`, `P1 verte si Pompe_1_Marche sinon rouge` ;\n"
+             "- des **questions** : `Combien d'objets ?`, `Quelles variables ?`, `Quels genres d'objets ?`.\n"
+             "Je cherche les noms dans ton projet (sans casse ni accents, `P1` pour `Pompe_1`) et **je n'invente jamais une "
+             "variable**. Chaque proposition passe par l'aper\xC3\xA7u, et **Ctrl+Z** la reprend d'un coup. Pour des demandes plus "
+             "libres, branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de l'Assistant IA).";
+    r.suggestions = examples();
+    return r;
+}
+
+LocalReply Engine::countQuestion() const {
+    if (has("variable") || has("variables")) {
+        const auto vars = variables();
+        std::size_t plc = 0;
+        for (const auto& v : vars) plc += v.plc ? 1 : 0;
+        return ask("Le projet a **" + plural(vars.size() - plc, "variable", "variables") + "** dans l'IHM"
+                   + (in_.env.plcVariables ? std::string(", et l'automate reli\xC3\xA9 en donne ") + std::to_string(plc) + " de plus" : std::string{}) + ".");
+    }
+    if (!view()) return needView();
+    for (const auto& m : mentions_) {
+        const auto all = ofKind(m.kind);
+        std::vector<std::string> names;
+        for (const auto* o : all) names.push_back(o->name);
+        return ask("Il y a **" + countKind(m.kind, all.size()) + "** dans " + viewName() + (names.empty() ? std::string(".") : " : " + codes(names) + "."));
+    }
+    std::map<std::string, std::size_t> byKind;
+    std::size_t top = 0;
+    for (const auto& o : view()->objects) {
+        ++byKind[std::string(hmi::kindLabel(o.kind))];
+        top += o.parent == hmi::kNoId ? 1 : 0;
+    }
+    std::vector<std::pair<std::string, std::size_t>> list(byKind.begin(), byKind.end());
+    std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+    std::vector<std::string> parts;
+    for (const auto& [k, n] : list) parts.push_back(std::to_string(n) + " " + lowerFirst(k));
+    return ask("La vue " + viewName() + " a **" + plural(view()->objects.size(), "objet", "objets") + "**"
+               + (top != view()->objects.size() ? " (" + std::to_string(top) + " au premier niveau)" : std::string{})
+               + (parts.empty() ? std::string(".") : " : " + joinAnd(parts, 10) + "."));
+}
+
+LocalReply Engine::listVariables() const {
+    const auto vars = variables();
+    if (vars.empty()) return ask("Le projet n'a **aucune variable** pour l'instant. Tu peux en cr\xC3\xA9" "er : `Cr\xC3\xA9" "e une variable Niveau_Cuve REAL`.");
+    // un filtre : "quelles variables de niveau"
+    std::vector<std::string> filter;
+    for (const auto& tk : t_)
+        if (!stopWord(tk.f) && tk.f != "quelles" && tk.f != "quels" && tk.f != "liste" && tk.f != "existe" && tk.f != "existent"
+            && tk.f != "donne" && tk.f != "montre" && tk.f != "projet" && tk.f != "ihm" && tk.f.size() >= 3)
+            filter.push_back(tk.f);
+    std::vector<std::string> shown;
+    std::size_t matched = 0;
+    for (const auto& v : vars) {
+        const std::string n = fold(v.name);
+        if (!filter.empty() && std::none_of(filter.begin(), filter.end(), [&](const std::string& w) { return n.find(w) != std::string::npos; })) continue;
+        ++matched;
+        if (shown.size() < 30) shown.push_back(code(v.name) + " (" + v.type + (v.plc ? ", automate" : "") + ")");
+    }
+    if (matched == 0) {
+        std::vector<std::string> all;
+        for (const auto& v : vars)
+            if (all.size() < 12) all.push_back(code(v.name));
+        return ask("Aucune variable ne contient " + joinAnd(filter) + ". Les variables du projet : " + joinAnd(all, 12) + ".");
+    }
+    std::string text = "Le projet a **" + plural(matched, "variable", "variables") + "**" + (filter.empty() ? std::string{} : " qui r\xC3\xA9pondent")
+                       + " :\n";
+    for (const auto& s : shown) text += "- " + s + "\n";
+    if (matched > shown.size()) text += "- \xE2\x80\xA6 et " + std::to_string(matched - shown.size()) + " autres.\n";
+    text += "Je ne lis jamais leur valeur en marche : seulement leur nom et leur type.";
+    return ask(std::move(text));
+}
+
+LocalReply Engine::listKinds() const {
+    std::map<std::string, std::vector<std::string>> fam;
+    std::size_t n = 0;
+    for (const auto& e : registry().kinds()) {
+        if (e.family.empty()) continue;
+        ++n;
+        fam[e.family].push_back(e.label);
+    }
+    std::string text = "Je connais les **" + std::to_string(n) + " genres** de la biblioth\xC3\xA8que (ceux de l'\xC3\xA9" "diteur), par famille :\n";
+    for (const auto& [f, labels] : fam) text += "- **" + f + "** : " + joinAnd(labels, 8) + " ;\n";
+    text += "Je les reconnais par leur libell\xC3\xA9, au pluriel, et par quelques mots du m\xC3\xA9tier (bac ou r\xC3\xA9servoir : une cuve ; "
+            "bouton poussoir ; voyant TOR ; tuyau : une tuyauterie).";
+    return ask(std::move(text));
+}
+
+LocalReply Engine::listViews() const {
+    if (!in_.project || in_.project->views.empty()) return ask("Le projet n'a aucune vue.");
+    std::vector<std::string> list;
+    for (const auto& v : in_.project->views) list.push_back(code(v.name) + " (" + std::to_string(v.width) + "\xC3\x97" + std::to_string(v.height) + ")");
+    return ask("Le projet a **" + plural(list.size(), "vue", "vues") + "** : " + joinAnd(list, 20) + ".");
+}
+
+// ---- creer des objets ---------------------------------------------------------------------------
+LocalReply Engine::create(std::vector<NewObject> wanted, const Position& pos, std::string intro, const hmi::View* into) const {
+    if (!view() && !into) return needView();
+    if (wanted.empty()) return notUnderstood();
+    const hmi::View& v = into ? *into : *view();
+    constexpr std::size_t kMax = 60;
+    std::string capped;
+    if (wanted.size() > kMax) {
+        capped = " Je me limite \xC3\xA0 " + std::to_string(kMax) + " objets par demande.";
+        wanted.resize(kMax);
+    }
+    // la reference d'une position relative
+    const hmi::Object* ref = nullptr;
+    if (pos.rel != Rel::None && !into) {
+        const Target t = firstTarget(pos.refAt, pos.end);
+        if (!t.question.empty()) return ask(t.question);
+        if (!t.objects.empty()) ref = t.objects.front();
+    }
+    // les noms : Base_N libre, ou "Marche_Pompe_1" pour un bouton pose pres d'un objet
+    std::set<std::string> reserved;
+    std::vector<std::string> names;
+    for (auto& w : wanted) {
+        std::string name;
+        if (!w.name.empty() && hmi::isIdentifier(w.name) && nameFree(v, w.name, reserved)) name = w.name;
+        else if (!w.text.empty() && isButtonKind(w.kind)) {
+            const std::string b = sanitize(w.text) + (ref ? "_" + ref->name : std::string("_") + baseName(w.kind));
+            name = nameFree(v, b, reserved) ? b : b + "_" + std::to_string(nextNumber(v, b, reserved));
+        } else {
+            const std::string b = baseName(w.kind);
+            name = b + "_" + std::to_string(nextNumber(v, b, reserved));
+        }
+        reserved.insert(name);
+        names.push_back(name);
+    }
+    // les tailles par defaut du genre (le registre)
+    std::vector<hmi::Box> boxes;
+    for (const auto& w : wanted) {
+        const auto* e = registry().find(w.kind);
+        double ww = e ? e->w : 120, hh = e ? e->h : 80;
+        if (ww <= 0) ww = 120;
+        if (hh <= 0) hh = w.kind == hmi::Kind::Line ? 0 : 80;
+        boxes.push_back({0, 0, ww, hh});
+    }
+    const double gap = 24;
+    const auto labelRoom = [](hmi::Kind k) { return hmi::kindIsSynoptic(k) ? 20.0 : 0.0; };
+    Placer placer(v);
+    std::string where;
+    if (ref) {
+        const hmi::Box rb = hmi::edit::rotatedBounds(*ref);
+        const double extra = hmi::kindIsSynoptic(ref->kind) && !ref->text("label").empty() && ref->text("labelPosition", "dessous") == "dessous" ? 20 : 0;
+        double totalW = 0, maxH = 0;
+        for (const auto& b : boxes) {
+            totalW += b.w;
+            maxH = std::max(maxH, b.h);
+        }
+        totalW += gap * static_cast<double>(boxes.size() - 1);
+        double x = 0, y = 0;
+        bool row = true;
+        switch (pos.rel) {
+            case Rel::Right: x = rb.right() + 30; y = rb.cy() - maxH / 2; where = "\xC3\xA0 droite de " + code(ref->name); break;
+            case Rel::Left: x = rb.x - 30 - totalW; y = rb.cy() - maxH / 2; where = "\xC3\xA0 gauche de " + code(ref->name); break;
+            case Rel::Below: x = rb.cx() - totalW / 2; y = rb.bottom() + extra + 24; where = "sous " + code(ref->name); break;
+            case Rel::Above: x = rb.cx() - totalW / 2; y = rb.y - 24 - maxH - labelRoom(wanted.front().kind); where = "au-dessus de " + code(ref->name); break;
+            case Rel::None: break;
+        }
+        // une rangee (sous, au-dessus) ou une ligne (a droite, a gauche) ; decalee tant qu'elle recouvre
+        (void)row;
+        const auto layout = [&](double ox, double oy) {
+            std::vector<hmi::Box> out;
+            double cx = ox;
+            for (const auto& b : boxes) {
+                out.push_back({std::round(cx), std::round(oy + (maxH - b.h) / 2), b.w, b.h});
+                cx += b.w + gap;
+            }
+            return out;
+        };
+        double dx = pos.rel == Rel::Right ? 10 : pos.rel == Rel::Left ? -10 : 0;
+        double dy = pos.rel == Rel::Below ? 10 : pos.rel == Rel::Above ? -10 : 0;
+        x = std::max(0.0, x);
+        y = std::max(0.0, y);
+        auto out = layout(x, y);
+        for (int k = 0; k < 40; ++k) {
+            bool ok = true;
+            for (std::size_t i = 0; i < out.size() && ok; ++i) {
+                hmi::Box b = out[i];
+                b.h += labelRoom(wanted[i].kind);
+                // la reference elle-meme ne compte pas : on se pose a cote d'elle
+                const hmi::Box g{b.x - 8, b.y - 8, b.w + 16, b.h + 16};
+                for (const auto& tb : placer.taken)
+                    if (tb.intersects(g) && !(tb.x == rb.x && tb.y == rb.y && tb.w == rb.w)) ok = false;
+            }
+            if (ok) break;
+            x = std::max(0.0, x + dx);
+            y = std::max(0.0, y + dy);
+            out = layout(x, y);
+        }
+        boxes = out;
+    } else {
+        // une place libre : la rangee entiere si elle tient, sinon une grille ; sinon chacun la sienne
+        double totalW = 0, maxH = 0;
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            totalW += boxes[i].w;
+            maxH = std::max(maxH, boxes[i].h + labelRoom(wanted[i].kind));
+        }
+        totalW += gap * static_cast<double>(boxes.size() - 1);
+        std::size_t perRow = boxes.size();
+        if (totalW > v.width - 80) {
+            const double cell = totalW / static_cast<double>(boxes.size());
+            perRow = std::max<std::size_t>(1, static_cast<std::size_t>((v.width - 80 + gap) / (cell + gap)));
+        }
+        const std::size_t rows = (boxes.size() + perRow - 1) / perRow;
+        double rowW = 0;
+        for (std::size_t i = 0; i < perRow && i < boxes.size(); ++i) rowW += boxes[i].w + (i ? gap : 0);
+        const hmi::Box area = placer.find(rowW, maxH * static_cast<double>(rows) + gap * static_cast<double>(rows - 1));
+        double cx = area.x, cy = area.y;
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            if (i > 0 && i % perRow == 0) {
+                cx = area.x;
+                cy += maxH + gap;
+            }
+            boxes[i].x = cx;
+            boxes[i].y = cy;
+            cx += boxes[i].w + gap;
+        }
+        where = "\xC3\xA0 un endroit libre de " + (into ? guill(into->name) : viewName()) + " (x = " + num(boxes.front().x) + ", y = " + num(boxes.front().y) + ")";
+    }
+    // les operations
+    std::map<hmi::Kind, std::size_t> perKind;
+    std::vector<hmi::Kind> order;
+    Proposal p = base("");
+    std::vector<std::string> colored, texts;
+    for (std::size_t i = 0; i < wanted.size(); ++i) {
+        const auto& w = wanted[i];
+        if (!perKind[w.kind]++) order.push_back(w.kind);
+        Operation op;
+        op.action = Operation::Action::Create;
+        op.kind = std::string(hmi::kindKey(w.kind));
+        op.name = names[i];
+        op.props = {{"x", num(boxes[i].x)}, {"y", num(boxes[i].y)}, {"w", num(boxes[i].w)}, {"h", num(boxes[i].h)}};
+        const hmi::Object tmpl = hmi::makeObject(w.kind, 1, names[i], 0, 0, hmi::kNoId);
+        if (!w.text.empty()) {
+            if (tmpl.find("text")) op.props.emplace_back("text", w.text);
+            else if (tmpl.find("label")) op.props.emplace_back("label", w.text);
+            texts.push_back(guill(w.text));
+        } else if (tmpl.find("label") && hmi::kindIsSynoptic(w.kind)) {
+            // le libelle d'un symbole : P3 pour Pompe_3, Cuve 2 pour une cuve
+            const auto us = names[i].rfind('_');
+            const std::string n = us == std::string::npos ? std::string{} : names[i].substr(us + 1);
+            if (isDigits(n)) op.props.emplace_back("label", hmi::kindHasLevel(w.kind) ? baseName(w.kind) + " " + n : std::string(1, names[i][0]) + n);
+        }
+        if (!w.color.empty()) {
+            std::string key;
+            if (hmi::kindHasLevel(w.kind) && tmpl.find("fillColor")) key = "fillColor";
+            else if (tmpl.find("colorOn")) key = "colorOn";
+            else if (w.kind == hmi::Kind::Text && tmpl.find("textColor")) key = "textColor";
+            else if (tmpl.find("fill")) key = "fill";
+            else if (tmpl.find("textColor")) key = "textColor";
+            else if (tmpl.find("stroke")) key = "stroke";
+            if (!key.empty()) {
+                op.props.emplace_back(key, w.color);
+                colored.push_back(names[i]);
+            }
+        }
+        p.ops.push_back(std::move(op));
+    }
+    std::vector<std::string> parts;
+    for (const auto k : order) parts.push_back(countKind(k, perKind[k]));
+    p.summary = parts.size() == 1 ? "Ajouter " + parts.front() : "Ajouter " + joinAnd(parts);
+    std::string text = intro;
+    text += "Je propose **" + joinAnd(parts) + "** : " + codes(names) + ", " + where + ".";
+    if (!texts.empty()) text += " Textes : " + joinAnd(texts) + ".";
+    if (!colored.empty()) text += " En couleur : " + codes(colored) + ".";
+    text += capped;
+    bool needVariable = false;
+    for (const auto& w : wanted) {
+        const auto* e = registry().find(w.kind);
+        if (e && (e->shows || e->writes)) needVariable = true;
+    }
+    if (needVariable)
+        text += "\nAucune variable n'est associ\xC3\xA9" "e : je n'invente pas de nom. Dis-moi laquelle relier, par exemple `Associe "
+                + names.front() + " \xC3\xA0 ...`.";
+    return finish(std::move(p), std::move(text));
+}
+
+LocalReply Engine::createFromMentions(const hmi::View* into) const {
+    if (!view() && !into) return needView();
+    const Position pos = into ? Position{} : position();
+    std::vector<NewObject> wanted;
+    std::vector<const Mention*> news;
+    for (const auto& m : mentions_) {
+        if (pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end) continue;   // l'objet de reference
+        if (m.definite && !m.indefinite) continue;
+        news.push_back(&m);
+    }
+    // "cree la pompe P5" : un genre defini, un nom neuf
+    if (news.empty())
+        for (const auto& m : mentions_)
+            if (!(pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end)) news.push_back(&m);
+    if (news.empty()) return notUnderstood();
+    for (std::size_t k = 0; k < news.size(); ++k) {
+        const Mention& m = *news[k];
+        const std::size_t stop = k + 1 < news.size() ? news[k + 1]->at : (pos.rel != Rel::None && pos.at > m.at ? pos.at : t_.size());
+        // apres le genre : une couleur, des textes (Marche et Arret, "Marche"), un nom (appele X)
+        std::string color, name;
+        std::vector<std::string> texts;
+        for (std::size_t i = m.at + m.len; i < stop; ++i) {
+            const Tok& tk = t_[i];
+            std::size_t len = 0;
+            if (const std::string c = colorAt(t_, i, &len); !c.empty() && !tk.quoted) {
+                color = c;
+                i += len - 1;
+                continue;
+            }
+            if ((tk.f.rfind("appel", 0) == 0 || tk.f.rfind("nomm", 0) == 0) && i + 1 < stop) {
+                name = t_[i + 1].raw;
+                ++i;
+                continue;
+            }
+            // un mot en majuscule, ou entre guillemets : un texte (Marche, Arret)
+            const bool capital = !tk.raw.empty() && (std::isupper(static_cast<unsigned char>(tk.raw[0])) || static_cast<unsigned char>(tk.raw[0]) == 0xC3);
+            if (tk.quoted || (capital && !stopWord(tk.f) && numberOf(tk.f) < 0 && !mentionAt(i))) {
+                // un nom d'objet voulu (Pompe_Eau, P5) plutot qu'un texte, pour un symbole sans texte
+                if (!tk.quoted && tk.raw.find('_') != std::string::npos) {
+                    name = tk.raw;
+                    continue;
+                }
+                texts.push_back(tk.raw);
+            }
+        }
+        int count = m.count;
+        if (count < 0) count = m.plural ? (texts.size() > 1 ? static_cast<int>(texts.size()) : -1) : 1;
+        if (count < 0)
+            return ask("Combien de " + lowerFirst(kindPlural(m.kind, 2)) + " ? Dis-le en chiffres ou en lettres.",
+                       {"Ajoute 2 " + lowerFirst(kindPlural(m.kind, 2)), "Ajoute 3 " + lowerFirst(kindPlural(m.kind, 2))});
+        if (count > 60) return ask("C'est beaucoup : je pose au plus 60 objets par demande. Demande-les en plusieurs fois.");
+        // des boutons Marche, Arret... : des boutons de commande (a impulsion), comme le synoptique
+        hmi::Kind kind = m.kind;
+        if (kind == hmi::Kind::Button)
+            for (const auto& tx : texts) {
+                const std::string f = foldWord(tx);
+                for (const char* w : {"marche", "arret", "start", "stop", "ouvr", "ferm", "acquit", "reset", "demarr"})
+                    if (f.rfind(w, 0) == 0) kind = hmi::Kind::PushButton;
+            }
+        for (int c = 0; c < count; ++c) {
+            NewObject w;
+            w.kind = kind;
+            w.color = color;
+            if (static_cast<std::size_t>(c) < texts.size()) w.text = texts[static_cast<std::size_t>(c)];
+            else if (texts.size() == 1) w.text = texts.front();
+            if (count == 1) w.name = name;
+            wanted.push_back(std::move(w));
+        }
+    }
+    return create(std::move(wanted), pos, {}, into);
+}
+
+// ---- "et une autre", "la meme en bleu", "pareil pour P2" -----------------------------------------
+LocalReply Engine::followUp() const {
+    if (!view()) return needView();
+    std::size_t clen = 0;
+    std::string color;
+    for (std::size_t i = 0; i < t_.size() && color.empty(); ++i) color = colorAt(t_, i, &clen);
+    // pareil pour un autre objet : les memes modifications
+    if (!mem_.modifies.empty() && !names_.empty()) {
+        const Target t = targets(0, t_.size(), true, false);
+        if (!t.question.empty()) return ask(t.question);
+        if (!t.objects.empty()) {
+            Proposal p = base("La m\xC3\xAAme modification");
+            std::vector<std::string> done;
+            for (const auto* o : t.objects) {
+                for (const auto& prev : mem_.modifies) {
+                    Operation op;
+                    op.action = Operation::Action::Modify;
+                    op.name = o->name;
+                    for (const auto& [k, val] : prev.props) {
+                        if (k == "x" || k == "y" || k == "w" || k == "h") continue;
+                        if (!o->find(k)) continue;
+                        op.props.emplace_back(k, color.empty() || !hmi::roles::colorOk(val) ? val : color);
+                    }
+                    if (!op.props.empty()) p.ops.push_back(std::move(op));
+                }
+                done.push_back(o->name);
+            }
+            if (p.ops.empty()) return ask("La modification d'avant ne s'applique pas \xC3\xA0 " + codes(done) + " (ses propri\xC3\xA9t\xC3\xA9s ne sont pas les m\xC3\xAAmes).");
+            return finish(std::move(p), "Je propose **la m\xC3\xAAme modification** qu'\xC3\xA0 la demande d'avant (" + guill(mem_.request) + ") sur "
+                                            + codes(done) + ".");
+        }
+    }
+    if (mem_.creates.empty())
+        return ask("Je ne sais pas \xC3\xA0 quoi \xC3\xA7" "a se rapporte : la demande d'avant n'a rien cr\xC3\xA9\xC3\xA9 ni modifi\xC3\xA9. Dis-moi "
+                   "le genre d'objet, par exemple `Ajoute une pompe`.",
+                   examples());
+    // une autre (ou N autres) des memes, de la meme couleur sauf si une autre est dite
+    int count = 1;
+    for (const auto& tk : t_)
+        if (const int n = numberOf(tk.f); n > 1) count = n;
+    std::vector<NewObject> wanted;
+    std::vector<hmi::Kind> kinds;
+    std::map<hmi::Kind, std::vector<const Operation*>> byKind;
+    for (const auto& op : mem_.creates)
+        if (const auto k = hmi::kindFromKey(op.kind)) {
+            if (byKind[*k].empty()) kinds.push_back(*k);
+            byKind[*k].push_back(&op);
+        }
+    if (kinds.empty()) return ask("Je ne reconnais pas les objets de la demande d'avant. Dis-moi le genre d'objet, par exemple `Ajoute une pompe`.", examples());
+    // "une autre" : un objet du dernier genre cree ; "les memes" : tout le groupe d'avant
+    const bool group = has("memes") || has("pareils") || phrase("la meme chose") || phrase("le meme groupe");
+    std::vector<const Operation*> models;
+    if (group) {
+        for (const auto& op : mem_.creates)
+            if (hmi::kindFromKey(op.kind)) models.push_back(&op);
+    } else {
+        models.push_back(byKind[kinds.back()].back());
+    }
+    for (int c = 0; c < count; ++c)
+        for (const auto* op : models) {
+            NewObject w;
+            w.kind = *hmi::kindFromKey(op->kind);
+            for (const auto& [k, val] : op->props) {
+                if (k == "text") w.text = val;
+                if (hmi::roles::colorOk(val) && (k == "fillColor" || k == "colorOn" || k == "fill" || k == "textColor")) w.color = val;
+            }
+            if (!color.empty()) w.color = color;
+            wanted.push_back(std::move(w));
+        }
+    return create(std::move(wanted), position(), "Comme \xC3\xA0 la demande d'avant (" + guill(mem_.request) + ").\n");
+}
+
+// ---- le synoptique de station de pompage -------------------------------------------------------
+LocalReply Engine::synoptic() const {
+    if (!view()) return needView();
+    // les nombres de la phrase : "3 cuves", "2 pompes par cuve", "6 pompes"
+    int tanks = -1, pumps = -1;
+    bool perTank = false;
+    for (const auto& m : mentions_) {
+        if (m.count <= 0) continue;
+        if (m.kind == hmi::Kind::Tank && tanks < 0) tanks = m.count;
+        if (m.kind == hmi::Kind::Pump && pumps < 0) {
+            pumps = m.count;
+            const std::size_t after = m.at + m.len;
+            perTank = after + 1 < t_.size() && t_[after].f == "par" && sameWord(t_[after + 1].f, "cuve", true);
+        }
+    }
+    if (tanks < 0) tanks = 3;
+    if (pumps < 0) {
+        pumps = 2;
+        perTank = true;
+    }
+    if (!perTank) pumps = std::max(1, (pumps + tanks - 1) / tanks);
+    if (tanks > 8 || pumps > 6) return ask("C'est beaucoup pour une vue : au plus 8 cuves et 6 pompes par cuve. Redemande avec moins.");
+    const bool buttons = !(phrase("sans bouton") || phrase("sans boutons"));
+    const bool valves = !(phrase("sans vanne") || phrase("sans vannes"));
+    const hmi::View& v = *view();
+    const double margin = 40, pumpW = 90, step = 110;
+    const double colNeed = std::max(300.0, 40 + pumps * step);
+    const double W = std::max(static_cast<double>(v.width), margin * 2 + colNeed * tanks);
+    const double colW = std::max(colNeed, (std::min(W, static_cast<double>(v.width)) - 2 * margin) / tanks);
+    Placer placer(v);
+    double y0 = 24;
+    const double used = placer.bottom();
+    const double height = buttons ? 650 : 560;
+    if (used > 0) y0 = used + 30;
+    if (y0 + height > v.height && used + 30 + height > v.height) y0 = used > 0 ? used + 30 : 24;
+    std::set<std::string> reserved;
+    const auto fresh = [&](const std::string& wanted) {
+        if (nameFree(v, wanted, reserved)) {
+            reserved.insert(wanted);
+            return wanted;
+        }
+        std::string n = wanted + "_" + std::to_string(nextNumber(v, wanted, reserved));
+        reserved.insert(n);
+        return n;
+    };
+    Proposal p = base("Synoptique de station de pompage");
+    const auto add = [&](hmi::Kind k, const std::string& name, double x, double y, double w, double h,
+                         std::vector<std::pair<std::string, std::string>> more) {
+        Operation op;
+        op.action = Operation::Action::Create;
+        op.kind = std::string(hmi::kindKey(k));
+        op.name = fresh(name);
+        op.props = {{"x", num(x)}, {"y", num(y)}, {"w", num(w)}, {"h", num(h)}};
+        for (auto& m : more) op.props.push_back(std::move(m));
+        p.ops.push_back(std::move(op));
+    };
+    add(hmi::Kind::Text, "Titre_Station", margin, y0, 520, 40, {{"text", "Station de pompage"}, {"fontSize", "26"}, {"align", "gauche"}});
+    int nPumps = 0, nButtons = 0, nValves = 0;
+    for (int col = 0; col < tanks; ++col) {
+        const double cx = margin + col * colW;
+        const std::string n = std::to_string(col + 1);
+        add(hmi::Kind::Tank, "Cuve_" + n, cx + 40, y0 + 70, 150, 200, {{"label", "Cuve " + n}, {"max", "100"}, {"unit", "%"}});
+        add(hmi::Kind::Bargraph, "Niveau_Cuve_" + n, cx + 214, y0 + 70, 56, 200, {{"unit", "%"}});
+        double py = y0 + 300;
+        if (valves) {
+            add(hmi::Kind::Valve, "Vanne_" + n, cx + 75, y0 + 300, 80, 64, {{"label", "V" + n}});
+            ++nValves;
+            py = y0 + 392;
+        }
+        add(hmi::Kind::Pipe, "Collecteur_" + n, cx + 20, py, std::max(120.0, pumps * step - 20), 20, {});
+        for (int k = 0; k < pumps; ++k) {
+            const std::string pn = n + std::to_string(k + 1);
+            const double px = cx + 20 + k * step;
+            add(hmi::Kind::Pump, "Pompe_" + pn, px, py + 38, pumpW, 80, {{"label", "P" + pn}});
+            ++nPumps;
+            if (buttons) {
+                add(hmi::Kind::PushButton, "Marche_P" + pn, px, py + 164, 96, 36,
+                    {{"text", "Marche"}, {"fill", "#2F7D4F"}, {"stroke", "#24603C"}, {"fontSize", "14"}});
+                add(hmi::Kind::PushButton, "Arret_P" + pn, px, py + 208, 96, 36,
+                    {{"text", "Arr\xC3\xAAt"}, {"fill", "#7D3A36"}, {"stroke", "#5E2B28"}, {"fontSize", "14"}});
+                nButtons += 2;
+            }
+        }
+    }
+    std::string text = "## Synoptique de station de pompage\nJe propose **" + std::to_string(p.ops.size()) + " objets** dans " + viewName() + ", "
+                       + plural(static_cast<std::size_t>(tanks), "colonne", "colonnes") + " (une par cuve) :\n"
+                       "- **" + countKind(hmi::Kind::Tank, static_cast<std::size_t>(tanks)) + "** avec leur niveau en %, et **"
+                       + countKind(hmi::Kind::Bargraph, static_cast<std::size_t>(tanks)) + "** \xC3\xA0 c\xC3\xB4t\xC3\xA9 ;\n";
+    if (nValves) text += "- **" + countKind(hmi::Kind::Valve, static_cast<std::size_t>(nValves)) + "** de sortie ;\n";
+    text += "- **" + countKind(hmi::Kind::Pipe, static_cast<std::size_t>(tanks)) + "** vers les pompes ;\n"
+            "- **" + countKind(hmi::Kind::Pump, static_cast<std::size_t>(nPumps)) + "**, " + plural(static_cast<std::size_t>(pumps), "par cuve", "par cuve") + " ;\n";
+    if (nButtons) text += "- **" + countKind(hmi::Kind::PushButton, static_cast<std::size_t>(nButtons)) + "** : Marche et Arr\xC3\xAAt sous chaque pompe ;\n";
+    text += "- un titre.\n";
+    if (W > v.width + 1) text += "La vue est \xC3\xA9troite pour tout \xC3\xA7" "a : des objets d\xC3\xA9passeront du cadre (l'aper\xC3\xA7u le montre).\n";
+    text += "Je n'ai associ\xC3\xA9 **aucune variable** : je n'invente pas de nom. Ensuite, demande par exemple `Associe Pompe_11 \xC3\xA0 ...`.";
+    return finish(std::move(p), std::move(text));
+}
+
+// ---- une vue ------------------------------------------------------------------------------------
+LocalReply Engine::createView() const {
+    if (!in_.project) return ask("Ouvre d'abord un projet IHM.");
+    std::string name;
+    int w = 1920, h = 1080;
+    std::string bg;
+    const std::size_t at = indexOf("vue") != std::string::npos ? indexOf("vue") : indexOf("ecran");
+    for (std::size_t i = 0; i < t_.size(); ++i) {
+        const Tok& tk = t_[i];
+        // la taille : 1920x1080, 1280 x 800, 800 par 600
+        const auto x = tk.f.find('x');
+        if (x != std::string::npos && x > 0 && isDigits(tk.f.substr(0, x)) && isDigits(tk.f.substr(x + 1))) {
+            w = std::stoi(tk.f.substr(0, x));
+            h = std::stoi(tk.f.substr(x + 1));
+            continue;
+        }
+        if (isDigits(tk.f) && i + 2 < t_.size() && (t_[i + 1].f == "x" || t_[i + 1].f == "par" || t_[i + 1].f == "sur") && isDigits(t_[i + 2].f)) {
+            w = std::stoi(tk.f);
+            h = std::stoi(t_[i + 2].f);
+            i += 2;
+            continue;
+        }
+        std::size_t len = 0;
+        if (const std::string c = colorAt(t_, i, &len); !c.empty() && i > 0 && (t_[i - 1].f == "fond" || (i > 1 && t_[i - 2].f == "fond"))) {
+            bg = c;
+            continue;
+        }
+        if (name.empty() && at != std::string::npos && i > at && !tk.quoted && !stopWord(tk.f) && (tk.raw.find('_') != std::string::npos
+                                                                                                    || std::isupper(static_cast<unsigned char>(tk.raw[0]))))
+            name = tk.raw;
+        if (name.empty() && tk.quoted) name = sanitize(tk.raw);
+        if ((tk.f.rfind("appel", 0) == 0 || tk.f.rfind("nomm", 0) == 0) && i + 1 < t_.size()) name = t_[i + 1].quoted ? sanitize(t_[i + 1].raw) : t_[i + 1].raw;
+    }
+    if (w < 100 || h < 100 || w > 10000 || h > 10000) return ask("Cette taille (" + std::to_string(w) + "\xC3\x97" + std::to_string(h) + ") n'est pas une taille de vue : entre 100 et 10000 pixels.");
+    if (name.empty()) {
+        int n = 1;
+        while (in_.project->viewByName("Vue_" + std::to_string(n))) ++n;
+        name = "Vue_" + std::to_string(n);
+    }
+    if (!hmi::isIdentifier(name)) return ask(guill(name) + " n'est pas un nom de vue valable (des lettres, des chiffres et _).");
+    if (in_.project->viewByName(name)) return ask("La vue " + code(name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet. Choisis un autre nom.");
+    Proposal p = base("Cr\xC3\xA9" "er la vue " + name);
+    Operation op;
+    op.action = Operation::Action::View;
+    op.name = name;
+    op.props = {{"largeur", std::to_string(w)}, {"hauteur", std::to_string(h)}};
+    if (!bg.empty()) op.props.emplace_back("fond", bg);
+    p.ops.push_back(std::move(op));
+    std::string text = "Je propose de cr\xC3\xA9" "er la vue **" + name + "** en " + std::to_string(w) + "\xC3\x97" + std::to_string(h)
+                       + (bg.empty() ? std::string{} : ", fond " + bg) + ".";
+    // "une vue Vue_Pompes avec 3 pompes" : les objets se posent dans la vue neuve (les operations qui suivent
+    // un creer_vue la visent)
+    if (std::any_of(mentions_.begin(), mentions_.end(), [](const Mention& m) { return m.indefinite; })) {
+        hmi::View fresh;
+        fresh.name = name;
+        fresh.width = w;
+        fresh.height = h;
+        LocalReply objs = createFromMentions(&fresh);
+        if (!objs.proposal) return objs;   // une question (combien ?), dite telle quelle
+        for (auto& o : objs.proposal->ops) p.ops.push_back(std::move(o));
+        text += " Dedans : " + objs.text;
+    }
+    text += "\nElle s'ouvrira apr\xC3\xA8s Appliquer ; Ctrl+Z retire tout.";
+    return finish(std::move(p), std::move(text));
+}
+
+// ---- des variables -----------------------------------------------------------------------------
+std::string typeWord(const std::string& f) {
+    static const std::map<std::string, std::string> k = {
+        {"bool", "BOOL"}, {"booleen", "BOOL"}, {"booleenne", "BOOL"}, {"booleens", "BOOL"}, {"booleennes", "BOOL"}, {"tor", "BOOL"},
+        {"int", "INT"}, {"entier", "INT"}, {"entiers", "INT"}, {"dint", "DINT"}, {"uint", "UINT"}, {"udint", "UDINT"}, {"word", "WORD"},
+        {"dword", "DWORD"}, {"real", "REAL"}, {"reel", "REAL"}, {"reels", "REAL"}, {"reelle", "REAL"}, {"reelles", "REAL"}, {"flottant", "REAL"},
+        {"lreal", "LREAL"}, {"string", "STRING"}, {"chaine", "STRING"}, {"time", "TIME"}, {"duree", "TIME"}};
+    const auto it = k.find(f);
+    return it == k.end() ? std::string{} : it->second;
+}
+
+LocalReply Engine::createVariables() const {
+    if (!in_.project) return ask("Ouvre d'abord un projet IHM.");
+    const bool plc = has("automate") || has("api") || has("plc") || has("ddt") || has("ddts");
+    const bool types = has("type") || has("types") || has("ddt") || has("ddts") || has("structure") || has("structures");
+    // le filtre : "qui commencent par PT", "contenant Pompe"
+    std::string filter;
+    for (std::size_t i = 0; i + 1 < t_.size(); ++i)
+        if ((t_[i].f == "par" && i > 0 && t_[i - 1].f.rfind("commenc", 0) == 0) || t_[i].f.rfind("contien", 0) == 0 || t_[i].f.rfind("contenant", 0) == 0)
+            filter = t_[i + 1].raw;
+    // les noms ecrits
+    std::vector<Operation::VariableSpec> specs;
+    std::vector<std::string> already, invalid;
+    std::string type;
+    for (const auto& tk : t_)
+        if (const std::string ty = typeWord(tk.f); !ty.empty()) type = ty;
+    for (std::size_t i = 0; i < t_.size(); ++i) {
+        const Tok& tk = t_[i];
+        if (tk.quoted || stopWord(tk.f) || !typeWord(tk.f).empty() || tk.raw == filter) continue;
+        const bool identifier = tk.raw.find('_') != std::string::npos
+                             || (std::isupper(static_cast<unsigned char>(tk.raw[0])) && i > 0 && !plc
+                                 && (stopWord(t_[i - 1].f) || t_[i - 1].f.rfind("variable", 0) == 0 || t_[i - 1].raw.find('_') != std::string::npos));
+        if (!identifier) continue;
+        if (!hmi::isIdentifier(tk.raw)) {
+            invalid.push_back(tk.raw);
+            continue;
+        }
+        if (exists(tk.raw)) {
+            already.push_back(tk.raw);
+            continue;
+        }
+        if (std::any_of(specs.begin(), specs.end(), [&](const auto& s) { return norm(s.name) == norm(tk.raw); })) continue;
+        Operation::VariableSpec s;
+        s.name = tk.raw;
+        specs.push_back(std::move(s));
+    }
+    if (specs.empty() && plc) {
+        // l'automate relie : ses types (DDT) ; ou ses variables, avec les types qu'elles emploient (fromPlc : une
+        // proposition entiere, chaque type une fois)
+        auto ops = types && !hasPrefix("variable") ? typesFromPlc(*in_.project, in_.env, filter) : fromPlc(*in_.project, in_.env, filter);
+        const bool linked = static_cast<bool>(in_.env.plcTypes) || static_cast<bool>(in_.env.plcVariables);
+        if (ops.empty()) {
+            if (!linked)
+                return ask("Aucun automate n'est reli\xC3\xA9 au projet : je n'ai rien \xC3\xA0 lire. Relie l'automate (Communication), puis redemande.");
+            return ask(std::string("Rien \xC3\xA0 cr\xC3\xA9" "er : ") + (types ? "chaque type de l'automate" : "chaque variable de l'automate")
+                       + (filter.empty() ? std::string{} : " qui r\xC3\xA9pond \xC3\xA0 " + code(filter)) + " a d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent dans l'IHM"
+                       + " (ou l'automate n'en donne aucun).");
+        }
+        std::size_t nv = 0, nt = 0;
+        for (const auto& op : ops) {
+            if (op.action == Operation::Action::Variables) nv += op.variables.size();
+            if (op.action == Operation::Action::Type) ++nt;
+        }
+        std::vector<std::string> what;
+        if (nt) what.push_back(plural(nt, "type IHM", "types IHM"));
+        if (nv) what.push_back(plural(nv, "variable", "variables"));
+        Proposal p = base(nv ? "Variables depuis l'automate" : "Types IHM depuis l'automate");
+        p.ops = std::move(ops);
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + joinAnd(what) + "** depuis l'automate reli\xC3\xA9"
+                                        + (filter.empty() ? std::string{} : " (ceux qui r\xC3\xA9pondent \xC3\xA0 " + code(filter) + ")")
+                                        + " : les types d'abord, dans l'ordre o\xC3\xB9 ils s'emploient. L'aper\xC3\xA7u les montre tous ; rien n'est "
+                                          "cr\xC3\xA9\xC3\xA9 avant Appliquer.");
+    }
+    if (specs.empty()) {
+        std::string why;
+        if (!already.empty()) why = (already.size() > 1 ? "Les variables " : "La variable ") + codes(already) + (already.size() > 1 ? " existent" : " existe") + " d\xC3\xA9j\xC3\xA0. ";
+        if (!invalid.empty()) why += codes(invalid) + " n'est pas un nom de variable valable. ";
+        return ask(why + "Quelles variables ? \xC3\x89" "cris leurs noms et leur type, par exemple `Cr\xC3\xA9" "e les variables Pompe_3_Marche et "
+                         "Pompe_4_Marche en BOOL`.",
+                   {"Cr\xC3\xA9" "e une variable Niveau_Cuve REAL", "Cr\xC3\xA9" "e les variables de l'automate"});
+    }
+    // le type : dit, sinon tire du nom (une marche, un defaut : BOOL ; un niveau, une mesure : REAL) - et dit
+    std::vector<std::string> guessed;
+    for (auto& s : specs) {
+        s.type = type;
+        if (s.type.empty()) {
+            const std::string f = fold(s.name);
+            static const char* const reals[] = {"niveau", "temp", "pression", "debit", "mesure", "consigne", "vitesse", "poids", "valeur", "courant", "tension"};
+            s.type = "BOOL";
+            for (const char* r : reals)
+                if (f.find(r) != std::string::npos) s.type = "REAL";
+            guessed.push_back(s.name + " : " + s.type);
+        }
+        s.initial = s.type == "BOOL" ? "FALSE" : s.type == "STRING" || s.type == "TIME" ? std::string{} : "0";
+    }
+    Proposal p = base(specs.size() > 1 ? "Cr\xC3\xA9" "er " + std::to_string(specs.size()) + " variables" : "Cr\xC3\xA9" "er la variable " + specs.front().name);
+    Operation op;
+    op.action = Operation::Action::Variables;
+    op.variables = specs;
+    p.ops.push_back(std::move(op));
+    std::vector<std::string> list;
+    for (const auto& s : specs) list.push_back(code(s.name) + " (" + s.type + ")");
+    std::string text = "Je propose de cr\xC3\xA9" "er **" + plural(specs.size(), "variable", "variables") + "** dans les variables de l'IHM : " + joinAnd(list) + ".";
+    if (!guessed.empty()) text += "\nLe type n'\xC3\xA9tait pas dit : je l'ai tir\xC3\xA9 du nom (" + joinAnd(guessed) + ") - redemande avec le type s'il ne convient pas.";
+    if (!already.empty()) text += "\n" + codes(already) + (already.size() > 1 ? " existent" : " existe") + " d\xC3\xA9j\xC3\xA0 : rien \xC3\xA0 faire pour " + (already.size() > 1 ? "elles." : "elle.");
+    text += "\nL'aper\xC3\xA7u les montre avant d'appliquer ; Ctrl+Z les retire.";
+    return finish(std::move(p), std::move(text));
+}
+
+// ---- associer une variable ---------------------------------------------------------------------
+LocalReply Engine::bind() const {
+    if (!view()) return needView();
+    // l'objet : avant le mot de liaison (a, au, avec, sur, variable) s'il est la, sinon le premier designe
+    std::size_t verb = indexOfPrefix("associ");
+    if (verb == std::string::npos) verb = indexOfPrefix("reli");
+    if (verb == std::string::npos) verb = indexOfPrefix("lie");
+    if (verb == std::string::npos) verb = indexOfPrefix("branch");
+    if (verb == std::string::npos) verb = indexOfPrefix("connect");
+    if (verb == std::string::npos) verb = 0;
+    std::size_t link = std::string::npos;
+    for (std::size_t i = verb + 1; i < t_.size(); ++i)
+        if ((t_[i].f == "a" || t_[i].f == "au" || t_[i].f == "avec" || t_[i].f == "sur" || t_[i].f.rfind("variable", 0) == 0) && i > verb + 1) {
+            link = i;
+            break;
+        }
+    Target t = link == std::string::npos ? targets(verb + 1, t_.size(), false) : targets(verb + 1, link, false);
+    if (!t.question.empty()) return ask(t.question);
+    if (t.objects.size() != 1) {
+        std::vector<std::string> n;
+        for (const auto* o : t.objects) n.push_back(o->name);
+        return ask("J'associe une variable \xC3\xA0 **un** objet \xC3\xA0 la fois : lequel, parmi " + codes(n) + " ?");
+    }
+    const hmi::Object& o = *t.objects.front();
+    if (!o.find("variable")) return ask(code(o.name) + " (" + std::string(hmi::kindLabel(o.kind)) + ") ne se relie pas \xC3\xA0 une variable.");
+    std::size_t from = link == std::string::npos ? verb + 1 : link;
+    // apres l'objet (s'il est ecrit apres le lien : "associe a Pompe_1_Marche la pompe")
+    VarFind vf = findVariable(from, t_.size(), &o);
+    if (vf.name.empty() && vf.asked.empty() && vf.candidates.empty() && link != std::string::npos) vf = findVariable(verb + 1, link, &o);
+    if (!vf.name.empty()) {
+        Proposal p = base(o.name + kArrow + vf.name);
+        Operation op;
+        op.action = Operation::Action::Bind;
+        op.name = o.name;
+        op.variable = vf.name;
+        p.ops.push_back(std::move(op));
+        const bool shows = registry().find(o.kind) && registry().find(o.kind)->writes;
+        return finish(std::move(p), "Je propose d'associer **" + o.name + "** \xC3\xA0 la variable **" + vf.name + "** (sa propri\xC3\xA9t\xC3\xA9 `variable` : "
+                                        + (shows ? std::string("la commande \xC3\xA9" "crit dans cette variable).") : std::string("son \xC3\xA9tat viendra de l\xC3\xA0).")));
+    }
+    if (!vf.asked.empty()) {
+        std::vector<std::string> sugg;
+        std::string text = "**La variable " + vf.asked + " n'existe pas** dans ce projet, et je ne l'invente pas : une variable fausse ne "
+                           "s'allumerait jamais en exploitation.";
+        if (!vf.candidates.empty()) {
+            text += "\n- les plus proches : " + codes(vf.candidates) + " ;";
+            for (std::size_t i = 0; i < vf.candidates.size() && i < 2; ++i) sugg.push_back("Associe " + o.name + " \xC3\xA0 " + vf.candidates[i]);
+        }
+        if (hmi::isIdentifier(vf.asked)) {
+            const std::string ty = hmi::roles::valueRole(o.kind) == hmi::roles::Role::Number ? "REAL" : "BOOL";
+            text += "\n- ou cr\xC3\xA9" "e-la d'abord : `Cr\xC3\xA9" "e la variable " + vf.asked + " en " + ty + "`, puis redemande l'association.";
+            sugg.push_back("Cr\xC3\xA9" "e la variable " + vf.asked + " en " + ty);
+        }
+        return ask(std::move(text), std::move(sugg));
+    }
+    if (!vf.candidates.empty()) {
+        std::vector<std::string> sugg;
+        for (std::size_t i = 0; i < vf.candidates.size() && i < 4; ++i) sugg.push_back("Associe " + o.name + " \xC3\xA0 " + vf.candidates[i]);
+        return ask("Plusieurs variables conviennent : " + codes(vf.candidates) + ". Laquelle associer \xC3\xA0 **" + o.name + "** ?", std::move(sugg));
+    }
+    return ask("Quelle variable associer \xC3\xA0 **" + o.name + "** ? \xC3\x89" "cris son nom, par exemple `Associe " + o.name + " \xC3\xA0 Pompe_1_Marche`.");
+}
+
+// ---- animer : clignoter, une couleur selon une variable, visible selon une variable ------------
+LocalReply Engine::animate() const {
+    if (!view()) return needView();
+    // la condition : apres "quand", "si", "lorsque"
+    std::size_t cond = std::string::npos;
+    for (std::size_t i = 0; i < t_.size(); ++i)
+        if (t_[i].f == "quand" || t_[i].f == "si" || t_[i].f == "lorsque" || t_[i].f == "lorsqu") {
+            cond = i;
+            break;
+        }
+    if (cond == std::string::npos) return notUnderstood();
+    std::size_t condEnd = t_.size();
+    const std::size_t otherwise = indexOf("sinon", cond);
+    if (otherwise != std::string::npos) condEnd = otherwise;
+    // l'objet : avant la condition
+    Target t = targets(0, cond, true);
+    if (!t.question.empty()) return ask(t.question);
+    if (t.objects.empty()) return ask("Quel objet animer ? \xC3\x89" "cris son nom.");
+    // la condition : une variable existante, peut-etre comparee a un nombre ("Niveau_Cuve_1 > 80", "depasse 80")
+    VarFind vf = findVariable(cond + 1, condEnd, t.objects.front());
+    if (vf.name.empty()) {
+        if (!vf.asked.empty())
+            return ask("**La variable " + vf.asked + " n'existe pas** dans ce projet, et je ne l'invente pas."
+                       + (vf.candidates.empty() ? std::string{} : " Les plus proches : " + codes(vf.candidates) + "."),
+                       vf.candidates.empty() ? std::vector<std::string>{} : std::vector<std::string>{});
+        if (!vf.candidates.empty()) return ask("Quelle variable ? Plusieurs conviennent : " + codes(vf.candidates) + ".");
+        return ask("Quelle variable pour la condition ? \xC3\x89" "cris son nom exact (par exemple `quand Defaut_V1`).");
+    }
+    std::string condition = vf.name;
+    bool negate = false;
+    for (std::size_t i = cond + 1; i < condEnd; ++i) {
+        const std::string& w = t_[i].f;
+        std::string op;
+        if (w == ">" || w == "<" || w == ">=" || w == "<=" || w == "=" || w == "<>") op = w;
+        else if (w == "depasse" || w == "superieur" || w == "plus") op = ">";
+        else if (w == "inferieur" || w == "moins") op = "<";
+        else if (w == "faux" || w == "false" || phrase("n est pas")) negate = true;
+        if (op.empty()) continue;
+        for (std::size_t j = i + 1; j < condEnd; ++j)
+            if (isDigits(t_[j].f) || (t_[j].f.find('.') != std::string::npos && std::isdigit(static_cast<unsigned char>(t_[j].f[0])))) {
+                condition = vf.name + " " + op + " " + t_[j].raw;
+                break;
+            }
+        break;
+    }
+    if (negate) condition = "NOT " + condition;
+    Proposal p = base("Animer " + t.objects.front()->name);
+    std::vector<std::string> lines;
+    const bool blink = hasPrefix("clignot");
+    const bool hide = hasPrefix("cach") || hasPrefix("masqu");
+    const bool show = hasPrefix("montr") || hasPrefix("affich") || hasPrefix("appar") || has("visible");
+    // les couleurs : avant "si" (vrai), apres "sinon" (faux)
+    std::string onColor, offColor;
+    for (std::size_t i = 0; i < t_.size(); ++i) {
+        std::size_t len = 0;
+        const std::string c = colorAt(t_, i, &len);
+        if (c.empty()) continue;
+        if (i < cond && onColor.empty()) onColor = c;
+        else if (otherwise != std::string::npos && i > otherwise && offColor.empty()) offColor = c;
+        else if (i > cond && onColor.empty()) onColor = c;
+    }
+    const bool simple = condition == vf.name;
+    for (const auto* o : t.objects) {
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        if (blink) {
+            if (o->find("fault") && simple) {
+                // le defaut d'un symbole : sa couleur de defaut, clignotante
+                op.props.emplace_back("fault", condition);
+                lines.push_back(code(o->name) + " : son d\xC3\xA9" "faut (`fault`) suit " + code(condition) + " - rouge clignotant quand elle est vraie");
+            } else if (o->find("blink")) {
+                op.props.emplace_back("blink", "=" + condition);
+                lines.push_back(code(o->name) + " : le clignotement (`blink`) suit la formule `=" + condition + "`");
+            } else if (o->find("fault")) {
+                op.props.emplace_back("fault", condition);
+                lines.push_back(code(o->name) + " : son d\xC3\xA9" "faut (`fault`) suit `" + condition + "`");
+            } else {
+                return ask(code(o->name) + " (" + std::string(hmi::kindLabel(o->kind)) + ") n'a pas de clignotement que je sache piloter.");
+            }
+        } else if (hide || show) {
+            const std::string f = hide ? (condition.rfind("NOT ", 0) == 0 ? condition.substr(4) : "NOT " + condition) : condition;
+            op.props.emplace_back("visible", "=" + (hide && simple ? "NOT " + vf.name : f));
+            lines.push_back(code(o->name) + std::string(hide ? " : cach\xC3\xA9" : " : visible") + " quand " + code(condition) + " (la formule de `visible`)");
+        } else if (!onColor.empty() || !offColor.empty()) {
+            if (o->find("colorOn") && o->find("colorOff") && o->find("variable") && simple) {
+                // un symbole : ses couleurs en marche et a l'arret, et sa variable
+                if (!onColor.empty()) op.props.emplace_back("colorOn", onColor);
+                if (!offColor.empty()) op.props.emplace_back("colorOff", offColor);
+                op.props.emplace_back("variable", vf.name);
+                lines.push_back(code(o->name) + " : reli\xC3\xA9 \xC3\xA0 " + code(vf.name) + (onColor.empty() ? std::string{} : ", " + onColor + " en marche")
+                                + (offColor.empty() ? std::string{} : ", " + offColor + " \xC3\xA0 l'arr\xC3\xAAt"));
+            } else {
+                std::string what;
+                const std::string key = colorKey(*o, &what);
+                if (key.empty()) return ask(code(o->name) + " n'a pas de couleur que je sache changer.");
+                const std::string cur = o->text(key);
+                const std::string yes = onColor.empty() ? cur : onColor, no = offColor.empty() ? cur : offColor;
+                op.props.emplace_back(key, "=SEL(" + condition + ", '" + no + "', '" + yes + "')");
+                lines.push_back(code(o->name) + " : " + what + " suit la formule `=SEL(" + condition + ", '" + no + "', '" + yes + "')` (SEL : si faux, si vrai)");
+            }
+        } else {
+            return ask("Que doit faire " + code(o->name) + " quand " + code(condition) + " ? Clignoter, changer de couleur, appara\xC3\xAEtre ?",
+                       {"Fais clignoter " + o->name + " quand " + vf.name, o->name + " verte si " + vf.name + " sinon rouge"});
+        }
+        p.ops.push_back(std::move(op));
+    }
+    std::string text = "Je propose d'animer :\n";
+    for (const auto& l : lines) text += "- " + l + " ;\n";
+    text += "La formule ne lit que des variables qui existent ; le moteur la r\xC3\xA9\xC3\xA9value \xC3\xA0 chaque cycle.";
+    return finish(std::move(p), std::move(text));
+}
+
+// ---- supprimer, dupliquer, aligner, repartir -------------------------------------------------------
+LocalReply Engine::remove() const {
+    if (!view()) return needView();
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    std::vector<std::string> names;
+    for (const auto* o : t.objects)
+        if (o->parent == hmi::kNoId || std::none_of(t.objects.begin(), t.objects.end(), [&](const auto* q) { return q->id == o->parent; }))
+            names.push_back(o->name);
+    Proposal p = base("Supprimer " + (names.size() == 1 ? names.front() : std::to_string(names.size()) + " objets"));
+    Operation op;
+    op.action = Operation::Action::Remove;
+    op.objects = names;
+    p.ops.push_back(std::move(op));
+    return finish(std::move(p), "Je propose de supprimer **" + plural(names.size(), "objet", "objets") + "** : " + codes(names, 12) + ".\n"
+                                    + (names.size() > 1 ? "C'est une suppression multiple : **une confirmation** te sera demand\xC3\xA9" "e avant d'appliquer. "
+                                                        : std::string{})
+                                    + "Ctrl+Z la reprendra d'un coup.");
+}
+
+LocalReply Engine::duplicate() const {
+    if (!view()) return needView();
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    int count = 1;
+    for (std::size_t i = 0; i < t_.size(); ++i) {
+        const int n = numberOf(t_[i].f);
+        if (n > 0 && i + 1 < t_.size() && (t_[i + 1].f == "fois" || t_[i + 1].f.rfind("copie", 0) == 0 || t_[i + 1].f == "exemplaires")) count = n;
+    }
+    if (count > 50) return ask("Au plus 50 copies par demande.");
+    const bool down = has("bas") || has("dessous") || has("descendant") || phrase("en colonne") || phrase("vers le bas");
+    const bool left = has("gauche");
+    const bool up = has("haut") || has("dessus");
+    hmi::Box all = hmi::edit::rotatedBounds(*t.objects.front());
+    for (const auto* o : t.objects) {
+        const auto b = hmi::edit::rotatedBounds(*o);
+        const double r = std::max(all.right(), b.right()), bt = std::max(all.bottom(), b.bottom());
+        all.x = std::min(all.x, b.x);
+        all.y = std::min(all.y, b.y);
+        all.w = r - all.x;
+        all.h = bt - all.y;
+    }
+    const double label = hmi::kindIsSynoptic(t.objects.front()->kind) ? 20 : 0;
+    Operation op;
+    op.action = Operation::Action::Duplicate;
+    for (const auto* o : t.objects) op.objects.push_back(o->name);
+    op.dx = down || up ? 0 : (left ? -(all.w + 20) : all.w + 20);
+    op.dy = down ? all.h + label + 20 : up ? -(all.h + label + 20) : 0;
+    op.count = count;
+    // des reperes $...$ dans ses proprietes : ils avancent d'une copie a l'autre (comme Ctrl+Maj+D)
+    for (const auto* o : t.objects)
+        for (const auto& pr : o->props)
+            if (std::count(pr.value.begin(), pr.value.end(), '$') >= 2 || std::count(pr.expr.begin(), pr.expr.end(), '$') >= 2) op.markers = true;
+    Proposal p = base("Dupliquer " + (op.objects.size() == 1 ? op.objects.front() : std::to_string(op.objects.size()) + " objets"));
+    const std::string dir = down ? "vers le bas" : up ? "vers le haut" : left ? "vers la gauche" : "vers la droite";
+    std::string text = "Je propose de dupliquer " + codes(op.objects) + " **" + (count > 1 ? std::to_string(count) + " fois**" : std::string("une fois**"))
+                       + ", " + dir + " (d\xC3\xA9" "calage " + num(op.dx) + ", " + num(op.dy) + "), comme Ctrl+D : des noms neufs, ses propri\xC3\xA9t\xC3\xA9s et "
+                       "sa variable suivent.";
+    if (op.markers) text += " Ses **rep\xC3\xA8res $...$** avancent d'une copie \xC3\xA0 l'autre, comme Ctrl+Maj+D.";
+    p.ops.push_back(std::move(op));
+    return finish(std::move(p), std::move(text));
+}
+
+LocalReply Engine::arrange(bool alignIt) const {
+    if (!view()) return needView();
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    // sans genre ni nom : "aligne les boutons" a ete lu ; "aligne-les" prend la selection
+    std::vector<std::string> names;
+    double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    for (const auto* o : t.objects) {
+        if (o->parent != hmi::kNoId) continue;
+        names.push_back(o->name);
+        const auto b = o->box();
+        minX = std::min(minX, b.x);
+        maxX = std::max(maxX, b.x);
+        minY = std::min(minY, b.y);
+        maxY = std::max(maxY, b.y);
+    }
+    if (alignIt && names.size() < 2) return ask("Il faut au moins deux objets \xC3\xA0 aligner : s\xC3\xA9lectionne-les, ou nomme-les (`Aligne les boutons en haut`).");
+    if (!alignIt && names.size() < 3) return ask("Il faut au moins trois objets \xC3\xA0 r\xC3\xA9partir (\xC3\xA0 \xC3\xA9" "carts \xC3\xA9gaux).");
+    const bool row = (maxX - minX) >= (maxY - minY);
+    Operation op;
+    op.action = alignIt ? Operation::Action::Align : Operation::Action::Distribute;
+    op.objects = names;
+    std::string how;
+    if (alignIt) {
+        op.edge = row ? "haut" : "gauche";
+        if (has("bas")) op.edge = "bas";
+        else if (has("haut")) op.edge = "haut";
+        else if (has("gauche")) op.edge = "gauche";
+        else if (has("droite")) op.edge = "droite";
+        else if (has("centre") || has("milieu")) op.edge = row ? "centre-v" : "centre-h";
+        how = op.edge == "centre-v" || op.edge == "centre-h" ? "sur leur **centre**" : "sur leur **bord " + op.edge + "**";
+    } else {
+        op.edge = row ? "horizontal" : "vertical";
+        if (has("verticalement") || has("vertical") || phrase("en colonne")) op.edge = "vertical";
+        if (has("horizontalement") || has("horizontal") || phrase("en ligne")) op.edge = "horizontal";
+        how = "\xC3\xA0 **\xC3\xA9" "carts \xC3\xA9gaux** (" + std::string(op.edge == "horizontal" ? "horizontalement" : "verticalement") + ")";
+    }
+    Proposal p = base(alignIt ? "Aligner " + std::to_string(names.size()) + " objets" : "R\xC3\xA9partir " + std::to_string(names.size()) + " objets");
+    p.ops.push_back(std::move(op));
+    return finish(std::move(p), std::string("Je propose ") + (alignIt ? "d'aligner " : "de r\xC3\xA9partir ") + codes(names, 12) + " " + how
+                                    + (alignIt ? " : le geste Aligner de la barre d'outils." : " : le geste Distribuer de la barre d'outils."));
+}
+
+// ---- renommer -----------------------------------------------------------------------------------------
+LocalReply Engine::rename() const {
+    if (!view()) return needView();
+    // "renomme X en Y" : le nouveau nom apres "en" (ou "par", "comme")
+    std::size_t at = std::string::npos;
+    for (std::size_t i = t_.size(); i-- > 1;)
+        if (t_[i].f == "en" || t_[i].f == "par" || t_[i].f == "comme") {
+            at = i;
+            break;
+        }
+    if (at == std::string::npos || at + 1 >= t_.size()) return ask("Quel nouveau nom ? \xC3\x89" "cris par exemple `Renomme Cuve_1 en Bac_Eau`.");
+    Target t = firstTarget(0, at);
+    if (!t.question.empty()) return ask(t.question);
+    if (t.objects.empty()) return ask("Quel objet renommer ?");
+    const hmi::Object& o = *t.objects.front();
+    const std::string wanted = t_[at + 1].quoted ? sanitize(t_[at + 1].raw) : t_[at + 1].raw;
+    if (!hmi::edit::validName(wanted)) return ask(guill(wanted) + " n'est pas un nom d'objet valable (des lettres, des chiffres et _, sans espace).");
+    if (!nameFree(*view(), wanted, {})) return ask("Le nom " + code(wanted) + " est d\xC3\xA9j\xC3\xA0 pris dans " + viewName() + ".");
+    if (!view()->descendantsOf(o.id).empty())
+        return ask(code(o.name) + " tient d'autres objets : renomme-le dans l'inspecteur (la case Nom), je ne sais pas le faire sans toucher \xC3\xA0 ses enfants.");
+    // Il n'y a pas d'operation "renommer" : une copie exacte a la meme place, sous le nouveau nom, puis
+    // l'original retire - dit tel quel, et repris d'un Ctrl+Z.
+    Proposal p = base("Renommer " + o.name + " en " + wanted);
+    Operation dup;
+    dup.action = Operation::Action::Duplicate;
+    dup.objects = {o.name};
+    dup.names = {wanted};
+    dup.dx = 0;
+    dup.dy = 0;
+    p.ops.push_back(std::move(dup));
+    Operation rem;
+    rem.action = Operation::Action::Remove;
+    rem.objects = {o.name};
+    p.ops.push_back(std::move(rem));
+    return finish(std::move(p), "Je propose de renommer **" + o.name + "** en **" + wanted + "**. Mes op\xC3\xA9rations n'ont pas de \xC2\xAB renommer \xC2\xBB : "
+                                    "c'est une copie exacte \xC3\xA0 la m\xC3\xAAme place (ses propri\xC3\xA9t\xC3\xA9s, sa variable et ses actions suivent), "
+                                    "puis l'original retir\xC3\xA9 - l'aper\xC3\xA7u le montre, Ctrl+Z reprend tout. Une formule ailleurs qui citait " + code(o.name)
+                                    + " est \xC3\xA0 revoir.");
+}
+
+// ---- cacher, montrer ------------------------------------------------------------------------------------
+LocalReply Engine::visibility(bool show) const {
+    if (!view()) return needView();
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    Proposal p = base(std::string(show ? "Montrer " : "Cacher ") + t.objects.front()->name);
+    std::vector<std::string> names;
+    for (const auto* o : t.objects) {
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        op.props = {{"visible", show ? "TRUE" : "FALSE"}};
+        p.ops.push_back(std::move(op));
+        names.push_back(o->name);
+    }
+    return finish(std::move(p), std::string("Je propose de ") + (show ? "rendre **visible" : "**cacher") + "** " + codes(names)
+                                    + " en marche (la propri\xC3\xA9t\xC3\xA9 `visible`" + (show ? " \xC3\xA0 TRUE" : " \xC3\xA0 FALSE")
+                                    + ") : dans l'\xC3\xA9" "diteur, l'objet reste l\xC3\xA0.");
+}
+
+// ---- deplacer -----------------------------------------------------------------------------------------
+LocalReply Engine::move() const {
+    if (!view()) return needView();
+    const Position pos = position();
+    Target t = targets(0, pos.rel != Rel::None ? pos.at : t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    Proposal p = base("D\xC3\xA9placer " + t.objects.front()->name);
+    std::vector<std::string> lines;
+    if (pos.rel != Rel::None) {
+        const Target r = firstTarget(pos.refAt, pos.end);
+        if (!r.question.empty()) return ask(r.question);
+        if (r.objects.empty()) return ask("\xC3\x80 c\xC3\xB4t\xC3\xA9 de quel objet ?");
+        const hmi::Box rb = hmi::edit::rotatedBounds(*r.objects.front());
+        double cursor = 0;
+        for (const auto* o : t.objects) {
+            if (o == r.objects.front()) continue;
+            const hmi::Box b = o->box();
+            double x = b.x, y = b.y;
+            const double extra = hmi::kindIsSynoptic(r.objects.front()->kind) && !r.objects.front()->text("label").empty() ? 20 : 0;
+            switch (pos.rel) {
+                case Rel::Right: x = rb.right() + 30 + cursor; y = rb.cy() - b.h / 2; cursor += b.w + 24; break;
+                case Rel::Left: x = rb.x - 30 - b.w - cursor; y = rb.cy() - b.h / 2; cursor += b.w + 24; break;
+                case Rel::Below: x = rb.cx() - b.w / 2 + cursor; y = rb.bottom() + extra + 24; cursor += b.w + 24; break;
+                case Rel::Above: x = rb.cx() - b.w / 2 + cursor; y = rb.y - 24 - b.h - 20; cursor += b.w + 24; break;
+                case Rel::None: break;
+            }
+            Operation op;
+            op.action = Operation::Action::Modify;
+            op.name = o->name;
+            op.props = {{"x", num(std::max(0.0, x))}, {"y", num(std::max(0.0, y))}};
+            p.ops.push_back(std::move(op));
+            lines.push_back(code(o->name) + " en x = " + num(std::max(0.0, x)) + ", y = " + num(std::max(0.0, y)));
+        }
+        if (p.ops.empty()) return ask("Un objet ne se place pas \xC3\xA0 c\xC3\xB4t\xC3\xA9 de lui-m\xC3\xAAme.");
+        const std::string rel = pos.rel == Rel::Right ? "\xC3\xA0 droite de " : pos.rel == Rel::Left ? "\xC3\xA0 gauche de " : pos.rel == Rel::Below ? "sous " : "au-dessus de ";
+        return finish(std::move(p), "Je propose de d\xC3\xA9placer " + joinAnd(lines) + ", " + rel + code(r.objects.front()->name) + ".");
+    }
+    // un decalage : "monte de 50", "decale de 40 vers la droite", "descends P1" (20 par defaut)
+    double amount = 20;
+    for (const auto& tk : t_)
+        if (isDigits(tk.f) && !nameAt(static_cast<std::size_t>(&tk - t_.data()))) amount = std::stod(tk.f);
+    double dx = 0, dy = 0;
+    if (hasPrefix("mont") || has("haut")) dy = -amount;
+    else if (hasPrefix("descen") || has("bas")) dy = amount;
+    else if (has("gauche")) dx = -amount;
+    else if (has("droite")) dx = amount;
+    // une place : "en 100, 200", "x 100 y 200"
+    double ax = -1, ay = -1;
+    for (std::size_t i = 0; i + 1 < t_.size(); ++i) {
+        if ((t_[i].f == "x" || t_[i].f == "x=") && isDigits(t_[i + 1].f)) ax = std::stod(t_[i + 1].f);
+        if ((t_[i].f == "y" || t_[i].f == "y=") && isDigits(t_[i + 1].f)) ay = std::stod(t_[i + 1].f);
+        if (t_[i].f == "=" && i > 0 && i + 1 < t_.size() && isDigits(t_[i + 1].f)) {
+            if (t_[i - 1].f == "x") ax = std::stod(t_[i + 1].f);
+            if (t_[i - 1].f == "y") ay = std::stod(t_[i + 1].f);
+        }
+    }
+    if (ax < 0 && ay < 0) {
+        const std::size_t en = indexOf("en");
+        if (en != std::string::npos && en + 2 < t_.size() && isDigits(t_[en + 1].f) && isDigits(t_[en + 2].f)) {
+            ax = std::stod(t_[en + 1].f);
+            ay = std::stod(t_[en + 2].f);
+        }
+    }
+    if (ax < 0 && ay < 0 && dx == 0 && dy == 0)
+        return ask("O\xC3\xB9 le d\xC3\xA9placer ? Par exemple `D\xC3\xA9place " + t.objects.front()->name + " \xC3\xA0 droite de ...`, `Monte "
+                   + t.objects.front()->name + " de 50`, ou `D\xC3\xA9place " + t.objects.front()->name + " en 100, 200`.");
+    for (const auto* o : t.objects) {
+        const hmi::Box b = o->box();
+        const double x = ax >= 0 ? ax : b.x + dx, y = ay >= 0 ? ay : b.y + dy;
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        if (x != b.x) op.props.emplace_back("x", num(x));
+        if (y != b.y) op.props.emplace_back("y", num(y));
+        if (op.props.empty()) continue;
+        p.ops.push_back(std::move(op));
+        lines.push_back(code(o->name) + " en x = " + num(x) + ", y = " + num(y));
+    }
+    if (p.ops.empty()) return ask(codes({t.objects.front()->name}) + " est d\xC3\xA9j\xC3\xA0 \xC3\xA0 cette place.");
+    return finish(std::move(p), "Je propose de d\xC3\xA9placer " + joinAnd(lines) + ".");
+}
+
+// ---- la taille ----------------------------------------------------------------------------------------
+LocalReply Engine::resize() const {
+    if (!view()) return needView();
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    double factor = 1, w = -1, h = -1;
+    if (hasPrefix("agrandi") || phrase("plus grand") || phrase("plus grande") || phrase("plus gros") || phrase("plus grosse")) factor = 1.25;
+    if (hasPrefix("redui") || hasPrefix("reduire") || hasPrefix("retreci") || hasPrefix("rapetiss") || phrase("plus petit") || phrase("plus petite")) factor = 0.8;
+    if (phrase("deux fois plus grand") || phrase("deux fois plus grande") || has("double")) factor = 2;
+    if (phrase("deux fois plus petit") || phrase("deux fois plus petite") || has("moitie")) factor = 0.5;
+    for (std::size_t i = 0; i < t_.size(); ++i) {
+        const std::string& f = t_[i].f;
+        const auto valueAfter = [&](std::size_t k) -> double {
+            for (std::size_t j = k + 1; j < t_.size() && j <= k + 3; ++j)
+                if (isDigits(t_[j].f)) return std::stod(t_[j].f);
+            return -1;
+        };
+        if (f == "largeur") w = valueAfter(i);
+        if (f == "hauteur") h = valueAfter(i);
+        if ((f == "large" || f == "larges") && i > 0 && isDigits(t_[i - 1].f)) w = std::stod(t_[i - 1].f);
+        if ((f == "haut" || f == "hauts") && i > 0 && isDigits(t_[i - 1].f)) h = std::stod(t_[i - 1].f);
+        if (f == "taille") {
+            for (std::size_t j = i + 1; j < t_.size() && j <= i + 3; ++j) {
+                const auto x = t_[j].f.find('x');
+                if (x != std::string::npos && x > 0 && isDigits(t_[j].f.substr(0, x)) && isDigits(t_[j].f.substr(x + 1))) {
+                    w = std::stod(t_[j].f.substr(0, x));
+                    h = std::stod(t_[j].f.substr(x + 1));
+                }
+            }
+        }
+        // un pourcentage : "agrandis de 50 %"
+        if (isDigits(f) && i + 1 < t_.size() && (t_[i + 1].f == "pourcent" || t_[i + 1].raw == "%") && factor != 1)
+            factor = factor > 1 ? 1 + std::stod(f) / 100 : std::max(0.1, 1 - std::stod(f) / 100);
+    }
+    if (factor == 1 && w < 0 && h < 0)
+        return ask("Quelle taille ? Par exemple `Agrandis " + t.objects.front()->name + "`, `R\xC3\xA9" "duis-la`, ou `Largeur 200`.");
+    Proposal p = base("Taille de " + t.objects.front()->name);
+    std::vector<std::string> lines;
+    for (const auto* o : t.objects) {
+        const hmi::Box b = o->box();
+        double nw = w >= 0 ? w : b.w * factor, nh = h >= 0 ? h : b.h * factor;
+        if (w >= 0 && h < 0 && factor == 1) nh = b.h;
+        if (h >= 0 && w < 0 && factor == 1) nw = b.w;
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        // agrandir garde le centre
+        if (w < 0 && h < 0) {
+            op.props.emplace_back("x", num(std::max(0.0, b.cx() - nw / 2)));
+            op.props.emplace_back("y", num(std::max(0.0, b.cy() - nh / 2)));
+        }
+        op.props.emplace_back("w", num(nw));
+        op.props.emplace_back("h", num(nh));
+        p.ops.push_back(std::move(op));
+        lines.push_back(code(o->name) + " : " + num(b.w) + "\xC3\x97" + num(b.h) + kArrow + num(nw) + "\xC3\x97" + num(nh));
+    }
+    return finish(std::move(p), "Je propose la nouvelle taille de " + joinAnd(lines) + ".");
+}
+
+// ---- le texte -----------------------------------------------------------------------------------------
+LocalReply Engine::setText() const {
+    if (!view()) return needView();
+    // le nouveau texte : entre guillemets, sinon apres "en", ":", "par"
+    std::string text;
+    std::size_t at = t_.size();
+    for (std::size_t i = 0; i < t_.size(); ++i)
+        if (t_[i].quoted) {
+            text = t_[i].raw;
+            at = i;
+            break;
+        }
+    if (text.empty()) {
+        // apres le dernier "en" / "par" : la fin de la phrase telle qu'ecrite
+        for (std::size_t i = t_.size(); i-- > 1;)
+            if (t_[i].f == "en" || t_[i].f == "par") {
+                at = i;
+                break;
+            }
+        if (at < t_.size()) {
+            for (std::size_t i = at + 1; i < t_.size(); ++i) text += (text.empty() ? "" : " ") + t_[i].raw;
+        }
+    }
+    if (text.empty()) return ask("Quel texte ? \xC3\x89" "cris-le entre guillemets, par exemple `Change le texte de Bouton_1 en \"D\xC3\xA9marrer\"`.");
+    // l'objet : le texte d'un bouton, d'un libelle (pas le genre Texte dit comme mot)
+    Target t = targets(0, at < t_.size() && t_[at].quoted ? t_.size() : at, true);
+    if (!t.question.empty()) return ask(t.question);
+    Proposal p = base("Texte de " + t.objects.front()->name);
+    std::vector<std::string> names;
+    for (const auto* o : t.objects) {
+        std::string key = o->find("text") ? "text" : o->find("label") ? "label" : o->find("textOn") ? "textOn" : std::string{};
+        if (key.empty()) return ask(code(o->name) + " (" + std::string(hmi::kindLabel(o->kind)) + ") n'a pas de texte que je sache changer.");
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        op.props = {{key, text}};
+        p.ops.push_back(std::move(op));
+        names.push_back(o->name);
+    }
+    return finish(std::move(p), "Je propose d'\xC3\xA9" "crire " + guill(text) + " sur " + codes(names) + ".");
+}
+
+// ---- la couleur -----------------------------------------------------------------------------------------
+LocalReply Engine::color() const {
+    if (!view()) return needView();
+    std::string hex, label;
+    std::size_t at = t_.size();
+    for (std::size_t i = 0; i < t_.size() && hex.empty(); ++i) {
+        hex = colorAt(t_, i, nullptr, &label);
+        if (!hex.empty()) at = i;
+    }
+    Target t = targets(0, t_.size(), true);
+    if (!t.question.empty()) return ask(t.question);
+    (void)at;
+    Proposal p = base(t.objects.size() == 1 ? t.objects.front()->name + " en " + label : std::to_string(t.objects.size()) + " objets en " + label);
+    std::vector<std::string> lines;
+    for (const auto* o : t.objects) {
+        std::string what;
+        const std::string key = colorKey(*o, &what);
+        if (key.empty()) {
+            lines.push_back(code(o->name) + " : pas de couleur que je sache changer");
+            continue;
+        }
+        Operation op;
+        op.action = Operation::Action::Modify;
+        op.name = o->name;
+        op.props = {{key, hex}};
+        p.ops.push_back(std::move(op));
+        lines.push_back(code(o->name) + " (" + std::string(hmi::kindLabel(o->kind)) + ") : " + what + " (`" + key + "`)");
+    }
+    if (p.ops.empty()) return ask(joinAnd(lines) + ".");
+    std::string text = "Je propose de passer en **" + label + "** (`" + hex + "`) " + (lines.size() == 1 ? lines.front() : ":\n- " + [&] {
+        std::string s;
+        for (const auto& l : lines) s += (s.empty() ? "" : " ;\n- ") + l;
+        return s;
+    }()) + ".";
+    if (!t.how.empty()) text += " (" + t.how + ")";
+    return finish(std::move(p), std::move(text));
+}
+
+// ---- l'aiguillage -------------------------------------------------------------------------------------
+LocalReply Engine::run() {
+    if (t_.empty()) return help();
+    const bool question = request_.find('?') != std::string::npos;
+    // les questions
+    if (phrase("que sais tu") || phrase("que peux tu") || phrase("tu sais faire") || phrase("tu peux faire") || phrase("qu est ce que tu")
+        || phrase("sais tu faire") || ((has("aide") || has("help")) && mentions_.empty()) || phrase("comment ca marche") || phrase("que comprends tu")
+        || (t_.size() <= 2 && (has("bonjour") || has("salut") || has("aide"))))
+        return help();
+    if (has("combien")) return countQuestion();
+    const bool createVerb = hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("insere")
+                         || hasPrefix("dessin") || phrase("il me faut") || phrase("je veux") || hasPrefix("genere") || hasPrefix("fabriqu");
+    const bool weakCreate = has("mets") || has("met") || has("mettre") || has("pose") || has("poser") || has("place") || has("placer")
+                         || hasPrefix("positionn");
+    if ((has("quelles") || has("quels") || has("liste") || has("lister") || phrase("montre moi") || phrase("donne moi") || question) && !createVerb) {
+        if (has("variables") || has("variable")) return listVariables();
+        if (has("vues")) return listViews();
+        if (has("genres") || phrase("types d objets") || phrase("genres d objets") || phrase("objets peux tu") || phrase("objets connais tu"))
+            return listKinds();
+    }
+    // une suite : "et une autre", "encore une", "la meme en bleu", "pareil pour P2"
+    const bool follow = phrase("une autre") || phrase("un autre") || has("encore") || phrase("une de plus") || phrase("un de plus") || has("pareil")
+                     || phrase("la meme") || phrase("le meme") || has("idem") || phrase("les memes") || (has("aussi") && t_.size() <= 4);
+    if (follow && mentions_.empty() && !hasPrefix("supprim") && !hasPrefix("dupliqu")) return followUp();
+    // le synoptique
+    if (has("synoptique") || (has("station") && has("pompage"))) return synoptic();
+    // une vue neuve
+    if (createVerb && (phrase("une vue") || phrase("nouvelle vue") || phrase("un ecran") || phrase("une page") || (phrase("la vue") && mentions_.empty()))
+        && !(has("variable") || has("variables")))
+        return createView();
+    // des variables
+    if ((createVerb || hasPrefix("propos") || hasPrefix("import")) && (hasPrefix("variable") || has("ddt") || has("ddts")
+                                                                       || ((has("types") || has("type")) && (has("automate") || has("ihm")))))
+        return createVariables();
+    // creer des objets neufs ("cree 4 voyants alignes") : avant les gestes d'edition que la phrase peut citer
+    {
+        const Position early = position();
+        const bool fresh = std::any_of(mentions_.begin(), mentions_.end(), [&](const Mention& m) {
+            return m.indefinite && !(early.rel != Rel::None && m.at >= early.refAt && m.at < early.end);
+        });
+        if (createVerb && fresh && !hasPrefix("associ") && !hasPrefix("reli")) return createFromMentions();
+    }
+    // associer
+    if (hasPrefix("associ") || hasPrefix("reli") || has("lie") || has("lier") || hasPrefix("branch") || hasPrefix("connect"))
+        return bind();
+    // animer : clignoter, une couleur ou une visibilite selon une condition
+    if (hasPrefix("clignot") || ((has("si") || has("quand") || has("lorsque")) && (has("sinon") || hasPrefix("cach") || hasPrefix("montr")
+                                                                                 || hasPrefix("affich") || hasPrefix("appar") || !colorAt(t_, 0).empty()
+                                                                                 || std::any_of(t_.begin(), t_.end(), [&](const Tok& tk) { return !colorAt(t_, static_cast<std::size_t>(&tk - t_.data())).empty(); }))))
+        return animate();
+    // supprimer
+    if (hasPrefix("supprim") || hasPrefix("effac") || hasPrefix("enleve") || hasPrefix("retir") || has("vire") || hasPrefix("detrui"))
+        return remove();
+    // dupliquer
+    if (hasPrefix("dupliqu") || hasPrefix("copie") || hasPrefix("clone") || hasPrefix("recopie")) return duplicate();
+    // aligner, repartir
+    if (hasPrefix("align")) return arrange(true);
+    if (hasPrefix("repart") || hasPrefix("distribu") || phrase("espace les") || hasPrefix("espace")) return arrange(false);
+    // renommer
+    if (hasPrefix("renomm") || phrase("change le nom") || phrase("appelle le") || phrase("appelle la")) return rename();
+    // cacher, montrer
+    if (hasPrefix("cache") || hasPrefix("masqu") || phrase("rends invisible") || phrase("rend invisible")) return visibility(false);
+    if ((hasPrefix("montre") || hasPrefix("affiche") || phrase("rends visible") || phrase("fais apparaitre"))
+        && (!names_.empty() || std::any_of(mentions_.begin(), mentions_.end(), [](const Mention& m) { return m.definite; }))
+        && std::none_of(mentions_.begin(), mentions_.end(), [](const Mention& m) { return m.indefinite; }))
+        return visibility(true);
+    // la taille
+    if (hasPrefix("agrandi") || hasPrefix("redui") || hasPrefix("reduire") || hasPrefix("retreci") || hasPrefix("rapetiss") || has("largeur")
+        || has("hauteur") || has("taille") || phrase("plus grand") || phrase("plus grande") || phrase("plus petit") || phrase("plus petite"))
+        return resize();
+    // deplacer
+    const Position pos = position();
+    const bool moveVerb = hasPrefix("deplac") || has("bouge") || has("bouger") || hasPrefix("decal") || hasPrefix("mont") || hasPrefix("descend")
+                       || hasPrefix("pousse") || hasPrefix("gliss");
+    bool newObjects = false;
+    for (const auto& m : mentions_)
+        if (m.indefinite && !(pos.rel != Rel::None && m.at >= pos.refAt && m.at < pos.end)) newObjects = true;
+    if (moveVerb && !newObjects) return move();
+    if (weakCreate && !newObjects && pos.rel != Rel::None && !names_.empty() && names_.front().at < pos.at) return move();
+    // le texte
+    const bool textWord = has("texte") || has("libelle") || has("intitule") || hasPrefix("ecri") || has("titre");
+    bool quotedText = false;
+    for (const auto& tk : t_) quotedText = quotedText || tk.quoted;
+    if (textWord && !newObjects && (hasPrefix("chang") || hasPrefix("modifi") || hasPrefix("ecri") || weakCreate || quotedText) && !createVerb)
+        return setText();
+    // la couleur d'un objet qui existe
+    std::string anyColor;
+    for (std::size_t i = 0; i < t_.size() && anyColor.empty(); ++i) anyColor = colorAt(t_, i);
+    if (!anyColor.empty() && !newObjects && !(createVerb && !mentions_.empty())) return color();
+    // creer
+    if (!mentions_.empty() && (createVerb || weakCreate || newObjects)) return createFromMentions();
+    if (createVerb && mentions_.empty())
+        return ask("Quel genre d'objet ? Je connais ceux de la biblioth\xC3\xA8que (une pompe, une cuve, un bouton, un voyant...). Par exemple "
+                   "`Ajoute 2 pompes`. Demande `Quels genres d'objets ?` pour la liste.",
+                   examples());
+    if (follow) return followUp();
+    return notUnderstood();
+}
+
+} // namespace
+
+LocalReply understand(const PromptInput& in, std::string_view request) { return understand(in, request, {}); }
+
+LocalReply understand(const PromptInput& in, std::string_view request, const std::vector<LocalTurn>& history) {
+    Engine e(in, request, history);
+    return e.run();
+}
+
+const std::vector<std::string>& localSuggestions() {
+    static const std::vector<std::string> k = {
+        "Que sais-tu faire ?",
+        "Ajoute 3 pompes",
+        "Cr\xC3\xA9" "e un synoptique de station de pompage avec 3 cuves et 2 pompes par cuve",
+        "Ajoute un voyant rouge \xC3\xA0 droite de la cuve",
+        "Aligne les boutons en haut",
+        "Combien d'objets ?",
+    };
+    return k;
 }
 
 } // namespace app::ai

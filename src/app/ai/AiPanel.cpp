@@ -85,8 +85,12 @@ std::unordered_map<std::string, std::vector<AiChatView::Line>>& layoutCache() {
     return cache;
 }
 
-// 1.15.0 : branche sur un vrai fournisseur, l'accueil ne parle plus de demonstration.
-const std::string& welcomeText(bool live = false) {
+// 1.15.0 : branche sur un vrai fournisseur, l'accueil ne parle plus de demonstration. 1.16.0 : l'IA
+// integree dit ce qu'elle est (sur ce PC, des phrases simples).
+const std::string& welcomeText(bool live = false, bool local = false) {
+    static const std::string integree = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel. "
+                                        "IA int\xC3\xA9gr\xC3\xA9" "e : je comprends des phrases simples, sans connexion - rien ne quitte ce PC.";
+    if (local) return integree;
     static const std::string demo = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel. "
                                     "D\xC3\xA9monstration : je reconnais les demandes ci-dessous.";
     static const std::string real = "Je propose des modifications de **la vue ouverte**, avec les vrais objets du logiciel : "
@@ -894,9 +898,10 @@ void AiPanel::stop() {
 }
 
 bool AiPanel::clickSuggestion(std::size_t index) {
-    const auto& s = demoSuggestions();
+    const auto& s = assistant_->suggestions();
     if (index >= s.size()) return false;
-    return sendText(s[index]);
+    const std::string pick = s[index];   // 1.16.0 : une copie (l'envoi refait la liste de l'IA integree)
+    return sendText(pick);
 }
 
 void AiPanel::askAttach() {
@@ -1138,7 +1143,8 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     const float lhCap = ctx.r.lineHeight(f.caption);
     const float dotY = statusLine_.y + statusLine_.h / 2.f;
     // 1.15.0 : vert, un vrai fournisseur pret ; orange, la demonstration ou a configurer ; gris, desactive.
-    const gfx::Color dot = !on ? c.textDisabled : a.live() && a.ready() ? c.ok : c.warning;
+    // 1.16.0 : vert aussi, l'IA integree (toujours prete).
+    const gfx::Color dot = !on ? c.textDisabled : (a.live() && a.ready()) || a.local() ? c.ok : c.warning;
     ctx.r.fillRoundedRect({statusLine_.x + kPad + 6.f, dotY - 4.f, 8.f, 8.f}, dot, 4.f);
     ctx.r.drawText({statusLine_.x + kPad + 22.f, statusLine_.y + (statusLine_.h - lhCap) / 2.f},
                    elideTip(ctx.r, a.connectionText(), f.caption, statusLine_.w - 2 * kPad - 24.f, statusLine_, tips_), f.caption, c.textMuted);
@@ -1656,12 +1662,12 @@ void AiChatView::measure() {
     if (empty || a.suggestionsAfterLast()) {
         if (empty) {   // l'accueil : "Bonjour." puis son texte
             y += 6.f + 30.f;
-            for (const auto& l : layoutText(welcomeText(a.live()), w - 2 * kPad - 12.f)) y += l.h;
+            for (const auto& l : layoutText(welcomeText(a.live(), a.local()), w - 2 * kPad - 12.f)) y += l.h;
             y += 14.f;
         }
         suggestionsTop_ = y;
         y += ui::lineHeight(kMeta) + 8.f;
-        for (const auto& s : demoSuggestions()) {
+        for (const auto& s : a.suggestions()) {
             const auto lines = layoutText(s, inner - 26.f);
             const float h = std::min<std::size_t>(lines.size(), 2) * (ui::lineHeight(kBody) + 4.f) + 10.f;
             suggestionRects_.push_back({kPad + 2.f, y, inner - 4.f, h});
@@ -2109,7 +2115,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             ui::drawIcon(ctx.r, ui::Icon::Assistant, {bb.x + kPad + 2.f, y, 22.f, 22.f}, c.accent);   // le haut : 10 + 6 (measure)
             bold(ctx.r, {bb.x + kPad + 32.f, y + 2.f}, "Bonjour.", kHead, c.text);
             y += 30.f;
-            for (const auto& l : layoutText(welcomeText(a.live()), bb.w - 2 * kPad - 12.f)) {
+            for (const auto& l : layoutText(welcomeText(a.live(), a.local()), bb.w - 2 * kPad - 12.f)) {
                 for (const auto& r : l.runs) {
                     if (r.style == 1) bold(ctx.r, {bb.x + kPad + 4.f + r.x, y}, r.text, kBody, c.textMuted);
                     else ctx.r.drawText({bb.x + kPad + 4.f + r.x, y}, r.text, kBody, c.textMuted);
@@ -2118,7 +2124,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             }
         }
         ctx.r.drawText({bb.x + kPad + 4.f, bb.y + suggestionsTop_ - offset_}, "ESSAIE", kMeta, c.textMuted);
-        const auto& s = demoSuggestions();
+        const auto& s = a.suggestions();
         for (std::size_t i = 0; i < suggestionRects_.size() && i < s.size(); ++i) {
             const auto r0 = suggestionRects_[i];
             const gfx::Rect r{bb.x + r0.x, bb.y + r0.y - offset_, r0.w, r0.h};
