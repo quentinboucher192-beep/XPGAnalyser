@@ -83,7 +83,16 @@ La case ne s'écrit dans le projet que **décochée** (`incidents=0`) : un proje
 
 ## 5. Les essais
 
-ESSAIS
+**108 suites d'essais, toutes réussies** sous Linux (la construction complète, sans nouvel avertissement). Celles de la 1.20.2 :
+
+| Suite | Ce qu'elle vérifie | Résultat |
+|---|---|---|
+| ai_reseau_test | la bande « Plan en cours » (vérification, validation requise, application, appliqué, dépliée, clic sur une étape, croix) ; les blocs de code (découpe, langue, ligne longue repliée, bouton Copier : le code exact dans le presse-papiers, « Copié ») | 252 vérifications, 0 échec |
+| hmi_incident_test | le volet (dossiers par alarme, recherche, criticité, tri, l'incident le plus récent d'un dossier, Arrêter / Reprendre gardé) ; la case Incidents d'une alarme, d'un groupe, d'une alarme d'objet ; l'interrupteur général (aucune image demandée, tampon rendu, relu du projet) | 218 contrôles, 0 échec |
+| hmi_recording_test | la copie du projet dans l'enregistrement, la relecture avec elle (vue renommée, objet et variable supprimés depuis), le retour au projet d'aujourd'hui, un enregistrement d'avant sans copie | 381 vérifications, 0 échec |
+| hmi_editor_test (alarmes) | la colonne et la fiche Incidents, la case d'un groupe (mêlée « – », une seule commande), plusieurs alarmes ensemble, Ctrl+Z / Ctrl+Y, coller depuis Excel, l'enregistrement (`incidents=0` seulement décochée), un projet d'avant | 35 contrôles, 0 échec |
+| hmi_editor_test (le reste) | les notes de version (548, 78 versions), l'aide F1 (269 sujets, le texte et le C++ identiques) | réussie |
+| core_process_test | (pour la 1.21.0) un programme lancé à part, borné en temps, en mémoire et en sortie | 7 vérifications, 0 échec |
 
 ## 6. Installer
 
@@ -95,21 +104,41 @@ Fichiers livrés :
 1. Lance `API-IHM-Studio-Setup-1.20.2.exe` : il met à jour la version installée au même endroit et garde tes données.
 2. Windows SmartScreen peut avertir (installateur non signé) : « Informations complémentaires », puis « Exécuter quand même ».
 
-EMPREINTES
+Le format des projets ne change pas (33) : la case Incidents ne s'écrit que décochée. Les enregistrements passent au format 3 (avec la copie du projet).
+
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.20.2.exe` (42,7 Mo, 44 767 233 octets) :
+`1354211662F89CAC0FA7877C5F905A5B6F24B81DE62405D7CB68BEE5CA8830F7`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.20.2-portable.zip` (33,1 Mo) :
+  `729C5B5BE9A4D7AF05F84B2A9ED1EA68D441E87DBA2E306397F3862E26719C52`
+- `IHM-Studio-1.20.2-portable.zip` (33,1 Mo) :
+  `6D77D78E8C103204820EA4E37126160FC05B944207853142B3A5D6D3A5933384`
 
 ### Les vérifications sous Windows (Wine)
 
-VERIFICATIONS
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.20.2` et `IHM Studio 1.20.2` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, par-dessus la 1.20.1 livrée, avec **une clé API d'essai** déposée dans `%APPDATA%\XpgAnalyzer\IA\cles` : « Installation process succeeded ».
+- La clé est **intacte** après l'installation (même empreinte avant et après) ; le journal dit « Clés API : 1 gardée (protégée par Windows ; la réinstallation n'y touche pas) ».
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.20.1 est faite.
 
 Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 
 ## 7. Les limites
 
-LIMITES
+- **Le plan en cours** pendant une application de fond ne connaît que l'avancement global : les étapes disent « En cours » jusqu'au compte rendu, jamais une réussite avant qu'elle ait eu lieu.
+- **Les blocs de code** n'ont pas de coloration syntaxique (le code est montré tel quel, sur son fond).
+- **Les vidéos d'incident** restent en Motion-JPEG (lisibles partout, par le lecteur Vidéo de l'IHM) : plus nettes et plus fluides, elles sont aussi plus lourdes qu'avant (qualité 92 au lieu de 75, 5 images par seconde au lieu de 2 ; la taille n'a pas été mesurée sur un vrai projet). 10 images par seconde au plus.
+- **Les enregistrements** ne copient ni les images ni les sons (ils viennent du projet actuel) ; une copie du projet de plus de 64 Mio (décompressée) n'est pas gardée, et c'est dit.
+- **La case Incidents** porte sur les alarmes de IHM › Alarmes et sur les groupes ; une alarme définie dans un symbole n'a pas sa propre case : elle suit la case du groupe de son objet.
+- **Pas de nouvelles captures d'écran** (à ta demande) ; les vérifications Windows sont faites sous Wine, pas sur un vrai Windows.
 
 ## 8. Ce qui a été optimisé pour livrer plus tôt
 
 - **Trois agents en parallèle** de mon travail, chacun dans ses fichiers (le volet Incidents ; les enregistrements ; les alarmes), vérifiés à la compilation sans toucher au dossier de construction ; relus, construits et essayés par moi avant d'être commités.
-- **La 1.20.1 fabriquée et vérifiée sous Wine pendant que j'écrivais la 1.20.2.**
-- Rien de recréé : le plan d'action et la vérification de fond de la 1.19/1.20, le presse-papiers et le bouton Copier de l'aide, le codeur JPEG et l'écrivain AVI, la recherche des listes du logiciel.
+- **La compilation Windows lancée pendant la compilation Linux** (les deux places de compilation de la machine occupées), puis reprise là où elle s'était arrêtée : seuls 64 fichiers restaient.
+- **La 1.21.0 commencée pendant que la 1.20.2 se compilait**, dans des copies séparées du dépôt (trois agents et moi), pour que rien ne se mélange à la version livrée.
+- **Les essais lancés en parallèle** (108 suites en 3 min 43 s).
+- Rien de recréé : le plan d'action et la vérification de fond de la 1.19/1.20, le presse-papiers et le bouton Copier de l'aide, le codeur JPEG et l'écrivain AVI, la recherche des listes du logiciel, la copie compressée et chiffrée des enregistrements.
 - Pas de captures ; l'installateur vérifié en silencieux sous Wine.
