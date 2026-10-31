@@ -2661,16 +2661,15 @@ bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, con
 }
 
 namespace {
-core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std::string* why, const Env& env, std::vector<std::string>* skipped) {
-    if (!doc) {
-        if (why) *why = "Pas de projet IHM ouvert.";
-        return nullptr;
-    }
-    const Check check = validate(doc->project, p, env);
+// Applique la proposition a `pr` (le projet de travail) : la validation d'abord (sur `pr` tel qu'il est), puis le plan par
+// unites ; faux et `why` : rien n'est change (une unite qui echoue : `pr` est remis tel qu'il etait). `skipped` non nul :
+// malgre les erreurs (ce qui est valide s'applique, le reste y est note).
+bool applyStaged(hmi::Project& pr, const Proposal& p, const Env& env, std::string* why, std::vector<std::string>* skipped) {
+    const Check check = validate(pr, p, env);
     const bool lenient = skipped != nullptr && !check.stale && !check.viewMissing;
     if (!check.ok() && !lenient) {
         if (why) *why = check.errors.front();
-        return nullptr;
+        return false;
     }
     if (skipped) *skipped = check.errors;
     // Les operations a executer : celles que la validation a validees (le reste : retire, echoue, ou qui en depend).
@@ -2679,38 +2678,51 @@ core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std:
         if (check.outcomes[i].state == Check::Outcome::State::Validated) allowed.insert(i);
     if (allowed.empty()) {
         if (why) *why = check.errors.empty() ? std::string("Rien \xC3\xA0 appliquer : toutes les op\xC3\xA9rations sont retir\xC3\xA9" "es.") : check.errors.front();
-        return nullptr;
+        return false;
     }
-    const hmi::Id open = openViewOf(doc->project, p);
-    const std::string label = "Assistant IA : " + (p.summary.empty() ? std::string("proposition") : p.summary);
+    const hmi::Id open = openViewOf(pr, p);
     // Une variable a creer (choisie par l'utilisateur) : le projet ET la vue, dans une seule commande.
     std::string createVar;
     if (p.variable.create && p.variable.use.empty())
         for (const auto& name : requestedVariables(p))
-            if (!variableExists(doc->project, name, env)) createVar = name;
+            if (!variableExists(pr, name, env)) createVar = name;
     const plan::Schedule sch = plan::schedule(p);
     std::string failed;
+    const hmi::Project backup = pr;
+    if (!createVar.empty()) {
+        hmi::Variable var;
+        var.id = pr.allocate();
+        var.name = createVar;
+        var.type = p.variable.type.empty() ? "BOOL" : p.variable.type;
+        var.initial = var.type == "BOOL" ? "FALSE" : "0";
+        var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
+        pr.programs.variables.push_back(std::move(var));
+    }
+    std::vector<Check::Outcome> out;
+    if (!runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open)) {
+        if (failed.empty()) failed = "La proposition ne s'applique pas.";
+        failed += " Le projet est rest\xC3\xA9 tel qu'il \xC3\xA9tait (rien n'a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9).";
+        const hmi::Id keep = pr.nextId;
+        pr = backup;
+        pr.nextId = std::max(pr.nextId, keep);
+        if (why) *why = failed;
+        return false;
+    }
+    return true;
+}
+
+std::string commandLabel(const Proposal& p) { return "Assistant IA : " + (p.summary.empty() ? std::string("proposition") : p.summary); }
+
+core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std::string* why, const Env& env, std::vector<std::string>* skipped) {
+    if (!doc) {
+        if (why) *why = "Pas de projet IHM ouvert.";
+        return nullptr;
+    }
     // 1.19.0 : UNE commande pour tout le plan (la vue neuve et ses objets, les autres vues, les variables, les types, les
     // outils) : Ctrl+Z reprend tout, Ctrl+Y le refait. Une unite qui echoue : le projet est remis tel qu'il etait.
-    core::CommandPtr cmd = hmi::changeProject(doc, label, [&](hmi::Project& pr) {
-        const hmi::Project backup = pr;
-        if (!createVar.empty()) {
-            hmi::Variable var;
-            var.id = pr.allocate();
-            var.name = createVar;
-            var.type = p.variable.type.empty() ? "BOOL" : p.variable.type;
-            var.initial = var.type == "BOOL" ? "FALSE" : "0";
-            var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
-            pr.programs.variables.push_back(std::move(var));
-        }
-        std::vector<Check::Outcome> out;
-        if (!runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open)) {
-            if (failed.empty()) failed = "La proposition ne s'applique pas.";
-            failed += " Le projet est rest\xC3\xA9 tel qu'il \xC3\xA9tait (rien n'a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9).";
-            const hmi::Id keep = pr.nextId;
-            pr = backup;
-            pr.nextId = std::max(pr.nextId, keep);
-        }
+    std::string failed;
+    core::CommandPtr cmd = hmi::changeProject(doc, commandLabel(p), [&](hmi::Project& pr) {
+        if (!applyStaged(pr, p, env, &failed, skipped) && failed.empty()) failed = "La proposition ne s'applique pas.";
     });
     if (!failed.empty()) {
         if (why) *why = failed;
@@ -2728,6 +2740,23 @@ core::CommandPtr makeCommand(const hmi::DocumentPtr& doc, const Proposal& p, std
 core::CommandPtr makeCommandLenient(const hmi::DocumentPtr& doc, const Proposal& p, std::vector<std::string>& skipped, std::string* why,
                                     const Env& env) {
     return commandFor(doc, p, why, env, &skipped);
+}
+
+std::shared_ptr<hmi::Project> appliedCopy(const hmi::Project& project, const Proposal& p, const Env& env, std::string* why,
+                                          std::vector<std::string>* skipped) {
+    auto copy = std::make_shared<hmi::Project>(project);
+    if (!applyStaged(*copy, p, env, why, skipped)) return nullptr;
+    return copy;
+}
+
+core::CommandPtr commandSetting(const hmi::DocumentPtr& doc, const Proposal& p, std::shared_ptr<const hmi::Project> after, std::string* why) {
+    if (!doc || !after) {
+        if (why) *why = "Pas de projet IHM ouvert.";
+        return nullptr;
+    }
+    core::CommandPtr cmd = hmi::changeProject(doc, commandLabel(p), [after](hmi::Project& pr) { pr = *after; });
+    if (!cmd && why) *why = "La proposition ne change rien au projet.";
+    return cmd;
 }
 
 Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) {

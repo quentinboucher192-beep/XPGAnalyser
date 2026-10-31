@@ -53,6 +53,7 @@ public:
     void cancel();          // Annuler : la proposition est refusee
     void editRequest();     // Modifier la demande
     void close();           // Echap : sans decider
+    [[nodiscard]] bool waiting() const noexcept { return waiting_; }   // 1.20.1 : la verification de fond n'est pas finie
     bool chooseVariable(int index);   // dans la liste deroulante (le dernier : creer)
 
     [[nodiscard]] int                message() const noexcept { return message_; }
@@ -97,6 +98,9 @@ private:
     std::vector<std::string> variableNames_;   // les noms de la liste ("" : creer)
     std::string   missingName_;                // la variable introuvable (gardee apres un choix)
     bool          done_{false};
+    bool          waiting_{false};    // 1.20.1 : la verification de fond de la carte n'est pas finie
+    bool          planReady_{false};
+    double        lastWait_{-1.0};
     bool          syncing_{false};
     bool          planFolded_{false};   // 1.19.0 : les categories du plan repliees a la premiere ouverture
     core::ConnectionScope links_;

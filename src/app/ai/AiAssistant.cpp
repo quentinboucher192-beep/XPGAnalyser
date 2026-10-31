@@ -108,7 +108,10 @@ Assistant::Assistant(Host host) : host_(std::move(host)) {
 
 // Le fournisseur en cours est arrete et part finir sur son fil (son destructeur attend le fil :
 // jamais sur celui de l'interface tant qu'il travaille - tick le libere quand il a fini).
-Assistant::~Assistant() = default;
+Assistant::~Assistant() {
+    // 1.20.1 : une application de fond finit sur sa copie (elle ne touche rien d'autre) : attendue ici.
+    if (applyJob_ && applyJob_->worker.joinable()) applyJob_->worker.join();
+}
 
 // ---- le cycle de vie ------------------------------------------------------------------
 void Assistant::load(std::vector<std::string>* problems) {
@@ -177,6 +180,7 @@ bool Assistant::tick(double now) {
     retiring_.erase(std::remove_if(retiring_.begin(), retiring_.end(), [](const std::unique_ptr<Provider>& p) { return !p || !p->busy(); }),
                     retiring_.end());
     (void)pollModels();
+    pollApply();   // 1.20.1 : l'application de fond finie : sa commande, sur ce fil
     if (gen_.phase != Phase::Idle && gen_.live) {
         pollLive();
     } else if (gen_.phase != Phase::Idle) {
@@ -738,6 +742,13 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
         return false;
     }
     if (host_.apply) host_.apply(std::move(cmd));
+    return afterApply(*c, message, pl, before, skipped);
+}
+
+// La suite d'une application (sur le fil de l'interface) : l'etat, le compte rendu reel, l'empreinte d'apres, la note.
+bool Assistant::afterApply(Conversation& conv, int message, plan::Plan pl, const std::optional<hmi::Project>& before,
+                           const std::vector<std::string>& skipped) {
+    Conversation* c = &conv;
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
     // 1.19.0 : LE COMPTE RENDU REEL - les etats confirmes dans le projet d'apres (jamais ce que l'IA a annonce).
@@ -783,6 +794,88 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
     // 1.16.0 : la vue creee s'ouvre dans l'editeur.
     if (opened != hmi::kNoId && host_.openView) host_.openView(opened);
     return true;
+}
+
+bool Assistant::applyInBackground(int message, bool ignoringErrors, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (applyJob_) return fail("Une autre proposition s'applique d\xC3\xA9j\xC3\xA0 : attends la fin.");
+    if (ignoringErrors && !settings_.applyWithErrors)
+        return fail("Appliquer malgr\xC3\xA9 les erreurs est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    const Conversation* c = current();
+    const Proposal* p = proposal(message);
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!c || !p || !doc || p->state != "proposee" || p->ops.size() < kBackgroundOps) return false;
+    Env frozen;
+    if (!frozenEnvironment(frozen)) return false;
+    auto job = std::make_shared<ApplyJob>();
+    job->conversation = c->id;
+    job->proposalId = p->id;
+    job->message = message;
+    job->ignoringErrors = ignoringErrors;
+    job->revision = doc->revision;
+    job->before = std::make_shared<const hmi::Project>(doc->project);
+    job->total = 3 * p->ops.size();   // la validation du plan, celle de l'application, l'application
+    job->worker = std::thread([job, prop = *p, env = std::move(frozen)] {
+        setProgressCounter(&job->done);
+        job->plan = plan::build(*job->before, prop, validate(*job->before, prop, env));
+        job->result = appliedCopy(*job->before, prop, env, &job->why, job->ignoringErrors ? &job->skipped : nullptr);
+        setProgressCounter(nullptr);
+        job->finished.store(true, std::memory_order_release);
+    });
+    applyJob_ = std::move(job);
+    notice_ = "Assistant IA : la proposition s'applique en arri\xC3\xA8re-plan (" + std::to_string(p->ops.size())
+              + " op\xC3\xA9rations) - tu peux continuer \xC3\xA0 travailler.";
+    ++revision_;
+    return true;
+}
+
+bool Assistant::applying(int message) const {
+    const Conversation* c = current();
+    return applyJob_ && c && c->id == applyJob_->conversation && applyJob_->message == message;
+}
+
+float Assistant::applyProgress() const {
+    if (!applyJob_ || applyJob_->total == 0) return 0.f;
+    return std::min(1.f, static_cast<float>(applyJob_->done.load()) / static_cast<float>(applyJob_->total));
+}
+
+void Assistant::pollApply() {
+    if (!applyJob_ || !applyJob_->finished.load(std::memory_order_acquire)) return;
+    auto job = std::move(applyJob_);
+    if (job->worker.joinable()) job->worker.join();
+    ++revision_;
+    Conversation* c = nullptr;
+    for (auto& conv : conversations_)
+        if (conv.id == job->conversation) c = &conv;
+    if (!c || job->message < 0 || job->message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(job->message)].proposal
+        || c->messages[static_cast<std::size_t>(job->message)].proposal->id != job->proposalId
+        || c->messages[static_cast<std::size_t>(job->message)].proposal->state != "proposee") {
+        notice_ = "Assistant IA : la proposition a chang\xC3\xA9 pendant son application en arri\xC3\xA8re-plan : rien n'est appliqu\xC3\xA9.";
+        return;
+    }
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc || doc->revision != job->revision) {
+        notice_ = "Assistant IA : le projet a chang\xC3\xA9 pendant l'application en arri\xC3\xA8re-plan : rien n'est appliqu\xC3\xA9 "
+                  "(Appliquer la refait sur le projet tel qu'il est).";
+        appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : le projet a chang\xC3\xA9 pendant son application en arri\xC3\xA8re-plan.");
+        return;
+    }
+    if (!job->result) {
+        notice_ = job->why.empty() ? std::string("La proposition ne s'applique pas.") : job->why;
+        appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : " + notice_);
+        return;
+    }
+    std::string w;
+    auto cmd = commandSetting(doc, *c->messages[static_cast<std::size_t>(job->message)].proposal, job->result, &w);
+    if (!cmd) {
+        notice_ = w;
+        return;
+    }
+    if (host_.apply) host_.apply(std::move(cmd));
+    (void)afterApply(*c, job->message, job->plan, std::optional<hmi::Project>(*job->before), job->skipped);
 }
 
 Assistant::Applied Assistant::appliedState(int message) const {

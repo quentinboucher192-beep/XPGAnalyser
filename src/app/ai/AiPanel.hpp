@@ -439,6 +439,9 @@ public:
     // Une verification de fond est en cours pour cette carte (essais) ; son avancement (0..1).
     [[nodiscard]] bool  checking(int message) const;
     [[nodiscard]] float checkProgress(int message) const;
+    // 1.20.1 : le resultat de la verification de cette carte, s'il est la (faux : en cours sur le fil de fond) - la
+    // previsualisation et Appliquer le reprennent au lieu de tout revalider sur le fil de l'interface.
+    bool resultReady(int message, Check* check, Preview* preview, plan::Plan* plan) const;
     [[nodiscard]] bool  anyChecking() const {
         for (const auto& [m, t] : thumbs_)
             if (t.pending()) return true;

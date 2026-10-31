@@ -26,6 +26,7 @@
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiOpenAI.hpp"
 #include "../src/app/ai/AiPanel.hpp"
+#include "../src/app/ai/AiPreviewDialog.hpp"
 #include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/ai/AiPrompt.hpp"
 #include "../src/app/ai/AiSecret.hpp"
@@ -34,6 +35,8 @@
 #include "../src/app/ai/AiTextParts.hpp"
 #include "../src/core/AtomicFile.hpp"
 #include "../src/hmi/HmiModel.hpp"
+#include "../src/hmi/HmiEdit.hpp"
+#include "../src/hmi/HmiCommands.hpp"
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/widgets/Controls.hpp"
@@ -1682,16 +1685,74 @@ void testBackgroundCard() {
     bool said = false;
     for (const auto& tx : rec.texts) said = said || has(tx, "rification");
     check(said, "la carte dit << Verification... >> pendant le travail de fond");
+    // 1.20.1 : Previsualiser pendant ce temps : la fenetre attend le resultat de fond (pas de revalidation sur ce fil).
+    f.panel->openPreview(m);
+    f.mm.applyPending();
+    auto* dlg = dynamic_cast<ai::AiPreviewDialog*>(f.mm.top());
+    check(dlg && dlg->waiting(), "Previsualiser pendant la verification : la fenetre attend le resultat de fond");
     for (int k = 0; k < 2500 && f.panel->chat().checking(m); ++k) {
         f.step(0.002);
         pause(2);
     }
     check(!f.panel->chat().checking(m), "la verification de fond se termine (le resultat arrive au tick)");
+    if (dlg) {
+        dlg->Update(menu::FrameContext{});
+        check(!dlg->waiting(), "la fenetre se remplit avec le resultat de fond");
+        dlg->close();
+        f.mm.applyPending();
+    }
     f.panel->chat().rebuild();
     f.panel->layout();
     auto* apply = f.panel->chat().cardButton(m, 1);
     check(apply && apply->enabled(), "le resultat est la : Appliquer est disponible");
-    check(f.as().apply(m) && f.object("R_79"), "appliquee : les 80 rectangles");
+    // 1.20.1 : Appliquer une grosse proposition : sur un fil de fond (la carte : << Application... >>), puis UNE commande.
+    const std::size_t steps = f.stack.done().size();
+    if (apply) apply->clicked->emit();
+    check(f.as().applying(m) && !f.object("R_0"), "Appliquer : sur un fil de fond, le projet pas encore touche");
+    Recorder rec2;
+    f.render(rec2);
+    bool applyingSaid = false;
+    for (const auto& tx : rec2.texts) applyingSaid = applyingSaid || has(tx, "Application");
+    check(applyingSaid, "la carte dit << Application... >> et son avancement");
+    for (int k = 0; k < 2500 && f.as().applyingAny(); ++k) {
+        f.step(0.002);
+        pause(2);
+    }
+    check(!f.as().applyingAny() && f.object("R_79") && f.object("R_0") && f.stack.done().size() == steps + 1
+              && f.last().proposal->state == "appliquee",
+          "appliquee : les 80 rectangles, en UNE commande");
+    (void)f.stack.undo();
+    check(!f.object("R_0") && !f.object("R_79"), "Ctrl+Z : les 80 rectangles partent d'un coup");
+    (void)f.stack.redo();
+    check(f.object("R_79"), "Ctrl+Y : ils reviennent");
+    // Le projet change PENDANT l'application de fond : rien n'est applique (pas d'ecrasement), c'est dit.
+    {
+        std::string input2 = "{\"resume\": \"Encore des rectangles\", \"operations\": [";
+        for (int i = 0; i < 60; ++i) {
+            if (i) input2 += ", ";
+            input2 += "{\"action\": \"creer\", \"genre\": \"Rectangle\", \"nom\": \"S_" + std::to_string(i) + "\", \"proprietes\": {\"x\": \""
+                      + std::to_string(10 + (i % 10) * 60) + "\", \"y\": \"" + std::to_string(500 + (i / 10) * 40) + "\", \"w\": \"30\", \"h\": \"20\"}}";
+        }
+        input2 += "]}";
+        g_net.push(sseReply(streamTextTool("toolu_big2", input2)));
+        (void)f.panel->sendText("Ajoute 60 rectangles");
+        f.waitLive();
+        const int m2 = f.lastIndex();
+        for (int k = 0; k < 2500 && f.panel->chat().checking(m2); ++k) {
+            f.step(0.002);
+            pause(2);
+        }
+        std::string why;
+        check(f.as().applyInBackground(m2, false, &why), "la seconde : sur un fil de fond (" + why + ")");
+        (void)f.stack.push(hmi::changeView(f.doc, f.view, "Un geste de l'utilisateur", [](hmi::Project& p, hmi::View& v) {
+            (void)hmi::edit::add(p, v, hmi::Kind::Text, 5, 5);
+        }));
+        for (int k = 0; k < 2500 && f.as().applyingAny(); ++k) {
+            f.step(0.002);
+            pause(2);
+        }
+        check(!f.object("S_0") && f.last().proposal->state == "proposee", "le projet a change pendant : rien n'est applique, la proposition reste a decider");
+    }
     // Une petite proposition reste verifiee tout de suite (pas de fil pour si peu).
     g_net.push(sseReply(streamTextTool("toolu_small", kTankInput)));
     (void)f.panel->sendText("Ajoute une cuve");

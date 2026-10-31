@@ -713,7 +713,7 @@ void AiPanel::tick(double now) {
             chat_->rebuild();
             invalidateLayout();
         }
-        if (chat_->anyChecking()) invalidate();
+        if (chat_->anyChecking() || assistant_->applyingAny()) invalidate();
     }
     // 1.16.1 : une reponse vient de finir - l'ecran avertit (s'il le faut : l'utilisateur ne regarde pas).
     if (assistant_->generating()) {
@@ -1036,14 +1036,30 @@ void AiPanel::openPreview(int message) {
 bool AiPanel::applyProposal(int message) {
     const Proposal* p = assistant_->proposal(message);
     if (!p) return false;
+    // 1.20.1 : une grosse proposition s'applique sur un fil de fond (la carte montre l'avancement) ; une petite, tout de suite.
     const auto doApply = [this, message] {
         std::string why;
+        if (assistant_->applyInBackground(message, false, &why)) {
+            sync();
+            return true;
+        }
+        if (!why.empty()) {
+            say(why);
+            return false;
+        }
         const bool ok = assistant_->apply(message, &why);
         if (!ok) say(why);
         sync();
         return ok;
     };
-    const Check ck = assistant_->check(message);
+    if (assistant_->applying(message)) return false;   // deja en cours
+    // 1.20.1 : la verification de la carte (faite sur le fil de fond) - pas une nouvelle validation sur ce fil.
+    Check ck;
+    if (chat_ && chat_->checking(message)) {
+        say("La proposition se v\xC3\xA9rifie encore (sur un fil de fond) : Appliquer revient \xC3\xA0 la fin.");
+        return false;
+    }
+    if (!chat_ || !chat_->resultReady(message, &ck, nullptr, nullptr)) ck = assistant_->check(message);
     // 1.16.1 : APPLIQUER MALGRE LES ERREURS (l'option des parametres) - toujours une confirmation qui les liste.
     if (!ck.ok() && !ck.stale && !ck.viewMissing && assistant_->settings().applyWithErrors && ui_.showDialog) {
         HmiAskDialog::Spec spec;
@@ -1059,7 +1075,11 @@ bool AiPanel::applyProposal(int message) {
         ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, message](const menu::DialogResult& r) {
             if (!r.accepted()) return;
             std::string why;
-            if (!assistant_->applyIgnoringErrors(message, &why)) say(why);
+            if (assistant_->applyInBackground(message, true, &why)) {   // 1.20.1 : une grosse proposition, sur un fil de fond
+                sync();
+                return;
+            }
+            if (!why.empty() || !assistant_->applyIgnoringErrors(message, &why)) say(why);
             sync();
         });
         return false;   // la reponse viendra
@@ -1795,6 +1815,15 @@ bool AiChatView::pollThumbs() {
     return changed;
 }
 
+bool AiChatView::resultReady(int message, Check* check, Preview* preview, plan::Plan* plan) const {
+    const Thumb& t = thumb(message);
+    if (t.pending()) return false;
+    if (check) *check = t.check;
+    if (preview) *preview = t.preview;
+    if (plan) *plan = t.plan;
+    return true;
+}
+
 bool AiChatView::checking(int message) const {
     const auto it = thumbs_.find(message);
     return it != thumbs_.end() && it->second.pending();
@@ -2085,6 +2114,7 @@ void AiChatView::rebuild() {
         cb.message = b.message;
         cb.refused = p->state == "refusee";
         cb.detect = false;
+        cb.preview->setEnabled(true);
         if (p->state == "appliquee" && panel_.canDetect(b.message)) {   // 1.18.0 : appliquee, une detection proposee
             cb.detect = true;
             cb.undone = false;
@@ -2122,8 +2152,11 @@ void AiChatView::rebuild() {
                                  : std::string("Appliquer"));
         cb.apply->setTooltip(anyway ? "Appliquer ce qui est valide ; les erreurs sont laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9" "es au journal (une confirmation les liste)."
                                     : "Appliquer au projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
-        cb.apply->setEnabled((t.check.ok() || anyway) && !t.pending());   // 1.20.0 : pas pendant la verification de fond
+        const bool busy = t.pending() || panel_.assistant().applying(b.message);   // 1.20.0, 1.20.1 : un fil de fond travaille
+        cb.apply->setEnabled((t.check.ok() || anyway) && !busy);
+        cb.preview->setEnabled(!busy);
         if (t.pending()) cb.apply->setTooltip("La proposition se v\xC3\xA9rifie (sur un fil de fond) : Appliquer revient \xC3\xA0 la fin.");
+        if (panel_.assistant().applying(b.message)) cb.apply->setTooltip("La proposition s'applique (sur un fil de fond).");
         cb.third->setText(cb.stale ? "Redemander" : "Refuser\xE2\x80\xA6");
         cb.third->setTooltip(cb.stale ? "La vue a chang\xC3\xA9 : remettre la demande dans la saisie."
                                       : "Refuser (une question d'abord) : le projet ne change pas ; la carte pourra revenir sur ce refus.");
@@ -2286,6 +2319,7 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     else if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
     else if (p->state == "refusee") { st = "Refus\xC3\xA9" "e"; tone = c.textMuted; }
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
+    else if (a.applying(b.message)) { st = "Application\xE2\x80\xA6"; tone = c.info; }   // 1.20.1 : sur un fil de fond
     else if (t.pending()) { st = "V\xC3\xA9rification\xE2\x80\xA6"; tone = c.info; }   // 1.20.0 : sur un fil de fond
     // 1.15.0 : "A completer" seulement quand l'utilisateur peut completer (une variable a choisir dans
     // l'apercu) ; une proposition que le logiciel refuse (une propriete inventee...) est "Non valide".
@@ -2397,12 +2431,17 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     // L'apercu : la copie de la vue, dessinee par les painters du logiciel.
     const gfx::Rect area{card.x + 10.f, y, card.w - 20.f, 100.f};
     ctx.r.fillRect(area, c.windowBg);
-    if (t.pending() && t.job) {
-        // 1.20.0 : une grosse proposition se verifie sur un fil de fond - l'avancement, l'interface reste libre.
-        const std::size_t done = std::min(t.job->done.load(), t.job->total), total = std::max<std::size_t>(1, t.job->total);
-        const float frac = static_cast<float>(done) / static_cast<float>(total);
-        const std::string line = "V\xC3\xA9rification de la proposition (" + std::to_string(p->ops.size()) + " op\xC3\xA9rations)\xE2\x80\xA6 "
-                                 + std::to_string(static_cast<int>(frac * 100.f + 0.5f)) + " %";
+    if ((t.pending() && t.job) || a.applying(b.message)) {
+        // 1.20.0 : une grosse proposition se verifie (1.20.1 : s'applique) sur un fil de fond - l'avancement, l'interface
+        // reste libre.
+        const bool applyingNow = a.applying(b.message);
+        float frac = applyingNow ? a.applyProgress() : 0.f;
+        if (!applyingNow) {
+            const std::size_t done = std::min(t.job->done.load(), t.job->total), total = std::max<std::size_t>(1, t.job->total);
+            frac = static_cast<float>(done) / static_cast<float>(total);
+        }
+        const std::string line = std::string(applyingNow ? "Application" : "V\xC3\xA9rification") + " de la proposition ("
+                                 + std::to_string(p->ops.size()) + " op\xC3\xA9rations)\xE2\x80\xA6 " + std::to_string(static_cast<int>(frac * 100.f + 0.5f)) + " %";
         ctx.r.drawText({area.x + 10.f, area.y + area.h / 2.f - kNoteH - 2.f}, line, kMeta, c.text);
         const gfx::Rect track{area.x + 10.f, area.y + area.h / 2.f + 2.f, area.w - 20.f, 8.f};
         ctx.r.fillRoundedRect(track, alpha(c.info, 40), 4.f);

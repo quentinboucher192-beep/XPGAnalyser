@@ -688,8 +688,17 @@ void AiPreviewDialog::refresh() {
     auto& a = panel_.assistant();
     const Proposal* p = a.proposal(message_);
     if (!p) return;
-    check_ = a.check(message_);
-    preview_ = a.previewOf(message_);
+    // 1.20.1 : le resultat de la verification de la carte (fait sur un fil de fond pour une grosse proposition) - pas une
+    // nouvelle validation sur le fil de l'interface. En cours : la fenetre l'attend (Update), l'avancement affiche.
+    plan::Plan readyPlan;
+    waiting_ = !panel_.chat().resultReady(message_, &check_, &preview_, &readyPlan);
+    planReady_ = !waiting_;
+    if (waiting_) {
+        check_ = Check{};
+        preview_ = Preview{};
+        preview_.why = "V\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6 "
+                       + std::to_string(static_cast<int>(panel_.chat().checkProgress(message_) * 100.f + 0.5f)) + " %";
+    }
     auto* body = dynamic_cast<AiPreviewBody*>(widgetRoot());
     // La liste de gauche.
     std::vector<Row> rows;
@@ -713,7 +722,7 @@ void AiPreviewDialog::refresh() {
     std::vector<std::string> planGroups;   // les categories : repliees a la premiere ouverture (la synthese reste ouverte)
     {
         const auto doc = a.host().document ? a.host().document() : nullptr;
-        const plan::Plan pl = p->state == "proposee" && doc ? plan::build(doc->project, *p, check_) : a.planOf(message_);
+        const plan::Plan pl = planReady_ ? readyPlan : waiting_ ? plan::Plan{} : p->state == "proposee" && doc ? plan::build(doc->project, *p, check_) : a.planOf(message_);
         if (pl.worthShowing()) {
             std::map<plan::Category, std::vector<const plan::Step*>> byCat;
             for (const auto& st : pl.steps) byCat[st.category].push_back(&st);
@@ -883,7 +892,7 @@ void AiPreviewDialog::refresh() {
         apply_->setTooltip(anyway ? "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9 dans le journal "
                                     "(une confirmation les liste d'abord). Un seul Ctrl+Z reprend tout."
                                   : "Modifier le projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
-        apply_->setEnabled(p->state == "proposee" && (check_.ok() || anyway));
+        apply_->setEnabled(p->state == "proposee" && (check_.ok() || anyway) && !waiting_);   // 1.20.1 : apres la verification de fond
     }
     if (cancel_) cancel_->setEnabled(p->state == "proposee");
     key_ = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
@@ -918,10 +927,15 @@ void AiPreviewDialog::Update(const menu::FrameContext& f) {
     }
     const std::string key = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
     if (key != key_) refresh();
+    // 1.20.1 : la verification de fond finie : la fenetre se remplit ; en cours : l'avancement (quatre fois par seconde).
+    else if (waiting_ && (!panel_.chat().checking(message_) || f.totalSeconds - lastWait_ >= 0.25 || f.totalSeconds < lastWait_)) {
+        lastWait_ = f.totalSeconds;
+        refresh();
+    }
 }
 
 bool AiPreviewDialog::apply() {
-    if (done_) return false;
+    if (done_ || waiting_) return false;   // 1.20.1 : pas avant la fin de la verification de fond
     const bool ok = panel_.applyProposal(message_);   // une suppression multiple : la confirmation d'abord
     if (ok) finish(true);
     else refresh();

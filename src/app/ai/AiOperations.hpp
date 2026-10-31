@@ -331,6 +331,14 @@ bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, con
 // toujours.
 [[nodiscard]] core::CommandPtr makeCommandLenient(const hmi::DocumentPtr&, const Proposal&, std::vector<std::string>& skipped,
                                                   std::string* why = nullptr, const Env& env = {});
+// 1.20.1 : APPLIQUER SUR UN FIL DE FOND. La proposition appliquee a une COPIE du projet (validation, plan, unites -
+// comme makeCommand) : le projet d'apres, ou nul et `why` (`skipped` non nul : malgre les erreurs). Puis, sur le fil de
+// l'interface, la commande qui pose ce projet d'apres (un Ctrl+Z le reprend d'un coup) - seulement si le projet n'a pas
+// change depuis la copie (a l'appelant de le verifier).
+[[nodiscard]] std::shared_ptr<hmi::Project> appliedCopy(const hmi::Project&, const Proposal&, const Env& env = {}, std::string* why = nullptr,
+                                                        std::vector<std::string>* skipped = nullptr);
+[[nodiscard]] core::CommandPtr commandSetting(const hmi::DocumentPtr&, const Proposal&, std::shared_ptr<const hmi::Project> after,
+                                              std::string* why = nullptr);
 
 // L'apercu : la copie de la vue, modifiee (les objets a supprimer y sont encore).
 struct Preview {

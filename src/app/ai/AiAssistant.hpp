@@ -51,6 +51,8 @@
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
 
+#include <atomic>
+#include <thread>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -162,6 +164,16 @@ public:
     // 1.16.1 : appliquer en laissant de cote ce qui est en erreur (l'option << Appliquer malgre les erreurs >> ; le
     // panneau a demande confirmation). Les erreurs sont notees sous la reponse et dans le journal d'activite.
     bool applyIgnoringErrors(int message, std::string* why = nullptr);
+    // 1.20.1 : APPLIQUER SUR UN FIL DE FOND (une grosse proposition, au moins kBackgroundOps operations) : la proposition
+    // est appliquee a une copie du projet, l'interface reste libre (la carte montre l'avancement) ; au tick, si le
+    // projet n'a pas change depuis, UNE commande pose le resultat (un Ctrl+Z le reprend) - sinon rien n'est applique,
+    // c'est dit. Faux : pas de fil de fond (petite proposition, environnement non figeable, une autre en cours) - appliquer
+    // directement (apply).
+    bool applyInBackground(int message, bool ignoringErrors, std::string* why = nullptr);
+    [[nodiscard]] bool  applying(int message) const;
+    [[nodiscard]] bool  applyingAny() const noexcept { return applyJob_ != nullptr; }
+    [[nodiscard]] float applyProgress() const;
+    static constexpr std::size_t kBackgroundOps = 40;
     bool refuse(int message);
     // 1.16.1 : REVENIR SUR UN REFUS (un refus par megarde) - la proposition redevient << proposee >> ; la carte la
     // revalide (une vue changee depuis : elle le dit, et propose de redemander).
@@ -279,6 +291,9 @@ public:
 private:
     Conversation* cur() noexcept;
     bool          applyWith(int message, std::string* why, bool ignoringErrors);   // 1.16.1
+    bool          afterApply(Conversation& c, int message, plan::Plan pl, const std::optional<hmi::Project>& before,
+                             const std::vector<std::string>& skipped);             // 1.20.1 : la suite (sur le fil de l'interface)
+    void          pollApply();                                                       // 1.20.1
     Conversation* generatingConversation() noexcept;
     Conversation* touch(Conversation& c);   // la date ; la liste retriee : rend la conversation (deplacee)
     void save(Conversation& c);
@@ -341,6 +356,23 @@ private:
     ProviderFactory                        providerFactory_;
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil
+    // 1.20.1 : l'application de fond en cours (une a la fois).
+    struct ApplyJob {
+        std::string                         conversation, proposalId;
+        int                                 message{-1};
+        bool                                ignoringErrors{false};
+        std::uint64_t                       revision{0};
+        std::shared_ptr<const hmi::Project> before;
+        std::atomic<std::size_t>            done{0};
+        std::size_t                         total{1};
+        std::atomic<bool>                   finished{false};
+        std::shared_ptr<hmi::Project>       result;
+        std::string                         why;
+        std::vector<std::string>            skipped;
+        plan::Plan                          plan;
+        std::thread                         worker;
+    };
+    std::shared_ptr<ApplyJob> applyJob_;
     std::unique_ptr<ModelQuery>            modelQuery_;
     std::optional<ModelsResult>            models_;
     std::uint64_t                          modelsRev_{0};
