@@ -166,6 +166,7 @@ std::vector<std::string> wrapPlainLine(const std::string& text, gfx::FontId f, f
 // Les boutons d'une carte, de gauche a droite, a la ligne quand ils ne tiennent pas (le bord
 // droit de la carte n'est jamais depasse : "Refuser" a 1280 x 800).
 constexpr float kBtnH = 28.f, kBtnGap = 6.f, kNoteH = 18.f;
+constexpr const char* kDetectText = "D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6";   // 1.18.0
 constexpr std::size_t kNoteLines = 4;   // les lignes d'une note, au plus (le reste : l'apercu)
 std::vector<gfx::Rect> flowButtons(const std::vector<std::string>& labels, float width) {
     std::vector<gfx::Rect> out;
@@ -1087,6 +1088,30 @@ bool AiPanel::unrefuseProposal(int message) {
     return ok;
 }
 
+bool AiPanel::canDetect(int message) const {
+    const Proposal* p = assistant_->proposal(message);
+    if (!p || p->state != "appliquee" || !ui_.openScan) return false;
+    const auto st = assistant_->appliedState(message);
+    return st != Assistant::Applied::Undone && !proposedDetections(*p).empty();
+}
+
+bool AiPanel::detectFromProposal(int message) {
+    // 1.18.0 : la detection des equipements est une action de l'utilisateur. L'IA l'a PROPOSEE ;
+    // ce bouton ouvre le scanner, la plage remplie, et c'est l'utilisateur qui clique Demarrer.
+    if (!canDetect(message)) return false;
+    const Proposal* p = assistant_->proposal(message);
+    const auto found = proposedDetections(*p);
+    const auto& [equipment, range] = found.front();
+    std::string why;
+    if (!ui_.openScan(equipment, range, &why)) {
+        say(why.empty() ? std::string("Le scanner n'a pas pu s'ouvrir.") : why);
+        return false;
+    }
+    say("Communication \xE2\x80\xBA Scanner IP" + (range.empty() ? std::string{} : " : la plage " + range + " est remplie")
+        + ". Rien n'est parti sur le r\xC3\xA9seau : clique D\xC3\xA9marrer pour lancer la d\xC3\xA9tection.");
+    return true;
+}
+
 void AiPanel::editRequest(int message) {
     const Proposal* p = assistant_->proposal(message);
     if (!p) return;
@@ -1761,9 +1786,11 @@ void AiChatView::measure() {
                                 break;
                             case Assistant::Applied::Changed:
                                 done = "Appliqu\xC3\xA9" "e ; la vue a chang\xC3\xA9 depuis (d'autres modifications, ou elle n'existe plus).";
+                                if (panel_.canDetect(static_cast<int>(i))) b.buttons = {kDetectText};   // 1.18.0
                                 break;
                             case Assistant::Applied::Applied:
                                 done = "Appliqu\xC3\xA9" "e au projet : Ctrl+Z la reprend d'un coup.";
+                                if (panel_.canDetect(static_cast<int>(i))) b.buttons = {kDetectText};   // 1.18.0
                                 break;
                             default:
                                 done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
@@ -1844,7 +1871,8 @@ void AiChatView::rebuild() {
             });
             links_ += cb.apply->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
-                if (cards_[k].refused) (void)panel_.unrefuseProposal(cards_[k].message);   // 1.16.1
+                if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
+                else if (cards_[k].refused) (void)panel_.unrefuseProposal(cards_[k].message);   // 1.16.1
                 else if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
                 else (void)panel_.applyProposal(cards_[k].message);
             });
@@ -1858,6 +1886,18 @@ void AiChatView::rebuild() {
         CardButtons& cb = cards_[slot++];
         cb.message = b.message;
         cb.refused = p->state == "refusee";
+        cb.detect = false;
+        if (p->state == "appliquee" && panel_.canDetect(b.message)) {   // 1.18.0 : appliquee, une detection proposee
+            cb.detect = true;
+            cb.undone = false;
+            cb.stale = false;
+            cb.apply->setText(kDetectText);
+            cb.apply->setTooltip("Ouvrir Communication \xE2\x80\xBA Scanner IP, la plage propos\xC3\xA9" "e remplie. Rien ne part sur le r\xC3\xA9seau "
+                                 "tant que tu n'as pas cliqu\xC3\xA9 D\xC3\xA9marrer.");
+            cb.apply->setEnabled(true);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            continue;
+        }
         cb.undone = p->state != "proposee" && !cb.refused;
         if (cb.refused) {   // 1.16.1 : refusee (par megarde, peut-etre) : Revenir sur le refus, seul
             cb.stale = false;

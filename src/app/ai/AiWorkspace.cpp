@@ -25,6 +25,7 @@
 #include "../App.hpp"
 #include "../BackgroundTasks.hpp"   // 1.16.1 : la cloche (une reponse de l'Assistant arrivee)
 #include "../../core/Edition.hpp"
+#include "../hmi/HmiCommPanes.hpp"   // 1.18.0 : le scanner (Detecter ce qui repond...)
 #include "../hmi/HmiEditor.hpp"
 #include "../screens/Screens.hpp"
 #include "../../domain/ProjectModel.hpp"
@@ -148,6 +149,21 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     ui.close = [this] { showAssistant(false); };
     ui.memoryAvailable = [this] { return app_.actions().find("ia.memoire") != nullptr; };
     ui.openMemory = [this] { (void)app_.actions().trigger("ia.memoire", app_.commands()); };
+    // 1.18.0 : << Detecter ce qui repond... >> d'une carte appliquee : Communication > Scanner IP, la plage remplie.
+    // Le scanner n'est PAS lance : c'est l'utilisateur qui clique Demarrer.
+    ui.openScan = [this](const std::string& equipment, const std::string& range, std::string* why) {
+        openHmiPane("communication");
+        auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"));
+        if (!comm) {
+            if (why) *why = "L'onglet Communication n'a pas pu s'ouvrir (un projet IHM est-il ouvert ?).";
+            return false;
+        }
+        comm->tabs().setCurrentIndex(static_cast<std::size_t>(HmiCommPane::TScanner));
+        if (!range.empty() && !comm->setScanField("plage", range, why)) return false;
+        if (status_)
+            status_->setTransientMessage("Scanner IP : la plage de \xC2\xAB " + equipment + " \xC2\xBB est remplie ; D\xC3\xA9marrer lance la d\xC3\xA9tection.", 8.0);
+        return true;
+    };
     // 1.16.1 : << M'avertir des reponses >> - seulement si l'utilisateur ne regarde pas : la fenetre derriere une autre,
     // le panneau replie, ou une autre conversation ouverte. La cloche (Voir ouvre la conversation) ; la fenetre en
     // arriere-plan : son bouton clignote dans la barre des taches, avec le son de notification du systeme.

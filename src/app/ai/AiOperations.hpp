@@ -259,6 +259,10 @@ struct Env {
 // La vue visee : par son identifiant, sinon par son nom (nul : plus la).
 [[nodiscard]] const hmi::View* targetView(const hmi::Project&, const Proposal&);
 [[nodiscard]] Check validate(const hmi::Project&, const Proposal&, const Env& = {});
+// 1.18.0 : les detections PROPOSEES par une proposition (un equipement cree avec `detecter`) :
+// le nom de l'equipement et la plage a parcourir ("192.168.1.0/24" ; vide : son adresse n'est
+// pas une IPv4). La carte appliquee offre de les lancer - c'est l'utilisateur qui clique.
+[[nodiscard]] std::vector<std::pair<std::string, std::string>> proposedDetections(const Proposal&);
 
 // ---- appliquer -------------------------------------------------------------------
 // Les operations sur `view` (une vue de `project`, ou sa copie) ; les identifiants neufs

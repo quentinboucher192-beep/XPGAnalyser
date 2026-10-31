@@ -126,6 +126,10 @@ public:
         // l'utilisateur ne regarde pas (la cloche, la barre des taches). conversation : son identifiant ; excerpt : le
         // debut de la reponse ; error : elle a fini en erreur.
         std::function<void(const std::string& conversation, const std::string& title, const std::string& excerpt, bool error)> replied;
+        // 1.18.0 : << Detecter ce qui repond... >> (une carte appliquee qui a cree un equipement avec la detection
+        // proposee) : l'ecran ouvre Communication > Scanner IP, la plage remplie - SANS lancer : c'est l'utilisateur qui
+        // clique Demarrer. Faux et `why` : l'onglet n'a pas pu s'ouvrir.
+        std::function<bool(const std::string& equipment, const std::string& range, std::string* why)> openScan;
     };
 
     AiPanel(std::string id, Assistant::Host core, UiHost ui);
@@ -161,6 +165,8 @@ public:
     bool reapplyProposal(int message);             // une proposition annulee (Ctrl+Z) : de nouveau
     bool refuseProposal(int message);
     bool unrefuseProposal(int message);            // 1.16.1 : revenir sur un refus
+    bool detectFromProposal(int message);          // 1.18.0 : ouvrir le scanner (la plage proposee) - sans le lancer
+    [[nodiscard]] bool canDetect(int message) const;   // la carte offre-t-elle << Detecter ce qui repond... >> ?
     // 1.16.1 : REFUSER AVEC UNE QUESTION (la Previsualisation) - << Refuser cette proposition ? >> [Refuser] [Garder] ;
     // Echap ou Garder : rien ne change.
     void askRefuse(int message);
@@ -347,6 +353,7 @@ private:
         bool        stale{false};
         bool        undone{false};        // appliquee puis annulee : `apply` dit Reappliquer
         bool        refused{false};       // 1.16.1 : refusee : `apply` dit Revenir sur le refus
+        bool        detect{false};        // 1.18.0 : appliquee : `apply` dit Detecter ce qui repond...
     };
     void measure();
     void placeCards();             // les boutons des cartes, au decalage du moment

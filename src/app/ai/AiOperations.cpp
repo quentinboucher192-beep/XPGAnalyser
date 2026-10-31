@@ -1811,6 +1811,21 @@ std::string_view actionKey(Operation::Action a) noexcept {
     return "creer";
 }
 
+std::vector<std::pair<std::string, std::string>> proposedDetections(const Proposal& p) {
+    std::vector<std::pair<std::string, std::string>> out;
+    for (const auto& op : p.ops) {
+        if (op.action != Operation::Action::Equipment || !op.detect) continue;
+        std::string host;
+        for (const auto& [k, v] : op.props)
+            if ((k == "adresse" || (k == "ip" && host.empty())) && !trimmed(v).empty()) host = trimmed(v);
+        std::uint32_t ip = 0;
+        std::string range;
+        if (!host.empty() && hmi::equip::parseIpv4(host, ip) && ip != 0) range = hmi::equip::ipv4Text(hmi::equip::networkOf(ip, 24)) + "/24";
+        out.emplace_back(trimmed(op.name), std::move(range));
+    }
+    return out;
+}
+
 bool projectLevel(Operation::Action a) noexcept {
     switch (a) {
         case Operation::Action::View:

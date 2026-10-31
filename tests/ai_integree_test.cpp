@@ -1385,6 +1385,114 @@ void testPlcFile(const char* xpg) {
           "des instances de bloc : dit, par leur nom sans API. (" + r.text + ")");
 }
 
+// ---- 1.18.0 : les outils (les phrases de l'IA integree) --------------------------------------------------------
+void testTools118() {
+    std::printf("[1.18.0 : les outils]\n");
+    using A = ai::Operation::Action;
+    Bench b;
+    std::string why;
+    // un type generique
+    auto r = b.ask("Cr\xC3\xA9" "e un type g\xC3\xA9n\xC3\xA9rique T_Pile<T> avec Valeur en T et Nombre en INT");
+    if (valid(b, r, "type generique")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Type && op->name == "T_Pile" && op->generics == std::vector<std::string>{"T"} && op->members.size() == 2
+                  && op->members[0].type == "T",
+              "T_Pile<T> : le nom, le generique T, le membre Valeur en T (" + (op ? op->name + " g" + std::to_string(op->generics.size()) + " m" + std::to_string(op->members.size())
+                                                                                    + (op->members.empty() ? std::string{} : " " + op->members[0].name + ":" + op->members[0].type) : std::string{}) + ")");
+        check(b.apply(r) && b.doc->project.hmiTypeByName("T_Pile") && b.doc->project.hmiTypeByName("T_Pile")->generics.size() == 1, "applique : T_Pile<T>");
+        (void)b.stack.undo();
+    }
+    // un symbole, une popup (titre, modale, parametres), un en-tete, un pied de page, un ecran modele
+    r = b.ask("Cr\xC3\xA9" "e un symbole Sym_Pompe<T> avec les param\xC3\xA8tres Etat en BOOL et Mesure en T");
+    if (valid(b, r, "symbole")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::View && prop(*op, "role") == "symbole" && op->name == "Sym_Pompe" && op->generics.size() == 1 && op->params.size() == 2
+                  && op->params[1].type == "T",
+              "le symbole : son role, ses generiques, ses parametres");
+        check(b.apply(r) && b.doc->project.viewByName("Sym_Pompe") && b.doc->project.viewByName("Sym_Pompe")->role == "symbole", "applique : le symbole");
+        (void)b.stack.undo();
+    }
+    r = b.ask("Cr\xC3\xA9" "e une popup modale Reglage_Pompe \xC2\xAB R\xC3\xA9glage de la pompe \xC2\xBB");
+    if (valid(b, r, "popup")) {
+        const auto* op = firstOp(r);
+        check(op && prop(*op, "role") == "popup" && op->name == "Reglage_Pompe" && prop(*op, "modale") == "oui" && prop(*op, "titre") == "R\xC3\xA9glage de la pompe",
+              "la popup : modale, son titre");
+    }
+    r = b.ask("Ajoute un en-t\xC3\xAAte");
+    check(r.proposal && firstOp(r) && prop(*firstOp(r), "role") == "entete" && firstOp(r)->name == "Entete", "un en-tete : Entete");
+    r = b.ask("Cr\xC3\xA9" "e un pied de page Pied_Station");
+    check(r.proposal && firstOp(r) && prop(*firstOp(r), "role") == "pied" && firstOp(r)->name == "Pied_Station", "un pied de page nomme");
+    r = b.ask("Cr\xC3\xA9" "e un \xC3\xA9" "cran mod\xC3\xA8le Modele_Process");
+    check(r.proposal && firstOp(r) && prop(*firstOp(r), "role") == "modele" && firstOp(r)->name == "Modele_Process", "un ecran modele");
+    // pas un outil : "fais clignoter le voyant quand l'alarme..." ne cree pas d'alarme
+    r = b.ask("Fais clignoter Bouton_1 quand l'alarme Defaut_V1 est vraie");
+    check(countOps(r, A::Alarm) == 0, "\"quand l'alarme\" : pas une alarme neuve");
+    // un equipement, la detection PROPOSEE
+    r = b.ask("Cr\xC3\xA9" "e un \xC3\xA9quipement Centrale_1 en 192.168.1.40, port 502, esclave 3, et d\xC3\xA9tecte ce qui r\xC3\xA9pond");
+    if (valid(b, r, "equipement")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Equipment && op->name == "Centrale_1" && prop(*op, "adresse") == "192.168.1.40" && prop(*op, "esclave") == "3"
+                  && prop(*op, "port") == "502" && op->detect,
+              "l'equipement : nom, adresse, port, esclave, detection proposee");
+        const auto det = ai::proposedDetections(*r.proposal);
+        check(det.size() == 1 && det[0].second == "192.168.1.0/24", "la plage proposee : 192.168.1.0/24");
+        check(r.text.find("c'est toi qui") != std::string::npos, "la reponse dit que l'utilisateur lance la detection");
+        check(b.apply(r) && b.doc->project.equipmentByName("Centrale_1"), "applique : l'equipement");
+    }
+    r = b.ask("Cr\xC3\xA9" "e un \xC3\xA9quipement Automate_2");
+    check(!r.proposal && r.text.find("adresse IP") != std::string::npos, "sans adresse : la question");
+    // des adresses : la variable doit exister ; plusieurs : la suite
+    r = b.ask("Lie Niveau_Cuve_1 et Niveau_Cuve_2 \xC3\xA0 l'\xC3\xA9quipement Centrale_1 en %MW100");
+    if (valid(b, r, "adresses")) {
+        check(countOps(r, A::Address) == 2 && prop(r.proposal->ops[0], "adresse") == "%MW100" && prop(r.proposal->ops[1], "adresse").empty(),
+              "deux adresses : %MW100 puis a la suite");
+        check(b.apply(r) && !b.doc->project.variable("Niveau_Cuve_1")->address.empty(), "applique : Niveau_Cuve_1 adressee");
+        (void)b.stack.undo();
+    }
+    r = b.ask("Lie Niveau_Inexistant_9 \xC3\xA0 Centrale_1 en %MW200");
+    check(!r.proposal && r.text.find("Niveau_Inexistant_9") != std::string::npos, "une variable inconnue : jamais inventee");
+    (void)b.stack.undo();   // l'equipement
+    // une alarme (la condition dite en francais), un script, une fonction
+    r = b.ask("Cr\xC3\xA9" "e une alarme Niveau_Haut quand Niveau_Cuve_1 d\xC3\xA9passe 90 avec le message \xC2\xAB Cuve 1 pleine \xC2\xBB, priorit\xC3\xA9 1");
+    if (valid(b, r, "alarme")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Alarm && op->name == "Niveau_Haut" && prop(*op, "condition") == "Niveau_Cuve_1 > 90" && prop(*op, "message") == "Cuve 1 pleine"
+                  && prop(*op, "priorite") == "1",
+              "l'alarme : condition > 90, message, priorite");
+    }
+    r = b.ask("Cr\xC3\xA9" "e une alarme Fuite quand Variable_Absente > 3");
+    check(!r.proposal, "une condition sur une variable inconnue : refusee (" + r.text.substr(0, 60) + ")");
+    r = b.ask("Cr\xC3\xA9" "e un script Surveillance toutes les 5 secondes");
+    if (valid(b, r, "script cyclique")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Script && op->name == "Surveillance" && prop(*op, "evenement") == "Cyclique" && prop(*op, "periode") == "5000",
+              "le script : cyclique, 5000 ms");
+    }
+    r = b.ask("Cr\xC3\xA9" "e un script Init au d\xC3\xA9marrage");
+    check(r.proposal && firstOp(r) && prop(*firstOp(r), "evenement") == "Demarrage", "un script au demarrage");
+    r = b.ask("Cr\xC3\xA9" "e une fonction Plus_Grand<T> avec les param\xC3\xA8tres A en T et B en T qui rend T");
+    if (valid(b, r, "fonction generique")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Function && op->name == "Plus_Grand" && op->generics.size() == 1 && prop(*op, "retour") == "T"
+                  && prop(*op, "corps").find("A : T;") != std::string::npos,
+              "la fonction generique : <T>, retour T, VAR_INPUT (" + (op ? op->name + " g" + std::to_string(op->generics.size()) + " r=" + prop(*op, "retour") + " c=" + prop(*op, "corps") : std::string{}) + ")");
+        check(b.apply(r) && b.doc->project.functionByName("Plus_Grand"), "applique : la fonction");
+        (void)b.stack.undo();
+    }
+    // des dossiers : creer, ranger
+    r = b.ask("Range Vue_Test dans le dossier Process");
+    if (valid(b, r, "ranger")) {
+        const auto* op = firstOp(r);
+        check(op && op->action == A::Store && prop(*op, "dossier") == "Process" && prop(*op, "liste") == "vues" && op->objects == std::vector<std::string>{"Vue_Test"},
+              "ranger : la vue, le dossier, la liste vues");
+    }
+    r = b.ask("Cr\xC3\xA9" "e un dossier Recettes pour les scripts");
+    check(r.proposal && firstOp(r) && firstOp(r)->action == A::Folder && prop(*firstOp(r), "liste") == "scripts", "creer un dossier de scripts");
+    // les variables systeme
+    r = b.ask("Quelles variables syst\xC3\xA8me ?");
+    check(!r.proposal && r.text.find("SYS.") != std::string::npos, "les variables systeme : SYS.xxx");
+}
+
 int main(int argc, char** argv) {
     testCreate();
     testSynoptic();
@@ -1412,6 +1520,7 @@ int main(int argc, char** argv) {
     testUnderstoodFlag();
     testCaptures1161();
     testCorpus();
+    testTools118();
     testPlcFile(argc > 1 ? argv[1] : nullptr);
     std::printf("ai_integree_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

@@ -35,11 +35,14 @@
 #include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiEdit.hpp"
+#include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : une adresse IP, un equipement
+#include "../../hmi/HmiPublicVars.hpp"   // 1.18.0 : les variables systeme
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -689,6 +692,8 @@ struct Memory {
 };
 
 std::string typeWord(const std::string& f);   // un type dit (bool, reel...) -> BOOL, REAL ; vide : aucun
+std::vector<std::string> genericsIn(std::string_view s);   // 1.18.0 : "<T, K>" ; vide : aucun
+std::string withoutGenerics(std::string s);               // 1.18.0 : la demande sans son "<...>"
 
 class Engine {
 public:
@@ -914,6 +919,8 @@ private:
     LocalReply resize() const;
     LocalReply setText() const;
     LocalReply color() const;
+    LocalReply tools() const;        // 1.18.0 : un outil (symbole, popup, equipement, adresse, alarme, script, fonction, dossier)
+    LocalReply listSystem() const;   // 1.18.0 : les variables systeme
     struct NewObject {
         hmi::Kind   kind;
         std::string text, color, name;
@@ -1589,7 +1596,12 @@ LocalReply Engine::help() const {
              "- **aligner, r\xC3\xA9partir, dupliquer, supprimer** : `Aligne les boutons en haut`, `R\xC3\xA9partis les pompes`, "
              "`Duplique P1 3 fois vers la droite`, `Supprime les vannes` ;\n"
              "- **animer** : `Fais clignoter V1 quand Defaut_V1`, `P1 verte si Pompe_1_Marche sinon rouge` ;\n"
-             "- des **questions** : `Combien d'objets ?`, `Quelles variables ?`, `Quels genres d'objets ?`.\n"
+             // 1.18.0 : les outils
+             "- **les outils du projet** : `Cr\xC3\xA9" "e un symbole Sym_Pompe<T>`, `Cr\xC3\xA9" "e une popup modale Reglage_P1`, "
+             "`Ajoute un en-t\xC3\xAAte`, `Cr\xC3\xA9" "e un \xC3\xA9quipement Centrale_1 en 192.168.1.40` (et `d\xC3\xA9tecte ce qui r\xC3\xA9pond` : "
+             "c'est toi qui lances), `Lie Niveau_Cuve_1 \xC3\xA0 Centrale_1 en %MW100`, `Cr\xC3\xA9" "e une alarme Haut quand Niveau_Cuve_1 > 90`, `Cr\xC3\xA9" "e un script Init au d\xC3\xA9marrage`, `Cr\xC3\xA9" "e une fonction Plus_Grand<T>`, "
+             "`Range Vue_1 dans le dossier Process` ;\n"
+             "- des **questions** : `Combien d'objets ?`, `Quelles variables ?`, `Quels genres d'objets ?`, `Quelles variables syst\xC3\xA8me ?`.\n"
              "Je cherche les noms dans ton projet (sans casse ni accents, `P1` pour `Pompe_1`) et **je n'invente jamais une "
              "variable** ; un objet que je ne trouve pas, je le dis. Chaque proposition passe par l'aper\xC3\xA7u, et **Ctrl+Z** la "
              "reprend d'un coup. Pour des demandes plus libres, branche une IA en ligne ou sur ce PC (Param\xC3\xA8tres de "
@@ -2665,7 +2677,7 @@ LocalReply Engine::createType() const {
             for (auto& tk : tokenize(piece)) u.push_back(std::move(tk));
             piece.clear();
         };
-        for (const char c : request_) {
+        for (const char c : withoutGenerics(request_)) {   // 1.18.0 : "T_Pile<T>" : le nom, puis les generiques a part
             if (c == ',' || c == ';' || c == '\n' || c == '(' || c == ')') {
                 flush();
                 u.push_back({",", ",", false});
@@ -2677,8 +2689,11 @@ LocalReply Engine::createType() const {
     }
     const std::size_t at = typeNoun(u);
     if (at == std::string::npos) return notUnderstood();
+    const std::vector<std::string> gens = genericsIn(request_);   // 1.18.0 : un type generique (T_Pile<T>)
     const auto typeOf = [&](const Tok& tk) -> std::string {
         if (tk.quoted) return {};
+        for (const auto& g : gens)
+            if (tk.raw == g) return g;   // un membre "en T"
         if (std::string ty = typeWord(tk.f); !ty.empty()) return ty;
         if (const auto* ht = in_.project->hmiTypeByName(tk.raw)) return ht->name;
         return {};
@@ -2937,6 +2952,7 @@ LocalReply Engine::createType() const {
     op.action = Operation::Action::Type;
     op.name = name;
     op.members = members;
+    op.generics = gens;
     if (model && (fromModel || !added.empty())) op.props.emplace_back("description", model->description);
     p.ops.push_back(std::move(op));
     std::vector<std::string> list;
@@ -3669,6 +3685,575 @@ LocalReply Engine::color() const {
     return finish(std::move(p), std::move(text));
 }
 
+// ---- 1.18.0 : les outils (symbole, popup, en-tete, pied, ecran modele, equipement, adresse, alarme, script, fonction,
+// dossier, ranger ; les variables systeme) -----------------------------------------------------------------------------
+// Les morceaux ecrits tels quels (une adresse IP, %MW100, <T, K>, une condition) se lisent dans la demande brute ; les
+// mots (les verbes, les noms communs) dans les mots replies. Rien n'est invente : un nom de variable, d'equipement,
+// d'element du projet doit exister (la validation le refuse sinon, et la reponse le dit).
+
+// Les generiques ecrits "<T>", "<T, K>" (le premier groupe de la demande) ; vide : aucun.
+std::vector<std::string> genericsIn(std::string_view s) {
+    std::vector<std::string> out;
+    const auto open = s.find('<');
+    if (open == std::string_view::npos) return out;
+    const auto close = s.find('>', open);
+    if (close == std::string_view::npos) return out;
+    // "<T>" colle a un nom (T_Pile<T>), ou isole apres "generique" : jamais une comparaison ("Niveau < 10")
+    const std::string_view inner = s.substr(open + 1, close - open - 1);
+    std::string cur;
+    bool ok = !inner.empty();
+    for (const char c : inner) {
+        if (c == ',') {
+            if (cur.empty()) ok = false;
+            out.push_back(cur);
+            cur.clear();
+        } else if (c != ' ') {
+            if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) ok = false;
+            cur += c;
+        }
+    }
+    if (cur.empty()) ok = false;
+    out.push_back(cur);
+    if (!ok || out.size() > 4) return {};
+    for (const auto& g : out)
+        if (!hmi::isIdentifier(g) || std::isdigit(static_cast<unsigned char>(g[0])) || g.size() > 16) return {};
+    return out;
+}
+
+// La demande sans son groupe "<...>" de generiques (les mots ne le voient pas comme une comparaison).
+std::string withoutGenerics(std::string s) {
+    if (genericsIn(s).empty()) return s;
+    const auto open = s.find('<');
+    const auto close = s.find('>', open);
+    s.erase(open, close - open + 1);
+    // "un type generique T_Pile<T>" : l'adjectif n'est ni le nom ni ce que le type decrit
+    for (const std::string_view w : {" g\xC3\xA9n\xC3\xA9riques", " g\xC3\xA9n\xC3\xA9rique", " generiques", " generique"})
+        for (auto p = s.find(w); p != std::string::npos; p = s.find(w, p)) s.erase(p, w.size());
+    return s;
+}
+
+// Une adresse IPv4 ecrite (192.168.1.40) ; vide : aucune.
+std::string ipIn(const std::vector<Tok>& t) {
+    for (const auto& tk : t) {
+        std::uint32_t ip = 0;
+        if (!tk.quoted && std::count(tk.raw.begin(), tk.raw.end(), '.') == 3 && hmi::equip::parseIpv4(tk.raw, ip)) return tk.raw;
+    }
+    return {};
+}
+
+// Les adresses d'automate ecrites (%MW100, %M10, %MD20, %I0.3) : la demande brute.
+std::vector<std::string> plcAddressesIn(std::string_view s) {
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        if (s[i] != '%') continue;
+        std::size_t j = i + 1;
+        while (j < s.size() && (std::isalnum(static_cast<unsigned char>(s[j])) || s[j] == '.' || s[j] == ':')) ++j;
+        while (j > i + 1 && s[j - 1] == '.') --j;   // le point de la fin de phrase
+        if (j > i + 2) out.emplace_back(s.substr(i, j - i));
+        i = j;
+    }
+    return out;
+}
+
+// Le nombre ecrit apres un mot ("port 502", "esclave 3", "priorite 2") ; -1 : aucun.
+long long numberAfter(const std::vector<Tok>& t, std::initializer_list<std::string_view> words) {
+    for (std::size_t i = 0; i + 1 < t.size(); ++i)
+        for (const auto w : words)
+            if (t[i].f == w) {
+                std::size_t k = i + 1;
+                if (k + 1 < t.size() && (t[k].f == "id" || t[k].f == "de" || t[k].f == "a" || t[k].f == "en" || t[k].f == "numero")) ++k;
+                if (isDigits(t[k].f) && t[k].f.size() <= 9) return std::stoll(t[k].f);
+            }
+    return -1;
+}
+
+// Le nom donne a l'element (le mot apres son nom commun, "nomme X", "appele X", un texte entre guillemets) ;
+// vide : aucun. `nounAt` : la place du nom commun (symbole, popup, alarme...).
+std::string nameAfter(const std::vector<Tok>& t, std::size_t nounAt) {
+    for (std::size_t i = 0; i + 1 < t.size(); ++i)
+        if (!t[i].quoted && (t[i].f.rfind("appel", 0) == 0 || t[i].f.rfind("nomm", 0) == 0) && t[i + 1].f != "a")
+            return t[i + 1].quoted ? sanitize(t[i + 1].raw) : t[i + 1].raw;
+    if (nounAt == std::string::npos) return {};
+    for (std::size_t i = nounAt + 1; i < t.size() && i <= nounAt + 3; ++i) {
+        const Tok& tk = t[i];
+        if (tk.quoted) return {};   // un titre, un message : pas le nom
+        if (stopWord(tk.f) || tk.f == "nouveau" || tk.f == "nouvelle" || tk.f == "generique" || tk.f == "general" || tk.f == "generale" || tk.f == "ihm"
+            || tk.f == "modale" || tk.f == "modal" || tk.f == "cyclique" || tk.f == "simule" || tk.f == "modbus" || tk.f == "tcp")
+            continue;
+        const auto c0 = static_cast<unsigned char>(tk.raw[0]);
+        if ((tk.raw.find('_') != std::string::npos || std::isupper(c0)) && hmi::isIdentifier(tk.raw)) return tk.raw;
+        return {};
+    }
+    return {};
+}
+
+// Un nom libre : base_1, base_2... (rien du meme nom dans `taken`).
+std::string freeName(const std::string& base, const std::function<bool(const std::string&)>& taken) {
+    if (!taken(base)) return base;
+    for (int n = 1; n < 1000; ++n)
+        if (const std::string s = base + "_" + std::to_string(n); !taken(s)) return s;
+    return base;
+}
+
+// Les parametres ecrits "Valeur : REAL, Titre : STRING" (ou "Valeur en REAL et Titre en STRING") apres le mot
+// "parametre(s)" ; vide : aucun. Le type peut etre un generique (T).
+std::vector<Operation::VariableSpec> paramsIn(const std::vector<Tok>& t, const std::vector<std::string>& generics, const hmi::Project* project) {
+    std::vector<Operation::VariableSpec> out;
+    std::size_t at = std::string::npos;
+    for (std::size_t i = 0; i < t.size() && at == std::string::npos; ++i)
+        if (t[i].f == "parametre" || t[i].f == "parametres") at = i;
+    if (at == std::string::npos) return out;
+    const auto typeOf = [&](const Tok& tk) -> std::string {
+        if (tk.quoted) return {};
+        for (const auto& g : generics)
+            if (tk.raw == g) return g;
+        if (std::string ty = typeWord(tk.f); !ty.empty()) return ty;
+        if (project)
+            if (const auto* ht = project->hmiTypeByName(tk.raw)) return ht->name;
+        return {};
+    };
+    for (std::size_t i = at + 1; i + 1 < t.size(); ++i) {
+        const Tok& tk = t[i];
+        // "qui rend T", "retourne un REAL" : la fin des parametres
+        if (tk.f == "qui" || tk.f.rfind("rend", 0) == 0 || tk.f.rfind("retourn", 0) == 0 || tk.f.rfind("renvoi", 0) == 0) break;
+        const bool lowerWord = std::none_of(tk.raw.begin(), tk.raw.end(), [](char c) { return std::isupper(static_cast<unsigned char>(c)); });
+        if (tk.quoted || (stopWord(tk.f) && lowerWord) || !hmi::isIdentifier(tk.raw)) continue;
+        std::size_t k = i + 1;
+        if (k < t.size() && (t[k].f == "en" || t[k].f == "de")) ++k;
+        if (k < t.size() && t[k].f == "type") ++k;
+        if (k >= t.size()) break;
+        const std::string ty = typeOf(t[k]);
+        if (ty.empty()) continue;
+        Operation::VariableSpec v;
+        v.name = tk.raw;
+        v.type = ty;
+        out.push_back(std::move(v));
+        i = k;
+    }
+    return out;
+}
+
+// La condition ecrite apres "quand", "si", "lorsque" (jusqu'au message, a la priorite, a la fin) - la demande
+// brute, les comparaisons dites en francais remplacees ("depasse" : >). Vide : aucune.
+std::string conditionIn(const std::string& request) {
+    std::string low;
+    for (const char c : request) low += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::size_t at = std::string::npos, len = 0;
+    for (const std::string_view w : {" quand ", " si ", " lorsque ", " lorsqu'", " des que ", " d\xC3\xA8s que "}) {
+        const auto p = low.find(w);
+        if (p != std::string::npos && (at == std::string::npos || p < at)) {
+            at = p;
+            len = w.size();
+        }
+    }
+    if (at == std::string::npos) return {};
+    std::string cond = request.substr(at + len);
+    std::string lc = low.substr(at + len);
+    for (const std::string_view stop : {" avec ", " message", " priorit", ", ", " (", " dans le groupe", " groupe ", "\xC2\xAB", "\""}) {
+        if (const auto p = lc.find(stop); p != std::string::npos) {
+            cond.resize(p);
+            lc.resize(p);
+        }
+    }
+    const auto swap = [&](std::string_view from, std::string_view to) {
+        for (auto p = lc.find(from); p != std::string::npos; p = lc.find(from, p + to.size())) {
+            cond.replace(p, from.size(), to);
+            lc.replace(p, from.size(), to);
+        }
+    };
+    swap(" est sup\xC3\xA9rieur \xC3\xA0 ", " > ");
+    swap(" sup\xC3\xA9rieur \xC3\xA0 ", " > ");
+    swap(" superieur a ", " > ");
+    swap(" d\xC3\xA9passe ", " > ");
+    swap(" depasse ", " > ");
+    swap(" plus grand que ", " > ");
+    swap(" est inf\xC3\xA9rieur \xC3\xA0 ", " < ");
+    swap(" inf\xC3\xA9rieur \xC3\xA0 ", " < ");
+    swap(" inferieur a ", " < ");
+    swap(" plus petit que ", " < ");
+    swap(" passe sous ", " < ");
+    swap(" est \xC3\xA9gal \xC3\xA0 ", " = ");
+    swap(" \xC3\xA9gal \xC3\xA0 ", " = ");
+    swap(" egal a ", " = ");
+    swap(" vaut ", " = ");
+    swap(" et ", " AND ");
+    swap(" ou ", " OR ");
+    while (!cond.empty() && (cond.back() == ' ' || cond.back() == '.' || cond.back() == '?' || cond.back() == '!')) cond.pop_back();
+    while (!cond.empty() && cond.front() == ' ') cond.erase(0, 1);
+    // "Pompe_1_Defaut est vrai" : la variable seule ; "est faux" : NOT
+    const auto ends = [&](std::string_view w) { return lc.size() >= w.size() && lc.compare(lc.size() - w.size(), w.size(), w) == 0; };
+    while (!lc.empty() && (lc.back() == ' ' || lc.back() == '.' || lc.back() == '?' || lc.back() == '!')) lc.pop_back();
+    if (ends(" est vrai") || ends(" est a 1") || ends(" est \xC3\xA0 1")) cond.resize(cond.rfind(" est "));
+    else if (ends(" est faux") || ends(" est a 0") || ends(" est \xC3\xA0 0")) cond = "NOT " + cond.substr(0, cond.rfind(" est "));
+    return cond;
+}
+
+LocalReply Engine::tools() const {
+    // Appelee quand la demande parle d'un outil (le nom commun, et un verbe) ; une reponse vide (pas de texte) : ce
+    // n'est pas une demande d'outil, l'aiguillage continue.
+    if (!in_.project) return {};
+    const hmi::Project& pr = *in_.project;
+    const bool createVerb = hasPrefix("ajout") || hasPrefix("rajout") || hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("genere")
+                         || hasPrefix("fabriqu") || phrase("il me faut") || phrase("je veux") || has("voudrais") || has("aimerais") || has("fais")
+                         || hasPrefix("prepar") || hasPrefix("prevoi") || hasPrefix("defini") || has("besoin") || hasPrefix("nouve");
+    const std::vector<std::string> gens = genericsIn(request_);
+    // un element NEUF : "un symbole", "une nouvelle alarme", "des scripts" ; "le symbole X" seulement avec un vrai verbe
+    // de creation ("cree le symbole X") - "fais clignoter le voyant quand l'alarme..." ne cree pas d'alarme.
+    const bool strongCreate = hasPrefix("cree") || has("creer") || has("cre") || hasPrefix("genere") || hasPrefix("ajout") || hasPrefix("defini");
+    const std::size_t typeAt = typeNoun(t_);   // "un type T_Cuve avec ... une alarme haute" : un membre, pas une alarme
+    const auto introduced = [&](std::size_t at) {
+        if (at == std::string::npos || at == 0) return false;
+        if (typeAt != std::string::npos && typeAt < at) return false;
+        std::size_t k = at - 1;
+        if ((t_[k].f == "nouveau" || t_[k].f == "nouvelle" || t_[k].f == "petit" || t_[k].f == "petite") && k > 0) --k;
+        const std::string& w = t_[k].f;
+        if (w == "un" || w == "une" || w == "des" || w == "nouveau" || w == "nouvelle" || w == "d" || w == "mon" || w == "ma") return true;
+        return strongCreate && (w == "l" || w == "le" || w == "la" || w == "les" || w == "cree" || w == "creer" || w == "ajoute");
+    };
+    // -- RANGER : "range les vues Vue_1 et Vue_2 dans le dossier Process", "mets Init dans le dossier Scripts/Demarrage"
+    const std::size_t folderAt = indexOf("dossier") != std::string::npos ? indexOf("dossier") : indexOf("repertoire");
+    const bool storeVerb = hasPrefix("rang") || hasPrefix("class") || hasPrefix("deplac") || has("mets") || has("met") || has("mettre");
+    if (folderAt != std::string::npos && (storeVerb || createVerb)) {
+        std::string path;
+        if (folderAt + 1 < t_.size()) path = t_[folderAt + 1].quoted ? t_[folderAt + 1].raw : t_[folderAt + 1].raw;
+        // la liste dite ("les vues", "les scripts") ; sinon celle du premier element nomme
+        struct Item { std::string name, list; };
+        std::vector<Item> items;
+        const auto listOfView = [](const hmi::View& v) -> std::string {
+            if (v.role == "popup") return "popups";
+            if (v.role == "symbole") return "symboles";
+            if (v.role == "modele") return "ecrans_modeles";
+            if (v.role == "entete") return "entetes";
+            if (v.role == "pied") return "pieds";
+            return "vues";
+        };
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            if (i == folderAt + 1) continue;
+            const std::string& n = t_[i].raw;
+            if (const auto* v = pr.viewByName(n)) items.push_back({v->name, listOfView(*v)});
+            else if (const auto* s = pr.generalScript(n)) items.push_back({s->name, "scripts"});
+            else if (const auto* ht = pr.hmiTypeByName(n)) items.push_back({ht->name, "types"});
+            else if (const auto* var = pr.variable(n)) items.push_back({var->name, "variables"});
+        }
+        std::string list;
+        for (const auto& [word, key] : std::initializer_list<std::pair<std::string_view, std::string_view>>{
+                 {"vues", "vues"}, {"popups", "popups"}, {"symboles", "symboles"}, {"scripts", "scripts"}, {"types", "types"},
+                 {"variables", "variables"}, {"styles", "styles"}, {"ressources", "ressources"}})
+            if (has(word) && list.empty()) list = std::string(key);
+        if (list.empty() && !items.empty()) list = items.front().list;
+        if (list.empty()) list = "vues";
+        std::erase_if(items, [&](const Item& it) { return it.list != list; });
+        if (path.empty() || path == "dossier") return ask("Quel dossier ? Par exemple `Range les vues Vue_1 et Vue_2 dans le dossier Process`.");
+        Proposal p = base((storeVerb ? "Ranger dans " : "Cr\xC3\xA9" "er le dossier ") + path);
+        Operation op;
+        op.props = {{"liste", list}, {"dossier", path}};
+        std::string text;
+        if (storeVerb && !items.empty()) {
+            op.action = Operation::Action::Store;
+            std::vector<std::string> names;
+            for (const auto& it : items) {
+                op.objects.push_back(it.name);
+                names.push_back(it.name);
+            }
+            text = "Je propose de ranger " + codes(names) + " dans le dossier **" + path + "** (" + list + ").";
+        } else if (storeVerb && (phrase("toutes les") || phrase("tous les"))) {
+            op.action = Operation::Action::Store;
+            std::vector<std::string> names;
+            if (list == "scripts") {
+                for (const auto& s : pr.programs.scripts) names.push_back(s.name);
+            } else if (list == "types") {
+                for (const auto& ty : pr.programs.types) names.push_back(ty.name);
+            } else if (list == "variables") {
+                for (const auto& v : pr.programs.variables) names.push_back(v.name);
+            } else {
+                for (const auto& v : pr.views)
+                    if (listOfView(v) == list) names.push_back(v.name);
+            }
+            if (names.empty()) return ask("Il n'y a rien \xC3\xA0 ranger dans la liste " + list + ".");
+            op.objects = names;
+            text = "Je propose de ranger " + plural(names.size(), "\xC3\xA9l\xC3\xA9ment", "\xC3\xA9l\xC3\xA9ments") + " (" + list + ") dans le dossier **" + path + "**.";
+        } else if (storeVerb) {
+            return ask("Que faut-il ranger dans **" + path + "** ? Nomme les \xC3\xA9l\xC3\xA9ments (des vues, des scripts, des types...) : "
+                       "`Range Vue_1 et Vue_2 dans le dossier " + path + "`.");
+        } else {
+            op.action = Operation::Action::Folder;
+            text = "Je propose de cr\xC3\xA9" "er le dossier **" + path + "** dans la liste " + list + ".";
+        }
+        p.ops.push_back(std::move(op));
+        return finish(std::move(p), text + "\nCtrl+Z le reprend.");
+    }
+    // -- un SYMBOLE, une POPUP, un EN-TETE, un PIED DE PAGE, un ECRAN MODELE
+    std::string role, noun;
+    std::size_t nounAt = std::string::npos;
+    if ((nounAt = indexOf("symbole")) != std::string::npos) { role = "symbole"; noun = "le symbole"; }
+    else if ((nounAt = indexOf("popup")) != std::string::npos || (nounAt = indexOf("pop")) != std::string::npos) { role = "popup"; noun = "la popup"; }
+    else if ((nounAt = indexOf("entete")) != std::string::npos || (phrase("en tete") && (nounAt = indexOf("tete")) != std::string::npos)) {
+        role = "entete";
+        noun = "l'en-t\xC3\xAAte";
+    } else if (phrase("pied de page") && (nounAt = indexOf("page")) != std::string::npos) { role = "pied"; noun = "le pied de page"; }
+    else if ((phrase("ecran modele") || phrase("vue modele") || phrase("modele de vue") || phrase("modele d ecran") || phrase("modele de page"))
+             && (nounAt = indexOf("modele")) != std::string::npos) {
+        if (nounAt + 2 < t_.size() && (t_[nounAt + 1].f == "de" || t_[nounAt + 1].f == "d")) nounAt += 2;
+        role = "modele";
+        noun = "l'\xC3\xA9" "cran mod\xC3\xA8le";
+    }
+    // le premier mot du nom commun (l'article le precede) : "un en-tete", "un pied de page", "un ecran modele", "un modele de vue"
+    std::size_t introAt = nounAt;
+    if (role == "entete" && nounAt > 0 && t_[nounAt].f == "tete") introAt = nounAt - 1;
+    if (role == "pied") introAt = indexOf("pied");
+    if (role == "modele") {
+        const std::size_t m = indexOf("modele");
+        introAt = m;
+        if (m > 0 && (t_[m - 1].f == "ecran" || t_[m - 1].f == "vue")) introAt = m - 1;
+    }
+    if (!role.empty() && createVerb && introduced(introAt) && !hasPrefix("instanc") && !phrase("dans la vue") && !phrase("sur la vue")) {
+        std::string name = nameAfter(t_, nounAt);
+        if (role == "pied" && name == "Page") name.clear();
+        const auto taken = [&](const std::string& n) { return pr.viewByName(n) != nullptr; };
+        if (name.empty()) {
+            const std::string b = role == "symbole" ? "Symbole" : role == "popup" ? "Popup" : role == "entete" ? "Entete" : role == "pied" ? "Pied_de_page" : "Modele";
+            name = freeName(role == "entete" || role == "pied" ? b : b + "_1", taken);
+            if ((role == "symbole" || role == "popup" || role == "modele") && name == b + "_1" && taken(name)) name = freeName(b, taken);
+        }
+        if (taken(name)) return ask(code(name) + " existe d\xC3\xA9j\xC3\xA0 dans le projet. Choisis un autre nom.");
+        Proposal p = base("Cr\xC3\xA9" "er " + noun + " " + name);
+        Operation op;
+        op.action = Operation::Action::View;
+        op.name = name;
+        op.props = {{"role", role}};
+        std::string detail;
+        if (role == "popup") {
+            for (const auto& tk : t_)
+                if (tk.quoted) {
+                    op.props.emplace_back("titre", tk.raw);
+                    detail += ", titre " + guill(tk.raw);
+                    break;
+                }
+            if (hasPrefix("modal")) {
+                op.props.emplace_back("modale", "oui");
+                detail += ", modale";
+            }
+        }
+        if (role == "symbole" || role == "popup") {
+            op.generics = gens;
+            op.params = paramsIn(tokenize(withoutGenerics(request_)), gens, &pr);
+            if (!gens.empty()) detail += ", g\xC3\xA9n\xC3\xA9rique <" + [&] { std::string s; for (const auto& g : gens) s += (s.empty() ? "" : ", ") + g; return s; }() + ">";
+            if (!op.params.empty()) {
+                std::vector<std::string> ps;
+                for (const auto& v : op.params) ps.push_back(v.name + " : " + v.type);
+                detail += ", " + plural(op.params.size(), "param\xC3\xA8tre", "param\xC3\xA8tres") + " (" + joinAnd(ps) + ")";
+            }
+        } else if (!gens.empty()) {
+            return ask("Seuls un symbole et une popup ont des g\xC3\xA9n\xC3\xA9riques (<T>).");
+        }
+        p.ops.push_back(std::move(op));
+        const std::string size = role == "symbole" ? "200\xC3\x97" "200" : role == "popup" ? "600\xC3\x97" "400"
+                               : role == "entete" || role == "pied" ? "la largeur du projet, 100 de haut" : "la taille du projet";
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er " + noun + " **" + name + "** (" + size + detail + ").\n"
+                                        "Il s'ouvrira apr\xC3\xA8s Appliquer ; Ctrl+Z retire tout.");
+    }
+    // -- un EQUIPEMENT : "cree un equipement Centrale_1 en 192.168.1.40, port 502, esclave 3, et detecte ce qui repond"
+    const std::size_t eqAt = indexOf("equipement");
+    const std::vector<std::string> addrs = plcAddressesIn(request_);
+    if (eqAt != std::string::npos && createVerb && introduced(eqAt) && addrs.empty()) {
+        std::string name = nameAfter(t_, eqAt);
+        const auto taken = [&](const std::string& n) { return pr.equipmentByName(n) != nullptr; };
+        if (name.empty()) name = freeName("Equipement_1", taken);
+        const std::string ip = ipIn(t_);
+        const bool simulated = hasPrefix("simul");
+        if (ip.empty() && !simulated)
+            return ask("Quelle adresse IP pour " + code(name) + " ? Par exemple `Cr\xC3\xA9" "e un \xC3\xA9quipement " + name + " en 192.168.1.40`.");
+        Proposal p = base("Cr\xC3\xA9" "er l'\xC3\xA9quipement " + name);
+        Operation op;
+        op.action = Operation::Action::Equipment;
+        op.name = name;
+        op.props = {{"type", has("ethernet") && !has("modbus") ? "ethernet_tcp" : "modbus_tcp"}};
+        if (!ip.empty()) op.props.emplace_back("adresse", ip);
+        if (const long long port = numberAfter(t_, {"port"}); port >= 0) op.props.emplace_back("port", std::to_string(port));
+        if (const long long unit = numberAfter(t_, {"esclave", "unit", "unite"}); unit >= 0) op.props.emplace_back("esclave", std::to_string(unit));
+        if (simulated) op.props.emplace_back("simule", "oui");
+        op.detect = hasPrefix("detect") || phrase("ce qui repond") || phrase("qui repond") || hasPrefix("scann") || hasPrefix("explor");
+        const bool detect = op.detect;
+        p.ops.push_back(std::move(op));
+        std::string text = "Je propose de cr\xC3\xA9" "er l'\xC3\xA9quipement **" + name + "**" + (ip.empty() ? std::string(" (simul\xC3\xA9)") : " en " + ip) + ".";
+        if (detect)
+            text += "\nLa d\xC3\xA9tection de ce qui r\xC3\xA9pond sur son r\xC3\xA9seau est **propos\xC3\xA9" "e** : apr\xC3\xA8s Appliquer, le bouton "
+                    "\xC2\xAB D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6 \xC2\xBB de la carte ouvre le scanner, la plage remplie ; c'est toi qui "
+                    "cliques D\xC3\xA9marrer (rien ne part sur le r\xC3\xA9seau avant).";
+        return finish(std::move(p), text + "\nCtrl+Z le reprend.");
+    }
+    // -- des ADRESSES : "lie Niveau_Cuve_1 a l'equipement Centrale_1 en %MW100", "adresse Consigne en %MW110 sur Centrale_1"
+    if (!addrs.empty() && (eqAt != std::string::npos || hasPrefix("adress") || linkWordAt() != std::string::npos || hasPrefix("reli") || hasPrefix("associ"))) {
+        // l'equipement : un nom du projet ecrit dans la demande ; sinon le seul du projet
+        std::string eq;
+        for (const auto& tk : t_)
+            if (const auto* e = pr.equipmentByName(tk.raw); e && eq.empty()) eq = e->name;
+        if (eq.empty() && eqAt != std::string::npos) eq = nameAfter(t_, eqAt);
+        if (eq.empty() && pr.equipments.size() == 1) eq = pr.equipments.front().name;
+        if (eq.empty())
+            return ask(pr.equipments.empty() ? std::string("Le projet n'a aucun \xC3\xA9quipement : cr\xC3\xA9" "e-le d'abord, par exemple `Cr\xC3\xA9" "e un \xC3\xA9quipement Centrale_1 en 192.168.1.40`.")
+                                             : "Quel \xC3\xA9quipement ? Nomme-le dans la demande (`... sur l'\xC3\xA9quipement " + pr.equipments.front().name + "`).");
+        // les variables IHM nommees (jamais une variable inventee)
+        std::vector<std::string> vars, unknown;
+        for (const auto& tk : t_) {
+            if (tk.quoted || pr.equipmentByName(tk.raw) || tk.raw == eq) continue;
+            if (const auto* v = pr.variable(tk.raw)) {
+                if (std::find(vars.begin(), vars.end(), v->name) == vars.end()) vars.push_back(v->name);
+            } else if (tk.raw.find('_') != std::string::npos && hmi::isIdentifier(tk.raw) && !stopWord(tk.f)) {
+                unknown.push_back(tk.raw);
+            }
+        }
+        if (vars.empty()) {
+            if (!unknown.empty()) {
+                std::string msg = "Je ne trouve pas la variable IHM " + code(unknown.front()) + " (je n'invente pas de variable)";
+                if (const auto near = nearVariables(pr, unknown.front()); !near.empty()) msg += " ; les plus proches : " + codes(near);
+                return ask(msg + ".");
+            }
+            return ask("Quelle variable IHM lier \xC3\xA0 " + code(eq) + " ? Par exemple `Lie Niveau_Cuve_1 \xC3\xA0 " + eq + " en " + addrs.front() + "`.");
+        }
+        Proposal p = base("Adresser sur " + eq);
+        std::vector<std::string> said;
+        for (std::size_t i = 0; i < vars.size(); ++i) {
+            Operation op;
+            op.action = Operation::Action::Address;
+            op.variable = vars[i];
+            op.props = {{"equipement", eq}};
+            // une adresse par variable dans l'ordre ; les suivantes sans adresse : a la suite (la place libre)
+            if (i < addrs.size()) op.props.emplace_back("adresse", addrs[i]);
+            said.push_back(vars[i] + (i < addrs.size() ? " en " + addrs[i] : std::string(" \xC3\xA0 la suite")));
+            p.ops.push_back(std::move(op));
+        }
+        return finish(std::move(p), "Je propose de lier \xC3\xA0 l'\xC3\xA9quipement **" + eq + "** : " + joinAnd(said, 12)
+                                        + ".\nL'aper\xC3\xA7u dit les chevauchements ; Ctrl+Z reprend tout.");
+    }
+    // -- une ALARME : "cree une alarme Niveau_Haut quand Niveau_Cuve_1 > 90 avec le message 'Cuve pleine', priorite 1"
+    const std::size_t alAt = indexOf("alarme");
+    if (alAt != std::string::npos && createVerb && introduced(alAt)) {
+        const std::string cond = conditionIn(withoutGenerics(request_));
+        const auto taken = [&](const std::string& n) { return pr.alarmByName(n) != nullptr; };
+        std::string name = nameAfter(t_, alAt);
+        if (name.empty()) name = freeName("Alarme_1", taken);
+        if (cond.empty())
+            return ask("Quand l'alarme " + code(name) + " doit-elle se d\xC3\xA9" "clencher ? Par exemple `Cr\xC3\xA9" "e une alarme " + name
+                       + " quand Niveau_Cuve_1 > 90`.");
+        Proposal p = base("Cr\xC3\xA9" "er l'alarme " + name);
+        Operation op;
+        op.action = Operation::Action::Alarm;
+        op.name = name;
+        op.props = {{"condition", cond}};
+        for (const auto& tk : t_)
+            if (tk.quoted) {
+                op.props.emplace_back("message", tk.raw);
+                break;
+            }
+        if (const long long prio = numberAfter(t_, {"priorite"}); prio >= 0) op.props.emplace_back("priorite", std::to_string(prio));
+        p.ops.push_back(std::move(op));
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er l'alarme **" + name + "**, d\xC3\xA9" "clench\xC3\xA9" "e quand `" + cond
+                                        + "`.\nLa condition est v\xC3\xA9rifi\xC3\xA9" "e (Compiler) avant d'\xC3\xAAtre propos\xC3\xA9" "e ; Ctrl+Z la reprend.");
+    }
+    // -- un SCRIPT general : "cree un script Init au demarrage", "un script Surveillance toutes les 5 secondes"
+    const std::size_t scAt = indexOf("script");
+    if (scAt != std::string::npos && createVerb && introduced(scAt)) {
+        const auto taken = [&](const std::string& n) { return pr.generalScript(n) != nullptr; };
+        std::string name = nameAfter(t_, scAt);
+        if (name.empty()) name = freeName("Script_1", taken);
+        std::string lang = "st";
+        if (request_.find("C++") != std::string::npos || request_.find("c++") != std::string::npos) lang = "c++";
+        else if (phrase("en c")) lang = "c";
+        std::string event = "Appel", detail = "appel\xC3\xA9 par une action";
+        Operation op;
+        op.action = Operation::Action::Script;
+        op.name = name;
+        if (hasPrefix("demarr") || phrase("au lancement") || phrase("a l ouverture")) {
+            event = "Demarrage";
+            detail = "au d\xC3\xA9marrage";
+        } else if (hasPrefix("cycl") || hasPrefix("periodi") || phrase("toutes les") || phrase("tous les")) {
+            event = "Cyclique";
+            long long ms = 1000;
+            if (const long long n = numberAfter(t_, {"les"}); n > 0) {
+                ms = n;
+                if (has("secondes") || has("seconde") || has("s")) ms = n * 1000;
+                if (has("minutes") || has("minute")) ms = n * 60000;
+            }
+            op.props.emplace_back("periode", std::to_string(ms));
+            detail = "cyclique, toutes les " + std::to_string(ms) + " ms";
+        }
+        op.props.emplace_back("langage", lang);
+        op.props.emplace_back("evenement", event);
+        const std::string note = "Cree par l'Assistant IA : a completer.";
+        op.props.emplace_back("corps", lang == "st" ? "(* " + note + " *)\n" : "// " + note + "\n");
+        Proposal p = base("Cr\xC3\xA9" "er le script " + name);
+        p.ops.push_back(std::move(op));
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er le script g\xC3\xA9n\xC3\xA9ral **" + name + "** (" + (lang == "st" ? std::string("ST") : lang == "c" ? std::string("C") : std::string("C++"))
+                                        + ", " + detail + "), son code \xC3\xA0 \xC3\xA9" "crire dans l'\xC3\xA9" "diteur.\nCtrl+Z le reprend.");
+    }
+    // -- une FONCTION IHM : "cree une fonction Moyenne avec les parametres A : REAL, B : REAL qui rend un REAL", "<T>"
+    const std::size_t fnAt = indexOf("fonction");
+    if (fnAt != std::string::npos && createVerb && introduced(fnAt) && !has("symbole")) {
+        const std::vector<Tok> u = tokenize(withoutGenerics(request_));
+        std::size_t at = std::string::npos;
+        for (std::size_t i = 0; i < u.size() && at == std::string::npos; ++i)
+            if (u[i].f == "fonction") at = i;
+        const auto taken = [&](const std::string& n) { return pr.functionByName(n) != nullptr || pr.variable(n) != nullptr; };
+        std::string name = nameAfter(u, at);
+        if (name.empty()) name = freeName("Fonction_1", taken);
+        std::string ret;
+        for (std::size_t i = 0; i + 1 < u.size() && ret.empty(); ++i)
+            if (u[i].f.rfind("rend", 0) == 0 || u[i].f.rfind("retourn", 0) == 0 || u[i].f.rfind("renvoi", 0) == 0 || u[i].f == "retour") {
+                for (std::size_t k = i + 1; k < u.size() && k <= i + 3 && ret.empty(); ++k) {
+                    for (const auto& g : gens)
+                        if (u[k].raw == g) ret = g;
+                    if (ret.empty()) ret = typeWord(u[k].f);
+                    if (ret.empty())
+                        if (const auto* ht = pr.hmiTypeByName(u[k].raw)) ret = ht->name;
+                }
+            }
+        const auto params = paramsIn(u, gens, &pr);
+        std::string body = "VAR_INPUT\n";
+        for (const auto& v : params) body += "    " + v.name + " : " + v.type + ";\n";
+        body += "END_VAR\n(* Cree par l'Assistant IA : a completer. *)\n";
+        if (!ret.empty())
+            for (const auto& v : params)
+                if (v.type == ret) {
+                    body += name + " := " + v.name + ";\n";
+                    break;
+                }
+        if (params.empty()) body = "(* Cree par l'Assistant IA : a completer. *)\n";
+        Operation op;
+        op.action = Operation::Action::Function;
+        op.name = name;
+        op.generics = gens;
+        if (!ret.empty()) op.props.emplace_back("retour", ret);
+        op.props.emplace_back("corps", body);
+        Proposal p = base("Cr\xC3\xA9" "er la fonction " + name);
+        p.ops.push_back(std::move(op));
+        std::vector<std::string> ps;
+        for (const auto& v : params) ps.push_back(v.name + " : " + v.type);
+        std::string gtext;
+        for (const auto& g : gens) gtext += (gtext.empty() ? "" : ", ") + g;
+        return finish(std::move(p), "Je propose de cr\xC3\xA9" "er la fonction IHM **" + name + (gens.empty() ? std::string{} : "<" + gtext + ">") + "**"
+                                        + (ps.empty() ? std::string(" sans param\xC3\xA8tre") : " (" + joinAnd(ps) + ")")
+                                        + (ret.empty() ? std::string(", sans retour") : ", qui rend " + ret)
+                                        + " ; son calcul \xC3\xA0 \xC3\xA9" "crire dans l'\xC3\xA9" "diteur.\nCtrl+Z la reprend.");
+    }
+    return {};
+}
+
+// "quelles variables systeme ?" : les domaines et quelques noms (SYS.xxx), sans rien inventer.
+LocalReply Engine::listSystem() const {
+    std::string text = "Les **variables syst\xC3\xA8me** se lisent `SYS.Nom` (en lecture, sauf mention) :\n";
+    for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) {
+        if (!hmi::pub::sysDomainShown(d)) continue;
+        const auto vars = hmi::pub::sysVarsOf(static_cast<int>(d));
+        if (vars.empty()) continue;
+        std::vector<std::string> names;
+        for (std::size_t i = 0; i < vars.size() && i < 4; ++i) names.push_back("SYS." + std::string(vars[i]->name));
+        text += "- " + std::string(hmi::pub::kSysDomains[d]) + " : " + codes(names, 4) + (vars.size() > 4 ? " (" + std::to_string(vars.size()) + " en tout)" : std::string{}) + "\n";
+    }
+    text += "La liste compl\xC3\xA8te : l'arbre du projet, Variables syst\xC3\xA8me (ou F1).";
+    return ask(text);
+}
+
 // ---- l'aiguillage -------------------------------------------------------------------------------------
 LocalReply Engine::run() {
     if (t_.empty()) return help();
@@ -3689,12 +4274,17 @@ LocalReply Engine::run() {
                        || has("faudrait") || phrase("il faut") || has("besoin") || phrase("je veux") || phrase("on veut");
     const bool makeVerb = has("fais") || has("faire") || has("faites") || hasPrefix("prevoi") || hasPrefix("prepar") || hasPrefix("construi")
                        || has("donne") || has("donnez");
+    // 1.18.0 : les variables systeme (une question)
+    if ((question || has("quelles") || has("liste") || phrase("montre moi")) && !createVerb && (has("systeme") || has("sys")) && (variableWord() || has("sys")))
+        return listSystem();
     if ((has("quelles") || has("quels") || has("liste") || has("lister") || phrase("montre moi") || phrase("donne moi") || question) && !createVerb) {
         if (has("variables") || has("variable")) return listVariables();
         if (has("vues")) return listViews();
         if (has("genres") || phrase("types d objets") || phrase("genres d objets") || phrase("objets peux tu") || phrase("objets connais tu"))
             return listKinds();
     }
+    // 1.18.0 : les outils (symbole, popup, equipement, adresse, alarme...)
+    if (LocalReply r = tools(); !r.text.empty()) return r;
     // une suite : "et une autre", "encore une", "la meme en bleu", "pareil pour P2"
     const bool follow = phrase("une autre") || phrase("un autre") || has("encore") || phrase("une de plus") || phrase("un de plus") || has("pareil")
                      || phrase("la meme") || phrase("le meme") || has("idem") || phrase("les memes") || (has("aussi") && t_.size() <= 4);

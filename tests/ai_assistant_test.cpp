@@ -139,6 +139,7 @@ struct Fixture {
     menu::MenuManager              mm{menu::MenuFactory{}};
     std::unique_ptr<ai::AiPanel>   panel;
     std::vector<std::string>       statuses;
+    std::vector<std::string>       scans;   // 1.18.0 : << Detecter ce qui repond... >> (l'equipement | la plage)
     double                         t{100.0};
     bool                           memory{false};
 
@@ -176,6 +177,10 @@ struct Fixture {
         ui.showDialog = [this](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> cb) { mm.ShowDialog(std::move(d), std::move(cb)); };
         ui.status = [this](const std::string& s) { statuses.push_back(s); };
         ui.memoryAvailable = [this] { return memory; };
+        ui.openScan = [this](const std::string& eq, const std::string& range, std::string*) {
+            scans.push_back(eq + "|" + range);
+            return true;
+        };
         panel = std::make_unique<ai::AiPanel>("ai.panneau", std::move(core), std::move(ui));
         panel->setBounds({0, 0, 440, 900});
         panel->ensureLoaded();
@@ -1356,6 +1361,35 @@ void testKeyManager() {
     ai::setKeyProtector({});
 }
 
+// ---- 1.18.0 : la carte d'un equipement : << Detecter ce qui repond... >> (l'utilisateur lance, jamais l'IA) ----
+void testDetectButton() {
+    std::printf("[1.18.0 : detecter ce qui repond]\n");
+    Fixture f("detecter");
+    ai::Settings st = f.as().settings();
+    st.provider = "integree";
+    f.as().setSettings(st);
+    f.panel->newConversation();
+    (void)f.sendAndWait("Cr\xC3\xA9" "e un \xC3\xA9quipement Centrale_1 en 192.168.1.40 et d\xC3\xA9tecte ce qui r\xC3\xA9pond");
+    const int m = f.lastProposal();
+    check(m >= 0, "l'IA integree propose l'equipement");
+    if (m < 0) return;
+    check(!f.panel->canDetect(m) && f.scans.empty(), "avant Appliquer : pas de detection, rien d'ouvert");
+    auto* apply = f.panel->chat().cardButton(m, 1);
+    check(apply && apply->text() == "Appliquer", "la carte : Appliquer");
+    if (apply) apply->clicked->emit();
+    f.step(0.3);
+    check(f.doc->project.equipmentByName("Centrale_1") != nullptr, "applique : l'equipement existe");
+    check(f.scans.empty(), "Appliquer ne lance pas la detection");
+    auto* detect = f.panel->chat().cardButton(m, 1);
+    check(detect && detect->text() == "D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6" && detect->visible(), "la carte appliquee : Detecter ce qui repond...");
+    if (detect) detect->clicked->emit();
+    f.step();
+    check(f.scans.size() == 1 && f.scans.front() == "Centrale_1|192.168.1.0/24", "le scanner s'ouvre, la plage remplie (" + (f.scans.empty() ? std::string("-") : f.scans.front()) + ")");
+    (void)f.stack.undo();
+    f.step(0.3);
+    check(!f.panel->canDetect(m), "apres Ctrl+Z : plus de detection (Reappliquer)");
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1383,6 +1417,7 @@ int main() {
     testMarkdown();
     testSecondPass();
     testKeyManager();
+    testDetectButton();
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
