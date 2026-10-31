@@ -49,6 +49,7 @@ struct CategoryInfo {
 inline constexpr CategoryInfo kCategories[] = {
     {"objets", "Genres d'objets"},
     {"proprietes", "Propri\xC3\xA9t\xC3\xA9s et actions"},
+    {"modeles", "Mod\xC3\xA8les m\xC3\xA9tier"},             // 1.17.0 : AiLearning.hpp (corrigeables)
     {"vocabulaire", "Vocabulaire et synonymes"},
     {"regles", "R\xC3\xA8gles de cr\xC3\xA9" "ation"},
     {"preferences", "Pr\xC3\xA9" "f\xC3\xA9rences de conception"},

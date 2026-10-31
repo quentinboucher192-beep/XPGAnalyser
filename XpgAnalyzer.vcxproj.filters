@@ -1696,6 +1696,9 @@
     <ClCompile Include="src\app\ai\AiKnowledge.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiLearning.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiLearningFile.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -3188,6 +3191,9 @@
       <Filter></Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiKnowledge.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiLearning.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiLearningFile.hpp">

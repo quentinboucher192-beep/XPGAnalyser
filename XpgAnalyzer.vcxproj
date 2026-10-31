@@ -689,6 +689,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
     <ClCompile Include="src\app\ai\AiKnowledge.cpp" />
+    <ClCompile Include="src\app\ai\AiLearning.cpp" />
     <ClCompile Include="src\app\ai\AiLearningFile.cpp" />
     <ClCompile Include="src\app\ai\AiMemory.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryDialog.cpp" />
@@ -1193,6 +1194,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ZoomMemory.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
     <ClInclude Include="src\app\ai\AiKnowledge.hpp" />
+    <ClInclude Include="src\app\ai\AiLearning.hpp" />
     <ClInclude Include="src\app\ai\AiLearningFile.hpp" />
     <ClInclude Include="src\app\ai\AiMemory.hpp" />
     <ClInclude Include="src\app\ai\AiMemoryDialog.hpp" />

@@ -32,6 +32,7 @@
 
 #include "AiAutomate.hpp"
 #include "AiDemo.hpp"       // fold
+#include "AiLearning.hpp"   // 1.17.0 : les modeles et le vocabulaire, corrigeables (l'onglet Apprentissage)
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiEdit.hpp"
 
@@ -40,11 +41,37 @@
 #include <cmath>
 #include <cstdlib>
 #include <map>
+#include <optional>
 #include <set>
 
 namespace app::ai {
 
 namespace {
+
+// 1.17.0 : CE QUE L'UTILISATEUR LUI A APPRIS (AiLearning.hpp), lu UNE FOIS par demande (understand) : les modeles metier
+// effectifs (ceux du logiciel corriges, plus les siens, sans les desactives), les mots appris (un mot = un genre, un mot =
+// un modele, un mot a ignorer).
+struct Learned {
+    std::vector<learning::BusinessModel> models;
+    std::vector<learning::WordEntry>     words;      // les mots appris (pas ceux du logiciel), actifs
+    std::set<std::string>                ignored;    // replies
+    bool                                 loaded{false};
+};
+Learned& learned() {
+    thread_local Learned l;
+    if (!l.loaded) {
+        l.models = learning::models();
+        for (auto& w : learning::words())
+            if (!w.builtIn) {
+                if (w.means == learning::Meaning::Ignore) l.ignored.insert(fold(w.word));
+                l.words.push_back(std::move(w));
+            }
+        l.loaded = true;
+    }
+    return l;
+}
+void forgetLearned() { learned() = Learned{}; }
+
 
 // Les mots accentues qui reviennent, ecrits une fois.
 const char* const kOpen = "\xC2\xAB ";
@@ -175,7 +202,7 @@ bool stopWord(const std::string& f) {
         "toute", "toutes", "svp", "stp", "merci", "peux", "peut", "pourrais", "veux", "voudrais", "aimerais", "fais", "faire", "fait",
         "variable", "variables", "objet", "objets", "vue", "nouvelle", "nouveau", "nouvelles", "nouveaux", "autre", "autres", "est",
         "sont", "etre", "c", "j", "m", "t", "via", "vers", "depuis", "sous", "entre", "chez", "si", "sinon", "quand", "lorsque"};
-    return k.count(f) != 0;
+    return k.count(f) != 0 || learned().ignored.count(f) != 0;   // 1.17.0 : un mot appris a ignorer
 }
 
 // Les mots d'une PARTIE d'un objet : "le texte de Bouton_1", "le fond de la cuve", "le contour de P1".
@@ -895,7 +922,15 @@ private:
 
 // ---- les genres dits, et leur determinant ---------------------------------------------------
 void Engine::scanMentions() {
-    const auto& words = kindWords();
+    // 1.17.0 : les mots appris (<< bache >> -> Cuve) d'abord ; puis ceux du logiciel.
+    std::vector<KindWord> words;
+    for (const auto& w : learned().words)
+        if (w.means == learning::Meaning::Kind)
+            if (const auto k = hmi::kindFromKey(w.target)) {
+                auto ws = splitWords(fold(w.word));
+                if (!ws.empty()) words.push_back({std::move(ws), *k});
+            }
+    words.insert(words.end(), kindWords().begin(), kindWords().end());
     for (std::size_t i = 0; i < t_.size();) {
         if (t_[i].quoted || t_[i].raw.find('_') != std::string::npos) {
             ++i;
@@ -2406,15 +2441,16 @@ LocalReply Engine::createVariables() const {
 // un equipement (un capteur, une pompe, une vanne...) sans membres dits part d'un MODELE METIER, et le dit.
 
 // Les modeles metier : des types classiques de l'industrie (des membres sans accent, des types elementaires, decrits).
-struct TypeModel {
+struct BuiltinModel {
     const char*                                        key;      // "pompe"
     const char*                                        label;    // "pompe" (dans la reponse)
     const char*                                        name;     // le nom propose : T_Pompe
     const char*                                        description;
     std::vector<Operation::MemberSpec>                 members;
 };
-const std::vector<TypeModel>& typeModels() {
-    static const std::vector<TypeModel> k = {
+// 1.17.0 : la table DU LOGICIEL ; ce qui vaut a une demande : learning::models() (corrigee, completee par l'utilisateur).
+const std::vector<BuiltinModel>& builtinTypeModels() {
+    static const std::vector<BuiltinModel> k = {
         {"capteur", "capteur analogique", "T_Capteur", "Capteur analogique : la mesure, son \xC3\xA9" "chelle, ses seuils et ses alarmes",
          {{"Mesure", "REAL", "Valeur mesur\xC3\xA9" "e, en unit\xC3\xA9 physique"},
           {"Unite", "STRING", "Unit\xC3\xA9 de la mesure (bar, \xC2\xB0" "C, m3/h...)"},
@@ -2483,22 +2519,46 @@ const std::vector<TypeModel>& typeModels() {
     };
     return k;
 }
-const TypeModel* typeModel(std::string_view key) {
-    for (const auto& m : typeModels())
-        if (key == m.key) return &m;
-    return nullptr;
-}
-// Le modele d'un mot (replie) : capteur, sonde, transmetteur -> capteur analogique ; detecteur -> capteur TOR ; bac,
-// reservoir -> cuve... ; vide : aucun.
-std::string modelWord(const std::string& f) {
+// Les mots du logiciel qui appellent chaque modele (replies) : capteur, sonde, transmetteur -> capteur analogique ;
+// detecteur -> capteur TOR ; bac, reservoir -> cuve...
+const std::map<std::string, std::string>& builtinModelWords() {
     static const std::map<std::string, std::string> k = {
         {"capteur", "capteur"}, {"sonde", "capteur"}, {"transmetteur", "capteur"}, {"instrument", "capteur"}, {"analogique", "capteur"},
         {"detecteur", "capteur_tor"}, {"pompe", "pompe"}, {"vanne", "vanne"}, {"electrovanne", "vanne"}, {"robinet", "vanne"},
         {"moteur", "moteur"}, {"variateur", "variateur"}, {"cuve", "cuve"}, {"bac", "cuve"}, {"reservoir", "cuve"}, {"citerne", "cuve"},
         {"regulateur", "regulateur"}, {"regulation", "regulateur"}, {"regul", "regulateur"}, {"pid", "regulateur"}};
-    if (const auto it = k.find(f); it != k.end()) return it->second;
-    if (f.size() > 3 && (f.back() == 's' || f.back() == 'x'))
-        if (const auto it = k.find(f.substr(0, f.size() - 1)); it != k.end()) return it->second;
+    return k;
+}
+// Un modele metier tel qu'il vaut maintenant (le logiciel corrige, ou celui de l'utilisateur).
+struct TypeModel {
+    std::string                        key, label, name, description;
+    std::vector<Operation::MemberSpec> members;
+};
+std::optional<TypeModel> typeModel(std::string_view key) {
+    for (const auto& m : learned().models)
+        if (m.key == key) {
+            TypeModel out{m.key, m.label, m.name, m.description, {}};
+            for (const auto& x : m.members) out.members.push_back({x.name, x.type, x.description});
+            return out;
+        }
+    return std::nullopt;
+}
+// Le modele d'un mot (replie) ; vide : aucun. 1.17.0 : un mot appris d'abord (un mot = un modele ; un mot a ignorer), puis
+// les mots de chaque modele actif (ceux du logiciel, corriges ou non, et ceux de l'utilisateur).
+std::string modelWord(const std::string& f) {
+    const std::string s = f.size() > 3 && (f.back() == 's' || f.back() == 'x') ? f.substr(0, f.size() - 1) : f;
+    auto& l = learned();
+    for (const auto& w : l.words) {
+        const std::string wf = fold(w.word);
+        if (wf != f && wf != s) continue;
+        if (w.means == learning::Meaning::Ignore) return {};
+        if (w.means == learning::Meaning::Model)
+            for (const auto& m : l.models)
+                if (m.key == w.target) return m.key;
+    }
+    for (const auto& m : l.models)
+        for (const auto& w : m.words)
+            if (w == f || w == s) return m.key;
     return {};
 }
 // Un nom de membre ramene a son singulier, pour comparer (Defauts et Defaut, AlarmesHautes...).
@@ -2655,7 +2715,7 @@ LocalReply Engine::createType() const {
                                   || (!name.empty() && fold(name).find("tor") != std::string::npos)))
         modelKey = "capteur_tor";
     if (modelKey == "moteur" && said("variateur")) modelKey = "variateur";
-    const TypeModel* model = modelKey.empty() ? nullptr : typeModel(modelKey);
+    const std::optional<TypeModel> model = modelKey.empty() ? std::nullopt : typeModel(modelKey);
     // 4. LES MEMBRES en langage courant : une virgule, "et", "ou", un article ou un possessif en commencent un autre ; "de"
     // lie ("heures de marche" -> HeuresMarche), un adjectif aussi ("alarme haute" -> AlarmeHaute) ; un type dit ("en
     // BOOL", "de type REAL") vaut pour les membres ecrits depuis le type d'avant.
@@ -3691,12 +3751,73 @@ LocalReply Engine::run() {
 LocalReply understand(const PromptInput& in, std::string_view request) { return understand(in, request, {}); }
 
 LocalReply understand(const PromptInput& in, std::string_view request, const std::vector<LocalTurn>& history) {
+    forgetLearned();   // 1.17.0 : ce qu'elle a appris, relu (une correction de l'onglet Apprentissage vaut tout de suite)
     Engine e(in, request, history);
     LocalReply r = e.run();
     // des suggestions COURTES : une ligne du panneau, jamais coupee au bord
     std::erase_if(r.suggestions, [](const std::string& s) { return chars(s) > kSuggestionMax; });
     return r;
 }
+
+// ---- 1.17.0 : les tables du logiciel, pour AiLearning (l'onglet Apprentissage les montre, l'utilisateur les corrige) ----
+namespace learning {
+
+const std::vector<BusinessModel>& builtInModels() {
+    static const std::vector<BusinessModel> k = [] {
+        std::vector<BusinessModel> out;
+        for (const auto& b : builtinTypeModels()) {
+            BusinessModel m;
+            m.key = b.key;
+            m.name = b.name;
+            m.label = b.label;
+            m.description = b.description;
+            for (const auto& [w, key] : builtinModelWords())
+                if (key == m.key) m.words.push_back(w);
+            for (const auto& x : b.members) m.members.push_back({x.name, x.type, x.description});
+            m.builtIn = true;
+            m.source = "logiciel";
+            out.push_back(std::move(m));
+        }
+        return out;
+    }();
+    return k;
+}
+
+const std::vector<WordEntry>& builtInWords() {
+    static const std::vector<WordEntry> k = [] {
+        std::vector<WordEntry> out;
+        // les synonymes du metier qui designent un genre d'objet (pas les libelles du registre : ils sont les genres eux-memes)
+        static const std::pair<const char*, hmi::Kind> kinds[] = {
+            {"bouton poussoir", hmi::Kind::PushButton}, {"bouton \xC3\xA0 impulsion", hmi::Kind::PushButton}, {"bp", hmi::Kind::PushButton},
+            {"bac", hmi::Kind::Tank}, {"r\xC3\xA9servoir", hmi::Kind::Tank}, {"citerne", hmi::Kind::Tank}, {"voyant TOR", hmi::Kind::Indicator},
+            {"led", hmi::Kind::Indicator}, {"indicateur de niveau", hmi::Kind::Bargraph}, {"bargraph", hmi::Kind::Bargraph},
+            {"titre", hmi::Kind::Text}, {"libell\xC3\xA9", hmi::Kind::Text}, {"\xC3\xA9tiquette", hmi::Kind::Text}, {"tuyau", hmi::Kind::Pipe},
+            {"conduite", hmi::Kind::Pipe}, {"canalisation", hmi::Kind::Pipe}, {"\xC3\xA9lectrovanne", hmi::Kind::Valve},
+            {"ventilo", hmi::Kind::Fan}, {"tapis", hmi::Kind::Conveyor}, {"commutateur", hmi::Kind::Switch}, {"cercle", hmi::Kind::Ellipse},
+            {"trait", hmi::Kind::Line}, {"champ de saisie", hmi::Kind::InputField}, {"tendance", hmi::Kind::Trend},
+            {"capteur", hmi::Kind::IsaInstrument}, {"afficheur", hmi::Kind::NumericDisplay}, {"variateur", hmi::Kind::SpeedDrive}};
+        for (const auto& [w, kind] : kinds) {
+            WordEntry e;
+            e.word = w;
+            e.means = Meaning::Kind;
+            e.target = std::string(hmi::kindKey(kind));
+            e.builtIn = true;
+            out.push_back(std::move(e));
+        }
+        for (const auto& [w, key] : builtinModelWords()) {
+            WordEntry e;
+            e.word = w;
+            e.means = Meaning::Model;
+            e.target = key;
+            e.builtIn = true;
+            out.push_back(std::move(e));
+        }
+        return out;
+    }();
+    return k;
+}
+
+} // namespace learning
 
 const std::vector<std::string>& localSuggestions() {
     // la conversation vide ne connait pas la vue : des phrases qui marchent meme sur une vue vide (creer, demander),

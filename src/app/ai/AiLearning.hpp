@@ -1,0 +1,99 @@
+// =============================================================================
+//  app/ai/AiLearning.hpp - 1.17.0 : ce que l'IA integree sait, MODIFIABLE
+// -----------------------------------------------------------------------------
+//  "APPRENDRE" ICI = la memoire locale (le modele distant n'est jamais
+//  reentraine). Deux sortes de savoir STRUCTURE, que l'IA integree (AiLocal)
+//  LIT A CHAQUE DEMANDE - une correction faite dans l'onglet Apprentissage
+//  change sa reponse suivante :
+//
+//    - LES MODELES METIER (T_Capteur, T_Pompe...) : ceux du logiciel
+//      (builtInModels, la table d'AiLocal) et ceux de l'utilisateur. Un modele
+//      integre se CORRIGE (sa correction est gardee a part ; revertModel la
+//      retire), se DESACTIVE ; un modele de l'utilisateur s'ajoute, se change,
+//      se supprime ;
+//    - LE VOCABULAIRE : un mot = un genre d'objet (<< bache >> -> Cuve), un mot
+//      = un modele metier (<< compresseur >> -> T_Compresseur), un mot a ignorer
+//      (un mot-outil). Les mots integres (les synonymes du logiciel) se lisent ;
+//      ceux de l'utilisateur s'ajoutent, se desactivent, s'oublient.
+//
+//  LE STOCKAGE : des connaissances AJOUTEES comme les autres (AiKnowledge.hpp :
+//  connaissances/<id>.json, le meme contrat), de categorie "modeles" ou
+//  "vocabulaire", avec leur savoir structure dans le champ "donnees" et un
+//  "contenu" lisible (ce que les IA connectees recoivent). L'export .xia
+//  (AiLearningFile.hpp) les emporte sans rien de plus. Les identifiants sont
+//  stables : "modele.<cle>", "mot.<mot replie>".
+//
+//  Les mots se comparent REPLIES (fold : minuscules, sans accents).
+// =============================================================================
+#pragma once
+
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace app::ai::learning {
+
+struct ModelMember {
+    std::string name, type, description;
+    bool operator==(const ModelMember&) const = default;
+};
+
+struct BusinessModel {
+    std::string              key;            // "pompe", "compresseur" (minuscules, sans accent)
+    std::string              name;           // le type propose : T_Pompe
+    std::string              label;          // "pompe" (dans la reponse)
+    std::string              description;
+    std::vector<std::string> words;          // les mots qui l'appellent (replies) : pompe, pompes...
+    std::vector<ModelMember> members;
+    bool                     builtIn{false};     // du logiciel
+    bool                     corrected{false};   // un modele du logiciel, corrige par l'utilisateur
+    bool                     active{true};
+    std::string              source{"logiciel"}; // "logiciel", "utilisateur", "assistant", "fichier"
+    std::string              added, modified;    // ISO (une correction, un ajout) ; vide : du logiciel
+};
+
+enum class Meaning : unsigned char { Kind, Model, Ignore };
+
+struct WordEntry {
+    std::string word;            // tel qu'ecrit (accents compris) ; compare replie
+    Meaning     means{Meaning::Kind};
+    std::string target;          // Kind : la cle du genre (hmi::kindKey, "Tank") ; Model : la cle du modele ; Ignore : vide
+    bool        builtIn{false};
+    bool        active{true};
+    std::string source{"logiciel"};
+    std::string added, modified;
+};
+
+// ---- les tables du logiciel (AiLocal.cpp les donne : elles sont les siennes) ----
+[[nodiscard]] const std::vector<BusinessModel>& builtInModels();
+[[nodiscard]] const std::vector<WordEntry>&     builtInWords();
+
+// ---- ce qui vaut maintenant (le logiciel, corrige, plus l'utilisateur) - relu du disque quand il change ----
+[[nodiscard]] std::vector<BusinessModel> models(bool withInactive = false);
+[[nodiscard]] std::optional<BusinessModel> model(std::string_view key);        // actif seulement
+[[nodiscard]] std::vector<WordEntry> words(bool withInactive = false);
+[[nodiscard]] std::string modelForWord(std::string_view folded);               // la cle du modele d'un mot ; "" : aucun
+[[nodiscard]] bool        ignoredWord(std::string_view folded);                // un mot appris a ignorer
+[[nodiscard]] std::vector<WordEntry> learnedKindWords();                       // les mots appris qui designent un genre (actifs)
+
+// ---- corriger, apprendre (chaque geste : son fichier, sa ligne d'activite) ----
+// Un modele du logiciel : sa correction ; un autre : l'ajouter ou le changer. Refuse : une cle vide, un nom qui n'est pas
+// un identifiant, un membre sans nom ou d'un type que le logiciel ne connait pas (la raison dans `why`).
+bool saveModel(const BusinessModel& m, std::string* why = nullptr, std::string_view source = "utilisateur");
+bool revertModel(std::string_view key, std::string* why = nullptr);            // retirer la correction d'un modele du logiciel
+bool setModelActive(std::string_view key, bool on, std::string* why = nullptr);
+bool removeModel(std::string_view key, std::string* why = nullptr);            // un modele de l'utilisateur
+bool learnWord(const WordEntry& w, std::string* why = nullptr, std::string_view source = "utilisateur");
+bool setWordActive(std::string_view word, bool on, std::string* why = nullptr);
+bool forgetWord(std::string_view word, std::string* why = nullptr);
+
+// Le texte lisible d'un modele, d'un mot (le "contenu" de sa connaissance).
+[[nodiscard]] std::string describe(const BusinessModel& m);
+[[nodiscard]] std::string describe(const WordEntry& w);
+// Un type de membre valide ? (les types elementaires du logiciel, un tableau d'eux, un type IHM ecrit) - sinon la raison.
+[[nodiscard]] bool validMemberType(std::string_view type, std::string* why = nullptr);
+
+void invalidate();   // apres une ecriture faite ailleurs (un import) : relire au prochain acces
+
+} // namespace app::ai::learning
