@@ -118,4 +118,51 @@ Un classeur Excel joint (.xlsx ou .xlsm) est reconnu, sur le fil d'analyse :
 - **L'IA connectée** reçoit un résumé compact au lieu du texte brut, et l'outil `lignes_classeur` pour lire les lignes par pages (200 au plus), sur le fil du fournisseur. L'IA intégrée comprend « Crée les variables de la liste d'E/S jointe », « Crée les équipements du fichier réseau », « Adresse les variables du fichier joint sur l'équipement API_1 », « Que contient le fichier joint ? ».
 - Essai `ai_modeles_fichiers_test` : 149 vérifications (lecture, fusions, .xlsm, les trois genres en français et en anglais, enregistrer puis reconnaître un modèle, .xia aller-retour et ancien .xia, propositions validées, IA intégrée, outil par pages). Vérifié aussi, en local seulement, sur un classeur de reports réel (4 feuilles reconnues, 1 760 lignes lues en 0,3 s) : **aucune donnée client dans le dépôt**.
 
-<!-- SECTIONS-SUITE -->
+## 13. Les essais
+
+@@ESSAIS@@
+
+## 14. Installer
+
+Fichiers livrés :
+- `API-IHM-Studio-Setup-1.21.0.exe` : l'installateur ;
+- `API-Studio-1.21.0-portable.zip` et `IHM-Studio-1.21.0-portable.zip` : chaque application, sans installation ;
+- ce document.
+
+1. Lance `API-IHM-Studio-Setup-1.21.0.exe` : il met à jour la version installée au même endroit et garde tes données (projets, conversations, souvenirs, clés API).
+2. Windows SmartScreen peut avertir (installateur non signé) : « Informations complémentaires », puis « Exécuter quand même ».
+
+Le format des projets ne change pas (33). Le fichier d'apprentissage .xia reste en version 1 (une 1.20 le lit encore).
+
+@@SHA@@
+
+### Les vérifications sous Windows (Wine)
+
+@@WINE@@
+
+Ces vérifications sont faites sous Wine, **pas sur un vrai Windows**.
+
+## 15. Les limites
+
+- **Le C et le C++ ne sont jamais exécutés** par le bac à sable : seulement relus (vérification statique). Seul le ST est compilé et exécuté.
+- **Sous Windows, le bac à sable n'est pas isolé du réseau** (il faudrait des droits d'administrateur) : le code essayé n'a aucune fonction réseau, et c'est dit à chaque essai.
+- **La découverte réseau** ne lit que ce que les appareils annoncent (Modbus 43/14, réponses aux sondes) : un appareil muet est « supposé » d'après son port, jamais nommé au hasard.
+- **Les fichiers joints** : un PDF scanné (une image) n'a pas de texte (pas de reconnaissance de caractères) ; les anciens classeurs **.xls** ne sont pas lus.
+- **Les classeurs** : la détection repose sur des mots-clés (un en-tête atypique se corrige dans la fenêtre Modèle…) ; Modbus RTU n'est pas proposé ; 8 classeurs au plus gardés en mémoire pour la conversation ; les règles fines d'un modèle (valeurs vides, recopie vers le bas) sont gardées mais seule « lignes à sauter » se règle dans la fenêtre.
+- **Les souvenirs** restent sur ce PC (ils ne voyagent pas avec le projet) ; le modèle distant n'est pas réentraîné : il les relit.
+- **Le lecteur des incidents** : « vitesse +10 −10 » a été lu comme les sauts de 10 secondes (voir § 8).
+- **L'alarme qui bat** : le regroupement vit en mémoire ; après un redémarrage de l'IHM, la première réapparition rouvre un incident (puis le regroupement reprend).
+- **L'aperçu des fichiers** : les vidéos ne se décodent que dans les formats que Windows sait lire ; le texte s'affiche en police à chasse fixe, sans coloration.
+- **Pas de nouvelles captures d'écran** (à ta demande).
+
+## 16. Ce qui a été optimisé pour livrer plus tôt
+
+- **Des agents en parallèle de mon travail**, chacun dans sa propre copie du dépôt et ses fichiers (la mémoire, le contexte des fichiers joints, le bac à sable, la découverte réseau, l'agent ; puis le lecteur des incidents, l'alarme qui bat, À propos, l'aperçu des fichiers, les classeurs) : vérifiés à la compilation sans toucher au dossier de construction partagé, puis relus, fusionnés, construits et essayés par moi.
+- **Une vérification de syntaxe des fichiers fusionnés** (une à deux minutes) avant chaque grande compilation : une erreur de fusion ne coûte plus une compilation complète ratée.
+- **La compilation Windows sur le 4ᵉ cœur pendant la compilation Linux** (qui en prend 3), et seulement les objets touchés par les fusions (repérés par leurs dépendances réelles, en-têtes compris) ; le gros fichier de l'aide F1 (12 Go de mémoire) est compilé seul, pour ne jamais saturer la machine.
+- **Une compilation arrêtée et relancée une seule fois** quand le dernier lot est arrivé, plutôt que deux compilations complètes à la suite.
+- **La place sur le disque** libérée en effaçant les anciennes livraisons de travail (il ne restait que 1 Go).
+- **Les essais lancés en parallèle** (trois à la fois).
+- **Les exe Windows gardés avec leurs symboles** (jamais livrés) : un prochain rapport de plantage se lit en une minute au lieu de relier l'exe.
+- Rien de recréé : le graphe des relations et le vérificateur de la 1.19, l'aperçu et l'application de fond de la 1.20, le lecteur des enregistrements (mêmes commandes, mêmes touches), le registre de la mémoire de l'IA (les modèles de fichiers y sont des connaissances), le lecteur XLSX existant.
+- **Pas de captures d'écran** (à ta demande) ; l'installateur vérifié en silencieux sous Wine.
