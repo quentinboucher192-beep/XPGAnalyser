@@ -10,6 +10,7 @@
 #include "hmi/HmiTutorialDeduce.hpp"    // 1.11 (T1, tranche 18) : tutoriel-compte, la raison du deducteur (whyNoTutorial)
 #include "HistoryPanel.hpp"
 #include "ai/AiPanel.hpp"            // 1.14.2 : l'Assistant IA (ia ...)
+#include "ai/AiOpenAI.hpp"           // 1.16.0 : les services compatibles OpenAI (ia service)
 #include "ai/AiPreviewDialog.hpp"
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les commandes nouveautes-*
 #include "../ui/NoveltyBoard.hpp"
@@ -647,7 +648,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia defiler N                        la discussion, de N pixels (negatif : vers le haut)
     //  ia etat                             au journal du script : les conversations, l'ouverte, la generation
     //  ---- 1.15.0 : la connexion (l'IA branchee ; enregistre comme Parametres > Enregistrer) ----
-    //  ia fournisseur demo | anthropic     le fournisseur
+    //  ia fournisseur demo | anthropic     le fournisseur (1.16.0 : toute cle de ai::providers())
     //  ia modele "id"                      le modele (rien en dur : celui que le script donne)
     //  ia adresse "url" | ""               l'adresse : un relais, ou le faux fournisseur local
     //                                      (tests/fixtures/ia/faux_fournisseur.py : http://127.0.0.1:PORT) ;
@@ -658,6 +659,14 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia reessayer                        le bouton Reessayer (le dernier message : une erreur, un arret)
     //  ia modeles                          la liste des modeles du fournisseur, au journal (attend la reponse)
     //  ia tester                           tester la connexion, au journal (attend la reponse)
+    //  ---- 1.16.0 : les IA gratuites, la limite en direct (enregistre comme Parametres > Enregistrer) ----
+    //  ia fournisseur integree | demo | anthropic | openai
+    //  ia service ollama | lmstudio | openrouter | groq | gemini | mistral | autre
+    //                                      le service compatible OpenAI (son adresse remplit l'Adresse)
+    //  ia budget N [jour | mois]           le budget en jetons (0 : aucun)
+    //  ia contexte N                       la fenetre de contexte du modele (0 : Auto)
+    //  ia outil auto | outil | texte       l'appel d'outil, ou le JSON dans le texte
+    //  ia limite                           au journal : la bande de la limite (ses lignes) et les cumuls
     if (cmd == "ia") {
         const std::string sub = lower(arg(1));
         if (auto* pv = dynamic_cast<ai::AiPreviewDialog*>(app_.menus().top())) {
@@ -689,7 +698,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 bool known = false;
                 for (const auto& p : ai::providers())
                     if (p.key == lower(v) && p.available) known = true;
-                if (!known) { fail("ia fournisseur " + v + " : inconnu ou pas encore branch\xC3\xA9 (demo, anthropic)"); return Step::Next; }
+                if (!known) {
+                    std::string keys;
+                    for (const auto& p : ai::providers()) keys += (keys.empty() ? "" : ", ") + std::string(p.key);
+                    fail("ia fournisseur " + v + " : inconnu (" + keys + ")");
+                    return Step::Next;
+                }
                 st.provider = lower(v);
             } else if (sub == "modele") {
                 st.model = v;
@@ -706,6 +720,37 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return Step::Yield;
         }
         if (sub == "cle") { as.setApiKey(arg(2)); panel->sync(); return Step::Yield; }   // jamais au journal
+        // ---- 1.16.0 : le service, le budget, la fenetre de contexte, l'outil, la limite ----
+        if (sub == "service" || sub == "budget" || sub == "contexte" || sub == "outil") {
+            ai::Settings st = as.settings();
+            const std::string v = lower(arg(2));
+            if (sub == "service") {
+                const auto* sp = ai::findServicePreset(v);
+                if (!sp) { fail("ia service " + v + " : inconnu (ollama, lmstudio, openrouter, groq, gemini, mistral, autre)"); return Step::Next; }
+                st.preset = v;
+                if (!sp->endpoint.empty()) st.endpoint = std::string(sp->endpoint);
+            } else if (sub == "budget") {
+                st.budgetTokens = std::max(0LL, std::atoll(v.c_str()));
+                if (!arg(3).empty()) st.budgetPeriod = lower(arg(3)) == "mois" ? "mois" : "jour";
+            } else if (sub == "contexte") {
+                st.contextTokens = std::clamp(std::atoi(v.c_str()), 0, 10000000);
+            } else {
+                if (v != "auto" && v != "outil" && v != "texte") { fail("ia outil " + v + " : auto, outil ou texte"); return Step::Next; }
+                st.toolMode = v;
+            }
+            as.setSettings(st);
+            panel->sync();
+            return Step::Yield;
+        }
+        if (sub == "limite") {
+            const auto& band = panel->usageBand();   // celle que le panneau montre (mise a jour a chaque image)
+            for (const auto& l : band.lines) std::printf("[script] ia limite : %s\n", l.c_str());
+            const auto& t = as.usageTotals();
+            std::printf("[script] ia limite : jetons aujourd'hui %lld (%lld demandes), ce mois %lld ; budget %lld par %s%s\n", t.tokensToday, t.requestsToday,
+                        t.tokensMonth, as.settings().budgetTokens, as.settings().budgetPeriod.c_str(), band.level >= 2 ? " (atteint)" : band.level == 1 ? " (80 %)" : "");
+            std::fflush(stdout);
+            return Step::Next;
+        }
         if (sub == "reessayer") { if (!panel->retry()) fail("ia reessayer : " + panel->lastStatus()); return Step::Yield; }
         if (sub == "modeles" || sub == "tester") {
             if (!iaQuery_) {

@@ -252,7 +252,7 @@ public:
     HttpResponse perform(const HttpRequest& req, const HttpSink& sink) override {
         Url u;
         std::string why;
-        if (!parseUrl(req.url, u, &why)) {
+        if (!parseUrl(req.url, u, &why, req.allowPrivateHttp)) {
             HttpResponse r;
             r.failure = HttpResponse::Failure::BadUrl;
             r.error = why;
@@ -295,7 +295,7 @@ public:
         lib.setopt(h, kOptXferInfoFunction, static_cast<ProgressFn>(&curlOnProgress));
         lib.setopt(h, kOptXferInfoData, static_cast<void*>(&ctx));
         // Ce poste : jamais par un proxy (les essais, un relais local).
-        if (u.loopback()) lib.setopt(h, kOptProxy, "");
+        if (u.loopback() || u.privateLan()) lib.setopt(h, kOptProxy, "");   // 1.16.0 : un serveur de l'usine, sans proxy
         const int rc = lib.perform(h);
         long code = 0;
         lib.getinfo(h, kInfoResponseCode, &code);
@@ -376,7 +376,7 @@ public:
     HttpResponse perform(const HttpRequest& req, const HttpSink& sink) override {
         Url u;
         std::string why;
-        if (!parseUrl(req.url, u, &why)) {
+        if (!parseUrl(req.url, u, &why, req.allowPrivateHttp)) {
             HttpResponse r;
             r.failure = HttpResponse::Failure::BadUrl;
             r.error = why;
@@ -384,9 +384,10 @@ public:
         }
         if (cancelled_) return failed(HttpResponse::Failure::Cancelled, u.host);
         const int idle = std::max(1, req.idleTimeoutSeconds);
-        HINTERNET session = WinHttpOpen(L"IHM-Studio", u.loopback() ? WINHTTP_ACCESS_TYPE_NO_PROXY : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        const bool direct = u.loopback() || u.privateLan();   // 1.16.0 : un serveur de l'usine, sans proxy
+        HINTERNET session = WinHttpOpen(L"IHM-Studio", direct ? WINHTTP_ACCESS_TYPE_NO_PROXY : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!session && !u.loopback())   // avant Windows 8.1 : les reglages de proxy de WinHTTP
+        if (!session && !direct)   // avant Windows 8.1 : les reglages de proxy de WinHTTP
             session = WinHttpOpen(L"IHM-Studio", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!session) return failed(HttpResponse::Failure::Other, u.host, 0, "WinHttpOpen " + std::to_string(GetLastError()));
         DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
@@ -553,7 +554,19 @@ std::string Url::base() const {
 
 std::string Url::text() const { return base() + path; }
 
-bool parseUrl(std::string_view text, Url& out, std::string* why) {
+bool Url::privateLan() const {
+    // Une adresse IPv4 ecrite en chiffres : 10.x.x.x, 192.168.x.x, 172.16.x.x a 172.31.x.x.
+    int a = -1, b = -1, c = -1, d = -1;
+    char tail = 0;
+    if (std::sscanf(host.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &tail) != 4) return false;
+    for (const int n : {a, b, c, d})
+        if (n < 0 || n > 255) return false;
+    return a == 10 || (a == 192 && b == 168) || (a == 172 && b >= 16 && b <= 31);
+}
+
+bool parseUrl(std::string_view text, Url& out, std::string* why) { return parseUrl(text, out, why, false); }
+
+bool parseUrl(std::string_view text, Url& out, std::string* why, bool allowPrivateHttp) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
@@ -602,7 +615,7 @@ bool parseUrl(std::string_view text, Url& out, std::string* why) {
     u.hasPath = !path.empty() && path != "/" && path[0] == '/';
     if (path.empty() || path[0] != '/') path = "/" + path;
     u.path = path;
-    if (!u.https && !u.loopback())
+    if (!u.https && !u.loopback() && !(allowPrivateHttp && u.privateLan()))
         return fail("\xC2\xAB " + t + " \xC2\xBB : http:// n'est accept\xC3\xA9 que vers ce poste (127.0.0.1) ; la cl\xC3\xA9 ne passe jamais en clair "
                     "sur le r\xC3\xA9seau : utilise https://.");
     out = std::move(u);

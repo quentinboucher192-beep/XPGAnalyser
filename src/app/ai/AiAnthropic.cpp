@@ -4,6 +4,8 @@
 #include "AiAnthropic.hpp"
 
 #include "AiJson.hpp"
+#include "AiOpenAI.hpp"
+#include "AiUsage.hpp"
 #include "../../core/AtomicFile.hpp"
 
 #include <algorithm>
@@ -480,8 +482,25 @@ void AnthropicStream::handle(const SseEvent& e) {
     json::Value v;
     if (!json::parse(e.data, v) || !v.isObject()) return;   // une ligne illisible : ignoree
     const std::string type = e.event == "message" || e.event.empty() ? v.str("type") : e.event;
+    // 1.16.0 : les jetons de la reponse (message_start : l'entree et le cache ; message_delta : la
+    // sortie, cumulee) - un evenement Usage a chaque nouvelle valeur.
+    const auto readUsage = [this](const json::Value& u) {
+        if (!u.isObject()) return;
+        const ProviderUsage before = usage_;
+        if (u.has("input_tokens")) usage_.input = u.integer("input_tokens");
+        if (u.has("cache_creation_input_tokens")) usage_.cacheWrite = u.integer("cache_creation_input_tokens");
+        if (u.has("cache_read_input_tokens")) usage_.cacheRead = u.integer("cache_read_input_tokens");
+        if (u.has("output_tokens")) usage_.output = u.integer("output_tokens");
+        if (usage_.input == before.input && usage_.output == before.output && usage_.cacheRead == before.cacheRead && usage_.cacheWrite == before.cacheWrite)
+            return;
+        ProviderEvent ue;
+        ue.type = ProviderEvent::Type::Usage;
+        ue.usage = usage_;
+        out_.push_back(std::move(ue));
+    };
     if (type == "message_start") {
         status("reflexion");
+        readUsage(v.at("message").at("usage"));
     } else if (type == "content_block_start") {
         const int index = static_cast<int>(v.integer("index"));
         const auto& cb = v.at("content_block");
@@ -540,6 +559,7 @@ void AnthropicStream::handle(const SseEvent& e) {
     } else if (type == "message_delta") {
         const auto& d = v.at("delta");
         if (const auto* r = d.find("stop_reason"); r && r->isString()) stopReason_ = r->asString();
+        readUsage(v.at("usage"));
     } else if (type == "message_stop") {
         stopped_ = true;
         const std::string reason = stopReason_.empty() ? std::string("end_turn") : stopReason_;
@@ -652,7 +672,14 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
         int status = 0;
         std::string errBody;
         HttpSink sink;
-        sink.onHeaders = [&](int s, const HttpHeaders&) { status = s; };
+        sink.onHeaders = [&](int s, const HttpHeaders& h) {
+            status = s;
+            // 1.16.0 : la limite du service, dans les en-tetes de chaque reponse (une 429 : l'attente).
+            ProviderEvent le;
+            le.type = ProviderEvent::Type::Usage;
+            le.limits = limitsFromHeaders(h, now());
+            if (le.limits.known() || le.limits.retryAfterSeconds >= 0) push(std::move(le));
+        };
         sink.onData = [&](std::string_view chunk) {
             if (status == 200) {
                 stream.feed(chunk);
@@ -721,6 +748,7 @@ ModelsResult parseModels(int status, std::string_view body) {
         ModelInfo info;
         info.id = m.str("id");
         info.name = m.str("display_name", info.id);
+        info.contextTokens = std::max<long long>(0, m.integer("max_input_tokens"));   // 1.16.0
         if (!info.id.empty()) r.models.push_back(std::move(info));
     }
     r.ok = true;
@@ -733,14 +761,26 @@ ModelQuery::~ModelQuery() {
 }
 
 bool ModelQuery::start(std::string endpoint, std::string apiKey, int timeoutSeconds, std::string* why) {
+    if (busy_) {
+        if (why) *why = "Une demande est d\xC3\xA9j\xC3\xA0 en cours.";
+        return false;
+    }
+    if (apiKey.empty() && blank(endpoint)) {
+        if (why) *why = "Entre d'abord ta cl\xC3\xA9 API.";
+        return false;
+    }
+    std::string messages, models;
+    if (!anthropicUrls(endpoint, messages, models, why)) return false;
+    return startUrl(models + "?limit=1000", anthropicHeaders(apiKey), timeoutSeconds, false, false, why);
+}
+
+bool ModelQuery::startUrl(std::string url, HttpHeaders headers, int timeoutSeconds, bool openai, bool allowPrivateHttp, std::string* why) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
     };
     if (busy_) return fail("Une demande est d\xC3\xA9j\xC3\xA0 en cours.");
-    if (apiKey.empty() && blank(endpoint)) return fail("Entre d'abord ta cl\xC3\xA9 API.");
-    std::string messages, models, w;
-    if (!anthropicUrls(endpoint, messages, models, &w)) return fail(w);
+    std::string w;
     if (!httpAvailable(&w)) return fail("Pas de connexion possible sur ce poste : " + w + ".");
     if (thread_.joinable()) thread_.join();
     {
@@ -749,7 +789,7 @@ bool ModelQuery::start(std::string endpoint, std::string apiKey, int timeoutSeco
         http_ = std::shared_ptr<HttpClient>(makeHttpClient());
     }
     busy_ = true;
-    thread_ = std::thread([this, url = models + "?limit=1000", key = std::move(apiKey), timeoutSeconds] {
+    thread_ = std::thread([this, url = std::move(url), hs = std::move(headers), timeoutSeconds, openai, allowPrivateHttp] {
         std::shared_ptr<HttpClient> http;
         {
             std::lock_guard<std::mutex> lk(m_);
@@ -758,9 +798,10 @@ bool ModelQuery::start(std::string endpoint, std::string apiKey, int timeoutSeco
         HttpRequest hr;
         hr.method = "GET";
         hr.url = url;
-        hr.headers = anthropicHeaders(key);
+        hr.headers = hs;
         hr.connectTimeoutSeconds = 20;
         hr.idleTimeoutSeconds = std::clamp(timeoutSeconds, 5, 600);
+        hr.allowPrivateHttp = allowPrivateHttp;
         std::string body;
         int status = 0;
         HttpSink sink;
@@ -776,7 +817,7 @@ bool ModelQuery::start(std::string endpoint, std::string apiKey, int timeoutSeco
             res.error = r.error;
             res.httpStatus = status ? status : r.status;
         } else {
-            res = parseModels(status ? status : r.status, body);
+            res = openai ? parseOpenAIModels(status ? status : r.status, body) : parseModels(status ? status : r.status, body);
         }
         {
             std::lock_guard<std::mutex> lk(m_);

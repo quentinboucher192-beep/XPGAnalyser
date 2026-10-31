@@ -77,6 +77,9 @@ struct ProviderRequest {
     std::string preset;
     int         contextTokens{0};
     bool        toolsInText{false};
+    // 1.16.0 (FOURNISSEURS, a la fin) : Settings::toolMode "auto" - un service qui refuse l'outil (un
+    // modele sans appel d'outil) : une nouvelle tentative aussitot, la proposition demandee en texte.
+    bool        textFallback{true};
 };
 
 // 1.16.0 (le contrat) : ce qu'une reponse a consomme - les jetons, tels que le service les compte.
