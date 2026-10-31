@@ -2,6 +2,7 @@
 //  app/ai/AiOperations.cpp - voir AiOperations.hpp
 // =============================================================================
 #include "AiOperations.hpp"
+#include "AiPlan.hpp"   // 1.19.0 : l'ordre d'execution (les unites, leurs dependances)
 
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiDuplicate.hpp"    // 1.16.0 : dupliquer avec reperes, comme Ctrl+Maj+D
@@ -229,6 +230,9 @@ struct Run {
     // connaissent : associer une variable creee, un membre d'un type cree plus haut). L'appelant les pose.
     std::vector<hmi::Variable> newVars{};
     std::vector<hmi::HmiType>  newTypes{};
+    // 1.19.0 : les variables creees par les unites precedentes du plan (en minuscules) - deja posees dans le projet de
+    // travail, mais toujours << creees par la proposition >> pour l'utilisateur.
+    const std::set<std::string>* plannedVars{nullptr};
 
     [[nodiscard]] const Env& environment() const {
         static const Env none;
@@ -436,7 +440,7 @@ struct Run {
         if (Item* it = itemFor(whatOf(o), o)) it->variable = name;
         if (check)
             check->bindings.push_back(o.name + kArrow + name
-                                      + (found ? (newVar(name) && !variableExists(project, name, environment()) ? std::string(" (cr\xC3\xA9\xC3\xA9" "e par la proposition)") : std::string{})
+                                      + (found ? ((newVar(name) && !variableExists(project, name, environment())) || (plannedVars && plannedVars->count(lower(rootOf(name)))) ? std::string(" (cr\xC3\xA9\xC3\xA9" "e par la proposition)") : std::string{})
                                                : p.variable.create ? " (\xC3\xA0 cr\xC3\xA9" "er)" : std::string{}));
         prop->value = name;
         prop->expr.clear();
@@ -1025,7 +1029,16 @@ struct Run {
             std::string bad;
             if (!hmi::isIdentifier(name)) bad = "nom invalide (une lettre ou _, puis des lettres sans accent, des chiffres ou _)";
             else if (hmi::isReservedWord(name) || iequal(name, "SYS") || iequal(name, "API")) bad = "\xC2\xAB " + name + " \xC2\xBB est un mot r\xC3\xA9serv\xC3\xA9";
-            else if (const auto* v = project.variable(name)) bad = "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom (" + v->name + ")";
+            else if (const auto* v = project.variable(name)) {
+                // 1.19.0 : la meme variable (meme type) : reutilisee telle quelle ; un autre type : refusee, jamais remplacee.
+                const std::string wanted = hmi::types::normalized(trimmed(spec.type));
+                if (!wanted.empty() && iequal(wanted, v->type)) {
+                    reuse("Variable", v->name, v->type + " (existe d\xC3\xA9j\xC3\xA0, gard\xC3\xA9" "e telle quelle)");
+                    continue;
+                }
+                bad = "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom avec le type " + v->type + " (demand\xC3\xA9 : " + (wanted.empty() ? std::string("?") : wanted)
+                      + ") : elle n'est jamais remplac\xC3\xA9" "e en silence";
+            }
             else if (newVar(name)) bad = "elle est d\xC3\xA9j\xC3\xA0 cr\xC3\xA9\xC3\xA9" "e plus haut dans la proposition";
             else if (std::any_of(project.programs.functions.begin(), project.programs.functions.end(),
                                  [&](const hmi::HmiFunction& f) { return iequal(f.name, name); }))
@@ -1070,7 +1083,21 @@ struct Run {
         std::string bad;
         if (!hmi::isIdentifier(name)) bad = "nom invalide (une lettre ou _, puis des lettres sans accent, des chiffres ou _)";
         else if (hmi::types::isElementary(name)) bad = name + " est un type \xC3\xA9l\xC3\xA9mentaire";
-        else if (const auto* t = project.hmiTypeByName(name)) bad = "le type IHM " + t->name + " existe d\xC3\xA9j\xC3\xA0";
+        else if (const auto* t = project.hmiTypeByName(name)) {
+            // 1.19.0 : le meme type (memes membres, memes types, memes generiques) : reutilise ; sinon refuse.
+            bool same = t->members.size() == op.members.size() && t->generics.size() == op.generics.size();
+            for (const auto& m : op.members) {
+                const auto it = std::find_if(t->members.begin(), t->members.end(), [&](const hmi::TypeMember& x) { return iequal(x.name, trimmed(m.name)); });
+                if (it == t->members.end() || !iequal(it->type, hmi::types::normalized(trimmed(m.type)))) same = false;
+            }
+            if (same) {
+                reuse("Type", t->name, std::to_string(t->members.size()) + " membres (existe d\xC3\xA9j\xC3\xA0, gard\xC3\xA9 tel quel)");
+                return true;
+            }
+            std::string has;
+            for (std::size_t k = 0; k < t->members.size() && k < 6; ++k) has += (k ? ", " : "") + t->members[k].name + " : " + t->members[k].type;
+            bad = "le type IHM " + t->name + " existe d\xC3\xA9j\xC3\xA0 avec d'autres membres (" + has + ") : il n'est jamais remplac\xC3\xA9 en silence";
+        }
         else if (newType(name)) bad = "il est d\xC3\xA9j\xC3\xA0 cr\xC3\xA9\xC3\xA9 plus haut dans la proposition";
         else if (op.members.empty()) bad = "il n'a aucun membre (une structure en a au moins un : nom, type)";
         if (!bad.empty()) return fail("Type \xC2\xAB " + op.name + " \xC2\xBB : " + bad + ".");
@@ -1146,6 +1173,21 @@ struct Run {
         std::vector<std::string> names;          // vide : creer le dossier seulement
     };
     std::vector<FolderOp>         folderOps{};
+    // 1.19.0 : LE PLAN - ce qui existe deja a l'identique et sert tel quel (jamais compte comme une creation) ; par
+    // operation, ce qu'elle a dit (les erreurs, avertissements, lignes << aussi cree >> et << reutilise >> qu'elle a
+    // ajoutes : leurs bornes dans le Check) ; la compilation des codes crees, remise a la fin du plan (deux fonctions
+    // qui s'appellent : chacune est compilee une fois l'autre creee).
+    std::vector<Check::Made> reusedItems{};
+    struct Span {
+        std::size_t op{0}, e0{0}, e1{0}, w0{0}, w1{0}, m0{0}, m1{0}, r0{0}, r1{0};
+    };
+    std::vector<Span> spans{};
+    bool              deferCompile{false};
+    void reuse(std::string what, std::string name, std::string detail) {
+        Check::Made m{std::move(what), std::move(name), std::move(detail)};
+        if (check) check->reused.push_back(m);
+        reusedItems.push_back(std::move(m));
+    }
 
     [[nodiscard]] static std::string prop(const Operation& op, std::string_view key) {
         for (const auto& [k, v] : op.props)
@@ -1225,7 +1267,6 @@ struct Run {
         std::string bad;
         if (name.empty() || name.size() > 64) bad = "son nom manque (64 caract\xC3\xA8res au plus)";
         else if (name.find_first_of("\"';|$\n\t") != std::string::npos) bad = "caract\xC3\xA8re interdit dans le nom";
-        else if (equipmentNamed(name)) bad = "un \xC3\xA9quipement porte d\xC3\xA9j\xC3\xA0 ce nom";
         if (!bad.empty()) return fail(at + bad + ".");
         hmi::Equipment e;
         e.name = name;
@@ -1256,6 +1297,15 @@ struct Run {
         e.unit = static_cast<int>(n);
         if (!readInt(prop(op, "periode"), 50, 60000, 500, n)) return fail(at + "p\xC3\xA9riode : de 50 \xC3\xA0 60000 ms.");
         e.periodMs = static_cast<int>(n);
+        // 1.19.0 : le meme equipement (memes reglages) : reutilise ; d'autres reglages : refuse, jamais remplace.
+        if (const hmi::Equipment* same = equipmentNamed(name)) {
+            if (same->type == e.type && iequal(same->host, e.host) && same->port == e.port && same->unit == e.unit && same->simulated == e.simulated) {
+                reuse("\xC3\x89quipement", same->name, "existe d\xC3\xA9j\xC3\xA0 avec ces r\xC3\xA9glages, gard\xC3\xA9 tel quel");
+                return true;
+            }
+            return fail(at + "un \xC3\xA9quipement porte d\xC3\xA9j\xC3\xA0 ce nom avec d'autres r\xC3\xA9glages (" + (same->host.empty() ? std::string("simul\xC3\xA9") : same->host)
+                        + ":" + std::to_string(same->port) + ", esclave " + std::to_string(same->unit) + ") : il n'est jamais remplac\xC3\xA9 en silence.");
+        }
         e.description = prop(op, "description").empty() ? created() : prop(op, "description");
         e.id = nextId++;
         std::string detail = std::string(hmi::equipmentTypeLabel(e.type)) + (e.host.empty() ? std::string{} : " " + e.host)
@@ -1629,6 +1679,12 @@ struct Run {
         for (std::size_t index = 0; index < p.ops.size(); ++index) {
             const Operation& op = p.ops[index];
             bool ok = true;
+            Span span;
+            span.op = index;
+            span.e0 = check ? check->errors.size() : 0;
+            span.w0 = check ? check->warnings.size() : 0;
+            span.m0 = check ? check->made.size() : 0;
+            span.r0 = reusedItems.size();
             switch (op.action) {
                 case Operation::Action::Create: ok = create(op); break;
                 case Operation::Action::Modify: ok = modify(op); break;
@@ -1652,9 +1708,14 @@ struct Run {
                 case Operation::Action::Folder: ok = folder(op, false); break;
                 case Operation::Action::Store: ok = folder(op, true); break;
             }
+            span.e1 = check ? check->errors.size() : 0;
+            span.w1 = check ? check->warnings.size() : 0;
+            span.m1 = check ? check->made.size() : 0;
+            span.r1 = reusedItems.size();
+            spans.push_back(span);
             if (!ok) return false;
         }
-        compileCreated();
+        if (!deferCompile) compileCreated();
         if (!why.empty() && !check && !preview) return false;
         for (const auto id : modifiedIds)
             if (removedIds.count(id) == 0 && touched && std::find(touched->modified.begin(), touched->modified.end(), id) == touched->modified.end())
@@ -1765,6 +1826,14 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
                 for (const auto& [k, v] : op.props)
                     if (k == "liste" || k == "dossier") out += "D:" + k + "=" + v + ";";
                 for (const auto& n : op.objects) out += "D:" + n + ";";
+                break;
+            // 1.19.0 : une vue neuve autre que la principale (un symbole, une popup... avec une vue de supervision) :
+            // absente, ou son empreinte (la principale est en tete de proposalPrint).
+            case Operation::Action::View:
+                if (!iequal(name, newViewName(p))) {
+                    const hmi::View* v = project.viewByName(name);
+                    out += "W:" + name + "=" + (v ? fingerprint(*v) : std::string("-")) + ";";
+                }
                 break;
             default:
                 break;
@@ -1925,23 +1994,51 @@ const hmi::View* targetView(const hmi::Project& p, const Proposal& pr) {
 }
 
 // ---- 1.16.0 : la portee, l'empreinte, la vue neuve ---------------------------------------------
-bool createsView(const Proposal& p) noexcept { return !p.ops.empty() && p.ops.front().action == Operation::Action::View; }
+// 1.19.0 : une proposition peut creer PLUSIEURS vues (un symbole, une popup, la vue de supervision) et toucher aussi la
+// vue ouverte. La vue neuve PRINCIPALE : la premiere creer_vue de role << vue >>, sinon la premiere creer_vue (en 1.18.0,
+// la seule, en premier : le meme resultat).
+bool createsView(const Proposal& p) noexcept {
+    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return op.action == Operation::Action::View; });
+}
 
-std::string newViewName(const Proposal& p) { return createsView(p) ? trimmed(p.ops.front().name) : std::string{}; }
+std::string newViewName(const Proposal& p) {
+    const Operation* first = nullptr;
+    for (const auto& op : p.ops) {
+        if (op.action != Operation::Action::View) continue;
+        if (!first) first = &op;
+        std::string role;
+        for (const auto& [k, v] : op.props)
+            if (k == "role") role = lower(trimmed(v));
+        if (role.empty() || role == "vue") return trimmed(op.name);
+    }
+    return first ? trimmed(first->name) : std::string{};
+}
+
+std::string opTarget(const Proposal& p, std::size_t index) {
+    if (index >= p.ops.size() || projectLevel(p.ops[index].action)) return {};
+    if (const std::string t = trimmed(p.ops[index].target); !t.empty()) return t;
+    for (std::size_t j = index; j-- > 0;)
+        if (p.ops[j].action == Operation::Action::View) return trimmed(p.ops[j].name);
+    return {};
+}
 
 bool usesOpenView(const Proposal& p) noexcept {
-    if (createsView(p)) return false;
     // Une proposition vide (une ancienne conversation) : la vue visee, comme avant.
     if (p.ops.empty()) return true;
-    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return !projectLevel(op.action); });
+    for (std::size_t i = 0; i < p.ops.size(); ++i)
+        if (!projectLevel(p.ops[i].action) && opTarget(p, i).empty()) return true;
+    return false;
 }
 
 std::string proposalPrint(const hmi::Project& project, const Proposal& p, std::string_view viewPrint) {
     std::string s;
     if (createsView(p)) {
-        const hmi::View* v = p.viewId != hmi::kNoId ? project.view(p.viewId) : nullptr;
-        if (!v) v = project.viewByName(p.ops.front().name);
+        // la vue neuve principale : par son identifiant une fois creee (une proposition qui ne touche pas la vue ouverte :
+        // viewId est alors le sien), sinon par son nom
+        const hmi::View* v = !usesOpenView(p) && p.viewId != hmi::kNoId ? project.view(p.viewId) : nullptr;
+        if (!v) v = project.viewByName(newViewName(p));
         s = "vue:" + (v ? fingerprint(*v) : std::string("absente"));
+        if (usesOpenView(p)) s += "|" + std::string(viewPrint);
     } else if (usesOpenView(p)) {
         s = std::string(viewPrint);
     } else {
@@ -2042,20 +2139,280 @@ hmi::View newViewFor(const hmi::Project& project, const Operation& op, hmi::Id& 
     return v;
 }
 
+// =============================================================================================
+//  1.19.0 : L'EXECUTION EN ETAPES (le plan, AiPlan.hpp). Les operations sont regroupees en
+//  UNITES (une operation du projet ; une vue neuve et ses objets ; les objets d'une vue
+//  existante), triees par leurs dependances - jamais l'ordre ecrit par l'IA. Chaque unite passe
+//  par le meme moteur (Run) que la 1.18.0, sur un projet qui grandit d'unite en unite :
+//    VALIDER   sur une COPIE du projet : tout est verifie, chaque operation recoit son etat
+//              (validee, echouee, ignoree parce qu'elle depend d'une operation echouee ou
+//              retiree) ; le code cree est compile une fois tout cree ;
+//    APPLIQUER dans UNE commande (hmi::changeProject) : les seules operations validees, dans
+//              l'ordre ; si une unite echoue malgre tout, le projet est remis tel qu'il etait
+//              (rien a moitie) et la raison est dite ;
+//    APERCU    comme valider, sans rien dire : la vue principale telle qu'elle serait.
+// =============================================================================================
+namespace {
+
+enum class Mode : std::uint8_t { Check, Preview, Apply };
+
+// Ce qu'une unite cree au projet : pose dans `pr` (les vues a part, par l'appelant).
+void commitRun(Run& run, hmi::Project& pr) {
+    for (auto& t : run.newTypes) pr.programs.types.push_back(std::move(t));
+    for (auto& nv : run.newVars) pr.programs.variables.push_back(std::move(nv));
+    for (auto& e : run.newEquipments) pr.equipments.push_back(std::move(e));
+    for (const auto& av : run.addressed)
+        if (hmi::Variable* x = pr.variableById(av.id)) *x = av;
+    std::set<hmi::Id> codes;
+    for (auto& sc : run.newScripts) {
+        codes.insert(sc.id);
+        pr.programs.scripts.push_back(std::move(sc));
+    }
+    for (auto& fn : run.newFunctions) {
+        codes.insert(fn.id);
+        pr.programs.functions.push_back(std::move(fn));
+    }
+    for (auto& al : run.newAlarms) pr.alarms.push_back(std::move(al));
+    for (auto& rs : run.newResources) pr.assets.resources.push_back(std::move(rs));
+    // Les blocs VAR d'un code cree deviennent ses declarations (comme a l'ouverture d'un projet d'avant).
+    if (!codes.empty()) {
+        const auto plan = hmi::migrate::plan(pr, [&](const hmi::migrate::Place& pl) { return codes.count(pl.id) > 0; });
+        if (!plan.items.empty()) (void)hmi::migrate::apply(pr, plan);
+    }
+}
+
+// Le court nom d'une operation, pour dire pourquoi une autre est ignoree.
+std::string opLabel(const Proposal& p, std::size_t i) {
+    if (i >= p.ops.size()) return {};
+    const Operation& op = p.ops[i];
+    const std::string name = trimmed(op.name.empty() ? op.variable : op.name);
+    return std::string(actionKey(op.action)) + (name.empty() ? std::string{} : " " + name);
+}
+
+using Outcome = Check::Outcome;
+
+bool stopped(const Outcome& o) noexcept {
+    return o.state == Outcome::State::Failed || o.state == Outcome::State::Skipped || o.state == Outcome::State::Excluded;
+}
+
+// Le coeur : `pr` grandit d'unite en unite. `only` (appliquer) : les operations a executer ; nul : toutes celles qui ne
+// sont ni retirees, ni bloquees, ni dependantes d'une operation qui l'est. Faux et `why` : une unite a echoue (appliquer).
+bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, Check* check, std::vector<Outcome>& out,
+               const plan::Schedule& sch, const std::set<std::size_t>* only, std::string* why,
+               std::map<hmi::Id, Touched>* touched, hmi::Id openView) {
+    const std::size_t n = p.ops.size();
+    out.assign(n, Outcome{});
+    const std::set<std::size_t> excluded(p.excluded.begin(), p.excluded.end());
+    const std::set<std::size_t> blocked(sch.blocked.begin(), sch.blocked.end());
+    for (std::size_t i = 0; i < n; ++i) {
+        if (excluded.count(i)) {
+            out[i].state = Outcome::State::Excluded;
+            out[i].note = "retir\xC3\xA9" "e du plan";
+        } else if (blocked.count(i)) {
+            out[i].state = Outcome::State::Failed;
+            out[i].errors = sch.errors;
+        }
+    }
+    std::set<std::string>          plannedVars;    // les variables creees par les unites precedentes
+    std::map<hmi::Id, std::size_t> codeOwner;      // un code cree -> l'operation qui le cree
+    std::map<hmi::Id, std::string> codeLabel;
+    for (const auto& unit : sch.units) {
+        // 1. ce qui s'execute dans cette unite (sans ce qui depend d'une operation echouee, ignoree ou retiree)
+        std::vector<std::size_t> run;
+        for (const auto i : unit.ops) {
+            if (stopped(out[i])) continue;
+            if (only && !only->count(i)) {
+                out[i].state = Outcome::State::Skipped;
+                if (out[i].note.empty()) out[i].note = "non valid\xC3\xA9" "e : laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9";
+                continue;
+            }
+            std::string cause;
+            for (const auto d : sch.deps[i])
+                if (d < n && stopped(out[d])) {
+                    cause = opLabel(p, d) + (out[d].state == Outcome::State::Excluded ? " (retir\xC3\xA9" "e)" : out[d].state == Outcome::State::Failed
+                                                                                                                ? " (\xC3\xA9" "chou\xC3\xA9" "e)"
+                                                                                                                : " (ignor\xC3\xA9" "e)");
+                    break;
+                }
+            if (!cause.empty()) {
+                out[i].state = Outcome::State::Skipped;
+                out[i].note = "d\xC3\xA9pend de " + cause;
+                continue;
+            }
+            run.push_back(i);
+        }
+        if (run.empty()) continue;
+        const bool newView = unit.kind == plan::Unit::Kind::NewView;
+        if (newView && p.ops[run.front()].action != Operation::Action::View) {
+            for (const auto i : run) {
+                out[i].state = Outcome::State::Skipped;
+                out[i].note = "sa vue " + unit.target + " n'est pas cr\xC3\xA9\xC3\xA9" "e";
+            }
+            continue;
+        }
+        // 2. la sous-proposition de l'unite (le meme moteur que la 1.18.0)
+        Proposal sub;
+        sub.id = p.id;
+        sub.request = p.request;
+        sub.summary = p.summary;
+        sub.variable = p.variable;
+        for (const auto i : run) sub.ops.push_back(p.ops[i]);
+        hmi::View work;
+        hmi::Id existing = hmi::kNoId;
+        if (newView) {
+            work = newViewFor(pr, sub.ops.front(), pr.nextId);
+        } else if (unit.kind == plan::Unit::Kind::ExistingView) {
+            const hmi::View* v = unit.target.empty() ? pr.view(openView) : pr.viewByName(unit.target);
+            if (!v) {
+                const std::string text = "La vue \xC2\xAB " + (unit.target.empty() ? p.view : unit.target) + " \xC2\xBB n'existe pas : ses objets ne peuvent pas s'appliquer.";
+                if (mode == Mode::Apply) {
+                    if (why) *why = text;
+                    return false;
+                }
+                for (const auto i : run) {
+                    out[i].state = Outcome::State::Failed;
+                    out[i].errors.push_back(text);
+                }
+                if (check) check->errors.push_back(text);
+                continue;
+            }
+            existing = v->id;
+            work = *v;
+            sub.view = v->name;
+            sub.viewId = v->id;
+        }
+        Check unitCheck;
+        Touched* t = touched && (newView || existing != hmi::kNoId) ? &(*touched)[newView ? work.id : existing] : nullptr;
+        Run r{pr, work, pr.nextId, sub, &env, mode == Mode::Check ? &unitCheck : nullptr, t, mode == Mode::Preview};
+        r.preview = mode == Mode::Preview;
+        r.deferCompile = true;
+        r.plannedVars = &plannedVars;
+        const bool ok = r.go();
+        if (mode == Mode::Apply && !ok) {
+            if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;
+            return false;
+        }
+        // 3. l'etat de chaque operation (ce qu'elle a dit)
+        for (const auto& sp : r.spans) {
+            if (sp.op >= run.size()) continue;
+            Outcome& o = out[run[sp.op]];
+            for (std::size_t k = sp.e0; k < sp.e1 && k < unitCheck.errors.size(); ++k) o.errors.push_back(unitCheck.errors[k]);
+            for (std::size_t k = sp.w0; k < sp.w1 && k < unitCheck.warnings.size(); ++k) o.warnings.push_back(unitCheck.warnings[k]);
+            for (std::size_t k = sp.m0; k < sp.m1 && k < unitCheck.made.size(); ++k) o.made.push_back(unitCheck.made[k]);
+            for (std::size_t k = sp.r0; k < sp.r1 && k < r.reusedItems.size(); ++k) o.reused.push_back(r.reusedItems[k]);
+            o.state = o.errors.empty() ? Outcome::State::Validated : Outcome::State::Failed;
+        }
+        // ce que l'unite a dit en plus (apres ses operations : les objets sans variable...) : a la derniere
+        if (!run.empty() && !r.spans.empty()) {
+            Outcome& last = out[run[r.spans.back().op < run.size() ? r.spans.back().op : run.size() - 1]];
+            for (std::size_t k = r.spans.back().w1; k < unitCheck.warnings.size(); ++k) last.warnings.push_back(unitCheck.warnings[k]);
+            for (std::size_t k = r.spans.back().e1; k < unitCheck.errors.size(); ++k) {
+                last.errors.push_back(unitCheck.errors[k]);
+                last.state = Outcome::State::Failed;
+            }
+        }
+        if (check) {
+            for (auto& it : unitCheck.items) {
+                it.view = work.name;
+                check->items.push_back(std::move(it));
+            }
+            for (auto& x : unitCheck.warnings) check->warnings.push_back(std::move(x));
+            for (auto& x : unitCheck.errors) check->errors.push_back(std::move(x));
+            for (auto& x : unitCheck.bindings) check->bindings.push_back(std::move(x));
+            check->create += unitCheck.create;
+            check->modify += unitCheck.modify;
+            check->remove += unitCheck.remove;
+            check->confirmRemoval = check->confirmRemoval || unitCheck.confirmRemoval;
+            if (check->missingVariable.empty() && !unitCheck.missingVariable.empty()) {
+                check->missingVariable = unitCheck.missingVariable;
+                check->nearVariables = unitCheck.nearVariables;
+            }
+            for (auto& x : unitCheck.newVariables) check->newVariables.push_back(std::move(x));
+            for (auto& x : unitCheck.newTypes) check->newTypes.push_back(std::move(x));
+            for (auto& x : unitCheck.made) check->made.push_back(std::move(x));
+            for (auto& x : unitCheck.detections) check->detections.push_back(std::move(x));
+            for (auto& x : unitCheck.reused) check->reused.push_back(std::move(x));
+        }
+        // 4. poser ce que l'unite cree (la suite du plan le voit)
+        if (unit.kind == plan::Unit::Kind::Project && run.size() == 1) {
+            for (const auto& sc : r.newScripts) {
+                codeOwner[sc.id] = run.front();
+                codeLabel[sc.id] = "Script " + sc.name;
+            }
+            for (const auto& fn : r.newFunctions) {
+                codeOwner[fn.id] = run.front();
+                codeLabel[fn.id] = "Fonction " + fn.name;
+            }
+            for (const auto& al : r.newAlarms) {
+                codeOwner[al.id] = run.front();
+                codeLabel[al.id] = "Alarme " + al.name;
+            }
+        }
+        for (const auto& v : r.newVars) plannedVars.insert(lower(v.name));
+        commitRun(r, pr);
+        if (newView) {
+            if (out[run.front()].state == Outcome::State::Failed) {
+                // la vue elle-meme est refusee (un nom pris...) : ses objets ne peuvent pas etre poses
+                for (std::size_t k = 1; k < run.size(); ++k)
+                    if (out[run[k]].state != Outcome::State::Failed) {
+                        out[run[k]].state = Outcome::State::Skipped;
+                        out[run[k]].note = "sa vue " + unit.target + " est refus\xC3\xA9" "e";
+                    }
+            } else {
+                // La vue de demarrage : une vue ordinaire, s'il n'y en a pas (comme "Nouvelle vue") - jamais un modele ni une popup.
+                if (pr.config.startView == hmi::kNoId && work.role == "vue") pr.config.startView = work.id;
+                pr.views.push_back(std::move(work));
+            }
+        } else if (existing != hmi::kNoId) {
+            if (hmi::View* target = pr.view(existing)) *target = std::move(work);
+        }
+        r.applyFolders(pr);
+    }
+    // 5. le code cree, compile une fois TOUT cree (deux fonctions qui s'appellent, un script et sa fonction)
+    if (mode != Mode::Apply && !codeOwner.empty()) {
+        hmi::CompileFocus focus;
+        for (const auto& [id, op] : codeOwner) {
+            focus.scripts.insert(id);
+            focus.functions.insert(id);
+            focus.alarms.insert(id);
+        }
+        const hmi::NameExists plc = env.plcName ? hmi::NameExists(env.plcName) : hmi::NameExists([](std::string_view) { return false; });
+        for (const auto& is : hmi::compileWith(pr, plc, hmi::exprcheck::PlcPaths{}, focus)) {
+            hmi::Id id = hmi::kNoId;
+            if (codeOwner.count(is.script)) id = is.script;
+            else if (codeOwner.count(is.item)) id = is.item;
+            if (id == hmi::kNoId) continue;
+            const std::string text = codeLabel[id] + (is.line > 0 ? ", ligne " + std::to_string(is.line) : std::string{}) + " : " + is.message;
+            Outcome& o = out[codeOwner[id]];
+            if (is.severity == hmi::Issue::Severity::Error) {
+                o.errors.push_back(text);
+                o.state = Outcome::State::Failed;
+                if (check) check->errors.push_back(text);
+            } else if (is.severity == hmi::Issue::Severity::Warning) {
+                o.warnings.push_back(text);
+                if (check) check->warnings.push_back(text);
+            }
+        }
+    }
+    return true;
+}
+
+// La vue ouverte d'une proposition (kNoId : elle n'en touche pas, ou plus).
+hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
+    if (!usesOpenView(p)) return hmi::kNoId;
+    const hmi::View* v = targetView(project, p);
+    return v ? v->id : hmi::kNoId;
+}
+
+} // namespace
+
 Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     Check check;
-    hmi::Id next = project.nextId;
-    hmi::View work;
-    if (createsView(p)) {
-        work = newViewFor(project, p.ops.front(), next);
-    } else if (usesOpenView(p)) {
-        const hmi::View* v = targetView(project, p);
-        if (!v) {
-            check.viewMissing = true;
-            check.errors.push_back("La vue \xC2\xAB " + p.view + " \xC2\xBB n'existe plus dans le projet : rien ne peut s'appliquer.");
-            return check;
-        }
-        work = *v;
+    const hmi::Id open = openViewOf(project, p);
+    if (usesOpenView(p) && open == hmi::kNoId) {
+        check.viewMissing = true;
+        check.errors.push_back("La vue \xC2\xAB " + p.view + " \xC2\xBB n'existe plus dans le projet : rien ne peut s'appliquer.");
+        return check;
     }
     if (!p.fingerprint.empty() && proposalPrint(project, p) != p.fingerprint) {
         check.stale = true;
@@ -2066,8 +2423,16 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
             check.errors.push_back("Le projet a chang\xC3\xA9 depuis cette proposition (une vue, une variable ou un type du m\xC3\xAAme nom "
                                    "existe maintenant) : elle ne s'applique plus telle quelle. Redemande-la.");
     }
-    Run run{project, work, next, p, &env, &check};
-    (void)run.go();
+    const plan::Schedule sch = plan::schedule(p);
+    hmi::Project copy = project;
+    std::vector<Check::Outcome> out;
+    (void)runStaged(copy, p, env, Mode::Check, &check, out, sch, nullptr, nullptr, nullptr, open);
+    for (const auto& e : sch.errors) check.errors.push_back(e);
+    check.outcomes = std::move(out);
+    check.order = sch.order();
+    check.deps = sch.deps;
+    check.planErrors = sch.errors;
+    check.newView = createsView(p) ? newViewName(p) : std::string{};
     return check;
 }
 
@@ -2093,80 +2458,45 @@ core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std:
         return nullptr;
     }
     if (skipped) *skipped = check.errors;
-    const bool onView = usesOpenView(p);
-    const hmi::View* v = onView ? targetView(doc->project, p) : nullptr;
-    const hmi::Id viewId = v ? v->id : hmi::kNoId;
+    // Les operations a executer : celles que la validation a validees (le reste : retire, echoue, ou qui en depend).
+    std::set<std::size_t> allowed;
+    for (std::size_t i = 0; i < check.outcomes.size(); ++i)
+        if (check.outcomes[i].state == Check::Outcome::State::Validated) allowed.insert(i);
+    if (allowed.empty()) {
+        if (why) *why = check.errors.empty() ? std::string("Rien \xC3\xA0 appliquer : toutes les op\xC3\xA9rations sont retir\xC3\xA9" "es.") : check.errors.front();
+        return nullptr;
+    }
+    const hmi::Id open = openViewOf(doc->project, p);
     const std::string label = "Assistant IA : " + (p.summary.empty() ? std::string("proposition") : p.summary);
     // Une variable a creer (choisie par l'utilisateur) : le projet ET la vue, dans une seule commande.
     std::string createVar;
     if (p.variable.create && p.variable.use.empty())
         for (const auto& name : requestedVariables(p))
             if (!variableExists(doc->project, name, env)) createVar = name;
+    const plan::Schedule sch = plan::schedule(p);
     std::string failed;
-    core::CommandPtr cmd;
-    if (!createVar.empty() || createsProjectItems(p)) {
-        // 1.16.0 : UNE commande pour tout - la vue neuve, ses objets, les variables, les types (Ctrl+Z
-        // reprend tout ensemble). Sur des copies : rien a moitie (une operation qui echoue ne laisse rien).
-        cmd = hmi::changeProject(doc, label, [&](hmi::Project& pr) {
-            const hmi::Id savedNext = pr.nextId;
-            const std::size_t savedVars = pr.programs.variables.size();
-            if (!createVar.empty()) {
-                hmi::Variable var;
-                var.id = pr.allocate();
-                var.name = createVar;
-                var.type = p.variable.type.empty() ? "BOOL" : p.variable.type;
-                var.initial = var.type == "BOOL" ? "FALSE" : "0";
-                var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
-                pr.programs.variables.push_back(std::move(var));
-            }
-            hmi::View work;
-            if (createsView(p)) work = newViewFor(pr, p.ops.front(), pr.nextId);
-            else if (const hmi::View* target = pr.view(viewId)) work = *target;
-            Run run{pr, work, pr.nextId, p, &env, nullptr, nullptr, false};
-            run.preview = lenient && !check.ok();   // 1.16.1 : appliquer malgre les erreurs
-            if (!run.go()) {
-                failed = run.why.empty() ? std::string("La proposition ne s'applique pas.") : run.why;
-                pr.programs.variables.resize(savedVars);
-                pr.nextId = savedNext;
-                return;
-            }
-            for (auto& t : run.newTypes) pr.programs.types.push_back(std::move(t));
-            for (auto& nv : run.newVars) pr.programs.variables.push_back(std::move(nv));
-            // 1.18.0 : les outils - equipements, adresses, scripts, fonctions, alarmes, ressources.
-            for (auto& e : run.newEquipments) pr.equipments.push_back(std::move(e));
-            for (const auto& av : run.addressed)
-                if (hmi::Variable* x = pr.variableById(av.id)) *x = av;
-            std::set<hmi::Id> codes;
-            for (auto& sc : run.newScripts) {
-                codes.insert(sc.id);
-                pr.programs.scripts.push_back(std::move(sc));
-            }
-            for (auto& fn : run.newFunctions) {
-                codes.insert(fn.id);
-                pr.programs.functions.push_back(std::move(fn));
-            }
-            for (auto& al : run.newAlarms) pr.alarms.push_back(std::move(al));
-            for (auto& rs : run.newResources) pr.assets.resources.push_back(std::move(rs));
-            // Les blocs VAR d'un code cree deviennent ses declarations (comme a l'ouverture d'un projet d'avant).
-            if (!codes.empty()) {
-                const auto plan = hmi::migrate::plan(pr, [&](const hmi::migrate::Place& pl) { return codes.count(pl.id) > 0; });
-                if (!plan.items.empty()) (void)hmi::migrate::apply(pr, plan);
-            }
-            if (createsView(p)) {
-                // La vue de demarrage : une vue ordinaire, s'il n'y en a pas (comme "Nouvelle vue") - jamais un modele ni une popup.
-                if (pr.config.startView == hmi::kNoId && work.role == "vue") pr.config.startView = work.id;
-                pr.views.push_back(std::move(work));
-            } else if (hmi::View* target = pr.view(viewId)) {
-                *target = std::move(work);
-            }
-            run.applyFolders(pr);
-        });
-    } else {
-        cmd = hmi::changeView(doc, viewId, label, [&](hmi::Project& pr, hmi::View& view) {
-            hmi::View work = view;
-            if (applyOps(pr, work, pr.nextId, p, nullptr, &failed, false, &env, lenient && !check.ok())) view = std::move(work);
-        });
-    }
+    // 1.19.0 : UNE commande pour tout le plan (la vue neuve et ses objets, les autres vues, les variables, les types, les
+    // outils) : Ctrl+Z reprend tout, Ctrl+Y le refait. Une unite qui echoue : le projet est remis tel qu'il etait.
+    core::CommandPtr cmd = hmi::changeProject(doc, label, [&](hmi::Project& pr) {
+        const hmi::Project backup = pr;
+        if (!createVar.empty()) {
+            hmi::Variable var;
+            var.id = pr.allocate();
+            var.name = createVar;
+            var.type = p.variable.type.empty() ? "BOOL" : p.variable.type;
+            var.initial = var.type == "BOOL" ? "FALSE" : "0";
+            var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
+            pr.programs.variables.push_back(std::move(var));
+        }
+        std::vector<Check::Outcome> out;
+        if (!runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open)) {
+            if (failed.empty()) failed = "La proposition ne s'applique pas.";
+            failed += " Le projet est rest\xC3\xA9 tel qu'il \xC3\xA9tait (rien n'a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9).";
+            const hmi::Id keep = pr.nextId;
+            pr = backup;
+            pr.nextId = std::max(pr.nextId, keep);
+        }
+    });
     if (!failed.empty()) {
         if (why) *why = failed;
         return nullptr;
@@ -2187,25 +2517,31 @@ core::CommandPtr makeCommandLenient(const hmi::DocumentPtr& doc, const Proposal&
 
 Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) {
     Preview out;
-    hmi::Id next = project.nextId;
-    if (createsView(p)) {
-        out.view = newViewFor(project, p.ops.front(), next);
-    } else if (usesOpenView(p)) {
-        const hmi::View* v = targetView(project, p);
-        if (!v) {
-            out.why = "La vue \xC2\xAB " + p.view + " \xC2\xBB n'existe plus.";
-            return out;
-        }
-        out.view = *v;
-    } else {
+    const hmi::Id open = openViewOf(project, p);
+    if (!createsView(p) && !usesOpenView(p)) {
         // Ni vue ni objet : des variables, des types (l'apercu de la carte le dit, la liste les montre).
         out.why = "Rien \xC3\xA0 dessiner : la proposition cr\xC3\xA9" "e " + creationSummary(p) + " (la liste de l'aper\xC3\xA7u les montre).";
         return out;
     }
+    if (usesOpenView(p) && open == hmi::kNoId && !createsView(p)) {
+        out.why = "La vue \xC2\xAB " + p.view + " \xC2\xBB n'existe plus.";
+        return out;
+    }
     // Tolerant : une operation impossible (une variable introuvable) n'empeche pas de voir le reste.
-    Run run{project, out.view, next, p, &env, nullptr, &out.touched, /*skipRemovals=*/true};
-    run.preview = true;
-    out.ok = run.go();
+    hmi::Project copy = project;
+    std::vector<Check::Outcome> outcomes;
+    std::map<hmi::Id, Touched> touched;
+    (void)runStaged(copy, p, env, Mode::Preview, nullptr, outcomes, plan::schedule(p), nullptr, nullptr, &touched, open);
+    // La vue montree : la vue neuve principale, sinon la vue ouverte.
+    const hmi::View* shown = createsView(p) ? copy.viewByName(newViewName(p)) : nullptr;
+    if (!shown && open != hmi::kNoId) shown = copy.view(open);
+    if (!shown) {
+        out.why = "La vue \xC2\xAB " + (createsView(p) ? newViewName(p) : p.view) + " \xC2\xBB ne peut pas \xC3\xAA" "tre dessin\xC3\xA9" "e (refus\xC3\xA9" "e).";
+        return out;
+    }
+    out.view = *shown;
+    if (auto it = touched.find(shown->id); it != touched.end()) out.touched = it->second;
+    out.ok = true;
     return out;
 }
 
@@ -2318,6 +2654,8 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
             if (op.count != 1) o.set("copies", static_cast<std::int64_t>(op.count));
             if (op.markers) o.set("reperes", true);
         }
+        // 1.19.0 : la vue visee par une operation sur des objets (seulement si elle est dite).
+        if (!projectLevel(op.action) && !op.target.empty()) o.set("vue", op.target);
         arr.push(std::move(o));
     }
     return arr;
@@ -2371,12 +2709,13 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
             if (g.isString()) op.generics.push_back(g.asString());
         for (const auto& v : o.at("parametres").items()) op.params.push_back({v.str("nom"), v.str("type"), v.str("description"), scalar(v.at("valeur"))});
         op.detect = o.flag("detecter");
+        if (!projectLevel(*action)) op.target = o.str("vue");   // 1.19.0 : la vue visee (vide : comme avant)
         if (*action == Operation::Action::Store)
             for (const auto& n : o.at("elements").items()) op.objects.push_back(n.asString());
         if (projectLevel(*action) && *action != Operation::Action::Variables && *action != Operation::Action::Type) {
             static const std::set<std::string, std::less<>> reserved = {"action", "nom", "objet", "objets", "elements", "variable", "proprietes", "variables",
                                                                         "membres", "parametres", "generiques", "detecter", "genre", "noms", "dx", "dy",
-                                                                        "code", "copies", "reperes"};
+                                                                        "code", "copies", "reperes", "vue"};
             for (const auto& [k, v] : o.members())
                 if (!reserved.count(k) && (v.isString() || v.isNumber() || v.isBool())) {
                     const bool already = std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; });
@@ -2417,6 +2756,14 @@ json::Value toJson(const Proposal& p) {
         o.set("variableChoisie", std::move(c));
     }
     o.set("operations", operationsToJson(p.ops));
+    // 1.19.0 : les operations retirees du plan, le plan applique (ses etats) et le compte rendu reel.
+    if (!p.excluded.empty()) {
+        json::Value a = json::Value::array();
+        for (const auto i : p.excluded) a.push(static_cast<std::int64_t>(i));
+        o.set("exclues", std::move(a));
+    }
+    if (!p.plan.isNull()) o.set("plan", p.plan);
+    if (!p.report.isNull()) o.set("compteRendu", p.report);
     json::addMembers(o, p.extra);
     return o;
 }
@@ -2440,8 +2787,13 @@ Proposal proposalFromJson(const json::Value& o) {
         p.variable.type = c->str("type", "BOOL");
     }
     if (const auto* ops = o.find("operations")) (void)operationsFromJson(*ops, p.ops);
+    if (const auto* ex = o.find("exclues"); ex && ex->isArray())
+        for (const auto& x : ex->items())
+            if (x.isNumber() && x.asInt() >= 0 && static_cast<std::size_t>(x.asInt()) < p.ops.size()) p.excluded.push_back(static_cast<std::size_t>(x.asInt()));
+    if (const auto* pl = o.find("plan")) p.plan = *pl;
+    if (const auto* cr = o.find("compteRendu")) p.report = *cr;
     p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "empreinteApres", "demande", "resume",
-                                       "variableChoisie", "operations"});
+                                       "variableChoisie", "operations", "exclues", "plan", "compteRendu"});
     return p;
 }
 

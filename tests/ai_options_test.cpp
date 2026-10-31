@@ -111,11 +111,12 @@ struct Fixture {
         p.request = std::move(request);
         p.summary = "Essai";
         p.ops = std::move(ops);
-        if (ai::createsView(p)) {
-            p.view = p.ops.front().name;
-        } else if (ai::usesOpenView(p)) {
+        // 1.19.0 : une proposition peut creer une vue ET toucher la vue ouverte - la vue ouverte d'abord.
+        if (ai::usesOpenView(p)) {
             p.view = doc->project.view(view)->name;
             p.viewId = view;
+        } else if (ai::createsView(p)) {
+            p.view = ai::newViewName(p);
         }
         p.fingerprint = ai::proposalPrint(doc->project, p);
         return p;
@@ -188,7 +189,17 @@ void createView() {
     auto taken = f.proposal({op(A::View, "accueil")});
     check(anyHas(ai::validate(f.doc->project, taken).errors, "une vue porte d\xC3\xA9j\xC3\xA0 ce nom"), "un nom de vue pris (sans la casse) : refuse");
     auto second = f.proposal({create("Rectangle", "R"), op(A::View, "Vue_B")});
-    check(anyHas(ai::validate(f.doc->project, second).errors, "vient en PREMIER"), "creer_vue apres une autre operation : refuse");
+    // 1.19.0 : l'ordre d'ecriture ne decide plus : un objet ecrit AVANT creer_vue, sans "vue", va sur la vue ouverte ;
+    // avec "vue", il va sur la vue creee, meme ecrit avant elle.
+    const auto sc = ai::validate(f.doc->project, second);
+    check(sc.ok() && ai::opTarget(second, 0).empty() && ai::opTarget(second, 1).empty(),
+          "creer_vue apres un objet : accepte, l'objet ecrit avant reste sur la vue ouverte (" + errorsOf(sc) + ")");
+    auto r1 = create("Rectangle", "R", {{"x", "10"}, {"y", "10"}});
+    r1.target = "Vue_B";
+    auto before1 = f.proposal({r1, op(A::View, "Vue_B")});
+    const auto sb = ai::validate(f.doc->project, before1);
+    check(sb.ok() && sb.order.size() == 2 && sb.order.front() == 1 && sb.newView == "Vue_B" && sb.create == 1,
+          "un objet de Vue_B ecrit avant creer_vue : la vue est creee d'abord (l'ordre du plan) (" + errorsOf(sb) + ")");
     auto badKey = f.proposal({op(A::View, "Vue_C", {{"couleur", "#FFFFFF"}})});
     check(anyHas(ai::validate(f.doc->project, badKey).errors, "n'est pas un r\xC3\xA9glage d'une vue"), "un reglage inconnu (couleur) : refuse");
     auto badSize = f.proposal({op(A::View, "Vue_D", {{"largeur", "grand"}, {"fond", "bleu"}})});
@@ -233,7 +244,7 @@ void createVariables() {
     check(f.doc->project.programs.variables.size() == before && !f.doc->project.variable("Marche_P2"), "Ctrl+Z : toutes reparties");
 
     // Refusees, une raison par variable.
-    auto bad = f.proposal({vars({{"Pompe_1_Marche", "BOOL", "", ""},
+    auto bad = f.proposal({vars({{"Pompe_1_Marche", "INT", "", ""},
                                  {"1abc", "BOOL", "", ""},
                                  {"Niveau", "REEL", "", ""},
                                  {"Etat", "BOOL", "", "peut-etre"},
@@ -244,7 +255,13 @@ void createVariables() {
                                  {"SansType", "", "", ""},
                                  {"Tableau", "ARRAY[0..3] OF REAL", "", "5"}})});
     const auto bk = ai::validate(f.doc->project, bad);
-    check(anyHas(bk.errors, "Pompe_1_Marche") && anyHas(bk.errors, "porte d\xC3\xA9j\xC3\xA0 ce nom"), "un nom pris : refuse");
+    check(anyHas(bk.errors, "Pompe_1_Marche") && anyHas(bk.errors, "porte d\xC3\xA9j\xC3\xA0 ce nom avec le type BOOL"), "un nom pris avec un autre type : refuse");
+    {
+        // 1.19.0 : le meme nom, le meme type : reutilisee (rien de cree, rien de remplace).
+        auto same = f.proposal({vars({{"Pompe_1_Marche", "BOOL", "", ""}})});
+        const auto ss = ai::validate(f.doc->project, same);
+        check(ss.ok() && ss.newVariables.empty() && ss.reused.size() == 1, "le meme nom et le meme type : reutilisee (" + errorsOf(ss) + ")");
+    }
     check(anyHas(bk.errors, "1abc") && anyHas(bk.errors, "nom invalide"), "un nom invalide : refuse");
     check(anyHas(bk.errors, "REEL") && anyHas(bk.errors, "les plus proches : REAL"), "un type inconnu : refuse, avec les plus proches (REAL)");
     check(anyHas(bk.errors, "TRUE ou FALSE"), "une valeur BOOL illisible : refusee");
@@ -282,7 +299,7 @@ void createVariables() {
         hmi::Variable v;
         v.id = f.doc->project.allocate();
         v.name = "Marche_P2";
-        v.type = "BOOL";
+        v.type = "INT";
         f.doc->project.programs.variables.push_back(v);
         const auto st = ai::validate(f.doc->project, both);
         check(st.stale && anyHas(st.errors, "porte d\xC3\xA9j\xC3\xA0 ce nom"), "une variable du meme nom apparue depuis : perimee et refusee");
@@ -316,9 +333,12 @@ void createTypes() {
 
     // L'ordre des dependances.
     auto order = f.proposal({type("T_Ligne", {{"Vannes", "ARRAY[1..3] OF T_Vanne", ""}}), type("T_Vanne", {{"Ouv", "BOOL", ""}})});
-    check(anyHas(ai::validate(f.doc->project, order).errors, "PLUS BAS"), "un type employe avant d'etre cree : refuse (l'ordre)");
+    // 1.19.0 : l'ordre d'ecriture ne compte plus - le plan cree T_Vanne d'abord.
+    const auto ok1 = ai::validate(f.doc->project, order);
+    check(ok1.ok() && ok1.order.size() == 2 && ok1.order.front() == 1, "un type employe avant d'etre cree : le plan le cree d'abord (" + errorsOf(ok1) + ")");
     auto varFirst = f.proposal({vars({{"Ligne_2", "T_Ligne2", "", ""}}), type("T_Ligne2", {{"A", "BOOL", ""}})});
-    check(anyHas(ai::validate(f.doc->project, varFirst).errors, "PLUS BAS"), "une variable d'un type cree plus bas : refusee (l'ordre)");
+    const auto ok2 = ai::validate(f.doc->project, varFirst);
+    check(ok2.ok() && ok2.order.size() == 2 && ok2.order.front() == 1, "une variable d'un type ecrit plus bas : le type d'abord (" + errorsOf(ok2) + ")");
     auto bad = f.proposal({type("T_Moteur", {{"A", "BOOL", ""}}),
                            type("INT", {{"A", "BOOL", ""}}),
                            type("T_Soi", {{"Moi", "T_Soi", ""}}),
@@ -602,7 +622,7 @@ void toolReading() {
               && has(rules, "Jamais pour masquer une variable absente"),
           "les consignes : les trois operations, les formules, les reperes, quand creer");
     // Le retour au modele cite les nouvelles erreurs.
-    auto bad = f.proposal({vars({{"Pompe_1_Marche", "BOOL", "", ""}})});
+    auto bad = f.proposal({vars({{"Pompe_1_Marche", "REAL", "", ""}})});
     const std::string fb = ai::feedback(ai::validate(f.doc->project, bad), bad);
     check(has(fb, "Pompe_1_Marche") && has(fb, "porte d\xC3\xA9j\xC3\xA0 ce nom") && has(fb, "Corrige"), "le retour au modele : l'erreur de la variable");
 }

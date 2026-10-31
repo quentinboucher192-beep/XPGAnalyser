@@ -130,8 +130,13 @@ struct Operation {
     std::vector<std::string>                         generics;
     std::vector<VariableSpec>                        params;
     bool                                             detect{false};
+    // 1.19.0 (a la fin) : les objets (creer, modifier, associer...) - la vue visee, par son nom : une vue creee dans
+    // la meme proposition (creer_vue) ou une vue du projet. Vide : la derniere creer_vue ecrite avant l'operation,
+    // sinon la vue ouverte (comme en 1.18.0). Le JSON : "vue".
+    std::string                                      target;
     bool operator==(const Operation&) const = default;
 };
+
 // 1.18.0 : l'operation ne touche que le projet (pas la vue ouverte) : creer_variables, creer_type, creer_vue et les outils.
 [[nodiscard]] bool projectLevel(Operation::Action) noexcept;
 [[nodiscard]] std::string_view actionKey(Operation::Action) noexcept;          // "creer"...
@@ -161,6 +166,12 @@ struct Proposal {
     VariableChoice         variable;
     int                    create{0}, modify{0}, remove{0};   // les comptes (le contrat), refaits par validate
     json::Value            extra;                // les champs inconnus, gardes
+    // 1.19.0 (a la fin) : LE PLAN - les operations retirees par l'utilisateur dans l'apercu (leurs indices : elles ne
+    // s'appliquent pas, celles qui en dependent non plus) ; le plan tel qu'il a ete applique (ses etapes et leurs etats,
+    // AiPlan : toJson) et le COMPTE RENDU reel (AiPlan : reportToJson) - gardes avec la conversation.
+    std::vector<std::size_t> excluded;
+    json::Value              plan;
+    json::Value              report;
 };
 
 // ---- valider -------------------------------------------------------------------
@@ -175,6 +186,7 @@ struct Item {
     hmi::Kind           kind{hmi::Kind::Rectangle};
     std::vector<Change> changes;          // creer : les proprietes donnees ; modifier : avant -> apres
     std::string         variable;         // la variable associee (vide : aucune)
+    std::string         view;             // 1.19.0 : la vue de l'objet (une proposition peut en toucher plusieurs)
 };
 struct Check {
     std::vector<Item>        items;
@@ -199,6 +211,22 @@ struct Check {
     };
     std::vector<Made>                                   made;
     std::vector<std::pair<std::string, std::string>>    detections;
+    // 1.19.0 (a la fin) : LE PLAN - ce qui existe deja a l'identique et sert tel quel (un type de memes membres, une
+    // variable de meme type, un equipement de memes reglages) ; par operation (l'indice de Proposal::ops) : son etat a la
+    // validation, ses erreurs et avertissements, pourquoi elle est ignoree ; l'ordre d'execution (AiPlan : schedule) et
+    // les dependances ; les erreurs du plan (une dependance circulaire).
+    std::vector<Made>                                   reused;
+    struct Outcome {
+        enum class State : std::uint8_t { ToDo, Validated, Failed, Skipped, Excluded };
+        State                    state{State::ToDo};
+        std::vector<std::string> errors, warnings;
+        std::string              note;
+        std::vector<Made>        made, reused;
+    };
+    std::vector<Outcome>                                outcomes;
+    std::vector<std::size_t>                            order;
+    std::vector<std::vector<std::size_t>>               deps;
+    std::vector<std::string>                            planErrors;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 
@@ -239,6 +267,9 @@ struct Env {
 // Le nom de la vue neuve (celui de creer_vue), vide sans creer_vue. Proposal::view peut dire la vue ouverte a la
 // demande (l'IA integree) : la vue neuve se lit ici.
 [[nodiscard]] std::string newViewName(const Proposal&);
+// 1.19.0 : la vue visee par une operation sur des objets (son nom ; vide : la vue ouverte) - Operation::target, sinon la
+// derniere creer_vue ecrite avant elle. Vide aussi pour une operation du projet.
+[[nodiscard]] std::string opTarget(const Proposal&, std::size_t index);
 // 1.16.0 : L'EMPREINTE DE CE QUE LA PROPOSITION TOUCHE, telle qu'elle est dans le projet : la vue visee
 // (fingerprint, comme en 1.15.0 : une proposition qui ne cree que des objets garde la meme empreinte) ;
 // la vue neuve d'un creer_vue (absente, ou son empreinte) ; + l'etat des variables et des types qu'elle cree
