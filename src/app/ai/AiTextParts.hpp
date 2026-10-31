@@ -57,13 +57,38 @@ struct Prepared {
 using Ask = std::function<std::optional<std::string>(const ProviderRequest& mini, std::string* error)>;
 using Progress = std::function<void(const std::string& detail)>;
 
+// 1.20.1 : LE TEXTE EXACT A LA DEMANDE. Les pieces qui n'ont pas tenu entieres (des parties en extrait ou non envoyees)
+// restent lisibles : l'IA appelle l'outil << lire_piece_jointe >> (fichier, de_ligne, a_ligne) et le fournisseur lui
+// repond, sur son fil, par le texte EXACT de ces lignes - dans la place qui reste dans la fenetre du modele.
+inline constexpr std::string_view kReadTool = "lire_piece_jointe";
+inline constexpr int              kMaxReads = 8;   // les lectures exactes d'une demande, au plus
+struct Library {
+    struct File {
+        std::string              name;
+        std::string              text;
+        std::vector<std::size_t> lineStarts;   // l'octet ou commence chaque ligne
+    };
+    std::vector<File> files;
+    std::size_t       room{0};   // les octets de texte que la demande peut encore porter
+    [[nodiscard]] bool active() const noexcept { return !files.empty(); }
+    // La reponse a un appel de l'outil (son entree JSON) : le texte exact des lignes demandees (borne par la place), ou
+    // ce qui ne va pas (fichier inconnu, lignes hors du fichier, plus de place). `detail` : pour l'etat du panneau.
+    [[nodiscard]] std::string read(std::string_view inputJson, std::string* detail = nullptr);
+};
+// La definition de l'outil (au format Anthropic : name, description, input_schema), a ajouter au tableau des outils.
+[[nodiscard]] std::string readToolJson();
+// Le tableau des outils `toolsJson` (vide : aucun) avec l'outil de lecture en plus.
+[[nodiscard]] std::string withReadTool(const std::string& toolsJson);
+
 // Prepare les pieces texte de `req` (ProviderAttachment::prepared). Le budget va d'abord a la DERNIERE demande, puis
 // aux plus anciennes. Une piece qui tient : ses parties. Sinon : ses premieres parties, puis les autres lues a part
 // (`ask` ; seulement pour la derniere demande - les plus anciennes reprennent les extraits deja faits, gardes le temps
 // de la session) ; ce qui ne peut pas etre lu est dit. `ask` vide : pas de lecture prealable. `cancelled` : Arreter.
 // Les notes : pour l'utilisateur.
+// `library` non nul : les pieces qui n'ont pas tenu entieres y sont gardees (le texte exact a la demande) et les blocs
+// le disent a l'IA ; sa place est ce qui reste de la fenetre.
 void prepare(ProviderRequest& req, int fallbackWindow, const Ask& ask, const Progress& progress, const std::function<bool()>& cancelled,
-             std::vector<std::string>* notes);
+             std::vector<std::string>* notes, Library* library = nullptr);
 
 // La preparation d'une seule piece, sans lecture prealable, dans `budget` octets (les corps des fournisseurs, quand
 // prepare n'a pas ete appele).

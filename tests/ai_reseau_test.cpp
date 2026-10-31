@@ -135,9 +135,9 @@ std::string thinkingBlock(int i) {
            + sseOf("content_block_delta", obj({{"type", "content_block_delta"}, {"index", i}, {"delta", obj({{"type", "signature_delta"}, {"signature", "sig"}})}}))
            + blockStop(i);
 }
-std::string toolStart(int i, const std::string& id) {
+std::string toolStart(int i, const std::string& id, const std::string& name = "proposer_operations") {
     return sseOf("content_block_start", obj({{"type", "content_block_start"}, {"index", i},
-                                             {"content_block", obj({{"type", "tool_use"}, {"id", id}, {"name", "proposer_operations"}, {"input", Value::object()}})}}));
+                                             {"content_block", obj({{"type", "tool_use"}, {"id", id}, {"name", name}, {"input", Value::object()}})}}));
 }
 std::string jsonDelta(int i, const std::string& part) {
     return sseOf("content_block_delta", obj({{"type", "content_block_delta"}, {"index", i}, {"delta", obj({{"type", "input_json_delta"}, {"partial_json", part}})}}));
@@ -937,6 +937,49 @@ void testTextParts() {
         (void)runToEnd(p2, 10000);
         check(g_net.count() == 1 && has(g_net.at(0).body, "EXTRAIT_4"), "le tour suivant : les extraits gardes, aucune nouvelle lecture");
     }
+    // 1.20.1 : le TEXTE EXACT a la demande - l'IA appelle lire_piece_jointe, le fournisseur repond (sur son fil) et la demande
+    // continue ; le panneau ne voit ni l'appel ni la fin du tour qui l'attendait.
+    g_net.reset();
+    {
+        ai::ProviderRequest r = simpleRequest("Que dit la ligne 5000 ?");
+        r.contextTokens = 138000;
+        r.turns[0].attachments = {att()};
+        const std::string readInput = "{\"fichier\": \"mesures.csv\", \"de_ligne\": 5000, \"a_ligne\": 5001}";
+        g_net.push(sseReply(msgStart() + textStart(0) + textDelta(0, "Je lis la ligne. ") + blockStop(0) + toolStart(1, "toolu_lire", "lire_piece_jointe")
+                            + jsonDelta(1, readInput) + blockStop(1) + msgDelta("tool_use") + msgStop()));
+        g_net.push(sseReply(streamText("La ligne 5000 dit Pompe_5000.")));
+        ai::AnthropicProvider p(fastRetries());
+        (void)p.start(r);
+        const auto ev = runToEnd(p, 10000);
+        const std::size_t n = g_net.count();
+        const std::string ask = g_net.at(n - 2).body, cont = g_net.at(n - 1).body;
+        int dones = 0;
+        bool toolSeen = false, readStatus = false;
+        for (const auto& e : ev) {
+            if (e.type == ai::ProviderEvent::Type::Done) ++dones;
+            if (e.type == ai::ProviderEvent::Type::ToolUse) toolSeen = true;
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "lecture" && has(e.detail, "Lecture exacte")) readStatus = true;
+        }
+        check(has(ask, "lire_piece_jointe") && has(ask, "outil lire_piece_jointe"), "la demande offre l'outil lire_piece_jointe (et le dit dans les blocs)");
+        check(has(cont, "\"tool_result\"") && has(cont, "toolu_lire") && has(cont, "texte exact") && has(cont, "Pompe_5000;")
+                  && has(cont, "lignes 5000 \xC3\xA0 5001"),
+              "la suite : le TEXTE EXACT des lignes 5000 et 5001 en tool_result");
+        check(!toolSeen && dones == 1 && readStatus && allText(ev) == "Je lis la ligne. La ligne 5000 dit Pompe_5000.",
+              "le panneau : le texte suivi, l'etat << Lecture exacte >>, une seule fin, aucun appel d'outil visible");
+        ai::textparts::Library lib;
+        ai::textparts::Library::File file;
+        file.name = "a.txt";
+        file.text = "un\ndeux\ntrois\n";
+        file.lineStarts = {0, 3, 8};
+        lib.files.push_back(file);
+        lib.room = 100000;
+        check(has(lib.read("{\"fichier\": \"A.TXT\", \"de_ligne\": 2, \"a_ligne\": 9}"), "deux\ntrois"), "une lecture : sans casse, bornee a la fin du fichier");
+        check(has(lib.read("{\"fichier\": \"b.txt\", \"de_ligne\": 1, \"a_ligne\": 1}"), "introuvable"), "un fichier inconnu : dit, avec la liste");
+        check(has(lib.read("{\"fichier\": \"a.txt\", \"de_ligne\": 9, \"a_ligne\": 9}"), "n'a que 3 lignes"), "des lignes hors du fichier : dit");
+        lib.room = 10;
+        check(has(lib.read("{\"fichier\": \"a.txt\", \"de_ligne\": 1, \"a_ligne\": 1}"), "Plus de place"), "plus de place : dit, rien d'invente");
+    }
+    tp::forgetExtracts();
     // une lecture qui echoue : la partie est DITE non lue, la demande part quand meme
     tp::forgetExtracts();
     g_net.reset();

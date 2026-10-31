@@ -700,7 +700,9 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
     hr.allowPrivateHttp = target.privateHttp && request.apiKey.empty();
     request.apiKey.clear();
     // 1.20.0 : les textes joints, a la mesure de la fenetre du modele - entiers en parties, ou les parties en trop lues a
-    // part (une demande chacune, sans outil) ; ici, sur le fil, jamais sur celui de l'interface.
+    // part (une demande chacune, sans outil) ; ici, sur le fil, jamais sur celui de l'interface. 1.20.1 : et leur texte
+    // exact lisible a la demande (l'outil lire_piece_jointe, repondu ici ; seulement avec l'appel d'outil natif).
+    textparts::Library library;
     {
         std::vector<std::string> notes;
         const auto ask = [&](const ProviderRequest& mini, std::string* err) -> std::optional<std::string> {
@@ -760,8 +762,9 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
         };
         textparts::prepare(
             request, openAIWindow(request), ask, [this](const std::string& detail) { push(statusEvent("lecture", detail)); },
-            [this] { return cancelled_.load(); }, &notes);
+            [this] { return cancelled_.load(); }, &notes, withTools ? &library : nullptr);
         if (cancelled_) return finish(doneEvent("arrete"));
+        if (library.active()) request.toolsJson = textparts::withReadTool(request.toolsJson);
         if (!notes.empty()) {
             std::string all;
             for (const auto& n : notes) all += (all.empty() ? "" : " ") + n;
@@ -771,7 +774,33 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
     }
     double delay = opt_.firstDelay;
     int attempt = 0;
-    for (int round = 0; round < 8; ++round) {
+    // 1.20.1 : un appel de l'outil de lecture est repondu ICI (le texte exact), puis la demande continue.
+    std::string turnText;
+    std::optional<ProviderEvent> readCall, heldDone;
+    bool otherTool = false;
+    int reads = 0;
+    const auto route = [&](ProviderEvent e) {
+        if (library.active() && withTools) {
+            if (e.type == ProviderEvent::Type::ToolUse && e.toolName == textparts::kReadTool) {
+                if (!readCall) readCall = std::move(e);
+                return;
+            }
+            if (e.type == ProviderEvent::Type::ToolUse) otherTool = true;
+            if (e.type == ProviderEvent::Type::Done && readCall && !otherTool) {
+                if (reads < textparts::kMaxReads) {
+                    heldDone = std::move(e);
+                    return;
+                }
+                ProviderEvent t;
+                t.type = ProviderEvent::Type::Text;
+                t.text = "\n\n[Lectures exactes des pi\xC3\xA8" "ces jointes : la limite de cette demande est atteinte.]";
+                push(std::move(t));
+            }
+            if (e.type == ProviderEvent::Type::Text) turnText += e.text;
+        }
+        push(std::move(e));
+    };
+    for (int round = 0; round < 8 + textparts::kMaxReads; ++round) {
         if (cancelled_) return finish(doneEvent("arrete"));
         if (round > 0) push(statusEvent("connexion"));
         hr.body = openAIBody(request, withTools, streamUsage);   // lit les pieces jointes : ici, sur le fil
@@ -793,7 +822,7 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
         sink.onData = [&](std::string_view chunk) {
             if (status == 200) {
                 stream.feed(chunk);
-                for (auto& e : stream.take()) push(std::move(e));
+                for (auto& e : stream.take()) route(std::move(e));
             } else if (errBody.size() < 64 * 1024) {
                 errBody.append(chunk.data(), std::min<std::size_t>(chunk.size(), 64 * 1024 - errBody.size()));
             }
@@ -804,7 +833,30 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
         std::optional<ApiError> retry;
         if (status == 200) {
             stream.end();
-            for (auto& e : stream.take()) push(std::move(e));
+            for (auto& e : stream.take()) route(std::move(e));
+            if (stream.finished() && heldDone && readCall) {
+                // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
+                ++reads;
+                std::string detail;
+                const std::string result = library.read(readCall->toolInputJson, &detail);
+                push(statusEvent("lecture", detail));
+                ProviderTurn a;
+                a.role = ProviderTurn::Role::Assistant;
+                a.text = turnText;
+                a.toolUseId = readCall->toolUseId;
+                a.toolName = readCall->toolName;
+                a.toolInputJson = readCall->toolInputJson;
+                ProviderTurn u;
+                u.toolResultFor = readCall->toolUseId;
+                u.toolResultText = result;
+                request.turns.push_back(std::move(a));
+                request.turns.push_back(std::move(u));
+                turnText.clear();
+                readCall.reset();
+                heldDone.reset();
+                otherTool = false;
+                continue;   // la boucle refait le corps (la reponse et la suite)
+            }
             if (stream.finished()) {
                 busy_ = false;
                 return;

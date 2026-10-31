@@ -7,6 +7,8 @@
 #include "../../core/AtomicFile.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <map>
@@ -201,7 +203,7 @@ void forgetExtracts() {
 }
 
 void prepare(ProviderRequest& req, int fallbackWindow, const Ask& ask, const Progress& progress, const std::function<bool()>& cancelled,
-             std::vector<std::string>* notes) {
+             std::vector<std::string>* notes, Library* library) {
     const auto note = [&](std::string n) {
         if (notes && !n.empty() && std::find(notes->begin(), notes->end(), n) == notes->end()) notes->push_back(std::move(n));
     };
@@ -238,6 +240,16 @@ void prepare(ProviderRequest& req, int fallbackWindow, const Ask& ask, const Pro
                 continue;
             }
             // Il ne tient pas : les premieres parties telles quelles, les suivantes lues a part (un extrait chacune).
+            // 1.20.1 : et son texte exact reste lisible a la demande (l'outil de lecture).
+            if (library && std::none_of(library->files.begin(), library->files.end(), [&](const Library::File& f) { return f.name == a.name; })) {
+                Library::File f;
+                f.name = a.name;
+                f.text = text;
+                f.lineStarts.push_back(0);
+                for (std::size_t i = 0; i < f.text.size(); ++i)
+                    if (f.text[i] == '\n' && i + 1 < f.text.size()) f.lineStarts.push_back(i + 1);
+                library->files.push_back(std::move(f));
+            }
             const bool canRead = latest && static_cast<bool>(ask);
             const auto cached = [&](std::size_t i) {
                 std::lock_guard<std::mutex> lk(g_m);
@@ -293,7 +305,8 @@ void prepare(ProviderRequest& req, int fallbackWindow, const Ask& ask, const Pro
                     ++unread;
                     continue;
                 }
-                std::string block = partLabel(a.name, a.bytes, i, n, parts[i]) + ", lue \xC3\xA0 part (un extrait, pas le texte entier) :\n" + extract;
+                std::string block = partLabel(a.name, a.bytes, i, n, parts[i]) + ", lue \xC3\xA0 part (un extrait, pas le texte entier"
+                                    + (library ? std::string(" ; son texte exact : l'outil lire_piece_jointe") : std::string{}) + ") :\n" + extract;
                 room = room > block.size() ? room - block.size() : 0;
                 a.blocks.push_back(std::move(block));
                 ++readCount;
@@ -302,16 +315,97 @@ void prepare(ProviderRequest& req, int fallbackWindow, const Ask& ask, const Pro
                 a.blocks.push_back("[Pi\xC3\xA8" "ce jointe " + guillemets(a.name) + " : " + std::to_string(unread) + " partie(s) sur " + std::to_string(n)
                                    + " (\xC3\xA0 partir de la partie " + std::to_string(firstUnread + 1) + ", ligne " + std::to_string(parts[firstUnread].firstLine)
                                    + ") ne sont pas envoy\xC3\xA9" "es : la fen\xC3\xAAtre de contexte du mod\xC3\xA8le est pleine. Ne devine pas leur contenu ; "
-                                     "si elles comptent, dis-le \xC3\xA0 l'utilisateur.]");
+                                   + (library ? std::string("lis le texte exact des lignes utiles avec l'outil lire_piece_jointe, ou dis-le \xC3\xA0 l'utilisateur.]")
+                                              : std::string("si elles comptent, dis-le \xC3\xA0 l'utilisateur.]")));
             std::string msg = guillemets(a.name) + " (" + sizeText(a.bytes) + ") ne tient pas entier dans la fen\xC3\xAAtre du mod\xC3\xA8le : " + std::to_string(n)
                               + " parties, ";
             msg += k == 0 ? std::string("aucune telle quelle") : (k == 1 ? std::string("la premi\xC3\xA8re") : "les " + std::to_string(k) + " premi\xC3\xA8res") + " telle(s) quelle(s)";
             if (readCount > 0) msg += ", " + std::to_string(readCount) + " lue(s) \xC3\xA0 part (un extrait chacune)";
             if (unread > 0) msg += ", " + std::to_string(unread) + " non lue(s)" + (failure.empty() ? std::string{} : " (" + failure + ")");
-            note(msg + ".");
+            note(msg + (library ? std::string(" L'IA peut en lire le texte exact \xC3\xA0 la demande.") : std::string(".")));
             budget = room;
         }
     }
+    if (library) library->room = budget;
+}
+
+std::string readToolJson() {
+    return "{\"name\": \"lire_piece_jointe\", \"description\": \"Lit le texte EXACT de lignes d'une piece jointe qui n'a pas tenu "
+           "entiere dans la demande (ses parties sont en extrait ou non envoyees). Un appel a la fois ; demande seulement les lignes "
+           "utiles (la place est comptee). Ne devine jamais le contenu non lu.\", \"input_schema\": {\"type\": \"object\", "
+           "\"properties\": {\"fichier\": {\"type\": \"string\", \"description\": \"le nom de la piece jointe\"}, "
+           "\"de_ligne\": {\"type\": \"integer\", \"description\": \"la premiere ligne (1 = la premiere)\"}, "
+           "\"a_ligne\": {\"type\": \"integer\", \"description\": \"la derniere ligne (incluse)\"}}, "
+           "\"required\": [\"fichier\", \"de_ligne\", \"a_ligne\"]}}";
+}
+
+std::string withReadTool(const std::string& toolsJson) {
+    if (toolsJson.empty()) return "[" + readToolJson() + "]";
+    const auto close = toolsJson.find_last_of(']');
+    if (close == std::string::npos) return toolsJson;
+    const auto open = toolsJson.find('[');
+    const bool empty = open != std::string::npos && toolsJson.find_first_not_of(" \t\r\n", open + 1) == close;
+    return toolsJson.substr(0, close) + (empty ? "" : ", ") + readToolJson() + toolsJson.substr(close);
+}
+
+std::string Library::read(std::string_view inputJson, std::string* detail) {
+    // L'entree : {"fichier": ..., "de_ligne": n, "a_ligne": m} - lue sans dependre du lecteur JSON (des entiers, un nom).
+    const auto field = [&](std::string_view key) -> std::string {
+        const std::string k = "\"" + std::string(key) + "\"";
+        auto at = inputJson.find(k);
+        if (at == std::string_view::npos) return {};
+        at = inputJson.find(':', at + k.size());
+        if (at == std::string_view::npos) return {};
+        ++at;
+        while (at < inputJson.size() && (inputJson[at] == ' ' || inputJson[at] == '\t')) ++at;
+        if (at < inputJson.size() && inputJson[at] == '"') {
+            std::string out;
+            for (std::size_t i = at + 1; i < inputJson.size() && inputJson[i] != '"'; ++i) {
+                if (inputJson[i] == '\\' && i + 1 < inputJson.size()) ++i;
+                out += inputJson[i];
+            }
+            return out;
+        }
+        std::size_t end = at;
+        while (end < inputJson.size() && (std::isdigit(static_cast<unsigned char>(inputJson[end])) || inputJson[end] == '-')) ++end;
+        return std::string(inputJson.substr(at, end - at));
+    };
+    const std::string name = field("fichier");
+    const File* file = nullptr;
+    for (const auto& f : files) {
+        std::string a = f.name, b = name;
+        for (auto& c : a) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : b) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (a == b) file = &f;
+    }
+    if (!file) {
+        std::string list;
+        for (const auto& f : files) list += (list.empty() ? "" : ", ") + guillemets(f.name);
+        return "Pi\xC3\xA8" "ce jointe " + guillemets(name) + " introuvable parmi celles qu'on peut lire : " + list + ".";
+    }
+    const long long total = static_cast<long long>(file->lineStarts.size());
+    long long from = std::atoll(field("de_ligne").c_str()), to = std::atoll(field("a_ligne").c_str());
+    if (from < 1) from = 1;
+    if (to < from) to = from;
+    if (from > total) return guillemets(file->name) + " n'a que " + std::to_string(total) + " lignes.";
+    if (to > total) to = total;
+    const auto begin = file->lineStarts[static_cast<std::size_t>(from - 1)];
+    const auto endOf = [&](long long line) {   // la fin de la ligne `line` (1 = la premiere) : le debut de la suivante
+        return line < total ? file->lineStarts[static_cast<std::size_t>(line)] : file->text.size();
+    };
+    const std::string head = guillemets(file->name) + ", lignes " + std::to_string(from) + " \xC3\xA0 ";
+    if (room < 512) return "Plus de place dans la demande pour lire " + guillemets(file->name) + " : r\xC3\xA9ponds avec ce que tu as, ou dis \xC3\xA0 "
+                           "l'utilisateur ce qui manque (une question plus pr\xC3\xA9" "cise, ou un mod\xC3\xA8le \xC3\xA0 plus grande fen\xC3\xAAtre).";
+    const std::size_t space = room - head.size() - 160;
+    long long last = to;
+    while (last > from && endOf(last) - begin > space) --last;   // jusqu'a la derniere ligne entiere qui tient
+    std::size_t end = endOf(last);
+    if (end - begin > space) end = charStart(file->text, begin + space);   // une seule ligne trop longue : coupee
+    std::string out = head + std::to_string(last) + " (texte exact) :\n" + file->text.substr(begin, end - begin);
+    if (last < to) out += "\n[La place manque : lignes " + std::to_string(last + 1) + " \xC3\xA0 " + std::to_string(to) + " non lues.]";
+    room = room > out.size() ? room - out.size() : 0;
+    if (detail) *detail = "Lecture exacte de " + guillemets(file->name) + " : lignes " + std::to_string(from) + " \xC3\xA0 " + std::to_string(last) + "\xE2\x80\xA6";
+    return out;
 }
 
 } // namespace app::ai::textparts
