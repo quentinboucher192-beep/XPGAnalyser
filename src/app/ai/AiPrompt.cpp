@@ -99,7 +99,7 @@ const char* const kRules =
     "17. Travailler en plusieurs \xC3\xA9tapes (1.21.0, quand l'outil analyser_projet est disponible) : pour une demande large (v\xC3\xA9rifier, "
     "nettoyer, supprimer, r\xC3\xA9organiser), encha\xC3\xAEne seul les \xC3\xA9tapes qui ne changent rien - analyser_projet (orphelins, impact "
     "d'une suppression, qui utilise quoi, verifier), executer_code - puis propose les modifications avec proposer_operations : "
-    "l'utilisateur valide avant que rien ne change (une suppression toujours). Ton compte rendu suit les r\xC3\xA9sultats r\xC3\xA9els : "
+    "l'utilisateur valide avant que rien ne change (une suppression toujours). Ton compte rendu suit les r\xC3\xA9sultats r\xC3\xA9" "els : "
     "ce qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce qui est propos\xC3\xA9, ce qui attend la validation ; jamais une \xC3\xA9tape suppos\xC3\xA9" "e faite.\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
