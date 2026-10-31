@@ -16,6 +16,10 @@
 //                         (verifications, Appliquer, Remettre l'adresse d'avant) ;
 //    Scanner IP           tout un reseau (celui d'un port, ou une plage) : qui
 //                         repond, sa MAC, son fabricant, ses ports, Modbus ;
+//                         1.21.0 : confirme avant de partir (HmiScanDialog), a
+//                         cadence limitee, en lecture seule ; chaque information
+//                         confirmee, annoncee ou supposee ; compare au projet,
+//                         des propositions (Ctrl+Z) ; un journal des scans ;
 //    Equipements          la liste (l'automate du projet en tete), la fiche de
 //                         celui qu'on choisit, Tester, Ping ;
 //    (1.11.4 : l'onglet Variables liees est retire ; une variable IHM liee se choisit
@@ -54,9 +58,11 @@
 
 #include "HmiAskDialog.hpp"
 #include "HmiPanels.hpp"
+#include "HmiScanDialog.hpp"
 #include "../../core/Signal.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiComm.hpp"
+#include "../../hmi/HmiDiscovery.hpp"
 #include "../../hmi/HmiIpScan.hpp"
 #include "../../hmi/HmiNetInfo.hpp"
 #include "../../hmi/HmiRuntime.hpp"
@@ -261,9 +267,22 @@ public:
     [[nodiscard]] std::vector<std::pair<int, std::string>> portChecks() const;
 
     // ---- le scanner IP (lot 15) -------------------------------------------------------
-    // "port" (le nom d'un port), "plage", "ports", "delai", "noms", "modbus".
+    // "port" (le nom d'un port), "plage", "ports", "delai", "noms", "modbus" ; 1.21.0 : "cadence"
+    // (interrogations par seconde, 1 a 100).
     bool setScanField(const std::string& key, const std::string& value, std::string* why = nullptr);
+    // 1.21.0 : LA DECOUVERTE EST UNE OBSERVATION. Scanner n'envoie rien : il ouvre la confirmation
+    // (askScan, le dialogue HmiScanDialog) preremplie d'apres les champs du volet ; c'est Lancer, dans
+    // le dialogue, qui lance (launchScan). Sans dialogue (les essais) : refuse.
     bool startScan(std::string* why = nullptr);
+    // La confirmation d'une demande donnee (l'Assistant IA : sa plage, ses protocoles) ; `note` : une
+    // ligne de plus en haut du dialogue. Vrai : le dialogue est ouvert (rien n'est encore parti).
+    bool askScan(const hmi::discovery::Request& request, const std::string& note = {}, std::string* why = nullptr);
+    // La demande d'apres les champs du volet (le port, la plage, les ports, la cadence...).
+    [[nodiscard]] hmi::discovery::Request scanRequest() const;
+    // Au clic Lancer : la demande confirmee et l'empreinte des reglages montres (vide : pas de controle).
+    // Le plan est refait ; une empreinte differente (le PC a change entre-temps) : refuse, a confirmer
+    // de nouveau. Puis l'accord (ipscan::grant), le scan, la ligne du journal.
+    bool launchScan(const hmi::discovery::Request& request, const std::string& shownSignature, std::string* why = nullptr);
     void stopScan();
     [[nodiscard]] bool scanning() const;
     [[nodiscard]] std::vector<hmi::ipscan::Host> scanResults() const;
@@ -271,6 +290,18 @@ public:
     bool addScanned(const std::string& ip, std::string* why = nullptr);
     bool exportScan(std::string* where = nullptr);
     [[nodiscard]] std::string selectedScanned() const;
+    // 1.21.0 : la fiche de chaque appareil (confirme, annonce, suppose) et la comparaison avec le
+    // projet, refaites a chaque resultat ; `scanReportSerial` change a chaque nouveau compte rendu
+    // (l'Assistant IA le surveille pour sa carte).
+    [[nodiscard]] const hmi::discovery::Report& scanReport() const noexcept { return scanReport_; }
+    [[nodiscard]] std::uint64_t scanReportSerial() const noexcept { return scanReportSerial_; }
+    [[nodiscard]] bool scanFinished() const;            // le dernier scan est alle au bout (ou s'est arrete)
+    // 1.21.0 : appliquer la proposition faite pour une adresse trouvee - ajouter (addScanned), mettre a
+    // jour l'adresse ou associer (une supposition : la question d'abord, `ask` faux : sans). Une commande,
+    // Ctrl+Z. Rien n'est fait sur l'appareil.
+    bool applyScanProposal(const std::string& ip, bool ask = true, std::string* why = nullptr);
+    // 1.21.0 : le journal des decouvertes (ihm/reseau/decouvertes.csv, et cette seance), du plus recent.
+    [[nodiscard]] std::vector<hmi::discovery::JournalEntry> scanJournal() const;
 
     // ---- lot 17 : supprimer, deplacer -------------------------------------------------
     // Supprimer un equipement : les variables de `drop` sont supprimees (et ce qui
@@ -387,6 +418,11 @@ public:
         std::function<void(const std::string& equipment, const std::string& address, const std::string& type)> askBindAt;
         // Lot 17 : importer un fichier CSV dans la memoire du jumeau (le dialogue du chemin).
         std::function<void(const std::string& equipment)>             askImportTwin;
+        // 1.21.0 : la confirmation d'un scan (HmiScanDialog) ; la reponse : accepte, et le payload
+        // (HmiScanDialog::parse). Nul : aucun scan ne part.
+        std::function<void(HmiScanDialog::Spec, std::function<void(bool, const std::string&)>)> askScan;
+        // 1.21.0 : le dossier du projet (le journal des decouvertes) ; vide : pas encore enregistre.
+        std::function<std::string()>                                  projectFolder;
     };
     void setHosts(Hosts h);
 
@@ -519,6 +555,20 @@ private:
     std::string              scanRange_;        // la plage tapee (vide : le reseau du port)
     std::size_t              scanShown_{0};
     bool                     scanWasRunning_{false};
+    // 1.21.0 : la confirmation, le compte rendu, le journal.
+    double                   scanRate_{hmi::ipscan::kDefaultRate};
+    bool                     scanAsking_{false};        // la confirmation est ouverte
+    hmi::discovery::Report   scanReport_;
+    std::uint64_t            scanReportSerial_{0};
+    std::uint64_t            scanShownSerial_{0};       // le compte rendu que montre le tableau
+    std::string              scanReportKey_;            // ce que le compte rendu a vu (resultats, projet)
+    hmi::discovery::JournalEntry scanEntry_;            // le lancement du scan en cours (ou du dernier)
+    bool                     scanEnded_{true};          // sa fin est deja au journal
+    std::vector<hmi::discovery::JournalEntry> scanSession_;   // les lignes de cette seance
+    mutable std::vector<hmi::discovery::JournalEntry> journalCache_;   // le fichier relu (une fois par changement)
+    mutable std::string      journalCacheKey_;
+    void refreshScanReport(bool running);
+    void journalScan(const hmi::discovery::JournalEntry& e);
     // Lot 17 : la carte memoire.
     HmiMemoryMap*            map_{nullptr};
     ui::DropDown*            mapTargetBox_{nullptr};

@@ -17,6 +17,7 @@
 #include "../../hmi/HmiZones.hpp"
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiHistory.hpp"
+#include "../../hmi/HmiDiscovery.hpp"   // 1.21.0 : la decouverte sans intrusion (fiche, comparaison, journal)
 #include "../../ui/widgets/Controls.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 
@@ -1906,7 +1907,24 @@ bool HmiCommPane::giveOutside(int index, std::string* why) {
 }
 
 // ================================================================= scanner ===
+//  1.21.0 : LA DECOUVERTE EST UNE OBSERVATION. Scanner ouvre la confirmation (HmiScanDialog) ; Lancer y donne
+//  l'accord (ipscan::grant) pour CES reglages ; le scan va a sa cadence (20 interrogations par seconde par defaut),
+//  en lecture seule ; chaque resultat est classe (confirme, annonce, suppose) et compare au projet ; le lancement et
+//  la fin vont au journal (ihm/reseau/decouvertes.csv). Les propositions (ajouter, mettre a jour l'adresse, associer)
+//  sont des commandes a part, Ctrl+Z.
+namespace {
+
+bool hasPort(const std::vector<int>& ports, int p) { return std::find(ports.begin(), ports.end(), p) != ports.end(); }
+
+} // namespace
+
 bool HmiCommPane::scanning() const { return scanner_ && scanner_->running(); }
+
+bool HmiCommPane::scanFinished() const {
+    if (!scanner_ || scanner_->running()) return false;
+    const auto pr = scanner_->progress();
+    return pr.finished || pr.stopped;
+}
 
 std::vector<hmi::ipscan::Host> HmiCommPane::scanResults() const {
     return scanner_ ? scanner_->results() : std::vector<hmi::ipscan::Host>{};
@@ -1944,6 +1962,11 @@ bool HmiCommPane::setScanField(const std::string& key, const std::string& raw, s
         long long n = 0;
         if (!sim::readInteger(v, n) || n < 50 || n > 5000) return fail("d\xC3\xA9lai : de 50 \xC3\xA0 5000 ms");
         scanOptions_.timeoutMs = static_cast<int>(n);
+    } else if (key == "cadence") {
+        long long n = 0;
+        if (!sim::readInteger(v, n) || n < 1 || n > static_cast<long long>(hmi::ipscan::kMaxRate))
+            return fail("cadence : de 1 \xC3\xA0 " + std::to_string(static_cast<int>(hmi::ipscan::kMaxRate)) + " interrogations par seconde");
+        scanRate_ = static_cast<double>(n);
     } else if (key == "noms") {
         scanOptions_.names = yes(v);
     } else if (key == "modbus") {
@@ -1956,33 +1979,116 @@ bool HmiCommPane::setScanField(const std::string& key, const std::string& raw, s
     return true;
 }
 
-bool HmiCommPane::startScan(std::string* why) {
+hmi::discovery::Request HmiCommPane::scanRequest() const {
+    namespace disc = hmi::discovery;
+    disc::Request r;
+    r.origin = "Scanner IP";
+    auto* h = host();
+    const auto adapters = h ? h->adapters() : std::vector<hmi::netinfo::Adapter>{};
+    std::string port = scanPort_;
+    if (port.empty()) port = disc::defaultInterface(adapters);
+    if (!port.empty() && adapter(port)) r.adapter = port;
+    if (!scanRange_.empty()) (void)disc::setRange(r, scanRange_);
+    else if (!r.adapter.empty()) (void)disc::useInterface(r, adapters, r.adapter);
+    // Les protocoles dont chaque port est dans la liste du volet ; les autres ports : en plus.
+    r.protocols.clear();
+    std::vector<int> covered;
+    for (const auto& p : disc::protocols()) {
+        if (p.ports.empty() || !std::all_of(p.ports.begin(), p.ports.end(), [&](int x) { return hasPort(scanOptions_.ports, x); })) continue;
+        r.protocols.push_back(p.key);
+        covered.insert(covered.end(), p.ports.begin(), p.ports.end());
+    }
+    std::vector<int> extra;
+    for (const int x : scanOptions_.ports)
+        if (!hasPort(covered, x)) extra.push_back(x);
+    r.extraPorts = hmi::ipscan::portsText(extra);
+    r.rate = scanRate_;
+    r.threads = std::clamp(scanOptions_.threads, 1, hmi::ipscan::kMaxThreads);
+    r.timeoutMs = scanOptions_.timeoutMs;
+    r.names = scanOptions_.names;
+    r.modbusId = scanOptions_.modbusId;
+    return r;
+}
+
+bool HmiCommPane::startScan(std::string* why) { return askScan(scanRequest(), {}, why); }
+
+bool HmiCommPane::askScan(const hmi::discovery::Request& request, const std::string& note, std::string* why) {
     const auto fail = [&](std::string m) {
         say(m, true);
         if (why) *why = std::move(m);
         return false;
     };
+    if (scanning()) return fail("un scan est d\xC3\xA9j\xC3\xA0 en cours : Arr\xC3\xAAter d'abord");
+    if (!hosts_.askScan) return fail("la confirmation n'est pas disponible ici : aucun scan ne part sans elle");
+    if (scanAsking_) return true;
     auto* h = host();
-    std::string text = scanRange_;
-    const auto a = adapter(scanPort_);
-    if (text.empty()) {
-        if (!a || !a->ip()) return fail("choisis un port avec une adresse (ou tape une plage)");
-        text = eq::ipv4Text(eq::networkOf(a->ip(), a->prefix())) + "/" + std::to_string(a->prefix());
-    }
-    hmi::ipscan::Options o = scanOptions_;
-    std::string reason;
-    if (!hmi::ipscan::parseRange(text, o.first, o.last, &reason)) return fail("plage : " + reason);
-    // Sur le reseau d'un port du PC : l'ARP dit qui est la.
-    o.onLink = false;
-    if (h)
-        for (const auto& ad : h->adapters())
-            for (const auto& [ip, pre] : ad.addresses)
-                if (eq::sameNetwork(ip, o.first, pre) && eq::sameNetwork(ip, o.last, pre)) o.onLink = true;
-    if (!scanner_) scanner_ = std::make_unique<hmi::ipscan::Scanner>();
-    if (!scanner_->start(o, &reason)) return fail("scan : " + reason);
-    scanWasRunning_ = true;
+    HmiScanDialog::Spec spec;
+    spec.request = request;
+    spec.adapters = h ? h->adapters() : std::vector<hmi::netinfo::Adapter>{};
+    spec.note = note;
+    scanAsking_ = true;
     tabs_->setCurrentIndex(TScanner);
-    say("Scan de " + hmi::ipscan::rangeText(o.first, o.last) + " lanc\xC3\xA9 (ping, ARP, ports " + hmi::ipscan::portsText(o.ports) + ").");
+    say("Confirmez le scan : l'interface, la plage, les protocoles, la cadence. Rien ne part avant Lancer.");
+    hosts_.askScan(std::move(spec), [this](bool ok, const std::string& payload) {
+        scanAsking_ = false;
+        if (!ok) {
+            say("Scan annul\xC3\xA9 : rien n'est parti sur le r\xC3\xA9seau.");
+            return;
+        }
+        hmi::discovery::Request confirmed;
+        std::string signature;
+        if (!HmiScanDialog::parse(payload, confirmed, signature)) {
+            say("La confirmation est illisible : rien n'est parti.", true);
+            return;
+        }
+        (void)launchScan(confirmed, signature);
+    });
+    return true;
+}
+
+bool HmiCommPane::launchScan(const hmi::discovery::Request& request, const std::string& shownSignature, std::string* why) {
+    namespace disc = hmi::discovery;
+    const auto fail = [&](std::string m) {
+        say(m, true);
+        if (why) *why = std::move(m);
+        return false;
+    };
+    if (scanning()) return fail("un scan est d\xC3\xA9j\xC3\xA0 en cours : Arr\xC3\xAAter d'abord");
+    auto* h = host();
+    const auto adapters = h ? h->adapters() : std::vector<hmi::netinfo::Adapter>{};
+    const disc::Plan plan = disc::plan(request, adapters);
+    if (!plan.ok()) return fail("scan refus\xC3\xA9 : " + plan.error);
+    if (!shownSignature.empty() && hmi::ipscan::signature(plan.options) != shownSignature)
+        return fail("les r\xC3\xA9glages ont chang\xC3\xA9 depuis la confirmation (les ports du PC ?) : rien n'est parti, confirmez \xC3\xA0 nouveau");
+    // L'ACCORD : au clic Lancer, pour ces reglages, une fois.
+    const auto permit = hmi::ipscan::grant(plan.options, disc::currentUser(), hmi::wallStamp());
+    if (!scanner_) scanner_ = std::make_unique<hmi::ipscan::Scanner>();
+    std::string reason;
+    if (!scanner_->start(plan.options, permit, &reason)) return fail("scan : " + reason);
+    // Les champs du volet suivent ce qui a ete confirme.
+    scanOptions_.ports = plan.options.ports;
+    scanOptions_.timeoutMs = plan.options.timeoutMs;
+    scanOptions_.threads = plan.options.threads;
+    scanOptions_.names = plan.options.names;
+    scanOptions_.modbusId = request.modbusId;
+    scanRate_ = plan.options.rate;
+    if (!request.adapter.empty() && adapter(request.adapter)) scanPort_ = request.adapter;
+    disc::Request network;
+    const bool whole = !request.adapter.empty() && disc::useInterface(network, adapters, request.adapter) && network.start == request.start
+                       && network.end == request.end;
+    scanRange_ = whole ? std::string{} : (request.start == request.end ? request.start : request.start + "-" + request.end);
+    scanWasRunning_ = true;
+    scanShown_ = static_cast<std::size_t>(-1);
+    scanReportKey_.clear();
+    scanEntry_ = disc::startEntry(plan, permit, disc::newScanId(), request.origin.empty() ? std::string("Scanner IP") : request.origin);
+    scanEnded_ = false;
+    journalScan(scanEntry_);
+    tabs_->setCurrentIndex(TScanner);
+    char rate[32];
+    std::snprintf(rate, sizeof rate, "%g", plan.options.rate);
+    say("Scan de " + plan.rangeText + " lanc\xC3\xA9 : " + rate + " interrogations par seconde au plus, en lecture seule (ports "
+        + (plan.options.ports.empty() ? std::string("aucun") : hmi::ipscan::portsText(plan.options.ports)) + ").");
+    rebuildProperties();
     refreshScan();
     return true;
 }
@@ -1990,11 +2096,57 @@ bool HmiCommPane::startScan(std::string* why) {
 void HmiCommPane::stopScan() {
     if (!scanner_ || !scanner_->running()) return;
     scanner_->stop();
-    say("Scan arr\xC3\xAAt\xC3\xA9 : " + std::to_string(scanner_->results().size()) + " appareil(s) trouv\xC3\xA9(s).");
-    refreshScan();
+    refreshScan();   // la fin : le message, le journal
+}
+
+void HmiCommPane::journalScan(const hmi::discovery::JournalEntry& e) {
+    scanSession_.push_back(e);
+    const std::string folder = hosts_.projectFolder ? hosts_.projectFolder() : std::string{};
+    if (folder.empty()) return;   // un projet pas encore enregistre : la seance seulement
+    if (const auto st = hmi::discovery::appendJournal(e, folder); !st.has_value())
+        say("Journal des d\xC3\xA9" "couvertes : " + st.error().context, true);
+}
+
+std::vector<hmi::discovery::JournalEntry> HmiCommPane::scanJournal() const {
+    // Le fichier n'est relu que s'il a pu changer : un autre projet, une ligne de plus dans cette seance.
+    const std::string folder = hosts_.projectFolder ? hosts_.projectFolder() : std::string{};
+    const std::string key = folder + "|" + std::to_string(scanSession_.size());
+    if (key != journalCacheKey_) {
+        journalCacheKey_ = key;
+        journalCache_ = folder.empty() ? std::vector<hmi::discovery::JournalEntry>{} : hmi::discovery::readJournal(folder);
+        if (journalCache_.empty()) journalCache_ = scanSession_;
+        std::reverse(journalCache_.begin(), journalCache_.end());
+    }
+    return journalCache_;
+}
+
+void HmiCommPane::refreshScanReport(bool running) {
+    if (!scanner_) return;
+    const auto results = scanner_->results();
+    const auto pr = scanner_->progress();
+    // Ce que le compte rendu a vu : les resultats, la fin, les equipements du projet.
+    std::string key = std::to_string(results.size()) + (running ? "r" : pr.stopped ? "s" : "f");
+    for (const auto& e : doc_->project.equipments)
+        key += "|" + e.name + "@" + e.host + ":" + std::to_string(e.port) + "/" + std::to_string(e.unit) + (e.simulated ? "s" : "") + std::to_string(e.description.size());
+    key += "|" + doc_->project.comm.mode + doc_->project.comm.host;
+    if (key == scanReportKey_) return;
+    scanReportKey_ = key;
+    hmi::discovery::Scope scope;
+    const auto& o = scanner_->options();
+    scope.first = o.first;
+    scope.last = o.last;
+    scope.ports = o.ports;
+    scope.withPlc = core::hasApi();     // 1.12.2 : IHM Studio n'a pas d'automate du projet
+    scope.complete = !running && pr.finished;
+    if (auto* h = host())
+        for (const auto& ad : h->adapters())
+            for (const auto& [ip, pre] : ad.addresses) scope.local.push_back(ip);
+    scanReport_ = hmi::discovery::analyze(doc_->project, results, scope);
+    ++scanReportSerial_;
 }
 
 void HmiCommPane::refreshScan() {
+    namespace disc = hmi::discovery;
     auto* h = host();
     // Le port par defaut : le premier branche, avec une adresse.
     if (scanPort_.empty() && h)
@@ -2003,7 +2155,10 @@ void HmiCommPane::refreshScan() {
     const auto a = adapter(scanPort_);
     std::string title = scanRange_.empty() ? (a && a->ip() ? "R\xC3\xA9seau " + eq::networkText(a->ip(), a->prefix()) + " sur " + a->name : std::string("Choisis un port \xC3\xA0 droite"))
                                            : "Plage " + scanRange_;
-    std::string detail = "ports " + hmi::ipscan::portsText(scanOptions_.ports) + " \xC2\xB7 d\xC3\xA9lai " + std::to_string(scanOptions_.timeoutMs) + " ms";
+    char rate[32];
+    std::snprintf(rate, sizeof rate, "%g", scanRate_);
+    std::string detail = "ports " + hmi::ipscan::portsText(scanOptions_.ports) + " \xC2\xB7 d\xC3\xA9lai " + std::to_string(scanOptions_.timeoutMs) + " ms \xC2\xB7 "
+                         + rate + " interrogations/s au plus \xC2\xB7 Scanner : confirmer puis Lancer";
     float fraction = -1;
     bool running = false;
     std::vector<hmi::ipscan::Host> results;
@@ -2016,46 +2171,64 @@ void HmiCommPane::refreshScan() {
             char secs[32];
             std::snprintf(secs, sizeof secs, "%.1f s", pr.seconds);
             detail = std::to_string(pr.done) + " / " + std::to_string(pr.total) + " adresses essay\xC3\xA9" "es \xC2\xB7 " + std::to_string(pr.found) + " appareil"
-                     + (pr.found > 1 ? "s" : "") + " \xC2\xB7 " + secs + (pr.stopped ? " (arr\xC3\xAAt\xC3\xA9)" : running ? std::string{} : " \xC2\xB7 termin\xC3\xA9");
+                     + (pr.found > 1 ? "s" : "") + " \xC2\xB7 " + std::to_string(pr.probes) + " interrogations \xC2\xB7 " + secs
+                     + (pr.stopped ? " (arr\xC3\xAAt\xC3\xA9)" : running ? std::string{} : " \xC2\xB7 termin\xC3\xA9");
         }
         if (scanWasRunning_ && !running) {
             scanWasRunning_ = false;
-            say("Scan termin\xC3\xA9 : " + std::to_string(pr.found) + " appareil(s) en " + std::to_string(static_cast<int>(std::lround(pr.seconds))) + " s.");
+            refreshScanReport(false);
+            if (!scanEnded_) {
+                scanEnded_ = true;
+                journalScan(disc::endEntry(scanEntry_, pr));
+            }
+            const std::string counts = scanReport_.countsText();
+            say(std::string(pr.stopped ? "Scan arr\xC3\xAAt\xC3\xA9" : "Scan termin\xC3\xA9") + " : " + std::to_string(pr.found) + " appareil(s) en "
+                + std::to_string(static_cast<int>(std::lround(pr.seconds))) + " s" + (counts.empty() ? std::string{} : " \xE2\x80\x94 " + counts)
+                + ". Rien n'est ajout\xC3\xA9 au projet sans votre accord.");
+            rebuildProperties();
         }
     }
     scanPage_->setProgress(title, detail, fraction, running);
-    if (results.size() == scanShown_ && !running && scanModel_) {
+    refreshScanReport(running);
+    if (results.size() == scanShown_ && !running && scanModel_ && scanShownSerial_ == scanReportSerial_) {
         tabs_->setTabBadge(TScanner, scanner_ ? std::to_string(results.size()) : std::string{}, ui::Tone::None);
         return;
     }
     scanShown_ = results.size();
-    // Ce que le projet connait deja a chaque adresse.
-    std::map<std::string, std::string> known;
-    for (const auto& e : doc_->project.equipments) known[e.host] = e.name;
-    if (core::hasApi() && doc_->project.comm.modbus()) known[doc_->project.comm.host] = "automate du projet";   // 1.12.2 : API seulement
-    if (h)
-        for (const auto& ad : h->adapters())
-            for (const auto& [ip, pre] : ad.addresses) known[eq::ipv4Text(ip)] = "ce PC (" + ad.name + ")";
+    scanShownSerial_ = scanReportSerial_;
     const std::string keep = selectedScanned();
     scanOrder_.clear();
     std::vector<std::vector<std::string>> rows;
     std::vector<int> tones;
+    const std::string dash = "\xE2\x80\x94";
     for (const auto& x : results) {
         scanOrder_.push_back(x.address);
-        const auto k = known.find(x.address);
-        std::string mac = x.mac, vendor = x.vendor;
+        const disc::Device* d = scanReport_.device(x.address);
+        const disc::Device fallback = d ? disc::Device{} : disc::classify(x);
+        const disc::Device& dev = d ? *d : fallback;
+        std::string mac = x.mac;
         // Une adresse du PC lui-meme : sa MAC est celle du port.
         if (mac.empty() && h)
             for (const auto& ad : h->adapters())
                 for (const auto& [ip, pre] : ad.addresses)
                     if (ip == x.ip) mac = ad.mac;
-        if (vendor.empty() && !mac.empty()) vendor = hmi::ipscan::vendorOf(mac);
-        rows.push_back({x.address, k == known.end() ? std::string("nouveau") : k->second, mac.empty() ? "\xE2\x80\x94" : mac, vendor,
-                        x.portsText().empty() ? "\xE2\x80\x94" : x.portsText(), x.modbus, x.ping ? msText(x.pingMs) : "\xE2\x80\x94", x.name, x.how});
-        tones.push_back(k != known.end() ? 4 : x.hasPort(502) ? 1 : 0);
+        std::string inProject = scanReport_.projectText(x.address);
+        if (inProject.empty()) inProject = "nouveau";
+        const std::string vendor = dev.vendor.empty() ? dash : disc::valueWithCertainty(dev.vendor, dev.vendorCertainty);
+        const std::string model = dev.model.empty() ? std::string("non identifi\xC3\xA9") : disc::valueWithCertainty(dev.model, dev.modelCertainty);
+        const std::string type = dev.type.empty() ? dash : disc::valueWithCertainty(dev.type, dev.typeCertainty);
+        rows.push_back({x.address, inProject, vendor, model, type, x.portsText().empty() ? dash : x.portsText(), x.modbus,
+                        x.ping ? msText(x.pingMs) : dash, mac.empty() ? dash : mac, x.name, x.how});
+        // Le ton : un ecart (autre adresse, incoherence, doublon), deja dans le projet, un 502 ouvert.
+        bool known = false, odd = false;
+        for (const auto* f : scanReport_.about(x.address)) {
+            if (f->status == disc::Status::Known || f->status == disc::Status::ThisPc) known = true;
+            if (f->status == disc::Status::Moved || f->status == disc::Status::Inconsistent || f->status == disc::Status::Duplicate) odd = true;
+        }
+        tones.push_back(odd ? 2 : known ? 4 : x.hasPort(502) ? 1 : 0);
     }
-    scanModel_ = std::make_shared<Rows>(std::vector<std::string>{"Adresse", "Dans le projet", "MAC", "Fabricant", "Ports ouverts", "Modbus (identification)",
-                                                                 "Ping", "Nom", "Vu par"},
+    scanModel_ = std::make_shared<Rows>(std::vector<std::string>{"Adresse", "Dans le projet", "Constructeur", "Mod\xC3\xA8le", "Type", "Ports ouverts",
+                                                                 "Modbus (identification)", "Ping", "MAC", "Nom", "Vu par"},
                                         std::move(rows), [tones](ui::RowIndex r, std::size_t c) {
                                             ui::CellStyle st;
                                             if (r >= tones.size()) return st;
@@ -2064,8 +2237,8 @@ void HmiCommPane::refreshScan() {
                                                 st.icon = tones[r] == 1 ? ui::Icon::Cpu : ui::Icon::Module;
                                                 st.iconTone = toneOf(tones[r]);
                                             }
-                                            if (c == 1) st.fgTone = tones[r] == 4 ? ui::Tone::Accent : ui::Tone::Ok;
-                                            if (c == 5 && tones[r] == 1) st.fgTone = ui::Tone::Ok;
+                                            if (c == 1) st.fgTone = tones[r] == 4 ? ui::Tone::Accent : tones[r] == 2 ? ui::Tone::Warning : ui::Tone::Ok;
+                                            if (c == 6 && tones[r] == 1) st.fgTone = ui::Tone::Ok;
                                             return st;
                                         });
     const bool was = refreshing_;
@@ -2096,7 +2269,10 @@ bool HmiCommPane::addScanned(const std::string& ip, std::string* why) {
         }
     const bool modbus = it->hasPort(502);
     std::string name;
-    if (!it->name.empty()) name = it->name.substr(0, it->name.find('.'));
+    // 1.21.0 : le nom que propose le compte rendu (les memes regles, unique) ; sinon celui d'avant.
+    const auto* proposal = scanReport_.proposalFor(ip);
+    if (proposal && proposal->kind == hmi::discovery::Proposal::Kind::Add && !doc_->project.equipmentByName(proposal->equipment)) name = proposal->equipment;
+    else if (!it->name.empty()) name = it->name.substr(0, it->name.find('.'));
     else if (!it->vendor.empty() && it->vendor.rfind("adresse locale", 0) != 0) name = it->vendor.substr(0, it->vendor.find(" (")) + " " + ip.substr(ip.rfind('.') + 1);
     else name = (modbus ? "Modbus " : "Appareil ") + ip;
     name = hmi::uniqueEquipmentName(doc_->project, name);
@@ -2104,7 +2280,8 @@ bool HmiCommPane::addScanned(const std::string& ip, std::string* why) {
     const std::string added = addEquipment(name, modbus ? hmi::EquipmentType::ModbusTcp : hmi::EquipmentType::EthernetTcp, ip, port, why);
     if (added.empty()) return false;
     std::string desc = "trouv\xC3\xA9 par le scanner";
-    if (!it->modbus.empty()) desc += " : " + it->modbus;
+    if (proposal && !proposal->prop("description").empty()) desc = proposal->prop("description");
+    else if (!it->modbus.empty()) desc += " : " + it->modbus;
     else if (!it->vendor.empty()) desc += " : " + it->vendor;
     (void)setEquipmentField(added, "description", desc);
     if (modbus && it->modbusUnit >= 0) (void)setEquipmentField(added, "esclave", std::to_string(it->modbusUnit));
@@ -2112,6 +2289,60 @@ bool HmiCommPane::addScanned(const std::string& ip, std::string* why) {
     selectEquipment(added);
     say(added + " ajout\xC3\xA9 (" + std::string(modbus ? "Modbus TCP/IP" : "Ethernet TCP/IP") + ", " + ip + ") : liez-lui des variables, puis Tester.");
     return true;
+}
+
+bool HmiCommPane::applyScanProposal(const std::string& ip, bool ask, std::string* why) {
+    using K = hmi::discovery::Proposal::Kind;
+    const auto fail = [&](std::string m) {
+        say(m, true);
+        if (why) *why = std::move(m);
+        return false;
+    };
+    const auto* p = scanReport_.proposalFor(ip);
+    if (!p) return fail(ip + " : aucune proposition (d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "clar\xC3\xA9, ce PC, ou pas dans le r\xC3\xA9sultat)");
+    if (p->kind == K::Add) return addScanned(ip, why);
+    if (!doc_->project.equipmentByName(p->equipment)) return fail(p->equipment + " n'est plus dans le projet");
+    const hmi::discovery::Proposal copy = *p;
+    // Mettre a jour l'adresse, associer : UNE commande (l'adresse, et l'esclave qui a repondu).
+    const auto apply = [this, copy](std::string* w) {
+        const auto* cur = doc_->project.equipmentByName(copy.equipment);
+        if (!cur) {
+            const std::string m = copy.equipment + " n'est plus dans le projet";
+            say(m, true);
+            if (w) *w = m;
+            return false;
+        }
+        const hmi::Id id = cur->id;
+        const std::string hostText = copy.prop("hote");
+        const std::string unit = copy.prop("esclave");
+        const std::string label = copy.kind == K::UpdateAddress ? copy.equipment + " : adresse " + copy.before + " \xE2\x86\x92 " + hostText
+                                                                : copy.equipment + " : associ\xC3\xA9 \xC3\xA0 " + hostText;
+        const bool ok = changeProject(label, [&](hmi::Project& x) {
+            for (auto& e : x.equipments)
+                if (e.id == id) {
+                    e.host = hostText;
+                    if (!unit.empty()) e.unit = std::clamp(std::atoi(unit.c_str()), 0, 255);
+                }
+        });
+        if (!ok) {
+            if (w) *w = "rien \xC3\xA0 changer";
+            return false;
+        }
+        selectEquipment(copy.equipment);
+        say(label + " (Ctrl+Z pour annuler). Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9 \xC3\xA0 l'appareil.");
+        return true;
+    };
+    if (ask && hosts_.ask) {
+        HmiAskDialog::Spec spec;
+        spec.title = copy.kind == K::UpdateAddress ? "Mettre \xC3\xA0 jour l'adresse" : "Associer l'appareil trouv\xC3\xA9";
+        spec.text = copy.text + "\n\n" + copy.reason + "\n\nSeul le projet change (une commande, Ctrl+Z) : rien n'est envoy\xC3\xA9 \xC3\xA0 l'appareil.";
+        spec.confirm = copy.kind == K::UpdateAddress ? "Mettre \xC3\xA0 jour l'adresse" : "Associer";
+        hosts_.ask(std::move(spec), [apply](bool ok, const HmiAskDialog::Answer&) {
+            if (ok) (void)apply(nullptr);
+        });
+        return true;
+    }
+    return apply(why);
 }
 
 bool HmiCommPane::exportScan(std::string* where) {
@@ -2135,6 +2366,7 @@ bool HmiCommPane::exportScan(std::string* where) {
 }
 
 void HmiCommPane::rebuildScanProperties(std::vector<PG::Category>& cats) {
+    namespace disc = hmi::discovery;
     auto* h = host();
     const auto field = [this](const char* key) {
         return [this, key](std::string_view v) {
@@ -2157,28 +2389,75 @@ void HmiCommPane::rebuildScanProperties(std::vector<PG::Category>& cats) {
                                    "Vide : tout le r\xC3\xA9seau du port. Sinon 192.168.1.1-50, 10.10.0.0/24, 192.168.1.30 (4096 adresses au plus)."));
     scan.properties.push_back(prop("Ports TCP", hmi::ipscan::portsText(scanOptions_.ports), PG::ValueType::Text, field("ports"),
                                    "502 Modbus, 80/443 web, 102 S7 (Siemens), 44818 EtherNet/IP, 4840 OPC UA, 9100 imprimante, 554 cam\xC3\xA9ra."));
+    char rate[32];
+    std::snprintf(rate, sizeof rate, "%g", scanRate_);
+    scan.properties.push_back(prop("Cadence (par seconde)", rate, PG::ValueType::Integer, field("cadence"),
+                                   "Les interrogations par seconde au plus (un ping, une connexion, une requ\xC3\xAAte Modbus : une chacun), tous fils confondus. "
+                                   "20 par d\xC3\xA9" "faut ; 1 \xC3\xA0 100."));
     scan.properties.push_back(prop("D\xC3\xA9lai (ms)", std::to_string(scanOptions_.timeoutMs), PG::ValueType::Integer, field("delai"),
                                    "L'attente du ping et de chaque port. 400 ms suffit sur un r\xC3\xA9seau local."));
     scan.properties.push_back(prop("Noms (DNS)", tf(scanOptions_.names), PG::ValueType::Boolean, field("noms"), "Le nom de chaque appareil (DNS inverse)."));
     scan.properties.push_back(prop("Identification Modbus", tf(scanOptions_.modbusId), PG::ValueType::Boolean, field("modbus"),
-                                   "Le port 502 ouvert : lire l'identification de l'appareil (fonction 43 : fabricant, r\xC3\xA9" "f\xC3\xA9rence, version)."));
+                                   "Le port 502 ouvert : lire l'identification de l'appareil (fonction 43 : fabricant, r\xC3\xA9" "f\xC3\xA9rence, version), "
+                                   "en lecture seule - rien n'est jamais \xC3\xA9" "crit."));
     cats.push_back(std::move(scan));
     const std::string sel = selectedScanned();
-    if (sel.empty()) return;
-    for (const auto& x : scanResults()) {
-        if (x.address != sel) continue;
-        PG::Category host;
-        host.name = "Adresse choisie";
-        host.properties.push_back(prop("Adresse", x.address, PG::ValueType::ReadOnly));
-        host.properties.push_back(prop("MAC", x.mac.empty() ? "\xE2\x80\x94" : x.mac, PG::ValueType::ReadOnly));
-        host.properties.push_back(prop("Fabricant", x.vendor.empty() ? "inconnu" : x.vendor, PG::ValueType::ReadOnly));
-        if (!x.name.empty()) host.properties.push_back(prop("Nom", x.name, PG::ValueType::ReadOnly));
-        host.properties.push_back(prop("Ping", x.ping ? msText(x.pingMs) : "pas de r\xC3\xA9ponse (vu par " + x.how + ")", PG::ValueType::ReadOnly));
-        host.properties.push_back(prop("Ports ouverts", x.portsText().empty() ? "aucun des ports essay\xC3\xA9s" : x.portsText(), PG::ValueType::ReadOnly));
-        if (!x.modbus.empty())
-            host.properties.push_back(prop("Modbus", x.modbus + (x.modbusUnit >= 0 ? " (esclave " + std::to_string(x.modbusUnit) + ")" : std::string{}), PG::ValueType::ReadOnly));
-        cats.push_back(std::move(host));
+    if (sel.empty()) {
+        // La comparaison avec le projet, le journal.
+        if (scanner_ && (!scanReport_.devices.empty() || !scanReport_.findings.empty())) {
+            PG::Category cmp;
+            cmp.name = "Comparaison avec le projet";
+            const std::string counts = scanReport_.countsText();
+            cmp.properties.push_back(prop("R\xC3\xA9sum\xC3\xA9", counts.empty() ? std::string("rien \xC3\xA0 signaler") : counts, PG::ValueType::ReadOnly));
+            std::size_t shown = 0;
+            for (const auto& f : scanReport_.findings) {
+                if (f.status == disc::Status::Known || f.status == disc::Status::New || f.status == disc::Status::ThisPc) continue;
+                if (++shown > 16) break;
+                cmp.properties.push_back(prop(std::string(disc::statusText(f.status)), f.text + " (" + std::string(disc::certaintyText(f.certainty)) + ")",
+                                              PG::ValueType::ReadOnly, {}, f.text));
+            }
+            const std::size_t proposals = scanReport_.proposals.size();
+            if (proposals)
+                cmp.properties.push_back(prop("Propositions", std::to_string(proposals) + " : choisissez une adresse, puis Appliquer la proposition",
+                                              PG::ValueType::ReadOnly));
+            cats.push_back(std::move(cmp));
+        }
+        const auto journal = scanJournal();
+        if (!journal.empty()) {
+            PG::Category j;
+            j.name = "Journal des d\xC3\xA9" "couvertes";
+            for (std::size_t i = 0; i < journal.size() && i < 6; ++i) {
+                const auto& e = journal[i];
+                j.properties.push_back(prop(e.stamp.size() >= 16 ? e.stamp.substr(0, 16) : e.stamp, disc::journalText(e), PG::ValueType::ReadOnly, {},
+                                            e.protocols + (e.probes ? " \xC2\xB7 " + std::to_string(e.probes) + " interrogations" : std::string{})));
+            }
+            cats.push_back(std::move(j));
+        }
+        return;
     }
+    const disc::Device* dev = scanReport_.device(sel);
+    if (!dev) return;
+    PG::Category host;
+    host.name = "Adresse choisie";
+    for (const auto& f : dev->facts) {
+        std::string value = f.value;
+        if (f.certainty == disc::Certainty::Announced || f.certainty == disc::Certainty::Supposed) value += " (" + std::string(disc::certaintyText(f.certainty)) + ")";
+        host.properties.push_back(prop(f.label, value, PG::ValueType::ReadOnly, {}, std::string(disc::certaintyText(f.certainty)) + " : " + f.source));
+    }
+    cats.push_back(std::move(host));
+    PG::Category project;
+    project.name = "Dans le projet";
+    const std::string where = scanReport_.projectText(sel);
+    project.properties.push_back(prop("\xC3\x89tat", where.empty() ? std::string("nouveau") : where, PG::ValueType::ReadOnly));
+    for (const auto* f : scanReport_.about(sel))
+        if (f->status != disc::Status::Known && f->status != disc::Status::New && f->status != disc::Status::ThisPc)
+            project.properties.push_back(prop(std::string(disc::statusText(f->status)), f->text, PG::ValueType::ReadOnly, {}, f->text));
+    if (const auto* p = scanReport_.proposalFor(sel)) {
+        project.properties.push_back(prop("Proposition", p->text, PG::ValueType::ReadOnly, {}, p->reason));
+        project.properties.push_back(prop("Pourquoi", p->reason, PG::ValueType::ReadOnly));
+        project.properties.push_back(prop("Appliquer", "la barre d'outils : Appliquer la proposition (une commande, Ctrl+Z)", PG::ValueType::ReadOnly));
+    }
+    cats.push_back(std::move(project));
 }
 
 // ================================================================ la fiche ===

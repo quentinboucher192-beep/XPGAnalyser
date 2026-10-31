@@ -13546,7 +13546,8 @@ void scannerIpLot15() {
     o.names = false;
     o.onLink = false;
     Scanner sc;
-    check(sc.start(o, &why), "le scan d\xC3\xA9marre");
+    check(!sc.start(o, Permit{}, &why) && !sc.running(), "1.21.0 : sans confirmation, le scan refuse de partir");
+    check(sc.start(o, grant(o, "essai"), &why), "le scan d\xC3\xA9marre");
     for (int i = 0; i < 400 && sc.running(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(25));
     const auto pr = sc.progress();
     check(!sc.running() && pr.finished && pr.done == 3 && pr.total == 3, "trois adresses essay\xC3\xA9" "es, termin\xC3\xA9");
@@ -13561,7 +13562,7 @@ void scannerIpLot15() {
     Options bad;
     bad.first = 0xC0A8010Au;
     bad.last = 0xC0A80105u;
-    check(!idle.start(bad, &why) && !idle.running(), "une plage \xC3\xA0 l'envers : le scan refuse de partir");
+    check(!idle.start(bad, grant(bad), &why) && !idle.running(), "une plage \xC3\xA0 l'envers : le scan refuse de partir");
 }
 
 // =============================================================================
