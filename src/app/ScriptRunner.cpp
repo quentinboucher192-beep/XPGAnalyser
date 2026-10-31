@@ -7258,7 +7258,19 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   memoire-ajouter "NOM" "CATEGORIE" "PROJET" "CONTENU" ["DESCRIPTION"]   une connaissance, sans l'editeur
     //   memoire-oui, memoire-non              la confirmation ; memoire-actualiser, memoire-fermer
     //   memoire-verifier CLE N                echec si le compte differe : conversations, messages, connaissances,
-    //                                         actives, genres, fichiers, activite (les valeurs vont au journal)
+    //                                         actives, genres, fichiers, activite, lignes (la liste du theme de l'onglet
+    //                                         Apprentissage) (les valeurs vont au journal)
+    //  1.17.0 - l'onglet Apprentissage, un tableau de bord (ses champs : ia.memoire.apprentissage.modele.nom, .mots,
+    //  ia.memoire.apprentissage.mot.mot ; ses listes : .mot.sens, .mot.cible, .periode ; ses boutons par leur texte) :
+    //   memoire-theme CLE                     modeles, vocabulaire, apprendre, ou une categorie (regles, metier...)
+    //   memoire-apprentissage-chercher "t"    la recherche du tableau de bord ("" : l'efface)
+    //   memoire-apprentissage-ligne "cle"     un modele (sa cle ou son nom), un mot, une demande non comprise
+    //   memoire-apprentissage-nouveau         Nouveau modele... / Nouveau mot...
+    //   memoire-modele-membre "Nom" "TYPE"    un membre de plus au modele montre (+ Membre, puis son nom et son type)
+    //   memoire-apprentissage-enregistrer | -original | -basculer | -supprimer
+    //   memoire-apprendre "mot" genre|modele|ignorer CIBLE   A lui apprendre (la demande choisie) ; memoire-ignorer
+    //   memoire-essayer "phrase"              Essayer une phrase (le resultat va au journal)
+    //   memoire-exporter "chemin.xia" ; memoire-importer "chemin.xia" (puis memoire-oui)
     if (cmd.rfind("memoire-", 0) == 0) {
         auto* d = dynamic_cast<AiMemoryDialog*>(app_.menus().top());
         if (!d) { fail(cmd + " : la fen\xC3\xAAtre M\xC3\xA9moire et apprentissage n'est pas ouverte (action ia.memoire)"); return Step::Next; }
@@ -7303,6 +7315,34 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             k.description = arg(5);
             if (!d->addKnowledge(k)) fail(cmd + " : " + d->message());
         }
+        else if (cmd == "memoire-theme") { if (!d->showLearningTheme(arg(1))) fail(cmd + " : th\xC3\xA8me inconnu " + arg(1)); }
+        else if (cmd == "memoire-apprentissage-chercher") d->setLearningSearch(arg(1));
+        else if (cmd == "memoire-apprentissage-ligne") { if (!d->selectLearningRow(arg(1))) fail(cmd + " : aucune ligne " + arg(1)); }
+        else if (cmd == "memoire-apprentissage-nouveau") { if (!d->beginLearningNew()) fail(cmd + " : pas dans ce th\xC3\xA8me"); }
+        else if (cmd == "memoire-modele-membre") {
+            auto* root = d->widgetRoot();
+            auto* t = root ? dynamic_cast<ui::TableView*>(root->findById("ia.memoire.apprentissage.modele.membres")) : nullptr;
+            auto* b = root ? dynamic_cast<ui::Button*>(root->findById("ia.memoire.apprentissage.modele.ajouterMembre")) : nullptr;
+            if (!t || !t->model() || !b) fail(cmd + " : pas de mod\xC3\xA8le montr\xC3\xA9");
+            else {
+                b->clicked->emit();
+                const std::size_t r = t->model()->rowCount() - 1;
+                if (!t->model()->setCellText(r, 0, arg(1)) || (!arg(2).empty() && !t->model()->setCellText(r, 1, arg(2))))
+                    fail(cmd + " : " + arg(1) + " " + arg(2) + " refus\xC3\xA9");
+            }
+        }
+        else if (cmd == "memoire-apprentissage-enregistrer") { if (!d->saveLearningDetail()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-apprentissage-original") { if (!d->revertLearningDetail()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-apprentissage-basculer") { if (!d->toggleLearningDetail()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-apprentissage-supprimer") { if (!d->removeLearningDetail()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-apprendre") { if (!d->teachLearning(arg(1), arg(2), arg(3))) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-ignorer") { if (!d->ignoreLearningRequest()) fail(cmd + " : aucune demande choisie"); }
+        else if (cmd == "memoire-essayer") {
+            (void)d->tryLearningPhrase(arg(1));
+            std::printf("[script] essayer : %s\n", d->learningTrial().c_str());
+        }
+        else if (cmd == "memoire-exporter") { if (!d->exportLearning(arg(1))) fail(cmd + " : " + d->message()); }
+        else if (cmd == "memoire-importer") { if (!d->importLearning(arg(1))) fail(cmd + " : " + d->message()); }
         else if (cmd == "memoire-oui") { if (!d->confirmYes()) fail(cmd + " : " + d->message()); }
         else if (cmd == "memoire-non") d->confirmNo();
         else if (cmd == "memoire-actualiser") d->refresh();
@@ -7317,6 +7357,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             else if (key == "genres") value = d->registry().kindsKnown();
             else if (key == "fichiers") value = d->measured().total.files;
             else if (key == "activite") value = d->activity().size();
+            else if (key == "lignes") value = d->learningRowCount();
             else { fail(cmd + " : cl\xC3\xA9 inconnue " + arg(1)); return Step::Next; }
             std::printf("[script] memoire %s = %zu\n", key.c_str(), value);
             if (!arg(2).empty() && value != static_cast<std::size_t>(std::atoll(arg(2).c_str())))
