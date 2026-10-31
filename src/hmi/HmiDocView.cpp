@@ -1474,9 +1474,67 @@ bool extract(const Location& loc, const Entry& e, const std::string& folder, std
     return true;
 }
 
-Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh, bool extract,
-                bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first, const TextWidth& measure) {
+// 1.21.0 : les octets d'un fichier pour son apercu (un fichier du disque, une entree de zip), bornes.
+bool readEntry(const Location& loc, const Entry& e, std::uint64_t max, std::vector<std::uint8_t>& out, std::string& why) {
+    out.clear();
+    if (e.folder) {
+        why = "un dossier n'a pas d'octets";
+        return false;
+    }
+    if (e.size > max) {
+        why = "trop gros pour l'aper\xC3\xA7u (" + sizeText(e.size) + ", " + sizeText(max) + " au plus)";
+        return false;
+    }
+    if (!e.inZip) {
+        std::FILE* f = openRead(e.path);
+        if (!f) {
+            why = "illisible : " + e.path;
+            return false;
+        }
+        std::vector<unsigned char> buf(64 * 1024);
+        for (;;) {
+            const std::size_t n = std::fread(buf.data(), 1, buf.size(), f);
+            if (n == 0) break;
+            out.insert(out.end(), buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(n));
+            if (out.size() > max) {
+                std::fclose(f);
+                out.clear();
+                why = "trop gros pour l'aper\xC3\xA7u (" + sizeText(max) + " au plus)";
+                return false;
+            }
+        }
+        std::fclose(f);
+        return true;
+    }
+    Place pl;
+    if (!resolve(loc, pl, why)) return false;
+    if (!pl.zip) {
+        why = "le dossier courant n'est pas dans un zip";
+        return false;
+    }
+    const long at = findEntry(*pl.archive, pl.prefix + e.name);
+    if (at < 0) {
+        why = "introuvable dans le zip : " + e.name;
+        return false;
+    }
+    std::vector<unsigned char> data;
+    if (!pl.archive->read(static_cast<std::size_t>(at), max, data)) {
+        why = "entr\xC3\xA9" "e illisible ou trop grosse : " + e.name;
+        return false;
+    }
+    out.assign(data.begin(), data.end());
+    return true;
+}
+
+bool previewInside(double w, bool showPreview) noexcept { return showPreview && w >= kPreviewMinWidth; }
+
+Layout layoutOf(double totalW, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh, bool extract,
+                bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first, const TextWidth& measure, bool showPreview) {
     Layout l;
+    // 1.21.0 : l'apercu dans l'objet - la liste prend la gauche (45 %), l'apercu la droite ; la ligne d'etat garde toute la
+    // largeur (un message long s'y lit comme avant).
+    const bool inside = previewInside(totalW, showPreview);
+    const double w = inside ? std::clamp(totalW * 0.45, 340.0, totalW - 380.0) : totalW;
     const double fs = std::clamp(fontSize, 7.0, 40.0);
     const double pad = 6;
     const double barH = std::max(40.0, fs * 2.6);       // des cibles de 32 pixels au moins (le doigt)
@@ -1539,7 +1597,8 @@ Layout layoutOf(double w, double h, double fontSize, const std::vector<std::stri
     l.colName = {pad, y, std::max(0.0, nameRight - pad - 6), l.rowHeight};
     y += l.rowHeight;
     const double statusH = std::max(20.0, fs * 1.6);
-    l.status = {pad, std::max(y, h - statusH), std::max(0.0, w - 2 * pad), statusH};
+    l.status = {pad, std::max(y, h - statusH), std::max(0.0, totalW - 2 * pad), statusH};
+    if (inside) l.preview = {w + 1, 0, std::max(0.0, totalW - w - 1), std::max(0.0, l.status.y - 1)};
     l.list = {0, y, w, std::max(0.0, l.status.y - y)};
     double ry = y;
     if (parent) {
@@ -1580,6 +1639,7 @@ Layout layoutOf(double w, double h, double fontSize, const std::vector<std::stri
 
 std::string hit(const Layout& l, double x, double y) {
     const auto in = [&](const Box& b) { return b.w > 0 && b.h > 0 && b.contains(x, y); };
+    if (in(l.preview)) return "apercu";   // 1.21.0 : ses gestes restent a l'ecran (l'apercu les prend)
     if (in(l.bar)) {
         if (in(l.up)) return "monter";
         if (in(l.search)) return "recherche";

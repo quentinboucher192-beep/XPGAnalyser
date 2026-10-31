@@ -26,6 +26,7 @@
 #include "../../hmi/HmiNavigation.hpp"
 
 #include "HmiAssetPanes.hpp"
+#include "../FileViewer.hpp"          // 1.21.0 : l'apercu du fichier choisi dans un Explorateur de fichiers
 #include "HmiSimVarTree.hpp"   // 1.11.5 : les variables IHM et API en arbre
 #include "HmiIcons.hpp"
 #include "HmiSound.hpp"
@@ -989,6 +990,8 @@ std::optional<ui::cursor::Shape> HmiLiveCanvas::cursorAt(gfx::Point p) const {
 }
 
 void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
+    // 1.21.0 : l'apercu d'un Explorateur de fichiers charge, joue un son ou une video : redessiner.
+    if (explorerViewersAnimating()) invalidate();
     // 1.14.1 (N2) : le geste en cours garde sa forme (meme la souris sortie de l'objet).
     if (replayDrag_) ui::cursor::hold(ui::cursor::Shape::Pointer);
     else if (dragSlot_ >= 0 || panning_ || displayPanning_ || docDrag_ != kNoId) ui::cursor::hold(ui::cursor::Shape::Move);
@@ -1710,7 +1713,8 @@ hmi::explorer::Layout explorerLayout(const hmi::Runtime& rt, const hmi::Object& 
         return static_cast<double>(ui::measureWidth(s, f)) / std::max(0.01, kx);
     };
     return hmi::explorer::layoutOf(box.w, box.h, o.number("fontSize", 13), rt.explorerCrumbs(o.id), fe.showSearch, fe.allowRefresh,
-                                   fe.allowExtract, !fe.loc.at.empty(), fe.showSize, fe.showDate, fe.shown.size(), fe.first, measure);
+                                   fe.allowExtract, !fe.loc.at.empty(), fe.showSize, fe.showDate, fe.shown.size(), fe.first, measure,
+                                   fe.showPreview);
 }
 } // namespace
 
@@ -2407,6 +2411,13 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             const auto* fe = runtime_ ? runtime_->fileExplorer(id) : nullptr;
             if (!fe) return;
             const auto l = explorerLayout(*runtime_, *o, *fe, vp);
+            // 1.21.0 : l'apercu dans l'objet - ses gestes (une page, zoomer, Lire, un onglet, deplier...) restent a l'ecran.
+            if (l.preview.w > 0 && l.preview.contains(lx, ly)) {
+                gfx::Rect at;
+                if (fe->pilotable && explorerViewerRect(runtime_, id, at))
+                    if (auto* v = findExplorerViewer(runtime_, id); v && v->event(ui::MouseDown{p, ui::MouseButton::Left, clickCount, {}}, at)) invalidate();
+                return;
+            }
             std::string part = hmi::explorer::hit(l, lx, ly);
             if (clickCount >= 2 && part.rfind("ligne:", 0) == 0) part = "ouvrir:" + part.substr(6);
             if (!part.empty()) partClicked->emit(id, part);
@@ -2734,6 +2745,16 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                     }
                     // 1.14.1 (lot N5) : sur un Explorateur de fichiers, la molette fait defiler ses lignes.
                     if (o->kind == hmi::Kind::FileExplorer) {
+                        // 1.21.0 : sur l'apercu dans l'objet, la molette le fait defiler (Ctrl : zoomer une image, un PDF).
+                        if (const auto* fe = runtime_->fileExplorer(o->id)) {
+                            const auto l = explorerLayout(*runtime_, *o, *fe, vps_[li]);
+                            gfx::Rect at;
+                            if (l.preview.w > 0 && l.preview.contains(x - o->box().x, y - o->box().y)) {
+                                if (fe->pilotable && explorerViewerRect(runtime_, o->id, at))
+                                    if (auto* v = findExplorerViewer(runtime_, o->id); v && v->event(ev, at)) invalidate();
+                                return ui::EventResult::Consumed;
+                            }
+                        }
                         const double steps = w->dy != 0 ? w->dy : w->dx;
                         if (steps != 0) partClicked->emit(o->id, steps > 0 ? "liste:haut" : "liste:bas");
                         return ui::EventResult::Consumed;
@@ -3928,6 +3949,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     // parametres systeme se ferment d'un clic.
     links_ += canvas_->partClicked->connect([this](Id object, const std::string& part) {
         runtime_.objectPart(object, part, now_);
+        followFilePreview(object, part);   // 1.21.0 : un fichier choisi dans un Explorateur etroit - sa fenetre d'apercu
         refreshNow();
     });
     links_ += canvas_->replayCommand->connect([this](const std::string& c) { replayCommand(c); });   // 1.14.0 (M4)
@@ -4566,6 +4588,22 @@ void HmiSimulationPane::run(core::ActionId id) {
 }
 
 void HmiSimulationPane::refreshNow() { refreshPane(); }
+
+bool HmiSimulationPane::followFilePreview(Id object, const std::string& part) {
+    if (!host_.showFilePreview || (part.rfind("ligne:", 0) != 0 && part.rfind("ouvrir:", 0) != 0)) return false;
+    const auto* fe = runtime_.fileExplorer(object);
+    if (!fe || !fe->showPreview || fe->selected < 0 || static_cast<std::size_t>(fe->selected) >= fe->shown.size()) return false;
+    if (fe->shown[static_cast<std::size_t>(fe->selected)].folder) return false;   // un dossier : on y entre, rien a montrer
+    // Assez large : l'apercu est dans l'objet (le peintre le suit).
+    const hmi::Object* o = nullptr;
+    for (const auto& layer : canvas_->layers())
+        if (const auto* x = layer.view.object(object)) o = x;
+    if (!o || hmi::explorer::previewInside(o->box().w, true)) return false;
+    auto source = explorerSelection(runtime_, object, &shownProject());
+    if (source.empty()) return false;
+    host_.showFilePreview(source, fe->allowOpen && fe->pilotable);
+    return true;
+}
 
 // ======================================= 1.10 : l'IHM et l'API independantes ===
 // 1.11.13 : vrai - on peut demarrer (pas de build demande par l'hote, ou il est valide).

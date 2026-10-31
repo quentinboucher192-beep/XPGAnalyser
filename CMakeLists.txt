@@ -680,6 +680,10 @@ if(XPG_BUILD_TESTS)
     # Lot API 8, 2e partie : l'apercu (src/app/FilePreview.cpp : hmi::decodeImage, xls::Workbook)
     xpg_add_test_executable(fileexplorer_test tests/fileexplorer_test.cpp src/app/FilePreview.cpp)
     xpg_target_link_libraries(fileexplorer_test PRIVATE xpg_ui xpg_hmi)
+    # 1.21.0 : l'apercu de tous les fichiers, sans ecran (src/app/FileView.cpp : signatures, encodages, CSV, zip,
+    # classeurs, DOCX, JSON, XML, vidage hexadecimal ; les dossiers et les .XPG par src/app/FilePreview.cpp)
+    xpg_add_test_executable(fileview_test tests/fileview_test.cpp src/app/FileView.cpp src/app/FilePreview.cpp)
+    xpg_target_link_libraries(fileview_test PRIVATE xpg_ui xpg_hmi)
     # ---- fin Lot API 8 : l'explorateur de fichiers ----
     # 1.12.30 : les echanges de projets - les archives .xihm et .xapi (aller-retour fichier par
     # fichier et compte par compte, abimees, plus recentes, d'une autre application). xpg_app est
@@ -776,7 +780,8 @@ if(XPG_BUILD_TESTS)
                    src/app/Fenetres.cpp    # 1.12.27 : le presse-papiers partage des fenetres (HmiPartage.cpp)
                    src/app/Disposition.cpp src/app/DispositionDialog.cpp
                    src/app/DispositionPreview.cpp    # 1.12.3 : Projet > Disposition (1.12.4 : son apercu)
-                   src/app/FileFinder.cpp src/app/FileFinderPane.cpp)   # 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
+                   src/app/FileFinder.cpp src/app/FileFinderPane.cpp    # 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
+                   src/app/FileView.cpp src/app/FileViewer.cpp src/app/FilePreview.cpp)   # 1.21.0 : l'apercu de tous les fichiers
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre
     # d'aide (help::center, news, notes, keys, f1, report, Tutorial) : xpg_help,
     # comme l'appli et la construction des essais (outils/hmitests).
@@ -926,6 +931,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME aimemoire COMMAND ai_memoire_test)                     # ---- 1.14.2 (Assistant IA, IA2) : la memoire de l'IA ----
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
+    xpg_add_test(NAME fileview COMMAND fileview_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.21.0 : l'apercu de tous les fichiers
 
     # LES TESTS QUI LISENT libs/ NE SONT ENREGISTRES QUE SI libs/ EST LA.
     #

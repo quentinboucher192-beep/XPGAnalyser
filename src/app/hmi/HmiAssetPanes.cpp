@@ -1,5 +1,7 @@
 #include "HmiAssetPanes.hpp"
 
+#include "../FileViewer.hpp"        // 1.21.0 : l'apercu de tous les fichiers
+
 #include "HmiIcons.hpp"
 #include "HmiPaneKit.hpp"            // 1.14.0 (M4) : prop, tf, yes (les enregistrements)
 #include "HmiSound.hpp"
@@ -98,28 +100,6 @@ ui::Icon iconOf(MediaKind k) {
     }
 }
 
-// Les couleurs de la scene d'apercu : sombres dans un theme sombre, claires
-// dans un theme clair (une police ecrite a la couleur du texte doit s'y lire).
-struct Stage { gfx::Color back, check1, check2, axis, overlay; };
-Stage stageOf(const ui::Theme& t) {
-    const auto p = t.color.panelBg;
-    const bool darkTheme = (p.r * 299 + p.g * 587 + p.b * 114) / 1000 < 128;
-    if (darkTheme) return {{24, 27, 32, 255}, {58, 62, 70, 255}, {78, 83, 92, 255}, {70, 76, 86, 255}, {230, 236, 244, 220}};
-    return {{236, 239, 243, 255}, {204, 208, 214, 255}, {228, 231, 235, 255}, {176, 182, 192, 255}, {70, 80, 96, 200}};
-}
-
-void checker(gfx::IRenderer& r, const gfx::Rect& b, const Stage& st) {
-    // Le damier des logiciels de dessin : la transparence se voit.
-    const float s = 10.f;
-    r.pushClip(b);
-    for (float y = b.y; y < b.y + b.h; y += s)
-        for (float x = b.x; x < b.x + b.w; x += s) {
-            const bool first = (static_cast<int>((x - b.x) / s) + static_cast<int>((y - b.y) / s)) % 2 == 0;
-            r.fillRect({x, y, s, s}, first ? st.check1 : st.check2);
-        }
-    r.popClip();
-}
-
 } // namespace
 
 void hmiSelectModelRow(ui::TableView& table, std::size_t modelRow) {
@@ -127,145 +107,72 @@ void hmiSelectModelRow(ui::TableView& table, std::size_t modelRow) {
 }
 
 // =============================================================== apercu ==
+// 1.21.0 : L'APERCU DE TOUS LES FICHIERS (app/FileViewer) - l'image (ajuster, zoomer), le son (son onde, Lire), la
+// video, la police ecrite, et tout document : un PDF page a page, un texte numerote (son encodage), une grille CSV ou
+// Excel, un JSON ou un XML depliable, un DOCX et ses titres, la liste d'un zip, le vidage hexadecimal d'un binaire.
+// Le meme apercu que l'objet Explorateur de fichiers ; les renseignements de la ressource restent dessous.
+HmiResourcePreview::HmiResourcePreview(std::string id) : ui::Widget(std::move(id)), viewer_(std::make_unique<FileViewer>()) {
+    setFocusPolicy(true);
+    viewer_->setShowHeader(false);      // le nom, le genre, le poids : dits dessous
+    viewer_->setEmptyText("Choisis une ressource pour la voir.");
+}
+
+HmiResourcePreview::~HmiResourcePreview() = default;
+
+void HmiResourcePreview::show(const hmi::Project* project, hmi::Id resource) {
+    project_ = project;
+    resource_ = resource;
+    const hmi::Resource* res = project_ ? project_->resource(resource_) : nullptr;
+    if (!res || !res->data) {
+        viewer_->clear();
+    } else {
+        fileview::Source src = fileview::fromBytes(res->name, res->data, "Ressource du projet");
+        // Ouvrir le dossier : celui des ressources du projet enregistre.
+        if (const std::string& folder = hmiProjectFolder(); !folder.empty()) {
+            std::error_code ec;
+            const std::u8string u8(folder.begin(), folder.end());
+            const auto dir = std::filesystem::path(u8) / "ihm" / "ressources";
+            if (std::filesystem::is_directory(dir, ec)) {
+                const auto u = dir.u8string();
+                src.openFolder.assign(u.begin(), u.end());
+            }
+        }
+        viewer_->show(std::move(src));
+    }
+    invalidate();
+}
+
+ui::EventResult HmiResourcePreview::onEvent(const ui::InputEvent& ev) {
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos)) grabFocus();
+    if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
+    if (area_.w > 0 && viewer_->event(ev, area_)) {
+        invalidate();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
+}
+
 void HmiResourcePreview::onPaint(const ui::PaintContext& ctx) {
     const auto b = bounds();
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(b, c.panelBg);
     const hmi::Resource* res = project_ ? project_->resource(resource_) : nullptr;
     if (!res) {
+        area_ = {};
         ctx.r.drawText({b.x + 16, b.y + 16}, "Choisis une ressource pour la voir.", ctx.theme.font.ui, c.textMuted);
         return;
     }
     ctx.r.pushClip(b);
-    // La zone d'apercu en haut, les renseignements dessous.
+    // L'apercu en haut, les renseignements dessous.
     const float infoH = 190.f;
     const gfx::Rect area{b.x + 12, b.y + 12, b.w - 24, std::max(60.f, b.h - infoH - 24)};
-    const Stage stage = stageOf(ctx.theme);
-    ctx.r.fillRect(area, stage.back);
-    auto& cache = HmiImageCache::instance();
-    switch (res->kind()) {
-        case MediaKind::Image: {
-            // Lot 16 : un GIF anime se joue dans l'apercu, a son rythme ; le coin dit
-            // l'image montree et le temps du tour.
-            if (res->format == "GIF") {
-                if (const auto* gif = cache.gif(ctx.r, *res); gif && gif->valid() && gif->frames.size() > 1) {
-                    const auto& img = gif->looping(ctx.time);
-                    const float scale = std::min({area.w / static_cast<float>(img.width), area.h / static_cast<float>(img.height), 4.f});
-                    const float w = static_cast<float>(img.width) * scale, h = static_cast<float>(img.height) * scale;
-                    const gfx::Rect dst{area.x + (area.w - w) / 2, area.y + (area.h - h) / 2, w, h};
-                    checker(ctx.r, dst, stage);
-                    ctx.r.drawImage(img.tex, dst);
-                    const double total = std::max(1, gif->timing.totalMs) / 1000.0;
-                    const double at = std::fmod(ctx.time, total);
-                    const auto frame = gif->timing.frameAt(at * 1000.0);
-                    const std::string tag = "GIF \xC2\xB7 image " + std::to_string(frame + 1) + " / " + std::to_string(gif->frames.size()) + " \xC2\xB7 "
-                                            + hmi::formatDuration(at) + " / " + hmi::formatDuration(total);
-                    ctx.r.drawText({area.x + 8, area.y + area.h - 22}, tag, ctx.theme.font.smallUi, c.textMuted);
-                    invalidate();          // l'apercu joue : redessiner
-                    break;
-                }
-            }
-            const auto img = cache.resource(ctx.r, *res);
-            if (img.valid()) {
-                const float scale = std::min({area.w / static_cast<float>(img.width), area.h / static_cast<float>(img.height), 4.f});
-                const float w = static_cast<float>(img.width) * scale, h = static_cast<float>(img.height) * scale;
-                const gfx::Rect dst{area.x + (area.w - w) / 2, area.y + (area.h - h) / 2, w, h};
-                checker(ctx.r, dst, stage);
-                ctx.r.drawImage(img.tex, dst);
-            } else {
-                ctx.r.drawText({area.x + 12, area.y + 12}, res->data ? "Image illisible" : "Fichier absent",
-                               ctx.theme.font.ui, c.warning);
-            }
-            break;
-        }
-        case MediaKind::Sound: {
-            const int buckets = std::max(8, static_cast<int>(area.w / 3));
-            const auto& env = cache.envelope(*res, buckets);
-            const float mid = area.y + area.h / 2;
-            ctx.r.line({area.x, mid}, {area.x + area.w, mid}, stage.axis, 1);
-            for (int k = 0; k < buckets && static_cast<std::size_t>(k * 2 + 1) < env.size(); ++k) {
-                const float x = area.x + static_cast<float>(k) * area.w / static_cast<float>(buckets);
-                const float lo = env[static_cast<std::size_t>(k * 2)], hi = env[static_cast<std::size_t>(k * 2 + 1)];
-                ctx.r.fillRect({x, mid - hi * area.h / 2, std::max(1.f, area.w / static_cast<float>(buckets) + 0.5f),
-                                std::max(1.f, (hi - lo) * area.h / 2)},
-                               c.accent);
-            }
-            // En lecture : le curseur avance avec l'horloge de l'application.
-            auto& player = HmiSoundPlayer::instance();
-            if (player.current() == res->data.get() && player.playing(ctx.time) && player.duration() > 0) {
-                const float x = area.x + static_cast<float>(player.position(ctx.time) / player.duration()) * area.w;
-                ctx.r.fillRect({x - 1, area.y, 2, area.h}, c.warning);
-                ctx.r.drawText({x + 6, area.y + 6}, hmi::formatDuration(player.position(ctx.time)), ctx.theme.font.smallUi,
-                               c.warning);
-                invalidate();
-            }
-            // L'axe du temps : le debut, le milieu, la fin.
-            const float ty = area.y + area.h - 20;
-            ctx.r.drawText({area.x + 6, ty}, "0 s", ctx.theme.font.smallUi, c.textMuted);
-            const auto half = hmi::formatDuration(res->seconds / 2), end = hmi::formatDuration(res->seconds);
-            ctx.r.drawText({area.x + area.w / 2 - ctx.r.measure(half, ctx.theme.font.smallUi).width / 2, ty}, half,
-                           ctx.theme.font.smallUi, c.textMuted);
-            ctx.r.drawText({area.x + area.w - 6 - ctx.r.measure(end, ctx.theme.font.smallUi).width, ty}, end,
-                           ctx.theme.font.smallUi, c.textMuted);
-            break;
-        }
-        case MediaKind::Font: {
-            float y = area.y + 14;
-            for (const auto& [line, px] : std::initializer_list<std::pair<const char*, float>>{
-                     {"Aa Bb Cc 0123456789", 36.f}, {"Temp\xC3\xA9rature : 21,5 \xC2\xB0" "C", 26.f},
-                     {"ABCDEFGHIJKLMNOPQRSTUVWXYZ", 18.f}, {"abcdefghijklmnopqrstuvwxyz \xC3\xA9\xC3\xA8\xC3\xA0\xC3\xA7", 18.f}}) {
-                const auto img = cache.fontText(ctx.r, *res, line, px);
-                if (img.valid())
-                    ctx.r.drawImage(img.tex, {area.x + 14, y, static_cast<float>(img.width), static_cast<float>(img.height)}, 0.f,
-                                    false, false, c.text);
-                y += px * 1.45f;
-            }
-            break;
-        }
-        case MediaKind::Video: {
-            // 1.12.12 (lot H) : sa premiere image quand elle se decode ici (le Motion-JPEG en AVI partout ; MP4, WMV,
-            // MOV sous Windows). Sinon l'affiche, si une image de meme nom existe (presentation.png pour
-            // presentation.mp4) ; sinon un ecran et le triangle de lecture.
-            std::string why;
-            auto img = cache.videoFrame(ctx.r, *res, hmi::kNoId, 0.0, &why);
-            const bool decoded = img.valid();
-            if (!decoded) {
-                const auto stem = res->name.substr(0, res->name.rfind('.'));
-                const hmi::Resource* poster = nullptr;
-                for (const auto& r : project_->assets.resources)
-                    if (r.kind() == MediaKind::Image && r.name.rfind(stem + ".", 0) == 0) poster = &r;
-                img = poster ? cache.resource(ctx.r, *poster) : HmiImageCache::Image{};
-            }
-            if (img.valid()) {
-                const float scale = std::min(area.w / static_cast<float>(img.width), area.h / static_cast<float>(img.height));
-                const float w = static_cast<float>(img.width) * scale, h = static_cast<float>(img.height) * scale;
-                ctx.r.drawImage(img.tex, {area.x + (area.w - w) / 2, area.y + (area.h - h) / 2, w, h});
-            }
-            const float s = std::min(area.w, area.h) * 0.22f;
-            const gfx::Point m{area.x + area.w / 2, area.y + area.h / 2};
-            ui::shapes::fillPolygon(ctx.r, {{m.x - s / 2, m.y - s / 2}, {m.x + s / 2, m.y}, {m.x - s / 2, m.y + s / 2}},
-                                    stage.overlay);
-            if (!decoded) {
-                if (why.empty()) why = hmi::video::decodeAdvice(res->format, res->detail);
-                ctx.r.drawText({area.x + 8, area.y + area.h - 22},
-                               why.empty() ? std::string("Non d\xC3\xA9" "cod\xC3\xA9" "e : conteneur lu (dur\xC3\xA9" "e, dimensions, codec)") : why,
-                               ctx.theme.font.smallUi, c.textMuted);
-            }
-            break;
-        }
-        case MediaKind::Document: {
-            // Lot API 8 : un document garde tel quel - son format en grand.
-            const std::string fmt = res->format.empty() ? std::string("?") : res->format;
-            const auto sz = ctx.r.measure(fmt, ctx.theme.font.title);
-            ctx.r.drawText({area.x + (area.w - sz.width) / 2, area.y + area.h / 2 - 20}, fmt, ctx.theme.font.title, c.text);
-            const std::string said = "Document gard\xC3\xA9 tel quel : une copie qui voyage avec le projet";
-            const auto sw = ctx.r.measure(said, ctx.theme.font.smallUi);
-            ctx.r.drawText({area.x + std::max(8.f, (area.w - sw.width) / 2), area.y + area.h / 2 + 12}, said, ctx.theme.font.smallUi,
-                           c.textMuted);
-            break;
-        }
-        default:
-            break;
+    area_ = area;
+    if (res->data) {
+        viewer_->paint(ctx.r, area, FileViewer::paletteOf(ctx.theme), FileViewer::fontsOf(ctx.theme));
+        if (viewer_->animating()) invalidate();
+    } else {
+        ctx.r.fillRect(area, c.inputBg);
+        ctx.r.drawText({area.x + 12, area.y + 12}, "Fichier absent", ctx.theme.font.ui, c.warning);
     }
     // Les renseignements.
     float y = area.y + area.h + 12;
@@ -641,7 +548,10 @@ ui::EventResult HmiResourcesPane::onEvent(const ui::InputEvent& ev) {
 }
 
 // ======================================================= fichiers externes ==
-HmiFilePreview::HmiFilePreview(std::string id) : ui::Widget(std::move(id)) {
+HmiFilePreview::HmiFilePreview(std::string id) : ui::Widget(std::move(id)), viewer_(std::make_unique<FileViewer>()) {
+    setFocusPolicy(true);
+    viewer_->setShowHeader(false);                // le nom et le type : le titre du volet
+    viewer_->setActions(false, true);             // Ouvrir avec... : le bouton du volet
     auto grid = std::make_unique<ui::TableView>(this->id() + ".grid");
     grid->setSelectionMode(ui::SelectionMode::Single);
     grid_ = &static_cast<ui::TableView&>(addChild(std::move(grid)));
@@ -667,9 +577,13 @@ bool HmiFilePreview::openDocument(std::string* why) {
 }
 // ---- fin Lot API 8 : glisser de fichiers, 2e partie ----
 
+HmiFilePreview::~HmiFilePreview() = default;
+
 void HmiFilePreview::show(const hmi::ExternalFile* file) {
     openPath_.clear();                                   // lot API 8
     if (!file) {
+        docView_ = false;                                // 1.21.0
+        viewer_->clear();
         data_.reset();
         title_.clear();
         grid_->setModel(nullptr);
@@ -682,6 +596,10 @@ void HmiFilePreview::show(const hmi::ExternalFile* file) {
     // Lot API 8 : un document present s'ouvre avec le programme du systeme.
     if (file->kind == hmi::ExternalKind::Document && data_ && data_->ok())
         openPath_ = hmi::externalState(*file, hmiProjectFolder()).resolvedPath;
+    // 1.21.0 : ... et se montre (un PDF page a page, un DOCX, la liste d'un zip, une image, un binaire en hexadecimal).
+    docView_ = !openPath_.empty();
+    if (docView_) viewer_->show(fileview::fromPath(openPath_));
+    else viewer_->clear();
     // La largeur d'une colonne : son titre ou ses 50 premieres valeurs.
     std::vector<ui::TableView::Column> cols;
     for (std::size_t k = 0; k < data_->headers.size(); ++k) {
@@ -700,7 +618,8 @@ void HmiFilePreview::onLayout() {
     const auto b = bounds();
     const float head = 96.f;
     grid_->setBounds({b.x + 8, b.y + head, b.w - 16, std::max(0.f, b.h - head - 8)});
-    grid_->setVisibility(data_ && !data_->headers.empty() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    grid_->setVisibility(data_ && !data_->headers.empty() && !docView_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    viewArea_ = docView_ ? gfx::Rect{b.x + 8, b.y + head + 4, b.w - 16, std::max(0.f, b.h - head - 12)} : gfx::Rect{};   // 1.21.0
     // Lot API 8 : le bouton d'un document, sous son resume.
     if (open_) {
         open_->setBounds({b.x + 12, b.y + head - 30.f, std::min(b.w - 24.f, 300.f), 28.f});
@@ -727,6 +646,13 @@ void HmiFilePreview::onPaint(const ui::PaintContext& ctx) {
         for (const auto& p : data_->parts) parts += (parts.empty() ? "" : "   ") + (p == data_->partUsed ? "[" + p + "]" : p);
         ctx.r.drawText({b.x + 12, y}, parts, ctx.theme.font.smallUi, c.accent);
     }
+    // 1.21.0 : un document - l'apercu de tous les fichiers.
+    if (docView_ && viewArea_.w > 0) {
+        viewer_->paint(ctx.r, viewArea_, FileViewer::paletteOf(ctx.theme), FileViewer::fontsOf(ctx.theme));
+        if (viewer_->animating()) invalidate();
+        ctx.r.popClip();
+        return;
+    }
     // Pas de colonnes : le texte lui-meme.
     if (data_->headers.empty()) {
         y = b.y + 96;
@@ -737,6 +663,17 @@ void HmiFilePreview::onPaint(const ui::PaintContext& ctx) {
         }
     }
     ctx.r.popClip();
+}
+
+ui::EventResult HmiFilePreview::onEvent(const ui::InputEvent& ev) {
+    if (!docView_ || viewArea_.w <= 0) return ui::EventResult::Ignored;
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && viewArea_.contains(m->pos)) grabFocus();
+    if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
+    if (viewer_->event(ev, viewArea_)) {
+        invalidate();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
 }
 
 namespace {

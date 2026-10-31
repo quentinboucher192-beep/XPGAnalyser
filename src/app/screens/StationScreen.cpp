@@ -8,6 +8,7 @@
 #include "../App.hpp"
 #include "../Capture.hpp"
 #include "../ExportTarget.hpp"            // lot API 8 : exportFileFor, exportWhatOf
+#include "../FileViewer.hpp"              // 1.21.0 : la fenetre d'apercu (un Explorateur de fichiers etroit)
 #include "../hmi/HmiImages.hpp"
 #include "../hmi/HmiPainter.hpp"
 #include "../hmi/HmiSimulation.hpp"
@@ -158,6 +159,8 @@ core::Status StationScreen::buildUi() {
     };
     }
     host.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeExport(app_.projectFolder(), rq, where); };
+    // 1.21.0 : l'apercu du fichier choisi dans un Explorateur de fichiers etroit - sa fenetre (une seule, reprise).
+    host.showFilePreview = [this](const fileview::Source& src, bool allowOpen) { (void)showPreviewWindow(app_.detachedWindows(), src, allowOpen); };
     host.projectFolder = [this] { return app_.projectFolder(); };           // 1.12.26 : les fichiers des scripts
     // ---- Lot API 8 : les exports qui demandent ou ----
     // Lance par un geste de l'operateur : le dialogue du poste, au doigt (askExport).

@@ -95,6 +95,9 @@ namespace ui {
         std::function<std::string(const std::string& path)> openExternally;      // "" : ouvert ; sinon pourquoi
         std::function<void()> useSystemExplorer;                                  // le lien du bas
         // ---- fin Lot API 8 : l'explorateur, 2e partie ----
+        // 1.21.0 : "Apercu complet" - le fichier choisi dans la fenetre d'apercu de tous les fichiers (app/FileViewer :
+        // l'image zoomee, le PDF page a page, la grille, le texte...). "" : montre ; sinon pourquoi. Absent : pas de bouton.
+        std::function<std::string(const std::string& path)> fullPreview;
     };
 
     class FileExplorerDialog final : public menu::WidgetMenu {
@@ -155,6 +158,8 @@ namespace ui {
         [[nodiscard]] std::vector<std::string> previewLines();
         //  "Ouvrir avec le programme du systeme" sur l'element choisi ; "" : ouvert.
         std::string openSelectedExternally();
+        //  1.21.0 : "Apercu complet" sur l'element choisi (un fichier) ; "" : montre.
+        std::string previewSelectedFully();
         //  Les vignettes deja decodees (vue Vignettes) : combien, pour les tests.
         [[nodiscard]] std::size_t thumbnailCount() const noexcept { return thumbs_.size(); }
         //  Le menu du clic droit sur l'element choisi (1.12.18, planche 21) : Ouvrir,

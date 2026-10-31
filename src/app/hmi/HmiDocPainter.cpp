@@ -14,6 +14,7 @@
 // =============================================================================
 #include "HmiImages.hpp"
 #include "HmiPaintKit.hpp"
+#include "../FileViewer.hpp"              // 1.21.0 : l'apercu du fichier choisi dans l'Explorateur
 #include "../../hmi/HmiDocView.hpp"
 #include "../../hmi/HmiPdf.hpp"
 #include "../../hmi/HmiRoles.hpp"
@@ -602,12 +603,13 @@ bool drawFileExplorer(const Ctx& c) {
         status = std::to_string(rows.size()) + " \xC3\xA9l\xC3\xA9ments (exemple : la liste se lit en marche)";
     }
     // Le fil d'Ariane mesure avec la police dessinee (rawWidth) ; la souris (HmiLiveCanvas) mesure de meme.
+    const bool preview = live ? live->showPreview : c.src.flag(c.o, "showPreview", true);   // 1.21.0
     const auto l = ex::layoutOf(w, h, fs, crumbs, search, refresh, extract, parent, showSize, showDate, rows.size(), first,
-                                [&c](std::string_view s, double px) { return rawWidth(c, s, px); });
+                                [&c](std::string_view s, double px) { return rawWidth(c, s, px); }, preview);
 
     // ---- la barre : remonter, le fil d'Ariane, la recherche, Rafraichir, Extraire
     box(c, l.bar, mix(bg, tc, 0.06f), rad);
-    seg(c, 0, l.bar.bottom(), w, l.bar.bottom(), withAlpha(stroke, 0.9f), 1);
+    seg(c, 0, l.bar.bottom(), l.bar.w, l.bar.bottom(), withAlpha(stroke, 0.9f), 1);
     box(c, l.up, mix(bg, tc, parent ? 0.16f : 0.07f), 4);
     upGlyph(c, l.up, parent ? tc : withAlpha(tc, 0.35f));
     if (l.firstCrumb > 0 && l.firstCrumb < l.crumbs.size())
@@ -687,6 +689,28 @@ bool drawFileExplorer(const Ctx& c) {
     if (rows.empty() && !error && live)
         text(c, live->search.empty() && live->filter.empty() ? "Dossier vide" : "Rien ne correspond", l.list.x, l.list.y + (l.parent.w > 0 ? l.rowHeight : 0),
              l.list.w, l.rowHeight * 2, muted, fs, "centre");
+
+    // ---- 1.21.0 : l'apercu du fichier choisi, a droite (l'objet est assez large) - le meme que IHM > Ressources, aux
+    // couleurs de l'objet ; en marche, la ligne choisie ; dans l'editeur, ce qu'il montrera.
+    if (l.preview.w > 0 && l.preview.h > 0) {
+        seg(c, l.preview.x, 0, l.preview.x, l.preview.bottom(), withAlpha(stroke, 0.9f), 1);
+        const hmi::Box inner{l.preview.x + 4, l.preview.y + 4, std::max(0.0, l.preview.w - 8), std::max(0.0, l.preview.h - 8)};
+        if (live && c.opt.runtime) {
+            const auto* rt = c.opt.runtime;
+            auto& viewer = app::explorerViewer(rt, c.o.id);
+            const bool open = live->allowOpen && live->pilotable;
+            viewer.setActions(open, open);
+            const hmi::Project* project = c.opt.project;
+            viewer.follow(app::explorerSelectionHint(*rt, c.o.id), [rt, project, id = c.o.id] { return app::explorerSelection(*rt, id, project); });
+            const app::FileViewer::Palette pal{mix(bg, tc, 0.02f), mix(bg, tc, 0.10f), tc, muted, accent, c.fixedOn(0xFFFFFF),
+                                               c.fixedText(0xFF6B6B), c.fixedText(0xF5A623), stroke};
+            const gfx::Rect screen = screenRect(c, inner);
+            viewer.paint(c.r, screen, pal, app::FileViewer::fontsAt(fs * c.vp.zoom));
+            app::setExplorerViewerRect(rt, c.o.id, screen);
+        } else {
+            text(c, "Aper\xC3\xA7u du fichier choisi (en marche)", inner.x, inner.y, inner.w, inner.h, muted, fs, "centre");
+        }
+    }
 
     // ---- la ligne d'etat
     seg(c, 0, l.status.y - 1, w, l.status.y - 1, withAlpha(stroke, 0.7f), 1);

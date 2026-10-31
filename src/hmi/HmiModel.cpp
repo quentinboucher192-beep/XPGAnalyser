@@ -1439,6 +1439,8 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             // (*.csv;*.pdf), la recherche Nom contient ("showSearch"), le tri ("sortBy", "sortOrder"), les colonnes
             // ("showSize", "showDate") ; "pickTo" : la variable qui recoit le chemin de la ligne choisie ; Extraire une
             // entree de zip ("allowExtract", decoche : lecture seule) vers "extractTo" ; "maxItems" lignes au plus.
+            // 1.21.0 : "showPreview" - l'apercu du fichier choisi (dans l'objet s'il fait 760 pixels de large au moins, sinon
+            // une fenetre) ; "allowOpen" - ses boutons Ouvrir avec le programme du systeme et Ouvrir le dossier (decoche).
             common(o, x, y, 560, 320);
             o.set("folder", "");
             o.set("filter", "");
@@ -1452,6 +1454,8 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.setFlag("allowExtract", false);
             o.set("extractTo", "donnees/extraits");
             o.setNumber("maxItems", 2000);
+            o.setFlag("showPreview", true);
+            o.setFlag("allowOpen", false);
             o.set("font", "Sans");
             o.setNumber("fontSize", 13);
             o.set("textColor", "#DDE3EA");

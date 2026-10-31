@@ -3193,6 +3193,15 @@ const std::vector<KeyInfo>& keyInfos() {
          "d'office : l'explorateur est en lecture seule."},
         {"extractTo", "Dossier d'extraction", PG::ValueType::Text, {},
          "O\xC3\xB9 Extraire pose les fichiers. Relatif : au dossier du projet (donnees/extraits). Jamais dans le projet lui-m\xC3\xAAme (ihm/)."},
+        // ---- 1.21.0 : l'apercu du fichier choisi
+        {"showPreview", "Aper\xC3\xA7u", PG::ValueType::Boolean, {},
+         "Coch\xC3\xA9 : en marche, le fichier choisi se montre - une image (ajust\xC3\xA9" "e, zoom), un PDF page \xC3\xA0 page, un "
+         "texte num\xC3\xA9rot\xC3\xA9, une grille CSV ou Excel, un JSON ou un XML d\xC3\xA9pliable, un DOCX, la liste d'un zip, un son "
+         "(Lire), une vid\xC3\xA9o, une police, sinon le type reconnu et ses premiers octets. Dans l'objet s'il fait 760 pixels de large "
+         "au moins (la liste \xC3\xA0 gauche, l'aper\xC3\xA7u \xC3\xA0 droite), sinon dans une fen\xC3\xAAtre d'aper\xC3\xA7u."},
+        {"allowOpen", "Ouvrir avec le syst\xC3\xA8me permis", PG::ValueType::Boolean, {},
+         "Les boutons de l'aper\xC3\xA7u \xC2\xAB Ouvrir avec le programme du syst\xC3\xA8me \xC2\xBB et \xC2\xAB Ouvrir le dossier \xC2\xBB. "
+         "D\xC3\xA9" "coch\xC3\xA9 d'office : un poste d'exploitation ne lance aucun programme."},
         {"resultTo", "R\xC3\xA9sultat vers", PG::ValueType::Text, {},
          "Facultatif : une variable o\xC3\xB9 le bouton \xC3\x89" "crire pose le r\xC3\xA9sultat (la permission Piloter et le niveau "
          "d'acc\xC3\xA8s de l'objet s'appliquent). Vide : pas de bouton \xC3\x89" "crire."},

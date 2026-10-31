@@ -1014,6 +1014,9 @@ public:
         std::size_t              maxItems{2000};
         bool                     allowRefresh{true}, allowExtract{false}, showSearch{true}, showSize{true}, showDate{true};
         bool                     pilotable{true};
+        // 1.21.0 : l'apercu du fichier choisi (dans l'objet s'il est assez large, sinon une fenetre) ; Ouvrir avec le
+        // programme du systeme et Ouvrir le dossier, permis ou non (decoche d'office : un poste d'exploitation ne lance rien).
+        bool                     showPreview{true}, allowOpen{false};
         std::string              message;         // la reponse du dernier geste (vide : le compte)
         bool                     error{false};
         int                      loads{0};        // combien de fois la source a ete lue (les essais)

@@ -640,7 +640,7 @@ void checkTouch(Ctx& c, const View& v, const Object& o) {
         case Kind::FileExplorer: {
             // 1.14.1 (lot N5) : les boutons de sa barre (remonter, Rafraichir, Extraire) ; ses lignes se font defiler.
             const auto l = explorer::layoutOf(w, h, o.number("fontSize", 13), {"source"}, o.flag("showSearch", true), o.flag("allowRefresh", true),
-                                              o.flag("allowExtract", false), false, true, true, 0, 0);
+                                              o.flag("allowExtract", false), false, true, true, 0, 0, {}, o.flag("showPreview", true));
             parts({l.up, l.refresh, l.extract}, "les boutons de la barre");
             return;
         }

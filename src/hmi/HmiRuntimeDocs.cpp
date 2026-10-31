@@ -471,6 +471,8 @@ void Runtime::explorerRefresh(const View& v, const Object& raw, const Object& o,
     e.showSize = o.flag("showSize", true);
     e.showDate = o.flag("showDate", true);
     e.pilotable = o.flag("pilotable", true);
+    e.showPreview = o.flag("showPreview", true);      // 1.21.0 : l'apercu du fichier choisi
+    e.allowOpen = o.flag("allowOpen", false);
     e.maxItems = static_cast<std::size_t>(std::clamp(o.number("maxItems", 2000), 1.0, 100000.0));
     const std::string sortProp = trimmedOf(o.text("sortBy", "nom")) + "|" + trimmedOf(o.text("sortOrder", "croissant"));
     bool resort = false;
@@ -759,7 +761,8 @@ void Runtime::explorerPart(const View& v, const Object& o, std::string_view part
         }
     } else if (part == "liste:haut" || part == "liste:bas") {
         const auto l = explorer::layoutOf(o.number("w", 520), o.number("h", 320), o.number("fontSize", 13), explorerCrumbs(o.id), e.showSearch,
-                                          e.allowRefresh, e.allowExtract, !e.loc.at.empty(), e.showSize, e.showDate, e.shown.size(), e.first);
+                                          e.allowRefresh, e.allowExtract, !e.loc.at.empty(), e.showSize, e.showDate, e.shown.size(), e.first, {},
+                                          e.showPreview);
         const std::size_t step = std::max<std::size_t>(1, l.rows.size());
         e.first = part == "liste:haut" ? (l.first > step ? l.first - step : 0) : std::min(l.first + step, e.shown.empty() ? 0 : e.shown.size() - 1);
     }

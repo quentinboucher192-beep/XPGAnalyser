@@ -261,6 +261,9 @@ struct Tip {
 // Extraire un fichier d'un zip vers `folder` : sous son nom seul (jamais ses dossiers : rien ne sort de `folder`),
 // sans ecraser un fichier, borne a kMaxExtract. Vrai : `written` dit ou ; faux : `why`.
 bool extract(const Location&, const Entry&, const std::string& folder, std::string& written, std::string& why);
+// 1.21.0 : les octets d'un fichier (sur le disque, ou une entree de zip), bornes a `max` - l'apercu du fichier choisi.
+// Faux : `why` (introuvable, trop gros, entree abimee).
+bool readEntry(const Location&, const Entry&, std::uint64_t max, std::vector<std::uint8_t>& out, std::string& why);
 
 // "12,4 Ko", "980 octets", "3,1 Mo" ; "30/10/2026 14:02" (vide : inconnue).
 [[nodiscard]] std::string sizeText(std::uint64_t bytes);
@@ -279,7 +282,13 @@ struct Layout {
     Box upArrow, downArrow;                     // defiler (vides : tout tient)
     Box status;                                 // la ligne du bas : le compte, le filtre, le message
     double rowHeight{24};
+    Box preview;                                // 1.21.0 : l'apercu du fichier choisi, a droite (vide : pas dans l'objet)
 };
+// 1.21.0 : L'APERCU DU FICHIER CHOISI (la propriete Apercu, showPreview) se montre DANS L'OBJET quand il est assez large
+// (kPreviewMinWidth, en pixels de la vue) : la liste a gauche, l'apercu a droite, la ligne d'etat dessous sur toute la
+// largeur. Plus etroit : une fenetre d'apercu (l'ecran la fait).
+inline constexpr double kPreviewMinWidth = 760;
+[[nodiscard]] bool previewInside(double w, bool showPreview) noexcept;
 // La largeur d'un texte a la taille `sizePx`, en pixels de l'objet : la vraie police (le peintre et la souris passent la
 // meme mesure, ce qui se dessine est ce qui se clique).
 using TextWidth = std::function<double(std::string_view text, double sizePx)>;
@@ -287,9 +296,9 @@ using TextWidth = std::function<double(std::string_view text, double sizePx)>;
 // d'une etape du fil (1.14.1, lot N5, retouche) ; absente (Generer, sans police) : une estimation, 0,5 em par caractere.
 [[nodiscard]] Layout layoutOf(double w, double h, double fontSize, const std::vector<std::string>& crumbs, bool searchBox, bool refresh,
                               bool extract, bool parent, bool showSize, bool showDate, std::size_t rows, std::size_t first,
-                              const TextWidth& measure = {});
+                              const TextWidth& measure = {}, bool showPreview = false);
 // "monter", "ariane:N", "recherche", "rafraichir", "extraire", "colonne:nom", "colonne:taille", "colonne:date", "parent",
-// "ligne:N" (N : le rang dans la liste), "liste:haut", "liste:bas" ; "" : rien.
+// "ligne:N" (N : le rang dans la liste), "liste:haut", "liste:bas", "apercu" (1.21.0 : l'apercu dans l'objet) ; "" : rien.
 [[nodiscard]] std::string hit(const Layout&, double x, double y);
 
 } // namespace hmi::explorer
