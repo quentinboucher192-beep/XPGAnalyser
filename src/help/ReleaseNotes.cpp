@@ -165,6 +165,28 @@ const std::vector<Note>& table() {
          "le dit) ; le reste part \xC3\xA0 l'IA connect\xC3\xA9" "e avec la conversation. Une demande avec une pi\xC3\xA8" "ce jointe part \xC3\xA0 "
          "l'IA connect\xC3\xA9" "e. Commande de s\xC3\xA9" "ance : ia dabord oui|non.",
          "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::New,
+         "M'AVERTIR DES R\xC3\x89PONSES : une r\xC3\xA9ponse de l'IA qui arrive quand tu ne regardes pas le panneau (une autre fen\xC3\xAAtre "
+         "devant, le panneau repli\xC3\xA9, une autre conversation) : un avis dans la cloche (Voir ouvre la conversation) et, la fen\xC3\xAAtre en "
+         "arri\xC3\xA8re-plan, son bouton clignote dans la barre des t\xC3\xA2" "ches avec le son de notification. Une case des param\xC3\xA8tres, "
+         "coch\xC3\xA9" "e au d\xC3\xA9part.",
+         "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::Changed,
+         "PLUS DE REFUS PAR M\xC3\x89GARDE : dans la Pr\xC3\xA9visualisation, \xC2\xAB Annuler \xC2\xBB devient \xC2\xAB Refuser\xE2\x80\xA6 \xC2\xBB et pose une "
+         "question (Refuser ou Garder) ; \xC3\x89" "chap ferme la fen\xC3\xAAtre sans d\xC3\xA9" "cider ; Modifier la demande ne refuse plus la "
+         "proposition. Une carte refus\xC3\xA9" "e propose Revenir sur le refus.",
+         "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::New,
+         "APPLIQUER MALGR\xC3\x89 LES ERREURS : une case des param\xC3\xA8tres (d\xC3\xA9" "coch\xC3\xA9" "e au d\xC3\xA9part). Coch\xC3\xA9" "e, une proposition qui "
+         "garde des erreurs s'applique quand m\xC3\xAAme, apr\xC3\xA8s une confirmation qui les liste : ce qui est valide s'applique, ce qui est "
+         "en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 et not\xC3\xA9 sous la r\xC3\xA9ponse et dans le journal d'activit\xC3\xA9. Un seul Ctrl+Z "
+         "reprend tout ; une vue qui a chang\xC3\xA9 depuis bloque toujours.",
+         "assistant-ia", ""),
+        note("1.16.1", "Assistant IA", Kind::Fixed,
+         "UN REP\xC3\x88RE ASSOCI\xC3\x89 N'EST PLUS DIT INTROUVABLE : une proposition qui associe un objet \xC3\xA0 $Armoires[0]$.Prete (un "
+         "rep\xC3\xA8re que Dupliquer avec rep\xC3\xA8res fera avancer) disait \xC2\xAB n'existe pas \xC2\xBB alors que la variable Armoires existe : "
+         "le rep\xC3\xA8re se lit maintenant sans ses $.",
+         "assistant-ia", ""),
         // 1.14.1 (lot N1, demande du 30/10) : les vannes et les registres commandes par leurs fins de course.
         note("1.16.0", "Assistant IA", Kind::New,
          "L'IA INT\xC3\x89GR\xC3\x89" "E, SANS CONNEXION : l'Assistant IA a maintenant une IA \xC3\xA9" "crite dans le logiciel, gratuite et "
