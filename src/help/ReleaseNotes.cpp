@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.16.1", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.17.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.16.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.16.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 au matin"},
     {"1.15.0", "30/10/2026", "livr\xC3\xA9" "e dans la nuit du 30 au 31/10"},
     {"1.14.2", "30/10/2026", "livr\xC3\xA9" "e le 30/10 au soir"},
@@ -143,6 +144,34 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.17.0 : l'apprentissage, un tableau de bord ; dans un fichier ; l'installateur relie l'IA
+        note("1.17.0", "Assistant IA", Kind::New,
+         "L'APPRENTISSAGE, UN TABLEAU DE BORD : l'onglet Apprentissage de la fen\xC3\xAAtre M\xC3\xA9moire et apprentissage de l'IA montre ce "
+         "qu'elle sait et qu'elle progresse - quatre tuiles, deux graphiques mesur\xC3\xA9s sur ce PC par semaine (les demandes comprises "
+         "par l'IA int\xC3\xA9gr\xC3\xA9" "e, les propositions gard\xC3\xA9" "es ; ce qu'elle a appris, par origine), les th\xC3\xA8mes et leur "
+         "nombre, Rechercher, les filtres et le tri.",
+         "memoire-ia", ""),
+        note("1.17.0", "Assistant IA", Kind::New,
+         "CORRIGER \xC3\x80 LA MAIN : un mod\xC3\xA8le m\xC3\xA9tier (T_Pompe, T_Capteur...) se corrige dans l'onglet - son nom, les mots "
+         "qui l'appellent, ses membres et leur type ; Revenir \xC3\xA0 l'original, D\xC3\xA9sactiver, Nouveau mod\xC3\xA8le... Un mot aussi "
+         "(\xC2\xAB surpresseur \xC2\xBB = une pompe). L'IA int\xC3\xA9gr\xC3\xA9" "e s'en sert d\xC3\xA8s la demande suivante.",
+         "memoire-ia", ""),
+        note("1.17.0", "Assistant IA", Kind::New,
+         "\xC3\x80 LUI APPRENDRE, ESSAYER UNE PHRASE : les demandes que l'IA int\xC3\xA9gr\xC3\xA9" "e n'a pas comprises ces 7 jours, et pour "
+         "chacune le mot \xC3\xA0 lui apprendre (la demande est r\xC3\xA9" "essay\xC3\xA9" "e aussit\xC3\xB4t) ; Essayer une phrase dit ce "
+         "qu'elle proposerait sur le projet ouvert, sans rien appliquer.",
+         "memoire-ia", ""),
+        note("1.17.0", "Assistant IA", Kind::New,
+         "L'APPRENTISSAGE DANS UN FICHIER : Exporter l'apprentissage... \xC3\xA9" "crit un fichier .xia (tes connaissances, tes mod\xC3\xA8les "
+         "corrig\xC3\xA9s, tes mots ; jamais la cl\xC3\xA9 API) ; Importer... dit ce qu'il ferait, puis importe apr\xC3\xA8s confirmation. "
+         "Commandes de s\xC3\xA9" "ance : ia apprentissage exporter, voir, importer.",
+         "memoire-ia", ""),
+        note("1.17.0", "Installation", Kind::New,
+         "L'INSTALLATEUR RELIE L'IA : une page Assistant IA (l'IA int\xC3\xA9gr\xC3\xA9" "e, Ollama, Anthropic, un service compatible ; IA "
+         "int\xC3\xA9gr\xC3\xA9" "e d'abord ; l'adresse et le mod\xC3\xA8le) et une page Un apprentissage d'un autre PC (un fichier .xia) - "
+         "appliqu\xC3\xA9" "es au premier lancement de chaque compte. Aucune cl\xC3\xA9 API ne passe par l'installateur. En silencieux : "
+         "/IA=, /IAADRESSE=, /IAMODELE=, /IADABORD=oui, /APPRENTISSAGE=.",
+         "memoire-ia", ""),
         // 1.16.1 : l'IA integree lit les phrases, les modeles metier, le relais vers l'IA connectee.
         note("1.16.1", "Assistant IA", Kind::Changed,
          "L'IA INT\xC3\x89GR\xC3\x89" "E COMPREND MIEUX TES PHRASES : elle lit la phrase au lieu de la d\xC3\xA9" "couper. Un type se dit en "

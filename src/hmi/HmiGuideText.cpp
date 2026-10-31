@@ -4569,12 +4569,55 @@ const std::vector<Topic>& topics() {
                          "date du dernier nettoyage).", {}},
              {K::Tip, "Le mod\xC3\xA8le d'IA distant tourne chez son fournisseur : il n'occupe ni la RAM "
                          "ni le disque de ce PC.", {}},
-             {K::Paragraph, "La liste des connaissances : nom, cat\xC3\xA9gorie, source, projet, dates d'ajout "
-                         "et de mise \xC3\xA0 jour, taille estim\xC3\xA9" "e, \xC3\xA9tat. Filtr\xC3\xA9" "e "
-                         "par cat\xC3\xA9gorie et par projet. **Consulter** montre tout le texte ; "
-                         "**Modifier**, **Activer / D\xC3\xA9sactiver**, **Supprimer** (en rouge, "
-                         "confirm\xC3\xA9) ; **Ajouter une connaissance\xE2\x80\xA6** ouvre "
-                         "l'\xC3\xA9" "diteur (nom, cat\xC3\xA9gorie, projet, description, contenu, active).", {}},
+             {K::Paragraph, "L'onglet **Apprentissage** est un tableau de bord : ce qu'elle sait, et qu'elle "
+                         "progresse. En haut, **Importer\xE2\x80\xA6** et **Exporter "
+                         "l'apprentissage\xE2\x80\xA6** (un fichier .xia) ; quatre tuiles : ce qu'elle sait "
+                         "(et ce qui s'est ajout\xC3\xA9 en 4 semaines), les demandes comprises par l'IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e sur 30 jours, les propositions gard\xC3\xA9" "es, ce "
+                         "qu'il reste \xC3\xA0 lui apprendre ; deux graphiques mesur\xC3\xA9s sur ce PC, par "
+                         "semaine (8 semaines, 3 mois ou 6 mois) : les demandes comprises et les "
+                         "propositions gard\xC3\xA9" "es, puis ce qu'elle a appris, par origine (tes "
+                         "corrections, l'Assistant, tes fichiers). Le survol d'un point ou d'une barre donne "
+                         "ses chiffres. En bas, \xC3\xA0 gauche, les **th\xC3\xA8mes** et leur nombre "
+                         "(\xC2\xAB +N \xC2\xBB : ajout\xC3\xA9s ces 4 semaines) ; au milieu, la liste du "
+                         "th\xC3\xA8me avec **Rechercher** (un nom, un mot, un membre, un type), "
+                         "l'\xC3\xA9tat (actifs, d\xC3\xA9sactiv\xC3\xA9s, modifi\xC3\xA9s \xC3\xA0 la main) "
+                         "et le tri ; \xC3\xA0 droite, le d\xC3\xA9tail, **modifiable** :", {}, "1.17.0"},
+             {K::Table, "Th\xC3\xA8me\tCe qu'on y fait\nMod\xC3\xA8les m\xC3\xA9tier\tCe que propose "
+                         "\xC2\xAB un type pour une pompe \xC2\xBB : le nom du type, les mots qui "
+                         "l'appellent, ses membres et leur type (double-clic ; le type se choisit dans une "
+                         "liste ; + Membre, Retirer, monter, descendre). **Enregistrer** : l'IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e s'en sert d\xC3\xA8s la demande suivante. Un "
+                         "mod\xC3\xA8le du logiciel corrig\xC3\xA9 garde **Revenir \xC3\xA0 l'original** ; "
+                         "**Nouveau mod\xC3\xA8le\xE2\x80\xA6** en ajoute un (T_Compresseur) ; "
+                         "D\xC3\xA9sactiver, Supprimer.\nVocabulaire et synonymes\tUn mot et ce qu'il "
+                         "d\xC3\xA9signe : un genre d'objet (\xC2\xAB surpresseur \xC2\xBB = une pompe), un "
+                         "mod\xC3\xA8le m\xC3\xA9tier, ou un mot \xC3\xA0 ignorer. Les mots du logiciel se "
+                         "lisent ; les tiens se changent, se d\xC3\xA9sactivent, s'oublient.\nLes autres "
+                         "th\xC3\xA8mes\tLes connaissances en texte de cette cat\xC3\xA9gorie "
+                         "(ci-dessous).\n\xC3\x80 lui apprendre\tLes demandes que l'IA "
+                         "int\xC3\xA9gr\xC3\xA9" "e n'a pas comprises ces 7 jours : choisis le mot qu'elle "
+                         "ne conna\xC3\xAEt pas et ce qu'il d\xC3\xA9signe, puis **Lui apprendre** - la "
+                         "demande est r\xC3\xA9" "essay\xC3\xA9" "e tout de suite. **Ignorer** la retire de "
+                         "la liste.", {}},
+             {K::Paragraph, "En pied, **Essayer une phrase** : l'IA int\xC3\xA9gr\xC3\xA9" "e la lit sur le "
+                         "projet et la vue ouverts et dit ce qu'elle proposerait, sans rien appliquer ni "
+                         "rien compter. **Exporter l'apprentissage\xE2\x80\xA6** \xC3\xA9" "crit un fichier "
+                         ".xia : tes connaissances, tes mod\xC3\xA8les corrig\xC3\xA9s, tes mots, "
+                         "l'\xC3\xA9tat des connaissances du logiciel - jamais la cl\xC3\xA9 API. "
+                         "**Importer\xE2\x80\xA6** dit d'abord ce qu'il ferait (ajout\xC3\xA9" "es, "
+                         "gard\xC3\xA9" "es, ignor\xC3\xA9" "es), puis importe apr\xC3\xA8s ta confirmation "
+                         "; une connaissance que ce PC a d\xC3\xA9j\xC3\xA0 est gard\xC3\xA9" "e. "
+                         "L'installateur reprend aussi un .xia (sa page \xC2\xAB Un apprentissage d'un autre "
+                         "PC \xC2\xBB). Commandes de s\xC3\xA9" "ance : ia apprentissage exporter "
+                         "\"chemin.xia\", ia apprentissage voir \"chemin.xia\", ia apprentissage importer "
+                         "\"chemin.xia\". Dans un th\xC3\xA8me en texte, la liste des connaissances : nom, "
+                         "cat\xC3\xA9gorie, source, projet, dates d'ajout et de mise \xC3\xA0 jour, taille "
+                         "estim\xC3\xA9" "e, \xC3\xA9tat. Filtr\xC3\xA9" "e par cat\xC3\xA9gorie et par "
+                         "projet. **Consulter** montre tout le texte ; **Modifier**, **Activer / "
+                         "D\xC3\xA9sactiver**, **Supprimer** (en rouge, confirm\xC3\xA9) ; **Ajouter une "
+                         "connaissance\xE2\x80\xA6** ouvre l'\xC3\xA9" "diteur (nom, cat\xC3\xA9gorie, "
+                         "projet, description, contenu, active).", {}},
              {K::Table, "Sorte\tCe qu'on peut en faire\nDu logiciel (6)\tGenres d'objets, "
                          "propri\xC3\xA9t\xC3\xA9s de chaque genre, actions, vocabulaire et synonymes, objet "
                          "pos\xC3\xA9 pour une variable, mod\xC3\xA8les de vues - tir\xC3\xA9" "es des "
@@ -4585,10 +4628,9 @@ const std::vector<Topic>& topics() {
                          ": tout (consulter, modifier, activer, d\xC3\xA9sactiver, supprimer).", {}},
              {K::Paragraph, "Une connaissance porte un projet (vide : tous les projets). Celle d'un autre "
                          "projet est marqu\xC3\xA9" "e \xC2\xAB Autre projet \xC2\xBB : elle ne part pas "
-                         "avec les demandes faites ici. \xC3\x80 droite, l'activit\xC3\xA9 r\xC3\xA9" "cente "
-                         "de l'apprentissage. Les informations gard\xC3\xA9" "es, par cat\xC3\xA9gorie : "
-                         "conversations, historique des messages, informations par projet, "
-                         "pr\xC3\xA9" "f\xC3\xA9rences, connaissances m\xC3\xA9tier, "
+                         "avec les demandes faites ici. Les informations gard\xC3\xA9" "es, par "
+                         "cat\xC3\xA9gorie : conversations, historique des messages, informations par "
+                         "projet, pr\xC3\xA9" "f\xC3\xA9rences, connaissances m\xC3\xA9tier, "
                          "r\xC3\xA9" "f\xC3\xA9rences aux pi\xC3\xA8" "ces jointes. La recherche trouve un "
                          "titre, un message, une connaissance ou une pi\xC3\xA8" "ce jointe (les mots dans "
                          "n'importe quel ordre, sans les accents). Supprimer une conversation, une "
@@ -4617,7 +4659,7 @@ const std::vector<Topic>& topics() {
                          "type.", {}},
          },
          {"assistant-ia", "aller-a"},
-         {"M\xC3\xA9moire et apprentissage de l'IA", "m\xC3\xA9moire IA", "apprentissage", "connaissances", "connaissance", "cache", "Vider le cache", "donn\xC3\xA9" "es persistantes", "Stockage PC", "ia.memoire", "IA", "dossier IA", "activite.jsonl", "memoire.json", "genres d'objets connus"},
+         {"M\xC3\xA9moire et apprentissage de l'IA", "m\xC3\xA9moire IA", "apprentissage", "connaissances", "connaissance", "cache", "Vider le cache", "donn\xC3\xA9" "es persistantes", "Stockage PC", "ia.memoire", "IA", "dossier IA", "activite.jsonl", "memoire.json", "genres d'objets connus", "tableau de bord", "mod\xC3\xA8les m\xC3\xA9tier", "mod\xC3\xA8le m\xC3\xA9tier", "vocabulaire", "synonymes", ".xia", "Exporter l'apprentissage", "Importer", "\xC3\xA0 lui apprendre", "Lui apprendre", "Essayer une phrase", "progression"},
          {"ia.memoire"},
          {},
          "",

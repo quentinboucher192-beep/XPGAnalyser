@@ -576,6 +576,12 @@ var
   CasePosteAuto, CasePosteRelance: TNewCheckBox;
   TexteRelance: TNewStaticText;
   TachesVues: Boolean;
+  // 1.17.0 : l'Assistant IA (relier une IA, reprendre un apprentissage d'un autre PC)
+  PageIA: TInputOptionWizardPage;
+  CaseIADabord: TNewCheckBox;
+  TexteIAAdresse, TexteIAModele: TNewStaticText;
+  EditIAAdresse, EditIAModele: TNewEdit;
+  PageXia: TInputFileWizardPage;
 
 // ---------------------------------------------- 1.8.0 : la liste des blocs ----
 //  Une vraie ListView de Windows (aide\xpgliste.c) : setuponly et delayload - la DLL
@@ -4684,6 +4690,163 @@ begin
   T.Caption := 'Dans le menu Démarrer : seulement « {#RacPosteP} », pas l''éditeur. Ctrl+Alt+Q en sort (avec le mot de passe de sortie du projet).';
 end;
 
+// ---------------------------------------------- 1.17.0 : l'Assistant IA ----
+//  Relier une IA des l'installation, et reprendre l'apprentissage d'un autre PC (un fichier .xia exporte de
+//  l'onglet Apprentissage). L'installateur depose dans {commonappdata}\{#Cle}\IA :
+//    installation.json : { "tampon", "ia" (integree|ollama|anthropic|compatible|garder), "adresse", "modele",
+//                          "dabord", "apprentissage" } ; apprentissage.xia (la copie du fichier choisi).
+//  IHM Studio les applique au premier lancement de chaque compte Windows (une fois par installation : le tampon).
+//  AUCUNE CLE API : elle se saisit dans le logiciel (protegee par Windows), jamais dans l'installateur.
+//  En silencieux : /IA=integree|ollama|anthropic|compatible|garder /IAADRESSE=... /IAMODELE=... /IADABORD=oui|non
+//  /APPRENTISSAGE="D:\appris.xia".
+const
+  iaGarder = 0; iaIntegree = 1; iaOllama = 2; iaAnthropic = 3; iaCompatible = 4;
+
+function IACle(I: Integer): String;
+begin
+  case I of
+    iaIntegree: Result := 'integree';
+    iaOllama: Result := 'ollama';
+    iaAnthropic: Result := 'anthropic';
+    iaCompatible: Result := 'compatible';
+  else
+    Result := 'garder';
+  end;
+end;
+
+procedure IAChoixChange(Sender: TObject);
+var I: Integer;
+    Connectee: Boolean;
+begin
+  if PageIA = nil then Exit;
+  I := PageIA.SelectedValueIndex;
+  Connectee := (I = iaOllama) or (I = iaAnthropic) or (I = iaCompatible);
+  CaseIADabord.Enabled := Connectee;
+  EditIAAdresse.Enabled := Connectee;
+  TexteIAAdresse.Enabled := Connectee;
+  EditIAModele.Enabled := Connectee;
+  TexteIAModele.Enabled := Connectee;
+  if (I = iaOllama) and (Trim(EditIAAdresse.Text) = '') then EditIAAdresse.Text := 'http://localhost:11434/v1';
+end;
+
+procedure CreerPagesIA;
+var Y: Integer;
+    S: String;
+begin
+  PageIA := CreateInputOptionPage(PageBiblio.ID, 'L''Assistant IA', 'Quelle IA l''Assistant d''{#NomIhm} utilise-t-il ?',
+    'Tout se change plus tard : panneau Assistant IA > Paramètres. Aucune clé API ne passe par l''installateur : pour Claude, elle se saisit dans le logiciel.',
+    True, False);
+  PageIA.Add('Garder le réglage actuel (sur un PC neuf : l''IA intégrée)');
+  PageIA.Add('L''IA intégrée : sans connexion, gratuite, immédiate - elle comprend les demandes simples');
+  PageIA.Add('Ollama sur ce PC : gratuit, rien ne quitte le PC (Ollama s''installe à part : ollama.com)');
+  PageIA.Add('Anthropic (Claude) : le plus capable ; la clé API se saisit ensuite dans le logiciel');
+  PageIA.Add('Un service compatible OpenAI : LM Studio, un serveur de l''entreprise...');
+  PageIA.SelectedValueIndex := iaGarder;
+  PageIA.CheckListBox.Height := ScaleY(118);
+  Y := PageIA.CheckListBox.Top + PageIA.CheckListBox.Height + ScaleY(10);
+  CaseIADabord := TNewCheckBox.Create(PageIA);
+  CaseIADabord.Parent := PageIA.Surface;
+  CaseIADabord.Top := Y;
+  CaseIADabord.Width := PageIA.SurfaceWidth;
+  CaseIADabord.Height := ScaleY(20);
+  CaseIADabord.Caption := 'IA intégrée d''abord : elle répond tout de suite à ce qu''elle comprend ; le reste part à l''IA connectée';
+  Y := Y + ScaleY(30);
+  TexteIAAdresse := TNewStaticText.Create(PageIA);
+  TexteIAAdresse.Parent := PageIA.Surface;
+  TexteIAAdresse.Top := Y + ScaleY(3);
+  TexteIAAdresse.Caption := 'Adresse (vide : celle du service) :';
+  EditIAAdresse := TNewEdit.Create(PageIA);
+  EditIAAdresse.Parent := PageIA.Surface;
+  EditIAAdresse.Top := Y;
+  EditIAAdresse.Left := ScaleX(200);
+  EditIAAdresse.Width := PageIA.SurfaceWidth - ScaleX(200);
+  Y := Y + ScaleY(30);
+  TexteIAModele := TNewStaticText.Create(PageIA);
+  TexteIAModele.Parent := PageIA.Surface;
+  TexteIAModele.Top := Y + ScaleY(3);
+  TexteIAModele.Caption := 'Modèle (vide : à choisir ensuite) :';
+  EditIAModele := TNewEdit.Create(PageIA);
+  EditIAModele.Parent := PageIA.Surface;
+  EditIAModele.Top := Y;
+  EditIAModele.Left := ScaleX(200);
+  EditIAModele.Width := PageIA.SurfaceWidth - ScaleX(200);
+  PageIA.CheckListBox.OnClickCheck := @IAChoixChange;
+  // les parametres de la ligne de commande (le silencieux, un deploiement)
+  S := Lowercase(Trim(ExpandConstant('{param:IA|}')));
+  if S = 'integree' then PageIA.SelectedValueIndex := iaIntegree
+  else if S = 'ollama' then PageIA.SelectedValueIndex := iaOllama
+  else if S = 'anthropic' then PageIA.SelectedValueIndex := iaAnthropic
+  else if S = 'compatible' then PageIA.SelectedValueIndex := iaCompatible;
+  EditIAAdresse.Text := Trim(ExpandConstant('{param:IAADRESSE|}'));
+  EditIAModele.Text := Trim(ExpandConstant('{param:IAMODELE|}'));
+  CaseIADabord.Checked := Lowercase(Trim(ExpandConstant('{param:IADABORD|}'))) = 'oui';
+  IAChoixChange(nil);
+
+  PageXia := CreateInputFilePage(PageIA.ID, 'Un apprentissage d''un autre PC',
+    'Ce que l''IA a appris ailleurs : ses modèles métier corrigés, ses mots, tes connaissances.',
+    'Un fichier .xia : sur l''autre PC, onglet Apprentissage > Exporter l''apprentissage... Laisse vide pour ne rien reprendre.' + #13#10 + #13#10 +
+    'Le fichier est copié ; il s''importe au premier lancement d''{#NomIhm}, pour chaque compte Windows. Une connaissance que ce PC a déjà est gardée. La clé API n''est jamais dans ce fichier.');
+  PageXia.Add('Fichier .xia :', 'Apprentissage de l''IA (*.xia)|*.xia|Tous les fichiers|*.*', '.xia');
+  PageXia.Values[0] := Trim(ExpandConstant('{param:APPRENTISSAGE|}'));
+end;
+
+// Une chaine JSON en ASCII : les guillemets, les barres, les accents en \u (le fichier se lit sans BOM ni ANSI).
+function JsonAscii(S: String): String;
+var I, C: Integer;
+begin
+  Result := '"';
+  for I := 1 to Length(S) do begin
+    C := Ord(S[I]);
+    if S[I] = '"' then Result := Result + '\"'
+    else if S[I] = '\' then Result := Result + '\\'
+    else if (C < 32) or (C > 126) then Result := Result + '\u' + Format('%.4x', [C])
+    else Result := Result + S[I];
+  end;
+  Result := Result + '"';
+end;
+
+procedure IAInstaller;
+var Dossier, Xia, Cle, Json, Dabord: String;
+begin
+  if (PageIA = nil) or not AvecExeIhm(ProfilChoisi) or (ProfilChoisi = pPoste) then Exit;
+  Cle := IACle(PageIA.SelectedValueIndex);
+  Xia := Trim(PageXia.Values[0]);
+  if (Cle = 'garder') and (Xia = '') then begin
+    JournalNote(jInfo, 'ia', 'Assistant IA : le réglage actuel est gardé, aucun apprentissage à reprendre');
+    Exit;
+  end;
+  Dossier := ExpandConstant('{commonappdata}\{#Cle}\IA');
+  if not ForceDirectories(Dossier) then begin
+    JournalNote(jAttention, 'ia', 'Assistant IA : le dossier ' + Dossier + ' ne se crée pas (droits ?) ; à régler dans le logiciel');
+    Exit;
+  end;
+  if Xia <> '' then begin
+#if Ver >= EncodeVer(6, 4, 0)
+    if not CopyFile(Xia, Dossier + '\apprentissage.xia', False) then begin
+#else
+    if not FileCopy(Xia, Dossier + '\apprentissage.xia', False) then begin
+#endif
+      JournalNote(jAttention, 'ia', 'Apprentissage : ' + Xia + ' ne se copie pas ; à importer dans l''onglet Apprentissage');
+      Xia := '';
+    end else
+      JournalNote(jFait, 'ia', 'Apprentissage repris de ' + Xia + ' : il s''importe au premier lancement d''{#NomIhm}');
+  end;
+  if CaseIADabord.Checked then Dabord := 'true' else Dabord := 'false';
+  Json := '{' + #13#10 +
+          '  "tampon": ' + JsonAscii(GetDateTimeString('yyyymmddhhnnss', #0, #0) + '-' + IntToStr(GetTickCount)) + ',' + #13#10 +
+          '  "ia": ' + JsonAscii(Cle) + ',' + #13#10 +
+          '  "adresse": ' + JsonAscii(Trim(EditIAAdresse.Text)) + ',' + #13#10 +
+          '  "modele": ' + JsonAscii(Trim(EditIAModele.Text)) + ',' + #13#10 +
+          '  "dabord": ' + Dabord + ',' + #13#10;
+  if Xia <> '' then Json := Json + '  "apprentissage": "apprentissage.xia"' + #13#10
+  else Json := Json + '  "apprentissage": ""' + #13#10;
+  Json := Json + '}' + #13#10;
+  if SaveStringToFile(Dossier + '\installation.json', Json, False) then
+    JournalNote(jFait, 'ia', 'Assistant IA : ' + PageIA.CheckListBox.ItemCaption[PageIA.SelectedValueIndex] + ' (appliqué au premier lancement)')
+  else
+    JournalNote(jAttention, 'ia', 'Assistant IA : installation.json ne s''écrit pas ; à régler dans le logiciel');
+end;
+
 procedure InitializeWizard;
 var I: Integer;
     S, Precedent: String;
@@ -4739,6 +4902,8 @@ begin
 
   // ---- 1.8.0 : Ta bibliothèque ----
   CreerPageBiblio;
+  // ---- 1.17.0 : l'Assistant IA, un apprentissage d'un autre PC ----
+  CreerPagesIA;
   // ---- 1.8.0 : Ce qui a été installé (après la copie) ----
   PageRecap := CreateOutputMsgMemoPage(wpInstalling, 'Ce qui a été installé',
     'Les programmes, leur architecture, et où se trouve chaque chose.', 'Le même texte est enregistré dans tes journaux.', '');
@@ -4867,6 +5032,9 @@ begin
   if (PagePoste <> nil) and (PageID = PagePoste.ID) then Result := ProfilChoisi <> pPoste;
   if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := not AvecApi(ProfilChoisi);
   if (PageAutre <> nil) and (PageID = PageAutre.ID) then Result := (GetArrayLength(Sources) = 0) or not PageReprise.Values[OptionAutre];
+  // 1.17.0 : l'Assistant IA est dans IHM Studio (pas sur le poste d'exploitation)
+  if ((PageIA <> nil) and (PageID = PageIA.ID)) or ((PageXia <> nil) and (PageID = PageXia.ID)) then
+    Result := not AvecExeIhm(ProfilChoisi) or (ProfilChoisi = pPoste);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -4875,6 +5043,17 @@ begin
   Result := True;
   // 1.14.0 : le choix fait les composants ; le poste vérifie son projet
   if (PageProfil <> nil) and (CurPageID = PageProfil.ID) then AppliquerProfil(ProfilChoisi);
+  // 1.17.0 : un service compatible demande son adresse ; un .xia doit exister
+  if (PageIA <> nil) and (CurPageID = PageIA.ID) and (PageIA.SelectedValueIndex = iaCompatible) and (Trim(EditIAAdresse.Text) = '') then begin
+    MsgBox('Donne l''adresse du service compatible OpenAI (par exemple http://localhost:1234/v1 pour LM Studio).', mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  if (PageXia <> nil) and (CurPageID = PageXia.ID) and (Trim(PageXia.Values[0]) <> '') and not FileExists(Trim(PageXia.Values[0])) then begin
+    MsgBox('Ce fichier n''existe pas : ' + Trim(PageXia.Values[0]), mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
   if (PagePoste <> nil) and (CurPageID = PagePoste.ID) then begin
     D := RemoveBackslashUnlessRoot(Trim(PagePoste.Values[0]));
     if D = '' then begin MsgBox('Choisis le dossier du projet que le poste ouvre.', mbError, MB_OK); Result := False; Exit; end;
@@ -5511,6 +5690,12 @@ begin
   end;
   EcrireInstallationIni;
   JournalNote(jFait, 'ini', 'installation.ini est écrit : la version, ton choix, tes dossiers, la maintenance');
+  // 1.17.0 : l'Assistant IA (relier une IA, reprendre un apprentissage)
+  try
+    IAInstaller;
+  except
+    Log('Assistant IA : ' + GetExceptionMessage);
+  end;
   // L'installateur lui-meme dans la reserve : repair.bat (reinstaller) et la reprise s'en servent.
   // (1.12.29 : CopyFile depuis Inno Setup 6.4 - FileCopy, son ancien nom, y donne un avertissement.)
   // 1.14.0 : seulement avec la copie de secours (sa case) ; puis les anciennes copies partent.
