@@ -3,6 +3,8 @@
 // =============================================================================
 #include "AiProjectAnswers.hpp"
 
+#include "../../hmi/HmiFolders.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -332,6 +334,121 @@ Answer verify(const hmi::Project& project, const hmi::NameExists& plc) {
     if (other > 0)
         a.text += std::string(moves.empty() ? "" : "\n") + "Les autres corrections (" + std::to_string(other)
                   + ") se font \xC3\xA0 la main, l\xC3\xA0 o\xC3\xB9 je l'indique : je ne modifie jamais un texte ou une suppression sans toi.";
+    return a;
+}
+
+// ---- les conventions du projet --------------------------------------------------------------------------------------
+namespace {
+
+// Le prefixe partage par au moins la moitie des noms (et deux au moins) : "T_", "Vue_", "Sym_" ; vide : aucun.
+std::string commonPrefix(const std::vector<std::string>& names) {
+    std::map<std::string, std::size_t> count;
+    for (const auto& n : names)
+        if (const auto cut = n.find('_'); cut != std::string::npos && cut > 0 && cut <= 6) ++count[n.substr(0, cut + 1)];
+    std::string best;
+    std::size_t most = 0;
+    for (const auto& [p, n] : count)
+        if (n > most) {
+            most = n;
+            best = p;
+        }
+    return most >= 2 && most * 2 >= names.size() ? best : std::string{};
+}
+
+// Les series : Pompe_1, Pompe_2... -> "Pompe_N (3)".
+std::vector<std::string> seriesOf(const std::vector<std::string>& names) {
+    std::map<std::string, std::size_t> count;
+    for (const auto& n : names) {
+        std::size_t end = n.size();
+        while (end > 0 && std::isdigit(static_cast<unsigned char>(n[end - 1]))) --end;
+        if (end == n.size() || end == 0) continue;
+        ++count[n.substr(0, end)];
+    }
+    std::vector<std::string> out;
+    for (const auto& [base, n] : count)
+        if (n >= 2) out.push_back(code(base + "N") + " (" + std::to_string(n) + ")");
+    return out;
+}
+
+} // namespace
+
+Answer conventions(const hmi::Project& project) {
+    Answer a;
+    std::vector<std::string> lines;
+    const auto names = [](const auto& list, auto get) {
+        std::vector<std::string> out;
+        for (const auto& x : list) out.push_back(get(x));
+        return out;
+    };
+    const auto types = names(project.programs.types, [](const hmi::HmiType& t) { return t.name; });
+    const auto vars = names(project.programs.variables, [](const hmi::Variable& v) { return v.name; });
+    std::vector<std::string> views, symbols, popups;
+    std::map<std::string, std::size_t> sizes;
+    for (const auto& v : project.views) {
+        if (v.role == "symbole") symbols.push_back(v.name);
+        else if (v.role == "popup") popups.push_back(v.name);
+        else if (v.role == "vue" || v.role.empty()) {
+            views.push_back(v.name);
+            ++sizes[std::to_string(v.width) + "\xC3\x97" + std::to_string(v.height)];
+        }
+    }
+    const auto alarms = names(project.alarms, [](const hmi::AlarmDef& x) { return x.name; });
+    const auto prefixLine = [&](const char* what, const std::vector<std::string>& list) {
+        if (list.empty()) return;
+        const std::string p = commonPrefix(list);
+        lines.push_back(std::string(what) + " : " + std::to_string(list.size()) + (p.empty() ? std::string(", sans pr\xC3\xA9" "fixe commun") : ", pr\xC3\xA9" "fixe " + code(p)));
+    };
+    prefixLine("Types", types);
+    prefixLine("Vues", views);
+    prefixLine("Symboles", symbols);
+    prefixLine("Popups", popups);
+    prefixLine("Alarmes", alarms);
+    if (const auto s = seriesOf(vars); !s.empty()) lines.push_back("S\xC3\xA9ries de variables : " + joined(s));
+    if (!sizes.empty()) {
+        const auto most = std::max_element(sizes.begin(), sizes.end(), [](const auto& x, const auto& y) { return x.second < y.second; });
+        lines.push_back("Taille des vues : " + most->first + " (" + std::to_string(most->second) + " sur " + std::to_string(views.size()) + ")");
+    }
+    {
+        std::map<std::string, std::pair<long, long>> span;
+        for (const auto& r : hmi::audit::ranges(project)) {
+            auto& sp = span[r.equipment];
+            if (sp.second < sp.first || sp.first == 0) sp = {static_cast<long>(r.first), static_cast<long>(r.last)};
+            sp.first = std::min(sp.first, static_cast<long>(r.first));
+            sp.second = std::max(sp.second, static_cast<long>(r.last));
+        }
+        for (const auto& [eq, sp] : span) lines.push_back("Adresses de " + code(eq) + " : de la case " + std::to_string(sp.first) + " \xC3\xA0 " + std::to_string(sp.second));
+    }
+    if (!project.alarms.empty()) {
+        std::map<int, std::size_t> prio;
+        for (const auto& x : project.alarms) ++prio[x.priority];
+        std::string t = "Priorit\xC3\xA9s des alarmes : ";
+        bool first = true;
+        for (const auto& [p, n] : prio) {
+            t += (first ? "" : ", ") + std::string(hmi::alarmPriorityLabel(p)) + " " + std::to_string(n);
+            first = false;
+        }
+        lines.push_back(t);
+    }
+    {
+        std::set<std::string> folders;
+        for (std::size_t l = 0; l < static_cast<std::size_t>(hmi::fold::List::Count); ++l)
+            for (const auto& f : hmi::fold::allFolders(project, static_cast<hmi::fold::List>(l))) folders.insert(f);
+        if (!folders.empty()) {
+            std::vector<std::string> list(folders.begin(), folders.end());
+            if (list.size() > 10) list.resize(10);
+            lines.push_back("Dossiers : " + joined(list));
+        }
+    }
+    if (lines.empty()) {
+        a.text = "Le projet est encore vide : je ne vois **aucune convention** \xC3\xA0 suivre. Celles du logiciel s'appliquent (T_ pour un type, "
+                 "Vue_ pour une vue, des s\xC3\xA9ries Nom_1, Nom_2...).";
+        return a;
+    }
+    a.text = "**Les conventions du projet** (lues dans le projet, je les suis quand je con\xC3\xA7ois) :\n";
+    for (const auto& l : lines) a.text += "- " + l + "\n";
+    a.text += "Pour que l'IA connect\xC3\xA9" "e les suive aussi, garde-les dans la **m\xC3\xA9moire de l'IA** (Param\xC3\xA8tres de l'Assistant \xE2\x80\xBA "
+              "M\xC3\xA9moire, une connaissance \xC2\xAB Contexte de projet \xC2\xBB propre \xC3\xA0 ce projet) : elle se voit, se corrige et s'exporte "
+              "(.xia). Je n'y \xC3\xA9" "cris rien sans toi.";
     return a;
 }
 

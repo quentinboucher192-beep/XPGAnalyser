@@ -4268,7 +4268,9 @@ LocalReply Engine::projectQuestion() const {
         return s;
     };
     std::optional<answers::Answer> a;
-    if ((hasPrefix("verifi") || hasPrefix("control") || hasPrefix("audit")) && (has("projet") || has("tout") || has("tous") || has("ensemble"))) {
+    if (hasPrefix("convention") || phrase("regles de nommage") || phrase("regle de nommage") || phrase("conventions de nommage")) {
+        a = answers::conventions(*in_.project);
+    } else if ((hasPrefix("verifi") || hasPrefix("control") || hasPrefix("audit")) && (has("projet") || has("tout") || has("tous") || has("ensemble"))) {
         a = answers::verify(*in_.project, in_.env.plcName ? hmi::NameExists(in_.env.plcName) : hmi::NameExists{});
     } else if (hasPrefix("optimis") && (hasPrefix("adress") || has("registres") || has("memoire") || has("modbus"))) {
         // le filtre : les noms ecrits, ou une serie au pluriel (<< les pompes >> -> Pompe*)

@@ -358,6 +358,9 @@ void questions() {
     check(has(r.text, "Pompe_A") && has(r.text, "simulation") && !r.proposal, "l'impact de T_PompeA : Pompe_A touchee, rien de supprime");
     r = ask(pr, open, "Quels objets sont orphelins ?");
     check(has(r.text, "Consigne_Generale") && has(r.text, "orphelin"), "les orphelins : Consigne_Generale (jamais lue)");
+    r = ask(pr, open, "Quelles sont les conventions du projet ?");
+    check(has(r.text, "Types : 2") && has(r.text, "`T_`") && has(r.text, "m\xC3\xA9moire") && !r.proposal,
+          "les conventions : le prefixe T_ des types, la memoire (rien d'ecrit) - " + r.text.substr(0, 160));
     r = ask(pr, open, "Quels objets utilisent Variable_Inventee ?");
     check(has(r.text, "aucun") || has(r.text, "De quel"), "un nom absent : rien d'invente");
     // verifier : un chevauchement volontaire, sa correction proposee, jamais appliquee seule

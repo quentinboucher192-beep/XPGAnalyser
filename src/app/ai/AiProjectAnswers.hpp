@@ -60,6 +60,12 @@ struct Answer {
 // La verification globale et ses corrections proposees.
 [[nodiscard]] Answer verify(const hmi::Project&, const hmi::NameExists& plcHasName = {});
 
+// 1.19.0 : LES CONVENTIONS DU PROJET, lues dans le projet (jamais devinees) : le prefixe des types, des vues, des
+// symboles, des popups, des alarmes ; les series (Pompe_1, Pompe_2...) ; la taille des vues ; les dossiers ; les plages
+// d'adresses par equipement ; les priorites des alarmes. La reponse dit comment les garder dans la memoire de l'IA
+// (une connaissance << Contexte de projet >>, propre a ce projet) - rien n'y est ecrit sans l'utilisateur.
+[[nodiscard]] Answer conventions(const hmi::Project&);
+
 // Le plan d'optimisation des adresses (`filter` : des noms, * permis ; vide : toutes) et sa proposition.
 [[nodiscard]] Answer optimizeAddresses(const hmi::Project&, const std::vector<std::string>& filter);
 
