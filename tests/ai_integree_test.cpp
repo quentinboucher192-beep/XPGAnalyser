@@ -933,7 +933,8 @@ void testPlcFile(const char* xpg) {
     check(r.proposal && has(r.text, "MAST.XPG"), "la reponse dit d'ou vient l'automate (MAST.XPG), pas \"l'automate relie\"");
     // des instances de bloc (PT1_A : CAPTEUR, un DFB) : dit, pas "deja dans l'IHM"
     r = b.ask("Cr\xC3\xA9" "e les variables de l'automate qui commencent par PT");
-    check(!r.proposal && has(r.text, "instances de bloc") && !has(r.text, "d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent"), "des instances de bloc : dit (" + r.text + ")");
+    check(!r.proposal && has(r.text, "instances de bloc") && !has(r.text, "d\xC3\xA9j\xC3\xA0 son \xC3\xA9quivalent") && !has(r.text, "API.PT"),
+          "des instances de bloc : dit, par leur nom sans API. (" + r.text + ")");
 }
 
 int main(int argc, char** argv) {

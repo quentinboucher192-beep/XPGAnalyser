@@ -2174,7 +2174,7 @@ LocalReply Engine::createVariables() const {
                     for (const auto& d : in_.env.plcTypes()) ddtNames.push_back(d.name);
                 std::size_t matched = 0;
                 for (const auto& [n, ty] : in_.env.plcVariables()) {
-                    std::string bare = n.size() > 4 && fold(n.substr(0, 4)) == "api." ? n.substr(4) : n;
+                    std::string bare = n.size() > 4 && (n.compare(0, 4, "API.") == 0 || n.compare(0, 4, "api.") == 0) ? n.substr(4) : n;
                     if (!filter.empty() && fold(bare).find(fold(filter)) == std::string::npos) continue;
                     ++matched;
                     if (hmiTypeOfPlc(ty, ddtNames, *in_.project).empty()) blocks.push_back(bare + " : " + ty);
