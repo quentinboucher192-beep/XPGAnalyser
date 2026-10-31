@@ -6,6 +6,7 @@
 #include "../../hmi/HmiRecording.hpp"
 #include "../../hmi/HmiVideo.hpp"
 #include "../../ui/Icons.hpp"
+#include "../../ui/Shapes.hpp"      // 1.21.0 : les triangles du lecteur (comme la barre de relecture)
 #include "../../ui/TextSearch.hpp"   // 1.20.2 : les alarmes pliees (dossiers, tri)
 
 #include <algorithm>
@@ -339,6 +340,188 @@ Target targetOf(const hmi::Project* p, const inc::Link& l) {
         t.exists = p->resourceByName(l.name) != nullptr;
     }
     return t;
+}
+
+// ---- 1.21.0 : le lecteur de la video ----
+void VideoClock::start(double d, double f, double t) {
+    duration = std::isfinite(d) ? std::max(0.0, d) : 0.0;
+    fps = std::isfinite(f) ? std::max(0.0, f) : 0.0;
+    trigger = std::isfinite(t) ? t : -1.0;
+    position = 0;
+    playing = true;
+    ended = false;
+    setSpeed(speed);
+}
+
+void VideoClock::advance(double dt) {
+    if (!playing || !(dt > 0) || !std::isfinite(dt)) return;
+    position += dt * speed;
+    if (duration <= 0 || position < duration) return;
+    if (loop) {
+        position = std::fmod(position, duration);
+    } else {
+        position = duration;   // la derniere image reste
+        playing = false;
+        ended = true;
+    }
+}
+
+void VideoClock::playPause() {
+    if (playing) {
+        playing = false;
+        return;
+    }
+    if (ended || (duration > 0 && position >= duration - 1e-6)) position = 0;   // au bout : Lecture repart du debut
+    ended = false;
+    playing = true;
+}
+
+void VideoClock::seek(double seconds) {
+    if (!std::isfinite(seconds)) return;
+    position = std::max(0.0, seconds);
+    if (duration > 0) position = std::min(position, duration);
+    ended = !loop && duration > 0 && position >= duration - 1e-6;
+    if (ended) playing = false;
+}
+
+void VideoClock::step(double seconds) { seek(position + seconds); }
+
+void VideoClock::stepFrame(int n) {
+    playing = false;
+    if (fps <= 0) {
+        seek(position + 0.1 * n);
+        return;
+    }
+    const int count = frames();
+    int k = frame() + n;
+    k = count > 0 ? std::clamp(k, 0, count - 1) : std::max(0, k);
+    seek(static_cast<double>(k) / fps);
+}
+
+void VideoClock::toTrigger() {
+    if (hasTrigger()) seek(trigger);
+}
+
+void VideoClock::faster() {
+    for (const double v : hmi::rec::kSpeeds)
+        if (v > speed + 1e-9) {
+            speed = v;
+            return;
+        }
+}
+
+void VideoClock::slower() {
+    for (auto it = std::rbegin(hmi::rec::kSpeeds); it != std::rend(hmi::rec::kSpeeds); ++it)
+        if (*it < speed - 1e-9) {
+            speed = *it;
+            return;
+        }
+}
+
+void VideoClock::setSpeed(double v) {
+    if (!(v > 0) || !std::isfinite(v)) v = 1.0;
+    double best = 1.0, gap = 1e300;
+    for (const double s : hmi::rec::kSpeeds)
+        if (const double g = std::fabs(std::log(v / s)); g < gap) {
+            gap = g;
+            best = s;
+        }
+    speed = best;
+}
+
+int VideoClock::frames() const { return duration > 0 && fps > 0 ? static_cast<int>(std::lround(duration * fps)) : 0; }
+
+int VideoClock::frame() const {
+    if (fps <= 0) return 0;
+    const int k = static_cast<int>(std::floor(std::max(0.0, position) * fps + 1e-6));   // comme MjpegSource::frameAt
+    const int count = frames();
+    return count > 0 ? std::min(k, count - 1) : k;
+}
+
+double triggerPosition(const std::vector<double>& times, double fps, double before, double duration) {
+    double t = -1.0;
+    if (fps > 0 && !times.empty()) {
+        // la premiere image au declenchement ou apres ; entre elle et la precedente, au prorata de leurs instants (une
+        // cadence juste - depuis la 1.20.2 - donne exactement -instants[0])
+        std::size_t k = 0;
+        while (k < times.size() && times[k] < 0) ++k;
+        if (k == 0) {
+            t = times[0] <= 1.0 / fps + 1e-9 ? 0.0 : -1.0;   // la video commence apres le declenchement
+        } else if (k == times.size()) {
+            t = static_cast<double>(times.size() - 1) / fps - times.back();   // il vient apres la derniere image
+            if (duration > 0 && t > duration + 1.0 / fps) t = -1.0;
+        } else {
+            const double a = times[k - 1], b = times[k];
+            const double frac = b > a ? std::clamp(-a / (b - a), 0.0, 1.0) : 1.0;
+            t = (static_cast<double>(k - 1) + frac) / fps;
+        }
+    } else if (before > 0 && std::isfinite(before)) {
+        t = duration > 0 && before > duration + 1e-6 ? -1.0 : before;
+    }
+    if (t >= 0 && duration > 0) t = std::min(t, duration);
+    return t;
+}
+
+std::string clockTenths(double seconds) {
+    const long long d = std::llround(std::max(0.0, std::isfinite(seconds) ? seconds : 0.0) * 10.0);
+    const long long s = d / 10;
+    char buf[40];
+    if (s >= 3600) std::snprintf(buf, sizeof buf, "%lld:%02lld:%02lld,%lld", s / 3600, (s / 60) % 60, s % 60, d % 10);
+    else std::snprintf(buf, sizeof buf, "%02lld:%02lld,%lld", s / 60, s % 60, d % 10);
+    return buf;
+}
+
+std::string signedSeconds(double seconds) {
+    const long long d = std::llround((std::isfinite(seconds) ? seconds : 0.0) * 10.0);
+    const long long a = d < 0 ? -d : d;
+    const std::string sign = d > 0 ? "+" : d < 0 ? "\xE2\x88\x92" : "";
+    return sign + std::to_string(a / 10) + "," + std::to_string(a % 10) + " s";
+}
+
+std::string speedLabel(double speed) { return "\xC3\x97" + number(speed); }
+
+gfx::Rect ImageView::place(const gfx::Rect& box, int w, int h) const {
+    if (w <= 0 || h <= 0 || box.w <= 0.f || box.h <= 0.f) return box;
+    const float s = std::min(box.w / static_cast<float>(w), box.h / static_cast<float>(h)) * zoom;
+    const float dw = std::floor(static_cast<float>(w) * s), dh = std::floor(static_cast<float>(h) * s);
+    return {std::floor(box.x + (box.w - dw) * 0.5f + pan.x), std::floor(box.y + (box.h - dh) * 0.5f + pan.y), dw, dh};
+}
+
+void ImageView::clamp(const gfx::Rect& box, int w, int h) {
+    zoom = std::isfinite(zoom) ? std::clamp(zoom, kMin, kMax) : kMin;
+    if (!zoomed()) {
+        fit();
+        return;
+    }
+    const gfx::Point keep = pan;
+    pan = {0.f, 0.f};
+    const gfx::Rect r = place(box, w, h);
+    const float mx = std::max(0.f, (r.w - box.w) * 0.5f), my = std::max(0.f, (r.h - box.h) * 0.5f);
+    pan = {std::clamp(std::isfinite(keep.x) ? keep.x : 0.f, -mx, mx), std::clamp(std::isfinite(keep.y) ? keep.y : 0.f, -my, my)};
+}
+
+void ImageView::zoomAt(float z, const gfx::Rect& box, int w, int h, gfx::Point at) {
+    const gfx::Rect before = place(box, w, h);
+    zoom = std::isfinite(z) ? std::clamp(z, kMin, kMax) : kMin;
+    if (before.w <= 0.f || before.h <= 0.f || !zoomed()) {
+        clamp(box, w, h);
+        return;
+    }
+    // le point de l'image sous la souris, en fraction de l'image : il y reste
+    const float u = (at.x - before.x) / before.w, v = (at.y - before.y) / before.h;
+    pan = {0.f, 0.f};
+    const gfx::Rect centered = place(box, w, h);
+    pan = {at.x - (centered.x + u * centered.w), at.y - (centered.y + v * centered.h)};
+    clamp(box, w, h);
+}
+
+void ImageView::zoomBy(float factor, const gfx::Rect& box, int w, int h) {
+    zoomAt(zoom * factor, box, w, h, {box.x + box.w * 0.5f, box.y + box.h * 0.5f});
+}
+
+void ImageView::drag(gfx::Point delta, const gfx::Rect& box, int w, int h) {
+    pan = {pan.x + delta.x, pan.y + delta.y};
+    clamp(box, w, h);
 }
 
 } // namespace incidentsui
@@ -885,12 +1068,15 @@ public:
     enum Group : int { GCapture, GDiag, GChain, GAnalyses, GComments, GValidation, GIntegrity, GCount };
     enum Act : int {
         ANone, AGroup, ASection, AAnalysis, AReveal, AAlarm, APlay, AStop, AOpenVideo, AFolder, ACompare, AAnalyze, AComment, AValidate,
-        ARemove, AVerify, AExpandAll
+        ARemove, AVerify, AExpandAll,
+        // 1.21.0 : le lecteur (la barre sous l'image) et le zoom (les boutons sur l'image)
+        AVStart, AVBack, AVPrev, AVPlay, AVNext, AVFwd, AVEnd, AVTrigger, AVLoop, AVSpeed, AVSeek, AZoomOut, AZoomFit, AZoomIn
     };
 
     explicit HmiIncidentSheet(HmiIncidentsPane& pane) : ui::Widget(pane.id() + ".fiche"), pane_(pane) {
         for (int g = 0; g < GCount; ++g) groupOpen_[static_cast<std::size_t>(g)] = g != GChain;
         sectionOpen_ = {0, 7};
+        setFocusPolicy(true);   // 1.21.0 : les touches du lecteur (Espace, les fleches, + -...)
     }
 
     void setItem(const st::Item* it) {
@@ -900,6 +1086,7 @@ public:
         if (other) {
             name_ = name;
             stopVideo();
+            view_.fit();   // 1.21.0 : une autre image, entiere
             analysisOpen_.clear();
             if (it)
                 for (std::size_t k = 0; k < it->analyses.size(); ++k)
@@ -929,9 +1116,47 @@ public:
         return h;
     }
     [[nodiscard]] std::optional<ui::cursor::Shape> cursorAt(gfx::Point local) const override {
+        const gfx::Point l{local.x - bounds().x, local.y - bounds().y};
+        if (panning_) return ui::cursor::Shape::Move;
         for (const auto& h : hits_)
-            if (h.r.contains({local.x - bounds().x, local.y - bounds().y})) return ui::cursor::Shape::Pointer;
+            if (h.r.contains(l)) return ui::cursor::Shape::Pointer;
+        if (view_.zoomed() && picture_.contains(l)) return ui::cursor::Shape::Move;   // 1.21.0 : l'image zoomee se glisse
         return std::nullopt;
+    }
+    // 1.21.0 : les infobulles du lecteur et du zoom (leurs touches).
+    [[nodiscard]] bool        hasTooltip() const override { return true; }
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override {
+        const gfx::Point l{mouse.x - bounds().x, mouse.y - bounds().y};
+        for (const auto& h : hits_) {
+            if (!h.r.contains(l)) continue;
+            switch (h.act) {
+                case AVStart:   return "D\xC3\xA9" "but : la premi\xC3\xA8re image (touche D\xC3\xA9" "but)";
+                case AVBack:    return "10 s en arri\xC3\xA8re (\xE2\x86\x90)";
+                case AVPrev:    return "L'image pr\xC3\xA9" "c\xC3\xA9" "dente, en pause (Maj+\xE2\x86\x90, ou la virgule)";
+                case AVPlay:    return "Lecture ou pause (Espace) ; au bout, Lecture repart du d\xC3\xA9" "but";
+                case AVNext:    return "L'image suivante, en pause (Maj+\xE2\x86\x92, ou le point)";
+                case AVFwd:     return "10 s en avant (\xE2\x86\x92)";
+                case AVEnd:     return "Fin : la derni\xC3\xA8re image (touche Fin)";
+                case AVTrigger: return "Aller au d\xC3\xA9" "clenchement : t = 0, le rep\xC3\xA8re rouge de la barre (D)";
+                case AVLoop:
+                    return std::string(clock_.loop ? "Boucle activ\xC3\xA9" "e" : "Boucle d\xC3\xA9sactiv\xC3\xA9" "e")
+                         + " : au bout, la lecture " + (clock_.loop ? "repart du d\xC3\xA9" "but" : "s'arr\xC3\xAAte sur la derni\xC3\xA8re image")
+                         + " (B, ou un clic, change)";
+                case AVSpeed:
+                    return "Vitesse " + ui_::speedLabel(hmi::rec::kSpeeds[static_cast<std::size_t>(std::clamp(h.arg, 0, kSpeedCount - 1))])
+                         + " (+ et \xE2\x88\x92 : la voisine, comme la relecture des enregistrements)";
+                case AVSeek:
+                    return "La barre de temps : un clic ou un glisser d\xC3\xA9place la lecture ; le rep\xC3\xA8re rouge : le d\xC3\xA9" "clenchement (t = 0)";
+                case AZoomOut:  return "Zoom arri\xC3\xA8re (la molette sur l'image)";
+                case AZoomFit:  return "Ajuster : l'image enti\xC3\xA8re (ou un double-clic sur l'image)";
+                case AZoomIn:   return "Zoom avant (la molette sur l'image, autour de la souris)";
+                default:        return {};
+            }
+        }
+        // (pas d'infobulle sur l'image : elle cacherait la video ; la legende sous la barre dit les gestes)
+        if (player_ && timeRow_.contains(l))
+            return "La position et la dur\xC3\xA9" "e ; t : les secondes depuis le d\xC3\xA9" "clenchement (n\xC3\xA9gatives : avant) ; l'image montr\xC3\xA9" "e";
+        return {};
     }
 
     // ---- pour le volet ----
@@ -984,6 +1209,11 @@ public:
     void stopVideo() {
         if (player_ && player_->tex.v) dropped_.emplace_back(player_->owner, player_->tex);
         player_.reset();
+        clock_.playing = false;
+        lastTick_ = -1.0;
+        imageW_ = imageH_ = 0;   // la prochaine image dessinee les redonne
+        endDrags();
+        if (view_.zoomed()) view_.fit();   // 1.21.0 : la capture revient entiere (une autre taille que la video)
         dirty();
     }
     bool playVideo(std::string* why) {
@@ -1004,13 +1234,61 @@ public:
             if (why) *why = "vid\xC3\xA9o non d\xC3\xA9" "cod\xC3\xA9" "e : " + reason;
             return false;
         }
+        // 1.21.0 : la cadence (celle du fichier), la duree, et la place du declenchement (video.json : instants_s, avant_s)
+        hmi::video::AviInfo info;
+        const double fps = hmi::video::parseAvi(*blob, info) && info.fps > 0 ? info.fps : item_->videoFps;
+        std::vector<double> times;
+        double before = 0;
+        {
+            std::ifstream js(pathOf(item_->folder) / "video.json", std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(js)), std::istreambuf_iterator<char>());
+            ai::json::Value doc;
+            if (!text.empty() && ai::json::parse(text, doc)) {
+                before = doc.num("avant_s");
+                for (const auto& v : doc.at("instants_s").items())
+                    if (v.isNumber()) times.push_back(v.asNumber());
+            }
+        }
+        const double duration = src->duration();
         stopVideo();
         player_ = std::make_unique<Player>();
         player_->blob = std::move(blob);
         player_->src = std::move(src);
+        // elle part du debut, en lecture (comme avant) ; la vitesse et la boucle restent celles choisies
+        clock_.start(duration, fps, ui_::triggerPosition(times, fps, before, duration));
+        lastTick_ = -1.0;
+        view_.fit();
         groupOpen_[GCapture] = true;
         wantGroup_ = GCapture;
         dirty();
+        return true;
+    }
+
+    // 1.21.0 : LES GESTES DU LECTEUR ET DU ZOOM (les boutons, les touches) ; faux : rien a faire ici (pas de video).
+    bool playerAct(int what, int arg) {
+        if (what >= AZoomOut && what <= AZoomIn) {
+            if (picture_.w <= 0.f) return false;
+            const gfx::Rect box = screenPicture();
+            if (what == AZoomFit) view_.fit();
+            else view_.zoomBy(what == AZoomIn ? ui_::ImageView::kStep : 1.f / ui_::ImageView::kStep, box, imageW(), imageH());
+            invalidate();
+            return true;
+        }
+        if (!player_) return false;
+        switch (what) {
+            case AVStart:   clock_.seek(0); break;
+            case AVBack:    clock_.step(-10.0); break;
+            case AVPrev:    clock_.stepFrame(-1); break;
+            case AVPlay:    clock_.playPause(); break;
+            case AVNext:    clock_.stepFrame(1); break;
+            case AVFwd:     clock_.step(10.0); break;
+            case AVEnd:     clock_.seek(clock_.duration); break;
+            case AVTrigger: clock_.toTrigger(); break;
+            case AVLoop:    clock_.loop = !clock_.loop; break;
+            case AVSpeed:   clock_.setSpeed(hmi::rec::kSpeeds[static_cast<std::size_t>(std::clamp(arg, 0, kSpeedCount - 1))]); break;
+            default:        return false;
+        }
+        invalidate();   // en lecture, onPaint fait avancer ; en pause, l'image demandee se montre
         return true;
     }
 
@@ -1027,10 +1305,25 @@ protected:
                 ++it;
             }
         }
+        // 1.21.0 : LA LECTURE AVANCE de (dt x vitesse), dt l'horloge entre deux images (bornee : une fiche cachee un
+        // moment ne saute pas la video) ; en pause, rien ne bouge et rien ne se redessine.
+        if (player_ && clock_.playing) {
+            if (lastTick_ >= 0.0) clock_.advance(std::clamp(ctx.time - lastTick_, 0.0, 0.5));
+            lastTick_ = ctx.time;
+        } else {
+            lastTick_ = -1.0;
+        }
         if (dirty_ || b.w != builtWidth_) {
             build(ctx.r, th, b.w);
             dirty_ = false;
             builtWidth_ = b.w;
+        }
+        // l'image suivante, si l'image ou la barre se voient ; repliees ou hors de vue, la lecture attend (rien ne
+        // tourne pour rien)
+        if (player_ && clock_.playing) {
+            const float top = b.y + picture_.y, bottom = b.y + std::max(picture_.bottom(), timeRow_.bottom());
+            if (picture_.w > 0.f && bottom >= ctx.clip.y && top <= ctx.clip.bottom()) invalidate();
+            else lastTick_ = -1.0;
         }
         if (wantGroup_ >= 0 || wantScroll_ >= 0.f) {
             const float y = wantGroup_ >= 0 ? groupY_[static_cast<std::size_t>(wantGroup_)] : wantScroll_;
@@ -1054,10 +1347,11 @@ protected:
                 case Prim::K::Stroke: ctx.r.strokeRect(r, col, 1.f); break;
                 case Prim::K::Icon:   ui::drawIcon(ctx.r, p.icon, r, col); break;
                 case Prim::K::Picture: paintPicture(ctx, r); break;
+                case Prim::K::Player: paintPlayer(ctx, ox, oy); break;
             }
         }
-        // la zone sous la souris
-        if (hover_ >= 0 && static_cast<std::size_t>(hover_) < hits_.size()) {
+        // la zone sous la souris (pas la barre de temps : son bouton le montre)
+        if (hover_ >= 0 && static_cast<std::size_t>(hover_) < hits_.size() && hits_[static_cast<std::size_t>(hover_)].act != AVSeek) {
             const auto& h = hits_[static_cast<std::size_t>(hover_)].r;
             ctx.r.strokeRect({ox + h.x, oy + h.y, h.w, h.h}, th.brand.focusRing, 1.f);
         }
@@ -1070,6 +1364,20 @@ protected:
                 if (hits_[i].r.contains(l)) return static_cast<int>(i);
             return -1;
         };
+        // 1.21.0 : un glisser en cours - la barre de temps, ou l'image zoomee (la souris est tenue)
+        if (seeking_ || panning_) {
+            if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+                if (seeking_) seekAt(m->pos.x);
+                else view_.drag({m->pos.x - panFrom_.x, m->pos.y - panFrom_.y}, screenPicture(), imageW(), imageH());
+                panFrom_ = m->pos;
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            if (std::holds_alternative<ui::MouseUp>(ev)) {
+                endDrags();
+                return ui::EventResult::Consumed;
+            }
+        }
         if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
             const int h = bounds().contains(m->pos) ? hitAt(m->pos) : -1;
             if (h != hover_) {
@@ -1078,11 +1386,83 @@ protected:
             }
             return ui::EventResult::Ignored;
         }
+        // 1.21.0 : la molette sur l'image zoome autour de la souris ; ajustee, vers le bas, la fiche defile (comme ailleurs)
+        if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && w->dy != 0.f && !w->mods.ctrl && !w->mods.alt) {
+            const gfx::Rect box = screenPicture();
+            if (box.w > 0.f && box.contains(w->pos) && (w->dy > 0.f || view_.zoomed())) {
+                view_.zoomAt(view_.zoom * (w->dy > 0.f ? ui_::ImageView::kStep : 1.f / ui_::ImageView::kStep), box, imageW(), imageH(), w->pos);
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+            return ui::EventResult::Ignored;
+        }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && bounds().contains(d->pos)) {
+            grabFocus();   // 1.21.0 : les touches du lecteur
             const int h = hitAt(d->pos);
-            if (h < 0) return ui::EventResult::Ignored;
-            const Hit hit = hits_[static_cast<std::size_t>(h)];
-            run(hit.act, hit.arg);
+            if (h >= 0) {
+                const Hit hit = hits_[static_cast<std::size_t>(h)];
+                if (hit.act == AVSeek) {   // la barre de temps : un clic y va, un glisser la suit
+                    seeking_ = true;
+                    captureMouse();
+                    seekAt(d->pos.x);
+                } else {
+                    run(hit.act, hit.arg);
+                }
+                return ui::EventResult::Consumed;
+            }
+            // 1.21.0 : l'image - un double-clic l'ajuste ; zoomee, un glisser la deplace
+            if (const gfx::Rect box = screenPicture(); box.w > 0.f && box.contains(d->pos)) {
+                if (d->clickCount >= 2) {
+                    view_.fit();
+                    invalidate();
+                } else if (view_.zoomed()) {
+                    panning_ = true;
+                    panFrom_ = d->pos;
+                    captureMouse();
+                }
+                return ui::EventResult::Consumed;
+            }
+            return ui::EventResult::Ignored;
+        }
+        // 1.21.0 : LES TOUCHES DU LECTEUR, celles de la relecture des enregistrements (la fiche a le clavier : un clic
+        // dessus le lui donne). Espace lecture ou pause ; fleches 10 s ; Maj + fleches (ou la virgule, le point) une
+        // image ; Debut, Fin ; + et - la vitesse ; D le declenchement ; B la boucle ; Echap arrete la video.
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            if (!focused() || k->mods.ctrl || k->mods.alt || k->mods.super) return ui::EventResult::Ignored;
+            if (!player_) {
+                // sans video lue : Espace la lit (s'il y en a une)
+                if (k->key != ui::Key::Space || !item_ || !item_->hasVideo) return ui::EventResult::Ignored;
+                if (!k->repeat) run(APlay, 0);
+                return ui::EventResult::Consumed;
+            }
+            switch (k->key) {
+                case ui::Key::Space:  return k->repeat ? ui::EventResult::Consumed : press(AVPlay);
+                case ui::Key::Left:   return press(k->mods.shift ? AVPrev : AVBack);
+                case ui::Key::Right:  return press(k->mods.shift ? AVNext : AVFwd);
+                case ui::Key::Home:   return press(AVStart);
+                case ui::Key::End:    return press(AVEnd);
+                case ui::Key::D:      return k->repeat ? ui::EventResult::Consumed : press(AVTrigger);
+                case ui::Key::B:      return k->repeat ? ui::EventResult::Consumed : press(AVLoop);
+                case ui::Key::Plus:   signKey_ = true; clock_.faster(); invalidate(); return ui::EventResult::Consumed;   // son "+" ne recompte pas
+                case ui::Key::Minus:  signKey_ = true; clock_.slower(); invalidate(); return ui::EventResult::Consumed;
+                case ui::Key::Escape:
+                    if (k->repeat) return ui::EventResult::Consumed;
+                    stopVideo();
+                    return ui::EventResult::Consumed;
+                default:              return ui::EventResult::Ignored;
+            }
+        }
+        if (const auto* t = std::get_if<ui::TextInput>(&ev)) {
+            if (!focused() || !player_) return ui::EventResult::Ignored;
+            const bool sign = signKey_;
+            signKey_ = false;
+            if (sign && (t->utf8 == "+" || t->utf8 == "-" || t->utf8 == "=")) return ui::EventResult::Consumed;
+            if (t->utf8 == "+") clock_.faster();        // le + d'un clavier AZERTY (Maj + =)
+            else if (t->utf8 == "-") clock_.slower();   // le - de la rangee des chiffres d'un AZERTY
+            else if (t->utf8 == ",") return press(AVPrev);
+            else if (t->utf8 == ".") return press(AVNext);
+            else return ui::EventResult::Ignored;
+            invalidate();
             return ui::EventResult::Consumed;
         }
         return ui::EventResult::Ignored;
@@ -1090,7 +1470,7 @@ protected:
 
 private:
     struct Prim {
-        enum class K : std::uint8_t { Text, Fill, Round, Stroke, Icon, Picture } k{K::Text};
+        enum class K : std::uint8_t { Text, Fill, Round, Stroke, Icon, Picture, Player /* 1.21.0 */ } k{K::Text};
         gfx::Rect   r{};
         std::string text;
         gfx::FontId font{16};
@@ -1103,10 +1483,10 @@ private:
         int       act{ANone};
         int       arg{0};
     };
+    // La video lue ici : une seule texture a la fois (l'image du moment). 1.21.0 : sa position est celle de clock_.
     struct Player {
         hmi::BlobPtr                             blob;
         std::unique_ptr<hmi::video::FrameSource> src;
-        double                                   start{-1.0};
         gfx::TextureId                           tex{};
         gfx::IRenderer*                          owner{nullptr};
         std::uint64_t                            serial{0};
@@ -1165,8 +1545,49 @@ private:
             case ARemove: pane_.askRemove(); break;
             case AVerify: reverify(); break;
             case AExpandAll: pane_.showFullAnalysis(); break;
-            default: break;
+            default: (void)playerAct(act, arg); break;   // 1.21.0 : le lecteur et le zoom
         }
+    }
+
+    // ---- 1.21.0 : le lecteur et le zoom ----
+    static constexpr int kSpeedCount = static_cast<int>(std::size(hmi::rec::kSpeeds));
+    ui::EventResult press(int what) {
+        (void)playerAct(what, 0);
+        return ui::EventResult::Consumed;
+    }
+    // Le cadre de l'image, dans le repere de la fiche (vide : pas d'image).
+    [[nodiscard]] gfx::Rect screenPicture() const {
+        if (picture_.w <= 0.f) return {};
+        return {bounds().x + picture_.x, bounds().y + picture_.y, picture_.w, picture_.h};
+    }
+    // La taille de l'image montree (la derniere dessinee ; sinon celle du fichier, ou le cadre).
+    [[nodiscard]] int imageW() const {
+        if (imageW_ > 0) return imageW_;
+        if (player_ && player_->w > 0) return player_->w;
+        if (item_ && item_->captureWidth > 0) return item_->captureWidth;
+        return static_cast<int>(std::max(1.f, picture_.w));
+    }
+    [[nodiscard]] int imageH() const {
+        if (imageH_ > 0) return imageH_;
+        if (player_ && player_->h > 0) return player_->h;
+        if (item_ && item_->captureHeight > 0) return item_->captureHeight;
+        return static_cast<int>(std::max(1.f, picture_.h));
+    }
+    // La piste de la barre de temps (dans le repere de la fiche) ; `x` -> la position.
+    [[nodiscard]] gfx::Rect seekTrack() const {
+        for (const auto& h : hits_)
+            if (h.act == AVSeek) return {bounds().x + h.r.x + 7.f, bounds().y + h.r.y + 4.f, std::max(10.f, h.r.w - 14.f), 16.f};
+        return {};
+    }
+    void seekAt(float x) {
+        const gfx::Rect t = seekTrack();
+        if (!player_ || t.w <= 0.f) return;
+        clock_.seek(std::clamp(static_cast<double>((x - t.x) / t.w), 0.0, 1.0) * clock_.duration);
+        invalidate();
+    }
+    void endDrags() {
+        if (seeking_ || panning_) releaseMouse();
+        seeking_ = panning_ = false;
     }
 
     // ---- la mise en page ----
@@ -1329,6 +1750,7 @@ private:
         prims_.clear();
         hits_.clear();
         groupY_.fill(0.f);
+        picture_ = timeRow_ = {};   // 1.21.0 : refaits avec l'image et le lecteur
         Builder B{r, th, prims_, hits_};
         B.x0 = 16.f;
         B.w = std::max(120.f, width - 32.f - 12.f);
@@ -1395,14 +1817,33 @@ private:
                 p.k = Prim::K::Picture;
                 p.r = {X, B.y, bw, bh};
                 prims_.push_back(p);
+                picture_ = p.r;
                 B.rect(Prim::K::Stroke, {X, B.y, bw, bh}, Tone::Border);
+                // 1.21.0 : LE ZOOM - en haut a droite de l'image : moins, Ajuster, plus (le pourcentage a cote, au dessin)
+                if (bw >= 150.f && bh >= 60.f) {
+                    const float zy = B.y + 6.f, zin = X + bw - 34.f;
+                    hits_.push_back({{zin, zy, 28.f, 24.f}, AZoomIn, 0});
+                    const float fitW = r.measure("Ajuster", small).width + 16.f;
+                    hits_.push_back({{zin - fitW - 2.f, zy, fitW, 24.f}, AZoomFit, 0});
+                    hits_.push_back({{zin - fitW - 32.f, zy, 28.f, 24.f}, AZoomOut, 0});
+                }
                 B.y += bh + 6.f;
+                // 1.21.0 : LE LECTEUR, sous l'image (comme la barre de relecture des enregistrements)
+                if (player_) playerBar(B, X, std::min(W, std::max(bw, 600.f)));
                 B.para(X, W,
-                       player_ ? std::string("Lecture de la vid\xC3\xA9o (Motion-JPEG), en boucle : les secondes d'avant et d'apr\xC3\xA8s le d\xC3\xA9" "faut.")
+                       player_ ? std::string("Vid\xC3\xA9o Motion-JPEG : les secondes d'avant et d'apr\xC3\xA8s le d\xC3\xA9" "faut")
+                                     + (clock_.hasTrigger() ? " ; t = 0 au d\xC3\xA9" "clenchement (le rep\xC3\xA8re rouge de la barre)." : ".")
                                : "Capture de l'\xC3\xA9" "cran au d\xC3\xA9" "clenchement : une image fixe, pas une vid\xC3\xA9o"
                                      + (it.captureWidth > 0 ? " (" + std::to_string(it.captureWidth) + " \xC3\x97 " + std::to_string(it.captureHeight) + ")"
                                                             : std::string{})
                                      + ".",
+                       small, Tone::Muted);
+                B.para(X, W,
+                       player_ ? std::string("Espace : lecture ou pause \xC2\xB7 \xE2\x86\x90 \xE2\x86\x92 : 10 s \xC2\xB7 Maj+\xE2\x86\x90 \xE2\x86\x92 (ou , .) : "
+                                             "une image \xC2\xB7 D\xC3\xA9" "but, Fin \xC2\xB7 D : le d\xC3\xA9" "clenchement \xC2\xB7 B : la boucle \xC2\xB7 + "
+                                             "\xE2\x88\x92 : la vitesse \xC2\xB7 \xC3\x89" "chap : arr\xC3\xAAter la vid\xC3\xA9o \xC2\xB7 molette : zoom \xC2\xB7 glisser : "
+                                             "d\xC3\xA9placer \xC2\xB7 double-clic : ajuster")
+                               : std::string("Molette sur l'image : zoom \xC2\xB7 glisser : d\xC3\xA9placer (zoom\xC3\xA9" "e) \xC2\xB7 double-clic : ajuster"),
                        small, Tone::Muted);
             } else {
                 const gfx::Rect box{X, B.y, std::min(W, 320.f), 72.f};
@@ -1575,6 +2016,65 @@ private:
         finish(B);
     }
 
+    // 1.21.0 : LA BARRE DU LECTEUR, mise en page ici (ses zones sont des Hit ; paintPlayer les dessine dans leur etat
+    // du moment). La barre de temps (le repere rouge du declenchement), la ligne du temps, puis les commandes - celles de
+    // la relecture des enregistrements : Debut, -10 s, -1 image, Lecture / Pause, +1 image, +10 s, Fin ; Declenchement
+    // et Boucle ; les vitesses x0,25 a x8. Une rangee qui ne tient pas passe a la ligne (un groupe entier si possible).
+    void playerBar(Builder& B, float x, float w) {
+        auto& r = B.r;
+        const auto f = B.th.font.ui;
+        const float top = B.y;
+        hits_.push_back({{x, B.y, w, 24.f}, AVSeek, 0});
+        B.y += 24.f;
+        timeRow_ = {x, B.y, w, B.lh(B.th.font.smallUi) + 2.f};
+        B.y += timeRow_.h + 6.f;
+        struct Item {
+            int   act, arg;
+            float w;
+        };
+        const auto tw = [&](const char* s, float pad, float least) { return std::max(least, r.measure(s, f).width + pad); };
+        std::vector<std::vector<Item>> groups;
+        groups.push_back({{AVStart, 0, 34.f},
+                          {AVBack, 0, tw("\xE2\x88\x92" "10 s", 16.f, 52.f)},
+                          {AVPrev, 0, tw("\xE2\x88\x92" "1 image", 16.f, 52.f)},
+                          {AVPlay, 0, std::max(tw("Lecture", 40.f, 92.f), tw("Pause", 40.f, 92.f))},
+                          {AVNext, 0, tw("+1 image", 16.f, 52.f)},
+                          {AVFwd, 0, tw("+10 s", 16.f, 52.f)},
+                          {AVEnd, 0, 34.f}});
+        std::vector<Item> more;
+        if (clock_.hasTrigger()) more.push_back({AVTrigger, 0, tw("D\xC3\xA9" "clenchement", 30.f, 60.f)});
+        more.push_back({AVLoop, 0, tw("Boucle", 22.f, 52.f)});
+        groups.push_back(std::move(more));
+        std::vector<Item> speeds;
+        for (int i = 0; i < kSpeedCount; ++i) speeds.push_back({AVSpeed, i, 44.f});
+        groups.push_back(std::move(speeds));
+        const float h = B.lh(f) + 10.f;
+        float cx = x, cy = B.y;
+        for (std::size_t g = 0; g < groups.size(); ++g) {
+            const float gap = g == 2 ? 2.f : 6.f;   // les vitesses se touchent presque (comme la relecture)
+            float gw = -gap;
+            for (const auto& it : groups[g]) gw += it.w + gap;
+            if (cx > x && cx + gw > x + w) {
+                cx = x;
+                cy += h + 6.f;
+            }
+            for (const auto& it : groups[g]) {
+                if (cx > x && cx + it.w > x + w) {
+                    cx = x;
+                    cy += h + 6.f;
+                }
+                hits_.push_back({{cx, cy, it.w, h}, it.act, it.arg});
+                cx += it.w + gap;
+            }
+            cx += 12.f - gap;
+        }
+        B.y = cy + h + 8.f;
+        Prim p;
+        p.k = Prim::K::Player;
+        p.r = {x, top, w, B.y - top};
+        prims_.push_back(p);
+    }
+
     void integrityGroup(Builder& B) {
         group(B, GIntegrity, "Int\xC3\xA9grit\xC3\xA9", integrity_.empty() ? std::string{} : integrity_.front());
         if (!groupOpen_[GIntegrity]) return;
@@ -1613,18 +2113,17 @@ private:
         return t;
     }
 
+    // L'image : la video a la position du lecteur, sinon la capture - au zoom de view_, tenue dans son cadre ; puis les
+    // boutons du zoom par-dessus. 1.21.0 : la position ne vient plus de l'horloge brute (ctx.time) mais de clock_.
     void paintPicture(const ui::PaintContext& ctx, const gfx::Rect& r) {
         const auto& th = ctx.theme;
         const auto small = th.font.smallUi;
         ctx.r.fillRect(r, th.color.windowBg);
+        ctx.r.pushClip(r);
         if (player_) {
-            if (player_->start < 0) player_->start = ctx.time;
-            double t = ctx.time - player_->start;
-            const double dur = player_->src->duration();
-            if (dur > 0) t = std::fmod(t, dur);
             std::uint64_t serial = 0;
-            if (const hmi::Rgba* fr = player_->src->frameAt(t, serial); fr && (serial != player_->serial || !player_->tex.v)) {
-                if (player_->tex.v && player_->owner == &ctx.r) ctx.r.releaseImage(player_->tex);
+            if (const hmi::Rgba* fr = player_->src->frameAt(clock_.position, serial); fr && (serial != player_->serial || !player_->tex.v)) {
+                if (player_->tex.v && player_->owner == &ctx.r) ctx.r.releaseImage(player_->tex);   // une texture a la fois
                 player_->tex = ctx.r.createImage(fr->pixels.data(), fr->width, fr->height);
                 player_->owner = &ctx.r;
                 player_->serial = serial;
@@ -1632,34 +2131,167 @@ private:
                     player_->w = fr->width;
                     player_->h = fr->height;
                     dirty_ = true;   // la boite prend les proportions de la video
+                    invalidate();    // ... meme en pause
                 }
             }
-            if (player_->tex.v) ctx.r.drawImage(player_->tex, fitInto(r, player_->w, player_->h));
-            std::string why;
-            const auto tenths = [](double v) {
-                const long d = std::lround(std::max(0.0, v) * 10.0);
-                return std::to_string(d / 10) + "," + std::to_string(d % 10) + " s";
-            };
-            const std::string label = player_->src->failed(&why) ? "vid\xC3\xA9o illisible : " + why
-                                                                 : "Vid\xC3\xA9o " + tenths(t) + " / " + tenths(dur);
-            const float lw = ctx.r.measure(label, small).width;
-            const gfx::Rect tag{r.x + 6.f, r.bottom() - ctx.r.lineHeight(small) - 10.f, lw + 12.f, ctx.r.lineHeight(small) + 6.f};
-            ctx.r.fillRoundedRect(tag, th.brand.tooltipBg, 3.f);
-            ctx.r.drawText({tag.x + 6.f, tag.y + 3.f}, label, small, th.brand.tooltipText);
-            invalidate();   // la lecture avance
-            return;
+            if (player_->w > 0 && player_->h > 0) {
+                imageW_ = player_->w;
+                imageH_ = player_->h;
+            }
+            if (player_->tex.v) ctx.r.drawImage(player_->tex, view_.place(r, player_->w, player_->h));
+            if (std::string why; player_->src->failed(&why)) {
+                const std::string label = ellipsize(ctx.r, "vid\xC3\xA9o illisible : " + why, small, std::max(0.f, r.w - 24.f));
+                const float lw = ctx.r.measure(label, small).width;
+                const gfx::Rect tag{r.x + 6.f, r.bottom() - ctx.r.lineHeight(small) - 10.f, lw + 12.f, ctx.r.lineHeight(small) + 6.f};
+                ctx.r.fillRoundedRect(tag, th.brand.tooltipBg, 3.f);
+                ctx.r.drawText({tag.x + 6.f, tag.y + 3.f}, label, small, th.brand.tooltipText);
+            }
+        } else if (item_ && item_->hasCapture) {
+            const auto pic = Pictures::instance().get(ctx.r, item_->capturePath, 1600);
+            if (pic.ready && pic.tex.v) {
+                imageW_ = pic.w;
+                imageH_ = pic.h;
+                ctx.r.drawImage(pic.tex, view_.place(r, pic.w, pic.h));
+            } else {
+                const bool waiting = !pic.ready && !pic.failed;
+                const std::string t = waiting ? std::string("Chargement de la capture\xE2\x80\xA6") : std::string("Capture (aper\xC3\xA7u indisponible ici)");
+                const float tw = ctx.r.measure(t, small).width;
+                ctx.r.drawText({r.x + (r.w - tw) * 0.5f, r.y + (r.h - ctx.r.lineHeight(small)) * 0.5f}, t, small, th.color.textMuted);
+                if (waiting) invalidate();
+            }
         }
-        if (!item_ || !item_->hasCapture) return;
-        const auto pic = Pictures::instance().get(ctx.r, item_->capturePath, 1600);
-        if (pic.ready && pic.tex.v) {
-            ctx.r.drawImage(pic.tex, fitInto(r, pic.w, pic.h));
-            return;
+        ctx.r.popClip();
+        paintZoom(ctx);
+    }
+
+    // 1.21.0 : les boutons du zoom (moins, Ajuster, plus) et le pourcentage (l'image montree, rapportee a ses pixels).
+    void paintZoom(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        const auto small = ctx.theme.font.smallUi;
+        const float lh = ctx.r.lineHeight(small);
+        for (std::size_t i = 0; i < hits_.size(); ++i) {
+            const Hit& h = hits_[i];
+            if (h.act < AZoomOut || h.act > AZoomIn) continue;
+            const gfx::Rect b{bounds().x + h.r.x, bounds().y + h.r.y, h.r.w, h.r.h};
+            const bool over = hover_ == static_cast<int>(i);
+            ctx.r.fillRoundedRect(b, (over ? c.selectionBg : c.panelBg).withAlpha(230), 4.f);
+            ctx.r.strokeRect(b, c.border, 1.f);
+            const std::string t = h.act == AZoomOut ? std::string("\xE2\x88\x92") : h.act == AZoomIn ? std::string("+") : std::string("Ajuster");
+            ctx.r.drawText({b.x + (b.w - ctx.r.measure(t, small).width) * 0.5f, b.y + (b.h - lh) * 0.5f}, t, small, c.text);
+            if (h.act != AZoomOut) continue;
+            const gfx::Rect shown = view_.place(screenPicture(), imageW(), imageH());
+            const std::string pct = std::to_string(static_cast<long>(std::lround(shown.w / static_cast<float>(std::max(1, imageW())) * 100.f))) + " %";
+            const float pw = ctx.r.measure(pct, small).width + 12.f;
+            const gfx::Rect pr{b.x - pw - 4.f, b.y, pw, b.h};
+            ctx.r.fillRoundedRect(pr, c.panelBg.withAlpha(230), 4.f);
+            ctx.r.drawText({pr.x + 6.f, pr.y + (pr.h - lh) * 0.5f}, pct, small, c.textMuted);
         }
-        const bool waiting = !pic.ready && !pic.failed;
-        const std::string t = waiting ? std::string("Chargement de la capture\xE2\x80\xA6") : std::string("Capture (aper\xC3\xA7u indisponible ici)");
-        const float tw = ctx.r.measure(t, small).width;
-        ctx.r.drawText({r.x + (r.w - tw) * 0.5f, r.y + (r.h - ctx.r.lineHeight(small)) * 0.5f}, t, small, th.color.textMuted);
-        if (waiting) invalidate();
+    }
+
+    // 1.21.0 : LA BARRE DU LECTEUR dans son etat du moment - le meme dessin que la barre de relecture des enregistrements
+    // (paintReplayChrome) : la piste, le rempli, le repere (rouge : le declenchement), le bouton ; les boutons arrondis,
+    // Lecture / Pause en couleur d'accent ; les vitesses en cases ; puis le temps.
+    void paintPlayer(const ui::PaintContext& ctx, float ox, float oy) {
+        if (!player_) return;
+        const auto& col = ctx.theme.color;
+        const auto f = ctx.theme.font.ui, small = ctx.theme.font.smallUi;
+        const gfx::Color accent = col.accent;
+        const gfx::Color red = gfx::Color::rgb(0xE5484D);   // le rouge des reperes d'alarme de la relecture
+        const auto tri = [&](float cx, float cy, float s, bool right, gfx::Color ink) {
+            const float d = right ? 1.f : -1.f;
+            ui::shapes::fillPolygon(ctx.r,
+                                    std::vector<gfx::Point>{{cx - d * s * 0.45f, cy - s * 0.55f}, {cx + d * s * 0.55f, cy}, {cx - d * s * 0.45f, cy + s * 0.55f}},
+                                    ink);
+        };
+        const double dur = clock_.duration;
+        for (std::size_t i = 0; i < hits_.size(); ++i) {
+            const Hit& h = hits_[i];
+            if (h.act < AVStart || h.act > AVSeek) continue;
+            const gfx::Rect b{ox + h.r.x, oy + h.r.y, h.r.w, h.r.h};
+            const bool over = hover_ == static_cast<int>(i);
+            if (h.act == AVSeek) {   // la piste, le rempli, le declenchement, le bouton
+                const gfx::Rect pr{b.x + 7.f, b.y + 4.f, std::max(10.f, b.w - 14.f), 16.f};
+                const float trackY = pr.y + 6.f;
+                ctx.r.fillRoundedRect({pr.x, trackY, pr.w, 4.f}, col.inputBg, 2.f);
+                const double frac = dur > 0 ? std::clamp(clock_.position / dur, 0.0, 1.0) : 0.0;
+                const float knobX = pr.x + static_cast<float>(frac) * pr.w;
+                if (knobX - pr.x > 0.5f) ctx.r.fillRoundedRect({pr.x, trackY, knobX - pr.x, 4.f}, accent, 2.f);
+                if (clock_.hasTrigger() && dur > 0) {
+                    const float mx = pr.x + static_cast<float>(std::clamp(clock_.trigger / dur, 0.0, 1.0)) * pr.w;
+                    ctx.r.fillRect({mx - 1.f, pr.y, 2.f, 16.f}, red);
+                }
+                ctx.r.fillRoundedRect({knobX - 7.f, pr.y + 1.f, 14.f, 14.f}, over || seeking_ ? col.accentHover : accent, 7.f);
+                ctx.r.fillRoundedRect({knobX - 5.f, pr.y + 3.f, 10.f, 10.f}, col.text, 5.f);
+                continue;
+            }
+            if (h.act == AVSpeed) {   // une case par vitesse, celle du moment en couleur d'accent
+                const double v = hmi::rec::kSpeeds[static_cast<std::size_t>(std::clamp(h.arg, 0, kSpeedCount - 1))];
+                const bool on = std::fabs(v - clock_.speed) < 1e-6;
+                ctx.r.fillRect(b, on ? accent : over ? col.selectionBg : col.headerBg);
+                ctx.r.strokeRect(b, col.border, 1.f);
+                const std::string t = ui_::speedLabel(v);
+                ctx.r.drawText({b.x + (b.w - ctx.r.measure(t, small).width) / 2.f, b.y + (b.h - ctx.r.lineHeight(small)) / 2.f}, t, small,
+                               on ? col.textInverted : col.textMuted);
+                continue;
+            }
+            const bool primary = h.act == AVPlay, on = h.act == AVLoop && clock_.loop;
+            ctx.r.fillRoundedRect(b, primary || on ? (over ? col.accentHover : accent) : (over ? col.selectionBg : col.headerBg), 4.f);
+            if (!primary && !on) ctx.r.strokeRect(b, col.border, 1.f);
+            const gfx::Color ink = primary || on ? col.textInverted : col.text;
+            const float s = std::min(12.f, b.h * 0.45f), cy = b.y + b.h / 2.f, textY = b.y + (b.h - ctx.r.lineHeight(f)) / 2.f;
+            const auto centered = [&](const std::string& t) { ctx.r.drawText({b.x + (b.w - ctx.r.measure(t, f).width) / 2.f, textY}, t, f, ink); };
+            switch (h.act) {
+                case AVStart:   // |<
+                    ctx.r.fillRect({b.x + b.w / 2.f - s * 0.65f, cy - s * 0.55f, 2.f, s * 1.1f}, ink);
+                    tri(b.x + b.w / 2.f + s * 0.15f, cy, s, false, ink);
+                    break;
+                case AVEnd:     // >|
+                    tri(b.x + b.w / 2.f - s * 0.15f, cy, s, true, ink);
+                    ctx.r.fillRect({b.x + b.w / 2.f + s * 0.45f, cy - s * 0.55f, 2.f, s * 1.1f}, ink);
+                    break;
+                case AVBack: centered("\xE2\x88\x92" "10 s"); break;
+                case AVFwd:  centered("+10 s"); break;
+                case AVPrev: centered("\xE2\x88\x92" "1 image"); break;
+                case AVNext: centered("+1 image"); break;
+                case AVLoop: centered("Boucle"); break;
+                case AVPlay: {
+                    const bool paused = !clock_.playing;
+                    const std::string t = paused ? "Lecture" : "Pause";
+                    const float gx = b.x + (b.w - ctx.r.measure(t, f).width - s - 8.f) / 2.f;
+                    if (paused) {
+                        tri(gx + s / 2.f, cy, s, true, ink);
+                    } else {
+                        ctx.r.fillRect({gx, cy - s * 0.5f, s * 0.32f, s}, ink);
+                        ctx.r.fillRect({gx + s * 0.6f, cy - s * 0.5f, s * 0.32f, s}, ink);
+                    }
+                    ctx.r.drawText({gx + s + 8.f, textY}, t, f, ink);
+                    break;
+                }
+                case AVTrigger: {   // le repere rouge de la barre, puis le mot
+                    const std::string t = "D\xC3\xA9" "clenchement";
+                    const float gx = b.x + (b.w - ctx.r.measure(t, f).width - 10.f) / 2.f;
+                    ctx.r.fillRect({gx, cy - s * 0.6f, 3.f, s * 1.2f}, red);
+                    ctx.r.drawText({gx + 10.f, textY}, t, f, ink);
+                    break;
+                }
+                default: break;
+            }
+        }
+        // le temps : la position et la duree (au dixieme) ; a droite, t (depuis le declenchement) et l'image montree
+        if (timeRow_.w > 0.f) {
+            const gfx::Rect tr{ox + timeRow_.x, oy + timeRow_.y, timeRow_.w, timeRow_.h};
+            const std::string left = ui_::clockTenths(clock_.position) + " / " + ui_::clockTenths(dur) + (clock_.ended ? "  (fin)" : "");
+            ctx.r.drawText({tr.x + 2.f, tr.y + 1.f}, left, small, col.text);
+            std::string right;
+            if (clock_.hasTrigger()) right = "t = " + ui_::signedSeconds(clock_.sinceTrigger());
+            if (const int n = clock_.frames(); n > 0)
+                right += (right.empty() ? "" : " \xC2\xB7 ") + std::string("image ") + std::to_string(clock_.frame() + 1) + " / " + std::to_string(n);
+            right = ellipsize(ctx.r, right, small, tr.w - ctx.r.measure(left, small).width - 18.f);
+            if (!right.empty()) {
+                const bool atTrigger = clock_.hasTrigger() && std::fabs(clock_.sinceTrigger()) < 0.05;
+                ctx.r.drawText({tr.right() - 2.f - ctx.r.measure(right, small).width, tr.y + 1.f}, right, small, atTrigger ? red : col.textMuted);
+            }
+        }
     }
 
     HmiIncidentsPane&                               pane_;
@@ -1680,6 +2312,15 @@ private:
     std::string                                     integritySig_;
     std::unique_ptr<Player>                         player_;
     std::vector<std::pair<gfx::IRenderer*, gfx::TextureId>> dropped_;
+    // 1.21.0 : le lecteur (position, vitesse, boucle - avance par onPaint) et le zoom de l'image
+    ui_::VideoClock                                 clock_;
+    double                                          lastTick_{-1.0};   // ctx.time de la derniere avance (-1 : aucune)
+    ui_::ImageView                                  view_;
+    gfx::Rect                                       picture_{}, timeRow_{};   // relatifs a la fiche (vides : pas d'image)
+    int                                             imageW_{0}, imageH_{0};  // l'image dessinee (le zoom)
+    bool                                            seeking_{false}, panning_{false};
+    bool                                            signKey_{false};   // un + ou - tape : son caractere ne recompte pas
+    gfx::Point                                      panFrom_{};
 };
 
 // ============================================================================================== le volet ==
