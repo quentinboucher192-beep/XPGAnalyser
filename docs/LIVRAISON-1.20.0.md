@@ -1,6 +1,6 @@
 # API Studio et IHM Studio 1.20.0 : l'enregistrement intelligent et l'analyse IA des incidents
 
-Livrée le 31/10/2026 @HEURE@. Elle suit la 1.19.0 (`docs/LIVRAISON-1.19.0.md`), livrée le même jour en fin d'après-midi.
+Livrée le 31/10/2026 dans la soirée. Elle suit la 1.19.0 (`docs/LIVRAISON-1.19.0.md`), livrée le même jour en fin d'après-midi.
 
 Ta demande (le prompt « XPGAnalyser 1.20.0 — Enregistrement intelligent et analyse IA des incidents en arrière-plan ») : qu'une alarme qui apparaît ne soit plus seulement notée, mais qu'IHM Studio comprenne à quoi elle est reliée dans le projet, retrouve ce qui peut l'expliquer, enregistre l'écran et le contexte du moment dans un dossier immuable, le fasse analyser par l'IA en arrière-plan, et te laisse le consulter, le commenter et le valider.
 
@@ -114,7 +114,24 @@ Fichiers livrés :
 
 Le format des projets ne change pas (33). Les incidents vivent à côté du projet, dans ses ressources (`ihm/ressources/enregistrements/en attente/` et `valides/`) ; les réglages de la surveillance dans `ihm/ressources/enregistrements/reglages-incidents.json`. Un projet sans ces dossiers s'ouvre comme avant ; la surveillance est active par défaut (elle se règle dans le volet).
 
-@EMPREINTES@
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.20.0.exe` (42,5 Mo, 44 612 251 octets) :
+`5489A49864553931C3AD2433372DAD9A655E94F16B15F86A466F777C58BBBF5D`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.20.0-portable.zip` (33,0 Mo) :
+  `9BA24D8A263EF6BF294B4170A1AB9AD38D948EB40DEA141CFF6E7C7AEC7A7F56`
+- `IHM-Studio-1.20.0-portable.zip` (33,0 Mo) :
+  `6E6F7F47FAC0F55A7B1546EAB891BE84ECFFECB7CE9F47169ADC310711B8F098`
+
+### Les vérifications sous Windows (Wine)
+
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.20.0` et `IHM Studio 1.20.0` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, par-dessus la 1.19.0 livrée, avec **une clé API d'essai** déposée dans `%APPDATA%\XpgAnalyzer\IA\cles` : « Installation process succeeded ».
+- La clé est **intacte** après l'installation (même empreinte avant et après) ; le journal dit « Clés API : 1 gardée (protégée par Windows ; la réinstallation n'y touche pas) ».
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.19.0 est faite.
+
+Ces vérifications sont faites sous Wine, pas sur un vrai Windows.
 
 ## 5. Les fichiers modifiés
 
