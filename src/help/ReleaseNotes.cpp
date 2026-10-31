@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.20.2", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.21.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.2", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.19.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin d'apr\xC3\xA8s-midi"},
@@ -149,6 +150,40 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.21.0 : l'IA qui agit (supprimer, essayer dans le bac a sable, la decouverte reseau, l'agent)
+        note("1.21.0", "Assistant IA", Kind::New,
+         "SUPPRIMER AVEC L'ASSISTANT, SANS CASSER LE PROJET : vues, popups, symboles (la d\xC3\xA9" "finition ou une "
+         "instance), \xC3\xA9" "crans mod\xC3\xA8les, variables, types, alarmes, scripts, fonctions, \xC3\xA9quipements, ressources et "
+         "dossiers. Avant tout, le graphe des relations : ce qui part, ce qui en d\xC3\xA9pend (directement, de proche en "
+         "proche, par le nom), ce qui est partag\xC3\xA9 et gard\xC3\xA9, ce qui deviendrait orphelin. Quatre strat\xC3\xA9gies : seul "
+         "(refus\xC3\xA9 si quelque chose en d\xC3\xA9pend), remplacer par un \xC3\xA9l\xC3\xA9ment existant, retirer seulement les r\xC3\xA9" "f\xC3\xA9rences, "
+         "supprimer aussi ce qui devient inutile. V\xC3\xA9rifi\xC3\xA9 sur une copie, une confirmation toujours, un seul Ctrl+Z "
+         "; \xC2\xAB R\xC3\xA9ussie \xC2\xBB seulement si l'\xC3\xA9l\xC3\xA9ment a vraiment disparu.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "LE BAC \xC3\x80 SABLE : l'IA essaie une fonction ST avant de la proposer, dans un processus \xC3\xA0 part (temps, "
+         "m\xC3\xA9moire et sortie born\xC3\xA9s, dossier de travail effac\xC3\xA9, aucun automate, aucun acc\xC3\xA8s \xC3\xA0 tes fichiers ; sous "
+         "Linux, sans r\xC3\xA9seau). Des \xC3\xA9tapes distinctes et r\xC3\xA9" "elles : analyse, compilation, ex\xC3\xA9" "cution des cas, tests "
+         "r\xC3\xA9ussis (N/M) ; elle corrige et relance (5 essais au plus). Jamais \xC2\xAB \xC3\xA7" "a marche \xC2\xBB parce que \xC3\xA7" "a compile. Le "
+         "C et le C++ ne sont que relus, jamais ex\xC3\xA9" "cut\xC3\xA9s.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Assistant IA", Kind::New,
+         "L'AGENT : pour une demande large, l'IA encha\xC3\xAEne seule ce qui ne change rien - elle interroge le projet en "
+         "lecture seule (qui utilise quoi, l'impact d'une suppression, les orphelins, la v\xC3\xA9rification globale) et "
+         "essaie le code - puis propose ; rien ne change avant ta validation. Son compte rendu suit les r\xC3\xA9sultats "
+         "r\xC3\xA9" "els.",
+         "assistant-ia-plan", ""),
+        note("1.21.0", "Communication", Kind::New,
+         "D\xC3\x89" "COUVERTE R\xC3\x89SEAU SANS INTRUSION : une confirmation avant tout scan (interface, plage, masque, "
+         "protocoles, dur\xC3\xA9" "e estim\xC3\xA9" "e), une cadence limit\xC3\xA9" "e (20 interrogations par seconde par d\xC3\xA9" "faut), la lecture "
+         "seule garantie (seule l'identification Modbus 43/14 peut partir). Chaque appareil : ce qui est confirm\xC3\xA9, "
+         "annonc\xC3\xA9 ou suppos\xC3\xA9, jamais un mod\xC3\xA8le invent\xC3\xA9. La comparaison avec le projet et ses propositions (ajouter, "
+         "mettre \xC3\xA0 jour l'adresse, associer) en une commande annulable ; un journal des scans. L'IA peut pr\xC3\xA9parer "
+         "une d\xC3\xA9tection : c'est toi qui lances.",
+         "scanner-ip", ""),
+        note("1.21.0", "Vues", Kind::Fixed,
+         "Supprimer un symbole emporte aussi ses popups (elles restaient orphelines).",
+         "assistant-ia-plan", ""),
         // 1.20.2 : la conversation (le plan en cours en haut, les blocs de code copiables), les incidents (la qualite)
         note("1.20.2", "Assistant IA", Kind::New,
          "LE PLAN EN COURS, EN HAUT DE LA CONVERSATION : une bande au-dessus de la discussion, qui ne d\xC3\xA9" "file pas, montre "

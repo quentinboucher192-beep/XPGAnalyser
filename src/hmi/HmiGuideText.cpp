@@ -4436,6 +4436,39 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9placement et sa raison \xE2\x80\x93 et sa proposition. Une adresse "
                          "existante ne change jamais en silence ; un appareil r\xC3\xA9" "el doit utiliser "
                          "les m\xC3\xAAmes adresses.", {}},
+             {K::Heading, "Supprimer avec l'Assistant (1.21.0)", {}},
+             {K::Paragraph, "\xC2\xAB Supprime le type T_Pompe \xC2\xBB, \xC2\xAB supprime la vue Vue_A et ce "
+                         "qui devient inutile \xC2\xBB, \xC2\xAB remplace Niveau_1 par Niveau_2 puis "
+                         "supprime-la \xC2\xBB : avant toute suppression, l'Assistant lit le **graphe des "
+                         "relations** du projet et montre ce qui part (l'\xC3\xA9l\xC3\xA9ment et son "
+                         "contenu), ce qui en d\xC3\xA9pend (directement, de proche en proche, ou seulement "
+                         "par le nom \xE2\x80\x93 \xC3\xA0 v\xC3\xA9rifier), ce qui est partag\xC3\xA9 et "
+                         "gard\xC3\xA9, et ce qui deviendrait orphelin ; le r\xC3\xA9sum\xC3\xA9 compte par "
+                         "genre (\xC2\xAB 2 variables directement concern\xC3\xA9" "es, 1 alarme "
+                         "d\xC3\xA9pendante \xC2\xBB). Vues, popups, symboles (la d\xC3\xA9" "finition ou "
+                         "une instance), \xC3\xA9" "crans mod\xC3\xA8les, variables, types, alarmes, "
+                         "scripts, fonctions, \xC3\xA9quipements, ressources et dossiers se suppriment ainsi.", {}},
+             {K::Bullet, "**seul** : refus\xC3\xA9 si quelque chose en d\xC3\xA9pend (l'Assistant dit quoi, "
+                         "et ce qu'il faut choisir) ;", {}},
+             {K::Bullet, "**remplacer** : par un \xC3\xA9l\xC3\xA9ment **existant** du m\xC3\xAAme genre, "
+                         "jamais un nom invent\xC3\xA9 ;", {}},
+             {K::Bullet, "**r\xC3\xA9" "f\xC3\xA9rences** : retire seulement les r\xC3\xA9" "f\xC3\xA9rences "
+                         "(propri\xC3\xA9t\xC3\xA9 vid\xC3\xA9" "e, action retir\xC3\xA9" "e, instances "
+                         "retir\xC3\xA9" "es, variables d\xC3\xA9li\xC3\xA9" "es ; une "
+                         "r\xC3\xA9" "f\xC3\xA9rence dans du code est refus\xC3\xA9" "e) ;", {}},
+             {K::Bullet, "**inutiles** : supprime aussi les popups, scripts sur appel, fonctions et "
+                         "ressources devenus inutiles \xE2\x80\x93 jamais une variable, un type ni une "
+                         "d\xC3\xA9" "finition.", {}},
+             {K::Paragraph, "Supprimer une instance de symbole garde le symbole et ses autres instances ; "
+                         "supprimer un objet garde sa variable ; supprimer une vue garde un script qu'elle "
+                         "partage. L'aper\xC3\xA7u liste chaque suppression (cat\xC3\xA9gorie "
+                         "**Suppressions**) ; un clic la retire du plan ou l'y remet. Tout est "
+                         "v\xC3\xA9rifi\xC3\xA9 sur une copie (plus aucune r\xC3\xA9" "f\xC3\xA9rence, la "
+                         "v\xC3\xA9rification globale), une **confirmation** est toujours "
+                         "demand\xC3\xA9" "e, et **un seul Ctrl+Z** reprend tout. Une \xC3\xA9tape n'est "
+                         "\xC2\xAB R\xC3\xA9ussie \xC2\xBB que si l'\xC3\xA9l\xC3\xA9ment a vraiment disparu "
+                         "et que plus rien ne le cite. Supprimer un symbole depuis la liste des vues emporte "
+                         "aussi ses popups.", {}},
              {K::Heading, "Essayer avant de proposer : le bac \xC3\xA0 sable (1.21.0)", {}},
              {K::Paragraph, "Avec une IA connect\xC3\xA9" "e (et l'appel d'outil), l'Assistant peut **essayer "
                          "une fonction ST** avant de te la proposer : il l'\xC3\xA9" "crit, la fait "
@@ -4475,14 +4508,16 @@ const std::vector<Topic>& topics() {
                          "**encha\xC3\xAEne seule ce qui ne change rien** : elle interroge le projet "
                          "(**analyser_projet**, en lecture seule : qui utilise quoi, ce qu'une suppression "
                          "toucherait, les \xC3\xA9l\xC3\xA9ments orphelins, la v\xC3\xA9rification globale, "
-                         "les conventions) et essaie le code (le bac \xC3\xA0 sable). Elle **propose** "
-                         "ensuite les modifications : rien ne change avant ta validation, une suppression "
-                         "jamais sans elle. Son compte rendu suit les r\xC3\xA9sultats r\xC3\xA9" "els : ce "
-                         "qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce qui est propos\xC3\xA9, ce qui attend "
-                         "ta validation.", {}},
+                         "les conventions) et essaie le code (le bac \xC3\xA0 sable). Elle peut "
+                         "**pr\xC3\xA9parer** une d\xC3\xA9tection r\xC3\xA9seau (la confirmation du Scanner "
+                         "IP s'ouvre, pr\xC3\xA9remplie ; c'est toi qui lances) et en lire ensuite le compte "
+                         "rendu r\xC3\xA9" "el. Elle **propose** ensuite les modifications : rien ne change "
+                         "avant ta validation, une suppression jamais sans elle. Son compte rendu suit les "
+                         "r\xC3\xA9sultats r\xC3\xA9" "els : ce qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce "
+                         "qui est propos\xC3\xA9, ce qui attend ta validation.", {}},
          },
          {"assistant-ia", "assistant-ia-integree", "assistant-ia-registre", "communication"},
-         {"BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
+         {"SUPPRIMER", "SUPPRESSIONS", "STRAT\xC3\x89GIE", "REMPLACER", "R\xC3\x89" "F\xC3\x89RENCES", "INUTILES", "BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
          {"ai.panneau", "dialog.ai.apercu"},
          {},
          "",
@@ -4899,25 +4934,24 @@ const std::vector<Topic>& topics() {
                          "son adresse IP, son port, son esclave (Unit Id), sa p\xC3\xA9riode, simul\xC3\xA9 "
                          "ou non. **D\xC3\xA9tecter ce qui r\xC3\xA9pond** n'est jamais lanc\xC3\xA9 par "
                          "l'IA : elle le **propose** ; apr\xC3\xA8s Appliquer, la carte offre "
-                         "**D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6**, qui ouvre Communication "
-                         "\xE2\x80\xBA Scanner IP avec la plage remplie (192.168.1.0/24) - c'est toi qui "
-                         "cliques D\xC3\xA9marrer. Rien ne part sur le r\xC3\xA9seau avant.\nAdresses\tLier "
-                         "une variable IHM \xC3\xA0 un \xC3\xA9quipement, \xC3\xA0 une adresse (%MW100) ; "
-                         "sans adresse : la suivante libre. Une structure ou un tableau de structures : une "
-                         "**formule de lien** (100 + 10*i, motif [*]), comme \xC2\xAB Modifier l'adresse "
-                         "dans toutes les cases\xE2\x80\xA6 \xC2\xBB ; les chevauchements sont "
-                         "signal\xC3\xA9s.\nScript g\xC3\xA9n\xC3\xA9ral\tUn script ST, C ou C++ : au "
-                         "d\xC3\xA9marrage, cyclique (sa p\xC3\xA9riode), sur changement (ce qu'il "
-                         "surveille) ou appel\xC3\xA9 ; son code est compil\xC3\xA9 avant d'\xC3\xAAtre "
-                         "propos\xC3\xA9.\nFonction IHM\tUne fonction (ses g\xC3\xA9n\xC3\xA9riques, son "
-                         "retour, VAR_INPUT et son calcul), compil\xC3\xA9" "e avant d'\xC3\xAAtre "
-                         "propos\xC3\xA9" "e.\nAlarme\tUne alarme : sa condition (compil\xC3\xA9" "e : "
-                         "chaque nom lu existe), son message, sa priorit\xC3\xA9, son "
-                         "groupe.\nRessource\tUne ressource \xC3\xA0 partir d'un **fichier joint** \xC3\xA0 "
-                         "la demande (une image, un PDF\xE2\x80\xA6), lu seulement \xC3\xA0 "
-                         "Appliquer.\nDossiers, ranger\tUn dossier dans une liste (vues, popups, symboles, "
-                         "scripts, types, variables\xE2\x80\xA6), et y ranger des \xC3\xA9l\xC3\xA9ments qui "
-                         "existent.", {}, "1.18.0"},
+                         "**D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6**, qui ouvre la confirmation du "
+                         "Scanner IP avec la plage remplie (192.168.1.0/24) - c'est toi qui cliques Lancer. "
+                         "Rien ne part sur le r\xC3\xA9seau avant.\nAdresses\tLier une variable IHM \xC3\xA0 "
+                         "un \xC3\xA9quipement, \xC3\xA0 une adresse (%MW100) ; sans adresse : la suivante "
+                         "libre. Une structure ou un tableau de structures : une **formule de lien** (100 + "
+                         "10*i, motif [*]), comme \xC2\xAB Modifier l'adresse dans toutes les "
+                         "cases\xE2\x80\xA6 \xC2\xBB ; les chevauchements sont signal\xC3\xA9s.\nScript "
+                         "g\xC3\xA9n\xC3\xA9ral\tUn script ST, C ou C++ : au d\xC3\xA9marrage, cyclique (sa "
+                         "p\xC3\xA9riode), sur changement (ce qu'il surveille) ou appel\xC3\xA9 ; son code "
+                         "est compil\xC3\xA9 avant d'\xC3\xAAtre propos\xC3\xA9.\nFonction IHM\tUne fonction "
+                         "(ses g\xC3\xA9n\xC3\xA9riques, son retour, VAR_INPUT et son calcul), "
+                         "compil\xC3\xA9" "e avant d'\xC3\xAAtre propos\xC3\xA9" "e.\nAlarme\tUne alarme : "
+                         "sa condition (compil\xC3\xA9" "e : chaque nom lu existe), son message, sa "
+                         "priorit\xC3\xA9, son groupe.\nRessource\tUne ressource \xC3\xA0 partir d'un "
+                         "**fichier joint** \xC3\xA0 la demande (une image, un PDF\xE2\x80\xA6), lu "
+                         "seulement \xC3\xA0 Appliquer.\nDossiers, ranger\tUn dossier dans une liste (vues, "
+                         "popups, symboles, scripts, types, variables\xE2\x80\xA6), et y ranger des "
+                         "\xC3\xA9l\xC3\xA9ments qui existent.", {}, "1.18.0"},
              {K::Paragraph, "Avec chaque demande, l'Assistant re\xC3\xA7oit aussi la liste des "
                          "\xC3\xA9quipements, des ressources, des scripts g\xC3\xA9n\xC3\xA9raux, des "
                          "fonctions IHM, des alarmes et des dossiers du projet ; et, quand ta demande en "
@@ -6633,9 +6667,47 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Le scan se fait sur le r\xC3\xA9seau d'un port du PC : un appareil d'un autre "
                          "r\xC3\xA9seau ne r\xC3\xA9pond pas (donne d'abord au port une adresse dans ce "
                          "r\xC3\xA9seau, voir \xC2\xAB Le r\xC3\xA9seau du PC \xC2\xBB).", {}},
+             {K::Heading, "La confirmation, la cadence, la lecture seule (1.21.0)", {}},
+             {K::Paragraph, "**Scanner** ouvre d'abord une **fen\xC3\xAAtre de confirmation** : l'interface du "
+                         "PC, le d\xC3\xA9" "but, la fin ou le masque, les protocoles (Modbus TCP, S7, "
+                         "EtherNet/IP, OPC UA, web, imprimantes\xE2\x80\xA6), des ports en plus, la cadence. "
+                         "Le r\xC3\xA9sum\xC3\xA9 dit ce qui partira : le nombre d'adresses, les ports, la "
+                         "dur\xC3\xA9" "e estim\xC3\xA9" "e. **Rien n'est envoy\xC3\xA9 avant Lancer** ; "
+                         "Lancer reste gris\xC3\xA9 (avec la raison) si la demande est refus\xC3\xA9" "e. "
+                         "**Arr\xC3\xAAter** coupe tout, m\xC3\xAAme pendant l'attente de la cadence. "
+                         "L'Assistant IA peut **pr\xC3\xA9parer** une d\xC3\xA9tection : la m\xC3\xAAme "
+                         "fen\xC3\xAAtre s'ouvre, pr\xC3\xA9remplie \xE2\x80\x93 c'est toujours toi qui "
+                         "lances.", {}},
+             {K::Bullet, "**La cadence** : 20 interrogations par seconde par d\xC3\xA9" "faut (de 1 \xC3\xA0 "
+                         "100), 8 en parall\xC3\xA8le, 4096 adresses au plus. Des connexions TCP ordinaires, "
+                         "referm\xC3\xA9" "es aussit\xC3\xB4t ; la table ARP est seulement lue.", {}},
+             {K::Bullet, "**Lecture seule** : la seule trame Modbus qui peut partir est l'identification "
+                         "(fonction 43/14) ; toute autre est refus\xC3\xA9" "e avant l'envoi. Aucune "
+                         "\xC3\xA9" "criture, aucune commande, aucun red\xC3\xA9marrage.", {}},
+             {K::Bullet, "Choisir l'interface ne force pas le chemin des paquets : ils suivent la table de "
+                         "routage du syst\xC3\xA8me (la fen\xC3\xAAtre le dit quand la plage sort du "
+                         "r\xC3\xA9seau de l'interface).", {}},
+             {K::Heading, "La fiche, la comparaison, le journal (1.21.0)", {}},
+             {K::Paragraph, "Chaque information est dite **confirm\xC3\xA9" "e** (l'appareil a r\xC3\xA9pondu), "
+                         "**annonc\xC3\xA9" "e** (par l'appareil ou le DNS) ou **suppos\xC3\xA9" "e** (le "
+                         "fabricant d'apr\xC3\xA8s l'adresse MAC, \xC2\xAB automate probable \xC2\xBB "
+                         "d'apr\xC3\xA8s le port 502, le protocole d'apr\xC3\xA8s son seul port) ; un "
+                         "mod\xC3\xA8le qui n'est pas annonc\xC3\xA9 reste **non identifi\xC3\xA9**, jamais "
+                         "devin\xC3\xA9. Le r\xC3\xA9sultat est **compar\xC3\xA9 au projet** : "
+                         "\xC3\xA9quipements d\xC3\xA9" "clar\xC3\xA9s et trouv\xC3\xA9s, absents du projet, "
+                         "d\xC3\xA9" "clar\xC3\xA9s mais injoignables (jamais conclu d'un scan "
+                         "arr\xC3\xAAt\xC3\xA9 en route), \xC3\xA0 une autre adresse, doublons, "
+                         "incoh\xC3\xA9rences (port d\xC3\xA9" "clar\xC3\xA9 ferm\xC3\xA9, un "
+                         "\xC3\xA9quipement Ethernet qui r\xC3\xA9pond en Modbus). **Appliquer la "
+                         "proposition** ajoute un \xC3\xA9quipement, met \xC3\xA0 jour son adresse ou "
+                         "l'associe \xC3\xA0 un esclave simul\xC3\xA9 : une question si c'est une "
+                         "supposition, puis une seule commande (Ctrl+Z). Aucune variable n'est "
+                         "cr\xC3\xA9\xC3\xA9" "e. Chaque scan est not\xC3\xA9 dans "
+                         "**ihm/reseau/decouvertes.csv** du projet : qui, quand, d'o\xC3\xB9, l'interface, "
+                         "la plage, les protocoles, la cadence, combien d'appareils.", {}},
          },
          {"reseau-pc", "equipements", "outil-modbus"},
-         {"scanner IP", "scanner", "scan", "balayage", "plage d'adresses", "ports ouverts", "adresse MAC", "fabricant", "OUI", "ARP", "DNS inverse", "identification Modbus", "fonction 43", "Ajouter comme \xC3\xA9quipement", "Exporter le scan", "CSV"},
+         {"confirmation", "Lancer", "cadence", "lecture seule", "confirm\xC3\xA9" "e", "annonc\xC3\xA9" "e", "suppos\xC3\xA9" "e", "decouvertes.csv", "Appliquer la proposition", "scanner IP", "scanner", "scan", "balayage", "plage d'adresses", "ports ouverts", "adresse MAC", "fabricant", "OUI", "ARP", "DNS inverse", "identification Modbus", "fonction 43", "Ajouter comme \xC3\xA9quipement", "Exporter le scan", "CSV"},
          {"scanner-ip"},
          {{"PNG_400_scanner_ip.png", "Le scan du r\xC3\xA9seau 192.168.1.0/24 sur eth1 : 254 adresses en 1,6 s, six appareils - l'automate du projet, ce PC, la centrale, l'imprimante, une passerelle Moxa nouvelle (502 ouvert, identifi\xC3\xA9" "e) et un appareil web nouveau."}, {"PNG_401_scanner_ajoute.png", "Ajouter comme \xC3\xA9quipement : la passerelle trouv\xC3\xA9" "e devient un \xC3\xA9quipement Modbus TCP/IP, son identification dans sa description."}},
          "",
