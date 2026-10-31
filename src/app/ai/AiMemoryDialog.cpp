@@ -388,7 +388,7 @@ protected:
         std::size_t addedCount = 0, here = 0;
         for (const auto& k : reg.all()) {
             if (!k.builtIn) ++addedCount;
-            if (mem::hereState(k, d_.spec_.project) == mem::Here::Active) ++here;
+            if (mem::hereState(k, d_.here()) == mem::Here::Active) ++here;
         }
         const auto& m = d_.measure_;
         struct Kpi {
@@ -406,7 +406,7 @@ protected:
                         pieces ? plural(pieces, "pi\xC3\xA8" "ce jointe cit\xC3\xA9" "e", "pi\xC3\xA8" "ces jointes cit\xC3\xA9" "es") : std::string("aucune pi\xC3\xA8" "ce jointe")});
         kpis.push_back({ui::Icon::Library, "CONNAISSANCES", std::to_string(reg.count(false)), {},
                         std::to_string(here) + " actives ici" + kDot + std::to_string(addedCount) + (addedCount > 1 ? " ajout\xC3\xA9" "es" : " ajout\xC3\xA9" "e"),
-                        mem::sizeText(reg.bytesHere(d_.spec_.project)) + " par demande"});
+                        mem::sizeText(reg.bytesHere(d_.here())) + " par demande"});
         const auto known = reg.kindsKnown(), total = mem::Registry::kindsTotal();
         kpis.push_back({ui::Icon::Layers, "GENRES D'OBJETS CONNUS", std::to_string(known) + "/" + std::to_string(total), {},
                         known ? std::string("tir\xC3\xA9s des tables du logiciel") : std::string("connaissance d\xC3\xA9sactiv\xC3\xA9" "e"),
@@ -562,11 +562,11 @@ private:
         caption(ctx, b.x + kPad, b.y + 12.f, ui::Icon::Library, fit(ctx, "JOINT \xC3\x80 CHAQUE DEMANDE " + where, kCaption, b.w - 2.f * kPad - 120.f),
                 c.textMuted);
         const float x = b.x + kPad, w = b.w - 2.f * kPad;
-        textRight(ctx, x + w, b.y + 11.f, mem::sizeText(d_.registry_.bytesHere(d_.spec_.project)) + " en tout", kSmall, c.text);
+        textRight(ctx, x + w, b.y + 11.f, mem::sizeText(d_.registry_.bytesHere(d_.here())) + " en tout", kSmall, c.text);
         float y = b.y + 36.f;
         std::size_t shown = 0, total = 0;
         for (const auto& k : d_.registry_.all()) {
-            if (mem::hereState(k, d_.spec_.project) != mem::Here::Active) continue;
+            if (mem::hereState(k, d_.here()) != mem::Here::Active) continue;
             ++total;
             if (y + 18.f >= b.bottom() - 24.f) continue;
             drawFit(ctx, {x, y}, k.name, kSmall, w * 0.5f, c.text);
@@ -822,7 +822,7 @@ protected:
         {
             std::size_t shown = d_.shownKnowledge().size(), here = 0;
             for (const auto* k : d_.shownKnowledge())
-                if (mem::hereState(*k, d_.spec_.project) == mem::Here::Active) ++here;
+                if (mem::hereState(*k, d_.here()) == mem::Here::Active) ++here;
             drawFit(ctx, {countX_, fb.y + (fb.h - ctx.r.lineHeight(kSmall)) * 0.5f},
                     plural(shown, "connaissance", "connaissances") + kDot + std::to_string(here) + " active(s) ici", kSmall, countW_, c.textMuted);
         }
@@ -888,7 +888,7 @@ private:
             ctx.r.drawText({cr.x + 8.f, cr.y + (cr.h - ctx.r.lineHeight(kSmall)) * 0.5f}, s, kSmall, c.text);
             px += cw + 6.f;
         };
-        const auto here = mem::hereState(*k, d_.spec_.project);
+        const auto here = mem::hereState(*k, d_.here());
         chip(mem::categoryLabel(k->category), ctx.theme.onSurface(ctx.theme.brand.family[2]));
         chip("Source : " + mem::sourceLabel(k->source), ctx.theme.onSurface(ctx.theme.brand.family[0]));
         chip(k->project.empty() ? std::string("Tous les projets") : "Projet " + k->project, ctx.theme.onSurface(ctx.theme.brand.family[4]));
@@ -2631,6 +2631,338 @@ private:
     float labelX_{0}, labelY_{0}, countX_{0}, textCol_{0};
 };
 
+// ============================================================================ Souvenirs (1.21.0) ===
+//  LE GESTIONNAIRE DE LA MEMOIRE PERSISTANTE. En haut, le bandeau honnete (le modele distant n'est pas reentraine) ;
+//  la recherche et les filtres (portee, statut, projet) ; a gauche les souvenirs (epingles et conflits d'abord), a
+//  droite le souvenir choisi - sa portee, son statut, son projet, sa provenance, ses dates, sa confiance, son contenu,
+//  ses conflits, son historique - et ses gestes ; en bas, les sauvegardes de la memoire.
+class AiMemoryDialog::SouvenirsPage final : public ui::Widget {
+public:
+    explicit SouvenirsPage(AiMemoryDialog& d) : ui::Widget("ia.memoire.souvenirs"), d_(d) {
+        const std::string base = "ia.memoire.souvenirs.";
+        search = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + "recherche")));
+        search->setPlaceholder("Rechercher dans les souvenirs");
+        scopeBox = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "portee")));
+        {
+            std::vector<ui::DropDown::Item> items{{"Toutes les port\xC3\xA9" "es", "", {}, true}};
+            for (const auto& c : mem::kScopes) items.push_back({std::string(c.label), std::string(c.key), {}, true});
+            scopeBox->setItems(std::move(items));
+            scopeBox->setSelectedIndex(0);
+        }
+        statusBox = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "statut")));
+        {
+            std::vector<ui::DropDown::Item> items{{"Tous les statuts", "", {}, true}};
+            for (const auto& c : mem::kStatuses) items.push_back({std::string(c.label), std::string(c.key), {}, true});
+            items.push_back({"En conflit", "conflits", {}, true});
+            statusBox->setItems(std::move(items));
+            statusBox->setSelectedIndex(0);
+        }
+        projBox = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + "projet")));
+        model = std::make_shared<Rows>();
+        model->headers = {"Souvenir", "Port\xC3\xA9" "e", "Statut", "Projet", "Modifi\xC3\xA9"};
+        table = &makeTable(*this, base + "liste", model,
+                           {col("Souvenir", 230.f), col("Port\xC3\xA9" "e", 105.f), col("Statut", 120.f), col("Projet", 115.f), col("Modifi\xC3\xA9", 90.f)});
+        const auto button = [&](const char* text, const std::string& id) {
+            return &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(text, base + id)));
+        };
+        confirm = button("Confirmer", "confirmer");
+        confirm->setStyle(ui::Button::Style::Primary);
+        hypothesis = button("Hypoth\xC3\xA8se", "hypothese");
+        pin = button("\xC3\x89pingler", "epingler");
+        pin->setIcon(ui::Icon::Pin);
+        keep = button("Garder", "garder");
+        associate = button("Associer au projet ouvert", "associer");
+        associate->setIcon(ui::Icon::Link);
+        edit = button("Modifier", "modifier");
+        edit->setIcon(ui::Icon::Rename);
+        reject = button("Refuser", "refuser");
+        remove = button("Supprimer\xE2\x80\xA6", "supprimer");
+        remove->setStyle(ui::Button::Style::Danger);
+        remove->setIcon(ui::Icon::Delete);
+        backup = button("Sauvegarder maintenant", "sauvegarder");
+        backup->setIcon(ui::Icon::Save);
+        restore = button("Restaurer la plus r\xC3\xA9" "cente\xE2\x80\xA6", "restaurer");
+        restore->setIcon(ui::Icon::Undo);
+        edName = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + "ednom")));
+        edName->setPlaceholder("Un titre court");
+        edContent = &static_cast<ui::MultiLineText&>(addChild(std::make_unique<ui::MultiLineText>(base + "edcontenu")));
+        edContent->setWordWrap(true);
+        edContent->setShowLineNumbers(false);
+        edContent->setLanguage(ui::Language::PlainText);
+        edSave = button("Enregistrer", "enregistrer");
+        edSave->setStyle(ui::Button::Style::Primary);
+        edCancel = button("Annuler", "annuler");
+        showEditor(false);
+    }
+
+    void showEditor(bool on) {
+        editorOn = on;
+        const auto v = [](bool b) { return b ? ui::Visibility::Visible : ui::Visibility::Collapsed; };
+        for (ui::Widget* w : {static_cast<ui::Widget*>(edName), static_cast<ui::Widget*>(edContent), static_cast<ui::Widget*>(edSave),
+                              static_cast<ui::Widget*>(edCancel)})
+            w->setVisibility(v(on));
+        for (ui::Widget* w : {static_cast<ui::Widget*>(confirm), static_cast<ui::Widget*>(hypothesis), static_cast<ui::Widget*>(pin),
+                              static_cast<ui::Widget*>(keep), static_cast<ui::Widget*>(associate), static_cast<ui::Widget*>(edit),
+                              static_cast<ui::Widget*>(reject), static_cast<ui::Widget*>(remove)})
+            if (on) w->setVisibility(ui::Visibility::Collapsed);
+        invalidateLayout();
+        invalidate();
+    }
+
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override { return tipAt(tips_, mouse); }
+    [[nodiscard]] bool hasTooltip() const override { return !tips_.empty() || ui::Widget::hasTooltip(); }
+
+    ui::InputText*        search{nullptr};
+    ui::DropDown*         scopeBox{nullptr};
+    ui::DropDown*         statusBox{nullptr};
+    ui::DropDown*         projBox{nullptr};
+    std::shared_ptr<Rows> model;
+    ui::TableView*        table{nullptr};
+    ui::Button*           confirm{nullptr};
+    ui::Button*           hypothesis{nullptr};
+    ui::Button*           pin{nullptr};
+    ui::Button*           keep{nullptr};
+    ui::Button*           associate{nullptr};
+    ui::Button*           edit{nullptr};
+    ui::Button*           reject{nullptr};
+    ui::Button*           remove{nullptr};
+    ui::Button*           backup{nullptr};
+    ui::Button*           restore{nullptr};
+    ui::InputText*        edName{nullptr};
+    ui::MultiLineText*    edContent{nullptr};
+    ui::Button*           edSave{nullptr};
+    ui::Button*           edCancel{nullptr};
+    bool                  editorOn{false};
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float x0 = r.x + kPad, W = r.w - 2.f * kPad;
+        info_ = {x0, r.y + 10.f, W, 48.f};
+        const float fy = info_.bottom() + 8.f;
+        filtersY_ = fy;
+        const float sw = std::min(250.f, std::floor(W * 0.22f));
+        search->setBounds({x0, fy, sw, 30.f});
+        float x = x0 + sw + 14.f;
+        const auto place = [&](ui::DropDown* box, const char* label, float w, float& labelX) {
+            labelX = x;
+            const float lw = ui::measureWidth(label, kSmall) + 8.f;
+            box->setBounds({x + lw, fy, w, 30.f});
+            x += lw + w + 14.f;
+        };
+        place(scopeBox, "Port\xC3\xA9" "e", 150.f, scopeLabelX_);
+        place(statusBox, "Statut", 165.f, statusLabelX_);
+        place(projBox, "Projet", 200.f, projLabelX_);
+        countX_ = x;
+        countW_ = x0 + W - x;
+        // les sauvegardes, en bas
+        backups_ = {x0, r.bottom() - 10.f - 36.f, W, 36.f};
+        float bx = backups_.right() - 6.f;
+        for (ui::Button* b : {restore, backup}) {
+            const float bw = std::max(120.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 48.f);
+            bx -= bw;
+            b->setBounds({bx, backups_.y + 3.f, bw, 30.f});
+            bx -= 8.f;
+        }
+        backupsTextW_ = bx - backups_.x - 34.f - 8.f;
+        const float top = fy + 40.f;
+        const float h = backups_.y - 8.f - top;
+        const float tw = std::floor(W * 0.55f);
+        table->setBounds({x0, top, tw, h});
+        detail_ = {x0 + tw + kGap, top, W - tw - kGap, h};
+        // le detail : ses gestes sur deux rangees, en bas
+        const auto row = [&](std::initializer_list<ui::Button*> buttons, float y) {
+            float rx = detail_.x + 12.f;
+            for (ui::Button* b : buttons) {
+                if (!b->visible()) continue;
+                const float bw = std::max(84.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 44.f);
+                b->setBounds({rx, y, std::max(0.f, std::min(bw, detail_.right() - 12.f - rx)), 30.f});
+                rx += bw + 8.f;
+            }
+        };
+        row({confirm, hypothesis, pin, keep}, detail_.bottom() - 80.f);
+        row({associate, edit, reject, remove}, detail_.bottom() - 42.f);
+        if (editorOn) {
+            edName->setBounds({detail_.x + 12.f, detail_.y + 52.f, detail_.w - 24.f, 30.f});
+            edContent->setBounds({detail_.x + 12.f, detail_.y + 110.f, detail_.w - 24.f, detail_.bottom() - 56.f - (detail_.y + 110.f)});
+            float ex = detail_.right() - 12.f;
+            for (ui::Button* b : {edSave, edCancel}) {
+                const float bw = std::max(110.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 36.f);
+                ex -= bw;
+                b->setBounds({ex, detail_.bottom() - 44.f, bw, 32.f});
+                ex -= 10.f;
+            }
+        }
+    }
+
+    void onPaint(const ui::PaintContext& ctx) override {
+        const TipScope tips(tips_);
+        const auto& c = ctx.theme.color;
+        ctx.r.fillRect(bounds(), c.windowBg);
+        // le bandeau honnete
+        ctx.r.fillRoundedRect(info_, c.accent.withAlpha(ctx.theme.isDark() ? 34 : 22), 6.f);
+        ctx.r.fillRoundedRect({info_.x, info_.y, 3.f, info_.h}, c.accent, 1.5f);
+        ui::drawIcon(ctx.r, ui::Icon::Info, {info_.x + 12.f, info_.y + 10.f, 14.f, 14.f}, c.accent);
+        {
+            // deux lignes : ce que c'est, puis ce que ce n'est pas (la phrase entiere, jamais coupee a cette largeur)
+            const std::string lead = "Souvenirs : la m\xC3\xA9moire persistante de l'Assistant, sur ce PC.";
+            const std::string honest(mem::kNotRetrained);
+            drawBold(ctx, {info_.x + 34.f, info_.y + 6.f}, fit(ctx, lead, kText, info_.w - 44.f), kText, c.text);
+            const std::string shown = fit(ctx, honest, kSmall, info_.w - 44.f);
+            ctx.r.drawText({info_.x + 34.f, info_.y + 28.f}, shown, kSmall, c.text);
+            if (shown != honest) addTip(info_, honest);
+        }
+        // les filtres
+        const gfx::Rect fb{0.f, filtersY_, 0.f, 30.f};
+        textMid(ctx, scopeLabelX_, fb, "Port\xC3\xA9" "e", kSmall, c.textMuted);
+        textMid(ctx, statusLabelX_, fb, "Statut", kSmall, c.textMuted);
+        textMid(ctx, projLabelX_, fb, "Projet", kSmall, c.textMuted);
+        {
+            const auto shown = d_.shownSouvenirs();
+            std::size_t pending = 0, conflicts = 0;
+            for (const auto* k : shown) {
+                pending += k->provisional() ? 1 : 0;
+                conflicts += k->conflicted() ? 1 : 0;
+            }
+            std::string count = plural(shown.size(), "souvenir", "souvenirs");
+            if (pending) count += kDot + std::to_string(pending) + " \xC3\xA0 valider";
+            if (conflicts) count += kDot + std::to_string(conflicts) + " en conflit";
+            drawFit(ctx, {countX_, fb.y + (fb.h - ctx.r.lineHeight(kSmall)) * 0.5f}, count, kSmall, countW_, conflicts ? c.error : c.textMuted);
+        }
+        paintDetail(ctx);
+        paintBackups(ctx);
+    }
+
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            if (k->key == ui::Key::Delete && !editorOn && table->focused()) {
+                (void)d_.deleteSelectedSouvenir();
+                return ui::EventResult::Consumed;
+            }
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    void paintDetail(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, detail_, c.border);
+        const auto* k = d_.selectedSouvenir();
+        const float x = detail_.x + 12.f, w = detail_.w - 24.f;
+        float y = detail_.y + 12.f;
+        if (editorOn) {
+            caption(ctx, x, y, ui::Icon::Rename, "MODIFIER LE SOUVENIR", c.textMuted);
+            ctx.r.drawText({x, detail_.y + 34.f}, "Titre", kSmall, c.textMuted);
+            drawFit(ctx, {x, detail_.y + 92.f}, "Contenu \xE2\x80\x94 ce qui sera relu et envoy\xC3\xA9 avec les demandes", kSmall, w, c.textMuted);
+            return;
+        }
+        if (!k) {
+            const std::string empty = d_.shownSouvenirs().empty()
+                                          ? "Aucun souvenir avec ces filtres. L'Assistant en propose (\xC3\xA0 valider ici) ; l'onglet Apprentissage en ajoute."
+                                          : "Choisis un souvenir dans la liste.";
+            for (const auto& l : wrap(ctx, empty, kText, w, 3)) {
+                ctx.r.drawText({x, y}, l, kText, c.textMuted);
+                y += 20.f;
+            }
+            return;
+        }
+        ui::drawIcon(ctx.r, k->pinned ? ui::Icon::Pin : k->conflicted() ? ui::Icon::Warning : ui::Icon::Document, {x, y + 1.f, 16.f, 16.f},
+                     k->conflicted() ? c.error : c.textMuted);
+        {
+            const std::string name = fit(ctx, k->name, kText, w - 24.f);
+            drawBold(ctx, {x + 24.f, y}, name, kText, c.text);
+            if (name != k->name) addTip({x + 24.f, y - 2.f, w - 24.f, ctx.r.lineHeight(kText) + 4.f}, k->name);
+        }
+        y += 24.f;
+        float px = x;
+        const auto chip = [&](const std::string& s, gfx::Color ink) {
+            const float cw = textW(ctx, s, kSmall) + 16.f;
+            if (px + cw > x + w) return;
+            const gfx::Rect cr{px, y, cw, 22.f};
+            ctx.r.fillRoundedRect(cr, ink.withAlpha(ctx.theme.isDark() ? 40 : 28), 11.f);
+            ctx.r.drawText({cr.x + 8.f, cr.y + (cr.h - ctx.r.lineHeight(kSmall)) * 0.5f}, s, kSmall, c.text);
+            px += cw + 6.f;
+        };
+        const auto here = mem::hereState(*k, d_.here());
+        chip(mem::statusLabel(k->status), k->status == "confirme" ? c.ok : k->status == "provisoire" ? c.info : c.warning);
+        chip(mem::scopeLabel(k->scopeKey()), ctx.theme.onSurface(ctx.theme.brand.family[2]));
+        chip(k->project.empty() && k->projectId.empty() ? std::string("Tous les projets") : "Projet " + (k->project.empty() ? k->projectId : k->project),
+             ctx.theme.onSurface(ctx.theme.brand.family[4]));
+        chip(mem::hereLabel(here), here == mem::Here::Active ? c.ok : here == mem::Here::Inactive ? c.textDisabled : c.warning);
+        if (k->conflicted()) chip("En conflit", c.error);
+        y += 30.f;
+        drawFit(ctx, {x, y}, "Source : " + k->provenance(), kSmall, w, c.text);
+        y += 18.f;
+        drawFit(ctx, {x, y},
+                "Cr\xC3\xA9\xC3\xA9 le " + dateOrDash(k->added) + kDot + "modifi\xC3\xA9 le " + dateOrDash(k->modified) + kDot + "confiance "
+                    + std::to_string(static_cast<int>(k->confidence * 100.0 + 0.5)) + " %",
+                kSmall, w, c.textMuted);
+        y += 20.f;
+        if (here == mem::Here::Pending) {
+            drawFit(ctx, {x, y}, "Propos\xC3\xA9 par l'Assistant : il ne part pas avec les demandes tant qu'il n'est pas valid\xC3\xA9.", kSmall, w,
+                    ctx.theme.onSurface(c.info));
+            y += 18.f;
+        } else if (here == mem::Here::Unbound) {
+            drawFit(ctx, {x, y}, "Li\xC3\xA9 par le nom seul, et ce nom est port\xC3\xA9 par deux projets : associe-le pour qu'il reparte.", kSmall, w,
+                    ctx.theme.onSurface(c.warning));
+            y += 18.f;
+        }
+        for (const auto* o : d_.registry_.conflictsOf(k->id)) {
+            if (y + 36.f > detail_.bottom() - 150.f) break;
+            drawFit(ctx, {x, y}, "En conflit avec \xC2\xAB " + o->name + " \xC2\xBB (" + mem::statusLabel(o->status) + ", " + o->provenance() + ")", kSmall, w,
+                    c.error);
+            y += 18.f;
+        }
+        // le contenu, puis l'historique
+        const float historyH = k->history.empty() ? 0.f : 22.f + 16.f * static_cast<float>(std::min<std::size_t>(3, k->history.size()));
+        const float bottom = detail_.bottom() - 90.f - historyH;
+        if (y + 20.f < bottom) {
+            const gfx::Rect box{x, y + 2.f, w, bottom - y - 4.f};
+            ctx.r.fillRoundedRect(box, c.inputBg, 4.f);
+            ctx.r.pushClip(box);
+            float ly = box.y + 6.f;
+            for (const auto& l : wrap(ctx, k->content, kSmall, box.w - 16.f, 40)) {
+                if (ly + 15.f > box.bottom()) break;
+                ctx.r.drawText({box.x + 8.f, ly}, l, kSmall, c.text);
+                ly += 16.f;
+            }
+            ctx.r.popClip();
+            addTip(box, k->content.size() > 600 ? k->content.substr(0, 600) + kDots : k->content);
+        }
+        if (historyH > 0.f) {
+            float hy = detail_.bottom() - 88.f - historyH + 2.f;
+            caption(ctx, x, hy, ui::Icon::History, "HISTORIQUE", c.textMuted);
+            hy += 20.f;
+            const std::size_t n = std::min<std::size_t>(3, k->history.size());
+            for (std::size_t i = k->history.size() - n; i < k->history.size(); ++i) {
+                drawFit(ctx, {x, hy}, dateOrDash(k->history[i].date) + kDot + k->history[i].text, kCaption, w, c.textMuted);
+                hy += 16.f;
+            }
+        }
+    }
+
+    void paintBackups(const ui::PaintContext& ctx) {
+        const auto& c = ctx.theme.color;
+        card(ctx, backups_, c.border);
+        ui::drawIcon(ctx.r, ui::Icon::Save, {backups_.x + 10.f, backups_.y + 10.f, 16.f, 16.f}, c.textMuted);
+        std::string text;
+        if (d_.backups_.empty())
+            text = "Aucune sauvegarde de la m\xC3\xA9moire : une copie est faite avant chaque migration et chaque restauration.";
+        else
+            text = "Sauvegardes : " + std::to_string(d_.backups_.size()) + kDot + "la plus r\xC3\xA9" "cente du " + dateOrDash(d_.backups_.front().date)
+                   + " (" + d_.backups_.front().reason + ")";
+        const std::string shown = fit(ctx, text, kSmall, backupsTextW_);
+        ctx.r.drawText({backups_.x + 34.f, backups_.y + (backups_.h - ctx.r.lineHeight(kSmall)) * 0.5f}, shown, kSmall, c.textMuted);
+        if (shown != text) addTip(backups_, text);
+    }
+
+    AiMemoryDialog& d_;
+    std::vector<Tip> tips_;
+    gfx::Rect info_{}, detail_{}, backups_{};
+    float filtersY_{0}, scopeLabelX_{0}, statusLabelX_{0}, projLabelX_{0}, countX_{0}, countW_{0}, backupsTextW_{0};
+};
+
+
 // ============================================================================== le corps ===
 class AiMemoryDialog::Body final : public ui::Widget {
 public:
@@ -2770,6 +3102,10 @@ void AiMemoryDialog::refresh() {
     conversations_ = mem::loadConversations();
     attachments_ = mem::attachmentFolders(conversations_);
     activity_ = mem::readActivity();
+    // 1.21.0 : les sauvegardes de la memoire, les projets connus (leur identifiant)
+    backups_ = mem::listBackups();
+    projects_ = mem::knownProjects();
+    if (!selectedSouvenir_.empty() && !registry_.find(selectedSouvenir_)) selectedSouvenir_.clear();
     // la zone rouge : une categorie devenue vide se decoche (elle se grise, syncWidgets)
     persistentOn_.erase(std::remove_if(persistentOn_.begin(), persistentOn_.end(), [&](mem::Persistent p) { return persistentEmpty(p); }),
                         persistentOn_.end());
@@ -2798,6 +3134,7 @@ std::string AiMemoryDialog::tabTitle(Tab t) {
     switch (t) {
         case Tab::Overview: return "Vue g\xC3\xA9n\xC3\xA9rale";
         case Tab::Learning: return "Apprentissage";
+        case Tab::Souvenirs: return "Souvenirs";
         case Tab::Memory: return "M\xC3\xA9moire";
         case Tab::Storage: return "Stockage PC";
         case Tab::Cleaning: return "Nettoyage";
@@ -2888,7 +3225,7 @@ void AiMemoryDialog::rebuildTables() {
             selectedKnowledge_ = shown.empty() ? std::string{} : shown.front()->id;
         for (const auto* k : shown) {
             Rows::Row row;
-            const auto here = mem::hereState(*k, spec_.project);
+            const auto here = mem::hereState(*k, this->here());
             row.key = k->id;
             row.cells = {k->name,
                          mem::categoryLabel(k->category),
@@ -2922,7 +3259,7 @@ void AiMemoryDialog::rebuildTables() {
                     col("Taille", 80.f, ui::Align::End)};
             for (const auto& k : registry_.all()) {
                 if (preferencesOnly && k.category != "preferences") continue;
-                const auto here = mem::hereState(k, spec_.project);
+                const auto here = mem::hereState(k, this->here());
                 Rows::Row row;
                 row.key = "k:" + k.id;
                 row.cells = {k.name, mem::categoryLabel(k.category), k.project.empty() ? std::string("Tous") : k.project, mem::sourceLabel(k.source),
@@ -3122,6 +3459,7 @@ void AiMemoryDialog::rebuildTables() {
         m.reset();
         activityPage_->invalidate();
     }
+    rebuildSouvenirs();
 }
 
 void AiMemoryDialog::syncWidgets() {
@@ -3231,13 +3569,15 @@ void AiMemoryDialog::syncWidgets() {
             if (items[i].value == activityFilter_) sel = static_cast<int>(i);
         activityPage_->typeBox->setSelectedIndex(sel);
     }
+    syncSouvenirs();
     if (yes_ && no_) {
         const auto vis = confirming() ? ui::Visibility::Visible : ui::Visibility::Collapsed;
         yes_->setVisibility(vis);
         no_->setVisibility(vis);
         if (confirming()) yes_->setText(confirm_.yes);
         // 1.17.0 : importer n'efface rien - le bouton n'est pas rouge
-        yes_->setStyle(confirm_.kind == Confirm::ImportLearning ? ui::Button::Style::Primary : ui::Button::Style::Danger);
+        yes_->setStyle(confirm_.kind == Confirm::ImportLearning || confirm_.kind == Confirm::RestoreBackup ? ui::Button::Style::Primary
+                                                                                                          : ui::Button::Style::Danger);
     }
     syncing_ = false;
 }
@@ -3301,6 +3641,8 @@ const mem::Knowledge* AiMemoryDialog::selectedKnowledge() const { return selecte
 
 bool AiMemoryDialog::addKnowledge(mem::Knowledge k) {
     std::string why;
+    // 1.21.0 : pour le projet ouvert, liee par son identifiant (jamais melangee avec un autre projet du meme nom)
+    if (k.projectId.empty() && !k.project.empty() && k.project == spec_.project) k.projectId = spec_.projectId;
     if (!registry_.add(k, &why)) {
         say("Ajout impossible : " + why, true);
         return false;
@@ -3318,8 +3660,20 @@ bool AiMemoryDialog::addKnowledge(mem::Knowledge k) {
 bool AiMemoryDialog::updateSelected(const mem::Knowledge& changes) {
     const auto* k = selectedKnowledge();
     if (!k) return false;
-    mem::Knowledge next = changes;
-    next.id = k->id;
+    // 1.21.0 : ce que l'editeur montre, sur la connaissance telle qu'elle est (son statut, sa portee, son epingle, son
+    // historique restent) ; un projet change : lie a l'identifiant du projet ouvert quand c'est son nom.
+    mem::Knowledge next = *k;
+    next.name = changes.name;
+    next.description = changes.description;
+    next.category = changes.category.empty() ? k->category : changes.category;
+    next.content = changes.content;
+    next.active = changes.active;
+    if (changes.project != k->project) {
+        next.project = changes.project;
+        next.projectId = !spec_.projectId.empty() && changes.project == spec_.project ? spec_.projectId : std::string{};
+        next.scope.clear();   // deduite de nouveau (un projet : portee projet)
+        if (k->scopeKey() == "conversation") next.scope = "conversation";
+    }
     std::string why;
     if (!registry_.update(next, &why)) {
         say("Modification refus\xC3\xA9" "e : " + why, true);
@@ -3833,6 +4187,8 @@ bool AiMemoryDialog::confirmYes() {
         case Confirm::ClearCache: ok = doClearCache(); break;
         case Confirm::DeletePersistent: ok = doDeletePersistent(); break;
         case Confirm::ImportLearning: ok = hub_ && hub_->doImport(); break;
+        case Confirm::DeleteSouvenir: ok = doDeleteSouvenir(); break;
+        case Confirm::RestoreBackup: ok = doRestoreBackup(); break;
         case Confirm::None: break;
     }
     syncWidgets();
@@ -3843,9 +4199,10 @@ bool AiMemoryDialog::confirmYes() {
 void AiMemoryDialog::confirmNo() {
     const bool cache = confirm_.kind == Confirm::ClearCache;
     const bool import = confirm_.kind == Confirm::ImportLearning;
+    const bool restore = confirm_.kind == Confirm::RestoreBackup;
     confirm_ = {};
     if (import && hub_) hub_->pendingImport.clear();
-    say(import ? "Rien n'a \xC3\xA9t\xC3\xA9 import\xC3\xA9." : cache ? "Le cache n'a pas \xC3\xA9t\xC3\xA9 vid\xC3\xA9." : "Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
+    say(import ? "Rien n'a \xC3\xA9t\xC3\xA9 import\xC3\xA9." : restore ? "Rien n'a \xC3\xA9t\xC3\xA9 restaur\xC3\xA9." : cache ? "Le cache n'a pas \xC3\xA9t\xC3\xA9 vid\xC3\xA9." : "Rien n'a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9.");
     syncWidgets();
     if (body_) body_->invalidateLayout();
 }
@@ -3862,6 +4219,7 @@ ui::TableView* AiMemoryDialog::currentTable() const {
             if (hub_ && !hub_->textTheme()) return hub_->list;
             return learning_ && !learning_->editorOn ? learning_->table : nullptr;
         case Tab::Memory: return memory_ ? memory_->table : nullptr;
+        case Tab::Souvenirs: return souvenirs_ && !souvenirEditing() ? souvenirsTable() : nullptr;
         case Tab::Storage: return storage_ ? storage_->table : nullptr;
         case Tab::Activity: return activityPage_ ? activityPage_->table : nullptr;
         default: return nullptr;
@@ -3872,6 +4230,7 @@ bool AiMemoryDialog::selectRow(std::string_view text) {
     switch (tab()) {
         case Tab::Learning: return hub_ && !hub_->textTheme() ? selectLearningRow(text) : selectKnowledge(text);
         case Tab::Memory: return selectMemoryRow(text);
+        case Tab::Souvenirs: return selectSouvenir(text);
         default: break;
     }
     auto* t = currentTable();
@@ -3892,6 +4251,418 @@ void AiMemoryDialog::finish() {
     manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, std::string{}});
 }
 
+// ---- Souvenirs (1.21.0) -----------------------------------------------------------------------
+mem::Context AiMemoryDialog::here() const {
+    mem::Context c;
+    c.projectId = spec_.projectId;
+    c.projectName = spec_.project;
+    c.nameAmbiguous = spec_.projectAmbiguous;
+    c.conversationId = spec_.conversationId;
+    return c;
+}
+
+ui::TableView* AiMemoryDialog::souvenirsTable() const { return souvenirs_ ? souvenirs_->table : nullptr; }
+
+std::vector<const mem::Knowledge*> AiMemoryDialog::shownSouvenirs() const {
+    std::vector<const mem::Knowledge*> out;
+    const ui::SearchQuery q(souvSearch_);
+    for (const auto& k : registry_.all()) {
+        if (k.builtIn) continue;
+        if (!souvScope_.empty() && k.scopeKey() != souvScope_) continue;
+        if (souvStatus_ == "conflits") {
+            if (!k.conflicted()) continue;
+        } else if (!souvStatus_.empty() && k.status != souvStatus_) {
+            continue;
+        }
+        if (souvProject_ == "ici") {
+            const bool mine = (!k.projectId.empty() && !spec_.projectId.empty() && k.projectId == spec_.projectId)
+                              || (k.projectId.empty() && !k.project.empty() && k.project == spec_.project);
+            if (!mine) continue;
+        } else if (souvProject_ == "*") {
+            if (!k.projectId.empty() || !k.project.empty()) continue;
+        } else if (!souvProject_.empty() && k.projectId != souvProject_) {
+            continue;
+        }
+        if (!q.empty() && !q.matches({k.name, k.content, k.description, k.subject, k.project})) continue;
+        out.push_back(&k);
+    }
+    // les epingles, puis les conflits, puis les propositions a valider ; les plus recents d'abord
+    std::stable_sort(out.begin(), out.end(), [](const mem::Knowledge* a, const mem::Knowledge* b) {
+        const auto rank = [](const mem::Knowledge* k) { return k->pinned ? 0 : k->conflicted() ? 1 : k->provisional() ? 2 : 3; };
+        if (rank(a) != rank(b)) return rank(a) < rank(b);
+        return a->modified > b->modified;
+    });
+    return out;
+}
+
+void AiMemoryDialog::rebuildSouvenirs() {
+    if (!souvenirs_) return;
+    auto& m = *souvenirs_->model;
+    m.rows.clear();
+    const auto shown = shownSouvenirs();
+    if (!selectedSouvenir_.empty() && std::none_of(shown.begin(), shown.end(), [&](const mem::Knowledge* k) { return k->id == selectedSouvenir_; }))
+        selectedSouvenir_ = shown.empty() ? std::string{} : shown.front()->id;
+    for (const auto* k : shown) {
+        Rows::Row row;
+        row.key = k->id;
+        const std::string project = !k->project.empty() ? k->project : !k->projectId.empty() ? k->projectId : std::string("Tous");
+        row.cells = {k->name, mem::scopeLabel(k->scopeKey()), mem::statusLabel(k->status) + (k->conflicted() ? kDot + "conflit" : std::string{}), project,
+                     dateOrDash(k->modified).substr(0, 10)};
+        row.styles.resize(5);
+        row.styles[0].icon = k->pinned ? ui::Icon::Pin : k->conflicted() ? ui::Icon::Warning : k->provisional() ? ui::Icon::Assistant : ui::Icon::Document;
+        row.styles[0].iconTone = k->conflicted() ? ui::Tone::Error : k->provisional() ? ui::Tone::Info : ui::Tone::Muted;
+        row.styles[2] = toneStyle(k->conflicted() ? ui::Tone::Error : k->status == "confirme" ? ui::Tone::Ok : k->status == "provisoire" ? ui::Tone::Info : ui::Tone::Warning);
+        row.tip = k->name + "\n" + k->provenance() + "\n" + (k->content.size() > 300 ? k->content.substr(0, 300) + kDots : k->content);
+        m.rows.push_back(std::move(row));
+    }
+    m.reset();
+    selectKey(souvenirs_->table, m.find(selectedSouvenir_));
+    souvenirs_->invalidate();
+}
+
+void AiMemoryDialog::syncSouvenirs() {
+    if (!souvenirs_) return;
+    auto& p = *souvenirs_;
+    if (p.search->text() != souvSearch_) p.search->setText(souvSearch_);
+    const auto select = [](ui::DropDown* box, const std::string& value) {
+        int sel = 0;
+        const auto& items = box->items();
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].value == value) sel = static_cast<int>(i);
+        box->setSelectedIndex(sel);
+    };
+    select(p.scopeBox, souvScope_);
+    select(p.statusBox, souvStatus_);
+    {
+        std::vector<ui::DropDown::Item> items{{"Tous les projets", "", {}, true},
+                                              {"Ce projet" + (spec_.project.empty() ? std::string(" (aucun ouvert)") : " (" + spec_.project + ")"), "ici", {}, true},
+                                              {"Communs \xC3\xA0 tous les projets", "*", {}, true}};
+        for (const auto& pr : projects_)
+            items.push_back({"Projet " + pr.name + (pr.ambiguous ? " (" + pr.path + ")" : std::string{}), pr.id, {}, true});
+        p.projBox->setItems(std::move(items));
+        select(p.projBox, souvProject_);
+    }
+    const auto* k = selectedSouvenir();
+    const bool any = k != nullptr && !p.editorOn;
+    const auto vis = [&](ui::Widget* w, bool on) { w->setVisibility(on && !p.editorOn ? ui::Visibility::Visible : ui::Visibility::Collapsed); };
+    const bool provisional = k && k->provisional();
+    vis(p.confirm, true);
+    vis(p.hypothesis, true);
+    vis(p.pin, true);
+    vis(p.keep, k && k->conflicted());
+    vis(p.associate, true);
+    vis(p.edit, true);
+    vis(p.reject, provisional);
+    vis(p.remove, !provisional);
+    p.confirm->setText(provisional ? "Valider" : "Confirmer");
+    p.confirm->setEnabled(any && k->status != "confirme");
+    p.confirm->setTooltip(provisional ? "Valider la proposition de l'Assistant : elle partira avec les demandes." : "Marquer l'information comme confirm\xC3\xA9" "e.");
+    p.hypothesis->setText(provisional ? "Garder comme hypoth\xC3\xA8se" : "Hypoth\xC3\xA8se");
+    p.hypothesis->setEnabled(any && k->status != "hypothese");
+    p.hypothesis->setTooltip("Une hypoth\xC3\xA8se part avec les demandes, dite comme telle (pas comme un fait).");
+    p.pin->setText(k && k->pinned ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler");
+    p.pin->setEnabled(any);
+    p.pin->setTooltip("Un souvenir \xC3\xA9pingl\xC3\xA9 part en premier avec les demandes.");
+    p.keep->setEnabled(any);
+    p.keep->setTooltip("Garder celui-ci (confirm\xC3\xA9) ; ceux qui le contredisent sont d\xC3\xA9sactiv\xC3\xA9s, gard\xC3\xA9s pour m\xC3\xA9moire.");
+    const bool here = k && !spec_.projectId.empty() && k->projectId == spec_.projectId;
+    p.associate->setText(here ? "\xC3\x80 tous les projets" : "Associer au projet ouvert");
+    p.associate->setEnabled(any && (here || !spec_.projectId.empty()));
+    p.associate->setTooltip(here ? "Le d\xC3\xA9lier de ce projet : il vaudra pour tous les projets."
+                            : spec_.projectId.empty() ? "Aucun projet enregistr\xC3\xA9 n'est ouvert : rien \xC3\xA0 quoi l'associer."
+                                                      : "L'associer \xC3\xA0 " + spec_.project + " (par son identifiant) : il ne partira qu'avec les demandes de ce projet.");
+    p.edit->setEnabled(any);
+    p.reject->setEnabled(any);
+    p.reject->setTooltip("Refuser la proposition de l'Assistant : elle est supprim\xC3\xA9" "e.");
+    p.remove->setEnabled(any);
+    p.restore->setEnabled(!backups_.empty());
+    p.backup->setEnabled(!measure_.root.empty());
+    souvenirs_->invalidateLayout();
+    souvenirs_->invalidate();
+}
+
+void AiMemoryDialog::setSouvenirSearch(std::string text) {
+    souvSearch_ = std::move(text);
+    rebuildSouvenirs();
+    syncWidgets();
+}
+
+void AiMemoryDialog::setSouvenirFilter(std::string scope, std::string status, std::string project) {
+    souvScope_ = std::move(scope);
+    souvStatus_ = std::move(status);
+    souvProject_ = std::move(project);
+    rebuildSouvenirs();
+    syncWidgets();
+}
+
+bool AiMemoryDialog::selectSouvenir(std::string_view idOrName) {
+    const std::string want = folded(idOrName);
+    const auto shown = shownSouvenirs();
+    const mem::Knowledge* hit = nullptr;
+    for (const auto* k : shown)
+        if (k->id == idOrName) hit = k;
+    if (!hit)
+        for (const auto* k : shown)
+            if (!hit && (folded(k->name) == want || folded(k->name).rfind(want, 0) == 0)) hit = k;
+    if (!hit) return false;
+    selectedSouvenir_ = hit->id;
+    if (souvenirs_) selectKey(souvenirs_->table, souvenirs_->model->find(selectedSouvenir_));
+    syncWidgets();
+    return true;
+}
+
+const mem::Knowledge* AiMemoryDialog::selectedSouvenir() const {
+    if (selectedSouvenir_.empty()) return nullptr;
+    const auto* k = registry_.find(selectedSouvenir_);
+    return k && !k->builtIn ? k : nullptr;
+}
+
+bool AiMemoryDialog::pinSelected(bool on) {
+    const auto* k = selectedSouvenir();
+    std::string why;
+    if (!k || !registry_.setPinned(k->id, on, &why)) {
+        say(k ? "\xC3\x89pingler : " + why : std::string("Choisis d'abord un souvenir."), true);
+        return false;
+    }
+    const std::string name = k->name;
+    refresh();
+    say(std::string(on ? "\xC3\x89pingl\xC3\xA9 : " : "D\xC3\xA9s\xC3\xA9pingl\xC3\xA9 : ") + name + (on ? " (il part en premier avec les demandes)." : "."));
+    return true;
+}
+
+bool AiMemoryDialog::setSelectedStatus(std::string_view status) {
+    const auto* k = selectedSouvenir();
+    std::string why;
+    if (!k || !registry_.setStatus(k->id, status, &why)) {
+        say(k ? why : std::string("Choisis d'abord un souvenir."), true);
+        return false;
+    }
+    const std::string name = k->name;
+    refresh();
+    say(name + " : " + mem::statusLabel(status) + ".");
+    return true;
+}
+
+bool AiMemoryDialog::associateSelectedHere() {
+    const auto* k = selectedSouvenir();
+    if (!k) return false;
+    if (spec_.projectId.empty()) {
+        say("Aucun projet enregistr\xC3\xA9 n'est ouvert : enregistre le projet pour lui associer des souvenirs.", true);
+        return false;
+    }
+    std::string why;
+    if (!registry_.associate(k->id, spec_.projectId, spec_.project, &why)) {
+        say(why, true);
+        return false;
+    }
+    const std::string name = k->name;
+    refresh();
+    say(name + " : associ\xC3\xA9 au projet " + spec_.project + " (il ne part qu'avec ses demandes).");
+    return true;
+}
+
+bool AiMemoryDialog::associateSelectedAll() {
+    const auto* k = selectedSouvenir();
+    std::string why;
+    if (!k || !registry_.associate(k->id, {}, {}, &why)) {
+        if (k) say(why, true);
+        return false;
+    }
+    const std::string name = k->name;
+    refresh();
+    say(name + " : vaut maintenant pour tous les projets.");
+    return true;
+}
+
+bool AiMemoryDialog::keepSelectedInConflict() {
+    const auto* k = selectedSouvenir();
+    if (!k || !k->conflicted()) return false;
+    const std::string keepId = k->id, name = k->name;
+    const std::vector<std::string> others = k->conflicts;
+    std::string why;
+    for (const auto& o : others)
+        if (registry_.find(o) && !registry_.resolveConflict(keepId, o, false, &why)) {
+            say(why, true);
+            refresh();
+            return false;
+        }
+    refresh();
+    say("Gard\xC3\xA9 : " + name + " ; " + plural(others.size(), "souvenir qui le contredisait d\xC3\xA9sactiv\xC3\xA9", "souvenirs qui le contredisaient d\xC3\xA9sactiv\xC3\xA9s") + ".");
+    return true;
+}
+
+bool AiMemoryDialog::rejectSelected() {
+    const auto* k = selectedSouvenir();
+    if (!k || !k->provisional()) return false;
+    const std::string name = k->name;
+    std::string why;
+    if (!mem::rejectMemory(registry_, k->id, &why)) {
+        say(why, true);
+        return false;
+    }
+    selectedSouvenir_.clear();
+    refresh();
+    say("Proposition refus\xC3\xA9" "e : " + name + ".");
+    return true;
+}
+
+bool AiMemoryDialog::editSelectedSouvenir(const std::string& name, const std::string& content) {
+    const auto* k = selectedSouvenir();
+    if (!k) return false;
+    mem::Knowledge next = *k;
+    next.name = name;
+    next.content = content;
+    std::string why;
+    if (!registry_.update(next, &why)) {
+        say(why, true);
+        return false;
+    }
+    refresh();
+    say("Souvenir modifi\xC3\xA9 : " + name + ".");
+    return true;
+}
+
+void AiMemoryDialog::beginSouvenirEdit() {
+    const auto* k = selectedSouvenir();
+    if (!souvenirs_ || !k) return;
+    souvenirs_->edName->setText(k->name);
+    souvenirs_->edContent->setText(k->content);
+    souvenirs_->showEditor(true);
+    syncWidgets();
+}
+
+bool AiMemoryDialog::saveSouvenirEdit() {
+    if (!souvenirs_ || !souvenirs_->editorOn) return false;
+    const std::string name = souvenirs_->edName->text(), content = souvenirs_->edContent->text();
+    if (name.empty() || content.find_first_not_of(" \t\r\n") == std::string::npos) {
+        say("Un souvenir a un titre et un contenu.", true);
+        return false;
+    }
+    souvenirs_->showEditor(false);
+    const bool ok = editSelectedSouvenir(name, content);
+    syncWidgets();
+    return ok;
+}
+
+void AiMemoryDialog::closeSouvenirEdit() {
+    if (!souvenirs_) return;
+    souvenirs_->showEditor(false);
+    syncWidgets();
+}
+
+bool AiMemoryDialog::souvenirEditing() const noexcept { return souvenirs_ && souvenirs_->editorOn; }
+
+bool AiMemoryDialog::deleteSelectedSouvenir(bool now) {
+    const auto* k = selectedSouvenir();
+    if (!k) return false;
+    if (now) return doDeleteSouvenir();
+    ask(Confirm::DeleteSouvenir,
+        "Supprimer le souvenir \xC2\xAB " + k->name + " \xC2\xBB ? Il ne partira plus avec les demandes" + (backups_.empty() ? std::string(".") : " (les sauvegardes le gardent)."),
+        "Oui, supprimer");
+    return true;
+}
+
+bool AiMemoryDialog::doDeleteSouvenir() {
+    const auto* k = selectedSouvenir();
+    if (!k) return false;
+    const std::string name = k->name;
+    std::string why;
+    if (!registry_.remove(k->id, &why)) {
+        say(why, true);
+        return false;
+    }
+    selectedSouvenir_.clear();
+    refresh();
+    say("Souvenir supprim\xC3\xA9 : " + name + ".");
+    return true;
+}
+
+bool AiMemoryDialog::backupNow() {
+    std::string name, why;
+    if (!mem::backupMemory("\xC3\xA0 la demande", &name, &why)) {
+        say("Sauvegarde impossible : " + why, true);
+        return false;
+    }
+    refresh();
+    say("M\xC3\xA9moire sauvegard\xC3\xA9" "e : " + name + ".");
+    return true;
+}
+
+bool AiMemoryDialog::restoreLatestBackup(bool now) {
+    if (backups_.empty()) {
+        say("Aucune sauvegarde \xC3\xA0 restaurer.", true);
+        return false;
+    }
+    if (now) return doRestoreBackup();
+    ask(Confirm::RestoreBackup,
+        "Restaurer la m\xC3\xA9moire telle qu'elle \xC3\xA9tait le " + dateOrDash(backups_.front().date) + " (" + backups_.front().reason
+            + ") ? L'\xC3\xA9tat actuel est sauvegard\xC3\xA9 d'abord.",
+        "Oui, restaurer");
+    return true;
+}
+
+bool AiMemoryDialog::doRestoreBackup() {
+    if (backups_.empty()) return false;
+    const std::string name = backups_.front().name;
+    std::string why;
+    if (!mem::restoreBackup(name, &why)) {
+        say("Restauration impossible : " + why, true);
+        return false;
+    }
+    refresh();
+    say("M\xC3\xA9moire restaur\xC3\xA9" "e depuis " + name + " (l'\xC3\xA9tat d'avant est sauvegard\xC3\xA9).");
+    return true;
+}
+
+void AiMemoryDialog::connectSouvenirs() {
+    if (!souvenirs_) return;
+    auto& p = *souvenirs_;
+    links_ += p.search->textChanged->connect([this](const std::string& t) {
+        if (syncing_ || t == souvSearch_) return;
+        setSouvenirSearch(t);
+    });
+    const auto value = [](ui::DropDown* box) {
+        const auto* it = box->selectedItem();
+        return it ? it->value : std::string{};
+    };
+    links_ += p.scopeBox->selectionChanged->connect([this, value](int) {
+        if (!syncing_) setSouvenirFilter(value(souvenirs_->scopeBox), souvStatus_, souvProject_);
+    });
+    links_ += p.statusBox->selectionChanged->connect([this, value](int) {
+        if (!syncing_) setSouvenirFilter(souvScope_, value(souvenirs_->statusBox), souvProject_);
+    });
+    links_ += p.projBox->selectionChanged->connect([this, value](int) {
+        if (!syncing_) setSouvenirFilter(souvScope_, souvStatus_, value(souvenirs_->projBox));
+    });
+    links_ += p.table->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
+        if (syncing_) return;
+        const auto& m = *souvenirs_->model;
+        selectedSouvenir_ = !rows.empty() && rows.front() < m.rows.size() ? m.rows[rows.front()].key : std::string{};
+        syncWidgets();
+    });
+    links_ += p.table->activated->connect([this](ui::RowIndex) { beginSouvenirEdit(); });
+    links_ += p.confirm->clicked->connect([this] { (void)setSelectedStatus("confirme"); });
+    links_ += p.hypothesis->clicked->connect([this] { (void)setSelectedStatus("hypothese"); });
+    links_ += p.pin->clicked->connect([this] {
+        const auto* k = selectedSouvenir();
+        (void)pinSelected(!(k && k->pinned));
+    });
+    links_ += p.keep->clicked->connect([this] { (void)keepSelectedInConflict(); });
+    links_ += p.associate->clicked->connect([this] {
+        const auto* k = selectedSouvenir();
+        if (k && !spec_.projectId.empty() && k->projectId == spec_.projectId) (void)associateSelectedAll();
+        else (void)associateSelectedHere();
+    });
+    links_ += p.edit->clicked->connect([this] { beginSouvenirEdit(); });
+    links_ += p.reject->clicked->connect([this] { (void)rejectSelected(); });
+    links_ += p.remove->clicked->connect([this] { (void)deleteSelectedSouvenir(); });
+    links_ += p.backup->clicked->connect([this] { (void)backupNow(); });
+    links_ += p.restore->clicked->connect([this] { (void)restoreLatestBackup(); });
+    links_ += p.edSave->clicked->connect([this] { (void)saveSouvenirEdit(); });
+    links_ += p.edCancel->clicked->connect([this] { closeSouvenirEdit(); });
+}
+
+
 // ================================================================================== l'ecran ===
 core::Status AiMemoryDialog::buildUi() {
     auto body = std::make_unique<Body>(*this);
@@ -3908,6 +4679,11 @@ core::Status AiMemoryDialog::buildUi() {
         hub_ = p.get();
         learning_ = p->knowledge;
         tabs->addTab(ui::TabControl::Tab{tabTitle(Tab::Learning), ui::Icon::Library}, std::move(p));
+    }
+    {
+        auto p = std::make_unique<SouvenirsPage>(*this);   // 1.21.0 : le gestionnaire de la memoire persistante
+        souvenirs_ = p.get();
+        tabs->addTab(ui::TabControl::Tab{tabTitle(Tab::Souvenirs), ui::Icon::Pin}, std::move(p));
     }
     {
         auto p = std::make_unique<MemoryPage>(*this);
@@ -3994,6 +4770,8 @@ core::Status AiMemoryDialog::buildUi() {
         links_ += p.removeOne->clicked->connect([this] { (void)deleteMemorySelection(); });
         links_ += p.removeAll->clicked->connect([this] { (void)deleteMemoryCategory(); });
     }
+    // ---- Souvenirs (1.21.0)
+    connectSouvenirs();
     // ---- Stockage PC
     {
         links_ += storage_->copy->clicked->connect([this] { copyLocation(); });
@@ -4038,6 +4816,7 @@ ui::EventResult AiMemoryDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
         if (k->key == ui::Key::Escape) {
             if (confirming()) confirmNo();
+            else if (souvenirEditing() && tab() == Tab::Souvenirs) closeSouvenirEdit();
             else if (editorOpen()) closeEditor();
             else finish();
             return ui::EventResult::Consumed;

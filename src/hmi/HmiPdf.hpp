@@ -18,6 +18,9 @@
 //  UN SEUL FIL APPELLE PDFium (il n'est pas sur entre fils) : le fil des
 //  documents (HmiDocument.cpp). Les fonctions "un fil" ci-dessous ne
 //  s'appellent que de lui. library() et missingAdvice() s'appellent de partout.
+//  1.21.0 : l'Assistant IA lit aussi le texte des PDF joints (AiAttachments, sur
+//  son fil d'analyse) : chaque fonction "un fil" prend desormais un verrou
+//  (callLock, recursif) - deux fils s'en servent tour a tour, jamais ensemble.
 // =============================================================================
 #pragma once
 
@@ -26,6 +29,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,5 +74,20 @@ struct Found {
     std::vector<std::array<double, 4>> rects;
 };
 [[nodiscard]] std::vector<Found> search(DocHandle, int index, const std::u16string& query);
+
+// ---- 1.21.0 : le texte (l'Assistant IA lit les PDF joints) -------------------------
+// Le verrou des appels a PDFium (recursif) : chaque fonction "un fil" le prend ; plusieurs appels d'affilee sur un
+// meme document peuvent le prendre autour.
+[[nodiscard]] std::unique_lock<std::recursive_mutex> callLock();
+// Le texte d'une page, en UTF-8, dans l'ordre de lecture de PDFium ; vide : une page sans texte (scannee) ou une
+// bibliotheque sans FPDFText_CountChars / FPDFText_GetText.
+[[nodiscard]] std::string pageText(DocHandle, int index);
+// Vrai si la bibliotheque chargee sait rendre le texte d'une page.
+[[nodiscard]] bool canExtractText();
+// Tout le texte d'un PDF en memoire, une entree par page (au plus `maxPages` ; `pageTotal` : le nombre de pages du
+// document). De n'importe quel fil (le verrou est pris). Faux et `error` : PDFium absent ou trop ancien, PDF
+// illisible, abime ou protege.
+bool extractText(const std::uint8_t* data, std::size_t size, std::vector<std::string>& pages, std::string* error = nullptr,
+                 int maxPages = 2000, int* pageTotal = nullptr);
 
 } // namespace hmi::pdf

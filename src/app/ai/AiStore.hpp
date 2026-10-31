@@ -36,6 +36,25 @@
 namespace app::ai {
 
 // ---- les structures -------------------------------------------------------------
+// 1.21.0 : UNE ANALYSE d'une piece jointe (AiAttachments.hpp) - l'extraction de son texte par le logiciel, une
+// lecture par l'IA, une comparaison. La derniere est le resultat courant ; les precedentes restent (l'historique).
+struct AttachmentAnalysis {
+    std::string              date;          // ISO, heure locale
+    std::string              kind;          // "extraction" (le logiciel) | "lecture" (l'IA) | "comparaison" | "note"
+    std::string              state;         // "analysee" | "echec"
+    std::string              summary;       // une ligne : "12 pages, 18 400 caracteres"
+    std::string              error;         // un echec : pourquoi (en francais)
+    std::string              textFile;      // le texte extrait, relatif a IA/ (cache/documents/<id>.txt) ; vide : le fichier est
+                                            // du texte (il se lit tel quel) ou rien n'a ete extrait
+    std::uint64_t            textBytes{0};  // la taille du texte extrait
+    int                      pages{0}, sheets{0}, width{0}, height{0};
+    std::uint64_t            lines{0};
+    std::vector<std::string> details;       // les feuilles, l'encodage, les fins de ligne, les avertissements
+    std::string              message;       // le message de la conversation qui l'a faite (une lecture par l'IA)
+    json::Value              extra;
+    bool operator==(const AttachmentAnalysis&) const = default;
+};
+
 struct Attachment {
     std::string   id;          // "p-20261030-173512-1"
     std::string   name;        // "plan.pdf"
@@ -43,6 +62,21 @@ struct Attachment {
     std::uint64_t bytes{0};
     std::string   file;        // relatif a IA/ : "pieces-jointes/<id>/plan.pdf" ; vide : pas copie (pas de racine)
     std::string   source;      // le chemin d'origine (en memoire seulement : pas dans le fichier)
+    // 1.21.0 : LE CONTEXTE DE LA DISCUSSION (AiAttachments.hpp). Un identifiant unique, jamais le nom seul (deux
+    // fichiers differents peuvent porter le meme nom) ; l'original copie n'est jamais modifie.
+    std::string   conversation;   // la conversation qui l'a recue
+    std::string   message;        // le message qui l'a portee (vide : pas encore envoyee)
+    std::string   ext;            // l'extension, en minuscules ("pdf")
+    std::string   mime;           // le type MIME quand il est connu ("application/pdf")
+    std::string   added;          // la date d'ajout (ISO)
+    std::string   sha256;         // l'empreinte de la copie (vide : pas encore calculee) - les doublons
+    std::string   origin{"utilisateur"};   // "utilisateur" (jointe) | "copie-de-travail" | "generee" (par l'IA)
+    std::string   originalPath;   // ou elle etait sur le PC quand elle a ete jointe (retrouver un fichier deplace)
+    std::string   workingCopyOf;  // une copie de travail : l'id de l'original (lui reste intact)
+    std::string   duplicateOf;    // le meme contenu qu'une piece deja jointe a cette conversation : son id
+    bool          removed{false}; // retiree de la discussion : plus envoyee ni proposee, la copie reste
+    std::string   analysis;       // "" (non analysee) | "en-cours" | "analysee" | "echec"
+    std::vector<AttachmentAnalysis> analyses;   // les analyses, la plus recente a la fin
     json::Value   extra;
 };
 
@@ -178,13 +212,22 @@ struct AttachmentFormat {
     std::string_view ext, label;
 };
 // PNG, JPG, PDF, TXT, CSV, XLSX, XML, JSON, et les formats du logiciel (.xihm, .xapi, le projet).
+// 1.21.0 : ST, C, C++, H, HPP (du code, lu tel quel) et DOCX (son texte extrait).
 [[nodiscard]] const std::vector<AttachmentFormat>& attachmentFormats();
 [[nodiscard]] bool acceptedFormat(std::string_view fileName);
 // Le filtre du selecteur de fichiers ("png;jpg;jpeg;pdf;...").
 [[nodiscard]] std::string attachmentFilter();
 // Copie le fichier dans pieces-jointes/<id>/ (sans racine : il est seulement decrit). Faux et
-// `why` : format refuse, fichier illisible, copie impossible.
+// `why` : format refuse, fichier illisible, trop volumineux (1.21.0), copie impossible.
+// 1.21.0 : l'extension, le type MIME, la date d'ajout et le chemin d'origine sont remplis ; la conversation
+// et le message, par l'appelant (AiAttachments.hpp : attach::adopt).
 bool addAttachment(const std::string& sourcePath, Attachment& out, std::string* why = nullptr);
+// 1.21.0 : au-dela, un fichier ne se joint pas (il est dit trop volumineux).
+inline constexpr std::uint64_t kMaxAttachmentBytes = 200ull * 1024 * 1024;
+// 1.21.0 : le type MIME d'une extension ("pdf" -> "application/pdf") ; vide : inconnu.
+[[nodiscard]] std::string mimeOfExtension(std::string_view ext);
+// 1.21.0 : le libelle du format ("Document PDF", "Tableur", "Image") ; une extension inconnue : "Fichier ext".
+[[nodiscard]] std::string formatLabel(std::string_view ext);
 // Le chemin complet de la copie (vide : pas copie).
 [[nodiscard]] std::string attachmentPath(const Attachment&);
 // "12 Ko", "1,3 Mo".

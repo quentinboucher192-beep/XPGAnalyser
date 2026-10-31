@@ -158,7 +158,7 @@ std::string mediaTypeOf(std::string_view fileName) {
     if (e == "png") return "image/png";
     if (e == "jpg" || e == "jpeg") return "image/jpeg";
     if (e == "pdf") return "application/pdf";
-    if (e == "txt") return "text/plain";
+    if (e == "txt" || e == "st" || e == "c" || e == "cpp" || e == "h" || e == "hpp") return "text/plain";   // 1.21.0 : le code aussi
     if (e == "csv") return "text/csv";
     if (e == "json") return "application/json";
     if (e == "xml") return "application/xml";
@@ -187,7 +187,8 @@ AttachmentPlan planAttachment(const ProviderAttachment& a) {
         }
         return p;
     }
-    if (e == "txt" || e == "csv" || e == "json" || e == "xml") {
+    // 1.21.0 : le code (ST, C, C++, en-tetes) part comme du texte, tel quel
+    if (e == "txt" || e == "csv" || e == "json" || e == "xml" || e == "st" || e == "c" || e == "cpp" || e == "h" || e == "hpp") {
         // 1.20.0 : plus de coupure a 200 Ko - le texte part entier, en parties, a la mesure du modele (AiTextParts.hpp)
         p.as = AttachmentPlan::As::Text;
         p.mediaType = "text/plain";

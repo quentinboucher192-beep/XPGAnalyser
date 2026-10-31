@@ -2604,6 +2604,11 @@ void App::showAiMemory() {
         auto folder = dossiers::cheminDe(projectFolder_);
         if (!folder.has_filename()) folder = folder.parent_path();
         spec.project = dossiers::utf8De(folder.filename());
+        // 1.21.0 : son identifiant fiable (projets.json) - ses souvenirs ne se melangent jamais avec ceux d'un autre projet
+        // de meme nom ; un nom porte par deux projets connus est dit (les souvenirs lies par le nom seul ne partent pas).
+        const auto identity = ai::memory::identifyProject(spec.project, projectFolder_);
+        spec.projectId = identity.id;
+        spec.projectAmbiguous = identity.ambiguous;
     }
     // 1.14.2 (captures) : ouverte depuis une fenetre modale qui assombrit deja le fond (les parametres de
     // l'Assistant), elle ne remet pas son voile - le fond s'assombrissait deux fois. Comme le selecteur

@@ -198,7 +198,11 @@ std::vector<hmi::Kind> detailKinds(const PromptInput& in, bool useWords) {
     return out;
 }
 
-const char* const kAddedHeader = "## Connaissances ajout\xC3\xA9" "es (actives dans ce projet)\n";
+// 1.21.0 : les souvenirs aussi (la memoire persistante) - et ce qu'ils sont, sans pretendre a un apprentissage du modele.
+const char* const kAddedHeader = "## Connaissances ajout\xC3\xA9" "es et souvenirs (actifs dans ce projet)\n"
+                                 "M\xC3\xA9moire locale de l'application, relue \xC3\xA0 chaque demande (tu n'as pas \xC3\xA9t\xC3\xA9 r\xC3\xA9" "entra\xC3\xAEn\xC3\xA9) : "
+                                 "ne pr\xC3\xA9tends pas te souvenir d'autre chose. Une hypoth\xC3\xA8se n'est pas un fait ; deux souvenirs en conflit : "
+                                 "demande \xC3\xA0 l'utilisateur lequel est juste.\n";
 constexpr std::size_t kAddedBytes = 20000;   // les connaissances ajoutees, au plus
 
 std::string join(const std::vector<std::string>& v, std::string_view sep) {
@@ -358,9 +362,15 @@ PromptParts promptParts(const PromptInput& in) {
         local.load();
         knowledge = &local;
     }
+    // 1.21.0 : le contexte de la demande - le projet par son identifiant fiable, la conversation.
+    memory::Context here;
+    here.projectId = in.projectId;
+    here.projectName = in.projectName;
+    here.conversationId = in.conversationId;
+    here.nameAmbiguous = in.projectNameAmbiguous;
     const auto active = [&](std::string_view id) {
         const auto* k = knowledge->find(id);
-        return k && memory::hereState(*k, in.projectName) == memory::Here::Active;
+        return k && memory::hereState(*k, here) == memory::Here::Active;
     };
     const auto* kinds = knowledge->find(memory::kKindsKnowledge);
 
@@ -386,11 +396,26 @@ PromptParts promptParts(const PromptInput& in) {
         if (active(id))
             if (const auto* k = knowledge->find(id)) s += "\n## " + k->name + "\n" + k->content;
     // Les connaissances ajoutees : pour tous les projets, ou pour CE projet ; actives.
+    // 1.21.0 : les souvenirs aussi - les epingles d'abord, puis les confirmes, puis les hypotheses ; une proposition de
+    // l'Assistant pas encore validee ne part pas ; une hypothese, un conflit sont dits comme tels.
+    std::vector<const memory::Knowledge*> order;
+    for (const auto& k : knowledge->all())
+        if (!k.builtIn && memory::hereState(k, here) == memory::Here::Active) order.push_back(&k);
+    std::stable_sort(order.begin(), order.end(), [](const memory::Knowledge* a, const memory::Knowledge* b) {
+        const auto rank = [](const memory::Knowledge* k) { return k->pinned ? 0 : k->status == "hypothese" ? 2 : 1; };
+        return rank(a) < rank(b);
+    });
     std::string added;
     std::size_t cut = 0;
-    for (const auto& k : knowledge->all()) {
-        if (k.builtIn || memory::hereState(k, in.projectName) != memory::Here::Active) continue;
-        std::string one = "### " + k.name + " (" + memory::categoryLabel(k.category) + (k.project.empty() ? "" : ", projet " + k.project) + ")\n";
+    for (const memory::Knowledge* kp : order) {
+        const memory::Knowledge& k = *kp;
+        std::string one = "### " + k.name + " (" + memory::categoryLabel(k.category) + (k.project.empty() ? "" : ", projet " + k.project)
+                          + (k.pinned ? ", \xC3\xA9pingl\xC3\xA9" : "") + (k.status == "hypothese" ? ", HYPOTH\xC3\x88SE non confirm\xC3\xA9" "e" : "") + ")\n";
+        if (k.conflicted()) {
+            std::string names;
+            for (const auto* o : knowledge->conflictsOf(k.id)) names += (names.empty() ? "" : ", ") + o->name;
+            one += "[En conflit avec : " + names + " \xE2\x80\x94 ne choisis pas seul, demande \xC3\xA0 l'utilisateur.]\n";
+        }
         if (!k.description.empty()) one += k.description + "\n";
         one += k.content;
         if (!one.empty() && one.back() != '\n') one += '\n';

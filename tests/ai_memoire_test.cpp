@@ -191,7 +191,7 @@ void knowledge() {
     const fs::path file = fs::path(app::ai::knowledgeDir()) / (k.id + ".json");
     check(fs::exists(file), "son fichier : connaissances/" + k.id + ".json");
     mem::Json j;
-    check(mem::parseJson(readAll(file), j) && j.num("format") == 1 && j.str("nom") == k.name && j.str("categorie") == "regles" && j.flag("actif")
+    check(mem::parseJson(readAll(file), j) && j.num("format") == mem::kKnowledgeFormat /* 1.21.0 : format 2 (les souvenirs) */ && j.str("nom") == k.name && j.str("categorie") == "regles" && j.flag("actif")
               && j.str("projet").empty() && j.str("contenu") == k.content,
           "le fichier au format du contrat");
     // un champ inconnu ajoute a la main reste a la reecriture

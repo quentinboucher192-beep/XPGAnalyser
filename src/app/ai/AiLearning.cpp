@@ -192,7 +192,7 @@ bool writeKnowledge(const std::string& id, const std::string& name, const std::s
             j = old;   // les champs inconnus restent
         }
     }
-    j.set("format", Json::makeNumber(1));
+    j.set("format", Json::makeNumber(memory::kKnowledgeFormat));   // 1.21.0 : le format des souvenirs (pas de migration a refaire)
     j.set("id", Json::makeString(id));
     j.set("nom", Json::makeString(name));
     j.set("description", Json::makeString(category == "modeles" ? "Mod\xC3\xA8le m\xC3\xA9tier de l'IA int\xC3\xA9gr\xC3\xA9" "e"
