@@ -239,15 +239,16 @@ struct Fields {
 const std::vector<Fields>& fieldsOf() {
     using A = Operation::Action;
     static const std::vector<Fields> f = {
-        {A::Create, {"genre", "nom", "proprietes"}, {"genre"}},
-        {A::Modify, {"objet", "proprietes"}, {"objet", "proprietes"}},
-        {A::Bind, {"objet", "variable"}, {"objet", "variable"}},
-        {A::Align, {"objets", "bord"}, {"objets", "bord"}},
-        {A::Distribute, {"objets", "sens"}, {"objets"}},
+        // 1.21.0 : "vue" (la vue visee, annoncee par le schema depuis la 1.19.0) n'est plus refusee.
+        {A::Create, {"genre", "nom", "proprietes", "vue"}, {"genre"}},
+        {A::Modify, {"objet", "proprietes", "vue"}, {"objet", "proprietes"}},
+        {A::Bind, {"objet", "variable", "vue"}, {"objet", "variable"}},
+        {A::Align, {"objets", "bord", "vue"}, {"objets", "bord"}},
+        {A::Distribute, {"objets", "sens", "vue"}, {"objets"}},
         // 1.21.0 : la suppression intelligente - le genre, la vue des objets, la strategie, le remplacant, les exclusions.
         {A::Remove, {"objets", "genre", "vue", "strategie", "remplacer_par", "inutiles", "exclure", "liste", "proprietes"}, {"objets"}},
-        {A::Duplicate, {"objets", "noms", "dx", "dy", "copies", "reperes"}, {"objets"}},
-        {A::Code, {"code"}, {"code"}},
+        {A::Duplicate, {"objets", "noms", "dx", "dy", "copies", "reperes", "vue"}, {"objets"}},
+        {A::Code, {"code", "vue"}, {"code"}},
         // 1.16.0 : la vue neuve, les variables, les types IHM.
         {A::View, {"nom", "proprietes", "parametres", "generiques", "description"}, {"nom"}},
         {A::Variables, {"variables"}, {"variables"}},

@@ -2,6 +2,7 @@
 //  app/ai/AiPanel.cpp - voir AiPanel.hpp
 // =============================================================================
 #include "AiPanel.hpp"
+#include "AiDelete.hpp"   // 1.21.0 : la confirmation des suppressions
 
 #include "AiMarkdown.hpp"
 #include "AiPlanStrip.hpp"
@@ -1095,18 +1096,18 @@ bool AiPanel::applyProposal(int message) {
         return false;   // la reponse viendra
     }
     if (ck.confirmRemoval && ui_.showDialog) {
+        // 1.21.0 : la confirmation dit ce qui part vraiment (des objets de la vue, ou des elements du projet : AiDelete).
+        const del::Confirmation conf = del::confirmation(ck, *p);
         HmiAskDialog::Spec spec;
         spec.id = "dialog.ai.confirmer";
-        spec.title = "Supprimer " + std::to_string(ck.remove) + " objets";
-        spec.text = "L'Assistant propose de supprimer " + std::to_string(ck.remove) + " objets de la vue \xC2\xAB " + p->view
-                    + " \xC2\xBB. Une suppression multiple se confirme.\nCtrl+Z la reprend d'un coup.";
-        spec.listTitle = "Objets supprim\xC3\xA9s";
-        for (const auto& it : ck.items)
-            if (it.what == Item::What::Remove) spec.items.push_back({it.name, std::string(hmi::kindLabel(it.kind)), true});
+        spec.title = conf.title;
+        spec.text = conf.text;
+        spec.listTitle = ck.projectRemovals > 0 ? "Ce qui part" : "Objets supprim\xC3\xA9s";
+        for (const auto& [name, detail] : conf.items) spec.items.push_back({name, detail, true});
         spec.plainItems = true;
-        spec.confirm = "Supprimer les " + std::to_string(ck.remove) + " objets";
+        spec.confirm = conf.confirm;
         spec.danger = true;
-        spec.width = 560.f;
+        spec.width = 620.f;
         ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [doApply](const menu::DialogResult& r) {
             if (r.accepted()) (void)doApply();
         });
