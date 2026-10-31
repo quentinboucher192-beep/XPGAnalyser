@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.20.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.1", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.20.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.19.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.18.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans l'apr\xC3\xA8s-midi"},
     {"1.17.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 en fin de matin\xC3\xA9" "e"},
@@ -147,6 +148,22 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.20.1 : ce que la 1.20.0 laissait au premier plan, et le texte exact des pieces jointes
+        note("1.20.1", "Assistant IA", Kind::Fixed,
+         "APPLIQUER ET PR\xC3\x89VISUALISER UNE GROSSE PROPOSITION NE BLOQUENT PLUS L'APPLI : \xC3\xA0 partir de 40 op\xC3\xA9rations, "
+         "Appliquer construit le projet modifi\xC3\xA9 sur un fil de fond - la carte dit \xC2\xAB Application\xE2\x80\xA6 \xC2\xBB avec une barre "
+         "d'avancement, tu continues \xC3\xA0 travailler ; le projet n'est remplac\xC3\xA9 qu'\xC3\xA0 la fin, en un seul Ctrl+Z. Si tu as modifi\xC3\xA9 "
+         "le projet entre-temps, rien n'est \xC3\xA9" "cras\xC3\xA9 : la carte le dit et propose de recommencer. La Pr\xC3\xA9visualisation "
+         "attend la v\xC3\xA9rification de fond (sa barre, en %) au lieu de tout recalculer \xC3\xA0 l'ouverture, et Appliquer y reste "
+         "gris\xC3\xA9 jusqu'au r\xC3\xA9sultat.",
+         "assistant-ia-plan", ""),
+        note("1.20.1", "Assistant IA", Kind::New,
+         "LE TEXTE EXACT D'UNE PI\xC3\x88" "CE JOINTE, \xC3\x80 LA DEMANDE : quand un fichier texte ne tient pas entier dans la fen\xC3\xAAtre "
+         "du mod\xC3\xA8le, l'IA n'en a plus seulement un extrait - elle peut demander les lignes exactes dont elle a besoin "
+         "(\xC2\xAB Lecture exacte de mesures.csv : lignes 5000 \xC3\xA0 5001\xE2\x80\xA6 \xC2\xBB). La r\xC3\xA9ponse est faite sur ce PC, dans la "
+         "m\xC3\xAAme demande, sans lecture pr\xC3\xA9" "alable de plus : 8 lectures au plus, dans la place qui reste dans la fen\xC3\xAAtre "
+         "(au-del\xC3\xA0, c'est dit, rien n'est invent\xC3\xA9). Avec Claude et les services compatibles OpenAI qui acceptent les outils.",
+         "assistant-ia", ""),
         // 1.20.0 : l'enregistrement intelligent et l'analyse IA des incidents
         note("1.20.0", "Incidents", Kind::New,
          "UN DOSSIER D'INCIDENT \xC3\x80 CHAQUE D\xC3\x89" "FAUT, SANS GESTE : en simulation IHM et au poste d'exploitation, une alarme qui "
