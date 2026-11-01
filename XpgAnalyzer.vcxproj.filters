@@ -964,6 +964,9 @@
     <ClCompile Include="src\app\FileFinderPane.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiActivity.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiAgentTools.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
@@ -2673,6 +2676,9 @@
     </ClInclude>
     <ClInclude Include="src\app\FileFinderPane.hpp">
       <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiActivity.hpp">
+      <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiAgentTools.hpp">
       <Filter>app\ai</Filter>

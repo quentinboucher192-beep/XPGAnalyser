@@ -73,6 +73,9 @@ struct LimitState {
     long long      conversation{0}; // les jetons de la conversation ouverte
     int            contextWindow{0};// la fenetre du modele (0 : inconnue)
     long long      contextUsed{0};  // le contexte de la derniere demande (ses jetons d'entree)
+    // 1.22.6 (a la fin) : une reponse en cours compte deja dans la conversation et la journee, dont une part ESTIMEE (sa sortie
+    // d'apres le texte recu, avant que le service ne la dise) : la bande ecrit << env. >>.
+    bool           estimate{false};
 };
 
 // La bande du panneau : de une a trois lignes (chacune en deux longueurs : la longue si elle

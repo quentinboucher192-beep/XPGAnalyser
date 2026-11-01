@@ -42,6 +42,7 @@
 // =============================================================================
 #pragma once
 
+#include "AiActivity.hpp"   // 1.22.6 : ce que fait l'IA en direct, le bilan par action
 #include "AiAnthropic.hpp"
 #include "AiDemo.hpp"
 #include "AiLearning.hpp"
@@ -511,6 +512,20 @@ public:
     // Le service est sur ce PC (Ollama, LM Studio, le reseau de l'usine) : pas de limite.
     [[nodiscard]] bool localService() const;
 
+    // ---- 1.22.6 : CE QUE FAIT L'IA, EN DIRECT, ET CE QUE CA COUTE (AiActivity.hpp) ---------------------------------------
+    // LA LIGNE D'ACTIVITE a l'instant `now` (la seconde de l'application) : pendant la reponse d'un fournisseur par le reseau,
+    // ce qui se passe (l'envoi, la reflexion, l'ecriture, l'operation qui s'ecrit, un outil repondu sur ce PC, une attente du
+    // service), le contexte (l'etape de mission servie, la correction automatique) et les dernieres etapes ; apres elle, sous
+    // la derniere reponse de la conversation ouverte, la verification de fond de sa proposition, Generer et Compiler, son
+    // application de fond, une correction qui attend. Vide : rien en cours. Le panneau la relit au plus kRefresh fois par seconde.
+    [[nodiscard]] activity::Snapshot activity(double now) const;
+    // LE BILAN de la reponse en cours (ses appels au service, le reel et les estimations) ; vide : aucune.
+    [[nodiscard]] activity::Bill liveBill(double now) const;
+    // Le bilan garde avec la reponse `message` de la conversation ouverte (Message::extra << bilan >>) ; nul : aucun.
+    [[nodiscard]] std::optional<activity::Bill> billOf(int message) const;
+    // La seconde du dernier tick (l'horloge de l'Assistant ; les essais la donnent).
+    [[nodiscard]] double lastTick() const noexcept { return lastNow_; }
+
 private:
     Conversation* cur() noexcept;
     bool          applyWith(int message, std::string* why, bool ignoringErrors);   // 1.16.1
@@ -610,6 +625,8 @@ private:
         int                     fixN{0};
         std::string             fixWho;       // "Compiler", "G\xC3\xA9n\xC3\xA9rer", "G\xC3\xA9n\xC3\xA9rer et Compiler"
         int                     fixErrors{0};
+        // 1.22.6 : ce que fait l'IA (les evenements du fournisseur, a l'instant) et ce que coutent ses appels.
+        activity::Tracker       act;
     };
 
     Host                      host_;
@@ -682,6 +699,7 @@ private:
         std::atomic<bool>                   finished{false};
         Check                               result;
         std::thread                         worker;
+        double                              started{0};   // 1.22.6 : la seconde de son depart (l'activite)
     };
     std::vector<std::shared_ptr<CheckJob>> checkJobs_;
     struct KnownCheck {
@@ -698,6 +716,7 @@ private:
         std::atomic<bool>                   finished{false};
         build::Verdict                      result;
         std::thread                         worker;
+        double                              started{0};   // 1.22.6 : la seconde de son depart (l'activite)
     };
     std::vector<std::shared_ptr<BuildJob>> buildJobs_;
     std::uint64_t                          verdictRev_{0};
@@ -816,6 +835,14 @@ private:
     [[nodiscard]] std::string              capKey() const;
     std::string                            noTools_;
     std::string                            modelsProvider_;
+    // 1.22.6 : L'ACTIVITE ET LE BILAN (AiActivity.hpp) - le suivi de la reponse qui commence (son contexte : la mission, la
+    // correction ; `contextGuess` : env. les jetons envoyes) ; a sa fin (finie, en erreur, arretee), son bilan garde avec le
+    // message et ses etapes gardees pour la ligne qui suit (la verification, Generer et Compiler de sa proposition).
+    void                                   startActivity(long long contextGuess);
+    void                                   keepBill(Message& m, bool proposed);
+    activity::Tracker                      lastAct_;
+    std::string                            lastActConv_;
+    int                                    lastActMsg_{-1};
 };
 
 [[nodiscard]] std::string_view phaseLabel(Assistant::Phase) noexcept;   // "En attente", "R\xC3\xA9" "flexion"...

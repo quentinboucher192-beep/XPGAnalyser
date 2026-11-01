@@ -214,6 +214,7 @@ std::vector<std::string> wrapPlainLine(const std::string& text, gfx::FontId f, f
 // Les boutons d'une carte, de gauche a droite, a la ligne quand ils ne tiennent pas (le bord
 // droit de la carte n'est jamais depasse : "Refuser" a 1280 x 800).
 constexpr float kBtnH = 28.f, kBtnGap = 6.f, kNoteH = 18.f;
+constexpr float kActRow = 22.f;   // 1.22.6 : la ligne d'activite et son trait
 constexpr const char* kDetectText = "D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6";   // 1.18.0
 constexpr const char* kNextText = "Proposer la suite";   // 1.21.3
 constexpr std::size_t kNoteLines = 4;   // les lignes d'une note, au plus (le reste : l'apercu)
@@ -2385,6 +2386,10 @@ std::string AiPanel::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, m
 
 // 1.16.0 : ce que dit la bande de la limite, a l'instant `now` ; la mise en page suit si le texte change.
 void AiPanel::refreshBand(double now) {
+    // 1.22.6 : pendant une reponse, les compteurs bougent a chaque morceau recu : la bande est refaite quatre fois par seconde
+    // au plus (l'onglet Performances mesure le panneau).
+    if (assistant_->generating() && now >= bandAt_ && now - bandAt_ < activity::kRefresh) return;
+    bandAt_ = now;
     band_ = assistant_->usageBand(now);
     std::string key = std::to_string(band_.level) + "|" + std::to_string(band_.ratio) + "|";
     for (const auto& l : band_.lines) key += l + "\n";
@@ -2972,6 +2977,25 @@ void AiChatView::measure() {
     float y = 10.f;
     const int generating = a.generatingMessage();
     const float meta = ui::lineHeight(kMeta) + 4.f;
+    // 1.22.6 : CE QUE FAIT L'IA (la ligne, son contexte, les etapes passees) et LE BILAN d'une reponse (sa ligne, son detail
+    // deplie : une ligne par appel, coupee a la largeur - le nombre de lignes ne bouge pas quand les chiffres changent).
+    const activity::Snapshot& act = activityNow(true);
+    const auto placeActivity = [&](Block& b) {
+        b.actY = b.h;
+        b.actContext = !act.context.empty();
+        b.actRows = std::clamp<std::size_t>(wrapPlain(act.line, kMeta, inner - 28.f).size(), 1, 2);
+        b.actHistory = historyOpen_ ? act.history.size() : 0;
+        b.h += (b.actContext ? kNoteH : 0.f) + kActRow + static_cast<float>(b.actRows - 1) * kNoteH + static_cast<float>(b.actHistory) * kNoteH + 4.f;
+    };
+    const auto placeBill = [&](Block& b, const activity::Bill& bill, bool liveOne) {
+        b.billY = b.h + 2.f;
+        b.billText = (liveOne ? std::string("Cette r\xC3\xA9ponse : ") : std::string{}) + activity::billLine(bill);
+        b.h += kNoteH + 6.f;
+        if (billOpen(b.message)) {
+            b.billLines = activity::billDetail(bill);
+            b.h += static_cast<float>(b.billLines.size()) * kNoteH + 2.f;
+        }
+    };
     if (conv) {
         for (std::size_t i = 0; i < conv->messages.size(); ++i) {
             const auto& m = conv->messages[i];
@@ -3005,8 +3029,14 @@ void AiChatView::measure() {
                 b.h = meta + th + 4.f;
                 if (live) {   // l'indicateur, et ce qu'il dit en plus (une nouvelle tentative)
                     b.h += 26.f;
-                    if (!a.statusDetail().empty())
+                    // 1.22.6 : la ligne d'activite dit deja la lecture, l'outil, la longueur : l'etat en plus reste pour la cause
+                    // d'une nouvelle tentative.
+                    const bool here = !act.empty() && act.message == static_cast<int>(i);
+                    b.showDetail = !a.statusDetail().empty() && (!here || act.keepDetail);
+                    if (b.showDetail)
                         b.h += static_cast<float>(std::min<std::size_t>(3, wrapPlain(a.statusDetail(), kMeta, inner - 30.f).size())) * kNoteH + 2.f;
+                    if (here) placeActivity(b);
+                    if (!liveBill_.empty()) placeBill(b, liveBill_, true);
                 }
                 // 1.15.0 : la note du logiciel (une erreur, une reponse coupee, une entree illisible).
                 if (!live && !m.note.empty()) {
@@ -3015,6 +3045,8 @@ void AiChatView::measure() {
                     b.noteY = b.h + 2.f;
                     b.h += static_cast<float>(b.noteLines.size()) * kNoteH + 6.f;
                 }
+                // 1.22.6 : apres la reponse, le travail de fond sur sa proposition (la verification, Generer et Compiler).
+                if (!live && !act.empty() && act.message == static_cast<int>(i)) placeActivity(b);
                 if (!live && m.proposal) {
                     // Une carte close (appliquee, refusee) n'a plus d'apercu : la vue a change depuis.
                     const bool open = m.proposal->state == "proposee";
@@ -3237,6 +3269,9 @@ void AiChatView::measure() {
                     b.card = {kPad + 2.f, b.h + 6.f, cw, ch};
                     b.h += ch + 10.f;
                 }
+                // 1.22.6 : LE BILAN de la reponse (garde avec elle) - sa ligne, son << + >>.
+                if (!live)
+                    if (const auto bill = a.billOf(static_cast<int>(i))) placeBill(b, *bill, false);
                 // 1.15.0 : Reessayer, sous le dernier message (une erreur, un arret).
                 if (!live && i + 1 == conv->messages.size() && a.canRetry()) {
                     b.retryY = b.h + 4.f;
@@ -3502,7 +3537,7 @@ std::vector<std::string> AiChatView::renderedLines(int message) const {
 }
 
 void AiChatView::onLayout() {
-    if (bounds().w != measuredW_) {
+    if (bounds().w != measuredW_ || std::exchange(actRemeasure_, false)) {   // 1.22.6 : la ligne d'activite demande une rangee de plus
         measure();
         if (anchored_) anchor_ = true;   // la largeur a change depuis le placement : le refaire
     }
@@ -3574,6 +3609,183 @@ void AiChatView::placeCards() {
             btn->setVisibility(inside ? ui::Visibility::Visible : ui::Visibility::Hidden);
         }
     }
+}
+
+// ---- 1.22.6 : CE QUE FAIT L'IA, EN DIRECT, ET CE QUE CA COUTE (Assistant::activity, AiActivity.hpp) ---------------------
+//  La ligne est relue au plus quatre fois par seconde (kRefresh) : son texte bouge (le compteur, le temps), un trait fin avance
+//  dessous ; les etapes passees, en gris, se replient d'un clic sur l'icone. Le bilan : une ligne et son << + >>.
+const activity::Snapshot& AiChatView::activityNow(bool fresh) const {
+    const auto& a = panel_.assistant();
+    const double now = a.lastTick();
+    if (fresh || now - actAt_ >= activity::kRefresh || now < actAt_) {
+        act_ = a.activity(now);
+        liveBill_ = a.liveBill(now);
+        actAt_ = now;
+    }
+    return act_;
+}
+
+void AiChatView::paintActivity(const ui::PaintContext& ctx, const Block& b, float top) {
+    const auto& c = ctx.theme.color;
+    const auto bb = bounds();
+    const activity::Snapshot& act = activityNow(false);
+    if (act.empty() || act.message != b.message) return;   // finie depuis la mise en page : la prochaine la retire
+    const float tx = bb.x + kPad + 4.f;
+    const float width = std::max(80.f, bb.w - 2 * kPad - 12.f) - 28.f;
+    const float lh = ctx.r.lineHeight(kMeta);
+    float y = top + b.actY;
+    if (b.actContext) {
+        ctx.r.drawText({tx + 20.f, y}, elideTip(ctx.r, act.context, kMeta, width, {tx + 20.f, y, width, kNoteH}, tips_), kMeta, c.accent);
+        y += kNoteH;
+    }
+    historySpot_ = {tx - 2.f, y, 20.f, kActRow};
+    ui::drawIcon(ctx.r, ui::Icon::History, {tx, y + (lh - 14.f) / 2.f + 1.f, 14.f, 14.f}, act.history.empty() ? alpha(c.textMuted, 110) : c.textMuted);
+    tips_.emplace_back(historySpot_, historyOpen_ ? std::string("Replier les \xC3\xA9tapes pass\xC3\xA9" "es")
+                                                  : std::string("Montrer les derni\xC3\xA8res \xC3\xA9tapes et leur dur\xC3\xA9" "e"));
+    // La ligne, a la ligne sur deux rangees au plus (l'operation en cours, le classeur lu : la fin compte) ; une rangee de plus
+    // que la mise en page n'en a prevu : elle est refaite (la prochaine image), coupee d'ici la.
+    std::vector<std::string> rows = wrapPlain(act.line, kMeta, width);
+    if (rows.empty()) rows.push_back(act.line);
+    if (rows.size() > b.actRows && b.actRows < 2 && !actRemeasure_ && actRemeasureAt_ != actAt_) {   // une fois par lecture de la ligne
+        actRemeasure_ = true;
+        actRemeasureAt_ = actAt_;
+        invalidateLayout();
+    }
+    if (rows.size() > b.actRows) {
+        std::string rest;
+        for (std::size_t k = b.actRows - 1; k < rows.size(); ++k) rest += (rest.empty() ? std::string{} : std::string(" ")) + rows[k];
+        rows.resize(b.actRows);
+        rows.back() = rest;
+    }
+    for (std::size_t k = 0; k < rows.size(); ++k) {
+        const float ry = y + 1.f + static_cast<float>(k) * kNoteH;
+        ctx.r.drawText({tx + 20.f, ry}, k + 1 == rows.size() ? elideTip(ctx.r, rows[k], kMeta, width, {tx + 20.f, ry, width, kNoteH}, tips_) : rows[k], kMeta, c.text);
+    }
+    y += static_cast<float>(rows.size() - 1) * kNoteH;
+    // Le trait qui avance (doucement) sous la ligne : un travail en cours.
+    const gfx::Rect track{tx + 20.f, y + lh + 4.f, std::min(width, 240.f), 2.f};
+    ctx.r.fillRect(track, alpha(c.accent, 26));
+    if (act.working) {
+        const float seg = track.w * 0.3f;
+        const float at = track.x - seg + static_cast<float>(std::fmod(std::max(0.0, ctx.time) * 0.45, 1.0)) * (track.w + seg);
+        const float x0 = std::max(track.x, at), x1 = std::min(track.right(), at + seg);
+        if (x1 > x0) ctx.r.fillRect({x0, track.y, x1 - x0, track.h}, alpha(c.accent, 120));
+    }
+    y += kActRow;
+    const std::size_t n = std::min(b.actHistory, act.history.size());
+    for (std::size_t k = 0; k < n; ++k) {
+        const auto& st = act.history[k];
+        const std::string t = "\xE2\x9C\x93 " + st.text + " \xC2\xB7 " + activity::shortDuration(st.seconds);
+        ctx.r.drawText({tx + 20.f, y}, elideTip(ctx.r, t, kMeta, width, {tx + 20.f, y, width, kNoteH}, tips_), kMeta, alpha(c.textMuted, 210));
+        y += kNoteH;
+    }
+}
+
+void AiChatView::paintBill(const ui::PaintContext& ctx, const Block& b, float top) {
+    const auto& c = ctx.theme.color;
+    const auto& a = panel_.assistant();
+    const auto bb = bounds();
+    const float tx = bb.x + kPad + 4.f;
+    const float width = std::max(80.f, bb.w - 2 * kPad - 12.f) - 8.f;
+    const float lh = ctx.r.lineHeight(kMeta);
+    // La reponse en cours : ses chiffres relus avec l'activite (quatre fois par seconde au plus) ; le nombre de lignes, celui
+    // de la mise en page.
+    const bool live = b.message == a.generatingMessage();
+    std::string text = b.billText;
+    std::vector<std::string> lines = b.billLines;
+    if (live) {
+        (void)activityNow(false);
+        if (!liveBill_.empty()) {
+            text = "Cette r\xC3\xA9ponse : " + activity::billLine(liveBill_);
+            if (!lines.empty()) {
+                auto fresh = activity::billDetail(liveBill_);
+                fresh.resize(lines.size());
+                lines = std::move(fresh);
+            }
+        }
+    }
+    const float y = top + b.billY;
+    const std::string shown = elide(ctx.r, text, kMeta, width - 34.f);
+    ctx.r.drawText({tx, y}, shown, kMeta, c.textMuted);
+    const bool open = billOpen(b.message);
+    const gfx::Rect pill{tx + ctx.r.measure(shown, kMeta).width + 8.f, y - 1.f, 22.f, lh + 2.f};
+    ctx.r.fillRoundedRect(pill, alpha(c.accent, open ? 64 : 36), 4.f);
+    const std::string sign = open ? "\xE2\x80\x93" : "+";
+    ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(sign, kMeta).width) / 2.f, pill.y + 1.f}, sign, kMeta, c.accent);
+    billSpots_.emplace_back(pill, b.message);
+    tips_.emplace_back(pill, open ? std::string("Replier le d\xC3\xA9tail")
+                                  : std::string("Le d\xC3\xA9tail par action : chaque appel au service, ses jetons (entr\xC3\xA9" "e, cache, sortie, "
+                                                "r\xC3\xA9" "flexion) et sa dur\xC3\xA9" "e. Le logiciel ne conna\xC3\xAEt pas le prix du mod\xC3\xA8le : "
+                                                "les jetons seulement ; env. : une estimation, remplac\xC3\xA9" "e par le compte du service."));
+    float ly = y + kNoteH + 2.f;
+    for (const auto& l : lines) {
+        ctx.r.drawText({tx + 12.f, ly}, elideTip(ctx.r, l, kMeta, width - 12.f, {tx + 12.f, ly, width - 12.f, kNoteH}, tips_), kMeta,
+                       l.rfind("Total", 0) == 0 ? c.text : c.textMuted);
+        ly += kNoteH;
+    }
+}
+
+std::string AiChatView::billKey(int message) const {
+    const auto* conv = panel_.assistant().current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return {};
+    return conv->id + "|" + conv->messages[static_cast<std::size_t>(message)].id;
+}
+
+bool AiChatView::billOpen(int message) const {
+    const std::string k = billKey(message);
+    return !k.empty() && billOpen_.count(k) > 0;
+}
+
+void AiChatView::setBillOpen(int message, bool open) {
+    const std::string k = billKey(message);
+    if (k.empty()) return;
+    if (open) billOpen_.insert(k);
+    else billOpen_.erase(k);
+    stick_ = false;
+    measure();
+    placeCards();
+    invalidate();
+}
+
+void AiChatView::setActivityHistoryOpen(bool open) {
+    if (historyOpen_ == open) return;
+    historyOpen_ = open;
+    measure();
+    placeCards();
+    invalidate();
+}
+
+std::vector<std::string> AiChatView::activityLines() const {
+    std::vector<std::string> out;
+    const activity::Snapshot& act = activityNow(false);
+    if (act.empty()) return out;
+    if (!act.context.empty()) out.push_back(act.context);
+    out.push_back(act.line);
+    if (historyOpen_)
+        for (const auto& st : act.history) out.push_back("\xE2\x9C\x93 " + st.text + " \xC2\xB7 " + activity::shortDuration(st.seconds));
+    return out;
+}
+
+std::string AiChatView::billText(int message) const {
+    if (message >= 0 && message == panel_.assistant().generatingMessage()) {
+        (void)activityNow(false);
+        return liveBill_.empty() ? std::string{} : "Cette r\xC3\xA9ponse : " + activity::billLine(liveBill_);
+    }
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.billText;
+    return {};
+}
+
+std::vector<std::string> AiChatView::billDetailLines(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.billLines;
+    return {};
+}
+
+gfx::Rect AiChatView::billRect(int message) const {
+    for (const auto& [at, m] : billSpots_)
+        if (m == message) return at;
+    return {};
 }
 
 void AiChatView::paintIndicator(const ui::PaintContext& ctx, gfx::Rect at) {
@@ -3900,6 +4112,8 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
     tips_.clear();
     copySpots_.clear();
     noteSpots_.clear();   // 1.22.1
+    billSpots_.clear();   // 1.22.6
+    historySpot_ = {};
     const auto& a = panel_.assistant();
     const auto* conv = a.current();
     ctx.r.pushClip(bb);
@@ -4014,7 +4228,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             }
             paintIndicator(ctx, {tx, ly + 2.f, bb.w - 2 * kPad, 22.f});
             // 1.15.0 : une nouvelle tentative (la cause, l'attente), sous l'indicateur.
-            if (!a.statusDetail().empty()) {
+            if (b.showDetail && !a.statusDetail().empty()) {
                 auto lines = wrapPlain(a.statusDetail(), kMeta, std::max(80.f, bb.w - 2 * kPad - 12.f) - 30.f);
                 if (lines.size() > 3) lines.resize(3);
                 float dy = ly + 28.f;
@@ -4025,6 +4239,9 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
                 }
             }
         }
+        // 1.22.6 : ce que fait l'IA (sous l'indicateur, ou sous la reponse dont la proposition se verifie), le bilan.
+        if (b.actY > 0.f) paintActivity(ctx, b, top);
+        if (b.billY > 0.f) paintBill(ctx, b, top);
         // 1.15.0 : la note du logiciel (une erreur : en rouge ; une reponse coupee, refusee : en gris).
         if (!b.noteLines.empty()) {
             float ny = top + b.noteY;
@@ -4220,6 +4437,16 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 (void)copyCode(code);
                 return ui::EventResult::Consumed;
             }
+        // 1.22.6 : le << + >> d'un bilan (le detail par action) ; l'icone de l'activite (les etapes passees).
+        for (const auto& [at, message] : billSpots_)
+            if (at.contains(d->pos)) {
+                setBillOpen(message, !billOpen(message));
+                return ui::EventResult::Consumed;
+            }
+        if (historySpot_.w > 0.f && historySpot_.contains(d->pos)) {
+            setActivityHistoryOpen(!historyOpen_);
+            return ui::EventResult::Consumed;
+        }
         // 1.22.5 : le processus de developpement - l'en-tete le deplie (ou le replie) ; un constat ouvre la previsualisation.
         for (const auto& b : blocks_) {
             if (b.procY <= 0.f) continue;

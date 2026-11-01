@@ -440,17 +440,18 @@ UsageBand usageBand(const Settings& s, const LimitState& st, const UsageTotals& 
     const bool month = s.budgetPeriod == "mois";
     const long long used = month ? t.tokensMonth : t.tokensToday;
     if (st.conversation > 0 || t.tokensToday > 0 || t.tokensMonth > 0 || s.budgetTokens > 0) {
-        std::string l2 = "Cette conversation : " + tokensText(st.conversation) + " jetons";
-        std::string s2 = "Conv. " + tokensText(st.conversation);
+        const std::string env = st.estimate ? "env. " : "";   // 1.22.6 : une reponse en cours, sa sortie estimee
+        std::string l2 = "Cette conversation : " + env + tokensText(st.conversation) + " jetons";
+        std::string s2 = "Conv. " + env + tokensText(st.conversation);
         const std::string period = month ? "ce mois" : "aujourd'hui";
         if (s.budgetTokens > 0) {
-            l2 += " \xC2\xB7 " + period + " " + tokensText(used) + " / " + tokensText(s.budgetTokens);
-            s2 += " \xC2\xB7 " + tokensText(used) + " / " + tokensText(s.budgetTokens);
+            l2 += " \xC2\xB7 " + period + " " + env + tokensText(used) + " / " + tokensText(s.budgetTokens);
+            s2 += " \xC2\xB7 " + env + tokensText(used) + " / " + tokensText(s.budgetTokens);
             b.ratio = static_cast<double>(used) / static_cast<double>(s.budgetTokens);
             b.level = b.ratio >= 1.0 ? 2 : b.ratio >= 0.8 ? 1 : 0;
         } else {
-            l2 += " \xC2\xB7 aujourd'hui " + tokensText(t.tokensToday);
-            s2 += " \xC2\xB7 auj. " + tokensText(t.tokensToday);
+            l2 += " \xC2\xB7 aujourd'hui " + env + tokensText(t.tokensToday);
+            s2 += " \xC2\xB7 auj. " + env + tokensText(t.tokensToday);
         }
         b.lines.push_back(l2);
         b.shortLines.push_back(s2);
@@ -490,6 +491,9 @@ UsageBand usageBand(const Settings& s, const LimitState& st, const UsageTotals& 
     if (st.contextWindow > 0)
         tip += "\nFen\xC3\xAAtre de contexte du mod\xC3\xA8le : " + thousands(st.contextWindow) + " jetons"
                + (st.contextUsed > 0 ? " ; la derni\xC3\xA8re demande en a utilis\xC3\xA9 " + thousands(st.contextUsed) : std::string{}) + ".";
+    if (st.estimate)   // 1.22.6
+        tip += "\nUne r\xC3\xA9ponse est en cours : elle compte d\xC3\xA9j\xC3\xA0, dont une part estim\xC3\xA9" "e (env.) d'apr\xC3\xA8s le texte re\xC3\xA7u ; "
+               "le service donne le compte exact \xC3\xA0 la fin de chaque appel.";
     tip += "\nLes jetons sont ceux que le service compte ; leur cumul est gard\xC3\xA9 dans IA/usage.json (jamais la demande ni la cl\xC3\xA9).";
     b.tooltip = std::move(tip);
     return b;

@@ -546,11 +546,14 @@ void OpenAIStream::handle(const std::string& data) {
         nu.input = prompt - cached;
         nu.cacheRead = cached;
         nu.output = u.integer("completion_tokens");
-        if (!nu.empty() && (nu.input != usage_.input || nu.output != usage_.output || nu.cacheRead != usage_.cacheRead)) {
+        // 1.22.6 : dont la reflexion, quand le service la compte a part
+        nu.reasoning = std::clamp<long long>(u.at("completion_tokens_details").integer("reasoning_tokens"), 0, std::max(0LL, nu.output));
+        if (!nu.empty() && (nu.input != usage_.input || nu.output != usage_.output || nu.cacheRead != usage_.cacheRead || nu.reasoning != usage_.reasoning)) {
             usage_ = nu;
             ProviderEvent ue;
             ue.type = ProviderEvent::Type::Usage;
             ue.usage = usage_;
+            ue.text = "fin";   // 1.22.6 : l'usage d'un compatible OpenAI arrive avec le dernier morceau
             out_.push_back(std::move(ue));
         }
     }
@@ -559,7 +562,16 @@ void OpenAIStream::handle(const std::string& data) {
     const auto& c = choices.items().front();
     const auto& delta = c.at("delta");
     if (delta.isObject()) {
-        if (delta.at("reasoning").isString() || delta.at("reasoning_content").isString()) status("reflexion");
+        if (delta.at("reasoning").isString() || delta.at("reasoning_content").isString()) {
+            status("reflexion");
+            // 1.22.6 : la longueur de la reflexion recue (le compteur de l'activite) - jamais son texte.
+            const std::size_t n = delta.at("reasoning").asString().size() + delta.at("reasoning_content").asString().size();
+            ProviderEvent pe;
+            pe.type = ProviderEvent::Type::Progress;
+            pe.text = "reflexion";
+            pe.amount = static_cast<long long>(n);
+            out_.push_back(std::move(pe));
+        }
         if (const auto& t = delta.at("content"); t.isString() && !t.asString().empty()) {
             status("ecriture");
             text_ += t.asString();
@@ -578,8 +590,18 @@ void OpenAIStream::handle(const std::string& data) {
                 const auto& fn = tc.at("function");
                 if (const std::string name = fn.str("name"); !name.empty()) call.name = name;
                 const auto& args = fn.at("arguments");
+                const std::size_t had = call.args.size();
                 if (args.isString()) call.args += args.asString();
                 else if (args.isObject()) call.args += json::write(args, false);   // certains services : deja un objet
+                // 1.22.6 : l'entree de l'appel, lue pendant qu'elle s'ecrit (l'activite)
+                ProviderEvent pe;
+                pe.type = ProviderEvent::Type::Progress;
+                pe.text = "entree";
+                pe.toolName = call.name;
+                pe.toolUseId = call.id.empty() ? "appel-" + std::to_string(index) : call.id;
+                pe.toolInputJson = call.args.substr(had);
+                pe.amount = static_cast<long long>(pe.toolInputJson.size());
+                out_.push_back(std::move(pe));
             }
         }
     }
@@ -796,7 +818,9 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
             if (request.localTools[i].name == name) return static_cast<int>(i);
         return -1;
     };
+    int callNo = 0;   // 1.22.6 : le rang de l'appel au service (un outil repondu ici, puis la suite : un appel de plus)
     const auto route = [&](ProviderEvent e) {
+        e.call = callNo;
         if ((library.active() || !request.localTools.empty()) && withTools) {
             const bool isRead = library.active() && e.toolName == textparts::kReadTool;
             if (e.type == ProviderEvent::Type::ToolUse && (isRead || localIndex(e.toolName) >= 0)) {
@@ -859,6 +883,15 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
                 // 1.21.0 : ou un outil local (le bac a sable) : sa reponse, de meme.
                 std::string result;
+                {   // 1.22.6 : l'outil repondu ici commence (l'activite)
+                    ProviderEvent pe;
+                    pe.type = ProviderEvent::Type::Progress;
+                    pe.text = "outil";
+                    pe.toolName = readCall->toolName;
+                    pe.toolInputJson = readCall->toolInputJson;
+                    pe.call = callNo;
+                    push(std::move(pe));
+                }
                 if (const int li = localIndex(readCall->toolName); li >= 0) {
                     const LocalTool& tool = request.localTools[static_cast<std::size_t>(li)];
                     ++localCalls[static_cast<std::size_t>(li)];
@@ -882,6 +915,14 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 u.toolResultText = result;
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(u));
+                {   // 1.22.6 : la suite part : un nouvel appel au service
+                    ProviderEvent pe;
+                    pe.type = ProviderEvent::Type::Progress;
+                    pe.text = "appel";
+                    pe.toolName = readCall->toolName;
+                    pe.call = ++callNo;
+                    push(std::move(pe));
+                }
                 turnText.clear();
                 readCall.reset();
                 heldDone.reset();
@@ -940,6 +981,15 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
             wait = std::max(wait, asked);
         }
         ++attempt;
+        {   // 1.22.6 : l'attente, en secondes (l'activite : le compte a rebours)
+            ProviderEvent pe;
+            pe.type = ProviderEvent::Type::Progress;
+            pe.text = "attente";
+            pe.seconds = wait;
+            pe.httpStatus = retry->status;
+            pe.call = callNo;
+            push(std::move(pe));
+        }
         push(statusEvent("reprise", retry->text + " Nouvelle tentative (" + std::to_string(attempt) + "/" + std::to_string(opt_.maxRetries) + ") dans "
                                         + secondsText(wait) + "\xE2\x80\xA6"));
         if (!waitFor(wait)) return finish(doneEvent("arrete"));

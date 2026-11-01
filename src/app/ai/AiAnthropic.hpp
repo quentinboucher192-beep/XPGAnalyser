@@ -98,6 +98,9 @@ struct AttachmentPlan {
 // Le corps JSON de POST /v1/messages (il lit les pieces jointes sur le disque). `notes` :
 // celles qui ne sont pas parties entieres, en francais.
 [[nodiscard]] std::string anthropicBody(const ProviderRequest&, std::vector<std::string>* notes = nullptr);
+// 1.22.6 : les outils de la demande (un tableau JSON), chacun avec "eager_input_streaming": true - le service envoie leur
+// entree pendant qu'elle s'ecrit (la ligne d'activite la lit) ; un outil du service (un "type") ou un JSON illisible : tel quel.
+[[nodiscard]] std::string eagerTools(std::string_view toolsJson);
 
 // ---- les erreurs -----------------------------------------------------------------------
 struct ApiError {
@@ -152,6 +155,7 @@ public:
         double factor{3.0};
         double maxRetryAfter{60.0}; // un retry-after plus long : pas de nouvelle tentative, le dire
         int    connectTimeout{20};
+        bool   eagerInput{true};    // 1.22.6 : l'entree des outils en direct (eagerTools) ; refusee par le service : sans
     };
     AnthropicProvider();
     explicit AnthropicProvider(Options o);

@@ -186,6 +186,7 @@ const char* describe(std::string_view name) {
         {"ia.mission.propositions", "Les cartes des propositions d'une mission (d\xC3\xA9pli\xC3\xA9" "es ou r\xC3\xA9" "duites)."},
         {"ia.mission.fin-forcee", "La fin forc\xC3\xA9" "e d'une mission (ses \xC3\xA9tapes ignor\xC3\xA9" "es, son enregistrement)."},
         {"ia.missions.onglet", "L'onglet Missions IA refait."},
+        {"ia.activite", "Ce que fait l'IA \xC3\xA0 l'instant (la ligne sous la r\xC3\xA9ponse), refaite 4 fois par seconde au plus."},
     };
     for (const auto& d : kDesc)
         if (name == d.name) return d.text;
