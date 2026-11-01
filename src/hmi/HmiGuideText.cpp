@@ -4593,6 +4593,14 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9signation, type, adresse, IP, masque, sens\xE2\x80\xA6) et indique le "
                          "**genre** du fichier avec sa **confiance**, ou le **mod\xC3\xA8le** qu'il a "
                          "reconnu.", {}},
+             {K::Bullet, "1.21.1 : **toutes les feuilles** sont prises en compte. Celles du m\xC3\xAAme "
+                         "genre que la premi\xC3\xA8re (une liste d'E/S en plusieurs feuilles : "
+                         "entr\xC3\xA9" "es TOR, sorties TOR, analogiques\xE2\x80\xA6) sont lues chacune "
+                         "avec sa propre correspondance, m\xC3\xAAme si leurs en-t\xC3\xAAtes "
+                         "diff\xC3\xA8rent ; les autres (sans en-t\xC3\xAAte reconnu, d'un autre genre, "
+                         "masqu\xC3\xA9" "es) sont cit\xC3\xA9" "es, et l'IA connect\xC3\xA9" "e peut les "
+                         "lire une \xC3\xA0 une. Les propositions prennent les lignes de toutes les feuilles "
+                         "lues.", {}},
              {K::Bullet, "Dans **Contexte de la discussion**, le geste **Mod\xC3\xA8le\xE2\x80\xA6** de la "
                          "ligne du fichier ouvre la correspondance des colonnes : corrige-la, choisis un "
                          "mod\xC3\xA8le existant, ou **Enregistre comme mod\xC3\xA8le** pour que les "

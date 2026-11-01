@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.21.0", "31/10/2026", "\xC3\xA0 venir"},
+    {"1.21.1", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 dans la nuit"},
     {"1.20.2", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.0", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
@@ -150,6 +151,15 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.21.1 : toutes les feuilles d'un classeur joint
+        note("1.21.1", "Assistant IA", Kind::Fixed,
+         "UN CLASSEUR \xC3\x80 PLUSIEURS FEUILLES EST LU EN ENTIER : une liste d'entr\xC3\xA9" "es/sorties r\xC3\xA9partie "
+         "en plusieurs feuilles aux en-t\xC3\xAAtes diff\xC3\xA9rents (entr\xC3\xA9" "es TOR, sorties TOR, analogiques...) "
+         "est lue feuille par feuille, chacune avec sa propre correspondance - jusqu'ici, seules les feuilles au m\xC3\xAAme "
+         "en-t\xC3\xAAte que la premi\xC3\xA8re l'\xC3\xA9taient. L'Assistant et l'IA connect\xC3\xA9" "e connaissent toutes "
+         "les feuilles du classeur (lues, sans en-t\xC3\xAAte reconnu, d'un autre genre, masqu\xC3\xA9" "es) et l'IA peut "
+         "lire n'importe laquelle ; les propositions (variables, types) prennent les lignes de toutes les feuilles lues.",
+         "assistant-ia-plan", ""),
         // 1.21.0 : l'IA qui agit (supprimer, essayer dans le bac a sable, la decouverte reseau, l'agent)
         note("1.21.0", "Assistant IA", Kind::New,
          "SUPPRIMER AVEC L'ASSISTANT, SANS CASSER LE PROJET : vues, popups, symboles (la d\xC3\xA9" "finition ou une "

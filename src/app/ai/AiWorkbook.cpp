@@ -1135,6 +1135,7 @@ Detection detect(const Workbook& wb) {
     double bestKey = -1;
     for (std::size_t i = 0; i < wb.sheets.size(); ++i) {
         out.sheets.push_back(detectSheet(wb.sheets[i], i));
+        out.sheets.back().hidden = wb.sheets[i].hidden;
         const auto& d = out.sheets.back();
         // la plus sure d'abord (un genre reconnu passe avant << autre >>), puis la plus longue ; une feuille masquee en dernier
         const double key = (d.genre != Genre::Other ? 10.0 + d.confidence : 0.0) + std::min<double>(static_cast<double>(d.dataRows), 9999.0) / 100000.0

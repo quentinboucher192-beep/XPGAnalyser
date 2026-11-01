@@ -780,6 +780,79 @@ void testAssistant() {
 
 } // namespace
 
+// 1.21.1 : UN CLASSEUR A PLUSIEURS FEUILLES (les entrees TOR, les sorties analogiques a un autre en-tete, une feuille libre,
+// une feuille masquee) - toutes les feuilles du meme genre sont lues, l'IA les connait toutes.
+void testSheets() {
+    std::printf("== 9. toutes les feuilles du classeur (1.21.1) ==\n");
+    useRoot("pc8");
+    const Cells torHeader = {"Rep\xC3\xA8re", "D\xC3\xA9signation", "Type", "Adresse"};
+    const Cells anaHeader = {"Voie", "Adresse", "Signal", "D\xC3\xA9signation", "Rep\xC3\xA8re"};
+    TSheet tor = ioSheet("Entr\xC3\xA9" "es TOR", 2,
+                         {{"DI_ARRET_URG", "Arr\xC3\xAAt d'urgence", "DI", "%I0.1.0"},
+                          {"DI_PORTE", "Porte armoire", "DI", "%I0.1.1"},
+                          {"DI_DEFAUT_VAR", "D\xC3\xA9" "faut variateur", "DI", "%I0.1.2"}},
+                         torHeader);
+    TSheet ana = ioSheet("Sorties Analogiques", 4,
+                         {{"0", "%QW200.5.0", "AO", "Consigne variateur V258", "AO_V258"},
+                          {"1", "%QW200.5.1", "AO", "Consigne variateur V259", "AO_V259"}},
+                         anaHeader);
+    TSheet free;
+    free.name = "vars";
+    free.rows = {{1, {"Notes de l'affaire"}}, {2, {"Ne pas modifier"}}};
+    TSheet old = ioSheet("Archive", 2, {{"DI_ANCIEN", "Ancien capteur", "DI", "%I0.9.0"}}, torHeader);
+    old.hidden = true;
+    const std::string bytes = xlsxOf({tor, ana, free, old});
+    const sh::Workbook wb = wbOf(bytes);
+    const sh::Detection det = sh::detect(wb);
+    check(det.sheets.size() == 4 && det.sheets[0].genre == sh::Genre::IoList && det.sheets[1].genre == sh::Genre::IoList
+              && !det.sheets[2].headerFound && det.sheets[3].hidden,
+          "4 feuilles : deux listes d'E/S aux en-t\xC3\xAAtes differents, une libre, une masquee");
+    // la lecture : les deux feuilles d'E/S, pas la libre ni la masquee
+    const auto readings = sh::readAll(wb, det.chosen()->layout);
+    std::size_t rows = 0;
+    for (const auto& rd : readings) rows += rd.rows.size();
+    check(readings.size() == 2 && rows == 5, "les deux feuilles d'E/S lues (" + std::to_string(readings.size()) + " feuilles, " + std::to_string(rows) + " lignes)");
+    // la piece jointe : l'analyse le dit, et l'Assistant connait les quatre feuilles
+    const fs::path src = writeFile(scratch() / "fichiers" / "ali_luna.xlsx", bytes);
+    ai::Attachment a;
+    std::string why;
+    check(ai::addAttachment(src.string(), a, &why), "joint (" + why + ")");
+    at::adopt(a, "c-feuilles");
+    at::Outcome o = at::analyzeNow(a);
+    bool alsoRead = false, freeSaid = false, hiddenSaid = false;
+    for (const auto& d : o.analysis.details) {
+        alsoRead = alsoRead || has(d, "lues aussi");
+        freeSaid = freeSaid || (has(d, "\xC2\xAB vars \xC2\xBB non lue") && has(d, "aucun en-t\xC3\xAA" "te"));
+        hiddenSaid = hiddenSaid || (has(d, "\xC2\xAB Archive \xC2\xBB non lue") && has(d, "masqu"));
+    }
+    check(has(o.analysis.summary, "5 lignes lues") && alsoRead && freeSaid && hiddenSaid,
+          "l'analyse : 5 lignes lues, les autres feuilles dites (" + o.analysis.summary + ")");
+    check(at::applyOutcome(a, o), "remise a la piece");
+    const sh::Attached f = sh::attachedOf(a, src.string(), o.workbook);
+    std::size_t nRead = 0;
+    for (const auto& si : f.sheets) nRead += si.read ? 1 : 0;
+    check(f.sheets.size() == 4 && nRead == 2 && f.rows == 5 && !f.sheets[2].read && f.sheets[3].hidden && !f.sheets[3].read,
+          "les feuilles de la piece : 4, dont 2 lues (" + std::to_string(nRead) + "), 5 lignes");
+    const std::string block = sh::compactBlock(f);
+    check(has(block, "Entr\xC3\xA9" "es TOR") && has(block, "Sorties Analogiques") && has(block, "\xC2\xAB vars \xC2\xBB") && has(block, "Archive")
+              && has(block, "non lue") && has(block, "Consigne variateur V258") && has(block, "Arr\xC3\xAAt d'urgence"),
+          "l'IA connectee : les quatre feuilles, et les premieres lignes de chaque feuille lue");
+    const std::string prompt = sh::workbooksPrompt({f}, true);
+    check(has(prompt, "4 feuilles") && has(prompt, "feuille=\"vars\"") && has(prompt, "Ne d\xC3\xA9" "cris jamais le classeur entier"),
+          "les consignes : toutes les feuilles, et la regle");
+    const std::string desc = sh::describeFile(f, readings);
+    check(has(desc, "Entr\xC3\xA9" "es TOR") && has(desc, "Sorties Analogiques") && has(desc, "Les autres feuilles") && has(desc, "\xC2\xAB vars \xC2\xBB"),
+          "l'IA integree : les feuilles lues et les autres");
+    hmi::Project project;
+    const sh::Plan p = sh::planVariables(f, readings, &project);
+    const auto vars = allVariables(p.ops);
+    check(p.ok && vars.size() == 5 && varNamed(vars, "AO_V258") && varNamed(vars, "DI_PORTE"),
+          "les variables des deux feuilles (" + std::to_string(vars.size()) + ")");
+    bool err = true;
+    const std::string free2 = sh::runRowsTool({f}, "{\"feuille\": \"vars\"}", &err);
+    check(!err && has(free2, "Notes de l'affaire"), "l'outil lit aussi la feuille libre, case par case");
+}
+
 int main() {
     testRead();
     testDetect();
@@ -790,6 +863,7 @@ int main() {
     testTool();
     testAttachment();
     testAssistant();
+    testSheets();
     std::error_code ec;
     fs::remove_all(scratch(), ec);
     std::printf("%d verifications, %d echec(s)\n", checks, failures);

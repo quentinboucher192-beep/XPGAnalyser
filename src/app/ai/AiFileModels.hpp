@@ -106,6 +106,7 @@ struct Recognition {
     std::string              modelId, modelName;  // reconnu ; vide : la detection
     std::size_t              rows{0}, ignored{0}, empty{0};
     Detection                detection;
+    std::vector<std::pair<std::string, std::size_t>> sheetsRead;   // 1.21.1 : les feuilles lues et leurs lignes (la premiere : celle de la mise en page)
     std::string              summary;            // "Mod\xC3\xA8le reconnu : <nom> \xE2\x80\x94 412 lignes lues"
     std::vector<std::string> details;
 };
@@ -137,9 +138,11 @@ void clearChoice(Attachment& a);
 [[nodiscard]] Attached attachedOf(const Attachment& a, std::string path, std::shared_ptr<const Workbook> workbook);
 
 // ---- lire ce qu'il faut -----------------------------------------------------------------------------------------
-// La feuille de la mise en page, et les feuilles JUMELLES (la meme ligne d'en-tete, aux memes intitules : << Lectures >>
-// et << Ecritures >> d'une table d'echange) - chacune lue.
-[[nodiscard]] std::vector<Reading> readAll(const Workbook& wb, const Layout& layout);
+// La feuille de la mise en page, les feuilles JUMELLES (la meme ligne d'en-tete, aux memes intitules : << Lectures >>
+// et << Ecritures >> d'une table d'echange) et, 1.21.1, TOUTES LES AUTRES FEUILLES DU MEME GENRE, chacune avec sa propre
+// detection (une liste d'E/S en plusieurs feuilles : entrees TOR, sorties TOR, analogiques..., aux en-tetes differents) -
+// chacune lue. Une feuille masquee n'est pas lue. `detection` : celle du classeur, si elle est deja faite.
+[[nodiscard]] std::vector<Reading> readAll(const Workbook& wb, const Layout& layout, const Detection* detection = nullptr);
 
 // ---- ce que l'IA en fait : TOUJOURS une proposition ------------------------------------------------------------
 struct PlanOptions {

@@ -163,6 +163,7 @@ struct SheetDetection {
     Layout                   layout;            // la ligne d'en-tete, les colonnes reconnues, les regles par defaut
     std::size_t              dataRows{0};       // les lignes non vides sous l'en-tete
     std::vector<std::string> reasons;           // pourquoi ("12 adresses %MW sur 12 lignes", "en-t\xC3\xAA" "te : Adresse IP, Masque")
+    bool                     hidden{false};     // 1.21.1 : une feuille masquee (detect)
 };
 struct Detection {
     std::vector<SheetDetection> sheets;     // une par feuille
@@ -199,6 +200,17 @@ struct Reading {
 [[nodiscard]] Reading read(const Workbook& wb, const Layout& layout, std::size_t maxRows = static_cast<std::size_t>(-1));
 
 // ------------------------------------------------- un classeur joint, pour l'IA ---
+//  1.21.1 : chaque feuille du classeur, telle que l'analyse l'a vue - l'IA les connait TOUTES (lues ou non), et lit
+//  n'importe laquelle (l'outil des lignes, son parametre << feuille >>).
+struct SheetInfo {
+    std::string name;
+    Genre       genre{Genre::Other};
+    bool        headerFound{false};
+    std::size_t headerLine{0};   // 1 : la premiere ligne ; 0 : aucun en-tete reconnu
+    std::size_t rows{0};         // les lignes lues (une feuille lue), sinon les lignes non vides sous l'en-tete
+    bool        hidden{false};
+    bool        read{false};     // lue avec la mise en page retenue (la feuille du modele, ses jumelles, celles du meme genre)
+};
 //  Ce que l'Assistant sait d'un classeur joint a la conversation : la piece, sa copie, le classeur lu (nul : pas encore),
 //  la mise en page retenue (le choix de l'utilisateur, sinon le modele reconnu, sinon la detection).
 struct Attached {
@@ -209,7 +221,8 @@ struct Attached {
     std::string                     modelId, modelName;   // le modele reconnu ou choisi ; vide : une detection
     bool                            byUser{false};        // choisi dans la fenetre << Modele... >>
     double                          confidence{0};
-    std::size_t                     rows{0};              // les lignes lues (a l'analyse, ou au choix)
+    std::size_t                     rows{0};              // les lignes lues (a l'analyse, ou au choix) - toutes feuilles comprises
+    std::vector<SheetInfo>          sheets;               // 1.21.1 : toutes les feuilles (vide : une analyse d'avant)
 };
 
 } // namespace app::ai::sheets

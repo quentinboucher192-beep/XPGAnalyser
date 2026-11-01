@@ -307,6 +307,40 @@ std::string sourceLine(const Attached& f, const std::vector<Reading>& readings) 
     return s + ".";
 }
 
+// 1.21.1 : une feuille, en quelques mots (pour l'IA et pour l'utilisateur).
+std::string sheetWords(const SheetInfo& si, bool tool) {
+    std::string d = guill(si.name) + " : ";
+    if (si.hidden) d += "masqu\xC3\xA9" "e, ";
+    if (!si.headerFound) d += "aucun en-t\xC3\xAA" "te reconnu";
+    else {
+        d += (si.genre == Genre::Other ? std::string("ni E/S, ni r\xC3\xA9seau, ni reports") : genreLabel(si.genre)) + ", en-t\xC3\xAA" "te ligne "
+             + std::to_string(si.headerLine) + ", " + plural(si.rows, "ligne", "lignes");
+    }
+    if (si.read) d += " \xE2\x80\x94 lue";
+    else if (tool) d += " \xE2\x80\x94 non lue : " + std::string(kRowsTool) + " avec feuille=\"" + si.name + "\"";
+    else d += " \xE2\x80\x94 non lue";
+    return d;
+}
+
+// La mise en page d'une AUTRE feuille, lue avec celle de `layout` : la meme (une jumelle : les memes intitules sur la
+// meme ligne), sinon sa propre detection si elle est du meme genre ; nullopt : elle n'est pas lue avec cette mise en page.
+std::optional<Layout> sameKindLayout(const Sheet& s, const Layout& layout, const std::vector<std::string>& sig, std::size_t named,
+                                     const SheetDetection* known, std::size_t index) {
+    if (s.hidden) return std::nullopt;
+    if (named >= 2 && headerCells(s, layout.headerRow) == sig) {
+        Layout twin = layout;
+        twin.sheet = s.name;
+        return twin;
+    }
+    if (layout.genre == Genre::Other) return std::nullopt;
+    const SheetDetection d = known && known->layout.columns.size() > 0 && known->sheet == s.name ? *known : detectSheet(s, index);
+    if (!d.headerFound || d.genre != layout.genre) return std::nullopt;
+    Layout own = d.layout;
+    own.sheet = s.name;
+    own.genre = d.genre;
+    return own;
+}
+
 } // namespace
 
 // ------------------------------------------------------------------------- la memoire ---
@@ -514,28 +548,40 @@ Recognition recognize(const Workbook& wb, const std::vector<FileModel>& models) 
         r.genre = Genre::Other;
         r.confidence = d2->confidence;
     }
-    std::vector<std::string> twins;
+    std::vector<std::string> others;
     if (r.hasLayout) {
-        const auto readings = readAll(wb, r.layout);
+        const auto readings = readAll(wb, r.layout, &r.detection);
         for (const auto& rd : readings) {
             r.rows += rd.rows.size();
             r.ignored += rd.ignored;
             r.empty += rd.empty;
-            if (rd.sheet != r.layout.sheet) twins.push_back(guill(rd.sheet));
+            r.sheetsRead.emplace_back(rd.sheet, rd.rows.size());
+            if (rd.sheet != r.layout.sheet) others.push_back(guill(rd.sheet) + " (" + plural(rd.rows.size(), "ligne", "lignes") + ")");
         }
     }
     const std::string lines = plural(r.rows, "ligne lue", "lignes lues");
     if (!r.modelName.empty()) r.summary = "Mod\xC3\xA8le reconnu : " + r.modelName + " \xE2\x80\x94 " + lines;
     else if (r.hasLayout) r.summary = "D\xC3\xA9tection : " + genreLabel(r.genre) + " (confiance " + percent(r.confidence) + ") \xE2\x80\x94 " + lines;
     if (r.hasLayout) {
-        r.details.push_back(genreLabel(r.genre) + " : feuille " + guill(r.layout.sheet) + ", en-t\xC3\xAA" "te ligne " + std::to_string(r.layout.headerRow + 1)
-                            + (twins.empty() ? std::string{} : " (lues aussi, m\xC3\xAAme en-t\xC3\xAA" "te : " + joinList(twins) + ")"));
+        const std::size_t mainRows = r.sheetsRead.empty() ? 0 : r.sheetsRead.front().second;
+        r.details.push_back(genreLabel(r.genre) + " : feuille " + guill(r.layout.sheet) + " (" + plural(mainRows, "ligne", "lignes") + "), en-t\xC3\xAA" "te ligne "
+                            + std::to_string(r.layout.headerRow + 1) + (others.empty() ? std::string{} : " ; lues aussi : " + joinList(others, 30)));
         r.details.push_back("colonnes : " + mappingText(r.layout));
         if (r.ignored) r.details.push_back(plural(r.ignored, "ligne ignor\xC3\xA9" "e", "lignes ignor\xC3\xA9" "es") + " (ni rep\xC3\xA8re ni adresse)");
+        // 1.21.1 : les feuilles qui ne sont pas lues, et pourquoi (l'IA peut les lire une a une)
+        for (const auto& d : r.detection.sheets) {
+            if (std::any_of(r.sheetsRead.begin(), r.sheetsRead.end(), [&](const auto& x) { return x.first == d.sheet; })) continue;
+            std::string why = d.hidden                 ? std::string("masqu\xC3\xA9" "e")
+                              : !d.headerFound         ? std::string("aucun en-t\xC3\xAA" "te reconnu")
+                              : d.genre == Genre::Other ? std::string("ni E/S, ni r\xC3\xA9seau, ni reports")
+                                                        : genreLabel(d.genre) + " (confiance " + percent(d.confidence) + "), un autre genre";
+            r.details.push_back("feuille " + guill(d.sheet) + " non lue : " + why);
+        }
+    } else {
+        for (const auto& d : r.detection.sheets)
+            if (d.genre != Genre::Other && d.sheet != r.layout.sheet)
+                r.details.push_back("feuille " + guill(d.sheet) + " : " + genreLabel(d.genre) + " (confiance " + percent(d.confidence) + ")");
     }
-    for (const auto& d : r.detection.sheets)
-        if (d.genre != Genre::Other && d.sheet != r.layout.sheet)
-            r.details.push_back("feuille " + guill(d.sheet) + " : " + genreLabel(d.genre) + " (confiance " + percent(d.confidence) + ")");
     if (r.modelName.empty())
         if (const auto* d = r.detection.chosen())
             for (const auto& why : d->reasons) r.details.push_back("d\xC3\xA9tection : " + why);
@@ -622,6 +668,11 @@ json::Value recognitionToJson(const Recognition& r) {
         s.set("confiance", d.confidence);
         s.set("lignes", static_cast<std::uint64_t>(d.dataRows));
         s.set("entete", static_cast<int>(d.layout.headerRow + 1));
+        s.set("enteteTrouvee", d.headerFound);   // 1.21.1
+        s.set("masquee", d.hidden);
+        const auto it = std::find_if(r.sheetsRead.begin(), r.sheetsRead.end(), [&](const auto& x) { return x.first == d.sheet; });
+        s.set("lue", it != r.sheetsRead.end());
+        if (it != r.sheetsRead.end()) s.set("lues", static_cast<std::uint64_t>(it->second));
         sheets.push(std::move(s));
     }
     o.set("feuilles", std::move(sheets));
@@ -664,6 +715,11 @@ std::optional<Recognition> recognitionOf(const Attachment& a) {
             d.layout.headerRow = e > 0 ? static_cast<std::size_t>(e - 1) : 0;
             d.layout.sheet = d.sheet;
             d.layout.genre = d.genre;
+            // 1.21.1 (une analyse d'avant : un genre reconnu avait son en-tete ; la feuille de la mise en page etait lue)
+            d.headerFound = s.flag("enteteTrouvee", d.genre != Genre::Other);
+            d.hidden = s.flag("masquee", false);
+            if (s.flag("lue", r.hasLayout && d.sheet == r.layout.sheet))
+                r.sheetsRead.emplace_back(d.sheet, static_cast<std::size_t>(std::max<std::int64_t>(0, s.integer("lues", d.sheet == r.layout.sheet ? static_cast<std::int64_t>(r.rows) : 0))));
             d.index = r.detection.sheets.size();
             if (d.sheet == r.layout.sheet) r.detection.best = d.index;
             r.detection.sheets.push_back(std::move(d));
@@ -727,10 +783,29 @@ Attached attachedOf(const Attachment& a, std::string path, std::shared_ptr<const
         f.confidence = c->confidence;
         f.rows = c->rows;
     }
+    // 1.21.1 : toutes les feuilles, telles que l'analyse les a vues
+    if (const auto r = recognitionOf(a)) {
+        for (const auto& d : r->detection.sheets) {
+            SheetInfo si;
+            si.name = d.sheet;
+            si.genre = d.genre;
+            si.headerFound = d.headerFound;
+            si.headerLine = d.headerFound ? d.layout.headerRow + 1 : 0;
+            si.hidden = d.hidden;
+            si.rows = d.dataRows;
+            const auto it = std::find_if(r->sheetsRead.begin(), r->sheetsRead.end(), [&](const auto& x) { return x.first == d.sheet; });
+            if (f.hasLayout && !d.hidden) {
+                si.read = d.sheet == f.layout.sheet || (it != r->sheetsRead.end() && f.layout.genre == r->layout.genre)
+                          || (d.headerFound && d.genre == f.layout.genre && d.genre != Genre::Other);
+            }
+            if (si.read && it != r->sheetsRead.end()) si.rows = it->second;
+            f.sheets.push_back(std::move(si));
+        }
+    }
     return f;
 }
 
-std::vector<Reading> readAll(const Workbook& wb, const Layout& layout) {
+std::vector<Reading> readAll(const Workbook& wb, const Layout& layout, const Detection* detection) {
     std::vector<Reading> out;
     out.push_back(read(wb, layout));
     const Sheet* main = wb.sheet(layout.sheet);
@@ -738,13 +813,15 @@ std::vector<Reading> readAll(const Workbook& wb, const Layout& layout) {
     const auto sig = headerCells(*main, layout.headerRow);
     std::size_t named = 0;
     for (const auto& s : sig) named += s.empty() ? 0 : 1;
-    if (named < 2) return out;
-    for (const auto& s : wb.sheets) {
-        if (&s == main || s.hidden) continue;
-        if (headerCells(s, layout.headerRow) != sig) continue;
-        Layout twin = layout;
-        twin.sheet = s.name;
-        out.push_back(read(wb, twin));
+    for (std::size_t i = 0; i < wb.sheets.size(); ++i) {
+        const Sheet& s = wb.sheets[i];
+        if (&s == main) continue;
+        const SheetDetection* known = detection && i < detection->sheets.size() ? &detection->sheets[i] : nullptr;
+        const auto L = sameKindLayout(s, layout, sig, named, known, i);
+        if (!L) continue;
+        Reading rd = read(wb, *L);
+        if (rd.rows.empty() && L->columns != layout.columns) continue;   // une feuille du meme genre, mais vide
+        out.push_back(std::move(rd));
     }
     return out;
 }
@@ -1223,16 +1300,28 @@ Plan planEquipments(const Attached& f, const std::vector<Reading>& readings, con
 std::string describeFile(const Attached& f, const std::vector<Reading>& readings) {
     std::string s = sourceLine(f, readings) + "\n";
     if (!readings.empty()) s += "En-t\xC3\xAA" "te ligne " + std::to_string(readings.front().headerLine) + " ; colonnes : " + mappingText(f.layout) + ".\n";
+    // 1.21.1 : quelques lignes de CHAQUE feuille lue (3 par feuille, 12 en tout), puis les feuilles non lues
     std::size_t shown = 0;
-    for (const auto& rd : readings)
+    for (const auto& rd : readings) {
+        std::size_t here = 0;
         for (const auto& row : rd.rows) {
-            if (shown >= 5) break;
+            if (here >= (readings.size() > 1 ? 3u : 5u) || shown >= 12) break;
             std::string line;
             for (const auto& [role, v] : row.values)
                 if (!v.empty()) line += (line.empty() ? "" : " \xC2\xB7 ") + v;
-            s += "- ligne " + std::to_string(row.line) + " : " + clip(line, 160) + "\n";
+            s += "- " + (readings.size() > 1 ? guill(rd.sheet) + " " : std::string{}) + "ligne " + std::to_string(row.line) + " : " + clip(line, 160) + "\n";
             ++shown;
+            ++here;
         }
+    }
+    std::vector<std::string> unread;
+    for (const auto& si : f.sheets)
+        if (!si.read && std::none_of(readings.begin(), readings.end(), [&](const Reading& rd) { return rd.sheet == si.name; }))
+            unread.push_back(sheetWords(si, false));
+    if (!unread.empty()) {
+        s += "Les autres feuilles du classeur :\n";
+        for (const auto& u : unread) s += "- " + u + "\n";
+    }
     switch (f.layout.genre) {
         case Genre::IoList:
         case Genre::Exchange:
@@ -1255,7 +1344,8 @@ std::string rowsToolJson() {
            "Par pages : a_partir_de (1 : la premiere ligne lue) et combien (200 au plus). Une valeur absente est vide : n'invente jamais "
            "une ligne, un nom ou une adresse.\", \"input_schema\": {\"type\": \"object\", \"properties\": {"
            "\"fichier\": {\"type\": \"string\", \"description\": \"le nom du fichier joint (vide : le seul classeur joint)\"}, "
-           "\"feuille\": {\"type\": \"string\", \"description\": \"une autre feuille (vide : celle du modele)\"}, "
+           "\"feuille\": {\"type\": \"string\", \"description\": \"le nom d'une feuille du classeur (vide : celle du modele) ; toutes ses "
+           "feuilles sont listees dans les consignes, lues ou non ; une feuille sans en-tete reconnu est rendue case par case\"}, "
            "\"a_partir_de\": {\"type\": \"integer\", \"description\": \"la premiere ligne lue voulue (1 : la premiere)\"}, "
            "\"combien\": {\"type\": \"integer\", \"description\": \"le nombre de lignes (200 au plus)\"}}}}";
 }
@@ -1372,9 +1462,17 @@ std::string workbooksPrompt(const std::vector<Attached>& files, bool tool) {
                                        : "d\xC3\xA9tect\xC3\xA9 (confiance " + percent(f.confidence) + ")")
                 + " \xE2\x80\x94 feuille " + guill(f.layout.sheet) + ", en-t\xC3\xAA" "te ligne " + std::to_string(f.layout.headerRow + 1) + " \xE2\x80\x94 colonnes : "
                 + mappingText(f.layout) + "\n";
+        // 1.21.1 : TOUTES les feuilles du classeur (lues ou non) - l'IA ne conclut jamais sur une seule
+        if (f.sheets.size() > 1) {
+            list += "  " + plural(f.sheets.size(), "feuille", "feuilles") + " :\n";
+            for (const auto& si : f.sheets) list += "  - " + sheetWords(si, tool) + "\n";
+        }
     }
     if (list.empty()) return {};
     std::string s = "## Classeurs joints (lus par le logiciel)\n" + list;
+    s += "Un classeur a souvent plusieurs feuilles (entr\xC3\xA9" "es TOR, sorties TOR, analogiques, r\xC3\xA9seau...) : la liste ci-dessus les donne "
+         "toutes ; les feuilles du m\xC3\xAAme genre que la premi\xC3\xA8re sont lues avec elle" + std::string(tool ? ", une autre se lit avec l'outil (param\xC3\xA8tre feuille)" : "")
+         + ". Ne d\xC3\xA9" "cris jamais le classeur entier d'apr\xC3\xA8s une seule feuille.\n";
     s += tool ? "Lis leurs lignes avec l'outil " + std::string(kRowsTool) + " (par pages, 200 au plus) plutot que leur texte brut, qui n'est pas envoy\xC3\xA9. "
               : std::string("Leurs lignes sont dans le texte extrait joint. ");
     s += "Pour agir, propose : creer_variables (le nom = le rep\xC3\xA8re tel quel, ou ajust\xC3\xA9 en identifiant et dit ; le type tir\xC3\xA9 de DI/DO/AI/AO, "
@@ -1390,20 +1488,49 @@ std::string compactBlock(const Attached& f, std::size_t sampleRows) {
     std::string s = "Pi\xC3\xA8" "ce jointe " + guill(f.name) + " (classeur lu par le logiciel) : " + genreLabel(f.layout.genre)
                     + (f.modelName.empty() ? std::string{} : " \xE2\x80\x94 mod\xC3\xA8le " + guill(f.modelName)) + " \xE2\x80\x94 feuille " + guill(f.layout.sheet)
                     + ", en-t\xC3\xAA" "te ligne " + std::to_string(f.layout.headerRow + 1) + ".\nColonnes : " + mappingText(f.layout) + ".\n";
-    if (f.rows > 0) s += plural(f.rows, "ligne lue", "lignes lues") + " en tout (avec les feuilles au m\xC3\xAAme en-t\xC3\xAA" "te).\n";
+    if (f.rows > 0) s += plural(f.rows, "ligne lue", "lignes lues") + " en tout (toutes les feuilles lues).\n";
+    // 1.21.1 : toutes les feuilles du classeur
+    if (!f.sheets.empty()) {
+        s += plural(f.sheets.size(), "feuille", "feuilles") + " dans le classeur :\n";
+        for (const auto& si : f.sheets) s += "- " + sheetWords(si, true) + "\n";
+    } else if (f.workbook && f.workbook->sheets.size() > 1) {
+        std::vector<std::string> names;
+        for (const auto& sh : f.workbook->sheets) names.push_back(guill(sh.name));
+        s += "Feuilles du classeur : " + joinList(names, 30) + ".\n";
+    }
     if (f.workbook) {
-        // un apercu seulement (le fil de l'interface) : les premieres lignes de la feuille du modele
-        const Reading first = read(*f.workbook, f.layout, sampleRows);
-        s += "Les premi\xC3\xA8res lignes :\n";
-        std::size_t n = 0;
-        for (const auto& r : first.rows) {
-            if (n++ >= sampleRows) break;
-            s += "[" + std::to_string(r.line) + "]";
-            for (std::size_t c = 0; c < r.values.size(); ++c) s += (c ? " | " : " ") + clip(r.values[c].second, 80);
-            s += "\n";
+        // un apercu seulement (le fil de l'interface) : les premieres lignes de la feuille du modele, puis quelques-unes
+        // de chaque autre feuille lue (8 feuilles au plus)
+        const auto sample = [&](const Reading& rd, std::size_t max) {
+            std::size_t n = 0;
+            for (const auto& r : rd.rows) {
+                if (n++ >= max) break;
+                s += "[" + std::to_string(r.line) + "]";
+                for (std::size_t c = 0; c < r.values.size(); ++c) s += (c ? " | " : " ") + clip(r.values[c].second, 80);
+                s += "\n";
+            }
+        };
+        s += "Les premi\xC3\xA8res lignes de " + guill(f.layout.sheet) + " :\n";
+        sample(read(*f.workbook, f.layout, sampleRows), sampleRows);
+        const Sheet* main = f.workbook->sheet(f.layout.sheet);
+        const auto sig = main ? headerCells(*main, f.layout.headerRow) : std::vector<std::string>{};
+        std::size_t named = 0;
+        for (const auto& x : sig) named += x.empty() ? 0 : 1;
+        std::size_t shown = 0;
+        for (std::size_t i = 0; i < f.workbook->sheets.size() && main && shown < 8; ++i) {
+            const Sheet& sh = f.workbook->sheets[i];
+            if (&sh == main) continue;
+            if (!f.sheets.empty() && std::none_of(f.sheets.begin(), f.sheets.end(), [&](const SheetInfo& si) { return si.name == sh.name && si.read; })) continue;
+            const auto L = sameKindLayout(sh, f.layout, sig, named, nullptr, i);
+            if (!L) continue;
+            const Reading rd = read(*f.workbook, *L, 5);
+            if (rd.rows.empty()) continue;
+            s += "Les premi\xC3\xA8res lignes de " + guill(sh.name) + " (en-t\xC3\xAA" "te ligne " + std::to_string(L->headerRow + 1) + ", colonnes : " + mappingText(*L) + ") :\n";
+            sample(rd, 5);
+            ++shown;
         }
     }
-    s += "(Le texte brut du classeur n'est pas envoy\xC3\xA9 : toutes ses lignes se lisent avec l'outil " + std::string(kRowsTool) + ".)";
+    s += "(Le texte brut du classeur n'est pas envoy\xC3\xA9 : toutes ses lignes, de toutes ses feuilles, se lisent avec l'outil " + std::string(kRowsTool) + ".)";
     return s;
 }
 
