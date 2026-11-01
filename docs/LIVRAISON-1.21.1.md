@@ -26,7 +26,15 @@ Un classeur joint avec la 1.21.0 garde le résumé de son analyse d'alors (« 8 
 
 ## 3. Les essais
 
-@@ESSAIS@@
+**115 suites d'essais, toutes réussies** sous Linux. Pour la 1.21.1 :
+
+| Suite | Ce qu'elle vérifie | Résultat |
+|---|---|---|
+| ai_modeles_fichiers_test (section 9, nouvelle) | un classeur de 4 feuilles fabriqué à l'image du tien : entrées TOR, sorties analogiques à un autre en-tête, une feuille libre, une feuille masquée ; les deux feuilles d'E/S lues (5 lignes) ; l'analyse qui cite les deux autres et pourquoi ; les quatre feuilles connues de l'IA connectée, avec les premières lignes de chacune ; la règle dans les consignes ; l'IA intégrée ; les variables des deux feuilles ; l'outil qui lit la feuille libre case par case | réussie |
+| ai_modeles_fichiers_test (le reste) | un classeur de reports dont la feuille « Bits » (même genre, autre en-tête) est maintenant lue avec les deux autres : 7 variables et 7 adresses au lieu de 5 | 161 vérifications, 0 échec |
+| hmi_editor_test | les notes de version (563, 80 versions), l'aide F1 (269 sujets) | réussie |
+
+Le bac à sable de l'exe Windows a été relancé sous Wine (même fonction, même résultat qu'en 1.21.0).
 
 ## 4. Installer
 
@@ -37,11 +45,22 @@ Fichiers livrés :
 
 Windows SmartScreen peut avertir (installateur non signé) : « Informations complémentaires », puis « Exécuter quand même ». Le format des projets ne change pas (33).
 
-@@SHA@@
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.21.1.exe` (44,1 Mo, 46 238 658 octets) :
+`16060B1A6492D1EBA71A959852E576C2FBAB5A1224CB5AF6146CA7C5C8EC79DA`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.21.1-portable.zip` (34,2 Mo) :
+  `42AAAFFCBBF600745D944D0C1CC8C30AF06D909D2AA3CBCC50F26A5422E1BDB2`
+- `IHM-Studio-1.21.1-portable.zip` (34,2 Mo) :
+  `E525B0E882834870CB5BCA1CF068DE2FE357A3B9AD139968BF76C197E5A873DE`
 
 ### Les vérifications sous Windows (Wine)
 
-@@WINE@@
+Les deux exe Windows (MinGW-w64) répondent `API Studio 1.21.1` et `IHM Studio 1.21.1` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+L'installateur (Inno Setup 6.4.1) a été lancé en silencieux **par-dessus la 1.21.0 livrée**, avec une clé API d'essai : « Installation process succeeded » ; la clé est intacte (même empreinte avant et après, « Clés API : 1 gardée ») ; les exe et `pdfium.dll` installés sont ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.21.0 est faite.
+
+Le bac à sable de l'exe installé (`IHM-Studio.exe --bac-a-sable`) : analyse, compilation et exécution réussies, le cas juste réussi (3,0), le cas faux en échec comme prévu (1,0 au lieu de 5,0).
 
 Ces vérifications sont faites sous Wine, **pas sur un vrai Windows**.
 
