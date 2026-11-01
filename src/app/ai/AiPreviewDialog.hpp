@@ -52,6 +52,21 @@
 //  calcule une fois par proposition (Check::spots : les objets de chaque operation
 //  et de chaque message), jamais a chaque image.
 //
+//  1.22.5 : L'AVIS DU LOGICIEL (AiBuild.hpp) - une categorie << GENERER ET
+//  COMPILER >> apres les avertissements : chaque constat NOUVEAU de Generer et de
+//  Compiler sur une copie du projet ou la proposition est appliquee (l'etape,
+//  l'endroit, le message ; rouge ou ambre), sa ligne de titre dit le resume
+//  (<< 2 erreurs, 1 avertissement nouveaux, 1,4 s >>) ou << en cours >>
+//  tant que le verdict n'est pas la. Il arrive par setVerdict (la verification de
+//  fond de l'Assistant) ou par la proposition elle-meme (Proposal::extra
+//  << logiciel >>, relu a chaque image : un nouveau verdict s'y lit) ; il est verse
+//  dans la verification (build::merge : ses erreurs comptent, ses objets
+//  s'encadrent comme les autres) - la liste et ses reperes se refont, rien n'est
+//  revalide. Une proposition corrigee depuis (une autre cle) : le verdict ne vaut
+//  plus, << en cours >> jusqu'au suivant. Choisir une ligne encadre son objet ; le
+//  clic droit : Copier, Retirer l'operation, Demander a l'IA de corriger (la
+//  correction du logiciel dans le texte prepare, quand il en a une).
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -61,6 +76,7 @@
 // =============================================================================
 #pragma once
 
+#include "AiBuild.hpp"
 #include "AiFixes.hpp"
 #include "AiOperations.hpp"
 #include "../../menu/IMenu.hpp"
@@ -156,6 +172,16 @@ public:
     [[nodiscard]] gfx::Rect                chipRect(bool errors) const;
     [[nodiscard]] ui::SearchField*         searchField() const noexcept { return search_; }
 
+    // 1.22.5 : L'AVIS DU LOGICIEL - le verdict de fond de la proposition (Generer et Compiler sur une copie) : la categorie
+    // GENERER ET COMPILER se refait, ses constats sont verses dans la verification (les cadres, les puces, Appliquer) ; sans
+    // tout recalculer (ni validation, ni apercu). Avant lui : << en cours >>. Les lignes de la categorie (les constats, dans
+    // l'ordre), le menu d'une ligne (essais et scripts).
+    void setVerdict(const build::Verdict& verdict);
+    [[nodiscard]] bool                     verdictKnown() const noexcept { return verdictKnown_; }
+    [[nodiscard]] const build::Verdict&    verdict() const noexcept { return verdict_; }
+    [[nodiscard]] std::vector<std::string> buildRows() const;
+    bool                                   openBuildMenu(std::size_t line);
+
 protected:
     core::Status buildUi() override;
 
@@ -200,6 +226,13 @@ private:
     std::map<hmi::Id, std::size_t>           objectIndex_;
     std::map<hmi::Id, int>                   issues_;
     std::map<hmi::Id, std::vector<std::string>> issueTexts_;
+    // 1.22.5 : l'avis du logiciel - le verdict (connu ou non), le dernier lu dans la proposition (Proposal::extra << logiciel >>),
+    // les constats montres (la categorie, le clic droit : sa liste 4).
+    build::Verdict                           verdict_;
+    bool                                     verdictKnown_{false};
+    json::Value                              verdictSeen_;
+    std::vector<build::Finding>              buildLines_;
+    void                                     adoptStoredVerdict(const Proposal& p, bool forget);
     core::ConnectionScope links_;
 };
 

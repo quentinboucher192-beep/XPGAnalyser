@@ -83,4 +83,20 @@ void merge(Check&, const Verdict&);
 // ESSAIS : remplace verdict() par `fake` (nul : le vrai). Les essais de l'Assistant (sans projet lourd) s'en servent.
 void setVerdictForTests(std::function<Verdict(const hmi::Project&, const Proposal&)> fake);
 
+// ---- ajouts (lot-mu) -----------------------------------------------------------------------------------------------------
+// Le meme verdict, l'operation en cause lue d'abord dans les objets que la validation a notes (`validated` : le Check de
+// validate sur `before` ; Check::spots). Sans lui (verdict ci-dessus), l'operation se retrouve par le nom de l'objet dans la
+// proposition (celle qui le cree, le modifie, l'associe, le pose en code ; celle qui donne la propriete en cause d'abord).
+[[nodiscard]] Verdict verdict(const hmi::Project& before, const Proposal&, const Env& env, const Check& validated);
+// La ligne d'un constat telle que merge() la verse (errors, warnings, Spot::message, Fault::message) :
+// "Compiler : Vue_Station . Voyant_1 . visible \xE2\x80\x94 <le message>".
+[[nodiscard]] std::string lineOf(const Finding&);
+// "2 erreurs, 1 avertissement nouveaux", "1 erreur nouvelle", "3 avertissements nouveaux", "aucun constat nouveau".
+[[nodiscard]] std::string countText(const Verdict&);
+// La duree a l'ecran : "320 ms", "1,4 s".
+[[nodiscard]] std::string durationText(double ms);
+// ESSAIS : combien de projets d'avant ont ete generes et compiles (le cache a manque) ; vider le cache.
+[[nodiscard]] std::size_t beforeRunsForTests() noexcept;
+void clearCacheForTests();
+
 } // namespace app::ai::build

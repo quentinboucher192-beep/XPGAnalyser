@@ -100,6 +100,28 @@ std::string proposalKey(const Proposal& p) {
     return key + fixes::key(p);   // 1.22.1 : les corrections (un choix par variable introuvable)
 }
 
+// 1.22.5 : une ligne de la verification qui vient de l'avis du logiciel (build::merge : << Generer : ... >>, << Compiler : ... >>).
+bool fromBuild(std::string_view message) {
+    return message.rfind("G\xC3\xA9n\xC3\xA9rer : ", 0) == 0 || message.rfind("Compiler : ", 0) == 0;
+}
+// La ligne d'un constat dans la liste : la ligne versee dans la verification, et la correction du logiciel s'il en a une.
+std::string buildRowText(const build::Finding& f) {
+    std::string t = build::lineOf(f);
+    if (!f.fixFrom.empty()) t += " (correction du logiciel : \xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo + " \xC2\xBB)";
+    return t;
+}
+// Le constat comme une ligne de la verification (les cadres, le menu du clic droit).
+fixes::Line buildLine(const build::Finding& f, const Check& ck, std::size_t ops) {
+    fixes::Line l;
+    l.message = build::lineOf(f);
+    l.text = buildRowText(f);
+    l.error = f.error;
+    if (f.op != Check::Fault::kNoOp && f.op < ops) l.ops = {f.op};
+    for (std::size_t k = 0; k < ck.faults.size(); ++k)
+        if (ck.faults[k].message == l.message) l.faults.push_back(k);
+    return l;
+}
+
 // Une ligne de la liste de gauche.
 struct Row {
     enum class Kind : std::uint8_t { Heading, Item, Change, Note, Warning, Error } kind{Kind::Note};
@@ -1363,6 +1385,13 @@ void AiPreviewDialog::refresh() {
         preview_.why = "V\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6 "
                        + std::to_string(static_cast<int>(panel_.chat().checkProgress(message_) * 100.f + 0.5f)) + " %";
     }
+    // 1.22.5 : L'AVIS DU LOGICIEL - une proposition corrigee depuis (une autre cle) : le verdict d'avant ne vaut plus ; un verdict
+    // neuf garde dans la proposition se lit. Il est verse dans la verification : ses erreurs et ses avertissements (les puces,
+    // Appliquer), ses objets (les cadres) - sa categorie les montre, pas ERREURS ni AVERTISSEMENTS.
+    adoptStoredVerdict(*p, !key_.empty() && proposalKey(*p) != key_);
+    if (verdictKnown_ && verdict_.ran) build::merge(check_, verdict_);
+    const std::size_t buildErrors = verdictKnown_ ? static_cast<std::size_t>(std::count_if(check_.errors.begin(), check_.errors.end(), fromBuild)) : 0;
+    const std::size_t buildWarnings = verdictKnown_ ? static_cast<std::size_t>(std::count_if(check_.warnings.begin(), check_.warnings.end(), fromBuild)) : 0;
     auto* body = dynamic_cast<AiPreviewBody*>(widgetRoot());
     // La liste de gauche.
     std::vector<Row> rows;
@@ -1371,6 +1400,10 @@ void AiPreviewDialog::refresh() {
     // sur l'une d'elles la reprend (Revenir). Puis les erreurs et les avertissements, les doublons regroupes.
     errorLines_ = fixes::errorLines(check_);
     warningLines_ = fixes::warningLines(check_);
+    if (verdictKnown_) {   // 1.22.5 : les constats du logiciel ont leur categorie
+        std::erase_if(errorLines_, [](const fixes::Line& l) { return fromBuild(l.message); });
+        std::erase_if(warningLines_, [](const fixes::Line& l) { return fromBuild(l.message); });
+    }
     corrections_ = fixes::corrections(*p);
     if (!corrections_.empty()) {
         heading("CORRECTIONS (" + std::to_string(corrections_.size()) + ") \xE2\x80\x94 la proposition seule ; clic droit : revenir");
@@ -1392,11 +1425,12 @@ void AiPreviewDialog::refresh() {
             rows.push_back(std::move(r));
         }
     }
-    if (!check_.errors.empty()) {
+    if (check_.errors.size() > buildErrors) {
         // 1.16.1 (captures) : avec << Appliquer malgre les erreurs >>, le titre le dit (il disait encore << rien ne s'applique >>)
         const bool anywayTitle = !check_.stale && !check_.viewMissing && a.settings().applyWithErrors;
-        heading("ERREURS (" + std::to_string(check_.errors.size()) + ") \xE2\x80\x94 "
-                + (anywayTitle ? std::string(check_.errors.size() > 1 ? "laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB"
+        const std::size_t shownErrors = check_.errors.size() - buildErrors;
+        heading("ERREURS (" + std::to_string(shownErrors) + ") \xE2\x80\x94 "
+                + (anywayTitle ? std::string(shownErrors > 1 ? "laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB"
                                                                       : "laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB")
                                : std::string("rien ne s'applique tant qu'il y en a")));
         for (std::size_t k = 0; k < errorLines_.size(); ++k) {
@@ -1410,8 +1444,8 @@ void AiPreviewDialog::refresh() {
             rows.push_back(std::move(r));
         }
     }
-    if (!check_.warnings.empty()) {
-        heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size()) + ")");
+    if (check_.warnings.size() > buildWarnings) {
+        heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size() - buildWarnings) + ")");
         for (std::size_t k = 0; k < warningLines_.size(); ++k) {
             Row r{Row::Kind::Warning, warningLines_[k].text, {}, 0};
             r.list = 2;
@@ -1421,6 +1455,43 @@ void AiPreviewDialog::refresh() {
             r.ops = warningLines_[k].ops;
             r.issue = 1;
             rows.push_back(std::move(r));
+        }
+    }
+    // 1.22.5 : L'AVIS DU LOGICIEL - GENERER ET COMPILER sur une copie du projet ou la proposition est appliquee : chaque constat
+    // NOUVEAU (l'etape, l'endroit, le message ; rouge ou ambre), le resume dans le titre ; << en cours >> avant le verdict.
+    buildLines_.clear();
+    {
+        std::string state;
+        if (!verdictKnown_) state = "en cours\xE2\x80\xA6";
+        else if (!verdict_.ran) state = "pas lanc\xC3\xA9s";
+        else state = build::countText(verdict_) + " \xC2\xB7 " + build::durationText(verdict_.ms);
+        const std::size_t n = verdictKnown_ && verdict_.ran ? verdict_.findings.size() : 0;
+        heading("G\xC3\x89N\xC3\x89RER ET COMPILER" + (n > 0 ? " (" + std::to_string(n) + ")" : std::string{}) + " \xE2\x80\x94 " + state);
+        if (!verdictKnown_) {
+            rows.push_back({Row::Kind::Note, "L'avis du logiciel arrive : ta proposition est appliqu\xC3\xA9" "e \xC3\xA0 une copie du projet, "
+                                             "puis G\xC3\xA9n\xC3\xA9rer et Compiler.", {}, 0});
+        } else if (!verdict_.ran) {
+            rows.push_back({Row::Kind::Note, "Pas lanc\xC3\xA9s" + (verdict_.why.empty() ? std::string(".") : " : " + verdict_.why), {}, 0});
+        } else {
+            rows.push_back({Row::Kind::Note, "L'avis du logiciel : ta proposition appliqu\xC3\xA9" "e \xC3\xA0 une copie du projet, g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e et compil\xC3\xA9" "e.",
+                            {}, 0});
+            buildLines_ = verdict_.findings;
+            for (std::size_t k = 0; k < buildLines_.size(); ++k) {
+                const auto& f = buildLines_[k];
+                Row r{f.error ? Row::Kind::Error : Row::Kind::Warning, buildRowText(f), {}, 0};
+                r.list = 4;
+                r.line = k;
+                r.ref = Row::Ref::Message;   // ses objets : ceux que le verdict a notes (Check::spots, par son message)
+                r.names = {build::lineOf(f)};
+                if (f.op != Check::Fault::kNoOp && f.op < p->ops.size()) r.ops = {f.op};
+                r.issue = f.error ? 2 : 1;
+                rows.push_back(std::move(r));
+            }
+            if (buildLines_.empty()) rows.push_back({Row::Kind::Note, "Rien de nouveau : G\xC3\xA9n\xC3\xA9rer et Compiler acceptent la proposition.", {}, 0});
+            if (verdict_.before > 0)
+                rows.push_back({Row::Kind::Note, "D\xC3\xA9j\xC3\xA0 l\xC3\xA0 avant ta proposition : " + std::to_string(verdict_.before)
+                                                     + (verdict_.before > 1 ? " constats (pas repris ici)." : " constat (pas repris ici)."),
+                                {}, 0});
         }
     }
     // 1.21.0 : LES SUPPRESSIONS - chacune : sa strategie, le resume par genre, ce qui part, ce qui en depend, les
@@ -1682,6 +1753,7 @@ void AiPreviewDialog::refresh() {
         };
         for (const auto& l : errorLines_) note(l, 2);
         for (const auto& l : warningLines_) note(l, 1);
+        for (const auto& f : buildLines_) note(buildLine(f, check_, p->ops.size()), f.error ? 2 : 1);   // 1.22.5 : l'avis du logiciel
         const auto objectIssue = [&](const std::vector<hmi::Id>& ids) {
             int lv = 0;
             for (const auto id : ids)
@@ -1957,6 +2029,17 @@ bool AiPreviewDialog::openFixMenu(int list, std::size_t line, gfx::Point at) {
         m = fixes::menuFor(*p, check_, warningLines_[line], nullptr);
     } else if (list == 3 && line < corrections_.size()) {
         m = fixes::menuFor(*p, corrections_[line]);
+    } else if (list == 4 && line < buildLines_.size()) {
+        // 1.22.5 : un constat du logiciel - le menu d'une erreur (Retirer l'operation, Copier, Demander a l'IA) ; la demande a
+        // l'IA porte la correction du logiciel quand il en a une.
+        const auto& f = buildLines_[line];
+        const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
+        m = fixes::menuFor(*p, check_, buildLine(f, check_, p->ops.size()), doc ? &doc->project : nullptr);
+        m.title = f.step + (f.error ? " : erreur" : " : avertissement");
+        if (!f.fixFrom.empty())
+            for (auto& act : m.actions)
+                if (act.kind == fixes::Action::Kind::AskAi)
+                    act.value += "\nLe logiciel propose de remplacer \xC2\xAB " + f.fixFrom + " \xC2\xBB par \xC2\xAB " + f.fixTo + " \xC2\xBB.";
     } else {
         return false;
     }
@@ -1989,6 +2072,43 @@ bool AiPreviewDialog::openWarningMenu(std::size_t line) {
 bool AiPreviewDialog::openCorrectionMenu(std::size_t line) {
     const auto* b = dynamic_cast<const AiPreviewBody*>(widgetRoot());
     return b && openFixMenu(3, line, menuPoint(b->rowRect(3, line), b->listRect()));
+}
+
+// ---- 1.22.5 : l'avis du logiciel ---------------------------------------------------------------------------------------
+bool AiPreviewDialog::openBuildMenu(std::size_t line) {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(widgetRoot());
+    return b && openFixMenu(4, line, menuPoint(b->rowRect(4, line), b->listRect()));
+}
+
+std::vector<std::string> AiPreviewDialog::buildRows() const {
+    std::vector<std::string> out;
+    for (const auto& f : buildLines_) out.push_back(buildRowText(f));
+    return out;
+}
+
+void AiPreviewDialog::setVerdict(const build::Verdict& verdict) {
+    verdict_ = verdict;
+    verdictKnown_ = true;
+    // Il vaut pour la proposition telle qu'elle est : une correction faite juste avant ne l'efface pas (refresh y verrait une
+    // autre cle).
+    if (const Proposal* p = panel_.assistant().proposal(message_); p && !key_.empty()) key_ = proposalKey(*p);
+    if (widgetRoot()) refresh();   // la liste et ses reperes ; ni validation, ni apercu
+}
+
+// Le verdict garde dans la proposition (Proposal::extra << logiciel >>) : un nouveau se lit ; `forget` (la proposition a change
+// depuis) : celui qu'on avait ne vaut plus, celui qui est garde non plus (il est d'avant) - le suivant se lira.
+void AiPreviewDialog::adoptStoredVerdict(const Proposal& p, bool forget) {
+    const json::Value* stored = p.extra.isObject() ? p.extra.find("logiciel") : nullptr;
+    if (forget) {
+        verdict_ = build::Verdict{};
+        verdictKnown_ = false;
+        verdictSeen_ = stored ? *stored : json::Value{};
+        return;
+    }
+    if (!stored || *stored == verdictSeen_) return;
+    verdictSeen_ = *stored;
+    verdict_ = build::fromJson(*stored);
+    verdictKnown_ = true;
 }
 
 bool AiPreviewDialog::menuOpen() const { return fixMenu_ && fixMenu_->isOpen(); }
@@ -2060,7 +2180,8 @@ void AiPreviewDialog::Update(const menu::FrameContext& f) {
             (void)variable_->dispatch(ui::MouseDown{{at.x + at.w / 2.f, at.y + at.h / 2.f}, ui::MouseButton::Left, 1, {}});
     }
     const std::string key = proposalKey(*p);
-    if (key != key_) refresh();
+    const json::Value* stored = p->extra.isObject() ? p->extra.find("logiciel") : nullptr;   // 1.22.5 : un verdict neuf garde
+    if (key != key_ || (stored && !(*stored == verdictSeen_))) refresh();
     // 1.20.1 : la verification de fond finie : la fenetre se remplit ; en cours : l'avancement (quatre fois par seconde).
     else if (waiting_ && (!panel_.chat().checking(message_) || f.totalSeconds - lastWait_ >= 0.25 || f.totalSeconds < lastWait_)) {
         lastWait_ = f.totalSeconds;
