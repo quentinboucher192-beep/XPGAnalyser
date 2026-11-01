@@ -108,6 +108,7 @@ bool fromJson(std::string_view text, std::vector<Item>& oldestFirst, std::string
 //  "scan"                            le compte rendu du dernier scan reseau (Communication > Scanner IP)
 //  "incident:<dossier>"              IHM > Ressources > Incidents, cet incident choisi
 //  "parametres"                      les parametres de l'Assistant
+//  "mission:<identifiant>"           1.22.0 : le tableau de bord de la mission (au centre)
 [[nodiscard]] std::string toConversation(const std::string& conversation, int message = -1);
 [[nodiscard]] std::string toCard(const std::string& conversation, int message);
 [[nodiscard]] std::string toAttachment(const std::string& attachmentId);
@@ -116,8 +117,9 @@ bool fromJson(std::string_view text, std::vector<Item>& oldestFirst, std::string
 [[nodiscard]] std::string toScanReport();
 [[nodiscard]] std::string toIncident(const std::string& folderName);
 [[nodiscard]] std::string toSettings();
+[[nodiscard]] std::string toMission(const std::string& missionId);   // 1.22.0
 struct Target {
-    std::string kind;     // "conv", "carte", "piece", "modele", "souvenirs", "scan", "incident", "parametres" ; vide : inconnu
+    std::string kind;     // "conv", "carte", "piece", "modele", "souvenirs", "scan", "incident", "parametres", "mission" ; vide : inconnu
     std::string id;       // la conversation, la piece, le statut, le dossier
     int         message{-1};
 };

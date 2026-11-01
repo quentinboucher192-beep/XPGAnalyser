@@ -420,6 +420,7 @@ std::string toSouvenirs(const std::string& status) { return "souvenirs:" + statu
 std::string toScanReport() { return "scan"; }
 std::string toIncident(const std::string& folderName) { return "incident:" + folderName; }
 std::string toSettings() { return "parametres"; }
+std::string toMission(const std::string& missionId) { return "mission:" + missionId; }   // 1.22.0
 
 Target parseAction(std::string_view action) {
     Target t;
@@ -431,7 +432,9 @@ Target parseAction(std::string_view action) {
     if (colon == std::string_view::npos || colon == 0) return t;
     const std::string kind(action.substr(0, colon));
     std::string rest(action.substr(colon + 1));
-    if (kind != "conv" && kind != "carte" && kind != "piece" && kind != "modele" && kind != "souvenirs" && kind != "incident") return t;
+    if (kind != "conv" && kind != "carte" && kind != "piece" && kind != "modele" && kind != "souvenirs" && kind != "incident"
+        && kind != "mission")   // 1.22.0
+        return t;
     if (kind == "conv" || kind == "carte") {
         if (const auto hash = rest.rfind('#'); hash != std::string::npos) {
             const std::string n = rest.substr(hash + 1);
