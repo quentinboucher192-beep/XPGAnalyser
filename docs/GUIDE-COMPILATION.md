@@ -1,6 +1,6 @@
 # Compiler API Studio et IHM Studio
 
-Ce guide couvre les trois façons de construire la suite à partir du dépôt (version 1.21.3) et la fabrication de l'installateur. Les commandes viennent des scripts du dépôt (`CMakeLists.txt`, `outils/`). Retour au [README](../README.md).
+Ce guide couvre les trois façons de construire la suite à partir du dépôt (version 1.22.0) et la fabrication de l'installateur. Les commandes viennent des scripts du dépôt (`CMakeLists.txt`, `outils/`). Retour au [README](../README.md).
 
 > Mise à jour 1.21.3 : ce guide décrivait auparavant la seule chaîne Windows de la 1.11.2 (un exécutable `XpgAnalyzer.exe`, un installateur `XPGAnalyser-Setup-1.11.2.exe`). Il couvre maintenant les deux exécutables `API-Studio.exe` et `IHM-Studio.exe`, la construction Linux et la compilation croisée MinGW-w64, qui produit les exécutables livrés.
 
@@ -23,7 +23,7 @@ Ce guide couvre les trois façons de construire la suite à partir du dépôt (v
 
 | Chaîne | Produit | Usage constaté dans les notes de livraison |
 |---|---|---|
-| **CMake + Ninja + GCC sous Linux** | bibliothèques, `API-Studio` et `IHM-Studio` sans interface (`--cli` seulement) si `XPG_WITH_SDL=OFF`, et les essais | les 116 suites de la 1.21.3 |
+| **CMake + Ninja + GCC sous Linux** | bibliothèques, `API-Studio` et `IHM-Studio` sans interface (`--cli` seulement) si `XPG_WITH_SDL=OFF`, et les essais | les 119 suites de la 1.22.0 |
 | **CMake + Ninja + MinGW-w64 (compilation croisée sous Linux)** | `API-Studio.exe`, `IHM-Studio.exe` pour Windows x64 | exécutables livrés, installateur fabriqué sous Linux avec Inno Setup sous Wine |
 | **MSBuild + MSVC (Visual Studio 2022 ou Build Tools)** | `build\Release\API-Studio.exe`, `IHM-Studio.exe` ; installateur par `outils\package.bat` | liste des sources tenue à jour (essai `vcxproj`) ; l'ancienne version de ce guide indiquait que ces scripts n'avaient pas encore tourné sous Windows, aucune note de livraison ultérieure ne rapporte une compilation MSVC, et la version du fichier `.rc` est en retard (§ 9) |
 
@@ -212,11 +212,11 @@ Dépannage : [DEPANNAGE.md](DEPANNAGE.md). Paramètres : [CONFIG-INI.md](CONFIG-
 
 La version doit être identique dans quatre fichiers (`src/core/Version.hpp`, rappel en tête) :
 
-- `CMakeLists.txt` : `project(xpg_analyzer VERSION 1.21.3 …)` ;
+- `CMakeLists.txt` : `project(xpg_analyzer VERSION 1.22.0 …)` ;
 - `src/core/Version.hpp` : `XPG_ANALYZER_VERSION` ;
 - `resources/windows/xpg_analyzer.rc` ;
 - `outils/config.ini` : `[Produit] version`.
 
 `outils\build.bat` et `outils\package.bat` vérifient leur concordance sous Windows (`Get-XpgVersionsDuProjet`, `outils/lib/XpgOutils.psm1`).
 
-> **État constaté dans ce commit** : `CMakeLists.txt`, `src/core/Version.hpp` et `outils/config.ini` portent 1.21.3, mais `resources/windows/xpg_analyzer.rc` (le fichier de ressources utilisé par `XpgAnalyzer.vcxproj`) porte encore `1.12.0`. En l'état, `build.bat` et `package.bat` s'arrêteraient donc sur « Versions incohérentes » (code 2) avant de compiler. La chaîne CMake (Linux, MinGW) n'est pas concernée : elle produit sa ressource depuis `resources/windows/xpg_analyzer.rc.in` avec la version de `CMakeLists.txt`.
+> **1.22.0** : les quatre fichiers portent 1.22.0. Jusqu'à la 1.21.3, `resources/windows/xpg_analyzer.rc` (le fichier de ressources utilisé par `XpgAnalyzer.vcxproj`) était resté à `1.12.0`, ce qui arrêtait `build.bat` et `package.bat` sur « Versions incohérentes » (code 2). La chaîne CMake (Linux, MinGW) n'est pas concernée : elle produit sa ressource depuis `resources/windows/xpg_analyzer.rc.in` avec la version de `CMakeLists.txt`.

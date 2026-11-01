@@ -1,6 +1,6 @@
 # IHM Studio
 
-Référence fonctionnelle d'**IHM Studio** (exécutable `IHM-Studio.exe`, édition `core::Edition::Ihm`), version 1.21.3 : conception, simulation et exploitation d'une interface homme-machine de supervision. Chaque section renvoie au code qui l'implémente ; le mode d'emploi détaillé, écran par écran, est l'aide F1 (source : `tools/guide-ihm/guide-ihm.txt`, 269 sujets d'après la note de livraison 1.21.3). L'Assistant IA a sa propre référence : [ASSISTANT-IA.md](ASSISTANT-IA.md). Retour au [README](../README.md).
+Référence fonctionnelle d'**IHM Studio** (exécutable `IHM-Studio.exe`, édition `core::Edition::Ihm`), version 1.22.0 : conception, simulation et exploitation d'une interface homme-machine de supervision. Chaque section renvoie au code qui l'implémente ; le mode d'emploi détaillé, écran par écran, est l'aide F1 (source : `tools/guide-ihm/guide-ihm.txt`, 269 sujets d'après la note de livraison 1.21.3). L'Assistant IA a sa propre référence : [ASSISTANT-IA.md](ASSISTANT-IA.md). Retour au [README](../README.md).
 
 ## Sommaire
 

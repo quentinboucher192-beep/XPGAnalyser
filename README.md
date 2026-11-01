@@ -11,16 +11,16 @@ Suite logicielle de bureau, écrite en C++20 avec une interface maison sur SDL3,
 - **API Studio** lit les exports d'échange de Control Expert (`.XPG`, `.XHW`), range le programme dans un dossier de projet modifiable, l'analyse, le simule et régénère des fichiers à réimporter dans Control Expert ;
 - **IHM Studio** conçoit, vérifie, simule et exploite une interface homme-machine (vues, alarmes, recettes, utilisateurs, équipements Modbus TCP), avec un **Assistant IA** qui propose des modifications vérifiées avant application.
 
-Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.21.3**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
+Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.22.0**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
 
 | | |
 |---|---|
-| Version | 1.21.3 (`src/core/Version.hpp`, `CMakeLists.txt`, `outils/config.ini`) |
+| Version | 1.22.0 (`src/core/Version.hpp`, `CMakeLists.txt`, `outils/config.ini`) |
 | Applications | `API-Studio.exe` et `IHM-Studio.exe`, deux exécutables construits à partir des mêmes sources |
 | Langage | C++20 ; environ 647 000 lignes dans `src/` (1 115 fichiers `.cpp`/`.hpp`/`.h`) et 147 000 dans `tests/` |
 | Plates-formes livrées | Windows 10 (1809) et 11, x64 ; construction et essais automatiques sous Linux ([détail](#plates-formes)) |
 | Format des projets IHM | 33 (`hmi::kFormatVersion`) |
-| Essais | 116 suites CTest, toutes réussies sous Linux pour la 1.21.3 ([détail](#tests)) |
+| Essais | 119 suites CTest, toutes réussies sous Linux pour la 1.22.0 ([détail](#tests)) |
 
 ## Sommaire
 
@@ -169,6 +169,7 @@ Résumé par application ; chaque document de référence détaille où se trouv
 | Prévisualisation, application, Undo/Redo | Validation sur une copie, fenêtre « Prévisualisation des modifications », **Appliquer** en une seule commande (un Ctrl+Z), application en fond au-delà de 40 opérations, mode Direct, refus réversible. |
 | Plan et compte rendu | Étapes triées par dépendances, compte rendu lu dans le projet après application. |
 | Propositions successives | Une grande demande est découpée ; la carte affiche « Suite prévue » et le bouton **Proposer la suite** (1.21.3). |
+| Missions IA persistantes | Une grande demande devient une **mission** (1.22.0) : analyse du projet réel, plan d'étapes ordonnées par leurs dépendances, propositions successives P1, P2… qui savent ce qui a réellement été fait, progression calculée, tableau de bord, reprise après une fermeture sans rien rejouer, audit et rapport final. Fichiers `IA/missions/<id>.json`. |
 | Pièces jointes | Textes découpés à la mesure du modèle, lecture exacte de lignes à la demande (`lire_piece_jointe`, 8 lectures au plus), classeurs reconnus et modèles de fichiers. |
 | Apprentissage local | Connaissances, modèles métier et vocabulaire de l'IA intégrée, souvenirs validés par l'utilisateur, export `.xia`. **Aucun modèle n'est entraîné ou réentraîné.** |
 | Notifications | Onglet Notifications du panneau (300 au plus). |
@@ -332,7 +333,7 @@ Options lues par `src/main.cpp` :
 | Option | Effet |
 |---|---|
 | `<fichier>` | Ouvre le projet, l'archive ou l'export donné (transmis à l'instance déjà ouverte s'il y en a une). |
-| `--version` | Écrit le nom et la version (`API Studio 1.21.3` ou `IHM Studio 1.21.3`) et s'arrête. |
+| `--version` | Écrit le nom et la version (`API Studio 1.22.0` ou `IHM Studio 1.22.0`) et s'arrête. |
 | `--cli <fichier.XPG> [autres]` | API Studio : analyse sans fenêtre ; code 0 sans constat d'erreur, 1 sinon, 2 si la lecture échoue. |
 | `--poste <dossier>` ou `--ihm <dossier>` | IHM Studio : ouvre le projet en poste d'exploitation. |
 | `--enregistrer`, `--rejouer`, `--arreter-enregistrement`, `--quitter-relecture` (+ `--duree`, `--vitesse`, `--mot-de-passe`, `--jeter`) | IHM Studio : pilote les enregistrements d'une IHM en marche ([détail](docs/IHM-STUDIO.md#enregistrements)). |
@@ -394,7 +395,7 @@ rem Sous Windows, avec MSVC : build\Release\API-Studio.exe et IHM-Studio.exe
 outils\build.bat
 ```
 
-Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). Dans ce commit, la version de `resources/windows/xpg_analyzer.rc` est restée à 1.12.0 : `build.bat` s'arrête sur « Versions incohérentes » tant qu'elle n'est pas alignée ([détail](docs/GUIDE-COMPILATION.md#version)).
+Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). La version de `resources/windows/xpg_analyzer.rc` est alignée sur les trois autres depuis la 1.22.0 (elle était restée à 1.12.0) ; `build.bat` la vérifie ([détail](docs/GUIDE-COMPILATION.md#version)). Aucune compilation MSVC n'a été faite dans la session de la 1.22.0.
 
 ### Installateur et versions portables
 
@@ -440,7 +441,7 @@ Référence complète : [docs/FORMATS.md](docs/FORMATS.md).
 | `.xlsx`, `.xlsm`, `.csv` | Classeurs d'entrée (import, fichiers externes, pièces jointes) ; macros VBA jamais exécutées | les deux |
 | `.xpglayout` | Disposition manuelle des grafcets | API Studio |
 
-- **Format interne des projets IHM** : 33 (`hmi::kFormatVersion`), écrit au plus petit format suffisant ; un outil plus ancien refuse un format plus récent. La 1.21.3 ne change pas ce format.
+- **Format interne des projets IHM** : 33 (`hmi::kFormatVersion`), écrit au plus petit format suffisant ; un outil plus ancien refuse un format plus récent. La 1.22.0 ne change pas ce format : les missions IA sont des fichiers à part, dans le dossier `IA/missions/` des réglages, jamais dans le projet.
 - **Sauvegardes** : sauvegarde de la version installée avant mise à jour (3 gardées), réserve de réparation (`Reserve\<version>`), reprise après arrêt brutal, sauvegardes de la mémoire de l'Assistant, version « Avant restauration ».
 - **Données de l'Assistant** : dossier `IA/` (conversations, pièces jointes, `parametres.json` sans clé, `notifications.json`, `cles/` protégées par DPAPI sous Windows…) — [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md#donnees).
 
@@ -464,7 +465,7 @@ Un modèle servi sur le PC (Ollama, LM Studio) reçoit les mêmes données sans 
 - **aucun modèle n'est entraîné ni réentraîné** : l'« apprentissage » est une mémoire locale (connaissances, modèles métier et vocabulaire de l'IA intégrée, modèles de fichiers, souvenirs) relue et jointe aux demandes ;
 - la clé API n'est jamais écrite en clair ; sous Linux elle n'est gardée que pour la séance ;
 - `http://` n'est accepté que vers le poste lui-même, ou vers une adresse privée pour un service compatible OpenAI sans clé ;
-- limites : qualité dépendante du modèle, essais automatiques faits avec un faux fournisseur (aucun essai avec une vraie IA rapporté pour la 1.21.3), bac à sable non isolé du réseau sous Windows, C/C++ jamais exécutés, PDF scannés et `.xls` non lus.
+- limites : qualité dépendante du modèle, essais automatiques faits avec un faux fournisseur (aucun essai avec une vraie IA rapporté pour la 1.22.0), bac à sable non isolé du réseau sous Windows, C/C++ jamais exécutés, PDF scannés et `.xls` non lus.
 
 ---
 
@@ -482,9 +483,9 @@ Les emplacements prévus, le contenu attendu de chaque capture et la façon de l
 
 Détail : [docs/TESTS.md](docs/TESTS.md).
 
-- **116 suites CTest** dans ce commit : 115 essais C++ enregistrés par `xpg_add_test` (certains exécutables servent à deux essais) et l'essai Python `vcxproj`. Répartition : Assistant IA (18), IHM (37), automate (33), socle et application (27), outillage (1). Vingt-deux autres suites sont déclarées mais sautées car leur source n'est pas dans le dépôt.
+- **119 suites CTest** dans ce commit : 118 essais C++ enregistrés par `xpg_add_test` (certains exécutables servent à deux essais) et l'essai Python `vcxproj`. Répartition : Assistant IA (21), IHM (37), automate (33), socle et application (27), outillage (1). Vingt-deux autres suites sont déclarées mais sautées car leur source n'est pas dans le dépôt.
 - Les essais n'ouvrent pas de fenêtre ; réseau et IA sont remplacés par des faux injectables.
-- **Plates-formes réellement essayées** : Linux (CTest, 116 suites réussies pour la 1.21.3) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** (`--version`, `--cli` sur le projet d'essai, installation silencieuse, bac à sable).
+- **Plates-formes réellement essayées** : Linux (CTest, 119 suites réussies pour la 1.22.0) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** (`--version`, `--cli` sur le projet d'essai, installation silencieuse, bac à sable).
 - `build.sh` et `runtests.sh` sont historiques (le premier se déclare « plus tenu à jour ») : la référence est CMake/CTest.
 - Des essais réussis ne prouvent pas l'absence de défauts ; l'interface graphique réelle, les services d'IA réels, Windows hors Wine et les automates physiques ne sont pas couverts par les essais automatiques.
 
@@ -501,7 +502,8 @@ Relevées dans le code et les notes de livraison de ce commit :
 - **IHM** : communication Modbus TCP seulement (et surveillance « joignable » d'un appareil Ethernet) ; scripts C/C++ jamais exécutés ; courriel sans TLS ; accès web en HTTP ; vidéo MP4/WMV/MOV sous Windows seulement ; bases de données externes par chaîne de connexion non connectées.
 - **Assistant IA** : IHM Studio seulement ; voir [§ 8](#assistant) et [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md#limites).
 - **Plates-formes** : pas d'exécutable graphique Linux livré ; vérifications Windows faites sous Wine seulement ; installateur non signé.
-- **Fabrication Windows MSVC** : la version de `resources/windows/xpg_analyzer.rc` (1.12.0) ne concorde pas avec les autres (1.21.3), ce qui arrête `build.bat` et `package.bat` ; aucune compilation MSVC n'est rapportée par les notes de livraison récentes.
+- **Fabrication Windows MSVC** : aucune compilation MSVC n'est rapportée par les notes de livraison récentes (la version du `.rc`, restée à 1.12.0, a été alignée en 1.22.0).
+- **Missions IA** : IHM Studio seulement ; essayées avec un faux fournisseur, jamais avec une vraie IA ; voir [docs/LIVRAISON-1.22.0.md](docs/LIVRAISON-1.22.0.md).
 - **Dépôt** : `SDL3.dll`/`SDL3.lib` et PDFium ne sont pas versionnés ; 22 suites d'essais déclarées n'ont pas leur source.
 
 Aucune feuille de route n'est publiée dans ce dépôt.
@@ -526,7 +528,7 @@ Aucune feuille de route n'est publiée dans ce dépôt.
 | [docs/images/README.md](docs/images/README.md) | Captures à ajouter |
 | Aide F1 (dans le logiciel) | Mode d'emploi écran par écran ; source `tools/guide-ihm/guide-ihm.txt` |
 
-Documents historiques, conservés tels quels : notes de livraison `docs/LIVRAISON-<version>.md` (de la 1.11.3 à la 1.21.3 ; la plus récente est [docs/LIVRAISON-1.21.3.md](docs/LIVRAISON-1.21.3.md)), audit de conception de l'Assistant IA ([docs/ASSISTANT-IA-AUDIT.md](docs/ASSISTANT-IA-AUDIT.md)), audit de la bibliothèque d'objets ([docs/AUDIT-BIBLIOTHEQUE-OBJETS.md](docs/AUDIT-BIBLIOTHEQUE-OBJETS.md)), rapports ([docs/RAPPORT-ANALYSE.md](docs/RAPPORT-ANALYSE.md), [docs/RAPPORT-FINAL-IHM-SIMULATION.md](docs/RAPPORT-FINAL-IHM-SIMULATION.md), [docs/REFONTE-SCRIPTS-ANALYSE.md](docs/REFONTE-SCRIPTS-ANALYSE.md)), notes de travail `docs/NOTES-*.md`, maquettes HTML `docs/maquettes/`, classeur d'accompagnement (`docs/automation.xlsx`, `docs/automation.xlsm`, `docs/Automation.bas`, `docs/make_workbook.py`, `docs/GUIDE.txt`). Ces documents décrivent l'état du logiciel à leur date.
+Documents historiques, conservés tels quels : notes de livraison `docs/LIVRAISON-<version>.md` (de la 1.11.3 à la 1.22.0 ; la plus récente est [docs/LIVRAISON-1.22.0.md](docs/LIVRAISON-1.22.0.md), avec l'audit fait avant les missions : [docs/AUDIT-MISSIONS-1.22.0.md](docs/AUDIT-MISSIONS-1.22.0.md)), audit de conception de l'Assistant IA ([docs/ASSISTANT-IA-AUDIT.md](docs/ASSISTANT-IA-AUDIT.md)), audit de la bibliothèque d'objets ([docs/AUDIT-BIBLIOTHEQUE-OBJETS.md](docs/AUDIT-BIBLIOTHEQUE-OBJETS.md)), rapports ([docs/RAPPORT-ANALYSE.md](docs/RAPPORT-ANALYSE.md), [docs/RAPPORT-FINAL-IHM-SIMULATION.md](docs/RAPPORT-FINAL-IHM-SIMULATION.md), [docs/REFONTE-SCRIPTS-ANALYSE.md](docs/REFONTE-SCRIPTS-ANALYSE.md)), notes de travail `docs/NOTES-*.md`, maquettes HTML `docs/maquettes/`, classeur d'accompagnement (`docs/automation.xlsx`, `docs/automation.xlsm`, `docs/Automation.bas`, `docs/make_workbook.py`, `docs/GUIDE.txt`). Ces documents décrivent l'état du logiciel à leur date.
 
 ---
 

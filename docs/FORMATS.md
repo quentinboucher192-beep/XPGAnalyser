@@ -1,6 +1,6 @@
 # Formats, données et emplacements
 
-Référence des fichiers lus et écrits par API Studio et IHM Studio (version 1.21.3), d'après le code. Retour au [README](../README.md).
+Référence des fichiers lus et écrits par API Studio et IHM Studio (version 1.22.0), d'après le code. Retour au [README](../README.md).
 
 ## Sommaire
 
@@ -184,7 +184,7 @@ Règles d'écriture :
 <a id="ia"></a>
 ## 9. Données de l'Assistant IA
 
-Dossier `IA/` des réglages partagés : `parametres.json`, `conversations/`, `pieces-jointes/`, `connaissances/`, `cles/` (`index.json` non secret, `<id>.bin` protégé par DPAPI sous Windows), `projets.json`, `notifications.json`, `usage.json`, `memoire.json`, `activite.jsonl`, `sauvegardes/`, `index/`, `journaux/`, `cache/`. Détail et règles : [ASSISTANT-IA.md](ASSISTANT-IA.md#donnees).
+Dossier `IA/` des réglages partagés : `parametres.json`, `conversations/`, `missions/` (1.22.0 : une mission IA par fichier, format 1, écrit d'un bloc avec une copie `.bak`), `pieces-jointes/`, `connaissances/`, `cles/` (`index.json` non secret, `<id>.bin` protégé par DPAPI sous Windows), `projets.json`, `notifications.json`, `usage.json`, `memoire.json`, `activite.jsonl`, `sauvegardes/`, `index/`, `journaux/`, `cache/`. Détail et règles : [ASSISTANT-IA.md](ASSISTANT-IA.md#donnees).
 
 Les fichiers JSON de l'Assistant conservent l'ordre et les champs inconnus (`src/app/ai/AiJson.*`), portent un champ `format` pour les migrations, et sont écrits de façon atomique.
 

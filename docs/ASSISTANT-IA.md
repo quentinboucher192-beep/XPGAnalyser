@@ -1,6 +1,6 @@
 # Assistant IA
 
-Référence de l'Assistant IA d'**IHM Studio** (version 1.21.3), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
+Référence de l'Assistant IA d'**IHM Studio** (version 1.22.0), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
 
 ## Sommaire
 
@@ -13,6 +13,7 @@ Référence de l'Assistant IA d'**IHM Studio** (version 1.21.3), établie à par
 7. [Validation, prévisualisation, application, annulation](#application)
 8. [Plan d'opérations et compte rendu](#plan)
 9. [Grandes demandes : propositions successives et « Proposer la suite »](#suite)
+9 bis. [Missions IA persistantes (1.22.0)](#missions)
 10. [Pièces jointes](#pieces)
 11. [Outils exécutés sur le PC à la demande de l'IA](#outils)
 12. [Apprentissage local, mémoire et souvenirs](#memoire)
@@ -178,6 +179,24 @@ Depuis la 1.21.3 (`docs/LIVRAISON-1.21.3.md`, `src/app/ai/AiPanel.cpp`) :
 
 ---
 
+<a id="missions"></a>
+## 9 bis. Missions IA persistantes (1.22.0)
+
+Une demande trop grande pour une proposition devient une **mission** : un objet de l'application, gardé dans `IA/missions/<id>.json`, indépendant de la conversation qui l'a lancée (`src/app/ai/AiMission.*`, `AiMissionStore.*` ; audit préalable : [AUDIT-MISSIONS-1.22.0.md](AUDIT-MISSIONS-1.22.0.md) ; détail : [LIVRAISON-1.22.0.md](LIVRAISON-1.22.0.md)).
+
+- **Création** : la carte « Créer une mission IA ? » au moment d'envoyer une demande complexe (heuristique `looksComplex`, jamais pour une question), ou le **+** de l'onglet **Missions IA**. Il faut une IA connectée (pas l'IA intégrée ni la démonstration) et un projet ouvert.
+- **Plan** : l'IA analyse le projet réel puis appelle l'outil `planifier_mission` (étapes, catégories, dépendances, estimation d'opérations). L'ordre est calculé par le logiciel (tri topologique stable) ; des dépendances **implicites** s'ajoutent par catégorie, sans cycle ; un cycle est refusé. Un plan revu fusionne avec l'existant (rien n'est remis à zéro).
+- **États d'une étape** : à planifier, en attente, prête, en cours, en attente de validation, appliquée, vérification, terminée, en erreur, bloquée, ignorée, annulée ; transitions contrôlées (`canMove`).
+- **Propositions successives** : les étapes prêtes sont regroupées en un lot à la mesure d'une réponse (`nextBatch`) ; la consigne de chaque proposition contient ce qui est **réellement** dans le projet (les éléments créés par les précédentes, vérifiés) et ce qui a changé ; chaque opération porte son étape (`etape`). Validation, prévisualisation et application inchangées (une commande, un Ctrl+Z).
+- **Suivi réel** : après Appliquer, le compte rendu lu dans le projet met les étapes à jour ; une étape n'est terminée que si ce qu'elle a créé est dans le projet. Ctrl+Z / Ctrl+Y après coup sont constatés.
+- **Progression** : calculée (poids = opérations estimées), cinq mesures (planification, génération, validation, application, globale = étapes terminées).
+- **Reprise** : enregistrement à chaque événement (écriture atomique + `.bak`) ; à la réouverture, comparaison de l'empreinte du projet (identique, modifié avec la liste des changements, introuvable) ; un appel à l'IA en cours à la fermeture est marqué interrompu, rien n'est rejoué.
+- **Fin** : audit global du projet (`hmi::audit::run`) et rapport final (créés, modifiés, réutilisés, terminés, non réalisés, erreurs, à vérifier) ; terminée seulement sans erreur bloquante.
+- **Toute conversation** : un résumé des missions du projet est joint aux demandes ; les outils `chercher_missions` et `etat_mission` relisent les fichiers (jamais inventé).
+- **Écrans** : onglet **Missions IA** du panneau, bande **Mission IA** au-dessus de la conversation, tableau de bord au centre (onglet « Mission IA · nom »), écran de reprise.
+
+---
+
 <a id="pieces"></a>
 ## 10. Pièces jointes
 
@@ -272,6 +291,7 @@ Racine : `<réglages partagés>/IA/`, soit `%APPDATA%\XpgAnalyzer\IA` sous Windo
 IA/
   parametres.json        réglages de l'Assistant (jamais la clé API)
   conversations/         un JSON par conversation
+  missions/              une mission IA par fichier (<id>.json et sa copie .bak, 1.22.0)
   pieces-jointes/<id>/   copies à l'identique des fichiers joints
   connaissances/         connaissances ajoutées, souvenirs, modèles de fichiers
   cles/                  index.json (non secret) et <id>.bin (clé protégée, Windows)
@@ -293,7 +313,7 @@ Sources : `src/app/ai/AiPaths.hpp`, `AiKeys.hpp`, `AiUsage.hpp`, `AiMemory.hpp`.
 <a id="limites"></a>
 ## 17. Limites connues
 
-Relevées dans le code et les notes de livraison 1.21.x :
+Relevées dans le code et les notes de livraison 1.21.x et 1.22.0 :
 
 - Disponible dans **IHM Studio seulement** ; les suppressions côté automate ne sont pas couvertes.
 - Avec une IA connectée, la **qualité des propositions dépend du modèle** ; la validation stricte, l'aperçu et Ctrl+Z en sont la protection.
@@ -304,6 +324,7 @@ Relevées dans le code et les notes de livraison 1.21.x :
 - Les **souvenirs** restent sur le PC (ils ne voyagent pas avec le projet).
 - **Clé API sous Linux** : gardée pour la séance seulement.
 - Deux fenêtres d'IHM Studio ouvertes partagent le même journal de notifications : la dernière écriture l'emporte.
+- **Missions IA** : jamais essayées avec une vraie IA (faux fournisseur) ; la qualité du plan dépend du modèle ; deux fenêtres d'IHM Studio sur la même mission ne se synchronisent pas (la dernière écriture l'emporte) ; une mission ne travaille que sur le projet IHM.
 
 ---
 
@@ -316,6 +337,8 @@ Relevées dans le code et les notes de livraison 1.21.x :
 | `AiProvider`, `AiAnthropic`, `AiOpenAI`, `AiLocal`, `AiDemo`, `AiDesign` | Fournisseurs (contrat commun ; Anthropic ; compatible OpenAI ; IA intégrée ; démonstration ; conception de projets complets par l'IA intégrée) |
 | `AiHttp`, `AiSse` | HTTPS (WinHTTP / libcurl), flux d'événements serveur |
 | `AiPrompt`, `AiRegistry`, `AiContext`, `AiAutomate` | Consignes, registre des genres tiré du code, contexte du projet, variables et types de l'automate |
+| `AiMission`, `AiMissionStore` | Missions IA (1.22.0) : modèle et règles ; fichiers, empreinte du projet, reprise |
+| `AiMissionsView`, `AiMissionStrip`, `AiMissionBoard` | Onglet Missions IA, bande et carte « Créer une mission IA ? », tableau de bord et écran de reprise |
 | `AiOperations`, `AiPlan`, `AiDelete` | Opérations, validation, commande unique, aperçu ; plan ; suppression intelligente |
 | `AiPanel`, `AiPlanStrip`, `AiPreviewDialog`, `AiSettingsDialog`, `AiKeysDialog`, `AiContextPane`, `AiFileModelDialog`, `AiNotificationsView`, `AiMemoryDialog`, `AiWorkspace` | Interface et branchement dans l'écran du projet |
 | `AiStore`, `AiJson`, `AiPaths`, `AiConversationIndex` | Fichiers, JSON, chemins, index |

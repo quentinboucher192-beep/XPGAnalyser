@@ -1,6 +1,6 @@
 # Architecture technique
 
-Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.21.3). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
+Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.22.0). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
 
 > Ce document remplace la version d'origine, rédigée en anglais au premier jalon du projet (un seul exécutable, quatre essais, un outil d'analyse en lecture seule). Cette version reste consultable dans l'historique Git.
 
@@ -339,6 +339,7 @@ flowchart TD
 - `Provider::start()` part sur un fil de travail ; `poll()` est appelé à chaque image sur le fil de l'interface et rend les événements reçus (texte, appel d'outil, fin) ; `cancel()` ferme la connexion (`src/app/ai/AiProvider.hpp`).
 - L'IA intégrée et la démonstration calculent leur réponse sur le fil de l'interface, sans réseau, puis la « déroulent » au rythme de `tick()` (`AiAssistant.hpp`).
 - Une proposition d'au moins 40 opérations est vérifiée et appliquée sur une copie du projet dans un fil de fond ; le résultat n'est posé (une seule commande) que si le projet n'a pas changé entre-temps (`Assistant::applyInBackground`, `kBackgroundOps = 40`).
+- **Missions IA (1.22.0)** : `AiMission` (le modèle et ses règles, sans disque ni réseau : états des étapes, plan, ordre, lots, suivi des propositions, progression, rapport) et `AiMissionStore` (fichiers `IA/missions/<id>.json` écrits d'un bloc avec une copie `.bak`, empreinte du projet, reprise) ; `ai::Assistant` les tient à jour à chaque événement ; `AiMissionsView`, `AiMissionStrip` et `AiMissionBoard` les montrent (onglet, bande, tableau de bord au centre). Le projet réel reste la source de vérité : une étape n'est terminée que si ce qu'elle a créé est dans le projet.
 - Le détail (fournisseurs, données envoyées, stockage, limites) est dans [ASSISTANT-IA.md](ASSISTANT-IA.md).
 
 ---

@@ -1,6 +1,6 @@
 # Tests et qualité
 
-État des essais automatiques du dépôt (version 1.21.3), établi à partir de `CMakeLists.txt` et du dossier `tests/`. Retour au [README](../README.md).
+État des essais automatiques du dépôt (version 1.21.3), établi à partir de `CMakeLists.txt` et du dossier `tests/`. Version 1.22.0. Retour au [README](../README.md).
 
 ## Sommaire
 
@@ -32,11 +32,11 @@ Décompte fait sur `CMakeLists.txt` de ce commit :
 
 | Élément | Nombre |
 |---|---:|
-| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 115 |
+| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 118 |
 | Essai `vcxproj` (Python : `outils/verifier_vcxproj.py`, enregistré si Python 3 est trouvé) | 1 |
-| **Total** | **116** |
+| **Total** | **119** |
 
-Ce total correspond aux « 116 suites d'essais » de la note de livraison 1.21.3.
+Ce total correspond aux « 119 suites d'essais » de la note de livraison 1.22.0 (116 en 1.21.3, plus `aimissions`, `aimissionse2e`, `aimissionsui`).
 
 Essais **déclarés mais sautés** parce que leur source n'est pas dans le dépôt (22) : `core` (`src/core/compile_check.cpp` absent), `grafcet`, `macro`, `xref`, `equipment`, `font`, `theme`, `corner`, `libhelp`, `helparticle`, `execorder`, `simorder`, `treednd`, `execwiring`, `macroxls`, `macronatives`, `libcatalog`, `macrohelp`, `libpage`, `help`, `helpsession`, `xlsm`. Pour `xlsm`, les classeurs d'essai (`tests/fixtures/simple.xlsx`) et le script `tests/make_fixtures.py` que cite `CMakeLists.txt` pour les fabriquer sont eux aussi absents.
 
@@ -85,7 +85,7 @@ ctest --test-dir build-linux -R '^ai' --output-on-failure
 
 | Catégorie | Nombre | Suites |
 |---|---:|---|
-| Assistant IA | 18 | `aiassistant`, `aireseau`, `aisandbox`, `airegistre`, `aiintegree`, `aicompatible`, `aioptions`, `aiapprentissagefichier`, `aiapprentissage`, `aiplan`, `aidelete`, `aisouvenirs`, `aicontexte`, `ainotifications`, `aimodelesfichiers`, `aidesign`, `aiincidents`, `aimemoire` |
+| Assistant IA | 21 | `aimissions`, `aimissionse2e`, `aimissionsui`, `aiassistant`, `aireseau`, `aisandbox`, `airegistre`, `aiintegree`, `aicompatible`, `aioptions`, `aiapprentissagefichier`, `aiapprentissage`, `aiplan`, `aidelete`, `aisouvenirs`, `aicontexte`, `ainotifications`, `aimodelesfichiers`, `aidesign`, `aiincidents`, `aimemoire` |
 | IHM (modèle, éditeur, moteur, langage des scripts, communication, incidents, archives) | 37 | `hmi`, `hmieditor`, `hmicheckexpr`, `hmibuild`, `hmilog`, `hmisimdata`, `hmiretain`, `hmitrace`, `hmitracemig`, `hmimigrate`, `hmitypes`, `hmireperes`, `hminatives`, `hminatives1127`, `hminatives1216`, `hmisetring`, `hmiqr`, `hmivideo`, `hmipid`, `hmidocviewer`, `hmiedits`, `hmirecording`, `hmioverload`, `hmidecl`, `hmidebug`, `hmirelations`, `hmiincident`, `hmidiscovery`, `renamehmipaths`, `echanges`, `erreurs`, `generiques`, `testsunitaires`, `donnees`, `objets`, `unites`, `bibliotheques` |
 | Automate (import, projet, édition, analyse, simulation, macros) | 33 | `import`, `hardware`, `roundtrip`, `project`, `edit`, `editor`, `library`, `sharedlib`, `delete`, `table`, `robustness`, `viewmodel`, `simulation`, `macros2`, `api2`, `api34`, `typeusage`, `versionstate`, `projecticon`, `lisible`, `membertree`, `renameplan`, `mastimport`, `projectstats`, `graphxml`, `simdebugui`, `simstatus`, `simperf`, `simdebug`, `macros2libs`, `api2libs`, `macrospecwrite`, `simdebuglibs` |
 | Socle, interface, application | 27 | `menu`, `syntax`, `fold`, `layout`, `popup`, `zoom`, `settings`, `dossiers`, `keymap`, `themecatalog`, `themefile`, `dialogwindow`, `statusstrip`, `searchfocus`, `filtermemory`, `crashtrail`, `crashreport`, `coreprocess`, `topbar8`, `lot8tutorials`, `tutorial`, `fileexplorer`, `fileview`, `dropfiles`, `exportask`, `cellrule`, `edition` |
@@ -126,9 +126,9 @@ Quelques suites significatives :
 
 D'après les notes de livraison (`docs/LIVRAISON-1.21.0.md` à `docs/LIVRAISON-1.21.3.md`) :
 
-- **Linux** : les 116 suites CTest, toutes réussies pour la 1.21.3.
+- **Linux** : les 119 suites CTest, toutes réussies pour la 1.22.0.
 - **Windows** : les deux exécutables Windows, compilés sous Linux avec MinGW-w64, ont été **vérifiés sous Wine, pas sur un vrai Windows** : `--version`, `API-Studio.exe --cli MAST.XPG` (même résultat qu'avant : 891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB), installation silencieuse de `API-IHM-Studio-Setup-1.21.3.exe` par-dessus la 1.21.1 (clé API d'essai conservée, associations présentes), et bac à sable de l'exécutable installé (`IHM-Studio.exe --bac-a-sable`).
-- **Assistant IA avec une vraie IA** : non essayé dans la session de la 1.21.3 (aucune clé disponible) ; les essais utilisent un faux fournisseur et un faux transport.
+- **Assistant IA avec une vraie IA** : non essayé dans les sessions de la 1.21.3 et de la 1.22.0 (aucune clé disponible) ; les essais utilisent un faux fournisseur et un faux transport.
 
 ---
 

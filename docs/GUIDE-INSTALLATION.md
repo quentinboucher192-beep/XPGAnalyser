@@ -1,6 +1,6 @@
 # Installer, mettre à jour, réparer, désinstaller API IHM Studio
 
-Pour l'utilisateur, sous Windows. Un seul fichier : **`API-IHM-Studio-Setup-<version>.exe`** (pour cette version : `API-IHM-Studio-Setup-1.21.3.exe`). Il installe API Studio et/ou IHM Studio et apporte tout ce dont ils ont besoin, sans Internet : `SDL3.dll`, `pdfium.dll` (lecteur PDF) et, pour une version compilée avec MSVC, le runtime Visual C++ placé à côté des exécutables. Retour au [README](../README.md).
+Pour l'utilisateur, sous Windows. Un seul fichier : **`API-IHM-Studio-Setup-<version>.exe`** (pour cette version : `API-IHM-Studio-Setup-1.22.0.exe`). Il installe API Studio et/ou IHM Studio et apporte tout ce dont ils ont besoin, sans Internet : `SDL3.dll`, `pdfium.dll` (lecteur PDF) et, pour une version compilée avec MSVC, le runtime Visual C++ placé à côté des exécutables. Retour au [README](../README.md).
 
 > Mise à jour 1.21.3 : ce guide a été écrit pour la 1.11.2 (installateur `XPGAnalyser-Setup-1.11.2.exe`). Les noms ont été mis à jour d'après `installateur/XPGAnalyser.iss` et `outils/config.ini` : le produit s'appelle **API IHM Studio** depuis la 1.12.20 ; la clé du registre et les dossiers techniques gardent le nom d'origine `XPGAnalyser` / `XpgAnalyzer`.
 
@@ -55,9 +55,9 @@ Dans le menu Démarrer (groupe **API IHM Studio**) : API Studio, IHM Studio, **M
 ### Sans surveillance (déploiement)
 
 ```bat
-API-IHM-Studio-Setup-1.21.3.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /LOG="C:\temp\installation.log"
-API-IHM-Studio-Setup-1.21.3.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D:\Donnees API IHM" /MIGRER=non
-API-IHM-Studio-Setup-1.21.3.exe /VERYSILENT /ALLUSERS /PROFIL=poste /POSTE="D:\Projets\Armoire" /POSTEAUTO=oui /POSTERELANCE=oui
+API-IHM-Studio-Setup-1.22.0.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /LOG="C:\temp\installation.log"
+API-IHM-Studio-Setup-1.22.0.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D:\Donnees API IHM" /MIGRER=non
+API-IHM-Studio-Setup-1.22.0.exe /VERYSILENT /ALLUSERS /PROFIL=poste /POSTE="D:\Projets\Armoire" /POSTEAUTO=oui /POSTERELANCE=oui
 ```
 
 | Option | Rôle |
