@@ -258,6 +258,38 @@ public:
     // 1.22.1 : la proposition appliquee sur un fil de fond (Proposal::id ; vide : aucune) - l'activite d'une etape de mission.
     [[nodiscard]] std::string applyingProposal() const { return applyJob_ ? applyJob_->proposalId : std::string{}; }
 
+    // ---- 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) ----------------------------------------------------------------
+    // A son arrivee (une fois), chaque proposition est comparee aux precedentes : celles de sa mission (memes operations,
+    // memes erreurs deux fois de suite, une etape tentee 3 fois sans aboutir, le projet revenu au meme point), celles de sa
+    // conversation (memes operations, memes erreurs, la meme suite). UN CERCLE VU : la proposition est RETENUE - elle ne
+    // s'applique pas (ni en mode Direct), la suite de la mission ne repart pas ; sa carte dit le cercle et propose les
+    // choix ; la mission le note (historique, notification << La mission tourne en rond >>).
+    struct LoopInfo {
+        std::string              text;      // le cercle, en clair (vide : aucun)
+        std::vector<std::string> signs;     // loop::signKey
+        std::string              choice;    // le choix fait (vide : aucun)
+        std::string              mission;   // la mission de la proposition (vide : une proposition de conversation)
+        std::vector<std::string> steps;     // les etapes en cause (mission)
+        std::string              tag;       // "P5" (mission) ; vide sinon
+        bool                     held{false};   // retenue : un cercle, pas encore de choix, toujours << proposee >>
+    };
+    [[nodiscard]] LoopInfo loopOf(int message) const;
+    // LE CHOIX sur la carte d'une proposition retenue (la conversation ouverte) :
+    //  - ProposeAnyway (Proposer quand meme) : elle redevient une proposition comme les autres ;
+    //  - ByHand (Corriger a la main) : idem, la previsualisation s'ouvre (le panneau) pour la corriger avant d'appliquer ;
+    //  - EditRequest (Modifier la demande) : une conversation - la demande revient dans la saisie (`request`), la
+    //    proposition reste a decider ; une mission - la proposition est refusee (ses etapes redeviennent pretes) et
+    //    `request` rend le debut de la consigne a ecrire (<< Pour S4 : >>) : le prochain envoi de cette conversation qui
+    //    commence ainsi devient une CONSIGNE de la mission (gardee, dite a l'IA) et la suite repart avec elle ;
+    //  - SkipStep (Ignorer cette etape, une mission) : la proposition est refusee, les etapes en cause ignorees ;
+    //  - ForceFinish (Forcer la fin de la mission) : forceFinishMission (le panneau demande d'abord).
+    // Faux et `why` : pas de proposition retenue a ce message, un choix qui ne vaut que pour une mission, une mission en
+    // lecture seule...
+    enum class LoopChoice : std::uint8_t { EditRequest, ByHand, SkipStep, ForceFinish, ProposeAnyway };
+    bool chooseLoop(int message, LoopChoice choice, std::string* why = nullptr, std::string* request = nullptr);
+    // La consigne attendue apres Modifier la demande (une mission) : son debut (<< Pour S4 : >>) ; vide : aucune.
+    [[nodiscard]] std::string steerPrefix() const { return steer_ ? steer_->prefix : std::string{}; }
+
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
     [[nodiscard]] const Proposal* proposal(int message) const noexcept;
@@ -653,6 +685,17 @@ private:
     void                                   missionDropped(std::string_view proposalId, std::string_view state, const std::string& reason);
     [[nodiscard]] bool                     missionMayApply(std::string_view proposalId, std::string* why) const;
     void                                   settleStale(mission::Mission& m);
+    // 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) - une proposition de conversation arrivee (ses empreintes, le cercle
+    // eventuel ; `errors` nul : pas encore verifiee), et retenue ou non ; la consigne attendue apres Modifier la demande.
+    void                                   loopArrived(Conversation& c, int message, const std::vector<std::string>* errors);
+    [[nodiscard]] bool                     loopMayApply(const Proposal& p, std::string* why) const;
+    bool                                   steerMission(const std::string& text, std::string* why);
+    bool                                   continueMissionWith(std::string_view id, const std::string& consigne, std::string* why);
+    struct Steer {
+        std::string              mission, conversation, prefix;
+        std::vector<std::string> steps;
+    };
+    std::optional<Steer>                   steer_;
     void                                   missionsTick();
     void                                   pollAudits();
     bool                                   relaunchMission(const Message& request, std::string* why);

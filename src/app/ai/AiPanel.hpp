@@ -214,6 +214,10 @@ public:
     // Echap ou Garder : rien ne change.
     void askRefuse(int message);
     void editRequest(int message);                 // Modifier la demande : le texte remis dans la saisie
+    // 1.22.4 : LE CHOIX sur la carte d'une proposition qui tourne en rond (Assistant::chooseLoop) : Corriger a la main ouvre
+    // la previsualisation ; Modifier la demande remet la demande (une mission : le debut de la consigne) dans la saisie ;
+    // Forcer la fin de la mission pose d'abord la question (missionAct). Faux : refuse, et dit pourquoi.
+    bool chooseLoop(int message, Assistant::LoopChoice choice);
     // 1.22.1 : LE CLIC DROIT SUR UNE ERREUR (AiFixes.hpp) - << Demander a l'IA de corriger >> : le texte prepare dans la
     // saisie (RIEN ne part seul : l'utilisateur relit, puis Entree) ; << Choisir une variable... >> depuis la carte :
     // la previsualisation, son choix du haut sur cette variable ; ce que la barre d'etat dit (la fenetre d'apercu).
@@ -424,7 +428,8 @@ public:
     [[nodiscard]] bool  atBottom() const noexcept;
     // La carte d'un message (vide : pas de carte, ou pas encore dessinee), ses boutons.
     [[nodiscard]] gfx::Rect cardRect(int message) const;
-    [[nodiscard]] ui::Button* cardButton(int message, int which) const;   // 0 Previsualiser, 1 Appliquer, 2 Refuser / Redemander
+    // 0 Previsualiser, 1 Appliquer, 2 Refuser / Redemander ; 1.22.4 (retenue) : 3 Ignorer cette etape, 4 Forcer la fin de la mission
+    [[nodiscard]] ui::Button* cardButton(int message, int which) const;
     // 1.15.0 : Reessayer, sous le dernier message (une erreur, un arret) ; nul : pas encore cree.
     [[nodiscard]] ui::Button* retryButton() const noexcept { return retry_; }
     [[nodiscard]] gfx::Rect suggestionRect(std::size_t index) const;
@@ -554,6 +559,11 @@ private:
         std::string              stepsMore;        // "... et 12 autres etapes"
         struct ReportLine { std::string text; std::uint8_t tone{0}; };   // 0 normal, 1 ok, 2 attention, 3 erreur, 4 titre
         std::vector<ReportLine>  reportLines;
+        // 1.22.4 (a la fin) : NE PAS TOURNER EN ROND - le cercle vu a l'arrivee (Assistant::loopOf), sous les comptes ;
+        // retenue : les boutons sont les choix (Corriger a la main, Proposer quand meme, Modifier la demande ; une mission :
+        // Ignorer cette etape, Forcer la fin de la mission).
+        std::vector<std::string> loopLines;
+        bool                     loopHeld{false};
     };
     struct CardButtons {
         int         message{-1};
@@ -565,6 +575,11 @@ private:
         bool        refused{false};       // 1.16.1 : refusee : `apply` dit Revenir sur le refus
         bool        detect{false};        // 1.18.0 : appliquee : `apply` dit Detecter ce qui repond...
         bool        next{false};          // 1.21.3 : appliquee, une suite prevue : `apply` dit Proposer la suite
+        // 1.22.4 (a la fin) : retenue (elle tourne en rond) - `preview` Corriger a la main, `apply` Proposer quand meme,
+        // `third` Modifier la demande ; une mission : `fourth` Ignorer cette etape, `fifth` Forcer la fin de la mission.
+        ui::Button* fourth{nullptr};
+        ui::Button* fifth{nullptr};
+        bool        loop{false};
     };
     void measure();
     void placeCards();             // les boutons des cartes, au decalage du moment

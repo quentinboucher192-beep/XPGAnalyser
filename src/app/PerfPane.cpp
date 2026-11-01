@@ -149,6 +149,7 @@ const char* describe(std::string_view name) {
         {"ia.tick.missions", "Les missions : la reprise, le projet qui change, les audits finis."},
         {"ia.tick.direct", "La r\xC3\xA9ponse de l'IA qui arrive, en direct."},
         {"ia.fin-reponse", "La r\xC3\xA9ponse finie : la proposition, son empreinte, son enregistrement."},
+        {"ia.cercles", "Une proposition compar\xC3\xA9" "e aux pr\xC3\xA9" "c\xC3\xA9" "dentes \xC3\xA0 son arriv\xC3\xA9" "e : tourne-t-elle en rond ?"},
         {"ia.empreinte", "L'empreinte de ce qu'une proposition appliqu\xC3\xA9" "e touche (dire si Ctrl+Z l'a reprise)."},
         {"ia.copie-projet", "Une copie du projet pour un travail de fond (v\xC3\xA9rifier, appliquer, auditer)."},
         {"ia.panneau", "Le panneau de l'Assistant : sa mise \xC3\xA0 jour."},

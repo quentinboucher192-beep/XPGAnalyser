@@ -17,8 +17,12 @@
 //    - LA REPRISE : cas A (projet identique), B (modifie : ce qui a change), C (introuvable) ; un appel a l'IA
 //      interrompu pendant la 3e proposition (rien n'est rejoue) ;
 //    - pause, reprise, annulation ; la recherche et les outils chercher_missions / etat_mission ;
-//    - 1.22.2 : forcer la fin (les etapes ignorees, les propositions refusees, le rapport, le fichier).
+//    - 1.22.2 : forcer la fin (les etapes ignorees, les propositions refusees, le rapport, le fichier) ;
+//    - 1.22.4 : ne pas tourner en rond (AiLoop.hpp) - les empreintes (la meme proposition reordonnee, deplacee : la meme ;
+//      une operation differente : une autre), les cinq signes, la retenue et le choix, le fichier (relu ; un fichier 1.22.3),
+//      les tentatives dites a l'IA (borne), la consigne de l'utilisateur.
 // =============================================================================
+#include "../src/app/ai/AiLoop.hpp"
 #include "../src/app/ai/AiMission.hpp"
 #include "../src/app/ai/AiMissionStore.hpp"
 #include "../src/app/ai/AiOperations.hpp"
@@ -1188,6 +1192,187 @@ void forcing() {
     check(mi::progressOf(e).steps == 0 && mi::progressOf(e).skipped == 5, "la progression : plus rien a compter");
 }
 
+// ---- 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) -------------------------------------------------------------------
+void loops() {
+    std::printf("1.22.4 : ne pas tourner en rond\n");
+    namespace lp = app::ai::loop;
+    Fixture f;
+    std::string why;
+    // LES EMPREINTES : la meme proposition, reordonnee et ses objets deplaces -> la meme ; une operation differente -> une autre.
+    const ai::Operation alarm = op(A::Alarm, "Defaut_Vanne", {{"condition", "Vanne.Cmd"}, {"message", "Vanne en d\xC3\xA9" "faut"}}, "S3");
+    const ai::Operation eq = op(A::Equipment, "Modbus_V", {{"type", "modbus_tcp"}, {"ip", "127.0.0.1"}, {"port", "5020"}, {"esclave", "1"}, {"simule", "oui"}}, "S3");
+    const ai::Operation box = create("Indicator", "Voyant_V", {{"x", "40"}, {"y", "40"}, {"variable", "Pompe_1_Marche"}}, {}, "S3");
+    ai::Operation moved = box;
+    moved.props = {{"variable", "Pompe_1_Marche"}, {"y", "300"}, {"x", "220"}};
+    ai::Operation renamed = eq;
+    renamed.name = "Modbus_W";
+    const ai::Proposal pa = f.proposal("opA", {alarm, eq, box});
+    const ai::Proposal pb = f.proposal("opB", {moved, alarm, eq});
+    const ai::Proposal pc = f.proposal("opC", {alarm, renamed, box});
+    check(!lp::opsPrint(pa).empty() && lp::opsPrint(pa) == lp::opsPrint(pb), "reordonnee, les objets deplaces (x, y) : la meme empreinte");
+    check(lp::opsPrint(pa) != lp::opsPrint(pc), "une operation differente (un autre nom) : une autre empreinte");
+    ai::Operation spaced = alarm;
+    spaced.name = "  defaut_VANNE ";
+    spaced.step = "S9";
+    check(lp::opLine(spaced) == lp::opLine(alarm), "les blancs, la casse et l'etape ne comptent pas");
+    ai::Operation other = alarm;
+    other.props = {{"condition", "Vanne.Etat"}, {"message", "Vanne en d\xC3\xA9" "faut"}};
+    check(lp::opLine(other) != lp::opLine(alarm), "une autre propriete : une autre ligne");
+    check(lp::opsPrint(std::vector<ai::Operation>{}).empty(), "aucune operation : pas d'empreinte");
+    // LES ERREURS : normalisees (sans les nombres isoles, sans << les plus proches >>), triees.
+    const std::vector<std::string> e1 = {"variable IHM \xC2\xAB Vanne.Cmd \xC2\xBB introuvable (op\xC3\xA9ration 3) ; les plus proches : Vanne_1, Vanne_2",
+                                         "Alarme \xC2\xAB Defaut_Vanne \xC2\xBB : condition \xC2\xAB Vanne.Cmd > 90 \xC2\xBB illisible"};
+    const std::vector<std::string> e2 = {"Alarme \xC2\xAB Defaut_Vanne \xC2\xBB : condition \xC2\xAB Vanne.Cmd > 75 \xC2\xBB illisible",
+                                         "variable IHM \xC2\xAB Vanne.Cmd \xC2\xBB introuvable (op\xC3\xA9ration 12) ; les plus proches : Vanne_3"};
+    check(!lp::errorsPrint(e1).empty() && lp::errorsPrint(e1) == lp::errorsPrint(e2), "les memes erreurs (autre ordre, autres nombres, autres proches) : la meme empreinte");
+    check(lp::errorsPrint({"variable IHM \xC2\xAB Vanne.Etat \xC2\xBB introuvable"}) != lp::errorsPrint({"variable IHM \xC2\xAB Vanne.Cmd \xC2\xBB introuvable"}),
+          "un autre nom en cause : une autre empreinte");
+    check(lp::errorKey("Pompe_1 et %MW100 : 12 erreurs") == "pompe_1 et %mw100 : # erreurs", "les noms gardent leurs chiffres : " + lp::errorKey("Pompe_1 et %MW100 : 12 erreurs"));
+    check(lp::errorsPrint({}).empty() && lp::errorNames({}).empty(), "aucune erreur : rien");
+    check(lp::errorNames(e1) == "Vanne.Cmd, Defaut_Vanne", "les noms en cause : " + lp::errorNames(e1));
+    check(lp::nextKey("  Cr\xC3\xA9" "er les ALARMES (S3). ") == lp::nextKey("cr\xC3\xA9" "er les alarmes (S3)") && lp::nextKey("Les vues 3 \xC3\xA0 5") != lp::nextKey("Les vues 6 \xC3\xA0 8"),
+          "la suite : sans la casse ni les accents, les nombres gardes");
+
+    // LES SIGNES D'UNE MISSION : S3 (la liaison Modbus) proposee, refusee, reproposee.
+    mi::Mission m = stationOn(f);
+    const auto arrive = [&](const ai::Proposal& p, const std::string& print) {
+        m.project.print = print;   // l'empreinte du projet a la demande (l'Assistant la prend avant chaque appel)
+        mi::onGenerated(m, p, "c1", "m" + std::to_string(m.proposals.size() + 2), {"S3"}, kNow);
+        mi::onChecked(m, p.id, ai::validate(f.doc->project, p), kNow);
+        return lp::missionCircle(m, p.id);
+    };
+    const ai::Proposal p1 = f.proposal("op1", {alarm, eq});
+    const lp::Circle c1 = arrive(p1, "X");
+    const mi::ProposalLink* l1 = m.proposal("op1");
+    check(!c1.on() && m.step("S3")->attempts == 1, "P1 : une tentative, aucun cercle");
+    check(l1 && l1->opsPrint == lp::opsPrint(p1) && !l1->errorsPrint.empty() && l1->errorCount > 0 && l1->projectPrint == "X" && !l1->errorNames.empty(),
+          "P1 : ses empreintes (operations, erreurs, projet)");
+    mi::onDropped(m, "op1", "refusee", "refus\xC3\xA9" "e par l'utilisateur", kNow);
+    // (a) + (b) : la meme, reordonnee
+    const lp::Circle c2 = arrive(f.proposal("op2", {eq, alarm}), "X");
+    check(c2.has(lp::Sign::SameOps) && c2.has(lp::Sign::SameErrors) && c2.again == "op1"
+              && c2.keys() == std::vector<std::string>({"memes_operations", "memes_erreurs"}) && c2.steps == std::vector<std::string>({"S3"}),
+          "(a) (b) : P2 refait P1 - memes operations, memes erreurs");
+    check(has(c2.text, "P2 refait P1 (refus\xC3\xA9" "e ; m\xC3\xAAmes 2 op\xC3\xA9rations, ") && has(c2.text, "m\xC3\xAA") && has(c2.text, m.proposal("op2")->errorNames),
+          "le cercle en clair : " + c2.text);
+    check(!c2.has(lp::Sign::Attempts) && !c2.has(lp::Sign::SamePoint), "2 tentatives, 1 seule fois avant au meme point : pas encore");
+    mi::onDropped(m, "op2", "refusee", "refus\xC3\xA9" "e par l'utilisateur", kNow);
+    // (b) seul et (c) : la meme alarme, un voyant a la place de l'equipement ; un autre etat du projet
+    const lp::Circle c3 = arrive(f.proposal("op3", {alarm, box}), "Y");
+    check(!c3.has(lp::Sign::SameOps) && c3.has(lp::Sign::SameErrors) && has(c3.text, "P3 retombe sur les m\xC3\xAAmes erreurs que P2 pour S3"), "(b) : " + c3.text);
+    check(c3.has(lp::Sign::Attempts) && has(c3.text, "S3 a \xC3\xA9t\xC3\xA9 propos\xC3\xA9" "e 3 fois sans aboutir (P1, P2, P3)"), "(c) : " + c3.text);
+    check(!c3.has(lp::Sign::SamePoint), "un autre etat du projet : pas le meme point");
+    mi::onDropped(m, "op3", "refusee", "refus\xC3\xA9" "e par l'utilisateur", kNow);
+    // (d) : le projet revenu a X (avant P1 et P2) avec S3 en attente, une 3e fois
+    const lp::Circle c4 = arrive(f.proposal("op4", {alarm, box, eq}), "X");
+    check(c4.has(lp::Sign::SamePoint) && has(c4.text, "e projet est revenu au m\xC3\xAAme point qu'avant P1 et P2, avec S3 toujours en attente"),
+          "(d) : " + c4.text);
+    // LA RETENUE : ni appliquee ni suivie ; le choix la libere
+    lp::flag(m, "op4", c4, kNow);
+    check(lp::held(m) && lp::held(m)->id == "op4" && m.proposal("op4")->held() && m.proposal("op4")->loop == c4.text, "P4 retenue");
+    check(!mi::mayApply(m, "op4", &why) && has(why, "tourne en rond"), "retenue : elle ne s'applique pas (" + why + ")");
+    const mi::Batch hb = mi::nextBatch(m, 10);
+    check(hb.steps.empty() && has(hb.why, "tourne en rond"), "retenue : la suite ne repart pas, meme pour S1 qui est prete (" + hb.why + ")");
+    check(has(mi::nextAction(m), "tourne en rond") && has(mi::activityOf(m, *m.step("S3")).text, "tourne en rond"), "la prochaine action, l'activite de S3 : decider");
+    bool logged = false;
+    for (const auto& e : m.history) logged = logged || (e.kind == "cercle" && has(e.text, "La mission tourne en rond") && e.proposal == "op4");
+    check(logged, "l'historique le dit");
+    check(!lp::choose(m, "op4", "n_importe_quoi", kNow, &why) && m.proposal("op4")->held(), "un choix inconnu : refuse");
+    check(lp::choose(m, "op4", "quand_meme", kNow, &why) && !m.proposal("op4")->held() && !lp::held(m) && mi::mayApply(m, "op4", &why),
+          "Proposer quand meme : elle n'est plus retenue (" + why + ")");
+    check(!m.decisions.empty() && has(m.decisions.back().answer, "quand m\xC3\xAAme") && !lp::choose(m, "op4", "quand_meme", kNow, &why),
+          "la decision est gardee ; deja choisie : refuse");
+    check(mi::nextBatch(m, 10).steps == std::vector<std::string>({"S1"}), "la suite repart (S1)");
+
+    // LE FICHIER : relu tel quel ; un fichier 1.22.3 (sans << cercles >>) se relit, tout a zero ; le format ne change pas.
+    {
+        const ai::json::Value j = mi::toJson(m);
+        check(!j.members().empty() && j.members().back().first == "cercles", "<< cercles >> a la fin du fichier");
+        const mi::Mission back = mi::fromJson(j);
+        const mi::ProposalLink* a = m.proposal("op4");
+        const mi::ProposalLink* r = back.proposal("op4");
+        check(r && a && r->opsPrint == a->opsPrint && r->errorsPrint == a->errorsPrint && r->errorCount == a->errorCount && r->errorNames == a->errorNames
+                  && r->projectPrint == "X" && r->loop == a->loop && r->loopSigns == a->loopSigns && r->loopSteps == a->loopSteps && r->loopChoice == "quand_meme",
+              "relu : les empreintes, le cercle, le choix");
+        check(back.step("S3") && back.step("S3")->attempts == 4 && back.step("S1") && back.step("S1")->attempts == 0, "relu : 4 tentatives pour S3");
+        check(mi::toJson(back).at("cercles") == j.at("cercles"), "reecrit a l'identique");
+        ai::json::Value old = j;
+        (void)old.erase("cercles");
+        int format = -1;
+        const mi::Mission o = mi::fromJson(old, &format);
+        check(format == 1 && o.step("S3") && o.step("S3")->attempts == 0 && o.proposal("op4") && o.proposal("op4")->opsPrint.empty()
+                  && o.proposal("op4")->loop.empty() && !o.proposal("op4")->held() && o.proposals.size() == m.proposals.size(),
+              "un fichier 1.22.3 : relu, sans empreinte ni tentative");
+        check(!mi::toJson(mi::make("Une demande", "c1", kNow)).has("cercles") && mi::kFormat == 1, "rien a garder : pas de << cercles >> ; le format reste 1");
+    }
+
+    // EN AMONT : la demande suivante dit les tentatives deja faites et pourquoi elles ont echoue.
+    mi::onDropped(m, "op4", "refusee", "refus\xC3\xA9" "e par l'utilisateur", kNow);
+    const std::string bp = mi::batchPrompt(m, f.doc->project, mi::Batch{{"S3"}, 1, {}, {}}, {});
+    check(has(bp, "D\xC3\xA9j\xC3\xA0 propos\xC3\xA9 pour ces \xC3\xA9tapes") && has(bp, "- P4 (refus\xC3\xA9" "e)") && has(bp, "- P1 (refus\xC3\xA9" "e)")
+              && has(bp, "Ne repropose pas la m\xC3\xAAme chose") && has(bp, "dis clairement ce qui bloque"),
+          "la suite : les tentatives deja faites (P4 ... P1)");
+    check(!m.proposal("op1")->errors.empty() && has(bp, m.proposal("op1")->errors.front().substr(0, 24)), "... et leurs erreurs exactes");
+    check(has(bp, "elle tournait en rond"), "... et le cercle vu");
+    check(!has(mi::batchPrompt(m, f.doc->project, mi::Batch{{"S1"}, 1, {}, {}}, {}), "D\xC3\xA9j\xC3\xA0 propos\xC3\xA9"), "une autre etape : rien de tel");
+    // la correction aussi
+    check(mi::setStepState(m, "S3", S::Running, kNow) && mi::setStepState(m, "S3", S::Error, kNow, "variable introuvable"), "S3 en erreur");
+    check(has(mi::correctionPrompt(m, f.doc->project, "S3"), "D\xC3\xA9j\xC3\xA0 propos\xC3\xA9"), "la correction : les tentatives deja faites");
+    // la consigne de l'utilisateur (Modifier la demande)
+    check(lp::addConsigne(m, {"S3"}, "Utilise Pompe_1_Marche, pas Vanne.Cmd.", kNow) && !lp::addConsigne(m, {"S3"}, "   ", kNow), "une consigne (vide : refusee)");
+    const std::string cp = mi::correctionPrompt(m, f.doc->project, "S3");
+    check(has(cp, "CONSIGNES DE L'UTILISATEUR") && has(cp, "S3 : Utilise Pompe_1_Marche, pas Vanne.Cmd."), "la consigne est dite a l'IA");
+    check(!has(mi::batchPrompt(m, f.doc->project, mi::Batch{{"S1"}, 1, {}, {}}, {}), "Pompe_1_Marche, pas Vanne"), "... pour son etape seulement");
+    // borne : 30 tentatives de plus
+    for (int k = 0; k < 30; ++k) {
+        const ai::Proposal x = f.proposal("opx" + std::to_string(k), {alarm, eq});
+        if (m.step("S3")->state == S::Error) (void)mi::setStepState(m, "S3", S::Ready, kNow);
+        m.project.print = "Z";
+        mi::onGenerated(m, x, "c1", "mx", {"S3"}, kNow);
+        mi::onChecked(m, x.id, ai::validate(f.doc->project, x), kNow);
+        mi::onDropped(m, x.id, "refusee", "refus\xC3\xA9" "e par l'utilisateur", kNow);
+    }
+    const std::string tried = lp::triedText(m, {"S3"});
+    check(tried.size() < 3100 && has(tried, "plus ancienne") && has(tried, "CONSIGNES"), "borne : " + std::to_string(tried.size()) + " caracteres pour 34 tentatives");
+    // terminee : ses tentatives repartent de zero ; une consigne aussi (choose << demande_modifiee >>)
+    check(mi::setStepState(m, "S3", S::Running, kNow) && mi::setStepState(m, "S3", S::AwaitingValidation, kNow) && mi::setStepState(m, "S3", S::Applied, kNow)
+              && mi::setStepState(m, "S3", S::Done, kNow) && m.step("S3")->attempts == 0,
+          "terminee : ses tentatives repartent de zero");
+
+    // (e) ET (a) (b) DANS UNE CONVERSATION
+    ai::Proposal s1 = f.proposal("cv1", {box});
+    s1.next = "Cr\xC3\xA9" "er les alarmes (S3).";
+    ai::Proposal s2 = f.proposal("cv2", {eq});
+    s2.next = "  cr\xC3\xA9" "er les ALARMES (S3) ";
+    lp::stamp(s1, nullptr);
+    lp::stamp(s2, nullptr);
+    std::vector<lp::Seen> before{lp::seenOf(s1)};
+    before[0].tag = lp::ordinalTag(1);
+    before[0].state = "appliquee";
+    lp::Seen now = lp::seenOf(s2);
+    now.tag = lp::ordinalTag(2);
+    const lp::Circle ce = lp::conversationCircle(before, now);
+    check(ce.has(lp::Sign::SameNext) && !ce.has(lp::Sign::SameOps) && has(ce.text, "La m\xC3\xAAme suite revient") && has(ce.text, "la 1re proposition")
+              && has(ce.text, "n'avance pas"),
+          "(e) : " + ce.text);
+    ai::Proposal t1 = f.proposal("cv3", {alarm, eq});
+    ai::Proposal t2 = f.proposal("cv4", {eq, alarm});
+    const ai::Check k1 = ai::validate(f.doc->project, t1), k2 = ai::validate(f.doc->project, t2);
+    lp::stamp(t1, &k1.errors);
+    lp::stamp(t2, &k2.errors);
+    std::vector<lp::Seen> prior{lp::seenOf(t1)};
+    prior[0].tag = lp::ordinalTag(1);
+    prior[0].state = "refusee";
+    lp::Seen n2 = lp::seenOf(t2);
+    n2.tag = lp::ordinalTag(2);
+    const lp::Circle ca = lp::conversationCircle(prior, n2);
+    check(ca.has(lp::Sign::SameOps) && ca.has(lp::Sign::SameErrors) && ca.again == "cv3" && has(ca.text, "Cette proposition refait la 1re proposition (refus\xC3\xA9" "e ;"),
+          "(a) (b) dans une conversation : " + ca.text);
+    check(!lp::conversationCircle({}, n2).on(), "la premiere proposition : aucun cercle");
+    check(t2.extra.at("cercle").str("operations") == lp::opsPrint(t2) && t2.extra.at("cercle").integer("nb_erreurs") == static_cast<std::int64_t>(k2.errors.size()),
+          "les empreintes gardees dans la proposition (son extra << cercle >>)");
+}
+
 } // namespace
 
 int main() {
@@ -1208,6 +1393,7 @@ int main() {
     stepJournals();     // 1.22.1
     file1220();         // 1.22.1
     forcing();          // 1.22.2
+    loops();            // 1.22.4
     std::printf("ai_missions_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

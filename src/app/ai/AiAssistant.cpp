@@ -10,6 +10,7 @@
 #include "AiHttp.hpp"
 #include "AiKeys.hpp"          // 1.18.0 : le gestionnaire des cles API
 #include "AiLocal.hpp"
+#include "AiLoop.hpp"            // 1.22.4 : ne pas tourner en rond (les empreintes, les signes, la retenue)
 #include "AiOpenAI.hpp"
 #include "AiPaths.hpp"
 #include "AiPrompt.hpp"
@@ -598,6 +599,13 @@ bool Assistant::send(std::string text, std::string* why) {
     if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
     if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
     if (text.empty() && pending_.empty()) return fail("Rien \xC3\xA0 envoyer.");
+    // 1.22.4 : apres << Modifier la demande >> sur une proposition de mission qui tournait en rond, le texte qui commence par
+    // << Pour S4 : >> est une CONSIGNE de la mission (gardee) et la suite repart avec elle ; un autre envoi l'oublie.
+    if (steer_) {
+        const Conversation* c0 = cur();
+        if (c0 && c0->id == steer_->conversation && text.rfind(trim(steer_->prefix), 0) == 0) return steerMission(text, why);
+        steer_.reset();
+    }
     // 1.16.1 : L'IA INTEGREE D'ABORD (Settings::localFirst) - ce qu'elle comprend est repondu tout de suite, sans
     // connexion ni jeton ; l'IA connectee ne recoit que ce qu'elle ne comprend pas. Une piece jointe va a l'IA
     // connectee (elle la lit).
@@ -1346,7 +1354,7 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
     }
     // 1.22.0 : une proposition de mission ne s'applique pas si la mission est en pause, annulee, ou si la proposition
     // n'est plus la bonne (obsolete, annulee) ; ni sur un autre projet que celui de la mission.
-    if (std::string w; !missionMayApply(p->id, &w)) {
+    if (std::string w; !missionMayApply(p->id, &w) || !loopMayApply(*p, &w)) {   // 1.22.4 : retenue (elle tourne en rond)
         if (why) *why = w;
         notice_ = "Assistant IA : " + w;
         ++revision_;
@@ -1462,6 +1470,7 @@ bool Assistant::applyInBackground(int message, bool ignoringErrors, std::string*
     const auto doc = host_.document ? host_.document() : nullptr;
     if (!c || !p || !doc || p->state != "proposee" || !checkInBackground(*p)) return false;   // 1.22.1 : << adresser >> aussi
     if (std::string w; !missionMayApply(p->id, &w)) return fail(w);   // 1.22.0 : pause, annulee, obsolete, autre projet
+    if (std::string w; !loopMayApply(*p, &w)) return fail(w);          // 1.22.4 : retenue (elle tourne en rond)
     Env frozen;
     if (!frozenEnvironment(frozen)) return false;
     auto job = std::make_shared<ApplyJob>();
@@ -1560,6 +1569,13 @@ void Assistant::pollChecks() {
         prop->create = job->result.create;
         prop->modify = job->result.modify;
         prop->remove = job->result.remove;
+        // 1.22.4 : une grosse proposition de l'IA connectee (deja comparee a son arrivee) : ses erreurs, enfin connues
+        if (job->purpose == CheckFor::Counts && prop->extra.at("cercle").flag("comparee"))
+            for (std::size_t i = 0; i < c->messages.size(); ++i)
+                if (c->messages[i].proposal && c->messages[i].proposal->id == job->proposalId) {
+                    loopArrived(*c, static_cast<int>(i), &job->result.errors);
+                    break;
+                }
         if (job->purpose == CheckFor::Mission && !missionsReadOnly_.count(job->mission))
             if (mission::Mission* m = missionMut(job->mission)) missionChecked(*m, *prop, job->steps, &job->result, m->state, isoDate(now()));
         save(*c);
@@ -2571,19 +2587,25 @@ void Assistant::finishLive(const std::string& stopReason) {
                 // sur le fil de l'interface (8 s de blocage le 01/11) : sur un fil de fond (pollChecks pose ses comptes) ; celle
                 // d'une mission, par la verification de la mission (missionAnswered), une seule fois.
                 const bool heavy = checkInBackground(*p);
+                std::optional<std::vector<std::string>> errors;   // 1.22.4 : ses erreurs, si elle est deja verifiee
                 if (doc && !heavy) {
-                    const Check ck = validate(doc->project, *p, host_.env);
+                    Check ck = validate(doc->project, *p, host_.env);
                     p->create = ck.create;
                     p->modify = ck.modify;
                     p->remove = ck.remove;
+                    errors = std::move(ck.errors);
                 }
                 m.proposal = std::move(*p);
                 if (doc && heavy && call.id.empty() && !startCheck(c->id, *m.proposal, CheckFor::Counts)) {
-                    const Check ck = validate(doc->project, *m.proposal, host_.env);
+                    Check ck = validate(doc->project, *m.proposal, host_.env);
                     m.proposal->create = ck.create;
                     m.proposal->modify = ck.modify;
                     m.proposal->remove = ck.remove;
+                    errors = std::move(ck.errors);
                 }
+                // 1.22.4 : NE PAS TOURNER EN ROND - une proposition de conversation comparee aux precedentes (celle d'une
+                // mission : par la mission, a sa verification - missionChecked).
+                if (call.id.empty()) loopArrived(*c, gen_.message, errors ? &*errors : nullptr);
             }
         }
         if (!m.tool->error.empty()) {
@@ -2801,7 +2823,20 @@ int Assistant::outputTokens() const {
 std::string Assistant::nextRequest(int message) const {
     const Proposal* p = proposal(message);
     if (!p || p->next.empty() || p->state != "appliquee") return {};
-    return "Propose la suite : " + p->next;
+    std::string ask = "Propose la suite : " + p->next;
+    // 1.22.4 : la meme suite deja annoncee par une proposition precedente de la conversation - l'IA le sait (ne pas tourner
+    // en rond).
+    if (const Conversation* c = current()) {
+        const std::string key = loop::nextKey(p->next);
+        for (int i = 0; i < message && i < static_cast<int>(c->messages.size()) && !key.empty(); ++i)
+            if (const auto& q = c->messages[static_cast<std::size_t>(i)].proposal;
+                q && !q->next.empty() && (q->extra.at("cercle").has("suite") ? q->extra.at("cercle").str("suite") : loop::nextKey(q->next)) == key) {
+                ask += " (Cette suite a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 annonc\xC3\xA9" "e par une proposition pr\xC3\xA9" "c\xC3\xA9" "dente : ne repropose pas la m\xC3\xAAme chose ; "
+                       "change d'approche, ou dis ce qui bloque.)";
+                break;
+            }
+    }
+    return ask;
 }
 
 bool Assistant::toolsInText() const {
@@ -3221,11 +3256,26 @@ void Assistant::missionChecked(mission::Mission& mm, const Proposal& p, const st
     }
     const mission::ProposalLink* link = m->proposal(p.id);
     const std::string P = link ? "P" + std::to_string(link->order) : std::string("La proposition");
+    // 1.22.4 : NE PAS TOURNER EN ROND - comparee aux propositions precedentes de la mission (une fois, maintenant que ses
+    // erreurs sont connues) : un cercle vu, elle est RETENUE (ni appliquee ni suivie d'une autre tant que l'utilisateur
+    // n'a pas choisi sur sa carte).
+    loop::Circle circle;
+    if (!stale && link && (link->state == "generee" || link->state == "validee")) {
+        XPG_MESURE("ia.cercles");
+        circle = loop::missionCircle(*m, p.id);
+        if (circle.on()) loop::flag(*m, p.id, circle, when);
+    }
     if (stale)
         notifyMission(*m, "proposition", "Proposition obsol\xC3\xA8te : " + m->name,
                       P + " a \xC3\xA9t\xC3\xA9 pr\xC3\xA9par\xC3\xA9" "e sur un projet qui a chang\xC3\xA9 depuis : elle ne s'applique pas. Demande la suite pour en avoir une \xC3\xA0 jour.",
                       "warning");
-    else
+    else if (circle.on()) {
+        notifyMission(*m, "cercle", "La mission tourne en rond : " + m->name,
+                      circle.text + ". " + P + " est retenue : choisis sur sa carte (Modifier la demande, Corriger \xC3\xA0 la main, Ignorer cette \xC3\xA9tape, "
+                      "Forcer la fin de la mission, Proposer quand m\xC3\xAAme).",
+                      "warning");
+        notice_ = "Assistant IA : la mission " + guillemets(m->name) + " tourne en rond \xE2\x80\x94 " + circle.text + ". Choisis sur la carte de " + P + ".";
+    } else
         notifyMission(*m, "proposition", "Proposition disponible : " + m->name,
                       P + " " + guillemets(p.summary) + " pour " + stepsLine(*m, link ? link->steps : steps) + " : \xC3\xA0 pr\xC3\xA9visualiser et appliquer.", "info");
     missionTransition(*m, before);
@@ -3321,6 +3371,206 @@ bool Assistant::missionMayApply(std::string_view proposalId, std::string* why) c
         return false;
     }
     return true;
+}
+
+// =====================================================================================================================
+//  1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp)
+// ---------------------------------------------------------------------------------------------------------------------
+//  Les empreintes d'une proposition se calculent UNE fois, a son arrivee (celle d'une mission : onGenerated, onChecked ;
+//  celle d'une conversation : loopArrived, gardees dans son extra << cercle >>), jamais a chaque image. La carte relit
+//  seulement ce qui est garde (loopOf).
+// =====================================================================================================================
+void Assistant::loopArrived(Conversation& c, int message, const std::vector<std::string>* errors) {
+    XPG_MESURE("ia.cercles");
+    if (message < 0 || message >= static_cast<int>(c.messages.size()) || !c.messages[static_cast<std::size_t>(message)].proposal) return;
+    Proposal& p = *c.messages[static_cast<std::size_t>(message)].proposal;
+    loop::stamp(p, errors);
+    const bool open = current() && current()->id == c.id;
+    const loop::Seen now0 = loop::seenOf(p);
+    std::vector<loop::Seen> earlier;
+    int order = 0;
+    for (int i = 0; i < message; ++i) {
+        Message& msg = c.messages[static_cast<std::size_t>(i)];
+        if (!msg.proposal) continue;
+        // une proposition d'avant 1.22.4 (ou de l'IA integree) : ses empreintes prises une fois, gardees avec elle
+        if (!msg.proposal->extra.has("cercle")) loop::stamp(*msg.proposal, nullptr);
+        loop::Seen s = loop::seenOf(*msg.proposal);
+        s.tag = loop::ordinalTag(++order);
+        // appliquee puis annulee (Ctrl+Z) : dit seulement pour celle qu'elle refait (l'empreinte de la vue n'est pas
+        // relue pour toutes)
+        if (open && s.ops == now0.ops && msg.proposal->state == "appliquee" && appliedState(i) == Applied::Undone) s.state = "annulee";
+        earlier.push_back(std::move(s));
+    }
+    loop::Seen now = now0;
+    now.tag = loop::ordinalTag(order + 1);
+    const loop::Circle circle = loop::conversationCircle(earlier, now);
+    json::Value& x = p.extra["cercle"];
+    x.set("comparee", true);               // comparee a son arrivee (pollChecks la reprend quand ses erreurs sont connues)
+    if (!x.str("choix").empty()) return;   // deja decide : rien ne revient
+    const bool before = !x.str("texte").empty();
+    if (!circle.on()) {
+        (void)x.erase("texte");
+        (void)x.erase("signes");
+        (void)x.erase("choix");
+        return;
+    }
+    x.set("texte", circle.text);
+    json::Value keys = json::Value::array();
+    for (const auto& k : circle.keys()) keys.push(k);
+    x.set("signes", std::move(keys));
+    x.set("choix", std::string{});
+    if (!before) {
+        notice_ = "Assistant IA : cette proposition tourne en rond \xE2\x80\x94 " + circle.text + ". Choisis sur sa carte.";
+        appendActivity("cercle", "Proposition retenue (elle tourne en rond) : " + circle.text);
+    }
+}
+
+bool Assistant::loopMayApply(const Proposal& p, std::string* why) const {
+    if (missionOfProposal(p.id)) return true;   // une proposition de mission : mission::mayApply le dit
+    const json::Value& x = p.extra.at("cercle");
+    if (x.str("texte").empty() || !x.str("choix").empty()) return true;
+    if (why)
+        *why = "Elle tourne en rond. " + x.str("texte") + ". Choisis d'abord sur sa carte : Proposer quand m\xC3\xAAme, Corriger \xC3\xA0 la main ou "
+               "Modifier la demande.";
+    return false;
+}
+
+Assistant::LoopInfo Assistant::loopOf(int message) const {
+    LoopInfo out;
+    const Proposal* p = proposal(message);
+    if (!p) return out;
+    if (const mission::Mission* m = missionOfProposal(p->id)) {
+        const mission::ProposalLink* l = m->proposal(p->id);
+        if (!l || l->loop.empty()) return out;
+        out.text = l->loop;
+        out.signs = l->loopSigns;
+        out.choice = l->loopChoice;
+        out.mission = m->id;
+        out.steps = l->loopSteps.empty() ? l->steps : l->loopSteps;
+        out.tag = "P" + std::to_string(l->order);
+        out.held = l->held() && p->state == "proposee";
+        return out;
+    }
+    const json::Value& x = p->extra.at("cercle");
+    out.text = x.str("texte");
+    if (out.text.empty()) return out;
+    for (const auto& k : x.at("signes").items())
+        if (k.isString()) out.signs.push_back(k.asString());
+    out.choice = x.str("choix");
+    out.held = out.choice.empty() && p->state == "proposee";
+    return out;
+}
+
+bool Assistant::chooseLoop(int message, LoopChoice choice, std::string* why, std::string* request) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    Conversation* c = cur();
+    const Proposal* p = proposal(message);
+    if (!c || !p) return fail("Pas de proposition.");
+    const LoopInfo info = loopOf(message);
+    if (!info.held) return fail("Cette proposition n'attend pas de choix : elle ne tourne pas en rond, ou c'est d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "cid\xC3\xA9.");
+    const std::string key = choice == LoopChoice::ProposeAnyway ? "quand_meme"
+                            : choice == LoopChoice::ByHand      ? "a_la_main"
+                            : choice == LoopChoice::EditRequest ? "demande_modifiee"
+                            : choice == LoopChoice::SkipStep    ? "etape_ignoree"
+                                                                : "fin_forcee";
+    const std::string pid = p->id;
+    const std::string when = isoDate(now());
+    // ---- une proposition de conversation : le choix est garde avec elle ----
+    if (info.mission.empty()) {
+        if (choice == LoopChoice::SkipStep || choice == LoopChoice::ForceFinish)
+            return fail("Ce choix vaut pour une proposition de mission : celle-ci est une proposition de la conversation.");
+        Proposal& mp = *c->messages[static_cast<std::size_t>(message)].proposal;
+        mp.extra["cercle"].set("choix", key);
+        if (request && choice == LoopChoice::EditRequest) *request = mp.request;
+        notice_ = "Assistant IA : " + std::string(loop::choiceLabel(key)) + " \xE2\x80\x94 la proposition n'est plus retenue.";
+        appendActivity("cercle", std::string(loop::choiceLabel(key)) + " : " + info.text);
+        save(*c);
+        ++revision_;
+        return true;
+    }
+    // ---- une proposition de mission ----
+    const std::string id = info.mission;
+    if (choice == LoopChoice::ForceFinish && !canForceFinish(id, why)) return false;
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (!loop::choose(*m, pid, key, when, why)) return false;
+    const mission::ProposalLink* link = m->proposal(pid);
+    const std::string P = link ? "P" + std::to_string(link->order) : info.tag;
+    const std::vector<std::string> linkSteps = link ? link->steps : std::vector<std::string>{};
+    saveMission(*m);
+    // Refuser la proposition retenue (Modifier la demande, Ignorer cette etape) : ses etapes redeviennent pretes.
+    const auto drop = [&](const std::string& reason) {
+        c->messages[static_cast<std::size_t>(message)].proposal->state = "refusee";
+        save(*c);
+        missionDropped(pid, "refusee", reason);
+    };
+    switch (choice) {
+        case LoopChoice::ProposeAnyway:
+            if (const mission::Mission* mm = findMission(id))
+                notifyMission(*mm, "proposition", "Proposition disponible : " + mm->name,
+                              P + " propos\xC3\xA9" "e quand m\xC3\xAAme (elle tournait en rond) : \xC3\xA0 pr\xC3\xA9visualiser et appliquer.", "info");
+            notice_ = "Assistant IA : " + P + " propos\xC3\xA9" "e quand m\xC3\xAAme \xE2\x80\x94 pr\xC3\xA9visualise-la, puis applique-la ou refuse-la.";
+            break;
+        case LoopChoice::ByHand:
+            notice_ = "Assistant IA : " + P + " \xC3\xA0 corriger \xC3\xA0 la main \xE2\x80\x94 la pr\xC3\xA9visualisation la montre ; applique-la ensuite.";
+            break;
+        case LoopChoice::EditRequest: {
+            drop("elle tournait en rond : la demande est \xC3\xA0 modifier");
+            const std::vector<std::string> steps = info.steps.empty() ? linkSteps : info.steps;
+            Steer st;
+            st.mission = id;
+            st.conversation = c->id;
+            st.steps = steps;
+            st.prefix = "Pour " + (steps.empty() ? std::string("la mission") : joined(steps, ", ")) + " : ";
+            steer_ = st;
+            if (request) *request = st.prefix;
+            notice_ = "Assistant IA : " + P + " refus\xC3\xA9" "e (elle tournait en rond). \xC3\x89" "cris ta consigne apr\xC3\xA8s " + guillemets(trim(st.prefix))
+                      + ", puis Entr\xC3\xA9" "e : la mission repart avec elle.";
+            break;
+        }
+        case LoopChoice::SkipStep: {
+            drop("elle tournait en rond : \xC3\xA9tape ignor\xC3\xA9" "e");
+            std::vector<std::string> skipped, failed;
+            for (const auto& sid : info.steps.empty() ? linkSteps : info.steps) {
+                mission::PlanEdit e;
+                e.kind = mission::PlanEdit::Kind::Skip;
+                e.step = sid;
+                std::string w;
+                if (editMissionPlan(id, e, &w)) skipped.push_back(sid);
+                else failed.push_back(sid + " (" + w + ")");
+            }
+            notice_ = "Assistant IA : " + P + " refus\xC3\xA9" "e ; " + (skipped.empty() ? std::string("aucune \xC3\xA9tape ignor\xC3\xA9" "e")
+                                                                                       : joined(skipped, ", ") + (skipped.size() > 1 ? " ignor\xC3\xA9" "es" : " ignor\xC3\xA9" "e"))
+                      + (failed.empty() ? std::string(".") : " ; pas ignor\xC3\xA9" "e(s) : " + joined(failed, ", ") + ".");
+            break;
+        }
+        case LoopChoice::ForceFinish:
+            ++revision_;
+            return forceFinishMission(id, why);
+    }
+    ++revision_;
+    return true;
+}
+
+// LA CONSIGNE apres Modifier la demande (une mission) : gardee dans la mission, puis la suite repart avec elle.
+bool Assistant::steerMission(const std::string& text, std::string* why) {
+    if (!steer_) return false;
+    const Steer st = *steer_;
+    const std::string head = trim(st.prefix);
+    const std::string consigne = trim(text.substr(std::min(text.size(), head.size())));
+    if (consigne.empty()) {
+        if (why) *why = "\xC3\x89" "cris ce que l'IA doit faire autrement apr\xC3\xA8s " + guillemets(head) + ", puis Entr\xC3\xA9" "e.";
+        return false;   // la consigne reste attendue
+    }
+    steer_.reset();
+    mission::Mission* m = editableMission(st.mission, why);
+    if (!m) return false;
+    (void)loop::addConsigne(*m, st.steps, consigne, isoDate(now()));
+    saveMission(*m);
+    return continueMissionWith(st.mission, consigne, why);
 }
 
 // AU TICK : les missions interrompues (constatees des que le projet ouvert est connu), la verification des missions
@@ -3516,7 +3766,11 @@ bool Assistant::createMission(std::string request, std::string* why) {
     return true;
 }
 
-bool Assistant::continueMission(std::string_view idv, std::string* why) {
+bool Assistant::continueMission(std::string_view idv, std::string* why) { return continueMissionWith(idv, {}, why); }
+
+// 1.22.4 : `consigne` (apres Modifier la demande sur une proposition qui tournait en rond) - dite dans la demande ; la
+// consigne est aussi gardee dans la mission (loop::addConsigne) et reprise par la consigne du lot (loop::triedText).
+bool Assistant::continueMissionWith(std::string_view idv, const std::string& consigne, std::string* why) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
@@ -3552,7 +3806,8 @@ bool Assistant::continueMission(std::string_view idv, std::string* why) {
     call.steps = batch.steps;
     call.batch = batch;
     call.changes = joined(changes, ", ");
-    const std::string text = "Propose la suite de la mission " + guillemets(m->name) + " : " + stepsLine(*m, batch.steps) + ".";
+    std::string text = "Propose la suite de la mission " + guillemets(m->name) + " : " + stepsLine(*m, batch.steps) + ".";
+    if (!consigne.empty()) text += " Consigne : " + consigne;
     return launchMission(*m, text, std::move(call), why);
 }
 
