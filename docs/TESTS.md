@@ -36,7 +36,7 @@ Décompte fait sur `CMakeLists.txt` de ce commit :
 | Essai `vcxproj` (Python : `outils/verifier_vcxproj.py`, enregistré si Python 3 est trouvé) | 1 |
 | **Total** | **122** |
 
-Ce total correspond aux « 122 suites d'essais » des notes de livraison 1.22.2 et 1.22.3 (121 en 1.22.1, plus `perf` ; 119 en 1.22.0, 116 en 1.21.3).
+Ce total correspond aux « 122 suites d'essais » des notes de livraison 1.22.2 à 1.22.4 (121 en 1.22.1, plus `perf` ; 119 en 1.22.0, 116 en 1.21.3).
 
 Essais **déclarés mais sautés** parce que leur source n'est pas dans le dépôt (22) : `core` (`src/core/compile_check.cpp` absent), `grafcet`, `macro`, `xref`, `equipment`, `font`, `theme`, `corner`, `libhelp`, `helparticle`, `execorder`, `simorder`, `treednd`, `execwiring`, `macroxls`, `macronatives`, `libcatalog`, `macrohelp`, `libpage`, `help`, `helpsession`, `xlsm`. Pour `xlsm`, les classeurs d'essai (`tests/fixtures/simple.xlsx`) et le script `tests/make_fixtures.py` que cite `CMakeLists.txt` pour les fabriquer sont eux aussi absents.
 
