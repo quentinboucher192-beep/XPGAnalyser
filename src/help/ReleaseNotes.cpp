@@ -158,6 +158,18 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.4 : la previsualisation montre ou sont les erreurs
+        note("1.22.4", "Assistant IA", Kind::New,
+         "LA PR\xC3\x89VISUALISATION MONTRE O\xC3\x99 SONT LES ERREURS : dans l'aper\xC3\xA7u, un objet en erreur est encadr\xC3\xA9 de rouge, un objet en "
+         "avertissement d'ambre, avec une pastille ! (m\xC3\xAAme un avertissement qui ne nomme pas ses objets, \xC2\xAB 2 objets cr\xC3\xA9\xC3\xA9s ne sont reli\xC3\xA9s "
+         "\xC3\xA0 aucune variable \xC2\xBB) ; \xC3\xA0 gauche, les lignes concern\xC3\xA9" "es prennent la m\xC3\xAAme couleur. La liste se filtre : une recherche (Ctrl+F ; "
+         "\xC3\x89" "chap la vide), les puces Erreurs et Avertissements, et le compte \xC2\xAB 12 lignes \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.22.4", "Assistant IA", Kind::New,
+         "CHOISIR UNE LIGNE ENCADRE CE QU'ELLE D\xC3\x89SIGNE DANS L'APER\xC3\x87U : un objet ; une variable, les objets qui la lisent ; un type, "
+         "ceux qui lisent une variable de ce type ; une \xC3\xA9tape, ses objets ; un message, ses objets. Le cadre pulse puis reste, et l'aper\xC3\xA7u "
+         "s'y recentre (il zoome si c'est petit). Un clic sur un objet de l'aper\xC3\xA7u choisit sa ligne.",
+         "assistant-ia", ""),
         // 1.22.4 : un texte entre guillemets, un nom sans
         note("1.22.4", "IHM", Kind::Fixed,
          "UN TEXTE ENTRE GUILLEMETS, UN NOM SANS : dans une case de texte (valeur par d\xC3\xA9" "faut d'un param\xC3\xA8tre, argument, valeur "

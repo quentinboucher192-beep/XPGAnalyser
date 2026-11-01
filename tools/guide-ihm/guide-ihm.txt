@@ -1924,6 +1924,19 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
   - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
 - La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
 - Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
+### Voir où sont les erreurs (1.22.4)
+- **Dans l'aperçu**, un objet en erreur a un second cadre **rouge**, plus épais, avec une pastille « ! » ; un objet en avertissement, le même cadre en **ambre**. La légende du bas les nomme. Le survol d'un objet liste ses messages.
+- Un avertissement qui ne nomme pas ses objets (« 2 objets créés ne sont reliés à aucune variable ») encadre quand même les objets concernés.
+- **À gauche**, les lignes liées à une erreur sont en rouge, celles liées à un avertissement en ambre : les erreurs, les avertissements, les étapes de l'architecture, les objets, les variables, les types. Le titre d'une catégorie porte la pastille de son pire niveau, même repliée.
+- **La recherche** en haut de la liste (**Ctrl+F**) filtre toutes les catégories : un nom d'objet, de variable, de type, un texte d'erreur. Les titres des catégories qui ont un résultat restent, et le compte dit « 12 lignes ». **Échap** vide la recherche ; un second Échap ferme la fenêtre.
+- **Les puces Erreurs (n) et Avertissements (n)** ne gardent que ces lignes, l'une, l'autre ou les deux.
+- **Choisir une ligne encadre dans l'aperçu ce qu'elle désigne**, en couleur d'accent (le cadre pulse une seconde puis reste), et l'aperçu s'y recentre (il zoome si c'est petit) :
+  - un objet : cet objet ;
+  - une variable : les objets qui la lisent (variable liée, formules, textes à trous, actions, arguments) ;
+  - un type : les objets qui lisent une variable ou un paramètre de ce type ;
+  - une étape : ses objets, sinon ceux qui lisent ce qu'elle crée ;
+  - une erreur ou un avertissement : ses objets.
+- Inversement, **un clic sur un objet de l'aperçu** choisit sa ligne à gauche.
 ### L'automate d'un .XPG joint
 - Un export de Control Expert joint (.XPG) est **lu comme l'automate de la séance** : ses variables globales et ses types (DDT) vont dans ce que l'IA reçoit, pour créer les variables et les types IHM correspondants (ils ne s'associent pas directement).
 - Il est lu avant chaque appel à l'IA - un message, la création d'une mission, une proposition de mission - et de nouveau après une relance du logiciel (l'automate lu n'est gardé que le temps de la séance) : le plus récent .XPG de la conversation (ou des pièces de la mission). La barre de l'Assistant le dit (« J'ai lu l'automate de programme.XPG : … variables globales et … types (DDT) »).
