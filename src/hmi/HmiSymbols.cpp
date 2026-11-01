@@ -27,6 +27,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -219,6 +220,40 @@ std::set<std::size_t> markerDollars(std::string_view text) {
         at.insert(sp.end() - 1);
     }
     return at;
+}
+
+// 1.22.4 : le texte d'une chaine entre guillemets ("Vanne", "dit $"oui$"") - les memes echappements
+// et les memes reperes qu'entre apostrophes ; faux : pas une chaine seule.
+bool quotedLiteral(const std::string& t, std::string& text) {
+    if (t.size() < 2 || t.front() != '"' || t.back() != '"') return false;
+    text.clear();
+    const auto kept = markerDollars(std::string_view(t).substr(1, t.size() - 2));
+    for (std::size_t i = 1; i + 1 < t.size(); ++i) {
+        if (t[i] == '$' && kept.count(i - 1)) {
+            const std::size_t close = t.find('$', i + 1);
+            text += t.substr(i, close - i + 1);
+            i = close;
+            continue;
+        }
+        // Les echappements du moteur ($" $$ $' $N $T $R $L $P $hh) ; un autre $ reste un $ (Prix 5$).
+        if (t[i] == '$' && i + 2 < t.size()) {
+            const char n = t[i + 1];
+            if (std::strchr("$'\"NnLlRrTtPp", n) != nullptr) {
+                ++i;
+                text += n == 'N' || n == 'n' || n == 'L' || n == 'l' ? '\n' : n == 'T' || n == 't' ? '\t' : n == 'R' || n == 'r' ? '\r'
+                      : n == 'P' || n == 'p' ? '\f' : n;
+                continue;
+            }
+            if (i + 3 < t.size() && std::isxdigit(uc(n)) && std::isxdigit(uc(t[i + 2]))) {
+                text += static_cast<char>(std::stoi(t.substr(i + 1, 2), nullptr, 16));
+                i += 2;
+                continue;
+            }
+        }
+        if (t[i] == '"') return false;
+        text += t[i];
+    }
+    return true;
 }
 
 bool stringLiteral(const std::string& t, std::string& text) {
@@ -674,8 +709,30 @@ std::string enumConstantNumber(const Project& project, std::string_view type, st
 std::string shownLiteral(std::string_view text) {
     const std::string t = trimmedCopy(text);
     std::string inner;
-    if (stringLiteral(t, inner)) return inner;
+    if (stringLiteral(t, inner) || quotedLiteral(t, inner)) return shownText(inner);
     return t;
+}
+
+std::string shownText(std::string_view text) {
+    // 1.22.4 : TOUJOURS ENTRE GUILLEMETS - "Vanne" est un texte, Vanne un nom (un parametre, une variable).
+    // Un guillemet s'ecrit $" ; un $ qui serait lu comme un echappement s'ecrit $$ (les reperes $Nom$ restent).
+    const std::string s(text);
+    const auto kept = markerDollars(s);
+    const auto escapes = [&](std::size_t i) {
+        if (i + 1 >= s.size()) return true;   // a la fin : $" fermerait mal
+        const char n = s[i + 1];
+        if (std::strchr("$'\"NnLlRrTtPp", n) != nullptr) return true;
+        return i + 2 < s.size() && std::isxdigit(uc(n)) && std::isxdigit(uc(s[i + 2]));
+    };
+    std::string out = "\"";
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const char c = s[i];
+        if (c == '"') { out += "$\""; continue; }
+        if (c == '\n') { out += "$N"; continue; }
+        if (c == '$' && !kept.count(i) && escapes(i)) { out += "$$"; continue; }
+        out += c;
+    }
+    return out + "\"";
 }
 
 std::string shownCell(std::string_view stored) {
@@ -735,6 +792,7 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
     double num = 0;
     // ANY : un nombre, un booleen, un litteral deja ecrit ; sinon un texte.
     if (u.empty() || u == "ANY") {
+        if (std::string inner; quotedLiteral(t, inner)) return quoted(inner);   // 1.22.4 : la forme gardee est du ST
         if (isLiteralArgument(t)) return t;
         if (parseNumber(t, num)) {
             std::string n = t;
@@ -748,7 +806,7 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
     if (isTextType(type)) {
         std::string inner;
         if (stringLiteral(t, inner)) return t;
-        if (t.size() >= 2 && t.front() == '"' && t.back() == '"') return quoted(std::string_view(t).substr(1, t.size() - 2));
+        if (quotedLiteral(t, inner)) return quoted(inner);   // 1.22.4 : "Vanne" -> 'Vanne'
         return quoted(t);
     }
     if (u.rfind("ARRAY", 0) == 0)
@@ -912,7 +970,8 @@ CellText cellValue(const Project* project, std::string_view type, std::string_vi
     // Une valeur deja ecrite dans la forme gardee ('texte', 12, TRUE, T#5s, T_MODE#Auto) : lue dans le type.
     if (isLiteralArgument(t)) {
         std::string why;
-        r.text = any ? t : literal(type, &why);
+        std::string inner;
+        r.text = any ? (quotedLiteral(t, inner) ? quoted(inner) : t) : literal(type, &why);
         return r.text.empty() ? refuse(why) : r;
     }
     // Un calcul sur des noms connus (Seuil * 2), un appel (TO_INT(x)) : une formule. Dans une case de

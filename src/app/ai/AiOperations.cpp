@@ -22,6 +22,8 @@
 #include "../../hmi/HmiFolders.hpp"      // 1.18.0 : creer_dossier, ranger
 #include "../../hmi/HmiMarkers.hpp"      // 1.22.2 : un repere ($Vanne$.Cmd) se lit sans ses $
 #include "../../hmi/HmiPopupParams.hpp"  // 1.22.2 : le type d'un parametre de la vue et de ses membres
+#include "../../hmi/HmiSymbols.hpp"      // 1.22.4 : la regle des cases (cellValue), un texte ou un nom
+#include "../../hmi/HmiRuntime.hpp"      // 1.22.4 : isVariablePath (un nom seul)
 #include "../../hmi/HmiMigrate.hpp"      // 1.18.0 : les blocs VAR d'un code cree deviennent ses declarations
 
 #include <algorithm>
@@ -1053,10 +1055,16 @@ struct Run {
                 std::string reason;
                 if (!generic && !typeKnown(pt, &reason)) bad = unknownType(pt, reason);
             }
+            // 1.22.4 : la valeur par defaut d'un parametre texte - 'Vanne' est un texte, Vanne un NOM (un autre
+            // parametre, une variable). Un nom qui n'est pas un texte donne a un STRING : l'ambiguite, refusee.
+            if (bad.empty()) bad = textDefaultProblem(op, pt, trimmed(prm.initial));
             if (!bad.empty()) {
                 if (!fail("Vue " + op.name + ", param\xC3\xA8tre \xC2\xAB " + prm.name + " \xC2\xBB : " + bad + ".")) return false;
                 continue;
             }
+            if (hmi::isTextType(pt) && hmi::isVariablePath(trimmed(prm.initial)) && !knownForDefault(op, trimmed(prm.initial)))
+                warn("Vue " + op.name + ", param\xC3\xA8tre " + pn + " : la valeur par d\xC3\xA9" "faut " + trimmed(prm.initial)
+                     + " est prise comme le texte '" + trimmed(prm.initial) + "' (un texte s'\xC3\xA9" "crit entre apostrophes).");
             seen.push_back(pn);
             shown.push_back(pn + " : " + (pt.empty() ? std::string("ANY") : pt) + (trimmed(prm.initial).empty() ? std::string{} : " = " + trimmed(prm.initial)));
         }
@@ -1068,6 +1076,26 @@ struct Run {
                  shown.empty() ? std::string("sans param\xC3\xA8tre") : joinList(shown));
         }
         return true;
+    }
+
+    // 1.22.4 : un nom connu pour une valeur par defaut - un parametre de la meme vue, ou un nom du projet.
+    bool knownForDefault(const Operation& op, const std::string& value) const {
+        const std::string root = value.substr(0, value.find_first_of(".["));
+        if (std::any_of(op.params.begin(), op.params.end(), [&](const auto& q) { return iequal(trimmed(q.name), root); })) return true;
+        return hmi::isKnownName(&project, root);
+    }
+    // 1.22.4 : la valeur par defaut `g` d'un parametre de type `pt` - vide : elle convient. Pour un texte, un nom
+    // sans apostrophes dont le type n'est pas un texte (Vanne : T_Vanne) est l'ambiguite de ta capture.
+    std::string textDefaultProblem(const Operation& op, const std::string& pt, const std::string& g) const {
+        if (g.empty() || !hmi::isTextType(pt) || !hmi::isVariablePath(g) || !knownForDefault(op, g)) return {};
+        const std::string root = g.substr(0, g.find_first_of(".["));
+        std::string given;
+        for (const auto& q : op.params)
+            if (iequal(trimmed(q.name), root)) given = g == root ? hmi::types::normalized(trimmed(q.type)) : std::string{};
+        if (given.empty()) given = hmi::params::expressionType(project, nullptr, g);
+        if (given.empty() || hmi::isTextType(given)) return {};
+        return "la valeur par d\xC3\xA9" "faut " + g + " sans apostrophes est un NOM (" + root + ", " + given + "), pas un texte : un texte "
+               "s'\xC3\xA9" "crit '" + g + "' ; une valeur calcul\xC3\xA9" "e, une formule ('Vanne ' + Numero.ToString())";
     }
 
     // La valeur initiale d'une variable, lue selon son type ; vide : elle convient (`out` : telle qu'elle s'ecrit).
@@ -2550,6 +2578,14 @@ hmi::View newViewFor(const hmi::Project& project, const Operation& op, hmi::Id& 
             vp.name = trimmed(prm.name);
             vp.type = hmi::types::normalized(trimmed(prm.type));
             vp.defaultValue = trimmed(prm.initial);
+            // 1.22.4 : gardee comme toute case de valeur (hmi::cellValue) - 'Vanne' et "Vanne" : 'Vanne' ; un texte
+            // tape sans apostrophes, inconnu : 'Pompe' ; un nom connu : le nom ; =formule : la formule.
+            if (!vp.defaultValue.empty()) {
+                const auto cell = hmi::cellValue(&project, vp.type, vp.defaultValue, [&op](std::string_view n) {
+                    return std::any_of(op.params.begin(), op.params.end(), [&](const auto& q) { return iequal(trimmed(q.name), n); });
+                });
+                if (cell.ok() && !cell.text.empty()) vp.defaultValue = cell.text;
+            }
             vp.description = trimmed(prm.description);
             v.params.push_back(std::move(vp));
         }

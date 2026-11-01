@@ -571,6 +571,21 @@ void expressions() {
     auto rv = real.evaluate(plc, &scope);
     check(rv && std::fabs(rv->asReal() - 31.25) < 1e-9, "REAL");
 
+    // 1.22.4 : un texte entre guillemets ("P101", comme 'P101') et x.ToString() (TO_STRING(x)) - construire un texte.
+    evalBool("Nom = \"P101\"", true);
+    {
+        const auto text = [&](const char* src, const char* want) {
+            auto e = Expression::compile(src);
+            auto r = e.valid() ? e.evaluate(plc, &scope) : core::Result<sim::Value>(core::fail(core::ErrorCode::InvalidArgument, e.error()));
+            check(r && r->asString() == want, std::string("1.22.4 : ") + src + " vaut " + want + (r ? " (" + r->asString() + ")" : " -> " + e.error()));
+        };
+        text("\"test\" + \"test2\" + Etat.ToString()", "testtest25");
+        text("'Pompe ' + Nom + \" : \" + TO_STRING(Etat)", "Pompe P101 : 5");
+        text("(i + 1).ToString()", "4");
+        text("\"dit $\"oui$\"\"", "dit \"oui\"");
+        text("\"Prix 5$\"", "Prix 5$");
+    }
+
     auto bad = Expression::compile("Etat := 3");
     check(!bad.valid(), "une expression n'ecrit pas");
     auto bad2 = Expression::compile("Marche; Etat");

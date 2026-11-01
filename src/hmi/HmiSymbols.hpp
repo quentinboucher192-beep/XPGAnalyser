@@ -99,11 +99,13 @@ using SymbolArguments = std::vector<std::pair<std::string, std::string>>;
 // `text` est-il deja une constante : une chaine seule, un nombre, TRUE/FALSE, un
 // litteral type (T#5s, 16#FF, T_MODE#Auto) ?
 [[nodiscard]] bool isLiteralArgument(std::string_view text);
-// Ce que l'inspecteur montre d'une constante : 'Voiture' -> Voiture, 'L$'eau' -> L'eau ;
-// le reste tel quel.
+// Ce que l'inspecteur montre d'une constante : 'Voiture' -> "Voiture", 'L$'eau' -> "L'eau" (1.22.4 : un texte
+// toujours entre guillemets, jamais confondu avec un nom ; avant, Voiture) ; le reste tel quel.
 [[nodiscard]] std::string shownLiteral(std::string_view text);
+// 1.22.4 : un texte montre entre guillemets ("dit $"oui$"") - ce qui se retape tel quel (cellValue).
+[[nodiscard]] std::string shownText(std::string_view text);
 // 1.12.19 (U3, la regle des cases) : CE QU'UNE CASE MONTRE d'une valeur gardee - une formule avec son
-// = (=Niveau * 2), un texte sans ses apostrophes (Azote), un nombre, un litteral type, une liste [..]
+// = (=Niveau * 2), un texte entre guillemets ("Azote", 1.22.4), un nombre, un litteral type, une liste [..]
 // ou une structure (A := ..) tels quels ; vide : vide. Ce qui est montre se retape tel quel (cellValue).
 [[nodiscard]] std::string shownCell(std::string_view stored);
 // 1.12.19 (la regle des cases) : une valeur d'une ENUMERATION IHM tapee par son nom (Auto,
@@ -113,7 +115,8 @@ using SymbolArguments = std::vector<std::pair<std::string, std::string>>;
 // 1.12.19 (LA REGLE DES CASES) : CE QUE DEVIENT LE TEXTE TAPE DANS UNE CASE DE VALEUR de type
 // `type` - la meme lecture partout (une grille de declarations, une valeur initiale, une valeur
 // par defaut, un membre, une recette, Essayer) :
-//   =expression        la formule, sans le = (formula) ;
+//   =expression        la formule, sans le = (formula) : ="Pompe " + Numero.ToString() ;
+//   "texte" ou 'texte'  un texte (1.22.4 : la seule facon d'ecrire un texte qui est aussi un nom) ;
 //   un nom connu, seul  le nom : Niveau vaut =Niveau (formula) ; un calcul sur des noms connus aussi ;
 //   ( ou [              une structure, un tableau ecrits (tels quels, la case les verifie) ;
 //   le reste            une valeur fixe lue dans le type (argumentLiteral) : 2,5 -> 2.5, VRAI -> TRUE,

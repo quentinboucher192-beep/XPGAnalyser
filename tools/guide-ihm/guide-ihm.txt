@@ -9249,7 +9249,7 @@ Là où un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF
 ### La règle des cases (1.12.19)
 **Une seule règle pour toutes les cases** : l'inspecteur, les volets (Actions, Contenu, alarmes, paramètres, arguments d'une popup), les variables et leurs membres, les déclarations, la valeur initiale, les recettes, l'essai d'une fonction. Une case se lit toujours de la même façon :
 - **Une expression commence par =** : `=Niveau * 2`, `=SEL(Marche, 'Oui', 'Non')`. Elle s'écrit en chasse fixe et garde son = à l'affichage ; une case qui n'attend qu'une formule (Variable écrite, Condition) montre aussi le sien (`=Marche`).
-- **Une valeur fixe s'écrit comme elle se lit**, sans préfixe : la case la lit selon son type (le tableau ci-dessous). Un texte s'écrit tel quel (`Bonjour`) ; entre apostrophes seulement s'il est le nom d'une variable (`'Niveau'`).
+- **Une valeur fixe s'écrit comme elle se lit**, sans préfixe : la case la lit selon son type (le tableau ci-dessous). Un texte s'écrit entre guillemets (`"Bonjour"`, ou `'Bonjour'`) ; tapé sans, il en reçoit, sauf s'il est un nom (1.22.4).
 - **Un nom connu tapé seul devient une expression** : `Niveau` dans une case nombre devient `=Niveau`. Une valeur d'énumération tapée seule (`Auto`) reste une valeur fixe (`T_MODE#Auto`).
 - **Vide, la case dit sa valeur par défaut**, en gris : « 12 · valeur par défaut ». L'invite ne se tape pas.
 - **Le type attendu est écrit au bout du nom** (nombre, booléen, durée, texte, couleur…).
@@ -9264,9 +9264,18 @@ Là où un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF
 | nombre réel (REAL) | `2,5`, `1 000,5`, `5` | `2.5`, `1000.5`, `5` |
 | booléen (BOOL) | `TRUE`, `vrai`, `oui`, `on`, `1` ; `FALSE`, `faux`, `non`, `off`, `0` | `TRUE` ; `FALSE` |
 | durée (TIME) | `5 s`, `250 ms`, `1 h 30`, `2 min 30`, `01:30` (mm:ss), `01:30:00` (h:mm:ss), `T#5s` ; un nombre seul : des millisecondes | `T#5s`, `T#250ms`, `T#1m30s`… |
-| texte (STRING) | `Azote` | `'Azote'`, montré sans apostrophes |
+| texte (STRING) | `"Azote"` (ou `Azote`, qui n'est pas un nom) | `'Azote'`, montré `"Azote"` |
 | énumération | `Auto` | `T_MODE#Auto` |
 | expression | `=Niveau * 2`, ou `Niveau` seul | `=Niveau * 2`, `=Niveau` |
+@nouveau 1.22.4
+### Un texte entre guillemets, un nom sans (1.22.4)
+Dans une case de texte (STRING : la valeur par défaut d'un paramètre, un argument d'Ouvrir une popup, une valeur initiale, un membre, une recette), **`"Vanne"` est un texte et `Vanne` un nom** : un paramètre, une variable. Avant, un texte se montrait sans apostrophes : `Vanne` tapé dans la valeur par défaut d'un paramètre STRING devenait le paramètre Vanne de la popup (un T_Vanne), avec l'erreur « Vanne est sortie_tor ; ce champ attend STRING ».
+- **Un texte constant se montre toujours entre guillemets** : `"Azote"`, `"L'eau"`. Ce qui est montré se retape tel quel. Un guillemet dans le texte s'écrit `$"` (`"dit $"oui$""`).
+- **Tu tapes `"Vanne"` ou `'Vanne'`** : c'est le texte, même si Vanne est aussi un nom.
+- **Tu tapes un mot qui n'est pas un nom** (`Pompe`) : la case le prend comme texte et ajoute les guillemets (`"Pompe"`).
+- **Tu tapes un nom** (`Vanne`) : c'est le nom. S'il n'est pas un texte, la ligne rouge le dit : « Sans guillemets, Vanne est un nom ; le texte s'écrit "Vanne" ». Le clic droit et le carré proposent **Prendre comme texte : "Vanne"**.
+- **Un texte se construit en formule** : `="Vanne " + Numero.ToString()`, `='Pompe ' + Nom + ' : ' + TO_STRING(Debit)`. `x.ToString()` est `TO_STRING(x)` (pour une énumération, son toString). Les guillemets et `.ToString()` marchent dans toutes les expressions de l'IHM (formules, scripts, conditions). Le code de l'automate garde le ST de Control Expert : `'texte'`.
+- **L'Assistant IA suit la même règle** (règle 20 de ses consignes) : un texte entre apostrophes, sans elles un nom. Une valeur par défaut STRING qui serait un nom d'un autre type (`Vanne`) est refusée, avec l'explication. Un mot inconnu est pris comme texte, et un avertissement le dit.
 ### Elle dit qu'elle accepte une expression
 Une case qui accepte une expression porte la **pastille fx** devant sa valeur et le **type attendu** en petit au bout de son nom : c'est ce qui le dit. Son nom n'a donc plus de « (expression) » (l'animation de l'inspecteur : **Visibilité**, **Couleur dynamique**, **Clignotement**… ; **Autorisation**, **Valeur** d'une action), et une case vide n'a plus d'invite « ou = expression » ; une case à cocher non plus.
 ### Vide : elle dit ce qu'elle attend

@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.3", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.4", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h 50"},
     {"1.22.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h"},
     {"1.22.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 13 h"},
     {"1.22.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 vers midi"},
@@ -157,6 +158,21 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.4 : un texte entre guillemets, un nom sans
+        note("1.22.4", "IHM", Kind::Fixed,
+         "UN TEXTE ENTRE GUILLEMETS, UN NOM SANS : dans une case de texte (valeur par d\xC3\xA9" "faut d'un param\xC3\xA8tre, argument, valeur "
+         "initiale, membre, recette), \"Vanne\" est un texte et Vanne un nom. Avant, un texte se montrait sans apostrophes, et Vanne tap\xC3\xA9 "
+         "dans la valeur par d\xC3\xA9" "faut STRING d'une popup devenait son param\xC3\xA8tre Vanne (\xC2\xAB Vanne est sortie_tor ; ce champ attend STRING \xC2\xBB). "
+         "Un texte constant se montre toujours entre guillemets (\"Azote\") et se retape tel quel ; un mot qui n'est pas un nom re\xC3\xA7oit ses "
+         "guillemets ; un nom d'un autre type est dit, avec \xC2\xAB Prendre comme texte : \"Vanne\" \xC2\xBB. Un texte se construit en formule : "
+         "=\"Vanne \" + Numero.ToString() - les guillemets et x.ToString() (TO_STRING(x)) marchent dans toutes les expressions de l'IHM.",
+         "champs-expressions", ""),
+        note("1.22.4", "Assistant IA", Kind::Fixed,
+         "L'IA APPREND LA M\xC3\x8AME R\xC3\x88GLE : ses consignes (r\xC3\xA8gle 20) disent qu'un texte constant s'\xC3\xA9" "crit entre apostrophes, "
+         "sans elles un nom, et qu'un texte se construit en formule ('Vanne ' + Numero.ToString()). Une valeur par d\xC3\xA9" "faut STRING qui "
+         "serait un nom d'un autre type (Vanne, un T_Vanne) est refus\xC3\xA9" "e avec l'explication ; un mot inconnu est pris comme texte, et un "
+         "avertissement le dit.",
+         "champs-expressions", ""),
         // 1.22.3 : le .XPG joint lu pour les missions
         note("1.22.3", "Assistant IA", Kind::Fixed,
          "UN .XPG JOINT EST LU AUSSI POUR UNE MISSION : joint au moment de cr\xC3\xA9" "er une mission, l'export de l'automate partait avec "

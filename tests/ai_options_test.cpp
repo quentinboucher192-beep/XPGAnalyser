@@ -1212,6 +1212,49 @@ void popupParams() {
     check(has(ai::contextText(in), "Popup_Vanne(Vanne : T_Vanne)"), "le contexte d'une autre vue : la popup et ses parametres");
 }
 
+// 1.22.4 : un texte constant entre apostrophes - la valeur par defaut "Vanne" d'un parametre STRING lue comme le parametre
+// Vanne (T_Vanne) : l'ambiguite de la capture, refusee et expliquee ; 'Vanne', "Vanne", un mot inconnu, une formule.
+void textQuotes() {
+    std::printf("les textes entre apostrophes (1.22.4)\n");
+    Fixture f;
+    auto& p = f.doc->project;
+    hmi::HmiType tv;
+    tv.id = p.allocate();
+    tv.name = "T_Vanne";
+    tv.members = {{"Cmd", "BOOL"}, {"F0", "BOOL"}};
+    p.programs.types.push_back(tv);
+    std::string why;
+    const auto popup = [](const std::string& name, const std::string& initial) {
+        auto o = op(A::View, name, {{"role", "popup"}});
+        o.params = {{"Vanne", "T_Vanne", "", ""}, {"Numero", "INT", "", "3"}, {"Nom", "STRING", "", initial}};
+        return o;
+    };
+    const ai::Check amb = ai::validate(p, f.proposal({popup("Pop_A", "Vanne")}));
+    check(!amb.ok() && !amb.errors.empty() && has(amb.errors.front(), "sans apostrophes est un NOM (Vanne, T_Vanne)")
+              && has(amb.errors.front(), "s'\xC3\xA9" "crit 'Vanne'"),
+          "Nom : STRING := Vanne, Vanne etant le parametre T_Vanne : refuse, l'ambiguite dite (" + errorsOf(amb) + ")");
+    const auto applied = [&](const std::string& name, const std::string& initial, const std::string& want) {
+        const ai::Proposal pr = f.proposal({popup(name, initial)});
+        const ai::Check ck = ai::validate(p, pr);
+        const bool ok = ck.ok() && f.apply(pr, &why);
+        const auto* v = p.viewByName(name);
+        const std::string got = v && v->params.size() == 3 ? v->params[2].defaultValue : std::string("?");
+        check(ok && got == want, "Nom : STRING := " + initial + " -> " + want + " (garde : " + got + ", " + errorsOf(ck) + why + ")");
+        return ck;
+    };
+    (void)applied("Pop_B", "'Vanne'", "'Vanne'");
+    (void)applied("Pop_C", "\"Vanne\"", "'Vanne'");
+    const ai::Check unknown = applied("Pop_D", "Pompe", "'Pompe'");
+    check(std::any_of(unknown.warnings.begin(), unknown.warnings.end(), [](const std::string& w) { return has(w, "prise comme le texte 'Pompe'"); }),
+          "un mot inconnu : pris comme texte, et dit dans un avertissement");
+    (void)applied("Pop_E", "='Vanne ' + Numero.ToString()", "'Vanne ' + Numero.ToString()");
+    ai::PromptInput in;
+    in.project = &p;
+    const std::string rules = ai::systemPrompt(in);
+    check(has(rules, "20. Un texte constant s'\xC3\xA9" "crit TOUJOURS entre apostrophes") && has(rules, "Numero.ToString()"),
+          "les consignes : la regle 20 (un texte entre apostrophes, sinon un nom ; un texte construit)");
+}
+
 int main() {
     // Le dossier IA des essais (les connaissances relues par les consignes, les conversations).
     const fs::path root = fs::temp_directory_path() / "xpg_ai_options_racine";
@@ -1232,6 +1275,7 @@ int main() {
     tools118();
     bigProposal();
     popupParams();   // 1.22.2
+    textQuotes();    // 1.22.4
     fs::remove_all(root);
     std::printf("ai_options_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

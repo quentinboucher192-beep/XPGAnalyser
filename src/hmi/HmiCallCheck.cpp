@@ -294,7 +294,8 @@ std::vector<Problem> checkCode(const Context& c, std::string_view code, bool* ok
 
 std::vector<Problem> checkExpression(const Context& c, std::string_view expression, bool* ok) {
     if (ok) *ok = false;
-    auto parsed = sim::parseExpression(expression);
+    // 1.22.4 : lue dans le dialecte IHM, comme la case la calcule ("Pompe " + n.ToString()).
+    auto parsed = sim::parseExpression(expression, sim::ParseOptions{true});
     if (!parsed) return {};
     if (ok) *ok = true;
     Typing typing(c);

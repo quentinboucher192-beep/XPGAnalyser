@@ -272,10 +272,13 @@ public:
                 continue;
             }
 
-            if (c == '\'') {
+            // 1.22.4 (dialecte IHM) : un texte s'ecrit aussi entre guillemets ("Vanne", comme 'Vanne') ; les
+            // memes echappements ($" pour un guillemet). Hors dialecte, le ST de l'automate ne change pas.
+            if (c == '\'' || (dialect_ && c == '"')) {
+                const char quote = c;
                 ++pos_;
                 std::string body;
-                while (pos_ < src_.size() && src_[pos_] != '\'') {
+                while (pos_ < src_.size() && src_[pos_] != quote) {
                     if (src_[pos_] == '\n') ++line_;
                     // LES ECHAPPEMENTS DE LA NORME : $' pour une apostrophe, $$
                     // pour un dollar, $N $L $R $T $P, et $hh en hexadecimal.
@@ -1265,6 +1268,18 @@ private:
                     }
                 }
                 if (!accept(")")) return error("expected ')'");
+                // 1.22.4 (dialecte IHM) : x.ToString() est TO_STRING(x) - pour construire un texte
+                // ('Vanne ' + Numero.ToString()). Pour un type IHM, c'est son operateur toString (comme TO_STRING).
+                if (dialect_ && node->arguments.empty() && node->outputs.empty() && node->lhs->kind == Expr::Kind::Member
+                    && node->lhs->lhs && upperOf(node->lhs->name) == "TOSTRING") {
+                    auto conv = std::make_shared<Expr>();
+                    conv->kind = Expr::Kind::Reference;
+                    conv->name = "TO_STRING";
+                    conv->line = node->line;
+                    auto value = node->lhs->lhs;
+                    node->lhs = conv;
+                    node->arguments.emplace_back(std::string{}, value);
+                }
                 base = node;
                 continue;
             }

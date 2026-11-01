@@ -640,7 +640,7 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
             r.style = markers ? Style::Markers : Style::Constant;
             r.literal = (e.empty() || e == "ANY") ? hmi::argumentLiteral(env.project, "ANY", t) : t;
             if (hmi::isTextType(e) && e != "TEXTE") r.literal = hmi::argumentLiteral(env.project, e, t);
-            r.info = "Constante" + (r.literal.empty() ? std::string{} : " : " + r.literal);
+            r.info = "Constante" + (r.literal.empty() ? std::string{} : " : " + hmi::shownLiteral(r.literal));   // 1.22.4 : "Voiture"
             if (hmi::isTextType(e) && !hmi::isLiteralArgument(t)) r.info += " (converti en texte)";
             return r;
         }
@@ -772,6 +772,13 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
             if (!compatible(expected, type)) {
                 r.style = Style::Error;
                 Diag d{clean + " est " + type + " ; ce champ attend " + expectedLabel(expected) + ".", {}};
+                // 1.22.4 : l'ambiguite d'un nom tape dans une case de texte (Vanne : le parametre, pas le
+                // texte) - le dire, et le texte d'un clic.
+                const bool textCell = e == "STRING" || (hmi::isTextType(e) && e != "TEXTE");
+                if (textCell && hmi::isVariablePath(t)) {
+                    d.message += " Sans guillemets, " + t + " est un nom ; le texte s'\xC3\xA9" "crit " + hmi::shownText(t) + ".";
+                    d.fixes.push_back({"Prendre comme texte : " + hmi::shownText(t), hmi::shownText(t), false, {}});
+                }
                 Fix f;
                 if (conversionFix(clean, type, expected, f)) d.fixes.push_back(f);
                 if (hmi::isAggregateType(env.project, expected))

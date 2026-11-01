@@ -119,6 +119,13 @@ const char* const kRules =
     "(Vanne.Cmd, Vanne.F0) - ce n'est PAS une variable du projet : ne le cherche pas parmi les variables, ne demande pas sa "
     "cr\xC3\xA9" "ation. L'appelant le donne \xC3\xA0 l'ouverture (Ouvrir la popup : Vanne := Vannes[3]). Un param\xC3\xA8tre qui manque \xC3\xA0 une popup "
     "existante ne s'ajoute pas par une op\xC3\xA9ration : dis-le (l'onglet Param\xC3\xA8tres de la popup) au lieu d'inventer une variable.\n"
+    // 1.22.4 : l'ambiguite d'un texte et d'un nom (la valeur par defaut "Vanne" lue comme le parametre Vanne).
+    "20. Un texte constant s'\xC3\xA9" "crit TOUJOURS entre apostrophes : 'Vanne' (ou guillemets : \"Vanne\"). Sans eux, Vanne est un NOM "
+    "(un param\xC3\xA8tre, une variable, un objet) : dans une valeur par d\xC3\xA9" "faut de param\xC3\xA8tre (initial), un argument "
+    "(Nom := 'Vanne 3'), une valeur initiale STRING, une propri\xC3\xA9t\xC3\xA9 de type texte. Un texte construit est une formule : "
+    "'Vanne ' + Numero.ToString() (ou TO_STRING(Numero)), 'Pompe ' + Nom + ' : ' + TO_STRING(Debit) + ' m3/h'. Un nom qui n'est pas un "
+    "texte (Vanne : T_Vanne) donn\xC3\xA9 \xC3\xA0 un STRING est refus\xC3\xA9 : mets les apostrophes. Exception : le texte affich\xC3\xA9 d'un "
+    "objet (label, titre) est un texte \xC3\xA0 trous, sans apostrophes (Cuve {Niveau} %).\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
     "- creer : genre (une cl\xC3\xA9), nom (neuf), proprietes (x, y, w, h compris ; variable : une variable existante). "

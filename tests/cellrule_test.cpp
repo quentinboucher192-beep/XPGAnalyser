@@ -262,6 +262,45 @@ void cells() {
           "INT : 12.7 refuse (" + why + ")");
 }
 
+// 1.22.4 : UN TEXTE ENTRE GUILLEMETS. "Vanne" est un texte, Vanne un nom (un parametre, une variable) ; une case
+// montre un texte entre guillemets et ce qu'elle montre se retape tel quel ; un texte se construit en formule.
+void quotes() {
+    std::printf("== 1.22.4 : un texte entre guillemets, un nom sans ==\n");
+    hmi::Project p;
+    hmi::Variable niveau;
+    niveau.id = p.allocate();
+    niveau.name = "Niveau";
+    niveau.type = "REAL";
+    p.programs.variables.push_back(niveau);
+    const auto is = [&](std::string_view type, std::string_view typed, std::string_view text, bool formula) {
+        const auto c = hmi::cellValue(&p, type, typed);
+        check(c.ok() && c.text == text && c.formula == formula,
+              std::string(type) + " : " + std::string(typed) + " -> " + std::string(text) + (formula ? " (formule)" : "") + " (lu : " + c.text
+                  + (c.formula ? ", formule" : "") + (c.why.empty() ? std::string{} : ", " + c.why) + ")");
+    };
+    is("STRING", "\"Vanne\"", "'Vanne'", false);
+    is("STRING", "\"Niveau\"", "'Niveau'", false);          // un nom connu entre guillemets : le texte
+    is("STRING", "'Niveau'", "'Niveau'", false);
+    is("STRING", "Niveau", "Niveau", true);                   // sans : le nom
+    is("ANY", "\"Voiture\"", "'Voiture'", false);
+    is("STRING", "\"dit $\"oui$\"\"", "'dit \"oui\"'", false);
+    is("STRING", "\"L'eau\"", "'L$'eau'", false);
+    is("STRING", "\"Prix 5$\"", "'Prix 5$$'", false);
+    is("STRING", "=\"Pompe \" + Niveau.ToString()", "\"Pompe \" + Niveau.ToString()", true);
+    check(hmi::argumentLiteral(nullptr, "STRING", "\"Voiture\"") == "'Voiture'", "argumentLiteral : \"Voiture\" -> 'Voiture'");
+
+    std::printf("== ce qu'une case montre : un texte entre guillemets, qui se retape tel quel ==\n");
+    check(hmi::shownCell("'Azote'") == "\"Azote\"" && hmi::shownLiteral("'L$'eau'") == "\"L'eau\"", "'Azote' -> \"Azote\" ; 'L$'eau' -> \"L'eau\"");
+    check(hmi::shownLiteral("'dit \"oui\"'") == "\"dit $\"oui$\"\"", "un guillemet s'ecrit $\" (" + hmi::shownLiteral("'dit \"oui\"'") + ")");
+    check(hmi::shownLiteral("'Prix 5$$'") == "\"Prix 5$$\"" && hmi::shownLiteral("'a$$b'") == "\"a$b\"",
+          "un $ : $$ seulement s'il serait lu comme un echappement (" + hmi::shownLiteral("'Prix 5$$'") + ", " + hmi::shownLiteral("'a$$b'") + ")");
+    check(hmi::shownCell("Niveau") == "=Niveau" && hmi::shownCell("12") == "12" && hmi::shownCell("TRUE") == "TRUE", "un nom : =Niveau ; 12 et TRUE tels quels");
+    for (const std::string stored : {"'Azote'", "'L$'eau'", "'dit \"oui\"'", "'Prix 5$$'", "'a$$b'", "'$$N'", "'Pompe $Nom$'", "''", "'Ligne 1$NLigne 2'"}) {
+        const auto back = hmi::cellValue(&p, "STRING", hmi::shownCell(stored));
+        check(back.ok() && !back.formula && back.text == stored, stored + " montre " + hmi::shownCell(stored) + ", qui se relit " + back.text);
+    }
+}
+
 // 1.12.19 (U5) : la simulation et l'API sous la meme regle - une case qui n'attend qu'une expression accepte
 // le "=" de tete (une condition de point d'arret aussi).
 void expressions() {
@@ -282,6 +321,7 @@ int main() {
     shown();
     constants();
     cells();
+    quotes();        // 1.22.4
     expressions();
     std::printf("%d controles, %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
