@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.2", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.3", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h"},
     {"1.22.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 13 h"},
     {"1.22.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 vers midi"},
     {"1.21.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
@@ -156,6 +157,14 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.3 : le .XPG joint lu pour les missions
+        note("1.22.3", "Assistant IA", Kind::Fixed,
+         "UN .XPG JOINT EST LU AUSSI POUR UNE MISSION : joint au moment de cr\xC3\xA9" "er une mission, l'export de l'automate partait avec "
+         "la demande sans \xC3\xAAtre lu - l'IA n'en voyait que le nom (\xC2\xAB Je ne peux pas lire programme.XPG \xC2\xBB) et proposait d'attendre. "
+         "Avant chaque appel \xC3\xA0 l'IA (un message, un plan, une proposition de mission), le .XPG le plus r\xC3\xA9" "cent de la conversation "
+         "(ou des pi\xC3\xA8" "ces de la mission) est lu comme l'automate de la s\xC3\xA9" "ance s'il ne l'est pas d\xC3\xA9j\xC3\xA0 - y compris apr\xC3\xA8s une relance "
+         "du logiciel - et la liste des fichiers joints le dit LU, ses variables et ses DDT dans le contexte.",
+         "assistant-ia", ""),
         // 1.22.2 : les parametres des popups compris par l IA, les saccades des missions, l onglet Performances
         note("1.22.2", "Assistant IA", Kind::New,
          "LES PROPOSITIONS D'UNE MISSION SE D\xC3\x89PLIENT OU SE R\xC3\x89" "DUISENT : dans le tableau de bord, un clic sur l'en-t\xC3\xAAte d'une "

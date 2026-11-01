@@ -833,7 +833,7 @@ DiscussionContext buildContext(const Conversation& c, const std::vector<Attachme
     return ctx;
 }
 
-std::string contextPrompt(const DiscussionContext& ctx) {
+std::string contextPrompt(const DiscussionContext& ctx, std::string_view plcLoaded) {
     const std::size_t n = ctx.count();
     if (n == 0) return {};
     std::string s = "## Contexte de la discussion\nFichiers joints : " + std::to_string(n) + "\n";
@@ -846,7 +846,16 @@ std::string contextPrompt(const DiscussionContext& ctx) {
             s += " \xE2\x80\x94 MANQUANT : le fichier n'est plus sur le poste ; tu ne peux pas le lire, ne pr\xC3\xA9tends pas l'avoir consult\xC3\xA9";
         } else {
             if (f.availability == Availability::Moved) s += " \xE2\x80\x94 d\xC3\xA9plac\xC3\xA9 (retrouv\xC3\xA9)";
-            if (a.analysis == "analysee" && !a.analyses.empty()) s += " \xE2\x80\x94 analys\xC3\xA9 (" + a.analyses.back().summary + ")";
+            const std::string_view onDisk = a.file.empty() ? std::string_view(a.name) : std::string_view(a.file).substr(a.file.find_last_of('/') + 1);
+            const bool plc = !plcLoaded.empty() && onDisk.size() == plcLoaded.size()
+                             && std::equal(onDisk.begin(), onDisk.end(), plcLoaded.begin(), [](char x, char y) {
+                                    return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+                                });
+            if (plc)   // 1.22.3 : l'export de l'automate, lu par le logiciel
+                s += " \xE2\x80\x94 export de l'automate LU par le logiciel : ses variables globales et ses types (DDT) sont plus bas "
+                     "(\xC2\xAB Variables globales de l'automate lu dans " + a.name + " \xC2\xBB, \xC2\xAB Types (DDT) de l'automate lu dans "
+                     + a.name + " \xC2\xBB) ; sers-t'en, ne dis pas que tu ne peux pas le lire";
+            else if (a.analysis == "analysee" && !a.analyses.empty()) s += " \xE2\x80\x94 analys\xC3\xA9 (" + a.analyses.back().summary + ")";
             else if (a.analysis == "echec" && !a.analyses.empty()) s += " \xE2\x80\x94 analyse en \xC3\xA9" "chec (" + a.analyses.back().error + ")";
             else if (a.analysis == "en-cours") s += " \xE2\x80\x94 analyse en cours";
             else s += " \xE2\x80\x94 pas encore analys\xC3\xA9";

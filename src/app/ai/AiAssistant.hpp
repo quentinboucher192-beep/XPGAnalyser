@@ -450,6 +450,11 @@ private:
     // 1.16.0 (captures) : les exports de Control Expert joints (.XPG...) lus comme l'automate de la seance
     // (Host::readPlc) ; le texte a dire (vide : aucun).
     [[nodiscard]] std::string readPlcAttachments(const std::vector<Attachment>& attachments);
+    // 1.22.3 : L'AUTOMATE D'UN .XPG JOINT, POUR TOUT APPEL A L'IA - le plus recent .XPG de la conversation (sinon des pieces de
+    // la mission) est relu s'il n'est pas celui de la seance. Il n'etait lu qu'a l'envoi d'un message : un appel de mission
+    // joignait le fichier sans le lire (l'IA n'en voyait que le nom : << je ne peux pas lire programme.XPG >>, 01/11), et apres
+    // une relance du logiciel l'automate lu n'etait plus la. Le texte a dire (vide : rien de lu).
+    [[nodiscard]] std::string ensurePlc(const Conversation& c, const mission::Mission* m = nullptr);
     // 1.16.1 : l'IA integree sur la demande `text`, avec les `turns` premiers messages de `c` pour la suite des
     // demandes (<< et une autre >>).
     [[nodiscard]] LocalReply askLocal(const Conversation* c, std::size_t turns, const DemoContext& ctx, const std::string& text) const;

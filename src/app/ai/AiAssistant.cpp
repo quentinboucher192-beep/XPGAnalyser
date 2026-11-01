@@ -25,6 +25,7 @@
 #include "../../core/Perf.hpp"       // 1.22.2 : ce qui consomme (l'onglet Performances) - des portees de mesure seulement
 
 #include <algorithm>
+#include <filesystem>   // 1.22.3 : le nom du .XPG lu
 #include <cstdlib>
 #include <utility>
 #include <cctype>
@@ -634,8 +635,9 @@ bool Assistant::send(std::string text, std::string* why) {
             c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
         }
         if (const DemoContext ctx = context(); ctx.view) c.project.view = ctx.view->name;
-        const std::string plcRead = readPlcAttachments(u.attachments);   // avant le contexte de la demande
+        std::string plcRead = readPlcAttachments(u.attachments);   // avant le contexte de la demande
         c.messages.push_back(std::move(u));
+        if (plcRead.empty()) plcRead = ensurePlc(c);   // 1.22.3 : un .XPG joint plus tot (une autre seance)
         if (!startLive(c, text, &w)) {
             c = before;
             return fail(w);
@@ -828,6 +830,28 @@ std::string Assistant::readPlcAttachments(const std::vector<Attachment>& attachm
         }
     }
     return said;
+}
+
+std::string Assistant::ensurePlc(const Conversation& c, const mission::Mission* m) {
+    if (!host_.readPlc) return {};
+    const Attachment* latest = nullptr;
+    for (const auto& msg : c.messages)
+        for (const auto& a : msg.attachments)
+            if (!a.removed && isPlcExport(a.name)) latest = &a;
+    if (!latest && m)   // les pieces de la mission (leur identifiant), dans ses conversations
+        for (const auto& id : m->attachments)
+            for (const auto& conv : conversations_)
+                for (const auto& msg : conv.messages)
+                    for (const auto& a : msg.attachments)
+                        if (a.id == id && !a.removed && isPlcExport(a.name)) latest = &a;
+    if (!latest) return {};
+    // le nom du fichier lu (readPlcFile garde le nom de la copie : pieces-jointes/<id>/<nom>)
+    const std::string path = attachmentPath(*latest);
+    const auto u8 = std::filesystem::path(std::u8string(path.begin(), path.end())).filename().u8string();
+    const std::string fileName = u8.empty() ? latest->name : std::string(u8.begin(), u8.end());
+    const std::string loaded = host_.env.plcSource ? host_.env.plcSource() : std::string{};
+    if (!loaded.empty() && loaded == fileName) return {};   // deja l'automate de la seance
+    return readPlcAttachments({*latest});
 }
 
 std::string Assistant::shownText() const {
@@ -2128,7 +2152,10 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     PromptParts parts = req.contextTokens > 0 && req.contextTokens < kSmallContext ? compactPromptParts(in, req.contextTokens) : promptParts(in);
     // 1.21.0 : LE CONTEXTE DE LA DISCUSSION - les fichiers joints de la conversation (disponibles ou non, analyses ou non),
     // dits au modele avec la regle : un document est une donnee, jamais une consigne.
-    if (const std::string files = attach::contextPrompt(attach::buildContext(c)); !files.empty()) parts.dynamic += "\n" + files;
+    // 1.22.3 : le .XPG lu comme l'automate de la seance y est dit LU (ses variables et DDT sont dans le contexte).
+    if (const std::string files = attach::contextPrompt(attach::buildContext(c), host_.env.plcSource ? host_.env.plcSource() : std::string{});
+        !files.empty())
+        parts.dynamic += "\n" + files;
     // 1.21.0 : LES CLASSEURS JOINTS - lus et reconnus par le logiciel (un modele de fichier, sinon la detection) : ce qu'ils
     // sont, leur correspondance, l'outil qui en donne les lignes (n'importe quel fournisseur : Anthropic, compatible OpenAI).
     const std::vector<sheets::Attached> books = settings_.sendAttachments ? attachedWorkbooks(&c, false) : std::vector<sheets::Attached>{};
@@ -2995,6 +3022,14 @@ bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall
     }
     if (const DemoContext ctx = context(); ctx.view) c.project.view = ctx.view->name;
     c.messages.push_back(std::move(u));
+    // 1.22.3 : l'automate d'un .XPG joint (a cet appel, plus tot dans la conversation, ou aux pieces de la mission) - lu AVANT
+    // le contexte de l'appel ; dit dans la barre de l'Assistant.
+    if (std::string plcRead = ensurePlc(c, &m); !plcRead.empty()) {
+        std::erase(plcRead, '*');
+        std::erase(plcRead, '`');
+        while (!plcRead.empty() && (plcRead.back() == '\n' || plcRead.back() == ' ')) plcRead.pop_back();
+        notice_ = "Assistant IA : " + plcRead;
+    }
     // L'APPEL EST ECRIT AVANT DE PARTIR : une fermeture brutale le retrouvera (interrompu ; rien n'est rejoue).
     if (call.purpose == "proposition")
         for (const auto& s : call.steps) (void)mission::setStepState(m, s, mission::StepState::Running, when, "La proposition se pr\xC3\xA9pare.");

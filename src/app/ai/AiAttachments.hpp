@@ -180,7 +180,9 @@ struct DiscussionContext {
 // Le contexte d'une conversation (et des pieces jointes pas encore envoyees) : la disponibilite verifiee sur le disque.
 [[nodiscard]] DiscussionContext buildContext(const Conversation& c, const std::vector<Attachment>& pending = {});
 // Le texte que la demande emporte (vide : aucun fichier) : << Fichiers joints : 4 >>, une ligne par fichier, les regles.
-[[nodiscard]] std::string contextPrompt(const DiscussionContext& ctx);
+// 1.22.3 : `plcLoaded` - le nom du .XPG lu comme l'automate de la seance (vide : aucun) : ce fichier est dit LU, ses variables
+// et ses DDT plus bas dans le contexte (il etait dit << pas encore analyse >> : l'IA repondait qu'elle ne pouvait pas le lire).
+[[nodiscard]] std::string contextPrompt(const DiscussionContext& ctx, std::string_view plcLoaded = {});
 // RESTAURE une conversation d'avant la 1.21 : ses pieces recoivent leur conversation, leur message, leur extension,
 // leur type MIME et leur date d'ajout (celle du message). Rend le nombre de pieces completees (a enregistrer).
 std::size_t adopt(Conversation& c);

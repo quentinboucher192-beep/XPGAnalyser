@@ -4397,6 +4397,18 @@ const std::vector<Topic>& topics() {
                          "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
              {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
                          "op\xC3\xA9rations) \xC2\xBB.", {}},
+             {K::Heading, "L'automate d'un .XPG joint", {}},
+             {K::Bullet, "Un export de Control Expert joint (.XPG) est **lu comme l'automate de la "
+                         "s\xC3\xA9" "ance** : ses variables globales et ses types (DDT) vont dans ce que "
+                         "l'IA re\xC3\xA7oit, pour cr\xC3\xA9" "er les variables et les types IHM "
+                         "correspondants (ils ne s'associent pas directement).", {}},
+             {K::Bullet, "Il est lu avant chaque appel \xC3\xA0 l'IA - un message, la cr\xC3\xA9" "ation "
+                         "d'une mission, une proposition de mission - et de nouveau apr\xC3\xA8s une relance "
+                         "du logiciel (l'automate lu n'est gard\xC3\xA9 que le temps de la s\xC3\xA9" "ance) "
+                         ": le plus r\xC3\xA9" "cent .XPG de la conversation (ou des pi\xC3\xA8" "ces de la "
+                         "mission). La barre de l'Assistant le dit (\xC2\xAB J'ai lu l'automate de "
+                         "programme.XPG : \xE2\x80\xA6 variables globales et \xE2\x80\xA6 types (DDT) "
+                         "\xC2\xBB).", {}},
              {K::Heading, "Les param\xC3\xA8tres d'une popup ou d'un symbole", {}},
              {K::Bullet, "Dans une popup qui re\xC3\xA7oit un param\xC3\xA8tre (Popup_Vanne et son "
                          "param\xC3\xA8tre **Vanne : T_Vanne**), ses objets lisent le param\xC3\xA8tre par "

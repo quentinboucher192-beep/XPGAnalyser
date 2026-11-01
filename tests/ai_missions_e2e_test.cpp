@@ -47,6 +47,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <fstream>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -259,6 +260,8 @@ struct Fixture {
     std::string                    projectName;
     std::unique_ptr<ai::Assistant> as;
     double                         t{100.0};
+    std::string                    plcName;    // 1.22.3 : l'automate lu (un .XPG joint), comme AiWorkspace
+    int                            plcReads{0};
 
     // `fresh` : le dossier IA/ repart de zero ; `project` : le projet ouvert (une copie : << enregistre puis rouvert >>) ;
     // `name` : le projet (un autre nom : un autre projet, un autre dossier).
@@ -290,6 +293,15 @@ struct Fixture {
         h.apply = [this](core::CommandPtr c) { (void)stack.push(std::move(c)); };
         h.projectName = [this] { return projectName; };
         h.projectPath = [this] { return U(dir / projectName); };
+        // 1.22.3 : lire un .XPG joint (l'automate de la seance) : compte, et garde le nom du fichier lu
+        h.readPlc = [this](const std::string& path, std::string* said) {
+            ++plcReads;
+            const auto u8 = fs::path(std::u8string(path.begin(), path.end())).filename().u8string();
+            plcName.assign(u8.begin(), u8.end());
+            if (said) *said = "2 variables globales et 1 type (DDT)";
+            return true;
+        };
+        h.env.plcSource = [this] { return plcName; };
         as = std::make_unique<ai::Assistant>(std::move(h));
         as->setProviderFactory([this](std::string_view) { return std::make_unique<FakeProvider>(s); });
         as->load();
@@ -1098,6 +1110,41 @@ void testForceFinish() {
     f.waitAudit(id3);
 }
 
+// 1.22.3 : UN .XPG JOINT A LA CREATION D'UNE MISSION - lu comme l'automate de la seance AVANT l'appel (il ne l'etait qu'a
+// l'envoi d'un message : l'IA n'en voyait que le nom, << je ne peux pas lire programme.XPG >>, 01/11) ; dit LU dans la liste
+// des fichiers ; pas relu au tour suivant ; relu apres une relance (l'automate n'est garde que le temps de la seance).
+void testXpgMission() {
+    std::printf("[1.22.3 : un .XPG joint a une mission]\n");
+    Fixture f("xpg");
+    const fs::path xpg = f.dir / "programme.XPG";
+    {
+        std::ofstream o(xpg);
+        o << "<?xml version=\"1.0\"?><FBExchangeFile></FBExchangeFile>\n";
+    }
+    std::string why;
+    check(f.as->attach(U(xpg), &why), "joindre programme.XPG (" + why + ")");
+    for (int k = 0; k < 500 && f.as->processing(); ++k) {
+        pause(2);
+        f.step(0.01);
+    }
+    f.answerPlan("toolu_plan_x", planInput("Automate", {{"S1", "Cr\xC3\xA9" "er les variables de l'automate", "variables", {}, 2, {"variable:Moteur_1"}}}));
+    check(f.as->createMission("Cr\xC3\xA9" "e l'IHM compl\xC3\xA8te de l'automate joint : variables, alarmes et vues.", &why), "creer la mission (" + why + ")");
+    check(f.plcReads == 1 && f.plcName == "programme.XPG", "l'automate du .XPG est lu AVANT l'appel de la mission (" + std::to_string(f.plcReads) + " lecture)");
+    if (!f.s.requests.empty())
+        check(has(f.s.requests.back().systemDynamic, "programme.XPG") && has(f.s.requests.back().systemDynamic, "export de l'automate LU par le logiciel"),
+              "la liste des fichiers joints le dit LU (ses variables et DDT dans le contexte)");
+    f.step();
+    f.s.replies.push_back({textEv("D'accord."), doneEv("end_turn")});
+    check(f.as->send("Et les DDT ?", &why), "un message de plus (" + why + ")");
+    check(f.plcReads == 1, "deja l'automate de la seance : pas relu");
+    f.step();
+    f.plcName.clear();   // une relance du logiciel : l'automate lu n'est plus la
+    f.s.replies.push_back({textEv("D'accord."), doneEv("end_turn")});
+    check(f.as->send("Et les variables ?", &why), "apres une relance (" + why + ")");
+    check(f.plcReads == 2 && f.plcName == "programme.XPG", "apres une relance : le .XPG de la conversation est relu avant l'appel");
+    f.step();
+}
+
 } // namespace
 
 int main() {
@@ -1109,6 +1156,7 @@ int main() {
     testPauseResumeCancel();
     testRefresh();
     testHeavyInBackground();   // 1.22.1
+    testXpgMission();          // 1.22.3
     testForceFinish();         // 1.22.2
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

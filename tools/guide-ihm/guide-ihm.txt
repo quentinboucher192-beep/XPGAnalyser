@@ -1924,6 +1924,9 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
   - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
 - La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
 - Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
+### L'automate d'un .XPG joint
+- Un export de Control Expert joint (.XPG) est **lu comme l'automate de la séance** : ses variables globales et ses types (DDT) vont dans ce que l'IA reçoit, pour créer les variables et les types IHM correspondants (ils ne s'associent pas directement).
+- Il est lu avant chaque appel à l'IA - un message, la création d'une mission, une proposition de mission - et de nouveau après une relance du logiciel (l'automate lu n'est gardé que le temps de la séance) : le plus récent .XPG de la conversation (ou des pièces de la mission). La barre de l'Assistant le dit (« J'ai lu l'automate de programme.XPG : … variables globales et … types (DDT) »).
 ### Les paramètres d'une popup ou d'un symbole
 - Dans une popup qui reçoit un paramètre (Popup_Vanne et son paramètre **Vanne : T_Vanne**), ses objets lisent le paramètre par son nom et, pour une structure, par ses membres : **Vanne.Cmd**, **Vanne.F0**. L'Assistant le sait : ce n'est pas une variable du projet, il ne demande pas de la créer ; l'appelant donne la variable à l'ouverture (Ouvrir la popup : Vanne := Vannes[3]).
 - La vérification accepte ces chemins membre par membre, d'après le type du paramètre ; un membre qui n'existe pas est dit, avec les vrais membres du type.
