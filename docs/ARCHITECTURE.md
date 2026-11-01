@@ -1,6 +1,6 @@
 # Architecture technique
 
-Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.22.1). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
+Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.22.2). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
 
 > Ce document remplace la version d'origine, rédigée en anglais au premier jalon du projet (un seul exécutable, quatre essais, un outil d'analyse en lecture seule). Cette version reste consultable dans l'historique Git.
 
