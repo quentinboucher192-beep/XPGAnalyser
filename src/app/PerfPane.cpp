@@ -167,6 +167,8 @@ const char* describe(std::string_view name) {
         {"ia.carte", "La vignette d'une proposition : son empreinte, sa v\xC3\xA9rification, son plan."},
         {"ia.carte.empreinte", "L'empreinte du projet pour une carte (relue chaque seconde ou quand le projet change)."},
         {"ia.carte.verification", "La v\xC3\xA9rification d'une petite proposition, sur ce fil."},
+        {"ia.apercu.reperes", "La pr\xC3\xA9visualisation d'une proposition : ce que chaque ligne d\xC3\xA9signe dans l'aper\xC3\xA7u et "
+                              "o\xC3\xB9 sont les erreurs (calcul\xC3\xA9 une fois par proposition)."},
         {"ia.plan-en-cours", "Le plan d'action en cours (au-dessus de la discussion)."},
         {"ia.discussion.markdown", "La mise en forme du texte des messages (markdown)."},
         {"ia.discussion.mesure", "La mise en page de la discussion."},

@@ -267,6 +267,25 @@ struct Run {
     // proches d'une variable introuvable, cherchees une fois par nom (une grosse proposition la cite souvent).
     std::size_t current{0};
     std::map<std::string, std::vector<std::string>> nearCache{};
+    // 1.22.4 : LES OBJETS EN CAUSE (Check::spots) - ceux que touche chaque operation (une fois par objet), ceux que vise
+    // un message ; les noms des objets neufs renommes (l'avertissement les vise).
+    std::set<std::pair<std::size_t, hmi::Id>> spotted{};
+    std::vector<std::string>                  renamedTo{};
+    // `overall` : un message de la proposition entiere (apres ses operations : les objets sans variable...).
+    void spot(const hmi::Object& o, const std::string& message = {}, bool error = false, bool overall = false) {
+        if (!check) return;
+        const std::size_t at = overall ? Check::Fault::kNoOp : current;
+        if (message.empty() && !spotted.emplace(at, o.id).second) return;
+        check->spots.push_back({at, view.name, o.id, o.name, message, error});
+    }
+    void warnAt(const hmi::Object& o, std::string text) {
+        spot(o, text);
+        warn(std::move(text));
+    }
+    bool failAt(const hmi::Object& o, std::string text) {
+        spot(o, text, true);
+        return fail(std::move(text));
+    }
 
     [[nodiscard]] const Env& environment() const {
         static const Env none;
@@ -360,6 +379,7 @@ struct Run {
     }
     Item* itemFor(Item::What what, const hmi::Object& o) {
         if (!check) return nullptr;
+        spot(o);   // 1.22.4 : l'operation en cours touche cet objet (l'apercu l'encadre quand on choisit son etape)
         for (auto& it : check->items)
             if (it.id == o.id && it.what == what) {
                 it.name = o.name;
@@ -399,13 +419,16 @@ struct Run {
         if (!wanted.empty() && hmi::edit::validName(wanted) && !nameTaken(wanted)) return wanted;
         const std::string base = wanted.empty() ? std::string(fallbackBase) : sanitizeName(wanted);
         std::string name = !wanted.empty() && base != wanted && !nameTaken(base) ? base : hmi::uniqueObjectName(view, base);
-        if (!wanted.empty()) renamed.push_back(wanted + kArrow + name);
+        if (!wanted.empty()) {
+            renamed.push_back(wanted + kArrow + name);
+            renamedTo.push_back(name);   // 1.22.4 : l'avertissement des noms pris vise cet objet
+        }
         return name;
     }
     void boundsWarning(const hmi::Object& o) {
         const hmi::Box b = hmi::edit::rotatedBounds(o);
         if (b.x < 0 || b.y < 0 || b.right() > view.width || b.bottom() > view.height)
-            warn(o.name + " d\xC3\xA9" "passe du cadre de la vue (" + std::to_string(view.width) + " \xC3\x97 " + std::to_string(view.height) + ").");
+            warnAt(o, o.name + " d\xC3\xA9" "passe du cadre de la vue (" + std::to_string(view.width) + " \xC3\x97 " + std::to_string(view.height) + ").");
     }
 
     // ---- les valeurs ----------------------------------------------------------------
@@ -471,7 +494,7 @@ struct Run {
     // erreur, et la variable manquante est notee (l'apercu propose les plus proches).
     bool setVariable(hmi::Object& o, const std::string& requested) {
         hmi::Prop* prop = o.find("variable");
-        if (!prop) return fail(label(o) + " ne se relie pas \xC3\xA0 une variable.");
+        if (!prop) return failAt(o, label(o) + " ne se relie pas \xC3\xA0 une variable.");
         std::string name = requested;
         // 1.22.2 : un parametre de la vue (Vanne.Cmd dans Popup_Vanne) : il existe ; un membre inconnu de son type : dit tel quel.
         std::string paramWhy;
@@ -527,7 +550,7 @@ struct Run {
                     f.type = suggestedType(name, o.kind);
                     check->faults.push_back(std::move(f));
                 }
-                return fail(msg);
+                return failAt(o, msg);   // 1.22.4 : l'apercu encadre l'objet en rouge
             }
         }
         change(o, {"variable", prop->value, name});
@@ -550,15 +573,15 @@ struct Run {
     // reperes $...$ y sont transparents), posee comme lui (Prop::expr ; la valeur fixe reste dessous).
     bool formula(hmi::Object& o, const std::string& k, const std::string& v) {
         hmi::Prop* prop = o.find(k);
-        if (!prop) return fail("\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 de " + label(o) + ".");
+        if (!prop) return failAt(o, "\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 de " + label(o) + ".");
         const std::string e = trimmed(std::string_view(v).substr(1));
         const std::string at = o.name + "." + k + " = \xC2\xAB " + v + " \xC2\xBB : ";
         if (k == "variable")
-            return fail(at + "la variable s'\xC3\xA9" "crit par son nom, sans = (une formule va dans une autre propri\xC3\xA9t\xC3\xA9 : visible, fill...).");
-        if (e.empty()) return fail(at + "formule vide apr\xC3\xA8s le =.");
+            return failAt(o, at + "la variable s'\xC3\xA9" "crit par son nom, sans = (une formule va dans une autre propri\xC3\xA9t\xC3\xA9 : visible, fill...).");
+        if (e.empty()) return failAt(o, at + "formule vide apr\xC3\xA8s le =.");
         std::string reason;
-        if (!hmi::isReadOnly(e, &reason)) return fail(at + "une formule ne fait que lire (" + reason + ").");
-        if (const auto bad = formulaProblem(e); !bad.empty()) return fail(at + bad + ".");
+        if (!hmi::isReadOnly(e, &reason)) return failAt(o, at + "une formule ne fait que lire (" + reason + ").");
+        if (const auto bad = formulaProblem(e); !bad.empty()) return failAt(o, at + bad + ".");
         change(o, {k, prop->expr.empty() ? prop->value : "=" + prop->expr, "=" + e});
         prop->expr = e;
         return true;
@@ -589,7 +612,7 @@ struct Run {
         for (const auto& [k, v] : op.props) {
             hmi::Prop* prop = o.find(k);
             if (!prop) {
-                if (!fail("\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 d'un objet " + std::string(hmi::kindLabel(*kind))
+                if (!failAt(o, "\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 d'un objet " + std::string(hmi::kindLabel(*kind))
                           + " : refus\xC3\xA9" "e (aucune propri\xC3\xA9t\xC3\xA9 n'est invent\xC3\xA9" "e)."))
                     return false;
                 continue;
@@ -604,7 +627,7 @@ struct Run {
                 continue;
             }
             if (const auto bad = valueProblem(*kind, k, v); !bad.empty()) {
-                if (!fail(o.name + "." + k + " = \xC2\xAB " + v + " \xC2\xBB : " + bad + ".")) return false;
+                if (!failAt(o, o.name + "." + k + " = \xC2\xAB " + v + " \xC2\xBB : " + bad + ".")) return false;
                 continue;
             }
             prop->value = v;
@@ -627,7 +650,7 @@ struct Run {
         for (const auto& [k, v] : op.props) {
             hmi::Prop* prop = o->find(k);
             if (!prop) {
-                if (!fail("\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 de " + label(*o) + ".")) return false;
+                if (!failAt(*o, "\xC2\xAB " + k + " \xC2\xBB n'est pas une propri\xC3\xA9t\xC3\xA9 de " + label(*o) + ".")) return false;
                 continue;
             }
             if (k == "variable" && !isFormula(v)) {
@@ -641,7 +664,7 @@ struct Run {
                 continue;
             }
             if (const auto bad = valueProblem(o->kind, k, v); !bad.empty()) {
-                if (!fail(o->name + "." + k + " = \xC2\xAB " + v + " \xC2\xBB : " + bad + ".")) return false;
+                if (!failAt(*o, o->name + "." + k + " = \xC2\xAB " + v + " \xC2\xBB : " + bad + ".")) return false;
                 continue;
             }
             // DEPLACER, REDIMENSIONNER : x, y, w, h passent par le geste natif (un groupe garde ses enfants).
@@ -652,13 +675,13 @@ struct Run {
                 continue;
             }
             if (!prop->expr.empty())
-                warn(o->name + "." + k + " est pilot\xC3\xA9" "e par une formule (fx) : la valeur fixe ne se verra pas tant que la formule reste.");
+                warnAt(*o, o->name + "." + k + " est pilot\xC3\xA9" "e par une formule (fx) : la valeur fixe ne se verra pas tant que la formule reste.");
             change(*o, {k, prop->value, v});
             prop->value = v;
         }
         if (geometry && !(box == before)) {
             if (view.effectivelyLocked(*o)) {
-                if (!fail(o->name + " est verrouill\xC3\xA9 : d\xC3\xA9verrouille-le pour le d\xC3\xA9placer ou le redimensionner.")) return false;
+                if (!failAt(*o, o->name + " est verrouill\xC3\xA9 : d\xC3\xA9verrouille-le pour le d\xC3\xA9placer ou le redimensionner.")) return false;
             } else {
                 const hmi::Id id = o->id;
                 hmi::edit::setBox(view, id, box);
@@ -714,7 +737,7 @@ struct Run {
         for (const auto id : ids)
             if (const hmi::Object* o = view.object(id)) {
                 before.emplace_back(id, o->box());
-                if (view.effectivelyLocked(*o)) warn(o->name + " est verrouill\xC3\xA9 : il ne bouge pas.");
+                if (view.effectivelyLocked(*o)) warnAt(*o, o->name + " est verrouill\xC3\xA9 : il ne bouge pas.");
             }
         if (align) {
             using A = hmi::edit::Align;
@@ -747,7 +770,9 @@ struct Run {
         std::vector<hmi::Id> ids;
         for (const auto& n : op.objects) {
             if (std::any_of(op.keep.begin(), op.keep.end(), [&](const std::string& k) { return iequal(trimmed(k), trimmed(n)); })) {
-                warn("\xC2\xAB " + n + " \xC2\xBB est exclu de la suppression : il reste.");
+                const std::string text = "\xC2\xAB " + n + " \xC2\xBB est exclu de la suppression : il reste.";
+                if (const hmi::Object* kept = find(n)) spot(*kept, text);   // 1.22.4
+                warn(text);
                 continue;
             }
             hmi::Object* o = find(n);
@@ -2122,18 +2147,28 @@ struct Run {
                 std::string list;
                 for (std::size_t i = 0; i < renamed.size() && i < 4; ++i) list += (list.empty() ? "" : ", ") + renamed[i];
                 if (renamed.size() > 4) list += ", \xE2\x80\xA6";
-                check->warnings.push_back(std::to_string(renamed.size()) + (renamed.size() > 1 ? " noms pris ou invalides : les objets neufs s'appellent autrement ("
-                                                                                              : " nom pris ou invalide : l'objet neuf s'appelle autrement (")
-                                          + list + ").");
+                const std::string text = std::to_string(renamed.size())
+                                         + (renamed.size() > 1 ? " noms pris ou invalides : les objets neufs s'appellent autrement ("
+                                                               : " nom pris ou invalide : l'objet neuf s'appelle autrement (")
+                                         + list + ").";
+                check->warnings.push_back(text);
+                // 1.22.4 : les objets renommes (l'apercu les encadre ; le message n'en cite que quatre)
+                const std::set<std::string> fresh(renamedTo.begin(), renamedTo.end());
+                for (const auto& o : view.objects)
+                    if (createdIds.count(o.id) && fresh.count(o.name)) spot(o, text, false, true);
             }
             // Les objets crees qui montrent ou ecrivent une valeur, sans variable : dit, jamais invente.
-            int unbound = 0;
+            // 1.22.4 : CES objets sont notes (Check::spots) - le message ne les nomme pas, l'apercu les encadre.
+            std::vector<const hmi::Object*> unbound;
             for (const auto& o : view.objects)
-                if (createdIds.count(o.id) && valueBearing(o.kind) && o.text("variable").empty() && o.expr("value").empty()) ++unbound;
-            if (unbound > 0)
-                check->warnings.push_back(std::to_string(unbound) + (unbound > 1 ? " objets cr\xC3\xA9\xC3\xA9s ne sont reli\xC3\xA9s"
-                                                                             : " objet cr\xC3\xA9\xC3\xA9 n'est reli\xC3\xA9")
-                                          + " \xC3\xA0 aucune variable : \xC3\xA0 associer ensuite (l'Assistant n'invente pas de variable).");
+                if (createdIds.count(o.id) && valueBearing(o.kind) && o.text("variable").empty() && o.expr("value").empty()) unbound.push_back(&o);
+            if (!unbound.empty()) {
+                const std::string text = std::to_string(unbound.size())
+                                         + (unbound.size() > 1 ? " objets cr\xC3\xA9\xC3\xA9s ne sont reli\xC3\xA9s" : " objet cr\xC3\xA9\xC3\xA9 n'est reli\xC3\xA9")
+                                         + " \xC3\xA0 aucune variable : \xC3\xA0 associer ensuite (l'Assistant n'invente pas de variable).";
+                check->warnings.push_back(text);
+                for (const auto* o : unbound) spot(*o, text, false, true);
+            }
         }
         return true;
     }
@@ -2775,6 +2810,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
                     item.kind = ed.kind;
                     item.changes = ed.changes;
                     item.view = ed.viewName;
+                    check->spots.push_back({i, ed.viewName, ed.object, ed.name, {}, false});   // 1.22.4 : l'etape touche cet objet
                     check->items.push_back(std::move(item));
                     ++check->modify;
                 }
@@ -2910,6 +2946,10 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
             for (auto& x : unitCheck.faults) {   // 1.22.1 : l'operation de la proposition (pas son rang dans l'unite)
                 x.op = x.op < run.size() ? run[x.op] : Check::Fault::kNoOp;
                 check->faults.push_back(std::move(x));
+            }
+            for (auto& x : unitCheck.spots) {    // 1.22.4 : de meme pour les objets en cause
+                x.op = x.op < run.size() ? run[x.op] : Check::Fault::kNoOp;
+                check->spots.push_back(std::move(x));
             }
         }
         // 4. poser ce que l'unite cree (la suite du plan le voit)
