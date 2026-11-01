@@ -1396,6 +1396,9 @@
     <ClCompile Include="src\app\hmi\HmiParamPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiProjectEdits.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -3035,6 +3038,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiParamPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiProjectEdits.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp">

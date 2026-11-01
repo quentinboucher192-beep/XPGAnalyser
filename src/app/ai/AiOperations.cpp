@@ -25,15 +25,26 @@
 #include "../../hmi/HmiSymbols.hpp"      // 1.22.4 : la regle des cases (cellValue), un texte ou un nom
 #include "../../hmi/HmiRuntime.hpp"      // 1.22.4 : isVariablePath (un nom seul)
 #include "../../hmi/HmiMigrate.hpp"      // 1.18.0 : les blocs VAR d'un code cree deviennent ses declarations
+// 1.22.6 : les options des variables, la securite, les vues - le code des ecrans (app::projedit), Renommer, la carte memoire.
+#include "../RenameDialog.hpp"             // rewriteHmiReferences : renommer une variable et ses emplois
+#include "../hmi/HmiProjectEdits.hpp"      // securite, liens d'une vue, valeur initiale, membres internes
+#include "../hmi/HmiUnitPanes.hpp"         // unitui::problem : l'unite d'une variable
+#include "../../hmi/HmiAudit.hpp"          // overlaps, nearestFreeAddress : le chevauchement d'une adresse
+#include "../../hmi/HmiEnums.hpp"          // le type enumeration d'une variable
+#include "../../hmi/HmiTemplates.hpp"      // headerOf, footerOf : les bandes d'une vue
+#include "../../hmi/HmiUnits.hpp"          // typeTakesUnit
+#include "../../sim/ValueText.hpp"         // readInteger, readDecimal : les nombres lus comme partout
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <unordered_map>
 
@@ -236,6 +247,102 @@ std::string suggestedType(std::string_view name, hmi::Kind kind) {
     if (hmi::kindHasLevel(kind) || hmi::kindIsChart(kind)) return "REAL";
     return "BOOL";
 }
+
+// =============================================================================================
+//  1.22.6 : LES OPTIONS DES VARIABLES, LA SECURITE, LES VUES - les petits outils communs
+// =============================================================================================
+// Les mots d'un booleen (oui, non, true, false, 1, 0, vrai, faux, coche, decoche) ; nullopt : illisible.
+std::optional<bool> boolWord(std::string_view v) {
+    const std::string l = lower(trimmed(v));
+    if (l == "true" || l == "1" || l == "vrai" || l == "oui" || l == "yes" || l == "coche" || l == "cochee") return true;
+    if (l == "false" || l == "0" || l == "faux" || l == "non" || l == "no" || l == "decoche" || l == "decochee") return false;
+    return std::nullopt;
+}
+
+// Les vues les plus proches d'un nom (d'un role donne ; vide : toutes).
+std::vector<std::string> nearViews(const hmi::Project& p, std::string_view name, std::string_view role = {}) {
+    std::vector<std::pair<std::size_t, std::string>> scored;
+    const std::string l = lower(name);
+    for (const auto& v : p.views) {
+        if (!role.empty() && v.role != role) continue;
+        const std::string n = lower(v.name);
+        const std::size_t d = distance(n, l);
+        if (d <= std::max<std::size_t>(3, l.size() / 2) || (!l.empty() && (n.find(l) != std::string::npos || l.find(n) != std::string::npos)))
+            scored.emplace_back(d, v.name);
+    }
+    std::stable_sort(scored.begin(), scored.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<std::string> out;
+    for (const auto& [d, n] : scored)
+        if (out.size() < 4) out.push_back(n);
+    if (out.empty() && !role.empty())   // aucun proche : ceux de ce role (peu nombreux)
+        for (const auto& v : p.views)
+            if (v.role == role && out.size() < 4) out.push_back(v.name);
+    return out;
+}
+
+// LES LIENS D'UNE VUE (creer_vue, modifier_vue) : parent, modele, entete, pied, entete_modele, pied_modele - poses sur `vv` par le
+// code de l'inspecteur (app::projedit::setViewLink : pas de boucle, le bon role). entete / pied : oui, non, ou le NOM d'un
+// modele d'en-tete / de pied (coche avec ce modele). Faux et `why` (avec les plus proches) ; `known` : la cle en est une.
+bool viewLinkProp(const hmi::Project& p, hmi::View& vv, const std::string& key, const std::string& raw, std::string& why, bool* known = nullptr) {
+    const std::string value = trimmed(raw);
+    if (known) *known = true;
+    const auto near = [&](std::string_view role) {
+        const auto list = nearViews(p, value, role);
+        if (!list.empty()) why += " ; les plus proches : " + joinList(list);
+    };
+    if (key == "parent" || key == "vue_parente") {
+        const std::string l = lower(value);
+        const bool none = value.empty() || l == "aucune" || l == "(aucune)" || l == "racine" || l == "non";
+        if (!app::projedit::setViewLink(p, vv, "vue_parente", none ? std::string{} : value, why)) {
+            if (!p.viewByName(value)) near({});
+            return false;
+        }
+        return true;
+    }
+    if (key == "modele") {
+        const std::string l = lower(value);
+        const bool none = value.empty() || l == "aucun" || l == "(aucun)" || l == "non";
+        if (!app::projedit::setViewLink(p, vv, "modele", none ? std::string{} : value, why)) {
+            near("modele");
+            return false;
+        }
+        return true;
+    }
+    if (key == "entete" || key == "pied") {
+        if (vv.role == "entete" || vv.role == "pied") {
+            why = vv.name + " est un mod\xC3\xA8le " + (vv.role == "entete" ? std::string("d'en-t\xC3\xAAte") : std::string("de pied de page"))
+                  + " : il n'a ni en-t\xC3\xAAte ni pied";
+            return false;
+        }
+        if (const auto b = boolWord(value)) return app::projedit::setViewLink(p, vv, key, *b ? "TRUE" : "FALSE", why);
+        if (!app::projedit::setViewLink(p, vv, key + "_modele", value, why)) {
+            near(key);
+            return false;
+        }
+        return app::projedit::setViewLink(p, vv, key, "TRUE", why);
+    }
+    if (key == "entete_modele" || key == "pied_modele") {
+        if (!app::projedit::setViewLink(p, vv, key, value, why)) {
+            near(key == "entete_modele" ? "entete" : "pied");
+            return false;
+        }
+        return true;
+    }
+    if (known) *known = false;
+    return true;
+}
+
+// Une cle qui porterait un SECRET (un mot de passe, un badge, un secret de code dynamique) : jamais lue, jamais gardee. Pour
+// << securite >>, << badge >> est le reglage << connexion par badge >> (oui, non) : permis.
+bool secretKey(Operation::Action a, std::string_view key) {
+    const std::string l = lower(key);
+    for (const char* k : {"mot_de_passe", "motdepasse", "mot_passe", "mdp", "password", "passwd", "pass", "passe", "secret", "secret_totp", "totp",
+                          "empreinte", "hash", "sel", "salt", "pin", "code_pin", "numero_badge", "badge_numero"})
+        if (l == k) return true;
+    return l == "badge" && a != Operation::Action::Security;
+}
+const char* const kNoSecret = "l'Assistant ne choisit ni ne transmet jamais de mot de passe, de badge ni de secret : l'utilisateur le donne "
+                              "lui-m\xC3\xAAme dans Configuration > Utilisateurs (gard\xC3\xA9 en empreinte sal\xC3\xA9" "e, jamais en clair)";
 
 // ---- le moteur : valider (check) ou appliquer (touched), une seule lecture des operations ----
 struct Run {
@@ -1054,9 +1161,23 @@ struct Run {
                 const std::string r = lower(trimmed(v));
                 if (r != "vue" && r != "popup" && r != "symbole" && r != "modele" && r != "entete" && r != "pied")
                     if (!fail("Vue " + op.name + " : r\xC3\xB4le \xC2\xAB " + v + " \xC2\xBB inconnu (vue, popup, symbole, modele, entete, pied).")) return false;
+            } else if (k == "parent" || k == "modele" || k == "entete" || k == "pied" || k == "entete_modele" || k == "pied_modele") {
+                // 1.22.6 : ses liens, controles comme dans l'inspecteur (newViewFor les a poses ; ici, la raison d'un refus).
+                hmi::View probe;
+                probe.id = view.id;
+                probe.name = op.name;
+                probe.role = lower(prop(op, "role").empty() ? std::string("vue") : prop(op, "role"));
+                std::string why2;
+                if (k == "modele" && (probe.role == "entete" || probe.role == "pied")) why2 = "un mod\xC3\xA8le d'en-t\xC3\xAAte ou de pied n'h\xC3\xA9rite pas d'un \xC3\xA9" "cran mod\xC3\xA8le";
+                else (void)viewLinkProp(project, probe, k, v, why2);
+                if (!why2.empty())
+                    if (!fail("Vue " + op.name + " : " + why2 + ".")) return false;
+            } else if (k == "decaler" || k == "agrandir") {
+                if (!boolWord(v))
+                    if (!fail("Vue " + op.name + " : " + k + " : oui ou non.")) return false;
             } else if (k != "description" && k != "titre" && k != "modale" && k != "dossier") {
                 if (!fail("Vue " + op.name + " : \xC2\xAB " + k + " \xC2\xBB n'est pas un r\xC3\xA9glage d'une vue (largeur, hauteur, fond, description, role, "
-                          "titre, modale, dossier).")) return false;
+                          "titre, modale, dossier, parent, modele, entete, pied).")) return false;
             }
         }
         // 1.18.0 : les parametres et les generiques d'un symbole ou d'une popup.
@@ -2092,6 +2213,733 @@ struct Run {
         }
     }
 
+    // =========================================================================================
+    //  1.22.6 : LES OPTIONS DES VARIABLES, LA SECURITE, LES VUES. Ces operations sont seules dans leur unite (une operation
+    //  du projet) : elles se posent DIRECTEMENT sur le projet de travail (`edit`, celui de runStaged : la copie de la
+    //  validation, de l'apercu, ou le projet de la commande) - les unites qui suivent les voient. Refusees : rien n'a change.
+    // =========================================================================================
+    hmi::Project* edit{nullptr};
+
+    // Ce que l'operation dit d'une modification : "lecture seule d\xC3\xA9" "coch\xC3\xA9" "e".
+    static std::string checkedText(const char* what, bool on) {
+        return std::string(what) + (on ? " coch\xC3\xA9" "e" : " d\xC3\xA9" "coch\xC3\xA9" "e");
+    }
+    bool noEdit(const Operation& op) {
+        return fail(std::string(actionKey(op.action)) + " : seulement dans une proposition enti\xC3\xA8re (le projet de travail manque).");
+    }
+
+    // MODIFIER_VARIABLE : une ou plusieurs variables IHM existantes (variable, objets), les memes options.
+    bool editVariables(const Operation& op) {
+        if (!edit) return noEdit(op);
+        std::vector<std::string> names;
+        if (!trimmed(op.variable).empty()) names.push_back(trimmed(op.variable));
+        for (const auto& n : op.objects)
+            if (!trimmed(n).empty()) names.push_back(trimmed(n));
+        if (names.empty()) return fail("modifier_variable : quelle variable ? (\xC2\xAB variable \xC2\xBB : le nom d'une variable IHM existante).");
+        if (op.props.empty()) return fail("modifier_variable " + names.front() + " : rien \xC3\xA0 modifier (les options vont dans \xC2\xAB proprietes \xC2\xBB).");
+        if (names.size() > 1 && !prop(op, "renommer").empty()) return fail("modifier_variable : renommer, une variable \xC3\xA0 la fois.");
+        for (const auto& n : names)
+            if (!editVariable(op, n)) return false;
+        return true;
+    }
+
+    bool editVariable(const Operation& op, const std::string& name) {
+        namespace ty = hmi::types;
+        namespace eq = hmi::equip;
+        const std::string at = "Variable \xC2\xAB " + name + " \xC2\xBB : ";
+        hmi::Variable* cur = nullptr;
+        for (auto& v : edit->programs.variables)
+            if (v.name == name) cur = &v;
+        if (!cur)
+            for (auto& v : edit->programs.variables)
+                if (!cur && iequal(v.name, name)) cur = &v;
+        if (!cur) {
+            if (environment().plcName && environment().plcName(name))
+                return fail(at + "c'est une variable de l'automate reli\xC3\xA9 : l'Assistant ne modifie pas l'automate (seulement les variables IHM).");
+            if (const std::string root = rootOf(name); !iequal(root, name) && edit->variable(root))
+                return fail(at + "une option se r\xC3\xA8gle sur la variable enti\xC3\xA8re (" + root + "), pas sur un membre.");
+            std::string msg = at + "variable IHM introuvable (l'Assistant n'invente pas de variable)";
+            if (const auto near = nearVariables(*edit, name); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+            return fail(msg + ".");
+        }
+        static const std::vector<std::string> keys = {"type", "equipement", "adresse", "lecture_seule", "remanente", "unite", "valeur",
+                                                      "valeur_initiale", "description", "dossier", "brut_min", "brut_max", "echelle_min",
+                                                      "echelle_max", "type_brut", "bools_par_mot", "internes", "attribues", "compacter", "renommer"};
+        for (const auto& [k, v] : op.props) {
+            if (k == "secret_refuse") return fail(at + "\xC2\xAB " + v + " \xC2\xBB refus\xC3\xA9 : " + kNoSecret + ".");
+            if (std::find(keys.begin(), keys.end(), k) == keys.end())
+                return fail(at + "\xC2\xAB " + k + " \xC2\xBB n'est pas une option d'une variable (" + joinList(keys) + ").");
+        }
+        const auto has = [&](const char* k) { return std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; }); };
+        const auto boolOf = [&](const char* k, bool& out) {
+            const auto b = boolWord(prop(op, k));
+            if (!b) return fail(at + k + " : oui ou non (pas \xC2\xAB " + prop(op, k) + " \xC2\xBB).");
+            out = *b;
+            return true;
+        };
+        const hmi::Variable before = *cur;
+        hmi::Variable next = *cur;
+        std::vector<std::string> said;
+        std::string error;
+        // ---- le type (comme la colonne Type : une enumeration, un type objet, une structure)
+        if (has("type")) {
+            const std::string raw = prop(op, "type");
+            const std::string type = ty::normalized(raw);
+            if (!ty::validType(*edit, type, &error)) return fail(at + unknownType(raw, error) + ".");
+            if (!iequal(type, next.type)) {
+                const std::string was = next.type;
+                if (const auto* e = hmi::findEnumeration(*edit, type)) {
+                    next.type = e->name;
+                    next.initial = e->values.empty() ? std::string{} : e->values.front().name;
+                    if (next.scaled()) next.rawMin = next.rawMax = next.engMin = next.engMax = 0;
+                    next.unit.clear();
+                } else if (ty::isRich(type)) {
+                    next.type = type;
+                    if (!app::projedit::validInitial(*edit, type, next.initial, nullptr)) next.initial.clear();
+                    if (next.bound()) said.push_back("d\xC3\xA9li\xC3\xA9" "e de " + next.equipment + " (" + ty::unbindableReason(type) + ")");
+                    next.equipment.clear();
+                    next.address.clear();
+                    next.readOnly = false;
+                    next.rawMin = next.rawMax = next.engMin = next.engMax = 0;
+                    next.rawType.clear();
+                    next.places.clear();
+                    next.internal.clear();
+                    next.compact = false;
+                    next.retain = false;
+                    next.unit.clear();
+                } else {
+                    if (ty::isComposite(type))
+                        if (const auto f = ty::flatten(*edit, next.name, type, {}, next.packBools); !f.ok()) return fail(at + "type " + type + " : " + f.error + ".");
+                    const bool wasComposite = ty::isComposite(next.type);
+                    next.type = type;
+                    if (!app::projedit::validInitial(*edit, type, next.initial, nullptr) || ty::isComposite(type) != wasComposite)
+                        next.initial = ty::isComposite(type) ? std::string{} : (type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : "0");
+                    if (ty::isComposite(type) && next.scaled()) next.rawMin = next.rawMax = next.engMin = next.engMax = 0;
+                    if (!next.unit.empty() && !hmi::units::typeTakesUnit(type)) next.unit.clear();
+                }
+                said.push_back("type " + was + kArrow + next.type);
+                if (!before.unit.empty() && next.unit.empty()) said.push_back("unit\xC3\xA9 " + before.unit + " retir\xC3\xA9" "e");
+            }
+        }
+        // ---- l'equipement (Lier, Delier)
+        if (has("equipement")) {
+            const std::string e = prop(op, "equipement");
+            const std::string le = lower(e);
+            if (e.empty() || le == "aucun" || le == "(aucun)" || le == "locale" || le == "(locale)" || le == "non") {
+                if (next.bound()) {
+                    said.push_back("d\xC3\xA9li\xC3\xA9" "e de " + next.equipment + " (elle reste dans l'IHM)");
+                    next.equipment.clear();
+                    next.address.clear();
+                    next.readOnly = false;
+                    next.rawMin = next.rawMax = next.engMin = next.engMax = 0;
+                    next.rawType.clear();
+                    next.places.clear();
+                }
+            } else {
+                if (const std::string reason = ty::unbindableReason(*edit, next.type); !reason.empty()) return fail(at + reason + ".");
+                const hmi::Equipment* eqp = edit->equipmentByName(e);
+                if (!eqp) {
+                    std::vector<std::string> all;
+                    for (const auto& x : edit->equipments) all.push_back(x.name);
+                    return fail(at + "\xC3\xA9quipement \xC2\xAB " + e + " \xC2\xBB introuvable" + (all.empty() ? std::string(" (le projet n'en a aucun)") : " (les \xC3\xA9quipements : " + joinList(all) + ")") + ".");
+                }
+                if (!eqp->modbus()) return fail(at + eqp->name + " est un \xC3\xA9quipement Ethernet TCP/IP : il n'a pas de variables.");
+                if (!iequal(next.equipment, eqp->name)) {
+                    if (!has("adresse") && (next.address.empty() || !before.bound())) {
+                        ty::Spec sp;
+                        const bool bits = ty::parseSpec(next.type, sp) && sp.element == "BOOL" && !ty::isComposite(next.type);
+                        next.address = eq::nextFreeAddress(*edit, *eqp, bits ? sim::Type::Bool : ty::isComposite(next.type) ? sim::Type::Int : eq::typeOfName(next.type));
+                    }
+                    next.equipment = eqp->name;
+                    said.push_back("li\xC3\xA9" "e \xC3\xA0 " + eqp->name + (next.address.empty() ? std::string{} : " (" + next.address + ")"));
+                    if (next.retain) {
+                        next.retain = false;
+                        said.push_back("r\xC3\xA9manente retir\xC3\xA9" "e (l'\xC3\xA9quipement garde sa valeur)");
+                    }
+                }
+            }
+        }
+        // ---- l'adresse (comme la colonne Adresse : lisible, de la bonne zone ; le chevauchement plus bas)
+        if (has("adresse")) {
+            const std::string a = prop(op, "adresse");
+            if (const std::string reason = ty::unbindableReason(*edit, next.type); !reason.empty()) return fail(at + reason + ".");
+            if (!next.bound()) return fail(at + next.name + " n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement : donne aussi \xC2\xAB equipement \xC2\xBB.");
+            if (a.empty()) return fail(at + "adresse vide (pour la d\xC3\xA9lier : equipement = aucun).");
+            if (ty::isComposite(next.type)) {
+                if (ty::memberAddress(a, 0, -1, "INT", &error).empty()) {
+                    if (!ty::bitArea(a)) return fail(at + "adresse \xC2\xAB " + a + " \xC2\xBB : " + error + ".");
+                    hmi::Variable probeVar = next;
+                    probeVar.address = a;
+                    for (const auto& l : ty::leafVariables(*edit, probeVar))
+                        if (l.type != "BOOL") return fail(at + "le d\xC3\xA9part " + a + " est un bit : " + l.name + " (" + l.type + ") n'y tient pas.");
+                }
+            } else {
+                hmi::comm::Point pt;
+                hmi::Variable probeVar = next;
+                probeVar.address = a;
+                if (!eq::placeEquipmentAddress(a, eq::registerType(probeVar), pt, &error))
+                    return fail(at + "adresse \xC2\xAB " + a + " \xC2\xBB : " + (error.empty() ? std::string("illisible") : error) + ".");
+            }
+            if (next.address != a) {
+                said.push_back("adresse " + (next.address.empty() ? std::string("(aucune)") : next.address) + kArrow + a);
+                next.address = a;
+            }
+        }
+        // ---- les cases a cocher
+        if (has("lecture_seule")) {
+            bool on = false;
+            if (!boolOf("lecture_seule", on)) return false;
+            if (on != next.readOnly) said.push_back(checkedText("lecture seule", on));
+            next.readOnly = on;
+        }
+        if (has("remanente")) {
+            bool on = false;
+            if (!boolOf("remanente", on)) return false;
+            if (on && ty::isRich(next.type))
+                return fail(at + next.name + " est un " + ty::normalized(next.type) + " : un objet de l'IHM, que R\xC3\xA9manente ne garde pas (des cases simples seulement).");
+            if (on && next.bound())
+                return fail(at + next.name + " est li\xC3\xA9" "e \xC3\xA0 " + next.equipment + " : sa valeur vient de l'\xC3\xA9quipement, qui la garde (R\xC3\xA9manente vaut pour une variable de l'IHM).");
+            if (on != next.retain) said.push_back(checkedText("r\xC3\xA9manente", on));
+            next.retain = on;
+        }
+        if (has("bools_par_mot")) {
+            bool on = false;
+            if (!boolOf("bools_par_mot", on)) return false;
+            if (on != next.packBools) said.push_back(on ? std::string("BOOL rang\xC3\xA9s 16 par mot") : std::string("BOOL un mot chacun"));
+            next.packBools = on;
+        }
+        if (has("compacter")) {
+            bool on = false;
+            if (!boolOf("compacter", on)) return false;
+            if (on && (!next.bound() || !ty::isComposite(next.type)))
+                return fail(at + "recalculer la place : une structure ou un tableau li\xC3\xA9 \xC3\xA0 un \xC3\xA9quipement seulement.");
+            if (on != next.compact) said.push_back(on ? std::string("place m\xC3\xA9moire recalcul\xC3\xA9" "e") : std::string("place d'origine"));
+            next.compact = on;
+        }
+        // ---- l'unite (la colonne Unite : un symbole connu, un type numerique)
+        if (has("unite")) {
+            std::string unit;
+            if (const std::string bad = unitui::problem(*edit, next.type, prop(op, "unite"), &unit); !bad.empty()) return fail(at + "unit\xC3\xA9 : " + bad + ".");
+            if (unit != next.unit) said.push_back(unit.empty() ? "sans unit\xC3\xA9" : "unit\xC3\xA9 " + (next.unit.empty() ? std::string("(aucune)") : next.unit) + kArrow + unit);
+            next.unit = unit;
+        }
+        // ---- la valeur initiale (lue comme toute case : hmi::typedInitial ; controlee comme la colonne)
+        if (has("valeur") || has("valeur_initiale")) {
+            const std::string raw = has("valeur") ? prop(op, "valeur") : prop(op, "valeur_initiale");
+            std::string initial = raw;
+            if (!hmi::typedInitial(*edit, next.type, initial, &error) || !app::projedit::validInitial(*edit, next.type, initial, &error))
+                return fail(at + "valeur initiale \xC2\xAB " + raw + " \xC2\xBB : " + error + ".");
+            if (const auto* e = hmi::findEnumeration(*edit, next.type); e && !initial.empty()) {
+                std::int64_t n = 0;
+                if (hmi::enumNumberOf(*e, initial, n))
+                    if (const auto* x = hmi::enumValueByNumber(*e, n)) initial = x->name;
+            }
+            if (initial != next.initial) said.push_back("valeur initiale " + (next.initial.empty() ? std::string("(vide)") : next.initial) + kArrow + initial);
+            next.initial = initial;
+        }
+        if (has("description") && prop(op, "description") != trimmed(next.description)) {
+            next.description = prop(op, "description");
+            said.push_back("description : " + next.description);
+        }
+        // ---- le dossier (comme creer_variables : normalise, l'existant repris sans la casse, le manquant cree)
+        std::string newFolder;
+        if (has("dossier")) {
+            const std::string raw = prop(op, "dossier");
+            const std::string l = lower(raw);
+            std::string folder;
+            if (!(raw.empty() || raw == "/" || l == "racine" || l == "(racine)")) {
+                if (!varfold::normalize(raw, folder, &error)) return fail(at + "dossier : " + error + ".");
+                const auto known = ty::allFolders(*edit);
+                folder = varfold::resolve(folder, known);
+                if (std::none_of(known.begin(), known.end(), [&](const std::string& f) { return varfold::key(f) == varfold::key(folder); })) newFolder = folder;
+            }
+            if (folder != next.folder) said.push_back(folder.empty() ? std::string("rang\xC3\xA9" "e \xC3\xA0 la racine") : "rang\xC3\xA9" "e dans " + folder);
+            next.folder = folder;
+        }
+        // ---- la mise a l'echelle (Communication : brut -> echelle)
+        for (const char* k : {"brut_min", "brut_max", "echelle_min", "echelle_max"}) {
+            if (!has(k)) continue;
+            double d = 0;
+            if (!sim::readDecimal(prop(op, k), d) || !std::isfinite(d)) return fail(at + k + " : un nombre (pas \xC2\xAB " + prop(op, k) + " \xC2\xBB).");
+            if (ty::isComposite(next.type)) return fail(at + "une structure ou un tableau ne se met pas \xC3\xA0 l'\xC3\xA9" "chelle (ses cases gardent leur valeur).");
+            double& target = std::string_view(k) == "brut_min" ? next.rawMin : std::string_view(k) == "brut_max" ? next.rawMax
+                           : std::string_view(k) == "echelle_min" ? next.engMin : next.engMax;
+            target = d;
+        }
+        if (has("type_brut")) {
+            const std::string t = upperOf(prop(op, "type_brut"));
+            if (!t.empty() && t != "INT" && t != "UINT" && t != "WORD" && t != "DINT" && t != "UDINT" && t != "DWORD" && t != "REAL")
+                return fail(at + "type du registre : INT, UINT, WORD, DINT, UDINT, DWORD, REAL.");
+            next.rawType = t;
+        }
+        if (next.rawMin != before.rawMin || next.rawMax != before.rawMax || next.engMin != before.engMin || next.engMax != before.engMax
+            || next.rawType != before.rawType) {
+            said.push_back(next.scaled() ? "\xC3\xA9" "chelle brut " + hmi::formatNumber(next.rawMin) + ".." + hmi::formatNumber(next.rawMax) + " = "
+                                               + hmi::formatNumber(next.engMin) + ".." + hmi::formatNumber(next.engMax)
+                                         : std::string("sans mise \xC3\xA0 l'\xC3\xA9" "chelle"));
+            if (next.scaled() && !next.bound()) warn(at + "la mise \xC3\xA0 l'\xC3\xA9" "chelle ne joue que pour une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement.");
+        }
+        // ---- les membres internes (Rendre interne / Attribuer a l'equipement)
+        for (const char* k : {"internes", "attribues"}) {
+            if (!has(k)) continue;
+            std::vector<std::string> paths;
+            for (const auto& part : hmi::roles::splitList(prop(op, k), ';'))
+                for (auto& item : hmi::roles::splitList(part, ','))
+                    if (!trimmed(item).empty()) paths.push_back(trimmed(item));
+            std::vector<std::string> internal;
+            if (!app::projedit::membersInternal(*edit, next, paths, std::string_view(k) == "internes", false, internal, &error))
+                return fail(at + k + " : " + error + ".");
+            if (internal != next.internal)
+                said.push_back(std::string(std::string_view(k) == "internes" ? "interne" : "attribu\xC3\xA9 \xC3\xA0 " + next.equipment) + " : " + joinList(paths));
+            next.internal = internal;
+        }
+        // ---- le chevauchement : une place deja prise par une autre variable de l'equipement est REFUSEE (l'Assistant choisit
+        // une place libre ; l'ecran, lui, laisse faire et le montre dans la carte memoire).
+        if (next.bound() && (next.equipment != before.equipment || next.address != before.address || next.type != before.type
+                             || next.packBools != before.packBools || next.internal != before.internal || next.compact != before.compact)) {
+            const hmi::Variable saved = *cur;
+            *cur = next;
+            std::string clash, nearest;
+            for (const auto& o : hmi::audit::overlaps(*edit, next.equipment)) {
+                const bool mineA = iequal(o.a.variable, next.name), mineB = iequal(o.b.variable, next.name);
+                if (mineA == mineB) continue;   // deux cases de la meme variable, ou deux autres variables
+                clash = (mineA ? o.b.variable : o.a.variable) + " (" + o.text + ")";
+                break;
+            }
+            if (!clash.empty()) nearest = hmi::audit::nearestFreeAddress(*edit, next.name);
+            *cur = saved;
+            if (!clash.empty())
+                return fail(at + "l'adresse " + next.address + " sur " + next.equipment + " chevauche " + clash + " : choisis une place libre"
+                            + (nearest.empty() ? std::string{} : " (la plus proche : " + nearest + ")") + ".");
+        }
+        // ---- renommer (avec tous ses emplois, comme Renommer : un seul Ctrl+Z avec le reste)
+        std::string newName;
+        if (has("renommer")) {
+            const std::string to = prop(op, "renommer");
+            if (const std::string bad = identifierProblem(to); !bad.empty()) return fail(at + "renommer en \xC2\xAB " + to + " \xC2\xBB : " + bad + ".");
+            if (to != next.name) {
+                for (const auto& v : edit->programs.variables)
+                    if (&v != cur && iequal(v.name, to)) return fail(at + "renommer : une variable IHM s'appelle d\xC3\xA9j\xC3\xA0 " + v.name + ".");
+                if (std::any_of(edit->programs.functions.begin(), edit->programs.functions.end(), [&](const hmi::HmiFunction& f) { return iequal(f.name, to); }))
+                    return fail(at + "renommer : une fonction de l'IHM s'appelle " + to + ".");
+                if (environment().plcName && environment().plcName(to))
+                    return fail(at + "renommer : " + to + " est une variable de l'automate reli\xC3\xA9 (l'IHM lirait la sienne \xC3\xA0 la place).");
+                newName = to;
+            }
+        }
+        if (said.empty() && newName.empty()) {
+            reuse("Variable", next.name, "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+            return true;
+        }
+        if (newName.empty()) {
+            *cur = next;
+            if (!newFolder.empty() && std::none_of(edit->programs.folders.begin(), edit->programs.folders.end(), [&](const std::string& f) { return iequal(f, newFolder); }))
+                edit->programs.folders.push_back(newFolder);
+        } else {
+            hmi::Project trial = *edit;
+            if (hmi::Variable* x = trial.variableById(next.id)) *x = next;
+            if (!newFolder.empty()) trial.programs.folders.push_back(newFolder);
+            const auto conflicts = rewriteHmiReferences(trial, false, next.name, newName);
+            if (!conflicts.empty()) return fail(at + "renommer en " + newName + " : " + conflicts.front() + " (rien n'est renomm\xC3\xA9).");
+            std::size_t places = 0;
+            for (std::size_t i = 0; i < trial.views.size() && i < edit->views.size(); ++i) places += !(trial.views[i] == edit->views[i]);
+            for (std::size_t i = 0; i < trial.programs.scripts.size() && i < edit->programs.scripts.size(); ++i)
+                places += !(trial.programs.scripts[i] == edit->programs.scripts[i]);
+            for (std::size_t i = 0; i < trial.programs.functions.size() && i < edit->programs.functions.size(); ++i)
+                places += !(trial.programs.functions[i] == edit->programs.functions[i]);
+            for (std::size_t i = 0; i < trial.alarms.size() && i < edit->alarms.size(); ++i) places += !(trial.alarms[i] == edit->alarms[i]);
+            said.push_back("renomm\xC3\xA9" "e en " + newName + (places == 0 ? std::string(" (rien ne la citait)")
+                                                                  : " (" + std::to_string(places) + (places > 1 ? " vues, scripts ou alarmes la citaient : ils suivent)"
+                                                                                                                : " vue, script ou alarme la citait : il suit)")));
+            *edit = std::move(trial);
+        }
+        if (!newFolder.empty()) made("Dossier", newFolder, "dossier cr\xC3\xA9\xC3\xA9 : " + newFolder + " (variables IHM)");
+        made("Variable", name, joinList(said, " ; "));
+        return true;
+    }
+
+    // ---- LA SECURITE ------------------------------------------------------------------------------------------------
+    static std::string securityLabel(const std::string& field) {
+        static const std::map<std::string, std::string> labels = {
+            {"active", "s\xC3\xA9" "curit\xC3\xA9"}, {"depart", "utilisateur au d\xC3\xA9marrage"}, {"deconnexion", "d\xC3\xA9" "connexion automatique (min)"},
+            {"menu_comptes", "niveau de l'onglet Comptes"}, {"menu_acces", "niveau de l'onglet Acc\xC3\xA8s"}, {"menu_journal", "niveau de l'onglet Journal"},
+            {"periode", "p\xC3\xA9riode du code (s)"}, {"chiffres", "chiffres du code"}, {"mdp_longueur", "longueur minimale du mot de passe"},
+            {"mdp_chiffre", "un chiffre"}, {"mdp_lettre", "une lettre"}, {"mdp_casse", "majuscules et minuscules"},
+            {"mdp_special", "un caract\xC3\xA8re sp\xC3\xA9" "cial"}, {"mdp_duree", "expiration (jours)"}, {"mdp_historique", "derniers mots de passe interdits"},
+            {"mdp_premiere", "changer \xC3\xA0 la premi\xC3\xA8re connexion"}, {"verrou_essais", "verrouillage apr\xC3\xA8s (\xC3\xA9" "checs)"},
+            {"verrou_minutes", "dur\xC3\xA9" "e du verrouillage (min)"}, {"avertir", "avertissement avant d\xC3\xA9" "connexion (s)"}, {"badge", "connexion par badge"}};
+        const auto it = labels.find(field);
+        return it == labels.end() ? field : it->second;
+    }
+    static std::string securityValue(const hmi::Security& s, const std::string& f) {
+        const auto yn = [](bool b) { return std::string(b ? "oui" : "non"); };
+        if (f == "active") return s.enabled ? "active" : "inactive";
+        if (f == "depart") return s.startUser.empty() ? std::string("personne") : s.startUser;
+        if (f == "deconnexion") return std::to_string(s.autoLogoutMin);
+        if (f == "menu_comptes") return std::to_string(s.menuLevelAccounts);
+        if (f == "menu_acces") return std::to_string(s.menuLevelAccess);
+        if (f == "menu_journal") return std::to_string(s.menuLevelJournal);
+        if (f == "periode") return std::to_string(s.dynamicPeriodS);
+        if (f == "chiffres") return std::to_string(s.dynamicDigits);
+        if (f == "mdp_longueur") return std::to_string(s.pwMinLength);
+        if (f == "mdp_chiffre") return yn(s.pwDigit);
+        if (f == "mdp_lettre") return yn(s.pwLetter);
+        if (f == "mdp_casse") return yn(s.pwMixedCase);
+        if (f == "mdp_special") return yn(s.pwSpecial);
+        if (f == "mdp_duree") return std::to_string(s.pwMaxAgeDays);
+        if (f == "mdp_historique") return std::to_string(s.pwHistory);
+        if (f == "mdp_premiere") return yn(s.pwChangeFirst);
+        if (f == "verrou_essais") return std::to_string(s.lockAttempts);
+        if (f == "verrou_minutes") return std::to_string(s.lockMinutes);
+        if (f == "avertir") return std::to_string(s.logoutWarnS);
+        if (f == "badge") return yn(s.badgeLogin);
+        return {};
+    }
+    // SECURITE : ses reglages, par le code de Configuration > Utilisateurs (app::projedit::setSecurityField).
+    bool securityOp(const Operation& op) {
+        if (!edit) return noEdit(op);
+        if (op.props.empty()) return fail("securite : rien \xC3\xA0 r\xC3\xA9gler (active, depart, deconnexion, menu_comptes... dans \xC2\xAB proprietes \xC2\xBB).");
+        const hmi::Security before = edit->security;
+        const auto refuse = [&](std::string text) {
+            edit->security = before;
+            return fail(std::move(text));
+        };
+        const auto& fields = app::projedit::securityFields();
+        std::vector<std::string> said;
+        for (const auto& [k, raw] : op.props) {
+            if (k == "secret_refuse") return refuse("S\xC3\xA9" "curit\xC3\xA9 : \xC2\xAB " + raw + " \xC2\xBB refus\xC3\xA9 : " + kNoSecret + ".");
+            if (std::find(fields.begin(), fields.end(), k) == fields.end())
+                return refuse("S\xC3\xA9" "curit\xC3\xA9 : \xC2\xAB " + k + " \xC2\xBB n'est pas un r\xC3\xA9glage (" + joinList(fields) + ").");
+            std::string value = trimmed(raw);
+            if (k == "active" || k == "badge" || k.rfind("mdp_", 0) == 0) {
+                if (k == "active" || k == "badge" || k == "mdp_chiffre" || k == "mdp_lettre" || k == "mdp_casse" || k == "mdp_special" || k == "mdp_premiere") {
+                    const auto b = boolWord(value);
+                    if (!b) return refuse("S\xC3\xA9" "curit\xC3\xA9, " + k + " : oui ou non (pas \xC2\xAB " + value + " \xC2\xBB).");
+                    value = *b ? "TRUE" : "FALSE";
+                }
+            }
+            const std::string was = securityValue(edit->security, k);
+            std::string err;
+            if (!app::projedit::setSecurityField(*edit, k, value, err)) return refuse("S\xC3\xA9" "curit\xC3\xA9 : " + err + ".");
+            const std::string now = securityValue(edit->security, k);
+            if (was == now) continue;
+            if (k == "active") said.push_back(edit->security.enabled ? "activ\xC3\xA9" "e (niveaux et permissions appliqu\xC3\xA9s en marche)"
+                                                                     : "D\xC3\x89" "SACTIV\xC3\x89" "E (tout est permis en marche)");
+            else said.push_back(securityLabel(k) + " : " + was + kArrow + now);
+        }
+        if (said.empty()) reuse("S\xC3\xA9" "curit\xC3\xA9", "r\xC3\xA9glages", "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+        else made("S\xC3\xA9" "curit\xC3\xA9", "Configuration > Utilisateurs", joinList(said, " ; "));
+        return true;
+    }
+
+    // CREER_GROUPE, MODIFIER_GROUPE : par le code de la fiche d'un groupe (app::projedit::addGroup, setGroupField).
+    bool groupOp(const Operation& op, bool create) {
+        if (!edit) return noEdit(op);
+        const std::string name = create ? trimmed(op.name) : (prop(op, "groupe").empty() ? trimmed(op.name) : prop(op, "groupe"));
+        const std::string at = "Groupe \xC2\xAB " + name + " \xC2\xBB : ";
+        std::vector<std::string> groups;
+        for (const auto& g : edit->security.groups) groups.push_back(g.name + " (" + std::to_string(g.level) + ")");
+        if (name.empty()) return fail(std::string(actionKey(op.action)) + " : le nom du groupe manque.");
+        static const std::vector<std::string> keys = {"groupe", "niveau", "roles", "description", "vue_demarrage", "renommer"};
+        for (const auto& [k, v] : op.props) {
+            if (k == "secret_refuse") return fail(at + "\xC2\xAB " + v + " \xC2\xBB refus\xC3\xA9 : " + kNoSecret + ".");
+            if (std::find(keys.begin(), keys.end(), k) == keys.end() || (create && (k == "renommer" || k == "groupe")))
+                return fail(at + "\xC2\xAB " + k + " \xC2\xBB n'est pas un champ d'un groupe (niveau, roles, description, vue_demarrage"
+                            + (create ? std::string{} : std::string(", renommer")) + ").");
+        }
+        const hmi::Security before = edit->security;
+        const auto refuse = [&](std::string text) {
+            edit->security = before;
+            return fail(std::move(text));
+        };
+        std::string err;
+        hmi::Id id = hmi::kNoId;
+        long long level = 1;
+        if (!readInt(prop(op, "niveau"), 1, 9, 1, level)) return fail(at + "niveau : de 1 \xC3\xA0 9 (pas \xC2\xAB " + prop(op, "niveau") + " \xC2\xBB).");
+        if (create) {
+            if (const hmi::UserGroup* g = edit->groupByName(name)) {
+                if (g->level == level && (prop(op, "roles").empty() || [&] {
+                        std::vector<std::string> wanted;
+                        for (const auto& part : hmi::roles::splitList(prop(op, "roles"), ';'))
+                            for (auto& r : hmi::roles::splitList(part, ','))
+                                if (!trimmed(r).empty()) wanted.push_back(lower(trimmed(r)));
+                        std::vector<std::string> have;
+                        for (const auto& r : g->roles) have.push_back(lower(r));
+                        std::sort(wanted.begin(), wanted.end());
+                        std::sort(have.begin(), have.end());
+                        return wanted == have;
+                    }())) {
+                    reuse("Groupe", g->name, "existe d\xC3\xA9j\xC3\xA0 avec ce niveau et ces r\xC3\xB4les, gard\xC3\xA9 tel quel");
+                    return true;
+                }
+                return fail(at + "il existe d\xC3\xA9j\xC3\xA0 (niveau " + std::to_string(g->level) + ") : modifier_groupe pour le changer.");
+            }
+            id = app::projedit::addGroup(*edit, name, static_cast<int>(level), err);
+            if (id == hmi::kNoId) return refuse(at + err + ".");
+        } else {
+            const hmi::UserGroup* g = edit->groupByName(name);
+            if (!g) return fail(at + "introuvable (l'Assistant n'invente pas de groupe) ; les groupes : " + joinList(groups) + ".");
+            id = g->id;
+            if (!prop(op, "niveau").empty() && !app::projedit::setGroupField(*edit, id, "niveau", std::to_string(level), err)) return refuse(at + err + ".");
+        }
+        const hmi::UserGroup old = [&] {
+            for (const auto& g : before.groups)
+                if (g.id == id) return g;
+            return hmi::UserGroup{};
+        }();
+        for (const char* k : {"roles", "description", "vue_demarrage", "renommer"}) {
+            if (std::none_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; })) continue;
+            const std::string field = std::string_view(k) == "renommer" ? "nom" : k;
+            if (!app::projedit::setGroupField(*edit, id, field, prop(op, k), err)) {
+                std::string msg = at + err;
+                if (field == "vue_demarrage")
+                    if (const auto near = nearViews(*edit, prop(op, k)); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+                if (field == "roles") {
+                    std::vector<std::string> roles;
+                    for (const auto& r : edit->security.roles) roles.push_back(r.name);
+                    msg += " (les r\xC3\xB4les : " + joinList(roles) + ")";
+                }
+                return refuse(msg + ".");
+            }
+        }
+        const hmi::UserGroup* g = edit->group(id);
+        const auto rolesText = [](const hmi::UserGroup& x) { return x.roles.empty() ? std::string("aucun r\xC3\xB4le") : "r\xC3\xB4les " + joinList(x.roles); };
+        const auto viewText = [&](hmi::Id v) {
+            const hmi::View* vw = edit->view(v);
+            return vw ? vw->name : std::string("la vue de d\xC3\xA9marrage");
+        };
+        if (create) {
+            made("Groupe", g->name, "niveau " + std::to_string(g->level) + ", " + rolesText(*g)
+                                       + (g->startView != hmi::kNoId ? ", vue de d\xC3\xA9part " + viewText(g->startView) : std::string{}));
+        } else {
+            std::vector<std::string> said;
+            if (old.name != g->name) said.push_back("renomm\xC3\xA9 en " + g->name);
+            if (old.level != g->level) said.push_back("niveau " + std::to_string(old.level) + kArrow + std::to_string(g->level));
+            if (old.roles != g->roles) said.push_back(rolesText(*g));
+            if (old.description != g->description) said.push_back("description : " + g->description);
+            if (old.startView != g->startView) said.push_back("vue de d\xC3\xA9part " + viewText(g->startView));
+            if (said.empty()) reuse("Groupe", g->name, "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+            else made("Groupe", name, joinList(said, " ; "));
+        }
+        return true;
+    }
+
+    // CREER_UTILISATEUR, MODIFIER_UTILISATEUR : par le code de la fiche d'un utilisateur (app::projedit::addUser, setUserField).
+    // JAMAIS de mot de passe : un compte cree par l'Assistant est desactive, << mot de passe a definir >> (a changer a la
+    // premiere connexion) ; il ne s'active (actif) qu'une fois son mot de passe donne dans Configuration > Utilisateurs.
+    static bool loggable(const hmi::User& u) {
+        if (u.protection == "classique") return !u.passwordHash.empty();
+        if (u.protection == "dynamique") return !u.secret.empty();
+        if (u.protection == "expression") return !u.expression.empty();
+        return false;
+    }
+    bool userOp(const Operation& op, bool create) {
+        if (!edit) return noEdit(op);
+        const std::string login = create ? trimmed(op.name) : (prop(op, "utilisateur").empty() ? trimmed(op.name) : prop(op, "utilisateur"));
+        const std::string at = "Utilisateur \xC2\xAB " + login + " \xC2\xBB : ";
+        if (login.empty()) return fail(std::string(actionKey(op.action)) + " : le login manque (\xC2\xAB " + (create ? "nom" : "utilisateur") + " \xC2\xBB).");
+        static const std::vector<std::string> keys = {"utilisateur", "nom_complet", "groupe", "protection", "actif", "description", "changer", "renommer"};
+        for (const auto& [k, v] : op.props) {
+            if (k == "secret_refuse") return fail(at + "\xC2\xAB " + v + " \xC2\xBB refus\xC3\xA9 : " + kNoSecret + ".");
+            if (std::find(keys.begin(), keys.end(), k) == keys.end() || (create && (k == "renommer" || k == "utilisateur" || k == "changer")))
+                return fail(at + "\xC2\xAB " + k + " \xC2\xBB n'est pas un champ d'un utilisateur (nom_complet, groupe, protection, actif, description"
+                            + (create ? std::string{} : std::string(", changer, renommer")) + ") ; " + kNoSecret + ".");
+        }
+        std::vector<std::string> groups;
+        for (const auto& g : edit->security.groups) groups.push_back(g.name);
+        const std::string protection = lower(prop(op, "protection"));
+        if (!protection.empty() && protection != "classique" && protection != "dynamique") {
+            if (protection == "expression")
+                return fail(at + "la protection par expression est un moyen de connexion : elle se r\xC3\xA8gle dans Configuration > Utilisateurs "
+                                 "(l'Assistant ne le choisit pas). Ici : classique (un mot de passe) ou dynamique (un code \xC3\xA0 6 chiffres).");
+            return fail(at + "protection : classique ou dynamique (pas \xC2\xAB " + prop(op, "protection") + " \xC2\xBB).");
+        }
+        const hmi::Security before = edit->security;
+        const auto refuse = [&](std::string text) {
+            edit->security = before;
+            return fail(std::move(text));
+        };
+        std::string err;
+        hmi::Id id = hmi::kNoId;
+        hmi::User old;
+        if (create) {
+            if (edit->userByLogin(login)) return fail(at + "il existe d\xC3\xA9j\xC3\xA0 : modifier_utilisateur pour le changer.");
+            const std::string group = prop(op, "groupe");
+            if (group.empty()) return fail(at + "son groupe manque (les groupes : " + joinList(groups) + ").");
+            if (!edit->groupByName(group)) return fail(at + "groupe \xC2\xAB " + group + " \xC2\xBB introuvable ; les groupes : " + joinList(groups) + ".");
+            id = app::projedit::addUser(*edit, login, group, err);
+            if (id == hmi::kNoId) return refuse(at + err + ".");
+        } else {
+            const hmi::User* u = edit->userByLogin(login);
+            if (!u) {
+                std::vector<std::string> users;
+                for (const auto& x : edit->security.users) users.push_back(x.login);
+                return fail(at + "introuvable (l'Assistant n'invente pas de compte)" + (users.empty() ? std::string(" ; le projet n'en a aucun") : " ; les utilisateurs : " + joinList(users)) + ".");
+            }
+            id = u->id;
+            old = *u;
+        }
+        // les champs, dans un ordre fixe ; le login en dernier (les actions qui le citent suivent)
+        for (const char* k : {"nom_complet", "groupe", "protection", "description", "changer"}) {
+            if (std::none_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; })) continue;
+            if (create && std::string_view(k) == "groupe") continue;
+            std::string value = std::string_view(k) == "protection" ? protection : prop(op, k);
+            if (std::string_view(k) == "changer") {
+                const auto b = boolWord(value);
+                if (!b) return refuse(at + "changer : oui ou non.");
+                value = *b ? "TRUE" : "FALSE";
+            }
+            const std::string field = std::string_view(k) == "nom_complet" ? "nom" : k;
+            if (!app::projedit::setUserField(*edit, id, field, value, err)) return refuse(at + err + (field == "groupe" ? " ; les groupes : " + joinList(groups) : std::string{}) + ".");
+        }
+        if (create) {
+            // Jamais de mot de passe : desactive et << a definir >> tant que l'utilisateur ne l'a pas donne.
+            hmi::User* u = edit->user(id);
+            u->enabled = false;
+            u->mustChange = true;
+            if (const auto b = boolWord(prop(op, "actif")); b && *b)
+                warn(at + "reste d\xC3\xA9sactiv\xC3\xA9 tant que son mot de passe n'est pas d\xC3\xA9" "fini (l'Assistant n'en donne jamais).");
+            const hmi::UserGroup* g = edit->group(u->group);
+            made("Utilisateur", u->login, (u->fullName.empty() ? std::string{} : u->fullName + ", ") + "groupe " + (g ? g->name + " (niveau " + std::to_string(g->level) + ")" : std::string("?"))
+                                              + (u->protection == "dynamique" ? ", code dynamique (secret cr\xC3\xA9\xC3\xA9 par le logiciel)" : std::string{})
+                                              + " ; d\xC3\xA9sactiv\xC3\xA9 : mot de passe \xC3\xA0 d\xC3\xA9" "finir dans Configuration > Utilisateurs");
+            warn(u->login + " : mot de passe \xC3\xA0 d\xC3\xA9" "finir dans Configuration > Utilisateurs (l'Assistant n'en choisit jamais) - le compte reste "
+                 "d\xC3\xA9sactiv\xC3\xA9 jusque-l\xC3\xA0, puis \xC3\xA0 changer \xC3\xA0 sa premi\xC3\xA8re connexion.");
+            return true;
+        }
+        if (const std::string a = prop(op, "actif"); !a.empty()) {
+            const auto b = boolWord(a);
+            if (!b) return refuse(at + "actif : oui ou non.");
+            if (*b && !loggable(*edit->user(id)))
+                return refuse(at + "pas encore de " + (edit->user(id)->protection == "dynamique" ? std::string("secret") : std::string("mot de passe"))
+                              + " : donne-le dans Configuration > Utilisateurs, puis active le compte (l'Assistant n'en donne jamais).");
+            if (!app::projedit::setUserField(*edit, id, "actif", *b ? "TRUE" : "FALSE", err)) return refuse(at + err + ".");
+        }
+        std::size_t followed = 0;
+        if (const std::string to = prop(op, "renommer"); !to.empty() && to != old.login)
+            if (!app::projedit::setUserField(*edit, id, "login", to, err, &followed)) return refuse(at + "renommer : " + err + ".");
+        const hmi::User& u = *edit->user(id);
+        std::vector<std::string> said;
+        if (old.login != u.login) said.push_back("login " + u.login + (followed ? " (" + std::to_string(followed) + " action(s) suivent)" : std::string{}));
+        if (old.fullName != u.fullName) said.push_back("nom " + u.fullName);
+        if (old.group != u.group) {
+            const hmi::UserGroup* g = edit->group(u.group);
+            said.push_back("groupe " + (g ? g->name + " (niveau " + std::to_string(g->level) + ")" : std::string("?")));
+        }
+        if (old.protection != u.protection)
+            said.push_back("protection " + u.protection + (u.protection == "dynamique" && old.secret != u.secret ? std::string(" (secret cr\xC3\xA9\xC3\xA9 par le logiciel : \xC3\xA0 lire dans Configuration > Utilisateurs)") : std::string{}));
+        if (old.enabled != u.enabled) said.push_back(u.enabled ? "activ\xC3\xA9" : "D\xC3\x89" "SACTIV\xC3\x89");
+        if (old.description != u.description) said.push_back("description : " + u.description);
+        if (old.mustChange != u.mustChange) said.push_back(u.mustChange ? "\xC3\xA0 changer \xC3\xA0 la prochaine connexion" : "plus \xC3\xA0 changer");
+        if (said.empty()) reuse("Utilisateur", u.login, "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+        else made("Utilisateur", login, joinList(said, " ; "));
+        return true;
+    }
+
+    // ---- LES VUES -------------------------------------------------------------------------------------------------------
+    // MODIFIER_VUE : la parente, l'ecran modele, l'en-tete, le pied (et leurs modeles), la taille - par le code de l'inspecteur
+    // d'une vue (app::projedit::setViewLink). Les objets que la bande recouvre : la passe des bandes, apres tout le plan.
+    bool viewOp(const Operation& op) {
+        if (!edit) return noEdit(op);
+        const std::string name = trimmed(op.name);
+        const std::string at = "Vue \xC2\xAB " + name + " \xC2\xBB : ";
+        if (name.empty()) return fail("modifier_vue : quelle vue ? (\xC2\xAB vue \xC2\xBB : son nom).");
+        hmi::View* v = edit->viewByName(name);
+        if (!v) {
+            std::string msg = at + "introuvable (l'Assistant n'invente pas de vue)";
+            if (const auto near = nearViews(*edit, name); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+            return fail(msg + ".");
+        }
+        if (op.props.empty()) return fail(at + "rien \xC3\xA0 modifier (parent, modele, entete, pied, hauteur...).");
+        // une vue legere : ses liens et sa taille seulement (setViewLink ne lit qu'eux)
+        hmi::View probe;
+        probe.id = v->id;
+        probe.name = v->name;
+        probe.role = v->role;
+        probe.upView = v->upView;
+        probe.templateView = v->templateView;
+        probe.showHeader = v->showHeader;
+        probe.header = v->header;
+        probe.showFooter = v->showFooter;
+        probe.footer = v->footer;
+        probe.width = v->width;
+        probe.height = v->height;
+        for (const auto& [k, raw] : op.props) {
+            if (k == "decaler" || k == "agrandir") {
+                if (!boolWord(raw)) return fail(at + k + " : oui ou non.");
+                continue;
+            }
+            if (k == "hauteur" || k == "largeur") {
+                long long n = 0;
+                if (!sim::readInteger(trimmed(raw), n) || n < 16 || n > 100000)
+                    return fail(at + (k == "hauteur" ? "hauteur" : "largeur") + " : un nombre entier de pixels, 16 au moins (pas \xC2\xAB " + raw + " \xC2\xBB).");
+                (k == "hauteur" ? probe.height : probe.width) = static_cast<int>(n);
+                continue;
+            }
+            std::string refused;
+            bool known = false;
+            if (k == "modele" && (v->role == "entete" || v->role == "pied"))
+                return fail(at + "un mod\xC3\xA8le d'en-t\xC3\xAAte ou de pied n'h\xC3\xA9rite pas d'un \xC3\xA9" "cran mod\xC3\xA8le.");
+            if (!viewLinkProp(*edit, probe, k, raw, refused, &known)) return fail(at + refused + ".");
+            if (!known) return fail(at + "\xC2\xAB " + k + " \xC2\xBB n'est pas un r\xC3\xA9glage de modifier_vue (parent, modele, entete, pied, entete_modele, pied_modele, hauteur, largeur, decaler, agrandir).");
+        }
+        std::vector<std::string> said;
+        const auto nameOf = [&](hmi::Id id, const char* none) {
+            const hmi::View* x = edit->view(id);
+            return x ? x->name : std::string(none);
+        };
+        if (probe.upView != v->upView) said.push_back(probe.upView == hmi::kNoId ? std::string("sans parente (une racine)") : "parent " + nameOf(probe.upView, "?"));
+        if (probe.templateView != v->templateView) said.push_back(probe.templateView == hmi::kNoId ? std::string("sans \xC3\xA9" "cran mod\xC3\xA8le") : "mod\xC3\xA8le " + nameOf(probe.templateView, "?"));
+        if (probe.width != v->width || probe.height != v->height)
+            said.push_back("taille " + std::to_string(v->width) + " \xC3\x97 " + std::to_string(v->height) + kArrow + std::to_string(probe.width) + " \xC3\x97 " + std::to_string(probe.height));
+        const bool headChanged = probe.showHeader != v->showHeader || probe.header != v->header;
+        const bool footChanged = probe.showFooter != v->showFooter || probe.footer != v->footer;
+        // le commit (les liens et la taille), puis ce que montrent les bandes
+        v->upView = probe.upView;
+        v->templateView = probe.templateView;
+        v->showHeader = probe.showHeader;
+        v->header = probe.header;
+        v->showFooter = probe.showFooter;
+        v->footer = probe.footer;
+        v->width = probe.width;
+        v->height = probe.height;
+        if (headChanged) {
+            const hmi::View* h = hmi::headerOf(*edit, *v);
+            said.push_back(!v->showHeader ? std::string("sans en-t\xC3\xAAte") : h ? "en-t\xC3\xAAte " + h->name + " (" + std::to_string(h->height) + " px)" : std::string("en-t\xC3\xAAte coch\xC3\xA9"));
+            if (v->showHeader && !h) warn(at + "l'en-t\xC3\xAAte est coch\xC3\xA9, mais le projet n'a aucun mod\xC3\xA8le d'en-t\xC3\xAAte : rien ne s'affiche (creer_vue, role entete).");
+        }
+        if (footChanged) {
+            const hmi::View* f = hmi::footerOf(*edit, *v);
+            said.push_back(!v->showFooter ? std::string("sans pied") : f ? "pied " + f->name + " (" + std::to_string(f->height) + " px)" : std::string("pied coch\xC3\xA9"));
+            if (v->showFooter && !f) warn(at + "le pied est coch\xC3\xA9, mais le projet n'a aucun mod\xC3\xA8le de pied : rien ne s'affiche (creer_vue, role pied).");
+        }
+        if (said.empty()) reuse("Vue", v->name, "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+        else made("Vue", v->name, joinList(said, ", "));
+        return true;
+    }
+
+    // VUE_DE_DEMARRAGE : la vue ouverte au lancement (une vue ordinaire : ni popup, ni symbole, ni modele).
+    bool startViewOp(const Operation& op) {
+        if (!edit) return noEdit(op);
+        const std::string name = trimmed(op.name);
+        const std::string at = "Vue de d\xC3\xA9marrage \xC2\xAB " + name + " \xC2\xBB : ";
+        const hmi::View* v = edit->viewByName(name);
+        if (!v) {
+            std::string msg = at + "vue introuvable (l'Assistant n'invente pas de vue)";
+            if (const auto near = nearViews(*edit, name, "vue"); !near.empty()) msg += " ; les plus proches : " + joinList(near);
+            return fail(msg + ".");
+        }
+        if (v->role != "vue") return fail(at + v->name + " est un(e) " + std::string(hmi::viewRoleLabel(v->role)) + " : la vue de d\xC3\xA9marrage est une vue ordinaire.");
+        const hmi::View* was = edit->view(edit->config.startView);
+        if (was && was->id == v->id) {
+            reuse("Vue de d\xC3\xA9marrage", v->name, "c'est d\xC3\xA9j\xC3\xA0 elle");
+            return true;
+        }
+        edit->config.startView = v->id;
+        made("Vue de d\xC3\xA9marrage", v->name, "avant : " + (was ? was->name : std::string("aucune")));
+        return true;
+    }
+
     bool go() {
         for (std::size_t index = 0; index < p.ops.size(); ++index) {
             const Operation& op = p.ops[index];
@@ -2103,7 +2951,11 @@ struct Run {
             span.w0 = check ? check->warnings.size() : 0;
             span.m0 = check ? check->made.size() : 0;
             span.r0 = reusedItems.size();
-            switch (op.action) {
+            // 1.22.6 : un secret retire a la lecture (operationsFromJson) - l'operation est refusee, la raison dite (jamais sa valeur).
+            if (const std::string sk = prop(op, "secret_refuse"); !sk.empty())
+                ok = fail(std::string(actionKey(op.action)) + (trimmed(op.name).empty() ? std::string{} : " " + trimmed(op.name)) + " : \xC2\xAB " + sk
+                          + " \xC2\xBB refus\xC3\xA9 : " + kNoSecret + ".");
+            else switch (op.action) {
                 case Operation::Action::Create: ok = create(op); break;
                 case Operation::Action::Modify: ok = modify(op); break;
                 case Operation::Action::Bind: ok = bind(op); break;
@@ -2125,6 +2977,15 @@ struct Run {
                 case Operation::Action::Resource: ok = resource(op); break;
                 case Operation::Action::Folder: ok = folder(op, false); break;
                 case Operation::Action::Store: ok = folder(op, true); break;
+                // 1.22.6 : les options des variables, la securite, les vues.
+                case Operation::Action::VarEdit: ok = editVariables(op); break;
+                case Operation::Action::Security: ok = securityOp(op); break;
+                case Operation::Action::Group: ok = groupOp(op, true); break;
+                case Operation::Action::GroupEdit: ok = groupOp(op, false); break;
+                case Operation::Action::User: ok = userOp(op, true); break;
+                case Operation::Action::UserEdit: ok = userOp(op, false); break;
+                case Operation::Action::ViewEdit: ok = viewOp(op); break;
+                case Operation::Action::StartView: ok = startViewOp(op); break;
             }
             span.e1 = check ? check->errors.size() : 0;
             span.w1 = check ? check->warnings.size() : 0;
@@ -2276,6 +3137,63 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
                     out += "W:" + name + "=" + (v ? fingerprint(*v) : std::string("-")) + ";";
                 }
                 break;
+            // 1.22.6 : la variable telle qu'elle est (ses options ; renommee : le nouveau nom aussi), la securite (jamais une
+            // empreinte ni un secret : les reglages, les groupes, les logins), les liens d'une vue, la vue de demarrage.
+            case Operation::Action::VarEdit: {
+                std::vector<std::string> names;
+                if (!trimmed(op.variable).empty()) names.push_back(trimmed(op.variable));
+                for (const auto& n : op.objects) names.push_back(trimmed(n));
+                for (const auto& [k, v] : op.props)
+                    if (k == "renommer") names.push_back(trimmed(v));
+                for (const auto& n : names) {
+                    out += "M:" + n + "=";
+                    if (const auto* x = variableNamed(n))
+                        out += x->name + "|" + x->type + "|" + x->initial + "|" + x->description + "|" + x->folder + "|" + x->unit + "|" + x->equipment + "@"
+                               + x->address + "|" + (x->readOnly ? "L" : "") + (x->retain ? "R" : "") + (x->packBools ? "P" : "") + (x->compact ? "C" : "")
+                               + "|" + hmi::formatNumber(x->rawMin) + "," + hmi::formatNumber(x->rawMax) + "," + hmi::formatNumber(x->engMin) + ","
+                               + hmi::formatNumber(x->engMax) + "," + x->rawType + "|" + std::to_string(x->internal.size());
+                    else out += "-";
+                    out += ";";
+                }
+                break;
+            }
+            case Operation::Action::Security:
+            case Operation::Action::Group:
+            case Operation::Action::GroupEdit:
+            case Operation::Action::User:
+            case Operation::Action::UserEdit: {
+                const hmi::Security& sc = project.security;
+                out += std::string("Z:") + (sc.enabled ? "1" : "0") + "|" + sc.startUser + "|" + std::to_string(sc.autoLogoutMin) + "|"
+                       + std::to_string(sc.menuLevelAccounts) + std::to_string(sc.menuLevelAccess) + std::to_string(sc.menuLevelJournal) + "|"
+                       + std::to_string(sc.pwMinLength) + "," + std::to_string(sc.pwMaxAgeDays) + "," + std::to_string(sc.pwHistory) + ","
+                       + std::to_string(sc.lockAttempts) + "," + std::to_string(sc.lockMinutes) + "," + std::to_string(sc.logoutWarnS)
+                       + (sc.pwDigit ? "d" : "") + (sc.pwLetter ? "l" : "") + (sc.pwMixedCase ? "c" : "") + (sc.pwSpecial ? "s" : "")
+                       + (sc.pwChangeFirst ? "f" : "") + (sc.badgeLogin ? "b" : "") + "|";
+                for (const auto& g : sc.groups) {
+                    out += g.name + ":" + std::to_string(g.level) + ":" + std::to_string(g.startView) + ":" + g.description + ":";
+                    for (const auto& r : g.roles) out += r + ",";
+                    out += "/";
+                }
+                out += "|";
+                for (const auto& u : sc.users)
+                    out += u.login + ":" + std::to_string(u.group) + ":" + u.fullName + ":" + u.protection + ":" + (u.enabled ? "1" : "0")
+                           + (u.mustChange ? "m" : "") + ":" + u.description + "/";
+                out += ";";
+                break;
+            }
+            case Operation::Action::ViewEdit: {
+                out += "Y:" + name + "=";
+                if (const hmi::View* v = project.viewByName(name))
+                    out += std::to_string(v->upView) + "|" + std::to_string(v->templateView) + "|" + (v->showHeader ? "H" : "") + std::to_string(v->header) + "|"
+                           + (v->showFooter ? "F" : "") + std::to_string(v->footer) + "|" + std::to_string(v->width) + "x" + std::to_string(v->height) + "|"
+                           + fingerprint(*v);
+                else out += "-";
+                out += ";";
+                break;
+            }
+            case Operation::Action::StartView:
+                out += "S0:" + std::to_string(project.config.startView) + ";";
+                break;
             default:
                 break;
         }
@@ -2317,6 +3235,14 @@ std::string_view actionKey(Operation::Action a) noexcept {
         case Operation::Action::Resource: return "creer_ressource";
         case Operation::Action::Folder: return "creer_dossier";
         case Operation::Action::Store: return "ranger";
+        case Operation::Action::VarEdit: return "modifier_variable";
+        case Operation::Action::Security: return "securite";
+        case Operation::Action::Group: return "creer_groupe";
+        case Operation::Action::GroupEdit: return "modifier_groupe";
+        case Operation::Action::User: return "creer_utilisateur";
+        case Operation::Action::UserEdit: return "modifier_utilisateur";
+        case Operation::Action::ViewEdit: return "modifier_vue";
+        case Operation::Action::StartView: return "vue_de_demarrage";
     }
     return "creer";
 }
@@ -2350,7 +3276,16 @@ bool projectLevel(Operation::Action a) noexcept {
         case Operation::Action::Alarm:
         case Operation::Action::Resource:
         case Operation::Action::Folder:
-        case Operation::Action::Store: return true;
+        case Operation::Action::Store:
+        // 1.22.6 : les options des variables, la securite, les vues (leurs liens) - le projet, pas les objets de la vue ouverte.
+        case Operation::Action::VarEdit:
+        case Operation::Action::Security:
+        case Operation::Action::Group:
+        case Operation::Action::GroupEdit:
+        case Operation::Action::User:
+        case Operation::Action::UserEdit:
+        case Operation::Action::ViewEdit:
+        case Operation::Action::StartView: return true;
         default: return false;
     }
 }
@@ -2360,8 +3295,13 @@ std::optional<Operation::Action> actionFromKey(std::string_view k) noexcept {
                          Operation::Action::Distribute, Operation::Action::Remove, Operation::Action::Duplicate, Operation::Action::Code,
                          Operation::Action::View, Operation::Action::Variables, Operation::Action::Type, Operation::Action::Equipment,
                          Operation::Action::Address, Operation::Action::Script, Operation::Action::Function, Operation::Action::Alarm,
-                         Operation::Action::Resource, Operation::Action::Folder, Operation::Action::Store})
+                         Operation::Action::Resource, Operation::Action::Folder, Operation::Action::Store, Operation::Action::VarEdit,
+                         Operation::Action::Security, Operation::Action::Group, Operation::Action::GroupEdit, Operation::Action::User,
+                         Operation::Action::UserEdit, Operation::Action::ViewEdit, Operation::Action::StartView})
         if (actionKey(a) == k) return a;
+    // 1.22.6 : des noms de plus (une liste de variables, les mots de la demande).
+    if (k == "modifier_variables") return Operation::Action::VarEdit;
+    if (k == "modifier_securite") return Operation::Action::Security;
     // 1.18.0 : des noms de plus pour une vue d'un role (lus comme creer_vue + role).
     if (k == "creer_symbole" || k == "creer_popup" || k == "creer_modele_vue") return Operation::Action::View;
     return std::nullopt;
@@ -2572,6 +3512,15 @@ std::string creationSummary(const Proposal& p) {
     add(Operation::Action::Resource, "ressource", "ressources");
     add(Operation::Action::Folder, "dossier", "dossiers");
     add(Operation::Action::Store, "rangement", "rangements");
+    // 1.22.6 : les options des variables, la securite, les vues.
+    add(Operation::Action::VarEdit, "variable modifi\xC3\xA9" "e", "variables modifi\xC3\xA9" "es");
+    add(Operation::Action::Security, "r\xC3\xA9glage de la s\xC3\xA9" "curit\xC3\xA9", "r\xC3\xA9glages de la s\xC3\xA9" "curit\xC3\xA9");
+    add(Operation::Action::Group, "groupe", "groupes");
+    add(Operation::Action::GroupEdit, "groupe modifi\xC3\xA9", "groupes modifi\xC3\xA9s");
+    add(Operation::Action::User, "utilisateur", "utilisateurs");
+    add(Operation::Action::UserEdit, "utilisateur modifi\xC3\xA9", "utilisateurs modifi\xC3\xA9s");
+    add(Operation::Action::ViewEdit, "vue modifi\xC3\xA9" "e", "vues modifi\xC3\xA9" "es");
+    add(Operation::Action::StartView, "vue de d\xC3\xA9marrage", "vues de d\xC3\xA9marrage");
     return joinList(parts);
 }
 
@@ -2603,6 +3552,12 @@ hmi::View newViewFor(const hmi::Project& project, const Operation& op, hmi::Id& 
         if (k == "titre") v.popup.title = trimmed(val);
         if (k == "modale") v.popup.modal = !(lower(trimmed(val)) == "false" || lower(trimmed(val)) == "0" || lower(trimmed(val)) == "non");
         if (k == "dossier") v.folder = trimmed(val);
+    }
+    // 1.22.6 : ses liens - parente, ecran modele, en-tete, pied (le code de l'inspecteur ; un refus est dit par la validation).
+    for (const auto& [k, val] : op.props) {
+        if (k == "modele" && (v.role == "entete" || v.role == "pied")) continue;
+        std::string why;
+        (void)viewLinkProp(project, v, k, val, why);
     }
     if (v.role == "symbole" || v.role == "popup") {
         std::string text;
@@ -2698,6 +3653,252 @@ bool stopped(const Outcome& o) noexcept {
     return o.state == Outcome::State::Failed || o.state == Outcome::State::Skipped || o.state == Outcome::State::Excluded;
 }
 
+// =============================================================================================
+//  1.22.6 : LES BANDES D'EN-TETE ET DE PIED. La bande du modele d'en-tete se pose en haut de la vue (sa hauteur : celle du
+//  modele), celle du pied en bas, PAR-DESSUS le contenu (hmi::compose) : un objet dessous est cache. Apres tout le plan (les
+//  objets que la proposition cree ou deplace compris), pour chaque operation qui coche (ou change) un en-tete ou un pied
+//  (modifier_vue, creer_vue) : les objets de la vue que la bande recouvre sont DITS (un avertissement, l'objet encadre) ; avec
+//  << decaler >> (par defaut), ils glissent d'un meme decalage sous l'en-tete (au-dessus du pied), avec ceux qu'ils
+//  pousseraient, leurs ecarts gardes ; plus la place : dit (agrandir, ou la hauteur de la vue). Un seul Ctrl+Z avec le reste.
+// =============================================================================================
+struct BandObject {
+    hmi::Id   id{hmi::kNoId};
+    hmi::Box  box;
+    bool      locked{false};
+};
+
+// Les objets du haut de la vue (les enfants suivent leur groupe), leur cadre a l'ecran.
+std::vector<BandObject> topObjects(const hmi::View& v) {
+    std::vector<BandObject> out;
+    for (const auto& o : v.objects)
+        if (o.parent == hmi::kNoId) out.push_back({o.id, hmi::edit::rotatedBounds(o), v.effectivelyLocked(o)});
+    return out;
+}
+
+std::string namesOf(const hmi::View& v, const std::vector<hmi::Id>& ids, std::size_t max = 6) {
+    std::vector<std::string> names;
+    for (const auto id : ids)
+        if (const hmi::Object* o = v.object(id); o && names.size() < max) names.push_back(o->name);
+    std::string out = joinList(names);
+    if (ids.size() > max) out += ", \xE2\x80\xA6";
+    return out;
+}
+
+struct BandResult {
+    std::vector<std::string> warnings, made;
+    std::vector<std::pair<hmi::Id, std::string>> spots;   // l'objet, le message (vide : deplace)
+    std::vector<std::pair<hmi::Id, double>>      moved;   // l'objet, son y d'avant
+};
+
+// Une bande (`head` : l'en-tete, sinon le pied) de hauteur `band` sur la vue `v` ; `only` non vide : ces objets seulement (des
+// objets poses par la proposition sous une bande deja la : dits, jamais deplaces).
+BandResult checkBand(hmi::View& v, bool head, int band, int otherBand, bool shift, bool grow, const std::set<hmi::Id>* only) {
+    BandResult r;
+    const std::string what = head ? "l'en-t\xC3\xAAte" : "le pied";
+    const auto all = topObjects(v);
+    const double edge = head ? static_cast<double>(band) : static_cast<double>(v.height - band);
+    std::vector<const BandObject*> under;
+    for (const auto& b : all) {
+        if (only && !only->count(b.id)) continue;
+        const bool covered = head ? (b.box.y < edge && b.box.bottom() > 0) : (b.box.bottom() > edge && b.box.y < v.height);
+        if (covered) under.push_back(&b);
+    }
+    if (under.empty()) return r;
+    std::vector<hmi::Id> ids;
+    for (const auto* b : under) ids.push_back(b->id);
+    const std::string list = namesOf(v, ids);
+    const std::string n = std::to_string(ids.size()) + (ids.size() > 1 ? " objets" : " objet");
+    if (only) {
+        const std::string text = v.name + " : " + n + " pos\xC3\xA9" + (ids.size() > 1 ? "s" : "") + " par la proposition " + (ids.size() > 1 ? "sont" : "est")
+                                 + (head ? " sous l'en-t\xC3\xAAte (" : " sous le pied (") + std::to_string(band) + " px) : " + list
+                                 + (head ? " - place-les plus bas." : " - place-les plus haut.");
+        r.warnings.push_back(text);
+        for (const auto id : ids) r.spots.emplace_back(id, text);
+        return r;
+    }
+    const std::string covers = v.name + " : " + what + " (" + std::to_string(band) + " px) recouvre " + n + " : " + list;
+    if (!shift) {
+        r.warnings.push_back(covers + " (decaler : non - rien n'est d\xC3\xA9plac\xC3\xA9).");
+        for (const auto id : ids) r.spots.emplace_back(id, r.warnings.back());
+        return r;
+    }
+    // Le decalage commun : le haut le plus haut juste sous l'en-tete (le bas le plus bas juste au-dessus du pied).
+    double dy = 0;
+    if (head) {
+        double top = under.front()->box.y;
+        for (const auto* b : under) top = std::min(top, b->box.y);
+        dy = edge - top;
+    } else {
+        double bottom = under.front()->box.bottom();
+        for (const auto* b : under) bottom = std::max(bottom, b->box.bottom());
+        dy = edge - bottom;
+    }
+    // Ceux qu'ils pousseraient glissent avec eux (les ecarts gardes) : de proche en proche.
+    std::set<hmi::Id> moving(ids.begin(), ids.end());
+    for (bool more = true; more;) {
+        more = false;
+        for (const auto& b : all) {
+            if (moving.count(b.id)) continue;
+            for (const auto& m : all) {
+                if (!moving.count(m.id)) continue;
+                const hmi::Box shifted{m.box.x, m.box.y + dy, m.box.w, m.box.h};
+                const bool cross = shifted.x < b.box.right() && b.box.x < shifted.right() && shifted.y < b.box.bottom() && b.box.y < shifted.bottom();
+                if (cross) {
+                    moving.insert(b.id);
+                    more = true;
+                    break;
+                }
+            }
+        }
+    }
+    std::vector<hmi::Id> locked, movable;
+    double lo = 1e18, hi = -1e18;
+    for (const auto& b : all) {
+        if (!moving.count(b.id)) continue;
+        if (b.locked) {
+            locked.push_back(b.id);
+            continue;
+        }
+        movable.push_back(b.id);
+        lo = std::min(lo, b.box.y + dy);
+        hi = std::max(hi, b.box.bottom() + dy);
+    }
+    // La place : sous l'en-tete et au-dessus du pied (l'autre bande, si elle est la).
+    const double floor = head ? static_cast<double>(v.height - otherBand) : static_cast<double>(v.height);
+    const double ceiling = head ? 0.0 : static_cast<double>(otherBand);
+    double missing = 0;
+    if (!movable.empty()) missing = head ? std::max(0.0, hi - floor) : std::max(0.0, ceiling - lo);
+    if (missing > 0.5) {
+        const int old = v.height;
+        // l'en-tete : la vue grandit de ce qui manque en bas ; le pied : de ce qu'il recouvre (il descend avec le bas de la vue)
+        const int need = old + static_cast<int>(std::ceil(head ? missing : -dy));
+        if (!grow) {
+            r.warnings.push_back(covers + " ; plus la place pour les d\xC3\xA9" "caler (il manque " + std::to_string(static_cast<int>(std::ceil(missing)))
+                                 + " px) : rien n'est d\xC3\xA9plac\xC3\xA9. Agrandis la vue \xC3\xA0 " + std::to_string(need)
+                                 + " px (modifier_vue : hauteur, ou agrandir : oui).");
+            for (const auto id : ids) r.spots.emplace_back(id, r.warnings.back());
+            return r;
+        }
+        v.height = need;
+        r.made.push_back("hauteur de la vue " + std::to_string(old) + kArrow + std::to_string(need) + " px (agrandir)");
+        if (!head) return r;   // le pied est descendu sous les objets : plus rien ne le touche
+    }
+    for (const auto id : movable)
+        if (const hmi::Object* o = v.object(id)) r.moved.emplace_back(id, o->number("y"));
+    if (!movable.empty()) {
+        hmi::edit::move(v, movable, 0, dy);
+        const int px = static_cast<int>(std::lround(std::fabs(dy)));
+        r.made.push_back(std::to_string(movable.size()) + (movable.size() > 1 ? " objets " : " objet ") + (head ? "descendu" : "remont\xC3\xA9")
+                         + (movable.size() > 1 ? "s" : "") + " de " + std::to_string(px) + " px " + (head ? "sous l'en-t\xC3\xAAte" : "au-dessus du pied")
+                         + " : " + namesOf(v, movable) + " (leurs \xC3\xA9" "carts gard\xC3\xA9s)");
+        for (const auto id : movable) r.spots.emplace_back(id, std::string{});
+    }
+    if (!locked.empty()) {
+        r.warnings.push_back(v.name + " : " + namesOf(v, locked) + (locked.size() > 1 ? " sont verrouill\xC3\xA9s" : " est verrouill\xC3\xA9") + " : pas d\xC3\xA9plac\xC3\xA9"
+                             + (locked.size() > 1 ? "s" : "") + ", " + what + " les recouvre (d\xC3\xA9verrouille-les).");
+        for (const auto id : locked) r.spots.emplace_back(id, r.warnings.back());
+    }
+    return r;
+}
+
+// La passe des bandes (voir plus haut) : les operations validees qui cochent ou changent un en-tete, un pied (ou la hauteur
+// d'une vue qui a un pied) ; puis, a la validation, les objets poses par la proposition sous une bande deja la (dits).
+void bandPass(hmi::Project& pr, const Proposal& p, Check* check, std::vector<Check::Outcome>& out, std::map<hmi::Id, Touched>* touched,
+              const std::map<hmi::Id, std::set<hmi::Id>>& placed) {
+    std::set<hmi::Id> done;
+    const auto apply = [&](std::size_t i, hmi::View& v, const BandResult& r) {
+        for (const auto& w : r.warnings) {
+            if (i < out.size()) out[i].warnings.push_back(w);
+            if (check) check->warnings.push_back(w);
+        }
+        for (const auto& m : r.made) {
+            const Check::Made x{"Disposition", v.name, m};
+            if (i < out.size()) out[i].made.push_back(x);
+            if (check) check->made.push_back(x);
+        }
+        if (check)
+            for (const auto& [id, msg] : r.spots)
+                if (const hmi::Object* o = v.object(id)) check->spots.push_back({i, v.name, id, o->name, msg, false});
+        for (const auto& [id, y0] : r.moved) {
+            const hmi::Object* o = v.object(id);
+            if (!o) continue;
+            if (touched) {
+                Touched& t = (*touched)[v.id];
+                if (std::find(t.created.begin(), t.created.end(), id) == t.created.end() && std::find(t.modified.begin(), t.modified.end(), id) == t.modified.end())
+                    t.modified.push_back(id);
+            }
+            if (!check) continue;
+            Item* it = nullptr;
+            for (auto& x : check->items)
+                if (x.id == id && x.view == v.name) it = &x;
+            if (!it) {
+                Item n;
+                n.what = Item::What::Modify;
+                n.id = id;
+                n.name = o->name;
+                n.kind = o->kind;
+                n.view = v.name;
+                check->items.push_back(std::move(n));
+                it = &check->items.back();
+                ++check->modify;
+            }
+            it->changes.push_back({"y", hmi::formatNumber(y0), hmi::formatNumber(o->number("y"))});
+        }
+    };
+    for (std::size_t i = 0; i < p.ops.size() && i < out.size(); ++i) {
+        const Operation& op = p.ops[i];
+        if ((op.action != Operation::Action::ViewEdit && op.action != Operation::Action::View) || out[i].state != Check::Outcome::State::Validated) continue;
+        const auto has = [&](const char* k) { return std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; }); };
+        const bool headKey = has("entete") || has("entete_modele");
+        const bool footKey = has("pied") || has("pied_modele") || (op.action == Operation::Action::ViewEdit && has("hauteur"));
+        if (!headKey && !footKey) continue;
+        hmi::View* v = pr.viewByName(trimmed(op.name));
+        if (!v) continue;
+        const bool shift = boolWord(Run::prop(op, "decaler")).value_or(true);
+        const bool grow = boolWord(Run::prop(op, "agrandir")).value_or(false);
+        done.insert(v->id);
+        const hmi::View* h = hmi::headerOf(pr, *v);
+        const hmi::View* f = hmi::footerOf(pr, *v);
+        const int hh = h ? h->height : 0, fh = f ? f->height : 0;
+        if (headKey && h) apply(i, *v, checkBand(*v, true, hh, fh, shift, grow, nullptr));
+        if (footKey && f) apply(i, *v, checkBand(*v, false, fh, hh, shift, grow, nullptr));
+    }
+    if (!check) return;
+    for (const auto& [vid, ids] : placed) {
+        if (done.count(vid) || ids.empty()) continue;
+        hmi::View* v = pr.view(vid);
+        if (!v) continue;
+        const hmi::View* h = hmi::headerOf(pr, *v);
+        const hmi::View* f = hmi::footerOf(pr, *v);
+        if (h) apply(Check::Fault::kNoOp, *v, checkBand(*v, true, h->height, f ? f->height : 0, false, false, &ids));
+        if (f) apply(Check::Fault::kNoOp, *v, checkBand(*v, false, f->height, h ? h->height : 0, false, false, &ids));
+    }
+}
+
+// La securite ACTIVEE par la proposition sans un compte actif qui puisse administrer et se connecter : refusee - en marche, plus
+// personne ne gererait les comptes (on se fermerait dehors). Faux et `why` : a l'application (la validation l'a dit avant).
+bool securityPass(const hmi::Project& pr, const Proposal& p, Mode mode, Check* check, std::vector<Check::Outcome>& out, bool wasEnabled,
+                  std::string* why) {
+    if (wasEnabled || !pr.security.enabled || !app::projedit::administrators(pr, true).empty()) return true;
+    std::vector<std::string> admins = app::projedit::administrators(pr, false);
+    const std::string text = "Activer la s\xC3\xA9" "curit\xC3\xA9 : aucun compte actif ne peut administrer ET se connecter (la permission Administrer par son "
+                             "groupe, un mot de passe)" + (admins.empty() ? std::string{} : " - " + joinList(admins) + " n'a pas encore de mot de passe")
+                             + " ; en marche, plus personne ne pourrait g\xC3\xA9rer les comptes : on se fermerait dehors. Donne d'abord un mot de passe \xC3\xA0 un "
+                               "compte administrateur dans Configuration > Utilisateurs (l'Assistant n'en donne jamais), puis redemande.";
+    if (mode == Mode::Apply) {
+        if (why) *why = text;
+        return false;
+    }
+    for (std::size_t i = 0; i < p.ops.size() && i < out.size(); ++i)
+        if (p.ops[i].action == Operation::Action::Security && boolWord(Run::prop(p.ops[i], "active")).value_or(false)
+            && out[i].state == Check::Outcome::State::Validated) {
+            out[i].errors.push_back(text);
+            out[i].state = Check::Outcome::State::Failed;
+        }
+    if (check) check->errors.push_back(text);
+    return true;
+}
+
 // Le coeur : `pr` grandit d'unite en unite. `only` (appliquer) : les operations a executer ; nul : toutes celles qui ne
 // sont ni retirees, ni bloquees, ni dependantes d'une operation qui l'est. Faux et `why` : une unite a echoue (appliquer).
 thread_local std::atomic<std::size_t>* tlProgress = nullptr;   // 1.20.0 : setProgressCounter
@@ -2733,6 +3934,8 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
             out[i].errors = sch.errors;
         }
     }
+    const bool                     securityWas = pr.security.enabled;   // 1.22.6 : activee par la proposition ?
+    std::map<hmi::Id, std::set<hmi::Id>> placed;   // 1.22.6 : les objets crees ou modifies, par vue (la passe des bandes)
     std::set<std::string>          plannedVars;    // les variables creees par les unites precedentes
     Run::Shared                    shared;         // 1.20.0 : les adresses libres et prises, d'une unite a l'autre
     std::map<hmi::Id, std::size_t> codeOwner;      // un code cree -> l'operation qui le cree
@@ -2866,6 +4069,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         r.plannedVars = &plannedVars;
         r.shared = &shared;
         r.whole = &p;   // 1.22.1 : les << ranger >> de variables de toute la proposition
+        r.edit = &pr;   // 1.22.6 : les options des variables, la securite, les vues se posent sur le projet de travail
         const bool ok = r.go();
         if (mode == Mode::Apply && !ok) {
             if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;
@@ -2901,6 +4105,12 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
                     const del::Analysis an = del::analyze(pr, rq, ctx);
                     if (!an.removed.empty()) check->removals.push_back(del::removalOf(i, an, p.ops[i].keep));
                 }
+        }
+        if (newView || existing != hmi::kNoId) {   // 1.22.6 : ce que l'unite pose dans la vue (la passe des bandes)
+            auto& set = placed[newView ? work.id : existing];
+            set.insert(r.createdIds.begin(), r.createdIds.end());
+            for (const auto id : r.modifiedIds)
+                if (!r.removedIds.count(id)) set.insert(id);
         }
         if (tlProgress) tlProgress->fetch_add(run.size(), std::memory_order_relaxed);   // 1.20.0 : l'avancement
         // 3. l'etat de chaque operation (ce qu'elle a dit)
@@ -2987,6 +4197,10 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         }
         r.applyFolders(pr);
     }
+    // 1.22.6 : les bandes d'en-tete et de pied (apres tout le plan : les objets crees ou deplaces compris) ; la securite activee
+    // sans personne pour l'administrer.
+    bandPass(pr, p, check, out, touched, placed);
+    if (!securityPass(pr, p, mode, check, out, securityWas, why)) return false;
     // 5. le code cree, compile une fois TOUT cree (deux fonctions qui s'appellent, un script et sa fonction)
     if (mode != Mode::Apply && !codeOwner.empty()) {
         hmi::CompileFocus focus;
@@ -3044,6 +4258,20 @@ void structureFaults(Check& check, const Proposal& p) {
     }
 }
 
+// 1.22.6 : CE QUI REND UNE PROPOSITION SENSIBLE, lu sur le projet d'avant et celui d'apres (la copie de la validation) : la
+// securite desactivee, le dernier compte actif qui administre, le dernier groupe qui a Administrer. Vide : rien.
+std::string sensitiveText(const hmi::Project& before, const hmi::Project& after) {
+    std::string why;
+    if (before.security.enabled && !after.security.enabled)
+        why = "la proposition D\xC3\x89" "SACTIVE la s\xC3\xA9" "curit\xC3\xA9 : en marche, tout sera permis \xC3\xA0 tout le monde (niveaux et permissions ignor\xC3\xA9s)";
+    else if (const auto was = app::projedit::administrators(before); !was.empty() && app::projedit::administrators(after).empty())
+        why = "la proposition retire le dernier compte actif qui peut administrer (" + joinList(was) + ") : plus personne ne pourra g\xC3\xA9rer les comptes en marche";
+    else if (const auto groups = app::projedit::adminGroups(before); !groups.empty() && app::projedit::adminGroups(after).empty())
+        why = "la proposition retire la permission Administrer au dernier groupe qui l'avait (" + joinList(groups) + ")";
+    if (why.empty()) return {};
+    return std::string(kSensitive) + " : " + why + ". Le mode Direct ne l'applique pas : v\xC3\xA9rifie l'aper\xC3\xA7u, puis clique Appliquer.";
+}
+
 // La vue ouverte d'une proposition (kNoId : elle n'en touche pas, ou plus).
 hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
     if (!usesOpenView(p)) return hmi::kNoId;
@@ -3052,6 +4280,29 @@ hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
 }
 
 } // namespace
+
+bool sensitive(const Proposal& p) {
+    for (const auto& op : p.ops) {
+        if (std::find(p.excluded.begin(), p.excluded.end(), static_cast<std::size_t>(&op - p.ops.data())) != p.excluded.end()) continue;
+        const auto has = [&](const char* k) { return std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; }); };
+        switch (op.action) {
+            case Operation::Action::Security:
+                if (has("active") && !boolWord(Run::prop(op, "active")).value_or(true)) return true;   // la desactiver
+                break;
+            case Operation::Action::UserEdit:   // un compte desactive, change de groupe ou de protection : peut-etre le dernier qui administre
+                if ((has("actif") && !boolWord(Run::prop(op, "actif")).value_or(true)) || has("groupe") || has("protection")) return true;
+                break;
+            case Operation::Action::GroupEdit:  // les roles d'un groupe : peut-etre le dernier qui a Administrer
+                if (has("roles")) return true;
+                break;
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
+bool secretField(Operation::Action a, std::string_view key) { return secretKey(a, key); }
 
 bool checkInBackground(const Proposal& p) noexcept {
     if (p.ops.size() >= kHeavyOps) return true;
@@ -3104,6 +4355,9 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     check.deps = sch.deps;
     check.planErrors = sch.errors;
     check.newView = createsView(p) ? newViewName(p) : std::string{};
+    // 1.22.6 : une proposition SENSIBLE (la securite desactivee, le dernier administrateur retire) : dit EN TETE des avertissements -
+    // la premiere ligne de l'apercu et de la carte.
+    if (const std::string why = sensitiveText(project, copy); !why.empty()) check.warnings.insert(check.warnings.begin(), why);
     structureFaults(check, p);   // 1.22.1 : chaque erreur, son defaut structure (le clic droit)
     return check;
 }
@@ -3265,7 +4519,11 @@ core::CommandPtr commandSetting(const hmi::DocumentPtr& doc, const Proposal& p, 
 Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) {
     Preview out;
     const hmi::Id open = openViewOf(project, p);
-    if (!createsView(p) && !usesOpenView(p)) {
+    // 1.22.6 : modifier_vue - la vue qu'elle change (les objets que son en-tete ou son pied recouvre peuvent y bouger).
+    std::string edited;
+    for (const auto& op : p.ops)
+        if (op.action == Operation::Action::ViewEdit && edited.empty()) edited = trimmed(op.name);
+    if (!createsView(p) && !usesOpenView(p) && edited.empty()) {
         // Ni vue ni objet : des variables, des types (l'apercu de la carte le dit, la liste les montre).
         const bool removes = std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return del::projectRemoval(op); });
         const std::string made = creationSummary(p);
@@ -3286,6 +4544,7 @@ Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) 
     // La vue montree : la vue neuve principale, sinon la vue ouverte.
     const hmi::View* shown = createsView(p) ? copy.viewByName(newViewName(p)) : nullptr;
     if (!shown && open != hmi::kNoId) shown = copy.view(open);
+    if (!shown && !edited.empty()) shown = copy.viewByName(edited);   // 1.22.6
     if (!shown) {
         out.why = "La vue \xC2\xAB " + (createsView(p) ? newViewName(p) : p.view) + " \xC2\xBB ne peut pas \xC3\xAA" "tre dessin\xC3\xA9" "e (refus\xC3\xA9" "e).";
         return out;
@@ -3442,6 +4701,27 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
                 break;
             case Operation::Action::Folder:
                 break;
+            // 1.22.6 : la variable (ou les variables), le nom d'un groupe ou d'un login cree, la vue visee ; le reste : proprietes.
+            case Operation::Action::VarEdit:
+                if (!op.variable.empty()) o.set("variable", op.variable);
+                if (!op.objects.empty()) {
+                    json::Value list = json::Value::array();
+                    for (const auto& n : op.objects) list.push(n);
+                    o.set("objets", std::move(list));
+                }
+                break;
+            case Operation::Action::Group:
+            case Operation::Action::User:
+                o.set("nom", op.name);
+                break;
+            case Operation::Action::ViewEdit:
+            case Operation::Action::StartView:
+                o.set("vue", op.name);
+                break;
+            case Operation::Action::Security:
+            case Operation::Action::GroupEdit:
+            case Operation::Action::UserEdit:
+                break;
             default: {
                 json::Value list = json::Value::array();
                 for (const auto& n : op.objects) list.push(n);
@@ -3532,8 +4812,12 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         }
         const bool named = *action == Operation::Action::Create || *action == Operation::Action::View || *action == Operation::Action::Type
                            || *action == Operation::Action::Equipment || *action == Operation::Action::Script || *action == Operation::Action::Function
-                           || *action == Operation::Action::Alarm || *action == Operation::Action::Resource;
+                           || *action == Operation::Action::Alarm || *action == Operation::Action::Resource
+                           || *action == Operation::Action::Group || *action == Operation::Action::User;   // 1.22.6
         op.name = named ? o.str("nom") : o.str("objet");
+        // 1.22.6 : creer_utilisateur - le login (nom, ou login) ; modifier_vue, vue_de_demarrage - la vue visee (vue, ou nom).
+        if (*action == Operation::Action::User && op.name.empty()) op.name = o.str("login");
+        if (*action == Operation::Action::ViewEdit || *action == Operation::Action::StartView) op.name = !o.str("vue").empty() ? o.str("vue") : o.str("nom");
         for (const auto& n : o.at("objets").items()) op.objects.push_back(n.asString());
         for (const auto& [k, v] : o.at("proprietes").members())
             op.props.emplace_back(k, v.isString() ? v.asString() : v.isNumber() ? hmi::formatNumber(v.asNumber()) : v.isBool() ? (v.asBool() ? "TRUE" : "FALSE") : std::string{});
@@ -3594,6 +4878,18 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
                     const bool already = std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; });
                     if (!already) op.props.emplace_back(k, scalar(v));
                 }
+        }
+        // 1.22.6 : JAMAIS UN SECRET GARDE - un mot de passe, un badge, un secret (au premier niveau ou dans proprietes) est retire
+        // de l'operation des sa lecture ; seul son NOM reste (secret_refuse), et l'operation est refusee avec la raison.
+        for (auto it = op.props.begin(); it != op.props.end();) {
+            if (secretKey(*action, it->first)) {
+                const std::string key = it->first;
+                it = op.props.erase(it);
+                if (std::none_of(op.props.begin(), op.props.end(), [](const auto& kv) { return kv.first == "secret_refuse"; }))
+                    it = op.props.insert(it, {"secret_refuse", key}) + 1;
+                continue;
+            }
+            ++it;
         }
         // creer_symbole, creer_popup, creer_modele_vue : une vue de ce role (sauf si proprietes le dit).
         if (*action == Operation::Action::View) {

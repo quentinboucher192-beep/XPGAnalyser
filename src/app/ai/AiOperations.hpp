@@ -66,6 +66,25 @@
 //                       le logiciel en deduit un du prefixe des noms (et le dit) ; un melange de deux
 //                       equipements dans un meme dossier est signale.
 //
+//    1.22.6 (LES OPTIONS DES VARIABLES, LA SECURITE, LES VUES - a la fin) :
+//    modifier_variable  une variable IHM EXISTANTE (jamais inventee ; une variable de l'automate : refusee) - ce que
+//                       Variables IHM change : lecture seule, description, valeur initiale (la regle des cases), unite,
+//                       dossier (cree s'il manque), remanente, equipement et adresse (un chevauchement : refuse), mise a
+//                       l'echelle, BOOL par mot, membres internes, type, renommer (avec tous ses emplois) ;
+//    securite           l'activer / la desactiver, l'utilisateur au demarrage, la deconnexion automatique, les niveaux
+//                       des onglets du menu de connexion, la politique des mots de passe (les champs de la fiche) ;
+//    creer_groupe, modifier_groupe            nom, niveau, roles existants, description, vue de depart ;
+//    creer_utilisateur, modifier_utilisateur  login, nom complet, groupe, protection, actif, description. JAMAIS de mot de
+//                       passe, de badge ni de secret : un compte cree par l'Assistant est DESACTIVE, << mot de passe a
+//                       definir >> (mustChange), jusqu'a ce que l'utilisateur le donne dans Configuration > Utilisateurs ;
+//    modifier_vue       une vue existante (ou creee plus haut) : sa parente, son ecran modele, son en-tete et son pied (et
+//                       leurs modeles), sa taille ; les objets que la bande recouvre sont dits, et descendus (remontes)
+//                       d'un meme decalage (decaler, par defaut) ;
+//    vue_de_demarrage   la vue ouverte au lancement.
+//  Activer la securite sans compte actif qui puisse administrer et se connecter : refuse (on se fermerait dehors).
+//  Desactiver la securite, retirer le dernier compte (ou groupe) qui administre : SENSIBLE (sensitive) - dit en tete de
+//  l'apercu et de la carte ; le mode Direct ne l'applique jamais sans clic.
+//
 //  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
 //  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
@@ -108,8 +127,11 @@ struct Operation {
     // 1.16.0 (le contrat, a la fin) : View (creer_vue), Variables (creer_variables), Type (creer_type).
     // 1.18.0 (a la fin) : Equipment (creer_equipement), Address (adresser), Script, Function, Alarm, Resource,
     // Folder (creer_dossier), Store (ranger).
+    // 1.22.6 (a la fin) : VarEdit (modifier_variable), Security (securite), Group (creer_groupe), GroupEdit (modifier_groupe),
+    // User (creer_utilisateur), UserEdit (modifier_utilisateur), ViewEdit (modifier_vue), StartView (vue_de_demarrage).
     enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code, View, Variables, Type,
-                                       Equipment, Address, Script, Function, Alarm, Resource, Folder, Store };
+                                       Equipment, Address, Script, Function, Alarm, Resource, Folder, Store,
+                                       VarEdit, Security, Group, GroupEdit, User, UserEdit, ViewEdit, StartView };
     Action                                           action{Action::Create};
     std::string                                      kind;      // creer : la cle du genre ("Tank")
     std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
@@ -409,6 +431,17 @@ inline constexpr std::size_t kHeavyOps = 40;
 // le nom de l'equipement et la plage a parcourir ("192.168.1.0/24" ; vide : son adresse n'est
 // pas une IPv4). La carte appliquee offre de les lancer - c'est l'utilisateur qui clique.
 [[nodiscard]] std::vector<std::pair<std::string, std::string>> proposedDetections(const Proposal&);
+// 1.22.6 : UNE PROPOSITION SENSIBLE - elle peut fermer la porte : desactiver la securite, desactiver un compte ou changer son
+// groupe ou sa protection, changer les roles d'un groupe (le dernier compte, le dernier groupe qui administre). Lu dans les
+// operations seules (sans le projet), donc prudent : le mode Direct ne l'applique JAMAIS sans clic (Assistant::autoApply). La
+// validation dit la raison precise en tete des avertissements (kSensitive) quand le projet d'apres perd quelque chose.
+[[nodiscard]] bool sensitive(const Proposal&);
+// 1.22.6 : un champ qui porterait un SECRET (un mot de passe, un badge, un secret de code dynamique) : jamais lu ni garde - la
+// lecture de l'outil le refuse, operationsFromJson le retire (seul son nom reste, l'operation est refusee). Pour << securite >>,
+// << badge >> est le reglage << connexion par badge >> (oui, non) : permis.
+[[nodiscard]] bool secretField(Operation::Action, std::string_view key);
+// Le debut de l'avertissement d'une proposition sensible (en tete de l'apercu et de la carte).
+inline constexpr std::string_view kSensitive = "OP\xC3\x89RATION SENSIBLE";
 
 // ---- appliquer -------------------------------------------------------------------
 // Les operations sur `view` (une vue de `project`, ou sa copie) ; les identifiants neufs

@@ -195,6 +195,36 @@ const char* const kRules =
     "l'applique d'un seul Ctrl+Z. R\xC3\xA9utilise l'existant ; une s\xC3\xA9rie suit un mod\xC3\xA8le. Modifier en masse : dis combien "
     "d'\xC3\xA9l\xC3\xA9ments. Ne promets que ce que contient la proposition.\n";
 
+// 1.22.6 : LES OPTIONS DES VARIABLES, LA SECURITE, LES VUES - les operations qui les changent et la regle 23 (quand l'une
+// d'elles bloque la demande, l'IA propose l'operation au lieu de dire << decoche toi-meme >>). Jointe apres les regles (kRules).
+const char* const kRulesOptions =
+    "\n## Options des variables, s\xC3\xA9" "curit\xC3\xA9, vues\n- modifier_variable : variable (IHM, EXISTANTE ; plusieurs "
+    ": objets), proprietes : lecture_seule (oui/non), description, valeur, unite, dossier, remanente, equipement (aucun : d\xC3\xA9lier), "
+    "adresse (libre : un chevauchement est refus\xC3\xA9), type, renommer (ses emplois suivent), brut_min, brut_max, echelle_min, "
+    "echelle_max, type_brut, bools_par_mot, internes, attribues, compacter. Jamais une variable de l'automate. Ex. : {\"action\": "
+    "\"modifier_variable\", \"variable\": \"Armoires\", \"proprietes\": {\"lecture_seule\": \"non\"}}\n- securite : proprietes "
+    "active (oui/non), depart (login), deconnexion (min), menu_comptes, menu_acces, menu_journal (niveaux du menu de connexion), "
+    "mdp_longueur, mdp_chiffre, mdp_lettre, mdp_casse, mdp_special, mdp_duree, mdp_historique, mdp_premiere, verrou_essais, verrou_minutes, "
+    "avertir. Ex. : {\"action\": \"securite\", \"proprietes\": {\"active\": \"oui\"}}\n- creer_groupe : nom, proprietes niveau "
+    "(1-9), roles (existants), description, vue_demarrage ; modifier_groupe : groupe, les m\xC3\xAAmes, renommer. Ex. : {\"action\": "
+    "\"creer_groupe\", \"nom\": \"Regleurs\", \"proprietes\": {\"niveau\": \"3\", \"roles\": \"Conduite, R\xC3\xA9glages\"}}\n- "
+    "creer_utilisateur : nom (login), proprietes groupe, nom_complet, protection (classique, dynamique), description ; modifier_utilisateur "
+    ": utilisateur (login), proprietes nom_complet, groupe, protection, actif, description, changer, renommer. JAMAIS de mot "
+    "de passe, badge ni secret : le compte cr\xC3\xA9\xC3\xA9 reste d\xC3\xA9sactiv\xC3\xA9, mot de passe \xC3\xA0 d\xC3\xA9" "finir "
+    "par l'utilisateur (Configuration > Utilisateurs). Ex. : {\"action\": \"creer_utilisateur\", \"nom\": \"jdupont\", \"proprietes\": "
+    "{\"groupe\": \"Regleurs\"}}\n- modifier_vue : vue, proprietes parent (aucune : racine), modele, entete, pied (oui, non ou "
+    "le nom du mod\xC3\xA8le), hauteur, largeur, decaler (oui par d\xC3\xA9" "faut : les objets recouverts par la bande glissent, "
+    "\xC3\xA9" "carts gard\xC3\xA9s), agrandir. creer_vue prend aussi parent, modele, entete, pied. Ex. : {\"action\": \"modifier_vue\", "
+    "\"vue\": \"Vue_A\", \"proprietes\": {\"parent\": \"Accueil\", \"entete\": \"oui\"}}\n- vue_de_demarrage : vue. Ex. : {\"action\": "
+    "\"vue_de_demarrage\", \"vue\": \"Accueil\"}\n- Niveau d'acc\xC3\xA8s : la propri\xC3\xA9t\xC3\xA9 access d'un objet (0 : "
+    "tous ; N : un groupe de niveau N ou plus), par modifier. Une vue n'en a pas : prot\xC3\xA8ge ce qui l'ouvre.\n23. Quand "
+    "une option d'une variable (lecture seule...), la s\xC3\xA9" "curit\xC3\xA9 ou un lien de vue bloque la demande, PROPOSE "
+    "l'op\xC3\xA9ration qui la change (dans la m\xC3\xAAme proposition) au lieu de demander \xC3\xA0 l'utilisateur de le faire "
+    "; le contexte dit leur \xC3\xA9tat ([LS] : lecture seule). Jamais de mot de passe : l'utilisateur le donne lui-m\xC3\xAAme. "
+    "Activer la s\xC3\xA9" "curit\xC3\xA9 demande un compte actif qui administre et se connecte. D\xC3\xA9sactiver la s\xC3\xA9" "curit\xC3\xA9, "
+    "retirer le dernier administrateur : sensible, dis-le. Un en-t\xC3\xAAte ou un pied coch\xC3\xA9 : le logiciel corrige la "
+    "place des objets recouverts ; pose les tiens hors des bandes.\n";
+
 // L'exemple du code brut : un bouton qui ouvre une vue, ecrit par le logiciel lui-meme.
 const std::string& codeExample() {
     static const std::string text = [] {
@@ -295,6 +325,22 @@ const std::vector<Fields>& fieldsOf() {
         {A::Resource, {"nom", "piece_jointe", "dossier", "proprietes"}, {"piece_jointe"}},
         {A::Folder, {"liste", "dossier", "proprietes"}, {"liste", "dossier"}},
         {A::Store, {"liste", "dossier", "objets", "proprietes"}, {"liste", "dossier", "objets"}},
+        // 1.22.6 : les options des variables, la securite, les vues - les options dans proprietes (ou au premier niveau).
+        {A::VarEdit, {"variable", "objets", "proprietes", "lecture_seule", "description", "valeur", "valeur_initiale", "unite", "dossier", "remanente",
+                      "equipement", "adresse", "type", "renommer", "brut_min", "brut_max", "echelle_min", "echelle_max", "type_brut", "bools_par_mot",
+                      "internes", "attribues", "compacter"},
+         {}},
+        {A::Security, {"proprietes", "active", "depart", "deconnexion", "menu_comptes", "menu_acces", "menu_journal", "periode", "chiffres",
+                       "mdp_longueur", "mdp_chiffre", "mdp_lettre", "mdp_casse", "mdp_special", "mdp_duree", "mdp_historique", "mdp_premiere",
+                       "verrou_essais", "verrou_minutes", "avertir", "badge"},
+         {}},
+        {A::Group, {"nom", "niveau", "roles", "description", "vue_demarrage", "proprietes"}, {"nom"}},
+        {A::GroupEdit, {"groupe", "niveau", "roles", "description", "vue_demarrage", "renommer", "proprietes"}, {"groupe"}},
+        {A::User, {"nom", "nom_complet", "groupe", "protection", "actif", "description", "proprietes"}, {"nom", "groupe"}},
+        {A::UserEdit, {"utilisateur", "nom_complet", "groupe", "protection", "actif", "description", "changer", "renommer", "proprietes"}, {"utilisateur"}},
+        {A::ViewEdit, {"vue", "parent", "modele", "entete", "pied", "entete_modele", "pied_modele", "hauteur", "largeur", "decaler", "agrandir", "proprietes"},
+         {"vue"}},
+        {A::StartView, {"vue"}, {"vue"}},
     };
     return f;
 }
@@ -318,6 +364,19 @@ std::string malformed(const json::Value& o, std::size_t n) {
     for (const auto& x : fieldsOf())
         if (x.action == *action) f = &x;
     const std::string what = at + " (" + std::string(actionKey(*action)) + ")";
+    // 1.22.6 : JAMAIS UN SECRET - un mot de passe, un badge, un secret (au premier niveau ou dans proprietes) : refuse, sans
+    // jamais redire sa valeur ; rien n'est propose (la proposition qui le porterait ne serait pas gardee).
+    for (const auto& [key, value] : o.members())
+        if (secretField(*action, key))
+            return what + " : \xC2\xAB " + key + " \xC2\xBB refus\xC3\xA9 - l'Assistant ne choisit ni ne transmet jamais de mot de passe, de badge ni de "
+                          "secret (l'utilisateur le donne dans Configuration > Utilisateurs). Repropose sans ce champ.";
+    if (const json::Value* props = o.find("proprietes"); props && props->isObject())
+        for (const auto& [key, value] : props->members())
+            if (secretField(*action, key))
+                return what + " : \xC2\xAB " + key + " \xC2\xBB refus\xC3\xA9 - l'Assistant ne choisit ni ne transmet jamais de mot de passe, de badge ni de "
+                              "secret (l'utilisateur le donne dans Configuration > Utilisateurs). Repropose sans ce champ.";
+    if (*action == Operation::Action::VarEdit && !o.has("variable") && !o.has("objets"))
+        return what + " : \xC2\xAB variable \xC2\xBB manque (le nom d'une variable IHM existante ; plusieurs : \xC2\xAB objets \xC2\xBB).";
     for (const auto& [key, value] : o.members()) {
         if (key == "action" || key == "etape") continue;   // 1.22.0 : "etape" (l'etape de la mission), pour toutes
         if (std::find(f->allowed.begin(), f->allowed.end(), key) != f->allowed.end()) continue;
@@ -450,6 +509,7 @@ PromptParts promptParts(const PromptInput& in) {
 
     std::string& s = out.stable;
     s = kRules;
+    s += kRulesOptions;   // 1.22.6 : les options des variables, la securite, les vues ; la regle 23
     s += "Le code brut d'un objet, tel que le logiciel l'\xC3\xA9" "crit (ici un bouton qui ouvre la vue Accueil) :\n";
     s += codeExample();
     if (!s.empty() && s.back() != '\n') s += '\n';
@@ -688,6 +748,13 @@ std::string operationsTool() {
              {"consigne", "creer_alarme."}, {"piece_jointe", "creer_ressource."}, {"liste", "creer_dossier, ranger."},
              {"dossier", "creer_dossier, ranger... ; creer_variables : le dossier de ses variables (Station de pompage/Pompes/P1)."}})
         props.set(k, str(d));
+    // 1.22.6 : les options des variables, la securite, les vues - leurs cibles (leurs options vont dans proprietes).
+    props.set("utilisateur", str("modifier_utilisateur : le login d'un compte existant."));
+    props.set("groupe", str("creer_alarme ; creer_utilisateur : son groupe ; modifier_groupe : le groupe existant."));
+    props.set("variable", str("associer : une variable EXISTANTE du contexte ; adresser : la variable IHM \xC3\xA0 lier ; modifier_variable : la variable "
+                              "IHM existante (ses options dans proprietes)."));
+    props.set("vue", str("un objet : sa vue (absente : la derni\xC3\xA8re creer_vue au-dessus, sinon la vue ouverte) ; modifier_vue, vue_de_demarrage : "
+                         "la vue vis\xC3\xA9" "e."));
     item.set("properties", props);
     Value req = Value::array();
     req.push("action");
@@ -718,7 +785,8 @@ std::string operationsTool() {
              "Propose des modifications de la vue active d'IHM Studio. Appelle-le pour TOUTE demande qui modifie la vue (cr\xC3\xA9" "er, "
              "modifier, d\xC3\xA9placer, redimensionner, colorer, associer une variable, aligner, r\xC3\xA9partir, dupliquer, supprimer) "
              "ou qui cr\xC3\xA9" "e une vue (un symbole, une popup, un mod\xC3\xA8le, un en-t\xC3\xAAte, un pied), des variables, des types IHM (g\xC3\xA9n\xC3\xA9riques), des "
-             "\xC3\xA9quipements et leurs adresses, des scripts, des fonctions, des alarmes, des ressources, des dossiers, avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
+             "\xC3\xA9quipements et leurs adresses, des scripts, des fonctions, des alarmes, des ressources, des dossiers, les options des variables, "
+             "la s\xC3\xA9" "curit\xC3\xA9 (groupes, utilisateurs, sans mot de passe), les liens des vues, avec toutes les op\xC3\xA9rations en un seul appel. Le logiciel v\xC3\xA9rifie chaque op\xC3\xA9ration (genres, propri\xC3\xA9t\xC3\xA9s, "
              "valeurs, objets, variables) et montre un aper\xC3\xA7u : rien ne change avant que l'utilisateur applique (un Ctrl+Z annule "
              "tout). N'invente ni genre, ni propri\xC3\xA9t\xC3\xA9, ni variable : seulement ceux du registre et du contexte.");
     tool.set("input_schema", schema);

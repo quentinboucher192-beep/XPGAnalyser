@@ -22,6 +22,7 @@
 #include "HmiActionDialogs.hpp"       // 1.11.10 : la fenetre du script (une redefinition)
 #include "HmiActionsPanel.hpp"
 #include "HmiPaneKit.hpp"
+#include "HmiProjectEdits.hpp"          // 1.22.6 : ecran modele, en-tete, pied, vue parente (communs avec l'Assistant IA)
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : les lignes d'un objet deplie (les deux explorateurs)
 #include "HmiValueKind.hpp"           // 1.11.3 : le carre de legende, la liste des carres
 #include "HmiTypePicker.hpp"           // 1.11.19 (lot 6) : le type d'un parametre, au selecteur de types
@@ -1747,27 +1748,10 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             // Une bande d'en-tete ou de pied : de la largeur de l'IHM, 80 de haut.
             if ((role == "entete" || role == "pied") && vv.height > 200) vv.height = 80;
             if (role == "entete" || role == "pied") { vv.templateView = hmi::kNoId; vv.showHeader = vv.showFooter = false; }
-        } else if (field == "modele") {
-            if (value.empty() || value == "(aucun)") { vv.templateView = hmi::kNoId; return; }
-            const auto* t = p.viewByName(value);
-            if (!t || t->role != "modele") { ok = false; why = "'" + value + "' n'est pas un \xC3\xA9" "cran mod\xC3\xA8le"; return; }
-            // Pas de boucle : le modele ne doit pas heriter (de proche en proche) de cette vue.
-            for (const auto* up : hmi::templateChain(p, *t))
-                if (up->id == vv.id) { ok = false; why = "h\xC3\xA9ritage circulaire : " + t->name + " h\xC3\xA9rite d\xC3\xA9j\xC3\xA0 de " + vv.name; return; }
-            if (t->id == vv.id) { ok = false; why = "une vue n'h\xC3\xA9rite pas d'elle-m\xC3\xAAme"; return; }
-            vv.templateView = t->id;
-        } else if (field == "entete") vv.showHeader = hmi::parseBool(value, false);
-        else if (field == "pied") vv.showFooter = hmi::parseBool(value, false);
-        else if (field == "entete_modele" || field == "pied_modele") {
-            const bool head = field == "entete_modele";
-            if (value.empty() || value == "(le premier)") { (head ? vv.header : vv.footer) = hmi::kNoId; return; }
-            const auto* t = p.viewByName(value);
-            if (!t || t->role != (head ? "entete" : "pied")) {
-                ok = false;
-                why = "'" + value + "' n'est pas un mod\xC3\xA8le " + (head ? std::string("d'en-t\xC3\xAAte") : std::string("de pied de page"));
-                return;
-            }
-            (head ? vv.header : vv.footer) = t->id;
+        } else if (app::projedit::isViewLinkField(field) && field != "vue_parente") {
+            // 1.22.6 : ecran modele, en-tete, pied et leurs modeles - le corps commun avec l'Assistant IA (app::projedit).
+            ok = app::projedit::setViewLink(p, vv, field, value, why);
+            return;
         }
         // ---- lot 8 : la popup (sa barre, son comportement, sa place) et les parametres
         else if (field == "popup_titre") vv.popup.titleBar = hmi::parseBool(value, true);
@@ -1797,15 +1781,8 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
         }
         // ---- lot 12 : la vue parente (fil d'Ariane), le zoom en marche
         else if (field == "vue_parente") {
-            if (value.empty() || value == "(aucune)") { vv.upView = hmi::kNoId; return; }
-            const auto* up = p.viewByName(value);
-            if (!up) { ok = false; why = "'" + value + "' : vue introuvable"; return; }
-            // Pas de boucle : la parente ne doit pas descendre (de proche en proche) de cette vue.
-            for (const auto* x = up; x; x = x->upView != hmi::kNoId ? p.view(x->upView) : nullptr) {
-                if (x->id == vv.id) { ok = false; why = "boucle : " + up->name + " a d\xC3\xA9j\xC3\xA0 " + vv.name + " pour parente"; return; }
-                if (x->upView == x->id) break;
-            }
-            vv.upView = up->id;
+            ok = app::projedit::setViewLink(p, vv, field, value, why);   // 1.22.6 : pas de boucle (app::projedit)
+            return;
         } else if (field == "zoom") vv.zoomable = hmi::parseBool(value, false);
         else ok = false;
     });

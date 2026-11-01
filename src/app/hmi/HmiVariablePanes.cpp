@@ -33,6 +33,7 @@
 #include "../../hmi/HmiRuntime.hpp"         // 1.12.14 : la valeur initiale deballee (Runtime::valueObject)
 #include "HmiUnfold.hpp"                    // 1.12.14 : la valeur d'une partie, d'une propriete
 #include "HmiUnitPanes.hpp"                 // 1.13.0 (lot J6b) : la colonne Unite, le selecteur d'unites
+#include "HmiProjectEdits.hpp"              // 1.22.6 : la valeur initiale, les membres internes (communs avec l'Assistant IA)
 #include "../../hmi/HmiUnits.hpp"
 
 #include <algorithm>
@@ -258,46 +259,8 @@ bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string curre
 // pour un nom (le moteur l'ecrivait illisible au demarrage), 2,5 et 5s etaient refuses.
 using hmi::typedInitial;
 
-bool validInitial(const hmi::Project& p, const std::string& type, const std::string& initial, std::string* why) {
-    if (trimmed(initial).empty()) return true;
-    // 1.12.2 : un type objet - un litteral que le moteur range dans son type ([1, 2, 3], ['a' := 1], (1, 'x')).
-    if (ty::isRich(type)) {
-        std::string w;
-        if (hmi::typeform::valueFits(p, type, initial, &w)) return true;
-        return fail(why, "valeur initiale illisible pour un " + ty::normalized(type) + " : " + w + " (" + std::string(hmi::typeform::valueHint(hmi::typeform::decompose(type).form)) + ")");
-    }
-    // 1.10 (chantier U) : une enumeration prend le nom d'une de ses valeurs (T_MODE#Auto, le texte, le nombre).
-    if (const auto* e = hmi::findEnumeration(p, type)) {
-        std::int64_t n = 0;
-        if (hmi::enumNumberOf(*e, initial, n)) return true;
-        std::string names;
-        for (std::size_t i = 0; i < e->values.size() && i < 6; ++i) names += (names.empty() ? "" : ", ") + e->values[i].name;
-        return fail(why, "valeur inconnue de " + e->name + " : " + names);
-    }
-    const auto f = ty::isComposite(type) ? ty::flatten(p, "x", type, initial) : ty::Flat{};
-    // 1.12.10 (lot F) : une structure prend un litteral (Marche := TRUE, Consigne := 12.5) - les membres nommes,
-    // les autres gardent la valeur de leur type ; un tableau de structures, un litteral par element
-    // [(Nom := 'Cuve A', Niveau := 4.2), (...)]. Avant : refuse (« une structure prend les valeurs initiales de
-    // son type »). Ce que le moteur ne pourrait pas appliquer est refuse, avec la raison.
-    if (!f.notes.empty()) {
-        std::string note = f.notes.front();
-        if (note.rfind("x : ", 0) == 0) note.erase(0, 4);
-        else if (note.rfind("x.", 0) == 0) note.erase(0, 2);
-        else if (note.rfind("x[", 0) == 0) note.erase(0, 1);
-        for (const char* tail : {" - la valeur du type reste", " - les valeurs du type "})
-            if (const auto at = note.find(tail); at != std::string::npos) note.erase(at);
-        return fail(why, note.rfind("valeur initiale", 0) == 0 ? note : "valeur initiale : " + note);
-    }
-    std::vector<std::string> texts;
-    if (ty::isComposite(type)) for (const auto& l : f.leaves) texts.push_back(l.initial);
-    else texts.push_back(initial);
-    for (const auto& text : texts) {
-        if (text.empty()) continue;
-        const auto e = hmi::Expression::compile(text);
-        if (!e.valid()) return fail(why, "valeur initiale illisible : " + text + " (" + e.error() + ")");
-    }
-    return true;
-}
+// 1.22.6 : le controle de la valeur initiale, commun avec l'Assistant IA (app::projedit, sans rien changer).
+using projedit::validInitial;
 
 // 1.10 (chantier U) : la valeur initiale d'une variable d'enumeration, montree
 // << Auto (1) >> (vide : la premiere valeur ; inconnue : telle quelle, avec ?).
@@ -2499,50 +2462,16 @@ bool HmiVariablesPane::setMembersInternal(Id id, const std::vector<std::string>&
     if (!v) return fail(why, "variable introuvable");
     if (!v->bound()) return fail(why, v->name + " n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement : ses membres sont d\xC3\xA9j\xC3\xA0 dans l'IHM");
     if (!ty::isComposite(v->type)) return fail(why, v->name + " n'a pas de membres");
+    // 1.22.6 : le calcul des membres internes, commun avec l'Assistant IA (app::projedit, sans rien changer).
     std::vector<std::string> wanted;
     for (const auto& r : relPaths) {
         const std::string rel = trimmed(r);
         if (rel.empty()) continue;
-        if (ty::typeOfPath(doc_->project, v->name + (rel.front() == '[' ? "" : ".") + rel).empty())
-            return fail(why, rel + " : pas un membre de " + v->name);
         const std::string pattern = allElements ? allElementsOf(rel) : rel;
         if (std::find(wanted.begin(), wanted.end(), pattern) == wanted.end()) wanted.push_back(pattern);
     }
-    if (wanted.empty()) return fail(why, "aucun membre choisi");
-    // Les cases de la variable (sans membres internes) : pour defaire un motif qui en couvre plus.
-    hmi::Variable all = *v;
-    all.internal.clear();
-    std::vector<std::string> rels;
-    for (const auto& l : ty::leafVariables(doc_->project, all)) {
-        const std::string rest = l.name.substr(std::min(l.name.size(), v->name.size()));
-        rels.push_back(!rest.empty() && rest.front() == '.' ? rest.substr(1) : rest);
-    }
-    std::vector<std::string> next = v->internal;
-    for (const auto& pattern : wanted) {
-        if (internal) {
-            // Deja couvert : rien a faire ; sinon il remplace ceux qu'il couvre.
-            if (std::any_of(next.begin(), next.end(), [&](const std::string& e) { return ty::memberCovers(e, pattern); })) continue;
-            std::erase_if(next, [&](const std::string& e) { return ty::memberCovers(pattern, e); });
-            next.push_back(pattern);
-            continue;
-        }
-        // Attribuer : retirer ce qu'il couvre ; un motif plus large ([*].NOM pour [0].NOM) se defait
-        // en ses cases, moins celles-ci.
-        std::vector<std::string> keep, expanded;
-        for (const auto& e : next) {
-            if (ty::memberCovers(pattern, e)) continue;                       // lui, ou dessous
-            if (!ty::memberCovers(e, pattern) && !std::any_of(rels.begin(), rels.end(), [&](const std::string& r) {
-                    return ty::memberCovers(e, r) && ty::memberCovers(pattern, r);
-                })) {
-                keep.push_back(e);
-                continue;
-            }
-            for (const auto& r : rels)
-                if (ty::memberCovers(e, r) && !ty::memberCovers(pattern, r)) expanded.push_back(r);
-        }
-        for (auto& x : expanded) keep.push_back(std::move(x));
-        next = std::move(keep);
-    }
+    std::vector<std::string> next;
+    if (!projedit::membersInternal(doc_->project, *v, relPaths, internal, allElements, next, why)) return false;
     if (next == v->internal) return true;
     std::string what;
     for (const auto& w : wanted) what += (what.empty() ? "" : ", ") + w;
