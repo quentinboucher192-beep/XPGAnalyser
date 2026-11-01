@@ -50,6 +50,7 @@
 #include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
 #include "ai/AiAssistant.hpp"       // 1.20.0 : l'IA choisie analyse les incidents
 #include "ai/AiKeys.hpp"
+#include "ai/AiNotifications.hpp"   // 1.21.2 : le journal des notifications de l'Assistant (IA/notifications.json)
 #include "ai/AiPanel.hpp"
 #include "ai/AiStore.hpp"
 #include "ai/AiOpenAI.hpp"
@@ -281,6 +282,9 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto iaDir = std::filesystem::path(Settings::sharedFolder()) / "IA";
         const auto u8 = iaDir.u8string();
         app::ai::setRoot(std::string(u8.begin(), u8.end()));
+        // 1.21.2 : les notifications de l'Assistant - relues sur le fil du journal (l'interface n'attend pas le disque),
+        // ecrites au plus une fois par seconde sur ce meme fil.
+        app::ai::notifs::open(app::ai::notificationsFile());
     }
     // ---- fin Lot API 8 ----
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);
@@ -462,6 +466,7 @@ App::~App() {
     recovery_.stop();       // lot 15 : une sortie normale - le verrou s'efface
     notify_.shutdown();
     incidents_.shutdown();  // 1.20.0 : les ecritures en cours finissent
+    app::ai::notifs::close();   // 1.21.2 : les notifications de l'Assistant, ecrites une derniere fois (apres les incidents)
     web_.shutdown();
     // Persist on the way out: the workspace a user arranged should survive
     // closing the program, including when they close it with the window button.

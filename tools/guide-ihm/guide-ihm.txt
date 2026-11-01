@@ -1776,7 +1776,7 @@ Chaque changement est écrit au journal.
 == assistant-ia | L'Assistant IA
 : Un panneau à droite de l'éditeur de vues : on y décrit en français ce qu'on veut dans la vue ouverte, l'Assistant propose des opérations sur les vrais objets du logiciel, on les voit avant de les appliquer, et un seul Ctrl+Z les reprend. Il travaille d'emblée avec l'**IA intégrée** (sans connexion : rien ne quitte le PC), et se branche sur une IA en ligne – Anthropic (Claude), avec ta clé API ou le relais de ton entreprise – ou sur un service **compatible OpenAI** : une IA gratuite sur ce PC (Ollama, LM Studio, sans clé ni connexion) ou un service en ligne (OpenRouter, Groq, Google Gemini, Mistral…). Une bande sous l'en-tête montre **en direct** la limite du service et ce que tu as consommé.
 @depuis 1.14.2
-@mots ASSISTANT, IA, ASSISTANT IA, PROPOSITION, APERÇU, CLÉ API, CLÉS API, GÉRER LES CLÉS, GESTIONNAIRE DES CLÉS, CLAUDE, ANTHROPIC, RELAIS, MODÈLE, IA INTÉGRÉE, OPENAI, COMPATIBLE OPENAI, OLLAMA, LM STUDIO, OPENROUTER, GROQ, GEMINI, MISTRAL, IA GRATUITE, LIMITE, JETONS, BUDGET, FENÊTRE DE CONTEXTE, IA INTÉGRÉE D'ABORD
+@mots ASSISTANT, IA, ASSISTANT IA, NOTIFICATIONS DE L'ASSISTANT, NON LUES, TOUT MARQUER COMME LU, EFFACER LES LUES, PROPOSITION, APERÇU, CLÉ API, CLÉS API, GÉRER LES CLÉS, GESTIONNAIRE DES CLÉS, CLAUDE, ANTHROPIC, RELAIS, MODÈLE, IA INTÉGRÉE, OPENAI, COMPATIBLE OPENAI, OLLAMA, LM STUDIO, OPENROUTER, GROQ, GEMINI, MISTRAL, IA GRATUITE, LIMITE, JETONS, BUDGET, FENÊTRE DE CONTEXTE, IA INTÉGRÉE D'ABORD
 @lieux ai.panneau, dialog.ai.apercu, dialog.ai.parametres, dialog.ai.cles
 @voir editeur, objets, historique, assistant-ia-integree, assistant-ia-registre, memoire-ia
 - **Ctrl+Maj+I** le montre ou le replie (« I » comme IA).
@@ -1894,6 +1894,27 @@ LM Studio se règle de la même façon (Service **LM Studio**, son serveur local
 ### Un service en ligne gratuit
 OpenRouter (certains modèles marqués « free »), Groq, Google Gemini et Mistral ont souvent une offre gratuite, limitée en demandes par minute ou par jour : crée un compte chez eux, copie leur clé dans **Clé API**, choisis le Service, puis **Lister les modèles**. Leurs conditions changent : la bande montre en direct ce qu'il te reste.
 ! Un service en ligne reçoit ta demande et le contexte de la vue (selon tes réglages de confidentialité). Lis ses conditions : certaines offres gratuites se réservent le droit d'utiliser les demandes.
+@nouveau 1.21.2
+### Les notifications de l'Assistant (1.21.2)
+Sous l'en-tête du panneau, deux onglets : **Conversation** (tout ce qui précède) et **Notifications**. La pastille de l'onglet Notifications compte celles que tu n'as pas encore lues : **rouge** s'il y a une erreur non lue, de la couleur d'accent sinon ; rien quand tout est lu. Au survol : le nombre et la plus récente. Un clic montre les notifications à la place de la conversation ; un autre clic, ou l'onglet Conversation, y revient (rien n'est perdu : la saisie, les pièces en attente, la réponse en cours restent).
+L'Assistant y note ce qui s'est passé pendant que tu regardais ailleurs, et ce qui mérite ton attention – jamais à chaque cycle :
+| Notification | Quand | Son bouton mène à |
+| Réponse prête, Proposition prête | Une réponse finit quand sa conversation n'est pas à l'écran (une autre conversation ouverte, le panneau replié, l'onglet Notifications devant, la fenêtre derrière une autre). | La conversation et ce message ; la carte de la proposition, son plan déplié. |
+| Proposition appliquée, non appliquée | Appliquer a réussi (ce qui est créé, les erreurs laissées de côté) ou a échoué (la raison ; le projet n'a pas changé), aussi en arrière-plan et en mode Direct. | La carte de la proposition. |
+| Erreur du service | Clé API refusée, limite atteinte, service indisponible, pas de réseau : le texte de l'erreur. La même erreur répétée reste une ligne (« ×3 »). | Le message en erreur (Réessayer y est). |
+| Pièce jointe illisible ; classeur reconnu ou lu | L'analyse d'un fichier joint a échoué ; un classeur (.xlsx, .xlsm) a été reconnu (un modèle de fichier) ou lu. | Le contexte de la discussion, déplié sur la pièce ; la fenêtre Modèle de fichier. |
+| Modèle de fichier enregistré | « Enregistrer comme modèle » dans la fenêtre Modèle de fichier. | Cette fenêtre, pour ce classeur. |
+| Souvenirs à valider ; souvenir en conflit | L'IA a proposé des souvenirs (rien n'est retenu sans ton accord) ; l'un d'eux contredit ce qui est déjà retenu. | Mémoire et apprentissage › Souvenirs, filtré (à valider, en conflit). |
+| Bac à sable | Un essai de code de l'IA est terminé (réussi, à corriger, ou impossible) – sur une copie du projet. | La réponse qui l'a fait. |
+| Scan réseau terminé | Le scan que l'IA a préparé (la confirmation qu'elle a ouverte, ou « Détecter ce qui répond… ») est fini : la première ligne du compte rendu. | Communication › Scanner IP, le compte rendu. |
+| Analyse IA d'un incident | L'IA connectée a fini d'analyser un incident (ou l'analyse reste en attente) – pas la fiche faite sur le PC à chaque incident. | IHM › Ressources › Incidents, cet incident. |
+La plus récente est en haut, rangée par jour (**Aujourd'hui**, **Hier**, puis la date). Chaque ligne : la couleur et l'icône de son ton (erreur, attention, réussi, information), l'heure, sa catégorie, le titre (en gras tant qu'elle n'est pas lue), deux lignes de détail (le reste au survol), « ×3 » si elle s'est répétée (la même remonte en tête, non lue), et son bouton.
+- **Toutes** | **Non lues** (leurs nombres) filtrent la liste. Dans Non lues, une ligne que tu viens de lire reste à sa place, grisée, jusqu'au prochain choix du filtre.
+- Une ligne choisie (un clic, les flèches) devient **lue** ; un double-clic ou **Entrée** suit son bouton.
+- **Tout marquer comme lu** (la coche) et **Effacer les lues** (la gomme) : grisés quand il n'y a rien à faire.
+- Le clic droit : Ouvrir, Marquer comme lue / non lue, Copier, Supprimer. Au clavier : Haut, Bas, Début, Fin, Page précédente / suivante, **Espace** (lue / non lue), **Suppr**, **Ctrl+C**, la touche Menu.
+Les notifications sont gardées dans le dossier IA (notifications.json, à côté des conversations) : 300 au plus, les plus anciennes lues partent d'abord. Le fichier est relu et écrit en arrière-plan (au plus une fois par seconde) : l'interface n'attend jamais le disque.
+> Un lien qui ne mène plus nulle part (une conversation supprimée, un incident validé ailleurs) le dit dans la barre d'état ; la notification reste, à toi de l'effacer.
 
 == assistant-ia-plan | Le plan d'action, le compte rendu et les questions sur le projet
 : Une demande complexe devient un plan d'action : des étapes rangées par leurs dépendances, vérifiées sur une copie du projet, appliquées d'un bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant répond aussi aux questions sur les relations du projet, le vérifie en entier et propose de ranger ses adresses.

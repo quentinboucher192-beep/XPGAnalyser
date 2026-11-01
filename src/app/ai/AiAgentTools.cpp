@@ -116,13 +116,13 @@ LocalTool analyseTool(std::shared_ptr<const hmi::Project> snapshot) {
     return t;
 }
 
-LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string program) {
+LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string program, SandboxFinished finished) {
     LocalTool t;
     t.name = std::string(sandbox::kTool);
     t.definitionJson = sandbox::toolJson();
     t.maxCalls = sandbox::kMaxRuns;
-    t.run = [snap = std::move(snapshot), program = std::move(program)](const std::string& input, const std::function<void(const std::string&)>& status,
-                                                                       const std::atomic<bool>& cancelled) -> std::string {
+    t.run = [snap = std::move(snapshot), program = std::move(program), finished = std::move(finished)](
+                const std::string& input, const std::function<void(const std::string&)>& status, const std::atomic<bool>& cancelled) -> std::string {
         sandbox::Job job;
         std::string bad;
         if (!sandbox::jobFromJson(input, job, &bad))
@@ -137,6 +137,9 @@ LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string 
         else if (comp && comp->state == sandbox::State::Ok && o.cases.empty()) said += "compil\xC3\xA9" "e, aucun cas";
         else said += "\xC3\xA0 corriger";
         status(said);
+        // 1.21.2 : l'onglet Notifications de l'Assistant (un essai arrete par Arreter n'est pas << termine >>)
+        if (finished && !cancelled.load())
+            finished(said, !o.error.empty() ? "error" : o.testsPassed() || (comp && comp->state == sandbox::State::Ok && o.cases.empty()) ? "ok" : "warning");
         return o.report();
     };
     return t;

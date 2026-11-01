@@ -21,6 +21,13 @@
 //
 //  Le panneau ne fait que montrer et demander : la seance (ai::Assistant) garde
 //  les conversations et applique ; l'hote (l'ecran) ouvre les fenetres.
+//
+//  1.21.2 : DEUX ONGLETS sous l'en-tete - << Conversation >> (tout ce qui est
+//  dit plus haut) et << Notifications >> (sa pastille : le nombre de non lues,
+//  rouge s'il y a une erreur non lue). Le second montre, a la place de la
+//  conversation, le journal de l'Assistant (AiNotificationsView,
+//  AiNotifications.hpp) ; un autre clic, ou l'onglet Conversation, y revient.
+//  Le bouton d'une notification mene a la chose (followNotification).
 // =============================================================================
 #pragma once
 
@@ -47,6 +54,7 @@ namespace app::ai {
 class AiChatView;
 class AiPlanStrip;
 class AiContextPane;   // 1.21.0
+class AiNotificationsView;   // 1.21.2
 
 // Le champ de la demande : UN CHAMP DE MESSAGE, pas un editeur de code (les captures 1.14.2 :
 // la gouttiere, la bande de la ligne courante, la marque "modifie" sur l'indication, le texte
@@ -137,6 +145,15 @@ public:
         // proposee) : l'ecran ouvre Communication > Scanner IP, la plage remplie - SANS lancer : c'est l'utilisateur qui
         // clique Demarrer. Faux et `why` : l'onglet n'a pas pu s'ouvrir.
         std::function<bool(const std::string& equipment, const std::string& range, std::string* why)> openScan;
+        // ---- 1.21.2 : l'onglet Notifications (a la fin ; nuls : les essais) ----
+        // La fenetre a le clavier (nul : oui) - une reponse qui arrive fenetre derriere une autre est notee.
+        std::function<bool()> windowFocused;
+        // Memoire et apprentissage > Souvenirs, filtre sur ce statut ("provisoire" : a valider, "conflits") ; nul : openMemory.
+        std::function<void(const std::string& status)> openSouvenirs;
+        // Le compte rendu du dernier scan (Communication > Scanner IP) ; faux : pas ouvert.
+        std::function<bool()> showScanReport;
+        // IHM > Ressources > Incidents, ce dossier d'incident choisi ; faux : introuvable.
+        std::function<bool(const std::string& folderName)> openIncident;
     };
 
     AiPanel(std::string id, Assistant::Host core, UiHost ui);
@@ -207,6 +224,20 @@ public:
     // Le menu du clic droit d'une conversation (Renommer, Supprimer...).
     void openRowMenu(int index, gfx::Point at);
     enum MenuId : int { kMenuOpen = 1, kMenuRename, kMenuDelete, kMenuNew };
+
+    // ---- 1.21.2 : L'ONGLET NOTIFICATIONS ----------------------------------------------------
+    void showNotifications(bool on);               // l'onglet Notifications (vrai) ou Conversation (faux)
+    [[nodiscard]] bool notificationsShown() const noexcept { return notifsShown_; }
+    [[nodiscard]] AiNotificationsView& notifications() noexcept { return *notifView_; }
+    [[nodiscard]] gfx::Rect conversationTabRect() const noexcept { return tabConv_; }
+    [[nodiscard]] gfx::Rect notificationsTabRect() const noexcept { return tabNotifs_; }
+    // La pastille de l'onglet : les non lues (0 : pas de pastille), rouge s'il y a une erreur non lue (sinon l'accent).
+    [[nodiscard]] std::size_t badgeCount() const noexcept { return badge_; }
+    [[nodiscard]] bool        badgeAlert() const noexcept { return badgeError_; }
+    // Le bouton d'une notification (AiNotifications.hpp, ses liens) : la conversation et le message, la carte, la piece
+    // jointe, la fenetre << Modele de fichier >>, les Souvenirs, le compte rendu du scan, l'incident. Faux : introuvable
+    // (la barre d'etat le dit).
+    bool followNotification(const std::string& action);
 
     [[nodiscard]] UiHost& uiHost() noexcept { return ui_; }
     // La part du separateur que l'ecran a posee pour la largeur par defaut (-1 : aucune) ; une
@@ -279,6 +310,18 @@ private:
     UsageBand                band_;
     std::vector<std::string> bandLines_;
     std::string              bandKey_;
+    // 1.21.2 : l'onglet Notifications (les deux onglets sous l'en-tete, la vue du journal, la pastille).
+    void                     syncNotifications();                         // le journal a change : la vue, la pastille
+    [[nodiscard]] bool       looking(const std::string& conversation) const;   // cette conversation est-elle a l'ecran ?
+    void                     notifyReply(const Conversation& c);          // une reponse prete hors de la vue
+    AiNotificationsView*     notifView_{nullptr};
+    bool                     notifsShown_{false};
+    gfx::Rect                tabs_{}, tabConv_{}, tabNotifs_{};
+    std::uint64_t            notifsSeen_{~0ull};
+    std::size_t              badge_{0};
+    bool                     badgeError_{false};
+    std::string              latest_;                                     // la plus recente (l'infobulle de l'onglet)
+    int                      hoverTab_{-1};
 };
 
 // =============================================================================

@@ -176,6 +176,13 @@ public:
     [[nodiscard]] std::shared_ptr<const sheets::Workbook> workbookOf(const std::string& attachmentId) const;
     // La piece (de la conversation ouverte, ou en attente d'envoi) ; nul : introuvable.
     [[nodiscard]] const Attachment* attachmentById(const std::string& attachmentId) const;
+    // 1.21.2 : la piece dans TOUTES les conversations (et les pieces en attente) - une notification peut viser une piece
+    // d'une conversation fermee ; `conversation` : la sienne (en attente : la conversation ouverte). Nul : introuvable.
+    [[nodiscard]] const Attachment* findAttachment(const std::string& attachmentId, std::string* conversation = nullptr) const;
+    // 1.21.2 : un scan prepare par l'IA vient d'etre propose (la confirmation ouverte) : le prochain compte rendu qui
+    // arrive (dans les kScanAwaitSeconds) va dans l'onglet Notifications.
+    void expectScan();
+    static constexpr double kScanAwaitSeconds = 1800.0;
     // LE CHOIX de la fenetre << Modele... >> (une correspondance, un modele existant) : garde avec la piece et enregistre ;
     // un modele choisi compte une utilisation. clear : revenir a la reconnaissance de l'analyse.
     bool setWorkbookChoice(const std::string& attachmentId, const sheets::Choice& choice, std::string* why = nullptr);
@@ -404,6 +411,7 @@ private:
     std::unique_ptr<attach::Analyzer>      analyzer_;
     std::shared_ptr<std::atomic<int>>      proposedMemories_ = std::make_shared<std::atomic<int>>(0);
     std::string                            boundProject_;
+    double                                 scanAwaited_{-1.0};   // 1.21.2 : la seconde ou l'IA a prepare un scan (-1 : aucun)
     void submitAnalysis(Attachment& a);
     void pollAnalyses();
     // 1.21.0 : les classeurs lus (par piece jointe), et leurs lectures en cours (une ancienne conversation rouverte : ses

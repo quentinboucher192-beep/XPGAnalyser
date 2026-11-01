@@ -5,6 +5,7 @@
 
 #include "../Capture.hpp"
 #include "../ai/AiJson.hpp"
+#include "../ai/AiNotifications.hpp"   // 1.21.2 : l'analyse IA d'un incident, dans l'onglet Notifications de l'Assistant
 #include "../../core/AtomicFile.hpp"
 #include "../../core/Version.hpp"
 #include "../../hmi/HmiRecording.hpp"
@@ -1162,14 +1163,19 @@ void IncidentHost::pollAnalysis() {
     provider_.reset();
     auto store = store_;
     const std::string folder = current_ ? current_->folder : std::string{};
+    // 1.21.2 : l'alarme, pour l'onglet Notifications de l'Assistant (l'IA qui analyse est celle choisie dans l'Assistant)
+    const std::string alarm = !current_ ? std::string{}
+                              : !current_->snapshot.alarm.name.empty() ? current_->snapshot.alarm.name : current_->snapshot.trigger.name;
     current_.reset();
     answer_.clear();
     if (!store || folder.empty()) return;
-    post([this, store, folder, a]() mutable {
+    post([this, store, folder, a, alarm]() mutable {
         std::string w;
         if (!store->addAnalysis(folder, a, &w)) postEvent("Analyse non enregistr\xC3\xA9" "e : " + w);
         else if (a.state == "faite") postEvent("Analyse IA ajout\xC3\xA9" "e (" + a.source + ") : " + U(P(folder).filename()));
         else postEvent("Analyse en attente (" + a.error + ") : l'incident est gard\xC3\xA9, relance-la plus tard");
+        // 1.21.2 : le resultat de l'analyse par l'IA distante (jamais la fiche faite sur le PC) - sur ce fil d'ecriture
+        if (w.empty()) app::ai::notifs::incidentAnalysed(alarm, U(P(folder).filename()), a.state == "faite", a.source, a.error);
         relist(store);
     });
 }
