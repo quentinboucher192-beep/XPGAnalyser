@@ -279,6 +279,16 @@ public:
     [[nodiscard]] bool needsConfirm(int message) const;
     // Le choix de l'utilisateur pour une variable introuvable (une variable existante, ou la creer).
     bool chooseVariable(int message, VariableChoice choice);
+    // 1.22.1 : LES CORRECTIONS (le clic droit sur une erreur de l'apercu ou de la carte, AiFixes.hpp) - la proposition change,
+    // JAMAIS le projet ; elle est gardee avec la conversation et se revalide par son chemin habituel (la carte, l'apercu ;
+    // sur un fil de fond pour une grosse). Faux : plus << proposee >>, ou rien de valable a poser.
+    //  - chooseVariable : la variable introuvable `from` (toutes les operations qui la citent) - une variable existante a la
+    //    place (choice.use), ou la creer (choice.create, choice.type ; choice.use : le nom a creer, vide : creatableName) ;
+    //  - clearChoice : revenir sur ce choix (la variable redevient introuvable, son erreur revient) ;
+    //  - excludeOps : retirer (ou remettre) plusieurs operations d'un coup, comme setExcluded (une seule ecriture).
+    bool chooseVariable(int message, const std::string& from, VariableChoice choice);
+    bool clearChoice(int message, const std::string& from);
+    bool excludeOps(int message, const std::vector<std::size_t>& ops, bool excluded);
     // 1.14.2 : CE QU'EST DEVENUE UNE PROPOSITION APPLIQUEE, d'apres la vue telle qu'elle est (les
     // empreintes d'avant et d'apres Appliquer) : toujours appliquee ; annulee (Ctrl+Z, ou le projet
     // rouvert sans avoir ete enregistre : la vue est revenue a son etat d'avant) ; ou la vue a change

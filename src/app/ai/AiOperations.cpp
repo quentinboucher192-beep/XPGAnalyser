@@ -212,6 +212,26 @@ const std::vector<std::string>& elementaryTypes() {
     return all;
 }
 
+// 1.22.1 : LE TYPE CONSEILLE pour creer une variable introuvable (le clic droit << Creer la variable >>, AiFixes) - d'apres
+// son nom (Cmd, Raz : BOOL ; Nb, Cpt : DINT ; Temperature, Niveau, Debit : REAL) et l'objet qui la lit (un champ de saisie :
+// STRING ; une cuve, une courbe : REAL) ; sinon BOOL (une commande, un etat). Un conseil : l'utilisateur choisit le type.
+std::string suggestedType(std::string_view name, hmi::Kind kind) {
+    if (hmi::kindTakesText(kind)) return "STRING";
+    std::string leaf(name);
+    if (const auto dot = leaf.find_last_of('.'); dot != std::string::npos) leaf = leaf.substr(dot + 1);
+    const std::string l = lower(leaf);
+    const auto starts = [&](std::string_view w) { return l.rfind(w, 0) == 0; };
+    for (const char* w : {"raz", "reset", "cmd", "etat", "def", "alarme", "marche", "arret"})
+        if (starts(w)) return "BOOL";
+    for (const char* w : {"nb", "cpt", "compt", "count", "nombre", "index", "idx"})
+        if (starts(w)) return "DINT";
+    for (const char* w : {"temp", "niveau", "level", "debit", "pression", "mesure", "consigne", "vitesse", "valeur", "pourcent", "ouverture",
+                          "position", "puissance", "courant", "tension"})
+        if (l.find(w) != std::string::npos) return "REAL";
+    if (hmi::kindHasLevel(kind) || hmi::kindIsChart(kind)) return "REAL";
+    return "BOOL";
+}
+
 // ---- le moteur : valider (check) ou appliquer (touched), une seule lecture des operations ----
 struct Run {
     const hmi::Project& project;
@@ -236,6 +256,10 @@ struct Run {
     // 1.19.0 : les variables creees par les unites precedentes du plan (en minuscules) - deja posees dans le projet de
     // travail, mais toujours << creees par la proposition >> pour l'utilisateur.
     const std::set<std::string>* plannedVars{nullptr};
+    // 1.22.1 : l'operation en cours (son indice dans `p.ops`) - les defauts structures (Check::faults) la notent ; les plus
+    // proches d'une variable introuvable, cherchees une fois par nom (une grosse proposition la cite souvent).
+    std::size_t current{0};
+    std::map<std::string, std::vector<std::string>> nearCache{};
 
     [[nodiscard]] const Env& environment() const {
         static const Env none;
@@ -415,7 +439,22 @@ struct Run {
         if (!prop) return fail(label(o) + " ne se relie pas \xC3\xA0 une variable.");
         std::string name = requested;
         const bool found = exists(name);
-        if (!found) {
+        const VariableChoice* chosen = found ? nullptr : choiceFor(p, requested);   // 1.22.1 : le choix pour CETTE variable
+        bool toCreate = false;
+        if (chosen) {
+            if (!chosen->create) {
+                if (!exists(chosen->use))
+                    return fail("La variable choisie \xC2\xAB " + chosen->use + " \xC2\xBB n'existe pas non plus.");
+                name = chosen->use;
+            } else {
+                name = trimmed(chosen->use).empty() ? creatableName(requested) : trimmed(chosen->use);
+                if (!hmi::isIdentifier(name)) return fail("\xC2\xAB " + name + " \xC2\xBB n'est pas un nom de variable valable.");
+                toCreate = !exists(name);
+                const std::string type = chosen->type.empty() ? std::string("BOOL") : chosen->type;
+                if (toCreate)
+                    warn("La variable " + name + " (" + type + ") sera cr\xC3\xA9\xC3\xA9" "e dans les variables de l'IHM, \xC3\xA0 ta demande.");
+            }
+        } else if (!found) {
             if (!p.variable.use.empty()) {
                 if (!exists(p.variable.use))
                     return fail("La variable choisie \xC2\xAB " + p.variable.use + " \xC2\xBB n'existe pas non plus.");
@@ -435,16 +474,31 @@ struct Run {
                     noteModified(o);
                 }
                 if (touched && preview && !createdIds.count(o.id)) touched->modified.push_back(o.id);
-                return fail("La variable \xC2\xAB " + name + " \xC2\xBB n'existe pas dans le projet : l'Assistant ne l'invente pas. "
-                            "Choisis une variable existante, ou demande sa cr\xC3\xA9" "ation.");
+                const std::string msg = "La variable \xC2\xAB " + name + " \xC2\xBB n'existe pas dans le projet : l'Assistant ne l'invente pas. "
+                                        "Choisis une variable existante, ou demande sa cr\xC3\xA9" "ation.";
+                if (check) {   // 1.22.1 : le defaut structure (le clic droit : utiliser une proche, creer, retirer)
+                    Check::Fault f;
+                    f.op = current;
+                    f.kind = "variable";
+                    f.name = name;
+                    const auto [cached, fresh] = nearCache.try_emplace(name);
+                    if (fresh) cached->second = nearVariables(project, name, 5);
+                    f.closest = cached->second;
+                    f.message = msg;
+                    f.type = suggestedType(name, o.kind);
+                    check->faults.push_back(std::move(f));
+                }
+                return fail(msg);
             }
         }
         change(o, {"variable", prop->value, name});
         if (Item* it = itemFor(whatOf(o), o)) it->variable = name;
         if (check)
             check->bindings.push_back(o.name + kArrow + name
-                                      + (found ? ((newVar(name) && !variableExists(project, name, environment())) || (plannedVars && plannedVars->count(lower(rootOf(name)))) ? std::string(" (cr\xC3\xA9\xC3\xA9" "e par la proposition)") : std::string{})
-                                               : p.variable.create ? " (\xC3\xA0 cr\xC3\xA9" "er)" : std::string{}));
+                                      + (chosen ? (!toCreate ? " (\xC3\xA0 la place de " + requested + ")"
+                                             : name == requested ? std::string(" (\xC3\xA0 cr\xC3\xA9" "er)") : " (\xC3\xA0 cr\xC3\xA9" "er, pour " + requested + ")")
+                                         : found ? ((newVar(name) && !variableExists(project, name, environment())) || (plannedVars && plannedVars->count(lower(rootOf(name)))) ? std::string(" (cr\xC3\xA9\xC3\xA9" "e par la proposition)") : std::string{})
+                                                 : p.variable.create ? " (\xC3\xA0 cr\xC3\xA9" "er)" : std::string{}));
         prop->value = name;
         prop->expr.clear();
         noteModified(o);
@@ -1884,6 +1938,7 @@ struct Run {
     bool go() {
         for (std::size_t index = 0; index < p.ops.size(); ++index) {
             const Operation& op = p.ops[index];
+            current = index;   // 1.22.1
             bool ok = true;
             Span span;
             span.op = index;
@@ -2181,6 +2236,32 @@ bool variableExists(const hmi::Project& p, std::string_view name, const Env& env
     if (p.variable(root)) return true;
     if (env.plcName && (env.plcName(root) || env.plcName(name))) return true;
     return false;
+}
+
+const VariableChoice* choiceFor(const Proposal& p, std::string_view missing) {
+    if (p.choices.empty()) return nullptr;
+    const std::string want = trimmed(missing);
+    for (const auto& c : p.choices)
+        if (!c.from.empty() && iequal(trimmed(c.from), want)) return &c;
+    return nullptr;
+}
+
+std::string creatableName(std::string_view missing) {
+    std::string n = trimmed(missing);
+    std::erase(n, '$');   // un repere ($Vanne$.Cmd) se lit sans ses $
+    if (hmi::isIdentifier(n)) return n;
+    // Un membre, un element de tableau (Vanne.Cmd, Pompes[3].Marche) : un seul identifiant (Vanne_Cmd, Pompes_3_Marche).
+    std::string out;
+    for (const char c : n) {
+        const char k = std::isalnum(static_cast<unsigned char>(c)) || c == '_' ? c : '_';
+        if (k == '_' && !out.empty() && out.back() == '_') continue;
+        out += k;
+    }
+    while (!out.empty() && out.back() == '_') out.pop_back();
+    while (!out.empty() && out.front() == '_') out.erase(out.begin());
+    if (out.empty() || std::isdigit(static_cast<unsigned char>(out.front()))) out.insert(0, "V_");
+    if (out.size() > 64) out.resize(64);
+    return out;
 }
 
 std::vector<std::string> nearVariables(const hmi::Project& p, std::string_view name, std::size_t max) {
@@ -2575,6 +2656,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         sub.request = p.request;
         sub.summary = p.summary;
         sub.variable = p.variable;
+        sub.choices = p.choices;   // 1.22.1 : les corrections
         for (const auto i : run) sub.ops.push_back(p.ops[i]);
         hmi::View work;
         hmi::Id existing = hmi::kNoId;
@@ -2684,6 +2766,10 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
             for (auto& x : unitCheck.made) check->made.push_back(std::move(x));
             for (auto& x : unitCheck.detections) check->detections.push_back(std::move(x));
             for (auto& x : unitCheck.reused) check->reused.push_back(std::move(x));
+            for (auto& x : unitCheck.faults) {   // 1.22.1 : l'operation de la proposition (pas son rang dans l'unite)
+                x.op = x.op < run.size() ? run[x.op] : Check::Fault::kNoOp;
+                check->faults.push_back(std::move(x));
+            }
         }
         // 4. poser ce que l'unite cree (la suite du plan le voit)
         if (unit.kind == plan::Unit::Kind::Project && run.size() == 1) {
@@ -2749,6 +2835,34 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
     return true;
 }
 
+// 1.22.1 : LES DEFAUTS STRUCTURES - chaque erreur qui n'en a pas encore un (une variable introuvable en a un, fait par le
+// moteur) : celle d'une operation (son indice ; "code" pour le code brut), sinon de la proposition entiere.
+void structureFaults(Check& check, const Proposal& p) {
+    std::set<std::pair<std::size_t, std::string>> known;
+    std::set<std::string>                         said;
+    for (const auto& f : check.faults) {
+        known.emplace(f.op, f.message);
+        said.insert(f.message);
+    }
+    for (std::size_t i = 0; i < check.outcomes.size(); ++i)
+        for (const auto& e : check.outcomes[i].errors) {
+            if (!known.emplace(i, e).second) continue;
+            Check::Fault f;
+            f.op = i;
+            f.kind = i < p.ops.size() && p.ops[i].action == Operation::Action::Code ? "code" : "operation";
+            f.message = e;
+            check.faults.push_back(std::move(f));
+            said.insert(e);
+        }
+    for (const auto& e : check.errors) {
+        if (!said.insert(e).second) continue;
+        Check::Fault f;
+        f.kind = check.stale || check.viewMissing ? "perimee" : "proposition";
+        f.message = e;
+        check.faults.push_back(std::move(f));
+    }
+}
+
 // La vue ouverte d'une proposition (kNoId : elle n'en touche pas, ou plus).
 hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
     if (!usesOpenView(p)) return hmi::kNoId;
@@ -2764,6 +2878,7 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     if (usesOpenView(p) && open == hmi::kNoId) {
         check.viewMissing = true;
         check.errors.push_back("La vue \xC2\xAB " + p.view + " \xC2\xBB n'existe plus dans le projet : rien ne peut s'appliquer.");
+        structureFaults(check, p);   // 1.22.1
         return check;
     }
     if (!p.fingerprint.empty() && proposalPrint(project, p) != p.fingerprint) {
@@ -2803,6 +2918,7 @@ Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     check.deps = sch.deps;
     check.planErrors = sch.errors;
     check.newView = createsView(p) ? newViewName(p) : std::string{};
+    structureFaults(check, p);   // 1.22.1 : chaque erreur, son defaut structure (le clic droit)
     return check;
 }
 
@@ -2816,6 +2932,38 @@ bool applyOps(const hmi::Project& project, hmi::View& view, hmi::Id& nextId, con
 }
 
 namespace {
+// 1.22.1 : LES VARIABLES A CREER CHOISIES UNE A UNE (Proposal::choices, create) - celles que lit une operation qui s'applique
+// (`allowed`) et qui n'existent pas : posees dans `pr` avant le plan, dans la meme commande (un seul Ctrl+Z), comme le choix
+// unique d'avant. Jamais une variable que personne n'a demandee : seulement celles que l'utilisateur a choisi de creer.
+void createChosen(hmi::Project& pr, const Proposal& p, const std::set<std::size_t>& allowed, const Env& env) {
+    if (p.choices.empty()) return;
+    std::set<std::string> made;
+    const auto make = [&](const std::string& requested) {
+        if (requested.empty() || isFormula(requested) || variableExists(pr, requested, env)) return;
+        const VariableChoice* c = choiceFor(p, requested);
+        if (!c || !c->create) return;
+        const std::string name = trimmed(c->use).empty() ? creatableName(requested) : trimmed(c->use);
+        if (!hmi::isIdentifier(name) || variableExists(pr, name, env) || !made.insert(lower(name)).second) return;
+        hmi::Variable var;
+        var.id = pr.allocate();
+        var.name = name;
+        var.type = c->type.empty() ? std::string("BOOL") : c->type;
+        static const std::set<std::string> numbers = {"INT", "UINT", "WORD", "DINT", "UDINT", "DWORD", "REAL", "LREAL", "BYTE",
+                                                      "SINT", "USINT", "LINT", "ULINT", "LWORD"};
+        var.initial = var.type == "BOOL" ? std::string("FALSE") : numbers.count(upperOf(var.type)) ? std::string("0") : std::string{};
+        var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
+        pr.programs.variables.push_back(std::move(var));
+    };
+    for (const auto i : allowed) {
+        if (i >= p.ops.size()) continue;
+        const Operation& op = p.ops[i];
+        if (op.action == Operation::Action::Bind) make(trimmed(op.variable));
+        if (op.action == Operation::Action::Create || op.action == Operation::Action::Modify)
+            for (const auto& [k, v] : op.props)
+                if (k == "variable") make(trimmed(v));
+    }
+}
+
 // Applique la proposition a `pr` (le projet de travail) : la validation d'abord (sur `pr` tel qu'il est), puis le plan par
 // unites ; faux et `why` : rien n'est change (une unite qui echoue : `pr` est remis tel qu'il etait). `skipped` non nul :
 // malgre les erreurs (ce qui est valide s'applique, le reste y est note).
@@ -2853,6 +3001,7 @@ bool applyStaged(hmi::Project& pr, const Proposal& p, const Env& env, std::strin
         var.description = "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")";
         pr.programs.variables.push_back(std::move(var));
     }
+    createChosen(pr, p, allowed, env);   // 1.22.1 : les corrections (une variable a creer, choisie une a une)
     std::vector<Check::Outcome> out;
     RemovalLog log;
     bool ok = runStaged(pr, p, env, Mode::Apply, nullptr, out, sch, &allowed, &failed, nullptr, open, &log);
@@ -3201,6 +3350,19 @@ json::Value toJson(const Proposal& p) {
         c.set("type", p.variable.type);
         o.set("variableChoisie", std::move(c));
     }
+    // 1.22.1 : les corrections - un choix par variable introuvable (absent : aucun ; un fichier 1.22.0 n'en a pas).
+    if (!p.choices.empty()) {
+        json::Value a = json::Value::array();
+        for (const auto& ch : p.choices) {
+            json::Value c = json::Value::object();
+            c.set("de", ch.from);
+            c.set("utiliser", ch.use);
+            c.set("creer", ch.create);
+            c.set("type", ch.type);
+            a.push(std::move(c));
+        }
+        o.set("variablesChoisies", std::move(a));
+    }
     o.set("operations", operationsToJson(p.ops));
     // 1.19.0 : les operations retirees du plan, le plan applique (ses etats) et le compte rendu reel.
     if (!p.excluded.empty()) {
@@ -3240,8 +3402,19 @@ Proposal proposalFromJson(const json::Value& o) {
     if (const auto* pl = o.find("plan")) p.plan = *pl;
     if (const auto* cr = o.find("compteRendu")) p.report = *cr;
     p.next = o.str("suite");   // 1.21.3
+    if (const auto* cs = o.find("variablesChoisies"); cs && cs->isArray())   // 1.22.1 : les corrections
+        for (const auto& c : cs->items()) {
+            if (!c.isObject()) continue;
+            VariableChoice ch;
+            ch.from = c.str("de");
+            ch.use = c.str("utiliser");
+            ch.create = c.flag("creer");
+            ch.type = c.str("type", "BOOL");
+            if (ch.from.empty() || (ch.use.empty() && !ch.create) || choiceFor(p, ch.from)) continue;   // illisible, ou en double
+            p.choices.push_back(std::move(ch));
+        }
     p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "empreinteApres", "demande", "resume",
-                                       "variableChoisie", "operations", "exclues", "plan", "compteRendu", "suite"});
+                                       "variableChoisie", "operations", "exclues", "plan", "compteRendu", "suite", "variablesChoisies"});
     return p;
 }
 

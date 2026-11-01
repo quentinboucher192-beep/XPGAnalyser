@@ -169,6 +169,10 @@ struct VariableChoice {
     std::string use;              // une variable existante, a la place
     bool        create{false};    // creer la variable demandee (dans les variables de l'IHM)
     std::string type{"BOOL"};
+    // 1.22.1 (a la fin) : LES CORRECTIONS (Proposal::choices) - la variable introuvable que ce choix remplace (son nom tel que
+    // la proposition l'ecrit, << Vanne.Cmd >>) ; vide : le choix unique d'avant (Proposal::variable, pour toute variable
+    // introuvable). Avec `create` : `use` est le nom a creer (vide : `from` ramene a un identifiant, creatableName).
+    std::string from;
     bool operator==(const VariableChoice&) const = default;
 };
 
@@ -197,6 +201,11 @@ struct Proposal {
     // 1.21.3 (a la fin) : LA SUITE - une grande demande decoupee par l'IA : ce qui reste a faire apres cette proposition
     // (vide : rien). La carte propose << Proposer la suite >> une fois la proposition appliquee.
     std::string              next;
+    // 1.22.1 (a la fin) : LES CORRECTIONS (le clic droit sur une erreur, AiFixes.hpp) - un choix par variable introuvable
+    // (VariableChoice::from) : une variable existante a la place, ou la creer. Il vaut pour TOUTES les operations qui la
+    // citent (associer, la propriete variable d'un creer, d'un modifier), avant `variable` (le choix unique d'avant, garde).
+    // La proposition seule change (jamais le projet), puis se revalide. Le JSON : "variablesChoisies".
+    std::vector<VariableChoice> choices;
 };
 
 // ---- valider -------------------------------------------------------------------
@@ -269,6 +278,22 @@ struct Check {
     };
     std::vector<Removal>                                removals;
     int                                                 projectRemovals{0};
+    // 1.22.1 (a la fin) : LES DEFAUTS STRUCTURES - chaque erreur de `errors`, telle que l'apercu et la carte la corrigent (le
+    // clic droit, AiFixes.hpp) sans lire son texte : l'operation en cause (l'indice de Proposal::ops ; kNoOp : la proposition
+    // entiere), le genre ("variable" : une variable introuvable ; "code" : le code brut ; "operation" : une autre erreur d'une
+    // operation ; "proposition" : le plan, une suppression... ; "perimee" : la vue ou le projet a change), le nom en cause
+    // (la variable), les variables existantes les plus proches (5 au plus), le type conseille pour la creer, et le message
+    // tel qu'il est dans `errors` (le texte des erreurs ne change pas).
+    struct Fault {
+        static constexpr std::size_t kNoOp = static_cast<std::size_t>(-1);
+        std::size_t              op{kNoOp};
+        std::string              kind;
+        std::string              name;
+        std::vector<std::string> closest;
+        std::string              message;
+        std::string              type;
+    };
+    std::vector<Fault>                                  faults;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 
@@ -341,6 +366,11 @@ void scopeProposal(Proposal&, const hmi::View* open);
 // "Nouvelle vue" de l'arbre : les identifiants viennent de `nextId`.
 [[nodiscard]] hmi::View newViewFor(const hmi::Project&, const Operation&, hmi::Id& nextId);
 [[nodiscard]] bool        variableExists(const hmi::Project&, std::string_view name, const Env& = {});
+// 1.22.1 : LES CORRECTIONS - le choix de l'utilisateur pour la variable introuvable `missing` (Proposal::choices ; nul :
+// aucun) ; le nom d'une variable a creer pour elle : tel quel si c'est un identifiant, sinon ramene a un identifiant
+// (<< Vanne.Cmd >> -> << Vanne_Cmd >> : un membre ne se cree pas seul).
+[[nodiscard]] const VariableChoice* choiceFor(const Proposal&, std::string_view missing);
+[[nodiscard]] std::string           creatableName(std::string_view missing);
 // Les variables de l'IHM les plus proches d'un nom (les memes lettres, les memes mots).
 [[nodiscard]] std::vector<std::string> nearVariables(const hmi::Project&, std::string_view name, std::size_t max = 4);
 // La vue visee : par son identifiant, sinon par son nom (nul : plus la).

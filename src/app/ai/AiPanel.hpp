@@ -41,6 +41,7 @@
 #pragma once
 
 #include "AiAssistant.hpp"
+#include "AiFixes.hpp"   // 1.22.1 : le clic droit sur une erreur de la carte
 #include "../../menu/IMenu.hpp"
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -213,6 +214,12 @@ public:
     // Echap ou Garder : rien ne change.
     void askRefuse(int message);
     void editRequest(int message);                 // Modifier la demande : le texte remis dans la saisie
+    // 1.22.1 : LE CLIC DROIT SUR UNE ERREUR (AiFixes.hpp) - << Demander a l'IA de corriger >> : le texte prepare dans la
+    // saisie (RIEN ne part seul : l'utilisateur relit, puis Entree) ; << Choisir une variable... >> depuis la carte :
+    // la previsualisation, son choix du haut sur cette variable ; ce que la barre d'etat dit (la fenetre d'apercu).
+    void askFix(const std::string& text);
+    void openPreviewFor(int message, const std::string& variable);
+    void notice(const std::string& text);
     void openSettings();
     // 1.15.0 : Reessayer (le dernier message est une erreur ou un arret d'un vrai fournisseur).
     bool retry();
@@ -461,6 +468,13 @@ public:
     [[nodiscard]] const std::vector<std::pair<gfx::Rect, std::string>>& copyButtons() const noexcept { return copySpots_; }
     [[nodiscard]] bool copyFlash() const noexcept { return !copied_.empty(); }
     bool copyCode(const std::string& code);
+    // 1.22.1 : LE CLIC DROIT SUR UNE ERREUR DE LA CARTE (AiFixes.hpp) - les notes de la carte d'un message (erreurs puis
+    // avertissements, les doublons regroupes), le menu d'une note (au clic droit ; ici : sur la note dessinee, sinon au
+    // milieu de la discussion), ses entrees, en choisir une comme un clic (essais, scripts).
+    [[nodiscard]] std::vector<std::string> cardNotes(int message) const;
+    bool openNoteMenu(int message, std::size_t note);
+    [[nodiscard]] std::vector<std::string> noteMenuItems() const;
+    bool chooseNoteMenuItem(const std::string& label);
 
 protected:
     void onLayout() override;
@@ -468,6 +482,19 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent&) override;
 
 private:
+    // 1.22.1 : le menu du clic droit des notes (cree au premier usage), ses actions par id, la carte visee ; la place de
+    // chaque note au dernier dessin.
+    bool openNoteMenuAt(int message, std::size_t note, gfx::Point at);
+    void runNoteFix(int id);
+    ui::PopupMenu*             fixMenu_{nullptr};
+    std::vector<fixes::Action> fixActions_;
+    int                        fixMessage_{-1};
+    struct NoteSpot {
+        gfx::Rect   at;
+        int         message{-1};
+        std::size_t note{0};
+    };
+    std::vector<NoteSpot>      noteSpots_;
     mutable std::vector<std::pair<gfx::Rect, std::string>> copySpots_;
     mutable std::string copied_;
     mutable double      copiedAt_{-1.0};
@@ -484,7 +511,9 @@ private:
         // (erreurs, avertissements) et sa ligne d'etat a la ligne, ses boutons poses de gauche a
         // droite et a la ligne quand ils ne tiennent pas (relatifs au bas de la carte), et l'etat
         // reel d'une proposition appliquee (Ctrl+Z).
-        struct Note { bool error{false}; std::vector<std::string> lines; };
+        // 1.22.1 (a la fin) : `message` - le message de la validation (sans le << (2 operations) >> d'un doublon) : le clic
+        // droit retrouve sa ligne (AiFixes) et ses corrections.
+        struct Note { bool error{false}; std::vector<std::string> lines; std::string message; };
         std::vector<Note>        notes;
         std::vector<std::string> doneLines;
         std::vector<std::string> buttons;

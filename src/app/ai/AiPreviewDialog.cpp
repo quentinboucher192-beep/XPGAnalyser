@@ -91,7 +91,7 @@ std::string groupKey(const std::string& heading) {
 std::string proposalKey(const Proposal& p) {
     std::string key = p.id + "|" + p.state + "|" + p.variable.use + (p.variable.create ? "+" : "-");
     for (const auto x : p.excluded) key += "x" + std::to_string(x);
-    return key;
+    return key + fixes::key(p);   // 1.22.1 : les corrections (un choix par variable introuvable)
 }
 
 // Une ligne de la liste de gauche.
@@ -101,6 +101,10 @@ struct Row {
     int         what{0};      // un objet : 0 creer, 1 modifier, 2 supprimer
     int         op{-1};       // 1.21.0 : une suppression (l'indice de son operation) - un clic la retire ou la remet
     bool        excluded{false};
+    // 1.22.1 : une ligne qui se corrige au clic droit - 1 : une erreur, 2 : un avertissement, 3 : une correction faite ;
+    // `line` : son rang (AiPreviewDialog::errorLines_, warningLines_, corrections_).
+    int         list{0};
+    std::size_t line{0};
 };
 
 } // namespace
@@ -218,6 +222,16 @@ public:
             if (r.contains(at) && i < rows.size() && rows[i].op >= 0) return static_cast<int>(i);
         return -1;
     }
+    [[nodiscard]] int fixRowAt(gfx::Point at) const {   // 1.22.1 : une ligne qui se corrige au clic droit (-1 : aucune)
+        for (const auto& [r, i] : hits_)
+            if (r.contains(at) && i < rows.size() && rows[i].list > 0) return static_cast<int>(i);
+        return -1;
+    }
+    [[nodiscard]] gfx::Rect rowRect(int list, std::size_t line) const {   // 1.22.1 : sa place (vide : pas montree)
+        for (const auto& [r, i] : hits_)
+            if (i < rows.size() && rows[i].list == list && rows[i].line == line) return r;
+        return {};
+    }
     [[nodiscard]] gfx::Rect headingRect(const std::string& key) const {
         for (const auto& [r, i] : hits_)
             if (i < rows.size() && rows[i].kind == Row::Kind::Heading && groupKey(rows[i].text) == key) return r;
@@ -240,6 +254,8 @@ public:
                 if (row.op >= 0)
                     return row.excluded ? "Clic : remettre cette suppression dans le plan."
                                         : "Clic : retirer cette suppression du plan (ce qui en d\xC3\xA9pend est ignor\xC3\xA9, la v\xC3\xA9rification se refait).";
+                if (row.list == 3) return row.text + " \xE2\x80\x94 " + row.right + "\nClic droit : revenir sur cette correction.";
+                if (row.list > 0) return row.text + "\nClic droit : les corrections possibles.";   // 1.22.1
                 return row.text + (row.right.empty() ? std::string{} : " \xE2\x80\x94 " + row.right);
             }
         if (area_.contains(mouse)) {
@@ -345,10 +361,23 @@ protected:
         if (d_.variable_ && d_.variable_->visibility() == ui::Visibility::Visible) {
             // Le nom introuvable reste dit apres le choix (la validation ne le cite plus : il est remplace).
             const std::string name = "\xC2\xAB " + d_.missingName_ + " \xC2\xBB n'existe pas";
-            const bool chosen = !p->variable.use.empty() || p->variable.create;
-            const std::string label = !p->variable.use.empty() ? name + " : remplac\xC3\xA9" "e par " + p->variable.use + "."
-                                    : p->variable.create    ? name + " : elle sera cr\xC3\xA9\xC3\xA9" "e (" + p->variable.type + ")."
-                                                            : name + " : quelle variable utiliser ?";
+            // 1.22.1 : le choix pour CETTE variable (une correction), sinon le choix unique d'avant.
+            const VariableChoice* ch = choiceFor(*p, d_.missingName_);
+            if (!ch && (!p->variable.use.empty() || p->variable.create)) ch = &p->variable;
+            const bool chosen = ch != nullptr;
+            std::string label;
+            if (ch && !ch->create) {
+                label = name + " : remplac\xC3\xA9" "e par " + ch->use + ".";
+            } else if (ch) {
+                const std::string made = ch == &p->variable ? d_.missingName_ : ch->use.empty() ? creatableName(d_.missingName_) : ch->use;
+                const std::string type = ch->type.empty() ? std::string("BOOL") : ch->type;
+                label = made == d_.missingName_ ? name + " : elle sera cr\xC3\xA9\xC3\xA9" "e (" + type + ")."
+                                                : name + " : " + made + " sera cr\xC3\xA9\xC3\xA9" "e (" + type + ").";
+            } else {
+                label = name + " : quelle variable utiliser ?";
+                if (d_.otherMissing_ > 0)
+                    label += " (et " + std::to_string(d_.otherMissing_) + (d_.otherMissing_ > 1 ? " autres" : " autre") + " : clic droit sur leur erreur)";
+            }
             ctx.r.drawText({varLabel_.x, varLabel_.y + 2.f}, elide(ctx.r, label, kSmall, varLabel_.w), kSmall, chosen ? c.textMuted : c.error);
         }
         paintList(ctx);
@@ -544,6 +573,14 @@ protected:
             releaseMouse();
             return ui::EventResult::Consumed;
         }
+        // 1.22.1 : LE CLIC DROIT sur une erreur, un avertissement, une correction : le menu des corrections.
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right && list_.contains(d->pos)) {
+            if (const int k = fixRowAt(d->pos); k >= 0) {
+                const Row& row = rows[static_cast<std::size_t>(k)];
+                (void)d_.openFixMenu(row.list, row.line, d->pos);
+            }
+            return ui::EventResult::Consumed;
+        }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
             if (close_.contains(d->pos)) {
                 d_.close();
@@ -703,6 +740,9 @@ core::Status AiPreviewDialog::buildUi() {
     apply_->setStyle(ui::Button::Style::Primary);
     apply_->setTooltip("Modifier le projet, en une seule \xC3\xA9tape d'annulation (Ctrl+Z).");
     links_ += apply_->clicked->connect([this] { (void)apply(); });
+    // 1.22.1 : le menu du clic droit des erreurs (le menu de l'appli), devant le reste.
+    fixMenu_ = &static_cast<ui::PopupMenu&>(b->addChild(std::make_unique<ui::PopupMenu>(base + ".corriger")));
+    links_ += fixMenu_->itemChosen->connect([this](int id) { runFix(id); });
     setRoot(std::move(body));
     refresh();
     return core::ok();
@@ -727,6 +767,23 @@ void AiPreviewDialog::refresh() {
     // La liste de gauche.
     std::vector<Row> rows;
     const auto heading = [&](std::string t) { rows.push_back({Row::Kind::Heading, std::move(t), {}, 0}); };
+    // 1.22.1 : LES CORRECTIONS FAITES (le clic droit sur une erreur) - ce qui a ete corrige, une ligne chacune ; le clic droit
+    // sur l'une d'elles la reprend (Revenir). Puis les erreurs et les avertissements, les doublons regroupes.
+    errorLines_ = fixes::errorLines(check_);
+    warningLines_ = fixes::warningLines(check_);
+    corrections_ = fixes::corrections(*p);
+    if (!corrections_.empty()) {
+        heading("CORRECTIONS (" + std::to_string(corrections_.size()) + ") \xE2\x80\x94 la proposition seule ; clic droit : revenir");
+        rows.push_back({Row::Kind::Note, "Corrig\xC3\xA9 : " + fixes::summary(*p) + ".", {}, 0});
+        for (std::size_t k = 0; k < corrections_.size(); ++k) {
+            const auto& c = corrections_[k];
+            Row r{Row::Kind::Item, c.text, c.state, c.what};
+            r.excluded = c.what == 2;
+            r.list = 3;
+            r.line = k;
+            rows.push_back(std::move(r));
+        }
+    }
     if (!check_.errors.empty()) {
         // 1.16.1 (captures) : avec << Appliquer malgre les erreurs >>, le titre le dit (il disait encore << rien ne s'applique >>)
         const bool anywayTitle = !check_.stale && !check_.viewMissing && a.settings().applyWithErrors;
@@ -734,11 +791,21 @@ void AiPreviewDialog::refresh() {
                 + (anywayTitle ? std::string(check_.errors.size() > 1 ? "laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB"
                                                                       : "laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB")
                                : std::string("rien ne s'applique tant qu'il y en a")));
-        for (const auto& e : check_.errors) rows.push_back({Row::Kind::Error, e, {}, 0});
+        for (std::size_t k = 0; k < errorLines_.size(); ++k) {
+            Row r{Row::Kind::Error, errorLines_[k].text, {}, 0};
+            r.list = 1;
+            r.line = k;
+            rows.push_back(std::move(r));
+        }
     }
     if (!check_.warnings.empty()) {
         heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size()) + ")");
-        for (const auto& w : check_.warnings) rows.push_back({Row::Kind::Warning, w, {}, 0});
+        for (std::size_t k = 0; k < warningLines_.size(); ++k) {
+            Row r{Row::Kind::Warning, warningLines_[k].text, {}, 0};
+            r.list = 2;
+            r.line = k;
+            rows.push_back(std::move(r));
+        }
     }
     // 1.21.0 : LES SUPPRESSIONS - chacune : sa strategie, le resume par genre, ce qui part, ce qui en depend, les
     // consequences ; un clic la retire du plan (ou l'y remet). Les suppressions retirees restent listees (a remettre).
@@ -914,14 +981,47 @@ void AiPreviewDialog::refresh() {
         planFolded_ = true;
     }
     // Le choix de la variable (introuvable) : les plus proches d'abord, puis les autres, puis Creer.
-    const bool needChoice = !check_.missingVariable.empty() || !p->variable.use.empty() || p->variable.create;
+    // 1.22.1 : il vise UNE variable introuvable - celle qu'on a demandee (Choisir une variable... au clic droit), sinon la
+    // premiere encore introuvable ; une variable deja choisie reste montree (son choix se lit) tant qu'aucune autre n'attend.
+    std::vector<const Check::Fault*> missingFaults;
+    for (const auto& f : check_.faults)
+        if (f.kind == "variable"
+            && std::none_of(missingFaults.begin(), missingFaults.end(), [&](const Check::Fault* x) { return x->name == f.name; }))
+            missingFaults.push_back(&f);
+    const auto stillMissing = [&](const std::string& n) {
+        return std::any_of(missingFaults.begin(), missingFaults.end(), [&](const Check::Fault* x) { return x->name == n; });
+    };
+    if (!waiting_) {
+        const bool chosenHere = !missingName_.empty() && choiceFor(*p, missingName_) != nullptr;
+        if (pinned_ && !missingName_.empty() && (stillMissing(missingName_) || chosenHere)) {
+            // demandee par l'utilisateur : elle reste visee
+        } else if (!missingName_.empty() && stillMissing(missingName_)) {
+            pinned_ = false;
+        } else if (!missingFaults.empty()) {
+            missingName_ = missingFaults.front()->name;
+            pinned_ = false;
+        } else if (!chosenHere) {
+            missingName_.clear();
+            pinned_ = false;
+            // le choix unique d'avant (un fichier d'avant 1.22.1) : la variable de l'association, comme avant
+            if (!p->variable.use.empty() || p->variable.create)
+                for (const auto& op : p->ops)
+                    if (op.action == Operation::Action::Bind) missingName_ = op.variable;
+        }
+        otherMissing_ = 0;
+        for (const auto* f : missingFaults)
+            if (f->name != missingName_) ++otherMissing_;
+    }
+    const bool needChoice = !missingName_.empty();
     if (variable_) {
         syncing_ = true;
         if (needChoice) {
-            std::string missing = check_.missingVariable;
-            for (const auto& op : p->ops)
-                if (op.action == Operation::Action::Bind) missing = op.variable;
-            missingName_ = missing;
+            const std::string missing = missingName_;
+            const Check::Fault* fault = nullptr;
+            for (const auto* f : missingFaults)
+                if (f->name == missing) fault = f;
+            createType_ = fault && !fault->type.empty() ? fault->type : std::string("BOOL");
+            if (const VariableChoice* ch = choiceFor(*p, missing); ch && ch->create && !ch->type.empty()) createType_ = ch->type;
             variableNames_.clear();
             std::vector<ui::DropDown::Item> items;
             std::set<std::string> seen;
@@ -929,7 +1029,8 @@ void AiPreviewDialog::refresh() {
             variableNames_.push_back("?");
             const auto doc = a.host().document ? a.host().document() : nullptr;
             if (doc) {
-                for (const auto& n : nearVariables(doc->project, missing)) {
+                // 1.22.1 : les plus proches que la validation a deja trouvees (rien a recalculer ici), sinon comme avant.
+                for (const auto& n : fault && !fault->closest.empty() ? fault->closest : nearVariables(doc->project, missing)) {
                     items.push_back({n + "  (proche)", n});
                     variableNames_.push_back(n);
                     seen.insert(n);
@@ -943,13 +1044,16 @@ void AiPreviewDialog::refresh() {
                     variableNames_.push_back(n);
                 }
             }
-            items.push_back({"Cr\xC3\xA9" "er \xC2\xAB " + missing + " \xC2\xBB (BOOL) dans les variables de l'IHM", "+"});
+            // 1.22.1 : un membre (Vanne.Cmd) se cree sous un nom d'identifiant (Vanne_Cmd) ; le type conseille.
+            items.push_back({"Cr\xC3\xA9" "er \xC2\xAB " + creatableName(missing) + " \xC2\xBB (" + createType_ + ") dans les variables de l'IHM", "+"});
             variableNames_.push_back({});
             variable_->setItems(std::move(items));
+            const VariableChoice* ch = choiceFor(*p, missing);
+            if (!ch && (!p->variable.use.empty() || p->variable.create)) ch = &p->variable;
             int sel = 0;
-            if (p->variable.create) sel = static_cast<int>(variableNames_.size()) - 1;
+            if (ch && ch->create) sel = static_cast<int>(variableNames_.size()) - 1;
             for (std::size_t i = 1; i + 1 < variableNames_.size(); ++i)
-                if (!p->variable.use.empty() && variableNames_[i] == p->variable.use) sel = static_cast<int>(i);
+                if (ch && !ch->create && !ch->use.empty() && variableNames_[i] == ch->use) sel = static_cast<int>(i);
             variable_->setSelectedIndex(sel);
             variable_->setVisibility(ui::Visibility::Visible);
         } else {
@@ -982,10 +1086,18 @@ std::vector<std::string> AiPreviewDialog::variableItems() const {
 
 bool AiPreviewDialog::chooseVariable(int index) {
     if (index <= 0 || index >= static_cast<int>(variableNames_.size())) return false;   // 0 : l'invite
+    if (missingName_.empty()) return false;
     VariableChoice choice;
-    if (variableNames_[static_cast<std::size_t>(index)].empty()) choice.create = true;
-    else choice.use = variableNames_[static_cast<std::size_t>(index)];
-    const bool ok = panel_.assistant().chooseVariable(message_, choice);
+    if (variableNames_[static_cast<std::size_t>(index)].empty()) {
+        choice.create = true;
+        choice.type = createType_;
+    } else {
+        choice.use = variableNames_[static_cast<std::size_t>(index)];
+    }
+    // 1.22.1 : le choix vaut pour CETTE variable introuvable (toutes les operations qui la citent) - les autres gardent leur
+    // erreur jusqu'a leur propre choix (avant : un seul choix pour toutes, Proposal::variable).
+    pinned_ = false;
+    const bool ok = panel_.assistant().chooseVariable(message_, missingName_, choice);
     panel_.sync();
     refresh();
     return ok;
@@ -1015,6 +1127,123 @@ std::vector<std::string> AiPreviewDialog::removalRows() const {
     return out;
 }
 
+// ---- 1.22.1 : le clic droit sur une erreur (AiFixes) -------------------------------------------------------------------
+std::vector<std::string> AiPreviewDialog::errorRows() const {
+    std::vector<std::string> out;
+    for (const auto& l : errorLines_) out.push_back(l.text);
+    return out;
+}
+
+std::vector<std::string> AiPreviewDialog::warningRows() const {
+    std::vector<std::string> out;
+    for (const auto& l : warningLines_) out.push_back(l.text);
+    return out;
+}
+
+std::vector<std::string> AiPreviewDialog::correctionRows() const {
+    std::vector<std::string> out;
+    for (const auto& c : corrections_) out.push_back(c.text + " | " + c.state);
+    return out;
+}
+
+bool AiPreviewDialog::openFixMenu(int list, std::size_t line, gfx::Point at) {
+    const Proposal* p = panel_.assistant().proposal(message_);
+    auto* root = widgetRoot();
+    if (!p || !fixMenu_ || !root || done_ || waiting_) return false;
+    fixes::Menu m;
+    if (list == 1 && line < errorLines_.size()) {
+        const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
+        m = fixes::menuFor(*p, check_, errorLines_[line], doc ? &doc->project : nullptr);
+    } else if (list == 2 && line < warningLines_.size()) {
+        m = fixes::menuFor(*p, check_, warningLines_[line], nullptr);
+    } else if (list == 3 && line < corrections_.size()) {
+        m = fixes::menuFor(*p, corrections_[line]);
+    } else {
+        return false;
+    }
+    fixes::fill(*fixMenu_, m, fixActions_);
+    fixMenu_->setBounds(root->bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {root->bounds().right() + 400.f, root->bounds().bottom() + 400.f};
+    fixMenu_->openAt(at, surface);
+    return true;
+}
+
+namespace {
+// Le point ou s'ouvre le menu d'une ligne demande par un essai : la ligne si elle est montree, sinon le milieu de la liste.
+gfx::Point menuPoint(gfx::Rect row, gfx::Rect list) {
+    if (row.w > 0.f) return {row.x + 40.f, row.y + row.h / 2.f};
+    return {list.x + list.w / 2.f, list.y + list.h / 2.f};
+}
+} // namespace
+
+bool AiPreviewDialog::openErrorMenu(std::size_t line) {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(widgetRoot());
+    return b && openFixMenu(1, line, menuPoint(b->rowRect(1, line), b->listRect()));
+}
+
+bool AiPreviewDialog::openWarningMenu(std::size_t line) {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(widgetRoot());
+    return b && openFixMenu(2, line, menuPoint(b->rowRect(2, line), b->listRect()));
+}
+
+bool AiPreviewDialog::openCorrectionMenu(std::size_t line) {
+    const auto* b = dynamic_cast<const AiPreviewBody*>(widgetRoot());
+    return b && openFixMenu(3, line, menuPoint(b->rowRect(3, line), b->listRect()));
+}
+
+bool AiPreviewDialog::menuOpen() const { return fixMenu_ && fixMenu_->isOpen(); }
+
+std::vector<std::string> AiPreviewDialog::menuItems() const {
+    return fixMenu_ && fixMenu_->isOpen() ? fixes::labels(*fixMenu_) : std::vector<std::string>{};
+}
+
+bool AiPreviewDialog::chooseMenuItem(const std::string& label) {
+    if (!fixMenu_ || !fixMenu_->isOpen()) return false;
+    const int id = fixes::idOf(*fixMenu_, label);
+    if (id < 0) return false;
+    fixMenu_->close();
+    fixMenu_->itemChosen->emit(id);   // le meme chemin qu'un clic
+    return true;
+}
+
+void AiPreviewDialog::focusVariable(const std::string& name, bool openList) {
+    if (name.empty()) return;
+    missingName_ = name;
+    pinned_ = true;
+    openChoice_ = openList;
+    if (widgetRoot()) refresh();
+}
+
+void AiPreviewDialog::runFix(int id) {
+    if (id < 0 || static_cast<std::size_t>(id) >= fixActions_.size() || done_) return;
+    const fixes::Action act = fixActions_[static_cast<std::size_t>(id)];
+    using K = fixes::Action::Kind;
+    switch (act.kind) {
+        case K::Copy:
+            ui::setClipboardText(act.value);
+            panel_.notice("Message copi\xC3\xA9.");
+            return;
+        case K::AskAi:
+            // Le texte va dans la saisie du panneau (rien ne part seul) : la fenetre se ferme pour qu'on le relise.
+            panel_.askFix(act.value);
+            finish(false);
+            return;
+        case K::Pick:
+            // Le choix du haut vise cette variable ; sa liste s'ouvre au prochain Update (le menu s'est referme).
+            focusVariable(act.name, true);
+            return;
+        default: {
+            std::string said;
+            (void)fixes::apply(panel_.assistant(), message_, act, &said);
+            panel_.notice(said);
+            panel_.sync();
+            refresh();
+            return;
+        }
+    }
+}
+
 void AiPreviewDialog::Update(const menu::FrameContext& f) {
     menu::WidgetMenu::Update(f);
     const Proposal* p = panel_.assistant().proposal(message_);
@@ -1022,6 +1251,14 @@ void AiPreviewDialog::Update(const menu::FrameContext& f) {
     if (!p || p->state != "proposee") {
         finish(p && p->state == "appliquee");
         return;
+    }
+    // 1.22.1 : << Choisir une variable... >> (le clic droit) - la liste du haut s'ouvre, sur la variable demandee.
+    if (openChoice_ && variable_ && variable_->visibility() == ui::Visibility::Visible) {
+        openChoice_ = false;
+        if (auto* root = widgetRoot()) root->layout();
+        const gfx::Rect at = variable_->bounds();
+        if (at.w > 0.f && !variable_->isOpen())
+            (void)variable_->dispatch(ui::MouseDown{{at.x + at.w / 2.f, at.y + at.h / 2.f}, ui::MouseButton::Left, 1, {}});
     }
     const std::string key = proposalKey(*p);
     if (key != key_) refresh();
@@ -1059,7 +1296,8 @@ void AiPreviewDialog::finish(bool ok) {
 }
 
 ui::EventResult AiPreviewDialog::HandleEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && !(variable_ && variable_->isOpen())) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev);
+        k && k->key == ui::Key::Escape && !(variable_ && variable_->isOpen()) && !(fixMenu_ && fixMenu_->isOpen())) {
         close();
         return ui::EventResult::Consumed;
     }

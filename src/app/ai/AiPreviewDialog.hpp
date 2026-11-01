@@ -27,6 +27,16 @@
 //  (ou l'y remet) : le geste de la bande du plan (Assistant::setExcluded) - ce
 //  qui en depend est ignore, la verification se refait.
 //
+//  1.22.1 : LE CLIC DROIT SUR UNE ERREUR (AiFixes.hpp) - le menu du clic droit
+//  propose des corrections adaptees (une variable introuvable : utiliser une
+//  proche, la choisir, la creer, retirer ce qui la lit ; une operation en erreur :
+//  la retirer ; copier ; demander a l'IA). La proposition change (jamais le
+//  projet), se revalide, l'erreur disparait ; la categorie CORRECTIONS dit ce qui
+//  a ete fait, et le clic droit sur une correction la reprend (Revenir). Deux
+//  erreurs identiques : une ligne << ... (2 operations) >>. Le choix du haut vaut
+//  pour UNE variable introuvable (la premiere, ou celle qu'on a demandee) - les
+//  autres gardent leur erreur jusqu'a leur propre choix.
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -36,12 +46,14 @@
 // =============================================================================
 #pragma once
 
+#include "AiFixes.hpp"
 #include "AiOperations.hpp"
 #include "../../menu/IMenu.hpp"
 
 #include <string>
+#include <vector>
 
-namespace ui { class Button; class DropDown; }
+namespace ui { class Button; class DropDown; class PopupMenu; }
 
 namespace app::ai {
 
@@ -90,6 +102,22 @@ public:
     [[nodiscard]] gfx::Rect  groupRect(const std::string& heading) const;
     [[nodiscard]] gfx::Point objectPoint(const std::string& name) const;   // le centre d'un objet de l'apercu a l'ecran
 
+    // 1.22.1 : LE CLIC DROIT SUR UNE ERREUR (AiFixes.hpp) - les lignes telles qu'elles se lisent (les doublons regroupes), celles
+    // des corrections faites ; le menu d'une ligne (au milieu de la liste), ses entrees (un sous-menu : "parent > enfant"),
+    // en choisir une comme un clic ; la variable introuvable que vise le choix du haut (focusVariable : << Choisir une
+    // variable... >>). Pour les essais et les scripts ; la souris passe par les memes gestes.
+    [[nodiscard]] std::vector<std::string> errorRows() const;
+    [[nodiscard]] std::vector<std::string> warningRows() const;
+    [[nodiscard]] std::vector<std::string> correctionRows() const;
+    bool openErrorMenu(std::size_t line);
+    bool openWarningMenu(std::size_t line);
+    bool openCorrectionMenu(std::size_t line);
+    [[nodiscard]] bool menuOpen() const;
+    [[nodiscard]] std::vector<std::string> menuItems() const;
+    bool chooseMenuItem(const std::string& label);
+    void focusVariable(const std::string& name, bool openList = false);   // openList : sa liste s'ouvre aussi
+    [[nodiscard]] const std::string& variableShown() const noexcept { return missingName_; }
+
 protected:
     core::Status buildUi() override;
 
@@ -97,6 +125,9 @@ private:
     friend class AiPreviewBody;
     void refresh();
     void finish(bool ok);
+    // 1.22.1 : le menu d'une ligne (`list` 1 : une erreur, 2 : un avertissement, 3 : une correction), au point `at`.
+    bool openFixMenu(int list, std::size_t line, gfx::Point at);
+    void runFix(int id);
 
     AiPanel&      panel_;
     int           message_;
@@ -115,6 +146,16 @@ private:
     double        lastWait_{-1.0};
     bool          syncing_{false};
     bool          planFolded_{false};   // 1.19.0 : les categories du plan repliees a la premiere ouverture
+    // 1.22.1 : le clic droit (le menu, ses actions par id), les lignes d'erreur, d'avertissement et de correction montrees ;
+    // le choix du haut demande pour une variable (pinned_) et sa liste a ouvrir au prochain Update.
+    ui::PopupMenu*                  fixMenu_{nullptr};
+    std::vector<fixes::Action>      fixActions_;
+    std::vector<fixes::Line>        errorLines_, warningLines_;
+    std::vector<fixes::Correction>  corrections_;
+    std::string                     createType_{"BOOL"};   // le type de << Creer ... >> dans la liste du haut
+    std::size_t                     otherMissing_{0};      // les autres variables introuvables (sans choix)
+    bool                            pinned_{false};
+    bool                            openChoice_{false};
     core::ConnectionScope links_;
 };
 
