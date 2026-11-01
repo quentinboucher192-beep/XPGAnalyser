@@ -125,6 +125,11 @@ public:
     bool exists(std::string_view ref) {
         const RefParts p = partsOf(ref);
         if (p.name.empty()) return false;
+        // 1.22.2 : d'abord une recherche DIRECTE par le nom. Le graphe des relations relit toutes les formules et tous les
+        // scripts du projet : des centaines de ms sur un gros projet, sur le fil de l'interface, a CHAQUE geste quand une
+        // mission suit le projet (verifyAgainst) - une saccade. Le graphe ne sert plus que si la recherche directe ne trouve
+        // pas (un nom qualifie, un genre rare) : jamais un faux << absent >>.
+        if (direct(p)) return true;
         const auto& g = graph();
         using K = hmi::rel::Kind;
         const std::string k = folded(p.kind);
@@ -146,6 +151,29 @@ public:
     }
 
 private:
+    bool direct(const RefParts& p) const {
+        const std::string k = folded(p.kind);
+        const std::string want = folded(p.name);
+        const auto named = [&](const auto& list) {
+            return std::any_of(list.begin(), list.end(), [&](const auto& x) { return folded(x.name) == want; });
+        };
+        if (k == "variable") return project_.variable(p.name) != nullptr;
+        if (k == "type") return project_.hmiTypeByName(p.name) != nullptr;
+        if (k == "equipement") return project_.equipmentByName(p.name) != nullptr;
+        if (k == "vue" || k == "symbole" || k == "popup" || k == "modele" || k == "entete" || k == "pied" || k == "ecran modele")
+            return named(project_.views);
+        if (k == "script") return named(project_.programs.scripts);
+        if (k == "fonction") return named(project_.programs.functions);
+        if (k == "objet" || k == "instance") {
+            const auto inView = [&](const hmi::View& v) { return named(v.objects); };
+            if (!p.view.empty()) {
+                const std::string vk = folded(p.view);
+                return std::any_of(project_.views.begin(), project_.views.end(), [&](const hmi::View& v) { return folded(v.name) == vk && inView(v); });
+            }
+            return std::any_of(project_.views.begin(), project_.views.end(), inView);
+        }
+        return false;
+    }
     const hmi::rel::Graph& graph() {
         if (!graph_) graph_ = std::make_unique<hmi::rel::Graph>(hmi::rel::build(project_));
         return *graph_;
