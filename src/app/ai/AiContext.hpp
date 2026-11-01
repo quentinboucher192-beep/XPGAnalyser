@@ -16,6 +16,9 @@
 //      etre) ; les types (DDT) de l'automate relie, resumes (nom et membres),
 //      quand la demande parle de types ou de l'automate, ou qu'il y en a peu ;
 //    - les autres vues (leurs noms : une navigation les cite) ;
+//    - 1.22.1 : l'ARBORESCENCE des dossiers de variables (chaque dossier, ses variables, bornee :
+//      les premiers niveaux d'abord) et le dossier de chaque variable listee - l'IA range les
+//      variables qu'elle cree dans l'existant (AiVarFolders.hpp) ;
 //    - 1.20.0 : SEULEMENT QUAND LA DEMANDE PARLE D'INCIDENT (pourquoi cette alarme, un
 //      diagnostic, la chaine de dependances...), les trois derniers dossiers d'incident
 //      qu'elle concerne, resumes et bornes a 6 Ko (AiIncidentAnswers : contextBlock).
@@ -52,6 +55,8 @@ struct ContextLimits {
     std::size_t toolBytes{3000};
     std::size_t sysBytes{2000};
     std::size_t nativeBytes{2500};
+    // 1.22.1 (a la fin) : l'arborescence des dossiers de variables (AiVarFolders : treeText) - les premiers niveaux d'abord.
+    std::size_t folderBytes{2500};
 };
 
 // Ce que le texte contient (les essais, le rapport).
@@ -63,6 +68,8 @@ struct ContextInfo {
     bool        summarized{false};                      // une vue trop grande : resumee
     // 1.16.0 (a la fin) : les DDT de l'automate relie (combien, combien resumes) ; les types IHM du projet nommes.
     std::size_t plcTypes{0}, plcTypesListed{0}, hmiTypes{0};
+    // 1.22.1 (a la fin) : les dossiers de variables (combien, combien montres dans l'arborescence).
+    std::size_t folders{0}, foldersListed{0};
 };
 
 // Le contexte de la demande (la fin du champ "system").

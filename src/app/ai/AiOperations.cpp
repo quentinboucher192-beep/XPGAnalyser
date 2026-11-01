@@ -4,6 +4,7 @@
 #include "AiOperations.hpp"
 #include "AiDelete.hpp" // 1.21.0 : la suppression intelligente (genre, strategie, verification)
 #include "AiPlan.hpp"   // 1.19.0 : l'ordre d'execution (les unites, leurs dependances)
+#include "AiVarFolders.hpp"   // 1.22.1 : le dossier des variables creees (normalise, l'existant repris, deduit, melange)
 
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiDuplicate.hpp"    // 1.16.0 : dupliquer avec reperes, comme Ctrl+Maj+D
@@ -236,6 +237,8 @@ struct Run {
     // 1.19.0 : les variables creees par les unites precedentes du plan (en minuscules) - deja posees dans le projet de
     // travail, mais toujours << creees par la proposition >> pour l'utilisateur.
     const std::set<std::string>* plannedVars{nullptr};
+    // 1.22.1 : la proposition ENTIERE (le plan donne a cette Run une unite) - ses << ranger >> de variables (nul : `p`).
+    const Proposal* whole{nullptr};
 
     [[nodiscard]] const Env& environment() const {
         static const Env none;
@@ -1040,9 +1043,16 @@ struct Run {
     // CREER_VARIABLES : des variables de l'IHM, les regles du logiciel (le volet Variables IHM) : un nom
     // valable et libre (ni une variable IHM, ni une fonction, ni une variable de l'automate, ni plus haut),
     // un type connu (sinon les plus proches), la valeur initiale lue selon le type.
+    // 1.22.1 : + LE DOSSIER de chaque variable (AiVarFolders.hpp) - le sien, sinon celui de l'operation ; un chemin invalide
+    // est refuse ; sans dossier, deduit du prefixe (et dit) ; un melange d'equipements est signale.
     bool variables(const Operation& op, std::size_t index) {
         if (op.variables.empty()) return fail("creer_variables ne porte aucune variable (\xC2\xAB variables \xC2\xBB est vide).");
         if (op.variables.size() > 500) return fail("creer_variables : 500 variables au plus en une proposition.");
+        std::string opFolder, folderWhy;
+        if (!varfold::normalize(prop(op, "dossier"), opFolder, &folderWhy)) return fail("creer_variables : " + folderWhy + ".");
+        const std::size_t firstNew = newVars.size(), firstShown = check ? check->newVariables.size() : 0;
+        const std::map<std::string, std::string> stored = storedVariables();
+        std::vector<varfold::Request> asks;
         for (const auto& spec : op.variables) {
             const std::string name = trimmed(spec.name);
             const std::string at = "Variable \xC2\xAB " + spec.name + " \xC2\xBB : ";
@@ -1077,6 +1087,8 @@ struct Run {
                 else if (!typeKnown(v.type, &reason)) bad = unknownType(trimmed(spec.type), reason);
                 else if (auto b2 = initialValue(v.type, spec.initial, v.initial); !b2.empty()) bad = "valeur initiale : " + b2;
             }
+            std::string folder;   // 1.22.1 : son dossier, normalise (vide : celui de l'operation)
+            if (bad.empty() && !varfold::normalize(spec.folder, folder, &folderWhy)) bad = folderWhy;
             if (!bad.empty()) {
                 if (!fail(at + bad + ".")) return false;
                 continue;
@@ -1091,9 +1103,56 @@ struct Run {
             v.description = trimmed(spec.description).empty() ? "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")"
                                                               : trimmed(spec.description);
             if (check) check->newVariables.push_back({v.name, v.type, v.description, v.initial});
+            varfold::Request rq;
+            rq.name = v.name;
+            rq.folder = folder.empty() ? opFolder : folder;
+            if (const auto it = stored.find(lower(v.name)); it != stored.end()) {
+                rq.stored = true;
+                rq.folder = it->second;
+            }
+            asks.push_back(std::move(rq));
             newVars.push_back(std::move(v));
         }
+        placeFolders(firstNew, firstShown, asks);
         return true;
+    }
+
+    // 1.22.1 : les variables qu'un << ranger >> (liste variables) de la proposition range - leur nom (en minuscules) -> le
+    // dossier de ce ranger (normalise) : elles ne sont ni rangees ni deduites ici.
+    [[nodiscard]] std::map<std::string, std::string> storedVariables() const {
+        std::map<std::string, std::string> out;
+        const Proposal& all = whole ? *whole : p;
+        for (std::size_t i = 0; i < all.ops.size(); ++i) {
+            const Operation& o = all.ops[i];
+            if (o.action != Operation::Action::Store || std::find(all.excluded.begin(), all.excluded.end(), i) != all.excluded.end()) continue;
+            const std::string list = lower(prop(o, "liste"));
+            if (list != "variables" && list != "variable") continue;
+            std::string path;
+            if (!varfold::normalize(prop(o, "dossier"), path)) path.clear();
+            for (const auto& n : o.objects) out[lower(trimmed(n))] = path;
+        }
+        return out;
+    }
+
+    // 1.22.1 : LE RANGEMENT des variables creees par une operation (AiVarFolders : place) - le dossier de chacune (dans
+    // newVars et dans l'apercu), les dossiers a creer (une ligne << Dossier >> ; poses par applyFolders), ce qui est deduit
+    // ou melange (des avertissements). Une variable rangee par un << ranger >> garde son dossier vide ici : le ranger le pose.
+    void placeFolders(std::size_t firstNew, std::size_t firstShown, const std::vector<varfold::Request>& asks) {
+        if (asks.empty()) return;
+        const varfold::Placement pl = varfold::place(project, asks);
+        for (std::size_t i = 0; i < asks.size() && i < pl.placed.size(); ++i) {
+            const varfold::Placed& at = pl.placed[i];
+            if (firstNew + i < newVars.size() && at.how != varfold::Placed::How::Stored) newVars[firstNew + i].folder = at.folder;
+            if (check && firstShown + i < check->newVariables.size()) check->newVariables[firstShown + i].folder = at.folder;
+        }
+        for (const auto& w : pl.warnings) warn(w);
+        for (const auto& c : pl.created) {
+            made("Dossier", c, "dossier cr\xC3\xA9\xC3\xA9 : " + c + " (variables IHM)");
+            FolderOp f;
+            f.variables = true;
+            f.path = c;
+            folderOps.push_back(std::move(f));
+        }
     }
 
     // CREER_TYPE : un type IHM (une structure), comme Types IHM > Nouveau : un nom libre, des membres (un nom
@@ -1779,6 +1838,16 @@ struct Run {
             || path.find_first_of("\\:*?\"<>|") != std::string::npos)
             return fail(at + "chemin de dossier invalide (\xC2\xAB Ligne 1/Pompes \xC2\xBB : des noms s\xC3\xA9par\xC3\xA9s par /).");
         f.path = path;
+        // 1.22.1 : un dossier de variables (AiVarFolders) - le chemin remis en forme, un dossier existant repris tel qu'il
+        // s'ecrit (sans la casse ni les blancs en trop) : jamais un double.
+        if (f.variables) {
+            std::string norm, why2;
+            if (!varfold::normalize(path, norm, &why2)) return fail(at + why2 + ".");
+            std::vector<std::string> known = hmi::types::allFolders(project);
+            for (const auto& x : folderOps)
+                if (x.variables) known.push_back(x.path);
+            f.path = varfold::resolve(norm, known);
+        }
         if (store) {
             if (op.objects.empty()) return fail(at + "rien \xC3\xA0 ranger (\xC2\xAB objets \xC2\xBB : les noms des \xC3\xA9l\xC3\xA9ments).");
             for (const auto& raw : op.objects) {
@@ -1803,19 +1872,19 @@ struct Run {
                 f.names.push_back(n);
             }
             if (f.names.empty()) return true;
-            made("Rangement", path, std::to_string(f.names.size()) + (f.names.size() > 1 ? " \xC3\xA9l\xC3\xA9ments : " : " \xC3\xA9l\xC3\xA9ment : ") + joinList(f.names));
+            made("Rangement", f.path, std::to_string(f.names.size()) + (f.names.size() > 1 ? " \xC3\xA9l\xC3\xA9ments : " : " \xC3\xA9l\xC3\xA9ment : ") + joinList(f.names));
         } else {
             bool exists = false;
             if (f.variables) {
-                for (const auto& d : project.programs.folders) exists = exists || iequal(d, path);
+                for (const auto& d : hmi::types::allFolders(project)) exists = exists || varfold::key(d) == varfold::key(f.path);
             } else {
                 for (const auto& d : hmi::fold::allFolders(project, f.list)) exists = exists || iequal(d, path);
             }
             if (exists) {
-                warn("Le dossier \xC2\xAB " + path + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 : rien \xC3\xA0 cr\xC3\xA9" "er.");
+                warn("Le dossier \xC2\xAB " + f.path + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 : rien \xC3\xA0 cr\xC3\xA9" "er.");
                 return true;
             }
-            made("Dossier", path, "dans " + (f.variables ? std::string("variables") : std::string(hmi::fold::key(f.list))));
+            made("Dossier", f.path, "dans " + (f.variables ? std::string("variables") : std::string(hmi::fold::key(f.list))));
         }
         folderOps.push_back(std::move(f));
         return true;
@@ -2607,6 +2676,7 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
         r.deferCompile = true;
         r.plannedVars = &plannedVars;
         r.shared = &shared;
+        r.whole = &p;   // 1.22.1 : les << ranger >> de variables de toute la proposition
         const bool ok = r.go();
         if (mode == Mode::Apply && !ok) {
             if (why) *why = r.why.empty() ? std::string("La proposition ne s'applique pas.") : r.why;
@@ -2992,6 +3062,7 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
                     x.set("type", v.type);
                     if (!v.description.empty()) x.set("description", v.description);
                     if (!v.initial.empty()) x.set("valeur", v.initial);
+                    if (!v.folder.empty()) x.set("dossier", v.folder);   // 1.22.1 : son dossier
                     list.push(std::move(x));
                 }
                 o.set("variables", std::move(list));
@@ -3052,8 +3123,12 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
         if (op.detect) o.set("detecter", true);
         if (!op.props.empty() && op.action != Operation::Action::Type) {
             json::Value props = json::Value::object();
-            for (const auto& [k, v] : op.props) props.set(k, v);
-            o.set("proprietes", std::move(props));
+            for (const auto& [k, v] : op.props) {
+                // 1.22.1 : creer_variables - le dossier de l'operation s'ecrit au premier niveau, comme l'IA l'envoie.
+                if (op.action == Operation::Action::Variables && k == "dossier") o.set("dossier", v);
+                else props.set(k, v);
+            }
+            if (!props.members().empty()) o.set("proprietes", std::move(props));
         }
         if (op.action == Operation::Action::Bind) o.set("variable", op.variable);
         if (op.action == Operation::Action::Align) o.set("bord", op.edge.empty() ? std::string("haut") : op.edge);
@@ -3123,15 +3198,21 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         op.dy = o.num("dy", 20);
         op.code = o.str("code");
         // 1.16.0 : les variables, le type (sa description, ses membres), les copies et les reperes.
-        for (const auto& v : o.at("variables").items())
+        for (const auto& v : o.at("variables").items()) {
             op.variables.push_back({v.str("nom"), v.str("type"), v.str("description"),
                                     v.at("valeur").isString() ? v.str("valeur")
                                     : v.at("valeur").isNumber() ? hmi::formatNumber(v.at("valeur").asNumber())
                                     : v.at("valeur").isBool() ? (v.at("valeur").asBool() ? std::string("TRUE") : std::string("FALSE"))
                                                               : std::string{}});
+            op.variables.back().folder = v.str("dossier");   // 1.22.1 : son dossier (absent : celui de l'operation, sinon deduit)
+        }
         for (const auto& m : o.at("membres").items()) op.members.push_back({m.str("nom"), m.str("type"), m.str("description")});
         if (*action == Operation::Action::Type && o.at("description").isString() && !o.str("description").empty())
             op.props.emplace_back("description", o.str("description"));
+        // 1.22.1 : creer_variables - le dossier de l'operation (pour celles de ses variables qui n'en disent pas).
+        if (*action == Operation::Action::Variables && o.at("dossier").isString()
+            && std::none_of(op.props.begin(), op.props.end(), [](const auto& kv) { return kv.first == "dossier"; }))
+            op.props.emplace_back("dossier", o.str("dossier"));
         op.count = static_cast<int>(o.integer("copies", 1));
         op.markers = o.flag("reperes");
         // 1.18.0 : les generiques, les parametres (un symbole, une popup), la detection proposee, et les champs des outils.

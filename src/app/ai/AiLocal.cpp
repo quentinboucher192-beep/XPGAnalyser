@@ -38,6 +38,7 @@
 #include "AiDesign.hpp"           // 1.19.0 : concevoir une installation, modifier l'existant
 #include "AiIncidentAnswers.hpp"  // 1.20.0 : le diagnostic des incidents
 #include "AiRegistry.hpp"
+#include "AiVarFolders.hpp"   // 1.22.1 : le dossier des variables creees (la regle du logiciel)
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : une adresse IP, un equipement
 #include "../../hmi/HmiPublicVars.hpp"   // 1.18.0 : les variables systeme
@@ -2373,6 +2374,36 @@ std::string typeFromName(const std::string& name) {
     return "BOOL";
 }
 
+// 1.22.1 : LE RANGEMENT des variables que l'IA integree cree - la regle du logiciel (AiVarFolders : suggest), jamais un nom
+// invente : le dossier ou vivent deja les variables du meme prefixe, sinon un dossier au nom d'un prefixe commun a plusieurs
+// d'entre elles, sinon la racine. Seulement celles qui n'ont pas de dossier. Le texte qui le dit (vide : toutes a la racine).
+std::string fileVariables(const hmi::Project& project, std::vector<Operation>& ops) {
+    std::vector<std::string> names;
+    for (const auto& op : ops)
+        if (op.action == Operation::Action::Variables)
+            for (const auto& v : op.variables) names.push_back(v.name);
+    if (names.empty()) return {};
+    const auto folders = varfold::suggest(project, names);
+    std::vector<std::string> order;
+    std::map<std::string, std::vector<std::string>> byFolder;
+    std::size_t k = 0;
+    for (auto& op : ops) {
+        if (op.action != Operation::Action::Variables) continue;
+        for (auto& v : op.variables) {
+            if (v.folder.empty() && k < folders.size()) v.folder = folders[k];
+            ++k;
+            if (v.folder.empty()) continue;
+            auto& list = byFolder[v.folder];
+            if (list.empty()) order.push_back(v.folder);
+            list.push_back(v.name);
+        }
+    }
+    if (order.empty()) return {};
+    std::vector<std::string> parts;
+    for (const auto& f : order) parts.push_back("**" + f + "** (" + codes(byFolder[f], 4) + ")");
+    return "\nRangement, d'apr\xC3\xA8s le pr\xC3\xA9" "fixe des noms : " + joinAnd(parts, 6) + ".";
+}
+
 LocalReply Engine::createVariables() const {
     if (!in_.project) return ask("Ouvre d'abord un projet IHM.");
     const bool plc = has("automate") || has("api") || has("plc") || has("ddt") || has("ddts");
@@ -2472,13 +2503,14 @@ LocalReply Engine::createVariables() const {
         if (nt) what.push_back(plural(nt, "type IHM", "types IHM"));
         if (nv) what.push_back(plural(nv, "variable", "variables"));
         Proposal p = base(nv ? "Variables depuis l'automate" : "Types IHM depuis l'automate");
+        const std::string filed = fileVariables(*in_.project, ops);   // 1.22.1 : leur dossier
         p.ops = std::move(ops);
         const std::string source = in_.env.plcSource ? in_.env.plcSource() : std::string{};
         return finish(std::move(p), "Je propose de cr\xC3\xA9" "er **" + joinAnd(what) + "** depuis "
                                         + (source.empty() ? std::string("l'automate reli\xC3\xA9") : "l'automate de **" + source + "**")
                                         + (filter.empty() ? std::string{} : " (ceux qui r\xC3\xA9pondent \xC3\xA0 " + code(filter) + ")")
                                         + " : les types d'abord, dans l'ordre o\xC3\xB9 ils s'emploient. L'aper\xC3\xA7u les montre tous ; rien n'est "
-                                          "cr\xC3\xA9\xC3\xA9 avant Appliquer.");
+                                          "cr\xC3\xA9\xC3\xA9 avant Appliquer." + filed);
     }
     if (specs.empty()) {
         std::string why;
@@ -2504,9 +2536,10 @@ LocalReply Engine::createVariables() const {
     op.action = Operation::Action::Variables;
     op.variables = specs;
     p.ops.push_back(std::move(op));
+    const std::string filed = fileVariables(*in_.project, p.ops);   // 1.22.1 : leur dossier
     std::vector<std::string> list;
     for (const auto& s : specs) list.push_back(code(s.name) + " (" + s.type + ")");
-    std::string text = "Je propose de cr\xC3\xA9" "er **" + plural(specs.size(), "variable", "variables") + "** dans les variables de l'IHM : " + joinAnd(list) + ".";
+    std::string text = "Je propose de cr\xC3\xA9" "er **" + plural(specs.size(), "variable", "variables") + "** dans les variables de l'IHM : " + joinAnd(list) + "." + filed;
     if (!guessed.empty()) text += "\nLe type n'\xC3\xA9tait pas dit : je l'ai tir\xC3\xA9 du nom (" + joinAnd(guessed) + ") - redemande avec le type s'il ne convient pas.";
     if (!already.empty()) text += "\n" + codes(already) + (already.size() > 1 ? " existent" : " existe") + " d\xC3\xA9j\xC3\xA0 : rien \xC3\xA0 faire pour " + (already.size() > 1 ? "elles." : "elle.");
     text += "\nL'aper\xC3\xA7u les montre avant d'appliquer ; Ctrl+Z les retire.";
@@ -4585,6 +4618,7 @@ LocalReply Engine::workbookRequest() const {
     const auto reply = [&](sheets::Plan plan) {
         if (!plan.ok) return ask(std::move(plan.text));
         Proposal p = base(plan.summary);
+        if (in_.project) plan.text += fileVariables(*in_.project, plan.ops);   // 1.22.1 : le dossier des variables creees
         p.ops = std::move(plan.ops);
         return finish(std::move(p), std::move(plan.text));
     };

@@ -60,6 +60,12 @@
 //                       verifie sur la copie (aucune reference restante, la verification
 //                       globale) avant la commande - un seul Ctrl+Z.
 //
+//    1.22.1 (LE RANGEMENT DES VARIABLES, AiVarFolders.hpp) :
+//    creer_variables + dossier  un dossier par variable (ou celui de l'operation) ; les dossiers
+//                       manquants sont crees, un dossier existant repris sans la casse ; sans dossier,
+//                       le logiciel en deduit un du prefixe des noms (et le dit) ; un melange de deux
+//                       equipements dans un meme dossier est signale.
+//
 //  DEPLACER, REDIMENSIONNER : c'est modifier x, y, w, h (le geste natif
 //  hmi::edit::setBox : un groupe garde ses enfants a leur place relative).
 //
@@ -123,6 +129,10 @@ struct Operation {
     //  - dupliquer : `count` copies (1 : une), `markers` (les reperes $...$ avancent d'une copie a l'autre).
     struct VariableSpec {
         std::string name, type, description, initial;
+        // 1.22.1 (a la fin) : creer_variables - son dossier dans les variables IHM ("Station de pompage/Pompes/P1" ; vide : celui
+        // de l'operation, "dossier", sinon deduit - AiVarFolders.hpp). Le JSON : "dossier". Dans Check::newVariables : le
+        // dossier final ("" : la racine).
+        std::string folder{};
         bool operator==(const VariableSpec&) const = default;
     };
     struct MemberSpec {

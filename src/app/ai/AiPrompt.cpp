@@ -103,6 +103,17 @@ const char* const kRules =
     "l'utilisateur valide avant que rien ne change (une suppression toujours). Une d\xC3\xA9tection r\xC3\xA9seau "
     "(detecter_equipements) n'est jamais lanc\xC3\xA9" "e par toi : elle ouvre la confirmation, l'utilisateur lance. Ton compte rendu suit les r\xC3\xA9sultats r\xC3\xA9" "els : "
     "ce qui a \xC3\xA9t\xC3\xA9 analys\xC3\xA9, ce qui est propos\xC3\xA9, ce qui attend la validation ; jamais une \xC3\xA9tape suppos\xC3\xA9" "e faite.\n"
+    // 1.22.1 : le rangement des variables creees (AiVarFolders) - le contexte montre l'arborescence reelle.
+    "18. Ranger les variables cr\xC3\xA9\xC3\xA9" "es (creer_variables) : chaque variable neuve a un dossier (son \"dossier\", ou celui de "
+    "l'op\xC3\xA9ration pour toutes ; A/B/C). Lis l'arborescence du contexte (Dossiers des variables IHM) et r\xC3\xA9utilise le dossier qui "
+    "correspond (m\xC3\xAAme zone, m\xC3\xAAme \xC3\xA9quipement) ; jamais un dossier existant sans rapport. Sinon : installation ou zone / "
+    "\xC3\xA9quipement ou fonction / (si utile) nature : Commandes, \xC3\x89tats, Mesures, D\xC3\xA9" "fauts, Param\xC3\xA8tres, Compteurs. Un "
+    "\xC3\xA9quipement = un dossier : jamais deux \xC3\xA9quipements dans le m\xC3\xAAme dossier final. Noms courts, en fran\xC3\xA7" "ais, sans "
+    "r\xC3\xA9p\xC3\xA9ter le pr\xC3\xA9" "fixe ; 4 niveaux au plus ; pas de dossier pour une seule variable isol\xC3\xA9" "e (sauf un \xC3\xA9quipement) : "
+    "le dossier parent ; les variables communes (alarmes g\xC3\xA9n\xC3\xA9rales, heure, utilisateur...) dans un dossier commun explicite "
+    "(Commun). Exemple, une station de pompage : Station de pompage/Pompes/P1 (P1_Marche, P1_Defaut), Station de pompage/Pompes/P2, "
+    "Station de pompage/Vannes/V1, Station de pompage/Mesures (PT1_Pression, FT1_Debit). Sans dossier, le logiciel en d\xC3\xA9" "duit un du "
+    "pr\xC3\xA9" "fixe et le signale ; il signale aussi deux \xC3\xA9quipements m\xC3\xAAl\xC3\xA9s.\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
     "- creer : genre (une cl\xC3\xA9), nom (neuf), proprietes (x, y, w, h compris ; variable : une variable existante). "
@@ -139,11 +150,12 @@ const char* const kRules =
     "\"Les pompes du poste\"}}\n"
     // 1.19.0 : plusieurs vues.
     "  Plusieurs creer_vue possibles : un objet va dans sa \"vue\", sinon la derni\xC3\xA8re creer_vue au-dessus, sinon la vue ouverte.\n"
-    "- creer_variables : variables (nom neuf, type, description, valeur initiale). Types : BOOL, INT, DINT, REAL, STRING, "
+    "- creer_variables : variables (nom neuf, type, description, valeur initiale, dossier), dossier (pour toutes). Types : BOOL, INT, DINT, REAL, STRING, "
     "TIME, ARRAY[0..9] OF REAL, ou un type IHM du projet (ou cr\xC3\xA9\xC3\xA9 dans la proposition). Les autres op\xC3\xA9rations peuvent les citer. "
     "M\xC3\xAAme nom et m\xC3\xAAme type : r\xC3\xA9utilis\xC3\xA9" "e ; autre type : refus\xC3\xA9" "e. "
     "Exemple : {\"action\": \"creer_variables\", \"variables\": [{\"nom\": \"Marche_P1\", \"type\": \"BOOL\", \"description\": "
-    "\"Marche pompe 1\"}, {\"nom\": \"Consigne_Niveau\", \"type\": \"REAL\", \"valeur\": \"75\"}]}\n"
+    "\"Marche pompe 1\", \"dossier\": \"Station de pompage/Pompes/P1\"}, {\"nom\": \"Consigne_Niveau\", \"type\": \"REAL\", \"valeur\": \"75\", "
+    "\"dossier\": \"Station de pompage/Cuve\"}]}\n"
     "- creer_type : nom (T_...), description, membres (nom, type, description) ; un membre d'un autre type IHM : ce type "
     "existe ou est cr\xC3\xA9\xC3\xA9 dans la proposition (identique : r\xC3\xA9utilis\xC3\xA9). Exemple : {\"action\": \"creer_type\", \"nom\": \"T_Pompe\", "
     "\"membres\": [{\"nom\": \"Marche\", \"type\": \"BOOL\"}, {\"nom\": \"Vitesse\", \"type\": \"REAL\", \"description\": \"tr/min\"}]}\n"
@@ -255,7 +267,7 @@ const std::vector<Fields>& fieldsOf() {
         {A::Code, {"code", "vue"}, {"code"}},
         // 1.16.0 : la vue neuve, les variables, les types IHM.
         {A::View, {"nom", "proprietes", "parametres", "generiques", "description"}, {"nom"}},
-        {A::Variables, {"variables"}, {"variables"}},
+        {A::Variables, {"variables", "dossier"}, {"variables"}},   // 1.22.1 : + dossier (celui de toutes ses variables)
         {A::Type, {"nom", "description", "membres", "generiques"}, {"nom", "membres"}},
         // 1.18.0 : les outils de l'IA.
         {A::Equipment, {"nom", "type", "adresse", "port", "esclave", "periode", "simule", "description", "detecter", "proprietes"}, {"nom"}},
@@ -378,7 +390,10 @@ std::string malformed(const json::Value& o, std::size_t n) {
         return {};
     };
     if (o.has("variables"))
-        if (auto bad = entries("variables", {"nom", "type", "description", "valeur"}, true); !bad.empty()) return bad;
+        if (auto bad = entries("variables", {"nom", "type", "description", "valeur", "dossier"}, true); !bad.empty()) return bad;
+    // 1.22.1 : le dossier de creer_variables (celui de toutes ses variables) : un texte.
+    if (*action == Operation::Action::Variables && o.has("dossier") && !o.at("dossier").isString())
+        return what + " : \xC2\xAB dossier \xC2\xBB doit \xC3\xAAtre un texte (Station de pompage/Pompes/P1).";
     if (o.has("membres"))
         if (auto bad = entries("membres", {"nom", "type", "description"}, false); !bad.empty()) return bad;
     if (*action == Operation::Action::Align) {
@@ -603,7 +618,10 @@ std::string operationsTool() {
         Value e = Value::object();
         e.set("type", "object");
         Value fields = Value::object();
-        for (const char* k : keys) fields.set(k, str(std::string(k) == "valeur" ? "la valeur initiale (selon le type ; vide : 0, FALSE, '')." : std::string(k) + "."));
+        for (const char* k : keys)
+            fields.set(k, str(std::string(k) == "valeur"    ? "la valeur initiale (selon le type ; vide : 0, FALSE, '')."
+                              : std::string(k) == "dossier" ? "son dossier (A/B/C : zone/\xC3\xA9quipement/nature) ; absent : celui de l'op\xC3\xA9ration."
+                                                            : std::string(k) + "."));
         e.set("properties", fields);
         Value required = Value::array();
         required.push("nom");
@@ -616,7 +634,7 @@ std::string operationsTool() {
         v.set("description", std::move(description));
         return v;
     };
-    props.set("variables", entries({"nom", "type", "description", "valeur"},
+    props.set("variables", entries({"nom", "type", "description", "valeur", "dossier"},
                                    "creer_variables : les variables IHM neuves (type : BOOL, INT, REAL, STRING, TIME, ARRAY[a..b] OF ..., "
                                    "un type IHM)."));
     props.set("membres", entries({"nom", "type", "description"}, "creer_type : les membres du type (un type IHM cit\xC3\xA9 : existant ou cr\xC3\xA9\xC3\xA9 plus haut)."));
@@ -652,7 +670,7 @@ std::string operationsTool() {
              {"categorie", "creer_alarme."}, {"groupe", "creer_alarme."}, {"delai", "creer_alarme (ms)."}, {"acquittement", "creer_alarme."},
              {"incidents", "creer_alarme : false = pas de dossier d'incident pour elle."},
              {"consigne", "creer_alarme."}, {"piece_jointe", "creer_ressource."}, {"liste", "creer_dossier, ranger."},
-             {"dossier", "creer_dossier, ranger..."}})
+             {"dossier", "creer_dossier, ranger... ; creer_variables : le dossier de ses variables (Station de pompage/Pompes/P1)."}})
         props.set(k, str(d));
     item.set("properties", props);
     Value req = Value::array();
@@ -900,6 +918,7 @@ PromptParts compactPromptParts(const PromptInput& in, int contextTokens) {
     lim.variableBytes = room / 8;
     lim.plcBytes = room / 10;
     lim.viewBytes = room / 24;
+    lim.folderBytes = room / 24;   // 1.22.1 : l'arborescence des dossiers de variables
     d += "\n" + contextText(in, lim);
     return out;
 }
