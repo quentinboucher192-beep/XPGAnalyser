@@ -158,6 +158,15 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.4 : ne pas tourner en rond (Proposer la suite)
+        note("1.22.4", "Assistant IA", Kind::New,
+         "\xC2\xAB PROPOSER LA SUITE \xC2\xBB NE TOURNE PLUS EN ROND : une proposition qui refait une pr\xC3\xA9" "c\xC3\xA9" "dente (les m\xC3\xAAmes op\xC3\xA9rations, la place "
+         "des objets mise \xC3\xA0 part), qui retombe sur les m\xC3\xAAmes erreurs, ou une \xC3\xA9tape propos\xC3\xA9" "e 3 fois sans aboutir est retenue : elle ne "
+         "s'applique pas et la suite ne repart pas seule. Sa carte dit le cercle (\xC2\xAB P2 refait P1 : la m\xC3\xAAme op\xC3\xA9ration, la m\xC3\xAAme erreur : "
+         "Vanne.Cmd \xC2\xBB) ; la mission le note et le notifie (\xC2\xAB La mission tourne en rond \xC2\xBB). Tu choisis : Modifier la demande, Corriger \xC3\xA0 la "
+         "main, Ignorer cette \xC3\xA9tape, Forcer la fin de la mission ou Proposer quand m\xC3\xAAme. La demande suivante dit \xC3\xA0 l'IA ce qui a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 "
+         "propos\xC3\xA9 et pourquoi cela a \xC3\xA9" "chou\xC3\xA9.",
+         "assistant-ia-missions", ""),
         // 1.22.4 : la previsualisation montre ou sont les erreurs
         note("1.22.4", "Assistant IA", Kind::New,
          "LA PR\xC3\x89VISUALISATION MONTRE O\xC3\x99 SONT LES ERREURS : dans l'aper\xC3\xA7u, un objet en erreur est encadr\xC3\xA9 de rouge, un objet en "

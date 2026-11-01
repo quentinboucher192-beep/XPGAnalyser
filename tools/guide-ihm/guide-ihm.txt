@@ -2174,6 +2174,21 @@ Au bout, sans la boucle, la dernière image reste à l'écran ; Lecture repart d
 - L'appel à l'IA en cours s'arrête ; une proposition en attente passe « refusée » (jamais appliquée) ; chaque étape non terminée devient **ignorée (fin forcée)**. **Rien n'est défait dans le projet** : ce qui a été appliqué reste.
 - La mission est **Terminée (fin forcée)** ; l'audit final suit (le projet de la mission ouvert ; sinon « Lancer l'audit final »), et le rapport le dit, avec les étapes ignorées.
 - Impossible pendant qu'une proposition de la mission s'applique en arrière-plan (attends la fin), et sur une mission déjà terminée ou annulée.
+### Quand l'IA tourne en rond (1.22.4)
+- À l'arrivée de chaque proposition (une mission, ou « Proposer la suite » dans une conversation), le logiciel la compare aux précédentes. Il voit un **cercle** quand :
+  - elle refait une proposition précédente : les **mêmes opérations**, qu'elle ait été refusée, en échec, annulée ou appliquée (la place des objets ne compte pas : deux propositions qui ne diffèrent que par x et y sont la même) ;
+  - elle retombe sur les **mêmes erreurs** que la tentative précédente pour la même étape ;
+  - une étape a été **proposée 3 fois sans aboutir** ;
+  - le projet est **revenu au même point** pour la même étape (une troisième fois) ;
+  - dans une conversation, la **même suite** est annoncée de nouveau.
+- La proposition est alors **retenue** : elle ne s'applique pas (en mode Direct non plus), et la suite ne repart pas toute seule. Sa carte porte « Tourne en rond » et dit le cercle, par exemple « P2 refait P1 (refusée ; la même opération, la même erreur : Vanne.Cmd) » ou « S1 a été proposée 3 fois sans aboutir (P1, P2, P3) ». La mission le note dans son historique et une notification le dit.
+- Tu choisis sur la carte :
+  - **Modifier la demande** : la saisie reçoit « Pour S1 : », écris ta consigne puis Entrée ; elle part avec la suite ;
+  - **Corriger à la main…** : la prévisualisation ;
+  - **Ignorer cette étape** ;
+  - **Forcer la fin de la mission…** ;
+  - **Proposer quand même**.
+- **La demande suivante dit à l'IA ce qui a déjà été proposé** pour ces étapes, et pourquoi cela a échoué (le sort, les opérations, les erreurs exactes), avec la consigne de changer d'approche ou de dire ce qui bloque.
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0

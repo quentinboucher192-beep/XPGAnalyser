@@ -4397,6 +4397,36 @@ const std::vector<Topic>& topics() {
                          "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
              {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
                          "op\xC3\xA9rations) \xC2\xBB.", {}},
+             {K::Heading, "Voir o\xC3\xB9 sont les erreurs (1.22.4)", {}},
+             {K::Bullet, "**Dans l'aper\xC3\xA7u**, un objet en erreur a un second cadre **rouge**, plus "
+                         "\xC3\xA9pais, avec une pastille \xC2\xAB ! \xC2\xBB ; un objet en avertissement, "
+                         "le m\xC3\xAAme cadre en **ambre**. La l\xC3\xA9gende du bas les nomme. Le survol "
+                         "d'un objet liste ses messages.", {}},
+             {K::Bullet, "Un avertissement qui ne nomme pas ses objets (\xC2\xAB 2 objets "
+                         "cr\xC3\xA9\xC3\xA9s ne sont reli\xC3\xA9s \xC3\xA0 aucune variable \xC2\xBB) "
+                         "encadre quand m\xC3\xAAme les objets concern\xC3\xA9s.", {}},
+             {K::Bullet, "**\xC3\x80 gauche**, les lignes li\xC3\xA9" "es \xC3\xA0 une erreur sont en rouge, "
+                         "celles li\xC3\xA9" "es \xC3\xA0 un avertissement en ambre : les erreurs, les "
+                         "avertissements, les \xC3\xA9tapes de l'architecture, les objets, les variables, "
+                         "les types. Le titre d'une cat\xC3\xA9gorie porte la pastille de son pire niveau, "
+                         "m\xC3\xAAme repli\xC3\xA9" "e.", {}},
+             {K::Bullet, "**La recherche** en haut de la liste (**Ctrl+F**) filtre toutes les "
+                         "cat\xC3\xA9gories : un nom d'objet, de variable, de type, un texte d'erreur. Les "
+                         "titres des cat\xC3\xA9gories qui ont un r\xC3\xA9sultat restent, et le compte dit "
+                         "\xC2\xAB 12 lignes \xC2\xBB. **\xC3\x89" "chap** vide la recherche ; un second "
+                         "\xC3\x89" "chap ferme la fen\xC3\xAAtre.", {}},
+             {K::Bullet, "**Les puces Erreurs (n) et Avertissements (n)** ne gardent que ces lignes, l'une, "
+                         "l'autre ou les deux.", {}},
+             {K::Bullet, "**Choisir une ligne encadre dans l'aper\xC3\xA7u ce qu'elle d\xC3\xA9signe**, en "
+                         "couleur d'accent (le cadre pulse une seconde puis reste), et l'aper\xC3\xA7u s'y "
+                         "recentre (il zoome si c'est petit) :", {}},
+             {K::Paragraph, "- un objet : cet objet ; - une variable : les objets qui la lisent (variable "
+                         "li\xC3\xA9" "e, formules, textes \xC3\xA0 trous, actions, arguments) ; - un type : "
+                         "les objets qui lisent une variable ou un param\xC3\xA8tre de ce type ; - une "
+                         "\xC3\xA9tape : ses objets, sinon ceux qui lisent ce qu'elle cr\xC3\xA9" "e ; - une "
+                         "erreur ou un avertissement : ses objets.", {}},
+             {K::Bullet, "Inversement, **un clic sur un objet de l'aper\xC3\xA7u** choisit sa ligne \xC3\xA0 "
+                         "gauche.", {}},
              {K::Heading, "L'automate d'un .XPG joint", {}},
              {K::Bullet, "Un export de Control Expert joint (.XPG) est **lu comme l'automate de la "
                          "s\xC3\xA9" "ance** : ses variables globales et ses types (DDT) vont dans ce que "
@@ -5179,6 +5209,37 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Impossible pendant qu'une proposition de la mission s'applique en "
                          "arri\xC3\xA8re-plan (attends la fin), et sur une mission d\xC3\xA9j\xC3\xA0 "
                          "termin\xC3\xA9" "e ou annul\xC3\xA9" "e.", {}},
+             {K::Heading, "Quand l'IA tourne en rond (1.22.4)", {}},
+             {K::Bullet, "\xC3\x80 l'arriv\xC3\xA9" "e de chaque proposition (une mission, ou \xC2\xAB "
+                         "Proposer la suite \xC2\xBB dans une conversation), le logiciel la compare aux "
+                         "pr\xC3\xA9" "c\xC3\xA9" "dentes. Il voit un **cercle** quand :", {}},
+             {K::Paragraph, "- elle refait une proposition pr\xC3\xA9" "c\xC3\xA9" "dente : les **m\xC3\xAAmes "
+                         "op\xC3\xA9rations**, qu'elle ait \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e, en "
+                         "\xC3\xA9" "chec, annul\xC3\xA9" "e ou appliqu\xC3\xA9" "e (la place des objets ne "
+                         "compte pas : deux propositions qui ne diff\xC3\xA8rent que par x et y sont la "
+                         "m\xC3\xAAme) ; - elle retombe sur les **m\xC3\xAAmes erreurs** que la tentative "
+                         "pr\xC3\xA9" "c\xC3\xA9" "dente pour la m\xC3\xAAme \xC3\xA9tape ; - une "
+                         "\xC3\xA9tape a \xC3\xA9t\xC3\xA9 **propos\xC3\xA9" "e 3 fois sans aboutir** ; - le "
+                         "projet est **revenu au m\xC3\xAAme point** pour la m\xC3\xAAme \xC3\xA9tape (une "
+                         "troisi\xC3\xA8me fois) ; - dans une conversation, la **m\xC3\xAAme suite** est "
+                         "annonc\xC3\xA9" "e de nouveau.", {}},
+             {K::Bullet, "La proposition est alors **retenue** : elle ne s'applique pas (en mode Direct non "
+                         "plus), et la suite ne repart pas toute seule. Sa carte porte \xC2\xAB Tourne en "
+                         "rond \xC2\xBB et dit le cercle, par exemple \xC2\xAB P2 refait P1 "
+                         "(refus\xC3\xA9" "e ; la m\xC3\xAAme op\xC3\xA9ration, la m\xC3\xAAme erreur : "
+                         "Vanne.Cmd) \xC2\xBB ou \xC2\xAB S1 a \xC3\xA9t\xC3\xA9 propos\xC3\xA9" "e 3 fois "
+                         "sans aboutir (P1, P2, P3) \xC2\xBB. La mission le note dans son historique et une "
+                         "notification le dit.", {}},
+             {K::Bullet, "Tu choisis sur la carte :", {}},
+             {K::Paragraph, "- **Modifier la demande** : la saisie re\xC3\xA7oit \xC2\xAB Pour S1 : \xC2\xBB, "
+                         "\xC3\xA9" "cris ta consigne puis Entr\xC3\xA9" "e ; elle part avec la suite ; - "
+                         "**Corriger \xC3\xA0 la main\xE2\x80\xA6** : la pr\xC3\xA9visualisation ; - "
+                         "**Ignorer cette \xC3\xA9tape** ; - **Forcer la fin de la mission\xE2\x80\xA6** ; - "
+                         "**Proposer quand m\xC3\xAAme**.", {}},
+             {K::Bullet, "**La demande suivante dit \xC3\xA0 l'IA ce qui a d\xC3\xA9j\xC3\xA0 "
+                         "\xC3\xA9t\xC3\xA9 propos\xC3\xA9** pour ces \xC3\xA9tapes, et pourquoi cela a "
+                         "\xC3\xA9" "chou\xC3\xA9 (le sort, les op\xC3\xA9rations, les erreurs exactes), "
+                         "avec la consigne de changer d'approche ou de dire ce qui bloque.", {}},
          },
          {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
          {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},
@@ -20261,8 +20322,8 @@ const std::vector<Topic>& topics() {
                          "aussi le sien (`=Marche`).", {}, "1.12.19"},
              {K::Bullet, "**Une valeur fixe s'\xC3\xA9" "crit comme elle se lit**, sans pr\xC3\xA9" "fixe : "
                          "la case la lit selon son type (le tableau ci-dessous). Un texte s'\xC3\xA9" "crit "
-                         "tel quel (`Bonjour`) ; entre apostrophes seulement s'il est le nom d'une variable "
-                         "(`'Niveau'`).", {}, "1.12.19"},
+                         "entre guillemets (`\"Bonjour\"`, ou `'Bonjour'`) ; tap\xC3\xA9 sans, il en "
+                         "re\xC3\xA7oit, sauf s'il est un nom (1.22.4).", {}, "1.12.19"},
              {K::Bullet, "**Un nom connu tap\xC3\xA9 seul devient une expression** : `Niveau` dans une case "
                          "nombre devient `=Niveau`. Une valeur d'\xC3\xA9num\xC3\xA9ration tap\xC3\xA9" "e "
                          "seule (`Auto`) reste une valeur fixe (`T_MODE#Auto`).", {}, "1.12.19"},
@@ -20298,9 +20359,39 @@ const std::vector<Topic>& topics() {
                          "`FALSE`, `faux`, `non`, `off`, `0`\t`TRUE` ; `FALSE`\ndur\xC3\xA9" "e (TIME)\t`5 "
                          "s`, `250 ms`, `1 h 30`, `2 min 30`, `01:30` (mm:ss), `01:30:00` (h:mm:ss), `T#5s` "
                          "; un nombre seul : des millisecondes\t`T#5s`, `T#250ms`, "
-                         "`T#1m30s`\xE2\x80\xA6\ntexte (STRING)\t`Azote`\t`'Azote'`, montr\xC3\xA9 sans "
-                         "apostrophes\n\xC3\xA9num\xC3\xA9ration\t`Auto`\t`T_MODE#Auto`\nexpression\t`=Niveau "
+                         "`T#1m30s`\xE2\x80\xA6\ntexte (STRING)\t`\"Azote\"` (ou `Azote`, qui n'est pas un "
+                         "nom)\t`'Azote'`, montr\xC3\xA9 "
+                         "`\"Azote\"`\n\xC3\xA9num\xC3\xA9ration\t`Auto`\t`T_MODE#Auto`\nexpression\t`=Niveau "
                          "* 2`, ou `Niveau` seul\t`=Niveau * 2`, `=Niveau`", {}, "1.12.19"},
+             {K::Heading, "Un texte entre guillemets, un nom sans (1.22.4)", {}, "1.22.4"},
+             {K::Paragraph, "Dans une case de texte (STRING : la valeur par d\xC3\xA9" "faut d'un "
+                         "param\xC3\xA8tre, un argument d'Ouvrir une popup, une valeur initiale, un membre, "
+                         "une recette), **`\"Vanne\"` est un texte et `Vanne` un nom** : un "
+                         "param\xC3\xA8tre, une variable. Avant, un texte se montrait sans apostrophes : "
+                         "`Vanne` tap\xC3\xA9 dans la valeur par d\xC3\xA9" "faut d'un param\xC3\xA8tre "
+                         "STRING devenait le param\xC3\xA8tre Vanne de la popup (un T_Vanne), avec l'erreur "
+                         "\xC2\xAB Vanne est sortie_tor ; ce champ attend STRING \xC2\xBB.", {}, "1.22.4"},
+             {K::Bullet, "**Un texte constant se montre toujours entre guillemets** : `\"Azote\"`, "
+                         "`\"L'eau\"`. Ce qui est montr\xC3\xA9 se retape tel quel. Un guillemet dans le "
+                         "texte s'\xC3\xA9" "crit `$\"` (`\"dit $\"oui$\"\"`).", {}, "1.22.4"},
+             {K::Bullet, "**Tu tapes `\"Vanne\"` ou `'Vanne'`** : c'est le texte, m\xC3\xAAme si Vanne est "
+                         "aussi un nom.", {}, "1.22.4"},
+             {K::Bullet, "**Tu tapes un mot qui n'est pas un nom** (`Pompe`) : la case le prend comme texte "
+                         "et ajoute les guillemets (`\"Pompe\"`).", {}, "1.22.4"},
+             {K::Bullet, "**Tu tapes un nom** (`Vanne`) : c'est le nom. S'il n'est pas un texte, la ligne "
+                         "rouge le dit : \xC2\xAB Sans guillemets, Vanne est un nom ; le texte "
+                         "s'\xC3\xA9" "crit \"Vanne\" \xC2\xBB. Le clic droit et le carr\xC3\xA9 proposent "
+                         "**Prendre comme texte : \"Vanne\"**.", {}, "1.22.4"},
+             {K::Bullet, "**Un texte se construit en formule** : `=\"Vanne \" + Numero.ToString()`, `='Pompe "
+                         "' + Nom + ' : ' + TO_STRING(Debit)`. `x.ToString()` est `TO_STRING(x)` (pour une "
+                         "\xC3\xA9num\xC3\xA9ration, son toString). Les guillemets et `.ToString()` marchent "
+                         "dans toutes les expressions de l'IHM (formules, scripts, conditions). Le code de "
+                         "l'automate garde le ST de Control Expert : `'texte'`.", {}, "1.22.4"},
+             {K::Bullet, "**L'Assistant IA suit la m\xC3\xAAme r\xC3\xA8gle** (r\xC3\xA8gle 20 de ses "
+                         "consignes) : un texte entre apostrophes, sans elles un nom. Une valeur par "
+                         "d\xC3\xA9" "faut STRING qui serait un nom d'un autre type (`Vanne`) est "
+                         "refus\xC3\xA9" "e, avec l'explication. Un mot inconnu est pris comme texte, et un "
+                         "avertissement le dit.", {}, "1.22.4"},
              {K::Heading, "Elle dit qu'elle accepte une expression", {}},
              {K::Paragraph, "Une case qui accepte une expression porte la **pastille fx** devant sa valeur et "
                          "le **type attendu** en petit au bout de son nom : c'est ce qui le dit. Son nom n'a "
