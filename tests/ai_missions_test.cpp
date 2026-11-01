@@ -623,6 +623,16 @@ void recovery() {
     mi::recover(m, {}, nullptr, kNow, &r);
     check(r.coherence == mi::Coherence::Missing && m.coherence == mi::Coherence::Missing && has(r.nextAction, "Ouvrir"), "cas C : aucun projet - l'ouvrir");
     check(mi::nextBatch(m, 10).steps.empty() && has(mi::nextBatch(m, 10).why, "ouvre"), "cas C : rien ne se propose");
+
+    // Une mission lancee sur un projet jamais enregistre (sans identite) : elle suit le projet ouvert, et prend son
+    // identite des qu'il est enregistre ; un autre projet ensuite n'est plus le sien.
+    mi::Mission u = mi::make("x", "c1", kNow);
+    mi::stamp(u, mi::printOf(f.doc->project), kNow);
+    check(mi::inspect(u, {}, &f.doc->project).coherence == mi::Coherence::Same, "projet jamais enregistre : le meme");
+    mi::recover(u, "projet-A", &f.doc->project, kNow, &r);
+    check(r.coherence == mi::Coherence::Same && u.project.id == "projet-A", "enregistre depuis : son identite prise");
+    check(mi::inspect(u, "projet-B", &f.doc->project).coherence == mi::Coherence::Missing, "puis un autre projet : introuvable");
+    check(mi::inspect(m, {}, &f.doc->project).coherence == mi::Coherence::Missing, "une mission d'un projet enregistre : pas un projet sans identite");
 }
 
 // SCENARIO B : l'application est fermee pendant la 3e proposition (l'appel a l'IA en cours) - rien n'est rejoue.

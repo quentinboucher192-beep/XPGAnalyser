@@ -377,7 +377,10 @@ std::string listText(const std::vector<std::string>& v, std::size_t max) {
 Recovery inspect(const Mission& m, std::string_view openProjectId, const hmi::Project* project) {
     Recovery r;
     r.interrupted = m.pending.active;
-    const bool sameProject = project && !openProjectId.empty() && (m.project.id.empty() || m.project.id == openProjectId);
+    // Le meme projet : la meme identite. Une mission lancee sur un projet jamais enregistre (sans identite) suit le
+    // projet ouvert (recover lui donne son identite des qu'il en a une) ; une mission d'un projet enregistre ne
+    // reconnait pas un projet sans identite.
+    const bool sameProject = project && (m.project.id.empty() || (!openProjectId.empty() && m.project.id == openProjectId));
     if (!sameProject) {
         r.coherence = Coherence::Missing;
         r.text = project ? "Le projet ouvert n'est pas celui de la mission (" + (m.project.name.empty() ? std::string("?") : m.project.name) + ")."
@@ -410,6 +413,10 @@ Recovery inspect(const Mission& m, std::string_view openProjectId, const hmi::Pr
 bool recover(Mission& m, std::string_view openProjectId, const hmi::Project* project, std::string now, Recovery* out) {
     Recovery r = inspect(m, openProjectId, project);
     bool changed = false;
+    if (r.coherence != Coherence::Missing && m.project.id.empty() && !openProjectId.empty()) {
+        m.project.id = std::string(openProjectId);   // le projet a ete enregistre depuis : son identite
+        changed = true;
+    }
     if (m.pending.active) {
         const std::string purpose = m.pending.purpose.empty() ? std::string("proposition") : m.pending.purpose;
         log(m, "interruption",
