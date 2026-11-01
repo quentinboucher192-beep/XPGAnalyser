@@ -16,6 +16,7 @@
 #include "AiAgentTools.hpp"   // 1.21.0 : les outils de l'agent (analyser_projet, executer_code)
 #include "AiConversationIndex.hpp"   // 1.21.0 : chercher_conversations
 #include "AiMemoryManager.hpp"       // 1.21.0 : la memoire persistante (proposer_souvenir, chercher_souvenirs)
+#include "AiNotifications.hpp"       // 1.21.2 : l'onglet Notifications du panneau (ce qui s'est passe)
 #include "AiSecret.hpp"
 
 #include "../../core/Edition.hpp"
@@ -83,6 +84,31 @@ std::string providerName(std::string_view key) {
 }
 
 std::string plural(std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
+
+// ---- 1.21.2 : LES NOTIFICATIONS DE L'ASSISTANT (AiNotifications.hpp) ----
+//  Ce qui merite d'etre retrouve dans l'onglet Notifications : chaque source poste UN evenement (jamais par tick).
+std::string guillemets(const std::string& s) { return "\xC2\xAB " + s + " \xC2\xBB"; }
+
+// Une proposition qui ne s'applique pas (la transaction refusee, ou le projet change pendant l'application de fond).
+void notifyApplyFailed(const std::string& conversation, int message, const Proposal& p, const std::string& why) {
+    notifs::Item n;
+    n.category = "Proposition";
+    n.title = "Proposition non appliqu\xC3\xA9" "e" + (p.summary.empty() ? std::string{} : " : " + notifs::oneLine(p.summary, 90));
+    n.detail = (why.empty() ? std::string("La proposition ne s'applique pas.") : notifs::oneLine(why, 300)) + " Le projet n'a pas chang\xC3\xA9.";
+    n.tone = "error";
+    n.button = "Voir la carte";
+    n.action = notifs::toCard(conversation, message);
+    n.key = "proposition-echec:" + p.id;
+    (void)notifs::post(std::move(n));
+}
+
+// Le titre d'une erreur du service, d'apres sa reponse HTTP (le detail : le texte de l'erreur, en clair).
+std::string serviceErrorTitle(int http) {
+    if (http == 401 || http == 403) return "Cl\xC3\xA9 API refus\xC3\xA9" "e par le service";
+    if (http == 429) return "Limite du service atteinte";
+    if (http >= 500 && http <= 599) return "Service indisponible ou surcharg\xC3\xA9";
+    return "L'Assistant n'a pas pu r\xC3\xA9pondre";
+}
 
 } // namespace
 
@@ -188,6 +214,21 @@ bool Assistant::tick(double now) {
         notice_ = "Assistant IA : " + std::to_string(n) + (n > 1 ? " souvenirs propos\xC3\xA9s" : " souvenir propos\xC3\xA9")
                   + " \xC3\xA0 valider dans M\xC3\xA9moire et apprentissage \xE2\x80\xBA Souvenirs (rien n'est retenu sans ton accord).";
         ++revision_;
+        // 1.21.2 : l'onglet Notifications - ils attendent ta validation (la meme conversation : une ligne, << x2 >>)
+        const std::string conv = !gen_.conversation.empty() ? gen_.conversation : current() ? current()->id : std::string{};
+        std::string title;
+        for (const auto& c : conversations_)
+            if (c.id == conv) title = c.title;
+        notifs::Item note;
+        note.category = "Souvenirs";
+        note.title = n > 1 ? std::to_string(n) + " souvenirs propos\xC3\xA9s attendent ta validation"
+                           : std::string("Un souvenir propos\xC3\xA9 attend ta validation");
+        note.detail = std::string(n > 1 ? "L'IA les a propos\xC3\xA9s" : "L'IA l'a propos\xC3\xA9") + (title.empty() ? std::string{} : " dans " + guillemets(title))
+                      + " : rien n'est retenu sans ton accord (M\xC3\xA9moire et apprentissage \xE2\x80\xBA Souvenirs).";
+        note.button = "Valider les souvenirs";
+        note.action = notifs::toSouvenirs("provisoire");
+        note.key = "souvenirs:" + conv;
+        (void)notifs::post(std::move(note));
     }
     // 1.21.0 : LE PONT DE L'AGENT, sur le fil de l'interface - les confirmations de scan demandees par l'IA s'ouvrent ici,
     // et le dernier compte rendu de scan est recopie pour resultat_detection.
@@ -202,6 +243,8 @@ bool Assistant::tick(double now) {
             if (!host_.askScan || !host_.askScan(a.encoded, a.reason, &why)) {
                 notice_ = "Assistant IA : la confirmation de la d\xC3\xA9tection n'a pas pu s'ouvrir" + (why.empty() ? std::string(".") : " : " + why);
                 ++revision_;
+            } else {
+                expectScan();   // 1.21.2 : sa fin ira dans l'onglet Notifications
             }
         }
         if (host_.scanSerial) {
@@ -213,6 +256,23 @@ bool Assistant::tick(double now) {
             }
             if (fresh) {
                 std::string text = host_.scanReportText ? host_.scanReportText() : std::string{};
+                // 1.21.2 : le scan que l'IA a prepare (la confirmation ouverte par elle, ou << Detecter ce qui repond... >>)
+                // vient de finir - l'onglet Notifications le dit, avec la premiere ligne du compte rendu.
+                if (scanAwaited_ >= 0.0 && lastNow_ - scanAwaited_ < kScanAwaitSeconds) {
+                    scanAwaited_ = -1.0;
+                    std::string head = text.substr(0, text.find('\n'));
+                    if (!head.empty() && head.back() == '.') head.pop_back();
+                    notifs::Item note;
+                    note.category = "R\xC3\xA9seau";
+                    note.title = "Scan r\xC3\xA9seau termin\xC3\xA9" + (head.empty() ? std::string{} : " : " + notifs::oneLine(head, 120));
+                    note.detail = "Le compte rendu est dans Communication \xE2\x80\xBA Scanner IP ; l'IA peut le lire (r\xC3\xA9sultat de la "
+                                  "d\xC3\xA9tection). Rien n'est ajout\xC3\xA9 au projet sans ton accord.";
+                    note.tone = "ok";
+                    note.button = "Voir le compte rendu";
+                    note.action = notifs::toScanReport();
+                    note.key = "scan:" + std::to_string(serial);
+                    (void)notifs::post(std::move(note));
+                }
                 std::lock_guard<std::mutex> lk(bridge_->m);
                 bridge_->scanSerial = serial;
                 bridge_->scanText = std::move(text);
@@ -775,6 +835,7 @@ void Assistant::pollAnalyses() {
         bool done = false;
         for (auto& p : pending_)
             if (attach::applyOutcome(p.attachment, o)) done = true;
+        const bool fresh = done;   // 1.21.2 : une piece qui vient d'etre jointe (pas une relecture d'une ancienne conversation)
         if (!done)
             for (auto& c : conversations_)
                 if (attach::applyOutcome(c, o)) {
@@ -783,6 +844,30 @@ void Assistant::pollAnalyses() {
                     break;
                 }
         if (done) ++revision_;
+        // 1.21.2 : l'onglet Notifications - une piece qui ne se lit pas, un classeur qui vient d'etre joint, reconnu ou lu (son
+        // modele, sa detection) ; un classeur d'une ancienne conversation relu n'est pas une nouvelle.
+        const Attachment* a = done ? findAttachment(o.attachment) : nullptr;
+        if (a && (o.analysis.state == "echec" || (o.workbook && fresh))) {
+            notifs::Item note;
+            note.key = "piece:" + o.attachment;
+            if (o.analysis.state == "echec") {
+                note.category = "Pi\xC3\xA8" "ce jointe";
+                note.title = "Pi\xC3\xA8" "ce jointe illisible : " + guillemets(a->name);
+                note.detail = (o.analysis.error.empty() ? std::string("son analyse a \xC3\xA9" "chou\xC3\xA9") : o.analysis.error)
+                              + " ; l'IA ne la lit pas tant qu'elle n'est pas lisible.";
+                note.tone = "error";
+                note.button = "Voir la pi\xC3\xA8" "ce";
+                note.action = notifs::toAttachment(o.attachment);
+            } else {
+                note.category = "Classeur";
+                note.title = (o.model.empty() ? "Classeur lu : " : "Classeur reconnu : ") + guillemets(a->name);
+                note.detail = notifs::oneLine(o.analysis.summary.empty() ? std::string("ses feuilles sont lues pour l'IA") : o.analysis.summary, 300);
+                note.tone = o.model.empty() ? "info" : "ok";
+                note.button = "Mod\xC3\xA8le\xE2\x80\xA6";
+                note.action = notifs::toFileModel(o.attachment);
+            }
+            (void)notifs::post(std::move(note));
+        }
     }
 }
 
@@ -895,6 +980,27 @@ const Attachment* Assistant::attachmentById(const std::string& attachmentId) con
                 if (a.id == attachmentId) return &a;
     return nullptr;
 }
+
+// 1.21.2 : dans toutes les conversations (une notification peut viser une piece d'une conversation fermee).
+const Attachment* Assistant::findAttachment(const std::string& attachmentId, std::string* conversation) const {
+    if (conversation) conversation->clear();
+    if (attachmentId.empty()) return nullptr;
+    for (const auto& p : pending_)
+        if (p.attachment.id == attachmentId) {
+            if (conversation && current()) *conversation = current()->id;
+            return &p.attachment;
+        }
+    for (const auto& c : conversations_)
+        for (const auto& m : c.messages)
+            for (const auto& a : m.attachments)
+                if (a.id == attachmentId) {
+                    if (conversation) *conversation = c.id;
+                    return &a;
+                }
+    return nullptr;
+}
+
+void Assistant::expectScan() { scanAwaited_ = std::max(0.0, lastNow_); }
 
 Attachment* Assistant::attachmentMut(const std::string& attachmentId, Conversation** owner) {
     if (owner) *owner = nullptr;
@@ -1077,6 +1183,7 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
         notice_ = w;
         // 1.19.0 : une transaction refusee - le projet n'a pas change (rien n'a ete applique), dit dans le journal.
         appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : " + w);
+        notifyApplyFailed(c->id, message, *p, w);   // 1.21.2 : l'onglet Notifications
         ++revision_;
         return false;
     }
@@ -1127,6 +1234,22 @@ bool Assistant::afterApply(Conversation& conv, int message, plan::Plan pl, const
         notice_ = "Assistant IA : " + prop.summary + " appliqu\xC3\xA9" "e, " + std::to_string(skipped.size())
                   + (skipped.size() > 1 ? " erreurs laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal)."
                                         : " erreur laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal).");
+    }
+    // 1.21.2 : l'onglet Notifications - appliquee (ce qu'elle a cree, ce qui est laisse de cote), et sa carte.
+    {
+        notifs::Item note;
+        note.category = "Proposition";
+        note.title = "Proposition appliqu\xC3\xA9" "e" + (prop.summary.empty() ? std::string{} : " : " + notifs::oneLine(prop.summary, 90));
+        const std::string made = creationSummary(prop);
+        note.detail = skipped.empty()
+                          ? (made.empty() ? std::string("Ctrl+Z la reprend d'un coup.") : "Cr\xC3\xA9\xC3\xA9" "s : " + made + ". Ctrl+Z reprend tout d'un coup.")
+                          : plural(skipped.size(), "erreur laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9", "erreurs laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9")
+                                + " (sous la r\xC3\xA9ponse et dans le journal d'activit\xC3\xA9).";
+        note.tone = skipped.empty() ? "ok" : "warning";
+        note.button = "Voir la carte";
+        note.action = notifs::toCard(c->id, message);
+        note.key = "proposition:" + prop.id;
+        (void)notifs::post(std::move(note));
     }
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
@@ -1196,21 +1319,26 @@ void Assistant::pollApply() {
         return;
     }
     const auto doc = host_.document ? host_.document() : nullptr;
+    const Proposal& jobProp = *c->messages[static_cast<std::size_t>(job->message)].proposal;   // 1.21.2 : les notifications
     if (!doc || doc->revision != job->revision) {
         notice_ = "Assistant IA : le projet a chang\xC3\xA9 pendant l'application en arri\xC3\xA8re-plan : rien n'est appliqu\xC3\xA9 "
                   "(Appliquer la refait sur le projet tel qu'il est).";
         appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : le projet a chang\xC3\xA9 pendant son application en arri\xC3\xA8re-plan.");
+        notifyApplyFailed(c->id, job->message, jobProp,
+                          "Le projet a chang\xC3\xA9 pendant l'application en arri\xC3\xA8re-plan (Appliquer la refait sur le projet tel qu'il est).");
         return;
     }
     if (!job->result) {
         notice_ = job->why.empty() ? std::string("La proposition ne s'applique pas.") : job->why;
         appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : " + notice_);
+        notifyApplyFailed(c->id, job->message, jobProp, notice_);
         return;
     }
     std::string w;
-    auto cmd = commandSetting(doc, *c->messages[static_cast<std::size_t>(job->message)].proposal, job->result, &w);
+    auto cmd = commandSetting(doc, jobProp, job->result, &w);
     if (!cmd) {
         notice_ = w;
+        notifyApplyFailed(c->id, job->message, jobProp, w);
         return;
     }
     if (host_.apply) host_.apply(std::move(cmd));
@@ -1651,7 +1779,22 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     if (core::hasIhm() && ctx.project && !req.toolsInText) {
         auto snap = std::make_shared<const hmi::Project>(*ctx.project);
         req.localTools.push_back(agent::analyseTool(snap));
-        if (sandbox_) req.localTools.push_back(agent::sandboxTool(snap, sandboxProgram_));
+        if (sandbox_) {
+            // 1.21.2 : un essai fini du bac a sable va dans l'onglet Notifications (poste sur le fil du fournisseur : le
+            // journal est sur entre fils) ; le bouton mene a la reponse qui l'a fait.
+            const std::string convId = c.id;
+            const int answer = static_cast<int>(c.messages.size());   // la reponse qui commence
+            req.localTools.push_back(agent::sandboxTool(snap, sandboxProgram_, [convId, answer](const std::string& said, const std::string& tone) {
+                notifs::Item note;
+                note.category = "Bac \xC3\xA0 sable";
+                note.title = notifs::oneLine(said, 140);
+                note.detail = "Un essai de code de l'IA, sur une copie du projet : rien n'a chang\xC3\xA9 dans le projet. Le r\xC3\xA9sultat est dans sa r\xC3\xA9ponse.";
+                note.tone = tone;
+                note.button = "Voir la r\xC3\xA9ponse";
+                note.action = notifs::toConversation(convId, answer);
+                (void)notifs::post(std::move(note));
+            }));
+        }
         // la detection reseau : proposee, jamais lancee par l'IA (la confirmation s'ouvre chez l'utilisateur)
         if (host_.askScan && bridge_) {
             {
@@ -1680,6 +1823,22 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
             bool failed = false;
             std::string out = memory::runRememberTool(reg, input, here, convId, msgId, &failed);
             if (!failed) ++*counter;
+            // 1.21.2 : une contradiction (la reponse de l'outil la dit en CONTREDIT, suivie des souvenirs contredits) - dans
+            // l'onglet Notifications, sur ce fil (le journal est sur entre fils).
+            if (!failed && out.find("CONTREDIT") != std::string::npos) {
+                const auto at = out.find("\n- ");
+                const std::string first = at == std::string::npos ? std::string{} : out.substr(at + 3, out.find('\n', at + 3) - (at + 3));
+                notifs::Item note;
+                note.category = "Souvenirs";
+                note.title = "Un souvenir propos\xC3\xA9 contredit ce qui est retenu";
+                note.detail = (first.empty() ? std::string{} : "Contredit : " + notifs::oneLine(first, 220) + ". ")
+                              + "Les deux sont gard\xC3\xA9s : choisis lequel est juste.";
+                note.tone = "warning";
+                note.button = "R\xC3\xA9soudre le conflit";
+                note.action = notifs::toSouvenirs("conflits");
+                note.key = "souvenirs-conflit:" + convId;
+                (void)notifs::post(std::move(note));
+            }
             return out;
         };
         req.localTools.push_back(std::move(remember));
@@ -1920,6 +2079,19 @@ void Assistant::failLive(const ProviderEvent& e) {
         m.date = isoDate(now());
         m.provider = gen_.provider;
         m.model = gen_.model;
+        // 1.21.2 : l'onglet Notifications - l'erreur du service (cle refusee, limite, reseau...), meme repetee : une ligne
+        // par fournisseur et par code (<< x3 >>) ; le bouton mene au message (Reessayer y est).
+        {
+            notifs::Item note;
+            note.category = "Service";
+            note.title = serviceErrorTitle(e.httpStatus);
+            note.detail = guillemets(c->title) + " : " + notifs::oneLine(m.note, 300);
+            note.tone = "error";
+            note.button = "Voir le message";
+            note.action = notifs::toConversation(c->id, gen_.message);
+            note.key = "service:" + gen_.provider + ":" + std::to_string(e.httpStatus);
+            (void)notifs::post(std::move(note));
+        }
         gen_ = {};
         if ((c = touch(*c)) != nullptr) save(*c);
     } else {

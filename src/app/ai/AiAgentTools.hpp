@@ -21,6 +21,7 @@
 #include "AiProvider.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -60,7 +61,11 @@ struct Bridge {
 // L'outil analyser_projet sur cette copie du projet.
 [[nodiscard]] LocalTool analyseTool(std::shared_ptr<const hmi::Project> snapshot);
 // L'outil executer_code (le bac a sable) sur cette copie ; `program` : le programme relance (vide : celui-ci).
-[[nodiscard]] LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string program = {});
+// 1.21.2 : `finished` (facultatif) - un essai fini, pas arrete : ce qu'il a dit (<< Bac a sable : Moyenne - 3 cas
+// reussis >>) et son ton ("ok" reussi, "warning" a corriger, "error" l'essai n'a pas pu se faire) ; appele sur le fil
+// du fournisseur.
+using SandboxFinished = std::function<void(const std::string& said, const std::string& tone)>;
+[[nodiscard]] LocalTool sandboxTool(std::shared_ptr<const hmi::Project> snapshot, std::string program = {}, SandboxFinished finished = {});
 
 // La reponse de analyser_projet a une entree JSON (pour les essais ; l'outil l'appelle).
 [[nodiscard]] std::string analyse(const hmi::Project&, std::string_view inputJson);

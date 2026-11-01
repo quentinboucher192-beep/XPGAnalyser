@@ -26,6 +26,8 @@
 #include "../BackgroundTasks.hpp"   // 1.16.1 : la cloche (une reponse de l'Assistant arrivee)
 #include "../../core/Edition.hpp"
 #include "../hmi/HmiCommPanes.hpp"   // 1.18.0 : le scanner (Detecter ce qui repond...)
+#include "../hmi/HmiIncidentsPane.hpp"   // 1.21.2 : l'onglet Notifications ouvre un incident
+#include "AiMemoryDialog.hpp"            // 1.21.2 : ... et les Souvenirs a valider
 #include "../../hmi/HmiDiscovery.hpp"   // 1.21.0 : la detection reseau proposee par l'IA (la confirmation)
 #include "../hmi/HmiEditor.hpp"
 #include "../../hmi/HmiDeclEdit.hpp"   // 1.19.0 : ouvrir un script nomme dans le plan (goToHmiUsage)
@@ -222,6 +224,42 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
         rq.origin = "Assistant IA";
         if (!range.empty() && !hmi::discovery::setRange(rq, range, why)) return false;
         return comm->askScan(rq, "Propos\xC3\xA9 par l'Assistant IA pour \xC2\xAB " + equipment + " \xC2\xBB", why);
+    };
+    // ---- 1.21.2 : l'onglet Notifications du panneau - ce que ses boutons ouvrent ----
+    ui.windowFocused = [this] { return app_.windowFocused(); };
+    // Memoire et apprentissage > Souvenirs, filtre (a valider, en conflit) : la fenetre s'ouvre (l'action ia.memoire),
+    // puis, une fois a l'ecran, l'onglet et le filtre (la fenetre n'est posee qu'a l'image suivante).
+    {
+        auto wanted = std::make_shared<std::string>();
+        paneLinks_ += app_.menus().menuEntered->connect([this, wanted](const menu::MenuId& id) {
+            if (wanted->empty() || id != "dialog.iaMemoire") return;
+            if (auto* d = dynamic_cast<AiMemoryDialog*>(app_.menus().top())) {
+                d->showTab(AiMemoryDialog::Tab::Souvenirs);
+                d->setSouvenirFilter({}, *wanted, {});
+            }
+            wanted->clear();
+        });
+        ui.openSouvenirs = [this, wanted](const std::string& status) {
+            *wanted = status.empty() ? std::string("provisoire") : status;
+            (void)app_.actions().trigger("ia.memoire", app_.commands());
+        };
+    }
+    // Le compte rendu du dernier scan : Communication > Scanner IP (l'onglet le garde tant qu'il est ouvert).
+    ui.showScanReport = [this] {
+        auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"));
+        if (!comm || !comm->scanFinished()) return false;
+        openHmiPane("communication");
+        comm->tabs().setCurrentIndex(static_cast<std::size_t>(HmiCommPane::TScanner));
+        return true;
+    };
+    // IHM > Ressources > Incidents, l'incident choisi (par le nom de son dossier, en attente ou valide).
+    ui.openIncident = [this](const std::string& folderName) {
+        if (!app_.hmi()) return false;
+        openHmiPane("incidents");
+        auto* pane = dynamic_cast<HmiIncidentsPane*>(hmiTab("incidents"));
+        if (!pane) return false;
+        (void)pane->poll();
+        return pane->select(folderName);
     };
     // 1.16.1 : << M'avertir des reponses >> - seulement si l'utilisateur ne regarde pas : la fenetre derriere une autre,
     // le panneau replie, ou une autre conversation ouverte. La cloche (Voir ouvre la conversation) ; la fenetre en

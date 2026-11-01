@@ -4,6 +4,7 @@
 #include "AiFileModelDialog.hpp"
 
 #include "AiAssistant.hpp"
+#include "AiNotifications.hpp"   // 1.21.2
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
 #include "../../ui/Icons.hpp"
@@ -507,6 +508,7 @@ bool AiFileModelDialog::saveAsModel(const std::string& name) {
     (void)assistant_.postFileModel(m, created);
     say("Mod\xC3\xA8le " + guill(m.name) + " enregistr\xC3\xA9 dans la m\xC3\xA9moire de l'IA : un classeur aux m\xC3\xAAmes intitul\xC3\xA9s sera lu directement.", true);
     if (sayOut_) sayOut_("Assistant IA : mod\xC3\xA8le de fichier " + guill(m.name) + " enregistr\xC3\xA9 (" + sheets::genreLabel(layout_.genre) + ").");
+    notifs::fileModelSaved(m.name, sheets::genreLabel(layout_.genre), id_, name_);   // 1.21.2 : l'onglet Notifications
     return true;
 }
 

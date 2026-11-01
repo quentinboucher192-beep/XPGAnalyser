@@ -14,6 +14,7 @@
 //        connaissances/          un fichier JSON par connaissance ajoutee (utilisateur, projet, regle) ;
 //                                1.21.0 : les souvenirs aussi (portee, statut, provenance - AiKnowledge.hpp)
 //        projets.json            1.21.0 : les projets connus et leur identifiant fiable (AiMemoryManager.hpp)
+//        notifications.json      1.21.2 : les notifications de l'Assistant (AiNotifications.hpp)
 //        sauvegardes/            1.21.0 : les copies de la memoire (avant une migration, une restauration)
 //        activite.jsonl          l'activite de l'apprentissage et de la memoire, une ligne JSON par evenement
 //        index/                  les index de recherche (regenerables ; 1.21.0 : conversations.json)
@@ -66,6 +67,8 @@ inline void setRoot(std::string root) { detail::rootRef() = std::move(root); }
 // 1.21.0 : les projets connus (leur identifiant fiable) et les sauvegardes de la memoire.
 [[nodiscard]] inline std::string projectsFile() { return detail::join(root(), "projets.json"); }
 [[nodiscard]] inline std::string backupsDir() { return detail::join(root(), "sauvegardes"); }
+// 1.21.2 : le journal des notifications de l'Assistant (AiNotifications.hpp) - l'onglet Notifications du panneau.
+[[nodiscard]] inline std::string notificationsFile() { return detail::join(root(), "notifications.json"); }
 
 // Les six categories du cache, dans l'ordre ou le centre de memoire les montre.
 struct CacheCategory {

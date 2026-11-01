@@ -8,6 +8,8 @@
 #include "AiPlanStrip.hpp"
 #include "AiContextPane.hpp"   // 1.21.0
 #include "AiFileModelDialog.hpp"   // 1.21.0 : << Modele... >> d'un classeur joint
+#include "AiNotifications.hpp"       // 1.21.2 : l'onglet Notifications (le journal)
+#include "AiNotificationsView.hpp"   // 1.21.2 : ... et sa liste
 #include "../Dossiers.hpp"
 #include "../screens/Screens.hpp"   // MessageDialog
 
@@ -22,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <initializer_list>
 #include <unordered_map>
 #include <utility>
 
@@ -41,6 +44,8 @@ constexpr float kRowH = 28.f;
 constexpr int   kMaxRows = 4;
 constexpr float kBottomH = 40.f;
 constexpr float kPendingH = 30.f;
+constexpr float kTabsH = 30.f;   // 1.21.2 : les onglets Conversation | Notifications
+const gfx::FontId kTab{14};
 
 gfx::Color alpha(gfx::Color c, int a) { return c.withAlpha(static_cast<std::uint8_t>(std::clamp(a, 0, 255))); }
 
@@ -679,6 +684,14 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     attachBtn_->setTooltip("Joindre un fichier : image (PNG, JPG), PDF, texte, CSV, Excel, XML, JSON, projet (.xihm, .xapi). Il est copi\xC3\xA9 dans le dossier de l'Assistant.");
     sendBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer", base + ".envoyer")));
     sendBtn_->setStyle(ui::Button::Style::Primary);
+    // 1.21.2 : L'ONGLET NOTIFICATIONS - le journal de l'Assistant, a la place de la conversation quand il est choisi.
+    {
+        AiNotificationsView::Callbacks cb;
+        cb.follow = [this](const std::string& action) { return followNotification(action); };
+        cb.status = [this](const std::string& text) { say("Assistant IA : " + text); };
+        notifView_ = &static_cast<AiNotificationsView&>(addChild(std::make_unique<AiNotificationsView>(base + ".notifications", std::move(cb))));
+        notifView_->setVisibility(ui::Visibility::Collapsed);
+    }
     auto menu = std::make_unique<ui::PopupMenu>(base + ".menu");
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::move(menu)));
 
@@ -696,6 +709,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     });
     links_ += menu_->itemChosen->connect([this](int item) { menuChosen(item); });
     refreshButtons();
+    syncNotifications();   // 1.21.2 : la pastille des non lues des le depart
 }
 
 AiPanel::~AiPanel() { learning::setPhraseTester(nullptr); }
@@ -736,7 +750,7 @@ void AiPanel::tick(double now) {
         }
         if (chat_->anyChecking() || assistant_->applyingAny() || chat_->copyFlash()) invalidate();
         // 1.20.2 : le plan en cours apparait, change de hauteur ou s'en va : la discussion se replace.
-        if (strip_) {
+        if (strip_ && !notifsShown_) {   // 1.21.2 : l'onglet Notifications le cache
             const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
             const float want = strip_->heightFor(bounds().w, std::max(0.f, (pendingArea_.y - 6.f - chatTop - ctxH_) * 0.45f));
             if (std::fabs(want - stripH_) > 0.5f) invalidateLayout();
@@ -747,6 +761,12 @@ void AiPanel::tick(double now) {
         watchingReply_ = assistant_->generatingConversationId();
     } else if (!watchingReply_.empty()) {
         const std::string id = std::exchange(watchingReply_, std::string{});
+        // 1.21.2 : l'onglet Notifications - une reponse (ou une proposition) prete quand sa conversation n'est pas a
+        // l'ecran (une autre conversation, le panneau cache, l'onglet Notifications ouvert, la fenetre derriere une autre).
+        // Une erreur du service : l'Assistant l'a deja notee (toujours) ; une reponse arretee par Arreter : rien.
+        if (!looking(id))
+            for (const auto& c : assistant_->conversations())
+                if (c.id == id && !c.messages.empty() && c.messages.back().role == "assistant") notifyReply(c);
         if (assistant_->settings().notifyReplies && ui_.replied)
             for (const auto& c : assistant_->conversations())
                 if (c.id == id && !c.messages.empty() && c.messages.back().role == "assistant") {
@@ -762,6 +782,7 @@ void AiPanel::tick(double now) {
                     ui_.replied(id, c.title, excerpt, m.state == "erreur");
                 }
     }
+    syncNotifications();   // 1.21.2 : le journal a change (une source de n'importe quel fil) : la liste, la pastille
     refreshBand(now);   // 1.16.0 : la limite en direct (le compte a rebours avance chaque seconde)
     // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
     // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
@@ -1275,6 +1296,7 @@ bool AiPanel::detectFromProposal(int message) {
         say(why.empty() ? std::string("Le scanner n'a pas pu s'ouvrir.") : why);
         return false;
     }
+    assistant_->expectScan();   // 1.21.2 : sa fin ira dans l'onglet Notifications
     say("Communication \xE2\x80\xBA Scanner IP : la confirmation est ouverte" + (range.empty() ? std::string{} : ", la plage " + range + " remplie")
         + ". Rien n'est parti sur le r\xC3\xA9seau : v\xC3\xA9rifie et clique Lancer.");   // 1.21.0 : la confirmation obligatoire
     return true;
@@ -1317,6 +1339,144 @@ void AiPanel::setDirect(bool direct) {
                : "Mode Pr\xC3\xA9visualisation : chaque proposition passe par l'aper\xC3\xA7u.");
 }
 
+// ---- 1.21.2 : l'onglet Notifications ----------------------------------------------------------
+void AiPanel::syncNotifications() {
+    if (!notifView_) return;
+    const std::uint64_t rev = notifs::revision();
+    if (rev == notifsSeen_) return;
+    notifsSeen_ = rev;
+    notifView_->refresh();
+    const std::size_t before = badge_;
+    badge_ = notifView_->unreadCount();
+    badgeError_ = std::any_of(notifView_->items().begin(), notifView_->items().end(), [](const notifs::Item& n) { return !n.read && n.tone == "error"; });
+    latest_ = notifView_->items().empty() ? std::string{} : notifView_->items().front().title;
+    if ((before == 0) != (badge_ == 0) || std::to_string(before).size() != std::to_string(badge_).size()) invalidateLayout();   // la largeur de l'onglet
+    invalidate();
+}
+
+bool AiPanel::looking(const std::string& conversation) const {
+    for (const ui::Widget* w = this; w; w = w->parent())
+        if (!w->visible()) return false;   // le panneau replie, cache
+    if (notifsShown_) return false;        // l'onglet Notifications est devant la conversation
+    if (ui_.windowFocused && !ui_.windowFocused()) return false;
+    const Conversation* c = assistant_->current();
+    return c && c->id == conversation;
+}
+
+void AiPanel::notifyReply(const Conversation& c) {
+    const Message& m = c.messages.back();
+    if (m.state == "erreur" || m.state == "arrete") return;   // l'erreur : deja notee par l'Assistant ; arretee : par toi
+    const int index = static_cast<int>(c.messages.size()) - 1;
+    notifs::Item n;
+    if (m.proposal) {
+        if (m.proposal->state != "proposee") return;   // deja appliquee (le mode Direct) : sa notification le dit
+        n.category = "Proposition";
+        n.title = "Proposition pr\xC3\xAAte" + (m.proposal->summary.empty() ? std::string{} : " : " + notifs::oneLine(m.proposal->summary, 90));
+        n.detail = "\xC2\xAB " + c.title + " \xC2\xBB : elle attend ta d\xC3\xA9" "cision sur sa carte (Pr\xC3\xA9visualiser, Appliquer, Refuser). Rien n'a chang\xC3\xA9 dans le projet.";
+        n.button = "Voir la carte";
+        n.action = notifs::toCard(c.id, index);
+        n.key = "prete:" + m.proposal->id;
+    } else {
+        n.category = "R\xC3\xA9ponse";
+        n.title = "R\xC3\xA9ponse pr\xC3\xAAte dans \xC2\xAB " + c.title + " \xC2\xBB";
+        n.detail = notifs::oneLine(m.text.empty() ? m.note : m.text, 220);
+        n.button = "Voir la r\xC3\xA9ponse";
+        n.action = notifs::toConversation(c.id, index);
+        n.key = "reponse:" + c.id + ":" + (m.id.empty() ? std::to_string(index) : m.id);
+    }
+    (void)notifs::post(std::move(n));
+}
+
+void AiPanel::showNotifications(bool on) {
+    if (on == notifsShown_) return;
+    if (on) cancelRename();
+    notifsShown_ = on;
+    syncNotifications();
+    if (on && notifView_) {
+        notifView_->refresh();
+        notifView_->takeFocus();
+    }
+    invalidateLayout();
+    invalidate();
+    if (on) say(badge_ > 0 ? "Notifications de l'Assistant : " + std::to_string(badge_) + (badge_ > 1 ? " non lues." : " non lue.")
+                           : std::string("Notifications de l'Assistant : tout est lu."));
+}
+
+bool AiPanel::followNotification(const std::string& action) {
+    const notifs::Target t = notifs::parseAction(action);
+    if (t.kind == "conv" || t.kind == "carte") {
+        const int index = assistant_->indexOf(t.id);
+        if (index < 0) {
+            say("Assistant IA : cette conversation n'existe plus (elle a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9" "e).");
+            return false;
+        }
+        showNotifications(false);
+        (void)selectConversation(index);
+        const Conversation* c = assistant_->current();
+        const int msg = c && t.message >= 0 && t.message < static_cast<int>(c->messages.size()) ? t.message : -1;
+        if (t.kind == "carte" && (msg < 0 || !assistant_->proposal(msg))) {
+            say("Assistant IA : la proposition n'est plus dans la conversation ; la conversation est ouverte.");
+            return true;
+        }
+        if (msg >= 0) {
+            layout();   // la discussion a sa largeur : le message se place
+            chat_->revealMessage(msg, t.kind == "carte");
+        }
+        return true;
+    }
+    if (t.kind == "piece" || t.kind == "modele") {
+        std::string conv;
+        const Attachment* a = assistant_->findAttachment(t.id, &conv);
+        if (!a) {
+            say("Assistant IA : cette pi\xC3\xA8" "ce jointe n'est plus dans les conversations (supprim\xC3\xA9" "e avec la sienne).");
+            return false;
+        }
+        const std::string name = a->name;
+        showNotifications(false);
+        if (!conv.empty() && (!assistant_->current() || assistant_->current()->id != conv)) (void)selectConversation(assistant_->indexOf(conv));
+        sync();   // le contexte de la discussion de cette conversation
+        if (t.kind == "modele") {
+            contextAction(5, t.id);
+            return true;
+        }
+        if (ctxPane_) {
+            ctxPane_->setExpanded(true);
+            if (ctxPane_->context().files.size() >= 3) ctxPane_->setSearch(name);   // la recherche n'est montree qu'a partir de trois
+        }
+        invalidateLayout();
+        say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est dans le contexte de la discussion, en haut de la conversation.");
+        return true;
+    }
+    if (t.kind == "souvenirs") {
+        if (ui_.openSouvenirs) {
+            ui_.openSouvenirs(t.id);
+            return true;
+        }
+        if (ui_.openMemory && (!ui_.memoryAvailable || ui_.memoryAvailable())) {
+            ui_.openMemory();
+            return true;
+        }
+        say("Assistant IA : la m\xC3\xA9moire de l'IA (Souvenirs) n'est pas disponible ici.");
+        return false;
+    }
+    if (t.kind == "scan") {
+        if (ui_.showScanReport && ui_.showScanReport()) return true;
+        say("Assistant IA : le compte rendu du scan n'est plus ouvert (Communication \xE2\x80\xBA Scanner IP le refait).");
+        return false;
+    }
+    if (t.kind == "incident") {
+        if (ui_.openIncident && ui_.openIncident(t.id)) return true;
+        say("Assistant IA : l'incident \xC2\xAB " + t.id + " \xC2\xBB est introuvable (valid\xC3\xA9 et d\xC3\xA9plac\xC3\xA9, ou supprim\xC3\xA9).");
+        return false;
+    }
+    if (t.kind == "parametres") {
+        openSettings();
+        return true;
+    }
+    say("Assistant IA : ce lien n'est pas connu de cette version.");
+    return false;
+}
+
 // ---- la mise en page --------------------------------------------------------------------------
 gfx::Rect AiPanel::rowRect(int index) const {
     return index >= 0 && index < static_cast<int>(rows_.size()) ? rows_[static_cast<std::size_t>(index)] : gfx::Rect{};
@@ -1348,7 +1508,36 @@ void AiPanel::onLayout() {
     closeBtn_->setBounds({b.right() - kPad - bs, b.y + (kHeaderH - bs) / 2.f, bs, bs});
     settingsBtn_->setBounds({closeBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
     newBtn_->setBounds({settingsBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
-    statusLine_ = {x, header_.bottom(), w, kStatusH};
+    // 1.21.2 : LES ONGLETS sous l'en-tete - Conversation | Notifications (la cloche, la pastille des non lues).
+    {
+        tabs_ = {x, header_.bottom(), w, kTabsH};
+        const float convW = ui::measureWidth("Conversation", kTab) + 24.f;
+        tabConv_ = {x + kPad - 4.f, tabs_.y, convW, kTabsH};
+        const std::string count = badge_ > 99 ? std::string("99+") : std::to_string(badge_);
+        const float badgeW = badge_ > 0 ? std::max(18.f, ui::measureWidth(count, kMeta) + 10.f) + 6.f : 0.f;
+        float nw = 12.f + 16.f + 6.f + ui::measureWidth("Notifications", kTab) + badgeW + 12.f;
+        nw = std::min(nw, std::max(40.f, b.right() - kPad - (tabConv_.right() + 2.f)));
+        tabNotifs_ = {tabConv_.right() + 2.f, tabs_.y, nw, kTabsH};
+    }
+    // L'onglet Notifications : sa liste prend toute la place sous les onglets ; la conversation se cache (rien n'est perdu).
+    {
+        const bool notes = notifsShown_;
+        notifView_->setVisibility(notes ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        for (ui::Widget* wgt : std::initializer_list<ui::Widget*>{chat_, prompt_, attachBtn_, sendBtn_, modePreview_, modeDirect_})
+            wgt->setVisibility(notes ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+        if (notes) {
+            strip_->setVisibility(ui::Visibility::Collapsed);
+            if (ctxPane_) ctxPane_->setVisibility(ui::Visibility::Collapsed);
+            statusLine_ = limitLine_ = modeRow_ = listHead_ = list_ = pendingArea_ = promptArea_ = bottomBar_ = outgoing_ = gfx::Rect{};
+            rows_.assign(assistant_->conversations().size(), gfx::Rect{});
+            pendingRemove_.clear();
+            outgoingLines_.clear();
+            stripH_ = ctxH_ = 0.f;
+            notifView_->setBounds({x, tabs_.bottom(), w, std::max(40.f, b.bottom() - tabs_.bottom())});
+            return;
+        }
+    }
+    statusLine_ = {x, tabs_.bottom(), w, kStatusH};
     // 1.16.0 : la bande de la limite, sous l'etat de connexion - chaque ligne longue si elle tient,
     // sinon courte (le detail est dans l'infobulle).
     {
@@ -1434,6 +1623,46 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     ui::drawIcon(ctx.r, ui::Icon::Assistant, {header_.x + kPad + 2.f, header_.y + (header_.h - 20.f) / 2.f, 20.f, 20.f}, c.accent);
     const float lhUi = ctx.r.lineHeight(f.uiBold);
     bold(ctx.r, {header_.x + kPad + 30.f, header_.y + (header_.h - lhUi) / 2.f}, "Assistant IA", f.uiBold, c.text);
+    // ---- 1.21.2 : les onglets Conversation | Notifications (la pastille des non lues : rouge s'il y a une erreur)
+    {
+        ctx.r.fillRect({tabs_.x + 1.f, tabs_.y, tabs_.w - 1.f, tabs_.h}, c.headerBg);
+        ctx.r.fillRect({tabs_.x + 1.f, tabs_.bottom() - 1.f, tabs_.w - 1.f, 1.f}, c.border);
+        const float ty = tabs_.y + (tabs_.h - ctx.r.lineHeight(kTab)) / 2.f - 1.f;
+        const auto tab = [&](const gfx::Rect& r, bool on, bool hot) {
+            if (hot && !on) ctx.r.fillRoundedRect({r.x, r.y + 3.f, r.w, r.h - 6.f}, ctx.theme.brand.hover, 4.f);
+            if (on) ctx.r.fillRect({r.x + 4.f, r.bottom() - 3.f, r.w - 8.f, 2.f}, c.accent);
+        };
+        tab(tabConv_, !notifsShown_, hoverTab_ == 0);
+        const auto convInk = !notifsShown_ ? c.text : c.textMuted;
+        if (!notifsShown_) bold(ctx.r, {tabConv_.x + 12.f, ty}, "Conversation", kTab, convInk);
+        else ctx.r.drawText({tabConv_.x + 12.f, ty}, "Conversation", kTab, convInk);
+        tab(tabNotifs_, notifsShown_, hoverTab_ == 1);
+        const auto ink = notifsShown_ ? c.text : c.textMuted;
+        ctx.r.pushClip(tabNotifs_);
+        AiNotificationsView::drawBell(ctx.r, {tabNotifs_.x + 12.f, tabNotifs_.y + (tabNotifs_.h - 16.f) / 2.f - 1.f, 16.f, 16.f},
+                                      badge_ > 0 ? (badgeError_ ? c.error : c.accent) : ink);
+        const float lx = tabNotifs_.x + 12.f + 16.f + 6.f;
+        if (notifsShown_) bold(ctx.r, {lx, ty}, "Notifications", kTab, ink);
+        else ctx.r.drawText({lx, ty}, "Notifications", kTab, ink);
+        if (badge_ > 0) {
+            const std::string n = badge_ > 99 ? std::string("99+") : std::to_string(badge_);
+            const float bw = std::max(18.f, ctx.r.measure(n, kMeta).width + 10.f);
+            const gfx::Rect pill{lx + ctx.r.measure("Notifications", kTab).width + 6.f, tabNotifs_.y + (tabNotifs_.h - 17.f) / 2.f - 1.f, bw, 17.f};
+            const gfx::Color fill = badgeError_ ? c.error : c.accent;
+            ctx.r.fillRoundedRect(pill, fill, 8.5f);
+            ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(n, kMeta).width) / 2.f, pill.y + (pill.h - ctx.r.lineHeight(kMeta)) / 2.f}, n, kMeta,
+                           ctx.theme.onSurface(fill));
+        }
+        ctx.r.popClip();
+        tips_.emplace_back(tabConv_, "La conversation : les conversations, la discussion, la saisie");
+        std::string tip = badge_ > 0 ? std::to_string(badge_) + (badge_ > 1 ? " notifications non lues" : " notification non lue")
+                                     : std::string("Aucune notification non lue");
+        if (badgeError_) tip += " (dont une erreur)";
+        if (!latest_.empty()) tip += "\nLa plus r\xC3\xA9" "cente : " + latest_;
+        tip += "\nCe que l'Assistant a fait ou appris pendant que tu regardais ailleurs ; un clic l'ouvre, un autre revient \xC3\xA0 la conversation.";
+        tips_.emplace_back(tabNotifs_, tip);
+    }
+    if (notifsShown_) return;   // la liste des notifications se dessine elle-meme (AiNotificationsView)
     // ---- l'etat de connexion
     const auto& a = *assistant_;
     const bool on = a.settings().enabled;
@@ -1614,8 +1843,10 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
     }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         const int h = rowAt(m->pos);
-        if (h != hoverRow_) {
+        const int t = tabConv_.contains(m->pos) ? 0 : tabNotifs_.contains(m->pos) ? 1 : -1;   // 1.21.2
+        if (h != hoverRow_ || t != hoverTab_) {
             hoverRow_ = h;
+            hoverTab_ = t;
             invalidate();
         }
         return ui::EventResult::Ignored;
@@ -1627,6 +1858,16 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        // 1.21.2 : les onglets - Notifications (un autre clic revient a la conversation), Conversation.
+        if (d->button == ui::MouseButton::Left && tabNotifs_.contains(d->pos)) {
+            showNotifications(!notifsShown_);
+            return ui::EventResult::Consumed;
+        }
+        if (d->button == ui::MouseButton::Left && tabConv_.contains(d->pos)) {
+            showNotifications(false);
+            return ui::EventResult::Consumed;
+        }
+        if (tabs_.contains(d->pos)) return ui::EventResult::Consumed;
         for (std::size_t i = 0; i < pendingRemove_.size(); ++i)
             if (pendingRemove_[i].contains(d->pos) && d->button == ui::MouseButton::Left) {
                 removePending(i);
@@ -1663,8 +1904,8 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             takeFocus();
             return ui::EventResult::Consumed;
         }
-        // La liste a le clavier (le panneau lui-meme) : F2, Suppr, les fleches.
-        if (focused()) {
+        // La liste a le clavier (le panneau lui-meme) : F2, Suppr, les fleches. 1.21.2 : pas sous l'onglet Notifications.
+        if (focused() && !notifsShown_) {
             const int cur = assistant_->currentIndex();
             if (k->key == ui::Key::F2 && cur >= 0) { startRename(cur); return ui::EventResult::Consumed; }
             if (k->key == ui::Key::Delete && cur >= 0) { askDelete(cur); return ui::EventResult::Consumed; }
