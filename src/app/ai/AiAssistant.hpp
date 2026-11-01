@@ -259,6 +259,40 @@ public:
     // 1.22.1 : la proposition appliquee sur un fil de fond (Proposal::id ; vide : aucune) - l'activite d'une etape de mission.
     [[nodiscard]] std::string applyingProposal() const { return applyJob_ ? applyJob_->proposalId : std::string{}; }
 
+    // ---- 1.22.6 : DE LA CONVERSATION A LA MISSION IA ------------------------------------------------------------------
+    // Une grosse demande faite en conversation (la capture du 01/11 : << Propose la suite : S3b..., S5..., S9 >>, 991 k jetons)
+    // se fait mieux en mission : l'utilisateur la demande (un message envoye, ou << Envoyer en mission >>), ou le logiciel et
+    // l'IA la conseillent (une carte : Creer la mission, Continuer ici). JAMAIS une mission creee sans le clic de l'utilisateur.
+    struct MissionAdvice {
+        std::string reason;          // en clair, pour la carte ("elle \xC3\xA9num\xC3\xA8re 6 \xC3\xA9tapes (S3b, S5, S6, S7, S8, S9)")
+        std::string source;          // "logiciel" (l'heuristique) ou "ia" (mission_conseillee, [MISSION_CONSEILLEE: ...])
+        int         message{-1};     // le message de l'utilisateur vise (-1 : la demande pas encore envoyee)
+    };
+    // L'HEURISTIQUE, avant l'envoi : la demande enumere des etapes ou des lots (S3b, S5... ; une liste ; << puis >>), elle
+    // demande la suite d'une conversation qui en a deja annonce plusieurs, ou - avec une demande complexe - la derniere reponse
+    // a ete coupee par la longueur, la conversation a deja consomme kAdviceTokens jetons. Faux : rien a conseiller (pas d'IA
+    // connectee, une question, une mission deja en cours ici, << Continuer ici >> choisi pour cette conversation).
+    [[nodiscard]] bool adviseMission(std::string_view request, MissionAdvice* out = nullptr) const;
+    static constexpr long long kAdviceTokens = 500000;
+    // Le conseil porte par la derniere reponse de la conversation ouverte (l'IA, ou le logiciel a l'arrivee : la suite annoncee
+    // une fois de trop) ; nul : aucun, deja traite, une mission deja en cours ici, ou << Continuer ici >> choisi.
+    [[nodiscard]] std::optional<MissionAdvice> pendingAdvice() const;
+    // << Continuer ici >> : retenu pour la conversation ouverte (plus de carte ni de conseil montre) ; le conseil en cours est
+    // traite. missionAdviceDeclined : ce choix est fait pour la conversation ouverte.
+    void               declineMissionAdvice();
+    [[nodiscard]] bool missionAdviceDeclined() const;
+    // CREER UNE MISSION AVEC CE MESSAGE (un message de l'utilisateur de la conversation ouverte) : la demande, ses pieces
+    // jointes et celles de la conversation (le .XPG lu, les classeurs), le contexte utile de la conversation (conversationDigest :
+    // les propositions appliquees, la suite annoncee). La mission part dans une conversation NEUVE (l'historique ne la suit pas,
+    // ses jetons non plus) ; celle-ci dit << Mission << X >> creee - Ouvrir >> (un message du logiciel, lie a la mission). Puis le
+    // plan (planifier_mission), comme createMission. Faux et `why` : pas un message de l'utilisateur, pas d'IA connectee...
+    bool createMissionFromMessage(int message, std::string* why = nullptr);
+    // ENVOYER EN MISSION : la demande tapee (et les pieces en attente) devient une mission au lieu d'un message ; une
+    // conversation vide la garde (createMission), une conversation commencee : comme createMissionFromMessage.
+    bool sendAsMission(std::string text, std::string* why = nullptr);
+    // Le contexte d'une conversation, dit a la mission qui en sort (ses `upTo` premiers messages) ; vide : rien d'utile.
+    [[nodiscard]] std::string conversationDigest(const Conversation& c, std::size_t upTo) const;
+
     // ---- 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) ----------------------------------------------------------------
     // A son arrivee (une fois), chaque proposition est comparee aux precedentes : celles de sa mission (memes operations,
     // memes erreurs deux fois de suite, une etape tentee 3 fois sans aboutir, le projet revenu au meme point), celles de sa
@@ -464,6 +498,11 @@ public:
     [[nodiscard]] ProviderRequest requestFor(const Conversation&, std::size_t upTo) const;
     // Le resultat d'un appel d'outil tel que le tour suivant le dit au modele (texte, erreur ?).
     [[nodiscard]] std::pair<std::string, bool> toolResult(const Message&) const;
+    // 1.22.6 : L'HISTORIQUE RESUME - les derniers appels d'outil (kFullCalls au moins ; les resumes avancent par paquets de
+    // kCompactEvery, pour que l'historique se relise en cache) et toute proposition a decider partent entiers ; un appel plus
+    // ancien et regle part resume dans le texte de son tour (compactCall : vide, il part entier).
+    static constexpr std::size_t kFullCalls = 2, kCompactEvery = 3;
+    [[nodiscard]] std::string compactCall(const Message&) const;
 
     // ---- la liste des modeles (Parametres : Lister les modeles, Tester la connexion) ----------
     // Sur un fil ; le resultat arrive par pollModels (tick l'appelle aussi). Faux et `why`.
@@ -784,7 +823,15 @@ private:
                                                          std::string detail, std::string tone);
     void                                   missionTransition(const mission::Mission& m, mission::State before);
     [[nodiscard]] Conversation*            missionConversation(mission::Mission& m);
-    bool                                   launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why);
+    // 1.22.6 : `carried` - des pieces jointes d'une autre conversation qui partent avec la demande (createMissionWith).
+    bool                                   launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why,
+                                                         const std::vector<Attachment>* carried = nullptr);
+    // 1.22.6 : la mission d'une demande venue d'une conversation commencee (`message` : son message, -1 : la saisie).
+    bool                                   createMissionWith(std::string request, int message, std::string* why);
+    // 1.22.6 : le conseil de la reponse qui vient d'arriver (l'IA : mission_conseillee, [MISSION_CONSEILLEE: ...] ; le logiciel :
+    // la suite annoncee une fois de trop, la proposition coupee) - pose dans Message::extra << missionConseillee >> ; une
+    // reponse d'une mission (`missionCall`) : le marqueur est seulement retire du texte.
+    void                                   adviceArrived(Conversation& c, Message& m, const std::string& stopReason, bool missionCall);
     [[nodiscard]] std::string              missionPrompt(const mission::Mission& m, const MissionCall& call, const hmi::Project* project) const;
     bool                                   acceptPlan(const std::string& id, const std::string& input, std::string* why, int* count);
     void                                   missionAnswered(const MissionCall& call, Conversation& c, int message, bool planned,

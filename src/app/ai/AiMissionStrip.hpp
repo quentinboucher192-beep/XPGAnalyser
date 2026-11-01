@@ -107,6 +107,12 @@ public:
 
     void                             setRequest(std::string text);
     [[nodiscard]] const std::string& request() const noexcept { return request_; }
+    // 1.22.6 : LE CONSEIL << Cette demande est grosse : passer en mission IA ? >> (Assistant::adviseMission avant l'envoi,
+    // Assistant::pendingAdvice a l'arrivee d'une reponse) - sa raison dite, << Creer la mission >> et << Continuer ici >> ;
+    // setRequest revient a la carte d'une demande complexe (<< Continuer en conversation >>).
+    void                             setAdvice(std::string text, std::string reason);
+    [[nodiscard]] bool               advice() const noexcept { return advice_; }
+    [[nodiscard]] std::string        title() const;
     [[nodiscard]] float              heightFor(float width) const;
     [[nodiscard]] ui::Button&        createButton() noexcept { return *create_; }
     [[nodiscard]] ui::Button&        continueButton() noexcept { return *continue_; }
@@ -129,6 +135,8 @@ private:
     ui::Button*           create_{nullptr};
     ui::Button*           continue_{nullptr};
     core::ConnectionScope links_;
+    bool                  advice_{false};   // 1.22.6 : le conseil (sa raison), pas la carte d'une demande complexe
+    std::string           reason_;
 };
 
 } // namespace app::ai

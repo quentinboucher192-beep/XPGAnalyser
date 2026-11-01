@@ -302,6 +302,22 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
         if (!typeLines.empty()) s += "Structures de l'IHM utilis\xC3\xA9" "es (membres) :\n" + typeLines;
     }
     if (!plc.empty()) {
+        // 1.22.6 : celles que la demande evoque d'abord (<< les moteurs >> : Moteur_...), comme les variables de l'IHM - un
+        // grand automate ne tient pas en entier : l'IA voit celles dont on lui parle, et sait que le reste existe.
+        {
+            const auto asked = wordsOf(in.request);
+            std::vector<std::pair<std::size_t, std::size_t>> rank;   // (pertinence, rang)
+            for (std::size_t i = 0; i < plc.size(); ++i) {
+                hmi::Variable v;
+                v.name = plc[i].first;
+                rank.emplace_back(relevance(asked, v), i);
+            }
+            std::stable_sort(rank.begin(), rank.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            std::vector<std::pair<std::string, std::string>> sorted;
+            sorted.reserve(plc.size());
+            for (const auto& [score, i] : rank) sorted.push_back(std::move(plc[i]));
+            plc = std::move(sorted);
+        }
         std::string lines;
         for (const auto& [name, type] : plc) {
             if (lines.size() >= lim.plcBytes) break;
@@ -463,7 +479,19 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
         }
     }
     // Les variables systeme et les natives : seulement celles que la demande evoque (un mot commun) - jamais toutes.
-    const auto asked = wordsOf(in.request);
+    // 1.22.6 : pas par un mot de tous les jours (<< ajoute >>, << variables >>, << zone >>, << reliees >>... evoquaient une
+    // vingtaine de natives et de variables systeme a chaque demande : 1 000 jetons pour rien) ; les natives, seulement pour une
+    // demande de code (script, fonction, formule, calcul...) ou qui en nomme une.
+    std::vector<std::string> asked;
+    for (auto& w : wordsOf(in.request)) {
+        static const char* const common[] = {"ajout", "ajoute", "ajouter", "ajoutes", "ajoutee", "ajoutees", "variable", "variables", "valeur", "valeurs",
+                                             "zone", "zones", "relie", "reliee", "reliees", "relies", "relier", "objet", "objets", "deux", "trois", "quatre",
+                                             "cinq", "toutes", "tous", "cree", "creer", "crees", "creee", "creees", "faire", "mettre", "mets", "nouveau",
+                                             "nouvelle", "chaque", "avec", "dans", "pour", "sans", "sous", "apres", "avant", "entre", "plus", "moins",
+                                             "propose", "proposer", "suite", "etape", "etapes", "premier", "premiere", "premiers", "dernier", "derniere",
+                                             "leur", "leurs"};
+        if (std::find_if(std::begin(common), std::end(common), [&w](const char* c) { return w == c; }) == std::end(common)) asked.push_back(std::move(w));
+    }
     const auto evokes = [&](std::string_view a, std::string_view b) {
         const auto ws = wordsOf(std::string(a) + " " + std::string(b));
         for (const auto& w : ws)
@@ -471,6 +499,19 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
                 if (q.size() >= 4 && w.size() >= 4 && (w.rfind(q, 0) == 0 || q.rfind(w, 0) == 0)) return true;
         return false;
     };
+    const bool codeAsked = [&] {
+        static const char* const cues[] = {"script", "scripts", "fonction", "fonctions", "formule", "formules", "calcul", "calcule", "calculer", "code",
+                                           "expression", "programme", "logique", "native", "natives", "liste", "listes", "chaine", "conversion", "convertir", "moyenne", "somme", "compteur", "minuterie", "temporisation"};
+        for (const auto& w : wordsOf(in.request))
+            for (const char* c : cues)
+                if (w == c) return true;
+        return false;
+    }();
+    const std::string requestUpper = [&] {
+        std::string u = in.request;
+        for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        return u;
+    }();
     std::string sys, nat;
     for (const auto& v : hmi::pub::kSysVars) {
         if (!hmi::pub::sysDomainShown(static_cast<std::size_t>(v.domain)) || !evokes(v.name, v.text)) continue;
@@ -479,7 +520,8 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
         sys += it;
     }
     for (const auto& f : hmi::natives::functions()) {
-        if (!evokes(f.name, f.summary)) continue;
+        const bool named = requestUpper.find(std::string(f.name) + "(") != std::string::npos || requestUpper.find(" " + std::string(f.name)) != std::string::npos;
+        if (!named && (!codeAsked || !evokes(f.name, f.summary))) continue;
         std::string sig = "\n  " + std::string(f.name) + "(";
         for (std::size_t k = 0; k < f.params.size(); ++k) sig += (k ? ", " : "") + std::string(f.params[k].name) + " : " + std::string(f.params[k].type);
         sig += ")" + (f.returns.empty() ? std::string{} : " : " + std::string(f.returns)) + " - " + clip(f.summary, 90);

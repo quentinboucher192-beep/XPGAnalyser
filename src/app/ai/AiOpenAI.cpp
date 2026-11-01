@@ -255,7 +255,13 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
     };
     std::vector<Msg> msgs;
     std::string pendingTool;   // l'id de l'appel du tour precedent (son resultat suit)
-    for (const auto& t : req.turns) {
+    // 1.22.6 : LE CONTEXTE DANS LE DERNIER TOUR (ProviderRequest::contextTurn) - le prefixe system + historique ne change plus
+    // d'une demande a l'autre : les services qui gardent le debut d'une demande en cache (automatiquement) le relisent.
+    const bool contextInTurn = req.contextTurn >= 0 && static_cast<std::size_t>(req.contextTurn) < req.turns.size()
+                               && req.turns[static_cast<std::size_t>(req.contextTurn)].role == ProviderTurn::Role::User && !req.systemStable.empty()
+                               && !blank(req.systemDynamic);
+    for (std::size_t ti = 0; ti < req.turns.size(); ++ti) {
+        const ProviderTurn& t = req.turns[ti];
         if (t.role == ProviderTurn::Role::User) {
             Msg m;
             m.role = "user";
@@ -274,6 +280,9 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
                 }
                 pendingTool.clear();
             }
+            if (contextInTurn && static_cast<int>(ti) == req.contextTurn)
+                m.parts.push_back({false, "[Contexte du projet \xC3\xA0 ce message, \xC3\xA9" "crit par le logiciel ; il remplace celui des messages pr\xC3\xA9" "c\xC3\xA9" "dents.]\n"
+                                              + req.systemDynamic});
             for (const auto& a : t.attachments) attachmentParts(a, m.parts);
             if (!blank(t.text)) m.parts.push_back({false, t.text});
             if (m.parts.empty()) m.parts.push_back({false, "(message sans texte)"});
@@ -326,7 +335,7 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
         body.set("stream_options", std::move(so));
     }
     json::Value list = json::Value::array();
-    std::string system = !req.systemStable.empty() ? req.systemStable + req.systemDynamic : req.system;
+    std::string system = !req.systemStable.empty() ? req.systemStable + (contextInTurn ? std::string{} : req.systemDynamic) : req.system;
     if (textTool) system += textToolInstructions();
     if (!blank(system)) {
         json::Value o = json::Value::object();
@@ -796,7 +805,20 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
             if (request.localTools[i].name == name) return static_cast<int>(i);
         return -1;
     };
+    // 1.22.6 : les jetons de toute la demande - l'usage des tours d'outils locaux finis est donne a ajouter (preread), juste
+    // avant le premier usage du tour suivant (chaque flux repart de zero ; l'Assistant garde le dernier recu).
+    ProviderUsage rounds, roundLast;
     const auto route = [&](ProviderEvent e) {
+        if (e.type == ProviderEvent::Type::Usage && !e.preread && !e.usage.empty()) {
+            if (!rounds.empty()) {   // les tours finis : ajoutes a la demande (comme une lecture prealable), juste avant le nouveau
+                ProviderEvent done;
+                done.type = ProviderEvent::Type::Usage;
+                done.usage = std::exchange(rounds, {});
+                done.preread = true;
+                push(std::move(done));
+            }
+            roundLast = e.usage;
+        }
         if ((library.active() || !request.localTools.empty()) && withTools) {
             const bool isRead = library.active() && e.toolName == textparts::kReadTool;
             if (e.type == ProviderEvent::Type::ToolUse && (isRead || localIndex(e.toolName) >= 0)) {
@@ -882,6 +904,11 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 u.toolResultText = result;
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(u));
+                rounds.input += roundLast.input;   // 1.22.6 : ce tour est fini, son usage compte
+                rounds.output += roundLast.output;
+                rounds.cacheRead += roundLast.cacheRead;
+                rounds.cacheWrite += roundLast.cacheWrite;
+                roundLast = {};
                 turnText.clear();
                 readCall.reset();
                 heldDone.reset();

@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <filesystem>   // 1.22.3 : le nom du .XPG lu
 #include <cstdlib>
+#include <cstring>   // 1.22.6 : strlen
 #include <utility>
 #include <cctype>
 #include <chrono>
@@ -284,7 +285,134 @@ Proposal* proposalIn(Conversation& c, std::string_view id, int* index = nullptr)
     return nullptr;
 }
 
+// ---- 1.22.6 : L'HISTORIQUE RESUME (ce qui part au fournisseur) ----
+// Les operations d'une proposition, comptees par action, et les noms qu'elle cree ou touche (bornes) :
+// "40 operations (creer x40) : Voyant_L1_0, Afficheur_L1_1, ... (+28)".
+std::string opsDigest(const Proposal& p, std::size_t maxBytes = 420) {
+    std::vector<std::pair<std::string, int>> counts;
+    std::vector<std::string> names;
+    const auto name = [&names](const std::string& n) {
+        if (!n.empty() && std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
+    };
+    for (const auto& op : p.ops) {
+        const std::string k(actionKey(op.action));
+        auto it = std::find_if(counts.begin(), counts.end(), [&k](const auto& c) { return c.first == k; });
+        if (it == counts.end()) counts.emplace_back(k, 1);
+        else ++it->second;
+        name(op.name);
+        for (const auto& v : op.variables) name(v.name);
+        for (const auto& o : op.objects) name(o);
+        for (const auto& n : op.names) name(n);
+        if (op.action == Operation::Action::Address || op.action == Operation::Action::Bind) name(op.variable);
+    }
+    std::string s = plural(p.ops.size(), "op\xC3\xA9ration", "op\xC3\xA9rations") + " (";
+    for (std::size_t i = 0; i < counts.size(); ++i)
+        s += (i ? ", " : "") + counts[i].first + (counts[i].second > 1 ? " x" + std::to_string(counts[i].second) : std::string{});
+    s += ")";
+    std::string list;
+    std::size_t shown = 0;
+    for (const auto& n : names) {
+        if (!list.empty() && list.size() + n.size() + 2 > maxBytes) break;
+        list += (list.empty() ? "" : ", ") + n;
+        ++shown;
+    }
+    if (!list.empty()) s += " : " + list + (shown < names.size() ? ", \xE2\x80\xA6 (+" + std::to_string(names.size() - shown) + ")" : std::string{});
+    return s;
+}
+
+// 1.22.6 : la conversation `index` sans les pieces jointes qu'une autre conversation porte aussi (une mission sortie d'une
+// conversation emporte ses pieces : la meme copie sur le disque) - ce que sa suppression peut effacer.
+Conversation unshared(const std::vector<Conversation>& all, std::size_t index) {
+    Conversation c = all[index];
+    for (auto& msg : c.messages)
+        std::erase_if(msg.attachments, [&](const Attachment& a) {
+            for (std::size_t k = 0; k < all.size(); ++k) {
+                if (k == index) continue;
+                for (const auto& om : all[k].messages)
+                    for (const auto& oa : om.attachments)
+                        if (!a.id.empty() && oa.id == a.id) return true;
+            }
+            return false;
+        });
+    return c;
+}
+
+// ---- 1.22.6 : DE LA CONVERSATION A LA MISSION IA ----
+
+bool adviceDeclined(const Conversation& c) { return c.extra.isObject() && c.extra.str("missionConseil") == "ici"; }
+
+bool missionRunningIn(const std::vector<mission::Mission>& all, const std::string& conversation) {
+    for (const auto& m : all) {
+        if (m.archived || (m.conversation != conversation && !listed(m.conversations, conversation))) continue;
+        if (m.state == mission::State::Planning || m.state == mission::State::Active || m.state == mission::State::Paused
+            || m.state == mission::State::Blocked)
+            return true;
+    }
+    return false;
+}
+
+std::string lowered(std::string_view s) {
+    std::string out(s);
+    for (auto& ch : out) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return out;
+}
+
+bool alnum(char ch) { return std::isalnum(static_cast<unsigned char>(ch)) != 0; }
+
+// Les etapes que la demande enumere : S3b, S5, S6... (une lettre S, un ou deux chiffres, une lettre au plus), sans doublon.
+std::vector<std::string> stepTokens(std::string_view t) {
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        if ((t[i] != 'S' && t[i] != 's') || (i > 0 && alnum(t[i - 1]))) continue;
+        std::size_t j = i + 1;
+        while (j < t.size() && j - i <= 2 && std::isdigit(static_cast<unsigned char>(t[j]))) ++j;
+        if (j == i + 1) continue;
+        if (j < t.size() && std::isalpha(static_cast<unsigned char>(t[j])) && (j + 1 >= t.size() || !alnum(t[j + 1]))) ++j;
+        if (j < t.size() && alnum(t[j])) continue;
+        std::string tok(t.substr(i, j - i));
+        tok[0] = 'S';
+        if (std::find(out.begin(), out.end(), tok) == out.end()) out.push_back(std::move(tok));
+    }
+    return out;
+}
+
+// Un texte borne a `max` octets (sans couper un caractere), entier sinon.
+std::string clipped(std::string s, std::size_t max) {
+    if (s.size() <= max) return s;
+    std::size_t cut = max;
+    while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut;
+    return s.substr(0, cut) + "\xE2\x80\xA6";
+}
+
+// Le sort d'une proposition, tel qu'il est enregistre (`undone` : appliquee puis reprise par Ctrl+Z).
+std::string fateText(const Proposal& p, bool undone) {
+    if (p.state == "appliquee") return undone ? "appliqu\xC3\xA9" "e puis annul\xC3\xA9" "e (Ctrl+Z)" : "appliqu\xC3\xA9" "e au projet";
+    if (p.state == "refusee") return "refus\xC3\xA9" "e par l'utilisateur (rien n'a chang\xC3\xA9)";
+    if (p.state == "remplacee") return "remplac\xC3\xA9" "e par ta proposition corrig\xC3\xA9" "e (jamais appliqu\xC3\xA9" "e)";
+    return "en attente";
+}
+
 } // namespace
+
+// 1.22.6 : un appel d'outil d'avant, RESUME pour le modele (son entree n'est plus renvoyee) - vide : il part entier.
+std::string Assistant::compactCall(const Message& m) const {
+    if (!m.tool) return {};
+    const std::string head = "[R\xC3\xA9sum\xC3\xA9 du logiciel, ce tour n'est plus renvoy\xC3\xA9 en entier : ";
+    const std::string tail = " Le projet tel qu'il est maintenant est dans le contexte de la derni\xC3\xA8re demande.]";
+    if (m.tool->name == mission::kPlanTool) {
+        if (!m.tool->error.empty()) return head + "ton plan de mission (planifier_mission) \xC3\xA9tait invalide : " + firstSentence(m.tool->error) + "]";
+        const std::int64_t n = m.extra.integer("planEtapes");
+        return head + "ton plan de mission (planifier_mission) a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 ("
+               + plural(static_cast<std::size_t>(std::max<std::int64_t>(0, n)), "\xC3\xA9tape", "\xC3\xA9tapes") + ")." + tail;
+    }
+    if (m.tool->name != kOperationsTool) return {};
+    if (!m.tool->error.empty() || !m.proposal)
+        return head + "ton appel de proposer_operations \xC3\xA9tait invalide, rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9"
+               + (m.tool->error.empty() ? std::string(".") : " : " + firstSentence(m.tool->error)) + "]";
+    const Proposal& p = *m.proposal;
+    return head + "ta proposition \xC2\xAB " + p.summary + " \xC2\xBB (proposer_operations, " + opsDigest(p) + ") \xE2\x80\x94 "
+           + fateText(p, p.state == "appliquee" && appliedOf(p) == Applied::Undone) + "." + tail;
+}
 
 std::string_view phaseLabel(Assistant::Phase p) noexcept {
     switch (p) {
@@ -372,7 +500,7 @@ void Assistant::load(std::vector<std::string>* problems) {
     for (const auto& id : expired) {
         const int i = indexOf(id);
         if (i < 0) continue;
-        (void)deleteConversationFiles(conversations_[static_cast<std::size_t>(i)]);
+        (void)deleteConversationFiles(unshared(conversations_, static_cast<std::size_t>(i)));   // 1.22.6 : les pieces partagees restent
         appendActivity("nettoyage", "Conversation retir\xC3\xA9" "e (conservation de l'historique) : " + conversations_[static_cast<std::size_t>(i)].title);
         conversations_.erase(conversations_.begin() + i);
     }
@@ -627,7 +755,7 @@ bool Assistant::remove(std::string_view id) {
     if (i < 0) return false;
     if (generating() && gen_.conversation == id) stop();
     const Conversation c = conversations_[static_cast<std::size_t>(i)];
-    (void)deleteConversationFiles(c);
+    (void)deleteConversationFiles(unshared(conversations_, static_cast<std::size_t>(i)));   // 1.22.6 : les pieces partagees restent
     appendActivity("suppression", "Conversation supprim\xC3\xA9" "e : " + c.title);
     conversations_.erase(conversations_.begin() + i);
     if (current_ == i) current_ = conversations_.empty() ? -1 : std::min(i, static_cast<int>(conversations_.size()) - 1);
@@ -2811,6 +2939,22 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
     r.effort = settings_.effort;
     std::string pendingId, pendingText;
     bool pendingError = false;
+    // 1.22.6 : L'HISTORIQUE RESUME. Les derniers appels d'outil partent entiers (avec leur resultat reel), et toute proposition
+    // encore a decider ; un appel plus ancien et regle (appliquee, refusee, remplacee, invalide ; un plan enregistre) part
+    // RESUME dans le texte de son tour (compactCall : son libelle, ses operations comptees, les noms, son sort) - son entree
+    // JSON n'est plus renvoyee a chaque demande. Les resumes avancent PAR PAQUETS de kCompactEvery appels (entre kFullCalls et
+    // kFullCalls + kCompactEvery - 1 appels restent entiers) : l'historique ne change pas d'une demande a l'autre entre deux
+    // paquets et se relit en cache. Le resultat d'un appel entier qui n'est pas le dernier ne dit plus << la vue a change
+    // depuis >> (les propositions suivantes l'ont changee) : il ne bouge plus non plus.
+    std::vector<std::size_t> calls;
+    for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i)
+        if (c.messages[i].tool && c.messages[i].role != "utilisateur") calls.push_back(i);
+    const std::size_t lastCall = calls.empty() ? static_cast<std::size_t>(-1) : calls.back();
+    const std::size_t compacted = calls.size() >= kFullCalls + kCompactEvery ? (calls.size() - kFullCalls) / kCompactEvery * kCompactEvery : 0;
+    const auto keptWhole = [&](std::size_t i, const Message& m) {
+        if (compacted == 0 || i >= calls[compacted]) return true;
+        return m.proposal && m.proposal->state == "proposee" && m.tool && m.tool->error.empty();
+    };
     for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i) {
         const Message& m = c.messages[i];
         ProviderTurn t;
@@ -2856,12 +3000,24 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
             if (m.state == "arrete" && m.text == kStoppedEmpty) continue;
             t.role = ProviderTurn::Role::Assistant;
             t.text = m.text;
-            if (m.tool) {
+            std::string digest = m.tool && !keptWhole(i, m) ? compactCall(m) : std::string{};
+            if (!digest.empty()) {   // 1.22.6 : un appel d'avant, regle : resume dans le texte du tour, sans appel ni resultat
+                t.text = trim(t.text.empty() ? digest : t.text + "\n\n" + digest);
+                pendingId.clear();
+            } else if (m.tool) {
                 t.toolUseId = m.tool->id;
                 t.toolName = m.tool->name;
                 t.toolInputJson = m.tool->input;
                 pendingId = m.tool->id;
-                std::tie(pendingText, pendingError) = toolResult(m);
+                if (i != lastCall && m.proposal && m.proposal->state == "appliquee" && m.tool->error.empty()) {
+                    // 1.22.6 : un appel entier qui n'est pas le dernier - son sort enregistre, stable (Ctrl+Z seul le change)
+                    const bool undone = appliedOf(*m.proposal) == Applied::Undone;
+                    pendingText = undone ? "annul\xC3\xA9" "e (Ctrl+Z) : appliqu\xC3\xA9" "e puis annul\xC3\xA9" "e par l'utilisateur, la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant."
+                                         : "appliqu\xC3\xA9" "e au projet.";
+                    pendingError = false;
+                } else {
+                    std::tie(pendingText, pendingError) = toolResult(m);
+                }
             } else {
                 pendingId.clear();
             }
@@ -2939,6 +3095,9 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
+    // 1.22.6 : LE CACHE DE LA CONVERSATION - le contexte (il change a chaque demande) part dans le dernier tour, celui de la
+    // demande ; les consignes et l'historique, devant lui, ne changent plus et se relisent en cache (AiAnthropic).
+    if (!req.turns.empty() && req.turns.back().role == ProviderTurn::Role::User) req.contextTurn = static_cast<int>(req.turns.size()) - 1;
     req.toolsJson = operationsTool();
     // 1.22.0 : planifier_mission (un outil de la demande, pas un outil local : son appel arrive a la fin de la reponse et
     // finishLive l'enregistre dans la mission) - seulement pour planifier ou actualiser une mission.
@@ -3280,8 +3439,16 @@ void Assistant::finishLive(const std::string& stopReason) {
     m.model = gen_.model;
     // 1.16.0 : les jetons de la reponse (le cumul de la conversation) ; la proposition en texte : le
     // bloc ```json sort de la bulle (la carte la montre ; le tour suivant la reecrit pour le modele).
-    if (!gen_.usage.empty() || !gen_.preread.empty() || !gen_.carried.empty())
+    if (!gen_.usage.empty() || !gen_.preread.empty() || !gen_.carried.empty()) {
         m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total() + gen_.carried.total()));
+        // 1.22.6 : le detail, pour le bilan (le cache lu est compte dans << jetons >>, et coute dix fois moins qu'une entree)
+        json::Value d = json::Value::object();
+        d.set("entree", static_cast<std::int64_t>(gen_.usage.input + gen_.preread.input + gen_.carried.input));
+        d.set("sortie", static_cast<std::int64_t>(gen_.usage.output + gen_.preread.output + gen_.carried.output));
+        d.set("cacheLu", static_cast<std::int64_t>(gen_.usage.cacheRead + gen_.preread.cacheRead + gen_.carried.cacheRead));
+        d.set("cacheEcrit", static_cast<std::int64_t>(gen_.usage.cacheWrite + gen_.preread.cacheWrite + gen_.carried.cacheWrite));
+        m.extra.set("jetonsDetail", std::move(d));
+    }
     if (gen_.textTool && gen_.tool) {
         std::string rest;
         if (extractProposalBlock(m.text, nullptr, &rest)) m.text = rest;
@@ -3403,6 +3570,7 @@ void Assistant::finishLive(const std::string& stopReason) {
                 m.note = "La proposition re\xC3\xA7ue est illisible, rien n'est propos\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
         }
     }
+    adviceArrived(*c, m, stopReason, !call.id.empty());   // 1.22.6 : passer en mission IA ? (le conseil, jamais la creation)
     if (m.text.empty() && !m.proposal && m.note.empty()) m.note = "R\xC3\xA9ponse vide.";
     const int index = gen_.message;
     const bool open = current() && current()->id == c->id;
@@ -3860,7 +4028,7 @@ void Assistant::settleStale(mission::Mission& m) {
 // LA DEMANDE D'UNE MISSION : un message de l'utilisateur dans la conversation de la mission (marque : la mission, le but),
 // l'appel ECRIT AVANT DE PARTIR (pending, les etapes << en cours >>, l'empreinte du projet), puis startLive avec l'appel
 // (ses consignes, ses outils). Rien ne change si la demande ne part pas.
-bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why) {
+bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why, const std::vector<Attachment>* carried) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
@@ -3890,6 +4058,12 @@ bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall
     u.date = when;
     u.text = text;
     for (const auto& p : pending_) u.attachments.push_back(p.attachment);   // les pieces jointes attendues partent avec
+    if (carried)   // 1.22.6 : celles de la conversation d'origine (la copie sur le disque est partagee, jamais dupliquee)
+        for (Attachment a : *carried) {
+            a.conversation = c.id;
+            a.message = u.id;
+            u.attachments.push_back(std::move(a));
+        }
     u.extra = json::Value::object();
     u.extra.set("mission", id);
     u.extra.set("appelMission", call.purpose);
@@ -4563,6 +4737,7 @@ bool Assistant::suggestsMission(std::string_view request) const {
     if (!settings_.enabled || !live() || !mission::looksComplex(request)) return false;
     const Conversation* c = current();
     if (!c) return true;
+    if (adviceDeclined(*c)) return false;   // 1.22.6 : << Continuer ici >> choisi pour cette conversation
     for (const auto& m : missions_) {
         if (m.archived || (m.conversation != c->id && !listed(m.conversations, c->id))) continue;
         if (m.state == mission::State::Planning || m.state == mission::State::Active || m.state == mission::State::Paused
@@ -4624,6 +4799,354 @@ bool Assistant::createMission(std::string request, std::string* why) {
         notice_ = "Assistant IA : mission " + guillemets(made->name) + " cr\xC3\xA9\xC3\xA9" "e - l'IA analyse le projet et pr\xC3\xA9pare le plan.";
     }
     appendActivity("mission", "Mission cr\xC3\xA9\xC3\xA9" "e : " + request);
+    return true;
+}
+
+// =====================================================================================================================
+//  1.22.6 : DE LA CONVERSATION A LA MISSION IA
+// ---------------------------------------------------------------------------------------------------------------------
+//  Une grosse demande faite en conversation devient une mission : a la demande de l'utilisateur (un message envoye, << Envoyer
+//  en mission >>), ou sur le conseil du logiciel (adviseMission, avant l'envoi ; adviceArrived, a l'arrivee) et de l'IA (la
+//  regle 22 : mission_conseillee, [MISSION_CONSEILLEE: ...]). Le conseil n'est qu'une carte : jamais une mission sans le clic.
+// =====================================================================================================================
+bool Assistant::adviseMission(std::string_view request, MissionAdvice* out) const {
+    if (!settings_.enabled || !live()) return false;
+    const Conversation* c = current();
+    if (c && (adviceDeclined(*c) || missionRunningIn(missions_, c->id))) return false;
+    const std::string text = trim(std::string(request));
+    if (text.empty() || text.back() == '?') return false;   // une question n'est jamais une mission
+    const std::string low = lowered(text);
+    std::vector<std::string> reasons;
+    bool primary = false;
+    // 1. elle enumere des etapes ou des lots, une liste, un enchainement
+    if (const auto steps = stepTokens(text); steps.size() >= 3) {
+        reasons.push_back("elle \xC3\xA9num\xC3\xA8re " + std::to_string(steps.size()) + " \xC3\xA9tapes (" + joined(steps, ", ") + ")");
+        primary = true;
+    }
+    {
+        std::vector<std::string> lots;
+        for (std::size_t at = low.find("lot "); at != std::string::npos; at = low.find("lot ", at + 4)) {
+            if (at > 0 && alnum(low[at - 1])) continue;   // << pilot 3 >> n'est pas un lot
+            std::size_t j = at + 4;
+            std::string n;
+            while (j < low.size() && std::isdigit(static_cast<unsigned char>(low[j]))) n += low[j++];
+            if (!n.empty() && std::find(lots.begin(), lots.end(), n) == lots.end()) lots.push_back(n);
+        }
+        if (lots.size() >= 3) {
+            reasons.push_back("elle \xC3\xA9num\xC3\xA8re " + std::to_string(lots.size()) + " lots");
+            primary = true;
+        }
+    }
+    {
+        std::size_t items = 0;
+        std::size_t from = 0;
+        while (from <= text.size()) {
+            const std::size_t end = std::min(text.find('\n', from), text.size());
+            std::string line = trim(text.substr(from, end - from));
+            std::size_t k = 0;
+            while (k < line.size() && std::isdigit(static_cast<unsigned char>(line[k]))) ++k;
+            if (line.rfind("- ", 0) == 0 || line.rfind("* ", 0) == 0 || line.rfind("\xE2\x80\xA2", 0) == 0
+                || (k > 0 && k + 1 < line.size() && (line[k] == '.' || line[k] == ')') && line[k + 1] == ' '))
+                ++items;
+            from = end + 1;
+        }
+        if (items >= 3) {
+            reasons.push_back("elle liste " + std::to_string(items) + " \xC3\xA9l\xC3\xA9ments");
+            primary = true;
+        }
+    }
+    {
+        std::size_t thens = 0;
+        for (const char* w : {"puis", "ensuite", "enfin"})
+            for (std::size_t at = low.find(w); at != std::string::npos; at = low.find(w, at + 1))
+                if ((at == 0 || !alnum(low[at - 1])) && (at + std::strlen(w) >= low.size() || !alnum(low[at + std::strlen(w)]))) ++thens;
+        if (thens >= 2) {
+            reasons.push_back("elle encha\xC3\xAEne plusieurs \xC3\xA9tapes (\xC2\xAB puis \xC2\xBB)");
+            primary = true;
+        }
+    }
+    // 2. la suite d'une conversation qui en a deja annonce plusieurs
+    long long spent = 0;
+    bool cut = false;
+    if (c) {
+        std::size_t nexts = 0;
+        for (const auto& m : c->messages) {
+            if (m.proposal && !m.proposal->next.empty()) ++nexts;
+            spent += m.extra.integer("jetons");
+        }
+        for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
+            if (m->role == "assistant" && !(m->extra.isObject() && m->extra.has("logiciel"))) {
+                cut = m->note.find("longueur d'une r\xC3\xA9ponse") != std::string::npos;
+                break;
+            }
+        if (nexts >= 2 && (low.rfind("propose la suite", 0) == 0 || low.find("d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 annonc") != std::string::npos)) {
+            reasons.push_back("la conversation a d\xC3\xA9j\xC3\xA0 annonc\xC3\xA9 une suite " + std::to_string(nexts) + " fois");
+            primary = true;
+        }
+    }
+    // 3. aggravants : la derniere reponse coupee, une conversation deja lourde - avec une demande complexe
+    std::vector<std::string> heavy;
+    if (cut) heavy.push_back("la derni\xC3\xA8re r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e par la longueur");
+    if (spent >= kAdviceTokens) heavy.push_back("la conversation a d\xC3\xA9j\xC3\xA0 consomm\xC3\xA9 " + tokensText(spent) + " jetons");
+    if (!primary && (heavy.empty() || (!mission::looksComplex(text) && countWords(text) < 40))) return false;
+    for (auto& h : heavy) reasons.push_back(std::move(h));
+    if (out) {
+        out->reason = joined(reasons, " ; ");
+        out->source = "logiciel";
+        out->message = -1;
+    }
+    return true;
+}
+
+void Assistant::adviceArrived(Conversation& c, Message& m, const std::string& stopReason, bool missionCall) {
+    std::string reason;
+    // l'IA : le champ de proposer_operations...
+    if (m.tool && m.tool->name == kOperationsTool) {
+        json::Value in;
+        if (json::parse(m.tool->input, in) && in.isObject()) reason = trim(in.str("mission_conseillee"));
+    }
+    // ... ou la ligne [MISSION_CONSEILLEE: la raison], retiree du texte montre (et renvoye)
+    if (const auto at = m.text.find("[MISSION_CONSEILLEE"); at != std::string::npos) {
+        const auto end = m.text.find(']', at);
+        const std::string said = m.text.substr(at, end == std::string::npos ? std::string::npos : end - at + 1);
+        const auto colon = said.find(':');
+        std::string r = colon == std::string::npos ? std::string{} : trim(said.substr(colon + 1, said.size() - colon - 1 - (said.back() == ']' ? 1 : 0)));
+        if (reason.empty()) reason = r.empty() ? std::string("l'IA conseille une mission IA pour cette demande") : r;
+        m.text = trim(m.text.erase(at, said.size()));
+    }
+    std::string source = reason.empty() ? "logiciel" : "ia";
+    if (reason.empty()) {
+        // le logiciel : une reponse coupee par la longueur, ou la suite annoncee une fois de trop
+        if (stopReason == "max_tokens" && !m.proposal) {
+            reason = "la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e par la longueur d'une r\xC3\xA9ponse";
+        } else if (m.proposal && !m.proposal->next.empty()) {
+            std::size_t nexts = 0;
+            for (const auto& x : c.messages)
+                if (x.proposal && !x.proposal->next.empty()) ++nexts;
+            if (nexts >= 3) reason = "la suite de cette demande est annonc\xC3\xA9" "e pour la " + std::to_string(nexts) + "e fois";
+        }
+    }
+    // jamais pendant une mission (le marqueur est seulement retire), ni apres << Continuer ici >>
+    if (reason.empty() || missionCall || !live() || adviceDeclined(c) || missionRunningIn(missions_, c.id)) return;
+    reason = clipped(trim(reason), 300);
+    json::Value a = json::Value::object();
+    a.set("raison", reason);
+    a.set("source", source);
+    if (!m.extra.isObject()) m.extra = json::Value::object();
+    m.extra.set("missionConseillee", std::move(a));
+}
+
+std::optional<Assistant::MissionAdvice> Assistant::pendingAdvice() const {
+    const Conversation* c = current();
+    if (!c || c->messages.empty() || !live() || adviceDeclined(*c) || missionRunningIn(missions_, c->id)) return std::nullopt;
+    if (generating() && gen_.conversation == c->id) return std::nullopt;
+    const Message& last = c->messages.back();
+    const json::Value* a = last.role == "assistant" && last.extra.isObject() ? last.extra.find("missionConseillee") : nullptr;
+    if (!a || !a->isObject() || a->flag("traite")) return std::nullopt;
+    MissionAdvice out;
+    out.reason = a->str("raison");
+    out.source = a->str("source");
+    for (int i = static_cast<int>(c->messages.size()) - 2; i >= 0; --i) {
+        const Message& u = c->messages[static_cast<std::size_t>(i)];
+        if (u.role == "utilisateur" && !(u.extra.isObject() && u.extra.has("logiciel"))) {
+            out.message = i;
+            break;
+        }
+    }
+    if (out.message < 0) return std::nullopt;
+    return out;
+}
+
+void Assistant::declineMissionAdvice() {
+    Conversation* c = cur();
+    if (!c) return;
+    if (!c->extra.isObject()) c->extra = json::Value::object();
+    c->extra.set("missionConseil", "ici");
+    if (!c->messages.empty())
+        if (json::Value* a = c->messages.back().extra.isObject() ? c->messages.back().extra.find("missionConseillee") : nullptr; a && a->isObject())
+            a->set("traite", true);
+    save(*c);
+    ++revision_;
+}
+
+bool Assistant::missionAdviceDeclined() const {
+    const Conversation* c = current();
+    return c && adviceDeclined(*c);
+}
+
+std::string Assistant::conversationDigest(const Conversation& c, std::size_t upTo) const {
+    std::vector<std::string> applied;
+    std::size_t refused = 0, replaced = 0, waiting = 0, undone = 0, nexts = 0;
+    std::string lastNext;
+    for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i) {
+        if (!c.messages[i].proposal) continue;
+        const Proposal& p = *c.messages[i].proposal;
+        if (!p.next.empty()) {
+            ++nexts;
+            lastNext = p.next;
+        }
+        if (p.state == "appliquee") {
+            if (appliedOf(p) == Applied::Undone) ++undone;
+            else applied.push_back(guillemets(p.summary) + " : " + opsDigest(p, 240));
+        } else if (p.state == "refusee") {
+            ++refused;
+        } else if (p.state == "remplacee") {
+            ++replaced;
+        } else {
+            ++waiting;
+        }
+    }
+    std::vector<std::string> files;
+    const std::string plc = host_.env.plcSource ? host_.env.plcSource() : std::string{};
+    for (const auto& f : attach::buildContext(c).files)
+        if (!f.attachment.removed) files.push_back(f.attachment.name + (!plc.empty() && f.attachment.name == plc ? " (l'automate lu)" : ""));
+    if (applied.empty() && nexts == 0 && files.empty() && refused + replaced + waiting + undone == 0) return {};
+    std::string s = "CONTEXTE DE LA CONVERSATION " + guillemets(c.title)
+                    + " (d'o\xC3\xB9 vient cette mission ; ce qui y est d\xC3\xA9j\xC3\xA0 fait, d'apr\xC3\xA8s le logiciel - le projet ouvert fait foi) :\n";
+    if (!applied.empty()) {
+        s += "- Propositions appliqu\xC3\xA9" "es (" + std::to_string(applied.size()) + ") :\n";
+        const std::size_t from = applied.size() > 8 ? applied.size() - 8 : 0;
+        if (from > 0) s += "  - ... et " + std::to_string(from) + " plus anciennes\n";
+        for (std::size_t i = from; i < applied.size(); ++i) s += "  - " + applied[i] + "\n";
+    }
+    if (refused + replaced + waiting + undone > 0) {
+        std::vector<std::string> other;
+        if (refused) other.push_back(plural(refused, "refus\xC3\xA9" "e", "refus\xC3\xA9" "es"));
+        if (replaced) other.push_back(plural(replaced, "remplac\xC3\xA9" "e par sa correction", "remplac\xC3\xA9" "es par leur correction"));
+        if (undone) other.push_back(plural(undone, "annul\xC3\xA9" "e (Ctrl+Z)", "annul\xC3\xA9" "es (Ctrl+Z)"));
+        if (waiting) other.push_back(plural(waiting, "jamais appliqu\xC3\xA9" "e", "jamais appliqu\xC3\xA9" "es"));
+        s += "- Autres propositions (rien d'elles n'est dans le projet) : " + joined(other, ", ") + ".\n";
+    }
+    if (nexts > 0)
+        s += "- Suite annonc\xC3\xA9" "e" + (nexts > 1 ? " (" + std::to_string(nexts) + " fois)" : std::string{}) + " : " + guillemets(lastNext) + "\n";
+    if (!files.empty()) s += "- Pi\xC3\xA8" "ces jointes reprises par la mission : " + joined(files, ", ") + ".\n";
+    return clipped(s, 4000);
+}
+
+bool Assistant::createMissionFromMessage(int message, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const Conversation* c = current();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size())) return fail("Ce message n'existe plus.");
+    const Message& m = c->messages[static_cast<std::size_t>(message)];
+    if (m.role != "utilisateur" || (m.extra.isObject() && m.extra.has("logiciel")))
+        return fail("Seul un message que tu as envoy\xC3\xA9 devient une mission.");
+    if (m.extra.isObject() && m.extra.has("mission")) return fail("Ce message fait d\xC3\xA9j\xC3\xA0 partie d'une mission.");
+    const std::string text = trim(m.text);
+    if (text.empty()) return fail("Ce message n'a pas de texte : \xC3\xA9" "cris ce que la mission doit construire.");
+    return createMissionWith(text, message, why);
+}
+
+bool Assistant::sendAsMission(std::string text, std::string* why) {
+    text = trim(std::move(text));
+    const Conversation* c = current();
+    if (!c || c->messages.empty()) return createMission(std::move(text), why);   // une conversation vide : la mission y reste
+    return createMissionWith(std::move(text), -1, why);
+}
+
+bool Assistant::createMissionWith(std::string request, int message, std::string* why) {
+    request = trim(std::move(request));
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (request.empty()) return fail("D\xC3\xA9" "cris ce que la mission doit construire.");
+    if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    if (!live())
+        return fail("Une mission travaille avec une IA connect\xC3\xA9" "e (Anthropic, ou un service compatible OpenAI) : choisis-la dans les "
+                    "Param\xC3\xA8tres de l'Assistant IA.");
+    if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
+    if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
+    std::string w;
+    if (!ready(&w)) return fail(w);
+    if (toolsInText())
+        return fail("Ce mod\xC3\xA8le re\xC3\xA7oit les propositions en texte : il ne peut pas appeler l'outil du plan d'une mission. Choisis "
+                    "\xC2\xAB Outil \xC2\xBB (l'appel d'outil) dans les Param\xC3\xA8tres de l'Assistant IA.");
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return fail("Aucun projet n'est ouvert : une mission travaille sur le projet IHM ouvert.");
+    const Conversation* src = current();
+    if (!src) return createMission(std::move(request), why);
+    const Conversation source = *src;   // une copie : la conversation neuve deplace la liste
+    const std::size_t upTo = message >= 0 ? static_cast<std::size_t>(message) : source.messages.size();
+    // Les pieces : celles du message, puis celles de la conversation (le .XPG lu, les classeurs), sans doublon ni retiree.
+    std::vector<Attachment> carried;
+    const auto carry = [&carried](const Attachment& a) {
+        if (a.removed || a.id.empty()) return;
+        if (std::any_of(carried.begin(), carried.end(), [&a](const Attachment& x) { return x.id == a.id; })) return;
+        carried.push_back(a);
+    };
+    if (message >= 0)
+        for (const auto& a : source.messages[static_cast<std::size_t>(message)].attachments) carry(a);
+    for (const auto& f : attach::buildContext(source).files) carry(f.attachment);
+    const std::string digest = conversationDigest(source, upTo);
+    const std::string when = isoDate(now());
+    newConversation();
+    const Conversation* fresh = cur();
+    if (!fresh || fresh->id == source.id) return fail("Aucune conversation pour la mission.");
+    const std::string convId = fresh->id;
+    mission::Mission made = mission::make(request, convId, when);
+    made.project.name = host_.projectName ? host_.projectName() : std::string{};
+    made.project.path = host_.projectPath ? host_.projectPath() : std::string{};
+    made.project.id = openProjectId();
+    made.provider = settings_.provider;
+    made.model = trim(settings_.model);
+    for (const auto& a : carried) made.attachments.push_back(a.id);
+    for (const auto& p : pending_)
+        if (!p.attachment.id.empty()) made.attachments.push_back(p.attachment.id);
+    mission::log(made, "creation", "Cr\xC3\xA9\xC3\xA9" "e depuis la conversation " + guillemets(source.title) + ".", when);
+    const std::string id = made.id;
+    missions_.insert(missions_.begin(), std::move(made));
+    MissionCall call;
+    call.purpose = "plan";
+    if (!launchMission(missions_.front(), request + (digest.empty() ? std::string{} : "\n\n" + digest), std::move(call), why, &carried)) {
+        // la demande n'est pas partie : ni mission, ni conversation neuve ; la conversation d'origine revient
+        missions_.erase(std::remove_if(missions_.begin(), missions_.end(), [&id](const mission::Mission& x) { return x.id == id; }), missions_.end());
+        (void)mission::remove(id);
+        ++missionsRev_;
+        (void)remove(convId);
+        (void)select(source.id);
+        ++revision_;
+        return false;
+    }
+    const mission::Mission* mm = findMission(id);
+    const std::string name = mm ? mm->name : std::string("Mission");
+    // LA CONVERSATION D'ORIGINE le dit : << Mission << X >> creee - Ouvrir >> (un clic ouvre son tableau de bord).
+    if (const int si = indexOf(source.id); si >= 0) {
+        Conversation& sc = conversations_[static_cast<std::size_t>(si)];
+        const int ci = indexOf(convId);
+        const std::string title = ci >= 0 ? conversations_[static_cast<std::size_t>(ci)].title : std::string{};
+        if (message >= 0 && message < static_cast<int>(sc.messages.size())) {
+            Message& um = sc.messages[static_cast<std::size_t>(message)];
+            if (!um.extra.isObject()) um.extra = json::Value::object();
+            um.extra.set("missionCreee", id);
+            for (std::size_t k = static_cast<std::size_t>(message) + 1; k < sc.messages.size(); ++k)   // le conseil est suivi
+                if (json::Value* a = sc.messages[k].extra.isObject() ? sc.messages[k].extra.find("missionConseillee") : nullptr; a && a->isObject())
+                    a->set("traite", true);
+        }
+        Message link;
+        link.id = "m" + std::to_string(sc.messages.size() + 1);
+        link.role = "assistant";
+        link.state = "fini";
+        link.date = when;
+        link.text = "Mission " + guillemets(name) + " cr\xC3\xA9\xC3\xA9" "e \xE2\x80\x94 **Ouvrir**\n\nElle continue dans la conversation " + guillemets(title)
+                    + " : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est modifi\xC3\xA9 avant ta validation). Un clic ici ouvre son tableau de bord.";
+        link.extra = json::Value::object();
+        link.extra.set("logiciel", "mission-creee");
+        link.extra.set("mission", id);
+        sc.messages.push_back(std::move(link));
+        save(sc);
+    }
+    if (mm) {
+        notifyMission(*mm, "creee", "Mission cr\xC3\xA9\xC3\xA9" "e : " + mm->name,
+                      "Depuis la conversation " + guillemets(source.title) + " : l'IA analyse le projet r\xC3\xA9" "el et pr\xC3\xA9pare le plan ; rien n'est "
+                      "modifi\xC3\xA9 avant ta validation.",
+                      "info");
+        notice_ = "Assistant IA : mission " + guillemets(mm->name) + " cr\xC3\xA9\xC3\xA9" "e depuis la conversation - l'IA analyse le projet et pr\xC3\xA9pare le plan.";
+    }
+    appendActivity("mission", "Mission cr\xC3\xA9\xC3\xA9" "e depuis une conversation : " + request);
+    ++revision_;
     return true;
 }
 

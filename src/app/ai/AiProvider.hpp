@@ -118,6 +118,12 @@ struct ProviderRequest {
     // 1.21.0 : les outils repondus ici (LocalTool) ; ajoutes aux outils de la demande par le fournisseur. Un mode sans
     // appel d'outil (la proposition en texte) ne les a pas.
     std::vector<LocalTool> localTools;
+    // 1.22.6 (a la fin) : LE CACHE DE LA CONVERSATION. contextTurn >= 0 : systemDynamic (le contexte du projet, qui change a
+    // chaque demande) part EN TETE du tour `contextTurn` (un tour de l'utilisateur : le dernier de la conversation), apres le
+    // retour d'outil, et non plus dans system - le prefixe outils + consignes + historique ne change plus d'une demande a
+    // l'autre et se relit en cache (AiAnthropic : les points de cache sur les consignes, la fin de l'historique, la fin de la
+    // demande). -1 : dans system, comme avant. `system` et systemDynamic restent remplis (les budgets, les essais).
+    int contextTurn{-1};
 };
 
 // 1.16.0 (le contrat) : ce qu'une reponse a consomme - les jetons, tels que le service les compte.

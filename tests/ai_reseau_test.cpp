@@ -534,6 +534,44 @@ void testBody() {
     check(sys.size() == 2 && sys[0].str("text") == "Les consignes stables." && sys[0].at("cache_control").str("type") == "ephemeral"
               && sys[1].str("text") == "Le contexte de la vue." && !sys[1].has("cache_control"),
           "system en deux blocs : le stable avec cache_control ephemeral, puis le dynamique");
+    // 1.22.6 : LE CACHE DE LA CONVERSATION (contextTurn) - le contexte part en tete du dernier tour (apres le retour d'outil),
+    // system n'a plus que le stable ; la fin de l'historique porte un point de cache ; la fin de la demande aussi apres un
+    // tour d'outil local (le tour suivant la relit).
+    ai::ProviderRequest r4 = r3;
+    r4.contextTurn = static_cast<int>(r4.turns.size()) - 1;
+    Value v4;
+    (void)ai::json::parse(ai::anthropicBody(r4), v4);
+    const auto& sys4 = v4.at("system").items();
+    const auto& msgs4 = v4.at("messages").items();
+    check(sys4.size() == 1 && sys4[0].str("text") == "Les consignes stables." && sys4[0].has("cache_control"), "contextTurn : system, le stable seul (en cache)");
+    if (msgs4.size() >= 2) {
+        const auto& last4 = msgs4.back().at("content").items();
+        check(last4.size() >= 2 && last4[0].str("type") == "tool_result" && has(last4[1].str("text"), "Le contexte de la vue.")
+                  && has(last4[1].str("text"), "il remplace celui des messages"),
+              "contextTurn : le contexte en tete du dernier tour, apres le retour d'outil");
+        check(msgs4[msgs4.size() - 2].at("content").items().back().has("cache_control") && !last4.back().has("cache_control"),
+              "contextTurn : un point de cache a la fin de l'historique, pas a la fin d'une demande d'un seul tour");
+    }
+    ai::ProviderRequest r5 = r4;
+    ai::ProviderTurn call;
+    call.role = ai::ProviderTurn::Role::Assistant;
+    call.text = "Je regarde.";
+    call.toolUseId = "toolu_local";
+    call.toolName = "analyser_projet";
+    call.toolInputJson = "{}";
+    ai::ProviderTurn back;
+    back.toolResultFor = "toolu_local";
+    back.toolResultText = "3 orphelins";
+    r5.turns.push_back(call);
+    r5.turns.push_back(back);
+    Value v5;
+    (void)ai::json::parse(ai::anthropicBody(r5), v5);
+    const auto& msgs5 = v5.at("messages").items();
+    int marks = 0;
+    for (const auto& m : msgs5)
+        for (const auto& b : m.at("content").items()) marks += b.has("cache_control") ? 1 : 0;
+    check(!msgs5.empty() && msgs5.back().at("content").items().back().has("cache_control") && marks == 2,
+          "contextTurn, apres un outil local : la fin de la demande aussi (2 points dans les messages)");
 }
 
 // =============================================================================
@@ -1034,6 +1072,15 @@ void testTextParts() {
                   "outil local (Anthropic) : offert, sa reponse en tool_result");
             check(calls == 1 && has(seenInput, "Moyenne") && !toolSeenL && donesL == 1 && outilStatus && allText(evl) == "J'essaie. Les 2 cas passent.",
                   "outil local (Anthropic) : appele une fois sur le fil, l'etat << outil >>, aucun appel visible, une fin");
+            // 1.22.6 : les jetons des deux tours comptes ensemble - le premier donne a ajouter (preread), le dernier recu : le second
+            long long lastOut = 0, added = 0;
+            for (const auto& e : evl)
+                if (e.type == ai::ProviderEvent::Type::Usage && !e.usage.empty()) {
+                    if (e.preread) added += e.usage.output;
+                    else lastOut = e.usage.output;
+                }
+            check(lastOut == 42 && added == 42, "outil local (Anthropic) : les jetons des deux tours sont comptes, une fois chacun (" + std::to_string(added) + " + "
+                                                  + std::to_string(lastOut) + ")");
             // compatible OpenAI : pareil
             g_net.reset();
             calls = 0;

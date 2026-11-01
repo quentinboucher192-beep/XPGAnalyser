@@ -33,6 +33,10 @@
 //      processus de developpement et ses 6 entrees), 2 corrections qui ne suffisent pas, une
 //      correction qui tourne en rond, des avertissements seuls, les options decochees, une
 //      mission (sa correction), le mode Direct, le retour de l'outil, la relecture.
+//    - 1.22.6 : de la conversation a la mission IA - << Creer une mission avec ce message >> (la
+//      demande, les pieces, le contexte utile, une conversation neuve, le lien), << Envoyer en
+//      mission >>, la carte du conseil pour le message de la capture (S3b... S9), << Continuer
+//      ici >> la fait taire, l'IA qui conseille (outil et texte) ; rien n'est cree sans clic.
 //  Scenarios de la demande : A (station de pompage complete), B (interruption
 //  pendant la 3e proposition), C (modification externe pendant la preparation),
 //  D (une autre conversation).
@@ -1737,6 +1741,226 @@ void testSoftwareVerdictMission() {
 
 } // namespace
 
+
+// ---- 1.22.6 : DE LA CONVERSATION A LA MISSION IA ---------------------------------------------------------------------------
+// La capture du 01/11 : une tres grosse demande faite en conversation (la limite a 3999/4000 requetes, 991 k jetons).
+const char* const kCapture =
+    "Propose la suite : S3b les configurations de gaz (zones %MW de 150 mots), S5 le socle (en-t\xC3\xAAte, pied, mod\xC3\xA8le, symboles, popups), S6 "
+    "les vues, S7 les alarmes, S8 la navigation et les droits, S9 la v\xC3\xA9rification. (Cette suite a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 annonc\xC3\xA9" "e par "
+    "une proposition pr\xC3\xA9" "c\xC3\xA9" "dente : ne repropose pas la m\xC3\xAAme chose ; change d'approche, ou dis ce qui bloque.)";
+
+std::string lampInput(const std::string& name, const std::string& x, const std::string& suite = {}, const std::string& advice = {}) {
+    Value op = O({{"action", "creer"}, {"genre", "Indicator"}, {"nom", name}, {"proprietes", O({{"x", x}, {"y", "40"}, {"variable", "Pompe_1_Marche"}})}});
+    Value list = Value::array();
+    list.push(op);
+    Value in = O({{"resume", "Le voyant " + name}, {"operations", list}});
+    if (!suite.empty()) in.set("suite", suite);
+    if (!advice.empty()) in.set("mission_conseillee", advice);
+    return ai::json::write(in, false);
+}
+
+int lastUser(const ai::Conversation& c) {
+    for (int i = static_cast<int>(c.messages.size()) - 1; i >= 0; --i)
+        if (c.messages[static_cast<std::size_t>(i)].role == "utilisateur") return i;
+    return -1;
+}
+
+void testFromConversation() {
+    std::printf("[1.22.6 : de la conversation a la mission IA]\n");
+    std::string why;
+    // (a) CREER UNE MISSION AVEC CE MESSAGE : la demande, les pieces, le contexte utile ; une conversation neuve ; le lien.
+    {
+        Fixture f("depuis_conversation");
+        const fs::path xpg = f.dir / "programme.XPG";
+        {
+            std::ofstream o(xpg);
+            o << "<?xml version=\"1.0\"?><FBExchangeFile></FBExchangeFile>\n";
+        }
+        check(f.as->attach(U(xpg), &why), "(a) joindre programme.XPG (" + why + ")");
+        for (int k = 0; k < 500 && f.as->processing(); ++k) {
+            pause(2);
+            f.step(0.01);
+        }
+        f.s.replies.push_back({textEv("J'ai lu l'automate."), doneEv("end_turn")});
+        check(f.as->send("Lis l'automate joint.", &why), "(a) un premier message (" + why + ")");
+        f.step();
+        f.answerOps("toolu_c1", lampInput("Voyant_C1", "40", "Les alarmes et la vue des pompes."));
+        check(f.as->send("Ajoute le voyant de la pompe 1.", &why), "(a) une proposition (" + why + ")");
+        f.step();
+        check(f.as->apply(f.lastIndex(), &why), "(a) appliquee (" + why + ")");
+        f.s.replies.push_back({textEv("Je commence par S3b."), doneEv("end_turn")});
+        check(f.as->send(kCapture, &why), "(a) la grosse demande, envoyee en conversation (" + why + ")");
+        f.step();
+        const std::string source = f.as->current()->id;
+        const int big = lastUser(*f.as->current());
+        const std::string xpgId = f.as->current()->messages.front().attachments.empty() ? std::string{} : f.as->current()->messages.front().attachments.front().id;
+        check(big >= 0 && f.as->current()->messages[static_cast<std::size_t>(big)].text == kCapture && !xpgId.empty(), "(a) la demande et la piece sont dans la conversation");
+        check(f.as->missions().empty(), "(a) rien n'est cree sans clic");
+        const std::size_t sent = f.s.requests.size();
+        f.answerPlan("toolu_plan_c", planInput("Socle et vues", {{"S1", "Cr\xC3\xA9" "er le socle", "vues", {}, 2, {}}, {"S2", "Cr\xC3\xA9" "er les vues", "vues", {"S1"}, 3, {}}}));
+        f.s.hang = true;
+        check(f.as->createMissionFromMessage(big, &why), "(a) Creer une mission avec ce message (" + why + ")");
+        check(f.as->missions().size() == 1 && f.s.requests.size() == sent + 1 && f.as->generating(), "(a) la mission, et sa planification est partie");
+        const ms::Mission* m = f.as->missions().empty() ? nullptr : &f.as->missions().front();
+        const std::string id = m ? m->id : std::string{};
+        if (m) {
+            check(m->request == kCapture, "(a) la demande exacte");
+            check(f.as->current()->id != source && m->conversation == f.as->current()->id, "(a) une conversation NEUVE (l'historique ne suit pas)");
+            check(listedIn(m->attachments, xpgId), "(a) les pieces de la conversation (le .XPG lu)");
+            check(m->state == ms::State::Planning && m->pending.purpose == "plan", "(a) planifier, comme une mission ordinaire");
+        }
+        if (f.s.requests.size() == sent + 1) {
+            const ai::ProviderRequest& r = f.s.requests.back();
+            check(r.turns.size() == 1, "(a) un seul tour : l'historique de la conversation ne part pas (" + std::to_string(r.turns.size()) + ")");
+            const std::string& t = r.turns.empty() ? std::string{} : r.turns.front().text;
+            check(has(t, kCapture) && has(t, "CONTEXTE DE LA CONVERSATION") && has(t, "Le voyant Voyant_C1") && has(t, "Les alarmes et la vue des pompes")
+                      && has(t, "programme.XPG"),
+                  "(a) le contexte utile : la proposition appliquee, la suite annoncee, les pieces");
+            check(!r.turns.empty() && !r.turns.front().attachments.empty() && r.turns.front().attachments.front().name == "programme.XPG",
+                  "(a) les pieces jointes partent avec la demande");
+            check(has(r.toolsJson, "planifier_mission"), "(a) l'outil planifier_mission");
+        }
+        {
+            const int si = f.as->indexOf(source);
+            const ai::Conversation* sc = si >= 0 ? &f.as->conversations()[static_cast<std::size_t>(si)] : nullptr;
+            check(sc && sc->messages.back().extra.str("logiciel") == "mission-creee" && sc->messages.back().extra.str("mission") == id
+                      && has(sc->messages.back().text, "Ouvrir") && has(sc->messages.back().text, "Mission \xC2\xAB "),
+                  "(a) la conversation d'origine dit << Mission << X >> creee - Ouvrir >>");
+            check(sc && sc->messages[static_cast<std::size_t>(big)].extra.str("missionCreee") == id, "(a) le message garde sa mission");
+        }
+        f.s.hang = false;
+        f.step();
+        check(f.mission(id) && f.mission(id)->state == ms::State::Active && f.mission(id)->steps.size() == 2, "(a) le plan arrive : la mission est en cours");
+        // le lien n'est jamais renvoye au modele
+        check(f.as->select(source), "(a) la conversation d'origine se rouvre");
+        f.s.replies.push_back({textEv("D'accord."), doneEv("end_turn")});
+        check(f.as->send("Merci.", &why), "(a) un message de plus (" + why + ")");
+        bool linkSent = false;
+        for (const auto& t : f.s.requests.back().turns) linkSent |= has(t.text, "cr\xC3\xA9\xC3\xA9" "e \xE2\x80\x94 **Ouvrir**");
+        check(!linkSent, "(a) le message du logiciel ne part pas au modele");
+        f.step();
+        // supprimer la conversation d'origine : la piece partagee avec la mission reste sur le disque
+        const ai::Attachment* shared = f.as->findAttachment(xpgId);
+        const std::string path = shared ? ai::attachmentPath(*shared) : std::string{};
+        const fs::path onDisk(std::u8string(path.begin(), path.end()));
+        check(!path.empty() && fs::exists(onDisk), "(a) la piece est sur le disque");
+        check(f.as->remove(source), "(a) supprimer la conversation d'origine");
+        check(!path.empty() && fs::exists(onDisk), "(a) la piece partagee avec la mission reste");
+        // pas un message de l'utilisateur
+        check(!f.as->createMissionFromMessage(9999, &why), "(a) un message inconnu : refuse (" + why + ")");
+    }
+    // (b) ENVOYER EN MISSION : une conversation commencee -> une conversation neuve et le lien ; une conversation vide la garde.
+    {
+        Fixture f("envoyer_en_mission");
+        f.s.replies.push_back({textEv("Bonjour."), doneEv("end_turn")});
+        check(f.as->send("Bonjour", &why), "(b) une conversation commencee (" + why + ")");
+        f.step();
+        const std::string source = f.as->current()->id;
+        f.answerPlan("toolu_plan_b", planInput("Zone 6", {{"S1", "Cr\xC3\xA9" "er les variables", "variables", {}, 2, {}}}));
+        const std::string request = "Cr\xC3\xA9" "e la zone 6 : ses variables, ses alarmes et sa vue.";
+        check(f.as->sendAsMission(request, &why), "(b) Envoyer en mission (" + why + ")");
+        check(f.as->missions().size() == 1 && f.as->missions().front().request == request && f.as->current()->id != source, "(b) la mission, dans une conversation neuve");
+        {
+            const int si = f.as->indexOf(source);
+            check(si >= 0 && f.as->conversations()[static_cast<std::size_t>(si)].messages.back().extra.str("logiciel") == "mission-creee",
+                  "(b) la conversation d'origine garde le lien");
+        }
+        f.step();
+        f.as->newConversation();
+        const std::string empty = f.as->current()->id;
+        f.answerPlan("toolu_plan_b2", planInput("Zone 7", {{"S1", "Cr\xC3\xA9" "er la vue", "vues", {}, 2, {}}}));
+        check(f.as->sendAsMission("Cr\xC3\xA9" "e la zone 7 : ses variables et sa vue.", &why), "(b) Envoyer en mission, conversation vide (" + why + ")");
+        check(f.as->missions().size() == 2 && f.as->current()->id == empty && f.as->missions().front().conversation == empty,
+              "(b) une conversation vide garde la mission (comme Creer une mission IA)");
+        f.step();
+        check(!f.as->sendAsMission("   ", &why), "(b) une demande vide : refusee (" + why + ")");
+    }
+    // (c) LA CARTE DE L'HEURISTIQUE : la capture ; Continuer ici la fait taire (pour la conversation) ; rien n'est cree sans clic.
+    {
+        Fixture f("conseil");
+        ai::Assistant::MissionAdvice adv;
+        check(f.as->adviseMission(kCapture, &adv) && has(adv.reason, "6 \xC3\xA9tapes") && has(adv.reason, "S3b") && has(adv.reason, "S9")
+                  && adv.source == "logiciel" && adv.message == -1,
+              "(c) la capture : << Cette demande est grosse >> (" + adv.reason + ")");
+        check(!f.as->adviseMission("Ajoute un voyant vert"), "(c) une demande simple : non");
+        check(!f.as->adviseMission("Pourquoi S3b, S5 et S6 sont-elles en attente ?"), "(c) une question : non");
+        check(f.as->adviseMission("Cr\xC3\xA9" "e les variables, puis les alarmes, puis la vue de la station."), "(c) << puis >> deux fois : oui");
+        check(f.as->adviseMission("Fais ceci :\n- les variables\n- les alarmes\n- les vues"), "(c) une liste de trois : oui");
+        {
+            ai::Settings st = f.as->settings();
+            st.provider = "demo";
+            f.as->setSettings(st);
+            check(!f.as->adviseMission(kCapture), "(c) sans IA connectee : rien a conseiller");
+            f.configure();
+        }
+        // une conversation deja lourde (600 k jetons) et une demande complexe
+        ai::ProviderEvent heavy;
+        heavy.type = ai::ProviderEvent::Type::Usage;
+        heavy.usage.input = 600000;
+        f.s.replies.push_back({textEv("D'accord."), heavy, doneEv("end_turn")});
+        check(f.as->send("Bonjour", &why), "(c) un message (" + why + ")");
+        f.step();
+        check(f.as->adviseMission(kStationRequest, &adv) && has(adv.reason, "jetons"), "(c) une conversation lourde, une demande complexe : " + adv.reason);
+        check(!f.as->adviseMission("Ajoute un voyant vert"), "(c) une conversation lourde, une demande simple : non");
+        // la suite annoncee deux fois, puis << Propose la suite >>
+        f.answerOps("toolu_s1", lampInput("Voyant_S1", "40", "La suite 1."));
+        check(f.as->send("Pose le premier voyant.", &why), "(c) P1 (" + why + ")");
+        f.step();
+        f.answerOps("toolu_s2", lampInput("Voyant_S2", "80", "La suite 2."));
+        check(f.as->send("Propose la suite : la suite 1.", &why), "(c) P2 (" + why + ")");
+        f.step();
+        check(f.as->adviseMission("Propose la suite : la suite 2.", &adv) && has(adv.reason, "2 fois"), "(c) la suite annoncee 2 fois : " + adv.reason);
+        // a l'arrivee : la 3e suite - le logiciel le conseille (sans rien creer)
+        f.answerOps("toolu_s3", lampInput("Voyant_S3", "120", "La suite 3."));
+        check(f.as->send("Propose la suite : la suite 2.", &why), "(c) P3 (" + why + ")");
+        f.step();
+        const auto arrived = f.as->pendingAdvice();
+        check(arrived && arrived->source == "logiciel" && has(arrived->reason, "3e fois") && arrived->message == f.lastIndex() - 1,
+              "(c) la 3e suite : le conseil du logiciel a l'arrivee");
+        check(f.as->missions().empty(), "(c) rien n'est cree sans clic");
+        // CONTINUER ICI : plus de conseil ni de carte dans cette conversation
+        f.as->declineMissionAdvice();
+        check(f.as->missionAdviceDeclined() && !f.as->pendingAdvice() && !f.as->adviseMission(kCapture) && !f.as->suggestsMission(kStationRequest),
+              "(c) Continuer ici : la conversation ne propose plus de mission");
+        {
+            const auto again = ai::loadConversations();
+            bool kept = false;
+            for (const auto& c : again) kept |= c.id == f.as->current()->id && c.extra.str("missionConseil") == "ici";
+            check(kept, "(c) le choix est garde avec la conversation");
+        }
+        f.as->newConversation();
+        check(f.as->adviseMission(kCapture), "(c) une autre conversation : le conseil revient");
+        check(f.as->missions().empty(), "(c) toujours aucune mission");
+    }
+    // (d) L'IA QUI CONSEILLE UNE MISSION : l'outil (mission_conseillee) et le texte ([MISSION_CONSEILLEE: ...]).
+    {
+        Fixture f("conseil_ia");
+        f.answerOps("toolu_ia1", lampInput("Voyant_IA", "40", {}, "six \xC3\xA9tapes \xC3\xA0 v\xC3\xA9rifier une \xC3\xA0 une"));
+        check(f.as->send("Fais toute la supervision de la station.", &why), "(d) envoyer (" + why + ")");
+        f.step();
+        auto adv = f.as->pendingAdvice();
+        check(adv && adv->source == "ia" && adv->reason == "six \xC3\xA9tapes \xC3\xA0 v\xC3\xA9rifier une \xC3\xA0 une" && adv->message == f.lastIndex() - 1,
+              "(d) l'outil : mission_conseillee, la carte");
+        check(f.last().proposal && f.last().proposal->state == "proposee", "(d) la proposition reste une proposition ordinaire");
+        check(f.as->missions().empty(), "(d) rien n'est cree sans clic");
+        f.s.replies.push_back({textEv("C'est trop large pour une conversation.\n[MISSION_CONSEILLEE: la navigation et les droits de 12 vues]"), doneEv("end_turn")});
+        check(f.as->send("Et toute la navigation, avec les droits ?", &why), "(d) envoyer (" + why + ")");
+        f.step();
+        adv = f.as->pendingAdvice();
+        check(adv && adv->source == "ia" && adv->reason == "la navigation et les droits de 12 vues", "(d) le texte : [MISSION_CONSEILLEE: ...], la meme carte");
+        check(!has(f.last().text, "MISSION_CONSEILLEE") && has(f.last().text, "trop large"), "(d) le marqueur est retire du texte montre");
+        check(f.as->missions().empty(), "(d) toujours rien de cree");
+        // le clic : la mission, avec la demande ; le conseil est suivi (plus de carte)
+        const std::string source = f.as->current()->id;
+        const std::string ask = adv ? f.as->current()->messages[static_cast<std::size_t>(adv->message)].text : std::string{};
+        f.answerPlan("toolu_plan_d", planInput("Navigation", {{"S1", "Relier les vues", "vues", {}, 2, {}}}));
+        check(adv && f.as->createMissionFromMessage(adv->message, &why), "(d) Creer la mission (" + why + ")");
+        check(f.as->missions().size() == 1 && f.as->missions().front().request == ask, "(d) la mission : la demande conseillee");
+        f.step();
+        check(f.as->select(source) && !f.as->pendingAdvice(), "(d) le conseil est suivi : plus de carte");
+    }
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     ai::notifs::resetForTests();
@@ -1751,6 +1975,7 @@ int main() {
     testLoops();               // 1.22.4
     testSoftwareVerdict();          // 1.22.5
     testSoftwareVerdictMission();   // 1.22.5
+    testFromConversation();         // 1.22.6
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

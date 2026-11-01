@@ -263,7 +263,13 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         std::string toolUse;   // assistant : l'id de son appel (vide : aucun)
     };
     std::vector<Msg> msgs;
-    for (const auto& t : req.turns) {
+    // 1.22.6 : LE CONTEXTE DANS LE DERNIER TOUR (ProviderRequest::contextTurn) - le message qui le porte (-1 : aucun).
+    const bool contextInTurn = req.contextTurn >= 0 && static_cast<std::size_t>(req.contextTurn) < req.turns.size()
+                               && req.turns[static_cast<std::size_t>(req.contextTurn)].role == ProviderTurn::Role::User && !req.systemStable.empty()
+                               && !blank(req.systemDynamic);
+    int contextMsg = -1;
+    for (std::size_t ti = 0; ti < req.turns.size(); ++ti) {
+        const ProviderTurn& t = req.turns[ti];
         Msg m;
         if (t.role == ProviderTurn::Role::User) {
             m.role = "user";
@@ -278,6 +284,10 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
                 if (matches && t.toolResultError) r.set("is_error", true);
                 m.content.push(std::move(r));
             }
+            // Le contexte du projet, a jour : apres le retour d'outil (l'API le veut en tete), avant les pieces et le texte.
+            if (contextInTurn && static_cast<int>(ti) == req.contextTurn)
+                m.content.push(textBlock("[Contexte du projet \xC3\xA0 ce message, \xC3\xA9" "crit par le logiciel ; il remplace celui des "
+                                         "messages pr\xC3\xA9" "c\xC3\xA9" "dents.]\n" + req.systemDynamic));
             for (const auto& a : t.attachments) {
                 json::Value b = attachmentBlock(a);
                 if (b.isArray())
@@ -310,8 +320,19 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         } else {
             msgs.push_back(std::move(m));
         }
+        if (contextInTurn && static_cast<int>(ti) == req.contextTurn) contextMsg = static_cast<int>(msgs.size()) - 1;
     }
     while (!msgs.empty() && msgs.back().role == "assistant") msgs.pop_back();   // pas de "prefill"
+    // 1.22.6 : LES POINTS DE CACHE DE LA CONVERSATION (4 au plus avec celui des consignes) - la fin de l'historique (le message
+    // avant celui du contexte : la demande suivante le relit en cache, son prefixe ne change pas) et, quand la demande continue
+    // apres un outil local ou une lecture (des tours apres celui du contexte), la fin de ce qui part : le tour suivant le
+    // relit. Un prefixe trop court n'est pas mis en cache par le service, sans erreur.
+    const auto mark = [](Msg& m) {
+        auto& items = m.content.items();
+        if (!items.empty() && items.back().isObject()) items.back().set("cache_control", obj("type", "ephemeral"));
+    };
+    if (contextMsg > 0 && contextMsg < static_cast<int>(msgs.size())) mark(msgs[static_cast<std::size_t>(contextMsg - 1)]);
+    if (contextMsg >= 0 && static_cast<int>(msgs.size()) - 1 > contextMsg) mark(msgs.back());
 
     json::Value body = json::Value::object();
     body.set("model", req.model);
@@ -324,7 +345,7 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         json::Value stable = textBlock(req.systemStable);
         stable.set("cache_control", obj("type", "ephemeral"));
         sys.push(std::move(stable));
-        if (!blank(req.systemDynamic)) sys.push(textBlock(req.systemDynamic));
+        if (!blank(req.systemDynamic) && contextMsg < 0) sys.push(textBlock(req.systemDynamic));   // 1.22.6 : sinon, dans le tour
         body.set("system", std::move(sys));
     } else if (!req.system.empty()) {
         body.set("system", req.system);
@@ -716,7 +737,22 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
     };
     const bool locals = library.active() || !request.localTools.empty();
     int        shrinks = 0;   // 1.21.3 : les longueurs de reponse refusees
+    // 1.22.6 : LES JETONS DE TOUTE LA DEMANDE - un outil local (ou une lecture) relance la demande : chaque tour a son flux et
+    // son usage (qui repart de zero) ; l'Assistant garde le dernier recu (le contexte de la derniere demande). L'usage des tours
+    // finis lui est donc donne A AJOUTER (preread), juste avant le premier usage du tour suivant : l'entree, la sortie, le cache
+    // lu et ecrit - rien ne se perd au bilan, rien n'est compte deux fois.
+    ProviderUsage rounds, roundLast;
     const auto route = [&](ProviderEvent e) {
+        if (e.type == ProviderEvent::Type::Usage && !e.preread && !e.usage.empty()) {
+            if (!rounds.empty()) {   // les tours finis : ajoutes a la demande (comme une lecture prealable), juste avant le nouveau
+                ProviderEvent done;
+                done.type = ProviderEvent::Type::Usage;
+                done.usage = std::exchange(rounds, {});
+                done.preread = true;
+                push(std::move(done));
+            }
+            roundLast = e.usage;
+        }
         if (locals) {
             const bool isRead = library.active() && e.toolName == textparts::kReadTool;
             if (e.type == ProviderEvent::Type::ToolUse && (isRead || localIndex(e.toolName) >= 0)) {
@@ -801,6 +837,11 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(back));
                 hr.body = anthropicBody(request);
+                rounds.input += roundLast.input;   // 1.22.6 : ce tour est fini, son usage compte
+                rounds.output += roundLast.output;
+                rounds.cacheRead += roundLast.cacheRead;
+                rounds.cacheWrite += roundLast.cacheWrite;
+                roundLast = {};
                 turnText.clear();
                 readCall.reset();
                 heldDone.reset();

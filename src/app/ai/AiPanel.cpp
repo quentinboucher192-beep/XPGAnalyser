@@ -690,6 +690,13 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     attachBtn_->setTooltip("Joindre un fichier : image (PNG, JPG), PDF, texte, CSV, Excel, XML, JSON, projet (.xihm, .xapi). Il est copi\xC3\xA9 dans le dossier de l'Assistant.");
     sendBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer", base + ".envoyer")));
     sendBtn_->setStyle(ui::Button::Style::Primary);
+    // 1.22.6 : ENVOYER EN MISSION - a cote d'Envoyer : la demande tapee devient une mission IA (l'icone seule, le libelle en infobulle).
+    missionSendBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer en mission", base + ".envoyer-en-mission")));
+    missionSendBtn_->setIcon(ui::Icon::Task);
+    missionSendBtn_->setCompact(true);
+    missionSendBtn_->setStyle(ui::Button::Style::Flat);
+    missionSendBtn_->setTooltip("Envoyer en mission : la demande devient une mission IA (un plan d'\xC3\xA9tapes v\xC3\xA9rifi\xC3\xA9" "es, reprenables) au "
+                                "lieu d'un message. Rien n'est modifi\xC3\xA9 avant ta validation.");
     // 1.21.2 : L'ONGLET NOTIFICATIONS - le journal de l'Assistant, a la place de la conversation quand il est choisi.
     {
         AiNotificationsView::Callbacks cb;
@@ -709,9 +716,10 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
         if (what == 1) (void)chooseMission(true);
         else if (what == 2) (void)chooseMission(false);
         else {
+            const bool reply = askMessage_ >= 0;   // 1.22.6 : le conseil d'une reponse (rien dans la saisie)
             dismissMissionAsk();
             prompt_->takeFocus();
-            say("Rien n'est parti : la demande reste dans la saisie.");
+            say(reply ? std::string("Conseil ferm\xC3\xA9 : aucune mission n'est cr\xC3\xA9\xC3\xA9" "e.") : std::string("Rien n'est parti : la demande reste dans la saisie."));
         }
     });
     auto menu = std::make_unique<ui::PopupMenu>(base + ".menu");
@@ -729,6 +737,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
         if (assistant_->generating()) stop();
         else (void)send();
     });
+    links_ += missionSendBtn_->clicked->connect([this] { (void)sendAsMission(); });   // 1.22.6
     links_ += menu_->itemChosen->connect([this](int item) { menuChosen(item); });
     refreshButtons();
     syncNotifications();   // 1.21.2 : la pastille des non lues des le depart
@@ -756,6 +765,7 @@ void AiPanel::refreshButtons() {
     sendBtn_->setTooltip(gen ? "Arr\xC3\xAAter la g\xC3\xA9n\xC3\xA9ration : la r\xC3\xA9ponse est gard\xC3\xA9" "e telle quelle, sans proposition."
                              : "Envoyer la demande (Entr\xC3\xA9" "e)");
     sendBtn_->setEnabled(gen || (a.settings().enabled && !a.processing()));
+    missionSendBtn_->setEnabled(!gen && a.settings().enabled && !a.processing() && a.live());   // 1.22.6
     attachBtn_->setEnabled(!gen);
     prompt_->setReadOnly(!a.settings().enabled);
     prompt_->setPlaceholder(a.settings().enabled ? "D\xC3\xA9" "cris ta demande\xE2\x80\xA6 (ex. : Ajoute une cuve avec un indicateur de niveau)"
@@ -945,6 +955,7 @@ void AiPanel::sync() {
         if (ctxPane_) ctxPane_->setContext(assistant_->discussionContext());   // 1.21.0 (un stat par fichier)
         refreshButtons();
         chat_->rebuild();
+        syncAdvice();   // 1.22.6 : le conseil de la derniere reponse (passer en mission IA ?)
         invalidateLayout();
         invalidate();
     }
@@ -1100,6 +1111,17 @@ void AiPanel::menuChosen(int id) {
 // ---- envoyer --------------------------------------------------------------------------------
 bool AiPanel::send() {
     const std::string text = prompt_->text();
+    // 1.22.6 : UNE GROSSE DEMANDE (des etapes enumerees, la suite annoncee une fois de trop...) - le conseil d'abord : << Cette
+    // demande est grosse : passer en mission IA ? >> (Creer la mission, Continuer ici) ; rien ne part encore.
+    if (!assistant_->generating())
+        if (Assistant::MissionAdvice adv; assistant_->adviseMission(text, &adv)) {
+            if (askText_ == text && missionAsk_->advice()) {
+                say("Choisis au-dessus de la saisie : \xC2\xAB Cr\xC3\xA9" "er la mission \xC2\xBB, ou \xC2\xAB Continuer ici \xC2\xBB.");
+                return false;
+            }
+            offerAdvice(text, adv.reason, -1);
+            return false;
+        }
     // 1.22.0 : UNE DEMANDE COMPLEXE - << Creer une mission IA ? >> d'abord, rien ne part encore (c'est l'Assistant qui
     // juge : une IA connectee, une demande complexe, aucune mission dans cette conversation ; jamais une demande simple).
     if (!assistant_->generating() && assistant_->suggestsMission(text)) {
@@ -1734,6 +1756,7 @@ void AiPanel::offerMission(const std::string& text) {
 void AiPanel::dismissMissionAsk() {
     if (askText_.empty()) return;
     askText_.clear();
+    askMessage_ = -1;   // 1.22.6
     missionAsk_->setRequest({});
     invalidateLayout();
     invalidate();
@@ -1742,6 +1765,38 @@ void AiPanel::dismissMissionAsk() {
 bool AiPanel::chooseMission(bool create) {
     if (askText_.empty()) return false;
     const std::string text = askText_;   // une copie : le choix ferme la carte
+    // 1.22.6 : LE CONSEIL - celui d'une reponse (le message de l'utilisateur qu'il vise), ou celui d'avant l'envoi.
+    if (missionAsk_->advice()) {
+        const int message = askMessage_;
+        if (create) {
+            if (message >= 0) return createMissionFromMessage(message);
+            std::string why;
+            cancelRename();
+            if (!assistant_->sendAsMission(text, &why)) {
+                say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
+                return false;
+            }
+            if (prompt_->text() == text) prompt_->setText({});
+            dismissMissionAsk();
+            watchingReply_ = assistant_->generatingConversationId();
+            showConversation();
+            seen_ = 0;
+            sync();
+            syncMissions();
+            chat_->scrollToBottom();
+            say("Mission IA cr\xC3\xA9\xC3\xA9" "e : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est modifi\xC3\xA9).");
+            return true;
+        }
+        assistant_->declineMissionAdvice();   // << Continuer ici >> : retenu pour cette conversation
+        dismissMissionAsk();
+        if (message >= 0) {
+            say("D'accord : la conversation continue ici (elle ne te propose plus de mission).");
+            return true;
+        }
+        if (!sendText(text)) return false;
+        if (prompt_->text() == text) prompt_->setText({});
+        return true;
+    }
     if (create) {
         if (!createMission(text)) return false;
         if (prompt_->text() == text) prompt_->setText({});
@@ -1770,6 +1825,85 @@ bool AiPanel::createMission(const std::string& request) {
     say("Mission IA cr\xC3\xA9\xC3\xA9" "e : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est modifi\xC3\xA9). Son tableau de bord : l'onglet Missions IA, "
         "ou un clic sur la bande \xC2\xAB Mission IA \xC2\xBB.");
     return true;
+}
+
+// ---- 1.22.6 : DE LA CONVERSATION A LA MISSION IA ----------------------------------------------------------------------
+bool AiPanel::missionAdviceShown() const noexcept { return !askText_.empty() && missionAsk_->advice(); }
+
+bool AiPanel::createMissionFromMessage(int message) {
+    cancelRename();
+    std::string why;
+    if (!assistant_->createMissionFromMessage(message, &why)) {
+        say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
+        return false;
+    }
+    dismissMissionAsk();
+    watchingReply_ = assistant_->generatingConversationId();
+    showConversation();
+    seen_ = 0;
+    sync();
+    syncMissions();
+    chat_->scrollToBottom();
+    say("Mission IA cr\xC3\xA9\xC3\xA9" "e avec ce message, dans une conversation neuve : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est "
+        "modifi\xC3\xA9). La conversation d'origine garde le lien vers son tableau de bord.");
+    return true;
+}
+
+bool AiPanel::sendAsMission() {
+    const std::string text = prompt_->text();
+    if (assistant_->generating()) {
+        say("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
+        return false;
+    }
+    cancelRename();
+    std::string why;
+    if (!assistant_->sendAsMission(text, &why)) {
+        say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
+        return false;
+    }
+    prompt_->setText({});
+    dismissMissionAsk();
+    watchingReply_ = assistant_->generatingConversationId();
+    showConversation();
+    seen_ = 0;
+    sync();
+    syncMissions();
+    chat_->scrollToBottom();
+    say("Mission IA cr\xC3\xA9\xC3\xA9" "e : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est modifi\xC3\xA9). Son tableau de bord : l'onglet "
+        "Missions IA.");
+    return true;
+}
+
+bool AiPanel::sendOrAdvise(const std::string& text) {
+    if (!assistant_->generating())
+        if (Assistant::MissionAdvice adv; assistant_->adviseMission(text, &adv)) {
+            offerAdvice(text, adv.reason, -1);
+            return false;
+        }
+    return sendText(text);
+}
+
+void AiPanel::offerAdvice(const std::string& text, const std::string& reason, int message) {
+    askText_ = text;
+    askMessage_ = message;
+    missionAsk_->setAdvice(text, reason);
+    invalidateLayout();
+    invalidate();
+    say("Assistant IA : cette demande est grosse - elle peut passer en mission IA (choisis au-dessus de la saisie ; rien n'est cr\xC3\xA9\xC3\xA9).");
+}
+
+void AiPanel::syncAdvice() {
+    if (!askText_.empty() && askMessage_ < 0) return;   // le choix d'un envoi attend : il passe d'abord
+    const auto adv = assistant_->pendingAdvice();
+    const Conversation* c = assistant_->current();
+    if (!adv || !c || adv->message < 0 || adv->message >= static_cast<int>(c->messages.size())) {
+        if (!askText_.empty() && askMessage_ >= 0) dismissMissionAsk();   // traite, ou une autre conversation
+        return;
+    }
+    const std::string key = c->id + "#" + std::to_string(adv->message);
+    if (key == adviceSeen_) return;   // deja montre (ou ferme par la croix) : il ne revient pas
+    adviceSeen_ = key;
+    offerAdvice(c->messages[static_cast<std::size_t>(adv->message)].text, adv->reason, adv->message);
 }
 
 bool AiPanel::openMission(const std::string& missionId, int mode) {
@@ -2050,6 +2184,8 @@ void AiPanel::onLayout() {
         missionsView_->setVisibility(miss ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         for (ui::Widget* wgt : std::initializer_list<ui::Widget*>{chat_, prompt_, attachBtn_, sendBtn_, modePreview_, modeDirect_})
             wgt->setVisibility(other ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+        // 1.22.6 : Envoyer en mission - avec une IA connectee seulement (une mission travaille avec elle)
+        missionSendBtn_->setVisibility(other || !assistant_->live() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         if (other) {
             strip_->setVisibility(ui::Visibility::Collapsed);
             if (ctxPane_) ctxPane_->setVisibility(ui::Visibility::Collapsed);
@@ -2104,6 +2240,7 @@ void AiPanel::onLayout() {
     // Etroit (1280 x 800) : Envoyer moins large, l'aide des touches garde sa place.
     const float sw = std::max(w < 340.f ? 84.f : 110.f, ui::measureWidth(sendBtn_->text(), gfx::FontId{16}) + (w < 340.f ? 28.f : 40.f));
     sendBtn_->setBounds({bottomBar_.right() - kPad - sw, bottomBar_.y + 5.f, sw, kBottomH - 10.f});
+    missionSendBtn_->setBounds({sendBtn_->bounds().x - 36.f, bottomBar_.y + 5.f, 32.f, kBottomH - 10.f});   // 1.22.6
     attachBtn_->setBounds({x + kPad - 4.f, bottomBar_.y + 5.f, 32.f, kBottomH - 10.f});
     // 1.15.0 : CE QUI PART, sous la saisie, avant le premier envoi d'une conversation a un vrai
     // fournisseur (deux lignes au plus ; le reste dans l'infobulle).
@@ -2364,7 +2501,7 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
     // ---- la barre du bas : l'aide des touches entre Joindre et Envoyer
     ctx.r.fillRect({b.x + 1.f, bottomBar_.y, b.w - 1.f, 1.f}, c.border);
     const float hx = attachBtn_->bounds().right() + 8.f;
-    const float hw = sendBtn_->bounds().x - 8.f - hx;
+    const float hw = (missionSendBtn_->visible() ? missionSendBtn_->bounds().x : sendBtn_->bounds().x) - 8.f - hx;   // 1.22.6
     if (a.generating()) {
         ctx.r.drawText({hx, bottomBar_.y + (bottomBar_.h - lhCap) / 2.f}, elide(ctx.r, std::string(phaseLabel(a.phase())), f.caption, hw), f.caption,
                        c.textMuted);
@@ -3318,7 +3455,7 @@ void AiChatView::rebuild() {
                 else if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
                 else if (cards_[k].next) {   // 1.21.3 : << Propose la suite : ... >>, envoye comme une demande
                     const std::string ask = panel_.assistant().nextRequest(cards_[k].message);
-                    if (!ask.empty()) (void)panel_.sendText(ask);
+                    if (!ask.empty()) (void)panel_.sendOrAdvise(ask);   // 1.22.6 : une suite trop grosse : le conseil d'abord
                 }
                 else if (cards_[k].refused) (void)panel_.unrefuseProposal(cards_[k].message);   // 1.16.1
                 else if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
@@ -4136,6 +4273,81 @@ bool AiChatView::openNoteMenuAt(int message, std::size_t note, gfx::Point at) {
     return true;
 }
 
+// ---- 1.22.6 : le clic droit sur un message envoye ---------------------------------------------------------------------------
+gfx::Rect AiChatView::bubbleRect(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message && b.user && b.bubble.h > 0.f)
+            return {bounds().x + b.bubble.x, bounds().y + b.y - offset_ + b.bubble.y, b.bubble.w, b.bubble.h};
+    return {};
+}
+
+gfx::Rect AiChatView::messageRect(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return {bounds().x, bounds().y + b.y - offset_, bounds().w, b.h};
+    return {};
+}
+
+bool AiChatView::openMessageMenuAt(int message, gfx::Point at) {
+    const auto* conv = panel_.assistant().current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return false;
+    const auto& m = conv->messages[static_cast<std::size_t>(message)];
+    if (m.role != "utilisateur" || (m.extra.isObject() && m.extra.has("logiciel"))) return false;
+    if (!msgMenu_) {
+        msgMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".message")));
+        links_ += msgMenu_->itemChosen->connect([this](int item) {
+            const int msg = std::exchange(msgMenuMessage_, -1);
+            if (item == 1 && msg >= 0) (void)panel_.createMissionFromMessage(msg);
+        });
+    }
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item create;
+    create.label = "Cr\xC3\xA9" "er une mission avec ce message";
+    create.icon = ui::Icon::Task;
+    create.id = 1;
+    const auto& a = panel_.assistant();
+    if (m.extra.isObject() && m.extra.has("mission")) {
+        create.enabled = false;
+        create.disabledReason = "Ce message fait d\xC3\xA9j\xC3\xA0 partie d'une mission.";
+    } else if (!a.live()) {
+        create.enabled = false;
+        create.disabledReason = "Une mission travaille avec une IA connect\xC3\xA9" "e (Param\xC3\xA8tres de l'Assistant IA).";
+    } else if (a.generating()) {
+        create.enabled = false;
+        create.disabledReason = "Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture.";
+    }
+    items.push_back(std::move(create));
+    msgMenu_->setItems(std::move(items));
+    msgMenuMessage_ = message;
+    msgMenu_->setBounds(bounds());
+    msgMenu_->openAtSurface(toSurface(at));
+    return true;
+}
+
+bool AiChatView::openMessageMenu(int message) {
+    const gfx::Rect r = bubbleRect(message);
+    return openMessageMenuAt(message, r.h > 0.f ? gfx::Point{r.x + r.w / 2.f, r.y + r.h / 2.f} : gfx::Point{bounds().x + bounds().w / 2.f, bounds().y + 40.f});
+}
+
+std::vector<std::string> AiChatView::messageMenuItems() const {
+    std::vector<std::string> out;
+    if (msgMenu_ && msgMenu_->isOpen())
+        for (const auto& it : msgMenu_->items())
+            if (!it.separator && !it.heading) out.push_back(it.label);
+    return out;
+}
+
+bool AiChatView::chooseMessageMenuItem(const std::string& label) {
+    if (!msgMenu_ || !msgMenu_->isOpen()) return false;
+    for (const auto& it : msgMenu_->items())
+        if (it.label == label && it.enabled) {
+            const int item = it.id;
+            msgMenu_->close();
+            msgMenu_->itemChosen->emit(item);   // le meme chemin qu'un clic
+            return true;
+        }
+    return false;
+}
+
 std::vector<std::string> AiChatView::noteMenuItems() const {
     return fixMenu_ && fixMenu_->isOpen() ? fixes::labels(*fixMenu_) : std::vector<std::string>{};
 }
@@ -4207,6 +4419,22 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
             if (spot.at.contains(d->pos)) {
                 (void)openNoteMenuAt(spot.message, spot.note, d->pos);
                 return ui::EventResult::Consumed;
+            }
+    // 1.22.6 : LE CLIC DROIT sur un message envoye : << Creer une mission avec ce message >>.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right)
+        for (const auto& b : blocks_)
+            if (b.user && bubbleRect(b.message).contains(d->pos) && openMessageMenuAt(b.message, d->pos)) return ui::EventResult::Consumed;
+    // 1.22.6 : << Mission << X >> creee - Ouvrir >> : un clic ouvre son tableau de bord.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left)
+        if (const auto* conv = panel_.assistant().current())
+            for (const auto& b : blocks_) {
+                if (b.message < 0 || b.message >= static_cast<int>(conv->messages.size())) continue;
+                const auto& msg = conv->messages[static_cast<std::size_t>(b.message)];
+                if (!msg.extra.isObject() || msg.extra.str("logiciel") != "mission-creee") continue;
+                if (messageRect(b.message).contains(d->pos)) {
+                    (void)panel_.openMission(msg.extra.str("mission"));
+                    return ui::EventResult::Consumed;
+                }
             }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         for (std::size_t i = 0; i < suggestionRects_.size(); ++i)
