@@ -573,9 +573,10 @@ void testActions() {
     const sh::Workbook ex = wbOf(reportsXlsx());
     const sh::Attached fx = attached("reports.xlsx", reportsXlsx(), sh::detect(ex).chosen()->layout);
     const auto rx = sh::readAll(*fx.workbook, fx.layout);
-    check(rx.size() == 2 && rx[1].sheet == "Reports API 2", "la feuille jumelle (le meme en-tete) lue aussi");
+    // 1.21.1 : la feuille jumelle (le meme en-tete) ET la feuille << Bits >> (le meme genre, un autre en-tete) sont lues
+    check(rx.size() == 3 && rx[1].sheet == "Reports API 2" && rx[2].sheet == "Bits", "la feuille jumelle lue aussi, et la feuille des bits (1.21.1)");
     p = sh::planVariables(fx, rx, &project);
-    check(p.ok && allVariables(p.ops).size() == 5 && !opOf(p.ops, ai::Operation::Action::Address) && has(p.text, "aucun \xC3\xA9quipement Modbus"),
+    check(p.ok && allVariables(p.ops).size() == 7 && !opOf(p.ops, ai::Operation::Action::Address) && has(p.text, "aucun \xC3\xA9quipement Modbus"),
           "sans equipement : les variables, les adresses dans la description, et c'est dit");
     hmi::Equipment e;
     e.id = project.allocate();
@@ -586,9 +587,9 @@ void testActions() {
     std::vector<const ai::Operation*> addr;
     for (const auto& op : p.ops)
         if (op.action == ai::Operation::Action::Address) addr.push_back(&op);
-    check(addr.size() == 5 && addr[0]->variable == "ETAT_POMPE_1" && prop(*addr[0], "equipement") == "API_1" && prop(*addr[0], "adresse") == "%MW100"
+    check(addr.size() == 7 && addr[0]->variable == "ETAT_POMPE_1" && prop(*addr[0], "equipement") == "API_1" && prop(*addr[0], "adresse") == "%MW100"
               && prop(*addr[0], "lecture_seule") == "oui" && prop(*addr[1], "lecture_seule") == "non",
-          "5 adresses sur API_1, le sens lu (lecture : lecture seule)");
+          "7 adresses sur API_1 (les trois feuilles), le sens lu (lecture : lecture seule)");
     const auto xv = allVariables(p.ops);
     check(varNamed(xv, "DEFAUT_GENERAL") && varNamed(xv, "DEFAUT_GENERAL")->type == "BOOL" && varNamed(xv, "NIVEAU_CUVE")->type == "REAL"
               && !has(varNamed(xv, "ETAT_POMPE_1")->description, "%MW100"),
@@ -765,7 +766,7 @@ void testAssistant() {
     const auto* conv = a.current();
     const int m = conv ? static_cast<int>(conv->messages.size()) - 1 : -1;
     const ai::Proposal* p = a.proposal(m);
-    check(p && allVariables(p->ops).size() == 5, "la proposition : les 5 variables des reports");
+    check(p && allVariables(p->ops).size() == 7, "la proposition : les 7 variables des reports (les trois feuilles, 1.21.1)");
     check(conv && !has(conv->messages.back().text, "ne lit pas le contenu"), "l'IA integree lit les classeurs");
     // ce qui part chez un fournisseur : la lecture compacte, pas le texte brut
     if (conv) {
