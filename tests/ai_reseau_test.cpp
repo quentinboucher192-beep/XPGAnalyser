@@ -1527,6 +1527,7 @@ struct Fixture {
         st.provider = "anthropic";
         st.model = model;
         st.endpoint = endpoint;
+        st.buildCheck = false;   // 1.22.5 : sans l'avis du logiciel (le mode Direct applique des la reponse ; son essai : ai_missions_e2e_test)
         as().setSettings(st);
         as().setApiKey(key);
         as().newConversation();

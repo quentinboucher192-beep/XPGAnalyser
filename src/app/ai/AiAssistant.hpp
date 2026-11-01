@@ -49,6 +49,7 @@
 #include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
 #include "AiAgentTools.hpp"
 #include "AiAttachments.hpp"   // 1.21.0 : le contexte de la discussion
+#include "AiBuild.hpp"         // 1.22.5 : l'avis du logiciel (Generer et Compiler sur une copie)
 #include "AiFileModels.hpp"    // 1.21.0 : les classeurs joints, les modeles de fichiers
 #include "AiMissionStore.hpp"   // 1.22.0 : les missions IA persistantes (et AiMission.hpp)
 #include "AiProvider.hpp"
@@ -290,6 +291,61 @@ public:
     // La consigne attendue apres Modifier la demande (une mission) : son debut (<< Pour S4 : >>) ; vide : aucune.
     [[nodiscard]] std::string steerPrefix() const { return steer_ ? steer_->prefix : std::string{}; }
 
+    // ---- 1.22.5 : L'AVIS DU LOGICIEL (AiBuild.hpp) ET LE PROCESSUS DE DEVELOPPEMENT --------------------------------------
+    // A son arrivee, CHAQUE proposition de l'IA connectee (une conversation, une mission ; lourde ou non) passe par GENERER
+    // et COMPILER sur une copie du projet ou elle est appliquee (build::verdict), sur un fil de fond (startBuild, pollBuilds :
+    // une copie du projet prise sur le fil de l'interface, l'environnement fige ; rien ne bloque l'interface). Son verdict
+    // (les constats NOUVEAUX) est garde avec elle (Proposal::extra << logiciel >>), verse dans ses verifications
+    // (build::merge : check(), la carte, l'apercu, la mission) et dit a l'IA (toolResult). Des ERREURS nouvelles et
+    // << Corriger seule >> : l'Assistant demande AUSSITOT a l'IA de corriger (un message du logiciel dans la conversation ;
+    // une mission : sa correction, mission::correctionPrompt) ; la proposition passe << remplacee >> (elle ne s'applique plus)
+    // et la corrigee repasse par la validation et l'avis du logiciel - 2 corrections au plus par demande (kMaxFixes), puis
+    // c'est dit. Les avertissements seuls ne relancent rien. Une correction qui tourne en rond (AiLoop.hpp) est retenue. Le
+    // mode Direct n'applique qu'une proposition dont le verdict est propre (attendu).
+    // LE PROCESSUS DE DEVELOPPEMENT (Proposal::extra << processus >>) : ce qui s'est passe pour la demande, dans l'ordre -
+    // recue, verifiee, Generer et Compiler, correction demandee, corrigee... ; une proposition corrigee reprend celui de la
+    // precedente (une demande, un processus). La carte le montre (repliable, depliee pendant le travail), la bande du haut
+    // sa derniere etape, une mission dans l'activite de l'etape et son journal.
+    static constexpr int kMaxFixes = 2;
+    struct ProcessLine {
+        std::string date;          // ISO
+        std::string time;          // "14:02"
+        std::string what;          // recue, verification, logiciel, correction, corrigee, attente, arret, cercle, direct
+        std::string text;          // la phrase, sans l'heure
+        int         errors{0}, warnings{0};
+        std::string proposal;      // la proposition que l'entree concerne (Proposal::id)
+        struct Finding {
+            bool        error{true};
+            std::string text;      // "Compiler : ... (Vue_Station . Btn_P2 . value)"
+            std::string object, view;
+        };
+        std::vector<Finding> findings;   // les constats de Generer et Compiler (une entree << logiciel >>)
+    };
+    [[nodiscard]] static std::vector<ProcessLine> processOf(const Proposal&);
+    [[nodiscard]] std::vector<ProcessLine> processOf(int message) const;
+    // Le verdict garde avec la proposition (nul : pas encore, ou pas d'avis du logiciel pour elle).
+    [[nodiscard]] static std::optional<build::Verdict> verdictOf(const Proposal&);
+    [[nodiscard]] std::optional<build::Verdict> verdictOf(int message) const;
+    // Generer et Compiler tournent pour cette proposition (son identifiant).
+    [[nodiscard]] bool building(std::string_view proposalId) const;
+    [[nodiscard]] bool buildingAny() const noexcept { return !buildJobs_.empty(); }
+    // Le processus travaille encore pour la proposition de ce message : Generer et Compiler tournent, une correction
+    // automatique attend ou s'ecrit (la carte deplie le processus).
+    [[nodiscard]] bool processWorking(int message) const;
+    // La derniere etape du processus d'une proposition de la conversation ouverte, en une ligne (la bande du haut) :
+    // << Generer et Compiler sur une copie du projet... >>, << Correction 1/2 : l'IA corrige 2 erreurs de Compiler... >> ; vide :
+    // pas de processus.
+    [[nodiscard]] std::string processHeadline(int message) const;
+    // La correction automatique en cours pour cette mission : ce qu'elle corrige ("Compiler : 2 erreurs") ; vide : aucune.
+    [[nodiscard]] std::string autoCorrecting(std::string_view missionId) const;
+    // Change a chaque verdict arrive (le panneau le passe a la previsualisation ouverte sur sa proposition).
+    [[nodiscard]] std::uint64_t verdictRevision() const noexcept { return verdictRev_; }
+    // LA CORRECTION DU LOGICIEL d'un constat (build::Finding : fixFrom -> fixTo, le rang du constat dans le verdict de la
+    // proposition du message) : posee dans l'operation en cause de la PROPOSITION (sa propriete, sinon son code), jamais dans
+    // le projet ; l'avis du logiciel est redemande. Faux et `why` : pas de correction pour ce constat, l'operation inconnue,
+    // le texte plus la, la proposition n'est plus << proposee >>.
+    bool applyBuildFix(int message, std::size_t finding, std::string* why = nullptr);
+
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
     [[nodiscard]] const Proposal* proposal(int message) const noexcept;
@@ -504,6 +560,14 @@ private:
         std::vector<std::string> steps;
         mission::Batch           batch;
         std::string              changes;
+        // 1.22.5 : une correction demandee par le logiciel (l'avis de Generer et Compiler) - la proposition corrigee, son
+        // numero, ce qu'elle corrige ("Compiler : 2 erreurs"), et le retour du logiciel (build::feedbackText) ajoute a la
+        // consigne de correction.
+        std::string              fixOf;
+        int                      fixN{0};
+        std::string              fixWho;
+        int                      fixErrors{0};
+        std::string              feedback;
     };
 
     struct Generation {
@@ -540,6 +604,12 @@ private:
         ProviderUsage           carried;
         // 1.22.0 : l'appel de mission de cette reponse (vide : une demande ordinaire).
         MissionCall             mission;
+        // 1.22.5 : la correction automatique d'une proposition de conversation (l'avis du logiciel) - la proposition qu'elle
+        // corrige (vide : une demande ordinaire), son numero (1, 2), ce qu'elle corrige ("Compiler : 2 erreurs").
+        std::string             fixOf;
+        int                     fixN{0};
+        std::string             fixWho;       // "Compiler", "G\xC3\xA9n\xC3\xA9rer", "G\xC3\xA9n\xC3\xA9rer et Compiler"
+        int                     fixErrors{0};
     };
 
     Host                      host_;
@@ -619,6 +689,46 @@ private:
         Check         check;
     };
     std::map<std::string, KnownCheck>      knownChecks_;
+    // 1.22.5 : L'AVIS DU LOGICIEL - un job a part de CheckJob : il ne rend pas un Check mais un build::Verdict, il dure (tout
+    // le projet est genere et compile), il n'est jamais refait quand le projet change (l'avis vaut pour le projet de la
+    // proposition ; sa validation, elle, suit le projet) et sa fin decide d'une correction automatique.
+    struct BuildJob {
+        std::string                         conversation, proposalId;
+        std::string                         key;      // le contenu de la proposition (change depuis : le verdict ne vaut plus)
+        std::atomic<bool>                   finished{false};
+        build::Verdict                      result;
+        std::thread                         worker;
+    };
+    std::vector<std::shared_ptr<BuildJob>> buildJobs_;
+    std::uint64_t                          verdictRev_{0};
+    // Les corrections automatiques decidees, qui attendent la fin d'une reponse en cours (elles partent au tick).
+    struct AutoFix {
+        std::string conversation, proposalId, mission;
+        std::string who;      // les etapes en cause : "Compiler", "G\xC3\xA9n\xC3\xA9rer", "G\xC3\xA9n\xC3\xA9rer et Compiler"
+        int         n{1};     // la correction (1, 2)
+        int         errors{0};
+    };
+    std::vector<AutoFix>                   fixQueue_;
+    std::set<std::string>                  settled_;          // les verdicts deja tires (la correction decidee une fois)
+    std::set<std::string>                  directWaiting_;    // mode Direct : appliquee quand son verdict propre arrive
+    AutoFix                                nextFix_;          // la correction du prochain startLive (consommee par lui)
+    // Generer et Compiler pour la proposition de ce message (`validated` : son Check de validate, s'il est la - l'operation de
+    // chaque constat) ; impossible (l'option decochee, pas de projet...) : un verdict << pas lances >> et pourquoi (la
+    // previsualisation ne reste jamais << en cours >>). Vrai : le fil de fond est parti.
+    bool          startBuild(Conversation& c, int message, const Check* validated = nullptr);
+    void          noVerdict(Proposal& p, const std::string& why);
+    // La proposition a change (une correction au clic droit, une operation retiree, la correction du logiciel) : son avis ne
+    // vaut plus - efface, et redemande (une proposition de l'IA connectee).
+    void          proposalChanged(Conversation& c, int message);
+    void          pollBuilds();
+    void          settleVerdict(Conversation& c, int message, const Check& validation);
+    bool          validationKnown(const Proposal& p, Check* out) const;
+    void          runFixes();
+    bool          launchFix(const AutoFix& fix, std::string* why);
+    void          linkCorrection(Conversation& c, int message, const std::string& oldId, int n, const std::string& said);
+    void          fixAborted(const std::string& conversation, const std::string& oldId, const std::string& mission, const std::string& reason);
+    void          addProcess(Proposal& p, const std::string& what, const std::string& text, int errors = 0, int warnings = 0,
+                             const build::Verdict* v = nullptr);
     std::unique_ptr<ModelQuery>            modelQuery_;
     std::optional<ModelsResult>            models_;
     std::uint64_t                          modelsRev_{0};

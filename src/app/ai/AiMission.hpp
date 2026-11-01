@@ -414,6 +414,11 @@ struct Live {
     std::string applying;          // Proposal::id appliquee sur un fil de fond (vide : aucune)
     int         applyPercent{-1};  // son avancement 0..100 (-1 : inconnu)
     bool        auditing{false};
+    // 1.22.5 (a la fin) : L'AVIS DU LOGICIEL (AiBuild.hpp) - la proposition de la mission que Generer et Compiler verifient sur
+    // une copie du projet (Proposal::id ; vide : aucune), et ce que la correction automatique en cours corrige
+    // ("Compiler : 2 erreurs" ; vide : aucune).
+    std::string building;
+    std::string correcting;
 };
 // L'ACTIVITE D'UNE ETAPE EN UNE LIGNE (ce qu'elle fait maintenant), deduite de son etat, de ses dependances, de ses
 // propositions et de leurs verifications, et du moment : << L'IA prepare la proposition P2... (depuis 0:42) >>,

@@ -68,6 +68,7 @@ class AiNotificationsView;   // 1.21.2
 class AiMissionsView;        // 1.22.0 : l'onglet Missions IA
 class AiMissionStrip;        // 1.22.0 : la mission active, au-dessus de la conversation
 class AiMissionAsk;          // 1.22.0 : << Creer une mission IA ? >>, au-dessus de la saisie
+class AiPreviewDialog;       // 1.22.5 : la previsualisation ouverte (l'avis du logiciel lui est passe)
 
 // Le champ de la demande : UN CHAMP DE MESSAGE, pas un editeur de code (les captures 1.14.2 :
 // la gouttiere, la bande de la ligne courante, la marque "modifie" sur l'indication, le texte
@@ -408,6 +409,14 @@ private:
     float                    missionStripH_{0.f}, askH_{0.f}, chatBottom_{0.f};
     std::string              askText_;                                    // la demande qui attend le choix (vide : aucune)
     std::map<std::string, std::map<std::string, bool>> missionCards_;     // 1.22.2 : mission -> proposition -> depliee
+    // 1.22.5 : LA PREVISUALISATION OUVERTE (sa proposition) - un nouvel avis du logiciel lui est passe (AiPreviewDialog::
+    // setVerdict) ; `previewAlive_` tombe a faux quand la fenetre se ferme (son rappel de fermeture).
+    AiPreviewDialog*         preview_{nullptr};
+    std::shared_ptr<bool>    previewAlive_;
+    std::string              previewProposal_;
+    std::uint64_t            verdictSeen_{0};
+    void                     trackPreview(AiPreviewDialog* dialog, const std::string& proposalId);
+    void                     pushVerdict();
 };
 
 // =============================================================================
@@ -472,6 +481,10 @@ public:
         float             progress{-1.f};   // 0..1 : le travail de fond ; -1 : aucun
         bool              applying{false}, checking{false}, open{false};   // open : a decider (proposee)
         std::size_t       ops{0};
+        // 1.22.5 (a la fin) : LE PROCESSUS DE DEVELOPPEMENT - sa derniere etape (Assistant::processHeadline), et s'il travaille
+        // encore (Generer et Compiler, une correction automatique) : la bande se montre alors meme sans plan a montrer.
+        std::string       process;
+        bool              working{false};
     };
     [[nodiscard]] std::optional<LivePlan> livePlan() const;
     // Fait defiler jusqu'a la carte de ce message (`openPlan` : son plan deplie).
@@ -488,6 +501,15 @@ public:
     bool openNoteMenu(int message, std::size_t note);
     [[nodiscard]] std::vector<std::string> noteMenuItems() const;
     bool chooseNoteMenuItem(const std::string& label);
+    // 1.22.5 : LE PROCESSUS DE DEVELOPPEMENT d'une carte - deplie ou non (par defaut : deplie pendant le travail), le deplier
+    // ou le replier (un clic sur son en-tete), ses lignes telles qu'elles sont mises en page (l'en-tete, puis les lignes si
+    // deplie), la place de son en-tete (vide : pas de processus) ; un clic sur un constat (son rang parmi les lignes) - la
+    // previsualisation de sa proposition.
+    [[nodiscard]] bool processOpen(int message) const;
+    void setProcessOpen(int message, bool open);
+    [[nodiscard]] std::vector<std::string> processLines(int message) const;
+    [[nodiscard]] gfx::Rect processRect(int message) const;
+    bool clickProcessLine(int message, std::size_t line);
 
 protected:
     void onLayout() override;
@@ -564,6 +586,22 @@ private:
         // Ignorer cette etape, Forcer la fin de la mission).
         std::vector<std::string> loopLines;
         bool                     loopHeld{false};
+        // 1.22.5 (a la fin) : LE PROCESSUS DE DEVELOPPEMENT (Assistant::processOf) - l'en-tete (un clic le deplie ; deplie
+        // pendant que le logiciel ou l'IA travaillent), ses lignes (l'heure, ce qui s'est passe) et, sous l'avis de Generer et
+        // Compiler, ses constats (rouge : une erreur, ambre : un avertissement ; un clic : la previsualisation). Les hauteurs
+        // sont relatives au haut de la carte.
+        struct ProcLine {
+            std::string  text;
+            std::uint8_t tone{0};          // 0 normal, 1 ok, 2 attention (ambre), 3 erreur (rouge), 4 attenue
+            bool         finding{false};   // un constat (decale, cliquable)
+            std::string  proposal;         // la proposition qu'il concerne (Proposal::id)
+        };
+        std::vector<ProcLine>    procLines;
+        std::string              procHead;
+        float                    procY{0.f};    // l'en-tete (0 : pas de processus)
+        bool                     procOpen{false};
+        // remplacee par sa correction (l'avis du logiciel) : le message de la proposition corrigee (-1 : pas encore la)
+        int                      replacedBy{-1};
     };
     struct CardButtons {
         int         message{-1};
@@ -580,6 +618,8 @@ private:
         ui::Button* fourth{nullptr};
         ui::Button* fifth{nullptr};
         bool        loop{false};
+        // 1.22.5 (a la fin) : remplacee par sa correction - `apply` dit << Voir la correction >> (la carte de la corrigee).
+        int         replacedBy{-1};
     };
     void measure();
     void placeCards();             // les boutons des cartes, au decalage du moment
@@ -631,6 +671,7 @@ private:
         [[nodiscard]] bool pending() const noexcept { return job != nullptr; }
     };
     std::set<std::string> planOpen_;   // 1.19.0 : les propositions dont le plan est deplie (par identifiant)
+    std::map<std::string, bool> procOpen_;   // 1.22.5 : le processus deplie / replie a la main (sinon : deplie pendant le travail)
     mutable std::map<int, Thumb> thumbs_;
     mutable std::vector<std::shared_ptr<ThumbJob>> retiring_;   // remplacees en cours : attendues sans bloquer
     const Thumb& thumb(int message) const;

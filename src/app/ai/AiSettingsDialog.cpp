@@ -97,7 +97,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(960.f, std::max(560.f, r.w - 40.f));
-        const float h = std::min(640.f, std::max(420.f, r.h - 40.f));
+        const float h = std::min(700.f, std::max(420.f, r.h - 40.f));   // 1.22.5 : 700 (l'avis du logiciel) ; tient a 1280 x 800
         panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         labels_.clear();
         notes_.clear();
@@ -201,6 +201,11 @@ protected:
             row("Budget (jetons)", d_.budget_, bw);
             d_.period_->setBounds({x + labelW + bw + 8.f, y - kRow, colW - labelW - bw - 8.f, kRow - 4.f});
         }
+        // 1.22.5 : l'avis du logiciel (Generer et Compiler sur une copie), la correction automatique
+        d_.buildCheck_->setBounds({x, y, colW, kRow - 6.f});
+        y += kRow - 4.f;
+        d_.autoCorrect_->setBounds({x + 24.f, y, colW - 24.f, kRow - 6.f});
+        y += kRow - 4.f;
         heading("HISTORIQUE DES CONVERSATIONS");
         row("Conserver", d_.days_);
         row("Au plus", d_.count_);
@@ -468,6 +473,15 @@ core::Status AiSettingsDialog::buildUi() {
                         "est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) et not\xC3\xA9 sous la r\xC3\xA9ponse et "
                         "dans le journal d'activit\xC3\xA9. Toujours apr\xC3\xA8s une confirmation qui liste les erreurs ; Ctrl+Z reprend tout. "
                         "Une vue qui a chang\xC3\xA9 depuis la proposition bloque toujours. D\xC3\xA9" "coch\xC3\xA9" "e : une erreur bloque.");
+    // 1.22.5 : l'avis du logiciel sur chaque proposition de l'IA connectee, et la correction automatique
+    buildCheck_ = check("Faire v\xC3\xA9rifier par G\xC3\xA9n\xC3\xA9rer et Compiler", ".logiciel", s.buildCheck);
+    buildCheck_->setTooltip("Chaque proposition de l'IA connect\xC3\xA9" "e est g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e et compil\xC3\xA9" "e sur une copie du projet (en "
+                            "arri\xC3\xA8re-plan) : les erreurs et avertissements nouveaux sont montr\xC3\xA9s sur la carte et dans la pr\xC3\xA9visualisation, "
+                            "et dits \xC3\xA0 l'IA. Le mode Direct attend cet avis. Le projet n'est jamais modifi\xC3\xA9 par cette v\xC3\xA9rification.");
+    autoCorrect_ = check("Corriger seule (2 fois au plus)", ".corriger", s.autoCorrect);
+    autoCorrect_->setTooltip("Des erreurs nouvelles de G\xC3\xA9n\xC3\xA9rer et Compiler : l'Assistant demande aussit\xC3\xB4t \xC3\xA0 l'IA de corriger sa "
+                             "proposition (2 fois au plus par demande) ; la carte le montre dans le processus de d\xC3\xA9veloppement. D\xC3\xA9" "coch\xC3\xA9" "e : "
+                             "les erreurs sont seulement montr\xC3\xA9" "es.");
     localFirst_->setTooltip("Essayer d'abord l'IA int\xC3\xA9gr\xC3\xA9" "e (instantan\xC3\xA9" "e, sans connexion). Chaque demande passe d'abord par l'IA int\xC3\xA9gr\xC3\xA9" "e : ce qu'elle comprend est r\xC3\xA9pondu tout de suite, "
                             "sans connexion ni jeton. L'IA connect\xC3\xA9" "e ne re\xC3\xA7oit que ce qu'elle ne comprend pas (et les demandes "
                             "avec une pi\xC3\xA8" "ce jointe).");
@@ -527,7 +541,8 @@ void AiSettingsDialog::providerChanged() {
                           static_cast<ui::Widget*>(test_), static_cast<ui::Widget*>(endpoint_), static_cast<ui::Widget*>(timeout_),
                           static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_), static_cast<ui::Widget*>(output_),
                           static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_),
-                          static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_), static_cast<ui::Widget*>(localFirst_)})
+                          static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_), static_cast<ui::Widget*>(localFirst_),
+                          static_cast<ui::Widget*>(buildCheck_), static_cast<ui::Widget*>(autoCorrect_)})   // 1.22.5 : l'IA connectee
         if (w) w->setEnabled(net);
     if (remember_) remember_->setEnabled(net && keyProtectionAvailable());
     if (keys_) keys_->setEnabled(net);
@@ -640,6 +655,8 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "periode") return period_;
     if (name == "dabord") return localFirst_;
     if (name == "malgre") return anyway_;
+    if (name == "logiciel") return buildCheck_;     // 1.22.5
+    if (name == "corriger") return autoCorrect_;
     if (name == "cles") return keys_;
     if (name == "gerer") return manageKeys_;
     return nullptr;
@@ -672,6 +689,8 @@ Settings AiSettingsDialog::draft() const {
     s.sendAttachments = sendAttachments_->isChecked();
     s.localFirst = localFirst_->isChecked();
     s.applyWithErrors = anyway_->isChecked();
+    s.buildCheck = buildCheck_->isChecked();     // 1.22.5
+    s.autoCorrect = autoCorrect_->isChecked();
     // 1.16.0 : le service, la fenetre de contexte (vide : Auto), l'outil, le budget.
     if (s.provider == "openai")
         if (const auto* it = service_->selectedItem()) s.preset = it->value;

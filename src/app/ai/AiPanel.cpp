@@ -948,6 +948,7 @@ void AiPanel::sync() {
         invalidateLayout();
         invalidate();
     }
+    if (assistant_->verdictRevision() != verdictSeen_) pushVerdict();   // 1.22.5 : un avis du logiciel vient d'arriver
     if (const auto n = assistant_->takeNotice(); !n.empty()) say(n);
     // Le mode Direct et une suppression multiple : on demande d'abord.
     if (const int m = assistant_->takeDirectConfirm(); m >= 0) (void)applyProposal(m);
@@ -1200,12 +1201,39 @@ void AiPanel::openPreview(int message) {
     const Proposal* p = assistant_->proposal(message);
     if (!p) return;
     if (p->state != "proposee") {
-        say(p->state == "appliquee" ? "Cette proposition est d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9" "e (Ctrl+Z la reprend)."
-                                    : "Cette proposition a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e.");
+        say(p->state == "appliquee"   ? "Cette proposition est d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9" "e (Ctrl+Z la reprend)."
+            : p->state == "remplacee" ? "Cette proposition est remplac\xC3\xA9" "e par sa correction (G\xC3\xA9n\xC3\xA9rer et Compiler) : elle ne s'applique plus."
+                                      : "Cette proposition a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e.");
         return;
     }
     if (!ui_.showDialog) return;
-    ui_.showDialog(std::make_unique<AiPreviewDialog>(*this, message), [](const menu::DialogResult&) {});
+    auto dialog = std::make_unique<AiPreviewDialog>(*this, message);
+    trackPreview(dialog.get(), p->id);   // 1.22.5 : l'avis du logiciel lui sera passe
+    ui_.showDialog(std::move(dialog), [alive = previewAlive_](const menu::DialogResult&) { *alive = false; });
+}
+
+// ---- 1.22.5 : l'avis du logiciel passe a la previsualisation ouverte ---------------------------------------------------------
+namespace {
+// AiPreviewDialog::setVerdict (la previsualisation, lot de l'apercu) : appelee si elle existe - sinon rien (la fenetre relit
+// la carte a sa prochaine mise a jour).
+template <class D>
+void giveVerdict(D& dialog, const build::Verdict& v) {
+    if constexpr (requires { dialog.setVerdict(v); }) dialog.setVerdict(v);
+}
+} // namespace
+
+void AiPanel::trackPreview(AiPreviewDialog* dialog, const std::string& proposalId) {
+    previewAlive_ = std::make_shared<bool>(dialog != nullptr);
+    preview_ = dialog;
+    previewProposal_ = proposalId;
+    pushVerdict();   // deja la : tout de suite
+}
+
+void AiPanel::pushVerdict() {
+    verdictSeen_ = assistant_->verdictRevision();
+    if (!preview_ || !previewAlive_ || !*previewAlive_) return;
+    const int m = assistant_->messageOfProposal(previewProposal_);
+    if (const auto v = m >= 0 ? assistant_->verdictOf(m) : std::nullopt) giveVerdict(*preview_, *v);
 }
 
 bool AiPanel::applyProposal(int message) {
@@ -1240,6 +1268,22 @@ bool AiPanel::applyProposal(int message) {
         if (checkInBackground(*p)) return doApply();
         ck = assistant_->check(message);
     }
+    // 1.22.5 : LES ERREURS DE GENERER ET COMPILER (l'avis du logiciel, verse dans la verification de la carte) - elles bloquent
+    // comme les autres ; << Appliquer malgre les erreurs >> les dit a part (elles restent dans le projet : rien ne les retire).
+    std::vector<std::string> buildErrors, otherErrors;
+    {
+        std::set<std::string> fromBuild;
+        if (const auto v = assistant_->verdictOf(message); v && v->ran)
+            for (const auto& f : v->findings)
+                if (f.error) fromBuild.insert(build::lineOf(f));
+        for (const auto& e : ck.errors) (fromBuild.count(e) ? buildErrors : otherErrors).push_back(e);
+    }
+    if (!buildErrors.empty() && otherErrors.empty() && !ck.stale && !ck.viewMissing && !assistant_->settings().applyWithErrors) {
+        say("G\xC3\xA9n\xC3\xA9rer et Compiler trouvent " + std::to_string(buildErrors.size())
+            + (buildErrors.size() > 1 ? " erreurs nouvelles" : " erreur nouvelle") + " : la proposition ne s'applique pas telle quelle. Corrige-la "
+            "(Pr\xC3\xA9visualiser), ou coche \xC2\xAB Appliquer malgr\xC3\xA9 les erreurs \xC2\xBB (Param\xC3\xA8tres de l'Assistant IA).");
+        return false;
+    }
     // 1.16.1 : APPLIQUER MALGRE LES ERREURS (l'option des parametres) - toujours une confirmation qui les liste.
     if (!ck.ok() && !ck.stale && !ck.viewMissing && assistant_->settings().applyWithErrors && ui_.showDialog) {
         HmiAskDialog::Spec spec;
@@ -1248,8 +1292,14 @@ bool AiPanel::applyProposal(int message) {
         spec.text = "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) "
                     "et not\xC3\xA9 sous la r\xC3\xA9ponse et dans le journal.\nCtrl+Z reprend tout d'un coup.";
         // 1.16.1 (captures) : les erreurs dans le paragraphe, qui va a la ligne (une ligne de liste les coupait a droite)
-        spec.text += "\n\nLaiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 :";
-        for (const auto& e : ck.errors) spec.text += "\n\xE2\x80\xA2 " + e;
+        if (!otherErrors.empty()) {
+            spec.text += "\n\nLaiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 :";
+            for (const auto& e : otherErrors) spec.text += "\n\xE2\x80\xA2 " + e;
+        }
+        if (!buildErrors.empty()) {   // 1.22.5 : elles ne se laissent pas de cote - elles seront dans le projet
+            spec.text += "\n\nG\xC3\xA9n\xC3\xA9rer et Compiler (ces erreurs resteront dans le projet) :";
+            for (const auto& e : buildErrors) spec.text += "\n\xE2\x80\xA2 " + e;
+        }
         spec.confirm = "Appliquer quand m\xC3\xAAme";
         spec.width = 620.f;
         ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, message](const menu::DialogResult& r) {
@@ -1427,7 +1477,8 @@ void AiPanel::openPreviewFor(int message, const std::string& variable) {
     }
     auto dialog = std::make_unique<AiPreviewDialog>(*this, message);
     dialog->focusVariable(variable, true);   // le choix du haut vise cette variable, sa liste ouverte
-    ui_.showDialog(std::move(dialog), [](const menu::DialogResult&) {});
+    trackPreview(dialog.get(), p->id);       // 1.22.5
+    ui_.showDialog(std::move(dialog), [alive = previewAlive_](const menu::DialogResult&) { *alive = false; });
 }
 
 void AiPanel::openSettings() {
@@ -2718,6 +2769,8 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
         std::string base = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
         for (const auto x : p->excluded) base += "x" + std::to_string(x);   // 1.19.0 : les etapes retirees
         base += fixes::key(*p);   // 1.22.1 : les corrections (un choix par variable introuvable) - la carte se revalide
+        // 1.22.5 : l'avis du logiciel arrive (Generer et Compiler, une fois par proposition) - la carte le verse dans sa verification
+        if (p->extra.isObject() && p->extra.has("logiciel")) base += "|logiciel";
         // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
         // 1.20.0 : relue seulement si le projet a change (sa revision) ou chaque seconde - pas a chaque peinture.
         if (doc) {
@@ -2758,10 +2811,11 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
             XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
             return std::make_shared<const hmi::Project>(doc->project);
         }();
-        job->worker = std::thread([job, project, prop = *p, env = std::move(frozen)] {
+        job->worker = std::thread([job, project, prop = *p, env = std::move(frozen), verdict = Assistant::verdictOf(*p)] {
             XPG_TRAVAIL("ia.verification-carte");   // 1.22.2 : l'onglet Performances, travaux de fond
             setProgressCounter(&job->done);
             job->check = validate(*project, prop, env);
+            if (verdict) build::merge(job->check, *verdict);   // 1.22.5 : l'avis du logiciel, garde avec elle
             job->preview = preview(*project, prop, env);
             job->plan = plan::build(*project, prop, job->check);
             setProgressCounter(nullptr);
@@ -2786,8 +2840,8 @@ std::optional<AiChatView::LivePlan> AiChatView::livePlan() const {
     if (!conv) return std::nullopt;
     const int n = static_cast<int>(conv->messages.size());
     int found = -1;
-    for (int i = n - 1; i >= 0 && found < 0; --i)   // d'abord celle qui travaille sur un fil de fond
-        if (conv->messages[static_cast<std::size_t>(i)].proposal && (a.applying(i) || checking(i))) found = i;
+    for (int i = n - 1; i >= 0 && found < 0; --i)   // d'abord celle qui travaille sur un fil de fond (1.22.5 : son processus aussi)
+        if (conv->messages[static_cast<std::size_t>(i)].proposal && (a.applying(i) || checking(i) || a.processWorking(i))) found = i;
     for (int i = n - 1; i >= 0 && found < 0; --i)   // sinon la derniere proposition
         if (conv->messages[static_cast<std::size_t>(i)].proposal) found = i;
     if (found < 0) return std::nullopt;
@@ -2802,17 +2856,27 @@ std::optional<AiChatView::LivePlan> AiChatView::livePlan() const {
     lp.checking = !lp.applying && t.pending();
     lp.open = p->state == "proposee";
     lp.ops = p->ops.size();
-    if (!lp.applying && !lp.checking && !t.plan.worthShowing()) return std::nullopt;
+    // 1.22.5 : le processus de developpement (sa derniere etape) ; il montre la bande tant qu'il travaille
+    lp.working = a.processWorking(found);
+    lp.process = a.processHeadline(found);
+    if (!lp.applying && !lp.checking && !lp.working && !t.plan.worthShowing()) return std::nullopt;
     const auto applied = p->state == "appliquee" ? a.appliedState(found) : Assistant::Applied::NotApplied;
     lp.head = lp.checking ? "Plan d'action \xE2\x80\x94 " + std::to_string(lp.ops) + " op\xC3\xA9rations en v\xC3\xA9rification"
                           : planHeadOf(*p, t.plan);
-    if (!lp.checking) lp.phases = phasesOf(*p, t.plan, applied, t.check.ok());
+    if (!lp.checking && !lp.applying && !t.plan.worthShowing())   // 1.22.5 : le processus seul (pas de plan a montrer)
+        lp.head = (p->summary.empty() ? std::string("Proposition") : p->summary) + " \xE2\x80\x94 " + std::to_string(lp.ops) + " op\xC3\xA9rations";
+    if (!lp.checking && p->state != "remplacee") lp.phases = phasesOf(*p, t.plan, applied, t.check.ok());
     if (lp.applying) {
         lp.status = "Application\xE2\x80\xA6";
         lp.progress = a.applyProgress();
     } else if (lp.checking) {
         lp.status = "V\xC3\xA9rification\xE2\x80\xA6";
         lp.progress = checkProgress(found);
+    } else if (p->state == "remplacee") {   // 1.22.5 : remplacee par sa correction (l'IA la corrige, ou c'est fait)
+        lp.status = lp.working ? "Correction\xE2\x80\xA6" : "Remplac\xC3\xA9" "e";
+        lp.tone = lp.working ? 0 : 2;
+    } else if (p->state == "proposee" && a.building(p->id)) {   // 1.22.5 : l'avis du logiciel, sur une copie
+        lp.status = "G\xC3\xA9n\xC3\xA9rer et Compiler\xE2\x80\xA6";
     } else if (p->state == "appliquee" && applied == Assistant::Applied::Undone) {
         lp.status = "Annul\xC3\xA9 (Ctrl+Z)";
         lp.tone = 2;
@@ -2913,7 +2977,9 @@ void AiChatView::measure() {
             const auto& m = conv->messages[i];
             Block b;
             b.message = static_cast<int>(i);
-            b.user = m.role == "utilisateur";
+            // 1.22.5 : un message du LOGICIEL (la correction demandee a l'IA, l'avis de Generer et Compiler) n'est pas une bulle
+            // de l'utilisateur : il se lit a gauche, sous << Logiciel >>.
+            b.user = m.role == "utilisateur" && !(m.extra.isObject() && m.extra.has("logiciel"));
             b.y = y;
             const bool live = static_cast<int>(i) == generating;
             const std::string text = live ? a.shownText() : m.text;
@@ -2992,6 +3058,34 @@ void AiChatView::measure() {
                             ch += static_cast<float>(more.size()) * kNoteH + (b.createLines.empty() ? 2.f : 0.f);
                             for (auto& l : more) b.createLines.push_back(std::move(l));
                         }
+                    // 1.22.5 : LE PROCESSUS DE DEVELOPPEMENT (l'avis du logiciel, les corrections) - l'en-tete (un clic le deplie ;
+                    // deplie pendant le travail), puis ses lignes et les constats de Generer et Compiler.
+                    if (const auto proc = a.processOf(static_cast<int>(i)); !proc.empty()) {
+                        b.procOpen = processOpen(static_cast<int>(i));
+                        b.procHead = "Processus de d\xC3\xA9veloppement (" + std::to_string(proc.size()) + ")";
+                        if (!b.procOpen) b.procHead += " \xE2\x80\x94 " + proc.back().time + " " + proc.back().text;
+                        b.procY = ch;
+                        ch += kNoteH + 6.f;
+                        if (b.procOpen) {
+                            for (const auto& l : proc) {
+                                std::uint8_t tone = 0;
+                                if (l.what == "logiciel") tone = l.errors > 0 ? 3 : l.warnings > 0 ? 2 : l.text.find(" : aucun constat") != std::string::npos ? 1 : 2;
+                                else if (l.what == "verification") tone = l.errors > 0 ? 3 : 0;
+                                else if (l.what == "arret" || l.what == "cercle") tone = 2;
+                                else if (l.what == "direct" || l.what == "attente") tone = 4;
+                                for (auto& line : wrapPlain(l.time + "  " + l.text, kMeta, cw - 30.f)) b.procLines.push_back({std::move(line), tone, false, l.proposal});
+                                for (const auto& f : l.findings) {
+                                    auto lines = wrapPlain(f.text, kMeta, cw - 50.f);
+                                    if (lines.size() > 2) {
+                                        lines.resize(2);
+                                        lines.back() += " \xE2\x80\xA6";
+                                    }
+                                    for (auto& line : lines) b.procLines.push_back({std::move(line), static_cast<std::uint8_t>(f.object.empty() && f.view.empty() && f.text.rfind("\xE2\x80\xA6", 0) == 0 ? 4 : f.error ? 3 : 2), true, l.proposal});
+                                }
+                            }
+                            ch += static_cast<float>(b.procLines.size()) * kNoteH + 4.f;
+                        }
+                    }
                     // 1.19.0 : LE PLAN D'ACTION - seulement pour une demande qui en merite un (pas une simple question).
                     const plan::Plan& pl = t.plan;
                     const bool showPlan = m.proposal->state != "refusee" && pl.worthShowing();
@@ -3071,6 +3165,17 @@ void AiChatView::measure() {
                     } else {
                         b.applied = a.appliedState(static_cast<int>(i));
                         std::string done;
+                        // 1.22.5 : remplacee par sa correction (l'avis du logiciel) - elle ne s'applique plus ; la carte mene a la corrigee.
+                        if (m.proposal->state == "remplacee") {
+                            const std::string next = m.proposal->extra.isObject() ? m.proposal->extra.str("remplaceePar") : std::string{};
+                            b.replacedBy = next.empty() ? -1 : a.messageOfProposal(next);
+                            done = b.replacedBy >= 0 ? std::string("Remplac\xC3\xA9" "e par sa correction (plus bas) : elle ne s'applique plus.")
+                                   : a.processWorking(static_cast<int>(i))
+                                       ? std::string("Remplac\xC3\xA9" "e : l'IA la corrige d'apr\xC3\xA8s G\xC3\xA9n\xC3\xA9rer et Compiler\xE2\x80\xA6")
+                                       : std::string("Remplac\xC3\xA9" "e : elle ne s'applique plus.");
+                            if (b.replacedBy >= 0) b.buttons = {"Voir la correction"};
+                            b.applied = Assistant::Applied::NotApplied;
+                        } else
                         switch (b.applied) {
                             case Assistant::Applied::Undone:
                                 done = usesOpenView(*m.proposal)
@@ -3208,7 +3313,8 @@ void AiChatView::rebuild() {
             });
             links_ += cb.apply->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
-                if (cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::ProposeAnyway);   // 1.22.4
+                if (cards_[k].replacedBy >= 0) revealMessage(cards_[k].replacedBy, false);   // 1.22.5 : la carte de sa correction
+                else if (cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::ProposeAnyway);   // 1.22.4
                 else if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
                 else if (cards_[k].next) {   // 1.21.3 : << Propose la suite : ... >>, envoye comme une demande
                     const std::string ask = panel_.assistant().nextRequest(cards_[k].message);
@@ -3232,7 +3338,19 @@ void AiChatView::rebuild() {
         cb.detect = false;
         cb.next = false;
         cb.loop = false;
+        cb.replacedBy = -1;
         cb.preview->setEnabled(true);
+        // 1.22.5 : REMPLACEE par sa correction (l'avis du logiciel) - << Voir la correction >>, seul.
+        if (p->state == "remplacee") {
+            cb.replacedBy = b.replacedBy;
+            cb.undone = false;
+            cb.stale = false;
+            cb.apply->setText("Voir la correction");
+            cb.apply->setTooltip("Aller \xC3\xA0 la carte de la proposition corrig\xC3\xA9" "e (G\xC3\xA9n\xC3\xA9rer et Compiler avaient trouv\xC3\xA9 des erreurs dans celle-ci).");
+            cb.apply->setEnabled(b.replacedBy >= 0);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            continue;
+        }
         // 1.22.4 : RETENUE (elle tourne en rond) - les choix, rien d'autre ; une mission : deux de plus.
         if (b.loopHeld && p->state == "proposee" && !(t.check.stale || t.check.viewMissing)) {
             const Assistant::LoopInfo lp = panel_.assistant().loopOf(b.message);
@@ -3490,9 +3608,11 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     if (p->state == "appliquee" && b.applied == Assistant::Applied::Undone) { st = "Annul\xC3\xA9" "e"; tone = c.warning; }
     else if (p->state == "appliquee") { st = "Appliqu\xC3\xA9" "e"; tone = c.ok; }
     else if (p->state == "refusee") { st = "Refus\xC3\xA9" "e"; tone = c.textMuted; }
+    else if (p->state == "remplacee") { st = "Remplac\xC3\xA9" "e"; tone = c.textMuted; }   // 1.22.5 : par sa correction
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
     else if (a.applying(b.message)) { st = "Application\xE2\x80\xA6"; tone = c.info; }   // 1.20.1 : sur un fil de fond
     else if (t.pending()) { st = "V\xC3\xA9rification\xE2\x80\xA6"; tone = c.info; }   // 1.20.0 : sur un fil de fond
+    else if (a.building(p->id)) { st = "G\xC3\xA9n\xC3\xA9rer et Compiler\xE2\x80\xA6"; tone = c.info; }   // 1.22.5 : l'avis du logiciel
     else if (b.loopHeld) { st = "Tourne en rond"; tone = c.warning; }   // 1.22.4 : retenue, le choix d'abord
     // 1.15.0 : "A completer" seulement quand l'utilisateur peut completer (une variable a choisir dans
     // l'apercu) ; une proposition que le logiciel refuse (une propriete inventee...) est "Non valide".
@@ -3543,6 +3663,33 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
         y += kNoteH;
     }
     if (!b.createLines.empty()) y += 2.f;
+    // 1.22.5 : LE PROCESSUS DE DEVELOPPEMENT - l'en-tete (un clic le deplie), ses lignes ; sous l'avis de Generer et Compiler,
+    // ses constats (rouge : une erreur, ambre : un avertissement ; un clic : la previsualisation).
+    if (b.procY > 0.f) {
+        y = card.y + b.procY;
+        const gfx::Rect head{card.x + 10.f, y, card.w - 20.f, kNoteH + 2.f};
+        const bool working = a.processWorking(b.message);
+        ctx.r.fillRoundedRect(head, alpha(working ? c.info : c.accent, 26), 4.f);
+        ui::drawIcon(ctx.r, b.procOpen ? ui::Icon::Collapse : ui::Icon::Expand, {head.x + 4.f, head.y + 2.f, 14.f, 14.f}, c.textMuted);
+        ctx.r.drawText({head.x + 22.f, head.y + (head.h - lhCap) / 2.f},
+                       elideTip(ctx.r, b.procHead + (working ? std::string("  \xE2\x80\xA6") : std::string{}), kMeta, head.w - 28.f, head, tips_), kMeta, c.text);
+        tips_.emplace_back(head, b.procOpen ? std::string("Replier le processus de d\xC3\xA9veloppement.")
+                                            : std::string("D\xC3\xA9plier : ce que le logiciel et l'IA ont fait pour cette demande (G\xC3\xA9n\xC3\xA9rer et Compiler, "
+                                                          "les corrections)."));
+        y += kNoteH + 6.f;
+        if (b.procOpen) {
+            for (const auto& l : b.procLines) {
+                const gfx::Color ink = l.tone == 1 ? c.ok : l.tone == 2 ? c.warning : l.tone == 3 ? c.error : l.tone == 4 ? c.textMuted : c.text;
+                if (l.finding && l.tone != 4) {
+                    ctx.r.fillRoundedRect({card.x + 20.f, y + 6.f, 5.f, 5.f}, ink, 2.5f);
+                    tips_.emplace_back(gfx::Rect{card.x + 10.f, y, card.w - 20.f, kNoteH}, l.text + "\nClic : la pr\xC3\xA9visualisation.");
+                }
+                ctx.r.drawText({card.x + (l.finding ? 30.f : 14.f), y}, l.text, kMeta, ink);
+                y += kNoteH;
+            }
+            y += 4.f;
+        }
+    }
     // 1.19.0 : les phases reelles, le plan d'action (un clic le deplie), ses etapes et leur etat.
     if (b.planY > 0.f) {
         for (const auto& l : b.phaseLines) {
@@ -3683,6 +3830,67 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     }
 }
 
+// ---- 1.22.5 : le processus de developpement d'une carte -------------------------------------------------------------------
+bool AiChatView::processOpen(int message) const {
+    const Proposal* p = panel_.assistant().proposal(message);
+    if (!p) return false;
+    if (const auto it = procOpen_.find(p->id); it != procOpen_.end()) return it->second;
+    return panel_.assistant().processWorking(message);   // par defaut : deplie pendant le travail
+}
+
+void AiChatView::setProcessOpen(int message, bool open) {
+    const Proposal* p = panel_.assistant().proposal(message);
+    if (!p) return;
+    procOpen_[p->id] = open;
+    stick_ = false;
+    measure();
+    placeCards();
+    invalidate();
+}
+
+std::vector<std::string> AiChatView::processLines(int message) const {
+    std::vector<std::string> out;
+    for (const auto& b : blocks_)
+        if (b.message == message && b.procY > 0.f) {
+            out.push_back(b.procHead);
+            for (const auto& l : b.procLines) out.push_back(l.text);
+        }
+    return out;
+}
+
+gfx::Rect AiChatView::processRect(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message && b.procY > 0.f) {
+            const gfx::Rect card = cardRect(message);
+            return {card.x + 10.f, card.y + b.procY, card.w - 20.f, kNoteH + 2.f};
+        }
+    return {};
+}
+
+bool AiChatView::clickProcessLine(int message, std::size_t line) {
+    const Block* bl = nullptr;
+    for (const auto& b : blocks_)
+        if (b.message == message) bl = &b;
+    if (!bl || line >= bl->procLines.size() || !bl->procLines[line].finding) return false;
+    // la proposition du constat, ou celle qui l'a remplacee (la corrigee) : la previsualisation de celle qui est a decider
+    const auto& as = panel_.assistant();
+    int target = as.messageOfProposal(bl->procLines[line].proposal);
+    for (int hops = 0; target >= 0 && hops < 8; ++hops) {
+        const Proposal* p = as.proposal(target);
+        if (!p || p->state != "remplacee") break;
+        const std::string next = p->extra.isObject() ? p->extra.str("remplaceePar") : std::string{};
+        if (next.empty()) break;
+        target = as.messageOfProposal(next);
+    }
+    const Proposal* p = target >= 0 ? as.proposal(target) : nullptr;
+    if (!p || p->state != "proposee") {
+        panel_.say("Ce constat vient d'une proposition qui n'est plus \xC3\xA0 d\xC3\xA9" "cider : sa correction le reprend (ou elle est appliqu\xC3\xA9" "e).");
+        return true;
+    }
+    panel_.openPreview(target);
+    return true;
+}
+
 std::string AiChatView::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, mouse); }
 
 void AiChatView::onPaint(const ui::PaintContext& ctx) {
@@ -3727,8 +3935,10 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             }
             continue;
         }
-        ui::drawIcon(ctx.r, ui::Icon::Assistant, {bb.x + kPad + 2.f, top + 1.f, 14.f, 14.f}, c.accent);
-        std::string who = "Assistant \xC2\xB7 " + (live ? std::string("maintenant") : when);
+        // 1.22.5 : un message du LOGICIEL (la correction demandee d'apres Generer et Compiler) - dit comme tel.
+        const bool soft = m.role == "utilisateur";
+        ui::drawIcon(ctx.r, soft ? ui::Icon::Wrench : ui::Icon::Assistant, {bb.x + kPad + 2.f, top + 1.f, 14.f, 14.f}, soft ? c.textMuted : c.accent);
+        std::string who = (soft ? std::string("Logiciel \xC2\xB7 ") : std::string("Assistant \xC2\xB7 ")) + (live ? std::string("maintenant") : when);
         if (m.state == "arrete") who += " \xC2\xB7 arr\xC3\xAAt\xC3\xA9" "e";
         if (m.state == "erreur") who += " \xC2\xB7 erreur";
         ctx.r.drawText({bb.x + kPad + 22.f, top}, who, kMeta, m.state == "erreur" ? c.error : c.textMuted);
@@ -4010,6 +4220,21 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 (void)copyCode(code);
                 return ui::EventResult::Consumed;
             }
+        // 1.22.5 : le processus de developpement - l'en-tete le deplie (ou le replie) ; un constat ouvre la previsualisation.
+        for (const auto& b : blocks_) {
+            if (b.procY <= 0.f) continue;
+            const gfx::Rect card = cardRect(b.message);
+            if (card.h <= 0.f || !card.contains(d->pos)) continue;
+            const gfx::Rect head{card.x + 10.f, card.y + b.procY, card.w - 20.f, kNoteH + 2.f};
+            if (head.contains(d->pos)) {
+                setProcessOpen(b.message, !b.procOpen);
+                return ui::EventResult::Consumed;
+            }
+            const float top = head.bottom() + 4.f;
+            if (b.procOpen && d->pos.y >= top && d->pos.y < top + static_cast<float>(b.procLines.size()) * kNoteH
+                && clickProcessLine(b.message, static_cast<std::size_t>((d->pos.y - top) / kNoteH)))
+                return ui::EventResult::Consumed;
+        }
         // 1.19.0 : le plan d'action - l'en-tete le deplie ; << retirer >> / << remettre >> une etape facultative ; une
         // etape appliquee ouvre ce qu'elle a cree.
         for (const auto& b : blocks_) {

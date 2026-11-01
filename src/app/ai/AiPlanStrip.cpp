@@ -91,13 +91,13 @@ AiPlanStrip::AiPlanStrip(std::string id, AiPanel& panel) : ui::Widget(std::move(
 float AiPlanStrip::heightFor(float /*width*/, float maxH) const {
     const auto lp = panel_.chat().livePlan();
     if (!lp || closed_.count(lp->id)) return 0.f;
-    float h = kHeadH + kBarH + 4.f;
+    float h = kHeadH + kBarH + 4.f + (lp->process.empty() ? 0.f : kRowH);   // 1.22.5 : la derniere etape du processus
     if (open_) {
         const std::size_t n = lp->plan ? lp->plan->steps.size() : 0;
         if (!lp->phases.empty()) h += kPhasesH;
         h += static_cast<float>(std::min(n, kMaxRows)) * kRowH + 6.f;
     }
-    return std::min(h, std::max(kHeadH + kBarH + 4.f, maxH));
+    return std::min(h, std::max(kHeadH + kBarH + 4.f + (lp->process.empty() ? 0.f : kRowH), maxH));
 }
 
 void AiPlanStrip::setExpanded(bool open) {
@@ -126,7 +126,7 @@ gfx::Rect AiPlanStrip::closeRect() const {
 
 float AiPlanStrip::stepsTop() const {
     const auto lp = panel_.chat().livePlan();
-    return bounds().y + kHeadH + kBarH + 4.f + (lp && !lp->phases.empty() ? kPhasesH : 0.f);
+    return bounds().y + kHeadH + kBarH + 4.f + (lp && !lp->process.empty() ? kRowH : 0.f) + (lp && !lp->phases.empty() ? kPhasesH : 0.f);
 }
 
 std::size_t AiPlanStrip::visibleSteps() const {
@@ -150,6 +150,7 @@ std::vector<std::string> AiPlanStrip::lines() const {
     (void)progressOf(*lp, &prog);
     out.push_back("Plan en cours : " + lp->head);
     out.push_back(lp->status + (prog.empty() ? std::string() : " \xC2\xB7 " + prog));
+    if (!lp->process.empty()) out.push_back("Processus : " + lp->process);   // 1.22.5
     if (open_) {
         if (!lp->phases.empty()) out.push_back(lp->phases);
         if (lp->plan)
@@ -206,9 +207,18 @@ void AiPlanStrip::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRoundedRect(track, alpha(c.info, 40), 4.f);
     if (frac > 0.f) ctx.r.fillRoundedRect({track.x, track.y, std::max(8.f, track.w * frac), track.h}, lp->tone == 3 ? c.error : lp->tone == 1 ? c.ok : c.info, 4.f);
     if (!prog.empty()) ctx.r.drawText({track.right() + 8.f, track.y + (track.h - meta) / 2.f}, prog, kMeta, c.textMuted);
+    // 1.22.5 : LE PROCESSUS DE DEVELOPPEMENT - sa derniere etape (<< Correction 1/2 : l'IA corrige 2 erreurs de Compiler... >>).
+    float below = b.y + kHeadH + kBarH + 4.f;
+    if (!lp->process.empty()) {
+        const std::string line = "Processus : " + lp->process;
+        const std::string cut = elide(ctx.r, line, kMeta, b.w - 20.f);
+        ctx.r.drawText({b.x + 10.f, below}, cut, kMeta, lp->working ? c.info : c.textMuted);
+        tips_.emplace_back(gfx::Rect{b.x, below, b.w, kRowH}, line + "\nLe d\xC3\xA9tail : le processus de d\xC3\xA9veloppement, sur la carte de la proposition.");
+        below += kRowH;
+    }
     // Depliee : les phases, puis les etapes (celles qui tiennent ; la molette fait defiler).
     if (open_) {
-        float y = b.y + kHeadH + kBarH + 4.f;
+        float y = below;
         if (!lp->phases.empty()) {
             const std::string ph = elide(ctx.r, lp->phases, kMeta, b.w - 20.f);
             ctx.r.drawText({b.x + 10.f, y}, ph, kMeta, c.textMuted);
@@ -263,6 +273,12 @@ ui::EventResult AiPlanStrip::onEvent(const ui::InputEvent& ev) {
         }
         if (headRect().contains(d->pos) || d->pos.y < bounds().y + kHeadH + kBarH) {
             setExpanded(!open_);
+            return ui::EventResult::Consumed;
+        }
+        // 1.22.5 : la ligne du processus - la carte, son processus deplie
+        if (const float top = bounds().y + kHeadH + kBarH + 4.f; !lp->process.empty() && d->pos.y >= top && d->pos.y < top + kRowH) {
+            panel_.chat().setProcessOpen(lp->message, true);
+            panel_.chat().revealMessage(lp->message, false);
             return ui::EventResult::Consumed;
         }
         if (open_ && lp->plan)

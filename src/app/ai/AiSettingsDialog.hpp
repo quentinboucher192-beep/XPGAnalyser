@@ -137,6 +137,8 @@ private:
     ui::DropDown*     period_{nullptr};
     ui::Checkbox*     localFirst_{nullptr};   // 1.16.1 : l'IA integree d'abord
     ui::Checkbox*     anyway_{nullptr};       // 1.16.1 : appliquer malgre les erreurs
+    ui::Checkbox*     buildCheck_{nullptr};   // 1.22.5 : faire verifier par Generer et Compiler
+    ui::Checkbox*     autoCorrect_{nullptr};  // 1.22.5 : corriger seule (2 fois au plus)
     void              providerChanged();
     ui::Button*       cancel_{nullptr};
     ui::Button*       ok_{nullptr};

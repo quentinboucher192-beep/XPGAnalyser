@@ -30,8 +30,13 @@
 //       un clic, Tout deplier / Tout replier, le clic droit, gardees pour la
 //       seance, jamais dans le fichier) ; forcer la fin d'une mission (le clic
 //       droit de la liste, le bouton du tableau de bord, la question, l'etat apres).
+//   10. 1.22.5 : le PROCESSUS DE DEVELOPPEMENT sur la carte (deplie pendant que
+//       Generer et Compiler tournent, ses lignes, replie ensuite, un clic le deplie,
+//       un constat ouvre la previsualisation), la carte remplacee (<< Voir la
+//       correction >>), le message du logiciel, la bande du haut (sa derniere etape).
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
+#include "../src/app/ai/AiBuild.hpp"
 #include "../src/app/ai/AiMemoryManager.hpp"
 #include "../src/app/ai/AiMissionBoard.hpp"
 #include "../src/app/ai/AiMissionStrip.hpp"
@@ -40,6 +45,7 @@
 #include "../src/app/ai/AiNotificationsView.hpp"
 #include "../src/app/ai/AiPanel.hpp"
 #include "../src/app/ai/AiPaths.hpp"
+#include "../src/app/ai/AiPlanStrip.hpp"
 #include "../src/app/ai/AiPreviewDialog.hpp"
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiEdit.hpp"
@@ -49,6 +55,7 @@
 #include "../src/ui/widgets/Controls.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -434,6 +441,7 @@ struct Fixture {
         st.preset = "openrouter";
         st.endpoint = "https://openrouter.ai/api/v1";
         st.model = "modele-essai";
+        st.buildCheck = false;   // 1.22.5 : l'avis du logiciel a son essai (testProcessCard)
         as().setSettings(st);
         as().setApiKey("cle-essai");
     }
@@ -1324,6 +1332,138 @@ void testCardsAndForce() {
     nt::resetForTests();
 }
 
+// ================================================================== 10. le processus de developpement ==
+// Un faux Generer et Compiler : une cuve << Mauvais >> - 2 erreurs et 1 avertissement ; sinon rien. `g_hold` le retient.
+std::atomic<bool> g_hold{false};
+ai::build::Verdict fakeVerdict(const hmi::Project&, const ai::Proposal& p) {
+    for (int k = 0; k < 5000 && g_hold.load(); ++k) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    ai::build::Verdict v;
+    v.ran = true;
+    v.ms = 1400.0;
+    for (std::size_t i = 0; i < p.ops.size(); ++i)
+        for (const auto& [key, val] : p.ops[i].props)
+            if (key == "label" && val == "Mauvais") {
+                ai::build::Finding f;
+                f.step = "Compiler";
+                f.message = "valeur refus\xC3\xA9" "e : Mauvais";
+                f.where = "Vue_Station . " + p.ops[i].name + " . label";
+                f.view = "Vue_Station";
+                f.objectName = p.ops[i].name;
+                f.op = i;
+                v.findings.push_back(f);
+                f.step = "G\xC3\xA9n\xC3\xA9rer";
+                f.message = "texte vide";
+                v.findings.push_back(f);
+                f.error = false;
+                f.message = "libell\xC3\xA9 long";
+                v.findings.push_back(f);
+            }
+    for (const auto& f : v.findings) ++(f.error ? v.errors : v.warnings);
+    return v;
+}
+
+std::vector<ai::ProviderEvent> toolReply(const std::string& text, const std::string& id, const std::string& label) {
+    ai::ProviderEvent t;
+    t.type = ai::ProviderEvent::Type::Text;
+    t.text = text;
+    ai::ProviderEvent u;
+    u.type = ai::ProviderEvent::Type::ToolUse;
+    u.toolUseId = id;
+    u.toolName = "proposer_operations";
+    u.toolInputJson = "{\"resume\": \"La cuve de pression\", \"operations\": [{\"action\": \"creer\", \"genre\": \"Tank\", \"nom\": \"Cuve_P\", "
+                      "\"proprietes\": {\"x\": \"300\", \"y\": \"40\", \"w\": \"120\", \"h\": \"160\", \"label\": \"" + label + "\"}}]}";
+    ai::ProviderEvent d;
+    d.type = ai::ProviderEvent::Type::Done;
+    d.stopReason = "tool_use";
+    return {t, u, d};
+}
+
+void testProcessCard() {
+    std::printf("[10. 1.22.5 : le processus de developpement sur la carte]\n");
+    ai::build::setVerdictForTests(fakeVerdict);
+    Fixture f("processus");
+    f.live();
+    {
+        ai::Settings st = f.as().settings();
+        st.buildCheck = true;
+        st.autoCorrect = true;
+        f.as().setSettings(st);
+    }
+    f.as().newConversation();
+    f.step();
+    g_hold = true;
+    f.script.replies.push_back(toolReply("Voici la cuve.", "toolu_1", "Mauvais"));
+    f.script.replies.push_back(toolReply("J'ai remplac\xC3\xA9 le libell\xC3\xA9 Mauvais par Bon.", "toolu_2", "Bon"));
+    check(f.panel->sendText("Ajoute la cuve de pression."), "envoyer");
+    f.step();
+    f.step();
+    const int m1 = static_cast<int>(f.as().current()->messages.size()) - 1;
+    check(f.as().proposal(m1) && f.as().building(f.as().proposal(m1)->id), "Generer et Compiler tournent (un fil de fond)");
+    auto& chat = f.panel->chat();
+    check(chat.processOpen(m1), "pendant le travail : le processus est deplie");
+    {
+        const auto lines = chat.processLines(m1);
+        check(lines.size() >= 3 && has(lines[0], "Processus de d\xC3\xA9veloppement") && has(lines[1], "Proposition re\xC3\xA7ue : 1 op\xC3\xA9ration")
+                  && has(lines[2], "V\xC3\xA9rification : 0 erreur"),
+              "ses lignes : l'en-tete, recue, verifiee (" + std::to_string(lines.size()) + ")");
+        check(chat.processRect(m1).h > 0.f, "son en-tete a sa place sur la carte");
+        Recorder rec;
+        f.panel->render(ui::PaintContext{rec, ui::Theme::dark(), f.panel->bounds(), f.t, nullptr});
+        check(rec.saw("Processus de d\xC3\xA9veloppement") && rec.saw("Proposition re\xC3\xA7ue") && rec.saw("G\xC3\xA9n\xC3\xA9rer et Compiler\xE2\x80\xA6"),
+              "dessine hors ecran : le processus, l'etat de la carte");
+        bool band = false;
+        for (const auto& l : f.panel->planStrip().lines()) band = band || has(l, "Processus : G\xC3\xA9n\xC3\xA9rer et Compiler v\xC3\xA9rifient");
+        check(band, "la bande du haut : la derniere etape du processus");
+        check(rec.saw("Processus : G\xC3\xA9n\xC3\xA9rer et Compiler"), "la bande, dessinee");
+    }
+    g_hold = false;
+    for (int k = 0; k < 2500 && (f.as().buildingAny() || f.as().generating()); ++k) {
+        f.step(0.002);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    f.step();
+    const auto* conv = f.as().current();
+    const int m2 = static_cast<int>(conv->messages.size()) - 1;
+    check(m2 == m1 + 2 && f.as().proposal(m2) && f.as().proposal(m2)->state == "proposee" && f.as().proposal(m1)->state == "remplacee",
+          "corrigee seule : la premiere remplacee, la seconde a decider");
+    check(!chat.processOpen(m2), "le travail fini : le processus se replie");
+    {
+        const auto lines = chat.processLines(m2);
+        check(lines.size() == 1 && has(lines[0], "(6)") && has(lines[0], "aucun constat nouveau \xE2\x9C\x93"),
+              "replie : son en-tete dit la derniere etape (" + (lines.empty() ? std::string{} : lines[0]) + ")");
+    }
+    chat.setProcessOpen(m2, true);
+    std::size_t finding = 0;
+    {
+        const auto lines = chat.processLines(m2);
+        bool corrected = false, red = false;
+        for (std::size_t i = 1; i < lines.size(); ++i) {
+            corrected = corrected || has(lines[i], "J'ai remplac\xC3\xA9 le libell\xC3\xA9 Mauvais par Bon");
+            if (!red && has(lines[i], "Compiler : valeur refus\xC3\xA9" "e")) {
+                red = true;
+                finding = i - 1;
+            }
+        }
+        check(lines.size() > 7 && corrected && red, "deplie (un clic) : chaque etape, la phrase de l'IA, chaque constat");
+    }
+    check(chat.clickProcessLine(m2, finding), "un clic sur un constat");
+    f.step();
+    check(dynamic_cast<ai::AiPreviewDialog*>(f.mm.top()) != nullptr, "la previsualisation s'ouvre (sur la proposition a decider)");
+    if (auto* d = dynamic_cast<ai::AiPreviewDialog*>(f.mm.top())) d->close();
+    f.step();
+    // la carte remplacee : << Voir la correction >> ; le message du logiciel
+    chat.scrollBy(-100000.f);
+    f.step();
+    const ui::Button* see = chat.cardButton(m1, 1);
+    check(see && see->text() == "Voir la correction", "la carte remplacee mene a la corrigee");
+    {
+        Recorder rec;
+        f.panel->render(ui::PaintContext{rec, ui::Theme::dark(), f.panel->bounds(), f.t, nullptr});
+        check(rec.saw("Remplac\xC3\xA9" "e") && rec.saw("Logiciel \xC2\xB7"), "dessinees : la carte remplacee, le message du logiciel");
+    }
+    ai::build::setVerdictForTests(nullptr);
+}
+
 } // namespace
 
 int main() {
@@ -1345,6 +1485,7 @@ int main() {
     testNoBlocking();
     testSteps();   // 1.22.1
     testCardsAndForce();   // 1.22.2
+    testProcessCard();     // 1.22.5
     std::printf("ai_missions_ui_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
