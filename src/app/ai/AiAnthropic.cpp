@@ -201,6 +201,18 @@ AttachmentPlan planAttachment(const ProviderAttachment& a) {
 }
 
 // ---- la requete --------------------------------------------------------------------------------
+std::string eagerTools(std::string_view toolsJson) {
+    json::Value tools;
+    if (!json::parse(toolsJson, tools) || !tools.isArray()) return std::string(toolsJson);
+    bool changed = false;
+    for (auto& t : tools.items())
+        if (t.isObject() && t.has("input_schema") && !t.has("type") && !t.has("eager_input_streaming")) {
+            t.set("eager_input_streaming", true);
+            changed = true;
+        }
+    return changed ? json::write(tools, false) : std::string(toolsJson);
+}
+
 std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* notes) {
     std::uintmax_t heavy = 0;   // les octets en base64 deja mis
     std::size_t textBudget = textparts::budgetBytes(req, kAnthropicWindow);   // les textes que prepare n'a pas vus
@@ -442,23 +454,39 @@ void AnthropicStream::handle(const SseEvent& e) {
     const std::string type = e.event == "message" || e.event.empty() ? v.str("type") : e.event;
     // 1.16.0 : les jetons de la reponse (message_start : l'entree et le cache ; message_delta : la
     // sortie, cumulee) - un evenement Usage a chaque nouvelle valeur.
-    const auto readUsage = [this](const json::Value& u) {
+    // 1.22.6 : `final` (message_delta) - la sortie est celle de la fin : l'evenement le dit (text "fin"), meme sans changement.
+    const auto readUsage = [this](const json::Value& u, bool final) {
         if (!u.isObject()) return;
         const ProviderUsage before = usage_;
         if (u.has("input_tokens")) usage_.input = u.integer("input_tokens");
         if (u.has("cache_creation_input_tokens")) usage_.cacheWrite = u.integer("cache_creation_input_tokens");
         if (u.has("cache_read_input_tokens")) usage_.cacheRead = u.integer("cache_read_input_tokens");
         if (u.has("output_tokens")) usage_.output = u.integer("output_tokens");
-        if (usage_.input == before.input && usage_.output == before.output && usage_.cacheRead == before.cacheRead && usage_.cacheWrite == before.cacheWrite)
+        if (usage_.input == before.input && usage_.output == before.output && usage_.cacheRead == before.cacheRead && usage_.cacheWrite == before.cacheWrite
+            && !(final && !usage_.empty()))
             return;
         ProviderEvent ue;
         ue.type = ProviderEvent::Type::Usage;
         ue.usage = usage_;
+        if (final) ue.text = "fin";
         out_.push_back(std::move(ue));
+    };
+    // 1.22.6 : l'activite en direct (Progress) - un morceau de reflexion, de l'entree d'un outil qui s'ecrit.
+    const auto progress = [this](const char* what, long long amount, const Block* b, std::string chunk) {
+        ProviderEvent pe;
+        pe.type = ProviderEvent::Type::Progress;
+        pe.text = what;
+        pe.amount = amount;
+        if (b) {
+            pe.toolName = b->name;
+            pe.toolUseId = b->id;
+        }
+        pe.toolInputJson = std::move(chunk);
+        out_.push_back(std::move(pe));
     };
     if (type == "message_start") {
         status("reflexion");
-        readUsage(v.at("message").at("usage"));
+        readUsage(v.at("message").at("usage"), false);
     } else if (type == "content_block_start") {
         const int index = static_cast<int>(v.integer("index"));
         const auto& cb = v.at("content_block");
@@ -478,8 +506,10 @@ void AnthropicStream::handle(const SseEvent& e) {
             b.id = cb.str("id");
             b.name = cb.str("name");
             if (const auto* in = cb.find("input"); in && in->isObject() && !in->members().empty()) b.start = json::write(*in, false);
+            progress("entree", 0, &b, b.start);   // 1.22.6 : l'outil qui commence a s'ecrire (son nom)
         } else if (b.type == "thinking" || b.type == "redacted_thinking") {
             status("reflexion");
+            progress("reflexion", static_cast<long long>(cb.str("thinking").size()), nullptr, {});   // 1.22.6 : un bloc de reflexion
         }
         blocks_[index] = std::move(b);
     } else if (type == "content_block_delta") {
@@ -496,9 +526,16 @@ void AnthropicStream::handle(const SseEvent& e) {
                 emitted_ = true;
             }
         } else if (dt == "input_json_delta") {
-            if (auto it = blocks_.find(index); it != blocks_.end()) it->second.json += d.str("partial_json");
+            if (auto it = blocks_.find(index); it != blocks_.end()) {
+                const std::string part = d.str("partial_json");
+                it->second.json += part;
+                if (!part.empty()) progress("entree", static_cast<long long>(part.size()), &it->second, part);   // 1.22.6 : lue pendant qu'elle s'ecrit
+            }
+        } else if (dt == "thinking_delta") {
+            // 1.22.6 : la reflexion qui arrive (un service qui la montre) : sa longueur, pour le compteur - jamais son texte.
+            if (const std::size_t n = d.str("thinking").size(); n > 0) progress("reflexion", static_cast<long long>(n), nullptr, {});
         }
-        // thinking_delta, signature_delta, citations_delta : ignores (l'etat "reflexion" suffit).
+        // signature_delta, citations_delta : ignores.
     } else if (type == "content_block_stop") {
         const int index = static_cast<int>(v.integer("index"));
         auto it = blocks_.find(index);
@@ -517,7 +554,7 @@ void AnthropicStream::handle(const SseEvent& e) {
     } else if (type == "message_delta") {
         const auto& d = v.at("delta");
         if (const auto* r = d.find("stop_reason"); r && r->isString()) stopReason_ = r->asString();
-        readUsage(v.at("usage"));
+        readUsage(v.at("usage"), true);
     } else if (type == "message_stop") {
         stopped_ = true;
         const std::string reason = stopReason_.empty() ? std::string("end_turn") : stopReason_;
@@ -694,6 +731,12 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
             push(statusEvent("connexion"));
         }
     }
+    // 1.22.6 : L'ENTREE DES OUTILS EN DIRECT (eager_input_streaming) - le service envoie l'entree d'un appel d'outil pendant
+    // qu'elle s'ecrit, au lieu de la garder jusqu'a la fin : la ligne d'activite dit l'operation en cours. Un service (un relais)
+    // qui refuse ce champ : la demande repart aussitot sans lui (une fois).
+    const std::string plainTools = request.toolsJson;
+    bool eager = opt_.eagerInput && !request.toolsJson.empty();
+    if (eager) request.toolsJson = eagerTools(request.toolsJson);
     hr.body = anthropicBody(request);   // lit les pieces jointes : ici, sur le fil
     hr.connectTimeoutSeconds = opt_.connectTimeout;
     hr.idleTimeoutSeconds = std::clamp(request.timeoutSeconds, 5, 600);
@@ -716,7 +759,9 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
     };
     const bool locals = library.active() || !request.localTools.empty();
     int        shrinks = 0;   // 1.21.3 : les longueurs de reponse refusees
+    int        callNo = 0;    // 1.22.6 : le rang de l'appel au service (un outil repondu ici, puis la suite : un appel de plus)
     const auto route = [&](ProviderEvent e) {
+        e.call = callNo;
         if (locals) {
             const bool isRead = library.active() && e.toolName == textparts::kReadTool;
             if (e.type == ProviderEvent::Type::ToolUse && (isRead || localIndex(e.toolName) >= 0)) {
@@ -777,6 +822,15 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                 // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
                 // 1.21.0 : ou un outil local (le bac a sable) : sa reponse, de meme.
                 std::string result;
+                {   // 1.22.6 : l'outil repondu ici commence (l'activite : ce qu'il lit, ce qu'il cherche)
+                    ProviderEvent pe;
+                    pe.type = ProviderEvent::Type::Progress;
+                    pe.text = "outil";
+                    pe.toolName = readCall->toolName;
+                    pe.toolInputJson = readCall->toolInputJson;
+                    pe.call = callNo;
+                    push(std::move(pe));
+                }
                 if (const int li = localIndex(readCall->toolName); li >= 0) {
                     const LocalTool& tool = request.localTools[static_cast<std::size_t>(li)];
                     ++localCalls[static_cast<std::size_t>(li)];
@@ -801,6 +855,14 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(back));
                 hr.body = anthropicBody(request);
+                {   // 1.22.6 : la suite part : un nouvel appel au service (ses jetons s'ajoutent)
+                    ProviderEvent pe;
+                    pe.type = ProviderEvent::Type::Progress;
+                    pe.text = "appel";
+                    pe.toolName = readCall->toolName;
+                    pe.call = ++callNo;
+                    push(std::move(pe));
+                }
                 turnText.clear();
                 readCall.reset();
                 heldDone.reset();
@@ -825,6 +887,14 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
             return finish(errorEvent(r.error, 0, canRetry));
         } else {
             const ApiError e = apiError(status, errBody, request.model);
+            // 1.22.6 : un service qui ne connait pas l'entree des outils en direct : aussitot sans elle.
+            if (status == 400 && eager && (e.message.find("eager_input_streaming") != std::string::npos || errBody.find("eager_input_streaming") != std::string::npos)) {
+                eager = false;
+                request.toolsJson = plainTools;
+                hr.body = anthropicBody(request);
+                attempt = -1;   // une nouvelle demande, pas une nouvelle tentative
+                continue;
+            }
             // 1.21.3 : la longueur de la reponse refusee (au-dela de ce que le modele, ou le contexte, accepte) : redemandee
             // aussitot avec ce que le service dit accepter (quatre fois au plus) ; le panneau retient la limite du modele.
             if (status == 400 && shrinks < 4)
@@ -846,6 +916,15 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
             if (asked > opt_.maxRetryAfter)
                 return finish(errorEvent(retry->text + " Le service demande d'attendre " + secondsText(asked) + " : r\xC3\xA9" "essaie plus tard.", retry->status, true));
             wait = std::max(wait, asked);
+        }
+        {   // 1.22.6 : l'attente, en secondes (l'activite : le compte a rebours)
+            ProviderEvent pe;
+            pe.type = ProviderEvent::Type::Progress;
+            pe.text = "attente";
+            pe.seconds = wait;
+            pe.httpStatus = retry->status;
+            pe.call = callNo;
+            push(std::move(pe));
         }
         push(statusEvent("reprise", retry->text + " Nouvelle tentative (" + std::to_string(attempt + 1) + "/" + std::to_string(opt_.maxRetries) + ") dans "
                                         + secondsText(wait) + "\xE2\x80\xA6"));

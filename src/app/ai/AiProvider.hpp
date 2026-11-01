@@ -126,6 +126,9 @@ struct ProviderUsage {
     long long output{0};       // les jetons de sortie
     long long cacheRead{0};    // lus du cache (moins chers)
     long long cacheWrite{0};   // ecrits au cache
+    // 1.22.6 (a la fin) : dont la reflexion (comprise dans `output`), quand le service la compte a part (compatibles OpenAI :
+    // completion_tokens_details.reasoning_tokens) ; 0 : non dite.
+    long long reasoning{0};
     [[nodiscard]] long long total() const noexcept { return input + output + cacheRead + cacheWrite; }
     [[nodiscard]] bool      empty() const noexcept { return total() == 0; }
 };
@@ -154,8 +157,17 @@ struct ProviderEvent {
         ToolUse,   // un appel d'outil COMPLET : toolUseId, toolName, toolInputJson
         Done,      // la fin : stopReason ("end_turn", "tool_use", "max_tokens", "refusal", "arrete")
         Error,     // text : ce qui ne va pas, pour l'utilisateur ; httpStatus, retryable
-        Usage      // 1.16.0 : usage (les jetons de la reponse, au fil de l'eau ou a la fin) et/ou limits
-                   //          (les en-tetes de la reponse) - l'affichage en direct de la limite
+        Usage,     // 1.16.0 : usage (les jetons de la reponse, au fil de l'eau ou a la fin) et/ou limits
+                   //          (les en-tetes de la reponse) - l'affichage en direct de la limite ;
+                   //          1.22.6 : text "fin" - la sortie de cet usage est celle de la fin de l'appel (message_delta,
+                   //          le dernier morceau d'un compatible OpenAI) ; vide : peut-etre provisoire (message_start)
+        Progress   // 1.22.6 : CE QUI SE PASSE (l'activite en direct, AiActivity.hpp ; rien ne change dans la reponse) - text :
+                   //          "reflexion" (un morceau de la reflexion : amount octets ; 0 - un bloc de reflexion commence),
+                   //          "entree" (un morceau de l'entree de l'appel d'outil qui s'ecrit : toolName, toolUseId ;
+                   //          toolInputJson = le morceau), "outil" (un outil repondu sur le fil du fournisseur commence :
+                   //          toolName, toolInputJson = son entree entiere), "appel" (un nouvel appel au service part dans
+                   //          cette demande, apres un outil repondu : call = son rang ; toolName = l'outil), "attente" (une
+                   //          nouvelle tentative dans `seconds` secondes ; httpStatus : la cause)
     };
     Type        type{Type::Status};
     std::string text;
@@ -173,6 +185,12 @@ struct ProviderEvent {
     // 1.20.0 : Usage d'une lecture prealable (une partie d'un gros texte joint, lue a part) : a AJOUTER a la
     // consommation de la demande (pas le dernier recu : celui de la reponse elle-meme).
     bool           preread{false};
+    // 1.22.6 (a la fin) : L'ACTIVITE ET LE BILAN PAR APPEL - `call` : le rang de l'appel au service dans cette demande (0, puis
+    // 1, 2... apres chaque outil repondu sur le fil du fournisseur : ses jetons s'AJOUTENT a ceux des precedents ; Usage le
+    // porte, comme Progress) ; `amount`, `seconds` : ceux de Progress.
+    int            call{0};
+    long long      amount{0};
+    double         seconds{-1};
 };
 
 class Provider {

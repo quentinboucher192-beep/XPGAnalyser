@@ -383,6 +383,7 @@ private:
     UsageBand                band_;
     std::vector<std::string> bandLines_;
     std::string              bandKey_;
+    double                   bandAt_{-1.0};   // 1.22.6 : pendant une reponse, refaite quatre fois par seconde au plus
     // 1.21.2 : l'onglet Notifications (les deux onglets sous l'en-tete, la vue du journal, la pastille).
     void                     syncNotifications();                         // le journal a change : la vue, la pastille
     [[nodiscard]] bool       looking(const std::string& conversation) const;   // cette conversation est-elle a l'ecran ?
@@ -510,6 +511,19 @@ public:
     [[nodiscard]] std::vector<std::string> processLines(int message) const;
     [[nodiscard]] gfx::Rect processRect(int message) const;
     bool clickProcessLine(int message, std::size_t line);
+    // 1.22.6 : CE QUE FAIT L'IA (Assistant::activity) - les lignes de l'activite telles qu'elles sont montrees (le contexte, la
+    // ligne, puis les etapes passees si l'historique est deplie), son icone (un clic replie ou deplie l'historique) ; LE BILAN
+    // d'une reponse (le message de la conversation ouverte, celui de la reponse en cours compris) : sa ligne, son << + >> (la
+    // place au dernier dessin ; vide : pas de bilan), deplie ou non, ses lignes de detail. Les essais s'en servent.
+    [[nodiscard]] std::vector<std::string> activityLines() const;
+    [[nodiscard]] gfx::Rect                activityToggleRect() const noexcept { return historySpot_; }
+    [[nodiscard]] bool                     activityHistoryOpen() const noexcept { return historyOpen_; }
+    void                                   setActivityHistoryOpen(bool open);
+    [[nodiscard]] std::string              billText(int message) const;
+    [[nodiscard]] std::vector<std::string> billDetailLines(int message) const;
+    [[nodiscard]] gfx::Rect                billRect(int message) const;
+    [[nodiscard]] bool                     billOpen(int message) const;
+    void                                   setBillOpen(int message, bool open);
 
 protected:
     void onLayout() override;
@@ -533,6 +547,19 @@ private:
     mutable std::vector<std::pair<gfx::Rect, std::string>> copySpots_;
     mutable std::string copied_;
     mutable double      copiedAt_{-1.0};
+    // 1.22.6 : l'activite lue au plus kRefresh fois par seconde (la mise en page la relit) ; l'historique deplie ; les bilans
+    // deplies (conversation|message) ; les places du dernier dessin (le << + >> de chaque bilan, l'icone de l'historique).
+    [[nodiscard]] const activity::Snapshot& activityNow(bool fresh) const;
+    [[nodiscard]] std::string billKey(int message) const;
+    mutable activity::Snapshot                 act_;
+    mutable double                             actAt_{-1e9};
+    mutable activity::Bill                     liveBill_;
+    bool                                       historyOpen_{true};
+    std::set<std::string>                      billOpen_;
+    std::vector<std::pair<gfx::Rect, int>>     billSpots_;
+    gfx::Rect                                  historySpot_{};
+    bool                                       actRemeasure_{false};   // la ligne demande une rangee de plus : la mise en page suit
+    double                                     actRemeasureAt_{-1e9};  // ... une fois par lecture de la ligne (kRefresh)
     struct Block {                 // un message mis en page
         int               message{-1};
         bool              user{false};
@@ -602,6 +629,18 @@ private:
         bool                     procOpen{false};
         // remplacee par sa correction (l'avis du logiciel) : le message de la proposition corrigee (-1 : pas encore la)
         int                      replacedBy{-1};
+        // 1.22.6 (a la fin) : CE QUE FAIT L'IA (Assistant::activity) - sous l'indicateur de la reponse en cours, ou sous une
+        // reponse dont la proposition se verifie : le contexte (une mission, une correction), la ligne, les etapes passees
+        // montrees ; ce que l'indicateur dit en plus (une nouvelle tentative) ; LE BILAN (Assistant::billOf, liveBill) : sa
+        // ligne et son << + >>, son detail deplie. Hauteurs relatives au haut du bloc (0 : rien).
+        float                    actY{0.f};
+        std::size_t              actRows{1};     // la ligne d'activite, a la ligne (deux au plus)
+        bool                     actContext{false};
+        std::size_t              actHistory{0};
+        bool                     showDetail{true};
+        float                    billY{0.f};
+        std::string              billText;
+        std::vector<std::string> billLines;
     };
     struct CardButtons {
         int         message{-1};
@@ -626,6 +665,8 @@ private:
     void applyAnchor();            // showLastExchange, une fois la largeur connue
     void paintCard(const ui::PaintContext&, const Block&, gfx::Rect card);
     void paintIndicator(const ui::PaintContext&, gfx::Rect at);
+    void paintActivity(const ui::PaintContext&, const Block&, float top);   // 1.22.6 : ce que fait l'IA
+    void paintBill(const ui::PaintContext&, const Block&, float top);       // 1.22.6 : le bilan, son << + >>
     [[nodiscard]] float viewHeight() const noexcept;
 
     AiPanel&                 panel_;

@@ -765,6 +765,10 @@ if(XPG_BUILD_TESTS)
     # nouveaux (l'objet, l'operation), le cache du projet d'avant, merge, le texte pour l'IA, le JSON, la previsualisation.
     xpg_add_test_executable(ai_build_test tests/ai_build_test.cpp)
     xpg_target_link_libraries(ai_build_test PRIVATE xpg_app)
+    # 1.22.6 : ce que fait l'IA en direct (la ligne d'activite) et ce que ca coute (le bilan par action, les compteurs mis a
+    # jour pendant la reponse) - le suivi evenement par evenement, le flux Anthropic, un faux fournisseur par morceaux, le panneau.
+    xpg_add_test_executable(ai_activite_test tests/ai_activite_test.cpp)
+    xpg_target_link_libraries(ai_activite_test PRIVATE xpg_app)
     # 1.21.0 : les modeles de fichiers de l'Assistant (une liste d'E/S, un fichier reseau, des reports joints en .xlsx/.xlsm) -
     # la detection, les modeles en memoire, le .xia, les propositions (variables, types, equipements, adresses), l'outil des lignes.
     xpg_add_test_executable(ai_modeles_fichiers_test tests/ai_modeles_fichiers_test.cpp)
@@ -971,6 +975,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aimissionsui COMMAND ai_missions_ui_test)             # 1.22.0 : l'interface des missions IA (onglet, bande, tableau de bord, reprise)
     xpg_add_test(NAME aicorrections COMMAND ai_corrections_test)            # 1.22.1 : corriger une proposition depuis ses erreurs (clic droit)
     xpg_add_test(NAME aibuild COMMAND ai_build_test)                        # 1.22.5 : l'avis du logiciel (Generer et Compiler la proposition)
+    xpg_add_test(NAME aiactivite COMMAND ai_activite_test)                  # 1.22.6 : ce que fait l'IA en direct, ce que ca coute
     xpg_add_test(NAME aimodelesfichiers COMMAND ai_modeles_fichiers_test)   # 1.21.0 : les modeles de fichiers (E/S, reseau, reports)
     xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents

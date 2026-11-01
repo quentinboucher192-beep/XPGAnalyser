@@ -445,6 +445,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileExplorerHost.cpp" />
     <ClCompile Include="src\app\FileFinder.cpp" />
     <ClCompile Include="src\app\FileFinderPane.cpp" />
+    <ClCompile Include="src\app\ai\AiActivity.cpp" />
     <ClCompile Include="src\app\ai\AiAgentTools.cpp" />
     <ClCompile Include="src\app\ai\AiAssistant.cpp" />
     <ClCompile Include="src\app\ai\AiAnthropic.cpp" />
@@ -1020,6 +1021,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileExplorerHost.hpp" />
     <ClInclude Include="src\app\FileFinder.hpp" />
     <ClInclude Include="src\app\FileFinderPane.hpp" />
+    <ClInclude Include="src\app\ai\AiActivity.hpp" />
     <ClInclude Include="src\app\ai\AiAgentTools.hpp" />
     <ClInclude Include="src\app\ai\AiAssistant.hpp" />
     <ClInclude Include="src\app\ai\AiAnthropic.hpp" />

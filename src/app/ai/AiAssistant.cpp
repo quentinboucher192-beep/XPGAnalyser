@@ -1042,6 +1042,13 @@ void Assistant::stop() {
         m.provider = gen_.provider;
         m.model = gen_.model;
         if (!call.id.empty()) m.extra.set("mission", call.id);
+        // 1.22.6 : ce que la reponse arretee a deja consomme (le service le compte) - au cumul, avec le message, et son bilan.
+        if (gen_.live) {
+            recordLive();
+            if (!gen_.usage.empty() || !gen_.preread.empty())
+                m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total() + gen_.carried.total()));
+            keepBill(m, false);
+        }
         gen_ = {};
         save(*c);
     } else {
@@ -1616,6 +1623,7 @@ bool Assistant::startCheck(const std::string& conversation, const Proposal& p, C
     job->purpose = purpose;
     job->attempt = attempt;
     job->revision = doc->revision;
+    job->started = lastNow_;   // 1.22.6
     auto project = [&] {
         XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
         return std::make_shared<const hmi::Project>(doc->project);
@@ -1854,6 +1862,7 @@ bool Assistant::startBuild(Conversation& c, int message, const Check* validated)
     job->conversation = c.id;
     job->proposalId = p.id;
     job->key = contentKey(p);
+    job->started = lastNow_;   // 1.22.6
     auto project = [&] {
         XPG_MESURE("ia.copie-projet");   // la copie se fait sur ce fil (comme la verification de fond)
         return std::make_shared<const hmi::Project>(doc->project);
@@ -3068,6 +3077,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         }
     }
     const int maxTokens = req.maxTokens;
+    const long long contextGuess = activity::requestTokens(req);   // 1.22.6 : env. les jetons envoyes (la ligne d'activite)
     if (!prov->start(std::move(req), why)) return false;
     retire();
     provider_ = std::move(prov);
@@ -3096,6 +3106,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         gen_.viewId = ctx.view->id;
         gen_.fingerprint = fingerprint(*ctx.view);
     }
+    startActivity(contextGuess);   // 1.22.6
     (void)doc;
     ++revision_;
     return true;
@@ -3111,6 +3122,8 @@ void Assistant::pollLive() {
         return;
     }
     for (auto& e : provider_->poll()) {
+        // 1.22.6 : l'activite en direct et le cout de chaque appel (la mise en page suit quand les etapes changent)
+        if (gen_.act.observe(e, lastNow_)) ++revision_;
         switch (e.type) {
             case ProviderEvent::Type::Status: {
                 Phase ph = gen_.phase;
@@ -3185,7 +3198,9 @@ void Assistant::pollLive() {
                     gen_.preread.cacheRead += e.usage.cacheRead;
                     gen_.preread.cacheWrite += e.usage.cacheWrite;
                 } else if (!e.usage.empty()) {
-                    gen_.usage = e.usage;
+                    // 1.22.6 : la somme des appels de la demande (un outil repondu sur le fil du fournisseur, puis la suite :
+                    // chaque appel a ses jetons ; avant, le dernier remplacait les precedents)
+                    gen_.usage = gen_.act.started() ? gen_.act.realUsage() : e.usage;
                 }
                 ++revision_;
                 break;
@@ -3199,6 +3214,8 @@ void Assistant::pollLive() {
             case ProviderEvent::Type::Error:
                 failLive(e);
                 return;
+            case ProviderEvent::Type::Progress:   // 1.22.6 : l'activite seule (observe, plus haut)
+                break;
         }
     }
 }
@@ -3240,6 +3257,8 @@ void Assistant::finishLive(const std::string& stopReason) {
         spent.cacheRead += gen_.usage.cacheRead + gen_.preread.cacheRead;
         spent.cacheWrite += gen_.usage.cacheWrite + gen_.preread.cacheWrite;
         const std::string cutText = trim(gen_.text);
+        gen_.act.finish(lastNow_, true);   // 1.22.6 : le bilan de la reponse coupee, montre avec sa reprise
+        const activity::Bill cutBill = gen_.act.bill(lastNow_);
         c->messages.pop_back();
         gen_ = {};
         splitFrom_ = cut;
@@ -3248,6 +3267,7 @@ void Assistant::finishLive(const std::string& stopReason) {
         std::string why;
         if (startLive(*c, request, &why)) {
             gen_.carried = spent;
+            gen_.act.carry(cutBill);   // 1.22.6
             gen_.detail = "La proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse (" + groupedTokens(cut)
                           + " jetons) : redemand\xC3\xA9" "e en plusieurs parties\xE2\x80\xA6";
             notice_ = "Assistant IA : la proposition \xC3\xA9tait trop longue pour une r\xC3\xA9ponse ; elle est redemand\xC3\xA9" "e en plusieurs parties.";
@@ -3282,6 +3302,7 @@ void Assistant::finishLive(const std::string& stopReason) {
     // bloc ```json sort de la bulle (la carte la montre ; le tour suivant la reecrit pour le modele).
     if (!gen_.usage.empty() || !gen_.preread.empty() || !gen_.carried.empty())
         m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total() + gen_.carried.total()));
+    keepBill(m, gen_.tool && gen_.tool->name == kOperationsTool);   // 1.22.6 : le bilan par action, garde avec la reponse
     if (gen_.textTool && gen_.tool) {
         std::string rest;
         if (extractProposalBlock(m.text, nullptr, &rest)) m.text = rest;
@@ -3453,6 +3474,7 @@ void Assistant::failLive(const ProviderEvent& e) {
         m.text = trim(gen_.text);
         if (!gen_.usage.empty() || !gen_.preread.empty())
             m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total()));   // 1.16.0
+        keepBill(m, false);   // 1.22.6
         m.note = e.text.empty() ? std::string("Erreur inconnue.") : e.text;
         m.state = "erreur";
         m.date = isoDate(now());
@@ -3697,9 +3719,20 @@ UsageBand Assistant::usageBand(double now) const {
     st.conversation = 0;
     if (const auto* c = current())
         for (const auto& m : c->messages) st.conversation += m.extra.integer("jetons");
-    if (gen_.live && gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += gen_.usage.total() + gen_.preread.total();   // en cours
+    UsageTotals totals = usageTotals();
+    // 1.22.6 : EN DIRECT - ce que la reponse en cours a deja consomme (le reel des que le service le dit, sinon une estimation
+    // d'apres le texte recu, << env. >>) compte PENDANT la reponse : la conversation, la journee, le mois, le budget ; le
+    // contexte de son dernier appel. Au cumul (IA/usage.json) : a sa fin, le reel seulement.
+    if (gen_.live && generating()) {
+        const long long live = gen_.act.started() ? gen_.act.liveTokens() : gen_.usage.total() + gen_.preread.total();
+        if (gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += live + gen_.carried.total();
+        totals.tokensToday += live;
+        totals.tokensMonth += live;
+        st.estimate = gen_.act.estimating();
+        if (const long long ctx = gen_.act.contextNow(); ctx > 0) st.contextUsed = ctx;
+    }
     st.contextWindow = contextWindow();
-    return app::ai::usageBand(settings_, st, usageTotals(), localService(), now);
+    return app::ai::usageBand(settings_, st, totals, localService(), now);
 }
 
 // =====================================================================================================================
@@ -5012,6 +5045,124 @@ int Assistant::messageOfProposal(std::string_view proposalId) const {
     for (std::size_t i = 0; i < c->messages.size(); ++i)
         if (c->messages[i].proposal && c->messages[i].proposal->id == proposalId) return static_cast<int>(i);
     return -1;
+}
+
+// =====================================================================================================================
+//  1.22.6 : CE QUE FAIT L'IA, EN DIRECT, ET CE QUE CA COUTE (AiActivity.hpp)
+// ---------------------------------------------------------------------------------------------------------------------
+//  Le suivi (gen_.act) lit chaque evenement du fournisseur (pollLive) : la ligne d'activite, les etapes, les jetons de
+//  chaque appel - sans revision de plus, sauf quand les etapes changent (la mise en page). A la fin de la reponse (finie,
+//  en erreur, arretee), son bilan va avec le message (extra << bilan >>) ; ses etapes restent pour la ligne qui suit (la
+//  verification de sa proposition, Generer et Compiler).
+// =====================================================================================================================
+void Assistant::startActivity(long long contextGuess) {
+    activity::Tracker::Setup s;
+    s.contextEstimate = contextGuess;
+    s.textTool = gen_.textTool;
+    const MissionCall& call = gen_.mission;
+    const bool missionFix = !call.fixOf.empty();
+    if (missionFix || !gen_.fixOf.empty()) {   // une correction automatique (l'avis du logiciel, 1.22.5)
+        const std::string n = "Correction " + std::to_string(missionFix ? call.fixN : gen_.fixN) + "/" + std::to_string(kMaxFixes);
+        const std::string who = missionFix ? call.fixWho : gen_.fixWho;
+        s.purpose = n + " (" + who + ")";
+        s.context = n + " (" + fixLabel(who, missionFix ? call.fixErrors : gen_.fixErrors) + ")";
+    }
+    if (!call.id.empty()) {   // une mission : l'etape servie
+        const mission::Mission* m = findMission(call.id);
+        const auto stepName = [&](const std::string& id) {
+            const mission::Step* st = m ? m->step(id) : nullptr;
+            return st && !st->title.empty() ? id + " : " + st->title : id;
+        };
+        std::string what;
+        if (call.purpose == "plan") {
+            what = "plan";
+            if (s.purpose.empty()) s.purpose = "Plan de mission";
+        } else if (call.purpose == "actualisation") {
+            what = "actualisation du plan";
+            if (s.purpose.empty()) s.purpose = "Actualisation du plan de mission";
+        } else if (call.purpose == "correction") {
+            what = "correction de " + stepName(call.step);
+            if (s.purpose.empty()) s.purpose = "Correction de " + call.step;
+        } else if (!call.steps.empty()) {
+            what = stepName(call.steps.front()) + (call.steps.size() > 1 ? " (+" + std::to_string(call.steps.size() - 1) + ")" : std::string{});
+            if (s.purpose.empty()) s.purpose = "Proposition (" + joined(call.steps, ", ") + ")";
+        }
+        s.context = (m && !m->name.empty() ? "Mission " + guillemets(m->name) : std::string("Mission")) + (what.empty() ? std::string{} : " \xC2\xB7 " + what)
+                    + (s.context.empty() ? std::string{} : " \xC2\xB7 " + s.context);
+    }
+    if (gen_.split) {   // 1.21.3 : la reprise en parties d'une proposition coupee
+        if (s.purpose.empty()) s.purpose = "Proposition (reprise en parties)";
+        s.context += (s.context.empty() ? std::string{} : std::string(" \xC2\xB7 ")) + "Reprise en plusieurs parties";
+    }
+    gen_.act.start(std::move(s), lastNow_);
+}
+
+void Assistant::keepBill(Message& m, bool proposed) {
+    if (!gen_.live || !gen_.act.started()) return;
+    gen_.act.finish(lastNow_, proposed);
+    const activity::Bill b = gen_.act.bill(lastNow_);
+    if (!b.empty() && b.total() > 0) m.extra.set("bilan", activity::toJson(b));
+    lastAct_ = gen_.act;
+    lastActConv_ = gen_.conversation;
+    lastActMsg_ = gen_.message;
+}
+
+activity::Snapshot Assistant::activity(double now) const {
+    XPG_MESURE("ia.activite");   // l'onglet Performances
+    activity::Snapshot s;
+    const Conversation* c = current();
+    if (!c) return s;
+    if (generating()) {
+        if (!gen_.live || !gen_.act.started() || c->id != gen_.conversation) return s;
+        s = gen_.act.snapshot(now);
+        s.message = gen_.message;
+        return s;
+    }
+    // Apres la reponse : le travail de fond sur la proposition la plus recente qui en a (la verification, Generer et Compiler,
+    // l'application sur une copie, une correction qui attend).
+    for (int i = static_cast<int>(c->messages.size()) - 1; i >= 0; --i) {
+        const auto& msg = c->messages[static_cast<std::size_t>(i)];
+        if (!msg.proposal) continue;
+        const Proposal& p = *msg.proposal;
+        std::string line;
+        double since = -1;
+        if (applyJob_ && applyJob_->conversation == c->id && applyJob_->proposalId == p.id) {
+            line = "Application de la proposition sur une copie du projet\xE2\x80\xA6 "
+                   + std::to_string(static_cast<int>(std::lround(applyProgress() * 100.f))) + "\xC2\xA0%";
+        } else if (const auto ck = std::find_if(checkJobs_.begin(), checkJobs_.end(), [&](const auto& j) { return j && j->proposalId == p.id; });
+                   ck != checkJobs_.end()) {
+            line = "R\xC3\xA9ponse re\xC3\xA7ue : v\xC3\xA9rification de " + plural(p.ops.size(), "op\xC3\xA9ration", "op\xC3\xA9rations") + "\xE2\x80\xA6";
+            since = (*ck)->started;
+        } else if (const auto bj = std::find_if(buildJobs_.begin(), buildJobs_.end(), [&](const auto& j) { return j && j->proposalId == p.id; });
+                   bj != buildJobs_.end()) {
+            line = "G\xC3\xA9n\xC3\xA9rer et Compiler sur une copie du projet\xE2\x80\xA6";
+            since = (*bj)->started;
+        } else {
+            for (const auto& f : fixQueue_)
+                if (f.proposalId == p.id)
+                    line = "Correction " + std::to_string(f.n) + "/" + std::to_string(kMaxFixes) + " en attente (" + fixWhat(f.who, f.errors)
+                           + ") : elle part \xC3\xA0 la fin de la r\xC3\xA9ponse en cours\xE2\x80\xA6";
+        }
+        if (line.empty()) continue;
+        if (since >= 0 && now - since >= 1.0) line += " (" + activity::clockText(now - since) + ")";
+        s.line = std::move(line);
+        s.message = i;
+        s.keepDetail = false;
+        if (lastActConv_ == c->id && lastActMsg_ == i) s.history = lastAct_.history();
+        return s;
+    }
+    return s;
+}
+
+activity::Bill Assistant::liveBill(double now) const {
+    if (!generating() || !gen_.live || !gen_.act.started()) return {};
+    return gen_.act.bill(now);
+}
+
+std::optional<activity::Bill> Assistant::billOf(int message) const {
+    const Conversation* c = current();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size())) return std::nullopt;
+    return activity::billFrom(c->messages[static_cast<std::size_t>(message)].extra);
 }
 
 } // namespace app::ai
