@@ -453,7 +453,8 @@ void errors() {
     ai::Proposal fix = f.proposal("op10", {type("T_PompeB", {{"Marche", "BOOL", ""}}, "S1")});
     std::string why;
     check(f.run(m, fix, {"S1"}, &why), "la correction appliquee (" + why + ")");
-    check(m.step("S1")->state == S::Done && m.step("S2")->state == S::Ready && m.step("S4")->state == S::Waiting, "S1 corrigee ; S2 prete ; S4 attend");
+    check(m.step("S1")->state == S::Done && m.step("S2")->state == S::Waiting && has(m.step("S2")->note, "S3") && m.step("S4")->state == S::Waiting,
+          "S1 corrigee ; S2 attend encore S3 (des variables dependent des equipements : implicite) ; S4 attend");
 }
 
 // ---- pause, annulation -----------------------------------------------------------------------------------------------
