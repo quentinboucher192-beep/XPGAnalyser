@@ -1352,6 +1352,29 @@ void AiPanel::editRequest(int message) {
     say("La demande est dans la saisie : modifie-la, puis Entr\xC3\xA9" "e.");
 }
 
+void AiPanel::askFix(const std::string& text) {
+    if (text.empty()) return;
+    prompt_->setText(text);
+    prompt_->takeFocus();
+    sync();
+    say("La demande de correction est dans la saisie : relis-la, puis Entr\xC3\xA9" "e. Rien n'est envoy\xC3\xA9 seul.");
+}
+
+void AiPanel::notice(const std::string& text) {
+    if (!text.empty()) say(text);
+}
+
+void AiPanel::openPreviewFor(int message, const std::string& variable) {
+    const Proposal* p = assistant_->proposal(message);
+    if (!p || p->state != "proposee" || !ui_.showDialog) {
+        openPreview(message);
+        return;
+    }
+    auto dialog = std::make_unique<AiPreviewDialog>(*this, message);
+    dialog->focusVariable(variable, true);   // le choix du haut vise cette variable, sa liste ouverte
+    ui_.showDialog(std::move(dialog), [](const menu::DialogResult&) {});
+}
+
 void AiPanel::openSettings() {
     if (!ui_.showDialog) return;
     ui_.showDialog(std::make_unique<AiSettingsDialog>(*this), [this](const menu::DialogResult&) {
@@ -2589,6 +2612,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     if (p) {
         std::string base = p->id + "|" + p->state + "|" + p->variable.use + (p->variable.create ? "+" : "-");
         for (const auto x : p->excluded) base += "x" + std::to_string(x);   // 1.19.0 : les etapes retirees
+        base += fixes::key(*p);   // 1.22.1 : les corrections (un choix par variable introuvable) - la carte se revalide
         // 1.16.0 : l'empreinte de ce que la proposition touche (la vue visee, la vue neuve, les variables et les types).
         // 1.20.0 : relue seulement si le projet a change (sa revision) ou chaque seconde - pas a chaque peinture.
         if (doc) {
@@ -2833,6 +2857,13 @@ void AiChatView::measure() {
                         ch += static_cast<float>(more.size()) * kNoteH + (b.createLines.empty() ? 2.f : 0.f);
                         for (auto& l : more) b.createLines.push_back(std::move(l));
                     }
+                    // 1.22.1 : LES CORRECTIONS faites au clic droit sur une erreur (la proposition seule) - en une ligne.
+                    if (open)
+                        if (const std::string fixed = fixes::summary(*m.proposal); !fixed.empty()) {
+                            auto more = wrapPlain("Corrig\xC3\xA9" "e : " + fixed + ".", kMeta, cw - 24.f);
+                            ch += static_cast<float>(more.size()) * kNoteH + (b.createLines.empty() ? 2.f : 0.f);
+                            for (auto& l : more) b.createLines.push_back(std::move(l));
+                        }
                     // 1.19.0 : LE PLAN D'ACTION - seulement pour une demande qui en merite un (pas une simple question).
                     const plan::Plan& pl = t.plan;
                     const bool showPlan = m.proposal->state != "refusee" && pl.worthShowing();
@@ -2884,11 +2915,13 @@ void AiChatView::measure() {
                         b.buttons.push_back(stale ? "Redemander" : "Refuser\xE2\x80\xA6");
                         // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
                         std::size_t lines = 0;
-                        const auto note = [&](const std::string& what, bool error) {
+                        // 1.22.1 : les doublons regroupes (<< ... (2 operations) >>) ; le clic droit sur une note la corrige.
+                        const auto note = [&](const fixes::Line& l) {
                             if (b.notes.size() >= 3) return;
                             Block::Note n;
-                            n.error = error;
-                            n.lines = wrapPlain(what, kMeta, cw - 44.f);
+                            n.error = l.error;
+                            n.message = l.message;
+                            n.lines = wrapPlain(l.text, kMeta, cw - 44.f);
                             if (n.lines.size() > kNoteLines) {
                                 n.lines.resize(kNoteLines);
                                 n.lines.back() += " \xE2\x80\xA6";
@@ -2896,8 +2929,9 @@ void AiChatView::measure() {
                             lines += n.lines.size();
                             b.notes.push_back(std::move(n));
                         };
-                        for (const auto& e : t.check.errors) note(e, true);
-                        for (const auto& wv : t.check.warnings) note(wv, false);
+                        for (const auto& l : fixes::errorLines(t.check)) note(l);
+                        if (b.notes.size() < 3)
+                            for (const auto& l : fixes::warningLines(t.check)) note(l);
                         ch += 100.f + 6.f + static_cast<float>(lines) * kNoteH + 6.f;
                     } else {
                         b.applied = a.appliedState(static_cast<int>(i));
@@ -3436,12 +3470,18 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     }
     y = area.bottom() + 6.f;
     // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
-    for (const auto& n : b.notes) {
+    for (std::size_t k = 0; k < b.notes.size(); ++k) {
+        const auto& n = b.notes[k];
+        const float top = y;
         ui::drawIcon(ctx.r, n.error ? ui::Icon::Error : ui::Icon::Warning, {card.x + 12.f, y + 1.f, 14.f, 14.f}, n.error ? c.error : c.warning);
         for (const auto& l : n.lines) {
             ctx.r.drawText({card.x + 32.f, y}, l, kMeta, n.error ? c.text : c.textMuted);
             y += kNoteH;
         }
+        // 1.22.1 : sa place (le clic droit : les corrections possibles), et le dire a qui la survole.
+        const gfx::Rect spot{card.x + 8.f, top, card.w - 16.f, std::max(kNoteH, y - top)};
+        noteSpots_.push_back({spot, b.message, k});
+        tips_.emplace_back(spot, n.message + "\nClic droit : les corrections possibles.");
     }
 }
 
@@ -3452,6 +3492,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
     const auto bb = bounds();
     tips_.clear();
     copySpots_.clear();
+    noteSpots_.clear();   // 1.22.1
     const auto& a = panel_.assistant();
     const auto* conv = a.current();
     ctx.r.pushClip(bb);
@@ -3638,6 +3679,96 @@ bool AiChatView::copyCode(const std::string& code) {
     return true;
 }
 
+// ---- 1.22.1 : le clic droit sur une erreur de la carte (AiFixes) --------------------------------------------------------
+std::vector<std::string> AiChatView::cardNotes(int message) const {
+    std::vector<std::string> out;
+    for (const auto& b : blocks_) {
+        if (b.message != message) continue;
+        for (const auto& n : b.notes) {
+            std::string text;
+            for (const auto& l : n.lines) text += (text.empty() ? "" : " ") + l;
+            out.push_back(std::move(text));
+        }
+    }
+    return out;
+}
+
+bool AiChatView::openNoteMenu(int message, std::size_t note) {
+    for (const auto& spot : noteSpots_)
+        if (spot.message == message && spot.note == note) return openNoteMenuAt(message, note, {spot.at.x + 40.f, spot.at.y + spot.at.h / 2.f});
+    const auto bb = bounds();
+    return openNoteMenuAt(message, note, {bb.x + bb.w / 2.f, bb.y + bb.h / 2.f});
+}
+
+bool AiChatView::openNoteMenuAt(int message, std::size_t note, gfx::Point at) {
+    auto& a = panel_.assistant();
+    const Proposal* p = a.proposal(message);
+    if (!p || p->state != "proposee") return false;
+    const Block* block = nullptr;
+    for (const auto& b : blocks_)
+        if (b.message == message) block = &b;
+    if (!block || note >= block->notes.size()) return false;
+    const Thumb& t = thumb(message);
+    if (t.pending()) return false;   // une grosse proposition encore en verification sur son fil de fond
+    const auto& n = block->notes[note];
+    const auto lines = n.error ? fixes::errorLines(t.check) : fixes::warningLines(t.check);
+    const auto line = std::find_if(lines.begin(), lines.end(), [&](const fixes::Line& l) { return l.message == n.message; });
+    if (line == lines.end()) return false;
+    const auto doc = a.host().document ? a.host().document() : nullptr;
+    const fixes::Menu m = fixes::menuFor(*p, t.check, *line, n.error && doc ? &doc->project : nullptr);
+    if (!fixMenu_) {
+        fixMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".corriger")));
+        links_ += fixMenu_->itemChosen->connect([this](int item) { runNoteFix(item); });
+    }
+    fixes::fill(*fixMenu_, m, fixActions_);
+    fixMessage_ = message;
+    fixMenu_->setBounds(bounds());
+    fixMenu_->openAtSurface(toSurface(at));
+    return true;
+}
+
+std::vector<std::string> AiChatView::noteMenuItems() const {
+    return fixMenu_ && fixMenu_->isOpen() ? fixes::labels(*fixMenu_) : std::vector<std::string>{};
+}
+
+bool AiChatView::chooseNoteMenuItem(const std::string& label) {
+    if (!fixMenu_ || !fixMenu_->isOpen()) return false;
+    const int item = fixes::idOf(*fixMenu_, label);
+    if (item < 0) return false;
+    fixMenu_->close();
+    fixMenu_->itemChosen->emit(item);   // le meme chemin qu'un clic
+    return true;
+}
+
+void AiChatView::runNoteFix(int item) {
+    const int message = fixMessage_;
+    if (item < 0 || static_cast<std::size_t>(item) >= fixActions_.size() || message < 0) return;
+    const fixes::Action act = fixActions_[static_cast<std::size_t>(item)];
+    using K = fixes::Action::Kind;
+    switch (act.kind) {
+        case K::Copy:
+            ui::setClipboardText(act.value);
+            panel_.say("Message copi\xC3\xA9.");
+            return;
+        case K::AskAi:   // dans la saisie : rien ne part seul
+            panel_.askFix(act.value);
+            return;
+        case K::Pick:    // la previsualisation, son choix du haut sur cette variable
+            panel_.openPreviewFor(message, act.name);
+            return;
+        default: {
+            std::string said;
+            (void)fixes::apply(panel_.assistant(), message, act, &said);
+            panel_.say(said);
+            stick_ = false;
+            measure();
+            placeCards();
+            invalidate();
+            return;
+        }
+    }
+}
+
 ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
     if (bar_.handle(*this, ev, bounds(), content_, viewHeight(), offset_)) {
         stick_ = atBottom();
@@ -3661,6 +3792,13 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
         }
         return ui::EventResult::Ignored;
     }
+    // 1.22.1 : LE CLIC DROIT sur une erreur (ou un avertissement) d'une carte : le menu des corrections.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right)
+        for (const auto& spot : noteSpots_)
+            if (spot.at.contains(d->pos)) {
+                (void)openNoteMenuAt(spot.message, spot.note, d->pos);
+                return ui::EventResult::Consumed;
+            }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         for (std::size_t i = 0; i < suggestionRects_.size(); ++i)
             if (suggestionRect(i).contains(d->pos)) {

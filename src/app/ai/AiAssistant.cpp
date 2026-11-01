@@ -1687,6 +1687,84 @@ bool Assistant::chooseVariable(int message, VariableChoice choice) {
     return true;
 }
 
+// ---- 1.22.1 : les corrections (le clic droit sur une erreur) -------------------------------------------------
+namespace {
+bool sameName(std::string_view a, std::string_view b) {
+    const auto cut = [](std::string_view s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
+        return s;
+    };
+    a = cut(a);
+    b = cut(b);
+    return a.size() == b.size()
+        && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+               return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+           });
+}
+} // namespace
+
+bool Assistant::chooseVariable(int message, const std::string& from, VariableChoice choice) {
+    auto* c = cur();
+    if (!c || message < 0 || static_cast<std::size_t>(message) >= c->messages.size()) return false;
+    auto& m = c->messages[static_cast<std::size_t>(message)];
+    if (!m.proposal || m.proposal->state != "proposee") return false;
+    choice.from = trim(from);
+    choice.use = trim(choice.use);
+    if (choice.from.empty() || (choice.use.empty() && !choice.create)) return false;
+    if (choice.type.empty()) choice.type = "BOOL";
+    auto& list = m.proposal->choices;
+    const auto it = std::find_if(list.begin(), list.end(), [&](const VariableChoice& x) { return sameName(x.from, choice.from); });
+    if (it != list.end()) {
+        if (*it == choice) return true;
+        *it = std::move(choice);
+    } else {
+        list.push_back(std::move(choice));
+    }
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::clearChoice(int message, const std::string& from) {
+    auto* c = cur();
+    if (!c || message < 0 || static_cast<std::size_t>(message) >= c->messages.size()) return false;
+    auto& m = c->messages[static_cast<std::size_t>(message)];
+    if (!m.proposal || m.proposal->state != "proposee") return false;
+    auto& list = m.proposal->choices;
+    const auto before = list.size();
+    std::erase_if(list, [&](const VariableChoice& x) { return sameName(x.from, from); });
+    if (list.size() == before) return false;
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::excludeOps(int message, const std::vector<std::size_t>& ops, bool excluded) {
+    auto* c = cur();
+    if (!c || message < 0 || static_cast<std::size_t>(message) >= c->messages.size()) return false;
+    auto& m = c->messages[static_cast<std::size_t>(message)];
+    if (!m.proposal || m.proposal->state != "proposee" || ops.empty()) return false;
+    auto& ex = m.proposal->excluded;
+    bool changed = false;
+    for (const auto op : ops) {
+        if (op >= m.proposal->ops.size()) return false;
+        const auto it = std::find(ex.begin(), ex.end(), op);
+        if (excluded && it == ex.end()) {
+            ex.push_back(op);
+            changed = true;
+        } else if (!excluded && it != ex.end()) {
+            ex.erase(it);
+            changed = true;
+        }
+    }
+    if (!changed) return true;
+    std::sort(ex.begin(), ex.end());
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
 void Assistant::autoApply(int message) {
     // 1.22.1 : une proposition lourde s'applique sur un fil de fond (sa verification comprise) ; avec des suppressions,
     // l'ecran demande d'abord (sa verification de fond dit s'il faut confirmer) - jamais une validation sur ce fil.
