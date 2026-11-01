@@ -67,6 +67,21 @@
 //  clic droit : Copier, Retirer l'operation, Demander a l'IA de corriger (la
 //  correction du logiciel dans le texte prepare, quand il en a une).
 //
+//  1.22.6 : TOUTES LES VUES DE LA PROPOSITION. Une proposition peut creer
+//  plusieurs vues (une vue, une popup, un symbole) et toucher des objets d'autres
+//  vues : chacune a son apercu (ai::previews - un passage sur une copie du projet,
+//  ici ou sur un fil de fond pour une grosse proposition, comme la verification
+//  de la carte). Au-dessus de l'apercu, LA BARRE DES VUES : << Vue 2/4 :
+//  Popup_Vanne (neuve, popup) - 1 erreur >>, ses fleches (PageUp / PageDown,
+//  Ctrl+gauche / droite), un clic sur le nom ouvre la liste des vues (ce que
+//  chacune cree, modifie, supprime ; ses erreurs). A gauche, chaque ligne qui
+//  designe des objets dit SUR QUELLE VUE ils sont (le nom en petit a droite :
+//  marque d'une pastille d'accent pour la vue montree, grise pour une autre) ;
+//  choisir une ligne d'une autre vue y fait passer l'apercu, puis l'encadre ; la
+//  puce << Cette vue seulement >> ne garde que les lignes de la vue montree ; les
+//  titres disent << (12, 3 sur cette vue) >>. Les cadres (nouveau, modifie,
+//  supprime, erreur, avertissement, la ligne choisie) valent pour la vue montree.
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -82,7 +97,9 @@
 #include "../../menu/IMenu.hpp"
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ui { class Button; class DropDown; class PopupMenu; class SearchField; }
@@ -94,6 +111,7 @@ class AiPanel;
 class AiPreviewDialog final : public menu::WidgetMenu {
 public:
     AiPreviewDialog(AiPanel& panel, int message);
+    ~AiPreviewDialog() override;   // 1.22.6 : le calcul des vues en cours, attendu
 
     [[nodiscard]] menu::MenuTraits traits() const override;
     [[nodiscard]] std::string      title() const override { return "Pr\xC3\xA9visualisation des modifications"; }
@@ -182,6 +200,30 @@ public:
     [[nodiscard]] std::vector<std::string> buildRows() const;
     bool                                   openBuildMenu(std::size_t line);
 
+    // 1.22.6 : TOUTES LES VUES - le nombre de vues de la proposition (0 : aucune a dessiner), celle qui est montree (son
+    // rang), le calcul encore en cours (une grosse proposition : sur un fil de fond) ; montrer une vue (le zoom revient a
+    // Ajuster), la suivante (+1) ou la precedente (-1) - faux : hors de la liste, au bout ; le titre d'une vue (<< Vue 2/4 :
+    // Popup_Vanne (neuve, popup) - 1 erreur >>), celui de la barre ; la liste des vues (un menu : << titre | ce qu'elle
+    // change >>) ; la vue que dit une ligne de la liste (son nom, << 2 vues >>, vide : aucune) et si c'est la vue montree ;
+    // la puce << Cette vue seulement >> ; les places (la barre : -1 la fleche precedente, 0 le nom, 1 la suivante). Pour les
+    // essais et les scripts ; la souris et le clavier (PageUp, PageDown, Ctrl+gauche / droite) passent par les memes gestes.
+    [[nodiscard]] std::size_t              viewCount() const noexcept;
+    [[nodiscard]] std::size_t              shownView() const noexcept { return shown_; }
+    [[nodiscard]] bool                     viewsPending() const noexcept { return viewJob_ != nullptr; }
+    bool                                   showView(std::size_t rank);
+    bool                                   stepView(int delta);
+    [[nodiscard]] std::string              viewTitle(std::size_t rank) const;
+    [[nodiscard]] std::string              viewBarText() const;
+    bool                                   openViewMenu();
+    [[nodiscard]] bool                     viewMenuOpen() const;
+    [[nodiscard]] std::vector<std::string> viewMenuItems() const;
+    [[nodiscard]] std::string              rowView(const std::string& text) const;
+    [[nodiscard]] bool                     rowOnShownView(const std::string& text) const;
+    void                                   setViewFilter(bool on);
+    [[nodiscard]] bool                     viewFilter() const;
+    [[nodiscard]] gfx::Rect                viewBarRect(int part) const;
+    [[nodiscard]] gfx::Rect                viewChipRect() const;
+
 protected:
     core::Status buildUi() override;
 
@@ -221,7 +263,7 @@ private:
     bool                            pinned_{false};
     bool                            openChoice_{false};
     // 1.22.4 : la recherche de la liste ; calcules une fois par proposition (refresh) - le rang de chaque objet de l'apercu,
-    // le niveau de chaque objet en cause et ses messages (son infobulle).
+    // le niveau de chaque objet en cause et ses messages (son infobulle). 1.22.6 : ceux de la vue montree (useShownView).
     ui::SearchField*                         search_{nullptr};
     std::map<hmi::Id, std::size_t>           objectIndex_;
     std::map<hmi::Id, int>                   issues_;
@@ -233,6 +275,29 @@ private:
     json::Value                              verdictSeen_;
     std::vector<build::Finding>              buildLines_;
     void                                     adoptStoredVerdict(const Proposal& p, bool forget);
+    // 1.22.6 : TOUTES LES VUES - l'apercu de la vue principale (celui de la carte) ; celui de chaque vue (calcule une fois par
+    // proposition et par etat du projet, viewsKey_ : ici, ou sur un fil de fond, viewJob_) ; la vue montree (son rang ; son
+    // nom, choisi a la main, gardee d'un calcul a l'autre) ; les erreurs et les avertissements par vue et par objet (le
+    // niveau, les messages), leur compte par vue ; la liste des vues (un menu). `preview_` est l'apercu de la vue montree.
+    struct ViewJob;
+    struct ViewStats {
+        std::size_t errors{0}, warnings{0};
+    };
+    Preview                                  main_;
+    std::vector<ViewPreview>                 views_;
+    std::size_t                              shown_{0};
+    std::string                              shownName_;
+    std::string                              viewsKey_;
+    std::shared_ptr<ViewJob>                 viewJob_;
+    std::vector<std::shared_ptr<ViewJob>>    retiring_;
+    std::map<std::pair<std::size_t, hmi::Id>, int>                      viewIssues_;
+    std::map<std::pair<std::size_t, hmi::Id>, std::vector<std::string>> viewIssueTexts_;
+    std::vector<ViewStats>                   viewStats_;
+    ui::PopupMenu*                           viewMenu_{nullptr};
+    void                                     ensureViews(const Proposal& p);
+    void                                     pollViews();
+    void                                     useShownView();   // preview_, objectIndex_, issues_ : ceux de la vue montree
+    [[nodiscard]] std::string                viewName(std::size_t rank) const;
     core::ConnectionScope links_;
 };
 

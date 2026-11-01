@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiPreviewDialog.hpp"
 
+#include "AiDelete.hpp"   // 1.22.6 : une suppression du projet (elle peut changer des objets d'autres vues)
 #include "AiPanel.hpp"
 #include "../hmi/HmiPainter.hpp"
 #include "../../core/Perf.hpp"
@@ -16,8 +17,10 @@
 #include "../../ui/widgets/SearchField.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <optional>
+#include <thread>
 #include <cctype>
 #include <map>
 #include <set>
@@ -143,6 +146,12 @@ struct Row {
     std::vector<std::size_t> ops{};
     int         issue{0};
     int         target{-1};
+    // 1.22.6 : TOUTES LES VUES - la vue que la ligne nomme (un objet : la sienne ; une vue a creer : elle-meme ; vide : celle
+    // de ce qu'elle designe) ; les vues ou sont ses objets (leurs rangs dans la barre des vues, calcules avec `target`) ; un
+    // titre : son texte tel que refresh l'a fait (le compte << sur cette vue >> s'y ajoute selon la vue montree).
+    std::string              view{};
+    std::vector<std::size_t> views{};
+    std::string              base{};
 };
 
 // ---- 1.22.4 : OU SONT LES ERREURS ------------------------------------------------------------------------------------------
@@ -241,36 +250,52 @@ void addUnique(std::vector<hmi::Id>& to, hmi::Id id) {
     if (id != hmi::kNoId && std::find(to.begin(), to.end(), id) == to.end()) to.push_back(id);
 }
 
-// OU EST CE QUE DESIGNE UNE LIGNE, dans l'apercu - construit une fois par proposition (refresh) : les objets de la vue
-// montree (par nom, par id), les noms que chacun lit (sa variable, ses formules, ses textes a trous, ses actions), le type
-// de chaque variable (du projet, creee par la proposition, parametre de la vue), les objets de chaque operation et de
-// chaque message (Check::spots).
+// 1.22.6 : UN OBJET D'UNE VUE DE LA PROPOSITION - le rang de sa vue (dans la barre des vues) et son id.
+struct Place {
+    std::size_t view{0};
+    hmi::Id     id{hmi::kNoId};
+    bool operator==(const Place&) const = default;
+};
+void addUnique(std::vector<Place>& to, const Place& at) {
+    if (at.id != hmi::kNoId && std::find(to.begin(), to.end(), at) == to.end()) to.push_back(at);
+}
+
+// OU EST CE QUE DESIGNE UNE LIGNE, dans l'apercu - construit une fois par proposition (refresh) : les objets des vues
+// montrees (1.22.6 : TOUTES les vues de la proposition, dans l'ordre de la barre ; par nom, par vue et id), les noms que
+// chacun lit (sa variable, ses formules, ses textes a trous, ses actions), le type de chaque variable (du projet, creee
+// par la proposition, parametre d'une vue), les objets de chaque operation et de chaque message (Check::spots, qui disent
+// leur vue). Un nom sans vue dite : la premiere vue qui l'a (la principale d'abord).
 class Locator {
 public:
-    Locator(const Proposal& p, const Check& ck, const Preview& pv, const hmi::Project* project) : p_(p), ck_(ck), pv_(pv) {
-        if (!pv.ok) return;
-        const auto& objects = pv.view.objects;
-        for (std::size_t i = 0; i < objects.size(); ++i) {
-            const auto& o = objects[i];
-            index_.emplace(o.id, i);
-            byName_[o.name].push_back(o.id);
-            // Ce que l'objet lit : chaque texte ou un nom se lit (hmi::rewriteNames, sur une copie : rien ne change).
-            hmi::Object copy = o;
-            std::unordered_set<std::string> roots;
-            hmi::rewriteNames(copy, [&](std::string_view text, bool) {
-                rootsOf(text, roots);
-                return std::string(text);
-            });
-            for (const auto& r : roots) readers_[r].push_back(o.id);
-        }
+    Locator(const Proposal& p, const Check& ck, const std::vector<const hmi::View*>& views, const hmi::Project* project)
+        : p_(p), ck_(ck), views_(views) {
         const auto typed = [&](const std::string& name, const std::string& type) {
             known_.insert(rootKey(name));
             for (const auto& w : wordsOf(type)) ofType_[upperAscii(w)].push_back(rootKey(name));
         };
+        for (std::size_t k = 0; k < views.size(); ++k) {
+            const hmi::View* v = views[k];
+            if (!v) continue;
+            rank_.emplace(v->name, k);
+            for (std::size_t i = 0; i < v->objects.size(); ++i) {
+                const auto& o = v->objects[i];
+                const Place at{k, o.id};
+                index_.emplace(std::make_pair(k, o.id), i);
+                byName_[o.name].push_back(at);
+                // Ce que l'objet lit : chaque texte ou un nom se lit (hmi::rewriteNames, sur une copie : rien ne change).
+                hmi::Object copy = o;
+                std::unordered_set<std::string> roots;
+                hmi::rewriteNames(copy, [&](std::string_view text, bool) {
+                    rootsOf(text, roots);
+                    return std::string(text);
+                });
+                for (const auto& r : roots) readers_[r].push_back(at);
+            }
+            for (const auto& prm : v->params) typed(prm.name, prm.type);
+        }
         if (project)
             for (const auto& v : project->programs.variables) typed(v.name, v.type);
         for (const auto& v : ck.newVariables) typed(v.name, v.type);
-        for (const auto& prm : pv.view.params) typed(prm.name, prm.type);
         for (std::size_t k = 0; k < ck.spots.size(); ++k) {
             const auto& s = ck.spots[k];
             if (s.message.empty()) byOp_.emplace(s.op, k);
@@ -278,42 +303,63 @@ public:
         }
     }
 
-    [[nodiscard]] const std::unordered_map<hmi::Id, std::size_t>& index() const noexcept { return index_; }
-
-    [[nodiscard]] hmi::Id resolve(const Check::Spot& s) const {
-        if (!s.view.empty() && s.view != pv_.view.name) return hmi::kNoId;
-        if (const auto it = index_.find(s.id); it != index_.end() && pv_.view.objects[it->second].name == s.object) return s.id;
-        return named(s.object);
+    // Le rang de la vue de ce nom (aucun : elle n'est pas dessinee).
+    [[nodiscard]] std::optional<std::size_t> rankOf(const std::string& view) const {
+        const auto it = rank_.find(view);
+        return it == rank_.end() ? std::nullopt : std::optional<std::size_t>(it->second);
     }
-    [[nodiscard]] hmi::Id named(const std::string& name) const {
+    [[nodiscard]] Place resolve(const Check::Spot& s) const {
+        if (s.view.empty()) return named(s.object);
+        const auto k = rankOf(s.view);
+        if (!k) return {};
+        if (const auto it = index_.find(std::make_pair(*k, s.id)); it != index_.end() && views_[*k]->objects[it->second].name == s.object)
+            return {*k, s.id};
+        return namedIn(*k, s.object);
+    }
+    [[nodiscard]] Place named(const std::string& name) const {
         const auto it = byName_.find(name);
-        return it == byName_.end() || it->second.empty() ? hmi::kNoId : it->second.front();
+        return it == byName_.end() || it->second.empty() ? Place{} : it->second.front();
+    }
+    [[nodiscard]] Place namedIn(std::size_t view, const std::string& name) const {
+        if (const auto it = byName_.find(name); it != byName_.end())
+            for (const auto& at : it->second)
+                if (at.view == view) return at;
+        return {};
+    }
+    // Un objet nomme sur sa vue (`view` : son nom ; vide : la premiere vue qui l'a ; une vue pas dessinee : aucun - un
+    // homonyme d'une autre vue n'est pas lui).
+    [[nodiscard]] Place object(const std::string& name, const std::string& view) const {
+        if (view.empty()) return named(name);
+        const auto k = rankOf(view);
+        return k ? namedIn(*k, name) : Place{};
     }
     // Les objets qui lisent ce nom (une variable : Armoire1, Armoire1.Porte, Armoires[0].actif).
-    void usingName(const std::string& name, std::vector<hmi::Id>& out) const {
+    void usingName(const std::string& name, std::vector<Place>& out) const {
         if (const auto it = readers_.find(rootKey(name)); it != readers_.end())
-            for (const auto id : it->second) addUnique(out, id);
+            for (const auto& at : it->second) addUnique(out, at);
     }
     // Les objets qui lisent une variable de ce type (ou un tableau de ce type), ou le type lui-meme.
-    void usingType(const std::string& type, std::vector<hmi::Id>& out) const {
+    void usingType(const std::string& type, std::vector<Place>& out) const {
         const std::string key = upperAscii(type);
         if (const auto it = ofType_.find(key); it != ofType_.end())
             for (const auto& v : it->second) usingName(v, out);
         usingName(type, out);
     }
-    // Les objets qu'une operation cree, modifie ou supprime ; sinon (ignoree, retiree) ceux qu'elle nomme.
-    void ofOp(std::size_t op, std::vector<hmi::Id>& out) const {
+    // Les objets qu'une operation cree, modifie ou supprime ; sinon (ignoree, retiree) ceux qu'elle nomme, sur sa vue.
+    void ofOp(std::size_t op, std::vector<Place>& out) const {
         const std::size_t before = out.size();
         const auto [b, e] = byOp_.equal_range(op);
         for (auto it = b; it != e; ++it) addUnique(out, resolve(ck_.spots[it->second]));
         if (out.size() > before || op >= p_.ops.size() || projectLevel(p_.ops[op])) return;
-        addUnique(out, named(p_.ops[op].name));
-        for (const auto& n : p_.ops[op].objects) addUnique(out, named(n));
+        const std::string target = opTarget(p_, op);
+        const std::string view = target.empty() ? p_.view : target;
+        addUnique(out, object(p_.ops[op].name, view));
+        for (const auto& n : p_.ops[op].objects) addUnique(out, object(n, view));
     }
     // Les objets d'un message : ceux que la validation a notes ; sinon ceux qu'il nomme ; une erreur : sinon ceux qui lisent
-    // une variable qu'elle nomme (du projet, de la proposition, un parametre de la vue - pas un avertissement : << sera creee
+    // une variable qu'elle nomme (du projet, de la proposition, un parametre d'une vue - pas un avertissement : << sera creee
     // dans le dossier... >> n'est pas un defaut des objets qui la lisent) ; sinon ceux de ses operations.
-    void ofMessage(const std::string& message, const std::vector<std::size_t>& ops, bool error, std::vector<hmi::Id>& out) const {
+    void ofMessage(const std::string& message, const std::vector<std::size_t>& ops, bool error, std::vector<Place>& out) const {
         const std::size_t before = out.size();
         const auto [b, e] = byMessage_.equal_range(message);
         for (auto it = b; it != e; ++it) addUnique(out, resolve(ck_.spots[it->second]));
@@ -331,15 +377,45 @@ public:
 private:
     const Proposal&                                           p_;
     const Check&                                              ck_;
-    const Preview&                                            pv_;
-    std::unordered_map<hmi::Id, std::size_t>                  index_;
-    std::unordered_map<std::string, std::vector<hmi::Id>>     byName_;
-    std::unordered_map<std::string, std::vector<hmi::Id>>     readers_;
+    const std::vector<const hmi::View*>&                      views_;
+    std::map<std::pair<std::size_t, hmi::Id>, std::size_t>    index_;
+    std::unordered_map<std::string, std::size_t>              rank_;
+    std::unordered_map<std::string, std::vector<Place>>       byName_;
+    std::unordered_map<std::string, std::vector<Place>>       readers_;
     std::unordered_map<std::string, std::vector<std::string>> ofType_;
     std::unordered_set<std::string>                           known_;   // les variables (en majuscules)
     std::multimap<std::size_t, std::size_t>                   byOp_;
     std::multimap<std::string, std::size_t>                   byMessage_;
 };
+
+// 1.22.6 : le role d'une vue, dit dans la barre (vide : une vue ordinaire).
+std::string roleLabel(const std::string& role) {
+    if (role == "popup") return "popup";
+    if (role == "symbole") return "symbole";
+    if (role == "modele") return "\xC3\xA9" "cran mod\xC3\xA8le";
+    if (role == "entete") return "en-t\xC3\xAA" "te";
+    if (role == "pied") return "pied de page";
+    return {};
+}
+// << 3 >> + << erreur >> : << 3 erreurs >>.
+std::string plural(std::size_t n, const char* word) { return std::to_string(n) + " " + word + (n > 1 ? "s" : ""); }
+
+// 1.22.6 : une seule vue (la plupart des propositions) - les objets ne visent qu'une vue, aucune suppression du projet (elle
+// peut changer des objets ailleurs) : l'apercu de la carte suffit, rien a recalculer.
+bool oneView(const Proposal& p) {
+    std::optional<std::string> only;
+    for (std::size_t i = 0; i < p.ops.size(); ++i) {
+        const Operation& op = p.ops[i];
+        if (del::projectRemoval(op)) return false;
+        std::string name;
+        if (op.action == Operation::Action::View) name = trimCopy(op.name);
+        else if (!projectLevel(op)) name = opTarget(p, i);   // vide : la vue ouverte
+        else continue;
+        if (!only) only = name;
+        else if (*only != name) return false;
+    }
+    return true;
+}
 
 } // namespace
 
@@ -357,8 +433,9 @@ public:
     bool                  listHidden{false};
     // 1.22.4 : les objets de chaque ligne (Row::target) ; le filtre (la recherche, les puces) et ce qu'il garde ; la ligne
     // choisie et ce qu'elle encadre (le cadre pulse une seconde a partir de son premier dessin) ; la ligne a faire voir.
-    std::vector<std::vector<hmi::Id>> targets;
+    std::vector<std::vector<Place>>   targets;            // 1.22.6 : sur toutes les vues (le rang de la vue, l'id)
     bool                              onlyErrors{false}, onlyWarnings{false};
+    bool                              onlyView{false};    // 1.22.6 : la puce << Cette vue seulement >>
     bool                              filtering{false};
     std::vector<char>                 pass;
     std::size_t                       matches{0};
@@ -380,13 +457,77 @@ public:
         return -1;
     }
 
+    // ---- 1.22.6 : TOUTES LES VUES ----------------------------------------------------------------------------------------
+    [[nodiscard]] bool multiView() const { return d_.viewCount() > 1; }
+    // La ligne designe des objets de la vue montree ; la vue qu'elle dit (son nom, << 2 vues >> ; vide : aucune) ; les noms
+    // de ses vues (la recherche les lit).
+    [[nodiscard]] bool onShown(const Row& r) const { return std::find(r.views.begin(), r.views.end(), d_.shown_) != r.views.end(); }
+    [[nodiscard]] std::string viewTag(const Row& r) const {
+        if (r.views.empty()) return {};
+        if (r.views.size() == 1) return d_.viewName(r.views.front());
+        return std::to_string(r.views.size()) + " vues";
+    }
+    [[nodiscard]] std::string viewNames(const Row& r) const {
+        std::string out;
+        for (const auto k : r.views) out += (out.empty() ? "" : ", ") + d_.viewName(k);
+        return out;
+    }
+    // Les objets de la ligne sur la vue montree (ce que son cadre entoure).
+    [[nodiscard]] std::vector<hmi::Id> shownTargets(const Row& r) const {
+        std::vector<hmi::Id> out;
+        if (r.target >= 0 && static_cast<std::size_t>(r.target) < targets.size())
+            for (const auto& at : targets[static_cast<std::size_t>(r.target)])
+                if (at.view == d_.shown_) addUnique(out, at.id);
+        return out;
+    }
+    // Les titres : << OBJETS CONCERNES (12, 3 sur cette vue) >> - le compte des lignes du groupe qui designent des objets de la
+    // vue montree : ses objets, ses etapes (un groupe qui en a), sinon ses messages (plusieurs vues seulement ; un titre sans
+    // compte reste tel quel).
+    void relabel() {
+        const bool multi = multiView();
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            Row& h = rows[i];
+            if (h.kind != Row::Kind::Heading) continue;
+            h.text = h.base;
+            if (!multi) continue;
+            std::size_t end = i + 1;
+            bool items = false;
+            for (; end < rows.size() && rows[end].kind != Row::Kind::Heading; ++end) items = items || rows[end].kind == Row::Kind::Item;
+            std::size_t total = 0, here = 0;
+            for (std::size_t j = i + 1; j < end; ++j) {
+                const Row& r = rows[j];
+                if (r.kind == Row::Kind::Change || r.views.empty() || (items && r.kind != Row::Kind::Item)) continue;
+                ++total;
+                if (onShown(r)) ++here;
+            }
+            const std::size_t open = h.base.find(" (");
+            if (total == 0 || open == std::string::npos) continue;
+            std::size_t e = open + 2;
+            while (e < h.base.size() && std::isdigit(static_cast<unsigned char>(h.base[e]))) ++e;
+            if (e == open + 2 || e >= h.base.size() || h.base[e] != ')') continue;
+            h.text = h.base.substr(0, e) + ", " + std::to_string(here) + " sur cette vue" + h.base.substr(e);
+        }
+    }
+    // La vue montree a change : la vue entiere (Ajuster), ce que la ligne choisie encadre sur elle, les titres, le filtre.
+    void shownViewChanged() {
+        zoom = 1.f;
+        pan = {0.f, 0.f};
+        highlight = selected >= 0 && static_cast<std::size_t>(selected) < rows.size() ? shownTargets(rows[static_cast<std::size_t>(selected)])
+                                                                                      : std::vector<hmi::Id>{};
+        pulseStart = -1.0;
+        relabel();
+        if (filtering) applyFilter();
+        invalidateLayout();
+        invalidate();
+    }
+
     // 1.22.4 : LE FILTRE - la recherche (le champ de l'appli : les mots ET, sans casse ni accents) et les puces (les erreurs,
     // les avertissements, ou les deux). Une ligne repond : elle se montre, son titre aussi ; le detail d'une ligne qui repond
     // (son etat, ses changements) se montre avec elle. Rien de tape, aucune puce : la liste comme avant (les groupes replies).
     void applyFilter() {
         const ui::SearchQuery* q = d_.search_ ? &d_.search_->query() : nullptr;
         const bool text = q && !q->empty();
-        filtering = text || onlyErrors || onlyWarnings;
+        filtering = text || onlyErrors || onlyWarnings || onlyView;
         pass.assign(rows.size(), 0);
         matches = 0;
         if (filtering) {
@@ -399,8 +540,10 @@ public:
                     continue;
                 }
                 if (r.kind == Row::Kind::Item) item = i;
-                const bool chip = (!onlyErrors && !onlyWarnings) || (onlyErrors && r.issue == 2) || (onlyWarnings && r.issue == 1);
-                if (chip && (!text || q->matches({std::string_view(r.text), std::string_view(r.right)}))) {
+                const bool chip = ((!onlyErrors && !onlyWarnings) || (onlyErrors && r.issue == 2) || (onlyWarnings && r.issue == 1))
+                                  && (!onlyView || onShown(r));   // 1.22.6 : les lignes de la vue montree
+                const std::string views = multiView() ? viewNames(r) : std::string{};   // 1.22.6 : la recherche lit leur vue
+                if (chip && (!text || q->matches({std::string_view(r.text), std::string_view(r.right), std::string_view(views)}))) {
                     pass[i] = 1;
                     ++matches;
                     if (head < rows.size()) pass[head] = 1;
@@ -413,13 +556,20 @@ public:
     }
 
     // 1.22.4 : CHOISIR UNE LIGNE - ce qu'elle designe s'encadre (le cadre pulse) ; depuis la liste, l'apercu s'y recentre
-    // (et zoome si besoin) ; depuis l'apercu, la liste la fait voir (son groupe se deplie).
+    // (et zoome si besoin) ; depuis l'apercu, la liste la fait voir (son groupe se deplie). 1.22.6 : ce qu'elle designe est sur
+    // une AUTRE vue (rien sur la vue montree) : l'apercu passe d'abord sur cette vue.
     void select(int k, bool fromList) {
         selected = k >= 0 && static_cast<std::size_t>(k) < rows.size() ? k : -1;
         highlight.clear();
         if (selected >= 0) {
             const Row& r = rows[static_cast<std::size_t>(selected)];
-            if (r.target >= 0 && static_cast<std::size_t>(r.target) < targets.size()) highlight = targets[static_cast<std::size_t>(r.target)];
+            if (fromList && !r.views.empty() && !onShown(r)) {
+                std::size_t to = r.views.front();
+                if (r.target >= 0 && static_cast<std::size_t>(r.target) < targets.size() && !targets[static_cast<std::size_t>(r.target)].empty())
+                    to = targets[static_cast<std::size_t>(r.target)].front().view;
+                (void)d_.showView(to);
+            }
+            highlight = shownTargets(r);
         }
         pulseStart = -1.0;
         if (fromList) reveal(highlight);
@@ -440,7 +590,7 @@ public:
             const Row& r = rows[i];
             if (r.kind == Row::Kind::Heading || r.target < 0 || (filtering && !pass[i])) continue;
             const auto& t = targets[static_cast<std::size_t>(r.target)];
-            if (std::find(t.begin(), t.end(), id) == t.end()) continue;
+            if (std::find(t.begin(), t.end(), Place{d_.shown_, id}) == t.end()) continue;   // 1.22.6 : sur la vue montree
             const bool itself = r.ref == Row::Ref::Object && !r.names.empty() && r.names.front() == name;
             const bool item = r.kind == Row::Kind::Item;
             const int  here = itself && item ? 1 : item ? 2 : itself ? 3 : 4;
@@ -549,7 +699,7 @@ public:
         tip += made ? "\nNOUVEAU (cr\xC3\xA9\xC3\xA9 par la proposition)" : changed ? "\nMODIFI\xC3\x89 par la proposition"
              : gone ? "\nSUPPRIM\xC3\x89 par la proposition" : "\ninchang\xC3\xA9";
         for (const auto& it : d_.check_.items) {
-            if (it.name != o.name) continue;
+            if (it.name != o.name || (!it.view.empty() && it.view != pv.view.name)) continue;   // 1.22.6 : celui de cette vue
             std::size_t shown = 0;
             for (const auto& ch : it.changes) {
                 if (made && (ch.key == "x" || ch.key == "y" || ch.key == "w" || ch.key == "h")) continue;
@@ -577,7 +727,7 @@ public:
         for (const auto& r : rows)
             if (r.kind != Row::Kind::Heading && r.target >= 0 && static_cast<std::size_t>(r.target) < targets.size()) {
                 const auto& t = targets[static_cast<std::size_t>(r.target)];
-                if (std::find(t.begin(), t.end(), id) != t.end()) return true;
+                if (std::find(t.begin(), t.end(), Place{d_.shown_, id}) != t.end()) return true;
             }
         return false;
     }
@@ -586,6 +736,8 @@ public:
         return errors ? "Erreurs (" + std::to_string(d_.check_.errors.size()) + ")" : "Avertissements (" + std::to_string(d_.check_.warnings.size()) + ")";
     }
     [[nodiscard]] gfx::Rect chipRect(bool errors) const noexcept { return errors ? chipErr_ : chipWarn_; }
+    [[nodiscard]] gfx::Rect viewChipRect() const noexcept { return chipView_; }   // 1.22.6
+    [[nodiscard]] gfx::Rect viewBarPart(int part) const noexcept { return part < 0 ? viewPrev_ : part > 0 ? viewNext_ : viewName_; }
     [[nodiscard]] gfx::Rect previewArea() const noexcept { return area_; }
     [[nodiscard]] gfx::Rect toggleRect() const noexcept { return toggle_; }
     [[nodiscard]] gfx::Rect zoomInRect() const noexcept { return zoomIn_; }
@@ -628,11 +780,25 @@ public:
         if (zoomIn_.contains(mouse)) return "Zoom avant (Ctrl+plus, ou la molette sur l'aper\xC3\xA7u)";
         if (toggle_.contains(mouse))
             return listHidden ? "Montrer la liste (ce que fait la proposition)" : "Masquer la liste : l'aper\xC3\xA7u prend toute la largeur";
+        // 1.22.6 : la barre des vues, la puce << Cette vue seulement >>
+        if (viewPrev_.contains(mouse)) return "Vue pr\xC3\xA9" "c\xC3\xA9" "dente (PageUp, ou Ctrl+gauche)";
+        if (viewNext_.contains(mouse)) return "Vue suivante (PageDown, ou Ctrl+droite)";
+        if (viewName_.contains(mouse))
+            return multiView() ? d_.viewBarText() + "\nClic : la liste des vues de la proposition (ce que chacune cr\xC3\xA9" "e, modifie, supprime ; ses erreurs)."
+                               : d_.viewBarText() + "\nLa proposition ne touche que cette vue.";
+        if (!listHidden && chipView_.contains(mouse))
+            return "Ne montrer que les lignes de la vue montr\xC3\xA9" "e \xC3\xA0 droite (" + d_.viewName(d_.shown_) + "). \xC3\x89" "chap : tout remontrer.";
         // 1.22.4 : les puces
         if (!listHidden && (chipErr_.contains(mouse) || chipWarn_.contains(mouse))) {
             const bool err = chipErr_.contains(mouse);
+            // 1.22.6 : ou ils sont (plusieurs vues) - << Sur : Popup_Vanne (2), Vue_Station (1) >>
+            std::string where;
+            if (multiView())
+                for (std::size_t k = 0; k < d_.viewStats_.size() && k < d_.viewCount(); ++k)
+                    if (const std::size_t n = err ? d_.viewStats_[k].errors : d_.viewStats_[k].warnings; n > 0)
+                        where += (where.empty() ? "\nSur : " : ", ") + d_.viewName(k) + " (" + std::to_string(n) + ")";
             return std::string(err ? "Ne montrer que les lignes li\xC3\xA9" "es \xC3\xA0 une erreur" : "Ne montrer que les lignes li\xC3\xA9" "es \xC3\xA0 un avertissement")
-                   + " (les deux puces ensemble : l'un ou l'autre). \xC3\x89" "chap : tout remontrer.";
+                   + " (les deux puces ensemble : l'un ou l'autre). \xC3\x89" "chap : tout remontrer." + where;
         }
         if (list_.contains(mouse))
             for (const auto& [r, i] : hits_) {
@@ -645,9 +811,13 @@ public:
                                         : "Clic : retirer cette suppression du plan (ce qui en d\xC3\xA9pend est ignor\xC3\xA9, la v\xC3\xA9rification se refait).";
                 // 1.22.4 : ce que le clic encadre dans l'apercu
                 const std::size_t n = row.target >= 0 && static_cast<std::size_t>(row.target) < targets.size() ? targets[static_cast<std::size_t>(row.target)].size() : 0;
-                const std::string show = n == 0 ? std::string{}
-                                         : n == 1 ? std::string("\nClic : l'encadrer dans l'aper\xC3\xA7u.")
-                                                  : "\nClic : encadrer ses " + std::to_string(n) + " objets dans l'aper\xC3\xA7u.";
+                std::string show = n == 0 ? std::string{}
+                                   : n == 1 ? std::string("\nClic : l'encadrer dans l'aper\xC3\xA7u.")
+                                            : "\nClic : encadrer ses " + std::to_string(n) + " objets dans l'aper\xC3\xA7u.";
+                // 1.22.6 : sa vue (montree a droite, ou une autre : le clic y fait passer l'apercu)
+                if (multiView() && !row.views.empty())
+                    show += std::string(row.views.size() > 1 ? "\nVues : " : "\nVue : ") + viewNames(row)
+                            + (onShown(row) ? std::string(" (montr\xC3\xA9" "e \xC3\xA0 droite).") : std::string(" \xE2\x80\x94 le clic y fait passer l'aper\xC3\xA7u."));
                 if (row.list == 3) return row.text + " \xE2\x80\x94 " + row.right + show + "\nClic droit : revenir sur cette correction.";
                 if (row.list > 0) return row.text + show + "\nClic droit : les corrections possibles.";   // 1.22.1
                 return row.text + (row.right.empty() ? std::string{} : " \xE2\x80\x94 " + row.right) + show;
@@ -683,12 +853,18 @@ protected:
             if (listHidden) previewTop = top + 60.f;
         }
         // 1.22.4 : LA RECHERCHE ET LES PUCES, en haut de la liste (masquee : rien).
-        searchBox_ = chips_ = chipErr_ = chipWarn_ = gfx::Rect{};
+        searchBox_ = chips_ = chipErr_ = chipWarn_ = chipView_ = gfx::Rect{};
         if (!listHidden) {
             searchBox_ = {x, listTop, leftW, 28.f};
             chips_ = {x, listTop + 32.f, leftW, 22.f};
             chipErr_ = {chips_.x, chips_.y, ui::measureWidth(chipLabel(true), kSmall) + 30.f, chips_.h};
             chipWarn_ = {chipErr_.right() + 8.f, chips_.y, ui::measureWidth(chipLabel(false), kSmall) + 30.f, chips_.h};
+            // 1.22.6 : << Cette vue seulement >> (plusieurs vues) ; << Cette vue >> si la place manque.
+            if (multiView()) {
+                chipViewText_ = "Cette vue seulement";
+                if (chipWarn_.right() + 8.f + ui::measureWidth(chipViewText_, kSmall) + 28.f > chips_.right()) chipViewText_ = "Cette vue";
+                chipView_ = {chipWarn_.right() + 8.f, chips_.y, ui::measureWidth(chipViewText_, kSmall) + 28.f, chips_.h};
+            }
             listTop += 60.f;
         }
         if (d_.search_) {
@@ -700,7 +876,14 @@ protected:
         // 1.16.1 : le bouton qui masque / montre la liste (entre elle et l'apercu).
         toggle_ = listHidden ? gfx::Rect{x, previewTop, 14.f, 48.f} : gfx::Rect{x + leftW + 1.f, previewTop, 14.f, 48.f};
         const float px = listHidden ? x + 20.f : x + leftW + 16.f;
-        preview_ = {px, previewTop, right - px, std::max(80.f, bottom - previewTop - 24.f)};
+        // 1.22.6 : LA BARRE DES VUES, au-dessus de l'apercu : la fleche precedente, le titre de la vue montree (un clic : la
+        // liste des vues), la fleche suivante.
+        viewBar_ = {px, previewTop, right - px, 26.f};
+        viewPrev_ = {viewBar_.x, viewBar_.y, 28.f, viewBar_.h};
+        viewNext_ = {viewBar_.right() - 28.f, viewBar_.y, 28.f, viewBar_.h};
+        viewName_ = {viewPrev_.right() + 4.f, viewBar_.y, std::max(0.f, viewNext_.x - viewPrev_.right() - 8.f), viewBar_.h};
+        const float shownTop = viewBar_.bottom() + 6.f;
+        preview_ = {px, shownTop, right - px, std::max(80.f, bottom - shownTop - 24.f)};
         legend_ = {preview_.x, preview_.bottom() + 6.f, preview_.w, 18.f};
         area_ = {preview_.x + 8.f, preview_.y + 8.f, preview_.w - 16.f, preview_.h - 16.f};
         zoomIn_ = {preview_.right() - 34.f, preview_.y + 6.f, 28.f, 24.f};
@@ -731,9 +914,11 @@ protected:
         ui::drawIcon(ctx.r, ui::Icon::Close, {close_.x + 6.f, close_.y + 4.f, 16.f, 16.f}, c.textMuted);
         if (!p) return;
         // 1.16.0 : une vue neuve, ou le projet seul (des variables, des types).
-        const std::string where = createsView(*p) ? "Vue neuve \xC2\xAB " + newViewName(*p) + " \xC2\xBB"
-                                : usesOpenView(*p) ? "Vue \xC2\xAB " + p->view + " \xC2\xBB"
-                                                   : std::string("Le projet (variables, types IHM)");
+        std::string where = createsView(*p) ? "Vue neuve \xC2\xAB " + newViewName(*p) + " \xC2\xBB"
+                            : usesOpenView(*p) ? "Vue \xC2\xAB " + p->view + " \xC2\xBB"
+                                               : std::string("Le projet (variables, types IHM)");
+        if (const std::size_t n = d_.viewCount(); n > 1)   // 1.22.6 : toutes les vues (la barre au-dessus de l'apercu)
+            where += " et " + std::to_string(n - 1) + (n > 2 ? " autres vues" : " autre vue");
         const std::string sub = where + " \xC2\xB7 " + (p->summary.empty() ? std::string("proposition") : p->summary)
                                 + " \xC2\xB7 rien ne change avant Appliquer";
         ctx.r.drawText({x, panel_.y + 38.f}, elide(ctx.r, sub, kSmall, panel_.w - 32.f), kSmall, c.textMuted);
@@ -790,6 +975,65 @@ protected:
         paintFilter(ctx);   // 1.22.4
         paintList(ctx);
         paintPreview(ctx);
+        paintViewBar(ctx);  // 1.22.6
+    }
+
+    // 1.22.6 : LA BARRE DES VUES - << Vue 2/4 : Popup_Vanne (neuve, popup) - 1 erreur >> entre deux fleches (grisees au
+    // bout, et pour une seule vue) ; devant, la pastille de ses erreurs (ou de ses avertissements) ; derriere, la fleche vers
+    // le bas : un clic ouvre la liste des vues.
+    void paintViewBar(const ui::PaintContext& ctx) {
+        if (viewBar_.w <= 0.f) return;
+        const auto& c = ctx.theme.color;
+        const std::size_t n = d_.viewCount(), k = d_.shown_;
+        const auto arrow = [&](const gfx::Rect& b, int dir, bool on) {
+            ctx.r.fillRoundedRect(b, on ? c.rowAltBg : c.inputBg, 4.f);
+            ctx.r.strokeRect(b, c.border, 1.f);
+            chevron(ctx.r, {b.x + (b.w - 16.f) / 2.f, b.y + (b.h - 16.f) / 2.f, 16.f, 16.f}, dir, on ? c.text : c.textDisabled);
+        };
+        arrow(viewPrev_, 2, n > 1 && k > 0);
+        arrow(viewNext_, 0, n > 1 && k + 1 < n);
+        const bool list = n > 1;
+        ctx.r.fillRoundedRect(viewName_, c.inputBg, 4.f);
+        ctx.r.strokeRect(viewName_, c.border, 1.f);
+        float tx = viewName_.x + 10.f;
+        float tw = viewName_.w - 20.f - (list ? 20.f : 0.f);
+        const int level = k < d_.viewStats_.size() ? (d_.viewStats_[k].errors > 0 ? 2 : d_.viewStats_[k].warnings > 0 ? 1 : 0) : 0;
+        if (level > 0 && n > 0) {
+            pastille(ctx.r, {tx + 6.f, viewName_.y + viewName_.h / 2.f}, 13.f, issueColor(ctx.theme, level), c.panelBg);
+            tx += 18.f;
+            tw -= 18.f;
+        }
+        const std::string text = n == 0 ? std::string("Aucune vue \xC3\xA0 dessiner")
+                                        : d_.viewBarText() + (d_.viewsPending() ? std::string(" \xC2\xB7 les autres vues se calculent\xE2\x80\xA6") : std::string{});
+        ctx.r.drawText({tx, viewName_.y + (viewName_.h - ctx.r.lineHeight(kText)) / 2.f}, elide(ctx.r, text, kText, tw), kText, n == 0 ? c.textMuted : c.text);
+        if (list) chevron(ctx.r, {viewName_.right() - 24.f, viewName_.y + (viewName_.h - 16.f) / 2.f, 16.f, 16.f}, 1, c.textMuted);
+    }
+
+    // 1.22.6 : LA VUE D'UNE LIGNE, en petit a droite (plusieurs vues seulement ; ni un titre, ni un detail) - sur la vue montree :
+    // une pastille d'accent et le nom, sur un fond d'accent ; sur une autre vue : le nom, grise. Une ligne qui EST la vue (une
+    // vue a creer) : la pastille seule, sur la vue montree. Sa largeur (0 : rien).
+    [[nodiscard]] bool isView(const Row& row) const { return row.views.size() == 1 && d_.viewName(row.views.front()) == row.text; }
+    [[nodiscard]] float tagWidth(gfx::IRenderer& r, const Row& row) const {
+        if (!multiView() || row.views.empty() || row.kind == Row::Kind::Heading || row.kind == Row::Kind::Change) return 0.f;
+        if (isView(row)) return onShown(row) ? 14.f : 0.f;
+        return std::min(130.f, r.measure(viewTag(row), kSmall).width + 20.f);
+    }
+    void paintTag(const ui::PaintContext& ctx, const Row& row, float right, float y, float h) const {
+        const float w = tagWidth(ctx.r, row);
+        if (w <= 0.f) return;
+        const auto& c = ctx.theme.color;
+        const bool here = onShown(row);
+        if (isView(row)) {
+            ctx.r.fillRoundedRect({right - w + 4.f, y + h / 2.f - 3.f, 6.f, 6.f}, c.accent, 3.f);
+            return;
+        }
+        const gfx::Rect box{right - w, y + 3.f, w, h - 6.f};
+        if (here) {
+            ctx.r.fillRoundedRect(box, alpha(c.accent, 40), 3.f);
+            ctx.r.fillRoundedRect({box.x + 5.f, box.y + box.h / 2.f - 3.f, 6.f, 6.f}, c.accent, 3.f);
+        }
+        ctx.r.drawText({box.x + 14.f, box.y + (box.h - ctx.r.lineHeight(kSmall)) / 2.f}, elide(ctx.r, viewTag(row), kSmall, w - 17.f), kSmall,
+                       here ? c.text : c.textDisabled);
     }
 
     // 1.22.4 : le compte du filtre (a droite de la recherche, << 12 lignes >>) et les puces Erreurs, Avertissements.
@@ -818,6 +1062,18 @@ protected:
         };
         chip(chipErr_, true, onlyErrors);
         chip(chipWarn_, false, onlyWarnings);
+        // 1.22.6 : << Cette vue seulement >> - sa marque : la pastille d'accent des lignes de la vue montree.
+        if (chipView_.w > 0.f) {
+            if (onlyView) {
+                ctx.r.fillRoundedRect(chipView_, alpha(c.accent, 70), 4.f);
+                ctx.r.strokeRect(chipView_, c.accent, 1.5f);
+            } else {
+                ctx.r.fillRoundedRect(chipView_, c.inputBg, 4.f);
+                ctx.r.strokeRect(chipView_, c.border, 1.f);
+            }
+            ctx.r.fillRoundedRect({chipView_.x + 8.f, chipView_.y + chipView_.h / 2.f - 4.f, 8.f, 8.f}, c.accent, 4.f);
+            ctx.r.drawText({chipView_.x + 21.f, chipView_.y + (chipView_.h - ctx.r.lineHeight(kSmall)) / 2.f}, chipViewText_, kSmall, c.text);
+        }
     }
 
     void paintList(const ui::PaintContext& ctx) {
@@ -840,7 +1096,8 @@ protected:
         for (std::size_t i = 0; i < rows.size(); ++i) {
             if (hidden(i)) continue;   // 1.16.1 : un groupe replie ; 1.22.4 : le filtre
             const bool multi = rows[i].kind == Row::Kind::Warning || rows[i].kind == Row::Kind::Error;
-            wrapped[i] = multi ? wrap(rows[i].text, kSmall, w0 - 28.f) : std::vector<std::string>{rows[i].text};
+            const float tag = tagWidth(ctx.r, rows[i]);   // 1.22.6 : sa vue, a droite de la premiere ligne
+            wrapped[i] = multi ? wrap(rows[i].text, kSmall, w0 - 28.f - (tag > 0.f ? tag + 6.f : 0.f)) : std::vector<std::string>{rows[i].text};
             rowTop_[i] = content - 4.f;
             content += heightOf(i);
         }
@@ -896,9 +1153,14 @@ protected:
                         ctx.r.drawText({list_.x + 12.f, ty}, tag, kText, col);
                         const float rw = ctx.r.measure(row.right, kSmall).width;
                         ctx.r.drawText({list_.x + w - rw, ty + 1.f}, row.right, kSmall, c.textMuted);
-                        float tw = w - rw - 34.f;
+                        // 1.22.6 : sa vue, a gauche de son genre
+                        const float vw = tagWidth(ctx.r, row);
+                        const float gap = rw > 0.f ? 6.f : 0.f;
+                        paintTag(ctx, row, list_.x + w - rw - gap, y, lh);
+                        const float used = rw + (vw > 0.f ? vw + gap : 0.f);
+                        float tw = w - used - 34.f;
                         if (row.issue > 0) {
-                            pastille(ctx.r, {list_.x + w - rw - 12.f, y + lh / 2.f}, 13.f, issueColor(ctx.theme, row.issue), c.panelBg);
+                            pastille(ctx.r, {list_.x + w - used - 12.f, y + lh / 2.f}, 13.f, issueColor(ctx.theme, row.issue), c.panelBg);
                             tw -= 20.f;
                         }
                         ctx.r.drawText({list_.x + 30.f, ty}, elide(ctx.r, row.text, kText, tw), kText, issueCol);
@@ -909,8 +1171,13 @@ protected:
                         break;
                     case Row::Kind::Note: {
                         float tw = w;
+                        const float vw = tagWidth(ctx.r, row);   // 1.22.6 : sa vue, tout a droite
+                        if (vw > 0.f) {
+                            paintTag(ctx, row, list_.x + w + 4.f, y, lh);
+                            tw -= vw + 6.f;
+                        }
                         if (row.issue > 0) {
-                            pastille(ctx.r, {list_.x + w - 2.f, y + lh / 2.f}, 13.f, issueColor(ctx.theme, row.issue), c.panelBg);
+                            pastille(ctx.r, {list_.x + tw - 2.f, y + lh / 2.f}, 13.f, issueColor(ctx.theme, row.issue), c.panelBg);
                             tw -= 20.f;
                         }
                         ctx.r.drawText({list_.x + 12.f, ty}, elide(ctx.r, row.text, kSmall, tw), kSmall, issueCol);
@@ -920,6 +1187,7 @@ protected:
                     case Row::Kind::Error: {
                         const bool err = row.kind == Row::Kind::Error;
                         ui::drawIcon(ctx.r, err ? ui::Icon::Error : ui::Icon::Warning, {list_.x + 8.f, y + 4.f, 14.f, 14.f}, err ? c.error : c.warning);
+                        paintTag(ctx, row, list_.x + w + 4.f, y, lh);   // 1.22.6 : sa vue, a droite de la premiere ligne
                         float ly = ty;
                         for (const auto& l : wrapped[i]) {
                             ctx.r.drawText({list_.x + 28.f, ly}, l, kSmall, issueCol);
@@ -1106,6 +1374,20 @@ protected:
                 invalidate();
                 return ui::EventResult::Consumed;
             }
+            // 1.22.6 : la barre des vues - les fleches, le titre (la liste des vues) ; la puce << Cette vue seulement >>.
+            if (viewPrev_.contains(d->pos) || viewNext_.contains(d->pos)) {
+                (void)d_.stepView(viewPrev_.contains(d->pos) ? -1 : 1);
+                return ui::EventResult::Consumed;
+            }
+            if (viewName_.contains(d->pos)) {
+                (void)d_.openViewMenu();
+                return ui::EventResult::Consumed;
+            }
+            if (chipView_.contains(d->pos)) {
+                onlyView = !onlyView;
+                applyFilter();
+                return ui::EventResult::Consumed;
+            }
             // 1.22.4 : les puces Erreurs, Avertissements (a zero : rien) - l'une, l'autre ou les deux.
             if (chipErr_.contains(d->pos) || chipWarn_.contains(d->pos)) {
                 const bool err = chipErr_.contains(d->pos);
@@ -1157,6 +1439,8 @@ private:
     gfx::Rect         panel_{}, close_{}, counts_{}, list_{}, preview_{}, legend_{}, varLabel_{};
     gfx::Rect         area_{}, toggle_{}, zoomIn_{}, zoomOut_{}, zoomFit_{};   // 1.16.1
     gfx::Rect         searchBox_{}, chips_{}, chipErr_{}, chipWarn_{};          // 1.22.4
+    gfx::Rect         chipView_{}, viewBar_{}, viewPrev_{}, viewNext_{}, viewName_{};   // 1.22.6 : la puce de la vue, la barre des vues
+    std::string       chipViewText_;
     std::vector<float> rowTop_;                                                // 1.22.4 : le haut de chaque ligne montree (dans la liste)
     std::vector<std::pair<gfx::Rect, std::size_t>> hits_;                    // 1.16.1 : les lignes montrees de la liste
     bool              dragging_{false};
@@ -1319,6 +1603,224 @@ gfx::Rect AiPreviewDialog::chipRect(bool errors) const {
     return b ? b->chipRect(errors) : gfx::Rect{};
 }
 
+// ---- 1.22.6 : toutes les vues de la proposition ----------------------------------------------------------------------------
+// Le calcul des vues d'une grosse proposition, sur un fil de fond (une copie du projet, l'environnement fige) : le resultat
+// passe dans la fenetre a sa mise a jour (pollViews).
+struct AiPreviewDialog::ViewJob {
+    std::vector<ViewPreview> views;
+    std::atomic<bool>        finished{false};
+    std::thread              worker;
+};
+
+namespace {
+// Les vues qui se dessinent (une reponse << rien a dessiner >> : aucune - l'apercu de la carte dit pourquoi).
+std::vector<ViewPreview> drawable(std::vector<ViewPreview> all) {
+    std::erase_if(all, [](const ViewPreview& v) { return !v.preview.ok; });
+    return all;
+}
+// << 3 objets crees - 1 modifie - 2 supprimes >> : ce qu'une vue change (la liste des vues).
+std::string changesOf(const Touched& t) {
+    std::string out;
+    const auto part = [&](std::size_t n, const char* one, const char* many) {
+        if (n > 0) out += (out.empty() ? "" : " \xC2\xB7 ") + std::to_string(n) + " " + (n > 1 ? many : one);
+    };
+    part(t.created.size(), "objet cr\xC3\xA9\xC3\xA9", "objets cr\xC3\xA9\xC3\xA9s");
+    part(t.modified.size(), t.created.empty() ? "objet modifi\xC3\xA9" : "modifi\xC3\xA9", t.created.empty() ? "objets modifi\xC3\xA9s" : "modifi\xC3\xA9s");
+    part(t.removed.size(), t.created.empty() && t.modified.empty() ? "objet supprim\xC3\xA9" : "supprim\xC3\xA9",
+         t.created.empty() && t.modified.empty() ? "objets supprim\xC3\xA9s" : "supprim\xC3\xA9s");
+    return out.empty() ? std::string("aucun objet chang\xC3\xA9") : out;
+}
+} // namespace
+
+AiPreviewDialog::~AiPreviewDialog() {
+    // Le calcul des vues finit (il ne touche que ses copies) : attendu ici, a la fermeture.
+    if (viewJob_ && viewJob_->worker.joinable()) viewJob_->worker.join();
+    for (auto& j : retiring_)
+        if (j->worker.joinable()) j->worker.join();
+}
+
+void AiPreviewDialog::ensureViews(const Proposal& p) {
+    auto& a = panel_.assistant();
+    const auto doc = a.host().document ? a.host().document() : nullptr;
+    const std::string key = proposalKey(p) + "|" + (doc ? std::to_string(doc->revision) : std::string("-"));
+    if (key == viewsKey_) return;   // deja calculees (ou en calcul) pour cette proposition, sur ce projet
+    viewsKey_ = key;
+    if (viewJob_) retiring_.push_back(std::move(viewJob_));
+    views_.clear();
+    if (!doc) return;
+    // Une seule vue (la plupart des propositions) : l'apercu de la carte, rien a recalculer.
+    if (oneView(p)) {
+        if (main_.ok) views_.push_back(ViewPreview{main_, doc->project.view(main_.view.id) == nullptr});
+        return;
+    }
+    // Une grosse proposition : sur un fil de fond, comme la verification de la carte (la copie du projet se fait ici).
+    Env frozen;
+    if (checkInBackground(p) && a.frozenEnvironment(frozen)) {
+        auto job = std::make_shared<ViewJob>();
+        auto project = [&] {
+            XPG_MESURE("ia.apercu.vues.copie");
+            return std::make_shared<const hmi::Project>(doc->project);
+        }();
+        job->worker = std::thread([job, project, prop = p, env = std::move(frozen)] {
+            XPG_TRAVAIL("ia.apercu-vues");   // l'onglet Performances, travaux de fond
+            job->views = previews(*project, prop, env);
+            job->finished.store(true, std::memory_order_release);
+        });
+        viewJob_ = std::move(job);
+        return;
+    }
+    XPG_MESURE("ia.apercu.vues");
+    views_ = drawable(previews(doc->project, p, a.host().env));
+}
+
+void AiPreviewDialog::pollViews() {
+    std::erase_if(retiring_, [](const std::shared_ptr<ViewJob>& j) {
+        if (!j->finished.load(std::memory_order_acquire)) return false;
+        if (j->worker.joinable()) j->worker.join();
+        return true;
+    });
+    if (!viewJob_ || !viewJob_->finished.load(std::memory_order_acquire)) return;
+    if (viewJob_->worker.joinable()) viewJob_->worker.join();
+    views_ = drawable(std::move(viewJob_->views));
+    viewJob_.reset();
+    refresh();   // les reperes de toutes les vues : la liste, la vue de chaque ligne, les erreurs de chaque vue
+}
+
+void AiPreviewDialog::useShownView() {
+    if (shown_ >= std::max<std::size_t>(viewCount(), 1)) shown_ = 0;
+    preview_ = shown_ < views_.size() ? views_[shown_].preview : main_;
+    objectIndex_.clear();
+    for (std::size_t i = 0; i < preview_.view.objects.size(); ++i) objectIndex_.emplace(preview_.view.objects[i].id, i);
+    issues_.clear();
+    issueTexts_.clear();
+    for (const auto& [at, level] : viewIssues_)
+        if (at.first == shown_) issues_[at.second] = level;
+    for (const auto& [at, texts] : viewIssueTexts_)
+        if (at.first == shown_) issueTexts_[at.second] = texts;
+}
+
+std::size_t AiPreviewDialog::viewCount() const noexcept { return !views_.empty() ? views_.size() : main_.ok ? 1 : 0; }
+
+std::string AiPreviewDialog::viewName(std::size_t rank) const {
+    if (rank < views_.size()) return views_[rank].preview.view.name;
+    return rank == 0 && main_.ok ? main_.view.name : std::string{};
+}
+
+std::string AiPreviewDialog::viewTitle(std::size_t rank) const {
+    const std::size_t n = viewCount();
+    if (rank >= n) return {};
+    const Preview& pv = rank < views_.size() ? views_[rank].preview : main_;
+    bool created = rank < views_.size() && views_[rank].created;
+    if (rank >= views_.size()) {   // l'apercu de la carte (les vues se calculent) : neuve si le projet ne l'a pas
+        const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
+        created = doc && !doc->project.view(pv.view.id);
+    }
+    std::string what = created ? "neuve" : "modifi\xC3\xA9" "e";
+    if (const std::string role = roleLabel(pv.view.role); !role.empty()) what += ", " + role;
+    std::string t = "Vue " + std::to_string(rank + 1) + (viewsPending() ? std::string{} : "/" + std::to_string(n)) + " : " + pv.view.name + " (" + what + ")";
+    if (rank < viewStats_.size()) {
+        if (viewStats_[rank].errors > 0) t += " \xC2\xB7 " + plural(viewStats_[rank].errors, "erreur");
+        if (viewStats_[rank].warnings > 0) t += " \xC2\xB7 " + plural(viewStats_[rank].warnings, "avertissement");
+    }
+    return t;
+}
+
+std::string AiPreviewDialog::viewBarText() const { return viewCount() == 0 ? std::string("Aucune vue \xC3\xA0 dessiner") : viewTitle(shown_); }
+
+bool AiPreviewDialog::showView(std::size_t rank) {
+    if (rank >= viewCount()) return false;
+    shownName_ = viewName(rank);   // gardee d'un calcul a l'autre (une correction, l'avis du logiciel)
+    if (rank == shown_) return true;
+    shown_ = rank;
+    useShownView();
+    if (auto* b = bodyOf(*this)) b->shownViewChanged();
+    return true;
+}
+
+bool AiPreviewDialog::stepView(int delta) {
+    const long long to = static_cast<long long>(shown_) + delta;
+    if (delta == 0 || to < 0 || to >= static_cast<long long>(viewCount())) return false;
+    return showView(static_cast<std::size_t>(to));
+}
+
+bool AiPreviewDialog::openViewMenu() {
+    auto* root = widgetRoot();
+    const auto* b = bodyOf(*this);
+    const std::size_t n = viewCount();
+    if (!root || !b || !viewMenu_ || done_ || n < 2) return false;
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = std::to_string(n) + " vues dans la proposition";
+    items.push_back(std::move(head));
+    for (std::size_t k = 0; k < n; ++k) {
+        ui::PopupMenu::Item it;
+        it.id = static_cast<int>(k);
+        it.label = viewTitle(k);
+        it.note = k < views_.size() ? changesOf(views_[k].preview.touched) : changesOf(main_.touched);
+        it.radio = true;
+        it.checked = k == shown_;
+        items.push_back(std::move(it));
+    }
+    viewMenu_->setItems(std::move(items));
+    viewMenu_->setBounds(root->bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {root->bounds().right() + 400.f, root->bounds().bottom() + 400.f};
+    const gfx::Rect at = b->viewBarPart(0);
+    viewMenu_->openAt({at.x, at.bottom() + 2.f}, surface);
+    return true;
+}
+
+bool AiPreviewDialog::viewMenuOpen() const { return viewMenu_ && viewMenu_->isOpen(); }
+
+std::vector<std::string> AiPreviewDialog::viewMenuItems() const {
+    std::vector<std::string> out;
+    if (!viewMenuOpen()) return out;
+    for (const auto& it : viewMenu_->columnItems(0))
+        if (!it.heading && !it.separator) out.push_back((it.checked ? "(o) " : "") + it.label + " | " + it.note);
+    return out;
+}
+
+std::string AiPreviewDialog::rowView(const std::string& text) const {
+    const auto* b = bodyOf(*this);
+    if (!b || !b->multiView()) return {};   // une seule vue : rien ne se dit (rien ne se dessine)
+    for (const bool exact : {true, false})
+        for (const auto& r : b->rows)
+            if (r.kind != Row::Kind::Heading && (exact ? r.text == text : r.text.find(text) != std::string::npos)) return b->viewTag(r);
+    return {};
+}
+
+bool AiPreviewDialog::rowOnShownView(const std::string& text) const {
+    const auto* b = bodyOf(*this);
+    if (!b) return false;
+    for (const bool exact : {true, false})
+        for (const auto& r : b->rows)
+            if (r.kind != Row::Kind::Heading && (exact ? r.text == text : r.text.find(text) != std::string::npos)) return b->onShown(r);
+    return false;
+}
+
+void AiPreviewDialog::setViewFilter(bool on) {
+    auto* b = bodyOf(*this);
+    if (!b) return;
+    b->onlyView = on && viewCount() > 1;
+    b->applyFilter();
+}
+
+bool AiPreviewDialog::viewFilter() const {
+    const auto* b = bodyOf(*this);
+    return b && b->onlyView;
+}
+
+gfx::Rect AiPreviewDialog::viewBarRect(int part) const {
+    const auto* b = bodyOf(*this);
+    return b ? b->viewBarPart(part) : gfx::Rect{};
+}
+
+gfx::Rect AiPreviewDialog::viewChipRect() const {
+    const auto* b = bodyOf(*this);
+    return b ? b->viewChipRect() : gfx::Rect{};
+}
+
 AiPreviewDialog::AiPreviewDialog(AiPanel& panel, int message)
     : menu::WidgetMenu("dialog.ai.apercu"), panel_(panel), message_(message) {}
 
@@ -1365,6 +1867,11 @@ core::Status AiPreviewDialog::buildUi() {
     // 1.22.1 : le menu du clic droit des erreurs (le menu de l'appli), devant le reste.
     fixMenu_ = &static_cast<ui::PopupMenu&>(b->addChild(std::make_unique<ui::PopupMenu>(base + ".corriger")));
     links_ += fixMenu_->itemChosen->connect([this](int id) { runFix(id); });
+    // 1.22.6 : la liste des vues (un clic sur le titre de la barre des vues).
+    viewMenu_ = &static_cast<ui::PopupMenu&>(b->addChild(std::make_unique<ui::PopupMenu>(base + ".vues")));
+    links_ += viewMenu_->itemChosen->connect([this](int id) {
+        if (id >= 0) (void)showView(static_cast<std::size_t>(id));
+    });
     setRoot(std::move(body));
     refresh();
     return core::ok();
@@ -1377,14 +1884,31 @@ void AiPreviewDialog::refresh() {
     // 1.20.1 : le resultat de la verification de la carte (fait sur un fil de fond pour une grosse proposition) - pas une
     // nouvelle validation sur le fil de l'interface. En cours : la fenetre l'attend (Update), l'avancement affiche.
     plan::Plan readyPlan;
-    waiting_ = !panel_.chat().resultReady(message_, &check_, &preview_, &readyPlan);
+    waiting_ = !panel_.chat().resultReady(message_, &check_, &main_, &readyPlan);
     planReady_ = !waiting_;
     if (waiting_) {
         check_ = Check{};
-        preview_ = Preview{};
-        preview_.why = "V\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6 "
-                       + std::to_string(static_cast<int>(panel_.chat().checkProgress(message_) * 100.f + 0.5f)) + " %";
+        main_ = Preview{};
+        main_.why = "V\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6 "
+                    + std::to_string(static_cast<int>(panel_.chat().checkProgress(message_) * 100.f + 0.5f)) + " %";
     }
+    // 1.22.6 : TOUTES LES VUES - calculees une fois par proposition (ici, ou sur un fil de fond) ; la vue montree : celle qu'on
+    // avait choisie (par son nom), sinon la principale. En verification : la carte d'abord.
+    const std::size_t shownBefore = shown_;
+    if (waiting_) {
+        if (viewJob_) retiring_.push_back(std::move(viewJob_));
+        views_.clear();
+        viewsKey_.clear();
+    } else {
+        ensureViews(*p);
+    }
+    shown_ = 0;
+    if (!shownName_.empty())
+        for (std::size_t k = 0; k < views_.size(); ++k)
+            if (views_[k].preview.view.name == shownName_) {
+                shown_ = k;
+                break;
+            }
     // 1.22.5 : L'AVIS DU LOGICIEL - une proposition corrigee depuis (une autre cle) : le verdict d'avant ne vaut plus ; un verdict
     // neuf garde dans la proposition se lit. Il est verse dans la verification : ses erreurs et ses avertissements (les puces,
     // Appliquer), ses objets (les cadres) - sa categorie les montre, pas ERREURS ni AVERTISSEMENTS.
@@ -1395,7 +1919,10 @@ void AiPreviewDialog::refresh() {
     auto* body = dynamic_cast<AiPreviewBody*>(widgetRoot());
     // La liste de gauche.
     std::vector<Row> rows;
-    const auto heading = [&](std::string t) { rows.push_back({Row::Kind::Heading, std::move(t), {}, 0}); };
+    const auto heading = [&](std::string t) {
+        rows.push_back({Row::Kind::Heading, std::move(t), {}, 0});
+        rows.back().base = rows.back().text;   // 1.22.6 : le compte << sur cette vue >> s'y ajoute (relabel)
+    };
     // 1.22.1 : LES CORRECTIONS FAITES (le clic droit sur une erreur) - ce qui a ete corrige, une ligne chacune ; le clic droit
     // sur l'une d'elles la reprend (Revenir). Puis les erreurs et les avertissements, les doublons regroupes.
     errorLines_ = fixes::errorLines(check_);
@@ -1636,12 +2163,29 @@ void AiPreviewDialog::refresh() {
         }
     }
     // 1.16.0 : CE QUI SERA CREE en plus des objets - la vue neuve, les variables, les types IHM (jamais en silence).
-    if (!check_.newView.empty()) {
-        heading("VUE \xC3\x80 CR\xC3\x89" "ER (elle s'ouvre apr\xC3\xA8s Appliquer)");
-        std::string size;
-        if (preview_.view.width > 0) size = std::to_string(preview_.view.width) + " \xC3\x97 " + std::to_string(preview_.view.height);
-        rows.push_back({Row::Kind::Item, check_.newView, size, 0});
-        if (!preview_.view.description.empty()) rows.push_back({Row::Kind::Change, preview_.view.description, {}, 0});
+    // 1.22.6 : CHAQUE VUE NEUVE (une vue, une popup, un symbole...) - sa taille, son role ; la principale s'ouvre apres
+    // Appliquer. Un clic sur l'une : l'apercu y passe.
+    {
+        const auto sizeOf = [](const hmi::View& v) {
+            if (v.width <= 0) return std::string{};
+            std::string t = std::to_string(v.width) + " \xC3\x97 " + std::to_string(v.height);
+            if (const std::string role = roleLabel(v.role); !role.empty()) t += " \xC2\xB7 " + role;
+            return t;
+        };
+        std::vector<const hmi::View*> made;
+        for (const auto& v : views_)
+            if (v.created) made.push_back(&v.preview.view);
+        if (made.empty() && !check_.newView.empty()) made.push_back(main_.ok && main_.view.name == check_.newView ? &main_.view : nullptr);
+        if (made.size() > 1)
+            heading("VUES \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(made.size()) + ") \xE2\x80\x94 \xC2\xAB " + newViewName(*p) + " \xC2\xBB s'ouvre apr\xC3\xA8s Appliquer");
+        else if (!made.empty())
+            heading("VUE \xC3\x80 CR\xC3\x89" "ER (elle s'ouvre apr\xC3\xA8s Appliquer)");
+        for (const hmi::View* v : made) {
+            Row r{Row::Kind::Item, v ? v->name : check_.newView, v ? sizeOf(*v) : std::string{}, 0};
+            r.view = r.text;
+            rows.push_back(std::move(r));
+            if (v && !v->description.empty()) rows.push_back({Row::Kind::Change, v->description, {}, 0});
+        }
     }
     if (!check_.newTypes.empty()) {
         heading("TYPES IHM \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(check_.newTypes.size()) + ")");
@@ -1682,6 +2226,7 @@ void AiPreviewDialog::refresh() {
             Row r{Row::Kind::Item, m.name, m.what, 0};
             r.ref = Row::Ref::Uses;   // 1.22.4 : les objets qui le citent
             r.names = {m.name};
+            r.view = m.name;          // 1.22.6 : une vue (une popup, un symbole) dessinee : elle-meme
             rows.push_back(std::move(r));
             if (!m.detail.empty()) rows.push_back({Row::Kind::Change, m.detail, {}, 0});
         }
@@ -1713,10 +2258,9 @@ void AiPreviewDialog::refresh() {
     for (const auto& it : check_.items) {
         const int what = it.what == Item::What::Create ? 0 : it.what == Item::What::Modify ? 1 : 2;
         Row r{Row::Kind::Item, it.name, std::string(hmi::kindLabel(it.kind)), what};
-        if (it.view.empty() || it.view == preview_.view.name) {   // 1.22.4 : l'objet (dans la vue montree)
-            r.ref = Row::Ref::Object;
-            r.names = {it.name};
-        }
+        r.ref = Row::Ref::Object;   // 1.22.4 : l'objet ; 1.22.6 : sur sa vue (une autre que la montree : le clic y passe)
+        r.names = {it.name};
+        r.view = it.view;
         rows.push_back(std::move(r));
         std::size_t shown = 0;
         for (const auto& ch : it.changes) {
@@ -1733,25 +2277,35 @@ void AiPreviewDialog::refresh() {
     // 1.22.4 : OU EST CE QUE DESIGNE CHAQUE LIGNE, ET OU SONT LES ERREURS - une fois par proposition (jamais a chaque image) :
     // les objets de chaque erreur et de chaque avertissement (leur niveau, leurs messages pour l'infobulle), puis les objets
     // de chaque ligne ; le detail d'une ligne designe ce qu'elle designe ; un titre prend le niveau le plus haut de son groupe.
-    std::vector<std::vector<hmi::Id>> targets;
+    std::vector<std::vector<Place>> targets;
     {
         XPG_MESURE("ia.apercu.reperes");
         const auto doc = a.host().document ? a.host().document() : nullptr;
-        const Locator loc(*p, check_, preview_, doc ? &doc->project : nullptr);
-        objectIndex_.clear();
-        issues_.clear();
-        issueTexts_.clear();
-        for (const auto& [id, i] : loc.index()) objectIndex_.emplace(id, i);
+        // 1.22.6 : les objets de TOUTES les vues de la proposition (le rang de chacune dans la barre) ; en attendant leur
+        // calcul (un fil de fond), ceux de la vue principale.
+        std::vector<const hmi::View*> drawn;
+        if (!views_.empty())
+            for (const auto& v : views_) drawn.push_back(&v.preview.view);
+        else if (main_.ok)
+            drawn.push_back(&main_.view);
+        const Locator loc(*p, check_, drawn, doc ? &doc->project : nullptr);
+        viewIssues_.clear();
+        viewIssueTexts_.clear();
+        viewStats_.assign(std::max<std::size_t>(drawn.size(), 1), ViewStats{});
         std::unordered_map<std::string, int> nameIssue;   // un nom cite par un message (en majuscules) -> son niveau
         const auto note = [&](const fixes::Line& l, int level) {
-            std::vector<hmi::Id> ids;
-            loc.ofMessage(l.message, l.ops, level == 2, ids);
+            std::vector<Place> at;
+            loc.ofMessage(l.message, l.ops, level == 2, at);
             const std::string said = (level == 2 ? "Erreur : " : "Avertissement : ") + l.text;
-            for (const auto id : ids) {
-                int& lv = issues_[id];
+            std::set<std::size_t> onViews;
+            for (const auto& pl : at) {
+                int& lv = viewIssues_[{pl.view, pl.id}];
                 lv = std::max(lv, level);
-                issueTexts_[id].push_back(said);
+                viewIssueTexts_[{pl.view, pl.id}].push_back(said);
+                onViews.insert(pl.view);
             }
+            for (const auto k : onViews)   // 1.22.6 : la barre des vues dit ou sont les erreurs
+                if (k < viewStats_.size()) ++(level == 2 ? viewStats_[k].errors : viewStats_[k].warnings);
             for (const auto& w : wordsOf(l.message)) {
                 int& lv = nameIssue[upperAscii(w)];
                 lv = std::max(lv, level);
@@ -1760,10 +2314,10 @@ void AiPreviewDialog::refresh() {
         for (const auto& l : errorLines_) note(l, 2);
         for (const auto& l : warningLines_) note(l, 1);
         for (const auto& f : buildLines_) note(buildLine(f, check_, p->ops.size()), f.error ? 2 : 1);   // 1.22.5 : l'avis du logiciel
-        const auto objectIssue = [&](const std::vector<hmi::Id>& ids) {
+        const auto objectIssue = [&](const std::vector<Place>& at) {
             int lv = 0;
-            for (const auto id : ids)
-                if (const auto it = issues_.find(id); it != issues_.end()) lv = std::max(lv, it->second);
+            for (const auto& pl : at)
+                if (const auto it = viewIssues_.find({pl.view, pl.id}); it != viewIssues_.end()) lv = std::max(lv, it->second);
             return lv;
         };
         const auto namedIssue = [&](const std::string& n) {
@@ -1776,54 +2330,68 @@ void AiPreviewDialog::refresh() {
                 lastItem = -1;
                 continue;
             }
-            std::vector<hmi::Id> ids;
+            std::vector<Place> at;
             switch (r.ref) {
                 case Row::Ref::Object:
-                    if (!r.names.empty()) addUnique(ids, loc.named(r.names.front()));
-                    r.issue = std::max(r.issue, objectIssue(ids));
+                    if (!r.names.empty()) addUnique(at, loc.object(r.names.front(), r.view));
+                    r.issue = std::max(r.issue, objectIssue(at));
                     break;
                 case Row::Ref::Uses:
                     for (const auto& n : r.names) {
-                        loc.usingName(n, ids);
+                        loc.usingName(n, at);
                         r.issue = std::max(r.issue, namedIssue(n));
                     }
                     for (const auto& t : r.types) {
-                        loc.usingType(t, ids);
+                        loc.usingType(t, at);
                         r.issue = std::max(r.issue, namedIssue(t));
                     }
                     break;
                 case Row::Ref::Ops: {
                     bool objects = false;
                     for (const auto op : r.ops) {
-                        loc.ofOp(op, ids);
+                        loc.ofOp(op, at);
                         objects = objects || (op < p->ops.size() && !projectLevel(p->ops[op]));
                     }
-                    if (ids.empty()) {
-                        for (const auto& n : r.names) loc.usingName(n, ids);
-                        for (const auto& t : r.types) loc.usingType(t, ids);
+                    if (at.empty()) {
+                        for (const auto& n : r.names) loc.usingName(n, at);
+                        for (const auto& t : r.types) loc.usingType(t, at);
                     }
-                    if (objects) r.issue = std::max(r.issue, objectIssue(ids));
+                    if (objects) r.issue = std::max(r.issue, objectIssue(at));
                     break;
                 }
                 case Row::Ref::Message:
-                    if (!r.names.empty()) loc.ofMessage(r.names.front(), r.ops, r.issue == 2, ids);
+                    if (!r.names.empty()) loc.ofMessage(r.names.front(), r.ops, r.issue == 2, at);
                     break;
                 case Row::Ref::None:
                     break;
             }
-            if (!ids.empty()) {
+            if (!at.empty()) {
                 r.target = static_cast<int>(targets.size());
-                targets.push_back(std::move(ids));
+                targets.push_back(std::move(at));
             } else if (r.kind != Row::Kind::Item) {
                 r.target = lastItem;   // le detail d'une ligne (son etat, ses changements) : ce qu'elle designe
             }
             if (r.kind == Row::Kind::Item) lastItem = r.target;
+            // 1.22.6 : SES VUES - celles de ce qu'elle designe (dans l'ordre de la barre) ; sinon celle qu'elle nomme.
+            r.views.clear();
+            if (r.target >= 0)
+                for (const auto& pl : targets[static_cast<std::size_t>(r.target)])
+                    if (std::find(r.views.begin(), r.views.end(), pl.view) == r.views.end()) r.views.push_back(pl.view);
+            std::sort(r.views.begin(), r.views.end());
+            if (r.views.empty() && !r.view.empty())
+                if (const auto k = loc.rankOf(r.view)) r.views.push_back(*k);
         }
         Row* head = nullptr;
         for (auto& r : rows) {
             if (r.kind == Row::Kind::Heading) head = &r;
             else if (head && r.issue > head->issue) head->issue = r.issue;
         }
+    }
+    // 1.22.6 : l'apercu, les reperes et les cadres de la vue montree (une autre qu'avant : la vue entiere).
+    useShownView();
+    if (body && shown_ != shownBefore) {
+        body->zoom = 1.f;
+        body->pan = {0.f, 0.f};
     }
     if (body) {
         // 1.22.4 : la ligne choisie reste choisie (la meme, refaite) ; un objet clique reste encadre s'il est encore la.
@@ -1841,11 +2409,12 @@ void AiPreviewDialog::refresh() {
         body->targets = std::move(targets);
         body->selected = -1;
         body->highlight.clear();
+        body->relabel();   // 1.22.6 : << (12, 3 sur cette vue) >>
         if (!chosen.empty()) {
             for (std::size_t i = 0; i < body->rows.size(); ++i)
                 if (body->rows[i].kind == chosenKind && body->rows[i].text == chosen) {
                     body->selected = static_cast<int>(i);
-                    if (body->rows[i].target >= 0) body->highlight = body->targets[static_cast<std::size_t>(body->rows[i].target)];
+                    body->highlight = body->shownTargets(body->rows[i]);
                     break;
                 }
         } else if (objectOnly) {
@@ -2192,6 +2761,7 @@ void AiPreviewDialog::Update(const menu::FrameContext& f) {
         finish(p && p->state == "appliquee");
         return;
     }
+    pollViews();   // 1.22.6 : les vues calculees sur un fil de fond arrivent
     // 1.22.1 : << Choisir une variable... >> (le clic droit) - la liste du haut s'ouvre, sur la variable demandee.
     if (openChoice_ && variable_ && variable_->visibility() == ui::Visibility::Visible) {
         openChoice_ = false;
@@ -2237,11 +2807,11 @@ void AiPreviewDialog::finish(bool ok) {
 }
 
 ui::EventResult AiPreviewDialog::HandleEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev);
-        k && k->key == ui::Key::Escape && !(variable_ && variable_->isOpen()) && !(fixMenu_ && fixMenu_->isOpen())) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && !(variable_ && variable_->isOpen())
+                                                       && !(fixMenu_ && fixMenu_->isOpen()) && !viewMenuOpen()) {
         // 1.22.4 : une recherche tapee, une puce choisie : Echap remontre tout (la fenetre reste) ; sinon elle se ferme.
         if (auto* b = dynamic_cast<AiPreviewBody*>(widgetRoot()); b && b->filtering) {
-            b->onlyErrors = b->onlyWarnings = false;
+            b->onlyErrors = b->onlyWarnings = b->onlyView = false;
             if (search_ && !search_->text().empty()) search_->setText({});
             b->applyFilter();
             return ui::EventResult::Consumed;
@@ -2255,6 +2825,18 @@ ui::EventResult AiPreviewDialog::HandleEvent(const ui::InputEvent& ev) {
         if (auto* root = widgetRoot()) root->layout();
         search_->field().takeFocus();
         return ui::EventResult::Consumed;
+    }
+    // 1.22.6 : PageUp / PageDown, Ctrl+gauche / droite : la vue precedente, la suivante - pas dans une liste ouverte, ni dans
+    // la recherche pour Ctrl+fleche (elle y saute un mot).
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev);
+        k && viewCount() > 1 && !(variable_ && variable_->isOpen()) && !(fixMenu_ && fixMenu_->isOpen()) && !viewMenuOpen()) {
+        const bool page = (k->key == ui::Key::PageUp || k->key == ui::Key::PageDown) && !k->mods.ctrl && !k->mods.alt && !k->mods.shift;
+        const bool arrow = (k->key == ui::Key::Left || k->key == ui::Key::Right) && k->mods.ctrl && !k->mods.alt && !k->mods.shift
+                           && !(search_ && search_->field().focused());
+        if (page || arrow) {
+            (void)stepView(k->key == ui::Key::PageUp || k->key == ui::Key::Left ? -1 : 1);
+            return ui::EventResult::Consumed;
+        }
     }
     // 1.16.1 : Ctrl+plus, Ctrl+moins, Ctrl+0 zooment l'apercu (pas l'appli derriere).
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {

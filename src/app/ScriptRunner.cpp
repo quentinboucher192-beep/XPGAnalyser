@@ -644,6 +644,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia apercu | appliquer | refuser     la derniere proposition (dans la fenetre d'apercu : la sienne)
     //  ia reappliquer                      la derniere proposition, annulee par Ctrl+Z (le bouton Reappliquer de sa carte)
     //  ia variable N                       dans l'apercu : la N-ieme ligne de la liste (1 : l'invite ; la derniere : la creer)
+    //  ia vue N | suivante | precedente    1.22.6 : dans l'apercu, la N-ieme vue de la proposition (1 : la principale)
     //  ia mode previsualisation | direct
     //  ia parametres                       la fenetre des parametres
     //  ia defiler N                        la discussion, de N pixels (negatif : vers le haut)
@@ -681,6 +682,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             if (sub == "refuser" || sub == "annuler") { pv->cancel(); return Step::Yield; }
             if (sub == "variable") { if (!pv->chooseVariable(std::atoi(arg(2).c_str()) - 1)) fail("ia variable " + arg(2) + " : hors de la liste"); return Step::Yield; }
             if (sub == "fermer") { pv->close(); return Step::Yield; }
+            if (sub == "vue") {   // 1.22.6 : toutes les vues de la proposition
+                const std::string which = lower(arg(2));
+                const int n = std::atoi(which.c_str());
+                const bool ok = which == "suivante" ? pv->stepView(1) : which == "precedente" ? pv->stepView(-1) : n > 0 && pv->showView(static_cast<std::size_t>(n - 1));
+                if (!ok) fail("ia vue " + arg(2) + " : hors des " + std::to_string(pv->viewCount()) + " vues de la proposition");
+                return Step::Yield;
+            }
         }
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen) { fail("ia " + sub + " : pas d'\xC3\xA9" "cran du projet au-dessus"); return Step::Next; }

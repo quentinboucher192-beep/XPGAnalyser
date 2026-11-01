@@ -447,6 +447,19 @@ struct Preview {
     Touched     touched;
 };
 [[nodiscard]] Preview preview(const hmi::Project&, const Proposal&, const Env& env = {});
+// 1.22.6 : TOUTES LES VUES D'UNE PROPOSITION - une proposition peut creer plusieurs vues (creer_vue, creer_popup,
+// creer_symbole) et toucher des objets de plusieurs vues (Operation::target) : un apercu par vue qu'elle cree ou modifie,
+// en UN passage sur une copie du projet (le meme que preview : tolerant, les objets a supprimer gardes et barres). La vue
+// principale d'abord (celle de preview, a l'identique), puis les autres dans l'ordre de la proposition (la premiere
+// operation qui la vise), puis celles qu'une suppression du projet modifie (une variable retiree de leurs objets). Aucune
+// vue a dessiner : un seul element, celui de preview (ok faux, `why`). `created` : la vue n'existe pas encore dans le
+// projet (son role, << popup >>, << symbole >>... : dans preview.view.role). Long sur une grosse proposition : a calculer
+// hors du fil de l'interface (checkInBackground).
+struct ViewPreview {
+    Preview preview;
+    bool    created{false};
+};
+[[nodiscard]] std::vector<ViewPreview> previews(const hmi::Project&, const Proposal&, const Env& env = {});
 
 // ---- le JSON (le bloc "operations", et une proposition entiere) -----------------
 [[nodiscard]] json::Value operationsToJson(const std::vector<Operation>&);

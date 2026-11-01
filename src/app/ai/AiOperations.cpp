@@ -3296,6 +3296,87 @@ Preview preview(const hmi::Project& project, const Proposal& p, const Env& env) 
     return out;
 }
 
+// ---- 1.22.6 : toutes les vues de la proposition -------------------------------------------------------------------------
+std::vector<ViewPreview> previews(const hmi::Project& project, const Proposal& p, const Env& env) {
+    const hmi::Id open = openViewOf(project, p);
+    const bool views = createsView(p) || usesOpenView(p);
+    const bool removes = std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return del::projectRemoval(op); });
+    // Rien a dessiner (le projet seul ; la vue ouverte disparue) : la reponse de preview, telle quelle (elle ne copie rien).
+    // Une suppression du projet peut toutefois modifier des objets d'autres vues : celles-la se montrent.
+    if ((!views && !removes) || (usesOpenView(p) && open == hmi::kNoId && !createsView(p))) return {ViewPreview{preview(project, p, env), false}};
+    hmi::Project copy = project;
+    std::vector<Check::Outcome> outcomes;
+    std::map<hmi::Id, Touched> touched;
+    (void)runStaged(copy, p, env, Mode::Preview, nullptr, outcomes, plan::schedule(p), nullptr, nullptr, &touched, open);
+    // La vue principale : celle de preview (la vue neuve principale, sinon la vue ouverte).
+    const hmi::View* main = nullptr;
+    if (views) {
+        main = createsView(p) ? copy.viewByName(newViewName(p)) : nullptr;
+        if (!main && open != hmi::kNoId) main = copy.view(open);
+    }
+    // Les vues modifiees par une suppression du projet (aucune unite ne les a touchees) : leurs objets changes, compares a
+    // ceux du projet.
+    std::map<hmi::Id, Touched> changed;
+    if (removes)
+        for (const auto& v : copy.views) {
+            if (touched.count(v.id)) continue;
+            const hmi::View* before = project.view(v.id);
+            if (!before || fingerprint(*before) == fingerprint(v)) continue;
+            Touched t;
+            for (const auto& o : v.objects) {
+                const hmi::Object* was = before->object(o.id);
+                if (!was) t.created.push_back(o.id);
+                else if (!(*was == o)) t.modified.push_back(o.id);
+            }
+            changed.emplace(v.id, std::move(t));
+        }
+    // L'ordre : la principale, puis chaque vue dans l'ordre de la proposition (la premiere operation qui la vise ; une vue
+    // dont la creation est refusee - un nom pris - n'est pas la sienne : seulement si ses objets changent), puis le reste.
+    std::vector<hmi::Id> order;
+    const auto shows = [&](const hmi::View* v) {
+        if (!v) return false;
+        if (v == main || !project.view(v->id) || changed.count(v->id)) return true;
+        const auto it = touched.find(v->id);
+        return it != touched.end() && (!it->second.created.empty() || !it->second.modified.empty() || !it->second.removed.empty());
+    };
+    const auto add = [&](const hmi::View* v) {
+        if (shows(v) && std::find(order.begin(), order.end(), v->id) == order.end()) order.push_back(v->id);
+    };
+    add(main);
+    for (std::size_t i = 0; i < p.ops.size(); ++i) {
+        const Operation& op = p.ops[i];
+        if (op.action == Operation::Action::View) {
+            add(copy.viewByName(trimmed(op.name)));
+        } else if (!projectLevel(op)) {
+            const std::string target = opTarget(p, i);
+            add(target.empty() ? (open != hmi::kNoId ? copy.view(open) : nullptr) : copy.viewByName(target));
+        }
+    }
+    for (const auto& [id, t] : touched) add(copy.view(id));
+    for (const auto& [id, t] : changed) add(copy.view(id));
+    std::vector<ViewPreview> out;
+    for (const auto id : order) {
+        const hmi::View* v = copy.view(id);
+        if (!v) continue;
+        ViewPreview vp;
+        vp.preview.ok = true;
+        vp.preview.view = *v;
+        if (const auto it = touched.find(id); it != touched.end()) vp.preview.touched = it->second;
+        else if (const auto ch = changed.find(id); ch != changed.end()) vp.preview.touched = ch->second;
+        vp.created = project.view(id) == nullptr;
+        out.push_back(std::move(vp));
+    }
+    if (out.empty()) {
+        ViewPreview none;
+        if (views)
+            none.preview.why = "La vue \xC2\xAB " + (createsView(p) ? newViewName(p) : p.view) + " \xC2\xBB ne peut pas \xC3\xAA" "tre dessin\xC3\xA9" "e (refus\xC3\xA9" "e).";
+        else
+            none.preview = preview(project, p, env);   // << Rien a dessiner... >> (sans rien recalculer)
+        out.push_back(std::move(none));
+    }
+    return out;
+}
+
 // ---- le JSON ----------------------------------------------------------------------
 json::Value operationsToJson(const std::vector<Operation>& ops) {
     json::Value arr = json::Value::array();
