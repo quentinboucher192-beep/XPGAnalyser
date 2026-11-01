@@ -589,6 +589,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiObjectAlarmTree.cpp" />
     <ClCompile Include="src\app\hmi\HmiOperatorPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiParamPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiProjectEdits.cpp" />
     <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp" />
     <ClCompile Include="src\app\hmi\HmiScanDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiSimMarks.cpp" />
@@ -1142,6 +1143,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiObjectAlarmTree.hpp" />
     <ClInclude Include="src\app\hmi\HmiOperatorPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiParamPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiProjectEdits.hpp" />
     <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp" />
     <ClInclude Include="src\app\hmi\HmiScanDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiSimMarks.hpp" />

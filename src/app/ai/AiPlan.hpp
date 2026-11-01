@@ -50,7 +50,8 @@ enum class State : std::uint8_t { ToDo, Validated, Applied, Failed, Skipped, Can
 
 // Les categories de l'apercu, dans leur ordre d'affichage. 1.21.0 : Removals (<< Suppressions >>, a la fin) - toute operation
 // supprimer, d'objets ou d'elements du projet.
-enum class Category : std::uint8_t { Types, Equipments, Addresses, Code, Alarms, Views, Popups, Resources, Folders, Objects, Removals };
+// 1.22.6 : Accounts (<< Utilisateurs et groupes >>, a la fin) - securite, groupes, utilisateurs.
+enum class Category : std::uint8_t { Types, Equipments, Addresses, Code, Alarms, Views, Popups, Resources, Folders, Objects, Removals, Accounts };
 [[nodiscard]] std::string_view categoryLabel(Category) noexcept;     // "Types et variables"...
 [[nodiscard]] Category         categoryOf(const Operation&) noexcept;
 

@@ -4,6 +4,7 @@
 #include "HmiAssist.hpp"
 
 #include "HmiPaneKit.hpp"
+#include "HmiProjectEdits.hpp"   // 1.22.6 : les modifications communes avec l'Assistant IA
 
 #include "../../hmi/HmiCrypto.hpp"
 #include "../../hmi/HmiExpr.hpp"
@@ -718,69 +719,9 @@ void HmiUsersPane::rebuildProperties() {
 
 bool HmiUsersPane::setSecurity(const std::string& field, const std::string& raw, std::string* why) {
     const std::string value = trimmed(raw);
+    // 1.22.6 : le corps commun (app::projedit) - l'Assistant IA passe par le meme code.
     const bool ok = change("S\xC3\xA9" "curit\xC3\xA9 : " + field, [&](hmi::Project& p, std::string& err) {
-        auto& sec = p.security;
-        double n = 0;
-        if (field == "active") { sec.enabled = yes(value); return true; }
-        // Lot 13 : les regles cochees.
-        if (field == "mdp_chiffre") { sec.pwDigit = yes(value); return true; }
-        if (field == "mdp_lettre") { sec.pwLetter = yes(value); return true; }
-        if (field == "mdp_casse") { sec.pwMixedCase = yes(value); return true; }
-        if (field == "mdp_special") { sec.pwSpecial = yes(value); return true; }
-        if (field == "mdp_premiere") { sec.pwChangeFirst = yes(value); return true; }
-        if (field == "badge") { sec.badgeLogin = yes(value); return true; }
-        if (field == "depart") {
-            if (!value.empty() && !p.userByLogin(value)) { err = "utilisateur inconnu : " + value; return false; }
-            sec.startUser = value.empty() ? std::string{} : p.userByLogin(value)->login;
-            return true;
-        }
-        // 1.12.19 : un nombre entier, lu comme partout (1 000 ; 12.7 refuse, plus tronque en 12).
-        long long whole = 0;
-        if (!sim::readInteger(value, whole)) { err = field + " : un nombre entier"; return false; }
-        n = static_cast<double>(whole);
-        if (field == "periode") {
-            if (n < 10 || n > 300) { err = "p\xC3\xA9riode : de 10 \xC3\xA0 300 s"; return false; }
-            sec.dynamicPeriodS = static_cast<int>(n);
-            return true;
-        }
-        if (field == "chiffres") {
-            if (n < 6 || n > 8) { err = "chiffres : de 6 \xC3\xA0 8"; return false; }
-            sec.dynamicDigits = static_cast<int>(n);
-            return true;
-        }
-        if (field == "deconnexion") {
-            if (n < 0 || n > 1440) { err = "d\xC3\xA9" "connexion : de 0 (jamais) \xC3\xA0 1440 min"; return false; }
-            sec.autoLogoutMin = static_cast<int>(n);
-            return true;
-        }
-        if (field == "menu_comptes" || field == "menu_acces" || field == "menu_journal") {
-            if (n < 0 || n > 99) { err = "niveau : de 0 \xC3\xA0 99"; return false; }
-            (field == "menu_comptes" ? sec.menuLevelAccounts : field == "menu_acces" ? sec.menuLevelAccess : sec.menuLevelJournal) = static_cast<int>(n);
-            return true;
-        }
-        // Lot 13 : la politique des mots de passe, le verrouillage, l'avertissement.
-        const auto bounded = [&](int& target, double lo, double hi, const std::string& text) {
-            if (n < lo || n > hi) { err = text; return false; }
-            target = static_cast<int>(n);
-            return true;
-        };
-        if (field == "mdp_longueur") return bounded(sec.pwMinLength, 0, 64, "longueur minimale : de 0 \xC3\xA0 64");
-        if (field == "mdp_historique") return bounded(sec.pwHistory, 0, 24, "derniers mots de passe interdits : de 0 \xC3\xA0 24");
-        if (field == "verrou_essais") return bounded(sec.lockAttempts, 0, 99, "verrouillage : de 0 (jamais) \xC3\xA0 99 \xC3\xA9" "checs");
-        if (field == "verrou_minutes") return bounded(sec.lockMinutes, 0, 10080, "dur\xC3\xA9" "e du verrouillage : de 0 \xC3\xA0 10080 min");
-        if (field == "avertir") return bounded(sec.logoutWarnS, 0, 600, "avertissement : de 0 \xC3\xA0 600 s");
-        if (field == "mdp_duree") {
-            const int before = sec.pwMaxAgeDays;
-            if (!bounded(sec.pwMaxAgeDays, 0, 3650, "expiration : de 0 (jamais) \xC3\xA0 3650 jours")) return false;
-            // L'expiration s'allume : un mot de passe sans date prend celle du jour
-            // (il ne serait jamais perime - ou le serait tout de suite).
-            if (before <= 0 && sec.pwMaxAgeDays > 0)
-                for (auto& u : sec.users)
-                    if (u.protection == "classique" && !u.passwordHash.empty() && u.passwordSet.empty()) u.passwordSet = hmi::dayOf(hmi::wallStamp());
-            return true;
-        }
-        err = "champ inconnu : " + field;
-        return false;
+        return projedit::setSecurityField(p, field, value, err);
     }, why);
     if (!ok) return false;
     refresh();
@@ -800,18 +741,9 @@ Id HmiUsersPane::addUser(std::string login, std::string group, std::string* why)
     auto& p = doc_->project;
     if (login.empty()) login = hmi::uniqueLogin(p, "utilisateur");
     Id made = kNoId;
-    const bool ok = change("Nouvel utilisateur " + login, [&](hmi::Project& pr, std::string& err) {
-        if (!hmi::isIdentifier(login)) { err = "login invalide : lettres, chiffres et _ (" + login + ")"; return false; }
-        if (pr.userByLogin(login)) { err = "'" + login + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
-        hmi::User u;
-        u.id = pr.allocate();
-        u.login = login;
-        const auto* g = group.empty() ? (pr.security.groups.empty() ? nullptr : &pr.security.groups.front()) : pr.groupByName(group);
-        if (!group.empty() && !g) { err = "groupe inconnu : " + group; return false; }
-        u.group = g ? g->id : kNoId;
-        made = u.id;
-        pr.security.users.push_back(std::move(u));
-        return true;
+    const bool ok = change("Nouvel utilisateur " + login, [&](hmi::Project& pr, std::string& err) {   // 1.22.6 : app::projedit
+        made = projedit::addUser(pr, login, group, err);
+        return made != kNoId;
     }, why);
     if (!ok) return kNoId;
     showTab(Users);
@@ -843,46 +775,8 @@ bool HmiUsersPane::setUserField(Id id, const std::string& field, const std::stri
     const std::string value = field == "description" || field == "nom" ? raw : trimmed(raw);
     const std::string old = cur->login;
     std::size_t followed = 0;
-    const bool ok = change("Utilisateur " + old + " : " + field, [&](hmi::Project& p, std::string& err) {
-        auto* u = p.user(id);
-        if (!u) { err = "utilisateur introuvable"; return false; }
-        if (field == "login") {
-            if (!hmi::isIdentifier(value)) { err = "login invalide : lettres, chiffres et _ (" + value + ")"; return false; }
-            for (const auto& o : p.security.users)
-                if (o.id != id && same(o.login, value)) { err = "'" + value + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
-            u->login = value;
-            if (same(p.security.startUser, old)) p.security.startUser = value;
-            followed = retarget(p, hmi::Operation::ChangeUser, old, value);
-            return true;
-        }
-        if (field == "nom") { u->fullName = value; return true; }
-        if (field == "groupe") {
-            const auto* g = p.groupByName(value);
-            if (!g) { err = "groupe inconnu : " + value; return false; }
-            u->group = g->id;
-            return true;
-        }
-        if (field == "protection") {
-            const auto& names = hmi::protectionNames();
-            if (std::find(names.begin(), names.end(), value) == names.end()) { err = "protection : classique, dynamique ou expression"; return false; }
-            u->protection = value;
-            // Passer au code dynamique : un secret tout de suite (le code s'affiche).
-            if (value == "dynamique" && u->secret.empty()) u->secret = hmi::randomHex(20);
-            return true;
-        }
-        if (field == "expression") {
-            if (!value.empty()) {
-                const auto e = hmi::Expression::compile(value);
-                if (!e.valid()) { err = "expression illisible : " + e.error(); return false; }
-            }
-            u->expression = value;
-            return true;
-        }
-        if (field == "actif") { u->enabled = yes(value); return true; }
-        if (field == "description") { u->description = value; return true; }
-        if (field == "changer") { u->mustChange = yes(value); return true; }        // lot 13
-        err = "champ inconnu : " + field;
-        return false;
+    const bool ok = change("Utilisateur " + old + " : " + field, [&](hmi::Project& p, std::string& err) {   // 1.22.6 : app::projedit
+        return projedit::setUserField(p, id, field, value, err, &followed);
     }, why);
     if (!ok) return false;
     refresh();
@@ -1013,16 +907,9 @@ Id HmiUsersPane::addGroup(std::string name, int level, std::string* why) {
             if (!p.groupByName(name)) break;
         }
     Id made = kNoId;
-    const bool ok = change("Nouveau groupe " + name, [&](hmi::Project& pr, std::string& err) {
-        if (pr.groupByName(name)) { err = "le groupe '" + name + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
-        if (level < 1 || level > 9) { err = "niveau de 1 \xC3\xA0 9"; return false; }
-        hmi::UserGroup g;
-        g.id = pr.allocate();
-        g.name = name;
-        g.level = level;
-        made = g.id;
-        pr.security.groups.push_back(std::move(g));
-        return true;
+    const bool ok = change("Nouveau groupe " + name, [&](hmi::Project& pr, std::string& err) {   // 1.22.6 : app::projedit
+        made = projedit::addGroup(pr, name, level, err);
+        return made != kNoId;
     }, why);
     if (!ok) return kNoId;
     showTab(Groups);
@@ -1058,42 +945,8 @@ bool HmiUsersPane::setGroupField(Id id, const std::string& field, const std::str
     if (!cur) { if (why) *why = "aucun groupe choisi"; return false; }
     const std::string value = field == "description" ? raw : trimmed(raw);
     const std::string old = cur->name;
-    const bool ok = change("Groupe " + old + " : " + field, [&](hmi::Project& p, std::string& err) {
-        auto* g = p.group(id);
-        if (!g) { err = "groupe introuvable"; return false; }
-        if (field == "nom") {
-            if (value.empty()) { err = "un groupe a un nom"; return false; }
-            for (const auto& o : p.security.groups)
-                if (o.id != id && same(o.name, value)) { err = "le groupe '" + value + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
-            g->name = value;
-            return true;
-        }
-        if (field == "niveau") {
-            long long n = 0;
-            if (!sim::readInteger(value, n) || n < 1 || n > 9) { err = "niveau : de 1 \xC3\xA0 9"; return false; }
-            g->level = static_cast<int>(n);
-            return true;
-        }
-        if (field == "roles") {
-            std::vector<std::string> roles;
-            for (const auto& r : splitList(value)) {
-                const auto* role = p.role(r);
-                if (!role) { err = "r\xC3\xB4le inconnu : " + r; return false; }
-                roles.push_back(role->name);
-            }
-            g->roles = roles;
-            return true;
-        }
-        if (field == "description") { g->description = value; return true; }
-        if (field == "vue_demarrage") {                             // lot 12
-            if (value.empty() || value.rfind("(", 0) == 0) { g->startView = hmi::kNoId; return true; }
-            const auto* v = p.viewByName(value);
-            if (!v) { err = "vue introuvable : " + value; return false; }
-            g->startView = v->id;
-            return true;
-        }
-        err = "champ inconnu : " + field;
-        return false;
+    const bool ok = change("Groupe " + old + " : " + field, [&](hmi::Project& p, std::string& err) {   // 1.22.6 : app::projedit
+        return projedit::setGroupField(p, id, field, value, err);
     }, why);
     if (!ok) return false;
     refresh();

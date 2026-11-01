@@ -281,9 +281,13 @@ void sizes(const std::string& examplePath) {
     // stable des consignes est mise en cache par le fournisseur : elle n'est payee en entier qu'une fois.
     // 1.22.1 (le rangement des variables) : + la regle 18 (ranger, l'exemple de la station), le champ dossier de creer_variables
     // dans le schema et l'arborescence des dossiers de variables dans le contexte - environ 2 Ko : la borne passe de 45 a 48 Ko.
-    check(empty.size() + tool.size() < 48000, "une demande ordinaire (vue vide) : moins de 48 Ko avec l'outil");
-    check(station.size() + tool.size() < 48000, "la station de 31 objets : moins de 48 Ko avec l'outil");
-    check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 48000, "300 objets : resumes, la demande reste bornee");
+    // 1.22.6 (les options des variables, la securite, les vues) : + modifier_variable, securite, creer_groupe, modifier_groupe,
+    // creer_utilisateur, modifier_utilisateur, modifier_vue, vue_de_demarrage, le niveau d'acces, la regle 23 (environ 2,9 Ko),
+    // leurs cibles dans le schema (0,5 Ko), la securite en une ligne et les options des variables dans le contexte (0,6 Ko) : la
+    // borne passe de 48 a 53 Ko.
+    check(empty.size() + tool.size() < 53000, "une demande ordinaire (vue vide) : moins de 53 Ko avec l'outil");
+    check(station.size() + tool.size() < 53000, "la station de 31 objets : moins de 53 Ko avec l'outil");
+    check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 53000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")
               && has(bigCtx, "Titre_Station"),
@@ -463,10 +467,13 @@ void toolSchema() {
     for (const auto& x : actions.items()) a.insert(x.asString());
     // 1.16.0 : + creer_vue, creer_variables, creer_type (le chantier OPTIONS).
     // 1.18.0 : + les huit outils (creer_symbole, creer_popup, creer_modele_vue se lisent comme creer_vue + role).
+    // 1.22.6 : + modifier_variable, securite, creer_groupe, modifier_groupe, creer_utilisateur, modifier_utilisateur, modifier_vue,
+    // vue_de_demarrage.
     check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code", "creer_vue",
                                      "creer_variables", "creer_type", "creer_equipement", "adresser", "creer_script", "creer_fonction",
-                                     "creer_alarme", "creer_ressource", "creer_dossier", "ranger"},
-          "action : les dix-neuf operations");
+                                     "creer_alarme", "creer_ressource", "creer_dossier", "ranger", "modifier_variable", "securite", "creer_groupe",
+                                     "modifier_groupe", "creer_utilisateur", "modifier_utilisateur", "modifier_vue", "vue_de_demarrage"},
+          "action : les vingt-sept operations");
     check(item.at("properties").has("proprietes") && item.at("properties").has("variable") && item.at("properties").has("noms")
               && item.at("properties").has("code") && schema.at("properties").has("resume"),
           "les champs du format existant (+ noms, dx, dy, code)");

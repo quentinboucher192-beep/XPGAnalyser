@@ -213,6 +213,7 @@ std::string_view categoryLabel(Category c) noexcept {
         case Category::Folders: return "Dossiers";
         case Category::Objects: return "Objets des vues";
         case Category::Removals: return "Suppressions";
+        case Category::Accounts: return "Utilisateurs et groupes";   // 1.22.6
     }
     return "";
 }
@@ -234,6 +235,15 @@ Category categoryOf(const Operation& op) noexcept {
         case A::Folder:
         case A::Store: return Category::Folders;
         case A::Remove: return Category::Removals;
+        // 1.22.6 : les options d'une variable avec les variables ; les liens d'une vue avec les vues ; la securite a part.
+        case A::VarEdit: return Category::Types;
+        case A::ViewEdit:
+        case A::StartView: return Category::Views;
+        case A::Security:
+        case A::Group:
+        case A::GroupEdit:
+        case A::User:
+        case A::UserEdit: return Category::Accounts;
         default: return Category::Objects;
     }
 }
@@ -382,7 +392,58 @@ void refsOf(const hmi::Project& pr, const Proposal& p, std::size_t index, std::v
                 addUnique(modifies, r);
             }
             break;
+        // 1.22.6 : une variable modifiee (renommee : son nouveau nom est cree, ceux qui le lisent attendent) ; son equipement.
+        case A::VarEdit: {
+            std::vector<std::string> names;
+            if (!trimmed(op.variable).empty()) names.push_back(trimmed(op.variable));
+            for (const auto& n : op.objects) names.push_back(trimmed(n));
+            for (const auto& n : names) addUnique(modifies, Ref{"variable", n, {}, pr.variable(n) != nullptr});
+            if (const std::string to = prop(op, "renommer"); !to.empty()) addUnique(creates, Ref{"variable", to, {}, pr.variable(to) != nullptr});
+            if (const std::string e = prop(op, "equipement"); !e.empty()) addUnique(uses, Ref{"equipement", e, {}, existsIn(pr, "equipement", e)});
+            if (const std::string t = prop(op, "type"); !t.empty())
+                for (auto& n : readNames(t)) addUnique(uses, readRef(pr, n));
+            break;
+        }
+        case A::Security:
+            if (const std::string u = prop(op, "depart"); !u.empty()) addUnique(uses, Ref{"utilisateur", u, {}, pr.userByLogin(u) != nullptr});
+            break;
+        case A::Group:
+        case A::GroupEdit: {
+            const std::string g = op.action == A::Group || prop(op, "groupe").empty() ? trimmed(op.name) : prop(op, "groupe");
+            addUnique(op.action == A::Group ? creates : modifies, Ref{"groupe", g, {}, pr.groupByName(g) != nullptr});
+            if (const std::string to = prop(op, "renommer"); !to.empty()) addUnique(creates, Ref{"groupe", to, {}, pr.groupByName(to) != nullptr});
+            if (const std::string v = prop(op, "vue_demarrage"); !v.empty()) addUnique(uses, Ref{"vue", v, {}, existsIn(pr, "vue", v)});
+            break;
+        }
+        case A::User:
+        case A::UserEdit: {
+            const std::string u = op.action == A::User || prop(op, "utilisateur").empty() ? trimmed(op.name) : prop(op, "utilisateur");
+            addUnique(op.action == A::User ? creates : modifies, Ref{"utilisateur", u, {}, pr.userByLogin(u) != nullptr});
+            if (const std::string to = prop(op, "renommer"); !to.empty()) addUnique(creates, Ref{"utilisateur", to, {}, pr.userByLogin(to) != nullptr});
+            if (const std::string g = prop(op, "groupe"); !g.empty()) addUnique(uses, Ref{"groupe", g, {}, pr.groupByName(g) != nullptr});
+            break;
+        }
+        case A::ViewEdit:
+        case A::StartView: {
+            const std::string v = trimmed(op.name);
+            addUnique(op.action == A::ViewEdit ? modifies : uses, Ref{"vue", v, {}, existsIn(pr, "vue", v)});
+            for (const char* k : {"parent", "modele", "entete", "pied", "entete_modele", "pied_modele"}) {
+                const std::string n = prop(op, k);
+                const std::string l = lower(n);
+                if (n.empty() || l == "oui" || l == "non" || l == "true" || l == "false" || l == "aucun" || l == "aucune" || l == "1" || l == "0") continue;
+                addUnique(uses, Ref{"vue", n, {}, existsIn(pr, "vue", n)});
+            }
+            break;
+        }
     }
+    // 1.22.6 : creer_vue - sa parente, son modele, son en-tete, son pied (des vues existantes ou creees plus haut).
+    if (op.action == A::View)
+        for (const char* k : {"parent", "modele", "entete", "pied", "entete_modele", "pied_modele"}) {
+            const std::string n = prop(op, k);
+            const std::string l = lower(n);
+            if (n.empty() || l == "oui" || l == "non" || l == "true" || l == "false" || l == "aucun" || l == "aucune" || l == "1" || l == "0") continue;
+            addUnique(uses, Ref{"vue", n, {}, existsIn(pr, "vue", n)});
+        }
     // Un objet vise sa vue : une vue creee plus haut (ou du projet).
     if (objectAction(op) && !target.empty()) addUnique(uses, Ref{"vue", target, {}, existsIn(pr, "vue", target)});
 }
@@ -412,6 +473,16 @@ int rankOf(const Proposal& p, const Unit& u) {
             return r == "vue" ? 11 : r == "popup" ? 10 : 9;
         }
         case A::Store: return 13;
+        // 1.22.6 : les options d'une variable avec les adresses ; les groupes avant les comptes, la securite apres eux ; les
+        // liens d'une vue apres les vues (les objets de la vue, a egalite, dans l'ordre ecrit).
+        case A::VarEdit: return 4;
+        case A::Group:
+        case A::GroupEdit: return 5;
+        case A::User:
+        case A::UserEdit: return 6;
+        case A::Security: return 7;
+        case A::ViewEdit:
+        case A::StartView: return 12;
         default: return 12;
     }
 }
@@ -693,6 +764,25 @@ std::string titleOf(const Proposal& p, std::size_t index, const hmi::Project& pr
         case A::Resource: return create + "la ressource " + name;
         case A::Folder: return create + "le dossier " + prop(op, "dossier") + " (" + prop(op, "liste") + ")";
         case A::Store: return "Ranger " + list(op.objects) + " dans " + prop(op, "dossier");
+        // 1.22.6
+        case A::VarEdit: {
+            std::vector<std::string> names;
+            if (!trimmed(op.variable).empty()) names.push_back(trimmed(op.variable));
+            for (const auto& n : op.objects) names.push_back(trimmed(n));
+            return names.size() == 1 ? "Modifier la variable " + names.front() : "Modifier " + std::to_string(names.size()) + " variables (" + list(names) + ")";
+        }
+        case A::Security: {
+            const std::string a = lower(prop(op, "active"));
+            if (a == "oui" || a == "true" || a == "1" || a == "vrai") return "Activer la s\xC3\xA9" "curit\xC3\xA9";
+            if (a == "non" || a == "false" || a == "0" || a == "faux") return "D\xC3\xA9sactiver la s\xC3\xA9" "curit\xC3\xA9";
+            return "R\xC3\xA9gler la s\xC3\xA9" "curit\xC3\xA9";
+        }
+        case A::Group: return create + "le groupe " + name + (prop(op, "niveau").empty() ? std::string{} : " (niveau " + prop(op, "niveau") + ")");
+        case A::GroupEdit: return "Modifier le groupe " + (prop(op, "groupe").empty() ? name : prop(op, "groupe"));
+        case A::User: return create + "l'utilisateur " + name;
+        case A::UserEdit: return "Modifier l'utilisateur " + (prop(op, "utilisateur").empty() ? name : prop(op, "utilisateur"));
+        case A::ViewEdit: return "Modifier la vue " + name;
+        case A::StartView: return "Faire de " + name + " la vue de d\xC3\xA9marrage";
     }
     (void)pr;
     return name;
@@ -714,6 +804,14 @@ std::vector<std::string> checksOf(const Operation& op) {
         case A::Resource: return {"le fichier joint existe"};
         case A::Folder:
         case A::Store: return {"la liste et le chemin", "les \xC3\xA9l\xC3\xA9ments existent"};
+        case A::VarEdit: return {"la variable IHM existe (jamais celle de l'automate)", "chaque option, comme Variables IHM", "l'adresse libre (pas de chevauchement)"};
+        case A::Security: return {"chaque r\xC3\xA9glage, comme la fiche", "un compte qui peut administrer"};
+        case A::Group:
+        case A::GroupEdit: return {"le nom libre, le niveau de 1 \xC3\xA0 9", "les r\xC3\xB4les existent"};
+        case A::User:
+        case A::UserEdit: return {"le login libre, le groupe existe", "aucun mot de passe : d\xC3\xA9sactiv\xC3\xA9 jusqu'\xC3\xA0 ce que tu le donnes"};
+        case A::ViewEdit: return {"la vue existe", "pas de boucle de parentes ni d'h\xC3\xA9ritage", "les objets que l'en-t\xC3\xAAte ou le pied recouvre"};
+        case A::StartView: return {"une vue ordinaire existante"};
         case A::Remove:
             if (del::projectRemoval(op))
                 return {"ce qui en d\xC3\xA9pend (le graphe des relations)", "la strat\xC3\xA9gie", "aucune r\xC3\xA9" "f\xC3\xA9rence restante",
@@ -728,7 +826,13 @@ Verb verbOf(const Operation& op) {
         case A::Modify:
         case A::Bind:
         case A::Address:
-        case A::Store: return Verb::Modify;
+        case A::Store:
+        case A::VarEdit:     // 1.22.6
+        case A::Security:
+        case A::GroupEdit:
+        case A::UserEdit:
+        case A::ViewEdit:
+        case A::StartView: return Verb::Modify;
         case A::Align:
         case A::Distribute: return Verb::Arrange;
         case A::Remove: return Verb::Remove;
@@ -851,7 +955,7 @@ Plan fromJson(const json::Value& o) {
             if (auto act = actionFromKey(str(j, "action"))) s.action = *act;
             if (const json::Value* v = j.find("categorie"); v && v->isNumber()) {
                 const int c = static_cast<int>(v->asNumber());
-                if (c >= 0 && c <= static_cast<int>(Category::Removals)) s.category = static_cast<Category>(c);
+                if (c >= 0 && c <= static_cast<int>(Category::Accounts)) s.category = static_cast<Category>(c);
             }
             if (const json::Value* v = j.find("verbe"); v && v->isNumber()) {
                 const int c = static_cast<int>(v->asNumber());
@@ -933,6 +1037,13 @@ bool confirmed(const hmi::Project& after, const Step& s, const Proposal& p, std:
         case A::Alarm: return after.alarmByName(name) != nullptr;
         case A::Resource: return after.resourceByName(name) != nullptr;
         case A::Folder: return existsIn(after, "dossier", prop(op, "dossier"));
+        // 1.22.6 : lu dans le projet d'apres (le groupe, le compte, la vue de demarrage).
+        case A::Group: return after.groupByName(name) != nullptr;
+        case A::User: return after.userByLogin(name) != nullptr;
+        case A::StartView: {
+            const hmi::View* v = after.viewByName(name);
+            return v && after.config.startView == v->id;
+        }
         case A::Create: {
             const std::string t = s.target.empty() ? p.view : s.target;
             const hmi::View* v = after.viewByName(t);

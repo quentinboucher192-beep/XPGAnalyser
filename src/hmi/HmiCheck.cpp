@@ -1433,7 +1433,11 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
         if (!isIdentifier(u.login)) addItem(out, S::Error, "Utilisateur", u.login, "identifiant invalide : '" + u.login + "'", u.id);
         else if (!logins.insert(key).second) addItem(out, S::Error, "Utilisateur", u.login, "identifiant en double : " + u.login, u.id);
         if (!p.group(u.group)) addItem(out, S::Error, "Utilisateur", u.login, "groupe introuvable", u.id);
-        if (u.protection == "classique" && u.passwordHash.empty())
+        // 1.22.6 : un compte DESACTIVE sans mot de passe ne peut de toute facon pas se connecter (un compte cree par l'Assistant IA,
+        // << mot de passe a definir >>) : une information, plus une erreur ; actif, c'est toujours une erreur.
+        if (u.protection == "classique" && u.passwordHash.empty() && !u.enabled)
+            addItem(out, S::Info, "Utilisateur", u.login, "d\xC3\xA9sactiv\xC3\xA9, aucun mot de passe : \xC3\xA0 d\xC3\xA9" "finir (Configuration > Utilisateurs) avant de l'activer", u.id);
+        else if (u.protection == "classique" && u.passwordHash.empty())
             addItem(out, S::Error, "Utilisateur", u.login, "aucun mot de passe : il ne pourra pas se connecter", u.id);
         else if (u.protection == "dynamique" && u.secret.empty())
             addItem(out, S::Error, "Utilisateur", u.login, "aucun secret pour le code dynamique", u.id);

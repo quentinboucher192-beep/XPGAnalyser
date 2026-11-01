@@ -2555,6 +2555,19 @@ bool Assistant::excludeOps(int message, const std::vector<std::size_t>& ops, boo
 }
 
 void Assistant::autoApply(int message) {
+    // 1.22.6 : UNE PROPOSITION SENSIBLE (desactiver la securite, toucher le dernier compte ou groupe qui administre :
+    // AiOperations sensitive) - le mode Direct ne l'applique JAMAIS sans clic : elle attend sur sa carte, la raison dite.
+    if (const Proposal* sp = proposal(message); sp && sensitive(*sp)) {
+        const std::string said = "Mode Direct : pas appliqu\xC3\xA9" "e \xE2\x80\x94 op\xC3\xA9ration sensible (la s\xC3\xA9" "curit\xC3\xA9, les comptes) : "
+                                 "v\xC3\xA9rifie l'aper\xC3\xA7u, puis clique Appliquer.";
+        notice_ = said;
+        if (auto* c = cur())
+            if (Proposal* p = proposalIn(*c, sp->id)) {
+                addProcess(*p, "direct", said);
+                save(*c);
+            }
+        return;
+    }
     // 1.22.1 : une proposition lourde s'applique sur un fil de fond (sa verification comprise) ; avec des suppressions,
     // l'ecran demande d'abord (sa verification de fond dit s'il faut confirmer) - jamais une validation sur ce fil.
     if (const Proposal* p = proposal(message); p && checkInBackground(*p)) {

@@ -12,6 +12,7 @@
 #include "../../hmi/HmiNatives.hpp"      // 1.18.0 : les natives que la demande evoque
 #include "../../hmi/HmiPublicVars.hpp"   // 1.18.0 : les variables systeme
 #include "../../hmi/HmiScript.hpp"       // 1.18.0 : la signature d'une fonction IHM
+#include "../../hmi/HmiTemplates.hpp"    // 1.22.6 : l'en-tete et le pied d'une vue
 
 #include <algorithm>
 #include <cctype>
@@ -105,6 +106,19 @@ std::string paramsText(const hmi::Project& p, const hmi::View& v, bool members) 
     return out;
 }
 
+// 1.22.6 : LES LIENS D'UNE VUE, en court - sa parente, son ecran modele, son en-tete et son pied (`heights` : leur hauteur, pour
+// poser les objets hors des bandes) ; vide : aucun.
+std::string linksText(const hmi::Project& p, const hmi::View& v, bool heights) {
+    std::vector<std::string> parts;
+    if (const hmi::View* up = v.upView != hmi::kNoId ? p.view(v.upView) : nullptr) parts.push_back("parent " + up->name);
+    if (const hmi::View* t = v.templateView != hmi::kNoId ? p.view(v.templateView) : nullptr) parts.push_back("mod\xC3\xA8le " + t->name);
+    if (const hmi::View* h = hmi::headerOf(p, v)) parts.push_back("en-t\xC3\xAAte " + h->name + (heights ? " " + std::to_string(h->height) + " px" : std::string{}));
+    if (const hmi::View* f = hmi::footerOf(p, v)) parts.push_back("pied " + f->name + (heights ? " " + std::to_string(f->height) + " px" : std::string{}));
+    std::string out;
+    for (const auto& x : parts) out += (out.empty() ? "" : ", ") + x;
+    return out;
+}
+
 // ---- la vue et ses objets -------------------------------------------------------------
 void viewPart(const PromptInput& in, const ContextLimits& lim, ContextInfo& info, std::string& s) {
     const hmi::View& v = *in.view;
@@ -121,6 +135,10 @@ void viewPart(const PromptInput& in, const ContextLimits& lim, ContextInfo& info
         }
     }
     s += ".\n";
+    // 1.22.6 : ses liens (les bandes : hauteur comprise - les objets neufs se posent hors d'elles) ; la vue de demarrage.
+    if (in.project)
+        if (const std::string links = linksText(*in.project, v, true); !links.empty() || in.project->config.startView == v.id)
+            s += "Ses liens : " + (links.empty() ? std::string("aucun") : links) + (in.project->config.startView == v.id ? " ; c'est la vue de d\xC3\xA9marrage" : "") + ".\n";
     // 1.22.2 : les parametres de la popup (du symbole) active - et comment ses objets les lisent.
     if (!v.params.empty() && in.project)
         s += "Param\xC3\xA8tres de cette " + std::string(roleName(v.role)) + " (ses objets les lisent par leur nom et leurs membres : "
@@ -276,13 +294,19 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
         for (const auto& [score, v] : ranked) {
             if (lines.size() >= lim.variableBytes) break;
             lines += v->name + " : " + v->type;
+            // 1.22.6 : ses options, en court - l'unite, [LS] lecture seule, [REM] remanente, @equipement:adresse.
+            if (!v->unit.empty()) lines += " (" + v->unit + ")";
+            if (v->readOnly) lines += " [LS]";
+            if (v->retain) lines += " [REM]";
+            if (v->bound()) lines += " @" + v->equipment + (v->address.empty() ? std::string{} : ":" + v->address);
             if (!v->description.empty()) lines += " - " + clip(v->description, 50);
             if (!v->folder.empty()) lines += " | " + v->folder;   // 1.22.1 : son dossier
             lines += "\n";
             types.insert(v->type);
             ++info.variablesListed;
         }
-        s += "Variables de l'IHM (" + std::to_string(vars.size()) + ") : nom : type - description | dossier (jamais leur valeur ; un membre d'une structure "
+        s += "Variables de l'IHM (" + std::to_string(vars.size()) + ") : nom : type (unit\xC3\xA9) [LS] lecture seule [REM] r\xC3\xA9manente "
+             "@\xC3\xA9quipement:adresse - description | dossier (jamais leur valeur ; un membre d'une structure "
              "s'\xC3\xA9" "crit Variable.Membre) :\n" + lines;
         if (info.variablesListed < vars.size())
             s += "... et " + std::to_string(vars.size() - info.variablesListed)
@@ -379,7 +403,9 @@ void viewsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
         const std::string role = roleName(v.role);
         if (!byRole.count(role)) roles.push_back(role);
         // 1.22.2 : une popup, un symbole avec des parametres : leurs noms et types (Popup_Vanne(Vanne : T_Vanne))
-        byRole[role].push_back(v.params.empty() ? v.name : v.name + "(" + paramsText(*in.project, v, false) + ")");
+        std::string shown = v.params.empty() ? v.name : v.name + "(" + paramsText(*in.project, v, false) + ")";
+        if (const std::string links = linksText(*in.project, v, false); !links.empty()) shown += "[" + links + "]";   // 1.22.6
+        byRole[role].push_back(std::move(shown));
     }
     if (roles.empty()) {
         s += "Autres vues du projet : aucune.\n";
@@ -399,9 +425,12 @@ void viewsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
             first = false;
         }
     }
-    s += "Autres vues du projet (leurs noms : une navigation, une popup les citent) : " + text;
+    s += "Autres vues du projet (leurs noms : une navigation, une popup les citent ; [leurs liens]) : " + text;
     if (left > 0) s += " ; ... et " + std::to_string(left) + " autres";
     s += ".\n";
+    // 1.22.6 : la vue de demarrage
+    if (const hmi::View* start = in.project->view(in.project->config.startView); start && !(in.view && in.view->id == start->id))
+        s += "Vue de d\xC3\xA9marrage : " + start->name + ".\n";
 }
 
 // 1.18.0 : CE QUE LES OUTILS DE L'IA LISENT - les elements du projet que ses operations citent (un equipement a adresser, une
@@ -529,6 +558,54 @@ void toolsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
     }
 }
 
+// 1.22.6 : LA SECURITE, en court - toujours : active ou non, les groupes et leur niveau, le nombre de comptes ; le detail (les
+// roles, les roles des groupes, les comptes par login et groupe, desactives ou sans mot de passe, le demarrage, la deconnexion,
+// le menu de connexion) quand la demande en parle ou que la securite est active. JAMAIS une empreinte, un sel, un secret ni un
+// badge : seulement ce que la liste de Configuration > Utilisateurs montre.
+void securityPart(const PromptInput& in, std::string& s) {
+    const hmi::Security& sec = in.project->security;
+    std::string groups;
+    for (const auto& g : sec.groups) groups += (groups.empty() ? "" : ", ") + g.name + " " + std::to_string(g.level);
+    s += "S\xC3\xA9" "curit\xC3\xA9 : " + std::string(sec.enabled ? "ACTIVE" : "inactive") + " ; groupes (niveau) : " + (groups.empty() ? std::string("aucun") : clip(groups, 300))
+         + " ; " + std::to_string(sec.users.size()) + " compte(s) ; le niveau d'acc\xC3\xA8s d'un objet : sa propri\xC3\xA9t\xC3\xA9 access.\n";
+    bool asked = sec.enabled;
+    for (const auto& w : wordsOf(in.request))
+        for (const char* k : {"secur", "utilisat", "group", "niveau", "acces", "droit", "login", "compte", "passe", "role", "permission", "connex", "administr",
+                              "operateur", "superviseur", "maintenan"})
+            if (w.rfind(k, 0) == 0) asked = true;
+    if (!asked) return;
+    s += "  au d\xC3\xA9marrage : " + (sec.startUser.empty() ? std::string("personne") : sec.startUser) + " ; d\xC3\xA9" "connexion : "
+         + (sec.autoLogoutMin > 0 ? std::to_string(sec.autoLogoutMin) + " min" : std::string("jamais")) + " ; menu de connexion (niveaux) : Comptes "
+         + std::to_string(sec.menuLevelAccounts) + ", Acc\xC3\xA8s " + std::to_string(sec.menuLevelAccess) + ", Journal " + std::to_string(sec.menuLevelJournal) + ".\n";
+    std::string roles;
+    for (const auto& r : sec.roles) {
+        roles += (roles.empty() ? "" : ", ") + r.name + " (";
+        for (std::size_t k = 0; k < r.permissions.size(); ++k) roles += (k ? " " : "") + r.permissions[k];
+        roles += ")";
+    }
+    std::string gr;
+    for (const auto& g : sec.groups) {
+        gr += (gr.empty() ? "" : ", ") + g.name + " (" + std::to_string(g.level);
+        for (std::size_t k = 0; k < g.roles.size(); ++k) gr += (k ? " " : " : ") + g.roles[k];
+        gr += ")";
+    }
+    if (!roles.empty()) s += "  r\xC3\xB4les (permissions) : " + clip(roles, 400) + " ; groupes (niveau : r\xC3\xB4les) : " + clip(gr, 500) + ".\n";
+    std::string users;
+    std::size_t left = 0;
+    for (const auto& u : sec.users) {
+        if (users.size() >= 600) {
+            ++left;
+            continue;
+        }
+        const hmi::UserGroup* g = in.project->group(u.group);
+        const bool noPass = (u.protection == "classique" && u.passwordHash.empty()) || (u.protection == "dynamique" && u.secret.empty());
+        users += (users.empty() ? "" : ", ") + u.login + " : " + (g ? g->name : std::string("?"));
+        if (!u.enabled || noPass) users += std::string(" [") + (!u.enabled ? "d\xC3\xA9sactiv\xC3\xA9" : "") + (!u.enabled && noPass ? ", " : "")
+                                           + (noPass ? "sans mot de passe" : "") + "]";
+    }
+    s += "  comptes (login : groupe) : " + (users.empty() ? std::string("aucun") : users) + (left ? " ... et " + std::to_string(left) + " autres" : std::string{}) + ".\n";
+}
+
 // 1.20.0 : LES INCIDENTS, SEULEMENT QUAND LA DEMANDE EN PARLE (<< pourquoi cette alarme... >>, << diagnostic >>...) - les
 // trois derniers dossiers qu'elle concerne, resumes (date, alarme, resume, valeurs, pistes et leur certitude,
 // equipements, alarmes liees), au plus 6 Ko : jamais tout le projet ni toute la fiche. Une demande ordinaire n'en recoit
@@ -581,6 +658,7 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
     s += varfold::treeText(*in.project, lim.folderBytes, &info.folders, &info.foldersListed);   // 1.22.1 : ou ranger les variables creees
     viewsPart(in, lim, s);
     toolsPart(in, lim, s);   // 1.18.0
+    securityPart(in, s);     // 1.22.6 : la securite (jamais une empreinte ni un secret)
     incidentsPart(in, s);    // 1.20.0
     if (infoOut) *infoOut = info;
     return s;
