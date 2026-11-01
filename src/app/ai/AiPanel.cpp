@@ -1224,7 +1224,12 @@ bool AiPanel::applyProposal(int message) {
         say("La proposition se v\xC3\xA9rifie encore (sur un fil de fond) : Appliquer revient \xC3\xA0 la fin.");
         return false;
     }
-    if (!chat_ || !chat_->resultReady(message, &ck, nullptr, nullptr)) ck = assistant_->check(message);
+    if (!chat_ || !chat_->resultReady(message, &ck, nullptr, nullptr)) {
+        // 1.22.1 : une proposition lourde pas encore verifiee par la carte : jamais une validation sur ce fil (le blocage du
+        // 01/11) - l'application de fond la fait, et dit ses erreurs.
+        if (checkInBackground(*p)) return doApply();
+        ck = assistant_->check(message);
+    }
     // 1.16.1 : APPLIQUER MALGRE LES ERREURS (l'option des parametres) - toujours une confirmation qui les liste.
     if (!ck.ok() && !ck.stale && !ck.viewMissing && assistant_->settings().applyWithErrors && ui_.showDialog) {
         HmiAskDialog::Spec spec;
