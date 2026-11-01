@@ -188,6 +188,14 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
     };
     std::thread to(reader, outR, &r.out), te(reader, errR, &r.err);
     for (;;) {
+        // 1.22.0 : l'annulation d'abord - demandee avant le lancement (ou pendant un long arret du fil appelant), elle
+        // n'est pas perdue parce que l'enfant a eu le temps de finir.
+        if (cancel && cancel->load()) {
+            r.cancelled = true;
+            TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 2000);
+            break;
+        }
         const DWORD w = WaitForSingleObject(pi.hProcess, 50);
         if (w == WAIT_OBJECT_0) break;
         if (cancel && cancel->load()) {
@@ -337,6 +345,12 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
         }
     };
     while (!exited || outOpen || errOpen) {
+        // 1.22.0 : l'annulation d'abord - demandee avant le lancement (ou pendant un long arret du fil appelant), elle
+        // n'est pas perdue parce que l'enfant a eu le temps de finir.
+        if (!exited && !r.cancelled && cancel && cancel->load()) {
+            r.cancelled = true;
+            kill(-pid, SIGKILL);
+        }
         pollfd fds[2] = {{out[0], POLLIN, 0}, {err[0], POLLIN, 0}};
         (void)poll(fds, 2, 50);
         if (outOpen) drain(out[0], &r.out, &outOpen);
