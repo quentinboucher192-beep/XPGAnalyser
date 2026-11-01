@@ -1,6 +1,6 @@
 # API Studio et IHM Studio 1.21.2 : les notifications de l'Assistant, le modèle de fichier dans la conversation
 
-Livrée le 01/11/2026. Elle suit la 1.21.1 (`docs/LIVRAISON-1.21.1.md`), livrée le matin même.
+Livrée le 01/11/2026, **dans le même installateur que la 1.21.3** (une grande demande n'est plus coupée : `docs/LIVRAISON-1.21.3.md`). Elle suit la 1.21.1 (`docs/LIVRAISON-1.21.1.md`), livrée le matin même.
 
 Tes demandes :
 1. « quand il crée un modèle de fichiers ça le mette dans le chat un peu comme dans des balises code » ;
@@ -11,7 +11,7 @@ Tes demandes :
 Quand tu enregistres un modèle de fichier (**Contexte de la discussion › Modèle… › Enregistrer comme modèle**), l'Assistant l'écrit dans la conversation :
 - « **Modèle de fichier enregistré** : « Liste E/S A1 » — Liste d'entrées/sorties, feuille « E/S », en-tête ligne 3 », puis ses colonnes et où il est gardé (Mémoire et apprentissage › Apprentissage › Modèles de fichiers, partagé avec toutes les IA, emporté par le .xia) ;
 - puis **le modèle lui-même dans un bloc de code JSON** (le nom, l'identifiant, le genre, la feuille, la ligne d'en-tête, chaque colonne avec son rôle, sa lettre et son intitulé, les règles, la signature des intitulés), avec le bouton **Copier** des blocs de code ;
-- « **mis à jour** » quand un modèle du même nom et des mêmes intitulés existait déjà.
+- « **mis à jour** » quand un modèle du même nom et des mêmes intitulés existait déjà : il est mis à jour (ses utilisations et ses dates gardées). Avant la livraison, ce cas était refusé (« un modèle porte déjà ce nom ») : trouvé par les essais, corrigé.
 
 Ce message vient du **logiciel**, pas de l'IA : il n'est jamais renvoyé à l'IA connectée comme une de ses réponses.
 
@@ -42,24 +42,13 @@ Ni le Compiler, ni la simulation, ni les plantages : seulement l'Assistant.
 
 ## 3. Les essais
 
-@@ESSAIS@@
+La 1.21.2 a été essayée seule (114 suites sur 116 réussies : les deux échecs, le modèle réenregistré et la hauteur du volet dans un essai, sont corrigés), puis avec la 1.21.3 : voir `docs/LIVRAISON-1.21.3.md`, section 3.
 
 ## 4. Installer
 
-Fichiers livrés :
-- `API-IHM-Studio-Setup-1.21.2.exe` : l'installateur (il met à jour la 1.21.1 au même endroit et garde tes données) ;
-- `API-Studio-1.21.2-portable.zip` et `IHM-Studio-1.21.2-portable.zip` ;
-- ce document.
+La 1.21.2 n'a pas d'installateur à elle : elle est dans `API-IHM-Studio-Setup-1.21.3.exe` (et les portables 1.21.3), qui met à jour la 1.21.1 au même endroit et garde tes données.
 
-Windows SmartScreen peut avertir (installateur non signé) : « Informations complémentaires », puis « Exécuter quand même ». Le format des projets ne change pas (33).
-
-@@SHA@@
-
-### Les vérifications sous Windows (Wine)
-
-@@WINE@@
-
-Ces vérifications sont faites sous Wine, **pas sur un vrai Windows**.
+Les empreintes et les vérifications sous Wine (**pas sur un vrai Windows**) : `docs/LIVRAISON-1.21.3.md`, section 4.
 
 ## 5. Les limites
 
