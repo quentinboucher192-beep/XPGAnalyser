@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.5", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.6", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.5", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 19 h 45"},
     {"1.22.4", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 18 h"},
     {"1.22.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h 50"},
     {"1.22.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h"},
@@ -159,6 +160,45 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.6 : toutes les vues de l'apercu, l'activite et les couts en direct, la mission depuis la conversation, les jetons,
+        // les variables, la securite et les vues reglees par l'IA
+        note("1.22.6", "Assistant IA", Kind::New,
+         "LA PR\xC3\x89VISUALISATION MONTRE TOUTES LES VUES d'une proposition : une barre \xC2\xAB Vue 2/4 : Popup_Vanne (neuve, popup) \xC2\xB7 1 erreur \xC2\xBB, "
+         "ses fl\xC3\xA8" "ches (PageUp/PageDown, Ctrl+gauche/droite) et la liste des vues. \xC3\x80 gauche, chaque ligne dit sa vue (marqu\xC3\xA9" "e pour la vue "
+         "montr\xC3\xA9" "e) ; choisir un objet d'une autre vue y fait passer l'aper\xC3\xA7u et l'encadre ; \xC2\xAB Cette vue seulement \xC2\xBB ne garde que ses lignes.",
+         "assistant-ia", ""),
+        note("1.22.6", "Assistant IA", Kind::New,
+         "CE QUE FAIT L'IA, EN DIRECT : sous la r\xC3\xA9ponse en cours, une ligne dit ce qui se passe \xC3\xA0 l'instant - la demande envoy\xC3\xA9" "e (son "
+         "contexte, dont le cache), la r\xC3\xA9" "flexion et ses jetons, l'op\xC3\xA9ration en cours d'\xC3\xA9" "criture (\xC2\xAB op\xC3\xA9ration 12 : cr\xC3\xA9" "er Voyant_P3 sur "
+         "Vue_Pompes \xC2\xBB), le classeur lu, l'attente du service, la v\xC3\xA9rification, G\xC3\xA9n\xC3\xA9rer et Compiler - avec les derni\xC3\xA8res \xC3\xA9tapes et leur dur\xC3\xA9" "e.",
+         "assistant-ia", ""),
+        note("1.22.6", "Assistant IA", Kind::New,
+         "LES CO\xC3\x9BTS EN DIRECT ET LEUR D\xC3\x89TAIL : le bas du panneau (cette conversation, aujourd'hui, la limite) compte la r\xC3\xA9ponse pendant "
+         "qu'elle s'\xC3\xA9" "crit (\xC2\xAB env. \xC2\xBB jusqu'au compte exact). Chaque r\xC3\xA9ponse garde son bilan, \xC2\xAB 48 k jetons \xC2\xB7 0:42 \xC2\xBB, et son \xC2\xAB + \xC2\xBB d\xC3\xA9taille "
+         "chaque appel au service (but, entr\xC3\xA9" "e dont le cache, sortie dont la r\xC3\xA9" "flexion, dur\xC3\xA9" "e). Un tour avec outils additionne tous ses "
+         "appels ; une r\xC3\xA9ponse arr\xC3\xAAt\xC3\xA9" "e garde ce qu'elle a consomm\xC3\xA9.",
+         "assistant-ia", ""),
+        note("1.22.6", "Assistant IA", Kind::New,
+         "UNE GROSSE DEMANDE DEVIENT UNE MISSION : clic droit sur un message \xE2\x80\xBA Cr\xC3\xA9" "er une mission avec ce message (la demande, ses pi\xC3\xA8" "ces, "
+         "un r\xC3\xA9sum\xC3\xA9 de la conversation), ou le bouton Envoyer en mission. Le logiciel et l'IA le conseillent pour une demande qui "
+         "\xC3\xA9num\xC3\xA8re plusieurs \xC3\xA9tapes, une suite qui revient, une r\xC3\xA9ponse coup\xC3\xA9" "e : Cr\xC3\xA9" "er la mission ou Continuer ici. Rien sans ton clic.",
+         "assistant-ia-missions", ""),
+        note("1.22.6", "Assistant IA", Kind::Changed,
+         "MOINS DE JETONS PAR DEMANDE : le contexte du projet part \xC3\xA0 la fin, si bien que les consignes et l'historique se relisent en "
+         "cache (dix fois moins cher) ; les anciennes propositions r\xC3\xA9gl\xC3\xA9" "es partent r\xC3\xA9sum\xC3\xA9" "es ; les fonctions natives seulement pour du "
+         "code. Mesur\xC3\xA9 sur cinq cas types : environ -15 % en co\xC3\xBBt, la moiti\xC3\xA9 sur une longue conversation.",
+         "assistant-ia", ""),
+        note("1.22.6", "Assistant IA", Kind::New,
+         "L'IA R\xC3\x88GLE LES VARIABLES ET LA S\xC3\x89" "CURIT\xC3\x89 : cocher ou d\xC3\xA9" "cocher Lecture seule, la description, la valeur initiale, l'unit\xC3\xA9, le "
+         "dossier, l'adresse, renommer avec tous ses emplois ; activer la s\xC3\xA9" "curit\xC3\xA9, cr\xC3\xA9" "er et modifier groupes et utilisateurs. Elle ne "
+         "choisit jamais de mot de passe : un compte qu'elle cr\xC3\xA9" "e reste d\xC3\xA9sactiv\xC3\xA9 jusqu'\xC3\xA0 ce que tu le donnes. D\xC3\xA9sactiver la s\xC3\xA9" "curit\xC3\xA9 "
+         "est signal\xC3\xA9 et jamais appliqu\xC3\xA9 sans ton clic, m\xC3\xAAme en mode Direct.",
+         "assistant-ia", ""),
+        note("1.22.6", "Assistant IA", Kind::New,
+         "L'IA R\xC3\x88GLE LES VUES : la vue de d\xC3\xA9marrage, la vue parente (une boucle refus\xC3\xA9" "e), l'\xC3\xA9" "cran mod\xC3\xA8le, l'en-t\xC3\xAAte et le pied de page - "
+         "aussi \xC3\xA0 la cr\xC3\xA9" "ation d'une vue. Quand elle coche un en-t\xC3\xAAte ou un pied, les objets recouverts sont signal\xC3\xA9s et d\xC3\xA9plac\xC3\xA9s en "
+         "gardant leurs \xC3\xA9" "carts ; s'il manque de la place, c'est dit. Un seul Ctrl+Z.",
+         "assistant-ia", ""),
         // 1.22.5 : l'avis du logiciel (Generer et Compiler sur une copie), la correction par l'IA, le processus de developpement
         note("1.22.5", "Assistant IA", Kind::New,
          "L'AVIS DU LOGICIEL : chaque proposition de l'IA connect\xC3\xA9" "e passe par G\xC3\xA9n\xC3\xA9rer et Compiler, comme tes clics, sur une COPIE du "

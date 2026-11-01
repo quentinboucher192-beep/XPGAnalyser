@@ -4397,6 +4397,110 @@ const std::vector<Topic>& topics() {
                          "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
              {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
                          "op\xC3\xA9rations) \xC2\xBB.", {}},
+             {K::Heading, "Toutes les vues d'une proposition (1.22.6)", {}},
+             {K::Bullet, "Une proposition qui cr\xC3\xA9" "e ou modifie **plusieurs vues** les montre "
+                         "toutes. Au-dessus de l'aper\xC3\xA7u, une barre : \xC2\xAB < Vue 2/4 : Popup_Vanne "
+                         "(neuve, popup) \xC2\xB7 1 erreur > \xC2\xBB.", {}},
+             {K::Paragraph, "- Les fl\xC3\xA8" "ches passent \xC3\xA0 la vue pr\xC3\xA9" "c\xC3\xA9" "dente ou "
+                         "suivante, comme **PageUp / PageDown** ou **Ctrl+\xE2\x86\x90 / "
+                         "Ctrl+\xE2\x86\x92**. - Un clic sur le nom ouvre **la liste des vues**, avec ce que "
+                         "chacune cr\xC3\xA9" "e, modifie ou supprime, et ses erreurs.", {}},
+             {K::Bullet, "**\xC3\x80 gauche, chaque ligne dit sa vue** (en petit, \xC3\xA0 droite). Les "
+                         "lignes de la vue montr\xC3\xA9" "e sont marqu\xC3\xA9" "es d'une pastille, les "
+                         "autres sont gris\xC3\xA9" "es. Choisir un objet d'une autre vue y fait passer "
+                         "l'aper\xC3\xA7u et l'encadre.", {}},
+             {K::Bullet, "La puce **Cette vue seulement** ne garde que ses lignes. Les titres disent "
+                         "\xC2\xAB (12, 3 sur cette vue) \xC2\xBB.", {}},
+             {K::Bullet, "Les cadres (nouveau, modifi\xC3\xA9, supprim\xC3\xA9, erreurs, avertissements) "
+                         "sont ceux de la vue montr\xC3\xA9" "e.", {}},
+             {K::Heading, "Ce que fait l'IA, en direct (1.22.6)", {}},
+             {K::Bullet, "Sous la r\xC3\xA9ponse en cours, **une ligne dit ce que fait l'IA \xC3\xA0 "
+                         "l'instant**, et un trait fin avance dessous. Par exemple :", {}},
+             {K::Paragraph, "- \xC2\xAB Envoi de la demande (48 k jetons de contexte, dont 41 k en "
+                         "cache)\xE2\x80\xA6 \xC2\xBB ; - \xC2\xAB L'IA "
+                         "r\xC3\xA9" "fl\xC3\xA9" "chit\xE2\x80\xA6 env. 1 240 jetons de r\xC3\xA9" "flexion "
+                         "(0:12) \xC2\xBB ; - \xC2\xAB L'IA \xC3\xA9" "crit la proposition : "
+                         "op\xC3\xA9ration 12 (cr\xC3\xA9" "er Voyant_P3 sur Vue_Pompes)\xE2\x80\xA6 "
+                         "\xC2\xBB ; - \xC2\xAB L'IA lit le classeur Liste_ES.xlsx (lignes 200 \xC3\xA0 "
+                         "399)\xE2\x80\xA6 \xC2\xBB ; - \xC2\xAB Attente du service (limite : nouvelle "
+                         "tentative dans 8 s)\xE2\x80\xA6 \xC2\xBB ; - \xC2\xAB G\xC3\xA9n\xC3\xA9rer et "
+                         "Compiler sur une copie du projet\xE2\x80\xA6 \xC2\xBB.", {}},
+             {K::Bullet, "En gris dessous, les derni\xC3\xA8res \xC3\xA9tapes et leur dur\xC3\xA9" "e. Un "
+                         "clic sur l'horloge les replie.", {}},
+             {K::Bullet, "Le compteur de r\xC3\xA9" "flexion ne monte que si le service envoie le texte de "
+                         "sa r\xC3\xA9" "flexion. Sinon, la ligne montre le temps, et le bilan donne la "
+                         "r\xC3\xA9" "flexion \xC3\xA0 la fin.", {}},
+             {K::Heading, "Ce que \xC3\xA7" "a co\xC3\xBBte, en direct (1.22.6)", {}},
+             {K::Bullet, "Le bas du panneau (\xC2\xAB Cette conversation \xC2\xBB, \xC2\xAB aujourd'hui "
+                         "\xC2\xBB, la limite) **compte la r\xC3\xA9ponse pendant qu'elle "
+                         "s'\xC3\xA9" "crit**. \xC2\xAB env. \xC2\xBB reste affich\xC3\xA9 jusqu'au compte "
+                         "exact du service.", {}},
+             {K::Bullet, "Chaque r\xC3\xA9ponse garde son **bilan** : \xC2\xAB 48 k jetons \xC2\xB7 0:42 "
+                         "\xC2\xBB. Le **+** d\xC3\xA9plie une ligne par appel au service : son but "
+                         "(proposition, lecture du classeur, correction\xE2\x80\xA6), l'entr\xC3\xA9" "e "
+                         "(dont le cache lu et \xC3\xA9" "crit), la sortie (dont la r\xC3\xA9" "flexion), la "
+                         "dur\xC3\xA9" "e, puis le total.", {}},
+             {K::Bullet, "Le logiciel ne conna\xC3\xAEt pas les prix : il montre les jetons seulement.", {}},
+             {K::Bullet, "Un tour avec des outils additionne tous ses appels. Une r\xC3\xA9ponse "
+                         "arr\xC3\xAAt\xC3\xA9" "e garde ce qu'elle a d\xC3\xA9j\xC3\xA0 consomm\xC3\xA9.", {}},
+             {K::Heading, "Moins de jetons par demande (1.22.6)", {}},
+             {K::Bullet, "Le contexte du projet part \xC3\xA0 la fin de la demande, si bien que tout ce qui "
+                         "le pr\xC3\xA9" "c\xC3\xA8" "de (les consignes, l'historique) se **relit en "
+                         "cache**, environ 10 fois moins cher.", {}},
+             {K::Bullet, "Les **anciennes propositions r\xC3\xA9gl\xC3\xA9" "es** (appliqu\xC3\xA9" "es, "
+                         "refus\xC3\xA9" "es) partent r\xC3\xA9sum\xC3\xA9" "es : leur nom, leurs comptes, "
+                         "ce qu'elles ont cr\xC3\xA9\xC3\xA9. Celles \xC3\xA0 d\xC3\xA9" "cider partent "
+                         "enti\xC3\xA8res.", {}},
+             {K::Bullet, "Les fonctions natives ne sont envoy\xC3\xA9" "es que pour une demande de code.", {}},
+             {K::Bullet, "Mesur\xC3\xA9 sur 5 cas types : environ \xE2\x88\x92" "19 % en co\xC3\xBBt, et la "
+                         "moiti\xC3\xA9 sur une longue conversation.", {}},
+             {K::Heading, "Une grosse demande devient une mission (1.22.6)", {}},
+             {K::Bullet, "**Clic droit sur un message envoy\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er une mission "
+                         "avec ce message.** La mission reprend la demande, ses pi\xC3\xA8" "ces jointes (le "
+                         ".XPG lu, les classeurs) et un r\xC3\xA9sum\xC3\xA9 de la conversation : ce qui a "
+                         "\xC3\xA9t\xC3\xA9 appliqu\xC3\xA9, la suite annonc\xC3\xA9" "e. Elle part dans une "
+                         "conversation neuve et planifie ses \xC3\xA9tapes. La conversation d'origine dit "
+                         "\xC2\xAB Mission \xC2\xAB X \xC2\xBB cr\xC3\xA9\xC3\xA9" "e \xE2\x80\x94 Ouvrir "
+                         "\xC2\xBB.", {}},
+             {K::Bullet, "Le bouton **Envoyer en mission**, \xC3\xA0 c\xC3\xB4t\xC3\xA9 d'Envoyer, fait de "
+                         "la demande tap\xC3\xA9" "e une mission.", {}},
+             {K::Bullet, "**Le logiciel et l'IA te le conseillent** pour une grosse demande. C'est le cas "
+                         "quand elle \xC3\xA9num\xC3\xA8re plusieurs \xC3\xA9tapes (S3b, S5, "
+                         "S6\xE2\x80\xA6), quand la m\xC3\xAAme suite revient plusieurs fois, quand une "
+                         "r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e, ou quand la conversation "
+                         "devient tr\xC3\xA8s longue. Une carte propose alors **Cr\xC3\xA9" "er la mission** "
+                         "ou **Continuer ici** (retenu pour la conversation). Rien n'est cr\xC3\xA9\xC3\xA9 "
+                         "sans ton clic.", {}},
+             {K::Heading, "L'IA r\xC3\xA8gle les variables, la s\xC3\xA9" "curit\xC3\xA9 et les vues (1.22.6)", {}},
+             {K::Bullet, "**Les variables IHM** : l'IA peut cocher ou d\xC3\xA9" "cocher **Lecture seule** "
+                         "et changer la description, la valeur initiale, l'unit\xC3\xA9, le dossier, la "
+                         "r\xC3\xA9manence, l'\xC3\xA9quipement et l'adresse, ou la mise \xC3\xA0 "
+                         "l'\xC3\xA9" "chelle. Elle peut aussi **renommer** une variable avec tous ses "
+                         "emplois. Elle ne touche ni une variable inconnue ni une variable de l'automate.", {}},
+             {K::Bullet, "**La s\xC3\xA9" "curit\xC3\xA9** : l'IA peut l'activer ou la d\xC3\xA9sactiver, "
+                         "cr\xC3\xA9" "er et modifier des **groupes** (niveau, r\xC3\xB4les, vue de "
+                         "d\xC3\xA9part) et des **utilisateurs** (identifiant, nom, groupe).", {}},
+             {K::Paragraph, "- **Elle ne choisit jamais de mot de passe**, n'en voit aucun, et le contexte ne "
+                         "contient aucune empreinte. Un compte qu'elle cr\xC3\xA9" "e reste "
+                         "**d\xC3\xA9sactiv\xC3\xA9**, \xC2\xAB mot de passe \xC3\xA0 d\xC3\xA9" "finir dans "
+                         "Configuration > Utilisateurs \xC2\xBB. - Activer la s\xC3\xA9" "curit\xC3\xA9 sans "
+                         "compte capable d'administrer est refus\xC3\xA9, pour ne pas t'enfermer dehors. - "
+                         "D\xC3\xA9sactiver la s\xC3\xA9" "curit\xC3\xA9, ou retirer le dernier "
+                         "administrateur, est signal\xC3\xA9 en t\xC3\xAAte de la proposition. **Le mode "
+                         "Direct ne l'applique jamais** sans ton clic.", {}},
+             {K::Bullet, "**Les droits par niveau** sur un bouton passent par sa propri\xC3\xA9t\xC3\xA9 "
+                         "Acc\xC3\xA8s (l'op\xC3\xA9ration modifier).", {}},
+             {K::Bullet, "**Les vues** : l'IA peut changer la **vue de d\xC3\xA9marrage**, la **vue "
+                         "parente** (une boucle est refus\xC3\xA9" "e), l'**\xC3\xA9" "cran mod\xC3\xA8le**, "
+                         "l'**en-t\xC3\xAAte** et le **pied de page**, aussi d\xC3\xA8s la "
+                         "cr\xC3\xA9" "ation d'une vue.", {}},
+             {K::Paragraph, "- Quand elle coche un en-t\xC3\xAAte ou un pied, **les objets recouverts sont "
+                         "signal\xC3\xA9s** (\xC2\xAB l'en-t\xC3\xAAte (80 px) recouvre 3 objets \xC2\xBB) "
+                         "**et d\xC3\xA9plac\xC3\xA9s** sous l'en-t\xC3\xAAte ou au-dessus du pied, en "
+                         "gardant leurs \xC3\xA9" "carts. - S'il n'y a plus la place, la proposition le dit "
+                         "avec la hauteur n\xC3\xA9" "cessaire. L'IA peut alors agrandir la vue.", {}},
+             {K::Bullet, "Tout passe par une proposition v\xC3\xA9rifi\xC3\xA9" "e, et s'annule d'un seul "
+                         "Ctrl+Z.", {}},
              {K::Heading, "Voir o\xC3\xB9 sont les erreurs (1.22.4)", {}},
              {K::Bullet, "**Dans l'aper\xC3\xA7u**, un objet en erreur a un second cadre **rouge**, plus "
                          "\xC3\xA9pais, avec une pastille \xC2\xAB ! \xC2\xBB ; un objet en avertissement, "

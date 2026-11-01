@@ -32,11 +32,11 @@ Décompte fait sur `CMakeLists.txt` de ce commit :
 
 | Élément | Nombre |
 |---|---:|
-| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 122 |
+| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 126 |
 | Essai `vcxproj` (Python : `outils/verifier_vcxproj.py`, enregistré si Python 3 est trouvé) | 1 |
-| **Total** | **123** |
+| **Total** | **127** |
 
-Ce total correspond aux « 123 suites d'essais » de la note de livraison 1.22.5 (122 en 1.22.2 à 1.22.4, plus `aibuild` ; 121 en 1.22.1, 119 en 1.22.0, 116 en 1.21.3).
+Ce total correspond aux « 127 suites d'essais » de la note de livraison 1.22.6 (123 en 1.22.5, plus `aivues`, `aisecurite`, `aiactivite`, `aijetons` ; 122 en 1.22.2 à 1.22.4, 121 en 1.22.1, 119 en 1.22.0, 116 en 1.21.3).
 
 Essais **déclarés mais sautés** parce que leur source n'est pas dans le dépôt (22) : `core` (`src/core/compile_check.cpp` absent), `grafcet`, `macro`, `xref`, `equipment`, `font`, `theme`, `corner`, `libhelp`, `helparticle`, `execorder`, `simorder`, `treednd`, `execwiring`, `macroxls`, `macronatives`, `libcatalog`, `macrohelp`, `libpage`, `help`, `helpsession`, `xlsm`. Pour `xlsm`, les classeurs d'essai (`tests/fixtures/simple.xlsx`) et le script `tests/make_fixtures.py` que cite `CMakeLists.txt` pour les fabriquer sont eux aussi absents.
 
@@ -85,7 +85,7 @@ ctest --test-dir build-linux -R '^ai' --output-on-failure
 
 | Catégorie | Nombre | Suites |
 |---|---:|---|
-| Assistant IA | 24 | `aimissions`, `aimissionse2e`, `aimissionsui`, `aicorrections`, `aibuild`, `aidossiers`, `aiassistant`, `aireseau`, `aisandbox`, `airegistre`, `aiintegree`, `aicompatible`, `aioptions`, `aiapprentissagefichier`, `aiapprentissage`, `aiplan`, `aidelete`, `aisouvenirs`, `aicontexte`, `ainotifications`, `aimodelesfichiers`, `aidesign`, `aiincidents`, `aimemoire` |
+| Assistant IA | 28 | `aimissions`, `aimissionse2e`, `aimissionsui`, `aicorrections`, `aibuild`, `aivues`, `aisecurite`, `aiactivite`, `aijetons`, `aidossiers`, `aiassistant`, `aireseau`, `aisandbox`, `airegistre`, `aiintegree`, `aicompatible`, `aioptions`, `aiapprentissagefichier`, `aiapprentissage`, `aiplan`, `aidelete`, `aisouvenirs`, `aicontexte`, `ainotifications`, `aimodelesfichiers`, `aidesign`, `aiincidents`, `aimemoire` |
 | IHM (modèle, éditeur, moteur, langage des scripts, communication, incidents, archives) | 37 | `hmi`, `hmieditor`, `hmicheckexpr`, `hmibuild`, `hmilog`, `hmisimdata`, `hmiretain`, `hmitrace`, `hmitracemig`, `hmimigrate`, `hmitypes`, `hmireperes`, `hminatives`, `hminatives1127`, `hminatives1216`, `hmisetring`, `hmiqr`, `hmivideo`, `hmipid`, `hmidocviewer`, `hmiedits`, `hmirecording`, `hmioverload`, `hmidecl`, `hmidebug`, `hmirelations`, `hmiincident`, `hmidiscovery`, `renamehmipaths`, `echanges`, `erreurs`, `generiques`, `testsunitaires`, `donnees`, `objets`, `unites`, `bibliotheques` |
 | Automate (import, projet, édition, analyse, simulation, macros) | 33 | `import`, `hardware`, `roundtrip`, `project`, `edit`, `editor`, `library`, `sharedlib`, `delete`, `table`, `robustness`, `viewmodel`, `simulation`, `macros2`, `api2`, `api34`, `typeusage`, `versionstate`, `projecticon`, `lisible`, `membertree`, `renameplan`, `mastimport`, `projectstats`, `graphxml`, `simdebugui`, `simstatus`, `simperf`, `simdebug`, `macros2libs`, `api2libs`, `macrospecwrite`, `simdebuglibs` |
 | Socle, interface, application | 28 | `perf`, `menu`, `syntax`, `fold`, `layout`, `popup`, `zoom`, `settings`, `dossiers`, `keymap`, `themecatalog`, `themefile`, `dialogwindow`, `statusstrip`, `searchfocus`, `filtermemory`, `crashtrail`, `crashreport`, `coreprocess`, `topbar8`, `lot8tutorials`, `tutorial`, `fileexplorer`, `fileview`, `dropfiles`, `exportask`, `cellrule`, `edition` |

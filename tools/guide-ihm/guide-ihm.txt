@@ -1924,6 +1924,48 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
   - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
 - La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
 - Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
+### Toutes les vues d'une proposition (1.22.6)
+- Une proposition qui crée ou modifie **plusieurs vues** les montre toutes. Au-dessus de l'aperçu, une barre : « < Vue 2/4 : Popup_Vanne (neuve, popup) · 1 erreur > ».
+  - Les flèches passent à la vue précédente ou suivante, comme **PageUp / PageDown** ou **Ctrl+← / Ctrl+→**.
+  - Un clic sur le nom ouvre **la liste des vues**, avec ce que chacune crée, modifie ou supprime, et ses erreurs.
+- **À gauche, chaque ligne dit sa vue** (en petit, à droite). Les lignes de la vue montrée sont marquées d'une pastille, les autres sont grisées. Choisir un objet d'une autre vue y fait passer l'aperçu et l'encadre.
+- La puce **Cette vue seulement** ne garde que ses lignes. Les titres disent « (12, 3 sur cette vue) ».
+- Les cadres (nouveau, modifié, supprimé, erreurs, avertissements) sont ceux de la vue montrée.
+### Ce que fait l'IA, en direct (1.22.6)
+- Sous la réponse en cours, **une ligne dit ce que fait l'IA à l'instant**, et un trait fin avance dessous. Par exemple :
+  - « Envoi de la demande (48 k jetons de contexte, dont 41 k en cache)… » ;
+  - « L'IA réfléchit… env. 1 240 jetons de réflexion (0:12) » ;
+  - « L'IA écrit la proposition : opération 12 (créer Voyant_P3 sur Vue_Pompes)… » ;
+  - « L'IA lit le classeur Liste_ES.xlsx (lignes 200 à 399)… » ;
+  - « Attente du service (limite : nouvelle tentative dans 8 s)… » ;
+  - « Générer et Compiler sur une copie du projet… ».
+- En gris dessous, les dernières étapes et leur durée. Un clic sur l'horloge les replie.
+- Le compteur de réflexion ne monte que si le service envoie le texte de sa réflexion. Sinon, la ligne montre le temps, et le bilan donne la réflexion à la fin.
+### Ce que ça coûte, en direct (1.22.6)
+- Le bas du panneau (« Cette conversation », « aujourd'hui », la limite) **compte la réponse pendant qu'elle s'écrit**. « env. » reste affiché jusqu'au compte exact du service.
+- Chaque réponse garde son **bilan** : « 48 k jetons · 0:42 ». Le **+** déplie une ligne par appel au service : son but (proposition, lecture du classeur, correction…), l'entrée (dont le cache lu et écrit), la sortie (dont la réflexion), la durée, puis le total.
+- Le logiciel ne connaît pas les prix : il montre les jetons seulement.
+- Un tour avec des outils additionne tous ses appels. Une réponse arrêtée garde ce qu'elle a déjà consommé.
+### Moins de jetons par demande (1.22.6)
+- Le contexte du projet part à la fin de la demande, si bien que tout ce qui le précède (les consignes, l'historique) se **relit en cache**, environ 10 fois moins cher.
+- Les **anciennes propositions réglées** (appliquées, refusées) partent résumées : leur nom, leurs comptes, ce qu'elles ont créé. Celles à décider partent entières.
+- Les fonctions natives ne sont envoyées que pour une demande de code.
+- Mesuré sur 5 cas types : environ −19 % en coût, et la moitié sur une longue conversation.
+### Une grosse demande devient une mission (1.22.6)
+- **Clic droit sur un message envoyé › Créer une mission avec ce message.** La mission reprend la demande, ses pièces jointes (le .XPG lu, les classeurs) et un résumé de la conversation : ce qui a été appliqué, la suite annoncée. Elle part dans une conversation neuve et planifie ses étapes. La conversation d'origine dit « Mission « X » créée — Ouvrir ».
+- Le bouton **Envoyer en mission**, à côté d'Envoyer, fait de la demande tapée une mission.
+- **Le logiciel et l'IA te le conseillent** pour une grosse demande. C'est le cas quand elle énumère plusieurs étapes (S3b, S5, S6…), quand la même suite revient plusieurs fois, quand une réponse a été coupée, ou quand la conversation devient très longue. Une carte propose alors **Créer la mission** ou **Continuer ici** (retenu pour la conversation). Rien n'est créé sans ton clic.
+### L'IA règle les variables, la sécurité et les vues (1.22.6)
+- **Les variables IHM** : l'IA peut cocher ou décocher **Lecture seule** et changer la description, la valeur initiale, l'unité, le dossier, la rémanence, l'équipement et l'adresse, ou la mise à l'échelle. Elle peut aussi **renommer** une variable avec tous ses emplois. Elle ne touche ni une variable inconnue ni une variable de l'automate.
+- **La sécurité** : l'IA peut l'activer ou la désactiver, créer et modifier des **groupes** (niveau, rôles, vue de départ) et des **utilisateurs** (identifiant, nom, groupe).
+  - **Elle ne choisit jamais de mot de passe**, n'en voit aucun, et le contexte ne contient aucune empreinte. Un compte qu'elle crée reste **désactivé**, « mot de passe à définir dans Configuration > Utilisateurs ».
+  - Activer la sécurité sans compte capable d'administrer est refusé, pour ne pas t'enfermer dehors.
+  - Désactiver la sécurité, ou retirer le dernier administrateur, est signalé en tête de la proposition. **Le mode Direct ne l'applique jamais** sans ton clic.
+- **Les droits par niveau** sur un bouton passent par sa propriété Accès (l'opération modifier).
+- **Les vues** : l'IA peut changer la **vue de démarrage**, la **vue parente** (une boucle est refusée), l'**écran modèle**, l'**en-tête** et le **pied de page**, aussi dès la création d'une vue.
+  - Quand elle coche un en-tête ou un pied, **les objets recouverts sont signalés** (« l'en-tête (80 px) recouvre 3 objets ») **et déplacés** sous l'en-tête ou au-dessus du pied, en gardant leurs écarts.
+  - S'il n'y a plus la place, la proposition le dit avec la hauteur nécessaire. L'IA peut alors agrandir la vue.
+- Tout passe par une proposition vérifiée, et s'annule d'un seul Ctrl+Z.
 ### Voir où sont les erreurs (1.22.4)
 - **Dans l'aperçu**, un objet en erreur a un second cadre **rouge**, plus épais, avec une pastille « ! » ; un objet en avertissement, le même cadre en **ambre**. La légende du bas les nomme. Le survol d'un objet liste ses messages.
 - Un avertissement qui ne nomme pas ses objets (« 2 objets créés ne sont reliés à aucune variable ») encadre quand même les objets concernés.

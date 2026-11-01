@@ -55,6 +55,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1072,15 +1073,19 @@ void testTextParts() {
                   "outil local (Anthropic) : offert, sa reponse en tool_result");
             check(calls == 1 && has(seenInput, "Moyenne") && !toolSeenL && donesL == 1 && outilStatus && allText(evl) == "J'essaie. Les 2 cas passent.",
                   "outil local (Anthropic) : appele une fois sur le fil, l'etat << outil >>, aucun appel visible, une fin");
-            // 1.22.6 : les jetons des deux tours comptes ensemble - le premier donne a ajouter (preread), le dernier recu : le second
-            long long lastOut = 0, added = 0;
+            // 1.22.6 : les jetons des deux tours comptes ensemble - chaque appel au service porte son rang (ProviderEvent::call) ;
+            // l'Assistant fait la somme des appels (le dernier usage de chacun) : rien n'est ajoute deux fois (aucun preread).
+            std::map<int, long long> perCall;
+            bool pre = false;
             for (const auto& e : evl)
                 if (e.type == ai::ProviderEvent::Type::Usage && !e.usage.empty()) {
-                    if (e.preread) added += e.usage.output;
-                    else lastOut = e.usage.output;
+                    if (e.preread) pre = true;
+                    else perCall[e.call] = e.usage.output;
                 }
-            check(lastOut == 42 && added == 42, "outil local (Anthropic) : les jetons des deux tours sont comptes, une fois chacun (" + std::to_string(added) + " + "
-                                                  + std::to_string(lastOut) + ")");
+            const long long first = perCall.count(0) ? perCall[0] : -1, second = perCall.count(1) ? perCall[1] : -1;
+            check(perCall.size() == 2 && first == 42 && second == 42 && !pre,
+                  "outil local (Anthropic) : les jetons des deux tours sont comptes, une fois chacun (appel 0 : " + std::to_string(first)
+                      + ", appel 1 : " + std::to_string(second) + ")");
             // compatible OpenAI : pareil
             g_net.reset();
             calls = 0;
