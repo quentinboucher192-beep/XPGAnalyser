@@ -198,7 +198,7 @@ void AiMissionsView::rebuild() {
         Row r;
         r.id = m.id;
         r.name = missionui::title(m);
-        r.state = std::string(mission::stateLabel(m.state));
+        r.state = mission::stateText(m);   // 1.22.3 : << Terminee (fin forcee) >>
         r.stateTone = missionui::stateTone(m.state);
         r.meta = "Projet " + (m.project.name.empty() ? std::string("non enregistr\xC3\xA9") : m.project.name) + " \xC2\xB7 "
                  + (m.modified.empty() ? std::string("\xE2\x80\x94") : shortDate(m.modified)) + (m.archived ? " \xC2\xB7 archiv\xC3\xA9" "e" : "");
@@ -524,6 +524,12 @@ void AiMissionsView::openRowMenu(int row, gfx::Point at) {
     if (r.archived) item("D\xC3\xA9sarchiver", ui::Icon::Open, kMenuUnarchive);
     else item("Archiver", ui::Icon::Folder, kMenuArchive, "Suppr");
     item("Annuler la mission\xE2\x80\xA6", ui::Icon::Stop, kMenuCancel, {}, !r.over, "elle est d\xC3\xA9j\xC3\xA0 termin\xC3\xA9" "e ou annul\xC3\xA9" "e");
+    {
+        // 1.22.3 : forcer la fin - grise, et pourquoi (terminee, annulee, en lecture seule, une application de fond)
+        std::string why;
+        const bool can = panel_.assistant().canForceFinish(r.id, &why);
+        item("Forcer la fin de la mission\xE2\x80\xA6", ui::Icon::Ok, kMenuForceFinish, {}, can, why);
+    }
     menu_->setItems(std::move(items));
     menu_->openAtSurface(toSurface(at));
 }
@@ -548,6 +554,7 @@ void AiMissionsView::menuChosen(int id) {
         case kMenuArchive: (void)panel_.missionAct(mid, A::Archive); break;
         case kMenuUnarchive: (void)panel_.missionAct(mid, A::Unarchive); break;
         case kMenuCancel: (void)panel_.missionAct(mid, A::Cancel); break;
+        case kMenuForceFinish: (void)panel_.missionAct(mid, A::ForceFinish); break;   // 1.22.3
         default: break;
     }
     (void)row;

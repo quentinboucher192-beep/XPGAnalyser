@@ -24,6 +24,7 @@
 //    - la progression, calculee et explicable (progressOf) ;
 //    - 1.22.1 : ce que fait CHAQUE ETAPE - sa progression reelle (stepProgressOf), son
 //      activite du moment en une ligne (activityOf), son journal (stepJournal) ;
+//    - 1.22.3 : la fin forcee par l'utilisateur (forceFinish : les etapes non terminees ignorees, rien de defait) ;
 //    - le rapport final (finalReport) et les textes donnes a l'IA (contextes).
 //
 //  Le projet reel est toujours la source de verite : une etape n'est << terminee >>
@@ -178,6 +179,16 @@ struct Pending {
     std::vector<std::string> steps;
 };
 
+// 1.22.3 : LA FIN FORCEE par l'utilisateur (forceFinish) : quand, pourquoi, les etapes qu'elle a ignorees et les
+// propositions qu'elle a refusees (jamais appliquees). Gardee dans le fichier (<< fin_forcee >>) ; vide : pas de fin forcee.
+struct Forced {
+    std::string              date;        // ISO ; vide : pas de fin forcee
+    std::string              reason;      // "fin forc\xC3\xA9" "e par l'utilisateur"
+    std::vector<std::string> steps;       // les etapes passees << ignoree (fin forcee) >>
+    std::vector<std::string> proposals;   // les propositions en attente refusees par elle
+    [[nodiscard]] bool on() const noexcept { return !date.empty(); }
+};
+
 // L'empreinte du projet a la derniere sauvegarde (AiMissionStore.hpp : printOf) - la reprise compare.
 struct ProjectLink {
     std::string id, name, path;   // memory::identifyProject ; le chemin du dossier du projet
@@ -212,6 +223,7 @@ struct Mission {
     std::string               summary;       // le resume a jour (summaryOf)
     std::vector<std::string>  attachments;   // les pieces jointes de la conversation (Attachment::id, jamais copiees)
     json::Value               finalReport;   // reportToJson(FinalReport) ; nul : pas d'audit final
+    Forced                    forced;        // 1.22.3 : la fin forcee (forceFinish) ; vide : aucune
     json::Value               extra;         // les champs inconnus (un format plus recent), gardes
 
     [[nodiscard]] const Step*         step(std::string_view id) const noexcept;
@@ -307,6 +319,33 @@ void archive(Mission&, bool on, std::string now);
 // Une proposition de cette mission peut-elle encore s'appliquer ? Faux et `why` : la mission en pause, annulee, ou la
 // proposition n'est plus la bonne (obsolete, annulee).
 [[nodiscard]] bool mayApply(const Mission&, std::string_view proposal, std::string* why = nullptr);
+
+// ---- 1.22.3 : FORCER LA FIN D'UNE MISSION -----------------------------------------------------------------------------
+//  L'utilisateur arrete la mission la ou elle en est, SANS RIEN DEFAIRE dans le projet :
+//    - un appel a l'IA en cours est efface (l'Assistant l'arrete d'abord, comme Pause et Annuler) ;
+//    - chaque proposition qui attend une decision (a valider, verifiee) passe << refusee >> : elle ne s'appliquera pas ;
+//    - chaque etape non terminee (ni terminee, ni ignoree, ni annulee) passe << ignoree >>, la note << Fin forcee par
+//      l'utilisateur. >> - par les transitions de canMove, AUCUNE N'EST AJOUTEE : une etape en cours, a valider,
+//      appliquee ou en verification passe d'abord par << prete >> (comme quand sa proposition est refusee ou son appel
+//      arrete), puis << ignoree >> ; les autres (a planifier, en attente, prete, en erreur, bloquee) directement ;
+//    - la mission passe << terminee >> (l'etat terminal le plus juste : << annulee >> dirait que plus rien ne compte, alors
+//      que ce qui est fait reste fait et verifie) ; Mission::forced le retient : refreshState ne la rouvre plus,
+//      mayApply refuse ses propositions, editPlan son plan ; l'historique le dit (<< Fin forcee par l'utilisateur :
+//      N etapes ignorees >>) ; un ancien rapport final est retire (l'audit final le refait : finalReport dit << fin forcee >>
+//      et les etapes ignorees). La progression ne compte plus les etapes ignorees (progressOf, comme toujours).
+// Faux et `why` : la mission est deja terminee ou annulee (rien n'est change).
+inline constexpr std::string_view kForcedReason = "fin forc\xC3\xA9" "e par l'utilisateur";
+[[nodiscard]] bool mayForceFinish(const Mission&, std::string* why = nullptr);
+// Les etapes que la fin forcee ignorerait (ni terminees, ni ignorees, ni annulees), et les propositions qu'elle refuserait
+// (a valider, verifiees) : leurs identifiants, dans l'ordre de la mission.
+[[nodiscard]] std::vector<std::string> unfinishedSteps(const Mission&);
+[[nodiscard]] std::vector<std::string> awaitingProposals(const Mission&);
+// `reason` : vide -> kForcedReason.
+bool forceFinish(Mission&, std::string now, std::string reason = {}, std::string* why = nullptr);
+// L'etat en clair : "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)" apres une fin forcee, sinon stateLabel ; celui d'une etape :
+// "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)" pour une etape ignoree par elle, sinon stepLabel.
+[[nodiscard]] std::string stateText(const Mission&);
+[[nodiscard]] std::string stepText(const Mission&, const Step&);
 
 // ---- la progression ---------------------------------------------------------------------------------------------------
 //  LA REGLE (deterministe, dite telle quelle a l'ecran) : chaque etape pese son estimation d'operations (au moins 1) ;
@@ -423,6 +462,10 @@ struct FinalReport {
     bool                     auditRun{false};             // l'audit global du projet a-t-il pu etre fait ?
     bool                     complete{false};             // toutes les etapes obligatoires terminees, sans erreur bloquante
     std::string              date, verdict;
+    // 1.22.3 : une FIN FORCEE par l'utilisateur (Mission::forced) - le verdict le dit, et les etapes qu'elle a ignorees
+    // ("S3 Cr\xC3\xA9" "er les alarmes") ; jamais << complete >> si elle en a ignore une.
+    bool                     forced{false};
+    std::vector<std::string> skipped;
 };
 // `audit` : le resultat de hmi::audit::run sur le projet du moment (nul : pas fait - << non verifiable >>, jamais
 // << verifie >>).

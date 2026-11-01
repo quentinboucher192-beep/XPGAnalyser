@@ -9,6 +9,7 @@
 //    l'en-tete          le nom, le projet, l'etat (sa couleur), la progression
 //                       globale (sa regle en infobulle : mission::progressRule),
 //                       la derniere activite ; Pause / Reprendre, Annuler...,
+//                       1.22.3 : Forcer la fin de la mission... (une question),
 //                       la conversation de la mission, l'ecran de reprise ;
 //    la progression     planification, generation, validation, application,
 //                       globale - celles de mission::progressOf, jamais un
@@ -28,7 +29,9 @@
 //                       clic deplie son JOURNAL (mission::stepJournal : ses
 //                       propositions et leur sort, les operations appliquees,
 //                       les erreurs, les decisions, avec l'heure) ;
-//    les propositions   P1, P2... : leurs nombres (operations, creations,
+//    les propositions   P1, P2... (1.22.3 : chacune depliee ou reduite a une
+//                       ligne - un clic sur son en-tete, le clic droit, Tout
+//                       deplier / Tout replier) : leurs nombres (operations, creations,
 //                       modifications, reutilisations), leurs etapes, leur etat,
 //                       Previsualiser / Verifier / Appliquer (par la conversation
 //                       de la mission : les gestes du panneau) ; une proposition
@@ -101,6 +104,14 @@ enum class Tone : std::uint8_t { Text, Muted, Info, Accent, Ok, Warning, Error, 
 [[nodiscard]] std::string proposalCounts(const mission::ProposalLink&);
 // Les etapes, avec leur titre : "S2 Cr\xC3\xA9" "er les variables, S3 ..." (au plus `max` ; le reste : "...").
 [[nodiscard]] std::string stepList(const mission::Mission&, const std::vector<std::string>& ids, std::size_t max = 6);
+// 1.22.3 : LA CARTE D'UNE PROPOSITION, DEPLIEE OU REDUITE. Par defaut : depliee si elle attend une decision (a valider,
+// verifiee, en echec), reduite sinon (appliquee, refusee, annulee, obsolete, interrompue). Reduite, elle dit en une ligne
+// ses nombres : "302 op\xC3\xA9rations \xC2\xB7 293 appliqu\xC3\xA9" "es, 9 en \xC3\xA9" "chec" (proposalLine).
+[[nodiscard]] bool        cardOpenByDefault(std::string_view proposalState) noexcept;
+[[nodiscard]] std::string proposalLine(const mission::ProposalLink&);
+// 1.22.3 : la question de << Forcer la fin de la mission... >> : ce qui va se passer (les etapes non terminees ignorees,
+// rien de defait, une proposition en attente non appliquee, la reponse de l'IA en cours arretee si `calling`).
+[[nodiscard]] std::string forceFinishQuestion(const mission::Mission&, bool calling);
 
 // LE GESTE DU MOMENT d'une mission (le bouton de << Prochaine action >>, celui de la bande du panneau) - ce que le
 // modele permet maintenant, dans l'ordre de mission::nextAction (le bouton dit ce que le texte dit) : rien si le projet
@@ -200,7 +211,7 @@ public:
     [[nodiscard]] const mission::Progress&   progress() const noexcept { return progress_; }
     [[nodiscard]] const mission::Recovery&   recovery() const noexcept { return recovery_; }
     [[nodiscard]] const missionui::Next&     next() const noexcept { return next_; }
-    // Le bouton d'une cle ("pause", "reprendre", "annuler", "conversation", "mode", "action", "reprise.reprendre",
+    // Le bouton d'une cle ("pause", "reprendre", "annuler", "forcer" (1.22.3), "conversation", "mode", "action", "reprise.reprendre",
     // "reprise.actualiser", "reprise.historique", "reprise.verifier", "P2.apercu", "P2.verifier", "P2.appliquer",
     // "P1.voir") ; nul : pas montre.
     [[nodiscard]] ui::Button* button(std::string_view key) const;
@@ -213,6 +224,21 @@ public:
     [[nodiscard]] bool      stepOpen(std::string_view stepId) const { return stepsOpen_.count(std::string(stepId)) > 0; }
     [[nodiscard]] gfx::Rect stepRect(std::string_view stepId) const;
     [[nodiscard]] const mission::Live& live() const noexcept { return live_; }
+    // 1.22.3 : LES CARTES DES PROPOSITIONS, DEPLIEES OU REDUITES (une ligne : le chevron, P1, le titre et ses nombres,
+    // l'etat). Par defaut (missionui::cardOpenByDefault) : depliees celles qui attendent une decision, reduites les autres ;
+    // le choix de l'utilisateur est garde pour la seance, par mission et par proposition (AiPanel::missionCard - jamais
+    // dans le fichier de la mission). Un clic sur l'en-tete d'une carte la bascule ; le clic droit : Deplier, Reduire,
+    // Tout deplier, Tout replier ; l'intertitre << PROPOSITIONS (n) >> : Tout deplier / Tout replier.
+    [[nodiscard]] bool      cardOpen(std::string_view proposalId) const;
+    bool                    toggleCard(const std::string& proposalId);
+    void                    setCardOpen(const std::string& proposalId, bool open);
+    void                    setAllCards(bool open);
+    [[nodiscard]] gfx::Rect cardHeadRect(std::string_view proposalId) const;   // son en-tete, a l'ecran (vide : absente)
+    [[nodiscard]] gfx::Rect allCardsRect(bool open) const;                    // << Tout deplier >> (vrai) / << Tout replier >>
+    [[nodiscard]] ui::PopupMenu* menu() const noexcept { return menu_; }
+    enum MenuId : int { kMenuCardOpen = 1, kMenuCardClose, kMenuAllOpen, kMenuAllClose };
+    void openCardMenu(const std::string& proposalId, gfx::Point at);
+    void menuChosen(int id);
     [[nodiscard]] float     scrollOffset() const noexcept { return scroll_; }
     [[nodiscard]] float     contentHeight() const noexcept { return content_; }
     void                    scrollTo(float offset);
@@ -285,6 +311,10 @@ private:
     std::int64_t                        liveKey_{0};
     std::string                         pendingSection_;        // a mettre en vue apres la prochaine mise en page
     std::map<std::string, float>        anchors_;               // une proposition -> le haut de sa carte (dans la page)
+    std::map<std::string, gfx::Rect>    cardHeads_;             // 1.22.3 : l'en-tete de chaque carte (dans la page)
+    gfx::Rect                           allOpen_{}, allClose_{};   // 1.22.3 : Tout deplier / Tout replier (dans la page)
+    ui::PopupMenu*                      menu_{nullptr};         // 1.22.3 : le clic droit sur l'en-tete d'une carte
+    std::string                         menuCard_;              // la proposition du menu ouvert
     ui::EdgeScrollBar                   bar_;
     core::ConnectionScope               links_;
     mutable std::vector<std::pair<gfx::Rect, std::string>> tips_;

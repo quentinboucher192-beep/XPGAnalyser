@@ -25,7 +25,11 @@
 //       qu'elle fait maintenant (mission::activityOf) dans le plan, l'en-tete,
 //       l'ecran de reprise, la bande et la liste ; son journal (un clic) ; le
 //       direct (une correction en cours : << (depuis 0:42) >>, refait chaque
-//       seconde, jamais a chaque image).
+//       seconde, jamais a chaque image) ;
+//    9. 1.22.3 : les cartes des propositions depliees / reduites (par defaut,
+//       un clic, Tout deplier / Tout replier, le clic droit, gardees pour la
+//       seance, jamais dans le fichier) ; forcer la fin d'une mission (le clic
+//       droit de la liste, le bouton du tableau de bord, la question, l'etat apres).
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiMemoryManager.hpp"
@@ -50,9 +54,13 @@
 #include <ctime>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -777,6 +785,10 @@ void testBoard() {
     check(said(lines, "Demande initiale") && said(lines, "Deux pompes, une cuve et leur supervision."), "l'objectif : la description, la demande");
     // les propositions : P1 appliquee (consultable : son compte rendu), P2 a valider (Previsualiser, Verifier, Appliquer)
     check(said(lines, "P1") && said(lines, "P2") && said(lines, "\xC3\xA0 valider") && said(lines, "appliqu\xC3\xA9" "e"), "P1 et P2, leurs etats");
+    // 1.22.3 : P1 (appliquee) est reduite par defaut, P2 (a valider) depliee - P1 depliee ici pour la lire en entier
+    check(!board.cardOpen("op-p1") && board.cardOpen("op-p2"), "par defaut : P1 reduite, P2 depliee");
+    board.setAllCards(true);
+    lines = board.lines();
     check(said(lines, mu::proposalCounts(m->proposals[0])), "les nombres de P1 (" + mu::proposalCounts(m->proposals[0]) + ")");
     check(said(lines, "Compte rendu") && said(lines, "Pompe_1_Marche"), "P1 appliquee : son compte rendu reel reste consultable");
     check(said(lines, "Suite pr\xC3\xA9vue par l'IA : les alarmes et la vue de la station"), "la suite dite par l'IA");
@@ -830,6 +842,9 @@ void testBoard() {
     lines = old.lines();
     check(old.sectionRect("rapport").h > 0.f && said(lines, "RAPPORT FINAL") && said(lines, "Mission termin\xC3\xA9" "e : toutes les \xC3\xA9tapes"),
           "le rapport final : le verdict");
+    check(!old.cardOpen("op-old"), "1.22.3 : sa proposition appliquee est reduite par defaut");
+    old.setAllCards(true);   // depliee pour la lire en entier
+    lines = old.lines();
     check(said(lines, "Convoyeur_C1") && said(lines, "Sa conversation a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9" "e") && !old.button("P1.voir"),
           "P1 (ancienne, appliquee) : son compte rendu, sa conversation supprimee le dit");
     check(!old.button("action") && old.button("pause") && !old.button("pause")->enabled() && old.button("annuler") && !old.button("annuler")->enabled(),
@@ -1103,6 +1118,212 @@ void testSteps() {
     nt::resetForTests();
 }
 
+
+// =================== 9. 1.22.3 : les propositions depliees / reduites ; forcer la fin d'une mission ==
+void testCardsAndForce() {
+    std::printf("[9. 1.22.3 : les propositions depliees / reduites ; forcer la fin d'une mission]\n");
+    nt::resetForTests();
+    Fixture f("cartes");
+    (void)f.as().select(f.stationConv);
+    f.panel->sync();
+    f.step();
+    const fs::path file = f.dir / "IA" / "missions" / (f.stationId + ".json");
+    const auto readFile = [](const fs::path& p) {
+        std::ifstream in(p, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    };
+    const std::string onDisk = readFile(file);
+    check(!onDisk.empty(), "le fichier de la station");
+    ai::AiMissionBoard board("mission.cartes", *f.panel, f.stationId);
+    board.setBounds({0, 0, 1100, 3000});
+    board.layout();
+    const auto* m = f.as().findMission(f.stationId);
+    check(m != nullptr, "la station");
+    if (!m) return;
+    const auto clickAt = [&board](const gfx::Rect& r, ui::MouseButton b) {
+        (void)board.dispatch(ui::MouseDown{{r.x + std::min(300.f, r.w / 2.f), r.y + r.h / 2.f}, b, 1, {}});
+    };
+    // LES CHOIX PAR DEFAUT : depliees celles qui attendent une decision, reduites les autres
+    check(mu::cardOpenByDefault("generee") && mu::cardOpenByDefault("validee") && mu::cardOpenByDefault("echouee") && !mu::cardOpenByDefault("appliquee")
+              && !mu::cardOpenByDefault("refusee") && !mu::cardOpenByDefault("annulee") && !mu::cardOpenByDefault("obsolete")
+              && !mu::cardOpenByDefault("interrompue"),
+          "par defaut : depliees a valider, verifiee, en echec ; reduites appliquee, refusee, annulee, obsolete, interrompue");
+    check(!board.cardOpen("op-p1") && board.cardOpen("op-p2"), "P1 (appliquee) reduite, P2 (a valider) depliee");
+    check(mu::proposalLine(m->proposals[0]) == "3 op\xC3\xA9rations \xC2\xB7 3 appliqu\xC3\xA9" "es", "la ligne de P1 : " + mu::proposalLine(m->proposals[0]));
+    {
+        ms::ProposalLink big = m->proposals[0];
+        big.ops = 302;
+        big.applied = 293;
+        big.failed = 9;
+        check(mu::proposalLine(big) == "302 op\xC3\xA9rations \xC2\xB7 293 appliqu\xC3\xA9" "es, 9 en \xC3\xA9" "chec", "celle de la capture : " + mu::proposalLine(big));
+    }
+    const std::string p1Line = "\xC3\x89quipements et variables de la station \xE2\x80\x94 3 op\xC3\xA9rations \xC2\xB7 3 appliqu\xC3\xA9" "es";
+    auto lines = board.lines();
+    const float tall = board.sectionRect("propositions").h;
+    check(said(lines, p1Line), "P1 tient sur une ligne : son titre et ses nombres");
+    check(!said(lines, "Compte rendu") && !said(lines, "Suite pr\xC3\xA9vue par l'IA : les alarmes") && !board.button("P1.voir"),
+          "P1 reduite : ni compte rendu, ni suite, ni bouton");
+    check(said(lines, "Vue de la station") && !said(lines, "Vue de la station \xE2\x80\x94") && board.button("P2.apercu") && board.button("P2.verifier")
+              && board.button("P2.appliquer"),
+          "P2 depliee : sa carte entiere, ses gestes");
+    check(said(lines, "Tout d\xC3\xA9plier") && said(lines, "Tout replier") && board.allCardsRect(true).w > 0.f && board.allCardsRect(false).w > 0.f,
+          "l'intertitre : Tout deplier, Tout replier");
+    {
+        Recorder rec;
+        board.render(ui::PaintContext{rec, ui::Theme::dark(), board.bounds(), f.t, nullptr});
+        check(rec.saw(p1Line) && rec.saw("\xE2\x96\xB8") && rec.saw("\xE2\x96\xBE"), "dessine : la ligne de P1, les chevrons (reduite, depliee)");
+        const gfx::Rect h1 = board.cardHeadRect("op-p1");
+        const std::string tip = board.liveTooltip({h1.x + 300.f, h1.y + h1.h / 2.f});
+        check(has(tip, "Un clic : la d\xC3\xA9plier") && has(tip, "Clic droit"), "l'infobulle de l'en-tete : " + tip);
+    }
+    // UN CLIC SUR L'EN-TETE : P1 depliee (son compte rendu), un autre : reduite
+    check(board.cardHeadRect("op-p1").h > 0.f && board.cardHeadRect("op-p2").h > 0.f, "les en-tetes des cartes");
+    clickAt(board.cardHeadRect("op-p1"), ui::MouseButton::Left);
+    lines = board.lines();
+    check(board.cardOpen("op-p1") && said(lines, "Compte rendu") && said(lines, "Pompe_1_Marche") && board.button("P1.voir"),
+          "un clic sur son en-tete : P1 depliee (son compte rendu, Voir dans la conversation)");
+    check(f.panel->missionCard(f.stationId, "op-p1") == std::optional<bool>(true) && !f.panel->missionCard(f.stationId, "op-p2"),
+          "le choix est garde par le panneau (pour la seance) ; P2 : rien de choisi");
+    clickAt(board.cardHeadRect("op-p1"), ui::MouseButton::Left);
+    check(!board.cardOpen("op-p1") && !said(board.lines(), "Compte rendu"), "un autre clic : reduite");
+    // TOUT DEPLIER / TOUT REPLIER (l'intertitre)
+    clickAt(board.allCardsRect(true), ui::MouseButton::Left);
+    check(board.cardOpen("op-p1") && board.cardOpen("op-p2"), "Tout deplier : les deux cartes");
+    clickAt(board.allCardsRect(false), ui::MouseButton::Left);
+    lines = board.lines();
+    check(!board.cardOpen("op-p1") && !board.cardOpen("op-p2") && !board.button("P2.appliquer")
+              && said(lines, "Vue de la station \xE2\x80\x94 1 op\xC3\xA9ration \xC2\xB7 1 cr\xC3\xA9" "ation"),
+          "Tout replier : les deux (P2 en une ligne ; ses gestes partent avec sa carte)");
+    check(board.sectionRect("propositions").h < tall, "la section est plus courte");
+    // LE CLIC DROIT sur l'en-tete : Deplier, Reduire, Tout deplier, Tout replier (le menu de l'application)
+    clickAt(board.cardHeadRect("op-p2"), ui::MouseButton::Right);
+    bool unfold = false, fold = false, allOpen = false, allClose = false;
+    for (const auto& it : board.menu()->items()) {
+        unfold |= it.id == ai::AiMissionBoard::kMenuCardOpen && it.enabled;
+        fold |= it.id == ai::AiMissionBoard::kMenuCardClose && !it.enabled && !it.disabledReason.empty();
+        allOpen |= it.id == ai::AiMissionBoard::kMenuAllOpen && it.enabled;
+        allClose |= it.id == ai::AiMissionBoard::kMenuAllClose && it.enabled;
+    }
+    check(board.menu()->isOpen() && unfold && fold && allOpen && allClose, "le clic droit : Deplier, Reduire (grise : deja reduite), Tout deplier, Tout replier");
+    board.menu()->itemChosen->emit(ai::AiMissionBoard::kMenuCardOpen);
+    board.menu()->close();
+    check(board.cardOpen("op-p2") && !board.cardOpen("op-p1"), "Deplier : P2 seulement");
+    clickAt(board.cardHeadRect("op-p1"), ui::MouseButton::Right);
+    board.menu()->itemChosen->emit(ai::AiMissionBoard::kMenuAllOpen);
+    board.menu()->close();
+    check(board.cardOpen("op-p1") && board.cardOpen("op-p2"), "Tout deplier (le menu) : les deux");
+    clickAt(board.cardHeadRect("op-p2"), ui::MouseButton::Right);
+    board.menu()->itemChosen->emit(ai::AiMissionBoard::kMenuCardClose);
+    board.menu()->close();
+    check(board.cardOpen("op-p1") && !board.cardOpen("op-p2"), "Reduire (le menu) : P2 seulement");
+    // LE CHOIX EST GARDE POUR LA SEANCE : un autre tableau de bord de la meme mission (l'onglet ferme puis rouvert)
+    {
+        ai::AiMissionBoard again("mission.cartes.encore", *f.panel, f.stationId);
+        again.setBounds({0, 0, 1100, 3000});
+        again.layout();
+        check(again.cardOpen("op-p1") && !again.cardOpen("op-p2"), "rouvert : les cartes comme tu les as laissees");
+    }
+    check(readFile(file) == onDisk, "rien de cela n'est dans le fichier de la mission (il n'a pas change)");
+
+    // FORCER LA FIN : le clic droit de l'onglet Missions IA - une question d'abord ; Garder : rien ne change
+    {
+        const auto* now = f.as().findMission(f.stationId);
+        const std::string q = now ? mu::forceFinishQuestion(*now, false) : std::string{};
+        check(has(q, "3 \xC3\xA9tapes ne sont pas termin\xC3\xA9" "es (S3, S4, S5)") && has(q, "\xC2\xAB ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB")
+                  && has(q, "Rien n'est d\xC3\xA9" "fait dans le projet") && has(q, "(P2) ne sera pas appliqu\xC3\xA9" "e") && !has(q, "La r\xC3\xA9ponse de l'IA"),
+              "la question dit ce qui va se passer : " + q);
+        check(now && has(mu::forceFinishQuestion(*now, true), "La r\xC3\xA9ponse de l'IA en cours pour elle est arr\xC3\xAAt\xC3\xA9" "e"), "pendant un appel : la reponse arretee, dit");
+    }
+    auto& v = f.panel->missions();
+    f.panel->showMissions(true);
+    f.panel->layout();
+    const int row = f.rowOf(v, f.stationId);
+    const gfx::Rect rr = row >= 0 ? v.rowRect(static_cast<std::size_t>(row)) : gfx::Rect{};
+    check(rr.h > 0.f, "la ligne de la station");
+    (void)v.dispatch(ui::MouseDown{{rr.x + 60.f, rr.y + 10.f}, ui::MouseButton::Right, 1, {}});
+    bool force = false;
+    for (const auto& it : v.menu()->items())
+        force |= it.id == ai::AiMissionsView::kMenuForceFinish && it.enabled && it.label == "Forcer la fin de la mission\xE2\x80\xA6";
+    check(v.menu()->isOpen() && force, "le clic droit d'une mission : Forcer la fin de la mission...");
+    v.menu()->itemChosen->emit(ai::AiMissionsView::kMenuForceFinish);
+    v.menu()->close();
+    f.mm.applyPending();
+    check(f.mm.top() && f.mm.top()->id() == "dialog.ai.mission.fin-forcee", "une question d'abord");
+    f.mm.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});   // Garder
+    f.mm.applyPending();
+    check(f.as().findMission(f.stationId) && f.as().findMission(f.stationId)->state == ms::State::Active && !f.as().findMission(f.stationId)->forced.on(),
+          "Garder : rien ne change");
+    f.panel->showMissions(false);
+    f.panel->layout();
+    // ... puis le bouton du tableau de bord : Forcer la fin
+    check(board.button("forcer") && board.button("forcer")->enabled() && board.button("forcer")->text() == "Forcer la fin de la mission\xE2\x80\xA6",
+          "le bouton de l'en-tete du tableau de bord");
+    board.button("forcer")->clicked->emit();
+    f.mm.applyPending();
+    check(f.mm.top() && f.mm.top()->id() == "dialog.ai.mission.fin-forcee", "le bouton : la meme question");
+    f.mm.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, {}});   // Forcer la fin
+    f.mm.applyPending();
+    const auto* after = f.as().findMission(f.stationId);
+    check(after && after->state == ms::State::Done && after->forced.on() && after->forced.steps.size() == 3, "Forcer la fin : terminee (fin forcee), trois etapes ignorees");
+    check(after && after->step("S1")->state == ms::StepState::Done && after->step("S2")->state == ms::StepState::Done
+              && after->step("S3")->state == ms::StepState::Skipped && after->step("S4")->state == ms::StepState::Skipped
+              && after->step("S5")->state == ms::StepState::Skipped,
+          "S1, S2 restent terminees ; S3, S4, S5 ignorees");
+    check(after && after->proposal("op-p2") && after->proposal("op-p2")->state == "refusee", "P2 refusee (jamais appliquee)");
+    const int msg2 = f.as().messageOfProposal("op-p2");
+    check(msg2 >= 0 && f.as().proposal(msg2) && f.as().proposal(msg2)->state == "refusee", "sa carte dans la conversation aussi");
+    check(!f.statuses.empty() && has(f.statuses.back(), "fin forc"), "la barre d'etat le dit (" + (f.statuses.empty() ? std::string{} : f.statuses.back()) + ")");
+    bool notified = false;
+    for (const auto& n : nt::list()) notified |= n.category == "Mission" && n.title.rfind("Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)", 0) == 0;
+    check(notified, "une notification : Mission terminee (fin forcee)");
+    // l'audit final (son projet est ouvert), comme pour une fin normale ; il ne la rouvre pas
+    for (int k = 0; k < 2500 && f.as().auditing(f.stationId); ++k) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        f.step(0.002);
+    }
+    f.step();
+    after = f.as().findMission(f.stationId);
+    const ms::FinalReport fr = after && after->finalReport.isObject() ? ms::reportFromJson(after->finalReport) : ms::FinalReport{};
+    check(after && after->state == ms::State::Done && fr.forced && fr.skipped.size() == 3 && has(fr.verdict, "fin forc"),
+          "l'audit final : son rapport dit la fin forcee (" + fr.verdict + ")");
+    (void)board.poll();
+    lines = board.lines();
+    check(said(lines, "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)") && said(lines, "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)"),
+          "le tableau de bord : Terminee (fin forcee) ; ses etapes : Ignoree (fin forcee)");
+    check(said(lines, "En ce moment : Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : 3 \xC3\xA9tapes ignor\xC3\xA9" "es (S3, S4, S5)."), "l'activite : Terminee (fin forcee)");
+    check(board.progress().steps == 2 && board.progress().done == 2 && board.progress().skipped == 3 && board.progress().percent() == 100,
+          "la progression sans les etapes ignorees : " + board.progress().text());
+    check(said(lines, "RAPPORT FINAL") && said(lines, "Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e) (3)"), "le rapport final : les etapes ignorees");
+    check(board.button("forcer") && !board.button("forcer")->enabled() && has(board.button("forcer")->tooltip(), "d\xC3\xA9j\xC3\xA0 termin")
+              && board.button("annuler") && !board.button("annuler")->enabled(),
+          "Forcer la fin, Annuler : grises (et pourquoi)");
+    if (after) {
+        ms::Mission copy = *after;
+        copy.finalReport = ai::json::Value();
+        check(mu::nextOf(copy, false).kind == mu::Next::Kind::Audit, "une fin forcee sans rapport : Lancer l'audit final");
+        check(mu::nextOf(*after, false).kind == mu::Next::Kind::None, "avec son rapport : plus rien a faire");
+    }
+    // la bande, la liste : << Terminee (fin forcee) >> ; le clic droit ne la propose plus (et pourquoi)
+    auto& strip = f.panel->missionStrip();
+    (void)strip.poll();
+    check(said(strip.lines(), "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)"), "la bande le dit");
+    f.panel->showMissions(true);
+    f.panel->layout();
+    (void)v.poll();
+    f.panel->layout();
+    const int row2 = f.rowOf(v, f.stationId);
+    check(row2 >= 0 && has(v.rowText(static_cast<std::size_t>(row2)), "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)"), "la liste aussi");
+    const gfx::Rect rr2 = row2 >= 0 ? v.rowRect(static_cast<std::size_t>(row2)) : gfx::Rect{};
+    if (rr2.h > 0.f) (void)v.dispatch(ui::MouseDown{{rr2.x + 60.f, rr2.y + 10.f}, ui::MouseButton::Right, 1, {}});
+    bool greyed = false;
+    for (const auto& it : v.menu()->items()) greyed |= it.id == ai::AiMissionsView::kMenuForceFinish && !it.enabled && !it.disabledReason.empty();
+    check(greyed, "le clic droit : Forcer la fin grise (deja terminee)");
+    v.menu()->close();
+    check(!f.panel->missionAct(f.stationId, ai::AiPanel::MissionAct::ForceFinish) && !f.mm.top() && has(f.statuses.back(), "d\xC3\xA9j\xC3\xA0 termin"),
+          "deja terminee : refusee tout de suite, sans question (et pourquoi)");
+    nt::resetForTests();
+}
+
 } // namespace
 
 int main() {
@@ -1123,6 +1344,7 @@ int main() {
     testNotification();
     testNoBlocking();
     testSteps();   // 1.22.1
+    testCardsAndForce();   // 1.22.3
     std::printf("ai_missions_ui_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

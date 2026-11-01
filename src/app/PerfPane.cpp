@@ -178,6 +178,8 @@ const char* describe(std::string_view name) {
         {"ia.peinture.notifications", "Le dessin de l'onglet Notifications de l'Assistant."},
         {"ia.mission.bande", "La bande Mission IA refaite."},
         {"ia.mission.tableau", "Le tableau de bord d'une mission refait."},
+        {"ia.mission.propositions", "Les cartes des propositions d'une mission (d\xC3\xA9pli\xC3\xA9" "es ou r\xC3\xA9" "duites)."},
+        {"ia.mission.fin-forcee", "La fin forc\xC3\xA9" "e d'une mission (ses \xC3\xA9tapes ignor\xC3\xA9" "es, son enregistrement)."},
         {"ia.missions.onglet", "L'onglet Missions IA refait."},
     };
     for (const auto& d : kDesc)

@@ -290,7 +290,9 @@ public:
     bool openMission(const std::string& missionId, int mode = -1);
     // UN GESTE SUR UNE MISSION (la liste, la bande, le tableau de bord) : l'Assistant le fait, la barre d'etat dit ce
     // qui s'est passe (ou pourquoi rien). Cancel : une question d'abord. Conversation : sa conversation ouverte ici.
-    enum class MissionAct : std::uint8_t { Continue, Correct, Refresh, Audit, Pause, Resume, Cancel, Archive, Unarchive, Conversation };
+    // 1.22.3 : ForceFinish (Forcer la fin de la mission...) - refusee tout de suite et pourquoi (Assistant::canForceFinish),
+    // sinon une question d'abord (missionui::forceFinishQuestion : ce qui va se passer), puis Assistant::forceFinishMission.
+    enum class MissionAct : std::uint8_t { Continue, Correct, Refresh, Audit, Pause, Resume, Cancel, Archive, Unarchive, Conversation, ForceFinish };
     bool missionAct(const std::string& missionId, MissionAct act, const std::string& step = {});
     bool renameMission(const std::string& missionId, const std::string& name);
     // Une proposition de la mission, PAR SA CONVERSATION (rouverte) et les gestes de sa carte : 0 Previsualiser (la
@@ -299,6 +301,11 @@ public:
     bool missionProposal(const std::string& missionId, const std::string& proposalId, int what);
     // L'IA travaille-t-elle pour cette mission ? (une reponse dans l'une de ses conversations, l'audit final)
     [[nodiscard]] bool missionBusy(const mission::Mission& m) const;
+    // 1.22.3 : LES CARTES DES PROPOSITIONS d'une mission (son tableau de bord), depliees ou reduites PAR L'UTILISATEUR :
+    // gardees pour la seance, par mission et par proposition, en memoire (jamais dans le fichier de la mission) ; aucune
+    // valeur : le choix par defaut (missionui::cardOpenByDefault).
+    [[nodiscard]] std::optional<bool> missionCard(const std::string& missionId, const std::string& proposalId) const;
+    void                              setMissionCard(const std::string& missionId, const std::string& proposalId, bool open);
 
     [[nodiscard]] UiHost& uiHost() noexcept { return ui_; }
     // La part du separateur que l'ecran a posee pour la largeur par defaut (-1 : aucune) ; une
@@ -396,6 +403,7 @@ private:
     bool                     missionsAlert_{false};
     float                    missionStripH_{0.f}, askH_{0.f}, chatBottom_{0.f};
     std::string              askText_;                                    // la demande qui attend le choix (vide : aucune)
+    std::map<std::string, std::map<std::string, bool>> missionCards_;     // 1.22.3 : mission -> proposition -> depliee
 };
 
 // =============================================================================

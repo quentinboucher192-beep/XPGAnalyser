@@ -16,7 +16,8 @@
 //    - l'empreinte du projet : identique apres relecture, << les variables (modifiees) >>, << la vue X (ajoutee) >> ;
 //    - LA REPRISE : cas A (projet identique), B (modifie : ce qui a change), C (introuvable) ; un appel a l'IA
 //      interrompu pendant la 3e proposition (rien n'est rejoue) ;
-//    - pause, reprise, annulation ; la recherche et les outils chercher_missions / etat_mission.
+//    - pause, reprise, annulation ; la recherche et les outils chercher_missions / etat_mission ;
+//    - 1.22.3 : forcer la fin (les etapes ignorees, les propositions refusees, le rapport, le fichier).
 // =============================================================================
 #include "../src/app/ai/AiMission.hpp"
 #include "../src/app/ai/AiMissionStore.hpp"
@@ -1032,6 +1033,161 @@ void file1220() {
           "les champs de la 1.22.0 gardes tels quels");
 }
 
+
+// ---- 1.22.3 : forcer la fin d'une mission ------------------------------------------------------------------------------
+//  Les etapes non terminees ignorees (la raison dite), les propositions en attente refusees (jamais appliquees), l'appel
+//  a l'IA efface, l'historique, l'etat final (que rien ne rouvre), la progression, le rapport final, le refus sur une
+//  mission terminee ou annulee, le fichier relu ; une mission en pause peut finir ainsi ; Ctrl+Z apres coup.
+void forcing() {
+    std::printf("1.22.3 : forcer la fin d'une mission\n");
+    Fixture f;
+    mi::Mission m = stationOn(f);
+    std::string why;
+    // P1 appliquee : S1 (le type) et S2 (les variables) terminees, verifiees dans le projet
+    ai::Proposal p1 = f.proposal("op1", {type("T_PompeA", {{"Marche", "BOOL", ""}, {"Defaut", "BOOL", ""}}, "S1"),
+                                         vars({{"Pompe_A", "T_PompeA", "La pompe A", ""}}, "S2")});
+    check(f.run(m, p1, {"S1", "S2"}, &why), "P1 appliquee (" + why + ")");
+    // P2 a valider (S4), S3 en erreur, un appel a l'IA en cours pour S5
+    ai::Proposal p2 = f.proposal("op2", {op(A::Alarm, "Defaut_Pompe_A", {{"condition", "Pompe_A.Defaut"}, {"message", "Pompe A en d\xC3\xA9" "faut"}}, "S4")});
+    mi::onGenerated(m, p2, "c1", "m4", {"S4"}, kNow);
+    check(mi::setStepState(m, "S3", S::Running, kNow, {}, &why) && mi::setStepState(m, "S3", S::Error, kNow, "Modbus_A : adresse refus\xC3\xA9" "e", &why),
+          "S3 en erreur (" + why + ")");
+    check(mi::setStepState(m, "S5", S::Running, kNow, {}, &why), "S5 en cours (" + why + ")");
+    m.pending.active = true;
+    m.pending.purpose = "proposition";
+    m.pending.started = kNow;
+    m.pending.steps = {"S5"};
+    check(m.step("S1")->state == S::Done && m.step("S2")->state == S::Done && m.step("S4")->state == S::AwaitingValidation
+              && m.proposal("op2")->state == "generee",
+          "avant : S1, S2 terminees ; S4 attend la validation de P2 ; S3 en erreur ; S5 en cours");
+    check(mi::mayForceFinish(m, &why), "une mission en cours : sa fin se force");
+    const auto left = mi::unfinishedSteps(m);
+    check(left.size() == 3 && std::find(left.begin(), left.end(), "S3") != left.end() && std::find(left.begin(), left.end(), "S4") != left.end()
+              && std::find(left.begin(), left.end(), "S5") != left.end(),
+          "les etapes non terminees : S3, S4, S5");
+    check(mi::awaitingProposals(m) == std::vector<std::string>{"op2"}, "la proposition en attente : P2");
+    // aucune transition n'est ajoutee : celles qui ne vont pas directement a << ignoree >> passent par << prete >>
+    for (const S st : {S::Running, S::AwaitingValidation, S::Applied, S::Verifying})
+        check(!mi::canMove(st, S::Skipped) && mi::canMove(st, S::Ready) && mi::canMove(S::Ready, S::Skipped),
+              std::string(mi::stepLabel(st)) + " : par << prete >>, puis << ignoree >> (la table des transitions)");
+    for (const S st : {S::ToPlan, S::Waiting, S::Ready, S::Error, S::Blocked})
+        check(mi::canMove(st, S::Skipped), std::string(mi::stepLabel(st)) + " : directement << ignoree >>");
+    check(!mi::canMove(S::Done, S::Skipped) && !mi::canMove(S::Cancelled, S::Skipped), "terminee, annulee : jamais ignoree (elles ne sont pas touchees)");
+
+    const hmi::Project before = f.doc->project;
+    const std::size_t events = m.history.size();
+    const std::string at = "2026-11-01T11:30:00";
+    check(mi::forceFinish(m, at, {}, &why), "forcer la fin (" + why + ")");
+    // l'etat final
+    check(m.state == mi::State::Done && m.forced.on() && m.forced.date == at && m.forced.reason == std::string(mi::kForcedReason),
+          "terminee ; la fin forcee retenue (la date, la raison)");
+    check(mi::stateText(m) == "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)", "l'etat en clair : " + mi::stateText(m));
+    // les etapes : ignorees avec la raison ; celles qui etaient terminees le restent
+    for (const char* id : {"S3", "S4", "S5"}) {
+        const mi::Step* s = m.step(id);
+        check(s && s->state == S::Skipped && s->note == "Fin forc\xC3\xA9" "e par l'utilisateur." && mi::stepText(m, *s) == "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)",
+              std::string(id) + " : ignoree, << Fin forcee par l'utilisateur. >> (" + (s ? s->note : std::string("?")) + ")");
+        check(std::find(m.forced.steps.begin(), m.forced.steps.end(), id) != m.forced.steps.end(), std::string(id) + " : dans la fin forcee");
+    }
+    check(m.forced.steps.size() == 3, "trois etapes ignorees");
+    check(m.step("S1")->state == S::Done && m.step("S2")->state == S::Done && mi::stepText(m, *m.step("S1")) == "Termin\xC3\xA9" "e",
+          "S1, S2 restent terminees");
+    check(has(m.step("S3")->error, "adresse refus"), "l'erreur de S3 est gardee (l'historique de ce qui s'est passe)");
+    // les propositions : P2 refusee, jamais appliquee ; P1 reste appliquee
+    check(m.proposal("op2")->state == "refusee" && anyHas(m.proposal("op2")->errors, "fin forc\xC3\xA9" "e") && m.forced.proposals == std::vector<std::string>{"op2"},
+          "P2 refusee (fin forcee)");
+    check(!mi::mayApply(m, "op2", &why) && has(why, "fin forc"), "P2 ne s'applique plus (" + why + ")");
+    check(m.proposal("op1")->state == "appliquee", "P1 reste appliquee (rien n'est defait)");
+    check(mi::printOf(before).all == mi::printOf(f.doc->project).all, "le projet n'a pas change");
+    // l'appel a l'IA : efface, et dit
+    check(!m.pending.active, "l'appel a l'IA efface");
+    // l'historique
+    bool interruption = false, refused = false;
+    int ignored = 0;
+    for (std::size_t i = events; i < m.history.size(); ++i) {
+        const auto& e = m.history[i];
+        interruption |= e.kind == "interruption" && has(e.text, "fin forc");
+        refused |= e.kind == "proposition" && e.proposal == "op2" && has(e.text, "P2 refus");
+        ignored += e.kind == "etape" && has(e.text, "Ignor\xC3\xA9" "e") && has(e.text, "Fin forc") ? 1 : 0;
+    }
+    check(interruption && refused && ignored == 3, "l'historique : l'appel arrete, P2 refusee, les trois etapes ignorees");
+    check(m.history.back().kind == "terminee" && has(m.history.back().text, "Fin forc\xC3\xA9" "e par l'utilisateur : 3 \xC3\xA9tapes ignor\xC3\xA9" "es")
+              && has(m.history.back().text, "Rien n'est d\xC3\xA9" "fait"),
+          "la derniere entree : " + m.history.back().text);
+    // la progression : les etapes ignorees ne comptent plus
+    const mi::Progress pr = mi::progressOf(m);
+    check(pr.skipped == 3 && pr.steps == 2 && pr.done == 2 && pr.percent() == 100, "la progression sans les ignorees : " + pr.text());
+    check(mi::stepProgressOf(m, *m.step("S4")).percent < 0, "une etape ignoree : pas de pourcentage");
+    // ce que l'on dit
+    check(mi::activityOf(m, *m.step("S4")).text == "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) : hors du calcul de la progression.",
+          "S4 : " + mi::activityOf(m, *m.step("S4")).text);
+    check(mi::missionActivity(m).rfind("Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : 3 \xC3\xA9tapes ignor\xC3\xA9" "es", 0) == 0, "l'activite : " + mi::missionActivity(m));
+    check(has(mi::nextAction(m), "fin forc") && has(mi::nextAction(m), "audit"), "la prochaine action : l'audit final (" + mi::nextAction(m) + ")");
+    check(has(mi::summaryOf(m), "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)") && has(mi::detailText(m), "Fin forc\xC3\xA9" "e le " + at)
+              && has(mi::detailText(m), "[Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)] "),
+          "le resume et la fiche le disent");
+    // rien ne la rouvre : refreshState, un plan, une pause, une deuxieme fin forcee, une annulation
+    mi::refreshState(m, at);
+    check(m.state == mi::State::Done, "refreshState la laisse terminee (sans rapport final)");
+    mi::PlanEdit un;
+    un.kind = mi::PlanEdit::Kind::Unskip;
+    un.step = "S4";
+    check(!mi::editPlan(m, un, at, &why) && has(why, "fin forc") && m.step("S4")->state == S::Skipped, "son plan ne change plus (" + why + ")");
+    check(!mi::forceFinish(m, at, {}, &why) && has(why, "d\xC3\xA9j\xC3\xA0 termin\xC3\xA9" "e"), "deja terminee : refuse (" + why + ")");
+    check(!mi::cancel(m, at, &why) && !mi::pause(m, at, &why) && m.state == mi::State::Done, "ni annulee, ni en pause apres coup");
+    // LE RAPPORT FINAL (l'audit, comme pour une fin normale) : il dit la fin forcee et les etapes ignorees
+    const auto audit = hmi::audit::run(f.doc->project, {}, {});
+    const mi::FinalReport fr = mi::finalReport(m, f.doc->project, &audit, at);
+    check(fr.forced && fr.skipped.size() == 3 && anyHas(fr.skipped, "S4 Creer les alarmes") && !fr.complete, "le rapport : fin forcee, 3 ignorees, jamais complet");
+    check(has(fr.verdict, "fin forc\xC3\xA9" "e par l'utilisateur") && has(fr.verdict, "3 \xC3\xA9tapes ignor\xC3\xA9" "es ("), "le verdict : " + fr.verdict);
+    check(fr.finished.size() == 2 && fr.notDone.empty() && anyHas(fr.toCheck, "Fin forc\xC3\xA9" "e") && anyHas(fr.created, "T_PompeA"),
+          "terminees : S1, S2 ; rien << non fait >> ; a verifier : la fin forcee ; cree : le type");
+    const mi::FinalReport back = mi::reportFromJson(mi::reportToJson(fr));
+    check(back.forced && back.skipped == fr.skipped && back.verdict == fr.verdict, "le rapport relu : la fin forcee, les etapes ignorees");
+    const std::string rt = mi::reportText(back);
+    check(has(rt, "Fin forc\xC3\xA9" "e par l'utilisateur") && has(rt, "Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e)** (3)"), "le rapport en clair le dit");
+    check(!mi::reportToJson(mi::FinalReport{}).has("fin_forcee"), "un rapport ordinaire n'a pas ces champs (rien de change)");
+    m.finalReport = mi::reportToJson(fr);
+    mi::refreshState(m, at);
+    check(m.state == mi::State::Done && has(mi::nextAction(m), "consulter le rapport final"), "le rapport pose : toujours terminee, le rapport a consulter");
+    // LE FICHIER : relu tel quel
+    const ai::json::Value v = mi::toJson(m);
+    check(v.at("fin_forcee").isObject() && v.at("fin_forcee").str("date") == at, "le fichier : << fin_forcee >>");
+    int format = -1;
+    bool readOnly = true;
+    const mi::Mission again = mi::fromJson(v, &format, &readOnly);
+    check(format == mi::kFormat && !readOnly && again.forced.on() && again.forced.date == at && again.forced.reason == m.forced.reason
+              && again.forced.steps == m.forced.steps && again.forced.proposals == m.forced.proposals && again.state == mi::State::Done,
+          "relu : la fin forcee, l'etat");
+    check(again.step("S4") && again.step("S4")->state == S::Skipped && mi::stepText(again, *again.step("S4")) == "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)"
+              && again.proposal("op2")->state == "refusee",
+          "relu : les etapes ignorees, la proposition refusee");
+    check(ai::json::write(mi::toJson(again)) == ai::json::write(v), "aller-retour exact (rien en trop)");
+    check(!mi::toJson(stationOn(f)).has("fin_forcee"), "une mission sans fin forcee : le fichier ne change pas");
+    // CTRL+Z APRES COUP : le projet fait foi (P1 annulee, S1 prete), la mission reste terminee
+    check(static_cast<bool>(f.stack.undo()) && mi::verifyAgainst(m, f.doc->project, at), "Ctrl+Z apres la fin forcee : vu");
+    check(m.proposal("op1")->state == "annulee" && m.step("S1")->state != S::Done && m.state == mi::State::Done, "P1 annulee, S1 n'est plus terminee ; la mission reste terminee");
+    check(mi::activityOf(m, *m.step("S1")).text == "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : plus rien ne se fait pour elle.",
+          "S1 : " + mi::activityOf(m, *m.step("S1")).text);
+    (void)f.stack.redo();
+
+    // UNE MISSION ANNULEE : sa fin ne se force pas
+    mi::Mission c = stationOn(f);
+    check(mi::cancel(c, kNow, &why) && !mi::mayForceFinish(c, &why) && has(why, "annul"), "annulee : refuse (" + why + ")");
+    check(!mi::forceFinish(c, kNow, {}, &why) && c.state == mi::State::Cancelled && !c.forced.on(), "rien n'est change");
+    // UNE MISSION TERMINEE normalement : non plus
+    mi::Mission d = stationOn(f);
+    d.state = mi::State::Done;
+    check(!mi::forceFinish(d, kNow, {}, &why) && has(why, "d\xC3\xA9j\xC3\xA0 termin\xC3\xA9" "e") && !d.forced.on(), "terminee : refuse (" + why + ")");
+    // UNE MISSION EN PAUSE, rien de fait : toutes ses etapes ignorees, une raison donnee
+    mi::Mission e = stationOn(f);
+    check(mi::pause(e, kNow, &why) && mi::forceFinish(e, at, "le client a change d'avis", &why), "en pause : sa fin se force (" + why + ")");
+    check(e.state == mi::State::Done && e.forced.steps.size() == 5 && e.step("S1")->note == "Le client a change d'avis."
+              && has(e.history.back().text, "5 \xC3\xA9tapes ignor\xC3\xA9" "es") && has(e.history.back().text, "Raison : le client a change d'avis."),
+          "les cinq ignorees, la raison dite (" + e.history.back().text + ")");
+    check(mi::progressOf(e).steps == 0 && mi::progressOf(e).skipped == 5, "la progression : plus rien a compter");
+}
+
 } // namespace
 
 int main() {
@@ -1051,6 +1207,7 @@ int main() {
     stepActivities();   // 1.22.1
     stepJournals();     // 1.22.1
     file1220();         // 1.22.1
+    forcing();          // 1.22.3
     std::printf("ai_missions_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

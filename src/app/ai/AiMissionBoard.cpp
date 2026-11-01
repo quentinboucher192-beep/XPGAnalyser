@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <optional>
 
 namespace app::ai {
 
@@ -173,6 +174,60 @@ std::string stepList(const mission::Mission& m, const std::vector<std::string>& 
     return s;
 }
 
+// 1.22.3 : depliee par defaut, celle qui attend une decision (a valider, verifiee, en echec).
+bool cardOpenByDefault(std::string_view s) noexcept { return s == "generee" || s == "validee" || s == "echouee"; }
+
+std::string proposalLine(const mission::ProposalLink& p) {
+    std::string s = count(p.ops, "op\xC3\xA9ration", "op\xC3\xA9rations");
+    if (p.state == "appliquee" || p.applied + p.failed + p.skipped > 0) {
+        s += " \xC2\xB7 " + count(p.applied, "appliqu\xC3\xA9" "e", "appliqu\xC3\xA9" "es");
+        if (p.failed > 0) s += ", " + std::to_string(p.failed) + " en \xC3\xA9" "chec";
+        if (p.skipped > 0) s += ", " + count(p.skipped, "ignor\xC3\xA9" "e", "ignor\xC3\xA9" "es");
+    } else if (p.create + p.modify + p.reuse + p.remove > 0) {
+        if (p.create > 0) s += " \xC2\xB7 " + count(p.create, "cr\xC3\xA9" "ation", "cr\xC3\xA9" "ations");
+        if (p.modify > 0) s += " \xC2\xB7 " + count(p.modify, "modification", "modifications");
+        if (p.reuse > 0) s += " \xC2\xB7 " + count(p.reuse, "r\xC3\xA9utilisation", "r\xC3\xA9utilisations");
+        if (p.remove > 0) s += " \xC2\xB7 " + count(p.remove, "suppression", "suppressions");
+    }
+    return s;
+}
+
+std::string forceFinishQuestion(const mission::Mission& m, bool calling) {
+    const auto left = mission::unfinishedSteps(m);
+    const auto waiting = mission::awaitingProposals(m);
+    const auto ids = [](const std::vector<std::string>& v) {
+        std::string s;
+        for (std::size_t i = 0; i < v.size(); ++i) {
+            if (i == 8) {
+                s += ", \xE2\x80\xA6";
+                break;
+            }
+            s += (i ? ", " : "") + v[i];
+        }
+        return s;
+    };
+    std::string s = "Forcer la fin de la mission \xC2\xAB " + title(m) + " \xC2\xBB ?\n";
+    if (left.empty())
+        s += "Toutes ses \xC3\xA9tapes sont termin\xC3\xA9" "es ou ignor\xC3\xA9" "es : elle passe \xC3\xA0 \xC2\xAB Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB.";
+    else if (left.size() == 1)
+        s += "1 \xC3\xA9tape n'est pas termin\xC3\xA9" "e (" + ids(left) + ") : elle sera marqu\xC3\xA9" "e \xC2\xAB ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB.";
+    else
+        s += std::to_string(left.size()) + " \xC3\xA9tapes ne sont pas termin\xC3\xA9" "es (" + ids(left) + ") : elles seront marqu\xC3\xA9" "es \xC2\xAB ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB.";
+    s += " Rien n'est d\xC3\xA9" "fait dans le projet";
+    if (waiting.empty()) {
+        s += ".";
+    } else {
+        std::vector<std::string> tags;
+        for (const auto& id : waiting)
+            if (const mission::ProposalLink* p = m.proposal(id)) tags.push_back("P" + std::to_string(p->order));
+        s += waiting.size() == 1 ? " ; une proposition en attente (" + ids(tags) + ") ne sera pas appliqu\xC3\xA9" "e."
+                                 : " ; les propositions en attente (" + ids(tags) + ") ne seront pas appliqu\xC3\xA9" "es.";
+    }
+    if (calling) s += "\nLa r\xC3\xA9ponse de l'IA en cours pour elle est arr\xC3\xAAt\xC3\xA9" "e (rien n'est propos\xC3\xA9).";
+    s += "\nLe rapport final suit : l'audit global, sur une copie du projet. L'historique est gard\xC3\xA9.";
+    return s;
+}
+
 std::pair<int, int> stepOps(const mission::Mission& m, const mission::Step& s) {
     int done = 0, total = 0;
     for (const auto& p : m.proposals) {
@@ -253,6 +308,11 @@ Moment momentOf(const mission::Mission& m, const mission::Live& live) {
     // le plan, l'actualisation, l'audit final : la mission elle-meme travaille (aucune etape ne le porte)
     if (!own.empty() && (live.auditing || (m.pending.active && (m.pending.purpose == "plan" || m.pending.purpose == "actualisation"))))
         return whole(own);
+    if (m.state == mission::State::Done && m.forced.on()) {   // 1.22.3 : << Terminee (fin forcee) : 2 etapes ignorees (S4, S5). >>
+        mo.activity.kind = mission::Activity::Done;
+        mo.activity.text = own;
+        return mo;
+    }
     if (m.state == mission::State::Cancelled || m.state == mission::State::Done) return mo;   // rien en cours
     if (const mission::Step* s = mission::currentStep(m, live)) {
         mo.step = s->id;
@@ -274,8 +334,18 @@ Next nextOf(const mission::Mission& m, bool busy) {
         n.why = "Mission annul\xC3\xA9" "e : ses propositions ne s'appliquent plus ; son historique reste consultable.";
         return n;
     }
+    if (m.state == State::Done && m.forced.on() && !m.finalReport.isObject() && !busy && m.coherence != mission::Coherence::Missing && !m.steps.empty()) {
+        // 1.22.3 : une fin forcee sans rapport (son projet n'etait pas ouvert) - l'audit final le fait, comme pour une fin normale
+        n.kind = Next::Kind::Audit;
+        n.label = "Lancer l'audit final";
+        n.tooltip = "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : la v\xC3\xA9rification globale du projet, sur un fil de fond et une copie du projet, "
+                    "puis le rapport final (il dit la fin forc\xC3\xA9" "e et les \xC3\xA9tapes ignor\xC3\xA9" "es). Le projet n'est pas modifi\xC3\xA9.";
+        return n;
+    }
     if (m.state == State::Done) {
-        n.why = "Mission termin\xC3\xA9" "e : le rapport final dit ce qui a \xC3\xA9t\xC3\xA9 fait et ce qui reste \xC3\xA0 v\xC3\xA9rifier.";
+        n.why = m.forced.on() ? std::string("Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : le rapport final dit ce qui a \xC3\xA9t\xC3\xA9 fait, ce qui a \xC3\xA9t\xC3\xA9 ignor\xC3\xA9 "
+                                            "et ce qui reste \xC3\xA0 v\xC3\xA9rifier.")
+                              : std::string("Mission termin\xC3\xA9" "e : le rapport final dit ce qui a \xC3\xA9t\xC3\xA9 fait et ce qui reste \xC3\xA0 v\xC3\xA9rifier.");
         return n;
     }
     if (busy) {
@@ -576,6 +646,9 @@ AiMissionBoard::AiMissionBoard(std::string id, AiPanel& panel, std::string missi
     : ui::Widget(std::move(id)), panel_(panel), missionId_(std::move(missionId)) {
     setFocusPolicy(true);
     setZoomSupport(ui::ZoomSupport::Scaled);   // le zoom de la page, comme les autres pages du centre
+    // 1.22.3 : le clic droit sur l'en-tete d'une carte de proposition (le menu de l'application)
+    menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(this->id() + ".menu")));
+    links_ += menu_->itemChosen->connect([this](int item) { menuChosen(item); });
     refresh();
 }
 
@@ -702,7 +775,7 @@ AiMissionBoard::Block AiMissionBoard::blockHeader(const mission::Mission& m, flo
     float y = 14.f;
     // le nom, l'etat
     icon(b.ops, {x, y + 1.f, 22.f, 22.f}, ui::Icon::Task, Tone::Accent);
-    std::string state(mission::stateLabel(m.state));
+    std::string state = mission::stateText(m);   // 1.22.3 : << Terminee (fin forcee) >>
     if (m.archived) state += " \xC2\xB7 archiv\xC3\xA9" "e";
     const float cw = ui::measureWidth(state, kMeta) + 14.f;
     chip(b.ops, x + w - cw, y + 2.f, state, missionui::stateTone(m.state));
@@ -792,6 +865,20 @@ AiMissionBoard::Block AiMissionBoard::blockHeader(const mission::Mission& m, flo
                                           "d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9 reste dans le projet. L'historique est gard\xC3\xA9.")
                             : std::string("La mission est d\xC3\xA9j\xC3\xA0 termin\xC3\xA9" "e ou annul\xC3\xA9" "e."),
                         ui::Button::Style::Flat, can, {bx, y}, [this, mid] { (void)panel_.missionAct(mid, AiPanel::MissionAct::Cancel); }));
+    }
+    {
+        // 1.22.3 : FORCER LA FIN - une question d'abord ; refuse (et pourquoi) : terminee, annulee, en lecture seule, une
+        // proposition de la mission qui s'applique sur un fil de fond (le direct refait la page quand elle commence ou finit)
+        std::string whyNot;
+        const bool can = as.canForceFinish(missionId_, &whyNot);
+        const std::string label = "Forcer la fin de la mission\xE2\x80\xA6";
+        room(label);
+        place(useButton(b, "forcer", label,
+                        can ? std::string("Terminer la mission l\xC3\xA0 o\xC3\xB9 elle en est (une question d'abord) : ses \xC3\xA9tapes non termin\xC3\xA9" "es passent "
+                                          "\xC2\xAB ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB, une proposition en attente ne s'applique pas, la r\xC3\xA9ponse "
+                                          "de l'IA en cours pour elle s'arr\xC3\xAAte. Rien n'est d\xC3\xA9" "fait dans le projet ; le rapport final suit.")
+                            : "Impossible maintenant : " + whyNot,
+                        ui::Button::Style::Flat, can, {bx, y}, [this, mid] { (void)panel_.missionAct(mid, AiPanel::MissionAct::ForceFinish); }));
     }
     room("Conversation");
     place(useButton(b, "conversation", "Conversation", "Ouvrir la conversation de la mission dans le panneau de l'Assistant (ses cartes, ses r\xC3\xA9ponses).",
@@ -987,7 +1074,7 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
         const float top = y;
         if (index++ % 2 == 1) fill(b.ops, {x, top, w, rowH}, Tone::RowAlt, 70);
         const Tone tone = missionui::stepTone(s.state);
-        const std::string label(mission::stepLabel(s.state));
+        const std::string label = mission::stepText(m, s);   // 1.22.3 : << Ignoree (fin forcee) >>
         const mission::StepProgress sp = mission::stepProgressOf(m, s);
         const mission::StepActivity act = mission::activityOf(m, s, live_);
         const Tone actTone = missionui::activityTone(act.kind);
@@ -1123,15 +1210,37 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
 }
 
 AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, float x, float w) {
+    XPG_MESURE("ia.mission.propositions");   // 1.22.3 : les cartes des propositions (depliees ou reduites)
     Block b;
     b.section = "propositions";
     const auto& as = panel_.assistant();
-    float y = heading(b.ops, x, 0.f, w, "PROPOSITIONS (" + std::to_string(m.proposals.size()) + ")");
+    const std::string head = "PROPOSITIONS (" + std::to_string(m.proposals.size()) + ")";
+    float y = heading(b.ops, x, 0.f, w, head);
+    allOpen_ = allClose_ = {};
     if (m.proposals.empty()) {
         y = wrapped(b.ops, x, y, w, "Aucune proposition encore : \xC2\xAB Proposer la suite \xC2\xBB demande la premi\xC3\xA8re \xC3\xA0 l'IA (les \xC3\xA9tapes pr\xC3\xAAtes, regroup\xC3\xA9" "es).",
                     kMeta, Tone::Muted, 3);
         b.h = y + 4.f;
         return b;
+    }
+    // 1.22.3 : TOUT DEPLIER / TOUT REPLIER, a droite de l'intertitre (dessous s'il n'y a pas la place)
+    {
+        const std::string openAll = "Tout d\xC3\xA9plier", closeAll = "Tout replier";
+        const float wo = ui::measureWidth(openAll, kMeta), wc = ui::measureWidth(closeAll, kMeta);
+        float lx = x + w - 10.f - wc - 18.f - wo, ly = (kHeadH - ui::lineHeight(kMeta)) / 2.f;
+        if (lx < x + 10.f + ui::measureWidth(head, kMeta) + 16.f) {
+            lx = x + 10.f;
+            ly = y - 4.f;
+            y += lineH(kMeta) + 4.f;
+        }
+        text(b.ops, lx, ly, openAll, kMeta, Tone::Accent);
+        text(b.ops, lx + wo + 18.f, ly, closeAll, kMeta, Tone::Accent);
+        allOpen_ = {lx - 3.f, ly - 3.f, wo + 6.f, lineH(kMeta) + 6.f};
+        allClose_ = {lx + wo + 15.f, ly - 3.f, wc + 6.f, lineH(kMeta) + 6.f};
+        b.clicks.emplace_back(allOpen_, "cartes:ouvrir");
+        b.clicks.emplace_back(allClose_, "cartes:fermer");
+        b.tips.emplace_back(allOpen_, "D\xC3\xA9plier toutes les propositions (leur carte enti\xC3\xA8re).");
+        b.tips.emplace_back(allClose_, "R\xC3\xA9" "duire toutes les propositions \xC3\xA0 une ligne (P1, le titre, les nombres, l'\xC3\xA9tat).");
     }
     std::vector<const mission::ProposalLink*> list;
     for (const auto& p : m.proposals) list.push_back(&p);
@@ -1141,19 +1250,40 @@ AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, 
         const auto& p = *pp;
         const std::string tag = "P" + std::to_string(p.order);
         const std::string key = p.order > 0 ? tag : p.id;
+        const std::optional<bool> chosen = panel_.missionCard(missionId_, p.id);
+        const bool open = chosen ? *chosen : missionui::cardOpenByDefault(p.state);
         const float top = y;
         const std::size_t first = b.ops.size();   // le cadre se pose sous la carte, sa hauteur connue (a la fin)
         std::vector<Op> card;
         float cy = top + 10.f;
-        // P2, le titre, l'etat
-        const float tw = chip(b.ops, cx, cy - 2.f, tag, Tone::Accent);
+        // L'EN-TETE (un clic : deplier / reduire) : le chevron, P2, le titre (reduite : et ses nombres), l'etat
+        text(b.ops, cx, cy, open ? "\xE2\x96\xBE" : "\xE2\x96\xB8", kBody, Tone::Muted);
+        const float px = cx + 16.f;
+        const float tw = chip(b.ops, px, cy - 2.f, tag, Tone::Accent);
         const std::string st = missionui::proposalStateLabel(p.state);
         const float sw = ui::measureWidth(st, kMeta) + 14.f;
         (void)chip(b.ops, cx + cw - sw, cy - 2.f, st, missionui::proposalTone(p.state));
         const std::string ttl = p.title.empty() ? std::string("Proposition ") + tag : p.title;
-        text(b.ops, cx + tw + 8.f, cy, missionui::elide(ttl, kBody, cw - tw - sw - 20.f), kBody, Tone::Text, true);
-        b.tips.emplace_back(gfx::Rect{cx, cy - 2.f, cw, lineH(kBody)}, tag + " \xE2\x80\x94 " + ttl + " (" + st + ")");
+        const std::string line = missionui::proposalLine(p);
+        const std::string shownTitle = open ? ttl : ttl + " \xE2\x80\x94 " + line;
+        text(b.ops, px + tw + 8.f, cy, missionui::elide(shownTitle, kBody, cw - 16.f - tw - sw - 20.f), kBody, Tone::Text, true);
+        const float headH = open ? 10.f + lineH(kBody) + 4.f : 10.f + lineH(kBody) + 10.f;
+        const gfx::Rect headRect{x, top, w, headH};
+        b.clicks.emplace_back(headRect, "plier:" + p.id);
+        b.tips.emplace_back(headRect, tag + " \xE2\x80\x94 " + ttl + " (" + st + ")\n" + line + "\n"
+                                          + (open ? "Un clic : la r\xC3\xA9" "duire \xC3\xA0 une ligne." : "Un clic : la d\xC3\xA9plier (sa carte enti\xC3\xA8re).")
+                                          + " Clic droit : D\xC3\xA9plier, R\xC3\xA9" "duire, Tout d\xC3\xA9plier, Tout replier.");
+        cardHeads_[p.id] = headRect;
         cy += lineH(kBody) + 4.f;
+        if (!open) {
+            const float h = headH;
+            fill(card, {x, top, w, h}, Tone::Card, 255, true);
+            stroke(card, {x, top, w, h}, Tone::Border);
+            b.ops.insert(b.ops.begin() + static_cast<std::ptrdiff_t>(first), card.begin(), card.end());
+            anchors_[p.id] = top;
+            y = top + h + 8.f;
+            continue;
+        }
         cy = wrapped(b.ops, cx, cy, cw, missionui::proposalCounts(p), kMeta, Tone::Text, 2);
         // les etapes qu'elle couvre, et celles dont elles dependent (hors de la proposition)
         std::vector<std::string> outside;
@@ -1198,13 +1328,13 @@ AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, 
         }
         // ses operations, une par ligne (un clic les deplie)
         if (!p.lines.empty()) {
-            const bool open = opsOpen_.count(p.id) > 0;
-            const std::string link = open ? std::string("Masquer les op\xC3\xA9rations")
+            const bool opsShown = opsOpen_.count(p.id) > 0;
+            const std::string link = opsShown ? std::string("Masquer les op\xC3\xA9rations")
                                           : "Voir les " + missionui::count(static_cast<int>(p.lines.size()), "op\xC3\xA9ration", "op\xC3\xA9rations") + " \xE2\x80\xBA";
             text(b.ops, cx, cy + 2.f, link, kMeta, Tone::Accent);
             b.clicks.emplace_back(gfx::Rect{cx - 2.f, cy, ui::measureWidth(link, kMeta) + 6.f, lineH(kMeta) + 4.f}, "ops:" + p.id);
             cy += lineH(kMeta) + 4.f;
-            if (open) {
+            if (opsShown) {
                 constexpr std::size_t kMaxLines = 120;
                 for (std::size_t i = 0; i < p.lines.size() && i < kMaxLines; ++i) {
                     const auto& l = p.lines[i];
@@ -1318,6 +1448,7 @@ AiMissionBoard::Block AiMissionBoard::blockReport(const mission::Mission& m, flo
     list("Modifi\xC3\xA9", r.modified, Tone::Text);
     list("R\xC3\xA9utilis\xC3\xA9", r.reused, Tone::Text);
     list("\xC3\x89tapes termin\xC3\xA9" "es", r.finished, Tone::Text);
+    list("Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e)", r.skipped, Tone::Warning);   // 1.22.3
     list("Non fait", r.notDone, Tone::Warning);
     list("Erreurs rencontr\xC3\xA9" "es", r.errors, Tone::Error);
     list("\xC3\x80 v\xC3\xA9rifier", r.toCheck, Tone::Warning);
@@ -1385,7 +1516,7 @@ AiMissionBoard::Block AiMissionBoard::blockResume(const mission::Mission& m, flo
                     s.state == S::Done ? Tone::Ok : s.state == S::Error ? Tone::Error : Tone::Info);
             const std::string line = s.id + " \xC2\xB7 " + sp.text() + " \xE2\x80\x94 " + act.text;
             text(b.ops, x + 64.f, y, missionui::elide(line, kMeta, w - 64.f), kMeta, missionui::activityTone(act.kind), act.live);
-            b.tips.emplace_back(gfx::Rect{x, y, w, lineH(kMeta)}, s.id + "  " + s.title + " \xE2\x80\x94 " + std::string(mission::stepLabel(s.state)) + "\n" + act.text + "\nProgression : "
+            b.tips.emplace_back(gfx::Rect{x, y, w, lineH(kMeta)}, s.id + "  " + s.title + " \xE2\x80\x94 " + mission::stepText(m, s) + "\n" + act.text + "\nProgression : "
                                                                       + sp.text() + " (" + sp.detail() + ")");
             y += lineH(kMeta);
         }
@@ -1556,6 +1687,8 @@ void AiMissionBoard::rebuild() {
     for (auto& [k, s] : slots_) s.used = false;
     blocks_.clear();
     anchors_.clear();
+    cardHeads_.clear();   // 1.22.3
+    allOpen_ = allClose_ = {};
     const auto bb = bounds();
     builtW_ = bb.w;
     const float w = std::min(kMaxW, std::max(300.f, bb.w - 2.f * kPad - 12.f));
@@ -1598,8 +1731,12 @@ void AiMissionBoard::rebuild() {
         push(blockHistory(*m, x, w));
         // les cartes des propositions : leur haut dans la page (un clic sur une etape y mene)
         for (const auto& blk : blocks_) {
-            if (blk.section == "propositions")
+            if (blk.section == "propositions") {
                 for (auto& [pid, top] : anchors_) top += blk.y;
+                for (auto& [pid, r] : cardHeads_) r.y += blk.y;   // 1.22.3 : l'en-tete de chaque carte, dans la page
+                if (allOpen_.w > 0.f) allOpen_.y += blk.y;
+                if (allClose_.w > 0.f) allClose_.y += blk.y;
+            }
             if (blk.section == "plan")
                 for (auto& [sid, r] : stepRows_) r.y += blk.y;   // 1.22.1 : les lignes des etapes, dans la page
         }
@@ -1652,6 +1789,94 @@ gfx::Rect AiMissionBoard::stepRect(std::string_view stepId) const {
     return {b.x + it->second.x, b.y + it->second.y - scroll_, it->second.w, it->second.h};
 }
 
+// ---- 1.22.3 : les cartes des propositions, depliees ou reduites -------------------------------------------------------
+bool AiMissionBoard::cardOpen(std::string_view proposalId) const {
+    const std::string pid(proposalId);
+    if (const std::optional<bool> chosen = panel_.missionCard(missionId_, pid)) return *chosen;
+    const auto* m = panel_.assistant().findMission(missionId_);
+    const auto* p = m ? m->proposal(pid) : nullptr;
+    return p && missionui::cardOpenByDefault(p->state);
+}
+
+void AiMissionBoard::setCardOpen(const std::string& proposalId, bool open) {
+    panel_.setMissionCard(missionId_, proposalId, open);
+    rebuild();
+}
+
+bool AiMissionBoard::toggleCard(const std::string& proposalId) {
+    const auto* m = panel_.assistant().findMission(missionId_);
+    if (!m || !m->proposal(proposalId)) return false;
+    setCardOpen(proposalId, !cardOpen(proposalId));
+    return true;
+}
+
+void AiMissionBoard::setAllCards(bool open) {
+    if (const auto* m = panel_.assistant().findMission(missionId_))
+        for (const auto& p : m->proposals) panel_.setMissionCard(missionId_, p.id, open);
+    rebuild();
+}
+
+gfx::Rect AiMissionBoard::cardHeadRect(std::string_view proposalId) const {
+    const auto it = cardHeads_.find(std::string(proposalId));
+    if (it == cardHeads_.end()) return {};
+    const auto b = bounds();
+    return {b.x + it->second.x, b.y + it->second.y - scroll_, it->second.w, it->second.h};
+}
+
+gfx::Rect AiMissionBoard::allCardsRect(bool open) const {
+    const gfx::Rect r = open ? allOpen_ : allClose_;
+    if (r.w <= 0.f) return {};
+    const auto b = bounds();
+    return {b.x + r.x, b.y + r.y - scroll_, r.w, r.h};
+}
+
+void AiMissionBoard::openCardMenu(const std::string& proposalId, gfx::Point at) {
+    const auto* m = panel_.assistant().findMission(missionId_);
+    const auto* p = m ? m->proposal(proposalId) : nullptr;
+    if (!p) return;
+    menuCard_ = proposalId;
+    const bool open = cardOpen(proposalId);
+    std::vector<ui::PopupMenu::Item> items;
+    const auto item = [&](std::string label, ui::Icon icon, int id, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = std::move(why);
+        items.push_back(std::move(it));
+    };
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = "P" + std::to_string(p->order) + " " + notifs::oneLine(p->title.empty() ? std::string("Proposition") : p->title, 60);
+    head.shortcut = missionui::proposalStateLabel(p->state);
+    items.push_back(head);
+    item("D\xC3\xA9plier", ui::Icon::Expand, kMenuCardOpen, !open, "elle est d\xC3\xA9j\xC3\xA0 d\xC3\xA9pli\xC3\xA9" "e");
+    item("R\xC3\xA9" "duire", ui::Icon::Collapse, kMenuCardClose, open, "elle est d\xC3\xA9j\xC3\xA0 r\xC3\xA9" "duite");
+    ui::PopupMenu::Item sep;
+    sep.separator = true;
+    items.push_back(sep);
+    item("Tout d\xC3\xA9plier", ui::Icon::Expand, kMenuAllOpen);
+    item("Tout replier", ui::Icon::Collapse, kMenuAllClose);
+    menu_->setItems(std::move(items));
+    menu_->openAtSurface(toSurface(at));
+}
+
+void AiMissionBoard::menuChosen(int id) {
+    const std::string pid = std::exchange(menuCard_, std::string{});
+    switch (id) {
+        case kMenuCardOpen:
+            if (!pid.empty()) setCardOpen(pid, true);
+            break;
+        case kMenuCardClose:
+            if (!pid.empty()) setCardOpen(pid, false);
+            break;
+        case kMenuAllOpen: setAllCards(true); break;
+        case kMenuAllClose: setAllCards(false); break;
+        default: break;
+    }
+}
+
 std::vector<std::string> AiMissionBoard::lines() const {
     std::vector<std::string> out;
     for (const auto& blk : blocks_)
@@ -1679,8 +1904,20 @@ void AiMissionBoard::doClick(const std::string& what) {
         if (const auto it = stepRows_.find(sid); it != stepRows_.end()) scrollTo(it->second.y - 8.f);
         return;
     } else if (what.rfind("carte:", 0) == 0) {
-        // la carte d'une proposition (plus bas)
-        if (const auto it = anchors_.find(what.substr(6)); it != anchors_.end()) scrollTo(it->second - 8.f);
+        // la carte d'une proposition (plus bas) - 1.22.3 : depliee (on y va pour la lire)
+        const std::string pid = what.substr(6);
+        if (!cardOpen(pid)) {
+            panel_.setMissionCard(missionId_, pid, true);
+            rebuild();
+        }
+        if (const auto it = anchors_.find(pid); it != anchors_.end()) scrollTo(it->second - 8.f);
+        return;
+    } else if (what.rfind("plier:", 0) == 0) {
+        // 1.22.3 : l'en-tete d'une carte - depliee / reduite (le choix est garde pour la seance)
+        const std::string pid = what.substr(6);
+        panel_.setMissionCard(missionId_, pid, !cardOpen(pid));
+    } else if (what == "cartes:ouvrir" || what == "cartes:fermer") {
+        setAllCards(what == "cartes:ouvrir");
         return;
     }
     rebuild();
@@ -1691,6 +1928,7 @@ void AiMissionBoard::doClick(const std::string& what) {
 }
 
 void AiMissionBoard::onLayout() {
+    menu_->setBounds(bounds());   // 1.22.3 : le menu du clic droit (il se place lui-meme a l'ouverture)
     if (std::fabs(bounds().w - builtW_) > 0.5f) rebuild();
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content_ - bounds().h));
     if (!pendingSection_.empty() && bounds().h > 0.f) {
@@ -1734,6 +1972,16 @@ ui::EventResult AiMissionBoard::onEvent(const ui::InputEvent& ev) {
     }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && b.contains(d->pos)) {
         takeFocus();
+        if (d->button == ui::MouseButton::Right) {
+            // 1.22.3 : le clic droit sur l'en-tete d'une carte de proposition - Deplier, Reduire, Tout deplier, Tout replier
+            for (const auto& [pid, r] : cardHeads_)
+                if (gfx::Rect{b.x + r.x, b.y + r.y - scroll_, r.w, r.h}.contains(d->pos)) {
+                    const std::string go = pid;   // une copie : le menu peut refaire la page
+                    openCardMenu(go, d->pos);
+                    return ui::EventResult::Consumed;
+                }
+            return ui::EventResult::Consumed;
+        }
         if (d->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
         for (const auto& blk : blocks_) {
             const float top = b.y + blk.y - scroll_;

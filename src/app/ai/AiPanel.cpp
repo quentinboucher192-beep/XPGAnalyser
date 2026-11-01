@@ -1616,6 +1616,16 @@ bool AiPanel::missionBusy(const mission::Mission& m) const {
     return c == m.conversation || std::find(m.conversations.begin(), m.conversations.end(), c) != m.conversations.end();
 }
 
+std::optional<bool> AiPanel::missionCard(const std::string& missionId, const std::string& proposalId) const {
+    const auto m = missionCards_.find(missionId);
+    if (m == missionCards_.end()) return std::nullopt;
+    const auto p = m->second.find(proposalId);
+    if (p == m->second.end()) return std::nullopt;
+    return p->second;
+}
+
+void AiPanel::setMissionCard(const std::string& missionId, const std::string& proposalId, bool open) { missionCards_[missionId][proposalId] = open; }
+
 void AiPanel::offerMission(const std::string& text) {
     askText_ = text;
     missionAsk_->setRequest(text);
@@ -1753,6 +1763,42 @@ bool AiPanel::missionAct(const std::string& missionId, MissionAct act, const std
             spec.cancel = "Garder";
             spec.danger = true;
             spec.width = 560.f;
+            ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [run](const menu::DialogResult& r) {
+                if (r.accepted()) run();
+            });
+            return false;   // la reponse viendra
+        }
+        case MissionAct::ForceFinish: {
+            // 1.22.3 : refusee tout de suite, et pourquoi (terminee, annulee, en lecture seule, une application de fond)
+            if (!assistant_->canForceFinish(missionId, &why)) break;
+            const auto run = [this, missionId, name] {
+                std::string w;
+                if (assistant_->forceFinishMission(missionId, &w)) {
+                    const mission::Mission* now = assistant_->findMission(missionId);
+                    const std::size_t n = now ? now->forced.steps.size() : 0;
+                    say("Mission " + quoted(name) + " termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : "
+                        + (n == 0 ? std::string("aucune \xC3\xA9tape \xC3\xA0 ignorer") : missionui::count(static_cast<int>(n), "\xC3\xA9tape ignor\xC3\xA9" "e", "\xC3\xA9tapes ignor\xC3\xA9" "es"))
+                        + ", rien n'est d\xC3\xA9" "fait dans le projet ; "
+                        + (assistant_->auditing(missionId) ? std::string("l'audit final tourne en arri\xC3\xA8re-plan (le rapport suit).")
+                                                           : std::string("le rapport final : l'audit final, sur le projet de la mission.")));
+                } else {
+                    say("Mission " + quoted(name) + " : " + (w.empty() ? std::string("sa fin n'a pas pu \xC3\xAAtre forc\xC3\xA9" "e.") : w));
+                }
+                syncMissions();
+            };
+            if (!ui_.showDialog) {   // sans hote (un essai) : on force
+                run();
+                return true;
+            }
+            const mission::Mission* mm = assistant_->findMission(missionId);
+            HmiAskDialog::Spec spec;
+            spec.id = "dialog.ai.mission.fin-forcee";
+            spec.title = "Forcer la fin de la mission";
+            spec.text = mm ? missionui::forceFinishQuestion(*mm, missionui::liveOf(*assistant_, *mm).calling) : "Forcer la fin de la mission " + quoted(name) + " ?";
+            spec.confirm = "Forcer la fin";
+            spec.cancel = "Garder";
+            spec.danger = true;
+            spec.width = 580.f;
             ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [run](const menu::DialogResult& r) {
                 if (r.accepted()) run();
             });

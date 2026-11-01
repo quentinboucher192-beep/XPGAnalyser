@@ -3692,6 +3692,69 @@ bool Assistant::cancelMission(std::string_view idv, std::string* why) {
     return true;
 }
 
+// 1.22.3 : FORCER LA FIN (voir le .hpp et mission::forceFinish).
+bool Assistant::canForceFinish(std::string_view id, std::string* why) const {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const mission::Mission* m = findMission(id);
+    if (!m) return fail("Mission introuvable.");
+    if (missionsReadOnly_.count(id))
+        return fail("La mission " + guillemets(m->name) + " vient d'une version plus r\xC3\xA9" "cente du logiciel : elle se consulte ici, mais ne se "
+                    "modifie pas.");
+    if (!mission::mayForceFinish(*m, why)) return false;
+    if (applyJob_)
+        if (const mission::ProposalLink* l = m->proposal(applyJob_->proposalId))
+            return fail("P" + std::to_string(l->order) + " de cette mission s'applique en arri\xC3\xA8re-plan : attends la fin de son application (son "
+                        "compte rendu r\xC3\xA9" "el doit d'abord arriver \xC3\xA0 la mission), puis force la fin.");
+    return true;
+}
+
+bool Assistant::forceFinishMission(std::string_view idv, std::string* why) {
+    XPG_MESURE("ia.mission.fin-forcee");   // 1.22.3 : l'onglet Performances
+    const std::string id(idv);
+    if (!canForceFinish(id, why)) return false;
+    // L'APPEL A L'IA EN COURS POUR ELLE EST ARRETE (comme Pause et Annuler) : marque interrompu, rien n'est propose.
+    if (generating() && gen_.mission.id == id) stop();
+    mission::Mission* m = missionMut(id);
+    if (!m) return false;
+    settleStale(*m);   // un appel reste << en cours >> d'une autre seance : interrompu
+    const std::string when = isoDate(now());
+    const std::vector<std::string> refused = mission::awaitingProposals(*m);
+    if (!mission::forceFinish(*m, when, {}, why)) return false;
+    // Leurs cartes dans les conversations : refusees aussi - une verification ou une application de fond qui les visait
+    // ne les pose plus (elles ne s'appliquent que << proposees >>), et mayApply les refuse de toute facon.
+    for (auto& c : conversations_) {
+        bool changed = false;
+        for (auto& msg : c.messages)
+            if (msg.proposal && msg.proposal->state == "proposee" && listed(refused, msg.proposal->id)) {
+                msg.proposal->state = "refusee";
+                changed = true;
+            }
+        if (changed) save(c);
+    }
+    std::vector<std::string> tags;
+    for (const auto& pid : refused)
+        if (const mission::ProposalLink* l = m->proposal(pid)) tags.push_back("P" + std::to_string(l->order));
+    const std::size_t n = m->forced.steps.size();
+    std::string detail = n == 0 ? std::string("Aucune \xC3\xA9tape \xC3\xA0 ignorer")
+                                : std::to_string(n) + (n > 1 ? " \xC3\xA9tapes ignor\xC3\xA9" "es (" : " \xC3\xA9tape ignor\xC3\xA9" "e (") + joined(m->forced.steps, ", ") + ")";
+    if (!tags.empty()) detail += " ; " + joined(tags, ", ") + (tags.size() > 1 ? " non appliqu\xC3\xA9" "es" : " non appliqu\xC3\xA9" "e");
+    detail += ". Rien n'est d\xC3\xA9" "fait dans le projet.";
+    notifyMission(*m, "terminee", "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : " + m->name, detail, n > 0 || !tags.empty() ? "warning" : "ok");
+    saveMission(*m);
+    // LE RAPPORT FINAL, comme pour une fin normale : l'audit global sur une copie du projet, sur un fil de fond ; il dit
+    // << fin forcee >> et les etapes ignorees. Son projet n'est pas ouvert : le tableau de bord propose l'audit final.
+    std::string w;
+    const bool audit = auditMission(id, &w);
+    m = missionMut(id);
+    notice_ = "Assistant IA : mission " + guillemets(m ? m->name : id) + " termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) - " + detail
+              + (audit ? " L'audit final tourne en arri\xC3\xA8re-plan (sur une copie du projet) : le rapport suit."
+                       : " Le rapport final viendra de l'audit final" + (w.empty() ? std::string(".") : " : " + w));
+    return true;
+}
+
 bool Assistant::archiveMission(std::string_view idv, bool on, std::string* why) {
     const std::string id(idv);
     mission::Mission* m = editableMission(id, why);

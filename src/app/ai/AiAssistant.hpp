@@ -235,6 +235,15 @@ public:
     bool pauseMission(std::string_view id, std::string* why = nullptr);
     bool resumeMission(std::string_view id, std::string* why = nullptr);
     bool cancelMission(std::string_view id, std::string* why = nullptr);
+    // 1.22.3 : FORCER LA FIN (mission::forceFinish) - l'appel a l'IA en cours pour elle est arrete (comme Pause et
+    // Annuler) ; ses propositions en attente sont refusees (leur carte dans la conversation aussi : aucune verification ni
+    // application ne les pose plus) ; ses etapes non terminees sont ignorees ; elle est terminee, enregistree et notifiee ;
+    // puis l'audit final, comme pour une fin normale, si son projet est ouvert (sinon le tableau de bord le propose). Rien
+    // n'est defait dans le projet. canForceFinish : faux et `why` - introuvable, en lecture seule (un format plus recent),
+    // deja terminee ou annulee, une de ses propositions s'applique sur un fil de fond (attendre sa fin : son compte rendu
+    // reel doit d'abord arriver a la mission).
+    [[nodiscard]] bool canForceFinish(std::string_view id, std::string* why = nullptr) const;
+    bool forceFinishMission(std::string_view id, std::string* why = nullptr);
     bool archiveMission(std::string_view id, bool on, std::string* why = nullptr);
     bool renameMission(std::string_view id, std::string name, std::string* why = nullptr);
     bool editMissionPlan(std::string_view id, const mission::PlanEdit&, std::string* why = nullptr);

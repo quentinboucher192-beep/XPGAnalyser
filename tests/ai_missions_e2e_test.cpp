@@ -20,7 +20,9 @@
 //      arretee, l'application refusee), la reprise, l'annulation ; un autre projet
 //      ouvert (la mission ne se poursuit pas) ;
 //    - une autre conversation retrouve la mission (chercher_missions, etat_mission :
-//      les donnees enregistrees, jamais inventees) et la reprend.
+//      les donnees enregistrees, jamais inventees) et la reprend ;
+//    - 1.22.3 : forcer la fin (pendant un appel a l'IA, une proposition en attente,
+//      une application de fond).
 //  Scenarios de la demande : A (station de pompage complete), B (interruption
 //  pendant la 3e proposition), C (modification externe pendant la preparation),
 //  D (une autre conversation).
@@ -958,6 +960,144 @@ void testHeavyInBackground() {
     check(notified(id, "Proposition disponible"), "notification : proposition disponible");
 }
 
+
+// 1.22.3 : FORCER LA FIN D'UNE MISSION, de bout en bout.
+//  A. pendant un appel a l'IA : l'appel est arrete (rien n'est propose ni applique), les etapes non terminees ignorees,
+//     la mission terminee (fin forcee), notifiee, enregistree ; l'audit final se fait de lui-meme et son rapport le dit ;
+//     il ne la rouvre pas ;
+//  B. une proposition en attente : refusee (sa carte aussi), elle ne s'applique plus, le projet n'a pas change ;
+//  C. une proposition de la mission qui s'applique sur un fil de fond : refuse tant qu'elle s'applique (et pourquoi).
+void testForceFinish() {
+    std::printf("[1.22.3 : forcer la fin d'une mission]\n");
+    Fixture f("fin_forcee");
+    hmi::Equipment eq;   // pour C (une operation << adresser >> : verifiee et appliquee sur un fil de fond)
+    eq.id = f.doc->project.allocate();
+    eq.name = "Automate_1";
+    eq.host = "127.0.0.1";
+    eq.port = 502;
+    f.doc->project.equipments.push_back(eq);
+    const auto missionOther = [&f](const std::vector<std::string>& known) {
+        for (const auto& m : f.as->missions())
+            if (!listedIn(known, m.id)) return m.id;
+        return std::string{};
+    };
+    std::string why;
+
+    // A. PENDANT UN APPEL A L'IA
+    f.answerPlan("toolu_plan_ff", planInput("D\xC3\xA9" "bit de sortie",
+                                            {{"S1", "Cr\xC3\xA9" "er la variable", "variables", {}, 1, {"variable:Debit_Sortie"}},
+                                             {"S2", "Cr\xC3\xA9" "er l'alarme", "alarmes", {}, 1, {"alarme:Debit_Sortie_Haut"}},
+                                             {"S3", "Compl\xC3\xA9ter la vue", "vues", {}, 6, {"objet:Voyant_Sortie"}}}));
+    check(f.as->createMission("Cr\xC3\xA9" "e la surveillance compl\xC3\xA8te du d\xC3\xA9" "bit de sortie : variable, alarme et vue.", &why),
+          "creer (" + why + ")");
+    const std::string id = missionOther({});
+    f.step();
+    check(f.mission(id) && f.mission(id)->steps.size() == 3, "le plan : trois etapes");
+    Value vars = Value::array();
+    vars.push(O({{"nom", "Debit_Sortie"}, {"type", "REAL"}}));
+    f.answerOps("toolu_ff_p1", proposalInput("La variable", {O({{"action", "creer_variables"}, {"variables", vars}, {"etape", "S1"}})}));
+    check(f.as->continueMission(id, &why), "la suite : P1 (" + why + ")");
+    f.step();
+    const std::string p1 = f.lastProposalId();
+    const int m1 = f.as->messageOfProposal(p1);
+    check(m1 >= 0 && f.as->apply(m1, &why) && f.stepState(id, "S1") == ms::StepState::Done, "P1 appliquee : S1 terminee (" + why + ")");
+    // la suite part, et la reponse ne vient pas : un appel a l'IA en cours
+    f.answerOps("toolu_ff_p2", proposalInput("L'alarme", {O({{"action", "creer_alarme"}, {"nom", "Debit_Sortie_Haut"}, {"condition", "Debit_Sortie > 50"},
+                                                             {"message", "D\xC3\xA9" "bit haut"}, {"etape", "S2"}})}));
+    f.s.hang = true;
+    check(f.as->continueMission(id, &why), "la suite part (" + why + ")");
+    f.step();
+    check(f.as->generating() && f.mission(id) && f.mission(id)->pending.active && f.stepState(id, "S2") == ms::StepState::Running,
+          "l'IA prepare la suite (S2 en cours)");
+    const std::size_t undo0 = f.stack.done().size();
+    const int cancels = f.s.cancels;
+    check(f.as->canForceFinish(id, &why), "forcer la fin : permis pendant un appel (" + why + ")");
+    check(f.as->forceFinishMission(id, &why), "forcer la fin (" + why + ")");
+    f.s.hang = false;
+    check(!f.as->generating() && f.s.cancels == cancels + 1 && f.last().state == "arrete", "l'appel a l'IA est vraiment arrete");
+    f.step();
+    const ms::Mission* m = f.mission(id);
+    check(m && m->state == ms::State::Done && m->forced.on() && ms::stateText(*m) == "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)", "terminee (fin forcee)");
+    check(m && !m->pending.active && m->proposals.size() == 1, "l'appel efface ; aucune proposition n'est nee de la reponse arretee");
+    check(f.stepState(id, "S1") == ms::StepState::Done && f.stepState(id, "S2") == ms::StepState::Skipped && f.stepState(id, "S3") == ms::StepState::Skipped,
+          "S1 reste terminee ; S2, S3 ignorees");
+    check(m && m->step("S2") && m->step("S2")->note == "Fin forc\xC3\xA9" "e par l'utilisateur.", "la raison : fin forcee par l'utilisateur");
+    check(f.stack.done().size() == undo0 && f.doc->project.variable("Debit_Sortie"), "rien n'est applique ni defait dans le projet");
+    check(notified(id, "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)"), "notification : terminee (fin forcee)");
+    check(!f.as->continueMission(id, &why) && has(why, "termin"), "plus de suite (" + why + ")");
+    check(!f.as->forceFinishMission(id, &why) && has(why, "d\xC3\xA9j\xC3\xA0 termin"), "deja terminee : refuse (" + why + ")");
+    // LE RAPPORT FINAL, comme pour une fin normale : l'audit global (son projet est ouvert) ; il dit la fin forcee
+    check(f.as->auditing(id) || (f.mission(id) && f.mission(id)->finalReport.isObject()), "l'audit final part de lui-meme");
+    f.waitAudit(id);
+    m = f.mission(id);
+    const ms::FinalReport fr = m && m->finalReport.isObject() ? ms::reportFromJson(m->finalReport) : ms::FinalReport{};
+    check(m && m->finalReport.isObject() && fr.forced && fr.skipped.size() == 2 && !fr.complete && has(fr.verdict, "fin forc"),
+          "le rapport final : fin forcee, 2 etapes ignorees (" + fr.verdict + ")");
+    check(m && m->state == ms::State::Done, "l'audit ne la rouvre pas (toujours terminee)");
+    if (const auto disk = ms::load(id))
+        check(disk->state == ms::State::Done && disk->forced.on() && disk->forced.steps.size() == 2 && disk->finalReport.isObject(),
+              "enregistree : la fin forcee et le rapport relus du disque");
+
+    // B. UNE PROPOSITION EN ATTENTE : refusee (sa carte aussi), elle ne s'applique plus
+    f.as->newConversation();
+    f.answerPlan("toolu_plan_ff2", planInput("Pression", {{"S1", "Cr\xC3\xA9" "er la variable", "variables", {}, 1, {"variable:Pression_Sortie"}},
+                                                          {"S2", "Cr\xC3\xA9" "er l'alarme", "alarmes", {}, 1, {"alarme:Pression_Haute"}}}));
+    check(f.as->createMission("Cr\xC3\xA9" "e la surveillance compl\xC3\xA8te de la pression de sortie : variable et alarme.", &why),
+          "une deuxieme mission (" + why + ")");
+    const std::string id2 = missionOther({id});
+    f.step();
+    Value vars2 = Value::array();
+    vars2.push(O({{"nom", "Pression_Sortie"}, {"type", "REAL"}}));
+    f.answerOps("toolu_ff2_p1", proposalInput("La variable", {O({{"action", "creer_variables"}, {"variables", vars2}, {"etape", "S1"}})}));
+    check(f.as->continueMission(id2, &why), "la suite (" + why + ")");
+    f.step();
+    const std::string q1 = f.lastProposalId();
+    const int qm = f.as->messageOfProposal(q1);
+    check(qm >= 0 && f.mission(id2) && ms::awaitingProposals(*f.mission(id2)) == std::vector<std::string>{q1}, "P1 attend une decision");
+    const std::size_t undo1 = f.stack.done().size();
+    check(f.as->forceFinishMission(id2, &why), "forcer la fin de la deuxieme (" + why + ")");
+    check(f.linkState(id2, q1) == "refusee", "sa proposition en attente : refusee (jamais appliquee)");
+    const ai::Proposal* card = qm >= 0 ? f.as->proposal(qm) : nullptr;
+    check(card && card->state == "refusee", "sa carte dans la conversation aussi");
+    check(qm >= 0 && !f.as->apply(qm, &why) && f.stack.done().size() == undo1 && !f.doc->project.variable("Pression_Sortie"),
+          "elle ne s'applique plus ; le projet n'a pas change (" + why + ")");
+    check(f.stepState(id2, "S1") == ms::StepState::Skipped && f.stepState(id2, "S2") == ms::StepState::Skipped, "ses deux etapes ignorees");
+    f.waitAudit(id2);
+
+    // C. UNE PROPOSITION QUI S'APPLIQUE SUR UN FIL DE FOND : la fin ne se force pas tant qu'elle s'applique
+    f.as->newConversation();
+    f.answerPlan("toolu_plan_ff3", planInput("Adresses", {{"S1", "Adresser la pompe 1", "variables", {}, 1, {"variable:Pompe_1_Marche"}}}));
+    check(f.as->createMission("Adresse la pompe 1 sur l'automate, en mission compl\xC3\xA8te.", &why), "une troisieme mission (" + why + ")");
+    const std::string id3 = missionOther({id, id2});
+    f.step();
+    f.answerOps("toolu_ff3_p1", proposalInput("Adresser la pompe 1", {O({{"action", "adresser"}, {"variable", "Pompe_1_Marche"}, {"equipement", "Automate_1"},
+                                                                         {"adresse", "%M10"}, {"etape", "S1"}})}));
+    check(f.as->continueMission(id3, &why), "la suite (" + why + ")");
+    f.step();
+    const std::string r1 = f.lastProposalId();
+    for (int k = 0; k < 1000 && f.as->checkingProposal(r1); ++k) {
+        pause(2);
+        f.step(0.01);
+    }
+    const int rm = f.as->messageOfProposal(r1);
+    check(rm >= 0 && f.as->applyInBackground(rm, false, &why) && f.as->applyingAny(), "elle s'applique sur un fil de fond (" + why + ")");
+    check(!f.as->canForceFinish(id3, &why) && has(why, "arri\xC3\xA8re-plan"), "pendant l'application : refuse, et pourquoi (" + why + ")");
+    check(!f.as->forceFinishMission(id3, &why) && f.mission(id3) && f.mission(id3)->state != ms::State::Done && !f.mission(id3)->forced.on(),
+          "rien n'est change");
+    for (int k = 0; k < 2500 && f.as->applyingAny(); ++k) {
+        pause(2);
+        f.step(0.01);
+    }
+    f.step();
+    check(!f.as->applyingAny(), "l'application de fond est finie (son compte rendu est arrive a la mission)");
+    check(f.as->canForceFinish(id3, &why), "ensuite : permis (" + why + ")");
+    check(f.as->forceFinishMission(id3, &why) && f.mission(id3) && f.mission(id3)->forced.on() && f.mission(id3)->state == ms::State::Done,
+          "ensuite : la fin se force (" + why + ")");
+    if (f.stepState(id3, "S1") == ms::StepState::Done)
+        check(f.mission(id3) && f.mission(id3)->forced.steps.empty(), "S1 terminee par l'application de fond : aucune etape a ignorer");
+    f.waitAudit(id3);
+}
+
 } // namespace
 
 int main() {
@@ -969,6 +1109,7 @@ int main() {
     testPauseResumeCancel();
     testRefresh();
     testHeavyInBackground();   // 1.22.1
+    testForceFinish();         // 1.22.3
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

@@ -288,6 +288,14 @@ std::vector<std::string> createdRefs(const Mission& m) {
     return out;
 }
 
+// 1.22.3 : l'etape a-t-elle ete ignoree par la fin forcee ?
+bool forcedOut(const Mission& m, std::string_view id) {
+    return m.forced.on() && std::find(m.forced.steps.begin(), m.forced.steps.end(), id) != m.forced.steps.end();
+}
+
+// "3 \xC3\xA9tapes ignor\xC3\xA9" "es" / "1 \xC3\xA9tape ignor\xC3\xA9" "e"
+std::string ignoredCount(std::size_t n) { return std::to_string(n) + (n > 1 ? " \xC3\xA9tapes ignor\xC3\xA9" "es" : " \xC3\xA9tape ignor\xC3\xA9" "e"); }
+
 } // namespace
 
 // ---- les etats ----------------------------------------------------------------------------------------------------
@@ -903,6 +911,7 @@ bool editPlan(Mission& m, const PlanEdit& e, std::string now, std::string* why, 
         return false;
     };
     if (m.state == State::Cancelled) return fail("La mission est annul\xC3\xA9" "e : son plan ne change plus.");
+    if (m.forced.on()) return fail("La mission est termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : son plan ne change plus.");   // 1.22.3
     std::vector<Step> steps = m.steps;
     std::string text;
     const auto find = [&](const std::string& id) -> Step* {
@@ -1345,6 +1354,7 @@ bool verifyAgainst(Mission& m, const hmi::Project& project, std::string now) {
 
 void refreshState(Mission& m, std::string now) {
     if (m.state == State::Cancelled || m.state == State::Paused || m.state == State::Planning) return;
+    if (m.state == State::Done && m.forced.on()) return;   // 1.22.3 : une fin forcee ne se rouvre pas (le projet peut changer apres)
     const State before = m.state;
     bool allMandatoryDone = true, anyActionable = false, anyBlockedOrError = false;
     for (const auto& s : m.steps) {
@@ -1420,12 +1430,103 @@ bool mayApply(const Mission& m, std::string_view id, std::string* why) {
     };
     if (m.state == State::Paused) return fail("La mission " + guill(m.name) + " est en pause : reprends-la avant d'appliquer.");
     if (m.state == State::Cancelled) return fail("La mission " + guill(m.name) + " est annul\xC3\xA9" "e : ses propositions ne s'appliquent plus.");
+    if (m.forced.on())   // 1.22.3
+        return fail("La mission " + guill(m.name) + " est termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : ses propositions ne s'appliquent plus.");
     if (const ProposalLink* p = m.proposal(id)) {
         if (p->state == "obsolete") return fail("Cette proposition est devenue obsol\xC3\xA8te (le projet a chang\xC3\xA9) : demande la suite pour en avoir une \xC3\xA0 jour.");
         if (p->state == "annulee") return fail("Cette proposition est annul\xC3\xA9" "e.");
         if (p->state == "interrompue") return fail("Cette proposition a \xC3\xA9t\xC3\xA9 interrompue.");
     }
     return true;
+}
+
+// ---- 1.22.3 : forcer la fin (voir le .hpp) ----------------------------------------------------------------------------
+bool mayForceFinish(const Mission& m, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (m.state == State::Done)
+        return fail(std::string("La mission est d\xC3\xA9j\xC3\xA0 termin\xC3\xA9" "e") + (m.forced.on() ? " (fin forc\xC3\xA9" "e)" : "")
+                    + " : il n'y a plus rien \xC3\xA0 arr\xC3\xAAter.");
+    if (m.state == State::Cancelled) return fail("La mission est annul\xC3\xA9" "e : sa fin ne se force pas.");
+    return true;
+}
+
+std::vector<std::string> unfinishedSteps(const Mission& m) {
+    std::vector<std::string> out;
+    for (const auto& s : m.steps)
+        if (s.state != StepState::Done && s.state != StepState::Skipped && s.state != StepState::Cancelled) out.push_back(s.id);
+    return out;
+}
+
+std::vector<std::string> awaitingProposals(const Mission& m) {
+    std::vector<std::string> out;
+    for (const auto& p : m.proposals)
+        if (p.state == "generee" || p.state == "validee") out.push_back(p.id);
+    return out;
+}
+
+bool forceFinish(Mission& m, std::string now, std::string reason, std::string* why) {
+    if (!mayForceFinish(m, why)) return false;
+    reason = trimmed(reason);
+    if (reason.empty()) reason = std::string(kForcedReason);
+    std::string note = reason;   // la note de chaque etape ignoree : "Fin forc\xC3\xA9" "e par l'utilisateur."
+    if (note[0] >= 'a' && note[0] <= 'z') note[0] = static_cast<char>(note[0] - 'a' + 'A');
+    if (note.back() != '.') note += '.';
+    Forced f;
+    f.date = now;
+    f.reason = reason;
+    // 1. l'appel a l'IA de la mission (l'Assistant l'a arrete) : efface et dit ; rien n'est rejoue
+    if (m.pending.active) {
+        log(m, "interruption",
+            "Appel \xC3\xA0 l'IA (" + (m.pending.purpose.empty() ? std::string("proposition") : m.pending.purpose)
+                + ") arr\xC3\xAAt\xC3\xA9 : fin forc\xC3\xA9" "e de la mission. Rien n'est rejou\xC3\xA9.",
+            now);
+        m.pending = {};
+    }
+    // 2. les propositions qui attendent une decision : refusees (l'etat existant d'une proposition non appliquee par
+    //    choix de l'utilisateur) - mayApply les refuse de toute facon (la fin forcee)
+    std::vector<std::string> tags;
+    for (auto& p : m.proposals) {
+        if (p.state != "generee" && p.state != "validee") continue;
+        p.state = "refusee";
+        p.errors.push_back("Non appliqu\xC3\xA9" "e : fin forc\xC3\xA9" "e de la mission.");
+        f.proposals.push_back(p.id);
+        tags.push_back("P" + std::to_string(p.order));
+        log(m, "proposition", tags.back() + " refus\xC3\xA9" "e : fin forc\xC3\xA9" "e de la mission (elle ne s'appliquera pas).", now, {}, p.id);
+    }
+    // 3. les etapes non terminees : ignorees, par les transitions de canMove (en cours, a valider, appliquee, en
+    //    verification : par << prete >> d'abord, comme une proposition refusee ou un appel arrete)
+    for (auto& s : m.steps) {
+        if (s.state == StepState::Done || s.state == StepState::Skipped || s.state == StepState::Cancelled) continue;
+        if (!canMove(s.state, StepState::Skipped) && canMove(s.state, StepState::Ready) && canMove(StepState::Ready, StepState::Skipped))
+            s.state = StepState::Ready;
+        if (setStepState(m, s.id, StepState::Skipped, now, note)) f.steps.push_back(s.id);
+    }
+    // 4. la mission : terminee ; un ancien rapport final ne la decrit plus (l'audit final le refait)
+    m.forced = std::move(f);
+    m.finalReport = Value();
+    m.state = State::Done;
+    m.resumePoint = "Fin forc\xC3\xA9" "e (" + now + ")";
+    const std::size_t n = m.forced.steps.size();
+    std::string text = "Fin forc\xC3\xA9" "e par l'utilisateur : "
+                       + (n == 0 ? std::string("aucune \xC3\xA9tape \xC3\xA0 ignorer") : ignoredCount(n) + " (" + join(m.forced.steps, ", ") + ")");
+    if (!tags.empty()) text += " ; " + join(tags, ", ") + (tags.size() > 1 ? " non appliqu\xC3\xA9" "es" : " non appliqu\xC3\xA9" "e");
+    text += ". Rien n'est d\xC3\xA9" "fait dans le projet.";
+    if (reason != kForcedReason) text += " Raison : " + reason + ".";
+    log(m, "terminee", text, now);
+    return true;
+}
+
+std::string stateText(const Mission& m) {
+    if (m.state == State::Done && m.forced.on()) return "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)";
+    return std::string(stateLabel(m.state));
+}
+
+std::string stepText(const Mission& m, const Step& s) {
+    if (s.state == StepState::Skipped && forcedOut(m, s.id)) return "Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e)";
+    return std::string(stepLabel(s.state));
 }
 
 // ---- la progression ---------------------------------------------------------------------------------------------------
@@ -1673,7 +1774,8 @@ StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
         return a;
     }
     if (s.state == S::Skipped) {
-        set(Activity::Off, "Ignor\xC3\xA9" "e par l'utilisateur : hors du calcul de la progression.");
+        set(Activity::Off, forcedOut(m, s.id) ? std::string("Ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) : hors du calcul de la progression.")   // 1.22.3
+                                              : std::string("Ignor\xC3\xA9" "e par l'utilisateur : hors du calcul de la progression."));
         return a;
     }
     if (s.state == S::Done) {
@@ -1686,6 +1788,11 @@ StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
                                     + (when.empty() ? std::string{} : " " + when));
         else
             set(Activity::Done, "Termin\xC3\xA9" "e" + (when.empty() ? std::string{} : " " + when) + " \xE2\x80\x94 v\xC3\xA9rifi\xC3\xA9" "e dans le projet");
+        return a;
+    }
+    // 1.22.3 : la mission est finie (fin forcee) - une etape redevenue non terminee apres coup (Ctrl+Z) n'avance plus
+    if (m.state == State::Done && m.forced.on()) {
+        set(Activity::Off, "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : plus rien ne se fait pour elle.");
         return a;
     }
     // l'IA travaille pour elle maintenant (une proposition, une correction)
@@ -1794,6 +1901,10 @@ const Step* currentStep(const Mission& m, const Live& live) {
 
 std::string missionActivity(const Mission& m, const Live& live) {
     if (live.auditing) return "Audit final en cours (sur une copie du projet)\xE2\x80\xA6";
+    if (m.state == State::Done && m.forced.on()) {   // 1.22.3
+        const std::size_t n = m.forced.steps.size();
+        return "Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)" + (n == 0 ? std::string(".") : " : " + ignoredCount(n) + " (" + join(m.forced.steps, ", ") + ").");
+    }
     if (!m.pending.active) return {};
     const std::string& purpose = m.pending.purpose;
     if (!live.calling)
@@ -1862,6 +1973,9 @@ std::string nextAction(const Mission& m) {
     if (m.pending.active) return "L'IA travaille (" + m.pending.purpose + ") : attendre sa r\xC3\xA9ponse.";
     if (m.state == State::Paused) return "Reprendre la mission.";
     if (m.state == State::Planning) return "\xC3\x89tablir le plan : l'IA analyse le projet.";
+    if (m.state == State::Done && m.forced.on())   // 1.22.3
+        return m.finalReport.isObject() ? std::string("Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : consulter le rapport final.")
+                                        : std::string("Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : lancer l'audit final pour son rapport.");
     if (m.state == State::Done) return "Mission termin\xC3\xA9" "e : consulter le rapport final.";
     if (m.coherence == Coherence::Changed) return "Actualiser le contexte : le projet a chang\xC3\xA9 depuis la derni\xC3\xA8re sauvegarde.";
     for (const auto& s : m.steps)
@@ -1885,7 +1999,7 @@ std::string nextAction(const Mission& m) {
 
 std::string summaryOf(const Mission& m) {
     const Progress p = progressOf(m);
-    std::string s = std::string(stateLabel(m.state)) + " \xC2\xB7 " + p.text();
+    std::string s = stateText(m) + " \xC2\xB7 " + p.text();
     if (const ProposalLink* l = lastApplied(m)) s += " \xC2\xB7 Derni\xC3\xA8re appliqu\xC3\xA9" "e : P" + std::to_string(l->order);
     s += " \xC2\xB7 Prochaine action : " + nextAction(m);
     return s;
@@ -1997,7 +2111,12 @@ std::string detailText(const Mission& m) {
     const Progress p = progressOf(m);
     std::string s;
     s += "Mission " + guill(m.name) + " (" + m.id + ")\n";
-    s += "\xC3\x89tat : " + std::string(stateLabel(m.state)) + (m.archived ? " (archiv\xC3\xA9" "e)" : "") + " \xC2\xB7 " + p.text() + "\n";
+    s += "\xC3\x89tat : " + stateText(m) + (m.archived ? " (archiv\xC3\xA9" "e)" : "") + " \xC2\xB7 " + p.text() + "\n";
+    if (m.forced.on())   // 1.22.3
+        s += "Fin forc\xC3\xA9" "e le " + m.forced.date + " (" + m.forced.reason + ") : "
+             + (m.forced.steps.empty() ? std::string("aucune \xC3\xA9tape ignor\xC3\xA9" "e") : ignoredCount(m.forced.steps.size()) + " (" + join(m.forced.steps, ", ") + ")")
+             + (m.forced.proposals.empty() ? std::string{} : ", " + std::to_string(m.forced.proposals.size()) + " proposition(s) refus\xC3\xA9" "e(s) sans \xC3\xAAtre appliqu\xC3\xA9" "e(s)")
+             + ". Rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "fait dans le projet.\n";
     s += "Progression : planification " + percentText(p.planning) + ", g\xC3\xA9n\xC3\xA9ration " + percentText(p.generation) + ", validation "
          + percentText(p.validation) + ", application " + percentText(p.application) + ", globale " + percentText(p.global) + ".\n";
     s += "Projet : " + (m.project.name.empty() ? std::string("?") : m.project.name) + " \xE2\x80\x94 " + std::string(coherenceLabel(m.coherence))
@@ -2009,7 +2128,7 @@ std::string detailText(const Mission& m) {
     if (!m.analysis.impossible.empty()) s += "Impossible : " + join(m.analysis.impossible, " ; ") + "\n";
     s += "\xC3\x89tapes :\n";
     for (const auto& st : m.steps) {
-        s += "- " + st.id + " [" + std::string(stepLabel(st.state)) + "] " + st.title;
+        s += "- " + st.id + " [" + stepText(m, st) + "] " + st.title;
         if (!st.deps.empty()) s += " (d\xC3\xA9pend de " + join(st.deps, ", ") + ")";
         if (!st.proposals.empty()) {
             std::vector<std::string> ps;
@@ -2118,9 +2237,13 @@ FinalReport finalReport(const Mission& m, const hmi::Project& project, const hmi
                 if (reu.insert(line.category + " " + n).second) r.reused.push_back(line.category + " " + n);
     }
     bool mandatoryOpen = false, blockedOrError = false;
+    std::vector<std::string> skippedIds;   // 1.22.3 : les etapes ignorees par la fin forcee
     for (const auto& s : m.steps) {
         if (s.state == StepState::Done) r.finished.push_back(s.id + " " + s.title);
-        else if (s.state == StepState::Skipped) r.finished.push_back(s.id + " " + s.title + " (ignor\xC3\xA9" "e)");
+        else if (s.state == StepState::Skipped && forcedOut(m, s.id)) {
+            r.skipped.push_back(s.id + " " + s.title);
+            skippedIds.push_back(s.id);
+        } else if (s.state == StepState::Skipped) r.finished.push_back(s.id + " " + s.title + " (ignor\xC3\xA9" "e)");
         else if (s.state != StepState::Cancelled) {
             r.notDone.push_back(s.id + " " + s.title + " \xE2\x80\x94 " + std::string(stepLabel(s.state)) + (s.note.empty() ? std::string{} : " : " + s.note));
             if (s.mandatory) mandatoryOpen = true;
@@ -2152,8 +2275,20 @@ FinalReport finalReport(const Mission& m, const hmi::Project& project, const hmi
     bool equipments = false;
     for (const auto& ref : createdRefs(m)) equipments = equipments || folded(partsOf(ref).kind) == "equipement";
     if (equipments) r.toCheck.push_back("La communication r\xC3\xA9" "elle avec les \xC3\xA9quipements n'est pas v\xC3\xA9rifiable sans l'installation : \xC3\xA0 essayer sur site.");
-    r.complete = !mandatoryOpen && !blockedOrError && r.auditRun && r.auditErrors == 0;
-    if (r.complete)
+    // 1.22.3 : une fin forcee - jamais << complete >> si elle a ignore une etape ; ce qui reste a faire est dit
+    r.forced = m.forced.on();
+    if (!r.skipped.empty())
+        r.toCheck.push_back("Fin forc\xC3\xA9" "e : " + join(skippedIds, ", ") + (skippedIds.size() > 1 ? " ne sont pas faites" : " n'est pas faite")
+                            + " (ignor\xC3\xA9" "e" + (skippedIds.size() > 1 ? "s" : "") + ") \xE2\x80\x94 \xC3\xA0 reprendre dans une nouvelle mission si besoin.");
+    r.complete = !mandatoryOpen && !blockedOrError && r.auditRun && r.auditErrors == 0 && r.skipped.empty();
+    if (r.forced) {
+        std::string v = "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e par l'utilisateur) : "
+                        + (skippedIds.empty() ? std::string("aucune \xC3\xA9tape ignor\xC3\xA9" "e") : ignoredCount(skippedIds.size()) + " (" + join(skippedIds, ", ") + ")")
+                        + ", " + std::to_string(r.finished.size()) + " termin\xC3\xA9" "e(s), " + std::to_string(r.created.size()) + " \xC3\xA9l\xC3\xA9ment(s) cr\xC3\xA9\xC3\xA9(s)";
+        if (!r.auditRun) v += " ; audit non fait (v\xC3\xA9rification impossible).";
+        else v += " ; audit : " + std::to_string(r.auditErrors) + " erreur(s) bloquante(s), " + std::to_string(r.auditWarnings) + " avertissement(s).";
+        r.verdict = std::move(v);
+    } else if (r.complete)
         r.verdict = "Mission termin\xC3\xA9" "e : " + std::to_string(r.finished.size()) + " \xC3\xA9tape(s), " + std::to_string(r.created.size()) + " \xC3\xA9l\xC3\xA9ment(s) cr\xC3\xA9\xC3\xA9(s), "
                     + "audit sans erreur bloquante (" + std::to_string(r.auditWarnings) + " avertissement(s)).";
     else {
@@ -2182,6 +2317,10 @@ Value reportToJson(const FinalReport& r) {
     o.set("audit_avertissements", r.auditWarnings);
     o.set("complete", r.complete);
     o.set("verdict", r.verdict);
+    if (r.forced) {   // 1.22.3 : seulement apres une fin forcee (les autres rapports restent tels quels)
+        o.set("fin_forcee", true);
+        o.set("ignorees_fin_forcee", strings(r.skipped));
+    }
     return o;
 }
 
@@ -2200,6 +2339,8 @@ FinalReport reportFromJson(const Value& o) {
     r.auditWarnings = static_cast<int>(o.integer("audit_avertissements"));
     r.complete = o.flag("complete");
     r.verdict = o.str("verdict");
+    r.forced = o.flag("fin_forcee");
+    r.skipped = stringsOf(o.at("ignorees_fin_forcee"));
     return r;
 }
 
@@ -2210,10 +2351,12 @@ std::string reportText(const FinalReport& r) {
         if (v.empty()) s += "- aucun\n";
         for (const auto& x : v) s += "- " + x + "\n";
     };
+    if (r.forced) s += "**Fin forc\xC3\xA9" "e par l'utilisateur** : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "fait dans le projet.\n";   // 1.22.3
     section("Cr\xC3\xA9\xC3\xA9s", r.created);
     section("Modifi\xC3\xA9s", r.modified);
     section("R\xC3\xA9utilis\xC3\xA9s", r.reused);
     section("Termin\xC3\xA9s", r.finished);
+    if (r.forced) section("Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e)", r.skipped);
     section("Non r\xC3\xA9" "alis\xC3\xA9s", r.notDone);
     section("Erreurs", r.errors);
     section("\xC3\x80 v\xC3\xA9rifier", r.toCheck);
@@ -2428,6 +2571,14 @@ Value toJson(const Mission& m) {
     o.set("resume", m.summary);
     o.set("pieces_jointes", strings(m.attachments));
     if (!m.finalReport.isNull()) o.set("rapport_final", m.finalReport);
+    if (m.forced.on()) {   // 1.22.3 : seulement apres une fin forcee (les autres fichiers restent tels quels)
+        Value f = Value::object();
+        f.set("date", m.forced.date);
+        f.set("raison", m.forced.reason);
+        f.set("etapes", strings(m.forced.steps));
+        f.set("propositions", strings(m.forced.proposals));
+        o.set("fin_forcee", f);
+    }
     json::addMembers(o, m.extra);
     return o;
 }
@@ -2560,10 +2711,16 @@ Mission fromJson(const Value& o, int* fromFormat, bool* readOnly) {
     m.summary = o.str("resume");
     m.attachments = stringsOf(o.at("pieces_jointes"));
     if (const Value* r = o.find("rapport_final")) m.finalReport = *r;
+    if (const Value& f = o.at("fin_forcee"); f.isObject()) {   // 1.22.3
+        m.forced.date = f.str("date");
+        m.forced.reason = f.str("raison", kForcedReason);
+        m.forced.steps = stringsOf(f.at("etapes"));
+        m.forced.proposals = stringsOf(f.at("propositions"));
+    }
     m.extra = json::unknownMembers(o, {"format", "id", "nom", "description", "demande", "cree", "modifie", "projet", "conversation", "conversations",
                                        "fournisseur", "modele", "etat", "archivee", "revision_plan", "etapes", "analyse", "propositions",
                                        "historique", "decisions", "appel_en_cours", "coherence", "coherence_texte", "point_de_reprise", "resume",
-                                       "pieces_jointes", "rapport_final"});
+                                       "pieces_jointes", "rapport_final", "fin_forcee"});
     // Format 0 : des etapes sans dependances calculees - l'ordre et les etats d'attente refaits.
     if (format == 0) {
         std::string cycle;
