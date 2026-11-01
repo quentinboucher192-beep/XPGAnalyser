@@ -22,7 +22,12 @@
 //    - une autre conversation retrouve la mission (chercher_missions, etat_mission :
 //      les donnees enregistrees, jamais inventees) et la reprend ;
 //    - 1.22.2 : forcer la fin (pendant un appel a l'IA, une proposition en attente,
-//      une application de fond).
+//      une application de fond) ;
+//    - 1.22.4 : ne pas tourner en rond - l'IA renvoie la meme proposition (retenue, la
+//      suite ne repart pas seule, << Proposer quand meme >>), une etape proposee 3 fois
+//      sans aboutir, << Deja propose >> dans la demande suivante, Modifier la demande (la
+//      consigne), Ignorer cette etape, une relance ; dans une conversation, la meme
+//      proposition et la meme suite.
 //  Scenarios de la demande : A (station de pompage complete), B (interruption
 //  pendant la 3e proposition), C (modification externe pendant la preparation),
 //  D (une autre conversation).
@@ -1145,6 +1150,178 @@ void testXpgMission() {
     f.step();
 }
 
+// 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) - sur la vraie chaine : le faux fournisseur renvoie deux fois la meme
+// proposition pour une etape (la 2e est retenue, la suite ne repart pas seule, << Proposer quand meme >> la propose), une
+// etape proposee 3 fois sans aboutir est signalee, la demande suivante dit << Deja propose >> ; Modifier la demande (la
+// consigne part avec la suite), Ignorer cette etape ; une relance garde tout ; une conversation (la meme proposition, la
+// meme suite).
+std::string voyantInput(const std::string& name, const std::string& variable, const std::string& x, const std::string& step = "S1") {
+    Value op = O({{"action", "creer"}, {"genre", "Indicator"}, {"nom", name}, {"proprietes", O({{"x", x}, {"y", "40"}, {"variable", variable}})}});
+    if (!step.empty()) op.set("etape", step);   // hors mission : pas d'etape
+    return proposalInput("Le voyant de la vanne", {op});
+}
+
+void testLoops() {
+    std::printf("[1.22.4 : ne pas tourner en rond]\n");
+    Fixture f("cercle");
+    std::string why;
+    // S1 (le voyant, 1 operation) et S2 (le script, 6 : il ne tient pas dans le meme lot) : independantes, pretes.
+    f.answerPlan("toolu_plan", planInput("Vanne", {{"S1", "Poser le voyant de la vanne", "autre", {}, 1, {"objet:Voyant_Vanne"}},
+                                                    {"S2", "Poser le voyant du d\xC3\xA9" "bit", "autre", {}, 6, {"objet:Voyant_Debit"}}}));
+    check(f.as->createMission("Cr\xC3\xA9" "e la vanne compl\xC3\xA8te : son voyant, celui du d\xC3\xA9" "bit, les variables et les alarmes.", &why),
+          "creer (" + why + ")");
+    const std::string id = f.as->missions().empty() ? std::string{} : f.as->missions().front().id;
+    f.step();
+    check(f.mission(id) && f.mission(id)->steps.size() == 2 && f.stepState(id, "S2") == ms::StepState::Ready, "le plan : S1, S2 pretes");
+
+    // P1 : un voyant sur << Vanne.Cmd >>, une variable qui n'existe pas (l'IA ne l'invente pas : la validation le dit).
+    f.answerOps("toolu_p1", voyantInput("Voyant_Vanne", "Vanne.Cmd", "40"));
+    check(f.as->continueMission(id, &why), "la suite : P1 (" + why + ")");
+    check(!has(f.s.requests.back().systemDynamic, "D\xC3\xA9j\xC3\xA0 propos\xC3\xA9"), "la premiere demande : rien de deja propose");
+    f.step();
+    const std::string p1 = f.lastProposalId();
+    const int m1 = f.as->messageOfProposal(p1);
+    check(m1 >= 0 && !f.as->check(m1).ok() && !f.as->loopOf(m1).held && f.as->loopOf(m1).text.empty(), "P1 : en erreur (Vanne.Cmd), pas de cercle");
+    check(m1 >= 0 && f.as->refuse(m1) && f.stepState(id, "S1") == ms::StepState::Ready, "P1 refusee : S1 de nouveau prete");
+
+    // P2 : LA MEME (le voyant ailleurs : la position ne compte pas) - retenue.
+    f.answerOps("toolu_p2", voyantInput("Voyant_Vanne", "Vanne.Cmd", "300"));
+    check(f.as->continueMission(id, &why), "la suite : P2 (" + why + ")");
+    {
+        const std::string sys = f.s.requests.back().systemDynamic;
+        check(has(sys, "D\xC3\xA9j\xC3\xA0 propos\xC3\xA9") && has(sys, "- P1 (refus\xC3\xA9" "e)") && has(sys, "Vanne.Cmd") && has(sys, "Ne repropose pas la m\xC3\xAAme chose"),
+              "la demande suivante dit << Deja propose >> : P1, refusee, et ses erreurs");
+    }
+    f.step();
+    const std::string p2 = f.lastProposalId();
+    const int m2 = f.as->messageOfProposal(p2);
+    const ai::Assistant::LoopInfo l2 = m2 >= 0 ? f.as->loopOf(m2) : ai::Assistant::LoopInfo{};
+    check(p2 != p1 && l2.held && l2.mission == id && l2.tag == "P2" && l2.steps == std::vector<std::string>({"S1"}), "P2 retenue : elle tourne en rond");
+    check(has(l2.text, "P2 refait P1 (refus\xC3\xA9" "e ; la m\xC3\xAAme op\xC3\xA9ration") && has(l2.text, "Vanne.Cmd"), "le cercle en clair : " + l2.text);
+    check(listedIn(l2.signs, "memes_operations") && listedIn(l2.signs, "memes_erreurs"), "les signes : memes operations, memes erreurs");
+    check(notified(id, "La mission tourne en rond"), "notification : << La mission tourne en rond >>");
+    {
+        bool logged = false;
+        if (const ms::Mission* m = f.mission(id))
+            for (const auto& e : m->history) logged = logged || (e.kind == "cercle" && has(e.text, "P2 refait P1"));
+        check(logged, "l'historique de la mission le dit");
+        check(f.mission(id) && has(ms::nextAction(*f.mission(id)), "tourne en rond"), "la prochaine action : decider");
+    }
+    // LA SUITE NE REPART PAS SEULE (S2 est prete, pourtant) ; rien ne s'applique.
+    const std::size_t sent = f.s.requests.size();
+    check(!f.as->continueMission(id, &why) && has(why, "tourne en rond") && f.s.requests.size() == sent, "la suite ne repart pas tant que rien n'est choisi (" + why + ")");
+    check(m2 >= 0 && !f.as->apply(m2, &why) && has(why, "tourne en rond"), "elle ne s'applique pas (" + why + ")");
+    check(m2 >= 0 && !f.as->applyIgnoringErrors(m2, &why) && has(why, "tourne en rond"), "ni malgre les erreurs (" + why + ")");
+    // UNE RELANCE : la mission relue la retient toujours.
+    {
+        Fixture g("cercle", false, &f.doc->project);
+        g.step();
+        const ms::Mission* gm = g.mission(id);
+        const ms::ProposalLink* gl = gm ? gm->proposal(p2) : nullptr;
+        check(gl && gl->held() && !gl->opsPrint.empty() && gm->step("S1") && gm->step("S1")->attempts == 2, "relue : P2 retenue, ses empreintes, 2 tentatives pour S1");
+        check(!g.as->continueMission(id, &why) && has(why, "tourne en rond"), "relue : la suite ne repart pas (" + why + ")");
+    }
+    // PROPOSER QUAND MEME : elle redevient une proposition comme les autres.
+    check(m2 >= 0 && f.as->chooseLoop(m2, ai::Assistant::LoopChoice::ProposeAnyway, &why) && !f.as->loopOf(m2).held && f.as->loopOf(m2).choice == "quand_meme",
+          "Proposer quand meme (" + why + ")");
+    check(f.mission(id) && f.mission(id)->proposal(p2) && !f.mission(id)->proposal(p2)->held() && ms::mayApply(*f.mission(id), p2, &why),
+          "la mission l'accepte de nouveau");
+    check(m2 >= 0 && !f.as->apply(m2, &why) && !has(why, "tourne en rond"), "elle ne s'applique toujours pas, mais pour ses erreurs (" + why + ")");
+    check(!f.as->chooseLoop(m2, ai::Assistant::LoopChoice::ProposeAnyway, &why), "deja choisi : plus de choix");
+    check(m2 >= 0 && f.as->refuse(m2), "P2 refusee");
+
+    // P3 : autre chose (Vanne.Etat), toujours en erreur - S1 proposee 3 fois sans aboutir.
+    f.answerOps("toolu_p3", voyantInput("Voyant_Vanne_Etat", "Vanne.Etat", "40"));
+    check(f.as->continueMission(id, &why), "la suite : P3 (" + why + ")");
+    check(has(f.s.requests.back().systemDynamic, "- P2 (refus\xC3\xA9" "e)") && has(f.s.requests.back().systemDynamic, "- P1 (refus\xC3\xA9" "e)"),
+          "la demande dit P2 et P1");
+    f.step();
+    const std::string p3 = f.lastProposalId();
+    const int m3 = f.as->messageOfProposal(p3);
+    const ai::Assistant::LoopInfo l3 = m3 >= 0 ? f.as->loopOf(m3) : ai::Assistant::LoopInfo{};
+    check(l3.held && listedIn(l3.signs, "tentatives") && has(l3.text, "S1 a \xC3\xA9t\xC3\xA9 propos\xC3\xA9" "e 3 fois sans aboutir (P1, P2, P3)"), "(c) : " + l3.text);
+    check(!listedIn(l3.signs, "memes_operations"), "pas les memes operations");
+
+    // MODIFIER LA DEMANDE : P3 refusee, la consigne (<< Pour S1 : ... >>) part avec la suite.
+    std::string ask;
+    check(m3 >= 0 && f.as->chooseLoop(m3, ai::Assistant::LoopChoice::EditRequest, &why, &ask) && ask == "Pour S1 : " && f.as->steerPrefix() == ask,
+          "Modifier la demande : le debut de la consigne (" + ask + ")");
+    check(f.linkState(id, p3) == "refusee" && f.stepState(id, "S1") == ms::StepState::Ready && f.mission(id)->step("S1")->attempts == 0,
+          "P3 refusee ; S1 prete, ses tentatives repartent de zero");
+    f.answerOps("toolu_p4", voyantInput("Voyant_Vanne", "Pompe_1_Marche", "40"));
+    const std::size_t before4 = f.s.requests.size();
+    check(f.as->send("Pour S1 : utilise la variable Pompe_1_Marche, Vanne.Cmd n'existe pas.", &why), "la consigne part (" + why + ")");
+    check(f.s.requests.size() == before4 + 1 && f.mission(id)->pending.purpose == "proposition", "c'est la suite de la mission");
+    {
+        const ai::ProviderRequest& r = f.s.requests.back();
+        check(has(r.systemDynamic, "CONSIGNES DE L'UTILISATEUR") && has(r.systemDynamic, "S1 : utilise la variable Pompe_1_Marche") && has(r.turns.back().text, "Consigne : utilise"),
+              "la consigne est dite a l'IA (et gardee dans la mission)");
+        check(f.as->steerPrefix().empty(), "la consigne n'est plus attendue");
+    }
+    f.step();
+    const std::string p4 = f.lastProposalId();
+    const int m4 = f.as->messageOfProposal(p4);
+    check(m4 >= 0 && !f.as->loopOf(m4).held && f.as->check(m4).ok(), "P4 (une autre approche, apres la consigne) : pas de cercle");
+    check(m4 >= 0 && f.as->apply(m4, &why) && f.stepState(id, "S1") == ms::StepState::Done && f.mission(id)->step("S1")->attempts == 0, "P4 appliquee : S1 terminee");
+
+    // IGNORER CETTE ETAPE : S2, la meme proposition deux fois.
+    f.answerOps("toolu_p5", voyantInput("Voyant_Debit", "Debit.Inconnu", "120", "S2"));
+    check(f.as->continueMission(id, &why), "la suite : P5 (" + why + ")");
+    f.step();
+    const int m5 = f.as->messageOfProposal(f.lastProposalId());
+    check(m5 >= 0 && f.as->refuse(m5), "P5 refusee");
+    f.answerOps("toolu_p6", voyantInput("Voyant_Debit", "Debit.Inconnu", "120", "S2"));
+    check(f.as->continueMission(id, &why), "la suite : P6 (" + why + ")");
+    f.step();
+    const std::string p6 = f.lastProposalId();
+    const int m6 = f.as->messageOfProposal(p6);
+    check(m6 >= 0 && f.as->loopOf(m6).held && has(f.as->loopOf(m6).text, "P6 refait P5"), "P6 retenue : " + (m6 >= 0 ? f.as->loopOf(m6).text : std::string{}));
+    check(m6 >= 0 && f.as->chooseLoop(m6, ai::Assistant::LoopChoice::SkipStep, &why), "Ignorer cette etape (" + why + ")");
+    check(f.linkState(id, p6) == "refusee" && f.stepState(id, "S2") == ms::StepState::Skipped, "P6 refusee, S2 ignoree");
+    check(f.mission(id) && has(ms::nextAction(*f.mission(id)), "audit"), "plus rien a proposer : l'audit final (" + ms::nextAction(*f.mission(id)) + ")");
+
+    // DANS UNE CONVERSATION (hors mission) : la meme proposition, puis la meme suite.
+    f.as->newConversation();
+    f.answerOps("toolu_c1", voyantInput("Voyant_C", "Vanne.Cmd", "40", ""));
+    check(f.as->send("Ajoute un voyant sur la commande de la vanne.", &why), "une demande (" + why + ")");
+    f.step();
+    const int c1 = f.lastIndex();
+    check(f.last().proposal && !f.as->loopOf(c1).held, "la premiere : pas de cercle");
+    f.answerOps("toolu_c2", voyantInput("Voyant_C", "Vanne.Cmd", "200", ""));
+    check(f.as->send("Ajoute un voyant sur la commande de la vanne, s'il te pla\xC3\xAEt.", &why), "la meme demande (" + why + ")");
+    f.step();
+    const int c2 = f.lastIndex();
+    const ai::Assistant::LoopInfo lc = f.as->loopOf(c2);
+    check(lc.held && lc.mission.empty() && has(lc.text, "Cette proposition refait la 1re proposition") && listedIn(lc.signs, "memes_erreurs"),
+          "la 2e est retenue : " + lc.text);
+    check(!f.as->apply(c2, &why) && has(why, "tourne en rond"), "elle ne s'applique pas (" + why + ")");
+    check(!f.as->chooseLoop(c2, ai::Assistant::LoopChoice::SkipStep, &why) && has(why, "mission"), "Ignorer cette etape : une mission seulement");
+    std::string again;
+    check(f.as->chooseLoop(c2, ai::Assistant::LoopChoice::EditRequest, &why, &again) && has(again, "Ajoute un voyant"),
+          "Modifier la demande : la demande revient (" + again + ")");
+    check(!f.as->loopOf(c2).held && f.as->loopOf(c2).choice == "demande_modifiee" && f.last().proposal && f.last().proposal->state == "proposee"
+              && f.last().proposal->extra.at("cercle").str("choix") == "demande_modifiee",
+          "le choix est garde avec la proposition ; elle reste a decider");
+    // la meme suite
+    f.answerOps("toolu_c3", proposalInput("La cuve", {O({{"action", "creer"}, {"genre", "Tank"}, {"nom", "Cuve_E"}, {"proprietes", O({{"x", "400"}, {"y", "40"}})}})},
+                                          "Les alarmes de la cuve."));
+    check(f.as->send("Ajoute la cuve et ses alarmes.", &why), "une grande demande (" + why + ")");
+    f.step();
+    const int c3 = f.lastIndex();
+    check(c3 >= 0 && f.as->apply(c3, &why), "la premiere partie appliquee (" + why + ")");
+    const std::string ask3 = f.as->nextRequest(c3);
+    check(ask3 == "Propose la suite : Les alarmes de la cuve.", "la suite demandee : " + ask3);
+    f.answerOps("toolu_c4", proposalInput("La cuve, encore", {O({{"action", "creer"}, {"genre", "Tank"}, {"nom", "Cuve_F"}, {"proprietes", O({{"x", "600"}, {"y", "40"}})}})},
+                                          "Les alarmes de la cuve."));
+    check(f.as->send(ask3, &why), "Proposer la suite (" + why + ")");
+    f.step();
+    const int c4 = f.lastIndex();
+    const ai::Assistant::LoopInfo le = f.as->loopOf(c4);
+    check(le.held && listedIn(le.signs, "meme_suite") && has(le.text, "n'avance pas"), "la meme suite revient : retenue (" + le.text + ")");
+    check(f.as->chooseLoop(c4, ai::Assistant::LoopChoice::ProposeAnyway, &why) && f.as->apply(c4, &why), "Proposer quand meme, puis appliquer (" + why + ")");
+    check(has(f.as->nextRequest(c4), "d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 annonc\xC3\xA9" "e"), "la suite redemandee le dit a l'IA : " + f.as->nextRequest(c4));
+}
+
 } // namespace
 
 int main() {
@@ -1158,6 +1335,7 @@ int main() {
     testHeavyInBackground();   // 1.22.1
     testXpgMission();          // 1.22.3
     testForceFinish();         // 1.22.2
+    testLoops();               // 1.22.4
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

@@ -4,6 +4,7 @@
 #include "AiPanel.hpp"
 #include "AiDelete.hpp"   // 1.21.0 : la confirmation des suppressions
 
+#include "AiLoop.hpp"   // 1.22.4 : ne pas tourner en rond (loop::choiceLabel)
 #include "AiMarkdown.hpp"
 #include "AiPlanStrip.hpp"
 #include "AiContextPane.hpp"   // 1.21.0
@@ -1359,6 +1360,51 @@ void AiPanel::editRequest(int message) {
     prompt_->takeFocus();
     sync();
     say("La demande est dans la saisie : modifie-la, puis Entr\xC3\xA9" "e.");
+}
+
+// 1.22.4 : LE CHOIX sur la carte d'une proposition qui tourne en rond.
+bool AiPanel::chooseLoop(int message, Assistant::LoopChoice choice) {
+    const Assistant::LoopInfo info = assistant_->loopOf(message);
+    if (choice == Assistant::LoopChoice::ForceFinish) {   // la question d'abord (missionAct), puis la fin forcee
+        if (info.mission.empty() || !info.held) {
+            say("Assistant IA : cette proposition n'appartient pas \xC3\xA0 une mission, ou elle n'attend plus de choix.");
+            return false;
+        }
+        return missionAct(info.mission, MissionAct::ForceFinish);
+    }
+    std::string why, request;
+    if (!assistant_->chooseLoop(message, choice, &why, &request)) {
+        say("Assistant IA : " + (why.empty() ? std::string("ce choix n'a pas pu se faire.") : why));
+        sync();
+        return false;
+    }
+    const std::string said = assistant_->takeNotice();   // dit ici, une fois
+    switch (choice) {
+        case Assistant::LoopChoice::ByHand:
+            openPreview(message);
+            say("Corrige la proposition dans la pr\xC3\xA9visualisation (le clic droit sur une erreur), puis applique-la.");
+            break;
+        case Assistant::LoopChoice::ProposeAnyway:
+            say("Propos\xC3\xA9" "e quand m\xC3\xAAme : pr\xC3\xA9visualise-la, puis applique-la ou refuse-la.");
+            break;
+        case Assistant::LoopChoice::EditRequest:
+            if (!request.empty()) {
+                prompt_->setText(request);
+                prompt_->takeFocus();
+            }
+            say(info.mission.empty() ? std::string("La demande est dans la saisie : modifie-la, puis Entr\xC3\xA9" "e.")
+                                     : "\xC3\x89" "cris ta consigne apr\xC3\xA8s \xC2\xAB " + request + "\xC2\xBB, puis Entr\xC3\xA9" "e : la mission repart avec elle "
+                                       "(elle est gard\xC3\xA9" "e et dite \xC3\xA0 l'IA).");
+            break;
+        case Assistant::LoopChoice::SkipStep:
+            say(said.empty() ? std::string("\xC3\x89tape ignor\xC3\xA9" "e : la mission continue sans elle.") : said);
+            syncMissions();
+            break;
+        case Assistant::LoopChoice::ForceFinish:
+            break;
+    }
+    sync();
+    return true;
 }
 
 void AiPanel::askFix(const std::string& text) {
@@ -2909,6 +2955,21 @@ void AiChatView::measure() {
                     const Thumb& t = thumb(static_cast<int>(i));
                     const float cw = inner - 4.f;
                     float ch = 8.f + 24.f + 22.f;
+                    // 1.22.4 : LE CERCLE vu a son arrivee (elle refait une proposition precedente, les memes erreurs...) - sous
+                    // les comptes ; retenue tant que l'utilisateur n'a pas choisi.
+                    const Assistant::LoopInfo lp = a.loopOf(static_cast<int>(i));
+                    b.loopHeld = lp.held && open;
+                    if (!lp.text.empty()) {
+                        std::string said = b.loopHeld ? "Tourne en rond : " + lp.text + ". Choisis ci-dessous : rien ne repart avant ton choix."
+                                                      : "A tourn\xC3\xA9 en rond : " + lp.text
+                                                            + (lp.choice.empty() ? std::string{} : " \xE2\x80\x94 " + std::string(loop::choiceLabel(lp.choice))) + ".";
+                        b.loopLines = wrapPlain(said, kMeta, cw - 24.f);
+                        if (b.loopLines.size() > 5) {
+                            b.loopLines.resize(5);
+                            b.loopLines.back() += " \xE2\x80\xA6";
+                        }
+                        ch += static_cast<float>(b.loopLines.size()) * kNoteH + 4.f;
+                    }
                     // 1.16.0 : la vue, les variables, les types crees - une ligne sous les comptes.
                     if (const std::string made = creationSummary(*m.proposal); !made.empty()) {
                         b.createLines = wrapPlain("Cr\xC3\xA9" "e aussi : " + made, kMeta, cw - 24.f);
@@ -2980,6 +3041,13 @@ void AiChatView::measure() {
                                                        : std::string("Appliquer"));
                         }
                         b.buttons.push_back(stale ? "Redemander" : "Refuser\xE2\x80\xA6");
+                        if (b.loopHeld && !stale) {   // 1.22.4 : retenue - les choix
+                            b.buttons = {"Corriger \xC3\xA0 la main\xE2\x80\xA6", "Proposer quand m\xC3\xAAme", "Modifier la demande"};
+                            if (!lp.mission.empty()) {
+                                b.buttons.push_back(lp.steps.size() > 1 ? "Ignorer ces \xC3\xA9tapes" : "Ignorer cette \xC3\xA9tape");
+                                b.buttons.push_back("Forcer la fin de la mission\xE2\x80\xA6");
+                            }
+                        }
                         // Les erreurs puis les avertissements (trois au plus ; le reste dans l'apercu), a la ligne.
                         std::size_t lines = 0;
                         // 1.22.1 : les doublons regroupes (<< ... (2 operations) >>) ; le clic droit sur une note la corrige.
@@ -3104,7 +3172,7 @@ void AiChatView::rebuild() {
     // discussion pendant qu'il emet son signal - il ne doit pas etre detruit sous lui.
     for (auto& cb : cards_) {
         cb.message = -1;
-        for (ui::Button* btn : {cb.preview, cb.apply, cb.third}) btn->setVisibility(ui::Visibility::Collapsed);
+        for (ui::Button* btn : {cb.preview, cb.apply, cb.third, cb.fourth, cb.fifth}) btn->setVisibility(ui::Visibility::Collapsed);
     }
     const auto& a = panel_.assistant();
     std::size_t slot = 0;
@@ -3124,13 +3192,24 @@ void AiChatView::rebuild() {
             cb.preview = mk(".apercu", ui::Button::Style::Primary);
             cb.apply = mk(".appliquer", ui::Button::Style::Default);
             cb.third = mk(".refuser", ui::Button::Style::Flat);
+            cb.fourth = mk(".ignorer-etape", ui::Button::Style::Flat);       // 1.22.4 : retenue (elle tourne en rond)
+            cb.fifth = mk(".forcer-fin", ui::Button::Style::Flat);
             const std::size_t k = slot;
             links_ += cb.preview->clicked->connect([this, k] {
-                if (k < cards_.size() && cards_[k].message >= 0) panel_.openPreview(cards_[k].message);
+                if (k >= cards_.size() || cards_[k].message < 0) return;
+                if (cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::ByHand);   // 1.22.4
+                else panel_.openPreview(cards_[k].message);
+            });
+            links_ += cb.fourth->clicked->connect([this, k] {
+                if (k < cards_.size() && cards_[k].message >= 0 && cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::SkipStep);
+            });
+            links_ += cb.fifth->clicked->connect([this, k] {
+                if (k < cards_.size() && cards_[k].message >= 0 && cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::ForceFinish);
             });
             links_ += cb.apply->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
-                if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
+                if (cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::ProposeAnyway);   // 1.22.4
+                else if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
                 else if (cards_[k].next) {   // 1.21.3 : << Propose la suite : ... >>, envoye comme une demande
                     const std::string ask = panel_.assistant().nextRequest(cards_[k].message);
                     if (!ask.empty()) (void)panel_.sendText(ask);
@@ -3141,7 +3220,8 @@ void AiChatView::rebuild() {
             });
             links_ += cb.third->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
-                if (cards_[k].stale) panel_.editRequest(cards_[k].message);
+                if (cards_[k].loop) (void)panel_.chooseLoop(cards_[k].message, Assistant::LoopChoice::EditRequest);   // 1.22.4
+                else if (cards_[k].stale) panel_.editRequest(cards_[k].message);
                 else panel_.askRefuse(cards_[k].message);   // 1.16.1 (captures) : une question d'abord, comme l'apercu
             });
             cards_.push_back(cb);
@@ -3151,7 +3231,42 @@ void AiChatView::rebuild() {
         cb.refused = p->state == "refusee";
         cb.detect = false;
         cb.next = false;
+        cb.loop = false;
         cb.preview->setEnabled(true);
+        // 1.22.4 : RETENUE (elle tourne en rond) - les choix, rien d'autre ; une mission : deux de plus.
+        if (b.loopHeld && p->state == "proposee" && !(t.check.stale || t.check.viewMissing)) {
+            const Assistant::LoopInfo lp = panel_.assistant().loopOf(b.message);
+            const bool busy = t.pending() || panel_.assistant().applying(b.message);
+            cb.loop = true;
+            cb.stale = false;
+            cb.undone = false;
+            cb.preview->setText("Corriger \xC3\xA0 la main\xE2\x80\xA6");
+            cb.preview->setTooltip("Ouvrir la pr\xC3\xA9visualisation pour la corriger toi-m\xC3\xAAme (le clic droit sur une erreur, retirer une op\xC3\xA9ration), "
+                                   "puis l'appliquer. Rien ne change dans le projet avant Appliquer.");
+            cb.preview->setEnabled(!busy);
+            cb.apply->setText("Proposer quand m\xC3\xAAme");
+            cb.apply->setTooltip("La garder telle quelle : elle redevient une proposition comme les autres (pr\xC3\xA9visualiser, appliquer ou refuser).");
+            cb.apply->setEnabled(!busy);
+            cb.third->setText("Modifier la demande");
+            cb.third->setTooltip(lp.mission.empty() ? std::string("Remettre la demande dans la saisie pour la reformuler.")
+                                                    : std::string("Refuser cette proposition et \xC3\xA9" "crire ta consigne pour l'IA (elle est gard\xC3\xA9" "e "
+                                                                  "dans la mission) : la suite repart avec elle."));
+            cb.preview->setVisibility(ui::Visibility::Visible);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            cb.third->setVisibility(ui::Visibility::Visible);
+            if (!lp.mission.empty()) {
+                cb.fourth->setText(lp.steps.size() > 1 ? "Ignorer ces \xC3\xA9tapes" : "Ignorer cette \xC3\xA9tape");
+                cb.fourth->setTooltip("Refuser cette proposition et ignorer " + (lp.steps.empty() ? std::string("ses \xC3\xA9tapes") : lp.steps.front()
+                                      + (lp.steps.size() > 1 ? " et les autres \xC3\xA9tapes en cause" : std::string{})) + " : la mission continue sans.");
+                cb.fourth->setEnabled(!busy);
+                cb.fifth->setText("Forcer la fin de la mission\xE2\x80\xA6");
+                cb.fifth->setTooltip("Terminer la mission l\xC3\xA0 o\xC3\xB9 elle en est (une question d'abord) : rien n'est d\xC3\xA9" "fait dans le projet.");
+                cb.fifth->setEnabled(!busy);
+                cb.fourth->setVisibility(ui::Visibility::Visible);
+                cb.fifth->setVisibility(ui::Visibility::Visible);
+            }
+            continue;
+        }
         if (p->state == "appliquee" && panel_.canDetect(b.message)) {   // 1.18.0 : appliquee, une detection proposee
             cb.detect = true;
             cb.undone = false;
@@ -3171,7 +3286,13 @@ void AiChatView::rebuild() {
             cb.apply->setText(kNextText);
             cb.apply->setTooltip("Envoyer \xC2\xAB Propose la suite : " + p->next + " \xC2\xBB : l'IA propose la partie suivante de la demande "
                                  "(une nouvelle carte, \xC3\xA0 v\xC3\xA9rifier et appliquer comme celle-ci).");
-            cb.apply->setEnabled(!panel_.assistant().generating());
+            // 1.22.4 : une proposition plus recente tourne en rond (retenue) - la suite attend le choix sur sa carte.
+            bool laterHeld = false;
+            if (const Conversation* conv = panel_.assistant().current())
+                for (int j = b.message + 1; j < static_cast<int>(conv->messages.size()) && !laterHeld; ++j)
+                    laterHeld = conv->messages[static_cast<std::size_t>(j)].proposal && panel_.assistant().loopOf(j).held;
+            if (laterHeld) cb.apply->setTooltip("Une proposition plus r\xC3\xA9" "cente tourne en rond : choisis d'abord sur sa carte.");
+            cb.apply->setEnabled(!panel_.assistant().generating() && !laterHeld);
             cb.apply->setVisibility(ui::Visibility::Visible);
             continue;
         }
@@ -3238,7 +3359,8 @@ gfx::Rect AiChatView::cardRect(int message) const {
 
 ui::Button* AiChatView::cardButton(int message, int which) const {
     for (const auto& cb : cards_)
-        if (cb.message == message && message >= 0) return which == 0 ? cb.preview : which == 1 ? cb.apply : cb.third;
+        if (cb.message == message && message >= 0)
+            return which == 0 ? cb.preview : which == 1 ? cb.apply : which == 2 ? cb.third : which == 3 ? cb.fourth : cb.fifth;
     return nullptr;
 }
 
@@ -3321,7 +3443,7 @@ void AiChatView::placeCards() {
         const gfx::Rect card{b.x + bl->card.x, b.y + bl->y - offset_ + bl->card.y, bl->card.w, bl->card.h};
         const float top = card.bottom() - 10.f - bl->buttonsH;
         std::size_t k = 0;
-        for (ui::Button* btn : {cb.preview, cb.apply, cb.third}) {
+        for (ui::Button* btn : {cb.preview, cb.apply, cb.third, cb.fourth, cb.fifth}) {
             if (btn->visibility() == ui::Visibility::Collapsed) continue;
             if (k >= bl->buttonRects.size()) {
                 btn->setVisibility(ui::Visibility::Hidden);
@@ -3371,6 +3493,7 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     else if (stale) { st = "P\xC3\xA9rim\xC3\xA9" "e"; tone = c.warning; }
     else if (a.applying(b.message)) { st = "Application\xE2\x80\xA6"; tone = c.info; }   // 1.20.1 : sur un fil de fond
     else if (t.pending()) { st = "V\xC3\xA9rification\xE2\x80\xA6"; tone = c.info; }   // 1.20.0 : sur un fil de fond
+    else if (b.loopHeld) { st = "Tourne en rond"; tone = c.warning; }   // 1.22.4 : retenue, le choix d'abord
     // 1.15.0 : "A completer" seulement quand l'utilisateur peut completer (une variable a choisir dans
     // l'apercu) ; une proposition que le logiciel refuse (une propriete inventee...) est "Non valide".
     else if (!t.check.ok()) { st = t.check.missingVariable.empty() ? "Non valide" : "\xC3\x80 compl\xC3\xA9ter"; tone = c.error; }
@@ -3409,6 +3532,12 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
     count("Modifier", nm, c.info, cx);
     count("Supprimer", nr, c.error, cx);
     y += 22.f;
+    // 1.22.4 : le cercle vu a son arrivee (retenue : en couleur d'attention ; un choix fait : discret).
+    for (const auto& l : b.loopLines) {
+        ctx.r.drawText({card.x + 12.f, y}, l, kMeta, b.loopHeld ? c.warning : c.textMuted);
+        y += kNoteH;
+    }
+    if (!b.loopLines.empty()) y += 4.f;
     for (const auto& l : b.createLines) {   // 1.16.0 : la vue, les variables, les types crees
         ctx.r.drawText({card.x + 12.f, y}, l, kMeta, c.ok);
         y += kNoteH;

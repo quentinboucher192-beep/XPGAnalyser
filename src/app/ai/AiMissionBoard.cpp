@@ -4,6 +4,7 @@
 #include "AiMissionBoard.hpp"
 #include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
+#include "AiLoop.hpp"            // 1.22.4 : loop::choiceLabel
 #include "AiNotifications.hpp"   // notifs::oneLine
 #include "AiPanel.hpp"
 #include "../../ui/Icons.hpp"
@@ -98,7 +99,7 @@ Tone coherenceTone(mission::Coherence c) noexcept {
 
 Tone eventTone(std::string_view kind) noexcept {
     if (kind == "erreur") return Tone::Error;
-    if (kind == "interruption" || kind == "pause" || kind == "annulation") return Tone::Warning;
+    if (kind == "interruption" || kind == "pause" || kind == "annulation" || kind == "cercle") return Tone::Warning;   // 1.22.4 : cercle
     if (kind == "application" || kind == "terminee" || kind == "audit") return Tone::Ok;
     if (kind == "proposition" || kind == "validation" || kind == "plan" || kind == "plan_modifie") return Tone::Accent;
     return Tone::Info;
@@ -384,6 +385,15 @@ Next nextOf(const mission::Mission& m, bool busy) {
             n.tooltip = "Demander \xC3\xA0 l'IA une proposition de correction pour \xC2\xAB " + s.title + " \xC2\xBB (\xC3\xA0 v\xC3\xA9rifier et "
                         "appliquer comme les autres ; une proposition d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9" "e n'est jamais modifi\xC3\xA9" "e)."
                         + (s.error.empty() ? std::string{} : "\nL'erreur : " + s.error);
+            return n;
+        }
+    for (const auto& p : m.proposals)
+        if (p.held()) {   // 1.22.4 : retenue, elle tourne en rond - le choix se fait sur sa carte
+            n.kind = K::Review;
+            n.proposal = p.id;
+            n.label = "Voir P" + std::to_string(p.order) + " (tourne en rond)";
+            n.tooltip = "La mission tourne en rond : " + p.loop + ".\nSur sa carte : Modifier la demande, Corriger \xC3\xA0 la main, Ignorer cette "
+                        "\xC3\xA9tape, Forcer la fin de la mission, ou Proposer quand m\xC3\xAAme. La suite ne repart pas avant ton choix.";
             return n;
         }
     for (const auto& p : m.proposals)
@@ -1355,6 +1365,12 @@ AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, 
             }
         }
         if (!p.next.empty()) cy = wrapped(b.ops, cx, cy + 2.f, cw, "Suite pr\xC3\xA9vue par l'IA : " + p.next, kMeta, Tone::Muted, 3);
+        // 1.22.4 : le cercle vu a son arrivee (retenue : le choix se fait sur sa carte), et le choix fait
+        if (!p.loop.empty())
+            cy = wrapped(b.ops, cx, cy + 2.f, cw,
+                         p.held() ? "Tourne en rond : " + p.loop + ". Choisis sur sa carte."
+                                  : "A tourn\xC3\xA9 en rond : " + p.loop + (p.loopChoice.empty() ? std::string{} : " \xE2\x80\x94 " + std::string(loop::choiceLabel(p.loopChoice))) + ".",
+                         kMeta, p.held() ? Tone::Warning : Tone::Muted, 3);
         // les gestes, par la conversation de la mission (ceux de la carte)
         cy += 6.f;
         const std::string mid = missionId_, pid = p.id;

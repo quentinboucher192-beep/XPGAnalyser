@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiMission.hpp"
 
+#include "AiLoop.hpp"
 #include "../../hmi/HmiAudit.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiRelations.hpp"
@@ -1031,6 +1032,12 @@ Batch nextBatch(const Mission& m, int maxOps) {
         b.why = "Le projet de la mission n'est pas celui qui est ouvert : ouvre-le d'abord.";
         return b;
     }
+    // 1.22.4 : une proposition retenue (elle tourne en rond) - la suite ne repart pas tant que l'utilisateur n'a pas choisi.
+    if (const ProposalLink* h = loop::held(m)) {
+        b.why = "La mission tourne en rond : " + h->loop + ". Choisis d'abord sur la carte de P" + std::to_string(h->order) + " \xE2\x80\x94 Modifier la "
+                "demande, Corriger \xC3\xA0 la main, Ignorer cette \xC3\xA9tape, Forcer la fin de la mission ou Proposer quand m\xC3\xAAme.";
+        return b;
+    }
     const int budget = std::max(1, maxOps);
     std::set<std::string> in;
     for (const auto& s : m.steps) {
@@ -1106,6 +1113,7 @@ bool setStepState(Mission& m, std::string_view id, StepState to, std::string now
     s->note = std::move(note);
     s->updated = now;
     if (to == StepState::Error) s->error = s->note;
+    if (to == StepState::Done) s->attempts = 0;   // 1.22.4 : terminee, ses tentatives repartent de zero
     // 1.22.1 : un appel a l'IA fini sans proposition (en cours -> prete : interrompu, en echec) est dit aussi - le journal
     // de l'etape le montre avec sa raison.
     if (from != to && (to == StepState::Done || to == StepState::Error || to == StepState::Skipped || to == StepState::Cancelled
@@ -1117,6 +1125,7 @@ bool setStepState(Mission& m, std::string_view id, StepState to, std::string now
 void onGenerated(Mission& m, const Proposal& p, const std::string& conversation, const std::string& message,
                  const std::vector<std::string>& steps, std::string now) {
     ProposalLink* link = m.proposal(p.id);
+    const bool fresh = link == nullptr;
     if (!link) {
         ProposalLink l;
         l.id = p.id;
@@ -1134,6 +1143,17 @@ void onGenerated(Mission& m, const Proposal& p, const std::string& conversation,
     link->remove = p.remove;
     link->created = now;
     link->next = p.next;
+    // 1.22.4 : ses empreintes (une fois, a l'arrivee) - ses operations, le projet quand elle a ete demandee (l'Assistant
+    // prend l'empreinte du projet juste avant chaque appel) ; ses erreurs viendront de sa verification (onChecked).
+    link->opsPrint = loop::opsPrint(p);
+    link->projectPrint = m.project.print;
+    link->errorsPrint.clear();
+    link->errorCount = 0;
+    link->errorNames.clear();
+    link->loop.clear();
+    link->loopSigns.clear();
+    link->loopSteps.clear();
+    link->loopChoice.clear();
     link->lines.clear();
     std::vector<std::string> covered = steps;
     for (const auto& op : p.ops) {
@@ -1154,6 +1174,7 @@ void onGenerated(Mission& m, const Proposal& p, const std::string& conversation,
     for (const auto& id : real) {
         Step* s = m.step(id);
         if (std::find(s->proposals.begin(), s->proposals.end(), p.id) == s->proposals.end()) s->proposals.push_back(p.id);
+        if (fresh) ++s->attempts;   // 1.22.4 : une tentative de plus (proposee ou corrigee)
         if (s->state == StepState::Ready || s->state == StepState::Waiting) s->state = StepState::Running;   // le chemin normal
         if (canMove(s->state, StepState::AwaitingValidation)) {
             s->state = StepState::AwaitingValidation;
@@ -1171,6 +1192,9 @@ void onChecked(Mission& m, std::string_view id, const Check& check, std::string 
     ProposalLink* link = m.proposal(id);
     if (!link) return;
     link->errors = check.errors;
+    link->errorsPrint = loop::errorsPrint(check.errors);   // 1.22.4
+    link->errorCount = static_cast<int>(check.errors.size());
+    link->errorNames = loop::errorNames(check.errors);
     if (link->state == "generee" || link->state == "validee") link->state = check.ok() ? "validee" : "generee";
     if (!check.ok())
         log(m, "validation",
@@ -1436,6 +1460,9 @@ bool mayApply(const Mission& m, std::string_view id, std::string* why) {
         if (p->state == "obsolete") return fail("Cette proposition est devenue obsol\xC3\xA8te (le projet a chang\xC3\xA9) : demande la suite pour en avoir une \xC3\xA0 jour.");
         if (p->state == "annulee") return fail("Cette proposition est annul\xC3\xA9" "e.");
         if (p->state == "interrompue") return fail("Cette proposition a \xC3\xA9t\xC3\xA9 interrompue.");
+        if (p->held())   // 1.22.4
+            return fail("Elle tourne en rond. " + p->loop + ". Choisis d'abord sur sa carte : Proposer quand m\xC3\xAAme, Corriger \xC3\xA0 la main, Modifier "
+                        "la demande, Ignorer cette \xC3\xA9tape ou Forcer la fin de la mission.");
     }
     return true;
 }
@@ -1819,7 +1846,9 @@ StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
             if (const ProposalLink* p = awaitingFor(m, s)) {
                 a.proposal = p->id;
                 const std::string ops = plural(p->ops, "op\xC3\xA9ration", "op\xC3\xA9rations");
-                if (p->state == "validee")
+                if (p->held())   // 1.22.4 : retenue, elle tourne en rond
+                    set(Activity::Blocked, tag(*p) + " tourne en rond \xE2\x80\x94 \xC3\xA0 d\xC3\xA9" "cider sur sa carte : " + shortLine(p->loop, 100));
+                else if (p->state == "validee")
                     set(Activity::ToValidate, tag(*p) + " v\xC3\xA9rifi\xC3\xA9" "e : " + ops + (p->ops > 1 ? " pr\xC3\xAAtes" : " pr\xC3\xAAte") + " \xE2\x80\x94 Appliquer");
                 else if (!p->errors.empty())
                     set(Activity::Blocked, tag(*p) + " : " + plural(static_cast<int>(p->errors.size()), "erreur", "erreurs") + " \xC3\xA0 la v\xC3\xA9rification \xE2\x80\x94 "
@@ -1980,6 +2009,8 @@ std::string nextAction(const Mission& m) {
     if (m.coherence == Coherence::Changed) return "Actualiser le contexte : le projet a chang\xC3\xA9 depuis la derni\xC3\xA8re sauvegarde.";
     for (const auto& s : m.steps)
         if (s.state == StepState::Error) return "Corriger " + s.id + " " + guill(s.title) + " : " + (s.error.empty() ? s.note : s.error);
+    for (const auto& p : m.proposals)   // 1.22.4 : une proposition retenue d'abord (elle tourne en rond)
+        if (p.held()) return "La mission tourne en rond : d\xC3\xA9" "cider sur la carte de P" + std::to_string(p.order) + " (" + p.loop + ").";
     for (const auto& p : m.proposals)
         if (p.state == "generee" || p.state == "validee") return "Pr\xC3\xA9visualiser et appliquer P" + std::to_string(p.order) + " " + guill(p.title) + ".";
     const Batch b = nextBatch(m, 1 << 20);
@@ -2049,6 +2080,7 @@ std::string batchPrompt(const Mission& m, const hmi::Project& project, const Bat
             if (!st->expected.empty()) s += " (produit : " + join(st->expected, ", ") + ")";
             s += "\n";
         }
+    s += loop::triedText(m, b.steps);   // 1.22.4 : ce qui a deja ete propose pour ces etapes, sans aboutir, et pourquoi
     s += "R\xC3\x88GLES : une seule proposition (proposer_operations) qui couvre ces \xC3\xA9tapes et seulement elles ; chaque op\xC3\xA9ration porte "
          "\"etape\" (l'identifiant de l'\xC3\xA9tape qu'elle sert) ; r\xC3\xA9utilise les noms EXACTS des \xC3\xA9l\xC3\xA9ments pr\xC3\xA9sents, ne recr\xC3\xA9" "e rien de ce qui "
          "est list\xC3\xA9 comme pr\xC3\xA9sent ; si c'est trop long pour une r\xC3\xA9ponse, couvre une partie compl\xC3\xA8te et dis le reste dans \"suite\" ; "
@@ -2079,6 +2111,7 @@ std::string correctionPrompt(const Mission& m, const hmi::Project& project, std:
         if (std::find(o.deps.begin(), o.deps.end(), st->id) != o.deps.end()) users.push_back(o.id + " (" + std::string(stepLabel(o.state)) + ")");
     s += "Ses d\xC3\xA9pendances : " + (deps.empty() ? std::string("aucune") : join(deps, ", ")) + ". Les \xC3\xA9tapes qui l'attendent : "
          + (users.empty() ? std::string("aucune") : join(users, ", ")) + ".\n";
+    s += loop::triedText(m, {st->id});   // 1.22.4 : les tentatives deja faites pour elle, et pourquoi elles n'ont pas abouti
     s += "Propose UNE proposition de correction (proposer_operations, chaque op\xC3\xA9ration avec \"etape\": \"" + st->id
          + "\") qui corrige la cause ; ne modifie pas en silence ce qui est d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9 ; r\xC3\xA9utilise les \xC3\xA9l\xC3\xA9ments existants. Elle sera "
            "v\xC3\xA9rifi\xC3\xA9" "e sur une copie puis pr\xC3\xA9sent\xC3\xA9" "e \xC3\xA0 l'utilisateur.\n";
@@ -2579,6 +2612,37 @@ Value toJson(const Mission& m) {
         f.set("propositions", strings(m.forced.proposals));
         o.set("fin_forcee", f);
     }
+    // 1.22.4 : NE PAS TOURNER EN ROND (AiLoop.hpp) - a la fin, seulement s'il y a quelque chose (un fichier 1.22.3 se relit :
+    // absent, tout vaut zero) : les empreintes de chaque proposition, son cercle et le choix ; les tentatives par etape.
+    {
+        Value prints = Value::array();
+        for (const auto& p : m.proposals) {
+            if (p.opsPrint.empty() && p.errorsPrint.empty() && p.projectPrint.empty() && p.loop.empty()) continue;
+            Value x = Value::object();
+            x.set("id", p.id);
+            x.set("operations", p.opsPrint);
+            x.set("erreurs", p.errorsPrint);
+            x.set("nb_erreurs", p.errorCount);
+            if (!p.errorNames.empty()) x.set("noms", p.errorNames);
+            x.set("projet", p.projectPrint);
+            if (!p.loop.empty()) {
+                x.set("cercle", p.loop);
+                x.set("signes", strings(p.loopSigns));
+                x.set("etapes", strings(p.loopSteps));
+                x.set("choix", p.loopChoice);
+            }
+            prints.push(std::move(x));
+        }
+        Value tries = Value::object();
+        for (const auto& st : m.steps)
+            if (st.attempts > 0) tries.set(st.id, st.attempts);
+        if (!prints.items().empty() || !tries.members().empty()) {
+            Value c = Value::object();
+            c.set("propositions", std::move(prints));
+            c.set("tentatives", std::move(tries));
+            o.set("cercles", std::move(c));
+        }
+    }
     json::addMembers(o, m.extra);
     return o;
 }
@@ -2717,10 +2781,28 @@ Mission fromJson(const Value& o, int* fromFormat, bool* readOnly) {
         m.forced.steps = stringsOf(f.at("etapes"));
         m.forced.proposals = stringsOf(f.at("propositions"));
     }
+    if (const Value& c = o.at("cercles"); c.isObject()) {   // 1.22.4 (absent : un fichier d'avant, tout vaut zero)
+        for (const auto& x : c.at("propositions").items()) {
+            if (!x.isObject()) continue;
+            ProposalLink* p = m.proposal(x.str("id"));
+            if (!p) continue;
+            p->opsPrint = x.str("operations");
+            p->errorsPrint = x.str("erreurs");
+            p->errorCount = static_cast<int>(x.integer("nb_erreurs"));
+            p->errorNames = x.str("noms");
+            p->projectPrint = x.str("projet");
+            p->loop = x.str("cercle");
+            p->loopSigns = stringsOf(x.at("signes"));
+            p->loopSteps = stringsOf(x.at("etapes"));
+            p->loopChoice = x.str("choix");
+        }
+        for (const auto& [sid, n] : c.at("tentatives").members())
+            if (Step* st = m.step(sid)) st->attempts = std::max(0, static_cast<int>(n.asInt()));
+    }
     m.extra = json::unknownMembers(o, {"format", "id", "nom", "description", "demande", "cree", "modifie", "projet", "conversation", "conversations",
                                        "fournisseur", "modele", "etat", "archivee", "revision_plan", "etapes", "analyse", "propositions",
                                        "historique", "decisions", "appel_en_cours", "coherence", "coherence_texte", "point_de_reprise", "resume",
-                                       "pieces_jointes", "rapport_final", "fin_forcee"});
+                                       "pieces_jointes", "rapport_final", "fin_forcee", "cercles"});
     // Format 0 : des etapes sans dependances calculees - l'ordre et les etats d'attente refaits.
     if (format == 0) {
         std::string cycle;

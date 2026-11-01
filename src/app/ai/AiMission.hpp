@@ -25,6 +25,8 @@
 //    - 1.22.1 : ce que fait CHAQUE ETAPE - sa progression reelle (stepProgressOf), son
 //      activite du moment en une ligne (activityOf), son journal (stepJournal) ;
 //    - 1.22.2 : la fin forcee par l'utilisateur (forceFinish : les etapes non terminees ignorees, rien de defait) ;
+//    - 1.22.4 : ne pas tourner en rond (AiLoop.hpp : les empreintes des propositions, les tentatives par etape, une
+//      proposition retenue tant que l'utilisateur n'a pas choisi, les tentatives deja faites dites a l'IA) ;
 //    - le rapport final (finalReport) et les textes donnes a l'IA (contextes).
 //
 //  Le projet reel est toujours la source de verite : une etape n'est << terminee >>
@@ -117,6 +119,11 @@ struct Step {
     std::string              error;       // la derniere erreur exacte
     std::string              updated;     // ISO
     json::Value              extra;
+    // 1.22.4 (a la fin) : NE PAS TOURNER EN ROND (AiLoop.hpp) - ses propositions depuis qu'elle n'est plus terminee (ou
+    // depuis toujours) : une de plus a chaque proposition qui la couvre (onGenerated), zero quand elle devient terminee
+    // ou quand l'utilisateur donne une consigne pour elle (Modifier la demande : loop::choose).
+    // Gardees dans << cercles >> a la fin du fichier (absentes : 0).
+    int                      attempts{0};
 };
 
 // L'analyse prealable (planifier_mission : ce qui existe deja et ce qui manque) - les textes de l'IA, rapproches du
@@ -155,6 +162,19 @@ struct ProposalLink {
     std::vector<OpLine>      lines;                // les operations et leur etat
     json::Value              report;               // plan::reportToJson (le compte rendu reel)
     std::string              next;                 // Proposal::next (la suite dite par l'IA)
+    // 1.22.4 (a la fin) : NE PAS TOURNER EN ROND (AiLoop.hpp) - gardes dans << cercles >> a la fin du fichier (absents :
+    // vides ; une proposition d'avant 1.22.4 n'a pas d'empreinte et ne se compare pas).
+    std::string              opsPrint;             // loop::opsPrint (a l'arrivee, onGenerated)
+    std::string              errorsPrint;          // loop::errorsPrint de ses erreurs de validation (onChecked ; vide : aucune)
+    int                      errorCount{0};
+    std::string              errorNames;           // loop::errorNames ("Vanne.Cmd, Vanne.Etat")
+    std::string              projectPrint;         // l'empreinte du projet quand elle a ete demandee (ProjectLink::print)
+    std::string              loop;                 // LE CERCLE VU, en clair (vide : aucun) - loop::flag
+    std::vector<std::string> loopSigns;            // ses signes (loop::signKey)
+    std::vector<std::string> loopSteps;            // les etapes en cause
+    std::string              loopChoice;           // le choix de l'utilisateur (vide : il n'a pas encore choisi) - loop::choose
+    // Retenue : un cercle vu, pas encore de choix, et elle attend toujours une decision (a valider, verifiee).
+    [[nodiscard]] bool held() const noexcept { return !loop.empty() && loopChoice.empty() && (state == "generee" || state == "validee"); }
 };
 
 struct Event {
@@ -274,7 +294,8 @@ bool editPlan(Mission&, const PlanEdit&, std::string now, std::string* why = nul
 // ---- le prochain lot --------------------------------------------------------------------------------------------------
 // Les etapes a couvrir par la prochaine proposition : les pretes, puis celles qui ne dependent que d'etapes finies ou
 // deja dans le lot, tant que le poids estime (plannedOps, au moins 1) tient dans `maxOps`. Vide : rien de realisable
-// (`why` le dit : tout est fini, bloque, en attente de validation, la mission en pause...).
+// (`why` le dit : tout est fini, bloque, en attente de validation, la mission en pause...). 1.22.4 : vide aussi tant
+// qu'une proposition de la mission est retenue (elle tourne en rond, AiLoop.hpp) - l'utilisateur choisit d'abord.
 struct Batch {
     std::vector<std::string> steps;
     int                      ops{0};
@@ -317,7 +338,7 @@ bool resume(Mission&, std::string now, std::string* why = nullptr);
 bool cancel(Mission&, std::string now, std::string* why = nullptr);
 void archive(Mission&, bool on, std::string now);
 // Une proposition de cette mission peut-elle encore s'appliquer ? Faux et `why` : la mission en pause, annulee, ou la
-// proposition n'est plus la bonne (obsolete, annulee).
+// proposition n'est plus la bonne (obsolete, annulee) ; 1.22.4 : retenue (elle tourne en rond, pas encore de choix).
 [[nodiscard]] bool mayApply(const Mission&, std::string_view proposal, std::string* why = nullptr);
 
 // ---- 1.22.2 : FORCER LA FIN D'UNE MISSION -----------------------------------------------------------------------------
@@ -440,6 +461,8 @@ struct JournalLine {
 //    noms exacts, ne rien recreer, une operation porte "etape", "suite" dit les etapes suivantes ;
 //  - correctionPrompt : l'etape en erreur, l'erreur exacte, les operations touchees, les dependances ; une proposition
 //    de correction (jamais une modification silencieuse d'une proposition appliquee) ;
+//  - 1.22.4 : batchPrompt et correctionPrompt disent aussi ce qui a DEJA ETE PROPOSE pour ces etapes sans aboutir, et
+//    pourquoi (loop::triedText, borne) : ne pas reproposer la meme chose, changer d'approche ou dire ce qui bloque ;
 //  - overviewPrompt : les missions du projet (nom, etat, progression, prochaine action) en quelques lignes, pour toute
 //    conversation (<< ou en est la station de pompage ? >>).
 [[nodiscard]] std::string planningPrompt(const Mission&);
