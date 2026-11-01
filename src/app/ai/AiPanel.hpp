@@ -28,6 +28,15 @@
 //  conversation, le journal de l'Assistant (AiNotificationsView,
 //  AiNotifications.hpp) ; un autre clic, ou l'onglet Conversation, y revient.
 //  Le bouton d'une notification mene a la chose (followNotification).
+//
+//  1.22.0 : LES MISSIONS IA PERSISTANTES - un troisieme onglet << Missions IA >>
+//  (AiMissionsView : consulter, chercher, creer, reprendre, mettre en pause,
+//  annuler, archiver) ; au-dessus de la conversation, la bande << Mission IA >>
+//  de la mission de la conversation ouverte (AiMissionStrip) ; une demande
+//  complexe envoyee demande d'abord << Creer une mission IA ? >> (AiMissionAsk,
+//  au-dessus de la saisie). Le tableau de bord d'une mission s'ouvre au centre
+//  (UiHost::openMission, AiMissionBoard) ; la notification << mission:<id> >> y
+//  mene. Les gestes sur une mission passent par missionAct / missionProposal.
 // =============================================================================
 #pragma once
 
@@ -55,6 +64,9 @@ class AiChatView;
 class AiPlanStrip;
 class AiContextPane;   // 1.21.0
 class AiNotificationsView;   // 1.21.2
+class AiMissionsView;        // 1.22.0 : l'onglet Missions IA
+class AiMissionStrip;        // 1.22.0 : la mission active, au-dessus de la conversation
+class AiMissionAsk;          // 1.22.0 : << Creer une mission IA ? >>, au-dessus de la saisie
 
 // Le champ de la demande : UN CHAMP DE MESSAGE, pas un editeur de code (les captures 1.14.2 :
 // la gouttiere, la bande de la ligne courante, la marque "modifie" sur l'indication, le texte
@@ -154,6 +166,12 @@ public:
         std::function<bool()> showScanReport;
         // IHM > Ressources > Incidents, ce dossier d'incident choisi ; faux : introuvable.
         std::function<bool(const std::string& folderName)> openIncident;
+        // ---- 1.22.0 : les missions IA (a la fin ; nuls : les essais) ----
+        // Le tableau de bord d'une mission, AU CENTRE (un onglet par mission) ; `mode` 0 : le tableau de bord, 1 : l'ecran
+        // de reprise, 2 : l'historique. Faux : il n'a pas pu s'ouvrir.
+        std::function<bool(const std::string& missionId, int mode)> openMission;
+        // Montrer le panneau (replie : le deplier) - le tableau de bord y mene (Verifier une proposition, la conversation).
+        std::function<void()> showPanel;
     };
 
     AiPanel(std::string id, Assistant::Host core, UiHost ui);
@@ -239,6 +257,42 @@ public:
     // (la barre d'etat le dit).
     bool followNotification(const std::string& action);
 
+    // ---- 1.22.0 : LES MISSIONS IA ---------------------------------------------------------
+    // L'onglet Missions IA (vrai) ; showConversation : l'onglet Conversation (ni Notifications, ni Missions IA).
+    void showMissions(bool on);
+    void showConversation();
+    [[nodiscard]] bool              missionsShown() const noexcept { return missionsShown_; }
+    [[nodiscard]] AiMissionsView&   missions() noexcept { return *missionsView_; }
+    [[nodiscard]] AiMissionStrip&   missionStrip() noexcept { return *missionStrip_; }
+    [[nodiscard]] AiMissionAsk&     missionAsk() noexcept { return *missionAsk_; }
+    [[nodiscard]] gfx::Rect         missionsTabRect() const noexcept { return tabMissions_; }
+    [[nodiscard]] std::size_t       missionsBadge() const noexcept { return missionsBadge_; }
+    // << Creer une mission IA ? >> : une demande complexe envoyee (Assistant::suggestsMission) n'est pas partie - la carte
+    // de choix au-dessus de la saisie. Creer la mission (vrai) ou Continuer en conversation (l'envoi normal) ;
+    // dismissMissionAsk (la croix, Echap) : rien ne part, le texte reste dans la saisie.
+    [[nodiscard]] bool               missionAskShown() const noexcept { return !askText_.empty(); }
+    [[nodiscard]] const std::string& missionAskText() const noexcept { return askText_; }
+    bool                             chooseMission(bool create);
+    void                             dismissMissionAsk();
+    // Creer une mission (l'onglet Missions IA, la carte de choix) : l'IA analyse le projet et propose un plan.
+    bool createMission(const std::string& request);
+    // Le tableau de bord au centre (UiHost::openMission) ; `mode` -1 : le tableau de bord, ou l'ecran de reprise si la
+    // mission en a besoin (en pause, un appel interrompu, le projet modifie ou introuvable) ; 0 : le tableau de bord ;
+    // 1 : l'ecran de reprise ; 2 : l'historique. Sans hote (un essai) : l'onglet Missions IA, la mission choisie. Faux :
+    // la mission n'existe plus (ou l'hote n'a pas pu l'ouvrir).
+    bool openMission(const std::string& missionId, int mode = -1);
+    // UN GESTE SUR UNE MISSION (la liste, la bande, le tableau de bord) : l'Assistant le fait, la barre d'etat dit ce
+    // qui s'est passe (ou pourquoi rien). Cancel : une question d'abord. Conversation : sa conversation ouverte ici.
+    enum class MissionAct : std::uint8_t { Continue, Correct, Refresh, Audit, Pause, Resume, Cancel, Archive, Unarchive, Conversation };
+    bool missionAct(const std::string& missionId, MissionAct act, const std::string& step = {});
+    bool renameMission(const std::string& missionId, const std::string& name);
+    // Une proposition de la mission, PAR SA CONVERSATION (rouverte) et les gestes de sa carte : 0 Previsualiser (la
+    // fenetre d'apercu), 1 Verifier (sa carte dans la discussion, le plan deplie), 2 Appliquer (les confirmations de la
+    // carte). Faux : introuvable (sa conversation supprimee : le tableau de bord garde son compte rendu).
+    bool missionProposal(const std::string& missionId, const std::string& proposalId, int what);
+    // L'IA travaille-t-elle pour cette mission ? (une reponse dans l'une de ses conversations, l'audit final)
+    [[nodiscard]] bool missionBusy(const mission::Mission& m) const;
+
     [[nodiscard]] UiHost& uiHost() noexcept { return ui_; }
     // La part du separateur que l'ecran a posee pour la largeur par defaut (-1 : aucune) ; une
     // autre part est celle que l'utilisateur a tiree.
@@ -322,6 +376,19 @@ private:
     bool                     badgeError_{false};
     std::string              latest_;                                     // la plus recente (l'infobulle de l'onglet)
     int                      hoverTab_{-1};
+    // 1.22.0 : les missions IA (l'onglet, la bande, la carte de choix).
+    void                     syncMissions();                              // la liste, la bande, la pastille de l'onglet
+    void                     offerMission(const std::string& text);       // la carte << Creer une mission IA ? >>
+    AiMissionsView*          missionsView_{nullptr};
+    AiMissionStrip*          missionStrip_{nullptr};
+    AiMissionAsk*            missionAsk_{nullptr};
+    bool                     missionsShown_{false};
+    gfx::Rect                tabMissions_{};
+    bool                     notifsCompact_{false}, missionsCompact_{false};   // les onglets etroits : l'icone et la pastille
+    std::size_t              missionsBadge_{0};
+    bool                     missionsAlert_{false};
+    float                    missionStripH_{0.f}, askH_{0.f}, chatBottom_{0.f};
+    std::string              askText_;                                    // la demande qui attend le choix (vide : aucune)
 };
 
 // =============================================================================

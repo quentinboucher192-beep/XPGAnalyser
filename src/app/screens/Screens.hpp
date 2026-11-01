@@ -54,7 +54,7 @@ namespace app {
 
 class MacrosPane;   // lot macros 1 : l'onglet Macros
 class FileFinderPane;       // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (FileFinderPane.hpp)
-namespace ai { class AiPanel; }   // 1.14.2 : l'Assistant IA (app/ai/AiPanel.hpp)
+namespace ai { class AiPanel; class AiMissionBoard; }   // 1.14.2 : l'Assistant IA (app/ai/AiPanel.hpp) ; 1.22.0 : le tableau de bord d'une mission
 namespace finder { struct Hit; }
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
@@ -1228,6 +1228,18 @@ private:
     [[nodiscard]] ui::WidgetPtr buildAssistantPanel();
     void tickAssistant(double now);
     ai::AiPanel* aiPanel_{nullptr};
+
+    // ---- 1.22.0 : LES MISSIONS IA (screens/MissionsWorkspace.cpp) ----
+    //  Le tableau de bord d'une mission (ai::AiMissionBoard) : un onglet du centre par mission ("Mission IA . Station de
+    //  pompage"), comme Chercher des fichiers - ouvert par le panneau de l'Assistant (l'onglet Missions IA, la bande
+    //  Mission IA, la notification mission:<id>). `mode` 0 : le tableau de bord, 1 : l'ecran de reprise, 2 : l'historique.
+    //  Faux : pas d'Assistant (API Studio), ou la mission est introuvable. Le tick suit leurs missions (le titre de
+    //  l'onglet, sa diode quand l'IA travaille pour elle).
+public:
+    bool openMissionBoard(const std::string& missionId, int mode = 0);
+    [[nodiscard]] ai::AiMissionBoard* missionBoard(const std::string& missionId) const;
+private:
+    void tickMissionBoards();
 
     // ---- Lot API 8 : glisser n'importe quel fichier (DropFilesWorkspace.cpp) ----
     //  Un depot qui n'est pas fait que de .XPG / .XHW : le dialogue "Que faire

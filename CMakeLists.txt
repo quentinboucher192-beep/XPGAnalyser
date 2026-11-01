@@ -740,6 +740,11 @@ if(XPG_BUILD_TESTS)
     # garde sur le disque, la liste, la pastille, les sources (proposition, service, piece jointe, scan, incident).
     xpg_add_test_executable(ai_notifications_test tests/ai_notifications_test.cpp)
     xpg_target_link_libraries(ai_notifications_test PRIVATE xpg_app)
+    # 1.22.0 : l'interface des missions IA - l'onglet Missions IA (la liste, la recherche, la creation), la bande de la mission
+    # active, << Creer une mission IA ? >>, le tableau de bord (etats, progression reelle, propositions), l'ecran de reprise
+    # (meme projet, modifie, introuvable), la notification mission:<id>, des dessins qui ne bloquent pas.
+    xpg_add_test_executable(ai_missions_ui_test tests/ai_missions_ui_test.cpp)
+    xpg_target_link_libraries(ai_missions_ui_test PRIVATE xpg_app)
     # 1.21.0 : les modeles de fichiers de l'Assistant (une liste d'E/S, un fichier reseau, des reports joints en .xlsx/.xlsm) -
     # la detection, les modeles en memoire, le .xia, les propositions (variables, types, equipements, adresses), l'outil des lignes.
     xpg_add_test_executable(ai_modeles_fichiers_test tests/ai_modeles_fichiers_test.cpp)
@@ -934,6 +939,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aisouvenirs COMMAND ai_souvenirs_test)                 # 1.21.0 : la memoire persistante (les souvenirs)
     xpg_add_test(NAME aicontexte COMMAND ai_contexte_test ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium)   # 1.21.0 : le contexte de la discussion
     xpg_add_test(NAME ainotifications COMMAND ai_notifications_test)        # 1.21.2 : les notifications de l'Assistant (l'onglet)
+    xpg_add_test(NAME aimissionsui COMMAND ai_missions_ui_test)             # 1.22.0 : l'interface des missions IA (onglet, bande, tableau de bord, reprise)
     xpg_add_test(NAME aimodelesfichiers COMMAND ai_modeles_fichiers_test)   # 1.21.0 : les modeles de fichiers (E/S, reseau, reports)
     xpg_add_test(NAME aidesign COMMAND ai_design_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # 1.19.0 : concevoir et construire un projet complet
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents

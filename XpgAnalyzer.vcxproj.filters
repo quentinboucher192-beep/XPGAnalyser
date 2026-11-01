@@ -1426,6 +1426,9 @@
     <ClCompile Include="src\app\screens\IncidentsWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\screens\MissionsWorkspace.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\tutorial\TutorialApp.cpp">
       <Filter>app\tutorial</Filter>
     </ClCompile>
@@ -1798,7 +1801,16 @@
     <ClCompile Include="src\app\ai\AiMission.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ai\AiMissionBoard.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ai\AiMissionStore.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMissionStrip.cpp">
+      <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ai\AiMissionsView.cpp">
       <Filter>app\ai</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ai\AiNotifications.cpp">
@@ -3400,7 +3412,16 @@
     <ClInclude Include="src\app\ai\AiMission.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\ai\AiMissionBoard.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ai\AiMissionStore.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMissionStrip.hpp">
+      <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ai\AiMissionsView.hpp">
       <Filter>app\ai</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ai\AiNotifications.hpp">

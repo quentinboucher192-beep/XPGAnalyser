@@ -17,7 +17,9 @@
 //      en propose des variables et des types IHM (AiAutomate.hpp) ;
 //    - 1.16.0 : ouvrir la vue qu'une proposition vient de creer (son onglet) ;
 //    - les fenetres (MenuManager::ShowDialog), la barre d'etat, la commande
-//      ia.memoire (le centre de memoire, s'il est la).
+//      ia.memoire (le centre de memoire, s'il est la) ;
+//    - 1.22.0 : le tableau de bord d'une mission IA, au centre (UiHost::openMission,
+//      screens/MissionsWorkspace.cpp).
 // =============================================================================
 #include "AiAutomate.hpp"
 #include "AiPanel.hpp"
@@ -261,6 +263,12 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
         (void)pane->poll();
         return pane->select(folderName);
     };
+    // ---- 1.22.0 : les missions IA - le tableau de bord d'une mission, au centre (MissionsWorkspace.cpp) ; le panneau
+    // deplie quand le tableau de bord y mene (Verifier une proposition, la conversation de la mission).
+    ui.openMission = [this](const std::string& missionId, int mode) { return openMissionBoard(missionId, mode); };
+    ui.showPanel = [this] {
+        if (!assistantShown()) showAssistant(true);
+    };
     // 1.16.1 : << M'avertir des reponses >> - seulement si l'utilisateur ne regarde pas : la fenetre derriere une autre,
     // le panneau replie, ou une autre conversation ouverte. La cloche (Voir ouvre la conversation) ; la fenetre en
     // arriere-plan : son bouton clignote dans la barre des taches, avec le son de notification du systeme.
@@ -395,6 +403,7 @@ void MainAnalysisScreen::tickAssistant(double now) {
     if (assistantShown()) aiPanel_->ensureLoaded();
     if (aiPanel_->loaded()) aiPanel_->tick(now);
     if (upper_ && assistantShown()) fitAssistantWidth(*upper_, *aiPanel_);
+    tickMissionBoards();   // 1.22.0 : les tableaux de bord des missions ouverts au centre suivent leur mission
 }
 
 } // namespace app
