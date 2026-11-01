@@ -26,7 +26,7 @@
 //       l'ecran de reprise, la bande et la liste ; son journal (un clic) ; le
 //       direct (une correction en cours : << (depuis 0:42) >>, refait chaque
 //       seconde, jamais a chaque image) ;
-//    9. 1.22.3 : les cartes des propositions depliees / reduites (par defaut,
+//    9. 1.22.2 : les cartes des propositions depliees / reduites (par defaut,
 //       un clic, Tout deplier / Tout replier, le clic droit, gardees pour la
 //       seance, jamais dans le fichier) ; forcer la fin d'une mission (le clic
 //       droit de la liste, le bouton du tableau de bord, la question, l'etat apres).
@@ -785,7 +785,7 @@ void testBoard() {
     check(said(lines, "Demande initiale") && said(lines, "Deux pompes, une cuve et leur supervision."), "l'objectif : la description, la demande");
     // les propositions : P1 appliquee (consultable : son compte rendu), P2 a valider (Previsualiser, Verifier, Appliquer)
     check(said(lines, "P1") && said(lines, "P2") && said(lines, "\xC3\xA0 valider") && said(lines, "appliqu\xC3\xA9" "e"), "P1 et P2, leurs etats");
-    // 1.22.3 : P1 (appliquee) est reduite par defaut, P2 (a valider) depliee - P1 depliee ici pour la lire en entier
+    // 1.22.2 : P1 (appliquee) est reduite par defaut, P2 (a valider) depliee - P1 depliee ici pour la lire en entier
     check(!board.cardOpen("op-p1") && board.cardOpen("op-p2"), "par defaut : P1 reduite, P2 depliee");
     board.setAllCards(true);
     lines = board.lines();
@@ -842,7 +842,7 @@ void testBoard() {
     lines = old.lines();
     check(old.sectionRect("rapport").h > 0.f && said(lines, "RAPPORT FINAL") && said(lines, "Mission termin\xC3\xA9" "e : toutes les \xC3\xA9tapes"),
           "le rapport final : le verdict");
-    check(!old.cardOpen("op-old"), "1.22.3 : sa proposition appliquee est reduite par defaut");
+    check(!old.cardOpen("op-old"), "1.22.2 : sa proposition appliquee est reduite par defaut");
     old.setAllCards(true);   // depliee pour la lire en entier
     lines = old.lines();
     check(said(lines, "Convoyeur_C1") && said(lines, "Sa conversation a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9" "e") && !old.button("P1.voir"),
@@ -1119,9 +1119,9 @@ void testSteps() {
 }
 
 
-// =================== 9. 1.22.3 : les propositions depliees / reduites ; forcer la fin d'une mission ==
+// =================== 9. 1.22.2 : les propositions depliees / reduites ; forcer la fin d'une mission ==
 void testCardsAndForce() {
-    std::printf("[9. 1.22.3 : les propositions depliees / reduites ; forcer la fin d'une mission]\n");
+    std::printf("[9. 1.22.2 : les propositions depliees / reduites ; forcer la fin d'une mission]\n");
     nt::resetForTests();
     Fixture f("cartes");
     (void)f.as().select(f.stationConv);
@@ -1344,7 +1344,7 @@ int main() {
     testNotification();
     testNoBlocking();
     testSteps();   // 1.22.1
-    testCardsAndForce();   // 1.22.3
+    testCardsAndForce();   // 1.22.2
     std::printf("ai_missions_ui_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

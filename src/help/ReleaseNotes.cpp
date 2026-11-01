@@ -157,6 +157,19 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.22.2 : les parametres des popups compris par l IA, les saccades des missions, l onglet Performances
+        note("1.22.2", "Assistant IA", Kind::New,
+         "LES PROPOSITIONS D'UNE MISSION SE D\xC3\x89PLIENT OU SE R\xC3\x89" "DUISENT : dans le tableau de bord, un clic sur l'en-t\xC3\xAAte d'une "
+         "proposition la r\xC3\xA9" "duit \xC3\xA0 une ligne (\xC2\xAB P1 Titre \xE2\x80\x94 302 op\xC3\xA9rations \xC2\xB7 293 appliqu\xC3\xA9" "es, 9 en \xC3\xA9" "chec \xC2\xBB et son \xC3\xA9tat) ou la "
+         "d\xC3\xA9plie ; \xC2\xAB Tout d\xC3\xA9plier \xC2\xBB et \xC2\xAB Tout replier \xC2\xBB sont dans l'intertitre, et au clic droit. Celles qui attendent ta d\xC3\xA9" "cision "
+         "restent d\xC3\xA9pli\xC3\xA9" "es, les autres sont r\xC3\xA9" "duites ; ton choix est gard\xC3\xA9 pendant la s\xC3\xA9" "ance.",
+         "assistant-ia-missions", ""),
+        note("1.22.2", "Assistant IA", Kind::New,
+         "FORCER LA FIN D'UNE MISSION : \xC2\xAB Forcer la fin de la mission\xE2\x80\xA6 \xC2\xBB (tableau de bord, clic droit dans l'onglet Missions IA) "
+         "termine une mission l\xC3\xA0 o\xC3\xB9 elle en est, apr\xC3\xA8s une question : l'appel \xC3\xA0 l'IA en cours s'arr\xC3\xAAte, une proposition en "
+         "attente n'est pas appliqu\xC3\xA9" "e, les \xC3\xA9tapes non termin\xC3\xA9" "es deviennent \xC2\xAB ignor\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB. Rien n'est d\xC3\xA9" "fait dans le "
+         "projet ; la mission est \xC2\xAB Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) \xC2\xBB et son rapport final le dit. Impossible pendant qu'une proposition "
+         "s'applique en arri\xC3\xA8re-plan.",
+         "assistant-ia-missions", ""),
         note("1.22.2", "IHM", Kind::New,
          "L'ONGLET PERFORMANCES DU LOGICIEL : dans le panneau du bas, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Sorties, Console et Diagnostics - ce qui consomme sur "
          "le fil de l'interface (l'Assistant IA et ses cartes, les missions, la peinture, les \xC3\xA9v\xC3\xA9nements, la simulation...), tri\xC3\xA9 "

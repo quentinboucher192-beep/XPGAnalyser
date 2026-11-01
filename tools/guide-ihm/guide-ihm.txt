@@ -2149,6 +2149,15 @@ Au bout, sans la boucle, la dernière image reste à l'écran ; Lecture repart d
 - Un clic sur une étape du tableau de bord ouvre son **journal** : les propositions qui l'ont servie et leur sort, les opérations faites (et celles en échec, avec l'erreur exacte), les décisions, avec l'heure. « Voir la carte de P2 › » mène à la proposition dans la conversation.
 - L'étape du moment est aussi dans la **bande** de l'Assistant et dans l'onglet **Missions IA** (« En ce moment »), à jour en direct.
 - Une proposition lourde (une opération « adresser », ou 40 opérations et plus) se vérifie en arrière-plan : la mission ne la dit « validée » qu'à la fin de cette vérification, sans jamais figer l'écran.
+### Déplier, réduire les propositions
+- Dans le tableau de bord, chaque proposition a un en-tête avec un chevron : un clic la **réduit** à une ligne (« P1 Titre — 302 opérations · 293 appliquées, 9 en échec » et son état) ou la **déplie** (la carte entière).
+- **Tout déplier** / **Tout replier** sont dans l'intertitre « Propositions », et au clic droit sur un en-tête (avec Déplier / Réduire).
+- Au départ, celles qui attendent ta décision (à valider, validée, en échec) sont dépliées, les autres réduites. Ton choix est gardé jusqu'à la fermeture du logiciel ; rien n'est écrit dans la mission.
+### Forcer la fin d'une mission
+- **Forcer la fin de la mission…** (le tableau de bord, à côté d'Annuler ; le clic droit d'une mission dans l'onglet Missions IA) termine la mission là où elle en est. Une question d'abord, qui dit les étapes qui seront ignorées et la proposition qui ne sera pas appliquée.
+- L'appel à l'IA en cours s'arrête ; une proposition en attente passe « refusée » (jamais appliquée) ; chaque étape non terminée devient **ignorée (fin forcée)**. **Rien n'est défait dans le projet** : ce qui a été appliqué reste.
+- La mission est **Terminée (fin forcée)** ; l'audit final suit (le projet de la mission ouvert ; sinon « Lancer l'audit final »), et le rapport le dit, avec les étapes ignorées.
+- Impossible pendant qu'une proposition de la mission s'applique en arrière-plan (attends la fin), et sur une mission déjà terminée ou annulée.
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0

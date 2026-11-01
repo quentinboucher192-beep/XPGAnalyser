@@ -136,7 +136,7 @@ void AiMissionStrip::refresh() {
     }
     missionId_ = m->id;
     name_ = missionui::title(*m);
-    state_ = mission::stateText(*m);   // 1.22.3 : << Terminee (fin forcee) >>
+    state_ = mission::stateText(*m);   // 1.22.2 : << Terminee (fin forcee) >>
     stateTone_ = missionui::stateTone(m->state);
     busy_ = panel_.missionBusy(*m);
     progress_ = mission::progressOf(*m);   // la progression REELLE

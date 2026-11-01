@@ -174,7 +174,7 @@ std::string stepList(const mission::Mission& m, const std::vector<std::string>& 
     return s;
 }
 
-// 1.22.3 : depliee par defaut, celle qui attend une decision (a valider, verifiee, en echec).
+// 1.22.2 : depliee par defaut, celle qui attend une decision (a valider, verifiee, en echec).
 bool cardOpenByDefault(std::string_view s) noexcept { return s == "generee" || s == "validee" || s == "echouee"; }
 
 std::string proposalLine(const mission::ProposalLink& p) {
@@ -308,7 +308,7 @@ Moment momentOf(const mission::Mission& m, const mission::Live& live) {
     // le plan, l'actualisation, l'audit final : la mission elle-meme travaille (aucune etape ne le porte)
     if (!own.empty() && (live.auditing || (m.pending.active && (m.pending.purpose == "plan" || m.pending.purpose == "actualisation"))))
         return whole(own);
-    if (m.state == mission::State::Done && m.forced.on()) {   // 1.22.3 : << Terminee (fin forcee) : 2 etapes ignorees (S4, S5). >>
+    if (m.state == mission::State::Done && m.forced.on()) {   // 1.22.2 : << Terminee (fin forcee) : 2 etapes ignorees (S4, S5). >>
         mo.activity.kind = mission::Activity::Done;
         mo.activity.text = own;
         return mo;
@@ -335,7 +335,7 @@ Next nextOf(const mission::Mission& m, bool busy) {
         return n;
     }
     if (m.state == State::Done && m.forced.on() && !m.finalReport.isObject() && !busy && m.coherence != mission::Coherence::Missing && !m.steps.empty()) {
-        // 1.22.3 : une fin forcee sans rapport (son projet n'etait pas ouvert) - l'audit final le fait, comme pour une fin normale
+        // 1.22.2 : une fin forcee sans rapport (son projet n'etait pas ouvert) - l'audit final le fait, comme pour une fin normale
         n.kind = Next::Kind::Audit;
         n.label = "Lancer l'audit final";
         n.tooltip = "Mission termin\xC3\xA9" "e (fin forc\xC3\xA9" "e) : la v\xC3\xA9rification globale du projet, sur un fil de fond et une copie du projet, "
@@ -646,7 +646,7 @@ AiMissionBoard::AiMissionBoard(std::string id, AiPanel& panel, std::string missi
     : ui::Widget(std::move(id)), panel_(panel), missionId_(std::move(missionId)) {
     setFocusPolicy(true);
     setZoomSupport(ui::ZoomSupport::Scaled);   // le zoom de la page, comme les autres pages du centre
-    // 1.22.3 : le clic droit sur l'en-tete d'une carte de proposition (le menu de l'application)
+    // 1.22.2 : le clic droit sur l'en-tete d'une carte de proposition (le menu de l'application)
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(this->id() + ".menu")));
     links_ += menu_->itemChosen->connect([this](int item) { menuChosen(item); });
     refresh();
@@ -775,7 +775,7 @@ AiMissionBoard::Block AiMissionBoard::blockHeader(const mission::Mission& m, flo
     float y = 14.f;
     // le nom, l'etat
     icon(b.ops, {x, y + 1.f, 22.f, 22.f}, ui::Icon::Task, Tone::Accent);
-    std::string state = mission::stateText(m);   // 1.22.3 : << Terminee (fin forcee) >>
+    std::string state = mission::stateText(m);   // 1.22.2 : << Terminee (fin forcee) >>
     if (m.archived) state += " \xC2\xB7 archiv\xC3\xA9" "e";
     const float cw = ui::measureWidth(state, kMeta) + 14.f;
     chip(b.ops, x + w - cw, y + 2.f, state, missionui::stateTone(m.state));
@@ -867,7 +867,7 @@ AiMissionBoard::Block AiMissionBoard::blockHeader(const mission::Mission& m, flo
                         ui::Button::Style::Flat, can, {bx, y}, [this, mid] { (void)panel_.missionAct(mid, AiPanel::MissionAct::Cancel); }));
     }
     {
-        // 1.22.3 : FORCER LA FIN - une question d'abord ; refuse (et pourquoi) : terminee, annulee, en lecture seule, une
+        // 1.22.2 : FORCER LA FIN - une question d'abord ; refuse (et pourquoi) : terminee, annulee, en lecture seule, une
         // proposition de la mission qui s'applique sur un fil de fond (le direct refait la page quand elle commence ou finit)
         std::string whyNot;
         const bool can = as.canForceFinish(missionId_, &whyNot);
@@ -1074,7 +1074,7 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
         const float top = y;
         if (index++ % 2 == 1) fill(b.ops, {x, top, w, rowH}, Tone::RowAlt, 70);
         const Tone tone = missionui::stepTone(s.state);
-        const std::string label = mission::stepText(m, s);   // 1.22.3 : << Ignoree (fin forcee) >>
+        const std::string label = mission::stepText(m, s);   // 1.22.2 : << Ignoree (fin forcee) >>
         const mission::StepProgress sp = mission::stepProgressOf(m, s);
         const mission::StepActivity act = mission::activityOf(m, s, live_);
         const Tone actTone = missionui::activityTone(act.kind);
@@ -1210,7 +1210,7 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
 }
 
 AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, float x, float w) {
-    XPG_MESURE("ia.mission.propositions");   // 1.22.3 : les cartes des propositions (depliees ou reduites)
+    XPG_MESURE("ia.mission.propositions");   // 1.22.2 : les cartes des propositions (depliees ou reduites)
     Block b;
     b.section = "propositions";
     const auto& as = panel_.assistant();
@@ -1223,7 +1223,7 @@ AiMissionBoard::Block AiMissionBoard::blockProposals(const mission::Mission& m, 
         b.h = y + 4.f;
         return b;
     }
-    // 1.22.3 : TOUT DEPLIER / TOUT REPLIER, a droite de l'intertitre (dessous s'il n'y a pas la place)
+    // 1.22.2 : TOUT DEPLIER / TOUT REPLIER, a droite de l'intertitre (dessous s'il n'y a pas la place)
     {
         const std::string openAll = "Tout d\xC3\xA9plier", closeAll = "Tout replier";
         const float wo = ui::measureWidth(openAll, kMeta), wc = ui::measureWidth(closeAll, kMeta);
@@ -1448,7 +1448,7 @@ AiMissionBoard::Block AiMissionBoard::blockReport(const mission::Mission& m, flo
     list("Modifi\xC3\xA9", r.modified, Tone::Text);
     list("R\xC3\xA9utilis\xC3\xA9", r.reused, Tone::Text);
     list("\xC3\x89tapes termin\xC3\xA9" "es", r.finished, Tone::Text);
-    list("Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e)", r.skipped, Tone::Warning);   // 1.22.3
+    list("Ignor\xC3\xA9" "es (fin forc\xC3\xA9" "e)", r.skipped, Tone::Warning);   // 1.22.2
     list("Non fait", r.notDone, Tone::Warning);
     list("Erreurs rencontr\xC3\xA9" "es", r.errors, Tone::Error);
     list("\xC3\x80 v\xC3\xA9rifier", r.toCheck, Tone::Warning);
@@ -1687,7 +1687,7 @@ void AiMissionBoard::rebuild() {
     for (auto& [k, s] : slots_) s.used = false;
     blocks_.clear();
     anchors_.clear();
-    cardHeads_.clear();   // 1.22.3
+    cardHeads_.clear();   // 1.22.2
     allOpen_ = allClose_ = {};
     const auto bb = bounds();
     builtW_ = bb.w;
@@ -1733,7 +1733,7 @@ void AiMissionBoard::rebuild() {
         for (const auto& blk : blocks_) {
             if (blk.section == "propositions") {
                 for (auto& [pid, top] : anchors_) top += blk.y;
-                for (auto& [pid, r] : cardHeads_) r.y += blk.y;   // 1.22.3 : l'en-tete de chaque carte, dans la page
+                for (auto& [pid, r] : cardHeads_) r.y += blk.y;   // 1.22.2 : l'en-tete de chaque carte, dans la page
                 if (allOpen_.w > 0.f) allOpen_.y += blk.y;
                 if (allClose_.w > 0.f) allClose_.y += blk.y;
             }
@@ -1789,7 +1789,7 @@ gfx::Rect AiMissionBoard::stepRect(std::string_view stepId) const {
     return {b.x + it->second.x, b.y + it->second.y - scroll_, it->second.w, it->second.h};
 }
 
-// ---- 1.22.3 : les cartes des propositions, depliees ou reduites -------------------------------------------------------
+// ---- 1.22.2 : les cartes des propositions, depliees ou reduites -------------------------------------------------------
 bool AiMissionBoard::cardOpen(std::string_view proposalId) const {
     const std::string pid(proposalId);
     if (const std::optional<bool> chosen = panel_.missionCard(missionId_, pid)) return *chosen;
@@ -1904,7 +1904,7 @@ void AiMissionBoard::doClick(const std::string& what) {
         if (const auto it = stepRows_.find(sid); it != stepRows_.end()) scrollTo(it->second.y - 8.f);
         return;
     } else if (what.rfind("carte:", 0) == 0) {
-        // la carte d'une proposition (plus bas) - 1.22.3 : depliee (on y va pour la lire)
+        // la carte d'une proposition (plus bas) - 1.22.2 : depliee (on y va pour la lire)
         const std::string pid = what.substr(6);
         if (!cardOpen(pid)) {
             panel_.setMissionCard(missionId_, pid, true);
@@ -1913,7 +1913,7 @@ void AiMissionBoard::doClick(const std::string& what) {
         if (const auto it = anchors_.find(pid); it != anchors_.end()) scrollTo(it->second - 8.f);
         return;
     } else if (what.rfind("plier:", 0) == 0) {
-        // 1.22.3 : l'en-tete d'une carte - depliee / reduite (le choix est garde pour la seance)
+        // 1.22.2 : l'en-tete d'une carte - depliee / reduite (le choix est garde pour la seance)
         const std::string pid = what.substr(6);
         panel_.setMissionCard(missionId_, pid, !cardOpen(pid));
     } else if (what == "cartes:ouvrir" || what == "cartes:fermer") {
@@ -1928,7 +1928,7 @@ void AiMissionBoard::doClick(const std::string& what) {
 }
 
 void AiMissionBoard::onLayout() {
-    menu_->setBounds(bounds());   // 1.22.3 : le menu du clic droit (il se place lui-meme a l'ouverture)
+    menu_->setBounds(bounds());   // 1.22.2 : le menu du clic droit (il se place lui-meme a l'ouverture)
     if (std::fabs(bounds().w - builtW_) > 0.5f) rebuild();
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content_ - bounds().h));
     if (!pendingSection_.empty() && bounds().h > 0.f) {
@@ -1973,7 +1973,7 @@ ui::EventResult AiMissionBoard::onEvent(const ui::InputEvent& ev) {
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && b.contains(d->pos)) {
         takeFocus();
         if (d->button == ui::MouseButton::Right) {
-            // 1.22.3 : le clic droit sur l'en-tete d'une carte de proposition - Deplier, Reduire, Tout deplier, Tout replier
+            // 1.22.2 : le clic droit sur l'en-tete d'une carte de proposition - Deplier, Reduire, Tout deplier, Tout replier
             for (const auto& [pid, r] : cardHeads_)
                 if (gfx::Rect{b.x + r.x, b.y + r.y - scroll_, r.w, r.h}.contains(d->pos)) {
                     const std::string go = pid;   // une copie : le menu peut refaire la page

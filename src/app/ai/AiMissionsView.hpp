@@ -22,7 +22,7 @@
 //
 //  Le clic droit : Ouvrir le tableau de bord, l'ecran de reprise, la
 //  conversation, Proposer la suite, Mettre en pause / Reprendre, Renommer...,
-//  l'historique, Archiver / Desarchiver, Annuler la mission..., 1.22.3 : Forcer la
+//  l'historique, Archiver / Desarchiver, Annuler la mission..., 1.22.2 : Forcer la
 //  fin de la mission... (grise, et pourquoi, si elle est finie). Le clavier :
 //  Haut, Bas, Debut, Fin, Page precedente / suivante, Entree (le tableau de
 //  bord), F2 (renommer), Suppr (archiver), la touche Menu.
@@ -100,7 +100,7 @@ public:
     enum MenuId : int {
         kMenuOpen = 1, kMenuResumeScreen, kMenuConversation, kMenuContinue, kMenuPause, kMenuResume, kMenuRename, kMenuHistory,
         kMenuArchive, kMenuUnarchive, kMenuCancel,
-        kMenuForceFinish   // 1.22.3 : Forcer la fin de la mission... (une question d'abord)
+        kMenuForceFinish   // 1.22.2 : Forcer la fin de la mission... (une question d'abord)
     };
     void menuChosen(int id);
 

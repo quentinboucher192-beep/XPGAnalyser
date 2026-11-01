@@ -24,7 +24,7 @@
 //    - la progression, calculee et explicable (progressOf) ;
 //    - 1.22.1 : ce que fait CHAQUE ETAPE - sa progression reelle (stepProgressOf), son
 //      activite du moment en une ligne (activityOf), son journal (stepJournal) ;
-//    - 1.22.3 : la fin forcee par l'utilisateur (forceFinish : les etapes non terminees ignorees, rien de defait) ;
+//    - 1.22.2 : la fin forcee par l'utilisateur (forceFinish : les etapes non terminees ignorees, rien de defait) ;
 //    - le rapport final (finalReport) et les textes donnes a l'IA (contextes).
 //
 //  Le projet reel est toujours la source de verite : une etape n'est << terminee >>
@@ -179,7 +179,7 @@ struct Pending {
     std::vector<std::string> steps;
 };
 
-// 1.22.3 : LA FIN FORCEE par l'utilisateur (forceFinish) : quand, pourquoi, les etapes qu'elle a ignorees et les
+// 1.22.2 : LA FIN FORCEE par l'utilisateur (forceFinish) : quand, pourquoi, les etapes qu'elle a ignorees et les
 // propositions qu'elle a refusees (jamais appliquees). Gardee dans le fichier (<< fin_forcee >>) ; vide : pas de fin forcee.
 struct Forced {
     std::string              date;        // ISO ; vide : pas de fin forcee
@@ -223,7 +223,7 @@ struct Mission {
     std::string               summary;       // le resume a jour (summaryOf)
     std::vector<std::string>  attachments;   // les pieces jointes de la conversation (Attachment::id, jamais copiees)
     json::Value               finalReport;   // reportToJson(FinalReport) ; nul : pas d'audit final
-    Forced                    forced;        // 1.22.3 : la fin forcee (forceFinish) ; vide : aucune
+    Forced                    forced;        // 1.22.2 : la fin forcee (forceFinish) ; vide : aucune
     json::Value               extra;         // les champs inconnus (un format plus recent), gardes
 
     [[nodiscard]] const Step*         step(std::string_view id) const noexcept;
@@ -320,7 +320,7 @@ void archive(Mission&, bool on, std::string now);
 // proposition n'est plus la bonne (obsolete, annulee).
 [[nodiscard]] bool mayApply(const Mission&, std::string_view proposal, std::string* why = nullptr);
 
-// ---- 1.22.3 : FORCER LA FIN D'UNE MISSION -----------------------------------------------------------------------------
+// ---- 1.22.2 : FORCER LA FIN D'UNE MISSION -----------------------------------------------------------------------------
 //  L'utilisateur arrete la mission la ou elle en est, SANS RIEN DEFAIRE dans le projet :
 //    - un appel a l'IA en cours est efface (l'Assistant l'arrete d'abord, comme Pause et Annuler) ;
 //    - chaque proposition qui attend une decision (a valider, verifiee) passe << refusee >> : elle ne s'appliquera pas ;
@@ -462,7 +462,7 @@ struct FinalReport {
     bool                     auditRun{false};             // l'audit global du projet a-t-il pu etre fait ?
     bool                     complete{false};             // toutes les etapes obligatoires terminees, sans erreur bloquante
     std::string              date, verdict;
-    // 1.22.3 : une FIN FORCEE par l'utilisateur (Mission::forced) - le verdict le dit, et les etapes qu'elle a ignorees
+    // 1.22.2 : une FIN FORCEE par l'utilisateur (Mission::forced) - le verdict le dit, et les etapes qu'elle a ignorees
     // ("S3 Cr\xC3\xA9" "er les alarmes") ; jamais << complete >> si elle en a ignore une.
     bool                     forced{false};
     std::vector<std::string> skipped;

@@ -3692,7 +3692,7 @@ bool Assistant::cancelMission(std::string_view idv, std::string* why) {
     return true;
 }
 
-// 1.22.3 : FORCER LA FIN (voir le .hpp et mission::forceFinish).
+// 1.22.2 : FORCER LA FIN (voir le .hpp et mission::forceFinish).
 bool Assistant::canForceFinish(std::string_view id, std::string* why) const {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
@@ -3712,7 +3712,7 @@ bool Assistant::canForceFinish(std::string_view id, std::string* why) const {
 }
 
 bool Assistant::forceFinishMission(std::string_view idv, std::string* why) {
-    XPG_MESURE("ia.mission.fin-forcee");   // 1.22.3 : l'onglet Performances
+    XPG_MESURE("ia.mission.fin-forcee");   // 1.22.2 : l'onglet Performances
     const std::string id(idv);
     if (!canForceFinish(id, why)) return false;
     // L'APPEL A L'IA EN COURS POUR ELLE EST ARRETE (comme Pause et Annuler) : marque interrompu, rien n'est propose.

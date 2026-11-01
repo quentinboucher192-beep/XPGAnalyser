@@ -21,7 +21,7 @@
 //      ouvert (la mission ne se poursuit pas) ;
 //    - une autre conversation retrouve la mission (chercher_missions, etat_mission :
 //      les donnees enregistrees, jamais inventees) et la reprend ;
-//    - 1.22.3 : forcer la fin (pendant un appel a l'IA, une proposition en attente,
+//    - 1.22.2 : forcer la fin (pendant un appel a l'IA, une proposition en attente,
 //      une application de fond).
 //  Scenarios de la demande : A (station de pompage complete), B (interruption
 //  pendant la 3e proposition), C (modification externe pendant la preparation),
@@ -961,14 +961,14 @@ void testHeavyInBackground() {
 }
 
 
-// 1.22.3 : FORCER LA FIN D'UNE MISSION, de bout en bout.
+// 1.22.2 : FORCER LA FIN D'UNE MISSION, de bout en bout.
 //  A. pendant un appel a l'IA : l'appel est arrete (rien n'est propose ni applique), les etapes non terminees ignorees,
 //     la mission terminee (fin forcee), notifiee, enregistree ; l'audit final se fait de lui-meme et son rapport le dit ;
 //     il ne la rouvre pas ;
 //  B. une proposition en attente : refusee (sa carte aussi), elle ne s'applique plus, le projet n'a pas change ;
 //  C. une proposition de la mission qui s'applique sur un fil de fond : refuse tant qu'elle s'applique (et pourquoi).
 void testForceFinish() {
-    std::printf("[1.22.3 : forcer la fin d'une mission]\n");
+    std::printf("[1.22.2 : forcer la fin d'une mission]\n");
     Fixture f("fin_forcee");
     hmi::Equipment eq;   // pour C (une operation << adresser >> : verifiee et appliquee sur un fil de fond)
     eq.id = f.doc->project.allocate();
@@ -1109,7 +1109,7 @@ int main() {
     testPauseResumeCancel();
     testRefresh();
     testHeavyInBackground();   // 1.22.1
-    testForceFinish();         // 1.22.3
+    testForceFinish();         // 1.22.2
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

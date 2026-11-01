@@ -5138,6 +5138,35 @@ const std::vector<Topic>& topics() {
                          "op\xC3\xA9rations et plus) se v\xC3\xA9rifie en arri\xC3\xA8re-plan : la mission "
                          "ne la dit \xC2\xAB valid\xC3\xA9" "e \xC2\xBB qu'\xC3\xA0 la fin de cette "
                          "v\xC3\xA9rification, sans jamais figer l'\xC3\xA9" "cran.", {}},
+             {K::Heading, "D\xC3\xA9plier, r\xC3\xA9" "duire les propositions", {}},
+             {K::Bullet, "Dans le tableau de bord, chaque proposition a un en-t\xC3\xAAte avec un chevron : "
+                         "un clic la **r\xC3\xA9" "duit** \xC3\xA0 une ligne (\xC2\xAB P1 Titre \xE2\x80\x94 "
+                         "302 op\xC3\xA9rations \xC2\xB7 293 appliqu\xC3\xA9" "es, 9 en \xC3\xA9" "chec "
+                         "\xC2\xBB et son \xC3\xA9tat) ou la **d\xC3\xA9plie** (la carte enti\xC3\xA8re).", {}},
+             {K::Bullet, "**Tout d\xC3\xA9plier** / **Tout replier** sont dans l'intertitre \xC2\xAB "
+                         "Propositions \xC2\xBB, et au clic droit sur un en-t\xC3\xAAte (avec D\xC3\xA9plier "
+                         "/ R\xC3\xA9" "duire).", {}},
+             {K::Bullet, "Au d\xC3\xA9part, celles qui attendent ta d\xC3\xA9" "cision (\xC3\xA0 valider, "
+                         "valid\xC3\xA9" "e, en \xC3\xA9" "chec) sont d\xC3\xA9pli\xC3\xA9" "es, les autres "
+                         "r\xC3\xA9" "duites. Ton choix est gard\xC3\xA9 jusqu'\xC3\xA0 la fermeture du "
+                         "logiciel ; rien n'est \xC3\xA9" "crit dans la mission.", {}},
+             {K::Heading, "Forcer la fin d'une mission", {}},
+             {K::Bullet, "**Forcer la fin de la mission\xE2\x80\xA6** (le tableau de bord, \xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 d'Annuler ; le clic droit d'une mission dans l'onglet Missions "
+                         "IA) termine la mission l\xC3\xA0 o\xC3\xB9 elle en est. Une question d'abord, qui "
+                         "dit les \xC3\xA9tapes qui seront ignor\xC3\xA9" "es et la proposition qui ne sera "
+                         "pas appliqu\xC3\xA9" "e.", {}},
+             {K::Bullet, "L'appel \xC3\xA0 l'IA en cours s'arr\xC3\xAAte ; une proposition en attente passe "
+                         "\xC2\xAB refus\xC3\xA9" "e \xC2\xBB (jamais appliqu\xC3\xA9" "e) ; chaque "
+                         "\xC3\xA9tape non termin\xC3\xA9" "e devient **ignor\xC3\xA9" "e (fin "
+                         "forc\xC3\xA9" "e)**. **Rien n'est d\xC3\xA9" "fait dans le projet** : ce qui a "
+                         "\xC3\xA9t\xC3\xA9 appliqu\xC3\xA9 reste.", {}},
+             {K::Bullet, "La mission est **Termin\xC3\xA9" "e (fin forc\xC3\xA9" "e)** ; l'audit final suit "
+                         "(le projet de la mission ouvert ; sinon \xC2\xAB Lancer l'audit final \xC2\xBB), "
+                         "et le rapport le dit, avec les \xC3\xA9tapes ignor\xC3\xA9" "es.", {}},
+             {K::Bullet, "Impossible pendant qu'une proposition de la mission s'applique en "
+                         "arri\xC3\xA8re-plan (attends la fin), et sur une mission d\xC3\xA9j\xC3\xA0 "
+                         "termin\xC3\xA9" "e ou annul\xC3\xA9" "e.", {}},
          },
          {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
          {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},

@@ -17,7 +17,7 @@
 //    - LA REPRISE : cas A (projet identique), B (modifie : ce qui a change), C (introuvable) ; un appel a l'IA
 //      interrompu pendant la 3e proposition (rien n'est rejoue) ;
 //    - pause, reprise, annulation ; la recherche et les outils chercher_missions / etat_mission ;
-//    - 1.22.3 : forcer la fin (les etapes ignorees, les propositions refusees, le rapport, le fichier).
+//    - 1.22.2 : forcer la fin (les etapes ignorees, les propositions refusees, le rapport, le fichier).
 // =============================================================================
 #include "../src/app/ai/AiMission.hpp"
 #include "../src/app/ai/AiMissionStore.hpp"
@@ -1034,12 +1034,12 @@ void file1220() {
 }
 
 
-// ---- 1.22.3 : forcer la fin d'une mission ------------------------------------------------------------------------------
+// ---- 1.22.2 : forcer la fin d'une mission ------------------------------------------------------------------------------
 //  Les etapes non terminees ignorees (la raison dite), les propositions en attente refusees (jamais appliquees), l'appel
 //  a l'IA efface, l'historique, l'etat final (que rien ne rouvre), la progression, le rapport final, le refus sur une
 //  mission terminee ou annulee, le fichier relu ; une mission en pause peut finir ainsi ; Ctrl+Z apres coup.
 void forcing() {
-    std::printf("1.22.3 : forcer la fin d'une mission\n");
+    std::printf("1.22.2 : forcer la fin d'une mission\n");
     Fixture f;
     mi::Mission m = stationOn(f);
     std::string why;
@@ -1207,7 +1207,7 @@ int main() {
     stepActivities();   // 1.22.1
     stepJournals();     // 1.22.1
     file1220();         // 1.22.1
-    forcing();          // 1.22.3
+    forcing();          // 1.22.2
     std::printf("ai_missions_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

@@ -1769,7 +1769,7 @@ bool AiPanel::missionAct(const std::string& missionId, MissionAct act, const std
             return false;   // la reponse viendra
         }
         case MissionAct::ForceFinish: {
-            // 1.22.3 : refusee tout de suite, et pourquoi (terminee, annulee, en lecture seule, une application de fond)
+            // 1.22.2 : refusee tout de suite, et pourquoi (terminee, annulee, en lecture seule, une application de fond)
             if (!assistant_->canForceFinish(missionId, &why)) break;
             const auto run = [this, missionId, name] {
                 std::string w;
