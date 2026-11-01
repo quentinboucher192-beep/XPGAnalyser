@@ -126,6 +126,10 @@ const char* const kRules =
     "'Vanne ' + Numero.ToString() (ou TO_STRING(Numero)), 'Pompe ' + Nom + ' : ' + TO_STRING(Debit) + ' m3/h'. Un nom qui n'est pas un "
     "texte (Vanne : T_Vanne) donn\xC3\xA9 \xC3\xA0 un STRING est refus\xC3\xA9 : mets les apostrophes. Exception : le texte affich\xC3\xA9 d'un "
     "objet (label, titre) est un texte \xC3\xA0 trous, sans apostrophes (Cuve {Niveau} %).\n"
+    // 1.22.5 : l'avis du logiciel (AiBuild) - Generer et Compiler sur une copie, ses constats renvoyes a l'IA.
+    "21. Le logiciel g\xC3\xA9n\xC3\xA8re et compile chaque proposition sur une copie du projet ; il te renvoie ses erreurs et ses "
+    "avertissements (G\xC3\xA9n\xC3\xA9rer, Compiler). Corrige-les en renvoyant la proposition ENTI\xC3\x88RE (proposer_operations), et dis en "
+    "une phrase ce que tu as chang\xC3\xA9.\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
     "- creer : genre (une cl\xC3\xA9), nom (neuf), proprietes (x, y, w, h compris ; variable : une variable existante). "

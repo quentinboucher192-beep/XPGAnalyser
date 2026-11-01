@@ -206,6 +206,84 @@ std::string planMessage(const mission::Mission& m, bool revised) {
     return s;
 }
 
+// ---- 1.22.5 : L'AVIS DU LOGICIEL, LE PROCESSUS DE DEVELOPPEMENT ----
+// "14:02" : l'heure de l'horloge de l'Assistant (celle des essais aussi).
+std::string clockTime(const std::string& iso) { return iso.size() >= 16 ? iso.substr(11, 5) : iso; }
+
+// "2 erreurs, 1 avertissement" ; "aucun constat nouveau".
+std::string findingsText(std::size_t errors, std::size_t warnings) {
+    if (errors == 0 && warnings == 0) return "aucun constat nouveau";
+    std::string s;
+    if (errors > 0) s += plural(errors, "erreur", "erreurs");
+    if (warnings > 0) s += (s.empty() ? std::string{} : std::string(", ")) + plural(warnings, "avertissement", "avertissements");
+    return s;
+}
+
+// Les etapes du logiciel en cause dans les ERREURS d'un verdict : "Compiler", "G\xC3\xA9n\xC3\xA9rer", ou les deux.
+std::string errorSteps(const build::Verdict& v) {
+    bool gen = false, comp = false;
+    for (const auto& f : v.findings)
+        if (f.error) (f.step == "Compiler" ? comp : gen) = true;
+    if (gen && comp) return "G\xC3\xA9n\xC3\xA9rer et Compiler";
+    return gen ? std::string("G\xC3\xA9n\xC3\xA9rer") : std::string("Compiler");
+}
+// "Compiler : 2 erreurs" (l'activite d'une etape de mission) ; "2 erreurs de Compiler" (la bande du haut).
+std::string fixLabel(const std::string& who, int errors) {
+    return who + " : " + plural(static_cast<std::size_t>(std::max(0, errors)), "erreur", "erreurs");
+}
+std::string fixWhat(const std::string& who, int errors) {
+    return plural(static_cast<std::size_t>(std::max(0, errors)), "erreur", "erreurs") + " de " + who;
+}
+
+// L'entree << logiciel >> du processus : "G\xC3\xA9n\xC3\xA9rer et Compiler (copie du projet) : 2 erreurs, 1 avertissement \xE2\x80\x94 1,4 s".
+std::string verdictLine(const build::Verdict& v) {
+    if (!v.ran)
+        return "G\xC3\xA9n\xC3\xA9rer et Compiler n'ont pas pu v\xC3\xA9rifier la proposition" + (v.why.empty() ? std::string(".") : " : " + v.why);
+    const bool clean = v.errors == 0 && v.warnings == 0;
+    return "G\xC3\xA9n\xC3\xA9rer et Compiler (copie du projet) : " + findingsText(v.errors, v.warnings) + (clean ? std::string(" \xE2\x9C\x93") : std::string{})
+           + " \xE2\x80\x94 " + build::durationText(v.ms);
+}
+
+// La phrase de l'IA dans sa reponse (la premiere, sans la mise en forme), pour le processus : << j'ai remplace ... >>.
+std::string firstSentence(std::string_view text, std::size_t max = 200) {
+    std::string s;
+    for (const char ch : text) {
+        if (ch == '*' || ch == '`' || ch == '#') continue;
+        if (ch == '\n' || ch == '\r') {
+            if (!s.empty()) break;
+            continue;
+        }
+        s += ch;
+        if ((ch == '.' || ch == '!' || ch == '?') && s.size() > 12) break;
+    }
+    while (!s.empty() && (s.back() == ' ' || s.back() == ':')) s.pop_back();
+    while (!s.empty() && s.front() == ' ') s.erase(s.begin());
+    if (s.size() > max) {
+        std::size_t cut = max;
+        while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
+        s = s.substr(0, cut) + "\xE2\x80\xA6";
+    }
+    return s;
+}
+
+// Le contenu d'une proposition, tel que Generer et Compiler le voient (ses operations, les retirees, les choix de variables).
+std::string contentKey(const Proposal& p) {
+    std::string k = loop::opsPrint(p) + "|" + std::to_string(p.ops.size()) + "|" + p.variable.use + (p.variable.create ? "+" : "-");
+    for (const auto x : p.excluded) k += "x" + std::to_string(x);
+    for (const auto& ch : p.choices) k += "|" + ch.from + ">" + ch.use + (ch.create ? "+" + ch.type : std::string{});
+    return k;
+}
+
+// La proposition de ce message de cette conversation (nul : aucune).
+Proposal* proposalIn(Conversation& c, std::string_view id, int* index = nullptr) {
+    for (std::size_t i = 0; i < c.messages.size(); ++i)
+        if (c.messages[i].proposal && c.messages[i].proposal->id == id) {
+            if (index) *index = static_cast<int>(i);
+            return &*c.messages[i].proposal;
+        }
+    return nullptr;
+}
+
 } // namespace
 
 std::string_view phaseLabel(Assistant::Phase p) noexcept {
@@ -250,6 +328,9 @@ Assistant::~Assistant() {
         if (a && a->worker.joinable()) a->worker.join();
     // 1.22.1 : les verifications de fond en cours (sur leur copie du projet)
     for (auto& j : checkJobs_)
+        if (j && j->worker.joinable()) j->worker.join();
+    // 1.22.5 : Generer et Compiler en cours (sur leur copie du projet)
+    for (auto& j : buildJobs_)
         if (j && j->worker.joinable()) j->worker.join();
 }
 
@@ -301,6 +382,9 @@ void Assistant::load(std::vector<std::string>* problems) {
     retire();
     gen_ = {};
     pending_.clear();
+    fixQueue_.clear();        // 1.22.5 : les corrections automatiques en attente ne survivent pas a une relecture
+    directWaiting_.clear();
+    nextFix_ = {};
     totalsDay_.clear();   // 1.16.0 : les cumuls relus
     // 1.22.0 : LES MISSIONS - relues de IA/missions (un fichier illisible repris de sa copie, ou laisse tel quel : dit) ;
     // celles d'un format plus recent se lisent sans jamais etre reecrites ; un appel a l'IA en cours a la fermeture : la
@@ -426,6 +510,8 @@ bool Assistant::tick(double now) {
     pollApply();   // 1.20.1 : l'application de fond finie : sa commande, sur ce fil
     lap.to(XPG_PARTIE("ia.tick.verifications"));
     pollChecks();  // 1.22.1 : les verifications de fond finies : les comptes, la mission
+    pollBuilds();  // 1.22.5 : l'avis du logiciel (Generer et Compiler) arrive : le verdict, la correction a demander
+    runFixes();    //          une correction automatique decidee part (aucune reponse en cours)
     lap.to(XPG_PARTIE("ia.tick.missions"));
     missionsTick();   // 1.22.0 : la reprise au demarrage, le projet change (Ctrl+Z...), les audits finis
     lap.to(XPG_PARTIE("ia.tick.direct"));
@@ -919,6 +1005,8 @@ void Assistant::finish() {
             }
         }
         m.proposal = std::move(p);
+        // 1.22.5 : l'avis du logiciel accompagne les propositions de l'IA connectee - dit (la previsualisation ne l'attend pas)
+        noVerdict(*m.proposal, "l'avis du logiciel (G\xC3\xA9n\xC3\xA9rer et Compiler) accompagne les propositions de l'IA connect\xC3\xA9" "e");
         if (countLater && !startCheck(c->id, *m.proposal, CheckFor::Counts))
             if (const auto doc = host_.document ? host_.document() : nullptr) {
                 const Check ck = validate(doc->project, *m.proposal, host_.env);
@@ -942,6 +1030,8 @@ void Assistant::stop() {
     // Un vrai fournisseur : la connexion se ferme ; il finit sur son fil (retiring_), sans bloquer.
     if (gen_.live) retire();
     const MissionCall call = gen_.mission;   // 1.22.0 : l'appel de mission arrete (marque interrompu ci-dessous)
+    const std::string fixOf = !call.fixOf.empty() ? call.fixOf : gen_.fixOf;   // 1.22.5 : une correction automatique arretee
+    const std::string fixConv = gen_.conversation;
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
@@ -961,6 +1051,7 @@ void Assistant::stop() {
     // 1.22.0 : une reponse de mission arretee - l'appel est marque interrompu, ses etapes redeviennent pretes ; rien
     // n'est propose ni rejoue.
     endMissionCall(call, true, "la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e avant d'avoir propos\xC3\xA9 quoi que ce soit");
+    fixAborted(fixConv, fixOf, !call.fixOf.empty() ? call.id : std::string{}, "la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e");   // 1.22.5
     ++revision_;
 }
 
@@ -1303,7 +1394,9 @@ Check Assistant::check(int message) const {
         ck.viewMissing = !doc;
         return ck;
     }
-    return validate(doc->project, *p, host_.env);
+    ck = validate(doc->project, *p, host_.env);
+    if (const auto v = verdictOf(*p)) build::merge(ck, *v);   // 1.22.5 : l'avis du logiciel, garde avec elle
+    return ck;
 }
 
 bool Assistant::frozenEnvironment(Env& out) const {
@@ -1569,8 +1662,21 @@ void Assistant::pollChecks() {
         prop->create = job->result.create;
         prop->modify = job->result.modify;
         prop->remove = job->result.remove;
+        // 1.22.5 : le processus de developpement - sa verification, enfin connue (une fois)
+        if (prop->extra.has("processus")) {
+            bool said = false;
+            for (const auto& l : processOf(*prop)) said = said || (l.what == "verification" && l.proposal == prop->id);
+            if (!said)
+                addProcess(*prop, "verification",
+                           "V\xC3\xA9rification : " + plural(job->result.errors.size(), "erreur", "erreurs")
+                               + (job->result.warnings.empty() ? std::string{} : ", " + plural(job->result.warnings.size(), "avertissement", "avertissements")),
+                           static_cast<int>(job->result.errors.size()), static_cast<int>(job->result.warnings.size()));
+        }
+        // 1.22.5 : son avis du logiciel attendait cette verification (une grosse proposition) : il est tire maintenant
+        // (ses erreurs avec celles du logiciel - le cercle, la correction automatique).
+        const bool verdictWaits = verdictOf(*prop).has_value() && !settled_.count(prop->id);
         // 1.22.4 : une grosse proposition de l'IA connectee (deja comparee a son arrivee) : ses erreurs, enfin connues
-        if (job->purpose == CheckFor::Counts && prop->extra.at("cercle").flag("comparee"))
+        if (job->purpose == CheckFor::Counts && prop->extra.at("cercle").flag("comparee") && !verdictWaits)
             for (std::size_t i = 0; i < c->messages.size(); ++i)
                 if (c->messages[i].proposal && c->messages[i].proposal->id == job->proposalId) {
                     loopArrived(*c, static_cast<int>(i), &job->result.errors);
@@ -1578,8 +1684,626 @@ void Assistant::pollChecks() {
                 }
         if (job->purpose == CheckFor::Mission && !missionsReadOnly_.count(job->mission))
             if (mission::Mission* m = missionMut(job->mission)) missionChecked(*m, *prop, job->steps, &job->result, m->state, isoDate(now()));
+        if (verdictWaits) {
+            int index = -1;
+            if (proposalIn(*c, job->proposalId, &index)) {
+                save(*c);
+                settleVerdict(*c, index, job->result);   // enregistre ; le mode Direct peut appliquer : `c` n'est plus relu
+                continue;
+            }
+        }
         save(*c);
     }
+}
+
+// =====================================================================================================================
+//  1.22.5 : L'AVIS DU LOGICIEL (AiBuild.hpp) ET LE PROCESSUS DE DEVELOPPEMENT
+// ---------------------------------------------------------------------------------------------------------------------
+//  LE CIRCUIT. finishLive (une proposition de l'IA connectee arrive : conversation ou mission) -> le processus (recue,
+//  verifiee) -> startBuild : une copie du projet (sur ce fil), l'environnement fige, build::verdict sur un fil de fond.
+//  Au tick, pollBuilds : le verdict garde avec la proposition (extra << logiciel >>), dans son processus, puis TIRE
+//  (settleVerdict) quand sa validation est connue (tout de suite ; une grosse proposition : a la fin de sa verification de
+//  fond, pollChecks) : ses erreurs avec celles du logiciel (build::merge) -> la mission (onChecked : les empreintes des
+//  erreurs) et le cercle (AiLoop : une correction qui revient au meme point est retenue) ; des erreurs nouvelles et
+//  << Corriger seule >> : une correction automatique (AutoFix) en file. runFixes (au tick, aucune reponse en cours) la
+//  fait partir (launchFix) : une conversation - la proposition passe << remplacee >>, un message du LOGICIEL porte le retour
+//  (build::feedbackText) et part a l'IA (startLive, gen_.fixOf) ; une mission - ses etapes en erreur (l'erreur du logiciel),
+//  la proposition << remplacee >>, et sa correction (launchMission, mission::correctionPrompt + le retour du logiciel). La
+//  reponse de l'IA (finishLive) : la proposition corrigee reprend le processus (linkCorrection), puis le meme chemin ; sans
+//  proposition, arretee ou en erreur : la proposition d'avant revient (fixAborted). kMaxFixes corrections par demande.
+// =====================================================================================================================
+std::vector<Assistant::ProcessLine> Assistant::processOf(const Proposal& p) {
+    std::vector<ProcessLine> out;
+    const json::Value* list = p.extra.isObject() ? p.extra.find("processus") : nullptr;
+    if (!list || !list->isArray()) return out;
+    for (const auto& e : list->items()) {
+        if (!e.isObject()) continue;
+        ProcessLine l;
+        l.date = e.str("date");
+        l.time = e.str("heure", clockTime(l.date));
+        l.what = e.str("quoi");
+        l.text = e.str("texte");
+        l.errors = static_cast<int>(e.integer("erreurs"));
+        l.warnings = static_cast<int>(e.integer("avertissements"));
+        l.proposal = e.str("proposition");
+        for (const auto& f : e.at("constats").items()) {
+            ProcessLine::Finding x;
+            x.error = f.flag("erreur", true);
+            x.text = f.str("texte");
+            x.object = f.str("objet");
+            x.view = f.str("vue");
+            l.findings.push_back(std::move(x));
+        }
+        if (const std::int64_t more = e.integer("autres"); more > 0)
+            l.findings.push_back({false, "\xE2\x80\xA6 et " + plural(static_cast<std::size_t>(more), "autre constat", "autres constats")
+                                             + " (Pr\xC3\xA9visualiser les montre tous)", {}, {}});
+        out.push_back(std::move(l));
+    }
+    return out;
+}
+
+std::vector<Assistant::ProcessLine> Assistant::processOf(int message) const {
+    const Proposal* p = proposal(message);
+    return p ? processOf(*p) : std::vector<ProcessLine>{};
+}
+
+std::optional<build::Verdict> Assistant::verdictOf(const Proposal& p) {
+    const json::Value* v = p.extra.isObject() ? p.extra.find("logiciel") : nullptr;
+    if (!v || !v->isObject()) return std::nullopt;
+    return build::fromJson(*v);
+}
+
+std::optional<build::Verdict> Assistant::verdictOf(int message) const {
+    const Proposal* p = proposal(message);
+    return p ? verdictOf(*p) : std::nullopt;
+}
+
+bool Assistant::building(std::string_view proposalId) const {
+    return std::any_of(buildJobs_.begin(), buildJobs_.end(), [&](const std::shared_ptr<BuildJob>& j) { return j && j->proposalId == proposalId; });
+}
+
+bool Assistant::processWorking(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p) return false;
+    if (building(p->id)) return true;
+    if (generating() && (gen_.fixOf == p->id || gen_.mission.fixOf == p->id)) return true;
+    return std::any_of(fixQueue_.begin(), fixQueue_.end(), [&](const AutoFix& f) { return f.proposalId == p->id; });
+}
+
+std::string Assistant::processHeadline(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p) return {};
+    if (building(p->id)) return "G\xC3\xA9n\xC3\xA9rer et Compiler v\xC3\xA9rifient la proposition sur une copie du projet\xE2\x80\xA6";
+    if (generating()) {
+        if (gen_.fixOf == p->id)
+            return "Correction " + std::to_string(gen_.fixN) + "/" + std::to_string(kMaxFixes) + " : l'IA corrige " + fixWhat(gen_.fixWho, gen_.fixErrors) + "\xE2\x80\xA6";
+        if (gen_.mission.fixOf == p->id)
+            return "Correction " + std::to_string(gen_.mission.fixN) + "/" + std::to_string(kMaxFixes) + " : l'IA corrige "
+                   + fixWhat(gen_.mission.fixWho, gen_.mission.fixErrors) + "\xE2\x80\xA6";
+    }
+    for (const auto& f : fixQueue_)
+        if (f.proposalId == p->id)
+            return "Correction " + std::to_string(f.n) + "/" + std::to_string(kMaxFixes) + " en attente (" + fixWhat(f.who, f.errors)
+                   + ") : elle part \xC3\xA0 la fin de la r\xC3\xA9ponse en cours\xE2\x80\xA6";
+    const auto lines = processOf(*p);
+    return lines.empty() ? std::string{} : lines.back().time + " " + lines.back().text;
+}
+
+std::string Assistant::autoCorrecting(std::string_view missionId) const {
+    if (!generating() || missionId.empty() || gen_.mission.id != missionId || gen_.mission.fixOf.empty()) return {};
+    return fixLabel(gen_.mission.fixWho, gen_.mission.fixErrors);
+}
+
+void Assistant::addProcess(Proposal& p, const std::string& what, const std::string& text, int errors, int warnings, const build::Verdict* v) {
+    if (!p.extra.isObject()) p.extra = json::Value::object();
+    json::Value& list = p.extra["processus"];
+    if (!list.isArray()) list = json::Value::array();
+    const std::string when = isoDate(now());
+    json::Value e = json::Value::object();
+    e.set("date", when);
+    e.set("heure", clockTime(when));
+    e.set("quoi", what);
+    e.set("texte", text);
+    e.set("erreurs", errors);
+    e.set("avertissements", warnings);
+    e.set("proposition", p.id);
+    if (v && !v->findings.empty()) {
+        constexpr std::size_t kShown = 8;
+        json::Value found = json::Value::array();
+        for (std::size_t k = 0; k < v->findings.size() && k < kShown; ++k) {
+            const build::Finding& f = v->findings[k];
+            json::Value x = json::Value::object();
+            x.set("erreur", f.error);
+            x.set("texte", f.step + " : " + f.message + (f.where.empty() ? std::string{} : " (" + f.where + ")"));
+            if (!f.objectName.empty()) x.set("objet", f.objectName);
+            if (!f.view.empty()) x.set("vue", f.view);
+            found.push(std::move(x));
+        }
+        e.set("constats", std::move(found));
+        if (v->findings.size() > kShown) e.set("autres", static_cast<std::int64_t>(v->findings.size() - kShown));
+    }
+    list.push(std::move(e));
+    // borne : une demande qui tourne longtemps garde ses 60 dernieres entrees (la premiere aussi)
+    constexpr std::size_t kMaxLines = 60;
+    if (list.items().size() > kMaxLines) list.items().erase(list.items().begin() + 1, list.items().end() - static_cast<std::ptrdiff_t>(kMaxLines - 1));
+    ++revision_;
+}
+
+bool Assistant::startBuild(Conversation& c, int message, const Check* validated) {
+    if (message < 0 || message >= static_cast<int>(c.messages.size()) || !c.messages[static_cast<std::size_t>(message)].proposal) return false;
+    Proposal& p = *c.messages[static_cast<std::size_t>(message)].proposal;
+    if (!settings_.buildCheck) {
+        noVerdict(p, "d\xC3\xA9sactiv\xC3\xA9s (Param\xC3\xA8tres de l'Assistant IA \xE2\x80\xBA Faire v\xC3\xA9rifier par G\xC3\xA9n\xC3\xA9rer et Compiler)");
+        return false;
+    }
+    const auto doc = host_.document ? host_.document() : nullptr;
+    Env frozen;
+    if (!doc) {
+        noVerdict(p, "aucun projet IHM ouvert");
+        return false;
+    }
+    if (p.ops.empty()) {
+        noVerdict(p, "la proposition n'a aucune op\xC3\xA9ration");
+        return false;
+    }
+    if (!frozenEnvironment(frozen)) {
+        noVerdict(p, "les noms de l'automate reli\xC3\xA9 ne se figent pas pour un fil de fond");
+        return false;
+    }
+    auto job = std::make_shared<BuildJob>();
+    job->conversation = c.id;
+    job->proposalId = p.id;
+    job->key = contentKey(p);
+    auto project = [&] {
+        XPG_MESURE("ia.copie-projet");   // la copie se fait sur ce fil (comme la verification de fond)
+        return std::make_shared<const hmi::Project>(doc->project);
+    }();
+    std::optional<Check> check;
+    if (validated) check = *validated;
+    job->worker = std::thread([job, project, prop = p, env = std::move(frozen), check = std::move(check)] {
+        XPG_TRAVAIL("ia.logiciel");   // l'onglet Performances, travaux de fond
+        const auto t0 = std::chrono::steady_clock::now();
+        try {
+            job->result = check ? build::verdict(*project, prop, env, *check) : build::verdict(*project, prop, env);
+        } catch (const std::exception& e) {
+            job->result = build::Verdict{};
+            job->result.why = std::string("erreur pendant la v\xC3\xA9rification : ") + e.what();
+        } catch (...) {
+            job->result = build::Verdict{};
+            job->result.why = "erreur pendant la v\xC3\xA9rification";
+        }
+        if (job->result.ms <= 0.0) job->result.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        job->finished.store(true, std::memory_order_release);
+    });
+    buildJobs_.push_back(std::move(job));
+    ++revision_;
+    return true;
+}
+
+void Assistant::noVerdict(Proposal& p, const std::string& why) {
+    build::Verdict v;
+    v.why = why;
+    if (!p.extra.isObject()) p.extra = json::Value::object();
+    p.extra.set("logiciel", build::toJson(v));
+    ++verdictRev_;
+    ++revision_;
+}
+
+void Assistant::proposalChanged(Conversation& c, int message) {
+    if (message < 0 || message >= static_cast<int>(c.messages.size()) || !c.messages[static_cast<std::size_t>(message)].proposal) return;
+    const Message& msg = c.messages[static_cast<std::size_t>(message)];
+    Proposal& p = *c.messages[static_cast<std::size_t>(message)].proposal;
+    const auto before = verdictOf(p);
+    if (!before && !building(p.id)) return;   // aucun avis pour elle (une proposition d'avant la 1.22.5)
+    (void)p.extra.erase("logiciel");   // l'avis d'avant ne vaut plus (la previsualisation l'oublie aussi)
+    ++verdictRev_;
+    directWaiting_.erase(p.id);
+    // une proposition de l'IA connectee, ou dont l'avis avait tourne : redemande ; sinon (l'IA integree) : toujours << pas lances >>
+    if (msg.provider.empty() && !(before && before->ran)) {
+        noVerdict(p, before && !before->why.empty() ? before->why : std::string("l'avis du logiciel accompagne les propositions de l'IA connect\xC3\xA9" "e"));
+        return;
+    }
+    if (startBuild(c, message) && p.extra.has("processus")) addProcess(p, "attente", "La proposition a chang\xC3\xA9 : G\xC3\xA9n\xC3\xA9rer et Compiler la rev\xC3\xA9rifient\xE2\x80\xA6");
+}
+
+// 1.22.5 : la correction du logiciel (fixFrom -> fixTo), dans la proposition.
+namespace {
+// Remplace `from` par `to` dans `s` - les mots entiers d'abord (un nom), sinon partout. Vrai : quelque chose a change.
+bool replaceName(std::string& s, const std::string& from, const std::string& to) {
+    if (from.empty() || s.find(from) == std::string::npos) return false;
+    const auto ident = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || static_cast<unsigned char>(ch) >= 0x80; };
+    std::string out;
+    bool changed = false;
+    std::size_t at = 0;
+    for (std::size_t k = s.find(from); k != std::string::npos; k = s.find(from, k + 1)) {
+        const bool left = k == 0 || !ident(s[k - 1]) || !ident(from.front());
+        const bool right = k + from.size() >= s.size() || !ident(s[k + from.size()]) || !ident(from.back());
+        if (!left || !right || k < at) continue;
+        out += s.substr(at, k - at) + to;
+        at = k + from.size();
+        changed = true;
+    }
+    if (!changed) {   // pas de mot entier : partout
+        for (std::size_t k = s.find(from); k != std::string::npos; k = s.find(from, k + 1)) {
+            if (k < at) continue;
+            out += s.substr(at, k - at) + to;
+            at = k + from.size();
+        }
+    }
+    out += s.substr(at);
+    if (out == s) return false;
+    s = std::move(out);
+    return true;
+}
+} // namespace
+
+bool Assistant::applyBuildFix(int message, std::size_t finding, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(message)].proposal)
+        return fail("Pas de proposition.");
+    Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
+    if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
+    const auto v = verdictOf(p);
+    if (!v || !v->ran || finding >= v->findings.size()) return fail("Ce constat de G\xC3\xA9n\xC3\xA9rer et Compiler n'existe plus.");
+    const build::Finding f = v->findings[finding];
+    if (f.fixFrom.empty()) return fail("Le logiciel ne propose pas de correction pour ce constat : corrige \xC3\xA0 la main, ou demande \xC3\xA0 l'IA.");
+    if (f.op == Check::Fault::kNoOp || f.op >= p.ops.size())
+        return fail("L'op\xC3\xA9ration en cause n'est pas connue : corrige \xC3\xA0 la main (Pr\xC3\xA9visualiser), ou demande \xC3\xA0 l'IA.");
+    Operation& op = p.ops[f.op];
+    bool done = false;
+    if (!f.property.empty())
+        for (auto& [k, val] : op.props)
+            if (k == f.property) done = replaceName(val, f.fixFrom, f.fixTo) || done;
+    if (!done)
+        for (auto& kv : op.props) done = replaceName(kv.second, f.fixFrom, f.fixTo) || done;
+    if (!done) done = replaceName(op.code, f.fixFrom, f.fixTo);
+    if (!done) done = replaceName(op.variable, f.fixFrom, f.fixTo);
+    if (!done)
+        return fail("\xC2\xAB " + f.fixFrom + " \xC2\xBB n'est plus dans l'op\xC3\xA9ration " + std::to_string(f.op + 1) + " : rien n'est chang\xC3\xA9.");
+    addProcess(p, "correction",
+               "Correction du logiciel pos\xC3\xA9" "e : \xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo + " \xC2\xBB (op\xC3\xA9ration "
+                   + std::to_string(f.op + 1) + ")");
+    proposalChanged(*c, message);
+    notice_ = "Assistant IA : correction du logiciel pos\xC3\xA9" "e dans la proposition (\xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo
+              + " \xC2\xBB) : G\xC3\xA9n\xC3\xA9rer et Compiler la rev\xC3\xA9rifient. Le projet n'a pas chang\xC3\xA9.";
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::validationKnown(const Proposal& p, Check* out) const {
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return false;
+    if (checkInBackground(p)) {   // une grosse proposition : sa verification de fond, jamais une validation sur ce fil
+        const auto it = knownChecks_.find(p.id);
+        if (it == knownChecks_.end()) return false;
+        if (out) *out = it->second.check;
+        return true;
+    }
+    if (out) *out = validate(doc->project, p, host_.env);
+    return true;
+}
+
+void Assistant::pollBuilds() {
+    for (std::size_t k = 0; k < buildJobs_.size();) {
+        if (!buildJobs_[k] || !buildJobs_[k]->finished.load(std::memory_order_acquire)) {
+            ++k;
+            continue;
+        }
+        const std::shared_ptr<BuildJob> job = buildJobs_[k];
+        buildJobs_.erase(buildJobs_.begin() + static_cast<std::ptrdiff_t>(k));
+        if (job->worker.joinable()) job->worker.join();
+        ++revision_;
+        ++verdictRev_;
+        Conversation* c = nullptr;
+        for (auto& conv : conversations_)
+            if (conv.id == job->conversation) c = &conv;
+        int index = -1;
+        Proposal* p = c ? proposalIn(*c, job->proposalId, &index) : nullptr;
+        if (!p) continue;   // la conversation, ou la proposition, n'existe plus
+        if (contentKey(*p) != job->key) continue;   // changee depuis : un autre avis est (ou sera) demande
+        const build::Verdict& v = job->result;
+        p->extra.set("logiciel", build::toJson(v));
+        if (p->extra.has("processus"))   // le processus d'une demande a l'IA connectee (une proposition d'avant : l'avis seul)
+            addProcess(*p, "logiciel", verdictLine(v), static_cast<int>(v.errors), static_cast<int>(v.warnings), &v);
+        if (v.ran && v.errors + v.warnings > 0)
+            notice_ = "Assistant IA : G\xC3\xA9n\xC3\xA9rer et Compiler trouvent " + findingsText(v.errors, v.warnings) + " dans la proposition "
+                      + guillemets(p->summary) + ".";
+        appendActivity("conversation", "Avis du logiciel sur " + guillemets(p->summary) + " : " + verdictLine(v));
+        save(*c);
+        if (p->state != "proposee") {   // appliquee, refusee, remplacee pendant le calcul : l'avis est garde, rien ne part
+            directWaiting_.erase(p->id);
+            continue;
+        }
+        if (Check vck; validationKnown(*p, &vck)) settleVerdict(*c, index, vck);   // sinon : a la fin de sa verification de fond
+    }
+}
+
+// LE VERDICT TIRE (une fois par proposition) : ses erreurs avec celles de la validation, le cercle, la correction, le mode Direct.
+void Assistant::settleVerdict(Conversation& c, int message, const Check& validation) {
+    if (message < 0 || message >= static_cast<int>(c.messages.size()) || !c.messages[static_cast<std::size_t>(message)].proposal) return;
+    Proposal& p = *c.messages[static_cast<std::size_t>(message)].proposal;
+    const auto verdict = verdictOf(p);
+    if (!verdict || settled_.count(p.id)) return;
+    settled_.insert(p.id);
+    const std::string pid = p.id;
+    const bool direct = directWaiting_.erase(pid) > 0;
+    if (p.state != "proposee") return;
+    const build::Verdict& v = *verdict;
+    Check merged = validation;
+    build::merge(merged, v);
+    const std::string when = isoDate(now());
+    std::string missionId, circleText;
+    bool held = false;
+    if (mission::Mission* m = missionOfProposalMut(pid)) {
+        missionId = m->id;
+        if (!missionsReadOnly_.count(m->id)) {
+            const mission::State before = m->state;
+            mission::onChecked(*m, pid, merged, when);   // ses erreurs (et leur empreinte) : celles du logiciel aussi
+            const mission::ProposalLink* link = m->proposal(pid);
+            const std::string P = link ? "P" + std::to_string(link->order) : std::string("La proposition");
+            mission::log(*m, "validation", P + " : " + verdictLine(v) + (v.findings.empty() ? std::string{} : " \xE2\x80\x94 " + v.findings.front().step + " : " + v.findings.front().message),
+                         when, {}, pid);
+            if (link && !link->held() && (link->state == "generee" || link->state == "validee")) {
+                XPG_MESURE("ia.cercles");
+                const loop::Circle circle = loop::missionCircle(*m, pid);
+                if (circle.on()) {
+                    loop::flag(*m, pid, circle, when);
+                    notifyMission(*m, "cercle", "La mission tourne en rond : " + m->name,
+                                  circle.text + ". " + P + " est retenue : choisis sur sa carte (Modifier la demande, Corriger \xC3\xA0 la main, Ignorer cette \xC3\xA9tape, "
+                                  "Forcer la fin de la mission, Proposer quand m\xC3\xAAme).",
+                                  "warning");
+                }
+            }
+            if (const mission::ProposalLink* l = m->proposal(pid); l && l->held()) {
+                held = true;
+                circleText = l->loop;
+            }
+            missionTransition(*m, before);
+            saveMission(*m);
+        }
+    } else {
+        loopArrived(c, message, &merged.errors);   // une conversation : ses erreurs avec celles du logiciel (AiLoop)
+        const json::Value& x = p.extra.at("cercle");
+        held = !x.str("texte").empty() && x.str("choix").empty();
+        circleText = x.str("texte");
+    }
+    if (held) {
+        addProcess(p, "cercle", "Tourne en rond : " + circleText + " \xE2\x80\x94 retenue, rien ne repart : choisis sur sa carte.", static_cast<int>(v.errors),
+                   static_cast<int>(v.warnings));
+    } else if (v.ran && v.errors > 0 && settings_.autoCorrect && !c.messages[static_cast<std::size_t>(message)].provider.empty()) {   // l'IA connectee
+        const int done = static_cast<int>(std::max<std::int64_t>(0, p.extra.integer("corrections")));
+        const std::string who = errorSteps(v);
+        if (done >= kMaxFixes) {
+            const std::string said = std::to_string(kMaxFixes) + " corrections n'ont pas suffi : il reste " + fixWhat(who, static_cast<int>(v.errors))
+                                     + ". Corrige \xC3\xA0 la main (Pr\xC3\xA9visualiser, le clic droit sur une erreur), ou modifie la demande.";
+            addProcess(p, "arret", said, static_cast<int>(v.errors), static_cast<int>(v.warnings));
+            notice_ = "Assistant IA : " + said;
+            appendActivity("conversation", "Correction automatique arr\xC3\xAAt\xC3\xA9" "e : " + said);
+        } else {
+            AutoFix fix;
+            fix.conversation = c.id;
+            fix.proposalId = pid;
+            fix.mission = missionId;
+            fix.who = who;
+            fix.n = done + 1;
+            fix.errors = static_cast<int>(v.errors);
+            if (generating() || processing())
+                addProcess(p, "attente", "Correction " + std::to_string(fix.n) + " sur " + std::to_string(kMaxFixes)
+                                             + " en attente : elle part \xC3\xA0 la fin de la r\xC3\xA9ponse en cours.");
+            fixQueue_.push_back(std::move(fix));
+        }
+    }
+    const bool clean = v.clean() && merged.ok();
+    std::string directWhy;
+    if (direct && !clean)
+        directWhy = !v.ran ? "G\xC3\xA9n\xC3\xA9rer et Compiler n'ont pas pu la v\xC3\xA9rifier"
+                           : v.errors > 0 ? "G\xC3\xA9n\xC3\xA9rer et Compiler y trouvent " + plural(v.errors, "erreur", "erreurs")
+                                          : "elle a " + plural(merged.errors.size(), "erreur", "erreurs") + " de v\xC3\xA9rification";
+    if (direct && !clean) addProcess(p, "direct", "Mode Direct : pas appliqu\xC3\xA9" "e \xE2\x80\x94 " + directWhy + ".");
+    save(c);
+    ++revision_;
+    // LE MODE DIRECT : appliquee seulement maintenant, l'avis du logiciel propre (la conversation ouverte ; en dernier : Appliquer
+    // reordonne les conversations, `c` et `p` ne sont plus relus).
+    if (direct && clean && current() && current()->id == c.id) autoApply(message);
+}
+
+void Assistant::runFixes() {
+    if (fixQueue_.empty() || generating() || processing()) return;
+    const AutoFix fix = fixQueue_.front();
+    fixQueue_.erase(fixQueue_.begin());
+    std::string why;
+    if (launchFix(fix, &why)) return;
+    for (auto& conv : conversations_)
+        if (conv.id == fix.conversation)
+            if (Proposal* p = proposalIn(conv, fix.proposalId)) {
+                addProcess(*p, "arret", "La correction automatique n'est pas partie" + (why.empty() ? std::string(".") : " : " + why));
+                save(conv);
+            }
+    notice_ = "Assistant IA : la correction automatique n'est pas partie" + (why.empty() ? std::string(".") : " : " + why);
+    ++revision_;
+}
+
+// UNE CORRECTION AUTOMATIQUE PART : le retour du logiciel a l'IA, la proposition << remplacee >> (elle ne s'applique plus).
+bool Assistant::launchFix(const AutoFix& fix, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (!settings_.enabled) return fail("l'Assistant est d\xC3\xA9sactiv\xC3\xA9");
+    if (!live()) return fail("l'IA connect\xC3\xA9" "e n'est plus choisie");
+    if (std::string w; !ready(&w) || budgetBlocks(&w)) return fail(w);
+    Conversation* c = nullptr;
+    for (auto& conv : conversations_)
+        if (conv.id == fix.conversation) c = &conv;
+    int index = -1;
+    Proposal* p = c ? proposalIn(*c, fix.proposalId, &index) : nullptr;
+    if (!p) return fail("la proposition n'existe plus");
+    if (p->state != "proposee") return fail("la proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider");
+    const auto v = verdictOf(*p);
+    if (!v || v->errors == 0) return fail("plus d'erreur \xC3\xA0 corriger");
+    std::string feedback = build::feedbackText(*v);
+    if (Check vck; validationKnown(*p, &vck) && !vck.ok()) feedback += "\n\nLa v\xC3\xA9rification du logiciel :\n" + app::ai::feedback(vck, *p);
+    const std::string n = std::to_string(fix.n) + " sur " + std::to_string(kMaxFixes);
+    const std::string pid = p->id;
+    if (!fix.mission.empty()) {
+        // UNE MISSION : sa correction (le meme circuit que << Corriger >> : mission::correctionPrompt), avec le retour du logiciel.
+        mission::Mission* m = editableMission(fix.mission, why);
+        if (!m) return false;
+        settleStale(*m);
+        if (const std::string b = callBlocker(*m); !b.empty()) return fail(b);
+        mission::ProposalLink* link = m->proposal(pid);
+        if (!link) return fail("la proposition n'est plus dans la mission");
+        if (link->held()) return fail("elle tourne en rond : choisis d'abord sur sa carte");
+        const mission::Mission saved = *m;
+        const std::string when = isoDate(now());
+        const std::string P = "P" + std::to_string(link->order);
+        const std::string what = fixWhat(fix.who, fix.errors);
+        // ses etapes : en erreur (l'erreur du logiciel), le temps de la correction - une correction automatique est la meme
+        // tentative que la proposition qu'elle remplace (AiLoop : les tentatives d'une etape)
+        std::string first;
+        for (const auto& sid : link->steps)
+            if (mission::Step* st = m->step(sid); st && st->state == mission::StepState::AwaitingValidation) {
+                (void)mission::setStepState(*m, sid, mission::StepState::Error, when, P + " : " + fixLabel(fix.who, fix.errors) + " (G\xC3\xA9n\xC3\xA9rer et Compiler, sur une copie du projet)");
+                if (st->attempts > 0) --st->attempts;
+                if (first.empty()) first = sid;
+            }
+        if (first.empty() && !link->steps.empty()) first = link->steps.front();
+        link->state = "remplacee";
+        mission::log(*m, "proposition", P + " remplac\xC3\xA9" "e : G\xC3\xA9n\xC3\xA9rer et Compiler y trouvent " + what + " ; correction automatique " + n + " demand\xC3\xA9" "e \xC3\xA0 l'IA.",
+                     when, {}, pid);
+        p->state = "remplacee";
+        MissionCall call;
+        call.purpose = "correction";
+        call.step = first;
+        call.steps = link->steps;
+        call.fixOf = pid;
+        call.fixN = fix.n;
+        call.fixWho = fix.who;
+        call.fixErrors = fix.errors;
+        call.feedback = feedback;
+        const std::string text = "Corrige " + P + " de la mission " + guillemets(m->name) + " : G\xC3\xA9n\xC3\xA9rer et Compiler y trouvent " + what
+                                 + " (correction automatique " + n + "). Renvoie la proposition enti\xC3\xA8re corrig\xC3\xA9" "e, et dis en une phrase ce que tu as chang\xC3\xA9.\n\n"
+                                 + feedback;
+        const std::string missionId = m->id;
+        std::vector<Pending> keep = std::move(pending_);   // les pieces jointes du prochain message restent a l'utilisateur
+        pending_.clear();
+        std::string w;
+        const bool sent = launchMission(*m, text, std::move(call), &w);
+        pending_ = std::move(keep);
+        if (!sent) {
+            if (mission::Mission* again = missionMut(missionId)) {
+                *again = saved;
+                saveMission(*again);
+            }
+            for (auto& conv : conversations_)
+                if (Proposal* back = proposalIn(conv, pid); back && back->state == "remplacee") back->state = "proposee";
+            return fail(w);
+        }
+        // le message de la demande : celui du LOGICIEL (pas de l'utilisateur), et la proposition qu'il corrige
+        if (const mission::Mission* mm = findMission(missionId))
+            for (auto& conv : conversations_)
+                if (conv.id == mm->pending.conversation && conv.messages.size() >= 2) {
+                    Message& asked = conv.messages[conv.messages.size() - 2];
+                    if (asked.role == "utilisateur") {
+                        if (!asked.extra.isObject()) asked.extra = json::Value::object();
+                        asked.extra.set("logiciel", std::string("correction"));
+                        asked.extra.set("proposition", pid);
+                        asked.extra.set("correction", fix.n);
+                    }
+                    save(conv);
+                }
+    } else {
+        // UNE CONVERSATION : le message du logiciel (le retour de Generer et Compiler), puis l'IA (le tour de l'outil le dit
+        // aussi : << remplacee >>).
+        const Conversation before = *c;
+        p->state = "remplacee";
+        Message u;
+        u.id = "m" + std::to_string(c->messages.size() + 1);
+        u.role = "utilisateur";
+        u.date = isoDate(now());
+        u.text = "G\xC3\xA9n\xC3\xA9rer et Compiler trouvent " + plural(static_cast<std::size_t>(fix.errors), "erreur nouvelle", "erreurs nouvelles") + " dans ta proposition "
+                 + guillemets(p->summary) + " (correction automatique " + n + "). Corrige-la : renvoie la proposition enti\xC3\xA8re corrig\xC3\xA9" "e "
+                 "(proposer_operations), et dis en une phrase ce que tu as chang\xC3\xA9.\n\n" + feedback;
+        u.extra = json::Value::object();
+        u.extra.set("logiciel", std::string("correction"));
+        u.extra.set("proposition", pid);
+        u.extra.set("correction", fix.n);
+        const std::string text = u.text;
+        c->messages.push_back(std::move(u));
+        nextFix_ = fix;
+        std::string w;
+        if (!startLive(*c, text, &w)) {
+            nextFix_ = {};
+            *c = before;
+            return fail(w);
+        }
+        if (Conversation* cc = touch(*c)) save(*cc);
+    }
+    for (auto& conv : conversations_)
+        if (conv.id == fix.conversation)
+            if (Proposal* back = proposalIn(conv, pid)) {
+                addProcess(*back, "correction", "Correction demand\xC3\xA9" "e \xC3\xA0 l'IA (" + n + ")", fix.errors, static_cast<int>(v->warnings));
+                save(conv);
+            }
+    notice_ = "Assistant IA : G\xC3\xA9n\xC3\xA9rer et Compiler trouvent " + fixWhat(fix.who, fix.errors) + " \xE2\x80\x94 l'IA corrige la proposition (" + n + ").";
+    appendActivity("conversation", "Correction automatique " + n + " demand\xC3\xA9" "e \xC3\xA0 l'IA : " + fixLabel(fix.who, fix.errors) + ".");
+    ++revision_;
+    return true;
+}
+
+// LA PROPOSITION CORRIGEE ARRIVE (finishLive) : elle reprend le processus de celle qu'elle remplace (une demande, un processus).
+void Assistant::linkCorrection(Conversation& c, int message, const std::string& oldId, int n, const std::string& said) {
+    if (message < 0 || message >= static_cast<int>(c.messages.size()) || !c.messages[static_cast<std::size_t>(message)].proposal) return;
+    Proposal& np = *c.messages[static_cast<std::size_t>(message)].proposal;
+    Proposal* op = proposalIn(c, oldId);
+    for (auto it = conversations_.begin(); !op && it != conversations_.end(); ++it) op = proposalIn(*it, oldId);
+    if (!np.extra.isObject()) np.extra = json::Value::object();
+    if (op) {
+        if (const json::Value* proc = op->extra.isObject() ? op->extra.find("processus") : nullptr) np.extra.set("processus", *proc);
+        if (!op->request.empty()) np.request = op->request;   // la demande de l'utilisateur, pas le message du logiciel
+        if (!op->extra.isObject()) op->extra = json::Value::object();
+        op->extra.set("remplaceePar", np.id);
+        if (op->state == "proposee") op->state = "remplacee";   // une correction redemandee (Reessayer)
+    }
+    np.extra.set("corrige", oldId);
+    np.extra.set("corrections", n);
+    addProcess(np, "corrigee",
+               "Proposition corrig\xC3\xA9" "e : " + plural(np.ops.size(), "op\xC3\xA9ration", "op\xC3\xA9rations")
+                   + (said.empty() ? std::string{} : " \xE2\x80\x94 l'IA : \xC2\xAB " + said + " \xC2\xBB"));
+}
+
+// LA CORRECTION N'A PAS ABOUTI (l'IA n'a rien propose, la reponse est arretee ou en erreur) : la proposition d'avant revient
+// (a decider, comme avant), et c'est dit dans son processus ; une mission : ses etapes l'attendent de nouveau.
+void Assistant::fixAborted(const std::string& conversation, const std::string& oldId, const std::string& missionId, const std::string& reason) {
+    if (oldId.empty()) return;
+    for (auto& conv : conversations_) {
+        if (!conversation.empty() && conv.id != conversation) continue;
+        Proposal* p = proposalIn(conv, oldId);
+        if (!p || p->state != "remplacee" || p->extra.has("remplaceePar")) continue;
+        p->state = "proposee";
+        addProcess(*p, "arret", "La correction n'a pas abouti" + (reason.empty() ? std::string(".") : " : " + reason + ".") + " La proposition reste \xC3\xA0 d\xC3\xA9" "cider.");
+        save(conv);
+    }
+    if (missionId.empty() || missionsReadOnly_.count(missionId)) return;
+    mission::Mission* m = missionMut(missionId);
+    mission::ProposalLink* link = m ? m->proposal(oldId) : nullptr;
+    if (!link || link->state != "remplacee") return;
+    const std::string when = isoDate(now());
+    link->state = "generee";
+    const std::string P = "P" + std::to_string(link->order);
+    for (const auto& sid : link->steps)
+        if (mission::Step* st = m->step(sid); st && st->state == mission::StepState::Error) {
+            (void)mission::setStepState(*m, sid, mission::StepState::AwaitingValidation, when, P + " attend d'\xC3\xAAtre pr\xC3\xA9visualis\xC3\xA9" "e et appliqu\xC3\xA9" "e.");
+            ++st->attempts;
+        }
+    mission::log(*m, "proposition", P + " de nouveau \xC3\xA0 valider : la correction automatique n'a pas abouti" + (reason.empty() ? std::string(".") : " (" + reason + ")."), when, {},
+                 oldId);
+    saveMission(*m);
 }
 
 void Assistant::pollApply() {
@@ -1686,6 +2410,7 @@ bool Assistant::setExcluded(int message, std::size_t op, bool excluded) {
     if (excluded) ex.push_back(op);
     else ex.erase(it);
     std::sort(ex.begin(), ex.end());
+    proposalChanged(*c, message);   // 1.22.5 : l'avis du logiciel redemande
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;
@@ -1742,6 +2467,7 @@ bool Assistant::chooseVariable(int message, VariableChoice choice) {
     const Proposal* p = proposal(message);
     if (!c || !p || p->state != "proposee") return false;
     c->messages[static_cast<std::size_t>(message)].proposal->variable = std::move(choice);
+    proposalChanged(*c, message);   // 1.22.5
     save(*c);
     ++revision_;
     return true;
@@ -1781,6 +2507,7 @@ bool Assistant::chooseVariable(int message, const std::string& from, VariableCho
     } else {
         list.push_back(std::move(choice));
     }
+    proposalChanged(*c, message);   // 1.22.5
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;
@@ -1795,6 +2522,7 @@ bool Assistant::clearChoice(int message, const std::string& from) {
     const auto before = list.size();
     std::erase_if(list, [&](const VariableChoice& x) { return sameName(x.from, from); });
     if (list.size() == before) return false;
+    proposalChanged(*c, message);   // 1.22.5
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;
@@ -1820,6 +2548,7 @@ bool Assistant::excludeOps(int message, const std::vector<std::size_t>& ops, boo
     }
     if (!changed) return true;
     std::sort(ex.begin(), ex.end());
+    proposalChanged(*c, message);   // 1.22.5
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;
@@ -2026,6 +2755,11 @@ std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
     if (!m.proposal) return {"Erreur : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9 \xC3\xA0 l'utilisateur.", true};
     const Proposal& p = *m.proposal;
     if (p.state == "refusee") return {"refus\xC3\xA9" "e par l'utilisateur : le projet n'a pas chang\xC3\xA9.", false};
+    // 1.22.5 : remplacee par sa correction (l'avis du logiciel) - le message suivant, du logiciel, porte ses erreurs.
+    if (p.state == "remplacee")
+        return {"non appliqu\xC3\xA9" "e : G\xC3\xA9n\xC3\xA9rer et Compiler y ont trouv\xC3\xA9 des erreurs (le message suivant du logiciel les donne) ; "
+                "elle est remplac\xC3\xA9" "e par ta proposition corrig\xC3\xA9" "e et ne s'appliquera pas.",
+                true};
     if (p.state == "appliquee") {
         switch (appliedOf(p)) {
             case Applied::Undone: return {"annul\xC3\xA9" "e (Ctrl+Z) : appliqu\xC3\xA9" "e puis annul\xC3\xA9" "e par l'utilisateur, la vue est revenue \xC3\xA0 son \xC3\xA9tat d'avant.", false};
@@ -2045,10 +2779,25 @@ std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
             known = it->second.check;
         }
         const Check ck = known ? std::move(*known) : validate(doc->project, p, host_.env);
+        // 1.22.5 : L'AVIS DU LOGICIEL (Generer et Compiler sur une copie) - ses constats, ou << en cours >>. La validation
+        // garde son texte (feedback) ; le verdict s'y ajoute une fois (build::feedbackText), jamais verse dans ses erreurs.
+        const auto verdict = verdictOf(p);
+        std::string logiciel;
+        if (verdict) {
+            logiciel = build::feedbackText(*verdict);
+            if (logiciel.empty() && verdict->ran) logiciel = verdict->summary() + ".";
+        }
+        const bool buildErrors = verdict && verdict->ran && verdict->errors > 0;
+        const auto withVerdict = [&logiciel](std::string text) { return logiciel.empty() ? text : text + "\n" + logiciel; };
         // Refusee par la validation : le texte ecrit pour le modele (les erreurs, le detail des
         // genres en cause) - il corrige au tour suivant.
-        if (!ck.ok()) return {feedback(ck, p), true};
-        if (ck.stale) return {"en attente : pas encore appliqu\xC3\xA9" "e, et la vue a chang\xC3\xA9 depuis (elle ne s'appliquera plus telle quelle).", false};
+        if (!ck.ok()) return {withVerdict(feedback(ck, p)), true};
+        if (ck.stale) return {withVerdict("en attente : pas encore appliqu\xC3\xA9" "e, et la vue a chang\xC3\xA9 depuis (elle ne s'appliquera plus telle quelle)."), false};
+        if (building(p.id))
+            return {"en attente : G\xC3\xA9n\xC3\xA9rer et Compiler en cours (le logiciel v\xC3\xA9rifie la proposition sur une copie du projet ; pas encore appliqu\xC3\xA9" "e).",
+                    false};
+        if (verdict)
+            return {withVerdict("en attente : pas encore appliqu\xC3\xA9" "e (l'utilisateur ne l'a ni appliqu\xC3\xA9" "e ni refus\xC3\xA9" "e)."), buildErrors};
     }
     return {"en attente : pas encore appliqu\xC3\xA9" "e (l'utilisateur ne l'a ni appliqu\xC3\xA9" "e ni refus\xC3\xA9" "e).", false};
 }
@@ -2129,6 +2878,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     };
     const int splitFrom = std::exchange(splitFrom_, 0);   // 1.21.3 : une reprise en parties (la longueur qui a coupe)
     MissionCall call = std::exchange(nextMission_, MissionCall{});   // 1.22.0 : l'appel de mission (vide : une demande ordinaire)
+    const AutoFix fix = std::exchange(nextFix_, AutoFix{});           // 1.22.5 : une correction automatique (vide : aucune)
     auto prov = providerFactory_ ? providerFactory_(settings_.provider) : makeProvider(settings_.provider);
     if (!prov) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9.");
     const auto doc = host_.document ? host_.document() : nullptr;   // tenu le temps de la preparation
@@ -2338,6 +3088,10 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     gen_.maxTokens = maxTokens;      // 1.21.3
     gen_.split = splitFrom > 0;
     gen_.mission = std::move(call);   // 1.22.0
+    gen_.fixOf = fix.proposalId;      // 1.22.5
+    gen_.fixN = fix.n;
+    gen_.fixWho = fix.who;
+    gen_.fixErrors = fix.errors;
     if (ctx.view) {
         gen_.viewId = ctx.view->id;
         gen_.fingerprint = fingerprint(*ctx.view);
@@ -2454,10 +3208,19 @@ void Assistant::finishLive(const std::string& stopReason) {
     retire();
     recordLive();
     const MissionCall call = gen_.mission;   // 1.22.0 : l'appel de mission de cette reponse (vide : aucun)
+    // 1.22.5 : la correction automatique de cette reponse (une proposition de conversation, ou celle d'une mission)
+    AutoFix fix;
+    fix.conversation = gen_.conversation;
+    fix.proposalId = !call.fixOf.empty() ? call.fixOf : gen_.fixOf;
+    fix.mission = !call.fixOf.empty() ? call.id : std::string{};
+    fix.n = !call.fixOf.empty() ? call.fixN : gen_.fixN;
+    fix.who = !call.fixOf.empty() ? call.fixWho : gen_.fixWho;
+    fix.errors = !call.fixOf.empty() ? call.fixErrors : gen_.fixErrors;
     Conversation* c = generatingConversation();
     if (!c || gen_.message < 0 || gen_.message >= static_cast<int>(c->messages.size())) {
         gen_ = {};
         endMissionCall(call, true, "la conversation de la r\xC3\xA9ponse n'existe plus");
+        fixAborted({}, fix.proposalId, fix.mission, "la conversation de la r\xC3\xA9ponse n'existe plus");
         ++revision_;
         return;
     }
@@ -2481,6 +3244,7 @@ void Assistant::finishLive(const std::string& stopReason) {
         gen_ = {};
         splitFrom_ = cut;
         nextMission_ = call;   // 1.22.0 : la reprise en parties reste l'appel de la mission (ses etapes, son lot)
+        if (call.fixOf.empty()) nextFix_ = fix;   // 1.22.5 : et la correction automatique, la sienne
         std::string why;
         if (startLive(*c, request, &why)) {
             gen_.carried = spent;
@@ -2504,6 +3268,7 @@ void Assistant::finishLive(const std::string& stopReason) {
         c->messages.push_back(std::move(back));
         if ((c = touch(*c)) != nullptr) save(*c);
         endMissionCall(call, false, "la proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse et sa reprise en plusieurs parties n'a pas pu partir : " + why);
+        fixAborted({}, fix.proposalId, fix.mission, "la r\xC3\xA9ponse \xC3\xA9tait trop longue");   // 1.22.5
         ++revision_;
         return;
     }
@@ -2540,6 +3305,7 @@ void Assistant::finishLive(const std::string& stopReason) {
     // 1.22.0 : une demande de PLAN de mission (planifier, actualiser) attend planifier_mission, et rien d'autre.
     const bool planCall = !call.id.empty() && (call.purpose == "plan" || call.purpose == "actualisation");
     bool planned = false;
+    bool waitBuild = false;   // 1.22.5 : Generer et Compiler tournent pour la proposition (le mode Direct l'attend)
     if (gen_.tool) {
         m.tool = *gen_.tool;
         if (m.tool->name == mission::kPlanTool) {
@@ -2588,12 +3354,16 @@ void Assistant::finishLive(const std::string& stopReason) {
                 // d'une mission, par la verification de la mission (missionAnswered), une seule fois.
                 const bool heavy = checkInBackground(*p);
                 std::optional<std::vector<std::string>> errors;   // 1.22.4 : ses erreurs, si elle est deja verifiee
+                std::size_t warnings = 0;                         // 1.22.5 : le processus
+                std::optional<Check> validated;                   // 1.22.5 : pour l'avis du logiciel (l'operation de chaque constat)
                 if (doc && !heavy) {
                     Check ck = validate(doc->project, *p, host_.env);
                     p->create = ck.create;
                     p->modify = ck.modify;
                     p->remove = ck.remove;
-                    errors = std::move(ck.errors);
+                    warnings = ck.warnings.size();
+                    errors = ck.errors;
+                    validated = std::move(ck);
                 }
                 m.proposal = std::move(*p);
                 if (doc && heavy && call.id.empty() && !startCheck(c->id, *m.proposal, CheckFor::Counts)) {
@@ -2601,8 +3371,24 @@ void Assistant::finishLive(const std::string& stopReason) {
                     m.proposal->create = ck.create;
                     m.proposal->modify = ck.modify;
                     m.proposal->remove = ck.remove;
-                    errors = std::move(ck.errors);
+                    warnings = ck.warnings.size();
+                    errors = ck.errors;
+                    validated = std::move(ck);
                 }
+                // 1.22.5 : LE PROCESSUS DE DEVELOPPEMENT (l'avis du logiciel coche) - recue et verifiee ; une correction
+                // automatique reprend le processus de la proposition qu'elle remplace. Puis GENERER ET COMPILER, sur un fil
+                // de fond (startBuild) : son verdict arrive au tick (pollBuilds).
+                if (!fix.proposalId.empty()) {
+                    linkCorrection(*c, gen_.message, fix.proposalId, fix.n, firstSentence(m.text));
+                } else if (settings_.buildCheck && doc) {
+                    addProcess(*m.proposal, "recue", "Proposition re\xC3\xA7ue : " + plural(m.proposal->ops.size(), "op\xC3\xA9ration", "op\xC3\xA9rations"));
+                    if (errors)
+                        addProcess(*m.proposal, "verification",
+                                   "V\xC3\xA9rification : " + plural(errors->size(), "erreur", "erreurs")
+                                       + (warnings == 0 ? std::string{} : ", " + plural(warnings, "avertissement", "avertissements")),
+                                   static_cast<int>(errors->size()), static_cast<int>(warnings));
+                }
+                waitBuild = startBuild(*c, gen_.message, validated ? &*validated : nullptr);   // sinon : un avis << pas lances >>, dit
                 // 1.22.4 : NE PAS TOURNER EN ROND - une proposition de conversation comparee aux precedentes (celle d'une
                 // mission : par la mission, a sa verification - missionChecked).
                 if (call.id.empty()) loopArrived(*c, gen_.message, errors ? &*errors : nullptr);
@@ -2625,16 +3411,42 @@ void Assistant::finishLive(const std::string& stopReason) {
     // et verifiee ; sans proposition ni plan : l'appel est dit interrompu ou en echec, ses etapes redeviennent pretes.
     // (Peut ajouter un message du logiciel a la conversation : `m` n'est plus utilise apres.)
     if (!call.id.empty()) missionAnswered(call, *c, index, planned, stopReason);
+    // 1.22.5 : une correction automatique sans proposition corrigee - celle d'avant revient (a decider).
+    const std::string pid = hasProposal ? c->messages[static_cast<std::size_t>(index)].proposal->id : std::string{};
+    if (!hasProposal && !fix.proposalId.empty())
+        fixAborted(c->id, fix.proposalId, fix.mission,
+                   !c->messages[static_cast<std::size_t>(index)].note.empty() ? c->messages[static_cast<std::size_t>(index)].note
+                                                                                : std::string("l'IA n'a pas renvoy\xC3\xA9 de proposition corrig\xC3\xA9" "e"));
     gen_ = {};
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
-    if (hasProposal && open && directMode()) autoApply(index);
+    // 1.22.5 : LE MODE DIRECT n'applique jamais une proposition dont l'avis du logiciel n'est pas encore la (ni pas propre) :
+    // elle est appliquee a l'arrivee d'un verdict propre (settleVerdict).
+    if (hasProposal && open && directMode()) {
+        if (waitBuild) {
+            directWaiting_.insert(pid);
+            if (c)
+                if (Proposal* p = proposalIn(*c, pid)) {
+                    addProcess(*p, "direct", "Mode Direct : appliqu\xC3\xA9" "e d\xC3\xA8s que G\xC3\xA9n\xC3\xA9rer et Compiler auront donn\xC3\xA9 un avis propre.");
+                    save(*c);
+                }
+        } else if (settings_.buildCheck && host_.document && host_.document()) {
+            std::optional<build::Verdict> v;
+            if (const Proposal* p = c ? proposalIn(*c, pid) : nullptr) v = verdictOf(*p);
+            notice_ = "Mode Direct : pas appliqu\xC3\xA9" "e, G\xC3\xA9n\xC3\xA9rer et Compiler n'ont pas pu la v\xC3\xA9rifier"
+                      + (v && !v->why.empty() ? " (" + v->why + ")" : std::string{}) + " : Pr\xC3\xA9visualiser, puis Appliquer.";
+        } else {
+            autoApply(index);
+        }
+    }
 }
 
 void Assistant::failLive(const ProviderEvent& e) {
     retire();
     recordLive();
     const MissionCall call = gen_.mission;   // 1.22.0
+    const std::string fixOf = !call.fixOf.empty() ? call.fixOf : gen_.fixOf;   // 1.22.5 : une correction automatique
+    const std::string fixConv = gen_.conversation;
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
@@ -2669,6 +3481,9 @@ void Assistant::failLive(const ProviderEvent& e) {
     // 1.22.0 : l'appel de mission en echec - l'erreur exacte dans l'historique, ses etapes redeviennent pretes (Reessayer
     // la redemande comme une demande de mission, sur l'etat reel du projet).
     endMissionCall(call, false, "l'appel \xC3\xA0 l'IA a \xC3\xA9" "chou\xC3\xA9 : " + (e.text.empty() ? std::string("erreur inconnue") : e.text));
+    // 1.22.5 : la correction automatique en echec - la proposition d'avant revient (Reessayer redemande la correction).
+    fixAborted(fixConv, fixOf, !call.fixOf.empty() ? call.id : std::string{},
+               "l'appel \xC3\xA0 l'IA a \xC3\xA9" "chou\xC3\xA9 (" + (e.text.empty() ? std::string("erreur inconnue") : e.text) + ")");
     ++revision_;
 }
 
@@ -2693,6 +3508,36 @@ bool Assistant::retry(std::string* why) {
     Conversation& c = *cur();
     const Message last = c.messages.back();
     c.messages.pop_back();
+    // 1.22.5 : une CORRECTION AUTOMATIQUE (le message du logiciel) - redemandee telle quelle : la meme proposition, le meme
+    // numero (la proposition d'avant est revenue a decider a l'echec : launchFix la remplace de nouveau).
+    if (const Message& asked = c.messages.back(); asked.extra.isObject() && asked.extra.str("logiciel") == "correction") {
+        const Message user = asked;
+        const std::string convId = c.id;
+        AutoFix fix;
+        fix.conversation = convId;
+        fix.proposalId = user.extra.str("proposition");
+        fix.n = static_cast<int>(std::clamp<std::int64_t>(user.extra.integer("correction", 1), 1, kMaxFixes));
+        int at = -1;
+        if (Proposal* p = proposalIn(c, fix.proposalId, &at)) {
+            if (const mission::Mission* m = missionOfProposal(p->id)) fix.mission = m->id;
+            if (const auto v = verdictOf(*p)) {
+                fix.who = errorSteps(*v);
+                fix.errors = static_cast<int>(v->errors);
+            }
+        }
+        c.messages.pop_back();
+        if (launchFix(fix, &w)) {
+            suggestionsAfter_ = false;
+            ++revision_;
+            return true;
+        }
+        if (const int i = indexOf(convId); i >= 0) {
+            auto& back = conversations_[static_cast<std::size_t>(i)];
+            back.messages.push_back(user);
+            back.messages.push_back(last);
+        }
+        return fail(w);
+    }
     // 1.22.0 : la demande d'une mission (le plan, une proposition, une correction, une actualisation) - redemandee comme
     // une demande de mission (son etat REEL relu : le lot recalcule), jamais rejouee telle quelle.
     if (const Message& asked = c.messages.back(); asked.extra.isObject() && asked.extra.find("mission") != nullptr) {
@@ -3072,7 +3917,7 @@ bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall
     m.pending.purpose = call.purpose;
     m.pending.conversation = c.id;
     m.pending.started = when;
-    m.pending.steps = call.purpose == "correction" ? std::vector<std::string>{call.step} : call.steps;
+    m.pending.steps = call.purpose == "correction" && call.steps.empty() ? std::vector<std::string>{call.step} : call.steps;   // 1.22.5
     if (!listed(m.conversations, c.id)) m.conversations.push_back(c.id);
     m.provider = settings_.provider;
     m.model = trim(settings_.model);
@@ -3118,7 +3963,13 @@ bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall
 // Les consignes d'un appel de mission (ajoutees aux consignes dynamiques de la demande).
 std::string Assistant::missionPrompt(const mission::Mission& m, const MissionCall& call, const hmi::Project* project) const {
     if (call.purpose == "proposition" && project) return mission::batchPrompt(m, *project, call.batch, call.changes);
-    if (call.purpose == "correction" && project) return mission::correctionPrompt(m, *project, call.step);
+    if (call.purpose == "correction" && project) {
+        std::string s = mission::correctionPrompt(m, *project, call.step);
+        // 1.22.5 : une correction demandee par le logiciel - son retour (Generer et Compiler sur une copie du projet)
+        if (!call.feedback.empty())
+            s += "RETOUR DU LOGICIEL (G\xC3\xA9n\xC3\xA9rer et Compiler, sur une copie du projet avec ta proposition) :\n" + call.feedback + "\n";
+        return s;
+    }
     std::string s = mission::planningPrompt(m);
     if (call.purpose == "actualisation")
         s += "ACTUALISATION : relis le projet tel qu'il est MAINTENANT (il fait foi, pas le plan) et renvoie le plan COMPLET avec "
@@ -3212,7 +4063,9 @@ void Assistant::missionAnswered(const MissionCall& call, Conversation& c, int me
     }
     Message& msg = c.messages[static_cast<std::size_t>(message)];
     Proposal& p = *msg.proposal;
-    const std::vector<std::string> steps = call.purpose == "correction" ? std::vector<std::string>{call.step} : call.steps;
+    // 1.22.5 : une correction couvre les etapes de l'appel (celles de la proposition qu'elle remplace : la correction du
+    // logiciel) ; celle de << Corriger >> : son etape, comme avant.
+    const std::vector<std::string> steps = call.purpose == "correction" && call.steps.empty() ? std::vector<std::string>{call.step} : call.steps;
     // le lien garde avec la proposition (et dans sa conversation) : la mission, ses etapes
     p.extra.set("mission", call.id);
     {
@@ -3245,7 +4098,9 @@ void Assistant::missionChecked(mission::Mission& mm, const Proposal& p, const st
     mission::Mission* m = &mm;
     bool stale = false;
     if (ck) {
-        mission::onChecked(*m, p.id, *ck, when);
+        Check merged = *ck;   // 1.22.5 : l'avis du logiciel deja arrive compte aussi (ses erreurs, leur empreinte)
+        if (const auto v = verdictOf(p)) build::merge(merged, *v);
+        mission::onChecked(*m, p.id, merged, when);
         if (ck->stale) {
             mission::onDropped(*m, p.id, "obsolete",
                                "le projet a chang\xC3\xA9 pendant la pr\xC3\xA9paration de la proposition : elle ne s'applique pas sur un \xC3\xA9tat qui n'est "
@@ -3396,6 +4251,12 @@ void Assistant::loopArrived(Conversation& c, int message, const std::vector<std:
         if (!msg.proposal->extra.has("cercle")) loop::stamp(*msg.proposal, nullptr);
         loop::Seen s = loop::seenOf(*msg.proposal);
         s.tag = loop::ordinalTag(++order);
+        // 1.22.5 : remplacee par sa correction automatique - la meme demande : sa suite revient forcement, ce n'est pas un
+        // cercle (les memes operations, les memes erreurs, si : une correction qui revient au meme point)
+        if (msg.proposal->state == "remplacee") {
+            s.next.clear();
+            s.nextText.clear();
+        }
         // appliquee puis annulee (Ctrl+Z) : dit seulement pour celle qu'elle refait (l'empreinte de la vue n'est pas
         // relue pour toutes)
         if (open && s.ops == now0.ops && msg.proposal->state == "appliquee" && appliedState(i) == Applied::Undone) s.state = "annulee";

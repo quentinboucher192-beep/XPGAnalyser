@@ -1317,6 +1317,7 @@ void onDropped(Mission& m, std::string_view id, std::string_view state, std::str
     else if (state == "interrompue") label = "interrompue";
     else if (state == "echouee") label = "en \xC3\xA9" "chec";
     else if (state == "annulee") label = "annul\xC3\xA9" "e";
+    else if (state == "remplacee") label = "remplac\xC3\xA9" "e par sa correction";   // 1.22.5
     log(m, state == "interrompue" ? "interruption" : "proposition", P + " " + label + (reason.empty() ? std::string{} : " : " + reason) + ".", now, {},
         std::string(id));
     refreshReadiness(m);
@@ -1824,7 +1825,9 @@ StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
     }
     // l'IA travaille pour elle maintenant (une proposition, une correction)
     if (called(m, s) && live.calling) {
-        if (m.pending.purpose == "correction") set(Activity::Working, "L'IA pr\xC3\xA9pare une correction (" + nextTag + ")\xE2\x80\xA6" + since(live), true);
+        if (m.pending.purpose == "correction" && !live.correcting.empty())   // 1.22.5 : la correction demandee par le logiciel
+            set(Activity::Working, "L'IA corrige (" + live.correcting + ")\xE2\x80\xA6" + since(live), true);
+        else if (m.pending.purpose == "correction") set(Activity::Working, "L'IA pr\xC3\xA9pare une correction (" + nextTag + ")\xE2\x80\xA6" + since(live), true);
         else set(Activity::Working, "L'IA pr\xC3\xA9pare la proposition " + nextTag + "\xE2\x80\xA6" + since(live), true);
         return a;
     }
@@ -1848,6 +1851,8 @@ StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
                 const std::string ops = plural(p->ops, "op\xC3\xA9ration", "op\xC3\xA9rations");
                 if (p->held())   // 1.22.4 : retenue, elle tourne en rond
                     set(Activity::Blocked, tag(*p) + " tourne en rond \xE2\x80\x94 \xC3\xA0 d\xC3\xA9" "cider sur sa carte : " + shortLine(p->loop, 100));
+                else if (!live.building.empty() && live.building == p->id)   // 1.22.5 : l'avis du logiciel, sur une copie
+                    set(Activity::Working, "G\xC3\xA9n\xC3\xA9rer et Compiler v\xC3\xA9rifient " + tag(*p) + " sur une copie du projet\xE2\x80\xA6", true);
                 else if (p->state == "validee")
                     set(Activity::ToValidate, tag(*p) + " v\xC3\xA9rifi\xC3\xA9" "e : " + ops + (p->ops > 1 ? " pr\xC3\xAAtes" : " pr\xC3\xAAte") + " \xE2\x80\x94 Appliquer");
                 else if (!p->errors.empty())
@@ -1941,6 +1946,7 @@ std::string missionActivity(const Mission& m, const Live& live) {
     if (purpose == "plan") return "L'IA analyse le projet et pr\xC3\xA9pare le plan\xE2\x80\xA6" + since(live);
     if (purpose == "actualisation") return "L'IA relit le projet et revoit le plan\xE2\x80\xA6" + since(live);
     const std::string steps = m.pending.steps.empty() ? std::string{} : " (" + join(m.pending.steps, ", ") + ")";
+    if (purpose == "correction" && !live.correcting.empty()) return "L'IA corrige (" + live.correcting + ")" + steps + "\xE2\x80\xA6" + since(live);   // 1.22.5
     if (purpose == "correction") return "L'IA pr\xC3\xA9pare une correction" + steps + "\xE2\x80\xA6" + since(live);
     return "L'IA pr\xC3\xA9pare la proposition P" + std::to_string(m.proposals.size() + 1) + steps + "\xE2\x80\xA6" + since(live);
 }

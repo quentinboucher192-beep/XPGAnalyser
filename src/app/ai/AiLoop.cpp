@@ -138,6 +138,7 @@ std::string stateWord(const ProposalLink& l) {
     if (l.state == "echouee") return "en \xC3\xA9" "chec";
     if (l.state == "annulee") return "annul\xC3\xA9" "e";
     if (l.state == "interrompue") return "interrompue";
+    if (l.state == "remplacee") return "remplac\xC3\xA9" "e par sa correction";   // 1.22.5 : l'avis du logiciel
     if (l.state == "appliquee") return l.failed > 0 ? "appliqu\xC3\xA9" "e en partie" : "appliqu\xC3\xA9" "e";
     if (l.state == "generee" || l.state == "validee") return "\xC3\xA0 valider";
     return l.state;
@@ -149,6 +150,7 @@ std::string seenWord(std::string_view state) {
     if (state == "appliquee") return "appliqu\xC3\xA9" "e";
     if (state == "annulee") return "appliqu\xC3\xA9" "e puis annul\xC3\xA9" "e";
     if (state == "proposee") return "pas encore d\xC3\xA9" "cid\xC3\xA9" "e";
+    if (state == "remplacee") return "remplac\xC3\xA9" "e par sa correction";   // 1.22.5
     return std::string(state);
 }
 
@@ -422,6 +424,10 @@ Circle missionCircle(const Mission& m, std::string_view proposalId) {
                     tags.clear();
                     continue;
                 }
+                // 1.22.5 : une proposition remplacee par sa correction automatique (Generer et Compiler) est la MEME tentative
+                // que sa correction : le projet n'a pas bouge entre les deux, ce n'est pas un retour au meme point. Une
+                // correction qui refait les memes operations ou retombe sur les memes erreurs reste un cercle ((a), (b)).
+                if ((*it)->state == "remplacee") continue;
                 if ((*it)->projectPrint == now.projectPrint) tags.push_back(tag(**it));
             }
             if (static_cast<int>(tags.size()) < kSamePoint) continue;

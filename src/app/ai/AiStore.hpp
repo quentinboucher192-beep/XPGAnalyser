@@ -164,6 +164,12 @@ struct Settings {
     // connue au plus). Un service qui refuse la longueur demandee est redemande avec ce qu'il accepte.
     int         outputTokens{0};
     json::Value extra;
+    // 1.22.5 (a la fin) : L'AVIS DU LOGICIEL (AiBuild.hpp) - chaque proposition de l'IA connectee passe par Generer et Compiler
+    // sur une copie du projet (un fil de fond), ses constats nouveaux montres (la carte, l'apercu) et dits a l'IA ; << Corriger
+    // seule >> : des erreurs nouvelles, l'Assistant demande aussitot a l'IA de corriger (2 fois au plus par demande). Un fichier
+    // d'avant (sans ces cles) : les deux cochees.
+    bool        buildCheck{true};
+    bool        autoCorrect{true};
     bool operator==(const Settings&) const = default;
 };
 

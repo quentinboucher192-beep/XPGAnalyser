@@ -377,6 +377,8 @@ json::Value toJson(const Settings& s) {
     o.set("avertirReponses", s.notifyReplies);
     o.set("appliquerMalgreErreurs", s.applyWithErrors);
     o.set("longueurReponse", s.outputTokens);   // 1.21.3 (0 : Auto)
+    o.set("verifierGenererCompiler", s.buildCheck);   // 1.22.5 : l'avis du logiciel
+    o.set("corrigerSeule", s.autoCorrect);
     json::addMembers(o, s.extra);
     return o;
 }
@@ -409,9 +411,11 @@ Settings settingsFromJson(const json::Value& o) {
     s.applyWithErrors = o.flag("appliquerMalgreErreurs", false);
     s.outputTokens = static_cast<int>(std::clamp<std::int64_t>(o.integer("longueurReponse", 0), 0, 1000000));
     if (s.outputTokens > 0 && s.outputTokens < 1024) s.outputTokens = 1024;
+    s.buildCheck = o.flag("verifierGenererCompiler", true);   // 1.22.5 : absentes (un fichier d'avant) - cochees
+    s.autoCorrect = o.flag("corrigerSeule", true);
     // Une cle API ecrite par erreur (un fichier retouche a la main) n'est jamais relue ni reecrite.
     s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "effort", "mode", "historique",
-                                       "confidentialite", "service", "contexte", "outil", "budget", "integreeDabord", "avertirReponses", "appliquerMalgreErreurs", "longueurReponse", "cle", "cleApi", "apiKey",
+                                       "confidentialite", "service", "contexte", "outil", "budget", "integreeDabord", "avertirReponses", "appliquerMalgreErreurs", "longueurReponse", "verifierGenererCompiler", "corrigerSeule", "cle", "cleApi", "apiKey",
                                        "api_key"});
     return s;
 }

@@ -114,6 +114,7 @@ std::string proposalStateLabel(std::string_view s) {
     if (s == "obsolete") return "obsol\xC3\xA8te";
     if (s == "interrompue") return "interrompue";
     if (s == "annulee") return "annul\xC3\xA9" "e";
+    if (s == "remplacee") return "remplac\xC3\xA9" "e";   // 1.22.5 : par sa correction (Generer et Compiler)
     return std::string(s);
 }
 
@@ -261,12 +262,19 @@ mission::Live liveOf(const Assistant& as, const mission::Mission& m) {
             l.applyPercent = static_cast<int>(std::lround(std::clamp(as.applyProgress(), 0.f, 1.f) * 100.f));
         }
     l.auditing = as.auditing(m.id);
+    // 1.22.5 : l'avis du logiciel - Generer et Compiler sur une copie (la plus recente de ses propositions qui y passe), la
+    // correction automatique en cours
+    for (auto it = m.proposals.rbegin(); it != m.proposals.rend() && l.building.empty(); ++it)
+        if (as.building(it->id)) l.building = it->id;
+    if (l.calling) l.correcting = as.autoCorrecting(m.id);
     return l;
 }
 
 std::int64_t liveKey(const mission::Live& l) noexcept {
     std::int64_t k = l.calling ? 1 + std::max<long long>(0, l.elapsed) : 0;
     k = k * 128 + (l.applying.empty() ? 0 : 1 + std::clamp(l.applyPercent, 0, 100));
+    k = k * 2 + (l.building.empty() ? 0 : 1);     // 1.22.5
+    k = k * 2 + (l.correcting.empty() ? 0 : 1);
     return k * 2 + (l.auditing ? 1 : 0);
 }
 

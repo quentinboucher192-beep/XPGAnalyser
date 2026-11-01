@@ -28,11 +28,17 @@
 //      sans aboutir, << Deja propose >> dans la demande suivante, Modifier la demande (la
 //      consigne), Ignorer cette etape, une relance ; dans une conversation, la meme
 //      proposition et la meme suite.
+//    - 1.22.5 : l'avis du logiciel (un faux Generer et Compiler, build::setVerdictForTests) -
+//      la correction automatique (le message du logiciel, la proposition remplacee, le
+//      processus de developpement et ses 6 entrees), 2 corrections qui ne suffisent pas, une
+//      correction qui tourne en rond, des avertissements seuls, les options decochees, une
+//      mission (sa correction), le mode Direct, le retour de l'outil, la relecture.
 //  Scenarios de la demande : A (station de pompage complete), B (interruption
 //  pendant la 3e proposition), C (modification externe pendant la preparation),
 //  D (une autre conversation).
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
+#include "../src/app/ai/AiBuild.hpp"
 #include "../src/app/ai/AiJson.hpp"
 #include "../src/app/ai/AiMission.hpp"
 #include "../src/app/ai/AiMissionStore.hpp"
@@ -321,6 +327,7 @@ struct Fixture {
         st.outputTokens = ai::kMinOutputTokens;
         st.applyWithErrors = true;
         st.localFirst = false;
+        st.buildCheck = false;   // 1.22.5 : l'avis du logiciel a ses essais (testSoftwareVerdict) ; ici, le circuit d'avant
         as->setSettings(st);
         as->setApiKey("cle-essai");
         as->newConversation();
@@ -368,6 +375,25 @@ struct Fixture {
         for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
             if (m->proposal) return m->proposal->id;
         return {};
+    }
+    // 1.22.5 : l'avis du logiciel (Generer et Compiler), coche ; ses verifications de fond attendues (puis un tick).
+    void buildOn(bool autoCorrect = true, bool on = true) {
+        ai::Settings st = as->settings();
+        st.buildCheck = on;
+        st.autoCorrect = autoCorrect;
+        as->setSettings(st);
+    }
+    void waitBuilds() {
+        for (int k = 0; k < 2500 && as->buildingAny(); ++k) {
+            step(0.002);
+            pause(2);
+        }
+        step(0.002);
+    }
+    [[nodiscard]] std::vector<std::string> whats(int message) {
+        std::vector<std::string> out;
+        for (const auto& l : as->processOf(message)) out.push_back(l.what);
+        return out;
     }
     void waitAudit(const std::string& id) {
         for (int k = 0; k < 2500 && as->auditing(id); ++k) {
@@ -1322,6 +1348,393 @@ void testLoops() {
     check(has(f.as->nextRequest(c4), "d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 annonc\xC3\xA9" "e"), "la suite redemandee le dit a l'IA : " + f.as->nextRequest(c4));
 }
 
+// ---- 1.22.5 : L'AVIS DU LOGICIEL ---------------------------------------------------------------------------------------------
+// Un faux Generer et Compiler (build::setVerdictForTests) qui lit le libelle des cuves : << Mauvais... >> - 2 erreurs (Compiler,
+// Generer) et 1 avertissement, avec la correction du logiciel ; << Douteux... >> - 1 avertissement ; sinon rien. `g_hold` le
+// retient (le mode Direct, ce qui se voit pendant le travail).
+std::atomic<bool> g_hold{false};
+std::atomic<int>  g_verdicts{0};
+ai::build::Verdict fakeVerdict(const hmi::Project&, const ai::Proposal& p) {
+    ++g_verdicts;
+    for (int k = 0; k < 5000 && g_hold.load(); ++k) pause(2);
+    ai::build::Verdict v;
+    v.ran = true;
+    v.ms = 1400.0;
+    v.before = 3;
+    for (std::size_t i = 0; i < p.ops.size(); ++i)
+        for (const auto& [key, val] : p.ops[i].props) {
+            if (key != "label") continue;
+            ai::build::Finding f;
+            f.step = "Compiler";
+            f.category = "Expression";
+            f.where = "Vue_Station . " + p.ops[i].name + " . label";
+            f.view = "Vue_Station";
+            f.objectName = p.ops[i].name;
+            f.property = "label";
+            f.op = i;
+            if (val.rfind("Mauvais", 0) == 0) {
+                f.error = true;
+                f.message = "valeur refus\xC3\xA9" "e : " + val;
+                f.fixFrom = val;
+                f.fixTo = "Bon";
+                v.findings.push_back(f);
+                ai::build::Finding g = f;
+                g.step = "G\xC3\xA9n\xC3\xA9rer";
+                g.message = "texte vide apr\xC3\xA8s " + val;
+                g.fixFrom.clear();
+                g.fixTo.clear();
+                v.findings.push_back(g);
+                ai::build::Finding w = f;
+                w.error = false;
+                w.message = "libell\xC3\xA9 long : " + val;
+                w.fixFrom.clear();
+                w.fixTo.clear();
+                v.findings.push_back(w);
+            } else if (val.rfind("Douteux", 0) == 0) {
+                f.error = false;
+                f.message = "libell\xC3\xA9 douteux : " + val;
+                v.findings.push_back(f);
+            }
+        }
+    std::stable_partition(v.findings.begin(), v.findings.end(), [](const ai::build::Finding& f) { return f.error; });
+    for (const auto& f : v.findings) ++(f.error ? v.errors : v.warnings);
+    v.after = v.before + v.findings.size();
+    return v;
+}
+
+std::string cuveInput(const std::string& name, const std::string& label, const std::string& step = {}, const std::string& x = "300") {
+    Value op = O({{"action", "creer"}, {"genre", "Tank"}, {"nom", name}, {"proprietes", O({{"x", x}, {"y", "40"}, {"w", "120"}, {"h", "160"}, {"label", label}})}});
+    if (!step.empty()) op.set("etape", step);
+    return proposalInput("La cuve de pression", {op});
+}
+
+void testSoftwareVerdict() {
+    std::printf("[1.22.5 : l'avis du logiciel, la correction automatique, le processus de developpement]\n");
+    ai::build::setVerdictForTests(fakeVerdict);
+    std::string why, convA;
+    hmi::Project saved;
+    {
+        Fixture f("logiciel");
+        f.buildOn();
+        // (a) UNE PROPOSITION, 2 ERREURS DE GENERER ET COMPILER : la correction part seule, avec le retour du logiciel.
+        f.answerOps("toolu_v1", cuveInput("Cuve_P", "Mauvais"));
+        f.s.replies.push_back({textEv("J'ai remplac\xC3\xA9 le libell\xC3\xA9 Mauvais par Bon : le logiciel le refusait."),
+                               toolEv("toolu_v2", "proposer_operations", cuveInput("Cuve_P", "Bon")), doneEv("tool_use")});
+        check(f.as->send("Ajoute une cuve de pression.", &why), "envoyer (" + why + ")");
+        f.step();
+        const int m1 = f.lastIndex();
+        const std::string p1 = f.last().proposal ? f.last().proposal->id : std::string{};
+        check(!p1.empty() && f.last().proposal->state == "proposee", "P1 arrivee, a decider");
+        check(f.whats(m1) == std::vector<std::string>({"recue", "verification"}), "le processus : recue, verifiee");
+        {
+            const auto [text, error] = f.as->toolResult(f.last());
+            check(!error && has(text, "G\xC3\xA9n\xC3\xA9rer et Compiler en cours"), "pour l'IA, avant le verdict : << en cours >> (" + text + ")");
+        }
+        f.s.hang = true;   // la reponse de l'IA a la correction se fait attendre : ce qui se voit pendant qu'elle corrige
+        f.waitBuilds();
+        check(f.s.requests.size() == 2, "la correction est partie seule (" + std::to_string(f.s.requests.size()) + " demandes)");
+        const ai::Proposal* r1 = f.as->proposal(m1);
+        check(r1 && r1->state == "remplacee", "P1 remplacee (elle ne s'applique plus)");
+        check(!f.as->apply(m1, &why), "P1 ne s'applique plus (" + why + ")");
+        {
+            const ai::Message& soft = f.as->current()->messages[static_cast<std::size_t>(m1) + 1];
+            check(soft.role == "utilisateur" && soft.extra.str("logiciel") == "correction" && soft.extra.str("proposition") == p1
+                      && soft.extra.integer("correction") == 1,
+                  "un message du LOGICIEL (marque), la proposition corrigee, la correction 1");
+            const ai::ProviderTurn& t = f.s.requests.back().turns.back();
+            check(has(t.text, "valeur refus\xC3\xA9" "e : Mauvais") && has(t.text, "texte vide apr\xC3\xA8s Mauvais") && has(t.text, "1 sur 2"),
+                  "il porte le retour du logiciel (build::feedbackText)");
+            check(t.toolResultFor == "toolu_v1" && t.toolResultError && has(t.toolResultText, "remplac"), "le tour de l'outil : remplacee (" + t.toolResultText + ")");
+        }
+        check(has(f.as->processHeadline(m1), "Correction 1/2 : l'IA corrige 2 erreurs de G\xC3\xA9n\xC3\xA9rer et Compiler"),
+              "la bande : " + f.as->processHeadline(m1));
+        check(f.as->processWorking(m1), "le processus travaille (la carte le deplie)");
+        f.s.hang = false;
+        f.step();   // la proposition corrigee arrive
+        const int m2 = f.lastIndex();
+        const std::string p2 = f.last().proposal ? f.last().proposal->id : std::string{};
+        check(!p2.empty() && p2 != p1 && m2 == m1 + 2, "P2, la proposition corrigee");
+        f.waitBuilds();
+        check(f.s.requests.size() == 2, "son verdict est propre : rien ne repart");
+        const auto w2 = f.whats(m2);
+        check(w2 == std::vector<std::string>({"recue", "verification", "logiciel", "correction", "corrigee", "logiciel"}),
+              "le processus de la demande : 6 entrees dans l'ordre (" + std::to_string(w2.size()) + ")");
+        {
+            const auto proc = f.as->processOf(m2);
+            if (proc.size() == 6) {
+                check(has(proc[0].text, "Proposition re\xC3\xA7ue : 1 op\xC3\xA9ration") && has(proc[1].text, "V\xC3\xA9rification : 0 erreur"),
+                      "recue, verifiee : " + proc[0].text + " / " + proc[1].text);
+                check(has(proc[2].text, "2 erreurs, 1 avertissement") && has(proc[2].text, "1,4 s") && proc[2].findings.size() == 3
+                          && proc[2].findings.front().error && has(proc[2].findings.front().text, "valeur refus"),
+                      "Generer et Compiler : 2 erreurs, 1 avertissement, la duree, chaque constat (" + proc[2].text + ")");
+                check(has(proc[3].text, "Correction demand\xC3\xA9" "e \xC3\xA0 l'IA (1 sur 2)"), proc[3].text);
+                check(has(proc[4].text, "Proposition corrig\xC3\xA9" "e : 1 op\xC3\xA9ration") && has(proc[4].text, "J'ai remplac\xC3\xA9 le libell\xC3\xA9 Mauvais par Bon"),
+                      "corrigee, la phrase de l'IA : " + proc[4].text);
+                check(has(proc[5].text, "aucun constat nouveau \xE2\x9C\x93") && proc[5].proposal == p2, "le second verdict : propre (" + proc[5].text + ")");
+                check(!proc[0].time.empty() && proc[0].time.size() == 5 && proc[0].time[2] == ':', "l'heure de chaque entree : " + proc[0].time);
+            }
+        }
+        if (const ai::Proposal* r = f.as->proposal(m1)) check(r->extra.str("remplaceePar") == p2, "P1 mene a P2");
+        if (const ai::Proposal* r = f.as->proposal(m2))
+            check(r->extra.str("corrige") == p1 && r->extra.integer("corrections") == 1 && r->request == "Ajoute une cuve de pression.",
+                  "P2 : corrige P1 (1 correction), la demande de l'utilisateur gardee");
+        {
+            const auto [text, error] = f.as->toolResult(f.as->current()->messages[static_cast<std::size_t>(m2)]);
+            check(!error && has(text, "en attente") && has(text, "aucun constat nouveau"), "(g) pour l'IA : l'avis propre (" + text + ")");
+        }
+        check(f.as->check(m2).ok() && !f.as->loopOf(m2).held, "P2 : valide, pas de cercle");
+        convA = f.as->current()->id;
+        check(f.as->apply(m2, &why) && f.object("Cuve_P"), "P2 appliquee (" + why + ")");
+
+        // (b) DEUX CORRECTIONS QUI NE SUFFISENT PAS : arret, et c'est dit.
+        f.as->newConversation();
+        f.answerOps("toolu_b1", cuveInput("Cuve_B", "Mauvais1"));
+        f.answerOps("toolu_b2", cuveInput("Cuve_B", "Mauvais2"));
+        f.answerOps("toolu_b3", cuveInput("Cuve_B", "Mauvais3"));
+        const std::size_t before = f.s.requests.size();
+        check(f.as->send("Ajoute la cuve B.", &why), "une autre demande (" + why + ")");
+        f.step();
+        f.waitBuilds();   // P : 2 erreurs -> correction 1 -> C1 : encore -> correction 2 -> C2 : encore -> on s'arrete
+        check(f.s.requests.size() == before + 3 && has(f.s.requests.back().turns.back().text, "2 sur 2"), "deux corrections demandees");
+        f.step();
+        check(f.s.requests.size() == before + 3, "pas de troisieme correction");
+        const int mb = f.lastIndex();
+        const auto pb = f.as->processOf(mb);
+        check(!pb.empty() && pb.back().what == "arret" && has(pb.back().text, "2 corrections n'ont pas suffi") && has(pb.back().text, "2 erreurs"),
+              "la carte le dit : " + (pb.empty() ? std::string{} : pb.back().text));
+        check(f.last().proposal && f.last().proposal->state == "proposee" && !f.as->check(mb).ok(), "la derniere reste a decider, ses erreurs montrees");
+        check(f.last().proposal && f.last().proposal->extra.integer("corrections") == 2, "2 corrections comptees");
+
+        // (b') UNE CORRECTION QUI REVIENT AU MEME POINT (les memes operations) : retenue comme un cercle.
+        f.as->newConversation();
+        f.answerOps("toolu_r1", cuveInput("Cuve_R", "Mauvais1"));
+        f.answerOps("toolu_r2", cuveInput("Cuve_R", "Mauvais1", {}, "500"));   // la meme (la position ne compte pas)
+        const std::size_t beforeR = f.s.requests.size();
+        check(f.as->send("Ajoute la cuve R.", &why), "la cuve R (" + why + ")");
+        f.step();
+        f.waitBuilds();
+        f.step();
+        const int mr = f.lastIndex();
+        check(f.s.requests.size() == beforeR + 2 && f.as->loopOf(mr).held && listedIn(f.as->loopOf(mr).signs, "memes_operations"),
+              "la correction refait la proposition : retenue, rien ne repart (" + f.as->loopOf(mr).text + ")");
+        check(!f.as->processOf(mr).empty() && f.as->processOf(mr).back().what == "cercle", "le processus le dit (tourne en rond)");
+
+        // (c) DES AVERTISSEMENTS SEULS : rien ne repart, ils sont dits.
+        f.as->newConversation();
+        f.answerOps("toolu_c1", cuveInput("Cuve_C", "Douteux"));
+        const std::size_t beforeC = f.s.requests.size();
+        check(f.as->send("Ajoute la cuve C.", &why), "la cuve C (" + why + ")");
+        f.step();
+        f.waitBuilds();
+        f.step();
+        const int mc = f.lastIndex();
+        check(f.s.requests.size() == beforeC + 1, "des avertissements seuls : pas de correction");
+        {
+            const auto pc = f.as->processOf(mc);
+            check(!pc.empty() && pc.back().what == "logiciel" && pc.back().warnings == 1 && pc.back().errors == 0, "le processus : 1 avertissement");
+            const ai::Check ck = f.as->check(mc);
+            check(ck.ok() && std::any_of(ck.warnings.begin(), ck.warnings.end(), [](const std::string& w) { return has(w, "libell\xC3\xA9 douteux"); }),
+                  "l'avertissement est dans la verification (la carte, l'apercu)");
+            const auto [text, error] = f.as->toolResult(f.last());
+            check(!error && has(text, "libell\xC3\xA9 douteux : Douteux"), "(g) et dit a l'IA (" + text + ")");
+        }
+
+        // (d) L'OPTION DECOCHEE : rien ne part (les erreurs sont montrees) ; sans l'avis : pas de fil, un verdict << pas lances >>.
+        f.buildOn(false);
+        f.as->newConversation();
+        f.answerOps("toolu_d1", cuveInput("Cuve_D", "Mauvais1"));
+        const std::size_t beforeD = f.s.requests.size();
+        check(f.as->send("Ajoute la cuve D.", &why), "la cuve D (" + why + ")");
+        f.step();
+        f.waitBuilds();
+        f.step();
+        const int md = f.lastIndex();
+        check(f.s.requests.size() == beforeD + 1, "<< Corriger seule >> decochee : rien ne part");
+        check(!f.as->check(md).ok() && f.as->verdictOf(md) && f.as->verdictOf(md)->errors == 2, "les erreurs du logiciel sont montrees");
+        {
+            const auto [text, error] = f.as->toolResult(f.last());
+            check(error && has(text, "valeur refus\xC3\xA9" "e : Mauvais1"), "(g) le retour de l'outil porte les constats (" + text.substr(0, 120) + ")");
+        }
+        // LA CORRECTION DU LOGICIEL (fixFrom -> fixTo) : posee dans la proposition, l'avis redemande
+        check(f.as->applyBuildFix(md, 0, &why) && f.last().proposal->ops.front().props.end()
+                  != std::find_if(f.last().proposal->ops.front().props.begin(), f.last().proposal->ops.front().props.end(),
+                                  [](const auto& kv) { return kv.first == "label" && kv.second == "Bon"; }),
+              "la correction du logiciel : Mauvais1 -> Bon (" + why + ")");
+        check(!f.as->verdictOf(md) && f.as->building(f.last().proposal->id), "l'avis d'avant est oublie, un autre est demande");
+        f.waitBuilds();
+        check(f.as->verdictOf(md) && f.as->verdictOf(md)->clean() && f.as->check(md).ok(), "le nouvel avis : propre");
+        check(f.s.requests.size() == beforeD + 1, "toujours rien de parti");
+        f.buildOn(true, false);
+        f.as->newConversation();
+        f.answerOps("toolu_d2", cuveInput("Cuve_E", "Mauvais1"));
+        check(f.as->send("Ajoute la cuve E.", &why), "la cuve E (" + why + ")");
+        f.step();
+        check(!f.as->buildingAny() && f.as->verdictOf(f.lastIndex()) && !f.as->verdictOf(f.lastIndex())->ran
+                  && has(f.as->verdictOf(f.lastIndex())->why, "sactiv"),
+              "<< Faire verifier >> decochee : pas de fil, un avis << pas lances >> (la previsualisation ne l'attend pas)");
+        check(f.as->processOf(f.lastIndex()).empty() && f.as->check(f.lastIndex()).ok(), "ni processus, ni erreur du logiciel");
+
+        // (f) LE MODE DIRECT n'applique pas avant un avis propre.
+        f.buildOn(true);
+        f.as->setDirectMode(true);
+        f.as->newConversation();
+        g_hold = true;
+        f.answerOps("toolu_f1", cuveInput("Cuve_F", "Bon", {}, "40"));
+        check(f.as->send("Ajoute la cuve F.", &why), "la cuve F (" + why + ")");
+        f.step();
+        f.step();
+        const int mf = f.lastIndex();
+        check(f.last().proposal && f.last().proposal->state == "proposee" && !f.object("Cuve_F"), "mode Direct : pas appliquee avant l'avis");
+        check(!f.as->processOf(mf).empty() && f.as->processOf(mf).back().what == "direct", "le processus dit qu'elle attend l'avis");
+        g_hold = false;
+        f.waitBuilds();
+        check(f.as->proposal(mf) && f.as->proposal(mf)->state == "appliquee" && f.object("Cuve_F"), "l'avis propre : appliquee");
+        f.buildOn(false);
+        f.as->newConversation();
+        f.answerOps("toolu_f2", cuveInput("Cuve_G", "Mauvais1", {}, "40"));
+        check(f.as->send("Ajoute la cuve G.", &why), "la cuve G (" + why + ")");
+        f.step();
+        f.waitBuilds();
+        const int mg = f.lastIndex();
+        check(f.as->proposal(mg) && f.as->proposal(mg)->state == "proposee" && !f.object("Cuve_G"), "un avis en erreur : pas appliquee");
+        check(!f.as->processOf(mg).empty() && f.as->processOf(mg).back().what == "direct" && has(f.as->processOf(mg).back().text, "pas appliqu"),
+              "et c'est dit : " + (f.as->processOf(mg).empty() ? std::string{} : f.as->processOf(mg).back().text));
+        f.as->setDirectMode(false);
+        saved = f.doc->project;
+    }
+    // (h) LA RELECTURE : le processus et l'avis se relisent ; une conversation de la 1.22.4 se relit.
+    {
+        ai::Conversation old;
+        old.id = "c-ancienne-1224";
+        old.title = "Une conversation de la 1.22.4";
+        old.created = old.modified = ai::isoDate(ai::now());
+        ai::Message u;
+        u.id = "m1";
+        u.role = "utilisateur";
+        u.text = "Ajoute un voyant.";
+        old.messages.push_back(u);
+        ai::Message a;
+        a.id = "m2";
+        a.role = "assistant";
+        a.state = "fini";
+        a.provider = "anthropic";
+        a.text = "Voici.";
+        ai::Proposal pr;
+        pr.id = "op-ancienne";
+        pr.summary = "Un voyant";
+        pr.view = "Vue_Station";
+        if (const hmi::View* v = saved.viewByName("Vue_Station")) pr.viewId = v->id;
+        ai::Operation op;
+        op.action = ai::Operation::Action::Create;
+        op.kind = "Indicator";
+        op.name = "Voyant_Ancien";
+        op.props = {{"x", "40"}, {"y", "300"}};
+        pr.ops = {op};
+        a.proposal = pr;
+        a.tool = ai::ToolCall{"toolu_ancien", "proposer_operations", "{}", {}};
+        old.messages.push_back(a);
+        check(ai::saveConversation(old), "une conversation de la 1.22.4 ecrite");
+    }
+    {
+        Fixture g("logiciel", false, &saved);
+        check(g.as->select(convA), "relue : la conversation de (a)");
+        const auto* c = g.as->current();
+        int m1 = -1, m2 = -1;
+        for (std::size_t i = 0; c && i < c->messages.size(); ++i)
+            if (c->messages[i].proposal) (m1 < 0 ? m1 : m2) = static_cast<int>(i);
+        check(m1 >= 0 && m2 >= 0 && g.as->proposal(m1)->state == "remplacee" && g.as->proposal(m2)->state == "appliquee", "relue : remplacee, appliquee");
+        check(g.whats(m2).size() == 6 && g.as->processOf(m2)[4].what == "corrigee", "relu : le processus (6 entrees)");
+        check(g.as->verdictOf(m2) && g.as->verdictOf(m2)->clean() && g.as->verdictOf(m1) && g.as->verdictOf(m1)->errors == 2
+                  && g.as->verdictOf(m1)->findings.size() == 3,
+              "relus : les avis du logiciel");
+        check(g.as->select("c-ancienne-1224"), "relue : la conversation de la 1.22.4");
+        check(g.as->processOf(1).empty() && !g.as->verdictOf(1) && g.as->check(1).ok(), "sans processus ni avis : comme avant");
+        const auto [text, error] = g.as->toolResult(g.as->current()->messages[1]);
+        check(!error && text == "en attente : pas encore appliqu\xC3\xA9" "e (l'utilisateur ne l'a ni appliqu\xC3\xA9" "e ni refus\xC3\xA9" "e).",
+              "son retour d'outil : celui d'avant (" + text + ")");
+    }
+    {   // les reglages d'avant (sans les cles) : les deux options cochees ; decochees, elles se relisent
+        Value o = Value::object();
+        o.set("actif", true);
+        const ai::Settings s0 = ai::settingsFromJson(o);
+        check(s0.buildCheck && s0.autoCorrect, "un parametres.json d'avant : << Faire verifier >> et << Corriger seule >> cochees");
+        ai::Settings s1 = s0;
+        s1.buildCheck = false;
+        s1.autoCorrect = false;
+        const ai::Settings s2 = ai::settingsFromJson(ai::toJson(s1));
+        check(!s2.buildCheck && !s2.autoCorrect && !ai::toJson(s1).has("extra"), "decochees : relues decochees");
+    }
+    ai::build::setVerdictForTests(nullptr);
+}
+
+// ---- 1.22.5 : une mission - l'avis en erreur passe par la correction de la mission ----------------------------------------
+void testSoftwareVerdictMission() {
+    std::printf("[1.22.5 : l'avis du logiciel dans une mission]\n");
+    ai::build::setVerdictForTests(fakeVerdict);
+    Fixture f("logiciel_mission");
+    f.buildOn();
+    std::string why;
+    f.answerPlan("toolu_plan", planInput("Pression", {{"S1", "Poser la cuve de pression", "autre", {}, 1, {"objet:Cuve_M"}}}));
+    check(f.as->createMission("Cr\xC3\xA9" "e la supervision compl\xC3\xA8te de la pression : la cuve, les variables, les alarmes et la vue.", &why),
+          "creer (" + why + ")");
+    const std::string id = f.as->missions().empty() ? std::string{} : f.as->missions().front().id;
+    f.step();
+    f.answerOps("toolu_m1", cuveInput("Cuve_M", "Mauvais", "S1"));
+    f.s.replies.push_back({textEv("J'ai mis le libell\xC3\xA9 Bon."), toolEv("toolu_m2", "proposer_operations", cuveInput("Cuve_M", "Bon", "S1")), doneEv("tool_use")});
+    check(f.as->continueMission(id, &why), "la suite (" + why + ")");
+    f.step();
+    const std::string p1 = f.lastProposalId();
+    const std::size_t sent = f.s.requests.size();
+    f.s.hang = true;   // la correction se fait attendre : ce qui se voit pendant qu'elle s'ecrit
+    f.waitBuilds();
+    check(f.s.requests.size() == sent + 1, "l'avis en erreur : la correction de la mission part seule");
+    {
+        const ai::ProviderRequest& r = f.s.requests.back();
+        check(has(r.systemDynamic, "CORRECTION") && has(r.systemDynamic, "RETOUR DU LOGICIEL") && has(r.systemDynamic, "valeur refus\xC3\xA9" "e : Mauvais"),
+              "la consigne de correction de la mission, avec le retour du logiciel");
+        check(has(r.systemDynamic, "- P1 (remplac\xC3\xA9" "e par sa correction)"), "<< Deja propose >> : P1, remplacee");
+    }
+    check(f.linkState(id, p1) == "remplacee" && f.stepState(id, "S1") == ms::StepState::Error, "P1 remplacee ; S1 en erreur le temps de la correction");
+    if (const ms::Mission* m = f.mission(id)) {
+        check(m->pending.active && m->pending.purpose == "correction", "l'appel de correction est ecrit avant de partir");
+        const std::string corr = f.as->autoCorrecting(id);
+        check(corr == "G\xC3\xA9n\xC3\xA9rer et Compiler : 2 erreurs", "ce qu'elle corrige : " + corr);
+        ms::Live live;
+        live.calling = true;
+        live.correcting = corr;
+        if (const ms::Step* s1 = m->step("S1"))
+            check(has(ms::activityOf(*m, *s1, live).text, "L'IA corrige (G\xC3\xA9n\xC3\xA9rer et Compiler : 2 erreurs)"),
+                  "l'activite de l'etape : " + ms::activityOf(*m, *s1, live).text);
+        bool logged = false, replaced = false;
+        for (const auto& e : m->history) {
+            logged = logged || (e.proposal == p1 && has(e.text, "G\xC3\xA9n\xC3\xA9rer et Compiler (copie du projet) : 2 erreurs"));
+            replaced = replaced || (e.proposal == p1 && has(e.text, "remplac"));
+        }
+        check(logged && replaced, "l'historique (et le journal de l'etape) garde l'avis et le remplacement");
+        if (const ms::Step* s1 = m->step("S1")) {
+            bool inJournal = false;
+            for (const auto& l : ms::stepJournal(*m, *s1)) inJournal = inJournal || has(l.text, "G\xC3\xA9n\xC3\xA9rer et Compiler");
+            check(inJournal, "le journal de S1 dit Generer et Compiler");
+        }
+    }
+    {
+        const ai::Message& asked = f.as->current()->messages[f.as->current()->messages.size() - 2];
+        check(asked.role == "utilisateur" && asked.extra.str("logiciel") == "correction" && asked.extra.str("mission") == id,
+              "la demande de correction : un message du logiciel, de la mission");
+    }
+    f.s.hang = false;
+    f.step();
+    const std::string c1 = f.lastProposalId();
+    check(c1 != p1 && f.stepState(id, "S1") == ms::StepState::AwaitingValidation, "la correction arrive : S1 attend sa validation");
+    f.waitBuilds();
+    check(f.s.requests.size() == sent + 1 && f.linkState(id, c1) == "validee", "son avis est propre : validee, rien ne repart");
+    check(f.mission(id) && f.mission(id)->step("S1") && f.mission(id)->step("S1")->attempts == 1, "une correction automatique : la meme tentative");
+    const int mc = f.as->messageOfProposal(c1);
+    check(mc >= 0 && f.whats(mc).size() == 6, "le processus de la demande, sur la carte de la correction");
+    check(mc >= 0 && f.as->apply(mc, &why) && f.stepState(id, "S1") == ms::StepState::Done, "appliquee : S1 terminee (" + why + ")");
+    ai::build::setVerdictForTests(nullptr);
+}
+
 } // namespace
 
 int main() {
@@ -1336,6 +1749,8 @@ int main() {
     testXpgMission();          // 1.22.3
     testForceFinish();         // 1.22.2
     testLoops();               // 1.22.4
+    testSoftwareVerdict();          // 1.22.5
+    testSoftwareVerdictMission();   // 1.22.5
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
