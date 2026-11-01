@@ -267,11 +267,27 @@ Placement place(const hmi::Project& project, const std::vector<Request>& in) {
             if (g.empty()) order.push_back(pk);
             g.push_back(i);
         }
+        // 2 bis (1.22.1) : au moins trois equipements d'une meme famille crees ensemble (PompeG_1, PompeG_2, PompeG_3 : la
+        // famille PompeG) - un dossier de famille et un sous-dossier par equipement (PompeG/PompeG_1), plutot que des dizaines
+        // de dossiers a la racine. Une famille de moins de 3 caracteres (P1, P2 : << P >>) n'en fait pas.
+        const auto familyOf = [](std::string_view prefix) {
+            std::size_t e = prefix.size();
+            while (e > 0 && (std::isdigit(static_cast<unsigned char>(prefix[e - 1])) || prefix[e - 1] == '_' || prefix[e - 1] == '-' || prefix[e - 1] == ' ')) --e;
+            return std::string(prefix.substr(0, e));
+        };
+        std::unordered_map<std::string, std::size_t> families;   // la famille (sa cle) -> ses equipements crees ensemble
+        for (const auto& pk : order)
+            if (const auto& g = groups[pk]; g.size() >= 2)
+                if (const Prefix px = prefixOf(in[g.front()].name); px.equipment)
+                    if (const std::string fam = familyOf(px.text); fam.size() >= 3) ++families[key(fam)];
         for (const auto& pk : order) {
             const auto& g = groups[pk];
             if (g.size() < 2) continue;
-            const std::string text = prefixOf(in[g.front()].name).text;
-            const std::string folder = dirs.spell(text);
+            const Prefix gpx = prefixOf(in[g.front()].name);
+            const std::string text = gpx.text;
+            std::string where = text;
+            if (const std::string fam = familyOf(text); gpx.equipment && fam.size() >= 3 && families[key(fam)] >= 3) where = fam + "/" + text;
+            const std::string folder = dirs.spell(where);
             create(folder);
             for (const auto i : g) out.placed[i] = Placed{folder, Placed::How::Common, text};
         }
