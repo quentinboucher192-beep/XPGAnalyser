@@ -10,6 +10,9 @@
 #include "AiFileModelDialog.hpp"   // 1.21.0 : << Modele... >> d'un classeur joint
 #include "AiNotifications.hpp"       // 1.21.2 : l'onglet Notifications (le journal)
 #include "AiNotificationsView.hpp"   // 1.21.2 : ... et sa liste
+#include "AiMissionBoard.hpp"        // 1.22.0 : les missions IA (missionui)
+#include "AiMissionStrip.hpp"        // 1.22.0 : la mission active, << Creer une mission IA ? >>
+#include "AiMissionsView.hpp"        // 1.22.0 : l'onglet Missions IA
 #include "../Dossiers.hpp"
 #include "../screens/Screens.hpp"   // MessageDialog
 
@@ -693,6 +696,22 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
         notifView_ = &static_cast<AiNotificationsView&>(addChild(std::make_unique<AiNotificationsView>(base + ".notifications", std::move(cb))));
         notifView_->setVisibility(ui::Visibility::Collapsed);
     }
+    // 1.22.0 : LES MISSIONS IA - l'onglet (la liste), la bande de la mission active, la carte << Creer une mission IA ? >>.
+    missionsView_ = &static_cast<AiMissionsView&>(addChild(std::make_unique<AiMissionsView>(base + ".missions", *this)));
+    missionsView_->setVisibility(ui::Visibility::Collapsed);
+    missionStrip_ = &static_cast<AiMissionStrip&>(addChild(std::make_unique<AiMissionStrip>(base + ".mission", *this)));
+    missionStrip_->setVisibility(ui::Visibility::Collapsed);
+    missionAsk_ = &static_cast<AiMissionAsk&>(addChild(std::make_unique<AiMissionAsk>(base + ".mission-ou-conversation")));
+    missionAsk_->setVisibility(ui::Visibility::Collapsed);
+    links_ += missionAsk_->chosen->connect([this](int what) {
+        if (what == 1) (void)chooseMission(true);
+        else if (what == 2) (void)chooseMission(false);
+        else {
+            dismissMissionAsk();
+            prompt_->takeFocus();
+            say("Rien n'est parti : la demande reste dans la saisie.");
+        }
+    });
     auto menu = std::make_unique<ui::PopupMenu>(base + ".menu");
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::move(menu)));
 
@@ -711,6 +730,7 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
     links_ += menu_->itemChosen->connect([this](int item) { menuChosen(item); });
     refreshButtons();
     syncNotifications();   // 1.21.2 : la pastille des non lues des le depart
+    syncMissions();        // 1.22.0
 }
 
 AiPanel::~AiPanel() { learning::setPhraseTester(nullptr); }
@@ -751,9 +771,9 @@ void AiPanel::tick(double now) {
         }
         if (chat_->anyChecking() || assistant_->applyingAny() || chat_->copyFlash()) invalidate();
         // 1.20.2 : le plan en cours apparait, change de hauteur ou s'en va : la discussion se replace.
-        if (strip_ && !notifsShown_) {   // 1.21.2 : l'onglet Notifications le cache
+        if (strip_ && !notifsShown_ && !missionsShown_) {   // 1.21.2 : l'onglet Notifications le cache (1.22.0 : Missions IA aussi)
             const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
-            const float want = strip_->heightFor(bounds().w, std::max(0.f, (pendingArea_.y - 6.f - chatTop - ctxH_) * 0.45f));
+            const float want = strip_->heightFor(bounds().w, std::max(0.f, (chatBottom_ - chatTop - missionStripH_ - ctxH_) * 0.45f));
             if (std::fabs(want - stripH_) > 0.5f) invalidateLayout();
         }
     }
@@ -784,6 +804,7 @@ void AiPanel::tick(double now) {
                 }
     }
     syncNotifications();   // 1.21.2 : le journal a change (une source de n'importe quel fil) : la liste, la pastille
+    syncMissions();        // 1.22.0 : les missions (leur revision) : la liste, la bande, la pastille
     refreshBand(now);   // 1.16.0 : la limite en direct (le compte a rebours avance chaque seconde)
     // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
     // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
@@ -904,6 +925,7 @@ void AiPanel::ensureLoaded() {
     for (const auto& p : problems) say("Assistant IA : conversation illisible, laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 (" + p + ")");
     seen_ = 0;
     sync();
+    syncMissions();              // 1.22.0 : les missions relues avec le reste
     chat_->showLastExchange();   // la premiere ouverture : le debut de la conversation, pas sa fin
 }
 
@@ -1067,8 +1089,19 @@ void AiPanel::menuChosen(int id) {
 // ---- envoyer --------------------------------------------------------------------------------
 bool AiPanel::send() {
     const std::string text = prompt_->text();
+    // 1.22.0 : UNE DEMANDE COMPLEXE - << Creer une mission IA ? >> d'abord, rien ne part encore (c'est l'Assistant qui
+    // juge : une IA connectee, une demande complexe, aucune mission dans cette conversation ; jamais une demande simple).
+    if (!assistant_->generating() && assistant_->suggestsMission(text)) {
+        if (askText_ == text) {
+            say("Choisis au-dessus de la saisie : \xC2\xAB Cr\xC3\xA9" "er la mission \xC2\xBB, ou \xC2\xAB Continuer en conversation \xC2\xBB.");
+            return false;
+        }
+        offerMission(text);
+        return false;
+    }
     if (!sendText(text)) return false;
     prompt_->setText({});
+    if (!askText_.empty()) dismissMissionAsk();   // une autre demande est partie : la carte n'a plus d'objet
     return true;
 }
 
@@ -1358,7 +1391,7 @@ void AiPanel::syncNotifications() {
 bool AiPanel::looking(const std::string& conversation) const {
     for (const ui::Widget* w = this; w; w = w->parent())
         if (!w->visible()) return false;   // le panneau replie, cache
-    if (notifsShown_) return false;        // l'onglet Notifications est devant la conversation
+    if (notifsShown_ || missionsShown_) return false;   // l'onglet Notifications (ou Missions IA) est devant la conversation
     if (ui_.windowFocused && !ui_.windowFocused()) return false;
     const Conversation* c = assistant_->current();
     return c && c->id == conversation;
@@ -1390,7 +1423,10 @@ void AiPanel::notifyReply(const Conversation& c) {
 
 void AiPanel::showNotifications(bool on) {
     if (on == notifsShown_) return;
-    if (on) cancelRename();
+    if (on) {
+        cancelRename();
+        missionsShown_ = false;   // 1.22.0 : un onglet a la fois
+    }
     notifsShown_ = on;
     syncNotifications();
     if (on && notifView_) {
@@ -1411,7 +1447,7 @@ bool AiPanel::followNotification(const std::string& action) {
             say("Assistant IA : cette conversation n'existe plus (elle a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9" "e).");
             return false;
         }
-        showNotifications(false);
+        showConversation();
         (void)selectConversation(index);
         const Conversation* c = assistant_->current();
         const int msg = c && t.message >= 0 && t.message < static_cast<int>(c->messages.size()) ? t.message : -1;
@@ -1433,7 +1469,7 @@ bool AiPanel::followNotification(const std::string& action) {
             return false;
         }
         const std::string name = a->name;
-        showNotifications(false);
+        showConversation();
         if (!conv.empty() && (!assistant_->current() || assistant_->current()->id != conv)) (void)selectConversation(assistant_->indexOf(conv));
         sync();   // le contexte de la discussion de cette conversation
         if (t.kind == "modele") {
@@ -1474,8 +1510,298 @@ bool AiPanel::followNotification(const std::string& action) {
         openSettings();
         return true;
     }
+    if (t.kind == "mission") {   // 1.22.0 : le tableau de bord de la mission (au centre)
+        if (!assistant_->findMission(t.id)) {
+            say("Assistant IA : cette mission n'existe plus (son fichier a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9).");
+            return false;
+        }
+        return openMission(t.id, -1);
+    }
     say("Assistant IA : ce lien n'est pas connu de cette version.");
     return false;
+}
+
+// ---- 1.22.0 : les missions IA -------------------------------------------------------------------
+namespace {
+std::string quoted(const std::string& name) { return "\xC2\xAB " + name + " \xC2\xBB"; }
+} // namespace
+
+void AiPanel::showMissions(bool on) {
+    if (on == missionsShown_) return;
+    if (on) {
+        cancelRename();
+        notifsShown_ = false;   // un onglet a la fois
+    }
+    missionsShown_ = on;
+    syncMissions();
+    if (on && missionsView_) {
+        missionsView_->refresh();
+        missionsView_->takeFocus();
+    }
+    invalidateLayout();
+    invalidate();
+    if (on && missionsView_) {
+        const std::size_t open = missionsView_->count(AiMissionsView::Filter::Open);
+        say("Missions IA : " + (open == 0 ? std::string("aucune en cours") : std::to_string(open) + " en cours")
+            + (missionsBadge_ > 0 ? ", " + std::to_string(missionsBadge_) + (missionsBadge_ > 1 ? " attendent" : " attend") + " une d\xC3\xA9" "cision." : std::string(".")));
+    }
+}
+
+void AiPanel::showConversation() {
+    showMissions(false);
+    showNotifications(false);
+}
+
+void AiPanel::syncMissions() {
+    if (!missionsView_ || !missionStrip_) return;
+    (void)missionsView_->poll();
+    const std::size_t before = missionsBadge_;
+    const bool alertBefore = missionsAlert_;
+    missionsBadge_ = missionsView_->attentionCount();
+    missionsAlert_ = missionsView_->attentionAlert();
+    if (before != missionsBadge_ || alertBefore != missionsAlert_) {
+        invalidateLayout();   // la largeur de l'onglet
+        invalidate();
+    }
+    if (missionStrip_->poll()) invalidateLayout();
+    if (!notifsShown_ && !missionsShown_) {
+        const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
+        const float want = missionStrip_->heightFor(bounds().w, std::max(0.f, (chatBottom_ - chatTop) * 0.30f));
+        if (std::fabs(want - missionStripH_) > 0.5f) invalidateLayout();
+    }
+}
+
+bool AiPanel::missionBusy(const mission::Mission& m) const {
+    if (assistant_->auditing(m.id)) return true;
+    if (!assistant_->generating()) return false;
+    const std::string c = assistant_->generatingConversationId();
+    if (c.empty()) return false;
+    return c == m.conversation || std::find(m.conversations.begin(), m.conversations.end(), c) != m.conversations.end();
+}
+
+void AiPanel::offerMission(const std::string& text) {
+    askText_ = text;
+    missionAsk_->setRequest(text);
+    invalidateLayout();
+    invalidate();
+    say("Assistant IA : cette demande peut devenir une mission IA - choisis au-dessus de la saisie (rien n'est encore parti).");
+}
+
+void AiPanel::dismissMissionAsk() {
+    if (askText_.empty()) return;
+    askText_.clear();
+    missionAsk_->setRequest({});
+    invalidateLayout();
+    invalidate();
+}
+
+bool AiPanel::chooseMission(bool create) {
+    if (askText_.empty()) return false;
+    const std::string text = askText_;   // une copie : le choix ferme la carte
+    if (create) {
+        if (!createMission(text)) return false;
+        if (prompt_->text() == text) prompt_->setText({});
+        return true;
+    }
+    dismissMissionAsk();
+    if (!sendText(text)) return false;   // l'envoi normal (le budget, l'avis de fin de reponse...)
+    if (prompt_->text() == text) prompt_->setText({});
+    return true;
+}
+
+bool AiPanel::createMission(const std::string& request) {
+    cancelRename();
+    std::string why;
+    if (!assistant_->createMission(request, &why)) {
+        say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
+        return false;
+    }
+    dismissMissionAsk();
+    watchingReply_ = assistant_->generatingConversationId();   // l'avis de fin de reponse, comme un envoi
+    showConversation();
+    seen_ = 0;
+    sync();
+    syncMissions();
+    chat_->scrollToBottom();
+    say("Mission IA cr\xC3\xA9\xC3\xA9" "e : l'IA analyse le projet et pr\xC3\xA9pare le plan (rien n'est modifi\xC3\xA9). Son tableau de bord : l'onglet Missions IA, "
+        "ou un clic sur la bande \xC2\xAB Mission IA \xC2\xBB.");
+    return true;
+}
+
+bool AiPanel::openMission(const std::string& missionId, int mode) {
+    const mission::Mission* m = assistant_->findMission(missionId);
+    if (!m) {
+        say("Assistant IA : cette mission n'existe plus (son fichier a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9).");
+        return false;
+    }
+    // -1 : le tableau de bord, ou l'ecran de reprise si la mission en a besoin (en pause, un appel interrompu, le projet
+    // modifie ou introuvable a sa derniere verification).
+    if (mode < 0) mode = missionui::wantsResume(*m, m->coherence, missionBusy(*m)) ? 1 : 0;
+    if (ui_.openMission) {
+        if (ui_.openMission(missionId, mode)) return true;
+        say("Assistant IA : le tableau de bord de la mission n'a pas pu s'ouvrir (un projet IHM est-il ouvert ?).");
+        return false;
+    }
+    // Sans hote (un essai) : l'onglet Missions IA, la mission choisie.
+    showMissions(true);
+    return missionsView_->selectMission(missionId);
+}
+
+bool AiPanel::missionAct(const std::string& missionId, MissionAct act, const std::string& step) {
+    const mission::Mission* m = assistant_->findMission(missionId);
+    if (!m) {
+        say("Assistant IA : cette mission n'existe plus (son fichier a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9).");
+        return false;
+    }
+    const std::string name = missionui::title(*m);   // une copie : la mission change sous le geste
+    m = nullptr;
+    std::string why;
+    bool ok = false;
+    switch (act) {
+        case MissionAct::Continue:
+        case MissionAct::Correct:
+        case MissionAct::Refresh: {
+            ok = act == MissionAct::Continue  ? assistant_->continueMission(missionId, &why)
+                 : act == MissionAct::Correct ? assistant_->correctStep(missionId, step, &why)
+                                              : assistant_->refreshMission(missionId, &why);
+            if (!ok) break;
+            // la reponse s'ecrit dans la conversation de la mission (rouverte) : elle est montree
+            watchingReply_ = assistant_->generatingConversationId();
+            showConversation();
+            if (ui_.showPanel) ui_.showPanel();
+            seen_ = 0;
+            sync();
+            chat_->scrollToBottom();
+            say(act == MissionAct::Continue
+                    ? "Mission " + quoted(name) + " : la suite est demand\xC3\xA9" "e \xC3\xA0 l'IA, avec l'\xC3\xA9tat r\xC3\xA9" "el du projet (une carte \xC3\xA0 v\xC3\xA9rifier et appliquer)."
+                : act == MissionAct::Correct
+                    ? "Mission " + quoted(name) + " : une correction de " + step + " est demand\xC3\xA9" "e \xC3\xA0 l'IA (une nouvelle proposition, \xC3\xA0 valider)."
+                    : "Mission " + quoted(name) + " : l'IA relit le projet et revoit le plan (les \xC3\xA9tapes termin\xC3\xA9" "es sont gard\xC3\xA9" "es).");
+            break;
+        }
+        case MissionAct::Audit:
+            ok = assistant_->auditMission(missionId, &why);
+            if (ok) say("Mission " + quoted(name) + " : l'audit final tourne sur un fil de fond (une copie du projet) ; le rapport arrive dans le tableau de bord.");
+            break;
+        case MissionAct::Pause:
+            ok = assistant_->pauseMission(missionId, &why);
+            if (ok) say("Mission " + quoted(name) + " en pause : plus rien ne s'applique jusqu'\xC3\xA0 Reprendre.");
+            break;
+        case MissionAct::Resume:
+            ok = assistant_->resumeMission(missionId, &why);
+            if (ok) {
+                const mission::Mission* now = assistant_->findMission(missionId);
+                say("Mission " + quoted(name) + " reprise" + (now ? " : " + mission::nextAction(*now) : std::string(".")));
+            }
+            break;
+        case MissionAct::Cancel: {
+            const auto run = [this, missionId, name] {
+                std::string w;
+                if (assistant_->cancelMission(missionId, &w))
+                    say("Mission " + quoted(name) + " annul\xC3\xA9" "e : ses propositions ne s'appliqueront plus ; son historique reste consultable.");
+                else say("Mission " + quoted(name) + " : " + (w.empty() ? std::string("elle n'a pas pu \xC3\xAAtre annul\xC3\xA9" "e.") : w));
+                syncMissions();
+            };
+            if (!ui_.showDialog) {   // sans hote (un essai) : on annule
+                run();
+                return true;
+            }
+            HmiAskDialog::Spec spec;
+            spec.id = "dialog.ai.mission.annuler";
+            spec.title = "Annuler la mission";
+            spec.text = "Annuler la mission " + quoted(name) + " ?\nSes propositions ne s'appliqueront plus et ses \xC3\xA9tapes non finies passent \xC3\xA0 "
+                        "\xC2\xAB annul\xC3\xA9" "e \xC2\xBB. Ce qui est d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9 reste dans le projet (Ctrl+Z le reprend comme d'habitude). "
+                        "Son historique est gard\xC3\xA9 : elle reste consultable.";
+            spec.confirm = "Annuler la mission";
+            spec.cancel = "Garder";
+            spec.danger = true;
+            spec.width = 560.f;
+            ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [run](const menu::DialogResult& r) {
+                if (r.accepted()) run();
+            });
+            return false;   // la reponse viendra
+        }
+        case MissionAct::Archive:
+        case MissionAct::Unarchive:
+            ok = assistant_->archiveMission(missionId, act == MissionAct::Archive, &why);
+            if (ok)
+                say(act == MissionAct::Archive ? "Mission " + quoted(name) + " archiv\xC3\xA9" "e : rien n'est supprim\xC3\xA9 (le filtre Archiv\xC3\xA9" "es la montre, D\xC3\xA9sarchiver la remet)."
+                                               : "Mission " + quoted(name) + " d\xC3\xA9sarchiv\xC3\xA9" "e.");
+            break;
+        case MissionAct::Conversation:
+            ok = assistant_->openMissionConversation(missionId);
+            if (!ok) {
+                why = "sa conversation n'existe plus (elle a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9" "e) : le tableau de bord garde l'historique de la mission.";
+                break;
+            }
+            showConversation();
+            if (ui_.showPanel) ui_.showPanel();
+            seen_ = 0;
+            sync();
+            chat_->showLastExchange();
+            say("La conversation de la mission " + quoted(name) + " est ouverte.");
+            break;
+    }
+    if (!ok && !why.empty()) say("Mission " + quoted(name) + " : " + why);
+    syncMissions();
+    return ok;
+}
+
+bool AiPanel::renameMission(const std::string& missionId, const std::string& name) {
+    std::string why;
+    if (!assistant_->renameMission(missionId, name, &why)) {
+        say(why.empty() ? std::string("La mission n'a pas pu \xC3\xAAtre renomm\xC3\xA9" "e.") : "Mission IA : " + why);
+        return false;
+    }
+    say("Mission renomm\xC3\xA9" "e : " + name);
+    syncMissions();
+    return true;
+}
+
+bool AiPanel::missionProposal(const std::string& missionId, const std::string& proposalId, int what) {
+    const mission::Mission* m = assistant_->findMission(missionId);
+    const mission::ProposalLink* link = m ? m->proposal(proposalId) : nullptr;
+    if (!link) {
+        say("Assistant IA : cette proposition n'est plus dans la mission.");
+        return false;
+    }
+    const std::string tag = "P" + std::to_string(link->order), conversation = link->conversation;   // des copies
+    std::string why;
+    if (what == 2 && !mission::mayApply(*m, proposalId, &why)) {
+        say(tag + " : " + why);
+        return false;
+    }
+    m = nullptr;
+    link = nullptr;
+    // la conversation de la mission (rouverte), puis celle qui porte la proposition si c'en est une autre
+    (void)assistant_->openMissionConversation(missionId);
+    int msg = assistant_->messageOfProposal(proposalId);
+    if (msg < 0 && !conversation.empty())
+        if (assistant_->indexOf(conversation) >= 0) {
+            (void)assistant_->select(conversation);
+            msg = assistant_->messageOfProposal(proposalId);
+        }
+    seen_ = 0;
+    sync();
+    if (msg < 0) {
+        say(tag + " : sa conversation n'existe plus (supprim\xC3\xA9" "e) ; son compte rendu reste dans le tableau de bord de la mission.");
+        return false;
+    }
+    switch (what) {
+        case 0:
+            openPreview(msg);   // la fenetre d'apercu (une proposition qui n'est plus a decider : la barre d'etat le dit)
+            return true;
+        case 2:
+            showConversation();
+            return applyProposal(msg);   // les confirmations de la carte (suppressions, erreurs)
+        default:
+            showConversation();
+            if (ui_.showPanel) ui_.showPanel();
+            layout();   // la discussion a sa largeur : la carte se place
+            chat_->revealMessage(msg, true);
+            say(tag + " : sa carte, dans la conversation de la mission (le plan d\xC3\xA9pli\xC3\xA9).");
+            return true;
+    }
 }
 
 // ---- la mise en page --------------------------------------------------------------------------
@@ -1510,31 +1836,52 @@ void AiPanel::onLayout() {
     settingsBtn_->setBounds({closeBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
     newBtn_->setBounds({settingsBtn_->bounds().x - bs - 2.f, closeBtn_->bounds().y, bs, bs});
     // 1.21.2 : LES ONGLETS sous l'en-tete - Conversation | Notifications (la cloche, la pastille des non lues).
+    // 1.22.0 : | Missions IA (sa pastille : celles qui attendent une decision). Etroit (1280 x 800) : Notifications, puis
+    // Missions IA, ne gardent que leur icone et leur pastille (le libelle : l'infobulle).
     {
         tabs_ = {x, header_.bottom(), w, kTabsH};
         const float convW = ui::measureWidth("Conversation", kTab) + 24.f;
         tabConv_ = {x + kPad - 4.f, tabs_.y, convW, kTabsH};
-        const std::string count = badge_ > 99 ? std::string("99+") : std::to_string(badge_);
-        const float badgeW = badge_ > 0 ? std::max(18.f, ui::measureWidth(count, kMeta) + 10.f) + 6.f : 0.f;
-        float nw = 12.f + 16.f + 6.f + ui::measureWidth("Notifications", kTab) + badgeW + 12.f;
-        nw = std::min(nw, std::max(40.f, b.right() - kPad - (tabConv_.right() + 2.f)));
+        const auto pillW = [](std::size_t n) {
+            const std::string count = n > 99 ? std::string("99+") : std::to_string(n);
+            return n > 0 ? std::max(18.f, ui::measureWidth(count, kMeta) + 10.f) + 6.f : 0.f;
+        };
+        const float nBadge = pillW(badge_), mBadge = pillW(missionsBadge_);
+        const float notifFull = 12.f + 16.f + 6.f + ui::measureWidth("Notifications", kTab) + nBadge + 12.f;
+        const float notifShort = 12.f + 16.f + (nBadge > 0.f ? nBadge : 0.f) + 12.f;
+        const float missFull = 12.f + 16.f + 6.f + ui::measureWidth("Missions IA", kTab) + mBadge + 12.f;
+        const float missShort = 12.f + 16.f + (mBadge > 0.f ? mBadge : 0.f) + 12.f;
+        const float room = b.right() - kPad - (tabConv_.right() + 2.f);
+        notifsCompact_ = notifFull + 2.f + missFull > room;
+        missionsCompact_ = notifsCompact_ && notifShort + 2.f + missFull > room;
+        float nw = notifsCompact_ ? notifShort : notifFull;
+        float mw = missionsCompact_ ? missShort : missFull;
+        nw = std::min(nw, std::max(30.f, room - mw - 2.f));
         tabNotifs_ = {tabConv_.right() + 2.f, tabs_.y, nw, kTabsH};
+        mw = std::min(mw, std::max(30.f, b.right() - kPad - (tabNotifs_.right() + 2.f)));
+        tabMissions_ = {tabNotifs_.right() + 2.f, tabs_.y, mw, kTabsH};
     }
-    // L'onglet Notifications : sa liste prend toute la place sous les onglets ; la conversation se cache (rien n'est perdu).
+    // Les onglets Notifications et Missions IA : leur liste prend toute la place sous les onglets ; la conversation se
+    // cache (rien n'est perdu).
     {
-        const bool notes = notifsShown_;
+        const bool notes = notifsShown_, miss = missionsShown_ && !notifsShown_, other = notes || miss;
         notifView_->setVisibility(notes ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        missionsView_->setVisibility(miss ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         for (ui::Widget* wgt : std::initializer_list<ui::Widget*>{chat_, prompt_, attachBtn_, sendBtn_, modePreview_, modeDirect_})
-            wgt->setVisibility(notes ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-        if (notes) {
+            wgt->setVisibility(other ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+        if (other) {
             strip_->setVisibility(ui::Visibility::Collapsed);
             if (ctxPane_) ctxPane_->setVisibility(ui::Visibility::Collapsed);
+            missionStrip_->setVisibility(ui::Visibility::Collapsed);
+            missionAsk_->setVisibility(ui::Visibility::Collapsed);
             statusLine_ = limitLine_ = modeRow_ = listHead_ = list_ = pendingArea_ = promptArea_ = bottomBar_ = outgoing_ = gfx::Rect{};
             rows_.assign(assistant_->conversations().size(), gfx::Rect{});
             pendingRemove_.clear();
             outgoingLines_.clear();
-            stripH_ = ctxH_ = 0.f;
-            notifView_->setBounds({x, tabs_.bottom(), w, std::max(40.f, b.bottom() - tabs_.bottom())});
+            stripH_ = ctxH_ = missionStripH_ = askH_ = 0.f;
+            const gfx::Rect area{x, tabs_.bottom(), w, std::max(40.f, b.bottom() - tabs_.bottom())};
+            if (notes) notifView_->setBounds(area);
+            else missionsView_->setBounds(area);
             return;
         }
     }
@@ -1596,15 +1943,30 @@ void AiPanel::onLayout() {
     prompt_->setBounds(promptArea_);
     const float pendH = static_cast<float>(assistant_->pending().size()) * kPendingH;
     pendingArea_ = {x + kPad, promptArea_.y - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
+    // 1.22.0 : << Creer une mission IA ? >> - au-dessus des pieces en attente et de la saisie (rien n'est encore parti).
+    askH_ = 0.f;
+    if (!askText_.empty()) {
+        askH_ = missionAsk_->heightFor(w - 2 * kPad);
+        missionAsk_->setBounds({x + kPad, pendingArea_.y - askH_ - 6.f, w - 2 * kPad, askH_});
+        missionAsk_->setVisibility(ui::Visibility::Visible);
+    } else {
+        missionAsk_->setVisibility(ui::Visibility::Collapsed);
+    }
     const float chatTop = (listOpen_ ? list_.bottom() : listHead_.bottom()) + 1.f;
-    const float chatBottom = pendingArea_.y - 6.f;
+    const float chatBottom = (askH_ > 0.f ? missionAsk_->bounds().y : pendingArea_.y) - 6.f;
+    chatBottom_ = chatBottom;
+    // 1.22.0 : LA MISSION ACTIVE, tout en haut (la mission de la conversation ouverte) ; au plus 30 % de la place.
+    missionStripH_ = missionStrip_->heightFor(w, std::max(0.f, (chatBottom - chatTop) * 0.30f));
+    missionStrip_->setBounds({x, chatTop, w, missionStripH_});
+    missionStrip_->setVisibility(missionStripH_ > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    const float ctxTop = chatTop + missionStripH_;
     // 1.21.0 : le contexte de la discussion, tout en haut (seulement s'il y a des fichiers joints) ; au plus 35 % de la place.
-    ctxH_ = ctxPane_ && !ctxPane_->context().files.empty() ? ctxPane_->heightFor(w, std::max(28.f, (chatBottom - chatTop) * 0.35f)) : 0.f;
+    ctxH_ = ctxPane_ && !ctxPane_->context().files.empty() ? ctxPane_->heightFor(w, std::max(28.f, (chatBottom - ctxTop) * 0.35f)) : 0.f;
     if (ctxPane_) {
-        ctxPane_->setBounds({x, chatTop, w, ctxH_});
+        ctxPane_->setBounds({x, ctxTop, w, ctxH_});
         ctxPane_->setVisibility(ctxH_ > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     }
-    const float planTop = chatTop + ctxH_;
+    const float planTop = ctxTop + ctxH_;
     // 1.20.2 : le plan en cours, au-dessus de la discussion (il ne defile pas avec elle) ; au plus 45 % de la place.
     stripH_ = strip_->heightFor(w, std::max(0.f, (chatBottom - planTop) * 0.45f));
     strip_->setBounds({x, planTop, w, stripH_});
@@ -1633,9 +1995,10 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
             if (hot && !on) ctx.r.fillRoundedRect({r.x, r.y + 3.f, r.w, r.h - 6.f}, ctx.theme.brand.hover, 4.f);
             if (on) ctx.r.fillRect({r.x + 4.f, r.bottom() - 3.f, r.w - 8.f, 2.f}, c.accent);
         };
-        tab(tabConv_, !notifsShown_, hoverTab_ == 0);
-        const auto convInk = !notifsShown_ ? c.text : c.textMuted;
-        if (!notifsShown_) bold(ctx.r, {tabConv_.x + 12.f, ty}, "Conversation", kTab, convInk);
+        const bool convOn = !notifsShown_ && !missionsShown_;
+        tab(tabConv_, convOn, hoverTab_ == 0);
+        const auto convInk = convOn ? c.text : c.textMuted;
+        if (convOn) bold(ctx.r, {tabConv_.x + 12.f, ty}, "Conversation", kTab, convInk);
         else ctx.r.drawText({tabConv_.x + 12.f, ty}, "Conversation", kTab, convInk);
         tab(tabNotifs_, notifsShown_, hoverTab_ == 1);
         const auto ink = notifsShown_ ? c.text : c.textMuted;
@@ -1643,12 +2006,15 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
         AiNotificationsView::drawBell(ctx.r, {tabNotifs_.x + 12.f, tabNotifs_.y + (tabNotifs_.h - 16.f) / 2.f - 1.f, 16.f, 16.f},
                                       badge_ > 0 ? (badgeError_ ? c.error : c.accent) : ink);
         const float lx = tabNotifs_.x + 12.f + 16.f + 6.f;
-        if (notifsShown_) bold(ctx.r, {lx, ty}, "Notifications", kTab, ink);
-        else ctx.r.drawText({lx, ty}, "Notifications", kTab, ink);
+        if (!notifsCompact_) {   // 1.22.0 : etroit - la cloche et la pastille seules
+            if (notifsShown_) bold(ctx.r, {lx, ty}, "Notifications", kTab, ink);
+            else ctx.r.drawText({lx, ty}, "Notifications", kTab, ink);
+        }
         if (badge_ > 0) {
             const std::string n = badge_ > 99 ? std::string("99+") : std::to_string(badge_);
             const float bw = std::max(18.f, ctx.r.measure(n, kMeta).width + 10.f);
-            const gfx::Rect pill{lx + ctx.r.measure("Notifications", kTab).width + 6.f, tabNotifs_.y + (tabNotifs_.h - 17.f) / 2.f - 1.f, bw, 17.f};
+            const float px = notifsCompact_ ? lx - 2.f : lx + ctx.r.measure("Notifications", kTab).width + 6.f;
+            const gfx::Rect pill{px, tabNotifs_.y + (tabNotifs_.h - 17.f) / 2.f - 1.f, bw, 17.f};
             const gfx::Color fill = badgeError_ ? c.error : c.accent;
             ctx.r.fillRoundedRect(pill, fill, 8.5f);
             ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(n, kMeta).width) / 2.f, pill.y + (pill.h - ctx.r.lineHeight(kMeta)) / 2.f}, n, kMeta,
@@ -1661,9 +2027,38 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
         if (badgeError_) tip += " (dont une erreur)";
         if (!latest_.empty()) tip += "\nLa plus r\xC3\xA9" "cente : " + latest_;
         tip += "\nCe que l'Assistant a fait ou appris pendant que tu regardais ailleurs ; un clic l'ouvre, un autre revient \xC3\xA0 la conversation.";
+        if (notifsCompact_) tip = "Notifications : " + tip;
         tips_.emplace_back(tabNotifs_, tip);
+        // ---- 1.22.0 : l'onglet Missions IA (sa pastille : celles qui attendent une decision ; rouge : une erreur, un blocage)
+        tab(tabMissions_, missionsShown_, hoverTab_ == 2);
+        const auto mink = missionsShown_ ? c.text : c.textMuted;
+        ctx.r.pushClip(tabMissions_);
+        ui::drawIcon(ctx.r, ui::Icon::Task, {tabMissions_.x + 12.f, tabMissions_.y + (tabMissions_.h - 16.f) / 2.f - 1.f, 16.f, 16.f},
+                     missionsBadge_ > 0 ? (missionsAlert_ ? c.error : c.accent) : mink);
+        const float mx = tabMissions_.x + 12.f + 16.f + 6.f;
+        if (!missionsCompact_) {
+            if (missionsShown_) bold(ctx.r, {mx, ty}, "Missions IA", kTab, mink);
+            else ctx.r.drawText({mx, ty}, "Missions IA", kTab, mink);
+        }
+        if (missionsBadge_ > 0) {
+            const std::string n = missionsBadge_ > 99 ? std::string("99+") : std::to_string(missionsBadge_);
+            const float bw = std::max(18.f, ctx.r.measure(n, kMeta).width + 10.f);
+            const float px = missionsCompact_ ? mx - 2.f : mx + ctx.r.measure("Missions IA", kTab).width + 6.f;
+            const gfx::Rect pill{px, tabMissions_.y + (tabMissions_.h - 17.f) / 2.f - 1.f, bw, 17.f};
+            const gfx::Color fill = missionsAlert_ ? c.error : c.accent;
+            ctx.r.fillRoundedRect(pill, fill, 8.5f);
+            ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(n, kMeta).width) / 2.f, pill.y + (pill.h - ctx.r.lineHeight(kMeta)) / 2.f}, n, kMeta,
+                           ctx.theme.onSurface(fill));
+        }
+        ctx.r.popClip();
+        std::string mtip = "Missions IA : les demandes complexes suivies (un plan d'\xC3\xA9tapes, des propositions successives, la reprise apr\xC3\xA8s une fermeture).";
+        if (missionsBadge_ > 0)
+            mtip += "\n" + std::to_string(missionsBadge_) + (missionsBadge_ > 1 ? " attendent" : " attend") + " une d\xC3\xA9" "cision (en pause, une proposition \xC3\xA0 valider, une erreur"
+                    + (missionsAlert_ ? std::string(" - dont une erreur ou un blocage)") : std::string(")"));
+        mtip += "\nUn clic les montre, un autre revient \xC3\xA0 la conversation.";
+        tips_.emplace_back(tabMissions_, mtip);
     }
-    if (notifsShown_) return;   // la liste des notifications se dessine elle-meme (AiNotificationsView)
+    if (notifsShown_ || missionsShown_) return;   // leurs listes se dessinent elles-memes (AiNotificationsView, AiMissionsView)
     // ---- l'etat de connexion
     const auto& a = *assistant_;
     const bool on = a.settings().enabled;
@@ -1844,7 +2239,7 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
     }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         const int h = rowAt(m->pos);
-        const int t = tabConv_.contains(m->pos) ? 0 : tabNotifs_.contains(m->pos) ? 1 : -1;   // 1.21.2
+        const int t = tabConv_.contains(m->pos) ? 0 : tabNotifs_.contains(m->pos) ? 1 : tabMissions_.contains(m->pos) ? 2 : -1;   // 1.21.2, 1.22.0
         if (h != hoverRow_ || t != hoverTab_) {
             hoverRow_ = h;
             hoverTab_ = t;
@@ -1864,8 +2259,12 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             showNotifications(!notifsShown_);
             return ui::EventResult::Consumed;
         }
+        if (d->button == ui::MouseButton::Left && tabMissions_.contains(d->pos)) {   // 1.22.0
+            showMissions(!missionsShown_);
+            return ui::EventResult::Consumed;
+        }
         if (d->button == ui::MouseButton::Left && tabConv_.contains(d->pos)) {
-            showNotifications(false);
+            showConversation();
             return ui::EventResult::Consumed;
         }
         if (tabs_.contains(d->pos)) return ui::EventResult::Consumed;
@@ -1905,8 +2304,13 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             takeFocus();
             return ui::EventResult::Consumed;
         }
+        if (k->key == ui::Key::Escape && !askText_.empty() && !notifsShown_ && !missionsShown_) {   // 1.22.0 : la carte de choix
+            dismissMissionAsk();
+            prompt_->takeFocus();
+            return ui::EventResult::Consumed;
+        }
         // La liste a le clavier (le panneau lui-meme) : F2, Suppr, les fleches. 1.21.2 : pas sous l'onglet Notifications.
-        if (focused() && !notifsShown_) {
+        if (focused() && !notifsShown_ && !missionsShown_) {
             const int cur = assistant_->currentIndex();
             if (k->key == ui::Key::F2 && cur >= 0) { startRename(cur); return ui::EventResult::Consumed; }
             if (k->key == ui::Key::Delete && cur >= 0) { askDelete(cur); return ui::EventResult::Consumed; }

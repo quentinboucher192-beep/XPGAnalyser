@@ -599,6 +599,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\screens\HmiExprScreen.cpp" />
     <ClCompile Include="src\app\screens\HmiLibraryWorkspace.cpp" />
     <ClCompile Include="src\app\screens\IncidentsWorkspace.cpp" />
+    <ClCompile Include="src\app\screens\MissionsWorkspace.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialApp.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialOverlay.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialStageApp.cpp" />
@@ -723,7 +724,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiMemoryJson.cpp" />
     <ClCompile Include="src\app\ai\AiMemoryManager.cpp" />
     <ClCompile Include="src\app\ai\AiMission.cpp" />
+    <ClCompile Include="src\app\ai\AiMissionBoard.cpp" />
     <ClCompile Include="src\app\ai\AiMissionStore.cpp" />
+    <ClCompile Include="src\app\ai\AiMissionStrip.cpp" />
+    <ClCompile Include="src\app\ai\AiMissionsView.cpp" />
     <ClCompile Include="src\app\ai\AiNotifications.cpp" />
     <ClCompile Include="src\app\ai\AiNotificationsView.cpp" />
     <ClCompile Include="src\app\ai\AiPlan.cpp" />
@@ -1263,7 +1267,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiMemoryJson.hpp" />
     <ClInclude Include="src\app\ai\AiMemoryManager.hpp" />
     <ClInclude Include="src\app\ai\AiMission.hpp" />
+    <ClInclude Include="src\app\ai\AiMissionBoard.hpp" />
     <ClInclude Include="src\app\ai\AiMissionStore.hpp" />
+    <ClInclude Include="src\app\ai\AiMissionStrip.hpp" />
+    <ClInclude Include="src\app\ai\AiMissionsView.hpp" />
     <ClInclude Include="src\app\ai\AiNotifications.hpp" />
     <ClInclude Include="src\app\ai\AiNotificationsView.hpp" />
     <ClInclude Include="src\app\ai\AiPaths.hpp" />
