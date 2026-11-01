@@ -1917,6 +1917,13 @@ La plus récente est en haut, rangée par jour (**Aujourd'hui**, **Hier**, puis 
 Les notifications sont gardées dans le dossier IA (notifications.json, à côté des conversations) : 300 au plus, les plus anciennes lues partent d'abord. Le fichier est relu et écrit en arrière-plan (au plus une fois par seconde) : l'interface n'attend jamais le disque.
 > Un lien qui ne mène plus nulle part (une conversation supprimée, un incident validé ailleurs) le dit dans la barre d'état ; la notification reste, à toi de l'effacer.
 
+### Corriger une erreur d'un clic droit
+- Dans la prévisualisation comme sur la carte, un **clic droit sur une erreur** propose les corrections possibles :
+  - une variable introuvable : **Utiliser « … »** (les plus proches), **Choisir une variable…**, **Créer la variable « … »** (type à choisir : BOOL, INT, DINT, REAL…), **Retirer les opérations qui l'utilisent** ;
+  - toute erreur d'une opération (un code brut illisible…) : **Retirer cette opération** ;
+  - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
+- La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
+- Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
 == assistant-ia-plan | Le plan d'action, le compte rendu et les questions sur le projet
 : Une demande complexe devient un plan d'action : des étapes rangées par leurs dépendances, vérifiées sur une copie du projet, appliquées d'un bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant répond aussi aux questions sur les relations du projet, le vérifie en entier et propose de ranger ses adresses.
 @depuis 1.19.0
@@ -2132,6 +2139,12 @@ Dans la fiche, groupe **Capture et vidéo**, **Lire la vidéo ici** lance la lec
 Au bout, sans la boucle, la dernière image reste à l'écran ; Lecture repart du début. Les touches marchent une fois la fiche cliquée.
 **Zoom**, sur la vidéo comme sur la capture : la molette sur l'image zoome autour de la souris ; les boutons **-** / **Ajuster** / **+** sont en haut à droite, avec le pourcentage ; on glisse l'image zoomée pour la déplacer ; un double-clic la remet entière. **Ouvrir avec le lecteur du système** reste disponible.
 
+### Où en est chaque étape
+- Chaque étape a son **pourcentage** : ses opérations appliquées sur ses opérations prévues (l'estimation du plan tant que rien n'est proposé). Terminée = 100 %, jamais avant ; une étape ignorée ou annulée n'a pas de pourcentage (« — »).
+- Sous chaque étape, une ligne dit **ce qu'elle fait maintenant** : « L'IA prépare la proposition P2… (depuis 0:42) », « P2 : 12 opérations à valider — Prévisualiser puis Appliquer », « Application de P2… », « Vérification sur le projet réel… », « Attend S1 (dépendance) », « En erreur : … », « Terminée — 8 opérations appliquées le 01/11 à 12:04 ».
+- Un clic sur une étape du tableau de bord ouvre son **journal** : les propositions qui l'ont servie et leur sort, les opérations faites (et celles en échec, avec l'erreur exacte), les décisions, avec l'heure. « Voir la carte de P2 › » mène à la proposition dans la conversation.
+- L'étape du moment est aussi dans la **bande** de l'Assistant et dans l'onglet **Missions IA** (« En ce moment »), à jour en direct.
+- Une proposition lourde (une opération « adresser », ou 40 opérations et plus) se vérifie en arrière-plan : la mission ne la dit « validée » qu'à la fin de cette vérification, sans jamais figer l'écran.
 == assistant-ia-integree | L'IA intégrée (sans connexion)
 : Une IA écrite dans le logiciel : elle comprend des demandes simples en français et propose des opérations sur la vue ouverte, sans compte, sans réseau, sans modèle à télécharger. Rien ne quitte le PC. C'est le fournisseur d'une installation neuve.
 @depuis 1.16.0
@@ -2246,6 +2259,11 @@ Dans une proposition, une valeur qui commence par = est une formule, exactement 
 - Le logiciel la vérifie comme l'inspecteur : lisible, en lecture seule (ni := ni ;), et chaque nom lu existe (variable IHM, de l'automate, ou créée plus haut dans la proposition). Les repères $…$ y sont permis : ils ne changent pas le calcul.
 - Une formule refusée revient à l'IA avec la raison (le nom inconnu et les plus proches).
 
+### Le rangement des variables créées
+- L'IA reçoit l'**arborescence réelle** des dossiers de variables et range chaque variable qu'elle crée : la zone, puis l'équipement, puis la nature (Commandes, États, Mesures, Défauts, Paramètres, Compteurs). Un équipement = un dossier ; deux équipements ne sont jamais mélangés ; les variables communes vont dans « Commun ».
+- L'aperçu montre le **dossier** de chaque variable ; « dossier créé : … » signale un dossier neuf. Un dossier existant est repris sans tenir compte de la casse (« pompes » → « Pompes ») : jamais un double.
+- Sans dossier donné par l'IA, le logiciel en **déduit** un du préfixe des noms (Pompe1_Marche → là où sont déjà les variables Pompe1_…) et le dit dans un avertissement ; plusieurs équipements d'une même famille créés ensemble vont dans un dossier de famille, un sous-dossier chacun (PompeG/PompeG_1).
+- « … mélangerait 2 équipements » : le même dossier recevrait les variables de deux équipements ; la séparation proposée est dite (Pompes/P1, Pompes/P2). Les variables se déplacent ensuite par glisser-déposer.
 == memoire-ia | Mémoire et apprentissage de l'IA
 : Ce que l'Assistant IA connaît, ce qu'il garde d'une séance à l'autre et la place que tout cela prend sur ce PC : six onglets, tous calculés sur les vrais fichiers du dossier IA/. Apprendre ici, c'est enrichir la mémoire locale que l'Assistant joint à ses demandes : le modèle distant n'est pas réentraîné.
 @depuis 1.14.2

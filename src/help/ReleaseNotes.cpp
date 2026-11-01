@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.0", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.1", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 vers midi"},
     {"1.21.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
@@ -154,6 +155,38 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.1 : sans blocage, les etapes en direct, les corrections d'un clic droit, les dossiers des variables
+        note("1.22.1", "Assistant IA", Kind::Fixed,
+         "PLUS DE BLOCAGE \xC3\x80 L'ARRIV\xC3\x89" "E D'UNE PROPOSITION QUI ADRESSE DES VARIABLES : sur un gros projet, IHM Studio se figeait "
+         "plusieurs secondes (8 s vues sous Windows) quand l'IA proposait d'adresser des variables - chaque op\xC3\xA9ration recalculait "
+         "les cases de toutes les variables de l'\xC3\xA9quipement, sur le fil de l'interface, deux fois. Une telle proposition (ou une "
+         "de 40 op\xC3\xA9rations et plus) se v\xC3\xA9rifie maintenant en arri\xC3\xA8re-plan (la carte montre \xC2\xAB V\xC3\xA9rification\xE2\x80\xA6 \xC2\xBB, la mission attend "
+         "la fin pour la dire valid\xC3\xA9" "e), et les adresses d\xC3\xA9j\xC3\xA0 calcul\xC3\xA9" "es sont gard\xC3\xA9" "es d'une v\xC3\xA9rification \xC3\xA0 l'autre.",
+         "assistant-ia-plan", ""),
+        note("1.22.1", "Assistant IA", Kind::New,
+         "O\xC3\x99 EN EST CHAQUE \xC3\x89TAPE D'UNE MISSION : chaque \xC3\xA9tape montre son pourcentage r\xC3\xA9" "el (ses op\xC3\xA9rations appliqu\xC3\xA9" "es sur ses "
+         "op\xC3\xA9rations pr\xC3\xA9vues ; 100 % seulement une fois v\xC3\xA9rifi\xC3\xA9" "e dans le projet) et ce qu'elle fait en ce moment : \xC2\xAB L'IA pr\xC3\xA9pare "
+         "la proposition P2\xE2\x80\xA6 (depuis 0:42) \xC2\xBB, \xC2\xAB P2 : 12 op\xC3\xA9rations \xC3\xA0 valider \xC2\xBB, \xC2\xAB Application de P2\xE2\x80\xA6 \xC2\xBB, \xC2\xAB Attend S1 \xC2\xBB, \xC2\xAB En "
+         "erreur : \xE2\x80\xA6 \xC2\xBB. Un clic sur une \xC3\xA9tape du tableau de bord ouvre son journal : les propositions et leur sort, les op\xC3\xA9rations "
+         "faites, les erreurs, les d\xC3\xA9" "cisions, avec l'heure. L'\xC3\xA9tape du moment est aussi dans la bande de l'Assistant et dans "
+         "l'onglet Missions IA, \xC3\xA0 jour en direct.",
+         "assistant-ia-missions", ""),
+        note("1.22.1", "Assistant IA", Kind::New,
+         "CORRIGER UNE ERREUR D'UN CLIC DROIT : dans la pr\xC3\xA9visualisation et sur la carte, un clic droit sur une erreur propose "
+         "les corrections possibles - utiliser une variable proche, en choisir une, la cr\xC3\xA9" "er (type \xC3\xA0 choisir), retirer "
+         "l'op\xC3\xA9ration, copier le message ou demander \xC3\xA0 l'IA de corriger. La correction change la proposition, jamais le projet : "
+         "l'erreur dispara\xC3\xAEt, la cat\xC3\xA9gorie Corrections dit ce qui a \xC3\xA9t\xC3\xA9 fait (\xC2\xAB 7 variables remplac\xC3\xA9" "es \xC2\xBB) et un clic droit "
+         "\xC2\xAB Revenir \xC2\xBB l'annule. Appliquer prend la proposition corrig\xC3\xA9" "e. Les erreurs identiques tiennent sur une ligne "
+         "\xC2\xAB (2 op\xC3\xA9rations) \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.22.1", "Assistant IA", Kind::New,
+         "LES VARIABLES CR\xC3\x89\xC3\x89" "ES PAR L'IA RANG\xC3\x89" "ES DANS DES DOSSIERS : l'IA re\xC3\xA7oit l'arborescence r\xC3\xA9" "elle des dossiers de variables "
+         "et range chaque variable qu'elle cr\xC3\xA9" "e (zone, puis \xC3\xA9quipement, puis nature : Commandes, \xC3\x89tats, Mesures, D\xC3\xA9" "fauts...), "
+         "un \xC3\xA9quipement par dossier, sans jamais m\xC3\xA9langer deux \xC3\xA9quipements. Les dossiers existants sont repris (sans tenir compte "
+         "de la casse), les manquants cr\xC3\xA9\xC3\xA9s. Sans dossier donn\xC3\xA9, le logiciel en d\xC3\xA9" "duit un du pr\xC3\xA9" "fixe des noms (plusieurs pompes "
+         "d'une m\xC3\xAAme famille : un dossier de famille et un sous-dossier par pompe) et le dit dans l'aper\xC3\xA7u ; un m\xC3\xA9lange est "
+         "signal\xC3\xA9 avec la s\xC3\xA9paration propos\xC3\xA9" "e. L'IA int\xC3\xA9gr\xC3\xA9" "e range de la m\xC3\xAAme fa\xC3\xA7on.",
+         "assistant-ia-registre", ""),
         // 1.22.0 : les missions IA persistantes
         note("1.22.0", "Assistant IA", Kind::New,
          "LES MISSIONS IA : une grande demande (\xC2\xAB construis une station de pompage compl\xC3\xA8te avec deux pompes, une cuve, "

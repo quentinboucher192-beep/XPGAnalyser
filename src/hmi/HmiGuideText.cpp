@@ -4379,6 +4379,24 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Un lien qui ne m\xC3\xA8ne plus nulle part (une conversation supprim\xC3\xA9" "e, "
                          "un incident valid\xC3\xA9 ailleurs) le dit dans la barre d'\xC3\xA9tat ; la "
                          "notification reste, \xC3\xA0 toi de l'effacer.", {}, "1.21.2"},
+             {K::Heading, "Corriger une erreur d'un clic droit", {}},
+             {K::Bullet, "Dans la pr\xC3\xA9visualisation comme sur la carte, un **clic droit sur une "
+                         "erreur** propose les corrections possibles :", {}},
+             {K::Paragraph, "- une variable introuvable : **Utiliser \xC2\xAB \xE2\x80\xA6 \xC2\xBB** (les plus "
+                         "proches), **Choisir une variable\xE2\x80\xA6**, **Cr\xC3\xA9" "er la variable "
+                         "\xC2\xAB \xE2\x80\xA6 \xC2\xBB** (type \xC3\xA0 choisir : BOOL, INT, DINT, "
+                         "REAL\xE2\x80\xA6), **Retirer les op\xC3\xA9rations qui l'utilisent** ; - toute "
+                         "erreur d'une op\xC3\xA9ration (un code brut illisible\xE2\x80\xA6) : **Retirer "
+                         "cette op\xC3\xA9ration** ; - toujours : **Copier le message** et **Demander "
+                         "\xC3\xA0 l'IA de corriger** (le texte va dans la saisie, rien n'est envoy\xC3\xA9 "
+                         "tout seul).", {}},
+             {K::Bullet, "La correction change la **proposition**, jamais le projet : l'erreur "
+                         "dispara\xC3\xAEt, la cat\xC3\xA9gorie **Corrections** dit ce qui a "
+                         "\xC3\xA9t\xC3\xA9 fait (\xC2\xAB 7 variables remplac\xC3\xA9" "es \xC2\xBB), et un "
+                         "clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la "
+                         "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
+             {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
+                         "op\xC3\xA9rations) \xC2\xBB.", {}},
          },
          {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
          {"ASSISTANT", "IA", "ASSISTANT IA", "NOTIFICATIONS DE L'ASSISTANT", "NON LUES", "TOUT MARQUER COMME LU", "EFFACER LES LUES", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CL\xC3\x89S API", "G\xC3\x89RER LES CL\xC3\x89S", "GESTIONNAIRE DES CL\xC3\x89S", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
@@ -5082,6 +5100,31 @@ const std::vector<Topic>& topics() {
                          "sont en haut \xC3\xA0 droite, avec le pourcentage ; on glisse l'image "
                          "zoom\xC3\xA9" "e pour la d\xC3\xA9placer ; un double-clic la remet enti\xC3\xA8re. "
                          "**Ouvrir avec le lecteur du syst\xC3\xA8me** reste disponible.", {}},
+             {K::Heading, "O\xC3\xB9 en est chaque \xC3\xA9tape", {}},
+             {K::Bullet, "Chaque \xC3\xA9tape a son **pourcentage** : ses op\xC3\xA9rations "
+                         "appliqu\xC3\xA9" "es sur ses op\xC3\xA9rations pr\xC3\xA9vues (l'estimation du "
+                         "plan tant que rien n'est propos\xC3\xA9). Termin\xC3\xA9" "e = 100 %, jamais avant "
+                         "; une \xC3\xA9tape ignor\xC3\xA9" "e ou annul\xC3\xA9" "e n'a pas de pourcentage "
+                         "(\xC2\xAB \xE2\x80\x94 \xC2\xBB).", {}},
+             {K::Bullet, "Sous chaque \xC3\xA9tape, une ligne dit **ce qu'elle fait maintenant** : \xC2\xAB "
+                         "L'IA pr\xC3\xA9pare la proposition P2\xE2\x80\xA6 (depuis 0:42) \xC2\xBB, \xC2\xAB "
+                         "P2 : 12 op\xC3\xA9rations \xC3\xA0 valider \xE2\x80\x94 Pr\xC3\xA9visualiser puis "
+                         "Appliquer \xC2\xBB, \xC2\xAB Application de P2\xE2\x80\xA6 \xC2\xBB, \xC2\xAB "
+                         "V\xC3\xA9rification sur le projet r\xC3\xA9" "el\xE2\x80\xA6 \xC2\xBB, \xC2\xAB "
+                         "Attend S1 (d\xC3\xA9pendance) \xC2\xBB, \xC2\xAB En erreur : \xE2\x80\xA6 "
+                         "\xC2\xBB, \xC2\xAB Termin\xC3\xA9" "e \xE2\x80\x94 8 op\xC3\xA9rations "
+                         "appliqu\xC3\xA9" "es le 01/11 \xC3\xA0 12:04 \xC2\xBB.", {}},
+             {K::Bullet, "Un clic sur une \xC3\xA9tape du tableau de bord ouvre son **journal** : les "
+                         "propositions qui l'ont servie et leur sort, les op\xC3\xA9rations faites (et "
+                         "celles en \xC3\xA9" "chec, avec l'erreur exacte), les d\xC3\xA9" "cisions, avec "
+                         "l'heure. \xC2\xAB Voir la carte de P2 \xE2\x80\xBA \xC2\xBB m\xC3\xA8ne \xC3\xA0 "
+                         "la proposition dans la conversation.", {}},
+             {K::Bullet, "L'\xC3\xA9tape du moment est aussi dans la **bande** de l'Assistant et dans "
+                         "l'onglet **Missions IA** (\xC2\xAB En ce moment \xC2\xBB), \xC3\xA0 jour en direct.", {}},
+             {K::Bullet, "Une proposition lourde (une op\xC3\xA9ration \xC2\xAB adresser \xC2\xBB, ou 40 "
+                         "op\xC3\xA9rations et plus) se v\xC3\xA9rifie en arri\xC3\xA8re-plan : la mission "
+                         "ne la dit \xC2\xAB valid\xC3\xA9" "e \xC2\xBB qu'\xC3\xA0 la fin de cette "
+                         "v\xC3\xA9rification, sans jamais figer l'\xC3\xA9" "cran.", {}},
          },
          {"alarmes", "assistant-ia", "assistant-ia-plan", "enregistrements"},
          {"INCIDENT", "INCIDENTS", "DOSSIER D'INCIDENT", "EN ATTENTE", "VALID\xC3\x89S", "VALIDER", "DIAGNOSTIC", "FICHE DE DIAGNOSTIC", "CHA\xC3\x8ENE DE D\xC3\x89PENDANCES", "ALARMES LI\xC3\x89" "ES", "CAUSE", "CAUSES POTENTIELLES", "CERTITUDE", "CHRONOLOGIE", "CAPTURE", "VID\xC3\x89O", "TAMPON CIRCULAIRE", "EMPREINTE", "SHA-256", "IMMUABLE", "SURVEILLANCE", "ANALYSE IA"},
@@ -5447,6 +5490,27 @@ const std::vector<Topic>& topics() {
                          "$\xE2\x80\xA6$ y sont permis : ils ne changent pas le calcul.", {}},
              {K::Bullet, "Une formule refus\xC3\xA9" "e revient \xC3\xA0 l'IA avec la raison (le nom inconnu "
                          "et les plus proches).", {}},
+             {K::Heading, "Le rangement des variables cr\xC3\xA9\xC3\xA9" "es", {}},
+             {K::Bullet, "L'IA re\xC3\xA7oit l'**arborescence r\xC3\xA9" "elle** des dossiers de variables "
+                         "et range chaque variable qu'elle cr\xC3\xA9" "e : la zone, puis "
+                         "l'\xC3\xA9quipement, puis la nature (Commandes, \xC3\x89tats, Mesures, "
+                         "D\xC3\xA9" "fauts, Param\xC3\xA8tres, Compteurs). Un \xC3\xA9quipement = un "
+                         "dossier ; deux \xC3\xA9quipements ne sont jamais m\xC3\xA9lang\xC3\xA9s ; les "
+                         "variables communes vont dans \xC2\xAB Commun \xC2\xBB.", {}},
+             {K::Bullet, "L'aper\xC3\xA7u montre le **dossier** de chaque variable ; \xC2\xAB dossier "
+                         "cr\xC3\xA9\xC3\xA9 : \xE2\x80\xA6 \xC2\xBB signale un dossier neuf. Un dossier "
+                         "existant est repris sans tenir compte de la casse (\xC2\xAB pompes \xC2\xBB "
+                         "\xE2\x86\x92 \xC2\xAB Pompes \xC2\xBB) : jamais un double.", {}},
+             {K::Bullet, "Sans dossier donn\xC3\xA9 par l'IA, le logiciel en **d\xC3\xA9" "duit** un du "
+                         "pr\xC3\xA9" "fixe des noms (Pompe1_Marche \xE2\x86\x92 l\xC3\xA0 o\xC3\xB9 sont "
+                         "d\xC3\xA9j\xC3\xA0 les variables Pompe1_\xE2\x80\xA6) et le dit dans un "
+                         "avertissement ; plusieurs \xC3\xA9quipements d'une m\xC3\xAAme famille "
+                         "cr\xC3\xA9\xC3\xA9s ensemble vont dans un dossier de famille, un sous-dossier "
+                         "chacun (PompeG/PompeG_1).", {}},
+             {K::Bullet, "\xC2\xAB \xE2\x80\xA6 m\xC3\xA9langerait 2 \xC3\xA9quipements \xC2\xBB : le "
+                         "m\xC3\xAAme dossier recevrait les variables de deux \xC3\xA9quipements ; la "
+                         "s\xC3\xA9paration propos\xC3\xA9" "e est dite (Pompes/P1, Pompes/P2). Les "
+                         "variables se d\xC3\xA9placent ensuite par glisser-d\xC3\xA9poser.", {}},
          },
          {"assistant-ia", "memoire-ia", "objets", "historique"},
          {"REGISTRE", "GENRES D'OBJETS", "CONTEXTE", "CONFIDENTIALIT\xC3\x89", "DUPLIQUER", "CODE BRUT", "PROPOSER_OPERATIONS", "OP\xC3\x89RATIONS PROPOS\xC3\x89" "ES", "CR\xC3\x89" "ER UNE VUE", "CR\xC3\x89" "ER DES VARIABLES", "TYPES IHM", "DDT", "AUTOMATE", "REP\xC3\x88RES", "FORMULE", "FX", "SYMBOLE", "POPUP", "\xC3\x89" "CRAN MOD\xC3\x88LE", "EN-T\xC3\x8ATE", "PIED DE PAGE", "G\xC3\x89N\xC3\x89RIQUE", "\xC3\x89QUIPEMENT", "D\xC3\x89TECTER CE QUI R\xC3\x89POND", "SCANNER IP", "ADRESSE", "FORMULE DE LIEN", "SCRIPT", "FONCTION IHM", "ALARME", "RESSOURCE", "DOSSIER", "RANGER", "VARIABLES SYST\xC3\x88ME", "NATIVES"},
