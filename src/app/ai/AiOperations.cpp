@@ -20,6 +20,8 @@
 #include "../../hmi/HmiCheck.hpp"        // 1.18.0 : compiler les scripts, fonctions et alarmes crees
 #include "../../hmi/HmiEquipment.hpp"    // 1.18.0 : creer_equipement, adresser
 #include "../../hmi/HmiFolders.hpp"      // 1.18.0 : creer_dossier, ranger
+#include "../../hmi/HmiMarkers.hpp"      // 1.22.2 : un repere ($Vanne$.Cmd) se lit sans ses $
+#include "../../hmi/HmiPopupParams.hpp"  // 1.22.2 : le type d'un parametre de la vue et de ses membres
 #include "../../hmi/HmiMigrate.hpp"      // 1.18.0 : les blocs VAR d'un code cree deviennent ses declarations
 
 #include <algorithm>
@@ -283,6 +285,34 @@ struct Run {
     }
     // Une variable existe : dans le projet, l'automate relie, ou creee plus haut (creer_variables).
     [[nodiscard]] bool exists(std::string_view name) const { return variableExists(project, name, environment()) || newVar(name); }
+    // 1.22.2 : UN PARAMETRE DE LA VUE (popup, symbole) et ses membres - << Vanne >>, << Vanne.Cmd >> dans Popup_Vanne, comme le
+    // moteur les lit (params::expressionType : le type declare du parametre, puis ses membres). Ce n'est pas une variable du
+    // projet : l'appelant la donne a l'ouverture (Vanne := Vannes[3]). L'IA les prenait pour des variables inventees (01/11).
+    // Faux, et `why` : la racine est un parametre mais le chemin ne mene a rien (un membre inconnu de son type).
+    [[nodiscard]] bool paramPath(std::string_view name, std::string* why = nullptr) const {
+        const std::string t = trimmed(hmi::markers::strip(name));
+        std::size_t r = 0;
+        while (r < t.size() && (std::isalnum(static_cast<unsigned char>(t[r])) || t[r] == '_')) ++r;
+        if (r == 0) return false;
+        const hmi::ViewParam* prm = view.param(std::string_view(t).substr(0, r));
+        if (!prm) return false;
+        if (r == t.size()) return true;
+        const std::string type = trimmed(prm->type);
+        if (type.empty() || hmi::params::normalizedType(type) == "ANY" || hmi::params::isGenericName(view, type)) return true;
+        if (!hmi::params::expressionType(project, &view, t).empty()) return true;
+        if (why) {
+            std::string members;
+            if (const hmi::HmiType* ht = project.hmiTypeByName(type))
+                for (const auto& m : ht->members) members += (members.empty() ? "" : ", ") + m.name;
+            *why = "\xC2\xAB " + t + " \xC2\xBB : " + prm->name + " est un param\xC3\xA8tre de " + view.name + " (" + type + ")"
+                   + (members.empty() ? std::string(", ce chemin n'y m\xC3\xA8ne \xC3\xA0 rien")
+                                      : ", et " + type + " n'a pas ce membre (ses membres : " + members + ")")
+                   + ".";
+        }
+        return false;
+    }
+    // Ce qu'un objet peut lire ou ecrire : une variable (du projet, de l'automate relie, creee plus haut) ou un parametre de la vue.
+    [[nodiscard]] bool bindable(std::string_view name) const { return exists(name) || paramPath(name); }
     // Un type connu (d'une variable ; `member` : d'un membre de type IHM) : les types du projet ET ceux crees plus haut.
     bool typeKnown(const std::string& type, std::string* reason, bool member = false) const {
         if (newTypes.empty()) return member ? hmi::types::validMemberType(project, type, reason) : hmi::types::validType(project, type, reason);
@@ -441,7 +471,11 @@ struct Run {
         hmi::Prop* prop = o.find("variable");
         if (!prop) return fail(label(o) + " ne se relie pas \xC3\xA0 une variable.");
         std::string name = requested;
-        const bool found = exists(name);
+        // 1.22.2 : un parametre de la vue (Vanne.Cmd dans Popup_Vanne) : il existe ; un membre inconnu de son type : dit tel quel.
+        std::string paramWhy;
+        const bool param = !exists(name) && paramPath(name, &paramWhy);
+        if (!paramWhy.empty()) return fail(paramWhy);
+        const bool found = exists(name) || param;
         const VariableChoice* chosen = found ? nullptr : choiceFor(p, requested);   // 1.22.1 : le choix pour CETTE variable
         bool toCreate = false;
         if (chosen) {
@@ -500,6 +534,7 @@ struct Run {
             check->bindings.push_back(o.name + kArrow + name
                                       + (chosen ? (!toCreate ? " (\xC3\xA0 la place de " + requested + ")"
                                              : name == requested ? std::string(" (\xC3\xA0 cr\xC3\xA9" "er)") : " (\xC3\xA0 cr\xC3\xA9" "er, pour " + requested + ")")
+                                         : param ? std::string(" (param\xC3\xA8tre de " + view.name + ")")
                                          : found ? ((newVar(name) && !variableExists(project, name, environment())) || (plannedVars && plannedVars->count(lower(rootOf(name)))) ? std::string(" (cr\xC3\xA9\xC3\xA9" "e par la proposition)") : std::string{})
                                                  : p.variable.create ? " (\xC3\xA0 cr\xC3\xA9" "er)" : std::string{}));
         prop->value = name;
@@ -909,7 +944,7 @@ struct Run {
                     continue;
                 }
                 if (pr.key == "variable") {
-                    if (!pr.value.empty() && !exists(pr.value))
+                    if (!pr.value.empty() && !bindable(pr.value))
                         if (!fail("Code brut : la variable \xC2\xAB " + pr.value + " \xC2\xBB de " + who + " n'existe pas (l'Assistant ne l'invente pas).")) return false;
                 } else if (const auto bad = valueProblem(o.kind, pr.key, pr.value); !bad.empty()) {
                     if (!fail("Code brut : " + o.name + "." + pr.key + " = \xC2\xAB " + pr.value + " \xC2\xBB : " + bad + ".")) return false;
@@ -934,7 +969,7 @@ struct Run {
                             if (!fail(what + " : " + bad + ".")) return false;
                 if (hmi::operationWritesVariable(a.operation)) {
                     const std::string target = hmi::targetVariable(a.target);
-                    if (target.empty() || !exists(target))
+                    if (target.empty() || !bindable(target))
                         if (!fail(what + " \xC3\xA9" "crit \xC2\xAB " + a.target + " \xC2\xBB, qui n'est pas une variable du projet.")) return false;
                     if (a.operation == hmi::Operation::Assign && !a.value.empty())
                         if (const auto bad = formulaProblem(a.value); !bad.empty())

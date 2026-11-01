@@ -1161,6 +1161,57 @@ void bigProposal() {
     check(ms(t0, t1) < 2000 && ms(t2, t3) < 4000, "600 operations : valider et appliquer restent sous la seconde (hors Debug lent)");
 }
 
+// 1.22.2 : LES PARAMETRES D'UNE POPUP (Vanne : T_Vanne, une structure) - dans ses objets, Vanne.Cmd est le membre Cmd du
+// parametre, pas une variable a inventer (01/11 : la validation de l'Assistant le refusait, l'IA ne le savait pas) ; un
+// membre inconnu : dit, avec les membres du type ; hors de la popup : pas une variable ; le contexte les montre.
+void popupParams() {
+    std::printf("les parametres d'une popup\n");
+    Fixture f;
+    auto& p = f.doc->project;
+    hmi::HmiType tv;
+    tv.id = p.allocate();
+    tv.name = "T_Vanne";
+    tv.members = {{"Cmd", "BOOL"}, {"Autorisee", "BOOL"}, {"NbOuv", "DINT"}};
+    p.programs.types.push_back(tv);
+    hmi::View pop = hmi::makeView(p, "Popup_Vanne");
+    pop.role = "popup";
+    hmi::ViewParam prm;
+    prm.name = "Vanne";
+    prm.type = "T_Vanne";
+    pop.params.push_back(prm);
+    p.views.push_back(pop);
+    const hmi::Id station = f.view, popup = p.views.back().id;
+    f.view = popup;
+    const auto cmd = create("Indicator", "Voy_Cmd", {{"x", "20"}, {"y", "20"}, {"variable", "Vanne.Cmd"}});
+    const auto aut = create("Indicator", "Voy_Autorisee", {{"x", "20"}, {"y", "60"}, {"variable", "$Vanne$.Autorisee"}});
+    const ai::Proposal good = f.proposal({cmd, aut});
+    const ai::Check ck = ai::validate(p, good);
+    check(ck.ok() && ck.missingVariable.empty(), "Popup_Vanne : Vanne.Cmd et $Vanne$.Autorisee, des membres du parametre Vanne - valides (" + errorsOf(ck) + ")");
+    bool said = false;
+    for (const auto& b : ck.bindings) said = said || has(b, "param\xC3\xA8tre de Popup_Vanne");
+    check(said, "la liaison dit : parametre de Popup_Vanne");
+    const ai::Check bad = ai::validate(p, f.proposal({create("Indicator", "Voy_X", {{"variable", "Vanne.Inconnu"}})}));
+    check(!bad.ok() && has(bad.errors.front(), "Vanne est un param\xC3\xA8tre de Popup_Vanne") && has(bad.errors.front(), "Cmd, Autorisee, NbOuv"),
+          "un membre inconnu : dit, avec les membres de T_Vanne (" + errorsOf(bad) + ")");
+    std::string why;
+    auto command = ai::makeCommand(f.doc, good, &why);
+    check(command != nullptr, "appliquer : une commande (" + why + ")");
+    if (command) (void)f.stack.push(std::move(command));
+    const hmi::Object* voy = f.object(*p.view(popup), "Voy_Cmd");
+    check(voy && voy->find("variable") && voy->find("variable")->value == "Vanne.Cmd", "applique : Voy_Cmd lit Vanne.Cmd (le parametre)");
+    f.view = station;
+    const ai::Check out = ai::validate(p, f.proposal({create("Indicator", "Voy_Dehors", {{"variable", "Vanne.Cmd"}})}));
+    check(!out.ok() && has(out.errors.front(), "l'Assistant ne l'invente pas"), "hors de la popup, Vanne.Cmd n'est pas une variable");
+    ai::PromptInput in;
+    in.project = &p;
+    in.view = p.view(popup);
+    const std::string inside = ai::contextText(in);
+    check(has(inside, "Param\xC3\xA8tres de cette popup") && has(inside, "Vanne : T_Vanne {Cmd BOOL, Autorisee BOOL, NbOuv DINT}"),
+          "le contexte de la popup : ses parametres et leurs membres");
+    in.view = p.view(station);
+    check(has(ai::contextText(in), "Popup_Vanne(Vanne : T_Vanne)"), "le contexte d'une autre vue : la popup et ses parametres");
+}
+
 int main() {
     // Le dossier IA des essais (les connaissances relues par les consignes, les conversations).
     const fs::path root = fs::temp_directory_path() / "xpg_ai_options_racine";
@@ -1180,6 +1231,7 @@ int main() {
     assistant();
     tools118();
     bigProposal();
+    popupParams();   // 1.22.2
     fs::remove_all(root);
     std::printf("ai_options_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;

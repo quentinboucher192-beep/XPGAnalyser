@@ -87,6 +87,24 @@ const char* roleName(std::string_view role) {
     return "vue";
 }
 
+// 1.22.2 : LES PARAMETRES D'UNE POPUP, D'UN SYMBOLE - leur nom, leur type ; une structure : ses membres (`members`). Dans les
+// objets de la vue, ils se lisent par leur nom (Vanne, Vanne.Cmd) : ce ne sont pas des variables du projet. L'IA les prenait
+// pour des variables inventees (01/11 : Vanne.Cmd dans Popup_Vanne).
+std::string paramsText(const hmi::Project& p, const hmi::View& v, bool members) {
+    std::string out;
+    for (const auto& prm : v.params) {
+        const std::string type = prm.type.empty() ? std::string("ANY") : prm.type;
+        out += (out.empty() ? "" : ", ") + prm.name + " : " + type;
+        if (!members) continue;
+        if (const hmi::HmiType* t = p.hmiTypeByName(prm.type); t && !t->members.empty()) {
+            out += " {";
+            for (std::size_t k = 0; k < t->members.size(); ++k) out += (k ? ", " : "") + t->members[k].name + " " + t->members[k].type;
+            out += "}";
+        }
+    }
+    return out;
+}
+
 // ---- la vue et ses objets -------------------------------------------------------------
 void viewPart(const PromptInput& in, const ContextLimits& lim, ContextInfo& info, std::string& s) {
     const hmi::View& v = *in.view;
@@ -103,6 +121,11 @@ void viewPart(const PromptInput& in, const ContextLimits& lim, ContextInfo& info
         }
     }
     s += ".\n";
+    // 1.22.2 : les parametres de la popup (du symbole) active - et comment ses objets les lisent.
+    if (!v.params.empty() && in.project)
+        s += "Param\xC3\xA8tres de cette " + std::string(roleName(v.role)) + " (ses objets les lisent par leur nom et leurs membres : "
+             + v.params.front().name + ", " + v.params.front().name + ".Membre ; ce ne sont PAS des variables du projet, l'appelant les donne "
+             "\xC3\xA0 l'ouverture) : " + paramsText(*in.project, v, true) + ".\n";
     info.objects = v.objects.size();
     if (!in.settings.sendView) {
         s += "Les objets de la vue ne sont PAS envoy\xC3\xA9s (r\xC3\xA9glage de confidentialit\xC3\xA9 de l'utilisateur) : tu ne les connais pas. "
@@ -355,7 +378,8 @@ void viewsPart(const PromptInput& in, const ContextLimits& lim, std::string& s) 
         if (in.view && v.id == in.view->id) continue;
         const std::string role = roleName(v.role);
         if (!byRole.count(role)) roles.push_back(role);
-        byRole[role].push_back(v.name);
+        // 1.22.2 : une popup, un symbole avec des parametres : leurs noms et types (Popup_Vanne(Vanne : T_Vanne))
+        byRole[role].push_back(v.params.empty() ? v.name : v.name + "(" + paramsText(*in.project, v, false) + ")");
     }
     if (roles.empty()) {
         s += "Autres vues du projet : aucune.\n";
