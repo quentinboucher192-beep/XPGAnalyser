@@ -151,11 +151,24 @@ Fichiers livrés :
 
 Le format des projets ne change pas (33). Le fichier d'apprentissage .xia reste en version 1 (une 1.20 le lit encore).
 
-@@SHA@@
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.21.0.exe` (44,1 Mo, 46 245 733 octets) :
+`32D863179DCBBE46153214E37E85810AF6C8781F686808F21ADFD3C832DE3A27`
+
+Les zips portables (167 fichiers chacun) :
+- `API-Studio-1.21.0-portable.zip` (34,2 Mo) :
+  `D9C73BB0F0782115DB6C1BD0BC969663C24A4BB4010CA28A134EC4E4E468DAF7`
+- `IHM-Studio-1.21.0-portable.zip` (34,2 Mo) :
+  `EF99CBA9F306B0AD309F1BE5B2E89823EA0EDA6644E34ACEA9CDE5637FD7F512`
 
 ### Les vérifications sous Windows (Wine)
 
-@@WINE@@
+**Les deux exe Windows** sont compilés sous Linux avec MinGW-w64 et lancés sous Wine : `--version` répond `API Studio 1.21.0` et `IHM Studio 1.21.0` ; `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB).
+
+**L'installateur** (Inno Setup 6.4.1 sous Wine) a été lancé en silencieux, pour tous les comptes, **par-dessus la 1.20.2 livrée**, avec une clé API d'essai déposée dans `%APPDATA%\XpgAnalyzer\IA\cles` : « Installation process succeeded ».
+- La clé est **intacte** après l'installation (même empreinte avant et après) ; le journal dit « Clés API : 1 gardée (protégée par Windows ; la réinstallation n'y touche pas) ».
+- Les deux exe et `pdfium.dll` installés sont identiques à ceux qui ont été essayés ; les associations `.xihm` et `.xapi` sont là ; la copie de secours de la 1.20.2 est faite.
+
+**Le bac à sable sous Wine** : l'exe Windows installé, relancé comme l'Assistant le fait (`IHM-Studio.exe --bac-a-sable`, le travail sur l'entrée), a vérifié et exécuté la fonction `Moyenne` : analyse, compilation et exécution réussies, le premier cas réussi (3,0), le second en échec comme prévu (1,0 obtenu au lieu de 5,0) – le même résultat que sous Linux. Seul le processus enfant a été essayé ainsi ; le lancement depuis la fenêtre de l'Assistant, avec une vraie IA connectée, n'a pas été fait sous Wine. Sous Windows, le bac à sable n'est pas isolé du réseau (voir les limites).
 
 Ces vérifications sont faites sous Wine, **pas sur un vrai Windows**.
 
@@ -182,4 +195,5 @@ Ces vérifications sont faites sous Wine, **pas sur un vrai Windows**.
 - **Les essais lancés en parallèle** (trois à la fois).
 - **Les exe Windows gardés avec leurs symboles** (jamais livrés) : un prochain rapport de plantage se lit en une minute au lieu de relier l'exe.
 - Rien de recréé : le graphe des relations et le vérificateur de la 1.19, l'aperçu et l'application de fond de la 1.20, le lecteur des enregistrements (mêmes commandes, mêmes touches), le registre de la mémoire de l'IA (les modèles de fichiers y sont des connaissances), le lecteur XLSX existant.
+- **Le numéro de version oublié dans la configuration de l'installateur** (il nommait les fichiers « 1.20.2 ») a été vu par la vérification sous Wine et corrigé ; seule la fabrication de l'installateur a été refaite (5 minutes), pas la compilation.
 - **Pas de captures d'écran** (à ta demande) ; l'installateur vérifié en silencieux sous Wine.
