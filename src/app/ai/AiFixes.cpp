@@ -86,6 +86,7 @@ ui::Icon iconOf(Action::Kind k) {
         case Action::Kind::AskAi: return ui::Icon::Assistant;
         case Action::Kind::Revert:
         case Action::Kind::Restore: return ui::Icon::Undo;
+        case Action::Kind::BuildFix: return ui::Icon::Wrench;
         default: return ui::Icon::None;
     }
 }
@@ -331,6 +332,17 @@ bool apply(Assistant& a, int message, const Action& act, std::string* said) {
             ok = a.excludeOps(message, act.ops, false);
             text = act.ops.size() > 1 ? std::string("Op\xC3\xA9rations remises dans la proposition.") : std::string("Op\xC3\xA9ration remise dans la proposition.");
             break;
+        case Action::Kind::BuildFix: {
+            // 1.22.5 : la correction du logiciel, posee dans la PROPOSITION (jamais dans le projet) ; l'avis est redemande.
+            std::string why;
+            ok = !act.ops.empty() && a.applyBuildFix(message, act.ops.front(), &why);
+            if (!ok) {
+                if (said) *said = "Correction du logiciel impossible : " + (why.empty() ? std::string(kClosed) : why) + ".";
+                return false;
+            }
+            text = "Correction du logiciel pos\xC3\xA9" "e dans la proposition (" + act.note + ") : G\xC3\xA9n\xC3\xA9rer et Compiler la rev\xC3\xA9rifient.";
+            break;
+        }
         default:
             return false;
     }

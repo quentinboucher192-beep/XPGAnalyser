@@ -404,7 +404,7 @@ struct Fixture {
     double                       t{100.0};
     const std::string            convId = "c-cuve";
 
-    Fixture(const std::string& name, const ai::json::Value* stored) {
+    Fixture(const std::string& name, const ai::json::Value* stored, bool withProcess = true) {
         dir = fs::temp_directory_path() / ("xpg_ai_build_" + name);
         std::error_code ec;
         fs::remove_all(dir, ec);
@@ -429,6 +429,13 @@ struct Fixture {
         answer.text = "Voici les voyants.";
         ai::Proposal p = faultyProposal(view);
         if (stored) p.extra.set("logiciel", *stored);
+        // Une proposition de la 1.22.5 : passee par le processus (son verdict est attendu) ; sans lui, une proposition d'avant.
+        if (withProcess) {
+            ai::json::Value line = ai::json::Value::object();
+            line.set("quoi", "recue");
+            p.extra["processus"] = ai::json::Value::array();
+            p.extra["processus"].push(std::move(line));
+        }
         answer.proposal = p;
         c.messages.push_back(std::move(answer));
         check(ai::saveConversation(c), "la conversation est ecrite");
@@ -582,6 +589,26 @@ void testPreview() {
             const hmi::Id cuve = pv->objectId("Voyant_Cuve");
             check(pv->issueOf(cuve) == 2, "l'objet de l'erreur, encadre (par son id, sinon son nom)");
         }
+    }
+    // UNE PROPOSITION D'AVANT LA 1.22.5 (sans processus, rien ne tourne) : << pas lances >>, jamais << en cours >> sans fin.
+    {
+        Fixture f("ancienne", nullptr, false);
+        const int m = f.open();
+        auto* pv = m < 0 ? nullptr : f.preview(m);
+        check(pv && !pv->verdictKnown() && has(headingOf(*pv), "pas lanc\xC3\xA9s") && !has(headingOf(*pv), kPending),
+              "une proposition d'avant : << pas lances >> (" + (pv ? headingOf(*pv) : std::string("?")) + ")");
+    }
+    // LA CORRECTION DU LOGICIEL d'un clic (un constat qui en a une) : au menu, en tete.
+    {
+        bd::Verdict withFix = verdict;
+        withFix.findings.front().fixFrom = "Cuve.Inexistant";
+        withFix.findings.front().fixTo = "Cuve.Niveau";
+        const ai::json::Value stored = bd::toJson(withFix);
+        Fixture f("correction", &stored);
+        const int m = f.open();
+        auto* pv = m < 0 ? nullptr : f.preview(m);
+        check(pv && pv->openBuildMenu(0) && listed(pv->menuItems(), "Appliquer la correction du logiciel"),
+              "le menu d'un constat qui a une correction : Appliquer la correction du logiciel");
     }
 }
 

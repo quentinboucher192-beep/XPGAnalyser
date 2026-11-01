@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.4", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.5", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.4", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 18 h"},
     {"1.22.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h 50"},
     {"1.22.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h"},
     {"1.22.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 13 h"},
@@ -158,6 +159,25 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.5 : l'avis du logiciel (Generer et Compiler sur une copie), la correction par l'IA, le processus de developpement
+        note("1.22.5", "Assistant IA", Kind::New,
+         "L'AVIS DU LOGICIEL : chaque proposition de l'IA connect\xC3\xA9" "e passe par G\xC3\xA9n\xC3\xA9rer et Compiler, comme tes clics, sur une COPIE du "
+         "projet o\xC3\xB9 elle est appliqu\xC3\xA9" "e - en arri\xC3\xA8re-plan, sans figer l'\xC3\xA9" "cran. Seuls les constats NOUVEAUX comptent (ceux que le projet "
+         "avait d\xC3\xA9j\xC3\xA0 ne sont pas repris). La pr\xC3\xA9visualisation les liste (cat\xC3\xA9gorie G\xC3\x89N\xC3\x89RER ET COMPILER, \xC2\xAB 2 erreurs, 1 avertissement "
+         "nouveaux \xC2\xB7 1,4 s \xC2\xBB), encadre leurs objets, et propose au clic droit d'appliquer la correction du logiciel quand il en a une. "
+         "Une erreur du logiciel bloque Appliquer.",
+         "assistant-ia", ""),
+        note("1.22.5", "Assistant IA", Kind::New,
+         "L'IA CORRIGE SEULE D'APR\xC3\x88S G\xC3\x89N\xC3\x89RER ET COMPILER : des erreurs nouvelles, et l'Assistant les lui renvoie aussit\xC3\xB4t (dans une "
+         "mission : la correction de l'\xC3\xA9tape) ; sa proposition corrig\xC3\xA9" "e repasse par la v\xC3\xA9rification et l'avis du logiciel ; l'ancienne "
+         "est remplac\xC3\xA9" "e. Deux corrections au plus, puis c'est dit. Des avertissements seuls ne relancent rien. Le mode Direct attend "
+         "un avis propre. Param\xC3\xA8tres : \xC2\xAB Faire v\xC3\xA9rifier par G\xC3\xA9n\xC3\xA9rer et Compiler \xC2\xBB, \xC2\xAB Corriger seule \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.22.5", "Assistant IA", Kind::New,
+         "LE PROCESSUS DE D\xC3\x89VELOPPEMENT : sur la carte de la proposition, chaque \xC3\xA9tape avec l'heure - re\xC3\xA7ue, v\xC3\xA9rifi\xC3\xA9" "e, G\xC3\xA9n\xC3\xA9rer et "
+         "Compiler (et leurs constats, un clic ouvre la pr\xC3\xA9visualisation), correction demand\xC3\xA9" "e, corrig\xC3\xA9" "e (la phrase de l'IA), de nouveau "
+         "G\xC3\xA9n\xC3\xA9rer et Compiler. D\xC3\xA9pli\xC3\xA9 pendant le travail ; la bande du haut dit la derni\xC3\xA8re \xC3\xA9tape, la mission aussi (activit\xC3\xA9, journal).",
+         "assistant-ia", ""),
         // 1.22.4 : ne pas tourner en rond (Proposer la suite)
         note("1.22.4", "Assistant IA", Kind::New,
          "\xC2\xAB PROPOSER LA SUITE \xC2\xBB NE TOURNE PLUS EN ROND : une proposition qui refait une pr\xC3\xA9" "c\xC3\xA9" "dente (les m\xC3\xAAmes op\xC3\xA9rations, la place "

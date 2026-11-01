@@ -59,7 +59,8 @@ struct Line {
 
 // Une entree du menu. `children` : un sous-menu (Creer la variable : les types) - l'entree elle-meme ne se choisit pas.
 struct Action {
-    enum class Kind : std::uint8_t { Separator, Use, Pick, Create, RemoveUsing, RemoveOps, Copy, AskAi, Revert, Restore };
+    enum class Kind : std::uint8_t { Separator, Use, Pick, Create, RemoveUsing, RemoveOps, Copy, AskAi, Revert, Restore,
+                                     BuildFix /* 1.22.5 : la correction du logiciel d'un constat (ops[0] : son rang dans le verdict) */ };
     Kind                     kind{Kind::Separator};
     std::string              label;
     std::string              note;         // la petite ligne sous le libelle

@@ -2174,6 +2174,30 @@ Au bout, sans la boucle, la dernière image reste à l'écran ; Lecture repart d
 - L'appel à l'IA en cours s'arrête ; une proposition en attente passe « refusée » (jamais appliquée) ; chaque étape non terminée devient **ignorée (fin forcée)**. **Rien n'est défait dans le projet** : ce qui a été appliqué reste.
 - La mission est **Terminée (fin forcée)** ; l'audit final suit (le projet de la mission ouvert ; sinon « Lancer l'audit final »), et le rapport le dit, avec les étapes ignorées.
 - Impossible pendant qu'une proposition de la mission s'applique en arrière-plan (attends la fin), et sur une mission déjà terminée ou annulée.
+### L'avis du logiciel : Générer et Compiler (1.22.5)
+- **Chaque proposition de l'IA connectée passe par Générer et Compiler**, comme quand tu cliques sur Générer ou Compiler. Cela se fait sur une **copie du projet** où la proposition est appliquée, en arrière-plan, sans figer l'écran (de moins d'une seconde à quelques secondes sur un gros projet). Rien ne change dans ton projet.
+- **Seuls les constats nouveaux comptent** : une erreur ou un avertissement que ton projet avait déjà avant la proposition n'est pas repris.
+- **Dans la prévisualisation**, la catégorie **GÉNÉRER ET COMPILER** les liste (« 2 erreurs, 1 avertissement nouveaux · 1,4 s » ; « en cours… » pendant le calcul) :
+  - leurs objets sont encadrés en rouge ou en ambre ;
+  - choisir une ligne encadre son objet ;
+  - le clic droit propose Copier le message, Retirer cette opération, Demander à l'IA de corriger et, quand le logiciel en a une, **Appliquer la correction du logiciel** (elle change la proposition, jamais le projet ; l'avis est alors redemandé).
+- **Une erreur du logiciel bloque Appliquer**, comme une erreur de la vérification, sauf avec « Appliquer malgré les erreurs ».
+- **L'IA corrige seule** : quand Générer ou Compiler trouvent des erreurs nouvelles, l'Assistant les lui renvoie aussitôt (un message du logiciel dans la conversation ; dans une mission, la correction de l'étape).
+  - Elle renvoie une proposition corrigée, qui repasse par la vérification puis Générer et Compiler.
+  - L'ancienne passe « remplacée » : elle ne s'applique plus, et « Voir la correction » mène à la nouvelle.
+  - Au plus **2 corrections** par demande ; ensuite la carte dit « 2 corrections n'ont pas suffi » et c'est à toi de décider.
+  - Des avertissements seuls ne relancent rien : ils sont dits.
+- **Le Processus de développement**, sur la carte de la proposition (repliable, déplié pendant le travail), dit chaque étape avec l'heure. Par exemple :
+  - « Proposition reçue : 18 opérations » ;
+  - « Vérification : 0 erreur » ;
+  - « Générer et Compiler (copie du projet) : 2 erreurs, 1 avertissement — 1,4 s », avec chaque constat dessous (un clic ouvre la prévisualisation) ;
+  - « Correction demandée à l'IA (1 sur 2) » ;
+  - « Proposition corrigée : 19 opérations », avec la phrase de l'IA ;
+  - « Générer et Compiler : aucun constat nouveau ».
+- La bande du haut du panneau dit la dernière étape (« Correction 1/2 : l'IA corrige 2 erreurs de Compiler… ») ; dans une mission, l'activité et le journal de l'étape aussi.
+- **Le mode Direct** n'applique une proposition qu'une fois l'avis du logiciel arrivé et propre.
+- **Paramètres de l'Assistant IA** : « Faire vérifier par Générer et Compiler » et « Corriger seule (2 fois au plus) », cochées par défaut.
+- Une proposition d'avant la 1.22.5 n'a pas d'avis (« pas lancés ») : redemande-la à l'IA, ou modifie-la, pour l'avoir.
 ### Quand l'IA tourne en rond (1.22.4)
 - À l'arrivée de chaque proposition (une mission, ou « Proposer la suite » dans une conversation), le logiciel la compare aux précédentes. Il voit un **cercle** quand :
   - elle refait une proposition précédente : les **mêmes opérations**, qu'elle ait été refusée, en échec, annulée ou appliquée (la place des objets ne compte pas : deux propositions qui ne diffèrent que par x et y sont la même) ;

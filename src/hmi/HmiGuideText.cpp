@@ -5209,6 +5209,57 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Impossible pendant qu'une proposition de la mission s'applique en "
                          "arri\xC3\xA8re-plan (attends la fin), et sur une mission d\xC3\xA9j\xC3\xA0 "
                          "termin\xC3\xA9" "e ou annul\xC3\xA9" "e.", {}},
+             {K::Heading, "L'avis du logiciel : G\xC3\xA9n\xC3\xA9rer et Compiler (1.22.5)", {}},
+             {K::Bullet, "**Chaque proposition de l'IA connect\xC3\xA9" "e passe par G\xC3\xA9n\xC3\xA9rer "
+                         "et Compiler**, comme quand tu cliques sur G\xC3\xA9n\xC3\xA9rer ou Compiler. Cela "
+                         "se fait sur une **copie du projet** o\xC3\xB9 la proposition est "
+                         "appliqu\xC3\xA9" "e, en arri\xC3\xA8re-plan, sans figer l'\xC3\xA9" "cran (de "
+                         "moins d'une seconde \xC3\xA0 quelques secondes sur un gros projet). Rien ne change "
+                         "dans ton projet.", {}},
+             {K::Bullet, "**Seuls les constats nouveaux comptent** : une erreur ou un avertissement que ton "
+                         "projet avait d\xC3\xA9j\xC3\xA0 avant la proposition n'est pas repris.", {}},
+             {K::Bullet, "**Dans la pr\xC3\xA9visualisation**, la cat\xC3\xA9gorie **G\xC3\x89N\xC3\x89RER "
+                         "ET COMPILER** les liste (\xC2\xAB 2 erreurs, 1 avertissement nouveaux \xC2\xB7 1,4 "
+                         "s \xC2\xBB ; \xC2\xAB en cours\xE2\x80\xA6 \xC2\xBB pendant le calcul) :", {}},
+             {K::Paragraph, "- leurs objets sont encadr\xC3\xA9s en rouge ou en ambre ; - choisir une ligne "
+                         "encadre son objet ; - le clic droit propose Copier le message, Retirer cette "
+                         "op\xC3\xA9ration, Demander \xC3\xA0 l'IA de corriger et, quand le logiciel en a "
+                         "une, **Appliquer la correction du logiciel** (elle change la proposition, jamais "
+                         "le projet ; l'avis est alors redemand\xC3\xA9).", {}},
+             {K::Bullet, "**Une erreur du logiciel bloque Appliquer**, comme une erreur de la "
+                         "v\xC3\xA9rification, sauf avec \xC2\xAB Appliquer malgr\xC3\xA9 les erreurs "
+                         "\xC2\xBB.", {}},
+             {K::Bullet, "**L'IA corrige seule** : quand G\xC3\xA9n\xC3\xA9rer ou Compiler trouvent des "
+                         "erreurs nouvelles, l'Assistant les lui renvoie aussit\xC3\xB4t (un message du "
+                         "logiciel dans la conversation ; dans une mission, la correction de l'\xC3\xA9tape).", {}},
+             {K::Paragraph, "- Elle renvoie une proposition corrig\xC3\xA9" "e, qui repasse par la "
+                         "v\xC3\xA9rification puis G\xC3\xA9n\xC3\xA9rer et Compiler. - L'ancienne passe "
+                         "\xC2\xAB remplac\xC3\xA9" "e \xC2\xBB : elle ne s'applique plus, et \xC2\xAB Voir "
+                         "la correction \xC2\xBB m\xC3\xA8ne \xC3\xA0 la nouvelle. - Au plus **2 "
+                         "corrections** par demande ; ensuite la carte dit \xC2\xAB 2 corrections n'ont pas "
+                         "suffi \xC2\xBB et c'est \xC3\xA0 toi de d\xC3\xA9" "cider. - Des avertissements "
+                         "seuls ne relancent rien : ils sont dits.", {}},
+             {K::Bullet, "**Le Processus de d\xC3\xA9veloppement**, sur la carte de la proposition "
+                         "(repliable, d\xC3\xA9pli\xC3\xA9 pendant le travail), dit chaque \xC3\xA9tape avec "
+                         "l'heure. Par exemple :", {}},
+             {K::Paragraph, "- \xC2\xAB Proposition re\xC3\xA7ue : 18 op\xC3\xA9rations \xC2\xBB ; - \xC2\xAB "
+                         "V\xC3\xA9rification : 0 erreur \xC2\xBB ; - \xC2\xAB G\xC3\xA9n\xC3\xA9rer et "
+                         "Compiler (copie du projet) : 2 erreurs, 1 avertissement \xE2\x80\x94 1,4 s "
+                         "\xC2\xBB, avec chaque constat dessous (un clic ouvre la pr\xC3\xA9visualisation) ; "
+                         "- \xC2\xAB Correction demand\xC3\xA9" "e \xC3\xA0 l'IA (1 sur 2) \xC2\xBB ; - "
+                         "\xC2\xAB Proposition corrig\xC3\xA9" "e : 19 op\xC3\xA9rations \xC2\xBB, avec la "
+                         "phrase de l'IA ; - \xC2\xAB G\xC3\xA9n\xC3\xA9rer et Compiler : aucun constat "
+                         "nouveau \xC2\xBB.", {}},
+             {K::Bullet, "La bande du haut du panneau dit la derni\xC3\xA8re \xC3\xA9tape (\xC2\xAB "
+                         "Correction 1/2 : l'IA corrige 2 erreurs de Compiler\xE2\x80\xA6 \xC2\xBB) ; dans "
+                         "une mission, l'activit\xC3\xA9 et le journal de l'\xC3\xA9tape aussi.", {}},
+             {K::Bullet, "**Le mode Direct** n'applique une proposition qu'une fois l'avis du logiciel "
+                         "arriv\xC3\xA9 et propre.", {}},
+             {K::Bullet, "**Param\xC3\xA8tres de l'Assistant IA** : \xC2\xAB Faire v\xC3\xA9rifier par "
+                         "G\xC3\xA9n\xC3\xA9rer et Compiler \xC2\xBB et \xC2\xAB Corriger seule (2 fois au "
+                         "plus) \xC2\xBB, coch\xC3\xA9" "es par d\xC3\xA9" "faut.", {}},
+             {K::Bullet, "Une proposition d'avant la 1.22.5 n'a pas d'avis (\xC2\xAB pas lanc\xC3\xA9s "
+                         "\xC2\xBB) : redemande-la \xC3\xA0 l'IA, ou modifie-la, pour l'avoir.", {}},
              {K::Heading, "Quand l'IA tourne en rond (1.22.4)", {}},
              {K::Bullet, "\xC3\x80 l'arriv\xC3\xA9" "e de chaque proposition (une mission, ou \xC2\xAB "
                          "Proposer la suite \xC2\xBB dans une conversation), le logiciel la compare aux "

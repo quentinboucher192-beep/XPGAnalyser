@@ -1462,12 +1462,18 @@ void AiPreviewDialog::refresh() {
     buildLines_.clear();
     {
         std::string state;
-        if (!verdictKnown_) state = "en cours\xE2\x80\xA6";
-        else if (!verdict_.ran) state = "pas lanc\xC3\xA9s";
+        // Attendu : Generer et Compiler tournent, ou la proposition est passee par le processus de la 1.22.5 (son verdict
+        // arrive). Une proposition d'avant (sans processus, rien ne tourne) n'en aura pas : << pas lances >>, pas << en cours >>.
+        const bool expected = verdictKnown_ || panel_.assistant().building(p->id) || p->extra.has("processus");
+        if (!verdictKnown_ && expected) state = "en cours\xE2\x80\xA6";
+        else if (!verdictKnown_ || !verdict_.ran) state = "pas lanc\xC3\xA9s";
         else state = build::countText(verdict_) + " \xC2\xB7 " + build::durationText(verdict_.ms);
         const std::size_t n = verdictKnown_ && verdict_.ran ? verdict_.findings.size() : 0;
         heading("G\xC3\x89N\xC3\x89RER ET COMPILER" + (n > 0 ? " (" + std::to_string(n) + ")" : std::string{}) + " \xE2\x80\x94 " + state);
-        if (!verdictKnown_) {
+        if (!verdictKnown_ && !expected) {
+            rows.push_back({Row::Kind::Note, "Pas d'avis du logiciel pour cette proposition : elle date d'avant la 1.22.5. Redemande-la \xC3\xA0 "
+                                             "l'IA pour l'avoir (ou modifie-la : il se calcule alors).", {}, 0});
+        } else if (!verdictKnown_) {
             rows.push_back({Row::Kind::Note, "L'avis du logiciel arrive : ta proposition est appliqu\xC3\xA9" "e \xC3\xA0 une copie du projet, "
                                              "puis G\xC3\xA9n\xC3\xA9rer et Compiler.", {}, 0});
         } else if (!verdict_.ran) {
@@ -2036,10 +2042,25 @@ bool AiPreviewDialog::openFixMenu(int list, std::size_t line, gfx::Point at) {
         const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
         m = fixes::menuFor(*p, check_, buildLine(f, check_, p->ops.size()), doc ? &doc->project : nullptr);
         m.title = f.step + (f.error ? " : erreur" : " : avertissement");
-        if (!f.fixFrom.empty())
+        if (!f.fixFrom.empty()) {
             for (auto& act : m.actions)
                 if (act.kind == fixes::Action::Kind::AskAi)
                     act.value += "\nLe logiciel propose de remplacer \xC2\xAB " + f.fixFrom + " \xC2\xBB par \xC2\xAB " + f.fixTo + " \xC2\xBB.";
+            // 1.22.5 : la correction du logiciel, d'un clic (le rang du constat dans le verdict de la proposition).
+            for (std::size_t k = 0; k < verdict_.findings.size(); ++k) {
+                const auto& v = verdict_.findings[k];
+                if (v.step != f.step || v.message != f.message || v.where != f.where || v.fixFrom != f.fixFrom) continue;
+                fixes::Action fix;
+                fix.kind = fixes::Action::Kind::BuildFix;
+                fix.label = "Appliquer la correction du logiciel";
+                fix.note = "remplacer \xC2\xAB " + f.fixFrom + " \xC2\xBB par \xC2\xAB " + f.fixTo + " \xC2\xBB";
+                fix.ops = {k};
+                fixes::Action sep;
+                m.actions.insert(m.actions.begin(), sep);
+                m.actions.insert(m.actions.begin(), fix);
+                break;
+            }
+        }
     } else {
         return false;
     }
