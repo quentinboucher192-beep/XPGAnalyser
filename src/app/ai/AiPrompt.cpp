@@ -584,6 +584,8 @@ std::string operationsTool() {
         props.set("dy", n);
     }
     props.set("code", str("code : le code brut d'objets, sans script."));
+    // 1.22.0 : une proposition d'une MISSION IA - l'etape du plan que l'operation sert (le suivi de la mission).
+    props.set("etape", str("Seulement pour une mission IA : l'identifiant de l'\xC3\xA9tape du plan que cette op\xC3\xA9ration sert (S2)."));
     // 1.16.0 : les copies et les reperes (dupliquer), les variables, le type IHM.
     {
         Value n = Value::object();

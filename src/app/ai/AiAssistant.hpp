@@ -62,8 +62,11 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
+
+namespace hmi::audit { struct Report; }   // 1.22.0 : l'audit final d'une mission (HmiAudit.hpp)
 
 namespace app::ai {
 
@@ -422,6 +425,16 @@ private:
     void retire();                                    // le fournisseur en cours part finir sur son fil
     [[nodiscard]] Applied appliedOf(const Proposal&) const;
 
+    // 1.22.0 : UN APPEL A L'IA POUR UNE MISSION - la mission, son but ("plan", "proposition", "correction",
+    // "actualisation"), les etapes visees (le lot d'une proposition ; l'etape a corriger), et ce qui a change dans le
+    // projet depuis la derniere empreinte de la mission. Pose avant startLive (nextMission_), garde par la generation.
+    struct MissionCall {
+        std::string              id, purpose, step;
+        std::vector<std::string> steps;
+        mission::Batch           batch;
+        std::string              changes;
+    };
+
     struct Generation {
         Phase       phase{Phase::Idle};
         double      start{-1};      // la seconde de l'envoi (-1 : prise au prochain tick)
@@ -454,6 +467,8 @@ private:
         bool                    proposing{false};
         bool                    split{false};
         ProviderUsage           carried;
+        // 1.22.0 : l'appel de mission de cette reponse (vide : une demande ordinaire).
+        MissionCall             mission;
     };
 
     Host                      host_;
@@ -530,6 +545,61 @@ private:
     // 1.22.0 : les missions (relues par load, enregistrees a chaque evenement) et leur revision.
     std::vector<mission::Mission>          missions_;
     std::uint64_t                          missionsRev_{1};
+    // 1.22.0 (la mise en oeuvre, AiAssistant.cpp << LES MISSIONS >>) :
+    //  - les missions lues d'un format plus recent (jamais reecrites) ; celles dont un appel a l'IA etait en cours a la
+    //    fermeture (interrompues : constatees au premier tick ou le projet ouvert est connu) ;
+    //  - l'appel de mission du prochain startLive (consomme par lui) ;
+    //  - le projet vu au dernier tick (le document et sa revision) : la verification des missions (verifyAgainst) ne se
+    //    refait que s'il a change, jamais a chaque image ; l'identite du projet ouvert, gardee tant que son nom, son
+    //    chemin et sa date de creation ne changent pas ;
+    //  - les audits finals en cours (une copie du projet, un fil chacun ; le resultat sonde au tick).
+    std::set<std::string, std::less<>>     missionsReadOnly_;
+    std::vector<std::string>               missionsToRecover_;
+    MissionCall                            nextMission_;
+    const void*                            missionDoc_{nullptr};       // le projet verifie (document, revision)
+    std::uint64_t                          missionDocRev_{0};
+    const void*                            missionSeenDoc_{nullptr};   // le dernier vu, et quand (il se pose avant d'etre verifie)
+    std::uint64_t                          missionSeenRev_{0};
+    double                                 missionSeenAt_{0};
+    static constexpr double                kMissionSettle = 0.25;      // secondes sans changement avant la verification
+    mutable std::string                    missionProjectKey_, missionProjectId_;
+    struct AuditJob {
+        std::string                                    mission;
+        std::shared_ptr<const hmi::Project>            copy;
+        std::function<bool(std::string_view)>          plc;        // les noms de l'automate, figes (nul : aucun automate)
+        std::string                                    folder;     // le dossier du projet (les fichiers externes relatifs)
+        bool                                           plcUnknown{false};   // un automate relie, ses noms non figeables
+        const void*                                    doc{nullptr};
+        std::uint64_t                                  revision{0};
+        std::shared_ptr<hmi::audit::Report>            result;     // nul : l'audit n'a pas pu se faire
+        std::atomic<bool>                              finished{false};
+        std::thread                                    worker;
+    };
+    std::vector<std::shared_ptr<AuditJob>> audits_;
+    [[nodiscard]] mission::Mission*        missionMut(std::string_view id) noexcept;
+    [[nodiscard]] mission::Mission*        missionOfProposalMut(std::string_view proposalId) noexcept;
+    // La mission modifiable (faux et `why` : introuvable, ou lue d'un format plus recent).
+    [[nodiscard]] mission::Mission*        editableMission(std::string_view id, std::string* why);
+    [[nodiscard]] std::string              openProjectId() const;   // memory::identifyProject du projet ouvert (vide : aucun)
+    void                                   saveMission(mission::Mission& m);
+    void                                   notifyMission(const mission::Mission& m, const std::string& kind, std::string title,
+                                                         std::string detail, std::string tone);
+    void                                   missionTransition(const mission::Mission& m, mission::State before);
+    [[nodiscard]] Conversation*            missionConversation(mission::Mission& m);
+    bool                                   launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why);
+    [[nodiscard]] std::string              missionPrompt(const mission::Mission& m, const MissionCall& call, const hmi::Project* project) const;
+    bool                                   acceptPlan(const std::string& id, const std::string& input, std::string* why, int* count);
+    void                                   missionAnswered(const MissionCall& call, Conversation& c, int message, bool planned,
+                                                           const std::string& stopReason);
+    [[nodiscard]] std::string              callBlocker(const mission::Mission& m) const;
+    void                                   endMissionCall(const MissionCall& call, bool interrupted, const std::string& reason);
+    bool                                   missionApplied(const Proposal& prop, const plan::Plan& pl, const plan::Report* rep);
+    void                                   missionDropped(std::string_view proposalId, std::string_view state, const std::string& reason);
+    [[nodiscard]] bool                     missionMayApply(std::string_view proposalId, std::string* why) const;
+    void                                   settleStale(mission::Mission& m);
+    void                                   missionsTick();
+    void                                   pollAudits();
+    bool                                   relaunchMission(const Message& request, std::string* why);
     // 1.21.3 : les longueurs de reponse que les services ont dites (fournisseur|adresse|modele -> jetons), pour la
     // seance ; la reprise en parties a demander au prochain startLive (la longueur qui a coupe ; 0 : aucune).
     std::map<std::string, int>             outputCaps_;
