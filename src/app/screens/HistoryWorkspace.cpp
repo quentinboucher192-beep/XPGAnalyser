@@ -14,6 +14,7 @@
 // =============================================================================
 #include "Screens.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : les raccourcis de chaque application
+#include "../../core/Perf.hpp"     // 1.22.2 : ce qui consomme (l'onglet Performances)
 #include "../MacrosPane.hpp"
 #include "../../help/HelpSession.hpp"
 #include "../TablePaste.hpp"
@@ -475,6 +476,9 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
 
 void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     menu::WidgetMenu::Update(f);
+    // 1.22.2 : chaque etape est mesuree (core/Perf.hpp, l'onglet Performances du panneau du bas).
+    core::perf::Lap lap;
+    lap.to(XPG_PARTIE("ecran.barres"));
     takePendingApiTutorial();      // lot API 7 : l'accueil l'a demande avant que le projet soit la
     refreshHistoryButtons();
     // Lot API 2 : le numero de cycle de la simulation, le projet (nom, etat).
@@ -482,6 +486,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     else refreshHmiChip();         // 1.12.26 : l'IHM seule (IHM Studio, ou l'API arretee) - sa pastille suit
     frameClock_ = f.totalSeconds;   // ---- Lot API 8 : bandeau haut (l'horloge de l'appli) ----
     refreshTopBar();
+    lap.to(XPG_PARTIE("ecran.travaux"));
     // Lot macros 1 : l'apercu de la macro, differe apres une frappe.
     if (auto* macros = macrosPane()) macros->tick(f.totalSeconds);
     // Lot macros 1 : " Lancer " depuis la page d'une macro, dans l'aide.
@@ -495,15 +500,20 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     // Lot API 3 : les valeurs en direct de la table d'animation, sa courbe.
     // Lot API 7 : et l'onglet Simulation, ou qu'il soit (derriere un autre
     // onglet, dans un autre groupe, detache) - il ne lit rien s'il est cache.
+    lap.to(XPG_PARTIE("ecran.api"));
     tickApiPanes(f.totalSeconds);
     // Lot API 7 : la pastille de API > Simulation (en marche, en pause, halte),
     // meme quand l'onglet est ferme ; l'arbre ne se redessine que si elle change.
     refreshSimulationBadge();
     // ---- Lot API 8 : le bandeau bas (StatusStripWorkspace.cpp) ----
+    lap.to(XPG_PARTIE("ecran.bande-etat"));
     tickStatusStrip(f.totalSeconds);
     // ---- fin Lot API 8 : le bandeau bas ----
+    lap.to(XPG_PARTIE("ecran.build"));
     tickHmiBuild();                // 1.11.13 : le build de l'IHM (sa fin, la progression, l'analyse)
+    lap.to(XPG_PARTIE("ecran.recherche"));
     tickFileFinder();              // 1.14.0 (lot M5) : Chercher des fichiers - ce que la recherche a trouve
+    lap.to(XPG_PARTIE("ia"));
     tickAssistant(f.totalSeconds); // 1.14.2 : l'Assistant IA - la reponse qui s'ecrit, les pieces jointes
 }
 

@@ -2,6 +2,7 @@
 //  app/ai/AiPlanStrip.cpp - voir AiPlanStrip.hpp
 // =============================================================================
 #include "AiPlanStrip.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
 #include "AiPanel.hpp"
 #include "../../ui/Icons.hpp"
@@ -164,6 +165,7 @@ std::string AiPlanStrip::liveTooltip(gfx::Point mouse) const {
 }
 
 void AiPlanStrip::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.plan");   // 1.22.2
     tips_.clear();
     const auto lp = panel_.chat().livePlan();
     const auto b = bounds();

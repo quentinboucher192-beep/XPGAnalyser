@@ -2,6 +2,7 @@
 //  app/ImportJob.cpp - 1.8.0 : voir ImportJob.hpp
 // =============================================================================
 #include "ImportJob.hpp"
+#include "../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "../import/ProjectAnalyzer.hpp"
 #include "../import/ProjectImporter.hpp"
@@ -98,7 +99,10 @@ ImportJob::~ImportJob() {
 void ImportJob::start() {
     started_ = nowSeconds();
     stepStarted_ = started_;
-    worker_ = std::thread([this] { run(); });
+    worker_ = std::thread([this] {
+        XPG_TRAVAIL("import");   // 1.22.2
+        run();
+    });
 }
 
 void ImportJob::cancel() { cancel_.store(true); }

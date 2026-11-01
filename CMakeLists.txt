@@ -813,7 +813,8 @@ if(XPG_BUILD_TESTS)
                    src/app/Disposition.cpp src/app/DispositionDialog.cpp
                    src/app/DispositionPreview.cpp    # 1.12.3 : Projet > Disposition (1.12.4 : son apercu)
                    src/app/FileFinder.cpp src/app/FileFinderPane.cpp    # 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
-                   src/app/FileView.cpp src/app/FileViewer.cpp src/app/FilePreview.cpp)   # 1.21.0 : l'apercu de tous les fichiers
+                   src/app/FileView.cpp src/app/FileViewer.cpp src/app/FilePreview.cpp   # 1.21.0 : l'apercu de tous les fichiers
+                   src/app/PerfPane.cpp)   # 1.22.2 : l'onglet Performances du panneau du bas (hmi/HmiBuildPanes.cpp)
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre
     # d'aide (help::center, news, notes, keys, f1, report, Tutorial) : xpg_help,
     # comme l'appli et la construction des essais (outils/hmitests).
@@ -826,6 +827,11 @@ if(XPG_BUILD_TESTS)
         xpg_target_link_options(crashtrail_test PRIVATE -rdynamic)
     endif()
     xpg_add_test(NAME crashtrail COMMAND crashtrail_test)
+    # 1.22.2 : ce qui consomme (core/Perf : les portees, l'image, les fenetres de 10 s et 60 s, les saccades, le
+    # rapport) et l'onglet Performances (app/PerfPane), dessine sans ecran.
+    xpg_add_test_executable(perf_test tests/perf_test.cpp src/app/PerfPane.cpp)
+    xpg_target_link_libraries(perf_test PRIVATE xpg_ui)
+    xpg_add_test(NAME perf COMMAND perf_test)
 
     xpg_add_test(NAME core       COMMAND core_test)
     xpg_add_test(NAME menu       COMMAND menu_test)

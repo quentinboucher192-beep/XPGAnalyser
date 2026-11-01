@@ -5,6 +5,7 @@
 #include "../ui/DialogFrame.hpp"   // 1.12.21 : les dialogues se deplacent et s'agrandissent
 #include "../ui/Widget.hpp"
 #include "../ui/WidgetHost.hpp"     // lot 7 : le dessin de l'infobulle, partage
+#include "../core/Perf.hpp"         // 1.22.2 : la mise en page se mesure (l'onglet Performances)
 
 #include <algorithm>
 #include <string>
@@ -51,6 +52,7 @@ void WidgetMenu::Update(const FrameContext& fc) {
     {
         // 1.12.21 : un dialogue retient sa place (deplace, agrandi) sous le nom du menu.
         const ui::dialogframe::KeyScope key(id_);
+        XPG_MESURE("mise-en-page");
         root_->layout();
     }
 

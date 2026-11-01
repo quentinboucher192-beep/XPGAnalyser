@@ -2,6 +2,7 @@
 //  app/ai/AiNotificationsView.cpp - 1.21.2 : l'onglet Notifications du panneau (voir le .hpp)
 // =============================================================================
 #include "AiNotificationsView.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
 #include "../../ui/Icons.hpp"
 #include "../../ui/Theme.hpp"
@@ -479,6 +480,7 @@ void AiNotificationsView::drawBell(gfx::IRenderer& r, const gfx::Rect& b, gfx::C
 }
 
 void AiNotificationsView::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.notifications");   // 1.22.2
     const auto& c = ctx.theme.color;
     const auto b = bounds();
     tips_.clear();

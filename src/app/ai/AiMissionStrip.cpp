@@ -2,6 +2,7 @@
 //  app/ai/AiMissionStrip.cpp - 1.22.0 : la mission active dans le panneau, << Creer une mission IA ? >> (voir le .hpp)
 // =============================================================================
 #include "AiMissionStrip.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
 #include "AiNotifications.hpp"   // notifs::oneLine
 #include "AiPanel.hpp"
@@ -111,6 +112,7 @@ bool AiMissionStrip::poll() {
 }
 
 void AiMissionStrip::refresh() {
+    XPG_MESURE("ia.mission.bande");   // 1.22.2
     const auto& as = panel_.assistant();
     seenRev_ = as.missionsRevision();
     generating_ = as.generating();
@@ -346,6 +348,7 @@ std::vector<std::string> AiMissionStrip::lines() const {
 }
 
 void AiMissionStrip::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.bande-mission");   // 1.22.2
     tips_.clear();
     const auto b = bounds();
     if (missionId_.empty() || b.h <= 0.f) return;

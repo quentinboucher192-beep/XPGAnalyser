@@ -59,6 +59,7 @@
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les nouveautes se voient
 #include "../core/CrashGuard.hpp"           // 1.10.2 (CR) : le chien de garde bat a chaque image
 #include "../core/CallTrail.hpp"            // 1.10.2 (CR) : le journal interne (XPG_TRACE, XPG_PORTEE)
+#include "../core/Perf.hpp"                 // 1.22.2 : ce qui consomme (XPG_MESURE, l'onglet Performances)
 #include "CrashDialogs.hpp"                 // 1.10.2 (CR) : Aide > Journal interne
 #include "../core/SingleInstance.hpp"       // 1.11.2 (UNI) : une seule instance
 
@@ -2737,6 +2738,7 @@ int App::run() {
     // quand une question y attend.
     detached_.setMainWindow(window_);
     wireIncidents();   // 1.20.0
+    core::perf::attachUiThread();   // 1.22.2 : ce qui consomme se mesure sur ce fil (core/Perf.hpp, l'onglet Performances)
 
     while (running && !quit_) {
         const auto now = Clock::now();
@@ -2752,7 +2754,10 @@ int App::run() {
         core::crash::heartbeat();   // 1.10.2 (CR) : le battement (core/CrashGuard.hpp)
         if (double stalled = 0; core::crash::takeRecovery(stalled))   // et la note de reprise apres un blocage
             bus_.publish(StatusNotice{crashdialogs::recoveryNote(stalled), 12.0});
+        core::perf::Lap lap;        // 1.22.2 : les etapes de l'image (core/Perf.hpp)
+        lap.to(XPG_PARTIE("evenements"));
         pumpEvents(running);
+        lap.to(XPG_PARTIE("app.instances"));
         takeInstanceRequests();     // 1.11.2 (UNI) : une autre instance a ete lancee
         // 1.12.27 : le projet ouvert, annonce aux autres fenetres (et retire quand il change).
         if (projectFolder_ != announcedFolder_ && !script_) {
@@ -2760,7 +2765,9 @@ int App::run() {
             fenetres::annoncer(projectFolder_);
             announcedFolder_ = projectFolder_;
         }
+        lap.stop();
         frame(dt);
+        core::perf::frameEnd();     // 1.22.2 : l'image est finie - sa duree, ce qui l'a prise, une saccade
     }
     // Une session rejouee dont une commande n'a pas trouve sa cible : le dire
     // a qui l'a lancee (un script de CI, un .bat).
@@ -3108,8 +3115,13 @@ void App::closeScreenWindows() {
 }
 
 void App::frame(double dt) {
+    // 1.22.2 : CHAQUE ETAPE EST MESUREE (core/Perf.hpp, l'onglet Performances du panneau du bas) : une
+    // partie par etape, a la suite ; ce qu'elles appellent a ses propres parties, plus profond.
+    core::perf::Lap lap;
     // Fixed order, every frame. See docs/ARCHITECTURE.md ? Frame pipeline.
+    lap.to(XPG_PARTIE("app.messages"));
     bus_.drain();            // 1. deliver deferred notifications
+    lap.to(XPG_PARTIE("app.fichiers"));
 #if XPG_HAVE_SDL3
     // 1a. Lot macros 1 : les reponses de l'explorateur de fichiers, rendues ici
     //     sur le fil de l'interface (SDL peut les donner sur un autre).
@@ -3120,16 +3132,20 @@ void App::frame(double dt) {
     //     qui les a recus.
     deliverDroppedFiles();
     exchange::poll(*this);   // 1a ter. 1.12.30 : les archives (les taches finies)
+    lap.to(XPG_PARTIE("app.fenetre"));
     refreshWindowTitle();    // 1b. lot 19 : le nom du projet, et " *" s'il est modifie
     settleReopened();        // 1c. lot API 6 : tout annule - l'etat d'avant la 1re modification
     refreshWindowIcon();     // 1d. lot API 6 : l'icone du projet sur la fenetre
+    lap.to(XPG_PARTIE("app.navigation"));
     menus_->applyPending();  // 2. apply queued navigation
+    lap.to(XPG_PARTIE("app.nouveautes"));
     noveltyCenter().tick();  // 2. bis 1.10 (chantier P) : la fenetre des nouveautes, Me montrer, les reglages
     // 2b. The PLC does not stop because you looked away from it. The scan is
     //     driven here, not by whichever screen happens to be on top.
     // Lot API 7 : la revision du programme (chaque commande, chaque projet
     // republie) - une simulation preparee avant un changement se refait au
     // prochain Simuler au lieu de rejouer l'ancien code.
+    lap.to(XPG_PARTIE("simulation.api"));
     simulation_.setProgramRevision(commands_.revision() * 1000003ULL + programChanges_);
     simulation_.tick(dt);
     // 2c. Lot 14 : la liaison Modbus TCP suit la configuration de l'IHM ; le
@@ -3138,6 +3154,7 @@ void App::frame(double dt) {
     //     fois par projet.
     // 1.12.0 : IHM Studio n'a pas d'automate - ni son simulateur, ni la liaison vers
     // « l'automate du projet », ni le serveur de demonstration ; ses equipements, oui.
+    lap.to(XPG_PARTIE("liaisons"));
     const bool plc = core::hasApi();
     if (plc && hmi_ && hmi_->project.comm.demoServer && project_ && !simulation_.attached() && demoPrepared_ != project_.get()) {
         demoPrepared_ = project_.get();
@@ -3148,6 +3165,7 @@ void App::frame(double dt) {
     //     equipements simules, pings).
     //     Lot 17 : sur le poste, les vrais appareils ; dans l'application, les
     //     jumeaux (au choix de chaque equipement) ; "suit l'automate" lit le simulateur.
+    lap.to(XPG_PARTIE("equipements"));
     equip_.setStation(stationActive_);
     equip_.setPlcReader([this, plc](const std::string& name) -> std::optional<double> {
         auto* rt = plc ? simulationRuntime() : nullptr;      // 1.12.0 : « suit l'automate » : pas d'automate
@@ -3180,6 +3198,7 @@ void App::frame(double dt) {
     }
     // 2c ter. Lot 15 : la reprise - le battement ; en conception, les
     //     modifications non enregistrees gardees toutes les 2 minutes (a part).
+    lap.to(XPG_PARTIE("enregistrement-auto"));
     recovery_.tick(dt);
     if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
@@ -3200,12 +3219,15 @@ void App::frame(double dt) {
     }
     // 2d. Lot 14 : les notifications suivent la configuration (la boite d'essai,
     //     les delais ecoules).
+    lap.to(XPG_PARTIE("notifications"));
     notify_.tick(hmi_ ? &hmi_->project : nullptr);
     // 2d bis. 1.20.0 : la surveillance des incidents (le dossier du projet IHM, les fronts, les videos, les analyses).
+    lap.to(XPG_PARTIE("incidents"));
     incidents_.setProjectFolder(hmi_ ? projectFolder_ : std::string{});
     incidents_.tick(time_);
     // 2e. Lot 14 : l'acces web suit la configuration ; les clics des navigateurs
     //     (commande permise) sont des clics sur la vue en marche.
+    lap.to(XPG_PARTIE("acces-web"));
     web_.tick(hmi_ ? &hmi_->project : nullptr);
     for (const auto& k : web_.takeClicks()) {
         if (!liveHmiPane()) continue;
@@ -3222,13 +3244,17 @@ void App::frame(double dt) {
                           renderer_ ? renderer_->surfaceSize() : gfx::Size{},
                           renderer_ ? renderer_->dpiScale() : 1.f};
     // 1.11 (T1) : le tutoriel en cours - la scene joue sa file, l'horloge avance.
+    lap.to(XPG_PARTIE("tutoriel"));
     tutorials::frame(dt * 1000.0);
+    lap.to(XPG_PARTIE("mise-a-jour"));
     menus_->Update(fc);      // 3. tick logic and animations
+    lap.stop();
     // 1.14.1 (N2) : LE POINTEUR (ui::cursor). Chaque fenetre le demande pendant son dessin - ce
     // qui est sous la souris (une double fleche sur un separateur, la barre en I sur un champ...),
     // ou le geste en cours ; celui de la fenetre ou est la souris est montre apres le dessin (6 bis).
     ui::cursor::Shape mainCursor = ui::cursor::Shape::Default;
     if (renderer_) {
+        lap.to(XPG_PARTIE("peinture"));
         renderer_->beginFrame(theme_.color.windowBg);
         ui::cursor::begin();
         menus_->Render(*renderer_, fc);   // 4. paint back-to-front
@@ -3238,6 +3264,7 @@ void App::frame(double dt) {
         // ---- Lot API 8 : la question attend dans une fenetre detachee : le
         //      voile de la principale, et ou aller (avant la capture).
         detached_.paintOverMain(*renderer_, fc.surface);
+        lap.to(XPG_PARTIE("peinture.captures"));
         // 4b. Ce qui vient d'etre dessine, avant de le presenter : la capture
         //     demandee (F12) et la session rejouee (--script).
         if (!captureRequest_.empty()) {
@@ -3260,11 +3287,14 @@ void App::frame(double dt) {
         if (incidents_.wantsFrame(time_))
             if (auto* pane = liveHmiPane(); pane && pane->runtime().running()) incidents_.offerFrame(*renderer_, pane->canvas().screenRect(), time_);
         if (script_ && !script_->afterRender(*renderer_)) quit_ = true;
+        lap.to(XPG_PARTIE("peinture.presenter"));
         renderer_->endFrame();            // 5. present
     }
     // 6. Lot API 7 : les onglets detaches, chacun dans sa fenetre avec son
     //    renderer, a la meme horloge (celle, fixe, d'une session rejouee comprise).
+    lap.to(XPG_PARTIE("fenetres-detachees"));
     detached_.frame(time_);
+    lap.stop();
 #if XPG_HAVE_SDL3
     // 6 bis. 1.14.1 (N2) : le pointeur de la fenetre ou est la souris (la principale, ou une
     //    fenetre detachee : le sien, demande a son dessin). Le pointeur du systeme ne change que
@@ -3290,6 +3320,7 @@ void App::frame(double dt) {
     (void)mainCursor;
 #endif
     // 7. Lot API 8 : les filtres retenus, sur le disque une seconde apres le dernier changement.
+    lap.to(XPG_PARTIE("app.memoires"));
     flushFilterMemory();
     // 8. 1.12.31 : le zoom des pages, de meme.
     flushZoomMemory();

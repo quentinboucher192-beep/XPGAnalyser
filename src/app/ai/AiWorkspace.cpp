@@ -27,6 +27,7 @@
 #include "../App.hpp"
 #include "../BackgroundTasks.hpp"   // 1.16.1 : la cloche (une reponse de l'Assistant arrivee)
 #include "../../core/Edition.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 #include "../hmi/HmiCommPanes.hpp"   // 1.18.0 : le scanner (Detecter ce qui repond...)
 #include "../hmi/HmiIncidentsPane.hpp"   // 1.21.2 : l'onglet Notifications ouvre un incident
 #include "AiMemoryDialog.hpp"            // 1.21.2 : ... et les Souvenirs a valider
@@ -399,10 +400,14 @@ void MainAnalysisScreen::showAssistantReply(const std::string& conversation) {
 
 void MainAnalysisScreen::tickAssistant(double now) {
     if (!aiPanel_) return;
+    core::perf::Lap lap;   // 1.22.2 : l'onglet Performances (core/Perf.hpp)
     // Montre au demarrage (la case retenue, la Disposition) : charge a la premiere image.
+    lap.to(XPG_PARTIE("ia.chargement"));
     if (assistantShown()) aiPanel_->ensureLoaded();
+    lap.to(XPG_PARTIE("ia.panneau"));
     if (aiPanel_->loaded()) aiPanel_->tick(now);
     if (upper_ && assistantShown()) fitAssistantWidth(*upper_, *aiPanel_);
+    lap.to(XPG_PARTIE("ia.missions.tableaux"));
     tickMissionBoards();   // 1.22.0 : les tableaux de bord des missions ouverts au centre suivent leur mission
 }
 

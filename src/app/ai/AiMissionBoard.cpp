@@ -2,6 +2,7 @@
 //  app/ai/AiMissionBoard.cpp - 1.22.0 : le tableau de bord d'une mission (voir le .hpp)
 // =============================================================================
 #include "AiMissionBoard.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
 #include "AiNotifications.hpp"   // notifs::oneLine
 #include "AiPanel.hpp"
@@ -617,6 +618,7 @@ void AiMissionBoard::inspect() {
 }
 
 void AiMissionBoard::refresh() {
+    XPG_MESURE("ia.mission.tableau");   // 1.22.2
     if (mode_ == Mode::Resume) inspect();
     rebuild();
 }
@@ -1699,6 +1701,7 @@ void AiMissionBoard::onLayout() {
 }
 
 void AiMissionBoard::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.tableau-mission");   // 1.22.2
     tips_.clear();
     const auto b = bounds();
     ctx.r.fillRect(b, ctx.theme.color.panelBg);

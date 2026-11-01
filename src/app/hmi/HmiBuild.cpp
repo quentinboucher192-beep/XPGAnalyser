@@ -1,4 +1,5 @@
 #include "HmiBuild.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "../../domain/ProjectModel.hpp"
 
@@ -289,6 +290,7 @@ void HmiBuildManager::launch(HmiBuildSetup setup, std::optional<pl::Request> req
     const std::string projectBuild = setup.projectFolder.empty() || memoryOnly_ ? std::string{} : pl::buildFolderOf(setup.projectFolder);
     std::optional<pl::Cache> mem = memCache_;
     worker_ = std::thread([this, setup = std::move(setup), request, projectBuild, mem]() mutable {
+        XPG_TRAVAIL("build-ihm");   // 1.22.2
         Done d;
         std::string folder = projectBuild;
         // Le verrou d'abord : un dossier en lecture seule (un projet sur un partage, une cle
