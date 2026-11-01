@@ -891,7 +891,7 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
         std::string prog;
         if (total > 0) prog = std::to_string(done) + "/" + std::to_string(total) + " op.";
         else if (s.state == mission::StepState::Done) prog = "faite";
-        else if (s.plannedOps > 0) prog = "\xE2\x89\x88 " + std::to_string(s.plannedOps) + " op. pr\xC3\xA9vues";
+        else if (s.plannedOps > 0) prog = "environ " + std::to_string(s.plannedOps) + " op. pr\xC3\xA9vues";
         else prog = "\xE2\x80\x94";
         const std::string deps = s.deps.empty() ? std::string("\xE2\x80\x94") : joined(s.deps);
         std::string ttl = s.title + (s.mandatory ? std::string{} : std::string(" (facultative)"));
