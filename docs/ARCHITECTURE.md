@@ -1,783 +1,354 @@
-# PLC Project Analyzer — Architecture
+# Architecture technique
 
-A C++20/23 desktop framework built on SDL3 for importing and analysing Schneider
-Electric EcoStruxure Control Expert projects.
+Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.21.3). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
 
-Everything in this document is backed by code in `src/`. The import pipeline,
-the navigation stack and the view models compile and are covered by four
-executable tests that run headless. Numbers quoted below were measured on the
-supplied `MAST.XPG` and on a generated fixture at the target scale.
+> Ce document remplace la version d'origine, rédigée en anglais au premier jalon du projet (un seul exécutable, quatre essais, un outil d'analyse en lecture seule). Cette version reste consultable dans l'historique Git.
 
----
+## Sommaire
 
-## 0. What the reference file actually contains
-
-Before designing the importer I parsed the supplied file. This changed two
-decisions, so it comes first.
-
-`MAST.XPG` is a **Control Expert V15.3 program exchange file**, DTD version 41,
-root element `<PGMExchangeFile>`, 522 kB, UTF-8 with CRLF.
-
-| Element | Count | Becomes |
-|---|---:|---|
-| `DDTSource` | 28 | derived data types (285 member fields) |
-| `FBSource` | 8 | DFB types (34 instances across the project) |
-| `programUnit` | 3 | multi-section program units |
-| `program` / `FBProgram` | 75 | sections, all in ST, 10 336 lines |
-| `dataBlock/variables` | 251 | global dictionary, 90 of them located (`%MW…`) |
-| `animationTable` | 5 | watch tables |
-| **Total variable declarations** | **891** | |
-
-### Two findings that shaped the design
-
-**1. The brief's entry point is a family, not a file.** Control Expert exports a
-project as several documents: `.XPG` (program), `.XDB` (variable dictionary),
-`.XHW` (hardware), `.XEF`/`.ZEF` (whole project). `.STU` is the binary working
-file and is not an exchange format at all. A section export is conventionally
-named after its task, which is why the brief says "`.MAST`" — the file is
-`MAST.XPG`.
-
-**2. A `.XPG` does not contain the rack.** The only hardware information in the
-whole document is one attribute:
-
-```xml
-<resource resName="Micro Basic" resIdent="BMX P34 2020 03.30">
-```
-
-That identifies the CPU (BMX P34 2020 → Modicon M340 family, OS 03.30) and
-nothing else. There is no rack, no slot list, no module reference, no I/O card,
-no firmware per module.
-
-The mockup shows a populated rack view with six modules and order numbers. **That
-view cannot be filled from a `.XPG`.** Rather than fabricate a plausible rack,
-the importer marks `HardwareConfig::inferred = true`, records a
-`partialDataNotice`, and the PLC configuration pane shows what it does know plus
-an explicit "import the matching `.XHW` or `.XEF`" prompt. `ProjectImporter`
-merges several files into one `Project` precisely so that adding the `.XHW`
-later fills the gap without re-importing anything.
-
-This is the single most important decision in the document: in an engineering
-tool, an invented rack layout is worse than an empty pane.
+1. [Un code, deux applications](#un-code)
+2. [Bibliothèques de compilation et dépendances](#bibliotheques)
+3. [Organisation des sources](#sources)
+4. [Modèles, persistance et interface : la séparation](#separation)
+5. [Interface : plate-forme, widgets, écrans](#interface)
+6. [La boucle d'image](#boucle)
+7. [Commandes, annulation et historique](#commandes)
+8. [Communication entre modules](#communication)
+9. [Fils d'exécution](#fils)
+10. [Persistance](#persistance)
+11. [Gestion des erreurs, plantages et reprise](#erreurs)
+12. [Chaîne d'import d'un export Control Expert](#import)
+13. [Architecture de l'Assistant IA](#assistant)
+14. [Système de tests](#tests)
 
 ---
 
-## 1. Folder structure
+<a id="un-code"></a>
+## 1. Un code, deux applications
 
-```
-xpg-analyzer/
-├── CMakeLists.txt
-├── docs/
-│   └── ARCHITECTURE.md
-├── src/
-│   ├── core/                    no dependencies, not even on the platform
-│   │   ├── Result.hpp           std::expected + C++20 fallback, ErrorCode, XPG_TRY
-│   │   ├── Error.cpp
-│   │   ├── Signal.hpp           Observer: Signal<Args…>, RAII Connection, ConnectionScope
-│   │   ├── EventBus.hpp         deferred, thread-safe, type-erased pub/sub
-│   │   ├── Command.hpp          Command pattern, undo stack, ActionRegistry
-│   │   └── ServiceRegistry.hpp  constructor-injection container
-│   ├── platform/                the only place SDL3 exists
-│   │   ├── Geometry.hpp         Rect, Point, Size, Color, Edges
-│   │   ├── InputEvent.hpp       SDL_Event translated into a variant
-│   │   ├── Renderer.hpp         gfx::IRenderer + SdlRenderer (pimpl)
-│   │   ├── SdlRenderer.cpp
-│   │   ├── SdlEventPump.cpp
-│   │   └── FontAtlas.cpp
-│   ├── ui/
-│   │   ├── Theme.hpp/.cpp       design tokens, three themes
-│   │   ├── Widget.hpp           retained-mode base + FocusChain
-│   │   ├── Layout.hpp           BoxLayout, DockLayout, GridLayout
-│   │   └── widgets/
-│   │       ├── Controls.hpp     Button, InputText, MultiLineText, Checkbox,
-│   │       │                    RadioButton/Group, ToggleButton, DropDown
-│   │       ├── Containers.hpp   GroupBox, Splitter, TabControl,
-│   │       │                    ScrollablePanel, ToolBar, StatusBar
-│   │       ├── DataViews.hpp    ListView, TreeView, TableView, PropertyGrid
-│   │       └── FilterChain.cpp
-│   ├── menu/
-│   │   ├── IMenu.hpp            the six-method contract + WidgetMenu base
-│   │   └── MenuManager.hpp/.cpp navigation stack, modals, dialogs, overlays
-│   ├── domain/
-│   │   └── ProjectModel.hpp/.cpp  Project, Variable, DerivedType, Pou, Section…
-│   ├── import/
-│   │   ├── XmlReader.hpp/.cpp     zero-copy pull parser
-│   │   ├── ProjectParser.hpp      IProjectParser + XPG/XDB/XHW + HardwareCatalog
-│   │   ├── XpgParser.cpp
-│   │   ├── ProjectAnalyzer.hpp/.cpp
-│   │   └── ProjectImporter.hpp/.cpp
-│   ├── app/
-│   │   ├── App.hpp/.cpp           composition root, frame loop
-│   │   ├── ViewModels.hpp/.cpp    the M–V seam
-│   │   └── screens/               the six screens + dialogs
-│   └── main.cpp                   GUI and --cli modes
-└── tests/
-    ├── menu_test.cpp        navigation, modality, dialog results
-    ├── import_test.cpp      end-to-end against a real export
-    └── viewmodel_test.cpp   MVC seam + sort/filter benchmarks
-```
+Depuis la 1.12.0, la suite produit **deux exécutables indépendants** à partir des mêmes sources :
 
-### Dependency rule
+| Exécutable | Cible CMake | Définition de compilation | Édition (`core::Edition`) |
+|---|---|---|---|
+| `API-Studio` (`API-Studio.exe`) | `xpg_api` | `XPG_EDITION_API=1` | `Edition::Api` |
+| `IHM-Studio` (`IHM-Studio.exe`) | `xpg_ihm` | `XPG_EDITION_IHM=1` | `Edition::Ihm` |
 
-```
-        main ──► app ──► ui ──► core
-                  │       │       ▲
-                  ├──► menu ──────┤
-                  ├──► import ────┤
-                  │       │       │
-                  └──► domain ────┘
-                          ▲
-                     platform (SDL3)
-```
+- Seul `src/main.cpp` est compilé deux fois (`xpg_add_edition` dans `CMakeLists.txt`). Il fixe l'édition au lancement par `core::setEdition` avant toute autre initialisation (réglages, instance unique, dossiers).
+- Le reste du code interroge l'édition par `core::hasApi()` et `core::hasIhm()` (`src/core/Edition.hpp`) pour n'afficher que sa partie : menus, arbre du projet, aide, dossiers de projets (`projets\api`, `projets\ihm`), clé de l'instance unique. Exemple : l'Assistant IA n'est ajouté à l'écran du projet que si `core::hasIhm()` est vrai (`src/app/screens/MainAnalysisScreen.cpp`).
+- `Edition::Both` n'est utilisée que par les essais.
+- Le nom affiché vient de `core::productName()` (« API Studio », « IHM Studio ») ; le nom de l'ensemble, `XPG_ANALYZER_NAME`, vaut « API IHM Studio » (`src/core/Version.hpp`). Les dossiers techniques gardent leur nom d'origine (`%APPDATA%\XpgAnalyzer`, `XPGAnalyser.ini`, `Documents\XPGAnalyser`) pour ne pas perdre les réglages et les données existants.
 
-Arrows only point right. `domain` and `import` never include a UI header;
-`ui` and `menu` never include a domain header. That is why
-`import_test` and `menu_test` link and run without SDL, a window, or a display
-server — which is also how they run in CI.
+Langage : **C++20** (`CMAKE_CXX_STANDARD 20` dans `CMakeLists.txt`, `stdcpp20` dans `XpgAnalyzer.vcxproj`). `src/core/Result.hpp` utilise `std::expected` quand la bibliothèque standard le fournit (`__cpp_lib_expected`) et sinon une implémentation compatible.
 
 ---
 
-## 2. Part 1 — Menu framework
+<a id="bibliotheques"></a>
+## 2. Bibliothèques de compilation et dépendances
 
-### 2.1 Class model
+Les sources sont ramassées par dossier (`xpg_sources()` avec `file(GLOB_RECURSE ... CONFIGURE_DEPENDS)`), sans liste manuelle. Les liens ci-dessous sont ceux déclarés par `target_link_libraries` dans `CMakeLists.txt`.
 
-```
-                       ┌──────────────────────┐
-                       │      «interface»     │
-                       │        IMenu         │
-                       ├──────────────────────┤
-                       │ + Initialize(): Status
-                       │ + Update(FrameContext)
-                       │ + Render(IRenderer, FrameContext)
-                       │ + HandleEvent(InputEvent): EventResult
-                       │ + OnEnter()
-                       │ + OnExit()
-                       │ + id(): MenuId
-                       │ + traits(): MenuTraits
-                       │ + canClose(): bool
-                       │ # manager(): MenuManager&
-                       └──────────▲───────────┘
-                                  │
-                       ┌──────────┴───────────┐
-                       │      WidgetMenu      │  holds a Widget tree +
-                       │  # buildUi(): Status │  a FocusChain, forwards
-                       └──────────▲───────────┘  the lifecycle to them
-                                  │
-   ┌────────────┬────────────┬────┴───────┬─────────────┬──────────────┐
- StartupScreen  MainAnalysis VariableExpl LibraryExpl  Statistics   MessageDialog
-                  Screen       Screen       Screen      Dashboard   OpenProjectDialog
+| Cible | Type | Dossiers | Dépend de |
+|---|---|---|---|
+| `xpg_core` | statique | `src/core` | `Threads::Threads` |
+| `xpg_xls` | statique | `src/xls` (+ `third_party/miniz.c` s'il est présent) | `xpg_core` |
+| `xpg_import` | statique | `src/domain`, `src/import`, `src/export`, `src/project`, `src/sim` | `xpg_core`, `xpg_xls` |
+| `xpg_ui` | statique | `src/ui`, `src/menu` | `xpg_core`, `xpg_import` (Windows : `shell32`, `ole32`) |
+| `xpg_help` | statique | `src/help` | `xpg_import`, `xpg_ui` |
+| `xpg_hmi` | statique | `src/hmi` | `xpg_import` (Windows : `ws2_32`, `advapi32`, `iphlpapi`, `shell32`, Media Foundation ; Linux : `dl`) |
+| `xpg_app` | objets | `src/app` (dont `app/ai`, `app/hmi`, `app/screens`, `app/tutorial`), `src/platform/FontAtlas.cpp`, `src/platform/Sdl*.cpp` si SDL | `xpg_ui`, `xpg_import`, `xpg_help`, `xpg_hmi`, `SDL3::SDL3` (si `XPG_WITH_SDL`), Windows : `winhttp`, `crypt32` ; Linux : `dl` |
+| `xpg_api`, `xpg_ihm` | exécutables | `src/main.cpp` | `xpg_app` |
+| `xpg_analyzer` | cible personnalisée | — | construit `xpg_api` et `xpg_ihm` |
 
-  ┌───────────────────────────────────────────────────────────────────┐
-  │                           MenuManager                             │
-  ├───────────────────────────────────────────────────────────────────┤
-  │ - factory_   : MenuFactory                                        │
-  │ - stack_     : vector<Entry>      ← screens, modals, dialogs       │
-  │ - overlays_  : vector<Entry>      ← always painted on top          │
-  │ - pending_   : deque<Request>     ← deferred mutation              │
-  │ - history_   : vector<MenuId>     ← PreviousMenu()                 │
-  ├───────────────────────────────────────────────────────────────────┤
-  │ + PushMenu / PopMenu / PopTo / PopToRoot                           │
-  │ + ReplaceMenu / SwitchMenu / PreviousMenu                          │
-  │ + ShowModal / ShowDialog / CloseDialog                             │
-  │ + ShowOverlay / CloseOverlay / CloseAllOverlays                    │
-  │ + applyPending / Update / Render / HandleEvent                     │
-  │ + path(): vector<MenuId>          ← breadcrumb                     │
-  └───────────────────────────────────────────────────────────────────┘
-                  ◇ owns ▼                        ◇ creates ▼
-              vector<MenuPtr>                    MenuFactory
+```mermaid
+flowchart TD
+    core["xpg_core<br/>src/core"]
+    xls["xpg_xls<br/>src/xls + miniz"]
+    imp["xpg_import<br/>domain, import, export, project, sim"]
+    ui["xpg_ui<br/>src/ui, src/menu"]
+    help["xpg_help<br/>src/help"]
+    hmi["xpg_hmi<br/>src/hmi"]
+    app["xpg_app (objets)<br/>src/app, platform"]
+    sdl["SDL3 (si XPG_WITH_SDL)"]
+    api["API-Studio<br/>main.cpp + XPG_EDITION_API"]
+    ihm["IHM-Studio<br/>main.cpp + XPG_EDITION_IHM"]
+    xls --> core
+    imp --> core
+    imp --> xls
+    ui --> core
+    ui --> imp
+    help --> imp
+    help --> ui
+    hmi --> imp
+    app --> ui
+    app --> imp
+    app --> help
+    app --> hmi
+    app --> sdl
+    api --> app
+    ihm --> app
 ```
 
-### 2.2 Where I deviated from the brief, and why
+Options CMake (`CMakeLists.txt`) :
 
-The brief asks for a **`MenuManager` singleton** and, in Part 5, for
-**dependency injection**. Those pull against each other. A global mutable
-navigation stack makes it impossible to open a second window, to test a
-navigation sequence in isolation, or to control destruction order at shutdown.
-
-`MenuManager` is therefore an ordinary class with an ordinary constructor, owned
-by `App` and injected. A `MenuManager::instance()` accessor exists and is
-populated by `App` through a `ScopedInstance` RAII guard, for call sites where
-threading a reference would be gratuitous. **Nothing in the framework itself uses
-`instance()`** — delete it and everything still builds. You get the ergonomics
-the brief wanted without the testability cost.
-
-### 2.3 Deferred mutation
-
-Every navigation call is queued and applied by `applyPending()` at the top of the
-frame:
-
-```cpp
-void Button::onClick() { manager().PopMenu(); }   // queued, not immediate
-```
-
-Without this, a menu that pops itself in response to its own click destroys the
-object whose stack frame is still executing. The test asserts it:
-
-```cpp
-m4.PopMenu();                       // queued
-assert(m4.top() == top);            // stack unchanged mid-frame
-m4.applyPending();
-assert(m4.depth() == 0);
-```
-
-Requests enqueued *by* a request are handled on the next frame, so each frame's
-navigation is deterministic and bounded.
-
-### 2.4 Menu kinds and layer composition
-
-`MenuTraits` decides how a layer interacts with those beneath it:
-
-| Kind | rendersBelow | updatesBelow | blocksInput | dimsBelow | Used for |
-|---|---|---|---|---|---|
-| `Screen` | ✗ | ✗ | ✓ | ✗ | Startup, Analysis, Settings |
-| `Modal` | ✓ | ✗ | ✓ | ✓ | Import progress, confirmations |
-| `Dialog` | ✓ | ✗ | ✓ | ✓ | Open project, Save-changes |
-| `Overlay` | ✓ | ✓ | ✗ | ✗ | DropDown popups, tooltips, toasts |
-
-`firstRenderedLayer()` walks down from the top while `rendersBelow` is set, so a
-dialog over a screen paints two layers and an opaque screen paints one.
-
-### 2.5 Unlimited nesting
-
-Nesting is expressed in **ids**, not in code:
-
-```cpp
-factory.add("main.settings.graphics.advanced", [] { … });
-```
-
-`MenuFactory::childrenOf("main.settings")` returns direct children only —
-`main.settings.audio`, `main.settings.graphics`, `main.settings.theme` but not
-`main.settings.graphics.advanced` — which is what a generated submenu list needs.
-Depth is unbounded; the test pushes four levels and pops back through them.
-
-### 2.6 Event propagation
-
-```
-SDL_Event
-   │  SdlEventPump::translate()          ← the only SDL→UI conversion
-   ▼
-ui::InputEvent (variant)
-   │
-   ▼  MenuManager::HandleEvent
-   ├─ overlays_, newest → oldest         a dropdown popup sees the click first
-   │      └─ Consumed? → stop
-   ├─ stack_, top → bottom
-   │      └─ Consumed? → stop
-   │      └─ traits.blocksInput? → stop  ← the modal barrier
-   ▼
-Widget::dispatch (inside the screen)
-   ├─ capture phase   parent → child     (grabs: splitter drag, active editor)
-   ├─ target          hitTest(local)
-   └─ bubble phase    child → parent     unhandled keys reach the shortcut table
-```
-
-Two levels, same `EventResult::{Ignored, Consumed}` contract at both. The test
-asserts that an overlay lets an event through to the screen below while a modal
-swallows it.
-
-### 2.7 Lifecycle
-
-```
-create ─► Initialize() ─► OnEnter() ─┬─► Update()/Render()/HandleEvent()  (per frame)
-                            ▲        │
-                            │        └─► OnExit()  ──► destroyed
-                            └───────── re-entered when the layer above pops
-```
-
-`Initialize()` runs once and returns a `Status`, so a screen that cannot build
-its UI fails the push instead of appearing broken. `canClose()` lets a screen
-veto its own pop — that is where "you have unsaved analysis" lives, without the
-manager knowing what analysis is.
-
----
-
-## 3. Part 2 — Widget framework
-
-### 3.1 Class model
-
-```
-                    ┌──────────────────────────────┐
-                    │            Widget            │
-                    ├──────────────────────────────┤
-                    │ - bounds_, padding_          │
-                    │ - visibility_, enabled_      │
-                    │ - hovered_, focused_         │
-                    │ - dirtyPaint_, dirtyLayout_  │
-                    │ - parent_ : Widget*          │ non-owning
-                    │ - children_ : vector<unique_ptr<Widget>>
-                    ├──────────────────────────────┤
-                    │ + setBounds / contentRect    │
-                    │ + setVisibility / setEnabled │
-                    │ + addChild / removeChild     │
-                    │ + layout / render / dispatch │
-                    │ + invalidate(Layout)         │
-                    │ + sizeHint(): SizeHint       │
-                    │ ~ focusGained/Lost, hoverChanged : Signal
-                    │ # onLayout/onPaint/onEvent/hitTest
-                    └──────────────▲───────────────┘
-        ┌──────────────┬───────────┼────────────┬──────────────────┐
-   layouts        controls      containers    data views
-  BoxLayout       Button        GroupBox      ListView   ─► IListModel
-  DockLayout      InputText     Splitter      TreeView   ─► ITreeModel
-  GridLayout      MultiLineText TabControl    TableView  ─► ITableModel + FilterChain
-                  Checkbox      ScrollablePanel PropertyGrid
-                  RadioButton   ToolBar
-                  ToggleButton  StatusBar
-                  DropDown
-```
-
-### 3.2 The three rules that make 50 000 rows work
-
-**Model/View separation.** The view never owns rows. `TableView` asks an
-`ITableModel` for `cellText(row, column)`. Importing a project costs one
-allocation pass over the domain vectors, not one widget per cell.
-
-**Virtualisation.** Only rows intersecting the viewport are measured and
-painted: at 22 px rows in a 700 px pane that is ~32 rows, independent of model
-size.
-
-**Indirection vector.** Sorting and filtering never touch the model; they rebuild
-a `std::vector<RowIndex>` mapping view rows to model rows. Sorting is one
-`std::stable_sort` over 4-byte indices; clearing a filter is a vector swap.
-Selection is stored as *model* rows, so it survives re-sorting.
-
-Measured on a 59 000-row model (`tests/viewmodel_test.cpp`):
-
-| Operation | 891 rows (real file) | 59 000 rows (fixture) |
-|---|---:|---:|
-| Sort by Name | 0.17 ms | 7.56 ms |
-| Sort by Address (numeric) | 0.03 ms | 4.21 ms |
-| Global text filter | 0.24 ms | 11.09 ms |
-| Predicate filter ("unused only") | 0.01 ms | 0.44 ms |
-
-All of these are user-initiated, one-off operations; the predicate case fits
-inside a single 16 ms frame with room to spare.
-
-### 3.3 TreeView
-
-- Expanded state is flattened into a linear `vector<VisualRow>` on structural
-  change; painting and hit-testing are then O(visible rows).
-- `+`/`−` expander, per-level indent, nested hierarchy of unbounded depth.
-- **Lazy loading contract:** `hasChildren()` may answer before `childCount()` is
-  meaningful. The view calls `fetchChildren()` once on first expansion and shows
-  a placeholder row until `childrenReady` fires. This is what lets a 10 000-POU
-  tree open instantly.
-- `setFilter(predicate)` keeps the ancestors of every match so matches stay
-  reachable.
-
-### 3.4 TableView
-
-Multiple columns with per-column width/min-width/resizable/sortable/visible/align;
-`SelectionMode::{None, Single, Multi, Extended}`; frozen leading columns;
-alternating row colours; `autoSizeColumn` samples only visible rows.
-
-Comparison lives in the model, not the view — because only the model knows that
-`%MW1174` is an address and not a string:
-
-```cpp
-case Address: return va.address < vb.address;   // area, then numeric offset
-```
-
-`%MW9` sorts before `%MW10`. A lexicographic sort gets that wrong, and in an I/O
-list it is wrong in a way that costs an engineer real time.
-
-`FilterChain` composes three stages, cheapest first: predicates → per-column
-terms → global term.
-
-### 3.5 PropertyGrid
-
-Name/Value columns with a draggable divider, arbitrarily nested `Category`
-objects, typed editors resolved by value type (`Text, Integer, Real, Boolean,
-Enum, Address, Color, ReadOnly`), one live editor at a time, optional description
-strip. A property with a null `commit` callback is read-only — which is every
-property in an import-only tool today, and the seam through which write-back
-would arrive later.
-
----
-
-## 4. Part 3 — Import system
-
-### 4.1 Pipeline
-
-```
-path ──► readFile ──► sniff() ──► IProjectParser (Factory)
-                        │                │
-                        │                ├─ XpgParser   ✅ implemented
-                        │                ├─ XdbParser   declared
-                        │                └─ XhwParser   declared
-                        ▼                ▼
-                 SourceFormat      domain::Project  ◄── merge point for
-                                          │              multi-file imports
-                                          ▼
-                                  ProjectAnalyzer ──► AnalysisReport
-                                          │
-                                          ▼
-                                    EventBus events ──► UI
-```
-
-`sniff()` reads the first kilobyte and matches the root element, falling back to
-the extension only if that fails. `MAST.XPG`, `MAST.XEF` and a file someone
-renamed to `.TXT` all resolve correctly. A `.STU` is rejected with an actionable
-message rather than a parse error.
-
-### 4.2 Why a pull parser
-
-A DOM materialises every element and attribute as heap nodes. On a 50 MB export
-that is hundreds of megabytes and a visible stall. `XmlReader` is a pull parser
-handing out `string_view`s into one buffer, so the importer copies exactly the
-bytes it keeps. It never throws, never allocates per element, and reports the
-line number, so a malformed file yields *"line 4127: attribute 'typeName'
-missing on \<variables\>"* rather than an empty tree.
-
-It handles BOM, comments, CDATA, declarations, self-closing elements, entity
-decoding (named, decimal, hex, with UTF-8 re-encoding), plus `readElementText()`
-for lifting a 20 kB `<STSource>` body in one call and `skipElement()` for
-subtrees the options exclude.
-
-### 4.3 Domain model storage
-
-Flat `std::vector`s owned by `Project`; relationships are 32-bit indices, not
-pointers. That gives contiguous iteration for the analyzer, trivial
-serialisation of a cached project, and stable identity across reallocation.
-
-Names are interned. A project of this kind repeats `BOOL`, `EBOOL`, `MAST`,
-`%MW` tens of thousands of times; interning turns each into a 4-byte id and makes
-type resolution an integer compare.
-
-> **A bug worth recording.** `StringPool` first used
-> `std::vector<std::string>` for storage with a `unordered_map<string_view,
-> SymbolId>` index. Short names like `"BOOL"` live in the small-string buffer
-> *inside* the `std::string` object, so a vector reallocation moved them and
-> every key in the map dangled. The symptom was subtle: the type histogram
-> showed `INT` twice with split counts. Storage is now `std::deque<std::string>`,
-> which never moves an element once pushed. The regression is caught by
-> comparing the parser's type histogram against an independent count.
-
-### 4.4 What is extracted
-
-| Brief asks for | Source in the file | Where it lands |
+| Option | Défaut | Effet |
 |---|---|---|
-| PLC family, CPU, firmware | `resource/@resIdent` + `HardwareCatalog` | `HardwareConfig`, PropertyGrid |
-| Rack, modules, I/O cards, comms cards | **not in a .XPG** | flagged as a partial-data notice |
-| Global variables | `dataBlock/variables` | `Variable{scope=Global}` |
-| Local / public / parameters | POU + FB variable groups | `Variable{scope=Local/Public/Input/Output/InOut}` |
-| Constants | `variableInit/@value` | `Variable::initValue` |
-| Derived types, structures | `DDTSource/structure` | `DerivedType` + member `Variable`s |
-| Arrays | `typeName="ARRAY[0..27] OF X"` | `TypeRef{klass=Array, low, high, elementType}` |
-| DFB libraries, function libraries | `FBSource` | `Pou{FunctionBlockType}` + `LibraryEntry` |
-| Programs, sections, function blocks | `program`, `FBProgram`, `programUnit` | `Section`, `Pou` |
-| DFB instances | variables typed by an `FBSource` name | `Pou::instanceCount` (34 found) |
-| Language LD/FBD/ST/IL/SFC | `STSource` / `LDSource` / `FBDSource` / `ILSource` / `SFCSource` | `PouLanguage`, one mapping in `languageFromElement()` |
-
-The reference file is 100 % ST. The language mapping is a single function so
-adding graphical languages means teaching the *editor* to render them, not
-teaching the *parser* a new shape.
-
-### 4.5 Type resolution
-
-Types are resolved in a link step after the streaming pass, because a `.XPG`
-declares variables before the DDTs they reference. The link step assigns
-`derivedIndex` / `fbTypeIndex`, counts instances, and emits a diagnostic for
-every unresolved name instead of silently leaving `TypeClass::Unknown`.
-
-Section-to-task binding happens in the same step: `<taskDesc>` declares the
-execution order and closes long before the section bodies appear, so sections are
-bound by task name afterwards and re-sorted by `SectionOrder`.
-
-### 4.6 Analysis
-
-`ProjectAnalyzer` is a pure function of the `Project`: same input, same report,
-no hidden state, no UI dependency, cancellable through an `atomic_bool`.
-
-The expensive part is cross-referencing. Naively, "is variable V used?" over
-50 000 variables and 10 MB of source is 50 000 substring searches. Instead every
-section body is tokenised **once** into a case-insensitive identifier multiset
-(IEC 61131-3 identifiers are case-insensitive), skipping `(* … *)`, `//` and
-`'string'` content. Each variable is then one hash lookup. Complexity is
-O(bytes of code + symbols), not the product. Activation conditions and animation
-table entries count as references, so a variable that only gates a section is not
-reported as dead.
-
-The same `ReferenceIndex` powers the "Usage" column and "find all references", so
-the UI never rescans.
-
-Findings produced: unused global/local variables, unused derived types, unused
-DFB types, empty sections, over-long sections, duplicate addresses, undefined
-types, undocumented located I/O.
-
-### 4.7 Measured results — real file
-
-```
-parsed /mnt/project/MAST.XPG: 891 variables, 75 sections in 4.3 ms
-
-product          : Control Expert V15.3 - 230214C
-project          : Projet  v0.0.531  (DTD 41)
-CPU              : Modicon M340 BMX P34 2020  firmware 03.30  (inferred)
-
-variables        : 891  (global 251, local/param 355, DDT members 285)
-located I/O      : 90
-derived types    : 28
-DFB types        : 8   instances: 34
-program units    : 3
-sections         : 75   tasks: 1   animation tables: 5
-lines of code    : 10336   statements: 6830
-doc coverage     : 2.9 %
-parse+analyze    : 9.1 ms
-
-most instantiated DFBs: DFB_GRAFCETENGINE ×17, CAPTEUR ×6, BUILDING ×3,
-                        TOUTFERMER ×3, WORD_TO_AREBOOL_INV ×2, …
-
-findings: 9 unused locals, 2 long sections, 90 undocumented located I/O,
-          0 unused globals, 0 duplicate addresses  (101 total)
-
-! Rack and module layout is not part of a .XPG export. Import the matching
-  .XHW or .XEF file to populate the PLC configuration view.
-```
-
-The 2.9 % documentation coverage is not a bug: comments live in the `.XDB`
-dictionary, and only DDT member comments survive a program export. It is exactly
-the kind of thing the tool should say out loud rather than present as a quality
-score.
-
-### 4.8 Measured results — target scale
-
-Generated fixture: 50 000 global variables, 10 500 sections, 500 DFB types,
-200 DDTs, 6.2 MB.
-
-```
-parsed /tmp/SCALE.XPG: 59000 variables, 10500 sections in 52.0 ms
-lines of code    : 82500   statements: 41500
-parse+analyze    : 93.5 ms
-```
-
-Under 100 ms end to end for a project 12× the size of the reference file, well
-inside the brief's 50 000-variable / 10 000-POU target.
+| `XPG_WITH_SDL` | `ON` | Construit l'interface graphique (SDL3 exigé par `find_package(SDL3 CONFIG REQUIRED)`). À `OFF`, les exécutables se construisent mais n'ouvrent pas de fenêtre : seul `--cli` fonctionne (`App::initPlatform`). |
+| `XPG_BUILD_TESTS` | `ON` | Construit et enregistre les essais. |
+| `XPG_WARNINGS_AS_ERRORS` | `OFF` | `-Werror` / `/WX`. |
+| `XPG_SANS_NPCAP` | `OFF` | Retire la capture réseau de l'espion Modbus (Npcap / libpcap). |
 
 ---
 
-## 5. Part 4 — User interface
+<a id="sources"></a>
+## 3. Organisation des sources
 
-### 5.1 Startup screen
+| Dossier | Fichiers `.cpp/.hpp` | Rôle | Dépend de l'écran ? |
+|---|---:|---|---|
+| `src/core` | 23 | `Result`/`Status`/`ErrorCode`, `Signal`, `EventBus`, commandes et pile d'annulation (`Command.hpp`), écriture atomique (`AtomicFile`), rapport de plantage (`CrashGuard`), historique interne (`CallTrail`), instance unique (`SingleInstance`), processus enfant borné (`Process`), édition et version | non |
+| `src/xls` | 7 | Lecture des classeurs `.xlsx`/`.xlsm` (`Workbook`, `XlsmSource`, `MacroXls`) | non |
+| `src/domain` | 6 | Modèle du programme automate : `domain::Project` (variables, types dérivés, POU, sections, tâches), ordre d'exécution | non |
+| `src/import` | 9 | Lecteur XML en flux (`XmlReader`), lecteurs `.XPG` et `.XHW`, analyse (`ProjectAnalyzer`), orchestration (`ProjectImporter`) | non |
+| `src/export` | 11 | Réécriture `.XPG` (`XpgWriter`), programme lisible en texte, Excel, PDF et HTML (`ProgramBook*`) | non |
+| `src/project` | 83 | Projet API sur disque (`ProjectStore`), états et verrou (`Security`), archives (`ProjectArchive`, `ApiArchive`), commandes d'édition, renommage, suppression, GRAFCET, macros, bibliothèque partagée, contrôles, statistiques | non |
+| `src/sim` | 17 | Interpréteur ST (`Interpreter`, `Runtime`), valeurs, JSON des scripts | non |
+| `src/ui` | 71 | Cadre d'interface maison : `Widget`, `WidgetHost`, mises en page, widgets (`ui/widgets`), thèmes, icônes, zoom, coloration syntaxique | oui, via `gfx::IRenderer` |
+| `src/menu` | 4 | Pile d'écrans (`MenuManager`, `IMenu`, `WidgetMenu`) | oui |
+| `src/help` | 47 | Centre d'aide, aide F1, raccourcis, notes de version, didacticiels, signalement de problème | non (rend des données) |
+| `src/hmi` | 288 | Modèle IHM (`HmiModel.hpp`), fichiers (`HmiStore`, `HmiArchive`), commandes (`HmiCommands`), vérifications (`HmiCheck`), génération incrémentale (`HmiPipeline`), moteur d'exécution (`HmiRuntime*`), communication (Modbus TCP, serveur web, notifications), incidents, enregistrements | non (« le modèle ne sait rien de l'écran », en tête de `HmiModel.hpp`) |
+| `src/platform` | 11 | `gfx::IRenderer`, `SdlRenderer`, `SdlEventPump`, `FontAtlas` (stb_truetype), événements d'entrée | c'est l'écran |
+| `src/app` | 174 (+ sous-dossiers) | Racine de composition (`App`), écrans, volets, dialogues, réglages, dossiers, reprise, exports | oui |
+| `src/app/ai` | 98 | Assistant IA | partiellement (`AiPanel`, dialogues) |
+| `src/app/hmi` | 208 | Éditeur de vues et volets de l'IHM (`HmiEditor`, `HmiCanvas`, peintres) | oui |
+| `src/app/screens` | 48 | Écrans et espaces de travail (`MainAnalysisScreen`, `StartScreen`, `StationScreen`, …) | oui |
+| `src/app/tutorial` | 9 | Exécution des didacticiels | oui |
 
-`ListView` of recent projects (path, project name, CPU, last opened), an **Open
-project** action, and an **Import MAST** entry that runs the same code path with
-a file filter defaulted to `*.XPG;*.XEF;*.XDB;*.XHW`. Drag-and-drop is handled
-by the same `FileDropped` input event, so the drop target and the button share
-one code path.
-
-### 5.2 Main analysis screen
-
-```
-┌────────────────────────────── ToolBar ───────────────────────────────┐
-│rail│  Project explorer  │  PLC configuration    │  Variables browser │
-│    │  TreeView          │  TabControl:          │  search + scope    │
-│    │   ├ Configuration  │   IO Mapping          │  TableView         │
-│    │   ├ Derived types  │   Task Configuration  │  Name Type Address │
-│    │   ├ DFB types      │   Communication       │  Scope Comment     │
-│    │   ├ Program units  │   System Settings     │  Usage             │
-│    │   ├ Tasks ─ MAST   │  (PropertyGrid each)  │                    │
-│    │   └ Animation tbls │                       │                    │
-│    ├────────────────────┴───────────────────────┴────────────────────┤
-│    │  DFB library │ DB library │ Programming sections                │
-│    ├─────────────────────────────────────────────────────────────────┤
-│    │  Diagnostics │ Analysis summary │ Project status                │
-└──────────────────────────── StatusBar ───────────────────────────────┘
-```
-
-Built with one `DockLayout` (toolbar/status/rail/centre) and nested `Splitter`s.
-Pane sizes are stored as ratios with per-pane minimums, so a window resize keeps
-the engineer's proportions; the ratios go into the workspace file.
-
-Selecting a tree node drives the other panes through `onTreeSelection` — picking
-a DDT filters the variable table to that type, picking a task scopes the sections
-table. `MainAnalysisScreen.cpp` is written out in full as the worked example the
-other screens follow.
-
-### 5.3 Variable explorer
-
-Full-window `TableView` with the six columns from the brief, search box,
-scope dropdown, "unused only" and "located only" toggles, multi-select, and CSV
-export **in view order** — an export that ignores the current sort and filter is
-useless for a review.
-
-### 5.4 Library explorer
-
-`TreeView` over `LibraryTreeModel` with the family folders from the brief
-(Standard / Motion / Process / Communication / Safety / User / Custom), each DFB
-showing its version and instance count. Selecting one shows its parameters in a
-`PropertyGrid` and its body in a read-only `MultiLineText`.
-
-Everything in the reference file lands under **Custom**, because a `.XPG` does
-not record library provenance. Classification into Standard/Motion/Process is a
-catalog lookup that arrives with the `.XEF` — flagged, not guessed.
-
-### 5.5 Programming units explorer
-
-`TreeView` of program units → sections, with language and line count in the
-label and the activation condition in angle brackets, plus a tabbed read-only
-source view with line numbers and a syntax-highlighting hook.
-
-### 5.6 Statistics dashboard
-
-`GridLayout` of cards driven by `AnalysisReport`: counters, a language
-breakdown, most-declared types, largest sections, most-instantiated DFBs, a
-findings donut by severity, and documentation coverage.
-
-### 5.7 Theme
-
-Palette taken from the mockup rather than invented: a desaturated graphite shell
-so that the only saturated pixels on screen are *state* — module OK green,
-warning amber, error red, selection blue. In a control room that rule matters
-more than taste: colour has to mean something. Three themes ship (Dark, Light,
-High contrast); high contrast also enlarges row height for larger hit targets.
-Metrics are logical pixels multiplied by the display scale, so one theme serves a
-96 dpi panel PC and a 4K laptop.
+Les fichiers C++ sont en ASCII ; les textes accentués de l'interface sont écrits en octets UTF-8 échappés (`"\xC3\xA9"`).
 
 ---
 
-## 6. Part 5 — Code quality
+<a id="separation"></a>
+## 4. Modèles, persistance et interface : la séparation
 
-### 6.1 C++20 vs `std::expected`
-
-The brief asks for C++20 **and** `std::expected`. `std::expected` is a C++23
-library feature (P0323); no conforming C++20 standard library provides it.
-Verified:
-
+```mermaid
+flowchart LR
+    subgraph Donnees["Modèles et persistance (sans écran)"]
+        dom["domain::Project<br/>programme automate"]
+        store["project::ProjectStore<br/>dossier du projet API"]
+        hmodel["hmi::Project / hmi::Document<br/>modèle IHM"]
+        hstore["hmi::save / hmi::load<br/>ihm/ en texte"]
+        sim["sim::Runtime<br/>interpréteur ST"]
+    end
+    subgraph Interface["Interface"]
+        appc["app::App<br/>racine de composition"]
+        screens["Écrans et volets<br/>src/app, src/app/hmi"]
+        uifw["ui::Widget + menu::MenuManager"]
+        plat["gfx::IRenderer<br/>SdlRenderer"]
+    end
+    store --> dom
+    hstore --> hmodel
+    sim --> dom
+    appc --> dom
+    appc --> hmodel
+    appc --> screens
+    screens --> uifw
+    uifw --> plat
 ```
-$ g++ -std=c++20 -fsyntax-only expected_test.cpp
-error: 'std::expected' is only available from C++23 onwards
-$ g++ -std=c++23 -fsyntax-only expected_test.cpp   # OK
-```
 
-`core/Result.hpp` aliases to `std::expected` when `__cpp_lib_expected` is
-present and otherwise provides an API-compatible fallback. Application code only
-ever names `core::Result` / `core::Err`, so moving the fleet to C++23 shrinks
-this header and changes nothing else. `tests/` builds and passes under **both**
-dialects.
+- **Programme automate** (API Studio) : `domain::Project` stocke des vecteurs plats ; les relations sont des indices 32 bits, les noms sont internés dans un `StringPool` (stockage `std::deque` pour que les vues de chaînes restent valides). `project::ProjectStore` le lit et l'écrit dans le dossier du projet.
+- **Modèle IHM** (IHM Studio) : une seule structure `hmi::Object` pour les 116 genres d'objets (`kKindInfos`, `HmiModel.hpp`), avec un sac de propriétés texte (`Prop {key, value, expr}`). `hmi::Document` ajoute le signal `changed` et l'état « modifié ».
+- **Interface** : `app::App` possède le projet, la pile de commandes, la pile d'écrans, la simulation et les liaisons. Les écrans lisent les modèles et envoient des commandes ; ils ne modifient pas le modèle directement.
+- Les bibliothèques sans écran (`xpg_core`, `xpg_import`, `xpg_hmi`, `xpg_help`) sont essayées sans serveur graphique (voir [TESTS.md](TESTS.md)).
 
-### 6.2 Design patterns, and what each is actually for
+---
 
-| Pattern | Where | Why there |
+<a id="interface"></a>
+## 5. Interface : plate-forme, widgets, écrans
+
+### Plate-forme et rendu
+
+- **SDL3** est la seule bibliothèque de fenêtrage et de rendu (fenêtre, événements, presse-papiers, son ; `third_party/SDL3/ORIGINE.txt`). SDL3_ttf, SDL3_image et SDL3_mixer ne sont pas utilisés.
+- `gfx::IRenderer` (`src/platform/Renderer.hpp`) est l'interface de dessin : rectangles (pleins, arrondis, contours), lignes, triangles, texte, images RGBA, découpe, dessin hors écran.
+- Implémentations présentes dans le code :
+  - `SdlRenderer` (`src/platform/SdlRenderer.cpp`) : `SDL_Renderer` de SDL3, créé par `SDL_CreateRenderer(window, nullptr)` ; le pilote de rendu effectif (Direct3D, OpenGL, logiciel…) est donc choisi par SDL, le code n'en impose aucun ;
+  - `SvgRenderer` (`src/app/SvgRenderer.hpp`) : écrit du SVG (exports, outils de prévisualisation de `tools/`) ;
+  - `ZoomRenderer` (`src/ui/Zoom.hpp`) : applique le zoom d'un widget.
+- Texte : `gfx::FontAtlas` rasterise une police TrueType avec `stb_truetype` dans de la mémoire, sans SDL. Polices cherchées dans `resources/fonts/` (absent du dépôt), puis dans les polices du système (Segoe UI, Tahoma, Consolas sous Windows ; DejaVu, Liberation sous Linux) — `src/platform/FontAtlas.cpp`.
+- Images et sons : `stb_image`, `stb_image_write`, `nanosvg`, `minimp3` (`third_party/`). PDF : PDFium chargé à la demande (`src/hmi/HmiPdf.cpp`). Vidéo : Motion-JPEG en AVI décodé partout ; MP4/H.264, WMV et MOV via Media Foundation sous Windows, chargé à la demande (`CMakeLists.txt`, `src/hmi/HmiVideoMf.cpp`).
+
+### Widgets
+
+- `ui::Widget` (`src/ui/Widget.hpp`) : arbre de widgets (le parent possède ses enfants par `unique_ptr`), identifiant (`findById`), visibilité, focus, infobulles, zoom (`ZoomSupport::Scaled` ou `Native`). Mise en page (`layout`), dessin (`render` → `onPaint`, puis `onPaintOverlay`), événements (`dispatch` : capture → cible → remontée).
+- Mises en page : `src/ui/Layout.hpp`. Widgets : `src/ui/widgets/` (contrôles, conteneurs, vues de données virtualisées `ListView`/`TreeView`/`TableView`, `PropertyGrid`, éditeur de code, barres de défilement, explorateur de fichiers…).
+- `ui::WidgetHost` porte un arbre hors de la pile d'écrans (fenêtres détachées).
+- Thèmes intégrés et thèmes de l'utilisateur (`.xpgtheme`, `src/ui/ThemeFile.cpp`).
+
+### Écrans
+
+- `menu::MenuManager` (`src/menu/MenuManager.hpp`) gère une pile de couches de genres `Screen`, `Modal`, `Dialog`, `Overlay`. Les demandes de navigation sont mises en file et appliquées au début de l'image suivante (`applyPending`), pour qu'un écran ne soit jamais détruit pendant qu'il traite son propre événement.
+- Écrans enregistrés par `App::buildMenuFactory` (`src/app/App.cpp`) : `startup` (accueil), `analysis` (écran du projet, `MainAnalysisScreen`), `station` (poste d'exploitation), centre d'aide, etc.
+- Les fenêtres modales sont des `menu::WidgetMenu` de genre `Dialog`, déplaçables et redimensionnables (`src/ui/DialogFrame.hpp`).
+
+---
+
+<a id="boucle"></a>
+## 6. La boucle d'image
+
+`App::run` (`src/app/App.cpp`) enchaîne à chaque image `pumpEvents` puis `App::frame` :
+
+1. lecture des événements SDL, traduits en `ui::InputEvent` (`src/platform/SdlEventPump.cpp`) et transmis à `MenuManager::HandleEvent` ;
+2. `bus_.drain()` : livraison des notifications différées de l'`EventBus` sur le fil de l'interface ;
+3. `menus_->applyPending()` : navigation mise en file ;
+4. avancement des services possédés par l'application : simulation de l'automate (`SimulationHost::tick`), liaisons de communication, équipements, sauvegarde de reprise (`Recovery::tick`)… ;
+5. `menus_->Update(...)` : logique et animations des écrans ; c'est là que les écrans lisent l'état des tâches de fond (voir § 9) ;
+6. `beginFrame`, `menus_->Render(...)`, couche des didacticiels, fin d'image.
+
+La simulation appartient à l'application (`src/app/SimulationHost.hpp`) et non à un écran : elle continue quand on change d'écran.
+
+---
+
+<a id="commandes"></a>
+## 7. Commandes, annulation et historique
+
+- `core::ICommand`, `core::CommandStack`, `core::GroupCommand`, `core::CommandGroupScope` (`src/core/Command.hpp`). Toute modification de l'utilisateur passe par `App::apply(commande)` et devient un pas d'annulation (Ctrl+Z / Ctrl+Y).
+- Une rafale de frappe ne fait qu'un pas tant qu'on ne s'arrête pas plus de 2,5 s (`setMergeWindow`, `App::create`).
+- Côté IHM, les commandes sont des instantanés : `hmi::changeView` et `hmi::changeProject` gardent l'état avant/après des seuls objets touchés (`src/hmi/HmiCommands.hpp`). Une fonction qui ne change rien ne produit aucune commande.
+- `core::ActionRegistry` associe un identifiant texte (`project.save`, `ia.assistant`…) à chaque action ; les raccourcis viennent d'une seule table, `src/help/Shortcuts.cpp`.
+- L'historique de la séance (Ctrl+H) montre chaque pas avec son endroit. Il est distinct de l'historique des modifications des objets IHM, écrit à l'enregistrement (`src/hmi/HmiEditHistory.hpp`).
+
+---
+
+<a id="communication"></a>
+## 8. Communication entre modules
+
+| Mécanisme | Fichier | Usage |
 |---|---|---|
-| **Observer** | `core::Signal` | fine-grained, one known publisher: `Button::clicked` |
-| **Publish/Subscribe** | `core::EventBus` | publisher and subscriber must not know each other: the importer publishes `ProjectLoaded`, six unrelated views repopulate |
-| **Factory** | `MenuFactory`, `IProjectParser` registry | new screen or new file format = a registration, not a `switch` |
-| **Command** | `core::ICommand` + `CommandStack` | every user mutation is undoable; toolbar, menu bar and shortcut resolve to one `ActionId`, so they cannot drift apart |
-| **Strategy** | `IProjectParser`, `gfx::IRenderer` | swap the format, swap the backend |
-| **MVC** | `app/ViewModels` | `domain` knows nothing about widgets, `ui` knows nothing about PLCs |
-| **Dependency injection** | `ServiceRegistry` + constructor injection | wiring lives in `App::create()` only |
-| **RAII** | `Connection`, `ScopedInstance`, `unique_ptr` everywhere | lifetime is structural, not a convention |
-| **Pimpl** | `SdlRenderer` | SDL headers never leak above `platform/` |
+| `core::EventBus` | `src/core/EventBus.hpp` | Publication/abonnement typés, différés et protégés par un verrou ; livrés sur le fil de l'interface par `drain()`. Exemple : `importer::ImportFinished` → `App` remplace le projet → `ProjectOpened`. |
+| `core::Signal` | `src/core/Signal.hpp` | Observateur direct avec connexion RAII (un widget ne peut pas être rappelé après sa destruction). |
+| Hôtes par fonctions | ex. `app::ai::Assistant::Host` (`src/app/ai/AiAssistant.hpp`) | Un module sans écran reçoit des fonctions (document, vue active, `apply`) au lieu de pointeurs vers l'interface. |
+| Services de plate-forme | `ui::installPlatformServices` (`App::initPlatform`) | Presse-papiers, glisser-déposer, fichiers. |
 
-### 6.3 Memory ownership
+---
 
-| Relationship | Held as | Rationale |
+<a id="fils"></a>
+## 9. Fils d'exécution
+
+**Règle** : un seul fil pour l'interface et les modèles. Les fils de travail écrivent dans un état partagé protégé ; l'écran le lit à chaque image (interrogation, « poll »). Le modèle n'est modifié que sur le fil de l'interface.
+
+Fils de travail présents dans le code (recherche de `std::thread`/`std::async`) :
+
+| Domaine | Fichiers |
+|---|---|
+| Import d'un export | `src/import/ProjectImporter.cpp`, `src/app/ImportJob.*` |
+| Génération incrémentale de l'IHM | `src/app/hmi/HmiBuild.*` |
+| Communication : Modbus TCP, lecture cyclique, outil Modbus, espion, scanner IP | `src/hmi/HmiModbus*.cpp`, `HmiComm.*`, `HmiSpy.*`, `HmiIpScan.*` |
+| Serveur web intégré, notifications (courriel, SMS) | `src/hmi/HmiWeb.*`, `src/hmi/HmiNotify.*` |
+| Recherche de fichiers sur le PC, aperçus | `src/app/FileFinder.*`, `src/app/FileViewer.cpp` |
+| Incidents (écriture des dossiers) | `src/app/hmi/HmiIncidentHost.*` |
+| Assistant IA : fournisseurs, pièces jointes, application en fond, notifications | `src/app/ai/AiAnthropic.*`, `AiOpenAI.*`, `AiAssistant.*`, `AiAttachments.hpp`, `AiNotifications.cpp` |
+| Chien de garde et rapport de plantage, instance unique, processus enfants | `src/core/CrashGuard.cpp`, `SingleInstance.cpp`, `Process.cpp` |
+
+Les tâches de fond visibles par l'utilisateur sont listées dans la barre du haut (`src/app/BackgroundTasks.hpp`).
+
+---
+
+<a id="persistance"></a>
+## 10. Persistance
+
+| Donnée | Format | Code |
 |---|---|---|
-| `Widget` → children | `unique_ptr` | strict tree, single owner |
-| `Widget` → parent | raw `Widget*` | back-reference; a child cannot outlive its parent by construction. This is the **only** raw pointer in the code base, and it owns nothing |
-| `MenuManager` → menus | `unique_ptr` in stack entries | popped entry is moved out, then destroyed after the stack no longer references it |
-| View model → `Project` | `shared_ptr<const Project>` | a background re-import builds a new `Project` while the old one is still on screen; the swap is one atomic pointer exchange at a frame boundary |
-| Domain relationships | 32-bit indices | contiguous, serialisable, stable across reallocation |
-| Signal subscription | RAII `Connection` token | a widget can never be called back after its own destruction |
-| SDL resources | `unique_ptr` + explicit teardown order in `~App` | menus → widgets → textures → renderer → window → `SDL_Quit()` |
+| Projet API | dossier : `project.xpgproj`, `vars/`, `ddt/`, `dfb/`, `units/`, `sections/*.st`, `config/`, `src/` (généré) | `src/project/ProjectStore.hpp` |
+| Projet IHM | `ihm/ihm.txt` et un fichier par vue (`ihm/vues/*.vue`), texte ligne à ligne terminé par `fin`, écrit à côté puis renommé ; format 33 au plus | `src/hmi/HmiStore.hpp` |
+| Archives `.xapi`, `.xihm` | zip avec `manifeste.txt` (comptes, SHA-256 de chaque fichier) | `src/project/ProjectArchive.hpp`, `ApiArchive.hpp`, `src/hmi/HmiArchive.hpp` |
+| Versions du projet | `versions/` adressé par contenu (SHA-256) | `src/hmi/HmiVersions.hpp` |
+| Réglages | fichier `clé = valeur` (`settings.txt`) | `src/app/Settings.cpp` |
+| Dossiers de l'application | `.ini` (`installation.ini`, `XPGAnalyser.ini`) | `src/app/Dossiers.hpp` |
+| Données de l'Assistant IA | JSON (`IA/…`), ordre et champs inconnus conservés | `src/app/ai/AiPaths.hpp`, `AiStore.hpp`, `AiJson` |
 
-The brief says "no raw pointers". The parent back-pointer is the one deliberate
-exception; a `weak_ptr` there would cost an atomic load on every hit test for no
-safety gain.
-
-### 6.4 Frame pipeline
-
-```
-                     ┌─────────────────────────────┐
-                     │      App::run() loop        │
-                     └──────────────┬──────────────┘
-  1. pumpEvents      SDL_PollEvent ──► translate ──► MenuManager::HandleEvent
-  2. bus_.drain()    deferred notifications delivered on the UI thread
-  3. applyPending()  queued navigation applied — the only place the stack changes
-  4. Update(dt)      logic and animation, top layer down to firstUpdatedLayer()
-  5. beginFrame()    clear, reset clip stack
-  6. Render()        layers back-to-front, then overlays, then tooltips
-       ├─ layout()   only subtrees with dirtyLayout_
-       └─ onPaint()  only subtrees with dirtyPaint_, clipped to bounds
-  7. endFrame()      present (vsync)
-```
-
-Fixed order, every frame. Steps 2 and 3 exist so no view is ever mutated in the
-middle of another view's paint. Rendering is retained and invalidation-driven:
-an idle window submits no draw calls, which matters on a fanless panel PC.
-
-### 6.5 Threading
-
-One UI thread. Import and analysis run on a worker via `std::async`; progress
-and completion cross back through `EventBus::publish()`, which is mutex-guarded
-and delivered on the UI thread during `drain()`. The `Project` is never mutated
-after publication — views hold `shared_ptr<const Project>` — so there is no
-shared mutable state and no lock in the render path.
-
-### 6.6 Tests
-
-```
-$ ./core_test         # Result under C++20 and C++23, Signal, EventBus, CommandStack
-$ ./menu_test         # nesting, pop/replace/switch/previous, canClose veto,
-                      # modal vs overlay input, dialog results, deferred mutation
-$ ./import_test       # end-to-end on a real export; asserts 28 DDTs, 8 DFB types,
-                      # CPU identity, numeric address ordering, partial-data notice
-$ ./viewmodel_test    # MVC seam, sort/filter benchmarks, tree shape, property grid
-```
-
-All four run headless. `main --cli` returns a non-zero exit code when the
-analysis finds an error-severity issue, so the analyzer drops into a build
-pipeline as a gate.
+Écriture sûre : `core::writeFileAtomic` (`src/core/AtomicFile.hpp`) écrit dans un fichier voisin puis renomme. Le détail des formats est dans [FORMATS.md](FORMATS.md).
 
 ---
 
-## 7. Build
+<a id="erreurs"></a>
+## 11. Gestion des erreurs, plantages et reprise
 
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-`-DXPG_WITH_SDL=OFF` builds the import library, the tests and the `--cli` front
-end with no SDL dependency at all — useful for CI containers and for running the
-analyzer on a build server.
+- **Erreurs attendues** : `core::Result<T>` / `core::Status` avec `core::ErrorCode` et un message (`src/core/Result.hpp`, macro `XPG_TRY`). Les lecteurs de fichiers ne lèvent pas d'exception et renvoient un diagnostic localisé (numéro de ligne).
+- **Diagnostics métier** : constats d'analyse (`importer::Finding`, `src/import/ProjectAnalyzer.hpp`), constats de Générer/Compiler de l'IHM (`hmi::Issue`, `src/hmi/HmiCheck.hpp`), chacun avec l'endroit concerné.
+- **Plantage et blocage** : `core::crash::install` pose les gestionnaires (Windows : filtre d'exception, `terminate`, `SIGABRT`… ; Linux : signaux) et écrit `crashs/plantage-<date>.txt` (version, pile, historique interne `CallTrail`) dans le dossier des réglages ; un chien de garde détecte une boucle principale bloquée (`core::crash::startWatchdog(8, …)` dans `main.cpp`). « Signaler le problème » prépare un zip local ; rien n'est envoyé par le réseau (`main.cpp`, `src/help/ProblemReport.*`).
+- **Reprise après arrêt brutal** : un verrou de session dans `<réglages>/reprise`, une sauvegarde des modifications non enregistrées toutes les 2 minutes en conception (réglable par `recovery.autosaveSeconds`), l'état du poste d'exploitation toutes les 10 s (`src/app/Recovery.hpp`).
+- **Instance unique** : une instance par application et par session ; un second lancement transmet ses arguments à l'instance ouverte (`src/core/SingleInstance.hpp`). `XPG_INSTANCES_MULTIPLES=1` lève la règle.
 
 ---
 
-## 8. Status and what comes next
+<a id="import"></a>
+## 12. Chaîne d'import d'un export Control Expert
 
-**Everything in `src/` compiles and links.** Verified with GCC 13 under both
-`-std=c++20` and `-std=c++23` with `-Wall -Wextra`, against the real SDL3 3.2
-headers, and linked end to end. All four tests pass, including an import of a
-genuine Control Expert export and a generated fixture at 59 000 variables and
-10 500 sections. A Visual Studio 2022 solution is included and configured with
-`/std:c++20 /permissive- /W4 /utf-8`.
+```mermaid
+flowchart LR
+    fichier["Fichier choisi"] --> sniff["sniff()<br/>premier kilo-octet"]
+    sniff --> xpg["XpgParser<br/>PGMExchangeFile"]
+    sniff --> xhw["XhwParser<br/>IOExchangeFile / HWExchangeFile"]
+    sniff --> xdb["XdbParser<br/>non implémenté"]
+    sniff --> stu[".STU refusé<br/>avec explication"]
+    xpg --> projet["domain::Project"]
+    xhw --> projet
+    projet --> analyse["ProjectAnalyzer<br/>constats"]
+    analyse --> evt["ImportFinished<br/>EventBus"]
+    evt --> app["App : projet courant"]
+```
 
-**Two deliberate first-milestone simplifications, both isolated to one file:**
+- `ProjectImporter` (`src/import/ProjectImporter.cpp`) choisit le lecteur d'après le contenu (et non l'extension), fusionne plusieurs fichiers dans un même `domain::Project`, travaille hors du fil de l'interface et ne publie le projet qu'une fois l'analyse terminée.
+- Lecteurs enregistrés : `XpgParser`, `XdbParser`, `XhwParser`. `XdbParser` renvoie `NotImplemented`. Les fichiers `.XEF`/`.ZEF` sont reconnus par `sniff()` mais aucun lecteur enregistré ne les accepte dans ce commit : leur import échoue (« no parser recognises this file »).
+- `XmlReader` est un lecteur XML en flux, sans arbre DOM ni exception.
+- Les sections LD, FBD et SFC sont conservées telles que Control Expert les a écrites et réexportées à l'identique ; elles sont rendues lisibles en texte (`src/project/GraphListing.hpp`) mais ne sont ni modifiables ni simulées.
+- `ProjectAnalyzer` produit les constats : variables globales ou locales inutilisées, types dérivés et DFB inutilisés, sections non référencées, vides, sans condition, trop longues, adresses en double, types non définis, E/S situées non documentées (`FindingKind`).
 
-*Text rendering.* `SdlRenderer` draws with `SDL_RenderDebugText`, the 8x8 bitmap
-font built into SDL3, scaled to the size carried by `FontId`. That removes the
-SDL_ttf dependency entirely — the project builds with nothing but SDL3 on the
-include path — and `measure()`, `lineHeight()` and `fitCharacters()` all agree
-with what is actually drawn, so layout is honest. Swapping in a real glyph atlas
-touches `platform/SdlRenderer.cpp` and nothing else.
+---
 
-*Missing parsers.* `XdbParser` and `XhwParser` return
-`ErrorCode::NotImplemented` with a message naming what is missing, rather than
-silently producing an empty model.
+<a id="assistant"></a>
+## 13. Architecture de l'Assistant IA
 
-**Ordered by value:**
+L'Assistant IA vit dans `src/app/ai` et n'est construit que dans IHM Studio. Principe : **le fournisseur ne touche jamais au modèle** ; toute modification est une proposition validée, prévisualisée sur une copie puis appliquée en une seule commande.
 
-1. `.XHW` / `.XEF` parsing — it is the difference between an empty PLC
-   configuration pane and the one in the mockup.
-2. A real glyph atlas (SDL_ttf or a packed bitmap font). The debug font is
-   fixed-pitch and coarse; every metric call already routes through one place,
-   so this is a contained change.
-3. Graphical language rendering (LD/FBD/SFC). The reference file is all ST, but
-   most Control Expert projects are not, and those bodies are structured XML
-   graphs rather than text.
-4. A cached binary project format. Re-importing 6 MB in 52 ms is fine; a 200 MB
-   plant project is not, and the index-based domain model serialises directly.
-5. Cross-project comparison — two `Project` objects and a diff of the symbol
-   tables is a small step from here, and it is what an integrator actually wants
-   when a machine comes back from site with a modified program.
+```mermaid
+flowchart TD
+    panel["AiPanel<br/>panneau, cartes, saisie"]
+    assistant["ai::Assistant<br/>séance, conversations, états"]
+    provider["Provider<br/>intégrée, démo, Anthropic, compatible OpenAI"]
+    worker["Fil de travail<br/>HTTPS : WinHTTP ou libcurl"]
+    tools["Outils locaux<br/>analyser_projet, executer_code,<br/>lire_piece_jointe, souvenirs"]
+    sandbox["Bac à sable<br/>IHM-Studio --bac-a-sable"]
+    proposal["proposalFromTool<br/>AiPrompt"]
+    validate["validate + plan<br/>AiOperations, AiPlan<br/>(sur une copie)"]
+    preview["Prévisualiser<br/>AiPreviewDialog"]
+    command["makeCommand<br/>une commande"]
+    stack["App::apply<br/>pile d'annulation"]
+    panel --> assistant
+    assistant -->|"start()"| provider
+    provider --> worker
+    worker --> tools
+    tools --> sandbox
+    assistant -->|"poll() à chaque image"| provider
+    provider -->|"appel d'outil proposer_operations"| proposal
+    proposal --> validate
+    validate --> preview
+    preview -->|"Appliquer"| command
+    validate -->|"mode Direct"| command
+    command --> stack
+```
+
+- `Provider::start()` part sur un fil de travail ; `poll()` est appelé à chaque image sur le fil de l'interface et rend les événements reçus (texte, appel d'outil, fin) ; `cancel()` ferme la connexion (`src/app/ai/AiProvider.hpp`).
+- L'IA intégrée et la démonstration calculent leur réponse sur le fil de l'interface, sans réseau, puis la « déroulent » au rythme de `tick()` (`AiAssistant.hpp`).
+- Une proposition d'au moins 40 opérations est vérifiée et appliquée sur une copie du projet dans un fil de fond ; le résultat n'est posé (une seule commande) que si le projet n'a pas changé entre-temps (`Assistant::applyInBackground`, `kBackgroundOps = 40`).
+- Le détail (fournisseurs, données envoyées, stockage, limites) est dans [ASSISTANT-IA.md](ASSISTANT-IA.md).
+
+---
+
+<a id="tests"></a>
+## 14. Système de tests
+
+- Les essais sont des exécutables autonomes déclarés dans `CMakeLists.txt` et lancés par CTest. Chacun définit sa propre fonction de vérification (pas de cadriciel externe).
+- Ils ne demandent pas d'écran : ils lient les bibliothèques sans SDL, ou des sources de `src/app` nommées explicitement (ou `xpg_app` construit sans SDL).
+- Les réseaux et les fournisseurs d'IA sont remplacés par des faux injectables (`setHttpFactory`, `tests/fixtures/ia/faux_fournisseur.py`).
+- Le projet Visual Studio est contrôlé par l'essai `vcxproj` (`outils/verifier_vcxproj.py`).
+
+Voir [TESTS.md](TESTS.md).

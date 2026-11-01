@@ -1,5 +1,7 @@
 # Assistant IA dans IHM Studio — audit (phase 1)
 
+> **Document historique.** Cet audit décrit l'état du code **avant** l'implémentation de l'Assistant (1.14.2). Plusieurs constats ne sont plus vrais en 1.21.3 : un client HTTPS existe (WinHTTP sous Windows, libcurl chargée à la demande sous Linux, `src/app/ai/AiHttp.hpp`), la clé API est protégée par DPAPI sous Windows (`AiSecret.hpp`, `AiKeys.hpp`), et de nombreux modules ont été ajoutés (fournisseurs Anthropic et compatible OpenAI, IA intégrée, plan d'opérations, mémoire et souvenirs, notifications…). La référence à jour est [ASSISTANT-IA.md](ASSISTANT-IA.md).
+
 Écrit pour la 1.14.2, avant la maquette (partie du commit 6733013). Tout ce qui suit a été lu dans le code ;
 les fichiers et les fonctions sont cités pour qu'on puisse vérifier. Pas de code écrit avant ce document.
 
