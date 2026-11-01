@@ -1063,7 +1063,7 @@ void testSecondPass() {
     f.panel->layout();
     check(chat.contentHeight() > chat.bounds().h && chat.scrollOffset() == 0.f && !chat.atBottom(),
           "le volet retreci : toujours son debut, pas collee en bas");
-    f.panel->setBounds({0, 0, 440, 520});
+    f.panel->setBounds({0, 0, 440, 550});   // 1.21.2 : + 30 (la rangee d'onglets Conversation / Notifications)
     f.panel->layout();
     // Plusieurs echanges : la derniere demande en haut, pas la fin de la derniere reponse.
     f.panel->newConversation();
