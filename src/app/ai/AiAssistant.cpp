@@ -18,8 +18,10 @@
 #include "AiMemoryManager.hpp"       // 1.21.0 : la memoire persistante (proposer_souvenir, chercher_souvenirs)
 #include "AiNotifications.hpp"       // 1.21.2 : l'onglet Notifications du panneau (ce qui s'est passe)
 #include "AiSecret.hpp"
+#include "AiTextParts.hpp"           // 1.22.0 : withTool (planifier_mission ajoute aux outils de la demande)
 
 #include "../../core/Edition.hpp"
+#include "../../hmi/HmiAudit.hpp"    // 1.22.0 : l'audit final d'une mission (hmi::audit::run, sur une copie)
 
 #include <algorithm>
 #include <cstdlib>
@@ -140,6 +142,67 @@ std::string serviceErrorTitle(int http) {
     return "L'Assistant n'a pas pu r\xC3\xA9pondre";
 }
 
+// ---- 1.22.0 : LES MISSIONS IA PERSISTANTES ----
+bool listed(const std::vector<std::string>& list, std::string_view s) { return std::find(list.begin(), list.end(), s) != list.end(); }
+
+std::string joined(const std::vector<std::string>& list, std::string_view sep) {
+    std::string s;
+    for (const auto& x : list) s += (s.empty() ? std::string{} : std::string(sep)) + x;
+    return s;
+}
+
+// "S1 Creer les equipements, S2 Creer les variables" : les etapes nommees, dans l'ordre donne.
+std::string stepsLine(const mission::Mission& m, const std::vector<std::string>& ids) {
+    std::string s;
+    for (const auto& id : ids) {
+        const mission::Step* st = m.step(id);
+        s += (s.empty() ? "" : ", ") + id + (st && !st->title.empty() ? " " + st->title : std::string{});
+    }
+    return s;
+}
+
+// LA TAILLE D'UNE PROPOSITION DE MISSION (le poids d'un lot, mission::nextBatch) : la regle de lengthPrompt (1.21.3 :
+// (jetons - 2000) / 120 operations, au moins 10), dont la proposition prend environ 60 % - la marge pour le texte, la
+// reflexion du modele et les operations plus longues que la moyenne (une vue et ses objets).
+int missionMaxOps(int tokens) { return std::max(10, (tokens - 2000) / 120) * 3 / 5; }
+
+// Ce qu'un appel de mission demandait, pour l'historique et les notifications ("La demande de proposition").
+std::string callLabel(const std::string& purpose, const std::string& step) {
+    if (purpose == "plan") return "La demande de plan";
+    if (purpose == "actualisation") return "L'actualisation du plan";
+    if (purpose == "correction") return "La correction de " + step;
+    return "La demande de proposition";
+}
+
+// Le plan, en clair : le message du logiciel sous la reponse de l'IA (jamais renvoye au modele).
+std::string planMessage(const mission::Mission& m, bool revised) {
+    std::size_t live = 0;
+    for (const auto& st : m.steps) live += st.state != mission::StepState::Cancelled;
+    std::string s = std::string(revised ? "**Plan revu de la mission " : "**Plan de la mission ") + guillemets(m.name) + "** ("
+                    + plural(live, "\xC3\xA9tape", "\xC3\xA9tapes") + ")";
+    if (!m.analysis.summary.empty()) s += "\n\n" + m.analysis.summary;
+    const auto list = [&s](const char* label, const std::vector<std::string>& v) {
+        if (v.empty()) return;
+        s += std::string("\n\n*") + label + "* :";
+        for (const auto& x : v) s += "\n- " + x;
+    };
+    list("D\xC3\xA9j\xC3\xA0 conforme dans le projet", m.analysis.conform);
+    list("\xC3\x80 modifier", m.analysis.toModify);
+    list("\xC3\x80 compl\xC3\xA9ter", m.analysis.toComplete);
+    list("\xC3\x80 cr\xC3\xA9" "er", m.analysis.toCreate);
+    list("Impossible", m.analysis.impossible);
+    s += "\n\n";
+    int n = 0;
+    for (const auto& st : m.steps) {
+        if (st.state == mission::StepState::Cancelled) continue;
+        s += std::to_string(++n) + ". **" + st.id + "** " + st.title + " \xE2\x80\x94 " + std::string(mission::categoryLabel(st.category));
+        if (!st.deps.empty()) s += " (d\xC3\xA9pend de " + joined(st.deps, ", ") + ")";
+        s += " \xC2\xB7 " + std::string(mission::stepLabel(st.state)) + "\n";
+    }
+    s += "\nRien n'est encore modifi\xC3\xA9 par ce plan. Prochaine action : " + mission::nextAction(m);
+    return s;
+}
+
 } // namespace
 
 std::string_view phaseLabel(Assistant::Phase p) noexcept {
@@ -179,6 +242,9 @@ Assistant::~Assistant() {
     // 1.21.0 : les lectures de classeurs en cours (courtes, bornees)
     for (auto& l : loads_)
         if (l && l->worker.joinable()) l->worker.join();
+    // 1.22.0 : les audits finals de missions en cours (sur leur copie du projet)
+    for (auto& a : audits_)
+        if (a && a->worker.joinable()) a->worker.join();
 }
 
 // ---- le cycle de vie ------------------------------------------------------------------
@@ -230,6 +296,30 @@ void Assistant::load(std::vector<std::string>* problems) {
     gen_ = {};
     pending_.clear();
     totalsDay_.clear();   // 1.16.0 : les cumuls relus
+    // 1.22.0 : LES MISSIONS - relues de IA/missions (un fichier illisible repris de sa copie, ou laisse tel quel : dit) ;
+    // celles d'un format plus recent se lisent sans jamais etre reecrites ; un appel a l'IA en cours a la fermeture : la
+    // mission a ete interrompue - constate au premier tick ou le projet ouvert est connu (rien n'est rejoue).
+    {
+        mission::Loaded loaded = mission::loadAll();
+        missions_ = std::move(loaded.missions);
+        missionsReadOnly_.clear();
+        missionsReadOnly_.insert(loaded.readOnly.begin(), loaded.readOnly.end());
+        missionsToRecover_.clear();
+        for (const auto& m : missions_)
+            if (m.pending.active) missionsToRecover_.push_back(m.id);
+        nextMission_ = {};
+        missionDoc_ = nullptr;
+        missionDocRev_ = 0;
+        missionSeenDoc_ = nullptr;
+        missionSeenRev_ = 0;
+        for (const auto& p : loaded.problems) {
+            if (problems) problems->push_back("Mission : " + p);
+            appendActivity("mission", "Mission illisible : " + p);
+        }
+        if (!loaded.problems.empty())
+            notice_ = "Assistant IA : " + plural(loaded.problems.size(), "fichier de mission illisible", "fichiers de mission illisibles") + " (" + loaded.problems.front() + ").";
+        ++missionsRev_;
+    }
     ++revision_;
 }
 
@@ -322,6 +412,7 @@ bool Assistant::tick(double now) {
                     retiring_.end());
     (void)pollModels();
     pollApply();   // 1.20.1 : l'application de fond finie : sa commande, sur ce fil
+    missionsTick();   // 1.22.0 : la reprise au demarrage, le projet change (Ctrl+Z...), les audits finis
     if (gen_.phase != Phase::Idle && gen_.live) {
         pollLive();
     } else if (gen_.phase != Phase::Idle) {
@@ -792,6 +883,7 @@ void Assistant::stop() {
     if (!generating()) return;
     // Un vrai fournisseur : la connexion se ferme ; il finit sur son fil (retiring_), sans bloquer.
     if (gen_.live) retire();
+    const MissionCall call = gen_.mission;   // 1.22.0 : l'appel de mission arrete (marque interrompu ci-dessous)
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
@@ -801,12 +893,16 @@ void Assistant::stop() {
         m.date = isoDate(now());
         m.provider = gen_.provider;
         m.model = gen_.model;
+        if (!call.id.empty()) m.extra.set("mission", call.id);
         gen_ = {};
         save(*c);
     } else {
         gen_ = {};
     }
     notice_ = "G\xC3\xA9n\xC3\xA9ration arr\xC3\xAAt\xC3\xA9" "e : la r\xC3\xA9ponse est gard\xC3\xA9" "e telle quelle, sans proposition.";
+    // 1.22.0 : une reponse de mission arretee - l'appel est marque interrompu, ses etapes redeviennent pretes ; rien
+    // n'est propose ni rejoue.
+    endMissionCall(call, true, "la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e avant d'avoir propos\xC3\xA9 quoi que ce soit");
     ++revision_;
 }
 
@@ -1197,6 +1293,14 @@ bool Assistant::applyWith(int message, std::string* why, bool ignoringErrors) {
         if (why) *why = p->state == "appliquee" ? "Cette proposition est d\xC3\xA9j\xC3\xA0 appliqu\xC3\xA9" "e." : "Cette proposition a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e.";
         return false;
     }
+    // 1.22.0 : une proposition de mission ne s'applique pas si la mission est en pause, annulee, ou si la proposition
+    // n'est plus la bonne (obsolete, annulee) ; ni sur un autre projet que celui de la mission.
+    if (std::string w; !missionMayApply(p->id, &w)) {
+        if (why) *why = w;
+        notice_ = "Assistant IA : " + w;
+        ++revision_;
+        return false;
+    }
     const auto doc = host_.document ? host_.document() : nullptr;
     // 1.19.0 : le projet d'avant et le plan valide - le compte rendu se lit dans la difference avant / apres.
     std::optional<hmi::Project> before;
@@ -1228,6 +1332,7 @@ bool Assistant::afterApply(Conversation& conv, int message, plan::Plan pl, const
     auto& prop = *c->messages[static_cast<std::size_t>(message)].proposal;
     prop.state = "appliquee";
     // 1.19.0 : LE COMPTE RENDU REEL - les etats confirmes dans le projet d'apres (jamais ce que l'IA a annonce).
+    std::optional<plan::Report> real;   // 1.22.0 : la mission le recoit
     if (const auto after = host_.document ? host_.document() : nullptr; after && before) {
         const plan::Report rep = plan::report(*before, after->project, pl, prop);
         prop.plan = plan::toJson(pl);
@@ -1236,6 +1341,7 @@ bool Assistant::afterApply(Conversation& conv, int message, plan::Plan pl, const
             appendActivity("conversation", "Plan appliqu\xC3\xA9 : " + rep.verdict);
             for (const auto& f : rep.failures) appendActivity("conversation", "\xC3\x89tape non appliqu\xC3\xA9" "e : " + f);
         }
+        real = rep;
     }
     // L'empreinte d'apres : la carte saura dire si un Ctrl+Z l'a reprise. 1.16.0 : proposalPrint (la vue
     // neuve, les variables et les types crees comptent) ; la vue neuve retient son identifiant.
@@ -1265,8 +1371,12 @@ bool Assistant::afterApply(Conversation& conv, int message, plan::Plan pl, const
                   + (skipped.size() > 1 ? " erreurs laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal)."
                                         : " erreur laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 (sous la r\xC3\xA9ponse et dans le journal).");
     }
+    // 1.22.0 : UNE PROPOSITION DE MISSION - son resultat REEL (le compte rendu du projet d'avant et d'apres) passe a la
+    // mission : ses etapes terminees, en erreur ; l'empreinte du projet ; les notifications de la mission (a la place de
+    // celle d'une proposition ordinaire).
+    const bool fromMission = missionApplied(prop, pl, real ? &*real : nullptr);
     // 1.21.2 : l'onglet Notifications - appliquee (ce qu'elle a cree, ce qui est laisse de cote), et sa carte.
-    {
+    if (!fromMission) {
         notifs::Item note;
         note.category = "Proposition";
         note.title = "Proposition appliqu\xC3\xA9" "e" + (prop.summary.empty() ? std::string{} : " : " + notifs::oneLine(prop.summary, 90));
@@ -1300,6 +1410,7 @@ bool Assistant::applyInBackground(int message, bool ignoringErrors, std::string*
     const Proposal* p = proposal(message);
     const auto doc = host_.document ? host_.document() : nullptr;
     if (!c || !p || !doc || p->state != "proposee" || p->ops.size() < kBackgroundOps) return false;
+    if (std::string w; !missionMayApply(p->id, &w)) return fail(w);   // 1.22.0 : pause, annulee, obsolete, autre projet
     Env frozen;
     if (!frozenEnvironment(frozen)) return false;
     auto job = std::make_shared<ApplyJob>();
@@ -1350,12 +1461,21 @@ void Assistant::pollApply() {
     }
     const auto doc = host_.document ? host_.document() : nullptr;
     const Proposal& jobProp = *c->messages[static_cast<std::size_t>(job->message)].proposal;   // 1.21.2 : les notifications
+    // 1.22.0 : la mission a ete mise en pause ou annulee pendant l'application de fond : rien n'est pose.
+    if (std::string w; !missionMayApply(jobProp.id, &w)) {
+        notice_ = "Assistant IA : " + w + " Rien n'est appliqu\xC3\xA9.";
+        notifyApplyFailed(c->id, job->message, jobProp, w);
+        return;
+    }
     if (!doc || doc->revision != job->revision) {
         notice_ = "Assistant IA : le projet a chang\xC3\xA9 pendant l'application en arri\xC3\xA8re-plan : rien n'est appliqu\xC3\xA9 "
                   "(Appliquer la refait sur le projet tel qu'il est).";
         appendActivity("conversation", "Proposition non appliqu\xC3\xA9" "e : le projet a chang\xC3\xA9 pendant son application en arri\xC3\xA8re-plan.");
         notifyApplyFailed(c->id, job->message, jobProp,
                           "Le projet a chang\xC3\xA9 pendant l'application en arri\xC3\xA8re-plan (Appliquer la refait sur le projet tel qu'il est).");
+        // 1.22.0 : une proposition de mission preparee sur un projet qui a change est OBSOLETE : ses etapes redeviennent
+        // pretes, la prochaine proposition partira du projet tel qu'il est (rien n'est ecrase).
+        missionDropped(jobProp.id, "obsolete", "le projet a chang\xC3\xA9 pendant son application en arri\xC3\xA8re-plan : rien n'a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9");
         return;
     }
     if (!job->result) {
@@ -1451,6 +1571,14 @@ bool Assistant::unrefuse(int message) {
     auto* c = cur();
     const Proposal* p = proposal(message);
     if (!c || !p || p->state != "refusee") return false;
+    // 1.22.0 : une proposition de mission refusee est sortie de la mission (ses etapes sont redevenues pretes) : elle ne
+    // revient pas en douce - la suite de la mission repropose ces etapes sur le projet tel qu'il est.
+    if (const mission::Mission* ms = missionOfProposal(p->id)) {
+        notice_ = "Assistant IA : cette proposition de la mission " + guillemets(ms->name)
+                  + " a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e ; demande la suite de la mission pour que ses \xC3\xA9tapes soient repropos\xC3\xA9" "es.";
+        ++revision_;
+        return false;
+    }
     c->messages[static_cast<std::size_t>(message)].proposal->state = "proposee";
     notice_ = "Refus annul\xC3\xA9 : la proposition est de nouveau \xC3\xA0 pr\xC3\xA9visualiser, appliquer ou refuser.";
     save(*c);
@@ -1465,6 +1593,8 @@ bool Assistant::refuse(int message) {
     c->messages[static_cast<std::size_t>(message)].proposal->state = "refusee";
     notice_ = "Proposition refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
     save(*c);
+    // 1.22.0 : une proposition de mission refusee - ses etapes redeviennent pretes (la mission le retient).
+    missionDropped(p->id, "refusee", "refus\xC3\xA9" "e par l'utilisateur : le projet n'a pas chang\xC3\xA9");
     ++revision_;
     return true;
 }
@@ -1657,6 +1787,15 @@ void Assistant::retire() {
 
 std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
     if (!m.tool) return {};
+    // 1.22.0 : le plan d'une mission (planifier_mission) - enregistre (le nombre d'etapes), ou l'erreur exacte.
+    if (m.tool->name == mission::kPlanTool) {
+        if (!m.tool->error.empty()) return {"Erreur : le plan n'est pas enregistr\xC3\xA9 : " + m.tool->error, true};
+        const std::int64_t n = m.extra.integer("planEtapes");
+        return {"plan enregistr\xC3\xA9 : " + plural(static_cast<std::size_t>(std::max<std::int64_t>(0, n)), "\xC3\xA9tape", "\xC3\xA9tapes")
+                    + ". Rien n'est encore modifi\xC3\xA9 dans le projet : n'appelle pas proposer_operations avant que l'utilisateur demande la "
+                      "suite de la mission.",
+                false};
+    }
     if (!m.tool->error.empty())
         return {"Erreur : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9 \xC3\xA0 l'utilisateur, l'entr\xC3\xA9" "e de l'outil est invalide : " + m.tool->error, true};
     if (!m.proposal) return {"Erreur : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9 \xC3\xA0 l'utilisateur.", true};
@@ -1755,6 +1894,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         return false;
     };
     const int splitFrom = std::exchange(splitFrom_, 0);   // 1.21.3 : une reprise en parties (la longueur qui a coupe)
+    MissionCall call = std::exchange(nextMission_, MissionCall{});   // 1.22.0 : l'appel de mission (vide : une demande ordinaire)
     auto prov = providerFactory_ ? providerFactory_(settings_.provider) : makeProvider(settings_.provider);
     if (!prov) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9.");
     const auto doc = host_.document ? host_.document() : nullptr;   // tenu le temps de la preparation
@@ -1803,10 +1943,20 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     // 1.21.3 : LA LONGUEUR D'UNE REPONSE dite au modele (une grande demande se fait en plusieurs propositions, la suite
     // dans << suite >>) ; une reprise apres une reponse coupee : la consigne de decouper, cette fois.
     parts.dynamic += "\n" + lengthPrompt(req.maxTokens, splitFrom);
+    // 1.22.0 : LES MISSIONS - dans toute conversation, celles du projet en quelques lignes (<< ou en est la station de
+    // pompage ? >> : les donnees enregistrees, jamais inventees) ; pour un appel de mission, sa consigne (analyser et
+    // planifier ; la prochaine proposition et l'etat REEL du projet ; la correction d'une etape ; l'actualisation).
+    if (const std::string ov = mission::overviewPrompt(missions_, pid.id); !ov.empty()) parts.dynamic += "\n" + ov;
+    const mission::Mission* forMission = call.id.empty() ? nullptr : findMission(call.id);
+    if (forMission) parts.dynamic += "\n" + missionPrompt(*forMission, call, ctx.project);
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
     req.toolsJson = operationsTool();
+    // 1.22.0 : planifier_mission (un outil de la demande, pas un outil local : son appel arrive a la fin de la reponse et
+    // finishLive l'enregistre dans la mission) - seulement pour planifier ou actualiser une mission.
+    if (forMission && (call.purpose == "plan" || call.purpose == "actualisation"))
+        req.toolsJson = textparts::withTool(req.toolsJson, mission::planToolJson());
     // 1.21.0 : LES OUTILS DE L'AGENT (AiAgentTools.hpp) - IHM Studio, avec l'appel d'outil : analyser_projet (le graphe,
     // en lecture seule) et executer_code (le bac a sable). Sur une COPIE du projet, prise ici sur le fil de l'interface : le
     // fil du fournisseur ne lit jamais le projet vivant ; ce qui modifie le projet reste une proposition a valider.
@@ -1894,6 +2044,28 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
             return convindex::runSearchConversationsTool(input, convId);
         };
         req.localTools.push_back(std::move(searchConversations));
+        // 1.22.0 : chercher_missions, etat_mission - les missions RELUES DU DISQUE sur le fil du fournisseur (jamais celles
+        // de la seance, qui vivent sur le fil de l'interface) : ce qui est enregistre, jamais invente.
+        LocalTool searchMissions;
+        searchMissions.name = std::string(mission::kSearchTool);
+        searchMissions.definitionJson = mission::searchToolJson();
+        searchMissions.maxCalls = 6;
+        searchMissions.run = [projectId = pid.id](const std::string& input, const auto& status, const auto&) {
+            status("Recherche dans les missions enregistr\xC3\xA9" "es");
+            const mission::Loaded all = mission::loadAll();
+            return mission::runSearchTool(all.missions, input, projectId);
+        };
+        req.localTools.push_back(std::move(searchMissions));
+        LocalTool missionState;
+        missionState.name = std::string(mission::kDetailTool);
+        missionState.definitionJson = mission::detailToolJson();
+        missionState.maxCalls = 6;
+        missionState.run = [](const std::string& input, const auto& status, const auto&) {
+            status("Lecture d'une mission enregistr\xC3\xA9" "e");
+            const mission::Loaded all = mission::loadAll();
+            return mission::runDetailTool(all.missions, input);
+        };
+        req.localTools.push_back(std::move(missionState));
         // 1.21.0 : lignes_classeur - les lignes des classeurs joints, par pages, telles que le logiciel les a lues (sur le fil
         // du fournisseur : un classeur pas encore lu l'est depuis sa copie ; le projet n'est jamais touche).
         if (booksStructured) {
@@ -1928,6 +2100,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     gen_.textTool = toolsInText();
     gen_.maxTokens = maxTokens;      // 1.21.3
     gen_.split = splitFrom > 0;
+    gen_.mission = std::move(call);   // 1.22.0
     if (ctx.view) {
         gen_.viewId = ctx.view->id;
         gen_.fingerprint = fingerprint(*ctx.view);
@@ -2042,9 +2215,11 @@ void Assistant::pollLive() {
 void Assistant::finishLive(const std::string& stopReason) {
     retire();
     recordLive();
+    const MissionCall call = gen_.mission;   // 1.22.0 : l'appel de mission de cette reponse (vide : aucun)
     Conversation* c = generatingConversation();
     if (!c || gen_.message < 0 || gen_.message >= static_cast<int>(c->messages.size())) {
         gen_ = {};
+        endMissionCall(call, true, "la conversation de la r\xC3\xA9ponse n'existe plus");
         ++revision_;
         return;
     }
@@ -2067,6 +2242,7 @@ void Assistant::finishLive(const std::string& stopReason) {
         c->messages.pop_back();
         gen_ = {};
         splitFrom_ = cut;
+        nextMission_ = call;   // 1.22.0 : la reprise en parties reste l'appel de la mission (ses etapes, son lot)
         std::string why;
         if (startLive(*c, request, &why)) {
             gen_.carried = spent;
@@ -2086,8 +2262,10 @@ void Assistant::finishLive(const std::string& stopReason) {
         back.date = isoDate(now());
         back.note = "La proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse (" + groupedTokens(cut) + " jetons) et la reprise en "
                     "plusieurs parties n'a pas pu partir : " + why;
+        if (!call.id.empty()) back.extra.set("mission", call.id);
         c->messages.push_back(std::move(back));
         if ((c = touch(*c)) != nullptr) save(*c);
+        endMissionCall(call, false, "la proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse et sa reprise en plusieurs parties n'a pas pu partir : " + why);
         ++revision_;
         return;
     }
@@ -2121,10 +2299,31 @@ void Assistant::finishLive(const std::string& stopReason) {
             m.note = "La r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e (la longueur d'une r\xC3\xA9ponse" + limit + " est atteinte). Demande une r\xC3\xA9ponse "
                      "plus courte, ou augmente \xC2\xAB Longueur d'une r\xC3\xA9ponse \xC2\xBB (Param\xC3\xA8tres de l'Assistant IA).";
     }
+    // 1.22.0 : une demande de PLAN de mission (planifier, actualiser) attend planifier_mission, et rien d'autre.
+    const bool planCall = !call.id.empty() && (call.purpose == "plan" || call.purpose == "actualisation");
+    bool planned = false;
     if (gen_.tool) {
         m.tool = *gen_.tool;
-        if (m.tool->name != kOperationsTool) {
+        if (m.tool->name == mission::kPlanTool) {
+            // 1.22.0 : LE PLAN DE LA MISSION - lu, controle (titres, dependances connues, aucun cycle), ordonne par ses
+            // dependances et enregistre ; un plan revu garde les etapes deja travaillees (mission::planFromTool).
+            std::string why;
+            int steps = 0;
+            if (!planCall)
+                m.tool->error = "planifier_mission ne sert qu'\xC3\xA0 planifier une mission (Cr\xC3\xA9" "er une mission IA, Actualiser) : rien n'est enregistr\xC3\xA9";
+            else if (!acceptPlan(call.id, m.tool->input, &why, &steps))
+                m.tool->error = why.empty() ? std::string("plan illisible") : why;
+            else {
+                planned = true;
+                m.extra.set("mission", call.id);
+                m.extra.set("planEtapes", steps);
+            }
+        } else if (m.tool->name != kOperationsTool) {
             m.tool->error = "outil inconnu : " + m.tool->name + " (seul " + std::string(kOperationsTool) + " existe)";
+        } else if (planCall) {
+            // la mission attend d'abord son plan : une proposition avant le plan n'est pas montree (l'IA le saura)
+            m.tool->error = "la mission attend d'abord son plan (planifier_mission) : aucune op\xC3\xA9ration n'est propos\xC3\xA9" "e avant le plan, "
+                            "ni avant que l'utilisateur demande la suite";
         } else {
             const auto doc = host_.document ? host_.document() : nullptr;
             PromptInput in;
@@ -2155,13 +2354,23 @@ void Assistant::finishLive(const std::string& stopReason) {
                 m.proposal = std::move(*p);
             }
         }
-        if (!m.tool->error.empty())
-            m.note = "La proposition re\xC3\xA7ue est illisible, rien n'est propos\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
+        if (!m.tool->error.empty()) {
+            if (m.tool->name == mission::kPlanTool)
+                m.note = "Le plan de la mission n'a pas pu \xC3\xAAtre enregistr\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
+            else if (planCall && m.tool->name == kOperationsTool)
+                m.note = "Rien n'est propos\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
+            else
+                m.note = "La proposition re\xC3\xA7ue est illisible, rien n'est propos\xC3\xA9 : " + m.tool->error + " (l'IA le saura \xC3\xA0 ta prochaine demande).";
+        }
     }
     if (m.text.empty() && !m.proposal && m.note.empty()) m.note = "R\xC3\xA9ponse vide.";
     const int index = gen_.message;
     const bool open = current() && current()->id == c->id;
     const bool hasProposal = m.proposal.has_value();
+    // 1.22.0 : la reponse d'un appel de mission - le plan enregistre (et dit en clair), ou la proposition liee a ses etapes
+    // et verifiee ; sans proposition ni plan : l'appel est dit interrompu ou en echec, ses etapes redeviennent pretes.
+    // (Peut ajouter un message du logiciel a la conversation : `m` n'est plus utilise apres.)
+    if (!call.id.empty()) missionAnswered(call, *c, index, planned, stopReason);
     gen_ = {};
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
@@ -2171,6 +2380,7 @@ void Assistant::finishLive(const std::string& stopReason) {
 void Assistant::failLive(const ProviderEvent& e) {
     retire();
     recordLive();
+    const MissionCall call = gen_.mission;   // 1.22.0
     Conversation* c = generatingConversation();
     if (c && gen_.message >= 0 && gen_.message < static_cast<int>(c->messages.size())) {
         Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
@@ -2195,12 +2405,16 @@ void Assistant::failLive(const ProviderEvent& e) {
             note.key = "service:" + gen_.provider + ":" + std::to_string(e.httpStatus);
             (void)notifs::post(std::move(note));
         }
+        if (!call.id.empty()) m.extra.set("mission", call.id);
         gen_ = {};
         if ((c = touch(*c)) != nullptr) save(*c);
     } else {
         gen_ = {};
     }
     notice_ = "Assistant IA : " + (e.text.empty() ? std::string("erreur") : e.text);
+    // 1.22.0 : l'appel de mission en echec - l'erreur exacte dans l'historique, ses etapes redeviennent pretes (Reessayer
+    // la redemande comme une demande de mission, sur l'etat reel du projet).
+    endMissionCall(call, false, "l'appel \xC3\xA0 l'IA a \xC3\xA9" "chou\xC3\xA9 : " + (e.text.empty() ? std::string("erreur inconnue") : e.text));
     ++revision_;
 }
 
@@ -2225,6 +2439,24 @@ bool Assistant::retry(std::string* why) {
     Conversation& c = *cur();
     const Message last = c.messages.back();
     c.messages.pop_back();
+    // 1.22.0 : la demande d'une mission (le plan, une proposition, une correction, une actualisation) - redemandee comme
+    // une demande de mission (son etat REEL relu : le lot recalcule), jamais rejouee telle quelle.
+    if (const Message& asked = c.messages.back(); asked.extra.isObject() && asked.extra.find("mission") != nullptr) {
+        const Message user = asked;
+        const std::string convId = c.id;
+        c.messages.pop_back();
+        if (relaunchMission(user, &w)) {
+            suggestionsAfter_ = false;
+            ++revision_;
+            return true;
+        }
+        if (const int i = indexOf(convId); i >= 0) {
+            auto& back = conversations_[static_cast<std::size_t>(i)];
+            back.messages.push_back(user);
+            back.messages.push_back(last);
+        }
+        return fail(w);
+    }
     const std::string request = c.messages.back().text;
     if (!startLive(c, request, &w)) {
         c.messages.push_back(last);
@@ -2356,6 +2588,989 @@ UsageBand Assistant::usageBand(double now) const {
     if (gen_.live && gen_.conversation == (current() ? current()->id : std::string{})) st.conversation += gen_.usage.total() + gen_.preread.total();   // en cours
     st.contextWindow = contextWindow();
     return app::ai::usageBand(settings_, st, usageTotals(), localService(), now);
+}
+
+// =====================================================================================================================
+//  1.22.0 : LES MISSIONS IA PERSISTANTES (AiMission.hpp, AiMissionStore.hpp)
+// ---------------------------------------------------------------------------------------------------------------------
+//  Le fil de l'interface est le seul a toucher les missions de la seance (missions_) : chaque evenement (creation,
+//  plan, proposition, validation, application, etape, erreur, decision, pause, reprise, annulation, audit) les
+//  ENREGISTRE AUSSITOT (saveMission : ecriture atomique, avec .bak). Un appel a l'IA est ecrit AVANT de partir
+//  (Mission::pending) et efface a sa fin : apres un arret brutal, il est retrouve et marque interrompu (rien n'est
+//  rejoue). Le projet reel fait foi : une etape n'est terminee que si le compte rendu du projet d'avant et d'apres le
+//  dit (onApplied), et chaque changement du projet (Ctrl+Z, Ctrl+Y, une suppression a la main) est rapproche des
+//  missions au tick (verifyAgainst) - seulement quand Document::revision change, jamais a chaque image.
+// =====================================================================================================================
+mission::Mission* Assistant::missionMut(std::string_view id) noexcept {
+    for (auto& m : missions_)
+        if (m.id == id) return &m;
+    return nullptr;
+}
+
+const mission::Mission* Assistant::findMission(std::string_view id) const noexcept {
+    for (const auto& m : missions_)
+        if (m.id == id) return &m;
+    return nullptr;
+}
+
+mission::Mission* Assistant::missionOfProposalMut(std::string_view proposalId) noexcept {
+    if (proposalId.empty()) return nullptr;
+    for (auto& m : missions_)
+        if (m.proposal(proposalId)) return &m;
+    return nullptr;
+}
+
+const mission::Mission* Assistant::missionOfProposal(std::string_view proposalId) const noexcept {
+    if (proposalId.empty()) return nullptr;
+    for (const auto& m : missions_)
+        if (m.proposal(proposalId)) return &m;
+    return nullptr;
+}
+
+mission::Mission* Assistant::editableMission(std::string_view id, std::string* why) {
+    mission::Mission* m = missionMut(id);
+    if (!m) {
+        if (why) *why = "Mission introuvable.";
+        return nullptr;
+    }
+    if (missionsReadOnly_.count(id)) {
+        if (why)
+            *why = "La mission " + guillemets(m->name) + " vient d'une version plus r\xC3\xA9" "cente du logiciel : elle se consulte ici, mais ne se "
+                   "modifie pas (elle n'est jamais r\xC3\xA9\xC3\xA9" "crite par cette version).";
+        return nullptr;
+    }
+    return m;
+}
+
+std::string Assistant::openProjectId() const {
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return {};
+    const std::string name = host_.projectName ? host_.projectName() : std::string{};
+    const std::string path = host_.projectPath ? host_.projectPath() : std::string{};
+    const std::string key = name + "\n" + path + "\n" + doc->project.config.created;
+    if (key != missionProjectKey_) {
+        missionProjectKey_ = key;
+        missionProjectId_ = memory::identifyProject(name, path, doc->project.config.created).id;
+    }
+    return missionProjectId_;
+}
+
+void Assistant::saveMission(mission::Mission& m) {
+    m.modified = isoDate(now());
+    m.summary = mission::summaryOf(m);
+    // Une mission lue d'un format plus recent n'est jamais reecrite (elle reste telle quelle sur le disque).
+    if (!missionsReadOnly_.count(m.id)) {
+        std::string why;
+        if (!mission::save(m, &why)) {
+            notice_ = "Assistant IA : la mission " + guillemets(m.name) + " n'a pas pu \xC3\xAAtre enregistr\xC3\xA9" "e"
+                      + (why.empty() ? std::string(".") : " (" + why + ").");
+            appendActivity("mission", "Mission non enregistr\xC3\xA9" "e : " + m.name + (why.empty() ? std::string{} : " - " + why));
+        }
+    }
+    ++missionsRev_;
+    ++revision_;
+}
+
+// UNE NOTIFICATION DE MISSION (l'onglet Notifications) : une cle par mission et par genre - un nouvel evenement du meme
+// genre remplace l'ancien (<< x3 >>) ; jamais une par petite operation. Le bouton ouvre le tableau de bord de la mission.
+void Assistant::notifyMission(const mission::Mission& m, const std::string& kind, std::string title, std::string detail, std::string tone) {
+    notifs::Item n;
+    n.category = "Mission";
+    n.title = notifs::oneLine(title, 140);
+    n.detail = notifs::oneLine(detail, 300);
+    n.tone = std::move(tone);
+    n.button = "Voir la mission";
+    n.action = notifs::toMission(m.id);
+    n.key = "mission:" + m.id + ":" + kind;
+    (void)notifs::post(std::move(n));
+}
+
+// L'etat global vient de changer (refreshState) : bloquee, terminee - dit une fois.
+void Assistant::missionTransition(const mission::Mission& m, mission::State before) {
+    if (m.state == before) return;
+    if (m.state == mission::State::Blocked)
+        notifyMission(m, "bloquee", "Mission bloqu\xC3\xA9" "e : " + m.name, "Plus rien n'est r\xC3\xA9" "alisable sans ta d\xC3\xA9" "cision. " + mission::nextAction(m), "error");
+    else if (m.state == mission::State::Done)
+        notifyMission(m, "terminee", "Mission termin\xC3\xA9" "e : " + m.name,
+                      m.finalReport.isObject() ? mission::reportFromJson(m.finalReport).verdict : std::string("Toutes les \xC3\xA9tapes obligatoires sont termin\xC3\xA9" "es."),
+                      "ok");
+}
+
+// La conversation ou la mission travaille : l'ouverte si elle est la sienne, sinon la plus recente des siennes (rouverte),
+// sinon (supprimees) l'ouverte si elle est vide, ou une neuve.
+Conversation* Assistant::missionConversation(mission::Mission& m) {
+    const auto mine = [&m](const std::string& id) { return id == m.conversation || listed(m.conversations, id); };
+    if (Conversation* c = cur(); c && mine(c->id)) return c;
+    for (const auto& conv : conversations_)   // les plus recentes d'abord
+        if (mine(conv.id)) {
+            const std::string id = conv.id;
+            (void)select(id);
+            return cur();
+        }
+    newConversation();
+    return cur();
+}
+
+// Pourquoi une mission ne peut pas appeler l'IA maintenant (vide : elle le peut).
+std::string Assistant::callBlocker(const mission::Mission& m) const {
+    if (m.state == mission::State::Cancelled) return "La mission " + guillemets(m.name) + " est annul\xC3\xA9" "e.";
+    if (m.state == mission::State::Paused) return "La mission " + guillemets(m.name) + " est en pause : reprends-la d'abord.";
+    if (m.state == mission::State::Done) return "La mission " + guillemets(m.name) + " est termin\xC3\xA9" "e.";
+    if (m.archived) return "La mission " + guillemets(m.name) + " est archiv\xC3\xA9" "e : sors-la des archives d'abord.";
+    if (generating()) return "Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.";
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc)
+        return "Aucun projet n'est ouvert : ouvre le projet de la mission (" + (m.project.name.empty() ? std::string("?") : m.project.name) + ") pour continuer.";
+    if (!m.project.id.empty() && openProjectId() != m.project.id)
+        return "Le projet ouvert n'est pas celui de la mission " + guillemets(m.name) + " (" + (m.project.name.empty() ? std::string("?") : m.project.name)
+               + (m.project.path.empty() ? std::string{} : ", " + m.project.path) + ") : ouvre-le pour continuer. Rien n'est fait sur un autre projet.";
+    return {};
+}
+
+// Remettre une mission au fait du projet ouvert avant un appel : un appel reste << en cours >> d'une autre seance (une
+// fermeture brutale) est marque interrompu ; un projet qui etait introuvable et qui est de nouveau ouvert est reconnu.
+void Assistant::settleStale(mission::Mission& m) {
+    if (missionsReadOnly_.count(m.id)) return;
+    if (generating() && gen_.mission.id == m.id) return;
+    const auto doc = host_.document ? host_.document() : nullptr;
+    const std::string pid = openProjectId();
+    const bool stalePending = m.pending.active;
+    const bool backAgain = m.coherence == mission::Coherence::Missing && doc && (m.project.id.empty() || m.project.id == pid);
+    if (!stalePending && !backAgain) return;
+    const mission::State before = m.state;
+    (void)mission::recover(m, pid, doc ? &doc->project : nullptr, isoDate(now()));
+    m.pending = {};
+    missionsToRecover_.erase(std::remove(missionsToRecover_.begin(), missionsToRecover_.end(), m.id), missionsToRecover_.end());
+    missionTransition(m, before);
+    saveMission(m);
+}
+
+// LA DEMANDE D'UNE MISSION : un message de l'utilisateur dans la conversation de la mission (marque : la mission, le but),
+// l'appel ECRIT AVANT DE PARTIR (pending, les etapes << en cours >>, l'empreinte du projet), puis startLive avec l'appel
+// (ses consignes, ses outils). Rien ne change si la demande ne part pas.
+bool Assistant::launchMission(mission::Mission& m, std::string text, MissionCall call, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
+    if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
+    if (!live())
+        return fail("Une mission travaille avec une IA connect\xC3\xA9" "e (Anthropic, ou un service compatible OpenAI) : choisis-la dans les "
+                    "Param\xC3\xA8tres de l'Assistant IA.");
+    std::string w;
+    if (!ready(&w)) return fail(w);
+    if (budgetBlocks(&w)) return fail(w);
+    const std::string id = m.id;
+    call.id = id;
+    Conversation* cp = missionConversation(m);
+    if (!cp) return fail("Aucune conversation pour la mission.");
+    overBudgetOk_ = false;
+    localSuggestions_.clear();
+    Conversation& c = *cp;
+    const Conversation before = c;
+    const mission::Mission saved = m;   // tout revient si l'appel ne part pas
+    const std::string when = isoDate(now());
+    Message u;
+    u.id = "m" + std::to_string(c.messages.size() + 1);
+    u.role = "utilisateur";
+    u.date = when;
+    u.text = text;
+    for (const auto& p : pending_) u.attachments.push_back(p.attachment);   // les pieces jointes attendues partent avec
+    u.extra = json::Value::object();
+    u.extra.set("mission", id);
+    u.extra.set("appelMission", call.purpose);
+    if (!call.step.empty()) u.extra.set("etapeMission", call.step);
+    const bool first = c.messages.empty();
+    if (first || c.title == kNewTitle) c.title = call.purpose == "plan" ? titleFor(text, false) : "Mission : " + m.name;
+    if (first) {
+        c.project.name = host_.projectName ? host_.projectName() : std::string{};
+        c.project.path = host_.projectPath ? host_.projectPath() : std::string{};
+    }
+    if (const DemoContext ctx = context(); ctx.view) c.project.view = ctx.view->name;
+    c.messages.push_back(std::move(u));
+    // L'APPEL EST ECRIT AVANT DE PARTIR : une fermeture brutale le retrouvera (interrompu ; rien n'est rejoue).
+    if (call.purpose == "proposition")
+        for (const auto& s : call.steps) (void)mission::setStepState(m, s, mission::StepState::Running, when, "La proposition se pr\xC3\xA9pare.");
+    m.pending.active = true;
+    m.pending.purpose = call.purpose;
+    m.pending.conversation = c.id;
+    m.pending.started = when;
+    m.pending.steps = call.purpose == "correction" ? std::vector<std::string>{call.step} : call.steps;
+    if (!listed(m.conversations, c.id)) m.conversations.push_back(c.id);
+    m.provider = settings_.provider;
+    m.model = trim(settings_.model);
+    if (const auto doc = host_.document ? host_.document() : nullptr) {
+        // le projet tel que la mission le connait maintenant (ce qui a change avant est dans la consigne de l'appel)
+        mission::stamp(m, mission::printOf(doc->project), when);
+        m.coherence = mission::Coherence::Same;
+        m.coherenceText.clear();
+    }
+    if (call.purpose == "plan")
+        mission::log(m, "analyse", "Analyse du projet r\xC3\xA9" "el et plan demand\xC3\xA9s \xC3\xA0 l'IA (" + providerName(settings_.provider) + ").", when);
+    else if (call.purpose == "actualisation")
+        mission::log(m, "actualisation",
+                     "Actualisation demand\xC3\xA9" "e \xC3\xA0 l'IA : relire le projet et revoir le plan"
+                         + (call.changes.empty() ? std::string(".") : " (chang\xC3\xA9 : " + call.changes + ")."),
+                     when);
+    else if (call.purpose == "correction")
+        mission::log(m, "proposition", "Correction demand\xC3\xA9" "e \xC3\xA0 l'IA pour " + call.step + ".", when, call.step);
+    else
+        mission::log(m, "proposition",
+                     "Proposition demand\xC3\xA9" "e \xC3\xA0 l'IA pour " + joined(call.steps, ", ") + " (" + std::to_string(call.batch.ops)
+                         + " op\xC3\xA9ration(s) estim\xC3\xA9" "e(s)).",
+                     when);
+    saveMission(m);
+    nextMission_ = std::move(call);
+    if (!startLive(c, text, &w)) {
+        nextMission_ = {};
+        c = before;
+        if (mission::Mission* again = missionMut(id)) {
+            *again = saved;
+            mission::log(*again, "erreur", "La demande \xC3\xA0 l'IA n'est pas partie : " + w, when);
+            saveMission(*again);
+        }
+        return fail(w);
+    }
+    pending_.clear();
+    suggestionsAfter_ = false;
+    if (Conversation* cc = touch(c)) save(*cc);
+    ++revision_;
+    return true;
+}
+
+// Les consignes d'un appel de mission (ajoutees aux consignes dynamiques de la demande).
+std::string Assistant::missionPrompt(const mission::Mission& m, const MissionCall& call, const hmi::Project* project) const {
+    if (call.purpose == "proposition" && project) return mission::batchPrompt(m, *project, call.batch, call.changes);
+    if (call.purpose == "correction" && project) return mission::correctionPrompt(m, *project, call.step);
+    std::string s = mission::planningPrompt(m);
+    if (call.purpose == "actualisation")
+        s += "ACTUALISATION : relis le projet tel qu'il est MAINTENANT (il fait foi, pas le plan) et renvoie le plan COMPLET avec "
+             "planifier_mission. Ce qui a chang\xC3\xA9 depuis la derni\xC3\xA8re sauvegarde de la mission : "
+             + (call.changes.empty() ? std::string("rien de connu") : call.changes) + ".\n";
+    return s;
+}
+
+// LE PLAN RECU (planifier_mission) : planFromTool le lit et le controle (une etape sans titre, une dependance inconnue, un
+// cycle : refuse, la mission n'est pas touchee) ; un plan REVU garde les etapes deja travaillees (la regle de
+// mission::planFromTool : leur etat, leurs propositions ; une etape terminee absente du plan revu est gardee).
+bool Assistant::acceptPlan(const std::string& id, const std::string& input, std::string* why, int* count) {
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (m->state == mission::State::Cancelled) {
+        if (why) *why = "la mission est annul\xC3\xA9" "e : son plan n'est plus modifi\xC3\xA9";
+        return false;
+    }
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    if (!mission::planFromTool(*m, input, when, why)) return false;
+    m->pending = {};
+    if (const auto doc = host_.document ? host_.document() : nullptr) {
+        mission::stamp(*m, mission::printOf(doc->project), when);
+        m->coherence = mission::Coherence::Same;
+        m->coherenceText.clear();
+    }
+    int n = 0;
+    for (const auto& s : m->steps) n += s.state != mission::StepState::Cancelled;
+    if (count) *count = n;
+    missionTransition(*m, before);
+    saveMission(*m);
+    return true;
+}
+
+// LA REPONSE D'UN APPEL DE MISSION (finishLive, le message fini).
+void Assistant::missionAnswered(const MissionCall& call, Conversation& c, int message, bool planned, const std::string& stopReason) {
+    mission::Mission* m = missionMut(call.id);
+    if (!m || missionsReadOnly_.count(call.id) || message < 0 || message >= static_cast<int>(c.messages.size())) return;
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    {
+        Message& msg = c.messages[static_cast<std::size_t>(message)];
+        msg.extra.set("mission", call.id);
+    }
+    // ---- le plan (planifier, actualiser) ----
+    if (call.purpose == "plan" || call.purpose == "actualisation") {
+        m->pending = {};
+        const Message& msg = c.messages[static_cast<std::size_t>(message)];
+        if (planned) {
+            const bool revised = call.purpose == "actualisation" || m->planRevision > 0;
+            int live = 0;
+            for (const auto& s : m->steps) live += s.state != mission::StepState::Cancelled;
+            // le plan en clair, ecrit par le LOGICIEL sous la reponse (jamais renvoye au modele comme sa reponse)
+            Message a;
+            a.id = "m" + std::to_string(c.messages.size() + 1);
+            a.role = "assistant";
+            a.date = when;
+            a.state = "fini";
+            a.text = planMessage(*m, revised);
+            a.extra = json::Value::object();
+            a.extra.set("logiciel", std::string("mission"));
+            a.extra.set("mission", call.id);
+            c.messages.push_back(std::move(a));
+            notifyMission(*m, "plan", std::string(revised ? "Plan revu : " : "Plan termin\xC3\xA9 : ") + m->name,
+                          plural(static_cast<std::size_t>(live), "\xC3\xA9tape", "\xC3\xA9tapes") + " ordonn\xC3\xA9" "es par leurs d\xC3\xA9pendances. Prochaine action : "
+                              + mission::nextAction(*m),
+                          "ok");
+        } else {
+            const std::string reason = !msg.note.empty() ? msg.note
+                                       : stopReason == "max_tokens"
+                                           ? std::string("la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e avant le plan")
+                                           : std::string("l'IA n'a pas appel\xC3\xA9 planifier_mission : aucun plan n'est enregistr\xC3\xA9");
+            mission::log(*m, "erreur", callLabel(call.purpose, call.step) + " n'a pas abouti : " + reason, when);
+            notifyMission(*m, "erreur", "Erreur dans la mission : " + m->name, callLabel(call.purpose, call.step) + " n'a pas abouti : " + reason, "error");
+        }
+        missionTransition(*m, before);
+        saveMission(*m);
+        return;
+    }
+    // ---- une proposition (la suite, une correction) ----
+    if (!c.messages[static_cast<std::size_t>(message)].proposal) {
+        const Message& msg = c.messages[static_cast<std::size_t>(message)];
+        const bool cut = stopReason == "max_tokens";
+        const std::string reason = !msg.note.empty() ? msg.note : std::string("l'IA n'a rien propos\xC3\xA9 (aucune op\xC3\xA9ration)");
+        endMissionCall(call, cut, reason);
+        if (cut)
+            if (const mission::Mission* again = findMission(call.id))
+                notifyMission(*again, "interrompue", "Mission interrompue : " + again->name, callLabel(call.purpose, call.step) + " a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e : " + reason, "warning");
+        return;
+    }
+    Message& msg = c.messages[static_cast<std::size_t>(message)];
+    Proposal& p = *msg.proposal;
+    const std::vector<std::string> steps = call.purpose == "correction" ? std::vector<std::string>{call.step} : call.steps;
+    // le lien garde avec la proposition (et dans sa conversation) : la mission, ses etapes
+    p.extra.set("mission", call.id);
+    {
+        json::Value list = json::Value::array();
+        for (const auto& s : steps) list.push(s);
+        p.extra.set("etapes", list);
+    }
+    mission::onGenerated(*m, p, c.id, msg.id, steps, when);
+    m->pending = {};
+    bool stale = false;
+    if (const auto doc = host_.document ? host_.document() : nullptr) {
+        // VERIFIEE SUR UNE COPIE (validate) : validee, ou ses erreurs exactes ; preparee sur un projet qui a change
+        // pendant la reponse : obsolete (elle ne s'appliquera jamais, rien n'est ecrase).
+        const Check ck = validate(doc->project, p, host_.env);
+        mission::onChecked(*m, p.id, ck, when);
+        if (ck.stale) {
+            mission::onDropped(*m, p.id, "obsolete",
+                               "le projet a chang\xC3\xA9 pendant la pr\xC3\xA9paration de la proposition : elle ne s'applique pas sur un \xC3\xA9tat qui n'est "
+                               "plus le sien",
+                               when);
+            stale = true;
+        }
+    }
+    const mission::ProposalLink* link = m->proposal(p.id);
+    const std::string P = link ? "P" + std::to_string(link->order) : std::string("La proposition");
+    if (stale)
+        notifyMission(*m, "proposition", "Proposition obsol\xC3\xA8te : " + m->name,
+                      P + " a \xC3\xA9t\xC3\xA9 pr\xC3\xA9par\xC3\xA9" "e sur un projet qui a chang\xC3\xA9 depuis : elle ne s'applique pas. Demande la suite pour en avoir une \xC3\xA0 jour.",
+                      "warning");
+    else
+        notifyMission(*m, "proposition", "Proposition disponible : " + m->name,
+                      P + " " + guillemets(p.summary) + " pour " + stepsLine(*m, link ? link->steps : steps) + " : \xC3\xA0 pr\xC3\xA9visualiser et appliquer.", "info");
+    missionTransition(*m, before);
+    saveMission(*m);
+}
+
+// UN APPEL DE MISSION FINI SANS RESULTAT (arrete, coupe, en erreur, sans proposition) : ses etapes << en cours >>
+// redeviennent pretes, l'appel est efface, l'erreur exacte est dans l'historique. Rien n'est rejoue.
+void Assistant::endMissionCall(const MissionCall& call, bool interrupted, const std::string& reason) {
+    if (call.id.empty()) return;
+    mission::Mission* m = missionMut(call.id);
+    if (!m || missionsReadOnly_.count(call.id)) return;
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    for (const auto& s : call.steps)
+        if (const mission::Step* st = m->step(s); st && st->state == mission::StepState::Running)
+            (void)mission::setStepState(*m, s, mission::StepState::Ready, when,
+                                        std::string(interrupted ? "Appel interrompu" : "Appel en \xC3\xA9" "chec") + " : " + reason);
+    m->pending = {};
+    mission::log(*m, interrupted ? "interruption" : "erreur",
+                 callLabel(call.purpose, call.step) + (interrupted ? " a \xC3\xA9t\xC3\xA9 interrompue" : " a \xC3\xA9" "chou\xC3\xA9") + " : " + reason
+                     + ". Rien n'est rejou\xC3\xA9.",
+                 when, call.purpose == "correction" ? call.step : std::string{});
+    mission::refreshReadiness(*m);
+    mission::refreshState(*m, when);
+    if (!interrupted)
+        notifyMission(*m, "erreur", "Erreur dans la mission : " + m->name, callLabel(call.purpose, call.step) + " a \xC3\xA9" "chou\xC3\xA9 : " + reason, "error");
+    missionTransition(*m, before);
+    saveMission(*m);
+}
+
+// UNE PROPOSITION DE MISSION APPLIQUEE (afterApply) : son compte rendu REEL passe a la mission. Vrai : c'etait une
+// proposition de mission (sa notification est celle de la mission).
+bool Assistant::missionApplied(const Proposal& prop, const plan::Plan& pl, const plan::Report* rep) {
+    mission::Mission* m = missionOfProposalMut(prop.id);
+    if (!m) return false;
+    if (missionsReadOnly_.count(m->id)) return true;
+    const auto doc = host_.document ? host_.document() : nullptr;
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    std::map<std::string, mission::StepState> was;
+    for (const auto& s : m->steps) was[s.id] = s.state;
+    if (doc && rep) {
+        mission::onApplied(*m, prop.id, pl, *rep, doc->project, when);
+        mission::stamp(*m, mission::printOf(doc->project), when);
+        m->coherence = mission::Coherence::Same;
+        m->coherenceText.clear();
+    } else {
+        mission::log(*m, "application",
+                     "Proposition appliqu\xC3\xA9" "e, mais son compte rendu r\xC3\xA9" "el n'a pas pu \xC3\xAAtre lu (aucun projet ouvert) : ses \xC3\xA9tapes restent \xC3\xA0 v\xC3\xA9rifier.",
+                     when, {}, prop.id);
+    }
+    const mission::ProposalLink* link = m->proposal(prop.id);
+    const std::string P = link ? "P" + std::to_string(link->order) : std::string("La proposition");
+    notifyMission(*m, "appliquee", "Proposition appliqu\xC3\xA9" "e : " + m->name,
+                  P + " " + guillemets(prop.summary) + (rep && !rep->verdict.empty() ? " \xE2\x80\x94 " + rep->verdict : std::string{}) + " Ctrl+Z la reprend d'un coup.",
+                  rep && rep->failed > 0 ? "warning" : "ok");
+    for (const auto& s : m->steps) {
+        const auto it = was.find(s.id);
+        const mission::StepState prev = it == was.end() ? mission::StepState::Waiting : it->second;
+        if (s.state == mission::StepState::Done && prev != mission::StepState::Done)
+            notifyMission(*m, "etape", "\xC3\x89tape termin\xC3\xA9" "e : " + m->name, s.id + " " + s.title + " \xE2\x80\x94 v\xC3\xA9rifi\xC3\xA9" "e dans le projet.", "ok");
+        if (s.state == mission::StepState::Error && prev != mission::StepState::Error)
+            notifyMission(*m, "erreur", "Erreur dans la mission : " + m->name, s.id + " " + s.title + " : " + (s.error.empty() ? s.note : s.error), "error");
+    }
+    missionTransition(*m, before);
+    saveMission(*m);
+    return true;
+}
+
+// Une proposition de mission refusee, ou devenue obsolete : ses etapes redeviennent pretes.
+void Assistant::missionDropped(std::string_view proposalId, std::string_view state, const std::string& reason) {
+    mission::Mission* m = missionOfProposalMut(proposalId);
+    if (!m || missionsReadOnly_.count(m->id)) return;
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    mission::onDropped(*m, proposalId, state, reason, when);
+    if (state == "obsolete")
+        notifyMission(*m, "proposition", "Proposition obsol\xC3\xA8te : " + m->name,
+                      reason + ". Demande la suite : elle partira du projet tel qu'il est.", "warning");
+    missionTransition(*m, before);
+    saveMission(*m);
+}
+
+bool Assistant::missionMayApply(std::string_view proposalId, std::string* why) const {
+    const mission::Mission* m = missionOfProposal(proposalId);
+    if (!m) return true;
+    if (!mission::mayApply(*m, proposalId, why)) return false;
+    if (!m->project.id.empty() && openProjectId() != m->project.id) {
+        if (why)
+            *why = "Cette proposition appartient \xC3\xA0 la mission " + guillemets(m->name) + ", du projet "
+                   + guillemets(m->project.name.empty() ? std::string("?") : m->project.name) + " : ouvre ce projet pour l'appliquer.";
+        return false;
+    }
+    return true;
+}
+
+// AU TICK : les missions interrompues (constatees des que le projet ouvert est connu), la verification des missions
+// quand le projet a change (sa revision, ou un autre document), les audits finis.
+void Assistant::missionsTick() {
+    pollAudits();
+    const auto doc = host_.document ? host_.document() : nullptr;
+    // LA REPRISE APRES UNE FERMETURE : un appel a l'IA etait en cours - marque interrompu, ses etapes pretes, le projet
+    // compare (identique, modifie, introuvable) ; jamais une application rejouee.
+    if (!missionsToRecover_.empty() && (doc || !host_.document)) {
+        const std::string pid = openProjectId();
+        const std::string when = isoDate(now());
+        const std::vector<std::string> ids = std::exchange(missionsToRecover_, {});
+        for (const auto& id : ids) {
+            mission::Mission* m = missionMut(id);
+            if (!m || missionsReadOnly_.count(id) || !m->pending.active) continue;
+            const std::string purpose = m->pending.purpose;
+            const mission::State before = m->state;
+            mission::Recovery rec;
+            (void)mission::recover(*m, pid, doc ? &doc->project : nullptr, when, &rec);
+            m->pending = {};
+            notifyMission(*m, "interrompue", "Mission interrompue : " + m->name,
+                          "Un appel \xC3\xA0 l'IA (" + (purpose.empty() ? std::string("proposition") : purpose) + ") \xC3\xA9tait en cours \xC3\xA0 la fermeture : il est "
+                              "marqu\xC3\xA9 interrompu, rien n'est rejou\xC3\xA9. " + rec.text,
+                          "warning");
+            missionTransition(*m, before);
+            saveMission(*m);
+        }
+    }
+    if (!doc) {
+        missionDoc_ = nullptr;
+        missionSeenDoc_ = nullptr;
+        return;
+    }
+    // LE PROJET A CHANGE (sa revision, ou un autre document) : verifie une fois qu'il s'est pose (un geste continu - un
+    // deplacement a la souris - ne relance pas la verification a chaque image) ; le premier projet vu : tout de suite.
+    const std::uint64_t rev = doc->revision;
+    if (doc.get() == missionDoc_ && rev == missionDocRev_) return;   // deja verifie : rien a recalculer
+    if (doc.get() != missionSeenDoc_ || rev != missionSeenRev_) {
+        const bool first = missionDoc_ == nullptr;
+        missionSeenDoc_ = doc.get();
+        missionSeenRev_ = rev;
+        missionSeenAt_ = lastNow_;
+        if (!first) return;
+    } else if (lastNow_ - missionSeenAt_ < kMissionSettle) {
+        return;
+    }
+    missionDoc_ = doc.get();
+    missionDocRev_ = rev;
+    const std::string pid = openProjectId();
+    if (pid.empty()) return;
+    const std::string when = isoDate(now());
+    for (auto& m : missions_) {
+        if (m.archived || m.state == mission::State::Cancelled || m.proposals.empty() || missionsReadOnly_.count(m.id)) continue;
+        if (m.project.id != pid) continue;   // une mission d'un autre projet ne se juge pas sur celui-ci
+        const mission::State before = m.state;
+        // LE PROJET DU MOMENT FAIT FOI : Ctrl+Z (la proposition annulee, l'etape redevient prete), Ctrl+Y (retablie).
+        if (!mission::verifyAgainst(m, doc->project, when)) continue;
+        missionTransition(m, before);
+        saveMission(m);
+    }
+}
+
+void Assistant::pollAudits() {
+    for (auto it = audits_.begin(); it != audits_.end();) {
+        const std::shared_ptr<AuditJob> job = *it;
+        if (!job || !job->finished.load(std::memory_order_acquire)) {
+            ++it;
+            continue;
+        }
+        if (job->worker.joinable()) job->worker.join();
+        it = audits_.erase(it);
+        ++revision_;
+        mission::Mission* m = missionMut(job->mission);
+        if (!m || missionsReadOnly_.count(job->mission)) continue;
+        const std::string when = isoDate(now());
+        // le rapport : sur la copie auditee ; l'audit impossible est dit << non verifiable >>, jamais << verifie >>
+        mission::FinalReport rep = mission::finalReport(*m, *job->copy, job->result.get(), when);
+        if (job->plcUnknown)
+            rep.toCheck.push_back("Les noms de l'automate n'ont pas pu \xC3\xAAtre relus pour l'audit : les r\xC3\xA9" "f\xC3\xA9rences \xC3\xA0 l'automate sont \xC3\xA0 v\xC3\xA9rifier.");
+        if (const auto doc = host_.document ? host_.document() : nullptr; !doc || doc.get() != job->doc || doc->revision != job->revision)
+            rep.toCheck.push_back("Le projet a chang\xC3\xA9 pendant l'audit : relance-le pour v\xC3\xA9rifier l'\xC3\xA9tat actuel.");
+        m->finalReport = mission::reportToJson(rep);
+        const mission::State before = m->state;
+        mission::log(*m, "audit", "Audit final : " + rep.verdict, when);
+        mission::refreshState(*m, when);
+        missionTransition(*m, before);   // terminee (seulement si le rapport le dit complet) ou bloquee : notifiee
+        if (!(rep.complete && m->state == mission::State::Done))
+            notifyMission(*m, "audit", "Audit final : " + m->name, rep.verdict, rep.auditRun && rep.auditErrors == 0 ? "info" : "warning");
+        saveMission(*m);
+        notice_ = "Assistant IA : mission " + guillemets(m->name) + " \xE2\x80\x94 " + rep.verdict;
+    }
+}
+
+// Reessayer une demande de mission : redemandee comme une demande de mission (le lot recalcule sur le projet reel).
+bool Assistant::relaunchMission(const Message& request, std::string* why) {
+    const std::string id = request.extra.str("mission");
+    const std::string purpose = request.extra.str("appelMission");
+    if (purpose == "proposition") return continueMission(id, why);
+    if (purpose == "correction") return correctStep(id, request.extra.str("etapeMission"), why);
+    if (purpose == "actualisation") return refreshMission(id, why);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    settleStale(*m);
+    if (m->state == mission::State::Cancelled || m->archived) {
+        if (why) *why = callBlocker(*m);
+        return false;
+    }
+    if (!m->steps.empty()) return refreshMission(id, why);
+    MissionCall call;
+    call.purpose = "plan";
+    return launchMission(*m, m->request, std::move(call), why);
+}
+
+// ---- l'API publique ----------------------------------------------------------------------------------------------------
+const mission::Mission* Assistant::activeMission() const noexcept {
+    const Conversation* c = current();
+    if (!c) return nullptr;
+    const mission::Mission* best = nullptr;
+    for (const auto& m : missions_) {
+        if (m.archived || m.state == mission::State::Cancelled) continue;
+        if (m.conversation != c->id && !listed(m.conversations, c->id)) continue;
+        if (!best || m.modified > best->modified) best = &m;
+    }
+    return best;
+}
+
+bool Assistant::suggestsMission(std::string_view request) const {
+    if (!settings_.enabled || !live() || !mission::looksComplex(request)) return false;
+    const Conversation* c = current();
+    if (!c) return true;
+    for (const auto& m : missions_) {
+        if (m.archived || (m.conversation != c->id && !listed(m.conversations, c->id))) continue;
+        if (m.state == mission::State::Planning || m.state == mission::State::Active || m.state == mission::State::Paused
+            || m.state == mission::State::Blocked)
+            return false;   // une mission est deja en cours ici
+    }
+    return true;
+}
+
+bool Assistant::createMission(std::string request, std::string* why) {
+    request = trim(std::move(request));
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (request.empty()) return fail("D\xC3\xA9" "cris ce que la mission doit construire.");
+    if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    if (!live())
+        return fail("Une mission travaille avec une IA connect\xC3\xA9" "e (Anthropic, ou un service compatible OpenAI) : choisis-la dans les "
+                    "Param\xC3\xA8tres de l'Assistant IA.");
+    if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
+    std::string w;
+    if (!ready(&w)) return fail(w);
+    if (toolsInText())
+        return fail("Ce mod\xC3\xA8le re\xC3\xA7oit les propositions en texte : il ne peut pas appeler l'outil du plan d'une mission. Choisis "
+                    "\xC2\xAB Outil \xC2\xBB (l'appel d'outil) dans les Param\xC3\xA8tres de l'Assistant IA.");
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return fail("Aucun projet n'est ouvert : une mission travaille sur le projet IHM ouvert.");
+    if (!cur()) newConversation();
+    const Conversation* c = cur();
+    if (!c) return fail("Aucune conversation.");
+    const std::string when = isoDate(now());
+    mission::Mission m = mission::make(request, c->id, when);
+    m.project.name = host_.projectName ? host_.projectName() : std::string{};
+    m.project.path = host_.projectPath ? host_.projectPath() : std::string{};
+    m.project.id = openProjectId();
+    m.provider = settings_.provider;
+    m.model = trim(settings_.model);
+    // les pieces jointes de la conversation, par leur identifiant (jamais copiees)
+    for (const auto& f : attach::buildContext(*c).files)
+        if (!f.attachment.removed && !f.attachment.id.empty()) m.attachments.push_back(f.attachment.id);
+    for (const auto& p : pending_)
+        if (!p.attachment.id.empty()) m.attachments.push_back(p.attachment.id);
+    const std::string id = m.id;
+    missions_.insert(missions_.begin(), std::move(m));
+    MissionCall call;
+    call.purpose = "plan";
+    if (!launchMission(missions_.front(), request, std::move(call), why)) {
+        // la demande n'est pas partie : la mission n'existe pas (ni ici, ni sur le disque)
+        missions_.erase(std::remove_if(missions_.begin(), missions_.end(), [&id](const mission::Mission& x) { return x.id == id; }), missions_.end());
+        (void)mission::remove(id);
+        ++missionsRev_;
+        ++revision_;
+        return false;
+    }
+    if (const mission::Mission* made = findMission(id)) {
+        notifyMission(*made, "creee", "Mission cr\xC3\xA9\xC3\xA9" "e : " + made->name,
+                      "L'IA analyse le projet r\xC3\xA9" "el et pr\xC3\xA9pare le plan ; rien n'est modifi\xC3\xA9 avant ta validation.", "info");
+        notice_ = "Assistant IA : mission " + guillemets(made->name) + " cr\xC3\xA9\xC3\xA9" "e - l'IA analyse le projet et pr\xC3\xA9pare le plan.";
+    }
+    appendActivity("mission", "Mission cr\xC3\xA9\xC3\xA9" "e : " + request);
+    return true;
+}
+
+bool Assistant::continueMission(std::string_view idv, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    settleStale(*m);
+    if (const std::string b = callBlocker(*m); !b.empty()) return fail(b);
+    if (m->state == mission::State::Planning)
+        return fail(m->pending.active ? std::string("L'IA pr\xC3\xA9pare le plan de la mission : attends sa r\xC3\xA9ponse.")
+                                      : std::string("Le plan de la mission n'est pas encore \xC3\xA9tabli : actualise la mission pour le demander."));
+    const auto doc = host_.document();
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    // LE PROJET REEL D'ABORD : ce que les propositions precedentes ont cree y est-il encore ? Les etapes pretes, ensuite.
+    const bool verified = mission::verifyAgainst(*m, doc->project, when);
+    mission::refreshReadiness(*m);
+    mission::refreshState(*m, when);
+    const mission::Batch batch = mission::nextBatch(*m, missionMaxOps(outputTokens()));
+    if (batch.steps.empty()) {
+        if (verified || m->state != before) {
+            missionTransition(*m, before);
+            saveMission(*m);
+        }
+        return fail(batch.why.empty() ? std::string("Rien n'est r\xC3\xA9" "alisable pour l'instant.") : batch.why);
+    }
+    // ce qui a change depuis la derniere empreinte de la mission (une modification a la main, un Ctrl+Z...)
+    std::vector<std::string> changes;
+    if (!m->project.files.empty()) changes = mission::changesBetween(m->project.files, mission::printOf(doc->project).files);
+    MissionCall call;
+    call.purpose = "proposition";
+    call.steps = batch.steps;
+    call.batch = batch;
+    call.changes = joined(changes, ", ");
+    const std::string text = "Propose la suite de la mission " + guillemets(m->name) + " : " + stepsLine(*m, batch.steps) + ".";
+    return launchMission(*m, text, std::move(call), why);
+}
+
+bool Assistant::correctStep(std::string_view idv, std::string_view step, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    settleStale(*m);
+    if (const std::string b = callBlocker(*m); !b.empty()) return fail(b);
+    const mission::Step* st = m->step(step);
+    if (!st) return fail("\xC3\x89tape inconnue : " + std::string(step) + ".");
+    if (st->state != mission::StepState::Error)
+        return fail("L'\xC3\xA9tape " + st->id + " " + guillemets(st->title) + " n'est pas en erreur (" + std::string(mission::stepLabel(st->state))
+                    + ") : rien \xC3\xA0 corriger.");
+    MissionCall call;
+    call.purpose = "correction";
+    call.step = st->id;
+    call.steps = {st->id};
+    const std::string text = "Propose une correction pour l'\xC3\xA9tape " + st->id + " " + guillemets(st->title) + " de la mission " + guillemets(m->name)
+                             + " : " + (st->error.empty() ? st->note : st->error);
+    return launchMission(*m, text, std::move(call), why);
+}
+
+bool Assistant::refreshMission(std::string_view idv, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    settleStale(*m);
+    if (const std::string b = callBlocker(*m); !b.empty()) return fail(b);
+    if (toolsInText())
+        return fail("Ce mod\xC3\xA8le re\xC3\xA7oit les propositions en texte : il ne peut pas appeler l'outil du plan d'une mission. Choisis "
+                    "\xC2\xAB Outil \xC2\xBB (l'appel d'outil) dans les Param\xC3\xA8tres de l'Assistant IA.");
+    const auto doc = host_.document();
+    std::vector<std::string> changes;
+    if (!m->project.files.empty()) changes = mission::changesBetween(m->project.files, mission::printOf(doc->project).files);
+    MissionCall call;
+    call.purpose = m->steps.empty() ? "plan" : "actualisation";
+    call.changes = joined(changes, ", ");
+    const std::string text = m->steps.empty() ? m->request
+                                              : "Actualise le plan de la mission " + guillemets(m->name)
+                                                    + " : relis le projet tel qu'il est maintenant et revois les \xC3\xA9tapes restantes.";
+    return launchMission(*m, text, std::move(call), why);
+}
+
+bool Assistant::auditMission(std::string_view idv, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (auditing(id)) return fail("L'audit final de cette mission est d\xC3\xA9j\xC3\xA0 en cours.");
+    if (m->state == mission::State::Cancelled) return fail("La mission " + guillemets(m->name) + " est annul\xC3\xA9" "e.");
+    if (m->steps.empty()) return fail("Le plan de la mission n'est pas encore \xC3\xA9tabli : rien \xC3\xA0 auditer.");
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return fail("Aucun projet n'est ouvert : l'audit se fait sur le projet de la mission.");
+    if (!m->project.id.empty() && openProjectId() != m->project.id)
+        return fail("Le projet ouvert n'est pas celui de la mission " + guillemets(m->name) + " : ouvre-le pour l'auditer.");
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    (void)mission::verifyAgainst(*m, doc->project, when);
+    mission::refreshReadiness(*m);
+    mission::refreshState(*m, when);
+    // L'AUDIT SUR UNE COPIE, sur un fil (comme l'application de fond) : Generer, Compiler, les adresses, les references,
+    // les dependances, les orphelins - le projet vivant n'est jamais lu depuis ce fil.
+    auto job = std::make_shared<AuditJob>();
+    job->mission = id;
+    job->copy = std::make_shared<const hmi::Project>(doc->project);
+    Env frozen;
+    if (frozenEnvironment(frozen)) job->plc = frozen.plcName;   // nul : aucun automate relie
+    else job->plcUnknown = true;
+    job->folder = host_.projectPath ? host_.projectPath() : std::string{};
+    job->doc = doc.get();
+    job->revision = doc->revision;
+    job->worker = std::thread([job] {
+        try {
+            job->result = std::make_shared<hmi::audit::Report>(hmi::audit::run(*job->copy, job->plc, job->folder));
+        } catch (...) {
+            job->result.reset();   // l'audit n'a pas pu se faire : le rapport le dira (non verifiable)
+        }
+        job->finished.store(true, std::memory_order_release);
+    });
+    audits_.push_back(std::move(job));
+    mission::log(*m, "audit", "Audit final lanc\xC3\xA9 sur une copie du projet (G\xC3\xA9n\xC3\xA9rer, Compiler, adresses, r\xC3\xA9" "f\xC3\xA9rences, d\xC3\xA9pendances).", when);
+    missionTransition(*m, before);
+    saveMission(*m);
+    notice_ = "Assistant IA : audit final de la mission " + guillemets(m->name) + " en arri\xC3\xA8re-plan (sur une copie du projet).";
+    return true;
+}
+
+bool Assistant::auditing(std::string_view id) const {
+    return std::any_of(audits_.begin(), audits_.end(), [&id](const std::shared_ptr<AuditJob>& j) { return j && j->mission == id; });
+}
+
+bool Assistant::pauseMission(std::string_view idv, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    // LA PAUSE INTERROMPT VRAIMENT : la reponse en cours pour cette mission est arretee (l'appel marque interrompu, ses
+    // etapes pretes) ; plus aucune proposition de la mission ne s'applique (mayApply) tant qu'elle n'est pas reprise.
+    if (generating() && gen_.mission.id == id) stop();
+    m = missionMut(id);
+    if (!m) return false;
+    settleStale(*m);   // un appel reste << en cours >> d'une autre seance : interrompu
+    const std::string when = isoDate(now());
+    if (!mission::pause(*m, when, why)) return false;
+    saveMission(*m);
+    notice_ = "Assistant IA : mission " + guillemets(m->name) + " en pause - aucune proposition ne se pr\xC3\xA9pare ni ne s'applique.";
+    return true;
+}
+
+bool Assistant::resumeMission(std::string_view idv, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (m->state == mission::State::Cancelled) return fail("La mission " + guillemets(m->name) + " est annul\xC3\xA9" "e : elle ne reprend pas.");
+    const auto doc = host_.document ? host_.document() : nullptr;
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    // LE CONSTAT D'ABORD (le projet ouvert compare a la mission) : rien n'est applique ni rejoue.
+    mission::Recovery rec;
+    (void)mission::recover(*m, openProjectId(), doc ? &doc->project : nullptr, when, &rec);
+    if (!(generating() && gen_.mission.id == id)) m->pending = {};
+    missionsToRecover_.erase(std::remove(missionsToRecover_.begin(), missionsToRecover_.end(), id), missionsToRecover_.end());
+    if (rec.coherence == mission::Coherence::Missing) {
+        saveMission(*m);
+        return fail("La mission " + guillemets(m->name) + " ne reprend pas : " + rec.text + " " + rec.nextAction);
+    }
+    if (m->state == mission::State::Paused && !mission::resume(*m, when, why)) {
+        saveMission(*m);
+        return false;
+    }
+    mission::refreshReadiness(*m);
+    mission::refreshState(*m, when);
+    missionTransition(*m, before);
+    saveMission(*m);
+    notice_ = rec.coherence == mission::Coherence::Changed
+                  ? "Assistant IA : mission " + guillemets(m->name) + " reprise - " + rec.text + " Actualise-la pour que l'IA en tienne compte."
+                  : "Assistant IA : mission " + guillemets(m->name) + " reprise. Prochaine action : " + mission::nextAction(*m);
+    return true;
+}
+
+bool Assistant::cancelMission(std::string_view idv, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (generating() && gen_.mission.id == id) stop();
+    m = missionMut(id);
+    if (!m) return false;
+    const std::string when = isoDate(now());
+    // L'ANNULATION EMPECHE TOUTE APPLICATION ULTERIEURE (mayApply) ; ce qui est deja applique reste dans le projet.
+    if (!mission::cancel(*m, when, why)) return false;
+    saveMission(*m);
+    notice_ = "Assistant IA : mission " + guillemets(m->name) + " annul\xC3\xA9" "e - aucune de ses propositions ne s'appliquera plus.";
+    return true;
+}
+
+bool Assistant::archiveMission(std::string_view idv, bool on, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (on && generating() && gen_.mission.id == id) {
+        if (why) *why = "Une r\xC3\xA9ponse de l'IA est en cours pour cette mission : attends-la, ou arr\xC3\xAAte-la.";
+        return false;
+    }
+    mission::archive(*m, on, isoDate(now()));
+    saveMission(*m);
+    return true;
+}
+
+bool Assistant::renameMission(std::string_view idv, std::string name, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    name = trim(std::move(name));
+    if (name.empty()) {
+        if (why) *why = "Le nom de la mission est vide.";
+        return false;
+    }
+    if (name == m->name) return true;
+    mission::log(*m, "decision", "Renomm\xC3\xA9" "e : " + guillemets(m->name) + " devient " + guillemets(name) + ".", isoDate(now()));
+    m->name = std::move(name);
+    saveMission(*m);
+    return true;
+}
+
+bool Assistant::editMissionPlan(std::string_view idv, const mission::PlanEdit& edit, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (generating() && gen_.mission.id == id) {
+        if (why) *why = "Une r\xC3\xA9ponse de l'IA est en cours pour cette mission : attends-la, ou arr\xC3\xAAte-la, avant de modifier le plan.";
+        return false;
+    }
+    const std::string when = isoDate(now());
+    const mission::State before = m->state;
+    if (!mission::editPlan(*m, edit, when, why)) return false;
+    mission::refreshReadiness(*m);
+    mission::refreshState(*m, when);
+    missionTransition(*m, before);
+    saveMission(*m);
+    return true;
+}
+
+bool Assistant::attachMission(std::string_view idv, std::string* why) {
+    const std::string id(idv);
+    mission::Mission* m = editableMission(id, why);
+    if (!m) return false;
+    if (!cur()) newConversation();
+    Conversation* c = cur();
+    if (!c) return false;
+    if (generating() && gen_.conversation == c->id) {
+        if (why) *why = "Une r\xC3\xA9ponse est en cours dans cette conversation : attends-la, ou arr\xC3\xAAte-la.";
+        return false;
+    }
+    m = missionMut(id);   // newConversation ne touche pas aux missions ; par prudence
+    if (!m) return false;
+    if (c->id == m->conversation || listed(m->conversations, c->id)) return true;   // deja la sienne
+    const std::string when = isoDate(now());
+    settleStale(*m);
+    m->conversations.push_back(c->id);
+    mission::log(*m, "decision", "Reprise dans la conversation " + guillemets(c->title) + ".", when);
+    saveMission(*m);
+    // dans la conversation : ou en est la mission (les donnees enregistrees), ecrit par le LOGICIEL
+    Message a;
+    a.id = "m" + std::to_string(c->messages.size() + 1);
+    a.role = "assistant";
+    a.date = when;
+    a.state = "fini";
+    a.text = "**Mission " + guillemets(m->name) + "** reprise dans cette conversation.\n\n" + mission::summaryOf(*m);
+    a.extra = json::Value::object();
+    a.extra.set("logiciel", std::string("mission"));
+    a.extra.set("mission", id);
+    c->messages.push_back(std::move(a));
+    if (Conversation* moved = touch(*c)) save(*moved);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::openMissionConversation(std::string_view id) {
+    const mission::Mission* m = findMission(id);
+    if (!m) return false;
+    for (const auto& c : conversations_)   // les plus recentes d'abord
+        if (c.id == m->conversation || listed(m->conversations, c.id)) {
+            const std::string cid = c.id;
+            return select(cid);
+        }
+    return false;
+}
+
+mission::Recovery Assistant::inspectMission(std::string_view id) const {
+    const mission::Mission* m = findMission(id);
+    if (!m) return {};
+    const auto doc = host_.document ? host_.document() : nullptr;
+    return mission::inspect(*m, openProjectId(), doc ? &doc->project : nullptr);
+}
+
+int Assistant::messageOfProposal(std::string_view proposalId) const {
+    const Conversation* c = current();
+    if (!c || proposalId.empty()) return -1;
+    for (std::size_t i = 0; i < c->messages.size(); ++i)
+        if (c->messages[i].proposal && c->messages[i].proposal->id == proposalId) return static_cast<int>(i);
+    return -1;
 }
 
 } // namespace app::ai

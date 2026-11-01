@@ -3161,7 +3161,7 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         if (projectLevel(*action) && *action != Operation::Action::Variables && *action != Operation::Action::Type) {
             static const std::set<std::string, std::less<>> reserved = {"action", "nom", "objet", "objets", "elements", "variable", "proprietes", "variables",
                                                                         "membres", "parametres", "generiques", "detecter", "genre", "noms", "dx", "dy",
-                                                                        "code", "copies", "reperes", "vue"};
+                                                                        "code", "copies", "reperes", "vue", "etape"};
             for (const auto& [k, v] : o.members())
                 if (!reserved.count(k) && (v.isString() || v.isNumber() || v.isBool())) {
                     const bool already = std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; });
