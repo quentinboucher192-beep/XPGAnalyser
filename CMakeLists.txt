@@ -726,6 +726,8 @@ if(XPG_BUILD_TESTS)
     # 1.19.0 : le plan d'operations de l'Assistant, le compte rendu, les scenarios de projets complets (A a H).
     xpg_add_test_executable(ai_plan_test tests/ai_plan_test.cpp)
     xpg_target_link_libraries(ai_plan_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_missions_test tests/ai_missions_test.cpp)   # 1.22.0 : le noyau des missions IA
+    xpg_target_link_libraries(ai_missions_test PRIVATE xpg_app)
     # 1.21.0 : la suppression intelligente de l'Assistant (AiDelete) - dependances, strategies, exclusions, un seul Ctrl+Z,
     # la confirmation, la verification d'apres ; supprimer un symbole emporte ses popups (hmiDeleteViewCommand).
     xpg_add_test_executable(ai_delete_test tests/ai_delete_test.cpp)
@@ -930,6 +932,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiapprentissagefichier COMMAND ai_apprentissage_fichier_test)   # 1.17.0 : l'apprentissage dans un fichier (.xia)
     xpg_add_test(NAME aiapprentissage COMMAND ai_apprentissage_test)        # 1.17.0 : l'onglet Apprentissage (modeles, vocabulaire, mesures)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
+    xpg_add_test(NAME aimissions COMMAND ai_missions_test)                   # 1.22.0 : les missions IA (plan, suivi reel, fichier, reprise)
     xpg_add_test(NAME aidelete COMMAND ai_delete_test)                       # 1.21.0 : la suppression intelligente
     xpg_add_test(NAME aisouvenirs COMMAND ai_souvenirs_test)                 # 1.21.0 : la memoire persistante (les souvenirs)
     xpg_add_test(NAME aicontexte COMMAND ai_contexte_test ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium)   # 1.21.0 : le contexte de la discussion
