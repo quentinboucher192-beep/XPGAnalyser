@@ -176,6 +176,9 @@ public:
     [[nodiscard]] std::shared_ptr<const sheets::Workbook> workbookOf(const std::string& attachmentId) const;
     // La piece (de la conversation ouverte, ou en attente d'envoi) ; nul : introuvable.
     [[nodiscard]] const Attachment* attachmentById(const std::string& attachmentId) const;
+    // 1.21.2 : un modele de fichier enregistre (cree ou mis a jour) : un message de l'Assistant dans la conversation ouverte
+    // (une nouvelle s'il n'y en a pas), le modele en bloc de code JSON. Faux : rien n'a ete ajoute.
+    bool postFileModel(const sheets::FileModel& m, bool created);
     // LE CHOIX de la fenetre << Modele... >> (une correspondance, un modele existant) : garde avec la piece et enregistre ;
     // un modele choisi compte une utilisation. clear : revenir a la reconnaissance de l'analyse.
     bool setWorkbookChoice(const std::string& attachmentId, const sheets::Choice& choice, std::string* why = nullptr);

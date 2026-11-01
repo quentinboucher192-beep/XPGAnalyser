@@ -496,11 +496,15 @@ bool AiFileModelDialog::saveAsModel(const std::string& name) {
         say("Pas enregistr\xC3\xA9 : " + why + ".", false);
         return false;
     }
+    // 1.21.2 : cree ou mis a jour (meme nom, memes intitules : le meme identifiant) - dit dans la conversation, le modele en
+    // bloc de code
+    const bool created = std::none_of(models_.begin(), models_.end(), [&](const sheets::FileModel& x) { return x.id == m.id; });
     modelId_ = m.id;
     modelName_ = m.name;
     modelLayout_ = layout_;
     models_ = sheets::loadModels(true);
     (void)use();
+    (void)assistant_.postFileModel(m, created);
     say("Mod\xC3\xA8le " + guill(m.name) + " enregistr\xC3\xA9 dans la m\xC3\xA9moire de l'IA : un classeur aux m\xC3\xAAmes intitul\xC3\xA9s sera lu directement.", true);
     if (sayOut_) sayOut_("Assistant IA : mod\xC3\xA8le de fichier " + guill(m.name) + " enregistr\xC3\xA9 (" + sheets::genreLabel(layout_.genre) + ").");
     return true;

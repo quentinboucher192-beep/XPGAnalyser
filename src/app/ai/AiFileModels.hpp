@@ -87,6 +87,9 @@ bool removeModel(std::string_view id, std::string* why = nullptr);
 bool noteUse(std::string_view id);
 // Le texte lisible d'un modele (le "contenu" de sa connaissance : ce que les fournisseurs recoivent).
 [[nodiscard]] std::string describe(const FileModel& m);
+// 1.21.2 : le message de l'Assistant quand un modele est enregistre (cree ou mis a jour) : ce qu'il est, ou il vit, et le
+// modele lui-meme en bloc de code JSON (copiable : la fenetre de la conversation a son bouton Copier).
+[[nodiscard]] std::string chatText(const FileModel& m, bool created);
 // "repere = A (Rep\xC3\xA8re), designation = B..." : la correspondance en une ligne.
 [[nodiscard]] std::string mappingText(const Layout& L);
 

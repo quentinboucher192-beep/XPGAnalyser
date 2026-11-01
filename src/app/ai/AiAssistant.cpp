@@ -867,6 +867,25 @@ std::shared_ptr<const sheets::Workbook> Assistant::workbookOf(const std::string&
     return nullptr;
 }
 
+bool Assistant::postFileModel(const sheets::FileModel& m, bool created) {
+    if (!cur()) newConversation();
+    Conversation* c = cur();
+    if (!c) return false;
+    Message a;
+    a.id = "m" + std::to_string(c->messages.size() + 1);
+    a.role = "assistant";
+    a.date = isoDate(now());
+    a.text = sheets::chatText(m, created);
+    a.state = "fini";
+    // ecrit par le LOGICIEL, pas par le modele : jamais renvoye au fournisseur comme une de ses reponses
+    a.extra = json::Value::object();
+    a.extra.set("logiciel", std::string("modele-fichier"));
+    c->messages.push_back(std::move(a));
+    if (Conversation* moved = touch(*c)) save(*moved);
+    ++revision_;
+    return true;
+}
+
 const Attachment* Assistant::attachmentById(const std::string& attachmentId) const {
     for (const auto& p : pending_)
         if (p.attachment.id == attachmentId) return &p.attachment;
@@ -1550,8 +1569,10 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
                 pendingId.clear();
             }
         } else {
-            // Une erreur du logiciel n'est pas un tour du modele ; un arret sans texte non plus.
+            // Une erreur du logiciel n'est pas un tour du modele ; un arret sans texte non plus ; 1.21.2 : un message ecrit
+            // par le logiciel (un modele de fichier enregistre) non plus.
             if (m.state == "erreur") continue;
+            if (m.extra.isObject() && m.extra.find("logiciel") != nullptr) continue;
             if (m.state == "arrete" && m.text == kStoppedEmpty) continue;
             t.role = ProviderTurn::Role::Assistant;
             t.text = m.text;

@@ -457,6 +457,24 @@ std::string mappingText(const Layout& L) {
     return out;
 }
 
+std::string chatText(const FileModel& m, bool created) {
+    json::Value o = json::Value::object();
+    o.set("nom", m.name);
+    o.set("id", m.id);
+    o.set("format", kModelFormat);
+    o.set("mise", layoutToJson(m.layout));
+    json::Value sig = json::Value::array();
+    for (const auto& x : m.signature) sig.push(x);
+    o.set("signature", std::move(sig));
+    std::string s = std::string(created ? "**Mod\xC3\xA8le de fichier enregistr\xC3\xA9**" : "**Mod\xC3\xA8le de fichier mis \xC3\xA0 jour**") + " : " + guill(m.name) + " \xE2\x80\x94 "
+                    + genreLabel(m.layout.genre) + ", feuille " + guill(m.layout.sheet) + ", en-t\xC3\xAA" "te ligne " + std::to_string(m.layout.headerRow + 1) + ".\n\n";
+    s += "Colonnes : " + mappingText(m.layout) + ".\n\n";
+    s += "Il est gard\xC3\xA9 dans la m\xC3\xA9moire de l'IA (M\xC3\xA9moire et apprentissage \xE2\x80\xBA Apprentissage \xE2\x80\xBA Mod\xC3\xA8les de fichiers), "
+         "partag\xC3\xA9 avec toutes les IA et emport\xC3\xA9 par l'export .xia : un classeur aux m\xC3\xAAmes intitul\xC3\xA9s sera lu directement, sans analyse.\n\n";
+    s += "```json\n" + json::write(o, true) + "\n```";
+    return s;
+}
+
 std::string describe(const FileModel& m) {
     const Layout& L = m.layout;
     std::string s = "Mod\xC3\xA8le de fichier " + guill(m.name) + " : " + genreLabel(L.genre) + ".\n";

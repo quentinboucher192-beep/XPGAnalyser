@@ -757,6 +757,22 @@ void testAssistant() {
     check(d.setColumn("sens", -1) && !d.layout().has("sens") && d.setColumn("sens", 4) && d.layout().colOf("sens") == 4, "un role, sa colonne");
     check(d.setHeaderLine(2) && d.layout().has("repere"), "la ligne d'en-tete");
     check(d.saveAsModel("Reports essai") && !d.modelId().empty(), "enregistrer comme modele : " + d.message());
+    // 1.21.2 : le modele enregistre est dit dans la conversation, en bloc de code JSON - jamais renvoye au modele
+    {
+        const auto* cv = a.current();
+        const ai::Message* said = cv && !cv->messages.empty() ? &cv->messages.back() : nullptr;
+        check(said && said->role == "assistant" && has(said->text, "Mod\xC3\xA8le de fichier enregistr\xC3\xA9") && has(said->text, "Reports essai")
+                  && has(said->text, "```json") && has(said->text, "\"signature\"") && has(said->text, "\"colonnes\""),
+              "la conversation montre le modele enregistre, en bloc de code JSON");
+        check(d.saveAsModel("Reports essai") && cv && has(cv->messages.back().text, "Mod\xC3\xA8le de fichier mis \xC3\xA0 jour"),
+              "enregistre de nouveau : << mis a jour >>");
+        if (cv) {
+            const ai::ProviderRequest rq = a.requestFor(*cv, cv->messages.size());
+            bool leaked = false;
+            for (const auto& turn : rq.turns) leaked = leaked || has(turn.text, "```json");
+            check(!leaked, "ce message du logiciel ne part pas chez le fournisseur");
+        }
+    }
     const ai::Attachment* att = a.attachmentById(id);
     check(att && sh::choiceOf(*att) && sh::choiceOf(*att)->modelName == "Reports essai", "le choix garde avec la piece (le modele)");
     check(d.applyModel("Reports essai") && d.messageOk(), "choisir un modele existant : il est cherche dans ce classeur");
