@@ -14633,8 +14633,8 @@ void v19_finitions_interface() {
         };
         const auto* nom = rowOf("Nom");
         const auto* mot = rowOf("Moteur");
-        check(nom && nom->value == "Pompe 3" && nom->expression.empty() && mot && mot->expression == "M1",
-              "un texte se montre sans apostrophes ni fx ; une variable est une formule (=M1)");
+        check(nom && nom->value == "\"Pompe 3\"" && nom->expression.empty() && mot && mot->expression == "M1",
+              "un texte se montre entre guillemets (1.22.4), sans fx ; une variable est une formule (=M1)");
         check(nom && nom->commit && nom->commit("Pompe 4") && sent["Nom"] == "'Pompe 4'", "Pompe 4 tape : 'Pompe 4' (" + sent["Nom"] + ")");
         check(nom && nom->commit("Pompe 3") && sent["Nom"] == "'Pompe 3'", "une saisie inchangee garde ce qui etait ecrit");
         if (const auto* seuil = rowOf("Seuil"))
@@ -22304,7 +22304,7 @@ void expressions111() {
           "une couleur sans apostrophes ne se lit pas");
     check(!hmi::Expression::compile("Pompe_Marche && !V[0].Defaut").valid(), "&& et ! ne se lisent pas");
     check(!hmi::Expression::compile("Pression * 1,05").valid(), "la virgule decimale ne se lit pas");
-    check(!hmi::Expression::compile("\"En marche\"").valid(), "des guillemets ne se lisent pas");
+    check(hmi::Expression::compile("\"En marche\"").valid(), "1.22.4 : des guillemets se lisent (un texte, comme 'En marche')");
     // Une case d'expression lit un litteral d'enumeration (le dialecte IHM, corrige en 1.11 :
     // avant, "#" etait un caractere inattendu) ; les litteraux types se lisent toujours.
     check(hmi::Expression::compile("Mode = T_MODE#Auto").valid(), "une expression lit Mode = T_MODE#Auto");
@@ -25774,7 +25774,7 @@ void symParametres1112() {
               "la section : une ligne par param\xC3\xA8tre, dans l'ordre du symbole, son type au libell\xC3\xA9");
         const auto* n = find(cats, nameRow);
         const auto* val = find(cats, valueRow);
-        check(n && val && n->value == "Voiture" && val->value == "50", "les positionnels anciens se relisent : Voiture, 50");
+        check(n && val && n->value == "\"Voiture\"" && val->value == "50", "les positionnels anciens se relisent : \"Voiture\", 50");
         check(!find(cats, "Arguments") && !find(cats, "Param\xC3\xA8tres du symbole") && find(cats, "Instances de ce symbole")
                   && find(cats, "Instances de ce symbole")->value == "1",
               "plus de champ Arguments ni de r\xC3\xA9sum\xC3\xA9 ; Instances de ce symbole reste (1)");
@@ -25800,7 +25800,7 @@ void symParametres1112() {
         const auto cats = app::hmiPropertyCategories(view, {inst}, nullptr, commits, nullptr, &p);
         const auto* n = find(cats, nameRow);
         const auto* val = find(cats, valueRow);
-        check(n && n->value.empty() && n->placeholder.find("Sans nom \xC2\xB7 valeur par d\xC3\xA9" "faut") == 0 && val && val->value == "Mesures"
+        check(n && n->value.empty() && n->placeholder.find("\"Sans nom\" \xC2\xB7 valeur par d\xC3\xA9" "faut") == 0 && val && val->value == "Mesures"
                   && val->placeholder.find("valeur par d\xC3\xA9" "faut") == std::string::npos,
               "Name vide : Sans nom \xC2\xB7 valeur par d\xC3\xA9" "faut en gris (1.12.19 : l'invite de partout) ; Value : Mesures ("
                   + (n ? n->placeholder : std::string("?")) + ")");
@@ -28031,7 +28031,7 @@ void symParametresReperes1114() {
         const bool ok = n.commit && n.commit("$Nom$");
         check(ok && last == "Name := '$Nom$'; Value := $UINTS$", "$Nom$ sans fx : la constante '$Nom$' (" + last + ")");
         n = rowOf(nameRow);
-        check(n.value == "$Nom$" && n.expression.empty() && ui::exprfield::hasMarker(n), "Name se relit $Nom$, avec son rep\xC3\xA8re");
+        check(n.value == "\"$Nom$\"" && n.expression.empty() && ui::exprfield::hasMarker(n), "Name se relit \"$Nom$\", avec son rep\xC3\xA8re");
         check(n.legend && n.legend->style == S::Markers, "Name : le carr\xC3\xA9 $ (un texte avec rep\xC3\xA8re)");
     }
     // Dupliquer voit les deux reperes de l'instance : UINTS (une variable) et Nom (un texte).
@@ -28114,8 +28114,8 @@ void symParametres1113() {
               "=UINTS : la variable (" + std::get<1>(calls.back()) + ")");
         n = rowOf(nameRow);
         val = rowOf(valueRow);
-        check(n.value == "Voiture" && n.expression.empty() && n.legend && n.legend->text == "C",
-              "Name se relit Voiture, sans fx ni apostrophes ; son carre : C (" + n.value + ")");
+        check(n.value == "\"Voiture\"" && n.expression.empty() && n.legend && n.legend->text == "C",
+              "Name se relit \"Voiture\" (1.22.4 : entre guillemets), sans fx ; son carre : C (" + n.value + ")");
         check(val.expression == "UINTS" && val.exprError.empty() && val.legend && val.legend->text == "I",
               "Value garde son fx (=UINTS), sans erreur : UINTS est un ARRAY[0..9] OF UINT ; son carre : I (" + val.exprError + ")");
         check(ui::exprfield::editText(val) == "=UINTS", "rouvrir la case : =UINTS (la pastille fx pleine)");
@@ -28131,8 +28131,8 @@ void symParametres1113() {
     {
         view.object(inst)->set("params", "Name := 'UINTS'; Value := UINTS");
         auto n = rowOf(nameRow);
-        check(n.value == "UINTS" && n.expression.empty(), "la constante 'UINTS' se montre UINTS, sans fx");
-        const bool same = n.commit && n.commit("UINTS");
+        check(n.value == "\"UINTS\"" && n.expression.empty(), "la constante 'UINTS' se montre \"UINTS\", sans fx");
+        const bool same = n.commit && n.commit("\"UINTS\"");
         check(same && std::get<1>(calls.back()) == "Name := 'UINTS'; Value := UINTS",
               "la meme saisie : la constante reste 'UINTS' (" + std::get<1>(calls.back()) + ")");
     }
@@ -28164,7 +28164,7 @@ void symParametres1113() {
         // Une ancienne saisie sans apostrophes (1.11.2) se relit comme une constante, sans fx.
         view.object(inst)->set("params", "Name := Voiture; Value := UINTS");
         const auto n = rowOf(nameRow);
-        check(n.value == "Voiture" && n.expression.empty(), "Name := Voiture (1.11.2) : la constante Voiture, sans fx");
+        check(n.value == "\"Voiture\"" && n.expression.empty(), "Name := Voiture (1.11.2) : la constante \"Voiture\", sans fx");
     }
     // Les noms de l'automate (setPlcNames) : un argument qui en est un reste la variable.
     {

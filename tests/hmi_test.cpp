@@ -583,7 +583,7 @@ void expressions() {
         text("'Pompe ' + Nom + \" : \" + TO_STRING(Etat)", "Pompe P101 : 5");
         text("(i + 1).ToString()", "4");
         text("\"dit $\"oui$\"\"", "dit \"oui\"");
-        text("\"Prix 5$\"", "Prix 5$");
+        text("\"Prix 5$$\"", "Prix 5$");   // $$ : un dollar (un $ seul avant le guillemet l echapperait)
     }
 
     auto bad = Expression::compile("Etat := 3");
