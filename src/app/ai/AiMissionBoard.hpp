@@ -21,7 +21,13 @@
 //                       les blocages ;
 //    le plan d'action   un tableau : numero, etape, etat colore, details,
 //                       dependances, progression (les operations reellement
-//                       appliquees de l'etape) ;
+//                       appliquees de l'etape) ; 1.22.1 : son pourcentage
+//                       (mission::stepProgressOf, sa regle en infobulle), ce
+//                       qu'elle fait maintenant (mission::activityOf : << L'IA
+//                       prepare la proposition P2... (depuis 0:42) >>...) ; un
+//                       clic deplie son JOURNAL (mission::stepJournal : ses
+//                       propositions et leur sort, les operations appliquees,
+//                       les erreurs, les decisions, avec l'heure) ;
 //    les propositions   P1, P2... : leurs nombres (operations, creations,
 //                       modifications, reutilisations), leurs etapes, leur etat,
 //                       Previsualiser / Verifier / Appliquer (par la conversation
@@ -32,8 +38,14 @@
 //                       reste a verifier) ;
 //    l'historique       la chronologie des evenements (le plus recent d'abord).
 //
+//  1.22.1 : l'en-tete dit aussi << En ce moment >> (l'etape du moment, son
+//  pourcentage, ce qu'elle fait) ; la page se refait chaque seconde tant que
+//  l'IA repond pour la mission (le temps ecoule), ou a chaque pour-cent d'une
+//  application de fond - jamais a chaque image.
+//
 //  L'ECRAN DE REPRISE (Mode::Resume) : le dernier etat sauvegarde, les etapes
-//  terminees / en cours / restantes, les dernieres operations appliquees, la
+//  terminees / en cours / restantes (1.22.1 : ou en est chacune, son
+//  pourcentage et ce qu'elle fait), les dernieres operations appliquees, la
 //  coherence du projet (Assistant::inspectMission : le meme, modifie - la liste
 //  des changements -, introuvable), la prochaine action. << Reprendre la
 //  mission >> (resumeMission) ; le projet a change : << Actualiser le contexte >>
@@ -111,6 +123,27 @@ struct Next {
 // en tout ; {0, 0} : aucune operation encore.
 [[nodiscard]] std::pair<int, int> stepOps(const mission::Mission&, const mission::Step&);
 
+// 1.22.1 : CE QUE FAIT UNE ETAPE, EN DIRECT. Le moment d'une mission lu dans l'Assistant (sans rien changer) : l'IA repond-
+// elle a son appel (Mission::pending, la conversation qui ecrit), depuis combien de temps (l'horloge de AiStore : now) ;
+// une de ses propositions s'applique-t-elle sur un fil de fond (son avancement) ; l'audit final tourne-t-il.
+[[nodiscard]] mission::Live liveOf(const Assistant&, const mission::Mission&);
+// La cle du direct : change chaque seconde tant que l'IA repond pour la mission, a chaque pour-cent de son application de
+// fond ; 0 si rien ne travaille. Les ecrans se refont quand elle change - jamais a chaque image.
+[[nodiscard]] std::int64_t liveKey(const mission::Live&) noexcept;
+[[nodiscard]] Tone activityTone(mission::Activity) noexcept;
+[[nodiscard]] Tone journalTone(std::string_view kind) noexcept;
+// LE MOMENT d'une mission en une ligne (la bande, la liste, l'en-tete du tableau de bord) : l'etape du moment
+// (mission::currentStep), sa progression et son activite ; ou l'activite de la mission elle-meme quand aucune etape ne la
+// porte (le plan ou l'actualisation que l'IA prepare, l'audit final, un appel interrompu). Vide : rien en cours.
+struct Moment {
+    std::string            step, title;   // "S4", son titre (vides : la mission elle-meme)
+    mission::StepProgress  progress;
+    mission::StepActivity  activity;
+    [[nodiscard]] bool        empty() const noexcept { return activity.text.empty(); }
+    [[nodiscard]] std::string line() const;   // "S4 \xC2\xB7 40 % \xE2\x80\x94 P2 : 12 op\xC3\xA9rations \xC3\xA0 valider..." (l'activite seule sans etape)
+};
+[[nodiscard]] Moment momentOf(const mission::Mission&, const mission::Live&);
+
 // Le texte en lignes, au mot, a cette largeur (`maxLines` : 0, toutes ; sinon la derniere finit par ...).
 [[nodiscard]] std::vector<std::string> wrap(const std::string& text, gfx::FontId, float width, std::size_t maxLines = 0);
 // Coupe pour tenir dans `width` (finit par ...), jamais au milieu d'un caractere.
@@ -174,6 +207,12 @@ public:
     // Le cadre d'une section ("entete", "progression", "objectif", "prochaine", "plan", "propositions", "suite",
     // "rapport", "historique", "reprise"), dans la page (le defilement compris) ; vide : absente.
     [[nodiscard]] gfx::Rect sectionRect(std::string_view key) const;
+    // 1.22.1 : le JOURNAL d'une etape (un clic sur sa ligne du plan le deplie, un autre le replie) ; la ligne d'une etape
+    // dans la page (le defilement compris ; vide : absente).
+    bool                    toggleStep(const std::string& stepId);
+    [[nodiscard]] bool      stepOpen(std::string_view stepId) const { return stepsOpen_.count(std::string(stepId)) > 0; }
+    [[nodiscard]] gfx::Rect stepRect(std::string_view stepId) const;
+    [[nodiscard]] const mission::Live& live() const noexcept { return live_; }
     [[nodiscard]] float     scrollOffset() const noexcept { return scroll_; }
     [[nodiscard]] float     contentHeight() const noexcept { return content_; }
     void                    scrollTo(float offset);
@@ -240,6 +279,10 @@ private:
     bool                                requestOpen_{false};    // la demande initiale en entier
     bool                                historyAll_{false};     // tout l'historique
     std::set<std::string>               opsOpen_;               // les propositions dont les operations sont depliees
+    std::set<std::string>               stepsOpen_;             // 1.22.1 : les etapes dont le journal est deplie
+    std::map<std::string, gfx::Rect>    stepRows_;              // 1.22.1 : la ligne de chaque etape (dans la page)
+    mission::Live                       live_;                  // 1.22.1 : le moment (l'appel a l'IA, l'application de fond)
+    std::int64_t                        liveKey_{0};
     std::string                         pendingSection_;        // a mettre en vue apres la prochaine mise en page
     std::map<std::string, float>        anchors_;               // une proposition -> le haut de sa carte (dans la page)
     ui::EdgeScrollBar                   bar_;

@@ -715,6 +715,323 @@ void history() {
           "400 evenements au plus, le premier (la creation) garde");
 }
 
+// ==== 1.22.1 : CE QUE FAIT UNE ETAPE (sa progression, son activite du moment, son journal) ===============================
+std::vector<std::string> texts(const std::vector<mi::JournalLine>& j) {
+    std::vector<std::string> out;
+    for (const auto& l : j) out.push_back(l.text);
+    return out;
+}
+
+// Un compte rendu reel simule : E1 appliquee, E2 en echec (l'erreur exacte) - rien n'est restaure.
+void applyHalf(Fixture& f, mi::Mission& m, const std::string& id) {
+    plan::Plan pl;
+    plan::Step a;
+    a.id = "E1";
+    a.op = 0;
+    a.title = "Cr\xC3\xA9" "er le type T_PompeA";
+    a.state = plan::State::Applied;
+    plan::Step b;
+    b.id = "E2";
+    b.op = 1;
+    b.title = "Cr\xC3\xA9" "er le type T_PompeB";
+    b.state = plan::State::Failed;
+    b.errors = {"un type du m\xC3\xAAme nom existe"};
+    pl.steps = {a, b};
+    plan::Report rep;
+    rep.planned = 2;
+    rep.applied = 1;
+    rep.failed = 1;
+    rep.failures = {"E2 Cr\xC3\xA9" "er le type T_PompeB : un type du m\xC3\xAAme nom existe"};
+    mi::onApplied(m, id, pl, rep, f.doc->project, kNow);
+}
+
+void stepProgress() {
+    std::printf("1.22.1 : la progression de chaque etape\n");
+    Fixture f;
+    mi::Mission m = stationOn(f);
+    // 0 % : rien de propose encore, l'estimation du plan
+    mi::StepProgress sp = mi::stepProgressOf(m, *m.step("S5"));
+    check(sp.percent == 0 && sp.estimated && sp.planned == 3 && sp.counted() && sp.text() == "0 %" && has(sp.detail(), "estimation"),
+          "S5 : 0 %, l'estimation du plan (" + sp.detail() + ")");
+    // une proposition de deux operations pour S1 : generee (0 / 2), puis appliquee a moitie (une operation en echec)
+    ai::Proposal p = f.proposal("op1", {type("T_PompeA", {{"Marche", "BOOL", ""}}, "S1"), type("T_PompeB", {{"Marche", "BOOL", ""}}, "S1")});
+    mi::onGenerated(m, p, "c1", "m2", {"S1"}, kNow);
+    sp = mi::stepProgressOf(m, *m.step("S1"));
+    check(sp.percent == 0 && !sp.estimated && sp.planned == 2 && sp.toValidate == 2, "P1 generee : 0 / 2, deux a valider (" + sp.detail() + ")");
+    applyHalf(f, m, "op1");
+    check(m.step("S1")->state == S::Error, "S1 en erreur (une operation en echec)");
+    sp = mi::stepProgressOf(m, *m.step("S1"));
+    check(sp.applied == 1 && sp.failed == 1 && sp.planned == 2 && sp.percent == 50 && sp.text() == "50 %" && sp.frac() == 0.5,
+          "PARTIEL : 1 / 2 appliquee = 50 % (" + sp.detail() + ")");
+    check(has(sp.detail(), "1 / 2 op\xC3\xA9rations appliqu\xC3\xA9" "es") && has(sp.detail(), "1 en \xC3\xA9" "chec"), "le detail : " + sp.detail());
+    // la correction proposee reprend l'operation en echec : le pourcentage ne recule pas
+    ai::Proposal fix = f.proposal("op2", {type("T_PompeC", {{"Marche", "BOOL", ""}}, "S1")});
+    mi::onGenerated(m, fix, "c1", "m4", {"S1"}, kNow);
+    sp = mi::stepProgressOf(m, *m.step("S1"));
+    check(sp.applied == 1 && sp.failed == 0 && sp.toValidate == 1 && sp.planned == 2 && sp.percent == 50,
+          "la correction proposee : l'echec repris, toujours 50 % (" + sp.detail() + ")");
+    // une proposition refusee ne compte plus
+    mi::onDropped(m, "op2", "refusee", "pas maintenant", kNow);
+    sp = mi::stepProgressOf(m, *m.step("S1"));
+    check(sp.failed == 1 && sp.toValidate == 0 && sp.planned == 2 && sp.percent == 50, "refusee : elle ne compte plus, l'echec revient (" + sp.detail() + ")");
+    // 100 % : la correction appliquee, l'etape terminee (verifiee dans le projet)
+    std::string why;
+    ai::Proposal fix2 = f.proposal("op3", {type("T_PompeC", {{"Marche", "BOOL", ""}}, "S1")});
+    check(f.run(m, fix2, {"S1"}, &why), "la correction appliquee (" + why + ")");
+    sp = mi::stepProgressOf(m, *m.step("S1"));
+    check(m.step("S1")->state == S::Done && sp.percent == 100 && sp.text() == "100 %" && sp.applied == 2 && sp.failed == 0,
+          "TERMINEE : 100 % (" + sp.detail() + ")");
+    // jamais 100 % sans etre terminee (le projet a perdu ce qu'elle avait cree : de nouveau prete)
+    m.step("S1")->state = S::Ready;
+    check(mi::stepProgressOf(m, *m.step("S1")).percent == 99, "toutes ses operations appliquees mais pas terminee : 99 %");
+    m.step("S1")->state = S::Done;
+    // IGNOREE : pas de pourcentage, l'etat le dit
+    mi::PlanEdit e;
+    e.kind = mi::PlanEdit::Kind::Skip;
+    e.step = "S4";
+    check(mi::editPlan(m, e, kNow, &why), "S4 ignoree");
+    sp = mi::stepProgressOf(m, *m.step("S4"));
+    check(sp.percent == -1 && !sp.counted() && sp.text() == "\xE2\x80\x94" && sp.frac() == 0.0, "ignoree : pas de pourcentage");
+    check(has(mi::activityOf(m, *m.step("S4")).text, "Ignor\xC3\xA9" "e par l'utilisateur"), "ignoree : l'etat le dit");
+    // la regle dite a l'utilisateur
+    check(has(mi::progressRule(), "Par \xC3\xA9tape") && has(mi::stepProgressRule(), "99 %") && has(mi::stepProgressRule(), "100 %"),
+          "la regle par etape est dite (progressRule)");
+}
+
+void stepActivities() {
+    std::printf("1.22.1 : ce que fait chaque etape, en une ligne\n");
+    Fixture f;
+    mi::Mission m = stationOn(f);
+    using K = mi::Activity;
+    // prete, en attente d'une dependance
+    auto a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::Idle && a.text == "Pr\xC3\xAAte : \xC2\xAB Proposer la suite \xC2\xBB la demande \xC3\xA0 l'IA.", "prete : " + a.text);
+    a = mi::activityOf(m, *m.step("S4"));
+    check(a.kind == K::Waiting && a.text == "Attend S2 (d\xC3\xA9pendance)", "en attente : " + a.text);
+    a = mi::activityOf(m, *m.step("S2"));
+    check(a.text == "Attend S1, S3 (d\xC3\xA9pendances)", "deux dependances (dont l'implicite) : " + a.text);
+    // L'IA PREPARE LA PROPOSITION (l'appel ecrit avant de partir, la reponse en cours)
+    m.pending = {true, "proposition", "c1", kNow, {"S1", "S3"}};
+    check(mi::setStepState(m, "S1", S::Running, kNow) && mi::setStepState(m, "S3", S::Running, kNow), "S1, S3 en cours");
+    mi::Live lv;
+    lv.calling = true;
+    lv.elapsed = 42;
+    a = mi::activityOf(m, *m.step("S1"), lv);
+    check(a.kind == K::Working && a.live && a.text == "L'IA pr\xC3\xA9pare la proposition P1\xE2\x80\xA6 (depuis 0:42)", "en direct : " + a.text);
+    check(mi::currentStep(m, lv) == m.step("S1"), "l'etape du moment : S1 (l'IA travaille pour elle)");
+    check(mi::missionActivity(m, lv) == "L'IA pr\xC3\xA9pare la proposition P1 (S1, S3)\xE2\x80\xA6 (depuis 0:42)", "la mission : " + mi::missionActivity(m, lv));
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::Blocked && !a.live && has(a.text, "interrompu"), "un appel en attente sans reponse en cours : interrompu (" + a.text + ")");
+    // l'appel fini sans proposition : dit dans l'historique de l'etape (1.22.1)
+    check(mi::setStepState(m, "S3", S::Ready, kNow, "Appel interrompu : la r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e"), "S3 de nouveau prete");
+    check(m.history.back().kind == "etape" && m.history.back().step == "S3" && has(m.history.back().text, "Appel interrompu"),
+          "en cours -> prete : l'historique le dit (" + m.history.back().text + ")");
+    m.pending = {};
+    // P1 GENEREE : a valider ; VERIFIEE ; en cours d'APPLICATION de fond
+    ai::Proposal p = f.proposal("op1", {type("T_PompeA", {{"Marche", "BOOL", ""}}, "S1"), type("T_PompeB", {{"Marche", "BOOL", ""}}, "S1")});
+    mi::onGenerated(m, p, "c1", "m2", {"S1"}, kNow);
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::ToValidate && a.proposal == "op1" && a.text == "P1 : 2 op\xC3\xA9rations \xC3\xA0 valider \xE2\x80\x94 Pr\xC3\xA9visualiser puis Appliquer",
+          "a valider : " + a.text);
+    check(mi::currentStep(m) == m.step("S1"), "l'etape du moment : celle qui attend une decision");
+    mi::onChecked(m, "op1", ai::Check{}, kNow);
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.text == "P1 v\xC3\xA9rifi\xC3\xA9" "e : 2 op\xC3\xA9rations pr\xC3\xAAtes \xE2\x80\x94 Appliquer", "verifiee : " + a.text);
+    lv = {};
+    lv.applying = "op1";
+    lv.applyPercent = 45;
+    a = mi::activityOf(m, *m.step("S1"), lv);
+    check(a.kind == K::Working && a.live && a.text == "Application de P1\xE2\x80\xA6 45 %", "application de fond : " + a.text);
+    check(mi::currentStep(m, lv) == m.step("S1"), "l'etape du moment : celle qui s'applique");
+    // les erreurs de validation
+    ai::Check bad;
+    bad.errors = {"La variable Variable_Inventee est introuvable."};
+    mi::onChecked(m, "op1", bad, kNow);
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::Blocked && a.text == "P1 : 1 erreur \xC3\xA0 la v\xC3\xA9rification \xE2\x80\x94 La variable Variable_Inventee est introuvable.",
+          "erreur de validation : " + a.text);
+    // EN ERREUR, BLOQUEE (une application a moitie)
+    applyHalf(f, m, "op1");
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::Error && has(a.text, "En erreur : P1 : E2 Cr\xC3\xA9" "er le type T_PompeB : un type du m\xC3\xAAme nom existe"), "en erreur : " + a.text);
+    a = mi::activityOf(m, *m.step("S2"));
+    check(a.kind == K::Blocked && a.text == "Bloqu\xC3\xA9" "e : d\xC3\xA9pend de S1 (en erreur)", "bloquee : " + a.text);
+    // UNE CORRECTION en direct
+    m.pending = {true, "correction", "c1", kNow, {"S1"}};
+    lv = {};
+    lv.calling = true;
+    lv.elapsed = 3725;
+    a = mi::activityOf(m, *m.step("S1"), lv);
+    check(a.live && a.text == "L'IA pr\xC3\xA9pare une correction (P2)\xE2\x80\xA6 (depuis 1:02:05)", "correction en direct : " + a.text);
+    m.pending = {};
+    // APPLIQUEE, VERIFICATION, A PLANIFIER (des etats que le modele traverse)
+    m.step("S3")->state = S::Applied;
+    check(has(mi::activityOf(m, *m.step("S3")).text, "la v\xC3\xA9rification dans le projet suit"), "appliquee : la verification suit");
+    m.step("S3")->state = S::Verifying;
+    check(mi::activityOf(m, *m.step("S3")).text == "V\xC3\xA9rification sur le projet r\xC3\xA9" "el\xE2\x80\xA6", "verification en cours");
+    m.step("S3")->state = S::ToPlan;
+    check(has(mi::activityOf(m, *m.step("S3")).text, "\xC3\x80 planifier"), "a planifier");
+    m.step("S3")->state = S::Ready;
+    // TERMINEE : combien d'operations, quand
+    std::string why;
+    ai::Proposal fix = f.proposal("op2", {type("T_PompeC", {{"Marche", "BOOL", ""}}, "S1")});
+    check(f.run(m, fix, {"S1"}, &why), "la correction appliquee (" + why + ")");
+    a = mi::activityOf(m, *m.step("S1"));
+    check(a.kind == K::Done && a.text == "Termin\xC3\xA9" "e \xE2\x80\x94 2 op\xC3\xA9rations appliqu\xC3\xA9" "es le 01/11 \xC3\xA0 10:00", "terminee : " + a.text);
+    // EN PAUSE, ANNULEE
+    check(mi::pause(m, kNow, &why), "en pause");
+    check(mi::activityOf(m, *m.step("S3")).text == "Pr\xC3\xAAte \xE2\x80\x94 la mission est en pause : reprends-la d'abord.", "prete, mission en pause");
+    check(has(mi::activityOf(m, *m.step("S4")).text, "Mission en pause \xE2\x80\x94 Attend S2"), "en attente, mission en pause");
+    check(mi::cancel(m, kNow, &why), "annulee");
+    a = mi::activityOf(m, *m.step("S4"));
+    check(a.kind == K::Off && has(a.text, "Annul\xC3\xA9" "e") && mi::stepProgressOf(m, *m.step("S4")).percent == -1, "annulee : pas de pourcentage, l'etat");
+    check(mi::currentStep(m) == nullptr, "annulee : plus d'etape du moment");
+    // LA MISSION ELLE-MEME : le plan en preparation, l'audit final ; le temps ecoule
+    mi::Mission n = mi::make("x", "c1", kNow);
+    n.pending = {true, "plan", "c1", kNow, {}};
+    lv = {};
+    lv.calling = true;
+    lv.elapsed = 42;
+    check(mi::missionActivity(n, lv) == "L'IA analyse le projet et pr\xC3\xA9pare le plan\xE2\x80\xA6 (depuis 0:42)", "le plan : " + mi::missionActivity(n, lv));
+    check(has(mi::missionActivity(n), "interrompu"), "le plan sans reponse en cours : interrompu");
+    n.pending = {};
+    lv = {};
+    lv.auditing = true;
+    check(has(mi::missionActivity(n, lv), "Audit final en cours") && mi::missionActivity(n).empty(), "l'audit final ; rien sinon");
+    check(mi::elapsedText(0) == "0:00" && mi::elapsedText(42) == "0:42" && mi::elapsedText(725) == "12:05" && mi::elapsedText(3725) == "1:02:05",
+          "le temps ecoule : 0:42, 12:05, 1:02:05");
+}
+
+void stepJournals() {
+    std::printf("1.22.1 : le journal d'une etape (apres une application reelle)\n");
+    Fixture f;
+    mi::Mission m = stationOn(f);
+    std::string why;
+    // la demande a l'IA (comme l'Assistant l'ecrit), P1 generee, verifiee, appliquee (une commande, le compte rendu reel)
+    mi::log(m, "proposition", "Proposition demand\xC3\xA9" "e \xC3\xA0 l'IA pour S1, S2 (2 op\xC3\xA9ration(s) estim\xC3\xA9" "e(s)).", kNow);
+    ai::Proposal p1 = f.proposal("op1", {type("T_PompeA", {{"Marche", "BOOL", ""}, {"Defaut", "BOOL", ""}}, "S1"),
+                                         vars({{"Pompe_A", "T_PompeA", "La pompe A", ""}}, "S2")});
+    check(f.run(m, p1, {"S1", "S2"}, &why), "P1 appliquee (" + why + ")");
+    const auto j1 = mi::stepJournal(m, *m.step("S1"));
+    const auto t1 = texts(j1);
+    check(anyHas(t1, "demand\xC3\xA9" "e \xC3\xA0 l'IA pour S1"), "S1 : la demande a l'IA (le texte la cite)");
+    check(anyHas(t1, "P1 \xC2\xAB Essai op1 \xC2\xBB") && anyHas(t1, "v\xC3\xA9rifi\xC3\xA9" "e sur une copie"), "S1 : P1 generee, verifiee");
+    check(anyHas(t1, "\xE2\x9C\x93 Cr\xC3\xA9" "er le type T_PompeA"), "S1 : l'operation appliquee, son libelle lisible (" + joined(t1) + ")");
+    check(!anyHas(t1, "la variable Pompe_A"), "S1 : pas l'operation de S2");
+    check(anyHas(t1, "Termin\xC3\xA9" "e") && anyHas(t1, "P1 appliqu\xC3\xA9" "e"), "S1 : terminee, P1 appliquee");
+    check(std::all_of(j1.begin(), j1.end(), [](const mi::JournalLine& l) { return l.date == kNow; }), "chaque ligne a son heure");
+    check(std::any_of(j1.begin(), j1.end(), [](const mi::JournalLine& l) { return l.kind == "operation" && l.proposal == "op1"; }), "l'operation : son genre, sa proposition");
+    // l'operation apres l'en-tete de son application (le plus ancien d'abord)
+    std::size_t head = 99, opAt = 99;
+    for (std::size_t i = 0; i < j1.size(); ++i) {
+        if (j1[i].kind == "application" && head == 99) head = i;
+        if (j1[i].kind == "operation" && opAt == 99) opAt = i;
+    }
+    check(head < opAt && opAt < j1.size(), "l'operation suit son application");
+    const auto t2 = texts(mi::stepJournal(m, *m.step("S2")));
+    check(anyHas(t2, "\xE2\x9C\x93 Cr\xC3\xA9" "er la variable Pompe_A") && !anyHas(t2, "le type T_PompeA"), "S2 : son operation seulement");
+    check(mi::stepJournal(m, *m.step("S4")).empty() || !anyHas(texts(mi::stepJournal(m, *m.step("S4"))), "\xE2\x9C\x93"), "S4 : aucune operation");
+    // P2 refusee a la verification (S4) : ses erreurs, son refus
+    ai::Proposal bad = f.proposal("op2", {op(A::Alarm, "Defaut_X", {{"condition", "Variable_Inventee"}, {"message", "x"}}, "S4")});
+    check(!f.run(m, bad, {"S4"}, &why), "P2 : refusee a la verification");
+    mi::onDropped(m, "op2", "refusee", "variable inconnue", kNow);
+    const auto t4 = texts(mi::stepJournal(m, *m.step("S4")));
+    check(anyHas(t4, "erreur(s) de validation") && anyHas(t4, "P2 refus\xC3\xA9" "e : variable inconnue"), "S4 : la verification en erreur, le refus (" + joined(t4) + ")");
+    // un appel interrompu (en cours -> prete), puis a la reprise apres une fermeture : dit dans le journal de l'etape
+    m.pending = {true, "proposition", "c1", kNow, {"S3"}};
+    check(mi::setStepState(m, "S3", S::Running, kNow), "S3 en cours");
+    mi::recover(m, {}, &f.doc->project, kNow);
+    const auto t3 = texts(mi::stepJournal(m, *m.step("S3")));
+    check(anyHas(t3, "interrompu (proposition pour S3"), "S3 : l'appel interrompu (la reprise le dit) - " + joined(t3));
+    // une operation en echec : l'erreur exacte ; une decision qui cite l'etape
+    Fixture g;
+    mi::Mission e = stationOn(g);
+    ai::Proposal half = g.proposal("op9", {type("T_PompeA", {{"Marche", "BOOL", ""}}, "S1"), type("T_PompeB", {{"Marche", "BOOL", ""}}, "S1")});
+    mi::onGenerated(e, half, "c1", "m2", {"S1"}, kNow);
+    applyHalf(g, e, "op9");
+    e.decisions.push_back({kNow, "S1 : garder le type de la biblioth\xC3\xA8que ?", "Oui"});
+    const auto te = texts(mi::stepJournal(e, *e.step("S1")));
+    check(anyHas(te, "\xE2\x9C\x93 Cr\xC3\xA9" "er le type T_PompeA") && anyHas(te, "\xC3\x89" "chec : Cr\xC3\xA9" "er le type T_PompeB \xE2\x80\x94 un type du m\xC3\xAAme nom existe"),
+          "l'operation appliquee et celle en echec (l'erreur exacte) - " + joined(te));
+    check(anyHas(te, "En erreur") && anyHas(te, "garder le type de la biblioth\xC3\xA8que ? \xE2\x86\x92 Oui"), "l'erreur de l'etape, la decision qui la cite");
+    check(!anyHas(texts(mi::stepJournal(e, *e.step("S3"))), "garder le type"), "la decision n'est pas dans le journal d'une autre etape");
+    // l'historique borne a perdu la trace de P1 : repris de ce que la mission garde (rien n'est perdu)
+    mi::Mission lost = e;
+    lost.history.clear();
+    const auto tl = texts(mi::stepJournal(lost, *lost.step("S1")));
+    check(anyHas(tl, "P1 \xC2\xAB") && anyHas(tl, "P1 appliqu\xC3\xA9" "e") && anyHas(tl, "\xE2\x9C\x93 Cr\xC3\xA9" "er le type T_PompeA"),
+          "sans historique : la proposition, son application, ses operations (" + joined(tl) + ")");
+}
+
+// Un fichier ecrit par la 1.22.0 : relu sans perte ; la progression, l'activite et le journal de chaque etape s'en deduisent
+// (la 1.22.1 n'ajoute aucun champ au fichier : tout vient de ce que la 1.22.0 gardait).
+void file1220() {
+    std::printf("1.22.1 : un fichier de la 1.22.0\n");
+    const char* text = R"({"format":1,"id":"mission-20261101090000-ab12","nom":"Station","description":"","demande":"Construis la station",
+      "cree":"2026-11-01T09:00:00","modifie":"2026-11-01T12:04:00",
+      "projet":{"id":"projet-A","nom":"Station","chemin":"/projets/Station","empreinte":"e1","empreinte_prise":"2026-11-01T12:04:00","fichiers":{}},
+      "conversation":"c1","conversations":["c1"],"fournisseur":"anthropic","modele":"m","etat":"en_cours","archivee":false,"revision_plan":0,
+      "etapes":[
+        {"id":"S1","titre":"Cr\u00e9er le type","detail":"","categorie":"types","depend_de":[],"implicites":[],"etat":"terminee","obligatoire":true,
+         "operations":1,"produit":[],"propositions":["op1"],"note":"Appliqu\u00e9e par P1","erreur":"","maj":"2026-11-01T12:04:00"},
+        {"id":"S2","titre":"Cr\u00e9er les variables","detail":"","categorie":"variables","depend_de":["S1"],"implicites":[],"etat":"erreur",
+         "obligatoire":true,"operations":2,"produit":[],"propositions":["op1"],"note":"","erreur":"Pompe_B : nom pris","maj":"2026-11-01T12:04:00"},
+        {"id":"S3","titre":"Cr\u00e9er la vue","detail":"","categorie":"vues","depend_de":["S1"],"implicites":[],"etat":"a_valider","obligatoire":true,
+         "operations":4,"produit":[],"propositions":["op2"],"note":"","erreur":"","maj":"2026-11-01T12:10:00"}],
+      "analyse":{"conforme":[],"a_modifier":[],"a_completer":[],"a_creer":[],"impossible":[],"resume":""},
+      "propositions":[
+        {"id":"op1","ordre":1,"conversation":"c1","message":"m2","etapes":["S1","S2"],"titre":"Les types et les variables","etat":"appliquee",
+         "operations":3,"creer":3,"modifier":0,"reutiliser":0,"supprimer":0,"appliquees":2,"echouees":1,"ignorees":0,
+         "cree":"2026-11-01T12:00:00","appliquee_le":"2026-11-01T12:04:00","erreurs":["E3 : nom pris"],
+         "lignes":[{"id":"E1","etape":"S1","titre":"Cr\u00e9er le type T_PompeA","verbe":"creation","etat":"appliquee","cree":["type|T_PompeA|"]},
+                   {"id":"E2","etape":"S2","titre":"Cr\u00e9er la variable Pompe_A","verbe":"creation","etat":"appliquee","cree":["variable|Pompe_A|"]},
+                   {"id":"E3","etape":"S2","titre":"Cr\u00e9er la variable Pompe_B","verbe":"creation","etat":"echouee","cree":[],"erreur":"nom pris"}],
+         "suite":""},
+        {"id":"op2","ordre":2,"conversation":"c1","message":"m4","etapes":["S3"],"titre":"La vue","etat":"generee","operations":2,"creer":2,
+         "modifier":0,"reutiliser":0,"supprimer":0,"appliquees":0,"echouees":0,"ignorees":0,"cree":"2026-11-01T12:10:00","appliquee_le":"",
+         "erreurs":[],"lignes":[{"id":"","etape":"S3","titre":"creer_vue Vue_Station","verbe":"","etat":"a_faire","cree":[]},
+                                {"id":"","etape":"S3","titre":"creer Voyant","verbe":"","etat":"a_faire","cree":[]}],"suite":""}],
+      "historique":[
+        {"date":"2026-11-01T09:00:00","genre":"creation","texte":"Mission cr\u00e9\u00e9e"},
+        {"date":"2026-11-01T12:00:00","genre":"proposition","texte":"P1 \u00ab Les types et les variables \u00bb : 3 op\u00e9ration(s) pour S1, S2.","proposition":"op1"},
+        {"date":"2026-11-01T12:04:00","genre":"etape","texte":"S1 \u00ab Cr\u00e9er le type \u00bb : Termin\u00e9e","etape":"S1"},
+        {"date":"2026-11-01T12:04:00","genre":"etape","texte":"S2 \u00ab Cr\u00e9er les variables \u00bb : En erreur \u2014 P1 : E3 nom pris","etape":"S2"},
+        {"date":"2026-11-01T12:04:00","genre":"application","texte":"P1 appliqu\u00e9e : 2 op\u00e9ration(s) appliqu\u00e9e(s), 1 \u00e9chou\u00e9e(s).","proposition":"op1"},
+        {"date":"2026-11-01T12:10:00","genre":"proposition","texte":"P2 \u00ab La vue \u00bb : 2 op\u00e9ration(s) pour S3.","proposition":"op2"}],
+      "decisions":[],"appel_en_cours":{"actif":false,"objet":"","conversation":"","debut":"","etapes":[]},
+      "coherence":"identique","coherence_texte":"","point_de_reprise":"Apr\u00e8s P1","resume":"En cours","pieces_jointes":[]})";
+    ai::json::Value v;
+    check(ai::json::parse(text, v), "le fichier 1.22.0 se lit");
+    int format = -1;
+    bool readOnly = true;
+    const mi::Mission m = mi::fromJson(v, &format, &readOnly);
+    check(format == 1 && !readOnly && m.format == mi::kFormat && mi::kFormat == 1, "format 1 : le meme (kFormat inchange), pas en lecture seule");
+    check(m.steps.size() == 3 && m.proposals.size() == 2 && m.proposals[0].lines.size() == 3 && m.history.size() == 6, "tout est relu");
+    // la progression de chaque etape
+    check(mi::stepProgressOf(m, *m.step("S1")).percent == 100, "S1 terminee : 100 %");
+    const mi::StepProgress s2 = mi::stepProgressOf(m, *m.step("S2"));
+    check(s2.applied == 1 && s2.failed == 1 && s2.percent == 50, "S2 : 1 / 2 = 50 % (" + s2.detail() + ")");
+    check(mi::stepProgressOf(m, *m.step("S3")).percent == 0 && mi::stepProgressOf(m, *m.step("S3")).toValidate == 2, "S3 : 0 %, 2 a valider");
+    // l'activite de chaque etape
+    check(mi::activityOf(m, *m.step("S1")).text == "Termin\xC3\xA9" "e \xE2\x80\x94 1 op\xC3\xA9ration appliqu\xC3\xA9" "e le 01/11 \xC3\xA0 12:04",
+          "S1 : " + mi::activityOf(m, *m.step("S1")).text);
+    check(mi::activityOf(m, *m.step("S2")).text == "En erreur : Pompe_B : nom pris", "S2 : " + mi::activityOf(m, *m.step("S2")).text);
+    check(mi::activityOf(m, *m.step("S3")).text == "P2 : 2 op\xC3\xA9rations \xC3\xA0 valider \xE2\x80\x94 Pr\xC3\xA9visualiser puis Appliquer",
+          "S3 : " + mi::activityOf(m, *m.step("S3")).text);
+    // le journal de S2
+    const auto t2 = texts(mi::stepJournal(m, *m.step("S2")));
+    check(anyHas(t2, "\xE2\x9C\x93 Cr\xC3\xA9" "er la variable Pompe_A") && anyHas(t2, "\xC3\x89" "chec : Cr\xC3\xA9" "er la variable Pompe_B \xE2\x80\x94 nom pris")
+              && anyHas(t2, "P1 \xC2\xAB Les types") && !anyHas(t2, "le type T_PompeA"),
+          "S2 : P1, son operation appliquee, celle en echec (" + joined(t2) + ")");
+    // sans perte : reecrit puis relu, identique ; rien de nouveau dans le fichier
+    const ai::json::Value once = mi::toJson(m);
+    check(ai::json::write(mi::toJson(mi::fromJson(once))) == ai::json::write(once), "reecrit puis relu : identique");
+    check(once.integer("format") == 1 && once.at("propositions").items().size() == 2 && once.at("historique").items().size() == 6
+              && once.at("etapes").items()[1].str("erreur") == "Pompe_B : nom pris"
+              && once.at("propositions").items()[0].at("lignes").items()[2].str("erreur") == "nom pris",
+          "les champs de la 1.22.0 gardes tels quels");
+}
+
 } // namespace
 
 int main() {
@@ -730,6 +1047,10 @@ int main() {
     interrupted();
     searching();
     history();
+    stepProgress();     // 1.22.1
+    stepActivities();   // 1.22.1
+    stepJournals();     // 1.22.1
+    file1220();         // 1.22.1
     std::printf("ai_missions_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

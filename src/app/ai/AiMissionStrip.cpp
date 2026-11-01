@@ -64,15 +64,28 @@ bool AiMissionStrip::buttonsOnTwoRows(float width) const {
     return aw + buttonWidth(board_->text()) > width - 20.f;
 }
 
+int AiMissionStrip::momentRows(bool roomy) const {
+    if (moment_.empty()) return 0;
+    return moment_.step.empty() || !roomy ? 1 : 2;   // l'etape et son activite sur deux lignes s'il y a la place, sinon une
+}
+
+float AiMissionStrip::openHeight(float width, int rows) const {
+    float h = kHeadH + kBarH + 4.f;
+    h += static_cast<float>(rows) * kRowH;                                        // 1.22.1 : l'etape du moment, ce qu'elle fait
+    h += kRowH;                                                                   // la prochaine action
+    if (!proposals_.empty()) h += kRowH;                                          // les propositions
+    h += static_cast<float>(std::min(problems_.size(), kMaxProblems)) * kRowH;   // les erreurs, les blocages
+    h += 6.f + kBtnH + (buttonsOnTwoRows(width) ? kBtnH + 6.f : 0.f) + 8.f;
+    return h;
+}
+
 float AiMissionStrip::heightFor(float width, float maxH) const {
     if (missionId_.empty()) return 0.f;
     const float closed = kHeadH + kBarH + 4.f;
     float h = closed;
     if (open_) {
-        h += kRowH;                                                                   // la prochaine action
-        if (!proposals_.empty()) h += kRowH;                                          // les propositions
-        h += static_cast<float>(std::min(problems_.size(), kMaxProblems)) * kRowH;   // les erreurs, les blocages
-        h += 6.f + kBtnH + (buttonsOnTwoRows(width) ? kBtnH + 6.f : 0.f) + 8.f;
+        h = openHeight(width, momentRows(true));
+        if (h > maxH) h = openHeight(width, momentRows(false));   // a l'etroit : l'etape et son activite sur une ligne
     }
     return std::min(h, std::max(closed, maxH));
 }
@@ -91,7 +104,8 @@ bool AiMissionStrip::poll() {
     const mission::Mission* m = as.activeMission();
     const std::string id = m ? m->id : std::string{};
     const bool busy = m && panel_.missionBusy(*m);
-    if (id == missionId_ && as.missionsRevision() == seenRev_ && as.generating() == generating_ && busy == busy_) return false;
+    const std::int64_t key = m ? missionui::liveKey(missionui::liveOf(as, *m)) : 0;   // 1.22.1 : le direct, chaque seconde au plus
+    if (id == missionId_ && as.missionsRevision() == seenRev_ && as.generating() == generating_ && busy == busy_ && key == liveKey_) return false;
     refresh();
     return true;
 }
@@ -109,6 +123,8 @@ void AiMissionStrip::refresh() {
         name_.clear();
         progress_ = {};
         next_ = {};
+        moment_ = {};
+        liveKey_ = 0;
         busy_ = resume_ = false;
         action_->setVisibility(ui::Visibility::Collapsed);
         board_->setVisibility(ui::Visibility::Collapsed);
@@ -125,6 +141,11 @@ void AiMissionStrip::refresh() {
     count_ = std::to_string(progress_.done) + "/" + std::to_string(progress_.steps) + " \xC3\xA9tapes \xC2\xB7 " + std::to_string(progress_.percent()) + " %";
     nextText_ = mission::nextAction(*m);
     next_ = missionui::nextOf(*m, busy_);
+    {
+        const mission::Live live = missionui::liveOf(as, *m);   // 1.22.1 : l'etape du moment et ce qu'elle fait
+        liveKey_ = missionui::liveKey(live);
+        moment_ = missionui::momentOf(*m, live);
+    }
     resume_ = missionui::wantsResume(*m, m->coherence, busy_);
     // les propositions de la mission (les quatre dernieres) et leur etat
     {
@@ -194,6 +215,7 @@ gfx::Rect AiMissionStrip::toggleRect() const {
 void AiMissionStrip::layoutOps() {
     const float w = bounds().w;
     laidW_ = w;
+    laidH_ = bounds().h;   // 1.22.1 : l'etape du moment tient sur une ou deux lignes selon la hauteur donnee
     laidRev_ = rev_;
     ops_.clear();
     tipsRel_.clear();
@@ -226,6 +248,41 @@ void AiMissionStrip::layoutOps() {
     tipsRel_.emplace_back(gfx::Rect{0.f, kHeadH, w, kBarH}, progress_.text() + "\n\n" + mission::progressRule());
     if (!open_) return;
     float y = kHeadH + kBarH + 4.f;
+    // 1.22.1 : l'etape du moment (sa progression reelle) et ce qu'elle fait maintenant - sur deux lignes s'il y a la place,
+    // sinon sur une (la petite barre, << S4 . 40 % - ce qu'elle fait >>)
+    if (const int rows = momentRows(bounds().h + 0.5f >= openHeight(w, momentRows(true))); rows == 1 && !moment_.step.empty()) {
+        const Tone actTone = missionui::activityTone(moment_.activity.kind);
+        float tx = 10.f;
+        if (moment_.progress.counted()) {
+            const Tone barTone2 = moment_.activity.kind == mission::Activity::Error ? Tone::Error : moment_.activity.kind == mission::Activity::Done ? Tone::Ok : Tone::Info;
+            put(ops_, Op::Kind::Bar, {tx, y + 5.f, 30.f, 6.f}, {}, kMeta, barTone2, 255, static_cast<float>(moment_.progress.frac()));
+            tx += 36.f;
+        }
+        put(ops_, moment_.activity.live ? Op::Kind::Bold : Op::Kind::Text, {tx, y, 0.f, 0.f}, missionui::elide(moment_.line(), kMeta, w - 10.f - tx), kMeta, actTone);
+        tipsRel_.emplace_back(gfx::Rect{0.f, y, w, kRowH}, moment_.step + " " + moment_.title + " \xE2\x80\x94 " + moment_.progress.text() + " (" + moment_.progress.detail()
+                                                               + ")\n" + moment_.activity.text + "\n\n" + mission::stepProgressRule());
+        y += kRowH;
+    } else if (rows > 0) {
+        const Tone actTone = missionui::activityTone(moment_.activity.kind);
+        if (!moment_.step.empty()) {
+            const std::string pct = moment_.progress.text();
+            const float vw = ui::measureWidth(pct, kMeta) + 4.f, bw = 46.f;
+            const float right = w - 10.f;
+            put(ops_, Op::Kind::Text, {right - vw + 4.f, y, 0.f, 0.f}, pct, kMeta, Tone::Text);
+            if (moment_.progress.counted()) {
+                const Tone barTone2 = moment_.activity.kind == mission::Activity::Error ? Tone::Error : moment_.activity.kind == mission::Activity::Done ? Tone::Ok : Tone::Info;
+                put(ops_, Op::Kind::Bar, {right - vw - bw, y + 5.f, bw, 6.f}, {}, kMeta, barTone2, 255, static_cast<float>(moment_.progress.frac()));
+            }
+            const std::string head = "\xE2\x96\xB8 " + moment_.step + " " + moment_.title;
+            put(ops_, Op::Kind::Bold, {10.f, y, 0.f, 0.f}, missionui::elide(head, kMeta, right - vw - bw - 18.f), kMeta, Tone::Text);
+            tipsRel_.emplace_back(gfx::Rect{0.f, y, w, kRowH}, moment_.step + " " + moment_.title + " \xE2\x80\x94 " + pct + " (" + moment_.progress.detail() + ")\n\n"
+                                                                   + mission::stepProgressRule());
+            y += kRowH;
+        }
+        put(ops_, moment_.activity.live ? Op::Kind::Bold : Op::Kind::Text, {10.f, y, 0.f, 0.f}, missionui::elide(moment_.activity.text, kMeta, w - 20.f), kMeta, actTone);
+        tipsRel_.emplace_back(gfx::Rect{0.f, y, w, kRowH}, moment_.activity.text + (moment_.step.empty() ? std::string{} : "\nSon journal : le tableau de bord (un clic sur sa ligne du plan)."));
+        y += kRowH;
+    }
     const std::string next = "Prochaine : " + nextText_;
     put(ops_, Op::Kind::Text, {10.f, y, 0.f, 0.f}, missionui::elide(next, kMeta, w - 20.f), kMeta, Tone::Text);
     tipsRel_.emplace_back(gfx::Rect{0.f, y, w, kRowH}, next);
@@ -248,7 +305,7 @@ void AiMissionStrip::layoutOps() {
 
 void AiMissionStrip::onLayout() {
     const auto b = bounds();
-    if (std::fabs(b.w - laidW_) > 0.5f || laidRev_ != rev_) layoutOps();
+    if (std::fabs(b.w - laidW_) > 0.5f || std::fabs(b.h - laidH_) > 0.5f || laidRev_ != rev_) layoutOps();
     const bool shown = !missionId_.empty() && open_ && b.h > 0.f;
     const bool hasAction = shown && next_.kind != missionui::Next::Kind::None;
     float x = b.x + 10.f, y = b.y + buttonsY_;
@@ -276,6 +333,10 @@ std::vector<std::string> AiMissionStrip::lines() const {
     out.push_back("Mission IA : " + name_ + " \xE2\x80\x94 " + state_);
     out.push_back(count_);
     if (open_) {
+        if (!moment_.empty()) {
+            if (!moment_.step.empty()) out.push_back(moment_.step + " " + moment_.title + " \xC2\xB7 " + moment_.progress.text());
+            out.push_back(moment_.activity.text);
+        }
         out.push_back("Prochaine : " + nextText_);
         if (!proposals_.empty()) out.push_back(proposals_);
         for (const auto& [t, tone] : problems_) out.push_back(t);

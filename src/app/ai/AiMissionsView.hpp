@@ -13,10 +13,12 @@
 //                 (Assistant::createMission : l'IA analyse le projet et propose
 //                 un plan ; rien n'est modifie) ;
 //    une ligne    le nom, l'etat (sa couleur), le projet, la derniere activite,
-//                 la barre de la progression globale (mission::progressOf), la
-//                 prochaine action, les erreurs ; ses boutons : << Tableau de
-//                 bord >> (au centre) et << Reprendre >> (l'ecran de reprise)
-//                 ou << Pause >>.
+//                 la barre de la progression globale (mission::progressOf),
+//                 1.22.1 : l'etape du moment, sa progression reelle et ce
+//                 qu'elle fait maintenant (la ligne choisie : toutes ses
+//                 etapes), la prochaine action, les erreurs ; ses boutons :
+//                 << Tableau de bord >> (au centre) et << Reprendre >> (l'ecran
+//                 de reprise) ou << Pause >>.
 //
 //  Le clic droit : Ouvrir le tableau de bord, l'ecran de reprise, la
 //  conversation, Proposer la suite, Mettre en pause / Reprendre, Renommer...,
@@ -121,15 +123,28 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent&) override;
 
 private:
+    // 1.22.1 : une etape en une ligne - sa progression reelle (la petite barre) et ce qu'elle fait maintenant.
+    struct StepLine {
+        std::string     text, tip;
+        missionui::Tone tone{missionui::Tone::Muted};
+        double          frac{0.0};
+        bool            bar{false}, live{false};
+    };
     struct Row {
         std::string                 id, name, state, meta, count, next, problems, second, tip;
         missionui::Tone             stateTone{missionui::Tone::Muted}, problemsTone{missionui::Tone::Error};
         double                      frac{0.0};
         bool                        archived{false}, over{false}, paused{false}, canPause{false}, canContinue{false};
         std::string                 continueWhy;
+        StepLine                    moment;          // 1.22.1 : l'etape du moment (missionui::momentOf) ; vide : rien en cours
+        std::vector<StepLine>       steps;           // 1.22.1 : la ligne choisie - toutes ses etapes (les premieres)
+        std::size_t                 moreSteps{0};
         float                       y{0.f}, h{0.f};
     };
     void rebuild();        // relit les missions : les lignes (le filtre, la recherche)
+    void fillSteps(Row& r) const;                   // 1.22.1 : les etapes de la ligne choisie
+    [[nodiscard]] std::size_t extraLines(const Row& r, bool selected) const noexcept;
+    [[nodiscard]] std::int64_t liveKeyAll() const;   // 1.22.1 : le direct de toutes les missions (0 : rien ne travaille)
     void layoutRows();     // leurs hauteurs et leurs places
     void ensureVisible(int row);
     void say(const std::string& text) const;
@@ -141,6 +156,7 @@ private:
     AiPanel&                  panel_;
     std::vector<Row>          rows_;
     std::uint64_t             seen_{0};
+    std::int64_t              liveKey_{0};   // 1.22.1 : le direct (l'appel a l'IA d'une mission, une application de fond)
     bool                      generating_{false};
     Filter                    filter_{Filter::All};
     std::string               query_;

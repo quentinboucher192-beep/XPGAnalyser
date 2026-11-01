@@ -22,6 +22,8 @@
 //      (onApplied : le compte rendu du projet d'avant / d'apres), la verification
 //      des elements crees dans le projet du moment (verifyAgainst) ;
 //    - la progression, calculee et explicable (progressOf) ;
+//    - 1.22.1 : ce que fait CHAQUE ETAPE - sa progression reelle (stepProgressOf), son
+//      activite du moment en une ligne (activityOf), son journal (stepJournal) ;
 //    - le rapport final (finalReport) et les textes donnes a l'IA (contextes).
 //
 //  Le projet reel est toujours la source de verite : une etape n'est << terminee >>
@@ -318,7 +320,73 @@ struct Progress {
     [[nodiscard]] std::string text() const;       // "3 / 9 \xC3\xA9tapes termin\xC3\xA9" "es \xC2\xB7 1 en cours \xC2\xB7 5 en attente \xC2\xB7 38 %"
 };
 [[nodiscard]] Progress progressOf(const Mission&);
-[[nodiscard]] std::string progressRule();   // la regle, en clair (l'infobulle)
+[[nodiscard]] std::string progressRule();   // la regle, en clair (l'infobulle) - 1.22.1 : avec la regle par etape
+
+// ---- 1.22.1 : CE QUE FAIT UNE ETAPE (sa progression, son activite du moment, son journal) ---------------------------
+//  LA REGLE PAR ETAPE (deterministe, dite telle quelle a l'ecran : stepProgressRule) : ses operations APPLIQUEES (le
+//  compte rendu reel, dans une proposition appliquee) sur ses operations PREVUES - celles de ses propositions a valider,
+//  appliquees ou en echec (pas les refusees, obsoletes, interrompues ni annulees ; sans les operations retirees ou
+//  reprises par Ctrl+Z ; une operation en echec ne compte plus quand une proposition plus recente sert l'etape : la
+//  correction la reprend). Aucune operation proposee encore : l'estimation du plan (plannedOps, au moins 1). Terminee
+//  (verifiee dans le projet) : 100 % ; sinon jamais plus de 99 %, arrondi a l'inferieur. Ignoree, annulee : pas de
+//  pourcentage (l'etat le dit).
+struct StepProgress {
+    int  applied{0};       // ses operations appliquees
+    int  planned{1};       // ses operations prevues (au moins 1)
+    int  failed{0};        // en echec, pas reprises par une proposition plus recente
+    int  toValidate{0};    // dans une proposition qui attend Previsualiser / Appliquer
+    bool estimated{true};  // `planned` est l'estimation du plan (aucune operation proposee encore)
+    int  percent{0};       // 0..100 ; -1 : pas de pourcentage (ignoree, annulee)
+    [[nodiscard]] bool        counted() const noexcept { return percent >= 0; }
+    [[nodiscard]] double      frac() const noexcept;   // 0..1 (0 : pas de pourcentage)
+    [[nodiscard]] std::string text() const;            // "40 %" ; "\xE2\x80\x94" sans pourcentage
+    [[nodiscard]] std::string detail() const;          // "2 / 5 op\xC3\xA9rations appliqu\xC3\xA9" "es \xC2\xB7 1 en \xC3\xA9" "chec"
+};
+[[nodiscard]] StepProgress stepProgressOf(const Mission&, const Step&);
+[[nodiscard]] std::string  stepProgressRule();
+
+// CE QUE LE LOGICIEL SAIT DU MOMENT, en plus de la mission (l'Assistant le donne ; rien de cela n'est enregistre) : l'IA
+// repond-elle maintenant a l'appel de Mission::pending (sinon, un appel en attente est un appel interrompu), depuis
+// combien de secondes ; une proposition de la mission s'applique-t-elle sur un fil de fond ; l'audit final tourne-t-il.
+struct Live {
+    bool        calling{false};
+    long long   elapsed{-1};       // secondes depuis Pending::started (-1 : inconnu)
+    std::string applying;          // Proposal::id appliquee sur un fil de fond (vide : aucune)
+    int         applyPercent{-1};  // son avancement 0..100 (-1 : inconnu)
+    bool        auditing{false};
+};
+// L'ACTIVITE D'UNE ETAPE EN UNE LIGNE (ce qu'elle fait maintenant), deduite de son etat, de ses dependances, de ses
+// propositions et de leurs verifications, et du moment : << L'IA prepare la proposition P2... (depuis 0:42) >>,
+// << P2 : 12 operations a valider - Previsualiser puis Appliquer >>, << Application de P2... 45 % >>, << Attend S1
+// (dependance) >>, << Bloquee : depend de S3 (en erreur) >>, << En erreur : ... >>, << Terminee - 8 operations
+// appliquees le 01/11 a 12:04 >>...
+enum class Activity : std::uint8_t { Idle, Working, ToValidate, Waiting, Blocked, Error, Done, Off };
+struct StepActivity {
+    Activity    kind{Activity::Idle};
+    std::string text;
+    std::string proposal;   // la proposition en jeu (Proposal::id ; vide : aucune)
+    bool        live{false};   // l'IA ou une application travaille pour elle maintenant
+};
+[[nodiscard]] StepActivity activityOf(const Mission&, const Step&, const Live& = {});
+// L'etape << du moment >> : celle pour qui l'IA ou une application travaille, sinon celle qui attend une validation, puis
+// appliquee, en cours, en erreur, prete, bloquee, en attente (a egalite : l'ordre du plan). Nul : tout est fini.
+[[nodiscard]] const Step* currentStep(const Mission&, const Live& = {});
+// L'activite de la mission quand aucune etape ne la porte : le plan ou l'actualisation que l'IA prepare, l'audit final, un
+// appel interrompu. Vide : rien de tel.
+[[nodiscard]] std::string missionActivity(const Mission&, const Live& = {});
+[[nodiscard]] std::string elapsedText(long long seconds);   // "0:42", "12:05", "1:02:05"
+
+// LE JOURNAL D'UNE ETAPE, le plus ancien d'abord : les evenements de l'historique qui la concernent (son identifiant,
+// une proposition qui la sert, un texte qui la cite), et apres chaque application ses operations - appliquees (leur
+// libelle lisible, << \xE2\x9C\x93 Cr\xC3\xA9" "er la variable Pompe_1_Marche >>) ou en echec (l'erreur exacte) ; les decisions qui la citent.
+// Une proposition dont l'historique (borne) a perdu la trace est reprise de ce que la mission en garde. Rien d'invente.
+struct JournalLine {
+    std::string date;       // ISO (vide : inconnue)
+    std::string kind;       // un genre d'Event ; "operation" (appliquee), "echec" (une operation en echec), "decision"
+    std::string text;
+    std::string proposal;   // Proposal::id (vide : aucune)
+};
+[[nodiscard]] std::vector<JournalLine> stepJournal(const Mission&, const Step&);
 
 // ---- les textes ------------------------------------------------------------------------------------------------------
 // Le resume a jour (Mission::summary) : l'etat, la progression, ce qui est fait, la prochaine action.

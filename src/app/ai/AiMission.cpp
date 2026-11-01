@@ -1069,8 +1069,10 @@ bool setStepState(Mission& m, std::string_view id, StepState to, std::string now
     s->note = std::move(note);
     s->updated = now;
     if (to == StepState::Error) s->error = s->note;
+    // 1.22.1 : un appel a l'IA fini sans proposition (en cours -> prete : interrompu, en echec) est dit aussi - le journal
+    // de l'etape le montre avec sa raison.
     if (from != to && (to == StepState::Done || to == StepState::Error || to == StepState::Skipped || to == StepState::Cancelled
-                       || (from == StepState::Done && to == StepState::Ready)))
+                       || (from == StepState::Done && to == StepState::Ready) || (from == StepState::Running && to == StepState::Ready)))
         log(m, "etape", s->id + " " + guill(s->title) + " : " + std::string(stepLabel(to)) + (s->note.empty() ? std::string{} : " \xE2\x80\x94 " + s->note), now, s->id);
     return true;
 }
@@ -1466,7 +1468,363 @@ std::string progressRule() {
     return "Chaque \xC3\xA9tape p\xC3\xA8se son estimation d'op\xC3\xA9rations (au moins 1) ; les \xC3\xA9tapes ignor\xC3\xA9" "es ou annul\xC3\xA9" "es sortent du calcul. "
            "Planification : 100 % d\xC3\xA8s que le plan existe. G\xC3\xA9n\xC3\xA9ration : les \xC3\xA9tapes qui ont une proposition. Validation : celles dont la "
            "proposition est v\xC3\xA9rifi\xC3\xA9" "e ou appliqu\xC3\xA9" "e. Application : celles appliqu\xC3\xA9" "es. Globale : celles TERMIN\xC3\x89" "ES, c'est-\xC3\xA0-dire appliqu\xC3\xA9" "es "
-           "et v\xC3\xA9rifi\xC3\xA9" "es dans le projet.";
+           "et v\xC3\xA9rifi\xC3\xA9" "es dans le projet.\n"
+           + stepProgressRule();
+}
+
+// ---- 1.22.1 : ce que fait une etape -----------------------------------------------------------------------------------
+namespace {
+
+// La proposition sert-elle l'etape ? (ses etapes, celles de l'etape, une operation qui la cite)
+bool serves(const ProposalLink& p, const Step& s) {
+    if (std::find(p.steps.begin(), p.steps.end(), s.id) != p.steps.end()) return true;
+    if (std::find(s.proposals.begin(), s.proposals.end(), p.id) != s.proposals.end()) return true;
+    return std::any_of(p.lines.begin(), p.lines.end(), [&](const OpLine& l) { return l.step == s.id; });
+}
+// Une operation de la proposition est-elle de l'etape ? (sans etape : de toutes celles de la proposition)
+bool lineOf(const ProposalLink& p, const OpLine& l, const Step& s) {
+    return l.step == s.id || (l.step.empty() && std::find(p.steps.begin(), p.steps.end(), s.id) != p.steps.end());
+}
+// Retiree de l'apercu, ou reprise par Ctrl+Z : elle ne compte pas.
+bool retired(const OpLine& l) { return l.state == "ignoree" || l.state == "annulee"; }
+// Une proposition qui attend Previsualiser / Appliquer.
+bool awaiting(const ProposalLink& p) { return p.state == "generee" || p.state == "validee"; }
+// Celles qui comptent pour la progression d'une etape : a valider, appliquees, en echec (une refusee, obsolete,
+// interrompue ou annulee n'a rien - ou plus rien - dans le projet).
+bool countsFor(const ProposalLink& p) { return awaiting(p) || p.state == "appliquee" || p.state == "echouee"; }
+
+std::string tag(const ProposalLink& p) { return "P" + std::to_string(p.order); }
+
+std::string plural(int n, std::string_view one, std::string_view many) { return std::to_string(n) + " " + std::string(n > 1 ? many : one); }
+
+// "le 01/11 \xC3\xA0 12:04" (une date ISO ; vide : illisible)
+std::string dayAt(std::string_view iso) {
+    if (iso.size() < 16 || iso[4] != '-' || iso[7] != '-' || iso[10] != 'T' || iso[13] != ':') return {};
+    return "le " + std::string(iso.substr(8, 2)) + "/" + std::string(iso.substr(5, 2)) + " \xC3\xA0 " + std::string(iso.substr(11, 5));
+}
+
+// Un texte en une ligne courte : la premiere ligne, au plus `max` octets (jamais au milieu d'un caractere).
+std::string shortLine(std::string_view s, std::size_t max = 140) {
+    std::string t = trimmed(s.substr(0, s.find_first_of("\r\n")));
+    if (t.size() <= max) return t;
+    std::size_t cut = max;
+    while (cut > 0 && (static_cast<unsigned char>(t[cut]) & 0xC0) == 0x80) --cut;
+    t.resize(cut);
+    while (!t.empty() && t.back() == ' ') t.pop_back();
+    return t + "\xE2\x80\xA6";
+}
+
+std::string lowerFirst(std::string s) {
+    if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') s[0] = static_cast<char>(s[0] - 'A' + 'a');
+    return s;
+}
+
+// L'identifiant cite tel quel ("S1" dans "pour S1, S2" ; pas dans "S10" ni "Vue_S1").
+bool cites(std::string_view text, std::string_view id) {
+    if (id.empty()) return false;
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (std::size_t at = text.find(id); at != std::string_view::npos; at = text.find(id, at + 1)) {
+        const bool before = at == 0 || !word(text[at - 1]);
+        const bool after = at + id.size() >= text.size() || !word(text[at + id.size()]);
+        if (before && after) return true;
+    }
+    return false;
+}
+
+// L'appel a l'IA de la mission vise-t-il cette etape ?
+bool called(const Mission& m, const Step& s) {
+    return m.pending.active && std::find(m.pending.steps.begin(), m.pending.steps.end(), s.id) != m.pending.steps.end();
+}
+
+// La plus recente proposition a valider qui sert l'etape ; nul : aucune.
+const ProposalLink* awaitingFor(const Mission& m, const Step& s) {
+    const ProposalLink* best = nullptr;
+    for (const auto& p : m.proposals)
+        if (awaiting(p) && serves(p, s) && (!best || p.order > best->order)) best = &p;
+    return best;
+}
+
+// La plus recente proposition appliquee qui sert l'etape ; nul : aucune.
+const ProposalLink* appliedFor(const Mission& m, const Step& s) {
+    const ProposalLink* best = nullptr;
+    for (const auto& p : m.proposals)
+        if (p.state == "appliquee" && serves(p, s) && (!best || p.order > best->order)) best = &p;
+    return best;
+}
+
+// La proposition appliquee sur un fil de fond, si elle sert l'etape ; nul sinon.
+const ProposalLink* applyingFor(const Mission& m, const Step& s, const Live& live) {
+    if (live.applying.empty()) return nullptr;
+    const ProposalLink* p = m.proposal(live.applying);
+    return p && serves(*p, s) ? p : nullptr;
+}
+
+std::string since(const Live& live) { return live.elapsed >= 0 ? " (depuis " + elapsedText(live.elapsed) + ")" : std::string{}; }
+
+} // namespace
+
+double StepProgress::frac() const noexcept { return percent < 0 ? 0.0 : static_cast<double>(percent) / 100.0; }
+
+std::string StepProgress::text() const { return percent < 0 ? std::string("\xE2\x80\x94") : std::to_string(percent) + " %"; }
+
+std::string StepProgress::detail() const {
+    if (percent < 0) return "hors du calcul de la progression";
+    if (estimated)
+        return percent >= 100 ? std::string("termin\xC3\xA9" "e (aucune op\xC3\xA9ration suivie)")
+                              : "aucune op\xC3\xA9ration propos\xC3\xA9" "e encore (estimation : " + plural(planned, "op\xC3\xA9ration", "op\xC3\xA9rations") + ")";
+    std::string s = std::to_string(applied) + " / " + plural(planned, "op\xC3\xA9ration appliqu\xC3\xA9" "e", "op\xC3\xA9rations appliqu\xC3\xA9" "es");
+    if (failed > 0) s += " \xC2\xB7 " + std::to_string(failed) + " en \xC3\xA9" "chec";
+    if (toValidate > 0) s += " \xC2\xB7 " + std::to_string(toValidate) + " \xC3\xA0 valider";
+    return s;
+}
+
+// LA REGLE PAR ETAPE (voir le .hpp) : deterministe, tiree des propositions et de leurs operations suivies.
+StepProgress stepProgressOf(const Mission& m, const Step& s) {
+    StepProgress r;
+    r.planned = weightOf(s);
+    if (s.state == StepState::Skipped || s.state == StepState::Cancelled) {
+        r.percent = -1;
+        return r;
+    }
+    int applied = 0, pending = 0, latest = 0;
+    std::vector<int> failedAt;   // l'ordre de la proposition de chaque operation en echec (ou non executee)
+    for (const auto& p : m.proposals) {
+        if (!countsFor(p) || !serves(p, s)) continue;
+        bool any = false;
+        for (const auto& l : p.lines) {
+            if (!lineOf(p, l, s) || retired(l)) continue;
+            any = true;
+            if (p.state == "appliquee" && l.state == "appliquee") ++applied;
+            else if (awaiting(p)) ++pending;
+            else failedAt.push_back(p.order);
+        }
+        if (any) latest = std::max(latest, p.order);
+    }
+    // une operation en echec ne compte plus quand une proposition plus recente sert l'etape (la correction la reprend)
+    int failed = 0;
+    for (const int o : failedAt) failed += o >= latest ? 1 : 0;
+    r.applied = applied;
+    r.toValidate = pending;
+    r.failed = failed;
+    if (const int total = applied + pending + failed; total > 0) {
+        r.planned = total;
+        r.estimated = false;
+    }
+    if (s.state == StepState::Done) r.percent = 100;
+    else r.percent = std::min(99, applied * 100 / std::max(1, r.planned));
+    return r;
+}
+
+std::string stepProgressRule() {
+    return "Par \xC3\xA9tape : ses op\xC3\xA9rations appliqu\xC3\xA9" "es (lues dans le projet apr\xC3\xA8s Appliquer) sur ses op\xC3\xA9rations pr\xC3\xA9vues \xE2\x80\x94 celles de "
+           "ses propositions \xC3\xA0 valider, appliqu\xC3\xA9" "es ou en \xC3\xA9" "chec (sans les op\xC3\xA9rations retir\xC3\xA9" "es ; une op\xC3\xA9ration en \xC3\xA9" "chec ne compte "
+           "plus quand une proposition plus r\xC3\xA9" "cente reprend l'\xC3\xA9tape), sinon l'estimation du plan. Termin\xC3\xA9" "e (v\xC3\xA9rifi\xC3\xA9" "e dans le "
+           "projet) : 100 % ; sinon jamais plus de 99 %. Ignor\xC3\xA9" "e ou annul\xC3\xA9" "e : pas de pourcentage.";
+}
+
+std::string elapsedText(long long sec) {
+    if (sec < 0) sec = 0;
+    char buf[48];
+    if (sec >= 3600) std::snprintf(buf, sizeof buf, "%lld:%02lld:%02lld", sec / 3600, (sec / 60) % 60, sec % 60);
+    else std::snprintf(buf, sizeof buf, "%lld:%02lld", sec / 60, sec % 60);
+    return buf;
+}
+
+StepActivity activityOf(const Mission& m, const Step& s, const Live& live) {
+    using S = StepState;
+    StepActivity a;
+    const auto set = [&a](Activity k, std::string t, bool on = false) {
+        a.kind = k;
+        a.text = std::move(t);
+        a.live = on;
+    };
+    const std::string nextTag = "P" + std::to_string(m.proposals.size() + 1);   // la proposition que l'IA prepare
+    // les etats ou plus rien ne se fait
+    if (s.state == S::Cancelled) {
+        set(Activity::Off, "Annul\xC3\xA9" "e : rien ne s'applique plus pour elle.");
+        return a;
+    }
+    if (s.state == S::Skipped) {
+        set(Activity::Off, "Ignor\xC3\xA9" "e par l'utilisateur : hors du calcul de la progression.");
+        return a;
+    }
+    if (s.state == S::Done) {
+        const StepProgress pr = stepProgressOf(m, s);
+        const ProposalLink* last = appliedFor(m, s);
+        if (last) a.proposal = last->id;
+        const std::string when = dayAt(last && !last->appliedAt.empty() ? last->appliedAt : s.updated);
+        if (pr.applied > 0)
+            set(Activity::Done, "Termin\xC3\xA9" "e \xE2\x80\x94 " + plural(pr.applied, "op\xC3\xA9ration appliqu\xC3\xA9" "e", "op\xC3\xA9rations appliqu\xC3\xA9" "es")
+                                    + (when.empty() ? std::string{} : " " + when));
+        else
+            set(Activity::Done, "Termin\xC3\xA9" "e" + (when.empty() ? std::string{} : " " + when) + " \xE2\x80\x94 v\xC3\xA9rifi\xC3\xA9" "e dans le projet");
+        return a;
+    }
+    // l'IA travaille pour elle maintenant (une proposition, une correction)
+    if (called(m, s) && live.calling) {
+        if (m.pending.purpose == "correction") set(Activity::Working, "L'IA pr\xC3\xA9pare une correction (" + nextTag + ")\xE2\x80\xA6" + since(live), true);
+        else set(Activity::Working, "L'IA pr\xC3\xA9pare la proposition " + nextTag + "\xE2\x80\xA6" + since(live), true);
+        return a;
+    }
+    // une de ses propositions s'applique sur un fil de fond
+    if (const ProposalLink* p = applyingFor(m, s, live)) {
+        a.proposal = p->id;
+        set(Activity::Working,
+            "Application de " + tag(*p) + "\xE2\x80\xA6" + (live.applyPercent >= 0 ? " " + std::to_string(std::clamp(live.applyPercent, 0, 100)) + " %" : std::string{}),
+            true);
+        return a;
+    }
+    const bool paused = m.state == State::Paused;
+    switch (s.state) {
+        case S::Running:
+            if (m.pending.active) set(Activity::Blocked, "Appel \xC3\xA0 l'IA interrompu : rien n'est rejou\xC3\xA9, \xC3\xA0 relancer.");
+            else set(Activity::Working, "Une proposition se pr\xC3\xA9pare.");
+            break;
+        case S::AwaitingValidation:
+            if (const ProposalLink* p = awaitingFor(m, s)) {
+                a.proposal = p->id;
+                const std::string ops = plural(p->ops, "op\xC3\xA9ration", "op\xC3\xA9rations");
+                if (p->state == "validee")
+                    set(Activity::ToValidate, tag(*p) + " v\xC3\xA9rifi\xC3\xA9" "e : " + ops + (p->ops > 1 ? " pr\xC3\xAAtes" : " pr\xC3\xAAte") + " \xE2\x80\x94 Appliquer");
+                else if (!p->errors.empty())
+                    set(Activity::Blocked, tag(*p) + " : " + plural(static_cast<int>(p->errors.size()), "erreur", "erreurs") + " \xC3\xA0 la v\xC3\xA9rification \xE2\x80\x94 "
+                                               + shortLine(p->errors.front(), 100));
+                else
+                    set(Activity::ToValidate, tag(*p) + " : " + ops + " \xC3\xA0 valider \xE2\x80\x94 Pr\xC3\xA9visualiser puis Appliquer");
+            } else {
+                set(Activity::ToValidate, "En attente de validation" + (s.note.empty() ? std::string(".") : " : " + shortLine(s.note)));
+            }
+            break;
+        case S::Applied: {
+            const ProposalLink* p = appliedFor(m, s);
+            if (p) a.proposal = p->id;
+            set(Activity::Working, (p ? "Appliqu\xC3\xA9" "e par " + tag(*p) : std::string("Appliqu\xC3\xA9" "e")) + " : la v\xC3\xA9rification dans le projet suit.");
+            break;
+        }
+        case S::Verifying: set(Activity::Working, "V\xC3\xA9rification sur le projet r\xC3\xA9" "el\xE2\x80\xA6", live.auditing); break;
+        case S::Error:
+            if (const std::string why = shortLine(s.error.empty() ? s.note : s.error); !why.empty()) set(Activity::Error, "En erreur : " + why);
+            else set(Activity::Error, "En erreur.");
+            break;
+        case S::Blocked: {
+            std::vector<std::string> by;
+            for (const auto& d : s.deps)
+                if (const Step* dep = m.step(d); dep && isBlocking(dep->state)) by.push_back(d + " (" + lowerFirst(std::string(stepLabel(dep->state))) + ")");
+            if (!by.empty()) set(Activity::Blocked, "Bloqu\xC3\xA9" "e : d\xC3\xA9pend de " + join(by, ", "));
+            else set(Activity::Blocked, "Bloqu\xC3\xA9" "e" + (s.note.empty() ? std::string(".") : " : " + shortLine(s.note)));
+            break;
+        }
+        case S::Waiting: {
+            std::vector<std::string> by;
+            for (const auto& d : s.deps)
+                if (const Step* dep = m.step(d); dep && !isFinished(dep->state)) by.push_back(d);
+            if (!by.empty()) set(Activity::Waiting, "Attend " + join(by, ", ") + (by.size() > 1 ? " (d\xC3\xA9pendances)" : " (d\xC3\xA9pendance)"));
+            else set(Activity::Waiting, "En attente" + (s.note.empty() ? std::string(".") : " : " + shortLine(s.note)));
+            break;
+        }
+        case S::Ready:
+            if (paused) set(Activity::Waiting, "Pr\xC3\xAAte \xE2\x80\x94 la mission est en pause : reprends-la d'abord.");
+            else if (m.coherence == Coherence::Missing) set(Activity::Waiting, "Pr\xC3\xAAte \xE2\x80\x94 ouvre le projet de la mission pour continuer.");
+            else set(Activity::Idle, "Pr\xC3\xAAte : \xC2\xAB Proposer la suite \xC2\xBB la demande \xC3\xA0 l'IA.");
+            return a;
+        case S::ToPlan: set(Activity::Waiting, "\xC3\x80 planifier : le plan n'est pas encore fait."); break;
+        default: break;
+    }
+    if (paused && a.kind != Activity::Error && a.kind != Activity::Blocked) {
+        a.text = "Mission en pause \xE2\x80\x94 " + a.text;
+        a.kind = Activity::Waiting;
+        a.live = false;
+    }
+    return a;
+}
+
+const Step* currentStep(const Mission& m, const Live& live) {
+    using S = StepState;
+    const auto rank = [&](const Step& s) -> int {
+        if (isFinished(s.state) || s.state == S::Cancelled) return 99;
+        if ((called(m, s) && live.calling) || applyingFor(m, s, live)) return 0;
+        switch (s.state) {
+            case S::AwaitingValidation: return 1;
+            case S::Applied:
+            case S::Verifying: return 2;
+            case S::Running: return 3;
+            case S::Error: return 4;
+            case S::Ready: return 5;
+            case S::Blocked: return 6;
+            default: return 7;   // en attente, a planifier
+        }
+    };
+    const Step* best = nullptr;
+    int bestRank = 99;
+    for (const auto& s : m.steps)
+        if (const int r = rank(s); r < bestRank) {
+            best = &s;
+            bestRank = r;
+        }
+    return best;
+}
+
+std::string missionActivity(const Mission& m, const Live& live) {
+    if (live.auditing) return "Audit final en cours (sur une copie du projet)\xE2\x80\xA6";
+    if (!m.pending.active) return {};
+    const std::string& purpose = m.pending.purpose;
+    if (!live.calling)
+        return "Appel \xC3\xA0 l'IA interrompu (" + (purpose.empty() ? std::string("proposition") : purpose) + ") : rien n'est rejou\xC3\xA9.";
+    if (purpose == "plan") return "L'IA analyse le projet et pr\xC3\xA9pare le plan\xE2\x80\xA6" + since(live);
+    if (purpose == "actualisation") return "L'IA relit le projet et revoit le plan\xE2\x80\xA6" + since(live);
+    const std::string steps = m.pending.steps.empty() ? std::string{} : " (" + join(m.pending.steps, ", ") + ")";
+    if (purpose == "correction") return "L'IA pr\xC3\xA9pare une correction" + steps + "\xE2\x80\xA6" + since(live);
+    return "L'IA pr\xC3\xA9pare la proposition P" + std::to_string(m.proposals.size() + 1) + steps + "\xE2\x80\xA6" + since(live);
+}
+
+std::vector<JournalLine> stepJournal(const Mission& m, const Step& s) {
+    std::vector<JournalLine> out;
+    std::vector<const ProposalLink*> mine;
+    for (const auto& p : m.proposals)
+        if (serves(p, s)) mine.push_back(&p);
+    const auto mineOf = [&mine](std::string_view id) -> const ProposalLink* {
+        for (const auto* p : mine)
+            if (p->id == id) return p;
+        return nullptr;
+    };
+    // ses operations dans une proposition appliquee : celles appliquees (le libelle lisible), celles en echec (l'erreur)
+    const auto operations = [&](const ProposalLink& p, const std::string& date) {
+        for (const auto& l : p.lines) {
+            if (!lineOf(p, l, s)) continue;
+            const std::string title = l.title.empty() ? l.id : l.title;
+            if (l.state == "appliquee") out.push_back({date, "operation", "\xE2\x9C\x93 " + title, p.id});
+            else if (l.state == "echouee") out.push_back({date, "echec", "\xC3\x89" "chec : " + title + (l.error.empty() ? std::string{} : " \xE2\x80\x94 " + l.error), p.id});
+        }
+    };
+    std::set<std::string> generated, applied;
+    for (const auto& e : m.history) {
+        const ProposalLink* p = e.proposal.empty() ? nullptr : mineOf(e.proposal);
+        // le sien : son identifiant, une proposition qui la sert, ou un texte qui la cite sans viser une autre etape
+        const bool related = e.step == s.id || p != nullptr || (e.step.empty() && e.proposal.empty() && cites(e.text, s.id));
+        if (!related) continue;
+        out.push_back({e.date, e.kind, e.text, e.proposal});
+        if (!p) continue;
+        if (e.kind == "proposition" && e.text.rfind(tag(*p) + " \xC2\xAB", 0) == 0) generated.insert(p->id);
+        if (e.kind == "application" && applied.insert(p->id).second) operations(*p, e.date);
+    }
+    // l'historique est borne : ce qu'il a perdu, repris de ce que la mission garde de ses propositions
+    for (const auto* p : mine) {
+        if (!generated.count(p->id) && !p->created.empty())
+            out.push_back({p->created, "proposition",
+                           tag(*p) + " " + guill(p->title.empty() ? std::string("Proposition") : p->title) + " : " + plural(p->ops, "op\xC3\xA9ration", "op\xC3\xA9rations") + ".",
+                           p->id});
+        if (!applied.count(p->id) && !p->appliedAt.empty()) {
+            out.push_back({p->appliedAt, "application",
+                           tag(*p) + " appliqu\xC3\xA9" "e : " + plural(p->applied, "op\xC3\xA9ration appliqu\xC3\xA9" "e", "op\xC3\xA9rations appliqu\xC3\xA9" "es") + ", "
+                               + std::to_string(p->failed) + " en \xC3\xA9" "chec.",
+                           p->id});
+            operations(*p, p->appliedAt);
+        }
+    }
+    for (const auto& d : m.decisions)
+        if (cites(d.question, s.id) || cites(d.answer, s.id)) out.push_back({d.date, "decision", d.question + " \xE2\x86\x92 " + d.answer, {}});
+    std::stable_sort(out.begin(), out.end(), [](const JournalLine& a, const JournalLine& b) { return a.date < b.date; });
+    return out;
 }
 
 // ---- les textes ------------------------------------------------------------------------------------------------------
