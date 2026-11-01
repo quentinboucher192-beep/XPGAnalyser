@@ -270,6 +270,8 @@ public:
     bool applyInBackground(int message, bool ignoringErrors, std::string* why = nullptr);
     [[nodiscard]] bool  applying(int message) const;
     [[nodiscard]] bool  applyingAny() const noexcept { return applyJob_ != nullptr; }
+    // 1.22.1 : une verification de fond en cours pour cette proposition (son identifiant).
+    [[nodiscard]] bool  checkingProposal(std::string_view proposalId) const;
     [[nodiscard]] float applyProgress() const;
     static constexpr std::size_t kBackgroundOps = 40;
     bool refuse(int message);
@@ -406,6 +408,17 @@ private:
     bool          afterApply(Conversation& c, int message, plan::Plan pl, const std::optional<hmi::Project>& before,
                              const std::vector<std::string>& skipped);             // 1.20.1 : la suite (sur le fil de l'interface)
     void          pollApply();                                                       // 1.20.1
+    // 1.22.1 : LA VERIFICATION D'UNE PROPOSITION LOURDE SUR UN FIL DE FOND (checkInBackground : une operation << adresser >>,
+    // ou 40 operations et plus) - jamais sur le fil de l'interface (le blocage de 8 s du 01/11 sous Windows : la validation
+    // a l'arrivee de la reponse, puis celle de la mission). Sur une copie du projet et un environnement fige ; au tick
+    // (pollChecks), le resultat : les comptes de la proposition, la verification de la mission, la derniere verification
+    // connue (toolResult la relit au lieu de valider). Faux : pas de fil possible (pas de projet, environnement non figeable).
+    enum class CheckFor : std::uint8_t { Counts, Mission };
+    bool          startCheck(const std::string& conversation, const Proposal& p, CheckFor purpose, std::string missionId = {},
+                             std::vector<std::string> steps = {}, int attempt = 0);
+    void          pollChecks();
+    void          missionChecked(mission::Mission& m, const Proposal& p, const std::vector<std::string>& steps, const Check* ck,
+                                 mission::State before, const std::string& when);
     Conversation* generatingConversation() noexcept;
     Conversation* touch(Conversation& c);   // la date ; la liste retriee : rend la conversation (deplacee)
     void save(Conversation& c);
@@ -531,6 +544,23 @@ private:
         std::thread                         worker;
     };
     std::shared_ptr<ApplyJob> applyJob_;
+    // 1.22.1 : les verifications de fond en cours, et la derniere connue de chaque proposition (la revision du projet).
+    struct CheckJob {
+        std::string                         conversation, proposalId, mission;
+        std::vector<std::string>            steps;
+        CheckFor                            purpose{CheckFor::Counts};
+        int                                 attempt{0};
+        std::uint64_t                       revision{0};
+        std::atomic<bool>                   finished{false};
+        Check                               result;
+        std::thread                         worker;
+    };
+    std::vector<std::shared_ptr<CheckJob>> checkJobs_;
+    struct KnownCheck {
+        std::uint64_t revision{0};
+        Check         check;
+    };
+    std::map<std::string, KnownCheck>      knownChecks_;
     std::unique_ptr<ModelQuery>            modelQuery_;
     std::optional<ModelsResult>            models_;
     std::uint64_t                          modelsRev_{0};

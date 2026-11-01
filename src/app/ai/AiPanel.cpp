@@ -2568,8 +2568,8 @@ std::vector<AiChatView::Line> AiChatView::layoutText(const std::string& md, floa
 }
 
 namespace {
-// 1.20.0 : une proposition d'au moins tant d'operations se verifie sur un fil de fond (la carte montre l'avancement).
-constexpr std::size_t kBackgroundOps = 40;
+// 1.20.0 : une grosse proposition se verifie sur un fil de fond (la carte montre l'avancement). 1.22.1 : checkInBackground
+// (AiOperations) - 40 operations et plus, ou une operation << adresser >> (le blocage du 01/11).
 double steadySeconds() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
@@ -2615,7 +2615,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
     }
     // 1.20.0 : une grosse proposition - sur un fil de fond, sur une copie du projet et un environnement fige.
     Env frozen;
-    if (p && doc && p->ops.size() >= kBackgroundOps && as.frozenEnvironment(frozen)) {
+    if (p && doc && checkInBackground(*p) && as.frozenEnvironment(frozen)) {
         auto job = std::make_shared<ThumbJob>();
         job->key = key;
         job->total = 2 * p->ops.size();   // la validation puis l'apercu

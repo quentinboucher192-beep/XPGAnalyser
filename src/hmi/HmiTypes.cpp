@@ -884,25 +884,57 @@ std::string memberAddress(std::string_view start, long long word, int bit, std::
     return {};
 }
 
+namespace {
+// 1.22.1 : les chemins compares SANS COPIE - les blancs sautes, les majuscules a la volee. memberCovers et patternIndices
+// sont appeles pour chaque case de chaque variable (leafVariables, l'apercu des adresses d'un tableau de structures) :
+// copier les deux chemins a chaque appel prenait plus du tiers du temps d'un apercu sur un gros projet (un blocage de 8 s
+// sous Windows le 01/11, a la validation d'une proposition de l'Assistant).
+struct PathCursor {
+    std::string_view s;
+    std::size_t      k{0};
+    std::size_t at() {   // la place du prochain caractere utile (s.size() : fini)
+        while (k < s.size() && std::isspace(static_cast<unsigned char>(s[k]))) ++k;
+        return k;
+    }
+    char next() {        // le prochain caractere utile, en majuscule ('\0' : fini) ; passe apres lui
+        if (at() >= s.size()) return '\0';
+        return static_cast<char>(std::toupper(static_cast<unsigned char>(s[k++])));
+    }
+    char peek() {
+        const std::size_t keep = k;
+        const char c = next();
+        k = keep;
+        return c;
+    }
+};
+// Le motif est ici sur "[*]" (blancs compris) : il passe apres.
+bool takeStar(PathCursor& p) {
+    PathCursor q = p;
+    if (q.next() != '[' || q.next() != '*' || q.next() != ']') return false;
+    p = q;
+    return true;
+}
+} // namespace
+
 bool memberCovers(std::string_view pattern, std::string_view rel) {
-    const std::string pt = pathKey(pattern), r = pathKey(rel);
-    if (pt.empty()) return false;
-    std::size_t i = 0, j = 0;
-    while (i < pt.size()) {
-        if (pt.compare(i, 3, "[*]") == 0) {
+    PathCursor p{pattern}, r{rel};
+    if (p.peek() == '\0') return false;
+    while (p.peek() != '\0') {
+        if (takeStar(p)) {
             // [*] : un indice quelconque ([3], [1,2]).
-            if (j >= r.size() || r[j] != '[') return false;
-            const auto close = r.find(']', j);
-            if (close == std::string::npos) return false;
-            i += 3;
-            j = close + 1;
+            if (r.next() != '[') return false;
+            char c = '\0';
+            do c = r.next();
+            while (c != '\0' && c != ']');
+            if (c == '\0') return false;
             continue;
         }
-        if (j >= r.size() || pt[i] != r[j]) return false;
-        ++i;
-        ++j;
+        const char pc = p.next();
+        const char rc = r.next();
+        if (rc == '\0' || pc != rc) return false;
     }
-    return j == r.size() || r[j] == '.' || r[j] == '[';
+    const char rest = r.peek();
+    return rest == '\0' || rest == '.' || rest == '[';
 }
 
 // ------------------------------------------- 1.12.18 : l'adresse par formule ---
@@ -1009,36 +1041,48 @@ bool isFormula(std::string_view address) noexcept { return address.find('(') != 
 
 bool patternIndices(std::string_view pattern, std::string_view rel, std::vector<long long>& out, std::string* cell) {
     out.clear();
-    const std::string pt = pathKey(pattern);
-    if (pt.empty()) return false;
-    std::string r;                    // `rel` sans blancs, en majuscules ; at[k] : la place de r[k] dans `rel`
-    std::vector<std::size_t> at;
-    for (std::size_t k = 0; k < rel.size(); ++k)
-        if (!std::isspace(static_cast<unsigned char>(rel[k]))) {
-            r += static_cast<char>(std::toupper(static_cast<unsigned char>(rel[k])));
-            at.push_back(k);
-        }
-    std::size_t i = 0, j = 0;
-    while (i < pt.size()) {
-        if (pt.compare(i, 3, "[*]") == 0) {
-            if (j >= r.size() || r[j] != '[') return false;
-            const auto close = r.find(']', j);
-            if (close == std::string::npos) return false;
-            for (const auto& part : splitList(r.substr(j + 1, close - j - 1))) {
-                long long n = 0;
-                if (!integerOf(trimmed(part), n)) return false;
-                out.push_back(n);
+    PathCursor p{pattern}, r{rel};
+    if (p.peek() == '\0') return false;
+    while (p.peek() != '\0') {
+        if (takeStar(p)) {
+            // [*] : les indices de la case, des entiers separes par des virgules ("[3]", "[1,2]") - comme integerOf
+            // (un signe, 9 chiffres au plus) ; autre chose entre les crochets : pas une case de ce motif.
+            if (r.next() != '[') return false;
+            long long v = 0;
+            int digits = 0;
+            bool neg = false, sign = false;
+            for (;;) {
+                const char c = r.next();
+                if (c == '\0') return false;
+                if (c == ',' || c == ']') {
+                    if (digits == 0) return false;
+                    out.push_back(neg ? -v : v);
+                    v = 0;
+                    digits = 0;
+                    neg = sign = false;
+                    if (c == ']') break;
+                    continue;
+                }
+                if ((c == '-' || c == '+') && digits == 0 && !sign) {
+                    sign = true;
+                    neg = c == '-';
+                    continue;
+                }
+                if (!std::isdigit(static_cast<unsigned char>(c)) || ++digits > 9) return false;
+                v = v * 10 + (c - '0');
             }
-            i += 3;
-            j = close + 1;
             continue;
         }
-        if (j >= r.size() || pt[i] != r[j]) return false;
-        ++i;
-        ++j;
+        const char pc = p.next();
+        const char rc = r.next();
+        if (rc == '\0' || pc != rc) return false;
     }
-    if (j != r.size() && r[j] != '.' && r[j] != '[') return false;
-    if (cell) *cell = std::string(rel.substr(0, j < at.size() ? at[j] : rel.size()));
+    const std::size_t end = r.at();
+    if (end < rel.size()) {
+        const char c = rel[end];
+        if (c != '.' && c != '[') return false;
+    }
+    if (cell) *cell = std::string(rel.substr(0, end));
     return true;
 }
 
@@ -1156,8 +1200,17 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         std::map<std::string, long long> bases{};   // une formule : le depart de chaque case designee (sa cle)
     };
     std::vector<Start> starts;
+    // 1.22.1 : les cles des chemins calculees une fois (et non pour chaque case et chaque adresse corrigee).
+    std::vector<std::string> placeKeys, leafKeys;
+    if (v.bound() && !v.places.empty()) {
+        placeKeys.reserve(v.places.size());
+        for (const auto& pl : v.places) placeKeys.push_back(pathKey(pl.path));
+        leafKeys.reserve(n);
+        for (std::size_t i = 0; i < n; ++i) leafKeys.push_back(pathKey(f.leaves[i].rel));
+    }
     if (v.bound())
-        for (const auto& pl : v.places) {
+        for (std::size_t q = 0; q < v.places.size(); ++q) {
+            const auto& pl = v.places[q];
             const std::string address = trimmed(pl.address);
             if (address.empty()) continue;
             Start s{pl.path, address, 0, isFormula(address)};
@@ -1165,7 +1218,7 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
             std::vector<long long> idx;
             std::string cell;
             for (std::size_t i = 0; i < n; ++i) {
-                if (pathKey(pl.path) == pathKey(f.leaves[i].rel)) leaf = true;
+                if (placeKeys[q] == leafKeys[i]) leaf = true;
                 if (s.formula ? !patternIndices(pl.path, f.leaves[i].rel, idx, &cell) : !memberCovers(pl.path, f.leaves[i].rel)) continue;
                 if (v.compact && internal[i]) continue;
                 const long long at = bits ? rank[i] : word[i];
@@ -1205,8 +1258,8 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         if (v.bound() && !internal[i]) {
             x.equipment = v.equipment;
             const MemberAddress* fixed = nullptr;
-            for (const auto& pl : v.places)
-                if (pathKey(pl.path) == pathKey(l.rel)) fixed = &pl;
+            for (std::size_t q = 0; q < v.places.size(); ++q)
+                if (placeKeys[q] == leafKeys[i]) fixed = &v.places[q];
             const Start* from = nullptr;
             std::vector<long long> idx;
             std::string cell;

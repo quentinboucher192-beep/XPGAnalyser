@@ -2758,6 +2758,11 @@ hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
 
 } // namespace
 
+bool checkInBackground(const Proposal& p) noexcept {
+    if (p.ops.size() >= kHeavyOps) return true;
+    return std::any_of(p.ops.begin(), p.ops.end(), [](const Operation& op) { return op.action == Operation::Action::Address; });
+}
+
 Check validate(const hmi::Project& project, const Proposal& p, const Env& env) {
     Check check;
     const hmi::Id open = openViewOf(project, p);

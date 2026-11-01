@@ -892,6 +892,72 @@ void testRefresh() {
     check(f.last().tool && !f.last().tool->error.empty() && f.mission(id) && !f.mission(id)->step("S9"), "planifier_mission hors mission : refuse, rien n'est change");
 }
 
+// 1.22.1 : UNE PROPOSITION LOURDE (une operation << adresser >>) - verifiee sur un fil de fond, jamais sur celui de
+// l'interface (le blocage de 8 s du 01/11 sous Windows : la validation a l'arrivee de la reponse, puis celle de la mission).
+// A l'arrivee : la verification tourne ; le resultat pour le modele dit << en cours >> ; a la fin (au tick) : les comptes,
+// et pour une mission, la proposition << validee >> et sa notification - pas avant.
+void testHeavyInBackground() {
+    std::printf("[verification de fond : une operation adresser]\n");
+    Fixture f("lourde");
+    hmi::Equipment e;
+    e.id = f.doc->project.allocate();
+    e.name = "Automate_1";
+    e.host = "127.0.0.1";
+    e.port = 502;
+    f.doc->project.equipments.push_back(e);
+    const auto addressOp = [](const char* step) {
+        Value op = O({{"action", "adresser"}, {"variable", "Pompe_1_Marche"}, {"equipement", "Automate_1"}, {"adresse", "%M10"}});
+        if (step) op.set("etape", std::string(step));
+        return op;
+    };
+    const auto wait = [&f](const std::string& pid) {
+        for (int k = 0; k < 1000 && f.as->checkingProposal(pid); ++k) {
+            pause(2);
+            f.step(0.01);
+        }
+    };
+    std::string why;
+    // Une demande ordinaire.
+    f.answerOps("toolu_lourde", proposalInput("Adresser la pompe 1", {addressOp(nullptr),
+                                                                     O({{"action", "creer"}, {"genre", "Indicator"}, {"nom", "Voyant_Lourd"},
+                                                                        {"proprietes", O({{"x", "40"}, {"y", "40"}, {"variable", "Pompe_1_Marche"}})}})}));
+    check(f.as->send("Adresse la pompe 1 sur l'automate.", &why), "la demande part (" + why + ")");
+    f.step();
+    const std::string pid = f.lastProposalId();
+    const int mi = f.as->messageOfProposal(pid);
+    check(!pid.empty() && mi >= 0, "la proposition est arrivee");
+    check(f.as->checkingProposal(pid), "sa verification tourne sur un fil de fond (pas sur celui de l'interface)");
+    if (const ai::Proposal* p = mi >= 0 ? f.as->proposal(mi) : nullptr)
+        check(p->create == 0, "a l'arrivee : ses comptes ne sont pas encore la (aucune validation sur ce fil)");
+    if (mi >= 0) {
+        const auto [text, error] = f.as->toolResult(f.as->current()->messages[static_cast<std::size_t>(mi)]);
+        check(!error && has(text, "en cours"), "pour le modele, pendant la verification : en attente, verification en cours (" + text + ")");
+    }
+    wait(pid);
+    check(!f.as->checkingProposal(pid), "la verification de fond se termine");
+    if (const ai::Proposal* p = mi >= 0 ? f.as->proposal(mi) : nullptr) {
+        check(p->create == 1, "ses comptes sont poses a la fin (" + std::to_string(p->create) + " a creer : le voyant)");
+        const auto [text, error] = f.as->toolResult(f.as->current()->messages[static_cast<std::size_t>(mi)]);
+        check(!error && has(text, "en attente") && !has(text, "en cours"), "pour le modele ensuite : la verification connue (" + text + ")");
+        check(f.as->check(mi).ok(), "la proposition est valide");
+    }
+    // Une mission : la proposition n'est << validee >> (et notifiee) qu'a la fin de sa verification de fond.
+    f.answerPlan("toolu_plan_l", planInput("Adresses", {{"S1", "Adresser la pompe 1", "variables", {}, 1, {"variable:Pompe_1_Marche"}}}));
+    check(f.as->createMission("Adresse la pompe 1 sur l'automate, en mission.", &why), "creer la mission (" + why + ")");
+    f.step();
+    const std::string id = f.as->missions().empty() ? std::string{} : f.as->missions().front().id;
+    f.answerOps("toolu_m_l", proposalInput("Adresser la pompe 1", {addressOp("S1")}));
+    check(f.as->continueMission(id, &why), "proposer la suite (" + why + ")");
+    f.step();
+    const std::string mp = f.lastProposalId();
+    check(!mp.empty() && mp != pid, "la proposition de la mission est arrivee");
+    check(f.as->checkingProposal(mp) && f.linkState(id, mp) != "validee", "verifiee sur un fil de fond : pas encore << validee >>");
+    check(f.stepState(id, "S1") == ms::StepState::AwaitingValidation, "S1 attend la validation des le debut");
+    wait(mp);
+    check(f.linkState(id, mp) == "validee", "a la fin de la verification : validee (" + f.linkState(id, mp) + ")");
+    check(notified(id, "Proposition disponible"), "notification : proposition disponible");
+}
+
 } // namespace
 
 int main() {
@@ -902,6 +968,7 @@ int main() {
     testErrorAndCorrection();
     testPauseResumeCancel();
     testRefresh();
+    testHeavyInBackground();   // 1.22.1
     std::printf("ai_missions_e2e_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

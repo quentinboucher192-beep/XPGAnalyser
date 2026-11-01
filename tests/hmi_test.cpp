@@ -4561,6 +4561,18 @@ void adressesFormule11218() {
     check(ty::patternIndices("[*]", "[1,2].X", idx, &cell) && idx == std::vector<long long>{1, 2} && cell == "[1,2]", "[*] : [1,2].X, i = 1, j = 2, la case [1,2]");
     check(ty::patternIndices("[*].V[*].P", "[1].V[5].P", idx, &cell) && idx == std::vector<long long>{1, 5}, "[*].V[*].P : i = 1, j = 5");
     check(!ty::patternIndices("[*].Retour", "[3].Marche", idx, &cell), "[*].Retour ne couvre pas [3].Marche");
+    // 1.22.1 : la comparaison sans copie garde les memes regles - blancs et casse ignores, signe, 9 chiffres au plus.
+    check(ty::patternIndices("[ * ].retour", "[ 3 ] . Retour", idx, &cell) && idx == std::vector<long long>{3} && cell == "[ 3 ] . Retour",
+          "blancs et casse : [ * ].retour couvre [ 3 ] . Retour, la case entiere");
+    check(ty::patternIndices("[*]", "[-2].X", idx, &cell) && idx == std::vector<long long>{-2} && cell == "[-2]", "un indice negatif : [-2]");
+    check(!ty::patternIndices("[*]", "[].X", idx, &cell) && !ty::patternIndices("[*]", "[1,].X", idx, &cell)
+              && !ty::patternIndices("[*]", "[1234567890].X", idx, &cell) && !ty::patternIndices("[*]", "['a'].X", idx, &cell),
+          "pas une case : [], [1,], 10 chiffres, une cle texte");
+    check(!ty::patternIndices("[*].Ret", "[3].Retour", idx, &cell) && ty::patternIndices("[*].Retour", "[3].Retour[2]", idx, &cell)
+              && cell == "[3].Retour",
+          "un membre plus long n'est pas couvert ; un tableau dans le membre l'est (la case : [3].Retour)");
+    check(ty::memberCovers("[ * ].nom", "[63].NOM") && !ty::memberCovers("[*].NOM", "[63") && !ty::memberCovers("", "[1]"),
+          "memberCovers : blancs et casse ; un crochet non ferme ; un motif vide");
     same(ad::patternOf("[0].Retour", false), "[*].Retour", "le motif d'un membre");
     same(ad::patternOf("[0].Retour", true), "[*]", "... ses cases enti\xC3\xA8res");
     same(ad::patternOf("[1].V[2].P", true), "[*].V[*]", "... la case la plus proche");
@@ -4622,6 +4634,23 @@ void adressesFormule11218() {
     same(addressOf("EXTRACTEURS[9].Retour"), "%MW1090", "EXTRACTEURS[9].Retour : %MW1090");
     same(addressOf("EXTRACTEURS[0].Marche"), "%MW551.0", "les autres membres ne bougent pas");
     same(ty::formulaAddress("%MW(1000 + 10 * i)", {9}), "%MW1090", "... ");
+    // 1.22.1 : LES PLACES DES AUTRES VARIABLES GARDEES d'un apercu a l'autre (le blocage du 01/11) - et relues quand
+    // une variable ou un type change.
+    {
+        const auto shared2 = [&] {
+            const auto pl = ad::preview(p, var(), "[*].Retour", "%MW(1000 + 10 * i)");
+            return pl.rows.size() == 10 ? pl.rows[2].sharedWith : std::vector<std::string>{"?"};
+        };
+        check(shared2() == std::vector<std::string>{"POMPES[0].Etat"}, "le cache : [2] partage toujours avec POMPES[0].Etat");
+        p.programs.variables[1].address = "%MW3020";
+        check(shared2().empty(), "POMPES deplacee en %MW3020 : plus de partage (relue)");
+        p.programs.variables[1].address = "%MW1020";
+        check(shared2() == std::vector<std::string>{"POMPES[0].Etat"}, "... et de retour en %MW1020");
+        p.programs.types[1].members.insert(p.programs.types[1].members.begin(), {"Avant", "INT"});
+        check(shared2() == std::vector<std::string>{"POMPES[0].Avant"}, "T_POMPE change (Avant devant Etat) : POMPES[0].Avant en %MW1020");
+        p.programs.types[1].members.erase(p.programs.types[1].members.begin());
+        check(shared2() == std::vector<std::string>{"POMPES[0].Etat"}, "... et T_POMPE remis");
+    }
     // Une case a part : l'adresse tapee sur EXTRACTEURS[4].Retour l'emporte ; la formule reprise la retire.
     var().places.push_back({"[4].Retour", "%MW5000"});
     same(addressOf("EXTRACTEURS[4].Retour"), "%MW5000", "une adresse tap\xC3\xA9" "e sur [4].Retour l'emporte sur la formule");

@@ -245,6 +245,9 @@ Assistant::~Assistant() {
     // 1.22.0 : les audits finals de missions en cours (sur leur copie du projet)
     for (auto& a : audits_)
         if (a && a->worker.joinable()) a->worker.join();
+    // 1.22.1 : les verifications de fond en cours (sur leur copie du projet)
+    for (auto& j : checkJobs_)
+        if (j && j->worker.joinable()) j->worker.join();
 }
 
 // ---- le cycle de vie ------------------------------------------------------------------
@@ -412,6 +415,7 @@ bool Assistant::tick(double now) {
                     retiring_.end());
     (void)pollModels();
     pollApply();   // 1.20.1 : l'application de fond finie : sa commande, sur ce fil
+    pollChecks();  // 1.22.1 : les verifications de fond finies : les comptes, la mission
     missionsTick();   // 1.22.0 : la reprise au demarrage, le projet change (Ctrl+Z...), les audits finis
     if (gen_.phase != Phase::Idle && gen_.live) {
         pollLive();
@@ -858,16 +862,28 @@ void Assistant::finish() {
     m.state = "fini";
     m.date = isoDate(now());
     const int index = gen_.message;
+    bool countLater = false;   // 1.22.1 : une proposition lourde, verifiee sur un fil de fond
     if (gen_.proposal) {
         Proposal p = std::move(*gen_.proposal);
         p.state = "proposee";
         if (const auto doc = host_.document ? host_.document() : nullptr) {
-            const Check ck = validate(doc->project, p, host_.env);
-            p.create = ck.create;
-            p.modify = ck.modify;
-            p.remove = ck.remove;
+            if (checkInBackground(p)) {
+                countLater = true;
+            } else {
+                const Check ck = validate(doc->project, p, host_.env);
+                p.create = ck.create;
+                p.modify = ck.modify;
+                p.remove = ck.remove;
+            }
         }
         m.proposal = std::move(p);
+        if (countLater && !startCheck(c->id, *m.proposal, CheckFor::Counts))
+            if (const auto doc = host_.document ? host_.document() : nullptr) {
+                const Check ck = validate(doc->project, *m.proposal, host_.env);
+                m.proposal->create = ck.create;
+                m.proposal->modify = ck.modify;
+                m.proposal->remove = ck.remove;
+            }
     }
     const bool open = current() && current()->id == c->id;
     suggestionsAfter_ = open && gen_.suggestions;
@@ -1409,7 +1425,7 @@ bool Assistant::applyInBackground(int message, bool ignoringErrors, std::string*
     const Conversation* c = current();
     const Proposal* p = proposal(message);
     const auto doc = host_.document ? host_.document() : nullptr;
-    if (!c || !p || !doc || p->state != "proposee" || p->ops.size() < kBackgroundOps) return false;
+    if (!c || !p || !doc || p->state != "proposee" || !checkInBackground(*p)) return false;   // 1.22.1 : << adresser >> aussi
     if (std::string w; !missionMayApply(p->id, &w)) return fail(w);   // 1.22.0 : pause, annulee, obsolete, autre projet
     Env frozen;
     if (!frozenEnvironment(frozen)) return false;
@@ -1443,6 +1459,68 @@ bool Assistant::applying(int message) const {
 float Assistant::applyProgress() const {
     if (!applyJob_ || applyJob_->total == 0) return 0.f;
     return std::min(1.f, static_cast<float>(applyJob_->done.load()) / static_cast<float>(applyJob_->total));
+}
+
+// ---- 1.22.1 : la verification de fond ------------------------------------------------------------------------------
+bool Assistant::startCheck(const std::string& conversation, const Proposal& p, CheckFor purpose, std::string missionId,
+                           std::vector<std::string> steps, int attempt) {
+    const auto doc = host_.document ? host_.document() : nullptr;
+    Env frozen;
+    if (!doc || !frozenEnvironment(frozen)) return false;
+    auto job = std::make_shared<CheckJob>();
+    job->conversation = conversation;
+    job->proposalId = p.id;
+    job->mission = std::move(missionId);
+    job->steps = std::move(steps);
+    job->purpose = purpose;
+    job->attempt = attempt;
+    job->revision = doc->revision;
+    auto project = std::make_shared<const hmi::Project>(doc->project);
+    job->worker = std::thread([job, project, prop = p, env = std::move(frozen)] {
+        job->result = validate(*project, prop, env);
+        job->finished.store(true, std::memory_order_release);
+    });
+    checkJobs_.push_back(std::move(job));
+    ++revision_;
+    return true;
+}
+
+bool Assistant::checkingProposal(std::string_view proposalId) const {
+    return std::any_of(checkJobs_.begin(), checkJobs_.end(), [&](const std::shared_ptr<CheckJob>& j) { return j && j->proposalId == proposalId; });
+}
+
+void Assistant::pollChecks() {
+    for (std::size_t k = 0; k < checkJobs_.size();) {
+        if (!checkJobs_[k] || !checkJobs_[k]->finished.load(std::memory_order_acquire)) {
+            ++k;
+            continue;
+        }
+        const std::shared_ptr<CheckJob> job = checkJobs_[k];
+        checkJobs_.erase(checkJobs_.begin() + static_cast<std::ptrdiff_t>(k));
+        if (job->worker.joinable()) job->worker.join();
+        ++revision_;
+        Conversation* c = nullptr;
+        for (auto& conv : conversations_)
+            if (conv.id == job->conversation) c = &conv;
+        Proposal* prop = nullptr;
+        if (c)
+            for (auto& m : c->messages)
+                if (m.proposal && m.proposal->id == job->proposalId) prop = &*m.proposal;
+        if (!prop || prop->state != "proposee") continue;   // partie, appliquee ou refusee pendant la verification
+        const auto doc = host_.document ? host_.document() : nullptr;
+        // Le projet a change pendant la verification : refaite sur son etat d'aujourd'hui (trois fois au plus ; ensuite le
+        // resultat est pris tel quel - la carte et l'application revalident de toute facon).
+        if (doc && doc->revision != job->revision && job->attempt < 2 &&
+            startCheck(job->conversation, *prop, job->purpose, job->mission, job->steps, job->attempt + 1))
+            continue;
+        knownChecks_[prop->id] = {job->revision, job->result};
+        prop->create = job->result.create;
+        prop->modify = job->result.modify;
+        prop->remove = job->result.remove;
+        if (job->purpose == CheckFor::Mission && !missionsReadOnly_.count(job->mission))
+            if (mission::Mission* m = missionMut(job->mission)) missionChecked(*m, *prop, job->steps, &job->result, m->state, isoDate(now()));
+        save(*c);
+    }
 }
 
 void Assistant::pollApply() {
@@ -1610,6 +1688,15 @@ bool Assistant::chooseVariable(int message, VariableChoice choice) {
 }
 
 void Assistant::autoApply(int message) {
+    // 1.22.1 : une proposition lourde s'applique sur un fil de fond (sa verification comprise) ; avec des suppressions,
+    // l'ecran demande d'abord (sa verification de fond dit s'il faut confirmer) - jamais une validation sur ce fil.
+    if (const Proposal* p = proposal(message); p && checkInBackground(*p)) {
+        const bool removes = std::any_of(p->ops.begin(), p->ops.end(), [](const Operation& op) { return op.action == Operation::Action::Remove; });
+        std::string why;
+        if (removes) directConfirm_ = message;
+        else if (!applyInBackground(message, false, &why) && !why.empty()) notice_ = "Mode Direct : " + why;
+        return;
+    }
     if (needsConfirm(message)) {
         directConfirm_ = message;   // l'ecran demande d'abord (suppression multiple)
         return;
@@ -1810,7 +1897,16 @@ std::pair<std::string, bool> Assistant::toolResult(const Message& m) const {
     }
     // Encore proposee : la validation d'aujourd'hui dit si elle peut s'appliquer.
     if (const auto doc = host_.document ? host_.document() : nullptr) {
-        const Check ck = validate(doc->project, p, host_.env);
+        // 1.22.1 : une proposition lourde - sa derniere verification de fond, jamais une nouvelle validation sur ce fil
+        // (celui de l'interface) ; aucune encore : dite en attente.
+        std::optional<Check> known;
+        if (checkInBackground(p)) {
+            const auto it = knownChecks_.find(p.id);
+            if (it == knownChecks_.end())
+                return {"en attente : pas encore appliqu\xC3\xA9" "e (sa v\xC3\xA9rification sur le projet est en cours).", false};
+            known = it->second.check;
+        }
+        const Check ck = known ? std::move(*known) : validate(doc->project, p, host_.env);
         // Refusee par la validation : le texte ecrit pour le modele (les erreurs, le detail des
         // genres en cause) - il corrige au tour suivant.
         if (!ck.ok()) return {feedback(ck, p), true};
@@ -2345,13 +2441,23 @@ void Assistant::finishLive(const std::string& stopReason) {
                 if (p->summary.empty()) p->summary = "Proposition de l'Assistant";
                 if (p->request.empty()) p->request = gen_.request;
                 p->state = "proposee";
-                if (doc) {
+                // 1.22.1 : une proposition lourde (une operation << adresser >>, 40 operations et plus) n'est plus validee ICI,
+                // sur le fil de l'interface (8 s de blocage le 01/11) : sur un fil de fond (pollChecks pose ses comptes) ; celle
+                // d'une mission, par la verification de la mission (missionAnswered), une seule fois.
+                const bool heavy = checkInBackground(*p);
+                if (doc && !heavy) {
                     const Check ck = validate(doc->project, *p, host_.env);
                     p->create = ck.create;
                     p->modify = ck.modify;
                     p->remove = ck.remove;
                 }
                 m.proposal = std::move(*p);
+                if (doc && heavy && call.id.empty() && !startCheck(c->id, *m.proposal, CheckFor::Counts)) {
+                    const Check ck = validate(doc->project, *m.proposal, host_.env);
+                    m.proposal->create = ck.create;
+                    m.proposal->modify = ck.modify;
+                    m.proposal->remove = ck.remove;
+                }
             }
         }
         if (!m.tool->error.empty()) {
@@ -2947,13 +3053,31 @@ void Assistant::missionAnswered(const MissionCall& call, Conversation& c, int me
     }
     mission::onGenerated(*m, p, c.id, msg.id, steps, when);
     m->pending = {};
+    const auto doc = host_.document ? host_.document() : nullptr;
+    // 1.22.1 : UNE PROPOSITION LOURDE se verifie sur un fil de fond (pas sur celui de l'interface : le blocage du 01/11) ; la
+    // mission est enregistree tout de suite (P en attente de verification), la suite (validee ou ses erreurs, obsolete, la
+    // notification) vient au tick, quand la verification est finie (pollChecks -> missionChecked).
+    if (doc && checkInBackground(p) && startCheck(c.id, p, CheckFor::Mission, call.id, steps)) {
+        missionTransition(*m, before);
+        saveMission(*m);
+        return;
+    }
+    std::optional<Check> ck;
+    // VERIFIEE SUR UNE COPIE (validate) : validee, ou ses erreurs exactes ; preparee sur un projet qui a change
+    // pendant la reponse : obsolete (elle ne s'appliquera jamais, rien n'est ecrase).
+    if (doc) ck = validate(doc->project, p, host_.env);
+    missionChecked(*m, p, steps, ck ? &*ck : nullptr, before, when);
+}
+
+// 1.22.1 : LA SUITE D'UNE PROPOSITION DE MISSION VERIFIEE (tout de suite, ou a la fin de sa verification de fond) :
+// validee ou ses erreurs exactes ; preparee sur un projet qui a change : obsolete ; la notification ; enregistree.
+void Assistant::missionChecked(mission::Mission& mm, const Proposal& p, const std::vector<std::string>& steps, const Check* ck,
+                               mission::State before, const std::string& when) {
+    mission::Mission* m = &mm;
     bool stale = false;
-    if (const auto doc = host_.document ? host_.document() : nullptr) {
-        // VERIFIEE SUR UNE COPIE (validate) : validee, ou ses erreurs exactes ; preparee sur un projet qui a change
-        // pendant la reponse : obsolete (elle ne s'appliquera jamais, rien n'est ecrase).
-        const Check ck = validate(doc->project, p, host_.env);
-        mission::onChecked(*m, p.id, ck, when);
-        if (ck.stale) {
+    if (ck) {
+        mission::onChecked(*m, p.id, *ck, when);
+        if (ck->stale) {
             mission::onDropped(*m, p.id, "obsolete",
                                "le projet a chang\xC3\xA9 pendant la pr\xC3\xA9paration de la proposition : elle ne s'applique pas sur un \xC3\xA9tat qui n'est "
                                "plus le sien",

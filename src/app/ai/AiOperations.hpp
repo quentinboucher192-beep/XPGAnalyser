@@ -346,6 +346,11 @@ void scopeProposal(Proposal&, const hmi::View* open);
 // La vue visee : par son identifiant, sinon par son nom (nul : plus la).
 [[nodiscard]] const hmi::View* targetView(const hmi::Project&, const Proposal&);
 [[nodiscard]] Check validate(const hmi::Project&, const Proposal&, const Env& = {});
+// 1.22.1 : UNE PROPOSITION A VERIFIER (ET APPLIQUER) HORS DU FIL DE L'INTERFACE - au moins 40 operations, ou une operation
+// << adresser >> (elle lit les cases de toutes les variables de l'equipement : des secondes sur un gros projet ; la
+// validation sur le fil de l'interface a gele IHM Studio 8 s sous Windows le 01/11).
+inline constexpr std::size_t kHeavyOps = 40;
+[[nodiscard]] bool checkInBackground(const Proposal&) noexcept;
 // 1.18.0 : les detections PROPOSEES par une proposition (un equipement cree avec `detecter`) :
 // le nom de l'equipement et la plage a parcourir ("192.168.1.0/24" ; vide : son adresse n'est
 // pas une IPv4). La carte appliquee offre de les lancer - c'est l'utilisateur qui clique.

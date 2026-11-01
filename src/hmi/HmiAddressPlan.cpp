@@ -9,6 +9,7 @@
 #include <map>
 #include <set>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 
 namespace hmi::addr {
@@ -150,6 +151,47 @@ struct Occupancy {
         return out;
     }
 };
+
+// 1.22.1 : LES CASES PLACEES D'UNE AUTRE VARIABLE, gardees d'un apercu a l'autre. Chaque apercu (l'ecran << Modifier
+// l'adresse dans toutes les cases >>, l'operation << adresser >> de l'Assistant avec une formule) recalculait les cases
+// de TOUTES les variables de l'equipement : environ 4 s par apercu sur un projet de 300 000 cases (construction de mise
+// au point), et la validation d'une proposition qui en avait plusieurs a gele IHM Studio 8 s sous Windows (01/11). Un
+// cache par fil (la validation tourne aussi sur un fil de fond) ; la cle : la variable entiere (operator==), et les types
+// du projet et de ses bibliotheques (une structure changee change les cases) ; vide au-dela d'un million de cases.
+using Placed = std::vector<std::pair<Spot, std::string>>;
+const Placed& placedLeaves(const Project& p, const Variable& o) {
+    struct Entry {
+        Variable var;
+        Placed   spots;
+    };
+    struct Cache {
+        std::vector<HmiType>          types;
+        std::unordered_map<Id, Entry> byId;
+        std::size_t                   total{0};
+    };
+    thread_local Cache cache;
+    std::vector<HmiType> types = p.programs.types;
+    p.forEachLibraryType([&types](const HmiType& t, const LoadedLibrary&) { types.push_back(t); });
+    if (types != cache.types) {
+        cache.byId.clear();
+        cache.total = 0;
+        cache.types = std::move(types);
+    }
+    if (const auto it = cache.byId.find(o.id); it != cache.byId.end() && it->second.var == o) return it->second.spots;
+    Entry e{o, {}};
+    for (auto& leaf : ty::leafVariables(p, o)) {
+        Spot s;
+        if (leaf.bound() && spotOf(leaf, s)) e.spots.emplace_back(s, std::move(leaf.name));
+    }
+    constexpr std::size_t kMaxSpots = 1000000;
+    if (cache.total + e.spots.size() > kMaxSpots) {
+        cache.byId.clear();
+        cache.total = 0;
+    }
+    if (const auto it = cache.byId.find(o.id); it != cache.byId.end()) cache.total -= std::min(cache.total, it->second.spots.size());
+    cache.total += e.spots.size();
+    return (cache.byId[o.id] = std::move(e)).spots;
+}
 
 // Un depart lu : "%MW551.0" -> "%MW", 551, 0 ; "4x0101" -> "4x", 101 ; "40101" -> "", 40101.
 bool parseStart(std::string_view text, std::string& prefix, long long& number, int& bit) {
@@ -372,15 +414,6 @@ Plan preview(const Project& p, const Variable& v, std::string_view pattern, std:
     std::vector<std::string> why;
     const Variable x = withFormula(v, pattern, plan.formula);
     const auto after = ty::leafVariables(p, x, nullptr, &why);
-    // Les autres variables du meme equipement : leurs places.
-    Occupancy others;
-    for (const auto& o : p.programs.variables) {
-        if (o.id == v.id || !o.bound() || upper(o.equipment) != upper(v.equipment)) continue;
-        for (const auto& leaf : ty::leafVariables(p, o)) {
-            Spot s;
-            if (leaf.bound() && spotOf(leaf, s)) others.add(s, leaf.name);
-        }
-    }
     // Les cases de la variable elle-meme, apres. 1.12.19 : deux a la meme place (dont une qui change) ne
     // bloque plus - modifier pour toutes les cases, c'est accepter les chevauchements ; l'apercu les montre
     // comme ceux des autres variables (« ... l'a aussi », en ambre).
@@ -404,6 +437,22 @@ Plan preview(const Project& p, const Variable& v, std::string_view pattern, std:
         self.add(spots[i], after[i].name);
         indexOf.emplace(after[i].name, i);
     }
+    // Les autres variables du meme equipement : leurs places. 1.22.1 : gardees d'un apercu a l'autre (placedLeaves), et
+    // seules celles qui touchent un mot des cases de la variable entrent dans l'occupation (pas les 300 000 d'un gros projet).
+    std::set<std::pair<int, long long>> wanted;
+    for (std::size_t i = 0; i < after.size(); ++i)
+        if (placed[i])
+            for (long long w = spots[i].word; w < spots[i].word + spots[i].words; ++w) wanted.emplace(static_cast<int>(spots[i].area), w);
+    Occupancy others;
+    if (!wanted.empty())
+        for (const auto& o : p.programs.variables) {
+            if (o.id == v.id || !o.bound() || upper(o.equipment) != upper(v.equipment)) continue;
+            for (const auto& [s, name] : placedLeaves(p, o)) {
+                bool touches = false;
+                for (long long w = s.word; w < s.word + s.words && !touches; ++w) touches = wanted.count({static_cast<int>(s.area), w}) > 0;
+                if (touches) others.add(s, name);
+            }
+        }
     for (const auto& c : cells) {
         Row r;
         r.cell = c.cell;
