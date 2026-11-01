@@ -4,6 +4,7 @@
 #include "AiContext.hpp"
 
 #include "AiIncidentAnswers.hpp"         // 1.20.0 : les incidents que la demande evoque
+#include "AiVarFolders.hpp"              // 1.22.1 : l'arborescence des dossiers de variables
 #include "../../hmi/HmiRelations.hpp"   // 1.19.0 : ce qui utilise les elements nommes
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiGuide.hpp"   // fold : la demande sans accents ni casse
@@ -253,11 +254,12 @@ void variablesPart(const PromptInput& in, const ContextLimits& lim, ContextInfo&
             if (lines.size() >= lim.variableBytes) break;
             lines += v->name + " : " + v->type;
             if (!v->description.empty()) lines += " - " + clip(v->description, 50);
+            if (!v->folder.empty()) lines += " | " + v->folder;   // 1.22.1 : son dossier
             lines += "\n";
             types.insert(v->type);
             ++info.variablesListed;
         }
-        s += "Variables de l'IHM (" + std::to_string(vars.size()) + ") : nom : type - description (jamais leur valeur ; un membre d'une structure "
+        s += "Variables de l'IHM (" + std::to_string(vars.size()) + ") : nom : type - description | dossier (jamais leur valeur ; un membre d'une structure "
              "s'\xC3\xA9" "crit Variable.Membre) :\n" + lines;
         if (info.variablesListed < vars.size())
             s += "... et " + std::to_string(vars.size() - info.variablesListed)
@@ -552,6 +554,7 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
              "l'arbre du projet) ; tu peux quand m\xC3\xAAme proposer une vue neuve (creer_vue en premier), des variables ou des types IHM.\n";
     selectionPart(in, info, s);
     variablesPart(in, lim, info, s);
+    s += varfold::treeText(*in.project, lim.folderBytes, &info.folders, &info.foldersListed);   // 1.22.1 : ou ranger les variables creees
     viewsPart(in, lim, s);
     toolsPart(in, lim, s);   // 1.18.0
     incidentsPart(in, s);    // 1.20.0

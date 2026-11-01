@@ -868,7 +868,9 @@ void AiPreviewDialog::refresh() {
         heading("VARIABLES IHM \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(check_.newVariables.size()) + ")");
         for (const auto& v : check_.newVariables) {
             rows.push_back({Row::Kind::Item, v.name, v.type, 0});
-            std::string detail = v.initial.empty() ? std::string{} : "valeur initiale " + v.initial;
+            // 1.22.1 : son dossier (donne, repris de l'existant ou deduit : les avertissements disent lequel)
+            std::string detail = "Dossier : " + (v.folder.empty() ? std::string("(racine)") : v.folder);
+            if (!v.initial.empty()) detail += " \xE2\x80\x94 valeur initiale " + v.initial;
             if (!v.description.empty()) detail += (detail.empty() ? "" : " \xE2\x80\x94 ") + v.description;
             if (!detail.empty()) rows.push_back({Row::Kind::Change, detail, {}, 0});
         }

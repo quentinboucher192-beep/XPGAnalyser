@@ -722,6 +722,10 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(ai_compatible_test PRIVATE xpg_app)
     xpg_add_test_executable(ai_options_test tests/ai_options_test.cpp)
     xpg_target_link_libraries(ai_options_test PRIVATE xpg_app)
+    # 1.22.1 : l'Assistant range les variables qu'il cree (AiVarFolders) - un dossier par variable ou par operation, les
+    # dossiers crees, l'existant repris, le prefixe, le melange, le JSON, les consignes et l'arborescence du contexte.
+    xpg_add_test_executable(ai_dossiers_test tests/ai_dossiers_test.cpp)
+    xpg_target_link_libraries(ai_dossiers_test PRIVATE xpg_app)
     # 1.17.0 : l'apprentissage de l'IA dans un fichier (.xia) - exporter, importer, l'installation.
     xpg_add_test_executable(ai_apprentissage_fichier_test tests/ai_apprentissage_fichier_test.cpp)
     xpg_target_link_libraries(ai_apprentissage_fichier_test PRIVATE xpg_app)
@@ -940,6 +944,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiintegree COMMAND ai_integree_test ${XPG_FIXTURE})                   # 1.16.0 : l'IA integree (sans connexion)
     xpg_add_test(NAME aicompatible COMMAND ai_compatible_test)               # 1.16.0 : compatible OpenAI, la limite en direct
     xpg_add_test(NAME aioptions COMMAND ai_options_test)                     # 1.16.0 : vue, variables, types, reperes, formules
+    xpg_add_test(NAME aidossiers COMMAND ai_dossiers_test)                   # 1.22.1 : le dossier des variables creees par l'IA
     xpg_add_test(NAME aiapprentissagefichier COMMAND ai_apprentissage_fichier_test)   # 1.17.0 : l'apprentissage dans un fichier (.xia)
     xpg_add_test(NAME aiapprentissage COMMAND ai_apprentissage_test)        # 1.17.0 : l'onglet Apprentissage (modeles, vocabulaire, mesures)
     xpg_add_test(NAME aiplan COMMAND ai_plan_test)                           # 1.19.0 : le plan d'operations, le compte rendu, les scenarios
