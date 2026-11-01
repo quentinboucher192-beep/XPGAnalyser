@@ -376,6 +376,7 @@ json::Value toJson(const Settings& s) {
     o.set("integreeDabord", s.localFirst);
     o.set("avertirReponses", s.notifyReplies);
     o.set("appliquerMalgreErreurs", s.applyWithErrors);
+    o.set("longueurReponse", s.outputTokens);   // 1.21.3 (0 : Auto)
     json::addMembers(o, s.extra);
     return o;
 }
@@ -406,9 +407,11 @@ Settings settingsFromJson(const json::Value& o) {
     s.localFirst = o.flag("integreeDabord", false);
     s.notifyReplies = o.flag("avertirReponses", true);
     s.applyWithErrors = o.flag("appliquerMalgreErreurs", false);
+    s.outputTokens = static_cast<int>(std::clamp<std::int64_t>(o.integer("longueurReponse", 0), 0, 1000000));
+    if (s.outputTokens > 0 && s.outputTokens < 1024) s.outputTokens = 1024;
     // Une cle API ecrite par erreur (un fichier retouche a la main) n'est jamais relue ni reecrite.
     s.extra = json::unknownMembers(o, {"format", "actif", "fournisseur", "modele", "adresse", "delai", "effort", "mode", "historique",
-                                       "confidentialite", "service", "contexte", "outil", "budget", "integreeDabord", "avertirReponses", "appliquerMalgreErreurs", "cle", "cleApi", "apiKey",
+                                       "confidentialite", "service", "contexte", "outil", "budget", "integreeDabord", "avertirReponses", "appliquerMalgreErreurs", "longueurReponse", "cle", "cleApi", "apiKey",
                                        "api_key"});
     return s;
 }

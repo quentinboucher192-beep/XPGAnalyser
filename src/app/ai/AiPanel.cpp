@@ -210,6 +210,7 @@ std::vector<std::string> wrapPlainLine(const std::string& text, gfx::FontId f, f
 // droit de la carte n'est jamais depasse : "Refuser" a 1280 x 800).
 constexpr float kBtnH = 28.f, kBtnGap = 6.f, kNoteH = 18.f;
 constexpr const char* kDetectText = "D\xC3\xA9tecter ce qui r\xC3\xA9pond\xE2\x80\xA6";   // 1.18.0
+constexpr const char* kNextText = "Proposer la suite";   // 1.21.3
 constexpr std::size_t kNoteLines = 4;   // les lignes d'une note, au plus (le reste : l'apercu)
 std::vector<gfx::Rect> flowButtons(const std::vector<std::string>& labels, float width) {
     std::vector<gfx::Rect> out;
@@ -2413,6 +2414,16 @@ void AiChatView::measure() {
                         b.createLines = wrapPlain("Cr\xC3\xA9" "e aussi : " + made, kMeta, cw - 24.f);
                         ch += static_cast<float>(b.createLines.size()) * kNoteH + 2.f;
                     }
+                    // 1.21.3 : LA SUITE d'une grande demande decoupee par l'IA (le bouton Proposer la suite, une fois appliquee).
+                    if (!m.proposal->next.empty() && m.proposal->state != "refusee") {
+                        auto more = wrapPlain("Suite pr\xC3\xA9vue : " + m.proposal->next, kMeta, cw - 24.f);
+                        if (more.size() > 3) {
+                            more.resize(3);
+                            more.back() += " \xE2\x80\xA6";
+                        }
+                        ch += static_cast<float>(more.size()) * kNoteH + (b.createLines.empty() ? 2.f : 0.f);
+                        for (auto& l : more) b.createLines.push_back(std::move(l));
+                    }
                     // 1.19.0 : LE PLAN D'ACTION - seulement pour une demande qui en merite un (pas une simple question).
                     const plan::Plan& pl = t.plan;
                     const bool showPlan = m.proposal->state != "refusee" && pl.worthShowing();
@@ -2494,10 +2505,12 @@ void AiChatView::measure() {
                             case Assistant::Applied::Changed:
                                 done = "Appliqu\xC3\xA9" "e ; la vue a chang\xC3\xA9 depuis (d'autres modifications, ou elle n'existe plus).";
                                 if (panel_.canDetect(static_cast<int>(i))) b.buttons = {kDetectText};   // 1.18.0
+                                else if (!a.nextRequest(static_cast<int>(i)).empty()) b.buttons = {kNextText};   // 1.21.3
                                 break;
                             case Assistant::Applied::Applied:
                                 done = "Appliqu\xC3\xA9" "e au projet : Ctrl+Z la reprend d'un coup.";
                                 if (panel_.canDetect(static_cast<int>(i))) b.buttons = {kDetectText};   // 1.18.0
+                                else if (!a.nextRequest(static_cast<int>(i)).empty()) b.buttons = {kNextText};   // 1.21.3
                                 break;
                             default:
                                 done = "Refus\xC3\xA9" "e : le projet n'a pas chang\xC3\xA9.";
@@ -2607,6 +2620,10 @@ void AiChatView::rebuild() {
             links_ += cb.apply->clicked->connect([this, k] {
                 if (k >= cards_.size() || cards_[k].message < 0) return;
                 if (cards_[k].detect) (void)panel_.detectFromProposal(cards_[k].message);   // 1.18.0
+                else if (cards_[k].next) {   // 1.21.3 : << Propose la suite : ... >>, envoye comme une demande
+                    const std::string ask = panel_.assistant().nextRequest(cards_[k].message);
+                    if (!ask.empty()) (void)panel_.sendText(ask);
+                }
                 else if (cards_[k].refused) (void)panel_.unrefuseProposal(cards_[k].message);   // 1.16.1
                 else if (cards_[k].undone) (void)panel_.reapplyProposal(cards_[k].message);
                 else (void)panel_.applyProposal(cards_[k].message);
@@ -2622,6 +2639,7 @@ void AiChatView::rebuild() {
         cb.message = b.message;
         cb.refused = p->state == "refusee";
         cb.detect = false;
+        cb.next = false;
         cb.preview->setEnabled(true);
         if (p->state == "appliquee" && panel_.canDetect(b.message)) {   // 1.18.0 : appliquee, une detection proposee
             cb.detect = true;
@@ -2631,6 +2649,18 @@ void AiChatView::rebuild() {
             cb.apply->setTooltip("Ouvrir Communication \xE2\x80\xBA Scanner IP, la plage propos\xC3\xA9" "e remplie. Rien ne part sur le r\xC3\xA9seau "
                                  "tant que tu n'as pas cliqu\xC3\xA9 D\xC3\xA9marrer.");
             cb.apply->setEnabled(true);
+            cb.apply->setVisibility(ui::Visibility::Visible);
+            continue;
+        }
+        // 1.21.3 : appliquee (et pas annulee), une suite prevue par l'IA : la demander.
+        if (p->state == "appliquee" && !b.buttons.empty() && b.buttons.front() == kNextText) {
+            cb.next = true;
+            cb.undone = false;
+            cb.stale = false;
+            cb.apply->setText(kNextText);
+            cb.apply->setTooltip("Envoyer \xC2\xAB Propose la suite : " + p->next + " \xC2\xBB : l'IA propose la partie suivante de la demande "
+                                 "(une nouvelle carte, \xC3\xA0 v\xC3\xA9rifier et appliquer comme celle-ci).");
+            cb.apply->setEnabled(!panel_.assistant().generating());
             cb.apply->setVisibility(ui::Visibility::Visible);
             continue;
         }

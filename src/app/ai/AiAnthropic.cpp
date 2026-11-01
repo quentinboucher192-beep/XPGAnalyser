@@ -711,6 +711,7 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
         return -1;
     };
     const bool locals = library.active() || !request.localTools.empty();
+    int        shrinks = 0;   // 1.21.3 : les longueurs de reponse refusees
     const auto route = [&](ProviderEvent e) {
         if (locals) {
             const bool isRead = library.active() && e.toolName == textparts::kReadTool;
@@ -820,6 +821,17 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
             return finish(errorEvent(r.error, 0, canRetry));
         } else {
             const ApiError e = apiError(status, errBody, request.model);
+            // 1.21.3 : la longueur de la reponse refusee (au-dela de ce que le modele, ou le contexte, accepte) : redemandee
+            // aussitot avec ce que le service dit accepter (quatre fois au plus) ; le panneau retient la limite du modele.
+            if (status == 400 && shrinks < 4)
+                if (const OutputCap cap = outputCapFrom(e.message, request.maxTokens); cap.next > 0) {
+                    ++shrinks;
+                    request.maxTokens = cap.next;
+                    hr.body = anthropicBody(request);
+                    push(statusEvent(cap.modelLimit ? "longueur-modele" : "longueur", std::to_string(cap.next)));
+                    attempt = -1;   // une nouvelle demande, pas une nouvelle tentative
+                    continue;
+                }
             if (!autoRetry(e) || attempt >= opt_.maxRetries) return finish(errorEvent(e.text, e.status, e.retryable));
             retry = e;
         }

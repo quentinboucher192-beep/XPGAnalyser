@@ -460,6 +460,7 @@ private:
         bool        undone{false};        // appliquee puis annulee : `apply` dit Reappliquer
         bool        refused{false};       // 1.16.1 : refusee : `apply` dit Revenir sur le refus
         bool        detect{false};        // 1.18.0 : appliquee : `apply` dit Detecter ce qui repond...
+        bool        next{false};          // 1.21.3 : appliquee, une suite prevue : `apply` dit Proposer la suite
     };
     void measure();
     void placeCards();             // les boutons des cartes, au decalage du moment

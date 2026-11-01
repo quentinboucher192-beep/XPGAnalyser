@@ -334,6 +334,13 @@ public:
     // La fenetre de contexte du modele : celle des reglages, sinon celle que le service a dite
     // (Lister les modeles) ; 0 : inconnue.
     [[nodiscard]] int contextWindow() const;
+    // 1.21.3 : LA LONGUEUR D'UNE REPONSE demandee (max_tokens) : celle des reglages, sinon Auto (kAutoOutputTokens, la
+    // moitie de la fenetre de contexte connue au plus) ; jamais plus que la limite que le service a dite pour ce modele
+    // pendant la seance (un refus 400, redemande aussitot).
+    [[nodiscard]] int outputTokens() const;
+    // 1.21.3 : LA SUITE d'une proposition (l'IA l'a decoupee : son champ << suite >>) - le texte a envoyer pour la
+    // demander (<< Propose la suite : ... >>) ; vide : pas de suite, ou la proposition n'est pas encore appliquee.
+    [[nodiscard]] std::string nextRequest(int message) const;
     // La proposition part en texte (Outil : JSON dans le texte, ou un modele qui a refuse l'outil).
     [[nodiscard]] bool toolsInText() const;
     // Le service est sur ce PC (Ollama, LM Studio, le reseau de l'usine) : pas de limite.
@@ -389,6 +396,13 @@ private:
         bool                    textTool{false};
         // 1.20.0 : les lectures prealables (les parties d'un gros texte joint lues a part) - ajoutees a la consommation.
         ProviderUsage           preread;
+        // 1.21.3 : la longueur demandee (max_tokens) ; une proposition s'ecrivait (l'appel d'outil, ou le bloc JSON en
+        // texte) ; cette reponse est la reprise en plusieurs parties d'une reponse coupee ; ce que la reponse coupee a
+        // consomme (deja compte au cumul : montre avec celle-ci, jamais recompte).
+        int                     maxTokens{0};
+        bool                    proposing{false};
+        bool                    split{false};
+        ProviderUsage           carried;
     };
 
     Host                      host_;
@@ -462,6 +476,11 @@ private:
     mutable std::string                    totalsDay_;
     bool                                   overBudgetOk_{false};
     std::map<std::string, long long>       modelContext_;
+    // 1.21.3 : les longueurs de reponse que les services ont dites (fournisseur|adresse|modele -> jetons), pour la
+    // seance ; la reprise en parties a demander au prochain startLive (la longueur qui a coupe ; 0 : aucune).
+    std::map<std::string, int>             outputCaps_;
+    int                                    splitFrom_{0};
+    [[nodiscard]] std::string              capKey() const;
     std::string                            noTools_;
     std::string                            modelsProvider_;
 };

@@ -706,6 +706,22 @@ void testProvider() {
         check(hasStatus(ev, "reprise") && allText(ev) == "Bonjour" && waited, "429 : la limite epuisee dite, une nouvelle tentative, la reponse");
         check(g_net.count() == 3 && has(g_net.at(0).body, "stream_options") && !has(g_net.at(1).body, "stream_options"), "stream_options refuse : retire");
     }
+    {   // 1.21.3 : la longueur refusee (au plus 16384) : redemandee aussitot avec ce que le service accepte
+        g_net.reset();
+        g_net.push(errorReply(400, "max_tokens is too large: 64000. This model supports at most 16384 completion tokens, whereas you provided 64000."));
+        g_net.push(sseReply(streamText("Bonjour")));
+        ai::OpenAIProvider p(fastRetries());
+        auto r = simpleRequest();
+        r.maxTokens = 64000;
+        (void)p.start(r);
+        const auto ev = runToEnd(p);
+        std::string said;
+        for (const auto& e : ev)
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "longueur-modele") said = e.detail;
+        check(g_net.count() == 2 && has(g_net.at(0).body, "\"max_tokens\":64000") && has(g_net.at(1).body, "\"max_tokens\":16384")
+                  && allText(ev) == "Bonjour" && said == "16384" && !find(ev, ai::ProviderEvent::Type::Error),
+              "400 longueur : redemandee avec 16384 (la limite du modele dite au panneau), puis la reponse");
+    }
     {   // 401, une adresse de ce PC sans en-tete : pas de limite
         g_net.reset();
         g_net.push(errorReply(401, "Incorrect API key provided"));

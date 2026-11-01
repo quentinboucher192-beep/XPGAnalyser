@@ -1840,6 +1840,7 @@ Le bouton Paramètres de l'en-tête (ou un clic sur l'état de connexion) :
 | Clés (1.18.0) | La liste des clés enregistrées de ce fournisseur (celle utilisée est choisie) ; **Gérer les clés…** ouvre le gestionnaire des clés (ci-dessous). Une clé saisie ici et enregistrée y entre sous le nom « Ma clé (Anthropic) ». |
 | Tester la connexion | Demande la liste des modèles avec ces réglages (gratuit, sans consommer de jetons) : « Connexion réussie : 12 modèles », ou l'erreur en clair (clé refusée, adresse introuvable, hors ligne…). |
 | Fenêtre de contexte | Vide : **Auto** (celle que le service dit dans sa liste des modèles, quand il la dit). Sinon, un nombre de jetons. Sous 16 000, les consignes envoyées sont resserrées : seuls les genres de la vue et de ta demande, la vue résumée. |
+| Réponse (1.21.3) | La longueur d'une réponse de l'IA, en jetons (sa réflexion comprise), sur la même ligne que la fenêtre de contexte. Vide : **Auto** – 64 000, la moitié de la fenêtre de contexte au plus. Si le modèle en accepte moins, le service le dit : la demande repart aussitôt avec ce qu'il accepte, et cette limite est retenue pour la séance (rien n'est codé en dur par modèle). |
 | Outil | **Auto** : l'IA propose par l'appel d'outil ; si le modèle ne le connaît pas (beaucoup de petits modèles gratuits), l'Assistant redemande aussitôt une proposition écrite en JSON dans sa réponse, et s'en souvient. **Appel d'outil** : toujours l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la même vérification stricte, le même aperçu, le même Ctrl+Z. |
 | Budget | Les jetons par jour ou par mois (0 : aucun) – voir plus haut. |
 Puis le mode par défaut, la conservation de l'historique (durée, nombre de conversations), la confidentialité (ce qui part avec chaque demande : la vue active, la sélection, les noms et types des variables, les pièces jointes – chacun se décoche) et **Mémoire et apprentissage…**.
@@ -1919,7 +1920,7 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
 == assistant-ia-plan | Le plan d'action, le compte rendu et les questions sur le projet
 : Une demande complexe devient un plan d'action : des étapes rangées par leurs dépendances, vérifiées sur une copie du projet, appliquées d'un bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant répond aussi aux questions sur les relations du projet, le vérifie en entier et propose de ranger ses adresses.
 @depuis 1.19.0
-@mots CLASSEUR, XLSM, MODÈLE DE FICHIER, MODÈLES DE FICHIERS, LISTE D'E/S, FICHIER RÉSEAU, REPORTS, SUPPRIMER, SUPPRESSIONS, STRATÉGIE, REMPLACER, RÉFÉRENCES, INUTILES, BAC À SABLE, EXÉCUTER, ESSAYER, executer_code, analyser_projet, AGENT, PLAN D'ACTION, PLAN, ÉTAPES, DÉPENDANCES, ORDRE, COMPTE RENDU, TRANSACTION, RÉUTILISER, RÉUTILISÉ, RETIRER UNE ÉTAPE, PHASES, RELATIONS, QUI UTILISE, ORPHELINS, IMPACT, SI JE SUPPRIME, VÉRIFIER LE PROJET, VÉRIFIE TOUT MON PROJET, OPTIMISER LES ADRESSES, CHEVAUCHEMENT, INSTALLATION COMPLÈTE, STATION DE POMPAGE
+@mots COUPÉE, RÉPONSE COUPÉE, LONGUEUR, LIMITE DE LONGUEUR, EN PLUSIEURS PARTIES, PROPOSER LA SUITE, SUITE PRÉVUE, CLASSEUR, XLSM, MODÈLE DE FICHIER, MODÈLES DE FICHIERS, LISTE D'E/S, FICHIER RÉSEAU, REPORTS, SUPPRIMER, SUPPRESSIONS, STRATÉGIE, REMPLACER, RÉFÉRENCES, INUTILES, BAC À SABLE, EXÉCUTER, ESSAYER, executer_code, analyser_projet, AGENT, PLAN D'ACTION, PLAN, ÉTAPES, DÉPENDANCES, ORDRE, COMPTE RENDU, TRANSACTION, RÉUTILISER, RÉUTILISÉ, RETIRER UNE ÉTAPE, PHASES, RELATIONS, QUI UTILISE, ORPHELINS, IMPACT, SI JE SUPPRIME, VÉRIFIER LE PROJET, VÉRIFIE TOUT MON PROJET, OPTIMISER LES ADRESSES, CHEVAUCHEMENT, INSTALLATION COMPLÈTE, STATION DE POMPAGE
 @lieux ai.panneau, dialog.ai.apercu
 @voir assistant-ia, assistant-ia-integree, assistant-ia-registre, communication
 Par exemple : « Crée une station de pompage complète avec deux pompes, une cuve, les équipements Modbus, les variables, les alarmes, les scripts, les symboles, les popups et la vue de supervision. »
@@ -2008,6 +2009,15 @@ Joins une **liste d'entrées/sorties**, un **fichier réseau** (adressage IP) ou
 - Demande ensuite par exemple « Crée les variables du fichier joint », « Crée les types IHM du fichier joint », « Crée les équipements du fichier réseau » ou « Adresse les variables du fichier joint sur l'équipement API_1 » : l'Assistant prépare une **proposition**, que tu vérifies dans l'aperçu avant **Appliquer**.
 - Il n'invente jamais un nom ni une adresse, et dit les lignes sans repère, illisibles ou en double. Une adresse %I/%Q n'est jamais adressée en Modbus.
 ! Limites : la détection repose sur des mots-clés (un en-tête atypique se corrige dans la fenêtre Modèle…) ; ni ancien .xls, ni Modbus RTU ; 8 classeurs au plus gardés en mémoire.
+
+@nouveau 1.21.3
+### Une grande demande en plusieurs parties (1.21.3)
+Une réponse de l'IA a une longueur limitée (**Réponse** dans les paramètres : 64 000 jetons par défaut, environ 500 opérations). L'IA la connaît : une demande plus grande (« la page d'accueil avec toutes les infos des armoires, le bandeau d'alarme et les 31 alarmes ») se fait **en plusieurs propositions**.
+- La première est complète et utilisable seule (par exemple la vue et ses objets). Sa carte dit la **Suite prévue** (par exemple « les 31 alarmes et la surveillance de la communication »).
+- Une fois la proposition appliquée, le bouton **Proposer la suite** de la carte envoie « Propose la suite : … » : l'IA propose la partie suivante, sur une nouvelle carte, à vérifier et appliquer comme la première.
+- Si une proposition dépasse quand même la longueur pendant qu'elle s'écrit, elle n'est pas perdue : l'Assistant la **redemande aussitôt en plusieurs parties** (l'état le dit), une fois. Coupée de nouveau, la note le dit : demande une partie à la fois, ou augmente **Réponse**.
+> Une réponse en texte seulement (une longue explication) coupée par la longueur n'est pas redemandée : la note le dit.
+! La reprise coûte une seconde demande : les jetons de la réponse coupée sont comptés (la jauge et le budget).
 
 == incidents | Les incidents : enregistrement et analyse
 : Quand une alarme apparaît en simulation ou au poste d'exploitation, l'IHM crée toute seule un dossier d'incident : l'image et une vidéo de la vue, l'alarme telle qu'elle était, ce à quoi elle est reliée dans le projet, les valeurs du moment, la chronologie, une fiche de diagnostic et l'analyse de l'IA. Tu le consultes, le commentes et le valides.

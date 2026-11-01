@@ -131,6 +131,7 @@ private:
     // 1.16.0 : le service compatible OpenAI, la fenetre de contexte, l'outil, le budget.
     ui::DropDown*     service_{nullptr};
     ui::InputText*    context_{nullptr};
+    ui::InputText*    output_{nullptr};    // 1.21.3 : la longueur d'une reponse (vide : Auto)
     ui::DropDown*     tool_{nullptr};
     ui::InputText*    budget_{nullptr};
     ui::DropDown*     period_{nullptr};

@@ -187,7 +187,14 @@ protected:
         heading("FONCTIONNEMENT");
         row("Mode par d\xC3\xA9" "faut", d_.mode_);
         // 1.16.0 : la fenetre de contexte, l'outil, le budget (un fournisseur relie).
-        row("Fen\xC3\xAAtre de contexte", d_.context_, 150.f);
+        {   // 1.21.3 : la fenetre de contexte et la longueur d'une reponse, sur la meme ligne (la fenetre tient a 1280 x 800)
+            const float cw = 90.f;
+            row("Fen\xC3\xAAtre de contexte", d_.context_, cw);
+            const float ry = y - kRow;
+            const float lx = x + labelW + cw + 8.f;
+            labels_.push_back({{lx, ry + 6.f}, "R\xC3\xA9ponse", false, 56.f});
+            d_.output_->setBounds({lx + 58.f, ry, std::max(64.f, colW - labelW - cw - 66.f), kRow - 4.f});
+        }
         row("Outil", d_.tool_);
         {
             const float bw = 130.f;
@@ -427,6 +434,12 @@ core::Status AiSettingsDialog::buildUi() {
     context_->setValidator([](std::string_view t) { return t.size() <= 8 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
     context_->setTooltip("La fen\xC3\xAAtre de contexte du mod\xC3\xA8le, en jetons. Vide : Auto (celle que le service dit dans la liste des mod\xC3\xA8les). "
                          "Sous 16 000, les consignes sont resserr\xC3\xA9" "es. Ollama coupe en silence au-del\xC3\xA0 de sa fen\xC3\xAAtre : voir l'aide (F1).");
+    // 1.21.3 : la longueur d'une reponse (vide : Auto).
+    output_ = input(".longueur", s.outputTokens > 0 ? std::to_string(s.outputTokens) : std::string{}, "Auto");
+    output_->setValidator([](std::string_view t) { return t.size() <= 7 && std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
+    output_->setTooltip("La longueur d'une r\xC3\xA9ponse de l'IA, en jetons (sa r\xC3\xA9" "flexion comprise). Vide : Auto (64 000, la moiti\xC3\xA9 de la "
+                        "fen\xC3\xAAtre de contexte au plus). Si le mod\xC3\xA8le en accepte moins, le service le dit et la demande repart aussit\xC3\xB4t "
+                        "avec ce qu'il accepte. Une proposition trop longue est redemand\xC3\xA9" "e en plusieurs parties.");
     tool_ = &static_cast<ui::DropDown&>(b->addChild(std::make_unique<ui::DropDown>(base + ".outil")));
     {
         std::vector<ui::DropDown::Item> items;
@@ -512,7 +525,7 @@ void AiSettingsDialog::providerChanged() {
     const bool net = it && providerUsesNetwork(it->value);
     for (ui::Widget* w : {static_cast<ui::Widget*>(model_), static_cast<ui::Widget*>(listModels_), static_cast<ui::Widget*>(key_),
                           static_cast<ui::Widget*>(test_), static_cast<ui::Widget*>(endpoint_), static_cast<ui::Widget*>(timeout_),
-                          static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_),
+                          static_cast<ui::Widget*>(effort_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(context_), static_cast<ui::Widget*>(output_),
                           static_cast<ui::Widget*>(tool_), static_cast<ui::Widget*>(budget_), static_cast<ui::Widget*>(period_),
                           static_cast<ui::Widget*>(showKey_), static_cast<ui::Widget*>(clearKey_), static_cast<ui::Widget*>(localFirst_)})
         if (w) w->setEnabled(net);
@@ -621,6 +634,7 @@ ui::Widget* AiSettingsDialog::field(const std::string& name) const {
     if (name == "memoire") return memory_;
     if (name == "service") return service_;
     if (name == "contexte") return context_;
+    if (name == "longueur") return output_;   // 1.21.3
     if (name == "outil") return tool_;
     if (name == "budget") return budget_;
     if (name == "periode") return period_;
@@ -662,6 +676,8 @@ Settings AiSettingsDialog::draft() const {
     if (s.provider == "openai")
         if (const auto* it = service_->selectedItem()) s.preset = it->value;
     s.contextTokens = std::clamp(std::atoi(context_->text().c_str()), 0, 10000000);
+    s.outputTokens = std::clamp(std::atoi(output_->text().c_str()), 0, 1000000);   // 1.21.3 (vide : Auto)
+    if (s.outputTokens > 0 && s.outputTokens < 1024) s.outputTokens = 1024;
     if (const auto* it = tool_->selectedItem()) s.toolMode = it->value;
     s.budgetTokens = std::max(0LL, std::atoll(budget_->text().c_str()));
     if (const auto* it = period_->selectedItem()) s.budgetPeriod = it->value;

@@ -191,6 +191,9 @@ struct Proposal {
     std::vector<std::size_t> excluded;
     json::Value              plan;
     json::Value              report;
+    // 1.21.3 (a la fin) : LA SUITE - une grande demande decoupee par l'IA : ce qui reste a faire apres cette proposition
+    // (vide : rien). La carte propose << Proposer la suite >> une fois la proposition appliquee.
+    std::string              next;
 };
 
 // ---- valider -------------------------------------------------------------------

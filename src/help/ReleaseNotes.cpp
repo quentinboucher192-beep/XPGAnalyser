@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.21.2", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.3", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 dans la nuit"},
     {"1.20.2", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
@@ -152,6 +153,22 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.21.3 : une grande demande n'est plus coupee
+        note("1.21.3", "Assistant IA", Kind::Fixed,
+         "UNE GRANDE DEMANDE N'EST PLUS COUP\xC3\x89" "E : une proposition trop longue pour une r\xC3\xA9ponse (une vue "
+         "d'accueil compl\xC3\xA8te, ses voyants, ses mesures et des dizaines d'alarmes) n'est plus perdue - l'Assistant la "
+         "redemande aussit\xC3\xB4t en plusieurs parties : une premi\xC3\xA8re partie compl\xC3\xA8te, \xC3\xA0 v\xC3\xA9rifier "
+         "et appliquer, et la suite pr\xC3\xA9vue \xC3\xA9" "crite sur la carte. Une fois la partie appliqu\xC3\xA9" "e, le "
+         "bouton Proposer la suite demande la partie suivante. L'IA sait d\xC3\xA9sormais combien elle peut \xC3\xA9" "crire "
+         "et d\xC3\xA9" "coupe d'elle-m\xC3\xAA" "me une grande demande.",
+         "assistant-ia-plan", ""),
+        note("1.21.3", "Assistant IA", Kind::New,
+         "LA LONGUEUR D'UNE R\xC3\x89PONSE : quatre fois plus longue par d\xC3\xA9" "faut (64 000 jetons au lieu de 16 000, "
+         "la moiti\xC3\xA9 de la fen\xC3\xAAtre de contexte au plus), r\xC3\xA9glable dans les Param\xC3\xA8tres de "
+         "l'Assistant IA (R\xC3\xA9ponse, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Fen\xC3\xAAtre de contexte). Un mod\xC3\xA8le qui "
+         "en accepte moins le dit : la demande repart aussit\xC3\xB4t avec ce qu'il accepte, et la limite est retenue pour "
+         "la s\xC3\xA9" "ance. Rien n'est cod\xC3\xA9 en dur par mod\xC3\xA8le.",
+         "assistant-ia", ""),
         // 1.21.2 : les notifications de l'Assistant, un modele de fichier dans la conversation
         note("1.21.2", "Assistant IA", Kind::New,
          "LES NOTIFICATIONS DE L'ASSISTANT : le panneau de l'Assistant IA a deux onglets, Conversation et Notifications. "

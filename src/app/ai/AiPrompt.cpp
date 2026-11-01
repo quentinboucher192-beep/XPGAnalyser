@@ -667,6 +667,10 @@ std::string operationsTool() {
     ops.set("items", item);
     ops.set("description", "Dans l'ordre : une op\xC3\xA9ration peut citer un objet cr\xC3\xA9\xC3\xA9 plus haut.");
     top.set("operations", ops);
+    // 1.21.3 : une grande demande en plusieurs propositions - ce qui reste a faire apres celle-ci (la carte propose de le
+    // demander une fois la proposition appliquee).
+    top.set("suite", str("Seulement si la demande est trop grande pour une seule proposition : ce qui restera \xC3\xA0 faire apr\xC3\xA8s "
+                         "celle-ci, en une phrase (Les 31 alarmes des armoires et la surveillance de la communication). Absent sinon."));
     schema.set("properties", top);
     Value required = Value::array();
     required.push("operations");
@@ -715,6 +719,20 @@ std::optional<Proposal> proposalFromTool(std::string_view inputJson, const Promp
     p.request = std::string(request);
     p.summary = v.at("resume").isString() ? v.str("resume") : std::string{};
     if (p.summary.empty()) p.summary = "Proposition de l'Assistant";
+    // 1.21.3 : la suite d'une grande demande (une phrase ; bornee).
+    if (const auto* next = v.find("suite"); next && next->isString()) {
+        std::string t = next->asString();
+        while (!t.empty() && (t.back() == ' ' || t.back() == '\n' || t.back() == '\r' || t.back() == '\t')) t.pop_back();
+        std::size_t a = 0;
+        while (a < t.size() && (t[a] == ' ' || t[a] == '\n' || t[a] == '\r' || t[a] == '\t')) ++a;
+        t = t.substr(a);
+        if (t.size() > 600) {
+            std::size_t cut = 600;
+            while (cut > 0 && (static_cast<unsigned char>(t[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
+            t = t.substr(0, cut) + "\xE2\x80\xA6";
+        }
+        p.next = std::move(t);
+    }
     scopeProposal(p, in.view);   // 1.19.0 : la vue ouverte d'abord, sinon la vue neuve principale
     p.fingerprint = in.project ? proposalPrint(*in.project, p) : in.view && usesOpenView(p) ? fingerprint(*in.view) : std::string{};
     return p;
@@ -802,7 +820,8 @@ std::string textToolInstructions() {
            "{\"resume\": \"Une cuve\", \"operations\": [{\"action\": \"creer\", \"genre\": \"Tank\", \"nom\": \"Cuve_1\", \"proprietes\": "
            "{\"x\": \"80\", \"y\": \"120\", \"w\": \"150\", \"h\": \"200\"}}]}\n"
            "```\n"
-           "Le logiciel lit ce bloc strictement (un champ inconnu, une op\xC3\xA9ration inconnue : refus\xC3\xA9) et le v\xC3\xA9rifie comme "
+           "Une demande trop grande pour une seule r\xC3\xA9ponse : ajoute \"suite\" (ce qui restera \xC3\xA0 faire, une phrase) \xC3\xA0 c\xC3\xB4t\xC3\xA9 "
+           "de \"resume\". Le logiciel lit ce bloc strictement (un champ inconnu, une op\xC3\xA9ration inconnue : refus\xC3\xA9) et le v\xC3\xA9rifie comme "
            "un appel d'outil. Une question qui ne modifie rien : pas de bloc. Le r\xC3\xA9sultat de ta proposition pr\xC3\xA9" "c\xC3\xA9" "dente "
            "t'arrive en t\xC3\xAA" "te du message suivant, entre crochets.\n";
 }

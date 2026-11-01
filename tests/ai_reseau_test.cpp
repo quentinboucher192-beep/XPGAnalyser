@@ -1574,8 +1574,8 @@ void testAssistantLive() {
     check(f.as().outgoingSummary().empty(), "pendant la reponse : ce qui part n'est plus dit");
     if (!s.requests.empty()) {
         const auto& r = s.requests[0];
-        check(r.model == "modele-essai" && r.apiKey == "cle-essai-SECRETE" && r.maxTokens == 16000 && r.timeoutSeconds == 60,
-              "la requete : le modele, la cle (en memoire), 16000, le delai");
+        check(r.model == "modele-essai" && r.apiKey == "cle-essai-SECRETE" && r.maxTokens == ai::kAutoOutputTokens && r.timeoutSeconds == 60,
+              "la requete : le modele, la cle (en memoire), la longueur Auto (64000, 1.21.3), le delai");
         check(!r.system.empty() && has(r.toolsJson, "proposer_operations"), "les consignes (systemPrompt) et l'outil (operationsTool)");
         check(!r.systemStable.empty() && r.system == r.systemStable + r.systemDynamic && has(r.systemDynamic, "Vue_Station"),
               "les consignes en deux morceaux : le stable (en cache), le dynamique (le contexte de la vue)");
@@ -2210,6 +2210,146 @@ void testCodeBlocks() {
     check(rec2.saw("Copi\xC3\xA9") && f.panel->chat().copyFlash(), "la pastille dit << Copie >> un moment");
 }
 
+// =============================================================================
+//  1.21.3 : UNE GRANDE DEMANDE N'EST PLUS COUPEE - la longueur d'une reponse (Auto, reglee, refusee par le service puis
+//  redemandee), la reprise automatique en plusieurs parties, la suite d'une proposition.
+// =============================================================================
+const std::string kSuiteInput =
+    "{\"resume\": \"Accueil, partie 1\", \"suite\": \"  Les 31 alarmes des armoires et la surveillance de la communication.  \", "
+    "\"operations\": [{\"action\": \"creer\", \"genre\": \"Tank\", \"nom\": \"Cuve_S\", "
+    "\"proprietes\": {\"x\": \"120\", \"y\": \"120\", \"w\": \"150\", \"h\": \"200\"}}]}";
+
+void testOutputLength() {
+    std::printf("[longueur d'une reponse]\n");
+    // La regle du refus : ce que le service dit accepter.
+    {
+        auto c = ai::outputCapFrom("max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens for claude-opus-4-20250514", 64000);
+        check(c.next == 32000 && c.modelLimit, "Anthropic << 64000 > 32000, maximum allowed >> : 32000, la limite du modele");
+        c = ai::outputCapFrom("input length and `max_tokens` exceed context limit: 187254 + 64000 > 200000, decrease input length or `max_tokens` and try again", 64000);
+        check(c.next == 200000 - 187254 - 512 && !c.modelLimit, "<< entree + longueur > contexte >> : la place qui reste, pour cette demande");
+        c = ai::outputCapFrom("max_tokens is too large: 64000. This model supports at most 16384 completion tokens, whereas you provided 64000.", 64000);
+        check(c.next == 16384 && c.modelLimit, "OpenAI << at most 16384 completion tokens >> : 16384");
+        c = ai::outputCapFrom("Invalid 'max_tokens': integer above maximum value. Expected a value <= 32768, but got 64000 instead.", 64000);
+        check(c.next == 32768 && c.modelLimit, "<< Expected a value <= 32768 >> : 32768");
+        c = ai::outputCapFrom("max_tokens is too large for this model", 64000);
+        check(c.next == 32000 && !c.modelLimit, "un refus de la longueur sans chiffre : la moitie");
+        c = ai::outputCapFrom("messages: text content blocks must be non-empty", 64000);
+        check(c.next == 0, "un autre 400 : rien a redemander");
+        c = ai::outputCapFrom("max_tokens: 1000 > 512, which is the maximum allowed", 1000);
+        check(c.next == 0, "deja au plus bas (1024) : rien a redemander");
+    }
+    // Le fournisseur Anthropic : le refus, puis la demande renvoyee avec ce que le modele accepte.
+    {
+        useFakeNet();
+        g_net.reset();
+        g_net.push(errorReply(400, "invalid_request_error", "max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens for modele-essai"));
+        g_net.push(sseReply(streamText("Voici.")));
+        ai::AnthropicProvider p(fastRetries());
+        auto r = simpleRequest();
+        r.maxTokens = 64000;
+        (void)p.start(r);
+        const auto ev = runToEnd(p);
+        std::string said;
+        for (const auto& e : ev)
+            if (e.type == ai::ProviderEvent::Type::Status && e.text == "longueur-modele") said = e.detail;
+        check(g_net.count() == 2 && has(g_net.at(0).body, "\"max_tokens\":64000") && has(g_net.at(1).body, "\"max_tokens\":32000") && said == "32000"
+                  && allText(ev) == "Voici." && !find(ev, ai::ProviderEvent::Type::Error),
+              "400 longueur : redemandee aussitot avec 32000 (dit au panneau), puis la reponse");
+        g_net.reset();
+    }
+    Fixture f("longueur");
+    FakeScript s;
+    f.as().setProviderFactory([&s](std::string_view) { return std::make_unique<FakeProvider>(s); });
+    f.configure();
+    // La longueur : Auto, la moitie d'une petite fenetre, reglee ; la limite dite par le service, retenue.
+    check(f.as().outputTokens() == ai::kAutoOutputTokens, "Auto : 64000");
+    {
+        ai::Settings st = f.as().settings();
+        st.contextTokens = 32000;
+        f.as().setSettings(st);
+        check(f.as().outputTokens() == 16000, "Auto avec une fenetre de 32000 : la moitie (16000)");
+        st.contextTokens = 0;
+        st.outputTokens = 20000;
+        f.as().setSettings(st);
+        check(f.as().outputTokens() == 20000, "reglee : 20000");
+        const ai::Settings back = ai::settingsFromJson(ai::toJson(st));
+        check(back.outputTokens == 20000 && ai::toJson(st).integer("longueurReponse") == 20000, "gardee dans parametres.json (longueurReponse)");
+        st.outputTokens = 0;
+        f.as().setSettings(st);
+    }
+    {
+        ai::ProviderEvent cap = ev(ai::ProviderEvent::Type::Status, "longueur-modele");
+        cap.detail = "32000";
+        s.replies.push_back({cap, ev(ai::ProviderEvent::Type::Text, "Bonjour."), doneEv("end_turn")});
+        check(f.panel->sendText("Bonjour"), "envoyer");
+        check(!s.requests.empty() && s.requests.back().maxTokens == ai::kAutoOutputTokens && has(s.requests.back().systemDynamic, "LONGUEUR D'UNE R\xC3\x89PONSE")
+                  && has(s.requests.back().systemDynamic, "\"suite\""),
+              "la requete : 64000, et la consigne de longueur (en plusieurs propositions, la suite dans << suite >>)");
+        f.step();
+        check(f.as().outputTokens() == 32000 && f.last().text == "Bonjour.", "la limite dite par le service : retenue pour la seance (32000)");
+    }
+    // LA REPRISE EN PARTIES : une proposition coupee par la longueur est redemandee aussitot, une fois.
+    {
+        const std::size_t before = f.as().current()->messages.size();
+        s.replies.push_back({ev(ai::ProviderEvent::Type::Text, "Je propose la vue Accueil."), ev(ai::ProviderEvent::Type::Status, "operations"),
+                             ev(ai::ProviderEvent::Type::Usage), doneEv("max_tokens")});
+        s.replies.push_back({ev(ai::ProviderEvent::Type::Text, "Premiere partie : la vue et ses objets."), toolEv("toolu_s1", kSuiteInput), doneEv("tool_use")});
+        const std::size_t sent = s.requests.size();
+        check(f.panel->sendText("Cree la page d'accueil avec toutes les infos des armoires et les alarmes"), "envoyer la grande demande");
+        f.step();
+        check(s.requests.size() == sent + 2 && f.as().generating(), "coupee : redemandee aussitot (une seconde requete)");
+        if (s.requests.size() == sent + 2) {
+            const auto& r2 = s.requests.back();
+            check(has(r2.systemDynamic, "REPRISE") && has(r2.systemDynamic, "PREMI\xC3\x88RE PARTIE") && has(r2.systemDynamic, "32\xC2\xA0" "000"),
+                  "la reprise : la consigne de proposer une premiere partie (la longueur qui a coupe dite)");
+            check(!r2.turns.empty() && r2.turns.back().role == ai::ProviderTurn::Role::User && has(r2.turns.back().text, "page d'accueil"),
+                  "la meme demande, sans la reponse coupee");
+        }
+        check(f.as().current()->messages.size() == before + 2, "la reponse coupee est remplacee (la demande, une reponse)");
+        f.step();
+        check(!f.as().generating() && f.last().proposal && f.last().note.empty(), "la premiere partie : une proposition, sans note");
+        const int m = f.lastIndex();
+        if (f.last().proposal) {
+            check(f.last().proposal->next == "Les 31 alarmes des armoires et la surveillance de la communication.", "la suite gardee (" + f.last().proposal->next + ")");
+            check(f.as().nextRequest(m).empty(), "pas encore appliquee : la suite ne se demande pas encore");
+            const ai::Proposal back = ai::proposalFromJson(ai::toJson(*f.last().proposal));
+            check(back.next == f.last().proposal->next && back.extra.find("suite") == nullptr, "la suite gardee dans la conversation (<< suite >>)");
+            check(f.as().apply(m), "appliquer la premiere partie");
+            check(f.as().nextRequest(m) == "Propose la suite : Les 31 alarmes des armoires et la surveillance de la communication.",
+                  "appliquee : << Propose la suite : ... >> (" + f.as().nextRequest(m) + ")");
+            f.panel->chat().rebuild();
+            f.panel->layout();
+            ui::Button* next = f.panel->chat().cardButton(m, 1);
+            check(next && next->visibility() == ui::Visibility::Visible && next->text() == "Proposer la suite", "la carte : le bouton Proposer la suite");
+            s.replies.push_back({ev(ai::ProviderEvent::Type::Text, "Voici les alarmes."), doneEv("end_turn")});
+            const std::size_t n0 = s.requests.size();
+            if (next) next->clicked->emit();
+            check(s.requests.size() == n0 + 1 && has(s.requests.back().turns.back().text, "Propose la suite : Les 31 alarmes"), "un clic : la suite demandee");
+            f.step();
+        }
+    }
+    // Une reprise coupee a son tour : dite, sans boucle.
+    {
+        s.replies.push_back({ev(ai::ProviderEvent::Type::Status, "operations"), doneEv("max_tokens")});
+        s.replies.push_back({ev(ai::ProviderEvent::Type::Status, "operations"), doneEv("max_tokens")});
+        const std::size_t sent = s.requests.size();
+        (void)f.panel->sendText("Encore plus grand");
+        f.step();
+        f.step();
+        check(s.requests.size() == sent + 2 && !f.as().generating(), "deux requetes, pas une troisieme");
+        check(!f.last().proposal && has(f.last().note, "M\xC3\xAAme en plusieurs parties") && has(f.last().note, "Longueur d'une r\xC3\xA9ponse"),
+              "coupee deux fois : dit, avec le reglage a augmenter (" + f.last().note + ")");
+    }
+    // Une reponse en texte seulement, coupee : dite, pas de reprise.
+    {
+        s.replies.push_back({ev(ai::ProviderEvent::Type::Text, "Une tres longue explication"), doneEv("max_tokens")});
+        const std::size_t sent = s.requests.size();
+        (void)f.panel->sendText("Explique tout");
+        f.step();
+        check(s.requests.size() == sent + 1 && has(f.last().note, "plus courte"), "texte seul coupe : pas de reprise, la note le dit");
+    }
+}
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -2236,6 +2376,7 @@ int main() {
     testCodeBlocks();
     testSettingsDialog();
     testFauxFournisseur();
+    testOutputLength();   // 1.21.3
     std::printf("ai_reseau_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

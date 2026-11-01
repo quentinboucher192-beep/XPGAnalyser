@@ -22,6 +22,8 @@
 #include "../../core/Edition.hpp"
 
 #include <algorithm>
+#include <cstdlib>
+#include <utility>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -100,6 +102,34 @@ void notifyApplyFailed(const std::string& conversation, int message, const Propo
     n.action = notifs::toCard(conversation, message);
     n.key = "proposition-echec:" + p.id;
     (void)notifs::post(std::move(n));
+}
+
+// ---- 1.21.3 : LA LONGUEUR D'UNE REPONSE ----
+// "64 000" (l'espace insecable des milliers).
+std::string groupedTokens(int n) {
+    std::string d = std::to_string(std::max(0, n)), out;
+    for (std::size_t i = 0; i < d.size(); ++i) {
+        if (i > 0 && (d.size() - i) % 3 == 0) out += "\xC2\xA0";
+        out += d[i];
+    }
+    return out;
+}
+
+// La consigne dite au modele : sa longueur, et comment faire une grande demande (en plusieurs propositions, la suite dans
+// << suite >>) ; `splitFrom` > 0 : la reprise d'une reponse coupee a cette longueur - une premiere partie seulement.
+std::string lengthPrompt(int maxTokens, int splitFrom) {
+    const int ops = std::max(10, (maxTokens - 2000) / 120);
+    std::string s = "LONGUEUR D'UNE R\xC3\x89PONSE : au plus " + groupedTokens(maxTokens) + " jetons (ta r\xC3\xA9" "flexion comprise), soit environ "
+                    + std::to_string(ops) + " op\xC3\xA9rations. Une demande plus grande se fait en PLUSIEURS PROPOSITIONS : propose d'abord une "
+                    "partie compl\xC3\xA8te et utilisable seule (par exemple la vue et ses objets), et d\xC3\xA9" "cris dans le champ \"suite\" (de "
+                    "l'outil, ou du bloc JSON) ce qui restera \xC3\xA0 faire (par exemple : les alarmes et la surveillance de la communication) ; "
+                    "l'utilisateur demandera la suite apr\xC3\xA8s avoir appliqu\xC3\xA9. Ne commence jamais une proposition que tu ne peux pas finir.";
+    if (splitFrom > 0)
+        s += "\nREPRISE : ta r\xC3\xA9ponse pr\xC3\xA9" "c\xC3\xA9" "dente \xC3\xA0 cette demande d\xC3\xA9passait cette longueur (" + groupedTokens(splitFrom)
+             + " jetons) et a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e : rien n'a \xC3\xA9t\xC3\xA9 propos\xC3\xA9. Propose cette fois UNE PREMI\xC3\x88RE PARTIE seulement (au plus "
+               "environ " + std::to_string(std::max(10, ops / 2)) + " op\xC3\xA9rations), compl\xC3\xA8te et utilisable, avec \"suite\" pour le reste ; "
+               "dis en une ou deux phrases le d\xC3\xA9" "coupage choisi.";
+    return s;
 }
 
 // Le titre d'une erreur du service, d'apres sa reponse HTTP (le detail : le texte de l'erreur, en clair).
@@ -1655,7 +1685,7 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
     r.model = trim(settings_.model);
     r.endpoint = trim(settings_.endpoint);
     r.timeoutSeconds = settings_.timeoutSeconds;
-    r.maxTokens = 16000;
+    r.maxTokens = outputTokens();   // 1.21.3 (16000 avant)
     r.effort = settings_.effort;
     std::string pendingId, pendingText;
     bool pendingError = false;
@@ -1724,6 +1754,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         if (why) *why = std::move(w);
         return false;
     };
+    const int splitFrom = std::exchange(splitFrom_, 0);   // 1.21.3 : une reprise en parties (la longueur qui a coupe)
     auto prov = providerFactory_ ? providerFactory_(settings_.provider) : makeProvider(settings_.provider);
     if (!prov) return fail("Ce fournisseur n'est pas encore branch\xC3\xA9.");
     const auto doc = host_.document ? host_.document() : nullptr;   // tenu le temps de la preparation
@@ -1769,6 +1800,9 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     const std::vector<sheets::Attached> books = settings_.sendAttachments ? attachedWorkbooks(&c, false) : std::vector<sheets::Attached>{};
     const bool booksStructured = std::any_of(books.begin(), books.end(), [](const sheets::Attached& f) { return f.hasLayout; });
     if (const std::string wbText = sheets::workbooksPrompt(books, !req.toolsInText); !wbText.empty()) parts.dynamic += "\n" + wbText;
+    // 1.21.3 : LA LONGUEUR D'UNE REPONSE dite au modele (une grande demande se fait en plusieurs propositions, la suite
+    // dans << suite >>) ; une reprise apres une reponse coupee : la consigne de decouper, cette fois.
+    parts.dynamic += "\n" + lengthPrompt(req.maxTokens, splitFrom);
     req.system = parts.stable + parts.dynamic;
     req.systemStable = std::move(parts.stable);
     req.systemDynamic = std::move(parts.dynamic);
@@ -1874,6 +1908,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
             req.localTools.push_back(std::move(rows));
         }
     }
+    const int maxTokens = req.maxTokens;
     if (!prov->start(std::move(req), why)) return false;
     retire();
     provider_ = std::move(prov);
@@ -1891,6 +1926,8 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     gen_.provider = settings_.provider;
     gen_.model = trim(settings_.model);
     gen_.textTool = toolsInText();
+    gen_.maxTokens = maxTokens;      // 1.21.3
+    gen_.split = splitFrom > 0;
     if (ctx.view) {
         gen_.viewId = ctx.view->id;
         gen_.fingerprint = fingerprint(*ctx.view);
@@ -1932,6 +1969,20 @@ void Assistant::pollLive() {
                     ++revision_;
                     break;
                 }
+                // 1.21.3 : la longueur de la reponse refusee par le service, redemandee avec ce qu'il accepte (la limite du
+                // modele : retenue pour la seance).
+                if (e.text == "longueur" || e.text == "longueur-modele") {
+                    const int n = std::atoi(e.detail.c_str());
+                    if (n > 0) {
+                        gen_.maxTokens = n;
+                        if (e.text == "longueur-modele") outputCaps_[capKey()] = n;
+                        gen_.detail = "Le service accepte au plus " + groupedTokens(n) + " jetons par r\xC3\xA9ponse : demande renvoy\xC3\xA9" "e avec cette longueur\xE2\x80\xA6";
+                        gen_.phase = Phase::Waiting;
+                    }
+                    ++revision_;
+                    break;
+                }
+                if (e.text == "operations") gen_.proposing = true;   // 1.21.3 : une proposition s'ecrit
                 const std::string detail = e.text == "reprise" || e.text == "sans-outil" || e.text == "lecture" || e.text == "outil" ? e.detail
                                            : e.text == "connexion" && gen_.detail.rfind("Lecture de ", 0) != 0 ? gen_.detail
                                                                                                                 : std::string{};
@@ -1949,7 +2000,10 @@ void Assistant::pollLive() {
                 gen_.text += e.text;
                 if (gen_.phase != Phase::Proposing) gen_.phase = Phase::Writing;
                 // 1.16.0 : le bloc de la proposition en texte commence - "Preparation des operations".
-                if (gen_.textTool && gen_.text.find("```") != std::string::npos) gen_.phase = Phase::Proposing;
+                if (gen_.textTool && gen_.text.find("```") != std::string::npos) {
+                    gen_.phase = Phase::Proposing;
+                    gen_.proposing = true;   // 1.21.3
+                }
                 gen_.detail.clear();
                 ++revision_;
                 break;
@@ -1998,6 +2052,45 @@ void Assistant::finishLive(const std::string& stopReason) {
         stop();
         return;
     }
+    // 1.21.3 : UNE PROPOSITION COUPEE PAR LA LONGUEUR (max_tokens pendant qu'elle s'ecrivait : rien n'est propose) - redemandee
+    // AUSSITOT EN PLUSIEURS PARTIES : la reponse coupee est remplacee par une nouvelle, avec la consigne de proposer une
+    // premiere partie complete et de dire le reste dans << suite >>. Une fois seulement (une reprise coupee a son tour : dit).
+    if (stopReason == "max_tokens" && gen_.proposing && !gen_.tool && !gen_.split && gen_.message + 1 == static_cast<int>(c->messages.size())) {
+        const std::string request = gen_.request;
+        const int cut = gen_.maxTokens > 0 ? gen_.maxTokens : outputTokens();
+        ProviderUsage spent = gen_.carried;
+        spent.input += gen_.usage.input + gen_.preread.input;
+        spent.output += gen_.usage.output + gen_.preread.output;
+        spent.cacheRead += gen_.usage.cacheRead + gen_.preread.cacheRead;
+        spent.cacheWrite += gen_.usage.cacheWrite + gen_.preread.cacheWrite;
+        const std::string cutText = trim(gen_.text);
+        c->messages.pop_back();
+        gen_ = {};
+        splitFrom_ = cut;
+        std::string why;
+        if (startLive(*c, request, &why)) {
+            gen_.carried = spent;
+            gen_.detail = "La proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse (" + groupedTokens(cut)
+                          + " jetons) : redemand\xC3\xA9" "e en plusieurs parties\xE2\x80\xA6";
+            notice_ = "Assistant IA : la proposition \xC3\xA9tait trop longue pour une r\xC3\xA9ponse ; elle est redemand\xC3\xA9" "e en plusieurs parties.";
+            ++revision_;
+            return;
+        }
+        // La reprise n'a pas pu partir : la reponse coupee revient, avec la raison.
+        splitFrom_ = 0;
+        Message back;
+        back.id = "m" + std::to_string(c->messages.size() + 1);
+        back.role = "assistant";
+        back.text = cutText;
+        back.state = "fini";
+        back.date = isoDate(now());
+        back.note = "La proposition d\xC3\xA9passait la longueur d'une r\xC3\xA9ponse (" + groupedTokens(cut) + " jetons) et la reprise en "
+                    "plusieurs parties n'a pas pu partir : " + why;
+        c->messages.push_back(std::move(back));
+        if ((c = touch(*c)) != nullptr) save(*c);
+        ++revision_;
+        return;
+    }
     Message& m = c->messages[static_cast<std::size_t>(gen_.message)];
     m.text = trim(gen_.text);
     m.state = "fini";
@@ -2006,8 +2099,8 @@ void Assistant::finishLive(const std::string& stopReason) {
     m.model = gen_.model;
     // 1.16.0 : les jetons de la reponse (le cumul de la conversation) ; la proposition en texte : le
     // bloc ```json sort de la bulle (la carte la montre ; le tour suivant la reecrit pour le modele).
-    if (!gen_.usage.empty() || !gen_.preread.empty())
-        m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total()));
+    if (!gen_.usage.empty() || !gen_.preread.empty() || !gen_.carried.empty())
+        m.extra.set("jetons", static_cast<std::int64_t>(gen_.usage.total() + gen_.preread.total() + gen_.carried.total()));
     if (gen_.textTool && gen_.tool) {
         std::string rest;
         if (extractProposalBlock(m.text, nullptr, &rest)) m.text = rest;
@@ -2015,8 +2108,18 @@ void Assistant::finishLive(const std::string& stopReason) {
     if (stopReason == "refusal") {
         m.note = "La demande a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "clin\xC3\xA9" "e par le mod\xC3\xA8le : rien n'est propos\xC3\xA9.";
     } else if (stopReason == "max_tokens") {
-        m.note = "La r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e (la limite de longueur est atteinte) : aucune op\xC3\xA9ration n'est propos\xC3\xA9" "e. "
-                 "Demande moins d'objets \xC3\xA0 la fois, ou d\xC3\xA9" "coupe la demande.";
+        // 1.21.3 : la longueur dite ; une reprise en parties coupee a son tour ; une reponse en texte seulement.
+        const std::string limit = gen_.maxTokens > 0 ? " (" + groupedTokens(gen_.maxTokens) + " jetons)" : std::string{};
+        if (gen_.split)
+            m.note = "M\xC3\xAAme en plusieurs parties, la r\xC3\xA9ponse d\xC3\xA9passe la longueur d'une r\xC3\xA9ponse" + limit
+                     + " : aucune op\xC3\xA9ration n'est propos\xC3\xA9" "e. Demande une partie \xC3\xA0 la fois (par exemple la vue d'abord, puis "
+                       "les alarmes), ou augmente \xC2\xAB Longueur d'une r\xC3\xA9ponse \xC2\xBB (Param\xC3\xA8tres de l'Assistant IA).";
+        else if (gen_.proposing)
+            m.note = "La r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e (la longueur d'une r\xC3\xA9ponse" + limit + " est atteinte) : aucune op\xC3\xA9ration "
+                     "n'est propos\xC3\xA9" "e. Demande une partie \xC3\xA0 la fois, ou augmente \xC2\xAB Longueur d'une r\xC3\xA9ponse \xC2\xBB (Param\xC3\xA8tres).";
+        else
+            m.note = "La r\xC3\xA9ponse a \xC3\xA9t\xC3\xA9 coup\xC3\xA9" "e (la longueur d'une r\xC3\xA9ponse" + limit + " est atteinte). Demande une r\xC3\xA9ponse "
+                     "plus courte, ou augmente \xC2\xAB Longueur d'une r\xC3\xA9ponse \xC2\xBB (Param\xC3\xA8tres de l'Assistant IA).";
     }
     if (gen_.tool) {
         m.tool = *gen_.tool;
@@ -2219,6 +2322,22 @@ int Assistant::contextWindow() const {
     if (settings_.contextTokens > 0) return settings_.contextTokens;
     const auto it = modelContext_.find(settings_.provider + "|" + trim(settings_.model));
     return it == modelContext_.end() ? 0 : static_cast<int>(std::min<long long>(it->second, 100000000));
+}
+
+std::string Assistant::capKey() const { return settings_.provider + "|" + trim(settings_.endpoint) + "|" + trim(settings_.model); }
+
+int Assistant::outputTokens() const {
+    int n = settings_.outputTokens > 0 ? std::max(settings_.outputTokens, kMinOutputTokens) : kAutoOutputTokens;
+    if (settings_.outputTokens <= 0)
+        if (const int window = contextWindow(); window > 0) n = std::max(kMinOutputTokens, std::min(n, window / 2));
+    if (const auto it = outputCaps_.find(capKey()); it != outputCaps_.end() && it->second > 0) n = std::min(n, it->second);
+    return n;
+}
+
+std::string Assistant::nextRequest(int message) const {
+    const Proposal* p = proposal(message);
+    if (!p || p->next.empty() || p->state != "appliquee") return {};
+    return "Propose la suite : " + p->next;
 }
 
 bool Assistant::toolsInText() const {

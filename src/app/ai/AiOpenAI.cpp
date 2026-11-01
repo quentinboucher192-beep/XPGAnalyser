@@ -690,6 +690,7 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
     const auto autoRetry = [](const ApiError& e) { return e.retryable && (e.status == 429 || e.status >= 500); };
     bool withTools = !request.toolsJson.empty() && !request.toolsInText;
     bool streamUsage = true;
+    int  shrinks = 0;   // 1.21.3 : les longueurs de reponse refusees
     push(statusEvent("connexion"));
     HttpRequest hr;
     hr.method = "POST";
@@ -909,6 +910,15 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 streamUsage = false;
                 continue;
             }
+            // 1.21.3 : la longueur de la reponse refusee (au-dela de ce que le modele, ou le contexte, accepte) : redemandee
+            // aussitot avec ce que le service dit accepter (quatre fois au plus) ; le panneau retient la limite du modele.
+            if (status == 400 && shrinks < 4)
+                if (const OutputCap cap = outputCapFrom(e.message, request.maxTokens); cap.next > 0) {
+                    ++shrinks;
+                    request.maxTokens = cap.next;
+                    push(statusEvent(cap.modelLimit ? "longueur-modele" : "longueur", std::to_string(cap.next)));
+                    continue;
+                }
             if (!autoRetry(e) || attempt >= opt_.maxRetries) {
                 std::string text = e.text;
                 if (e.status == 429)

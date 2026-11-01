@@ -4139,8 +4139,15 @@ const std::vector<Topic>& topics() {
                          "service dit dans sa liste des mod\xC3\xA8les, quand il la dit). Sinon, un nombre "
                          "de jetons. Sous 16 000, les consignes envoy\xC3\xA9" "es sont resserr\xC3\xA9" "es "
                          ": seuls les genres de la vue et de ta demande, la vue "
-                         "r\xC3\xA9sum\xC3\xA9" "e.\nOutil\t**Auto** : l'IA propose par l'appel d'outil ; si "
-                         "le mod\xC3\xA8le ne le conna\xC3\xAEt pas (beaucoup de petits mod\xC3\xA8les "
+                         "r\xC3\xA9sum\xC3\xA9" "e.\nR\xC3\xA9ponse (1.21.3)\tLa longueur d'une "
+                         "r\xC3\xA9ponse de l'IA, en jetons (sa r\xC3\xA9" "flexion comprise), sur la "
+                         "m\xC3\xAAme ligne que la fen\xC3\xAAtre de contexte. Vide : **Auto** \xE2\x80\x93 "
+                         "64 000, la moiti\xC3\xA9 de la fen\xC3\xAAtre de contexte au plus. Si le "
+                         "mod\xC3\xA8le en accepte moins, le service le dit : la demande repart "
+                         "aussit\xC3\xB4t avec ce qu'il accepte, et cette limite est retenue pour la "
+                         "s\xC3\xA9" "ance (rien n'est cod\xC3\xA9 en dur par "
+                         "mod\xC3\xA8le).\nOutil\t**Auto** : l'IA propose par l'appel d'outil ; si le "
+                         "mod\xC3\xA8le ne le conna\xC3\xAEt pas (beaucoup de petits mod\xC3\xA8les "
                          "gratuits), l'Assistant redemande aussit\xC3\xB4t une proposition \xC3\xA9" "crite "
                          "en JSON dans sa r\xC3\xA9ponse, et s'en souvient. **Appel d'outil** : toujours "
                          "l'outil. **JSON dans le texte** : toujours le JSON. Dans tous les cas, la "
@@ -4697,9 +4704,31 @@ const std::vector<Topic>& topics() {
              {K::Warning, "Limites : la d\xC3\xA9tection repose sur des mots-cl\xC3\xA9s (un en-t\xC3\xAAte "
                          "atypique se corrige dans la fen\xC3\xAAtre Mod\xC3\xA8le\xE2\x80\xA6) ; ni ancien "
                          ".xls, ni Modbus RTU ; 8 classeurs au plus gard\xC3\xA9s en m\xC3\xA9moire.", {}},
+             {K::Heading, "Une grande demande en plusieurs parties (1.21.3)", {}, "1.21.3"},
+             {K::Paragraph, "Une r\xC3\xA9ponse de l'IA a une longueur limit\xC3\xA9" "e (**R\xC3\xA9ponse** "
+                         "dans les param\xC3\xA8tres : 64 000 jetons par d\xC3\xA9" "faut, environ 500 "
+                         "op\xC3\xA9rations). L'IA la conna\xC3\xAEt : une demande plus grande (\xC2\xAB la "
+                         "page d'accueil avec toutes les infos des armoires, le bandeau d'alarme et les 31 "
+                         "alarmes \xC2\xBB) se fait **en plusieurs propositions**.", {}, "1.21.3"},
+             {K::Bullet, "La premi\xC3\xA8re est compl\xC3\xA8te et utilisable seule (par exemple la vue et "
+                         "ses objets). Sa carte dit la **Suite pr\xC3\xA9vue** (par exemple \xC2\xAB les 31 "
+                         "alarmes et la surveillance de la communication \xC2\xBB).", {}, "1.21.3"},
+             {K::Bullet, "Une fois la proposition appliqu\xC3\xA9" "e, le bouton **Proposer la suite** de la "
+                         "carte envoie \xC2\xAB Propose la suite : \xE2\x80\xA6 \xC2\xBB : l'IA propose la "
+                         "partie suivante, sur une nouvelle carte, \xC3\xA0 v\xC3\xA9rifier et appliquer "
+                         "comme la premi\xC3\xA8re.", {}, "1.21.3"},
+             {K::Bullet, "Si une proposition d\xC3\xA9passe quand m\xC3\xAAme la longueur pendant qu'elle "
+                         "s'\xC3\xA9" "crit, elle n'est pas perdue : l'Assistant la **redemande "
+                         "aussit\xC3\xB4t en plusieurs parties** (l'\xC3\xA9tat le dit), une fois. "
+                         "Coup\xC3\xA9" "e de nouveau, la note le dit : demande une partie \xC3\xA0 la fois, "
+                         "ou augmente **R\xC3\xA9ponse**.", {}, "1.21.3"},
+             {K::Tip, "Une r\xC3\xA9ponse en texte seulement (une longue explication) coup\xC3\xA9" "e "
+                         "par la longueur n'est pas redemand\xC3\xA9" "e : la note le dit.", {}, "1.21.3"},
+             {K::Warning, "La reprise co\xC3\xBBte une seconde demande : les jetons de la r\xC3\xA9ponse "
+                         "coup\xC3\xA9" "e sont compt\xC3\xA9s (la jauge et le budget).", {}, "1.21.3"},
          },
          {"assistant-ia", "assistant-ia-integree", "assistant-ia-registre", "communication"},
-         {"CLASSEUR", "XLSM", "MOD\xC3\x88LE DE FICHIER", "MOD\xC3\x88LES DE FICHIERS", "LISTE D'E/S", "FICHIER R\xC3\x89SEAU", "REPORTS", "SUPPRIMER", "SUPPRESSIONS", "STRAT\xC3\x89GIE", "REMPLACER", "R\xC3\x89" "F\xC3\x89RENCES", "INUTILES", "BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
+         {"COUP\xC3\x89" "E", "R\xC3\x89PONSE COUP\xC3\x89" "E", "LONGUEUR", "LIMITE DE LONGUEUR", "EN PLUSIEURS PARTIES", "PROPOSER LA SUITE", "SUITE PR\xC3\x89VUE", "CLASSEUR", "XLSM", "MOD\xC3\x88LE DE FICHIER", "MOD\xC3\x88LES DE FICHIERS", "LISTE D'E/S", "FICHIER R\xC3\x89SEAU", "REPORTS", "SUPPRIMER", "SUPPRESSIONS", "STRAT\xC3\x89GIE", "REMPLACER", "R\xC3\x89" "F\xC3\x89RENCES", "INUTILES", "BAC \xC3\x80 SABLE", "EX\xC3\x89" "CUTER", "ESSAYER", "executer_code", "analyser_projet", "AGENT", "PLAN D'ACTION", "PLAN", "\xC3\x89TAPES", "D\xC3\x89PENDANCES", "ORDRE", "COMPTE RENDU", "TRANSACTION", "R\xC3\x89UTILISER", "R\xC3\x89UTILIS\xC3\x89", "RETIRER UNE \xC3\x89TAPE", "PHASES", "RELATIONS", "QUI UTILISE", "ORPHELINS", "IMPACT", "SI JE SUPPRIME", "V\xC3\x89RIFIER LE PROJET", "V\xC3\x89RIFIE TOUT MON PROJET", "OPTIMISER LES ADRESSES", "CHEVAUCHEMENT", "INSTALLATION COMPL\xC3\x88TE", "STATION DE POMPAGE"},
          {"ai.panneau", "dialog.ai.apercu"},
          {},
          "",

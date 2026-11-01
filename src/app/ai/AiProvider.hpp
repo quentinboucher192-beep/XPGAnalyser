@@ -35,6 +35,22 @@ namespace app::ai {
 // L'outil unique que le modele appelle pour proposer des operations sur la vue.
 inline constexpr std::string_view kOperationsTool = "proposer_operations";
 
+// 1.21.3 : LA LONGUEUR D'UNE REPONSE (max_tokens, en jetons ; elle compte aussi la reflexion du modele). << Auto >> :
+// kAutoOutputTokens, la moitie de la fenetre de contexte connue au plus (Assistant::outputTokens). Un service qui la
+// refuse (400 : << au plus N >>, << entree + longueur > contexte >>) est redemande aussitot avec ce qu'il accepte : rien
+// n'est code en dur par modele, c'est le service qui le dit.
+inline constexpr int kAutoOutputTokens = 64000;
+inline constexpr int kMinOutputTokens = 1024;
+struct OutputCap {
+    int  next{0};             // la longueur a redemander (0 : ce refus ne parle pas de la longueur, ou plus rien a reduire)
+    bool modelLimit{false};   // la limite du modele lui-meme (a retenir pour la seance) ; faux : celle de cette demande
+};
+// Le message (anglais) d'un refus 400 du service, la longueur demandee : la longueur a redemander. Reconnus :
+// << max_tokens: 64000 > 32000, which is the maximum allowed >> (Anthropic), << at most 16384 completion tokens >>,
+// << Expected a value <= 128000 >> (compatibles OpenAI), << 187254 + 64000 > 200000 >> (l'entree et la longueur
+// depassent le contexte) ; un refus qui parle de la longueur sans chiffre utilisable : la moitie.
+[[nodiscard]] OutputCap outputCapFrom(std::string_view message, int asked);
+
 // Une piece jointe d'un tour de l'utilisateur, telle que le fournisseur l'envoie.
 struct ProviderAttachment {
     std::string    name;        // "plan.pdf"

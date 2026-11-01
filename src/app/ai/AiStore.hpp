@@ -160,6 +160,9 @@ struct Settings {
     // 1.16.1 : appliquer une proposition MEME S'IL RESTE DES ERREURS (apres une confirmation) : ce qui est en erreur
     // est laisse de cote, et note au journal. Decochee : une erreur bloque (comme avant).
     bool        applyWithErrors{false};
+    // 1.21.3 : LA LONGUEUR D'UNE REPONSE (jetons ; 0 : Auto, kAutoOutputTokens - la moitie de la fenetre de contexte
+    // connue au plus). Un service qui refuse la longueur demandee est redemande avec ce qu'il accepte.
+    int         outputTokens{0};
     json::Value extra;
     bool operator==(const Settings&) const = default;
 };

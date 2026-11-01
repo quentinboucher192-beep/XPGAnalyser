@@ -3208,6 +3208,7 @@ json::Value toJson(const Proposal& p) {
     }
     if (!p.plan.isNull()) o.set("plan", p.plan);
     if (!p.report.isNull()) o.set("compteRendu", p.report);
+    if (!p.next.empty()) o.set("suite", p.next);   // 1.21.3
     json::addMembers(o, p.extra);
     return o;
 }
@@ -3236,8 +3237,9 @@ Proposal proposalFromJson(const json::Value& o) {
             if (x.isNumber() && x.asInt() >= 0 && static_cast<std::size_t>(x.asInt()) < p.ops.size()) p.excluded.push_back(static_cast<std::size_t>(x.asInt()));
     if (const auto* pl = o.find("plan")) p.plan = *pl;
     if (const auto* cr = o.find("compteRendu")) p.report = *cr;
+    p.next = o.str("suite");   // 1.21.3
     p.extra = json::unknownMembers(o, {"id", "etat", "creer", "modifier", "supprimer", "vue", "vueId", "empreinte", "empreinteApres", "demande", "resume",
-                                       "variableChoisie", "operations", "exclues", "plan", "compteRendu"});
+                                       "variableChoisie", "operations", "exclues", "plan", "compteRendu", "suite"});
     return p;
 }
 
