@@ -1,6 +1,8 @@
 # outils\config.ini, clé par clé
 
-Un seul fichier de paramètres pour toute la chaîne. Il est lu par tous les scripts de `outils\` et par `build_installer.bat`, qui passe ses valeurs à Inno Setup. `package.bat` en tire `maintenance\config.ini` pour les scripts installés avec le programme.
+Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu par tous les scripts de `outils\`, par `build_installer.bat` (qui passe ses valeurs à Inno Setup) et par `outils/mingw/package_mingw.py`. `package.bat` en tire `maintenance\config.ini` pour les scripts installés avec le programme. Retour au [README](../README.md).
+
+> Mise à jour 1.21.3 : la section [Produit] décrivait la 1.11.2 (un seul exécutable `XpgAnalyzer.exe`, produit « XPGAnalyser »). Elle reprend maintenant les clés réelles du fichier livré (`cle`, `fichier`, `exe_ihm` ajoutées en 1.12.0 et 1.12.20).
 
 **Règles du fichier**
 
@@ -19,12 +21,15 @@ Un seul fichier de paramètres pour toute la chaîne. Il est lu par tous les scr
 
 | Clé | Valeur livrée | Rôle |
 |---|---|---|
-| `nom` | XPGAnalyser | Le nom dans « Applications installées », le menu Démarrer, l'installateur (ta demande du 29/09). |
-| `editeur` | XPGAnalyser | L'éditeur de la fiche « Applications installées ». |
-| `version` | 1.11.2 | Doit être la même que dans `CMakeLists.txt`, `src\core\Version.hpp` et `resources\windows\xpg_analyzer.rc` ; `build.bat` et `package.bat` le vérifient. |
+| `nom` | API IHM Studio | Le nom dans « Applications installées », le menu Démarrer et l'installateur. |
+| `editeur` | API IHM Studio | L'éditeur de la fiche « Applications installées ». |
+| `cle` | XPGAnalyser | Le nom d'origine, celui de la clé du registre (`Software\XPGAnalyser`) et des dossiers techniques. **Ne pas le changer** : c'est par lui qu'une mise à jour retrouve l'installation et ses réglages. |
+| `fichier` | API-IHM-Studio | Le début du nom des fichiers livrés : `API-IHM-Studio-Setup-<version>.exe`. |
+| `version` | 1.21.3 | Doit être la même que dans `CMakeLists.txt`, `src\core\Version.hpp` et `resources\windows\xpg_analyzer.rc` ; `build.bat` et `package.bat` le vérifient (voir la remarque sur le `.rc` dans [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md#version)). |
 | `app_id` | {68A57092-…} | L'identité de l'installation pour Windows. **Ne jamais la changer** : c'est elle qui fait d'une nouvelle version une mise à jour. |
-| `exe` | XpgAnalyzer.exe | Le nom de l'exe installé (celui que produit MSBuild). |
-| `description` | … | Le commentaire des raccourcis et de la fiche. |
+| `exe` | API-Studio.exe | L'exécutable d'API Studio installé. |
+| `exe_ihm` | IHM-Studio.exe | L'exécutable d'IHM Studio installé. |
+| `description` | Analyse, IHM et simulation de projets Control Expert | Le commentaire des raccourcis et de la fiche. |
 | `url_support` | vide | Facultatif : le lien « Aide » de la fiche. |
 
 ## [Projet]
@@ -69,7 +74,7 @@ Un seul fichier de paramètres pour toute la chaîne. Il est lu par tous les scr
 
 | Clé | Rôle |
 |---|---|
-| `sortie` | `dist` : le dossier de travail de l'installateur, avec `staging\` (ce qui est installé) et `SHA256SUMS.txt`. L'installateur lui-même, `XPGAnalyser-Setup-<version>.exe`, est posé à la racine du dossier ; celui d'une autre version y est rangé dans `dist\anciens\`. |
+| `sortie` | `dist` : le dossier de travail de l'installateur, avec `staging\` (ce qui est installé) et `SHA256SUMS.txt`. L'installateur lui-même, `API-IHM-Studio-Setup-<version>.exe` (préfixe : `[Produit] fichier`), est posé à la racine du dossier ; celui d'une autre version y est rangé dans `dist\anciens\`. |
 | `dossier_donnees_par_defaut` | `{Documents}\XPGAnalyser` : proposé pendant l'installation (chaque compte a le sien). |
 | `anciens_dossiers` | Où chercher les anciennes versions à reprendre (séparés par `;`). L'installation du lot 8 est aussi trouvée par le registre. |
 | `certificat` | Vide : pas de signature (ta réponse du 29/09). Windows SmartScreen avertit au premier lancement. La signature n'est pas automatisée dans cette version : une valeur ici est seulement signalée par `build_installer.bat`, l'installateur n'est pas signé. |
