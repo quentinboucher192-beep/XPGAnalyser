@@ -1,6 +1,6 @@
 # Assistant IA
 
-Référence de l'Assistant IA d'**IHM Studio** (version 1.22.0), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
+Référence de l'Assistant IA d'**IHM Studio** (version 1.22.1), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
 
 ## Sommaire
 
@@ -337,7 +337,9 @@ Relevées dans le code et les notes de livraison 1.21.x et 1.22.0 :
 | `AiProvider`, `AiAnthropic`, `AiOpenAI`, `AiLocal`, `AiDemo`, `AiDesign` | Fournisseurs (contrat commun ; Anthropic ; compatible OpenAI ; IA intégrée ; démonstration ; conception de projets complets par l'IA intégrée) |
 | `AiHttp`, `AiSse` | HTTPS (WinHTTP / libcurl), flux d'événements serveur |
 | `AiPrompt`, `AiRegistry`, `AiContext`, `AiAutomate` | Consignes, registre des genres tiré du code, contexte du projet, variables et types de l'automate |
-| `AiMission`, `AiMissionStore` | Missions IA (1.22.0) : modèle et règles ; fichiers, empreinte du projet, reprise |
+| `AiMission`, `AiMissionStore` | Missions IA (1.22.0) : modèle et règles ; fichiers, empreinte du projet, reprise ; le % et l'activité de chaque étape, son journal (1.22.1) |
+| `AiFixes` | Les corrections d'un clic droit sur une erreur (1.22.1) : les lignes regroupées, le menu de chaque erreur, les corrections gardées dans la proposition |
+| `AiVarFolders` | Le dossier des variables créées (1.22.1) : chemins, reprise de l'existant, déduction par préfixe, mélange, l'arborescence envoyée au modèle |
 | `AiMissionsView`, `AiMissionStrip`, `AiMissionBoard` | Onglet Missions IA, bande et carte « Créer une mission IA ? », tableau de bord et écran de reprise |
 | `AiOperations`, `AiPlan`, `AiDelete` | Opérations, validation, commande unique, aperçu ; plan ; suppression intelligente |
 | `AiPanel`, `AiPlanStrip`, `AiPreviewDialog`, `AiSettingsDialog`, `AiKeysDialog`, `AiContextPane`, `AiFileModelDialog`, `AiNotificationsView`, `AiMemoryDialog`, `AiWorkspace` | Interface et branchement dans l'écran du projet |
