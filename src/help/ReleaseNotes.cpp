@@ -157,6 +157,13 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.22.2 : les parametres des popups compris par l IA, les saccades des missions, l onglet Performances
+        note("1.22.2", "IHM", Kind::New,
+         "L'ONGLET PERFORMANCES DU LOGICIEL : dans le panneau du bas, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Sorties, Console et Diagnostics - ce qui consomme sur "
+         "le fil de l'interface (l'Assistant IA et ses cartes, les missions, la peinture, les \xC3\xA9v\xC3\xA9nements, la simulation...), tri\xC3\xA9 "
+         "par temps propre, sur 10 s, 60 s ou depuis le lancement ; la cadence et le temps d'une image sur 60 s ; la m\xC3\xA9moire et le "
+         "processeur ; les travaux de fond en cours. Le journal des saccades garde chaque image lente (au-del\xC3\xA0 de 50 ms, seuil "
+         "r\xC3\xA9glable) avec les trois parties qui l'ont prise, et Copier le rapport donne un texte pr\xC3\xAAt \xC3\xA0 envoyer.",
+         "performances", ""),
         note("1.22.2", "Assistant IA", Kind::Fixed,
          "LES PARAM\xC3\x88TRES D'UNE POPUP OU D'UN SYMBOLE COMPRIS PAR L'IA : dans une popup qui re\xC3\xA7oit \xC2\xAB Vanne : T_Vanne \xC2\xBB (une "
          "structure), ses objets lisent Vanne.Cmd, Vanne.F0... - l'Assistant les prenait pour des variables invent\xC3\xA9" "es (\xC2\xAB La variable "

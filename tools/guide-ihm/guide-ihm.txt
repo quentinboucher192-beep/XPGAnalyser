@@ -10860,7 +10860,7 @@ Pendant une relecture, aucun script ne tourne : IHM_RELECTURE_* servent dans la 
 
 == performances | Les performances
 : L'onglet Performances de la simulation mesure le cycle IHM, l'évaluation des expressions, le dessin de la vue et chaque script : la dernière valeur, la moyenne, le maximum.
-@mots performances, cycle IHM, dépassement, temps de dessin, SYS.CycleLoad, SYS.CycleLoadMax, SYS.CycleOverruns, SYS.PaintTime
+@mots performances, cycle IHM, dépassement, temps de dessin, SYS.CycleLoad, SYS.CycleLoadMax, SYS.CycleOverruns, SYS.PaintTime, PERFORMANCES DU LOGICIEL, SACCADES, LAG, CE QUI CONSOMME, COPIER LE RAPPORT, MÉMOIRE, PROCESSEUR
 @voir simulation, verifier, essais, variables-systeme
 @capture PNG_352_performances.png | Le synoptique en marche, et l'onglet Performances : le cycle, ses dépassements, les expressions, le dessin, chaque script.
 ### Ce qu'il mesure
@@ -10881,6 +10881,14 @@ Deux boutons de la barre : **recommencer le relevé**, et l'**exporter en CSV** 
 
 **Les lenteurs**, juste dessous : ce qui a duré anormalement longtemps - plus de 50 ms, ou plus de 5 fois son temps habituel (la médiane de ses 100 dernières fois) et au moins 10 ms ; un cycle plus long que sa période, toujours. Un clic et ce qu'il déclenche, un script, l'affichage d'une vue, l'ouverture d'une popup, une lecture lente d'un équipement. Chaque ligne s'ouvre sur ce qui a pris le temps dedans ; **Aller à** ouvre l'objet, le script ou la popup. Les seuils se règlent pour le projet (un clic, le suivant) ; **Vider** demande d'abord ; **Exporter en CSV**. Les 500 dernières sont gardées d'une marche à l'autre ; le Journal de la simulation les a aussi (filtre Lenteurs).
 
+### Les performances du logiciel (panneau du bas, 1.22.2)
+L'onglet **Performances** du panneau du bas (à côté de Sorties, Console et Diagnostics) mesure IHM Studio lui-même, en édition comme en simulation : ce qui prend du temps sur le fil de l'interface, image par image.
+- **En haut** : la fenêtre (10 s, 60 s, depuis le lancement), le seuil des saccades (33, 50, 100, 250 ms), **Remettre à zéro** (repart de maintenant) et **Copier le rapport**.
+- **À gauche** : les images par seconde, le temps moyen et la pire image, la mémoire (ensemble de travail et privée) et le processeur (en % d'un cœur) ; la courbe des 60 dernières secondes ; les travaux de fond en cours (un appel à l'IA, une vérification ou une application de proposition, un audit de mission, une lecture de classeur, un build, un import).
+- **Ce qui consomme** : chaque partie mesurée (l'Assistant IA et ses cartes, les missions, la peinture, les événements, la simulation, les tableaux…), triée par temps propre - sa part, sa moyenne par image, sa pire image, ses appels, son cumul. Le survol d'une ligne dit ce qu'elle mesure et son temps avec ce qu'elle appelle. « peinture.presenter » attend l'écran : au repos, c'est normal qu'il domine.
+- **Le journal des saccades** : chaque image plus longue que le seuil, avec l'heure, sa durée et les trois parties qui l'ont prise (les 200 dernières) ; la pastille de l'onglet compte celles de la dernière minute. Une saccade de 250 ms ou plus est aussi notée dans l'historique interne, celui des rapports de plantage et de blocage.
+- Quand l'appli accroche : ouvre **Performances**, puis **Copier le rapport** (la configuration, les 20 parties qui consomment le plus, les 20 dernières saccades) et colle-le dans ton message.
+- La mesure coûte moins d'un millième du temps d'une image ; l'onglet ne se relit que quatre fois par seconde, et seulement quand il est à l'écran.
 = Tester et livrer › Livrer et exploiter
 
 == configuration | Configuration de l'IHM

@@ -4397,6 +4397,19 @@ const std::vector<Topic>& topics() {
                          "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
              {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
                          "op\xC3\xA9rations) \xC2\xBB.", {}},
+             {K::Heading, "Les param\xC3\xA8tres d'une popup ou d'un symbole", {}},
+             {K::Bullet, "Dans une popup qui re\xC3\xA7oit un param\xC3\xA8tre (Popup_Vanne et son "
+                         "param\xC3\xA8tre **Vanne : T_Vanne**), ses objets lisent le param\xC3\xA8tre par "
+                         "son nom et, pour une structure, par ses membres : **Vanne.Cmd**, **Vanne.F0**. "
+                         "L'Assistant le sait : ce n'est pas une variable du projet, il ne demande pas de la "
+                         "cr\xC3\xA9" "er ; l'appelant donne la variable \xC3\xA0 l'ouverture (Ouvrir la "
+                         "popup : Vanne := Vannes[3]).", {}},
+             {K::Bullet, "La v\xC3\xA9rification accepte ces chemins membre par membre, d'apr\xC3\xA8s le "
+                         "type du param\xC3\xA8tre ; un membre qui n'existe pas est dit, avec les vrais "
+                         "membres du type.", {}},
+             {K::Bullet, "Un param\xC3\xA8tre qui manque \xC3\xA0 une popup existante ne s'ajoute pas par "
+                         "une proposition : l'IA le dit, et tu l'ajoutes dans l'onglet **Param\xC3\xA8tres** "
+                         "de la popup.", {}},
          },
          {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
          {"ASSISTANT", "IA", "ASSISTANT IA", "NOTIFICATIONS DE L'ASSISTANT", "NON LUES", "TOUT MARQUER COMME LU", "EFFACER LES LUES", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CL\xC3\x89S API", "G\xC3\x89RER LES CL\xC3\x89S", "GESTIONNAIRE DES CL\xC3\x89S", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
@@ -23347,9 +23360,39 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA8glent pour le projet (un clic, le suivant) ; **Vider** demande d'abord ; "
                          "**Exporter en CSV**. Les 500 derni\xC3\xA8res sont gard\xC3\xA9" "es d'une marche "
                          "\xC3\xA0 l'autre ; le Journal de la simulation les a aussi (filtre Lenteurs).", {}, "1.12.17"},
+             {K::Heading, "Les performances du logiciel (panneau du bas, 1.22.2)", {}},
+             {K::Paragraph, "L'onglet **Performances** du panneau du bas (\xC3\xA0 c\xC3\xB4t\xC3\xA9 de "
+                         "Sorties, Console et Diagnostics) mesure IHM Studio lui-m\xC3\xAAme, en "
+                         "\xC3\xA9" "dition comme en simulation : ce qui prend du temps sur le fil de "
+                         "l'interface, image par image.", {}},
+             {K::Bullet, "**En haut** : la fen\xC3\xAAtre (10 s, 60 s, depuis le lancement), le seuil des "
+                         "saccades (33, 50, 100, 250 ms), **Remettre \xC3\xA0 z\xC3\xA9ro** (repart de "
+                         "maintenant) et **Copier le rapport**.", {}},
+             {K::Bullet, "**\xC3\x80 gauche** : les images par seconde, le temps moyen et la pire image, la "
+                         "m\xC3\xA9moire (ensemble de travail et priv\xC3\xA9" "e) et le processeur (en % "
+                         "d'un c\xC5\x93ur) ; la courbe des 60 derni\xC3\xA8res secondes ; les travaux de "
+                         "fond en cours (un appel \xC3\xA0 l'IA, une v\xC3\xA9rification ou une application "
+                         "de proposition, un audit de mission, une lecture de classeur, un build, un import).", {}},
+             {K::Bullet, "**Ce qui consomme** : chaque partie mesur\xC3\xA9" "e (l'Assistant IA et ses "
+                         "cartes, les missions, la peinture, les \xC3\xA9v\xC3\xA9nements, la simulation, "
+                         "les tableaux\xE2\x80\xA6), tri\xC3\xA9" "e par temps propre - sa part, sa moyenne "
+                         "par image, sa pire image, ses appels, son cumul. Le survol d'une ligne dit ce "
+                         "qu'elle mesure et son temps avec ce qu'elle appelle. \xC2\xAB peinture.presenter "
+                         "\xC2\xBB attend l'\xC3\xA9" "cran : au repos, c'est normal qu'il domine.", {}},
+             {K::Bullet, "**Le journal des saccades** : chaque image plus longue que le seuil, avec l'heure, "
+                         "sa dur\xC3\xA9" "e et les trois parties qui l'ont prise (les 200 derni\xC3\xA8res) "
+                         "; la pastille de l'onglet compte celles de la derni\xC3\xA8re minute. Une saccade "
+                         "de 250 ms ou plus est aussi not\xC3\xA9" "e dans l'historique interne, celui des "
+                         "rapports de plantage et de blocage.", {}},
+             {K::Bullet, "Quand l'appli accroche : ouvre **Performances**, puis **Copier le rapport** (la "
+                         "configuration, les 20 parties qui consomment le plus, les 20 derni\xC3\xA8res "
+                         "saccades) et colle-le dans ton message.", {}},
+             {K::Bullet, "La mesure co\xC3\xBBte moins d'un milli\xC3\xA8me du temps d'une image ; l'onglet "
+                         "ne se relit que quatre fois par seconde, et seulement quand il est \xC3\xA0 "
+                         "l'\xC3\xA9" "cran.", {}},
          },
          {"simulation", "verifier", "essais", "variables-systeme"},
-         {"performances", "cycle IHM", "d\xC3\xA9passement", "temps de dessin", "SYS.CycleLoad", "SYS.CycleLoadMax", "SYS.CycleOverruns", "SYS.PaintTime"},
+         {"performances", "cycle IHM", "d\xC3\xA9passement", "temps de dessin", "SYS.CycleLoad", "SYS.CycleLoadMax", "SYS.CycleOverruns", "SYS.PaintTime", "PERFORMANCES DU LOGICIEL", "SACCADES", "LAG", "CE QUI CONSOMME", "COPIER LE RAPPORT", "M\xC3\x89MOIRE", "PROCESSEUR"},
          {},
          {{"PNG_352_performances.png", "Le synoptique en marche, et l'onglet Performances : le cycle, ses d\xC3\xA9passements, les expressions, le dessin, chaque script."}},
          "",
