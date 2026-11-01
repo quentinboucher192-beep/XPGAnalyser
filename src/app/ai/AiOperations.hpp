@@ -304,6 +304,20 @@ struct Check {
         std::string              type;
     };
     std::vector<Fault>                                  faults;
+    // 1.22.4 (a la fin) : LES OBJETS EN CAUSE, pour l'apercu (ses cadres de couleur, sa liste) - sans changer le texte des
+    // messages : chaque objet qu'une operation cree, modifie ou supprime (`message` vide), et chaque objet qu'un avertissement
+    // ou une erreur vise (`message` : le texte tel qu'il est dans `warnings` ou `errors`), meme quand le message ne le nomme
+    // pas (<< 2 objets crees ne sont relies a aucune variable >> : CES deux objets). L'objet : sa vue (son nom), son id dans
+    // la copie de la validation et son nom (l'apercu le retrouve par l'id, sinon par le nom).
+    struct Spot {
+        std::size_t op{Fault::kNoOp};   // l'operation (l'indice de Proposal::ops ; kNoOp : la proposition entiere)
+        std::string view;
+        hmi::Id     id{hmi::kNoId};
+        std::string object;
+        std::string message;            // vide : l'operation touche cet objet, simplement
+        bool        error{false};
+    };
+    std::vector<Spot>                                   spots;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 

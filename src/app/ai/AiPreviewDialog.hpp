@@ -37,6 +37,21 @@
 //  pour UNE variable introuvable (la premiere, ou celle qu'on a demandee) - les
 //  autres gardent leur erreur jusqu'a leur propre choix.
 //
+//  1.22.4 : OU SONT LES ERREURS. Chaque objet de l'apercu vise par une erreur est
+//  encadre de rouge, par un avertissement d'ambre (un cadre plus epais, une
+//  pastille !) ; la legende le dit. A gauche, les lignes liees a une erreur ou a
+//  un avertissement (les messages, les etapes, les objets, les variables, les
+//  types) en ont la couleur et la pastille ; une RECHERCHE (le champ de l'appli :
+//  Ctrl+F y met le clavier, Echap la vide) filtre les lignes de toutes les
+//  categories, avec << 12 lignes >> ; deux PUCES, << Erreurs (n) >> et
+//  << Avertissements (n) >>, ne montrent que ces lignes. CHOISIR UNE LIGNE ENCADRE
+//  DANS L'APERCU CE QU'ELLE DESIGNE : un objet, les objets qui lisent une variable
+//  ou un type, ceux d'une etape, ceux d'un message - un cadre de la couleur
+//  d'accent qui pulse une seconde, l'apercu s'y recentre (et zoome si besoin) ; un
+//  clic sur un objet de l'apercu choisit sa ligne. Ce que designe chaque ligne est
+//  calcule une fois par proposition (Check::spots : les objets de chaque operation
+//  et de chaque message), jamais a chaque image.
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -50,10 +65,11 @@
 #include "AiOperations.hpp"
 #include "../../menu/IMenu.hpp"
 
+#include <map>
 #include <string>
 #include <vector>
 
-namespace ui { class Button; class DropDown; class PopupMenu; }
+namespace ui { class Button; class DropDown; class PopupMenu; class SearchField; }
 
 namespace app::ai {
 
@@ -118,6 +134,28 @@ public:
     void focusVariable(const std::string& name, bool openList = false);   // openList : sa liste s'ouvre aussi
     [[nodiscard]] const std::string& variableShown() const noexcept { return missingName_; }
 
+    // 1.22.4 : OU SONT LES ERREURS - le niveau d'un objet de l'apercu (0 : rien ; 1 : un avertissement ; 2 : une erreur) ;
+    // l'objet de l'apercu de ce nom (kNoId : aucun) ; la recherche et les puces (Erreurs, Avertissements) ; les lignes
+    // montrees (titres compris) et celles qui repondent au filtre (<< 12 lignes >> ; 0 sans filtre) ; choisir une ligne (celle
+    // qui dit `part`, sinon la premiere qui le contient ; son groupe se deplie), ce qu'elle encadre dans l'apercu ; un clic sur
+    // un objet de l'apercu (il choisit sa ligne) ; la place d'une puce. Pour les essais et les scripts ; la souris et le
+    // clavier passent par les memes gestes.
+    [[nodiscard]] int                      issueOf(hmi::Id id) const;
+    [[nodiscard]] hmi::Id                  objectId(const std::string& name) const;
+    void                                   setSearch(const std::string& text);
+    [[nodiscard]] std::string              searchText() const;
+    void                                   setIssueFilter(bool errors, bool warnings);
+    [[nodiscard]] bool                     errorFilter() const;
+    [[nodiscard]] bool                     warningFilter() const;
+    [[nodiscard]] std::vector<std::string> visibleRows() const;
+    [[nodiscard]] std::size_t              matchCount() const;
+    bool                                   selectRow(const std::string& part);
+    [[nodiscard]] std::string              selectedRow() const;
+    [[nodiscard]] std::vector<hmi::Id>     highlighted() const;
+    bool                                   clickObject(hmi::Id id);
+    [[nodiscard]] gfx::Rect                chipRect(bool errors) const;
+    [[nodiscard]] ui::SearchField*         searchField() const noexcept { return search_; }
+
 protected:
     core::Status buildUi() override;
 
@@ -156,6 +194,12 @@ private:
     std::size_t                     otherMissing_{0};      // les autres variables introuvables (sans choix)
     bool                            pinned_{false};
     bool                            openChoice_{false};
+    // 1.22.4 : la recherche de la liste ; calcules une fois par proposition (refresh) - le rang de chaque objet de l'apercu,
+    // le niveau de chaque objet en cause et ses messages (son infobulle).
+    ui::SearchField*                         search_{nullptr};
+    std::map<hmi::Id, std::size_t>           objectIndex_;
+    std::map<hmi::Id, int>                   issues_;
+    std::map<hmi::Id, std::vector<std::string>> issueTexts_;
     core::ConnectionScope links_;
 };
 

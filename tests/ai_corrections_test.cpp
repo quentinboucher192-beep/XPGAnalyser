@@ -18,7 +18,14 @@
 //    3. la carte de la conversation : ses notes regroupees, le clic droit, la ligne
 //       << Corrigee : ... >> ;
 //    4. une grosse proposition (au moins 40 operations) : la correction se reverifie
-//       sur le fil de fond de la carte, et l'erreur s'en va.
+//       sur le fil de fond de la carte, et l'erreur s'en va ;
+//    5. 1.22.4 : OU SONT LES ERREURS - les objets en cause notes par la validation
+//       (Check::spots, le texte des messages inchange) ; l'objet en erreur encadre de
+//       rouge, celui en avertissement d'ambre (lu dans le Renderer d'essai) ; la liste
+//       en couleur ; la recherche (les titres gardes, << N lignes >>), les puces
+//       Erreurs / Avertissements, Echap, Ctrl+F ; choisir une variable, un type, une
+//       etape, un message : ce qu'ils designent s'encadre (la couleur d'accent),
+//       l'apercu s'y recentre ; un clic sur un objet choisit sa ligne.
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiFixes.hpp"
@@ -32,9 +39,11 @@
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/widgets/Controls.hpp"
+#include "../src/ui/widgets/SearchField.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -96,18 +105,30 @@ std::string missingText(const std::string& name) {
            "Choisis une variable existante, ou demande sa cr\xC3\xA9" "ation.";
 }
 
-// Un renderer qui retient les textes.
+bool same(gfx::Color a, gfx::Color b) { return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a; }
+
+// Un renderer qui retient les textes ; 1.22.4 : leurs couleurs, et les cadres (place, couleur, epaisseur).
 struct Recorder final : gfx::IRenderer {
-    std::vector<std::string> texts;
+    struct Stroke {
+        gfx::Rect  r;
+        gfx::Color c;
+        float      w;
+    };
+    std::vector<std::string>                        texts;
+    std::vector<std::pair<std::string, gfx::Color>> coloured;
+    std::vector<Stroke>                             strokes;
     void beginFrame(gfx::Color) override {}
     void endFrame() override {}
     void pushClip(const gfx::Rect&) override {}
     void popClip() override {}
     void fillRect(const gfx::Rect&, gfx::Color) override {}
-    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void strokeRect(const gfx::Rect& r, gfx::Color c, float w) override { strokes.push_back({r, c, w}); }
     void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
-    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color c) override {
+        texts.emplace_back(t);
+        coloured.emplace_back(std::string(t), c);
+    }
     void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
     void fillTriangles(const gfx::Vertex*, std::size_t) override {}
     gfx::TextMetrics measure(std::string_view t, gfx::FontId f) const override {
@@ -121,6 +142,14 @@ struct Recorder final : gfx::IRenderer {
     }
     [[nodiscard]] bool saw(std::string_view what) const {
         return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(what) != std::string::npos; });
+    }
+    [[nodiscard]] bool said(std::string_view exact) const { return std::find(texts.begin(), texts.end(), exact) != texts.end(); }
+    // Un cadre de cette couleur et de cette epaisseur autour de ce point (le centre d'un objet de l'apercu).
+    [[nodiscard]] bool framed(gfx::Point at, gfx::Color c, float w) const {
+        return std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& s) { return same(s.c, c) && s.w == w && s.r.contains(at); });
+    }
+    [[nodiscard]] bool inColour(std::string_view exact, gfx::Color c) const {
+        return std::any_of(coloured.begin(), coloured.end(), [&](const auto& t) { return t.first == exact && same(t.second, c); });
     }
 };
 
@@ -683,6 +712,188 @@ void testBackground() {
     check(f.panel->chat().resultReady(m, &ck, nullptr, nullptr) && ck.ok(), "la carte se reverifie (son fil de fond) : plus d'erreur");
 }
 
+// ---- 5. 1.22.4 : ou sont les erreurs --------------------------------------------------------------------------------------
+// Un type, une variable de ce type, quatre objets : Voyant_Porte lit Armoire1.Porte, Voyant_Marche une variable du projet,
+// Voyant_Defaut une variable introuvable (une erreur), Cuve_Libre aucune (l'avertissement << ... a aucune variable >>).
+ai::Proposal armoireProposal(hmi::Id view) {
+    ai::Proposal p;
+    p.id = "op-armoire";
+    p.state = "proposee";
+    p.view = "Vue_Station";
+    p.viewId = view;
+    p.request = "Ajoute l'armoire et ses voyants";
+    p.summary = "Armoire";
+    ai::Operation type;
+    type.action = ai::Operation::Action::Type;
+    type.name = "T_Armoire";
+    type.members = {{"Porte", "BOOL", "porte ouverte"}, {"Defaut", "BOOL", "en d\xC3\xA9" "faut"}};
+    p.ops.push_back(type);
+    ai::Operation vars;
+    vars.action = ai::Operation::Action::Variables;
+    ai::Operation::VariableSpec v;
+    v.name = "Armoire1";
+    v.type = "T_Armoire";
+    v.description = "l'armoire 1";
+    vars.variables = {v};
+    p.ops.push_back(vars);
+    p.ops.push_back(voyant("Voyant_Porte", "Armoire1.Porte", 40));
+    p.ops.push_back(voyant("Voyant_Marche", "Pompe_1_Marche", 80));
+    p.ops.push_back(voyant("Voyant_Defaut", "Vanne.Inconnue", 120));
+    ai::Operation cuve;
+    cuve.action = ai::Operation::Action::Create;
+    cuve.kind = "Tank";
+    cuve.name = "Cuve_Libre";
+    cuve.props = {{"x", "400"}, {"y", "40"}};
+    p.ops.push_back(cuve);
+    return p;
+}
+
+void testIssues() {
+    std::printf("[ou sont les erreurs]\n");
+    const std::string unboundTail = " \xC3\xA0 aucune variable : \xC3\xA0 associer ensuite (l'Assistant n'invente pas de variable).";
+    // 1. LE MOTEUR : les objets en cause (Check::spots) ; le texte des messages ne change pas.
+    {
+        auto doc = std::make_shared<hmi::Document>();
+        const hmi::Id view = seedProject(doc->project);
+        const auto ck = ai::validate(doc->project, armoireProposal(view));
+        check(ck.errors.size() == 1 && ck.errors.front() == missingText("Vanne.Inconnue"), "une erreur : Vanne.Inconnue (texte inchange)");
+        const auto unbound = std::find_if(ck.warnings.begin(), ck.warnings.end(), [&](const std::string& w) {
+            return w.size() > unboundTail.size() && w.compare(w.size() - unboundTail.size(), unboundTail.size(), unboundTail) == 0;
+        });
+        check(unbound != ck.warnings.end(), "l'avertissement des objets sans variable (texte inchange)");
+        const auto spotted = [&](const std::string& message, const std::string& object, bool error) {
+            return std::any_of(ck.spots.begin(), ck.spots.end(), [&](const ai::Check::Spot& s) {
+                return s.message == message && s.object == object && s.error == error && s.view == "Vue_Station";
+            });
+        };
+        check(unbound != ck.warnings.end() && spotted(*unbound, "Cuve_Libre", false) && !spotted(*unbound, "Voyant_Porte", false),
+              "l'avertissement global vise CES objets (Check::spots) : Cuve_Libre, pas Voyant_Porte");
+        check(spotted(missingText("Vanne.Inconnue"), "Voyant_Defaut", true), "l'erreur vise son objet : Voyant_Defaut");
+        check(std::any_of(ck.spots.begin(), ck.spots.end(), [](const ai::Check::Spot& s) { return s.message.empty() && s.op == 2 && s.object == "Voyant_Porte"; }),
+              "l'operation 3 (poser Voyant_Porte) touche Voyant_Porte");
+        check(std::none_of(ck.spots.begin(), ck.spots.end(), [](const ai::Check::Spot& s) { return s.op == 0 || s.op == 1; }),
+              "le type et la variable ne touchent aucun objet");
+    }
+    // 2. LA PREVISUALISATION
+    Fixture f("reperes", true, armoireProposal);
+    const int m = f.open();
+    check(m == 1, "la proposition de l'armoire");
+    if (m < 0) return;
+    auto* pv = f.preview(m);
+    check(pv != nullptr, "la previsualisation s'ouvre");
+    if (!pv) return;
+    const hmi::Id porte = pv->objectId("Voyant_Porte"), marche = pv->objectId("Voyant_Marche"), defaut = pv->objectId("Voyant_Defaut"),
+                  cuve = pv->objectId("Cuve_Libre");
+    check(porte != hmi::kNoId && marche != hmi::kNoId && defaut != hmi::kNoId && cuve != hmi::kNoId, "les quatre objets dans l'apercu");
+    check(pv->issueOf(defaut) == 2 && pv->issueOf(cuve) == 1 && pv->issueOf(marche) == 0 && pv->issueOf(porte) == 0,
+          "les niveaux : Voyant_Defaut une erreur, Cuve_Libre un avertissement, les autres rien");
+    const ui::Theme th = ui::Theme::dark();
+    const auto draw = [&] {
+        Recorder rec;
+        pv->widgetRoot()->render(ui::PaintContext{rec, th, pv->widgetRoot()->bounds(), f.t, nullptr});
+        return rec;
+    };
+    {
+        const Recorder rec = draw();
+        check(rec.framed(pv->objectPoint("Voyant_Defaut"), th.color.error, 3.f), "Voyant_Defaut : encadre de rouge (le cadre epais)");
+        check(rec.framed(pv->objectPoint("Cuve_Libre"), th.color.warning, 3.f) && !rec.framed(pv->objectPoint("Cuve_Libre"), th.color.error, 3.f),
+              "Cuve_Libre : encadre d'ambre");
+        check(!rec.framed(pv->objectPoint("Voyant_Marche"), th.color.error, 3.f) && !rec.framed(pv->objectPoint("Voyant_Marche"), th.color.warning, 3.f),
+              "Voyant_Marche : aucun cadre d'erreur ni d'avertissement");
+        check(rec.said("erreur") && rec.said("avertissement"), "la legende : erreur, avertissement");
+        check(rec.said("Erreurs (1)") && rec.saw("Avertissements ("), "les puces : Erreurs (1), Avertissements (n)");
+        check(has(pv->previewTooltip(pv->objectPoint("Voyant_Defaut")), "Erreur : La variable"), "l'infobulle de l'objet : son erreur");
+    }
+    // LA RECHERCHE : les lignes de toutes les categories, leurs titres gardes, le compte.
+    pv->setSearch("Voyant_Porte");
+    auto shown = pv->visibleRows();
+    check(listed(shown, "Voyant_Porte") && indexHaving(shown, "OBJETS CONCERN\xC3\x89S") >= 0 && indexHaving(shown, "Poser Voyant_Porte") >= 0,
+          "la recherche : l'objet, son etape (groupe replie ou non), le titre de leur categorie");
+    check(!listed(shown, "Cuve_Libre") && !listed(shown, "Voyant_Marche") && indexHaving(shown, "TYPES IHM") < 0 && indexHaving(shown, "ERREURS") < 0,
+          "le reste, et les categories sans resultat, s'en vont");
+    check(pv->matchCount() >= 3 && pv->matchCount() < shown.size(), "le compte : " + std::to_string(pv->matchCount()) + " lignes");
+    {
+        const Recorder rec = draw();
+        check(rec.said(std::to_string(pv->matchCount()) + " lignes"), "<< N lignes >> a droite de la recherche");
+    }
+    (void)pv->HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(pv->searchText().empty() && pv->matchCount() == 0 && listed(pv->visibleRows(), "Cuve_Libre") && f.mm.top() == pv,
+          "Echap vide la recherche (la fenetre reste)");
+    pv->setSearch("Cuve");
+    {
+        const Recorder rec = draw();
+        check(rec.inColour("Cuve_Libre", th.onSurface(th.color.warning)), "a gauche : la ligne de Cuve_Libre en ambre");
+    }
+    pv->setSearch("Voyant_Defaut");
+    {
+        const Recorder rec = draw();
+        check(rec.inColour("Voyant_Defaut", th.onSurface(th.color.error)), "a gauche : la ligne de Voyant_Defaut en rouge");
+    }
+    pv->setSearch({});
+    // LES PUCES : les erreurs, les avertissements, les deux.
+    pv->setIssueFilter(true, false);
+    shown = pv->visibleRows();
+    check(listed(shown, missingText("Vanne.Inconnue")) && listed(shown, "Voyant_Defaut") && !listed(shown, "Cuve_Libre") && indexHaving(shown, unboundTail) < 0,
+          "Erreurs : les lignes des erreurs seulement");
+    pv->setIssueFilter(false, true);
+    shown = pv->visibleRows();
+    check(listed(shown, "Cuve_Libre") && !listed(shown, "Voyant_Defaut") && indexHaving(shown, unboundTail) >= 0 && !listed(shown, missingText("Vanne.Inconnue")),
+          "Avertissements : les lignes des avertissements seulement");
+    pv->setIssueFilter(true, true);
+    shown = pv->visibleRows();
+    check(listed(shown, "Cuve_Libre") && listed(shown, "Voyant_Defaut") && !listed(shown, "Voyant_Marche"), "les deux puces : l'un ou l'autre");
+    pv->setIssueFilter(false, false);
+    {
+        (void)draw();
+        const gfx::Rect chip = pv->chipRect(true);
+        (void)f.mm.HandleEvent(ui::MouseDown{{chip.x + 12.f, chip.y + chip.h / 2.f}, ui::MouseButton::Left, 1, {}});
+        check(chip.w > 0.f && pv->errorFilter() && !pv->warningFilter(), "un clic sur la puce Erreurs");
+        (void)f.mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+        f.mm.applyPending();
+        check(!pv->errorFilter() && f.mm.top() == pv, "Echap : tout remontre (la fenetre reste)");
+    }
+    // CHOISIR UNE LIGNE : ce qu'elle designe s'encadre (la couleur d'accent), l'apercu s'y recentre.
+    const auto only = [](const std::vector<hmi::Id>& ids, hmi::Id id) { return ids == std::vector<hmi::Id>{id}; };
+    const auto holds = [](const std::vector<hmi::Id>& ids, hmi::Id id) { return std::find(ids.begin(), ids.end(), id) != ids.end(); };
+    check(pv->selectRow("Armoire1") && pv->selectedRow() == "Armoire1" && only(pv->highlighted(), porte),
+          "la variable Armoire1 : l'objet qui la lit s'encadre (Voyant_Porte)");
+    {
+        const Recorder rec = draw();
+        check(rec.framed(pv->objectPoint("Voyant_Porte"), th.color.accent, 3.f), "le cadre de la ligne choisie : la couleur d'accent");
+    }
+    check(pv->selectRow("T_Armoire") && pv->selectedRow() == "T_Armoire" && only(pv->highlighted(), porte),
+          "le type T_Armoire : les objets qui lisent une variable de ce type");
+    check(pv->selectRow("Cr\xC3\xA9" "er le type T_Armoire") && only(pv->highlighted(), porte), "l'etape du type : les objets qui lisent ses variables");
+    pv->setPreviewZoom(1.f);
+    check(pv->selectRow("Poser Voyant_Defaut") && only(pv->highlighted(), defaut), "une etape : l'objet qu'elle pose");
+    {
+        const gfx::Rect area = pv->previewArea();
+        const gfx::Point at = pv->objectPoint("Voyant_Defaut");
+        check(pv->previewZoom() > 1.f && std::abs(at.x - (area.x + area.w / 2.f)) < 2.f && std::abs(at.y - (area.y + area.h / 2.f)) < 2.f,
+              "l'apercu zoome et se recentre sur elle (" + std::to_string(pv->previewZoom()) + ")");
+    }
+    check(pv->selectRow("Vanne.Inconnue") && holds(pv->highlighted(), defaut), "l'erreur : son objet");
+    check(pv->selectRow(unboundTail) && holds(pv->highlighted(), cuve) && !holds(pv->highlighted(), porte), "l'avertissement global : CES objets");
+    // UN CLIC SUR UN OBJET DE L'APERCU : sa ligne a gauche.
+    pv->setPreviewZoom(1.f);
+    (void)f.mm.HandleEvent(ui::MouseDown{pv->objectPoint("Voyant_Marche"), ui::MouseButton::Left, 1, {}});
+    check(pv->selectedRow() == "Voyant_Marche" && only(pv->highlighted(), marche), "un clic sur Voyant_Marche : sa ligne a gauche");
+    check(pv->clickObject(cuve) && pv->selectedRow() == "Cuve_Libre", "un clic sur Cuve_Libre : sa ligne");
+    // CTRL+F : le clavier dans la recherche ; Echap la vide, puis ferme.
+    ui::KeyDown ctrlF{ui::Key::F, {}, false};
+    ctrlF.mods.ctrl = true;
+    (void)f.mm.HandleEvent(ctrlF);
+    check(pv->searchField() && pv->searchField()->field().focused(), "Ctrl+F : le clavier dans la recherche");
+    (void)f.mm.HandleEvent(ui::TextInput{"Cuve"});
+    check(pv->searchText() == "Cuve" && listed(pv->visibleRows(), "Cuve_Libre") && !listed(pv->visibleRows(), "Voyant_Porte"), "taper filtre la liste");
+    (void)f.mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+    f.mm.applyPending();
+    check(pv->searchText().empty() && f.mm.top() == pv, "Echap : la recherche se vide, la fenetre reste");
+    (void)f.mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+    f.mm.applyPending();
+    check(dynamic_cast<ai::AiPreviewDialog*>(f.mm.top()) == nullptr && f.as().proposal(m)->state == "proposee", "Echap encore : la fenetre se ferme, rien n'est decide");
+}
+
 } // namespace
 
 int main() {
@@ -698,6 +909,7 @@ int main() {
     testPreview();
     testCard();
     testBackground();
+    testIssues();   // 1.22.4
     std::printf("ai_corrections_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
