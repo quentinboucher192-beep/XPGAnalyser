@@ -85,7 +85,11 @@ static void testRing() {
     // Un lecteur pendant les ecritures.
     std::size_t readWhileWriting = 0;
     go = true;
-    while (trail::written() < 70000) readWhileWriting += trail::recent(2000).size();
+    // Au moins une lecture apres le depart des ecrivains : sous une forte charge (4 processeurs pris par d'autres
+    // constructions), les 4 fils pouvaient tout ecrire avant que le lecteur ait la main - zero lecture, l'essai echouait
+    // sans que le tampon soit en cause (1.22.6, ctest en parallele avec MinGW et Wine).
+    do readWhileWriting += trail::recent(2000).size();
+    while (trail::written() < 70000);
     for (auto& th : threads) th.join();
     CHECK(trail::written() == 80000);
     all = trail::recent(trail::kCapacity);
