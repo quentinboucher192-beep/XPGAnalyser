@@ -150,6 +150,9 @@ struct Operation {
     // `objects` les noms, `props` la strategie (strategie, remplacer_par, inutiles, liste) ; `keep` : les elements EXCLUS
     // (jamais supprimes ni modifies). Le JSON : "genre", "objets", "strategie"..., "exclure".
     std::vector<std::string>                         keep;
+    // 1.22.0 (a la fin) : LES MISSIONS (AiMission.hpp) - l'etape de la mission que l'operation sert ("S3" ; vide : toutes
+    // celles de la proposition). Le JSON : "etape", permis pour toutes les actions.
+    std::string                                      step;
     bool operator==(const Operation&) const = default;
 };
 

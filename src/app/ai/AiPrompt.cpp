@@ -291,7 +291,7 @@ std::string malformed(const json::Value& o, std::size_t n) {
         if (x.action == *action) f = &x;
     const std::string what = at + " (" + std::string(actionKey(*action)) + ")";
     for (const auto& [key, value] : o.members()) {
-        if (key == "action") continue;
+        if (key == "action" || key == "etape") continue;   // 1.22.0 : "etape" (l'etape de la mission), pour toutes
         if (std::find(f->allowed.begin(), f->allowed.end(), key) != f->allowed.end()) continue;
         std::vector<std::string> allowed;
         for (const auto a : f->allowed) allowed.emplace_back(a);

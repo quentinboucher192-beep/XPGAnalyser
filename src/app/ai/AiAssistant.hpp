@@ -50,6 +50,7 @@
 #include "AiAgentTools.hpp"
 #include "AiAttachments.hpp"   // 1.21.0 : le contexte de la discussion
 #include "AiFileModels.hpp"    // 1.21.0 : les classeurs joints, les modeles de fichiers
+#include "AiMissionStore.hpp"   // 1.22.0 : les missions IA persistantes (et AiMission.hpp)
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
@@ -192,6 +193,56 @@ public:
     bool clearWorkbookChoice(const std::string& attachmentId, std::string* why = nullptr);
     // Les lectures de classeurs finies (les essais : attendre, puis tick).
     bool waitWorkbooks(int ms);
+
+    // ---- 1.22.0 : LES MISSIONS IA PERSISTANTES (AiMission.hpp, AiMissionStore.hpp) ----------------------------------
+    // Une demande complexe devient une MISSION : un plan d'etapes ordonnees par leurs dependances, des propositions
+    // successives liees a ces etapes, leur resultat REEL (le compte rendu lu dans le projet), gardee dans IA/missions
+    // et reprise apres une fermeture. Les missions sont relues par load() ; chaque evenement les enregistre aussitot.
+    [[nodiscard]] const std::vector<mission::Mission>& missions() const noexcept { return missions_; }
+    [[nodiscard]] std::uint64_t                        missionsRevision() const noexcept { return missionsRev_; }
+    [[nodiscard]] const mission::Mission*              findMission(std::string_view id) const noexcept;
+    // La mission de la conversation ouverte (lancee ou reprise dans cette conversation ; la plus recente) ; nul : aucune.
+    [[nodiscard]] const mission::Mission* activeMission() const noexcept;
+    // La mission d'une proposition (Proposal::id) ; nul : une proposition hors mission.
+    [[nodiscard]] const mission::Mission* missionOfProposal(std::string_view proposalId) const noexcept;
+    // Proposer << Creer une mission IA ? >> pour cette demande : une IA connectee, une demande complexe
+    // (mission::looksComplex), aucune mission en cours dans la conversation ouverte.
+    [[nodiscard]] bool suggestsMission(std::string_view request) const;
+    // CREER : la mission (enregistree), dans la conversation ouverte (une neuve s'il n'y en a pas) ; la demande part a
+    // l'IA pour l'ANALYSE du projet et le PLAN (outil planifier_mission) - aucune operation encore. Faux et `why` : pas
+    // d'IA connectee, une reponse en cours, l'Assistant desactive...
+    bool createMission(std::string request, std::string* why = nullptr);
+    // LA SUITE : la prochaine proposition (les etapes pretes regroupees, mission::nextBatch) demandee a l'IA dans la
+    // conversation de la mission (rouverte au besoin), avec l'etat REEL du projet. Faux et `why` : rien de realisable
+    // (dit : tout est fait, bloque, une proposition attend d'etre appliquee), en pause, annulee, une reponse en cours,
+    // le projet de la mission n'est pas celui qui est ouvert.
+    bool continueMission(std::string_view id, std::string* why = nullptr);
+    // Une CORRECTION pour une etape en erreur (mission::correctionPrompt) : une nouvelle proposition, a valider - jamais
+    // une modification silencieuse d'une proposition deja appliquee.
+    bool correctStep(std::string_view id, std::string_view step, std::string* why = nullptr);
+    // ACTUALISER LE CONTEXTE (le projet a change depuis la derniere sauvegarde) : l'IA relit le projet et revoit le
+    // plan (planifier_mission) ; les etapes terminees et les operations appliquees sont gardees.
+    bool refreshMission(std::string_view id, std::string* why = nullptr);
+    // L'AUDIT FINAL, sur un fil de fond et une copie du projet (hmi::audit::run) : le rapport (mission::finalReport),
+    // l'etat Terminee seulement si toutes les etapes obligatoires sont terminees sans erreur bloquante.
+    bool auditMission(std::string_view id, std::string* why = nullptr);
+    [[nodiscard]] bool auditing(std::string_view id) const;
+    // Pause (la reponse en cours pour cette mission est arretee et marquee interrompue ; plus aucune application),
+    // reprise (le constat de reprise d'abord - mission::recover), annulation, archivage, renommer, modifier le plan.
+    bool pauseMission(std::string_view id, std::string* why = nullptr);
+    bool resumeMission(std::string_view id, std::string* why = nullptr);
+    bool cancelMission(std::string_view id, std::string* why = nullptr);
+    bool archiveMission(std::string_view id, bool on, std::string* why = nullptr);
+    bool renameMission(std::string_view id, std::string name, std::string* why = nullptr);
+    bool editMissionPlan(std::string_view id, const mission::PlanEdit&, std::string* why = nullptr);
+    // Reprendre une mission dans la conversation OUVERTE (une autre que la sienne : elle la retient aussi), ou ouvrir la
+    // conversation la plus recente de la mission.
+    bool attachMission(std::string_view id, std::string* why = nullptr);
+    bool openMissionConversation(std::string_view id);
+    // Le constat de reprise, sans rien changer (l'ecran de reprise) : le projet ouvert compare a la mission.
+    [[nodiscard]] mission::Recovery inspectMission(std::string_view id) const;
+    // Le message qui porte une proposition dans la conversation OUVERTE (-1 : pas dans celle-ci).
+    [[nodiscard]] int messageOfProposal(std::string_view proposalId) const;
 
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
@@ -476,6 +527,9 @@ private:
     mutable std::string                    totalsDay_;
     bool                                   overBudgetOk_{false};
     std::map<std::string, long long>       modelContext_;
+    // 1.22.0 : les missions (relues par load, enregistrees a chaque evenement) et leur revision.
+    std::vector<mission::Mission>          missions_;
+    std::uint64_t                          missionsRev_{1};
     // 1.21.3 : les longueurs de reponse que les services ont dites (fournisseur|adresse|modele -> jetons), pour la
     // seance ; la reprise en parties a demander au prochain startLive (la longueur qui a coupe ; 0 : aucune).
     std::map<std::string, int>             outputCaps_;

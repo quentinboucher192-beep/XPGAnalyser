@@ -3072,6 +3072,7 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
         }
         // 1.19.0 : la vue visee par une operation sur des objets (seulement si elle est dite).
         if (!projectLevel(op) && !op.target.empty()) o.set("vue", op.target);
+        if (!op.step.empty()) o.set("etape", op.step);   // 1.22.0 : l'etape de la mission
         // 1.21.0 : supprimer - le genre de ce qui part (vide : des objets, comme avant) et les exclusions.
         if (op.action == Operation::Action::Remove) {
             if (!op.kind.empty()) o.set("genre", op.kind);
@@ -3142,6 +3143,7 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
         for (const auto& v : o.at("parametres").items()) op.params.push_back({v.str("nom"), v.str("type"), v.str("description"), scalar(v.at("valeur"))});
         op.detect = o.flag("detecter");
         if (!projectLevel(*action)) op.target = o.str("vue");   // 1.19.0 : la vue visee (vide : comme avant)
+        op.step = o.str("etape");   // 1.22.0 : l'etape de la mission (vide : toutes celles de la proposition)
         if (*action == Operation::Action::Store)
             for (const auto& n : o.at("elements").items()) op.objects.push_back(n.asString());
         // 1.21.0 : supprimer - la strategie, le remplacant, la liste d'un dossier, les devenus inutiles (aussi au premier
