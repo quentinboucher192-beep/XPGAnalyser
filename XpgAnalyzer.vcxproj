@@ -549,6 +549,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
+    <ClCompile Include="src\app\PerfPane.cpp" />
     <ClCompile Include="src\app\ProjectExchange.cpp" />
     <ClCompile Include="src\app\SimCenterPerf.cpp" />
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
@@ -609,6 +610,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\CallTrail.cpp" />
     <ClCompile Include="src\core\CrashGuard.cpp" />
     <ClCompile Include="src\core\Edition.cpp" />
+    <ClCompile Include="src\core\Perf.cpp" />
     <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
@@ -1103,6 +1105,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
+    <ClInclude Include="src\app\PerfPane.hpp" />
     <ClInclude Include="src\app\ProjectExchange.hpp" />
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuild.hpp" />
@@ -1155,6 +1158,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\CodeStats.hpp" />
     <ClInclude Include="src\core\CrashGuard.hpp" />
     <ClInclude Include="src\core\Edition.hpp" />
+    <ClInclude Include="src\core\Perf.hpp" />
     <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />

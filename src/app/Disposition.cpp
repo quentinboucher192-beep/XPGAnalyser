@@ -44,7 +44,7 @@ Catalog build(bool api, bool ihm) {
     c.groups.push_back({"fenetre", "La fen\xC3\xAAtre", false});
     add("explorateur", "Explorateur du projet", "fenetre", Kind::Panel, {}, {{"gauche", "\xC3\x80 gauche"}, {"droite", "\xC3\x80 droite"}});
     add("documents", "Documents ouverts", "fenetre", Kind::Panel);
-    add("bas", "Panneau du bas (Sorties, Console, Diagnostics)", "fenetre", Kind::Panel, {},
+    add("bas", "Panneau du bas (Sorties, Console, Diagnostics, Performances)", "fenetre", Kind::Panel, {},
         {{"dessous", "Sous l'\xC3\xA9" "diteur"}, {"droite", "\xC3\x80 droite de l'\xC3\xA9" "diteur"}},
         {{"ouvert", "Ouvert"}, {"replie", "Repli\xC3\xA9 (Ctrl+J)"}});
     if (api) {
@@ -63,6 +63,7 @@ Catalog build(bool api, bool ihm) {
     tab("bas.sorties", "Sorties", "bas");
     tab("bas.console", "Console", "bas");
     tab("bas.diagnostics", "Diagnostics", "bas");
+    tab("bas.performances", "Performances", "bas");   // 1.22.2 : ce qui consomme (app/PerfPane)
 
     if (ihm) {
         c.groups.push_back({"insp", "\xC3\x89" "diteur de vue \xE2\x80\xBA inspecteur", true});

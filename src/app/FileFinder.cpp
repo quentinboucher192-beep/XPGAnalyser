@@ -2,6 +2,7 @@
 //  app/FileFinder.cpp - 1.14.0 (lot M5) : voir FileFinder.hpp
 // =============================================================================
 #include "FileFinder.hpp"
+#include "../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "../project/ProjectArchive.hpp"   // parse (le manifeste d'une archive), sizeText
 #include "../ui/TextSearch.hpp"            // foldForSearch
@@ -861,7 +862,10 @@ void Search::start(Request r) {
     run->progress.running = true;
     run->progress.generation = run->generation;
     run_ = run;
-    worker_ = std::thread([run] { walk(run); });
+    worker_ = std::thread([run] {
+        XPG_TRAVAIL("recherche-fichiers");   // 1.22.2
+        walk(run);
+    });
 }
 
 void Search::stop() {

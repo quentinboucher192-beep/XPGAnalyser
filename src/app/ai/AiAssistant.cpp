@@ -22,6 +22,7 @@
 
 #include "../../core/Edition.hpp"
 #include "../../hmi/HmiAudit.hpp"    // 1.22.0 : l'audit final d'une mission (hmi::audit::run, sur une copie)
+#include "../../core/Perf.hpp"       // 1.22.2 : ce qui consomme (l'onglet Performances) - des portees de mesure seulement
 
 #include <algorithm>
 #include <cstdlib>
@@ -327,10 +328,13 @@ void Assistant::load(std::vector<std::string>* problems) {
 }
 
 bool Assistant::tick(double now) {
+    XPG_MESURE("ia.tick");   // 1.22.2 : l'onglet Performances (core/Perf.hpp)
+    core::perf::Lap lap;
     lastNow_ = now;
     const std::uint64_t before = revision_;
     // 1.21.0 : les analyses des pieces jointes finies (le fil d'analyse), remises dans leur conversation ; les souvenirs
     // que l'IA a proposes pendant sa reponse - a valider par l'utilisateur, dit une fois.
+    lap.to(XPG_PARTIE("ia.tick.analyses"));
     pollAnalyses();
     pollWorkbooks();   // 1.21.0 : les classeurs relus sur un fil (une ancienne conversation rouverte)
     if (const int n = proposedMemories_->exchange(0); n > 0) {
@@ -355,6 +359,7 @@ bool Assistant::tick(double now) {
     }
     // 1.21.0 : LE PONT DE L'AGENT, sur le fil de l'interface - les confirmations de scan demandees par l'IA s'ouvrent ici,
     // et le dernier compte rendu de scan est recopie pour resultat_detection.
+    lap.to(XPG_PARTIE("ia.tick.pont"));
     if (bridge_) {
         std::vector<agent::Bridge::ScanAsk> asks;
         {
@@ -402,6 +407,7 @@ bool Assistant::tick(double now) {
             }
         }
     }
+    lap.stop();
     for (auto& p : pending_) {
         if (p.started < 0) p.started = now;
         const float prog = static_cast<float>(std::clamp((now - p.started) / kAttachSeconds, 0.0, 1.0));
@@ -414,9 +420,13 @@ bool Assistant::tick(double now) {
     retiring_.erase(std::remove_if(retiring_.begin(), retiring_.end(), [](const std::unique_ptr<Provider>& p) { return !p || !p->busy(); }),
                     retiring_.end());
     (void)pollModels();
+    lap.to(XPG_PARTIE("ia.tick.application"));
     pollApply();   // 1.20.1 : l'application de fond finie : sa commande, sur ce fil
+    lap.to(XPG_PARTIE("ia.tick.verifications"));
     pollChecks();  // 1.22.1 : les verifications de fond finies : les comptes, la mission
+    lap.to(XPG_PARTIE("ia.tick.missions"));
     missionsTick();   // 1.22.0 : la reprise au demarrage, le projet change (Ctrl+Z...), les audits finis
+    lap.to(XPG_PARTIE("ia.tick.direct"));
     if (gen_.phase != Phase::Idle && gen_.live) {
         pollLive();
     } else if (gen_.phase != Phase::Idle) {
@@ -1050,6 +1060,7 @@ void Assistant::requestWorkbook(const Attachment& a) const {
     job->id = a.id;
     WorkbookLoad* raw = job.get();
     job->worker = std::thread([raw, path] {
+        XPG_TRAVAIL("ia.lecture-classeur");   // 1.22.2 : l'onglet Performances, travaux de fond
         auto wb = std::make_shared<sheets::Workbook>();
         std::string why;
         if (sheets::readWorkbookFile(path, *wb, &why)) raw->result = std::move(wb);
@@ -1435,9 +1446,13 @@ bool Assistant::applyInBackground(int message, bool ignoringErrors, std::string*
     job->message = message;
     job->ignoringErrors = ignoringErrors;
     job->revision = doc->revision;
-    job->before = std::make_shared<const hmi::Project>(doc->project);
+    job->before = [&] {
+        XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
+        return std::make_shared<const hmi::Project>(doc->project);
+    }();
     job->total = 3 * p->ops.size();   // la validation du plan, celle de l'application, l'application
     job->worker = std::thread([job, prop = *p, env = std::move(frozen)] {
+        XPG_TRAVAIL("ia.application");   // 1.22.2 : l'onglet Performances, travaux de fond
         setProgressCounter(&job->done);
         job->plan = plan::build(*job->before, prop, validate(*job->before, prop, env));
         job->result = appliedCopy(*job->before, prop, env, &job->why, job->ignoringErrors ? &job->skipped : nullptr);
@@ -1475,8 +1490,12 @@ bool Assistant::startCheck(const std::string& conversation, const Proposal& p, C
     job->purpose = purpose;
     job->attempt = attempt;
     job->revision = doc->revision;
-    auto project = std::make_shared<const hmi::Project>(doc->project);
+    auto project = [&] {
+        XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
+        return std::make_shared<const hmi::Project>(doc->project);
+    }();
     job->worker = std::thread([job, project, prop = p, env = std::move(frozen)] {
+        XPG_TRAVAIL("ia.verification");   // 1.22.2 : l'onglet Performances, travaux de fond
         job->result = validate(*project, prop, env);
         job->finished.store(true, std::memory_order_release);
     });
@@ -1579,6 +1598,7 @@ Assistant::Applied Assistant::appliedState(int message) const {
 }
 
 Assistant::Applied Assistant::appliedOf(const Proposal& prop) const {
+    XPG_MESURE("ia.empreinte");   // 1.22.2 : l'onglet Performances
     const Proposal* p = &prop;
     if (p->state != "appliquee") return Applied::NotApplied;
     const auto doc = host_.document ? host_.document() : nullptr;
@@ -2387,6 +2407,7 @@ void Assistant::pollLive() {
 }
 
 void Assistant::finishLive(const std::string& stopReason) {
+    XPG_MESURE("ia.fin-reponse");   // 1.22.2 : l'onglet Performances
     retire();
     recordLive();
     const MissionCall call = gen_.mission;   // 1.22.0 : l'appel de mission de cette reponse (vide : aucun)
@@ -3573,7 +3594,10 @@ bool Assistant::auditMission(std::string_view idv, std::string* why) {
     // les dependances, les orphelins - le projet vivant n'est jamais lu depuis ce fil.
     auto job = std::make_shared<AuditJob>();
     job->mission = id;
-    job->copy = std::make_shared<const hmi::Project>(doc->project);
+    job->copy = [&] {
+        XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
+        return std::make_shared<const hmi::Project>(doc->project);
+    }();
     Env frozen;
     if (frozenEnvironment(frozen)) job->plc = frozen.plcName;   // nul : aucun automate relie
     else job->plcUnknown = true;
@@ -3581,6 +3605,7 @@ bool Assistant::auditMission(std::string_view idv, std::string* why) {
     job->doc = doc.get();
     job->revision = doc->revision;
     job->worker = std::thread([job] {
+        XPG_TRAVAIL("ia.audit-mission");   // 1.22.2 : l'onglet Performances, travaux de fond
         try {
             job->result = std::make_shared<hmi::audit::Report>(hmi::audit::run(*job->copy, job->plc, job->folder));
         } catch (...) {

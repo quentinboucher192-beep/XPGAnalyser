@@ -3923,7 +3923,7 @@ void apercuDisposition1124() {
               "d'origine : la barre, l'explorateur, le centre, le panneau du bas, la bande d'\xC3\xA9tat (pas de rang\xC3\xA9" "e : c'est l'IHM)");
         check(ex && centre && bas && ex->x < centre->x && bas->y > centre->y && std::fabs(bas->x - centre->x) < 1e-4f,
               "l'explorateur \xC3\xA0 gauche, le panneau du bas sous le centre");
-        check(titles(bas) == "Sorties*,Console,Diagnostics", "les sous-onglets du bas, Sorties devant (" + titles(bas) + ")");
+        check(titles(bas) == "Sorties*,Console,Diagnostics,Performances", "les sous-onglets du bas, Sorties devant (" + titles(bas) + ")");
         check(titles(centre) == "Vue de d\xC3\xA9marrage*" && dp::sketchBox(s, "page.vue") && dp::sketchBox(s, "insp"),
               "le centre : la vue de d\xC3\xA9marrage (\xC3\xA0 l'ouverture du projet), son inspecteur (" + titles(centre) + ")");
         check(titles(dp::sketchBox(s, "insp")) == "Propri\xC3\xA9t\xC3\xA9s*,Actions,Contenu,Raccourcis",
@@ -3952,13 +3952,13 @@ void apercuDisposition1124() {
         // Mise au point : la Console en simulation seulement, la simulation cote a cote a son demarrage.
         const dp::Layout point = dp::preset("miseaupoint");
         const auto ed = dp::sketch(point, false);
-        check(titles(dp::sketchBox(ed, "bas")) == "Sorties*,Diagnostics" && !dp::sketchBox(ed, "cote") && !dp::sketchBox(ed, "page.simulation"),
+        check(titles(dp::sketchBox(ed, "bas")) == "Sorties*,Diagnostics,Performances" && !dp::sketchBox(ed, "cote") && !dp::sketchBox(ed, "page.simulation"),
               "en \xC3\xA9" "dition : pas de Console, pas de simulation (" + titles(dp::sketchBox(ed, "bas")) + ")");
         const auto sim = dp::sketch(point, true);
         const auto* bas = dp::sketchBox(sim, "bas");
         const auto* cote = dp::sketchBox(sim, "cote");
         const auto* centre = dp::sketchBox(sim, "centre");
-        check(titles(bas) == "Sorties,Console*+,Diagnostics", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
+        check(titles(bas) == "Sorties,Console*+,Diagnostics,Performances", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
         check(cote && centre && cote->x > centre->x && titles(cote) == "Simulation \xC2\xB7 IHM*+" && dp::sketchBox(sim, "sim"),
               "la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, avec son panneau de droite (" + titles(cote) + ")");
         check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,D\xC3\xA9" "bogage,Popups",
@@ -36886,6 +36886,30 @@ void clicDroitLot5() {
                   && findItem(menu->items(), "Effacer la console") && findItem(menu->items(), "Exporter en texte")
                   && findItem(menu->items(), "Disposition\xE2\x80\xA6"),
               "Console (panneau du bas) : Effacer la console, Exporter en texte, Disposition...");
+    }
+    // ---- 1.22.2 : l'onglet Performances du panneau du bas (ce qui consomme) ----
+    {
+        app::HmiBuildOutputPane out("out1222");
+        out.setBounds({0, 0, 1400, 320});
+        out.layout();
+        auto* tabs = out.tabs();
+        const auto* perfTab = tabs ? tabs->tab(app::HmiBuildOutputPane::kPerformances) : nullptr;
+        check(tabs && tabs->tabCount() == 4 && perfTab && perfTab->title == "Performances" && out.performances(),
+              "le panneau du bas : Sorties, Console, Diagnostics, Performances");
+        out.showTab(app::HmiBuildOutputPane::kPerformances);
+        out.layout();
+        out.tick();
+        Recorder rec;
+        out.render(ui::PaintContext{rec, theme, {0, 0, 1400, 320}, 0.0, nullptr});
+        check(out.currentTab() == app::HmiBuildOutputPane::kPerformances && out.copyText().find("rapport de performances") != std::string::npos,
+              "Performances : Copier donne le rapport (la configuration, les parties, les saccades)");
+        gfx::Rect hr;
+        if (tabs && tabs->headerRect(app::HmiBuildOutputPane::kPerformances, hr))
+            (void)tabs->dispatch(ui::MouseDown{{hr.x + 10.f, hr.y + hr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(out.findById("out1222.ongletMenu"));
+        check(menu && menu->isOpen() && findItem(menu->items(), "Copier le rapport") && findItem(menu->items(), "Remettre \xC3\xA0 z\xC3\xA9ro les mesures")
+                  && !findItem(menu->items(), "Effacer les sorties"),
+              "Performances (panneau du bas) : son clic droit (Remettre \xC3\xA0 z\xC3\xA9ro, Copier le rapport)");
     }
     // ---- l'arbre du projet (planche 19) : Dupliquer une fonction IHM, un script ----
     {

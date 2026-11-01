@@ -6,12 +6,15 @@
 #include "../../ui/widgets/ExprField.hpp"
 #include "../../ui/Commands.hpp"
 #include "../Disposition.hpp"
+#include "../PerfPane.hpp"   // 1.22.2 : l'onglet Performances
+#include "../../core/Perf.hpp"
 
 #include "../../core/AtomicFile.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Icons.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -620,20 +623,21 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     tools->add(7, HmiGlyph::EyeOff, "Replier le panneau du bas (Ctrl+J le rouvre)", "Replier");
     for (int k = 0; k < 4; ++k) {
         tools->setCheckedWhen(10 + k, [this, k] { return levels_[k]; });
-        tools->setVisibleWhen(10 + k, [this] { return currentTab() != kConsole; });
+        tools->setVisibleWhen(10 + k, [this] { return currentTab() != kConsole && currentTab() != kPerformances; });
     }
     for (int k = 0; k < hmi::kLogLevelCount; ++k) {
         tools->setCheckedWhen(20 + k, [this, k] { return consoleFilter_.levels[static_cast<std::size_t>(k)]; });
         tools->setVisibleWhen(20 + k, [this] { return currentTab() == kConsole; });
     }
-    tools->setVisibleWhen(1, [this] { return currentTab() != kDiagnostics; });
-    tools->setVisibleWhen(4, [this] { return currentTab() != kDiagnostics; });
-    tools->setVisibleWhen(5, [this] { return currentTab() != kDiagnostics; });
+    // 1.22.2 : Performances a ses boutons (Remettre a zero, Copier le rapport) ; Copier et Exporter : le rapport.
+    tools->setVisibleWhen(1, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
+    tools->setVisibleWhen(4, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
+    tools->setVisibleWhen(5, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
     tools->setCheckedWhen(4, [this] { return !follow_; });
     tools->setVisibleWhen(6, [this] { return currentTab() == kConsole; });
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     auto search = std::make_unique<ui::InputText>(this->id() + ".search");
-    search->setPlaceholder("Rechercher dans les sorties, la console et les diagnostics\xE2\x80\xA6");
+    search->setPlaceholder("Rechercher dans les sorties, la console, les diagnostics, les performances\xE2\x80\xA6");
     search_ = &static_cast<ui::InputText&>(addChild(std::move(search)));
     auto tabs = std::make_unique<ui::TabControl>(this->id() + ".tabs");
     auto out = std::make_unique<ui::TableView>(this->id() + ".sorties");
@@ -653,6 +657,10 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     tabs->addTab({"Sorties", ui::Icon::Document, false, false}, std::move(out));
     tabs->addTab({"Console", ui::Icon::Code, false, false}, std::move(console));
     tabs->addTab({"Diagnostics", ui::Icon::Warning, false, false}, std::move(diag));
+    // 1.22.2 : CE QUI CONSOMME - la mesure du fil de l'interface (core/Perf.hpp), les saccades, les travaux de fond.
+    auto perf = std::make_unique<PerfPane>(this->id() + ".performances");
+    perf_ = perf.get();
+    tabs->addTab({"Performances", ui::Icon::Chart, false, false}, std::move(perf));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     // 1.12.18 (bug 7, planche 20) : le clic droit sur un sous-onglet le choisit, puis son menu -
     // Effacer, Copier les lignes, Exporter en texte (la barre, pour lui) ; Disposition...
@@ -665,6 +673,12 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
             it.icon = icon;
             items.push_back(std::move(it));
         };
+        if (tab == kPerformances) {   // 1.22.2
+            add(1, "Remettre \xC3\xA0 z\xC3\xA9ro les mesures", ui::Icon::Clear);
+            add(2, "Copier le rapport", ui::Icon::Copy);
+            add(3, "Exporter le rapport en texte", ui::Icon::Export);
+            return items;
+        }
         if (tab != kDiagnostics) add(1, tab == kConsole ? "Effacer la console" : "Effacer les sorties", ui::Icon::Clear);
         add(2, "Copier les lignes", ui::Icon::Copy);
         add(3, "Exporter en texte", ui::Icon::Export);
@@ -695,7 +709,9 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
             case 1: clear(); break;
             case 2:
                 ui::setClipboardText(copyText());
-                status_->setTransientMessage("Lignes copi\xC3\xA9" "es dans le presse-papiers.", 4.0, ui::StatusBar::Severity::Success);
+                status_->setTransientMessage(currentTab() == kPerformances ? "Rapport copi\xC3\xA9 dans le presse-papiers : colle-le dans ton message."
+                                                                           : "Lignes copi\xC3\xA9" "es dans le presse-papiers.",
+                                             4.0, ui::StatusBar::Severity::Success);
                 break;
             case 3: {
                 std::string why;
@@ -722,6 +738,10 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         consoleFilter_.search = q;
         rebuild();
         rebuildConsole();
+        if (perf_) perf_->setSearch(q);   // 1.22.2 : les parties dont le nom contient la recherche
+    });
+    links_ += perf_->said->connect([this](const std::string& text) {
+        if (status_) status_->setTransientMessage(text, 4.0, ui::StatusBar::Severity::Success);
     });
     links_ += tabs_->currentChanged->connect([this](std::size_t) {
         refreshStatus();
@@ -927,6 +947,10 @@ void HmiBuildOutputPane::rebuildConsole() {
 
 void HmiBuildOutputPane::refreshStatus() {
     if (!status_) return;
+    if (currentTab() == kPerformances && perf_) {   // 1.22.2
+        status_->setMessage(perf_->statusText(), ui::StatusBar::Severity::Info);
+        return;
+    }
     if (currentTab() != kConsole) {
         // 1.11.21 : ce que la saisie trouve dans le document montre, dit apres le resume du build.
         std::size_t liveErrors = 0, liveWarnings = 0;
@@ -957,9 +981,26 @@ void HmiBuildOutputPane::refreshStatus() {
 }
 
 void HmiBuildOutputPane::tick() {
+    tickPerformances();
     if (console_.revision() == consoleSeen_) return;
     consoleSeen_ = console_.revision();
     rebuildConsole();
+}
+
+// 1.22.2 : l'onglet Performances - relu au plus quatre fois par seconde, et seulement a l'ecran ; sa
+// pastille (les saccades de la derniere minute), une fois par seconde, meme cache.
+void HmiBuildOutputPane::tickPerformances() {
+    if (!perf_ || !tabs_) return;
+    bool shown = currentTab() == kPerformances;
+    for (const ui::Widget* w = perf_; shown && w; w = w->parent())
+        if (!w->visible()) shown = false;
+    shown = shown && perf_->bounds().w > 1.f && perf_->bounds().h > 1.f;
+    if (perf_->tick(shown)) refreshStatus();
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (perfBadgeAt_ >= 0.0 && now >= perfBadgeAt_ && now - perfBadgeAt_ < 1.0) return;
+    perfBadgeAt_ = now;
+    const std::size_t recent = core::perf::recentStutters(60);
+    tabs_->setTabBadge(kPerformances, recent ? std::to_string(recent) : std::string{}, recent ? ui::Tone::Warning : ui::Tone::None);
 }
 
 std::size_t HmiBuildOutputPane::consoleRowCount() const noexcept {
@@ -985,6 +1026,7 @@ void HmiBuildOutputPane::setSearch(const std::string& text) {
     consoleFilter_.search = text;
     rebuild();
     rebuildConsole();
+    if (perf_) perf_->setSearch(text);
 }
 
 void HmiBuildOutputPane::setFollowing(bool on) {
@@ -1099,6 +1141,9 @@ std::string HmiBuildOutputPane::exportCurrent(bool csv, std::string* why) {
         text = csv ? console_.exportCsv(consoleFilter_) : console_.exportText(consoleFilter_);
         name = "console_" + stampForFile() + (csv ? ".csv" : ".txt");
         if (csv) text = "\xEF\xBB\xBF" + text;     // le BOM : Excel lit l'UTF-8
+    } else if (tab == kPerformances && perf_) {   // 1.22.2 : le rapport
+        text = perf_->reportText();
+        name = "performances_" + stampForFile() + ".txt";
     } else {
         text = copyText();
         name = (tab == kDiagnostics ? "diagnostics_" : "sorties_") + stampForFile() + ".txt";
@@ -1197,6 +1242,11 @@ void HmiBuildOutputPane::simulationEvent(bool started, int session, const std::s
 }
 
 void HmiBuildOutputPane::clear() {
+    if (currentTab() == kPerformances) {   // 1.22.2 : Remettre a zero
+        if (perf_) perf_->resetAll();
+        refreshStatus();
+        return;
+    }
     if (currentTab() == kConsole) {
         console_.clear();
         tick();
@@ -1209,6 +1259,7 @@ void HmiBuildOutputPane::clear() {
 std::string HmiBuildOutputPane::copyText() const {
     std::string out;
     const std::size_t tab = currentTab();
+    if (tab == kPerformances && perf_) return perf_->reportText();   // 1.22.2 : le rapport
     if (tab == kConsole) {
         const auto n = consoleRowCount();
         for (std::size_t r = 0; r < n; ++r)

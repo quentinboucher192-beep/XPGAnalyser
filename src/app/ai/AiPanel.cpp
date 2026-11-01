@@ -23,6 +23,7 @@
 #include "../../hmi/HmiEdit.hpp"
 #include "../../ui/FileKinds.hpp"
 #include "../../ui/Icons.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances) - des portees de mesure seulement
 
 #include <algorithm>
 #include <chrono>
@@ -762,8 +763,11 @@ void AiPanel::refreshButtons() {
 
 void AiPanel::tick(double now) {
     (void)assistant_->tick(now);
+    core::perf::Lap lap;   // 1.22.2 : l'onglet Performances
+    lap.to(XPG_PARTIE("ia.panneau.sync"));
     sync();
     // 1.20.0 : les verifications de fond des grosses propositions - leur avancement se redessine, leur resultat arrive.
+    lap.to(XPG_PARTIE("ia.panneau.vignettes"));
     if (chat_) {
         if (chat_->pollThumbs()) {
             chat_->rebuild();
@@ -778,6 +782,7 @@ void AiPanel::tick(double now) {
         }
     }
     // 1.16.1 : une reponse vient de finir - l'ecran avertit (s'il le faut : l'utilisateur ne regarde pas).
+    lap.to(XPG_PARTIE("ia.panneau.reponse"));
     if (assistant_->generating()) {
         watchingReply_ = assistant_->generatingConversationId();
     } else if (!watchingReply_.empty()) {
@@ -803,11 +808,15 @@ void AiPanel::tick(double now) {
                     ui_.replied(id, c.title, excerpt, m.state == "erreur");
                 }
     }
+    lap.to(XPG_PARTIE("ia.panneau.notifications"));
     syncNotifications();   // 1.21.2 : le journal a change (une source de n'importe quel fil) : la liste, la pastille
+    lap.to(XPG_PARTIE("ia.panneau.missions"));
     syncMissions();        // 1.22.0 : les missions (leur revision) : la liste, la bande, la pastille
+    lap.to(XPG_PARTIE("ia.panneau.sync"));
     refreshBand(now);   // 1.16.0 : la limite en direct (le compte a rebours avance chaque seconde)
     // Ctrl+Z, Ctrl+Y, un autre geste sur la vue : la carte d'une proposition appliquee dit l'etat
     // REEL (relu quatre fois par seconde : une empreinte de la vue par proposition appliquee).
+    lap.to(XPG_PARTIE("ia.panneau.etat-applique"));
     if (now - appliedCheck_ >= 0.25 || now < appliedCheck_) {
         appliedCheck_ = now;
         std::string key;
@@ -1854,6 +1863,7 @@ void AiPanel::layoutRows() {
 }
 
 void AiPanel::onLayout() {
+    XPG_MESURE("ia.panneau.mise-en-page");   // 1.22.2
     const auto b = bounds();
     // Le menu du clic droit : le cadre du panneau (ferme, il ne prend aucun clic ; ouvert, il deborde).
     menu_->setBounds(b);
@@ -2003,6 +2013,7 @@ void AiPanel::onLayout() {
 }
 
 void AiPanel::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.panneau");   // 1.22.2
     const auto& c = ctx.theme.color;
     const auto& f = ctx.theme.font;
     const auto b = bounds();
@@ -2439,6 +2450,7 @@ void layoutCode(std::vector<AiChatView::Line>& out, const markdown::Segment& seg
 } // namespace
 
 std::vector<AiChatView::Line> AiChatView::layoutText(const std::string& md, float width) {
+    XPG_MESURE("ia.discussion.markdown");   // 1.22.2
     const std::string key = std::to_string(static_cast<int>(width)) + "|" + md;
     auto& cache = layoutCache();
     if (auto it = cache.find(key); it != cache.end()) return it->second;
@@ -2604,6 +2616,7 @@ double steadySeconds() {
 } // namespace
 
 const AiChatView::Thumb& AiChatView::thumb(int message) const {
+    XPG_MESURE("ia.carte");   // 1.22.2
     auto& t = thumbs_[message];
     const auto& as = panel_.assistant();
     const Proposal* p = as.proposal(message);
@@ -2618,6 +2631,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
         if (doc) {
             const double now = steadySeconds();
             if (base != t.base || doc->revision != t.revision || now - t.at >= 1.0 || now < t.at) {
+                XPG_MESURE("ia.carte.empreinte");   // 1.22.2
                 t.print = proposalPrint(doc->project, *p);
                 t.base = base;
                 t.revision = doc->revision;
@@ -2648,8 +2662,12 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
         auto job = std::make_shared<ThumbJob>();
         job->key = key;
         job->total = 2 * p->ops.size();   // la validation puis l'apercu
-        auto project = std::make_shared<const hmi::Project>(doc->project);
+        auto project = [&] {
+            XPG_MESURE("ia.copie-projet");   // 1.22.2 : la copie se fait sur ce fil
+            return std::make_shared<const hmi::Project>(doc->project);
+        }();
         job->worker = std::thread([job, project, prop = *p, env = std::move(frozen)] {
+            XPG_TRAVAIL("ia.verification-carte");   // 1.22.2 : l'onglet Performances, travaux de fond
             setProgressCounter(&job->done);
             job->check = validate(*project, prop, env);
             job->preview = preview(*project, prop, env);
@@ -2661,6 +2679,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
         return t;
     }
     t.key = key;
+    XPG_MESURE("ia.carte.verification");   // 1.22.2 : une petite proposition, verifiee sur ce fil
     t.preview = as.previewOf(message);
     t.check = as.check(message);
     // 1.19.0 : le plan - celui de la validation (sans la refaire), ou celui garde a l'application.
@@ -2669,6 +2688,7 @@ const AiChatView::Thumb& AiChatView::thumb(int message) const {
 }
 
 std::optional<AiChatView::LivePlan> AiChatView::livePlan() const {
+    XPG_MESURE("ia.plan-en-cours");   // 1.22.2
     const auto& a = panel_.assistant();
     const auto* conv = a.current();
     if (!conv) return std::nullopt;
@@ -2786,6 +2806,7 @@ AiChatView::~AiChatView() {
 }
 
 void AiChatView::measure() {
+    XPG_MESURE("ia.discussion.mesure");   // 1.22.2
     const float w = bounds().w;
     blocks_.clear();
     suggestionRects_.clear();
@@ -3029,6 +3050,7 @@ void AiChatView::measure() {
 }
 
 void AiChatView::rebuild() {
+    XPG_MESURE("ia.discussion.refaire");   // 1.22.2
     const bool wasBottom = stick_ || atBottom();
     measure();
     // Les boutons des cartes : un trio par proposition encore "proposee". Ils sont GARDES d'une
@@ -3282,6 +3304,7 @@ void AiChatView::paintIndicator(const ui::PaintContext& ctx, gfx::Rect at) {
 }
 
 void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rect card) {
+    XPG_MESURE("ia.peinture.carte");   // 1.22.2
     const auto& c = ctx.theme.color;
     const auto& a = panel_.assistant();
     const Proposal* p = a.proposal(b.message);
@@ -3488,6 +3511,7 @@ void AiChatView::paintCard(const ui::PaintContext& ctx, const Block& b, gfx::Rec
 std::string AiChatView::liveTooltip(gfx::Point mouse) const { return tipAt(tips_, mouse); }
 
 void AiChatView::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.discussion");   // 1.22.2
     const auto& c = ctx.theme.color;
     const auto bb = bounds();
     tips_.clear();

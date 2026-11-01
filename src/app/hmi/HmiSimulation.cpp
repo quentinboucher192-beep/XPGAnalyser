@@ -1,4 +1,5 @@
 #include "HmiSimulation.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 #include "HmiDebugPane.hpp"          // 1.13.0 (lot J2) : Simulation > Debogage
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - la simulation de l'IHM seule
@@ -5685,7 +5686,10 @@ void HmiSimulationPane::refreshPane() {
         (void)replay(rq);
     }
     if (replayHeld_) runtime_.replayTick(replayWall_);                      // la relecture avance ; le moteur, lui, attend
-    runtime_.tick(now_);
+    {
+        XPG_MESURE("simulation.ihm");   // 1.22.2 : le moteur de l'IHM (l'onglet Performances)
+        runtime_.tick(now_);
+    }
     retainTick();                                                            // 1.11.16 : le poste garde ses variables remanentes
     // Lot 14 : la communication au journal (liaison etablie, perdue, retrouvee...).
     if (host_.commEvents)

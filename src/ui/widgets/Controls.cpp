@@ -2,6 +2,7 @@
 //  ui/widgets/Controls.cpp
 // =============================================================================
 #include "Controls.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : le dessin du code se mesure (l'onglet Performances)
 
 #include <algorithm>
 #include <cctype>
@@ -2024,6 +2025,7 @@ namespace ui {
     }
 
     void MultiLineText::onPaint(const PaintContext& ctx) {
+        XPG_MESURE("peinture.code");   // 1.22.2 : l'onglet Performances
         const auto& c = ctx.theme.color;
         const auto  r = bounds();
         const auto  f = scaledFont(ctx.theme.font.mono);

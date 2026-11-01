@@ -2,6 +2,7 @@
 //  app/ai/AiAnthropic.cpp - voir AiAnthropic.hpp
 // =============================================================================
 #include "AiAnthropic.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "AiJson.hpp"
 #include "AiOpenAI.hpp"
@@ -565,7 +566,10 @@ bool AnthropicProvider::start(ProviderRequest request, std::string* why) {
     }
     cancelled_ = false;
     busy_ = true;
-    thread_ = std::thread([this, r = std::move(request), u = std::move(messages)]() mutable { run(std::move(r), std::move(u)); });
+    thread_ = std::thread([this, r = std::move(request), u = std::move(messages)]() mutable {
+        XPG_TRAVAIL("ia.appel");   // 1.22.2
+        run(std::move(r), std::move(u));
+    });
     return true;
 }
 
@@ -910,6 +914,7 @@ bool ModelQuery::startUrl(std::string url, HttpHeaders headers, int timeoutSecon
     }
     busy_ = true;
     thread_ = std::thread([this, url = std::move(url), hs = std::move(headers), timeoutSeconds, openai, allowPrivateHttp] {
+        XPG_TRAVAIL("ia.liste-modeles");   // 1.22.2
         std::shared_ptr<HttpClient> http;
         {
             std::lock_guard<std::mutex> lk(m_);

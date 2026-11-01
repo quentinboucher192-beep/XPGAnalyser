@@ -2,6 +2,7 @@
 //  app/ProjectExchange.cpp - 1.12.30 : voir ProjectExchange.hpp
 // =============================================================================
 #include "ProjectExchange.hpp"
+#include "../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "App.hpp"
 #include "BackgroundTasks.hpp"
@@ -60,6 +61,7 @@ void run(std::string label, std::function<void()> work, std::function<void(App&)
     job->finish = std::move(finish);
     Job* raw = job.get();
     job->thread = std::thread([raw, w = std::move(work)] {
+        XPG_TRAVAIL("archive");   // 1.22.2
         try {
             w();
         } catch (...) {

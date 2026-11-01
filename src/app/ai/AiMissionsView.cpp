@@ -2,6 +2,7 @@
 //  app/ai/AiMissionsView.cpp - 1.22.0 : l'onglet Missions IA du panneau (voir le .hpp)
 // =============================================================================
 #include "AiMissionsView.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 
 #include "AiNotifications.hpp"   // notifs::oneLine
 #include "AiPanel.hpp"
@@ -154,6 +155,7 @@ void AiMissionsView::setSearch(std::string query) {
 }
 
 void AiMissionsView::rebuild() {
+    XPG_MESURE("ia.missions.onglet");   // 1.22.2
     const auto& as = panel_.assistant();
     seen_ = as.missionsRevision();
     generating_ = as.generating();
@@ -560,6 +562,7 @@ std::string AiMissionsView::liveTooltip(gfx::Point mouse) const {
 }
 
 void AiMissionsView::onPaint(const ui::PaintContext& ctx) {
+    XPG_MESURE("ia.peinture.missions");   // 1.22.2
     const auto& c = ctx.theme.color;
     const auto b = bounds();
     tips_.clear();

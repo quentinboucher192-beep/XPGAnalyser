@@ -2,6 +2,7 @@
 //  app/ai/AiOpenAI.cpp - un service compatible OpenAI (1.16.0) : voir AiOpenAI.hpp
 // =============================================================================
 #include "AiOpenAI.hpp"
+#include "../../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 #include "AiTextParts.hpp"
 
 #include "AiJson.hpp"
@@ -645,7 +646,10 @@ bool OpenAIProvider::start(ProviderRequest request, std::string* why) {
     }
     cancelled_ = false;
     busy_ = true;
-    thread_ = std::thread([this, r = std::move(request), t = std::move(target)]() mutable { run(std::move(r), std::move(t)); });
+    thread_ = std::thread([this, r = std::move(request), t = std::move(target)]() mutable {
+        XPG_TRAVAIL("ia.appel");   // 1.22.2
+        run(std::move(r), std::move(t));
+    });
     return true;
 }
 

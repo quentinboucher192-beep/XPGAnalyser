@@ -13,6 +13,7 @@
 #include "TableFilters.hpp"     // lot recherche : la fenetre du filtre d'une colonne
 #include "TrailSymbols.hpp"     // 1.11 (chantier T3, C4) : les symboles traces au trait
 #include "../../sim/ValueText.hpp"  // 1.12.19 : les mots d'un booleen, partout les memes
+#include "../../core/Perf.hpp"     // 1.22.2 : le dessin des tableaux et des arbres se mesure (l'onglet Performances)
 
 #include <algorithm>
 #include <cctype>
@@ -722,6 +723,7 @@ void TreeView::onLayout() {
 }
 
 void TreeView::onPaint(const PaintContext& ctx) {
+    XPG_MESURE("peinture.arbres");
     const auto& c = ctx.theme.color;
     const auto  full = contentRect();
     // Lot API 8 : l'arbre du projet - la densite (rowOverride_) passe avant le theme.
@@ -1982,6 +1984,7 @@ std::optional<cursor::Shape> TableView::cursorAt(gfx::Point local) const {
 }
 
 void TableView::onPaint(const PaintContext& ctx) {
+    XPG_MESURE("peinture.tableaux");
     const auto& c = ctx.theme.color;
     const auto  area = contentRect();
     if (resizingColumn_ >= 0) cursor::hold(cursor::Shape::ResizeEW);   // 1.14.1 (N2) : jusqu'au lacher

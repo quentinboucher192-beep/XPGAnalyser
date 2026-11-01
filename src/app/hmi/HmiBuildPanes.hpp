@@ -40,6 +40,8 @@
 
 namespace app {
 
+class PerfPane;   // 1.22.2 : l'onglet Performances (app/PerfPane.hpp)
+
 class HmiBuildProgressDialog final : public menu::WidgetMenu {
 public:
     // `startsSimulation` : le build d'un Demarrer (reussi : la fenetre se ferme seule).
@@ -99,8 +101,8 @@ private:
 
 class HmiBuildOutputPane final : public ui::Widget {
 public:
-    // 1.11.14 : LE PANNEAU DU BAS - ses trois onglets.
-    static constexpr std::size_t kSorties = 0, kConsole = 1, kDiagnostics = 2;
+    // 1.11.14 : LE PANNEAU DU BAS - ses trois onglets. 1.22.2 : et Performances (ce qui consomme).
+    static constexpr std::size_t kSorties = 0, kConsole = 1, kDiagnostics = 2, kPerformances = 3;
 
     explicit HmiBuildOutputPane(std::string id);
     // Un build fini : son journal s'ajoute (a l'heure), ses diagnostics remplacent les precedents.
@@ -166,6 +168,7 @@ public:
     // La croix du panneau : l'ecran le replie.
     void setOnClose(std::function<void()> f) { onClose_ = std::move(f); }
     [[nodiscard]] ui::TabControl* tabs() noexcept { return tabs_; }      // 1.12.3 : Projet > Disposition
+    [[nodiscard]] PerfPane* performances() noexcept { return perf_; }     // 1.22.2
     // Double-clic (ou Aller a la source) sur une ligne de la Console.
     const core::SignalPtr<ConsoleEntry> consoleActivated = core::Signal<ConsoleEntry>::create();
 
@@ -182,6 +185,7 @@ private:
     void rebuild();
     void rebuildConsole();
     void refreshStatus();
+    void tickPerformances();    // 1.22.2
     void consoleMenu(int action);
     void rowMenu(int action);   // 1.12.18 : Sorties et Diagnostics
     [[nodiscard]] bool shown(const Line&) const;
@@ -207,6 +211,8 @@ private:
     std::shared_ptr<ui::ITableModel>        outModel_, diagModel_, consoleModel_;
     std::string                             summary_;
     HmiConsole                              console_;
+    PerfPane*                               perf_{nullptr};      // 1.22.2 : l'onglet Performances
+    double                                  perfBadgeAt_{-1.0};  // ... sa pastille, relue chaque seconde
     HmiConsole::Filter                      consoleFilter_;
     std::uint64_t                           consoleSeen_{~std::uint64_t{0}};
     bool                                    follow_{true};
