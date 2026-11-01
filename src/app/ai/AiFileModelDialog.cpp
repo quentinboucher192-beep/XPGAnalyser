@@ -12,6 +12,7 @@
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 
@@ -492,14 +493,38 @@ bool AiFileModelDialog::applyModel(const std::string& idOrName) {
 bool AiFileModelDialog::saveAsModel(const std::string& name) {
     if (!workbook_) return false;
     sheets::FileModel m = sheets::makeModel(*workbook_, layout_, name);
+    // 1.21.2 : CREE OU MIS A JOUR - un modele du meme nom (sans tenir compte de la casse ni des blancs autour) et des memes
+    // intitules est mis a jour (son identifiant, ses utilisations, ses dates gardes) ; un autre nom : un modele neuf. Un nom
+    // deja porte par un modele aux intitules differents reste refuse (saveModel le dit).
+    bool created = true;
+    {
+        const auto folded = [](std::string t) {
+            while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+            std::size_t a = 0;
+            while (a < t.size() && std::isspace(static_cast<unsigned char>(t[a]))) ++a;
+            t.erase(0, a);
+            for (auto& ch : t) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            return t;
+        };
+        const std::string wanted = folded(m.name);
+        for (const auto& x : sheets::loadModels(true))
+            if (folded(x.name) == wanted && x.signature == m.signature) {
+                m.id = x.id;
+                m.uses = x.uses;
+                m.added = x.added;
+                m.lastUsed = x.lastUsed;
+                m.active = x.active;
+                m.source = x.source;
+                m.file = x.file;
+                created = false;
+                break;
+            }
+    }
     std::string why;
     if (!sheets::saveModel(m, &why)) {
         say("Pas enregistr\xC3\xA9 : " + why + ".", false);
         return false;
     }
-    // 1.21.2 : cree ou mis a jour (meme nom, memes intitules : le meme identifiant) - dit dans la conversation, le modele en
-    // bloc de code
-    const bool created = std::none_of(models_.begin(), models_.end(), [&](const sheets::FileModel& x) { return x.id == m.id; });
     modelId_ = m.id;
     modelName_ = m.name;
     modelLayout_ = layout_;
