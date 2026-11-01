@@ -537,8 +537,8 @@ void testStation() {
     (void)f.stack.undo();
     f.settle();
     check(!f.doc->project.equipmentByName("Station_Modbus"), "Ctrl+Z : l'equipement est reparti");
-    check(f.linkState(id, p1) == "annulee" && f.stepState(id, "S1") == ms::StepState::Ready && f.stepState(id, "S2") == ms::StepState::Ready,
-          "Ctrl+Z : P1 annulee apres coup, S1 et S2 redeviennent pretes");
+    check(f.linkState(id, p1) == "annulee" && f.stepState(id, "S1") == ms::StepState::Ready && f.stepState(id, "S2") == ms::StepState::Waiting,
+          "Ctrl+Z : P1 annulee apres coup, S1 de nouveau prete, S2 attend S1 (elle en depend)");
     (void)f.stack.redo();
     f.settle();
     check(f.doc->project.equipmentByName("Station_Modbus") && countVariables(f.doc->project, "Cuve_Niveau") == 1, "Ctrl+Y : de retour, sans doublon");
