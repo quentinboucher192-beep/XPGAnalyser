@@ -2019,6 +2019,47 @@ Une réponse de l'IA a une longueur limitée (**Réponse** dans les paramètres 
 > Une réponse en texte seulement (une longue explication) coupée par la longueur n'est pas redemandée : la note le dit.
 ! La reprise coûte une seconde demande : les jetons de la réponse coupée sont comptés (la jauge et le budget).
 
+== assistant-ia-missions | Les missions IA : planifier, construire, suivre et reprendre
+: Une grande demande devient une mission : un plan d'étapes rangées par leurs dépendances, des propositions successives qui savent ce qui a réellement été fait, une progression calculée, un tableau de bord, et une reprise après une fermeture – sans rien rejouer. Le projet réel reste la source de vérité.
+@depuis 1.22.0
+@mots MISSION, MISSIONS, MISSION IA, MISSIONS IA, PLAN DE LA MISSION, ÉTAPE, ÉTAPES, PROPOSITIONS SUCCESSIVES, P1, P2, PROGRESSION, TABLEAU DE BORD, REPRENDRE LA MISSION, REPRISE, ACTUALISER LE CONTEXTE, INTERROMPU, RAPPORT FINAL, AUDIT FINAL, CRÉER UNE MISSION, CONTINUER EN CONVERSATION, OÙ EN EST, chercher_missions, etat_mission, planifier_mission
+@lieux ai.panneau
+@voir assistant-ia, assistant-ia-plan, memoire-ia, assistant-ia-registre
+Une mission répond à une demande trop grande pour une seule proposition : « Construis une station de pompage complète avec deux pompes, une cuve, les équipements Modbus, les variables, les alarmes, les scripts et les vues. » Elle vit dans le dossier IA (IA/missions), à part de la conversation qui l'a lancée : elle se retrouve demain, depuis une autre conversation, après une fermeture.
+### Créer une mission
+- Une demande qui touche plusieurs familles du projet (équipements, variables, alarmes, vues…) ou qui dit « complète » : au moment de l'envoyer, la carte **Créer une mission IA ?** propose **Créer la mission** ou **Continuer en conversation** (l'envoi habituel). La croix ou Échap la ferme : rien n'est envoyé, le texte reste dans la saisie.
+- Ou à la main : l'onglet **Missions IA** du panneau de l'Assistant, le bouton **+** (Nouvelle mission IA…).
+- Rien n'est modifié à la création : l'IA **analyse le projet réel** – ce qui existe déjà et est conforme, ce qui est à modifier, à compléter, à créer, ce qui est impossible avec le logiciel – puis propose le **plan**.
+### Le plan
+- Des étapes (S1, S2…) : un titre, une catégorie (analyse, équipements, types, variables, symboles, popups, vues, objets, alarmes, scripts, fonctions, ressources, vérification, audit, rapport), les étapes dont elle dépend, une estimation du nombre d'opérations, obligatoire ou non.
+- L'**ordre est calculé** par le logiciel à partir des dépendances, jamais celui dans lequel l'IA les a écrites. Aux dépendances écrites s'ajoutent celles des catégories (des variables attendent les types et les équipements ; une alarme, ses variables ; une vue, ses variables, symboles et popups ; la vérification, tout le reste) : elles sont marquées **implicites**. Une dépendance circulaire est refusée, et dite (« S3 -> S5 -> S3 »).
+- Chaque étape a un état : À planifier, En attente, Prête, En cours, En attente de validation, Appliquée, Vérification en cours, Terminée, En erreur, Bloquée, Ignorée, Annulée. Une étape **n'est terminée que si ce qu'elle a créé est dans le projet**.
+- Modifier le plan ne remet rien à zéro : ajouter, ignorer, retirer une étape non commencée, changer ses dépendances ; les étapes terminées et ce qui a été appliqué sont gardés, l'historique dit ce qui a changé.
+### Les propositions successives
+- **Proposer la suite** regroupe les étapes prêtes (et celles qui ne dépendent que d'elles) en une proposition à la mesure d'une réponse de l'IA : P1, P2, P3… Chaque opération dit l'étape qu'elle sert.
+- Avant chaque proposition, l'IA reçoit **ce qui est réellement dans le projet** (les éléments créés par les propositions précédentes, vérifiés à l'instant), ce qui a changé depuis, et les étapes à couvrir : elle réutilise les noms exacts et ne recrée rien.
+- Chaque proposition se **prévisualise**, se **vérifie** sur une copie et s'**applique** comme d'habitude, en une transaction (un seul Ctrl+Z). Le compte rendu est lu dans le projet ; la mission met à jour ses étapes avec ce résultat réel.
+- Ctrl+Z après coup : la mission le voit (la proposition passe « annulée », ses étapes redeviennent prêtes) ; Ctrl+Y : rétablie.
+- Une étape en erreur garde l'**erreur exacte** ; celles qui en dépendent sont **bloquées** (et disent pourquoi) ; les étapes indépendantes continuent. **Corriger** demande une proposition de correction, vérifiée et présentée comme les autres – jamais une modification silencieuse de ce qui est appliqué.
+### Suivre une mission
+| Où | Ce qu'on y voit |
+| L'onglet Missions IA du panneau | Les missions (Toutes, En cours, Archivées), la recherche, chacune avec son état, son projet, sa progression, sa prochaine action ; Tableau de bord, Reprendre, Pause ; le clic droit (renommer, archiver, annuler…). |
+| La bande Mission IA au-dessus de la conversation | La mission de la conversation : les étapes terminées sur le total, la barre de progression, la prochaine action et son bouton. Le chevron la replie. |
+| Le tableau de bord (au centre, onglet « Mission IA · nom ») | L'en-tête (état, projet, progression, dernière activité), les cinq progressions, l'objectif et l'analyse, la prochaine action, le plan en tableau, les propositions P1, P2… (Prévisualiser, Vérifier, Appliquer ; le compte rendu d'une proposition appliquée), le rapport final, l'historique. |
+- La **progression** est calculée, jamais estimée par l'IA : chaque étape pèse son nombre d'opérations prévu (au moins 1) ; les étapes ignorées ou annulées sortent du calcul. Planification, génération, validation, application, et la **progression globale = les étapes terminées**, c'est-à-dire appliquées et vérifiées dans le projet. La règle est dans l'infobulle.
+- Les notifications de l'Assistant disent ce qui arrive aux missions ; leur bouton ouvre le tableau de bord.
+### Reprendre
+- Tout est **enregistré à chaque événement** (écriture d'un bloc, la version précédente gardée en copie) : une fermeture brutale laisse toujours une mission complète ; un fichier abîmé est repris de sa copie, et c'est dit.
+- À la réouverture, l'**écran de reprise** compare la mission au projet ouvert : identique (**Reprendre la mission**) ; modifié depuis (la liste de ce qui a changé – « les variables (modifiées) », « la vue Vue_Accueil (ajoutée) » – et **Actualiser le contexte** d'abord) ; introuvable (un autre projet ou aucun : ouvre le projet de la mission ; l'historique reste consultable).
+- Un appel à l'IA en cours à la fermeture est **interrompu** : sa réponse n'existe pas, rien n'est rejoué, ses étapes redeviennent prêtes. Une application n'est **jamais** rejouée.
+### Terminer : l'audit et le rapport final
+- Quand toutes les étapes obligatoires sont terminées, l'**audit final** vérifie tout le projet (comme « Vérifie tout mon projet » : Générer, Compiler, les adresses, les orphelins…).
+- Le **rapport final** dit : Créés, Modifiés, Réutilisés, Terminés, Non réalisés, Erreurs, À vérifier (dont ce qui ne peut pas l'être sans l'installation, comme la communication réelle avec les équipements).
+- La mission n'est **Terminée** que si l'audit a pu être fait sans erreur bloquante ; sinon le rapport le dit, et dit ce qui reste.
+### Depuis une autre conversation
+« Où en est la station de pompage ? », « Reprends la mission d'hier » : l'IA cherche dans les missions enregistrées (chercher_missions, etat_mission) et répond avec leur **état réel** – jamais de mémoire ni inventé. Une mission sans correspondance : elle le dit.
+! Les missions vivent dans IHM Studio, là où vit l'Assistant ; API Studio n'en a pas. Pause : aucune génération ni application tant que la mission n'est pas reprise. Annuler : ses propositions ne s'appliquent plus, ce qui a déjà été appliqué reste dans le projet (Ctrl+Z pour le défaire).
+
 == incidents | Les incidents : enregistrement et analyse
 : Quand une alarme apparaît en simulation ou au poste d'exploitation, l'IHM crée toute seule un dossier d'incident : l'image et une vidéo de la vue, l'alarme telle qu'elle était, ce à quoi elle est reliée dans le projet, les valeurs du moment, la chronologie, une fiche de diagnostic et l'analyse de l'IA. Tu le consultes, le commentes et le valides.
 @depuis 1.20.0

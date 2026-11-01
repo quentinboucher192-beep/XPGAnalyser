@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.21.3", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.0", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 dans la nuit"},
@@ -153,6 +154,52 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.0 : les missions IA persistantes
+        note("1.22.0", "Assistant IA", Kind::New,
+         "LES MISSIONS IA : une grande demande (\xC2\xAB construis une station de pompage compl\xC3\xA8te avec deux pompes, une cuve, "
+         "les \xC3\xA9quipements Modbus, les variables, les alarmes, les scripts et les vues \xC2\xBB) devient une mission, gard\xC3\xA9" "e dans "
+         "le dossier IA, \xC3\xA0 part de la conversation. L'IA analyse d'abord le projet r\xC3\xA9" "el (ce qui existe et est conforme, ce "
+         "qui est \xC3\xA0 modifier, \xC3\xA0 compl\xC3\xA9ter, \xC3\xA0 cr\xC3\xA9" "er, ce qui est impossible), puis propose un plan d'\xC3\xA9tapes. L'ordre est "
+         "calcul\xC3\xA9 par leurs d\xC3\xA9pendances (celles qu'elle \xC3\xA9" "crit, et celles des cat\xC3\xA9gories : des variables attendent leurs "
+         "types et leurs \xC3\xA9quipements, une alarme ses variables...), jamais celui o\xC3\xB9 elle les \xC3\xA9" "crit. La carte \xC2\xAB Cr\xC3\xA9" "er une "
+         "mission IA ? \xC2\xBB le propose au moment d'envoyer une telle demande.",
+         "assistant-ia-missions", ""),
+        note("1.22.0", "Assistant IA", Kind::New,
+         "DES PROPOSITIONS SUCCESSIVES QUI SAVENT CE QUI A \xC3\x89T\xC3\x89 FAIT : Proposer la suite regroupe les \xC3\xA9tapes pr\xC3\xAAtes en une "
+         "proposition (P1, P2, P3...) \xC3\xA0 la mesure d'une r\xC3\xA9ponse. Avant chacune, l'IA re\xC3\xA7oit ce qui est r\xC3\xA9" "ellement dans le "
+         "projet (les \xC3\xA9l\xC3\xA9ments cr\xC3\xA9\xC3\xA9s par les pr\xC3\xA9" "c\xC3\xA9" "dentes, v\xC3\xA9rifi\xC3\xA9s \xC3\xA0 l'instant) et ce qui a chang\xC3\xA9 : elle r\xC3\xA9utilise les "
+         "noms exacts et ne recr\xC3\xA9" "e rien. Chaque proposition se pr\xC3\xA9visualise, se v\xC3\xA9rifie et s'applique comme avant (un seul "
+         "Ctrl+Z) ; une \xC3\xA9tape n'est termin\xC3\xA9" "e que si ce qu'elle a cr\xC3\xA9\xC3\xA9 est dans le projet. Ctrl+Z apr\xC3\xA8s coup : la mission "
+         "le voit.",
+         "assistant-ia-missions", ""),
+        note("1.22.0", "Assistant IA", Kind::New,
+         "LE TABLEAU DE BORD D'UNE MISSION : l'onglet Missions IA du panneau de l'Assistant (recherche, filtres, \xC3\xA9tat, "
+         "progression, prochaine action), la bande Mission IA au-dessus de la conversation, et le tableau de bord au "
+         "centre : l'objectif et l'analyse, la prochaine action, le plan en tableau (\xC3\xA9tats color\xC3\xA9s, d\xC3\xA9pendances), les "
+         "propositions P1, P2... (Pr\xC3\xA9visualiser, V\xC3\xA9rifier, Appliquer, le compte rendu), le rapport final, l'historique. "
+         "La progression est calcul\xC3\xA9" "e et sa r\xC3\xA8gle est dite : la progression globale compte les \xC3\xA9tapes TERMIN\xC3\x89" "ES, "
+         "appliqu\xC3\xA9" "es et v\xC3\xA9rifi\xC3\xA9" "es dans le projet.",
+         "assistant-ia-missions", ""),
+        note("1.22.0", "Assistant IA", Kind::New,
+         "REPRENDRE APR\xC3\x88S UNE FERMETURE : la mission est enregistr\xC3\xA9" "e \xC3\xA0 chaque \xC3\xA9v\xC3\xA9nement (d'un bloc, avec une copie de la "
+         "version pr\xC3\xA9" "c\xC3\xA9" "dente). \xC3\x80 la r\xC3\xA9ouverture, l'\xC3\xA9" "cran de reprise compare le projet : identique, Reprendre la mission ; "
+         "modifi\xC3\xA9, ce qui a chang\xC3\xA9 (\xC2\xAB les variables (modifi\xC3\xA9" "es) \xC2\xBB, \xC2\xAB la vue Vue_Accueil (ajout\xC3\xA9" "e) \xC2\xBB) et Actualiser le "
+         "contexte d'abord ; introuvable, il le dit. Un appel \xC3\xA0 l'IA en cours \xC3\xA0 la fermeture est marqu\xC3\xA9 interrompu : rien "
+         "n'est rejou\xC3\xA9, jamais une application.",
+         "assistant-ia-missions", ""),
+        note("1.22.0", "Assistant IA", Kind::New,
+         "ERREURS, CORRECTIONS ET RAPPORT FINAL : une \xC3\xA9tape en erreur garde l'erreur exacte, celles qui en d\xC3\xA9pendent sont "
+         "bloqu\xC3\xA9" "es (et disent pourquoi), les autres continuent ; Corriger demande une proposition de correction, v\xC3\xA9rifi\xC3\xA9" "e "
+         "et pr\xC3\xA9sent\xC3\xA9" "e comme les autres. Le plan se modifie sans rien remettre \xC3\xA0 z\xC3\xA9ro. Quand tout est fait, l'audit final "
+         "v\xC3\xA9rifie le projet entier et le rapport dit Cr\xC3\xA9\xC3\xA9s, Modifi\xC3\xA9s, R\xC3\xA9utilis\xC3\xA9s, Termin\xC3\xA9s, Non r\xC3\xA9" "alis\xC3\xA9s, Erreurs, \xC3\x80 "
+         "v\xC3\xA9rifier ; la mission n'est termin\xC3\xA9" "e que si l'audit est pass\xC3\xA9 sans erreur bloquante.",
+         "assistant-ia-missions", ""),
+        note("1.22.0", "Assistant IA", Kind::New,
+         "LES MISSIONS DEPUIS N'IMPORTE QUELLE CONVERSATION : \xC2\xAB O\xC3\xB9 en est la station de pompage ? \xC2\xBB, \xC2\xAB Reprends la mission "
+         "d'hier \xC2\xBB - l'IA cherche dans les missions enregistr\xC3\xA9" "es et r\xC3\xA9pond avec leur \xC3\xA9tat r\xC3\xA9" "el, jamais de m\xC3\xA9moire. Pause, "
+         "reprise, annulation (ce qui est appliqu\xC3\xA9 reste dans le projet), archivage ; les notifications de l'Assistant "
+         "m\xC3\xA8nent au tableau de bord.",
+         "assistant-ia-missions", ""),
         // 1.21.3 : une grande demande n'est plus coupee
         note("1.21.3", "Assistant IA", Kind::Fixed,
          "UNE GRANDE DEMANDE N'EST PLUS COUP\xC3\x89" "E : une proposition trop longue pour une r\xC3\xA9ponse (une vue "

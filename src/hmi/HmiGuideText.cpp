@@ -4735,6 +4735,150 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.19.0"},
+        // ---- Concevoir les vues  L'Assistant IA / assistant-ia-missions
+        {"assistant-ia-missions", "Les missions IA : planifier, construire, suivre et reprendre", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
+         "Une grande demande devient une mission : un plan d'\xC3\xA9tapes rang\xC3\xA9" "es par leurs "
+         "d\xC3\xA9pendances, des propositions successives qui savent ce qui a r\xC3\xA9" "ellement "
+         "\xC3\xA9t\xC3\xA9 fait, une progression calcul\xC3\xA9" "e, un tableau de bord, et une reprise "
+         "apr\xC3\xA8s une fermeture \xE2\x80\x93 sans rien rejouer. Le projet r\xC3\xA9" "el reste la "
+         "source de v\xC3\xA9rit\xC3\xA9.",
+         {
+             {K::Paragraph, "Une mission r\xC3\xA9pond \xC3\xA0 une demande trop grande pour une seule "
+                         "proposition : \xC2\xAB Construis une station de pompage compl\xC3\xA8te avec deux "
+                         "pompes, une cuve, les \xC3\xA9quipements Modbus, les variables, les alarmes, les "
+                         "scripts et les vues. \xC2\xBB Elle vit dans le dossier IA (IA/missions), \xC3\xA0 "
+                         "part de la conversation qui l'a lanc\xC3\xA9" "e : elle se retrouve demain, depuis "
+                         "une autre conversation, apr\xC3\xA8s une fermeture.", {}},
+             {K::Heading, "Cr\xC3\xA9" "er une mission", {}},
+             {K::Bullet, "Une demande qui touche plusieurs familles du projet (\xC3\xA9quipements, "
+                         "variables, alarmes, vues\xE2\x80\xA6) ou qui dit \xC2\xAB compl\xC3\xA8te \xC2\xBB "
+                         ": au moment de l'envoyer, la carte **Cr\xC3\xA9" "er une mission IA ?** propose "
+                         "**Cr\xC3\xA9" "er la mission** ou **Continuer en conversation** (l'envoi "
+                         "habituel). La croix ou \xC3\x89" "chap la ferme : rien n'est envoy\xC3\xA9, le "
+                         "texte reste dans la saisie.", {}},
+             {K::Bullet, "Ou \xC3\xA0 la main : l'onglet **Missions IA** du panneau de l'Assistant, le "
+                         "bouton **+** (Nouvelle mission IA\xE2\x80\xA6).", {}},
+             {K::Bullet, "Rien n'est modifi\xC3\xA9 \xC3\xA0 la cr\xC3\xA9" "ation : l'IA **analyse le "
+                         "projet r\xC3\xA9" "el** \xE2\x80\x93 ce qui existe d\xC3\xA9j\xC3\xA0 et est "
+                         "conforme, ce qui est \xC3\xA0 modifier, \xC3\xA0 compl\xC3\xA9ter, \xC3\xA0 "
+                         "cr\xC3\xA9" "er, ce qui est impossible avec le logiciel \xE2\x80\x93 puis propose "
+                         "le **plan**.", {}},
+             {K::Heading, "Le plan", {}},
+             {K::Bullet, "Des \xC3\xA9tapes (S1, S2\xE2\x80\xA6) : un titre, une cat\xC3\xA9gorie (analyse, "
+                         "\xC3\xA9quipements, types, variables, symboles, popups, vues, objets, alarmes, "
+                         "scripts, fonctions, ressources, v\xC3\xA9rification, audit, rapport), les "
+                         "\xC3\xA9tapes dont elle d\xC3\xA9pend, une estimation du nombre "
+                         "d'op\xC3\xA9rations, obligatoire ou non.", {}},
+             {K::Bullet, "L'**ordre est calcul\xC3\xA9** par le logiciel \xC3\xA0 partir des "
+                         "d\xC3\xA9pendances, jamais celui dans lequel l'IA les a \xC3\xA9" "crites. Aux "
+                         "d\xC3\xA9pendances \xC3\xA9" "crites s'ajoutent celles des cat\xC3\xA9gories (des "
+                         "variables attendent les types et les \xC3\xA9quipements ; une alarme, ses "
+                         "variables ; une vue, ses variables, symboles et popups ; la v\xC3\xA9rification, "
+                         "tout le reste) : elles sont marqu\xC3\xA9" "es **implicites**. Une "
+                         "d\xC3\xA9pendance circulaire est refus\xC3\xA9" "e, et dite (\xC2\xAB S3 -> S5 -> "
+                         "S3 \xC2\xBB).", {}},
+             {K::Bullet, "Chaque \xC3\xA9tape a un \xC3\xA9tat : \xC3\x80 planifier, En attente, "
+                         "Pr\xC3\xAAte, En cours, En attente de validation, Appliqu\xC3\xA9" "e, "
+                         "V\xC3\xA9rification en cours, Termin\xC3\xA9" "e, En erreur, Bloqu\xC3\xA9" "e, "
+                         "Ignor\xC3\xA9" "e, Annul\xC3\xA9" "e. Une \xC3\xA9tape **n'est termin\xC3\xA9" "e "
+                         "que si ce qu'elle a cr\xC3\xA9\xC3\xA9 est dans le projet**.", {}},
+             {K::Bullet, "Modifier le plan ne remet rien \xC3\xA0 z\xC3\xA9ro : ajouter, ignorer, retirer "
+                         "une \xC3\xA9tape non commenc\xC3\xA9" "e, changer ses d\xC3\xA9pendances ; les "
+                         "\xC3\xA9tapes termin\xC3\xA9" "es et ce qui a \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9 "
+                         "sont gard\xC3\xA9s, l'historique dit ce qui a chang\xC3\xA9.", {}},
+             {K::Heading, "Les propositions successives", {}},
+             {K::Bullet, "**Proposer la suite** regroupe les \xC3\xA9tapes pr\xC3\xAAtes (et celles qui ne "
+                         "d\xC3\xA9pendent que d'elles) en une proposition \xC3\xA0 la mesure d'une "
+                         "r\xC3\xA9ponse de l'IA : P1, P2, P3\xE2\x80\xA6 Chaque op\xC3\xA9ration dit "
+                         "l'\xC3\xA9tape qu'elle sert.", {}},
+             {K::Bullet, "Avant chaque proposition, l'IA re\xC3\xA7oit **ce qui est r\xC3\xA9" "ellement "
+                         "dans le projet** (les \xC3\xA9l\xC3\xA9ments cr\xC3\xA9\xC3\xA9s par les "
+                         "propositions pr\xC3\xA9" "c\xC3\xA9" "dentes, v\xC3\xA9rifi\xC3\xA9s \xC3\xA0 "
+                         "l'instant), ce qui a chang\xC3\xA9 depuis, et les \xC3\xA9tapes \xC3\xA0 couvrir : "
+                         "elle r\xC3\xA9utilise les noms exacts et ne recr\xC3\xA9" "e rien.", {}},
+             {K::Bullet, "Chaque proposition se **pr\xC3\xA9visualise**, se **v\xC3\xA9rifie** sur une copie "
+                         "et s'**applique** comme d'habitude, en une transaction (un seul Ctrl+Z). Le compte "
+                         "rendu est lu dans le projet ; la mission met \xC3\xA0 jour ses \xC3\xA9tapes avec "
+                         "ce r\xC3\xA9sultat r\xC3\xA9" "el.", {}},
+             {K::Bullet, "Ctrl+Z apr\xC3\xA8s coup : la mission le voit (la proposition passe \xC2\xAB "
+                         "annul\xC3\xA9" "e \xC2\xBB, ses \xC3\xA9tapes redeviennent pr\xC3\xAAtes) ; Ctrl+Y "
+                         ": r\xC3\xA9tablie.", {}},
+             {K::Bullet, "Une \xC3\xA9tape en erreur garde l'**erreur exacte** ; celles qui en "
+                         "d\xC3\xA9pendent sont **bloqu\xC3\xA9" "es** (et disent pourquoi) ; les "
+                         "\xC3\xA9tapes ind\xC3\xA9pendantes continuent. **Corriger** demande une "
+                         "proposition de correction, v\xC3\xA9rifi\xC3\xA9" "e et pr\xC3\xA9sent\xC3\xA9" "e "
+                         "comme les autres \xE2\x80\x93 jamais une modification silencieuse de ce qui est "
+                         "appliqu\xC3\xA9.", {}},
+             {K::Heading, "Suivre une mission", {}},
+             {K::Table, "O\xC3\xB9\tCe qu'on y voit\nL'onglet Missions IA du panneau\tLes missions (Toutes, "
+                         "En cours, Archiv\xC3\xA9" "es), la recherche, chacune avec son \xC3\xA9tat, son "
+                         "projet, sa progression, sa prochaine action ; Tableau de bord, Reprendre, Pause ; "
+                         "le clic droit (renommer, archiver, annuler\xE2\x80\xA6).\nLa bande Mission IA "
+                         "au-dessus de la conversation\tLa mission de la conversation : les \xC3\xA9tapes "
+                         "termin\xC3\xA9" "es sur le total, la barre de progression, la prochaine action et "
+                         "son bouton. Le chevron la replie.\nLe tableau de bord (au centre, onglet \xC2\xAB "
+                         "Mission IA \xC2\xB7 nom \xC2\xBB)\tL'en-t\xC3\xAAte (\xC3\xA9tat, projet, "
+                         "progression, derni\xC3\xA8re activit\xC3\xA9), les cinq progressions, l'objectif "
+                         "et l'analyse, la prochaine action, le plan en tableau, les propositions P1, "
+                         "P2\xE2\x80\xA6 (Pr\xC3\xA9visualiser, V\xC3\xA9rifier, Appliquer ; le compte rendu "
+                         "d'une proposition appliqu\xC3\xA9" "e), le rapport final, l'historique.", {}},
+             {K::Bullet, "La **progression** est calcul\xC3\xA9" "e, jamais estim\xC3\xA9" "e par l'IA : "
+                         "chaque \xC3\xA9tape p\xC3\xA8se son nombre d'op\xC3\xA9rations pr\xC3\xA9vu (au "
+                         "moins 1) ; les \xC3\xA9tapes ignor\xC3\xA9" "es ou annul\xC3\xA9" "es sortent du "
+                         "calcul. Planification, g\xC3\xA9n\xC3\xA9ration, validation, application, et la "
+                         "**progression globale = les \xC3\xA9tapes termin\xC3\xA9" "es**, "
+                         "c'est-\xC3\xA0-dire appliqu\xC3\xA9" "es et v\xC3\xA9rifi\xC3\xA9" "es dans le "
+                         "projet. La r\xC3\xA8gle est dans l'infobulle.", {}},
+             {K::Bullet, "Les notifications de l'Assistant disent ce qui arrive aux missions ; leur bouton "
+                         "ouvre le tableau de bord.", {}},
+             {K::Heading, "Reprendre", {}},
+             {K::Bullet, "Tout est **enregistr\xC3\xA9 \xC3\xA0 chaque \xC3\xA9v\xC3\xA9nement** "
+                         "(\xC3\xA9" "criture d'un bloc, la version pr\xC3\xA9" "c\xC3\xA9" "dente "
+                         "gard\xC3\xA9" "e en copie) : une fermeture brutale laisse toujours une mission "
+                         "compl\xC3\xA8te ; un fichier ab\xC3\xAEm\xC3\xA9 est repris de sa copie, et c'est "
+                         "dit.", {}},
+             {K::Bullet, "\xC3\x80 la r\xC3\xA9ouverture, l'**\xC3\xA9" "cran de reprise** compare la "
+                         "mission au projet ouvert : identique (**Reprendre la mission**) ; modifi\xC3\xA9 "
+                         "depuis (la liste de ce qui a chang\xC3\xA9 \xE2\x80\x93 \xC2\xAB les variables "
+                         "(modifi\xC3\xA9" "es) \xC2\xBB, \xC2\xAB la vue Vue_Accueil (ajout\xC3\xA9" "e) "
+                         "\xC2\xBB \xE2\x80\x93 et **Actualiser le contexte** d'abord) ; introuvable (un "
+                         "autre projet ou aucun : ouvre le projet de la mission ; l'historique reste "
+                         "consultable).", {}},
+             {K::Bullet, "Un appel \xC3\xA0 l'IA en cours \xC3\xA0 la fermeture est **interrompu** : sa "
+                         "r\xC3\xA9ponse n'existe pas, rien n'est rejou\xC3\xA9, ses \xC3\xA9tapes "
+                         "redeviennent pr\xC3\xAAtes. Une application n'est **jamais** rejou\xC3\xA9" "e.", {}},
+             {K::Heading, "Terminer : l'audit et le rapport final", {}},
+             {K::Bullet, "Quand toutes les \xC3\xA9tapes obligatoires sont termin\xC3\xA9" "es, l'**audit "
+                         "final** v\xC3\xA9rifie tout le projet (comme \xC2\xAB V\xC3\xA9rifie tout mon "
+                         "projet \xC2\xBB : G\xC3\xA9n\xC3\xA9rer, Compiler, les adresses, les "
+                         "orphelins\xE2\x80\xA6).", {}},
+             {K::Bullet, "Le **rapport final** dit : Cr\xC3\xA9\xC3\xA9s, Modifi\xC3\xA9s, "
+                         "R\xC3\xA9utilis\xC3\xA9s, Termin\xC3\xA9s, Non r\xC3\xA9" "alis\xC3\xA9s, Erreurs, "
+                         "\xC3\x80 v\xC3\xA9rifier (dont ce qui ne peut pas l'\xC3\xAAtre sans "
+                         "l'installation, comme la communication r\xC3\xA9" "elle avec les "
+                         "\xC3\xA9quipements).", {}},
+             {K::Bullet, "La mission n'est **Termin\xC3\xA9" "e** que si l'audit a pu \xC3\xAAtre fait sans "
+                         "erreur bloquante ; sinon le rapport le dit, et dit ce qui reste.", {}},
+             {K::Heading, "Depuis une autre conversation", {}},
+             {K::Paragraph, "\xC2\xAB O\xC3\xB9 en est la station de pompage ? \xC2\xBB, \xC2\xAB Reprends la "
+                         "mission d'hier \xC2\xBB : l'IA cherche dans les missions enregistr\xC3\xA9" "es "
+                         "(chercher_missions, etat_mission) et r\xC3\xA9pond avec leur **\xC3\xA9tat "
+                         "r\xC3\xA9" "el** \xE2\x80\x93 jamais de m\xC3\xA9moire ni invent\xC3\xA9. Une "
+                         "mission sans correspondance : elle le dit.", {}},
+             {K::Warning, "Les missions vivent dans IHM Studio, l\xC3\xA0 o\xC3\xB9 vit l'Assistant ; API "
+                         "Studio n'en a pas. Pause : aucune g\xC3\xA9n\xC3\xA9ration ni application tant que "
+                         "la mission n'est pas reprise. Annuler : ses propositions ne s'appliquent plus, ce "
+                         "qui a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 appliqu\xC3\xA9 reste dans le projet "
+                         "(Ctrl+Z pour le d\xC3\xA9" "faire).", {}},
+         },
+         {"assistant-ia", "assistant-ia-plan", "memoire-ia", "assistant-ia-registre"},
+         {"MISSION", "MISSIONS", "MISSION IA", "MISSIONS IA", "PLAN DE LA MISSION", "\xC3\x89TAPE", "\xC3\x89TAPES", "PROPOSITIONS SUCCESSIVES", "P1", "P2", "PROGRESSION", "TABLEAU DE BORD", "REPRENDRE LA MISSION", "REPRISE", "ACTUALISER LE CONTEXTE", "INTERROMPU", "RAPPORT FINAL", "AUDIT FINAL", "CR\xC3\x89" "ER UNE MISSION", "CONTINUER EN CONVERSATION", "O\xC3\x99 EN EST", "chercher_missions", "etat_mission", "planifier_mission"},
+         {"ai.panneau"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.22.0"},
         // ---- Concevoir les vues  L'Assistant IA / incidents
         {"incidents", "Les incidents : enregistrement et analyse", "Concevoir les vues \xE2\x80\xBA L'Assistant IA",
          "Quand une alarme appara\xC3\xAEt en simulation ou au poste d'exploitation, l'IHM cr\xC3\xA9" "e "
