@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.1", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.2", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 13 h"},
     {"1.22.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 vers midi"},
     {"1.21.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.2", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
@@ -155,6 +156,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.2 : les parametres des popups compris par l IA, les saccades des missions, l onglet Performances
+        note("1.22.2", "Assistant IA", Kind::Fixed,
+         "LES PARAM\xC3\x88TRES D'UNE POPUP OU D'UN SYMBOLE COMPRIS PAR L'IA : dans une popup qui re\xC3\xA7oit \xC2\xAB Vanne : T_Vanne \xC2\xBB (une "
+         "structure), ses objets lisent Vanne.Cmd, Vanne.F0... - l'Assistant les prenait pour des variables invent\xC3\xA9" "es (\xC2\xAB La variable "
+         "Vanne.Cmd n'existe pas dans le projet \xC2\xBB). La v\xC3\xA9rification les accepte maintenant, membre par membre selon le type du "
+         "param\xC3\xA8tre (un membre inconnu est dit, avec les vrais membres) ; l'IA re\xC3\xA7oit les param\xC3\xA8tres de chaque popup et symbole "
+         "(Popup_Vanne(Vanne : T_Vanne), et les membres de la popup ouverte) et sait qu'ils ne se cr\xC3\xA9" "ent pas comme des variables.",
+         "assistant-ia", ""),
+        note("1.22.2", "Assistant IA", Kind::Fixed,
+         "MOINS DE SACCADES AVEC UNE MISSION EN COURS : apr\xC3\xA8s chaque modification du projet, chaque mission v\xC3\xA9rifiait ce qu'elle "
+         "avait cr\xC3\xA9\xC3\xA9 en reconstruisant tout le graphe des relations du projet (toutes les formules, tous les scripts relus) sur le "
+         "fil de l'interface - un \xC3\xA0-coup \xC3\xA0 chaque geste sur un gros projet. Elle cherche maintenant directement par le nom ; le "
+         "graphe ne sert plus que si un \xC3\xA9l\xC3\xA9ment semble manquer.",
+         "assistant-ia-missions", ""),
         // 1.22.1 : sans blocage, les etapes en direct, les corrections d'un clic droit, les dossiers des variables
         note("1.22.1", "Assistant IA", Kind::Fixed,
          "PLUS DE BLOCAGE \xC3\x80 L'ARRIV\xC3\x89" "E D'UNE PROPOSITION QUI ADRESSE DES VARIABLES : sur un gros projet, IHM Studio se figeait "

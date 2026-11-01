@@ -16,7 +16,7 @@
 // =============================================================================
 #pragma once
 
-#define XPG_ANALYZER_VERSION "1.22.1"
+#define XPG_ANALYZER_VERSION "1.22.2"
 #define XPG_ANALYZER_NAME    "API IHM Studio"
 #define XPG_PRODUCT_API      "API Studio"
 #define XPG_PRODUCT_IHM      "IHM Studio"

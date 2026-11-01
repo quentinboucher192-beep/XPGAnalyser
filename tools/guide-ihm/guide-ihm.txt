@@ -1924,6 +1924,10 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
   - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
 - La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
 - Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
+### Les paramètres d'une popup ou d'un symbole
+- Dans une popup qui reçoit un paramètre (Popup_Vanne et son paramètre **Vanne : T_Vanne**), ses objets lisent le paramètre par son nom et, pour une structure, par ses membres : **Vanne.Cmd**, **Vanne.F0**. L'Assistant le sait : ce n'est pas une variable du projet, il ne demande pas de la créer ; l'appelant donne la variable à l'ouverture (Ouvrir la popup : Vanne := Vannes[3]).
+- La vérification accepte ces chemins membre par membre, d'après le type du paramètre ; un membre qui n'existe pas est dit, avec les vrais membres du type.
+- Un paramètre qui manque à une popup existante ne s'ajoute pas par une proposition : l'IA le dit, et tu l'ajoutes dans l'onglet **Paramètres** de la popup.
 == assistant-ia-plan | Le plan d'action, le compte rendu et les questions sur le projet
 : Une demande complexe devient un plan d'action : des étapes rangées par leurs dépendances, vérifiées sur une copie du projet, appliquées d'un bloc (un seul Ctrl+Z), puis un compte rendu lu dans le projet. L'Assistant répond aussi aux questions sur les relations du projet, le vérifie en entier et propose de ranger ses adresses.
 @depuis 1.19.0
