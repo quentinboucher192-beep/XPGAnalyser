@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.21.1", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.2", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.21.1", "01/11/2026", "livr\xC3\xA9" "e le 01/11 au matin"},
     {"1.21.0", "01/11/2026", "livr\xC3\xA9" "e le 01/11 dans la nuit"},
     {"1.20.2", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
     {"1.20.1", "31/10/2026", "livr\xC3\xA9" "e le 31/10 dans la soir\xC3\xA9" "e"},
@@ -151,6 +152,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.21.2 : les notifications de l'Assistant, un modele de fichier dans la conversation
+        note("1.21.2", "Assistant IA", Kind::New,
+         "LES NOTIFICATIONS DE L'ASSISTANT : le panneau de l'Assistant IA a deux onglets, Conversation et Notifications. "
+         "La pastille compte ce que tu n'as pas lu (rouge pour une erreur). La liste, rang\xC3\xA9" "e par jour, dit ce "
+         "que l'Assistant a fait pendant que tu regardais ailleurs - une r\xC3\xA9ponse ou une proposition pr\xC3\xAAte, "
+         "une proposition appliqu\xC3\xA9" "e ou en \xC3\xA9" "chec, une erreur du service, une pi\xC3\xA8" "ce jointe illisible, "
+         "un mod\xC3\xA8le de fichier enregistr\xC3\xA9, des souvenirs \xC3\xA0 valider, un scan r\xC3\xA9seau termin\xC3\xA9, "
+         "l'analyse IA d'un incident - et chaque bouton m\xC3\xA8ne \xC3\xA0 la chose. Toutes / Non lues, Tout marquer comme "
+         "lu, Effacer les lues, clic droit et clavier ; 300 au plus, gard\xC3\xA9" "es dans le dossier IA.",
+         "assistant-ia", ""),
+        note("1.21.2", "Assistant IA", Kind::New,
+         "UN MOD\xC3\x88LE DE FICHIER DANS LA CONVERSATION : quand tu enregistres un mod\xC3\xA8le de fichier (Mod\xC3\xA8le\xE2\x80\xA6 "
+         "\xE2\x80\xBA Enregistrer comme mod\xC3\xA8le), l'Assistant l'\xC3\xA9" "crit dans la conversation - son genre, "
+         "sa feuille, sa ligne d'en-t\xC3\xAAte, ses colonnes - et le mod\xC3\xA8le lui-m\xC3\xAAme dans un bloc de code "
+         "JSON, avec son bouton Copier ; \xC2\xAB mis \xC3\xA0 jour \xC2\xBB s'il existait d\xC3\xA9j\xC3\xA0. Ce message "
+         "vient du logiciel : il n'est jamais renvoy\xC3\xA9 \xC3\xA0 l'IA connect\xC3\xA9" "e comme une de ses r\xC3\xA9ponses.",
+         "assistant-ia-plan", ""),
         // 1.21.1 : toutes les feuilles d'un classeur joint
         note("1.21.1", "Assistant IA", Kind::Fixed,
          "UN CLASSEUR \xC3\x80 PLUSIEURS FEUILLES EST LU EN ENTIER : une liste d'entr\xC3\xA9" "es/sorties r\xC3\xA9partie "

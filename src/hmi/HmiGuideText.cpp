@@ -4303,9 +4303,78 @@ const std::vector<Topic>& topics() {
              {K::Warning, "Un service en ligne re\xC3\xA7oit ta demande et le contexte de la vue (selon tes "
                          "r\xC3\xA9glages de confidentialit\xC3\xA9). Lis ses conditions : certaines offres "
                          "gratuites se r\xC3\xA9servent le droit d'utiliser les demandes.", {}},
+             {K::Heading, "Les notifications de l'Assistant (1.21.2)", {}, "1.21.2"},
+             {K::Paragraph, "Sous l'en-t\xC3\xAAte du panneau, deux onglets : **Conversation** (tout ce qui "
+                         "pr\xC3\xA9" "c\xC3\xA8" "de) et **Notifications**. La pastille de l'onglet "
+                         "Notifications compte celles que tu n'as pas encore lues : **rouge** s'il y a une "
+                         "erreur non lue, de la couleur d'accent sinon ; rien quand tout est lu. Au survol : "
+                         "le nombre et la plus r\xC3\xA9" "cente. Un clic montre les notifications \xC3\xA0 "
+                         "la place de la conversation ; un autre clic, ou l'onglet Conversation, y revient "
+                         "(rien n'est perdu : la saisie, les pi\xC3\xA8" "ces en attente, la r\xC3\xA9ponse "
+                         "en cours restent). L'Assistant y note ce qui s'est pass\xC3\xA9 pendant que tu "
+                         "regardais ailleurs, et ce qui m\xC3\xA9rite ton attention \xE2\x80\x93 jamais "
+                         "\xC3\xA0 chaque cycle :", {}, "1.21.2"},
+             {K::Table, "Notification\tQuand\tSon bouton m\xC3\xA8ne \xC3\xA0\nR\xC3\xA9ponse pr\xC3\xAAte, "
+                         "Proposition pr\xC3\xAAte\tUne r\xC3\xA9ponse finit quand sa conversation n'est pas "
+                         "\xC3\xA0 l'\xC3\xA9" "cran (une autre conversation ouverte, le panneau "
+                         "repli\xC3\xA9, l'onglet Notifications devant, la fen\xC3\xAAtre derri\xC3\xA8re "
+                         "une autre).\tLa conversation et ce message ; la carte de la proposition, son plan "
+                         "d\xC3\xA9pli\xC3\xA9.\nProposition appliqu\xC3\xA9" "e, non "
+                         "appliqu\xC3\xA9" "e\tAppliquer a r\xC3\xA9ussi (ce qui est cr\xC3\xA9\xC3\xA9, les "
+                         "erreurs laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9) ou a \xC3\xA9" "chou\xC3\xA9 (la "
+                         "raison ; le projet n'a pas chang\xC3\xA9), aussi en arri\xC3\xA8re-plan et en mode "
+                         "Direct.\tLa carte de la proposition.\nErreur du service\tCl\xC3\xA9 API "
+                         "refus\xC3\xA9" "e, limite atteinte, service indisponible, pas de r\xC3\xA9seau : "
+                         "le texte de l'erreur. La m\xC3\xAAme erreur r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e reste "
+                         "une ligne (\xC2\xAB \xC3\x97" "3 \xC2\xBB).\tLe message en erreur "
+                         "(R\xC3\xA9" "essayer y est).\nPi\xC3\xA8" "ce jointe illisible ; classeur reconnu "
+                         "ou lu\tL'analyse d'un fichier joint a \xC3\xA9" "chou\xC3\xA9 ; un classeur "
+                         "(.xlsx, .xlsm) a \xC3\xA9t\xC3\xA9 reconnu (un mod\xC3\xA8le de fichier) ou "
+                         "lu.\tLe contexte de la discussion, d\xC3\xA9pli\xC3\xA9 sur la pi\xC3\xA8" "ce ; "
+                         "la fen\xC3\xAAtre Mod\xC3\xA8le de fichier.\nMod\xC3\xA8le de fichier "
+                         "enregistr\xC3\xA9\t\xC2\xAB Enregistrer comme mod\xC3\xA8le \xC2\xBB dans la "
+                         "fen\xC3\xAAtre Mod\xC3\xA8le de fichier.\tCette fen\xC3\xAAtre, pour ce "
+                         "classeur.\nSouvenirs \xC3\xA0 valider ; souvenir en conflit\tL'IA a propos\xC3\xA9 "
+                         "des souvenirs (rien n'est retenu sans ton accord) ; l'un d'eux contredit ce qui "
+                         "est d\xC3\xA9j\xC3\xA0 retenu.\tM\xC3\xA9moire et apprentissage \xE2\x80\xBA "
+                         "Souvenirs, filtr\xC3\xA9 (\xC3\xA0 valider, en conflit).\nBac \xC3\xA0 sable\tUn "
+                         "essai de code de l'IA est termin\xC3\xA9 (r\xC3\xA9ussi, \xC3\xA0 corriger, ou "
+                         "impossible) \xE2\x80\x93 sur une copie du projet.\tLa r\xC3\xA9ponse qui l'a "
+                         "fait.\nScan r\xC3\xA9seau termin\xC3\xA9\tLe scan que l'IA a pr\xC3\xA9par\xC3\xA9 "
+                         "(la confirmation qu'elle a ouverte, ou \xC2\xAB D\xC3\xA9tecter ce qui "
+                         "r\xC3\xA9pond\xE2\x80\xA6 \xC2\xBB) est fini : la premi\xC3\xA8re ligne du compte "
+                         "rendu.\tCommunication \xE2\x80\xBA Scanner IP, le compte rendu.\nAnalyse IA d'un "
+                         "incident\tL'IA connect\xC3\xA9" "e a fini d'analyser un incident (ou l'analyse "
+                         "reste en attente) \xE2\x80\x93 pas la fiche faite sur le PC \xC3\xA0 chaque "
+                         "incident.\tIHM \xE2\x80\xBA Ressources \xE2\x80\xBA Incidents, cet incident.", {}, "1.21.2"},
+             {K::Paragraph, "La plus r\xC3\xA9" "cente est en haut, rang\xC3\xA9" "e par jour (**Aujourd'hui**, "
+                         "**Hier**, puis la date). Chaque ligne : la couleur et l'ic\xC3\xB4ne de son ton "
+                         "(erreur, attention, r\xC3\xA9ussi, information), l'heure, sa cat\xC3\xA9gorie, le "
+                         "titre (en gras tant qu'elle n'est pas lue), deux lignes de d\xC3\xA9tail (le reste "
+                         "au survol), \xC2\xAB \xC3\x97" "3 \xC2\xBB si elle s'est "
+                         "r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e (la m\xC3\xAAme remonte en t\xC3\xAAte, non lue), "
+                         "et son bouton.", {}, "1.21.2"},
+             {K::Bullet, "**Toutes** | **Non lues** (leurs nombres) filtrent la liste. Dans Non lues, une "
+                         "ligne que tu viens de lire reste \xC3\xA0 sa place, gris\xC3\xA9" "e, jusqu'au "
+                         "prochain choix du filtre.", {}, "1.21.2"},
+             {K::Bullet, "Une ligne choisie (un clic, les fl\xC3\xA8" "ches) devient **lue** ; un "
+                         "double-clic ou **Entr\xC3\xA9" "e** suit son bouton.", {}, "1.21.2"},
+             {K::Bullet, "**Tout marquer comme lu** (la coche) et **Effacer les lues** (la gomme) : "
+                         "gris\xC3\xA9s quand il n'y a rien \xC3\xA0 faire.", {}, "1.21.2"},
+             {K::Bullet, "Le clic droit : Ouvrir, Marquer comme lue / non lue, Copier, Supprimer. Au clavier "
+                         ": Haut, Bas, D\xC3\xA9" "but, Fin, Page pr\xC3\xA9" "c\xC3\xA9" "dente / suivante, "
+                         "**Espace** (lue / non lue), **Suppr**, **Ctrl+C**, la touche Menu.", {}, "1.21.2"},
+             {K::Paragraph, "Les notifications sont gard\xC3\xA9" "es dans le dossier IA (notifications.json, "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 des conversations) : 300 au plus, les plus anciennes "
+                         "lues partent d'abord. Le fichier est relu et \xC3\xA9" "crit en "
+                         "arri\xC3\xA8re-plan (au plus une fois par seconde) : l'interface n'attend jamais "
+                         "le disque.", {}, "1.21.2"},
+             {K::Tip, "Un lien qui ne m\xC3\xA8ne plus nulle part (une conversation supprim\xC3\xA9" "e, "
+                         "un incident valid\xC3\xA9 ailleurs) le dit dans la barre d'\xC3\xA9tat ; la "
+                         "notification reste, \xC3\xA0 toi de l'effacer.", {}, "1.21.2"},
          },
          {"editeur", "objets", "historique", "assistant-ia-integree", "assistant-ia-registre", "memoire-ia"},
-         {"ASSISTANT", "IA", "ASSISTANT IA", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CL\xC3\x89S API", "G\xC3\x89RER LES CL\xC3\x89S", "GESTIONNAIRE DES CL\xC3\x89S", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
+         {"ASSISTANT", "IA", "ASSISTANT IA", "NOTIFICATIONS DE L'ASSISTANT", "NON LUES", "TOUT MARQUER COMME LU", "EFFACER LES LUES", "PROPOSITION", "APER\xC3\x87U", "CL\xC3\x89 API", "CL\xC3\x89S API", "G\xC3\x89RER LES CL\xC3\x89S", "GESTIONNAIRE DES CL\xC3\x89S", "CLAUDE", "ANTHROPIC", "RELAIS", "MOD\xC3\x88LE", "IA INT\xC3\x89GR\xC3\x89" "E", "OPENAI", "COMPATIBLE OPENAI", "OLLAMA", "LM STUDIO", "OPENROUTER", "GROQ", "GEMINI", "MISTRAL", "IA GRATUITE", "LIMITE", "JETONS", "BUDGET", "FEN\xC3\x8ATRE DE CONTEXTE", "IA INT\xC3\x89GR\xC3\x89" "E D'ABORD"},
          {"ai.panneau", "dialog.ai.apercu", "dialog.ai.parametres", "dialog.ai.cles"},
          {},
          "",
@@ -4606,6 +4675,12 @@ const std::vector<Topic>& topics() {
                          "mod\xC3\xA8le existant, ou **Enregistre comme mod\xC3\xA8le** pour que les "
                          "prochains fichiers aux m\xC3\xAAmes intitul\xC3\xA9s soient lus directement, sans "
                          "analyse.", {}},
+             {K::Bullet, "1.21.2 : un mod\xC3\xA8le enregistr\xC3\xA9 est **\xC3\xA9" "crit dans la "
+                         "conversation** : son genre, sa feuille, sa ligne d'en-t\xC3\xAAte, ses colonnes, "
+                         "et le mod\xC3\xA8le lui-m\xC3\xAAme dans un **bloc de code JSON** (bouton "
+                         "**Copier**) ; \xC2\xAB mis \xC3\xA0 jour \xC2\xBB s'il existait "
+                         "d\xC3\xA9j\xC3\xA0. Ce message vient du logiciel : il n'est jamais renvoy\xC3\xA9 "
+                         "\xC3\xA0 l'IA connect\xC3\xA9" "e.", {}},
              {K::Bullet, "Les mod\xC3\xA8les se g\xC3\xA8rent dans **M\xC3\xA9moire et apprentissage "
                          "\xE2\x80\xBA Apprentissage \xE2\x80\xBA Mod\xC3\xA8les de fichiers** (renommer, "
                          "d\xC3\xA9sactiver, supprimer) ; ils sont **partag\xC3\xA9s avec toutes les IA** et "
