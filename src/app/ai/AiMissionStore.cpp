@@ -137,15 +137,15 @@ std::string missionsDir() { return root().empty() ? std::string{} : U(P(root()) 
 std::string missionFile(std::string_view id) { return U(P(missionsDir()) / P(std::string(id) + ".json")); }
 
 bool save(const Mission& m, std::string* why) {
-    if (root().empty()) return true;   // rien a ecrire : tout reste en memoire (les essais)
-    if (m.id.empty()) {
-        if (why) *why = "mission sans identifiant";
-        return false;
-    }
     if (m.format > kFormat) {
         if (why)
             *why = "La mission " + m.id + " vient d'une version plus r\xC3\xA9" "cente (format " + std::to_string(m.format)
                    + ") : elle n'est pas r\xC3\xA9\xC3\xA9" "crite par celle-ci.";
+        return false;
+    }
+    if (root().empty()) return true;   // rien a ecrire : tout reste en memoire (les essais)
+    if (m.id.empty()) {
+        if (why) *why = "mission sans identifiant";
         return false;
     }
     std::error_code ec;

@@ -1292,7 +1292,8 @@ bool verifyAgainst(Mission& m, const hmi::Project& project, std::string now) {
             link.state = "appliquee";
             changed = true;
             for (const auto& sid : link.steps)
-                if (Step* s = m.step(sid); s && s->state == StepState::Ready) {
+                if (Step* s = m.step(sid);
+                    s && (s->state == StepState::Ready || s->state == StepState::Waiting || s->state == StepState::Blocked)) {
                     s->state = StepState::Applied;
                     setStepState(m, sid, StepState::Done, now, "R\xC3\xA9tablie : ce que " + P + " avait cr\xC3\xA9\xC3\xA9 est de nouveau dans le projet.");
                 }
@@ -1916,7 +1917,7 @@ std::string runDetailTool(const std::vector<Mission>& missions, std::string_view
 // ---- le fichier -----------------------------------------------------------------------------------------------------
 Value toJson(const Mission& m) {
     Value o = Value::object();
-    o.set("format", kFormat);
+    o.set("format", m.format);
     o.set("id", m.id);
     o.set("nom", m.name);
     o.set("description", m.description);
