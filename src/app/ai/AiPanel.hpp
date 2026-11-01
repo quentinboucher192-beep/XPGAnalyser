@@ -288,6 +288,16 @@ public:
     void                             dismissMissionAsk();
     // Creer une mission (l'onglet Missions IA, la carte de choix) : l'IA analyse le projet et propose un plan.
     bool createMission(const std::string& request);
+    // 1.22.6 : DE LA CONVERSATION A LA MISSION IA. createMissionFromMessage : << Creer une mission avec ce message >> (le clic
+    // droit sur un message envoye) ; sendAsMission : << Envoyer en mission >> (le bouton a cote d'Envoyer) - la saisie devient
+    // une mission ; sendOrAdvise : un envoi du logiciel (<< Proposer la suite >>) - le conseil d'abord si la demande est
+    // grosse (la carte : Creer la mission, Continuer ici). Rien n'est cree sans un clic. missionAdviceShown : la carte du
+    // conseil (le mode << Continuer ici >> de la carte de choix).
+    bool               createMissionFromMessage(int message);
+    bool               sendAsMission();
+    bool               sendOrAdvise(const std::string& text);
+    [[nodiscard]] bool missionAdviceShown() const noexcept;
+    [[nodiscard]] ui::Button& missionSendButton() noexcept { return *missionSendBtn_; }
     // Le tableau de bord au centre (UiHost::openMission) ; `mode` -1 : le tableau de bord, ou l'ecran de reprise si la
     // mission en a besoin (en pause, un appel interrompu, le projet modifie ou introuvable) ; 0 : le tableau de bord ;
     // 1 : l'ecran de reprise ; 2 : l'historique. Sans hote (un essai) : l'onglet Missions IA, la mission choisie. Faux :
@@ -418,6 +428,14 @@ private:
     std::uint64_t            verdictSeen_{0};
     void                     trackPreview(AiPreviewDialog* dialog, const std::string& proposalId);
     void                     pushVerdict();
+    // 1.22.6 (a la fin) : DE LA CONVERSATION A LA MISSION IA - le bouton << Envoyer en mission >> ; la carte du conseil (le
+    // message de l'utilisateur qu'il vise : -1, la demande pas encore envoyee) ; le conseil d'une reponse deja montre ou ferme
+    // par la croix (conversation#message : il ne revient pas).
+    ui::Button*              missionSendBtn_{nullptr};
+    int                      askMessage_{-1};
+    std::string              adviceSeen_;
+    void                     offerAdvice(const std::string& text, const std::string& reason, int message);
+    void                     syncAdvice();
 };
 
 // =============================================================================
@@ -732,6 +750,20 @@ public:
             if (t.pending()) return true;
         return false;
     }
+    // 1.22.6 : LE CLIC DROIT SUR UN MESSAGE ENVOYE - le menu << Creer une mission avec ce message >> (au clic droit sur sa
+    // bulle ; ici : au milieu de la bulle), ses entrees, en choisir une comme un clic (essais, scripts) ; la place d'une bulle
+    // de l'utilisateur au dernier dessin (vide : pas une bulle de l'utilisateur, ou hors de la vue).
+    bool                                   openMessageMenu(int message);
+    [[nodiscard]] std::vector<std::string> messageMenuItems() const;
+    bool                                   chooseMessageMenuItem(const std::string& label);
+    [[nodiscard]] gfx::Rect                bubbleRect(int message) const;
+    // La place d'un message au dernier dessin (toute sa largeur ; vide : hors de la vue) - << Mission << X >> creee - Ouvrir >>.
+    [[nodiscard]] gfx::Rect                messageRect(int message) const;
+
+private:
+    bool         openMessageMenuAt(int message, gfx::Point at);
+    ui::PopupMenu* msgMenu_{nullptr};
+    int          msgMenuMessage_{-1};
 };
 
 } // namespace app::ai

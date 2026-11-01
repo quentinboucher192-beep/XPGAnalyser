@@ -130,6 +130,12 @@ const char* const kRules =
     "21. Le logiciel g\xC3\xA9n\xC3\xA8re et compile chaque proposition sur une copie du projet ; il te renvoie ses erreurs et ses "
     "avertissements (G\xC3\xA9n\xC3\xA9rer, Compiler). Corrige-les en renvoyant la proposition ENTI\xC3\x88RE (proposer_operations), et dis en "
     "une phrase ce que tu as chang\xC3\xA9.\n"
+    // 1.22.6 : de la conversation a la mission - l'IA conseille, l'utilisateur decide (jamais une mission creee sans son clic).
+    "22. Une demande LARGE (plusieurs \xC3\xA9tapes ou lots : S3b, S5, S6... ; toute une partie du projet ; une suite d\xC3\xA9j\xC3\xA0 annonc\xC3\xA9" "e "
+    "plusieurs fois) se fait mieux en MISSION IA (un plan d'\xC3\xA9tapes v\xC3\xA9rifi\xC3\xA9" "es, reprenables) qu'en conversation. Propose la "
+    "premi\xC3\xA8re partie utile si tu peux, et CONSEILLE la mission : le champ mission_conseillee de proposer_operations (la raison, une "
+    "phrase) ; sans proposition, une derni\xC3\xA8re ligne [MISSION_CONSEILLEE: la raison]. Le logiciel montre alors << Cr\xC3\xA9" "er la "
+    "mission >> \xC3\xA0 l'utilisateur : c'est lui qui d\xC3\xA9" "cide, tu ne cr\xC3\xA9" "es rien. Jamais pendant une mission IA.\n"
     "\n"
     "## Les op\xC3\xA9rations (l'outil proposer_operations)\n"
     "- creer : genre (une cl\xC3\xA9), nom (neuf), proprietes (x, y, w, h compris ; variable : une variable existante). "
@@ -774,6 +780,9 @@ std::string operationsTool() {
     // demander une fois la proposition appliquee).
     top.set("suite", str("Seulement si la demande est trop grande pour une seule proposition : ce qui restera \xC3\xA0 faire apr\xC3\xA8s "
                          "celle-ci, en une phrase (Les 31 alarmes des armoires et la surveillance de la communication). Absent sinon."));
+    // 1.22.6 : le conseil de passer en mission IA (la regle 22) - le logiciel montre << Creer la mission >>, l'utilisateur decide.
+    top.set("mission_conseillee", str("Seulement pour une demande trop large pour la conversation (plusieurs \xC3\xA9tapes ou lots) : pourquoi une "
+                                      "mission IA conviendrait mieux, en une phrase. Absent sinon, et jamais dans une mission."));
     schema.set("properties", top);
     Value required = Value::array();
     required.push("operations");
@@ -925,7 +934,7 @@ std::string textToolInstructions() {
            "{\"x\": \"80\", \"y\": \"120\", \"w\": \"150\", \"h\": \"200\"}}]}\n"
            "```\n"
            "Une demande trop grande pour une seule r\xC3\xA9ponse : ajoute \"suite\" (ce qui restera \xC3\xA0 faire, une phrase) \xC3\xA0 c\xC3\xB4t\xC3\xA9 "
-           "de \"resume\". Le logiciel lit ce bloc strictement (un champ inconnu, une op\xC3\xA9ration inconnue : refus\xC3\xA9) et le v\xC3\xA9rifie comme "
+           "de \"resume\" ; trop large pour la conversation : \"mission_conseillee\" (la raison, une phrase). Le logiciel lit ce bloc strictement (un champ inconnu, une op\xC3\xA9ration inconnue : refus\xC3\xA9) et le v\xC3\xA9rifie comme "
            "un appel d'outil. Une question qui ne modifie rien : pas de bloc. Le r\xC3\xA9sultat de ta proposition pr\xC3\xA9" "c\xC3\xA9" "dente "
            "t'arrive en t\xC3\xAA" "te du message suivant, entre crochets.\n";
 }

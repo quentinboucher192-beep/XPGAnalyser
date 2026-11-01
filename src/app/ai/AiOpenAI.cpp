@@ -255,7 +255,13 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
     };
     std::vector<Msg> msgs;
     std::string pendingTool;   // l'id de l'appel du tour precedent (son resultat suit)
-    for (const auto& t : req.turns) {
+    // 1.22.6 : LE CONTEXTE DANS LE DERNIER TOUR (ProviderRequest::contextTurn) - le prefixe system + historique ne change plus
+    // d'une demande a l'autre : les services qui gardent le debut d'une demande en cache (automatiquement) le relisent.
+    const bool contextInTurn = req.contextTurn >= 0 && static_cast<std::size_t>(req.contextTurn) < req.turns.size()
+                               && req.turns[static_cast<std::size_t>(req.contextTurn)].role == ProviderTurn::Role::User && !req.systemStable.empty()
+                               && !blank(req.systemDynamic);
+    for (std::size_t ti = 0; ti < req.turns.size(); ++ti) {
+        const ProviderTurn& t = req.turns[ti];
         if (t.role == ProviderTurn::Role::User) {
             Msg m;
             m.role = "user";
@@ -274,6 +280,9 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
                 }
                 pendingTool.clear();
             }
+            if (contextInTurn && static_cast<int>(ti) == req.contextTurn)
+                m.parts.push_back({false, "[Contexte du projet \xC3\xA0 ce message, \xC3\xA9" "crit par le logiciel ; il remplace celui des messages pr\xC3\xA9" "c\xC3\xA9" "dents.]\n"
+                                              + req.systemDynamic});
             for (const auto& a : t.attachments) attachmentParts(a, m.parts);
             if (!blank(t.text)) m.parts.push_back({false, t.text});
             if (m.parts.empty()) m.parts.push_back({false, "(message sans texte)"});
@@ -326,7 +335,7 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
         body.set("stream_options", std::move(so));
     }
     json::Value list = json::Value::array();
-    std::string system = !req.systemStable.empty() ? req.systemStable + req.systemDynamic : req.system;
+    std::string system = !req.systemStable.empty() ? req.systemStable + (contextInTurn ? std::string{} : req.systemDynamic) : req.system;
     if (textTool) system += textToolInstructions();
     if (!blank(system)) {
         json::Value o = json::Value::object();

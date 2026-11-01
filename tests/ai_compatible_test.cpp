@@ -416,6 +416,21 @@ void testBody() {
               "tool : le resultat, avant le message suivant");
         check(msgs[4].str("role") == "user" && msgs[4].str("content") == "Merci", "user : le texte seul (une chaine)");
     }
+    // 1.22.6 : LE CONTEXTE DANS LE DERNIER TOUR (contextTurn) - system n'a plus que le stable (le debut de la demande ne change
+    // plus : le cache automatique du service le relit), le contexte en tete du tour de la demande.
+    {
+        ai::ProviderRequest rc = r;
+        rc.contextTurn = 2;
+        Value vc;
+        check(ai::json::parse(ai::openAIBody(rc, true, true), vc) && vc.at("messages").items().size() == 5, "contextTurn : le corps, 5 messages");
+        const auto& mc = vc.at("messages").items();
+        if (mc.size() == 5) {
+            check(mc[0].str("content") == "STABLE.", "contextTurn : system, le stable seul");
+            const std::string last = ai::json::write(mc[4], false);
+            check(mc[4].str("role") == "user" && has(last, "DYNAMIQUE.") && has(last, "Merci") && last.find("DYNAMIQUE.") < last.find("Merci"),
+                  "contextTurn : le contexte en tete du dernier tour");
+        }
+    }
     const auto& tools = v.at("tools").items();
     check(tools.size() == 1 && tools[0].str("type") == "function" && tools[0].at("function").str("name") == "proposer_operations"
               && tools[0].at("function").at("parameters").at("properties").has("operations"),

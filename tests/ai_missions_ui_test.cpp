@@ -1466,6 +1466,90 @@ void testProcessCard() {
 
 } // namespace
 
+
+// ================================================ 1.22.6 : de la conversation a la mission IA (le panneau) ==
+const std::string kCapture =
+    "Propose la suite : S3b les configurations de gaz (zones %MW de 150 mots), S5 le socle (en-t\xC3\xAAte, pied, mod\xC3\xA8le, symboles, popups), S6 "
+    "les vues, S7 les alarmes, S8 la navigation et les droits, S9 la v\xC3\xA9rification.";
+
+void testFromConversation() {
+    std::printf("[1.22.6 : de la conversation a la mission IA (le panneau)]\n");
+    Fixture f("depuis_conversation");
+    check(f.as().select(f.stationConv), "la conversation de la station");
+    f.panel->sync();
+    f.step();
+    check(!f.panel->missionSendButton().visible(), "Envoyer en mission : pas sans IA connectee");
+    f.live();
+    f.panel->sync();
+    f.step();
+    check(f.panel->missionSendButton().visible() && f.panel->missionSendButton().bounds().w > 0.f
+              && f.panel->missionSendButton().bounds().x > f.panel->bounds().w * 0.5f && f.panel->missionSendButton().bounds().y >= f.panel->promptRect().bottom() - 0.5f,
+          "Envoyer en mission : en bas, a cote d'Envoyer");
+    // LE CLIC DROIT sur un message envoye : << Creer une mission avec ce message >>
+    auto& chat = f.panel->chat();
+    chat.scrollBy(-100000.f);   // le debut de la conversation : la premiere demande
+    f.step();
+    check(chat.bubbleRect(0).h > 0.f && chat.bounds().contains({chat.bubbleRect(0).x + 4.f, chat.bubbleRect(0).y + 4.f}), "la bulle du message envoye");
+    const ui::MouseDown right{{chat.bubbleRect(0).x + 4.f, chat.bubbleRect(0).y + 4.f}, ui::MouseButton::Right, 1, {}};
+    (void)f.panel->dispatch(right);
+    check(chat.messageMenuItems() == std::vector<std::string>{"Cr\xC3\xA9" "er une mission avec ce message"}, "le clic droit : le menu");
+    const std::size_t missions = f.as().missions().size();
+    check(chat.chooseMessageMenuItem("Cr\xC3\xA9" "er une mission avec ce message"), "Creer une mission avec ce message");
+    check(f.as().missions().size() == missions + 1 && f.as().current() && f.as().current()->id != f.stationConv, "une mission, dans une conversation neuve");
+    const std::string made = f.as().missions().front().id;
+    f.finish();
+    // la conversation d'origine : << Mission << X >> creee - Ouvrir >> ; un clic ouvre son tableau de bord
+    check(f.as().select(f.stationConv), "la conversation d'origine");
+    f.panel->sync();
+    f.step();
+    const int link = static_cast<int>(f.as().current()->messages.size()) - 1;
+    check(f.as().current()->messages.back().extra.str("logiciel") == "mission-creee", "le lien vers la mission");
+    chat.revealMessage(link, false);
+    f.step();
+    const std::size_t opened = f.opened.size();
+    f.click(chat.messageRect(link));
+    check(f.opened.size() == opened + 1 && f.opened.back().first == made, "un clic : son tableau de bord");
+    // LE CONSEIL avant l'envoi : la capture ; Continuer ici
+    f.as().newConversation();
+    f.panel->sync();
+    f.panel->prompt().setText(kCapture);
+    const std::size_t sent = f.script.requests.size();
+    check(!f.panel->send(), "Entree : rien ne part");
+    f.panel->layout();
+    check(f.panel->missionAdviceShown() && said(f.panel->missionAsk().lines(), "Cette demande est grosse : passer en mission IA ?")
+              && said(f.panel->missionAsk().lines(), "S3b") && f.panel->missionAsk().continueButton().text() == "Continuer ici"
+              && f.panel->missionAsk().createButton().text() == "Cr\xC3\xA9" "er la mission" && f.script.requests.size() == sent,
+          "la carte : Cette demande est grosse (pourquoi), Creer la mission, Continuer ici ; rien n'est parti");
+    f.panel->missionAsk().continueButton().clicked->emit();
+    check(!f.panel->missionAskShown() && f.script.requests.size() == sent + 1 && f.as().missionAdviceDeclined() && f.panel->prompt().text().empty(),
+          "Continuer ici : envoyee en conversation, retenu pour la conversation");
+    f.finish();
+    f.panel->prompt().setText(kCapture);
+    check(f.panel->send() && !f.panel->missionAskShown(), "Continuer ici la fait taire : la suivante part sans carte");
+    f.finish();
+    // ENVOYER EN MISSION (le bouton) : la saisie devient une mission
+    f.as().newConversation();
+    f.panel->sync();
+    const std::size_t before = f.as().missions().size();
+    f.panel->prompt().setText("Cr\xC3\xA9" "e la zone 6 : ses variables et sa vue.");
+    f.panel->missionSendButton().clicked->emit();
+    check(f.as().missions().size() == before + 1 && f.panel->prompt().text().empty() && f.as().missions().front().request == "Cr\xC3\xA9" "e la zone 6 : ses variables et sa vue.",
+          "Envoyer en mission : la mission, la saisie videe");
+    f.finish();
+    // LE CONSEIL DE L'IA a l'arrivee de la reponse : la meme carte ; Creer la mission
+    f.as().newConversation();
+    f.panel->sync();
+    f.script.replies.push_back(FakeProvider::textReply("C'est large.\n[MISSION_CONSEILLEE: douze vues et leurs droits]"));
+    f.panel->prompt().setText("Fais la navigation de toutes les vues.");
+    check(f.panel->send(), "envoyer");
+    f.finish();
+    check(f.panel->missionAdviceShown() && said(f.panel->missionAsk().lines(), "douze vues et leurs droits"), "le conseil de l'IA : la carte");
+    const std::size_t m2 = f.as().missions().size();
+    f.panel->missionAsk().createButton().clicked->emit();
+    check(f.as().missions().size() == m2 + 1 && !f.panel->missionAskShown(), "Creer la mission : la mission de la demande conseillee");
+    f.finish();
+}
+
 int main() {
     {
         ui::PlatformServices s;
@@ -1486,6 +1570,7 @@ int main() {
     testSteps();   // 1.22.1
     testCardsAndForce();   // 1.22.2
     testProcessCard();     // 1.22.5
+    testFromConversation();   // 1.22.6
     std::printf("ai_missions_ui_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

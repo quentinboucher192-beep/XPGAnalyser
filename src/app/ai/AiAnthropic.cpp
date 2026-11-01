@@ -275,7 +275,13 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         std::string toolUse;   // assistant : l'id de son appel (vide : aucun)
     };
     std::vector<Msg> msgs;
-    for (const auto& t : req.turns) {
+    // 1.22.6 : LE CONTEXTE DANS LE DERNIER TOUR (ProviderRequest::contextTurn) - le message qui le porte (-1 : aucun).
+    const bool contextInTurn = req.contextTurn >= 0 && static_cast<std::size_t>(req.contextTurn) < req.turns.size()
+                               && req.turns[static_cast<std::size_t>(req.contextTurn)].role == ProviderTurn::Role::User && !req.systemStable.empty()
+                               && !blank(req.systemDynamic);
+    int contextMsg = -1;
+    for (std::size_t ti = 0; ti < req.turns.size(); ++ti) {
+        const ProviderTurn& t = req.turns[ti];
         Msg m;
         if (t.role == ProviderTurn::Role::User) {
             m.role = "user";
@@ -290,6 +296,10 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
                 if (matches && t.toolResultError) r.set("is_error", true);
                 m.content.push(std::move(r));
             }
+            // Le contexte du projet, a jour : apres le retour d'outil (l'API le veut en tete), avant les pieces et le texte.
+            if (contextInTurn && static_cast<int>(ti) == req.contextTurn)
+                m.content.push(textBlock("[Contexte du projet \xC3\xA0 ce message, \xC3\xA9" "crit par le logiciel ; il remplace celui des "
+                                         "messages pr\xC3\xA9" "c\xC3\xA9" "dents.]\n" + req.systemDynamic));
             for (const auto& a : t.attachments) {
                 json::Value b = attachmentBlock(a);
                 if (b.isArray())
@@ -322,8 +332,19 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         } else {
             msgs.push_back(std::move(m));
         }
+        if (contextInTurn && static_cast<int>(ti) == req.contextTurn) contextMsg = static_cast<int>(msgs.size()) - 1;
     }
     while (!msgs.empty() && msgs.back().role == "assistant") msgs.pop_back();   // pas de "prefill"
+    // 1.22.6 : LES POINTS DE CACHE DE LA CONVERSATION (4 au plus avec celui des consignes) - la fin de l'historique (le message
+    // avant celui du contexte : la demande suivante le relit en cache, son prefixe ne change pas) et, quand la demande continue
+    // apres un outil local ou une lecture (des tours apres celui du contexte), la fin de ce qui part : le tour suivant le
+    // relit. Un prefixe trop court n'est pas mis en cache par le service, sans erreur.
+    const auto mark = [](Msg& m) {
+        auto& items = m.content.items();
+        if (!items.empty() && items.back().isObject()) items.back().set("cache_control", obj("type", "ephemeral"));
+    };
+    if (contextMsg > 0 && contextMsg < static_cast<int>(msgs.size())) mark(msgs[static_cast<std::size_t>(contextMsg - 1)]);
+    if (contextMsg >= 0 && static_cast<int>(msgs.size()) - 1 > contextMsg) mark(msgs.back());
 
     json::Value body = json::Value::object();
     body.set("model", req.model);
@@ -336,7 +357,7 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
         json::Value stable = textBlock(req.systemStable);
         stable.set("cache_control", obj("type", "ephemeral"));
         sys.push(std::move(stable));
-        if (!blank(req.systemDynamic)) sys.push(textBlock(req.systemDynamic));
+        if (!blank(req.systemDynamic) && contextMsg < 0) sys.push(textBlock(req.systemDynamic));   // 1.22.6 : sinon, dans le tour
         body.set("system", std::move(sys));
     } else if (!req.system.empty()) {
         body.set("system", req.system);

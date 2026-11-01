@@ -398,11 +398,41 @@ AiMissionAsk::AiMissionAsk(std::string id) : ui::Widget(std::move(id)) {
 
 void AiMissionAsk::setRequest(std::string text) {
     request_ = std::move(text);
+    if (advice_) {   // 1.22.6 : retour a la carte d'une demande complexe
+        advice_ = false;
+        reason_.clear();
+        continue_->setText("Continuer en conversation");
+        continue_->setTooltip("Envoyer la demande telle quelle dans la conversation (une r\xC3\xA9ponse, une proposition), sans mission.");
+    }
     invalidateLayout();
     invalidate();
 }
 
-std::vector<std::string> AiMissionAsk::textLines(float width) const { return missionui::wrap(kExplain, kMeta, width - 2.f * kAskPad, 4); }
+// 1.22.6 : le conseil de passer en mission (le logiciel ou l'IA), sa raison.
+void AiMissionAsk::setAdvice(std::string text, std::string reason) {
+    request_ = std::move(text);
+    reason_ = std::move(reason);
+    advice_ = true;
+    continue_->setText("Continuer ici");
+    continue_->setTooltip("Continuer dans cette conversation : la demande se fait ici, et cette conversation ne te propose plus de mission.");
+    invalidateLayout();
+    invalidate();
+}
+
+std::string AiMissionAsk::title() const {
+    return advice_ ? std::string("Cette demande est grosse : passer en mission IA ?") : std::string("Cr\xC3\xA9" "er une mission IA ?");
+}
+
+std::vector<std::string> AiMissionAsk::textLines(float width) const {
+    if (!advice_) return missionui::wrap(kExplain, kMeta, width - 2.f * kAskPad, 4);
+    std::string why = reason_;
+    while (!why.empty() && (why.back() == '.' || why.back() == ' ')) why.pop_back();
+    // la raison d'abord (elle ne doit jamais etre coupee), puis ce qu'est une mission
+    return missionui::wrap((why.empty() ? std::string{} : "Pourquoi : " + why + ". ")
+                               + "Une mission d\xC3\xA9" "coupe le travail en \xC3\xA9tapes v\xC3\xA9rifi\xC3\xA9" "es, reprenables m\xC3\xAAme apr\xC3\xA8s la fermeture "
+                                 "du logiciel. Rien n'est cr\xC3\xA9\xC3\xA9 tant que tu n'as pas choisi.",
+                           kMeta, width - 2.f * kAskPad, 6);
+}
 
 bool AiMissionAsk::twoRows(float width) const { return buttonWidth(create_->text()) + 6.f + buttonWidth(continue_->text()) > width - 2.f * kAskPad; }
 
@@ -418,7 +448,7 @@ gfx::Rect AiMissionAsk::closeRect() const {
 }
 
 std::vector<std::string> AiMissionAsk::lines() const {
-    std::vector<std::string> out{"Cr\xC3\xA9" "er une mission IA ?"};
+    std::vector<std::string> out{title()};
     for (auto& l : textLines(bounds().w > 0.f ? bounds().w : 400.f)) out.push_back(std::move(l));
     out.push_back("\xC2\xAB " + notifs::oneLine(request_, 200) + " \xC2\xBB");
     return out;
@@ -449,7 +479,7 @@ void AiMissionAsk::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRoundedRect(b, c.accent.withAlpha(ctx.theme.isDark() ? 34 : 22), 6.f);
     ctx.r.strokeRect(b, c.accent.withAlpha(140), 1.f);
     ui::drawIcon(ctx.r, ui::Icon::Task, {b.x + kAskPad, b.y + 10.f, 16.f, 16.f}, c.accent);
-    const std::string title = "Cr\xC3\xA9" "er une mission IA ?";
+    const std::string title = missionui::elide(this->title(), kBody, b.w - 2.f * kAskPad - 24.f - 26.f);   // 1.22.6 : le conseil aussi
     const float ty = b.y + 8.f + (kAskTitleH - ctx.r.lineHeight(kBody)) / 2.f;
     ctx.r.drawText({b.x + kAskPad + 24.f, ty}, title, kBody, c.text);
     ctx.r.drawText({b.x + kAskPad + 24.8f, ty}, title, kBody, c.text);   // le gras du logiciel
