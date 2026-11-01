@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 
 namespace app::ai {
 
@@ -183,6 +184,84 @@ std::pair<int, int> stepOps(const mission::Mission& m, const mission::Step& s) {
         }
     }
     return {done, total};
+}
+
+mission::Live liveOf(const Assistant& as, const mission::Mission& m) {
+    mission::Live l;
+    // l'appel de la mission (ecrit avant de partir) et la conversation qui ecrit maintenant : la meme -> l'IA repond
+    if (m.pending.active && as.generating()) {
+        const std::string c = as.generatingConversationId();
+        l.calling = !c.empty()
+                    && (c == m.pending.conversation
+                        || (m.pending.conversation.empty()
+                            && (c == m.conversation || std::find(m.conversations.begin(), m.conversations.end(), c) != m.conversations.end())));
+        if (l.calling)
+            if (const std::time_t t0 = parseIso(m.pending.started); t0 > 0) l.elapsed = std::max<long long>(0, static_cast<long long>(app::ai::now() - t0));
+    }
+    if (as.applyingAny())
+        if (std::string pid = as.applyingProposal(); !pid.empty() && m.proposal(pid)) {
+            l.applying = std::move(pid);
+            l.applyPercent = static_cast<int>(std::lround(std::clamp(as.applyProgress(), 0.f, 1.f) * 100.f));
+        }
+    l.auditing = as.auditing(m.id);
+    return l;
+}
+
+std::int64_t liveKey(const mission::Live& l) noexcept {
+    std::int64_t k = l.calling ? 1 + std::max<long long>(0, l.elapsed) : 0;
+    k = k * 128 + (l.applying.empty() ? 0 : 1 + std::clamp(l.applyPercent, 0, 100));
+    return k * 2 + (l.auditing ? 1 : 0);
+}
+
+Tone activityTone(mission::Activity a) noexcept {
+    using A = mission::Activity;
+    switch (a) {
+        case A::Idle: return Tone::Info;
+        case A::Working: return Tone::Accent;
+        case A::ToValidate: return Tone::Accent;
+        case A::Waiting: return Tone::Muted;
+        case A::Blocked: return Tone::Warning;
+        case A::Error: return Tone::Error;
+        case A::Done: return Tone::Ok;
+        case A::Off: return Tone::Off;
+    }
+    return Tone::Muted;
+}
+
+Tone journalTone(std::string_view kind) noexcept {
+    if (kind == "operation") return Tone::Ok;
+    if (kind == "echec") return Tone::Error;
+    if (kind == "decision") return Tone::Info;
+    return eventTone(kind);
+}
+
+std::string Moment::line() const {
+    if (step.empty()) return activity.text;
+    return step + " \xC2\xB7 " + progress.text() + " \xE2\x80\x94 " + activity.text;
+}
+
+Moment momentOf(const mission::Mission& m, const mission::Live& live) {
+    Moment mo;
+    const auto whole = [&](const std::string& text) {
+        mo.activity.text = text;
+        mo.activity.live = live.auditing || live.calling;
+        mo.activity.kind = mo.activity.live ? mission::Activity::Working : mission::Activity::Blocked;
+        return mo;
+    };
+    const std::string own = mission::missionActivity(m, live);
+    // le plan, l'actualisation, l'audit final : la mission elle-meme travaille (aucune etape ne le porte)
+    if (!own.empty() && (live.auditing || (m.pending.active && (m.pending.purpose == "plan" || m.pending.purpose == "actualisation"))))
+        return whole(own);
+    if (m.state == mission::State::Cancelled || m.state == mission::State::Done) return mo;   // rien en cours
+    if (const mission::Step* s = mission::currentStep(m, live)) {
+        mo.step = s->id;
+        mo.title = s->title;
+        mo.progress = mission::stepProgressOf(m, *s);
+        mo.activity = mission::activityOf(m, *s, live);
+        return mo;
+    }
+    if (!own.empty()) return whole(own);
+    return mo;
 }
 
 Next nextOf(const mission::Mission& m, bool busy) {
@@ -545,8 +624,13 @@ void AiMissionBoard::refresh() {
 bool AiMissionBoard::poll() {
     const auto& as = panel_.assistant();
     bool redo = as.missionsRevision() != seenRev_ || as.generating() != generating_;
-    if (const auto* m = as.findMission(missionId_)) redo |= panel_.missionBusy(*m) != busy_;
-    else redo |= found_;
+    if (const auto* m = as.findMission(missionId_)) {
+        redo |= panel_.missionBusy(*m) != busy_;
+        // 1.22.1 : le direct (l'appel a l'IA, l'application de fond) - au plus une fois par seconde, ou par pour-cent
+        redo |= missionui::liveKey(missionui::liveOf(as, *m)) != liveKey_;
+    } else {
+        redo |= found_;
+    }
     // L'ecran de reprise : le projet a change (sa revision) - le constat est refait, au plus toutes les 2 s (un geste
     // d'edition n'en fait pas un a chaque image).
     if (mode_ == Mode::Resume) {
@@ -652,6 +736,18 @@ AiMissionBoard::Block AiMissionBoard::blockHeader(const mission::Mission& m, flo
                                             : std::string("L'IA travaille sur cette mission : sa conversation montre la r\xC3\xA9ponse\xE2\x80\xA6"),
                     kMeta, Tone::Accent, 2);
     }
+    // 1.22.1 : EN CE MOMENT - l'etape du moment, sa progression, ce qu'elle fait (un clic : son journal, dans le plan)
+    if (mode_ == Mode::Board)
+        if (const missionui::Moment mo = missionui::momentOf(m, live_); !mo.empty()) {
+            const float top = y + 2.f;
+            y = wrapped(b.ops, x, top, w, "En ce moment : " + mo.line(), kMeta, missionui::activityTone(mo.activity.kind), 2, true);
+            std::string tip = mo.step.empty() ? mo.activity.text : mo.step + " " + mo.title + " \xE2\x80\x94 " + mo.progress.text() + " (" + mo.progress.detail() + ")\n" + mo.activity.text;
+            if (!mo.step.empty()) {
+                tip += "\nUn clic : son journal (dans le plan d'action).";
+                b.clicks.emplace_back(gfx::Rect{x, top, w, y - top}, "voir:" + mo.step);
+            }
+            b.tips.emplace_back(gfx::Rect{x, top, w, y - top}, tip);
+        }
     // les gestes : Pause / Reprendre, Annuler, la conversation, l'autre ecran
     y += 8.f;
     float bx = x;
@@ -880,23 +976,31 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
         for (const auto& c : cols) text(b.ops, c.cx, y - 1.f, c.t, kMeta, Tone::Muted);
         y += lineH(kMeta) + 6.f;
     }
-    const float rowH = wide ? 10.f + lineH(kBody) + lineH(kMeta) + 4.f : 10.f + lineH(kBody) + 2.f * lineH(kMeta) + 4.f;
+    // 1.22.1 : une ligne de plus par etape - ce qu'elle fait maintenant (mission::activityOf) ; sa progression REELLE
+    // (mission::stepProgressOf : ses operations appliquees sur ses operations prevues) ; un clic deplie son journal.
+    const float rowH = wide ? 10.f + lineH(kBody) + 2.f * lineH(kMeta) + 4.f : 10.f + lineH(kBody) + 3.f * lineH(kMeta) + 4.f;
+    const std::string stepRule = mission::stepProgressRule();
     std::size_t index = 0;
     for (const auto& s : m.steps) {
         const float top = y;
         if (index++ % 2 == 1) fill(b.ops, {x, top, w, rowH}, Tone::RowAlt, 70);
         const Tone tone = missionui::stepTone(s.state);
         const std::string label(mission::stepLabel(s.state));
-        const auto [done, total] = missionui::stepOps(m, s);
-        std::string prog;
-        if (total > 0) prog = std::to_string(done) + "/" + std::to_string(total) + " op.";
-        else if (s.state == mission::StepState::Done) prog = "faite";
-        else if (s.plannedOps > 0) prog = "environ " + std::to_string(s.plannedOps) + " op. pr\xC3\xA9vues";
-        else prog = "\xE2\x80\x94";
+        const mission::StepProgress sp = mission::stepProgressOf(m, s);
+        const mission::StepActivity act = mission::activityOf(m, s, live_);
+        const Tone actTone = missionui::activityTone(act.kind);
+        const bool open = stepsOpen_.count(s.id) > 0;
+        const Tone progTone = s.state == mission::StepState::Done ? Tone::Ok : s.state == mission::StepState::Error ? Tone::Error : Tone::Info;
+        // la progression en court : "2/5 op.", "estim. 4 op.", "hors calcul"
+        std::string ops;
+        if (!sp.counted()) ops = "hors calcul";
+        else if (sp.estimated) ops = s.state == mission::StepState::Done ? std::string("v\xC3\xA9rifi\xC3\xA9" "e") : "estim. " + std::to_string(sp.planned) + " op.";
+        else ops = std::to_string(sp.applied) + "/" + std::to_string(sp.planned) + " op.";
         const std::string deps = s.deps.empty() ? std::string("\xE2\x80\x94") : joined(s.deps);
         std::string ttl = s.title + (s.mandatory ? std::string{} : std::string(" (facultative)"));
         // l'infobulle de la ligne : tout, en entier
         std::string tip = s.id + "  " + s.title + " \xE2\x80\x94 " + label;
+        tip += "\nEn ce moment : " + act.text;
         if (!s.detail.empty()) tip += "\n" + s.detail;
         tip += "\nCat\xC3\xA9gorie : " + std::string(mission::categoryLabel(s.category)) + (s.mandatory ? "" : " \xC2\xB7 facultative");
         if (!s.deps.empty()) tip += "\nD\xC3\xA9pend de : " + joined(s.deps);
@@ -908,12 +1012,16 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
             std::vector<std::string> ps;
             for (const auto& pid : s.proposals)
                 if (const auto* p = m.proposal(pid)) ps.push_back("P" + std::to_string(p->order));
-            if (!ps.empty()) tip += "\nPropositions : " + joined(ps) + " (un clic : leurs cartes)";
+            if (!ps.empty()) tip += "\nPropositions : " + joined(ps);
         }
-        if (total > 0) tip += "\nProgression : " + std::to_string(done) + " op\xC3\xA9ration(s) appliqu\xC3\xA9" "e(s) sur " + std::to_string(total) + " (le compte rendu r\xC3\xA9" "el).";
+        tip += "\nProgression de l'\xC3\xA9tape : " + sp.text() + " \xE2\x80\x94 " + sp.detail() + ".";
+        tip += open ? "\nUn clic : replier son journal." : "\nUn clic : son journal (les propositions, les op\xC3\xA9rations faites, les erreurs).";
+        tip += "\n\n" + stepRule;
         b.tips.emplace_back(gfx::Rect{x, top, w, rowH}, tip);
-        if (!s.proposals.empty()) b.clicks.emplace_back(gfx::Rect{x, top, w, rowH}, "etape:" + s.id);
+        b.clicks.emplace_back(gfx::Rect{x, top, w, rowH}, "etape:" + s.id);
+        stepRows_[s.id] = gfx::Rect{x, top, w, rowH};
         const float y1 = top + 6.f, y2 = y1 + lineH(kBody) + 1.f;
+        const std::string caret = open ? "\xE2\x96\xBE" : "\xE2\x96\xB8";
         if (wide) {
             text(b.ops, cN, y1, s.id, kBody, Tone::Text, true);
             text(b.ops, cTitle, y1, missionui::elide(ttl, kBody, wTitle - 10.f), kBody, s.state == mission::StepState::Cancelled || s.state == mission::StepState::Skipped ? Tone::Muted : Tone::Text);
@@ -933,22 +1041,80 @@ AiMissionBoard::Block AiMissionBoard::blockPlan(const mission::Mission& m, float
             }
             text(b.ops, cDeps, y1 + 1.f, missionui::elide(deps, kMeta, wDeps - 10.f), kMeta, Tone::Text);
             if (!s.implicit.empty()) text(b.ops, cDeps, y2 + 2.f, missionui::elide("dont implicites : " + joined(s.implicit), kMeta, wDeps - 10.f), kMeta, Tone::Muted);
-            if (total > 0) {
-                bar(b.ops, {cProg, y1 + 5.f, 60.f, 6.f}, static_cast<double>(done) / static_cast<double>(total), done == total ? Tone::Ok : Tone::Info);
-                text(b.ops, cProg + 68.f, y1 + 1.f, prog, kMeta, Tone::Text);
+            if (sp.counted()) {
+                bar(b.ops, {cProg, y1 + 5.f, 60.f, 6.f}, sp.frac(), progTone);
+                text(b.ops, cProg + 68.f, y1 + 1.f, sp.text(), kMeta, Tone::Text, true);
             } else {
-                text(b.ops, cProg, y1 + 1.f, prog, kMeta, s.state == mission::StepState::Done ? Tone::Ok : Tone::Muted);
+                text(b.ops, cProg, y1 + 1.f, sp.text(), kMeta, Tone::Muted);
             }
+            text(b.ops, cProg, y2 + 2.f, missionui::elide(ops, kMeta, wProg - 10.f), kMeta, Tone::Muted);
+            // ce qu'elle fait maintenant, sur toute la largeur
+            const float y3 = y2 + lineH(kMeta) + 2.f;
+            text(b.ops, cN, y3, caret, kMeta, Tone::Muted);
+            text(b.ops, cTitle, y3, missionui::elide(act.text, kMeta, x + w - 8.f - cTitle), kMeta, actTone, act.live);
         } else {
-            // etroit : trois lignes - le numero et le titre (l'etat a droite), le detail ou l'erreur, les dependances et la progression
+            // etroit : quatre lignes - le numero et le titre (l'etat a droite), le detail ou l'erreur, les dependances et la
+            // progression, ce qu'elle fait maintenant
             const float cw2 = ui::measureWidth(label, kMeta) + 14.f;
             (void)chip(b.ops, x + w - cw2 - 4.f, y1 - 2.f, label, tone);
             text(b.ops, x + 8.f, y1, missionui::elide(s.id + "  " + ttl, kBody, w - cw2 - 24.f), kBody, Tone::Text, true);
             const std::string second = !s.error.empty() ? s.error : s.detail;
             text(b.ops, x + 8.f, y2, missionui::elide(second, kMeta, w - 16.f), kMeta, !s.error.empty() ? Tone::Error : Tone::Text);
-            text(b.ops, x + 8.f, y2 + lineH(kMeta), missionui::elide("d\xC3\xA9pend de " + deps + " \xC2\xB7 " + prog, kMeta, w - 16.f), kMeta, Tone::Muted);
+            const float y3 = y2 + lineH(kMeta);
+            float px = x + 8.f;
+            if (sp.counted()) {
+                bar(b.ops, {px, y3 + 5.f, 44.f, 6.f}, sp.frac(), progTone);
+                px += 52.f;
+            }
+            text(b.ops, px, y3, missionui::elide(sp.text() + " (" + ops + ") \xC2\xB7 d\xC3\xA9pend de " + deps, kMeta, x + w - 8.f - px), kMeta, Tone::Muted);
+            const float y4 = y3 + lineH(kMeta);
+            text(b.ops, x + 8.f, y4, caret, kMeta, Tone::Muted);
+            text(b.ops, x + 22.f, y4, missionui::elide(act.text, kMeta, w - 30.f), kMeta, actTone, act.live);
         }
         y += rowH;
+        if (!open) continue;
+        // LE JOURNAL DE L'ETAPE (le plus ancien d'abord ; les plus recents s'il est long)
+        const std::size_t first = b.ops.size();
+        const float jx = x + 8.f + (wide ? wN : 14.f), jw = x + w - 8.f - jx;
+        const float dw = 92.f;
+        float jy = y + 6.f;
+        const auto journal = mission::stepJournal(m, s);
+        constexpr std::size_t kMaxJournal = 60;
+        text(b.ops, jx, jy, "Journal de " + s.id + " \xE2\x80\x94 " + missionui::count(static_cast<int>(journal.size()), "\xC3\xA9v\xC3\xA9nement", "\xC3\xA9v\xC3\xA9nements"), kMeta,
+             Tone::Text, true);
+        jy += lineH(kMeta) + 2.f;
+        if (journal.empty())
+            jy = wrapped(b.ops, jx, jy, jw, "Rien encore : aucune proposition ni op\xC3\xA9ration pour cette \xC3\xA9tape.", kMeta, Tone::Muted, 2);
+        const std::size_t from = journal.size() > kMaxJournal ? journal.size() - kMaxJournal : 0;
+        if (from > 0)
+            jy = wrapped(b.ops, jx, jy, jw, "\xE2\x80\xA6 " + missionui::count(static_cast<int>(from), "\xC3\xA9v\xC3\xA9nement plus ancien", "\xC3\xA9v\xC3\xA9nements plus anciens"),
+                         kMeta, Tone::Muted, 1);
+        for (std::size_t i = from; i < journal.size(); ++i) {
+            const auto& j = journal[i];
+            const float jt = jy;
+            text(b.ops, jx, jy, when(j.date), kMeta, Tone::Muted);
+            const bool op = j.kind == "operation" || j.kind == "echec";
+            jy = wrapped(b.ops, jx + dw + (op ? 14.f : 0.f), jy, jw - dw - (op ? 14.f : 0.f), j.text, kMeta, missionui::journalTone(j.kind), 2);
+            if (jy < jt + lineH(kMeta)) jy = jt + lineH(kMeta);
+            const std::string kind = j.kind == "operation" ? std::string("Op\xC3\xA9ration appliqu\xC3\xA9" "e")
+                                     : j.kind == "echec"   ? std::string("Op\xC3\xA9ration en \xC3\xA9" "chec")
+                                                           : missionui::eventLabel(j.kind);
+            b.tips.emplace_back(gfx::Rect{jx, jt, jw, jy - jt}, (j.date.empty() ? std::string{} : j.date + " \xE2\x80\x94 ") + kind + "\n" + j.text);
+        }
+        // la carte de sa derniere proposition (plus bas)
+        if (!s.proposals.empty())
+            if (const auto* p = m.proposal(s.proposals.back())) {
+                const std::string link = "Voir la carte de P" + std::to_string(p->order) + " \xE2\x80\xBA";
+                text(b.ops, jx, jy + 2.f, link, kMeta, Tone::Accent);
+                b.clicks.emplace_back(gfx::Rect{jx - 2.f, jy, ui::measureWidth(link, kMeta) + 6.f, lineH(kMeta) + 4.f}, "carte:" + p->id);
+                jy += lineH(kMeta) + 4.f;
+            }
+        jy += 6.f;
+        std::vector<Op> back;
+        fill(back, {x + 4.f, y, w - 8.f, jy - y}, Tone::Card, 255, true);
+        stroke(back, {x + 4.f, y, w - 8.f, jy - y}, Tone::Border, 160);
+        b.ops.insert(b.ops.begin() + static_cast<std::ptrdiff_t>(first), back.begin(), back.end());
+        y = jy + 4.f;
     }
     b.h = y + 6.f;
     return b;
@@ -1196,6 +1362,32 @@ AiMissionBoard::Block AiMissionBoard::blockResume(const mission::Mission& m, flo
     group("Termin\xC3\xA9" "es :", finished, Tone::Ok);
     group("En cours :", running, Tone::Accent);
     group("Restantes :", left, Tone::Muted);
+    // 1.22.1 : OU EN EST CHAQUE ETAPE - sa progression reelle et ce qu'elle fait maintenant
+    if (!m.steps.empty()) {
+        y += 6.f;
+        text(b.ops, x, y, "O\xC3\xB9 en est chaque \xC3\xA9tape", kMeta, Tone::Text, true);
+        y += lineH(kMeta) + 2.f;
+        constexpr std::size_t kMaxSteps = 20;
+        std::size_t n = 0;
+        for (const auto& s : m.steps) {
+            if (n == kMaxSteps) {
+                y = wrapped(b.ops, x + 12.f, y, w - 12.f, "\xE2\x80\xA6 et " + missionui::count(static_cast<int>(m.steps.size() - kMaxSteps), "autre", "autres") + " (le tableau de bord les montre)",
+                            kMeta, Tone::Muted, 1);
+                break;
+            }
+            ++n;
+            const mission::StepProgress sp = mission::stepProgressOf(m, s);
+            const mission::StepActivity act = mission::activityOf(m, s, live_);
+            if (sp.counted())
+                bar(b.ops, {x + 12.f, y + 5.f, 44.f, 6.f}, sp.frac(),
+                    s.state == S::Done ? Tone::Ok : s.state == S::Error ? Tone::Error : Tone::Info);
+            const std::string line = s.id + " \xC2\xB7 " + sp.text() + " \xE2\x80\x94 " + act.text;
+            text(b.ops, x + 64.f, y, missionui::elide(line, kMeta, w - 64.f), kMeta, missionui::activityTone(act.kind), act.live);
+            b.tips.emplace_back(gfx::Rect{x, y, w, lineH(kMeta)}, s.id + "  " + s.title + " \xE2\x80\x94 " + std::string(mission::stepLabel(s.state)) + "\n" + act.text + "\nProgression : "
+                                                                      + sp.text() + " (" + sp.detail() + ")");
+            y += lineH(kMeta);
+        }
+    }
     // les dernieres operations appliquees (la plus recente d'abord)
     y += 6.f;
     text(b.ops, x, y, "Derni\xC3\xA8res op\xC3\xA9rations appliqu\xC3\xA9" "es", kMeta, Tone::Text, true);
@@ -1374,14 +1566,19 @@ void AiMissionBoard::rebuild() {
     };
     const mission::Mission* m = as.findMission(missionId_);
     found_ = m != nullptr;
+    stepRows_.clear();
     if (!m) {
         busy_ = false;
         progress_ = {};
         next_ = {};
+        live_ = {};
+        liveKey_ = 0;
         push(blockMissing(x, w));
     } else {
         name_ = missionui::title(*m);
         busy_ = panel_.missionBusy(*m);
+        live_ = missionui::liveOf(as, *m);   // 1.22.1 : le moment (l'appel a l'IA, l'application de fond)
+        liveKey_ = missionui::liveKey(live_);
         progress_ = mission::progressOf(*m);   // la progression REELLE (jamais un pourcentage invente)
         next_ = missionui::nextOf(*m, busy_);
         push(blockHeader(*m, x, w));
@@ -1398,9 +1595,12 @@ void AiMissionBoard::rebuild() {
         }
         push(blockHistory(*m, x, w));
         // les cartes des propositions : leur haut dans la page (un clic sur une etape y mene)
-        for (const auto& blk : blocks_)
+        for (const auto& blk : blocks_) {
             if (blk.section == "propositions")
                 for (auto& [pid, top] : anchors_) top += blk.y;
+            if (blk.section == "plan")
+                for (auto& [sid, r] : stepRows_) r.y += blk.y;   // 1.22.1 : les lignes des etapes, dans la page
+        }
     }
     content_ = y + kPad;
     for (auto& [k, s] : slots_)
@@ -1436,6 +1636,20 @@ gfx::Rect AiMissionBoard::sectionRect(std::string_view key) const {
     return {};
 }
 
+bool AiMissionBoard::toggleStep(const std::string& stepId) {
+    const auto* m = panel_.assistant().findMission(missionId_);
+    if (!m || !m->step(stepId)) return false;
+    doClick("etape:" + stepId);
+    return true;
+}
+
+gfx::Rect AiMissionBoard::stepRect(std::string_view stepId) const {
+    const auto it = stepRows_.find(std::string(stepId));
+    if (it == stepRows_.end()) return {};
+    const auto b = bounds();
+    return {b.x + it->second.x, b.y + it->second.y - scroll_, it->second.w, it->second.h};
+}
+
 std::vector<std::string> AiMissionBoard::lines() const {
     std::vector<std::string> out;
     for (const auto& blk : blocks_)
@@ -1452,14 +1666,19 @@ void AiMissionBoard::doClick(const std::string& what) {
         const std::string pid = what.substr(4);
         if (!opsOpen_.erase(pid)) opsOpen_.insert(pid);
     } else if (what.rfind("etape:", 0) == 0) {
-        // une etape : la carte de sa derniere proposition
-        const auto* m = panel_.assistant().findMission(missionId_);
-        const auto* s = m ? m->step(what.substr(6)) : nullptr;
-        if (s && !s->proposals.empty())
-            if (const auto it = anchors_.find(s->proposals.back()); it != anchors_.end()) {
-                scrollTo(it->second - 8.f);
-                return;
-            }
+        // 1.22.1 : une etape - son journal deplie (ou replie)
+        const std::string sid = what.substr(6);
+        if (!stepsOpen_.erase(sid)) stepsOpen_.insert(sid);
+    } else if (what.rfind("voir:", 0) == 0) {
+        // l'etape du moment (l'en-tete) : son journal deplie, sa ligne du plan en vue
+        const std::string sid = what.substr(5);
+        stepsOpen_.insert(sid);
+        rebuild();
+        if (const auto it = stepRows_.find(sid); it != stepRows_.end()) scrollTo(it->second.y - 8.f);
+        return;
+    } else if (what.rfind("carte:", 0) == 0) {
+        // la carte d'une proposition (plus bas)
+        if (const auto it = anchors_.find(what.substr(6)); it != anchors_.end()) scrollTo(it->second - 8.f);
         return;
     }
     rebuild();

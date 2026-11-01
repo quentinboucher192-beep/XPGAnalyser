@@ -20,7 +20,12 @@
 //    5. l'ecran de reprise : le meme projet, un projet modifie (Actualiser le
 //       contexte d'abord), introuvable (on ne propose pas de reprendre) ;
 //    6. la notification << mission:<id> >> ouvre le tableau de bord ;
-//    7. aucun dessin ne bloque : rien n'est relu ni refait au dessin.
+//    7. aucun dessin ne bloque : rien n'est relu ni refait au dessin ;
+//    8. 1.22.1 : chaque etape - son pourcentage (mission::stepProgressOf), ce
+//       qu'elle fait maintenant (mission::activityOf) dans le plan, l'en-tete,
+//       l'ecran de reprise, la bande et la liste ; son journal (un clic) ; le
+//       direct (une correction en cours : << (depuis 0:42) >>, refait chaque
+//       seconde, jamais a chaque image).
 // =============================================================================
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiMemoryManager.hpp"
@@ -42,6 +47,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -977,6 +983,126 @@ void testNoBlocking() {
     check(board.scrollOffset() > 0.f && board.lines() == lines, "defiler : la meme page, decalee");
 }
 
+
+// ================================== 8. 1.22.1 : ce que fait chaque etape (le pourcentage, l'activite, le journal) ==
+void testSteps() {
+    std::printf("[8. 1.22.1 : chaque etape - son pourcentage, ce qu'elle fait, son journal ; en direct]\n");
+    nt::resetForTests();
+    Fixture f("etapes");
+    (void)f.as().select(f.stationConv);
+    f.panel->sync();
+    f.step();
+    f.step();
+    const auto* m = f.as().findMission(f.stationId);
+    check(m != nullptr, "la station");
+    if (!m) return;
+    // le modele : S1 terminee (100 %), S3 en erreur, S4 attend la validation de P2, S5 attend S3 et S4
+    const std::string a1 = ms::activityOf(*m, *m->step("S1")).text;
+    check(ms::stepProgressOf(*m, *m->step("S1")).percent == 100 && has(a1, "Termin\xC3\xA9" "e \xE2\x80\x94 1 op\xC3\xA9ration appliqu\xC3\xA9" "e le "),
+          "S1 : 100 %, " + a1);
+    const std::string kS4 = "P2 : 1 op\xC3\xA9ration \xC3\xA0 valider \xE2\x80\x94 Pr\xC3\xA9visualiser puis Appliquer";
+    check(ms::activityOf(*m, *m->step("S4")).text == kS4 && ms::stepProgressOf(*m, *m->step("S4")).percent == 0, "S4 : 0 %, " + kS4);
+    check(ms::activityOf(*m, *m->step("S3")).text == "En erreur : La variable Niveau_Haut est introuvable.", "S3 : en erreur, l'erreur exacte");
+    const std::string a5 = ms::activityOf(*m, *m->step("S5")).text;
+    check(a5 == "Attend S3, S4 (d\xC3\xA9pendances)" || a5 == "Bloqu\xC3\xA9" "e : d\xC3\xA9pend de S3 (en erreur)", "S5 : " + a5);
+    // LE TABLEAU DE BORD : le pourcentage et l'activite de chaque etape, l'etape du moment dans l'en-tete
+    ai::AiMissionBoard board("mission.etapes", *f.panel, f.stationId);
+    board.setBounds({0, 0, 1100, 3000});
+    board.layout();
+    auto lines = board.lines();
+    for (const auto& s : m->steps) {
+        const std::string act = ms::activityOf(*m, s).text;
+        check(said(lines, act), "le plan : ce que fait " + s.id + " (" + act + ")");
+    }
+    check(said(lines, "100 %") && said(lines, "1/1 op.") && said(lines, "estim. 8 op."), "les pourcentages : S1 100 % (1/1 op.), S4 estime");
+    check(said(lines, "En ce moment : S4 \xC2\xB7 0 % \xE2\x80\x94 " + kS4), "l'en-tete : en ce moment, S4 et ce qu'elle fait");
+    {
+        Recorder rec;
+        board.render(ui::PaintContext{rec, ui::Theme::dark(), board.bounds(), f.t, nullptr});
+        check(rec.saw(kS4) && rec.saw("100 %"), "dessine : le pourcentage et l'activite");
+        const gfx::Rect r = board.stepRect("S1");
+        const std::string tip = board.liveTooltip({r.x + 300.f, r.y + r.h / 2.f});
+        check(has(tip, "En ce moment : " + a1) && has(tip, ms::stepProgressRule()), "l'infobulle d'une etape : ce qu'elle fait, la regle par etape");
+    }
+    // LE JOURNAL : un clic sur la ligne de S1 le deplie (les propositions, les operations faites), un autre le replie
+    check(!board.stepOpen("S1"), "le journal de S1 : replie");
+    const gfx::Rect r1 = board.stepRect("S1");
+    check(r1.h > 0.f, "la ligne de S1 dans le plan");
+    (void)board.dispatch(ui::MouseDown{{r1.x + 300.f, r1.y + r1.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    check(board.stepOpen("S1"), "un clic sur sa ligne : son journal");
+    lines = board.lines();
+    check(said(lines, "Journal de S1") && said(lines, "P1 appliqu\xC3\xA9" "e : 3 op\xC3\xA9rations.") && said(lines, "\xE2\x9C\x93 Cr\xC3\xA9" "er l'\xC3\xA9quipement Automate_1"),
+          "le journal : l'application de P1 et l'operation faite (son libelle)");
+    check(said(lines, "Voir la carte de P1 \xE2\x80\xBA"), "le lien vers la carte de P1");
+    check(board.toggleStep("S1") && !board.stepOpen("S1") && !said(board.lines(), "Journal de S1"), "un autre clic : replie");
+    check(board.toggleStep("S3") && said(board.lines(), "S3 : La variable Niveau_Haut est introuvable."), "le journal de S3 : son erreur");
+    // L'ECRAN DE REPRISE : ou en est chaque etape
+    {
+        ai::AiMissionBoard resume("mission.etapes.reprise", *f.panel, f.stationId);
+        resume.setBounds({0, 0, 1100, 2400});
+        resume.setMode(ai::AiMissionBoard::Mode::Resume);
+        resume.layout();
+        const auto rl = resume.lines();
+        check(said(rl, "O\xC3\xB9 en est chaque \xC3\xA9tape") && said(rl, "S1 \xC2\xB7 100 % \xE2\x80\x94 Termin\xC3\xA9" "e") && said(rl, "S4 \xC2\xB7 0 % \xE2\x80\x94 " + kS4),
+              "l'ecran de reprise : chaque etape, son pourcentage, ce qu'elle fait");
+    }
+    // LA BANDE : l'etape du moment (S4), son pourcentage, ce qu'elle fait
+    auto& strip = f.panel->missionStrip();
+    {
+        const auto sl = strip.lines();
+        check(strip.moment().step == "S4" && said(sl, "S4 Cr\xC3\xA9" "er la vue de la station \xC2\xB7 0 %") && said(sl, kS4), "la bande : S4, 0 %, " + kS4);
+        check(strip.actionButton().visible(), "la bande garde son bouton (le geste du moment)");
+    }
+    // L'ONGLET MISSIONS IA : l'etape du moment sur la ligne ; la ligne choisie montre toutes ses etapes
+    auto& v = f.panel->missions();
+    f.panel->showMissions(true);
+    f.panel->layout();
+    const int rs = f.rowOf(v, f.stationId);
+    check(rs >= 0 && has(v.rowText(static_cast<std::size_t>(rs)), "En ce moment : S4 \xC2\xB7 0 % \xE2\x80\x94 " + kS4), "la ligne : en ce moment, S4");
+    check(v.select(rs), "la station choisie");
+    f.panel->layout();
+    {
+        const std::string row = v.rowText(static_cast<std::size_t>(f.rowOf(v, f.stationId)));
+        check(has(row, "S1 \xC2\xB7 100 % \xE2\x80\x94 " + a1) && has(row, "S3 \xC2\xB7 0 % \xE2\x80\x94 En erreur : La variable Niveau_Haut") && has(row, "S4 \xC2\xB7 0 % \xE2\x80\x94 " + kS4),
+              "choisie : toutes ses etapes (" + row + ")");
+        Recorder rec;
+        v.render(ui::PaintContext{rec, ui::Theme::dark(), v.bounds(), f.t, nullptr});
+        check(rec.saw("S1 \xC2\xB7 100 %") && rec.saw("S3 \xC2\xB7 0 %"), "dessinee : S1 a 100 %, S3 a 0 %");
+    }
+    f.panel->showMissions(false);
+    f.panel->layout();
+    // EN DIRECT : une correction de S3 demandee - l'IA repond, le temps ecoule se compte (refait une fois par seconde)
+    const std::time_t t0 = ai::now();
+    ai::setClock([t0] { return t0; });
+    f.live();
+    check(f.panel->missionAct(f.stationId, ai::AiPanel::MissionAct::Correct, "S3"), "Corriger S3 : la demande part");
+    const auto* mm = f.as().findMission(f.stationId);
+    check(f.as().generating() && mm && mm->pending.active && mm->pending.purpose == "correction", "l'IA repond ; l'appel est ecrit avant de partir");
+    ai::setClock([t0] { return t0 + 42; });
+    const std::string live = "L'IA pr\xC3\xA9pare une correction (P3)\xE2\x80\xA6 (depuis 0:42)";
+    (void)strip.poll();
+    check(said(strip.lines(), live) && strip.moment().step == "S3" && strip.moment().activity.live, "la bande : S3, " + live);
+    check(board.poll() && said(board.lines(), live) && said(board.lines(), "En ce moment : S3"), "le tableau de bord se refait : " + live);
+    check(!board.poll(), "la meme seconde : rien a refaire");
+    ai::setClock([t0] { return t0 + 43; });
+    check(board.poll() && said(board.lines(), "(depuis 0:43)"), "une seconde de plus : refait (0:43)");
+    (void)v.poll();
+    const int rs2 = f.rowOf(v, f.stationId);
+    check(rs2 >= 0 && has(v.rowText(static_cast<std::size_t>(rs2)), "L'IA pr\xC3\xA9pare une correction (P3)\xE2\x80\xA6 (depuis 0:43)"), "la liste aussi");
+    ai::setClock({});
+    f.finish();
+    const bool redone = board.poll();
+    check(!f.as().generating() && redone, "la reponse finie : le tableau de bord se refait");
+    if (const auto* after = f.as().findMission(f.stationId)) {
+        std::vector<std::string> t3;
+        for (const auto& l : ms::stepJournal(*after, *after->step("S3"))) t3.push_back(l.text);
+        check(said(t3, "Correction demand\xC3\xA9" "e \xC3\xA0 l'IA pour S3") && said(t3, "La correction de S3 a \xC3\xA9" "chou\xC3\xA9"),
+              "le journal de S3 : la correction demandee, son echec (l'IA n'a rien propose)");
+        check(!after->pending.active && !ms::activityOf(*after, *after->step("S3")).live, "plus rien en direct");
+    }
+    nt::resetForTests();
+}
+
 } // namespace
 
 int main() {
@@ -996,6 +1122,7 @@ int main() {
     testResume();
     testNotification();
     testNoBlocking();
+    testSteps();   // 1.22.1
     std::printf("ai_missions_ui_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

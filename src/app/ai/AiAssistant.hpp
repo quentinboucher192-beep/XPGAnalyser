@@ -246,6 +246,8 @@ public:
     [[nodiscard]] mission::Recovery inspectMission(std::string_view id) const;
     // Le message qui porte une proposition dans la conversation OUVERTE (-1 : pas dans celle-ci).
     [[nodiscard]] int messageOfProposal(std::string_view proposalId) const;
+    // 1.22.1 : la proposition appliquee sur un fil de fond (Proposal::id ; vide : aucune) - l'activite d'une etape de mission.
+    [[nodiscard]] std::string applyingProposal() const { return applyJob_ ? applyJob_->proposalId : std::string{}; }
 
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).

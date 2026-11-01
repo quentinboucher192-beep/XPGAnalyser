@@ -419,8 +419,11 @@ bool recover(Mission& m, std::string_view openProjectId, const hmi::Project* pro
     }
     if (m.pending.active) {
         const std::string purpose = m.pending.purpose.empty() ? std::string("proposition") : m.pending.purpose;
+        // 1.22.1 : les etapes visees sont nommees (le journal de chaque etape le montre)
         log(m, "interruption",
-            "Appel \xC3\xA0 l'IA interrompu (" + purpose + ", commenc\xC3\xA9 le " + m.pending.started + ") : sa r\xC3\xA9ponse n'existe pas, rien n'est rejou\xC3\xA9.", now);
+            "Appel \xC3\xA0 l'IA interrompu (" + purpose + (m.pending.steps.empty() ? std::string{} : " pour " + listText(m.pending.steps, 12))
+                + ", commenc\xC3\xA9 le " + m.pending.started + ") : sa r\xC3\xA9ponse n'existe pas, rien n'est rejou\xC3\xA9.",
+            now);
         for (const auto& id : m.pending.steps)
             if (Step* s = m.step(id); s && s->state == StepState::Running) {
                 s->state = StepState::Ready;

@@ -6,6 +6,10 @@
 //  de la conversation ouverte (Assistant::activeMission) : son nom, son etat
 //  (sa couleur), les etapes terminees sur le total et la barre de la
 //  progression globale (mission::progressOf - jamais un pourcentage invente),
+//  1.22.1 : l'etape du moment (mission::currentStep), sa progression reelle
+//  et ce qu'elle fait maintenant (<< L'IA prepare la proposition P2... (depuis
+//  0:42) >>, << P2 : 12 operations a valider >>...), refaite chaque seconde
+//  tant que l'IA repond ;
 //  la prochaine action, les propositions de la mission et leur etat, les
 //  erreurs et les blocages. Son bouton fait le geste du moment (<< Proposer la
 //  suite >> quand des etapes sont pretes, Corriger, Actualiser le contexte,
@@ -53,6 +57,7 @@ public:
     [[nodiscard]] std::vector<std::string>  lines() const;   // le nom, l'etat, la progression, la prochaine action...
     [[nodiscard]] const mission::Progress&  progress() const noexcept { return progress_; }
     [[nodiscard]] const missionui::Next&    next() const noexcept { return next_; }
+    [[nodiscard]] const missionui::Moment&  moment() const noexcept { return moment_; }   // 1.22.1
     [[nodiscard]] ui::Button&               actionButton() noexcept { return *action_; }   // le geste du moment
     [[nodiscard]] ui::Button&               boardButton() noexcept { return *board_; }     // << Tableau de bord >>
     [[nodiscard]] gfx::Rect                 headRect() const;
@@ -69,6 +74,8 @@ protected:
 private:
     void layoutOps();   // les ordres de dessin a la largeur (refaits quand elle change, ou ce qu'elle montre)
     [[nodiscard]] bool buttonsOnTwoRows(float width) const;
+    [[nodiscard]] int   momentRows(bool roomy) const;              // 1.22.1 : les lignes de l'etape du moment (0, 1, 2)
+    [[nodiscard]] float openHeight(float width, int rows) const;   // la hauteur depliee, avec ces lignes
     void doAction();
 
     AiPanel&                    panel_;
@@ -81,10 +88,12 @@ private:
     std::vector<std::pair<std::string, missionui::Tone>> problems_;
     mission::Progress           progress_;
     missionui::Next             next_;
+    missionui::Moment           moment_;       // 1.22.1 : l'etape du moment, sa progression, ce qu'elle fait
+    std::int64_t                liveKey_{0};   // 1.22.1 : le direct (l'appel a l'IA, l'application de fond)
     // La mise en page :
     std::vector<missionui::Op>  ops_;   // relatifs au coin de la bande
     std::vector<std::pair<gfx::Rect, std::string>> tipsRel_;
-    float                       laidW_{-1.f}, buttonsY_{0.f};
+    float                       laidW_{-1.f}, laidH_{-1.f}, buttonsY_{0.f};
     std::uint64_t               laidRev_{~0ull}, rev_{0};
     ui::Button*                 action_{nullptr};
     ui::Button*                 board_{nullptr};

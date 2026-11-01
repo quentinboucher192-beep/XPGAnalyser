@@ -85,9 +85,54 @@ void AiMissionsView::say(const std::string& text) const {
 
 bool AiMissionsView::poll() {
     const auto& as = panel_.assistant();
-    if (as.missionsRevision() == seen_ && as.generating() == generating_) return false;
+    // 1.22.1 : le direct (l'appel a l'IA d'une mission, une application de fond) - la liste se refait au plus chaque seconde
+    if (as.missionsRevision() == seen_ && as.generating() == generating_ && liveKeyAll() == liveKey_) return false;
     rebuild();
     return true;
+}
+
+std::int64_t AiMissionsView::liveKeyAll() const {
+    const auto& as = panel_.assistant();
+    if (!as.generating() && !as.applyingAny()) return 0;
+    const std::string applying = as.applyingProposal();
+    std::uint64_t k = 0;   // sans signe : le melange deborde sans danger
+    for (const auto& m : as.missions())
+        if (!m.archived && (m.pending.active || (!applying.empty() && m.proposal(applying))))
+            k = k * 1000003u + static_cast<std::uint64_t>(missionui::liveKey(missionui::liveOf(as, m)));
+    return static_cast<std::int64_t>(k);
+}
+
+// 1.22.1 : TOUTES LES ETAPES de la ligne choisie - leur progression reelle et ce qu'elles font maintenant (les premieres).
+void AiMissionsView::fillSteps(Row& r) const {
+    r.steps.clear();
+    r.moreSteps = 0;
+    const auto& as = panel_.assistant();
+    const mission::Mission* m = as.findMission(r.id);
+    if (!m) return;
+    const mission::Live live = missionui::liveOf(as, *m);
+    constexpr std::size_t kMaxSteps = 30;
+    for (const auto& s : m->steps) {
+        if (r.steps.size() == kMaxSteps) {
+            ++r.moreSteps;
+            continue;
+        }
+        const mission::StepProgress sp = mission::stepProgressOf(*m, s);
+        const mission::StepActivity act = mission::activityOf(*m, s, live);
+        StepLine l;
+        l.text = s.id + " \xC2\xB7 " + sp.text() + " \xE2\x80\x94 " + act.text;
+        l.tone = missionui::activityTone(act.kind);
+        l.frac = sp.frac();
+        l.bar = sp.counted();
+        l.live = act.live;
+        l.tip = s.id + "  " + s.title + " \xE2\x80\x94 " + std::string(mission::stepLabel(s.state)) + "\n" + act.text + "\nProgression : " + sp.text() + " ("
+                + sp.detail() + ")\nSon journal : le tableau de bord (un clic sur sa ligne du plan).";
+        r.steps.push_back(std::move(l));
+    }
+}
+
+std::size_t AiMissionsView::extraLines(const Row& r, bool selected) const noexcept {
+    if (selected && !r.steps.empty()) return 1 + r.steps.size() + (r.moreSteps > 0 ? 1 : 0);
+    return r.moment.text.empty() ? 0 : 1;
 }
 
 void AiMissionsView::refresh() { rebuild(); }
@@ -112,6 +157,7 @@ void AiMissionsView::rebuild() {
     const auto& as = panel_.assistant();
     seen_ = as.missionsRevision();
     generating_ = as.generating();
+    liveKey_ = liveKeyAll();
     const auto& all = as.missions();
     counts_[0] = counts_[1] = counts_[2] = 0;
     attention_ = 0;
@@ -182,6 +228,17 @@ void AiMissionsView::rebuild() {
         if (blocked > 0) r.problems += (r.problems.empty() ? "" : " \xC2\xB7 ") + missionui::count(blocked, "bloqu\xC3\xA9" "e", "bloqu\xC3\xA9" "es");
         if (m.pending.active && !busy) r.problems += (r.problems.empty() ? "" : " \xC2\xB7 ") + std::string("appel \xC3\xA0 l'IA interrompu");
         r.problemsTone = errors > 0 || m.coherence == mission::Coherence::Missing ? Tone::Error : Tone::Warning;
+        // 1.22.1 : l'etape du moment, sa progression reelle, ce qu'elle fait maintenant
+        if (const missionui::Moment mo = missionui::momentOf(m, missionui::liveOf(as, m)); !mo.empty()) {
+            r.moment.text = mo.line();
+            r.moment.tone = missionui::activityTone(mo.activity.kind);
+            r.moment.frac = mo.progress.frac();
+            r.moment.bar = !mo.step.empty() && mo.progress.counted();
+            r.moment.live = mo.activity.live;
+            r.moment.tip = mo.step.empty() ? mo.activity.text
+                                           : "En ce moment : " + mo.step + " " + mo.title + " \xE2\x80\x94 " + mo.progress.text() + " (" + mo.progress.detail() + ")\n"
+                                                 + mo.activity.text + "\nUn clic sur la ligne : toutes ses \xC3\xA9tapes.";
+        }
         r.tip = r.name + " \xE2\x80\x94 " + r.state + "\n" + mission::summaryOf(m) + "\n\nDemande : " + notifs::oneLine(m.request, 240)
                 + "\nEntr\xC3\xA9" "e ou un double-clic : le tableau de bord (au centre) ; clic droit : les autres gestes.";
         rows_.push_back(std::move(r));
@@ -189,6 +246,7 @@ void AiMissionsView::rebuild() {
     selected_ = -1;
     for (std::size_t i = 0; i < rows_.size(); ++i)
         if (rows_[i].id == selectedId_) selected_ = static_cast<int>(i);
+    if (selected_ >= 0) fillSteps(rows_[static_cast<std::size_t>(selected_)]);
     laidW_ = -1.f;
     layoutRows();
     invalidateLayout();
@@ -199,9 +257,11 @@ void AiMissionsView::layoutRows() {
     const float w = list_.w > 0.f ? list_.w : bounds().w;
     if (w <= 0.f) return;
     float y = 0.f;
-    for (auto& r : rows_) {
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        auto& r = rows_[i];
         r.y = y;
         float h = 8.f + lh(kBody) + 1.f + lh(kMeta) + 14.f + lh(kMeta);
+        h += static_cast<float>(extraLines(r, static_cast<int>(i) == selected_)) * lh(kMeta);   // 1.22.1 : les etapes
         if (!r.problems.empty()) h += lh(kMeta);
         h += 4.f + kButtonH + 10.f;
         r.h = h;
@@ -299,7 +359,7 @@ void AiMissionsView::ensureVisible(int row) {
     if (row < 0 || row >= static_cast<int>(rows_.size())) return;
     const auto& r = rows_[static_cast<std::size_t>(row)];
     if (r.y < scroll_) scroll_ = r.y;
-    else if (r.y + r.h > scroll_ + viewH()) scroll_ = r.y + r.h - viewH();
+    else if (r.y + r.h > scroll_ + viewH()) scroll_ = std::min(r.y, r.y + r.h - viewH());   // 1.22.1 : une ligne haute (ses etapes) : son haut d'abord
     scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content_ - viewH()));
     invalidateLayout();
     invalidate();
@@ -313,7 +373,13 @@ std::string AiMissionsView::secondLabel(std::size_t row) const { return row < ro
 std::string AiMissionsView::rowText(std::size_t row) const {
     if (row >= rows_.size()) return {};
     const auto& r = rows_[row];
-    return r.name + " | " + r.state + " | " + r.meta + " | " + r.count + " | Prochaine : " + r.next + " | " + r.problems + " | " + r.second;
+    std::string s = r.name + " | " + r.state + " | " + r.meta + " | " + r.count + " | Prochaine : " + r.next + " | " + r.problems + " | " + r.second;
+    if (!r.moment.text.empty()) s += " | En ce moment : " + r.moment.text;   // 1.22.1
+    if (static_cast<int>(row) == selected_ && !r.steps.empty()) {
+        s += " | \xC3\x89tapes :";
+        for (const auto& l : r.steps) s += " " + l.text + " ;";
+    }
+    return s;
 }
 
 std::vector<std::string> AiMissionsView::lines() const {
@@ -324,8 +390,15 @@ std::vector<std::string> AiMissionsView::lines() const {
 
 bool AiMissionsView::select(int row) {
     if (row < 0 || row >= static_cast<int>(rows_.size())) return false;
-    selected_ = row;
-    selectedId_ = rows_[static_cast<std::size_t>(row)].id;
+    if (row != selected_) {
+        // 1.22.1 : la ligne choisie montre toutes ses etapes (sa hauteur change)
+        if (selected_ >= 0 && selected_ < static_cast<int>(rows_.size())) rows_[static_cast<std::size_t>(selected_)].steps.clear();
+        selected_ = row;
+        selectedId_ = rows_[static_cast<std::size_t>(row)].id;
+        fillSteps(rows_[static_cast<std::size_t>(row)]);
+        layoutRows();
+        invalidate();
+    }
     ensureVisible(row);
     return true;
 }
@@ -583,6 +656,36 @@ void AiMissionsView::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({track.right() + 8.f, y}, row.count, kMeta, c.textMuted);
         tips_.emplace_back(gfx::Rect{track.x, y, r.right() - track.x, 14.f}, row.count + " (la progression globale : les \xC3\xA9tapes termin\xC3\xA9" "es)\n\n" + mission::progressRule());
         y += 14.f;
+        // 1.22.1 : ce que font les etapes - l'etape du moment ; la ligne choisie : toutes (leur progression, leur activite)
+        const auto stepLine = [&](const StepLine& l) {
+            float tx = r.x + kLeft;
+            if (l.bar) {
+                const gfx::Rect t{tx, y + 5.f, 28.f, 5.f};
+                const gfx::Color full = missionui::color(ctx.theme, l.tone == Tone::Error ? Tone::Error : l.tone == Tone::Ok ? Tone::Ok : Tone::Info);
+                ctx.r.fillRoundedRect(t, alpha(full, 40), 2.5f);
+                if (l.frac > 0.0) ctx.r.fillRoundedRect({t.x, t.y, std::max(5.f, t.w * static_cast<float>(std::clamp(l.frac, 0.0, 1.0))), t.h}, full, 2.5f);
+                tx += 34.f;
+            }
+            const std::string shown = missionui::elide(l.text, kMeta, r.right() - kPad - tx);
+            const gfx::Color ink2 = missionui::color(ctx.theme, l.tone);
+            if (l.live) boldText(ctx.r, {tx, y}, shown, kMeta, ink2);
+            else ctx.r.drawText({tx, y}, shown, kMeta, ink2);
+            if (!l.tip.empty()) tips_.emplace_back(gfx::Rect{r.x + kLeft, y, r.right() - r.x - kLeft, lh(kMeta)}, l.tip);
+            y += lh(kMeta);
+        };
+        if (sel && !row.steps.empty()) {
+            ctx.r.drawText({r.x + kLeft, y}, "\xC3\x89tapes \xE2\x80\x94 progression r\xC3\xA9" "elle et ce qu'elles font", kMeta, c.textMuted);
+            tips_.emplace_back(gfx::Rect{r.x + kLeft, y, r.right() - r.x - kLeft, lh(kMeta)}, mission::stepProgressRule());
+            y += lh(kMeta);
+            for (const auto& l : row.steps) stepLine(l);
+            if (row.moreSteps > 0) {
+                ctx.r.drawText({r.x + kLeft, y}, "\xE2\x80\xA6 et " + missionui::count(static_cast<int>(row.moreSteps), "autre", "autres") + " (le tableau de bord les montre)", kMeta,
+                               c.textMuted);
+                y += lh(kMeta);
+            }
+        } else if (!row.moment.text.empty()) {
+            stepLine(row.moment);
+        }
         // la prochaine action, les erreurs
         ctx.r.drawText({r.x + kLeft, y}, missionui::elide("Prochaine : " + row.next, kMeta, r.right() - kPad - r.x - kLeft), kMeta, ink);
         y += lh(kMeta);
