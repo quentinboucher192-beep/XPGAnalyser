@@ -67,6 +67,16 @@
 //  Les RETOUCHES (une strategie, une propriete, la correction du logiciel) sont
 //  gardees avec la forme d'avant de l'operation (Proposal::extra << retouches >>) :
 //  la categorie CORRECTIONS les liste, Revenir les reprend (Undo).
+//
+//  1.22.8 : UNE UNITE INCONNUE (<< unite inconnue << mmCE >> >>, un defaut << unite >>
+//  de creer_variables, modifier_variable) : << Creer l'unite << mmCE >>... >> ouvre une
+//  petite fenetre (sa famille, son facteur, son libelle ; PRE-REMPLIE quand le logiciel
+//  reconnait le symbole - la table des unites courantes, hmi::units::knownUnits) ;
+//  Corriger rapidement la cree SEULEMENT si le symbole est dans cette table (sinon
+//  grisee : famille et facteur inconnus). Dans les deux cas, une operation creer_unite
+//  AJOUTEE A LA PROPOSITION (Assistant::addUnit : une retouche << ajout >>, Revenir la
+//  retire) - jamais au projet ; Tout corriger rapidement n'en cree qu'une par symbole
+//  (26 variables en mmCE : une seule unite).
 // =============================================================================
 #pragma once
 
@@ -111,7 +121,10 @@ struct Action {
                                      // suppression (ops[0], value) ; une propriete d'une operation (ops[0], name : la cle, value) ;
                                      // revenir sur une retouche (value : son id) ; Tout corriger rapidement (ops[0] : la categorie,
                                      // a l'ecran qui l'offre).
-                                     Quick, Strategy, Prop, Undo, QuickAll };
+                                     Quick, Strategy, Prop, Undo, QuickAll,
+                                     // 1.22.8 : ajouter une unite a la proposition (name : le symbole ; unit : l'operation creer_unite) ;
+                                     // << Creer l'unite... >> (name : le symbole) - la fenetre, a l'ecran qui l'offre.
+                                     Unit, UnitAsk };
     Kind                     kind{Kind::Separator};
     Kind                     does{Kind::Separator};   // 1.22.7 : Quick - l'action faite (Use, BuildFix, RemoveOps, Strategy, Prop)
     std::string              label;
@@ -123,6 +136,7 @@ struct Action {
     bool                     enabled{true};
     std::string              why;          // grisee : pourquoi
     std::vector<Action>      children;
+    Operation                unit{};       // 1.22.8 : Unit - l'operation creer_unite ajoutee a la proposition
 };
 struct Menu {
     std::string         title;             // la ligne de tete du menu
@@ -168,9 +182,28 @@ struct Correction {
 // Les types proposes pour creer une variable (le conseille vient en tete du sous-menu).
 [[nodiscard]] const std::vector<std::string>& types();
 
+// 1.22.8 : << CREER L'UNITE << X >>... >> - la petite fenetre. Ses champs (dans l'ordre : symbole, famille, facteur, decalage,
+// libelle, puis une famille neuve : nom, reference, libelle) et leurs valeurs PRE-REMPLIES quand le logiciel reconnait le
+// symbole (la table des unites courantes, ramenee au catalogue du projet) ; sinon a remplir. Le choix d'une famille :
+// << pression (Pa) >>... ou kNewFamily ; un symbole inconnu commence par kPickFamily (aucune famille choisie d'office).
+inline const std::string kNewFamily = "nouvelle famille\xE2\x80\xA6";
+inline const std::string kPickFamily = "(\xC3\xA0 choisir)";
+struct UnitForm {
+    std::vector<std::string> labels, values;
+    std::vector<std::string> families;     // les choix du champ Famille
+    bool                     known{false};  // pre-remplie (la table connait le symbole)
+    std::string              explanation;
+};
+[[nodiscard]] UnitForm unitForm(const hmi::Project&, std::string_view symbol);
+// Les valeurs de la fenetre -> l'operation creer_unite.
+[[nodiscard]] Operation unitFromForm(const std::vector<std::string>& values);
+// Ce que la fenetre lit de ses valeurs : la ligne de la conversion (<< Unite mmCE (pression) : 1 mmCE = 9,80665 Pa >>, et un
+// avertissement de coherence), ou la raison du refus - `field` : le champ en cause (-1 : aucun).
+[[nodiscard]] std::string unitFormCheck(const hmi::Config&, const std::vector<std::string>& values, int* field = nullptr, bool* ok = nullptr);
+
 // FAIRE une action qui change la proposition (Use, Create, RemoveUsing, RemoveOps, Revert, Restore, BuildFix ; 1.22.7 : Quick -
 // ce qu'elle fait -, Strategy, Prop, Undo) - par l'Assistant ; `said` : ce que la barre d'etat dit. Faux : rien n'a change.
-// Pick, Copy, AskAi et QuickAll sont a l'ecran qui les offre.
+// Pick, Copy, AskAi et QuickAll sont a l'ecran qui les offre ; 1.22.8 : UnitAsk aussi (la fenetre), Unit ici (Assistant::addUnit).
 bool apply(Assistant&, int message, const Action&, std::string* said = nullptr);
 
 // LE MENU DU CLIC DROIT : ses entrees posees dans `menu` (une tete, les actions, leurs icones, les sous-menus) ; `byId` recoit

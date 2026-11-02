@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <charconv>   // 1.22.8 : exactNumber (le plus court qui se relit)
 #include <cstdio>
 #include <cstdlib>
 
@@ -610,6 +611,261 @@ std::string converterHit(const ConverterLayout& l, double x, double y) {
     if (l.swap.contains(x, y)) return "inverser";
     if (l.write.contains(x, y)) return "ecrire";
     return {};
+}
+
+// =============================================================================
+//  1.22.8 : CREER UNE UNITE - les controles partages (l'editeur, l'Assistant IA) et la table des unites courantes
+// =============================================================================
+bool symbolOk(std::string_view s) {
+    if (s.empty() || s.size() > 16) return false;
+    for (const char c : s)
+        if (std::isspace(static_cast<unsigned char>(c)) || c == '[' || c == ']' || c == '\'' || c == '"' || c == ';') return false;
+    return true;
+}
+
+bool familyNameOk(std::string_view n) {
+    if (n.empty() || std::isdigit(static_cast<unsigned char>(n.front()))) return false;
+    return std::all_of(n.begin(), n.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
+}
+
+bool builtinUnit(std::string_view symbol) {
+    const std::string s = fold(symbol);
+    return std::any_of(builtinUnits().begin(), builtinUnits().end(), [&](const UnitDef& u) { return fold(u.symbol) == s; });
+}
+
+bool builtinFamily(std::string_view name) {
+    const std::string s = fold(name);
+    return std::any_of(builtinFamilies().begin(), builtinFamilies().end(), [&](const UnitFamily& f) { return fold(f.name) == s; });
+}
+
+std::string newUnitProblem(const Catalog& cat, const UnitDef& u, std::string* family) {
+    const std::string sym = trimmedText(u.symbol);
+    if (!symbolOk(sym)) return "son symbole : court, sans espace ni crochet (bar, m3/h, %)";
+    if (const UnitDef* other = cat.unit(sym))
+        return "\xC2\xAB " + sym + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 (" + cat.familyLabel(other->family)
+               + (builtinUnit(other->symbol) ? ", unit\xC3\xA9 fournie" : ", unit\xC3\xA9 du projet")
+               + (fold(other->symbol) != fold(sym) ? " " + other->symbol : std::string{}) + ")";
+    const UnitFamily* f = cat.family(trimmedText(u.family));
+    if (!f)
+        if (const std::string n = familyFrom(cat, u.family); !n.empty()) f = cat.family(n);
+    if (!f) return "famille inconnue \xC2\xAB " + trimmedText(u.family) + " \xC2\xBB";
+    if (family) *family = f->name;
+    if (!std::isfinite(u.factor) || u.factor == 0.0) return "le facteur doit \xC3\xAAtre un nombre non nul";
+    if (!std::isfinite(u.offset)) return "le d\xC3\xA9" "calage doit \xC3\xAAtre un nombre";
+    return {};
+}
+
+std::string newFamilyProblem(const Catalog& cat, std::string_view rawName, std::string_view rawRef) {
+    const std::string name = trimmedText(rawName), ref = trimmedText(rawRef);
+    if (!familyNameOk(name)) return "son nom : des minuscules, des chiffres et _ (pas de chiffre en t\xC3\xAAte)";
+    if (cat.family(name)) return "la famille \xC2\xAB " + name + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0";
+    if (!symbolOk(ref)) return "sa r\xC3\xA9" "f\xC3\xA9rence : un symbole court, sans espace (bar, m3/h)";
+    if (const UnitDef* u = cat.unit(ref))
+        return "\xC2\xAB " + ref + " \xC2\xBB est d\xC3\xA9j\xC3\xA0 une unit\xC3\xA9 (" + cat.familyLabel(u->family)
+               + ") : la r\xC3\xA9" "f\xC3\xA9rence d'une famille nouvelle est une unit\xC3\xA9 nouvelle";
+    return {};
+}
+
+std::string unitChangeProblem(const Config& cfg, std::string_view symbol, double factor, double offset) {
+    if (builtinUnit(symbol)) return "une unit\xC3\xA9 fournie est verrouill\xC3\xA9" "e (ajoute plut\xC3\xB4t une unit\xC3\xA9 du projet)";
+    const std::string s = fold(symbol);
+    const auto it = std::find_if(cfg.units.begin(), cfg.units.end(), [&](const UnitDef& u) { return fold(u.symbol) == s; });
+    if (it == cfg.units.end()) return "unit\xC3\xA9 introuvable";
+    if (!std::isfinite(factor) || factor == 0.0) return "le facteur doit \xC3\xAAtre un nombre non nul";
+    if (!std::isfinite(offset)) return "le d\xC3\xA9" "calage doit \xC3\xAAtre un nombre";
+    const Catalog cat(cfg);
+    if (const UnitFamily* f = cat.family(it->family); f && fold(f->reference) == s && (factor != 1.0 || offset != 0.0))
+        return it->symbol + " est la r\xC3\xA9" "f\xC3\xA9rence de sa famille : facteur 1, d\xC3\xA9" "calage 0";
+    return {};
+}
+
+std::string exactNumber(double v) {
+    if (!std::isfinite(v)) return "0";
+    char b[64];
+    const auto r = std::to_chars(b, b + sizeof b, v);
+    return r.ec == std::errc{} ? std::string(b, r.ptr) : std::string("0");
+}
+
+// La table : les unites courantes (fournies comprises : elles relient une famille du projet a la table), par famille.
+//  symbole, famille, facteur, decalage, libelle, reference de la famille, libelle de la famille (une famille neuve).
+const std::vector<KnownUnit>& knownUnits() {
+    static const std::vector<KnownUnit> k = {
+        // pression (Pa)
+        {"Pa", "pression", 1.0, 0.0, "pascal", "Pa", "Pression"},
+        {"hPa", "pression", 100.0, 0.0, "hectopascal", "Pa", "Pression"},
+        {"kPa", "pression", 1000.0, 0.0, "kilopascal", "Pa", "Pression"},
+        {"MPa", "pression", 1.0e6, 0.0, "m\xC3\xA9gapascal", "Pa", "Pression"},
+        {"mbar", "pression", 100.0, 0.0, "millibar", "Pa", "Pression"},
+        {"bar", "pression", 100000.0, 0.0, "bar", "Pa", "Pression"},
+        {"psi", "pression", 6894.757293, 0.0, "livre par pouce carr\xC3\xA9", "Pa", "Pression"},
+        {"mmCE", "pression", 9.80665, 0.0, "millim\xC3\xA8tre de colonne d'eau", "Pa", "Pression"},
+        {"cmCE", "pression", 98.0665, 0.0, "centim\xC3\xA8tre de colonne d'eau", "Pa", "Pression"},
+        {"mCE", "pression", 9806.65, 0.0, "m\xC3\xA8tre de colonne d'eau", "Pa", "Pression"},
+        {"mmH2O", "pression", 9.80665, 0.0, "millim\xC3\xA8tre d'eau", "Pa", "Pression"},
+        {"inH2O", "pression", 249.08891, 0.0, "pouce d'eau", "Pa", "Pression"},
+        {"mmHg", "pression", 133.322387415, 0.0, "millim\xC3\xA8tre de mercure", "Pa", "Pression"},
+        {"Torr", "pression", 101325.0 / 760.0, 0.0, "torr", "Pa", "Pression"},
+        {"atm", "pression", 101325.0, 0.0, "atmosph\xC3\xA8re", "Pa", "Pression"},
+        // temperature (K)
+        {"K", "temperature", 1.0, 0.0, "kelvin", "K", "Temp\xC3\xA9rature"},
+        {"degC", "temperature", 1.0, 273.15, "degr\xC3\xA9 Celsius", "K", "Temp\xC3\xA9rature"},
+        {"degF", "temperature", 5.0 / 9.0, 459.67 * 5.0 / 9.0, "degr\xC3\xA9 Fahrenheit", "K", "Temp\xC3\xA9rature"},
+        // debit (m3/h)
+        {"m3/h", "debit", 1.0, 0.0, "m\xC3\xA8tre cube par heure", "m3/h", "D\xC3\xA9" "bit"},
+        {"m3/min", "debit", 60.0, 0.0, "m\xC3\xA8tre cube par minute", "m3/h", "D\xC3\xA9" "bit"},
+        {"m3/s", "debit", 3600.0, 0.0, "m\xC3\xA8tre cube par seconde", "m3/h", "D\xC3\xA9" "bit"},
+        {"m3/j", "debit", 1.0 / 24.0, 0.0, "m\xC3\xA8tre cube par jour", "m3/h", "D\xC3\xA9" "bit"},
+        {"L/s", "debit", 3.6, 0.0, "litre par seconde", "m3/h", "D\xC3\xA9" "bit"},
+        {"L/min", "debit", 0.06, 0.0, "litre par minute", "m3/h", "D\xC3\xA9" "bit"},
+        {"L/h", "debit", 0.001, 0.0, "litre par heure", "m3/h", "D\xC3\xA9" "bit"},
+        // debit normalise (Nm3/h) - jamais converti vers m3/h
+        {"Nm3/h", "debit_normalise", 1.0, 0.0, "m\xC3\xA8tre cube normal par heure", "Nm3/h", "D\xC3\xA9" "bit normalis\xC3\xA9"},
+        {"Nm3/min", "debit_normalise", 60.0, 0.0, "m\xC3\xA8tre cube normal par minute", "Nm3/h", "D\xC3\xA9" "bit normalis\xC3\xA9"},
+        {"Nm3/j", "debit_normalise", 1.0 / 24.0, 0.0, "m\xC3\xA8tre cube normal par jour", "Nm3/h", "D\xC3\xA9" "bit normalis\xC3\xA9"},
+        {"NL/min", "debit_normalise", 0.06, 0.0, "litre normal par minute", "Nm3/h", "D\xC3\xA9" "bit normalis\xC3\xA9"},
+        // debit massique (kg/h) - une famille neuve
+        {"kg/h", "debit_massique", 1.0, 0.0, "kilogramme par heure", "kg/h", "D\xC3\xA9" "bit massique"},
+        {"kg/min", "debit_massique", 60.0, 0.0, "kilogramme par minute", "kg/h", "D\xC3\xA9" "bit massique"},
+        {"kg/s", "debit_massique", 3600.0, 0.0, "kilogramme par seconde", "kg/h", "D\xC3\xA9" "bit massique"},
+        {"g/s", "debit_massique", 3.6, 0.0, "gramme par seconde", "kg/h", "D\xC3\xA9" "bit massique"},
+        {"t/h", "debit_massique", 1000.0, 0.0, "tonne par heure", "kg/h", "D\xC3\xA9" "bit massique"},
+        {"t/j", "debit_massique", 1000.0 / 24.0, 0.0, "tonne par jour", "kg/h", "D\xC3\xA9" "bit massique"},
+        // humidite relative (%HR) - une famille neuve, sans autre unite
+        {"%HR", "humidite", 1.0, 0.0, "pour cent d'humidit\xC3\xA9 relative", "%HR", "Humidit\xC3\xA9 relative"},
+        // puissance (W) - une famille neuve
+        {"W", "puissance", 1.0, 0.0, "watt", "W", "Puissance"},
+        {"kW", "puissance", 1000.0, 0.0, "kilowatt", "W", "Puissance"},
+        {"MW", "puissance", 1.0e6, 0.0, "m\xC3\xA9gawatt", "W", "Puissance"},
+        // energie (J) - une famille neuve
+        {"J", "energie", 1.0, 0.0, "joule", "J", "\xC3\x89nergie"},
+        {"kJ", "energie", 1000.0, 0.0, "kilojoule", "J", "\xC3\x89nergie"},
+        {"MJ", "energie", 1.0e6, 0.0, "m\xC3\xA9gajoule", "J", "\xC3\x89nergie"},
+        {"Wh", "energie", 3600.0, 0.0, "wattheure", "J", "\xC3\x89nergie"},
+        {"kWh", "energie", 3.6e6, 0.0, "kilowattheure", "J", "\xC3\x89nergie"},
+        {"MWh", "energie", 3.6e9, 0.0, "m\xC3\xA9gawattheure", "J", "\xC3\x89nergie"},
+        // vitesse (m/s), vitesse de rotation (tr/min), volume (m3) - des familles neuves
+        {"m/s", "vitesse", 1.0, 0.0, "m\xC3\xA8tre par seconde", "m/s", "Vitesse"},
+        {"m/min", "vitesse", 1.0 / 60.0, 0.0, "m\xC3\xA8tre par minute", "m/s", "Vitesse"},
+        {"km/h", "vitesse", 1.0 / 3.6, 0.0, "kilom\xC3\xA8tre par heure", "m/s", "Vitesse"},
+        {"tr/min", "vitesse_rotation", 1.0, 0.0, "tour par minute", "tr/min", "Vitesse de rotation"},
+        {"rpm", "vitesse_rotation", 1.0, 0.0, "tour par minute", "tr/min", "Vitesse de rotation"},
+        {"tr/s", "vitesse_rotation", 60.0, 0.0, "tour par seconde", "tr/min", "Vitesse de rotation"},
+        {"m3", "volume", 1.0, 0.0, "m\xC3\xA8tre cube", "m3", "Volume"},
+        {"L", "volume", 0.001, 0.0, "litre", "m3", "Volume"},
+        {"hL", "volume", 0.1, 0.0, "hectolitre", "m3", "Volume"},
+        // les autres familles fournies
+        {"s", "temps", 1.0, 0.0, "seconde", "s", "Temps"},
+        {"m", "longueur", 1.0, 0.0, "m\xC3\xA8tre", "m", "Longueur"},
+        {"um", "longueur", 1.0e-6, 0.0, "microm\xC3\xA8tre", "m", "Longueur"},
+        {"mm", "longueur", 0.001, 0.0, "millim\xC3\xA8tre", "m", "Longueur"},
+        {"in", "longueur", 0.0254, 0.0, "pouce", "m", "Longueur"},
+        {"ft", "longueur", 0.3048, 0.0, "pied", "m", "Longueur"},
+        {"kg", "masse", 1.0, 0.0, "kilogramme", "kg", "Masse"},
+        {"t", "masse", 1000.0, 0.0, "tonne", "kg", "Masse"},
+        {"lb", "masse", 0.45359237, 0.0, "livre", "kg", "Masse"},
+        {"V", "tension", 1.0, 0.0, "volt", "V", "Tension"},
+        {"kV", "tension", 1000.0, 0.0, "kilovolt", "V", "Tension"},
+        {"A", "courant", 1.0, 0.0, "amp\xC3\xA8re", "A", "Courant"},
+        {"mA", "courant", 0.001, 0.0, "milliamp\xC3\xA8re", "A", "Courant"},
+        {"kA", "courant", 1000.0, 0.0, "kiloamp\xC3\xA8re", "A", "Courant"},
+        {"Hz", "frequence", 1.0, 0.0, "hertz", "Hz", "Fr\xC3\xA9quence"},
+        {"%", "pourcentage", 1.0, 0.0, "pour cent", "%", "Pourcentage"},
+        {"ppm", "pourcentage", 1.0e-4, 0.0, "partie par million", "%", "Pourcentage"},
+    };
+    return k;
+}
+
+const KnownUnit* knownUnit(std::string_view symbol) {
+    const std::string s = fold(symbol);
+    if (s.empty()) return nullptr;
+    for (const auto& k : knownUnits())
+        if (fold(k.symbol) == s) return &k;
+    return nullptr;
+}
+
+std::optional<Suggestion> expected(const Catalog& cat, std::string_view symbol, std::string_view reference) {
+    const KnownUnit* k = knownUnit(symbol);
+    if (!k) return std::nullopt;
+    Suggestion s;
+    s.unit.symbol = std::string(k->symbol);
+    s.unit.label = std::string(k->label);
+    // De S vers X (deux unites de la table, la meme famille) : v_X = v_S * a + b.
+    const auto toward = [&](const KnownUnit& x, double& a, double& b) {
+        a = k->factor / x.factor;
+        b = (k->offset - x.offset) / x.factor;
+    };
+    if (const UnitFamily* f = cat.family(k->family)) {
+        // La famille existe : reliee par une de ses unites que la table connait (sa reference d'abord : le compte exact).
+        s.unit.family = f->name;
+        std::vector<const UnitDef*> members;
+        if (const UnitDef* r = cat.unit(f->reference)) members.push_back(r);
+        for (const auto& u : cat.units())
+            if (fold(u.family) == fold(f->name)) members.push_back(&u);
+        for (const UnitDef* u : members) {
+            const KnownUnit* x = knownUnit(u->symbol);
+            if (!x || x->family != k->family || x->factor == 0.0) continue;
+            double a = 0, b = 0;
+            toward(*x, a, b);
+            s.unit.factor = a * u->factor;                // v_ref = v_X * u.factor + u.offset
+            s.unit.offset = b * u->factor + u->offset;
+            return s;
+        }
+        return std::nullopt;
+    }
+    // Une famille neuve : sa reference (celle de la table, ou celle deja choisie si la table la connait).
+    const std::string ref = trimmedText(reference).empty() ? std::string(k->reference) : trimmedText(reference);
+    s.unit.family = std::string(k->family);
+    s.family = {std::string(k->family), ref, std::string(k->familyLabel)};
+    if (fold(ref) == fold(k->reference)) {
+        s.family.reference = std::string(k->reference);
+        s.unit.factor = k->factor;
+        s.unit.offset = k->offset;
+        return s;
+    }
+    const KnownUnit* x = knownUnit(ref);
+    if (!x || x->family != k->family || x->factor == 0.0) return std::nullopt;
+    double a = 0, b = 0;
+    toward(*x, a, b);
+    s.family.reference = std::string(x->symbol);
+    s.unit.factor = a;
+    s.unit.offset = b;
+    return s;
+}
+
+std::optional<Suggestion> suggestUnit(const Catalog& cat, std::string_view symbol) {
+    if (cat.unit(symbol)) return std::nullopt;
+    return expected(cat, symbol);
+}
+
+namespace {
+// << 1 mmCE = 9,80665 Pa >> ; une affine : << degF -> K : x x 0,555556 + 255,372 >> (comme formulaText, sans catalogue).
+std::string affineShown(std::string_view from, std::string_view to, double factor, double offset) {
+    const std::string a = unitLabel(from), b = unitLabel(to);
+    if (offset == 0.0) return "1 " + a + " = " + frenchShown(shortNumber(factor)) + " " + b;
+    std::string f = "x";
+    if (shortNumber(factor) != "1") f += " \xC3\x97 " + frenchShown(shortNumber(factor));
+    f += (offset >= 0 ? " + " : " - ") + frenchShown(shortNumber(std::fabs(offset)));
+    return a + " -> " + b + " : " + f;
+}
+} // namespace
+
+std::string coherenceWarning(const Catalog& cat, const UnitDef& u, std::string_view reference) {
+    const auto e = expected(cat, u.symbol, reference);
+    if (!e) return {};
+    const std::string ref = !e->family.name.empty() ? e->family.reference : [&] {
+        const UnitFamily* f = cat.family(e->unit.family);
+        return f ? f->reference : std::string{};
+    }();
+    const std::string usual = affineShown(e->unit.symbol, ref, e->unit.factor, e->unit.offset);
+    const std::string mine = trimmedText(u.family);
+    if (fold(mine) != fold(e->unit.family) && fold(familyFrom(cat, mine)) != fold(e->unit.family))
+        return "\xC2\xAB " + trimmedText(u.symbol) + " \xC2\xBB est d'ordinaire de la famille " + e->unit.family + " (" + usual + "), pas " + mine
+               + " : v\xC3\xA9rifie la famille";
+    const double tol = 0.01;
+    const bool farFactor = std::fabs(u.factor - e->unit.factor) > tol * std::fabs(e->unit.factor);
+    const bool farOffset = std::fabs(u.offset - e->unit.offset) > tol * std::max(1.0, std::fabs(e->unit.offset));
+    if (!farFactor && !farOffset) return {};
+    return "d'ordinaire " + usual + ", pas " + affineShown(trimmedText(u.symbol), ref, u.factor, u.offset) + " : v\xC3\xA9rifie le facteur";
 }
 
 } // namespace hmi::units

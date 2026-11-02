@@ -18,6 +18,7 @@
 #include "AiProvider.hpp"
 #include "AiRegistry.hpp"
 #include "../../hmi/HmiStore.hpp"   // serializeObjectCode : l'exemple du code brut
+#include "../../hmi/HmiUnits.hpp"   // 1.22.8 : les familles d'unites fournies (la regle 25)
 
 #include <algorithm>
 #include <set>
@@ -267,6 +268,17 @@ const std::string& codeExample() {
     return text;
 }
 
+// 1.22.8 : LES UNITES DE MESURE - creer_unite, modifier_unite, les familles fournies (tirees du catalogue : jamais une liste
+// qui diverge) et la regle 25 (une unite qui manque se cree). Jointe apres les options (la partie mise en cache).
+std::string unitRules() {
+    std::string fams;
+    for (const auto& f : hmi::units::builtinFamilies()) fams += (fams.empty() ? "" : ", ") + f.name + " (" + f.reference + ")";
+    return "- creer_unite : symbole, famille, facteur (1 symbole = facteur x r\xC3\xA9" "f\xC3\xA9rence + decalage), decalage, libelle ; famille "
+           "neuve : + reference. modifier_unite : symbole, facteur, decalage, libelle. creer_variables : unite.\n- Familles (r\xC3\xA9" "f\xC3\xA9rence) : "
+           + fams + " ; leurs unit\xC3\xA9s courantes existent (bar, mbar, degC, L/min, ms, kV...).\n25. Une unit\xC3\xA9 qui manque se cr\xC3\xA9" "e "
+           "(creer_unite, m\xC3\xAAme proposition) avec le facteur EXACT (1 mmCE = 9.80665 Pa) ; jamais pour une grandeur inconnue.\n";
+}
+
 // Les genres dont le detail part : ceux de la vue (si elle part), ceux que la demande evoque ;
 // aucun : les plus courants.
 std::vector<hmi::Kind> detailKinds(const PromptInput& in, bool useWords) {
@@ -349,6 +361,9 @@ const std::vector<Fields>& fieldsOf() {
         {A::ViewEdit, {"vue", "parent", "modele", "entete", "pied", "entete_modele", "pied_modele", "hauteur", "largeur", "decaler", "agrandir", "proprietes"},
          {"vue"}},
         {A::StartView, {"vue"}, {"vue"}},
+        // 1.22.8 : les unites de mesure (le symbole ; le reste au premier niveau ou dans proprietes).
+        {A::Unit, {"symbole", "famille", "facteur", "decalage", "libelle", "reference", "libelle_famille", "proprietes"}, {"symbole", "famille"}},
+        {A::UnitEdit, {"symbole", "famille", "facteur", "decalage", "libelle", "proprietes"}, {"symbole"}},
     };
     return f;
 }
@@ -473,7 +488,7 @@ std::string malformed(const json::Value& o, std::size_t n) {
         return {};
     };
     if (o.has("variables"))
-        if (auto bad = entries("variables", {"nom", "type", "description", "valeur", "dossier"}, true); !bad.empty()) return bad;
+        if (auto bad = entries("variables", {"nom", "type", "description", "valeur", "dossier", "unite"}, true); !bad.empty()) return bad;
     // 1.22.1 : le dossier de creer_variables (celui de toutes ses variables) : un texte.
     if (*action == Operation::Action::Variables && o.has("dossier") && !o.at("dossier").isString())
         return what + " : \xC2\xAB dossier \xC2\xBB doit \xC3\xAAtre un texte (Station de pompage/Pompes/P1).";
@@ -518,6 +533,7 @@ PromptParts promptParts(const PromptInput& in) {
     std::string& s = out.stable;
     s = kRules;
     s += kRulesOptions;   // 1.22.6 : les options des variables, la securite, les vues ; la regle 23
+    s += unitRules();     // 1.22.8 : les unites de mesure, la regle 25
     s += "Le code brut d'un objet, tel que le logiciel l'\xC3\xA9" "crit (ici un bouton qui ouvre la vue Accueil) :\n";
     s += codeExample();
     if (!s.empty() && s.back() != '\n') s += '\n';
@@ -718,7 +734,7 @@ std::string operationsTool() {
         v.set("description", std::move(description));
         return v;
     };
-    props.set("variables", entries({"nom", "type", "description", "valeur", "dossier"},
+    props.set("variables", entries({"nom", "type", "description", "valeur", "dossier", "unite"},
                                    "creer_variables : les variables IHM neuves (type : BOOL, INT, REAL, STRING, TIME, ARRAY[a..b] OF ..., "
                                    "un type IHM)."));
     props.set("membres", entries({"nom", "type", "description"}, "creer_type : les membres du type (un type IHM cit\xC3\xA9 : existant ou cr\xC3\xA9\xC3\xA9 plus haut)."));
@@ -754,7 +770,8 @@ std::string operationsTool() {
              {"categorie", "creer_alarme."}, {"groupe", "creer_alarme."}, {"delai", "creer_alarme (ms)."}, {"acquittement", "creer_alarme."},
              {"incidents", "creer_alarme : false = pas de dossier d'incident pour elle."},
              {"consigne", "creer_alarme."}, {"piece_jointe", "creer_ressource."}, {"liste", "creer_dossier, ranger."},
-             {"dossier", "creer_dossier, ranger... ; creer_variables : le dossier de ses variables (Station de pompage/Pompes/P1)."}})
+             {"dossier", "creer_dossier, ranger... ; creer_variables : le dossier de ses variables (Station de pompage/Pompes/P1)."},
+             {"symbole", "creer_unite, modifier_unite."}})   // 1.22.8 : ses autres champs sont dans les consignes
         props.set(k, str(d));
     // 1.22.6 : les options des variables, la securite, les vues - leurs cibles (leurs options vont dans proprietes).
     props.set("utilisateur", str("modifier_utilisateur : le login d'un compte existant."));

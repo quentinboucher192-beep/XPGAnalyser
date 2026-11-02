@@ -13,6 +13,7 @@
 #include "../../hmi/HmiPublicVars.hpp"   // 1.18.0 : les variables systeme
 #include "../../hmi/HmiScript.hpp"       // 1.18.0 : la signature d'une fonction IHM
 #include "../../hmi/HmiTemplates.hpp"    // 1.22.6 : l'en-tete et le pied d'une vue
+#include "../../hmi/HmiUnits.hpp"        // 1.22.8 : les unites du projet
 
 #include <algorithm>
 #include <cctype>
@@ -648,6 +649,30 @@ void securityPart(const PromptInput& in, std::string& s) {
     s += "  comptes (login : groupe) : " + (users.empty() ? std::string("aucun") : users) + (left ? " ... et " + std::to_string(left) + " autres" : std::string{}) + ".\n";
 }
 
+// 1.22.8 : LES UNITES DU PROJET, en court (les familles fournies sont dans les consignes, regle 25) - chacune, sa famille, sa
+// conversion vers la reference ; les familles du projet et leur reference. Rien quand le projet n'en a pas.
+void unitsPart(const PromptInput& in, std::string& s) {
+    const auto& cfg = in.project->config;
+    if (cfg.units.empty() && cfg.unitFamilies.empty()) return;
+    const hmi::units::Catalog cat(cfg);
+    std::string units, fams;
+    std::size_t left = 0;
+    for (const auto& u : cfg.units) {
+        const hmi::UnitFamily* f = cat.family(u.family);
+        std::string one = u.symbol + " (" + u.family;
+        if (f && f->reference != u.symbol) one += " : " + hmi::units::formulaText(cat, u.symbol, f->reference);
+        one += ")";
+        if (units.size() + one.size() > 600) {
+            ++left;
+            continue;
+        }
+        units += (units.empty() ? "" : ", ") + one;
+    }
+    for (const auto& f : cfg.unitFamilies) fams += (fams.empty() ? "" : ", ") + f.name + " (" + f.reference + ")";
+    s += "Unit\xC3\xA9s du projet : " + (units.empty() ? std::string("aucune") : units) + (left ? " ... et " + std::to_string(left) + " autres" : std::string{})
+         + (fams.empty() ? std::string{} : " ; ses familles (r\xC3\xA9" "f\xC3\xA9rence) : " + fams) + ".\n";
+}
+
 // 1.20.0 : LES INCIDENTS, SEULEMENT QUAND LA DEMANDE EN PARLE (<< pourquoi cette alarme... >>, << diagnostic >>...) - les
 // trois derniers dossiers qu'elle concerne, resumes (date, alarme, resume, valeurs, pistes et leur certitude,
 // equipements, alarmes liees), au plus 6 Ko : jamais tout le projet ni toute la fiche. Une demande ordinaire n'en recoit
@@ -697,6 +722,7 @@ std::string contextText(const PromptInput& in, const ContextLimits& lim, Context
              "l'arbre du projet) ; tu peux quand m\xC3\xAAme proposer une vue neuve (creer_vue en premier), des variables ou des types IHM.\n";
     selectionPart(in, info, s);
     variablesPart(in, lim, info, s);
+    unitsPart(in, s);        // 1.22.8 : les unites du projet
     s += varfold::treeText(*in.project, lim.folderBytes, &info.folders, &info.foldersListed);   // 1.22.1 : ou ranger les variables creees
     viewsPart(in, lim, s);
     toolsPart(in, lim, s);   // 1.18.0

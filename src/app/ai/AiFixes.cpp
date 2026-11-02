@@ -5,12 +5,14 @@
 
 #include "AiAssistant.hpp"
 #include "AiDelete.hpp"   // 1.22.7 : une suppression refusee (sa strategie, son genre)
+#include "../../hmi/HmiUnits.hpp"   // 1.22.8 : une unite inconnue (la table des unites courantes)
 #include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <map>
 #include <set>
 #include <unordered_map>
 
@@ -93,6 +95,8 @@ ui::Icon iconOf(Action::Kind k) {
         case Action::Kind::Prop: return ui::Icon::Wrench;
         case Action::Kind::Quick:
         case Action::Kind::QuickAll: return ui::Icon::Ok;   // 1.22.7
+        case Action::Kind::Unit:
+        case Action::Kind::UnitAsk: return ui::Icon::Plus;  // 1.22.8
         case Action::Kind::Undo: return ui::Icon::Undo;
         default: return ui::Icon::None;
     }
@@ -212,6 +216,28 @@ bool refusedRemoval(const Proposal& p, const Check& ck, std::size_t op) {
     return false;
 }
 
+// 1.22.8 : UNE UNITE INCONNUE - ce que le logiciel sait d'elle (la table des unites courantes, ramenee au catalogue du projet) :
+// l'operation creer_unite et ce qu'elle poserait (vide : rien de connu, ou refusee).
+struct UnitGuess {
+    Operation op;
+    UnitPlan  plan;
+    bool      ok{false};
+};
+UnitGuess guessUnit(const hmi::Project* project, std::string_view symbol) {
+    UnitGuess g;
+    const hmi::Config cfg = project ? project->config : hmi::Config{};
+    const auto sg = hmi::units::suggestUnit(hmi::units::Catalog(cfg), symbol);
+    if (!sg) return g;
+    g.op = unitOperation(sg->unit, sg->family);
+    g.plan = planUnit(cfg, g.op);
+    g.ok = g.plan.error.empty();
+    return g;
+}
+std::string lowerFirst(std::string t) {
+    if (!t.empty()) t[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(t[0])));
+    return t;
+}
+
 } // namespace
 
 std::vector<Line> errorLines(const Check& ck) {
@@ -304,10 +330,24 @@ Action quick(const Proposal& p, const Check& ck, const Line& l, const hmi::Proje
     }
     const Check::Fault* variable = nullptr;
     const Check::Fault* first = nullptr;
+    const Check::Fault* unit = nullptr;   // 1.22.8
     for (const auto k : l.faults) {
         if (k >= ck.faults.size()) continue;
         if (!first) first = &ck.faults[k];
         if (ck.faults[k].kind == "variable" && !variable) variable = &ck.faults[k];
+        if (ck.faults[k].kind == "unite" && !unit) unit = &ck.faults[k];
+    }
+    // 1.22.8 : UNE UNITE INCONNUE - la creer dans la proposition, SEULEMENT si le logiciel la reconnait (la table) ; sinon grisee.
+    if (unit) {
+        const UnitGuess g = guessUnit(project, unit->name);
+        if (!g.ok)
+            return grey("Famille et facteur inconnus pour " + quoted(unit->name) + " : Cr\xC3\xA9" "er l'unit\xC3\xA9\xE2\x80\xA6 (tu les donnes), ou choisis une "
+                        "unit\xC3\xA9 de la liste.");
+        q.does = Action::Kind::Unit;
+        q.name = g.plan.unit.symbol;
+        q.unit = g.op;
+        q.note = "Cr\xC3\xA9" "er l'" + lowerFirst(unitText(g.plan)) + " (dans la proposition ; v\xC3\xA9rifie la conversion).";
+        return q;
     }
     // UNE VARIABLE INTROUVABLE : la nettement plus proche (toutes les variables du projet), sinon rien - on ne devine pas.
     if (variable) {
@@ -388,10 +428,12 @@ Menu menuFor(const Proposal& p, const Check& ck, const Line& l, const hmi::Proje
     const bool open = p.state == "proposee";
     const Check::Fault* variable = nullptr;
     const Check::Fault* first = nullptr;
+    const Check::Fault* unit = nullptr;   // 1.22.8
     for (const auto k : l.faults) {
         if (k >= ck.faults.size()) continue;
         if (!first) first = &ck.faults[k];
         if (ck.faults[k].kind == "variable" && !variable) variable = &ck.faults[k];
+        if (ck.faults[k].kind == "unite" && !unit) unit = &ck.faults[k];
     }
     // 1.22.7 : CORRIGER RAPIDEMENT, en tete ; puis la correction du logiciel d'un constat qui en a une (1.22.5).
     m.actions.push_back(quick(p, ck, l, project));
@@ -448,6 +490,22 @@ Menu menuFor(const Proposal& p, const Check& ck, const Line& l, const hmi::Proje
             a.name = name;
             a.ops = l.ops;
             m.actions.push_back(std::move(a));
+        }
+    } else if (unit) {
+        // 1.22.8 : UNE UNITE INCONNUE - la creer (la fenetre, pre-remplie si le logiciel la reconnait), ou retirer ce qui l'emploie.
+        m.title = "Unit\xC3\xA9 " + quoted(unit->name) + " inconnue";
+        const UnitGuess g = guessUnit(project, unit->name);
+        Action a = entry(Action::Kind::UnitAsk, "Cr\xC3\xA9" "er l'unit\xC3\xA9 " + quoted(unit->name) + "\xE2\x80\xA6",
+                         g.ok ? "Pr\xC3\xA9-rempli : " + lowerFirst(unitText(g.plan)) + ". Dans la proposition."
+                              : std::string("Sa famille, son facteur, son libell\xC3\xA9 \xC3\xA0 donner. Dans la proposition."));
+        a.name = unit->name;
+        m.actions.push_back(std::move(a));
+        if (!l.ops.empty()) {
+            Action r = entry(Action::Kind::RemoveOps, l.ops.size() > 1 ? "Retirer les " + std::to_string(l.ops.size()) + " op\xC3\xA9rations qui l'emploient"
+                                                                       : std::string("Retirer l'op\xC3\xA9ration qui l'emploie"),
+                             l.ops.size() == 1 ? opLabel(p, l.ops.front()) : std::string("Ce qui en d\xC3\xA9pend est ignor\xC3\xA9."));
+            r.ops = l.ops;
+            m.actions.push_back(std::move(r));
         }
     } else {
         m.title = first && first->kind == "code" ? std::string("Code brut") : l.error ? std::string("Erreur") : std::string("Avertissement");
@@ -522,11 +580,13 @@ std::vector<Correction> corrections(const Proposal& p) {
             x.text = opLabel(p, op) + " : " + r.str("texte");
             x.state = what == "strategie" ? std::string("strat\xC3\xA9gie chang\xC3\xA9" "e")
                     : what == "logiciel"  ? std::string("corrig\xC3\xA9" "e (logiciel)")
+                    : what == "ajout"     ? std::string("ajout\xC3\xA9" "e")   // 1.22.8 : une unite ajoutee (Revenir la retire)
                                           : std::string("retouch\xC3\xA9" "e");
             x.what = 3;
             x.op = op;
             x.key = "r:" + id;
-            x.undo = entry(Action::Kind::Undo, "Revenir", "L'op\xC3\xA9ration reprend sa forme d'avant.");
+            x.undo = entry(Action::Kind::Undo, "Revenir", what == "ajout" ? std::string("L'op\xC3\xA9ration ajout\xC3\xA9" "e quitte la proposition.")
+                                                                          : std::string("L'op\xC3\xA9ration reprend sa forme d'avant."));
             x.undo.value = id;
             x.undo.ops = {op};
             out.push_back(std::move(x));
@@ -560,13 +620,15 @@ std::string summary(const Proposal& p) {
     for (const auto op : p.excluded) removed += op < p.ops.size() ? 1 : 0;
     if (removed) parts.push_back(plural(removed, "op\xC3\xA9ration retir\xC3\xA9" "e", "op\xC3\xA9rations retir\xC3\xA9" "es"));
     // 1.22.7 : les retouches
-    std::size_t strategies = 0, software = 0, touched = 0;
+    std::size_t strategies = 0, software = 0, touched = 0, added = 0;
     for (const auto& c : corrections(p)) {
         if (c.what != 3) continue;
         if (c.state.rfind("strat", 0) == 0) ++strategies;
         else if (c.state.find("logiciel") != std::string::npos) ++software;
+        else if (c.state.rfind("ajout", 0) == 0) ++added;   // 1.22.8
         else ++touched;
     }
+    if (added) parts.push_back(plural(added, "unit\xC3\xA9 ajout\xC3\xA9" "e", "unit\xC3\xA9s ajout\xC3\xA9" "es"));
     if (strategies) parts.push_back(plural(strategies, "strat\xC3\xA9gie chang\xC3\xA9" "e", "strat\xC3\xA9gies chang\xC3\xA9" "es"));
     if (software) parts.push_back(plural(software, "correction du logiciel", "corrections du logiciel"));
     if (touched) parts.push_back(plural(touched, "op\xC3\xA9ration retouch\xC3\xA9" "e", "op\xC3\xA9rations retouch\xC3\xA9" "es"));
@@ -659,6 +721,17 @@ bool apply(Assistant& a, int message, const Action& act, std::string* said) {
                        : act.name + " : " + act.value + " (" + label + ") : la proposition se rev\xC3\xA9rifie.";
             break;
         }
+        // 1.22.8 : une unite ajoutee a la PROPOSITION (jamais au projet) - elle se revalide.
+        case Action::Kind::Unit: {
+            std::string why;
+            ok = a.addUnit(message, act.unit, &why);
+            if (!ok) {
+                if (said) *said = "Rien n'a chang\xC3\xA9 : " + (why.empty() ? std::string(kClosed) : why);
+                return false;
+            }
+            text = "Unit\xC3\xA9 " + act.unit.name + " ajout\xC3\xA9" "e \xC3\xA0 la proposition (le projet ne change pas) : elle se rev\xC3\xA9rifie.";
+            break;
+        }
         case Action::Kind::Undo: {
             std::string why;
             ok = a.undoRetouch(message, act.value, &why);
@@ -688,9 +761,17 @@ std::size_t applyAll(Assistant& a, int message, const std::vector<Action>& quick
     // Puis les variables, les strategies, les proprietes ; les retraits en une seule ecriture.
     std::vector<std::size_t> removed;
     std::size_t              removeLines = 0;
+    std::map<std::string, bool> units;   // 1.22.8 : une unite par symbole (26 lignes en mmCE : une seule creee)
     for (const auto& q : quick) {
         if (!usable(q)) continue;
         switch (q.does) {
+            case Action::Kind::Unit: {
+                const std::string k = foldedName(q.unit.name) + "|" + q.unit.name;
+                auto it = units.find(k);
+                if (it == units.end()) it = units.emplace(k, apply(a, message, q, &last)).first;
+                if (it->second) ++fixed;
+                break;
+            }
             case Action::Kind::Use:
             case Action::Kind::Strategy:
             case Action::Kind::Prop:
@@ -776,6 +857,92 @@ int idOf(const ui::PopupMenu& menu, std::string_view label) {
     };
     walk(menu.items(), {});
     return found;
+}
+
+// ---- 1.22.8 : << Creer l'unite... >> (la petite fenetre) ------------------------------------------------------------------
+namespace {
+// << pression (Pa) >> -> << pression >> ; kNewFamily -> vide.
+std::string familyOfChoice(const std::string& choice) {
+    if (choice == kNewFamily || choice == kPickFamily) return {};
+    const auto cut = choice.find(" (");
+    return trimmed(cut == std::string::npos ? choice : choice.substr(0, cut));
+}
+} // namespace
+
+UnitForm unitForm(const hmi::Project& project, std::string_view symbol) {
+    namespace hu = hmi::units;
+    UnitForm f;
+    f.labels = {"Symbole", "Famille", "Facteur", "D\xC3\xA9" "calage", "Libell\xC3\xA9", "Famille neuve : nom", "Famille neuve : r\xC3\xA9" "f\xC3\xA9rence",
+                "Famille neuve : libell\xC3\xA9"};
+    const hu::Catalog cat(project.config);
+    for (const auto& fam : cat.families()) f.families.push_back(fam.name + " (" + fam.reference + ")");
+    f.families.push_back(kNewFamily);
+    f.values.assign(f.labels.size(), std::string{});
+    f.values[0] = trimmed(symbol);
+    f.values[1] = kPickFamily;
+    f.values[3] = "0";
+    if (const auto sg = hu::suggestUnit(cat, symbol)) {
+        f.known = true;
+        f.values[0] = sg->unit.symbol;
+        f.values[2] = hu::exactNumber(sg->unit.factor);
+        f.values[3] = hu::exactNumber(sg->unit.offset);
+        f.values[4] = sg->unit.label;
+        if (sg->family.name.empty()) {
+            if (const hmi::UnitFamily* fam = cat.family(sg->unit.family)) f.values[1] = fam->name + " (" + fam->reference + ")";
+        } else {
+            f.values[1] = kNewFamily;
+            f.values[5] = sg->family.name;
+            f.values[6] = sg->family.reference;
+            f.values[7] = sg->family.label;
+        }
+    }
+    if (!f.known) f.families.insert(f.families.begin(), kPickFamily);   // rien de choisi d'office : la famille se donne
+    f.explanation = std::string(f.known ? "Le logiciel reconna\xC3\xAEt " + (kOpen + f.values[0] + kClose) + " : tout est pr\xC3\xA9-rempli, v\xC3\xA9rifie-le."
+                                        : "Le logiciel ne conna\xC3\xAEt pas " + (kOpen + f.values[0] + kClose) + " : donne sa famille et son facteur.")
+                    + " valeur de r\xC3\xA9" "f\xC3\xA9rence = valeur \xC3\x97 facteur + d\xC3\xA9" "calage. L'unit\xC3\xA9 est AJOUT\xC3\x89" "E \xC3\x80 LA PROPOSITION "
+                      "(pas au projet) : elle se cr\xC3\xA9" "e \xC3\xA0 Appliquer, avec le reste (un seul Ctrl+Z).";
+    return f;
+}
+
+Operation unitFromForm(const std::vector<std::string>& v) {
+    const auto at = [&](std::size_t i) { return i < v.size() ? trimmed(v[i]) : std::string{}; };
+    Operation op;
+    op.action = Operation::Action::Unit;
+    op.name = at(0);
+    const bool fresh = at(1) == kNewFamily;
+    op.props.emplace_back("famille", fresh ? at(5) : familyOfChoice(at(1)));
+    if (!at(2).empty()) op.props.emplace_back("facteur", at(2));
+    if (!at(3).empty() && at(3) != "0") op.props.emplace_back("decalage", at(3));
+    if (!at(4).empty()) op.props.emplace_back("libelle", at(4));
+    if (fresh) {
+        op.props.emplace_back("reference", at(6).empty() ? at(0) : at(6));
+        if (!at(7).empty()) op.props.emplace_back("libelle_famille", at(7));
+    }
+    return op;
+}
+
+std::string unitFormCheck(const hmi::Config& cfg, const std::vector<std::string>& values, int* field, bool* ok) {
+    const UnitPlan pl = planUnit(cfg, unitFromForm(values));
+    if (field) *field = -1;
+    if (ok) *ok = pl.error.empty();
+    if (!pl.error.empty()) {
+        if (field) {
+            const bool fresh = values.size() > 1 && trimmed(values[1]) == kNewFamily;
+            switch (pl.field) {
+                case UnitPlan::Field::Symbol: *field = 0; break;
+                case UnitPlan::Field::Family: *field = fresh ? 5 : 1; break;
+                case UnitPlan::Field::Factor: *field = 2; break;
+                case UnitPlan::Field::Offset: *field = 3; break;
+                case UnitPlan::Field::Reference: *field = 6; break;
+                case UnitPlan::Field::None: *field = 1; break;
+            }
+        }
+        return pl.error;
+    }
+    if (pl.same) return quoted(pl.unit.symbol) + " existe d\xC3\xA9j\xC3\xA0 \xC3\xA0 l'identique : rien \xC3\xA0 ajouter.";
+    std::string t = unitText(pl);
+    for (const auto& w : pl.warnings) t += " \xE2\x80\x94 " + w;
+    return t;
 }
 
 } // namespace app::ai::fixes

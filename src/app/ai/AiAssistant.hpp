@@ -441,6 +441,11 @@ public:
     bool setDeleteStrategy(int message, std::size_t op, std::string strategy, std::string* why = nullptr);
     bool setOperationProperty(int message, std::size_t op, const std::string& key, const std::string& value, std::string* why = nullptr);
     bool undoRetouch(int message, const std::string& id, std::string* why = nullptr);
+    // 1.22.8 : UNE UNITE AJOUTEE A LA PROPOSITION (<< Creer l'unite... >>, Corriger rapidement une unite inconnue) - l'operation
+    // creer_unite `op` va au bout de la proposition (le plan la pose avant les variables qui l'emploient), gardee comme une
+    // RETOUCHE << ajout >> (CORRECTIONS la liste ; Revenir - undoRetouch - la retire) ; jamais au projet. Le meme symbole deja
+    // ajoute : rien de plus (vrai). Faux et `why` : plus << proposee >>, pas une creer_unite, une unite que planUnit refuse.
+    bool addUnit(int message, const Operation& op, std::string* why = nullptr);
     // 1.14.2 : CE QU'EST DEVENUE UNE PROPOSITION APPLIQUEE, d'apres la vue telle qu'elle est (les
     // empreintes d'avant et d'apres Appliquer) : toujours appliquee ; annulee (Ctrl+Z, ou le projet
     // rouvert sans avoir ete enregistre : la vue est revenue a son etat d'avant) ; ou la vue a change

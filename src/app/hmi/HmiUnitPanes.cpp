@@ -106,19 +106,9 @@ bool parseDouble(std::string_view text, double& out) {
     return end && *end == '\0' && std::isfinite(out);
 }
 
-bool familyNameOk(std::string_view n) {
-    if (n.empty() || std::isdigit(static_cast<unsigned char>(n.front()))) return false;
-    return std::all_of(n.begin(), n.end(), [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
-    });
-}
-
-bool symbolOk(std::string_view s) {
-    if (s.empty() || s.size() > 16) return false;
-    for (const char c : s)
-        if (std::isspace(static_cast<unsigned char>(c)) || c == '[' || c == ']' || c == '\'' || c == '"' || c == ';') return false;
-    return true;
-}
+// 1.22.8 : le symbole, le nom d'une famille - les controles partages avec l'Assistant IA (hmi::units).
+bool familyNameOk(std::string_view n) { return hu::familyNameOk(n); }
+bool symbolOk(std::string_view s) { return hu::symbolOk(s); }
 
 } // namespace
 
@@ -1099,17 +1089,9 @@ void HmiUnitConvertPage::onPaint(const ui::PaintContext& ctx) {
 }
 
 // ============================================ Configuration > Unites de mesure ===
-bool HmiMeasureUnitsPane::builtinUnit(std::string_view symbol) {
-    for (const auto& u : hu::builtinUnits())
-        if (fold(u.symbol) == fold(symbol)) return true;
-    return false;
-}
+bool HmiMeasureUnitsPane::builtinUnit(std::string_view symbol) { return hu::builtinUnit(symbol); }       // 1.22.8 : partage
 
-bool HmiMeasureUnitsPane::builtinFamily(std::string_view name) {
-    for (const auto& f : hu::builtinFamilies())
-        if (fold(f.name) == fold(name)) return true;
-    return false;
-}
+bool HmiMeasureUnitsPane::builtinFamily(std::string_view name) { return hu::builtinFamily(name); }
 
 HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
@@ -1456,13 +1438,9 @@ bool HmiMeasureUnitsPane::addFamily(const std::string& rawName, const std::strin
         say("Famille refus\xC3\xA9" "e : " + w, true);
         return false;
     };
-    if (!familyNameOk(name)) return refuse("son nom : des minuscules, des chiffres et _ (pas de chiffre en t\xC3\xAAte)");
     const hu::Catalog cat(doc_->project.config);
-    if (cat.family(name)) return refuse("la famille \xC2\xAB " + name + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0");
-    if (!symbolOk(ref)) return refuse("sa r\xC3\xA9" "f\xC3\xA9rence : un symbole court, sans espace (bar, m3/h)");
-    if (const auto* u = cat.unit(ref))
-        return refuse("\xC2\xAB " + ref + " \xC2\xBB est d\xC3\xA9j\xC3\xA0 une unit\xC3\xA9 (" + cat.familyLabel(u->family)
-                      + ") : la r\xC3\xA9" "f\xC3\xA9rence d'une famille nouvelle est une unit\xC3\xA9 nouvelle");
+    // 1.22.8 : les controles partages avec l'Assistant IA (creer_unite d'une famille neuve).
+    if (const std::string bad = hu::newFamilyProblem(cat, name, ref); !bad.empty()) return refuse(bad);
     const bool ok = commit("Nouvelle famille " + name, [&](hmi::Project& p, std::string*) {
         p.config.unitFamilies.push_back({name, ref, trim(label)});
         p.config.units.push_back({ref, name, 1.0, 0.0, {}});
@@ -1592,15 +1570,10 @@ bool HmiMeasureUnitsPane::addUnit(const hmi::UnitDef& rawUnit, std::string* why)
         say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
         return false;
     };
-    if (!symbolOk(u.symbol)) return refuse("son symbole : court, sans espace ni crochet (bar, m3/h, %)");
     const hu::Catalog cat(doc_->project.config);
-    if (const auto* other = cat.unit(u.symbol))
-        return refuse("\xC2\xAB " + u.symbol + " \xC2\xBB existe d\xC3\xA9j\xC3\xA0 (" + cat.familyLabel(other->family) + ")");
-    const auto* f = cat.family(u.family);
-    if (!f) return refuse("famille inconnue \xC2\xAB " + u.family + " \xC2\xBB");
-    u.family = f->name;
-    if (!std::isfinite(u.factor) || u.factor == 0.0) return refuse("le facteur doit \xC3\xAAtre un nombre non nul");
-    if (!std::isfinite(u.offset)) return refuse("le d\xC3\xA9" "calage doit \xC3\xAAtre un nombre");
+    // 1.22.8 : les controles partages avec l'Assistant IA (creer_unite) - le symbole libre (fourni ou du projet), la famille
+    // connue, le facteur non nul.
+    if (const std::string bad = hu::newUnitProblem(cat, u, &u.family); !bad.empty()) return refuse(bad);
     const bool ok = commit("Nouvelle unit\xC3\xA9 " + u.symbol, [&](hmi::Project& p, std::string*) {
         p.config.units.push_back(u);
         return true;
@@ -1618,15 +1591,10 @@ bool HmiMeasureUnitsPane::updateUnit(const std::string& symbol, const hmi::UnitD
         if (why) *why = w;
         return false;
     };
-    if (builtinUnit(symbol)) return refuse("une unit\xC3\xA9 fournie est verrouill\xC3\xA9" "e (ajoute plut\xC3\xB4t une unit\xC3\xA9 du projet)");
+    // 1.22.8 : les controles partages avec l'Assistant IA (modifier_unite).
+    if (const std::string bad = hu::unitChangeProblem(doc_->project.config, symbol, after.factor, after.offset); !bad.empty()) return refuse(bad);
     const auto& us = doc_->project.config.units;
     const auto it = std::find_if(us.begin(), us.end(), [&](const hmi::UnitDef& u) { return fold(u.symbol) == fold(symbol); });
-    if (it == us.end()) return refuse("unit\xC3\xA9 introuvable");
-    if (!std::isfinite(after.factor) || after.factor == 0.0) return refuse("le facteur doit \xC3\xAAtre un nombre non nul");
-    if (!std::isfinite(after.offset)) return refuse("le d\xC3\xA9" "calage doit \xC3\xAAtre un nombre");
-    const hu::Catalog cat(doc_->project.config);
-    if (const auto* f = cat.family(it->family); f && fold(f->reference) == fold(symbol) && (after.factor != 1.0 || after.offset != 0.0))
-        return refuse(symbol + " est la r\xC3\xA9" "f\xC3\xA9rence de sa famille : facteur 1, d\xC3\xA9" "calage 0");
     hmi::UnitDef next = *it;
     next.label = trim(after.label);
     next.factor = after.factor;

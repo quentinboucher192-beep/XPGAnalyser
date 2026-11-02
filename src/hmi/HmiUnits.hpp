@@ -158,4 +158,55 @@ struct ConverterLayout {
 // "liste:haut", "liste:bas" (la liste, au-dela de ses lignes) ; "" : rien.
 [[nodiscard]] std::string converterHit(const ConverterLayout&, double x, double y);
 
+// =============================================================================
+//  1.22.8 : CREER UNE UNITE - les controles de Configuration > Unites de mesure, PARTAGES avec l'Assistant IA
+//  (creer_unite, modifier_unite) : une seule regle, une seule raison. Et une petite table d'unites COURANTES que le
+//  logiciel reconnait sans les fournir (mmCE, %HR, t/h, kW...) : leur famille, leur facteur vers la reference de la
+//  famille - pour pre-remplir << Creer l'unite... >>, et pour VERIFIER le facteur que l'IA donne (un avertissement,
+//  jamais un refus).
+// =============================================================================
+// Un symbole : court (16 octets au plus), sans espace, crochet, apostrophe, guillemet ni point-virgule (bar, m3/h, %).
+[[nodiscard]] bool symbolOk(std::string_view symbol);
+// Un nom de famille : des minuscules, des chiffres et _ (pas de chiffre en tete).
+[[nodiscard]] bool familyNameOk(std::string_view name);
+// Une unite NEUVE (`u.family` : une famille du catalogue, par son nom ou son libelle) : "" = bonne ; sinon la raison - un
+// symbole mal forme, deja pris (une unite fournie ou du projet : on le nomme), une famille inconnue, un facteur nul, un
+// decalage illisible. `family` (non nul) : le nom de la famille trouvee.
+[[nodiscard]] std::string newUnitProblem(const Catalog&, const UnitDef& u, std::string* family = nullptr);
+// Une famille NEUVE et sa reference (un symbole neuf : l'unite de reference est creee avec elle) : "" = bonne.
+[[nodiscard]] std::string newFamilyProblem(const Catalog&, std::string_view name, std::string_view reference);
+// Changer le facteur et le decalage de l'unite `symbol` du projet (`cfg.units`) : "" = permis. Une fournie est verrouillee ;
+// la reference d'une famille garde facteur 1 et decalage 0.
+[[nodiscard]] std::string unitChangeProblem(const Config& cfg, std::string_view symbol, double factor, double offset);
+// Vrai : une unite, une famille de la bibliotheque fournie (verrouillee).
+[[nodiscard]] bool builtinUnit(std::string_view symbol);
+[[nodiscard]] bool builtinFamily(std::string_view name);
+
+// Une unite courante connue (la table) : son facteur et son decalage vers `reference`, la reference de sa famille ;
+// `familyLabel` : le libelle d'une famille neuve (puissance, humidite, debit massique...).
+struct KnownUnit {
+    std::string_view symbol, family;
+    double           factor{1.0}, offset{0.0};
+    std::string_view label, reference, familyLabel;
+};
+[[nodiscard]] const std::vector<KnownUnit>& knownUnits();
+[[nodiscard]] const KnownUnit* knownUnit(std::string_view symbol);   // sans casse ni accents, comme le catalogue
+// Ce que la table dit d'un symbole, RAMENE AU CATALOGUE : l'unite (sa famille telle que le catalogue la nomme, son
+// facteur vers la reference de CETTE famille) et, quand la famille manque, la famille a creer avec sa reference (son
+// nom vide : elle existe). Rien : un symbole hors de la table, ou une famille du catalogue dont la reference ne se relie
+// pas a la table. `reference` (non vide) : la reference d'une famille neuve deja choisie (l'IA, la fenetre).
+struct Suggestion {
+    UnitDef    unit;
+    UnitFamily family;
+};
+[[nodiscard]] std::optional<Suggestion> expected(const Catalog&, std::string_view symbol, std::string_view reference = {});
+// La meme chose pour un symbole que le catalogue n'a PAS encore (<< Creer l'unite... >> pre-rempli) ; rien s'il l'a deja.
+[[nodiscard]] std::optional<Suggestion> suggestUnit(const Catalog&, std::string_view symbol);
+// LA COHERENCE d'une unite proposee avec la table (meme symbole) : "" si rien a dire (inconnue de la table, ou
+// conforme a 1 % pres) ; sinon l'avertissement - une autre famille, un facteur loin de l'habituel. `reference` : celle
+// d'une famille neuve.
+[[nodiscard]] std::string coherenceWarning(const Catalog&, const UnitDef& u, std::string_view reference = {});
+// Le nombre exact d'un facteur, pour le garder en texte (le plus court qui se relit au meme double : 9.80665, 1e-06).
+[[nodiscard]] std::string exactNumber(double v);
+
 } // namespace hmi::units

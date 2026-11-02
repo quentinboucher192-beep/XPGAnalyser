@@ -776,6 +776,11 @@ if(XPG_BUILD_TESTS)
     # la reverification de fond d'une grosse proposition.
     xpg_add_test_executable(ai_rapide_test tests/ai_rapide_test.cpp)
     xpg_target_link_libraries(ai_rapide_test PRIVATE xpg_app)
+    # 1.22.8 : l'Assistant IA cree des unites de mesure (creer_unite, modifier_unite : les controles de l'editeur, la table des
+    # unites courantes, le facteur verifie, la conversion montree), le plan les pose avant les variables ; la regle 25 ; la
+    # correction rapide d'une << unite inconnue >> (une seule unite pour toutes ses lignes) et << Creer l'unite... >>.
+    xpg_add_test_executable(ai_unites_test tests/ai_unites_test.cpp)
+    xpg_target_link_libraries(ai_unites_test PRIVATE xpg_app)
     # 1.22.6 : l'Assistant IA change les options des variables (lecture seule, renommer, dossier, adresse...), la securite
     # (groupes, utilisateurs - jamais de mot de passe ; sensible : jamais sans clic en mode Direct) et les liens des vues
     # (parente, modele, en-tete et pied et les objets qu'ils recouvrent, la vue de demarrage).
@@ -994,6 +999,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aibuild COMMAND ai_build_test)                        # 1.22.5 : l'avis du logiciel (Generer et Compiler la proposition)
     xpg_add_test(NAME aivues COMMAND ai_vues_test)                          # 1.22.6 : la previsualisation de toutes les vues d'une proposition
     xpg_add_test(NAME airapide COMMAND ai_rapide_test)                      # 1.22.7 : Retour, Corriger rapidement (la previsualisation)
+    xpg_add_test(NAME aiunites COMMAND ai_unites_test)                      # 1.22.8 : l'Assistant IA cree des unites de mesure
     xpg_add_test(NAME aisecurite COMMAND ai_securite_test)                  # 1.22.6 : les options des variables, la securite, les liens des vues
     xpg_add_test(NAME aiactivite COMMAND ai_activite_test)                  # 1.22.6 : ce que fait l'IA en direct, ce que ca coute
     xpg_add_test(NAME aimodelesfichiers COMMAND ai_modeles_fichiers_test)   # 1.21.0 : les modeles de fichiers (E/S, reseau, reports)

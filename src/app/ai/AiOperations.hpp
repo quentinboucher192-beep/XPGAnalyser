@@ -82,6 +82,15 @@
 //                       d'un meme decalage (decaler, par defaut) ;
 //    vue_de_demarrage   la vue ouverte au lancement.
 //  Activer la securite sans compte actif qui puisse administrer et se connecter : refuse (on se fermerait dehors).
+//
+//    1.22.8 (LES UNITES DE MESURE - a la fin) :
+//    creer_unite        une unite du projet : symbole, famille (connue, ou NEUVE dite par sa reference), facteur et
+//                       decalage vers la reference de la famille, libelle - les controles de Configuration > Unites de
+//                       mesure (hmi::units : newUnitProblem, newFamilyProblem) ; le facteur d'une unite courante connue
+//                       (mmCE, %HR, kW...) VERIFIE : loin de l'habituel, un avertissement ; la conversion MONTREE dans
+//                       l'apercu (<< 1 mmCE = 9,80665 Pa >>). Le plan la pose AVANT les variables qui l'emploient ;
+//    modifier_unite     une unite du projet : facteur, decalage, libelle (une fournie : verrouillee) ;
+//    creer_variables + unite  l'unite de chaque variable (connue, ou creee dans la proposition).
 //  Desactiver la securite, retirer le dernier compte (ou groupe) qui administre : SENSIBLE (sensitive) - dit en tete de
 //  l'apercu et de la carte ; le mode Direct ne l'applique jamais sans clic.
 //
@@ -129,9 +138,11 @@ struct Operation {
     // Folder (creer_dossier), Store (ranger).
     // 1.22.6 (a la fin) : VarEdit (modifier_variable), Security (securite), Group (creer_groupe), GroupEdit (modifier_groupe),
     // User (creer_utilisateur), UserEdit (modifier_utilisateur), ViewEdit (modifier_vue), StartView (vue_de_demarrage).
+    // 1.22.8 (a la fin) : Unit (creer_unite), UnitEdit (modifier_unite).
     enum class Action : std::uint8_t { Create, Modify, Bind, Align, Distribute, Remove, Duplicate, Code, View, Variables, Type,
                                        Equipment, Address, Script, Function, Alarm, Resource, Folder, Store,
-                                       VarEdit, Security, Group, GroupEdit, User, UserEdit, ViewEdit, StartView };
+                                       VarEdit, Security, Group, GroupEdit, User, UserEdit, ViewEdit, StartView,
+                                       Unit, UnitEdit };
     Action                                           action{Action::Create};
     std::string                                      kind;      // creer : la cle du genre ("Tank")
     std::string                                      name;      // creer : le nom voulu ; modifier, associer : l'objet
@@ -155,6 +166,9 @@ struct Operation {
         // de l'operation, "dossier", sinon deduit - AiVarFolders.hpp). Le JSON : "dossier". Dans Check::newVariables : le
         // dossier final ("" : la racine).
         std::string folder{};
+        // 1.22.8 (a la fin) : creer_variables - son unite ("mmCE" : connue, ou creee dans la proposition ; vide : sans). Le JSON :
+        // "unite". Dans Check::newVariables : le symbole du catalogue.
+        std::string unit{};
         bool operator==(const VariableSpec&) const = default;
     };
     struct MemberSpec {
@@ -442,6 +456,29 @@ inline constexpr std::size_t kHeavyOps = 40;
 [[nodiscard]] bool secretField(Operation::Action, std::string_view key);
 // Le debut de l'avertissement d'une proposition sensible (en tete de l'apercu et de la carte).
 inline constexpr std::string_view kSensitive = "OP\xC3\x89RATION SENSIBLE";
+
+// ---- 1.22.8 : les unites de mesure (creer_unite) ------------------------------------
+// Ce que creer_unite poserait sur `cfg` (les unites du projet), ou la raison du refus (`error`, et le champ en cause :
+// symbole, famille, facteur, decalage, reference) ; les avertissements (un facteur loin de celui d'une unite courante de
+// meme symbole) ; la famille neuve (son nom vide : elle existe) et sa reference ; l'unite (sa famille resolue) ; la
+// conversion lue (<< 1 mmCE = 9,80665 Pa >>) ; `same` : elle existe deja a l'identique (rien a poser).
+struct UnitPlan {
+    enum class Field : std::uint8_t { None, Symbol, Family, Factor, Offset, Reference };
+    std::string              error;
+    Field                    field{Field::None};
+    std::vector<std::string> warnings;
+    hmi::UnitFamily          family;
+    hmi::UnitDef             unit;
+    std::string              familyLabel;     // << pression >>, << debit massique >> (son libelle, en minuscule)
+    std::string              conversion;
+    bool                     same{false};
+};
+[[nodiscard]] UnitPlan planUnit(const hmi::Config&, const Operation&);
+// L'operation creer_unite d'une unite (le facteur et le decalage en texte exact ; `family.name` non vide : une famille neuve,
+// sa reference, son libelle).
+[[nodiscard]] Operation unitOperation(const hmi::UnitDef&, const hmi::UnitFamily& family = {});
+// << Unite mmCE (pression) : 1 mmCE = 9,80665 Pa >> - la ligne de l'apercu, de la correction.
+[[nodiscard]] std::string unitText(const UnitPlan&);
 
 // ---- appliquer -------------------------------------------------------------------
 // Les operations sur `view` (une vue de `project`, ou sa copie) ; les identifiants neufs
