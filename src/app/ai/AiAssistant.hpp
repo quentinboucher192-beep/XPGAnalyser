@@ -56,6 +56,7 @@
 #include "AiProvider.hpp"
 #include "AiStore.hpp"
 #include "AiUsage.hpp"
+#include "AiViewTemplates.hpp"   // 1.22.8 : les modeles de vues (un PV d'approbation, des captures)
 
 #include <atomic>
 #include <thread>
@@ -198,6 +199,14 @@ public:
     bool clearWorkbookChoice(const std::string& attachmentId, std::string* why = nullptr);
     // Les lectures de classeurs finies (les essais : attendre, puis tick).
     bool waitWorkbooks(int ms);
+
+    // ---- 1.22.8 : LES MODELES DE VUES (AiViewTemplates.hpp) ----------------------------------------------------------
+    // Les modeles de vues de la conversation ouverte et du prochain message : un PV d'approbation reconnu, une capture choisie
+    // (le plus recent d'abord) - lus par l'analyse (les vues, leurs images recadrees, la charte).
+    [[nodiscard]] std::vector<viewtpl::Attached> viewTemplates() const;
+    // LE CHOIX << Modele de vues >> d'une piece (une image, un PDF) : on - la lire comme un modele de vues (son analyse est
+    // refaite : ses vues, sa charte), off - ne plus la lire ainsi. Garde avec la piece et enregistre.
+    bool setViewTemplateChoice(const std::string& attachmentId, bool on, std::string* why = nullptr);
 
     // ---- 1.22.0 : LES MISSIONS IA PERSISTANTES (AiMission.hpp, AiMissionStore.hpp) ----------------------------------
     // Une demande complexe devient une MISSION : un plan d'etapes ordonnees par leurs dependances, des propositions
@@ -724,6 +733,7 @@ private:
     void pollWorkbooks();
     void keepWorkbook(const std::string& id, std::shared_ptr<const sheets::Workbook> wb) const;
     [[nodiscard]] std::vector<sheets::Attached> attachedWorkbooks(const Conversation* c, bool withPending) const;
+    [[nodiscard]] std::vector<viewtpl::Attached> attachedTemplates(const Conversation* c, bool withPending) const;   // 1.22.8
     Attachment* attachmentMut(const std::string& attachmentId, Conversation** owner);
     std::unique_ptr<Provider>              provider_;
     std::vector<std::unique_ptr<Provider>> retiring_;   // arretes : ils finissent sur leur fil

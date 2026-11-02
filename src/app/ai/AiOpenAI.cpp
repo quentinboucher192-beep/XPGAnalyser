@@ -278,6 +278,12 @@ std::string openAIBody(const ProviderRequest& req, bool withTools, bool streamUs
                     r.parts.push_back({false, (matches && t.toolResultError ? "Erreur : " : "") + result});
                     msgs.push_back(std::move(r));
                 }
+                // 1.22.8 : les images d'un outil local (voir_vue_modele) - un message << tool >> n'est que du texte chez ces
+                // services : elles partent dans le message de l'utilisateur qui suit le retour, dans la meme demande.
+                if (matches && !t.toolResultImages.empty()) {
+                    m.parts.push_back({false, "[Les images rendues par l'outil, en r\xC3\xA9ponse \xC3\xA0 l'appel pr\xC3\xA9" "c\xC3\xA9" "dent.]"});
+                    for (const auto& img : t.toolResultImages) attachmentParts(img, m.parts);
+                }
                 pendingTool.clear();
             }
             if (contextInTurn && static_cast<int>(ti) == req.contextTurn)
@@ -892,6 +898,7 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
                 // 1.21.0 : ou un outil local (le bac a sable) : sa reponse, de meme.
                 std::string result;
+                std::vector<ProviderAttachment> images;   // 1.22.8 : celles d'un outil qui en montre (voir_vue_modele)
                 {   // 1.22.6 : l'outil repondu ici commence (l'activite)
                     ProviderEvent pe;
                     pe.type = ProviderEvent::Type::Progress;
@@ -905,7 +912,13 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                     const LocalTool& tool = request.localTools[static_cast<std::size_t>(li)];
                     ++localCalls[static_cast<std::size_t>(li)];
                     const auto say = [this](const std::string& detail) { push(statusEvent("outil", detail)); };
-                    result = tool.run ? tool.run(readCall->toolInputJson, say, cancelled_) : std::string("outil indisponible");
+                    if (tool.runRich) {
+                        LocalToolReply rich = tool.runRich(readCall->toolInputJson, say, cancelled_);
+                        result = std::move(rich.text);
+                        images = std::move(rich.images);
+                    } else {
+                        result = tool.run ? tool.run(readCall->toolInputJson, say, cancelled_) : std::string("outil indisponible");
+                    }
                     if (cancelled_) return finish(doneEvent("arrete"));
                 } else {
                     ++reads;
@@ -922,6 +935,7 @@ void OpenAIProvider::run(ProviderRequest request, OpenAITarget target) {
                 ProviderTurn u;
                 u.toolResultFor = readCall->toolUseId;
                 u.toolResultText = result;
+                u.toolResultImages = std::move(images);
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(u));
                 {   // 1.22.6 : la suite part : un nouvel appel au service

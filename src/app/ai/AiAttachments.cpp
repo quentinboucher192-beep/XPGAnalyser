@@ -7,6 +7,7 @@
 #include "AiMemoryJson.hpp"
 #include "AiPaths.hpp"
 #include "AiTextParts.hpp"
+#include "AiViewTemplates.hpp"   // 1.22.8 : le modele de vues (un PV d'approbation, une capture)
 #include "AiWorkbook.hpp"
 #include "../../core/AtomicFile.hpp"
 #include "../../hmi/HmiCrypto.hpp"
@@ -217,6 +218,7 @@ bool extractPdf(std::string_view bytes, const Limits& L, Extraction& x, std::str
     if (!hmi::pdf::extractText(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size(), pages, &why, L.maxPages, &total)) return false;
     an.pages = total;
     std::size_t letters = 0;
+    x.pages = pages;   // 1.22.8 : page par page (le modele de vues)
     for (std::size_t i = 0; i < pages.size(); ++i) {
         x.text += "--- Page " + std::to_string(i + 1) + " ---\n" + pages[i];
         if (!x.text.empty() && x.text.back() != '\n') x.text += '\n';
@@ -633,6 +635,17 @@ Outcome analyzeNow(const Attachment& a, const Limits& L) {
         sheets::applyRecognition(x.analysis, rec);
         o.model = rec.modelId;
         o.workbook = x.workbook;
+    }
+    // 1.22.8 : UN MODELE DE VUES - un PDF dont le texte le dit (un PV d'approbation de vues), une image choisie comme modele :
+    // ses vues, leurs images recadrees (dans le cache), la charte ; ici, sur le fil d'analyse (AiViewTemplates.hpp).
+    if (x.ok && viewtpl::wanted(a)) {
+        const std::string ext = extOf(a);
+        viewtpl::Template t;
+        std::string why;
+        const bool found = ext == "pdf" ? viewtpl::analyzePdf(bytes, x.pages, viewtpl::cacheFolder(a.id), t, &why)
+                                        : viewtpl::analyzeImage(bytes, ext, a.name, viewtpl::cacheFolder(a.id), t, &why);
+        if (found) viewtpl::applyTemplate(x.analysis, t);
+        else if (ext != "pdf") x.analysis.details.push_back("mod\xC3\xA8le de vues : " + why);
     }
     if (av == Availability::Moved) x.analysis.details.push_back("copie retrouv\xC3\xA9" "e ailleurs : " + where);
     if (x.ok && !x.textIsOriginal && !x.text.empty()) {

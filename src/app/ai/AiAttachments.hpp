@@ -20,7 +20,9 @@
 //      cellules, AiWorkbook.hpp ; 1.21.0 : le classeur RECONNU - un modele de
 //      fichier de la memoire, sinon la detection : liste d'E/S, reseau, reports,
 //      AiFileModels.hpp), la taille d'une image PNG ou JPEG (l'analyse visuelle
-//      reste celle du modele), un fichier natif reconnu. Un fichier manquant,
+//      reste celle du modele), un fichier natif reconnu ; 1.22.8 : UN MODELE DE VUES (un
+//      PDF dont le texte le dit, une image choisie : ses vues, leurs images recadrees,
+//      la charte - AiViewTemplates.hpp). Un fichier manquant,
 //      abime, trop volumineux : un echec, et pourquoi. Le texte extrait va dans
 //      cache/documents/<id>.txt (il se regenere : vider le cache ne perd rien, la
 //      piece jointe reste intacte) ; les resultats de l'analyse restent avec la
@@ -90,6 +92,8 @@ struct Extraction {
     // 1.21.0 (les modeles de fichiers, a la fin) : un classeur lu - ses feuilles, ses cases a leur place, ses fusions
     // (AiWorkbook.hpp) ; nul : pas un classeur.
     std::shared_ptr<const sheets::Workbook> workbook;
+    // 1.22.8 (a la fin) : un PDF - le texte de chacune de ses pages (le modele de vues les lit : AiViewTemplates.hpp).
+    std::vector<std::string> pages;
 };
 // Analyse des octets (sans disque) selon l'extension ; de n'importe quel fil (PDFium : son verrou).
 [[nodiscard]] Extraction extractBytes(std::string_view bytes, std::string_view ext, const Limits& limits = {});

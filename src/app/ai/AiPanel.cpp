@@ -923,6 +923,20 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
             return;
         }
         case 5: {   // 1.21.0 : << Modele... >> - le genre, la correspondance, les modeles de fichiers ; le choix reste avec la piece
+            // 1.22.8 : un PDF, une image - << Modele de vues >> : la lire (ou ne plus la lire) comme un modele de vues a reproduire
+            if (!sheets::workbookExt(f->attachment.ext) && viewtpl::candidate(f->attachment)) {
+                const bool on = !viewtpl::templateOf(f->attachment).has_value();
+                std::string why;
+                if (!assistant_->setViewTemplateChoice(attachmentId, on, &why)) say("Assistant IA : " + why);
+                else if (on)
+                    say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est lu comme un mod\xC3\xA8le de vues (ses vues, leurs images, la charte) : "
+                        "demande \xC2\xAB Reproduis ce mod\xC3\xA8le avec les donn\xC3\xA9" "es du projet \xC2\xBB.");
+                else
+                    say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB n'est plus lu comme un mod\xC3\xA8le de vues.");
+                seen_ = 0;
+                sync();
+                return;
+            }
             if (f->availability == attach::Availability::Missing) {
                 say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est manquant : son classeur ne peut pas \xC3\xAAtre relu.");
                 return;

@@ -76,6 +76,16 @@ struct ProviderTurn {
     std::string toolResultFor;                         // l'id de l'appel ; vide : aucune
     std::string toolResultText;                        // "appliquee", "refusee", "en attente"...
     bool        toolResultError{false};
+    // 1.22.8 (a la fin) : les IMAGES du retour d'un outil local (voir_vue_modele, LocalTool::runRich). Anthropic : des blocs
+    // image dans le tool_result ; un service compatible OpenAI (un message << tool >> n'est que du texte) : jointes au message
+    // de l'utilisateur qui suit le retour, dans la meme demande.
+    std::vector<ProviderAttachment> toolResultImages;
+};
+
+// 1.22.8 : la reponse d'un outil local qui montre aussi des IMAGES (voir_vue_modele : la vue d'un modele de vues, recadree).
+struct LocalToolReply {
+    std::string                     text;
+    std::vector<ProviderAttachment> images;   // des PNG ou des JPEG du cache (path), envoyes avec le texte
 };
 
 // 1.21.0 : UN OUTIL LOCAL - un appel de l'IA repondu sur le fil du fournisseur (jamais sur celui de l'interface), puis la
@@ -89,6 +99,9 @@ struct LocalTool {
     // `cancelled` : Arreter. Appelee sur le fil du fournisseur : elle ne touche ni le projet vivant ni l'interface.
     std::function<std::string(const std::string& inputJson, const std::function<void(const std::string&)>& status,
                               const std::atomic<bool>& cancelled)> run;
+    // 1.22.8 (a la fin) : un outil qui rend aussi des images (voir_vue_modele) ; s'il est la, il est appele a la place de run.
+    std::function<LocalToolReply(const std::string& inputJson, const std::function<void(const std::string&)>& status,
+                                 const std::atomic<bool>& cancelled)> runRich;
 };
 
 struct ProviderRequest {
