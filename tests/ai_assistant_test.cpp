@@ -46,7 +46,9 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -480,6 +482,13 @@ void testAttachments() {
     f.render(rec);
     check(rec.saw("traitement"), "le panneau montre le traitement");
     f.step(1.0);
+    // 1.22.9 : depuis la 1.22.8, un PDF joint est aussi lu comme un modele de vues possible, sur le fil d'analyse (du vrai
+    // travail, pas le temps simule) : sous charge (CTest -j3), il peut finir apres cette seconde. On attend sa fin reelle
+    // (5 s au plus) au lieu de supposer qu'elle est deja la.
+    for (int guard = 0; f.as().processing() && guard < 1000; ++guard) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        f.step();
+    }
     check(!f.as().processing(), "traite");
     // Un format refuse.
     check(!f.panel->attachFile(U(src / "outil.exe")), "un .exe est refuse");
