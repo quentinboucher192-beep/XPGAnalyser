@@ -4397,6 +4397,47 @@ const std::vector<Topic>& topics() {
                          "proposition corrig\xC3\xA9" "e (un seul Ctrl+Z).", {}},
              {K::Bullet, "Des erreurs identiques tiennent sur une ligne : \xC2\xAB \xE2\x80\xA6 (2 "
                          "op\xC3\xA9rations) \xC2\xBB.", {}},
+             {K::Heading, "Retour, et corriger rapidement (1.22.7)", {}},
+             {K::Bullet, "**Retour**, en bas \xC3\xA0 gauche, ferme la pr\xC3\xA9visualisation **sans rien "
+                         "d\xC3\xA9" "cider** : rien n'est refus\xC3\xA9 ni appliqu\xC3\xA9, la proposition "
+                         "reste \xC3\xA0 d\xC3\xA9" "cider. \xC3\x89" "chap fait de m\xC3\xAAme quand aucune "
+                         "recherche n'est en cours. **Refuser\xE2\x80\xA6** refuse la proposition.", {}},
+             {K::Bullet, "Le clic droit sur une **erreur** ou un **avertissement** propose en t\xC3\xAAte "
+                         "**Corriger rapidement** : la meilleure correction **s\xC3\xBBre**, "
+                         "appliqu\xC3\xA9" "e \xC3\xA0 la proposition (jamais au projet) **sans fermer la "
+                         "fen\xC3\xAAtre**. La v\xC3\xA9rification et l'aper\xC3\xA7u se refont "
+                         "aussit\xC3\xB4t.", {}},
+             {K::Paragraph, "- Une variable introuvable devient la variable **nettement** la plus proche : le "
+                         "m\xC3\xAAme nom \xC3\xA0 la casse et aux s\xC3\xA9parateurs pr\xC3\xA8s, ou les "
+                         "m\xC3\xAAmes mots (Cmd pour Commande), ou une faute de frappe d'au plus 2 lettres. "
+                         "Les chiffres doivent \xC3\xAAtre les m\xC3\xAAmes (Pompe_2 n'est jamais Pompe_1). "
+                         "- Un constat de G\xC3\xA9n\xC3\xA9rer et Compiler qui a une correction du logiciel "
+                         "re\xC3\xA7oit cette correction. - Une suppression refus\xC3\xA9" "e parce que "
+                         "l'\xC3\xA9l\xC3\xA9ment est cit\xC3\xA9 ailleurs passe en strat\xC3\xA9gie "
+                         "**r\xC3\xA9" "f\xC3\xA9rences** (l'aper\xC3\xA7u montre ce qui sera "
+                         "modifi\xC3\xA9). - Des objets sous un en-t\xC3\xAAte ou un pied sont "
+                         "d\xC3\xA9plac\xC3\xA9s (\xC2\xAB d\xC3\xA9" "caler \xC2\xBB). - Une autre erreur "
+                         "d'une op\xC3\xA9ration retire l'op\xC3\xA9ration. - Quand rien n'est s\xC3\xBBr "
+                         "(\xC2\xAB 2 objets cr\xC3\xA9\xC3\xA9s ne sont reli\xC3\xA9s \xC3\xA0 aucune "
+                         "variable \xC2\xBB, plusieurs variables aussi proches), l'entr\xC3\xA9" "e est "
+                         "gris\xC3\xA9" "e avec la raison, et \xC2\xAB Choisir une variable\xE2\x80\xA6 "
+                         "\xC2\xBB reste dessous.", {}},
+             {K::Bullet, "**Ce qui a chang\xC3\xA9 est montr\xC3\xA9** : la ligne quitte les erreurs, la "
+                         "cat\xC3\xA9gorie **Corrections** gagne une ligne \xC2\xAB \xE2\x80\xA6 "
+                         "(corrig\xC3\xA9 rapidement) \xC2\xBB \xC3\xA9" "clair\xC3\xA9" "e en vert, les "
+                         "objets touch\xC3\xA9s sont encadr\xC3\xA9s, et une bande en haut de la liste dit "
+                         "\xC2\xAB Corrig\xC3\xA9 : \xE2\x80\xA6 \xC2\xB7 **Revenir** \xC2\xBB (un clic "
+                         "annule la correction).", {}},
+             {K::Bullet, "Les autres corrections du menu (Utiliser \xC2\xAB \xE2\x80\xA6 \xC2\xBB, "
+                         "Cr\xC3\xA9" "er, Retirer l'op\xC3\xA9ration, la correction du logiciel) ne ferment "
+                         "plus la fen\xC3\xAAtre non plus. Seule \xC2\xAB Demander \xC3\xA0 l'IA de corriger "
+                         "\xC2\xBB la ferme, pour que tu relises le texte.", {}},
+             {K::Bullet, "**Tout corriger rapidement**, sur les titres ERREURS, AVERTISSEMENTS et "
+                         "G\xC3\x89N\xC3\x89RER ET COMPILER (le lien ou leur clic droit), corrige tout ce "
+                         "qui est s\xC3\xBBr et dit ce qui reste (\xC2\xAB 3 erreurs corrig\xC3\xA9" "es, 2 "
+                         "restent\xE2\x80\xA6 \xC2\xBB).", {}},
+             {K::Bullet, "Une grosse proposition se rev\xC3\xA9rifie en arri\xC3\xA8re-plan (\xC2\xAB "
+                         "Rev\xC3\xA9rification\xE2\x80\xA6 \xC2\xBB) ; Appliquer attend la fin.", {}},
              {K::Heading, "Toutes les vues d'une proposition (1.22.6)", {}},
              {K::Bullet, "Une proposition qui cr\xC3\xA9" "e ou modifie **plusieurs vues** les montre "
                          "toutes. Au-dessus de l'aper\xC3\xA7u, une barre : \xC2\xAB < Vue 2/4 : Popup_Vanne "
@@ -4746,6 +4787,31 @@ const std::vector<Topic>& topics() {
                          "\xC2\xAB R\xC3\xA9ussie \xC2\xBB que si l'\xC3\xA9l\xC3\xA9ment a vraiment disparu "
                          "et que plus rien ne le cite. Supprimer un symbole depuis la liste des vues emporte "
                          "aussi ses popups.", {}},
+             {K::Heading, "Supprimer une vue cit\xC3\xA9" "e ailleurs (1.22.7)", {}},
+             {K::Bullet, "En strat\xC3\xA9gie **r\xC3\xA9" "f\xC3\xA9rences** (le bon choix par "
+                         "d\xC3\xA9" "faut pour une vue cit\xC3\xA9" "e ailleurs), l'Assistant **modifie ce "
+                         "qui la cite** et le dit dans l'aper\xC3\xA7u, au lieu de refuser. Par exemple : "
+                         "\xC2\xAB Pied.Navigation : Vue_Accueil retir\xC3\xA9" "e de la liste des vues (3 "
+                         "\xE2\x86\x92 2) \xC2\xBB.", {}},
+             {K::Paragraph, "- **Une barre de navigation** perd l'entr\xC3\xA9" "e (et son libell\xC3\xA9) ; "
+                         "les autres vues restent dans l'ordre. Si la liste devient vide, un avertissement "
+                         "le dit : la barre montre alors toutes les vues. - **Une zone de plan** garde ses "
+                         "points et ses alarmes ; seule sa vue est vid\xC3\xA9" "e. - **Un argument "
+                         "d'instance** qui la nomme est vid\xC3\xA9 : le param\xC3\xA8tre reprend sa valeur "
+                         "par d\xC3\xA9" "faut. - **Les vues filles** remontent \xC3\xA0 la vue au-dessus de "
+                         "la vue supprim\xC3\xA9" "e, sinon \xC3\xA0 la racine. - **L'\xC3\xA9" "cran "
+                         "mod\xC3\xA8le** passe \xC3\xA0 celui au-dessus. **Un en-t\xC3\xAAte ou un pied "
+                         "supprim\xC3\xA9** est remplac\xC3\xA9 par le premier du m\xC3\xAAme r\xC3\xB4le "
+                         "qui reste, sinon la case est d\xC3\xA9" "coch\xC3\xA9" "e. - **La vue de "
+                         "d\xC3\xA9marrage** devient la premi\xC3\xA8re vue ordinaire qui reste, et c'est "
+                         "dit. Supprimer la derni\xC3\xA8re vue ordinaire est refus\xC3\xA9. **La vue "
+                         "d'accueil d'un groupe** revient \xC3\xA0 la vue de d\xC3\xA9marrage.", {}},
+             {K::Bullet, "**Le code n'est jamais r\xC3\xA9\xC3\xA9" "crit.** Un script, une fonction, une "
+                         "condition d'alarme ou une recette qui nomme la vue restent un refus. Le refus dit "
+                         "o\xC3\xB9 (\xC2\xAB script Script_Nav, ligne 2 \xC2\xBB) et propose **remplacer**, "
+                         "avec les vues existantes les plus proches.", {}},
+             {K::Bullet, "**remplacer** garde les liens en les faisant pointer vers une autre vue existante.", {}},
+             {K::Bullet, "Tout se fait sur une copie, et **un seul Ctrl+Z** remet tout.", {}},
              {K::Heading, "Essayer avant de proposer : le bac \xC3\xA0 sable (1.21.0)", {}},
              {K::Paragraph, "Avec une IA connect\xC3\xA9" "e (et l'appel d'outil), l'Assistant peut **essayer "
                          "une fonction ST** avant de te la proposer : il l'\xC3\xA9" "crit, la fait "

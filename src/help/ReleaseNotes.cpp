@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.6", "01/11/2026", "\xC3\xA0 venir"},
+    {"1.22.7", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.22.6", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 23 h"},
     {"1.22.5", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 19 h 45"},
     {"1.22.4", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 18 h"},
     {"1.22.3", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 16 h 50"},
@@ -160,6 +161,21 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.7 : la suppression qui modifie ses references ; Retour et Corriger rapidement dans l'apercu
+        note("1.22.7", "Assistant IA", Kind::Fixed,
+         "SUPPRIMER UNE VUE CIT\xC3\x89" "E AILLEURS NE BLOQUE PLUS : en strat\xC3\xA9gie \xC2\xAB r\xC3\xA9" "f\xC3\xA9rences \xC2\xBB, l'Assistant la retire des barres de "
+         "navigation (\xC2\xAB Pied.Navigation : Vue_Accueil retir\xC3\xA9" "e de la liste des vues (3 \xE2\x86\x92 2) \xC2\xBB) et des plans, vide l'argument qui la "
+         "nomme, remonte les vues filles, fait suivre l'\xC3\xA9" "cran mod\xC3\xA8le, l'en-t\xC3\xAAte, le pied, la vue de d\xC3\xA9marrage et les vues d'accueil "
+         "des groupes - chaque modification dite dans l'aper\xC3\xA7u, un seul Ctrl+Z. Le code qui la nomme n'est jamais r\xC3\xA9\xC3\xA9" "crit : le refus "
+         "dit o\xC3\xB9 (script, ligne) et propose \xC2\xAB remplacer \xC2\xBB avec les vues les plus proches.",
+         "assistant-ia", ""),
+        note("1.22.7", "Assistant IA", Kind::New,
+         "PR\xC3\x89VISUALISATION : un bouton RETOUR ferme la fen\xC3\xAAtre sans rien d\xC3\xA9" "cider (comme \xC3\x89" "chap) ; \xC2\xAB Refuser\xE2\x80\xA6 \xC2\xBB refuse. Le clic droit "
+         "sur une erreur ou un avertissement propose en t\xC3\xAAte CORRIGER RAPIDEMENT : la meilleure correction s\xC3\xBBre (la variable nettement "
+         "la plus proche, la correction du logiciel, la strat\xC3\xA9gie \xC2\xAB r\xC3\xA9" "f\xC3\xA9rences \xC2\xBB, le retrait de l'op\xC3\xA9ration...), appliqu\xC3\xA9" "e \xC3\xA0 la "
+         "proposition SANS FERMER la fen\xC3\xAAtre - l'aper\xC3\xA7u se refait, la correction est montr\xC3\xA9" "e (ligne en vert, objets encadr\xC3\xA9s, bande "
+         "\xC2\xAB Corrig\xC3\xA9 : \xE2\x80\xA6 \xC2\xB7 Revenir \xC2\xBB). \xC2\xAB Tout corriger rapidement \xC2\xBB sur les titres ; une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi rien n'est s\xC3\xBBr.",
+         "assistant-ia", ""),
         // 1.22.6 : toutes les vues de l'apercu, l'activite et les couts en direct, la mission depuis la conversation, les jetons,
         // les variables, la securite et les vues reglees par l'IA
         note("1.22.6", "Assistant IA", Kind::New,

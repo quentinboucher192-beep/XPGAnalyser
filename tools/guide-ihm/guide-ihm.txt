@@ -1924,6 +1924,19 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
   - toujours : **Copier le message** et **Demander à l'IA de corriger** (le texte va dans la saisie, rien n'est envoyé tout seul).
 - La correction change la **proposition**, jamais le projet : l'erreur disparaît, la catégorie **Corrections** dit ce qui a été fait (« 7 variables remplacées »), et un clic droit sur sa ligne propose **Revenir**. **Appliquer** prend ensuite la proposition corrigée (un seul Ctrl+Z).
 - Des erreurs identiques tiennent sur une ligne : « … (2 opérations) ».
+### Retour, et corriger rapidement (1.22.7)
+- **Retour**, en bas à gauche, ferme la prévisualisation **sans rien décider** : rien n'est refusé ni appliqué, la proposition reste à décider. Échap fait de même quand aucune recherche n'est en cours. **Refuser…** refuse la proposition.
+- Le clic droit sur une **erreur** ou un **avertissement** propose en tête **Corriger rapidement** : la meilleure correction **sûre**, appliquée à la proposition (jamais au projet) **sans fermer la fenêtre**. La vérification et l'aperçu se refont aussitôt.
+  - Une variable introuvable devient la variable **nettement** la plus proche : le même nom à la casse et aux séparateurs près, ou les mêmes mots (Cmd pour Commande), ou une faute de frappe d'au plus 2 lettres. Les chiffres doivent être les mêmes (Pompe_2 n'est jamais Pompe_1).
+  - Un constat de Générer et Compiler qui a une correction du logiciel reçoit cette correction.
+  - Une suppression refusée parce que l'élément est cité ailleurs passe en stratégie **références** (l'aperçu montre ce qui sera modifié).
+  - Des objets sous un en-tête ou un pied sont déplacés (« décaler »).
+  - Une autre erreur d'une opération retire l'opération.
+  - Quand rien n'est sûr (« 2 objets créés ne sont reliés à aucune variable », plusieurs variables aussi proches), l'entrée est grisée avec la raison, et « Choisir une variable… » reste dessous.
+- **Ce qui a changé est montré** : la ligne quitte les erreurs, la catégorie **Corrections** gagne une ligne « … (corrigé rapidement) » éclairée en vert, les objets touchés sont encadrés, et une bande en haut de la liste dit « Corrigé : … · **Revenir** » (un clic annule la correction).
+- Les autres corrections du menu (Utiliser « … », Créer, Retirer l'opération, la correction du logiciel) ne ferment plus la fenêtre non plus. Seule « Demander à l'IA de corriger » la ferme, pour que tu relises le texte.
+- **Tout corriger rapidement**, sur les titres ERREURS, AVERTISSEMENTS et GÉNÉRER ET COMPILER (le lien ou leur clic droit), corrige tout ce qui est sûr et dit ce qui reste (« 3 erreurs corrigées, 2 restent… »).
+- Une grosse proposition se revérifie en arrière-plan (« Revérification… ») ; Appliquer attend la fin.
 ### Toutes les vues d'une proposition (1.22.6)
 - Une proposition qui crée ou modifie **plusieurs vues** les montre toutes. Au-dessus de l'aperçu, une barre : « < Vue 2/4 : Popup_Vanne (neuve, popup) · 1 erreur > ».
   - Les flèches passent à la vue précédente ou suivante, comme **PageUp / PageDown** ou **Ctrl+← / Ctrl+→**.
