@@ -27,6 +27,46 @@
 //
 //  LES DOUBLONS : deux erreurs identiques (deux operations sur la meme variable
 //  introuvable) se lisent sur une seule ligne << ... (2 operations) >>.
+//
+//  1.22.7 : CORRIGER RAPIDEMENT - en TETE du menu de chaque erreur et de chaque
+//  avertissement (de l'apercu, de la carte ; les constats de GENERER ET COMPILER
+//  aussi) : LA meilleure correction SURE que le logiciel sait faire pour cette
+//  ligne, posee dans la PROPOSITION (jamais dans le projet), lue dans ses defauts
+//  structures (jamais dans son texte). Jamais d'invention : pas de variable
+//  inventee, pas de nom choisi au hasard. Ligne par ligne (quick) :
+//    une variable introuvable    << Utiliser << Y >> >> si Y est NETTEMENT la plus
+//                                proche (clearlyClosest : le meme nom aux separateurs
+//                                pres - << Vanne.Cmd >> / Vanne_Cmd -, sinon les memes
+//                                mots, un mot pouvant etre l'abrege de l'autre - Cmd /
+//                                Commande -, sinon une faute de frappe de deux lettres
+//                                au plus ; les chiffres toujours les memes : Pompe_2
+//                                n'est jamais Pompe_1 ; et UNE seule candidate au
+//                                meilleur rang) ; sinon grisee, le menu dit pourquoi
+//                                (aucune nettement, ou plusieurs autant) et << Choisir
+//                                une variable... >> reste juste dessous ;
+//    un constat du logiciel      sa correction (fixFrom -> fixTo : Assistant::
+//    avec sa correction          applyBuildFix) ;
+//    une SUPPRESSION refusee     (elle a des dependances directes, sa strategie est
+//    parce que l'element est     << seul >>) : sa strategie passe a << references >>
+//    cite ailleurs               (Assistant::setDeleteStrategy : seules les references
+//                                qui le citent partent ; un type, un dossier : pas de
+//                                << references >> qui tienne - l'operation est retiree) ;
+//    une autre erreur d'une      la retirer (excludeOps : ce qui en depend suit) - un
+//    operation (ou un constat    constat du logiciel sans correction aussi ;
+//    d'erreur du logiciel)
+//    une erreur sans operation   grisee : rien de sur (la proposition entiere, perimee) ;
+//    des objets sous l'en-tete   si une operation sait les deplacer (un modifier_vue,
+//    ou le pied (1.22.6)         un creer_vue avec << decaler : non >>) : << decaler :
+//                                oui >> (Assistant::setOperationProperty) ; sinon grisee ;
+//    << N objets crees ne sont   grisee : relier un objet, c'est choisir sa variable -
+//    relies a aucune variable >> l'Assistant n'en invente pas ;
+//    un autre avertissement      grisee, avec la raison.
+//  << TOUT CORRIGER RAPIDEMENT >> (applyAll) : toutes les corrections rapides sures
+//  d'une categorie en une fois - les corrections du logiciel d'abord (tout autre
+//  changement efface le verdict), les retraits en une seule ecriture.
+//  Les RETOUCHES (une strategie, une propriete, la correction du logiciel) sont
+//  gardees avec la forme d'avant de l'operation (Proposal::extra << retouches >>) :
+//  la categorie CORRECTIONS les liste, Revenir les reprend (Undo).
 // =============================================================================
 #pragma once
 
@@ -53,6 +93,12 @@ struct Line {
     std::vector<std::size_t> ops;          // les operations en cause (indices de Proposal::ops, sans doublon)
     std::vector<std::size_t> faults;       // ses defauts structures (indices de Check::faults ; une erreur seulement)
     bool                     error{true};
+    // 1.22.7 : un constat du logiciel (GENERER ET COMPILER) - son rang dans le verdict de la proposition (kNone : une ligne de
+    // la verification) et la correction du logiciel (fixFrom -> fixTo ; vide : aucune). Son menu offre alors << Appliquer la
+    // correction du logiciel >>, et Corriger rapidement la fait.
+    static constexpr std::size_t kNone = static_cast<std::size_t>(-1);
+    std::size_t              finding{kNone};
+    std::string              fixFrom{}, fixTo{};
 };
 [[nodiscard]] std::vector<Line> errorLines(const Check&);
 [[nodiscard]] std::vector<Line> warningLines(const Check&);
@@ -60,8 +106,14 @@ struct Line {
 // Une entree du menu. `children` : un sous-menu (Creer la variable : les types) - l'entree elle-meme ne se choisit pas.
 struct Action {
     enum class Kind : std::uint8_t { Separator, Use, Pick, Create, RemoveUsing, RemoveOps, Copy, AskAi, Revert, Restore,
-                                     BuildFix /* 1.22.5 : la correction du logiciel d'un constat (ops[0] : son rang dans le verdict) */ };
+                                     BuildFix /* 1.22.5 : la correction du logiciel d'un constat (ops[0] : son rang dans le verdict) */,
+                                     // 1.22.7 : Corriger rapidement (`does` : ce qui est fait, avec ses champs) ; la strategie d'une
+                                     // suppression (ops[0], value) ; une propriete d'une operation (ops[0], name : la cle, value) ;
+                                     // revenir sur une retouche (value : son id) ; Tout corriger rapidement (ops[0] : la categorie,
+                                     // a l'ecran qui l'offre).
+                                     Quick, Strategy, Prop, Undo, QuickAll };
     Kind                     kind{Kind::Separator};
+    Kind                     does{Kind::Separator};   // 1.22.7 : Quick - l'action faite (Use, BuildFix, RemoveOps, Strategy, Prop)
     std::string              label;
     std::string              note;         // la petite ligne sous le libelle
     std::string              name;         // la variable introuvable (Use, Pick, Create, RemoveUsing, Revert)
@@ -77,15 +129,31 @@ struct Menu {
     std::vector<Action> actions;
 };
 // Le menu d'une ligne d'erreur ou d'avertissement ; `project` (nul : inconnu) : une variable a creer qui existe deja se
-// propose a l'usage.
+// propose a l'usage. 1.22.7 : << Corriger rapidement >> en tete (quick), puis la correction du logiciel d'un constat qui en a
+// une.
 [[nodiscard]] Menu menuFor(const Proposal&, const Check&, const Line&, const hmi::Project* project);
+
+// 1.22.7 : CORRIGER RAPIDEMENT une ligne (voir l'en-tete) - une action Quick : choisissable (`does` et ses champs : ce qui sera
+// fait ; `note` : ce qui changera), ou grisee (`why`, redit dans `note` : pourquoi). `project` (nul : inconnu) : les variables
+// du projet, ou chercher la nettement plus proche (sinon les plus proches de la validation).
+[[nodiscard]] Action quick(const Proposal&, const Check&, const Line&, const hmi::Project* project);
+// La variable NETTEMENT la plus proche d'un nom introuvable parmi `candidates` (vide : aucune, `why` dit pourquoi).
+[[nodiscard]] std::string clearlyClosest(std::string_view missing, const std::vector<std::string>& candidates, std::string* why = nullptr);
+// TOUT CORRIGER RAPIDEMENT : les actions Quick choisissables de `quick` (les grisees sont laissees), en une fois - les
+// corrections du logiciel d'abord, les retraits en une seule ecriture. Le nombre de lignes corrigees ; `said` : ce que la
+// barre d'etat dit.
+std::size_t applyAll(Assistant&, int message, const std::vector<Action>& quick, std::string* said = nullptr);
 
 // LES CORRECTIONS FAITES : une ligne chacune (un choix de variable, une operation retiree), et le geste qui la reprend.
 struct Correction {
     std::string text;                      // "<< Vanne.Cmd >> -> Vanne_Ouverte", "operation 3 (associer Vanne_1)"
     std::string state;                     // "remplacee", "a creer (BOOL)", "retiree"
-    int         what{1};                   // 0 : une variable a creer, 1 : remplacee, 2 : une operation retiree
+    int         what{1};                   // 0 : une variable a creer, 1 : remplacee, 2 : une operation retiree ; 1.22.7 : 3 retouchee
     Action      undo;                      // Revenir
+    // 1.22.7 : ce qui l'identifie d'un etat de la proposition a l'autre ("c:vanne.cmd", "x:3", "r:r2") ; une retouche : son
+    // operation.
+    std::string key{};
+    std::size_t op{Check::Fault::kNoOp};
 };
 [[nodiscard]] std::vector<Correction> corrections(const Proposal&);
 [[nodiscard]] Menu menuFor(const Proposal&, const Correction&);
@@ -100,8 +168,9 @@ struct Correction {
 // Les types proposes pour creer une variable (le conseille vient en tete du sous-menu).
 [[nodiscard]] const std::vector<std::string>& types();
 
-// FAIRE une action qui change la proposition (Use, Create, RemoveUsing, RemoveOps, Revert, Restore) - par l'Assistant ;
-// `said` : ce que la barre d'etat dit. Faux : rien n'a change. Pick, Copy et AskAi sont a l'ecran qui les offre.
+// FAIRE une action qui change la proposition (Use, Create, RemoveUsing, RemoveOps, Revert, Restore, BuildFix ; 1.22.7 : Quick -
+// ce qu'elle fait -, Strategy, Prop, Undo) - par l'Assistant ; `said` : ce que la barre d'etat dit. Faux : rien n'a change.
+// Pick, Copy, AskAi et QuickAll sont a l'ecran qui les offre.
 bool apply(Assistant&, int message, const Action&, std::string* said = nullptr);
 
 // LE MENU DU CLIC DROIT : ses entrees posees dans `menu` (une tete, les actions, leurs icones, les sous-menus) ; `byId` recoit

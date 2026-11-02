@@ -297,7 +297,8 @@ void testEngine() {
                   && listed(labels, "Cr\xC3\xA9" "er la variable " + q("Vanne_Cmd") + " > DINT")
                   && listed(labels, "Retirer les 2 op\xC3\xA9rations qui l'utilisent") && listed(labels, "Copier le message") && listed(labels, kAsk),
               "variable : Utiliser, Choisir, Creer (le membre devient Vanne_Cmd, le type), Retirer, Copier, Demander a l'IA");
-        check(indexHaving(labels, "Utiliser") == 0, "les proches d'abord");
+        // 1.22.7 : << Corriger rapidement >> en tete, puis les proches
+        check(!labels.empty() && labels.front() == "Corriger rapidement" && indexHaving(labels, "Utiliser") == 1, "Corriger rapidement, puis les proches d'abord");
     }
     const auto codeLine = std::find_if(lines.begin(), lines.end(), [](const fx::Line& l) { return has(l.message, "Code brut"); });
     check(codeLine != lines.end(), "la ligne du code brut");

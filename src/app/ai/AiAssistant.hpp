@@ -380,6 +380,9 @@ public:
     // le projet ; l'avis du logiciel est redemande. Faux et `why` : pas de correction pour ce constat, l'operation inconnue,
     // le texte plus la, la proposition n'est plus << proposee >>.
     bool applyBuildFix(int message, std::size_t finding, std::string* why = nullptr);
+    // 1.22.7 : plusieurs constats d'un coup (Tout corriger rapidement : un seul avis redemande) - le nombre de corrections
+    // posees ; 0 et `why` : aucune. Chacune est une RETOUCHE (Revenir la reprend : undoRetouch).
+    std::size_t applyBuildFixes(int message, const std::vector<std::size_t>& findings, std::string* why = nullptr);
 
     // ---- les propositions -----------------------------------------------------------------
     // La proposition du message `message` de la conversation ouverte (nul : aucune).
@@ -425,6 +428,19 @@ public:
     bool chooseVariable(int message, const std::string& from, VariableChoice choice);
     bool clearChoice(int message, const std::string& from);
     bool excludeOps(int message, const std::vector<std::size_t>& ops, bool excluded);
+    // 1.22.7 : CORRIGER RAPIDEMENT (AiFixes.hpp) - des RETOUCHES d'une operation de la PROPOSITION (jamais du projet), comme
+    // chooseVariable pour une variable : chacune est gardee avec la forme d'avant de l'operation (Proposal::extra
+    // << retouches >> : la categorie CORRECTIONS la liste) ; la proposition se revalide, l'avis du logiciel est redemande.
+    //  - setDeleteStrategy : la strategie d'une operation supprimer (Operation::props << strategie >> : << seul >>,
+    //    << remplacer >> - avec son remplacant deja donne -, << references >>) ; << inutiles >> est garde. Des objets d'une vue :
+    //    << seul >> seulement ;
+    //  - setOperationProperty : une propriete d'une operation (<< decaler >> d'un modifier_vue) ; jamais un secret ;
+    //  - undoRetouch : revenir sur une retouche (son id) - l'operation reprend sa forme d'avant, et les retouches faites depuis
+    //    sur la meme operation partent avec.
+    // Faux et `why` : plus << proposee >>, l'operation n'est pas du bon genre, une valeur inconnue, la retouche n'existe plus.
+    bool setDeleteStrategy(int message, std::size_t op, std::string strategy, std::string* why = nullptr);
+    bool setOperationProperty(int message, std::size_t op, const std::string& key, const std::string& value, std::string* why = nullptr);
+    bool undoRetouch(int message, const std::string& id, std::string* why = nullptr);
     // 1.14.2 : CE QU'EST DEVENUE UNE PROPOSITION APPLIQUEE, d'apres la vue telle qu'elle est (les
     // empreintes d'avant et d'apres Appliquer) : toujours appliquee ; annulee (Ctrl+Z, ou le projet
     // rouvert sans avoir ete enregistre : la vue est revenue a son etat d'avant) ; ou la vue a change

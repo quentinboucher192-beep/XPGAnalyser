@@ -14,10 +14,10 @@
 //    a droite    L'APERCU : une COPIE de la vue, modifiee, dessinee par les
 //                painters du logiciel ; les objets nouveaux encadres en vert, les
 //                modifies en bleu, ceux a supprimer barres de rouge ;
-//    en bas      Modifier la demande (le texte revient dans la saisie ; la
-//                proposition reste a decider), Refuser... (une question d'abord),
-//                Appliquer (un seul Ctrl+Z ; une suppression multiple se
-//                confirme). Echap ferme sans decider.
+//    en bas      1.22.7 : Retour (fermer sans rien faire), Modifier la demande (le
+//                texte revient dans la saisie ; la proposition reste a decider),
+//                Refuser... (une question d'abord), Appliquer (un seul Ctrl+Z ;
+//                une suppression multiple se confirme). Echap ferme sans decider.
 //
 //  1.21.0 : LES SUPPRESSIONS (AiDelete) - une categorie en tete de la liste :
 //  chaque suppression, sa strategie, le resume par genre (<< 4 variables
@@ -82,6 +82,28 @@
 //  titres disent << (12, 3 sur cette vue) >>. Les cadres (nouveau, modifie,
 //  supprime, erreur, avertissement, la ligne choisie) valent pour la vue montree.
 //
+//  1.22.7 : RETOUR ET CORRIGER RAPIDEMENT. En bas a gauche, << Retour >> (discret)
+//  ferme la fenetre SANS RIEN FAIRE (comme Echap quand aucune recherche n'est en
+//  cours) : ni refus, ni application, la saisie intacte ; la proposition reste << a
+//  decider >>. << Refuser... >> (1.16.1) dit, lui, qu'il refuse. Le clic droit sur
+//  CHAQUE erreur et CHAQUE avertissement (GENERER ET COMPILER compris, toutes les
+//  vues) offre en tete << Corriger rapidement >> : la meilleure correction SURE
+//  (AiFixes.hpp, quick : une variable nettement la plus proche, la correction du
+//  logiciel, << references >> pour une suppression refusee, retirer l'operation...)
+//  ou grisee avec la raison. La fenetre RESTE OUVERTE : le menu se ferme, la
+//  verification et l'apercu se refont (la vue montree reste la meme), la ligne part
+//  des erreurs, la categorie CORRECTIONS gagne sa ligne, mise en evidence un instant
+//  (<< ... (corrige rapidement) >>), les objets touches s'encadrent (le cadre qui
+//  pulse de la 1.22.4), et une BANDE en haut de la liste dit << Corrige : ... >> et
+//  << Revenir >> (un clic la reprend). Les AUTRES corrections du menu (Utiliser,
+//  Creer, Retirer, la correction du logiciel, Revenir) font de meme ; seule
+//  << Demander a l'IA de corriger >> ferme (le texte va dans la saisie). << TOUT
+//  CORRIGER RAPIDEMENT >> (le lien des titres ERREURS, AVERTISSEMENTS, GENERER ET
+//  COMPILER ; leur clic droit) : toutes les corrections sures d'un coup, et le
+//  compte (<< 6 erreurs corrigees, 2 restent : ... >>). Une grosse proposition
+//  (checkInBackground) se reverifie sur un fil de fond : la liste d'avant reste
+//  montree, la bande dit << Reverification... >>, la fenetre garde la main.
+//
 //  1.16.1 : L'APERCU SE ZOOME (la molette autour de la souris, les boutons -,
 //  Ajuster, +, Ctrl+plus / moins / 0 ; zoome, il se deplace au glisser ; un
 //  double-clic l'ajuste) ; une INFOBULLE sur chaque objet (son nom, son genre,
@@ -98,6 +120,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -120,9 +143,11 @@ public:
 
     // Les gestes (essais, scripts).
     bool apply();
-    void cancel();          // Annuler : la proposition est refusee
+    void cancel();          // Refuser... : la proposition est refusee (une question d'abord)
     void editRequest();     // Modifier la demande
-    void close();           // Echap : sans decider
+    void close();           // Echap, 1.22.7 : Retour - sans rien decider ni toucher
+    [[nodiscard]] ui::Button* backButton() const noexcept { return back_; }     // 1.22.7 : Retour
+    [[nodiscard]] ui::Button* cancelButton() const noexcept { return cancel_; } // Refuser...
     [[nodiscard]] bool waiting() const noexcept { return waiting_; }   // 1.20.1 : la verification de fond n'est pas finie
     bool chooseVariable(int index);   // dans la liste deroulante (le dernier : creer)
     // 1.21.0 : retirer (ou remettre) une suppression (l'operation `op`, une operation supprimer) - comme la bande du plan.
@@ -224,6 +249,26 @@ public:
     [[nodiscard]] gfx::Rect                viewBarRect(int part) const;
     [[nodiscard]] gfx::Rect                viewChipRect() const;
 
+    // 1.22.7 : CORRIGER RAPIDEMENT - `list` 1 : une erreur, 2 : un avertissement, 4 : un constat du logiciel (GENERER ET
+    // COMPILER) ; `line` : son rang (errorRows, warningRows, buildRows). Ce que ferait << Corriger rapidement >> (grisee : `why`) ;
+    // le faire (comme le menu : la fenetre reste ouverte) ; << Tout corriger rapidement >> d'une categorie (le nombre de lignes
+    // corrigees) et combien elle en offre ; le clic droit d'un titre ; pourquoi une entree du menu ouvert est grisee (vide :
+    // choisissable, ou absente). LA BANDE (<< Corrige : ... >> ; vide : aucune) et son << Revenir >> ; les lignes de
+    // CORRECTIONS mises en evidence par la derniere correction ; la reverification de fond en cours (une grosse proposition).
+    // Pour les essais et les scripts ; la souris passe par les memes gestes.
+    [[nodiscard]] fixes::Action            quickFor(int list, std::size_t line) const;
+    bool                                   quickFix(int list, std::size_t line);
+    std::size_t                            quickFixAll(int list);
+    [[nodiscard]] std::size_t              quickCount(int list) const;
+    bool                                   openHeadingMenu(int list);
+    [[nodiscard]] std::string              menuWhy(const std::string& label) const;
+    [[nodiscard]] std::string              bandText() const;
+    bool                                   undoBand();
+    [[nodiscard]] std::vector<std::string> flashedRows() const;
+    [[nodiscard]] bool                     rechecking() const noexcept { return rechecking_; }
+    [[nodiscard]] gfx::Rect                bandUndoRect() const;
+    [[nodiscard]] gfx::Rect                quickAllRect(int list) const;
+
 protected:
     core::Status buildUi() override;
 
@@ -233,13 +278,23 @@ private:
     void finish(bool ok);
     // 1.22.1 : le menu d'une ligne (`list` 1 : une erreur, 2 : un avertissement, 3 : une correction), au point `at`.
     bool openFixMenu(int list, std::size_t line, gfx::Point at);
+    bool openGroupMenu(int list, gfx::Point at);   // 1.22.7 : le clic droit d'un titre (1, 2, 4) - Tout corriger rapidement
     void runFix(int id);
+    // 1.22.7 : la ligne `line` de la categorie `list` (1, 2, 4) telle que le menu la lit ; faire des corrections SANS FERMER (la
+    // proposition change, la verification et l'apercu se refont, ce qui a change se montre : la bande, la ligne de CORRECTIONS,
+    // les objets encadres) - `quick` : des corrections rapides ; `headline` : ce que la bande dit (vide : la correction elle-
+    // meme) ; la mise en evidence des lignes de CORRECTIONS de ces cles (apres la verification).
+    [[nodiscard]] bool lineOf(int list, std::size_t line, fixes::Line& out) const;
+    void corrected(const std::map<std::string, std::string>& before, bool quick, const std::string& headline);
+    [[nodiscard]] std::map<std::string, std::string> correctionState() const;
+    void flash();
 
     AiPanel&      panel_;
     int           message_;
     Check         check_;
     Preview       preview_;
     std::string   key_;
+    ui::Button*   back_{nullptr};   // 1.22.7 : Retour
     ui::Button*   edit_{nullptr};
     ui::Button*   cancel_{nullptr};
     ui::Button*   apply_{nullptr};
@@ -262,6 +317,20 @@ private:
     std::size_t                     otherMissing_{0};      // les autres variables introuvables (sans choix)
     bool                            pinned_{false};
     bool                            openChoice_{false};
+    // 1.22.7 : CORRIGER RAPIDEMENT - ce que ferait << Corriger rapidement >> pour chaque ligne (calcule une fois par
+    // verification : les erreurs, les avertissements, les constats du logiciel) ; les corrections faites ainsi (leurs cles,
+    // << (corrige rapidement) >>) ; la bande (son texte, ses Revenir, les cles qu'elle reprend) ; les lignes a mettre en evidence
+    // (au prochain rafraichissement complet) ; une liste deja montree (une reverification la garde) ; la reverification en cours.
+    std::vector<fixes::Action>      quickErrors_, quickWarnings_, quickBuild_;
+    std::set<std::string>           quickKeys_;
+    std::string                     bandText_;
+    std::vector<fixes::Action>      bandUndo_;
+    std::vector<std::string>        bandKeys_;
+    std::vector<std::string>        flashKeys_;
+    bool                            flashPending_{false};
+    bool                            shownOnce_{false};
+    bool                            rechecking_{false};
+    [[nodiscard]] const std::vector<fixes::Action>& quickOf(int list) const;
     // 1.22.4 : la recherche de la liste ; calcules une fois par proposition (refresh) - le rang de chaque objet de l'apercu,
     // le niveau de chaque objet en cause et ses messages (son infobulle). 1.22.6 : ceux de la vue montree (useShownView).
     ui::SearchField*                         search_{nullptr};
