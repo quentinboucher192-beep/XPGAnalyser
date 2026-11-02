@@ -22,15 +22,50 @@
 //
 //  LES STRATEGIES - jamais toutes les dependances supprimees d'office :
 //    seul        l'element seul, s'il ne casse rien ; sinon REFUSE, et la raison
-//                dit ce qui en depend et quoi choisir ;
+//                dit ce qui en depend et quoi choisir. Ce qui n'est pas une
+//                reference se regle et se DIT, comme en << references >> : la vue
+//                de demarrage, la vue d'accueil d'un groupe, un en-tete ou un pied
+//                choisi dont la case est decochee ; une barre de navigation
+//                automatique (sans liste : les vues du projet) suivra, elle ne
+//                bloque pas ; une vue montree par un ecran du poste : refuse ;
 //    remplacer   ce qui le cite cite un AUTRE element du meme genre, qui EXISTE
 //                (jamais un nom invente) : le passage de Renommer
 //                (rewriteHmiReferences, renameTypeEverywhere...) ;
-//    references  il part, avec SEULEMENT les references qui le citent (une
-//                propriete d'objet videe, une action retiree, les instances d'un
-//                symbole, une variable deliee de l'equipement) ; une reference
-//                qui ne se retire pas sans casser (du code, une condition
-//                d'alarme, une variable de ce type) : refuse, et dit laquelle ;
+//    references  il part ; ce qui le cite est MODIFIE (sur la copie) et DIT dans
+//                l'apercu - Removal::consequences (une phrase chacune), les objets
+//                modifies (ObjectEdit : avant -> apres, les reperes de l'apercu),
+//                Check::made (une vue, le poste, un groupe). 1.22.7, cas par cas :
+//      une action qui l'ouvre, l'appelle, l'acquitte     retiree ;
+//      une propriete d'objet qui le nomme                videe (un texte a trous : le trou seul) ;
+//      la liste << views >> d'une barre de navigation    l'entree retiree, son libelle avec (les autres
+//                                                        gardees, dans l'ordre) ; vide : un avertissement
+//                                                        (la barre montre alors toutes les vues ordinaires ;
+//                                                        elle n'est jamais supprimee d'office) ;
+//      une zone d'un plan a zones (<< mapZones >>)        sa vue videe : la zone et ses alarmes restent, un
+//                                                        clic n'y navigue plus ;
+//      un argument d'une instance (<< params >>)          vide (withArgument) : le parametre reprend sa
+//                                                        valeur par defaut ;
+//      une instance d'un symbole qui part                retiree ;
+//      une variable liee a l'equipement qui part         deliee, gardee ;
+//      le message, la consigne d'une alarme              le trou qui la lit retire ;
+//      la vue parente (upView) d'autres vues             la parente de la vue supprimee si elle reste,
+//                                                        sinon la racine (kNoId) ;
+//      l'ecran modele (templateView)                     le modele du modele supprime s'il reste, sinon
+//                                                        aucun (jamais un modele sans rapport) ;
+//      l'en-tete, le pied de page                        le premier du meme role qui reste, sinon la case
+//                                                        decochee ;
+//      la vue de demarrage                               la premiere vue ordinaire qui reste ; aucune :
+//                                                        REFUSE (aussi en << seul >>) ;
+//      la vue d'accueil d'un groupe                      la vue de demarrage (kNoId) ;
+//      un ecran du poste                                 retire de la liste des ecrans ;
+//      l'historique                                      la variable n'y est plus archivee.
+//                Restent des REFUS (on ne reecrit pas du code sans savoir) : du
+//                code qui le nomme (un script, une fonction, une redefinition, le
+//                code d'une action, une condition d'alarme, une alarme surchargee),
+//                une variable ou un type de ce type, un champ de recette, un
+//                argument hors des parametres du symbole. Le refus dit OU (le
+//                script et la ligne) et la strategie qui marcherait : remplacer,
+//                avec les elements existants les plus proches (remplacer_par) ;
 //    + inutiles  en plus, ce qui devient inutile : une popup que plus rien
 //                n'ouvre, un script sur appel que plus rien n'appelle, une
 //                fonction, une ressource - JAMAIS une definition (type, symbole),
@@ -143,6 +178,9 @@ struct Analysis {
     std::vector<Item> moved;              // un dossier supprime : ce qui remonte d'un cran
     std::vector<std::string> fixes;       // ce que la strategie change ailleurs, une phrase chacun
     std::vector<ObjectEdit>  objects;     // les objets modifies ou retires par la strategie
+    // 1.22.7 : ce que la strategie regle hors des objets (une vue : son en-tete, sa vue parente ; la vue de demarrage ; un
+    // groupe ; le poste) - une ligne de l'apercu chacun (Check::made : quoi, qui, avant -> apres).
+    std::vector<Check::Made> made;
     std::vector<std::string> errors, warnings;
     [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
     // Le resume par categorie et par genre : "4 variables directement concern\xC3\xA9" "es", "8 alarmes d\xC3\xA9pendantes"...

@@ -152,8 +152,10 @@ const char* const kRules =
     "instance de symbole : le symbole et ses autres instances restent), vue, popup, symbole (SA D\xC3\x89" "FINITION : toutes ses instances "
     "en d\xC3\xA9pendent), modele, variable, type, alarme, script, fonction, equipement, ressource, dossier (+ liste). strategie : seul "
     "(par d\xC3\xA9" "faut ; refus\xC3\xA9" "e si quelque chose en d\xC3\xA9pend - le logiciel dit quoi), remplacer + remplacer_par (un \xC3\xA9l\xC3\xA9ment "
-    "EXISTANT du m\xC3\xAAme genre, jamais invent\xC3\xA9), references (il part avec SEULEMENT les r\xC3\xA9" "f\xC3\xA9rences qui le citent : propri\xC3\xA9t\xC3\xA9s "
-    "vid\xC3\xA9" "es, actions retir\xC3\xA9" "es, instances retir\xC3\xA9" "es, variables d\xC3\xA9li\xC3\xA9" "es ; du code qui le cite : refus\xC3\xA9). inutiles: true : "
+    "EXISTANT du m\xC3\xAAme genre, jamais invent\xC3\xA9), references (il part ; ce qui le cite est MODIFI\xC3\x89 et dit dans l'aper\xC3\xA7u : "
+    "propri\xC3\xA9t\xC3\xA9s vid\xC3\xA9" "es, actions et instances retir\xC3\xA9" "es, variables d\xC3\xA9li\xC3\xA9" "es, entr\xC3\xA9" "es des listes retir\xC3\xA9" "es "
+    "(barre de navigation, plan, arguments), en-t\xC3\xAAtes, pieds, vues parentes et de d\xC3\xA9part suivants ; du code qui le cite : "
+    "refus\xC3\xA9). Vue cit\xC3\xA9" "e ailleurs : references par d\xC3\xA9" "faut (remplacer pour garder ses liens vers une autre vue). inutiles: true : "
     "aussi ce qui devient inutile (popup, script sur appel, fonction, ressource ; jamais une variable ni une d\xC3\xA9" "finition). exclure : "
     "les noms \xC3\xA0 garder. Supprimer un objet garde sa variable ; une vue garde les scripts qu'elle appelle. Le logiciel analyse les "
     "d\xC3\xA9pendances (directes, indirectes, potentielles, partag\xC3\xA9" "es, orphelins), v\xC3\xA9rifie sur une copie, montre tout et demande "
@@ -648,8 +650,8 @@ std::string operationsTool() {
                               "supprimer + genre : les \xC3\xA9l\xC3\xA9ments existants de ce genre."));
     // 1.21.0 : la suppression intelligente.
     props.set("strategie", choice({"seul", "remplacer", "references", "inutiles"},
-                                  "supprimer : seul (refus\xC3\xA9 si quelque chose en d\xC3\xA9pend), remplacer (+ remplacer_par), references (retire "
-                                  "seulement les r\xC3\xA9" "f\xC3\xA9rences), inutiles (+ ce qui devient inutile)."));
+                                  "supprimer : seul (refus\xC3\xA9 si quelque chose en d\xC3\xA9pend), remplacer (+ remplacer_par), references (modifie ce "
+                                  "qui le cite, et le dit), inutiles (+ ce qui devient inutile)."));
     props.set("remplacer_par", str("supprimer, strategie remplacer : un \xC3\xA9l\xC3\xA9ment EXISTANT du m\xC3\xAAme genre (jamais invent\xC3\xA9)."));
     props.set("exclure", names("supprimer : les \xC3\xA9l\xC3\xA9ments \xC3\xA0 garder (jamais supprim\xC3\xA9s ni modifi\xC3\xA9s)."));
     {

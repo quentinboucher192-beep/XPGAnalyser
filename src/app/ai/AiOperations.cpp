@@ -3997,9 +3997,11 @@ bool runStaged(hmi::Project& pr, const Proposal& p, const Env& env, Mode mode, C
                 for (const auto& it : an.removed) log->removed.emplace_back(i, it);
                 for (const auto& d : an.direct) log->touched.push_back(d.name);
             }
+            if (ok) o.made.insert(o.made.end(), an.made.begin(), an.made.end());   // 1.22.7 : une vue, le poste, un groupe regles
             if (check) {
                 for (const auto& e : an.errors) check->errors.push_back(e);
                 for (const auto& w : an.warnings) check->warnings.push_back(w);
+                if (ok) check->made.insert(check->made.end(), an.made.begin(), an.made.end());
                 check->removals.push_back(del::removalOf(i, an, p.ops[i].keep));
                 check->remove += static_cast<int>(an.removed.size());
                 ++check->projectRemovals;

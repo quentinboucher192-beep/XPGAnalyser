@@ -15,18 +15,23 @@
 #include "../RenameDialog.hpp"            // rewriteHmiReferences : le passage de Renommer (remplacer)
 #include "../../hmi/HmiAssets.hpp"        // renameResource (remplacer une ressource)
 #include "../../hmi/HmiAudit.hpp"         // la verification globale
+#include "../../hmi/HmiControls.hpp"      // listItems (la liste d'une barre de navigation, comme navItems la lit)
 #include "../../hmi/HmiEdit.hpp"          // edit::remove (des objets, avec leurs enfants)
 #include "../../hmi/HmiFolders.hpp"
 #include "../../hmi/HmiMethods.hpp"       // renameTypeEverywhere (remplacer un type)
+#include "../../hmi/HmiNavigation.hpp"    // parseMapZones, formatMapZones (les zones d'un plan)
 #include "../../hmi/HmiRenameRefs.hpp"    // renameAlarmReferences (remplacer une alarme)
 #include "../../hmi/HmiRoles.hpp"         // roles::nameOf
 #include "../../hmi/HmiScript.hpp"        // forEachCode, renameFunctionEverywhere, scriptCalls
 #include "../../hmi/HmiSymbols.hpp"       // isSymbolView
 #include "../../hmi/HmiTemplates.hpp"     // headerOf, footerOf
 #include "../../hmi/HmiTypes.hpp"         // types::usersOf, types::folderParent
+#include "../../hmi/HmiWidgets.hpp"       // joinSemicolons (une liste reecrite, comme l'onglet Contenu)
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -162,6 +167,42 @@ std::string dropHoles(std::string_view text, std::string_view name) {
     }
     return out;
 }
+
+// La premiere ligne (1, 2...) d'un texte de plusieurs lignes qui NOMME `name` (mentions) ; 0 : un texte d'une ligne, ou
+// nulle part.
+int lineOf(std::string_view text, std::string_view name, bool quoted) {
+    if (text.find('\n') == std::string_view::npos) return 0;
+    int line = 1;
+    for (std::size_t start = 0; start <= text.size(); ++line) {
+        const auto nl = text.find('\n', start);
+        if (mentions(text.substr(start, nl == std::string_view::npos ? std::string_view::npos : nl - start), name, quoted)) return line;
+        if (nl == std::string_view::npos) break;
+        start = nl + 1;
+    }
+    return 0;
+}
+
+// "A", "A ou B", "A, B ou C".
+std::string joinedOr(const std::vector<std::string>& items) {
+    std::string s;
+    for (std::size_t i = 0; i < items.size(); ++i) s += (i == 0 ? "" : i + 1 == items.size() ? " ou " : ", ") + items[i];
+    return s;
+}
+
+// Une barre de navigation AUTOMATIQUE (sa liste << views >> vide : les vues ordinaires du projet, navItems) ne nomme
+// aucune vue : son arete vers une vue n'est pas une reference a retirer - elle suivra (une vue de moins).
+bool automaticNav(const hmi::Project& p, const rel::Graph& g, const rel::Edge& e) {
+    static const std::string tail = " . views (barre de navigation)";
+    const rel::Node& src = g.node(e.from);
+    if (src.kind != RK::Object || e.link != rel::Link::Opens || e.where.size() < tail.size()
+        || e.where.compare(e.where.size() - tail.size(), tail.size(), tail) != 0)
+        return false;
+    const hmi::View* v = p.view(src.view);
+    const hmi::Object* o = v ? v->object(src.id) : nullptr;
+    return o && o->kind == hmi::Kind::NavBar && hmi::listItems(o->text("views")).empty();
+}
+
+const char* const kArrow = " \xE2\x86\x92 ";
 
 // ---- les noms des genres ----------------------------------------------------------------------
 struct Noun {
@@ -534,12 +575,19 @@ public:
                     if (jokerNodes_.insert(src).second) a_.indirect.push_back(itemOf(g_, src, p_, rel::edgeText(g_, edge) + " (joker de dossier : la liste suivra)"));
                     continue;
                 }
+                // 1.22.7 : une barre de navigation automatique (sans liste) ne la nomme pas : elle suivra.
+                if (automaticNav(p_, g_, edge)) {
+                    if (jokerNodes_.insert(src).second)
+                        a_.indirect.push_back(itemOf(g_, src, p_, rel::edgeText(g_, edge) + " (barre automatique : elle suivra, une vue de moins)"));
+                    continue;
+                }
                 directEdges_.push_back(e);
                 if (directNodes_.insert(src).second) a_.direct.push_back(itemOf(g_, src, p_, rel::edgeText(g_, edge)));
             }
         }
         // Les emplois que le graphe note sans arete (une fonction appelee par Vue.F(...), un type employe ailleurs) :
-        // directs aussi ; la vue de demarrage, l'accueil d'un groupe, l'historique : des avertissements.
+        // directs aussi ; l'historique : un avertissement. La vue de demarrage, l'accueil d'un groupe, un ecran du poste :
+        // regles (et dits) par settle.
         for (const auto t : targets_) {
             const rel::Node& node = g_.node(t);
             for (const auto& note : node.notes) {
@@ -547,11 +595,7 @@ public:
                     notedUsers_.push_back(node.name + " : " + note);
                     continue;
                 }
-                if (note.rfind("vue de d\xC3\xA9marrage", 0) == 0)
-                    a_.warnings.push_back(node.name + " est la vue de d\xC3\xA9marrage : la premi\xC3\xA8re vue qui reste la remplace.");
-                else if (note.rfind("vue d'accueil", 0) == 0)
-                    a_.warnings.push_back(node.name + " est la " + note + " : le groupe n'aura plus de vue d'accueil.");
-                else if (note.rfind("archiv", 0) == 0)
+                if (note.rfind("archiv", 0) == 0)
                     a_.warnings.push_back(node.name + " est archiv\xC3\xA9" "e par l'historique : l'historique ne la gardera plus.");
             }
             // Le type : la regle de Types IHM (types::usersOf), en plus du graphe.
@@ -691,17 +735,21 @@ public:
         if (rq_.strategy == Strategy::Replace) return replacementCheck();
         // References : ce qui ne se retire pas est dit par apply (sur la copie).
         if (!notedUsers_.empty()) {
-            a_.errors.push_back(a_.title + " : " + joined(notedUsers_, 4) + " - ces emplois ne se retirent pas (du code) : remplace-le (strat\xC3\xA9gie remplacer) "
-                                "ou supprime d'abord ce qui l'emploie.");
+            a_.errors.push_back(a_.title + " : " + joined(notedUsers_, 4) + " - ces emplois sont du code : on ne le r\xC3\xA9\xC3\xA9" "crit pas sans savoir. "
+                                + replaceHint(g_.node(targets_.front())) + ", ou supprime d'abord ce qui l'emploie.");
             return false;
         }
         return true;
     }
 
-    // 5. sur la copie : la strategie, puis le retrait.
+    // 5. sur la copie : la strategie, puis le retrait. Seul et references : ce qui n'est pas une reference se regle (settle).
     bool apply(hmi::Project& w) {
-        if (rq_.strategy == Strategy::Replace) replaceIn(w);
-        else if (rq_.strategy == Strategy::References) referencesIn(w);
+        if (rq_.strategy == Strategy::Replace) {
+            replaceIn(w);
+        } else {
+            if (rq_.strategy == Strategy::References) referencesIn(w);
+            settle(w);
+        }
         if (!a_.errors.empty()) return false;
         eraseItems(w, a_.removed);
         return true;
@@ -875,11 +923,11 @@ private:
     }
 
     // Que faire, selon le genre (le refus de << seul >>).
-    std::string advice() const {
+    [[nodiscard]] std::string advice() const {
         switch (rq_.genre) {
             case Genre::Type:
-                return "Un type employ\xC3\xA9 ne se supprime pas en laissant des variables invalides : remplace-le par un autre type existant "
-                       "(strat\xC3\xA9gie remplacer, remplacer_par), ou supprime d'abord ce qui l'emploie.";
+                return "Un type employ\xC3\xA9 ne se supprime pas en laissant des variables invalides. " + replaceHint(g_.node(targets_.front()))
+                       + ", ou supprime d'abord ce qui l'emploie.";
             case Genre::Symbol:
                 return "Ses instances montreraient \xC2\xAB Symbole introuvable \xC2\xBB : strat\xC3\xA9gie references (ses instances sont retir\xC3\xA9" "es), "
                        "remplacer (par un autre symbole existant), ou supprime seulement une instance (genre instance).";
@@ -889,8 +937,10 @@ private:
             case Genre::View:
             case Genre::Popup:
             case Genre::Template:
-                return "Strat\xC3\xA9gie references (les actions qui l'ouvrent sont retir\xC3\xA9" "es, les liens de mod\xC3\xA8le d\xC3\xA9" "faits), remplacer (par une "
-                       "autre vue existante), ou ajoute ces \xC3\xA9l\xC3\xA9ments \xC3\xA0 la suppression.";
+                return "Strat\xC3\xA9gie references (ce qui la cite est modifi\xC3\xA9 et dit : les actions qui l'ouvrent retir\xC3\xA9" "es, elle sort des "
+                       "barres de navigation et des plans, les vues filles remontent, l'en-t\xC3\xAAte et le pied suivent ; du code qui la nomme "
+                       "reste refus\xC3\xA9), remplacer (par une autre vue existante : les liens la suivent), ou ajoute ces \xC3\xA9l\xC3\xA9ments \xC3\xA0 la "
+                       "suppression.";
             case Genre::Equipment:
                 return "Strat\xC3\xA9gie references (ses variables sont d\xC3\xA9li\xC3\xA9" "es et gard\xC3\xA9" "es) ou remplacer (par un autre \xC3\xA9quipement existant).";
             case Genre::Script:
@@ -1045,7 +1095,7 @@ private:
         }
     }
 
-    // ---- references : retirer seulement les references ------------------------------------------------
+    // ---- references : modifier ce qui le cite, et le dire ------------------------------------------------
     ObjectEdit& editOf(const hmi::View& v, const hmi::Object& o) {
         for (auto& e : a_.objects)
             if (e.object == o.id && e.view == v.id) return e;
@@ -1058,10 +1108,119 @@ private:
         a_.objects.push_back(std::move(e));
         return a_.objects.back();
     }
-    void refuse(const std::string& where, const std::string& what) {
-        a_.errors.push_back(a_.title + " (r\xC3\xA9" "f\xC3\xA9rences) : " + where + " - " + what
-                            + " ne se retire pas sans casser : remplace-le (strat\xC3\xA9gie remplacer) ou ajoute cet \xC3\xA9l\xC3\xA9ment \xC3\xA0 la suppression.");
+
+    // Une vue (par son identifiant) part-elle avec CETTE suppression ?
+    [[nodiscard]] bool removedView(hmi::Id id) const {
+        if (id == hmi::kNoId) return false;
+        const auto n = g_.byId(id);
+        return n && gone_[*n] && viewLike(g_.node(*n).kind);
     }
+    // ... avec celle-ci ou une autre de la proposition (Context::also) : jamais un remplacant.
+    [[nodiscard]] bool leaving(hmi::Id id) const {
+        if (id == hmi::kNoId) return false;
+        const auto n = g_.byId(id);
+        return n && (gone_[*n] || matches(g_, *n, p_, ctx_.also));
+    }
+    // La premiere vue de ce role qui reste (dans l'ordre du projet), sauf `self` ; nul : aucune.
+    [[nodiscard]] const hmi::View* firstRemaining(std::string_view role, hmi::Id self) const {
+        for (const auto& v : p_.views)
+            if (v.role == role && v.id != self && !leaving(v.id)) return &v;
+        return nullptr;
+    }
+    // En remontant depuis `from` (qui part) par `up` (le modele du modele, la parente de la parente) : la premiere vue qui
+    // reste, sauf `self` ; kNoId : aucune.
+    [[nodiscard]] hmi::Id survivor(hmi::Id from, hmi::Id self, const std::function<hmi::Id(const hmi::View&)>& up) const {
+        std::set<hmi::Id> seen;
+        for (hmi::Id id = from; id != hmi::kNoId && seen.insert(id).second;) {
+            const hmi::View* x = p_.view(id);
+            if (!x) break;
+            if (!leaving(id)) return id == self ? hmi::kNoId : id;
+            id = up(*x);
+        }
+        return hmi::kNoId;
+    }
+    // Une modification hors des objets, dite : une consequence de l'apercu, une ligne de Check::made.
+    void said(const std::string& what, const std::string& who, const std::string& change) {
+        a_.fixes.push_back(who + " : " + change + ".");
+        a_.made.push_back({what, who, change});
+    }
+
+    // Les elements EXISTANTS du meme genre qui restent, pour remplacer : les plus proches par le nom (vrai) ; sans proche,
+    // quelques vues (faux) - jamais un nom invente.
+    [[nodiscard]] std::pair<std::vector<std::string>, bool> candidates(const rel::Node& dst) const {
+        std::vector<std::string> out;
+        const auto usable = [&](std::size_t n) {
+            const rel::Node& x = g_.node(n);
+            return x.kind == dst.kind && !gone_[n] && !matches(g_, n, p_, ctx_.also) && x.id != hmi::kNoId
+                && !((x.kind == RK::Script || x.kind == RK::Function) && x.view != hmi::kNoId)
+                && std::find(out.begin(), out.end(), x.name) == out.end();
+        };
+        for (const auto& name : nearNames(g_, {dst.kind}, dst.name))
+            if (const auto n = g_.find(dst.kind, name); n && usable(*n) && out.size() < 3) out.push_back(g_.node(*n).name);
+        if (!out.empty() || !viewLike(dst.kind)) return {out, true};
+        for (std::size_t n = 0; n < g_.size() && out.size() < 3; ++n)
+            if (usable(n)) out.push_back(g_.node(n).name);
+        return {out, false};
+    }
+    // La strategie qui marcherait : remplacer, avec des elements existants (remplacer_par).
+    [[nodiscard]] std::string replaceHint(const rel::Node& dst) const {
+        const Noun no = nounOf(dst.kind);
+        std::string s = std::string(no.fem ? "Remplace-la par une autre " : "Remplace-le par un autre ") + no.one + (no.fem ? " existante" : " existant")
+                      + " (strat\xC3\xA9gie remplacer";
+        const auto [names, near] = candidates(dst);
+        if (!names.empty())
+            s += ", remplacer_par : " + joinedOr(names)
+               + (near ? (names.size() > 1 ? " - les plus proches" : no.fem ? " - la plus proche" : " - le plus proche") : " par exemple");
+        return s + ")";
+    }
+    // Un refus : ou, quoi, pourquoi ; et la strategie qui marcherait.
+    void refuse(const std::string& where, const std::string& what, const rel::Node& dst, const std::string& why = {},
+                const std::string& otherwise = "ajoute cet \xC3\xA9l\xC3\xA9ment \xC3\xA0 la suppression") {
+        a_.errors.push_back(a_.title + " (r\xC3\xA9" "f\xC3\xA9rences) : " + where + " - " + what
+                            + (why.empty() ? std::string(" ne se retire pas sans casser") : " : " + why) + ". " + replaceHint(dst) + ", ou " + otherwise
+                            + ".");
+    }
+    // Ou un code de `src` NOMME `name` (forEachCode) : "script Nav, ligne 2", "Vue_B . action 1" - 3 au plus ; `only` :
+    // seulement ces endroits.
+    [[nodiscard]] std::vector<std::string> codeSpots(const rel::Node& src, const std::string& name, bool quoted,
+                                                     const std::function<bool(const hmi::CodeSite&)>& only = {}) const {
+        std::vector<std::string> out;
+        const std::string alarmHead = lower("alarme " + src.name);
+        hmi::forEachCode(p_, [&](const std::string& text, hmi::CodeForm, const hmi::CodeSite& s) {
+            if (s.again || text.empty() || out.size() >= 3) return;
+            const hmi::View* host = s.host ? s.host : s.view;
+            bool mine = false;
+            switch (src.kind) {
+                case RK::Script: mine = s.script == src.id; break;
+                case RK::Function: mine = s.function == src.id || (s.method && s.method->id == src.id) || (s.own && s.own->id == src.id); break;
+                case RK::Object: mine = s.object && s.object->id == src.id; break;
+                case RK::View:
+                case RK::Popup:
+                case RK::Symbol:
+                case RK::Template: mine = !s.object && s.script == hmi::kNoId && s.function == hmi::kNoId && host && host->id == src.id; break;
+                case RK::Alarm: {
+                    const std::string w = lower(s.where);
+                    mine = !s.object && w.rfind(alarmHead, 0) == 0 && (w.size() == alarmHead.size() || !identChar(w[alarmHead.size()]));
+                    break;
+                }
+                default: break;
+            }
+            if (!mine || (only && !only(s)) || !mentions(text, name, quoted)) return;
+            const int line = lineOf(text, name, quoted);
+            const std::string at = (s.object && s.key.empty() && s.action < 0 ? s.where : siteWhere(s)) + (line > 0 ? ", ligne " + std::to_string(line) : std::string{});
+            if (std::find(out.begin(), out.end(), at) == out.end()) out.push_back(at);
+        });
+        return out;
+    }
+    // Du code de `src` nomme l'element : refuse (une fois par code et par element), en disant ou (le script, la ligne).
+    void refuseCode(const rel::Edge& edge, const rel::Node& src, const rel::Node& dst, const std::function<bool(const hmi::CodeSite&)>& only = {}) {
+        if (!codeRefused_.insert({edge.from, edge.to}).second) return;
+        const bool quoted = viewLike(dst.kind) || dst.kind == RK::Script || dst.kind == RK::Resource;
+        const auto spots = codeSpots(src, dst.name, quoted, only);
+        refuse(spots.empty() ? edge.where : joined(spots, 3), "du code nomme " + dst.name, dst, kCodeWhy, "corrige ce code d'abord");
+    }
+    static constexpr const char* kCodeWhy = "on ne r\xC3\xA9\xC3\xA9" "crit pas du code sans savoir";
+
     // Les actions d'une liste qui citent l'element (sa cible ou sa valeur), retirees ; rend leur libelle.
     static std::vector<std::string> dropActions(std::vector<hmi::Action>& list, const std::function<bool(const hmi::Action&)>& cites) {
         std::vector<std::string> out;
@@ -1071,6 +1230,191 @@ private:
                 list.erase(list.begin() + static_cast<std::ptrdiff_t>(k));
             }
         return out;
+    }
+
+    // ---- les listes d'un objet (1.22.7) : l'entree qui le nomme, retiree - lues et reecrites comme l'application les lit
+    // La liste << views >> d'une barre de navigation (listItems, comme navItems) : l'entree qui nomme la vue retiree, son
+    // libelle (au meme rang) avec ; les autres gardees, dans l'ordre. Vide : la barre montre toutes les vues - dit.
+    void navViews(const hmi::View& v, hmi::Object& o, hmi::Prop& pr, const rel::Node& dst, ObjectEdit& ed) {
+        const auto items = hmi::listItems(pr.value);
+        hmi::Prop* pl = o.find("labels");
+        const auto labels = pl ? hmi::roles::splitList(pl->value, ';') : std::vector<std::string>{};
+        std::vector<std::string> keep, keepLabels;
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            if (hmi::roles::nameOf(items[i]) == dst.name) continue;
+            keep.push_back(items[i]);
+            keepLabels.push_back(i < labels.size() ? labels[i] : std::string{});
+        }
+        if (keep.size() == items.size()) return;
+        const std::string before = pr.value;
+        pr.value = hmi::joinSemicolons(keep);
+        ed.changes.push_back({"views", before, pr.value});
+        if (pl) {
+            while (!keepLabels.empty() && keepLabels.back().empty()) keepLabels.pop_back();
+            const std::string after = keepLabels.empty() ? std::string{} : hmi::joinSemicolons(keepLabels);
+            if (after != pl->value) {
+                ed.changes.push_back({"labels", pl->value, after});
+                pl->value = after;
+            }
+        }
+        a_.fixes.push_back(v.name + "." + o.name + " : " + dst.name + " " + agreed("retir\xC3\xA9", 1, nounOf(dst.kind).fem) + " de la liste des vues ("
+                           + std::to_string(items.size()) + kArrow + std::to_string(keep.size()) + ").");
+        if (keep.empty())
+            a_.warnings.push_back(v.name + "." + o.name + " : sa liste des vues est vide - la barre de navigation montre alors toutes les vues "
+                                  "ordinaires du projet. Choisis ses vues, ou supprime-la si elle ne sert plus.");
+    }
+    // Les zones d'un plan (<< mapZones >>, une par ligne : parseMapZones, formatMapZones) : la zone qui mene a la vue garde
+    // son nom, ses points, ses alarmes et sa couleur ; sa vue est videe (un clic n'y navigue plus). Les autres lignes : telles quelles.
+    void zoneViews(const hmi::View& v, const hmi::Object& o, hmi::Prop& pr, const rel::Node& dst, ObjectEdit& ed) {
+        std::string out;
+        std::vector<std::string> zones;
+        const std::string& text = pr.value;
+        for (std::size_t start = 0; start <= text.size();) {
+            const auto nl = text.find('\n', start);
+            std::string line = text.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+            auto parsed = hmi::parseMapZones(line);
+            if (parsed.size() == 1 && hmi::roles::nameOf(parsed.front().view) == dst.name) {
+                parsed.front().view.clear();
+                zones.push_back(parsed.front().name);
+                line = hmi::formatMapZones(parsed);
+            }
+            out += line;
+            if (nl == std::string::npos) break;
+            out += '\n';
+            start = nl + 1;
+        }
+        if (zones.empty()) return;
+        ed.changes.push_back({"mapZones", pr.value, out});
+        pr.value = out;
+        const bool many = zones.size() > 1;
+        a_.fixes.push_back(v.name + "." + o.name + " : " + (many ? "les zones " : "la zone ") + joined(zones) + (many ? " ne m\xC3\xA8nent" : " ne m\xC3\xA8ne")
+                           + " plus \xC3\xA0 " + dst.name + " (vue vid\xC3\xA9" "e ; " + (many ? "les zones et leurs alarmes restent" : "la zone et ses alarmes restent")
+                           + ").");
+    }
+    // Les arguments d'une instance (<< params >>) : l'argument qui le nomme vide (givenArguments, withArgument : comme
+    // l'inspecteur) - le parametre reprend sa valeur par defaut. Un argument hors des parametres du symbole : refuse.
+    void instanceArguments(const hmi::Project& w, const hmi::View& v, const hmi::Object& o, hmi::Prop& pr, const rel::Node& dst, bool quoted,
+                           ObjectEdit& ed) {
+        const std::string where = v.name + " . " + o.name + " . params";
+        const hmi::View* sym = hmi::symbolOf(w, o);
+        if (!sym || mentions(pr.expr, dst.name, quoted)) {
+            refuse(where, "ses arguments", dst, sym ? "ils sont calcul\xC3\xA9s par une formule" : "son symbole est introuvable");
+            return;
+        }
+        std::string text = pr.value;
+        std::vector<std::string> lines;
+        const auto given = hmi::givenArguments(*sym, text);
+        for (std::size_t i = 0; i < given.size() && i < sym->params.size(); ++i) {
+            if (!mentions(given[i], dst.name, quoted)) continue;
+            text = hmi::withArgument(*sym, text, i, "");
+            const std::string& def = sym->params[i].defaultValue;
+            lines.push_back(v.name + "." + o.name + " : argument " + sym->params[i].name + " vid\xC3\xA9 (" + given[i] + kArrow
+                           + (def.empty() ? std::string("sa valeur par d\xC3\xA9" "faut") : "valeur par d\xC3\xA9" "faut " + def) + ").");
+        }
+        if (mentions(text, dst.name, quoted)) {
+            refuse(where, "un argument qui n'est pas un param\xC3\xA8tre de " + sym->name, dst);
+            return;
+        }
+        if (lines.empty()) return;
+        ed.changes.push_back({"params", pr.value, text});
+        pr.value = text;
+        for (auto& l : lines) a_.fixes.push_back(std::move(l));
+    }
+
+    // ---- les liens par identifiant (1.22.7) : modifies, dits ----------------------------------------------
+    //  Les vues qui restent et qui pointent une vue qui part : l'ecran modele (celui au-dessus, sinon aucun), l'en-tete et
+    //  le pied montres (le premier du meme role qui reste, sinon la case decochee), la vue parente (celle au-dessus, sinon
+    //  la racine) ; un en-tete ou un pied choisi dont la case est decochee : oublie. `hiddenOnly` (strategie seul) :
+    //  seulement ce dernier (il ne se voit pas : pas une dependance) - seul refuse les autres.
+    void relink(hmi::Project& w, bool hiddenOnly) {
+        for (auto& v : w.views) {
+            const hmi::View* pv = p_.view(v.id);
+            if (!pv || leaving(v.id) || kept(v.name)) continue;
+            const std::string what(hmi::viewRoleLabel(v.role));
+            if (!hiddenOnly && removedView(v.templateView)) {
+                const std::string was = p_.view(v.templateView)->name;
+                const hmi::Id up = survivor(v.templateView, v.id, [](const hmi::View& x) { return x.templateView; });
+                v.templateView = up;
+                said(what, v.name, "\xC3\xA9" "cran mod\xC3\xA8le " + was + kArrow + (up != hmi::kNoId ? p_.view(up)->name + " (celui au-dessus de " + was + ")" : std::string("aucun")));
+            }
+            for (const bool header : {true, false}) {
+                hmi::Id& chosen = header ? v.header : v.footer;
+                bool& show = header ? v.showHeader : v.showFooter;
+                const hmi::View* shown = header ? hmi::headerOf(p_, *pv) : hmi::footerOf(p_, *pv);
+                const std::string band = header ? "en-t\xC3\xAAte" : "pied de page";
+                if (shown && removedView(shown->id)) {
+                    if (hiddenOnly) continue;
+                    const hmi::View* next = firstRemaining(header ? "entete" : "pied", v.id);
+                    chosen = next ? next->id : hmi::kNoId;
+                    show = next != nullptr;
+                    said(what, v.name, band + " " + shown->name + kArrow + (next ? next->name + " (le premier qui reste)" : std::string("aucun (case d\xC3\xA9" "coch\xC3\xA9" "e)")));
+                } else if (removedView(chosen)) {
+                    const std::string was = p_.view(chosen)->name;
+                    chosen = hmi::kNoId;
+                    said(what, v.name, band + " choisi " + was + " oubli\xC3\xA9 (sa case \xC3\xA9tait d\xC3\xA9" "coch\xC3\xA9" "e)");
+                }
+            }
+            if (!hiddenOnly && removedView(v.upView)) {
+                const std::string was = p_.view(v.upView)->name;
+                const hmi::Id up = survivor(v.upView, v.id, [](const hmi::View& x) { return x.upView; });
+                v.upView = up;
+                said(what, v.name, "vue parente " + was + kArrow + (up != hmi::kNoId ? p_.view(up)->name + " (celle au-dessus de " + was + ")"
+                                                                                    : std::string("aucune (une racine du fil d'Ariane)")));
+            }
+        }
+    }
+
+    // Ce qui n'est pas une reference (une note du graphe, seul et references) : la vue de demarrage (la premiere vue ordinaire
+    // qui reste ; aucune : refuse), la vue d'accueil d'un groupe (la vue de demarrage), un ecran du poste (retire de la
+    // liste ; seul : refuse) ; seul : un en-tete ou un pied choisi, case decochee (oublie). Tout est dit.
+    void settle(hmi::Project& w) {
+        const bool refs = rq_.strategy == Strategy::References;
+        if (!refs) relink(w, true);
+        if (removedView(p_.config.startView)) {
+            const std::string was = p_.view(p_.config.startView)->name;
+            if (const hmi::View* next = firstRemaining("vue", hmi::kNoId)) {
+                w.config.startView = next->id;
+                a_.fixes.push_back("Vue de d\xC3\xA9marrage : " + was + kArrow + next->name + " (la premi\xC3\xA8re vue qui reste).");
+                a_.made.push_back({"Vue de d\xC3\xA9marrage", next->name, "avant : " + was + " (supprim\xC3\xA9" "e)"});
+                a_.warnings.push_back(was + " est la vue de d\xC3\xA9marrage : " + next->name + " la remplace (la premi\xC3\xA8re vue qui reste).");
+            } else {
+                a_.errors.push_back(a_.title + " : " + was + " est la vue de d\xC3\xA9marrage et aucune autre vue ordinaire ne reste - le projet n'aurait "
+                                    "plus de vue de d\xC3\xA9marrage. Cr\xC3\xA9" "e d'abord une autre vue (ou garde celle-ci).");
+            }
+        }
+        const hmi::View* start = removedView(w.config.startView) ? nullptr : w.view(w.config.startView);
+        for (auto& gr : w.security.groups) {
+            if (!removedView(gr.startView)) continue;
+            const std::string was = p_.view(gr.startView)->name;
+            gr.startView = hmi::kNoId;
+            const std::string now = "la vue de d\xC3\xA9marrage" + (start ? " (" + start->name + ")" : std::string{});
+            a_.fixes.push_back("Groupe " + gr.name + " : vue d'accueil " + was + kArrow + now + ".");
+            a_.made.push_back({"Groupe", gr.name, "vue d'accueil " + was + kArrow + now});
+        }
+        for (std::size_t i = w.station.screens.size(); i-- > 0;) {
+            const hmi::StationScreen sc = w.station.screens[i];
+            const hmi::View* sv = p_.viewByName(hmi::roles::nameOf(sc.view));
+            if (!sv || !removedView(sv->id)) continue;
+            const std::string screen = "\xC3\xA9" "cran " + std::to_string(sc.display) + " du poste";
+            if (!refs) {
+                a_.errors.push_back(a_.title + " : " + sv->name + " est montr\xC3\xA9" "e par l'" + screen + " - strat\xC3\xA9gie references (l'\xC3\xA9" "cran est "
+                                    "retir\xC3\xA9 de la liste des \xC3\xA9" "crans du poste) ou remplacer (par une autre vue existante).");
+                continue;
+            }
+            w.station.screens.erase(w.station.screens.begin() + static_cast<std::ptrdiff_t>(i));
+            a_.fixes.push_back("Poste : l'" + screen + " ne montre plus " + sv->name + " (retir\xC3\xA9 de la liste des \xC3\xA9" "crans).");
+            a_.made.push_back({"Poste", screen, "ne montre plus " + sv->name + " (retir\xC3\xA9)"});
+        }
+    }
+
+    // Une alarme du projet ou d'un symbole, par son identifiant (dans la copie).
+    static hmi::AlarmDef* alarmIn(hmi::Project& w, hmi::Id id) {
+        if (id == hmi::kNoId) return nullptr;
+        if (hmi::AlarmDef* a = w.alarm(id)) return a;
+        for (auto& v : w.views)
+            for (auto& a : v.alarms)
+                if (a.id == id) return &a;
+        return nullptr;
     }
 
     void referencesIn(hmi::Project& w) {
@@ -1084,8 +1428,11 @@ private:
             const rel::Node& src = g_.node(edge.from);
             const rel::Node& dst = g_.node(edge.to);
             const std::string at = rel::edgeText(g_, edge);
-            if (kept(src.name)) {
-                a_.errors.push_back(a_.title + " : " + src.name + " est exclu, sa r\xC3\xA9" "f\xC3\xA9rence resterait (" + at + ").");
+            // Une exclusion n'est jamais modifiee : ni l'element, ni (1.22.7) ce que porte une vue exclue (sa barre, son plan).
+            const hmi::View* holder = src.view != hmi::kNoId ? p_.view(src.view) : nullptr;
+            if (kept(src.name) || (holder && kept(holder->name))) {
+                a_.errors.push_back(a_.title + " : " + (kept(src.name) || !holder ? src.name : holder->name) + " est exclu, sa r\xC3\xA9" "f\xC3\xA9rence resterait ("
+                                    + at + ").");
                 continue;
             }
             const std::string name = dst.name;
@@ -1104,6 +1451,34 @@ private:
                     default: return false;
                 }
             };
+            // Les aretes de `src` vers `dst` : ou le graphe a lu l'element (les proprietes, par leur cle ; les actions qui le
+            // visent, par leur rang ; les actions dont le CODE le nomme ; ailleurs : du code). `head` : "Vue . Objet . ".
+            struct Sites {
+                std::set<std::string> keys;
+                bool                  actions{false}, code{false};
+                std::set<int>         codeActions;
+            };
+            const auto sitesOf = [&](const std::string& head, const std::vector<hmi::Action>* acts) {
+                Sites s;
+                for (const auto e2 : directEdges_) {
+                    const rel::Edge& x = g_.edges()[e2];
+                    if (x.from != edge.from || x.to != edge.to) continue;
+                    if (head.empty() || x.where.rfind(head, 0) != 0) {
+                        s.code = true;
+                        continue;
+                    }
+                    const std::string rest = x.where.substr(head.size());
+                    if (rest.find("(dossier ") != std::string::npos) continue;
+                    if (rest.rfind("action ", 0) == 0) {
+                        const auto rank = std::strtoul(rest.c_str() + 7, nullptr, 10);
+                        if (acts && rank >= 1 && rank <= acts->size() && !cites((*acts)[rank - 1])) s.codeActions.insert(static_cast<int>(rank) - 1);
+                        else s.actions = true;
+                    } else {
+                        s.keys.insert(rest.substr(0, rest.find(' ')));
+                    }
+                }
+                return s;
+            };
             switch (src.kind) {
                 case RK::Object: {
                     hmi::View* v = w.view(src.view);
@@ -1120,38 +1495,43 @@ private:
                         break;
                     }
                     if (!done.insert({edge.from, edge.to}).second) break;
-                    // Ou le graphe a lu l'element dans cet objet : ses proprietes (la cle), ses actions ; un joker de dossier
-                    // (Ligne/*) ne le nomme pas (rien a retirer) ; ailleurs (une redefinition de fonction) : du code.
-                    const std::string head = p_.view(src.view) ? p_.view(src.view)->name + " . " + src.name + " . " : std::string{};
-                    std::set<std::string> keys;
-                    bool actions = false, code = false;
-                    for (const auto e2 : directEdges_) {
-                        const rel::Edge& x = g_.edges()[e2];
-                        if (x.from != edge.from || x.to != edge.to) continue;
-                        if (head.empty() || x.where.rfind(head, 0) != 0) {
-                            code = true;
-                            continue;
-                        }
-                        const std::string rest = x.where.substr(head.size());
-                        if (rest.find("(dossier ") != std::string::npos) continue;
-                        if (rest.rfind("action ", 0) == 0) actions = true;
-                        else keys.insert(rest.substr(0, rest.find(' ')));
+                    const hmi::View* pv = p_.view(src.view);
+                    const hmi::Object* po = pv ? pv->object(src.id) : nullptr;
+                    const Sites st = sitesOf(pv ? pv->name + " . " + src.name + " . " : std::string{}, po ? &po->actions : nullptr);
+                    // Du code de l'objet le nomme (une redefinition, le code d'une action) : refuse, en disant ou.
+                    if (st.code || !st.codeActions.empty()) {
+                        const auto spots = codeSpots(src, name, quoted, [&](const hmi::CodeSite& s) {
+                            return s.key.empty() && (s.action < 0 ? st.code : st.codeActions.count(s.action) > 0);
+                        });
+                        refuse(spots.empty() ? at : joined(spots, 3), "du code de " + src.name + " nomme " + name, dst, kCodeWhy, "corrige ce code d'abord");
                     }
-                    if (code) refuse(at, "le code de " + src.name);
                     ObjectEdit& ed = editOf(*v, *o);
-                    if (actions)
+                    if (st.actions)
                         for (const auto& d : dropActions(o->actions, cites)) {
                             ed.changes.push_back({d, "", "retir\xC3\xA9" "e"});
                             a_.fixes.push_back(v->name + "." + o->name + " : " + d + " retir\xC3\xA9" "e.");
                         }
-                    for (const auto& key : keys) {
+                    for (const auto& key : st.keys) {
                         hmi::Prop* pr = o->find(key);
                         if (!pr) {
-                            refuse(at, src.name + " (" + key + ")");
+                            refuse(at, src.name + " (" + key + ")", dst);
+                            continue;
+                        }
+                        // 1.22.7 : les listes - l'entree qui le nomme, retiree (avant : un refus).
+                        if (key == "views" && o->kind == hmi::Kind::NavBar) {
+                            navViews(*v, *o, *pr, dst, ed);
+                            continue;
+                        }
+                        if (key == "mapZones" && o->kind == hmi::Kind::ZoneMap) {
+                            zoneViews(*v, *o, *pr, dst, ed);
+                            continue;
+                        }
+                        if (key == "params" && o->kind == hmi::Kind::SymbolInstance) {
+                            instanceArguments(w, *v, *o, *pr, dst, quoted && dst.kind != RK::Variable, ed);
                             continue;
                         }
                         if (key == "params" || key == "views" || key == "mapZones") {
-                            refuse(v->name + " . " + o->name + " . " + key, "cette liste nomme " + name);
+                            refuse(v->name + " . " + o->name + " . " + key, "cette liste nomme " + name, dst);
                             continue;
                         }
                         const bool q = quoted && dst.kind != RK::Variable;
@@ -1166,9 +1546,7 @@ private:
                     }
                     for (const auto& ao : o->alarmOverrides)
                         if ((ao.condition && mentions(*ao.condition, name, false)) || (ao.message && mentions(*ao.message, name, false)))
-                            refuse(v->name + " . " + o->name, "son alarme surcharg\xC3\xA9" "e " + ao.alarm);
-                    for (const auto& fo : o->functionOverrides)
-                        if (mentions(fo.body, name, quoted)) refuse(v->name + " . " + o->name, "sa fonction red\xC3\xA9" "finie " + fo.function);
+                            refuse(v->name + " . " + o->name, "son alarme surcharg\xC3\xA9" "e " + ao.alarm + " le nomme", dst, kCodeWhy, "corrige-la d'abord");
                     if (ed.changes.empty() && !ed.removed) std::erase_if(a_.objects, [&](const ObjectEdit& x) { return x.object == o->id && x.changes.empty() && !x.removed; });
                     break;
                 }
@@ -1177,26 +1555,30 @@ private:
                 case RK::Symbol:
                 case RK::Template: {
                     hmi::View* v = w.view(src.id);
-                    if (!v) break;
-                    if (edge.link == rel::Link::Inherits || (edge.link == rel::Link::Opens && v->upView == dst.id)) {
-                        if (v->templateView == dst.id) v->templateView = hmi::kNoId;
-                        if (v->upView == dst.id) v->upView = hmi::kNoId;
-                        const hmi::View* h = hmi::headerOf(p_, *p_.view(src.id));
-                        if (v->header == dst.id || (v->showHeader && h && h->id == dst.id)) {
-                            v->header = hmi::kNoId;
-                            v->showHeader = false;
-                        }
-                        const hmi::View* f = hmi::footerOf(p_, *p_.view(src.id));
-                        if (v->footer == dst.id || (v->showFooter && f && f->id == dst.id)) {
-                            v->footer = hmi::kNoId;
-                            v->showFooter = false;
-                        }
-                        a_.fixes.push_back(v->name + " : ne s'appuie plus sur " + name + ".");
+                    const hmi::View* pv = p_.view(src.id);
+                    if (!v || !pv) break;
+                    // L'ecran modele, l'en-tete, le pied, la vue parente : des liens par identifiant (relink, plus bas).
+                    if (edge.link == rel::Link::Inherits || (edge.link == rel::Link::Opens && edge.where == pv->name + " (vue parente, fil d'Ariane)")) break;
+                    if (edge.link == rel::Link::TypeOf) {
+                        refuse(edge.where, "sa d\xC3\xA9" "claration est de ce type", dst, "elle ne change pas de type d'office", "change d'abord cette d\xC3\xA9" "claration");
                         break;
                     }
-                    const auto gone = dropActions(v->actions, cites);
-                    for (const auto& d : gone) a_.fixes.push_back(v->name + " : " + d + " retir\xC3\xA9" "e.");
-                    if (gone.empty()) refuse(at, src.name);
+                    // Une ressource (un fond de vue, une action qui la joue) : comme avant - les actions qui la citent retirees.
+                    if (!viewLike(dst.kind) && dst.kind != RK::Variable && dst.kind != RK::Script && dst.kind != RK::Function) {
+                        const auto gone = dropActions(v->actions, cites);
+                        for (const auto& d : gone) a_.fixes.push_back(v->name + " : " + d + " retir\xC3\xA9" "e.");
+                        if (gone.empty()) refuse(at, src.name, dst);
+                        break;
+                    }
+                    if (!done.insert({edge.from, edge.to}).second) break;
+                    const Sites st = sitesOf(pv->name + " . ", &pv->actions);
+                    if (st.actions)
+                        for (const auto& d : dropActions(v->actions, cites)) a_.fixes.push_back(v->name + " : " + d + " retir\xC3\xA9" "e.");
+                    // Du code de la vue (le code d'une action, son titre, un parametre) le nomme : refuse, en disant ou.
+                    if (st.code || !st.codeActions.empty() || !st.keys.empty()) {
+                        const auto spots = codeSpots(src, name, quoted, [&](const hmi::CodeSite& s) { return s.action < 0 || st.codeActions.count(s.action) > 0; });
+                        refuse(spots.empty() ? at : joined(spots, 3), "du code de " + src.name + " nomme " + name, dst, kCodeWhy, "corrige ce code d'abord");
+                    }
                     break;
                 }
                 case RK::Variable: {
@@ -1209,12 +1591,46 @@ private:
                         }
                         break;
                     }
-                    refuse(at, "la variable " + src.name + " (son type)");
+                    if (edge.link == rel::Link::TypeOf)
+                        refuse("variable " + src.name, "elle est de ce type", dst, "une variable ne change pas de type d'office", "supprime d'abord la variable");
+                    else
+                        refuseCode(edge, src, dst);
                     break;
                 }
-                default: refuse(at, std::string(nounOf(src.kind).one) + " " + src.name); break;
+                case RK::Alarm: {
+                    const auto ends = [&](std::string_view t) { return edge.where.size() >= t.size() && edge.where.compare(edge.where.size() - t.size(), t.size(), t) == 0; };
+                    const bool message = ends(" (message)"), instruction = ends(" (consigne)");
+                    // Le message, la consigne : des textes a trous - le trou qui le lit, retire (comme le texte d'un objet).
+                    if (hmi::AlarmDef* al = alarmIn(w, src.id); al && (message || instruction)) {
+                        std::string& text = message ? al->message : al->instruction;
+                        const std::string before = text;
+                        text = dropHoles(text, name);
+                        if (text != before) {
+                            a_.fixes.push_back("Alarme " + src.name + " : " + (message ? "son message" : "sa consigne") + " ne cite plus " + name + " (" + before + kArrow
+                                               + text + ").");
+                            break;
+                        }
+                    }
+                    if (ends(" (condition)"))
+                        refuse(edge.where, "la condition de l'alarme " + src.name + " le lit", dst, "une condition ne se r\xC3\xA9\xC3\xA9" "crit pas sans savoir", "corrige-la d'abord");
+                    else
+                        refuse(edge.where, "l'alarme " + src.name, dst, src.id == hmi::kNoId ? "une alarme d'objet (n\xC3\xA9" "e de sa biblioth\xC3\xA8que ou de son symbole) le lit" : std::string{});
+                    break;
+                }
+                case RK::Recipe: refuse(at, "la recette " + src.name, dst, "un de ses champs l'\xC3\xA9" "crit : une recette ne perd pas un champ d'office"); break;
+                case RK::Type:
+                    if (edge.link == rel::Link::TypeOf || edge.link == rel::Link::Member)
+                        refuse(at, "le type " + src.name, dst, edge.link == rel::Link::Member ? "un de ses membres est de ce type" : "il en d\xC3\xA9pend (h\xC3\xA9ritage, interface)");
+                    else
+                        refuseCode(edge, src, dst);
+                    break;
+                case RK::Script:
+                case RK::Function: refuseCode(edge, src, dst); break;
+                default: refuse(at, std::string(nounOf(src.kind).one) + " " + src.name, dst); break;
             }
         }
+        // Les liens par identifiant des vues qui restent (le modele, l'en-tete, le pied, la vue parente).
+        relink(w, false);
         // L'historique (une note, pas une arete) : la variable n'y est plus archivee.
         for (const auto t : targets_)
             if (g_.node(t).kind == RK::Variable) {
@@ -1250,6 +1666,7 @@ private:
     std::set<std::size_t>    directNodes_;
     std::set<std::size_t>    jokerNodes_;     // les listes a joker de dossier qui le lisent (elles suivront)
     std::vector<std::string> notedUsers_;   // des emplois que le graphe note sans arete (types::usersOf, functionCallers)
+    std::set<std::pair<std::size_t, std::size_t>> codeRefused_;   // (le code, ce qui part) : un refus chacun
 };
 
 // L'erreur bloquante d'une verification globale, sa cle (pour comparer avant / apres).
@@ -1671,6 +2088,7 @@ std::vector<std::string> remaining(const hmi::Project& after, const std::vector<
                 const rel::Edge& edge = g.edges()[e];
                 if (edge.link == rel::Link::Contains || g.node(edge.from).kind == RK::Folder) continue;
                 if (matches(g, edge.from, probe, ignore)) continue;
+                if (automaticNav(probe, g, edge)) continue;   // une barre sans liste : les vues du projet (le temoin y passe)
                 out.push_back(rel::edgeText(g, edge));
             }
         }

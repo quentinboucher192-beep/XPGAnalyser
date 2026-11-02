@@ -14,7 +14,11 @@
 //    - la confirmation obligatoire (un element du projet, ou plusieurs objets) ; un genre inconnu refuse a la lecture ;
 //    - une transaction refusee au milieu : rien n'est applique ; les dependances circulaires ;
 //    - le plan apres Appliquer : << appliquee >> seulement si l'element est absent et plus rien ne le cite ;
-//    - la correction de la 1.21.0 : supprimer un symbole (Vues) emporte ses popups (View::ownerSymbol).
+//    - la correction de la 1.21.0 : supprimer un symbole (Vues) emporte ses popups (View::ownerSymbol) ;
+//    - 1.22.7 (la capture) : une vue citee par la barre de navigation d'un pied de page - << references >> la retire de la
+//      liste (les autres gardees, dans l'ordre), le dit, un Ctrl+Z ; les zones d'un plan, les arguments d'une instance, la
+//      vue parente, la vue de demarrage du projet et d'un groupe, un ecran du poste, l'ecran modele, l'en-tete et le pied ;
+//      le code qui la nomme : toujours refuse, avec la ligne et la strategie conseillee.
 // =============================================================================
 #include "../src/app/ai/AiDelete.hpp"
 #include "../src/app/ai/AiOperations.hpp"
@@ -621,6 +625,256 @@ void ownerSymbolFix() {
     check(static_cast<bool>(f.stack.undo()) && print(f.project()) == before, "Ctrl+Z : les deux reviennent");
 }
 
+// ---- 10. 1.22.7 : une vue citee ailleurs - la capture ---------------------------------------------------------------
+//  Vue_Accueil (sous Vue_B), Vue_Ligne et Vue_Four (sous Vue_Accueil) cochent le pied de page Pied : sa barre Navigation
+//  liste Vue_Accueil, Vue_Ligne, Vue_Four (et leurs libelles) ; le plan a zones de Vue_Ligne mene a Vue_Accueil (Z1) et a
+//  Vue_Four (Z2) ; Vue_B porte une barre automatique (sans liste : les vues du projet).
+void captureHome(hmi::Project& p) {
+    hmi::View accueil = makeRole(p, "Vue_Accueil", "vue");
+    hmi::View ligne = makeRole(p, "Vue_Ligne", "vue");
+    hmi::View four = makeRole(p, "Vue_Four", "vue");
+    hmi::View pied = makeRole(p, "Pied", "pied");
+    pied.height = 60;
+    hmi::Object& nav = place(p, pied, hmi::Kind::NavBar, "Navigation", 0, 0);
+    nav.set("views", "Vue_Accueil;Vue_Ligne;Vue_Four");
+    nav.set("labels", "Accueil;Ligne;Four");
+    accueil.upView = p.viewByName("Vue_B")->id;
+    ligne.upView = accueil.id;
+    four.upView = accueil.id;
+    accueil.showFooter = ligne.showFooter = four.showFooter = true;
+    place(p, ligne, hmi::Kind::ZoneMap, "Plan", 10, 10)
+        .set("mapZones", "Z1 | 10,10 40,10 40,40 | | Vue_Accueil\nZ2 | 50,50 60,50 60,60 | Four | Vue_Four | #FF0000");
+    place(p, *p.viewByName("Vue_B"), hmi::Kind::NavBar, "Barre_Auto", 10, 400).set("views", "");
+    p.views.push_back(std::move(accueil));
+    p.views.push_back(std::move(ligne));
+    p.views.push_back(std::move(four));
+    p.views.push_back(std::move(pied));
+}
+std::vector<std::string> consequencesOf(const ai::Check& ck) {
+    std::vector<std::string> out;
+    for (const auto& r : ck.removals) out.insert(out.end(), r.consequences.begin(), r.consequences.end());
+    return out;
+}
+bool madeHas(const ai::Check& ck, const std::string& name, const std::string& detail) {
+    return std::any_of(ck.made.begin(), ck.made.end(), [&](const ai::Check::Made& m) { return m.name == name && has(m.detail, detail); });
+}
+
+void viewCitedElsewhere() {
+    std::printf("10 - 1.22.7 : une vue cit\xC3\xA9" "e ailleurs (la capture : la barre de navigation d'un pied de page)\n");
+    Fixture f;
+    captureHome(f.project());
+    const std::string before = print(f.project());
+    std::string why;
+    // seul : refusee - le refus dit qui la cite et conseille references
+    const del::Analysis s = del::analyze(f.project(), request(del::Genre::View, {"Vue_Accueil"}));
+    check(!s.ok() && anyHas(s.errors, "Navigation") && anyHas(s.errors, "references"),
+          "Vue_Accueil seule : refus\xC3\xA9" "e, le refus conseille references (" + joinAll(s.errors) + ")");
+    // une barre automatique ne bloque pas : Vue_A seule part, la barre suivra
+    const del::Analysis autoNav = del::analyze(f.project(), request(del::Genre::View, {"Vue_A"}));
+    check(autoNav.ok() && listed(autoNav.indirect, "Barre_Auto") && !listed(autoNav.direct, "Barre_Auto"),
+          "une barre automatique (sans liste) : pas une d\xC3\xA9pendance directe, elle suivra (" + joinAll(autoNav.errors) + ")");
+    // references : acceptee, et tout est dit dans l'apercu
+    auto p = f.proposal({removal("vue", {"Vue_Accueil"}, "references")}, "Vue_B");
+    const ai::Check ck = ai::validate(f.project(), p);
+    check(ck.ok() && ck.confirmRemoval, "Vue_Accueil en r\xC3\xA9" "f\xC3\xA9rences : accept\xC3\xA9" "e (" + joinAll(ck.errors) + ")");
+    const auto cons = consequencesOf(ck);
+    check(anyHas(cons, "Pied.Navigation : Vue_Accueil retir\xC3\xA9" "e de la liste des vues (3 \xE2\x86\x92 2)"), "l'aper\xC3\xA7u le dit : " + joinAll(cons));
+    check(std::any_of(ck.items.begin(), ck.items.end(),
+                      [](const ai::Item& it) { return it.name == "Navigation" && it.view == "Pied" && it.what == ai::Item::What::Modify; }),
+          "l'aper\xC3\xA7u montre Pied.Navigation modifi\xC3\xA9");
+    check(anyHas(cons, "Vue_Ligne.Plan : la zone Z1 ne m\xC3\xA8ne plus \xC3\xA0 Vue_Accueil"), "la zone Z1 du plan : dit");
+    check(anyHas(cons, "Vue_Ligne : vue parente Vue_Accueil \xE2\x86\x92 Vue_B") && madeHas(ck, "Vue_Four", "vue parente Vue_Accueil"),
+          "les vues filles remontent sous Vue_B : dit (cons\xC3\xA9quences et Check::made)");
+    const std::size_t stackBefore = f.stack.done().size();
+    check(f.apply(p, &why), "appliqu\xC3\xA9" "e (" + why + ")");
+    check(f.stack.done().size() == stackBefore + 1, "UNE commande sur la pile");
+    const hmi::Project& pr = f.project();
+    const hmi::View* pied = pr.viewByName("Pied");
+    const hmi::Object* nav = pied ? pied->objectByName("Navigation") : nullptr;
+    check(!pr.viewByName("Vue_Accueil") && pied && nav, "Vue_Accueil est partie ; le pied et sa barre restent");
+    check(nav && nav->text("views") == "Vue_Ligne;Vue_Four" && nav->text("labels") == "Ligne;Four",
+          "la barre : les deux autres vues gard\xC3\xA9" "es, dans l'ordre, avec leurs libell\xC3\xA9s (" + (nav ? nav->text("views") + " / " + nav->text("labels") : std::string("?"))
+              + ")");
+    const hmi::View* ligne = pr.viewByName("Vue_Ligne");
+    const hmi::View* four = pr.viewByName("Vue_Four");
+    const hmi::View* b = pr.viewByName("Vue_B");
+    check(ligne && four && b && ligne->upView == b->id && four->upView == b->id, "Vue_Ligne et Vue_Four : sous Vue_B (la parente de Vue_Accueil)");
+    check(ligne && four && ligne->showFooter && four->showFooter, "le pied de page reste coch\xC3\xA9");
+    const hmi::Object* plan = ligne ? ligne->objectByName("Plan") : nullptr;
+    check(plan && plan->text("mapZones") == "Z1 | 10,10 40,10 40,40\nZ2 | 50,50 60,50 60,60 | Four | Vue_Four | #FF0000",
+          "le plan : Z1 sans vue (ses points restent), Z2 telle quelle (" + (plan ? plan->text("mapZones") : std::string("?")) + ")");
+    check(static_cast<bool>(f.stack.undo()) && print(f.project()) == before, "un seul Ctrl+Z : tout revient, \xC3\xA0 l'octet pr\xC3\xA8s");
+    // la parente de la vue supprimee est la racine : les filles deviennent des racines
+    hmi::Project w = f.project();
+    w.viewByName("Vue_Accueil")->upView = hmi::kNoId;
+    del::Analysis root;
+    check(del::run(w, request(del::Genre::View, {"Vue_Accueil"}, del::Strategy::References), root) && w.viewByName("Vue_Ligne")->upView == hmi::kNoId
+              && anyHas(root.fixes, "aucune (une racine du fil d'Ariane)"),
+          "sans parente : Vue_Ligne devient une racine, et c'est dit (" + joinAll(root.errors) + ")");
+    // la liste qui devient vide : un avertissement (la barre n'est pas supprimee)
+    hmi::Project w2 = f.project();
+    w2.viewByName("Pied")->objectByName("Navigation")->set("views", "Vue_Accueil");
+    del::Analysis empty;
+    check(del::run(w2, request(del::Genre::View, {"Vue_Accueil"}, del::Strategy::References), empty) && w2.viewByName("Pied")->objectByName("Navigation")
+              && anyHas(empty.warnings, "liste des vues est vide"),
+          "la liste vide : la barre reste, un avertissement le dit (" + joinAll(empty.warnings) + ")");
+}
+
+// ---- 11. 1.22.7 : la vue de demarrage, l'accueil d'un groupe, un ecran du poste --------------------------------------
+void startViews() {
+    std::printf("11 - 1.22.7 : la vue de d\xC3\xA9marrage, la vue d'accueil d'un groupe, un \xC3\xA9" "cran du poste\n");
+    Fixture f;
+    captureHome(f.project());
+    hmi::Project& pr = f.project();
+    const hmi::Id home = pr.viewByName("Vue_Accueil")->id;
+    pr.config.startView = home;
+    hmi::UserGroup gr;
+    gr.id = pr.allocate();
+    gr.name = "Operateurs";
+    gr.startView = home;
+    pr.security.groups.push_back(gr);
+    hmi::StationScreen sc;
+    sc.display = 2;
+    sc.view = "Vue_Accueil";
+    pr.station.screens.push_back(sc);
+    const std::string before = print(pr);
+    std::string why;
+    auto p = f.proposal({removal("vue", {"Vue_Accueil"}, "references")}, "Vue_B");
+    const ai::Check ck = ai::validate(pr, p);
+    check(ck.ok(), "la vue de d\xC3\xA9marrage en r\xC3\xA9" "f\xC3\xA9rences : accept\xC3\xA9" "e (" + joinAll(ck.errors) + ")");
+    const auto cons = consequencesOf(ck);
+    check(anyHas(cons, "Vue de d\xC3\xA9marrage : Vue_Accueil \xE2\x86\x92 Vue_A") && anyHas(ck.warnings, "Vue_A la remplace") && madeHas(ck, "Vue_A", "avant : Vue_Accueil"),
+          "la vue de d\xC3\xA9marrage : Vue_A (la premi\xC3\xA8re qui reste), dit (" + joinAll(cons) + ")");
+    check(anyHas(cons, "Groupe Operateurs : vue d'accueil Vue_Accueil \xE2\x86\x92 la vue de d\xC3\xA9marrage (Vue_A)"), "le groupe : la vue de d\xC3\xA9marrage, dit");
+    check(anyHas(cons, "Poste : l'\xC3\xA9" "cran 2 du poste ne montre plus Vue_Accueil"), "l'\xC3\xA9" "cran 2 du poste : retir\xC3\xA9, dit");
+    check(f.apply(p, &why), "appliqu\xC3\xA9" "e (" + why + ")");
+    const hmi::View* a = pr.viewByName("Vue_A");
+    const hmi::UserGroup* g = nullptr;
+    for (const auto& x : pr.security.groups)
+        if (x.name == "Operateurs") g = &x;
+    check(a && pr.config.startView == a->id, "la vue de d\xC3\xA9marrage est Vue_A");
+    check(g && g->startView == hmi::kNoId, "le groupe : kNoId (la vue de d\xC3\xA9marrage)");
+    check(pr.station.screens.empty(), "l'\xC3\xA9" "cran 2 est retir\xC3\xA9 de la liste");
+    check(static_cast<bool>(f.stack.undo()) && print(f.project()) == before, "Ctrl+Z : tout revient");
+    // seul : un ecran du poste la montre - refuse, la raison et la strategie
+    hmi::Project lone;
+    hmi::View seule = hmi::makeView(lone, "Seule");
+    lone.views.push_back(seule);
+    lone.config.startView = seule.id;
+    const del::Analysis none = del::analyze(lone, request(del::Genre::View, {"Seule"}, del::Strategy::References));
+    check(!none.ok() && anyHas(none.errors, "aucune autre vue ordinaire"), "la derni\xC3\xA8re vue, de d\xC3\xA9marrage : refus\xC3\xA9" "e (" + joinAll(none.errors) + ")");
+    hmi::View autre = hmi::makeView(lone, "Autre");
+    lone.views.push_back(autre);
+    hmi::Project two = lone;
+    del::Analysis only;
+    check(del::run(two, request(del::Genre::View, {"Seule"}), only) && two.config.startView == autre.id && anyHas(only.fixes, "Seule \xE2\x86\x92 Autre"),
+          "seul, sans autre d\xC3\xA9pendance : la vue de d\xC3\xA9marrage passe \xC3\xA0 Autre, dit (" + joinAll(only.errors) + ")");
+    hmi::StationScreen sc2;
+    sc2.display = 2;
+    sc2.view = "Seule";
+    lone.station.screens.push_back(sc2);
+    const del::Analysis shown = del::analyze(lone, request(del::Genre::View, {"Seule"}));
+    check(!shown.ok() && anyHas(shown.errors, "\xC3\xA9" "cran 2 du poste") && anyHas(shown.errors, "references"),
+          "seul, montr\xC3\xA9" "e par un \xC3\xA9" "cran du poste : refus\xC3\xA9" "e, la strat\xC3\xA9gie conseill\xC3\xA9" "e (" + joinAll(shown.errors) + ")");
+}
+
+// ---- 12. 1.22.7 : un ecran modele, un en-tete, un pied de page supprimes -----------------------------------------------
+void templatesAndBands() {
+    std::printf("12 - 1.22.7 : un \xC3\xA9" "cran mod\xC3\xA8le, un en-t\xC3\xAAte, un pied de page supprim\xC3\xA9s\n");
+    Fixture f;
+    captureHome(f.project());
+    hmi::Project& pr = f.project();
+    pr.views.push_back(makeRole(pr, "Pied_2", "pied"));
+    hmi::View racine = makeRole(pr, "Modele_Racine", "modele");
+    hmi::View base = makeRole(pr, "Modele_Base", "modele");
+    base.templateView = racine.id;
+    const hmi::Id racineId = racine.id, baseId = base.id;
+    pr.views.push_back(std::move(racine));
+    pr.views.push_back(std::move(base));
+    pr.viewByName("Vue_Four")->templateView = baseId;
+    hmi::View ent = makeRole(pr, "Entete", "entete");
+    pr.viewByName("Vue_A")->header = ent.id;   // choisi, case decochee
+    pr.views.push_back(std::move(ent));
+    const hmi::Id pied2 = pr.viewByName("Pied_2")->id;
+    // le pied en references : les vues qui le cochaient prennent Pied_2 (le premier qui reste) - dit
+    hmi::Project w = pr;
+    del::Analysis a;
+    check(del::run(w, request(del::Genre::Template, {"Pied"}, del::Strategy::References), a), "Pied en r\xC3\xA9" "f\xC3\xA9rences (" + joinAll(a.errors) + ")");
+    check(w.viewByName("Vue_Ligne")->footer == pied2 && w.viewByName("Vue_Ligne")->showFooter
+              && anyHas(a.fixes, "Vue_Ligne : pied de page Pied \xE2\x86\x92 Pied_2 (le premier qui reste)"),
+          "Vue_Ligne montre Pied_2, et c'est dit (" + joinAll(a.fixes) + ")");
+    // sans autre pied : la case decochee
+    hmi::Project w2 = pr;
+    std::erase_if(w2.views, [](const hmi::View& v) { return v.name == "Pied_2"; });
+    del::Analysis b;
+    check(del::run(w2, request(del::Genre::Template, {"Pied"}, del::Strategy::References), b) && !w2.viewByName("Vue_Four")->showFooter
+              && anyHas(b.fixes, "Vue_Four : pied de page Pied \xE2\x86\x92 aucun (case d\xC3\xA9" "coch\xC3\xA9" "e)"),
+          "sans autre pied : la case d\xC3\xA9" "coch\xC3\xA9" "e, dit (" + joinAll(b.errors) + ")");
+    // l'ecran modele : Vue_Four herite de celui au-dessus (Modele_Racine) ; seul : refuse
+    check(!del::analyze(pr, request(del::Genre::Template, {"Modele_Base"})).ok(), "Modele_Base seul : refus\xC3\xA9 (Vue_Four en h\xC3\xA9rite)");
+    hmi::Project w3 = pr;
+    del::Analysis c;
+    check(del::run(w3, request(del::Genre::Template, {"Modele_Base"}, del::Strategy::References), c) && w3.viewByName("Vue_Four")->templateView == racineId
+              && anyHas(c.fixes, "\xC3\xA9" "cran mod\xC3\xA8le Modele_Base \xE2\x86\x92 Modele_Racine"),
+          "Modele_Base en r\xC3\xA9" "f\xC3\xA9rences : Vue_Four h\xC3\xA9rite de Modele_Racine, dit (" + joinAll(c.errors) + ")");
+    // un en-tete choisi, case decochee : il ne se voit pas - seul suffit, le choix est oublie et dit
+    hmi::Project w4 = pr;
+    del::Analysis d;
+    check(del::run(w4, request(del::Genre::Template, {"Entete"}), d) && w4.viewByName("Vue_A")->header == hmi::kNoId
+              && anyHas(d.fixes, "en-t\xC3\xAAte choisi Entete oubli\xC3\xA9"),
+          "Entete seul : Vue_A l'oublie (sa case \xC3\xA9tait d\xC3\xA9" "coch\xC3\xA9" "e), dit (" + joinAll(d.errors) + ")");
+}
+
+// ---- 13. 1.22.7 : les arguments d'une instance ; le code qui la nomme -------------------------------------------------
+void argumentsAndCode() {
+    std::printf("13 - 1.22.7 : les arguments d'une instance ; le code qui nomme l'\xC3\xA9l\xC3\xA9ment\n");
+    Fixture f;
+    hmi::Project& pr = f.project();
+    hmi::View moteur = makeRole(pr, "Sym_Moteur", "symbole");
+    hmi::ViewParam pm;
+    pm.name = "Moteur";
+    pm.type = "T_Pompe";
+    pm.defaultValue = "Pompe_1";
+    moteur.params.push_back(pm);
+    hmi::ViewParam pt;
+    pt.name = "Titre";
+    pt.type = "STRING";
+    pt.defaultValue = "'Moteur'";
+    moteur.params.push_back(pt);
+    place(pr, moteur, hmi::Kind::Text, "Txt", 10, 10).set("text", "{Titre}");
+    pr.views.push_back(std::move(moteur));
+    hmi::Object& im = place(pr, *pr.viewByName("Vue_A"), hmi::Kind::SymbolInstance, "Inst_M2", 700, 300);
+    im.set("symbol", "Sym_Moteur");
+    im.set("params", "Moteur := Pompe_2; Titre := 'P2'");
+    const std::string before = print(pr);
+    std::string why;
+    auto p = f.proposal({removal("variable", {"Pompe_2"}, "references")});
+    const ai::Check ck = ai::validate(pr, p);
+    check(ck.ok(), "Pompe_2 en r\xC3\xA9" "f\xC3\xA9rences : accept\xC3\xA9" "e (" + joinAll(ck.errors) + ")");
+    const auto cons = consequencesOf(ck);
+    check(anyHas(cons, "Vue_A.Inst_P2 : argument Pompe vid\xC3\xA9 (Pompe_2 \xE2\x86\x92 valeur par d\xC3\xA9" "faut Pompe_1)"), "l'argument vid\xC3\xA9 : dit (" + joinAll(cons) + ")");
+    check(f.apply(p, &why), "appliqu\xC3\xA9" "e (" + why + ")");
+    const hmi::View* a = pr.viewByName("Vue_A");
+    const hmi::Object* i2 = a ? a->objectByName("Inst_P2") : nullptr;
+    const hmi::Object* m2 = a ? a->objectByName("Inst_M2") : nullptr;
+    check(!pr.variable("Pompe_2") && i2 && i2->text("params").empty(), "Inst_P2 : son argument vid\xC3\xA9 (le param\xC3\xA8tre reprend Pompe_1)");
+    check(m2 && m2->text("params") == "Titre := 'P2'", "Inst_M2 : seul l'argument qui la nommait part (" + (m2 ? m2->text("params") : std::string("?")) + ")");
+    check(a && a->objectByName("Inst_P1") && a->objectByName("Inst_P1")->text("params") == "Pompe := Pompe_1", "Inst_P1 n'a pas boug\xC3\xA9");
+    check(static_cast<bool>(f.stack.undo()) && print(f.project()) == before, "Ctrl+Z : tout revient");
+    // le code qui nomme la vue : toujours refuse - ou (le script, la ligne) et la strategie qui marcherait
+    Fixture g;
+    captureHome(g.project());
+    addScript(g.project(), "Script_Nav", "Appel", "Compteur := 0;\nIHM_NAVIGUER('Vue_Accueil');\n");
+    const del::Analysis c = del::analyze(g.project(), request(del::Genre::View, {"Vue_Accueil"}, del::Strategy::References));
+    check(!c.ok() && anyHas(c.errors, "script Script_Nav, ligne 2") && anyHas(c.errors, "sans savoir") && anyHas(c.errors, "strat\xC3\xA9gie remplacer, remplacer_par : "),
+          "IHM_NAVIGUER('Vue_Accueil') : refus\xC3\xA9, avec la ligne et remplacer conseill\xC3\xA9 (" + joinAll(c.errors) + ")");
+    check(!anyHas(c.errors, "Navigation"), "le refus ne parle que du code (la barre se modifie) : " + joinAll(c.errors));
+    // une variable lue par une condition d'alarme : refusee, le plus proche propose
+    const del::Analysis al = del::analyze(g.project(), request(del::Genre::Variable, {"Niveau_1"}, del::Strategy::References));
+    check(!al.ok() && anyHas(al.errors, "alarme Niveau_Haut (condition)") && anyHas(al.errors, "remplacer_par : Niveau_2"),
+          "la condition de Niveau_Haut : refus\xC3\xA9" "e, Niveau_2 propos\xC3\xA9" "e (" + joinAll(al.errors) + ")");
+}
+
 } // namespace
 
 int main() {
@@ -633,6 +887,10 @@ int main() {
     failuresAndCycles();
     planStates();
     ownerSymbolFix();
+    viewCitedElsewhere();
+    startViews();
+    templatesAndBands();
+    argumentsAndCode();
     std::printf("ai_delete_test : %d v\xC3\xA9rifications, %d \xC3\xA9" "checs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
