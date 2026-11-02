@@ -285,9 +285,12 @@ void sizes(const std::string& examplePath) {
     // creer_utilisateur, modifier_utilisateur, modifier_vue, vue_de_demarrage, le niveau d'acces, la regle 23 (environ 2,9 Ko),
     // leurs cibles dans le schema (0,5 Ko), la securite en une ligne et les options des variables dans le contexte (0,6 Ko) : la
     // borne passe de 48 a 53 Ko.
-    check(empty.size() + tool.size() < 53000, "une demande ordinaire (vue vide) : moins de 53 Ko avec l'outil");
-    check(station.size() + tool.size() < 53000, "la station de 31 objets : moins de 53 Ko avec l'outil");
-    check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 53000, "300 objets : resumes, la demande reste bornee");
+    // 1.22.8 (les modeles de vues, les unites) : + la regle 24 (un modele de vues joint), creer_unite et modifier_unite, la regle
+    // 25 (les familles fournies et leur unite de reference) et leurs champs dans le schema (symbole, famille, facteur, decalage,
+    // l'unite d'une variable) - environ 0,9 Ko : la borne passe de 53 a 54 Ko (la station : 53,5 Ko avec l'outil).
+    check(empty.size() + tool.size() < 54000, "une demande ordinaire (vue vide) : moins de 54 Ko avec l'outil");
+    check(station.size() + tool.size() < 54000, "la station de 31 objets : moins de 54 Ko avec l'outil");
+    check(info.summarized && info.detailed < 300 && info.detailed >= 31 && bigPrompt.size() < 54000, "300 objets : resumes, la demande reste bornee");
     // La selection d'abord, puis les plus proches : Pompe_31 et ses voisins detailles, les voyants du fond nommes seulement.
     check(has(bigCtx, "\nPompe_31 | Pump |") && has(bigCtx, "\nMarche_P31 | PushButton |") && !has(bigCtx, "\nTitre_Station | Text |")
               && has(bigCtx, "Titre_Station"),
@@ -469,11 +472,13 @@ void toolSchema() {
     // 1.18.0 : + les huit outils (creer_symbole, creer_popup, creer_modele_vue se lisent comme creer_vue + role).
     // 1.22.6 : + modifier_variable, securite, creer_groupe, modifier_groupe, creer_utilisateur, modifier_utilisateur, modifier_vue,
     // vue_de_demarrage.
+    // 1.22.8 : + creer_unite, modifier_unite (les unites de mesure).
     check(a == std::set<std::string>{"creer", "modifier", "associer", "aligner", "distribuer", "supprimer", "dupliquer", "code", "creer_vue",
                                      "creer_variables", "creer_type", "creer_equipement", "adresser", "creer_script", "creer_fonction",
                                      "creer_alarme", "creer_ressource", "creer_dossier", "ranger", "modifier_variable", "securite", "creer_groupe",
-                                     "modifier_groupe", "creer_utilisateur", "modifier_utilisateur", "modifier_vue", "vue_de_demarrage"},
-          "action : les vingt-sept operations");
+                                     "modifier_groupe", "creer_utilisateur", "modifier_utilisateur", "modifier_vue", "vue_de_demarrage",
+                                     "creer_unite", "modifier_unite"},
+          "action : les vingt-neuf operations");
     check(item.at("properties").has("proprietes") && item.at("properties").has("variable") && item.at("properties").has("noms")
               && item.at("properties").has("code") && schema.at("properties").has("resume"),
           "les champs du format existant (+ noms, dx, dy, code)");
