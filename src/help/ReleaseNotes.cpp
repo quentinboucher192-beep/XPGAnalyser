@@ -161,6 +161,20 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.8 : les modeles de vues reproduits avec les donnees ; les unites creees par l'IA ; la confirmation qui defile
+        note("1.22.8", "Assistant IA", Kind::New,
+         "LES MOD\xC3\x88LES DE VUES : joins un PV d'approbation de vues (un PDF) ou des captures d'\xC3\xA9" "cran, l'Assistant les lit comme un "
+         "MOD\xC3\x88LE \xC3\x80 REPRODUIRE - la liste des vues (nom, approbation, commentaires), l'image recadr\xC3\xA9" "e de chaque vue et la charte "
+         "graphique (les couleurs dominantes, l'en-t\xC3\xAAte et le pied r\xC3\xA9p\xC3\xA9t\xC3\xA9s). L'IA en reprend la FORME (vues, disposition, couleurs, "
+         "navigation) et relie chaque objet aux VRAIES donn\xC3\xA9" "es du projet (variables IHM, automate lu, reports, types) ; sans donn\xC3\xA9" "e, "
+         "l'objet reste non reli\xC3\xA9 et list\xC3\xA9 \xC2\xAB \xC3\xA0 relier \xC2\xBB (r\xC3\xA8gle 24). Elle ne re\xC3\xA7oit qu'un r\xC3\xA9sum\xC3\xA9 court, et l'image d'une vue "
+         "quand elle la demande (voir_vue_modele). Clic droit sur la pi\xC3\xA8" "ce : \xC2\xAB Mod\xC3\xA8le de vues \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.22.8", "Assistant IA", Kind::Fixed,
+         "\xC2\xAB APPLIQUER MALGR\xC3\x89 LES ERREURS \xC2\xBB : la fen\xC3\xAAtre de confirmation d\xC3\xA9" "file quand la liste est longue (les boutons restent "
+         "visibles), et les erreurs r\xC3\xA9p\xC3\xA9t\xC3\xA9" "es sont regroup\xC3\xA9" "es : \xC2\xAB Variable \xC2\xAB A \xC2\xBB, \xC2\xAB B \xC2\xBB, \xC2\xAB C \xC2\xBB et 23 autres (26 erreurs) : "
+         "unit\xC3\xA9 inconnue \xC2\xBB.",
+         "assistant-ia", ""),
         // 1.22.7 : la suppression qui modifie ses references ; Retour et Corriger rapidement dans l'apercu
         note("1.22.7", "Assistant IA", Kind::Fixed,
          "SUPPRIMER UNE VUE CIT\xC3\x89" "E AILLEURS NE BLOQUE PLUS : en strat\xC3\xA9gie \xC2\xAB r\xC3\xA9" "f\xC3\xA9rences \xC2\xBB, l'Assistant la retire des barres de "

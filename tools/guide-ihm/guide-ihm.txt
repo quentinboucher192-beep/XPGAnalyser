@@ -2035,6 +2035,7 @@ Une simple question, ou une seule opération, n'a pas de plan : la carte reste c
 - Pendant la planification et la vérification, **rien ne change** dans le projet : tout se passe sur une copie.
 - **Appliquer** pose tout en une seule transaction. Si une étape échoue au dernier moment, le projet reste exactement tel qu'il était (la carte le dit). Un seul Ctrl+Z reprend tout ; Ctrl+Y le remet.
 - Une proposition qui a des erreurs ne s'applique pas ; avec « Appliquer malgré les erreurs » (Paramètres de l'Assistant), seules les étapes validées s'appliquent, et les autres sont dites.
+- 1.22.8 : la confirmation d'« Appliquer malgré les erreurs » **défile** quand la liste est longue (ses boutons restent visibles), et des erreurs qui ne diffèrent que par le nom tiennent sur une ligne : « Variable « A », « B », « C » et 23 autres (26 erreurs) : … ».
 - **Réutiliser** : une variable, un type ou un équipement qui existe déjà **à l'identique** est réutilisé (le plan et le compte rendu le disent, il n'est pas compté comme créé) ; le même nom avec un autre type est **refusé** – jamais remplacé en silence.
 - Une proposition peut créer plusieurs vues (la vue, son symbole, sa popup) : chaque objet va dans la vue qu'il nomme, ou dans la dernière vue créée au-dessus de lui, sinon dans la vue ouverte.
 ! Une action hors du projet (lancer la détection de ce qui répond sur le réseau) n'est jamais faite par l'Assistant et ne se reprend pas par Ctrl+Z : le compte rendu la range dans « À faire ».
@@ -2102,6 +2103,16 @@ Joins une **liste d'entrées/sorties**, un **fichier réseau** (adressage IP) ou
 - Demande ensuite par exemple « Crée les variables du fichier joint », « Crée les types IHM du fichier joint », « Crée les équipements du fichier réseau » ou « Adresse les variables du fichier joint sur l'équipement API_1 » : l'Assistant prépare une **proposition**, que tu vérifies dans l'aperçu avant **Appliquer**.
 - Il n'invente jamais un nom ni une adresse, et dit les lignes sans repère, illisibles ou en double. Une adresse %I/%Q n'est jamais adressée en Modbus.
 ! Limites : la détection repose sur des mots-clés (un en-tête atypique se corrige dans la fenêtre Modèle…) ; ni ancien .xls, ni Modbus RTU ; 8 classeurs au plus gardés en mémoire.
+@nouveau 1.22.8
+### Un modèle de vues à reproduire (1.22.8)
+Joins un **PV d'approbation de vues** (un PDF : une page de garde, puis pour chaque vue une page « VUE : <nom> » avec sa capture et son cartouche APPROBATION, et sa page COMMENTAIRES) ou des **captures d'écran** (PNG, JPEG) : l'Assistant les lit comme un **modèle à reproduire**. Le modèle donne la **forme** ; les **données** viennent toujours de ton projet.
+- **Ce qui est lu**, sur un fil de fond : la liste des vues (le nom, la page, l'approbation et les commentaires quand ils sont écrits en texte), l'**image de chaque vue**, recadrée sur la capture, et la **charte graphique** : les couleurs dominantes avec leur part, l'en-tête et le bandeau du bas répétés d'une vue à l'autre.
+- Un PV est reconnu par son texte. Une **image** ne l'est pas toute seule : dans **Contexte de la discussion**, le geste **Modèle de vues** de sa ligne la fait lire comme un modèle ; le même geste l'écarte (un PDF qui n'en est pas un). Le contexte dit « Modèle de vues : 13 vues ».
+- Demande ensuite par exemple « **Reproduis ce modèle avec les données du projet** », « Crée la vue Station comme dans le PV », « Même charte que le PV » : l'IA reprend les vues, leur disposition, les couleurs, l'en-tête, le pied et la navigation, et **relie chaque objet aux vraies données** (variables IHM, automate lu d'un .XPG joint, reports, types) par son repère (règle 24 de ses consignes).
+- **Rien n'est inventé** : un objet sans donnée trouvée est créé **non relié**, et la réponse le liste « à relier ». La vérification, l'aperçu et Appliquer sont les mêmes que pour toute proposition.
+- **Peu de jetons** : l'IA reçoit un **résumé** court du modèle (environ 1 000 jetons pour 13 vues) à la place du PDF, et l'**image** d'une vue seulement quand elle la demande (l'outil voir_vue_modele, environ 1 600 jetons par image). Une IA sans outils reçoit les images une fois, avec la demande qui reproduit.
+- Les images recadrées sont gardées dans le cache de l'Assistant ; vider le cache les fait refaire depuis la pièce.
+! Limites : le rôle des couleurs (défaut, marche, valeur…) est dit « probable » : l'IA le confirme en regardant l'image. Une approbation cochée à la main ne se lit pas ; des commentaires manuscrits non plus, mais l'IA est prévenue et peut regarder leur page. Le logiciel n'a pas de palette de projet : la charte est appliquée objet par objet. Un PDF de reports n'est pas lu comme une table de reports (seuls les classeurs le sont).
 
 @nouveau 1.21.3
 ### Une grande demande en plusieurs parties (1.21.3)
