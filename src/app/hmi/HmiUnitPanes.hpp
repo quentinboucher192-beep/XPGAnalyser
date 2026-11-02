@@ -56,6 +56,7 @@
 // =============================================================================
 #pragma once
 
+#include "HmiDisplayPanes.hpp"   // 1.22.9 : les formats des variables, premier onglet d'Unites et formats
 #include "HmiPanels.hpp"
 #include "../../core/Signal.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -254,10 +255,13 @@ private:
 };
 
 // ------------------------------------------- Configuration > Unites de mesure ---
+// 1.22.9 : << Unites et formats >> et << Unites de mesure >> ne font plus qu'une page (le client : << est-ce vraiment utile d'avoir
+// les 2 ? >>). Avec `formats` (la page des formats des variables, HmiUnitsPane), ses onglets sont : Formats des variables, Unites
+// de mesure (la bibliotheque), Convertir. Sans (les essais d'avant), Bibliotheque et Convertir, comme en 1.14.1.
 class HmiMeasureUnitsPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
-    HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply);
+    HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply, std::unique_ptr<HmiUnitsPane> formats = nullptr);
     void refresh();
 
     // ---- les gestes : chacun une commande (Ctrl+Z) ; faux et `why` : refuse, rien ne change ----
@@ -285,9 +289,12 @@ public:
     [[nodiscard]] static bool builtinFamily(std::string_view name);
 
     // 1.14.1 (lot N5) : deux onglets - Bibliotheque (ce qui precede) et Convertir (le banc d'essai).
-    enum Tab : std::size_t { TabLibrary = 0, TabConvert = 1 };
+    // 1.22.9 : TabFormats, les formats des variables (le premier onglet, s'il y est) ; showTab et currentTab parlent de ces
+    // noms, quelle que soit la place de l'onglet.
+    enum Tab : std::size_t { TabLibrary = 0, TabConvert = 1, TabFormats = 2 };
     void showTab(std::size_t tab);
     [[nodiscard]] std::size_t currentTab() const noexcept;
+    [[nodiscard]] HmiUnitsPane* formats() noexcept { return formats_; }   // nul : pas d'onglet Formats des variables
     [[nodiscard]] ui::TabControl&     tabs() noexcept { return *tabs_; }
     [[nodiscard]] HmiUnitConvertPage& convertPage() noexcept { return *convert_; }
 
@@ -322,6 +329,7 @@ private:
     HmiTitledPanel*   unitsPanel_{nullptr};
     ui::TabControl*     tabs_{nullptr};                // 1.14.1 (lot N5)
     HmiUnitConvertPage* convert_{nullptr};
+    HmiUnitsPane*       formats_{nullptr};             // 1.22.9 : l'onglet Formats des variables (nul : absent)
     std::vector<std::string> familyNames_;   // dans l'ordre des lignes
     std::vector<std::string> unitSymbols_;
     std::string       family_;               // la famille choisie (son nom)

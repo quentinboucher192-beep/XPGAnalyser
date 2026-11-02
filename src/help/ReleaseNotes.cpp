@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.8", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.22.9", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.22.8", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 21 h 01"},
     {"1.22.7", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 10 h 55"},
     {"1.22.6", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 23 h"},
     {"1.22.5", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 19 h 45"},
@@ -162,6 +163,13 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.22.9 : Unites et formats et Unites de mesure, une seule page
+        note("1.22.9", "Projet", Kind::Changed,
+         "UNIT\xC3\x89S ET FORMATS, UNE SEULE PAGE : Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats a trois onglets - Formats des variables (l'unit\xC3\xA9 "
+         "affich\xC3\xA9" "e, le format, la plage et les seuils de chaque variable), Unit\xC3\xA9s de mesure (la biblioth\xC3\xA8que des unit\xC3\xA9s physiques, "
+         "leurs conversions, Unit\xC3\xA9s strictes) et Convertir. L'entr\xC3\xA9" "e Unit\xC3\xA9s de mesure de l'arbre dispara\xC3\xAEt ; \xC2\xAB G\xC3\xA9rer les "
+         "unit\xC3\xA9s\xE2\x80\xA6 \xC2\xBB, une erreur \xC2\xAB unit\xC3\xA9 inconnue \xC2\xBB et une session rouverte m\xC3\xA8nent \xC3\xA0 son onglet.",
+         "unites-formats", ""),
         // 1.22.8 : les modeles de vues reproduits avec les donnees ; les unites creees par l'IA ; la confirmation qui defile
         note("1.22.8", "Assistant IA", Kind::New,
          "LES MOD\xC3\x88LES DE VUES : joins un PV d'approbation de vues (un PDF) ou des captures d'\xC3\xA9" "cran, l'Assistant les lit comme un "

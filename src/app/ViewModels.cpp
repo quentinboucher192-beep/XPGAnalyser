@@ -897,7 +897,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFolder:           return hmi_ ? 13 : 0;
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
-        case NodeKind::HmiConfig:           return hmi_ ? 13 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements
+        case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements ; 1.22.9 : - Unites de mesure (un onglet d Unites et formats)
         case NodeKind::HmiResources:        return hmi_ ? 2 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents
         case NodeKind::HmiViews:            return hmi_ ? 3 : 0;   // lot 8 : Modeles, Vues, Popups
         case NodeKind::HmiViewFolder:
@@ -1384,7 +1384,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                                                NodeKind::HmiStation,                              // Poste d'exploitation,
                                                NodeKind::HmiNotify, NodeKind::HmiReports,         // Notifications, Rapports,
                                                NodeKind::HmiWeb,                                  // Acces web
-                                               NodeKind::HmiMeasureUnits,                         // 1.13.0 (lot J6b) : Unites de mesure
+                                               // 1.13.0 (lot J6b) : Unites de mesure ; 1.22.9 : un onglet d'Unites et formats
                                                NodeKind::HmiRecordingSettings};                   // 1.14.0 (M4) : Enregistrements
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }

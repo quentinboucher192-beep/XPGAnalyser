@@ -3770,13 +3770,28 @@ const std::vector<Topic>& topics() {
          "L'unit\xC3\xA9 et le format d'une variable, donn\xC3\xA9s une fois, repris partout o\xC3\xB9 elle "
          "s'affiche : afficheurs, champs de saisie, jauges, tableaux de variables, trous des textes.",
          {
+             {K::Heading, "Une seule page, trois onglets (1.22.9)", {}, "1.22.9"},
+             {K::Paragraph, "Configuration \xE2\x80\xBA **Unit\xC3\xA9s et formats** r\xC3\xA9unit tout ce qui "
+                         "touche aux unit\xC3\xA9s, en trois onglets :", {}, "1.22.9"},
+             {K::Bullet, "**Formats des variables** (il s'ouvre d'abord) : l'unit\xC3\xA9 "
+                         "affich\xC3\xA9" "e, le format, la plage et les seuils de chaque variable, repris "
+                         "par les objets qui la montrent (ci-dessous) ;", {}, "1.22.9"},
+             {K::Bullet, "**Unit\xC3\xA9s de mesure** : la biblioth\xC3\xA8que des unit\xC3\xA9s physiques "
+                         "(les familles, leurs unit\xC3\xA9s, leurs conversions, Unit\xC3\xA9s strictes) - "
+                         "l'ancienne entr\xC3\xA9" "e Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure de "
+                         "l'arbre (voir \xC2\xAB Les unit\xC3\xA9s de mesure dans les types \xC2\xBB) ;", {}, "1.22.9"},
+             {K::Bullet, "**Convertir** : le banc d'essai d'une conversion.", {}, "1.22.9"},
+             {K::Paragraph, "\xC2\xAB G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 \xC2\xBB du s\xC3\xA9lecteur "
+                         "d'unit\xC3\xA9s, une erreur \xC2\xAB unit\xC3\xA9 inconnue \xC2\xBB et une session "
+                         "rouverte qui avait l'ancienne page ouvrent l'onglet Unit\xC3\xA9s de mesure.", {}, "1.22.9"},
              {K::Heading, "Une ligne par variable", {}},
-             {K::Paragraph, "Configuration \xE2\x80\xBA **Unit\xC3\xA9s et formats** : la variable (IHM ou de "
-                         "l'automate), son **unit\xC3\xA9** (bar, \xC2\xB0" "C, %, m\xC2\xB3/h) et son "
-                         "**format** (0, 0.0, 0.00, 000, 0.0%). Un chemin avec des crochets vides, "
-                         "`Armoires[].ana.PT1.mes`, vaut pour **chaque case** du tableau ; un chemin exact "
-                         "(`Armoires[2].ana.PT1.mes`) l'emporte. La colonne **Exemple** montre 1234,5678 "
-                         "ainsi \xC3\xA9" "crit ; **Montr\xC3\xA9" "e par** dit quels objets en profitent.", {}},
+             {K::Paragraph, "L'onglet **Formats des variables** de Configuration \xE2\x80\xBA **Unit\xC3\xA9s "
+                         "et formats** : la variable (IHM ou de l'automate), son **unit\xC3\xA9** (bar, "
+                         "\xC2\xB0" "C, %, m\xC2\xB3/h) et son **format** (0, 0.0, 0.00, 000, 0.0%). Un "
+                         "chemin avec des crochets vides, `Armoires[].ana.PT1.mes`, vaut pour **chaque "
+                         "case** du tableau ; un chemin exact (`Armoires[2].ana.PT1.mes`) l'emporte. La "
+                         "colonne **Exemple** montre 1234,5678 ainsi \xC3\xA9" "crit ; **Montr\xC3\xA9" "e "
+                         "par** dit quels objets en profitent.", {}},
              {K::Bullet, "**Ajouter** demande la variable, l'unit\xC3\xA9, le format ;", {}},
              {K::Bullet, "**Proposer** relit les vues : chaque variable montr\xC3\xA9" "e avec une "
                          "unit\xC3\xA9 par un objet devient une ligne, avec l'unit\xC3\xA9 et le format de "
@@ -4444,12 +4459,12 @@ const std::vector<Topic>& topics() {
                          "symbole, la famille, le facteur vers l'unit\xC3\xA9 de r\xC3\xA9" "f\xC3\xA9rence, "
                          "le d\xC3\xA9" "calage, le libell\xC3\xA9), puis s'en sert pour les variables.", {}, "1.22.8"},
              {K::Bullet, "**Les m\xC3\xAAmes contr\xC3\xB4les que Configuration \xE2\x80\xBA Unit\xC3\xA9s "
-                         "de mesure** : un symbole d\xC3\xA9j\xC3\xA0 pris (\xC2\xAB existe "
-                         "d\xC3\xA9j\xC3\xA0 (Pression, unit\xC3\xA9 fournie) \xC2\xBB), un facteur nul ou "
-                         "absent (jamais 1 par d\xC3\xA9" "faut) et une famille inconnue sont "
-                         "**refus\xC3\xA9s**. Une famille neuve se cr\xC3\xA9" "e avec son unit\xC3\xA9 de "
-                         "r\xC3\xA9" "f\xC3\xA9rence. Une unit\xC3\xA9 identique \xC3\xA0 une existante est "
-                         "r\xC3\xA9utilis\xC3\xA9" "e.", {}, "1.22.8"},
+                         "et formats \xE2\x80\xBA Unit\xC3\xA9s de mesure** : un symbole d\xC3\xA9j\xC3\xA0 "
+                         "pris (\xC2\xAB existe d\xC3\xA9j\xC3\xA0 (Pression, unit\xC3\xA9 fournie) "
+                         "\xC2\xBB), un facteur nul ou absent (jamais 1 par d\xC3\xA9" "faut) et une famille "
+                         "inconnue sont **refus\xC3\xA9s**. Une famille neuve se cr\xC3\xA9" "e avec son "
+                         "unit\xC3\xA9 de r\xC3\xA9" "f\xC3\xA9rence. Une unit\xC3\xA9 identique \xC3\xA0 "
+                         "une existante est r\xC3\xA9utilis\xC3\xA9" "e.", {}, "1.22.8"},
              {K::Bullet, "**Le facteur est v\xC3\xA9rifi\xC3\xA9** : pour une unit\xC3\xA9 courante (mmCE, "
                          "cmCE, mCE, inH2O, mmHg, atm, degF, L/min, Nm3/min, t/h, kW, kWh, tr/min, "
                          "%HR\xE2\x80\xA6), un facteur qui s'\xC3\xA9" "carte de plus de 1 % est un "
@@ -9893,8 +9908,8 @@ const std::vector<Topic>& topics() {
              {K::Heading, "\xC3\x80 savoir", {}},
              {K::Bullet, "le calcul est celui de **EN** : la biblioth\xC3\xA8que des unit\xC3\xA9s du projet "
                          "(fournies, celles du projet et des biblioth\xC3\xA8ques reli\xC3\xA9" "es) ; une "
-                         "unit\xC3\xA9 ajout\xC3\xA9" "e dans Configuration \xE2\x80\xBA Unit\xC3\xA9s de "
-                         "mesure appara\xC3\xAEt dans ses listes ;", {}},
+                         "unit\xC3\xA9 ajout\xC3\xA9" "e dans Configuration \xE2\x80\xBA Unit\xC3\xA9s et "
+                         "formats \xE2\x80\xBA Unit\xC3\xA9s de mesure appara\xC3\xAEt dans ses listes ;", {}},
              {K::Bullet, "le niveau d'acc\xC3\xA8s et l'autorisation de l'objet s'appliquent \xC3\xA0 tous "
                          "ses gestes ; \xC3\x89" "crire demande aussi la permission **Piloter** quand la "
                          "s\xC3\xA9" "curit\xC3\xA9 est active ;", {}},
@@ -9905,7 +9920,7 @@ const std::vector<Topic>& topics() {
                          "dimension inconnue, une Valeur de d\xC3\xA9part qui n'est pas un nombre, une "
                          "variable inconnue dans R\xC3\xA9sultat vers ;", {}},
              {K::Bullet, "pour tester une conversion pendant la conception : l'onglet **Convertir** de "
-                         "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure.", {}},
+                         "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats.", {}},
          },
          {"unites-mesure", "objet-champ-de-saisie", "objet-communs", "actions"},
          {"Convertisseur d'unit\xC3\xA9s", "convertisseur", "UnitConverter", "Unit\xC3\xA9 de d\xC3\xA9part", "Unit\xC3\xA9 d'arriv\xC3\xA9" "e", "R\xC3\xA9sultat vers", "Valeur de d\xC3\xA9part", "inverser"},
@@ -18687,13 +18702,16 @@ const std::vector<Topic>& topics() {
                          "\xC2\xBB). L'unit\xC3\xA9 actuelle est choisie d'office ; la ligne du bas dit "
                          "l'unit\xC3\xA9 choisie. **Choisir** (ou Entr\xC3\xA9" "e, ou un double-clic), "
                          "**Sans unit\xC3\xA9** (vide la case), **Annuler**, et **G\xC3\xA9rer les "
-                         "unit\xC3\xA9s\xE2\x80\xA6**, qui ouvre Configuration \xE2\x80\xBA Unit\xC3\xA9s de "
-                         "mesure. Ouvert depuis une fen\xC3\xAAtre (Nouvelle fonction, Nouvelle variable), "
-                         "il n'a pas G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 : la page s'ouvrirait sous "
-                         "la fen\xC3\xAAtre ; ferme-la d'abord. Sur un type non num\xC3\xA9rique, il le dit.", {}},
-             {K::Heading, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure", {}},
-             {K::Paragraph, "Dans l'arbre, sous Configuration : la biblioth\xC3\xA8que des unit\xC3\xA9s du "
-                         "projet.", {}},
+                         "unit\xC3\xA9s\xE2\x80\xA6**, qui ouvre l'onglet Unit\xC3\xA9s de mesure de "
+                         "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats. Ouvert depuis une "
+                         "fen\xC3\xAAtre (Nouvelle fonction, Nouvelle variable), il n'a pas G\xC3\xA9rer les "
+                         "unit\xC3\xA9s\xE2\x80\xA6 : la page s'ouvrirait sous la fen\xC3\xAAtre ; ferme-la "
+                         "d'abord. Sur un type non num\xC3\xA9rique, il le dit.", {}},
+             {K::Heading, "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de "
+                         "mesure", {}},
+             {K::Paragraph, "La biblioth\xC3\xA8que des unit\xC3\xA9s du projet : l'onglet **Unit\xC3\xA9s de "
+                         "mesure** de Configuration \xE2\x80\xBA **Unit\xC3\xA9s et formats** (1.22.9 : "
+                         "avant, une entr\xC3\xA9" "e \xC3\xA0 part dans l'arbre).", {}},
              {K::Bullet, "\xC3\x80 gauche, les **familles** (Famille, R\xC3\xA9" "f\xC3\xA9rence, "
                          "Unit\xC3\xA9s, Provenance) ; \xC3\xA0 droite, les **unit\xC3\xA9s** de la famille "
                          "choisie (Unit\xC3\xA9, Nom, Conversion, Provenance, Emplois), et dessous la fiche "
@@ -18721,9 +18739,9 @@ const std::vector<Topic>& topics() {
                          "(voir \xC2\xAB L'IA cr\xC3\xA9" "e les unit\xC3\xA9s qui manquent \xC2\xBB) : les "
                          "m\xC3\xAAmes contr\xC3\xB4les qu'ici, dans sa proposition, avant Appliquer.", {}},
              {K::Heading, "L'onglet Convertir : tester une conversion", {}, "1.14.1"},
-             {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets : "
-                         "**Biblioth\xC3\xA8que** (les familles et les unit\xC3\xA9s, ci-dessus) et "
-                         "**Convertir**, un banc d'essai.", {}, "1.14.1"},
+             {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats a trois onglets : **Formats "
+                         "des variables**, **Unit\xC3\xA9s de mesure** (les familles et les unit\xC3\xA9s, "
+                         "ci-dessus) et **Convertir**, un banc d'essai.", {}, "1.14.1"},
              {K::Bullet, "**Valeur** : le nombre \xC3\xA0 convertir (1,5 ou 1.5, -40, 2,5E3) ; **De** et "
                          "**Vers** : les unit\xC3\xA9s, choisies dans des listes ; Vers ne propose que la "
                          "dimension de De. **Dimension** restreint De \xC3\xA0 une dimension ; "
@@ -18765,14 +18783,14 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9" "f\xC3\xA9rence, ne se convertit pas : passe une variable dans son "
                          "unit\xC3\xA9), un **tableau entier** (Pressions := Mesures : affecte case par "
                          "case, chaque case se convertit). La case \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB "
-                         "(Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure) exige EN(\xE2\x80\xA6) "
-                         "partout, l'affectation d'une variable comprise. Deux **familles "
-                         "diff\xC3\xA9rentes** (une pression et une temp\xC3\xA9rature) : toujours "
-                         "refus\xC3\xA9, et le message nomme les deux. Une valeur **sans unit\xC3\xA9** (un "
-                         "litt\xC3\xA9ral 9.0, une variable nue, une variable locale ou un param\xC3\xA8tre "
-                         "sans unit\xC3\xA9, m\xC3\xAAme s'il porte le nom d'une variable IHM) adopte "
-                         "l'unit\xC3\xA9 de l'autre ; une cible sans unit\xC3\xA9 re\xC3\xA7oit le nombre "
-                         "tel quel.", {}},
+                         "(Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de "
+                         "mesure) exige EN(\xE2\x80\xA6) partout, l'affectation d'une variable comprise. "
+                         "Deux **familles diff\xC3\xA9rentes** (une pression et une temp\xC3\xA9rature) : "
+                         "toujours refus\xC3\xA9, et le message nomme les deux. Une valeur **sans "
+                         "unit\xC3\xA9** (un litt\xC3\xA9ral 9.0, une variable nue, une variable locale ou "
+                         "un param\xC3\xA8tre sans unit\xC3\xA9, m\xC3\xAAme s'il porte le nom d'une "
+                         "variable IHM) adopte l'unit\xC3\xA9 de l'autre ; une cible sans unit\xC3\xA9 "
+                         "re\xC3\xA7oit le nombre tel quel.", {}},
              {K::Code, "Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord "
                          "*)\nIF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar "
                          "*)\nPression := PressionBasse;                      (* mbar -> bar : converti "
@@ -20288,13 +20306,14 @@ const std::vector<Topic>& topics() {
                          "ne voyage pas (une variable IHM employ\xC3\xA9" "e, par exemple) est dit "
                          "apr\xC3\xA8s la publication. Le projet ne change pas.", {}},
              {K::Paragraph, "Les **unit\xC3\xA9s de mesure propres** du projet (ses familles et ses "
-                         "unit\xC3\xA9s, Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure) voyagent avec "
-                         "la biblioth\xC3\xA8que : le projet qui la relie les conna\xC3\xAEt, "
-                         "gard\xC3\xA9" "es avec le lien m\xC3\xAAme quand le fichier est introuvable ; une "
-                         "unit\xC3\xA9 du projet de m\xC3\xAAme symbole l'emporte. Un membre `Volume_jour : "
-                         "REAL [Nm3/j]` d'un type de la biblioth\xC3\xA8que se convertit donc par "
-                         "`EN(Compteur.Volume_jour, 'Nm3/h')` dans ce projet (240 Nm3/j donnent 10 Nm3/h), "
-                         "et Compiler ne dit plus l'unit\xC3\xA9 inconnue.", {}, "1.13.0"},
+                         "unit\xC3\xA9s, Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA "
+                         "Unit\xC3\xA9s de mesure) voyagent avec la biblioth\xC3\xA8que : le projet qui la "
+                         "relie les conna\xC3\xAEt, gard\xC3\xA9" "es avec le lien m\xC3\xAAme quand le "
+                         "fichier est introuvable ; une unit\xC3\xA9 du projet de m\xC3\xAAme symbole "
+                         "l'emporte. Un membre `Volume_jour : REAL [Nm3/j]` d'un type de la "
+                         "biblioth\xC3\xA8que se convertit donc par `EN(Compteur.Volume_jour, 'Nm3/h')` dans "
+                         "ce projet (240 Nm3/j donnent 10 Nm3/h), et Compiler ne dit plus l'unit\xC3\xA9 "
+                         "inconnue.", {}, "1.13.0"},
              {K::Heading, "Relier, mettre \xC3\xA0 jour, d\xC3\xA9lier", {}},
              {K::Paragraph, "**Relier une biblioth\xC3\xA8que\xE2\x80\xA6** choisit un fichier .xpgbib (le "
                          "bouton \xE2\x80\xA6 ouvre l'explorateur), puis dit ce qu'il apporte. Le projet "

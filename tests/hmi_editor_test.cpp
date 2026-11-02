@@ -2892,8 +2892,8 @@ void arbre_supervision() {
     const auto ihm = tree.childAt(tree.root(), 1);
     const auto config = tree.childAt(ihm, 1);   // lot API 8 : apres la rangee des outils
     check(tree.childCount(ihm) == 9, "toujours neuf entr\xC3\xA9" "es de premier niveau (lot API 8 : les outils sortis de l'arbre, Simulation dans son dossier)");
-    check(tree.hasChildren(config) && tree.childCount(config) == 13,
-          "Configuration a treize sous-noeuds (lot 13 : Langues, Unit\xC3\xA9s et formats ; lot 14 : Communication (lot 15 : \xC3\x89quipements), Poste d'exploitation, Notifications, Rapports, Acc\xC3\xA8s web ; 1.13.0 : Unit\xC3\xA9s de mesure ; 1.14.0 : Enregistrements)");
+    check(tree.hasChildren(config) && tree.childCount(config) == 12,
+          "Configuration a douze sous-noeuds (lot 13 : Langues, Unit\xC3\xA9s et formats ; lot 14 : Communication (lot 15 : \xC3\x89quipements), Poste d'exploitation, Notifications, Rapports, Acc\xC3\xA8s web ; 1.14.0 : Enregistrements ; 1.22.9 : Unit\xC3\xA9s de mesure est un onglet d'Unit\xC3\xA9s et formats)");
     same_text(tree.text(tree.childAt(config, 0)) + "  [" + tree.counterOf(tree.childAt(config, 0)) + "]", "Alarmes  [1]", "Alarmes et leur nombre");
     same_text(tree.text(tree.childAt(config, 1)) + "  [" + tree.counterOf(tree.childAt(config, 1)) + "]", "Recettes  [1]", "Recettes et leur nombre");
     same_text(tree.text(tree.childAt(config, 2)) + "  [" + tree.counterOf(tree.childAt(config, 2)) + "]", "Utilisateurs  [0]", "Utilisateurs et leur nombre");
@@ -10155,7 +10155,7 @@ void lot13_affichage() {
         app::ProjectTreeModel tree(plc);
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
-        check(tree.childCount(config) == 13 && tree.text(tree.childAt(config, 5)) == "Unit\xC3\xA9s et formats" && tree.counterOf(tree.childAt(config, 5)) == "2"
+        check(tree.childCount(config) == 12 && tree.text(tree.childAt(config, 5)) == "Unit\xC3\xA9s et formats" && tree.counterOf(tree.childAt(config, 5)) == "2"
                   && app::ProjectTreeModel::kindOf(tree.childAt(config, 5)) == app::ProjectTreeModel::NodeKind::HmiUnits,
               "l'arbre : Configuration > Unit\xC3\xA9s et formats [2]");
     }
@@ -10268,7 +10268,7 @@ void lot14_poste() {
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
         const auto node = tree.childAt(config, 7);
-        check(tree.childCount(config) == 13 && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiStation
+        check(tree.childCount(config) == 12 && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiStation
                   && tree.text(node) == "Poste d'exploitation  [3 \xC3\xA9" "crans, kiosque]",
               "l'arbre : Configuration > Poste d'exploitation [3 \xC3\xA9" "crans, kiosque]");
         check(tree.style(node).iconTone == ui::Tone::Warning, "un kiosque sans mot de passe : l'ic\xC3\xB4ne orange");
@@ -10546,7 +10546,7 @@ void lot14_notifications_rapports_web() {
         app::ProjectTreeModel tree(std::make_shared<domain::Project>());
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);   // Lot API 8 : la rangee d'outils d'abord
-        check(tree.childCount(config) == 13 && tree.text(tree.childAt(config, 8)) == "Notifications  [2 destinataires]"
+        check(tree.childCount(config) == 12 && tree.text(tree.childAt(config, 8)) == "Notifications  [2 destinataires]"
                   && app::ProjectTreeModel::kindOf(tree.childAt(config, 8)) == app::ProjectTreeModel::NodeKind::HmiNotify
                   && tree.style(tree.childAt(config, 8)).iconTone == ui::Tone::Ok,
               "l'arbre : Configuration > Notifications [2 destinataires], ic\xC3\xB4ne verte (actives)");
@@ -19441,17 +19441,17 @@ void centreAide111() {
     // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67 ; 1.14.1 : 68 ; 1.14.2 : 69 ; 1.15.0 : 70 ; 1.16.0 : 71 ; 1.16.1 : 72 ; 1.17.0 : 73 ; 1.18.0 : 74.
     // 1.21.1 : 80 (la 1.21.1 en tete, un rang de plus pour les autres). 1.21.2 : 81. 1.21.3 : 82.
     const auto& rel = hn::releases();
-    check(rel.size() == 91 && rel.front().version == "1.22.8" && rel[1].version == "1.22.7" && rel[2].version == "1.22.6" && rel[3].version == "1.22.5" && rel[4].version == "1.22.4" && rel[5].version == "1.22.3" && rel[6].version == "1.22.2" && rel[7].version == "1.22.1" && rel[8].version == "1.22.0" && rel[9].version == "1.21.3" && rel[10].version == "1.21.2" && rel[11].version == "1.21.1" && rel[12].version == "1.21.0" && rel[13].version == "1.20.2" && rel[14].version == "1.20.1" && rel[15].version == "1.20.0" && rel[16].version == "1.19.0" && rel[17].version == "1.18.0" && rel[18].version == "1.17.0" && rel[19].version == "1.16.1" && rel[20].version == "1.16.0" && rel[21].version == "1.15.0" && rel[22].version == "1.14.2" && rel[23].version == "1.14.1" && rel[24].version == "1.14.0" && rel[25].version == "1.13.1" && rel[26].version == "1.13.0" && rel[27].version == "1.12.31" && rel[28].version == "1.12.30" && rel[29].version == "1.12.29" && rel[30].version == "1.12.28" && rel[31].version == "1.12.27" && rel[32].version == "1.12.26" && rel[33].version == "1.12.25" && rel[34].version == "1.12.24" && rel[35].version == "1.12.23" && rel[36].version == "1.12.22" && rel[37].version == "1.12.21" && rel[38].version == "1.12.20" && rel[39].version == "1.12.19" && rel[40].version == "1.12.18" && rel[41].version == "1.12.17" && rel[42].version == "1.12.16" && rel[43].version == "1.12.15" && rel[44].version == "1.12.14" && rel[45].version == "1.12.13" && rel[46].version == "1.12.12" && rel[47].version == "1.12.11" && rel[48].version == "1.12.10" && rel[49].version == "1.12.9" && rel[50].version == "1.12.8" && rel[51].version == "1.12.7" && rel[52].version == "1.12.6" && rel[53].version == "1.12.5" && rel[54].version == "1.12.4" && rel[55].version == "1.12.3" && rel[56].version == "1.12.2" && rel[57].version == "1.12.1"
-              && rel[58].version == "1.12.0" && rel[59].version == "1.11.24" && rel[60].version == "1.11.23"
-              && rel[61].version == "1.11.22" && rel[62].version == "1.11.21" && rel[63].version == "1.11.20" && rel[64].version == "1.11.19"
-              && rel[65].version == "1.11.18" && rel[66].version == "1.11.17"
-              && rel[67].version == "1.11.16" && rel[68].version == "1.11.15"
-              && rel[69].version == "1.11.14" && rel[70].version == "1.11.13" && rel[71].version == "1.11.12"
-              && rel[72].version == "1.11.11" && rel[73].version == "1.11.10"
-              && rel[74].version == "1.11.9" && rel[75].version == "1.11.8"
-              && rel[76].version == "1.11.7" && rel[77].version == "1.11.6" && rel[78].version == "1.11.5"
-              && rel[79].version == "1.11.4" && rel[80].version == "1.11.3" && rel[81].version == "1.11.2"
-              && rel[82].version == "1.11.1" && rel[83].version == "1.11" && rel[84].version == "1.10.4",
+    check(rel.size() == 92 && rel.front().version == "1.22.9" && rel[1].version == "1.22.8" && rel[2].version == "1.22.7" && rel[3].version == "1.22.6" && rel[4].version == "1.22.5" && rel[5].version == "1.22.4" && rel[6].version == "1.22.3" && rel[7].version == "1.22.2" && rel[8].version == "1.22.1" && rel[9].version == "1.22.0" && rel[10].version == "1.21.3" && rel[11].version == "1.21.2" && rel[12].version == "1.21.1" && rel[13].version == "1.21.0" && rel[14].version == "1.20.2" && rel[15].version == "1.20.1" && rel[16].version == "1.20.0" && rel[17].version == "1.19.0" && rel[18].version == "1.18.0" && rel[19].version == "1.17.0" && rel[20].version == "1.16.1" && rel[21].version == "1.16.0" && rel[22].version == "1.15.0" && rel[23].version == "1.14.2" && rel[24].version == "1.14.1" && rel[25].version == "1.14.0" && rel[26].version == "1.13.1" && rel[27].version == "1.13.0" && rel[28].version == "1.12.31" && rel[29].version == "1.12.30" && rel[30].version == "1.12.29" && rel[31].version == "1.12.28" && rel[32].version == "1.12.27" && rel[33].version == "1.12.26" && rel[34].version == "1.12.25" && rel[35].version == "1.12.24" && rel[36].version == "1.12.23" && rel[37].version == "1.12.22" && rel[38].version == "1.12.21" && rel[39].version == "1.12.20" && rel[40].version == "1.12.19" && rel[41].version == "1.12.18" && rel[42].version == "1.12.17" && rel[43].version == "1.12.16" && rel[44].version == "1.12.15" && rel[45].version == "1.12.14" && rel[46].version == "1.12.13" && rel[47].version == "1.12.12" && rel[48].version == "1.12.11" && rel[49].version == "1.12.10" && rel[50].version == "1.12.9" && rel[51].version == "1.12.8" && rel[52].version == "1.12.7" && rel[53].version == "1.12.6" && rel[54].version == "1.12.5" && rel[55].version == "1.12.4" && rel[56].version == "1.12.3" && rel[57].version == "1.12.2" && rel[58].version == "1.12.1"
+              && rel[59].version == "1.12.0" && rel[60].version == "1.11.24" && rel[61].version == "1.11.23"
+              && rel[62].version == "1.11.22" && rel[63].version == "1.11.21" && rel[64].version == "1.11.20" && rel[65].version == "1.11.19"
+              && rel[66].version == "1.11.18" && rel[67].version == "1.11.17"
+              && rel[68].version == "1.11.16" && rel[69].version == "1.11.15"
+              && rel[70].version == "1.11.14" && rel[71].version == "1.11.13" && rel[72].version == "1.11.12"
+              && rel[73].version == "1.11.11" && rel[74].version == "1.11.10"
+              && rel[75].version == "1.11.9" && rel[76].version == "1.11.8"
+              && rel[77].version == "1.11.7" && rel[78].version == "1.11.6" && rel[79].version == "1.11.5"
+              && rel[80].version == "1.11.4" && rel[81].version == "1.11.3" && rel[82].version == "1.11.2"
+              && rel[83].version == "1.11.1" && rel[84].version == "1.11" && rel[85].version == "1.10.4",
           "notes : 72 versions, la 1.16.1 en tete, la 1.16.0, la 1.15.0, la 1.14.2, la 1.14.1, la 1.14.0 (lots M1, M2, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
@@ -19723,7 +19723,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 603,   // 1.22.8 : + 3 (les modeles de vues, les unites creees par l IA, la confirmation qui defile). 1.22.7 : + 2 (la suppression qui modifie ses references, Retour et Corriger rapidement). 1.22.6 : + 7 (l apercu de toutes les vues, l activite et les couts en direct, la mission depuis la conversation, les jetons). 1.22.5 : + 3 (l avis du logiciel, la correction, le processus). 1.22.4 : + 5 (l'apercu des erreurs, la ligne choisie, les cercles, les guillemets, la regle 20). 1.22.3 : + 1 (le .XPG joint lu pour les missions). 1.22.2 : + 5 (les parametres des popups, les saccades des missions, l onglet Performances, deplier les propositions, forcer la fin). 1.22.1 : + 4 (sans blocage, les etapes, les corrections, les dossiers). 1.22.0 : + 6 (les missions IA persistantes). 1.21.3 : + 2 (une grande demande n'est plus coupee ; la longueur d'une reponse). 1.21.2 : + 2 (les notifications de l'Assistant ; un modele de fichier dans la conversation). 1.21.1 : + 1 (toutes les feuilles d'un classeur joint). 1.21.0 : + 14 (supprimer avec l'Assistant ; le bac a sable ; l'agent ; la decouverte reseau ; les popups d'un symbole supprime ; la memoire persistante ; le contexte de la discussion ; les classeurs joints reconnus ; les modeles de fichiers ; le lecteur des incidents ; l'alarme qui bat ; le plantage des videos d'incident ; A propos et ses fichiers ; l'apercu de tous les fichiers). 1.20.2 : + 7 (le plan en cours en haut ; les blocs de code copiables ; un dossier par alarme, la recherche, le tri ; arreter les incidents ; la case Incidents des alarmes et des groupes ; les enregistrements fideles ; les images nettes). 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 604,   // 1.22.9 : + 1 (Unites et formats et Unites de mesure en une page). 1.22.8 : + 3 (les modeles de vues, les unites creees par l IA, la confirmation qui defile). 1.22.7 : + 2 (la suppression qui modifie ses references, Retour et Corriger rapidement). 1.22.6 : + 7 (l apercu de toutes les vues, l activite et les couts en direct, la mission depuis la conversation, les jetons). 1.22.5 : + 3 (l avis du logiciel, la correction, le processus). 1.22.4 : + 5 (l'apercu des erreurs, la ligne choisie, les cercles, les guillemets, la regle 20). 1.22.3 : + 1 (le .XPG joint lu pour les missions). 1.22.2 : + 5 (les parametres des popups, les saccades des missions, l onglet Performances, deplier les propositions, forcer la fin). 1.22.1 : + 4 (sans blocage, les etapes, les corrections, les dossiers). 1.22.0 : + 6 (les missions IA persistantes). 1.21.3 : + 2 (une grande demande n'est plus coupee ; la longueur d'une reponse). 1.21.2 : + 2 (les notifications de l'Assistant ; un modele de fichier dans la conversation). 1.21.1 : + 1 (toutes les feuilles d'un classeur joint). 1.21.0 : + 14 (supprimer avec l'Assistant ; le bac a sable ; l'agent ; la decouverte reseau ; les popups d'un symbole supprime ; la memoire persistante ; le contexte de la discussion ; les classeurs joints reconnus ; les modeles de fichiers ; le lecteur des incidents ; l'alarme qui bat ; le plantage des videos d'incident ; A propos et ses fichiers ; l'apercu de tous les fichiers). 1.20.2 : + 7 (le plan en cours en haut ; les blocs de code copiables ; un dossier par alarme, la recherche, le tri ; arreter les incidents ; la case Incidents des alarmes et des groupes ; les enregistrements fideles ; les images nettes). 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19871,7 +19871,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 245, "centre : L'IHM a les 245 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 91, "centre : 11 expressions, 91 notes (1.22.8)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 92, "centre : 11 expressions, 92 notes (1.22.9)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -19933,10 +19933,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 91
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 92
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.22.8" && hc::notesPage("9.9").version == "1.22.8",   // 1.22.8 : la plus recente
+        check(hc::notesPage("").version == "1.22.9" && hc::notesPage("9.9").version == "1.22.9",   // 1.22.9 : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -20330,7 +20330,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 91;   // 1.11.3 a 1.22.8 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 92;   // 1.11.3 a 1.22.9 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -40044,16 +40044,45 @@ void unites113() {
         check(!p.config.strictUnits && !mu.strictBox().isChecked(), "Ctrl+Z : d\xC3\xA9" "coch\xC3\xA9" "e");
     }
 
-    // ---- l'arbre : Configuration > Unites de mesure ----
+    // ---- l'arbre : Configuration > Unites et formats (1.22.9 : Unites de mesure n'y est plus qu'un onglet) ----
     {
         auto plc = std::make_shared<domain::Project>();
         app::ProjectTreeModel tree(plc);
         tree.setHmi(doc);
         const auto config = tree.childAt(tree.childAt(tree.root(), 1), 1);
-        const auto node = tree.childCount(config) == 13 ? tree.childAt(config, 11) : ui::kInvalidNode;   // 1.14.0 : + Enregistrements, apres
-        check(node != ui::kInvalidNode && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiMeasureUnits
-                  && tree.text(node).rfind("Unit\xC3\xA9s de mesure", 0) == 0,
-              "l'arbre : Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure (le douzi\xC3\xA8me)");
+        bool measure = false;
+        for (std::size_t k = 0; k < tree.childCount(config); ++k)
+            measure = measure || app::ProjectTreeModel::kindOf(tree.childAt(config, k)) == app::ProjectTreeModel::NodeKind::HmiMeasureUnits;
+        const auto node = tree.childCount(config) == 12 ? tree.childAt(config, 5) : ui::kInvalidNode;
+        check(node != ui::kInvalidNode && app::ProjectTreeModel::kindOf(node) == app::ProjectTreeModel::NodeKind::HmiUnits
+                  && tree.text(node).rfind("Unit\xC3\xA9s et formats", 0) == 0 && !measure,
+              "l'arbre : une seule entr\xC3\xA9" "e, Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats (plus d'Unit\xC3\xA9s de mesure \xC3\xA0 part)");
+    }
+
+    // ---- 1.22.9 : Unites et formats, une page a trois onglets ----
+    {
+        app::HmiMeasureUnitsPane page("un.page", doc, apply, std::make_unique<app::HmiUnitsPane>("un.page.formats", doc, apply));
+        page.setBounds({0, 0, 1400, 800});
+        page.layout();
+        using MU = app::HmiMeasureUnitsPane;
+        check(page.formats() != nullptr && page.tabs().tabCount() == 3 && page.tabs().tab(0)->title == "Formats des variables"
+                  && page.tabs().tab(1)->title == "Unit\xC3\xA9s de mesure" && page.tabs().tab(2)->title == "Convertir",
+              "Unit\xC3\xA9s et formats : trois onglets - Formats des variables, Unit\xC3\xA9s de mesure, Convertir");
+        check(page.currentTab() == MU::TabFormats && page.tabs().currentIndex() == 0 && page.formats()->bounds().w > 0,
+              "elle s'ouvre sur les formats des variables");
+        page.showTab(MU::TabLibrary);
+        page.layout();
+        check(page.currentTab() == MU::TabLibrary && page.tabs().currentIndex() == 1 && page.families().bounds().w > 0,
+              "l'onglet Unit\xC3\xA9s de mesure (Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure d'avant, G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6)");
+        page.showTab(MU::TabConvert);
+        check(page.currentTab() == MU::TabConvert && page.tabs().currentIndex() == 2, "l'onglet Convertir");
+        page.showTab(MU::TabFormats);
+        page.layout();
+        std::string why2;
+        check(page.currentTab() == MU::TabFormats && page.formats()->addDisplay("Pression", "bar", "0.00", &why2)
+                  && page.formats()->table().model()->rowCount() >= 1,
+              "les formats des variables marchent dans leur onglet : une ligne ajout\xC3\xA9" "e (" + why2 + ")");
+        (void)stack.undo();
     }
 
     // ---- l'affichage : l'unite physique est l'unite d'affichage par defaut ----
@@ -42175,9 +42204,9 @@ void enregistrements1140() {
             same_text(tree.text(tree.childAt(res, 1)) + "  [" + tree.counterOf(tree.childAt(res, 1)) + "]", "Incidents  [0]",
                       "1.20.0 : ... et Incidents, ceux en attente (aucun)");
         }
-        check(conf != ui::kInvalidNode && tree.childCount(conf) == 13
-                  && app::ProjectTreeModel::kindOf(tree.childAt(conf, 12)) == NK::HmiRecordingSettings,
-              "Configuration \xE2\x80\xBA Enregistrements, le 13e sous-noeud");
+        check(conf != ui::kInvalidNode && tree.childCount(conf) == 12
+                  && app::ProjectTreeModel::kindOf(tree.childAt(conf, 11)) == NK::HmiRecordingSettings,
+              "Configuration \xE2\x80\xBA Enregistrements, le 12e sous-noeud (1.22.9 : Unit\xC3\xA9s de mesure est un onglet)");
     }
     fs::remove_all(dir, ec);
 }

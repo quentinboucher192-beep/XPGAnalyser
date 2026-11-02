@@ -724,7 +724,7 @@ void checkDeclaredUnits(const Project& p, std::vector<Issue>& out) {
         if (unit.empty()) return {};
         if (!units::typeTakesUnit(type))
             return "une unit\xC3\xA9 ne va que sur un nombre (ici " + (type.empty() ? std::string("sans type") : std::string(type)) + ")";
-        if (!cat.known(unit)) return "unit\xC3\xA9 inconnue '" + unit + "' (Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure)";
+        if (!cat.known(unit)) return "unit\xC3\xA9 inconnue '" + unit + "' (Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de mesure)";
         return {};
     };
     struct Where {

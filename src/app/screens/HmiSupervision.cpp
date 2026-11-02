@@ -11,6 +11,7 @@
 
 #include "../App.hpp"
 #include "../hmi/HmiDisplayPanes.hpp"
+#include "../hmi/HmiUnitPanes.hpp"       // 1.22.9 : Unites et formats, une page a onglets
 #include "../hmi/HmiCommPanes.hpp"     // lot 14
 #include "../hmi/HmiStationPanes.hpp"  // lot 14 : le poste
 #include "../hmi/HmiNotifyPanes.hpp"   // lot 14 : les notifications
@@ -436,7 +437,10 @@ bool MainAnalysisScreen::openHmiSupervisionIssue(const hmi::Issue& issue) {
     // Lot 13 : l'unite et le format d'une variable (son chemin dans `property`).
     if (issue.category == "Unit\xC3\xA9" && issue.view == hmi::kNoId) {
         openHmiPane("unites");
-        if (auto* pane = dynamic_cast<HmiUnitsPane*>(hmiTab("unites"))) pane->selectDisplay(issue.property);
+        if (auto* units = dynamic_cast<HmiMeasureUnitsPane*>(hmiTab("unites")); units && units->formats()) {   // 1.22.9 : un onglet
+            units->showTab(HmiMeasureUnitsPane::TabFormats);
+            units->formats()->selectDisplay(issue.property);
+        }
         return true;
     }
     // Lot 14 : la communication (la variable dans `property`) - sa ligne de la

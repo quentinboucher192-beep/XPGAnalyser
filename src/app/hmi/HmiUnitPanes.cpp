@@ -127,7 +127,7 @@ std::string problem(const hmi::Project& p, std::string_view type, std::string_vi
     const std::string sym = cat.canonical(t);
     if (sym.empty())
         return "unit\xC3\xA9 inconnue \xC2\xAB " + t + " \xC2\xBB : choisis-la dans la liste (Ctrl+Espace) ou ajoute-la dans "
-               "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure";
+               "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de mesure";
     if (canonical) *canonical = sym;
     return {};
 }
@@ -588,7 +588,7 @@ core::Status HmiUnitPicker::buildUi() {
     });
     if (spec_.canManage) {   // 1.13.0 (seconde passe) : pas depuis une fenetre modale (la page s'ouvrirait dessous)
         body->manage = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6", base + ".manage")));
-        body->manage->setTooltip("Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure : les familles et les unit\xC3\xA9s du projet");
+        body->manage->setTooltip("Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de mesure : les familles et les unit\xC3\xA9s du projet");
         links_ += body->manage->clicked->connect([this] { manage(); });
     }
     body->none = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Sans unit\xC3\xA9", base + ".none")));
@@ -1093,7 +1093,7 @@ bool HmiMeasureUnitsPane::builtinUnit(std::string_view symbol) { return hu::buil
 
 bool HmiMeasureUnitsPane::builtinFamily(std::string_view name) { return hu::builtinFamily(name); }
 
-HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
+HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply, std::unique_ptr<HmiUnitsPane> formats)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     // 1.14.1 (lot N5) : le contenu d'avant dans l'onglet Bibliotheque ; l'onglet Convertir a cote.
@@ -1139,7 +1139,12 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
     status_ = &static_cast<ui::StatusBar&>(host.addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     {
         auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
-        tabs->addTab({"Biblioth\xC3\xA8que", ui::Icon::Library}, std::move(library));
+        // 1.22.9 : Unites et formats - les formats des variables d'abord, la bibliotheque devient << Unites de mesure >>.
+        if (formats) {
+            formats_ = formats.get();
+            tabs->addTab({"Formats des variables", ui::Icon::Variable}, std::move(formats));
+        }
+        tabs->addTab({formats_ ? std::string("Unit\xC3\xA9s de mesure") : std::string("Biblioth\xC3\xA8que"), ui::Icon::Library}, std::move(library));
         auto convert = std::make_unique<HmiUnitConvertPage>(base + ".convert", doc_);
         convert_ = convert.get();
         tabs->addTab({"Convertir", ui::Icon::CodeCalc}, std::move(convert));
@@ -1651,10 +1656,16 @@ void HmiMeasureUnitsPane::onLayout() {
 }
 
 void HmiMeasureUnitsPane::showTab(std::size_t tab) {
-    if (tabs_ && tab < tabs_->tabCount()) tabs_->setCurrentIndex(tab);
+    // 1.22.9 : avec l'onglet Formats des variables, il est le premier et les autres sont decales d'un rang.
+    const std::size_t at = !formats_ ? tab : tab == TabFormats ? 0 : tab + 1;
+    if (tabs_ && at < tabs_->tabCount()) tabs_->setCurrentIndex(at);
 }
 
-std::size_t HmiMeasureUnitsPane::currentTab() const noexcept { return tabs_ ? tabs_->currentIndex() : 0; }
+std::size_t HmiMeasureUnitsPane::currentTab() const noexcept {
+    const std::size_t at = tabs_ ? tabs_->currentIndex() : 0;
+    if (!formats_) return at;
+    return at == 0 ? TabFormats : at - 1;
+}
 
 void HmiMeasureUnitsPane::layoutLibrary(const gfx::Rect& b) {
     constexpr float kTools = 38.f, kStatus = 24.f;

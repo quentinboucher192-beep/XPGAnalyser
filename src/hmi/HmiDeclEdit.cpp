@@ -1193,7 +1193,7 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
             const std::string sym = cat.canonical(v);
             if (sym.empty())
                 return fail(why, "unit\xC3\xA9 inconnue " + quoted(v) + " : choisis-la dans la liste (Ctrl+Espace) ou ajoute-la dans "
-                                 "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure");
+                                 "Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats \xE2\x80\xBA Unit\xC3\xA9s de mesure");
             d.unit = sym;
             return true;
         }

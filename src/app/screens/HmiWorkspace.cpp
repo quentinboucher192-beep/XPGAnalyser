@@ -1128,6 +1128,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         showBottomPanel(true, HmiBuildOutputPane::kSorties);
         return;
     }
+    // 1.22.9 : Unites de mesure est un onglet d'Unites et formats (Gerer les unites..., un lien d'avant, une session rouverte).
+    if (key == "unites-mesure") {
+        openHmiPane("unites");
+        if (auto* units = dynamic_cast<HmiMeasureUnitsPane*>(hmiTab("unites"))) units->showTab(HmiMeasureUnitsPane::TabLibrary);
+        return;
+    }
     auto doc = app_.hmi();
     if (!doc || !centre_) return;
     setHmiProjectFolder(app_.projectFolder());     // "Enregistrer sous" a pu le changer
@@ -1789,19 +1795,15 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         title = "IHM \xC2\xB7 Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te";
         icon = Icon::Globe;
     } else if (key == "unites") {
-        // Lot 13 : Configuration > Unites et formats - ceux des variables, repris partout.
-        auto pane = std::make_unique<HmiUnitsPane>("hmi.units", doc, apply);
+        // Lot 13 : Configuration > Unites et formats - ceux des variables, repris partout. 1.22.9 : une seule page avec les
+        // unites de mesure (1.13.0 : les familles et les unites du projet, Unites strictes) et Convertir, en onglets.
+        auto formats = std::make_unique<HmiUnitsPane>("hmi.units", doc, apply);
         HmiUnitsPane::Hosts hosts;
         hosts.askAdd = [this] { askHmiAddUnit(); };
-        pane->setHosts(std::move(hosts));
-        page = std::move(pane);
+        formats->setHosts(std::move(hosts));
+        page = std::make_unique<HmiMeasureUnitsPane>("hmi.measureUnits", doc, apply, std::move(formats));
         title = "IHM \xC2\xB7 Unit\xC3\xA9s et formats";
         icon = Icon::Variable;
-    } else if (key == "unites-mesure") {
-        // 1.13.0 (lot J6b) : Configuration > Unites de mesure - les familles et les unites du projet, Unites strictes.
-        page = std::make_unique<HmiMeasureUnitsPane>("hmi.measureUnits", doc, apply);
-        title = "IHM \xC2\xB7 Unit\xC3\xA9s de mesure";
-        icon = Icon::Constant;
     } else if (key == "communication") {
         // Lot 14 : Configuration > Communication - l'automate reel (Modbus TCP), le
         // plan d'adressage, Tester, le serveur de demonstration.
@@ -3078,7 +3080,8 @@ void MainAnalysisScreen::askHmiAddUnit() {
             "Un objet garde les siens s'il d\xC3\xA9" "coche \xC2\xAB Format de la variable \xC2\xBB. Ctrl+Z retire la ligne.",
             std::move(fields), "Ajouter"),
         [this](const menu::DialogResult& r) {
-            auto* pane = dynamic_cast<HmiUnitsPane*>(hmiTab("unites"));
+            auto* units = dynamic_cast<HmiMeasureUnitsPane*>(hmiTab("unites"));   // 1.22.9 : son onglet Formats des variables
+            auto* pane = units ? units->formats() : nullptr;
             if (!r.accepted() || !pane) return;
             const auto v = FormDialog::split(r.payload);
             if (v.empty()) return;
