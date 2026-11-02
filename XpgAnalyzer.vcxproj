@@ -456,6 +456,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiOpenAI.cpp" />
     <ClCompile Include="src\app\ai\AiUsage.cpp" />
     <ClCompile Include="src\app\ai\AiVarFolders.cpp" />
+    <ClCompile Include="src\app\ai\AiViewImages.cpp" />
+    <ClCompile Include="src\app\ai\AiViewTemplates.cpp" />
     <ClCompile Include="src\app\ai\AiHttp.cpp" />
     <ClCompile Include="src\app\ai\AiProvider.cpp" />
     <ClCompile Include="src\app\ai\AiSecret.cpp" />
@@ -1033,6 +1035,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiOpenAI.hpp" />
     <ClInclude Include="src\app\ai\AiUsage.hpp" />
     <ClInclude Include="src\app\ai\AiVarFolders.hpp" />
+    <ClInclude Include="src\app\ai\AiViewTemplates.hpp" />
     <ClInclude Include="src\app\ai\AiHttp.hpp" />
     <ClInclude Include="src\app\ai\AiSecret.hpp" />
     <ClInclude Include="src\app\ai\AiSse.hpp" />

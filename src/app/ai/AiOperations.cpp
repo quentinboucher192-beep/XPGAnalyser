@@ -1123,12 +1123,15 @@ struct Run {
         nextId = ids.nextId;
         std::size_t k = 0;
         for (hmi::Id id = first; id < nextId; ++id, ++k) {
-            const hmi::Object* o = view.object(id);
+            hmi::Object* o = view.object(id);
             if (!o) continue;
             createdIds.insert(id);
             if (k < objs.size()) {
                 aliases[objs[k].name] = id;
                 if (objs[k].name != o->name) renamed.push_back(objs[k].name + kArrow + o->name);
+                // 1.22.8 : verrou=1 dans le code reste verrouille (Ctrl+V deverrouille) - le calque de reference d'un modele de
+                // vues : une image ni selectionnable ni deplacable a la souris, masquee en marche (visible FALSE).
+                if (objs[k].locked) o->locked = true;
             }
             if (Item* it = itemFor(Item::What::Create, *o)) {
                 it->changes.push_back({"code brut", {}, std::to_string(o->props.size()) + " propri\xC3\xA9t\xC3\xA9s, "

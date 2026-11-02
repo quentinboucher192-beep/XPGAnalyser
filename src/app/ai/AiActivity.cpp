@@ -91,6 +91,14 @@ ToolWords localWords(const std::string& name, const std::string& input) {
         w.doing = "L'IA relit " + (f.empty() ? std::string("une pi\xC3\xA8" "ce jointe") : f) + " (lire_piece_jointe" + rows + ")" + kEllipsis;
         w.done = "Lecture exacte de " + (f.empty() ? std::string("la pi\xC3\xA8" "ce jointe") : f) + (rows.empty() ? std::string{} : " (" + rows.substr(2) + ")");
         w.purpose = "Lecture exacte d'une pi\xC3\xA8" "ce jointe (lire_piece_jointe)";
+    } else if (name == "voir_vue_modele") {   // 1.22.8 : viewtpl::kViewTool (AiViewTemplates.hpp)
+        std::string vue = v.str("vue");
+        if (vue.empty())
+            if (const json::Value* n = v.find("vue"); n && n->isNumber()) vue = std::to_string(n->asInt());
+        const std::string what = vue.empty() ? std::string("une vue du mod\xC3\xA8le") : "la vue " + vue + " du mod\xC3\xA8le";
+        w.doing = "L'IA regarde " + what + " (voir_vue_modele)" + kEllipsis;
+        w.done = "Vue du mod\xC3\xA8le montr\xC3\xA9" "e" + (vue.empty() ? std::string{} : " : " + vue);
+        w.purpose = "Image d'une vue du mod\xC3\xA8le de vues (voir_vue_modele)";
     } else {
         struct Known {
             const char* name;

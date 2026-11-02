@@ -714,6 +714,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(ai_missions_e2e_test PRIVATE xpg_app)
     xpg_add_test_executable(ai_jetons_test tests/ai_jetons_test.cpp)        # 1.22.6 : les jetons de ce qui part au fournisseur (avant / apres)
     xpg_target_link_libraries(ai_jetons_test PRIVATE xpg_app)
+    xpg_add_test_executable(ai_modele_vues_test tests/ai_modele_vues_test.cpp)   # 1.22.8 : les modeles de vues (un PV d'approbation, des captures)
+    xpg_target_link_libraries(ai_modele_vues_test PRIVATE xpg_app)
     xpg_add_test_executable(ai_sandbox_test tests/ai_sandbox_test.cpp)      # 1.21.0 : le bac a sable d'execution
     xpg_target_link_libraries(ai_sandbox_test PRIVATE xpg_app)
     # 1.16.0 (Assistant IA) : l'IA integree sans connexion (INTEGREE), les services compatibles OpenAI et la limite
@@ -975,6 +977,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aireseau COMMAND ai_reseau_test)                       # 1.15.0 : l'Assistant IA, la connexion (RESEAU)
     xpg_add_test(NAME aimissionse2e COMMAND ai_missions_e2e_test)            # 1.22.0 : les missions IA persistantes, de bout en bout
     xpg_add_test(NAME aijetons COMMAND ai_jetons_test)                       # 1.22.6 : les jetons envoyes (le cache, l'historique resume), avant / apres
+    xpg_add_test(NAME aimodelevues COMMAND ai_modele_vues_test ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium)   # 1.22.8 : les modeles de vues (PV d'approbation, captures)
     xpg_add_test(NAME aisandbox COMMAND ai_sandbox_test)                     # 1.21.0 : le bac a sable (processus enfant, etapes, confinement)
     xpg_add_test(NAME airegistre COMMAND ai_registre_test)                   # 1.15.0 : le registre, le contexte, l'outil
     xpg_add_test(NAME aiintegree COMMAND ai_integree_test ${XPG_FIXTURE})                   # 1.16.0 : l'IA integree (sans connexion)

@@ -292,7 +292,21 @@ std::string anthropicBody(const ProviderRequest& req, std::vector<std::string>* 
                 r.set("tool_use_id", pendingTool);
                 const bool matches = t.toolResultFor == pendingTool;
                 const std::string text = matches && !blank(t.toolResultText) ? t.toolResultText : std::string("sans suite connue");
-                r.set("content", text);
+                if (matches && !t.toolResultImages.empty()) {
+                    // 1.22.8 : un outil local qui montre des images (voir_vue_modele) : son texte, puis ses images, dans le retour
+                    json::Value content = json::Value::array();
+                    content.push(textBlock(text));
+                    for (const auto& img : t.toolResultImages) {
+                        json::Value b = attachmentBlock(img);
+                        if (b.isArray())
+                            for (auto& x : b.items()) content.push(std::move(x));
+                        else
+                            content.push(std::move(b));
+                    }
+                    r.set("content", std::move(content));
+                } else {
+                    r.set("content", text);
+                }
                 if (matches && t.toolResultError) r.set("is_error", true);
                 m.content.push(std::move(r));
             }
@@ -843,6 +857,7 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                 // 1.20.1 : l'IA demande le texte exact de lignes d'une piece jointe : la reponse, puis la suite de la demande.
                 // 1.21.0 : ou un outil local (le bac a sable) : sa reponse, de meme.
                 std::string result;
+                std::vector<ProviderAttachment> images;   // 1.22.8 : celles d'un outil qui en montre (voir_vue_modele)
                 {   // 1.22.6 : l'outil repondu ici commence (l'activite : ce qu'il lit, ce qu'il cherche)
                     ProviderEvent pe;
                     pe.type = ProviderEvent::Type::Progress;
@@ -856,7 +871,13 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                     const LocalTool& tool = request.localTools[static_cast<std::size_t>(li)];
                     ++localCalls[static_cast<std::size_t>(li)];
                     const auto say = [this](const std::string& detail) { push(statusEvent("outil", detail)); };
-                    result = tool.run ? tool.run(readCall->toolInputJson, say, cancelled_) : std::string("outil indisponible");
+                    if (tool.runRich) {
+                        LocalToolReply rich = tool.runRich(readCall->toolInputJson, say, cancelled_);
+                        result = std::move(rich.text);
+                        images = std::move(rich.images);
+                    } else {
+                        result = tool.run ? tool.run(readCall->toolInputJson, say, cancelled_) : std::string("outil indisponible");
+                    }
                     if (cancelled_) return finish(doneEvent("arrete"));
                 } else {
                     ++reads;
@@ -873,6 +894,7 @@ void AnthropicProvider::run(ProviderRequest request, std::string url) {
                 ProviderTurn back;
                 back.toolResultFor = readCall->toolUseId;
                 back.toolResultText = result;
+                back.toolResultImages = std::move(images);
                 request.turns.push_back(std::move(a));
                 request.turns.push_back(std::move(back));
                 hr.body = anthropicBody(request);

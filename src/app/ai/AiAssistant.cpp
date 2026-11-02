@@ -440,6 +440,10 @@ Assistant::Assistant(Host host) : host_(std::move(host)) {
                     if (!a.file.empty() && !root().empty()) return detail::join(root(), a.file);
                     if (!a.source.empty()) return a.source;
                 }
+            // 1.22.8 : l'image d'une vue d'un modele de vues (<< PV.pdf > Vue_A >>) - un calque de reference
+            if (name.find('>') != std::string_view::npos)
+                for (const auto& f : attachedTemplates(c, false))
+                    if (std::string path = viewtpl::imagePath(f, name); !path.empty()) return path;
             return {};
         };
 }
@@ -843,6 +847,14 @@ bool Assistant::send(std::string text, std::string* why) {
         if (budgetBlocks(&w)) return fail(w);
         overBudgetOk_ = false;
         if (!cur()) newConversation();
+        // 1.22.8 : une demande qui parle de reproduire un modele (<< reproduis cette vue >>, << meme charte >>) : ses images jointes
+        // sont lues comme des modeles de vues (leur charte arrive a la demande suivante ; l'image, elle, part tout de suite).
+        if (viewtpl::wantsReproduction(text))
+            for (auto& p : pending_)
+                if (viewtpl::isImageExt(p.attachment.ext) && !p.attachment.removed && !viewtpl::choiceOf(p.attachment)) {
+                    viewtpl::setChoice(p.attachment, true, "demande");
+                    submitAnalysis(p.attachment);
+                }
         Conversation& c = *cur();
         const Conversation before = c;
         Message u;
@@ -871,6 +883,7 @@ bool Assistant::send(std::string text, std::string* why) {
             for (const auto& p : pending_) {
                 // 1.21.0 : un classeur analyse part lu (son texte extrait, ou sa lecture compacte et l'outil des lignes)
                 if (sheets::workbookExt(p.attachment.ext) && p.attachment.analysis == "analysee") continue;
+                if (!viewtpl::isImageExt(p.attachment.ext) && viewtpl::templateOf(p.attachment)) continue;   // 1.22.8 : un PV de vues part resume
                 ProviderAttachment pa{p.attachment.name, mediaTypeOf(p.attachment.name), attachmentPath(p.attachment), p.attachment.bytes, false, {}};
                 if (const auto plan = planAttachment(pa); !plan.note.empty()) notes += (notes.empty() ? "" : " ") + plan.note;
             }
@@ -1225,8 +1238,10 @@ void Assistant::detach(std::size_t index) {
 
 bool Assistant::processing() const noexcept {
     return std::any_of(pending_.begin(), pending_.end(), [](const Pending& p) {
-        // 1.21.0 : un classeur joint est lu et reconnu avant l'envoi (l'IA en a besoin) - c'est court
-        return p.progress < 1.f || (p.attachment.analysis == "en-cours" && sheets::workbookExt(p.attachment.ext));
+        // 1.21.0 : un classeur joint est lu et reconnu avant l'envoi (l'IA en a besoin) - c'est court ; 1.22.8 : un PDF, une image
+        // choisie comme modele de vues aussi (un PV d'approbation : ses vues et sa charte partent avec la demande)
+        return p.progress < 1.f
+               || (p.attachment.analysis == "en-cours" && (sheets::workbookExt(p.attachment.ext) || viewtpl::wanted(p.attachment)));
     });
 }
 
@@ -1258,6 +1273,18 @@ void Assistant::pollAnalyses() {
         // 1.21.2 : l'onglet Notifications - une piece qui ne se lit pas, un classeur qui vient d'etre joint, reconnu ou lu (son
         // modele, sa detection) ; un classeur d'une ancienne conversation relu n'est pas une nouvelle.
         const Attachment* a = done ? findAttachment(o.attachment) : nullptr;
+        // 1.22.8 : un modele de vues lu (un PV d'approbation reconnu, une capture choisie) : ses vues, sa charte
+        if (a && o.analysis.state == "analysee" && !o.workbook && o.analysis.extra.isObject() && o.analysis.extra.find("modeleVues")) {
+            notifs::Item note;
+            note.key = "piece:" + o.attachment;
+            note.category = "Mod\xC3\xA8le de vues";
+            note.title = "Mod\xC3\xA8le de vues lu : " + guillemets(a->name);
+            note.detail = notifs::oneLine(o.analysis.summary + " : ses vues, leurs images recadr\xC3\xA9" "es et sa charte partent avec tes demandes (r\xC3\xA9sum\xC3\xA9" "es).", 300);
+            note.tone = "ok";
+            note.button = "Voir la pi\xC3\xA8" "ce";
+            note.action = notifs::toAttachment(o.attachment);
+            (void)notifs::post(std::move(note));
+        }
         if (a && (o.analysis.state == "echec" || (o.workbook && fresh))) {
             notifs::Item note;
             note.key = "piece:" + o.attachment;
@@ -1483,6 +1510,47 @@ std::vector<sheets::Attached> Assistant::attachedWorkbooks(const Conversation* c
 
 std::vector<sheets::Attached> Assistant::workbooks() const { return attachedWorkbooks(current(), true); }
 
+// ---- 1.22.8 : les modeles de vues ------------------------------------------------------------------------------------------
+std::vector<viewtpl::Attached> Assistant::attachedTemplates(const Conversation* c, bool withPending) const {
+    std::vector<viewtpl::Attached> out;
+    const auto add = [&](const Attachment& a) {
+        if (a.removed || std::any_of(out.begin(), out.end(), [&](const viewtpl::Attached& x) { return x.id == a.id; })) return;
+        auto tpl = viewtpl::templateOf(a);
+        if (!tpl) return;
+        std::string path = attachmentPath(a);
+        if (path.empty()) path = a.source;
+        out.push_back({a.id, a.name, std::move(path), std::move(*tpl)});
+    };
+    if (c)
+        for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)   // le plus recent d'abord
+            for (const auto& a : m->attachments) add(a);
+    if (withPending)
+        for (const auto& p : pending_) add(p.attachment);
+    return out;
+}
+
+std::vector<viewtpl::Attached> Assistant::viewTemplates() const { return attachedTemplates(current(), true); }
+
+bool Assistant::setViewTemplateChoice(const std::string& attachmentId, bool on, std::string* why) {
+    Conversation* owner = nullptr;
+    Attachment* a = attachmentMut(attachmentId, &owner);
+    if (!a) {
+        if (why) *why = "pi\xC3\xA8" "ce jointe introuvable dans cette discussion";
+        return false;
+    }
+    if (!viewtpl::candidate(*a)) {
+        if (why) *why = "seuls un PDF et une image (PNG, JPEG) peuvent \xC3\xAAtre un mod\xC3\xA8le de vues";
+        return false;
+    }
+    viewtpl::setChoice(*a, on);
+    // l'analyse refaite : les vues, leurs images recadrees, la charte (sur le fil d'analyse) ; ecarte : rien a refaire
+    if (on && !viewtpl::templateOf(*a)) submitAnalysis(*a);
+    if (owner) save(*owner);
+    appendActivity("fichier", "Pi\xC3\xA8" "ce " + a->name + (on ? " : lue comme un mod\xC3\xA8le de vues" : " : n'est plus lue comme un mod\xC3\xA8le de vues"));
+    ++revision_;
+    return true;
+}
+
 bool Assistant::removeFromDiscussion(const std::string& attachmentId, std::string* why) {
     for (std::size_t i = 0; i < pending_.size(); ++i)
         if (pending_[i].attachment.id == attachmentId) {
@@ -1544,6 +1612,9 @@ bool Assistant::frozenEnvironment(Env& out) const {
                 if (!a.file.empty() && !root().empty()) files[a.name] = detail::join(root(), a.file);
                 else if (!a.source.empty()) files[a.name] = a.source;
             }
+    // 1.22.8 : les images des vues des modeles de vues (<< PV.pdf > Vue_A >>)
+    for (const auto& f : attachedTemplates(current(), false))
+        for (auto& [name, path] : viewtpl::imageNames(f)) files.emplace(std::move(name), std::move(path));
     return frozenEnv(host_.env, files, out);
 }
 
@@ -3138,6 +3209,10 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
         if (compacted == 0 || i >= calls[compacted]) return true;
         return m.proposal && m.proposal->state == "proposee" && m.tool && m.tool->error.empty();
     };
+    // 1.22.8 : le dernier tour de l'utilisateur (sans appel d'outil : les images d'un modele de vues y partent, une fois)
+    std::size_t lastUser = static_cast<std::size_t>(-1);
+    for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i)
+        if (c.messages[i].role == "utilisateur") lastUser = i;
     for (std::size_t i = 0; i < c.messages.size() && i < upTo; ++i) {
         const Message& m = c.messages[i];
         ProviderTurn t;
@@ -3147,6 +3222,27 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
             if (settings_.sendAttachments) {
                 // 1.21.0 : l'original quand le modele le lit, sinon le texte extrait ; une piece retiree ne part plus.
                 for (const auto& a : m.attachments) {
+                    // 1.22.8 : UN MODELE DE VUES (un PV d'approbation reconnu, une capture choisie) part RESUME - le document, ses
+                    // vues, leur etat, leurs commentaires, la charte ; ses images avec l'outil voir_vue_modele, quand elles servent
+                    // (le PDF entier n'est plus renvoye a chaque demande). Sans appel d'outil : ses images jointes au tour de la
+                    // demande qui reproduit (le dernier), une fois. Une capture part aussi telle quelle (elle est l'image).
+                    if (!a.removed)
+                        if (auto tpl = viewtpl::templateOf(a)) {
+                            viewtpl::Attached f{a.id, a.name, attachmentPath(a), std::move(*tpl)};
+                            ProviderAttachment pa;
+                            pa.name = a.name + " (mod\xC3\xA8le de vues).txt";
+                            pa.mediaType = "text/plain";
+                            pa.prepared = true;
+                            pa.blocks.push_back(viewtpl::summaryText(f, !toolsInText()));
+                            pa.bytes = pa.blocks.front().size();
+                            t.attachments.push_back(std::move(pa));
+                            if (viewtpl::isImageExt(a.ext)) {
+                                if (auto img = attach::forProvider(a, false)) t.attachments.push_back(std::move(*img));
+                            } else if (toolsInText() && i == lastUser && viewtpl::wantsReproduction(m.text)) {
+                                for (auto& img : viewtpl::imagesFor(f, 8)) t.attachments.push_back(std::move(img));
+                            }
+                            continue;
+                        }
                     // 1.21.0 : UN CLASSEUR STRUCTURE (un modele de fichier reconnu, une detection, un choix) part en lecture
                     // compacte - sa mise en page, ses premieres lignes ; toutes ses lignes se lisent avec l'outil
                     // lignes_classeur (offert avec l'appel d'outil) : le texte brut n'est pas envoye.
@@ -3266,6 +3362,10 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     const std::vector<sheets::Attached> books = settings_.sendAttachments ? attachedWorkbooks(&c, false) : std::vector<sheets::Attached>{};
     const bool booksStructured = std::any_of(books.begin(), books.end(), [](const sheets::Attached& f) { return f.hasLayout; });
     if (const std::string wbText = sheets::workbooksPrompt(books, !req.toolsInText); !wbText.empty()) parts.dynamic += "\n" + wbText;
+    // 1.22.8 : LES MODELES DE VUES - lus par le logiciel (un PV d'approbation, une capture) : ce qu'ils sont, l'outil qui montre une
+    // vue (leur resume et leur charte partent dans le tour qui les a joints : requestFor).
+    const std::vector<viewtpl::Attached> models = settings_.sendAttachments ? attachedTemplates(&c, false) : std::vector<viewtpl::Attached>{};
+    if (const std::string vt = viewtpl::templatesPrompt(models, !req.toolsInText); !vt.empty()) parts.dynamic += "\n" + vt;
     // 1.21.3 : LA LONGUEUR D'UNE REPONSE dite au modele (une grande demande se fait en plusieurs propositions, la suite
     // dans << suite >>) ; une reprise apres une reponse coupee : la consigne de decouper, cette fois.
     parts.dynamic += "\n" + lengthPrompt(req.maxTokens, splitFrom);
@@ -3407,6 +3507,21 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
                 return sheets::runRowsTool(books, input);
             };
             req.localTools.push_back(std::move(rows));
+        }
+        // 1.22.8 : voir_vue_modele - l'IMAGE recadree d'une vue d'un modele de vues (refaite sur ce fil si le cache a ete vide).
+        if (!models.empty()) {
+            std::size_t views = 0;
+            for (const auto& f : models) views += f.tpl.views.size();
+            LocalTool see;
+            see.name = std::string(viewtpl::kViewTool);
+            see.definitionJson = viewtpl::viewToolJson();
+            see.maxCalls = static_cast<int>(std::clamp<std::size_t>(views + 2, 4, 16));
+            see.runRich = [models](const std::string& input, const auto& status, const auto&) {
+                status("Lecture d'une vue du mod\xC3\xA8le de vues");
+                return viewtpl::runViewTool(models, input);
+            };
+            see.run = [models](const std::string& input, const auto&, const auto&) { return viewtpl::runViewTool(models, input).text; };
+            req.localTools.push_back(std::move(see));
         }
     }
     const int maxTokens = req.maxTokens;
@@ -3750,6 +3865,10 @@ void Assistant::finishLive(const std::string& stopReason) {
                                        + (warnings == 0 ? std::string{} : ", " + plural(warnings, "avertissement", "avertissements")),
                                    static_cast<int>(errors->size()), static_cast<int>(warnings));
                 }
+                // 1.22.8 : un modele de vues joint - les objets crees sans donnee du projet (A RELIER), dits sous la reponse
+                if (!attachedTemplates(c, false).empty())
+                    if (const auto names = viewtpl::toLink(*m.proposal); !names.empty())
+                        m.note = (m.note.empty() ? std::string{} : m.note + " ") + viewtpl::toLinkNote(names);
                 waitBuild = startBuild(*c, gen_.message, validated ? &*validated : nullptr);   // sinon : un avis << pas lances >>, dit
                 // 1.22.4 : NE PAS TOURNER EN ROND - une proposition de conversation comparee aux precedentes (celle d'une
                 // mission : par la mission, a sa verification - missionChecked).

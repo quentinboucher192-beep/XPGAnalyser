@@ -25,8 +25,9 @@
 //  applique juste avant ; (3) une proposition de mission (mission::batchPrompt : P2,
 //  apres P1 appliquee) ; (4) une correction automatique (l'avis du logiciel, 1.22.5) ;
 //  (5) le 2e tour d'une conversation avec un .XPG lu (le contexte de l'automate : 891
-//  variables, 28 DDT). Les cas (2) a (5) sont compares a la requete d'avant du meme fil
-//  (le cache) ; (1) part a froid.
+//  variables, 28 DDT) ; 1.22.8 : (6) le 3e tour d'une conversation avec un PV d'approbation
+//  de vues (13 vues) joint au 1er - il part RESUME, ses images par l'outil voir_vue_modele.
+//  Les cas (2) a (6) sont compares a la requete d'avant du meme fil (le cache) ; (1) part a froid.
 //  AVANT : les chiffres de la 1.22.5 (8ae5f5d), mesures par ce banc et gardes ici ;
 //  APRES : mesures a chaque passage, sous un PLAFOND (une regression de taille fait
 //  echouer l'essai). Le tableau avant / apres est affiche. Ce qui a fait le gain (1.22.6) :
@@ -43,6 +44,7 @@
 #include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/ai/AiPrompt.hpp"
 #include "../src/app/ai/AiTextParts.hpp"
+#include "../src/app/ai/AiViewTemplates.hpp"
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiModel.hpp"
 
@@ -64,6 +66,7 @@
 
 namespace fs = std::filesystem;
 namespace ai = app::ai;
+namespace vt = app::ai::viewtpl;
 using ai::json::Value;
 
 namespace {
@@ -697,17 +700,140 @@ Mesure case5() {
     return b.s.requests.size() < 2 ? Mesure{} : measure(b.s.requests[1], &b.s.requests[0]);
 }
 
+// (6) 1.22.8 : une conversation avec un PV D'APPROBATION DE VUES (13 vues, 2 commentees) joint au 1er tour et lu par le logiciel :
+// le 3e tour (<< la vue 4 >>), compare au 2e (<< reproduis la vue 3 >>). Le PV part RESUME (le document, les vues, la charte) dans
+// le tour qui l'a joint, l'outil voir_vue_modele est offert ; aucune image ni le PDF ne partent (les images : par l'outil, quand
+// elles servent - une vue montree coute w x h / 750 jetons chez Anthropic, 1 638 pour 1280 x 960).
+vt::Template sampleTemplate() {
+    vt::Template t;
+    t.kind = "pv";
+    t.confidence = 1.0;
+    t.doc = {"ESSAI 2026 001", "INSTALLATION D'ESSAI - ZONE 1", "0", "01/02/2026", "Premiere emission"};
+    const char* names[] = {"Accueil", "Pompage 1", "Pompage 2", "Pompage 3", "Filtration", "Reservoirs", "Vannes",
+                           "Pressions", "Alarmes", "Compteurs", "Reglages", "Communications", "Synthese"};
+    for (int i = 0; i < 13; ++i) {
+        vt::View v;
+        v.name = names[i];
+        v.page = 2 + 2 * i;
+        v.commentsPage = 3 + 2 * i;
+        if (i == 3) v.comments = "Mettre les consignes en cyan et agrandir les valeurs des pressions.";
+        if (i == 7) {
+            v.approval = {"non", "05/02/2026", "JD"};
+            v.comments = "Ajouter le bouton Inhibe sous chaque pression limite.";
+        }
+        v.screen = {210, 104, 1336, 1002};
+        v.width = 1280;
+        v.height = 960;
+        v.screenW = 800;
+        v.screenH = 600;
+        v.image = "vue-" + std::to_string(v.page) + ".png";
+        v.palette.colors = {{0xE0E0E0, 0.52, "fond"}, {0xFF0000, 0.07, "d\xC3\xA9" "fauts, alarmes"}, {0x808080, 0.06, "cadres des valeurs, boutons"},
+                            {0x008000, 0.04, "conduites, marche"}, {0x000000, 0.04, "texte, bandeau d'alarmes"}, {0xFFFF00, 0.02, "valeurs (texte)"}};
+        v.palette.background = 0xE0E0E0;
+        t.views.push_back(std::move(v));
+    }
+    t.palette.colors = {{0xE0E0E0, 0.52, "fond"},
+                        {0xFFFFFF, 0.11, "en-t\xC3\xAAte, fonds clairs"},
+                        {0xFF0000, 0.07, "d\xC3\xA9" "fauts, alarmes"},
+                        {0x808080, 0.06, "cadres des valeurs, boutons"},
+                        {0x008000, 0.04, "conduites, marche"},
+                        {0x000000, 0.04, "texte, bandeau d'alarmes"},
+                        {0xFFFF00, 0.02, "valeurs (texte)"},
+                        {0x80FFFF, 0.01, "consignes"},
+                        {0xFFA500, 0.01, "symboles, rep\xC3\xA8res"},
+                        {0x000080, 0.005, "titres, libell\xC3\xA9s"}};
+    t.palette.background = 0xE0E0E0;
+    t.palette.backgroundShare = 0.52;
+    t.bands = {0.09, 0.06, 12, 12, 13, 0xFFFFFF, 0x000000};
+    return t;
+}
+Mesure case6(Mesure* second) {
+    std::string convId;
+    Bench b("modele-vues", [&convId](Bench& bb) {
+        ai::Conversation c;
+        c.id = "conv-jetons-vues";
+        c.title = "Les vues du PV";
+        c.created = c.modified = "2026-11-01T10:00:00";
+        c.project.name = "Station";
+        c.project.view = "Vue_Station";
+        ai::Attachment a;
+        a.id = "p-20261101-100000-1";
+        a.name = "PV_vues.pdf";
+        a.type = a.ext = "pdf";
+        a.mime = "application/pdf";
+        a.conversation = c.id;
+        a.message = "m1";
+        a.added = "2026-11-01T10:00:00";
+        a.file = "pieces-jointes/" + a.id + "/PV_vues.pdf";
+        a.bytes = 560000;
+        a.analysis = "analysee";
+        ai::AttachmentAnalysis an;
+        an.date = "2026-11-01T10:00:01";
+        an.kind = "extraction";
+        an.state = "analysee";
+        an.summary = "27 pages, 2 400 caract\xC3\xA8res";
+        an.pages = 27;
+        vt::applyTemplate(an, sampleTemplate());
+        a.analyses.push_back(std::move(an));
+        ai::Message m1;
+        m1.id = "m1";
+        m1.role = "utilisateur";
+        m1.date = "2026-11-01T10:00:00";
+        m1.text = "Voici le PV d'approbation des vues du client.";
+        m1.attachments.push_back(std::move(a));
+        c.messages.push_back(std::move(m1));
+        ai::Message m2;
+        m2.id = "m2";
+        m2.role = "assistant";
+        m2.date = "2026-11-01T10:00:05";
+        m2.state = "fini";
+        m2.provider = "anthropic";
+        m2.model = "modele-essai";
+        m2.text = "J'ai lu le PV : 13 vues, dont 2 comment\xC3\xA9" "es (Pompage 3, Pressions : NON). Je peux les reproduire une par une.";
+        c.messages.push_back(std::move(m2));
+        std::error_code ec;
+        fs::create_directories(bb.dir / "IA" / "pieces-jointes" / c.messages.front().attachments.front().id, ec);
+        { std::ofstream o(bb.dir / "IA" / "pieces-jointes" / c.messages.front().attachments.front().id / "PV_vues.pdf", std::ios::binary); o << "%PDF-1.4\n"; }
+        std::string why;
+        check(ai::saveConversation(c, &why), "(6) la conversation est ecrite (" + why + ")");
+        convId = c.id;
+    });
+    std::string why;
+    check(b.as->select(convId), "(6) la conversation se rouvre");
+    b.reply("Je reproduis la vue 3.");
+    check(b.as->send("Reproduis la vue 3 du mod\xC3\xA8le avec les donn\xC3\xA9" "es du projet.", &why), "(6) le 2e tour (" + why + ")");
+    b.step();
+    b.reply("Je reproduis la vue 4.");
+    check(b.as->send("Maintenant la vue 4.", &why), "(6) le 3e tour (" + why + ")");
+    b.step();
+    check(b.s.requests.size() == 2, "(6) deux requetes");
+    if (b.s.requests.size() < 2) return {};
+    const ai::ProviderRequest& r = b.s.requests[1];
+    const std::string body = bodyOf(r);
+    check(has(body, "Mod\xC3\xA8le de vues \xC2\xAB PV_vues.pdf \xC2\xBB") && has(body, "Pressions") && has(body, "Charte"),
+          "(6) le PV part resume (ses vues, sa charte) dans le tour qui l'a joint");
+    check(!has(body, "\"type\":\"image\"") && !has(body, "\"type\":\"document\""), "(6) ni image ni PDF : rien d'inutile");
+    check(has(body, "voir_vue_modele") && has(r.systemDynamic, "Mod\xC3\xA8les de vues joints"), "(6) l'outil voir_vue_modele est offert, le contexte le dit");
+    std::printf("  (6) une vue montree par l'outil : environ %d jetons d'image chez Anthropic (1280 x 960 / 750)\n", 1280 * 960 / 750);
+    if (second) *second = measure(b.s.requests[0], nullptr);
+    return measure(r, &b.s.requests[0]);
+}
+
 // AVANT : la 1.22.5 (8ae5f5d), mesuree par ce banc le 01/11/2026 (jetons estimes).
 struct Ref {
     long long total;
     double    cout;
 };
-constexpr Ref kAvant[5] = {{18274, 21679}, {28920, 16663}, {19514, 7257}, {18981, 6724}, {19992, 7735}};
+// (6) 1.22.8 : un cas neuf - son AVANT est sa mesure a sa creation (la 1.22.7 envoyait le PV ENTIER a chaque demande : chez
+// Anthropic, chaque page en image et en texte, que ce banc ne compte pas).
+constexpr Ref kAvant[6] = {{18274, 21679}, {28920, 16663}, {19514, 7257}, {18981, 6724}, {19992, 7735}, {20502, 5752}};
 // PLAFONDS : l'APRES de la 1.22.6, plus 5 % - au-dela, une regression de taille fait echouer l'essai.
 // 1.22.6 (integration) : les plafonds suivent les consignes reunies - les operations des variables, de la securite et des vues
 // (regle 23, kRulesOptions : environ 1 000 jetons de plus, dans la partie mise en cache), sur les memes cas.
 // 1.22.7 : + 64 jetons (la description de supprimer : << references >> modifie ce qui cite) - le cas 2 suit.
-constexpr Ref kPlafond[5] = {{19100, 22900}, {26300, 8500}, {20750, 6900}, {20150, 6500}, {20800, 7200}};
+// 1.22.8 : + environ 110 jetons (la regle 24, les modeles de vues, dans la partie mise en cache : son detail part avec le resume
+// du modele, seulement quand un modele est joint) ; le cas 6 neuf, sa mesure plus 5 %.
+constexpr Ref kPlafond[6] = {{19100, 22900}, {26300, 8500}, {20750, 6900}, {20150, 6500}, {20800, 7200}, {21550, 6050}};
 
 std::string pct(double before, double after) {
     char b[32];
@@ -718,25 +844,29 @@ std::string pct(double before, double after) {
 } // namespace
 
 int main() {
-    std::printf("[1.22.6 : les jetons de ce qui part au fournisseur]\n");
+    std::printf("[1.22.6 : les jetons de ce qui part au fournisseur ; 1.22.8 : un modele de vues joint]\n");
     Mesure m9;
-    const Mesure m[5] = {case1(), case2(&m9), case3(), case4(), case5()};
-    const char* names[5] = {"(1) premiere demande", "(2) 10e tour, 5 x 40 operations", "(3) proposition de mission", "(4) correction automatique",
-                            "(5) conversation avec un .XPG lu"};
+    Mesure m6a;
+    const Mesure m[6] = {case1(), case2(&m9), case3(), case4(), case5(), case6(&m6a)};
+    const char* names[6] = {"(1) premiere demande", "(2) 10e tour, 5 x 40 operations", "(3) proposition de mission", "(4) correction automatique",
+                            "(5) conversation avec un .XPG lu", "(6) un PV de vues (13 vues) joint"};
     std::printf("APRES, le detail (jetons estimes : octets / 3,5) :\n");
-    for (int i = 0; i < 5; ++i) print(names[i], m[i]);
+    for (int i = 0; i < 6; ++i) print(names[i], m[i]);
     print("    (le 9e tour, pour memoire)", m9);
+    print("    (6) son 2e tour, pour memoire", m6a);
     std::printf("\nAVANT / APRES (total : tout ce qui part ; cout : pleins + 1,25 x ecrits + 0,1 x lus, en jetons) :\n");
     std::printf("  %-34s | %13s %13s | %13s %13s | %8s %8s\n", "cas", "AVANT total", "APRES total", "AVANT cout", "APRES cout", "total", "cout");
     long long ta = 0, tb = 0;
     double ca = 0, cb = 0;
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         std::printf("  %-34s | %13lld %13lld | %13.0f %13.0f | %8s %8s\n", names[i], kAvant[i].total, m[i].total, kAvant[i].cout, m[i].cout,
                     pct(static_cast<double>(kAvant[i].total), static_cast<double>(m[i].total)).c_str(), pct(kAvant[i].cout, m[i].cout).c_str());
-        ta += kAvant[i].total;
-        tb += m[i].total;
-        ca += kAvant[i].cout;
-        cb += m[i].cout;
+        if (i < 5) {   // l'ensemble : les cas d'avant la 1.22.8 (le 6e est neuf)
+            ta += kAvant[i].total;
+            tb += m[i].total;
+            ca += kAvant[i].cout;
+            cb += m[i].cout;
+        }
         check(m[i].total > 0 && m[i].total <= kPlafond[i].total, std::string(names[i]) + " : total sous le plafond (" + std::to_string(m[i].total) + " <= "
                                                                     + std::to_string(kPlafond[i].total) + ")");
         check(m[i].cout > 0 && m[i].cout <= kPlafond[i].cout, std::string(names[i]) + " : cout sous le plafond (" + std::to_string(static_cast<long long>(m[i].cout))

@@ -4,6 +4,7 @@
 #include "AiContextPane.hpp"
 
 #include "AiFileModels.hpp"   // 1.21.0 : le classeur reconnu (un modele de fichier, une detection)
+#include "AiViewTemplates.hpp"   // 1.22.8 : le modele de vues (un PV d'approbation, une capture)
 #include "AiWorkbook.hpp"
 #include "../../ui/Icons.hpp"
 #include "../../ui/TextSearch.hpp"
@@ -102,6 +103,15 @@ ui::Icon actionIcon(AiContextPane::Action a, bool removed) {
 
 // 1.21.0 : un classeur (.xlsx, .xlsm) a le geste << Modele... >> (pas une piece retiree).
 bool isWorkbook(const attach::ContextFile& f) { return !f.attachment.removed && sheets::workbookExt(f.attachment.ext); }
+// 1.22.8 : un PDF, une image aussi - << Modele de vues >> (la lire, ou ne plus la lire, comme un modele de vues).
+bool isViewCandidate(const attach::ContextFile& f) { return viewtpl::candidate(f.attachment); }
+
+std::string viewModelTip(const attach::ContextFile& f) {
+    return viewtpl::templateOf(f.attachment)
+               ? std::string("Mod\xC3\xA8le de vues : ne plus lire cette pi\xC3\xA8" "ce comme un mod\xC3\xA8le de vues \xC3\xA0 reproduire")
+               : std::string("Mod\xC3\xA8le de vues : lire cette pi\xC3\xA8" "ce comme un mod\xC3\xA8le de vues \xC3\xA0 reproduire (ses vues, "
+                             "leurs images recadr\xC3\xA9" "es, la charte graphique) avec les donn\xC3\xA9" "es du projet");
+}
 
 constexpr AiContextPane::Action kActions[] = {AiContextPane::Action::Open, AiContextPane::Action::Details, AiContextPane::Action::Analyses,
                                               AiContextPane::Action::Remove};
@@ -223,6 +233,11 @@ gfx::Rect AiContextPane::rowRect(std::size_t index) const {
 }
 
 std::string AiContextPane::workbookChip(const attach::ContextFile& f) {
+    if (isViewCandidate(f))   // 1.22.8 : un modele de vues lu
+        if (const auto t = viewtpl::templateOf(f.attachment)) {
+            const std::size_t n = t->views.size();
+            return "Mod\xC3\xA8le de vues : " + std::to_string(n) + (n > 1 ? " vues" : " vue");
+        }
     if (!isWorkbook(f)) return {};
     const auto c = sheets::choiceOf(f.attachment);
     if (!c) return {};
@@ -236,7 +251,7 @@ gfx::Rect AiContextPane::actionRect(std::size_t index, Action a) const {
     if (row.w <= 0.f) return {};
     if (a == Action::Model) {   // 1.21.0 : a gauche des autres, sur un classeur seulement
         const auto list = shown();
-        if (index >= list.size() || !isWorkbook(*list[index])) return {};
+        if (index >= list.size() || !(isWorkbook(*list[index]) || isViewCandidate(*list[index]))) return {};   // 1.22.8 : un PDF, une image
     }
     const auto k = a == Action::Model ? 4.f : static_cast<float>(3 - static_cast<int>(a));   // de droite a gauche : retirer, analyses, detail, ouvrir, modele
     return {row.right() - 8.f - kIcon - k * (kIcon + 4.f), row.y + (row.h - kIcon) * 0.5f, kIcon, kIcon};
@@ -343,7 +358,7 @@ void AiContextPane::onPaint(const ui::PaintContext& ctx) {
             if (const gfx::Rect r = actionRect(i, Action::Model); r.w > 0.f) {   // 1.21.0 : << Modele... >> d'un classeur
                 ctx.r.fillRoundedRect(r, alpha(c.accent, 46), 4.f);
                 ui::drawIcon(ctx.r, actionIcon(Action::Model, false), {r.x + 3.f, r.y + 3.f, r.w - 6.f, r.h - 6.f}, c.accent);
-                tips_.emplace_back(r, actionTip(Action::Model, false));
+                tips_.emplace_back(r, isWorkbook(f) ? actionTip(Action::Model, false) : viewModelTip(f));
                 right = r.x - 6.f;
             }
         } else {

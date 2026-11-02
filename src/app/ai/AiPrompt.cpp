@@ -231,7 +231,13 @@ const char* const kRulesOptions =
     "; le contexte dit leur \xC3\xA9tat ([LS] : lecture seule). Jamais de mot de passe : l'utilisateur le donne lui-m\xC3\xAAme. "
     "Activer la s\xC3\xA9" "curit\xC3\xA9 demande un compte actif qui administre et se connecte. D\xC3\xA9sactiver la s\xC3\xA9" "curit\xC3\xA9, "
     "retirer le dernier administrateur : sensible, dis-le. Un en-t\xC3\xAAte ou un pied coch\xC3\xA9 : le logiciel corrige la "
-    "place des objets recouverts ; pose les tiens hors des bandes.\n";
+    "place des objets recouverts ; pose les tiens hors des bandes.\n"
+    // 1.22.8 : les modeles de vues (AiViewTemplates) - la forme du modele, les donnees du projet ; le detail (les vues, l'en-tete,
+    // la navigation, les commentaires, la mission) part avec le resume du modele, seulement quand un modele est joint.
+    "24. Un MOD\xC3\x88LE DE VUES joint (un PV d'approbation, des captures) donne la FORME ; les DONN\xC3\x89" "ES viennent du projet : "
+    "relie chaque objet aux VRAIES variables (IHM, automate lu, reports, types) par son rep\xC3\xA8re. Sans donn\xC3\xA9" "e trouv\xC3\xA9" "e, "
+    "l'objet est cr\xC3\xA9\xC3\xA9 NON RELI\xC3\x89 et list\xC3\xA9 << \xC3\xA0 relier >> dans ta r\xC3\xA9ponse ; jamais une variable invent\xC3\xA9" "e. "
+    "Suis le r\xC3\xA9sum\xC3\xA9 du mod\xC3\xA8le (comment le reproduire).\n";
 
 // L'exemple du code brut : un bouton qui ouvre une vue, ecrit par le logiciel lui-meme.
 const std::string& codeExample() {
@@ -913,7 +919,9 @@ const char* const kRulesShort =
     "aligner (objets, bord : haut|bas|gauche|droite|centre-h|centre-v), distribuer (objets, sens : horizontal|vertical), "
     "supprimer (objets ; genre : vue, variable, type... ; strategie : seul|remplacer|references|inutiles), dupliquer (objets, noms, dx, "
     "dy), code (code). Jamais de code \xC3\xA0 ex\xC3\xA9" "cuter.\n"
-    "- Une proposition refus\xC3\xA9" "e te revient avec ses raisons : corrige-la.\n";
+    "- Une proposition refus\xC3\xA9" "e te revient avec ses raisons : corrige-la.\n"
+    "- 24. Un mod\xC3\xA8le de vues joint donne la FORME (vues, couleurs, en-t\xC3\xAAte, navigation) ; les DONN\xC3\x89" "ES viennent du projet "
+    "(relie chaque objet par son rep\xC3\xA8re aux variables existantes) ; sans donn\xC3\xA9" "e : non reli\xC3\xA9, dit << \xC3\xA0 relier >>.\n";
 
 bool blankChar(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\v'; }
 
