@@ -1355,6 +1355,13 @@ struct Run {
             }
             std::string folder;   // 1.22.1 : son dossier, normalise (vide : celui de l'operation)
             if (bad.empty() && !varfold::normalize(spec.folder, folder, &folderWhy)) bad = folderWhy;
+            // 1.22.8 : son unite - connue (fournie, du projet), ou creee plus haut (creer_unite : le plan la pose avant).
+            std::string unitSymbol;
+            if (bad.empty() && !trimmed(spec.unit).empty())
+                if (const std::string u = unitui::problem(project, v.type, spec.unit, &unitSymbol); !u.empty()) {
+                    bad = "unit\xC3\xA9 : " + u;
+                    unknownUnit(spec.unit, v.type, at + bad + ".");
+                }
             if (!bad.empty()) {
                 if (!fail(at + bad + ".")) return false;
                 continue;
@@ -1366,9 +1373,13 @@ struct Run {
                      + ") : c'est l'IHM qui la lira sous ce nom.");
             v.id = nextId++;
             v.name = name;
+            v.unit = unitSymbol;   // 1.22.8
             v.description = trimmed(spec.description).empty() ? "Cr\xC3\xA9\xC3\xA9" "e par l'Assistant IA (demande : " + p.request + ")"
                                                               : trimmed(spec.description);
-            if (check) check->newVariables.push_back({v.name, v.type, v.description, v.initial});
+            if (check) {
+                check->newVariables.push_back({v.name, v.type, v.description, v.initial});
+                check->newVariables.back().unit = v.unit;   // 1.22.8
+            }
             varfold::Request rq;
             rq.name = v.name;
             rq.folder = folder.empty() ? opFolder : folder;
@@ -2422,7 +2433,10 @@ struct Run {
         // ---- l'unite (la colonne Unite : un symbole connu, un type numerique)
         if (has("unite")) {
             std::string unit;
-            if (const std::string bad = unitui::problem(*edit, next.type, prop(op, "unite"), &unit); !bad.empty()) return fail(at + "unit\xC3\xA9 : " + bad + ".");
+            if (const std::string bad = unitui::problem(*edit, next.type, prop(op, "unite"), &unit); !bad.empty()) {
+                unknownUnit(prop(op, "unite"), next.type, at + "unit\xC3\xA9 : " + bad + ".");   // 1.22.8 : le clic droit la cree
+                return fail(at + "unit\xC3\xA9 : " + bad + ".");
+            }
             if (unit != next.unit) said.push_back(unit.empty() ? "sans unit\xC3\xA9" : "unit\xC3\xA9 " + (next.unit.empty() ? std::string("(aucune)") : next.unit) + kArrow + unit);
             next.unit = unit;
         }
@@ -2921,6 +2935,93 @@ struct Run {
         return true;
     }
 
+    // ---- 1.22.8 : LES UNITES DE MESURE -------------------------------------------------------------------------------
+    // Une unite inconnue (creer_variables, modifier_variable) : son defaut structure - le clic droit la cree (<< Creer l'unite... >>,
+    // Corriger rapidement quand le logiciel la reconnait). Seulement un symbole inconnu sur un nombre (pas une unite sur un BOOL).
+    void unknownUnit(const std::string& symbol, const std::string& type, const std::string& message) {
+        if (!check || trimmed(symbol).empty() || !hmi::units::typeTakesUnit(type)) return;
+        if (hmi::units::Catalog((edit ? *edit : project).config).known(symbol)) return;
+        Check::Fault f;
+        f.op = current;
+        f.kind = "unite";
+        f.name = trimmed(symbol);
+        f.message = message;
+        f.type = type;
+        check->faults.push_back(std::move(f));
+    }
+
+    // CREER_UNITE : une unite du projet (et sa famille neuve, dite par sa reference) - les controles de Configuration > Unites de
+    // mesure (planUnit) ; un facteur loin de celui d'une unite courante de meme symbole : un avertissement ; la conversion montree.
+    bool unitOp(const Operation& op) {
+        if (!edit) return noEdit(op);
+        const std::string at = "Unit\xC3\xA9 \xC2\xAB " + trimmed(op.name) + " \xC2\xBB : ";
+        const UnitPlan pl = planUnit(edit->config, op);
+        if (!pl.error.empty()) return fail(at + pl.error + ".");
+        if (pl.same) {
+            reuse("Unit\xC3\xA9", pl.unit.symbol, "existe d\xC3\xA9j\xC3\xA0 \xC3\xA0 l'identique (" + pl.conversion + ") : gard\xC3\xA9" "e telle quelle");
+            return true;
+        }
+        for (const auto& w : pl.warnings) warn(at + w + ".");
+        if (!pl.family.name.empty()) {
+            edit->config.unitFamilies.push_back(pl.family);
+            if (lower(pl.family.reference) != lower(pl.unit.symbol)) {
+                const auto* k = hmi::units::knownUnit(pl.family.reference);
+                edit->config.units.push_back({pl.family.reference, pl.family.name, 1.0, 0.0, k ? std::string(k->label) : std::string{}});
+            }
+            made("Famille d'unit\xC3\xA9s", pl.family.name, "nouvelle, r\xC3\xA9" "f\xC3\xA9rence " + pl.family.reference + " (cr\xC3\xA9\xC3\xA9" "e avec elle)");
+        }
+        edit->config.units.push_back(pl.unit);
+        made("Unit\xC3\xA9", pl.unit.symbol, unitText(pl));
+        return true;
+    }
+
+    // MODIFIER_UNITE : une unite du projet (une fournie est verrouillee) - son facteur, son decalage, son libelle.
+    bool unitEditOp(const Operation& op) {
+        if (!edit) return noEdit(op);
+        namespace hu = hmi::units;
+        const std::string symbol = trimmed(op.name);
+        const std::string at = "Unit\xC3\xA9 \xC2\xAB " + symbol + " \xC2\xBB : ";
+        if (symbol.empty()) return fail("modifier_unite : le symbole manque (symbole : mmCE).");
+        auto& units = edit->config.units;
+        const std::string canon = hu::Catalog(edit->config).canonical(symbol);   // sans casse, comme la case Unite
+        const auto cur = std::find_if(units.begin(), units.end(), [&](const hmi::UnitDef& u) { return !canon.empty() && u.symbol == canon; });
+        if (cur == units.end()) {
+            if (hu::builtinUnit(symbol))
+                return fail(at + "une unit\xC3\xA9 fournie est verrouill\xC3\xA9" "e (une autre conversion : creer_unite d'un autre symbole).");
+            return fail(at + "unit\xC3\xA9 du projet introuvable (l'Assistant n'invente pas d'unit\xC3\xA9 ; une neuve : creer_unite).");
+        }
+        hmi::UnitDef next = *cur;
+        for (const char* k : {"facteur", "decalage"}) {
+            const std::string t = prop(op, k);
+            if (t.empty()) continue;
+            double d = 0;
+            if (!hu::parseValue(t, d)) return fail(at + k + " \xC2\xAB " + t + " \xC2\xBB : un nombre (9.80665).");
+            (std::string_view(k) == "facteur" ? next.factor : next.offset) = d;
+        }
+        if (const std::string f = prop(op, "famille"); !f.empty() && !iequal(f, cur->family) && !iequal(hu::familyFrom(hu::Catalog(edit->config), f), cur->family))
+            return fail(at + "sa famille ne change pas (" + cur->family + ") : cr\xC3\xA9" "e plut\xC3\xB4t une unit\xC3\xA9 d'un autre symbole.");
+        if (std::any_of(op.props.begin(), op.props.end(), [](const auto& kv) { return kv.first == "libelle"; })) next.label = prop(op, "libelle");
+        if (const std::string bad = hu::unitChangeProblem(edit->config, cur->symbol, next.factor, next.offset); !bad.empty()) return fail(at + bad + ".");
+        if (next == *cur) {
+            reuse("Unit\xC3\xA9", cur->symbol, "d\xC3\xA9j\xC3\xA0 ainsi : rien ne change");
+            return true;
+        }
+        {   // la coherence avec une unite courante de meme symbole (le catalogue sans elle)
+            hmi::Config probe = edit->config;
+            probe.units.erase(probe.units.begin() + (cur - units.begin()));
+            if (const std::string w = hu::coherenceWarning(hu::Catalog(probe), next); !w.empty()) warn(at + w + ".");
+        }
+        if (next.factor != cur->factor || next.offset != cur->offset)
+            if (const auto uses = unitui::usesOf(*edit, cur->symbol); !uses.empty())
+                warn(at + "employ\xC3\xA9" "e (" + std::to_string(uses.size()) + " : " + joinList(std::vector<std::string>(uses.begin(), uses.begin() + std::min<std::size_t>(uses.size(), 3)))
+                     + (uses.size() > 3 ? ", \xE2\x80\xA6" : "") + ") : leurs valeurs converties changent.");
+        *cur = next;
+        const hu::Catalog cat(edit->config);
+        const hmi::UnitFamily* f = cat.family(next.family);
+        made("Unit\xC3\xA9", next.symbol, "modifi\xC3\xA9" "e : " + (f ? hu::formulaText(cat, next.symbol, f->reference) : std::string("?")));
+        return true;
+    }
+
     // VUE_DE_DEMARRAGE : la vue ouverte au lancement (une vue ordinaire : ni popup, ni symbole, ni modele).
     bool startViewOp(const Operation& op) {
         if (!edit) return noEdit(op);
@@ -2989,6 +3090,9 @@ struct Run {
                 case Operation::Action::UserEdit: ok = userOp(op, false); break;
                 case Operation::Action::ViewEdit: ok = viewOp(op); break;
                 case Operation::Action::StartView: ok = startViewOp(op); break;
+                // 1.22.8 : les unites de mesure.
+                case Operation::Action::Unit: ok = unitOp(op); break;
+                case Operation::Action::UnitEdit: ok = unitEditOp(op); break;
             }
             span.e1 = check ? check->errors.size() : 0;
             span.w1 = check ? check->warnings.size() : 0;
@@ -3197,6 +3301,17 @@ std::string createdState(const hmi::Project& project, const Proposal& p) {
             case Operation::Action::StartView:
                 out += "S0:" + std::to_string(project.config.startView) + ";";
                 break;
+            // 1.22.8 : l'unite telle qu'elle est (absente, ou sa famille, son facteur, son decalage, son libelle).
+            case Operation::Action::Unit:
+            case Operation::Action::UnitEdit: {
+                out += "U:" + name + "=";
+                const hmi::units::Catalog cat(project.config);
+                if (const auto* u = cat.unit(name))
+                    out += u->family + "|" + hmi::units::exactNumber(u->factor) + "|" + hmi::units::exactNumber(u->offset) + "|" + u->label;
+                else out += "-";
+                out += ";";
+                break;
+            }
             default:
                 break;
         }
@@ -3246,6 +3361,8 @@ std::string_view actionKey(Operation::Action a) noexcept {
         case Operation::Action::UserEdit: return "modifier_utilisateur";
         case Operation::Action::ViewEdit: return "modifier_vue";
         case Operation::Action::StartView: return "vue_de_demarrage";
+        case Operation::Action::Unit: return "creer_unite";          // 1.22.8
+        case Operation::Action::UnitEdit: return "modifier_unite";
     }
     return "creer";
 }
@@ -3288,7 +3405,9 @@ bool projectLevel(Operation::Action a) noexcept {
         case Operation::Action::User:
         case Operation::Action::UserEdit:
         case Operation::Action::ViewEdit:
-        case Operation::Action::StartView: return true;
+        case Operation::Action::StartView:
+        case Operation::Action::Unit:        // 1.22.8 : les unites de mesure du projet
+        case Operation::Action::UnitEdit: return true;
         default: return false;
     }
 }
@@ -3300,8 +3419,10 @@ std::optional<Operation::Action> actionFromKey(std::string_view k) noexcept {
                          Operation::Action::Address, Operation::Action::Script, Operation::Action::Function, Operation::Action::Alarm,
                          Operation::Action::Resource, Operation::Action::Folder, Operation::Action::Store, Operation::Action::VarEdit,
                          Operation::Action::Security, Operation::Action::Group, Operation::Action::GroupEdit, Operation::Action::User,
-                         Operation::Action::UserEdit, Operation::Action::ViewEdit, Operation::Action::StartView})
+                         Operation::Action::UserEdit, Operation::Action::ViewEdit, Operation::Action::StartView, Operation::Action::Unit,
+                         Operation::Action::UnitEdit})
         if (actionKey(a) == k) return a;
+    if (k == "creer_unites") return Operation::Action::Unit;   // 1.22.8
     // 1.22.6 : des noms de plus (une liste de variables, les mots de la demande).
     if (k == "modifier_variables") return Operation::Action::VarEdit;
     if (k == "modifier_securite") return Operation::Action::Security;
@@ -3524,6 +3645,8 @@ std::string creationSummary(const Proposal& p) {
     add(Operation::Action::UserEdit, "utilisateur modifi\xC3\xA9", "utilisateurs modifi\xC3\xA9s");
     add(Operation::Action::ViewEdit, "vue modifi\xC3\xA9" "e", "vues modifi\xC3\xA9" "es");
     add(Operation::Action::StartView, "vue de d\xC3\xA9marrage", "vues de d\xC3\xA9marrage");
+    add(Operation::Action::Unit, "unit\xC3\xA9", "unit\xC3\xA9s");   // 1.22.8
+    add(Operation::Action::UnitEdit, "unit\xC3\xA9 modifi\xC3\xA9" "e", "unit\xC3\xA9s modifi\xC3\xA9" "es");
     return joinList(parts);
 }
 
@@ -4642,6 +4765,124 @@ std::vector<ViewPreview> previews(const hmi::Project& project, const Proposal& p
 }
 
 // ---- le JSON ----------------------------------------------------------------------
+// ---- 1.22.8 : les unites de mesure (creer_unite) ----------------------------------------------------------------------
+UnitPlan planUnit(const hmi::Config& cfg, const Operation& op) {
+    namespace hu = hmi::units;
+    using F = UnitPlan::Field;
+    UnitPlan out;
+    const auto refuse = [&](F field, std::string why) {
+        out.error = std::move(why);
+        out.field = field;
+        return out;
+    };
+    const auto propOf = [&](std::string_view key) {
+        for (const auto& [k, v] : op.props)
+            if (k == key) return trimmed(v);
+        return std::string{};
+    };
+    const auto shownFamily = [](const std::string& label, const std::string& name) {
+        std::string t = label.empty() ? name : label;
+        if (t.size() >= 2 && static_cast<unsigned char>(t[0]) == 0xC3 && static_cast<unsigned char>(t[1]) >= 0x80 && static_cast<unsigned char>(t[1]) <= 0x9E)
+            t[1] = static_cast<char>(static_cast<unsigned char>(t[1]) + 0x20);   // << Energie >> (E accent aigu) : sa minuscule
+        else if (!t.empty()) t[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(t[0])));
+        return t;
+    };
+    const std::string symbol = trimmed(op.name);
+    if (symbol.empty()) return refuse(F::Symbol, "le symbole manque (symbole : mmCE)");
+    double factor = 1.0, offset = 0.0;
+    const std::string factorText = propOf("facteur"), offsetText = propOf("decalage");
+    if (!factorText.empty() && !hu::parseValue(factorText, factor)) return refuse(F::Factor, "facteur \xC2\xAB " + factorText + " \xC2\xBB : un nombre (9.80665)");
+    if (!offsetText.empty() && !hu::parseValue(offsetText, offset)) return refuse(F::Offset, "d\xC3\xA9" "calage \xC2\xAB " + offsetText + " \xC2\xBB : un nombre (273.15)");
+    const std::string famText = propOf("famille");
+    const std::string label = propOf("libelle");
+    const hu::Catalog cat(cfg);
+    // Resoudre la famille : une famille du catalogue (son nom, son libelle), sinon une famille NEUVE dite par sa reference.
+    std::string familyName;
+    if (const hmi::UnitFamily* f = cat.family(famText)) familyName = f->name;
+    else familyName = hu::familyFrom(cat, famText);
+    // Deja la, a l'identique (meme famille, meme conversion) : rien a poser.
+    if (const hmi::UnitDef* u = cat.unit(symbol); u && !familyName.empty() && lower(u->family) == lower(familyName)
+                                                   && std::fabs(u->factor - factor) <= 1e-12 * std::max(1.0, std::fabs(factor))
+                                                   && std::fabs(u->offset - offset) <= 1e-12 * std::max(1.0, std::fabs(offset))) {
+        out.same = true;
+        out.unit = *u;
+        const hmi::UnitFamily* f = cat.family(u->family);
+        out.familyLabel = shownFamily(f ? f->label : std::string{}, u->family);
+        out.conversion = f ? hu::formulaText(cat, u->symbol, f->reference) : std::string{};
+        return out;
+    }
+    if (famText.empty()) return refuse(F::Family, "la famille manque (pression, temperature, debit... ; une famille neuve : son nom et sa reference)");
+    // Une famille qui existe deja, dite avec une AUTRE reference : le facteur serait faux - jamais converti en silence.
+    if (const std::string ref = propOf("reference"); !familyName.empty() && !ref.empty())
+        if (const hmi::UnitFamily* f = cat.family(familyName); f && lower(f->reference) != lower(ref))
+            return refuse(F::Reference, "la famille " + f->name + " existe d\xC3\xA9j\xC3\xA0, de r\xC3\xA9" "f\xC3\xA9rence " + f->reference + " (pas " + ref
+                                            + ") : donne le facteur vers " + f->reference);
+    hmi::Config probe = cfg;
+    if (familyName.empty()) {
+        const std::string ref = propOf("reference");
+        if (ref.empty()) {
+            std::string names;
+            for (const auto& f : cat.families()) names += (names.empty() ? "" : ", ") + f.name;
+            return refuse(F::Family, "famille \xC2\xAB " + famText + " \xC2\xBB inconnue (les familles : " + names
+                                        + ") ; une famille neuve se dit avec sa r\xC3\xA9" "f\xC3\xA9rence (reference : W)");
+        }
+        if (const std::string bad = hu::newFamilyProblem(cat, famText, ref); !bad.empty())
+            return refuse(hu::familyNameOk(famText) ? (lower(ref) == lower(symbol) ? F::Symbol : F::Reference) : F::Family, "famille neuve " + famText + " : " + bad);
+        out.family = {famText, ref, propOf("libelle_famille")};
+        out.familyLabel = shownFamily(out.family.label, famText);
+        probe.unitFamilies.push_back(out.family);
+        familyName = famText;
+        if (lower(ref) == lower(symbol)) {   // l'unite EST la reference de sa famille neuve : facteur 1, decalage 0
+            if (factor != 1.0 || offset != 0.0)
+                return refuse(F::Factor, symbol + " est la r\xC3\xA9" "f\xC3\xA9rence de sa famille neuve : facteur 1, d\xC3\xA9" "calage 0");
+            out.family.reference = symbol;
+            out.unit = {symbol, famText, 1.0, 0.0, label};
+            out.conversion = "r\xC3\xA9" "f\xC3\xA9rence de la famille";
+            return out;
+        }
+        probe.units.push_back({ref, famText, 1.0, 0.0, {}});
+    }
+    if (factorText.empty()) {
+        const hmi::UnitFamily* f = hu::Catalog(probe).family(familyName);
+        return refuse(F::Factor, "le facteur manque : combien vaut 1 " + symbol + " en " + (f ? f->reference : std::string("?")) + " (la r\xC3\xA9" "f\xC3\xA9rence de "
+                                     + familyName + ")");
+    }
+    hmi::UnitDef u{symbol, familyName, factor, offset, label};
+    const hu::Catalog before(probe);
+    if (const std::string bad = hu::newUnitProblem(before, u, &u.family); !bad.empty()) {
+        const F field = !hu::symbolOk(symbol) || before.unit(symbol) ? F::Symbol : !std::isfinite(factor) || factor == 0.0 ? F::Factor : F::Offset;
+        return refuse(field, bad);
+    }
+    out.unit = u;
+    const hmi::UnitFamily* f = before.family(u.family);
+    if (out.familyLabel.empty()) out.familyLabel = shownFamily(f ? f->label : std::string{}, u.family);
+    if (const std::string w = hu::coherenceWarning(before, u); !w.empty()) out.warnings.push_back(w);
+    probe.units.push_back(u);
+    out.conversion = f ? hu::formulaText(hu::Catalog(probe), u.symbol, f->reference) : std::string{};
+    return out;
+}
+
+Operation unitOperation(const hmi::UnitDef& u, const hmi::UnitFamily& family) {
+    Operation op;
+    op.action = Operation::Action::Unit;
+    op.name = u.symbol;
+    op.props.emplace_back("famille", u.family);
+    op.props.emplace_back("facteur", hmi::units::exactNumber(u.factor));
+    if (u.offset != 0.0) op.props.emplace_back("decalage", hmi::units::exactNumber(u.offset));
+    if (!u.label.empty()) op.props.emplace_back("libelle", u.label);
+    if (!family.name.empty()) {
+        op.props.emplace_back("reference", family.reference);
+        if (!family.label.empty()) op.props.emplace_back("libelle_famille", family.label);
+    }
+    return op;
+}
+
+std::string unitText(const UnitPlan& pl) {
+    std::string fam = pl.familyLabel.empty() ? pl.unit.family : pl.familyLabel;
+    if (!pl.family.name.empty()) fam += ", famille neuve, r\xC3\xA9" "f\xC3\xA9rence " + pl.family.reference;
+    return "Unit\xC3\xA9 " + pl.unit.symbol + " (" + fam + ")" + (pl.conversion.empty() ? std::string{} : " : " + pl.conversion);
+}
+
 json::Value operationsToJson(const std::vector<Operation>& ops) {
     json::Value arr = json::Value::array();
     for (const auto& op : ops) {
@@ -4673,6 +4914,7 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
                     if (!v.description.empty()) x.set("description", v.description);
                     if (!v.initial.empty()) x.set("valeur", v.initial);
                     if (!v.folder.empty()) x.set("dossier", v.folder);   // 1.22.1 : son dossier
+                    if (!v.unit.empty()) x.set("unite", v.unit);         // 1.22.8 : son unite
                     list.push(std::move(x));
                 }
                 o.set("variables", std::move(list));
@@ -4726,6 +4968,11 @@ json::Value operationsToJson(const std::vector<Operation>& ops) {
             case Operation::Action::Security:
             case Operation::Action::GroupEdit:
             case Operation::Action::UserEdit:
+                break;
+            // 1.22.8 : le symbole ; la famille, le facteur... : proprietes.
+            case Operation::Action::Unit:
+            case Operation::Action::UnitEdit:
+                o.set("symbole", op.name);
                 break;
             default: {
                 json::Value list = json::Value::array();
@@ -4840,6 +5087,7 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
                                     : v.at("valeur").isBool() ? (v.at("valeur").asBool() ? std::string("TRUE") : std::string("FALSE"))
                                                               : std::string{}});
             op.variables.back().folder = v.str("dossier");   // 1.22.1 : son dossier (absent : celui de l'operation, sinon deduit)
+            op.variables.back().unit = v.str("unite");       // 1.22.8 : son unite
         }
         for (const auto& m : o.at("membres").items()) op.members.push_back({m.str("nom"), m.str("type"), m.str("description")});
         if (*action == Operation::Action::Type && o.at("description").isString() && !o.str("description").empty())
@@ -4895,6 +5143,27 @@ bool operationsFromJson(const json::Value& array, std::vector<Operation>& out, s
                 continue;
             }
             ++it;
+        }
+        // 1.22.8 : creer_unite, modifier_unite - le symbole (au premier niveau, ou dans proprietes), le facteur et le decalage
+        // EXACTS : un nombre JSON garde tous ses chiffres (9.80665, pas 9.807 comme une propriete d'objet).
+        if (*action == Operation::Action::Unit || *action == Operation::Action::UnitEdit) {
+            if (op.name.empty()) op.name = !o.str("symbole").empty() ? o.str("symbole") : o.str("nom");
+            for (auto it = op.props.begin(); it != op.props.end();) {
+                if (it->first != "symbole") {
+                    ++it;
+                    continue;
+                }
+                if (op.name.empty()) op.name = it->second;
+                it = op.props.erase(it);
+            }
+            const json::Value* inner = o.find("proprietes");
+            for (const char* k : {"facteur", "decalage"}) {
+                const json::Value* v = o.find(k);
+                if (!(v && v->isNumber()) && inner && inner->isObject()) v = inner->find(k);
+                if (v && v->isNumber())
+                    for (auto& [pk, pv] : op.props)
+                        if (pk == k) pv = hmi::units::exactNumber(v->asNumber());
+            }
         }
         // creer_symbole, creer_popup, creer_modele_vue : une vue de ce role (sauf si proprietes le dit).
         if (*action == Operation::Action::View) {

@@ -2326,6 +2326,32 @@ bool Assistant::undoRetouch(int message, const std::string& id, std::string* why
     const auto it = std::find_if(items.begin(), items.end(), [&](const json::Value& r) { return r.isObject() && r.str("id") == id; });
     if (it == items.end()) return fail("Cette retouche n'existe plus.");
     const std::int64_t at = it->integer("op", -1);
+    // 1.22.8 : UNE OPERATION AJOUTEE (une unite) - elle quitte la proposition ; les indices qui la suivent reculent d'un cran
+    // (les operations retirees, les autres retouches).
+    if (it->str("quoi") == "ajout") {
+        if (at < 0 || static_cast<std::size_t>(at) >= p.ops.size()) return fail("L'op\xC3\xA9ration ajout\xC3\xA9" "e n'existe plus : rien n'est chang\xC3\xA9.");
+        const std::size_t k = static_cast<std::size_t>(at);
+        const auto doc = host_.document ? host_.document() : nullptr;
+        const bool fresh = doc && !p.fingerprint.empty() && proposalPrint(doc->project, p) == p.fingerprint;
+        p.ops.erase(p.ops.begin() + static_cast<std::ptrdiff_t>(k));
+        std::vector<std::size_t> kept;
+        for (const auto x : p.excluded)
+            if (x != k) kept.push_back(x > k ? x - 1 : x);
+        p.excluded = std::move(kept);
+        for (std::size_t r = items.size(); r-- > 0;) {
+            if (!items[r].isObject()) continue;
+            const std::int64_t o = items[r].integer("op", -1);
+            if (o == at) items.erase(items.begin() + static_cast<std::ptrdiff_t>(r));
+            else if (o > at) items[r].set("op", o - 1);
+        }
+        if (items.empty()) (void)p.extra.erase("retouches");
+        if (fresh) p.fingerprint = proposalPrint(doc->project, p);   // l'empreinte suit (rien d'autre n'a change)
+        proposalChanged(*c, message);
+        notice_ = "Assistant IA : l'op\xC3\xA9ration ajout\xC3\xA9" "e quitte la proposition (le projet ne change pas).";
+        if ((c = touch(*c)) != nullptr) save(*c);
+        ++revision_;
+        return true;
+    }
     std::vector<Operation> back;
     json::Value one = json::Value::array();
     one.push(it->at("avant"));
@@ -2339,6 +2365,41 @@ bool Assistant::undoRetouch(int message, const std::string& id, std::string* why
     if (items.empty()) (void)p.extra.erase("retouches");
     proposalChanged(*c, message);
     notice_ = "Assistant IA : retouche reprise - l'op\xC3\xA9ration " + std::to_string(at + 1) + " reprend sa forme d'avant (la proposition seule).";
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::addUnit(int message, const Operation& op, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(message)].proposal)
+        return fail("Pas de proposition.");
+    Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
+    if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
+    if (op.action != Operation::Action::Unit || trim(op.name).empty()) return fail("Seule une unit\xC3\xA9 (creer_unite) s'ajoute ainsi.");
+    const auto doc = host_.document ? host_.document() : nullptr;
+    if (!doc) return fail("Pas de projet IHM ouvert.");
+    // Deja ajoutee (ou deja proposee par l'IA) : rien de plus.
+    for (std::size_t i = 0; i < p.ops.size(); ++i)
+        if (p.ops[i].action == Operation::Action::Unit && lowered(trim(p.ops[i].name)) == lowered(trim(op.name))) {
+            if (std::find(p.excluded.begin(), p.excluded.end(), i) != p.excluded.end())
+                return fail("L'op\xC3\xA9ration " + std::to_string(i + 1) + " cr\xC3\xA9" "e d\xC3\xA9j\xC3\xA0 " + trim(op.name) + " : remets-la (CORRECTIONS, Revenir).");
+            return true;
+        }
+    // Les controles de creer_unite, sur le projet tel qu'il est (une unite deja la a l'identique : rien a ajouter).
+    const UnitPlan pl = planUnit(doc->project.config, op);
+    if (!pl.error.empty()) return fail("Unit\xC3\xA9 " + guillemets(trim(op.name)) + " : " + pl.error + ".");
+    if (pl.same) return true;
+    const bool fresh = !p.fingerprint.empty() && proposalPrint(doc->project, p) == p.fingerprint;
+    p.ops.push_back(op);
+    if (fresh) p.fingerprint = proposalPrint(doc->project, p);   // l'empreinte suit l'operation ajoutee (le projet n'a pas change)
+    recordRetouch(p, p.ops.size() - 1, op, "ajout", unitText(pl));
+    proposalChanged(*c, message);
+    notice_ = "Assistant IA : " + unitText(pl) + " - ajout\xC3\xA9" "e \xC3\xA0 la proposition (le projet ne change pas) : elle se rev\xC3\xA9rifie.";
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;

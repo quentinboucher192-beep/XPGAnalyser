@@ -9,6 +9,7 @@
 #include "../../core/Perf.hpp"
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../hmi/HmiUnits.hpp"   // 1.22.8 : une variable a creer et son unite (REAL [mmCE])
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
 #include "../../ui/Icons.hpp"
@@ -2392,7 +2393,7 @@ void AiPreviewDialog::refresh() {
     if (!check_.newVariables.empty()) {
         heading("VARIABLES IHM \xC3\x80 CR\xC3\x89" "ER (" + std::to_string(check_.newVariables.size()) + ")");
         for (const auto& v : check_.newVariables) {
-            Row r{Row::Kind::Item, v.name, v.type, 0};
+            Row r{Row::Kind::Item, v.name, hmi::units::withUnit(v.type, v.unit), 0};   // 1.22.8 : REAL [mmCE]
             r.ref = Row::Ref::Uses;   // 1.22.4 : les objets qui la lisent
             r.names = {v.name};
             rows.push_back(std::move(r));
@@ -2944,6 +2945,19 @@ void AiPreviewDialog::runFix(int id) {
         case K::QuickAll:   // 1.22.7 : le clic droit d'un titre
             (void)quickFixAll(act.ops.empty() ? 0 : static_cast<int>(act.ops.front()));
             return;
+        case K::UnitAsk: {
+            // 1.22.8 : << Creer l'unite... >> - la petite fenetre par-dessus ; Ajouter : l'unite va dans la PROPOSITION, cette
+            // fenetre reste ouverte et montre la correction (la bande, CORRECTIONS), comme les autres.
+            if (viewCount() > 0) shownName_ = viewName(shown_);
+            const auto before = correctionState();
+            const std::weak_ptr<int> alive = life_;
+            panel_.askUnit(message_, act.name, [this, alive, before](bool added) {
+                if (alive.expired() || done_ || !added) return;
+                panel_.sync();
+                corrected(before, false, {});
+            });
+            return;
+        }
         default: {
             // 1.22.7 : LA FENETRE RESTE OUVERTE - la proposition change, la verification et l'apercu se refont (la vue montree
             // reste la meme), ce qui a change se montre (la bande, la ligne de CORRECTIONS, les objets encadres).

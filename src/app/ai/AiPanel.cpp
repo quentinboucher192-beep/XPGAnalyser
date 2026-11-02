@@ -1564,6 +1564,59 @@ void AiPanel::openPreviewFor(int message, const std::string& variable) {
     ui_.showDialog(std::move(dialog), [alive = previewAlive_](const menu::DialogResult&) { *alive = false; });
 }
 
+void AiPanel::askUnit(int message, const std::string& symbol, std::function<void(bool)> done) {
+    const Proposal* p = assistant_->proposal(message);
+    const auto doc = assistant_->host().document ? assistant_->host().document() : nullptr;
+    if (!p || p->state != "proposee" || !doc || !ui_.showDialog) {
+        if (done) done(false);
+        return;
+    }
+    const fixes::UnitForm form = fixes::unitForm(doc->project, symbol);
+    std::vector<FormDialog::Field> fields;
+    for (std::size_t i = 0; i < form.labels.size(); ++i) {
+        FormDialog::Field f;
+        f.label = form.labels[i];
+        f.value = i < form.values.size() ? form.values[i] : std::string{};
+        if (i == 1) f.choices = form.families;
+        if (i == 2) f.placeholder = "9.80665";
+        fields.push_back(std::move(f));
+    }
+    auto dialog = std::make_unique<FormDialog>("dialog.ai.unite", "Cr\xC3\xA9" "er l'unit\xC3\xA9 \xC2\xAB " + form.values[0] + " \xC2\xBB",
+                                               form.explanation, std::move(fields), "Ajouter \xC3\xA0 la proposition");
+    const hmi::Config cfg = doc->project.config;
+    // Le symbole (grise) dit la conversion lue a chaque frappe, ou ce qui ne va pas ; une famille neuve ouvre ses trois champs.
+    dialog->setRules([cfg](const std::vector<std::string>& values, std::vector<FormDialog::FieldState>& state) {
+        const bool fresh = values.size() > 1 && values[1] == fixes::kNewFamily;
+        for (std::size_t i = 0; i < state.size(); ++i) state[i].error.clear();
+        if (!state.empty()) {
+            state[0].enabled = false;
+            state[0].hint = fixes::unitFormCheck(cfg, values);
+        }
+        for (std::size_t i = 5; i < state.size(); ++i) {
+            state[i].enabled = fresh;
+            state[i].hint = fresh ? std::string{} : std::string("seulement pour une famille neuve");
+        }
+    });
+    dialog->setValidator([cfg](const std::vector<std::string>& values, std::size_t& field) -> std::string {
+        int at = -1;
+        bool ok = false;
+        const std::string said = fixes::unitFormCheck(cfg, values, &at, &ok);
+        if (ok) return {};
+        field = at < 0 ? 1 : static_cast<std::size_t>(at);
+        return said;
+    });
+    ui_.showDialog(std::move(dialog), [this, message, done](const menu::DialogResult& r) {
+        bool added = false;
+        if (r.accepted()) {
+            std::string why;
+            added = assistant_->addUnit(message, fixes::unitFromForm(FormDialog::split(r.payload)), &why);
+            say(added ? assistant_->takeNotice() : "Unit\xC3\xA9 non ajout\xC3\xA9" "e : " + why);
+            sync();
+        }
+        if (done) done(added);
+    });
+}
+
 void AiPanel::openSettings() {
     if (!ui_.showDialog) return;
     ui_.showDialog(std::make_unique<AiSettingsDialog>(*this), [this](const menu::DialogResult&) {
@@ -4653,6 +4706,9 @@ void AiChatView::runNoteFix(int item) {
             return;
         case K::Pick:    // la previsualisation, son choix du haut sur cette variable
             panel_.openPreviewFor(message, act.name);
+            return;
+        case K::UnitAsk:   // 1.22.8 : la petite fenetre (l'unite va dans la proposition)
+            panel_.askUnit(message, act.name);
             return;
         default: {
             std::string said;

@@ -11,6 +11,7 @@
 #include "AiDelete.hpp"   // 1.21.0 : les suppressions (le genre, la verification d'apres)
 
 #include "../../hmi/HmiFolders.hpp"
+#include "../../hmi/HmiUnits.hpp"   // 1.22.8 : les unites de mesure (creer_unite : avant les variables qui l'emploient)
 
 #include <algorithm>
 #include <cctype>
@@ -116,6 +117,7 @@ bool existsIn(const hmi::Project& p, std::string_view kind, std::string_view nam
     if (kind == "fonction") return p.functionByName(name) != nullptr;
     if (kind == "alarme") return p.alarmByName(name) != nullptr;
     if (kind == "ressource") return p.resourceByName(name) != nullptr;
+    if (kind == "unite") return hmi::units::Catalog(p.config).known(name);   // 1.22.8 : fournie ou du projet
     if (kind == "dossier") {
         for (std::size_t l = 0; l < static_cast<std::size_t>(hmi::fold::List::Count); ++l)
             for (const auto& f : hmi::fold::allFolders(p, static_cast<hmi::fold::List>(l)))
@@ -244,6 +246,9 @@ Category categoryOf(const Operation& op) noexcept {
         case A::GroupEdit:
         case A::User:
         case A::UserEdit: return Category::Accounts;
+        // 1.22.8 : les unites de mesure avec les types et les variables (une variable porte son unite : REAL [mmCE]).
+        case A::Unit:
+        case A::UnitEdit: return Category::Types;
         default: return Category::Objects;
     }
 }
@@ -331,6 +336,8 @@ void refsOf(const hmi::Project& pr, const Proposal& p, std::size_t index, std::v
                 const std::string n = trimmed(v.name);
                 addUnique(pr.variable(n) ? modifies : creates, Ref{"variable", n, {}, pr.variable(n) != nullptr});
                 read(v.type);
+                // 1.22.8 : son unite (creee plus haut : le plan pose creer_unite avant)
+                if (const std::string u = trimmed(v.unit); !u.empty()) addUnique(uses, Ref{"unite", u, {}, existsIn(pr, "unite", u)});
             }
             break;
         case A::Type: {
@@ -402,8 +409,16 @@ void refsOf(const hmi::Project& pr, const Proposal& p, std::size_t index, std::v
             if (const std::string e = prop(op, "equipement"); !e.empty()) addUnique(uses, Ref{"equipement", e, {}, existsIn(pr, "equipement", e)});
             if (const std::string t = prop(op, "type"); !t.empty())
                 for (auto& n : readNames(t)) addUnique(uses, readRef(pr, n));
+            if (const std::string u = prop(op, "unite"); !u.empty()) addUnique(uses, Ref{"unite", u, {}, existsIn(pr, "unite", u)});   // 1.22.8
             break;
         }
+        // 1.22.8 : une unite creee (ceux qui l'emploient l'attendent), une unite modifiee (apres sa creation).
+        case A::Unit:
+            addUnique(creates, Ref{"unite", trimmed(op.name), {}, existsIn(pr, "unite", trimmed(op.name))});
+            break;
+        case A::UnitEdit:
+            addUnique(modifies, Ref{"unite", trimmed(op.name), {}, existsIn(pr, "unite", trimmed(op.name))});
+            break;
         case A::Security:
             if (const std::string u = prop(op, "depart"); !u.empty()) addUnique(uses, Ref{"utilisateur", u, {}, pr.userByLogin(u) != nullptr});
             break;
@@ -483,6 +498,9 @@ int rankOf(const Proposal& p, const Unit& u) {
         case A::Security: return 7;
         case A::ViewEdit:
         case A::StartView: return 12;
+        // 1.22.8 : les unites de mesure en premier (avec les dossiers) : les types et les variables les emploient.
+        case A::Unit:
+        case A::UnitEdit: return 0;
         default: return 12;
     }
 }
@@ -783,6 +801,9 @@ std::string titleOf(const Proposal& p, std::size_t index, const hmi::Project& pr
         case A::UserEdit: return "Modifier l'utilisateur " + (prop(op, "utilisateur").empty() ? name : prop(op, "utilisateur"));
         case A::ViewEdit: return "Modifier la vue " + name;
         case A::StartView: return "Faire de " + name + " la vue de d\xC3\xA9marrage";
+        // 1.22.8
+        case A::Unit: return create + "l'unit\xC3\xA9 " + name + (prop(op, "famille").empty() ? std::string{} : " (" + prop(op, "famille") + ")");
+        case A::UnitEdit: return "Modifier l'unit\xC3\xA9 " + name;
     }
     (void)pr;
     return name;
@@ -812,6 +833,9 @@ std::vector<std::string> checksOf(const Operation& op) {
         case A::UserEdit: return {"le login libre, le groupe existe", "aucun mot de passe : d\xC3\xA9sactiv\xC3\xA9 jusqu'\xC3\xA0 ce que tu le donnes"};
         case A::ViewEdit: return {"la vue existe", "pas de boucle de parentes ni d'h\xC3\xA9ritage", "les objets que l'en-t\xC3\xAAte ou le pied recouvre"};
         case A::StartView: return {"une vue ordinaire existante"};
+        case A::Unit: return {"le symbole libre (ni fourni, ni du projet)", "la famille connue, ou neuve avec sa r\xC3\xA9" "f\xC3\xA9rence",
+                              "le facteur non nul, compar\xC3\xA9 \xC3\xA0 l'habituel"};
+        case A::UnitEdit: return {"une unit\xC3\xA9 du projet (une fournie est verrouill\xC3\xA9" "e)", "le facteur non nul"};
         case A::Remove:
             if (del::projectRemoval(op))
                 return {"ce qui en d\xC3\xA9pend (le graphe des relations)", "la strat\xC3\xA9gie", "aucune r\xC3\xA9" "f\xC3\xA9rence restante",
@@ -832,7 +856,8 @@ Verb verbOf(const Operation& op) {
         case A::GroupEdit:
         case A::UserEdit:
         case A::ViewEdit:
-        case A::StartView: return Verb::Modify;
+        case A::StartView:
+        case A::UnitEdit: return Verb::Modify;   // 1.22.8
         case A::Align:
         case A::Distribute: return Verb::Arrange;
         case A::Remove: return Verb::Remove;
@@ -1044,6 +1069,7 @@ bool confirmed(const hmi::Project& after, const Step& s, const Proposal& p, std:
             const hmi::View* v = after.viewByName(name);
             return v && after.config.startView == v->id;
         }
+        case A::Unit: return hmi::units::Catalog(after.config).known(name);   // 1.22.8
         case A::Create: {
             const std::string t = s.target.empty() ? p.view : s.target;
             const hmi::View* v = after.viewByName(t);
@@ -1090,6 +1116,7 @@ Report report(const hmi::Project& before, const hmi::Project& after, Plan& plan,
     add(r.created, "Scripts", newNames(before.programs.scripts, after.programs.scripts, [](const hmi::Script& s) { return s.name; }));
     add(r.created, "Fonctions", newNames(before.programs.functions, after.programs.functions, [](const hmi::HmiFunction& f) { return f.name; }));
     add(r.created, "Ressources", newNames(before.assets.resources, after.assets.resources, [](const hmi::Resource& x) { return x.name; }));
+    add(r.created, "Unit\xC3\xA9s", newNames(before.config.units, after.config.units, [](const hmi::UnitDef& u) { return u.symbol; }));   // 1.22.8
     {
         std::map<std::string, std::vector<std::string>> byRole;
         for (const auto& v : after.views)

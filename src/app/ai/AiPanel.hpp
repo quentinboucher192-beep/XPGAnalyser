@@ -230,6 +230,10 @@ public:
     void askFix(const std::string& text);
     void openPreviewFor(int message, const std::string& variable);
     void notice(const std::string& text);
+    // 1.22.8 : << CREER L'UNITE << X >>... >> (une unite inconnue, la carte ou la previsualisation) - la petite fenetre, PRE-REMPLIE
+    // quand le logiciel reconnait le symbole (AiFixes : unitForm) ; Ajouter : l'unite va dans la PROPOSITION (Assistant::addUnit),
+    // jamais dans le projet. `done` (non nul) : apres la fenetre (vrai : ajoutee).
+    void askUnit(int message, const std::string& symbol, std::function<void(bool)> done = {});
     void openSettings();
     // 1.15.0 : Reessayer (le dernier message est une erreur ou un arret d'un vrai fournisseur).
     bool retry();

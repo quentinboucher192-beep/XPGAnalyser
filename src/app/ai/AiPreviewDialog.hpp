@@ -367,6 +367,8 @@ private:
     void                                     pollViews();
     void                                     useShownView();   // preview_, objectIndex_, issues_ : ceux de la vue montree
     [[nodiscard]] std::string                viewName(std::size_t rank) const;
+    // 1.22.8 : la vie de la fenetre (<< Creer l'unite... >> s'ouvre par-dessus : son retour ne touche qu'une fenetre vivante).
+    std::shared_ptr<int>                     life_{std::make_shared<int>(0)};
     core::ConnectionScope links_;
 };
 
