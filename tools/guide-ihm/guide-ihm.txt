@@ -2047,6 +2047,17 @@ L'IA intégrée y répond sans connexion, à partir du **graphe des relations** 
 - **références** : retire seulement les références (propriété vidée, action retirée, instances retirées, variables déliées ; une référence dans du code est refusée) ;
 - **inutiles** : supprime aussi les popups, scripts sur appel, fonctions et ressources devenus inutiles – jamais une variable, un type ni une définition.
 Supprimer une instance de symbole garde le symbole et ses autres instances ; supprimer un objet garde sa variable ; supprimer une vue garde un script qu'elle partage. L'aperçu liste chaque suppression (catégorie **Suppressions**) ; un clic la retire du plan ou l'y remet. Tout est vérifié sur une copie (plus aucune référence, la vérification globale), une **confirmation** est toujours demandée, et **un seul Ctrl+Z** reprend tout. Une étape n'est « Réussie » que si l'élément a vraiment disparu et que plus rien ne le cite. Supprimer un symbole depuis la liste des vues emporte aussi ses popups.
+### Supprimer une vue citée ailleurs (1.22.7)
+- En stratégie **références** (le bon choix par défaut pour une vue citée ailleurs), l'Assistant **modifie ce qui la cite** et le dit dans l'aperçu, au lieu de refuser. Par exemple : « Pied.Navigation : Vue_Accueil retirée de la liste des vues (3 → 2) ».
+  - **Une barre de navigation** perd l'entrée (et son libellé) ; les autres vues restent dans l'ordre. Si la liste devient vide, un avertissement le dit : la barre montre alors toutes les vues.
+  - **Une zone de plan** garde ses points et ses alarmes ; seule sa vue est vidée.
+  - **Un argument d'instance** qui la nomme est vidé : le paramètre reprend sa valeur par défaut.
+  - **Les vues filles** remontent à la vue au-dessus de la vue supprimée, sinon à la racine.
+  - **L'écran modèle** passe à celui au-dessus. **Un en-tête ou un pied supprimé** est remplacé par le premier du même rôle qui reste, sinon la case est décochée.
+  - **La vue de démarrage** devient la première vue ordinaire qui reste, et c'est dit. Supprimer la dernière vue ordinaire est refusé. **La vue d'accueil d'un groupe** revient à la vue de démarrage.
+- **Le code n'est jamais réécrit.** Un script, une fonction, une condition d'alarme ou une recette qui nomme la vue restent un refus. Le refus dit où (« script Script_Nav, ligne 2 ») et propose **remplacer**, avec les vues existantes les plus proches.
+- **remplacer** garde les liens en les faisant pointer vers une autre vue existante.
+- Tout se fait sur une copie, et **un seul Ctrl+Z** remet tout.
 ### Essayer avant de proposer : le bac à sable (1.21.0)
 Avec une IA connectée (et l'appel d'outil), l'Assistant peut **essayer une fonction ST** avant de te la proposer : il l'écrit, la fait vérifier et exécuter ici, lit le résultat, corrige et recommence (5 essais au plus par demande). L'état de la conversation le dit (« Bac à sable : Moyenne… »).
 - **À part** : chaque essai tourne dans un **processus séparé** (IHM Studio relancé en bac à sable), jamais dans l'application : temps borné (10 s par défaut, 60 au plus), mémoire bornée, sortie bornée, dossier de travail temporaire effacé après, environnement vide (ni clé, ni chemin de l'utilisateur).
