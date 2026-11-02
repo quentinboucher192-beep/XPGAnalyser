@@ -58,6 +58,14 @@ public:
         const auto lines = wrapText(live_ ? live_() : text_, font_, w - 4);
         return static_cast<float>(lines.size()) * (ui::lineHeight(font_) + 3.f);
     }
+    // 1.22.8 : dans son panneau qui defile, la largeur ou il va a la ligne (0 : la sienne) - sa hauteur entiere s'en deduit.
+    float wrapWidth{0.f};
+    [[nodiscard]] ui::SizeHint sizeHint() const override {
+        ui::SizeHint h;
+        h.preferred = {wrapWidth, wrapWidth > 0.f ? heightFor(wrapWidth) : 0.f};
+        h.minimum = h.preferred;
+        return h;
+    }
     void poll() {
         if (live_) invalidate();
     }
@@ -66,7 +74,7 @@ protected:
         const auto b = bounds();
         float y = b.y;
         ctx.r.pushClip(b);
-        for (const auto& l : wrapText(live_ ? live_() : text_, font_, b.w - 4)) {
+        for (const auto& l : wrapText(live_ ? live_() : text_, font_, (wrapWidth > 0.f ? wrapWidth : b.w) - 4)) {
             ctx.r.drawText({b.x, y}, l, font_, muted_ ? ctx.theme.color.textMuted : ctx.theme.color.text);
             y += ctx.r.lineHeight(font_) + 3.f;
         }
@@ -138,6 +146,7 @@ public:
     float width{640.f}, height{0.f};
     bool                       liveText{false};     // le paragraphe grandit (une detection) : toute la place
     TextBlock*                 text{nullptr};
+    ui::ScrollablePanel*       textPanel{nullptr};  // 1.22.8 : le paragraphe, s'il defile (nul : un paragraphe en direct)
     std::string                listTitle;
     ui::ScrollablePanel*       list{nullptr};
     ItemList*                  listContent{nullptr};
@@ -177,7 +186,18 @@ protected:
         if (text) {
             float th = text->heightFor(w);
             if (liveText) th = std::max(40.f, panel_.h - 44.f - (note ? note->heightFor(w) + 16.f : 0.f) - 64.f);
-            text->setBounds({x, y, w, th});
+            if (textPanel) {
+                // 1.22.8 : un paragraphe plus haut que la place (26 erreurs a lire) DEFILE - la molette, sa barre a droite ;
+                // avant, il passait sous les boutons. Ce qui le suit (la liste, les choix, la note) garde sa place.
+                const float others = contentHeight(w) - (th + 12.f) - 48.f;
+                const float room = std::max(60.f, panel_.h - 44.f - 52.f - others - 12.f);
+                const bool scroll = th > room;
+                text->wrapWidth = scroll ? w - 16.f : w;
+                th = scroll ? room : text->heightFor(w) + 2.f;
+                textPanel->setBounds({x, y, w, th});
+            } else {
+                text->setBounds({x, y, w, th});
+            }
             y += th + 12;
         }
         if (list && listContent) {
@@ -298,7 +318,17 @@ core::Status HmiAskDialog::buildUi() {
     body->liveText = static_cast<bool>(spec_.live) && spec_.height > 0;
     const std::string base = spec_.id;
     if (!spec_.text.empty() || spec_.live) {
-        body->text = &static_cast<TextBlock&>(body->addChild(std::make_unique<TextBlock>(spec_.text, spec_.live, gfx::FontId{15}, false)));
+        auto block = std::make_unique<TextBlock>(spec_.text, spec_.live, gfx::FontId{15}, false);
+        if (spec_.live) {
+            body->text = &static_cast<TextBlock&>(body->addChild(std::move(block)));
+        } else {
+            // 1.22.8 : le paragraphe dans un panneau qui defile quand il depasse la place (sinon, sans barre)
+            body->text = block.get();
+            auto panel = std::make_unique<ui::ScrollablePanel>(base + ".texte");
+            panel->setScrollPolicy(false, true);
+            panel->setContent(std::move(block));
+            body->textPanel = &static_cast<ui::ScrollablePanel&>(body->addChild(std::move(panel)));
+        }
         text_ = body->text;
     }
     if (!spec_.items.empty()) {

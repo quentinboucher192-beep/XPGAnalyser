@@ -897,6 +897,23 @@ void testIssues() {
 
 } // namespace
 
+// 1.22.8 : la confirmation << Appliquer malgre >> - les erreurs qui ne different que par le premier nom cite tiennent en une ligne.
+void groupedErrorsLines() {
+    std::printf("== 1.22.8 : les erreurs regroupees ==\n");
+    const std::string tail = " : unit\xC3\xA9 : unit\xC3\xA9 inconnue \xC2\xAB mmCE \xC2\xBB.";
+    std::vector<std::string> lines;
+    for (const char* n : {"VE1_Mesure", "VE2_Mesure", "VE3_Mesure", "VE4_Mesure", "VE5_Mesure"})
+        lines.push_back(std::string("Variable \xC2\xAB ") + n + " \xC2\xBB" + tail);
+    lines.push_back("Op\xC3\xA9ration 3 : le code brut ne se lit pas.");
+    lines.push_back("Variable \xC2\xAB A \xC2\xBB : autre faute.");
+    lines.push_back("Variable \xC2\xAB B \xC2\xBB : autre faute.");
+    const auto g = ai::groupedErrors(lines);
+    check(g.size() == 4, "4 lignes : un groupe de 5, une ligne seule, deux lignes (moins de 3 : telles quelles) (" + std::to_string(g.size()) + ")");
+    check(!g.empty() && g[0] == "Variable \xC2\xAB VE1_Mesure \xC2\xBB, \xC2\xAB VE2_Mesure \xC2\xBB, \xC2\xAB VE3_Mesure \xC2\xBB et 2 autres (5 erreurs)" + tail,
+          "le groupe : les trois premiers noms, et 2 autres, (5 erreurs), la suite commune (" + (g.empty() ? std::string("?") : g[0]) + ")");
+    check(g.size() == 4 && g[1] == lines[5] && g[2] == lines[6] && g[3] == lines[7], "les autres, telles quelles, dans l'ordre");
+}
+
 int main() {
     {
         ui::PlatformServices s;
@@ -911,6 +928,7 @@ int main() {
     testCard();
     testBackground();
     testIssues();   // 1.22.4
+    groupedErrorsLines();   // 1.22.8
     std::printf("ai_corrections_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

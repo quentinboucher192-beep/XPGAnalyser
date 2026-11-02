@@ -142,6 +142,11 @@ private:
 // pose tant que l'utilisateur n'a pas tire le volet (AiWorkspace.cpp) ; tiree, elle est la sienne.
 [[nodiscard]] float defaultPanelWidth(float windowWidth) noexcept;
 
+// 1.22.8 : DES ERREURS QUI NE DIFFERENT QUE PAR LE PREMIER NOM CITE (26 variables, la meme unite inconnue) en UNE ligne :
+// << Variable << A >>, << B >>, << C >> et 23 autres (26 erreurs) : unite : unite inconnue << mmCE >> ... >> - trois et plus ; les
+// autres telles quelles, dans l'ordre de leur premiere apparition (la confirmation << Appliquer malgre >>).
+[[nodiscard]] std::vector<std::string> groupedErrors(const std::vector<std::string>& lines);
+
 class AiPanel final : public ui::Widget {
 public:
     // Ce que l'ecran fait pour le panneau (un essai, le sien).

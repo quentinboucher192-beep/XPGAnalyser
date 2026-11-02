@@ -30,6 +30,7 @@
 #include <chrono>
 #include <cmath>
 #include <initializer_list>
+#include <map>
 #include <unordered_map>
 #include <utility>
 
@@ -1235,6 +1236,50 @@ void AiPanel::openPreview(int message) {
     ui_.showDialog(std::move(dialog), [alive = previewAlive_](const menu::DialogResult&) { *alive = false; });
 }
 
+std::vector<std::string> groupedErrors(const std::vector<std::string>& lines) {
+    static const std::string kOpen = "\xC2\xAB ", kClose = " \xC2\xBB";
+    struct Group {
+        std::string head, tail;           // avant et apres le premier nom cite
+        std::vector<std::string> names;
+        std::string line;                 // la ligne telle quelle (un groupe d'un ou deux)
+        std::vector<std::string> all;
+    };
+    std::vector<Group> groups;
+    std::map<std::string, std::size_t> byKey;
+    for (const auto& l : lines) {
+        const auto a = l.find(kOpen);
+        const auto b = a == std::string::npos ? std::string::npos : l.find(kClose, a + kOpen.size());
+        std::string key = l, head, tail, name;
+        if (b != std::string::npos) {
+            head = l.substr(0, a);
+            name = l.substr(a + kOpen.size(), b - a - kOpen.size());
+            tail = l.substr(b + kClose.size());
+            key = head + "\x01" + tail;
+        }
+        const auto it = byKey.find(key);
+        if (it == byKey.end()) {
+            byKey[key] = groups.size();
+            groups.push_back({head, tail, name.empty() ? std::vector<std::string>{} : std::vector<std::string>{name}, l, {l}});
+        } else {
+            groups[it->second].names.push_back(name);
+            groups[it->second].all.push_back(l);
+        }
+    }
+    std::vector<std::string> out;
+    for (const auto& g : groups) {
+        if (g.all.size() < 3 || g.names.size() != g.all.size()) {
+            for (const auto& l : g.all) out.push_back(l);
+            continue;
+        }
+        std::string s = g.head;
+        for (std::size_t i = 0; i < 3; ++i) s += (i ? ", " : "") + kOpen + g.names[i] + kClose;
+        if (g.all.size() > 3) s += " et " + std::to_string(g.all.size() - 3) + (g.all.size() - 3 > 1 ? " autres" : " autre");
+        s += " (" + std::to_string(g.all.size()) + " erreurs)" + g.tail;
+        out.push_back(std::move(s));
+    }
+    return out;
+}
+
 // ---- 1.22.5 : l'avis du logiciel passe a la previsualisation ouverte ---------------------------------------------------------
 namespace {
 // AiPreviewDialog::setVerdict (la previsualisation, lot de l'apercu) : appelee si elle existe - sinon rien (la fenetre relit
@@ -1314,14 +1359,15 @@ bool AiPanel::applyProposal(int message) {
         spec.title = "Appliquer malgr\xC3\xA9 " + std::to_string(ck.errors.size()) + (ck.errors.size() > 1 ? " erreurs" : " erreur");
         spec.text = "Ce qui est valide s'applique ; ce qui est en erreur est laiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 (comme l'aper\xC3\xA7u le montre) "
                     "et not\xC3\xA9 sous la r\xC3\xA9ponse et dans le journal.\nCtrl+Z reprend tout d'un coup.";
-        // 1.16.1 (captures) : les erreurs dans le paragraphe, qui va a la ligne (une ligne de liste les coupait a droite)
+        // 1.16.1 (captures) : les erreurs dans le paragraphe, qui va a la ligne (une ligne de liste les coupait a droite) ;
+        // 1.22.8 : le paragraphe defile (HmiAskDialog), et les erreurs qui ne different que par un nom tiennent en une ligne.
         if (!otherErrors.empty()) {
             spec.text += "\n\nLaiss\xC3\xA9 de c\xC3\xB4t\xC3\xA9 :";
-            for (const auto& e : otherErrors) spec.text += "\n\xE2\x80\xA2 " + e;
+            for (const auto& e : groupedErrors(otherErrors)) spec.text += "\n\xE2\x80\xA2 " + e;
         }
         if (!buildErrors.empty()) {   // 1.22.5 : elles ne se laissent pas de cote - elles seront dans le projet
             spec.text += "\n\nG\xC3\xA9n\xC3\xA9rer et Compiler (ces erreurs resteront dans le projet) :";
-            for (const auto& e : buildErrors) spec.text += "\n\xE2\x80\xA2 " + e;
+            for (const auto& e : groupedErrors(buildErrors)) spec.text += "\n\xE2\x80\xA2 " + e;
         }
         spec.confirm = "Appliquer quand m\xC3\xAAme";
         spec.width = 620.f;
