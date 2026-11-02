@@ -706,7 +706,8 @@ constexpr Ref kAvant[5] = {{18274, 21679}, {28920, 16663}, {19514, 7257}, {18981
 // PLAFONDS : l'APRES de la 1.22.6, plus 5 % - au-dela, une regression de taille fait echouer l'essai.
 // 1.22.6 (integration) : les plafonds suivent les consignes reunies - les operations des variables, de la securite et des vues
 // (regle 23, kRulesOptions : environ 1 000 jetons de plus, dans la partie mise en cache), sur les memes cas.
-constexpr Ref kPlafond[5] = {{19100, 22900}, {25700, 8500}, {20750, 6900}, {20150, 6500}, {20800, 7200}};
+// 1.22.7 : + 64 jetons (la description de supprimer : << references >> modifie ce qui cite) - le cas 2 suit.
+constexpr Ref kPlafond[5] = {{19100, 22900}, {26300, 8500}, {20750, 6900}, {20150, 6500}, {20800, 7200}};
 
 std::string pct(double before, double after) {
     char b[32];
