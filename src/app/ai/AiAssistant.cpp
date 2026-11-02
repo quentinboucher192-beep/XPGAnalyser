@@ -6,6 +6,7 @@
 #include "AiLearningFile.hpp"   // 1.17.0 : ce que l'installateur a depose
 
 #include "AiAutomate.hpp"
+#include "AiDelete.hpp"         // 1.22.7 : la strategie d'une suppression (Corriger rapidement)
 
 #include "AiHttp.hpp"
 #include "AiKeys.hpp"          // 1.18.0 : le gestionnaire des cles API
@@ -2072,9 +2073,102 @@ bool replaceName(std::string& s, const std::string& from, const std::string& to)
     s = std::move(out);
     return true;
 }
+
+// 1.22.7 : UNE RETOUCHE d'une operation de la proposition (Corriger rapidement, la correction du logiciel) - gardee avec la
+// forme d'avant de l'operation (Proposal::extra << retouches >>, comme la proposition l'enregistre) : Revenir la reprend.
+// L'identifiant : << r >> et un numero qui ne revient pas tant qu'une retouche le porte.
+void recordRetouch(Proposal& p, std::size_t op, const Operation& before, const std::string& what, const std::string& text) {
+    if (!p.extra.isObject()) p.extra = json::Value::object();
+    json::Value& list = p.extra["retouches"];
+    if (!list.isArray()) list = json::Value::array();
+    std::int64_t next = 1;
+    for (const auto& r : list.items()) {
+        const std::string id = r.isObject() ? r.str("id") : std::string{};
+        if (id.size() > 1 && id[0] == 'r') next = std::max<std::int64_t>(next, std::atoll(id.c_str() + 1) + 1);
+    }
+    json::Value e = json::Value::object();
+    e.set("id", "r" + std::to_string(next));
+    e.set("op", static_cast<std::int64_t>(op));
+    e.set("quoi", what);
+    e.set("texte", text);
+    const json::Value ops = operationsToJson({before});
+    if (!ops.items().empty()) e.set("avant", ops.items().front());
+    list.push(std::move(e));
+}
+
+// La valeur d'une propriete d'une operation (nul : absente).
+std::string* propSlot(Operation& o, std::string_view key) {
+    for (auto& [k, v] : o.props)
+        if (lowered(k) == lowered(key)) return &v;
+    return nullptr;
+}
 } // namespace
 
-bool Assistant::applyBuildFix(int message, std::size_t finding, std::string* why) {
+bool Assistant::applyBuildFix(int message, std::size_t finding, std::string* why) { return applyBuildFixes(message, {finding}, why) == 1; }
+
+std::size_t Assistant::applyBuildFixes(int message, const std::vector<std::size_t>& findings, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return std::size_t{0};
+    };
+    Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(message)].proposal)
+        return fail("Pas de proposition.");
+    Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
+    if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
+    const auto v = verdictOf(p);
+    std::size_t done = 0;
+    std::string first, said;
+    for (const auto finding : findings) {
+        const auto refuse = [&](std::string w) {
+            if (first.empty()) first = std::move(w);
+        };
+        if (!v || !v->ran || finding >= v->findings.size()) {
+            refuse("Ce constat de G\xC3\xA9n\xC3\xA9rer et Compiler n'existe plus.");
+            continue;
+        }
+        const build::Finding f = v->findings[finding];
+        if (f.fixFrom.empty()) {
+            refuse("Le logiciel ne propose pas de correction pour ce constat : corrige \xC3\xA0 la main, ou demande \xC3\xA0 l'IA.");
+            continue;
+        }
+        if (f.op == Check::Fault::kNoOp || f.op >= p.ops.size()) {
+            refuse("L'op\xC3\xA9ration en cause n'est pas connue : corrige \xC3\xA0 la main (Pr\xC3\xA9visualiser), ou demande \xC3\xA0 l'IA.");
+            continue;
+        }
+        Operation& op = p.ops[f.op];
+        const Operation before = op;
+        bool changed = false;
+        if (!f.property.empty())
+            for (auto& [k, val] : op.props)
+                if (k == f.property) changed = replaceName(val, f.fixFrom, f.fixTo) || changed;
+        if (!changed)
+            for (auto& kv : op.props) changed = replaceName(kv.second, f.fixFrom, f.fixTo) || changed;
+        if (!changed) changed = replaceName(op.code, f.fixFrom, f.fixTo);
+        if (!changed) changed = replaceName(op.variable, f.fixFrom, f.fixTo);
+        if (!changed) {
+            refuse("\xC2\xAB " + f.fixFrom + " \xC2\xBB n'est plus dans l'op\xC3\xA9ration " + std::to_string(f.op + 1) + " : rien n'est chang\xC3\xA9.");
+            continue;
+        }
+        const std::string text = "\xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo + " \xC2\xBB";
+        recordRetouch(p, f.op, before, "logiciel", text);   // 1.22.7 : Revenir la reprend
+        addProcess(p, "correction", "Correction du logiciel pos\xC3\xA9" "e : " + text + " (op\xC3\xA9ration " + std::to_string(f.op + 1) + ")");
+        said = text;
+        ++done;
+    }
+    if (done == 0) return fail(first.empty() ? std::string("Rien \xC3\xA0 corriger.") : first);
+    proposalChanged(*c, message);
+    notice_ = done == 1 ? "Assistant IA : correction du logiciel pos\xC3\xA9" "e dans la proposition (" + said
+                              + ") : G\xC3\xA9n\xC3\xA9rer et Compiler la rev\xC3\xA9rifient. Le projet n'a pas chang\xC3\xA9."
+                        : "Assistant IA : " + std::to_string(done) + " corrections du logiciel pos\xC3\xA9" "es dans la proposition : G\xC3\xA9n\xC3\xA9rer et "
+                              "Compiler la rev\xC3\xA9rifient. Le projet n'a pas chang\xC3\xA9.";
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return done;
+}
+
+// ---- 1.22.7 : les retouches (Corriger rapidement) ----------------------------------------------------------------------
+bool Assistant::setDeleteStrategy(int message, std::size_t op, std::string strategy, std::string* why) {
     const auto fail = [&](std::string w) {
         if (why) *why = std::move(w);
         return false;
@@ -2084,29 +2178,96 @@ bool Assistant::applyBuildFix(int message, std::size_t finding, std::string* why
         return fail("Pas de proposition.");
     Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
     if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
-    const auto v = verdictOf(p);
-    if (!v || !v->ran || finding >= v->findings.size()) return fail("Ce constat de G\xC3\xA9n\xC3\xA9rer et Compiler n'existe plus.");
-    const build::Finding f = v->findings[finding];
-    if (f.fixFrom.empty()) return fail("Le logiciel ne propose pas de correction pour ce constat : corrige \xC3\xA0 la main, ou demande \xC3\xA0 l'IA.");
-    if (f.op == Check::Fault::kNoOp || f.op >= p.ops.size())
-        return fail("L'op\xC3\xA9ration en cause n'est pas connue : corrige \xC3\xA0 la main (Pr\xC3\xA9visualiser), ou demande \xC3\xA0 l'IA.");
-    Operation& op = p.ops[f.op];
-    bool done = false;
-    if (!f.property.empty())
-        for (auto& [k, val] : op.props)
-            if (k == f.property) done = replaceName(val, f.fixFrom, f.fixTo) || done;
-    if (!done)
-        for (auto& kv : op.props) done = replaceName(kv.second, f.fixFrom, f.fixTo) || done;
-    if (!done) done = replaceName(op.code, f.fixFrom, f.fixTo);
-    if (!done) done = replaceName(op.variable, f.fixFrom, f.fixTo);
-    if (!done)
-        return fail("\xC2\xAB " + f.fixFrom + " \xC2\xBB n'est plus dans l'op\xC3\xA9ration " + std::to_string(f.op + 1) + " : rien n'est chang\xC3\xA9.");
-    addProcess(p, "correction",
-               "Correction du logiciel pos\xC3\xA9" "e : \xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo + " \xC2\xBB (op\xC3\xA9ration "
-                   + std::to_string(f.op + 1) + ")");
+    if (op >= p.ops.size() || p.ops[op].action != Operation::Action::Remove)
+        return fail("L'op\xC3\xA9ration " + std::to_string(op + 1) + " n'est pas une suppression.");
+    strategy = trim(std::move(strategy));
+    const auto st = del::strategyFromKey(strategy);
+    if (!st) return fail("Strat\xC3\xA9gie " + guillemets(strategy) + " inconnue (seul, remplacer, references).");
+    Operation& o = p.ops[op];
+    if (del::objectGenre(o.kind) && *st != del::Strategy::Only)
+        return fail("Des objets d'une vue se suppriment seuls (strat\xC3\xA9gie seul) : leur variable et leur symbole restent.");
+    const std::string* by = propSlot(o, "remplacer_par");
+    if (!by) by = propSlot(o, "par");
+    if (*st == del::Strategy::Replace && (!by || trim(*by).empty()))
+        return fail("Remplacer demande un \xC3\xA9l\xC3\xA9ment EXISTANT du m\xC3\xAAme genre (remplacer_par) : l'Assistant n'en choisit pas un au hasard.");
+    const std::string* now = propSlot(o, "strategie");
+    const std::string old = now ? trim(*now) : std::string{};
+    const std::string key(del::strategyKey(*st));
+    const auto oldKey = del::strategyFromKey(old);
+    const bool useless = lowered(old) == "inutiles" || lowered(old) == "cascade";
+    if (oldKey && *oldKey == *st && !useless) return true;   // deja
+    const Operation before = o;
+    if (std::string* slot = propSlot(o, "strategie")) *slot = key;
+    else o.props.emplace_back("strategie", key);
+    if (useless && !propSlot(o, "inutiles")) o.props.emplace_back("inutiles", "oui");   // << inutiles >> garde
+    const auto shown = [](const std::string& k) { return k == "references" ? std::string("r\xC3\xA9" "f\xC3\xA9rences") : k.empty() ? std::string("seul") : k; };
+    recordRetouch(p, op, before, "strategie", "strat\xC3\xA9gie " + shown(lowered(old)) + " \xE2\x86\x92 " + shown(key));
     proposalChanged(*c, message);
-    notice_ = "Assistant IA : correction du logiciel pos\xC3\xA9" "e dans la proposition (\xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo
-              + " \xC2\xBB) : G\xC3\xA9n\xC3\xA9rer et Compiler la rev\xC3\xA9rifient. Le projet n'a pas chang\xC3\xA9.";
+    notice_ = "Assistant IA : strat\xC3\xA9gie " + guillemets(shown(key)) + " pos\xC3\xA9" "e pour l'op\xC3\xA9ration " + std::to_string(op + 1)
+              + " (la proposition seule) : elle se rev\xC3\xA9rifie. Le projet n'a pas chang\xC3\xA9.";
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::setOperationProperty(int message, std::size_t op, const std::string& key, const std::string& value, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(message)].proposal)
+        return fail("Pas de proposition.");
+    Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
+    if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
+    const std::string k = trim(key);
+    if (op >= p.ops.size() || k.empty()) return fail("Cette op\xC3\xA9ration n'existe pas.");
+    Operation& o = p.ops[op];
+    if (secretField(o.action, k)) return fail("Un secret ne passe jamais par l'Assistant.");
+    const std::string* now = propSlot(o, k);
+    const std::string old = now ? *now : std::string{};
+    if (now && trim(old) == trim(value)) return true;   // deja
+    const Operation before = o;
+    if (std::string* slot = propSlot(o, k)) *slot = value;
+    else o.props.emplace_back(k, value);
+    recordRetouch(p, op, before, "propriete", k + " : " + (trim(old).empty() ? std::string("(vide)") : trim(old)) + " \xE2\x86\x92 " + value);
+    proposalChanged(*c, message);
+    notice_ = "Assistant IA : " + k + " : " + value + " pour l'op\xC3\xA9ration " + std::to_string(op + 1)
+              + " (la proposition seule) : elle se rev\xC3\xA9rifie. Le projet n'a pas chang\xC3\xA9.";
+    if ((c = touch(*c)) != nullptr) save(*c);
+    ++revision_;
+    return true;
+}
+
+bool Assistant::undoRetouch(int message, const std::string& id, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size()) || !c->messages[static_cast<std::size_t>(message)].proposal)
+        return fail("Pas de proposition.");
+    Proposal& p = *c->messages[static_cast<std::size_t>(message)].proposal;
+    if (p.state != "proposee") return fail("Cette proposition n'est plus \xC3\xA0 d\xC3\xA9" "cider.");
+    json::Value* list = p.extra.isObject() ? p.extra.find("retouches") : nullptr;
+    if (!list || !list->isArray()) return fail("Cette retouche n'existe plus.");
+    auto& items = list->items();
+    const auto it = std::find_if(items.begin(), items.end(), [&](const json::Value& r) { return r.isObject() && r.str("id") == id; });
+    if (it == items.end()) return fail("Cette retouche n'existe plus.");
+    const std::int64_t at = it->integer("op", -1);
+    std::vector<Operation> back;
+    json::Value one = json::Value::array();
+    one.push(it->at("avant"));
+    if (at < 0 || static_cast<std::size_t>(at) >= p.ops.size() || !operationsFromJson(one, back) || back.size() != 1)
+        return fail("La forme d'avant de l'op\xC3\xA9ration ne se relit pas : rien n'est chang\xC3\xA9.");
+    p.ops[static_cast<std::size_t>(at)] = std::move(back.front());
+    // Elle, et celles faites depuis sur la meme operation (l'operation reprend la forme qu'elle avait avant elle).
+    const auto from = static_cast<std::ptrdiff_t>(it - items.begin());
+    for (std::size_t k = items.size(); k-- > static_cast<std::size_t>(from);)
+        if (items[k].isObject() && items[k].integer("op", -1) == at) items.erase(items.begin() + static_cast<std::ptrdiff_t>(k));
+    if (items.empty()) (void)p.extra.erase("retouches");
+    proposalChanged(*c, message);
+    notice_ = "Assistant IA : retouche reprise - l'op\xC3\xA9ration " + std::to_string(at + 1) + " reprend sa forme d'avant (la proposition seule).";
     if ((c = touch(*c)) != nullptr) save(*c);
     ++revision_;
     return true;

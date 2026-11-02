@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
 #include <optional>
 #include <thread>
 #include <cctype>
@@ -113,8 +114,9 @@ std::string buildRowText(const build::Finding& f) {
     if (!f.fixFrom.empty()) t += " (correction du logiciel : \xC2\xAB " + f.fixFrom + " \xC2\xBB \xE2\x86\x92 \xC2\xAB " + f.fixTo + " \xC2\xBB)";
     return t;
 }
-// Le constat comme une ligne de la verification (les cadres, le menu du clic droit).
-fixes::Line buildLine(const build::Finding& f, const Check& ck, std::size_t ops) {
+// Le constat comme une ligne de la verification (les cadres, le menu du clic droit). 1.22.7 : `rank` - son rang dans le verdict
+// (le menu offre alors sa correction, et Corriger rapidement la fait).
+fixes::Line buildLine(const build::Finding& f, const Check& ck, std::size_t ops, std::size_t rank = fixes::Line::kNone) {
     fixes::Line l;
     l.message = build::lineOf(f);
     l.text = buildRowText(f);
@@ -122,7 +124,23 @@ fixes::Line buildLine(const build::Finding& f, const Check& ck, std::size_t ops)
     if (f.op != Check::Fault::kNoOp && f.op < ops) l.ops = {f.op};
     for (std::size_t k = 0; k < ck.faults.size(); ++k)
         if (ck.faults[k].message == l.message) l.faults.push_back(k);
+    l.finding = rank;
+    if (rank != fixes::Line::kNone) {
+        l.fixFrom = f.fixFrom;
+        l.fixTo = f.fixTo;
+    }
     return l;
+}
+
+// 1.22.7 : une ligne en quelques mots (<< 2 restent : ... >>) - sa variable introuvable, sinon le debut de son texte.
+std::string shortOf(const fixes::Line& l, const Check& ck) {
+    for (const auto k : l.faults)
+        if (k < ck.faults.size() && ck.faults[k].kind == "variable") return "\xC2\xAB " + ck.faults[k].name + " \xC2\xBB";
+    if (l.message.size() <= 44) return l.message;
+    std::size_t cut = l.message.rfind(' ', 44);
+    if (cut == std::string::npos || cut < 12) cut = 44;
+    while (cut > 0 && (static_cast<unsigned char>(l.message[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'une lettre
+    return l.message.substr(0, cut) + "\xE2\x80\xA6";
 }
 
 // Une ligne de la liste de gauche.
@@ -152,6 +170,10 @@ struct Row {
     std::string              view{};
     std::vector<std::size_t> views{};
     std::string              base{};
+    // 1.22.7 : un titre qui offre << Tout corriger rapidement >> (1 ERREURS, 2 AVERTISSEMENTS, 4 GENERER ET COMPILER ; 0 : aucun) ;
+    // une ligne de CORRECTIONS : la cle de sa correction (la mise en evidence).
+    int                      group{0};
+    std::string              key{};
 };
 
 // ---- 1.22.4 : OU SONT LES ERREURS ------------------------------------------------------------------------------------------
@@ -443,6 +465,10 @@ public:
     std::vector<hmi::Id>              highlight;
     double                            pulseStart{-1.0};
     int                               scrollToRow{-1};
+    // 1.22.7 : les lignes de CORRECTIONS que la derniere correction vient d'ajouter - mises en evidence un instant (un fond qui
+    // s'eteint en une seconde et demie a partir de leur premier dessin).
+    std::vector<int>                  flashed;
+    double                            flashStart{-1.0};
 
     [[nodiscard]] bool hidden(std::size_t i) const {   // une ligne d'un groupe replie
         if (filtering) return i >= pass.size() || !pass[i];   // 1.22.4 : le filtre montre ce qu'il trouve, groupes replies ou non
@@ -772,6 +798,23 @@ public:
             if (i < rows.size() && rows[i].kind == Row::Kind::Heading && groupKey(rows[i].text) == key) return r;
         return {};
     }
+    // ---- 1.22.7 : la bande << Corrige : ... >>, << Tout corriger rapidement >> -------------------------------------------
+    [[nodiscard]] gfx::Rect bandUndoRect() const noexcept { return bandUndo_; }
+    [[nodiscard]] gfx::Rect quickAllRect(int group) const {
+        for (const auto& [r, g] : allLinks_)
+            if (g == group) return r;
+        return {};
+    }
+    [[nodiscard]] gfx::Rect groupHeadingRect(int group) const {   // le titre d'une categorie qui se corrige d'un coup
+        for (const auto& [r, i] : hits_)
+            if (i < rows.size() && rows[i].kind == Row::Kind::Heading && rows[i].group == group) return r;
+        return {};
+    }
+    [[nodiscard]] int groupAt(gfx::Point at) const {   // ce titre sous ce point (0 : aucun)
+        for (const auto& [r, i] : hits_)
+            if (r.contains(at) && i < rows.size() && rows[i].kind == Row::Kind::Heading && rows[i].group > 0) return rows[i].group;
+        return 0;
+    }
 
     bool hasTooltip() const override { return true; }
     std::string liveTooltip(gfx::Point mouse) const override {
@@ -800,12 +843,22 @@ public:
             return std::string(err ? "Ne montrer que les lignes li\xC3\xA9" "es \xC3\xA0 une erreur" : "Ne montrer que les lignes li\xC3\xA9" "es \xC3\xA0 un avertissement")
                    + " (les deux puces ensemble : l'un ou l'autre). \xC3\x89" "chap : tout remontrer." + where;
         }
+        // 1.22.7 : la bande << Corrige : ... >>, son Revenir ; le lien << Tout corriger rapidement >> des titres
+        if (bandUndo_.contains(mouse))
+            return "Revenir sur " + std::string(d_.bandUndo_.size() > 1 ? "ces corrections" : "cette correction")
+                   + " : la proposition reprend sa forme d'avant (le projet ne change pas).";
+        if (band_.contains(mouse)) return d_.bandText();
+        for (const auto& [r, g] : allLinks_)
+            if (r.contains(mouse))
+                return "Tout corriger rapidement : " + std::to_string(d_.quickCount(g)) + (d_.quickCount(g) > 1 ? " corrections s\xC3\xBBres" : " correction s\xC3\xBBre")
+                       + " de ce groupe, en une fois (la proposition seule ; Revenir les reprend). Les autres lignes disent pourquoi au clic droit.";
         if (list_.contains(mouse))
             for (const auto& [r, i] : hits_) {
                 if (!r.contains(mouse) || i >= rows.size()) continue;
                 const auto& row = rows[i];
                 if (row.kind == Row::Kind::Heading)
-                    return folded.count(groupKey(row.text)) ? "Clic : d\xC3\xA9plier ce groupe" : "Clic : replier ce groupe";
+                    return std::string(folded.count(groupKey(row.text)) ? "Clic : d\xC3\xA9plier ce groupe" : "Clic : replier ce groupe")
+                           + (row.group > 0 ? "\nClic droit : Tout corriger rapidement." : "");
                 if (row.op >= 0)
                     return row.excluded ? "Clic : remettre cette suppression dans le plan."
                                         : "Clic : retirer cette suppression du plan (ce qui en d\xC3\xA9pend est ignor\xC3\xA9, la v\xC3\xA9rification se refait).";
@@ -819,7 +872,7 @@ public:
                     show += std::string(row.views.size() > 1 ? "\nVues : " : "\nVue : ") + viewNames(row)
                             + (onShown(row) ? std::string(" (montr\xC3\xA9" "e \xC3\xA0 droite).") : std::string(" \xE2\x80\x94 le clic y fait passer l'aper\xC3\xA7u."));
                 if (row.list == 3) return row.text + " \xE2\x80\x94 " + row.right + show + "\nClic droit : revenir sur cette correction.";
-                if (row.list > 0) return row.text + show + "\nClic droit : les corrections possibles.";   // 1.22.1
+                if (row.list > 0) return row.text + show + "\nClic droit : Corriger rapidement, et les autres corrections.";   // 1.22.1, 1.22.7
                 return row.text + (row.right.empty() ? std::string{} : " \xE2\x80\x94 " + row.right) + show;
             }
         if (area_.contains(mouse)) {
@@ -867,6 +920,12 @@ protected:
             }
             listTop += 60.f;
         }
+        // 1.22.7 : LA BANDE << Corrige : ... - Revenir >> (ou << Reverification... >>), en haut de la liste.
+        band_ = bandUndo_ = gfx::Rect{};
+        if (!listHidden && (!d_.bandText_.empty() || d_.rechecking_)) {
+            band_ = {x, listTop, leftW, 26.f};
+            listTop += 30.f;
+        }
         if (d_.search_) {
             d_.search_->setVisibility(listHidden ? ui::Visibility::Collapsed : ui::Visibility::Visible);
             if (!listHidden) d_.search_->setBounds(searchBox_);
@@ -898,7 +957,14 @@ protected:
             b->setBounds({bx, panel_.bottom() - 44.f, bw, 30.f});
             bx -= 10.f;
         }
-        if (d_.edit_) d_.edit_->setBounds({x, panel_.bottom() - 44.f, ui::measureWidth(d_.edit_->text(), gfx::FontId{16}) + 34.f, 30.f});
+        // 1.22.7 : a gauche, << Retour >> (discret : fermer sans rien faire), puis << Modifier la demande >>.
+        float lx = x;
+        for (ui::Button* b : {d_.back_, d_.edit_}) {
+            if (!b) continue;
+            const float bw = ui::measureWidth(b->text(), gfx::FontId{16}) + 34.f;
+            b->setBounds({lx, panel_.bottom() - 44.f, bw, 30.f});
+            lx += bw + 10.f;
+        }
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -973,6 +1039,7 @@ protected:
             ctx.r.drawText({varLabel_.x, varLabel_.y + 2.f}, elide(ctx.r, label, kSmall, varLabel_.w), kSmall, chosen ? c.textMuted : c.error);
         }
         paintFilter(ctx);   // 1.22.4
+        paintBand(ctx);     // 1.22.7
         paintList(ctx);
         paintPreview(ctx);
         paintViewBar(ctx);  // 1.22.6
@@ -1076,10 +1143,38 @@ protected:
         }
     }
 
+    // 1.22.7 : LA BANDE - << Corrige : ... >> et son << Revenir >> (un lien), sur un fond vert pale ; une reverification de fond :
+    // << Reverification... >> (sur un fond bleu pale, seule).
+    void paintBand(const ui::PaintContext& ctx) {
+        bandUndo_ = {};
+        if (band_.w <= 0.f) return;
+        const auto& c = ctx.theme.color;
+        const bool alone = d_.bandText_.empty();
+        const gfx::Color col = alone ? c.info : c.ok;
+        ctx.r.fillRoundedRect(band_, alpha(col, 38), 4.f);
+        ctx.r.fillRect({band_.x, band_.y + 3.f, 3.f, band_.h - 6.f}, col);
+        const float ty = band_.y + (band_.h - ctx.r.lineHeight(kSmall)) / 2.f;
+        float right = band_.right() - 8.f;
+        if (!d_.bandUndo_.empty()) {
+            const float w = ctx.r.measure("Revenir", kSmall).width;
+            bandUndo_ = {right - w - 6.f, band_.y + 2.f, w + 12.f, band_.h - 4.f};
+            ctx.r.drawText({right - w, ty}, "Revenir", kSmall, c.accent);
+            ctx.r.line({right - w, ty + ctx.r.lineHeight(kSmall)}, {right, ty + ctx.r.lineHeight(kSmall)}, alpha(c.accent, 170), 1.f);
+            const float dot = ctx.r.measure(" \xC2\xB7 ", kSmall).width;
+            ctx.r.drawText({right - w - dot, ty}, " \xC2\xB7 ", kSmall, c.textMuted);
+            right -= w + dot;
+        }
+        std::string text = d_.bandText_;
+        if (d_.rechecking_)
+            text += alone ? std::string("Rev\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6") : std::string(" \xC2\xB7 Rev\xC3\xA9rification\xE2\x80\xA6");
+        ctx.r.drawText({band_.x + 10.f, ty}, elide(ctx.r, text, kSmall, right - band_.x - 12.f), kSmall, c.text);
+    }
+
     void paintList(const ui::PaintContext& ctx) {
         const auto& c = ctx.theme.color;
         ctx.r.fillRect(list_, c.inputBg);
         ctx.r.strokeRect(list_, c.border, 1.f);
+        allLinks_.clear();   // 1.22.7
         const float lh = ctx.r.lineHeight(kText) + 6.f;
         const float lhSmall = ctx.r.lineHeight(kSmall) + 3.f;
         // Les hauteurs d'abord (un avertissement, une erreur : sur plusieurs lignes).
@@ -1116,6 +1211,7 @@ protected:
             ctx.r.drawText({list_.x + 12.f, list_.y + 10.f}, elide(ctx.r, "Aucune ligne ne correspond (\xC3\x89" "chap : tout remontrer).", kSmall, list_.w - 24.f), kSmall,
                            c.textMuted);
         float y = list_.y + 4.f - scroll;
+        bool  flashing = false;   // 1.22.7
         for (std::size_t i = 0; i < rows.size(); ++i) {
             if (hidden(i)) continue;
             const auto& row = rows[i];
@@ -1131,6 +1227,16 @@ protected:
                     ctx.r.fillRect({list_.x + 1.f, y, list_.w - space - 2.f, rh}, alpha(c.accent, 45));
                     ctx.r.fillRect({list_.x + 1.f, y, 3.f, rh}, c.accent);
                 }
+                // 1.22.7 : une correction qui vient d'etre faite - un fond vert qui s'eteint en une seconde et demie.
+                if (!flashed.empty() && std::find(flashed.begin(), flashed.end(), static_cast<int>(i)) != flashed.end()) {
+                    if (flashStart < 0.0) flashStart = ctx.time;
+                    const double since = ctx.time - flashStart;
+                    if (since >= 0.0 && since < 1.5) {
+                        ctx.r.fillRect({list_.x + 1.f, y, list_.w - space - 2.f, rh}, alpha(c.ok, static_cast<int>(110.0 * (1.0 - since / 1.5))));
+                        ctx.r.fillRect({list_.x + 1.f, y, 3.f, rh}, c.ok);
+                        flashing = true;
+                    }
+                }
                 const gfx::Color issueCol = row.issue > 0 ? ctx.theme.onSurface(issueColor(ctx.theme, row.issue)) : c.text;
                 switch (row.kind) {
                     case Row::Kind::Heading: {
@@ -1142,6 +1248,18 @@ protected:
                         if (row.issue > 0) {   // 1.22.4 : le groupe contient une erreur, un avertissement
                             pastille(ctx.r, {list_.x + w - 6.f, y + lh / 2.f}, 13.f, issueColor(ctx.theme, row.issue), c.panelBg);
                             tw -= 18.f;
+                        }
+                        // 1.22.7 : << Tout corriger rapidement >> - un lien a droite du titre, si le groupe a des corrections sures.
+                        if (row.group > 0 && d_.quickCount(row.group) > 0) {
+                            const char* link = "Tout corriger rapidement";
+                            const float lw = ctx.r.measure(link, kSmall).width + 8.f;
+                            if (tw - lw > 110.f) {
+                                const float lx = list_.x + 22.f + tw - lw;
+                                ctx.r.drawText({lx + 4.f, ty}, link, kSmall, c.accent);
+                                ctx.r.line({lx + 4.f, ty + ctx.r.lineHeight(kSmall)}, {lx + lw - 4.f, ty + ctx.r.lineHeight(kSmall)}, alpha(c.accent, 170), 1.f);
+                                allLinks_.emplace_back(gfx::Rect{lx, y + 1.f, lw, lh - 2.f}, row.group);
+                                tw -= lw + 8.f;
+                            }
                         }
                         ctx.r.drawText({list_.x + 22.f, ty}, elide(ctx.r, row.text, kSmall, tw), kSmall, c.textMuted);
                         break;
@@ -1201,6 +1319,7 @@ protected:
         }
         ctx.r.popClip();
         bar_.paint(ctx, list_, content, list_.h, scroll);
+        if (flashing) invalidate();
     }
 
     void paintPreview(const ui::PaintContext& ctx) {
@@ -1322,6 +1441,14 @@ protected:
         issueMark(1, "avertissement");
         ctx.r.drawText({lx, legend_.y}, elide(ctx.r, "Aper\xC3\xA7u : une copie de la vue \xC2\xB7 molette : zoom \xC2\xB7 survol : l'objet \xC2\xB7 clic : sa ligne", kSmall,
                                               legend_.right() - lx), kSmall, c.textMuted);
+        // 1.22.7 : une grosse proposition corrigee se reverifie sur un fil de fond - l'apercu d'avant reste, et le dit.
+        if (d_.rechecking_) {
+            const std::string t = "Rev\xC3\xA9rification\xE2\x80\xA6";
+            const gfx::Rect b{preview_.x + 6.f, preview_.y + 6.f, ctx.r.measure(t, kSmall).width + 16.f, 22.f};
+            ctx.r.fillRoundedRect(b, alpha(c.panelBg, 235), 4.f);
+            ctx.r.strokeRect(b, c.info, 1.f);
+            ctx.r.drawText({b.x + 8.f, b.y + (b.h - ctx.r.lineHeight(kSmall)) / 2.f}, t, kSmall, c.text);
+        }
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -1355,6 +1482,8 @@ protected:
             if (const int k = fixRowAt(d->pos); k >= 0) {
                 const Row& row = rows[static_cast<std::size_t>(k)];
                 (void)d_.openFixMenu(row.list, row.line, d->pos);
+            } else if (const int g = groupAt(d->pos); g > 0) {
+                (void)d_.openGroupMenu(g, d->pos);   // 1.22.7 : le clic droit d'un titre - Tout corriger rapidement
             }
             return ui::EventResult::Consumed;
         }
@@ -1363,6 +1492,17 @@ protected:
                 d_.close();
                 return ui::EventResult::Consumed;
             }
+            // 1.22.7 : le << Revenir >> de la bande ; le lien << Tout corriger rapidement >> d'un titre.
+            if (bandUndo_.contains(d->pos)) {
+                (void)d_.undoBand();
+                return ui::EventResult::Consumed;
+            }
+            for (const auto& [r, g] : allLinks_)
+                if (r.contains(d->pos)) {
+                    const int group = g;   // la liste se refait : le rang d'abord
+                    (void)d_.quickFixAll(group);
+                    return ui::EventResult::Consumed;
+                }
             if (zoomOut_.contains(d->pos) || zoomIn_.contains(d->pos) || zoomFit_.contains(d->pos)) {
                 if (zoomFit_.contains(d->pos)) setZoom(1.f);
                 else setZoom(zoom * (zoomIn_.contains(d->pos) ? 1.25f : 0.8f));
@@ -1440,6 +1580,8 @@ private:
     gfx::Rect         area_{}, toggle_{}, zoomIn_{}, zoomOut_{}, zoomFit_{};   // 1.16.1
     gfx::Rect         searchBox_{}, chips_{}, chipErr_{}, chipWarn_{};          // 1.22.4
     gfx::Rect         chipView_{}, viewBar_{}, viewPrev_{}, viewNext_{}, viewName_{};   // 1.22.6 : la puce de la vue, la barre des vues
+    gfx::Rect         band_{}, bandUndo_{};                                       // 1.22.7 : la bande << Corrige : ... >>, son Revenir
+    std::vector<std::pair<gfx::Rect, int>> allLinks_;                             // 1.22.7 : les liens << Tout corriger rapidement >>
     std::string       chipViewText_;
     std::vector<float> rowTop_;                                                // 1.22.4 : le haut de chaque ligne montree (dans la liste)
     std::vector<std::pair<gfx::Rect, std::size_t>> hits_;                    // 1.16.1 : les lignes montrees de la liste
@@ -1851,6 +1993,11 @@ core::Status AiPreviewDialog::buildUi() {
     });
     search_->recall();
     search_->setText({});
+    // 1.22.7 : RETOUR - fermer sans rien faire : ni refuser, ni appliquer, ni toucher la saisie (la proposition reste a decider).
+    back_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Retour", base + ".retour")));
+    back_->setStyle(ui::Button::Style::Flat);
+    back_->setTooltip("Fermer la pr\xC3\xA9visualisation sans rien d\xC3\xA9" "cider (\xC3\x89" "chap)");
+    links_ += back_->clicked->connect([this] { close(); });
     edit_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Modifier la demande", base + ".modifier")));
     edit_->setTooltip("Remettre la demande dans la saisie pour la reformuler (cette proposition reste \xC3\xA0 d\xC3\xA9" "cider, sur sa carte).");
     links_ += edit_->clicked->connect([this] { editRequest(); });
@@ -1858,7 +2005,7 @@ core::Status AiPreviewDialog::buildUi() {
     cancel_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", base + ".refuser")));
     cancel_->setStyle(ui::Button::Style::Flat);
     cancel_->setTooltip("Refuser la proposition (une question d'abord) : le projet ne change pas ; sa carte pourra revenir sur ce refus. "
-                        "\xC3\x89" "chap ferme cette fen\xC3\xAAtre SANS d\xC3\xA9" "cider.");
+                        "Retour (ou \xC3\x89" "chap) ferme cette fen\xC3\xAAtre SANS d\xC3\xA9" "cider.");
     links_ += cancel_->clicked->connect([this] { cancel(); });
     apply_ = &static_cast<ui::Button&>(b->addChild(std::make_unique<ui::Button>("Appliquer", base + ".appliquer")));
     apply_->setStyle(ui::Button::Style::Primary);
@@ -1878,6 +2025,7 @@ core::Status AiPreviewDialog::buildUi() {
 }
 
 void AiPreviewDialog::refresh() {
+    XPG_MESURE("ia.apercu.rafraichir");   // 1.22.7 : la previsualisation refaite (une correction, l'avis du logiciel, une vue)
     auto& a = panel_.assistant();
     const Proposal* p = a.proposal(message_);
     if (!p) return;
@@ -1886,6 +2034,22 @@ void AiPreviewDialog::refresh() {
     plan::Plan readyPlan;
     waiting_ = !panel_.chat().resultReady(message_, &check_, &main_, &readyPlan);
     planReady_ = !waiting_;
+    // 1.22.7 : UNE REVERIFICATION (une correction d'une grosse proposition, le projet qui change) - sur le fil de fond de la
+    // carte, comme la premiere : la liste et l'apercu d'avant restent montres (le menu attend, Appliquer aussi), la bande et
+    // l'apercu disent << Reverification... >> ; la fenetre garde la main. Le resultat arrive : la liste se refait (Update).
+    rechecking_ = waiting_ && shownOnce_;
+    if (rechecking_) {
+        adoptStoredVerdict(*p, !key_.empty() && proposalKey(*p) != key_);
+        if (apply_) apply_->setEnabled(false);
+        if (cancel_) cancel_->setEnabled(p->state == "proposee");
+        if (fixMenu_ && fixMenu_->isOpen()) fixMenu_->close();
+        key_ = proposalKey(*p);
+        if (auto* root = widgetRoot()) {
+            root->invalidateLayout();
+            root->invalidate();
+        }
+        return;
+    }
     if (waiting_) {
         check_ = Check{};
         main_ = Preview{};
@@ -1919,9 +2083,10 @@ void AiPreviewDialog::refresh() {
     auto* body = dynamic_cast<AiPreviewBody*>(widgetRoot());
     // La liste de gauche.
     std::vector<Row> rows;
-    const auto heading = [&](std::string t) {
+    const auto heading = [&](std::string t, int group = 0) {
         rows.push_back({Row::Kind::Heading, std::move(t), {}, 0});
         rows.back().base = rows.back().text;   // 1.22.6 : le compte << sur cette vue >> s'y ajoute (relabel)
+        rows.back().group = group;             // 1.22.7 : Tout corriger rapidement
     };
     // 1.22.1 : LES CORRECTIONS FAITES (le clic droit sur une erreur) - ce qui a ete corrige, une ligne chacune ; le clic droit
     // sur l'une d'elles la reprend (Revenir). Puis les erreurs et les avertissements, les doublons regroupes.
@@ -1937,14 +2102,21 @@ void AiPreviewDialog::refresh() {
         rows.push_back({Row::Kind::Note, "Corrig\xC3\xA9 : " + fixes::summary(*p) + ".", {}, 0});
         for (std::size_t k = 0; k < corrections_.size(); ++k) {
             const auto& c = corrections_[k];
-            Row r{Row::Kind::Item, c.text, c.state, c.what};
+            // 1.22.7 : une correction rapide le dit ; une retouche se lit comme une modification (bleue)
+            Row r{Row::Kind::Item, c.text + (quickKeys_.count(c.key) ? std::string(" (corrig\xC3\xA9 rapidement)") : std::string{}), c.state,
+                  c.what == 3 ? 1 : c.what};
             r.excluded = c.what == 2;
             r.list = 3;
             r.line = k;
-            // 1.22.4 : ce qu'elle touche - les objets d'une operation retiree, ceux qui lisent la variable choisie
+            r.key = c.key;
+            // 1.22.4 : ce qu'elle touche - les objets d'une operation retiree, ceux qui lisent la variable choisie ; 1.22.7 : ceux
+            // d'une operation retouchee
             if (c.what == 2) {
                 r.ref = Row::Ref::Ops;
                 r.ops = c.undo.ops;
+            } else if (c.what == 3) {
+                r.ref = Row::Ref::Ops;
+                r.ops = {c.op};
             } else if (const VariableChoice* ch = choiceFor(*p, c.undo.name)) {
                 r.ref = Row::Ref::Uses;
                 r.names = {ch->create && trimCopy(ch->use).empty() ? creatableName(c.undo.name) : trimCopy(ch->use)};
@@ -1959,7 +2131,8 @@ void AiPreviewDialog::refresh() {
         heading("ERREURS (" + std::to_string(shownErrors) + ") \xE2\x80\x94 "
                 + (anywayTitle ? std::string(shownErrors > 1 ? "laiss\xC3\xA9" "es de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB"
                                                                       : "laiss\xC3\xA9" "e de c\xC3\xB4t\xC3\xA9 par \xC2\xAB Appliquer malgr\xC3\xA9 \xC2\xBB")
-                               : std::string("rien ne s'applique tant qu'il y en a")));
+                               : std::string("rien ne s'applique tant qu'il y en a")),
+                1);   // 1.22.7 : Tout corriger rapidement
         for (std::size_t k = 0; k < errorLines_.size(); ++k) {
             Row r{Row::Kind::Error, errorLines_[k].text, {}, 0};
             r.list = 1;
@@ -1972,7 +2145,7 @@ void AiPreviewDialog::refresh() {
         }
     }
     if (check_.warnings.size() > buildWarnings) {
-        heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size() - buildWarnings) + ")");
+        heading("AVERTISSEMENTS (" + std::to_string(check_.warnings.size() - buildWarnings) + ")", 2);
         for (std::size_t k = 0; k < warningLines_.size(); ++k) {
             Row r{Row::Kind::Warning, warningLines_[k].text, {}, 0};
             r.list = 2;
@@ -1996,7 +2169,7 @@ void AiPreviewDialog::refresh() {
         else if (!verdictKnown_ || !verdict_.ran) state = "pas lanc\xC3\xA9s";
         else state = build::countText(verdict_) + " \xC2\xB7 " + build::durationText(verdict_.ms);
         const std::size_t n = verdictKnown_ && verdict_.ran ? verdict_.findings.size() : 0;
-        heading("G\xC3\x89N\xC3\x89RER ET COMPILER" + (n > 0 ? " (" + std::to_string(n) + ")" : std::string{}) + " \xE2\x80\x94 " + state);
+        heading("G\xC3\x89N\xC3\x89RER ET COMPILER" + (n > 0 ? " (" + std::to_string(n) + ")" : std::string{}) + " \xE2\x80\x94 " + state, 4);
         if (!verdictKnown_ && !expected) {
             rows.push_back({Row::Kind::Note, "Pas d'avis du logiciel pour cette proposition : elle date d'avant la 1.22.5. Redemande-la \xC3\xA0 "
                                              "l'IA pour l'avoir (ou modifie-la : il se calcule alors).", {}, 0});
@@ -2026,6 +2199,18 @@ void AiPreviewDialog::refresh() {
                                                      + (verdict_.before > 1 ? " constats (pas repris ici)." : " constat (pas repris ici)."),
                                 {}, 0});
         }
+    }
+    // 1.22.7 : CORRIGER RAPIDEMENT - ce que ferait chaque ligne (les erreurs, les avertissements, les constats du logiciel), une
+    // fois par verification : le menu, le lien des titres et Tout corriger rapidement le relisent (jamais a chaque image).
+    {
+        const auto doc = a.host().document ? a.host().document() : nullptr;
+        const hmi::Project* project = doc ? &doc->project : nullptr;
+        quickErrors_.clear();
+        quickWarnings_.clear();
+        quickBuild_.clear();
+        for (const auto& l : errorLines_) quickErrors_.push_back(fixes::quick(*p, check_, l, project));
+        for (const auto& l : warningLines_) quickWarnings_.push_back(fixes::quick(*p, check_, l, nullptr));
+        for (std::size_t k = 0; k < buildLines_.size(); ++k) quickBuild_.push_back(fixes::quick(*p, check_, buildLine(buildLines_[k], check_, p->ops.size(), k), project));
     }
     // 1.21.0 : LES SUPPRESSIONS - chacune : sa strategie, le resume par genre, ce qui part, ce qui en depend, les
     // consequences ; un clic la retire du plan (ou l'y remet). Les suppressions retirees restent listees (a remettre).
@@ -2420,7 +2605,28 @@ void AiPreviewDialog::refresh() {
         } else if (objectOnly) {
             body->highlight = std::move(kept);
         }
+        // 1.22.7 : CE QUI VIENT D'ETRE CORRIGE - ses lignes de CORRECTIONS (mises en evidence un instant, une fois la
+        // verification faite : la liste deroulee jusqu'a elles, leurs objets encadres - le cadre qui pulse de la 1.22.4).
+        body->flashed.clear();
+        for (std::size_t i = 0; i < body->rows.size(); ++i)
+            if (body->rows[i].list == 3 && std::find(flashKeys_.begin(), flashKeys_.end(), body->rows[i].key) != flashKeys_.end())
+                body->flashed.push_back(static_cast<int>(i));
         body->applyFilter();
+        if (flashPending_ && !waiting_) flash();
+    }
+    // 1.22.7 : la bande ne parle que de corrections qui sont encore la (reprises ailleurs : elle s'en va) ; << (corrige
+    // rapidement) >> de meme.
+    if (!waiting_) {
+        const auto present = [&](const std::string& k) {
+            return std::any_of(corrections_.begin(), corrections_.end(), [&](const fixes::Correction& c) { return c.key == k; });
+        };
+        if (!bandKeys_.empty() && std::none_of(bandKeys_.begin(), bandKeys_.end(), present)) {
+            bandText_.clear();
+            bandUndo_.clear();
+            bandKeys_.clear();
+        }
+        std::erase_if(quickKeys_, [&](const std::string& k) { return !present(k); });
+        shownOnce_ = true;
     }
     if (body && !planFolded_ && !planGroups.empty()) {
         for (const auto& g : planGroups) body->folded.insert(g);
@@ -2543,9 +2749,11 @@ bool AiPreviewDialog::chooseVariable(int index) {
     // 1.22.1 : le choix vaut pour CETTE variable introuvable (toutes les operations qui la citent) - les autres gardent leur
     // erreur jusqu'a leur propre choix (avant : un seul choix pour toutes, Proposal::variable).
     pinned_ = false;
+    if (viewCount() > 0) shownName_ = viewName(shown_);   // 1.22.7 : la vue montree reste la meme
+    const auto before = correctionState();
     const bool ok = panel_.assistant().chooseVariable(message_, missingName_, choice);
     panel_.sync();
-    refresh();
+    corrected(before, false, {});   // 1.22.7 : la bande, la ligne de CORRECTIONS mise en evidence
     return ok;
 }
 
@@ -2588,7 +2796,8 @@ std::vector<std::string> AiPreviewDialog::warningRows() const {
 
 std::vector<std::string> AiPreviewDialog::correctionRows() const {
     std::vector<std::string> out;
-    for (const auto& c : corrections_) out.push_back(c.text + " | " + c.state);
+    for (const auto& c : corrections_)
+        out.push_back(c.text + (quickKeys_.count(c.key) ? std::string(" (corrig\xC3\xA9 rapidement)") : std::string{}) + " | " + c.state);   // 1.22.7
     return out;
 }
 
@@ -2606,33 +2815,23 @@ bool AiPreviewDialog::openFixMenu(int list, std::size_t line, gfx::Point at) {
         m = fixes::menuFor(*p, corrections_[line]);
     } else if (list == 4 && line < buildLines_.size()) {
         // 1.22.5 : un constat du logiciel - le menu d'une erreur (Retirer l'operation, Copier, Demander a l'IA) ; la demande a
-        // l'IA porte la correction du logiciel quand il en a une.
+        // l'IA porte la correction du logiciel quand il en a une. 1.22.7 : son rang dans le verdict (buildLines_ en est la
+        // copie) - le menu offre la correction du logiciel, et Corriger rapidement la fait.
         const auto& f = buildLines_[line];
         const auto doc = panel_.assistant().host().document ? panel_.assistant().host().document() : nullptr;
-        m = fixes::menuFor(*p, check_, buildLine(f, check_, p->ops.size()), doc ? &doc->project : nullptr);
+        m = fixes::menuFor(*p, check_, buildLine(f, check_, p->ops.size(), line), doc ? &doc->project : nullptr);
         m.title = f.step + (f.error ? " : erreur" : " : avertissement");
-        if (!f.fixFrom.empty()) {
+        if (!f.fixFrom.empty())
             for (auto& act : m.actions)
                 if (act.kind == fixes::Action::Kind::AskAi)
                     act.value += "\nLe logiciel propose de remplacer \xC2\xAB " + f.fixFrom + " \xC2\xBB par \xC2\xAB " + f.fixTo + " \xC2\xBB.";
-            // 1.22.5 : la correction du logiciel, d'un clic (le rang du constat dans le verdict de la proposition).
-            for (std::size_t k = 0; k < verdict_.findings.size(); ++k) {
-                const auto& v = verdict_.findings[k];
-                if (v.step != f.step || v.message != f.message || v.where != f.where || v.fixFrom != f.fixFrom) continue;
-                fixes::Action fix;
-                fix.kind = fixes::Action::Kind::BuildFix;
-                fix.label = "Appliquer la correction du logiciel";
-                fix.note = "remplacer \xC2\xAB " + f.fixFrom + " \xC2\xBB par \xC2\xAB " + f.fixTo + " \xC2\xBB";
-                fix.ops = {k};
-                fixes::Action sep;
-                m.actions.insert(m.actions.begin(), sep);
-                m.actions.insert(m.actions.begin(), fix);
-                break;
-            }
-        }
     } else {
         return false;
     }
+    // 1.22.7 : << Corriger rapidement >> tel qu'il a ete calcule pour la ligne (le meme que le lien des titres).
+    if ((list == 1 || list == 2 || list == 4) && line < quickOf(list).size())
+        for (auto& act : m.actions)
+            if (act.kind == fixes::Action::Kind::Quick) act = quickOf(list)[line];
     fixes::fill(*fixMenu_, m, fixActions_);
     fixMenu_->setBounds(root->bounds());
     gfx::Size surface = ui::surfaceSize();
@@ -2742,15 +2941,258 @@ void AiPreviewDialog::runFix(int id) {
             // Le choix du haut vise cette variable ; sa liste s'ouvre au prochain Update (le menu s'est referme).
             focusVariable(act.name, true);
             return;
+        case K::QuickAll:   // 1.22.7 : le clic droit d'un titre
+            (void)quickFixAll(act.ops.empty() ? 0 : static_cast<int>(act.ops.front()));
+            return;
         default: {
+            // 1.22.7 : LA FENETRE RESTE OUVERTE - la proposition change, la verification et l'apercu se refont (la vue montree
+            // reste la meme), ce qui a change se montre (la bande, la ligne de CORRECTIONS, les objets encadres).
+            if (viewCount() > 0) shownName_ = viewName(shown_);
+            const auto before = correctionState();
             std::string said;
             (void)fixes::apply(panel_.assistant(), message_, act, &said);
             panel_.notice(said);
             panel_.sync();
-            refresh();
+            corrected(before, act.kind == K::Quick, {});
             return;
         }
     }
+}
+
+// ---- 1.22.7 : corriger rapidement, sans fermer -------------------------------------------------------------------------
+const std::vector<fixes::Action>& AiPreviewDialog::quickOf(int list) const {
+    static const std::vector<fixes::Action> none;
+    return list == 1 ? quickErrors_ : list == 2 ? quickWarnings_ : list == 4 ? quickBuild_ : none;
+}
+
+fixes::Action AiPreviewDialog::quickFor(int list, std::size_t line) const {
+    const auto& qs = quickOf(list);
+    return line < qs.size() ? qs[line] : fixes::Action{};
+}
+
+std::size_t AiPreviewDialog::quickCount(int list) const {
+    const auto& qs = quickOf(list);
+    return static_cast<std::size_t>(std::count_if(qs.begin(), qs.end(), [](const fixes::Action& q) { return q.enabled; }));
+}
+
+bool AiPreviewDialog::lineOf(int list, std::size_t line, fixes::Line& out) const {
+    const Proposal* p = panel_.assistant().proposal(message_);
+    if (list == 1 && line < errorLines_.size()) out = errorLines_[line];
+    else if (list == 2 && line < warningLines_.size()) out = warningLines_[line];
+    else if (list == 4 && line < buildLines_.size() && p) out = buildLine(buildLines_[line], check_, p->ops.size(), line);
+    else return false;
+    return true;
+}
+
+std::map<std::string, std::string> AiPreviewDialog::correctionState() const {
+    std::map<std::string, std::string> out;
+    if (const Proposal* p = panel_.assistant().proposal(message_))
+        for (const auto& c : fixes::corrections(*p)) out[c.key] = c.text + "|" + c.state;
+    return out;
+}
+
+void AiPreviewDialog::corrected(const std::map<std::string, std::string>& before, bool quick, const std::string& headline) {
+    // Ce qui est nouveau (ou change) dans les corrections : la bande le dit, Revenir le reprend, ses lignes s'eclairent.
+    std::vector<std::string>   fresh;
+    std::vector<fixes::Action> undo;
+    std::string                line;
+    if (const Proposal* p = panel_.assistant().proposal(message_))
+        for (const auto& c : fixes::corrections(*p)) {
+            const auto it = before.find(c.key);
+            if (it != before.end() && it->second == c.text + "|" + c.state) continue;
+            fresh.push_back(c.key);
+            undo.push_back(c.undo);
+            line = c.what == 0 ? c.text + " (\xC3\xA0 cr\xC3\xA9" "er)" : c.what == 2 ? c.text + " retir\xC3\xA9" "e" : c.text;
+            if (quick) quickKeys_.insert(c.key);
+            else quickKeys_.erase(c.key);
+        }
+    if (!fresh.empty()) {
+        bandText_ = !headline.empty() ? headline
+                    : fresh.size() == 1 ? "Corrig\xC3\xA9 : " + line + (quick ? " (corrig\xC3\xA9 rapidement)" : "")
+                                        : "Corrig\xC3\xA9 : " + std::to_string(fresh.size()) + " corrections";
+        bandUndo_ = std::move(undo);
+        bandKeys_ = fresh;
+        flashKeys_ = std::move(fresh);
+        flashPending_ = true;
+    } else {
+        flashKeys_.clear();
+        flashPending_ = false;
+    }
+    refresh();
+}
+
+void AiPreviewDialog::flash() {
+    flashPending_ = false;
+    auto* b = bodyOf(*this);
+    if (!b || b->flashed.empty()) return;
+    b->flashStart = -1.0;
+    b->selected = b->flashed.front();
+    b->highlight.clear();
+    for (const int k : b->flashed)
+        if (k >= 0 && static_cast<std::size_t>(k) < b->rows.size())
+            for (const auto id : b->shownTargets(b->rows[static_cast<std::size_t>(k)])) addUnique(b->highlight, id);
+    b->pulseStart = -1.0;
+    b->show(b->flashed.front());   // son groupe deplie, la liste deroulee jusqu'a elle
+    b->invalidate();
+}
+
+bool AiPreviewDialog::quickFix(int list, std::size_t line) {
+    if (done_ || waiting_) return false;
+    const fixes::Action q = quickFor(list, line);   // une copie : la liste se refait
+    if (q.kind != fixes::Action::Kind::Quick || !q.enabled) return false;
+    if (viewCount() > 0) shownName_ = viewName(shown_);
+    const auto before = correctionState();
+    std::string said;
+    const bool ok = fixes::apply(panel_.assistant(), message_, q, &said);
+    panel_.notice(said);
+    panel_.sync();
+    corrected(before, true, {});
+    return ok;
+}
+
+std::size_t AiPreviewDialog::quickFixAll(int list) {
+    if (done_ || waiting_) return 0;
+    const std::vector<fixes::Action> qs = quickOf(list);   // une copie : la liste se refait
+    std::vector<std::string> left;
+    std::size_t usable = 0;
+    for (std::size_t k = 0; k < qs.size(); ++k) {
+        if (qs[k].enabled) {
+            ++usable;
+            continue;
+        }
+        fixes::Line l;
+        if (lineOf(list, k, l)) left.push_back(shortOf(l, check_));
+    }
+    if (usable == 0) {
+        panel_.notice("Rien \xC3\xA0 corriger rapidement ici : " + std::string(qs.empty() ? "aucune ligne." : "aucune correction s\xC3\xBBre (clic droit sur une ligne : pourquoi)."));
+        return 0;
+    }
+    if (viewCount() > 0) shownName_ = viewName(shown_);
+    const auto before = correctionState();
+    std::string said;
+    const std::size_t fixed = fixes::applyAll(panel_.assistant(), message_, qs, &said);
+    panel_.notice(said);
+    panel_.sync();
+    // << 6 erreurs corrigees, 2 restent : << Vanne.F0 >>, Code brut... >>
+    const bool many = fixed > 1;
+    std::string headline = std::to_string(fixed) + (list == 1   ? (many ? " erreurs corrig\xC3\xA9" "es" : " erreur corrig\xC3\xA9" "e")
+                                                    : list == 2 ? (many ? " avertissements corrig\xC3\xA9s" : " avertissement corrig\xC3\xA9")
+                                                                : (many ? " constats corrig\xC3\xA9s" : " constat corrig\xC3\xA9"));
+    const std::size_t rest = qs.size() - std::min(qs.size(), fixed);
+    if (rest > 0) {
+        headline += ", " + std::to_string(rest) + (rest > 1 ? " restent" : " reste");
+        if (!left.empty()) {
+            headline += " : " + left.front();
+            if (left.size() > 1) headline += ", " + left[1];
+            if (left.size() > 2) headline += ", \xE2\x80\xA6";
+        }
+        headline += " (clic droit : pourquoi)";
+    }
+    corrected(before, true, fixed > 0 ? headline : std::string{});
+    return fixed;
+}
+
+bool AiPreviewDialog::openGroupMenu(int list, gfx::Point at) {
+    const Proposal* p = panel_.assistant().proposal(message_);
+    auto* root = widgetRoot();
+    if (!p || !fixMenu_ || !root || done_ || waiting_ || (list != 1 && list != 2 && list != 4)) return false;
+    const std::size_t n = quickCount(list);
+    fixes::Menu m;
+    m.title = list == 1 ? "Erreurs" : list == 2 ? "Avertissements" : "G\xC3\xA9n\xC3\xA9rer et Compiler";
+    fixes::Action all;
+    all.kind = fixes::Action::Kind::QuickAll;
+    all.label = "Tout corriger rapidement";
+    all.ops = {static_cast<std::size_t>(list)};
+    all.enabled = n > 0 && p->state == "proposee";
+    all.note = n > 0 ? std::to_string(n) + (n > 1 ? " corrections s\xC3\xBBres, en une fois" : " correction s\xC3\xBBre") + " (la proposition seule ; Revenir les reprend)."
+                     : std::string("Aucune correction s\xC3\xBBre ici : clic droit sur une ligne pour savoir pourquoi.");
+    if (!all.enabled) all.why = all.note;
+    m.actions.push_back(std::move(all));
+    m.actions.push_back(fixes::Action{});   // un separateur
+    fixes::Action copy;
+    copy.kind = fixes::Action::Kind::Copy;
+    copy.label = "Copier les lignes";
+    const auto& qs = quickOf(list);
+    for (std::size_t k = 0; k < qs.size(); ++k) {
+        fixes::Line l;
+        if (lineOf(list, k, l)) copy.value += (copy.value.empty() ? "" : "\n") + l.text;
+    }
+    m.actions.push_back(std::move(copy));
+    fixes::fill(*fixMenu_, m, fixActions_);
+    fixMenu_->setBounds(root->bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {root->bounds().right() + 400.f, root->bounds().bottom() + 400.f};
+    fixMenu_->openAt(at, surface);
+    return true;
+}
+
+bool AiPreviewDialog::openHeadingMenu(int list) {
+    const auto* b = bodyOf(*this);
+    if (!b) return false;
+    const gfx::Rect r = b->groupHeadingRect(list);
+    const gfx::Rect l = b->listRect();
+    return openGroupMenu(list, r.w > 0.f ? gfx::Point{r.x + 40.f, r.y + r.h / 2.f} : gfx::Point{l.x + l.w / 2.f, l.y + l.h / 2.f});
+}
+
+std::string AiPreviewDialog::menuWhy(const std::string& label) const {
+    if (!fixMenu_ || !fixMenu_->isOpen()) return {};
+    std::string found;
+    std::function<void(const std::vector<ui::PopupMenu::Item>&, const std::string&)> walk = [&](const std::vector<ui::PopupMenu::Item>& items,
+                                                                                               const std::string& path) {
+        for (const auto& it : items) {
+            if (it.separator || it.heading) continue;
+            const std::string full = path.empty() ? it.label : path + " > " + it.label;
+            if (it.children.empty()) {
+                if (full == label && !it.enabled && found.empty()) found = it.disabledReason.empty() ? std::string("(gris\xC3\xA9" "e)") : it.disabledReason;
+            } else {
+                walk(it.children, full);
+            }
+        }
+    };
+    walk(fixMenu_->items(), {});
+    return found;
+}
+
+std::string AiPreviewDialog::bandText() const {
+    std::string t = bandText_;
+    if (!t.empty() && !bandUndo_.empty()) t += " \xC2\xB7 Revenir";
+    if (rechecking_) t += t.empty() ? std::string("Rev\xC3\xA9rification de la proposition sur un fil de fond\xE2\x80\xA6") : std::string(" \xC2\xB7 Rev\xC3\xA9rification\xE2\x80\xA6");
+    return t;
+}
+
+bool AiPreviewDialog::undoBand() {
+    if (bandUndo_.empty() || done_) return false;
+    if (viewCount() > 0) shownName_ = viewName(shown_);
+    const auto before = correctionState();
+    const std::vector<fixes::Action> undo = std::move(bandUndo_);
+    bandText_.clear();
+    bandUndo_.clear();
+    bandKeys_.clear();
+    bool any = false;
+    std::string said;
+    for (auto it = undo.rbegin(); it != undo.rend(); ++it) any = fixes::apply(panel_.assistant(), message_, *it, &said) || any;   // la derniere d'abord
+    panel_.notice(any && undo.size() > 1 ? std::string("Corrections reprises : la proposition reprend sa forme d'avant (le projet n'a pas chang\xC3\xA9).") : said);
+    panel_.sync();
+    corrected(before, false, {});
+    return any;
+}
+
+std::vector<std::string> AiPreviewDialog::flashedRows() const {
+    std::vector<std::string> out;
+    if (const auto* b = bodyOf(*this))
+        for (const int k : b->flashed)
+            if (k >= 0 && static_cast<std::size_t>(k) < b->rows.size()) out.push_back(b->rows[static_cast<std::size_t>(k)].text);
+    return out;
+}
+
+gfx::Rect AiPreviewDialog::bandUndoRect() const {
+    const auto* b = bodyOf(*this);
+    return b ? b->bandUndoRect() : gfx::Rect{};
+}
+
+gfx::Rect AiPreviewDialog::quickAllRect(int list) const {
+    const auto* b = bodyOf(*this);
+    return b ? b->quickAllRect(list) : gfx::Rect{};
 }
 
 void AiPreviewDialog::Update(const menu::FrameContext& f) {
