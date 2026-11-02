@@ -4438,6 +4438,42 @@ const std::vector<Topic>& topics() {
                          "restent\xE2\x80\xA6 \xC2\xBB).", {}},
              {K::Bullet, "Une grosse proposition se rev\xC3\xA9rifie en arri\xC3\xA8re-plan (\xC2\xAB "
                          "Rev\xC3\xA9rification\xE2\x80\xA6 \xC2\xBB) ; Appliquer attend la fin.", {}},
+             {K::Heading, "L'IA cr\xC3\xA9" "e les unit\xC3\xA9s qui manquent (1.22.8)", {}, "1.22.8"},
+             {K::Paragraph, "Une variable en mmCE, %HR ou t/h dans un projet qui n'a pas cette unit\xC3\xA9 : "
+                         "l'IA la cr\xC3\xA9" "e dans sa proposition (l'op\xC3\xA9ration creer_unite : le "
+                         "symbole, la famille, le facteur vers l'unit\xC3\xA9 de r\xC3\xA9" "f\xC3\xA9rence, "
+                         "le d\xC3\xA9" "calage, le libell\xC3\xA9), puis s'en sert pour les variables.", {}, "1.22.8"},
+             {K::Bullet, "**Les m\xC3\xAAmes contr\xC3\xB4les que Configuration \xE2\x80\xBA Unit\xC3\xA9s "
+                         "de mesure** : un symbole d\xC3\xA9j\xC3\xA0 pris (\xC2\xAB existe "
+                         "d\xC3\xA9j\xC3\xA0 (Pression, unit\xC3\xA9 fournie) \xC2\xBB), un facteur nul ou "
+                         "absent (jamais 1 par d\xC3\xA9" "faut) et une famille inconnue sont "
+                         "**refus\xC3\xA9s**. Une famille neuve se cr\xC3\xA9" "e avec son unit\xC3\xA9 de "
+                         "r\xC3\xA9" "f\xC3\xA9rence. Une unit\xC3\xA9 identique \xC3\xA0 une existante est "
+                         "r\xC3\xA9utilis\xC3\xA9" "e.", {}, "1.22.8"},
+             {K::Bullet, "**Le facteur est v\xC3\xA9rifi\xC3\xA9** : pour une unit\xC3\xA9 courante (mmCE, "
+                         "cmCE, mCE, inH2O, mmHg, atm, degF, L/min, Nm3/min, t/h, kW, kWh, tr/min, "
+                         "%HR\xE2\x80\xA6), un facteur qui s'\xC3\xA9" "carte de plus de 1 % est un "
+                         "avertissement. L'aper\xC3\xA7u montre la conversion : \xC2\xAB Unit\xC3\xA9 mmCE "
+                         "(pression) : 1 mmCE = 9,80665 Pa \xC2\xBB.", {}, "1.22.8"},
+             {K::Bullet, "L'unit\xC3\xA9 s'applique **avant** les variables qui l'emploient, et tout se "
+                         "reprend d'un seul Ctrl+Z. L'IA peut aussi changer le facteur, le "
+                         "d\xC3\xA9" "calage ou le libell\xC3\xA9 d'une unit\xC3\xA9 du projet (jamais d'une "
+                         "unit\xC3\xA9 fournie).", {}, "1.22.8"},
+             {K::Bullet, "**Sur une erreur \xC2\xAB unit\xC3\xA9 inconnue \xC2\xBB**, dans la "
+                         "pr\xC3\xA9visualisation :", {}, "1.22.8"},
+             {K::Paragraph, "- **Corriger rapidement** cr\xC3\xA9" "e l'unit\xC3\xA9 quand le logiciel la "
+                         "conna\xC3\xAEt. **Tout corriger rapidement** n'en cr\xC3\xA9" "e qu'**une par "
+                         "symbole** : 26 variables en mmCE donnent une seule unit\xC3\xA9 ; - "
+                         "**Cr\xC3\xA9" "er l'unit\xC3\xA9 \xC2\xAB \xE2\x80\xA6 \xC2\xBB\xE2\x80\xA6** "
+                         "ouvre une petite fen\xC3\xAAtre : remplie d'office pour une unit\xC3\xA9 connue, "
+                         "\xC3\xA0 compl\xC3\xA9ter sinon (la famille, le facteur) ; - une unit\xC3\xA9 que "
+                         "le logiciel ne conna\xC3\xAEt pas est gris\xC3\xA9" "e avec la raison, et \xC2\xAB "
+                         "Cr\xC3\xA9" "er l'unit\xC3\xA9\xE2\x80\xA6 \xC2\xBB reste dessous. L'unit\xC3\xA9 "
+                         "va dans la **proposition**, jamais directement dans le projet ; **Revenir** la "
+                         "retire.", {}, "1.22.8"},
+             {K::Warning, "Un symbole se compare sans la casse, comme dans l'\xC3\xA9" "diteur : \xC2\xAB MW "
+                         "\xC2\xBB et \xC2\xAB mW \xC2\xBB sont le m\xC3\xAAme symbole. Les membres d'un "
+                         "type cr\xC3\xA9\xC3\xA9 par l'IA ne prennent pas d'unit\xC3\xA9.", {}, "1.22.8"},
              {K::Heading, "Toutes les vues d'une proposition (1.22.6)", {}},
              {K::Bullet, "Une proposition qui cr\xC3\xA9" "e ou modifie **plusieurs vues** les montre "
                          "toutes. Au-dessus de l'aper\xC3\xA7u, une barre : \xC2\xAB < Vue 2/4 : Popup_Vanne "
@@ -4697,6 +4733,11 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Une proposition qui a des erreurs ne s'applique pas ; avec \xC2\xAB Appliquer "
                          "malgr\xC3\xA9 les erreurs \xC2\xBB (Param\xC3\xA8tres de l'Assistant), seules les "
                          "\xC3\xA9tapes valid\xC3\xA9" "es s'appliquent, et les autres sont dites.", {}},
+             {K::Bullet, "1.22.8 : la confirmation d'\xC2\xAB Appliquer malgr\xC3\xA9 les erreurs \xC2\xBB "
+                         "**d\xC3\xA9" "file** quand la liste est longue (ses boutons restent visibles), et "
+                         "des erreurs qui ne diff\xC3\xA8rent que par le nom tiennent sur une ligne : "
+                         "\xC2\xAB Variable \xC2\xAB A \xC2\xBB, \xC2\xAB B \xC2\xBB, \xC2\xAB C \xC2\xBB et "
+                         "23 autres (26 erreurs) : \xE2\x80\xA6 \xC2\xBB.", {}},
              {K::Bullet, "**R\xC3\xA9utiliser** : une variable, un type ou un \xC3\xA9quipement qui existe "
                          "d\xC3\xA9j\xC3\xA0 **\xC3\xA0 l'identique** est r\xC3\xA9utilis\xC3\xA9 (le plan "
                          "et le compte rendu le disent, il n'est pas compt\xC3\xA9 comme cr\xC3\xA9\xC3\xA9) "
@@ -4947,6 +4988,52 @@ const std::vector<Topic>& topics() {
              {K::Warning, "Limites : la d\xC3\xA9tection repose sur des mots-cl\xC3\xA9s (un en-t\xC3\xAAte "
                          "atypique se corrige dans la fen\xC3\xAAtre Mod\xC3\xA8le\xE2\x80\xA6) ; ni ancien "
                          ".xls, ni Modbus RTU ; 8 classeurs au plus gard\xC3\xA9s en m\xC3\xA9moire.", {}},
+             {K::Heading, "Un mod\xC3\xA8le de vues \xC3\xA0 reproduire (1.22.8)", {}, "1.22.8"},
+             {K::Paragraph, "Joins un **PV d'approbation de vues** (un PDF : une page de garde, puis pour "
+                         "chaque vue une page \xC2\xAB VUE : <nom> \xC2\xBB avec sa capture et son cartouche "
+                         "APPROBATION, et sa page COMMENTAIRES) ou des **captures d'\xC3\xA9" "cran** (PNG, "
+                         "JPEG) : l'Assistant les lit comme un **mod\xC3\xA8le \xC3\xA0 reproduire**. Le "
+                         "mod\xC3\xA8le donne la **forme** ; les **donn\xC3\xA9" "es** viennent toujours de "
+                         "ton projet.", {}, "1.22.8"},
+             {K::Bullet, "**Ce qui est lu**, sur un fil de fond : la liste des vues (le nom, la page, "
+                         "l'approbation et les commentaires quand ils sont \xC3\xA9" "crits en texte), "
+                         "l'**image de chaque vue**, recadr\xC3\xA9" "e sur la capture, et la **charte "
+                         "graphique** : les couleurs dominantes avec leur part, l'en-t\xC3\xAAte et le "
+                         "bandeau du bas r\xC3\xA9p\xC3\xA9t\xC3\xA9s d'une vue \xC3\xA0 l'autre.", {}, "1.22.8"},
+             {K::Bullet, "Un PV est reconnu par son texte. Une **image** ne l'est pas toute seule : dans "
+                         "**Contexte de la discussion**, le geste **Mod\xC3\xA8le de vues** de sa ligne la "
+                         "fait lire comme un mod\xC3\xA8le ; le m\xC3\xAAme geste l'\xC3\xA9" "carte (un PDF "
+                         "qui n'en est pas un). Le contexte dit \xC2\xAB Mod\xC3\xA8le de vues : 13 vues "
+                         "\xC2\xBB.", {}, "1.22.8"},
+             {K::Bullet, "Demande ensuite par exemple \xC2\xAB **Reproduis ce mod\xC3\xA8le avec les "
+                         "donn\xC3\xA9" "es du projet** \xC2\xBB, \xC2\xAB Cr\xC3\xA9" "e la vue Station "
+                         "comme dans le PV \xC2\xBB, \xC2\xAB M\xC3\xAAme charte que le PV \xC2\xBB : l'IA "
+                         "reprend les vues, leur disposition, les couleurs, l'en-t\xC3\xAAte, le pied et la "
+                         "navigation, et **relie chaque objet aux vraies donn\xC3\xA9" "es** (variables IHM, "
+                         "automate lu d'un .XPG joint, reports, types) par son rep\xC3\xA8re (r\xC3\xA8gle "
+                         "24 de ses consignes).", {}, "1.22.8"},
+             {K::Bullet, "**Rien n'est invent\xC3\xA9** : un objet sans donn\xC3\xA9" "e trouv\xC3\xA9" "e "
+                         "est cr\xC3\xA9\xC3\xA9 **non reli\xC3\xA9**, et la r\xC3\xA9ponse le liste "
+                         "\xC2\xAB \xC3\xA0 relier \xC2\xBB. La v\xC3\xA9rification, l'aper\xC3\xA7u et "
+                         "Appliquer sont les m\xC3\xAAmes que pour toute proposition.", {}, "1.22.8"},
+             {K::Bullet, "**Peu de jetons** : l'IA re\xC3\xA7oit un **r\xC3\xA9sum\xC3\xA9** court du "
+                         "mod\xC3\xA8le (environ 1 000 jetons pour 13 vues) \xC3\xA0 la place du PDF, et "
+                         "l'**image** d'une vue seulement quand elle la demande (l'outil voir_vue_modele, "
+                         "environ 1 600 jetons par image). Une IA sans outils re\xC3\xA7oit les images une "
+                         "fois, avec la demande qui reproduit.", {}, "1.22.8"},
+             {K::Bullet, "**Un calque de r\xC3\xA9" "f\xC3\xA9rence**, si tu le demandes : l'image de la vue "
+                         "devient une ressource du projet, pos\xC3\xA9" "e comme un objet Image "
+                         "**verrouill\xC3\xA9**, \xC3\xA0 demi transparent et **masqu\xC3\xA9 en marche** : "
+                         "le mod\xC3\xA8le se voit sous ta vue dans l'\xC3\xA9" "diteur, jamais en marche.", {}, "1.22.8"},
+             {K::Bullet, "Les images recadr\xC3\xA9" "es sont gard\xC3\xA9" "es dans le cache de l'Assistant "
+                         "; vider le cache les fait refaire depuis la pi\xC3\xA8" "ce.", {}, "1.22.8"},
+             {K::Warning, "Limites : le r\xC3\xB4le des couleurs (d\xC3\xA9" "faut, marche, "
+                         "valeur\xE2\x80\xA6) est dit \xC2\xAB probable \xC2\xBB : l'IA le confirme en "
+                         "regardant l'image. Une approbation coch\xC3\xA9" "e \xC3\xA0 la main ne se lit pas "
+                         "; des commentaires manuscrits non plus, mais l'IA est pr\xC3\xA9venue et peut "
+                         "regarder leur page. Le logiciel n'a pas de palette de projet : la charte est "
+                         "appliqu\xC3\xA9" "e objet par objet. Un PDF de reports n'est pas lu comme une "
+                         "table de reports (seuls les classeurs le sont).", {}, "1.22.8"},
              {K::Heading, "Une grande demande en plusieurs parties (1.21.3)", {}, "1.21.3"},
              {K::Paragraph, "Une r\xC3\xA9ponse de l'IA a une longueur limit\xC3\xA9" "e (**R\xC3\xA9ponse** "
                          "dans les param\xC3\xA8tres : 64 000 jetons par d\xC3\xA9" "faut, environ 500 "
@@ -18630,6 +18717,9 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clarations et retours compris.", {}},
              {K::Bullet, "La case **Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige "
                          "EN(\xE2\x80\xA6)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.", {}},
+             {K::Bullet, "1.22.8 : l'**Assistant IA** peut aussi cr\xC3\xA9" "er une unit\xC3\xA9 du projet "
+                         "(voir \xC2\xAB L'IA cr\xC3\xA9" "e les unit\xC3\xA9s qui manquent \xC2\xBB) : les "
+                         "m\xC3\xAAmes contr\xC3\xB4les qu'ici, dans sa proposition, avant Appliquer.", {}},
              {K::Heading, "L'onglet Convertir : tester une conversion", {}, "1.14.1"},
              {K::Paragraph, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure a deux onglets : "
                          "**Biblioth\xC3\xA8que** (les familles et les unit\xC3\xA9s, ci-dessus) et "

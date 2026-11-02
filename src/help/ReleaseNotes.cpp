@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.7", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.22.8", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.22.7", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 10 h 55"},
     {"1.22.6", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 23 h"},
     {"1.22.5", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 19 h 45"},
     {"1.22.4", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 18 h"},
@@ -169,6 +170,13 @@ const std::vector<Note>& table() {
          "navigation) et relie chaque objet aux VRAIES donn\xC3\xA9" "es du projet (variables IHM, automate lu, reports, types) ; sans donn\xC3\xA9" "e, "
          "l'objet reste non reli\xC3\xA9 et list\xC3\xA9 \xC2\xAB \xC3\xA0 relier \xC2\xBB (r\xC3\xA8gle 24). Elle ne re\xC3\xA7oit qu'un r\xC3\xA9sum\xC3\xA9 court, et l'image d'une vue "
          "quand elle la demande (voir_vue_modele). Clic droit sur la pi\xC3\xA8" "ce : \xC2\xAB Mod\xC3\xA8le de vues \xC2\xBB.",
+         "assistant-ia", ""),
+        note("1.22.8", "Assistant IA", Kind::New,
+         "L'IA CR\xC3\x89" "E LES UNIT\xC3\x89S QUI MANQUENT : creer_unite (symbole, famille, facteur, d\xC3\xA9" "calage) dans sa proposition, avec les m\xC3\xAAmes "
+         "contr\xC3\xB4les que Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure (un symbole d\xC3\xA9j\xC3\xA0 pris, un facteur nul ou absent, une famille inconnue sont "
+         "refus\xC3\xA9s). Le facteur d'une unit\xC3\xA9 courante est v\xC3\xA9rifi\xC3\xA9 et la conversion montr\xC3\xA9" "e (\xC2\xAB 1 mmCE = 9,80665 Pa \xC2\xBB) ; l'unit\xC3\xA9 "
+         "s'applique avant les variables qui l'emploient, un seul Ctrl+Z. Sur \xC2\xAB unit\xC3\xA9 inconnue \xC2\xBB, CORRIGER RAPIDEMENT cr\xC3\xA9" "e l'unit\xC3\xA9 "
+         "connue (mmCE, %HR, t/h, kW...), une seule pour toutes les lignes ; \xC2\xAB Cr\xC3\xA9" "er l'unit\xC3\xA9\xE2\x80\xA6 \xC2\xBB ouvre une petite fen\xC3\xAAtre.",
          "assistant-ia", ""),
         note("1.22.8", "Assistant IA", Kind::Fixed,
          "\xC2\xAB APPLIQUER MALGR\xC3\x89 LES ERREURS \xC2\xBB : la fen\xC3\xAAtre de confirmation d\xC3\xA9" "file quand la liste est longue (les boutons restent "

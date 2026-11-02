@@ -1937,6 +1937,18 @@ Les notifications sont gardées dans le dossier IA (notifications.json, à côt�
 - Les autres corrections du menu (Utiliser « … », Créer, Retirer l'opération, la correction du logiciel) ne ferment plus la fenêtre non plus. Seule « Demander à l'IA de corriger » la ferme, pour que tu relises le texte.
 - **Tout corriger rapidement**, sur les titres ERREURS, AVERTISSEMENTS et GÉNÉRER ET COMPILER (le lien ou leur clic droit), corrige tout ce qui est sûr et dit ce qui reste (« 3 erreurs corrigées, 2 restent… »).
 - Une grosse proposition se revérifie en arrière-plan (« Revérification… ») ; Appliquer attend la fin.
+@nouveau 1.22.8
+### L'IA crée les unités qui manquent (1.22.8)
+Une variable en mmCE, %HR ou t/h dans un projet qui n'a pas cette unité : l'IA la crée dans sa proposition (l'opération creer_unite : le symbole, la famille, le facteur vers l'unité de référence, le décalage, le libellé), puis s'en sert pour les variables.
+- **Les mêmes contrôles que Configuration › Unités de mesure** : un symbole déjà pris (« existe déjà (Pression, unité fournie) »), un facteur nul ou absent (jamais 1 par défaut) et une famille inconnue sont **refusés**. Une famille neuve se crée avec son unité de référence. Une unité identique à une existante est réutilisée.
+- **Le facteur est vérifié** : pour une unité courante (mmCE, cmCE, mCE, inH2O, mmHg, atm, degF, L/min, Nm3/min, t/h, kW, kWh, tr/min, %HR…), un facteur qui s'écarte de plus de 1 % est un avertissement. L'aperçu montre la conversion : « Unité mmCE (pression) : 1 mmCE = 9,80665 Pa ».
+- L'unité s'applique **avant** les variables qui l'emploient, et tout se reprend d'un seul Ctrl+Z. L'IA peut aussi changer le facteur, le décalage ou le libellé d'une unité du projet (jamais d'une unité fournie).
+- **Sur une erreur « unité inconnue »**, dans la prévisualisation :
+  - **Corriger rapidement** crée l'unité quand le logiciel la connaît. **Tout corriger rapidement** n'en crée qu'**une par symbole** : 26 variables en mmCE donnent une seule unité ;
+  - **Créer l'unité « … »…** ouvre une petite fenêtre : remplie d'office pour une unité connue, à compléter sinon (la famille, le facteur) ;
+  - une unité que le logiciel ne connaît pas est grisée avec la raison, et « Créer l'unité… » reste dessous.
+  L'unité va dans la **proposition**, jamais directement dans le projet ; **Revenir** la retire.
+! Un symbole se compare sans la casse, comme dans l'éditeur : « MW » et « mW » sont le même symbole. Les membres d'un type créé par l'IA ne prennent pas d'unité.
 ### Toutes les vues d'une proposition (1.22.6)
 - Une proposition qui crée ou modifie **plusieurs vues** les montre toutes. Au-dessus de l'aperçu, une barre : « < Vue 2/4 : Popup_Vanne (neuve, popup) · 1 erreur > ».
   - Les flèches passent à la vue précédente ou suivante, comme **PageUp / PageDown** ou **Ctrl+← / Ctrl+→**.
@@ -8010,6 +8022,7 @@ Dans l'arbre, sous Configuration : la bibliothèque des unités du projet.
 - Les unités et familles **fournies** sont verrouillées (un cadenas). **+ Famille** crée une famille du projet : son nom (des minuscules, des chiffres et _), son unité de référence (créée avec elle) et son libellé. **+ Unité** ajoute une unité à la famille choisie : son symbole, son facteur et son décalage vers la référence (valeur de référence = valeur × facteur + décalage). La fiche modifie le nom, le facteur et le décalage d'une unité du projet ; la référence garde facteur 1 et décalage 0.
 - **Retirer** : une unité du projet que rien n'emploie (la colonne Emplois dit où elle sert : variables, membres, déclarations des fonctions et des scripts, constantes de vue, opérateurs, redéfinitions d'une instance, retours), ou une famille du projet dont aucune unité n'est employée ; **Renommer** aussi. Une unité fournie ne se retire pas. Générer dit une unité inconnue (ou sur un type non numérique) partout où elle est écrite, déclarations et retours compris.
 - La case **Unités strictes : une affectation de même famille exige EN(…)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.
+- 1.22.8 : l'**Assistant IA** peut aussi créer une unité du projet (voir « L'IA crée les unités qui manquent ») : les mêmes contrôles qu'ici, dans sa proposition, avant Appliquer.
 @nouveau 1.14.1
 ### L'onglet Convertir : tester une conversion
 Configuration › Unités de mesure a deux onglets : **Bibliothèque** (les familles et les unités, ci-dessus) et **Convertir**, un banc d'essai.
