@@ -46,15 +46,17 @@ Sous Linux : **130 suites d'essais sur 130** réussies (CTest).
 ## 3. Installer
 
 Fichiers livrés :
-- `API-IHM-Studio-Setup-1.22.9.exe` : l'installateur (48 234 353 octets). Il met à jour la 1.22.8 au même endroit ;
+- `API-IHM-Studio-Setup-1.22.9.exe` : l'installateur (48 233 762 octets). Il met à jour la 1.22.8 au même endroit ;
 - `API-Studio-1.22.9-portable.zip` et `IHM-Studio-1.22.9-portable.zip` (167 fichiers chacun) ;
 - ce document.
 
 | Fichier | SHA-256 |
 |---|---|
-| `API-IHM-Studio-Setup-1.22.9.exe` | `B97B040BBC6A3BF3F68765D37724C674DAB77C43B10151726D65DCBEB80CB65C` |
-| `API-Studio-1.22.9-portable.zip` | `D140F3D4A3B9196813C56BC1A77E74DA97123ACE3D977DD1AB0A500BC3ECEAE1` |
-| `IHM-Studio-1.22.9-portable.zip` | `E5B24710F0D3FB6E8F6F9B5FF02F10BAA7D524FD083EBB29360E4D8AC6D055E3` |
+| `API-IHM-Studio-Setup-1.22.9.exe` | `68A6CF0B3E6FF99C0951A234C1452F99CA8E684ADC9B8F173C0557042934EA71` |
+| `API-Studio-1.22.9-portable.zip` | `F0E57CF9012A14A3F2F0EC3E32B0E22E5915DC5EA85C1BCC578D68267B0FE00D` |
+| `IHM-Studio-1.22.9-portable.zip` | `BF7D3E9529EDB882A5BCD178ADD313BD9DA54C6C3561E417ACA750CB5F23E734` |
+
+**Reconstruit le 04/11** : la machine de construction avait été remplacée et l'installateur envoyé le 02/11 n'était plus disponible. Mêmes sources (le commit de la livraison), même version ; une nouvelle compilation donne de nouvelles empreintes, celles du tableau. Cette reconstruction a été vérifiée sous Wine dans un Windows neuf (pas par-dessus la 1.22.8) : l'installation silencieuse réussit, les deux exécutables installés sont identiques à ceux construits, et `--version` répond « API Studio 1.22.9 » et « IHM Studio 1.22.9 ». La vérification complète ci-dessous est celle de la construction du 02/11.
 
 Vérifié **sous Wine (pas sur un vrai Windows)**, en silencieux, par-dessus la 1.22.8 livrée :
 
