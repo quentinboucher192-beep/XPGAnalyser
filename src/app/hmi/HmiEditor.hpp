@@ -26,6 +26,7 @@
 #include "HmiContentPanel.hpp"
 #include "HmiPanels.hpp"
 #include "../../hmi/HmiDeclEdit.hpp"   // 1.14.0 (lot M1) : decledit::Usage (aller a un usage d'une constante)
+#include "../../hmi/HmiFontLibrary.hpp"   // 1.26.0 : donner une police (fontlib::Font)
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -256,6 +257,13 @@ public:
     enum ImageMenu : int { kImagePlace = 1, kImageImport, kImageRemove, kImageHelp };
     // Le bouton + de l'onglet Images : l'hote demande un fichier, puis palette().addImageFile(chemin).
     void setImageFileAsker(std::function<void()> ask) { askImageFile_ = std::move(ask); }
+
+    // ---- 1.26.0 : LA POLICE PARTOUT (le sous-onglet Polices, la case Police) ----
+    //  Donner une police a des objets : une du projet (`resource`) ou une de la bibliotheque (`library`, importee dans le
+    //  meme pas) - UNE commande (un Ctrl+Z annule l'import et le choix). Un groupe la donne a ses objets qui ont un texte.
+    //  Rend le nombre d'objets ; 0 et `why` : rien (pas d'objet, pas de texte).
+    std::size_t giveFont(const std::vector<hmi::Id>& objects, const std::string& resource, const hmi::fontlib::Font* library,
+                         std::string* why = nullptr);
 
 protected:
     void onLayout() override;

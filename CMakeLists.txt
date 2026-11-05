@@ -945,12 +945,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME filtermemory COMMAND filtermemory_test)                # ---- Lot API 8 : les filtres retenus ----
     # 1.11 (I111) : les echantillons de l'IHM (tests/fixtures/ihm) nommes, et non
     # pris a cote de XPG_FIXTURE : un MAST.XPG designe ailleurs n'a pas son ihm/.
-    xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
+    xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm
+                                        ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)   # 1.26.0 : les polices fournies
     xpg_add_test(NAME stylestypes  COMMAND styles_types_test)   # 1.23.0 : les styles par type d'objet
     xpg_add_test(NAME semanticcolors  COMMAND semantic_colors_test)   # 1.23.1 : les couleurs semantiques (@Nom)
     xpg_add_test(NAME soundlibrary  COMMAND sound_library_test)   # 1.24.0 : la bibliotheque de sons (natifs, Mes sons)
     xpg_add_test(NAME truetype      COMMAND truetype_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)   # 1.26.0 : les polices TrueType
-    xpg_add_test(NAME hmieditor    COMMAND hmi_editor_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
+    xpg_add_test(NAME hmieditor    COMMAND hmi_editor_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm
+                                        ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)   # 1.26.0 : les polices fournies
     xpg_add_test(NAME hmicheckexpr COMMAND hmicheck_expr_test)               # ---- Lot API 8 : les expressions impossibles ----
     xpg_add_test(NAME hmibuild     COMMAND hmi_build_test)                   # ---- 1.11.13 : la generation incrementale ----
     xpg_add_test(NAME hmilog       COMMAND hmi_log_test)                     # ---- 1.11.14 : IHM_LOG et la Console ----

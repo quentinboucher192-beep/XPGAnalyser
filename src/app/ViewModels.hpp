@@ -392,6 +392,11 @@ namespace app {
             // racine, apres Versions : << Corbeille  [N] >> ; un clic ouvre le volet Corbeille (app/Corbeille.hpp,
             // hmi/HmiCorbeillePane). A LA FIN, toujours.
             TrashFolder,
+            // 1.26.0 : Ressources > Bibliotheque de polices (le client : << ajouter des TTF dans les ressources de base >>),
+            // le cinquieme enfant de Ressources : HmiFontLibrary [n familles], HmiFontGroup un dossier (index : 0 Mes
+            // polices, puis Sans empattement, Avec empattement, Chasse fixe), HmiFontItem une famille (index : son dossier ;
+            // sub : son rang dedans). Un clic ouvre le volet sur la police. A LA FIN, toujours.
+            HmiFontLibrary, HmiFontGroup, HmiFontItem,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -511,6 +516,10 @@ namespace app {
         // 1.25.0 : la bibliotheque d'images depliee (les images du sous-onglet Images de l'editeur de vues).
         [[nodiscard]] static std::string imageFolderOf(ui::NodeId);
         [[nodiscard]] static std::string imageIdOf(ui::NodeId);
+        // 1.26.0 : la bibliotheque de polices depliee - le dossier d'un HmiFontGroup ou d'un HmiFontItem ("Chasse fixe"),
+        // l'identifiant du style Normal de la famille d'un HmiFontItem ("carlito", "mes/Ma police.ttf") ; "" sinon.
+        [[nodiscard]] static std::string fontFolderOf(ui::NodeId);
+        [[nodiscard]] static std::string fontIdOf(ui::NodeId);
         // Lot 10 : le dossier API (avec l'IHM ; sans elle, la racine en tient lieu).
         [[nodiscard]] static ui::NodeId apiFolderNode() { return pack(NodeKind::ApiFolder, 0); }
         [[nodiscard]] ui::NodeId hmiViewNode(std::uint64_t viewId) const;

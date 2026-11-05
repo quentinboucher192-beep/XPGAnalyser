@@ -21,6 +21,7 @@
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiAlarmViews.hpp"
 #include "../../hmi/HmiMedia.hpp"
+#include "../../hmi/HmiFontLibrary.hpp" // 1.26.0 : la police partout (Sans, Mono : celles du theme)
 #include "../../hmi/HmiControls.hpp"    // 1.12.2 : le tableau dynamique (tableLayout)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.2 : ses colonnes, dans l'editeur
 #include "../../hmi/HmiChoiceLists.hpp" // 1.12.7 (lot D) : les colonnes choisies d'une source
@@ -116,14 +117,11 @@ void fillAndStroke(const Ctx& c, const std::vector<gfx::Point>& local, bool clos
 
 // Un texte dans une boite locale de l'objet : aligne, centre verticalement,
 // tourne avec l'objet, jamais retourne.
-// La police ressource citee par l'objet ("font"), si c'en est une.
+// La police ressource citee par l'objet ("font"), si c'en est une. 1.26.0 : LA POLICE PARTOUT - "Sans" (ou rien) est la
+// police par defaut du theme, "Mono" la police des valeurs (Configuration > Affichage) ; pas choisies : celles de l'IHM.
 const hmi::Resource* fontOf(const Ctx& c) {
     if (!c.opt.assets) return nullptr;
-    const auto name = c.src.text(c.o, "font");
-    if (name.empty() || name == "Sans") return nullptr;
-    for (const auto& r : c.opt.assets->resources)
-        if (r.name == name) return r.kind() == hmi::MediaKind::Font && r.data ? &r : nullptr;
-    return nullptr;
+    return hmi::fontlib::resolve(*c.opt.assets, c.opt.project ? &c.opt.project->config : nullptr, c.src.text(c.o, "font"));
 }
 
 // Les lignes d'un texte coupees a la largeur `maxPx` (en pixels ecran), mot

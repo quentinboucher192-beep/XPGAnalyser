@@ -10,6 +10,7 @@
 #include "../src/hmi/HmiActionKinds.hpp"     // 1.11.9 : les operations rangees, Maths, le clavier virtuel
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
+#include "../src/hmi/HmiFontLibrary.hpp"   // 1.26.0 : la bibliotheque de polices, la police partout
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases
 #include "../src/hmi/HmiCommands.hpp"
@@ -33076,8 +33077,275 @@ void explorateur1141() {
     fs::remove_all(root, ec);
 }
 
+
+// =====================================================================================================================
+//  1.26.0 : LA BIBLIOTHEQUE DE POLICES ET LA POLICE PARTOUT (le modele) - les fournies (resources/polices), Mes polices
+//  (ajouter, le meme contenu, un nom pris, une collection refusee, remplacer, retirer), importer (le meme contenu
+//  reutilise), les choix d'une case Police, les polices du theme (enregistrees, relues) et leur resolution (Sans, Mono).
+//  HMI_TEST_POL=1 : ces essais seuls.
+// =====================================================================================================================
+fs::path gFonts1260;   // resources/polices (le 3e argument ; sinon devine depuis le .XPG des fixtures)
+
+void polices1260() {
+    std::printf("[1.26.0 : la biblioth\xC3\xA8que de polices, la police partout]\n");
+    namespace fl = hmi::fontlib;
+    std::error_code ec;
+    const bool here = !gFonts1260.empty() && fs::exists(gFonts1260 / "Carlito-Regular.ttf", ec);
+    check(here, "resources/polices : le dossier des polices fournies est l\xC3\xA0 (" + gFonts1260.string() + ")");
+    if (!here) return;
+    const auto u8 = fs::absolute(gFonts1260, ec).u8string();
+    fl::setNativeFolder(std::string(u8.begin(), u8.end()));
+    const fs::path mine = fs::temp_directory_path() / "xpg_polices_1260";
+    fs::remove_all(mine, ec);
+    {
+        const auto m8 = mine.u8string();
+        fl::setUserFolder(std::string(m8.begin(), m8.end()));
+    }
+
+    // ---- les fournies : une entree par fichier, trois dossiers, une ligne par famille
+    const auto& all = fl::builtIn();
+    check(all.size() == 16, "16 polices fournies list\xC3\xA9" "es (" + std::to_string(all.size()) + ")");
+    check(fl::builtInCategories() == std::vector<std::string>{"Sans empattement", "Avec empattement", "Chasse fixe"},
+          "trois dossiers : Sans empattement, Avec empattement, Chasse fixe");
+    const fl::Font* carlito = fl::findBuiltIn("carlito");
+    check(carlito && carlito->label == "Carlito" && carlito->style == "Normal" && carlito->category == "Sans empattement" && carlito->editable
+              && carlito->format == "TTF" && carlito->glyphs > 100 && carlito->data && !carlito->mine(),
+          "Carlito : sa famille, son style, son dossier, une TrueType modifiable, ses glyphes");
+    check(carlito && carlito->license == "SIL Open Font License 1.1" && fs::exists(fs::path(carlito->licenseFile), ec),
+          "Carlito : sa licence (SIL OFL 1.1) et son texte dans resources/polices/licences");
+    const fl::Font* lsGras = fl::findBuiltIn("liberation-sans-gras");
+    const fl::Font* lsIta = fl::findBuiltIn("liberation-sans-italique");
+    const fl::Font* jb = fl::findBuiltIn("jetbrains-mono");
+    check(lsGras && lsGras->style == "Gras" && lsIta && lsIta->style == "Italique" && jb && jb->category == "Chasse fixe",
+          "les ids stables : liberation-sans-gras (Gras), liberation-sans-italique (Italique), jetbrains-mono (Chasse fixe)");
+    check(fl::fromChoice("Carlito-Regular.ttf") == nullptr && fl::resourceName(*carlito) == "Carlito-Regular.ttf",
+          "le nom de ressource : le nom du fichier");
+    const auto fams = fl::families();
+    std::map<std::string, std::size_t> perFolder;
+    const fl::Family* liberation = nullptr;
+    for (const auto& f : fams) {
+        ++perFolder[f.category];
+        if (f.label == "Liberation Sans") liberation = &f;
+    }
+    check(perFolder["Sans empattement"] == 3 && perFolder["Avec empattement"] == 3 && perFolder["Chasse fixe"] == 3 && perFolder["Mes polices"] == 0,
+          "9 familles : 3 par dossier, Mes polices vide");
+    check(liberation && liberation->fonts.size() == 3 && liberation->stylesText() == "Normal, Gras, Italique" && liberation->regular().id == "liberation-sans",
+          "Liberation Sans : Normal, Gras, Italique (la famille, ses styles dans l'ordre)");
+    // ---- la recherche : les chasses connues
+    const auto find = [&](std::string_view q) {
+        std::vector<std::string> out;
+        for (const auto& f : fl::builtIn())
+            if (fl::matches(f, q)) out.push_back(f.id);
+        return out;
+    };
+    const auto has = [](const std::vector<std::string>& v, const std::string& id) { return std::find(v.begin(), v.end(), id) != v.end(); };
+    check(has(find("arial"), "liberation-sans") && !has(find("arial"), "carlito"), "chercher \xC2\xAB arial \xC2\xBB : Liberation Sans");
+    check(has(find("calibri"), "carlito") && has(find("cambria"), "caladea") && has(find("times"), "liberation-serif")
+              && has(find("courier"), "liberation-mono") && has(find("GRAS carlito"), "carlito-gras") && !has(find("GRAS carlito"), "carlito"),
+          "chercher calibri, cambria, times, courier, \xC2\xAB gras carlito \xC2\xBB (sans casse)");
+
+    // ---- lire une police : une collection refusee, une OTF a contours CFF lisible mais pas modifiable
+    const hmi::Bytes& carlitoBytes = *carlito->data;
+    hmi::Bytes ttc = {'t', 't', 'c', 'f', 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 16};
+    ttc.insert(ttc.end(), carlitoBytes.begin(), carlitoBytes.end());
+    std::string why;
+    check(!fl::readable(ttc, nullptr, nullptr, &why) && why.find("TTC") != std::string::npos, "une collection TTC : refus\xC3\xA9" "e (" + why + ")");
+    hmi::Bytes otf = carlitoBytes;
+    otf[0] = 'O';
+    otf[1] = 'T';
+    otf[2] = 'T';
+    otf[3] = 'O';
+    {
+        const unsigned tables = (static_cast<unsigned>(otf[4]) << 8) | otf[5];
+        for (unsigned i = 0; i < tables; ++i) {
+            const std::size_t rec = 12 + static_cast<std::size_t>(i) * 16;
+            if (std::equal(otf.begin() + static_cast<std::ptrdiff_t>(rec), otf.begin() + static_cast<std::ptrdiff_t>(rec) + 4, "glyf"))
+                std::copy_n("CFF ", 4, otf.begin() + static_cast<std::ptrdiff_t>(rec));
+        }
+    }
+    bool editable = true;
+    std::string family;
+    check(fl::readable(otf, &family, &editable) && !editable && family == "Carlito", "une OTF \xC3\xA0 contours CFF : lisible, pas modifiable");
+    check(fl::frenchStyle("Bold") == "Gras" && fl::frenchStyle("Italic") == "Italique" && fl::frenchStyle("Bold Italic") == "Gras italique"
+              && fl::frenchStyle("Book") == "Normal",
+          "les styles en fran\xC3\xA7" "ais (Bold, Italic, Bold Italic, Book)");
+
+    // ---- Mes polices : ajouter, le meme contenu, un nom pris, remplacer, retirer
+    const auto rev0 = fl::userRevision();
+    std::string stored;
+    bool existed = true;
+    check(fl::addUserFont("Ma police.ttf", carlitoBytes, &stored, &existed) && stored == "Ma police.ttf" && !existed && fl::userRevision() > rev0,
+          "Mes polices : Ma police.ttf ajout\xC3\xA9" "e (le dossier est cr\xC3\xA9\xC3\xA9)");
+    auto mineList = fl::userFonts();
+    check(mineList.size() == 1 && mineList[0].id == "mes/Ma police.ttf" && mineList[0].label == "Carlito" && mineList[0].category == "Mes polices"
+              && mineList[0].mine() && mineList[0].editable,
+          "Mes polices : sa famille lue dans le fichier (Carlito), une des tiennes");
+    check(fl::addUserFont("Autre nom.ttf", carlitoBytes, &stored, &existed) && existed && stored == "Ma police.ttf" && fl::userFonts().size() == 1,
+          "le m\xC3\xAA" "me contenu sous un autre nom : d\xC3\xA9j\xC3\xA0 l\xC3\xA0, rien d'\xC3\xA9" "crit");
+    check(fl::addUserFont("Ma police.ttf", *jb->data, &stored, &existed) && !existed && stored == "Ma police (2).ttf",
+          "un nom pris par un autre contenu : Ma police (2).ttf");
+    check(!fl::addUserFont("Collection.ttc", ttc, &stored, nullptr, &why) && why.find("TTC") != std::string::npos, "Mes polices : une TTC refus\xC3\xA9" "e");
+    check(!fl::addUserFont("pas.ttf", hmi::Bytes(64, 7), &stored, nullptr, &why), "Mes polices : un fichier qui n'est pas une police, refus\xC3\xA9");
+    check(fl::addUserFont("Signaletique", otf, &stored) && stored == "Signaletique.otf", "une OTF sans extension : Signaletique.otf");
+    mineList = fl::userFonts();
+    const fl::Font* sign = nullptr;
+    for (const auto& f : mineList)
+        if (f.id == "mes/Signaletique.otf") sign = &f;
+    check(mineList.size() == 3 && sign && sign->format == "OTF" && !sign->editable, "Mes polices : trois, l'OTF en aper\xC3\xA7u et emploi");
+    {
+        const fl::Font* two = nullptr;
+        for (const auto& f : mineList)
+            if (f.id == "mes/Ma police (2).ttf") two = &f;
+        check(two && fl::replaceUserFont(*two, *fl::findBuiltIn("liberation-serif")->data) && fl::findFont("mes/Ma police (2).ttf")
+                  && fl::findFont("mes/Ma police (2).ttf")->label == "Liberation Serif",
+              "remplacer une de Mes polices (l'\xC3\xA9" "diteur l'enregistre) : relue");
+        check(!fl::replaceUserFont(*carlito, carlitoBytes, &why) && !why.empty(), "une fournie ne se remplace pas");
+        const fl::Font copy = *fl::findFont("mes/Ma police (2).ttf");
+        check(fl::removeUserFont(copy) && fl::userFonts().size() == 2 && !fl::removeUserFont(*carlito), "retirer une de Mes polices ; une fournie se garde");
+    }
+    {
+        std::size_t mineFams = 0;
+        for (const auto& f : fl::families()) mineFams += f.mine() ? 1u : 0u;
+        check(mineFams == 2 && fl::categories().front() == "Mes polices", "les familles : Mes polices en t\xC3\xAA" "te (deux)");
+    }
+
+    // ---- importer : une ressource sous le nom du fichier ; le meme contenu deja la, reutilise
+    Project p;
+    const auto a = fl::importFont(p, *carlito);
+    check(!a.reused && a.name == "Carlito-Regular.ttf" && p.assets.resources.size() == 1 && p.assets.resources[0].kind() == MediaKind::Font,
+          "importer Carlito : la ressource Carlito-Regular.ttf");
+    const auto again = fl::importFont(p, *carlito);
+    const fl::Font* myCarlito = fl::findFont("mes/Ma police.ttf");
+    const auto same3 = myCarlito ? fl::importFont(p, *myCarlito) : fl::Imported{};
+    check(again.reused && again.id == a.id && same3.reused && same3.id == a.id && p.assets.resources.size() == 1,
+          "importer encore, ou Ma police (le m\xC3\xAA" "me contenu) : la ressource est r\xC3\xA9utilis\xC3\xA9" "e");
+    const auto b = fl::importFont(p, *jb);
+    check(fl::importedAs(p, *jb) && fl::projectFont(p, b.name) && !fl::projectFont(p, "Sans") && !fl::projectFont(p, "Mono"),
+          "JetBrains Mono dans le projet ; Sans et Mono ne sont pas des ressources");
+
+    // ---- les choix d'une case Police
+    const auto ch = fl::choices(p);
+    const std::string libLS = "Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement \xE2\x80\xBA Liberation Sans";
+    check(ch.size() > 4 && ch[0] == "Sans" && ch[1] == "Mono" && ch[2] == "Carlito-Regular.ttf" && ch[3] == b.name
+              && std::find(ch.begin(), ch.end(), libLS) != ch.end()
+              && std::find(ch.begin(), ch.end(), "Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement \xE2\x80\xBA Carlito") == ch.end(),
+          "choices : Sans, Mono, les polices du projet, puis la biblioth\xC3\xA8que pas encore import\xC3\xA9" "e");
+    check(std::find(ch.begin(), ch.end(), "Mes polices \xE2\x80\xBA Ma police") == ch.end()
+              && std::find(ch.begin(), ch.end(), "Mes polices \xE2\x80\xBA Signaletique (OTF)") != ch.end()
+              && fl::fromChoice("Mes polices \xE2\x80\xBA Signaletique (OTF)") && fl::fromChoice("Mes polices \xE2\x80\xBA Signaletique (OTF)")->format == "OTF",
+          "choices : Ma police (le m\xC3\xAA" "me contenu que Carlito, d\xC3\xA9j\xC3\xA0 dans le projet) n'est pas propos\xC3\xA9" "e");
+    const fl::Font* fromLib = fl::fromChoice(libLS);
+    check(fromLib && fromLib->id == "liberation-sans" && fl::fromChoice("Sans") == nullptr, "fromChoice : la police d'un libell\xC3\xA9 de la biblioth\xC3\xA8que");
+    const auto fc = fl::fieldChoices(p);
+    check(fc.size() > 4 && fc[0].label == "Police par d\xC3\xA9" "faut (celle de l'IHM)" && fc[0].value == "Sans"
+              && fc[1].label == "Police des valeurs (chasse fixe de l'IHM)" && fc[1].value == "Mono" && fc[2].label == "Carlito"
+              && fc[2].value == "Carlito-Regular.ttf" && fc[3].label == "JetBrains Mono",
+          "la case Police : le th\xC3\xA8me, puis les polices du projet par leur famille");
+    const auto viaLabel = fl::fromLabel(p, "Carlito");
+    const auto viaLib = fl::fromLabel(p, libLS);
+    check(viaLabel && viaLabel->value == "Carlito-Regular.ttf" && viaLib && viaLib->libraryId == "liberation-sans" && viaLib->value.empty()
+              && fl::fieldLabel(p, "") == fc[0].label && fl::fieldLabel(p, "Mono") == fc[1].label && fl::fieldLabel(p, "Absente.ttf") == "Absente.ttf",
+          "fromLabel / fieldLabel : l'\xC3\xA9tiquette et sa valeur");
+
+    // ---- les polices du theme : enregistrees, relues
+    View v = makeView(p, "Polices");
+    const Id t1 = edit::add(p, v, Kind::Text, 10, 10);
+    const Id t2 = edit::add(p, v, Kind::Button, 10, 60);
+    const Id t3 = edit::add(p, v, Kind::Text, 10, 120);
+    const Id t4 = edit::add(p, v, Kind::Text, 10, 180);
+    v.object(t3)->set("font", "Mono");
+    v.object(t4)->set("font", b.name);
+    p.views.push_back(v);
+    check(!fl::resolve(p, "Sans") && !fl::resolve(p, "") && !fl::resolve(p, "Mono") && fl::resolve(p, b.name),
+          "sans th\xC3\xA8me : Sans et Mono restent les polices de l'IHM (rien ne change d'aspect)");
+    p.config.defaultFont = "Carlito-Regular.ttf";
+    p.config.valueFont = b.name;
+    const fs::path dir = fs::temp_directory_path() / "xpg_polices_1260_projet";
+    fs::remove_all(dir, ec);
+    check(static_cast<bool>(save(p, dir.string())), "enregistrer le projet (les polices du th\xC3\xA8me)");
+    auto back = load(dir.string());
+    check(back && back->config.defaultFont == "Carlito-Regular.ttf" && back->config.valueFont == b.name
+              && back->resourceByName("Carlito-Regular.ttf") && back->resourceByName("Carlito-Regular.ttf")->data,
+          "relu : la police par d\xC3\xA9" "faut, celle des valeurs, et leurs ressources");
+    {
+        Project old;
+        const fs::path dir2 = fs::temp_directory_path() / "xpg_polices_1260_vide";
+        fs::remove_all(dir2, ec);
+        (void)save(old, dir2.string());
+        std::ifstream in(dir2 / "ihm" / "ihm.txt");
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        auto back2 = load(dir2.string());
+        check(text.find("police") == std::string::npos && back2 && back2->config.defaultFont.empty() && back2->config.valueFont.empty(),
+              "un projet sans polices du th\xC3\xA8me : rien d'\xC3\xA9" "crit, vides \xC3\xA0 la relecture");
+        fs::remove_all(dir2, ec);
+    }
+    // ---- la resolution : Sans (ou rien) la police par defaut, Mono celle des valeurs
+    const auto* rs = fl::resolve(p, "Sans");
+    check(rs && rs->name == "Carlito-Regular.ttf" && fl::resolve(p, "") == rs && fl::resolve(p, "Mono") && fl::resolve(p, "Mono")->name == b.name
+              && fl::resolve(p, b.name) && fl::resolve(p.assets, nullptr, "Sans") == nullptr,
+          "Sans et rien : la police par d\xC3\xA9" "faut ; Mono : celle des valeurs ; un nom : cette ressource");
+    check(fl::themeFontName(p, false) == "Carlito" && fl::fieldChoices(p)[0].label == "Police par d\xC3\xA9" "faut (Carlito)"
+              && fl::fieldChoices(p)[1].label == "Police des valeurs (JetBrains Mono)",
+          "la case Police dit les polices du th\xC3\xA8me : Police par d\xC3\xA9" "faut (Carlito), Police des valeurs (JetBrains Mono)");
+    {
+        const auto fct = fl::fieldChoices(p, true);
+        check(fct[0].label == "Celle de l'IHM" && fct[0].value.empty() && fl::fieldLabel(p, "", true) == "Celle de l'IHM"
+                  && fl::fieldLabel(p, "Carlito-Regular.ttf", true) == "Carlito",
+              "les cases du th\xC3\xA8me : Celle de l'IHM (vide), puis les polices du projet");
+    }
+    // ---- ou elles servent ; les citations et le renommage suivent le theme et les styles
+    const auto uc = fl::usageOf(p, "Carlito-Regular.ttf");
+    const auto uj = fl::usageOf(p, b.name);
+    check(uc.objects == 2 && uc.defaultFont && !uc.valueFont && uj.objects == 2 && uj.valueFont,
+          "o\xC3\xB9 elles servent : Carlito (2 objets sur Sans, la police par d\xC3\xA9" "faut), JetBrains Mono (Mono et cit\xC3\xA9" "e)");
+    same(fl::usageText(uc), "2 objets, police par d\xC3\xA9" "faut", "usageText");
+    Style st;
+    st.id = p.allocate();
+    st.name = "Valeur";
+    st.props.push_back({"font", b.name, ""});
+    p.styles.push_back(st);
+    check(fl::usageOf(p, b.name).styles == 1, "un style qui impose la police : compt\xC3\xA9");
+    const auto cites = citations(p, "Carlito-Regular.ttf");
+    bool themeCited = false;
+    for (const auto& c : cites) themeCited = themeCited || c.where.find("police par d") != std::string::npos;
+    check(themeCited, "les citations : la police par d\xC3\xA9" "faut du th\xC3\xA8me (la ressource n'est pas inutilis\xC3\xA9" "e)");
+    const Id jbId = p.resourceByName(b.name)->id;
+    check(renameResource(p, jbId, "Valeurs.ttf") && p.config.valueFont == "Valeurs.ttf" && p.styles.back().props[0].value == "Valeurs.ttf"
+              && p.views.back().object(t4)->text("font") == "Valeurs.ttf",
+          "renommer la ressource : le th\xC3\xA8me, le style et l'objet suivent");
+    (void)t1;
+    (void)t2;
+
+    // ---- les objets de la bibliotheque arrivent sur << Police par defaut >> (Sans)
+    {
+        std::size_t withFont = 0;
+        std::vector<std::string> other;
+        for (const auto k : kPlaceableKinds) {
+            const Object o = makeObject(k, 1, "x", 0, 0, 1);
+            if (const Prop* f = o.find("font")) {
+                ++withFont;
+                if (f->value != "Sans") other.push_back(std::string(kindKey(k)) + "=" + f->value);
+            }
+        }
+        std::string list;
+        for (const auto& s : other) list += " " + s;
+        check(withFont > 20 && other.empty(), "les " + std::to_string(withFont) + " objets de la biblioth\xC3\xA8que qui ont une Police arrivent sur Sans" + list);
+    }
+    fs::remove_all(dir, ec);
+    fs::remove_all(mine, ec);
+    fl::setUserFolder({});
+}
+
 int main(int argc, char** argv) {
     if (argc > 1) gSamples1251 = argc > 2 ? fs::path(argv[2]) : fs::path(argv[1]).parent_path() / "ihm";   // 1.25.1
+    // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
+    if (argc > 3) gFonts1260 = fs::path(argv[3]);
+    else if (argc > 1) gFonts1260 = fs::path(argv[1]).parent_path().parent_path().parent_path() / "resources" / "polices";
+    if (const char* only = std::getenv("HMI_TEST_POL"); only && *only == '1') {   // 1.26.0 : les polices, seules
+        polices1260();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.14.1 (lot N4) : HMI_TEST_1141=1 - la Calculatrice, seule.
     if (const char* only = std::getenv("HMI_TEST_1141"); only && *only == '1') {
         calculatrice1141();
@@ -33431,6 +33699,7 @@ int main(int argc, char** argv) {
     unites1141();                   // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
     explorateur1141();                // 1.14.1 (lot N5) : l'explorateur de fichiers (dossier, zip, zip hostile)
     miseEnPage1250();                 // 1.25.0 : la mise en page des rapports
+    polices1260();                    // 1.26.0 : la bibliotheque de polices, la police partout
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

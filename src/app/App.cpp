@@ -47,6 +47,7 @@
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
 #include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
 #include "../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : le dossier de Mes sons (la bibliotheque de sons)
+#include "../hmi/HmiFontLibrary.hpp"    // 1.26.0 : le dossier de Mes polices, celui des polices fournies
 #include "ai/AiPaths.hpp"           // 1.14.2 (Assistant IA) : le dossier IA/ de l'utilisateur
 #include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
 #include "ai/AiAssistant.hpp"       // 1.20.0 : l'IA choisie analyse les incidents
@@ -283,6 +284,16 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto soundsDir = std::filesystem::path(Settings::sharedFolder()) / "sons";
         const auto u8 = soundsDir.u8string();
         hmi::soundlib::setUserFolder(std::string(u8.begin(), u8.end()));
+    }
+    // 1.26.0 : MES POLICES, la part de l'utilisateur dans la bibliotheque de polices - un fichier par police dans
+    // "polices/", a cote de Mes sons ; et les polices fournies, resources/polices (le dossier courant est celui de l'exe).
+    {
+        const auto fontsDir = std::filesystem::path(Settings::sharedFolder()) / "polices";
+        const auto u8 = fontsDir.u8string();
+        hmi::fontlib::setUserFolder(std::string(u8.begin(), u8.end()));
+        std::error_code ec;
+        const auto native = std::filesystem::absolute(std::filesystem::path("resources") / "polices", ec).u8string();
+        hmi::fontlib::setNativeFolder(std::string(native.begin(), native.end()));
     }
     // 1.14.2 (Assistant IA) : LE DOSSIER IA/ (app/ai/AiPaths.hpp, le contrat de l'Assistant et du centre de
     // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet : conversations,

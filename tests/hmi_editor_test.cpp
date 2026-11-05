@@ -79,6 +79,8 @@
 #include "../src/app/hmi/HmiSoundLibraryPane.hpp"   // 1.24.0 : la bibliotheque de sons
 #include "../src/app/hmi/HmiImageLibraryPane.hpp"   // 1.25.1 : le volet de la bibliotheque d'images
 #include "../src/app/Capture.hpp"                   // 1.25.1 : un PNG pour Mes images (encodePng)
+#include "../src/app/hmi/HmiFontLibraryPane.hpp"    // 1.26.0 : la bibliotheque de polices
+#include "../src/hmi/HmiFontLibrary.hpp"            // 1.26.0 : la police partout
 #include "../src/app/hmi/HmiReportLayoutPane.hpp"   // 1.25.0 : la mise en page des rapports
 #include "../src/app/hmi/HmiFontEditorPane.hpp"     // 1.26.0 : l'editeur de polices
 #include "../src/app/hmi/HmiImages.hpp"
@@ -33615,6 +33617,15 @@ void enumsInspecteur1121() {
                     seen.insert({std::string(info.key), pr.key});
                     seenKeys.insert(pr.key);
                 }
+                // 1.26.0 : la case Police montre des etiquettes (Police par defaut (X), Police des valeurs (Y), les polices du
+                // projet, la bibliotheque) ; ses deux premieres valent Sans et Mono, les mots de POLICE (une formule les recoit).
+                if (pr.key == "font" && want) {
+                    const auto first = pr.enumValues.size() > 1 ? hmi::fontlib::fromLabel(b.doc->project, pr.enumValues[0]) : std::nullopt;
+                    const auto second = pr.enumValues.size() > 1 ? hmi::fontlib::fromLabel(b.doc->project, pr.enumValues[1]) : std::nullopt;
+                    if (!first || first->value != "Sans" || !second || second->value != "Mono")
+                        wrong += " " + std::string(info.key) + ".font (Police par d\xC3\xA9" "faut / des valeurs : pas Sans / Mono)";
+                    continue;
+                }
                 if (want != got) {
                     std::string words;
                     for (const auto& w : pr.enumValues) words += (words.empty() ? "" : "|") + w;
@@ -43597,12 +43608,13 @@ void enregistrements1140() {
         // 1.20.0 : Ressources a deux enfants - Enregistrements, puis Incidents (les dossiers d'incident en attente).
         // 1.24.0 : et la Bibliotheque de sons, troisieme.
         // 1.25.0 : et la Bibliotheque d'images, quatrieme.
-        check(res != ui::kInvalidNode && tree.childCount(res) == 4 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
+        check(res != ui::kInvalidNode && tree.childCount(res) == 5 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
                   && app::ProjectTreeModel::kindOf(tree.childAt(res, 1)) == NK::HmiIncidents
                   && app::ProjectTreeModel::kindOf(tree.childAt(res, 2)) == NK::HmiSoundLibrary
-                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 3)) == NK::HmiImageLibrary,
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 3)) == NK::HmiImageLibrary
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 4)) == NK::HmiFontLibrary,   // 1.26.0 : et la Bibliotheque de polices, cinquieme
               "Ressources \xE2\x80\xBA Enregistrements, Incidents, Biblioth\xC3\xA8que de sons et d'images dans l'arbre");
-        if (res != ui::kInvalidNode && tree.childCount(res) == 4) {
+        if (res != ui::kInvalidNode && tree.childCount(res) >= 4) {
             same_text(tree.text(tree.childAt(res, 0)) + "  [" + tree.counterOf(tree.childAt(res, 0)) + "]", "Enregistrements  [1]", "... avec son compte");
             same_text(tree.text(tree.childAt(res, 1)) + "  [" + tree.counterOf(tree.childAt(res, 1)) + "]", "Incidents  [0]",
                       "1.20.0 : ... et Incidents, ceux en attente (aucun)");
@@ -46840,7 +46852,7 @@ void rapportsSonsImages1250() {
             if (app::ProjectTreeModel::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
         for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i)
             if (app::ProjectTreeModel::kindOf(tree.childAt(hmiNode, i)) == NK::HmiResources) res = tree.childAt(hmiNode, i);
-        if (res != ui::kInvalidNode && tree.childCount(res) == 4) {
+        if (res != ui::kInvalidNode && tree.childCount(res) >= 4) {
             const auto sounds = tree.childAt(res, 2), images = tree.childAt(res, 3);
             const std::size_t nSounds = sl::builtIn().size() + sl::userSounds().size();
             const std::size_t nImages = il::builtIn().size() + il::userImages().size();
@@ -48267,9 +48279,325 @@ void corbeillePanneau1251() {
     fs::remove_all(dir, ec);
 }
 
+
+// =====================================================================================================================
+//  1.26.0 : LA BIBLIOTHEQUE DE POLICES ET LA POLICE PARTOUT (l'editeur) - le volet (une ligne par famille, ecrite dans sa
+//  police, l'apercu, importer, Mes polices, supprimer plusieurs d'un coup, l'editeur de polices par ses hotes), le
+//  sous-onglet Polices de la bibliotheque de l'editeur de vues (glisser une police sur un objet, double-clic : la
+//  selection), la case Police de l'inspecteur (une police de la bibliotheque importee + choisie : un seul Ctrl+Z), les
+//  polices du theme (Configuration > Affichage), l'arbre (Ressources > Bibliotheque de polices et ses compteurs).
+//  HMI_TEST_POL=1 : ces essais seuls.
+// =====================================================================================================================
+namespace fs1260 = std::filesystem;
+fs1260::path gFonts1260;
+
+void polices1260() {
+    std::printf("[1.26.0 : la biblioth\xC3\xA8que de polices, la police partout]\n");
+    namespace fl = hmi::fontlib;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const bool here = !gFonts1260.empty() && fs::exists(gFonts1260 / "Carlito-Regular.ttf", ec);
+    check(here, "resources/polices : les polices fournies sont l\xC3\xA0 (" + gFonts1260.string() + ")");
+    if (!here) return;
+    {
+        const auto u8 = fs::absolute(gFonts1260, ec).u8string();
+        fl::setNativeFolder(std::string(u8.begin(), u8.end()));
+    }
+    const fs::path mine = fs::temp_directory_path() / "xpg_polices_1260_ed";
+    fs::remove_all(mine, ec);
+    {
+        const auto m8 = mine.u8string();
+        fl::setUserFolder(std::string(m8.begin(), m8.end()));
+    }
+    const auto theme = ui::Theme::dark();
+    std::string why;
+
+    // ================================================================ le volet
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);   // une famille, plusieurs : un seul Ctrl+Z
+        app::HmiFontLibraryPane pane("polices", doc, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        const auto cats = pane.shownCategories();
+        check(cats.size() == 4 && cats[0].first == "Mes polices" && cats[0].second == 0 && cats[1].first == "Sans empattement" && cats[1].second == 3
+                  && cats[2].second == 3 && cats[3].first == "Chasse fixe" && cats[3].second == 3,
+              "les dossiers : Mes polices (0), Sans empattement, Avec empattement, Chasse fixe (3 familles chacun)");
+        const auto fams = pane.shownFamilies();
+        check(fams.size() == 9 && fams[0] == "Liberation Sans" && std::find(fams.begin(), fams.end(), "JetBrains Mono") != fams.end(),
+              "une ligne par famille : 9 (Liberation Sans d'abord)");
+        check(pane.select("carlito") && pane.selectedId() == "carlito" && pane.selectedFamily() && pane.selectedFamily()->label == "Carlito",
+              "choisir Carlito");
+        {
+            Recorder rec;
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, 0.0, nullptr});
+            check(rec.made.size() >= 9 && rec.drawn.size() >= 9, "chaque famille est \xC3\xA9" "crite dans sa police (" + std::to_string(rec.made.size())
+                                                                  + " images de texte)");
+            check(rec.wrote("SANS EMPATTEMENT") && rec.wrote("AVEC EMPATTEMENT")
+                      && rec.wrote("Les m\xC3\xAAmes chasses que Calibri") && rec.wrote("Normal, Gras"),
+                  "la ligne : le dossier, la phrase courte, ses styles");
+            check(rec.wrote("APER\xC3\x87U") && rec.wrote("CARLITO") && rec.wrote("DANS UNE VUE") && rec.wrote("GLYPHES")
+                      && rec.wrote("SIL Open Font License 1.1") && rec.wrote("(lire)") && rec.wrote("Importer dans le projet")
+                      && rec.wrote("Dupliquer pour la modifier"),
+                  "l'aper\xC3\xA7u : en grand, dans une vue, les glyphes, la licence (lire), Importer, Dupliquer pour la modifier");
+        }
+        check(!pane.tools().isEnabled(app::HmiFontLibraryPane::ActNew) && !pane.tools().isEnabled(app::HmiFontLibraryPane::ActDuplicate)
+                  && !pane.tools().isEnabled(app::HmiFontLibraryPane::ActEdit) && !pane.tools().isEnabled(app::HmiFontLibraryPane::ActRemove)
+                  && pane.tools().isEnabled(app::HmiFontLibraryPane::ActImport),
+              "sans l'\xC3\xA9" "diteur de polices : Nouvelle, Dupliquer, Modifier gris\xC3\xA9s ; Supprimer gris\xC3\xA9 (une fournie)");
+        std::vector<std::string> asked;
+        char32_t glyph = 0;
+        auto& h = pane.hosts();
+        h.newFont = [&] { asked.push_back("nouvelle"); };
+        h.duplicateFont = [&](const fl::Font& f) { asked.push_back("dupliquer " + f.id); };
+        h.editFont = [&](const fl::Font& f) { asked.push_back("modifier " + f.id); };
+        h.editGlyph = [&](const fl::Font& f, char32_t c) {
+            asked.push_back("glyphe " + f.id);
+            glyph = c;
+        };
+        pane.runAction(app::HmiFontLibraryPane::ActNew);
+        pane.tools().triggered->emit(app::HmiFontLibraryPane::ActDuplicate);
+        check(asked.size() == 2 && asked[0] == "nouvelle" && asked[1] == "dupliquer carlito" && !pane.tools().isEnabled(app::HmiFontLibraryPane::ActEdit),
+              "Nouvelle police, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 : l'\xC3\xA9" "diteur (ses h\xC3\xB4tes) ; Modifier : une fournie, non");
+        pane.setBold(true);
+        check(pane.selectedId() == "carlito-gras", "Gras : le style montr\xC3\xA9 (la liste, l'aper\xC3\xA7u)");
+        {
+            Recorder rec;
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, 0.0, nullptr});
+            gfx::Rect cell;
+            check(pane.glyphRect(U'A', cell), "la grille des glyphes : A");
+            pane.preview().dispatch(ui::MouseDown{{cell.x + 4, cell.y + 4}, ui::MouseButton::Left, 2, {}});
+            check(glyph == U'A' && !asked.empty() && asked.back() == "glyphe carlito-gras", "un double-clic sur un glyphe : l'\xC3\xA9" "diteur sur ce glyphe");
+        }
+        pane.setBold(false);
+        pane.setSampleText("Vanne V12 ouverte");
+        check(pane.sampleText() == "Vanne V12 ouverte", "le texte d'aper\xC3\xA7u se tape");
+        // ---- importer : une commande ; << dans le projet >>
+        const Id rid = pane.importSelected();
+        const auto* res = doc->project.resourceByName("Carlito-Regular.ttf");
+        check(rid != kNoId && res && res->id == rid && stack.undoLabel() == "Importer la police Carlito", "Importer dans le projet : la ressource, une commande");
+        {
+            Recorder rec;
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, 0.0, nullptr});
+            check(rec.wrote("dans le projet") && rec.wrote("D\xC3\xA9j\xC3\xA0 dans le projet") && rec.wrote("oui"),
+                  "la famille : \xC2\xAB dans le projet \xC2\xBB ; l'aper\xC3\xA7u : D\xC3\xA9j\xC3\xA0 dans le projet");
+        }
+        check(pane.importSelected() == rid && doc->project.assets.resources.size() == 1, "importer encore : la m\xC3\xAAme ressource");
+        (void)stack.undo();
+        check(!doc->project.resourceByName("Carlito-Regular.ttf"), "Ctrl+Z : la ressource part");
+        // ---- la recherche
+        pane.setSearch("calibri");
+        check(pane.shownFamilies() == std::vector<std::string>{"Carlito"}, "chercher \xC2\xAB calibri \xC2\xBB : Carlito");
+        pane.setSearch("courier");
+        check(pane.shownFamilies() == std::vector<std::string>{"Liberation Mono"}, "chercher \xC2\xAB courier \xC2\xBB : Liberation Mono");
+        pane.setSearch("");
+        // ---- Mes polices : ajouter deux fichiers, les supprimer d'un coup, un seul Ctrl+Z
+        const fs::path src = mine.parent_path() / "xpg_polices_1260_src";
+        fs::remove_all(src, ec);
+        fs::create_directories(src, ec);
+        fs::copy_file(gFonts1260 / "Caladea-Regular.ttf", src / "Ma police Station.ttf", ec);
+        fs::copy_file(gFonts1260 / "DejaVuSerif.ttf", src / "Signaletique.ttf", ec);
+        check(pane.addFile((src / "Ma police Station.ttf").string()) && pane.addFile((src / "Signaletique.ttf").string(), &why),
+              "Ajouter \xC3\xA0 Mes polices : deux fichiers");
+        check(pane.shownCategories()[0].second == 2 && pane.selectedId() == "mes/Signaletique.ttf" && pane.tools().isEnabled(app::HmiFontLibraryPane::ActEdit),
+              "Mes polices : deux, la derni\xC3\xA8re choisie ; Modifier (une des tiennes)");
+        pane.tools().triggered->emit(app::HmiFontLibraryPane::ActEdit);
+        check(asked.back() == "modifier mes/Signaletique.ttf", "Modifier : l'\xC3\xA9" "diteur sur la tienne");
+        check(pane.selectIds({"mes/Ma police Station.ttf", "mes/Signaletique.ttf", "carlito"}) && pane.selectedIds().size() == 3
+                  && pane.tools().labelOf(app::HmiFontLibraryPane::ActRemove) == "Supprimer les 3",
+              "trois choisies : \xC2\xAB Supprimer les 3 \xC2\xBB");
+        pane.tools().triggered->emit(app::HmiFontLibraryPane::ActRemove);
+        check(fl::userFonts().empty() && fl::findBuiltIn("carlito") && pane.message().find("refus") != std::string::npos,
+              "supprim\xC3\xA9" "es d'un coup ; Carlito (fournie) se garde, le compte rendu le dit");
+        (void)stack.undo();
+        check(fl::userFonts().size() == 2, "un seul Ctrl+Z les rend toutes les deux");
+        core::CommandGroupScope::registerStack(nullptr);
+        fs::remove_all(src, ec);
+        for (const auto& f : fl::userFonts()) (void)fl::removeUserFont(f);
+    }
+
+    // ================================================================ le sous-onglet Polices de l'editeur de vues
+    {
+        Bench b;
+        core::CommandGroupScope::registerStack(&b.stack);
+        auto& pal = b.editor->palette();
+        auto* fonts = pal.fontsPane();
+        gfx::Rect sonTab, polTab, varTab;
+        (void)pal.modeRect(app::HmiPalette::Mode::Sounds, sonTab);
+        (void)pal.modeRect(app::HmiPalette::Mode::Variables, varTab);
+        check(fonts && fonts->compact() && pal.modeRect(app::HmiPalette::Mode::Fonts, polTab) && sonTab.x < polTab.x && polTab.x < varTab.x,
+              "les onglets : Objets | Images | Sons | Polices | Variables");
+        pal.dispatch(ui::MouseDown{{polTab.x + polTab.w / 2, polTab.y + polTab.h / 2}, ui::MouseButton::Left, 1, {}});
+        b.editor->layout();
+        check(pal.mode() == app::HmiPalette::Mode::Fonts && fonts && fonts->visible(), "un clic sur Polices l'ouvre");
+        if (fonts) {
+            check(fonts->shownProjectFonts().empty() && fonts->shownCategories().size() == 4 && fonts->categoryOpen("Sans empattement")
+                      && !fonts->categoryOpen("Chasse fixe"),
+                  "Du projet (aucune), puis la biblioth\xC3\xA8que par dossiers (Sans empattement ouvert)");
+            pal.setFilter("calibri");
+            check(fonts->shownFamilies() == std::vector<std::string>{"Carlito"}, "la recherche de la biblioth\xC3\xA8que cherche les polices (calibri : Carlito)");
+            pal.setFilter("");
+            const Id btn = b.place(Kind::Button, 200, 200);
+            const Id lamp = b.place(Kind::Text, 400, 200);
+            check(b.v().object(btn) && b.v().object(btn)->text("font") == "Sans", "un bouton de la biblioth\xC3\xA8que arrive sur Sans (la police par d\xC3\xA9" "faut)");
+            // ---- glisser une police sur un objet : il la prend (importee), un seul Ctrl+Z
+            b.editor->canvas().setSelection({lamp});
+            fonts->layout();
+            gfx::Rect row;
+            check(fonts->familyRect("Liberation Sans", row), "Liberation Sans dans le sous-onglet");
+            fonts->list().dispatch(ui::MouseDown{{row.x + 60, row.y + row.h / 2}, ui::MouseButton::Left, 1, {}});
+            check(b.editor->canvas().dropOnObjectArmed(), "appuyer sur une police : le l\xC3\xA2" "cher est arm\xC3\xA9");
+            const auto stackBefore = b.stack.undoLabel();
+            b.up(b.screen(240, 220));   // lachee sur le bouton
+            const auto* bo = b.v().object(btn);
+            check(bo && bo->text("font") == "LiberationSans-Regular.ttf" && b.doc->project.resourceByName("LiberationSans-Regular.ttf")
+                      && b.stack.undoLabel() == "Police Liberation Sans" && b.v().object(lamp)->text("font") == "Sans",
+                  "l\xC3\xA2" "ch\xC3\xA9" "e sur le bouton : il la prend (la ressource import\xC3\xA9" "e), le texte choisi non");
+            (void)b.stack.undo();
+            check(b.v().object(btn)->text("font") == "Sans" && !b.doc->project.resourceByName("LiberationSans-Regular.ttf"),
+                  "un seul Ctrl+Z : la police et l'import partent");
+            (void)stackBefore;
+            // ---- double-clic : la selection la prend
+            b.editor->canvas().setSelection({btn, lamp});
+            check(fonts->select("jetbrains-mono"), "choisir JetBrains Mono");
+            gfx::Rect jb;
+            fonts->layout();
+            check(fonts->familyRect("JetBrains Mono", jb), "JetBrains Mono montr\xC3\xA9" "e (son dossier s'ouvre)");
+            fonts->list().dispatch(ui::MouseDown{{jb.x + 60, jb.y + jb.h / 2}, ui::MouseButton::Left, 2, {}});
+            check(b.v().object(btn)->text("font") == "JetBrainsMono-Regular.ttf" && b.v().object(lamp)->text("font") == "JetBrainsMono-Regular.ttf",
+                  "double-clic : les deux objets choisis la prennent");
+            b.editor->layout();
+            check(fonts->shownProjectFonts() == std::vector<std::string>{"JetBrainsMono-Regular.ttf"}, "Du projet : JetBrains Mono, maintenant");
+            {
+                Recorder rec;
+                fonts->render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+                check(fonts->selectProjectFont("JetBrainsMono-Regular.ttf"), "choisir la police du projet (la liste remonte, son en-t\xC3\xAAte se voit)");
+                fonts->render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+                std::string missing;
+                for (const char* t : {"DU PROJET", "2 objets", "BIBLIOTH\xC3\x88QUE", "Glisse une police sur un objet"})
+                    if (!rec.wrote(t)) missing += std::string(" [") + t + "]";
+                check(missing.empty(), "le sous-onglet : DU PROJET (o\xC3\xB9 elle sert : 2 objets), BIBLIOTH\xC3\x88QUE, le mode d'emploi" + missing);
+            }
+            (void)b.stack.undo();
+            check(b.v().object(btn)->text("font") == "Sans" && b.doc->project.assets.resources.empty(), "un seul Ctrl+Z pour les deux et l'import");
+
+            // ---- la case Police de l'inspecteur
+            b.editor->canvas().setSelection({btn});
+            b.editor->layout();
+            const auto fontProp = [&]() -> const ui::PropertyGrid::Property* {
+                const ui::PropertyGrid::Property* found = nullptr;
+                const std::function<void(const ui::PropertyGrid::Category&)> walk = [&](const ui::PropertyGrid::Category& c) {
+                    for (const auto& pr : c.properties)
+                        if (pr.key == "font") found = &pr;
+                    for (const auto& ch : c.children) walk(ch);
+                };
+                for (const auto& c : b.editor->properties().categories()) walk(c);
+                return found;
+            };
+            const auto* fp = fontProp();
+            const std::string libCarlito = "Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement \xE2\x80\xBA Carlito";
+            check(fp && fp->type == ui::PropertyGrid::ValueType::Enum && fp->value == "Police par d\xC3\xA9" "faut (celle de l'IHM)"
+                      && fp->enumValues.size() > 3 && fp->enumValues[1] == "Police des valeurs (chasse fixe de l'IHM)"
+                      && std::find(fp->enumValues.begin(), fp->enumValues.end(), libCarlito) != fp->enumValues.end(),
+                  "la case Police : Police par d\xC3\xA9" "faut (celle de l'IHM), Police des valeurs, puis la biblioth\xC3\xA8que");
+            check(fp && fp->commit && fp->commit(libCarlito) && b.v().object(btn)->text("font") == "Carlito-Regular.ttf"
+                      && b.doc->project.resourceByName("Carlito-Regular.ttf") && b.stack.undoLabel() == "Police Carlito",
+                  "choisir Carlito (biblioth\xC3\xA8que) : import\xC3\xA9" "e et choisie, une commande");
+            b.editor->layout();
+            fp = fontProp();
+            check(fp && fp->value == "Carlito" && fp->enumValues[2] == "Carlito", "la case dit Carlito (une police du projet, par sa famille)");
+            (void)b.stack.undo();
+            check(b.v().object(btn)->text("font") == "Sans" && !b.doc->project.resourceByName("Carlito-Regular.ttf"),
+                  "un seul Ctrl+Z annule l'import et le choix");
+            (void)b.stack.redo();
+            b.editor->layout();
+            fp = fontProp();
+            check(fp && fp->commit && fp->commit("Police des valeurs (chasse fixe de l'IHM)") && b.v().object(btn)->text("font") == "Mono",
+                  "Police des valeurs : la valeur Mono");
+            // ---- le theme : Configuration > Affichage
+            app::HmiConfigPane cfgPane("cfg", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); }, nullptr, nullptr);
+            cfgPane.setBounds({0, 0, 1200, 900});
+            cfgPane.layout();
+            const auto cfgProp = [&](std::string_view name) -> const ui::PropertyGrid::Property* {
+                for (const auto& c : cfgPane.properties().categories())
+                    for (const auto& pr : c.properties)
+                        if (pr.name == name) return &pr;
+                return nullptr;
+            };
+            const auto* def = cfgProp("Police par d\xC3\xA9" "faut");
+            const auto* val = cfgProp("Police des valeurs");
+            check(def && val && def->value == "Celle de l'IHM" && val->value == "Celle de l'IHM" && def->enumValues.size() > 2 && def->enumValues[1] == "Carlito",
+                  "Configuration > Affichage : Police par d\xC3\xA9" "faut et Police des valeurs (celle de l'IHM)");
+            const std::string libJb = "Biblioth\xC3\xA8que \xE2\x80\xBA Chasse fixe \xE2\x80\xBA JetBrains Mono";
+            check(def && def->commit("Carlito") && b.doc->project.config.defaultFont == "Carlito-Regular.ttf", "la police par d\xC3\xA9" "faut : Carlito");
+            cfgPane.refresh();
+            cfgPane.layout();
+            val = cfgProp("Police des valeurs");
+            const auto resources = b.doc->project.assets.resources.size();
+            check(val && val->commit(libJb) && b.doc->project.config.valueFont == "JetBrainsMono-Regular.ttf"
+                      && b.doc->project.assets.resources.size() == resources + 1,
+                  "la police des valeurs : JetBrains Mono (biblioth\xC3\xA8que, import\xC3\xA9" "e dans la m\xC3\xAAme commande)");
+            (void)b.stack.undo();
+            check(b.doc->project.config.valueFont.empty() && b.doc->project.assets.resources.size() == resources, "Ctrl+Z : l'import et le choix");
+            b.editor->layout();
+            fp = fontProp();
+            check(fp && fp->value == "Police des valeurs (chasse fixe de l'IHM)" && fp->enumValues[0] == "Police par d\xC3\xA9" "faut (Carlito)",
+                  "l'inspecteur dit la police du th\xC3\xA8me : Police par d\xC3\xA9" "faut (Carlito)");
+            // ---- le dessin : un objet sur Sans prend la police par defaut (une image de texte)
+            check(fp && fp->commit("Police par d\xC3\xA9" "faut (Carlito)") && b.v().object(btn)->text("font") == "Sans",
+                  "Police par d\xC3\xA9" "faut (Carlito) : la valeur Sans");
+            {
+                Recorder rec;
+                b.editor->canvas().render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+                const auto withTheme = rec.made.size();
+                b.doc->project.config.defaultFont.clear();
+                Recorder rec2;
+                b.editor->canvas().render(ui::PaintContext{rec2, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+                check(withTheme > rec2.made.size(), "dessin : le bouton sur Sans s'\xC3\xA9" "crit dans la police par d\xC3\xA9" "faut ; sans th\xC3\xA8me, comme avant");
+            }
+        }
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ================================================================ l'arbre : Ressources > Bibliotheque de polices
+    {
+        using NK = app::ProjectTreeModel::NodeKind;
+        auto doc = std::make_shared<Document>();
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        ui::NodeId hmiNode = ui::kInvalidNode, res = ui::kInvalidNode;
+        for (std::size_t i = 0; i < tree.childCount(tree.root()); ++i)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
+        for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(hmiNode, i)) == NK::HmiResources) res = tree.childAt(hmiNode, i);
+        const auto lib = res != ui::kInvalidNode && tree.childCount(res) == 5 ? tree.childAt(res, 4) : ui::kInvalidNode;
+        check(lib != ui::kInvalidNode && app::ProjectTreeModel::kindOf(lib) == NK::HmiFontLibrary, "Ressources : la Biblioth\xC3\xA8que de polices, cinqui\xC3\xA8me");
+        if (lib != ui::kInvalidNode) {
+            same_text(tree.text(lib) + "  [" + tree.counterOf(lib) + "]", "Biblioth\xC3\xA8que de polices  [9]", "Biblioth\xC3\xA8que de polices : ses familles");
+            check(tree.childCount(lib) == 4 && tree.text(tree.childAt(lib, 0)) == "Mes polices" && tree.counterOf(tree.childAt(lib, 0)) == "0"
+                      && tree.text(tree.childAt(lib, 1)) == "Sans empattement" && tree.counterOf(tree.childAt(lib, 1)) == "3"
+                      && tree.counterOf(tree.childAt(lib, 3)) == "3",
+                  "d\xC3\xA9pli\xC3\xA9" "e : Mes polices [0], Sans empattement [3], Avec empattement, Chasse fixe [3]");
+            const auto item = tree.childAt(tree.childAt(lib, 1), 2);
+            check(app::ProjectTreeModel::kindOf(item) == NK::HmiFontItem && tree.text(item) == "Carlito" && app::ProjectTreeModel::fontIdOf(item) == "carlito"
+                      && app::ProjectTreeModel::fontFolderOf(item) == "Sans empattement" && tree.style(item).icon == ui::Icon::Lock
+                      && tree.style(item).hint == "Normal, Gras",
+                  "une famille : Carlito (son id, son dossier, un cadenas, ses styles)");
+        }
+    }
+    fs::remove_all(mine, ec);
+    fl::setUserFolder({});
+}
+
 int main(int argc, char** argv) {
-    // 1.26.0 : HMI_TEST_POL=1 - l'editeur de polices, seul.
+    // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
+    if (argc > 3) gFonts1260 = fs1260::path(argv[3]);
+    else if (argc > 1) gFonts1260 = fs1260::path(argv[1]).parent_path().parent_path().parent_path() / "resources" / "polices";
+    // 1.26.0 : HMI_TEST_POL=1 - les polices (la bibliotheque, la police partout, l'editeur de polices), seules.
     if (const char* only = std::getenv("HMI_TEST_POL"); only && *only == '1') {
+        polices1260();
         editeurPolices1260(argc > 2 ? argv[2] : "");
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
@@ -48849,6 +49177,7 @@ int main(int argc, char** argv) {
     rapportsSonsImages1250();               // 1.25.0 : la mise en page des rapports, les sons et les images de la bibliotheque
     if (argc > 2) editeurPolices1260(argv[2]);   // 1.26.0 : l'editeur de polices
     bibliothequeImages1251();               // 1.25.1 : le volet de la bibliotheque d'images
+    polices1260();                          // 1.26.0 : la bibliotheque de polices, la police partout
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)

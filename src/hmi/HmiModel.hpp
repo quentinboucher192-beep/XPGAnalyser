@@ -1380,6 +1380,12 @@ struct Config {
     std::string colorMode{"normal"};
     bool        statusSymbols{false};
     std::string theme{"nuit"};
+    // 1.26.0 : LES POLICES DU THEME (Configuration > Affichage) - la police par defaut (celle des objets sur << Sans >>,
+    // ou sans police : les boutons, voyants, afficheurs de la bibliotheque arrivent ainsi) et la police des valeurs
+    // (celle des objets sur << Mono >>) : le nom d'une ressource police du projet. Vides (par defaut, et un projet
+    // d'avant) : les polices de l'IHM, comme avant. Ecrites seulement si elles sont choisies.
+    std::string defaultFont{};
+    std::string valueFont{};
     // 1.12.7 (lot D) : LE CALENDRIER DES POSTES du projet (« 06:00;14:00;22:00 » ; vide : aucun). Un
     // compteur de production dont les debuts de poste disent « calendrier » le suit (avant : une liste
     // a taper dans chaque compteur, et a changer partout).

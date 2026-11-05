@@ -1186,6 +1186,9 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
            + (cfg.colorMode != "normal" ? field("couleurs", cfg.colorMode) : std::string{})
            + (cfg.statusSymbols ? fieldBool("symboles", true) : std::string{})
            + (cfg.theme != "nuit" ? field("theme", cfg.theme) : std::string{})
+           // 1.26.0 : les polices du theme (la police par defaut, celle des valeurs) - ecrites seulement si choisies.
+           + (!cfg.defaultFont.empty() ? field("police", cfg.defaultFont) : std::string{})
+           + (!cfg.valueFont.empty() ? field("police_valeurs", cfg.valueFont) : std::string{})
            // 1.12.7 (lot D) : le calendrier des postes, ecrit seulement s'il existe.
            + (!cfg.shifts.empty() ? field("postes", cfg.shifts) : std::string{})
            // 1.13.0 (lot J4) : les tests des fonctions - ecrits seulement s'ils changent.
@@ -1826,6 +1829,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             p.config.colorMode = r.get("couleurs") ? toStr(r.get("couleurs")) : std::string("normal");
             p.config.statusSymbols = toBool(r.get("symboles"), false);
             p.config.theme = r.get("theme") ? toStr(r.get("theme")) : std::string("nuit");
+            p.config.defaultFont = r.get("police") ? toStr(r.get("police")) : std::string{};             // 1.26.0
+            p.config.valueFont = r.get("police_valeurs") ? toStr(r.get("police_valeurs")) : std::string{};
             p.config.shifts = r.get("postes") ? toStr(r.get("postes")) : std::string{};   // 1.12.7 (lot D)
             p.config.runTestsOnBuild = toBool(r.get("tests_au_build"), true);             // 1.13.0 (lot J4)
             p.config.testFailBlocksStart = toBool(r.get("echec_bloque"), false);

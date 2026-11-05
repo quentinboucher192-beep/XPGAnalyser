@@ -1,4 +1,6 @@
 #include "HmiSoundLibraryPane.hpp"   // 1.25.0 : le sous-onglet Sons de la bibliotheque
+#include "HmiFontLibraryPane.hpp"    // 1.26.0 : le sous-onglet Polices de la bibliotheque
+#include "../../hmi/HmiFontLibrary.hpp"   // 1.26.0 : la case Police (le theme, les polices du projet, la bibliotheque)
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"   // 1.24.0 : CommandGroupScope (supprimer plusieurs d'un coup)
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les styles fournis dans la liste Style nomme
@@ -1593,12 +1595,26 @@ void HmiPalette::setSoundsPane(std::unique_ptr<HmiSoundLibraryPane> pane) {
     invalidateLayout();
 }
 
+// 1.26.0 : le sous-onglet Polices - la bibliotheque de polices en etroit.
+void HmiPalette::setFontsPane(std::unique_ptr<HmiFontLibraryPane> pane) {
+    if (!pane) return;
+    pane->setCompact(true);
+    pane->setVisibility(ui::Visibility::Collapsed);
+    fonts_ = &static_cast<HmiFontLibraryPane&>(addChild(std::move(pane)));
+    if (!rawFilter_.empty()) fonts_->setSearch(rawFilter_);
+    invalidateLayout();
+}
+
 void HmiPalette::onLayout() {
     const auto b = bounds();
     const float helpH = 64.f;
     if (sounds_) {   // 1.25.0 : le sous-onglet Sons - toute la hauteur sous les onglets
         sounds_->setBounds({b.x, b.y + kModeH, b.w, std::max(0.f, b.h - kModeH)});
         sounds_->setVisibility(mode_ == Mode::Sounds ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    }
+    if (fonts_) {   // 1.26.0 : le sous-onglet Polices, de meme
+        fonts_->setBounds({b.x, b.y + kModeH, b.w, std::max(0.f, b.h - kModeH)});
+        fonts_->setVisibility(mode_ == Mode::Fonts ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     }
     apiTree_->setBounds({b.x + 2.f, b.y + kModeH, std::max(0.f, b.w - 4.f), std::max(0.f, b.h - kModeH - helpH)});
     apiTree_->setVisibility(treeShown() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
@@ -1726,6 +1742,7 @@ bool hmiPaletteWordMatch(hmi::Kind kind, std::string_view text) {
 void HmiPalette::setFilter(std::string text) {
     rawFilter_ = text;
     if (sounds_) sounds_->setSearch(text);   // 1.25.0 : la recherche de la bibliotheque cherche aussi les sons
+    if (fonts_) fonts_->setSearch(text);     // 1.26.0 : et les polices
     filter_ = lower(std::move(text));
     // 1.14.0 (captures finales) : les genres que trouvent leurs mots-cles (une fois par recherche, pas a chaque dessin).
     wordHits_.clear();
@@ -1903,9 +1920,10 @@ void HmiPalette::revealKind(hmi::Kind kind) {
 
 bool HmiPalette::modeRect(Mode m, gfx::Rect& out) const {
     // 1.14.1 (lot N6) : trois onglets, Objets | Images | Variables. 1.25.0 : quatre, Objets | Images | Sons | Variables.
+    // 1.26.0 : cinq, Objets | Images | Sons | Polices | Variables.
     const auto b = bounds();
-    const float w = (b.w - 12.f) / 4.f;
-    const float at = m == Mode::Objects ? 0.f : m == Mode::Images ? 1.f : m == Mode::Sounds ? 2.f : 3.f;
+    const float w = (b.w - 12.f) / 5.f;
+    const float at = m == Mode::Objects ? 0.f : m == Mode::Images ? 1.f : m == Mode::Sounds ? 2.f : m == Mode::Fonts ? 3.f : 4.f;
     out = {b.x + 6.f + w * at, b.y + 4.f, w, kModeH - 8.f};
     return b.w > 20.f;
 }
@@ -2016,13 +2034,14 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(b, c.panelBg);
     // Lot 12 : les onglets Objets | Variables ; 1.14.1 (lot N6) : Objets | Images | Variables.
-    for (const Mode m : {Mode::Objects, Mode::Images, Mode::Sounds, Mode::Variables}) {   // 1.25.0 : + Sons
+    for (const Mode m : {Mode::Objects, Mode::Images, Mode::Sounds, Mode::Fonts, Mode::Variables}) {   // 1.25.0 : + Sons ; 1.26.0 : + Polices
         gfx::Rect r;
         if (!modeRect(m, r)) continue;
         const bool on = m == mode_;
         ctx.r.fillRoundedRect(r, on ? c.accent.withAlpha(60) : c.inputBg, 4);
         if (on) ctx.r.fillRect({r.x + 4, r.y + r.h - 2, r.w - 8, 2}, c.accent);
-        const std::string label = fit(ctx.r, m == Mode::Objects ? "Objets" : m == Mode::Images ? "Images" : m == Mode::Sounds ? "Sons" : "Variables",
+        const std::string label = fit(ctx.r, m == Mode::Objects ? "Objets" : m == Mode::Images ? "Images" : m == Mode::Sounds ? "Sons"
+                                             : m == Mode::Fonts ? "Polices" : "Variables",
                                       ctx.theme.font.smallUi, r.w - 4);
         const float lw = ctx.r.measure(label, ctx.theme.font.smallUi).width;
         ctx.r.drawText({r.x + (r.w - lw) / 2, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.smallUi)) / 2}, label, ctx.theme.font.smallUi,
@@ -2034,6 +2053,7 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
         return;
     }
     if (mode_ == Mode::Sounds) return;     // 1.25.0 : le volet des sons se dessine lui-meme (un enfant)
+    if (mode_ == Mode::Fonts) return;      // 1.26.0 : celui des polices aussi
     if (mode_ == Mode::Variables) {
         if (!hovered()) hoverVariable_.clear();
         paintVariables(ctx);
@@ -2155,7 +2175,7 @@ void HmiPalette::onPaint(const ui::PaintContext& ctx) {
 ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
     // Lot 12 : les onglets Objets | Variables, puis la liste des variables ; 1.14.1 (lot N6) : et Images.
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
-        for (const Mode mode : {Mode::Objects, Mode::Images, Mode::Sounds, Mode::Variables}) {   // 1.25.0 : + Sons
+        for (const Mode mode : {Mode::Objects, Mode::Images, Mode::Sounds, Mode::Fonts, Mode::Variables}) {   // 1.25.0 : + Sons ; 1.26.0 : + Polices
             gfx::Rect r;
             if (modeRect(mode, r) && r.contains(m->pos)) {
                 setMode(mode);
@@ -2165,6 +2185,7 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
     }
     if (mode_ == Mode::Images) return imageEvent(ev);
     if (mode_ == Mode::Sounds) return ui::EventResult::Ignored;   // 1.25.0 : le volet des sons (un enfant) l'a deja vu
+    if (mode_ == Mode::Fonts) return ui::EventResult::Ignored;    // 1.26.0 : celui des polices aussi
     if (mode_ == Mode::Variables) {
         if (treeShown()) return ui::EventResult::Ignored;   // R1111-6 : l'arbre (un enfant) a deja vu l'evenement
         layoutVariables();
@@ -4735,7 +4756,15 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             const auto kindFor = [](std::string_view k) {
                 return k == "video" ? hmi::MediaKind::Video : k == "font" ? hmi::MediaKind::Font : hmi::MediaKind::Image;
             };
-            if (hmi::citesResource(prop.key)) {
+            if (prop.key == "font" && project) {
+                // 1.26.0 : LA CASE POLICE - << Police par defaut (Carlito) >>, << Police des valeurs (JetBrains Mono) >>
+                // (celles du theme), les polices du projet par leur famille, puis la bibliotheque (importee au choix :
+                // l'editeur fait une seule commande). L'etiquette se montre ; la valeur ecrite reste Sans, Mono, un nom.
+                p.type = PG::ValueType::Enum;
+                p.enumValues.clear();
+                for (const auto& ch : hmi::fontlib::fieldChoices(*project)) p.enumValues.push_back(ch.label);
+                if (prop.expr.empty()) p.value = hmi::fontlib::fieldLabel(*project, prop.value);
+            } else if (hmi::citesResource(prop.key)) {
                 p.type = PG::ValueType::Enum;
                 p.enumValues = prop.key == "font" ? std::vector<std::string>{"Sans", "Mono"} : std::vector<std::string>{""};
                 if (assets)
@@ -5059,6 +5088,19 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         };
         if (const std::string special = labelForKind(o->kind, prop.key); !special.empty() && prop.key != "variable")
             p.name = special + (prop.expr.empty() ? std::string{} : std::string("  \xC6\x92"));
+        // 1.26.0 : la Police choisie par son etiquette ecrit sa valeur (Sans, Mono, une ressource) ; une police de la
+        // bibliotheque part sous son libelle (fontlib::choiceLabel) : l'editeur l'importe et la donne, une commande.
+        if (p.type == PG::ValueType::Enum && prop.key == "font" && project)
+            p.commit = [inner = p.commit, project](std::string_view s) {
+                if (!inner) return false;
+                if (s.empty() || s.front() == '=' || s == ui::exprfield::kToDefault) return inner(s);
+                if (const auto ch = hmi::fontlib::fromLabel(*project, s)) {
+                    if (ch->libraryId.empty()) return inner(ch->value);
+                    const hmi::fontlib::Font* f = hmi::fontlib::findFont(ch->libraryId);
+                    return f ? inner(hmi::fontlib::choiceLabel(*f)) : false;
+                }
+                return inner(s);
+            };
         // 1.12.7 (lot D) : une position de vanne 3 voies, un onglet choisis par leur nom ecrivent leur code.
         if (p.type == PG::ValueType::Enum && o->kind == hmi::Kind::ThreeWayValve && prop.key == "value")
             p.commit = [inner = p.commit](std::string_view s) { return inner(hmi::choices::valve3Code(s)); };
