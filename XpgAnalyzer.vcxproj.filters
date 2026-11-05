@@ -1759,6 +1759,9 @@
     <ClCompile Include="src\hmi\HmiRuntimeTable.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiTrueType.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -3389,6 +3392,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTable.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTrueType.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp">

@@ -963,7 +963,7 @@ bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, Fon
         name && length > 0) {
         out.family.clear();
         for (int i = 0; i + 1 < length; i += 2)
-            if (name[i] == 0 && name[i + 1] > 0x20 && name[i + 1] < 0x7F) out.family += name[i + 1];
+            if (name[i] == 0 && name[i + 1] >= 0x20 && name[i + 1] < 0x7F) out.family += name[i + 1];
     }
     return true;
 }
