@@ -1550,9 +1550,9 @@ Renommer renomme aussi ce qui le cite dans le fichier : les instances d'un symbo
 
 == styles-nommes | Les styles nommés
 : Une apparence sous un nom, pour des types d'objets choisis (boutons, pompes, tes symboles…) : ses valeurs s'imposent aux objets qui le citent (le carré O), chacune se brise à part ; des styles fournis (ISA-101…).
-@mots style nommé, namedStyle, Créer un style, ISA-101, style fourni, Dupliquer à partir de, carré O, briser, valeur imposée, O Style, Tout rétablir
+@mots style nommé, namedStyle, Créer un style, ISA-101, style fourni, Dupliquer à partir de, carré O, briser, valeur imposée, O Style, Tout rétablir, style en formule
 @lieux styles
-@voir editeur, proprietes, concevoir-vite, dossiers
+@voir editeur, proprietes, concevoir-vite, dossiers, couleurs-semantiques
 @capture PNG_326_styles_nommes.png | IHM › Styles : les styles, combien d'objets les citent, la fiche du style choisi.
 @capture PNG_327_style_dans_inspecteur.png | Dans l'inspecteur, catégorie Apparence : le style nommé cité par l'objet.
 ### Créer un style
@@ -1589,6 +1589,52 @@ L'**aperçu** montre le style choisi sur le **type** choisi dans sa liste **Type
 ### Supprimer un style
 Les objets gardent leurs valeurs et ne le citent plus. Générer signale un objet qui cite un style disparu.
 > Copier le style / Coller le style (barre d'outils) reste là pour reporter une apparence une fois, sans lien.
+@nouveau 1.23.1
+### Le style choisi par une formule (1.23.1)
+**Style nommé** accepte une formule (fx) : `=SEL(Defaut_P1, 'Contraste élevé', 'ISA-101')`. Dans l'éditeur, l'objet garde le style de sa valeur (le carré O, l'aperçu) ; **en marche**, il prend les valeurs du style que la formule rend, et les reprend quand elle change. Une valeur brisée garde la sienne ; une propriété en formule aussi. La ligne **Valeurs du style** le dit (« fx : le style de la formule en marche »). Générer vérifie les noms écrits dans la formule (un style introuvable) ; une formule sans nom écrit ne se vérifie qu'en marche.
+@nouveau 1.23.1
+### Dans l'arbre du projet (1.23.1)
+IHM › **Styles** se déplie : **Styles** (ceux du projet, puis les fournis) et **Couleurs sémantiques**, chacun avec son nombre - les éléments fournis comptent. Un **cadenas** marque ce qui est fourni (verrouillé), une **personne** ce qui est à toi ; une couleur sémantique a son icône dans sa teinte, et sa valeur en gris après son nom. Un clic ouvre la page Styles sur l'élément ; le clic droit propose **Nouveau style…** (sur le groupe Styles) et **Dupliquer à partir de…** (sur un style, fourni ou à toi).
+
+== couleurs-semantiques | Les couleurs sémantiques
+: Des couleurs globales sous un nom (Alarme, Marche, Fond…), utilisables partout comme des constantes : une case couleur écrit @Alarme, une formule '@Alarme' ; changer la couleur change tout ce qui la cite. Douze fournies (ISA-101), et les tiennes.
+@depuis 1.23.1
+@mots couleur sémantique, couleurs sémantiques, @Nom, @Alarme, @Marche, @Fond, constante de couleur, couleur globale, palette, charte
+@lieux styles
+@voir styles-nommes, proprietes, animations, verifier
+### Citer une couleur
+Une case couleur (remplissage, contour, texte, couleur allumé…) peut contenir **@Nom** au lieu d'un code : `@Alarme`. L'objet se dessine dans la couleur de ce nom, et **suit si on la change**. La palette d'une case couleur propose les couleurs sémantiques dans une bande en bas (un clic écrit `@Nom`) ; on peut aussi le taper. Le nom se lit sans tenir compte des majuscules.
+- **Dans une formule** : un texte entre apostrophes, `=SEL(Defaut_P1, '@Alarme', '@Marche')`. Les fonctions de couleur le lisent aussi : `=COULEUR_ECLAIRCIR('@Alarme', 20)`.
+- **Dans un style** : une valeur imposée peut être `@Accent` ; le style suit la couleur.
+- **Le fond d'une vue** et les **zones** d'un bargraphe ou d'un cadran (`0-60 = @Marche; 60-100 = @Alarme`) aussi.
+- Un **script** peut écrire `'@Alarme'` dans une propriété : elle se dessine dans la couleur (mais Renommer, Retirer et Générer ne lisent pas les scripts).
+- Une couleur peut en citer une autre (`@Eau froide` vaut `@Eau`).
+### Les couleurs fournies
+Douze couleurs **fournies**, verrouillées (un cadenas), suivent l'ISA-101 - le gris pour le normal, la couleur pour l'anomalie :
+| Nom | Couleur | Pour |
+| Fond | #E0E0E0 | le fond des vues |
+| Texte | #1C1C1C | le texte |
+| Équipement | #4D4D4D | le contour et le corps d'un équipement |
+| Marche | #4D4D4D | en marche : plein, gris foncé (pas de vert) |
+| Arrêt | #F5F5F5 | à l'arrêt : vide |
+| Défaut | #D32F2F | un équipement en défaut |
+| Alarme critique | #D32F2F | une alarme de priorité 1 |
+| Alarme | #F57C00 | une alarme de priorité 2 |
+| Avertissement | #F2C200 | une alarme de priorité 3 |
+| Information | #3D7CC9 | une information, priorité 4 |
+| Accent | #1F5F99 | ce qui agit : la sélection, le bouton par défaut |
+| Désactivé | #A6A6A6 | ce qui ne répond pas |
+Elles ne se modifient pas : **Dupliquer à partir de…** en fait une couleur du projet, à toi. Une couleur du projet ne peut pas porter le nom d'une fournie.
+### Tes couleurs
+IHM › Styles, onglet **Couleurs sémantiques** : **Nouvelle couleur…**, **Dupliquer à partir de…**, **Renommer…**, **Retirer** ; chaque couleur a son nom, sa valeur (`#RRGGBB`, `#RRGGBBAA` ou `@Autre`), sa description et le nombre de citations. Chaque changement est une commande (Ctrl+Z).
+- **Renommer** : tout ce qui la cite suit (valeurs, formules, styles, fonds, autres couleurs).
+- **Retirer** : ce qui la cite garde sa couleur, écrite en dur - rien ne change à l'écran.
+- Elles s'enregistrent avec le projet ; un **paquet de vues** emporte celles que ses vues citent (et l'import ajoute celles qui manquent, sans toucher celles du projet).
+### Ce que Générer vérifie
+- une case, une formule, un style qui cite une couleur **inconnue** (un double-clic mène à l'objet) ;
+- une couleur **illisible** (ni `#RRGGBB`, ni `#RRGGBBAA`, ni `@Nom`) ;
+- une couleur du projet qui porte le nom d'une **fournie**, deux couleurs du même nom, des citations qui **tournent en rond** (`@A` vaut `@B`, `@B` vaut `@A`).
+! Un projet relu par une version d'avant la 1.23.1 ne connaît pas `@Nom` : la case y est une couleur illisible.
 
 == rechercher-remplacer | Rechercher et remplacer
 : Chercher un texte dans une vue ou tout le projet, voir chaque changement avant de le faire, remplacer d'un coup ; dupliquer une vue en remplaçant.

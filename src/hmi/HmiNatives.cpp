@@ -421,7 +421,7 @@ bool isOwnFunction(std::string_view name) noexcept {
 
 bool parseColor(std::string_view t, std::uint8_t& r, std::uint8_t& g, std::uint8_t& b, std::uint8_t& a) noexcept {
     t = trimmed(t);
-    // 1.23.1 : ECLAIRCIR('@Alarme', 20) : la couleur semantique.
+    // 1.23.1 : COULEUR_ECLAIRCIR('@Alarme', 20) : la couleur semantique.
     if (!t.empty() && t.front() == '@') {
         try {
             const std::string resolved = core::semantic::resolve(t);

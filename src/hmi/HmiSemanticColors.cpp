@@ -71,8 +71,9 @@ std::vector<SemanticColor> makeBuiltins() {
 }
 
 // ---- les citations ------------------------------------------------------------------------------------------------------
-//  Une valeur cite une couleur par son texte entier (<< @Alarme >>) ; une formule (et le texte des parametres d'un symbole,
-//  Couleur := '@Alarme') par un texte constant entre apostrophes ou guillemets.
+//  Une valeur cite une couleur par son texte entier (<< @Alarme >>), ou apres un = dans des zones (<< 0-60 = @Marche >>) ;
+//  une formule (et le texte des parametres d'un symbole, Couleur := '@Alarme') par un texte constant entre apostrophes ou
+//  guillemets.
 struct Ref {
     std::size_t at{0};
     std::size_t len{0};
@@ -83,7 +84,21 @@ std::vector<Ref> refsIn(std::string_view text, bool formula) {
     if (text.find('@') == std::string_view::npos) return out;
     if (!formula) {
         std::string name;
-        if (core::semantic::isReference(text, &name)) out.push_back({0, text.size(), name});
+        if (core::semantic::isReference(text, &name)) {
+            out.push_back({0, text.size(), name});
+            return out;
+        }
+        // Les zones d'un bargraphe, d'un cadran : << 0-60 = @Marche; 60-100 = @Alarme >> - un @ juste apres un =, le nom
+        // jusqu'au ; (ou la fin de la ligne).
+        for (std::size_t at = text.find('@'); at != std::string_view::npos; at = text.find('@', at + 1)) {
+            std::size_t before = at;
+            while (before > 0 && (text[before - 1] == ' ' || text[before - 1] == '\t')) --before;
+            if (before == 0 || text[before - 1] != '=') continue;
+            std::size_t end = at + 1;
+            while (end < text.size() && text[end] != ';' && text[end] != '\n' && text[end] != '\r') ++end;
+            while (end > at + 1 && std::isspace(static_cast<unsigned char>(text[end - 1]))) --end;
+            if (end > at + 1) out.push_back({at, end - at, std::string(text.substr(at + 1, end - at - 1))});
+        }
         return out;
     }
     std::size_t i = 0;

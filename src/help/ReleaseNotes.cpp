@@ -164,6 +164,26 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.23.1 : le Style nomme en formule ; les couleurs semantiques ; IHM > Styles deplie ; la page Styles (menus, listes)
+        note("1.23.1", "Vues", Kind::New,
+         "LES COULEURS S\xC3\x89MANTIQUES : des couleurs globales sous un nom, utilisables partout comme des constantes. Une case "
+         "couleur \xC3\xA9" "crit @Alarme (la palette les propose en bas : un clic), une formule '@Alarme' (SEL(Defaut, '@Alarme', "
+         "'@Marche')), un style ou le fond d'une vue aussi ; changer la couleur change tout ce qui la cite. Douze FOURNIES "
+         "(ISA-101 : Fond, Texte, \xC3\x89quipement, Marche, Arr\xC3\xAAt, D\xC3\xA9" "faut, Alarme critique, Alarme, Avertissement, Information, "
+         "Accent, D\xC3\xA9sactiv\xC3\xA9), verrouill\xC3\xA9" "es ; les tiennes dans IHM \xE2\x80\xBA Styles \xE2\x80\xBA Couleurs s\xC3\xA9mantiques. Renommer : ce qui la cite "
+         "suit ; retirer : la couleur reste, \xC3\xA9" "crite en dur. G\xC3\xA9n\xC3\xA9rer signale une couleur inconnue ou illisible ; un paquet de "
+         "vues emporte celles qu'il cite.",
+         "couleurs-semantiques", ""),
+        note("1.23.1", "Vues", Kind::New,
+         "LE STYLE NOMM\xC3\x89 PAR UNE FORMULE (fx) : Style nomm\xC3\xA9 accepte =SEL(Defaut_P1, 'Contraste \xC3\xA9lev\xC3\xA9', 'ISA-101'). Dans "
+         "l'\xC3\xA9" "diteur, l'objet garde le style de sa valeur ; en marche, il prend les valeurs du style que rend la formule (une "
+         "valeur bris\xC3\xA9" "e et une propri\xC3\xA9t\xC3\xA9 en formule gardent la leur). G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie les noms \xC3\xA9" "crits dans la formule.",
+         "styles-nommes", ""),
+        note("1.23.1", "Projet", Kind::Changed,
+         "IHM \xE2\x80\xBA STYLES SE D\xC3\x89PLIE dans l'arbre : Styles et Couleurs s\xC3\xA9mantiques, chacun avec son nombre (les \xC3\xA9l\xC3\xA9ments fournis "
+         "comptent). Un cadenas pour ce qui est fourni, une personne pour ce qui est \xC3\xA0 toi ; une couleur a son ic\xC3\xB4ne dans sa "
+         "teinte. Un clic ouvre la page Styles sur l'\xC3\xA9l\xC3\xA9ment ; clic droit : Nouveau style\xE2\x80\xA6, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6",
+         "styles-nommes", ""),
         // 1.23.0 : les styles par type d'objet (fournis, dupliquer, proprietes au choix, apercu) ; le carre O de l'inspecteur
         note("1.23.0", "Vues", Kind::New,
          "LES STYLES PAR TYPE D'OBJET : IHM \xE2\x80\xBA Styles refaite. Un style ne vise plus seulement les boutons : une liste de "

@@ -124,23 +124,27 @@ void usersRenameForget() {
     b.obj(b.pump).setExpr("colorFault", "SEL(Defaut_P1, '@Alarme', '@eau')");
     b.obj(b.text).set("textColor", " @Eau ");
     b.p.view(b.view)->background = "@Fond";
+    b.obj(b.text).set("zones", "0-50 = @Eau; 50-80 = @Alarme critique ;80-100 = #FF0000");   // des zones (bargraphe)
     hmi::Style s;
     s.id = b.p.allocate();
     s.name = "Bleu";
     hmi::styles::targetFor(s, "Pump").props.push_back({"stroke", "@Eau", {}});
     b.p.styles.push_back(s);
-    check(sem::users(b.p, "Eau") == 5, "@Eau : une valeur, une formule, un texte, un style, une couleur (5)");
+    check(sem::users(b.p, "Eau") == 6, "@Eau : une valeur, une formule, un texte, des zones, un style, une couleur (6)");
+    check(sem::users(b.p, "Alarme critique") == 1, "@Alarme critique dans les zones (un nom a espace)");
     check(sem::users(b.p, "@Alarme") == 1 && sem::users(b.p, "Fond") == 1, "@Alarme dans la formule ; @Fond au fond de la vue");
     // Renommer : chaque citation suit.
-    check(sem::renameReferences(b.p, "Eau", "Eau de ville") == 5, "renommer : 5 citations");
+    check(sem::renameReferences(b.p, "Eau", "Eau de ville") == 6, "renommer : 6 citations");
+    check(b.obj(b.text).text("zones") == "0-50 = @Eau de ville; 50-80 = @Alarme critique ;80-100 = #FF0000", "les zones suivent");
     b.p.semanticColors.front().name = "Eau de ville";
     check(b.obj(b.pump).text("colorOn") == "@Eau de ville" && b.obj(b.pump).expr("colorFault") == "SEL(Defaut_P1, '@Alarme', '@Eau de ville')",
           "la valeur et la formule suivent");
     check(b.p.styles.front().targets.front().props.front().value == "@Eau de ville" && b.p.semanticColors[1].value == "@Eau de ville",
           "le style et la couleur qui la citait suivent");
-    check(sem::users(b.p, "Eau") == 0 && sem::users(b.p, "Eau de ville") == 5, "plus rien ne cite l'ancien nom");
+    check(sem::users(b.p, "Eau") == 0 && sem::users(b.p, "Eau de ville") == 6, "plus rien ne cite l'ancien nom");
     // Retirer : ce qui la cite garde sa couleur, ecrite en dur.
-    check(sem::forget(b.p, "Eau de ville") == 5, "retirer : 5 citations remplacees");
+    check(sem::forget(b.p, "Eau de ville") == 6, "retirer : 6 citations remplacees");
+    check(b.obj(b.text).text("zones") == "0-50 = #2571B7; 50-80 = @Alarme critique ;80-100 = #FF0000", "les zones gardent la couleur");
     check(b.obj(b.pump).text("colorOn") == "#2571B7" && b.obj(b.pump).expr("colorFault") == "SEL(Defaut_P1, '@Alarme', '#2571B7')",
           "la couleur reste a l'ecran (en dur)");
     check(b.p.semanticColors[1].value == "#2571B7" && sem::users(b.p, "Eau de ville") == 0, "plus aucune citation");
