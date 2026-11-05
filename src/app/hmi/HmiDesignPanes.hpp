@@ -24,6 +24,11 @@
 //  citent le style suivent, sauf ceux qui l'avaient changee eux-memes ;
 //  renomme, ils le citent sous son nouveau nom ; retire, ils gardent leurs
 //  valeurs. Chaque changement est une commande (Ctrl+Z).
+//  1.23.1 : chaque liste a son menu du clic droit (les styles, les types, les
+//  proprietes imposees) ; les choix << Ajouter un type >> et << Ajouter une
+//  propriete >> rangent leurs lignes en dossiers qu'on deplie (les categories
+//  de la bibliotheque, celles de l'inspecteur), avec l'icone d'un type ou le
+//  genre de valeur d'une propriete a droite.
 //
 //  IHM > RECHERCHER / REMPLACER. Un texte, son remplacant, ou chercher (tout
 //  le projet ou une vue), la casse, le mot entier : l'APERCU liste chaque champ
@@ -45,6 +50,8 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -53,49 +60,84 @@ namespace ui { class StatusBar; }
 namespace app {
 
 // 1.23.0 : LE CHOIX AVEC RECHERCHE de l'onglet Styles (+ Ajouter un type..., + Ajouter une propriete...) : une liste
-// deroulee sous son bouton - un titre, un champ de recherche, des lignes rangees en groupes (BIBLIOTHEQUE, MES
-// SYMBOLES). Haut / Bas, Entree, Echap (le champ rend la main) ; un clic ailleurs la ferme. `chosen` : la valeur de la
-// ligne choisie (la liste est deja fermee : le volet peut en rouvrir une).
+// deroulee sous son bouton - un titre, un champ de recherche, des lignes rangees en groupes. Haut / Bas, Entree, Echap
+// (le champ rend la main) ; un clic ailleurs la ferme. `chosen` : la valeur de la ligne choisie (la liste est deja
+// fermee : le volet peut en rouvrir une).
+// 1.23.1 (le client, 05/11 : << deballer / reduire, des dossiers par categories, de petites icones a droite >>) :
+// CHAQUE GROUPE EST UN DOSSIER qu'on deplie ou replie - un clic sur sa ligne, Droite / Gauche, + / - (sur sa ligne),
+// Entree ; sa ligne dit son chevron, son nom et combien il contient. Haut / Bas passent par les lignes des dossiers et
+// sautent ce qu'un dossier replie contient. Au depart : le premier seul deplie (Folding::firstOnly), ou tous ; une
+// recherche tapee deplie ce qui a un resultat. Une ligne peut avoir sa petite icone a droite (le glyphe de la
+// bibliotheque d'un type), son genre de valeur (detail) et, plus discrete, sa valeur d'un objet neuf (extra).
 class HmiStyleChooser final : public ui::Widget {
 public:
     struct Entry {
         std::string value;    // ce que le choix rend ("Pump", "symbole:Sym_Moteur", "colorOn")
         std::string label;    // ce qu'on lit ("Pompe")
-        std::string group;    // son groupe ("BIBLIOTHEQUE") ; les lignes d'un meme groupe se suivent
-        std::string detail;   // a droite, en gris (la valeur d'un objet neuf) ; vide : rien
+        std::string group;    // son groupe, un dossier ("Synoptique") ; les lignes d'un meme groupe se suivent
+        std::string detail;   // a droite, en gris (le genre de valeur : "nombre", "couleur") ; vide : rien
+        std::string extra;    // 1.23.1 : avant `detail`, plus discret (la valeur d'un objet neuf), s'il y a la place
+        std::optional<HmiGlyph> glyph{};   // 1.23.1 : la petite icone a droite (le glyphe de la bibliotheque) ; rien : aucune
+    };
+    // 1.23.1 : les dossiers a l'ouverture, et le nom de ce qu'ils contiennent (le compte de leur ligne).
+    struct Folding {
+        bool        firstOnly{false};     // vrai : le premier deplie, les autres replies ; faux : tous deplies
+        std::string one, many;            // "type", "types" (vides : le nombre seul)
     };
     explicit HmiStyleChooser(std::string id);
     // Ouvert sous `anchor` (au-dessus s'il n'y a pas la place), garde dans `area` ; le champ de recherche prend la main.
-    void open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area);
+    void open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area, Folding folding);
+    void open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area) {
+        open(std::move(title), std::move(entries), anchor, area, Folding{});
+    }
     void close();
     [[nodiscard]] bool isOpen() const noexcept { return open_; }
     [[nodiscard]] const std::string& title() const noexcept { return title_; }
     void setSearch(const std::string& text);
     [[nodiscard]] const std::string& searchText() const;
-    // Ce qui est montre, dans l'ordre : les groupes ("# BIBLIOTHEQUE") et les lignes (leur libelle) ; les valeurs seules.
+    // Ce qui est montre, dans l'ordre : les dossiers ("# <chevron> Formes (6)" - le chevron U+25BE deplie, U+25B8 replie ;
+    // le compte : ses lignes qui repondent a la recherche) et les lignes (leur libelle) ; les valeurs seules.
     [[nodiscard]] std::vector<std::string> shownLines() const;
     [[nodiscard]] std::vector<std::string> shownValues() const;
-    [[nodiscard]] std::string highlighted() const;              // la valeur en surbrillance ("" : aucune)
+    [[nodiscard]] std::string highlighted() const;              // la valeur en surbrillance ("" : aucune, ou un dossier)
+    [[nodiscard]] std::string highlightedGroup() const;         // 1.23.1 : le dossier en surbrillance ("" : une ligne)
     void moveHighlight(int delta);
     bool choose(std::string_view value);                        // comme un clic sur sa ligne ; faux : pas montree
-    bool chooseHighlighted();                                   // Entree
+    bool chooseHighlighted();                                   // Entree (sur un dossier : il se deplie ou se replie)
     [[nodiscard]] bool rowRect(std::string_view value, gfx::Rect& out) const;   // sa ligne a l'ecran (essais, scripts)
+    // ---- 1.23.1 : les dossiers ----
+    [[nodiscard]] std::vector<std::string> groups() const;      // tous, dans l'ordre (meme sans resultat)
+    [[nodiscard]] bool groupOpen(std::string_view group) const;
+    void setGroupOpen(std::string_view group, bool open);
+    void toggleGroup(std::string_view group);
+    [[nodiscard]] bool groupRect(std::string_view group, gfx::Rect& out) const;   // la ligne du dossier a l'ecran
+    // La petite icone d'une ligne montree, a l'ecran ; faux : pas d'icone (une propriete), ou pas montree.
+    [[nodiscard]] bool iconRect(std::string_view value, gfx::Rect& out) const;
     [[nodiscard]] ui::InputText& field() noexcept { return *field_; }
     [[nodiscard]] gfx::Rect eventBounds() const override;       // ouverte : toute la zone (un clic ailleurs la ferme)
     const core::SignalPtr<const std::string&> chosen = core::Signal<const std::string&>::create();
+    // 1.23.1 : Droite, Gauche, +, - sur les dossiers ; vrai : la touche est prise (le champ de recherche les passe
+    // d'abord ici : sinon, le curseur ou le caractere tape).
+    bool foldKey(const ui::KeyDown&);
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
 private:
-    struct Line { bool group{false}; std::size_t entry{0}; };
-    void filter();
+    struct Line { bool group{false}; std::size_t entry{0}; std::size_t count{0}; };
+    void filter(const std::string& keepValue, const std::string& keepGroup);
+    void refilter();                                            // la surbrillance gardee (sa ligne, ou son dossier)
     [[nodiscard]] gfx::Rect listRect() const;
     [[nodiscard]] int lineAt(gfx::Point) const;
+    [[nodiscard]] int groupLine(std::string_view group) const;
+    [[nodiscard]] bool hotIsGroup() const;
     void reveal(int line);
     std::string        title_;
     std::vector<Entry> entries_;
     std::vector<Line>  lines_;
+    Folding            folding_{};
+    std::set<std::string> closed_;                              // 1.23.1 : les dossiers replies (sans recherche)
+    std::set<std::string> closedInSearch_;                      // ... pendant une recherche (vide a chaque frappe)
     int                hot_{-1};
     float              scroll_{0.f};
     bool               open_{false};
@@ -157,6 +199,31 @@ public:
     [[nodiscard]] std::vector<HmiStyleChooser::Entry> typeChoices() const;
     [[nodiscard]] std::vector<HmiStyleChooser::Entry> propertyChoices() const;
 
+    // ---- 1.23.1 : LES MENUS DU CLIC DROIT, un par liste (le client : plus le menu commun des tableaux - Copier,
+    // Coller...). Le clic droit choisit d'abord la ligne cliquee. Une entree grisee dit pourquoi.
+    //  - les styles (fournis et du projet) : Nouveau style (Inser), Dupliquer a partir de... (Ctrl+D), Renommer (F2),
+    //    Retirer (Suppr), Ranger dans un dossier > (la racine, les dossiers, Nouveau dossier... : le style y va, le nom
+    //    du dossier se tape), puis Copier le nom ; un style fourni : ni Renommer, ni Retirer, ni Ranger ; une ligne de
+    //    dossier : Renommer et Retirer le dossier ;
+    //  - les types du style : Ajouter un type... (Inser), Retirer le type (Suppr), Choisir pour l'apercu (coche : il y
+    //    est) ; un style fourni : ni Ajouter ni Retirer ;
+    //  - les proprietes imposees : Ajouter une propriete... (Inser), Retirer la propriete (Suppr) ; un style fourni :
+    //    grisees ; le clic droit ailleurs que sur une propriete imposee ne vise aucune propriete.
+    // Les entrees rendent ces identifiants (menuChosen : comme un clic sur l'entree - scripts, essais).
+    enum : int {
+        MenuNew = 1001, MenuDuplicate, MenuRename, MenuRemove, MenuFolder, MenuCopyName,
+        MenuAddType = 1011, MenuRemoveType, MenuPreviewType,
+        MenuAddProperty = 1021, MenuRemoveProperty,
+        MenuFolderRoot = 1100, MenuFolderNew, MenuFolderAt,      // Ranger dans un dossier > (MenuFolderAt + son rang)
+    };
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> styleMenuItems() const;
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> typeMenuItems() const;
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> propertyMenuItems() const;
+    void menuChosen(int id);
+    // Le menu des proprietes imposees (celui des tables : TableView::contextMenu).
+    void openPropertyMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu& propertyMenu() noexcept { return *propMenu_; }
+
     // ---- l'apercu ----
     // Les objets d'apercu d'un style pour un type : un objet neuf fait par le style (styles::previewObject) ; un
     // equipement a etats en trois exemplaires (en marche, a l'arret, en defaut ; deux sans defaut), poses cote a cote.
@@ -201,6 +268,8 @@ private:
     [[nodiscard]] bool matchesSearch(const hmi::Style&) const;
     [[nodiscard]] const hmi::Style* editable(std::string* why) const;   // le style choisi, s'il se modifie (sinon : pourquoi)
     bool dropKey(hmi::Id style, const std::string& type, const std::string& key, std::string* why);   // ne plus imposer
+    bool newFolderWith(hmi::Id style);   // 1.23.1 : Ranger dans un dossier > Nouveau dossier... (une commande)
+    void renameFolderRow(const std::string& path);
     hmi::DocumentPtr      doc_;
     Apply                 apply_;
     ui::Widget*           preview_{nullptr};    // 1.12.27
@@ -218,6 +287,8 @@ private:
     ui::PropertyGrid*     grid_{nullptr};
     ui::StatusBar*        status_{nullptr};
     HmiStyleChooser*      chooser_{nullptr};    // 1.23.0
+    ui::PopupMenu*        propMenu_{nullptr};   // 1.23.1 : le menu des proprietes imposees
+    mutable std::vector<std::string> menuFolders_;   // 1.23.1 : les dossiers du dernier << Ranger dans un dossier >>
     int                   chooserFor_{0};       // 1 : un type ; 2 : une propriete
     std::unique_ptr<HmiFolderTable> folders_;       // lot 21
     std::vector<std::string> builtinRows_;      // les noms des styles fournis montres

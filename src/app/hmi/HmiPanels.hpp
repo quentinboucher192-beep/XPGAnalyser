@@ -299,6 +299,14 @@ private:
 // ------------------------------------------------------------- palette ------
 // 1.12.18 : la famille d'un genre dans la bibliotheque (« Affichage », « Synoptique ») ; vide : aucune.
 [[nodiscard]] std::string hmiPaletteFamily(hmi::Kind kind);
+// 1.23.1 : LES CATEGORIES DE LA BIBLIOTHEQUE, dans son ordre (Formes, Commandes, Affichage, Graphiques, Alarmes...),
+// chacune avec ses genres dans l'ordre de ses tuiles - celles de la palette de l'editeur (IHM Studio : sans
+// Communication). Le choix << Ajouter un type >> de l'onglet Styles les range ainsi.
+struct HmiPaletteCategory {
+    std::string            name;
+    std::vector<hmi::Kind> kinds;
+};
+[[nodiscard]] std::vector<HmiPaletteCategory> hmiPaletteCategories();
 // 1.12.26 : le libelle d'une propriete d'un objet, celui de l'inspecteur (la fenetre Historique).
 [[nodiscard]] std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key);
 // 1.23.0 : UNE PROPRIETE D'OBJET TELLE QUE L'INSPECTEUR LA MONTRE - son libelle, son genre de case (couleur, nombre,
