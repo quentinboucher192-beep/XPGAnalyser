@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.22.9", "02/11/2026", "\xC3\xA0 venir"},
+    {"1.23.0", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.22.9", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 22 h 30"},
     {"1.22.8", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 21 h 01"},
     {"1.22.7", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 10 h 55"},
     {"1.22.6", "01/11/2026", "livr\xC3\xA9" "e le 01/11 \xC3\xA0 23 h"},
@@ -163,6 +164,21 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.23.0 : les styles par type d'objet (fournis, dupliquer, proprietes au choix, apercu) ; le carre O de l'inspecteur
+        note("1.23.0", "Vues", Kind::New,
+         "LES STYLES PAR TYPE D'OBJET : IHM \xE2\x80\xBA Styles refaite. Un style ne vise plus seulement les boutons : une liste de "
+         "TYPES (les objets de la biblioth\xC3\xA8que et TES SYMBOLES), et pour chacun les propri\xC3\xA9t\xC3\xA9s qu'il impose - n'importe "
+         "lesquelles (couleur, taille, texte, liste, param\xC3\xA8tre du symbole), ajout\xC3\xA9" "es ou retir\xC3\xA9" "es une \xC3\xA0 une. Quatre STYLES "
+         "FOURNIS, verrouill\xC3\xA9s (cadenas) : ISA-101 (gris neutres, la couleur pour les anomalies), Sombre (d'origine), Clair, "
+         "Contraste \xC3\xA9lev\xC3\xA9 ; \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait une copie \xC3\xA0 toi. L'aper\xC3\xA7u montre le style sur le type "
+         "choisi (en marche, \xC3\xA0 l'arr\xC3\xAAt, en d\xC3\xA9" "faut).",
+         "styles-nommes", ""),
+        note("1.23.0", "Vues", Kind::New,
+         "LES VALEURS IMPOS\xC3\x89" "ES PAR UN STYLE : dans l'inspecteur, une valeur qui vient du style nomm\xC3\xA9 porte O dans son carr\xC3\xA9 "
+         "(au lieu de C). Son menu la BRISE, une propri\xC3\xA9t\xC3\xA9 \xC3\xA0 la fois : reprendre l'ancienne valeur (celle d'avant le style) "
+         "ou garder la valeur actuelle ; taper une autre valeur la brise aussi. Une valeur bris\xC3\xA9" "e porte BRIS\xC3\x89" "E, sa fl\xC3\xA8" "che la "
+         "r\xC3\xA9tablit ; la ligne Valeurs du style dit combien sont impos\xC3\xA9" "es et bris\xC3\xA9" "es (Tout r\xC3\xA9tablir). Nouveau filtre O Style.",
+         "styles-nommes", ""),
         // 1.22.9 : Unites et formats et Unites de mesure, une seule page
         note("1.22.9", "Projet", Kind::Changed,
          "UNIT\xC3\x89S ET FORMATS, UNE SEULE PAGE : Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats a trois onglets - Formats des variables (l'unit\xC3\xA9 "

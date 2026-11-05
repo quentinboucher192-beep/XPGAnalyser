@@ -3308,29 +3308,101 @@ const std::vector<Topic>& topics() {
          {}, "1.11.2"},
         // ---- Concevoir les vues  Aller plus vite / styles-nommes
         {"styles-nommes", "Les styles nomm\xC3\xA9s", "Concevoir les vues \xE2\x80\xBA Aller plus vite",
-         "Une apparence (couleurs, contour, police, taille, rayon) sous un nom ; les objets qui le citent "
-         "suivent ses changements.",
+         "Une apparence sous un nom, pour des types d'objets choisis (boutons, pompes, tes "
+         "symboles\xE2\x80\xA6) : ses valeurs s'imposent aux objets qui le citent (le carr\xC3\xA9 O), "
+         "chacune se brise \xC3\xA0 part ; des styles fournis (ISA-101\xE2\x80\xA6).",
          {
              {K::Heading, "Cr\xC3\xA9" "er un style", {}},
              {K::Paragraph, "Choisis un objet bien r\xC3\xA9gl\xC3\xA9, puis **Cr\xC3\xA9" "er un style** "
                          "(barre d'outils de l'\xC3\xA9" "diteur) : son apparence devient un style "
-                         "nomm\xC3\xA9 (IHM \xE2\x80\xBA Styles), et les objets choisis le citent. "
-                         "**Nouveau** dans IHM \xE2\x80\xBA Styles en cr\xC3\xA9" "e un \xC3\xA0 "
-                         "r\xC3\xA9gler soi-m\xC3\xAAme.", {}},
+                         "nomm\xC3\xA9 (IHM \xE2\x80\xBA Styles) pour **son type** (1.23.0 : un bouton fait "
+                         "un style des boutons), et les objets choisis le citent. **Nouveau** dans IHM "
+                         "\xE2\x80\xBA Styles en cr\xC3\xA9" "e un \xC3\xA0 r\xC3\xA9gler soi-m\xC3\xAAme.", {}},
+             {K::Heading, "Les styles fournis (1.23.0)", {}, "1.23.0"},
+             {K::Paragraph, "IHM \xE2\x80\xBA Styles commence par quatre styles **fournis**, verrouill\xC3\xA9s "
+                         "(un cadenas) : **ISA-101** (l'IHM haute performance : gris neutres, texte sombre ; "
+                         "la couleur est r\xC3\xA9serv\xC3\xA9" "e aux anomalies, un \xC3\xA9quipement en "
+                         "marche est plein, \xC3\xA0 l'arr\xC3\xAAt vide), **Sombre (d'origine)** (l'aspect "
+                         "d'un objet neuf du logiciel, pour revenir au d\xC3\xA9part), **Clair** et "
+                         "**Contraste \xC3\xA9lev\xC3\xA9**. Un objet peut les citer directement (Style "
+                         "nomm\xC3\xA9). Ils ne se modifient pas : **Dupliquer \xC3\xA0 partir "
+                         "de\xE2\x80\xA6** (aussi Ctrl+D) en fait un style du projet, \xC3\xA0 toi, choisi "
+                         "aussit\xC3\xB4t et son nom pr\xC3\xAAt \xC3\xA0 taper. Un style du projet ne peut "
+                         "pas porter le nom d'un style fourni.", {}, "1.23.0"},
+             {K::Heading, "Un style par type d'objet (1.23.0)", {}},
+             {K::Paragraph, "La page a trois colonnes :", {}},
+             {K::Bullet, "**Les styles** : les fournis, puis ceux du projet (avec leurs dossiers) ; chacun "
+                         "avec sa pastille de couleurs et le nombre d'objets qui le citent. La recherche lit "
+                         "les noms, les descriptions, les types et les valeurs. Le nom d'un style du projet "
+                         "se change dans sa case (double-clic ou F2) ou par **Renommer**.", {}},
+             {K::Bullet, "**Les types d'objets du style** : les objets de la biblioth\xC3\xA8que et **tes "
+                         "symboles** que le style vise, avec leur nombre de propri\xC3\xA9t\xC3\xA9s. **+ "
+                         "Ajouter un type\xE2\x80\xA6** (ou Inser) propose la **Biblioth\xC3\xA8que** puis "
+                         "**Mes symboles**, avec une recherche ; un type d\xC3\xA9j\xC3\xA0 l\xC3\xA0 n'est "
+                         "pas repropos\xC3\xA9. **\xE2\x88\x92 Retirer le type choisi** (ou Suppr). \xC2\xAB "
+                         "Tous les objets \xC2\xBB appara\xC3\xAEt pour un style d'avant la 1.23.0.", {}},
+             {K::Bullet, "**Les propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es** au type choisi : **n'importe "
+                         "quelle propri\xC3\xA9t\xC3\xA9** de ce type (une couleur, une taille, un texte, "
+                         "une liste de choix, une case \xC3\xA0 cocher ; pour un symbole, ses "
+                         "**param\xC3\xA8tres**), chacune avec la case de l'inspecteur. **+ Ajouter une "
+                         "propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6** propose celles du type qui n'y sont pas "
+                         "encore (elle arrive avec la valeur d'un objet neuf) ; **\xE2\x88\x92 Retirer la "
+                         "propri\xC3\xA9t\xC3\xA9** retire la ligne choisie. Au-dessus : le nom, la "
+                         "description, les objets qui le citent, et ce qui est **\xC3\xA0 v\xC3\xA9rifier** "
+                         "(un type ou une propri\xC3\xA9t\xC3\xA9 qui n'existe plus).", {}},
+             {K::Paragraph, "Chaque changement est une commande (Ctrl+Z) : le style change, et les objets qui "
+                         "le citent suivent - le message dit combien suivent et combien gardent leur valeur "
+                         "(bris\xC3\xA9" "e). Un style fourni choisi se lit sans se modifier, avec le "
+                         "bandeau \xC2\xAB Style fourni : verrouill\xC3\xA9 \xC2\xBB.", {}},
+             {K::Warning, "Un type sans propri\xC3\xA9t\xC3\xA9 n'est pas gard\xC3\xA9 : ajoute-lui au moins "
+                         "une propri\xC3\xA9t\xC3\xA9 (le choix s'ouvre d\xC3\xA8s que le type est "
+                         "ajout\xC3\xA9).", {}},
              {K::Heading, "Appliquer un style", {}},
              {K::Paragraph, "Dans l'inspecteur, cat\xC3\xA9gorie **Apparence**, la propri\xC3\xA9t\xC3\xA9 "
-                         "**Style nomm\xC3\xA9** : choisir un style copie ses valeurs dans l'objet et le lui "
-                         "fait citer (une commande). Vide : l'objet ne le cite plus et garde ses valeurs.", {}},
+                         "**Style nomm\xC3\xA9** : choisir un style (du projet, ou un style fourni) "
+                         "**impose** ses valeurs \xC3\xA0 l'objet et le lui fait citer (une commande). Vide "
+                         ": l'objet ne le cite plus et garde ses valeurs.", {}},
+             {K::Heading, "Les valeurs impos\xC3\xA9" "es : le carr\xC3\xA9 O (1.23.0)", {}, "1.23.0"},
+             {K::Bullet, "Une valeur qui vient du style porte **O** dans son carr\xC3\xA9, au lieu de C. Son "
+                         "infobulle dit le style et la valeur d'avant le style.", {}, "1.23.0"},
+             {K::Bullet, "Sous **Style nomm\xC3\xA9**, la ligne **Valeurs du style** dit combien de valeurs "
+                         "le style impose et combien sont bris\xC3\xA9" "es ; son bouton **\xE2\x80\xA6** "
+                         "ouvre le style (IHM \xE2\x80\xBA Styles), sa fl\xC3\xA8" "che **Tout "
+                         "r\xC3\xA9tablir** remet toutes les valeurs bris\xC3\xA9" "es.", {}, "1.23.0"},
+             {K::Bullet, "Le filtre **O Style**, dans la barre \xC2\xAB Montrer \xC2\xBB de l'onglet "
+                         "Propri\xC3\xA9t\xC3\xA9s, ne garde que les valeurs impos\xC3\xA9" "es (avec son "
+                         "nombre).", {}, "1.23.0"},
+             {K::Bullet, "Une propri\xC3\xA9t\xC3\xA9 pilot\xC3\xA9" "e par une formule (fx) n'est jamais "
+                         "impos\xC3\xA9" "e : la formule garde la main (une animation reste une animation).", {}, "1.23.0"},
+             {K::Heading, "Briser une valeur (1.23.0)", {}},
+             {K::Paragraph, "Une valeur impos\xC3\xA9" "e se **brise** une propri\xC3\xA9t\xC3\xA9 \xC3\xA0 la "
+                         "fois, par le menu de son carr\xC3\xA9 O :", {}},
+             {K::Bullet, "**Briser : reprendre l'ancienne valeur** : la propri\xC3\xA9t\xC3\xA9 reprend sa "
+                         "valeur d'avant le style (le menu la montre) ;", {}},
+             {K::Bullet, "**Briser : garder la valeur actuelle** : elle garde la valeur du style, mais ne la "
+                         "suit plus ;", {}},
+             {K::Bullet, "**Ouvrir le style \xC2\xAB \xE2\x80\xA6 \xC2\xBB** : IHM \xE2\x80\xBA Styles, ce "
+                         "style choisi.", {}},
+             {K::Paragraph, "Taper une autre valeur sur une case O la brise aussi (la saisie est "
+                         "gard\xC3\xA9" "e). Une valeur bris\xC3\xA9" "e redevient **C**, porte "
+                         "l'\xC3\xA9tiquette **BRIS\xC3\x89" "E**, et sa fl\xC3\xA8" "che au bout de la "
+                         "ligne (ou le menu de son carr\xC3\xA9 : **R\xC3\xA9tablir la valeur du style**) la "
+                         "remet. Chaque geste se reprend par Ctrl+Z.", {}},
              {K::Heading, "Changer un style", {}},
              {K::Paragraph, "Dans IHM \xE2\x80\xBA Styles, changer une valeur change **tous les objets qui "
-                         "citent le style** - sauf ceux qui avaient chang\xC3\xA9 cette valeur "
-                         "eux-m\xC3\xAAmes : leur choix est gard\xC3\xA9. Renomm\xC3\xA9, le style reste "
-                         "cit\xC3\xA9 sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).", {}},
+                         "citent le style** - sauf les valeurs **bris\xC3\xA9" "es** : elles restent celles "
+                         "de l'objet (1.23.0 : une valeur qu'un objet avait chang\xC3\xA9" "e "
+                         "lui-m\xC3\xAAme devient bris\xC3\xA9" "e, gard\xC3\xA9" "e). Renomm\xC3\xA9, le "
+                         "style reste cit\xC3\xA9 sous son nouveau nom. Chaque changement est une commande "
+                         "(Ctrl+Z).", {}},
              {K::Heading, "Voir un style", {}, "1.12.27"},
-             {K::Paragraph, "Au-dessus de la fiche, l'**aper\xC3\xA7u** montre le style choisi sur un bouton, "
-                         "un texte, un rectangle et un voyant (allum\xC3\xA9, \xC3\xA9teint), sur le fond "
-                         "d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, "
-                         "chaque style a sa pastille (remplissage, contour, couleur du texte, couleur "
+             {K::Paragraph, "L'**aper\xC3\xA7u** montre le style choisi sur le **type** choisi dans sa liste "
+                         "**Type :** (n'importe quel objet de la biblioth\xC3\xA8que ou un de tes symboles ; "
+                         "ceux du style en t\xC3\xAAte, coch\xC3\xA9s \xE2\x9C\x93), sur le fond d'une vue "
+                         "du projet : un \xC3\xA9quipement \xC3\xA0 \xC3\xA9tats se montre en marche, "
+                         "\xC3\xA0 l'arr\xC3\xAAt et en d\xC3\xA9" "faut. Choisir un type dans la colonne du "
+                         "milieu y met l'aper\xC3\xA7u. Chaque changement s'y voit tout de suite. Dans la "
+                         "liste, chaque style a sa pastille (remplissage, contour, couleur du texte, couleur "
                          "allum\xC3\xA9).", {}, "1.12.27"},
              {K::Heading, "Supprimer un style", {}},
              {K::Paragraph, "Les objets gardent leurs valeurs et ne le citent plus. G\xC3\xA9n\xC3\xA9rer "
@@ -3339,7 +3411,7 @@ const std::vector<Topic>& topics() {
                          "une apparence une fois, sans lien.", {}},
          },
          {"editeur", "proprietes", "concevoir-vite", "dossiers"},
-         {"style nomm\xC3\xA9", "namedStyle", "Cr\xC3\xA9" "er un style"},
+         {"style nomm\xC3\xA9", "namedStyle", "Cr\xC3\xA9" "er un style", "ISA-101", "style fourni", "Dupliquer \xC3\xA0 partir de", "carr\xC3\xA9 O", "briser", "valeur impos\xC3\xA9" "e", "O Style", "Tout r\xC3\xA9tablir"},
          {"styles"},
          {{"PNG_326_styles_nommes.png", "IHM \xE2\x80\xBA Styles : les styles, combien d'objets les citent, la fiche du style choisi."}, {"PNG_327_style_dans_inspecteur.png", "Dans l'inspecteur, cat\xC3\xA9gorie Apparence : le style nomm\xC3\xA9 cit\xC3\xA9 par l'objet."}},
          "",

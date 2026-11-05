@@ -1556,7 +1556,17 @@ Renommer renomme aussi ce qui le cite dans le fichier : les instances d'un symbo
 @capture PNG_326_styles_nommes.png | IHM › Styles : les styles, combien d'objets les citent, la fiche du style choisi.
 @capture PNG_327_style_dans_inspecteur.png | Dans l'inspecteur, catégorie Apparence : le style nommé cité par l'objet.
 ### Créer un style
-Choisis un objet bien réglé, puis **Créer un style** (barre d'outils de l'éditeur) : son apparence devient un style nommé (IHM › Styles), et les objets choisis le citent. **Nouveau** dans IHM › Styles en crée un à régler soi-même.
+Choisis un objet bien réglé, puis **Créer un style** (barre d'outils de l'éditeur) : son apparence devient un style nommé (IHM › Styles) pour **son type** (1.23.0 : un bouton fait un style des boutons), et les objets choisis le citent. **Nouveau** dans IHM › Styles en crée un à régler soi-même.
+@nouveau 1.23.0
+### Les styles fournis (1.23.0)
+IHM › Styles commence par quatre styles **fournis**, verrouillés (un cadenas) : **ISA-101** (l'IHM haute performance : gris neutres, texte sombre ; la couleur est réservée aux anomalies, un équipement en marche est plein, à l'arrêt vide), **Sombre (d'origine)** (l'aspect d'un objet neuf du logiciel, pour revenir au départ), **Clair** et **Contraste élevé**. Un objet peut les citer directement (Style nommé). Ils ne se modifient pas : **Dupliquer à partir de…** (aussi Ctrl+D) en fait un style du projet, à toi, choisi aussitôt et son nom prêt à taper. Un style du projet ne peut pas porter le nom d'un style fourni.
+### Un style par type d'objet (1.23.0)
+La page a trois colonnes :
+- **Les styles** : les fournis, puis ceux du projet (avec leurs dossiers) ; chacun avec sa pastille de couleurs et le nombre d'objets qui le citent. La recherche lit les noms, les descriptions, les types et les valeurs. Le nom d'un style du projet se change dans sa case (double-clic ou F2) ou par **Renommer**.
+- **Les types d'objets du style** : les objets de la bibliothèque et **tes symboles** que le style vise, avec leur nombre de propriétés. **+ Ajouter un type…** (ou Inser) propose la **Bibliothèque** puis **Mes symboles**, avec une recherche ; un type déjà là n'est pas reproposé. **− Retirer le type choisi** (ou Suppr). « Tous les objets » apparaît pour un style d'avant la 1.23.0.
+- **Les propriétés imposées** au type choisi : **n'importe quelle propriété** de ce type (une couleur, une taille, un texte, une liste de choix, une case à cocher ; pour un symbole, ses **paramètres**), chacune avec la case de l'inspecteur. **+ Ajouter une propriété…** propose celles du type qui n'y sont pas encore (elle arrive avec la valeur d'un objet neuf) ; **− Retirer la propriété** retire la ligne choisie. Au-dessus : le nom, la description, les objets qui le citent, et ce qui est **à vérifier** (un type ou une propriété qui n'existe plus).
+Chaque changement est une commande (Ctrl+Z) : le style change, et les objets qui le citent suivent - le message dit combien suivent et combien gardent leur valeur (brisée). Un style fourni choisi se lit sans se modifier, avec le bandeau « Style fourni : verrouillé ».
+! Un type sans propriété n'est pas gardé : ajoute-lui au moins une propriété (le choix s'ouvre dès que le type est ajouté).
 ### Appliquer un style
 Dans l'inspecteur, catégorie **Apparence**, la propriété **Style nommé** : choisir un style (du projet, ou un style fourni) **impose** ses valeurs à l'objet et le lui fait citer (une commande). Vide : l'objet ne le cite plus et garde ses valeurs.
 @nouveau 1.23.0
@@ -1575,7 +1585,7 @@ Taper une autre valeur sur une case O la brise aussi (la saisie est gardée). Un
 Dans IHM › Styles, changer une valeur change **tous les objets qui citent le style** - sauf les valeurs **brisées** : elles restent celles de l'objet (1.23.0 : une valeur qu'un objet avait changée lui-même devient brisée, gardée). Renommé, le style reste cité sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).
 @nouveau 1.12.27
 ### Voir un style
-Au-dessus de la fiche, l'**aperçu** montre le style choisi sur un bouton, un texte, un rectangle et un voyant (allumé, éteint), sur le fond d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille (remplissage, contour, couleur du texte, couleur allumé).
+L'**aperçu** montre le style choisi sur le **type** choisi dans sa liste **Type :** (n'importe quel objet de la bibliothèque ou un de tes symboles ; ceux du style en tête, cochés ✓), sur le fond d'une vue du projet : un équipement à états se montre en marche, à l'arrêt et en défaut. Choisir un type dans la colonne du milieu y met l'aperçu. Chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille (remplissage, contour, couleur du texte, couleur allumé).
 ### Supprimer un style
 Les objets gardent leurs valeurs et ne le citent plus. Générer signale un objet qui cite un style disparu.
 > Copier le style / Coller le style (barre d'outils) reste là pour reporter une apparence une fois, sans lien.

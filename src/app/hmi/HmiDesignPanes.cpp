@@ -427,6 +427,10 @@ HmiStyleChooser::HmiStyleChooser(std::string id) : ui::Widget(std::move(id)) {
 
 void HmiStyleChooser::open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area) {
     title_ = std::move(title);
+    // Les lignes et la surbrillance d'avant designent l'ancienne liste : effacees AVANT de la remplacer (setText refiltre
+    // et relit la surbrillance - un rang hors de la nouvelle liste lisait n'importe quoi).
+    lines_.clear();
+    hot_ = -1;
     entries_ = std::move(entries);
     area_ = area;
     open_ = true;
@@ -500,7 +504,8 @@ std::vector<std::string> HmiStyleChooser::shownValues() const {
 
 std::string HmiStyleChooser::highlighted() const {
     if (hot_ < 0 || static_cast<std::size_t>(hot_) >= lines_.size() || lines_[static_cast<std::size_t>(hot_)].group) return {};
-    return entries_[lines_[static_cast<std::size_t>(hot_)].entry].value;
+    const std::size_t e = lines_[static_cast<std::size_t>(hot_)].entry;
+    return e < entries_.size() ? entries_[e].value : std::string{};
 }
 
 void HmiStyleChooser::moveHighlight(int delta) {
