@@ -53,6 +53,7 @@
 #include "../hmi/HmiIncidentsPane.hpp"              // 1.20.0 : Ressources > Incidents
 #include "../hmi/HmiSoundLibraryPane.hpp"           // 1.24.0 : Ressources > Bibliotheque de sons
 #include "../hmi/HmiCorbeillePane.hpp"              // 1.25.1 : la Corbeille
+#include "../hmi/HmiImageLibraryPane.hpp"           // 1.25.1 : Ressources > Bibliotheque d'images
 #include "../FileFinder.hpp"                         // 1.24.0 : revealInExplorer (Mes sons dans l explorateur)
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
@@ -702,7 +703,8 @@ void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
     app_.events().publish(HmiTabsCheck{});
 }
 
-// 1.25.0 : Ressources > Bibliotheque d'images - les images du sous-onglet Images de la BIBLIOTHEQUE de l'editeur de vues.
+// 1.25.0 : les images du sous-onglet Images de la BIBLIOTHEQUE de l'editeur de vues (1.25.1 : le bouton << Ouvrir dans
+// l'editeur de vues >> du volet Ressources > Bibliotheque d'images, et son double-clic).
 // L'editeur ouvert (celui au premier plan, sinon un autre), sinon la vue de demarrage (ou la premiere) ; son sous-onglet
 // Images, le dossier deplie, l'image montree et choisie.
 void MainAnalysisScreen::openHmiImageLibrary(const std::string& folder, const std::string& imageId) {
@@ -775,10 +777,12 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiRecordingSettings: openHmiPane("config-enregistrements"); break;
         case NK::HmiIncidents:     openHmiPane("incidents"); break;                 // 1.20.0
         case NK::HmiSoundLibrary:  openHmiPane("sons"); break;                      // 1.24.0
-        case NK::HmiImageLibrary:                                                    // 1.25.0 : la bibliotheque d'images -
-        case NK::HmiImageGroup:                                                      // le sous-onglet Images de l'editeur de
-        case NK::HmiImageItem:                                                       // vues, le dossier deplie, l'image montree
-            openHmiImageLibrary(ProjectTreeModel::imageFolderOf(n), ProjectTreeModel::imageIdOf(n));
+        case NK::HmiImageLibrary:                                                    // 1.25.1 : la bibliotheque d'images -
+        case NK::HmiImageGroup:                                                      // son volet (le jumeau de celui des sons),
+        case NK::HmiImageItem:                                                       // le dossier deplie, l'image choisie
+            openHmiPane("images");
+            if (auto* pane = dynamic_cast<HmiImageLibraryPane*>(hmiTab("images")))
+                (void)pane->reveal(ProjectTreeModel::imageFolderOf(n), ProjectTreeModel::imageIdOf(n));
             break;
         case NK::HmiSoundGroup:                                                      // 1.25.0 : le dossier, deplie
         case NK::HmiSoundItem:                                                       // 1.25.0 : le son, choisi
@@ -2179,6 +2183,21 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Biblioth\xC3\xA8que de sons";
         icon = Icon::Play;
+    } else if (key == "images") {
+        // 1.25.1 : Ressources > Bibliotheque d'images - les images natives et Mes images ; importer dans le projet ; le
+        // sous-onglet Images de l'editeur de vues (le bouton << Ouvrir dans l'editeur de vues >>, le double-clic).
+        auto pane = std::make_unique<HmiImageLibraryPane>("hmi.images", doc, apply);
+        HmiImageLibraryPane::Hosts hosts;
+        hosts.openResource = [this](hmi::Id r) {
+            openHmiPane("ressources");
+            if (auto* res = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"))) res->selectResource(r);
+        };
+        hosts.reveal = [](const std::string& path) { return finder::revealInExplorer(path); };
+        hosts.openInEditor = [this](const std::string& folder, const std::string& imageId) { openHmiImageLibrary(folder, imageId); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Biblioth\xC3\xA8que d'images";
+        icon = Icon::Image;
     } else if (key == "incidents") {
         // 1.20.0 : Ressources > Incidents - les dossiers d'incident de la surveillance (IncidentsWorkspace.cpp).
         page = buildHmiIncidentsPane();
