@@ -167,6 +167,55 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.26.0 : les polices (la bibliotheque, la police partout, l'editeur de polices) ; la Corbeille ; la bibliotheque d'images ; les limites
+        note("1.26.0", "Vues", Kind::New,
+         "LA BIBLIOTH\xC3\x88QUE DE POLICES : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de polices. "
+         "Seize polices TrueType libres livr\xC3\xA9" "es avec le logiciel (Liberation Sans, Serif et Mono : les chasses "
+         "d'Arial, Times, Courier ; Carlito : celles de Calibri ; Caladea : celles de Cambria ; DejaVu ; JetBrains "
+         "Mono), en trois dossiers, chacune \xC3\xA9" "crite dans elle-m\xC3\xAAme avec ton texte ; l'aper\xC3\xA7u "
+         "(toutes les tailles, sur le fond d'une vue, les glyphes, la licence) ; Importer dans le projet ; MES POLICES "
+         "(tes TTF et OTF, pour tous tes projets). LA POLICE PARTOUT : un sous-onglet Polices dans la BIBLIOTH\xC3\x88QUE "
+         "de l'\xC3\xA9" "diteur de vues (glisse une police sur un objet), la case Police des objets et des styles "
+         "(une police de la biblioth\xC3\xA8que s'importe en la choisissant, un seul Ctrl+Z), et le th\xC3\xA8me : "
+         "Configuration \xE2\x80\xBA Affichage, Police par d\xC3\xA9" "faut et Police des valeurs.",
+         "bibliotheque-polices", ""),
+        note("1.26.0", "Vues", Kind::New,
+         "L'\xC3\x89" "DITEUR DE POLICES : Nouvelle police, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 n'importe quelle "
+         "TrueType (les noms r\xC3\xA9serv\xC3\xA9s par sa licence refus\xC3\xA9s), Modifier. La grille des glyphes "
+         "(chercher, Modifi\xC3\xA9s), le contour point par point (sur ou hors de la courbe), la plume, ajouter un "
+         "point sans changer la forme, rectangle, ellipse, la chasse et les approches, les hauteurs ; un compos\xC3\xA9 "
+         "(\xC3\xA9) suit sa lettre, D\xC3\xA9" "composer ; Copier le glyphe d'une autre police. L'APER\xC3\x87U EN "
+         "DIRECT, et les vues qui suivent avant l'enregistrement. Ctrl+Z ; Enregistrer dans Mes polices ou dans le "
+         "projet (les objets suivent) ; Exporter en .ttf.",
+         "editeur-polices", ""),
+        note("1.26.0", "Projet", Kind::New,
+         "LA CORBEILLE : dans l'arbre du projet (Corbeille [N]) et le menu Projet. Ce qui a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9 "
+         "sur le disque, rang\xC3\xA9 par genre avec leur nombre (enregistrements, incidents, versions, macros, conversations, "
+         "pi\xC3\xA8" "ces jointes et connaissances de l'Assistant IA) ; Chercher dans la corbeille ; Restaurer (un "
+         "seul Ctrl+Z les y renvoie), Supprimer d\xC3\xA9" "finitivement, Vider la corbeille. Ce qui a plus de 7 jours "
+         "part \xC3\xA0 l'ouverture suivante.",
+         "corbeille", ""),
+        note("1.26.0", "Vues", Kind::New,
+         "LA BIBLIOTH\xC3\x88QUE D'IMAGES A SON VOLET, comme celle des sons : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA "
+         "Biblioth\xC3\xA8que d'images. Les dossiers et leur nombre (Mes images d'abord), une vignette devant chaque "
+         "image, la taille, le format, Dans le projet ; la recherche ; le grand aper\xC3\xA7u (damier, clair, sombre) "
+         "; Importer dans le projet, Ajouter \xC3\xA0 Mes images, Retirer (plusieurs, un Ctrl+Z) ; Ouvrir dans l'\xC3\xA9" "diteur "
+         "de vues.",
+         "bibliotheque-images", ""),
+        note("1.26.0", "Configuration", Kind::New,
+         "LES RAPPORTS, LES LIMITES DE LA 1.25.0 : la police d'une mise en page peut \xC3\xAAtre une police TrueType "
+         "des ressources du projet (int\xC3\xA9gr\xC3\xA9" "e au PDF) ; les courbes des mesures vont aussi dans Excel "
+         "(la feuille Courbes des mesures) ; les titres de Standard redeviennent noirs (la case Titres en couleur d'accent) "
+         "; l'aper\xC3\xA7u garde la largeur du texte du PDF.",
+         "mise-en-page-rapports", ""),
+        note("1.26.0", "Projet", Kind::New,
+         "LES LIMITES DE LA 1.25.0, CORRIG\xC3\x89" "ES : Ouvrir dans l'explorateur, Aller \xC3\xA0, Copier le chemin "
+         "aussi sur les cartes de l'accueil, le rapport de plantage, la barre d'\xC3\xA9tat, Signaler un probl\xC3\xA8me, "
+         "les fichiers d'une archive et les fichiers d\xC3\xA9pos\xC3\xA9s. Supprimer plusieurs avec un seul Ctrl+Z "
+         ": les requ\xC3\xAAtes et les jeux de l'outil Modbus, les macros et les versions (elles reviennent), plusieurs "
+         "\xC3\xA9quipements (le choix de leurs variables), les incidents et les listes de l'Assistant IA (dans la "
+         "Corbeille).",
+         "supprimer-plusieurs", ""),
         // 1.25.0 : la mise en page des rapports ; Generer maintenant (la fenetre) ; les sons et les images de la bibliotheque
         note("1.25.0", "Configuration", Kind::New,
          "LA MISE EN PAGE DES RAPPORTS : Configuration \xE2\x80\xBA Rapports, l'onglet Mise en page. La page (A4, A3, A5, Lettre ; "

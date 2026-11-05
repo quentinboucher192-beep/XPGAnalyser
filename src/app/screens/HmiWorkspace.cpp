@@ -56,6 +56,8 @@
 #include "../hmi/HmiImageLibraryPane.hpp"           // 1.25.1 : Ressources > Bibliotheque d'images
 #include "../hmi/HmiFontLibraryPane.hpp"            // 1.26.0 : Ressources > Bibliotheque de polices
 #include "../FilePreview.hpp"                       // 1.26.0 : la licence d'une police (preview::openWithSystem)
+#include "../hmi/HmiFontEditorPane.hpp"             // 1.26.0 : l'editeur de polices
+#include "../../hmi/HmiFontLibrary.hpp"             // 1.26.0 : les polices fournies, Mes polices
 #include "../FileFinder.hpp"                         // 1.24.0 : revealInExplorer (Mes sons dans l explorateur)
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
@@ -710,6 +712,62 @@ void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
 // l'editeur de vues >> du volet Ressources > Bibliotheque d'images, et son double-clic).
 // L'editeur ouvert (celui au premier plan, sinon un autre), sinon la vue de demarrage (ou la premiere) ; son sous-onglet
 // Images, le dossier deplie, l'image montree et choisie.
+void MainAnalysisScreen::openHmiFontEditor(int how, const std::string& label, hmi::BlobPtr data, const std::string& userFile,
+                                           std::uint64_t resource, bool builtIn) {
+    openHmiPane("police");
+    auto* pane = dynamic_cast<HmiFontEditorPane*>(hmiTab("police"));
+    if (!pane) return;
+    const HmiFontEditorPane::Source src{label, {}, std::move(data), userFile, static_cast<hmi::Id>(resource), builtIn};
+    const auto run = [this, how, src](bool force) {
+        auto* p = dynamic_cast<HmiFontEditorPane*>(hmiTab("police"));
+        if (!p) return true;
+        std::string why;
+        const bool ok = how == 0 ? p->newFont(&why, force) : how == 1 ? p->duplicateFrom(src, {}, &why, force) : p->openFont(src, &why, force);
+        if (!ok && force) status_->setTransientMessage(why, 8.0, ui::StatusBar::Severity::Warning);
+        return ok || force;
+    };
+    if (!pane->modified()) {
+        (void)run(false);
+        return;
+    }
+    app_.menus().ShowDialog(std::make_unique<FormDialog>("dialog.hmiFontDiscard", "Abandonner les modifications ?",
+                                                         "La police " + pane->font().family + " a des modifications non enregistr\xC3\xA9" "es. Les abandonner pour "
+                                                             + std::string(how == 0 ? "une nouvelle police" : label) + " ?",
+                                                         std::vector<FormDialog::Field>{}, "Abandonner"),
+                            [run](const menu::DialogResult& r) {
+                                if (r.accepted()) (void)run(true);
+                            });
+}
+
+void MainAnalysisScreen::askHmiFontExport() {
+    auto* pane = dynamic_cast<HmiFontEditorPane*>(hmiTab("police"));
+    if (!pane || !pane->hasFont()) return;
+    const std::string folder = app_.projectFolder().empty() ? std::string{} : app_.projectFolder() + "/exports";
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Vers", folder, "un dossier, ou un fichier .ttf", false, {}});
+    auto dialog = std::make_unique<FormDialog>("dialog.hmiFontExport", "Exporter \xC2\xAB " + pane->font().family + " \xC2\xBB",
+                                               std::string("Un fichier .ttf : Windows l'installe (clic droit, Installer), le PDF et les autres logiciels l'emploient."),
+                                               std::move(fields), "Exporter");
+    app_.menus().ShowDialog(FormDialog::withBrowse(std::move(dialog), 0, ui::chooseFolder(folder, "Exporter une police")),
+                            [this](const menu::DialogResult& r) {
+                                auto* p = dynamic_cast<HmiFontEditorPane*>(hmiTab("police"));
+                                if (!r.accepted() || !p) return;
+                                const auto v = FormDialog::split(r.payload);
+                                if (v.empty() || cleanPath(v[0]).empty()) return;
+                                std::string dest = cleanPath(v[0]);
+                                std::error_code ec;
+                                if (std::filesystem::is_directory(std::filesystem::path(std::u8string(dest.begin(), dest.end())), ec)) {
+                                    std::string leaf = p->font().family;
+                                    for (auto& c : leaf)
+                                        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') c = '_';
+                                    dest += "/" + leaf + ".ttf";
+                                }
+                                std::string why;
+                                if (!p->exportTo(dest, &why)) status_->setTransientMessage("Export impossible : " + why, 8.0, ui::StatusBar::Severity::Warning);
+                                else status_->setTransientMessage("Police export\xC3\xA9" "e : " + dest, 6.0);
+                            });
+}
+
 void MainAnalysisScreen::openHmiImageLibrary(const std::string& folder, const std::string& imageId) {
     auto doc = app_.hmi();
     if (!doc || !centre_) return;
@@ -2231,6 +2289,40 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Biblioth\xC3\xA8que de polices";
+    } else if (key == "police") {
+        // 1.26.0 : l'editeur de polices - creer, dupliquer, modifier une TrueType ; Mes polices, le projet, un .ttf.
+        auto pane = std::make_unique<HmiFontEditorPane>("hmi.fontEditor", doc, apply);
+        HmiFontEditorPane::Hosts hosts;
+        hosts.sources = [this] {
+            namespace fl = hmi::fontlib;
+            std::vector<HmiFontEditorPane::Source> out;
+            for (const auto& f : fl::userFonts())
+                if (f.editable) out.push_back({f.label + (f.style.empty() || f.style == "Normal" ? "" : " " + f.style), "Mes polices", f.data, f.file, hmi::kNoId, false});
+            if (const auto doc2 = app_.hmi())
+                for (const auto& r : doc2->project.assets.resources)
+                    if (r.kind() == hmi::MediaKind::Font && r.data && r.format == "TTF") out.push_back({r.name, "Du projet", r.data, {}, r.id, false});
+            for (const auto& f : fl::builtIn())
+                if (f.editable) out.push_back({f.label + (f.style.empty() || f.style == "Normal" ? "" : " " + f.style), f.category, f.data, {}, hmi::kNoId, true});
+            return out;
+        };
+        hosts.saveMine = [](const std::string& file, const hmi::Bytes& bytes, const std::string& replace, std::string* stored, std::string* why) {
+            namespace fl = hmi::fontlib;
+            if (!replace.empty())
+                for (const auto& f : fl::userFonts())
+                    if (f.file == replace) {
+                        if (!fl::replaceUserFont(f, bytes, why)) return false;
+                        if (stored) *stored = replace;
+                        return true;
+                    }
+            std::string leaf;
+            if (!fl::addUserFont(file, bytes, &leaf, nullptr, why)) return false;
+            if (stored) *stored = fl::userFolder() + "/" + leaf;
+            return true;
+        };
+        hosts.askExport = [this] { askHmiFontExport(); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 \xC3\x89" "diteur de polices";
         icon = Icon::Document;
     } else if (key == "incidents") {
         // 1.20.0 : Ressources > Incidents - les dossiers d'incident de la surveillance (IncidentsWorkspace.cpp).
@@ -2423,6 +2515,13 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
             made->palette().setFavorites(std::move(favs));    // "-" seul : aucun favori
         }
         HmiEditor* raw = made.get();
+        // 1.26.0 : le sous-onglet Polices de la palette - Nouvelle police, Dupliquer, Modifier la police : l'editeur de polices.
+        if (auto* fonts = made->palette().fontsPane()) {
+            auto& fh = fonts->hosts();
+            fh.newFont = [this] { openHmiFontEditor(0, {}, nullptr, {}, 0, false); };
+            fh.duplicateFont = [this](const hmi::fontlib::Font& f) { openHmiFontEditor(1, f.label, f.data, f.mine() ? f.file : std::string(), 0, !f.mine()); };
+            fh.editFont = [this](const hmi::fontlib::Font& f) { openHmiFontEditor(2, f.label, f.data, f.mine() ? f.file : std::string(), 0, !f.mine()); };
+        }
         // ---- Lot API 8 : les expressions impossibles ----
         // L'infobulle d'une propriete pilotee dit sa valeur pendant la simulation de l'IHM.
         made->properties().setExprValueProvider([this](const ui::PropertyGrid::Property& p) -> std::string {

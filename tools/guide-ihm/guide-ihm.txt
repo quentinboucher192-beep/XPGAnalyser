@@ -10680,6 +10680,20 @@ Là où un son se choisit dans une liste - le **son d'une priorité d'alarme** (
 - Dans l'arbre du projet, **Bibliothèque de sons [N]** dit combien de sons elle a, et **se déplie** : Mes sons, Alarmes, Notifications, Interface, Procédé, chacun avec son nombre, puis leurs sons (un cadenas, une personne ; la durée). Un clic ouvre la bibliothèque sur le dossier ou le son.
 - Dans l'éditeur de vues, la **BIBLIOTHÈQUE** a un sous-onglet **Sons**, entre Images et Variables : les mêmes dossiers dépliables et leur nombre, **Écouter** (Espace), **Importer** (Entrée), **+** (Mes sons) ; le champ de recherche de la bibliothèque cherche aussi les sons. **Au clic** : l'objet choisi dans la vue joue le son quand on clique dessus (le son est importé s'il ne l'est pas, une action « Jouer un son » s'ajoute ; un seul Ctrl+Z).
 
+== bibliotheque-images | La bibliothèque d'images
+: Plus de 300 images prêtes à poser et Mes images, dans un volet comme celui des sons : les dossiers et leur nombre, la recherche, l'aperçu, importer dans le projet.
+@depuis 1.26.0
+@mots bibliothèque d'images, images natives, Mes images, importer une image, pictogramme, icône, aperçu d'une image
+@lieux images
+@voir objets, ressources, bibliotheque-sons
+IHM › Ressources › **Bibliothèque d'images** (un clic dans l'arbre, sur un dossier ou une image) ouvre son volet, le jumeau de celui des sons :
+- la liste, rangée en **dossiers** avec leur nombre - **Mes images** d'abord, puis les catégories (Flèches et navigation, Interface, Sécurité et signalisation, Industrie et process…) ; devant chaque nom, une vignette, un cadenas (native) ou une personne (une des tiennes) ; les colonnes Taille, Format, **Dans le projet** (la ressource qui l'a déjà) et Mots-clés ;
+- **Chercher une image…** : la même recherche que le sous-onglet Images de l'éditeur de vues ;
+- à droite, le **grand aperçu**, sur un fond en damier, clair ou sombre, et sa fiche ;
+- **Importer dans le projet** (Entrée ; Ctrl+Z la retire) ; un dessin d'une seule couleur prend celle qui se voit sur le fond de la vue de démarrage ;
+- **Ajouter à Mes images…** (ou lâche un fichier sur le volet), **Retirer** (Suppr ; plusieurs d'un coup, un seul Ctrl+Z ; une image native se garde) ;
+- **Ouvrir dans l'éditeur de vues** (ou un double-clic) : le sous-onglet Images de la bibliothèque, l'image montrée.
+
 == bibliotheque-polices | La bibliothèque de polices, la police partout
 : Seize polices libres livrées avec le logiciel, Mes polices pour tous tes projets, leur aperçu ; une police se choisit partout : les objets, les styles, la police par défaut de l'IHM.
 @depuis 1.26.0
