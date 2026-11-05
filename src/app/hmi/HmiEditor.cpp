@@ -714,9 +714,15 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
                     if (giveFont({hit}, copy.resource, copy.font ? &*copy.font : nullptr, &why) == 0 && !why.empty())
                         statusBar_->setTransientMessage(why, 6.0, ui::StatusBar::Severity::Warning);
                 },
-                "l\xC3\xA2" "cher (ou cliquer) sur un objet : il prend la police " + copy.label);
+                "l\xC3\xA2" "cher (ou cliquer) sur un objet : il prend la police " + copy.label,
+                "Aa  " + copy.label + "  \xE2\x86\x92 l'objet la prend");
             statusBar_->setMessage("Glisse " + copy.label + " sur un objet de la vue (ou clique dessus) : il la prend. "
                                    "Double-clic : la s\xC3\xA9lection la prend. \xC3\x89" "chap : annuler.");
+        });
+    // Le double-clic (Entree) donne la police a la selection (give) : le lacher arme par le premier clic s'oublie.
+    if (auto* fonts = palette_->fontsPane())
+        links_ += fonts->activated->connect([this](const HmiFontPick&) {
+            if (canvas_->dropOnObjectArmed()) canvas_->setDropOnObject({});
         });
     // Lot 12 : l'onglet Variables de la bibliotheque - lues a l'ouverture de
     // l'onglet (le programme a pu changer) ; une variable choisie se pose au

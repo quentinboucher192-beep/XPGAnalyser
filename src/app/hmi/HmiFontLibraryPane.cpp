@@ -36,8 +36,18 @@ std::string shortDescription(const std::string& d) {
     return d.substr(0, end);
 }
 
+// En capitales, les lettres accentuees du latin aussi (<< Bibliotheque >> -> BIBLIOTHEQUE, son accent garde).
 std::string upperAscii(std::string s) {
-    for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            s[i] = static_cast<char>(std::toupper(c));
+        } else if (c == 0xC3 && i + 1 < s.size()) {
+            const auto n = static_cast<unsigned char>(s[i + 1]);
+            if (n >= 0xA0 && n <= 0xBE && n != 0xB7) s[i + 1] = static_cast<char>(n - 0x20);   // a grave... y aigu ; pas le signe divise
+            ++i;
+        }
+    }
     return s;
 }
 
@@ -735,13 +745,17 @@ HmiFontLibraryPane::HmiFontLibraryPane(std::string id, hmi::DocumentPtr doc, App
     links_ += sizeBox_->selectionChanged->connect([this](int) {
         if (const auto* it = sizeBox_->selectedItem()) setSampleSize(std::atoi(it->value.c_str()));
     });
-    links_ += normalBtn_->toggled->connect([this](bool) { setBold(false); });
-    links_ += boldBtn_->toggled->connect([this](bool) { setBold(true); });
+    // Normal | Gras : un clic sur l'un le choisit (un clic sur celui deja choisi le garde) ; setBold remet les deux boutons.
+    links_ += normalBtn_->toggled->connect([this](bool) { if (!syncing_) setBold(false); });
+    links_ += boldBtn_->toggled->connect([this](bool) { if (!syncing_) setBold(true); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
 }
 
 HmiFontLibraryPane::~HmiFontLibraryPane() = default;
+
+ui::Widget& HmiFontLibraryPane::list() noexcept { return *list_; }
+ui::Widget& HmiFontLibraryPane::preview() noexcept { return *preview_; }
 
 void HmiFontLibraryPane::setHosts(Hosts h) {
     hosts_ = std::move(h);
@@ -828,8 +842,14 @@ void HmiFontLibraryPane::rebuild() {
             r.name = shown.empty() ? res->name : shown;
             r.data = res->data;
             r.format = res->format;
+            // Ou elle sert : << police par defaut . 14 objets >>, << 5 objets . 1 style >>.
             const auto use = fl::usageOf(p, res->name);
-            r.sub = fl::usageText(use);
+            std::vector<std::string> parts;
+            if (use.defaultFont) parts.emplace_back("police par d\xC3\xA9" "faut");
+            if (use.valueFont) parts.emplace_back("police des valeurs");
+            parts.push_back(std::to_string(use.objects) + (use.objects > 1 ? " objets" : " objet"));
+            if (use.styles) parts.push_back(std::to_string(use.styles) + (use.styles > 1 ? " styles" : " style"));
+            for (const auto& part : parts) r.sub += (r.sub.empty() ? "" : "  \xC2\xB7  ") + part;
             r.inProject = true;
             r.h = 52.f;
             mine.push_back(std::move(r));
@@ -995,11 +1015,15 @@ HmiFontPick HmiFontLibraryPane::currentPick() const {
 }
 
 void HmiFontLibraryPane::setBold(bool bold) {
-    if (normalBtn_) normalBtn_->setChecked(!bold);
-    if (boldBtn_) boldBtn_->setChecked(bold);
-    if (bold == bold_) return;
+    const bool changed = bold != bold_;
     bold_ = bold;
-    rebuild();
+    if (!syncing_) {
+        syncing_ = true;
+        if (normalBtn_) normalBtn_->setChecked(!bold);
+        if (boldBtn_) boldBtn_->setChecked(bold);
+        syncing_ = false;
+    }
+    if (changed) rebuild();
 }
 
 void HmiFontLibraryPane::setSampleText(const std::string& text) {

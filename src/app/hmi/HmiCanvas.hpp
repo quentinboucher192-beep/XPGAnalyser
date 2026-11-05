@@ -93,7 +93,7 @@ public:
     // 1.26.0 : UN LACHER QUI NE POSE PAS D'OBJET (une police du sous-onglet Polices, glissee sur un objet) : au
     // relachement sur la vue (ou au clic suivant), `fn` recoit l'objet sous le pointeur (kNoId : aucun) et fait sa
     // commande ; Echap, le clic droit ou une autre pose l'oublient. `hint` : ce que dit la barre d'etat.
-    void setDropOnObject(std::function<void(hmi::Id)> fn, std::string hint = {});
+    void setDropOnObject(std::function<void(hmi::Id)> fn, std::string hint = {}, std::string tag = {});
     [[nodiscard]] bool dropOnObjectArmed() const noexcept { return static_cast<bool>(dropOnObject_); }
     void setShowHidden(bool on) { showHidden_ = on; invalidate(); }
     [[nodiscard]] bool showHidden() const noexcept { return showHidden_; }
@@ -322,7 +322,7 @@ private:
     std::optional<hmi::design::VarInfo> placeVariable_;   // lot 12 : placeKind_ = l'objet de la variable
     std::optional<PlaceImage> placeImage_;                // 1.14.1 (lot N6) : placeKind_ = Image
     std::function<void(hmi::Id)> dropOnObject_;           // 1.26.0 : une police a donner a l'objet vise
-    std::string dropHint_;
+    std::string dropHint_, dropTag_;              // la barre d'etat ; l'etiquette qui suit la souris
     bool fireDropOnObject(gfx::Point at);
     hmi::Id placeImageAt(const PlaceImage& image, double x, double y);
     bool                   downHere_{false};   // lot 12 : l'appui a eu lieu ici (sinon : un lacher venu de la bibliotheque)

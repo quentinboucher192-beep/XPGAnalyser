@@ -876,7 +876,7 @@ void HmiCanvas::addGuide(bool vertical) {
 hmi::edit::Pt HmiCanvas::contextPoint() const { return toView(contextScreen_); }
 
 // 1.26.0 : une police glissee depuis le sous-onglet Polices - l'objet vise la recoit (la commande de l'editeur).
-void HmiCanvas::setDropOnObject(std::function<void(hmi::Id)> fn, std::string hint) {
+void HmiCanvas::setDropOnObject(std::function<void(hmi::Id)> fn, std::string hint, std::string tag) {
     if (fn) {
         placeKind_.reset();
         placeSymbol_.clear();
@@ -886,6 +886,7 @@ void HmiCanvas::setDropOnObject(std::function<void(hmi::Id)> fn, std::string hin
     }
     dropOnObject_ = std::move(fn);
     dropHint_ = std::move(hint);
+    dropTag_ = std::move(tag);
     invalidate();
 }
 
@@ -897,6 +898,7 @@ bool HmiCanvas::fireDropOnObject(gfx::Point at) {
     auto fn = std::move(dropOnObject_);
     dropOnObject_ = {};
     dropHint_.clear();
+    dropTag_.clear();
     fn(hit);
     placed->emit();
     invalidate();
@@ -907,6 +909,7 @@ void HmiCanvas::cancelPlacement() {
     const bool was = placeKind_.has_value() || traceMap_ != kNoId || static_cast<bool>(dropOnObject_);
     dropOnObject_ = {};           // 1.26.0
     dropHint_.clear();
+    dropTag_.clear();
     if (traceMap_ != kNoId) { traceMap_ = kNoId; trace_.clear(); }
     placeKind_.reset();
     placeSymbol_.clear();
@@ -1566,6 +1569,14 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         const gfx::Rect mr{std::min(m0.x, m1.x), std::min(m0.y, m1.y), std::fabs(m1.x - m0.x), std::fabs(m1.y - m0.y)};
         ctx.r.fillRect(mr, ctx.theme.color.accent.withAlpha(40));
         ctx.r.strokeRect(mr, ctx.theme.color.accent, 1.f);
+    }
+    // 1.26.0 : une police glissee - son etiquette suit la souris (<< Aa Carlito -> l'objet la prend >>).
+    if (dropOnObject_ && pointerIn_ && !dropTag_.empty()) {
+        const float tw = ctx.r.measure(dropTag_, ctx.theme.font.ui).width + 16.f;
+        const gfx::Rect tag{pointer_.x + 14.f, pointer_.y + 12.f, tw, ctx.r.lineHeight(ctx.theme.font.ui) + 8.f};
+        ctx.r.fillRoundedRect(tag, ctx.theme.color.panelBg, 4.f);
+        ctx.r.strokeRect(tag, ctx.theme.color.accent, 1.f);
+        ctx.r.drawText({tag.x + 8.f, tag.y + 4.f}, dropTag_, ctx.theme.font.ui, ctx.theme.color.text);
     }
     // L'objet a poser suit la souris.
     if (placeKind_ && pointerIn_) {

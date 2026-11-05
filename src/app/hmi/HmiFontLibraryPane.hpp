@@ -148,8 +148,9 @@ public:
     void runAction(int action);
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
-    [[nodiscard]] HmiFontList&       list() noexcept { return *list_; }
-    [[nodiscard]] HmiFontPreview&    preview() noexcept { return *preview_; }
+    // La liste et l'apercu, en widgets (les essais leur envoient des clics).
+    [[nodiscard]] ui::Widget&        list() noexcept;
+    [[nodiscard]] ui::Widget&        preview() noexcept;
     [[nodiscard]] ui::InputText&     sampleField() noexcept { return *sampleField_; }
     [[nodiscard]] const std::string& message() const noexcept { return message_; }
     [[nodiscard]] ui::PopupMenu*     contextMenu() const noexcept { return menu_; }
@@ -191,6 +192,7 @@ private:
     std::string                          sample_;
     int                                  size_{15};
     bool                                 bold_{false};
+    bool                                 syncing_{false};      // setBold remet Normal | Gras (sans boucler)
     bool                                 compact_{false};
     std::string                          message_;
     core::ConnectionScope                links_;
