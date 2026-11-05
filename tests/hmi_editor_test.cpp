@@ -38757,6 +38757,19 @@ void couleursSemantiques1231() {
     (void)b.stack.undo();
     check(hmi::semantic::find(b.doc->project, "Alarme process") && b.v().object(rect)->text("fill") == "@Alarme process",
           "Ctrl+Z : la couleur et ses citations reviennent");
+    // L'onglet de la page Styles : un clic sur << Couleurs semantiques >>, puis sur << Styles >>.
+    app::HmiStylesPane page("sty1231", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    page.setBounds({0, 0, 1400, 800});
+    page.layout();
+    check(!page.semanticShown() && !page.semanticColors().visible(), "la page Styles s'ouvre sur ses styles");
+    const gfx::Rect t1 = page.tabRect(1), t0 = page.tabRect(0);
+    (void)page.dispatch(ui::MouseDown{{t1.x + t1.w / 2, t1.y + t1.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(page.semanticShown() && page.semanticColors().visible() && page.semanticColors().bounds().y >= t1.bottom(),
+          "un clic sur l'onglet Couleurs s\xC3\xA9mantiques : la liste des couleurs, sous les onglets");
+    page.showSemanticColors("@Marche");
+    check(page.semanticColors().selectedName() == "Marche", "ouvrir l'onglet sur @Marche (l'arbre du projet)");
+    (void)page.dispatch(ui::MouseDown{{t0.x + t0.w / 2, t0.y + t0.h / 2}, ui::MouseButton::Left, 1, {}});
+    check(!page.semanticShown() && !page.semanticColors().visible(), "un clic sur l'onglet Styles : retour aux styles");
 }
 
 

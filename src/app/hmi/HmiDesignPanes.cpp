@@ -2,9 +2,11 @@
 
 #include "HmiIcons.hpp"
 #include "HmiPainter.hpp"
+#include "HmiSemanticPane.hpp"              // 1.23.1 : l'onglet Couleurs semantiques
 #include "HmiSimMarks.hpp"                 // 1.12.27 : fitText (l'apercu des styles)
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
+#include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : le compte de l onglet Couleurs semantiques
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiTypes.hpp"          // 1.23.1 : folderLeaf (le nom d'un dossier de styles)
 #include "../../ui/Commands.hpp"          // 1.23.1 : les entrees des menus du clic droit
@@ -1190,6 +1192,45 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     // Lot API 8 : la recherche, branchee, puis relue (retenue d'une seance a l'autre).
     links_ += search_->changed->connect([this] { refresh(); });
     search_->recall();
+    // 1.23.1 : l'onglet Couleurs semantiques, cache tant qu'on ne le choisit pas.
+    colors_ = &static_cast<HmiSemanticColorsPane&>(addChild(std::make_unique<HmiSemanticColorsPane>(base + ".semantic", doc_, apply_)));
+    applyTab();
+}
+
+void HmiStylesPane::applyTab() {
+    for (const auto& child : children())
+        child->setVisibility(child.get() == colors_ ? (colorsShown_ ? ui::Visibility::Visible : ui::Visibility::Collapsed)
+                                                    : (colorsShown_ ? ui::Visibility::Collapsed : ui::Visibility::Visible));
+    invalidateLayout();
+    invalidate();
+}
+
+void HmiStylesPane::showSemanticColors(const std::string& name) {
+    colorsShown_ = true;
+    applyTab();
+    layout();
+    if (!name.empty()) (void)colors_->select(name);
+    colors_->table().takeFocus();
+}
+
+void HmiStylesPane::showStyles() {
+    colorsShown_ = false;
+    applyTab();
+    layout();
+}
+
+ui::EventResult HmiStylesPane::onEvent(const ui::InputEvent& ev) {
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
+        if (tabRects_[0].contains(d->pos)) {
+            if (colorsShown_) showStyles();
+            return ui::EventResult::Consumed;
+        }
+        if (tabRects_[1].contains(d->pos)) {
+            if (!colorsShown_) showSemanticColors();
+            return ui::EventResult::Consumed;
+        }
+    }
+    return ui::EventResult::Ignored;
 }
 
 void HmiStylesPane::say(std::string text, bool error) {
@@ -2200,7 +2241,17 @@ bool HmiStylesPane::dropKey(Id style, const std::string& type, const std::string
 }
 
 void HmiStylesPane::onLayout() {
-    const auto b = bounds();
+    // 1.23.1 : les deux onglets en haut ; le reste dessous.
+    auto b = bounds();
+    {
+        const float tabH = 30.f;
+        tabRects_[0] = {b.x + 8.f, b.y + 2.f, 150.f, tabH - 2.f};
+        tabRects_[1] = {b.x + 8.f + 152.f, b.y + 2.f, 230.f, tabH - 2.f};
+        b.y += tabH;
+        b.h = std::max(0.f, b.h - tabH);
+        if (colors_) colors_->setBounds(b);
+        if (colorsShown_) return;
+    }
     const float bar = 38.f, statusH = 24.f, head = 26.f, pad = 8.f;
     const float searchW = std::clamp(b.w * 0.3f, 180.f, 340.f);
     tools_->setBounds({b.x, b.y, std::max(0.f, b.w - searchW - 12.f), bar});
@@ -2240,6 +2291,26 @@ void HmiStylesPane::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto font = ctx.theme.font.smallUi;
     ctx.r.fillRect(bounds(), c.panelBg);
+    {
+        // 1.23.1 : les deux onglets - Styles [n], Couleurs semantiques [n] ; celui qui est choisi sur le fond du volet.
+        const auto b = bounds();
+        ctx.r.fillRect({b.x, b.y, b.w, 30.f}, c.headerBg);
+        ctx.r.fillRect({b.x, b.y + 29.f, b.w, 1.f}, c.border);
+        const auto& p = doc_->project;
+        const std::string labels[2] = {"Styles  " + std::to_string(styles::all(p).size()),
+                                       "Couleurs s\xC3\xA9mantiques  " + std::to_string(hmi::semantic::all(p).size())};
+        for (int t = 0; t < 2; ++t) {
+            const gfx::Rect r = tabRects_[t];
+            const bool on = (t == 1) == colorsShown_;
+            if (on) {
+                ctx.r.fillRect({r.x, r.y, r.w, r.h + 1.f}, c.panelBg);
+                ctx.r.fillRect({r.x, r.y, r.w, 2.f}, c.accent);
+            }
+            const auto font = on ? ctx.theme.font.uiBold : ctx.theme.font.ui;
+            ctx.r.drawText({r.x + 12.f, r.y + (r.h - ctx.r.lineHeight(font)) * 0.5f}, labels[t], font, on ? c.text : c.textMuted);
+        }
+        if (colorsShown_) return;
+    }
     const float head = 26.f;
     const auto heading = [&](const gfx::Rect& col, const std::string& left, const std::string& right) {
         const gfx::Rect strip{col.x, col.y, col.w, head};

@@ -43,6 +43,7 @@
 #include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques publiees pour le dessin
 #include "../../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles deplie (les fournis compris)
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8) : IHM > Espaces et bibliotheques
 #include "../hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
 #include "../hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
@@ -1147,9 +1148,10 @@ void MainAnalysisScreen::openHmiStylesAt(bool colors, const std::string& name) {
     const auto hdoc = app_.hmi();
     if (!styles || !hdoc) return;
     if (colors) {
-        (void)name;   // A_BRANCHER_ONGLET_COULEURS : l'onglet Couleurs semantiques de la page Styles
+        styles->showSemanticColors(name);
         return;
     }
+    styles->showStyles();
     if (name.empty()) return;
     if (const hmi::Style* st = hdoc->project.styleByName(name)) styles->selectStyle(st->id);
     else (void)styles->selectBuiltin(name);
@@ -2304,10 +2306,7 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         // 1.23.0 : << Ouvrir le style >> (le carre O, la ligne du style) : IHM > Styles, ce style choisi.
         made->setStyleOpener([this](const std::string& name) {
-            openHmiPane("styles");
-            if (auto* styles = dynamic_cast<HmiStylesPane*>(hmiTab("styles")))
-                if (const auto hdoc = app_.hmi())
-                    if (const hmi::Style* st = hdoc->project.styleByName(name)) styles->selectStyle(st->id);
+            openHmiStylesAt(false, name);   // 1.23.1 : l'onglet Styles (un style fourni aussi)
         });
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setHelpOpener([this](const std::string& topic) { openHmiHelp(topic); });   // 1.12.18 : Aide sur ...

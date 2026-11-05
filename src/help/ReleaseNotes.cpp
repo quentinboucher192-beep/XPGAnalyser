@@ -184,6 +184,14 @@ const std::vector<Note>& table() {
          "comptent). Un cadenas pour ce qui est fourni, une personne pour ce qui est \xC3\xA0 toi ; une couleur a son ic\xC3\xB4ne dans sa "
          "teinte. Un clic ouvre la page Styles sur l'\xC3\xA9l\xC3\xA9ment ; clic droit : Nouveau style\xE2\x80\xA6, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6",
          "styles-nommes", ""),
+        note("1.23.1", "Vues", Kind::Changed,
+         "LA PAGE STYLES, PLUS DIRECTE : deux onglets en haut, Styles et Couleurs s\xC3\xA9mantiques. Un menu du clic droit propre \xC3\xA0 "
+         "chaque liste - les styles (Nouveau, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6, Renommer\xE2\x80\xA6, Retirer, Ranger dans un dossier, Copier le "
+         "nom), les types (Ajouter, Retirer, Choisir pour l'aper\xC3\xA7u), les propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es (Ajouter, Retirer) ; une entr\xC3\xA9" "e "
+         "gris\xC3\xA9" "e dit pourquoi (un style fourni). \xC2\xAB Ajouter un type\xE2\x80\xA6 \xC2\xBB range la biblioth\xC3\xA8que en DOSSIERS d\xC3\xA9pliables, comme "
+         "la palette de l'\xC3\xA9" "diteur, puis Mes symboles, chaque type avec sa petite ic\xC3\xB4ne ; \xC2\xAB Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6 \xC2\xBB suit "
+         "les cat\xC3\xA9gories de l'inspecteur, chaque propri\xC3\xA9t\xC3\xA9 avec son genre (nombre, couleur, bool\xC3\xA9" "en, texte, choix).",
+         "styles-nommes", ""),
         // 1.23.0 : les styles par type d'objet (fournis, dupliquer, proprietes au choix, apercu) ; le carre O de l'inspecteur
         note("1.23.0", "Vues", Kind::New,
          "LES STYLES PAR TYPE D'OBJET : IHM \xE2\x80\xBA Styles refaite. Un style ne vise plus seulement les boutons : une liste de "

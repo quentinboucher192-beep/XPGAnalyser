@@ -1590,6 +1590,16 @@ L'**aperçu** montre le style choisi sur le **type** choisi dans sa liste **Type
 Les objets gardent leurs valeurs et ne le citent plus. Générer signale un objet qui cite un style disparu.
 > Copier le style / Coller le style (barre d'outils) reste là pour reporter une apparence une fois, sans lien.
 @nouveau 1.23.1
+### Les onglets, le clic droit, les choix en dossiers (1.23.1)
+- En haut de la page, deux onglets : **Styles** (cette page) et **Couleurs sémantiques** (voir ce sujet).
+- **Le clic droit** choisit la ligne cliquée et ouvre le menu de sa liste :
+  - les styles : Nouveau style (Inser), Dupliquer à partir de… (Ctrl+D), Renommer… (F2), Retirer (Suppr), **Ranger dans un dossier** (un sous-menu : à la racine, un dossier, Nouveau dossier…), Copier le nom ; sur un dossier : Renommer le dossier, Retirer le dossier ;
+  - les types : Ajouter un type… (Inser), Retirer le type (Suppr), Choisir pour l'aperçu ;
+  - les propriétés imposées : Ajouter une propriété… (Inser), Retirer la propriété (Suppr) ; aussi la touche Menu ou Maj+F10.
+  Une entrée grisée dit pourquoi (un style fourni ne se modifie pas).
+- **Ajouter un type…** range la bibliothèque en **dossiers** dépliables (ses catégories, dans l'ordre de la palette), puis **Mes symboles** ; chaque type a sa petite icône à droite. Le premier dossier est déplié ; une recherche déplie ce qui a un résultat. Au clavier : Haut et Bas passent les dossiers repliés, Droite déplie, Gauche replie, Entrée choisit.
+- **Ajouter une propriété…** suit les **catégories de l'inspecteur** (toutes dépliées), puis Paramètres du symbole ; chaque propriété dit à droite son **genre** (nombre, couleur, booléen, texte, choix, durée) et la valeur d'un objet neuf.
+@nouveau 1.23.1
 ### Le style choisi par une formule (1.23.1)
 **Style nommé** accepte une formule (fx) : `=SEL(Defaut_P1, 'Contraste élevé', 'ISA-101')`. Dans l'éditeur, l'objet garde le style de sa valeur (le carré O, l'aperçu) ; **en marche**, il prend les valeurs du style que la formule rend, et les reprend quand elle change. Une valeur brisée garde la sienne ; une propriété en formule aussi. La ligne **Valeurs du style** le dit (« fx : le style de la formule en marche »). Générer vérifie les noms écrits dans la formule (un style introuvable) ; une formule sans nom écrit ne se vérifie qu'en marche.
 @nouveau 1.23.1
@@ -1626,7 +1636,9 @@ Douze couleurs **fournies**, verrouillées (un cadenas), suivent l'ISA-101 - le 
 | Désactivé | #A6A6A6 | ce qui ne répond pas |
 Elles ne se modifient pas : **Dupliquer à partir de…** en fait une couleur du projet, à toi. Une couleur du projet ne peut pas porter le nom d'une fournie.
 ### Tes couleurs
-IHM › Styles, onglet **Couleurs sémantiques** : **Nouvelle couleur…**, **Dupliquer à partir de…**, **Renommer…**, **Retirer** ; chaque couleur a son nom, sa valeur (`#RRGGBB`, `#RRGGBBAA` ou `@Autre`), sa description et le nombre de citations. Chaque changement est une commande (Ctrl+Z).
+IHM › Styles, onglet **Couleurs sémantiques** (en haut de la page, à côté de **Styles**) : à gauche la liste - les tiennes (une personne), puis les fournies (un cadenas), avec leur nom à citer, leur couleur, leur description et le nombre de citations ; à droite la fiche de la couleur choisie : son **nom**, sa **couleur** (la palette ; ou une autre couleur sémantique, `@Autre`), sa description, son dossier, **où elle est citée** et ce qui est à vérifier.
+- La barre et le clic droit : **Nouvelle** (Inser), **Dupliquer à partir de** (Ctrl+D, aussi une fournie), **Copier @Nom** (Ctrl+C), **Retirer** (Suppr).
+- Chaque changement est une commande (Ctrl+Z). Une valeur illisible, le nom d'une fournie ou une boucle (`@A` vaut `@B` qui vaut `@A`) sont refusés, et la fiche dit pourquoi.
 - **Renommer** : tout ce qui la cite suit (valeurs, formules, styles, fonds, autres couleurs).
 - **Retirer** : ce qui la cite garde sa couleur, écrite en dur - rien ne change à l'écran.
 - Elles s'enregistrent avec le projet ; un **paquet de vues** emporte celles que ses vues citent (et l'import ajoute celles qui manquent, sans toucher celles du projet).

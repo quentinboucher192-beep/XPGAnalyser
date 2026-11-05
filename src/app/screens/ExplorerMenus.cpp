@@ -48,6 +48,8 @@
 #include "../VariablesPane.hpp"
 #include "../hmi/HmiDesignPanes.hpp"
 #include "../../hmi/HmiStyles.hpp"   // 1.23.1 : IHM > Styles deplie (dupliquer un style)
+#include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : ... et une couleur semantique
+#include "../hmi/HmiSemanticPane.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"     // 1.12.18 (planche 19) : Renommer, Dupliquer une fonction IHM
 #include "../hmi/HmiNotifyPanes.hpp"       // 1.12.18 : Nouveau destinataire...
 #include "../hmi/HmiReportPanes.hpp"       // 1.12.18 : Nouveau rapport...
@@ -2175,6 +2177,36 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
                 auto* pane = stylesPane();
                 return pane && pane->addStyle(name) != hmi::kNoId ? std::string{} : std::string("nom d\xC3\xA9j\xC3\xA0 pris ou invalide");
             }));
+        if (kind == NK::HmiStyleGroup && ProjectTreeModel::indexOf(node) == 1)
+            m.add("Nouvelle couleur s\xC3\xA9mantique" + kDots, Icon::Plus,
+                  askName("Nouvelle couleur s\xC3\xA9mantique", "Son nom (cit\xC3\xA9 par @Nom) ; sa couleur dans la fiche (Ctrl+Z la retire).",
+                          "Couleur", [stylesPane](const std::string& name) {
+                      auto* pane = stylesPane();
+                      if (!pane) return std::string("refus\xC3\xA9" "e");
+                      pane->showSemanticColors();
+                      std::string why;
+                      return pane->semanticColors().addColor(name, "#808080", &why) != hmi::kNoId ? std::string{} : why;
+                  }));
+        if (kind == NK::HmiSemanticItem && hdoc) {
+            const auto all = hmi::semantic::all(hdoc->project);
+            const std::size_t at = ProjectTreeModel::indexOf(node);
+            if (at < all.size()) {
+                const std::string from = all[at]->name;
+                m.add("Dupliquer \xC3\xA0 partir de \xC2\xAB @" + from + " \xC2\xBB" + kDots, Icon::Duplicate,
+                      askName("Dupliquer \xC3\xA0 partir de \xC2\xAB @" + from + " \xC2\xBB", "Le nom de la copie, \xC3\xA0 toi (Ctrl+Z la retire).",
+                              hmi::semantic::uniqueName(hdoc->project, from + " (copie)"), [stylesPane, from](const std::string& name) {
+                          auto* pane = stylesPane();
+                          if (!pane) return std::string("refus\xC3\xA9" "e");
+                          pane->showSemanticColors(from);
+                          std::string why;
+                          return pane->semanticColors().duplicateFrom(from, name, &why) != hmi::kNoId ? std::string{} : why;
+                      }));
+                m.add("Copier \xC2\xAB @" + from + " \xC2\xBB", Icon::Copy, [this, from] {
+                    ui::setClipboardText(hmi::semantic::reference(from));
+                    status_->setTransientMessage("\xC2\xAB " + hmi::semantic::reference(from) + " \xC2\xBB copi\xC3\xA9 : colle-le dans une case couleur.", 5.0);
+                });
+            }
+        }
         if (kind == NK::HmiStyleItem && hdoc) {
             const auto all = hmi::styles::all(hdoc->project);
             const std::size_t at = ProjectTreeModel::indexOf(node);

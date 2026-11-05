@@ -146,12 +146,21 @@ private:
     core::ConnectionScope links_;
 };
 
+class HmiSemanticColorsPane;   // 1.23.1 : HmiSemanticPane.hpp
+
 class HmiStylesPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
     enum : int { ActNew = 1, ActDuplicate, ActRename, ActRemove, ActFolder };   // la barre
     HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply);
     void refresh();
+    // 1.23.1 : DEUX ONGLETS en haut de la page (le client : << dans Styles, un onglet couleurs semantiques >>) - Styles
+    // (tout ce qui suit) et Couleurs semantiques (HmiSemanticPane.hpp). `name` : la couleur a choisir (vide : rien de plus).
+    void showSemanticColors(const std::string& name = {});
+    void showStyles();
+    [[nodiscard]] bool semanticShown() const noexcept { return colorsShown_; }
+    [[nodiscard]] HmiSemanticColorsPane& semanticColors() noexcept { return *colors_; }
+    [[nodiscard]] gfx::Rect tabRect(int tab) const noexcept { return tab == 1 ? tabRects_[1] : tabRects_[0]; }   // essais
 
     // ---- les styles (une commande chacun ; les gestes des boutons, des scripts et des essais) ----
     hmi::Id addStyle(const std::string& name = "Style");     // un style vide, au nom libre (jamais celui d'un fourni)
@@ -256,7 +265,12 @@ public:
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;   // 1.23.1 : un clic sur un onglet
 private:
+    void applyTab();                                           // 1.23.1 : ce qui se voit selon l'onglet
+    HmiSemanticColorsPane* colors_{nullptr};
+    bool                   colorsShown_{false};
+    gfx::Rect              tabRects_[2]{};
     void rebuildBuiltins();
     void styleChanged();
     void rebuildTypes();
