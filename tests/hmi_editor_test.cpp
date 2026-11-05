@@ -70,6 +70,7 @@
 #include "../src/app/hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8)
 #include "../src/app/hmi/HmiFunctionTestsPage.hpp"   // 1.13.0 (lot J4b) : l'onglet Tests
 #include "../src/app/hmi/HmiUnitPanes.hpp"          // 1.13.0 (lot J6b) : la case Unite, le selecteur, Unites de mesure
+#include "../src/hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
@@ -24920,6 +24921,138 @@ void inspecteur_reperes_filtres_1103() {
     ui::FilterMemory::install(ui::FilterMemory::Store{});
 }
 
+// 1.23.0 : L'INSPECTEUR D'UN OBJET STYLE - les valeurs imposees par le style (le carre O), le filtre O Style, la ligne du
+// style, briser (reprendre l'ancienne valeur, garder), une saisie qui brise, retablir, tout retablir, Ctrl+Z.
+void inspecteur_styles_1230() {
+    std::printf("== 1.23.0 : l'inspecteur d'un objet style - le carre O, briser, retablir, le filtre O Style ==\n");
+    using PG = ui::PropertyGrid;
+    using F = app::HmiEditor::PropFilter;
+    namespace st = hmi::styles;
+    std::map<std::string, std::string> store;
+    ui::FilterMemory::install(ui::FilterMemory::Store{
+        [&](const std::string& k) { const auto it = store.find(k); return it == store.end() ? std::string{} : it->second; },
+        [&](const std::string& k, const std::string& v) { store[k] = v; }, {}});
+    Bench b;
+    const Id pid = edit::add(b.doc->project, b.v(), Kind::Pump, 120, 120);
+    b.doc->changed->emit(kNoId);
+    b.editor->canvas().setSelection({pid});
+    b.editor->layout();
+    auto& grid = b.editor->properties();
+    const auto rows = [&] {
+        std::vector<const PG::Property*> out;
+        q1103Flatten(grid.categories(), out);
+        return out;
+    };
+    const auto row = [&](const std::string& key) -> const PG::Property* {
+        for (const auto* p : rows())
+            if (p->key == key) return p;
+        return nullptr;
+    };
+    // La liste Style nomme propose les styles fournis, sans style du projet.
+    const PG::Property* named = row("namedStyle");
+    check(named && std::find(named->enumValues.begin(), named->enumValues.end(), "ISA-101") != named->enumValues.end(),
+          "Style nomm\xC3\xA9 : les styles fournis se proposent (ISA-101)");
+    if (!named || !named->commit) return;
+    check(named->commit("ISA-101"), "choisir ISA-101 dans l'inspecteur");
+    b.editor->layout();
+    const Object* o = b.v().object(pid);
+    check(o && o->text("colorOn") == "#4D4D4D" && st::citedStyle(*o) == "ISA-101", "les valeurs du style sont impos\xC3\xA9" "es");
+    const PG::Property* on = row("colorOn");
+    check(on && on->legend && on->legend->style == PG::LegendStyle::Style && on->legend->text == "O",
+          "le carr\xC3\xA9 de Couleur en marche dit O");
+    const PG::Property* lbl = row("label");
+    check(lbl && (!lbl->legend || lbl->legend->style != PG::LegendStyle::Style), "une propri\xC3\xA9t\xC3\xA9 que le style ne porte pas : pas de O");
+    const PG::Property* line = row("__styleValues");
+    const std::size_t imposed = st::imposedKeys(b.doc->project, *o).size();
+    check(line && line->value.rfind(std::to_string(imposed) + " impos", 0) == 0 && line->type == PG::ValueType::ReadOnly,
+          "la ligne du style : " + (line ? line->value : std::string("absente")));
+    check(b.editor->propertyFilterCount(F::Style) == imposed && imposed >= 4,
+          "le filtre O Style compte les valeurs impos\xC3\xA9" "es (" + std::to_string(imposed) + ")");
+    b.editor->setPropertyFilter(F::Style, true);
+    b.editor->layout();
+    {
+        bool onlyO = true;
+        std::size_t n = 0;
+        for (const auto* p : rows()) {
+            if (q1103Summary(*p)) continue;
+            ++n;
+            onlyO = onlyO && p->legend && p->legend->style == PG::LegendStyle::Style;
+        }
+        check(onlyO && n == imposed, "filtre O Style allum\xC3\xA9 : seulement les cases O (" + std::to_string(n) + ")");
+    }
+    b.editor->setPropertyFilter(F::Style, false);
+    b.editor->layout();
+    // Le menu du carre O : la ligne du style, puis briser (reprendre, garder), ouvrir le style.
+    b.editor->setValueAsker([](const app::HmiEditor::ValueRequest&) {});
+    std::string opened;
+    b.editor->setStyleOpener([&](const std::string& s) { opened = s; });
+    on = row("colorOn");
+    std::string cat;
+    for (const auto& c : grid.categories())
+        for (const auto& p : c.properties)
+            if (p.key == "colorOn") cat = c.name;
+    check(on && b.editor->openLegendMenu(cat, on->name, {10.f, 10.f}), "le menu du carr\xC3\xA9 O s'ouvre");
+    {
+        const auto& items = b.editor->legendMenu()->items();
+        const auto hasId = [&](int id) { return std::any_of(items.begin(), items.end(), [&](const auto& it) { return it.id == id; }); };
+        const bool line2 = items.size() > 1 && items[1].label.find("Impos\xC3\xA9" "e par le style \xC2\xAB ISA-101 \xC2\xBB : #4D4D4D (avant le style : #2ECC71)") == 0;
+        check(line2 && hasId(400) && hasId(401) && hasId(402) && !hasId(403), "le menu : imposee par ISA-101, briser (reprendre, garder), ouvrir");
+        b.editor->legendMenu()->itemChosen->emit(402);
+        check(opened == "ISA-101", "Ouvrir le style : IHM > Styles, ISA-101");
+        b.editor->legendMenu()->itemChosen->emit(400);
+    }
+    b.editor->layout();
+    o = b.v().object(pid);
+    check(o && o->text("colorOn") == "#2ECC71" && st::brokenKeys(*o) == std::vector<std::string>{"colorOn"},
+          "briser : l'ancienne valeur revient (#2ECC71)");
+    on = row("colorOn");
+    check(on && on->overridden && on->overrideTag == "BRIS\xC3\x89" "E" && on->overrideDefault == "#4D4D4D" && on->revert
+              && (!on->legend || on->legend->style != PG::LegendStyle::Style),
+          "la case bris\xC3\xA9" "e : BRIS\xC3\x89" "E, la valeur du style en infobulle, sa fl\xC3\xA8" "che de retour, plus de O");
+    line = row("__styleValues");
+    check(line && line->value.find("1 bris\xC3\xA9" "e") != std::string::npos && line->revert, "la ligne du style : 1 bris\xC3\xA9" "e, Tout r\xC3\xA9tablir");
+    // Ctrl+Z reprend le geste.
+    (void)b.stack.undo();
+    b.editor->layout();
+    o = b.v().object(pid);
+    check(o && o->text("colorOn") == "#4D4D4D" && st::brokenKeys(*o).empty(), "Ctrl+Z : la valeur du style revient");
+    (void)b.stack.redo();
+    b.editor->layout();
+    // Retablir par la fleche de la case.
+    on = row("colorOn");
+    if (on && on->revert) on->revert();
+    b.editor->layout();
+    o = b.v().object(pid);
+    check(o && o->text("colorOn") == "#4D4D4D" && st::brokenKeys(*o).empty(), "la fl\xC3\xA8" "che : r\xC3\xA9tablir la valeur du style");
+    // Briser en gardant la valeur actuelle.
+    check(b.editor->breakStyleValue("colorOff", true), "briser Couleur \xC3\xA0 l'arr\xC3\xAAt en gardant sa valeur");
+    o = b.v().object(pid);
+    check(o && o->text("colorOff") == "#F5F5F5" && st::brokenKeys(*o) == std::vector<std::string>{"colorOff"}, "... elle garde #F5F5F5");
+    // Une saisie sur une valeur imposee la brise.
+    b.editor->layout();
+    const PG::Property* txt = row("textColor");
+    check(txt && txt->commit && txt->commit("#FFFFFF"), "taper une autre couleur du texte");
+    o = b.v().object(pid);
+    check(o && o->text("textColor") == "#FFFFFF" && st::brokenKeys(*o).size() == 2, "la saisie brise la valeur (gard\xC3\xA9" "e)");
+    // Tout retablir.
+    check(b.editor->restoreAllStyleValues(), "tout r\xC3\xA9tablir");
+    o = b.v().object(pid);
+    check(o && st::brokenKeys(*o).empty() && o->text("textColor") == "#1C1C1C" && o->text("colorOff") == "#F5F5F5", "... toutes les valeurs du style");
+    // Ne plus citer de style.
+    b.editor->layout();
+    named = row("namedStyle");
+    check(named && named->commit && named->commit(""), "Style nomm\xC3\xA9 vide");
+    o = b.v().object(pid);
+    check(o && st::citedStyle(*o).empty() && o->text("colorOn") == "#4D4D4D" && !o->find("styleWas"), "sans style : les valeurs restent, l'\xC3\xA9tat s'en va");
+    b.editor->layout();
+    check(!row("__styleValues") && b.editor->propertyFilterCount(F::Style) == 0, "plus de ligne du style, plus de O");
+    // Creer un style depuis l'objet : il vise son type.
+    std::string why;
+    check(b.editor->makeStyle("Pompe grise", &why), "Cr\xC3\xA9" "er un style depuis la pompe (" + why + ")");
+    const hmi::Style* made = b.doc->project.styleByName("Pompe grise");
+    check(made && st::target(*made, "Pump") && made->props.empty(), "le style cr\xC3\xA9\xC3\xA9 vise le type Pompe");
+}
+
 void barre_simulateur_1103() {
     std::printf("== 1.10.3 Q-B : la barre du simulateur de l'IHM sans les 5 boutons de droite ni la liste ==\n");
     auto doc = std::make_shared<Document>();
@@ -45485,6 +45618,7 @@ int main(int argc, char** argv) {
     dupliquerAvec1104_111();                // 1.11 (R111) : le membre et Ctrl+Y avec le preremplissage et Tableau... (1.10.4)
     dupliquerCapture111();                  // 1.11 (REP) : la capture du client - l'inspecteur et Dupliquer... avec des $...$
     inspecteur_reperes_filtres_1103();      // 1.10.3 (Q-B) : les reperes se voient ; les filtres fx, Reperes, Non vides
+    inspecteur_styles_1230();               // 1.23.0 : le carre O, briser, retablir, le filtre O Style
     inspecteur_range_1104();                // 1.10.4 (K3) : l'inspecteur range (communes, puis le genre ; ni doublon)
     barre_simulateur_1103();                // 1.10.3 (Q-B) : la barre du simulateur sans les 5 boutons ni la liste
     k1104_frappe_dupliquer_remplacer();     // 1.10.4 (K1) : la frappe sans plantage, Dupliquer avec les indices, Remplacer...

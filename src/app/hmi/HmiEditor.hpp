@@ -69,7 +69,8 @@ public:
     // s'affiche si elle repond a AU MOINS UN filtre allume ; tous eteints, tout
     // s'affiche. Chacun montre son nombre ; une section vide se cache ; l'etat est
     // garde dans les reglages ("hmi.inspecteur.filtres").
-    enum class PropFilter : int { Fx = 0, Markers = 1, Filled = 2 };
+    // 1.23.0 : Style - les cases dont la valeur est IMPOSEE par le style nomme de l'objet (le carre << O >>).
+    enum class PropFilter : int { Fx = 0, Markers = 1, Filled = 2, Style = 3 };
     void setPropertyFilter(PropFilter f, bool on);
     [[nodiscard]] bool        propertyFilter(PropFilter f) const noexcept;
     [[nodiscard]] std::size_t propertyFilterCount(PropFilter f) const noexcept;
@@ -149,6 +150,14 @@ public:
     // Lot 12 : LES STYLES NOMMES. "Creer un style" demande le nom a l'hote ;
     // makeStyle() fait la commande (le style au projet, la selection le cite).
     void setStyleAsker(std::function<void()> ask) { askStyle_ = std::move(ask); }
+    // 1.23.0 : << Ouvrir le style >> (le menu du carre O, la ligne du style) : IHM > Styles, ce style choisi.
+    void setStyleOpener(std::function<void(const std::string& style)> open) { openStyle_ = std::move(open); }
+    // 1.23.0 : les gestes du carre O, pour les menus, les scripts et les essais (l'objet choisi seul ; une commande).
+    //   breakStyleValue : la cle ne suit plus le style - elle reprend sa valeur d'avant le style (keepCurrent : garde la
+    //   valeur actuelle) ; restoreStyleValue : elle reprend la valeur du style ; restoreAllStyleValues : toutes.
+    bool breakStyleValue(const std::string& key, bool keepCurrent = false);
+    bool restoreStyleValue(const std::string& key);
+    bool restoreAllStyleValues();
     // Lot 20 : "Enregistrer comme modele" - le dialogue est a l'ecran.
     void setTemplateAsker(std::function<void()> ask) { askTemplate_ = std::move(ask); }
     // 1.10.2 (chantier D) : "Dupliquer..." (Ctrl+Maj+D, la barre d'outils) ; vide : la copie decalee.
@@ -288,6 +297,9 @@ private:
     ui::PropertyGrid* props_{nullptr};
     HmiPropsFilterBar* propFilters_{nullptr};   // 1.10.3 : fx, Reperes, Non vides (au-dessus de props_)
     void applyPropertyFilters(const hmi::View& v, std::vector<ui::PropertyGrid::Category>& cats);
+    // 1.23.0 : le carre << O >> des valeurs imposees par le style nomme, l'etiquette BRISEE (et son retour) des valeurs
+    // brisees, et la ligne du style sous << Style nomme >> (l'objet choisi seul).
+    void markStyleValues(const hmi::View& v, std::vector<ui::PropertyGrid::Category>& cats);
     ui::TabControl*   inspector_{nullptr};
     HmiActionsPanel*  actions_{nullptr};
     HmiActionsPanel*  shortcuts_{nullptr};      // 1.11.23 : les raccourcis de la vue
@@ -317,6 +329,7 @@ private:
     std::function<bool(bool)> historyPossible_;
     std::function<void()>     askSymbol_;
     std::function<void()>     askStyle_;         // lot 12
+    std::function<void(const std::string&)> openStyle_;   // 1.23.0 : IHM > Styles, ce style
     std::function<void()>     askTemplate_;      // lot 20
     std::function<void()>     askDuplicate_;     // 1.10.2 (chantier D)
     std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
@@ -344,6 +357,8 @@ private:
     ui::PopupMenu*            legendMenu_{nullptr};       // 1.11.3 : la liste des carres
     ValueRequest              legendRequest_;             // ... la case pour laquelle elle est ouverte
     std::vector<std::string>  legendUnknown_;             // ... les noms a creer qu'elle propose
+    std::string               legendKey_;                 // 1.23.0 : ... la cle de la case (les gestes du carre O)
+    std::string               legendStyle_;               // 1.23.0 : ... le style qui l'impose ou qu'elle a brise
 };
 
 } // namespace app

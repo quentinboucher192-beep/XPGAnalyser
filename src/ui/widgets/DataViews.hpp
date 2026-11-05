@@ -948,7 +948,8 @@ public:
     };
 
     // 1.11.3 : le carre de legende d'une case (voir Property::legend).
-    enum class LegendStyle : std::uint8_t { Constant, Formula, Markers, Api, Hmi, System, Local, Error, Empty };
+    // 1.23.0 : Style - la valeur est imposee par le style nomme de l'objet (le carre << O >>).
+    enum class LegendStyle : std::uint8_t { Constant, Formula, Markers, Api, Hmi, System, Local, Error, Empty, Style };
     struct Legend {
         LegendStyle              style{LegendStyle::Constant};
         std::string              text;      // "C", "fx", "$", "A", "I", "S", "V", "!"
@@ -998,6 +999,10 @@ public:
         // valeur d'origine ; revertTip : son infobulle. Nul : pas de bouton.
         std::function<void()>     revert{};
         std::string               revertTip{};
+        // 1.23.0 : l'etiquette de la valeur surchargee (vide : SURCHARGE) et la premiere ligne de son infobulle (vide :
+        // << Surcharge sur cet objet >>) - une valeur BRISEE d'un style nomme : << BRISEE >>.
+        std::string               overrideTag{};
+        std::string               overrideNote{};
         // ---- 1.9 : une PASTILLE DE COULEUR au debut de la case de la valeur
         // (le mode d'un parametre) ; pillOnly : elle tient lieu de valeur.
         std::optional<ColorPill>  pill{};

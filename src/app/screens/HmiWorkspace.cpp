@@ -2264,6 +2264,13 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
                 },
                 [this] { return app_.project(); });
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
+        // 1.23.0 : << Ouvrir le style >> (le carre O, la ligne du style) : IHM > Styles, ce style choisi.
+        made->setStyleOpener([this](const std::string& name) {
+            openHmiPane("styles");
+            if (auto* styles = dynamic_cast<HmiStylesPane*>(hmiTab("styles")))
+                if (const auto hdoc = app_.hmi())
+                    if (const hmi::Style* st = hdoc->project.styleByName(name)) styles->selectStyle(st->id);
+        });
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setHelpOpener([this](const std::string& topic) { openHmiHelp(topic); });   // 1.12.18 : Aide sur ...
         made->setHistoryOpener([this](hmi::Id view, std::vector<hmi::Id> objects) {    // 1.12.26 : l'historique des objets

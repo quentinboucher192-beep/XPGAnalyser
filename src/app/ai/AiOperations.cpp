@@ -7,6 +7,7 @@
 #include "AiVarFolders.hpp"   // 1.22.1 : le dossier des variables creees (normalise, l'existant repris, deduit, melange)
 
 #include "AiRegistry.hpp"
+#include "../../hmi/HmiStyles.hpp"   // 1.23.0 : un style nomme pose par l'IA s'applique
 #include "../../hmi/HmiDuplicate.hpp"    // 1.16.0 : dupliquer avec reperes, comme Ctrl+Maj+D
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiExpr.hpp"
@@ -4593,6 +4594,17 @@ bool applyStaged(hmi::Project& pr, const Proposal& p, const Env& env, std::strin
         if (why) *why = failed;
         return false;
     }
+    // 1.23.0 : un style nomme pose par l'IA (namedStyle) s'applique comme dans l'inspecteur : ses valeurs imposees, la
+    // valeur d'avant retenue - pour chaque objet dont le style cite a change (ou neuf, sans etat de style).
+    for (auto& v : pr.views)
+        for (auto& o : v.objects) {
+            const std::string now = hmi::styles::citedStyle(o);
+            if (now.empty()) continue;
+            const hmi::View* bv = backup.view(v.id);
+            const hmi::Object* bo = bv ? bv->object(o.id) : nullptr;
+            if (bo && hmi::styles::citedStyle(*bo) == now) continue;
+            if (const hmi::Style* st = hmi::styles::find(pr, now)) (void)hmi::styles::apply(pr, o, *st);
+        }
     return true;
 }
 

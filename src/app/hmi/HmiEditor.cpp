@@ -1,4 +1,5 @@
 #include "HmiEditor.hpp"
+#include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les valeurs imposees par un style (le carre O)
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
 #include "../../hmi/HmiGuide.hpp"     // 1.12.18 : « Aide sur Voyant » (le sujet du genre)
 #include "../../ui/Commands.hpp"      // 1.12.18 : la table des commandes du clic droit
@@ -89,7 +90,9 @@ std::vector<ui::exprfield::MarkerSpan> gridMarkers(std::string_view text, bool e
 }
 
 constexpr const char* kFilterKey = "hmi.inspecteur.filtres";
-constexpr std::array<const char*, 3> kFilterWords{"fx", "reperes", "nonvides"};
+constexpr std::array<const char*, 4> kFilterWords{"fx", "reperes", "nonvides", "style"};   // 1.23.0 : + style
+// 1.23.0 : l'ordre des boutons a l'ecran (fx, Reperes, O Style, Non vides) ; les indices restent ceux de PropFilter.
+constexpr std::array<std::size_t, 4> kFilterOrder{0, 1, 3, 2};
 
 // 1.12.18 (bug 7, planche 20) : le menu d'un sous-onglet du symbole ou de la vue (Dessin, Alarmes,
 // Fonctions...) - le clic droit l'a choisi ; son nom, puis Disposition...
@@ -117,13 +120,13 @@ public:
         addChild(std::move(grid));
         load();
     }
-    std::array<bool, 3>        on{};
-    std::array<std::size_t, 3> counts{};
+    std::array<bool, 4>        on{};
+    std::array<std::size_t, 4> counts{};
     std::function<void()>      changed;
-    [[nodiscard]] gfx::Rect chip(int i) const { return chips_[static_cast<std::size_t>(std::clamp(i, 0, 2))]; }
-    [[nodiscard]] bool any() const noexcept { return on[0] || on[1] || on[2]; }
+    [[nodiscard]] gfx::Rect chip(int i) const { return chips_[static_cast<std::size_t>(std::clamp(i, 0, 3))]; }
+    [[nodiscard]] bool any() const noexcept { return on[0] || on[1] || on[2] || on[3]; }
     void set(int i, bool v) {
-        auto& slot = on[static_cast<std::size_t>(std::clamp(i, 0, 2))];
+        auto& slot = on[static_cast<std::size_t>(std::clamp(i, 0, 3))];
         if (slot == v) return;
         slot = v;
         save();
@@ -134,15 +137,17 @@ public:
     void load() {
         if (!ui::FilterMemory::installed()) return;
         const std::string stored = ui::FilterMemory::read(kFilterKey);
-        for (std::size_t i = 0; i < 3; ++i) on[i] = stored.find(kFilterWords[i]) != std::string::npos;
+        for (std::size_t i = 0; i < 4; ++i) on[i] = stored.find(kFilterWords[i]) != std::string::npos;
     }
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override {
-        static const char* const what[3] = {
+        static const char* const what[4] = {
             "fx : les cases pilot\xC3\xA9" "es par une expression",
             "Rep\xC3\xA8res : les cases qui contiennent un rep\xC3\xA8re $Nom$ (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D, les remplace)",
             "Non vides : les cases renseign\xC3\xA9" "es - un texte ou une expression non vide, ou une valeur diff\xC3\xA9rente de "
-            "celle d'un objet neuf"};
-        for (std::size_t i = 0; i < 3; ++i)
+            "celle d'un objet neuf",
+            "O Style : les cases dont la valeur est impos\xC3\xA9" "e par le style nomm\xC3\xA9 de l'objet (le carr\xC3\xA9 O ; son menu "
+            "la brise, une case \xC3\xA0 la fois)"};
+        for (std::size_t i = 0; i < 4; ++i)
             if (chips_[i].contains(mouse))
                 return std::string(what[i]) + " (" + std::to_string(counts[i]) + ").\nClic : " + (on[i] ? "\xC3\xA9teindre" : "allumer")
                      + ". Les filtres se cumulent : une case s'affiche si elle r\xC3\xA9pond \xC3\xA0 au moins un filtre allum\xC3\xA9 ; "
@@ -163,19 +168,19 @@ protected:
         ctx.r.line({bar.x, bar.bottom() - 1.f}, {bar.right(), bar.bottom() - 1.f}, c.border, 1.f);
         const auto font = ctx.theme.font.smallUi;
         const float lh = ctx.r.lineHeight(font);
-        static const char* const labels[3] = {"fx", "$ Rep\xC3\xA8res", "Non vides"};
+        static const char* const labels[4] = {"fx", "$ Rep\xC3\xA8res", "Non vides", "O Style"};
         float x = bar.x + 6.f;
         const std::string lead = any() ? "Filtr\xC3\xA9 :" : "Montrer :";
         ctx.r.drawText({x, bar.y + (kBarH - lh) * 0.5f}, lead, font, c.textMuted);
         // la meme place pour "Montrer :" et "Filtre :" : les boutons ne bougent pas sous la souris
         x += std::max(ctx.r.measure("Montrer :", font).width, ctx.r.measure("Filtr\xC3\xA9 :", font).width) + 8.f;
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (const std::size_t i : kFilterOrder) {
             const std::string label = labels[i];
             const std::string count = std::to_string(counts[i]);
             const float lw = ctx.r.measure(label, font).width, cw = ctx.r.measure(count, font).width;
             const gfx::Rect r{x, bar.y + 5.f, lw + cw + 26.f, kBarH - 10.f};
             chips_[i] = r;
-            const gfx::Color tone = i == 1 ? c.warning : c.accent;
+            const gfx::Color tone = i == 1 ? c.warning : i == 3 ? gfx::Color{236, 112, 196, 255} : c.accent;   // 1.23.0 : la teinte du O
             if (on[i]) {
                 ctx.r.fillRoundedRect(r, tone, r.h * 0.5f);
             } else {
@@ -191,7 +196,7 @@ protected:
     }
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left)
-            for (std::size_t i = 0; i < 3; ++i)
+            for (std::size_t i = 0; i < 4; ++i)
                 if (chips_[i].contains(d->pos)) {
                     set(static_cast<int>(i), !on[i]);
                     return ui::EventResult::Consumed;
@@ -201,12 +206,12 @@ protected:
 private:
     void save() const {
         std::string v;
-        for (std::size_t i = 0; i < 3; ++i)
+        for (std::size_t i = 0; i < 4; ++i)
             if (on[i]) v += (v.empty() ? "" : ",") + std::string(kFilterWords[i]);
         if (ui::FilterMemory::installed()) ui::FilterMemory::write(kFilterKey, v);
     }
     static constexpr float kBarH = 32.f;
-    mutable std::array<gfx::Rect, 3> chips_{};
+    mutable std::array<gfx::Rect, 4> chips_{};
 };
 
 void HmiEditor::setPropertyFilter(PropFilter f, bool on) {
@@ -484,6 +489,14 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     // 1.11.3 : le carre de legende - la liste des carres, puis le selecteur (l'hote).
     legendMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".carres")));
     links_ += legendMenu_->itemChosen->connect([this](int a) {
+        // 1.23.0 : les gestes du carre O (briser, garder, ouvrir le style, retablir).
+        if (a >= 400 && a <= 403) {
+            if (a == 400) (void)breakStyleValue(legendKey_, false);
+            else if (a == 401) (void)breakStyleValue(legendKey_, true);
+            else if (a == 402) { if (openStyle_) openStyle_(legendStyle_); }
+            else (void)restoreStyleValue(legendKey_);
+            return;
+        }
         if (!askValue_) return;
         ValueRequest req = legendRequest_;
         const auto& kinds = valuekind::kinds();
@@ -851,8 +864,61 @@ bool HmiEditor::openLegendMenu(const std::string& grid, const std::string& categ
     legendUnknown_ = res.unknown;
     std::vector<ui::PopupMenu::Item> items;
     items.push_back({"Le carr\xC3\xA9 dit d'o\xC3\xB9 vient la valeur", {}, {}, ui::Icon::None, true, false, -1, true});
-    const std::string now = valuekind::summary(res);
-    items.push_back({now.size() > 90 ? now.substr(0, 87) + "\xE2\x80\xA6" : now, {}, {}, ui::Icon::None, true, false, -1, true});
+    // 1.23.0 : une valeur imposee par le style nomme (le carre O) ou brisee - les gestes du style en tete.
+    legendKey_.clear();
+    legendStyle_.clear();
+    bool styled = false;
+    std::vector<ui::PopupMenu::Item> styleItems;
+    std::string styleLine;
+    if (grid.empty() && !p->key.empty())
+        if (const auto sel = canvas_->selection(); sel.size() == 1)
+            if (const hmi::View* vv = doc_->project.view(viewId_))
+                if (const hmi::Object* o = vv->object(sel.front())) {
+                    namespace st = hmi::styles;
+                    const hmi::Style* by = nullptr;
+                    std::string styleValue;
+                    const auto shown = [](const std::string& v) { return v.empty() ? std::string("(vide)") : v; };
+                    const auto legendO = [](const ui::PaintContext& ctx, gfx::Rect r) {
+                        ui::PropertyGrid::Legend l;
+                        l.style = S::Style;
+                        l.text = "O";
+                        ui::paintLegend(ctx, r, l);
+                    };
+                    if (st::imposes(doc_->project, *o, p->key, &by, &styleValue) && by) {
+                        styled = true;
+                        legendKey_ = p->key;
+                        legendStyle_ = by->name;
+                        const auto before = st::valueBefore(*o, p->key);
+                        styleLine = "Impos\xC3\xA9" "e par le style \xC2\xAB " + by->name + " \xC2\xBB : " + shown(styleValue)
+                                  + (before ? " (avant le style : " + shown(*before) + ")" : std::string{});
+                        ui::PopupMenu::Item here{"Style", "\xE2\x9C\x93 ici \xC2\xB7 la valeur vient du style", {}, ui::Icon::None, true, false, -1};
+                        here.paintIcon = legendO;
+                        styleItems.push_back(std::move(here));
+                        styleItems.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+                        if (before && *before != styleValue)
+                            styleItems.push_back({"Briser : reprendre l'ancienne valeur", shown(*before), {}, ui::Icon::None, true, false, 400});
+                        styleItems.push_back({"Briser : garder la valeur actuelle", shown(styleValue), {}, ui::Icon::None, true, false, 401});
+                        styleItems.push_back({"Ouvrir le style \xC2\xAB " + by->name + " \xC2\xBB", "IHM \xE2\x80\xBA Styles", {}, ui::Icon::None,
+                                              static_cast<bool>(openStyle_), false, 402});
+                    } else if (const auto broken = st::brokenKeys(*o);
+                               std::find(broken.begin(), broken.end(), p->key) != broken.end()) {
+                        if (const hmi::Style* cited = st::find(doc_->project, st::citedStyle(*o)))
+                            for (const auto& pr : st::valuesFor(doc_->project, *cited, *o))
+                                if (pr.key == p->key) {
+                                    legendKey_ = p->key;
+                                    legendStyle_ = cited->name;
+                                    styleItems.push_back({"R\xC3\xA9tablir la valeur du style", shown(pr.value), {}, ui::Icon::None, true, false, 403});
+                                    styleItems.push_back({"Ouvrir le style \xC2\xAB " + cited->name + " \xC2\xBB", "IHM \xE2\x80\xBA Styles", {},
+                                                          ui::Icon::None, static_cast<bool>(openStyle_), false, 402});
+                                }
+                    }
+                }
+    const std::string now = styled ? styleLine : valuekind::summary(res);
+    items.push_back({now.size() > 110 ? now.substr(0, 107) + "\xE2\x80\xA6" : now, {}, {}, ui::Icon::None, true, false, -1, true});
+    if (!styleItems.empty()) {
+        items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
+        for (auto& it : styleItems) items.push_back(std::move(it));
+    }
     for (std::size_t i = 0; i < legendUnknown_.size() && i < 3; ++i) {
         ui::PopupMenu::Item it{"Cr\xC3\xA9" "er \xC2\xAB " + legendUnknown_[i] + " \xC2\xBB\xE2\x80\xA6",
                                core::hasApi() ? "le type et la zone (API ou IHM)" : "une variable IHM, son type", {},   // 1.12.0
@@ -867,7 +933,7 @@ bool HmiEditor::openLegendMenu(const std::string& grid, const std::string& categ
         const auto& k = kinds[i];
         std::string meaning(k.meaning);
         if (k.style == S::Constant) meaning = "Une valeur fixe, convertie en " + expectedText;
-        if (!res.empty && k.style == res.style) meaning = "\xE2\x9C\x93 ici \xC2\xB7 " + meaning;
+        if (!res.empty && k.style == res.style && !styled) meaning = "\xE2\x9C\x93 ici \xC2\xB7 " + meaning;   // 1.23.0 : O est ici
         ui::PopupMenu::Item it{std::string(k.name), meaning, {}, ui::Icon::None, true, false, 100 + static_cast<int>(i)};
         const S style = k.style;
         it.paintIcon = [style](const ui::PaintContext& ctx, gfx::Rect r) { ui::paintLegend(ctx, r, valuekind::legendOf(style)); };
@@ -1155,6 +1221,7 @@ void HmiEditor::rebuildProperties() {
     // 1.12.19 : les sections ajoutees ici (alarmes de l'objet, fonctions d'une instance, liaison) ont aussi
     // leur carre et leur raison.
     valuekind::decorateCells(cats, valuekind::Env{&doc_->project, v, plc_.get()});
+    markStyleValues(*v, cats);   // 1.23.0 : le carre O, BRISEE, la ligne du style (apres le carre de chaque case)
     props_->setCategories(std::move(cats));
 }
 
@@ -1197,12 +1264,18 @@ void HmiEditor::applyPropertyFilters(const hmi::View& v, std::vector<ui::Propert
             for (const auto& c : hmiPropertyCategories(tmp, {o->id}, plc_.get(), HmiPropertyCommits{}, &doc_->project.assets, &doc_->project))
                 walk(c);
         }
+    // 1.23.0 : les cles imposees par le style nomme de l'objet choisi (le filtre O Style).
+    std::set<std::string, std::less<>> imposedKeys;
+    if (sel.size() == 1)
+        if (const auto* o = v.object(sel.front()))
+            for (auto& k : hmi::styles::imposedKeys(doc_->project, *o)) imposedKeys.insert(std::move(k));
     const auto isSummary = [](const PG::Property& p) {   // la ligne "Reperes : $Vanne$ x 3" (1.10.2)
         return p.type == PG::ValueType::ReadOnly && p.name == "Rep\xC3\xA8res" && !p.commit;
     };
     const auto flagsOf = [&](const std::string& cat, const PG::Property& p) {
-        std::array<bool, 3> f{};
+        std::array<bool, 4> f{};
         f[0] = !p.expression.empty();
+        f[3] = !p.key.empty() && imposedKeys.count(p.key) > 0;   // 1.23.0 : O Style
         f[1] = ui::exprfield::hasMarker(p);
         // Non vides : ce que l'on a renseigne - pas une ligne de lecture seule (un resume),
         // ni "(aucun)" (rien de choisi).
@@ -1213,12 +1286,12 @@ void HmiEditor::applyPropertyFilters(const hmi::View& v, std::vector<ui::Propert
         else f[2] = !p.value.empty();
         return f;
     };
-    std::array<std::size_t, 3> counts{};
+    std::array<std::size_t, 4> counts{};
     const std::function<void(const PG::Category&)> count = [&](const PG::Category& c) {
         for (const auto& p : c.properties) {
             if (isSummary(p)) continue;
             const auto f = flagsOf(c.name, p);
-            for (std::size_t i = 0; i < 3; ++i) counts[i] += f[i] ? 1u : 0u;
+            for (std::size_t i = 0; i < 4; ++i) counts[i] += f[i] ? 1u : 0u;
         }
         for (const auto& ch : c.children) count(ch);
     };
@@ -1233,7 +1306,7 @@ void HmiEditor::applyPropertyFilters(const hmi::View& v, std::vector<ui::Propert
         for (auto& p : c.properties) {
             const bool show = isSummary(p) ? on[1] : [&] {
                 const auto f = flagsOf(c.name, p);
-                return (on[0] && f[0]) || (on[1] && f[1]) || (on[2] && f[2]);
+                return (on[0] && f[0]) || (on[1] && f[1]) || (on[2] && f[2]) || (on[3] && f[3]);
             }();
             if (show) kept.push_back(std::move(p));
         }
@@ -1251,21 +1324,29 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
     // Lot 12 : un style nomme choisi - ses valeurs s'appliquent aux objets choisis,
     // qui le citent ; vide : ils ne le citent plus (et gardent leurs valeurs).
     if (key == "namedStyle" && !expr) {
-        const hmi::Style* found = value.empty() ? nullptr : doc_->project.styleByName(value);
+        // 1.23.0 : un style du projet ou un style fourni (hmi::styles::find) ; ses valeurs sont IMPOSEES (le carre O), la
+        // valeur d'avant est retenue (briser la reprend).
+        const hmi::Style* found = value.empty() ? nullptr : hmi::styles::find(doc_->project, value);
         if (!value.empty() && !found) { warn("Style inconnu : " + value + " (IHM > Styles)"); return false; }
         const hmi::Style style = found ? *found : hmi::Style{};
-        canvas_->edit(value.empty() ? std::string("Sans style") : "Style " + style.name, [&](hmi::Project&, hmi::View& vv) {
+        std::size_t imposedCount = 0;
+        canvas_->edit(value.empty() ? std::string("Sans style") : "Style " + style.name, [&](hmi::Project& pr, hmi::View& vv) {
             for (Id id : sel) {
                 auto* o = vv.object(id);
                 if (!o) continue;
-                if (value.empty()) { if (auto* cite = o->find("namedStyle")) cite->value.clear(); }
-                else hmi::design::applyStyle(*o, style);
+                if (value.empty()) {
+                    hmi::styles::detach(*o);
+                } else {
+                    (void)hmi::styles::apply(pr, *o, style);
+                    imposedCount += hmi::styles::imposedKeys(pr, *o).size();
+                }
             }
         });
         statusBar_->setMessage(value.empty()
                                    ? std::to_string(sel.size()) + " objet(s) ne citent plus de style : ils gardent leurs valeurs."
-                                   : std::to_string(sel.size()) + " objet(s) citent le style " + style.name
-                                         + " : ses valeurs s'appliquent, ses changements suivront (IHM > Styles). Ctrl+Z le reprend.");
+                                   : std::to_string(sel.size()) + " objet(s) citent le style " + style.name + " : "
+                                         + std::to_string(imposedCount) + " valeur(s) impos\xC3\xA9" "e(s) (le carr\xC3\xA9 O ; son menu "
+                                         "en brise une). Ses changements suivront (IHM > Styles). Ctrl+Z le reprend.");
         return true;
     }
     // 1.12.13 : LE TABLEAU, UN MODE A LA FOIS - choisir le mode utilise (une commande) dit ce qui passe en reserve
@@ -1436,7 +1517,18 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
     // X revient a sa valeur fixe (...) - Ctrl+Z pour annuler").
     bool removedExpr = false;
     std::string fixedBack;
-    canvas_->edit(expr ? "Expression " + key : "Propri\xC3\xA9t\xC3\xA9 " + key, [&](hmi::Project&, hmi::View& vv) {
+    // 1.23.0 : une saisie sur une valeur imposee par le style la brise (la saisie gardee) - apres l'ecriture.
+    std::size_t brokenByTyping = 0;
+    const auto styleEdited = [&](hmi::Project& pr, hmi::Object& o) {
+        if (hmi::styles::citedStyle(o).empty()) return;
+        if (key == "params") {   // un argument du symbole : les cles param:<Nom>
+            for (const auto& k : hmi::styles::imposedKeys(pr, o))
+                if (k.rfind(hmi::styles::kParamPrefix, 0) == 0) brokenByTyping += hmi::styles::edited(pr, o, k) ? 1u : 0u;
+            return;
+        }
+        brokenByTyping += hmi::styles::edited(pr, o, key) ? 1u : 0u;
+    };
+    canvas_->edit(expr ? "Expression " + key : "Propri\xC3\xA9t\xC3\xA9 " + key, [&](hmi::Project& pr, hmi::View& vv) {
         for (Id id : sel) {
             auto* o = vv.object(id);
             if (!o) continue;
@@ -1458,6 +1550,7 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
             if (key == "rot") {
                 double a = 0;
                 if (hmi::parseNumber(value, a)) hmi::edit::setRotation(vv, {id}, a);
+                if (auto* again = vv.object(id)) styleEdited(pr, *again);
                 continue;
             }
             if (key == "w" || key == "h") {
@@ -1466,6 +1559,7 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 hmi::Box b = o->box();
                 (key == "w" ? b.w : b.h) = n;
                 hmi::edit::setBox(vv, id, b);
+                if (auto* again = vv.object(id)) styleEdited(pr, *again);
                 continue;
             }
             // Une propriete que l'objet n'a pas : posee sur l'objet seul choisi,
@@ -1485,9 +1579,17 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 o->setNumber("w", symbolW);
                 o->setNumber("h", symbolH);
             }
+            styleEdited(pr, *o);
         }
         hmi::edit::refreshGroupBounds(vv);
     });
+    if (brokenByTyping > 0) {
+        std::string label, help;
+        if (!hmiPropertyInfo(key, label, help) || label.empty()) label = hmi::styles::propertyLabel(key);
+        statusBar_->setTransientMessage(label + " : la valeur tap\xC3\xA9" "e remplace celle du style (bris\xC3\xA9" "e). Son carr\xC3\xA9 "
+                                        "propose \xC2\xAB R\xC3\xA9tablir la valeur du style \xC2\xBB. Ctrl+Z pour annuler.",
+                                        7.0, ui::StatusBar::Severity::Info);
+    }
     if (removedExpr) {
         std::string label, help;
         if (!hmiPropertyInfo(key, label, help) || label.empty()) label = key;
@@ -1513,11 +1615,13 @@ bool HmiEditor::makeStyle(const std::string& name, std::string* why) {
         auto* vv = p.view(vid);
         const auto* o = vv ? vv->object(from) : nullptr;
         if (!o) return;
-        hmi::Style style = hmi::design::styleFromObject(p, *o, name);
+        // 1.23.0 : le style vise le type de l'objet (hmi::styles::fromObject) ; les objets choisis le citent.
+        hmi::Style style = hmi::styles::fromObject(p, *o, name);
+        if (style.targets.empty() || style.targets.front().props.empty()) return;
         made = style.name;
+        p.styles.push_back(style);
         for (Id id : sel)
-            if (auto* target = vv->object(id)) hmi::design::applyStyle(*target, style);
-        p.styles.push_back(std::move(style));
+            if (auto* target = vv->object(id)) (void)hmi::styles::apply(p, *target, style);
     });
     if (!cmd || made.empty()) {
         if (why) *why = "rien \xC3\xA0 faire un style (l'objet n'a pas de couleurs ni de police)";
@@ -1527,6 +1631,139 @@ bool HmiEditor::makeStyle(const std::string& name, std::string* why) {
     refresh();
     statusBar_->setMessage("Style " + made + " cr\xC3\xA9\xC3\xA9 (IHM > Styles) : " + std::to_string(sel.size())
                            + " objet(s) le citent et suivront ses changements. Ctrl+Z le retire.");
+    return true;
+}
+
+// ---- 1.23.0 : les valeurs imposees par le style nomme ------------------------------------------------------------------------
+void HmiEditor::markStyleValues(const hmi::View& v, std::vector<ui::PropertyGrid::Category>& cats) {
+    namespace st = hmi::styles;
+    using PG = ui::PropertyGrid;
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1) return;
+    const hmi::Object* o = v.object(sel.front());
+    if (!o) return;
+    const std::string cited = st::citedStyle(*o);
+    const hmi::Style* style = cited.empty() ? nullptr : st::find(doc_->project, cited);
+    if (!style) return;
+    const auto imposed = st::imposedKeys(doc_->project, *o);
+    const auto broken = st::brokenKeys(*o);
+    std::map<std::string, std::string, std::less<>> styleValues;
+    for (const auto& pr : st::valuesFor(doc_->project, *style, *o)) styleValues.emplace(pr.key, pr.value);
+    const std::string quoted = "\xC2\xAB " + style->name + " \xC2\xBB";
+    const auto shown = [](const std::string& s) { return s.empty() ? std::string("(vide)") : s; };
+    std::size_t brokenShown = 0;
+    const std::function<void(PG::Category&)> walk = [&](PG::Category& c) {
+        for (auto& p : c.properties) {
+            if (p.key.empty()) continue;
+            if (std::find(imposed.begin(), imposed.end(), p.key) != imposed.end()) {
+                PG::Legend l;
+                l.style = PG::LegendStyle::Style;
+                l.text = "O";
+                if (p.legend) l.expected = p.legend->expected;
+                const auto before = st::valueBefore(*o, p.key);
+                l.tip = "O : impos\xC3\xA9" "e par le style " + quoted
+                      + (before ? " (avant le style : " + shown(*before) + ")" : std::string{}) + ". Clic : la briser.";
+                p.legend = std::move(l);
+            } else if (std::find(broken.begin(), broken.end(), p.key) != broken.end()) {
+                const auto it = styleValues.find(p.key);
+                if (it == styleValues.end()) continue;
+                ++brokenShown;
+                p.overridden = true;
+                p.overrideTag = "BRIS\xC3\x89" "E";
+                p.overrideNote = "Bris\xC3\xA9" "e : la valeur de l'objet, pas celle du style " + quoted;
+                p.overrideFrom = "Valeur du style " + quoted;
+                p.overrideDefault = it->second;
+                p.revert = [this, key = p.key] { (void)restoreStyleValue(key); };
+                p.revertTip = "R\xC3\xA9tablir la valeur du style (" + shown(it->second) + ")";
+            }
+        }
+        for (auto& ch : c.children) walk(ch);
+    };
+    for (auto& c : cats) walk(c);
+    // La ligne du style, sous << Style nomme >> : combien de valeurs il impose, combien sont brisees ; son retour : tout
+    // retablir ; son bouton : ouvrir le style.
+    const std::size_t brokenCount = std::count_if(broken.begin(), broken.end(), [&](const std::string& k) { return styleValues.count(k) > 0; });
+    const std::function<bool(PG::Category&)> insert = [&](PG::Category& c) {
+        for (std::size_t i = 0; i < c.properties.size(); ++i)
+            if (c.properties[i].key == "namedStyle") {
+                PG::Property row;
+                row.name = "Valeurs du style";
+                row.key = "__styleValues";
+                row.type = PG::ValueType::ReadOnly;
+                row.value = std::to_string(imposed.size()) + (imposed.size() > 1 ? " impos\xC3\xA9" "es" : " impos\xC3\xA9" "e")
+                          + (brokenCount ? ", " + std::to_string(brokenCount) + (brokenCount > 1 ? " bris\xC3\xA9" "es" : " bris\xC3\xA9" "e")
+                                         : std::string{});
+                row.description = "Le style " + quoted + (style->builtin ? " (fourni)" : "") + " impose ses valeurs : le carr\xC3\xA9 O. "
+                                  "Son menu en brise une \xC3\xA0 la fois (elle reprend sa valeur d'avant le style) ; une valeur bris\xC3\xA9" "e "
+                                  "porte BRIS\xC3\x89" "E et se r\xC3\xA9tablit par la fl\xC3\xA8" "che au bout de sa ligne. Le filtre O Style ne "
+                                  "montre que les valeurs impos\xC3\xA9" "es.";
+                if (brokenCount) {
+                    row.revert = [this] { (void)restoreAllStyleValues(); };
+                    row.revertTip = "Tout r\xC3\xA9tablir : les valeurs bris\xC3\xA9" "es reprennent celles du style";
+                }
+                if (openStyle_) {
+                    row.open = [this, name = style->name] { if (openStyle_) openStyle_(name); };
+                    row.openTip = "Ouvrir le style " + quoted + " (IHM \xE2\x80\xBA Styles)";
+                }
+                c.properties.insert(c.properties.begin() + static_cast<long>(i) + 1, std::move(row));
+                return true;
+            }
+        for (auto& ch : c.children)
+            if (insert(ch)) return true;
+        return false;
+    };
+    for (auto& c : cats)
+        if (insert(c)) break;
+    (void)brokenShown;
+}
+
+bool HmiEditor::breakStyleValue(const std::string& key, bool keepCurrent) {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1 || key.empty()) return false;
+    bool done = false;
+    std::string now;
+    std::string label, help;
+    if (!hmiPropertyInfo(key, label, help) || label.empty()) label = hmi::styles::propertyLabel(key);
+    canvas_->edit("Briser " + label, [&](hmi::Project& pr, hmi::View& vv) {
+        if (auto* o = vv.object(sel.front())) {
+            done = hmi::styles::breakKey(pr, *o, key, keepCurrent);
+            if (done) now = hmi::styles::valueOf(pr, *o, key).value_or(std::string{});
+        }
+    });
+    if (!done) return false;
+    statusBar_->setTransientMessage(label + " ne suit plus le style : " + (keepCurrent ? "garde " : "reprend sa valeur d'avant, ")
+                                        + (now.empty() ? std::string("(vide)") : now) + ". Ctrl+Z pour revenir.",
+                                    6.0, ui::StatusBar::Severity::Info);
+    invalidateLayout();
+    return true;
+}
+
+bool HmiEditor::restoreStyleValue(const std::string& key) {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1 || key.empty()) return false;
+    bool done = false;
+    std::string label, help;
+    if (!hmiPropertyInfo(key, label, help) || label.empty()) label = hmi::styles::propertyLabel(key);
+    canvas_->edit("R\xC3\xA9tablir " + label, [&](hmi::Project& pr, hmi::View& vv) {
+        if (auto* o = vv.object(sel.front())) done = hmi::styles::restoreKey(pr, *o, key);
+    });
+    if (!done) return false;
+    statusBar_->setTransientMessage(label + " reprend la valeur du style. Ctrl+Z pour revenir.", 5.0, ui::StatusBar::Severity::Info);
+    invalidateLayout();
+    return true;
+}
+
+bool HmiEditor::restoreAllStyleValues() {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1) return false;
+    std::size_t n = 0;
+    canvas_->edit("Tout r\xC3\xA9tablir (style)", [&](hmi::Project& pr, hmi::View& vv) {
+        if (auto* o = vv.object(sel.front())) n = hmi::styles::restoreAll(pr, *o);
+    });
+    if (n == 0) return false;
+    statusBar_->setTransientMessage(std::to_string(n) + " valeur(s) reprennent celle du style. Ctrl+Z pour revenir.", 5.0,
+                                    ui::StatusBar::Severity::Info);
+    invalidateLayout();
     return true;
 }
 
