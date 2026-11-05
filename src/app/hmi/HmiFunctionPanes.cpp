@@ -259,19 +259,23 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
+    // 1.24.0 : plusieurs fonctions choisies (Ctrl+clic, Maj+clic) - Supprimer les retire toutes (une question, un Ctrl+Z) ;
+    // Essayer, Compiler, Generer, une surcharge : une a la fois.
+    const auto one = [this] { return selectedFunction() != kNoId && (!functions_ || functions_->selectedModelRows().size() <= 1); };
     tools_->setEnabledWhen(TDelete, [this] { return selectedFunction() != kNoId; });
-    tools_->setEnabledWhen(TTry, [this] { return selectedFunction() != kNoId; });
-    tools_->setEnabledWhen(TCompile, [this] { return selectedFunction() != kNoId; });     // 1.11.17 : rien a compiler
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", functions_ ? several::chosen(*functions_, order_).size() : 0); });
+    tools_->setEnabledWhen(TTry, one);
+    tools_->setEnabledWhen(TCompile, one);     // 1.11.17 : rien a compiler
     for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
         tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
-        if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedFunction() != kNoId; });
+        if (a != TBuildState) tools_->setEnabledWhen(a, one);
     }
     tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });
     tools_->setEnabledWhen(TRunTests, [this] {   // 1.13.0 (lot J4b) : au moins un cas dans le volet
         const auto* l = listOf(doc_->project);
         return l && std::any_of(l->begin(), l->end(), [](const hmi::HmiFunction& f) { return !f.tests.empty(); });
     });
-    tools_->setEnabledWhen(TOverload, [this] { const auto* f = current(); return f && !f->isVirtual; });   // 1.11.22   // 1.11.10 : une fonction de symbole s'essaie en marche
+    tools_->setEnabledWhen(TOverload, [this, one] { const auto* f = current(); return f && !f->isVirtual && one(); });   // 1.11.22   // 1.11.10 : une fonction de symbole s'essaie en marche
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -281,7 +285,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         table->setColumns({{"Nom", 150.f}, {"Retour", 80.f}, {"Param\xC3\xA8tres", 230.f},
                            {"Lignes", 70.f, 40.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 110.f},
                            {"Description", 260.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs fonctions a supprimer d'un coup
         functions_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*functions_, {TDelete, 0, TNew});   // 1.12.27 : Suppr, Inser (comme les boutons)
         left->addPane(std::move(panel), 0.52f, 100.f);
@@ -348,11 +352,38 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                     (void)addFunction(n, {}, {});
                 } else (void)addFunction(hmi::uniqueFunctionName(doc_->project, "Fonction"), "REAL", {});
                 break;
-            case TDelete:
+            case TDelete: {
+                // 1.24.0 : plusieurs - UNE question (comme une seule : qui les appelle encore), un seul Ctrl+Z.
+                const auto ids = several::chosen(*functions_, order_);
+                if (ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "fonction";
+                    b.nouns = "fonctions";
+                    b.feminine = true;
+                    b.ask = static_cast<bool>(hosts_.remove);   // une seule demande une question la ou l'hote la pose
+                    std::vector<Id> doomed;
+                    std::vector<std::string> called;
+                    for (const auto id : ids)
+                        if (const auto* f = fnOf(doc_->project, id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(f->name);
+                            if (symbol_ == kNoId)   // les fonctions du projet : qui les appelle (comme la question d'une seule)
+                                if (const auto n = hmi::functionCallers(doc_->project, f->name).size())
+                                    called.push_back(f->name + " (" + std::to_string(n) + (n > 1 ? " appels)" : " appel)"));
+                        }
+                    if (!called.empty())
+                        b.warning = "Encore appel\xC3\xA9" "es : " + several::names(called, 3) + " - ces appels \xC3\xA9" "choueront et Compiler les signalera.";
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return deleteFunction(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!sel) break;
                 if (hosts_.remove) hosts_.remove(sel);
                 else (void)deleteFunction(sel);
                 break;
+            }
             case TTry:
                 if (!sel) break;
                 if (hosts_.tryIt) hosts_.tryIt(sel);

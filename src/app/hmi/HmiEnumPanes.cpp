@@ -515,18 +515,54 @@ HmiEnumValuesPane::HmiEnumValuesPane(std::string id, hmi::DocumentPtr doc, Apply
     tools->add(ERewrite, HmiGlyph::Refresh, "R\xC3\xA9\xC3\xA9" "crire toString et fromString d'apr\xC3\xA8s les valeurs (Ctrl+Z l'annule)",
                "R\xC3\xA9\xC3\xA9" "crire toString / fromString");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(EDuplicate, [this] { return current() && row_ >= 0; });
+    // 1.24.0 : plusieurs valeurs choisies - Supprimer les retire toutes (un Ctrl+Z) ; Dupliquer, Monter : une a la fois.
+    const auto one = [this] { return !grid_ || grid_->selectedModelRows().size() <= 1; };
+    tools_->setEnabledWhen(EDuplicate, [this, one] { return current() && row_ >= 0 && one(); });
     tools_->setEnabledWhen(ERemove, [this] { return current() && row_ >= 0; });
-    tools_->setEnabledWhen(EUp, [this] { return current() && row_ > 0; });
-    tools_->setEnabledWhen(EDown, [this] {
+    tools_->setLabelWhen(ERemove, [this] { return grid_ && grid_->selectedModelRows().size() > 1 ? several::label("Supprimer", grid_->selectedModelRows().size()) : std::string{}; });
+    tools_->setEnabledWhen(EUp, [this, one] { return current() && row_ > 0 && one(); });
+    tools_->setEnabledWhen(EDown, [this, one] {
         const auto* t = current();
-        return t && row_ >= 0 && row_ + 1 < static_cast<int>(t->values.size());
+        return t && row_ >= 0 && row_ + 1 < static_cast<int>(t->values.size()) && one();
     });
     links_ += tools_->triggered->connect([this](int a) {
         switch (a) {
             case EAdd: (void)addValue(); break;
             case EDuplicate: (void)duplicateValue(); break;
-            case ERemove: (void)removeValue(); break;
+            case ERemove: {
+                // 1.24.0 : plusieurs valeurs choisies - UNE question si l'une est employee (comme une seule : la fenetre
+                // previent), puis de la derniere a la premiere, un seul Ctrl+Z.
+                const auto* t = current();
+                std::vector<std::size_t> picked;
+                for (const auto r : grid_->selectedModelRows())
+                    if (r < viewToValue_.size()) {
+                        const int v = viewToValue_[r];
+                        const auto i = static_cast<std::size_t>(v >= 0 ? v : -1 - v);
+                        if (t && i < t->values.size() && std::find(picked.begin(), picked.end(), i) == picked.end()) picked.push_back(i);
+                    }
+                if (t && picked.size() > 1) {
+                    std::sort(picked.begin(), picked.end(), std::greater<>());
+                    several::Batch b;
+                    b.noun = "valeur";
+                    b.nouns = "valeurs";
+                    b.feminine = true;
+                    std::vector<std::string> used;
+                    for (const auto i : picked) {
+                        b.names.push_back(t->values[i].name);
+                        if (const auto n = enumValueUses(doc_->project, t->name, t->values[i].name).size())
+                            used.push_back(t->values[i].name + " (" + std::to_string(n) + (n > 1 ? " emplois)" : " emploi)"));
+                    }
+                    b.ask = !used.empty();
+                    if (b.ask) b.warning = "Encore employ\xC3\xA9" "es : " + several::names(used, 3) + " - Compiler signalera ce qui les cite.";
+                    b.remove = [this, picked](std::size_t k, std::string*) { return removeValueAnyway(picked[k]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                (void)removeValue();
+                break;
+            }
             case EUp: (void)moveValue(-1); break;
             case EDown: (void)moveValue(1); break;
             case EPaste: (void)openPaste(ui::clipboardText()); break;
@@ -541,7 +577,7 @@ HmiEnumValuesPane::HmiEnumValuesPane(std::string id, hmi::DocumentPtr doc, Apply
                       {"Valeur", 80.f, 50.f, true, false, true, ui::Align::End},
                       {"Texte affich\xC3\xA9", 170.f, 60.f, true, false},
                       {"Description", 260.f, 60.f, true, false}});
-    grid->setSelectionMode(ui::SelectionMode::Single);
+    grid->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs valeurs a supprimer d'un coup
     grid->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)openPaste(rq.text); });
     grid_ = &static_cast<ui::TableView&>(addChild(std::move(grid)));
     tools_->bindListKeys(*grid_, {0, EDuplicate, EAdd});   // 1.12.27 : Ctrl+D, Inser (Suppr : onEvent)
@@ -1000,7 +1036,7 @@ void HmiEnumValuesPane::onLayout() {
 ui::EventResult HmiEnumValuesPane::onEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev);
         k && k->key == ui::Key::Delete && k->mods.none() && !grid_->cellEditing() && dialogKind_ == Dialog::None && current()) {
-        (void)removeValue();
+        tools_->triggered->emit(ERemove);   // 1.24.0 : comme le bouton (plusieurs valeurs d'un coup)
         return ui::EventResult::Consumed;
     }
     return ui::EventResult::Ignored;

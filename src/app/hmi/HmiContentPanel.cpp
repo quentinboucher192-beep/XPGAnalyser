@@ -689,13 +689,15 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
-    tools_->setEnabledWhen(ADuplicate, [this] {   // 1.12.16 : les plumes, les lignes d'un tableau, les choix, les etats
+    // 1.24.0 : plusieurs elements choisis - Retirer les retire tous ; Dupliquer, Monter, Descendre : un a la fois.
+    const auto one = [this] { return !table_ || table_->selectedModelRows().size() <= 1; };
+    tools_->setEnabledWhen(ADuplicate, [this, one] {   // 1.12.16 : les plumes, les lignes d'un tableau, les choix, les etats
         const auto m = mode();
-        return selectedIndex() >= 0 && !xyReference_ && (m == Mode::Trend || m == Mode::Table || m == Mode::Choices || m == Mode::States);
+        return selectedIndex() >= 0 && !xyReference_ && (m == Mode::Trend || m == Mode::Table || m == Mode::Choices || m == Mode::States) && one();
     });
-    tools_->setEnabledWhen(AUp, [this, editable] { return editable() && !xyReference_ && selectedIndex() > 0; });
-    tools_->setEnabledWhen(ADown, [this, editable] {
-        return editable() && !xyReference_ && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(count());
+    tools_->setEnabledWhen(AUp, [this, editable, one] { return editable() && !xyReference_ && selectedIndex() > 0 && one(); });
+    tools_->setEnabledWhen(ADown, [this, editable, one] {
+        return editable() && !xyReference_ && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(count()) && one();
     });
     tools_->setEnabledWhen(AAddColumn, [this] { return mode() == Mode::Table; });
     tools_->setEnabledWhen(ARemoveColumn, [this] {
@@ -704,7 +706,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     });
     auto table = std::make_unique<ui::TableView>(base + ".list");
     table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"\xC3\x89l\xC3\xA9ment", 300.f}, {"D\xC3\xA9tail", 260.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs elements a retirer d'un coup
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     // 1.12.18 (planche 9) : le menu de la liste - les commandes de la barre, la plume entiere
     // copiee et collee ; et leurs touches (Inser, Suppr, Alt+Haut / Alt+Bas, Ctrl+Maj+D, Ctrl+C, Ctrl+V).
@@ -762,7 +764,26 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                 }
                 if (addItem()) selectIndex(static_cast<int>(count()) - 1);
                 break;
-            case ARemove: (void)removeItem(sel); break;
+            case ARemove: {
+                // 1.24.0 : plusieurs elements choisis - du dernier au premier, un seul Ctrl+Z.
+                auto rows = table_->selectedModelRows();
+                std::sort(rows.begin(), rows.end(), std::greater<>());
+                rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+                rows.erase(std::remove_if(rows.begin(), rows.end(), [this](ui::RowIndex r) { return r >= count(); }), rows.end());
+                if (rows.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "\xC3\xA9l\xC3\xA9ment";
+                    b.nouns = "\xC3\xA9l\xC3\xA9ments";
+                    for (const auto r : rows) b.names.push_back("n\xC2\xB0" + std::to_string(r + 1));
+                    b.remove = [this, rows](std::size_t k, std::string*) { return removeItem(static_cast<int>(rows[k])); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                (void)removeItem(sel);
+                break;
+            }
             case ADuplicate: (void)openDuplicate(); break;   // 1.12.16
             case AUp: if (moveItem(sel, -1)) selectIndex(sel - 1); break;
             case ADown: if (moveItem(sel, +1)) selectIndex(sel + 1); break;
@@ -1504,7 +1525,15 @@ std::vector<ui::PopupMenu::Item> HmiContentPanel::contextItems() const {
     items.push_back(tool(AUp, "Monter", "Alt+\xE2\x86\x91", sel <= 0 ? std::string("d\xC3\xA9j\xC3\xA0 en haut") : std::string("pas ici")));
     items.push_back(tool(ADown, "Descendre", "Alt+\xE2\x86\x93", "d\xC3\xA9j\xC3\xA0 en bas"));
     items.push_back(cmd::separator());
-    auto rem = tool(ARemove, "Retirer", "Suppr", none);
+    // 1.24.0 : plusieurs elements choisis - << Retirer les 3 >> ; le reste : un a la fois.
+    const std::size_t chosen = table_->selectedModelRows().size();
+    if (chosen > 1)
+        for (auto& it : items)
+            if (!it.heading && !it.separator && it.enabled && it.id != kMenuTool + AAdd && it.id != kMenuPasteItem) {
+                it.enabled = false;
+                it.disabledReason = several::kOneAtATime;
+            }
+    auto rem = tool(ARemove, several::label("Retirer", chosen), "Suppr", none);
     rem.icon = ui::Icon::Delete;
     items.push_back(std::move(rem));
     return items;

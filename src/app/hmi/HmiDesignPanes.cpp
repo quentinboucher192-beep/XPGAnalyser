@@ -994,9 +994,12 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                "Retirer");
     tools->add(ActFolder, HmiGlyph::Plus, "Nouveau dossier (sans effet sur les noms) : glisse des styles dessus pour les y ranger", "Dossier");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(ActDuplicate, [this] { return currentStyle() != nullptr; });
-    tools_->setEnabledWhen(ActRename, [this] { return currentStyle() != nullptr; });
+    // 1.24.0 : plusieurs styles du projet choisis - Retirer les retire tous ; Dupliquer, Renommer : un a la fois.
+    const auto one = [this] { return !builtin_.empty() || !folders_ || folders_->selectedCount() <= 1; };
+    tools_->setEnabledWhen(ActDuplicate, [this, one] { return currentStyle() != nullptr && one(); });
+    tools_->setEnabledWhen(ActRename, [this, one] { return currentStyle() != nullptr && one(); });
     tools_->setEnabledWhen(ActRemove, [this] { return selectedStyle() != kNoId || (builtin_.empty() && !folders_->selectedFolder().empty()); });
+    tools_->setLabelWhen(ActRemove, [this] { return several::label("Retirer", builtin_.empty() && folders_ ? folders_->selectedCount() : 0); });
     // Lot API 8 : chercher un style - la recherche de toute l'application.
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Chercher un style, un type, une valeur\xE2\x80\xA6",
@@ -1100,6 +1103,17 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         } else if (a == ActRename) {
             if (locked()) say("Un style fourni ne se renomme pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait une copie \xC3\xA0 toi.", true);
             else if (sel != kNoId) beginRename(sel);
+        } else if (a == ActRemove && builtin_.empty() && folders_->selectedCount() > 1) {
+            // 1.24.0 : plusieurs styles du projet (ou dossiers) - d'un coup, un seul Ctrl+Z (sans question, comme un seul).
+            several::Batch b;
+            b.verb = "Retirer";
+            b.noun = "style";
+            b.nouns = "styles";
+            folders_->fillBatch(b, [this](Id id) { const auto* s = doc_->project.style(id); return s ? s->name : std::string("?"); },
+                                [this](Id id, std::string*) { return removeStyle(id); });
+            b.report = [this](const std::string& text, bool warning) { say(text + " (les objets gardent leurs valeurs)", warning); };
+            b.alive = tools_->triggered;
+            several::run(std::move(b));
         } else if (a == ActRemove && sel != kNoId) {
             (void)removeStyle(sel);
         } else if (a == ActRemove && builtin_.empty()) {
@@ -1753,29 +1767,35 @@ std::vector<ui::PopupMenu::Item> HmiStylesPane::styleMenuItems() const {
     const bool fixed = s && s->builtin;
     const std::string folder = !s && builtin_.empty() ? folders_->selectedFolder() : std::string{};
     const std::string none = "choisis d'abord un style (un clic droit sur sa ligne)";
-    if (s) items.push_back(cmd::heading(s->name, fixed ? std::string("style fourni") : s->folder.empty() ? std::string("du projet") : s->folder));
+    // 1.24.0 : plusieurs styles du projet choisis - << Retirer les 5 >> ; Dupliquer, Renommer, Ranger : un a la fois.
+    const std::size_t chosen = builtin_.empty() && folders_ ? folders_->selectedCount() : 0;
+    const bool many = chosen > 1;
+    if (many) items.push_back(cmd::heading(std::to_string(chosen) + " lignes", "styles et dossiers"));
+    else if (s) items.push_back(cmd::heading(s->name, fixed ? std::string("style fourni") : s->folder.empty() ? std::string("du projet") : s->folder));
     else if (!folder.empty()) items.push_back(cmd::heading(hmi::types::folderLeaf(folder), "dossier"));
     else items.push_back(cmd::heading("Styles"));
     items.push_back(cmd::item(cmd::Id::Ajouter, MenuNew, true, {}, "Nouveau style"));
-    items.push_back(cmd::item(cmd::Id::Dupliquer, MenuDuplicate, s != nullptr,
-                              folder.empty() ? none : std::string("un dossier ne se duplique pas : choisis un de ses styles"),
+    items.push_back(cmd::item(cmd::Id::Dupliquer, MenuDuplicate, s != nullptr && !many,
+                              many ? several::kOneAtATime
+                                   : folder.empty() ? none : std::string("un dossier ne se duplique pas : choisis un de ses styles"),
                               "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6"));
     const bool own = s && !fixed;
-    items.push_back(cmd::item(cmd::Id::Renommer, MenuRename, own || !folder.empty(),
-                              fixed ? std::string("un style fourni ne se renomme pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait "
+    items.push_back(cmd::item(cmd::Id::Renommer, MenuRename, (own || !folder.empty()) && !many,
+                              many  ? several::kOneAtATime
+                              : fixed ? std::string("un style fourni ne se renomme pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait "
                                                   "une copie \xC3\xA0 toi")
                                     : none,
                               folder.empty() ? std::string{} : std::string("Renommer le dossier")));
-    items.push_back(cmd::item(cmd::Id::Retirer, MenuRemove, own || !folder.empty(),
+    items.push_back(cmd::item(cmd::Id::Retirer, MenuRemove, own || !folder.empty() || many,
                               fixed ? std::string("un style fourni ne se retire pas : il n'est pas dans le projet, et reste verrouill\xC3\xA9") : none,
-                              folder.empty() ? std::string{} : std::string("Retirer le dossier")));
+                              many ? several::label("Retirer", chosen) : folder.empty() ? std::string{} : std::string("Retirer le dossier")));
     // Ranger dans un dossier > la racine, chaque dossier des styles (celui du style coche), Nouveau dossier...
     ui::PopupMenu::Item put;
     put.label = "Ranger dans un dossier";
     put.icon = ui::Icon::Folder;
     put.id = MenuFolder;
     menuFolders_.clear();
-    if (own) {
+    if (own && !many) {
         const auto& p = doc_->project;
         const std::string at = fold::folderOf(p, fold::List::Styles, s->id);
         const auto entry = [&](std::string label, int id, bool here) {
@@ -1800,7 +1820,7 @@ std::vector<ui::PopupMenu::Item> HmiStylesPane::styleMenuItems() const {
         put.children.push_back(std::move(fresh));
     } else {
         put.enabled = false;
-        put.disabledReason = fixed ? std::string("un style fourni reste en t\xC3\xAAte de la liste, hors des dossiers")
+        put.disabledReason = many ? several::kOneAtATime : fixed ? std::string("un style fourni reste en t\xC3\xAAte de la liste, hors des dossiers")
                            : !folder.empty() ? std::string("un dossier se range en le glissant sur un autre")
                                              : none;
     }

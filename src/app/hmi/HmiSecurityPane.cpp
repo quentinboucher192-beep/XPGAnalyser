@@ -165,10 +165,15 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools->add(UEnable, HmiGlyph::Lock, "S\xC3\xA9" "curit\xC3\xA9 active : niveaux d'acc\xC3\xA8s et permissions appliqu\xC3\xA9s en marche",
                "S\xC3\xA9" "curit\xC3\xA9 active");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(UUnlock, [this] {
+    // 1.24.0 : plusieurs lignes choisies (l'onglet montre) - Supprimer les retire toutes ; le reste : une a la fois.
+    const auto one = [this] {
+        const auto* t = currentTab() == Users ? users_ : currentTab() == Groups ? groups_ : roles_;
+        return !t || t->selectedModelRows().size() <= 1;
+    };
+    tools_->setEnabledWhen(UUnlock, [this, one] {
         const auto* u = doc_->project.user(selectedUser());
         const auto* st = u ? doc_->history.account(u->login) : nullptr;
-        return currentTab() == Users && st && !st->lockedAt.empty();
+        return currentTab() == Users && st && !st->lockedAt.empty() && one();
     });
     tools_->setEnabledWhen(UDelete, [this] {
         switch (currentTab()) {
@@ -177,13 +182,17 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             default: return !selectedRole().empty();
         }
     });
-    tools_->setEnabledWhen(UPassword, [this] {
-        const auto* u = doc_->project.user(selectedUser());
-        return currentTab() == Users && u && u->protection == "classique";
+    tools_->setLabelWhen(UDelete, [this] {
+        const auto* t = currentTab() == Users ? users_ : currentTab() == Groups ? groups_ : roles_;
+        return several::label("Supprimer", t ? t->selectedModelRows().size() : 0);
     });
-    tools_->setEnabledWhen(USecret, [this] {
+    tools_->setEnabledWhen(UPassword, [this, one] {
         const auto* u = doc_->project.user(selectedUser());
-        return currentTab() == Users && u && u->protection == "dynamique";
+        return currentTab() == Users && u && u->protection == "classique" && one();
+    });
+    tools_->setEnabledWhen(USecret, [this, one] {
+        const auto* u = doc_->project.user(selectedUser());
+        return currentTab() == Users && u && u->protection == "dynamique" && one();
     });
     tools_->setCheckedWhen(UEnable, [this] { return doc_->project.security.enabled; });
     // Lot API 8 : chercher dans l'onglet montre - la recherche de toute l'application.
@@ -208,7 +217,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         auto t = std::make_unique<ui::TableView>(base + ".groups");
         t->setColumns({{"Groupe", 150.f}, {"Niveau", 76.f, 40.f, true, true, true, ui::Align::End}, {"R\xC3\xB4les", 260.f},
                        {"Utilisateurs", 90.f, 40.f, true, true, true, ui::Align::End}, {"Description", 260.f}});
-        t->setSelectionMode(ui::SelectionMode::Single);
+        t->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs groupes a supprimer d'un coup
         groups_ = t.get();
         tools_->bindListKeys(*groups_, {UDelete});
         tabs->addTab(ui::TabControl::Tab{"Groupes", ui::Icon::Folder, false, false}, std::move(t));
@@ -216,7 +225,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     {
         auto t = std::make_unique<ui::TableView>(base + ".roles");
         t->setColumns({{"R\xC3\xB4le", 140.f}, {"Permissions", 300.f}, {"Groupes", 220.f}, {"Description", 260.f}});
-        t->setSelectionMode(ui::SelectionMode::Single);
+        t->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs roles
         roles_ = t.get();
         tools_->bindListKeys(*roles_, {UDelete});
         tabs->addTab(ui::TabControl::Tab{"R\xC3\xB4les et permissions", ui::Icon::Lock, false, false}, std::move(t));
@@ -240,7 +249,62 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             }
             case UNewGroup: (void)addGroup(); break;
             case UNewRole: (void)addRole(); break;
-            case UDelete:
+            case UDelete: {
+                // 1.24.0 : plusieurs lignes choisies - d'un coup, un seul Ctrl+Z ; une question pour des utilisateurs
+                // (comme pour un seul) ; un groupe qui a encore des utilisateurs est garde (comme seul), le compte rendu
+                // dit lequel et pourquoi.
+                several::Batch b;
+                b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                b.alive = tools_->triggered;
+                if (currentTab() == Users) {
+                    const auto ids = several::chosen(*users_, userOrder_);
+                    if (ids.size() > 1) {
+                        b.noun = "utilisateur";
+                        b.nouns = "utilisateurs";
+                        b.ask = true;
+                        std::vector<Id> doomed;
+                        std::size_t cited = 0;
+                        bool start = false;
+                        for (const auto id : ids)
+                            if (const auto* u = doc_->project.user(id)) {
+                                doomed.push_back(id);
+                                b.names.push_back(u->login);
+                                start = start || same(doc_->project.security.startUser, u->login);
+                                cited += actionUses(doc_->project, hmi::Operation::ChangeUser, u->login).size();
+                            }
+                        b.warning = "Ils ne pourront plus se connecter.";
+                        if (start) b.warning += " L'utilisateur de d\xC3\xA9marrage en est : personne ne le sera plus.";
+                        if (cited) b.warning += " " + std::to_string(cited) + " action(s) les citent.";
+                        b.remove = [this, doomed](std::size_t i, std::string*) { return deleteUser(doomed[i]); };
+                        several::run(std::move(b));
+                        break;
+                    }
+                } else if (currentTab() == Groups) {
+                    const auto ids = several::chosen(*groups_, groupOrder_);
+                    if (ids.size() > 1) {
+                        b.noun = "groupe";
+                        b.nouns = "groupes";
+                        std::vector<Id> doomed;
+                        for (const auto id : ids)
+                            if (const auto* g = doc_->project.group(id)) {
+                                doomed.push_back(id);
+                                b.names.push_back(g->name);
+                            }
+                        b.remove = [this, doomed](std::size_t i, std::string* why) { return deleteGroup(doomed[i], why); };
+                        several::run(std::move(b));
+                        break;
+                    }
+                } else {
+                    const auto names = several::chosen(*roles_, roleOrder_);
+                    if (names.size() > 1) {
+                        b.noun = "r\xC3\xB4le";
+                        b.nouns = "r\xC3\xB4les";
+                        b.names = names;
+                        b.remove = [this, names](std::size_t i, std::string* why) { return deleteRole(names[i], why); };
+                        several::run(std::move(b));
+                        break;
+                    }
+                }
                 if (currentTab() == Users && selectedUser()) {
                     if (hosts_.removeUser) hosts_.removeUser(selectedUser());
                     else (void)deleteUser(selectedUser());
@@ -251,6 +315,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                     (void)deleteRole(selectedRole());
                 }
                 break;
+            }
             case UPassword: if (selectedUser() && hosts_.password) hosts_.password(selectedUser()); break;
             case USecret: if (selectedUser()) (void)newSecret(selectedUser()); break;
             case UUnlock: if (selectedUser()) (void)unlockUser(selectedUser()); break;

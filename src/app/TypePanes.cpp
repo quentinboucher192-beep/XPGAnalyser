@@ -7,6 +7,8 @@
 #include "hmi/HmiPanels.hpp"
 
 #include "../project/ApiCommands.hpp"
+#include "../project/DeleteCommands.hpp"   // 1.24.0 : supprimer plusieurs types d'un coup
+#include "../core/Command.hpp"             // 1.24.0 : un seul Ctrl+Z (CommandGroupScope)
 #include "../project/EditCommands.hpp"
 #include "../project/MacroSpec.hpp"
 #include "../project/RenameCommands.hpp"
@@ -578,7 +580,7 @@ DerivedTypesPane::DerivedTypesPane(std::string id) : ui::Widget(std::move(id)) {
         rebuildRows();
         updateHint();
     });
-    table_->setSelectionMode(ui::SelectionMode::Single);
+    table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs types a supprimer d'un coup
     links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) {
         if (syncing_) return;
         refreshProperties();
@@ -617,10 +619,17 @@ void DerivedTypesPane::attach(ApiFrame& frame) {
         const auto* row = selectedRow();
         return row && (row->kind == Row::Type || row->kind == Row::Field);
     };
+    // 1.24.0 : plusieurs types choisis - Supprimer les retire tous (une question, un Ctrl+Z) ; Champ, Renommer : un a la fois.
+    const auto one = [this] { return !table_ || table_->selectedModelRows().size() <= 1; };
     t.setEnabledWhen(AAddType, editable);
-    t.setEnabledWhen(AAddField, [editable, own] { return editable() && own(); });
-    t.setEnabledWhen(ARename, [editable, own] { return editable() && own(); });
+    t.setEnabledWhen(AAddField, [editable, own, one] { return editable() && own() && one(); });
+    t.setEnabledWhen(ARename, [editable, own, one] { return editable() && own() && one(); });
     t.setEnabledWhen(ADelete, [editable, own] { return editable() && own(); });
+    t.setLabelWhen(ADelete, [this] {
+        std::size_t n = 0;
+        for (const auto r : table_->selectedModelRows()) n += r < rows_.size() && rows_[r].kind == Row::Type && rows_[r].group == 0 ? 1u : 0u;
+        return several::label("Supprimer", n);
+    });
     t.setEnabledWhen(AUpdate, [this] { return outdated_ > 0; });
     t.setEnabledWhen(AVariables, [this] { return selectedInfo() != nullptr; });
     links_ += t.triggered->connect([this](int a) { runAction(a); });
@@ -1115,11 +1124,73 @@ void DerivedTypesPane::runAction(int action) {
             }
             if (info && !member) rename(*info, row && row->kind == Row::Field ? row->field : domain::kNoIndex);
             return;
-        case ADelete:
+        case ADelete: {
+            // 1.24.0 : PLUSIEURS TYPES D'UN COUP - les types du projet choisis (Ctrl+clic, Maj+clic), avec leurs champs ; UNE
+            // question, un seul Ctrl+Z ; un type encore employe reste (comme seul), sauf par un autre type retire avec lui
+            // (celui-ci part d'abord) ; le compte rendu dit lesquels et pourquoi.
+            std::vector<std::string> names;
+            for (const auto r : table_->selectedModelRows())
+                if (r < rows_.size() && rows_[r].kind == Row::Type && rows_[r].group == 0 && rows_[r].info < infos_.size()
+                    && std::find(names.begin(), names.end(), infos_[rows_[r].info].name) == names.end())
+                    names.push_back(infos_[rows_[r].info].name);
+            if (names.size() > 1) {
+                if (!hosts_.project || !hosts_.project() || !hosts_.apply) return;
+                const std::string n = std::to_string(names.size());
+                const std::weak_ptr<const void> alive = table_->selectionChanged;
+                several::confirm("Supprimer les " + n + " types ?",
+                                 "Les " + n + " types " + several::names(names) + " seront supprim\xC3\xA9s, avec leurs champs. Un type encore employ\xC3\xA9 "
+                                 "reste, comme seul : le compte rendu le dira. Un seul Ctrl+Z les rend.",
+                                 several::label("Supprimer", names.size()), [this, names, alive] {
+                    if (alive.expired()) return;
+                    auto doc = hosts_.project ? hosts_.project() : nullptr;
+                    if (!doc || !hosts_.apply) return;
+                    const auto indexOf = [&doc](const std::string& name) -> domain::Index {
+                        for (std::size_t i = 0; i < doc->derivedTypes.size(); ++i)
+                            if (text(*doc, doc->derivedTypes[i].name) == name) return static_cast<domain::Index>(i);
+                        return domain::kNoIndex;
+                    };
+                    std::vector<std::string> left = names, gone;
+                    std::vector<std::pair<std::string, std::string>> refused;
+                    {
+                        core::CommandGroupScope group("Supprimer " + std::to_string(names.size()) + " types");
+                        for (bool progress = true; progress && !left.empty();) {
+                            progress = false;
+                            for (auto it = left.begin(); it != left.end();) {
+                                const auto idx = indexOf(*it);
+                                if (idx == domain::kNoIndex) {
+                                    it = left.erase(it);
+                                    continue;
+                                }
+                                if (project::RemoveEntityCommand(doc, domain::EntityKind::DerivedType, idx).refusalReason()) {
+                                    hosts_.apply(std::make_unique<project::RemoveEntityCommand>(doc, domain::EntityKind::DerivedType, idx));
+                                    gone.push_back(*it);
+                                    it = left.erase(it);
+                                    progress = true;
+                                } else {
+                                    ++it;
+                                }
+                            }
+                        }
+                        for (const auto& name : left) {
+                            std::string why = "encore employ\xC3\xA9";
+                            if (const auto idx = indexOf(name); idx != domain::kNoIndex)
+                                if (const auto no = project::RemoveEntityCommand(doc, domain::EntityKind::DerivedType, idx).refusalReason(); !no)
+                                    why = no.error().context.empty() ? no.error().message() : no.error().context;
+                            refused.emplace_back(name, why);
+                        }
+                    }
+                    several::Batch b;
+                    b.noun = "type";
+                    b.nouns = "types";
+                    if (hosts_.status) hosts_.status(several::summary(b, gone, refused));
+                });
+                return;
+            }
             if (!info || !hosts_.remove || member) return;
             if (row && row->kind == Row::Field) hosts_.remove(domain::EntityKind::Variable, row->field);
             else hosts_.remove(domain::EntityKind::DerivedType, info->index);
             return;
+        }
         case AUpdate:
             if (hosts_.request) hosts_.request("bibliotheque");
             return;

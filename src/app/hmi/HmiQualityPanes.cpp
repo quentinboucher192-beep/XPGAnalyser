@@ -78,17 +78,22 @@ HmiScenariosPane::HmiScenariosPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TPdf, HmiGlyph::Export, "Rapport PDF : l'essai choisi, sinon toute la campagne (dossier exports/)", "Rapport PDF");
     tools->add(TXlsx, HmiGlyph::Export, "Rapport Excel : l'essai choisi, sinon toute la campagne (dossier exports/)", "Rapport Excel");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    for (int a : {TDup, TDel, TStepAdd, TPlay}) tools_->setEnabledWhen(a, [this] { return selectedScenario() != kNoId; });
-    for (int a : {TStepDel, TStepUp, TStepDown}) tools_->setEnabledWhen(a, [this] { return selectedStep() >= 0; });
+    // 1.24.0 : plusieurs essais (ou pas) choisis - Supprimer les retire tous (un Ctrl+Z) ; le reste : un a la fois.
+    for (int a : {TDup, TStepAdd, TPlay})
+        tools_->setEnabledWhen(a, [this] { return selectedScenario() != kNoId && list_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(TDel, [this] { return selectedScenario() != kNoId; });
+    tools_->setLabelWhen(TDel, [this] { return several::label("Supprimer", list_ ? several::chosen(*list_, order_).size() : 0); });
+    tools_->setEnabledWhen(TStepDel, [this] { return selectedStep() >= 0; });
+    for (int a : {TStepUp, TStepDown}) tools_->setEnabledWhen(a, [this] { return selectedStep() >= 0 && steps_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(TRunAll, [this] { return !doc_->project.scenarios.empty(); });
 
     auto list = std::make_unique<ui::TableView>(base + ".list");
     list->setColumns({{"Essai", 190.f}, {"Pas", 50.f, 40.f, true, true, true, ui::Align::End}, {"Dernier passage", 230.f}});
-    list->setSelectionMode(ui::SelectionMode::Single);
+    list->setSelectionMode(ui::SelectionMode::Extended);    // 1.24.0 : plusieurs essais a supprimer d'un coup
     list_ = &static_cast<ui::TableView&>(addChild(std::move(list)));
     auto steps = std::make_unique<ui::TableView>(base + ".steps");
     steps->setColumns({{"N\xC2\xB0", 44.f, 36.f, true, false, true, ui::Align::End}, {"Pas", 330.f}, {"Verdict", 96.f}, {"D\xC3\xA9tail", 330.f}});
-    steps->setSelectionMode(ui::SelectionMode::Single);
+    steps->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs pas
     steps_ = &static_cast<ui::TableView&>(addChild(std::move(steps)));
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
     tools_->bindListKeys(*list_, {TDel, TDup, TNew});
@@ -104,18 +109,58 @@ HmiScenariosPane::HmiScenariosPane(std::string id, hmi::DocumentPtr doc, Apply a
         switch (a) {
             case TNew: selectScenario(addScenario()); break;
             case TDup: if (sc != kNoId) selectScenario(duplicateScenario(sc)); break;
-            case TDel:
+            case TDel: {
+                // 1.24.0 : plusieurs essais - d'un coup, un seul Ctrl+Z (une question si l'hote en pose une pour un seul).
+                const auto ids = several::chosen(*list_, order_);
+                if (ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "essai";
+                    b.nouns = "essais";
+                    b.ask = static_cast<bool>(hosts_.remove);
+                    std::vector<Id> doomed;
+                    for (const auto id : ids)
+                        if (const auto* s = doc_->project.scenario(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(s->name);
+                        }
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return removeScenario(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (sc == kNoId) break;
                 if (hosts_.remove) hosts_.remove(sc);
                 else (void)removeScenario(sc);
                 break;
+            }
             case TStepAdd:
                 if (sc != kNoId) {
                     const int at = addStep(sc, {}, st);
                     if (at >= 0) selectStep(at);
                 }
                 break;
-            case TStepDel: if (sc != kNoId && st >= 0) (void)removeStep(sc, st); break;
+            case TStepDel: {
+                // 1.24.0 : plusieurs pas - du dernier au premier, un seul Ctrl+Z.
+                const auto* scen = doc_->project.scenario(sc);
+                auto rows = steps_->selectedModelRows();
+                std::sort(rows.begin(), rows.end(), std::greater<>());
+                rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+                if (scen) rows.erase(std::remove_if(rows.begin(), rows.end(), [scen](ui::RowIndex i) { return i >= scen->steps.size(); }), rows.end());
+                if (scen && rows.size() > 1) {
+                    several::Batch b;
+                    b.noun = "pas";
+                    b.nouns = "pas";
+                    for (const auto i : rows) b.names.push_back("n\xC2\xB0" + std::to_string(i + 1));
+                    b.remove = [this, sc, rows](std::size_t k, std::string*) { return removeStep(sc, static_cast<int>(rows[k])); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (sc != kNoId && st >= 0) (void)removeStep(sc, st);
+                break;
+            }
             case TStepUp: if (sc != kNoId && st >= 0 && moveStep(sc, st, -1)) selectStep(st - 1); break;
             case TStepDown: if (sc != kNoId && st >= 0 && moveStep(sc, st, +1)) selectStep(st + 1); break;
             case TPlay:

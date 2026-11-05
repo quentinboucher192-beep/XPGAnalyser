@@ -663,8 +663,9 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(VRecalc, HmiGlyph::Refresh, "Recalculer la place m\xC3\xA9moire de la structure : les mots des membres internes sont rendus, "
                "les membres suivants se resserrent (Ctrl+Z la remet)", "Recalculer la place m\xC3\xA9moire");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    const auto variableChosen = [this] { return selectedVariable() != kNoId && selectedPath().empty(); };
-    tools_->setEnabledWhen(VRename, [this] { return selectedVariable() != kNoId || !selectedFolder().empty(); });
+    // 1.24.0 : plusieurs lignes choisies - Supprimer les retire toutes ; ce qui vise une variable se fait une a la fois.
+    const auto variableChosen = [this] { return selectedVariable() != kNoId && selectedPath().empty() && !several(); };
+    tools_->setEnabledWhen(VRename, [this] { return (selectedVariable() != kNoId || !selectedFolder().empty()) && !several(); });
     tools_->setEnabledWhen(VDuplicate, variableChosen);
     tools_->setEnabledWhen(VItems, [this, variableChosen] {   // 1.12.2
         const auto* v = doc_->project.variableById(selectedVariable());
@@ -674,23 +675,24 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
         if (variableChosen() && v && app::calceditor::available()) return true;
         return variableChosen() && v && app::itemseditor::available() && (ty::isRich(v->type) || (ty::parseSpec(v->type, s) && s.array()));
     });
-    tools_->setEnabledWhen(VDelete, [this] { return (selectedVariable() != kNoId && selectedPath().empty()) || !selectedFolder().empty(); });
+    tools_->setEnabledWhen(VDelete, [this] { return !selectedVariables().empty() || !selectedFolders().empty(); });
+    tools_->setLabelWhen(VDelete, [this] { return several::label("Supprimer", selectedVariables().size() + selectedFolders().size()); });
     tools_->setEnabledWhen(VTrend, [this] { return table_ && !table_->selectedModelRows().empty(); });   // 1.10 (le clic dit s'il n'y a rien a tracer)
     tools_->setEnabledWhen(VLink, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
-        return v && !v->bound() && !ty::isRich(v->type);   // 1.12.2 : un objet de l'IHM ne se lie pas
+        return v && !v->bound() && !ty::isRich(v->type) && !several();   // 1.12.2 : un objet de l'IHM ne se lie pas
     });
     tools_->setEnabledWhen(VUnlink, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
-        return v && v->bound();
+        return v && v->bound() && !several();
     });
     tools_->setEnabledWhen(VShow, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
-        return v && v->bound() && hosts_.showEquipment;
+        return v && v->bound() && hosts_.showEquipment && !several();
     });
     tools_->setEnabledWhen(VRecalc, [this] {
         const auto* v = doc_->project.variableById(selectedVariable());
-        return v && v->bound() && ty::isComposite(v->type);
+        return v && v->bound() && ty::isComposite(v->type) && !several();
     });
 
     auto bar = std::make_unique<FilterBar>(base + ".filters");
@@ -859,11 +861,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
                     });
                 }
                 break;
-            case VDelete:
-                if (!selectedFolder().empty()) (void)deleteFolder(selectedFolder());
-                else if (sel && hosts_.removeVariable) hosts_.removeVariable(sel);
-                else if (sel) (void)deleteVariable(sel);
-                break;
+            case VDelete: deleteSelection(); break;   // 1.24.0 : une ligne comme avant, plusieurs d'un coup
             case VLink: {
                 const hmi::Equipment* first = nullptr;
                 for (const auto& e : doc_->project.equipments)
@@ -2606,6 +2604,116 @@ bool HmiVariablesPane::deleteFolder(const std::string& path) {
     return true;
 }
 
+// ---- 1.24.0 : supprimer plusieurs d'un coup ---------------------------------------------
+bool HmiVariablesPane::several() const { return table_ && table_->selectedModelRows().size() > 1; }
+
+std::vector<Id> HmiVariablesPane::selectedVariables() const {
+    auto sel = table_->selectedModelRows();
+    std::sort(sel.begin(), sel.end());
+    std::vector<Id> out;
+    for (const auto r : sel)
+        if (r < rows_.size() && rows_[r].kind == Row::Kind::Variable && std::find(out.begin(), out.end(), rows_[r].var) == out.end())
+            out.push_back(rows_[r].var);
+    return out;
+}
+
+namespace {
+// `folder` est-il `path` ou l'un de ses sous-dossiers ?
+bool withinFolder(const std::string& folder, const std::string& path) {
+    return sameText(folder, path) || upper(folder).rfind(upper(path) + "/", 0) == 0;
+}
+} // namespace
+
+std::vector<std::string> HmiVariablesPane::selectedFolders() const {
+    auto sel = table_->selectedModelRows();
+    std::sort(sel.begin(), sel.end());
+    std::vector<std::string> all, out;
+    for (const auto r : sel)
+        if (r < rows_.size() && rows_[r].kind == Row::Kind::Folder) all.push_back(rows_[r].key);
+    for (const auto& f : all)   // un dossier dans un autre choisi part avec lui
+        if (std::none_of(all.begin(), all.end(), [&](const std::string& g) { return !sameText(f, g) && withinFolder(f, g); })
+            && std::none_of(out.begin(), out.end(), [&](const std::string& g) { return sameText(f, g); }))
+            out.push_back(f);
+    return out;
+}
+
+std::size_t HmiVariablesPane::deleteMany(const std::vector<Id>& variables, const std::vector<std::string>& folders) {
+    std::vector<Id> ids;
+    std::vector<std::string> names;
+    for (const auto id : variables)
+        if (const auto* v = doc_->project.variableById(id); v && std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(id);
+            names.push_back(v->name);
+        }
+    if (ids.empty() && folders.empty()) return 0;
+    if (ids.size() == 1 && folders.empty()) return deleteVariable(ids.front()) ? 1 : 0;   // comme avant
+    if (ids.empty() && folders.size() == 1) return deleteFolder(folders.front()) ? 1 : 0;
+    const std::size_t count = ids.size() + folders.size();
+    // UNE commande : un seul Ctrl+Z rend tout (les variables, puis les dossiers et ce qu'ils rangeaient).
+    apply(hmi::changeProject(doc_, "Supprimer " + std::to_string(count) + " lignes des variables IHM", [&](hmi::Project& p) {
+        auto& all = p.programs.variables;
+        all.erase(std::remove_if(all.begin(), all.end(), [&](const hmi::Variable& x) { return std::find(ids.begin(), ids.end(), x.id) != ids.end(); }),
+                  all.end());
+        for (const auto& path : folders) {
+            const std::string parent = ty::folderParent(path);
+            auto& fs = p.programs.folders;
+            fs.erase(std::remove_if(fs.begin(), fs.end(), [&](const std::string& f) { return withinFolder(f, path); }), fs.end());
+            for (auto& v : all)
+                if (withinFolder(v.folder, path)) v.folder = parent;
+        }
+    }));
+    std::string text;
+    if (!ids.empty()) text = std::to_string(ids.size()) + (ids.size() > 1 ? " variables supprim\xC3\xA9" "es : " : " variable supprim\xC3\xA9" "e : ") + several::names(names);
+    if (!folders.empty())
+        text += (text.empty() ? std::string{} : std::string(" ; ")) + std::to_string(folders.size())
+              + (folders.size() > 1 ? " dossiers supprim\xC3\xA9s (leurs variables montent d'un cran) : " : " dossier supprim\xC3\xA9 (ses variables montent d'un cran) : ")
+              + several::names(folders);
+    say(text + " - un seul Ctrl+Z les rend");
+    return count;
+}
+
+void HmiVariablesPane::deleteSelection() {
+    const auto vars = selectedVariables();
+    const auto folders = selectedFolders();
+    const std::size_t count = vars.size() + folders.size();
+    if (count == 0) return;
+    if (count == 1) {                                  // une ligne : comme avant (la question de l'hote pour une variable)
+        if (!folders.empty()) (void)deleteFolder(folders.front());
+        else if (hosts_.removeVariable) hosts_.removeVariable(vars.front());
+        else (void)deleteVariable(vars.front());
+        return;
+    }
+    // Plusieurs : UNE question - les noms (les premiers, puis +N), celles qui servent encore (comme la question d'une seule).
+    std::vector<std::string> names, used;
+    for (const auto id : vars)
+        if (const auto* v = doc_->project.variableById(id)) {
+            names.push_back(v->name);
+            std::size_t refs = 0;
+            for (const auto& u : hmi::decledit::globalUsages(doc_->project, v->name)) refs += u.count;
+            if (refs) used.push_back(v->name + " (" + std::to_string(refs) + (refs > 1 ? " emplois)" : " emploi)"));
+        }
+    std::string title, text;
+    if (folders.empty()) {
+        title = "Supprimer les " + std::to_string(vars.size()) + " variables ?";
+        text = "Les " + std::to_string(vars.size()) + " variables IHM " + several::names(names) + " sont retir\xC3\xA9" "es.";
+    } else {
+        title = "Supprimer les " + std::to_string(count) + " lignes ?";
+        if (!vars.empty())
+            text = std::to_string(vars.size()) + (vars.size() > 1 ? " variables IHM sont retir\xC3\xA9" "es : " : " variable IHM est retir\xC3\xA9" "e : ")
+                 + several::names(names) + ". ";
+        text += std::to_string(folders.size()) + (folders.size() > 1 ? " dossiers sont retir\xC3\xA9s : " : " dossier est retir\xC3\xA9 : ")
+              + several::names(folders) + " (les variables qu'ils rangent montent d'un cran).";
+    }
+    if (!used.empty())
+        text += " Encore employ\xC3\xA9" + std::string(used.size() > 1 ? "es : " : "e : ") + several::names(used, 3)
+              + " - Compiler et G\xC3\xA9n\xC3\xA9rer le signaleront.";
+    text += " Un seul Ctrl+Z les rend toutes.";
+    const std::weak_ptr<int> alive = alive_;
+    several::confirm(title, text, several::label("Supprimer", count), [this, alive, vars, folders] {
+        if (!alive.expired()) (void)deleteMany(vars, folders);
+    });
+}
+
 // Lot 21 : le depot d'un glisser de plusieurs lignes.
 void HmiVariablesPane::dropRows(const std::vector<ui::RowIndex>& from, ui::RowIndex to, ui::TreeView::DropWhere where) {
     std::vector<Id> vars;
@@ -3134,6 +3242,7 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
         return it;
     };
     const auto tool = [this, &entry](int t, std::string label, std::string key, std::string why) {
+        if (several() && t != VAdd && t != VFolder) why = several::kOneAtATime;   // 1.24.0 : Lier, Delier... une a la fois
         return entry(std::move(label), kMenuBase - kMenuToolBase - t, std::move(key), tools_->isEnabled(t), std::move(why));
     };
     std::vector<ui::PopupMenu::Item> items;
@@ -3203,9 +3312,9 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
     }
     items.push_back(cmd::separator());
     items.push_back(entry("Copier le nom", kMenuBase - MCopyName, {}, any, none));
-    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - MRename, one, none));
-    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - MDuplicate, oneVar, "une variable \xC3\xA0 la fois"));
-    items.push_back(tool(VItems, "Valeur initiale\xE2\x80\xA6", {}, "une variable \xC3\xA0 la fois"));
+    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - MRename, one, sel.size() > 1 ? several::kOneAtATime : none));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - MDuplicate, oneVar, sel.size() > 1 ? several::kOneAtATime : std::string("une variable \xC3\xA0 la fois")));
+    items.push_back(tool(VItems, "Valeur initiale\xE2\x80\xA6", {}, sel.size() > 1 ? several::kOneAtATime : std::string("une variable \xC3\xA0 la fois")));
     if (v) {
         items.push_back(cmd::separator());
         if (v->bound()) items.push_back(tool(VUnlink, "D\xC3\xA9lier (elle reste dans l'IHM)", {}, "pas li\xC3\xA9" "e"));
@@ -3299,7 +3408,10 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
         items.push_back(std::move(table));
     }
     items.push_back(cmd::separator());
-    items.push_back(cmd::item(cmd::Id::Supprimer, kMenuBase - MDelete, one, "une ligne \xC3\xA0 la fois"));
+    // 1.24.0 : plusieurs lignes - << Supprimer les 5 >>, une seule question, un seul Ctrl+Z (avant : une ligne a la fois).
+    const std::size_t doomed = selectedVariables().size() + selectedFolders().size();
+    items.push_back(cmd::item(cmd::Id::Supprimer, kMenuBase - MDelete, doomed > 0, "choisis une variable (ou un dossier) : un membre ne se supprime pas ici",
+                              doomed > 1 ? several::label("Supprimer", doomed) : std::string{}));
     menu_->setItems(std::move(items));
 }
 
@@ -3424,16 +3536,24 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
     tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
     tools_->setEnabledWhen(TMember, [this] { return selectedType() != kNoId && !callbackPage_ && !showsInterface(); });   // 1.12.20 ; 1.13.0 : ni une interface
-    tools_->setEnabledWhen(TUp, [this] { return selectedType() != kNoId && selectedMember() > 0; });
-    tools_->setEnabledWhen(TDown, [this] {
+    // 1.24.0 : plusieurs membres choisis - Supprimer les retire tous (un Ctrl+Z) ; Monter, Descendre : un a la fois.
+    const auto oneMember = [this] { return !members_ || members_->selectedModelRows().size() <= 1; };
+    tools_->setEnabledWhen(TUp, [this, oneMember] { return selectedType() != kNoId && selectedMember() > 0 && oneMember(); });
+    tools_->setEnabledWhen(TDown, [this, oneMember] {
         const auto* t = doc_->project.hmiType(selectedType());
-        return t && selectedMember() >= 0 && selectedMember() + 1 < static_cast<int>(t->members.size());
+        return t && selectedMember() >= 0 && selectedMember() + 1 < static_cast<int>(t->members.size()) && oneMember();
     });
     tools_->setEnabledWhen(TRemoveMember, [this] { return selectedType() != kNoId && selectedMember() >= 0; });
-    tools_->setEnabledWhen(TDuplicate, [this] { return selectedType() != kNoId; });
+    tools_->setLabelWhen(TRemoveMember, [this] {
+        const std::size_t n = members_ ? members_->selectedModelRows().size() : 0;
+        return n > 1 ? several::label("Supprimer", n) : std::string{};
+    });
+    tools_->setEnabledWhen(TDuplicate, [this] { return selectedType() != kNoId && chosenCount() <= 1; });   // 1.24.0 : un a la fois
     tools_->setEnabledWhen(TCopy, [this] { return selectedType() != kNoId && selectedMember() >= 0; });
     tools_->setEnabledWhen(TPaste, [this] { return selectedType() != kNoId && !callbackPage_; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedType() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
+    // 1.24.0 : plusieurs types (ou dossiers) choisis - << Supprimer les 5 >> ; vide : << Supprimer le type >>.
+    tools_->setLabelWhen(TDelete, [this] { return chosenCount() > 1 ? several::label("Supprimer", chosenCount()) : std::string{}; });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     {
@@ -3695,14 +3815,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             case TFolder: (void)folders_->newFolder(); break;
             case TExport: if (hosts_.exportItems) hosts_.exportItems(t); break;   // 1.11.2 (decision 174)
             case TImport: if (hosts_.importAny) hosts_.importAny(); break;
-            case TDelete: {
-                if (t == kNoId) {
-                    if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);
-                    break;
-                }
-                if (!deleteType(t, &why)) say("Refus\xC3\xA9 : " + why, true);
-                break;
-            }
+            case TDelete: deleteTypeSelection(); break;   // 1.24.0 : un type comme avant, plusieurs d'un coup
             case TMember: {
                 const auto* ty = doc_->project.hmiType(t);
                 if (!ty) break;
@@ -3723,7 +3836,33 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             }
             case TUp: (void)moveMember(t, static_cast<std::size_t>(std::max(0, selectedMember())), -1); break;
             case TDown: (void)moveMember(t, static_cast<std::size_t>(std::max(0, selectedMember())), 1); break;
-            case TRemoveMember: (void)removeMember(t, static_cast<std::size_t>(std::max(0, selectedMember()))); break;
+            case TRemoveMember: {
+                // 1.24.0 : plusieurs membres choisis - UNE commande (un Ctrl+Z) ; les herites ne se suppriment pas ici.
+                const auto* ty = doc_->project.hmiType(t);
+                std::vector<int> picked;
+                for (const auto r : members_->selectedModelRows())
+                    if (const int m = memberIndexOf(r); ty && m >= 0 && static_cast<std::size_t>(m) < ty->members.size()
+                                                        && std::find(picked.begin(), picked.end(), m) == picked.end())
+                        picked.push_back(m);
+                if (ty && picked.size() > 1) {
+                    std::sort(picked.begin(), picked.end());
+                    std::vector<std::string> names;
+                    for (const int m : picked) names.push_back(ty->members[static_cast<std::size_t>(m)].name);
+                    const std::string typeName = ty->name;
+                    const bool ok = change(t, "Supprimer " + std::to_string(picked.size()) + " membres", [&](hmi::HmiType& x, std::string*) {
+                        for (auto it = picked.rbegin(); it != picked.rend(); ++it)
+                            if (static_cast<std::size_t>(*it) < x.members.size()) x.members.erase(x.members.begin() + *it);
+                        return true;
+                    }, &why);
+                    if (ok) member_ = -1;
+                    refresh();
+                    if (ok) say(std::to_string(names.size()) + " membres de " + typeName + " supprim\xC3\xA9s : " + several::names(names) + " - un seul Ctrl+Z les rend");
+                    else say("Refus\xC3\xA9 : " + why, true);
+                    break;
+                }
+                (void)removeMember(t, static_cast<std::size_t>(std::max(0, selectedMember())));
+                break;
+            }
             case TDuplicate: (void)duplicateType(t); break;
             default: break;
         }
@@ -4623,6 +4762,81 @@ bool HmiTypesPane::deleteType(Id id, std::string* why) {
     return true;
 }
 
+// ---- 1.24.0 : supprimer plusieurs types d'un coup ------------------------------------------
+std::size_t HmiTypesPane::chosenCount() const {
+    if (isDocument() || !folders_) return selectedType() != kNoId ? 1 : 0;
+    return folders_->selectedCount();
+}
+
+std::size_t HmiTypesPane::deleteTypes(const std::vector<Id>& types, const std::vector<std::string>& folders, std::string* report) {
+    std::vector<Id> left;
+    for (const auto id : types)
+        if (doc_->project.hmiType(id) && std::find(left.begin(), left.end(), id) == left.end()) left.push_back(id);
+    std::vector<std::string> gone;
+    std::vector<std::pair<std::string, std::string>> refused;
+    std::size_t foldersGone = 0;
+    {
+        core::CommandGroupScope group("Supprimer " + std::to_string(left.size() + folders.size()) + " types IHM");
+        // Un type employe seulement par un autre type retire avec lui : celui-ci part d'abord (des passes, tant que
+        // l'une en retire un).
+        for (bool progress = true; progress && !left.empty();) {
+            progress = false;
+            for (auto it = left.begin(); it != left.end();) {
+                const auto* t = doc_->project.hmiType(*it);
+                const std::string name = t ? t->name : std::string{};
+                if (t && ty::usersOf(doc_->project, hmi::fullName(*t)).empty() && deleteType(*it)) {
+                    gone.push_back(name);
+                    it = left.erase(it);
+                    progress = true;
+                } else {
+                    ++it;
+                }
+            }
+        }
+        for (const auto id : left)                     // refuses comme seuls : encore employes (et par qui)
+            if (const auto* t = doc_->project.hmiType(id)) {
+                const auto users = ty::usersOf(doc_->project, hmi::fullName(*t));
+                refused.emplace_back(t->name, users.empty() ? std::string("refus\xC3\xA9") : "employ\xC3\xA9 par " + several::names(users, 2));
+            }
+        for (const auto& f : folders) foldersGone += folders_ && folders_->deleteFolder(f) ? 1u : 0u;
+    }
+    refresh();
+    std::string text;
+    if (!gone.empty()) text = std::to_string(gone.size()) + (gone.size() > 1 ? " types supprim\xC3\xA9s : " : " type supprim\xC3\xA9 : ") + several::names(gone);
+    if (foldersGone)
+        text += (text.empty() ? std::string{} : std::string(" ; ")) + std::to_string(foldersGone)
+              + (foldersGone > 1 ? " dossiers supprim\xC3\xA9s (leurs types remontent d'un cran)" : " dossier supprim\xC3\xA9 (ses types remontent d'un cran)");
+    if (!refused.empty())
+        text += (text.empty() ? std::string{} : std::string(" ; ")) + std::to_string(refused.size())
+              + (refused.size() > 1 ? " refus\xC3\xA9s, encore employ\xC3\xA9s : " : " refus\xC3\xA9, encore employ\xC3\xA9 : ") + several::refusals(refused);
+    if (!gone.empty() || foldersGone) text += " - un seul Ctrl+Z les rend";
+    if (text.empty()) text = "Rien \xC3\xA0 supprimer";
+    say(text, !refused.empty());
+    if (report) *report = text;
+    return gone.size() + foldersGone;
+}
+
+void HmiTypesPane::deleteTypeSelection() {
+    std::vector<Id> types;
+    std::vector<std::string> fs;
+    if (!isDocument() && folders_) {
+        types = folders_->selectedItems();
+        fs = folders_->selectedFolders();
+    }
+    if (types.empty() && fs.empty() && selectedType() != kNoId) types.push_back(selectedType());   // l'onglet de document : le sien
+    if (types.size() + fs.size() > 1) {
+        (void)deleteTypes(types, fs);
+        return;
+    }
+    // Une ligne : comme avant (refuse tant qu'une variable ou un type l'emploie).
+    std::string why;
+    if (!types.empty()) {
+        if (!deleteType(types.front(), &why)) say("Refus\xC3\xA9 : " + why, true);
+    } else if (!fs.empty()) {
+        (void)folders_->deleteFolder(fs.front());
+    }
+}
+
 Id HmiTypesPane::duplicateType(Id id) {
     const auto* t = doc_->project.hmiType(id);
     if (!t) return kNoId;
@@ -5513,7 +5727,16 @@ void HmiTypesPane::openMemberMenu(gfx::Point at) {
         items.push_back(it);
     }
     items.push_back(cmd::separator());
-    auto del = entry("Supprimer le membre", kMenuBase - TRemoveMember, "Suppr", member, noMember);
+    const std::size_t chosen = members_->selectedModelRows().size();   // 1.24.0 : << Supprimer les 3 >>
+    if (chosen > 1)   // Dupliquer, Renommer, la visibilite, Monter, Descendre : un membre a la fois
+        for (auto& it : items)
+            if (it.enabled && (it.id == kMenuBase - kMemberDuplicate || it.id == kMenuBase - kMemberRename || it.id == kMenuBase - kMemberPublic
+                               || it.id == kMenuBase - kMemberPrivate || it.id == kMenuBase - TUp || it.id == kMenuBase - TDown)) {
+                it.enabled = false;
+                it.disabledReason = several::kOneAtATime;
+            }
+    auto del = entry(chosen > 1 ? several::label("Supprimer", chosen) : std::string("Supprimer le membre"), kMenuBase - TRemoveMember, "Suppr",
+                     member, noMember);
     del.icon = ui::Icon::Delete;
     items.push_back(std::move(del));
     menu_->setItems(std::move(items));
@@ -5920,22 +6143,28 @@ std::vector<ui::PopupMenu::Item> HmiTypesPane::typeMenuItems() const {
         return it;
     };
     const std::string noType = "choisis un type";
+    // 1.24.0 : plusieurs lignes choisies - Supprimer les retire toutes ; le reste se fait un type a la fois.
+    const std::size_t chosen = chosenCount();
+    const bool many = chosen > 1;
+    const std::string oneOnly = many ? several::kOneAtATime : noType;
     std::vector<ui::PopupMenu::Item> items;
-    if (t) items.push_back(cmd::heading(hmi::fullName(*t), kindTitle(*t) == "STRUCTURE" ? std::string("structure")
+    if (many) items.push_back(cmd::heading(std::to_string(chosen) + " lignes", "types et dossiers"));
+    else if (t) items.push_back(cmd::heading(hmi::fullName(*t), kindTitle(*t) == "STRUCTURE" ? std::string("structure")
                                                          : t->kind == hmi::HmiTypeKind::Interface ? std::string("interface")
                                                          : t->kind == hmi::HmiTypeKind::Callback ? std::string("rappel")
                                                                                                   : std::string("\xC3\xA9num\xC3\xA9ration")));
     else if (folder) items.push_back(cmd::heading(folders_->selectedFolder(), "dossier"));
-    items.push_back(entry("Ouvrir dans un onglet", kTypeMenuOpen, "Entr\xC3\xA9" "e", t && static_cast<bool>(hosts_.openTypeTab),
-                          t ? std::string("pas d'onglet de document ici") : noType, ui::Icon::Window));
+    items.push_back(entry("Ouvrir dans un onglet", kTypeMenuOpen, "Entr\xC3\xA9" "e", t && static_cast<bool>(hosts_.openTypeTab) && !many,
+                          many ? oneOnly : t ? std::string("pas d'onglet de document ici") : noType, ui::Icon::Window));
     items.push_back(cmd::separator());
-    items.push_back(cmd::item(cmd::Id::Renommer, kTypeMenuRename, t || folder, noType));
-    items.push_back(cmd::item(cmd::Id::Dupliquer, kTypeMenuDuplicate, t != nullptr, noType));
+    items.push_back(cmd::item(cmd::Id::Renommer, kTypeMenuRename, (t || folder) && !many, oneOnly));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kTypeMenuDuplicate, t != nullptr && !many, oneOnly));
     items.push_back(cmd::separator());
-    items.push_back(entry("Exporter le type\xE2\x80\xA6", kTypeMenuExport, {}, t && static_cast<bool>(hosts_.exportItems),
-                          t ? std::string("pas d'export ici") : noType, ui::Icon::Export));
+    items.push_back(entry("Exporter le type\xE2\x80\xA6", kTypeMenuExport, {}, t && static_cast<bool>(hosts_.exportItems) && !many,
+                          many ? oneOnly : t ? std::string("pas d'export ici") : noType, ui::Icon::Export));
     items.push_back(cmd::separator());
-    items.push_back(entry(folder ? "Supprimer le dossier" : "Supprimer le type", kTypeMenuDelete, "Suppr", t || folder, noType, ui::Icon::Delete));
+    items.push_back(entry(many ? several::label("Supprimer", chosen) : folder ? "Supprimer le dossier" : "Supprimer le type", kTypeMenuDelete, "Suppr",
+                          t || folder, noType, ui::Icon::Delete));
     // 1.16.1 : les deballages de la liste (les membres de chaque type, a toute profondeur).
     items.push_back(cmd::separator());
     const bool any = !doc_->project.programs.types.empty();

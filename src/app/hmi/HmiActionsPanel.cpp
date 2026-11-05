@@ -166,12 +166,14 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     tools->add(ADown, HmiGlyph::Down, "Descendre l'action");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(AAdd, [this] { return several_.empty(); });      // 1.12.3 : une action est a un objet
-    tools_->setEnabledWhen(ADuplicate, [this] { return selectedIndex() >= 0; });
+    // 1.24.0 : plusieurs lignes choisies - Retirer les retire toutes (un Ctrl+Z) ; Dupliquer, Monter : une a la fois.
+    const auto one = [this] { return !table_ || table_->selectedModelRows().size() <= 1; };
+    tools_->setEnabledWhen(ADuplicate, [this, one] { return selectedIndex() >= 0 && one(); });
     tools_->setEnabledWhen(ARemove, [this] { return selectedIndex() >= 0; });
-    tools_->setEnabledWhen(AUp, [this] { return rowOf(selectedIndex()) > 0; });
-    tools_->setEnabledWhen(ADown, [this] {
+    tools_->setEnabledWhen(AUp, [this, one] { return rowOf(selectedIndex()) > 0 && one(); });
+    tools_->setEnabledWhen(ADown, [this, one] {
         const int row = rowOf(selectedIndex());
-        return row >= 0 && row + 1 < static_cast<int>(rows_.size());
+        return row >= 0 && row + 1 < static_cast<int>(rows_.size()) && one();
     });
     auto table = std::make_unique<ui::TableView>(base + ".list");
     if (keys)
@@ -179,7 +181,7 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                            {"Action", 360.f}});
     else
         table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"Action", 520.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs actions a retirer d'un coup
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     grid->setShowDescriptionPane(true);
@@ -252,7 +254,26 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                 break;
             }
             case ADuplicate: (void)openDuplicate(); break;   // 1.12.16 : N copies (une sans hote)
-            case ARemove: (void)remove(sel); break;
+            case ARemove: {
+                // 1.24.0 : plusieurs lignes - de la derniere a la premiere (les rangs restent justes), un seul Ctrl+Z.
+                auto indices = several_.empty() ? several::chosen(*table_, rows_) : std::vector<int>{};
+                if (indices.size() > 1) {
+                    std::sort(indices.begin(), indices.end(), std::greater<>());
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    const bool keys = scope_ == Scope::Shortcuts;
+                    b.noun = keys ? "raccourci" : "action";
+                    b.nouns = keys ? "raccourcis" : "actions";
+                    b.feminine = !keys;
+                    for (const auto i : indices) b.names.push_back("n\xC2\xB0" + std::to_string(rowOf(i) + 1));
+                    b.remove = [this, indices](std::size_t k, std::string*) { return remove(indices[k]); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                (void)remove(sel);
+                break;
+            }
             case AUp: if (move(sel, -1)) selectIndex(selected_); break;
             case ADown: if (move(sel, +1)) selectIndex(selected_); break;
             default: break;
@@ -546,7 +567,15 @@ std::vector<ui::PopupMenu::Item> HmiActionsPanel::contextItems() const {
     items.push_back(tool(AUp, "Monter", "Alt+\xE2\x86\x91", sel < 0 ? none : std::string("d\xC3\xA9j\xC3\xA0 en haut")));
     items.push_back(tool(ADown, "Descendre", "Alt+\xE2\x86\x93", sel < 0 ? none : std::string("d\xC3\xA9j\xC3\xA0 en bas")));
     items.push_back(cmd::separator());
-    auto rem = tool(ARemove, "Retirer", "Suppr", none);
+    // 1.24.0 : plusieurs lignes choisies - << Retirer les 3 >> (un Ctrl+Z) ; le reste : une a la fois.
+    const std::size_t chosen = several::chosen(*table_, rows_).size();
+    if (chosen > 1)
+        for (auto& it : items)
+            if (!it.heading && !it.separator && it.enabled && it.id != kMenuTool + AAdd && it.id != kMenuPasteAction) {
+                it.enabled = false;
+                it.disabledReason = several::kOneAtATime;
+            }
+    auto rem = tool(ARemove, several::label("Retirer", chosen), "Suppr", none);
     rem.icon = ui::Icon::Delete;
     items.push_back(std::move(rem));
     return items;

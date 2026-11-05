@@ -77,18 +77,22 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
                "C\xC3\xB4te \xC3\xA0 c\xC3\xB4te");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(TSide, [this] { return static_cast<bool>(hosts_.sideBySide); });
+    // 1.24.0 : plusieurs langues choisies - Retirer les retire toutes (la langue du projet reste, dite) ; Demarrage,
+    // Essayer : une a la fois.
     tools_->setEnabledWhen(TRemove, [this] {
-        const auto code = selectedLanguage();
-        return !code.empty() && !same(code, doc_->project.languages.source());
+        for (const auto& code : several::chosen(*langs_, langOrder_))
+            if (!same(code, doc_->project.languages.source())) return true;
+        return false;
     });
-    tools_->setEnabledWhen(TStart, [this] { return !selectedLanguage().empty(); });
-    tools_->setEnabledWhen(TTry, [this] { return !selectedLanguage().empty(); });
+    tools_->setLabelWhen(TRemove, [this] { return several::label("Retirer", langs_ ? several::chosen(*langs_, langOrder_).size() : 0); });
+    tools_->setEnabledWhen(TStart, [this] { return !selectedLanguage().empty() && langs_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(TTry, [this] { return !selectedLanguage().empty() && langs_->selectedModelRows().size() <= 1; });
     tools_->setCheckedWhen(TMissing, [this] { return onlyMissing_; });
 
     auto langs = std::make_unique<ui::TableView>(base + ".langs");
     langs->setColumns({{"Code", 62.f}, {"Langue", 98.f}, {"Traduits", 150.f, 60.f, true, true, true, ui::Align::End},
                        {"D\xC3\xA9marrage", 104.f, 60.f, true, false, true, ui::Align::Center}});
-    langs->setSelectionMode(ui::SelectionMode::Single);
+    langs->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs langues a retirer d'un coup
     langs_ = &static_cast<ui::TableView&>(addChild(std::move(langs)));
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
     tools_->bindListKeys(*langs_, {TRemove, 0, TAdd});
@@ -105,7 +109,27 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
                 if (hosts_.askAdd) hosts_.askAdd();
                 else say("Ajouter une langue : son code (en, de, es...) - ici, par un script ou les tests.", true);
                 break;
-            case TRemove: if (!code.empty()) (void)removeLanguage(code); break;
+            case TRemove:
+                // 1.24.0 : plusieurs langues - retirees d'un coup avec leurs traductions, un seul Ctrl+Z ; la langue du
+                // projet reste (comme seule).
+                if (const auto codes = several::chosen(*langs_, langOrder_); codes.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "langue";
+                    b.nouns = "langues";
+                    b.feminine = true;
+                    for (const auto& c : codes) {
+                        const auto* lang = doc_->project.languages.find(c);
+                        b.names.push_back(lang ? lang->name : c);
+                    }
+                    b.remove = [this, codes](std::size_t i, std::string* why) { return removeLanguage(codes[i], why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text + " (avec leurs traductions)", warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (!code.empty()) (void)removeLanguage(code);
+                break;
             case TStart: if (!code.empty()) (void)setStartLanguage(code); break;
             case TMissing: setOnlyMissing(!onlyMissing_); break;
             // Lot 7 : ou exporter (ExportTarget.hpp) - exports/ par defaut, le bouton ... ailleurs.
@@ -642,6 +666,7 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools->add(UPropose, HmiGlyph::Search, "Proposer : chaque variable montr\xC3\xA9" "e avec une unit\xC3\xA9 ou un format par un objet des vues", "Proposer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(URemove, [this] { return !selectedDisplay().empty(); });
+    tools_->setLabelWhen(URemove, [this] { return several::label("Retirer", table_ ? several::chosen(*table_, order_).size() : 0); });   // 1.24.0
     auto table = std::make_unique<ui::TableView>(base + ".table");
     // 1.12.10 (lot F) : la plage et les seuils (vides : non regles ; Min et Max d'une variable liee : sa mise a l'echelle, en gris).
     table->setColumns({{"Variable", 280.f}, {"Unit\xC3\xA9", 80.f}, {"Format", 110.f}, {"Min", 90.f}, {"Max", 90.f}, {"Seuil bas", 80.f},
@@ -658,7 +683,25 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 if (hosts_.askAdd) hosts_.askAdd();
                 else say("Ajouter : la variable est demand\xC3\xA9" "e par l'application.", true);
                 break;
-            case URemove: if (!selectedDisplay().empty()) (void)removeDisplay(selectedDisplay()); break;
+            case URemove:
+                // 1.24.0 : plusieurs lignes choisies - retirees d'un coup, un seul Ctrl+Z (sans question, comme une seule).
+                if (const auto paths = several::chosen(*table_, order_); paths.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "ligne";
+                    b.nouns = "lignes";
+                    b.feminine = true;
+                    b.names = paths;
+                    b.remove = [this, paths](std::size_t i, std::string* why) { return removeDisplay(paths[i], why); };
+                    b.report = [this](const std::string& text, bool warning) {
+                        say(text + " : leurs objets reprennent leurs unit\xC3\xA9s et formats", warning);
+                    };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (!selectedDisplay().empty()) (void)removeDisplay(selectedDisplay());
+                break;
             case UPropose: (void)proposeFromViews(); break;
             default: break;
         }

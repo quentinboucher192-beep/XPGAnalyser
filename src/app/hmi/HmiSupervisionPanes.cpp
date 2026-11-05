@@ -78,7 +78,11 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools->add(AUp, HmiGlyph::Up, "Monter l'alarme dans la liste");
     tools->add(ADown, HmiGlyph::Down, "Descendre l'alarme dans la liste");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    for (int a : {ADup, ADel, AUp, ADown}) tools_->setEnabledWhen(a, [this] { return selectedAlarm() != kNoId; });
+    // 1.24.0 : plusieurs alarmes choisies - Supprimer les retire toutes (un Ctrl+Z) ; Dupliquer, Monter : une a la fois.
+    for (int a : {ADup, AUp, ADown})
+        tools_->setEnabledWhen(a, [this] { return selectedAlarm() != kNoId && table_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(ADel, [this] { return selectedAlarm() != kNoId; });
+    tools_->setLabelWhen(ADel, [this] { return several::label("Supprimer", table_ ? several::chosen(*table_, order_).size() : 0); });
 
     auto prio = std::make_unique<ui::DropDown>(base + ".priority");
     std::vector<ui::DropDown::Item> items{{"Toutes les priorit\xC3\xA9s", "", {}, true}};
@@ -188,11 +192,36 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         switch (a) {
             case ANew: (void)addAlarm(); break;
             case ADup: if (sel) (void)duplicateAlarm(sel); break;
-            case ADel:
+            case ADel: {
+                // 1.24.0 : plusieurs - une question si l'une est acquittee par une action (comme une seule), un Ctrl+Z.
+                const auto ids = several::chosen(*table_, order_);
+                if (ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "alarme";
+                    b.nouns = "alarmes";
+                    b.feminine = true;
+                    std::vector<Id> doomed;
+                    std::vector<std::string> cited;
+                    for (const auto id : ids)
+                        if (const auto* al = doc_->project.alarm(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(al->name);
+                            if (const auto n = actionUses(doc_->project, hmi::Operation::AckAlarm, al->name).size())
+                                cited.push_back(al->name + " (" + std::to_string(n) + " action" + (n > 1 ? "s)" : ")"));
+                        }
+                    b.ask = !cited.empty();
+                    if (b.ask) b.warning = "Encore acquitt\xC3\xA9" "es par des actions : " + several::names(cited, 3) + " - G\xC3\xA9n\xC3\xA9rer les signalera.";
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return deleteAlarm(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!sel) break;
                 if (hosts_.remove) hosts_.remove(sel);
                 else (void)deleteAlarm(sel);
                 break;
+            }
             case AUp: if (sel) (void)moveAlarm(sel, -1); break;
             case ADown: if (sel) (void)moveAlarm(sel, +1); break;
             default: break;
@@ -960,14 +989,16 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(RExport, HmiGlyph::Export, "Exporter les jeux dans un fichier CSV", "Exporter");
     tools->add(RCompare, HmiGlyph::Compare, "Comparer deux jeux", "Comparer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    for (int a : {RDup, RDel, FNew, SNew, RImport, RExport})
-        tools_->setEnabledWhen(a, [this] { return selectedRecipe() != kNoId; });
+    // 1.24.0 : plusieurs recettes (elements, jeux) choisies - Supprimer les retire toutes ; le reste vise UNE recette.
+    const auto oneRecipe = [this] { return selectedRecipe() != kNoId && recipes_->selectedModelRows().size() <= 1; };
+    for (int a : {RDup, FNew, SNew, RImport, RExport}) tools_->setEnabledWhen(a, oneRecipe);
+    tools_->setEnabledWhen(RDel, [this] { return selectedRecipe() != kNoId; });
     tools_->setEnabledWhen(FDel, [this] { return selectedField() >= 0; });
-    tools_->setEnabledWhen(SDup, [this] { return selectedRecord() != kNoId; });
+    tools_->setEnabledWhen(SDup, [this] { return selectedRecord() != kNoId && records_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(SDel, [this] { return selectedRecord() != kNoId; });
-    tools_->setEnabledWhen(RCompare, [this] {
+    tools_->setEnabledWhen(RCompare, [this, oneRecipe] {
         const auto* r = doc_->project.recipe(selectedRecipe());
-        return r && r->records.size() >= 2;
+        return r && r->records.size() >= 2 && oneRecipe();
     });
     // Lot API 8 : chercher une recette - la recherche de toute l'application.
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
@@ -981,7 +1012,7 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
         auto table = std::make_unique<ui::TableView>(base + ".recipes");
         table->setColumns({{"Recette", 186.f}, {"\xC3\x89l\xC3\xA9ments", 86.f, 40.f, true, true, true, ui::Align::End},
                            {"Jeux", 56.f, 40.f, true, true, true, ui::Align::End}, {"Description", 200.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs recettes a supprimer d'un coup
         recipes_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*recipes_, {RDel, RDup, RNew});   // 1.12.27 : les recettes
         split->addPane(std::move(panel), 0.24f, 200.f);
@@ -992,14 +1023,14 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
         auto table = std::make_unique<ui::TableView>(base + ".fields");
         table->setColumns({{"\xC3\x89l\xC3\xA9ment", 170.f}, {"Variable", 230.f}, {"Unit\xC3\xA9", 70.f}, {"Min", 70.f, 40.f, true, true, true, ui::Align::End},
                            {"Max", 70.f, 40.f, true, true, true, ui::Align::End}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs elements
         fields_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*fields_, {FDel, 0, FNew});   // 1.12.27 : les elements
         centre->addPane(std::move(panel), 0.38f, 120.f);
         auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
         {
             auto table2 = std::make_unique<ui::TableView>(base + ".records");
-            table2->setSelectionMode(ui::SelectionMode::Single);
+            table2->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs jeux
             records_ = table2.get();
         tools_->bindListKeys(*records_, {SDel, SDup, SNew});   // 1.12.27 : les jeux
             tabs->addTab(ui::TabControl::Tab{"Jeux de valeurs", ui::Icon::AnimationTable, false, false}, std::move(table2));
@@ -1024,16 +1055,88 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
         switch (a) {
             case RNew: (void)addRecipe(); break;
             case RDup: if (r) (void)duplicateRecipe(r); break;
-            case RDel:
+            case RDel: {
+                // 1.24.0 : plusieurs recettes - une question si l'une a des jeux ou est chargee par une action (comme une
+                // seule), puis un seul Ctrl+Z.
+                const auto ids = several::chosen(*recipes_, recipeOrder_);
+                if (ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "recette";
+                    b.nouns = "recettes";
+                    b.feminine = true;
+                    std::vector<Id> doomed;
+                    std::size_t sets = 0;
+                    std::vector<std::string> loaded;
+                    for (const auto id : ids)
+                        if (const auto* rec = doc_->project.recipe(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(rec->name);
+                            sets += rec->records.size();
+                            if (const auto n = actionUses(doc_->project, hmi::Operation::LoadRecipe, rec->name).size())
+                                loaded.push_back(rec->name + " (" + std::to_string(n) + " action" + (n > 1 ? "s)" : ")"));
+                        }
+                    b.ask = sets > 0 || !loaded.empty();
+                    if (sets) b.warning = "Leurs " + std::to_string(sets) + " jeu(x) de valeurs partent avec elles.";
+                    if (!loaded.empty()) b.warning += (b.warning.empty() ? "" : " ") + std::string("Encore charg\xC3\xA9" "es par des actions : ") + several::names(loaded, 3) + ".";
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return deleteRecipe(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!r) break;
                 if (hosts_.remove) hosts_.remove(r);
                 else (void)deleteRecipe(r);
                 break;
+            }
             case FNew: if (r) (void)addField(r, hmi::RecipeField{}); break;
-            case FDel: if (r && selectedField() >= 0) (void)removeField(r, selectedField()); break;
+            case FDel: {
+                // 1.24.0 : plusieurs elements (et leur valeur dans chaque jeu) - du dernier au premier, un seul Ctrl+Z.
+                const auto* rec = doc_->project.recipe(r);
+                if (!rec) break;
+                auto rows = fields_->selectedModelRows();
+                std::sort(rows.begin(), rows.end(), std::greater<>());
+                rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+                rows.erase(std::remove_if(rows.begin(), rows.end(), [rec](ui::RowIndex i) { return i >= rec->fields.size(); }), rows.end());
+                if (rows.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "\xC3\xA9l\xC3\xA9ment";
+                    b.nouns = "\xC3\xA9l\xC3\xA9ments";
+                    for (const auto i : rows) b.names.push_back(rec->fields[i].name);
+                    b.remove = [this, r, rows](std::size_t k, std::string*) { return removeField(r, static_cast<int>(rows[k])); };
+                    b.report = [this](const std::string& text, bool warning) { say(text + " (et leur valeur dans chaque jeu)", warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (selectedField() >= 0) (void)removeField(r, selectedField());
+                break;
+            }
             case SNew: if (r) (void)addRecord(r); break;
             case SDup: if (r && selectedRecord()) (void)duplicateRecord(r, selectedRecord()); break;
-            case SDel: if (r && selectedRecord()) (void)deleteRecord(r, selectedRecord()); break;
+            case SDel: {
+                const auto ids = several::chosen(*records_, recordOrder_);   // 1.24.0 : plusieurs jeux, un seul Ctrl+Z
+                const auto* rec = doc_->project.recipe(r);
+                if (rec && ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "jeu";
+                    b.nouns = "jeux";
+                    std::vector<Id> doomed;
+                    for (const auto id : ids)
+                        if (const auto* set = rec->record(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(set->name);
+                        }
+                    b.remove = [this, r, doomed](std::size_t i, std::string*) { return deleteRecord(r, doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (r && selectedRecord()) (void)deleteRecord(r, selectedRecord());
+                break;
+            }
             case RImport: if (r && hosts_.importCsv) hosts_.importCsv(r); break;
             case RExport: if (r && hosts_.exportCsv) hosts_.exportCsv(r); break;
             case RCompare: {

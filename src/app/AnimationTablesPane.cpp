@@ -368,7 +368,7 @@ AnimationTablesPane::AnimationTablesPane(std::string id) : ui::Widget(std::move(
         count.align = ui::Align::End;
         tables_->setColumns({name, count});
     }
-    tables_->setSelectionMode(ui::SelectionMode::Single);
+    tables_->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs tables a supprimer d'un coup
     links_ += tables_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
         if (syncing_ || rows.empty()) return;
         const auto p = project();
@@ -480,9 +480,17 @@ void AnimationTablesPane::attach(ApiFrame& frame) {
     t.add(AUnforce, HmiGlyph::Unlock, "Rel\xC3\xA2" "cher les lignes choisies", "Rel\xC3\xA2" "cher");
     t.add(AUnforceAll, HmiGlyph::Refresh, "Tout d\xC3\xA9" "forcer, dans toute la simulation", "Tout d\xC3\xA9" "forcer");
     const auto haveTable = [this] { return project() != nullptr && current() != nullptr; };
-    t.setEnabledWhen(ARename, haveTable);
-    t.setEnabledWhen(ADuplicate, haveTable);
+    // 1.24.0 : plusieurs tables choisies - Supprimer les retire toutes (un Ctrl+Z) ; Renommer, Dupliquer : une a la fois.
+    const auto oneTable = [this, haveTable] { return haveTable() && tables_->selectedModelRows().size() <= 1; };
+    t.setEnabledWhen(ARename, oneTable);
+    t.setEnabledWhen(ADuplicate, oneTable);
     t.setEnabledWhen(ADelete, haveTable);
+    t.setLabelWhen(ADelete, [this] {
+        const auto p = project();
+        std::size_t n = 0;
+        for (const auto r : tables_->selectedModelRows()) n += p && r < p->animationTables.size() ? 1u : 0u;
+        return several::label("Supprimer", n);
+    });
     t.setEnabledWhen(AAddApi, haveTable);
     t.setEnabledWhen(AAddHmi, [this, haveTable] { return haveTable() && hosts_.hmi && hosts_.hmi() != nullptr; });
     t.setVisibleWhen(AAddHmi, [] { return core::hasIhm(); });   // 1.12.0 : API Studio n'a pas d'IHM
@@ -1091,9 +1099,33 @@ void AnimationTablesPane::runAction(int action) {
                                                                              std::move(lines), table_ + 1, true));
             return;
         }
-        case ADelete:
+        case ADelete: {
+            // 1.24.0 : plusieurs tables choisies - de la derniere a la premiere, un seul Ctrl+Z (sans question, comme une seule).
+            auto rows = tables_->selectedModelRows();
+            const std::size_t n = doc ? doc->animationTables.size() : 0;
+            rows.erase(std::remove_if(rows.begin(), rows.end(), [n](RowIndex r) { return r >= n; }), rows.end());
+            std::sort(rows.begin(), rows.end(), std::greater<>());
+            rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+            if (doc && hosts_.apply && rows.size() > 1) {
+                several::Batch b;
+                b.noun = "table";
+                b.nouns = "tables";
+                b.feminine = true;
+                for (const auto r : rows) b.names.push_back(std::string(doc->strings.text(doc->animationTables[r].name)));
+                b.remove = [this, rows](std::size_t k, std::string*) {
+                    auto target = project();
+                    if (!target || rows[k] >= target->animationTables.size()) return false;
+                    hosts_.apply(std::make_unique<project::RemoveAnimationTableCommand>(target, static_cast<std::size_t>(rows[k])));
+                    return true;
+                };
+                b.report = [this](const std::string& text, bool) { if (hosts_.status) hosts_.status(text); };
+                b.alive = tables_->selectionChanged;
+                several::run(std::move(b));
+                return;
+            }
             if (doc && current()) hosts_.apply(std::make_unique<project::RemoveAnimationTableCommand>(doc, table_));
             return;
+        }
         case AAddApi:
         case AAddHmi:
             if (current() && hosts_.pick) hosts_.pick(action == AAddHmi);

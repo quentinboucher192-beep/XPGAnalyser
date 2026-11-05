@@ -26,6 +26,7 @@
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
+#include <algorithm>   // 1.24.0 : several::chosen
 #include <functional>
 #include <optional>
 #include <map>      // ---- Lot API 8 : les expressions impossibles ----
@@ -80,6 +81,10 @@ public:
     void setVisibleWhen(int action, std::function<bool()> predicate);
     // Lot 8 : changer l'infobulle et le libelle d'un bouton (Nouvelle vue / Nouvelle popup).
     void setText(int action, std::string tip, std::string label);
+    // 1.24.0 (supprimer plusieurs d'un coup) : un libelle qui suit la selection (<< Supprimer les 5 >>), relu a chaque
+    // image ; vide : le libelle fixe. labelOf : le libelle montre (les essais, les scripts).
+    void setLabelWhen(int action, std::function<std::string()> label);
+    [[nodiscard]] std::string labelOf(int action) const;
     [[nodiscard]] ui::SizeHint sizeHint() const override;
     const core::SignalPtr<int> triggered = core::Signal<int>::create();
     // Pour les tests : le rectangle ecran d'un bouton.
@@ -119,6 +124,12 @@ private:
         std::string tip, label;
         bool separator{false};
         std::function<bool()> enabled, checked, visible;
+        std::function<std::string()> dynamicLabel;   // 1.24.0 : << Supprimer les 5 >>
+        [[nodiscard]] std::string shown() const {
+            if (dynamicLabel)
+                if (auto l = dynamicLabel(); !l.empty()) return l;
+            return label;
+        }
         mutable gfx::Rect rect{};
         mutable bool compact{false};      // lot macros 1 : le libelle tombe (barre trop etroite)
     };
@@ -133,6 +144,58 @@ private:
     bool moreHot_{false}, morePressed_{false};
     ui::PopupMenu* more_{nullptr};
 };
+
+// ---------------------------------------------------- plusieurs d'un coup ---
+//  1.24.0 : LE CLIENT (05/11) - << partout pouvoir supprimer plusieurs d'un coup >>. Dans les volets a liste, Ctrl+clic
+//  et Maj+clic choisissent plusieurs lignes ; Supprimer (le bouton, Suppr, le clic droit) les retire toutes en UNE
+//  commande (un seul Ctrl+Z les rend) ; une seule question si la suppression d'une ligne en pose une. Ce qui ne vaut
+//  que pour une ligne (Renommer, Dupliquer, Modifier...) est grise, avec la raison << une a la fois >>. Une ligne
+//  refusee seule (encore employee...) l'est aussi parmi d'autres ; le compte rendu dit lesquelles et pourquoi.
+namespace several {
+inline const std::string kOneAtATime = "une \xC3\xA0 la fois";
+// "Supprimer" (une ligne ou aucune) ; "Supprimer les 5".
+[[nodiscard]] std::string label(std::string_view verb, std::size_t count);
+// "Pompe1, Pompe2, Pompe3 +2" : les premiers noms, puis combien d'autres.
+[[nodiscard]] std::string names(const std::vector<std::string>& all, std::size_t shown = 4);
+// Les refus : "Pompe1 (employ\xC3\xA9 par Vue_A), Pompe2 (...)" - les premiers, puis combien d'autres.
+[[nodiscard]] std::string refusals(const std::vector<std::pair<std::string, std::string>>& refused, std::size_t shown = 3);
+// La question avant de supprimer (titre, texte, bouton ; `yes` si l'on accepte). L'hote (l'ecran) ouvre la fenetre ;
+// sans hote (un essai qui n'en pose pas), `yes` tout de suite.
+using Confirm = std::function<void(const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes)>;
+void setConfirmHost(Confirm host);
+void confirm(const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes);
+// Les lignes choisies d'une table, en ids (`order` : la ligne du modele -> son id), dans l'ordre de la liste, sans double.
+template <class T>
+[[nodiscard]] std::vector<T> chosen(const ui::TableView& table, const std::vector<T>& order) {
+    auto rows = table.selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    std::vector<T> out;
+    for (const auto r : rows)
+        if (r < order.size() && std::find(out.begin(), out.end(), order[r]) == out.end()) out.push_back(order[r]);
+    return out;
+}
+// LE GESTE COMMUN : supprimer plusieurs lignes d'un coup. Si `ask` (la suppression d'une ligne pose une question) : UNE
+// question - << Supprimer les 5 alarmes ? >>, les noms (les premiers, puis +N), `warning` (ce qui sert encore...). Puis
+// UN groupe (core::CommandGroupScope : un seul Ctrl+Z) qui appelle `remove(i, why)` pour chaque ligne, dans l'ordre
+// (faux : refusee comme seule, `why` dit pourquoi) ; `after` ; enfin `report` : << 3 alarmes supprimees : A, B, C ;
+// 1 refusee : D (pourquoi) - un seul Ctrl+Z les rend >>. `alive` : un signal du volet - parti avant la reponse, rien.
+struct Batch {
+    std::string verb{"Supprimer"};               // ou "Retirer"
+    std::string noun, nouns;                     // "alarme", "alarmes"
+    bool        feminine{false};
+    bool        ask{false};
+    std::string warning;
+    std::vector<std::string> names;
+    std::function<bool(std::size_t, std::string*)> remove;
+    std::function<void()>                          after;
+    std::function<void(const std::string&, bool)>  report;
+    std::weak_ptr<const void>                      alive;
+};
+void run(Batch batch);
+// Le compte rendu seul (les volets qui suppriment eux-memes) : << 3 alarmes supprimees : A, B, C ; 1 refusee : D (...) >>.
+[[nodiscard]] std::string summary(const Batch& b, const std::vector<std::string>& gone,
+                                  const std::vector<std::pair<std::string, std::string>>& refused);
+} // namespace several
 
 // ------------------------------------------------------------ explorateur ---
 class HmiObjectList final : public ui::Widget {
