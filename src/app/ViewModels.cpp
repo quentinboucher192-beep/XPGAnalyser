@@ -901,7 +901,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
         case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements ; 1.22.9 : - Unites de mesure (un onglet d Unites et formats)
-        case NodeKind::HmiResources:        return hmi_ ? 2 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents
+        case NodeKind::HmiResources:        return hmi_ ? 3 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents ; 1.24.0 : Sons
         case NodeKind::HmiStyles:           return hmi_ ? 2 : 0;   // 1.23.1 : Styles, Couleurs semantiques
         case NodeKind::HmiStyleGroup:
             if (!hmi_) return 0;
@@ -1396,7 +1396,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
         case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements ; 1.20.0 : les incidents
-            if (!hmi_ || k > 1) return ui::kInvalidNode;
+            if (!hmi_ || k > 2) return ui::kInvalidNode;
+            if (k == 2) return pack(NodeKind::HmiSoundLibrary, 0);   // 1.24.0 : la bibliotheque de sons
             return pack(k == 0 ? NodeKind::HmiRecordings : NodeKind::HmiIncidents, 0);
         case NodeKind::HmiStyles:      // 1.23.1 : Styles, Couleurs semantiques
             return hmi_ && k < 2 ? pack(NodeKind::HmiStyleGroup, static_cast<Index>(k)) : ui::kInvalidNode;
@@ -2015,7 +2016,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiMeasureUnits                                                          // 1.13.0 (lot J6b)
                 || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                           // 1.14.0 (M4)
                 || k == NK::HmiIncidents                                                             // 1.20.0
-                || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem;      // 1.23.1
+                || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem       // 1.23.1
+                || k == NK::HmiSoundLibrary;                                                         // 1.24.0
         }
     } // namespace
 
@@ -2695,6 +2697,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiRecordings:    return "Enregistrements  [" + std::to_string(recordingsCount()) + "]";   // 1.14.0 (M4)
         case NodeKind::HmiRecordingSettings: return "Enregistrements";
         case NodeKind::HmiIncidents:     return "Incidents  [" + std::to_string(incidentsCount()) + "]";   // 1.20.0 : en attente
+        case NodeKind::HmiSoundLibrary:  return "Biblioth\xC3\xA8que de sons";                                      // 1.24.0
         case NodeKind::HmiMeasureUnits:  return "Unit\xC3\xA9s de mesure  [" + std::to_string(hmi_ ? hmi::units::Catalog(hmi_->project.config).units().size() : 0u) + "]";   // 1.13.0 (lot J6b)
         case NodeKind::HmiComm:                                                                                      // lot 14 ; lot 15 : les equipements
             return "\xC3\x89quipements  [" + std::to_string(hmi_ ? hmi_->project.equipments.size() + (hmi_->project.comm.modbus() ? 1u : 0u) : 0u) + "]";
@@ -3851,6 +3854,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiRecordings:                                              // 1.14.0 (M4) : rouge, un enregistrement qui tourne
             s.icon = ui::Icon::Play;
             break;
+        case NodeKind::HmiSoundLibrary:  s.icon = ui::Icon::Play; s.iconTone = ui::Tone::Accent; break;   // 1.24.0 : les sons
         case NodeKind::HmiIncidents:                                               // 1.20.0 : ambre, des incidents en attente
             s.icon = ui::Icon::Analyze;
             if (incidentsCount() > 0) s.iconTone = ui::Tone::Warning;

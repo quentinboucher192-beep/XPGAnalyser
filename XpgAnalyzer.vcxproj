@@ -163,6 +163,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiControlsPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiSemanticPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSoundLibraryPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiEditor.cpp" />
     <ClCompile Include="src\app\hmi\HmiEquipmentHost.cpp" />
@@ -783,6 +784,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiContentPanel.hpp" />
     <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiSemanticPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSoundLibraryPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiEditor.hpp" />
     <ClInclude Include="src\app\hmi\HmiEquipmentHost.hpp" />

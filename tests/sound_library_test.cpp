@@ -151,6 +151,19 @@ void import() {
     check(!c.reused && c.name != "alarme-haute.wav" && p.assets.resources.size() == 2, "un nom pris par un autre contenu : un autre nom");
 }
 
+void lists() {
+    std::printf("[6] les listes de sons\n");
+    hmi::Project p;
+    auto c = sl::choices(p);
+    check(c.size() == 22 && c.front() == "Biblioth\xC3\xA8que \xE2\x80\xBA Alarmes \xE2\x80\xBA Alarme critique",
+          "un projet sans son : les 22 natifs, << Bibliotheque > Alarmes > Alarme critique >>");
+    check(sl::fromChoice(c.front()) == sl::findBuiltIn("alarme-critique") && sl::fromChoice("alarme-critique.wav") == nullptr,
+          "le natif d'un choix ; un nom de ressource : aucun");
+    (void)sl::importSound(p, *sl::findBuiltIn("alarme-critique"));
+    c = sl::choices(p);
+    check(c.size() == 22 && c.front() == "alarme-critique.wav", "importe : la ressource d'abord, plus son choix << Bibliotheque >>");
+}
+
 void texts() {
     std::printf("[5] les durees\n");
     check(sl::durationText(1.52) == "1,52 s" && sl::durationText(1.4) == "1,4 s" && sl::durationText(0.08) == "0,08 s"
@@ -167,6 +180,7 @@ int main() {
     mine();
     import();
     texts();
+    lists();
     std::printf("sound_library_test : %d verifications, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

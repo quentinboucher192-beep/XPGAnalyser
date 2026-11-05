@@ -544,6 +544,9 @@
     <ClCompile Include="src\app\hmi\HmiSemanticPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSoundLibraryPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -2345,6 +2348,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiSemanticPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSoundLibraryPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp">

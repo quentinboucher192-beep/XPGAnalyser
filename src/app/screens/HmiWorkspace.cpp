@@ -51,6 +51,8 @@
 #include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiIncidentsPane.hpp"              // 1.20.0 : Ressources > Incidents
+#include "../hmi/HmiSoundLibraryPane.hpp"           // 1.24.0 : Ressources > Bibliotheque de sons
+#include "../FileFinder.hpp"                         // 1.24.0 : revealInExplorer (Mes sons dans l explorateur)
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
 #include "../hmi/HmiAssist.hpp"
@@ -426,7 +428,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                      // 1.13.0 (lot J8) : les bibliotheques
         || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                     // 1.14.0 (M4) : les enregistrements
         || k == NK::HmiIncidents                                                       // 1.20.0 : les incidents
-        || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem;   // 1.23.1 : Styles deplie
+        || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem   // 1.23.1 : Styles deplie
+        || k == NK::HmiSoundLibrary;                                                   // 1.24.0 : la bibliotheque de sons
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -727,6 +730,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiRecordings:    openHmiPane("enregistrements"); break;          // 1.14.0 (M4)
         case NK::HmiRecordingSettings: openHmiPane("config-enregistrements"); break;
         case NK::HmiIncidents:     openHmiPane("incidents"); break;                 // 1.20.0
+        case NK::HmiSoundLibrary:  openHmiPane("sons"); break;                      // 1.24.0
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
         case NK::HmiStation:       openHmiPane("poste"); break;
         case NK::HmiNotify:        openHmiPane("notifications"); break;
@@ -2090,6 +2094,19 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Enregistrements";
+        icon = Icon::Play;
+    } else if (key == "sons") {
+        // 1.24.0 : Ressources > Bibliotheque de sons - les sons natifs et Mes sons ; ecouter, importer dans le projet.
+        auto pane = std::make_unique<HmiSoundLibraryPane>("hmi.sounds", doc, apply);
+        HmiSoundLibraryPane::Hosts hosts;
+        hosts.openResource = [this](hmi::Id r) {
+            openHmiPane("ressources");
+            if (auto* res = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"))) res->selectResource(r);
+        };
+        hosts.reveal = [](const std::string& path) { return finder::revealInExplorer(path); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Biblioth\xC3\xA8que de sons";
         icon = Icon::Play;
     } else if (key == "incidents") {
         // 1.20.0 : Ressources > Incidents - les dossiers d'incident de la surveillance (IncidentsWorkspace.cpp).
@@ -4305,6 +4322,7 @@ std::string placeOfNode(NK kind) {
         case NK::HmiRecordings:    return "enregistrements";          // 1.14.0 (M4)
         case NK::HmiRecordingSettings: return "config-enregistrements";
         case NK::HmiIncidents:     return "incidents";                // 1.20.0
+        case NK::HmiSoundLibrary:  return "sons";                     // 1.24.0
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

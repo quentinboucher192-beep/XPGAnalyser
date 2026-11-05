@@ -520,6 +520,25 @@ Imported importSound(Project& p, const Sound& s) {
     return out;
 }
 
+std::string choiceLabel(const Sound& s) {
+    return "Biblioth\xC3\xA8que \xE2\x80\xBA " + s.category + " \xE2\x80\xBA " + s.label;
+}
+
+std::vector<std::string> choices(const Project& p) {
+    std::vector<std::string> out;
+    for (const auto& r : p.assets.resources)
+        if (r.kind() == MediaKind::Sound) out.push_back(r.name);
+    for (const auto& s : builtIn())
+        if (!importedAs(p, s)) out.push_back(choiceLabel(s));
+    return out;
+}
+
+const Sound* fromChoice(std::string_view choice) {
+    for (const auto& s : builtIn())
+        if (choiceLabel(s) == choice) return &s;
+    return nullptr;
+}
+
 std::string durationText(double seconds) {
     char b[32];
     if (seconds < 10) std::snprintf(b, sizeof b, "%.2f s", seconds);

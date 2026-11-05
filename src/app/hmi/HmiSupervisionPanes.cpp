@@ -1,4 +1,5 @@
 #include "HmiSupervisionPanes.hpp"
+#include "../../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : les sons natifs proposes pour les alarmes
 #include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiAssist.hpp"
 
@@ -313,9 +314,9 @@ namespace {
 PG::Category alarmSettingsCategory(const hmi::Project& p, const std::function<std::function<bool(std::string_view)>(const char*)>& commit) {
     PG::Category c;
     c.name = "Sons et mise de c\xC3\xB4t\xC3\xA9 (toutes les alarmes)";
+    // 1.24.0 : les sons du projet, puis ceux de la bibliotheque (choisir l'un d'eux l'importe).
     std::vector<std::string> sounds{""};
-    for (const auto& r : p.assets.resources)
-        if (r.kind() == hmi::MediaKind::Sound) sounds.push_back(r.name);
+    for (auto& choice : hmi::soundlib::choices(p)) sounds.push_back(std::move(choice));
     static const char* kKeys[] = {"son1", "son2", "son3", "son4"};
     for (int k = 0; k < hmi::kAlarmPriorities; ++k) {
         const std::string current = p.alarmSettings.sounds[static_cast<std::size_t>(k)];
@@ -323,7 +324,8 @@ PG::Category alarmSettingsCategory(const hmi::Project& p, const std::function<st
         if (std::find(choices.begin(), choices.end(), current) == choices.end()) choices.push_back(current);
         c.properties.push_back(prop("Son : priorit\xC3\xA9 " + std::to_string(k + 1) + " (" + std::string(hmi::alarmPriorityLabel(k + 1)) + ")", current,
                                     PG::ValueType::Enum, commit(kKeys[k]),
-                                    "Jou\xC3\xA9 quand une alarme de cette priorit\xC3\xA9 appara\xC3\xAEt (un son des ressources, WAV). "
+                                    "Jou\xC3\xA9 quand une alarme de cette priorit\xC3\xA9 appara\xC3\xAEt (un son des ressources, WAV ; "
+                                    "\xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA \xE2\x80\xA6 \xC2\xBB : un son natif, import\xC3\xA9 en le choisissant). "
                                     "Vide : aucun. Au volume des Param\xC3\xA8tres syst\xC3\xA8me ; \xC2\xAB Faire taire \xC2\xBB le coupe.",
                                     choices));
     }
@@ -647,14 +649,21 @@ bool HmiAlarmsPane::setSetting(const std::string& field, const std::string& raw,
     const std::string value = trimmed(raw);
     hmi::AlarmSettings next = doc_->project.alarmSettings;
     std::string label;
+    const hmi::soundlib::Sound* native = nullptr;   // 1.24.0 : un son de la bibliotheque, importe avec le reglage
+    std::size_t nativeSlot = 0;
     if (field.size() == 4 && field.rfind("son", 0) == 0 && field[3] >= '1' && field[3] <= '4') {
         const auto k = static_cast<std::size_t>(field[3] - '1');
-        if (!value.empty()) {
+        if ((native = hmi::soundlib::fromChoice(value)) != nullptr) {
+            nativeSlot = k;
+            next.sounds[k] = hmi::soundlib::resourceName(*native);   // provisoire : la ressource dit son vrai nom
+        } else if (!value.empty()) {
             const auto* r = doc_->project.resourceByName(value);
             if (!r) return fail("son introuvable dans les ressources : " + value);
             if (r->kind() != hmi::MediaKind::Sound) return fail(value + " n'est pas un son");
+            next.sounds[k] = value;
+        } else {
+            next.sounds[k] = value;
         }
-        next.sounds[k] = value;
         label = "son de la priorit\xC3\xA9 " + std::to_string(k + 1);
     } else if (field == "repetition") {
         double s = 0;
@@ -669,11 +678,19 @@ bool HmiAlarmsPane::setSetting(const std::string& field, const std::string& raw,
     } else {
         return fail("r\xC3\xA9glage inconnu : " + field);
     }
-    if (next == doc_->project.alarmSettings) return true;
-    auto cmd = hmi::changeProject(doc_, "Alarmes : " + label, [&](hmi::Project& pr) { pr.alarmSettings = next; });
+    if (next == doc_->project.alarmSettings && !native) return true;
+    std::string imported;
+    auto cmd = hmi::changeProject(doc_, "Alarmes : " + label, [&](hmi::Project& pr) {
+        if (native) {   // 1.24.0 : importer le son natif et le regler, une seule commande
+            const auto made = hmi::soundlib::importSound(pr, *native);
+            next.sounds[nativeSlot] = made.name;
+            imported = made.name;
+        }
+        pr.alarmSettings = next;
+    });
     if (cmd) apply_(std::move(cmd));
     refresh();
-    say("Alarmes : " + label + " r\xC3\xA9gl\xC3\xA9" "e");
+    say("Alarmes : " + label + " r\xC3\xA9gl\xC3\xA9" "e" + (imported.empty() ? std::string{} : " (le son natif import\xC3\xA9 : " + imported + ")"));
     return true;
 }
 

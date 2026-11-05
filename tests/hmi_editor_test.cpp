@@ -74,6 +74,7 @@
 #include "../src/hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques
 #include "../src/core/SemanticColors.hpp"
 #include "../src/app/hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
+#include "../src/app/hmi/HmiSoundLibraryPane.hpp"   // 1.24.0 : la bibliotheque de sons
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
@@ -38671,6 +38672,90 @@ void arbreStyles1231() {
     }
 }
 
+// 1.24.0 : IHM > RESSOURCES > BIBLIOTHEQUE DE SONS - les dossiers (Mes sons, puis les natifs), la recherche, importer dans
+// le projet (puis Ctrl+Z), Mes sons (un fichier, lache ou choisi ; retirer), le clic droit.
+void bibliothequeSons1240() {
+    std::printf("== 1.24.0 : la bibliotheque de sons ==\n");
+    namespace sl = hmi::soundlib;
+    using P = app::HmiSoundLibraryPane;
+    const auto dir = std::filesystem::temp_directory_path() / ("xpg_mes_sons_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    sl::setUserFolder(dir.string());
+    Bench b;
+    P pane("snd1240", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    const auto cats = pane.shownCategories();
+    check(cats.size() == 5 && cats[0].first == "Mes sons" && cats[0].second == 0 && cats[1].first == "Alarmes" && cats[1].second == 7,
+          "les dossiers : Mes sons (vide) en t\xC3\xAAte, puis Alarmes (7)...");
+    check(pane.shownIds().size() == 22 && pane.shownIds().front() == "alarme-critique", "les 22 sons natifs, la critique d'abord");
+    check(pane.selectedId() == "alarme-critique", "le premier son est choisi");
+    check(pane.select("alarme-haute") && pane.selectedSound() && pane.selectedSound()->label == "Alarme haute priorit\xC3\xA9", "choisir l'alarme haute");
+    // Le clic droit d'un son natif.
+    {
+        const auto items = pane.contextItems();
+        const auto has = [&](int id, bool enabled) {
+            return std::any_of(items.begin(), items.end(), [&](const ui::PopupMenu::Item& it) { return it.id == id && it.enabled == enabled; });
+        };
+        check(!items.empty() && items.front().heading && items.front().shortcut == "son natif", "le menu : son titre (son natif)");
+        check(has(P::ActPlay, true) && has(P::ActImport, true) && has(P::ActRemove, false) && has(P::ActReveal, false) && has(P::ActGoTo, false),
+              "le menu : \xC3\x89" "couter, Importer ; Retirer, l'explorateur et Aller \xC3\xA0 gris\xC3\xA9s (un son natif, pas encore import\xC3\xA9)");
+    }
+    // Importer dans le projet : une ressource ; deux fois : la meme ; Ctrl+Z la retire.
+    const hmi::Id rid = pane.importSelected();
+    const hmi::Resource* r = b.doc->project.resource(rid);
+    check(r && r->name == "alarme-haute.wav" && r->kind() == hmi::MediaKind::Sound, "Importer : la ressource alarme-haute.wav");
+    check(pane.message().find("alarme-haute.wav") != std::string::npos, "le message dit la ressource");
+    check(pane.importSelected() == rid && b.doc->project.assets.resources.size() == 1 && pane.message().find("d\xC3\xA9j\xC3\xA0") != std::string::npos,
+          "deux fois : la m\xC3\xAAme ressource");
+    {
+        const auto items = pane.contextItems();
+        check(std::any_of(items.begin(), items.end(), [](const ui::PopupMenu::Item& it) { return it.id == P::ActImport && !it.enabled; }),
+              "import\xC3\xA9 : Importer gris\xC3\xA9 (d\xC3\xA9j\xC3\xA0 dans le projet)");
+    }
+    (void)b.stack.undo();
+    check(b.doc->project.assets.resources.empty(), "Ctrl+Z : la ressource part");
+    // Chercher.
+    pane.setSearch("sirene");
+    check(pane.shownIds() == std::vector<std::string>{"alarme-critique", "sirene-montante"} && pane.shownCategories().size() == 1,
+          "chercher sirene : les deux sir\xC3\xA8nes, le seul dossier Alarmes");
+    pane.setSearch("");
+    pane.setCategoryOpen("Alarmes", false);
+    const auto ids = pane.shownIds();
+    check(std::none_of(ids.begin(), ids.end(), [](const std::string& id) { return id.rfind("alarme", 0) == 0; }) && pane.shownCategories().size() == 5,
+          "replier Alarmes : ses sons se cachent, le dossier reste");
+    pane.setCategoryOpen("Alarmes", true);
+    // Mes sons : un fichier lache sur le volet ; le retirer.
+    const auto file = std::filesystem::temp_directory_path() / ("xpg_son_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".wav");
+    {
+        std::ofstream out(file, std::ios::binary);
+        const auto& d = *sl::findBuiltIn("carillon")->data;
+        out.write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size()));
+    }
+    (void)pane.dispatch(ui::FileDropped{file.string(), {100, 200}});
+    check(pane.shownCategories().front().second == 1 && pane.selectedSound() && pane.selectedSound()->mine(),
+          "un fichier l\xC3\xA2" "ch\xC3\xA9 : il rejoint Mes sons, choisi");
+    check(pane.tools().isEnabled(P::ActRemove), "un de tes sons : Retirer actif");
+    check(pane.removeSelected() && pane.shownCategories().front().second == 0, "Retirer de Mes sons");
+    std::string why;
+    (void)pane.select("clic");
+    check(!pane.removeSelected(&why) && why.find("natif") != std::string::npos, "un son natif ne se retire pas");
+    // Le son d'une priorite d'alarme : un son natif se choisit dans la liste, il est importe avec le reglage (un Ctrl+Z).
+    {
+        app::HmiAlarmsPane alarms("al1240", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        const std::string choice = sl::choiceLabel(*sl::findBuiltIn("alarme-critique"));
+        check(alarms.setSetting("son1", choice) && b.doc->project.alarmSettings.sounds[0] == "alarme-critique.wav"
+                  && b.doc->project.resourceByName("alarme-critique.wav") != nullptr,
+              "Alarmes : choisir \xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA Alarmes \xE2\x80\xBA Alarme critique \xC2\xBB l'importe et le r\xC3\xA8gle");
+        (void)b.stack.undo();
+        check(b.doc->project.alarmSettings.sounds[0].empty() && b.doc->project.resourceByName("alarme-critique.wav") == nullptr,
+              "Ctrl+Z : le r\xC3\xA9glage et la ressource partent ensemble");
+    }
+    std::filesystem::remove(file, ec);
+    std::filesystem::remove_all(dir, ec);
+    sl::setUserFolder("");
+}
+
 // 1.23.1 : LA PALETTE D'UNE CASE COULEUR PROPOSE LES COULEURS SEMANTIQUES (une bande sous le choix) ; un clic applique
 // << @Nom >>, que le dessin lit dans sa couleur.
 void paletteSemantique1231() {
@@ -43440,10 +43525,12 @@ void enregistrements1140() {
             if (app::ProjectTreeModel::kindOf(c) == NK::HmiConfig) conf = c;
         }
         // 1.20.0 : Ressources a deux enfants - Enregistrements, puis Incidents (les dossiers d'incident en attente).
-        check(res != ui::kInvalidNode && tree.childCount(res) == 2 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
-                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 1)) == NK::HmiIncidents,
-              "Ressources \xE2\x80\xBA Enregistrements et Incidents dans l'arbre");
-        if (res != ui::kInvalidNode && tree.childCount(res) == 2) {
+        // 1.24.0 : et la Bibliotheque de sons, troisieme.
+        check(res != ui::kInvalidNode && tree.childCount(res) == 3 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 1)) == NK::HmiIncidents
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 2)) == NK::HmiSoundLibrary,
+              "Ressources \xE2\x80\xBA Enregistrements, Incidents et Biblioth\xC3\xA8que de sons dans l'arbre");
+        if (res != ui::kInvalidNode && tree.childCount(res) == 3) {
             same_text(tree.text(tree.childAt(res, 0)) + "  [" + tree.counterOf(tree.childAt(res, 0)) + "]", "Enregistrements  [1]", "... avec son compte");
             same_text(tree.text(tree.childAt(res, 1)) + "  [" + tree.counterOf(tree.childAt(res, 1)) + "]", "Incidents  [0]",
                       "1.20.0 : ... et Incidents, ceux en attente (aucun)");
@@ -45801,6 +45888,7 @@ int main(int argc, char** argv) {
         paletteSemantique1231();
         couleursSemantiques1231();
         menusStyles1231();
+        bibliothequeSons1240();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -46319,6 +46407,7 @@ int main(int argc, char** argv) {
     paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
     couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
+    bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

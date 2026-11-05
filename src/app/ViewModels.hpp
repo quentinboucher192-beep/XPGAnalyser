@@ -375,6 +375,9 @@ namespace app {
             //   ceux du projet, puis les fournis) ; HmiSemanticItem une couleur (index = rang dans
             //   hmi::semantic::all). A LA FIN, toujours.
             HmiStyleGroup, HmiStyleItem, HmiSemanticItem,
+            // 1.24.0 : Ressources > Bibliotheque de sons (les sons natifs et Mes sons), le troisieme enfant de Ressources.
+            // A LA FIN, toujours.
+            HmiSoundLibrary,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).

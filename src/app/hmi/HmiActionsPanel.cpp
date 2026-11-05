@@ -1,4 +1,6 @@
 #include "HmiActionsPanel.hpp"
+#include "../../core/Command.hpp"          // 1.24.0 : CommandGroupScope (importer et regler en un Ctrl+Z)
+#include "../../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : les sons natifs proposes pour Jouer un son
 #include "HmiValueKind.hpp"   // 1.12.19 : le carre et la raison sous chaque case (valuekind::decorateCells)
 #include <optional>
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
@@ -1187,13 +1189,25 @@ void HmiActionsPanel::rebuildGrid() {
                                      "Un fichier externe du projet (SQLite, Excel, CSV, base externe...) : le tableau montre ses lignes. "
                                      "Vide : il revient \xC3\xA0 sa source de l'\xC3\xA9" "diteur. Une expression peut le choisir en marche."));
     } else if (a.operation == Operation::PlaySound) {
-        std::vector<std::string> sounds;
-        for (const auto& r : doc_->project.assets.resources)
-            if (r.kind() == hmi::MediaKind::Sound) sounds.push_back(r.name);
+        // 1.24.0 : les sons du projet, puis ceux de la bibliotheque (choisir l'un d'eux l'importe, une commande de plus).
+        std::vector<std::string> sounds = hmi::soundlib::choices(doc_->project);
         if (std::find(sounds.begin(), sounds.end(), a.target) == sounds.end()) sounds.insert(sounds.begin(), a.target);
+        const auto plain = commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; });
         op.properties.push_back(prop("Son (ressource)", a.target, PG::ValueType::Enum, sounds,
-                                     commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
-                                     "Un son du gestionnaire de ressources (WAV). Une expression peut le choisir en marche."));
+                                     [this, plain](std::string_view v) {
+                                         const hmi::soundlib::Sound* native = hmi::soundlib::fromChoice(v);
+                                         if (!native) return plain(v);
+                                         core::CommandGroupScope group("Jouer le son natif " + native->label);
+                                         std::string name;
+                                         auto cmd = hmi::changeProject(doc_, "Importer le son " + native->label, [&](hmi::Project& pr) {
+                                             name = hmi::soundlib::importSound(pr, *native).name;
+                                         });
+                                         if (cmd) apply_(std::move(cmd));
+                                         return !name.empty() && plain(name);
+                                     },
+                                     "Un son du gestionnaire de ressources (WAV), ou de la biblioth\xC3\xA8que (\xC2\xAB Biblioth\xC3\xA8que "
+                                     "\xE2\x80\xBA \xE2\x80\xA6 \xC2\xBB : il est import\xC3\xA9 en le choisissant). Une expression peut le "
+                                     "choisir en marche."));
     } else if (a.operation == Operation::SoundMute || a.operation == Operation::SoundRestore || a.operation == Operation::SoundToggle) {
         // 1.14.0 : le son - tout couper, retablir, basculer (le General du melangeur, SYS.SoundEnabled).
         const char* effect = a.operation == Operation::SoundMute    ? "tous les sons se taisent ; les suivants ne partent pas"

@@ -89,4 +89,12 @@ Imported importSound(Project&, const Sound&);
 // "1,4 s" ; "0,08 s".
 [[nodiscard]] std::string durationText(double seconds);
 
+// ---- les listes de sons (le son d'une priorite d'alarme, l'action Jouer un son) ----
+// Ce qu'une liste propose : les sons du projet, puis << Bibliotheque > Alarmes > Alarme haute priorite >> pour chaque son
+// natif pas encore importe. Choisir un son natif l'importe (importSound) et la liste retient sa ressource.
+[[nodiscard]] std::vector<std::string> choices(const Project&);
+[[nodiscard]] std::string choiceLabel(const Sound&);
+// Le son natif d'un choix << Bibliotheque > ... >> ; nul : un son du projet (ou autre chose).
+[[nodiscard]] const Sound* fromChoice(std::string_view choice);
+
 } // namespace hmi::soundlib
