@@ -3409,15 +3409,137 @@ const std::vector<Topic>& topics() {
                          "signale un objet qui cite un style disparu.", {}},
              {K::Tip, "Copier le style / Coller le style (barre d'outils) reste l\xC3\xA0 pour reporter "
                          "une apparence une fois, sans lien.", {}},
+             {K::Heading, "Les onglets, le clic droit, les choix en dossiers (1.23.1)", {}, "1.23.1"},
+             {K::Bullet, "En haut de la page, deux onglets : **Styles** (cette page) et **Couleurs "
+                         "s\xC3\xA9mantiques** (voir ce sujet).", {}, "1.23.1"},
+             {K::Bullet, "**Le clic droit** choisit la ligne cliqu\xC3\xA9" "e et ouvre le menu de sa liste :", {}, "1.23.1"},
+             {K::Paragraph, "- les styles : Nouveau style (Inser), Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 "
+                         "(Ctrl+D), Renommer\xE2\x80\xA6 (F2), Retirer (Suppr), **Ranger dans un dossier** "
+                         "(un sous-menu : \xC3\xA0 la racine, un dossier, Nouveau dossier\xE2\x80\xA6), "
+                         "Copier le nom ; sur un dossier : Renommer le dossier, Retirer le dossier ; - les "
+                         "types : Ajouter un type\xE2\x80\xA6 (Inser), Retirer le type (Suppr), Choisir pour "
+                         "l'aper\xC3\xA7u ; - les propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es : Ajouter une "
+                         "propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6 (Inser), Retirer la propri\xC3\xA9t\xC3\xA9 "
+                         "(Suppr) ; aussi la touche Menu ou Maj+F10. Une entr\xC3\xA9" "e gris\xC3\xA9" "e "
+                         "dit pourquoi (un style fourni ne se modifie pas).", {}, "1.23.1"},
+             {K::Bullet, "**Ajouter un type\xE2\x80\xA6** range la biblioth\xC3\xA8que en **dossiers** "
+                         "d\xC3\xA9pliables (ses cat\xC3\xA9gories, dans l'ordre de la palette), puis **Mes "
+                         "symboles** ; chaque type a sa petite ic\xC3\xB4ne \xC3\xA0 droite. Le premier "
+                         "dossier est d\xC3\xA9pli\xC3\xA9 ; une recherche d\xC3\xA9plie ce qui a un "
+                         "r\xC3\xA9sultat. Au clavier : Haut et Bas passent les dossiers repli\xC3\xA9s, "
+                         "Droite d\xC3\xA9plie, Gauche replie, Entr\xC3\xA9" "e choisit.", {}, "1.23.1"},
+             {K::Bullet, "**Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6** suit les **cat\xC3\xA9gories "
+                         "de l'inspecteur** (toutes d\xC3\xA9pli\xC3\xA9" "es), puis Param\xC3\xA8tres du "
+                         "symbole ; chaque propri\xC3\xA9t\xC3\xA9 dit \xC3\xA0 droite son **genre** "
+                         "(nombre, couleur, bool\xC3\xA9" "en, texte, choix, dur\xC3\xA9" "e) et la valeur "
+                         "d'un objet neuf.", {}, "1.23.1"},
+             {K::Heading, "Le style choisi par une formule (1.23.1)", {}, "1.23.1"},
+             {K::Paragraph, "**Style nomm\xC3\xA9** accepte une formule (fx) : `=SEL(Defaut_P1, 'Contraste "
+                         "\xC3\xA9lev\xC3\xA9', 'ISA-101')`. Dans l'\xC3\xA9" "diteur, l'objet garde le "
+                         "style de sa valeur (le carr\xC3\xA9 O, l'aper\xC3\xA7u) ; **en marche**, il prend "
+                         "les valeurs du style que la formule rend, et les reprend quand elle change. Une "
+                         "valeur bris\xC3\xA9" "e garde la sienne ; une propri\xC3\xA9t\xC3\xA9 en formule "
+                         "aussi. La ligne **Valeurs du style** le dit (\xC2\xAB fx : le style de la formule "
+                         "en marche \xC2\xBB). G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie les noms "
+                         "\xC3\xA9" "crits dans la formule (un style introuvable) ; une formule sans nom "
+                         "\xC3\xA9" "crit ne se v\xC3\xA9rifie qu'en marche.", {}, "1.23.1"},
+             {K::Heading, "Dans l'arbre du projet (1.23.1)", {}, "1.23.1"},
+             {K::Paragraph, "IHM \xE2\x80\xBA **Styles** se d\xC3\xA9plie : **Styles** (ceux du projet, puis "
+                         "les fournis) et **Couleurs s\xC3\xA9mantiques**, chacun avec son nombre - les "
+                         "\xC3\xA9l\xC3\xA9ments fournis comptent. Un **cadenas** marque ce qui est fourni "
+                         "(verrouill\xC3\xA9), une **personne** ce qui est \xC3\xA0 toi ; une couleur "
+                         "s\xC3\xA9mantique a son ic\xC3\xB4ne dans sa teinte, et sa valeur en gris "
+                         "apr\xC3\xA8s son nom. Un clic ouvre la page Styles sur l'\xC3\xA9l\xC3\xA9ment ; "
+                         "le clic droit propose **Nouveau style\xE2\x80\xA6** (sur le groupe Styles) et "
+                         "**Dupliquer \xC3\xA0 partir de\xE2\x80\xA6** (sur un style, fourni ou \xC3\xA0 "
+                         "toi).", {}, "1.23.1"},
          },
-         {"editeur", "proprietes", "concevoir-vite", "dossiers"},
-         {"style nomm\xC3\xA9", "namedStyle", "Cr\xC3\xA9" "er un style", "ISA-101", "style fourni", "Dupliquer \xC3\xA0 partir de", "carr\xC3\xA9 O", "briser", "valeur impos\xC3\xA9" "e", "O Style", "Tout r\xC3\xA9tablir"},
+         {"editeur", "proprietes", "concevoir-vite", "dossiers", "couleurs-semantiques"},
+         {"style nomm\xC3\xA9", "namedStyle", "Cr\xC3\xA9" "er un style", "ISA-101", "style fourni", "Dupliquer \xC3\xA0 partir de", "carr\xC3\xA9 O", "briser", "valeur impos\xC3\xA9" "e", "O Style", "Tout r\xC3\xA9tablir", "style en formule"},
          {"styles"},
          {{"PNG_326_styles_nommes.png", "IHM \xE2\x80\xBA Styles : les styles, combien d'objets les citent, la fiche du style choisi."}, {"PNG_327_style_dans_inspecteur.png", "Dans l'inspecteur, cat\xC3\xA9gorie Apparence : le style nomm\xC3\xA9 cit\xC3\xA9 par l'objet."}},
          "",
          {},
          "",
          {}},
+        // ---- Concevoir les vues  Aller plus vite / couleurs-semantiques
+        {"couleurs-semantiques", "Les couleurs s\xC3\xA9mantiques", "Concevoir les vues \xE2\x80\xBA Aller plus vite",
+         "Des couleurs globales sous un nom (Alarme, Marche, Fond\xE2\x80\xA6), utilisables partout comme "
+         "des constantes : une case couleur \xC3\xA9" "crit @Alarme, une formule '@Alarme' ; changer la "
+         "couleur change tout ce qui la cite. Douze fournies (ISA-101), et les tiennes.",
+         {
+             {K::Heading, "Citer une couleur", {}},
+             {K::Paragraph, "Une case couleur (remplissage, contour, texte, couleur allum\xC3\xA9\xE2\x80\xA6) "
+                         "peut contenir **@Nom** au lieu d'un code : `@Alarme`. L'objet se dessine dans la "
+                         "couleur de ce nom, et **suit si on la change**. La palette d'une case couleur "
+                         "propose les couleurs s\xC3\xA9mantiques dans une bande en bas (un clic "
+                         "\xC3\xA9" "crit `@Nom`) ; on peut aussi le taper. Le nom se lit sans tenir compte "
+                         "des majuscules.", {}},
+             {K::Bullet, "**Dans une formule** : un texte entre apostrophes, `=SEL(Defaut_P1, '@Alarme', "
+                         "'@Marche')`. Les fonctions de couleur le lisent aussi : "
+                         "`=COULEUR_ECLAIRCIR('@Alarme', 20)`.", {}},
+             {K::Bullet, "**Dans un style** : une valeur impos\xC3\xA9" "e peut \xC3\xAAtre `@Accent` ; le "
+                         "style suit la couleur.", {}},
+             {K::Bullet, "**Le fond d'une vue** et les **zones** d'un bargraphe ou d'un cadran (`0-60 = "
+                         "@Marche; 60-100 = @Alarme`) aussi.", {}},
+             {K::Bullet, "Un **script** peut \xC3\xA9" "crire `'@Alarme'` dans une propri\xC3\xA9t\xC3\xA9 : "
+                         "elle se dessine dans la couleur (mais Renommer, Retirer et G\xC3\xA9n\xC3\xA9rer "
+                         "ne lisent pas les scripts).", {}},
+             {K::Bullet, "Une couleur peut en citer une autre (`@Eau froide` vaut `@Eau`).", {}},
+             {K::Heading, "Les couleurs fournies", {}},
+             {K::Paragraph, "Douze couleurs **fournies**, verrouill\xC3\xA9" "es (un cadenas), suivent "
+                         "l'ISA-101 - le gris pour le normal, la couleur pour l'anomalie :", {}},
+             {K::Table, "Nom\tCouleur\tPour\nFond\t#E0E0E0\tle fond des vues\nTexte\t#1C1C1C\tle "
+                         "texte\n\xC3\x89quipement\t#4D4D4D\tle contour et le corps d'un "
+                         "\xC3\xA9quipement\nMarche\t#4D4D4D\ten marche : plein, gris fonc\xC3\xA9 (pas de "
+                         "vert)\nArr\xC3\xAAt\t#F5F5F5\t\xC3\xA0 l'arr\xC3\xAAt : "
+                         "vide\nD\xC3\xA9" "faut\t#D32F2F\tun \xC3\xA9quipement en d\xC3\xA9" "faut\nAlarme "
+                         "critique\t#D32F2F\tune alarme de priorit\xC3\xA9 1\nAlarme\t#F57C00\tune alarme de "
+                         "priorit\xC3\xA9 2\nAvertissement\t#F2C200\tune alarme de priorit\xC3\xA9 "
+                         "3\nInformation\t#3D7CC9\tune information, priorit\xC3\xA9 4\nAccent\t#1F5F99\tce "
+                         "qui agit : la s\xC3\xA9lection, le bouton par "
+                         "d\xC3\xA9" "faut\nD\xC3\xA9sactiv\xC3\xA9\t#A6A6A6\tce qui ne r\xC3\xA9pond pas", {}},
+             {K::Paragraph, "Elles ne se modifient pas : **Dupliquer \xC3\xA0 partir de\xE2\x80\xA6** en fait "
+                         "une couleur du projet, \xC3\xA0 toi. Une couleur du projet ne peut pas porter le "
+                         "nom d'une fournie.", {}},
+             {K::Heading, "Tes couleurs", {}},
+             {K::Paragraph, "IHM \xE2\x80\xBA Styles, onglet **Couleurs s\xC3\xA9mantiques** (en haut de la "
+                         "page, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de **Styles**) : \xC3\xA0 gauche la liste - les "
+                         "tiennes (une personne), puis les fournies (un cadenas), avec leur nom \xC3\xA0 "
+                         "citer, leur couleur, leur description et le nombre de citations ; \xC3\xA0 droite "
+                         "la fiche de la couleur choisie : son **nom**, sa **couleur** (la palette ; ou une "
+                         "autre couleur s\xC3\xA9mantique, `@Autre`), sa description, son dossier, "
+                         "**o\xC3\xB9 elle est cit\xC3\xA9" "e** et ce qui est \xC3\xA0 v\xC3\xA9rifier.", {}},
+             {K::Bullet, "La barre et le clic droit : **Nouvelle** (Inser), **Dupliquer \xC3\xA0 partir de** "
+                         "(Ctrl+D, aussi une fournie), **Copier @Nom** (Ctrl+C), **Retirer** (Suppr).", {}},
+             {K::Bullet, "Chaque changement est une commande (Ctrl+Z). Une valeur illisible, le nom d'une "
+                         "fournie ou une boucle (`@A` vaut `@B` qui vaut `@A`) sont refus\xC3\xA9s, et la "
+                         "fiche dit pourquoi.", {}},
+             {K::Bullet, "**Renommer** : tout ce qui la cite suit (valeurs, formules, styles, fonds, autres "
+                         "couleurs).", {}},
+             {K::Bullet, "**Retirer** : ce qui la cite garde sa couleur, \xC3\xA9" "crite en dur - rien ne "
+                         "change \xC3\xA0 l'\xC3\xA9" "cran.", {}},
+             {K::Bullet, "Elles s'enregistrent avec le projet ; un **paquet de vues** emporte celles que ses "
+                         "vues citent (et l'import ajoute celles qui manquent, sans toucher celles du "
+                         "projet).", {}},
+             {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie", {}},
+             {K::Bullet, "une case, une formule, un style qui cite une couleur **inconnue** (un double-clic "
+                         "m\xC3\xA8ne \xC3\xA0 l'objet) ;", {}},
+             {K::Bullet, "une couleur **illisible** (ni `#RRGGBB`, ni `#RRGGBBAA`, ni `@Nom`) ;", {}},
+             {K::Bullet, "une couleur du projet qui porte le nom d'une **fournie**, deux couleurs du "
+                         "m\xC3\xAAme nom, des citations qui **tournent en rond** (`@A` vaut `@B`, `@B` vaut "
+                         "`@A`).", {}},
+             {K::Warning, "Un projet relu par une version d'avant la 1.23.1 ne conna\xC3\xAEt pas `@Nom` : la "
+                         "case y est une couleur illisible.", {}},
+         },
+         {"styles-nommes", "proprietes", "verifier"},
+         {"couleur s\xC3\xA9mantique", "couleurs s\xC3\xA9mantiques", "@Nom", "@Alarme", "@Marche", "@Fond", "constante de couleur", "couleur globale", "palette", "charte"},
+         {"styles"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.23.1"},
         // ---- Concevoir les vues  Aller plus vite / rechercher-remplacer
         {"rechercher-remplacer", "Rechercher et remplacer", "Concevoir les vues \xE2\x80\xBA Aller plus vite",
          "Chercher un texte dans une vue ou tout le projet, voir chaque changement avant de le faire, "

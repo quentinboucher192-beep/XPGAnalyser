@@ -1611,7 +1611,7 @@ IHM › **Styles** se déplie : **Styles** (ceux du projet, puis les fournis) et
 @depuis 1.23.1
 @mots couleur sémantique, couleurs sémantiques, @Nom, @Alarme, @Marche, @Fond, constante de couleur, couleur globale, palette, charte
 @lieux styles
-@voir styles-nommes, proprietes, animations, verifier
+@voir styles-nommes, proprietes, verifier
 ### Citer une couleur
 Une case couleur (remplissage, contour, texte, couleur allumé…) peut contenir **@Nom** au lieu d'un code : `@Alarme`. L'objet se dessine dans la couleur de ce nom, et **suit si on la change**. La palette d'une case couleur propose les couleurs sémantiques dans une bande en bas (un clic écrit `@Nom`) ; on peut aussi le taper. Le nom se lit sans tenir compte des majuscules.
 - **Dans une formule** : un texte entre apostrophes, `=SEL(Defaut_P1, '@Alarme', '@Marche')`. Les fonctions de couleur le lisent aussi : `=COULEUR_ECLAIRCIR('@Alarme', 20)`.

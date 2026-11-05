@@ -32,11 +32,11 @@ Décompte fait sur `CMakeLists.txt` de ce commit :
 
 | Élément | Nombre |
 |---|---:|
-| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 130 |
+| Essais enregistrés par `xpg_add_test` (sources et fichiers d'entrée présents) | 131 |
 | Essai `vcxproj` (Python : `outils/verifier_vcxproj.py`, enregistré si Python 3 est trouvé) | 1 |
-| **Total** | **131** |
+| **Total** | **132** |
 
-Ce total correspond aux « 131 suites d'essais » de la note de livraison 1.23.0 (130 en 1.22.9, plus `stylestypes` ; 130 aussi en 1.22.8 ; 128 en 1.22.7, plus `aimodelevues` et `aiunites` ; 127 en 1.22.6, plus `airapide` ; 123 en 1.22.5, puis `aivues`, `aisecurite`, `aiactivite`, `aijetons` ; 122 en 1.22.2 à 1.22.4, 121 en 1.22.1, 119 en 1.22.0, 116 en 1.21.3).
+Ce total correspond aux « 132 suites d'essais » de la note de livraison 1.23.1 (131 en 1.23.0, plus `semanticcolors` ; 130 en 1.22.9, plus `stylestypes` en 1.23.0 ; 130 aussi en 1.22.8 ; 128 en 1.22.7, plus `aimodelevues` et `aiunites` ; 127 en 1.22.6, plus `airapide` ; 123 en 1.22.5, puis `aivues`, `aisecurite`, `aiactivite`, `aijetons` ; 122 en 1.22.2 à 1.22.4, 121 en 1.22.1, 119 en 1.22.0, 116 en 1.21.3).
 
 Essais **déclarés mais sautés** parce que leur source n'est pas dans le dépôt (22) : `core` (`src/core/compile_check.cpp` absent), `grafcet`, `macro`, `xref`, `equipment`, `font`, `theme`, `corner`, `libhelp`, `helparticle`, `execorder`, `simorder`, `treednd`, `execwiring`, `macroxls`, `macronatives`, `libcatalog`, `macrohelp`, `libpage`, `help`, `helpsession`, `xlsm`. Pour `xlsm`, les classeurs d'essai (`tests/fixtures/simple.xlsx`) et le script `tests/make_fixtures.py` que cite `CMakeLists.txt` pour les fabriquer sont eux aussi absents.
 
@@ -86,7 +86,7 @@ ctest --test-dir build-linux -R '^ai' --output-on-failure
 | Catégorie | Nombre | Suites |
 |---|---:|---|
 | Assistant IA | 31 | `aimissions`, `aimissionse2e`, `aimissionsui`, `aicorrections`, `aibuild`, `aivues`, `aisecurite`, `aiactivite`, `aijetons`, `airapide`, `aimodelevues`, `aiunites`, `aidossiers`, `aiassistant`, `aireseau`, `aisandbox`, `airegistre`, `aiintegree`, `aicompatible`, `aioptions`, `aiapprentissagefichier`, `aiapprentissage`, `aiplan`, `aidelete`, `aisouvenirs`, `aicontexte`, `ainotifications`, `aimodelesfichiers`, `aidesign`, `aiincidents`, `aimemoire` |
-| IHM (modèle, éditeur, moteur, langage des scripts, communication, incidents, archives) | 38 | `hmi`, `hmieditor`, `stylestypes`, `hmicheckexpr`, `hmibuild`, `hmilog`, `hmisimdata`, `hmiretain`, `hmitrace`, `hmitracemig`, `hmimigrate`, `hmitypes`, `hmireperes`, `hminatives`, `hminatives1127`, `hminatives1216`, `hmisetring`, `hmiqr`, `hmivideo`, `hmipid`, `hmidocviewer`, `hmiedits`, `hmirecording`, `hmioverload`, `hmidecl`, `hmidebug`, `hmirelations`, `hmiincident`, `hmidiscovery`, `renamehmipaths`, `echanges`, `erreurs`, `generiques`, `testsunitaires`, `donnees`, `objets`, `unites`, `bibliotheques` |
+| IHM (modèle, éditeur, moteur, langage des scripts, communication, incidents, archives) | 39 | `hmi`, `hmieditor`, `stylestypes`, `semanticcolors`, `hmicheckexpr`, `hmibuild`, `hmilog`, `hmisimdata`, `hmiretain`, `hmitrace`, `hmitracemig`, `hmimigrate`, `hmitypes`, `hmireperes`, `hminatives`, `hminatives1127`, `hminatives1216`, `hmisetring`, `hmiqr`, `hmivideo`, `hmipid`, `hmidocviewer`, `hmiedits`, `hmirecording`, `hmioverload`, `hmidecl`, `hmidebug`, `hmirelations`, `hmiincident`, `hmidiscovery`, `renamehmipaths`, `echanges`, `erreurs`, `generiques`, `testsunitaires`, `donnees`, `objets`, `unites`, `bibliotheques` |
 | Automate (import, projet, édition, analyse, simulation, macros) | 33 | `import`, `hardware`, `roundtrip`, `project`, `edit`, `editor`, `library`, `sharedlib`, `delete`, `table`, `robustness`, `viewmodel`, `simulation`, `macros2`, `api2`, `api34`, `typeusage`, `versionstate`, `projecticon`, `lisible`, `membertree`, `renameplan`, `mastimport`, `projectstats`, `graphxml`, `simdebugui`, `simstatus`, `simperf`, `simdebug`, `macros2libs`, `api2libs`, `macrospecwrite`, `simdebuglibs` |
 | Socle, interface, application | 28 | `perf`, `menu`, `syntax`, `fold`, `layout`, `popup`, `zoom`, `settings`, `dossiers`, `keymap`, `themecatalog`, `themefile`, `dialogwindow`, `statusstrip`, `searchfocus`, `filtermemory`, `crashtrail`, `crashreport`, `coreprocess`, `topbar8`, `lot8tutorials`, `tutorial`, `fileexplorer`, `fileview`, `dropfiles`, `exportask`, `cellrule`, `edition` |
 | Outillage | 1 | `vcxproj` |
