@@ -310,7 +310,7 @@ Chaque geste est **une commande** : Ctrl+Z le défait d'un coup, l'historique le
 - Choisis les éléments avec **Ctrl+clic** (un par un) ou **Maj+clic** (une suite) - même de genres différents : des vues et des scripts, des variables et des alarmes.
 - Le clic droit sur l'un d'eux propose **Supprimer les 5 éléments…** (ou « Supprimer les 3 vues… » s'ils sont tous du même genre) ; la touche **Suppr** fait pareil.
 - Une seule question : quelques noms puis « +N », ce qui **ne part pas** et pourquoi (un élément fourni, un dossier natif, un type encore employé, une tâche qui exécute encore une section…), et ce que Ctrl+Z rendra.
-- Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Les macros (elles vont dans leur corbeille) et les versions ne reviennent pas par Ctrl+Z ; la question le dit.
+- Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Depuis la 1.26.0, les macros et les versions aussi (elles passent par leur corbeille, voir « La Corbeille »).
 - Ce qui ne vaut que pour un élément (Renommer…) est grisé « un à la fois ».
 Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes et pieds, symboles (avec leurs popups), scripts, fonctions, types (s'ils ne sont plus employés), variables, alarmes, recettes, utilisateurs, groupes (vides), tes styles et tes couleurs sémantiques, les dossiers des listes ; côté automate, les sections, sous-routines, variables, DDT, DFB, unités, tables d'animation et tâches.
 ### Dans les listes des volets
@@ -325,7 +325,11 @@ Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes e
 - **Les bibliothèques reliées** : **Délier les N**, un seul Ctrl+Z.
 - **Côté automate** : les tâches (MAST et une tâche qui a encore des sections restent), les modules des racks (le processeur et l'alimentation restent), les unités et leurs sections, les blocs DFB ; une question quand d'autres éléments partent avec eux ; un seul Ctrl+Z. Suppr marche aussi dans les DDT.
 - **Mes sons** (la bibliothèque de sons) : plusieurs d'un coup ; un son natif reste, le compte rendu le dit ; un seul Ctrl+Z les rend.
-- **Les incidents** et **les listes de l'Assistant IA** (Apprentissage, Mémoire, Souvenirs, les conversations du panneau) : plusieurs d'un coup, mais **sans Ctrl+Z** (ils n'ont pas de corbeille) - la question le dit.
+- **Les incidents** et **les listes de l'Assistant IA** (Apprentissage, Mémoire, Souvenirs, les conversations du panneau) : plusieurs d'un coup ; depuis la 1.26.0 ils vont dans la **Corbeille** et **un seul Ctrl+Z** les rend.
+### L'outil Modbus, les équipements
+@nouveau 1.26.0
+- **L'outil Modbus** : plusieurs requêtes de la lecture cyclique d'un coup (Ctrl+clic, Maj+clic, Suppr) ; **Supprimer des jeux…** en coche plusieurs. Une question, un Ctrl+Z.
+- **Plusieurs équipements** : le même choix que pour un seul - garder leurs variables IHM ou les supprimer aussi, leurs esclaves simulés - une question, un Ctrl+Z.
 
 == chemins | Les chemins de fichiers : ouvrir dans l'explorateur, aller à
 : Partout où un chemin de fichier ou de dossier s'affiche, le clic droit propose Ouvrir dans l'explorateur, Aller à (l'élément dans le logiciel) et Copier le chemin.
@@ -10314,9 +10318,9 @@ Sous la liste : les rapports qui l'emploient.
 | Pied de page | à gauche, au centre, à droite (à trous) ; les cases de visa (Établi par ; Vérifié par…) en fin de rapport |
 | Contenu | les parties à imprimer et leur ordre (coche ; glisse une ligne, ou Alt+↑ ↓) |
 | Tableaux | la taille, les lignes alternées, l'en-tête répété à chaque page |
-| Texte | la police (Helvetica, Times, Courier), la taille du titre et du corps |
+| Texte | la police (Helvetica, Times, Courier, ou une police TrueType des ressources du projet : elle est intégrée au PDF), la taille du titre et du corps ; les titres en couleur d'accent, ou en noir (Standard) |
 Les trous : `{Titre}` (le titre du rapport), `{SousTitre}`, `{Rapport}` (« Rapport journalier »), `{Nom}`, `{Periode}`, `{Site}` et `{Projet}` (le projet), `{Debut}`, `{Fin}`, `{Date}`, `{Heure}` (quand il est écrit), `{Page}`, `{Pages}`.
-Les parties : la synthèse, le graphique des alarmes par priorité, les alarmes de la période, les plus fréquentes, les mesures (minimum, moyenne, maximum), **les courbes des mesures** (une courbe par mesure sur la période, PDF seulement), la production, les événements. Une partie s'imprime si la mise en page la coche **et** si le rapport la recueille (ses cases Alarmes, Production, Événements ; ses mesures). En Excel : une feuille par tableau coché, dans l'ordre (la synthèse en tête si cochée).
+Les parties : la synthèse, le graphique des alarmes par priorité, les alarmes de la période, les plus fréquentes, les mesures (minimum, moyenne, maximum), **les courbes des mesures** (une courbe par mesure sur la période ; en Excel, la feuille « Courbes des mesures » : l'heure et une colonne par mesure), la production, les événements. Une partie s'imprime si la mise en page la coche **et** si le rapport la recueille (ses cases Alarmes, Production, Événements ; ses mesures). En Excel : une feuille par tableau coché, dans l'ordre (la synthèse en tête si cochée).
 ### Le brouillon, l'aperçu, Enregistrer
 Chaque réglage change **l'aperçu** tout de suite (à droite : la page telle que le PDF l'écrira, page par page, avec un zoom) ; **Données d'exemple** (une journée inventée) ou **Dernière période** (l'historique du projet, pour un rapport qui l'emploie). Le bas dit « modifiée (non enregistrée) » et qui l'emploie ; **Ctrl+Z** défait le dernier réglage. **Enregistrer la mise en page** (Ctrl+S) la garde dans le projet - Ctrl+Z ensuite la rend comme avant ; **Annuler les modifications** revient à l'enregistrée. Les rapports qui l'emploient la prennent à leur prochaine écriture.
 ### Le rapport, l'export
@@ -10675,6 +10679,72 @@ Là où un son se choisit dans une liste - le **son d'une priorité d'alarme** (
 @nouveau 1.25.0
 - Dans l'arbre du projet, **Bibliothèque de sons [N]** dit combien de sons elle a, et **se déplie** : Mes sons, Alarmes, Notifications, Interface, Procédé, chacun avec son nombre, puis leurs sons (un cadenas, une personne ; la durée). Un clic ouvre la bibliothèque sur le dossier ou le son.
 - Dans l'éditeur de vues, la **BIBLIOTHÈQUE** a un sous-onglet **Sons**, entre Images et Variables : les mêmes dossiers dépliables et leur nombre, **Écouter** (Espace), **Importer** (Entrée), **+** (Mes sons) ; le champ de recherche de la bibliothèque cherche aussi les sons. **Au clic** : l'objet choisi dans la vue joue le son quand on clique dessus (le son est importé s'il ne l'est pas, une action « Jouer un son » s'ajoute ; un seul Ctrl+Z).
+
+== bibliotheque-polices | La bibliothèque de polices, la police partout
+: Seize polices libres livrées avec le logiciel, Mes polices pour tous tes projets, leur aperçu ; une police se choisit partout : les objets, les styles, la police par défaut de l'IHM.
+@depuis 1.26.0
+@mots police, polices, TTF, OTF, TrueType, bibliothèque de polices, Mes polices, police par défaut, police des valeurs, Liberation, DejaVu, Carlito, Caladea, JetBrains Mono, Arial, Calibri, Times, Courier, Cambria, aperçu d'une police
+@lieux polices
+@voir editeur-polices, ressources, styles-nommes, objets
+### Les polices fournies
+IHM › Ressources › **Bibliothèque de polices** : seize fichiers TrueType **libres** (licence SIL Open Font License ou celle de DejaVu, livrées avec elles), neuf familles rangées en trois dossiers, chacune avec un cadenas :
+| Dossier | Les familles |
+| Sans empattement | Liberation Sans (les chasses d'Arial : un texte écrit en Arial garde sa place), DejaVu Sans (très complète : accents, grec, cyrillique, symboles), Carlito (les chasses de Calibri) |
+| Avec empattement | Liberation Serif (celles de Times New Roman), DejaVu Serif, Caladea (celles de Cambria) |
+| Chasse fixe | Liberation Mono (celles de Courier New), DejaVu Sans Mono, JetBrains Mono (les chiffres et les valeurs bien alignés) |
+Chaque police est **écrite dans elle-même**, avec ton texte d'aperçu et ta taille. À droite, l'aperçu : toutes les tailles, la police sur le fond d'une vue, ses glyphes, son fichier, sa licence, où le projet l'emploie.
+- **Importer dans le projet** (Entrée) : la police devient une **ressource** ; le même contenu déjà là est réutilisé. Ctrl+Z retire l'import.
+- **Mes polices** : tes TTF et OTF (le bouton **Ajouter à Mes polices…**, ou lâche un fichier sur la liste), gardés hors du projet : ils te suivent d'un projet à l'autre. Les polices que tu crées dans l'éditeur de polices y vont.
+- **Nouvelle police**, **Dupliquer à partir de…** et **Modifier** ouvrent l'**éditeur de polices**.
+! Une OTF à contours CFF s'emploie, mais ne se modifie pas dans l'éditeur (il lit les TrueType).
+### La police partout
+- Dans l'éditeur de vues, la **BIBLIOTHÈQUE** a un sous-onglet **Polices** (Objets | Images | Sons | **Polices** | Variables) : celles du projet (et combien d'objets les emploient), puis toute la bibliothèque. **Glisse une police sur un objet** : il la prend (importée si besoin, un seul Ctrl+Z) ; un double-clic : la sélection.
+- La case **Police** de chaque objet propose : **Police par défaut**, **Police des valeurs**, les polices du projet, puis la bibliothèque (« Bibliothèque › Sans empattement › Carlito ») : la choisir l'importe et la règle d'un geste.
+- Les **styles** ont leur police, de la même façon.
+- Le **thème** : Configuration › Affichage, **Police par défaut** et **Police des valeurs**. Tout objet sur « Police par défaut » la prend : la changer change toute l'IHM. Les objets de la bibliothèque (boutons, voyants, afficheurs…) arrivent sur « Police par défaut ». Vides : les polices de l'IHM, comme avant.
+
+== editeur-polices | L'éditeur de polices
+: Créer une police, en dupliquer une à partir d'une autre, la modifier glyphe par glyphe, point par point, avec l'aperçu en direct ; l'enregistrer dans Mes polices ou dans le projet, l'exporter en .ttf.
+@depuis 1.26.0
+@mots éditeur de polices, créer une police, dupliquer une police, modifier une police, glyphe, contour, point sur la courbe, point de contrôle, plume, chasse, approche, hauteur des capitales, hauteur d'x, ligne de base, composé, décomposer, exporter TTF
+@lieux police
+@voir bibliotheque-polices, ressources
+### Ouvrir
+- **Nouvelle police** : les lettres, les chiffres, les signes, les accentuées et l'euro, vides, à dessiner.
+- **Dupliquer à partir de…** : une copie de n'importe quelle TrueType - fournie, de Mes polices, du projet - sous un autre nom.
+- **Modifier** (depuis la bibliothèque de polices) : une de Mes polices ou une police du projet se modifie telle quelle ; une police **fournie** ne change pas : on en modifie une copie.
+! La licence d'une police copiée suit la copie, et une copie ne porte pas les **noms réservés** par cette licence (Liberation, Carlito ; Bitstream et Vera pour DejaVu…) ni le nom de sa source : l'éditeur les refuse et dit pourquoi.
+### Les glyphes
+À gauche, la grille : chaque glyphe dessiné, son code. **Chercher** : un caractère (é), plusieurs, ou un code (U+00E9). Les filtres : Tout, **Modifiés** (un point orange), A–Z, a–z, 0–9, Accents, Symboles.
+### Le dessin
+- Les points **sur la courbe** sont des carrés, ceux **hors de la courbe** (ils attirent le trait) des ronds ; les lignes de la police (ascendante, capitales, hauteur d'x, ligne de base, descendante), la **chasse** et les approches sont tracées.
+- **Choisir** (V) : un clic, Maj+clic, ou un cadre ; **glisser** ; les **flèches** (1 unité, Maj : 10) ; **Suppr** ; un **double-clic** sur un point : sur / hors de la courbe ; sur le trait : un point de plus.
+- **La plume** (P) : un clic, un point (Alt+clic : hors de la courbe) ; un clic sur le premier point, Entrée ou Échap ferme le contour.
+- **Ajouter un point** (A) : sur le trait, sans changer la forme. **Rectangle** (R), **Ellipse** (E) : glisser.
+- La **chasse** se glisse aussi : le carré en bas de sa ligne. La molette : le zoom ; le bouton du milieu : déplacer la vue ; **Ajusté** : tout voir.
+- Un **composé** (é = e + l'accent) se montre sans ses points : modifier « e » change « é » ; **Décomposer** en fait un glyphe à dessiner ici.
+- **Copier le glyphe de…** : le même caractère d'une autre police, mis à l'échelle. **Rétablir l'original** : le glyphe tel qu'à l'ouverture.
+### Les réglages, à droite
+Le glyphe (sa chasse, ses approches gauche et droite), le point choisi (x, y, sur ou hors de la courbe), la police (famille, style, version, hauteurs, interligne), son origine et sa licence.
+### En direct, annuler, enregistrer
+- L'**aperçu en direct**, en bas, se refait à chaque geste, avec ton texte, en trois tailles. Une police du projet ouverte ici : **les vues la dessinent telle qu'ici** tant qu'elle n'est ni enregistrée ni abandonnée (« Les vues suivent »).
+- **Ctrl+Z**, **Ctrl+Y** défont et refont chaque geste (un glissement : un geste).
+- **Enregistrer (Mes polices)** (Ctrl+S) ; **Enregistrer dans le projet** : sa ressource police est ajoutée ou remplacée, les objets qui l'emploient suivent (Ctrl+Z dans le projet la rend) ; **Exporter en .ttf…** : un fichier que Windows installe ; **Abandonner** revient à l'enregistrée.
+
+== corbeille | La Corbeille
+: Ce qui a été supprimé sur le disque (enregistrements, incidents, versions, macros, l'Assistant IA), rangé par genre, où l'on cherche ; Restaurer, Supprimer définitivement, Vider.
+@depuis 1.26.0
+@mots corbeille, restaurer, supprimer définitivement, vider la corbeille, éléments supprimés, récupérer, purge
+@voir supprimer-plusieurs, historique, versions, chemins
+### L'ouvrir
+- Dans l'arbre du projet, **Corbeille [N]** (après Versions) : un clic l'ouvre ; le clic droit propose aussi **Vider la corbeille…**. Ou le menu **Projet › Corbeille…**.
+### Ce qu'elle montre
+Un dossier par genre, avec son nombre : **Enregistrements**, **Incidents**, **Versions**, **Macros**, **Conversations IA**, **Pièces jointes IA**, **Connaissances et souvenirs IA**. Les colonnes : Nom, Supprimé le, Origine (un chemin : le clic droit l'ouvre dans l'explorateur), Taille.
+- **Chercher dans la corbeille…** : chaque mot commence un mot du nom, du genre ou de l'origine, sans casse ni accents.
+- **Restaurer** (Entrée) remet les éléments choisis à leur place, sans question ; **un seul Ctrl+Z** les renvoie dans la corbeille. Un fichier du même nom revenu entre-temps : la restauration est refusée, et dit pourquoi.
+- **Supprimer définitivement** (Suppr) et **Vider la corbeille** demandent confirmation : on ne revient pas en arrière.
+- Les éléments supprimés il y a plus de 7 jours partent à l'ouverture suivante (du projet, ou de l'application pour l'Assistant IA) ; les macros restent jusqu'à Supprimer définitivement.
+! Les vues, les objets, les variables et le reste du projet supprimés se rendent par **Ctrl+Z** (l'historique) : ils ne sont pas dans la Corbeille.
 
 == actions-ressources | Actions sur les ressources
 : Quatre opérations d'action touchent aux ressources et au poste : demander une ressource à l'opérateur, lier un tableau à une base, jouer un son, ouvrir le menu Paramètres système.
