@@ -749,6 +749,9 @@ private:
     [[nodiscard]] static bool isHmiNode(ui::NodeId);
     void openHmiNode(ui::NodeId node);
     void openHmiPane(const std::string& key);
+    // 1.23.1 : IHM > Styles sur un style (ou un fourni) de ce nom, ou sur l'onglet Couleurs semantiques (`colors`) et la
+    // couleur de ce nom ; vide : la page seule.
+    void openHmiStylesAt(bool colors, const std::string& name);
     void noteCodePage();   // 1.12.0 : le dernier onglet de code montre (insertInCodeTab)
     // Lot 15 : l'outil Modbus vers cette cible ; tab : "lecture", "cyclique",
     // "trames", "espion", "ping".

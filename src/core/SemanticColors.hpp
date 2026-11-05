@@ -33,5 +33,7 @@ void publish(std::vector<std::pair<std::string, std::string>> colors);
 [[nodiscard]] std::string resolve(std::string_view text);
 // Le nombre de couleurs publiees (essais).
 [[nodiscard]] std::size_t count();
+// Le nom et la couleur de chacune, dans l'ordre publie (celles du projet, puis les fournies) : la palette les propose.
+[[nodiscard]] std::vector<std::pair<std::string, std::string>> all();
 
 } // namespace core::semantic

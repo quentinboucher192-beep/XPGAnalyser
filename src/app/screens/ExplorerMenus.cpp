@@ -47,6 +47,7 @@
 #include "../TypePanes.hpp"
 #include "../VariablesPane.hpp"
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../../hmi/HmiStyles.hpp"   // 1.23.1 : IHM > Styles deplie (dupliquer un style)
 #include "../hmi/HmiFunctionPanes.hpp"     // 1.12.18 (planche 19) : Renommer, Dupliquer une fonction IHM
 #include "../hmi/HmiNotifyPanes.hpp"       // 1.12.18 : Nouveau destinataire...
 #include "../hmi/HmiReportPanes.hpp"       // 1.12.18 : Nouveau rapport...
@@ -2155,6 +2156,39 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
                 auto* pane = dynamic_cast<HmiNotifyPane*>(made("notifications"));
                 return pane && pane->addRecipient(name, {}, {}, &why) ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
             }));
+        break;
+    }
+
+    // 1.23.1 : IHM > Styles deplie - le groupe des styles cree ; un style se duplique (un fourni aussi : une copie a soi).
+    case NK::HmiStyleGroup:
+    case NK::HmiStyleItem:
+    case NK::HmiSemanticItem: {
+        m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        const auto stylesPane = [this] {
+            openHmiPane("styles");
+            return dynamic_cast<HmiStylesPane*>(hmiTab("styles"));
+        };
+        const auto hdoc = app_.hmi();
+        if (kind == NK::HmiStyleGroup && ProjectTreeModel::indexOf(node) == 0)
+            m.add("Nouveau style" + kDots, Icon::Plus, askName("Nouveau style", "Son nom ; le reste dans son onglet (Ctrl+Z le retire).", "Style",
+                                                               [stylesPane](const std::string& name) {
+                auto* pane = stylesPane();
+                return pane && pane->addStyle(name) != hmi::kNoId ? std::string{} : std::string("nom d\xC3\xA9j\xC3\xA0 pris ou invalide");
+            }));
+        if (kind == NK::HmiStyleItem && hdoc) {
+            const auto all = hmi::styles::all(hdoc->project);
+            const std::size_t at = ProjectTreeModel::indexOf(node);
+            if (at < all.size()) {
+                const std::string from = all[at]->name;
+                m.add("Dupliquer \xC3\xA0 partir de \xC2\xAB " + from + " \xC2\xBB" + kDots, Icon::Duplicate,
+                      askName("Dupliquer \xC3\xA0 partir de \xC2\xAB " + from + " \xC2\xBB", "Le nom de la copie, \xC3\xA0 toi (Ctrl+Z la retire).",
+                              hmi::styles::uniqueName(hdoc->project, from + " (copie)"), [stylesPane, from](const std::string& name) {
+                          auto* pane = stylesPane();
+                          return pane && pane->duplicateFrom(from, name) != hmi::kNoId ? std::string{}
+                                                                                     : std::string("nom d\xC3\xA9j\xC3\xA0 pris ou invalide");
+                      }));
+            }
+        }
         break;
     }
 

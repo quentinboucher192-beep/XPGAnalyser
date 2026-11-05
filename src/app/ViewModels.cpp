@@ -9,6 +9,9 @@
 #include "../hmi/HmiOperators.hpp"   // 1.10 (chantier O) : la signature d'un operateur dans l'arbre
 #include "../hmi/HmiMethods.hpp"     // 1.13.0 (J1b) : la signature d'une methode dans l'arbre
 #include "../hmi/HmiSymbols.hpp"     // 1.10 (chantier O) : le symbole d'une instance (ses operateurs)
+#include "../hmi/HmiSemanticColors.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
+#include "../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles > Styles (les fournis compris)
+#include "../ui/widgets/ColorPalette.hpp"   // 1.23.1 : la teinte d'une couleur semantique
 #include "../hmi/HmiFolders.hpp"      // lot 21 : les listes rangees en dossiers
 
 #include <optional>
@@ -899,6 +902,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
         case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements ; 1.22.9 : - Unites de mesure (un onglet d Unites et formats)
         case NodeKind::HmiResources:        return hmi_ ? 2 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents
+        case NodeKind::HmiStyles:           return hmi_ ? 2 : 0;   // 1.23.1 : Styles, Couleurs semantiques
+        case NodeKind::HmiStyleGroup:
+            if (!hmi_) return 0;
+            return i == 0 ? hmi::styles::all(hmi_->project).size() : hmi::semantic::all(hmi_->project).size();
         case NodeKind::HmiViews:            return hmi_ ? 3 : 0;   // lot 8 : Modeles, Vues, Popups
         case NodeKind::HmiViewFolder:
             if (!hmi_) return 0;
@@ -1391,6 +1398,14 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements ; 1.20.0 : les incidents
             if (!hmi_ || k > 1) return ui::kInvalidNode;
             return pack(k == 0 ? NodeKind::HmiRecordings : NodeKind::HmiIncidents, 0);
+        case NodeKind::HmiStyles:      // 1.23.1 : Styles, Couleurs semantiques
+            return hmi_ && k < 2 ? pack(NodeKind::HmiStyleGroup, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::HmiStyleGroup: {
+            if (!hmi_) return ui::kInvalidNode;
+            const std::size_t count = i == 0 ? hmi::styles::all(hmi_->project).size() : hmi::semantic::all(hmi_->project).size();
+            if (k >= count || k > 0xFFFF) return ui::kInvalidNode;
+            return pack(i == 0 ? NodeKind::HmiStyleItem : NodeKind::HmiSemanticItem, static_cast<Index>(k));
+        }
         case NodeKind::HmiViews:
             return hmi_ && k < 3 ? pack(NodeKind::HmiViewFolder, static_cast<Index>(k)) : ui::kInvalidNode;
         case NodeKind::HmiViewFolder: {
@@ -1936,6 +1951,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiMeasureUnits:                                      // 1.13.0 (lot J6b)
             case NK::HmiRecordings:                                        // 1.14.0 (M4)
             case NK::HmiIncidents:                                         // 1.20.0
+            case NK::HmiStyleGroup:                                        // 1.23.1
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
@@ -1998,7 +2014,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                           // 1.13.0 (lot J8)
                 || k == NK::HmiMeasureUnits                                                          // 1.13.0 (lot J6b)
                 || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                           // 1.14.0 (M4)
-                || k == NK::HmiIncidents;                                                            // 1.20.0
+                || k == NK::HmiIncidents                                                             // 1.20.0
+                || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem;      // 1.23.1
         }
     } // namespace
 
@@ -2644,7 +2661,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::HmiSimulation:    return "IHM";           // lot API 8 : sous Simulation (etait IHM > Simulation)
         case NodeKind::HmiGenerate:      return "G\xC3\xA9n\xC3\xA9rer";
-        case NodeKind::HmiStyles:        return "Styles" + countTag(hmi_ ? hmi_->project.styles.size() : 0u);   // lot 12
+        // lot 12 ; 1.23.1 : les styles fournis (verrouilles) comptent aussi (le client)
+        case NodeKind::HmiStyles:        return "Styles" + countTag(hmi_ ? hmi::styles::all(hmi_->project).size() : 0u);
+        case NodeKind::HmiStyleGroup:    // 1.23.1
+            if (!hmi_) return {};
+            return i == 0 ? "Styles" + countTag(hmi::styles::all(hmi_->project).size())
+                          : "Couleurs s\xC3\xA9mantiques" + countTag(hmi::semantic::all(hmi_->project).size());
+        case NodeKind::HmiStyleItem: {
+            if (!hmi_) return {};
+            const auto all = hmi::styles::all(hmi_->project);
+            return i < all.size() ? all[i]->name : std::string{};
+        }
+        case NodeKind::HmiSemanticItem: {
+            if (!hmi_) return {};
+            const auto all = hmi::semantic::all(hmi_->project);
+            return i < all.size() ? "@" + all[i]->name : std::string{};
+        }
         case NodeKind::HmiFind:          return "Rechercher / remplacer";
         case NodeKind::HmiTests:         return "Essais" + countTag(hmi_ ? hmi_->project.scenarios.size() : 0u);   // lot 13
         case NodeKind::HmiCompile:       return "Compiler";
@@ -3294,7 +3326,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiHistory:       t.key = "historiques"; t.label = "les historiques"; t.code = true; break;
         case NodeKind::HmiResources:     t.paths = {"IHM/Ressources"}; t.label = "les ressources"; break;
         case NodeKind::HmiExternalFiles: t.paths = {"IHM/Fichiers externes"}; t.label = "les fichiers externes"; break;
-        case NodeKind::HmiStyles:        t.key = "styles"; t.label = "les styles"; break;
+        case NodeKind::HmiStyles:                                                                  // lot 12
+        case NodeKind::HmiStyleGroup: case NodeKind::HmiStyleItem: case NodeKind::HmiSemanticItem:   // 1.23.1
+            t.key = "styles"; t.label = "les styles"; break;
         case NodeKind::HmiLanguages:     t.key = "langues"; t.label = "les langues"; break;
         case NodeKind::HmiUnits:         t.key = "affichages"; t.label = "les unit\xC3\xA9s et formats"; t.code = true; break;
         case NodeKind::HmiConfig:        t.paths = {"IHM/Configuration", "IHM/Configuration de simulation"}; t.label = "la configuration"; t.code = true; break;
@@ -3862,6 +3896,30 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSimulation:    s.icon = ui::Icon::Screen; break;   // lot API 8 : Simulation > IHM
         case NodeKind::HmiGenerate:      s.icon = ui::Icon::Analyze; break;
         case NodeKind::HmiStyles:        s.icon = ui::Icon::Settings; s.iconTone = ui::Tone::Accent; break;   // lot 12
+        // 1.23.1 : un cadenas pour ce qui est fourni (verrouille), une personne pour ce qui est a l'utilisateur.
+        case NodeKind::HmiStyleGroup:    s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;
+        case NodeKind::HmiStyleItem:
+            if (hmi_) {
+                const auto all = hmi::styles::all(hmi_->project);
+                const bool fixed = i < all.size() && all[i]->builtin;
+                s.icon = fixed ? ui::Icon::Lock : ui::Icon::User;
+                s.iconTone = fixed ? ui::Tone::Muted : ui::Tone::Accent;
+                if (fixed) s.hint = "fourni";
+            }
+            break;
+        case NodeKind::HmiSemanticItem:
+            if (hmi_) {
+                const auto all = hmi::semantic::all(hmi_->project);
+                if (i < all.size()) {
+                    // Le cadenas ou la personne, dans la couleur elle-meme ; sa valeur en gris apres le nom.
+                    s.icon = all[i]->builtin ? ui::Icon::Lock : ui::Icon::User;
+                    const std::string hex = hmi::semantic::resolve(hmi_->project, all[i]->value);
+                    if (gfx::Color c; ui::parseHexColor(hex, c)) s.iconColor = c.withAlpha(255);
+                    else s.iconTone = ui::Tone::Muted;
+                    s.hint = all[i]->value + (all[i]->builtin ? "  \xC2\xB7 fournie" : "");
+                }
+            }
+            break;
         case NodeKind::HmiFind:          s.icon = ui::Icon::Search; break;
         case NodeKind::HmiTests:         s.icon = ui::Icon::Ok; s.iconTone = ui::Tone::Accent; break;   // lot 13
         case NodeKind::HmiCompile:       s.icon = ui::Icon::Code; break;

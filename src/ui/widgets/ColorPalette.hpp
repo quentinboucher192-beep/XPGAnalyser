@@ -71,6 +71,10 @@ public:
     [[nodiscard]] const std::string& value() const noexcept { return value_; }
     // Les couleurs deja employees (le projet) : une rangee a part, 10 au plus.
     void setProjectColors(std::vector<std::string> colors);
+    // 1.23.1 : LES COULEURS SEMANTIQUES (core/SemanticColors.hpp, relues a chaque ouverture) : une bande sous le choix,
+    // 20 pastilles au plus ; un clic applique << @Nom >> (la case suit la couleur si on la change). Aucune : pas de bande.
+    void refreshSemanticColors();
+    [[nodiscard]] const std::vector<std::string>& semanticColors() const noexcept { return semantic_; }
 
     void open();
     void close();
@@ -162,6 +166,7 @@ private:
     std::string              origin_;         // la valeur a l'ouverture (l'apercu Avant)
     std::string              draft_;          // le code montre dans le champ
     std::vector<std::string> project_;
+    std::vector<std::string> semantic_;       // 1.23.1 : les couleurs semantiques publiees (<< @Nom >>), 20 au plus
     std::string              title_, subject_;
     std::string              picked_;         // la derniere couleur prise a la pipette (le bas le dit)
     bool                     open_{false};

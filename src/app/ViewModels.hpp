@@ -369,6 +369,12 @@ namespace app {
             // 1.20.0 : LES INCIDENTS - Ressources > Incidents (les dossiers d'incident que la surveillance cree quand une
             // alarme apparait), le deuxieme enfant de Ressources ; son compteur : ceux en attente. A LA FIN, toujours.
             HmiIncidents,
+            // 1.23.1 : IHM > Styles SE DEPLIE (le client : << le deballage de Styles, avec les styles, les couleurs
+            //   semantiques, des icones verrouille et utilisateur >>) - HmiStyleGroup "Styles [n]" (index 0) et
+            //   "Couleurs semantiques [n]" (index 1) ; HmiStyleItem un style (index = rang dans hmi::styles::all :
+            //   ceux du projet, puis les fournis) ; HmiSemanticItem une couleur (index = rang dans
+            //   hmi::semantic::all). A LA FIN, toujours.
+            HmiStyleGroup, HmiStyleItem, HmiSemanticItem,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).

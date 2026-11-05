@@ -71,6 +71,8 @@
 #include "../src/app/hmi/HmiFunctionTestsPage.hpp"   // 1.13.0 (lot J4b) : l'onglet Tests
 #include "../src/app/hmi/HmiUnitPanes.hpp"          // 1.13.0 (lot J6b) : la case Unite, le selecteur, Unites de mesure
 #include "../src/hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
+#include "../src/hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques
+#include "../src/core/SemanticColors.hpp"
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
@@ -38609,6 +38611,96 @@ void stylesParType1230() {
     check(st::users(p, "Mon ISA-101") == 3, "Ctrl+Z : il revient, cit\xC3\xA9 par ses trois objets");
 }
 
+// ============================================================ 1.23.1 ======
+//  IHM > STYLES SE DEPLIE (le client : << le deballage de Styles, avec les styles, les couleurs semantiques, des icones
+//  verrouille et utilisateur >>) : deux groupes, Styles [n] (les fournis comptent) et Couleurs semantiques [n] ; un
+//  cadenas pour ce qui est fourni, une personne pour ce qui est a soi ; une couleur dans sa teinte, sa valeur apres.
+void arbreStyles1231() {
+    std::printf("== 1.23.1 : IHM > Styles deplie (styles, couleurs semantiques, cadenas et personne) ==\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    using TM = app::ProjectTreeModel;
+    auto doc = std::make_shared<Document>();
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    // IHM > Styles.
+    ui::NodeId hmiNode = ui::kInvalidNode, styles = ui::kInvalidNode;
+    for (std::size_t i = 0; i < tree.childCount(tree.root()); ++i)
+        if (TM::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
+    for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i)
+        if (TM::kindOf(tree.childAt(hmiNode, i)) == NK::HmiStyles) styles = tree.childAt(hmiNode, i);
+    check(styles != ui::kInvalidNode, "IHM \xE2\x80\xBA Styles dans l'arbre");
+    if (styles == ui::kInvalidNode) return;
+    same_text(tree.counterOf(styles), "4", "un projet neuf : les 4 styles fournis comptent (le client)");
+    check(tree.childCount(styles) == 2 && TM::kindOf(tree.childAt(styles, 0)) == NK::HmiStyleGroup
+              && TM::kindOf(tree.childAt(styles, 1)) == NK::HmiStyleGroup,
+          "Styles se d\xC3\xA9plie : deux groupes");
+    if (tree.childCount(styles) != 2) return;
+    const auto groupStyles = tree.childAt(styles, 0), groupColors = tree.childAt(styles, 1);
+    same_text(tree.text(groupStyles) + "  [" + tree.counterOf(groupStyles) + "]", "Styles  [4]", "le groupe Styles et son compte");
+    same_text(tree.text(groupColors) + "  [" + tree.counterOf(groupColors) + "]", "Couleurs s\xC3\xA9mantiques  [12]",
+              "le groupe Couleurs s\xC3\xA9mantiques : les 12 fournies");
+    // Un style et une couleur du projet : en tete, avec la personne ; les fournis, avec le cadenas.
+    hmi::Style mine = hmi::styles::duplicate(doc->project, *hmi::styles::builtin("ISA-101"), "Mon ISA");
+    doc->project.styles.push_back(mine);
+    hmi::SemanticColor eau;
+    eau.id = doc->project.allocate();
+    eau.name = "Eau";
+    eau.value = "#2571B7";
+    doc->project.semanticColors.push_back(eau);
+    doc->changed->emit(kNoId);
+    same_text(tree.counterOf(styles), "5", "un style du projet : 5 en tout");
+    same_text(tree.counterOf(groupColors), "13", "une couleur du projet : 13 en tout");
+    check(tree.childCount(groupStyles) == 5 && tree.childCount(groupColors) == 13, "les groupes se d\xC3\xA9plient");
+    if (tree.childCount(groupStyles) == 5 && tree.childCount(groupColors) == 13) {
+        const auto s0 = tree.childAt(groupStyles, 0), s4 = tree.childAt(groupStyles, 4);
+        same_text(tree.text(s0), "Mon ISA", "le style du projet en t\xC3\xAAte");
+        check(TM::kindOf(s0) == NK::HmiStyleItem && tree.style(s0).icon == ui::Icon::User, "le style du projet : la personne");
+        check(tree.style(s4).icon == ui::Icon::Lock && tree.style(s4).hint == "fourni", "un style fourni : le cadenas");
+        const auto c0 = tree.childAt(groupColors, 0), c1 = tree.childAt(groupColors, 1);
+        same_text(tree.text(c0), "@Eau", "la couleur du projet en t\xC3\xAAte, << @Nom >>");
+        const auto st0 = tree.style(c0);
+        check(TM::kindOf(c0) == NK::HmiSemanticItem && st0.icon == ui::Icon::User && st0.iconColor
+                  && st0.iconColor->r == 0x25 && st0.iconColor->g == 0x71 && st0.iconColor->b == 0xB7 && st0.hint == "#2571B7",
+              "la couleur du projet : la personne, dans sa teinte ; sa valeur apr\xC3\xA8s");
+        same_text(tree.text(c1), "@Fond", "puis les fournies");
+        check(tree.style(c1).icon == ui::Icon::Lock && tree.style(c1).hint.find("fournie") != std::string::npos, "une couleur fournie : le cadenas");
+    }
+}
+
+// 1.23.1 : LA PALETTE D'UNE CASE COULEUR PROPOSE LES COULEURS SEMANTIQUES (une bande sous le choix) ; un clic applique
+// << @Nom >>, que le dessin lit dans sa couleur.
+void paletteSemantique1231() {
+    std::printf("== 1.23.1 : la palette propose les couleurs semantiques (@Nom) ==\n");
+    const auto before = core::semantic::all();
+    const auto recentBefore = ui::ColorPalette::recent();
+    core::semantic::publish({{"Eau", "#2571B7"}, {"Alarme", "#F57C00"}});
+    ui::ColorPalette pal("pal1231");
+    std::string applied;
+    auto link = pal.applied->connect([&](const std::string& v) { applied = v; });
+    pal.setValue("#000000");
+    const float plain = pal.popupRect().h;
+    pal.open();
+    check(pal.semanticColors().size() == 2 && pal.semanticColors()[0] == "@Eau" && pal.semanticColors()[1] == "@Alarme",
+          "la bande : les couleurs publi\xC3\xA9" "es, dans leur ordre");
+    check(pal.popupRect().h > plain, "la fen\xC3\xAAtre grandit de la bande");
+    gfx::Rect r;
+    check(pal.swatchRect("@Eau", r), "la pastille @Eau");
+    gfx::Color col;
+    check(ui::parseHexColor("@Eau", col) && col.r == 0x25 && col.g == 0x71 && col.b == 0xB7, "elle se dessine dans sa couleur");
+    (void)pal.dispatch(ui::MouseMove{{r.x + r.w / 2, r.y + r.h / 2}, {}});
+    check(pal.hint().find("@Eau = #2571B7") != std::string::npos, "le bas dit son nom et sa couleur");
+    (void)pal.dispatch(ui::MouseDown{{r.x + r.w / 2, r.y + r.h / 2}, ui::MouseButton::Left, 1, {}});
+    same_text(applied, "@Eau", "un clic applique << @Eau >> (pas son code)");
+    core::semantic::publish({});
+    pal.open();
+    check(pal.semanticColors().empty(), "aucune couleur publi\xC3\xA9" "e : pas de bande");
+    pal.close();
+    core::semantic::publish(before);
+    ui::ColorPalette::recent() = recentBefore;
+}
+
+
 // 1.12.28 : « j'aimerais combiner le didacticiel de l'ihm avec l'aide F1 ». Le catalogue des parcours
 // (help/Trails), leurs pages du guide (Demarrer > Le didacticiel), le sous-chapitre du centre, en bas
 // de Demarrer, et les pages qui les proposent.
@@ -45073,6 +45165,8 @@ int main(int argc, char** argv) {
         lot12_conception();
         apercuStyles11227();
         stylesParType1230();
+        arbreStyles1231();
+        paletteSemantique1231();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -45587,6 +45681,8 @@ int main(int argc, char** argv) {
     touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
     apercuStyles11227();                    // 1.12.27 : l'apercu des styles
     stylesParType1230();                    // 1.23.0 : l'onglet Styles par type d'objet
+    arbreStyles1231();                      // 1.23.1 : IHM > Styles deplie (styles, couleurs semantiques, cadenas et personne)
+    paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

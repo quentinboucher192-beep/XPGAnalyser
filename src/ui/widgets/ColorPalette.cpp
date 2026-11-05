@@ -37,6 +37,8 @@ constexpr float kFootH = 46.f;
 constexpr float kButtonH = 28.f;
 constexpr float kWidth = kPad + kLeftW + kColGap + kRightW + kPad;  // 514
 constexpr float kHeight = kHeadH + kPad + kBodyH + kPad + kFootH;    // 388
+constexpr float kSemanticH = kLabel + kSwatch + kPad;                  // 1.23.1 : la bande des couleurs semantiques
+constexpr std::size_t kSemanticMax = 20;
 constexpr float kLoupeCells = 11.f;                                  // la loupe : 11 x 11 pixels
 constexpr float kLoupeZoom = 9.f;
 constexpr gfx::FontId kFont{16};
@@ -263,7 +265,17 @@ void ColorPalette::setProjectColors(std::vector<std::string> colors) {
     invalidate();
 }
 
+void ColorPalette::refreshSemanticColors() {
+    semantic_.clear();
+    for (const auto& [name, value] : core::semantic::all()) {
+        semantic_.push_back("@" + name);
+        if (semantic_.size() == kSemanticMax) break;
+    }
+    invalidate();
+}
+
 void ColorPalette::open() {
+    refreshSemanticColors();   // 1.23.1
     open_ = true;
     origin_ = value_;
     draft_ = value_;
@@ -322,7 +334,7 @@ float ColorPalette::sectionY(int section) const {
 
 gfx::Rect ColorPalette::popupRect() const {
     const auto b = bounds();
-    const float h = kHeight;
+    const float h = kHeight + (semantic_.empty() ? 0.f : kSemanticH);   // 1.23.1
     float x = b.x;
     float y = b.bottom() + 2.f;
     const auto surface = surfaceSize();
@@ -350,6 +362,10 @@ std::vector<ColorPalette::Cell> ColorPalette::cells() const {
     }
     if (!project_.empty()) rowOf(sectionY(1) + kLabel, project_);
     if (!recent().empty()) rowOf(sectionY(2) + kLabel, recent());
+    // 1.23.1 : les couleurs semantiques, sur toute la largeur, sous le choix.
+    const float sy = kHeadH + kPad + kBodyH + kPad + kLabel;
+    for (std::size_t i = 0; i < semantic_.size() && i < kSemanticMax; ++i)
+        out.push_back({{p.x + kPad + static_cast<float>(i) * (kSwatch + kGap), p.y + sy, kSwatch, kSwatch}, semantic_[i]});
     return out;
 }
 
@@ -831,6 +847,9 @@ std::string ColorPalette::hint() const {
     if (hover_ == "@teinte") return "Teinte : de 0 \xC3\xA0 359\xC2\xB0 (rouge, jaune, vert,\ncyan, bleu, magenta). Clic ou gliss\xC3\xA9.";
     if (hover_ == "@alpha") return "Transparence : transparente \xC3\xA0 gauche,\nopaque \xC3\xA0 droite (code en #RRGGBBAA).";
     if (!hover_.empty() && hover_.front() == '#') return hover_ + "\nUn clic l'applique et ferme la palette.";
+    if (hover_.size() > 1 && hover_.front() == '@')   // 1.23.1 : une couleur semantique
+        if (const auto v = core::semantic::lookup(hover_))
+            return hover_ + " = " + *v + " (couleur s\xC3\xA9mantique) : la case la suit\nsi on la change. Un clic l'applique.";
     if (!picked_.empty()) return "Pipette : " + picked_ + " prise.\nAppliquer pour la garder.";
     switch (field_) {
         case Field::Hex:
@@ -953,6 +972,10 @@ void ColorPalette::paintBody(const PaintContext& ctx) {
     label(p.x + kPad, p.y + sectionY(0), "Nuancier");
     if (!project_.empty()) label(p.x + kPad, p.y + sectionY(1), "Dans le projet");
     if (!recent().empty()) label(p.x + kPad, p.y + sectionY(2), "R\xC3\xA9" "centes");
+    if (!semantic_.empty()) {   // 1.23.1
+        ctx.r.fillRect({p.x + 1.f, p.y + kHeadH + kPad + kBodyH + kPad * 0.5f, p.w - 2.f, 1.f}, c.border);
+        label(p.x + kPad, p.y + kHeadH + kPad + kBodyH + kPad, "Couleurs s\xC3\xA9mantiques (@Nom, IHM \xE2\x80\xBA Styles)");
+    }
     for (const auto& cell : cells()) {
         gfx::Color col;
         if (!parseHexColor(cell.color, col)) continue;

@@ -41,6 +41,7 @@
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques publiees pour le dessin
+#include "../../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles deplie (les fournis compris)
 #include "../hmi/HmiDesignPanes.hpp"
 #include "../hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8) : IHM > Espaces et bibliotheques
 #include "../hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
@@ -423,7 +424,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || ProjectTreeModel::isNativesKind(k)                                          // 1.12.0 : les natives
         || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                      // 1.13.0 (lot J8) : les bibliotheques
         || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                     // 1.14.0 (M4) : les enregistrements
-        || k == NK::HmiIncidents;                                                      // 1.20.0 : les incidents
+        || k == NK::HmiIncidents                                                       // 1.20.0 : les incidents
+        || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem;   // 1.23.1 : Styles deplie
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -698,6 +700,24 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiTemplateFolder: openHmiViewsFolder(3 + static_cast<int>(ProjectTreeModel::indexOf(n))); break;
         case NK::HmiSymbolsFolder: openHmiViewsFolder(6); break;   // lot 10
         case NK::HmiStyles:        openHmiPane("styles"); break;   // lot 12
+        case NK::HmiStyleGroup:    openHmiStylesAt(ProjectTreeModel::indexOf(n) == 1, {}); break;   // 1.23.1
+        case NK::HmiStyleItem:
+        case NK::HmiSemanticItem: {                                                                 // 1.23.1
+            const bool colors = ProjectTreeModel::kindOf(n) == NK::HmiSemanticItem;
+            std::string name;
+            if (const auto hdoc = app_.hmi()) {
+                const std::size_t at = ProjectTreeModel::indexOf(n);
+                if (colors) {
+                    const auto all = hmi::semantic::all(hdoc->project);
+                    if (at < all.size()) name = all[at]->name;
+                } else {
+                    const auto all = hmi::styles::all(hdoc->project);
+                    if (at < all.size()) name = all[at]->name;
+                }
+            }
+            openHmiStylesAt(colors, name);
+            break;
+        }
         case NK::HmiFind:          openHmiPane("rechercher"); break;
         case NK::HmiTests:         openHmiPane("essais"); break;       // lot 13
         case NK::HmiLanguages:     openHmiPane("langues"); break;
@@ -1119,6 +1139,20 @@ void MainAnalysisScreen::askHmiBind(const std::string& equipment, const std::str
             if (!pane->bindVariable(v[0], v[2], v.size() > 3 ? v[3] : std::string{}, v[1], &why))
                 status_->setTransientMessage("Lier : " + why, 8.0);
         });
+}
+
+void MainAnalysisScreen::openHmiStylesAt(bool colors, const std::string& name) {
+    openHmiPane("styles");
+    auto* styles = dynamic_cast<HmiStylesPane*>(hmiTab("styles"));
+    const auto hdoc = app_.hmi();
+    if (!styles || !hdoc) return;
+    if (colors) {
+        (void)name;   // A_BRANCHER_ONGLET_COULEURS : l'onglet Couleurs semantiques de la page Styles
+        return;
+    }
+    if (name.empty()) return;
+    if (const hmi::Style* st = hdoc->project.styleByName(name)) styles->selectStyle(st->id);
+    else (void)styles->selectBuiltin(name);
 }
 
 void MainAnalysisScreen::openHmiPane(const std::string& key) {
@@ -4263,6 +4297,7 @@ std::string placeOfNode(NK kind) {
             return "vues";
         case NK::HmiSymbolsFolder: return "symboles";   // lot 10
         case NK::HmiStyles:        return "styles";     // lot 12
+        case NK::HmiStyleGroup: case NK::HmiStyleItem: case NK::HmiSemanticItem: return "styles";   // 1.23.1
         case NK::HmiFind:          return "rechercher";
         case NK::HmiTests:         return "essais";     // lot 13
         case NK::HmiLanguages:     return "langues";
