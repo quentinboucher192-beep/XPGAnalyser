@@ -88,8 +88,10 @@ static void testRing() {
     // Au moins une lecture apres le depart des ecrivains : sous une forte charge (4 processeurs pris par d'autres
     // constructions), les 4 fils pouvaient tout ecrire avant que le lecteur ait la main - zero lecture, l'essai echouait
     // sans que le tampon soit en cause (1.22.6, ctest en parallele avec MinGW et Wine).
+    // 1.23.0 : la seule lecture pouvait tomber AVANT la premiere ecriture (rien a lire), puis les 4 fils tout ecrire avant
+    // le test de la boucle - zero lu. On lit jusqu'a avoir lu quelque chose, et tant que les ecrivains travaillent.
     do readWhileWriting += trail::recent(2000).size();
-    while (trail::written() < 70000);
+    while (trail::written() < 70000 || readWhileWriting == 0);
     for (auto& th : threads) th.join();
     CHECK(trail::written() == 80000);
     all = trail::recent(trail::kCapacity);
