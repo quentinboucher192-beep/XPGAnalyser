@@ -277,7 +277,22 @@ void HelpCenterScreen::saveNavigation(bool all) {
     (void)s.save();
 }
 
-void HelpCenterScreen::onExit() { saveNavigation(true); }
+void HelpCenterScreen::onExit() {
+    saveNavigation(true);
+    ui::paths::setProvider({});   // 1.25.1 : plus de `this` dans le fournisseur (l'ecran d'en dessous remet le sien)
+}
+
+// 1.25.1 : le chemin du signalement - le dernier zip prepare, sinon le dossier signalements de tes donnees.
+std::string HelpCenterScreen::reportPathNow() const {
+    return dossiers::utf8De(lastZip_.empty() ? reportDataDir() / "signalements" : lastZip_);
+}
+
+bool HelpCenterScreen::openReportPathMenu(ui::Widget& host, gfx::Point at) {
+    if (!reportShown_) return false;
+    const std::string path = reportPathNow();
+    auto& menu = &host == reportPanel_ ? reportPanelPath_ : reportPath_;
+    return menu.open(host, path, at, {}, lastZip_.empty() ? std::string("Le dossier signalements") : dossiers::utf8De(lastZip_.filename()));
+}
 
 void HelpCenterScreen::Update(const menu::FrameContext& fc) {
     menu::WidgetMenu::Update(fc);
@@ -520,6 +535,8 @@ core::Status HelpCenterScreen::buildUi() {
     }
     links_ += head_->linkActivated->connect([this](const std::string& t) { onLink(t); });
     links_ += page_->linkActivated->connect([this](const std::string& t) { onLink(t); });
+    // 1.25.1 : le clic droit sur la page Signaler (son apercu, << Dernier zip >>) - le chemin du zip ; ailleurs, rien.
+    links_ += page_->contextRequested->connect([this](gfx::Point at, int) { (void)openReportPathMenu(*page_, at); });
 
     // Tranche 8 : les favoris et les recents d'une session a l'autre (les reglages).
     nav_.restore(app_.settings().getList("aide.centre.recents"), app_.settings().getList("aide.centre.favoris"));
@@ -530,6 +547,11 @@ core::Status HelpCenterScreen::buildUi() {
 }
 
 void HelpCenterScreen::onEnter() {
+    // 1.25.1 : les chemins du centre (le zip du signalement, la barre d'etat : la fiche des raccourcis, les exemples
+    // d'import) - le fournisseur de l'ecran du projet n'est pas la.
+    installBasicPathLinks(&app_, [this](const std::string& why) {
+        if (status_) status_->setTransientMessage(why, 6.0, ui::StatusBar::Severity::Warning);
+    });
     // F1 : la boite aux lettres d'avant (le lieu de l'IHM, la cible de la
     // bibliotheque, l'ancre de l'onglet de l'API) -> le sujet de l'endroit.
     hc::F1Place place;
@@ -784,6 +806,7 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
     head_->setVisibility(api ? Visibility::Visible : Visibility::Collapsed);
     // Signaler : le formulaire tient le haut (son titre) ; l'article n'a que l'apercu.
     const bool report = t->source == hc::Source::ReportPage;
+    reportShown_ = report;   // 1.25.1
     if (reportPanel_) reportPanel_->setVisibility(report ? Visibility::Visible : Visibility::Collapsed);
     refreshTrails();   // 1.12.28 : les cartes des parcours, sur leurs pages
     if (keysPanel_)
@@ -983,6 +1006,11 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
 }
 
 ui::EventResult HelpCenterScreen::HandleEvent(const ui::InputEvent& ev) {
+    // 1.25.1 : le clic droit sur les boutons du signalement (Ouvrir le dossier, Copier le chemin...) - le meme menu du
+    // chemin que partout, en plus de leurs boutons.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right && reportPanel_ && reportShown_
+        && reportPanel_->visible() && reportPanel_->bounds().contains(d->pos))
+        if (openReportPathMenu(*reportPanel_, d->pos)) return ui::EventResult::Consumed;
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
         // Alt+Gauche / Alt+Droite : l'historique du centre, comme un navigateur.
         // Dans le centre, ces touches sont toujours a lui : la touche globale

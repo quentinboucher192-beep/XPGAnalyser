@@ -142,6 +142,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
   <ItemGroup>
     <ClCompile Include="src\app\App.cpp" />
     <ClCompile Include="src\app\Brand.cpp" />
+    <ClCompile Include="src\app\Corbeille.cpp" />
     <ClCompile Include="src\app\Capture.cpp" />
     <ClCompile Include="src\app\GoToPanel.cpp" />
     <ClCompile Include="src\app\GrafcetPanels.cpp" />
@@ -164,6 +165,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiSemanticPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiSoundLibraryPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCorbeillePane.cpp" />
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiEditor.cpp" />
     <ClCompile Include="src\app\hmi\HmiEquipmentHost.cpp" />
@@ -434,6 +436,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\screens\ImportWorkspace.cpp" />
     <ClCompile Include="src\app\screens\RenameWorkspace.cpp" />
     <ClCompile Include="src\app\screens\StartScreen.cpp" />
+    <ClCompile Include="src\app\screens\TrashWorkspace.cpp" />
     <ClCompile Include="src\project\MastImport.cpp" />
     <ClCompile Include="src\project\MemberTree.cpp" />
     <ClCompile Include="src\project\GraphListing.cpp" />
@@ -626,6 +629,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\Perf.cpp" />
     <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
+    <ClCompile Include="src\core\Trash.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
     <ClCompile Include="src\help\CenterPages.cpp" />
     <ClCompile Include="src\help\CenterSources.cpp" />
@@ -767,6 +771,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
   <ItemGroup>
     <ClInclude Include="src\app\App.hpp" />
     <ClInclude Include="src\app\Brand.hpp" />
+    <ClInclude Include="src\app\Corbeille.hpp" />
     <ClInclude Include="src\app\Capture.hpp" />
     <ClInclude Include="src\app\ExecutionOrderWiring.hpp" />
     <ClInclude Include="src\app\GoToPanel.hpp" />
@@ -789,6 +794,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiSemanticPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiSoundLibraryPane.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCorbeillePane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiEditor.hpp" />
     <ClInclude Include="src\app\hmi\HmiEquipmentHost.hpp" />
@@ -1189,6 +1195,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\Perf.hpp" />
     <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
+    <ClInclude Include="src\core\Trash.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />
     <ClInclude Include="src\help\CenterPages.hpp" />
     <ClInclude Include="src\help\CenterSources.hpp" />

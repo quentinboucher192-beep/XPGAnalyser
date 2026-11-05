@@ -1039,6 +1039,56 @@ void AiPanel::cancelRename() {
     invalidateLayout();
 }
 
+// 1.25.1 : SUPPRIMER DES CONVERSATIONS DU PANNEAU - leurs fichiers dans la corbeille de l'IA (IA/corbeille), puis UNE
+// commande : un seul Ctrl+Z les rend (leurs fichiers, puis la liste du panneau), Ctrl+Y les y remet. Le panneau parti
+// entretemps : les fichiers reviennent quand meme (l'Assistant les relira).
+namespace {
+void trashConversations(AiPanel& panel, const std::vector<std::string>& ids, const std::vector<std::string>& titles,
+                        std::vector<std::string>& gone, std::vector<std::pair<std::string, std::string>>& refused) {
+    struct Undo {
+        std::vector<core::trash::Moved> moved;
+        std::vector<ai::Conversation>   removed;
+    };
+    auto undo = std::make_shared<Undo>();
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        ai::Conversation c;
+        if (panel.assistant().remove(ids[i], &undo->moved, &c)) {
+            gone.push_back(i < titles.size() ? titles[i] : ids[i]);
+            undo->removed.push_back(std::move(c));
+        } else {
+            refused.emplace_back(i < titles.size() ? titles[i] : ids[i], "introuvable");
+        }
+    }
+    if (undo->removed.empty()) return;
+    AiPanel* p = &panel;
+    const std::weak_ptr<const void> alive = panel.prompt().submitted;   // le champ de la demande vit avec le panneau
+    const auto again = [p, alive] {
+        if (alive.expired()) return;
+        p->chat().rebuild();
+        p->invalidateLayout();
+    };
+    const std::size_t n = undo->removed.size();
+    auto cmd = std::make_unique<core::trash::LambdaCommand>(
+        n > 1 ? "Supprimer " + std::to_string(n) + " conversations" : "Supprimer la conversation " + undo->removed.front().title,
+        [p, alive, undo]() -> core::Status {   // Ctrl+Y : elles repartent
+            if (alive.expired()) return core::ok();
+            undo->moved.clear();
+            for (const auto& c : undo->removed) (void)p->assistant().remove(c.id, &undo->moved);
+            return core::ok();
+        },
+        [p, alive, undo]() -> core::Status {   // Ctrl+Z : les fichiers, puis la liste du panneau
+            std::string why;
+            const bool all = core::trash::takeBackAll(undo->moved, &why);
+            if (!alive.expired())
+                for (const auto& c : undo->removed) (void)p->assistant().restoreConversation(c);
+            if (!all) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + why);
+            return core::ok();
+        },
+        again, true);
+    (void)core::trash::apply(std::move(cmd));
+}
+} // namespace
+
 void AiPanel::askDelete(int index) {
     const auto& list = assistant_->conversations();
     if (index < 0 || index >= static_cast<int>(list.size())) return;
@@ -1047,7 +1097,10 @@ void AiPanel::askDelete(int index) {
     std::size_t files = 0;
     for (const auto& m : c.messages) files += m.attachments.size();
     const auto run = [this, id, title] {
-        if (assistant_->remove(id)) say("Conversation supprim\xC3\xA9" "e : " + title);
+        std::vector<std::string> gone;
+        std::vector<std::pair<std::string, std::string>> refused;
+        trashConversations(*this, {id}, {title}, gone, refused);   // 1.25.1 : la corbeille de l'IA, Ctrl+Z la rend
+        if (!gone.empty()) say("Conversation supprim\xC3\xA9" "e : " + title + " (Ctrl+Z la rend)");
         chat_->rebuild();
         invalidateLayout();
     };
@@ -1060,7 +1113,7 @@ void AiPanel::askDelete(int index) {
     spec.title = "Supprimer la conversation";
     spec.text = "Supprimer \xC2\xAB " + title + " \xC2\xBB et ses " + std::to_string(c.messages.size()) + " messages"
                 + (files ? " (et la copie de ses " + std::to_string(files) + " pi\xC3\xA8" "ces jointes)" : std::string{})
-                + " ?\nLe projet n'est pas touch\xC3\xA9 : seule la conversation part du dossier de l'Assistant.";
+                + " ?\nLe projet n'est pas touch\xC3\xA9 : seule la conversation part, dans la corbeille de l'IA (Ctrl+Z la rend).";
     spec.confirm = "Supprimer";
     spec.danger = true;
     spec.width = 520.f;
@@ -1106,16 +1159,12 @@ void AiPanel::askDeleteChosen() {
     const auto run = [this, ids, titles] {
         std::vector<std::string> gone;
         std::vector<std::pair<std::string, std::string>> refused;
-        for (std::size_t i = 0; i < ids.size(); ++i) {
-            if (assistant_->remove(ids[i])) gone.push_back(titles[i]);
-            else refused.emplace_back(titles[i], "introuvable");
-        }
+        trashConversations(*this, ids, titles, gone, refused);
         chosenIds_.clear();
         several::Batch b;
         b.noun = "conversation";
         b.nouns = "conversations";
         b.feminine = true;
-        b.final = true;
         say(several::summary(b, gone, refused) + ".");
         chat_->rebuild();
         invalidateLayout();
@@ -1128,7 +1177,8 @@ void AiPanel::askDeleteChosen() {
     spec.id = "dialog.ai.supprimer";
     spec.title = "Supprimer les " + std::to_string(ids.size()) + " conversations";
     spec.text = "Supprimer les " + std::to_string(ids.size()) + " conversations " + several::names(titles)
-                + " et leurs messages ?\nC'est d\xC3\xA9" "finitif : elles quittent le dossier de l'Assistant, rien ne les rend. Le projet n'est pas touch\xC3\xA9.";
+                + " et leurs messages ?\nElles vont dans la corbeille de l'IA (l'Assistant ne la lit pas ; elle se vide de ce qui y est "
+                  "depuis plus de 7 jours) : un seul Ctrl+Z les rend. Le projet n'est pas touch\xC3\xA9.";
     spec.confirm = several::label("Supprimer", ids.size());
     spec.danger = true;
     spec.width = 520.f;

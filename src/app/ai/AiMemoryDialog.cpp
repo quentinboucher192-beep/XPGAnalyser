@@ -3736,9 +3736,34 @@ bool AiMemoryDialog::deleteSelected(bool now) {
         return false;
     }
     if (now) return doDeleteKnowledge();
-    ask(Confirm::DeleteKnowledge, "Supprimer la connaissance \xC2\xAB " + k->name + " \xC2\xBB (" + mem::sizeText(k->size()) + ") ? Son fichier est effac\xC3\xA9 de ce PC.",
+    ask(Confirm::DeleteKnowledge, "Supprimer la connaissance \xC2\xAB " + k->name + " \xC2\xBB (" + mem::sizeText(k->size())
+                                      + ") ? Son fichier va dans la corbeille de l'IA : Ctrl+Z le rend.",
         "Oui, supprimer");
     return true;
+}
+
+// 1.25.1 : CE QUI VIENT DE PARTIR DANS LA CORBEILLE DE L'IA (IA/corbeille) - une commande : un seul Ctrl+Z le rend, Ctrl+Y
+// l'y remet ; la fenetre se relit si elle est encore la (sinon elle relira a sa prochaine ouverture).
+void AiMemoryDialog::undoableTrash(std::shared_ptr<std::vector<core::trash::Moved>> moved, const std::string& label) {
+    if (!moved || moved->empty()) return;
+    const std::weak_ptr<const void> alive = refreshButton_ ? std::weak_ptr<const void>(refreshButton_->clicked) : std::weak_ptr<const void>{};
+    auto cmd = std::make_unique<core::trash::LambdaCommand>(
+        label,
+        [moved]() -> core::Status {
+            std::string why;
+            if (!core::trash::putAll(*moved, ai::trashDir(), &why)) return core::fail(core::ErrorCode::FileUnreadable, why);
+            return core::ok();
+        },
+        [moved]() -> core::Status {
+            std::string why;
+            if (!core::trash::takeBackAll(*moved, &why)) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + why);
+            return core::ok();
+        },
+        [this, alive] {
+            if (!alive.expired()) refresh();
+        },
+        true);
+    (void)core::trash::apply(std::move(cmd));
 }
 
 bool AiMemoryDialog::doDeleteKnowledge() {
@@ -3746,13 +3771,15 @@ bool AiMemoryDialog::doDeleteKnowledge() {
     if (!k) return false;
     const std::string name = k->name;
     std::string why;
-    if (!registry_.remove(k->id, &why)) {
+    auto moved = std::make_shared<std::vector<core::trash::Moved>>();   // 1.25.1
+    if (!registry_.remove(k->id, &why, moved.get())) {
         say("Suppression impossible : " + why, true);
         return false;
     }
     selectedKnowledge_.clear();
     refresh();
-    say("Connaissance supprim\xC3\xA9" "e : " + name);
+    undoableTrash(moved, "Supprimer la connaissance " + name);
+    say("Connaissance supprim\xC3\xA9" "e : " + name + " (Ctrl+Z la rend)");
     return true;
 }
 
@@ -3941,6 +3968,7 @@ bool AiMemoryDialog::deleteMemorySelection(bool now) {
     } else {
         return false;
     }
+    text += " Ce qui part va dans la corbeille de l'IA : Ctrl+Z le rend.";   // 1.25.1
     if (now) return doDeleteMemory();
     ask(Confirm::DeleteMemory, text, "Oui, supprimer");
     return true;
@@ -3951,26 +3979,27 @@ bool AiMemoryDialog::doDeleteMemory() {
     if (const auto hash = key.find('#'); hash != std::string::npos) key.erase(hash);
     std::string why, done;
     bool ok = false;
+    auto moved = std::make_shared<std::vector<core::trash::Moved>>();   // 1.25.1 : la corbeille de l'IA, Ctrl+Z
     if (key.rfind("c:", 0) == 0 || key.rfind("m:", 0) == 0) {
         std::string id = key.substr(2);
         if (key[0] == 'm') id = id.substr(0, id.rfind(':'));
-        ok = mem::deleteConversation(id, &why);
+        ok = mem::deleteConversation(id, &why, moved.get());
         done = "Conversation supprim\xC3\xA9" "e.";
     } else if (key.rfind("p:", 0) == 0) {
         const std::string p = key.substr(2);
-        const std::size_t know = registry_.removeProject(p);
+        const std::size_t know = registry_.removeProject(p, moved.get());
         std::size_t convs = 0;
         for (const auto& c : conversations_)
-            if (c.project == p && mem::deleteConversation(c.id, &why)) ++convs;
+            if (c.project == p && mem::deleteConversation(c.id, &why, moved.get())) ++convs;
         ok = true;
         done = "Projet " + p + " oubli\xC3\xA9 : " + plural(know, "connaissance", "connaissances") + ", " + plural(convs, "conversation", "conversations") + " supprim\xC3\xA9" "es.";
     } else if (key.rfind("k:", 0) == 0) {
         const auto* k = registry_.find(key.substr(2));
         const std::string name = k ? k->name : std::string{};
-        ok = registry_.remove(key.substr(2), &why);
+        ok = registry_.remove(key.substr(2), &why, moved.get());
         done = "M\xC3\xA9moire supprim\xC3\xA9" "e : " + name;
     } else if (key.rfind("a:", 0) == 0) {
-        ok = mem::deleteAttachmentFolder(key.substr(2), &why);
+        ok = mem::deleteAttachmentFolder(key.substr(2), &why, moved.get());
         done = "Pi\xC3\xA8" "ce jointe supprim\xC3\xA9" "e.";
     }
     selectedMemory_.clear();
@@ -3979,7 +4008,8 @@ bool AiMemoryDialog::doDeleteMemory() {
         say("Suppression impossible : " + why, true);
         return false;
     }
-    say(done);
+    undoableTrash(moved, done);
+    say(done + (moved->empty() ? std::string{} : std::string(" Ctrl+Z la rend (la corbeille de l'IA).")));
     return true;
 }
 
@@ -4609,13 +4639,15 @@ bool AiMemoryDialog::doDeleteSouvenir() {
     if (!k) return false;
     const std::string name = k->name;
     std::string why;
-    if (!registry_.remove(k->id, &why)) {
+    auto moved = std::make_shared<std::vector<core::trash::Moved>>();   // 1.25.1
+    if (!registry_.remove(k->id, &why, moved.get())) {
         say(why, true);
         return false;
     }
     selectedSouvenir_.clear();
     refresh();
-    say("Souvenir supprim\xC3\xA9 : " + name + ".");
+    undoableTrash(moved, "Supprimer le souvenir " + name);
+    say("Souvenir supprim\xC3\xA9 : " + name + " (Ctrl+Z le rend).");
     return true;
 }
 
@@ -4651,7 +4683,8 @@ bool AiMemoryDialog::selectKeys(List l, const std::vector<std::string>& keys) {
     return rows.size() == keys.size();
 }
 
-// La confirmation : les premiers noms, ce qui reste et pourquoi, << definitif >>. `now` : sans elle (les essais).
+// La confirmation : les premiers noms, ce qui reste et pourquoi, ce que Ctrl+Z rend. `now` : sans elle (les essais).
+// 1.25.1 : plus << definitif >> - ce qui part va dans la corbeille de l'IA (IA/corbeille), un seul Ctrl+Z le rend.
 bool AiMemoryDialog::askDeleteMany(List l, bool now) {
     const auto keys = chosenKeys(l);
     const Rows* m = l == List::Learning ? (learning_ ? learning_->model.get() : nullptr)
@@ -4708,8 +4741,9 @@ bool AiMemoryDialog::askDeleteMany(List l, bool now) {
     if (now) return doDeleteMany();
     const std::size_t n = doomed_.size();
     std::string text = "Supprimer " + (n > 1 ? "les " + std::to_string(n) + " " + doomedNouns_ : (doomedFeminine_ ? "la " : "le ") + doomedNoun_)
-                     + " " + several::names(names, 4) + " ? C'est d\xC3\xA9" "finitif : " + (n > 1 ? "leurs fichiers sont effac\xC3\xA9s" : "son fichier est effac\xC3\xA9")
-                     + " de ce PC, rien ne pourra \xC3\xAAtre r\xC3\xA9" "cup\xC3\xA9r\xC3\xA9.";
+                     + " " + several::names(names, 4) + " ? " + (n > 1 ? "Leurs fichiers vont" : "Son fichier va")
+                     + " dans la corbeille de l'IA (l'Assistant ne la lit pas ; elle se vide de ce qui y est depuis plus de 7 jours) : "
+                     + (n > 1 ? "un seul Ctrl+Z les rend." : "Ctrl+Z le rend.");
     if (!kept.empty()) text += " Reste" + std::string(kept.size() > 1 ? "nt" : "") + " : " + several::names(kept, 3) + ".";
     ask(Confirm::DeleteMany, std::move(text), "Oui, " + several::label("supprimer", n));
     return true;
@@ -4720,6 +4754,7 @@ bool AiMemoryDialog::doDeleteMany() {
     doomed_.clear();
     std::vector<std::string> gone;
     std::vector<std::pair<std::string, std::string>> refused;
+    auto moved = std::make_shared<std::vector<core::trash::Moved>>();   // 1.25.1 : ce que la corbeille a recu
     for (const auto& d : doomed) {
         std::string why;
         bool ok = false;
@@ -4728,11 +4763,11 @@ bool AiMemoryDialog::doDeleteMany() {
             const auto* k = registry_.find(id);
             if (!k) why = "introuvable";
             else if (k->builtIn) why = "int\xC3\xA9gr\xC3\xA9" "e au logiciel";
-            else ok = registry_.remove(id, &why);
+            else ok = registry_.remove(id, &why, moved.get());
         } else if (d.key.rfind("c:", 0) == 0) {
-            ok = mem::deleteConversation(d.key.substr(2), &why);
+            ok = mem::deleteConversation(d.key.substr(2), &why, moved.get());
         } else if (d.key.rfind("a:", 0) == 0) {
-            ok = mem::deleteAttachmentFolder(d.key.substr(2), &why);
+            ok = mem::deleteAttachmentFolder(d.key.substr(2), &why, moved.get());
         } else {
             why = "pas ici";
         }
@@ -4747,7 +4782,8 @@ bool AiMemoryDialog::doDeleteMany() {
     b.noun = doomedNoun_;
     b.nouns = doomedNouns_;
     b.feminine = doomedFeminine_;
-    b.final = true;
+    // 1.25.1 : UN SEUL Ctrl+Z les rend (la corbeille de l'IA) ; Ctrl+Y les y remet.
+    undoableTrash(moved, "Supprimer " + std::to_string(gone.size()) + " " + (gone.size() > 1 ? b.nouns : b.noun));
     say(several::summary(b, gone, refused) + ".", !refused.empty());
     return !gone.empty();
 }

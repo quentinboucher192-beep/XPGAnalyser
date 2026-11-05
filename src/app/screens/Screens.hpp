@@ -79,6 +79,13 @@ class HmiTutorial;
 class HistoryPanel;
 struct HistoryMoved;
 
+// 1.25.1 : LES CHEMINS HORS DE L'ECRAN DU PROJET (FinderWorkspace.cpp) - l'accueil, le centre d'aide, la fenetre du
+// rapport de plantage installent ce fournisseur a leur onEnter (et l'otent a leur onExit) : Ouvrir dans l'explorateur,
+// Aller a (`goTo` d'abord : rend nullopt s'il ne prend pas ce chemin, sinon "" ou la raison ; puis l'apercu d'un fichier),
+// Copier le chemin. `app` nul : pas d'apercu (la fenetre a part du rapport). `say` : une raison a dire.
+using PathGoTo = std::function<std::optional<std::string>(const std::string& path, const std::string& resolved, bool dry)>;
+void installBasicPathLinks(App* app, std::function<void(const std::string&)> say, PathGoTo goTo = {});
+
 // --------------------------------------------------------------- 1. Startup ---
 //  L'accueil (lot API 7) : a gauche la marque et les actions, au centre les
 //  projets recents en cartes, a droite le projet choisi. Les widgets sont dans
@@ -1141,7 +1148,12 @@ public:
     // 1.12.30 : l'archive .xihm du projet entier vient d'etre ecrite (app/ProjectExchange) :
     // son rapport dans IHM > Exporter / Importer, si l'onglet est ouvert.
     void showHmiArchiveReport(const hmi::ArchiveReport& report, const std::string& path);
+    // 1.25.1 : LA CORBEILLE (Projet > Corbeille..., le noeud << Corbeille [N] >> de l'arbre) - le volet ; les corbeilles du
+    // projet, de l'Assistant IA et des macros s'y inscrivent (TrashWorkspace.cpp), a chaque retour sur l'ecran.
+    void openTrash();
+    void registerTrashSources();
 private:
+    std::string trashFolder_;   // 1.25.1 : le projet dont la corbeille est inscrite (et purgee, une fois par projet)
     void askHmiLogin(std::string login);
     // Le lot 6 (HmiRuntimeDialogs.cpp) : ce que l'IHM en marche demande a
     // l'ecran - un jeu de recette a ajouter, modifier, supprimer ou relire

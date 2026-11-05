@@ -121,6 +121,7 @@ void drawCyclicGlyph(gfx::IRenderer& r, int glyph, const gfx::Rect& b, gfx::Colo
     }
     switch (glyph) {
         case GPlus: L(8, 3, 8, 13, 1.7f); L(3, 8, 13, 8, 1.7f); break;
+        case GDelete: L(4, 4, 12, 12, 1.7f); L(12, 4, 4, 12, 1.7f); break;   // 1.25.1
         case GReadWrite:          // une fleche qui monte, une qui descend
             L(5, 2.5f, 5, 13.5f); L(2.5f, 5, 5, 2.5f); L(5, 2.5f, 7.5f, 5);
             L(11, 13.5f, 11, 2.5f); L(8.5f, 11, 11, 13.5f); L(11, 13.5f, 13.5f, 11);
@@ -805,6 +806,91 @@ void HmiCyclicPrompt::paintPanel(const ui::PaintContext& ctx) {
 }
 
 ui::EventResult HmiCyclicPrompt::panelEvent(const ui::InputEvent& ev) {
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Return) {
+        (void)accept();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
+}
+
+// ================================================ 1.25.1 : Supprimer des jeux ===
+HmiCyclicSetsDialog::HmiCyclicSetsDialog(std::string id, std::vector<Set> sets) : HmiCyclicOverlay(id, true), sets_(std::move(sets)) {
+    table_ = &static_cast<HmiCyclicTable&>(addChild(std::make_unique<HmiCyclicTable>(id + ".liste")));
+    table_->setSelectionMode(ui::SelectionMode::Extended);   // Ctrl+clic, Maj+clic, Ctrl+A
+    table_->setColumns({{"Jeu", 240.f}, {"Requ\xC3\xAAtes, p\xC3\xA9riode", 220.f}});
+    std::vector<std::vector<std::string>> cells;
+    std::vector<std::vector<ui::CellStyle>> styles;
+    for (const auto& s : sets_) {
+        cells.push_back({s.name, s.detail});
+        styles.push_back(std::vector<ui::CellStyle>(2));
+    }
+    table_->setContent({"Jeu", "Requ\xC3\xAAtes, p\xC3\xA9riode"}, std::move(cells), std::move(styles));
+    cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", id + ".fermer")));
+    ok_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Supprimer", id + ".supprimer")));
+    ok_->setStyle(ui::Button::Style::Danger);
+    links_ += ok_->clicked->connect([this] { (void)accept(); });
+    links_ += cancel_->clicked->connect([this] { close(); });
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { refreshButton(); });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key == ui::Key::Delete && k.mods.none()) return accept();
+        return false;
+    });
+    refreshButton();
+}
+
+std::vector<std::string> HmiCyclicSetsDialog::chosen() const {
+    std::vector<std::string> order;
+    for (const auto& s : sets_) order.push_back(s.name);
+    return several::chosen(*table_, order);
+}
+
+bool HmiCyclicSetsDialog::choose(const std::vector<std::string>& names) {
+    std::vector<ui::RowIndex> rows;
+    for (std::size_t i = 0; i < sets_.size(); ++i)
+        if (std::find(names.begin(), names.end(), sets_[i].name) != names.end()) rows.push_back(static_cast<ui::RowIndex>(i));
+    table_->selectModelRows(rows);
+    refreshButton();
+    return rows.size() == names.size();
+}
+
+void HmiCyclicSetsDialog::refreshButton() {
+    const auto n = chosen().size();
+    ok_->setText(several::label("Supprimer", n) + (n > 1 ? "\xE2\x80\xA6" : ""));
+    ok_->setEnabled(n > 0);
+    ok_->setTooltip(n ? std::string("Une question, puis un seul Ctrl+Z les rend") : std::string("Choisis un ou plusieurs jeux (Ctrl+clic, Maj+clic)"));
+    invalidate();
+}
+
+bool HmiCyclicSetsDialog::accept() {
+    const auto names = chosen();
+    if (names.empty()) return false;
+    close();
+    if (deleted) deleted(names);
+    return true;
+}
+
+void HmiCyclicSetsDialog::placePanel(const gfx::Rect& host) {
+    const float w = std::min(560.f, host.w - 40), h = std::min(420.f, std::max(260.f, host.h - 60));
+    panel_ = {host.x + (host.w - w) / 2, host.y + std::max(30.f, (host.h - h) / 3), w, h};
+    table_->setBounds({panel_.x + 16, panel_.y + 96, panel_.w - 32, panel_.h - 96 - 58});
+    const float by = panel_.y + panel_.h - 42;
+    ok_->setBounds({panel_.x + panel_.w - 16 - 170, by, 170, 32});
+    cancel_->setBounds({panel_.x + panel_.w - 16 - 170 - 10 - 110, by, 110, 32});
+}
+
+void HmiCyclicSetsDialog::paintPanel(const ui::PaintContext& ctx) {
+    const auto body = paintFrame(ctx, "Supprimer des jeux de lecture", GDelete, 52);
+    const std::string text = sets_.empty() ? std::string("Aucun jeu enregistr\xC3\xA9 dans le projet.")
+                                           : std::string("Choisis les jeux \xC3\xA0 supprimer (Ctrl+clic, Maj+clic, Ctrl+A). Une question, "
+                                                         "puis un seul Ctrl+Z les rend.");
+    float y = body.y;
+    for (const auto& line : wrap(text, kSmall, body.w)) {
+        ctx.r.drawText({body.x + 2, y}, line, kSmall, ctx.theme.color.textMuted);
+        y += 18;
+    }
+}
+
+ui::EventResult HmiCyclicSetsDialog::panelEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Return) {
         (void)accept();
         return ui::EventResult::Consumed;

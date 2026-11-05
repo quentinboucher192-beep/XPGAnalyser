@@ -637,7 +637,8 @@ void arbre_ihm() {
     // API porte les dix dossiers de l'automate, avec leurs NodeId d'avant.
     // Lot 21 : et les versions du projet, a cote.
     // Lot API 8 : et le Centre de simulation, entre l'IHM et les versions.
-    check(tree.childCount(root) == 4, "avec l'IHM : quatre dossiers au m\xC3\xAAme niveau, API, IHM, Simulation et Versions");
+    // 1.25.1 : et la Corbeille, apres les versions (cinq dossiers).
+    check(tree.childCount(root) == 5, "avec l'IHM : cinq dossiers au m\xC3\xAAme niveau, API, IHM, Simulation, Versions et Corbeille");
     const auto api = tree.childAt(root, 0);
     same_text(tree.text(api), "API", "le dossier API d'abord");
     check(api == app::ProjectTreeModel::apiFolderNode() && tree.style(api).icon == ui::Icon::Cpu, "... son ic\xC3\xB4ne : l'automate");
@@ -661,7 +662,10 @@ void arbre_ihm() {
     }
     check(tree.childAt(api, 2) == app::ProjectTreeModel::pack(NK::TypesFolder, 0) && tree.childAt(api, 5) == app::ProjectTreeModel::pack(NK::ExecOrderFolder, 0),
           "... avec leurs identifiants d'avant (ce qui \xC3\xA9tait d\xC3\xA9pli\xC3\xA9 le reste)");
-    check(tree.childAt(api, 11) == ui::kInvalidNode && tree.childAt(root, 4) == ui::kInvalidNode, "rien au-del\xC3\xA0");
+    // 1.25.1 : la Corbeille, cinquieme, puis rien.
+    check(tree.childAt(api, 11) == ui::kInvalidNode && tree.childAt(root, 4) == app::ProjectTreeModel::trashFolderNode()
+              && tree.childAt(root, 5) == ui::kInvalidNode,
+          "la Corbeille en dernier, rien au-del\xC3\xA0");
     // Lot API 8 : LE CENTRE DE SIMULATION - un dossier a la racine, entre l'IHM
     // et les versions : Vue d'ensemble, Automate (l'ancien API > Simulation, le
     // meme noeud), IHM (l'ancien IHM > Simulation), Equipements, Debogage,
@@ -764,7 +768,7 @@ void arbre_ihm() {
                   && tree.style(api).pill == "5 \xC3\xA0 mettre \xC3\xA0 jour" && !tree.setLibraryUpdates(5, 0),
               "les mises \xC3\xA0 jour de biblioth\xC3\xA8que : Types d\xC3\xA9riv\xC3\xA9s (5), le titre API");
         (void)tree.setLibraryUpdates(0, 0);
-        check(tree.setScope(3) && tree.childCount(root) == 1 && tree.childAt(root, 0) == ihm && tree.setScope(0) && tree.childCount(root) == 4,
+        check(tree.setScope(3) && tree.childCount(root) == 1 && tree.childAt(root, 0) == ihm && tree.setScope(0) && tree.childCount(root) == 5,   // 1.25.1 : + la Corbeille
               "la port\xC3\xA9" "e du rail : IHM seulement, puis tout");
     }
 
@@ -12001,7 +12005,14 @@ int ligneDeVue(const ui::TableView& t, int modelRow) {
 }
 
 // 1.24.1 : les aides des essais des limites corrigees (cheminsChamps1241, supprimerPlusieurs1241, Chercher des fichiers).
+#include "../src/core/Trash.hpp"   // 1.25.1 : la corbeille commune (<date>~<nom>)
 namespace lim1241 {
+// 1.25.1 : un element de la corbeille `bin` sous son nom d'origine (la corbeille commune le prefixe de sa date).
+bool inBin(const std::filesystem::path& bin, const std::string& name) {
+    for (const auto& e : core::trash::list(bin.generic_string()))
+        if (core::trash::originalName(std::filesystem::path(e).filename().string()) == name) return true;
+    return false;
+}
 // Un fournisseur de chemins d'essai : le "dossier du projet" est `base` ; Ouvrir dans l'explorateur et Aller a notent.
 struct Paths {
     ui::paths::Provider      saved;
@@ -43521,7 +43532,7 @@ void enregistrements1140() {
     }
     check(rp.importPath((out / "Essai renomme.xrec").string()) && rp.rowCount() == 2 && fs::exists(recDir / "Essai renomme (2).xrec"),
           "Importer : un nom libre (Essai renomme (2))");
-    check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && fs::exists(dir / "ihm" / "corbeille" / "Essai renomme (2).xrec"),
+    check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && lim1241::inBin(dir / "ihm" / "corbeille", "Essai renomme (2).xrec"),
           "Supprimer : dans la corbeille du projet");
     // ---- Configuration > Enregistrements
     app::HmiRecordingSettingsPane cp("m4.settings", doc, apply);
@@ -47006,12 +47017,12 @@ void supprimerPlusieurs1241() {
         check(q.asked == 1 && q.title == "Supprimer les 3 enregistrements ?" && has(q.text, "Nuit") && has(q.text, "corbeille") && has(q.text, "Un seul Ctrl+Z"),
               "Suppr : une seule question (" + q.title + " / " + q.text + ")");
         check(!askedOne, "... pas la question d'un seul");
-        check(rp.rowCount() == 1 && fs::exists(folder / "Essai.xrec") && fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec")
-                  && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"),
+        check(rp.rowCount() == 1 && fs::exists(folder / "Essai.xrec") && lim1241::inBin(dir / "ihm" / "corbeille", "Nuit.xrec")
+                  && lim1241::inBin(dir / "ihm" / "corbeille", "Demo.xrec"),
               "les 3 partent dans la corbeille du projet ; Essai reste");
         check(has(rp.lastMessage(), "3 enregistrements supprim") && has(rp.lastMessage(), "un seul Ctrl+Z"), "le compte rendu : " + rp.lastMessage());
         check(stack.undo() && fs::exists(folder / "Nuit.xrec") && fs::exists(folder / "Jour.xrec") && fs::exists(folder / "Demo.xrec")
-                  && !fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec"),
+                  && !lim1241::inBin(dir / "ihm" / "corbeille", "Nuit.xrec"),
               "UN Ctrl+Z les ressort de la corbeille, \xC3\xA0 leur place");
         rp.refresh();
         check(rp.rowCount() == 4, "les 4 de nouveau dans la liste");
@@ -47027,7 +47038,7 @@ void supprimerPlusieurs1241() {
         // Un fichier revenu a sa place entretemps : Ctrl+Z le dit, la corbeille garde le sien.
         check(rp.select("Demo") && rp.removeSelected(), "Demo \xC3\xA0 la corbeille");
         { std::ofstream f(folder / "Demo.xrec"); f << "un autre"; }
-        check(!stack.undo() && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"), "un fichier du m\xC3\xAAme nom revenu : Ctrl+Z ne l'\xC3\xA9" "crase pas");
+        check(!stack.undo() && lim1241::inBin(dir / "ihm" / "corbeille", "Demo.xrec"), "un fichier du m\xC3\xAAme nom revenu : Ctrl+Z ne l'\xC3\xA9" "crase pas");
         core::CommandGroupScope::registerStack(nullptr);
         fs::remove_all(dir, ec);
     }
@@ -47126,7 +47137,8 @@ void supprimerPlusieurs1241() {
     app::several::setConfirmHost({});
 }
 
-// =============================================================================
+// ======================================================================}
+
 //  1.26.0 : L'EDITEUR DE POLICES (le client : << pouvoir editer des TTF en live sur le logiciel, en creer, en dupliquer
 //  a partir de >>). Nouvelle police, dessiner (rectangle, ellipse, plume, ajouter un point), deplacer (fleches, glisser a
 //  la souris : un seul Ctrl+Z), les reglages (chasse, approches, famille et noms reserves), les composes (decomposer),
@@ -47321,6 +47333,676 @@ void editeurPolices1260(const std::string& fixtures) {
     // Ouvrir une fournie : une copie (elle ne change pas).
     check(ed.openFont(dejavu) && ed.font().family != "DejaVu Sans" && ed.originText() == "Copie de DejaVu Sans", "ouvrir une fournie : on modifie une copie");
     fs::remove_all(mine, ec);
+=======
+// =====================================================================================================================
+//  1.25.1 : LES LIMITES RESTANTES DE LA 1.25.0 (le client : << corrige les limites restantes >>). HMI_TEST_RES=1 : ces
+//  essais seuls. La corbeille commune (core/Trash), celle des versions, les macros et les versions de l'arbre qui
+//  reviennent par Ctrl+Z, le chemin d'un message de la barre d'etat, les fichiers d'une archive (Echanges), l'outil
+//  Modbus (plusieurs requetes, des jeux), plusieurs equipements avec le choix d'un seul.
+// =====================================================================================================================
+#include "../src/core/Trash.hpp"
+#include "../src/hmi/HmiVersions.hpp"
+#include "../src/app/FileView.hpp"
+
+namespace res1251 {
+std::string utf8(const std::filesystem::path& p) {
+    const auto u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+void write(const std::filesystem::path& p, const std::string& text) {
+    std::error_code ec;
+    std::filesystem::create_directories(p.parent_path(), ec);
+    std::ofstream f(p, std::ios::binary);
+    f << text;
+}
+} // namespace res1251
+
+// LA CORBEILLE COMMUNE (core/Trash) ET CELLE DES VERSIONS (versions/corbeille).
+void corbeille1251() {
+    std::printf("== 1.25.1 : la corbeille (core::trash), celle des versions ==\n");
+    namespace fs = std::filesystem;
+    namespace tr = core::trash;
+    using res1251::utf8;
+    const fs::path dir = fs::temp_directory_path() / "hmi_corbeille_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    // ---- les noms : la date en temps universel, puis le nom d'origine ----
+    same_text(tr::stamp(1762364000), "20251105-173320", "la date d'un element : 20251105-173320 (temps universel)");
+    check(tr::trashedAt("20251105-173320~Pompe.json") == 1762364000, "... et le retour (secondes depuis 1970)");
+    same_text(tr::originalName("20251105-173320~Pompe.json"), "Pompe.json", "le nom d'origine");
+    check(tr::trashedAt("Pompe.json") < 0 && tr::originalName("Pompe.json") == "Pompe.json", "un nom ordinaire n'est pas de la corbeille");
+    // ---- mettre, rendre ----
+    res1251::write(dir / "magasin" / "a.json", "{}");
+    res1251::write(dir / "magasin" / "dossier" / "b.txt", "b");
+    const std::string bin = utf8(dir / "magasin" / ".corbeille");
+    std::string t1, t2, why;
+    check(tr::put(utf8(dir / "magasin" / "a.json"), bin, t1, &why) && !fs::exists(dir / "magasin" / "a.json") && fs::exists(fs::path(t1)),
+          "un fichier dans la corbeille (" + t1 + ")");
+    check(tr::put(utf8(dir / "magasin" / "dossier"), bin, t2, &why) && fs::is_directory(fs::path(t2)) && fs::exists(fs::path(t2) / "b.txt"),
+          "un dossier aussi, avec ce qu'il contient");
+    check(tr::list(bin).size() == 2 && tr::originalName(fs::path(t1).filename().string()) == "a.json", "la corbeille les liste ; leurs noms d'origine");
+    check(tr::takeBack(t1, utf8(dir / "magasin" / "a.json"), &why) && fs::exists(dir / "magasin" / "a.json") && !fs::exists(fs::path(t1)),
+          "rendu, a sa place");
+    res1251::write(dir / "magasin" / "dossier" / "autre.txt", "x");
+    check(!tr::takeBack(t2, utf8(dir / "magasin" / "dossier"), &why) && why.find("m\xC3\xAAme nom") != std::string::npos && fs::exists(fs::path(t2)),
+          "un element du meme nom revenu : refuse, la corbeille garde le sien (" + why + ")");
+    // ---- la purge : plus de 7 jours ----
+    {
+        const std::int64_t now = tr::trashedAt(fs::path(t2).filename().string());
+        const std::string old = utf8(fs::path(bin) / (tr::stamp(now - 8 * 86400) + "~vieux.json"));
+        res1251::write(fs::path(old), "{}");
+        check(tr::purge(bin, tr::kKeepDays, now) == 1 && !fs::exists(fs::path(old)) && fs::exists(fs::path(t2)),
+              "la purge : celui de plus de 7 jours part, l'autre reste");
+    }
+    // ---- une commande : Ctrl+Z, Ctrl+Y ----
+    {
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        std::vector<tr::Moved> moved{{utf8(dir / "magasin" / "a.json"), {}}};
+        std::string at;
+        check(tr::put(moved[0].original, bin, at) , "un fichier supprime par un volet");
+        moved[0].trashed = at;
+        auto shared = std::make_shared<std::vector<tr::Moved>>(moved);
+        int after = 0;
+        check(tr::apply(std::make_unique<tr::LambdaCommand>(
+                            "Supprimer a.json",
+                            [shared, bin]() -> core::Status {
+                                return tr::putAll(*shared, bin) ? core::ok() : core::fail(core::ErrorCode::FileUnreadable, "non");
+                            },
+                            [shared]() -> core::Status {
+                                return tr::takeBackAll(*shared) ? core::ok() : core::fail(core::ErrorCode::FileUnreadable, "non");
+                            },
+                            [&after] { ++after; }, true)),
+              "... puis sa commande (deja faite : la premiere execution ne refait rien)");
+        check(after == 0 && !fs::exists(dir / "magasin" / "a.json") && stack.undoLabel() == "Supprimer a.json", "rien de refait ; l'historique la nomme");
+        check(stack.undo() && fs::exists(dir / "magasin" / "a.json") && after == 1, "Ctrl+Z : rendu");
+        check(stack.redo() && !fs::exists(dir / "magasin" / "a.json") && after == 2, "Ctrl+Y : de nouveau dans la corbeille");
+        check(stack.undo() && fs::exists(dir / "magasin" / "a.json"), "Ctrl+Z encore");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    // ---- les versions : versions/corbeille ----
+    {
+        namespace ver = hmi::ver;
+        const fs::path proj = dir / "projet";
+        res1251::write(proj / "donnees" / "a.txt", "premier");
+        auto store = ver::open(utf8(proj));
+        check(static_cast<bool>(store), "le magasin des versions");
+        auto v1 = ver::create(*store, "Premiere", ver::State::Draft, "", "essai", "2026-11-05 10:00");
+        res1251::write(proj / "donnees" / "a.txt", "second");
+        res1251::write(proj / "donnees" / "b.txt", "nouveau");
+        auto v2 = ver::create(*store, "Seconde", ver::State::Draft, "", "essai", "2026-11-05 11:00");
+        check(v1 && v2 && store->versions.size() == 2, "V1, V2");
+        auto t = ver::trash(*store, v2->number);
+        check(t && store->versions.size() == 1 && fs::is_directory(fs::path(t->folder)) && fs::path(t->folder).parent_path() == fs::path(ver::trashFolder(utf8(proj))),
+              "V2 dans versions/corbeille (" + (t ? t->folder : std::string("?")) + ")");
+        check(ver::open(utf8(proj)) && ver::open(utf8(proj))->versions.size() == 1, "relue : V1 seule");
+        check(ver::scan(utf8(proj)).size() == 2, "la corbeille n'entre pas dans une version (versions/ est a part)");
+        if (t) {
+            auto s2 = ver::open(utf8(proj));
+            check(s2 && ver::untrash(*s2, *t) && s2->versions.size() == 2 && !fs::exists(fs::path(t->folder)), "untrash : V2 revient, la corbeille se vide");
+            auto c = s2 ? ver::contentOf(*s2, v2->number, "donnees/b.txt") : core::Result<std::string>(core::fail(core::ErrorCode::FileNotFound));
+            check(c && *c == "nouveau", "... et se lit (ses objets sont revenus)");
+            // Une corbeille de plus de 7 jours : purgee a l'ouverture.
+            auto t3 = s2 ? ver::trash(*s2, v2->number) : core::Result<ver::Trashed>(core::fail(core::ErrorCode::FileNotFound));
+            if (t3) {
+                const fs::path old = fs::path(t3->folder).parent_path() / ("20200101-000000~V" + std::to_string(v2->number));
+                fs::rename(fs::path(t3->folder), old, ec);
+                (void)ver::open(utf8(proj));
+                check(!fs::exists(old), "une version dans la corbeille depuis plus de 7 jours : purgee a l'ouverture");
+            }
+        }
+    }
+    fs::remove_all(dir, ec);
+}
+
+// LES MACROS ET LES VERSIONS SUPPRIMEES DEPUIS L'ARBRE REVIENNENT PAR UN CTRL+Z (avant : la question le disait definitif).
+void arbreMacrosVersions1251() {
+    std::printf("== 1.25.1 : l'arbre - les macros et les versions supprimees reviennent par Ctrl+Z ==\n");
+    namespace fs = std::filesystem;
+    namespace ver = hmi::ver;
+    using W = app::TreeDeletion::What;
+    using res1251::utf8;
+    const fs::path dir = fs::temp_directory_path() / "hmi_arbre_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    const fs::path proj = dir / "projet";
+    res1251::write(proj / "donnees" / "a.txt", "un");
+    auto store = ver::open(utf8(proj));
+    (void)ver::create(*store, "V un", ver::State::Draft, "", "essai", "2026-11-05 10:00");
+    res1251::write(proj / "donnees" / "a.txt", "deux");
+    auto v2 = ver::create(*store, "V deux", ver::State::Draft, "", "essai", "2026-11-05 11:00");
+    const std::string libRoot = utf8(dir / "libs");
+    {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        check(static_cast<bool>(lib.createMacro("Essai_Macro", "(* Essai_Macro *)\nMsgBox('ok');\n")), "une macro Essai_Macro");
+    }
+    app::TreeDeletion plan;
+    app::TreeDeletion::Item m;
+    m.what = W::Macro;
+    m.name = "Essai_Macro";
+    m.one = "macro";
+    m.many = "macros";
+    m.path = "Essai_Macro";
+    plan.items.push_back(m);
+    app::TreeDeletion::Item v;
+    v.what = W::Version;
+    v.name = "V" + std::to_string(v2 ? v2->number : 2);
+    v.one = "version";
+    v.many = "versions";
+    v.id = static_cast<std::uint64_t>(v2 ? v2->number : 2);
+    plan.items.push_back(v);
+    check(plan.undoable(), "tout revient par Ctrl+Z (les macros et les versions aussi)");
+    const std::string said = plan.message();
+    check(said.find("Un seul Ctrl+Z les rend") != std::string::npos && said.find("corbeille") != std::string::npos
+              && said.find("ne revient pas") == std::string::npos,
+          "la question le dit, sans << ne revient pas >> : " + said);
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    app::TreeDeletionHosts hosts;
+    hosts.apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    hosts.deleteMacro = [libRoot](const std::string& name, std::string* why) {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        auto st = lib.deleteMacro(name);
+        if (!st && why) *why = st.error().message();
+        return static_cast<bool>(st);
+    };
+    hosts.restoreMacro = [libRoot](const std::string& name, std::string* why) {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        auto st = lib.restoreMacro(name);
+        if (!st && why) *why = st.error().message();
+        return static_cast<bool>(st);
+    };
+    auto trashed = std::make_shared<std::map<int, ver::Trashed>>();
+    const std::string folder = utf8(proj);
+    hosts.deleteVersion = [folder, trashed](int n, std::string* why) {
+        auto s = ver::open(folder);
+        auto t = s ? ver::trash(*s, n) : core::Result<ver::Trashed>(core::fail(core::ErrorCode::FileNotFound));
+        if (!t) {
+            if (why) *why = "refus";
+            return false;
+        }
+        (*trashed)[n] = *t;
+        return true;
+    };
+    hosts.restoreVersion = [folder, trashed](int n, std::string* why) {
+        auto s = ver::open(folder);
+        if (!s || !trashed->count(n) || !ver::untrash(*s, (*trashed)[n])) {
+            if (why) *why = "refus";
+            return false;
+        }
+        return true;
+    };
+    int refreshed = 0;
+    hosts.afterMacros = [&refreshed] { ++refreshed; };
+    hosts.afterVersions = [&refreshed] { ++refreshed; };
+    const auto macroThere = [libRoot] {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        for (const auto& it : lib.items())
+            if (it.kind == project::LibraryItemKind::Macro && it.name == "Essai_Macro") return true;
+        return false;
+    };
+    const auto r = app::performTreeDeletion(plan, hosts);
+    check(r.done == 2 && r.failed.empty(), "les deux partent (" + std::to_string(r.done) + ")");
+    check(!macroThere() && ver::open(folder)->versions.size() == 1 && refreshed == 2, "la macro dans sa corbeille, V2 dans versions/corbeille ; les volets suivent");
+    check(stack.done().size() == 1, "UN pas dans l'historique : " + stack.undoLabel());
+    check(stack.undo() && macroThere() && ver::open(folder)->versions.size() == 2, "UN Ctrl+Z : la macro et la version reviennent");
+    check(stack.redo() && !macroThere() && ver::open(folder)->versions.size() == 1, "Ctrl+Y : reparties");
+    check(stack.undo() && macroThere() && ver::open(folder)->versions.size() == 2, "Ctrl+Z encore");
+    core::CommandGroupScope::registerStack(nullptr);
+    fs::remove_all(dir, ec);
+}
+
+// LES CHEMINS RESTANTS : un message de la barre d'etat qui contient un chemin ; les fichiers d'une archive (Echanges).
+void cheminsRestants1251() {
+    std::printf("== 1.25.1 : les chemins restants (barre d'etat, fichiers de l'archive) ==\n");
+    namespace fs = std::filesystem;
+    using res1251::utf8;
+    const fs::path dir = fs::temp_directory_path() / "hmi_chemins_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    res1251::write(dir / "exports" / "rapport.pdf", "%PDF\n");
+    res1251::write(dir / "Mes Documents" / "liste.csv", "a;b\n");
+    const std::string base = dir.generic_string();
+    lim1241::Paths paths(base);
+    // ---- le chemin dans un texte ----
+    same_text(ui::paths::findIn("Rapport \xC3\xA9" "crit : exports/rapport.pdf"), "exports/rapport.pdf", "un relatif au projet, apres << : >>");
+    same_text(ui::paths::findIn("Liste \xC3\xA9" "crite dans " + base + "/Mes Documents/liste.csv (2 lignes)."), base + "/Mes Documents/liste.csv",
+              "un absolu avec un blanc, au milieu d'une phrase (la parenthese et le point rognes)");
+    same_text(ui::paths::findIn("Le dossier s'ouvre : \xC2\xAB " + base + "/exports \xC2\xBB"), base + "/exports", "un dossier entre << >>");
+    same_text(ui::paths::findIn("Fichier introuvable : C:\\Nulle\\part.txt"), "C:\\Nulle\\part.txt", "un absolu absent : quand meme (ses entrees diront pourquoi)");
+    check(ui::paths::findIn("3/4 contr\xC3\xB4les r\xC3\xA9ussis").empty() && ui::paths::findIn("Projet enregistr\xC3\xA9.").empty(), "pas de chemin : rien");
+    // ---- la barre d'etat : le clic droit sur un message qui contient un chemin ----
+    {
+        ui::StatusBar bar("res1251.barre");
+        bar.setBounds({0, 0, 900, 24});
+        bar.setMessage("Rapport \xC3\xA9" "crit : exports/rapport.pdf");
+        same_text(bar.messagePath(), "exports/rapport.pdf", "le chemin du message");
+        (void)bar.dispatch(ui::MouseDown{{40.f, 12.f}, ui::MouseButton::Right, 1, {}});
+        auto* pm = bar.pathMenu();
+        auto* menu = pm ? pm->menu() : nullptr;
+        const auto* open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+        check(menu && menu->isOpen() && open && open->enabled && findItem(menu->items(), "Aller \xC3\xA0") && findItem(menu->items(), "Copier le chemin")
+                  && menu->items().front().heading && menu->items().front().label == "rapport.pdf",
+              "le clic droit : rapport.pdf, Ouvrir dans l'explorateur, Aller a, Copier le chemin");
+        if (menu && open) menu->itemChosen->emit(open->id);
+        check(!paths.revealed.empty() && paths.revealed.back() == base + "/exports/rapport.pdf", "Ouvrir dans l'explorateur : le fichier, resolu dans le projet");
+        if (const auto* c = menu ? findItem(menu->items(), "Copier le chemin") : nullptr) menu->itemChosen->emit(c->id);
+        same_text(ui::clipboardText(), base + "/exports/rapport.pdf", "Copier le chemin");
+        if (menu) menu->close();
+        bar.setMessage("Projet enregistr\xC3\xA9.");
+        const bool opened = (bar.dispatch(ui::MouseDown{{40.f, 12.f}, ui::MouseButton::Right, 1, {}}) == ui::EventResult::Consumed);
+        check(!opened, "un message sans chemin : pas de menu");
+    }
+    // ---- Echanges > Fichiers de l'archive ----
+    {
+        Bench b;
+        installerPressePapiers();   // Bench remet les services de la plateforme : le presse-papiers d'essai revient
+        core::CommandStack stack;
+        app::HmiExchangePane pane("res1251.ech", b.doc, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        app::fileview::Source shown;
+        int previews = 0;
+        app::HmiExchangePane::Hosts h;
+        h.preview = [&](const app::fileview::Source& s) {
+            shown = s;
+            ++previews;
+            return std::string{};
+        };
+        pane.setHosts(h);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        const std::string zip = base + "/archive.zip";
+        std::string why;
+        check(pane.exportTo(zip, &why) && !pane.report().entries.empty(), "une archive ecrite (" + std::to_string(pane.report().entries.size()) + " fichiers)");
+        if (!pane.report().entries.empty()) {
+            const auto& e = pane.report().entries.front();
+            const auto items = pane.entryMenu(0);
+            const auto* reveal = findItem(items, "Ouvrir dans l'explorateur");
+            const auto* go = findItem(items, "Aller \xC3\xA0");
+            const auto* copy = findItem(items, "Copier le chemin");
+            check(!items.empty() && items.front().heading && items.front().label == e.path && reveal && reveal->enabled && go && go->enabled && copy && copy->enabled,
+                  "le clic droit d'un fichier de l'archive : son chemin, puis les trois entrees");
+            check(pane.entryAction(0, app::HmiExchangePane::kEntryReveal).empty() && !paths.revealed.empty() && paths.revealed.back() == zip,
+                  "Ouvrir dans l'explorateur : l'archive elle-meme");
+            check(pane.entryAction(0, app::HmiExchangePane::kEntryCopy).empty() && ui::clipboardText() == zip + "/" + e.path,
+                  "Copier le chemin : << archive.zip/" + e.path + " >> (" + ui::clipboardText() + ")");
+            check(pane.entryAction(0, app::HmiExchangePane::kEntryGoTo).empty() && previews == 1 && shown.name == fs::path(e.path).filename().string()
+                      && shown.shownPath == zip + "/" + e.path && shown.origin == "Dans archive.zip",
+                  "Aller a : l'apercu de ce fichier (" + shown.shownPath + ")");
+            hmi::Bytes bytes;
+            std::string w;
+            check(shown.fetch && shown.fetch(bytes, w) && bytes.size() == e.bytes, "... ses octets lus dans l'archive (" + std::to_string(bytes.size()) + " octets) " + w);
+            // La ligne de la table : le menu du tableau commence par ces entrees.
+            pane.layout();
+            auto* m = lim1241::rightClickRow(pane.filesTable(), 0);
+            check(m && findItem(m->items(), "Aller \xC3\xA0") && findItem(m->items(), "Copier le chemin"), "le menu du tableau les montre");
+            if (m) m->close();
+            fs::remove(fs::path(zip), ec);
+            const auto gone = pane.entryMenu(0);
+            const auto* r2 = findItem(gone, "Ouvrir dans l'explorateur");
+            check(r2 && !r2->enabled && r2->disabledReason.find("n'existe plus") != std::string::npos, "l'archive partie : grisees, avec la raison");
+        }
+    }
+    fs::remove_all(dir, ec);
+}
+
+// SUPPRIMER PLUSIEURS, LA OU C'ETAIT ENCORE LIMITE : l'outil Modbus (les requetes, les jeux) ; plusieurs equipements avec
+// le choix d'un seul (leurs variables gardees ou supprimees).
+void supprimerRestants1251() {
+    std::printf("== 1.25.1 : supprimer plusieurs - l'outil Modbus, les \xC3\xA9quipements ==\n");
+    struct Question {
+        int         asked{0};
+        bool        yes{true};
+        std::string title, text, button;
+    } q;
+    app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes) {
+        ++q.asked;
+        q.title = title;
+        q.text = text;
+        q.button = button;
+        if (q.yes && yes) yes();
+    });
+    const auto has = [](const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; };
+    // ---- L'OUTIL MODBUS : les requetes de la lecture cyclique ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        app::HmiModbusToolPane tool("res1251.mb");
+        app::HmiModbusToolPane::Hosts th;
+        th.project = [&]() -> const hmi::Project* { return &doc->project; };
+        th.document = [&] { return doc; };
+        th.apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        tool.setHosts(th);
+        tool.setBounds({0, 0, 1800, 1000});
+        tool.layout();
+        tool.showTab("cyclique");
+        tool.layout();
+        auto& cy = tool.cyclic();
+        std::string why;
+        std::vector<int> ids;
+        for (int i = 0; i < 4; ++i) ids.push_back(cy.addNew(&why));
+        cy.tick(0.5, true);
+        tool.layout();
+        check(cy.rows().size() == 4, "4 requetes");
+        {   // de vrais clics : un clic, puis Ctrl+clic sur deux autres (la requete reglee suit, le choix reste)
+            auto& t = cy.requestsTable();
+            const auto click = [&](int row, bool ctrl) {
+                t.layout();
+                const int i = ligneDeVue(t, row);
+                gfx::Rect cell;
+                if (i < 0 || !t.cellRect(static_cast<std::size_t>(i), 2, cell)) return false;
+                const gfx::Point at{cell.x + 6.f, cell.y + cell.h * 0.5f};
+                t.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, ui::KeyMods{ctrl, false, false, false}});
+                t.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+                return true;
+            };
+            check(click(0, false) && click(2, true) && click(3, true), "les clics sur les lignes");
+            check(cy.chosen() == std::vector<int>{ids[0], ids[2], ids[3]} && cy.selected() == ids[3],
+                  "Ctrl+clic : 3 requetes choisies ; la derniere cliquee est reglee a droite (" + std::to_string(cy.chosen().size()) + ")");
+        }
+        check(cy.choose({ids[0], ids[2], ids[3]}) && cy.chosen() == std::vector<int>{ids[0], ids[2], ids[3]}, "choisir par leurs numeros (les scripts)");
+        cy.tick(1.0, true);
+        check(cy.chosen().size() == 3, "le rafraichissement les garde choisies (avant : une seule restait)");
+        auto* m = lim1241::rightClickRow(cy.requestsTable(), 0);
+        const auto* del = m ? findItem(m->items(), "Supprimer les 3\xE2\x80\xA6") : nullptr;
+        check(del && del->enabled, "le clic droit : Supprimer les 3...");
+        if (m) m->close();
+        q = Question{};
+        check(cy.key(ui::KeyDown{ui::Key::Delete, {}, false}), "Suppr");
+        check(q.asked == 1 && q.title == "Supprimer les 3 requ\xC3\xAAtes ?" && has(q.text, "Un seul Ctrl+Z"), "une seule question (" + q.title + ")");
+        check(cy.rows().size() == 1 && cy.rows().front().id == ids[1], "les 3 partent ; R2 reste");
+        check(has(tool.message(), "3 requ\xC3\xAAtes retir") && has(tool.message(), "un seul Ctrl+Z"), "le compte rendu : " + tool.message());
+        check(cy.undoList() && cy.rows().size() == 4, "UN Ctrl+Z (la liste) les remet toutes");
+        check(cy.redoList() && cy.rows().size() == 1 && cy.undoList(), "Ctrl+Y, puis Ctrl+Z");
+        // ---- les jeux du projet ----
+        check(cy.saveSet("Jeu A", &why) && cy.saveSet("Jeu B", &why) && cy.saveSet("Jeu C", &why) && doc->project.modbusSets.size() == 3, "3 jeux enregistres");
+        cy.openSetsMenu({100, 100});
+        auto* menu = dynamic_cast<app::HmiCyclicMenu*>(cy.overlay());
+        const app::HmiCyclicMenu::Item* entry = nullptr;
+        if (menu)
+            for (const auto& it : menu->items())
+                if (it.label == "Supprimer des jeux\xE2\x80\xA6") entry = &it;
+        check(entry && entry->enabled, "Jeu > Supprimer des jeux...");
+        check(menu && menu->choose(app::HmiCyclicPage::MDeleteSets), "... ouvre la liste des jeux");
+        cy.tick(2.0, true);
+        auto* sets = dynamic_cast<app::HmiCyclicSetsDialog*>(cy.overlay());
+        check(sets && sets->table().rows() == 3, "la liste : les 3 jeux");
+        if (sets) {
+            check(sets->choose({"Jeu A", "Jeu C"}) && sets->chosen().size() == 2, "Ctrl+clic : 2 jeux");
+            q = Question{};
+            check(sets->accept(), "Supprimer les 2");
+            check(q.asked == 1 && q.title == "Supprimer les 2 jeux de lecture ?" && has(q.text, "Un seul Ctrl+Z"), "une question : " + q.title);
+            check(doc->project.modbusSets.size() == 1 && doc->project.modbusSets[0].name == "Jeu B", "les 2 partent du projet ; Jeu B reste");
+            check(stack.undo() && doc->project.modbusSets.size() == 3, "UN Ctrl+Z (le projet) les rend");
+        }
+        check(cy.deleteSets({"Jeu B"}, &why) && doc->project.modbusSets.size() == 2 && stack.undo() && doc->project.modbusSets.size() == 3,
+              "un seul jeu : supprime, Ctrl+Z le rend");
+        check(!cy.deleteSets({"Inconnu"}, &why) && !why.empty(), "un jeu inconnu : refuse (" + why + ")");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    // ---- PLUSIEURS EQUIPEMENTS : le choix d'un seul, pour tous ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::CommHost comm;
+        app::EquipmentHost equip;
+        app::HmiCommPane pane("res1251.eq", doc, apply);
+        app::HmiCommPane::Hosts hosts;
+        hosts.comm = [&] { return &comm; };
+        hosts.equipments = [&] { return &equip; };
+        app::HmiAskDialog::Spec asked;
+        std::function<void(bool, const app::HmiAskDialog::Answer&)> answer;
+        hosts.ask = [&](app::HmiAskDialog::Spec spec, std::function<void(bool, const app::HmiAskDialog::Answer&)> done) {
+            asked = std::move(spec);
+            answer = std::move(done);
+        };
+        pane.setHosts(hosts);
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        check(pane.addEquipment("Pompe", hmi::EquipmentType::ModbusTcp, "192.168.1.41", 502) == "Pompe"
+                  && pane.addEquipment("Vanne", hmi::EquipmentType::ModbusTcp, "192.168.1.42", 502) == "Vanne"
+                  && pane.bindVariable("Debit", "Pompe", "%MW100", "INT") && pane.bindVariable("Ouverture", "Vanne", "%MW200", "INT")
+                  && pane.bindVariable("Etat", "Vanne", "%MW201", "INT"),
+              "deux equipements, trois variables liees");
+        const auto eq = [&](const std::string& n) { return doc->project.equipmentByName(n); };
+        pane.askDeleteEquipments({"Pompe", "Vanne"});
+        check(asked.title == "Supprimer les 2 \xC3\xA9quipements" && asked.options.size() == 2 && asked.option == 0 && asked.danger,
+              "UNE question : le choix d'un seul (garder leurs variables, ou les supprimer aussi) - " + asked.title);
+        check(asked.options.size() == 2 && has(asked.options[0].label, "Garder leurs 3 variable") && has(asked.options[1].label, "Supprimer aussi leurs 3 variable"),
+              "les deux choix disent combien");
+        check(asked.confirmLabel && asked.confirmLabel({}, {}, 1) == "Supprimer les 2 \xC3\xA9quipements et 3 variables", "le bouton dit ce qui va partir");
+        app::HmiAskDialog::Answer a;
+        a.option = 1;
+        if (answer) answer(true, a);
+        check(!eq("Pompe") && !eq("Vanne") && !doc->project.variable("Debit") && !doc->project.variable("Ouverture") && !doc->project.variable("Etat"),
+              "supprimer aussi : les equipements et leurs 3 variables partent");
+        check(stack.done().size() >= 1 && stack.undo() && eq("Pompe") && eq("Vanne") && doc->project.variable("Debit") && doc->project.variable("Debit")->bound()
+                  && doc->project.variable("Etat")->bound(),
+              "UN Ctrl+Z rend tout (equipements et variables liees)");
+        answer = nullptr;
+        pane.askDeleteEquipments({"Pompe", "Vanne"});
+        app::HmiAskDialog::Answer keep;
+        keep.option = 0;
+        if (answer) answer(true, keep);
+        check(!eq("Pompe") && !eq("Vanne") && doc->project.variable("Debit") && !doc->project.variable("Debit")->bound() && doc->project.variable("Etat")
+                  && !doc->project.variable("Etat")->bound(),
+              "les garder : elles restent, deliees (comme un seul decoche)");
+        check(stack.undo() && eq("Pompe") && doc->project.variable("Debit")->bound(), "Ctrl+Z rend tout");
+        check(has(pane.deleteEquipments({"Pompe", "Vanne"}, true, true), "un seul Ctrl+Z") && !doc->project.variable("Ouverture") && stack.undo()
+                  && doc->project.variable("Ouverture"),
+              "le geste sans question (les scripts) : le compte rendu, un seul Ctrl+Z");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    app::several::setConfirmHost({});
+}
+
+// =====================================================================================================================
+//  1.25.1 : LA CORBEILLE, BIEN RANGEE, OU L'ON CHERCHE (le client : << fait une corbeille bien rangee avec recherche
+//  possible >>). HMI_TEST_COR=1 : cet essai seul. Les corbeilles du projet (enregistrements, incidents, versions), de
+//  l'Assistant IA et des macros, inscrites (app/Corbeille.hpp) ; le volet (hmi/HmiCorbeillePane) : un dossier par genre
+//  et son nombre, la recherche, Restaurer (un seul Ctrl+Z), Supprimer definitivement, Vider, la purge ; le noeud de
+//  l'arbre ; le dessin a 1400 x 800.
+// =====================================================================================================================
+#include "../src/app/Corbeille.hpp"
+#include "../src/app/hmi/HmiCorbeillePane.hpp"
+#include "../src/app/ai/AiPaths.hpp"
+
+void corbeillePanneau1251() {
+    std::printf("== 1.25.1 : la Corbeille (le volet, la recherche, Restaurer, Supprimer d\xC3\xA9" "finitivement, Vider) ==\n");
+    namespace fs = std::filesystem;
+    namespace cb = app::corbeille;
+    namespace tr = core::trash;
+    using res1251::utf8;
+    const fs::path dir = fs::temp_directory_path() / "hmi_corbeille_volet_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    const fs::path proj = dir / "Station";
+    const fs::path rec = proj / "ihm" / "ressources" / "enregistrements";
+    const std::string recBin = utf8(proj / "ihm" / "corbeille");
+    std::string at, why;
+    // ---- les corbeilles, remplies comme le font les volets ----
+    for (const char* n : {"Nuit.xrec", "Essai pompe.xrec", "Jour.xrec"}) {
+        res1251::write(rec / n, std::string("enregistrement ") + n);
+        if (std::string(n) != "Jour.xrec") check(tr::put(utf8(rec / n), recBin, at, &why), std::string("enregistrement dans la corbeille : ") + n);
+    }
+    res1251::write(rec / "en attente" / "2026-11-05_08-00_Niveau_Haut" / "incident.json", "{}");
+    check(tr::put(utf8(rec / "en attente" / "2026-11-05_08-00_Niveau_Haut"), utf8(rec / "en attente" / ".corbeille"), at, &why), "un incident");
+    res1251::write(proj / "donnees" / "a.txt", "un");
+    auto store = hmi::ver::open(utf8(proj));
+    (void)hmi::ver::create(*store, "Essais usine", hmi::ver::State::Draft, "", "essai", "2026-11-05 10:00");
+    res1251::write(proj / "donnees" / "a.txt", "deux");
+    auto v2 = hmi::ver::create(*store, "Mise en service", hmi::ver::State::Draft, "", "essai", "2026-11-05 11:00");
+    check(v2 && hmi::ver::trash(*store, v2->number), "une version");
+    const fs::path ia = dir / "IA";
+    app::ai::setRoot(utf8(ia));
+    res1251::write(ia / "conversations" / "c1.json", "{\"format\": 1, \"id\": \"c1\", \"titre\": \"R\xC3\xA9glage de la mise en service\"}");
+    res1251::write(ia / "connaissances" / "k1.json", "{\"id\": \"k1\", \"nom\": \"Pompe_Doseuse\", \"contenu\": \"x\"}");
+    check(tr::put(utf8(ia / "conversations" / "c1.json"), app::ai::trashFor(utf8(ia / "conversations" / "c1.json")), at, &why)
+              && tr::put(utf8(ia / "connaissances" / "k1.json"), app::ai::trashFor(utf8(ia / "connaissances" / "k1.json")), at, &why),
+          "une conversation et une connaissance de l'IA");
+    const std::string libRoot = utf8(dir / "libs");
+    {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        check(lib.createMacro("Importer_Cartes", "(* Importer_Cartes *)\n") && lib.deleteMacro("Importer_Cartes"), "une macro dans sa corbeille");
+    }
+    const auto saved = cb::sources();
+    const std::string savedRoot = app::ai::root();
+    auto* savedStack = core::CommandGroupScope::stack();
+    cb::registerSource("projet", cb::projectSource(utf8(proj), [rec] { return utf8(rec); }));
+    cb::registerSource("ia", cb::aiSource());
+    cb::registerSource("macros", cb::macroSource(libRoot));
+    check(cb::entries().size() == 7 && cb::count() == 7, "7 \xC3\xA9l\xC3\xA9ments dans les corbeilles inscrites (" + std::to_string(cb::entries().size()) + ")");
+    // ---- le volet ----
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    struct Question {
+        int         asked{0};
+        bool        yes{true};
+        std::string title, text;
+    } q;
+    app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string&, std::function<void()> yes) {
+        ++q.asked;
+        q.title = title;
+        q.text = text;
+        if (q.yes && yes) yes();
+    });
+    lim1241::Paths paths(utf8(proj));
+    app::HmiCorbeillePane pane("cor1251");
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    const auto groups = pane.shownGroups();
+    const std::vector<std::pair<std::string, std::size_t>> want{{"Enregistrements", 2}, {"Incidents", 1}, {"Versions", 1}, {"Macros", 1},
+                                                                {"Conversations IA", 1}, {"Connaissances et souvenirs IA", 1}};
+    check(groups == want, "un dossier par genre, et son nombre (" + std::to_string(groups.size()) + " dossiers)");
+    const auto names = pane.shownNames();
+    const auto shows = [&](const std::string& n) { return std::find(names.begin(), names.end(), n) != names.end(); };
+    check(shows("Nuit") && shows("Essai pompe") && shows("2026-11-05_08-00_Niveau_Haut") && shows("V2 \xC2\xB7 Mise en service") && shows("Importer_Cartes")
+              && shows("R\xC3\xA9glage de la mise en service") && shows("Pompe_Doseuse"),
+          "leurs noms : celui de l'enregistrement, de l'incident, la version, la macro, le titre de la conversation, le nom de la connaissance");
+    same_text(pane.summary(), "7 \xC3\xA9l\xC3\xA9ments, " + cb::sizeText([&] {
+                  std::uint64_t b = 0;
+                  for (const auto& e : cb::entries()) b += e.bytes;
+                  return b;
+              }()),
+              "la ligne d'\xC3\xA9tat : le nombre et la taille");
+    check(pane.status().message() == pane.summary(), "... dans la barre d'\xC3\xA9tat");
+    // ---- la recherche : chaque mot commence un mot du nom, du genre ou de l'origine, sans casse ni accents ----
+    pane.setSearch("pompe");
+    check(pane.shownNames() == std::vector<std::string>{"Essai pompe", "Pompe_Doseuse"}, "<< pompe >> : un enregistrement et une connaissance");
+    pane.setSearch("INCIDENT");
+    check(pane.shownNames() == std::vector<std::string>{"2026-11-05_08-00_Niveau_Haut"}, "<< INCIDENT >> : le genre (sans casse)");
+    pane.setSearch("mise serv");
+    check(pane.shownNames() == std::vector<std::string>{"V2 \xC2\xB7 Mise en service", "R\xC3\xA9glage de la mise en service"},
+          "deux mots, chacun au d\xC3\xA9" "but d'un mot : la version et la conversation");
+    pane.setSearch("ompe");
+    check(pane.shownNames().empty(), "<< ompe >> ne commence aucun mot : rien");
+    pane.setSearch("enregistrements nuit");
+    check(pane.shownNames() == std::vector<std::string>{"Nuit"}, "le genre et le nom ensemble");
+    pane.setSearch("REGLAGE");   // sans l'accent, en capitales
+    check(pane.shownNames() == std::vector<std::string>{"R\xC3\xA9glage de la mise en service"}, "<< REGLAGE >> trouve << R\xC3\xA9glage... >> (sans accent ni casse)");
+    pane.setSearch("pi\xC3\xA8" "ces");   // le genre Pieces jointes IA : aucune ici
+    check(pane.shownGroups().empty(), "rien qui commence par << pi\xC3\xA8" "ces >> ici : aucun dossier");
+    pane.setSearch("");
+    // ---- replier, deplier ----
+    pane.setKindOpen(cb::Kind::Recording, false);
+    check(!pane.kindOpen(cb::Kind::Recording) && pane.shownNames().size() == 5 && pane.shownGroups().front().second == 2,
+          "Enregistrements repli\xC3\xA9 : son nombre reste, ses lignes se cachent");
+    pane.setKindOpen(cb::Kind::Recording, true);
+    // ---- la colonne Origine : un chemin (le dossier ou il reviendra) ----
+    {
+        const auto picked = pane.choose({"Nuit"}) ? pane.chosen() : std::vector<cb::Entry>{};
+        check(picked.size() == 1 && picked.front().origin == utf8(rec / "Nuit.xrec") && picked.front().originFolder() == utf8(rec),
+              "Nuit reviendra dans le dossier des enregistrements");
+        auto* m = lim1241::rightClickRow(pane.table(), 1);
+        const auto* open = m ? findItem(m->items(), "Ouvrir dans l'explorateur") : nullptr;
+        const auto* restoreItem = m ? findItem(m->items(), "Restaurer") : nullptr;
+        check(m && open && open->enabled && restoreItem && findItem(m->items(), "Supprimer d\xC3\xA9" "finitivement\xE2\x80\xA6"),
+              "le clic droit : Restaurer, Supprimer d\xC3\xA9" "finitivement, et le chemin de l'origine");
+        if (m) m->close();
+    }
+    // ---- dessine a 1400 x 800 ----
+    {
+        Recorder r;
+        const auto theme = ui::Theme::dark();
+        const ui::PaintContext ctx{r, theme, {0, 0, 1400, 800}, 0.0, nullptr};
+        pane.layout();
+        pane.render(ctx);
+        check(r.wrote("Enregistrements  (2)") && r.wrote("Connaissances et souvenirs IA  (1)") && r.wrote("Supprim\xC3\xA9 le") && r.wrote("Origine")
+                  && r.wrote("Nuit") && r.wrote("7 jours") && r.wrote("7 \xC3\xA9l\xC3\xA9ments"),
+              "dessin\xC3\xA9 : les dossiers, les colonnes, les \xC3\xA9l\xC3\xA9ments, la purge, la ligne d'\xC3\xA9tat");
+    }
+    // ---- Restaurer plusieurs : a leur place ; un seul Ctrl+Z les remet dans la corbeille ----
+    check(pane.choose({"Nuit", "R\xC3\xA9glage de la mise en service", "V2 \xC2\xB7 Mise en service", "Importer_Cartes"}) && pane.chosen().size() == 4, "4 choisis");
+    check(pane.restoreChosen() == 4, "Restaurer les 4");
+    const auto macroThere = [&] {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        for (const auto& it : lib.items())
+            if (it.kind == project::LibraryItemKind::Macro && it.name == "Importer_Cartes") return true;
+        return false;
+    };
+    check(fs::exists(rec / "Nuit.xrec") && fs::exists(ia / "conversations" / "c1.json") && hmi::ver::open(utf8(proj))->versions.size() == 2 && macroThere(),
+          "chacun \xC3\xA0 sa place : l'enregistrement, la conversation, la version, la macro");
+    check(pane.all().size() == 3 && pane.message().find("4 \xC3\xA9l\xC3\xA9ments restaur") != std::string::npos
+              && pane.message().find("un seul Ctrl+Z") != std::string::npos,
+          "la corbeille en garde 3 ; le compte rendu : " + pane.message());
+    check(stack.done().size() == 1 && stack.undo(), "UN Ctrl+Z");
+    check(!fs::exists(rec / "Nuit.xrec") && !fs::exists(ia / "conversations" / "c1.json") && hmi::ver::open(utf8(proj))->versions.size() == 1 && !macroThere(),
+          "... les remet tous dans la corbeille");
+    pane.refresh();
+    check(pane.all().size() == 7, "le volet les montre de nouveau (7)");
+    check(stack.redo() && fs::exists(rec / "Nuit.xrec") && macroThere(), "Ctrl+Y : restaur\xC3\xA9s de nouveau");
+    check(stack.undo() && !fs::exists(rec / "Nuit.xrec"), "Ctrl+Z encore");
+    pane.refresh();
+    // Un nom revenu entretemps : refuse, dit.
+    res1251::write(rec / "Nuit.xrec", "un autre");
+    check(pane.choose({"Nuit"}) && pane.restoreChosen() == 0 && pane.message().find("refus") != std::string::npos, "un fichier du m\xC3\xAAme nom revenu : refus\xC3\xA9 (" + pane.message() + ")");
+    fs::remove(rec / "Nuit.xrec", ec);
+    // ---- Supprimer definitivement : une question, sans retour ----
+    q = Question{};
+    check(pane.choose({"Essai pompe", "Pompe_Doseuse"}), "2 choisis");
+    pane.runAction(app::HmiCorbeillePane::APurge);
+    check(q.asked == 1 && q.title == "Supprimer d\xC3\xA9" "finitivement les 2 \xC3\xA9l\xC3\xA9ments ?" && q.text.find("pour de bon") != std::string::npos,
+          "une question : " + q.title);
+    check(pane.all().size() == 5 && !tr::list(utf8(ia / "corbeille" / "connaissances")).size(), "les 2 partis pour de bon");
+    // ---- la purge : plus de 7 jours (a l'ouverture suivante) ; la macro reste ----
+    {
+        const fs::path old = fs::path(recBin) / "20200101-000000~Vieux.xrec";
+        res1251::write(old, "vieux");
+        cb::touch();
+        check(cb::purgeOld("projet") == 1 && !fs::exists(old), "purgeOld : l'enregistrement de 2020 part");
+        check(cb::purgeOld("macros", cb::kKeepDays, static_cast<std::int64_t>(std::time(nullptr)) + 30 * 86400) == 0,
+              "une macro ne part pas toute seule (meme dans 30 jours)");
+        check(app::HmiCorbeillePane::purgeNote().find("7 jours") != std::string::npos, "le volet le dit : " + app::HmiCorbeillePane::purgeNote());
+    }
+    // ---- Vider : une question ----
+    q = Question{};
+    pane.refresh();
+    pane.runAction(app::HmiCorbeillePane::AEmpty);
+    check(q.asked == 1 && q.title == "Vider la corbeille ?" && pane.all().empty() && pane.summary() == "La corbeille est vide",
+          "Vider : une question, puis plus rien (" + pane.summary() + ")");
+    // ---- le noeud de l'arbre ----
+    {
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel model(plc);
+        model.setTrashCount(4);
+        same_text(model.text(app::ProjectTreeModel::trashFolderNode()), "Corbeille  [4]", "l'arbre : << Corbeille  [4] >>");
+        model.setTrashCount(0);
+        same_text(model.text(app::ProjectTreeModel::trashFolderNode()), "Corbeille", "vide : << Corbeille >>");
+    }
+    core::CommandGroupScope::registerStack(savedStack);
+    app::several::setConfirmHost({});
+    for (const auto& k : cb::sources())
+        if (std::find(saved.begin(), saved.end(), k) == saved.end()) cb::unregisterSource(k);
+    app::ai::setRoot(savedRoot);
+    fs::remove_all(dir, ec);
 }
 
 int main(int argc, char** argv) {
@@ -47333,6 +48015,22 @@ int main(int argc, char** argv) {
     // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
     if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
         rapportsSonsImages1250();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.25.1 : HMI_TEST_RES=1 - les limites restantes de la 1.25.0 corrigees (la corbeille, l'arbre, les chemins, Modbus,
+    // les equipements), seules.
+    if (const char* only = std::getenv("HMI_TEST_RES"); only && *only == '1') {
+        corbeille1251();
+        arbreMacrosVersions1251();
+        cheminsRestants1251();
+        supprimerRestants1251();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.25.1 : HMI_TEST_COR=1 - la Corbeille (bien rangee, ou l'on cherche), seule.
+    if (const char* only = std::getenv("HMI_TEST_COR"); only && *only == '1') {
+        corbeillePanneau1251();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -47892,6 +48590,11 @@ int main(int argc, char** argv) {
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)
     cheminsChamps1241();                    // 1.24.1 : les chemins des champs (bouton ...) et des libelles
     supprimerPlusieurs1241();               // 1.24.1 : enregistrements, Mes sons, bibliotheques - plusieurs d'un coup
+    corbeille1251();                        // 1.25.1 : la corbeille commune, celle des versions
+    arbreMacrosVersions1251();              // 1.25.1 : l'arbre - les macros et les versions reviennent par Ctrl+Z
+    cheminsRestants1251();                  // 1.25.1 : le chemin d'un message, les fichiers d'une archive
+    supprimerRestants1251();                // 1.25.1 : l'outil Modbus (requetes, jeux), plusieurs equipements
+    corbeillePanneau1251();                 // 1.25.1 : la Corbeille (par genre, la recherche, Restaurer, Vider)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

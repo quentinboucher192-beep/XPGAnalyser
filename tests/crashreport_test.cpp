@@ -15,9 +15,12 @@
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
 #include "../src/ui/widgets/CrashReport.hpp"
+#include "../src/ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : le chemin du rapport (ui::paths)
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -258,6 +261,68 @@ int main() {
             menus.applyPending();
             check(closedByUser && dynamic_cast<ui::CrashReportDialog*>(menus.top()) == nullptr, "\xC3\x89" "chap le ferme");
         }
+    }
+
+    // 1.25.1 : LES CHEMINS DE LA FENETRE (<< corrige les limites restantes >>) - le clic droit sur le rapport, son dossier,
+    // le minidump a cote : Ouvrir dans l'explorateur, Aller a, Copier le chemin (ui::paths ; l'hote installe le fournisseur).
+    std::printf("4. les chemins du rapport (clic droit)\n");
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / "crashreport_chemins_1251";
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir / "crashs", ec);
+        const std::string report = (dir / "crashs" / "plantage-2026-11-05_10-00-00.txt").generic_string();
+        { std::ofstream f(report); f << kHang; }
+        std::vector<std::string> revealed;
+        ui::paths::Provider pr;
+        pr.reveal = [&](const std::string& r) { revealed.push_back(r); return std::string{}; };
+        pr.goTo = [](const std::string&, const std::string&, bool) { return std::string("pas d'aper\xC3\xA7u dans cette fen\xC3\xAAtre"); };
+        ui::paths::setProvider(pr);
+        ui::CrashReportSetup setup;
+        setup.mode = ui::crashreport::Mode::Pending;
+        setup.path = report;
+        setup.text = kHang;
+        setup.close = [] {};
+        ui::CrashReportView view(setup, false);
+        view.setBounds({0, 0, 760, 560});
+        view.layout();
+        FakeRenderer r({760, 560});
+        const ui::PaintContext ctx{r, theme, {0, 0, 760, 560}, 1.0, nullptr};
+        r.beginFrame({});
+        view.render(ctx);
+        const auto row = view.pathRow(0);
+        check(row.w > 0.f && view.pathOf(0) == report && view.pathRow(1).w > 0.f && view.pathRow(2).w <= 0.f,
+              "les lignes du rapport et de son dossier ; pas de minidump");
+        (void)view.dispatch(ui::MouseDown{{row.x + 20.f, row.y + row.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = view.pathMenu() ? view.pathMenu()->menu() : nullptr;
+        const ui::PopupMenu::Item* open = nullptr;
+        const ui::PopupMenu::Item* go = nullptr;
+        if (menu)
+            for (const auto& it : menu->items()) {
+                if (it.label == "Ouvrir dans l'explorateur") open = &it;
+                if (it.label == "Aller \xC3\xA0") go = &it;
+            }
+        check(menu && menu->isOpen() && open && open->enabled && go && !go->enabled && !go->disabledReason.empty(),
+              "le clic droit du rapport : Ouvrir dans l'explorateur ; Aller \xC3\xA0 gris\xC3\xA9 avec la raison (" + (go ? go->disabledReason : std::string("?")) + ")");
+        if (menu && open) menu->itemChosen->emit(open->id);
+        check(!revealed.empty() && revealed.back() == report, "Ouvrir dans l'explorateur : le rapport, choisi");
+        if (menu) menu->close();
+        const auto folderRow = view.pathRow(1);
+        (void)view.dispatch(ui::MouseDown{{folderRow.x + 30.f, folderRow.y + 2.f}, ui::MouseButton::Right, 1, {}});
+        if (menu)
+            for (const auto& it : menu->items())
+                if (it.label == "Copier le chemin") menu->itemChosen->emit(it.id);
+        check(clipboard == (dir / "crashs").generic_string(), "le dossier : Copier le chemin (" + clipboard + ")");
+        // Le minidump, ecrit apres l'ouverture (Windows) : la fenetre le trouve et le montre.
+        { std::ofstream f(dir / "crashs" / "plantage-2026-11-05_10-00-00.dmp"); f << "MDMP"; }
+        view.tick(10.0);
+        r.beginFrame({});
+        view.render(ctx);
+        check(view.dumpPath() == (dir / "crashs" / "plantage-2026-11-05_10-00-00.dmp").generic_string() && view.pathRow(2).w > 0.f && r.shows("Minidump : "),
+              "le minidump a c\xC3\xB4t\xC3\xA9 : sa ligne, et le m\xC3\xAAme clic droit");
+        ui::paths::setProvider({});
+        fs::remove_all(dir, ec);
     }
 
     std::printf("crashreport_test : %d v\xC3\xA9rifications, %d \xC3\xA9" "checs\n", checks, failures);

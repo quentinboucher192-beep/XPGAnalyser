@@ -16,6 +16,9 @@
 //        projets.json            1.21.0 : les projets connus et leur identifiant fiable (AiMemoryManager.hpp)
 //        notifications.json      1.21.2 : les notifications de l'Assistant (AiNotifications.hpp)
 //        sauvegardes/            1.21.0 : les copies de la memoire (avant une migration, une restauration)
+//        corbeille/              1.25.1 : ce qu'on a supprime (conversations, pieces jointes, connaissances, souvenirs) -
+//                                Ctrl+Z l'en ressort ; aucune liste ne la lit, l'IA non plus ; purgee au demarrage
+//                                (plus de 7 jours, core/Trash.hpp)
 //        activite.jsonl          l'activite de l'apprentissage et de la memoire, une ligne JSON par evenement
 //        index/                  les index de recherche (regenerables ; 1.21.0 : conversations.json)
 //        journaux/               les journaux techniques
@@ -69,6 +72,20 @@ inline void setRoot(std::string root) { detail::rootRef() = std::move(root); }
 [[nodiscard]] inline std::string backupsDir() { return detail::join(root(), "sauvegardes"); }
 // 1.21.2 : le journal des notifications de l'Assistant (AiNotifications.hpp) - l'onglet Notifications du panneau.
 [[nodiscard]] inline std::string notificationsFile() { return detail::join(root(), "notifications.json"); }
+// 1.25.1 : la corbeille (supprimer une conversation, une piece jointe, une connaissance, un souvenir : Ctrl+Z la rend).
+// Rangee comme IA/ : corbeille/conversations, corbeille/pieces-jointes, corbeille/connaissances - la Corbeille du projet
+// sait ainsi d'ou vient chaque element (et ou le rendre).
+[[nodiscard]] inline std::string trashDir() { return detail::join(root(), "corbeille"); }
+// Le dossier de la corbeille d'un element de IA/ : celui de son dossier (IA/conversations/x.json -> corbeille/conversations).
+[[nodiscard]] inline std::string trashFor(std::string_view originalUtf8) {
+    std::string s(originalUtf8);
+    while (!s.empty() && (s.back() == '/' || s.back() == '\\')) s.pop_back();
+    const auto cut = s.find_last_of("/\\");
+    const std::string parent = cut == std::string::npos ? std::string{} : s.substr(0, cut);
+    const auto cut2 = parent.find_last_of("/\\");
+    const std::string sub = cut2 == std::string::npos ? parent : parent.substr(cut2 + 1);
+    return sub.empty() ? trashDir() : detail::join(trashDir(), sub);
+}
 
 // Les six categories du cache, dans l'ordre ou le centre de memoire les montre.
 struct CacheCategory {

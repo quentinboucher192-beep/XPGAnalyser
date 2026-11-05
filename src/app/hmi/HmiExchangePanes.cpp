@@ -9,6 +9,10 @@
 #include "../../hmi/HmiDossier.hpp"        // lot 13 : le dossier de l'IHM
 
 #include "HmiPaneKit.hpp"
+#include "../FileView.hpp"                       // 1.25.1 : l'apercu d'un fichier de l'archive
+#include "../../hmi/HmiDocView.hpp"              // 1.25.1 : ... lu dans le zip (hmi::explorer::readEntry)
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : Ouvrir dans l'explorateur (l'archive), comme partout
+#include <filesystem>
 
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiHistory.hpp"
@@ -520,9 +524,116 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
     links_ += issuesTable_->activated->connect([this](ui::RowIndex r) {
         if (r < issues_.size() && hosts_.openIssue) hosts_.openIssue(issues_[r]);
     });
+    // 1.25.1 : le clic droit d'un fichier de l'archive - Ouvrir dans l'explorateur, Aller a, Copier le chemin (en tete du
+    // menu du tableau) ; double clic : Aller a.
+    files_->setExtraContextItems([this] {
+        const auto rows = files_->selectedModelRows();
+        return rows.empty() ? std::vector<ui::PopupMenu::Item>{} : entryMenu(rows.front());
+    });
+    links_ += files_->contextAction->connect([this](int action) {
+        const auto rows = files_->selectedModelRows();
+        if (rows.empty() || action < kEntryReveal || action > kEntryCopy) return;
+        if (const std::string why = entryAction(rows.front(), action); !why.empty()) say(why, true);
+    });
+    links_ += files_->activated->connect([this](ui::RowIndex r) {
+        if (const std::string why = entryAction(r, kEntryGoTo); !why.empty()) say(why, true);
+    });
     rebuildTables();
     status_->setMessage("Exporter : tout le projet dans une archive .xihm. Importer : reconstruire l'IHM depuis une archive, "
                         "puis la contr\xC3\xB4ler.");
+}
+
+// ---- 1.25.1 : les chemins dans l'archive ----
+namespace {
+std::filesystem::path pathOfUtf8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+} // namespace
+
+std::string HmiExchangePane::entryPath(std::size_t row) const {
+    if (row >= report_.entries.size() || archive_.empty()) return {};
+    std::string inner = report_.entries[row].path;
+    std::replace(inner.begin(), inner.end(), '\\', '/');
+    while (!inner.empty() && inner.front() == '/') inner.erase(0, 1);
+    return archive_ + "/" + inner;
+}
+
+std::vector<ui::PopupMenu::Item> HmiExchangePane::entryMenu(std::size_t row) const {
+    std::vector<ui::PopupMenu::Item> items;
+    if (row >= report_.entries.size()) return items;
+    std::error_code ec;
+    const bool there = !archive_.empty() && std::filesystem::is_regular_file(pathOfUtf8(archive_), ec);
+    const std::string gone = archive_.empty() ? std::string("aucune archive")
+                                              : "\xC2\xAB " + pathOfUtf8(archive_).filename().generic_string() + " \xC2\xBB n'existe plus";
+    const auto add = [&](int id, std::string label, ui::Icon icon, std::string why) {
+        ui::PopupMenu::Item it;
+        it.id = id;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.enabled = why.empty();
+        it.disabledReason = std::move(why);
+        items.push_back(std::move(it));
+    };
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = report_.entries[row].path;
+    items.push_back(std::move(head));
+    add(kEntryReveal, "Ouvrir dans l'explorateur", ui::Icon::FolderOpen,
+        !there ? gone : ui::paths::active() ? std::string{} : std::string("pas d'explorateur ici"));
+    add(kEntryGoTo, "Aller \xC3\xA0", ui::Icon::GoTo,
+        !there ? gone : hosts_.preview ? std::string{} : std::string("pas d'aper\xC3\xA7u ici"));
+    add(kEntryCopy, "Copier le chemin", ui::Icon::Copy, archive_.empty() ? gone : std::string{});
+    return items;
+}
+
+std::string HmiExchangePane::entryAction(std::size_t row, int action) {
+    if (row >= report_.entries.size()) return "aucun fichier choisi";
+    for (const auto& it : entryMenu(row))
+        if (it.id == action && !it.enabled) return it.label + " : " + it.disabledReason;
+    const auto& e = report_.entries[row];
+    switch (action) {
+        case kEntryReveal:
+            // L'archive elle-meme, choisie dans l'explorateur (le fournisseur des chemins, comme partout).
+            return ui::paths::run(ui::paths::PathMenu::kFirstId + ui::paths::kReveal, ui::paths::PathMenu::kFirstId, archive_);
+        case kEntryCopy:
+            ui::setClipboardText(entryPath(row));
+            say("Chemin copi\xC3\xA9 : " + entryPath(row));
+            return {};
+        case kEntryGoTo: {
+            // L'apercu : les octets lus dans l'archive, a la demande (sur le fil de l'apercu), rien d'extrait sur le disque.
+            std::vector<std::string> steps;
+            std::string inner = e.path;
+            std::replace(inner.begin(), inner.end(), '\\', '/');
+            for (std::size_t from = 0; from <= inner.size();) {
+                const auto slash = inner.find('/', from);
+                const std::string step = inner.substr(from, slash == std::string::npos ? std::string::npos : slash - from);
+                if (!step.empty()) steps.push_back(step);
+                if (slash == std::string::npos) break;
+                from = slash + 1;
+            }
+            if (steps.empty()) return "chemin vide";
+            fileview::Source s;
+            s.name = steps.back();
+            s.shownPath = entryPath(row);
+            s.origin = "Dans " + pathOfUtf8(archive_).filename().generic_string();
+            s.openFolder = pathOfUtf8(archive_).parent_path().generic_string();
+            hmi::explorer::Location loc;
+            loc.root = archive_;
+            loc.at.assign(steps.begin(), steps.end() - 1);
+            hmi::explorer::Entry entry;
+            entry.name = steps.back();
+            entry.path = s.shownPath;
+            entry.inZip = true;
+            entry.size = e.bytes;
+            s.fetch = [loc, entry](hmi::Bytes& out, std::string& why) {
+                std::vector<std::uint8_t> bytes;
+                if (!hmi::explorer::readEntry(loc, entry, 128ull << 20, bytes, why)) return false;
+                out = std::move(bytes);
+                return true;
+            };
+            if (!hosts_.preview) return "pas d'aper\xC3\xA7u ici";
+            return hosts_.preview(s);
+        }
+        default: return {};
+    }
 }
 
 void HmiExchangePane::say(std::string text, bool warning) {

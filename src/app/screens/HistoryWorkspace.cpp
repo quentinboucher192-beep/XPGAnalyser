@@ -12,6 +12,7 @@
 //   - apres chaque mouvement, la barre d'etat dit ce qui a ete defait (ou
 //     refait) et l'ecran montre l'endroit.
 // =============================================================================
+#include "../Corbeille.hpp"   // 1.25.1 : le compte de la Corbeille (l'arbre)
 #include "Screens.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : les raccourcis de chaque application
 #include "../../core/Perf.hpp"     // 1.22.2 : ce qui consomme (l'onglet Performances)
@@ -486,6 +487,14 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     else refreshHmiChip();         // 1.12.26 : l'IHM seule (IHM Studio, ou l'API arretee) - sa pastille suit
     frameClock_ = f.totalSeconds;   // ---- Lot API 8 : bandeau haut (l'horloge de l'appli) ----
     refreshTopBar();
+    // 1.25.1 : << Corbeille [N] >> dans l'arbre (le compte se relit au plus toutes les 2 s, ou apres un geste) ; un autre
+    // projet ouvert (ou enregistre ailleurs) : sa corbeille remplace celle d'avant.
+    if (app_.projectFolder() != trashFolder_) registerTrashSources();
+    if (treeModel_)
+        if (const auto n = corbeille::count(); n != treeModel_->trashCount()) {
+            treeModel_->setTrashCount(n);
+            if (explorer_) explorer_->invalidate();
+        }
     lap.to(XPG_PARTIE("ecran.travaux"));
     // Lot macros 1 : l'apercu de la macro, differe apres une frappe.
     if (auto* macros = macrosPane()) macros->tick(f.totalSeconds);

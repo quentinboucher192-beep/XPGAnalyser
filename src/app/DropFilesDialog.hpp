@@ -77,6 +77,13 @@ public:
     std::size_t addFiles(const std::vector<std::string>& paths, std::string* why = nullptr);
     // ---- fin Lot API 8 : glisser de fichiers, 2e partie ----
 
+    // 1.25.1 : LES FICHIERS DEPOSES ONT LEUR CHEMIN - le clic droit d'une ligne (un fichier, un classeur, le .XPG / .XHW)
+    // propose Ouvrir dans l'explorateur, Aller a, Copier le chemin, si le fichier montre est bien sur le disque (un nom
+    // temporaire deja parti - un fichier glisse depuis un courriel - n'en a pas). `pathOf` : le chemin d'une ligne par le
+    // nom qu'elle montre ("logo.png") ; vide : pas sur le disque, ou inconnu. `openPathMenu` : le menu, comme au clic droit.
+    [[nodiscard]] std::string pathOf(const std::string& shownName) const;
+    bool openPathMenu(const std::string& shownName, gfx::Point at);
+
 protected:
     core::Status buildUi() override;
 

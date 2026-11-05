@@ -87,7 +87,8 @@ ui::WidgetPtr MainAnalysisScreen::buildHmiIncidentsPane() {
         app_.menus().ShowDialog(
             std::make_unique<MessageDialog>("Supprimer l'incident ?",
                                             "\xC2\xAB " + name + " \xC2\xBB et tout son dossier (la capture, la vid\xC3\xA9o, les analyses, les "
-                                            "commentaires) sont supprim\xC3\xA9s du disque. Valider le garderait plut\xC3\xB4t dans \xC2\xAB valides \xC2\xBB.",
+                                            "commentaires) vont dans la corbeille des incidents : Ctrl+Z le rend (elle se vide de ce qui y est depuis "
+                                            "plus de 7 jours). Valider le garderait plut\xC3\xB4t dans \xC2\xAB valides \xC2\xBB.",
                                             MessageDialog::Icon::Question, "Supprimer"),
             [this, folder, name](const menu::DialogResult& r) {
                 if (!r.accepted()) return;

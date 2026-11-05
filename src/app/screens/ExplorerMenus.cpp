@@ -59,6 +59,7 @@
 #include "../hmi/HmiLibraryPanes.hpp"      // 1.13.0 (lot J8) : Delier une bibliotheque
 #include "../Dossiers.hpp"                 // 1.12.18 : Ouvrir le dossier du projet
 #include "../HistoryPanel.hpp"             // 1.12.18 (planche 21) : le menu d'une action de l'historique
+#include "../hmi/HmiCorbeillePane.hpp"     // 1.25.1 : le noeud Corbeille (Vider la corbeille...)
 #include "../MacrosPane.hpp"               // 1.12.18 (planche 21) : le meme menu de macro que le volet
 #include "../../core/Command.hpp"          // 1.12.18 : CommandGroupScope (Supprimer les N...)
 #include "../hmi/HmiSimulation.hpp"   // 1.12.18 : les lignes de la Simulation depliee
@@ -430,30 +431,58 @@ void MainAnalysisScreen::runTreeDeletion(const TreeDeletion& plan) {
         }
         return true;
     };
-    const std::string folder = app_.projectFolder();
-    hosts.deleteVersion = [folder](int number, std::string* why) {
-        auto store = hmi::ver::open(folder);
-        if (!store) {
-            if (why) *why = "pas de versions ici";
-            return false;
-        }
-        if (auto st = hmi::ver::remove(*store, number); !st) {
+    // 1.25.1 : Ctrl+Z - la macro revient de sa corbeille (Restaurer, comme dans le volet des macros).
+    hosts.restoreMacro = [](const std::string& name, std::string* why) {
+        project::SharedLibrary lib(project::SharedLibrary::defaultRoot());
+        (void)lib.scan();
+        if (auto st = lib.restoreMacro(name); !st) {
             if (why) *why = st.error().context.empty() ? st.error().message() : st.error().context;
             return false;
         }
         return true;
     };
-    const auto result = performTreeDeletion(plan, hosts);
-    bool macros = false, versions = false;
-    for (const auto& it : plan.items) {
-        macros = macros || it.what == TreeDeletion::What::Macro;
-        versions = versions || it.what == TreeDeletion::What::Version;
-    }
-    if (macros) {
+    const std::string folder = app_.projectFolder();
+    // 1.25.1 : une version supprimee va dans versions/corbeille (hmi::ver::trash) ; Ctrl+Z l'en ressort a son numero.
+    auto trashed = std::make_shared<std::map<int, hmi::ver::Trashed>>();
+    hosts.deleteVersion = [folder, trashed](int number, std::string* why) {
+        auto store = hmi::ver::open(folder);
+        if (!store) {
+            if (why) *why = "pas de versions ici";
+            return false;
+        }
+        auto t = hmi::ver::trash(*store, number);
+        if (!t) {
+            if (why) *why = t.error().context.empty() ? t.error().message() : t.error().context;
+            return false;
+        }
+        (*trashed)[number] = std::move(*t);
+        return true;
+    };
+    hosts.restoreVersion = [folder, trashed](int number, std::string* why) {
+        const auto at = trashed->find(number);
+        auto store = hmi::ver::open(folder);
+        if (at == trashed->end() || !store) {
+            if (why) *why = "V" + std::to_string(number) + " n'est plus dans la corbeille";
+            return false;
+        }
+        if (auto st = hmi::ver::untrash(*store, at->second); !st) {
+            if (why) *why = st.error().context.empty() ? st.error().message() : st.error().context;
+            return false;
+        }
+        return true;
+    };
+    // Apres chaque geste (le premier, Ctrl+Z, Ctrl+Y) : le volet des macros, celui des versions. L'ecran a pu partir
+    // (un Ctrl+Z bien plus tard) : `alive`.
+    const std::weak_ptr<bool> alive = hookGuard_;
+    hosts.afterMacros = [this, alive] {
+        if (alive.expired()) return;
         if (auto* pane = macrosPane(); pane && pane->step() != 0) pane->closeRun();
         macrosChanged();
-    }
-    if (versions) refreshVersions();
+    };
+    hosts.afterVersions = [this, alive] {
+        if (!alive.expired()) refreshVersions();
+    };
+    const auto result = performTreeDeletion(plan, hosts);
     if (!status_) return;
     std::string said = std::to_string(result.done) + (result.done > 1 ? " \xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s" : " \xC3\xA9l\xC3\xA9ment supprim\xC3\xA9");
     if (plan.undoable() && result.done) said += result.done > 1 ? " (un seul Ctrl+Z les rend)" : " (Ctrl+Z le rend)";
@@ -2149,6 +2178,18 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     // =====================================================================================
     //  LES VERSIONS
     // =====================================================================================
+    // 1.25.1 : LA CORBEILLE - l'ouvrir (son volet : par genre, la recherche, Restaurer), la vider (une question).
+    case NK::TrashFolder: {
+        m.add("Ouvrir la corbeille", Icon::Open, [this] { openTrash(); });
+        const bool empty = treeModel_ && treeModel_->trashCount() == 0;
+        m.add("Vider la corbeille" + kDots, Icon::Delete,
+              [this] {
+                  openTrash();
+                  if (auto* pane = dynamic_cast<HmiCorbeillePane*>(hmiTab("corbeille"))) pane->askEmpty();
+              },
+              {}, empty ? "la corbeille est vide" : "");
+        break;
+    }
     case NK::VersionsFolder:
         m.add("Ouvrir", Icon::Open, [this] { openVersions(); });
         m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",

@@ -865,6 +865,7 @@ void MainAnalysisScreen::refreshTreeShortcuts() {
         const auto k = ProjectTreeModel::kindOf(n);
         if (ProjectTreeModel::isSimNode(n)) return "Simulation";
         if (k == Kind::VersionsFolder || k == Kind::VersionItem) return "Versions";
+        if (k == Kind::TrashFolder) return "Projet";   // 1.25.1 : la Corbeille
         // 1.13.0 (correctifs F2) : un dossier d'une liste de l'IHM (le dossier Automate des Types IHM) est de l'IHM - avant,
         // les Recents disaient "Automate  API", meme dans IHM Studio (le lot 21 l'avait oublie ici).
         return isHmiNode(n) || k == Kind::HmiListFolder ? "IHM" : "API";

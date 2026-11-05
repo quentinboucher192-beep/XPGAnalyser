@@ -245,8 +245,7 @@ std::string summary(const Batch& b, const std::vector<std::string>& gone, const 
         if (refused.size() > 1) refusedWord += "s";
         text += " ; " + std::to_string(refused.size()) + " " + refusedWord + " : " + refusals(refused);
     }
-    // 1.24.1 : parti du disque sans retour (b.final) - pas de Ctrl+Z a promettre.
-    if (!gone.empty() && !b.final) text += gone.size() > 1 ? " - un seul Ctrl+Z les rend" : " - Ctrl+Z le rend";
+    if (!gone.empty()) text += gone.size() > 1 ? " - un seul Ctrl+Z les rend" : " - Ctrl+Z le rend";
     return text;
 }
 
@@ -278,11 +277,7 @@ void run(Batch batch) {
     std::string text = "Les " + countOf(*go, n) + " " + names(go->names) + " seront " + participle(*go, n) + ".";
     if (n == 1) text = std::string(go->feminine ? "La " : "Le ") + go->noun + " " + go->names.front() + " sera " + participle(*go, 1) + ".";
     if (!go->warning.empty()) text += " " + go->warning;
-    if (go->final)   // 1.24.1 : du disque, sans retour
-        text += std::string(" C'est d\xC3\xA9" "finitif : ") + (n > 1 ? (go->feminine ? "elles ne reviendront" : "ils ne reviendront")
-                                                                    : (go->feminine ? "elle ne reviendra" : "il ne reviendra"))
-              + " pas par Ctrl+Z.";
-    else text += n > 1 ? " Un seul Ctrl+Z les rend." : " Ctrl+Z le rend.";
+    text += n > 1 ? " Un seul Ctrl+Z les rend." : " Ctrl+Z le rend.";
     confirm(go->verb + (n > 1 ? " les " + countOf(*go, n) : (go->feminine ? " la " : " le ") + go->noun) + " ?", text, label(go->verb, n), act);
 }
 } // namespace several

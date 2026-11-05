@@ -755,17 +755,30 @@ bool Assistant::rename(std::string_view id, std::string title) {
     return true;
 }
 
-bool Assistant::remove(std::string_view id) {
+bool Assistant::remove(std::string_view id, std::vector<core::trash::Moved>* moved, Conversation* removed) {
     const int i = indexOf(id);
     if (i < 0) return false;
     if (generating() && gen_.conversation == id) stop();
     const Conversation c = conversations_[static_cast<std::size_t>(i)];
-    (void)deleteConversationFiles(unshared(conversations_, static_cast<std::size_t>(i)));   // 1.22.6 : les pieces partagees restent
+    if (removed) *removed = c;
+    // 1.22.6 : les pieces partagees restent ; 1.25.1 : le reste dans la corbeille de l'IA (Ctrl+Z la rend)
+    (void)trashConversationFiles(unshared(conversations_, static_cast<std::size_t>(i)), moved);
     appendActivity("suppression", "Conversation supprim\xC3\xA9" "e : " + c.title);
     conversations_.erase(conversations_.begin() + i);
     if (current_ == i) current_ = conversations_.empty() ? -1 : std::min(i, static_cast<int>(conversations_.size()) - 1);
     else if (current_ > i) --current_;
     suggestionsAfter_ = false;
+    ++revision_;
+    return true;
+}
+
+bool Assistant::restoreConversation(Conversation c) {
+    if (c.id.empty() || indexOf(c.id) >= 0) return false;
+    const std::string openId = current() ? current()->id : std::string{};
+    conversations_.push_back(std::move(c));
+    std::stable_sort(conversations_.begin(), conversations_.end(),
+                     [](const Conversation& a, const Conversation& b) { return a.modified > b.modified; });
+    current_ = openId.empty() ? 0 : indexOf(openId);
     ++revision_;
     return true;
 }

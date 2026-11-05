@@ -757,7 +757,7 @@ CleanResult deletePersistent(const std::vector<Persistent>& what, bool confirmed
     return r;
 }
 
-bool deleteConversation(std::string_view id, std::string* why) {
+bool deleteConversation(std::string_view id, std::string* why, std::vector<core::trash::Moved>* moved) {
     for (const auto& c : loadConversations()) {
         if (c.id != id) continue;
         const fs::path f = pathOf(c.file);
@@ -765,12 +765,10 @@ bool deleteConversation(std::string_view id, std::string* why) {
             if (why) *why = "hors du dossier des conversations";
             return false;
         }
-        std::error_code ec;
-        fs::remove(f, ec);
-        if (ec) {
-            if (why) *why = ec.message();
-            return false;
-        }
+        // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z l'en ressort), plus effacee.
+        std::string trashed;
+        if (!core::trash::put(utf8Of(f), trashFor(utf8Of(f)), trashed, why)) return false;
+        if (moved) moved->push_back({utf8Of(f), trashed});
         (void)appendActivity("suppression", "Conversation supprim\xC3\xA9" "e : " + c.title + " (" + std::to_string(c.messages.size())
                                                 + (c.messages.size() > 1 ? " messages)" : " message)"));
         return true;
@@ -779,7 +777,7 @@ bool deleteConversation(std::string_view id, std::string* why) {
     return false;
 }
 
-bool deleteAttachmentFolder(std::string_view id, std::string* why) {
+bool deleteAttachmentFolder(std::string_view id, std::string* why, std::vector<core::trash::Moved>* moved) {
     if (id.empty() || id.find('/') != std::string_view::npos || id.find('\\') != std::string_view::npos || id == "." || id == "..") {
         if (why) *why = "nom refus\xC3\xA9";
         return false;
@@ -795,13 +793,18 @@ bool deleteAttachmentFolder(std::string_view id, std::string* why) {
     if (fs::is_directory(fs::symlink_status(f, ec)))
         for (fs::directory_iterator c(f, ec), end; !ec && c != end; c.increment(ec)) names += (names.empty() ? "" : ", ") + utf8Of(c->path().filename());
     const Usage u = usageOf(f);
-    fs::remove_all(f, ec);
-    if (ec) {
-        if (why) *why = ec.message();
-        return false;
-    }
+    std::string trashed;   // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z l'en ressort)
+    if (!core::trash::put(utf8Of(f), trashFor(utf8Of(f)), trashed, why)) return false;
+    if (moved) moved->push_back({utf8Of(f), trashed});
     (void)appendActivity("suppression", "Pi\xC3\xA8" "ce jointe supprim\xC3\xA9" "e : " + (names.empty() ? std::string(id) : names) + " (" + sizeText(u.bytes) + ")");
     return true;
+}
+
+std::size_t purgeTrash() {
+    if (root().empty()) return 0;
+    std::size_t n = core::trash::purge(trashDir());
+    for (const char* sub : {"conversations", "pieces-jointes", "connaissances"}) n += core::trash::purge(trashDir() + "/" + sub);
+    return n;
 }
 
 // ------------------------------------------------------------------ la recherche ---

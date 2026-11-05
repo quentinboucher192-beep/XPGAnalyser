@@ -2,6 +2,7 @@
 //  ui/widgets/Containers.cpp
 // =============================================================================
 #include "Containers.hpp"
+#include "PropertyGridHooks.hpp"   // 1.25.1 : le chemin d'un message (Ouvrir dans l'explorateur, Aller a, Copier le chemin)
 
 #include <algorithm>
 #include <cctype>
@@ -1351,6 +1352,10 @@ StatusBar::StatusBar(std::string id) : Widget(std::move(id)) {
     setPadding({2.f, 8.f, 2.f, 8.f});
 }
 
+StatusBar::~StatusBar() = default;
+
+std::string StatusBar::messagePath() const { return message_.empty() ? std::string{} : paths::findIn(message_); }
+
 void StatusBar::setMessage(std::string text, gfx::Color accent) {
     // UN TRANSITOIRE EN COURS RESTE A L'ECRAN. Le message durable est retenu
     // et reviendra quand le transitoire expirera (onPaint). Sans ce test, le
@@ -1411,6 +1416,23 @@ void StatusBar::dismissTransient() {
 // Un clic sur le texte du message (hors des indicateurs, qui prennent leurs
 // clics avant) : le journal des messages s'ouvre.
 EventResult StatusBar::onEvent(const InputEvent& ev) {
+    // 1.25.1 : le clic droit sur un message qui contient un chemin - ses trois entrees (sans fournisseur : rien).
+    if (const auto* d = std::get_if<MouseDown>(&ev); d && d->button == MouseButton::Right && bounds().contains(d->pos)) {
+        float right = bounds().right();
+        for (auto* w : right_) right = std::min(right, w->bounds().x);
+        if (d->pos.x < right && paths::active()) {
+            if (const std::string path = messagePath(); !path.empty()) {
+                if (!pathMenu_) {
+                    pathMenu_ = std::make_unique<paths::PathMenu>();
+                    pathMenu_->refused = [this](const std::string& why) { setTransientMessage(why, 6.0, Severity::Warning); };
+                }
+                std::string name = path;
+                while (name.size() > 1 && (name.back() == '/' || name.back() == '\\')) name.pop_back();
+                if (const auto slash = name.find_last_of("/\\"); slash != std::string::npos) name = name.substr(slash + 1);
+                if (pathMenu_->open(*this, path, d->pos, {}, name)) return EventResult::Consumed;
+            }
+        }
+    }
     if (!click_) return EventResult::Ignored;
     if (const auto* d = std::get_if<MouseDown>(&ev); d && d->button == MouseButton::Left && bounds().contains(d->pos)) {
         float right = bounds().right();

@@ -251,6 +251,88 @@ bool HmiCommPane::askDeleteEquipment(const std::string& name) {
     return true;
 }
 
+// 1.25.1 : PLUSIEURS EQUIPEMENTS - le choix d'un seul, pour tous, en une question ; un seul Ctrl+Z.
+std::string HmiCommPane::deleteEquipments(const std::vector<std::string>& names, bool dropVariables, bool dropTwins) {
+    std::string said;
+    several::Batch b;
+    b.noun = "\xC3\xA9quipement";
+    b.nouns = "\xC3\xA9quipements";
+    b.names = names;
+    b.remove = [this, names, dropVariables, dropTwins](std::size_t i, std::string* why) {
+        std::vector<std::string> drop;
+        if (dropVariables)
+            if (const auto* e = doc_->project.equipmentByName(names[i]))
+                for (const auto* v : eq::boundVariables(doc_->project, *e)) drop.push_back(v->name);
+        return deleteEquipment(names[i], drop, dropTwins, why);
+    };
+    b.report = [this, &said](const std::string& text, bool warning) {
+        said = text;
+        say(text, warning);
+    };
+    b.alive = tools_->triggered;
+    several::run(std::move(b));
+    return said;
+}
+
+void HmiCommPane::askDeleteEquipments(const std::vector<std::string>& names) {
+    if (names.empty()) return;
+    std::size_t vars = 0, twins = 0;
+    for (const auto& n : names)
+        if (const auto* e = doc_->project.equipmentByName(n)) {
+            vars += eq::boundVariables(doc_->project, *e).size();
+            twins += e->twin && !e->simulated ? 1 : 0;
+        }
+    if (!hosts_.ask) {   // sans dialogue (les essais) : la question commune, les variables gardees
+        several::Batch b;
+        b.noun = "\xC3\xA9quipement";
+        b.nouns = "\xC3\xA9quipements";
+        b.ask = true;
+        b.names = names;
+        if (vars) b.warning = "Leurs " + std::to_string(vars) + " variable(s) IHM restent, d\xC3\xA9li\xC3\xA9" "es (des variables IHM locales).";
+        b.remove = [this, names](std::size_t i, std::string* why) { return deleteEquipment(names[i], {}, true, why); };
+        b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+        b.alive = tools_->triggered;
+        several::run(std::move(b));
+        return;
+    }
+    HmiAskDialog::Spec spec;
+    spec.id = "dialog.hmiDelete";
+    spec.title = "Supprimer les " + std::to_string(names.size()) + " \xC3\xA9quipements";
+    spec.text = several::names(names) + " seront retir\xC3\xA9s du projet. Le choix vaut pour tous ; un seul Ctrl+Z rend tout.";
+    if (vars) {
+        HmiAskDialog::Option keep, drop;
+        keep.label = "Garder leurs " + std::to_string(vars) + " variable(s) IHM";
+        keep.detail = "d\xC3\xA9li\xC3\xA9" "es : des variables IHM locales, comme pour un seul \xC3\xA9quipement d\xC3\xA9" "coch\xC3\xA9";
+        drop.label = "Supprimer aussi leurs " + std::to_string(vars) + " variable(s) IHM";
+        drop.detail = "ce qui les cite (vues, scripts, alarmes) sera signal\xC3\xA9 par Compiler";
+        spec.options.push_back(std::move(keep));
+        spec.options.push_back(std::move(drop));
+        spec.option = 0;
+    }
+    if (twins) {
+        HmiAskDialog::Item twin;
+        twin.label = "Supprimer aussi leurs esclaves simul\xC3\xA9s (" + std::to_string(twins) + ")";
+        twin.detail = "d\xC3\xA9" "coch\xC3\xA9 : ils restent, seulement simul\xC3\xA9s";
+        twin.checked = true;
+        spec.extras.push_back(std::move(twin));
+    }
+    spec.confirm = "Supprimer les " + std::to_string(names.size()) + " \xC3\xA9quipements";
+    spec.danger = true;
+    spec.confirmLabel = [n = names.size(), vars](const std::vector<bool>&, const std::vector<bool>&, int option) {
+        std::string s = "Supprimer les " + std::to_string(n) + " \xC3\xA9quipements";
+        if (vars && option == 1) s += " et " + std::to_string(vars) + " variable" + (vars > 1 ? "s" : "");
+        return s;
+    };
+    spec.note = "Les appareils eux-m\xC3\xAAmes ne sont pas touch\xC3\xA9s : seul le projet les oublie.";
+    const bool asked = twins > 0;
+    hosts_.ask(std::move(spec), [this, names, vars, asked](bool ok, const HmiAskDialog::Answer& a) {
+        if (!ok) return;
+        const bool dropVariables = vars && a.option == 1;
+        const bool dropTwins = !asked || a.extras.empty() || a.extras[0];
+        (void)deleteEquipments(names, dropVariables, dropTwins);
+    });
+}
+
 // ================================================================= deplacer ===
 std::string HmiCommPane::freeAddressOn(const std::string& port, const std::string& equipment) const {
     const auto& p = doc_->project;

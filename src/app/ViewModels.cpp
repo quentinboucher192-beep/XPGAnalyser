@@ -34,6 +34,7 @@
 #include "../project/IoCheck.hpp"
 #include "../project/ApiCommands.hpp"      // 1.24.0 : supprimer plusieurs noeuds (tables, taches)
 #include "../project/DeleteCommands.hpp"   // 1.24.0 : ... (sections, variables, DDT, DFB, unites)
+#include "../core/Trash.hpp"               // 1.25.1 : les macros et les versions supprimees reviennent par Ctrl+Z
 
 #include "../ui/Icons.hpp"
 
@@ -760,9 +761,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         // API, Simulation, Versions ; IHM Studio : IHM, Simulation, Versions.
         const std::vector<ProjectTreeModel::NodeKind>& rootDomainList(bool hmiDoc) {
             using NK = ProjectTreeModel::NodeKind;
-            static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
-            static const std::vector<NK> api{NK::ApiFolder, NK::SimFolder, NK::VersionsFolder};
-            static const std::vector<NK> ihm{NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
+            // 1.25.1 : la Corbeille, apres Versions (ce que le projet et l'application ont supprime).
+            static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
+            static const std::vector<NK> api{NK::ApiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
+            static const std::vector<NK> ihm{NK::HmiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
             static const std::vector<NK> legacy{};
             switch (core::edition()) {
             case core::Edition::Api: return api;
@@ -924,6 +926,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::VersionsFolder:      return versions_.size();
         case NodeKind::VersionItem:         return 0;
+        case NodeKind::TrashFolder:         return 0;   // 1.25.1 : son volet montre ce qu'elle garde
         // Lot API 7 : + Simulation, Statistiques ; lot API 8 : Simulation part dans son dossier.
         case NodeKind::ApiFolder:           return 11;
         // ---- Lot API 8 : Centre de simulation ----
@@ -2246,6 +2249,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return indexOf(n) < filterHits_.size() && filterHits_[indexOf(n)].hmi ? std::uint8_t{2} : std::uint8_t{1};
         case NodeKind::ToolRow: return indexOf(n) == 1 ? std::uint8_t{2} : std::uint8_t{1};
         case NodeKind::VersionsFolder: case NodeKind::VersionItem: case NodeKind::VersionsMore: return 4;
+        case NodeKind::TrashFolder: return 4;   // 1.25.1 : comme Versions (le projet entier)
         default: break;
         }
         if (isSimNode(n)) return 3;
@@ -2717,6 +2721,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFolder:        return "IHM";
         // Lot 21 : les versions.
         case NodeKind::VersionsFolder:   return "Versions";
+        case NodeKind::TrashFolder:      return trashCount_ ? "Corbeille  [" + std::to_string(trashCount_) + "]" : std::string("Corbeille");   // 1.25.1
         case NodeKind::VersionItem:      return i < versions_.size() ? versions_[i].label : std::string{};
         case NodeKind::HmiListFolder:    return hmiListFolderText(n);     // lot 21 : un dossier d'une liste
         case NodeKind::HmiConfig:        return "Configuration";
@@ -4000,6 +4005,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.bold = true;
             s.icon = ui::Icon::History;
             if (versions_.size() > 1) s.badge = std::to_string(versions_.size() - 1);
+            break;
+        // 1.25.1 : la Corbeille.
+        case NodeKind::TrashFolder:
+            s.bold = true;
+            s.icon = ui::Icon::Delete;
+            s.iconTone = trashCount_ ? ui::Tone::Warning : ui::Tone::Muted;
             break;
         case NodeKind::HmiListFolder:    s.bold = true; s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;
         case NodeKind::VersionItem:
@@ -5901,9 +5912,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         return out;
     }
 
-    bool TreeDeletion::undoable() const noexcept {
-        return std::none_of(items.begin(), items.end(), [](const Item& it) { return it.what == What::Macro || it.what == What::Version; });
-    }
+    // 1.25.1 : tout revient par Ctrl+Z - les macros et les versions aussi (leur corbeille, une commande chacune).
+    bool TreeDeletion::undoable() const noexcept { return !items.empty(); }
 
     std::string TreeDeletion::what() const {
         if (items.empty()) return {};
@@ -5926,21 +5936,18 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             for (const auto& k : kept) left.push_back(k.name + " (" + k.why + ")");
             s += std::string(kept.size() > 1 ? "\nNe partent pas : " : "\nNe part pas : ") + fewNames(left, 4, " ; ") + ".";
         }
-        bool project = false, macros = false, versions = false;
+        // 1.25.1 : les macros et les versions vont dans leur corbeille - le meme Ctrl+Z les en ressort.
+        bool macros = false, versions = false;
         for (const auto& it : items) {
             if (it.what == What::Macro) macros = true;
             else if (it.what == What::Version) versions = true;
-            else project = true;
         }
+        if (items.empty()) return s + ".";
+        s += items.size() > 1 ? "\nUn seul Ctrl+Z les rend" : "\nCtrl+Z le rend";
         std::vector<std::string> outside;
-        if (macros) outside.push_back("les macros vont dans leur corbeille (Restaurer les remet)");
-        if (versions) outside.push_back("une version supprim\xC3\xA9" "e ne revient pas");
-        if (project) {
-            s += items.size() > 1 ? "\nUn seul Ctrl+Z les rend" : "\nCtrl+Z le rend";
-            if (!outside.empty()) s += " ; " + fewNames(outside, 2, " ; ");
-        } else if (!outside.empty()) {
-            s += "\n" + fewNames(outside, 2, " ; ");
-        }
+        if (macros) outside.push_back("les macros vont dans leur corbeille");
+        if (versions) outside.push_back("les versions dans versions/corbeille");
+        if (!outside.empty()) s += " (" + fewNames(outside, 2, ", ") + ")";
         return s + ".";
     }
 
@@ -6096,18 +6103,42 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             hosts.apply(std::make_unique<project::RemoveTaskCommand>(api, it->index));
             ++r.done;
         }
-        (void)group.close();
-        // ---- 3. hors du projet : les macros (leur corbeille), les versions ----
+        // ---- 3. hors du projet : les macros (leur corbeille), les versions (versions/corbeille) ----
+        //  1.25.1 : une commande chacune, DANS le meme groupe - le meme Ctrl+Z les en ressort.
         for (const auto& it : plan.items) {
-            std::string why;
-            if (it.what == W::Macro) {
-                if (hosts.deleteMacro && hosts.deleteMacro(it.path, &why)) ++r.done;
-                else fail(it, why.empty() ? std::string("refus\xC3\xA9" "e") : why);
-            } else if (it.what == W::Version) {
-                if (hosts.deleteVersion && hosts.deleteVersion(static_cast<int>(it.id), &why)) ++r.done;
-                else fail(it, why.empty() ? std::string("refus\xC3\xA9" "e") : why);
-            }
+            if (it.what != W::Macro && it.what != W::Version) continue;
+            const bool macro = it.what == W::Macro;
+            if (macro ? !hosts.deleteMacro : !hosts.deleteVersion) { fail(it, "refus\xC3\xA9" "e"); continue; }
+            struct Outcome { bool ran{false}, ok{false}; std::string why; };
+            auto out = std::make_shared<Outcome>();
+            const std::string name = it.path;
+            const int number = static_cast<int>(it.id);
+            auto doIt = [out, macro, name, number, delMacro = hosts.deleteMacro, delVersion = hosts.deleteVersion]() -> core::Status {
+                std::string why;
+                const bool ok = macro ? delMacro(name, &why) : delVersion(number, &why);
+                if (!out->ran) {
+                    out->ran = true;
+                    out->ok = ok;
+                    out->why = why;
+                }
+                if (!ok) return core::fail(core::ErrorCode::FileUnreadable, why.empty() ? std::string("refus\xC3\xA9" "e") : why);
+                return core::ok();
+            };
+            auto undoIt = [macro, name, number, backMacro = hosts.restoreMacro, backVersion = hosts.restoreVersion]() -> core::Status {
+                std::string why;
+                const bool ok = macro ? (backMacro && backMacro(name, &why)) : (backVersion && backVersion(number, &why));
+                if (!ok) return core::fail(core::ErrorCode::FileUnreadable, why.empty() ? std::string("ne revient pas") : why);
+                return core::ok();
+            };
+            auto cmd = std::make_unique<core::trash::LambdaCommand>(
+                (macro ? "Supprimer la macro " : "Supprimer la version ") + it.name, std::move(doIt), std::move(undoIt),
+                macro ? hosts.afterMacros : hosts.afterVersions);
+            if (hosts.apply) hosts.apply(std::move(cmd));
+            else (void)cmd->execute();
+            if (out->ok) ++r.done;
+            else fail(it, !out->ran ? std::string("refus\xC3\xA9" "e") : out->why.empty() ? std::string("refus\xC3\xA9" "e") : out->why);
         }
+        (void)group.close();
         return r;
     }
 

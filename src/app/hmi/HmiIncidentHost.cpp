@@ -1025,18 +1025,31 @@ void IncidentHost::validate(const std::string& folder, const std::string& note, 
     });
 }
 
-void IncidentHost::remove(const std::string& folder) {
-    if (!store_) return;
+std::string IncidentHost::remove(const std::string& folder) {
+    if (!store_) return {};
     const std::string id = idOf(folder);
     auto store = store_;
-    post([this, store, folder, id] {
+    const std::string slot = store->trashSlot(folder);
+    post([this, store, folder, slot, id] {
         std::string why;
-        if (store->remove(folder, &why)) {
-            postEvent("Incident supprim\xC3\xA9 : " + U(P(folder).filename()));
+        if (store->trash(folder, slot, &why)) {
+            postEvent("Incident supprim\xC3\xA9 (dans la corbeille ; Ctrl+Z le rend) : " + U(P(folder).filename()));
             forget(id);
         } else {
             postEvent("Incident non supprim\xC3\xA9 : " + why);
         }
+        relist(store);
+    });
+    return slot;
+}
+
+void IncidentHost::restore(const std::string& slot, const std::string& folder) {
+    if (!store_ || slot.empty()) return;
+    auto store = store_;
+    post([this, store, slot, folder] {
+        std::string why;
+        if (store->restore(slot, folder, &why)) postEvent("Incident rendu : " + U(P(folder).filename()));
+        else postEvent("Incident non rendu : " + why);
         relist(store);
     });
 }

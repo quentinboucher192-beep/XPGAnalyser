@@ -471,6 +471,30 @@ bool deleteConversationFiles(const Conversation& c) {
     return ok;
 }
 
+bool trashConversationFiles(const Conversation& c, std::vector<core::trash::Moved>* moved) {
+    if (root().empty()) return true;
+    std::error_code ec;
+    bool ok = true;
+    const auto utf8 = [](const fs::path& p) {
+        const auto u = p.u8string();
+        return std::string(u.begin(), u.end());
+    };
+    const auto away = [&](const fs::path& p) {
+        if (!fs::exists(p, ec)) return;
+        std::string trashed;
+        if (!core::trash::put(utf8(p), trashFor(utf8(p)), trashed)) {
+            ok = false;
+            return;
+        }
+        if (moved) moved->push_back({utf8(p), trashed});
+    };
+    if (!c.id.empty()) away(P(conversationsDir()) / P(c.id + ".json"));
+    for (const auto& m : c.messages)
+        for (const auto& a : m.attachments)
+            if (!a.id.empty()) away(P(attachmentsDir()) / P(a.id));
+    return ok;
+}
+
 Settings loadSettings(bool* found) {
     if (found) *found = false;
     if (root().empty()) return {};

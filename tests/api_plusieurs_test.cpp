@@ -12,11 +12,16 @@
 //    - ceux qui supprimaient une ligne a la fois : les taches, les modules (Ctrl+clic
 //      dans les racks), les unites et leurs sections, les blocs DFB ;
 //    - l'Assistant IA, Memoire et apprentissage : les connaissances (Apprentissage),
-//      la Memoire, les Souvenirs - une confirmation qui le dit definitif.
+//      la Memoire, les Souvenirs - 1.25.1 : dans la corbeille de l'IA (IA/corbeille),
+//      UN Ctrl+Z les rend (avant : une confirmation qui le disait definitif) ; les
+//      conversations du panneau aussi.
+//    - 1.25.1 : les fichiers deposes (leur chemin, s'il est sur le disque) ; le
+//      fournisseur des chemins hors de l'ecran du projet (l'accueil, le centre d'aide).
 //
-//  Chaque fois : << Supprimer les N >>, UNE question au plus, UN Ctrl+Z (sauf ce qui
-//  part du disque), ce qui reste et pourquoi dans le compte rendu, les gestes d'une
-//  seule ligne grises. API_PLUSIEURS_DETAIL=1 : chaque controle reussi est ecrit.
+//  Chaque fois : << Supprimer les N >>, UNE question au plus, UN Ctrl+Z, ce qui reste
+//  et pourquoi dans le compte rendu, les gestes d'une seule ligne grises.
+//  API_PLUSIEURS_DETAIL=1 : chaque controle reussi est ecrit. API_PLUSIEURS_RES=1 : les
+//  essais de la 1.25.1 seuls (l'Assistant IA, les fichiers deposes, les chemins).
 // =============================================================================
 #include "../src/app/AnimationTablesPane.hpp"
 #include "../src/app/ApiPanes.hpp"
@@ -29,6 +34,11 @@
 #include "../src/app/ai/AiMemoryDialog.hpp"
 #include "../src/app/ai/AiPanel.hpp"
 #include "../src/app/ai/AiPaths.hpp"
+#include "../src/app/DropFilesDialog.hpp"     // 1.25.1 : le chemin d'un fichier depose
+#include "../src/app/screens/Screens.hpp"     // 1.25.1 : installBasicPathLinks (l'accueil, le centre d'aide)
+#include "../src/core/Trash.hpp"              // 1.25.1 : la corbeille de l'IA
+#include "../src/menu/MenuManager.hpp"
+#include "../src/ui/widgets/PropertyGridHooks.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/app/hmi/HmiPanels.hpp"
 #include "../src/core/Command.hpp"
@@ -41,7 +51,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <optional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -415,17 +427,41 @@ void aiMemory() {
         if (d.selectedKnowledge()) ids.push_back(d.selectedKnowledge()->id);
     }
     const std::size_t before = d.registry().all().size();
-    // Apprentissage : trois connaissances choisies, une confirmation (definitif), puis elles partent.
+    core::CommandStack stack;   // 1.25.1 : Ctrl+Z
+    core::CommandGroupScope::registerStack(&stack);
+    // Apprentissage : trois connaissances choisies, une confirmation (1.25.1 : la corbeille, Ctrl+Z), puis elles partent.
     check(ids.size() == 4 && d.selectKeys(L::Learning, {ids[0], ids[1], ids[2]}) && d.chosenKeys(L::Learning).size() == 3,
           "Apprentissage : trois connaissances choisies");
     check(d.deleteSelected() && d.confirming(), "Supprimer : une confirmation");
-    check(has(d.confirmText(), "les 3 connaissances") && has(d.confirmText(), "Regle_A") && has(d.confirmText(), "d\xC3\xA9" "finitif"),
-          "elle nomme ce qui part et dit que c'est d\xC3\xA9" "finitif : " + d.confirmText());
+    check(has(d.confirmText(), "les 3 connaissances") && has(d.confirmText(), "Regle_A") && has(d.confirmText(), "corbeille de l'IA")
+              && has(d.confirmText(), "un seul Ctrl+Z") && !has(d.confirmText(), "d\xC3\xA9" "finitif"),
+          "elle nomme ce qui part, dit la corbeille et le Ctrl+Z (plus << d\xC3\xA9" "finitif >>) : " + d.confirmText());
     d.confirmNo();
     check(d.registry().all().size() == before, "Non : rien ne part");
     check(d.selectKeys(L::Learning, {ids[0], ids[1], ids[2]}) && d.deleteSelected() && d.confirmYes(), "Oui");
-    check(d.registry().all().size() == before - 3 && has(d.message(), "3 connaissances supprim") && !has(d.message(), "Ctrl+Z"),
-          "les trois partent ; le message (sans Ctrl+Z) : " + d.message());
+    check(d.registry().all().size() == before - 3 && has(d.message(), "3 connaissances supprim") && has(d.message(), "un seul Ctrl+Z"),
+          "les trois partent ; le message : " + d.message());
+    // 1.25.1 : la corbeille de l'IA (cachee de l'Assistant), puis UN Ctrl+Z.
+    check(core::trash::list(app::ai::trashDir() + "/connaissances").size() == 3 && !fs::exists(fs::path(app::ai::knowledgeDir()) / "corbeille"),
+          "leurs fichiers dans IA/corbeille/connaissances (" + std::to_string(core::trash::list(app::ai::trashDir() + "/connaissances").size()) + ")");
+    {
+        mem::Registry fresh;
+        fresh.load();
+        check(fresh.all().size() == before - 3, "l'IA ne les lit plus (un registre relu)");
+    }
+    check(stack.done().size() == 1 && stack.undo() && d.registry().all().size() == before && d.registry().find(ids[0]) && d.registry().find(ids[2]),
+          "UN Ctrl+Z : les trois reviennent (la fen\xC3\xAAtre les relit)");
+    check(stack.redo() && d.registry().all().size() == before - 3, "Ctrl+Y : de nouveau dans la corbeille");
+    check(stack.undo() && d.registry().all().size() == before, "Ctrl+Z encore");
+    check(d.selectKeys(L::Learning, {ids[0], ids[1], ids[2]}) && d.deleteSelected() && d.confirmYes() && d.registry().all().size() == before - 3,
+          "pour la suite : elles repartent");
+    // La purge au demarrage : plus de 7 jours.
+    {
+        const fs::path old = fs::path(app::ai::trashDir()) / "connaissances" / "20200101-000000~vieux.json";
+        { std::ofstream f(old); f << "{}"; }
+        check(mem::purgeTrash() == 1 && !fs::exists(old) && core::trash::list(app::ai::trashDir() + "/connaissances").size() == 3,
+              "la purge au d\xC3\xA9marrage : ce qui a plus de 7 jours part, le reste attend");
+    }
     // La Memoire (la categorie des memoires) : une ajoutee et une du logiciel - celle-ci reste, c'est dit.
     d.showMemoryCategory(app::AiMemoryDialog::MemCat::Preferences);
     std::string builtin;
@@ -464,6 +500,8 @@ void aiMemory() {
     } else {
         check(false, "Souvenirs : deux souvenirs montr\xC3\xA9s et choisis");
     }
+    check(stack.undo() && souv.size() == 2 && d.registry().find(souv[0]) && d.registry().find(souv[1]), "Souvenirs : UN Ctrl+Z les rend");
+    core::CommandGroupScope::registerStack(nullptr);
     app::ai::setRoot({});
     fs::remove_all(root, ec);
 }
@@ -486,6 +524,8 @@ void aiPanelConversations() {
     core.projectName = [] { return std::string("Essai"); };
     core.projectPath = [root] { return (root / "Essai").string(); };
     app::ai::AiPanel::UiHost ui;   // sans fenetre de confirmation (un essai) : le geste se fait
+    core::CommandStack undo;       // 1.25.1 : Ctrl+Z
+    core::CommandGroupScope::registerStack(&undo);
     {
         app::ai::AiPanel panel("ia.panneau.plusieurs", std::move(core), std::move(ui));
         panel.setBounds({0, 0, 440, 900});
@@ -502,14 +542,88 @@ void aiPanelConversations() {
         panel.toggleChosen(0);
         check(panel.chosenConversations().size() == 2, "Ctrl+clic sur l'ouverte : elle sort du choix");
         const std::string kept = list[0].id;
+        const std::size_t onDisk = app::ai::loadConversations().size();   // 1.25.1 : la neuve n'est pas encore ecrite
         panel.askDeleteChosen();
         check(panel.assistant().conversations().size() == before - 2 && panel.assistant().conversations()[0].id == kept,
               "les deux partent, l'ouverte reste");
-        check(has(panel.lastStatus(), "2 conversations supprim") && !has(panel.lastStatus(), "Ctrl+Z"), "le compte rendu (sans Ctrl+Z) : " + panel.lastStatus());
+        check(has(panel.lastStatus(), "2 conversations supprim") && has(panel.lastStatus(), "un seul Ctrl+Z"), "le compte rendu : " + panel.lastStatus());
         check(panel.chosenConversations().size() == 1, "apr\xC3\xA8s : une seule choisie");
+        // 1.25.1 : leurs fichiers dans la corbeille de l'IA, que l'Assistant ne relit pas ; UN Ctrl+Z les rend.
+        check(!core::trash::list(app::ai::trashDir() + "/conversations").empty() && app::ai::loadConversations().size() == onDisk - 2,
+              "leurs fichiers dans IA/corbeille ; relues du disque : " + std::to_string(app::ai::loadConversations().size()));
+        check(undo.done().size() == 1 && undo.undo() && panel.assistant().conversations().size() == before && app::ai::loadConversations().size() == onDisk,
+              "UN Ctrl+Z : les deux reviennent (le panneau et le disque)");
+        check(undo.redo() && panel.assistant().conversations().size() == before - 2, "Ctrl+Y : reparties");
+        check(undo.undo() && panel.assistant().conversations().size() == before, "Ctrl+Z encore");
     }
+    core::CommandGroupScope::registerStack(nullptr);
     app::ai::setRoot({});
     fs::remove_all(root, ec);
+}
+
+// ------------------------------------------- 1.25.1 : les chemins hors de l'ecran du projet, les fichiers deposes ----
+void cheminsHorsProjet() {
+    std::printf("== 1.25.1 : les chemins hors de l'\xC3\xA9" "cran du projet ; les fichiers d\xC3\xA9pos\xC3\xA9s ==\n");
+    const fs::path dir = fs::temp_directory_path() / "xpg_api_chemins_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir / "Projet", ec);
+    { std::ofstream f(dir / "logo.png", std::ios::binary); f << "PNG"; }
+    const auto saved = ui::paths::provider();
+    // ---- le fournisseur de l'accueil, du centre d'aide, de la fenetre du rapport (sans App : pas d'apercu) ----
+    std::vector<std::string> said;
+    std::vector<std::string> opened;
+    app::installBasicPathLinks(nullptr, [&](const std::string& why) { said.push_back(why); },
+                               [&](const std::string& path, const std::string&, bool dry) -> std::optional<std::string> {
+                                   if (path != (dir / "Projet").string()) return std::nullopt;   // un projet de la liste : l'ouvrir
+                                   if (!dry) opened.push_back(path);
+                                   return std::string{};
+                               });
+    check(ui::paths::active(), "le fournisseur est l\xC3\xA0 (l'accueil)");
+    const auto project = ui::paths::menuItems((dir / "Projet").string(), 40);
+    const auto find = [](const std::vector<ui::PopupMenu::Item>& items, const std::string& label) -> const ui::PopupMenu::Item* {
+        for (const auto& it : items)
+            if (it.label == label) return &it;
+        return nullptr;
+    };
+    const auto* go = find(project, "Aller \xC3\xA0");
+    check(project.size() == 3 && go && go->enabled && find(project, "Ouvrir dans l'explorateur")->enabled && find(project, "Copier le chemin")->enabled,
+          "la carte d'un projet : Ouvrir dans l'explorateur, Aller \xC3\xA0, Copier le chemin");
+    check(ui::paths::run(40 + ui::paths::kGoTo, 40, (dir / "Projet").string()).empty() && opened.size() == 1, "Aller \xC3\xA0 : le projet s'ouvre");
+    const auto file = ui::paths::menuItems((dir / "logo.png").string(), 40);
+    const auto* goFile = find(file, "Aller \xC3\xA0");
+    check(goFile && !goFile->enabled && has(goFile->disabledReason, "aper\xC3\xA7u"), "un fichier sans App (la fen\xC3\xAAtre du rapport) : Aller \xC3\xA0 gris\xC3\xA9 - " + (goFile ? goFile->disabledReason : std::string("?")));
+    const auto absent = ui::paths::menuItems((dir / "absent.txt").string(), 40);
+    const auto* rev = find(absent, "Ouvrir dans l'explorateur");
+    check(rev && !rev->enabled && has(rev->disabledReason, "n'existe pas"), "un fichier absent : gris\xC3\xA9, avec la raison");
+    // ---- les fichiers deposes : le menu si le fichier est sur le disque ----
+    {
+        std::vector<std::string> revealed;
+        ui::paths::Provider pr;
+        pr.reveal = [&](const std::string& r) { revealed.push_back(r); return std::string{}; };
+        pr.goTo = [](const std::string&, const std::string&, bool) { return std::string{}; };
+        ui::paths::setProvider(pr);
+        auto plan = std::make_shared<app::dropfiles::Plan>();
+        app::dropfiles::FileRow real;
+        real.path = (dir / "logo.png").string();
+        real.name = "logo.png";
+        plan->files.push_back(real);
+        app::dropfiles::FileRow temp;
+        temp.path = (dir / "piece-jointe-temporaire.pdf").string();   // un nom temporaire deja parti
+        temp.name = "piece-jointe-temporaire.pdf";
+        plan->files.push_back(temp);
+        menu::MenuManager menus{menu::MenuFactory{}};
+        auto dialog = std::make_unique<app::DropFilesDialog>(plan);
+        auto* d = dialog.get();
+        menus.ShowDialog(std::move(dialog), {});
+        menus.applyPending();
+        check(d->pathOf("logo.png") == real.path && d->pathOf("piece-jointe-temporaire.pdf").empty() && d->pathOf("inconnu").empty(),
+              "le chemin d'une ligne : le fichier sur le disque ; un nom temporaire parti, rien");
+        check(d->openPathMenu("logo.png", {200.f, 200.f}) && !d->openPathMenu("piece-jointe-temporaire.pdf", {200.f, 200.f}),
+              "le clic droit : le menu pour logo.png, rien pour le fichier parti");
+    }
+    ui::paths::setProvider(saved);
+    fs::remove_all(dir, ec);
 }
 
 } // namespace
@@ -529,6 +643,15 @@ int main(int argc, char** argv) {
         s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
         ui::installPlatformServices(std::move(s));
     }
+    // 1.25.1 : API_PLUSIEURS_RES=1 - l'Assistant IA (la corbeille), les chemins hors du projet, les fichiers deposes, seuls.
+    if (const char* only = std::getenv("API_PLUSIEURS_RES"); only && *only == '1') {
+        aiMemory();
+        aiPanelConversations();
+        cheminsHorsProjet();
+        app::several::setConfirmHost({});
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     Api api;
     api.project = load(xpg);
     check(api.project != nullptr, "le projet d'essai se lit : " + xpg);
@@ -545,6 +668,7 @@ int main(int argc, char** argv) {
     }
     aiMemory();
     aiPanelConversations();
+    cheminsHorsProjet();   // 1.25.1
     app::several::setConfirmHost({});
     std::printf("%d controles, %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;

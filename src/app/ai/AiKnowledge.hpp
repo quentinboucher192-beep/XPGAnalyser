@@ -54,6 +54,7 @@
 #pragma once
 
 #include "AiMemoryJson.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille de l'IA (Registry::remove)
 
 #include <cstdint>
 #include <string>
@@ -214,10 +215,12 @@ public:
     bool update(const Knowledge& k, std::string* why = nullptr);
     // ACTIVER / DESACTIVER (une integree aussi).
     bool setActive(std::string_view id, bool on, std::string* why = nullptr);
-    // SUPPRIMER une connaissance ajoutee (une integree : refuse).
-    bool remove(std::string_view id, std::string* why = nullptr);
+    // SUPPRIMER une connaissance ajoutee (une integree : refuse). 1.25.1 : son fichier va dans la corbeille de l'IA
+    // (IA/corbeille) ; `moved` recoit d'ou et ou - Ctrl+Z l'en ressort (puis load()).
+    bool remove(std::string_view id, std::string* why = nullptr, std::vector<core::trash::Moved>* moved = nullptr);
     // Supprimer les connaissances propres a un projet (12.7) ; rend leur nombre.
-    std::size_t removeProject(std::string_view project);
+    // 1.25.1 : `moved` - leurs fichiers vont dans la corbeille de l'IA (Ctrl+Z) ; nul : effaces, comme avant.
+    std::size_t removeProject(std::string_view project, std::vector<core::trash::Moved>* moved = nullptr);
 
     // ---- 1.21.0 : les souvenirs ------------------------------------------------------------------------
     // RETENIR : comme add, mais un doublon (meme portee, meme projet, meme conversation pour une portee

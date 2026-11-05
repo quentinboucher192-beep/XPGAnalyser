@@ -232,6 +232,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, core::hasApi() ? "Exporter en archive .xapi\xE2\x80\xA6" : "Exporter en archive .xihm\xE2\x80\xA6", "", ui::Icon::Export,
       "project.exportArchive");
     e(project_, "Importer une archive\xE2\x80\xA6", "", ui::Icon::Import, "project.importArchive");
+    // 1.25.1 : la Corbeille (ce qui a ete supprime : Restaurer, chercher).
+    e(project_, "Corbeille\xE2\x80\xA6", "", ui::Icon::Delete, "project.trash");
     sep(project_);
     e(project_, "Fermer le projet", "", ui::Icon::Close, "file.close");    // Lot API 8 : bandeau haut
     // 1.12.27 : un deuxieme projet a cote (copier de l'un a l'autre, glisser d'une fenetre a l'autre).

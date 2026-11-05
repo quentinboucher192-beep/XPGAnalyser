@@ -324,6 +324,34 @@ private:
     int                         hoverLine_{-1};
 };
 
+// ---- 1.25.1 : Supprimer des jeux (la liste des jeux du projet, plusieurs d'un coup) ----
+//  Le client : << corrige les limites restantes >> - les jeux enregistres ne se supprimaient pas du tout. La liste des
+//  jeux du projet (Ctrl+clic, Maj+clic, Ctrl+A), << Supprimer les N >> (Suppr) : une question, puis une commande sur le
+//  projet - un seul Ctrl+Z les rend. Le jeu de travail ouvert reste ouvert (son nom redevient << a enregistrer >>).
+class HmiCyclicSetsDialog final : public HmiCyclicOverlay {
+public:
+    struct Set { std::string name, detail; };
+    HmiCyclicSetsDialog(std::string id, std::vector<Set> sets);
+    [[nodiscard]] HmiCyclicTable& table() noexcept { return *table_; }
+    [[nodiscard]] std::vector<std::string> chosen() const;     // dans l'ordre de la liste
+    bool choose(const std::vector<std::string>& names);        // les essais, les scripts
+    bool accept();                                             // << Supprimer les N >> ; faux : rien de choisi
+    std::function<void(const std::vector<std::string>&)> deleted;
+
+protected:
+    void            placePanel(const gfx::Rect& host) override;
+    void            paintPanel(const ui::PaintContext&) override;
+    ui::EventResult panelEvent(const ui::InputEvent&) override;
+
+private:
+    void            refreshButton();
+    std::vector<Set>      sets_;
+    HmiCyclicTable*       table_{nullptr};
+    ui::Button*           ok_{nullptr};
+    ui::Button*           cancel_{nullptr};
+    core::ConnectionScope links_;
+};
+
 // ---- Exporter la lecture cyclique (MB-8) ----
 class HmiCyclicExportDialog final : public HmiCyclicOverlay {
 public:
@@ -428,6 +456,12 @@ public:
     PasteReport pasteRequests(const std::string& text);
     bool duplicate(int id);
     bool remove(int id);
+    // 1.25.1 : PLUSIEURS REQUETES D'UN COUP (Ctrl+clic, Maj+clic dans la liste) - << Supprimer les N >> (Suppr, le clic
+    // droit) : une question, puis un seul pas d'annulation de la liste (Ctrl+Z, la liste ayant le clavier, les remet).
+    [[nodiscard]] std::vector<int> chosen() const;            // les requetes choisies, dans l'ordre de la liste
+    bool choose(const std::vector<int>& ids);                 // les choisir (les essais)
+    void askRemoveChosen();
+    bool removeMany(const std::vector<int>& ids);             // sans question
     bool setActive(int id, bool on);
     // Un reglage de la requete : "nom", "active", "cible" (un libelle du choix de la cible),
     // "hote", "port", "esclave", "delai", "fonction", "adresse" (0..65535, 40101, %MW100),
@@ -467,6 +501,11 @@ public:
     [[nodiscard]] std::string setCsv() const;
     bool exportSet(std::string* where = nullptr);
     bool importSet(const std::string& csv, std::string* why = nullptr);
+    // 1.25.1 : SUPPRIMER DES JEUX DU PROJET (plusieurs d'un coup) - une commande sur le projet (un seul Ctrl+Z les rend) ;
+    // faux et `why` : aucun de ces jeux. askDeleteSets : la question d'abord (several::confirm).
+    bool deleteSets(const std::vector<std::string>& names, std::string* why = nullptr);
+    void askDeleteSets(const std::vector<std::string>& names);
+    void openDeleteSetsDialog();                              // la liste des jeux (Jeu > Supprimer des jeux...)
     // Le dernier jeu du projet revient (a l'ouverture de l'outil) ; faux : aucun.
     bool restoreLastSet();
 
@@ -512,7 +551,8 @@ public:
     // ---- menus et dialogues ----
     enum MenuId : int {
         MNew = 1, MFromRead, MFromVars, MFromZones, MPaste, MOpenSet,
-        MSave = 20, MSaveAs, MNewSet, MExportSet, MImportSet, MSetBase = 100, MZoneBase = 500,
+        MSave = 20, MSaveAs, MNewSet, MExportSet, MImportSet, MDeleteSets, MSetBase = 100, MZoneBase = 500,
+        MRemoveChosen = 700,                                  // 1.25.1 : le clic droit de la liste des requetes
     };
     void openAddMenu(gfx::Point at);
     void openSetsMenu(gfx::Point at);
@@ -601,6 +641,7 @@ private:
 // Les pictogrammes des menus et des cases (dessines ici, pas des icones du theme).
 enum CyclicGlyph : int {
     GNone = 0, GPlus, GReadWrite, GVariables, GMemory, GTable, GFolder, GSave, GExport, GFlask,
+    GDelete,   // 1.25.1 : Supprimer des jeux (une croix)
     GBoxOn = 50, GBoxOff, GBoxDisabled, GDotOk, GDotWarn, GDotErr, GDotOff, GDotSim, GForced, GChipBase = 100,
 };
 void drawCyclicGlyph(gfx::IRenderer& r, int glyph, const gfx::Rect& box, gfx::Color c);

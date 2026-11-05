@@ -9,6 +9,7 @@
 #include "../../ui/Shapes.hpp"      // 1.21.0 : les triangles du lecteur (comme la barre de relecture)
 #include "../../ui/TextSearch.hpp"   // 1.20.2 : les alarmes pliees (dossiers, tri)
 #include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le dossier d'un incident (Ouvrir dans l'explorateur, Aller a)
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille des incidents (Ctrl+Z les rend)
 
 #include <algorithm>
 #include <array>
@@ -2509,7 +2510,7 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
                "Arr\xC3\xAAter les incidents");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(TOnOff, [this] { return host_ != nullptr; });
-    // 1.24.1 : plusieurs incidents choisis (Ctrl+clic, Maj+clic) - Supprimer les supprime tous (une question : definitif) ;
+    // 1.24.1 : plusieurs incidents choisis (Ctrl+clic, Maj+clic) - Supprimer les supprime tous (une question ; 1.25.1 : la corbeille, un seul Ctrl+Z) ;
     // le reste : un a la fois.
     for (const int a : {TConsult, TFull, TChain, TComment, TAnalyze})
         tools_->setEnabledWhen(a, [this] { return selected() != nullptr && chosenIncidents().size() <= 1; });
@@ -3093,6 +3094,30 @@ bool HmiIncidentsPane::validateSelected(const std::string& note, std::string* wh
     return true;
 }
 
+namespace {
+// 1.25.1 : UN INCIDENT VERS LA CORBEILLE (en attente/.corbeille), PAR UNE COMMANDE - Ctrl+Z l'en ressort, a sa place ;
+// Ctrl+Y l'y remet. Le deplacement se fait sur le fil d'ecriture de la surveillance, comme avant la suppression.
+bool trashIncident(IncidentHost* host, const std::string& folder, const std::string& name, std::string* why) {
+    if (!host) {
+        if (why) *why = "la surveillance des incidents n'est pas branch\xC3\xA9" "e ici";
+        return false;
+    }
+    auto slot = std::make_shared<std::string>();
+    auto cmd = std::make_unique<core::trash::LambdaCommand>(
+        "Supprimer l'incident " + name,
+        [host, folder, slot]() -> core::Status {
+            *slot = host->remove(folder);
+            if (slot->empty()) return core::fail(core::ErrorCode::FileUnreadable, "pas de dossier des incidents ici");
+            return core::ok();
+        },
+        [host, folder, slot]() -> core::Status {
+            host->restore(*slot, folder);
+            return core::ok();
+        });
+    return core::trash::apply(std::move(cmd), why);
+}
+} // namespace
+
 bool HmiIncidentsPane::removeSelected(std::string* why) {
     const auto* it = selected();
     std::string reason;
@@ -3103,8 +3128,8 @@ bool HmiIncidentsPane::removeSelected(std::string* why) {
         if (why) *why = reason;
         return false;
     }
-    host_->remove(it->folder);
-    say("Suppression de \xC2\xAB " + it->name + " \xC2\xBB demand\xC3\xA9" "e.");
+    if (!trashIncident(host_, it->folder, it->name, why)) return false;
+    say("\xC2\xAB " + it->name + " \xC2\xBB va dans la corbeille des incidents : Ctrl+Z le rend.");
     return true;
 }
 
@@ -3125,7 +3150,7 @@ void HmiIncidentsPane::askValidate() {
 }
 
 void HmiIncidentsPane::askRemove() {
-    if (chosenIncidents().size() > 1) {   // 1.24.1 : plusieurs - une question (definitif), puis tous
+    if (chosenIncidents().size() > 1) {   // 1.24.1 : plusieurs - une question, puis tous (1.25.1 : la corbeille, un seul Ctrl+Z)
         removeChosen();
         return;
     }
@@ -3212,8 +3237,9 @@ void HmiIncidentsPane::clearChoice() {
     if (lists_[t]) lists_[t]->invalidate();
 }
 
-// SUPPRIMER PLUSIEURS INCIDENTS : une question qui le dit definitif (leurs dossiers sont effaces, Ctrl+Z ne les rend pas),
-// puis chacun par la surveillance (en arriere-plan, comme un seul) ; un incident valide reste, le compte rendu le dit.
+// SUPPRIMER PLUSIEURS INCIDENTS : une question, puis chacun dans la corbeille des incidents par la surveillance (en
+// arriere-plan, comme un seul) ; un incident valide reste, le compte rendu le dit. 1.25.1 : un seul Ctrl+Z les rend (avant :
+// definitif, leurs dossiers etaient effaces).
 void HmiIncidentsPane::removeChosen() {
     const auto chosen = chosenIncidents();
     if (chosen.empty()) return;
@@ -3221,14 +3247,14 @@ void HmiIncidentsPane::removeChosen() {
     b.noun = "incident";
     b.nouns = "incidents";
     b.ask = true;
-    b.final = true;
-    b.warning = "Leurs dossiers sont effac\xC3\xA9s de ce PC (la capture, la vid\xC3\xA9o, la fiche, les commentaires).";
+    b.warning = "Leurs dossiers (la capture, la vid\xC3\xA9o, la fiche, les commentaires) vont dans la corbeille des incidents, "
+                "qui se vide de ce qui y est depuis plus de 7 jours.";
     std::vector<std::pair<std::string, bool>> doomed;   // le dossier, valide
     for (const auto* it : chosen) {
         b.names.push_back(it->name);
         doomed.emplace_back(it->folder, it->state != st::State::Pending);
     }
-    b.remove = [this, doomed](std::size_t i, std::string* why) {
+    b.remove = [this, doomed, names = b.names](std::size_t i, std::string* why) {
         if (!host_) {
             if (why) *why = "la surveillance des incidents n'est pas branch\xC3\xA9" "e ici";
             return false;
@@ -3237,8 +3263,7 @@ void HmiIncidentsPane::removeChosen() {
             if (why) *why = "valid\xC3\xA9 : il ne se supprime pas d'ici";
             return false;
         }
-        host_->remove(doomed[i].first);
-        return true;
+        return trashIncident(host_, doomed[i].first, names[i], why);
     };
     b.after = [this] { clearChoice(); };
     b.report = [this](const std::string& text, bool warning) { say(text + ".", warning); };
@@ -3366,7 +3391,7 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
         return e;
     };
     std::vector<ui::PopupMenu::Item> items;
-    // 1.24.1 : PLUSIEURS INCIDENTS CHOISIS - Supprimer les N (une question : definitif) ; le reste, un a la fois.
+    // 1.24.1 : PLUSIEURS INCIDENTS CHOISIS - Supprimer les N (une question ; 1.25.1 : la corbeille, un seul Ctrl+Z) ; le reste, un a la fois.
     if (const auto chosen = chosenIncidents(); chosen.size() > 1) {
         ui::PopupMenu::Item head;
         head.heading = true;

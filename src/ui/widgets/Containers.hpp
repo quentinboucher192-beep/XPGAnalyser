@@ -11,10 +11,13 @@
 #include "Controls.hpp"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace ui {
+
+namespace paths { class PathMenu; }   // 1.25.1 : le chemin d'un message de la barre d'etat (PropertyGridHooks.hpp)
 
 // -------------------------------------------------------------- GroupBox ---
 class GroupBox : public Widget {
@@ -327,6 +330,7 @@ public:
     enum class Severity : std::uint8_t { None, Info, Success, Warning, Error };
 
     explicit StatusBar(std::string id = {});
+    ~StatusBar() override;
     // L'accent par defaut est TRANSPARENT, donc « pas d'accent » : il valait
     // {} - un noir opaque, puisque gfx::Color a 255 d'alpha par defaut - et
     // chaque message sans couleur s'ecrivait en noir, invisible en theme sombre.
@@ -349,6 +353,11 @@ public:
     void setMessageHook(std::function<void(const std::string&, Severity, bool transient)> hook) { hook_ = std::move(hook); }
     void setMessageClick(std::function<void()> click) { click_ = std::move(click); }
     // ---- fin Lot API 8 : le bandeau bas ----
+    // 1.25.1 : UN MESSAGE QUI CONTIENT UN CHEMIN (<< Rapport ecrit : exports/x.pdf >>) - son clic droit propose Ouvrir dans
+    // l'explorateur, Aller a, Copier le chemin (ui::paths::findIn, puis ui::paths::PathMenu). Vide : aucun chemin.
+    [[nodiscard]] std::string messagePath() const;
+    // Le menu ouvert par le dernier clic droit (les essais) ; nul : jamais ouvert.
+    [[nodiscard]] paths::PathMenu* pathMenu() const noexcept { return pathMenu_.get(); }
 protected:
     void onLayout() override;
     void onPaint(const PaintContext&) override;
@@ -370,6 +379,7 @@ private:
     gfx::Color           steadyAccent_{0, 0, 0, 0};
     Severity             steadySeverity_{Severity::None};
     std::vector<Widget*> left_, right_;
+    std::unique_ptr<paths::PathMenu> pathMenu_;   // 1.25.1
 };
 
 } // namespace ui

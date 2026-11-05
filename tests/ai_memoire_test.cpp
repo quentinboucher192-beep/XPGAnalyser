@@ -323,7 +323,14 @@ void space() {
     check(m.of(mem::Part::CacheProcessing).bytes == 2000 && m.of(mem::Part::CacheImages).bytes == 4000 && m.of(mem::Part::CacheDocuments).bytes == 500
               && m.of(mem::Part::CachePreviews).bytes == 600 && m.of(mem::Part::CacheDownloads).bytes == 700,
           "les six categories du cache");
-    check(m.of(mem::Part::CacheOther).bytes == 50 && m.of(mem::Part::Other).bytes == 10, "le reste du cache, le reste de la racine");
+    // 1.25.1 : la corbeille de l'IA (IA/corbeille : les connaissances supprimees en 3. y sont, Ctrl+Z les rend) compte
+    // avec le reste de la racine.
+    std::uintmax_t trash = 0;
+    std::error_code et;
+    for (fs::recursive_directory_iterator it(ia / "corbeille", et), end; !et && it != end; it.increment(et))
+        if (it->is_regular_file()) trash += it->file_size();
+    check(trash > 0, "la corbeille de l'IA garde les connaissances supprim\xC3\xA9" "es en 3.");
+    check(m.of(mem::Part::CacheOther).bytes == 50 && m.of(mem::Part::Other).bytes == 10 + trash, "le reste du cache, le reste de la racine (la corbeille comprise)");
     check(m.cache().bytes == 1024 + 2000 + 4000 + 500 + 600 + 700 + 50 && m.cache().files == 8, "le cache : " + std::to_string(m.cache().bytes));
     std::uintmax_t sum = 0;
     std::size_t files = 0;

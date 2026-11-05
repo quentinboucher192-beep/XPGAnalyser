@@ -4,6 +4,7 @@
 #include "AiIncident.hpp"
 
 #include "../../core/AtomicFile.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille des incidents
 #include "../../hmi/HmiCrypto.hpp"
 #include "../../hmi/HmiVideo.hpp"
 
@@ -886,6 +887,32 @@ bool Store::remove(const std::string& folder, std::string* why) {
     return true;
 }
 
+// ---- 1.25.1 : la corbeille (en attente/.corbeille) ----
+std::string Store::trashFolder() const { return join(pendingFolder(), ".corbeille"); }
+
+std::string Store::trashSlot(const std::string& folder) const {
+    return join(trashFolder(), core::trash::stamp() + "~" + U(P(folder).filename()));
+}
+
+bool Store::trash(const std::string& folder, const std::string& slot, std::string* why) {
+    const fs::path f = P(folder).lexically_normal();
+    if (f.parent_path() != P(pendingFolder()).lexically_normal() || U(f.filename()).empty()) {
+        if (why) *why = "seul un incident en attente se supprime";
+        return false;
+    }
+    std::error_code ec;
+    if (fs::exists(P(slot), ec)) {
+        if (why) *why = "la corbeille a d\xC3\xA9j\xC3\xA0 " + U(P(slot).filename());
+        return false;
+    }
+    return core::trash::move(folder, slot, why);
+}
+
+bool Store::restore(const std::string& slot, const std::string& folder, std::string* why) {
+    if (!core::trash::takeBack(slot, folder, why)) return false;
+    return true;
+}
+
 Item Store::read(const std::string& folder) const {
     Item it;
     it.folder = folder;
@@ -1002,6 +1029,9 @@ std::vector<inc::Snapshot::Previous> Store::history(std::string_view alarm, std:
 std::vector<std::string> Store::recover() {
     std::vector<std::string> notes;
     std::error_code ec;
+    // 0. 1.25.1 : la corbeille - ce qui y est depuis plus de 7 jours part pour de bon
+    if (const auto n = core::trash::purge(trashFolder()); n)
+        notes.push_back(std::to_string(n) + " incident(s) supprim\xC3\xA9(s) il y a plus de 7 jours : la corbeille est vid\xC3\xA9" "e");
     // 1. les copies de validation interrompues : l'original est encore en attente
     for (fs::directory_iterator it(P(validatedFolder()), ec), end; !ec && it != end; it.increment(ec)) {
         const std::string n = U(it->path().filename());

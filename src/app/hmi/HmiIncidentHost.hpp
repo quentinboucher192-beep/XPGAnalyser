@@ -135,7 +135,10 @@ public:
     void comment(const std::string& folder, const std::string& text, const std::string& author);
     void analyze(const std::string& folder);         // une nouvelle analyse (l'IA choisie) ; la fiche si aucune
     void validate(const std::string& folder, const std::string& note, const std::string& author);
-    void remove(const std::string& folder);
+    // 1.25.1 : supprimer, c'est mettre dans la corbeille des incidents (en attente/.corbeille) ; rend ou il ira (vide :
+    // pas de stockage). restore l'en ressort, a sa place (Ctrl+Z). Les deux en arriere-plan, comme le reste.
+    std::string remove(const std::string& folder);
+    void restore(const std::string& slot, const std::string& folder);
     [[nodiscard]] app::ai::incidents::Integrity verify(const std::string& folder) const;   // (lecture directe, rapide)
 
     // L'etat, pour le volet et la barre.

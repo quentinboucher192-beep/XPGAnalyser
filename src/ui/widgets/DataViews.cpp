@@ -3156,6 +3156,68 @@ std::string run(int id, int firstId, const std::string& path, const std::string&
     }
 }
 
+// 1.25.1 : le chemin dans un texte (un message de la barre d'etat).
+std::string findIn(std::string_view text) {
+    if (text.size() < 3) return {};
+    const auto separator = [](std::string_view s) { return s.find('/') != std::string_view::npos || s.find('\\') != std::string_view::npos; };
+    const auto extension = [](std::string_view s) {
+        const auto dot = s.find_last_of('.');
+        if (dot == std::string_view::npos || dot == 0 || dot + 1 >= s.size() || s.size() - dot > 6) return false;
+        for (std::size_t i = dot + 1; i < s.size(); ++i)
+            if (!std::isalnum(static_cast<unsigned char>(s[i]))) return false;
+        return std::isalpha(static_cast<unsigned char>(s[dot + 1])) != 0;
+    };
+    // Rogner : les blancs, les guillemets, << >> et la ponctuation qui suit un chemin dans une phrase.
+    const auto trim = [](std::string_view s) {
+        static constexpr std::string_view kOpen = "\xC2\xAB";
+        static constexpr std::string_view kClose = "\xC2\xBB";
+        for (bool again = true; again && !s.empty();) {
+            again = false;
+            while (!s.empty() && (s.front() == ' ' || s.front() == '"' || s.front() == '\'' || s.front() == '(')) { s.remove_prefix(1); again = true; }
+            while (!s.empty() && (s.back() == ' ' || s.back() == '"' || s.back() == '\'' || s.back() == ')' || s.back() == '.' || s.back() == ','
+                                  || s.back() == ';' || s.back() == ':')) { s.remove_suffix(1); again = true; }
+            if (s.starts_with(kOpen)) { s.remove_prefix(kOpen.size()); again = true; }
+            if (s.ends_with(kClose)) { s.remove_suffix(kClose.size()); again = true; }
+        }
+        return s;
+    };
+    // Les debuts : le texte, apres un blanc, << : >>, un guillemet, une parenthese ; les fins : le bout, avant un blanc, une
+    // virgule, un point-virgule, une parenthese, >>.
+    std::vector<std::size_t> starts{0}, ends{text.size()};
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == ' ' || c == '(' || c == '"' || c == '\'') starts.push_back(i + 1);
+        if (c == ' ' || c == ',' || c == ';' || c == ')' || c == '"') ends.push_back(i);
+        if (c == '\xC2' && i + 1 < text.size() && text[i + 1] == '\xBB') ends.push_back(i);
+    }
+    std::string best;
+    std::error_code ec;
+    std::size_t tried = 0;
+    for (const auto a : starts)
+        for (const auto b : ends) {
+            if (b <= a || b - a < 3 || b - a <= best.size() || tried > 600) continue;
+            const auto cand = trim(text.substr(a, b - a));
+            if (cand.size() < 3 || cand.size() <= best.size() || (!separator(cand) && !extension(cand))) continue;
+            ++tried;
+            const std::string path(cand);
+            const std::string resolved = resolve(path);
+            if (!resolved.empty() && std::filesystem::exists(std::filesystem::path(std::u8string(resolved.begin(), resolved.end())), ec))
+                best = path;
+        }
+    if (!best.empty()) return best;
+    // Absent du disque : un chemin absolu ecrit apres << : >> (C:\..., \\serveur\..., /...).
+    if (const auto colon = text.rfind(" : "); colon != std::string_view::npos) {
+        auto rest = text.substr(colon + 3);
+        if (const auto cut = rest.find(" ("); cut != std::string_view::npos) rest = rest.substr(0, cut);
+        rest = trim(rest);
+        const bool drive = rest.size() > 3 && std::isalpha(static_cast<unsigned char>(rest[0])) && rest[1] == ':' && (rest[2] == '\\' || rest[2] == '/');
+        const bool unc = rest.starts_with("\\\\");
+        const bool root = rest.size() > 1 && rest[0] == '/' && rest.find('/', 1) != std::string_view::npos;
+        if (drive || unc || root) return std::string(rest);
+    }
+    return {};
+}
+
 // 1.24.1 : le menu d'un chemin montre hors d'un tableau, d'une grille ou d'un champ (un libelle).
 bool PathMenu::open(Widget& host, std::string path, gfx::Point at, std::string base, std::string heading) {
     auto items = menuItems(path, kFirstId, base);
