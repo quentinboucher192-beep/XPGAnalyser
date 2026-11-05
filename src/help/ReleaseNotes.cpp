@@ -165,6 +165,15 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.24.0 : la bibliotheque de sons ; supprimer plusieurs d'un coup ; les chemins (Ouvrir dans l'explorateur, Aller a)
+        note("1.24.0", "Vues", Kind::New,
+         "LA BIBLIOTH\xC3\x88QUE DE SONS : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de sons. 22 SONS NATIFS fabriqu\xC3\xA9s par le logiciel "
+         "(rien \xC3\xA0 t\xC3\xA9l\xC3\xA9" "charger ni \xC3\xA0 licencier), en dossiers : Alarmes (critique, haute, moyenne, basse priorit\xC3\xA9, sir\xC3\xA8ne, "
+         "klaxon, bip continu), Notifications, Interface, Proc\xC3\xA9" "d\xC3\xA9. \xC3\x89" "couter (Espace, la forme d'onde), Importer dans le "
+         "projet (Entr\xC3\xA9" "e : une ressource, r\xC3\xA9utilis\xC3\xA9" "e si elle y est d\xC3\xA9j\xC3\xA0 ; Ctrl+Z), chercher. MES SONS : tes WAV et MP3, "
+         "gard\xC3\xA9s hors du projet pour tous tes projets (le bouton +, ou un fichier l\xC3\xA2" "ch\xC3\xA9). Le son d'une priorit\xC3\xA9 d'alarme et "
+         "l'action Jouer un son proposent aussi \xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA \xE2\x80\xA6 \xC2\xBB : le choisir l'importe et le r\xC3\xA8gle d'un geste.",
+         "bibliotheque-sons", ""),
         // 1.23.1 : le Style nomme en formule ; les couleurs semantiques ; IHM > Styles deplie ; la page Styles (menus, listes)
         note("1.23.1", "Vues", Kind::New,
          "LES COULEURS S\xC3\x89MANTIQUES : des couleurs globales sous un nom, utilisables partout comme des constantes. Une case "

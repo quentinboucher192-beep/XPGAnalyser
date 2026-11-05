@@ -10565,6 +10565,34 @@ Choisir une ressource la montre à droite, quel que soit son genre. Une image s'
 CSV (séparateur, en-tête), Excel (onglets), SQLite (tables et types), JSON (tableau d'objets ou clé / valeur), XML (éléments répétés), TXT. Pour un classeur ou une base, **choisis l'onglet ou la table** affichée.
 > Un tableau lié à un fichier affiche ses lignes, relues quand le fichier change ; l'action « Lier un tableau » change sa source en marche.
 
+== bibliotheque-sons | La bibliothèque de sons
+: Des sons prêts à servir (alarmes, notifications, interface, procédé), fabriqués par le logiciel, et Mes sons, gardés pour tous tes projets : les écouter, les importer dans le projet, les choisir pour une alarme ou l'action Jouer un son.
+@depuis 1.24.0
+@mots bibliothèque de sons, sons natifs, Mes sons, son natif, écouter, importer un son, alarme sonore, sirène, klaxon, carillon, bip
+@lieux sons
+@voir ressources, alarmes, actions-ressources, objet-coupe-son
+### Les sons natifs
+IHM › Ressources › **Bibliothèque de sons** : 22 sons **fabriqués par le logiciel** (rien à télécharger, rien à licencier, le même son partout), rangés en dossiers dépliables, chacun avec un cadenas :
+| Dossier | Les sons |
+| Alarmes | Alarme critique (une sirène à deux tons), Alarme haute priorité (deux salves de trois bips rapides), Alarme priorité moyenne, Alarme basse priorité, Sirène montante, Klaxon, Bip continu |
+| Notifications | Notification, Information, Succès, Erreur, Avertissement, Acquittement |
+| Interface | Clic, Bip court, Bip double, Touche, Refus |
+| Procédé | Démarrage, Arrêt, Cycle terminé, Carillon |
+Plus une alarme est grave, plus son son est rapide et insistant (l'esprit de l'ISA-18.2).
+### Écouter, importer
+- Choisis un son : sa fiche à droite dit à quoi il sert, sa durée, et montre sa forme d'onde.
+- **Écouter** (Espace, ou un double-clic) ; encore une fois : l'arrêter.
+- **Importer dans le projet** (Entrée) : le son devient une **ressource** (`alarme-haute.wav`), à choisir ensuite partout où un son se choisit. Le même son déjà dans le projet est réutilisé ; la colonne **Dans le projet** dit sa ressource. Ctrl+Z retire l'import.
+- **Chercher un son** : chaque mot est cherché dans le nom, le dossier, la description et les mots-clés (sirène, porte, acquittement…), sans casse ni accents ; les dossiers qui trouvent s'ouvrent.
+- Le clic droit propose les mêmes gestes, plus **Aller à la ressource** (un son déjà importé) et **Copier le nom**.
+### Mes sons
+- **Ajouter à Mes sons** (le bouton +), ou **lâche un fichier** WAV ou MP3 sur la liste : il rejoint le dossier **Mes sons**, en tête, avec une personne. Mes sons sont gardés **hors du projet**, dans tes réglages (à côté de Mes images) : ils te suivent d'un projet à l'autre.
+- Le même contenu déjà dans Mes sons n'est pas copié deux fois ; un autre contenu sous le même nom devient `nom (2).wav`.
+- **Retirer** (Suppr) enlève un de tes sons de Mes sons ; les projets qui l'ont importé gardent leur ressource. Un son natif ne se retire pas.
+- **Ouvrir dans l'explorateur** (clic droit) : le fichier d'un de tes sons.
+### Choisir un son natif directement
+Là où un son se choisit dans une liste - le **son d'une priorité d'alarme** (Configuration › Alarmes, Sons et mise de côté) et l'action **Jouer un son** - la liste propose, après les sons du projet, ceux de la bibliothèque : « Bibliothèque › Alarmes › Alarme critique ». Le choisir **l'importe et le règle** d'un seul geste (un seul Ctrl+Z pour une alarme).
+
 == actions-ressources | Actions sur les ressources
 : Quatre opérations d'action touchent aux ressources et au poste : demander une ressource à l'opérateur, lier un tableau à une base, jouer un son, ouvrir le menu Paramètres système.
 @voir actions, ressources, fichiers, parametres-systeme
