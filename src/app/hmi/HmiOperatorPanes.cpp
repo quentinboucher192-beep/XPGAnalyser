@@ -263,8 +263,10 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(TAdd, [this] { return owner_.valid(); });
     tools_->setEnabledWhen(TExport, [this] { return owner_.valid() && !order_.empty(); });
     tools_->setEnabledWhen(TImport, [this] { return owner_.valid(); });
-    tools_->setEnabledWhen(TDuplicate, [this] { return selectedOperator() != kNoId; });
+    // 1.24.0 : plusieurs operateurs choisis - Supprimer les retire tous (un Ctrl+Z) ; Dupliquer : un a la fois.
+    tools_->setEnabledWhen(TDuplicate, [this] { return selectedOperator() != kNoId && table_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedOperator() != kNoId; });
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", table_ ? several::chosen(*table_, order_).size() : 0); });
     tools_->setEnabledWhen(TCompile, [this] { return owner_.valid() && !order_.empty(); });     // 1.11.17 : rien a compiler
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
@@ -274,7 +276,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         auto table = std::make_unique<ui::TableView>(base + ".operators");
         table->setColumns({{"Genre", 104.f}, {"Signature", 250.f}, {"Retour", 110.f}, {"\xC3\x89tat", 110.f},
                            {"Fonction", 110.f}, {"Description", 220.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs operateurs a supprimer d'un coup
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_);   // 1.12.27 : Suppr, Ctrl+D, Inser (comme les boutons)
         listPanel_ = panel.get();
@@ -335,7 +337,24 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
         switch (a) {
             case TAdd: (void)openAddDialog(); break;
             case TDuplicate: if (sel) (void)openDuplicateDialog(sel); break;
-            case TDelete: if (sel) (void)deleteOperator(sel); break;
+            case TDelete:
+                // 1.24.0 : plusieurs operateurs choisis - d'un coup, un seul Ctrl+Z (sans question, comme un seul).
+                if (const auto ids = several::chosen(*table_, order_); ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "op\xC3\xA9rateur";
+                    b.nouns = "op\xC3\xA9rateurs";
+                    for (const auto id : ids) {
+                        const auto* o = hmi::operatorById(doc_->project, id);
+                        b.names.push_back(o ? hmi::operatorSignature(*o) : std::string("?"));
+                    }
+                    b.remove = [this, ids](std::size_t i, std::string* why) { return deleteOperator(ids[i], why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (sel) (void)deleteOperator(sel);
+                break;
             case TRewrite: (void)rewriteFromValues(); break;
             case TExport: {   // 1.11.3
                 const std::weak_ptr<char> alive = alive_;

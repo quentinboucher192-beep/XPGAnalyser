@@ -87,7 +87,13 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(CAutoOff, HmiGlyph::Stop, "Ne plus d\xC3\xA9marrer le poste avec la session", "Ne plus d\xC3\xA9marrer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(CTry, [this] { return static_cast<bool>(hosts_.tryStation); });
-    tools_->setEnabledWhen(CRemove, [this] { return selectedScreen() >= 2; });
+    tools_->setEnabledWhen(CRemove, [this] {   // 1.24.0 : plusieurs ecrans - un secondaire suffit
+        if (!screens_) return false;
+        for (const int d : several::chosen(*screens_, order_))
+            if (d >= 2) return true;
+        return false;
+    });
+    tools_->setLabelWhen(CRemove, [this] { return several::label("Retirer", screens_ ? several::chosen(*screens_, order_).size() : 0); });
     tools_->setEnabledWhen(CAdd, [this] { return doc_->project.station.screens.size() + 1 < static_cast<std::size_t>(kMaxDisplay); });
     tools_->setEnabledWhen(CLauncher, [this] { return !folder().empty(); });
     tools_->setEnabledWhen(CAutoOn, [this] { return !folder().empty() && !autostart(); });
@@ -96,7 +102,7 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
     auto screens = std::make_unique<ui::TableView>(base + ".screens");
     screens->setColumns({{"\xC3\x89" "cran", 120.f}, {"Vue", 260.f}, {"Taille de la vue", 130.f}, {"Moniteur", 330.f}, {"R\xC3\xB4le", 420.f}});
-    screens->setSelectionMode(ui::SelectionMode::Single);
+    screens->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs ecrans a retirer d'un coup
     auto launch = std::make_unique<ui::TableView>(base + ".launch");
     launch->setColumns({{"Lancement", 230.f}, {"Valeur", 900.f}});
     screens_ = static_cast<ui::TableView*>(screens.get());
@@ -113,7 +119,22 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
                 if (hosts_.tryStation) hosts_.tryStation();
                 break;
             case CAdd: (void)addScreen(); break;
-            case CRemove: if (selectedScreen() >= 2) (void)removeScreen(selectedScreen()); break;
+            case CRemove:
+                // 1.24.0 : plusieurs ecrans secondaires - d'un coup, un seul Ctrl+Z ; l'ecran principal reste (comme seul).
+                if (const auto displays = several::chosen(*screens_, order_); displays.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "\xC3\xA9" "cran";
+                    b.nouns = "\xC3\xA9" "crans";
+                    for (const int d : displays) b.names.push_back("\xC3\xA9" "cran " + std::to_string(d));
+                    b.remove = [this, displays](std::size_t i, std::string* why) { return removeScreen(displays[i], why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (selectedScreen() >= 2) (void)removeScreen(selectedScreen());
+                break;
             case CPassword:
                 if (hosts_.askPassword) hosts_.askPassword();
                 break;

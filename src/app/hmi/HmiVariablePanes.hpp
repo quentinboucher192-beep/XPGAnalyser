@@ -145,6 +145,14 @@ public:
     bool addFolder(const std::string& path, std::string* why = nullptr);
     bool renameFolder(const std::string& path, const std::string& newLeaf, std::string* why = nullptr);
     bool deleteFolder(const std::string& path);                 // ses variables montent d'un cran
+    // ---- 1.24.0 : SUPPRIMER PLUSIEURS D'UN COUP (Ctrl+clic, Maj+clic) ----
+    //  Les variables et les dossiers choisis (les lignes des membres ne comptent pas ; un dossier dans un autre choisi
+    //  part avec lui). deleteMany : tout en UNE commande (un seul Ctrl+Z) ; les variables d'un dossier retire montent
+    //  d'un cran. Rend le nombre de lignes retirees. Supprimer (le bouton, Suppr, le clic droit) : une seule question
+    //  (several::confirm) qui dit les noms et celles qui servent encore ; Renommer, Dupliquer... : une a la fois.
+    [[nodiscard]] std::vector<hmi::Id>     selectedVariables() const;
+    [[nodiscard]] std::vector<std::string> selectedFolders() const;
+    std::size_t deleteMany(const std::vector<hmi::Id>& variables, const std::vector<std::string>& folders = {});
 
     // ---- la selection et l'affichage ----
     [[nodiscard]] hmi::Id     selectedVariable() const;          // aussi pour un membre choisi
@@ -262,6 +270,8 @@ private:
     void rebuildProperties();
     void say(std::string text, bool warning = false);
     void apply(core::CommandPtr cmd);
+    void deleteSelection();                          // 1.24.0 : Supprimer (une ligne comme avant ; plusieurs : une question)
+    [[nodiscard]] bool several() const;              // 1.24.0 : plusieurs lignes choisies (Renommer... : une a la fois)
     bool change(hmi::Id, std::string label, const std::function<void(hmi::Variable&)>& edit);
     void emitFolder(const std::string& folder, int depth);
     void emitVariable(const hmi::Variable&, int depth);
@@ -344,6 +354,11 @@ public:
     bool renameType(hmi::Id, const std::string& name, std::string* why = nullptr);
     bool setTypeDescription(hmi::Id, const std::string& text);
     bool deleteType(hmi::Id, std::string* why = nullptr);
+    // 1.24.0 : SUPPRIMER PLUSIEURS TYPES D'UN COUP (Ctrl+clic, Maj+clic dans la liste) - ces types puis ces dossiers, en
+    // UNE commande (un seul Ctrl+Z, core::CommandGroupScope). Un type encore employe est refuse comme seul (sauf par un
+    // autre type retire avec lui : celui-ci part d'abord) ; `report` : combien sont partis, lesquels sont refuses et
+    // pourquoi. Rend le nombre de lignes retirees. Supprimer (le bouton, Suppr, le clic droit) le fait pour la selection.
+    std::size_t deleteTypes(const std::vector<hmi::Id>& types, const std::vector<std::string>& folders = {}, std::string* report = nullptr);
     hmi::Id duplicateType(hmi::Id);
     bool addMember(hmi::Id, const std::string& name, const std::string& type, std::string* why = nullptr);
     bool setMember(hmi::Id, std::size_t index, const hmi::TypeMember&, std::string* why = nullptr);
@@ -550,6 +565,8 @@ protected:
 
 private:
     void refreshMembers();
+    void deleteTypeSelection();                      // 1.24.0 : Supprimer - une ligne comme avant, plusieurs d'un coup
+    [[nodiscard]] std::size_t chosenCount() const;   // 1.24.0 : les types et dossiers choisis dans la liste
     void refreshCallbackPage(const hmi::HmiType&);   // 1.12.20 (lot T)
     void rebuildProperties();
     void say(std::string text, bool warning = false);

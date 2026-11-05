@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../core/Command.hpp"   // 1.24.0 : CommandGroupScope (supprimer plusieurs d'un coup)
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les styles fournis dans la liste Style nomme
 #include "../../hmi/HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe de l'Enregistreur)
 #include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
@@ -180,6 +181,105 @@ void HmiToolStrip::setText(int action, std::string tip, std::string label) {
     invalidateLayout();
     invalidate();
 }
+void HmiToolStrip::setLabelWhen(int action, std::function<std::string()> label) {
+    for (auto& it : items_) if (it.action == action && !it.separator) it.dynamicLabel = label;
+    invalidateLayout();
+}
+std::string HmiToolStrip::labelOf(int action) const {
+    for (const auto& it : items_)
+        if (!it.separator && it.action == action) return it.shown();
+    return {};
+}
+
+// ---- 1.24.0 : plusieurs d'un coup ----------------------------------------------------
+namespace several {
+std::string label(std::string_view verb, std::size_t count) {
+    std::string out(verb);
+    if (count > 1) out += " les " + std::to_string(count);
+    return out;
+}
+std::string names(const std::vector<std::string>& all, std::size_t shown) {
+    std::string out;
+    for (std::size_t i = 0; i < all.size() && i < shown; ++i) out += (i ? ", " : "") + all[i];
+    if (all.size() > shown) out += " +" + std::to_string(all.size() - shown);
+    return out;
+}
+std::string refusals(const std::vector<std::pair<std::string, std::string>>& refused, std::size_t shown) {
+    std::string out;
+    for (std::size_t i = 0; i < refused.size() && i < shown; ++i)
+        out += (i ? ", " : "") + refused[i].first + (refused[i].second.empty() ? std::string{} : " (" + refused[i].second + ")");
+    if (refused.size() > shown) out += " +" + std::to_string(refused.size() - shown);
+    return out;
+}
+namespace {
+Confirm& confirmHost() {
+    static Confirm host;
+    return host;
+}
+} // namespace
+void setConfirmHost(Confirm host) { confirmHost() = std::move(host); }
+void confirm(const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes) {
+    if (confirmHost()) confirmHost()(title, text, button, std::move(yes));
+    else if (yes) yes();
+}
+
+namespace {
+// "supprim\xC3\xA9" (Supprimer), "retir\xC3\xA9" (Retirer), accorde.
+std::string participle(const Batch& b, std::size_t n) {
+    std::string out = b.verb == "Retirer" ? "retir\xC3\xA9" : b.verb == "Effacer" ? "effac\xC3\xA9" : "supprim\xC3\xA9";
+    if (b.feminine) out += "e";
+    if (n > 1) out += "s";
+    return out;
+}
+std::string countOf(const Batch& b, std::size_t n) { return std::to_string(n) + " " + (n > 1 ? b.nouns : b.noun); }
+} // namespace
+
+std::string summary(const Batch& b, const std::vector<std::string>& gone, const std::vector<std::pair<std::string, std::string>>& refused) {
+    std::string text;
+    if (!gone.empty()) text = countOf(b, gone.size()) + " " + participle(b, gone.size()) + " : " + names(gone);
+    else text = std::string(b.feminine ? "Aucune " : "Aucun ") + b.noun + " " + participle(b, 1);
+    if (!refused.empty()) {
+        std::string refusedWord = "refus\xC3\xA9";
+        if (b.feminine) refusedWord += "e";
+        if (refused.size() > 1) refusedWord += "s";
+        text += " ; " + std::to_string(refused.size()) + " " + refusedWord + " : " + refusals(refused);
+    }
+    if (!gone.empty()) text += gone.size() > 1 ? " - un seul Ctrl+Z les rend" : " - Ctrl+Z le rend";
+    return text;
+}
+
+void run(Batch batch) {
+    const std::size_t n = batch.names.size();
+    if (n == 0 || !batch.remove) return;
+    auto go = std::make_shared<Batch>(std::move(batch));
+    const auto act = [go] {
+        const Batch& b = *go;
+        if (b.alive.expired()) return;
+        std::vector<std::string> gone;
+        std::vector<std::pair<std::string, std::string>> refused;
+        {
+            core::CommandGroupScope group(b.verb + " " + countOf(b, b.names.size()));
+            for (std::size_t i = 0; i < b.names.size(); ++i) {
+                std::string why;
+                if (b.remove(i, &why)) gone.push_back(b.names[i]);
+                else refused.emplace_back(b.names[i], why);
+                if (b.alive.expired()) return;      // le volet est parti en route (rien ne devrait le faire)
+            }
+        }
+        if (b.after) b.after();
+        if (b.report) b.report(summary(b, gone, refused), !refused.empty());
+    };
+    if (!go->ask) {
+        act();
+        return;
+    }
+    std::string text = "Les " + countOf(*go, n) + " " + names(go->names) + " seront " + participle(*go, n) + ".";
+    if (n == 1) text = std::string(go->feminine ? "La " : "Le ") + go->noun + " " + go->names.front() + " sera " + participle(*go, 1) + ".";
+    if (!go->warning.empty()) text += " " + go->warning;
+    text += n > 1 ? " Un seul Ctrl+Z les rend." : " Ctrl+Z le rend.";
+    confirm(go->verb + (n > 1 ? " les " + countOf(*go, n) : (go->feminine ? " la " : " le ") + go->noun) + " ?", text, label(go->verb, n), act);
+}
+} // namespace several
 
 ui::SizeHint HmiToolStrip::sizeHint() const {
     ui::SizeHint h;
@@ -214,7 +314,7 @@ void HmiToolStrip::layoutItems(float) const {
     for (auto& it : items_) it.compact = false;
     const auto widthOf = [&](const Item& it) {
         float w = 30;
-        if (!it.label.empty() && !it.compact) w += ui::measureWidth(it.label, gfx::FontId{13}) + 8;
+        if (const auto l = it.shown(); !l.empty() && !it.compact) w += ui::measureWidth(l, gfx::FontId{13}) + 8;
         return w;
     };
     const auto total = [&] {
@@ -225,7 +325,7 @@ void HmiToolStrip::layoutItems(float) const {
     };
     if (b.w > 0.f)
         for (std::size_t i = items_.size(); i-- > 0 && total() > b.w;)
-            if (on[i] && !items_[i].separator && !items_[i].label.empty()) items_[i].compact = true;
+            if (on[i] && !items_[i].separator && !items_[i].shown().empty()) items_[i].compact = true;
     float x = b.x + 6;
     for (std::size_t i = 0; i < items_.size(); ++i) {
         auto& it = items_[i];
@@ -306,7 +406,8 @@ void HmiToolStrip::openMore() {
     for (const auto i : overflow_) {
         const auto& it = items_[i];
         ui::PopupMenu::Item m;
-        m.label = overflowLabel(it.tip, it.label);
+        const std::string now = it.shown();     // 1.24.0 : << Supprimer les 5 >> (plusieurs lignes choisies)
+        m.label = now != it.label ? now : overflowLabel(it.tip, it.label);
         m.id = it.action;
         m.enabled = !it.enabled || it.enabled();
         m.disabledReason = "pas maintenant";
@@ -428,8 +529,8 @@ void HmiToolStrip::onPaint(const ui::PaintContext& ctx) {
         if (static_cast<int>(i) == pressed_ && enabled) ctx.r.fillRoundedRect(it.rect, ctx.theme.color.accent.withAlpha(90), 4);
         const gfx::Color col = !enabled ? ctx.theme.color.textDisabled : checked ? ctx.theme.color.accent : ctx.theme.color.text;
         drawHmiGlyph(ctx.r, it.glyph, {it.rect.x + 5, it.rect.y + (it.rect.h - 20) / 2, 20, 20}, col);
-        if (!it.label.empty() && !it.compact)
-            textCentred(ctx, {it.rect.x + 29, it.rect.y, it.rect.w - 30, it.rect.h}, it.label, gfx::FontId{13}, col);
+        if (const auto l = it.shown(); !l.empty() && !it.compact)
+            textCentred(ctx, {it.rect.x + 29, it.rect.y, it.rect.w - 30, it.rect.h}, l, gfx::FontId{13}, col);
     }
     // 1.12.30 : le bouton des outils qui ne tiennent pas.
     if (moreRect_.w > 0.f) {

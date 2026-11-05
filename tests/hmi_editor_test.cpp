@@ -17188,9 +17188,9 @@ void v110_editeur() {
         if (menu)
             for (const auto& it : menu->items()) {
                 rename = rename || it.label.find("Renommer") != std::string::npos;
-                remove = remove || it.label == "Supprimer";
+                remove = remove || it.label == "Supprimer les 3";   // 1.24.0 : les 3 choisies, d'un coup
             }
-        check(rename && remove, "et les gestes d\xC3\xA9j\xC3\xA0 connus : Copier le nom, Renommer, Supprimer");
+        check(rename && remove, "et les gestes d\xC3\xA9j\xC3\xA0 connus : Copier le nom, Renommer, Supprimer (les 3)");
         const auto* noTrace = menu ? findItemStarting(menu->items(), "1 variable sans courbe") : nullptr;
         check(noTrace && !noTrace->enabled, "le menu dit ce qui ne se trace pas : \xC2\xAB 1 variable sans courbe \xC2\xBB (Message, un texte)");
         check(menu && ui::cmd::badShortcuts(menu->items()).empty(), "Variables IHM : la colonne de droite, des touches seulement");
@@ -46170,11 +46170,374 @@ void cheminsMenu1240() {
     check(!fs::exists(dir), "le fichier de l'essai est efface");
 }
 
+// 1.24.0 : LE CLIENT (05/11) - << dans variables, types, faire en sorte de pouvoir supprimer plusieurs variables d'un coup,
+// plusieurs types d'un coup >>, << partout pouvoir supprimer plusieurs d'un coup >>. Dans les volets a liste : 3 lignes
+// choisies, Supprimer (le bouton, Suppr, le clic droit) - elles partent, UN Ctrl+Z les rend toutes ; une seule question si
+// une ligne en pose une ; une ligne seule comme avant ; Renommer, Dupliquer... grises (<< une a la fois >>) ; une ligne
+// refusee seule (employee, fournie) l'est aussi parmi d'autres, le compte rendu le dit. HMI_TEST_DEL=1 : ces essais seuls.
+void supprimerPlusieurs1240() {
+    std::printf("== 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes, utilisateurs...) ==\n");
+    // La question unique : l'essai la lit, et repond oui (ou non).
+    struct Question {
+        int         asked{0};
+        bool        yes{true};
+        std::string title, text, button;
+    } q;
+    app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes) {
+        ++q.asked;
+        q.title = title;
+        q.text = text;
+        q.button = button;
+        if (q.yes && yes) yes();
+    });
+    const std::string oneAtATime = "une \xC3\xA0 la fois";
+    const auto has = [](const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; };
+    // ---- les textes communs
+    same_text(app::several::label("Supprimer", 5), "Supprimer les 5", "le libell\xC3\xA9 : Supprimer les 5");
+    same_text(app::several::label("Supprimer", 1), "Supprimer", "... une ligne : Supprimer");
+    same_text(app::several::names({"A", "B", "C", "D", "E", "F"}), "A, B, C, D +2", "les noms : les premiers, puis +N");
+
+    // ---- VARIABLES IHM
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiVariablesPane vars("del1240v", doc, apply);
+        vars.setBounds({0, 0, 1600, 900});
+        vars.layout();
+        std::string why;
+        for (const char* n : {"Pompe1", "Pompe2", "Pompe3", "Vanne1", "Vanne2"}) (void)vars.addVariable(n, "INT", {}, &why);
+        Script calcul;   // Pompe1 sert encore : la question le dit (comme pour une seule)
+        calcul.id = doc->project.allocate();
+        calcul.name = "Calcul";
+        calcul.body = "Pompe1 := Pompe1 + 1;";
+        doc->project.programs.scripts.push_back(calcul);
+        vars.refresh();
+        auto& vp = doc->project.programs.variables;
+        const auto alive = [&](const char* n) { return std::any_of(vp.begin(), vp.end(), [n](const Variable& v) { return v.name == n; }); };
+        check(vp.size() == 5, "Variables IHM : 5 variables");
+        auto& tools = vars.tools();
+        const int del = tools.actionByTip("Supprimer la variable");
+        const int ren = tools.actionByTip("Renommer");
+        const int dup = tools.actionByTip("Dupliquer la variable");
+        const auto pick = [&](std::initializer_list<const char*> names) {
+            std::vector<ui::RowIndex> rows;
+            for (const char* n : names)
+                if (const int r = vars.rowOf(n); r >= 0) rows.push_back(static_cast<ui::RowIndex>(r));
+            vars.table().selectModelRows(rows);
+            return rows.size();
+        };
+        check(del > 0 && ren > 0 && dup > 0, "les boutons Supprimer, Renommer, Dupliquer");
+        check(pick({"Pompe1", "Pompe3", "Vanne2"}) == 3 && vars.selectedVariables().size() == 3, "Ctrl+clic : 3 variables choisies");
+        same_text(tools.labelOf(del), "Supprimer les 3", "le bouton dit combien");
+        check(tools.isEnabled(del) && !tools.isEnabled(ren) && !tools.isEnabled(dup), "Supprimer actif ; Renommer, Dupliquer gris\xC3\xA9s");
+        vars.openContextMenu({400, 300});
+        if (const auto* menu = vars.contextMenu()) {
+            const auto* delItem = findItem(menu->items(), "Supprimer les 3");
+            const auto* renItem = findItem(menu->items(), "Renommer\xE2\x80\xA6");
+            check(delItem && delItem->enabled, "le clic droit : Supprimer les 3");
+            check(renItem && !renItem->enabled && renItem->disabledReason == oneAtATime, "le clic droit : Renommer gris\xC3\xA9 (une \xC3\xA0 la fois)");
+        } else {
+            check(false, "le menu du clic droit");
+        }
+        if (auto* m = vars.contextMenu()) m->close();
+        // Suppr sur la liste : UNE question, les noms et celle qui sert encore ; puis les 3 partent.
+        q = Question{};
+        vars.table().takeFocus();
+        (void)vars.table().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(q.asked == 1, "Suppr : une seule question pour les 3");
+        same_text(q.title, "Supprimer les 3 variables ?", "la question");
+        check(has(q.text, "Pompe1, Pompe3, Vanne2") && has(q.text, "Encore employ") && has(q.text, "Pompe1 (") && has(q.text, "Un seul Ctrl+Z")
+                  && q.button == "Supprimer les 3",
+              "la question dit les noms, celle qui sert encore, un seul Ctrl+Z : " + q.text);
+        check(vp.size() == 2 && alive("Pompe2") && alive("Vanne1"), "oui : les 3 variables sont parties");
+        check(has(vars.lastMessage(), "3 variables supprim"), "le compte rendu : " + vars.lastMessage());
+        check(stack.undo() && vp.size() == 5 && alive("Pompe1") && alive("Pompe3") && alive("Vanne2"), "UN Ctrl+Z les rend toutes");
+        vars.refresh();
+        // Non : rien ne part.
+        pick({"Pompe2", "Vanne1"});
+        q = Question{};
+        q.yes = false;
+        (void)tools.trigger(del);
+        check(q.asked == 1 && vp.size() == 5, "non : rien ne part");
+        q.yes = true;
+        // Une seule ligne : comme avant (ici sans hote : tout de suite, Ctrl+Z la rend).
+        pick({"Vanne1"});
+        same_text(tools.labelOf(del), "Supprimer", "une ligne : Supprimer");
+        check(tools.isEnabled(ren) && tools.isEnabled(dup), "une ligne : Renommer, Dupliquer actifs");
+        q = Question{};
+        (void)tools.trigger(del);
+        check(q.asked == 0 && vp.size() == 4 && !alive("Vanne1"), "une variable seule : supprim\xC3\xA9" "e comme avant");
+        check(stack.undo() && vp.size() == 5, "Ctrl+Z la rend");
+        vars.refresh();
+        // Un dossier et des variables : UNE commande - les variables du dossier montent d'un cran.
+        check(vars.addFolder("Ligne", &why), "un dossier Ligne (Vanne1 et Vanne2 dedans)");
+        for (auto& v : vp)
+            if (v.name == "Vanne1" || v.name == "Vanne2") v.folder = "Ligne";
+        vars.refresh();
+        pick({"Ligne", "Pompe2"});
+        check(vars.selectedFolders().size() == 1 && vars.selectedVariables().size() == 1, "un dossier et une variable choisis");
+        (void)tools.trigger(del);
+        check(!alive("Pompe2") && alive("Vanne1") && std::none_of(vp.begin(), vp.end(), [](const Variable& v) { return v.folder == "Ligne"; }),
+              "le dossier part, ses variables montent \xC3\xA0 la racine ; Pompe2 part");
+        check(stack.undo() && alive("Pompe2") && std::count_if(vp.begin(), vp.end(), [](const Variable& v) { return v.folder == "Ligne"; }) == 2,
+              "un seul Ctrl+Z rend le dossier, ses variables et Pompe2");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- TYPES IHM : un type employe reste (comme seul) ; employe seulement par un autre retire avec lui : il part
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiTypesPane types("del1240t", doc, apply);
+        types.setBounds({0, 0, 1400, 800});
+        types.layout();
+        std::string why;
+        const Id ta = types.addType("T_A", &why), tb = types.addType("T_B", &why), tc = types.addType("T_C", &why), td = types.addType("T_D", &why);
+        check(ta != kNoId && tb != kNoId && tc != kNoId && td != kNoId && types.addMember(tb, "Sous", "T_A", &why), "T_A, T_B (un membre T_A), T_C, T_D");
+        Variable station;
+        station.id = doc->project.allocate();
+        station.name = "Station";
+        station.type = "T_D";
+        doc->project.programs.variables.push_back(station);
+        types.refresh();
+        auto& tools = types.tools();
+        const int del = tools.actionByTip("Supprimer le type");
+        const int dup = tools.actionByTip("Dupliquer le type");
+        const auto pick = [&](std::initializer_list<Id> ids) {
+            std::vector<ui::RowIndex> rows;
+            for (const Id id : ids)
+                if (const int r = types.folders().rowOfItem(id); r >= 0) rows.push_back(static_cast<ui::RowIndex>(r));
+            types.typeTable().selectModelRows(rows);
+            return rows.size();
+        };
+        check(pick({ta, tb, td}) == 3, "Types IHM : 3 types choisis (T_A, T_B, T_D)");
+        same_text(tools.labelOf(del), "Supprimer les 3", "le bouton dit combien");
+        check(tools.isEnabled(del) && !tools.isEnabled(dup), "Supprimer actif, Dupliquer gris\xC3\xA9");
+        types.openTypeMenu({20, 120});
+        if (const auto* menu = types.typeMenu()) {
+            const auto* delItem = findItem(menu->items(), "Supprimer les 3");
+            const auto* renItem = findItem(menu->items(), "Renommer\xE2\x80\xA6");
+            check(delItem && delItem->enabled && renItem && !renItem->enabled && renItem->disabledReason == oneAtATime,
+                  "le clic droit : Supprimer les 3 ; Renommer gris\xC3\xA9 (une \xC3\xA0 la fois)");
+            if (auto* m = types.typeMenu()) m->close();
+        }
+        q = Question{};
+        types.typeTable().takeFocus();
+        (void)types.typeTable().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(q.asked == 0, "pas de question (comme pour un seul type)");
+        check(!doc->project.hmiType(ta) && !doc->project.hmiType(tb) && doc->project.hmiType(td) && doc->project.hmiType(tc),
+              "T_A et T_B partent (T_B d'abord : il employait T_A) ; T_D reste (Station l'emploie)");
+        check(has(types.lastMessage(), "2 types supprim") && has(types.lastMessage(), "T_D") && has(types.lastMessage(), "employ"),
+              "le compte rendu dit les supprim\xC3\xA9s et le refus\xC3\xA9 : " + types.lastMessage());
+        check(stack.undo() && doc->project.hmiType(ta) && doc->project.hmiType(tb), "UN Ctrl+Z rend T_A et T_B");
+        types.refresh();
+        pick({tc});
+        same_text(tools.labelOf(del), "Supprimer le type", "un type : son libell\xC3\xA9 d'avant");
+        (void)tools.trigger(del);
+        check(!doc->project.hmiType(tc), "un type seul : supprim\xC3\xA9 comme avant");
+        check(stack.undo() && doc->project.hmiType(tc), "Ctrl+Z le rend");
+        // Les membres d'un type aussi : deux d'un coup, une commande.
+        types.selectType(tc);
+        check(types.addMember(tc, "Debit", "REAL", &why), "T_C : un troisi\xC3\xA8me membre");
+        const std::size_t members = doc->project.hmiType(tc)->members.size();
+        const int rm1 = types.memberRowOf(doc->project.hmiType(tc)->members[0].name), rm2 = types.memberRowOf("Debit");
+        types.memberTable().selectModelRows({static_cast<ui::RowIndex>(rm1), static_cast<ui::RowIndex>(rm2)});
+        const int delMember = tools.actionByTip("Supprimer le membre");
+        same_text(tools.labelOf(delMember), "Supprimer les 2", "deux membres : le bouton dit combien");
+        (void)tools.trigger(delMember);
+        check(rm1 >= 0 && rm2 >= 0 && doc->project.hmiType(tc)->members.size() == members - 2, "les deux membres partent");
+        check(stack.undo() && doc->project.hmiType(tc)->members.size() == members, "UN Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- ALARMES : sans action qui les acquitte, pas de question (comme une seule)
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiAlarmsPane pane("del1240a", doc, apply);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        for (const char* n : {"Al_Haut", "Al_Bas", "Al_Defaut", "Al_Porte"}) (void)pane.addAlarm(n);
+        check(doc->project.alarms.size() == 4, "Alarmes : 4 alarmes");
+        const int del = pane.tools().actionByTip("Supprimer l'alarme");
+        const int dup = pane.tools().actionByTip("Dupliquer l'alarme");
+        pane.table().selectModelRows({0, 1, 3});
+        same_text(pane.tools().labelOf(del), "Supprimer les 3", "le bouton dit combien");
+        check(!pane.tools().isEnabled(dup), "Dupliquer gris\xC3\xA9 (une \xC3\xA0 la fois)");
+        q = Question{};
+        (void)pane.tools().trigger(del);
+        check(q.asked == 0 && doc->project.alarms.size() == 1 && doc->project.alarms[0].name == "Al_Defaut", "les 3 alarmes partent, sans question");
+        check(stack.undo() && doc->project.alarms.size() == 4, "UN Ctrl+Z les rend toutes");
+        // Une alarme acquittee par une action : la question, une seule.
+        View v = makeView(doc->project, "Vue_Alarmes");
+        Action ack;
+        ack.operation = Operation::AckAlarm;
+        ack.target = "Al_Bas";
+        v.actions.push_back(ack);
+        doc->project.views.push_back(v);
+        pane.refresh();
+        pane.table().selectModelRows({0, 1});
+        q = Question{};
+        (void)pane.tools().trigger(del);
+        check(q.asked == 1 && q.title == "Supprimer les 2 alarmes ?" && has(q.text, "Al_Bas (1 action)"), "une acquitt\xC3\xA9" "e : une question - " + q.text);
+        check(doc->project.alarms.size() == 2 && stack.undo() && doc->project.alarms.size() == 4, "les 2 partent ; un Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- UTILISATEURS ET GROUPES : une question pour des utilisateurs ; un groupe qui en a garde (comme seul)
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiUsersPane pane("del1240u", doc, apply);
+        pane.setBounds({0, 0, 1600, 900});
+        pane.layout();
+        for (const char* n : {"op1", "op2", "op3", "op4"}) (void)pane.addUser(n);
+        auto& users = doc->project.security.users;
+        check(users.size() == 4, "Utilisateurs : 4 comptes");
+        const int del = pane.tools().actionByTip("Supprimer l'\xC3\xA9l\xC3\xA9ment choisi");
+        const int pwd = pane.tools().actionByTip("D\xC3\xA9" "finir le mot de passe");
+        pane.usersTable().selectModelRows({1});
+        const bool pwdOne = pane.tools().isEnabled(pwd);
+        pane.usersTable().selectModelRows({0, 1, 2});
+        same_text(pane.tools().labelOf(del), "Supprimer les 3", "le bouton dit combien");
+        check(pwdOne && !pane.tools().isEnabled(pwd), "Mot de passe : actif pour un compte, gris\xC3\xA9 pour 3");
+        q = Question{};
+        (void)pane.tools().trigger(del);
+        check(q.asked == 1 && q.title == "Supprimer les 3 utilisateurs ?" && has(q.text, "op1, op2, op3"), "une question pour les 3 : " + q.text);
+        check(users.size() == 1 && users[0].login == "op4", "les 3 comptes partent");
+        check(stack.undo() && users.size() == 4, "UN Ctrl+Z les rend");
+        // Les groupes : celui qui a des utilisateurs reste, les deux autres partent.
+        pane.tabs().setCurrentIndex(1);
+        pane.refresh();
+        const std::size_t groups = doc->project.security.groups.size();
+        const auto& sg = doc->project.security.groups;
+        const Id busy = sg[0].id;   // Operateur : les 4 comptes y sont
+        (void)pane.addGroup("Equipe_A");
+        (void)pane.addGroup("Equipe_B");
+        pane.tabs().setCurrentIndex(1);
+        pane.refresh();
+        auto* groupsTable = dynamic_cast<ui::TableView*>(pane.findById("del1240u.groups"));
+        std::vector<ui::RowIndex> rows;
+        for (std::size_t i = 0; groupsTable && groupsTable->model() && i < groupsTable->model()->rowCount(); ++i) {
+            const std::string name = groupsTable->model()->cellText(static_cast<ui::RowIndex>(i), 0);
+            if (name == "Equipe_A" || name == "Equipe_B" || (doc->project.group(busy) && name == doc->project.group(busy)->name))
+                rows.push_back(static_cast<ui::RowIndex>(i));
+        }
+        check(groupsTable && rows.size() == 3, "Groupes : 3 groupes choisis (dont celui des comptes)");
+        if (groupsTable) groupsTable->selectModelRows(rows);
+        q = Question{};
+        (void)pane.tools().trigger(del);
+        check(q.asked == 0 && doc->project.security.groups.size() == groups && doc->project.group(busy),
+              "les 2 groupes vides partent, celui des comptes reste");
+        check(has(pane.lastMessage(), "2 groupes supprim") && has(pane.lastMessage(), "1 refus"), "le compte rendu : " + pane.lastMessage());
+        check(stack.undo() && doc->project.security.groups.size() == groups + 2, "UN Ctrl+Z rend les 2 groupes");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- COULEURS SEMANTIQUES : une fournie reste (verrouillee), les tiennes partent
+    {
+        Bench b;
+        core::CommandGroupScope::registerStack(&b.stack);
+        using P = app::HmiSemanticColorsPane;
+        P pane("del1240c", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1200, 700});
+        pane.layout();
+        std::string why;
+        check(pane.addColor("Cuve", "#336699", &why) != kNoId && pane.addColor("Tuyau", "#996633", &why) != kNoId, "Couleurs : deux \xC3\xA0 toi");
+        const std::size_t before = b.doc->project.semanticColors.size();
+        std::vector<ui::RowIndex> rows;
+        for (std::size_t i = 0; i < pane.shownNames().size(); ++i)
+            if (pane.shownNames()[i] == "Cuve" || pane.shownNames()[i] == "Tuyau" || pane.shownNames()[i] == "Fond") rows.push_back(static_cast<ui::RowIndex>(i));
+        pane.table().selectModelRows(rows);
+        same_text(pane.tools().labelOf(P::ActRemove), "Retirer les 3", "le bouton dit combien");
+        check(rows.size() == 3 && pane.tools().isEnabled(P::ActRemove) && !pane.tools().isEnabled(P::ActDuplicate), "Retirer actif, Dupliquer gris\xC3\xA9");
+        pane.runAction(P::ActRemove);
+        check(b.doc->project.semanticColors.size() == before - 2, "les deux tiennes partent");
+        check(has(pane.message(), "1 refus") && has(pane.message(), "@Fond"), "la fournie reste, dite : " + pane.message());
+        check(b.stack.undo() && b.doc->project.semanticColors.size() == before, "UN Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- STYLES DU PROJET
+    {
+        Bench b;
+        core::CommandGroupScope::registerStack(&b.stack);
+        app::HmiStylesPane styles("del1240s", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        styles.setBounds({0, 0, 1400, 800});
+        styles.layout();
+        const Id s1 = styles.addStyle("Titre"), s2 = styles.addStyle("Bouton_vert"), s3 = styles.addStyle("Cadre");
+        styles.refresh();
+        const std::size_t before = b.doc->project.styles.size();
+        std::vector<ui::RowIndex> rows;
+        for (const Id id : {s1, s2, s3})
+            if (const int r = styles.folders().rowOfItem(id); r >= 0) rows.push_back(static_cast<ui::RowIndex>(r));
+        styles.table().selectModelRows(rows);
+        same_text(styles.tools().labelOf(app::HmiStylesPane::ActRemove), "Retirer les 3", "Styles : le bouton dit combien");
+        check(!styles.tools().isEnabled(app::HmiStylesPane::ActRename) && !styles.tools().isEnabled(app::HmiStylesPane::ActDuplicate),
+              "Renommer, Dupliquer gris\xC3\xA9s");
+        (void)styles.tools().trigger(app::HmiStylesPane::ActRemove);
+        check(b.doc->project.styles.size() == before - 3, "les 3 styles partent");
+        check(b.stack.undo() && b.doc->project.styles.size() == before, "UN Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+
+    // ---- ESSAIS DE RECEPTION, puis RECETTES (leurs jeux)
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiScenariosPane pane("del1240e", doc, apply);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        for (const char* n : {"Essai_A", "Essai_B", "Essai_C"}) (void)pane.addScenario(n);
+        const int del = pane.tools().actionByTip("Supprimer l'essai");
+        const int dup = pane.tools().actionByTip("Dupliquer l'essai");
+        pane.scenarios().selectModelRows({0, 1, 2});
+        same_text(pane.tools().labelOf(del), "Supprimer les 3", "Essais : le bouton dit combien");
+        check(!pane.tools().isEnabled(dup), "Dupliquer gris\xC3\xA9");
+        (void)pane.tools().trigger(del);
+        check(doc->project.scenarios.empty(), "les 3 essais partent");
+        check(stack.undo() && doc->project.scenarios.size() == 3, "UN Ctrl+Z les rend");
+
+        app::HmiRecipesPane recipes("del1240r", doc, apply);
+        recipes.setBounds({0, 0, 1400, 800});
+        recipes.layout();
+        const Id gaz = recipes.addRecipe("Gaz");
+        for (int k = 0; k < 3; ++k) (void)recipes.addRecord(gaz);
+        recipes.selectRecipe(gaz);
+        const auto* r = doc->project.recipe(gaz);
+        const std::size_t sets = r ? r->records.size() : 0;
+        auto* records = dynamic_cast<ui::TableView*>(recipes.findById("del1240r.records"));
+        check(records && sets >= 3, "Recettes : 3 jeux de valeurs");
+        if (records) records->selectModelRows({0, 1, 2});
+        (void)recipes.tools().trigger(recipes.tools().actionByTip("Supprimer le jeu choisi"));
+        check(doc->project.recipe(gaz) && doc->project.recipe(gaz)->records.size() == sets - 3, "les 3 jeux partent");
+        check(stack.undo() && doc->project.recipe(gaz)->records.size() == sets, "UN Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    app::several::setConfirmHost({});
+}
+
 int main(int argc, char** argv) {
     // 1.24.0 : HMI_TEST_ARB=1 - supprimer plusieurs noeuds de l'arbre, les chemins (Ouvrir dans l'explorateur, Aller a).
     if (const char* only = std::getenv("HMI_TEST_ARB"); only && *only == '1') {
         arbreSupprimerPlusieurs1240();
         cheminsMenu1240();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.24.0 : HMI_TEST_DEL=1 - supprimer plusieurs lignes d'un coup, seul.
+    if (const char* only = std::getenv("HMI_TEST_DEL"); only && *only == '1') {
+        supprimerPlusieurs1240();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -46709,6 +47072,7 @@ int main(int argc, char** argv) {
     bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
+    supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

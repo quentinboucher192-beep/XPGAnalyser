@@ -11,6 +11,7 @@
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiOperators.hpp"   // 1.10
+#include "../../hmi/HmiSymbols.hpp"     // 1.24.0 : les instances d'un symbole (supprimer plusieurs vues)
 #include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
 #include "../../import/ProjectAnalyzer.hpp"
 #include "../../ui/Theme.hpp"
@@ -786,6 +787,11 @@ HmiViewsPane::HmiViewsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     folders_ = std::make_unique<HmiFolderTable>(*table_, doc_, apply_);
     links_ += folders_->message->connect([this](const std::string& text) { status_->setTransientMessage(text, 8.0); });
     links_ += folders_->relayout->connect([this] { refresh(); });
+    // 1.24.0 : plusieurs vues choisies - << Supprimer les 5 >> ; Dupliquer, Monter, Ouvrir... : une a la fois.
+    tools_->setLabelWhen(VDelete, [this] { return several::label("Supprimer", folders_->selectedCount()); });
+    for (const int a : {static_cast<int>(VDuplicate), static_cast<int>(VUp), static_cast<int>(VDown), static_cast<int>(VStart),
+                        static_cast<int>(VOpen), static_cast<int>(VDupReplace)})
+        tools_->setEnabledWhen(a, [this] { return folders_->selectedCount() <= 1; });
     // Lot 12 : la vignette de la vue survolee (sinon choisie).
     thumb_ = &addChild(std::make_unique<ViewThumbnail>(this->id() + ".thumb", doc_, [this]() -> Id {
         const int hover = table_->hoveredRow();
@@ -877,6 +883,40 @@ HmiViewsPane::HmiViewsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 break;
             }
             case VDelete:
+                // 1.24.0 : plusieurs vues (ou dossiers) choisies - UNE question (comme une seule), un seul Ctrl+Z.
+                if (folders_->selectedCount() > 1) {
+                    several::Batch b;
+                    b.noun = "vue";
+                    b.nouns = "vues";
+                    b.feminine = true;
+                    const auto ids = folders_->selectedItems();
+                    b.ask = static_cast<bool>(onDelete_) && !ids.empty();
+                    std::size_t objects = 0, instances = 0;
+                    bool start = false;
+                    for (const auto id : ids)
+                        if (const auto* v = doc_->project.view(id)) {
+                            objects += v->objects.size();
+                            if (hmi::isSymbolView(*v)) instances += hmi::instancesOf(doc_->project, v->name).size();
+                            start = start || doc_->project.config.startView == id;
+                        }
+                    if (objects) b.warning = std::to_string(objects) + (objects > 1 ? " objets partent avec elles." : " objet part avec elles.");
+                    if (instances)
+                        b.warning += (b.warning.empty() ? "" : " ") + std::to_string(instances)
+                                   + " instance(s) de symbole montreront \xC2\xAB Symbole introuvable \xC2\xBB (G\xC3\xA9n\xC3\xA9rer le signale).";
+                    if (start) b.warning += (b.warning.empty() ? "" : " ") + std::string("La vue de d\xC3\xA9marrage en est : la premi\xC3\xA8re restante la remplace.");
+                    folders_->fillBatch(b, [this](Id id) { const auto* v = doc_->project.view(id); return v ? v->name : std::string("?"); },
+                                        [this, push](Id id, std::string*) {
+                                            auto cmd = hmiDeleteViewCommand(doc_, id);
+                                            if (!cmd) return false;
+                                            push(std::move(cmd));
+                                            return true;
+                                        });
+                    b.after = [this] { refresh(); };
+                    b.report = [this](const std::string& text, bool warning) { status_->setTransientMessage(text, 8.0); (void)warning; };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 // Lot 21 : un dossier choisi - il part, ses vues remontent d'un cran.
                 if (sel == kNoId) {
                     if (const std::string f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);

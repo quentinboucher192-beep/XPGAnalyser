@@ -595,6 +595,13 @@ void MainAnalysisScreen::bindHmi() {
             done(v.empty() ? std::string{} : v[0], v.size() > 1 ? v[1] : std::string{});
         });
     });
+    // 1.24.0 : supprimer plusieurs lignes d'un coup - la question unique des volets (<< Supprimer les 5 variables ? >>).
+    several::setConfirmHost([this](const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes) {
+        app_.menus().ShowDialog(std::make_unique<MessageDialog>(title, text, MessageDialog::Icon::Question, button),
+                                [yes = std::move(yes)](const menu::DialogResult& r) {
+                                    if (r.accepted() && yes) yes();
+                                });
+    });
     // Les chemins relatifs des fichiers externes partent du dossier du projet.
     setHmiProjectFolder(app_.projectFolder());
 

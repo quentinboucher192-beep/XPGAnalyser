@@ -137,9 +137,11 @@ HmiNotifyPane::HmiNotifyPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                "Bo\xC3\xAEte d'essai");
     tools->add(CClearBox, HmiGlyph::Delete, "Vider la liste des messages re\xC3\xA7us par la bo\xC3\xAEte d'essai", "Vider la bo\xC3\xAEte");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    // 1.24.0 : plusieurs destinataires choisis - Retirer les retire tous (un Ctrl+Z) ; Tester : un a la fois.
     tools_->setEnabledWhen(CRemove, [this] { return !selectedRecipient().empty(); });
-    tools_->setEnabledWhen(CTestMail, [this] { return !selectedRecipient().empty() && hosts_.notify; });
-    tools_->setEnabledWhen(CTestSms, [this] { return !selectedRecipient().empty() && hosts_.notify; });
+    tools_->setLabelWhen(CRemove, [this] { return several::label("Retirer", table_ ? several::chosen(*table_, order_).size() : 0); });
+    tools_->setEnabledWhen(CTestMail, [this] { return !selectedRecipient().empty() && hosts_.notify && table_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(CTestSms, [this] { return !selectedRecipient().empty() && hosts_.notify && table_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(CClearBox, [this] { return hosts_.notify && hosts_.notify() && hosts_.notify()->testBox(); });
 
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
@@ -168,7 +170,22 @@ HmiNotifyPane::HmiNotifyPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         switch (a) {
             case CTestMail: case CTestSms: (void)test(a == CTestSms); break;
             case CAdd: (void)addRecipient("Nouveau_destinataire"); break;
-            case CRemove: if (!selectedRecipient().empty()) (void)removeRecipient(selectedRecipient()); break;
+            case CRemove:
+                // 1.24.0 : plusieurs destinataires - d'un coup, un seul Ctrl+Z (sans question, comme un seul).
+                if (const auto names = several::chosen(*table_, order_); names.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "destinataire";
+                    b.nouns = "destinataires";
+                    b.names = names;
+                    b.remove = [this, names](std::size_t i, std::string* why) { return removeRecipient(names[i], why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (!selectedRecipient().empty()) (void)removeRecipient(selectedRecipient());
+                break;
             case CPassword: if (hosts_.askPassword) hosts_.askPassword(); break;
             case CTestBox: (void)useTestBox(); break;
             case CClearBox:

@@ -229,9 +229,11 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(RUnused, HmiGlyph::Search, "Montrer seulement les ressources inutilis\xC3\xA9" "es", "Inutilis\xC3\xA9" "es");
     tools->add(RPurge, HmiGlyph::Delete, "Retirer toutes les ressources inutilis\xC3\xA9" "es", "Retirer les inutilis\xC3\xA9" "es");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(RReplace, [this] { return selectedResource() != kNoId; });
-    tools_->setEnabledWhen(RRename, [this] { return selectedResource() != kNoId; });
+    // 1.24.0 : plusieurs ressources choisies - Supprimer les retire toutes ; Remplacer, Renommer : une a la fois.
+    tools_->setEnabledWhen(RReplace, [this] { return selectedResource() != kNoId && folders_->selectedCount() <= 1; });
+    tools_->setEnabledWhen(RRename, [this] { return selectedResource() != kNoId && folders_->selectedCount() <= 1; });
     tools_->setEnabledWhen(RDelete, [this] { return selectedResource() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
+    tools_->setLabelWhen(RDelete, [this] { return several::label("Supprimer", folders_ ? folders_->selectedCount() : 0); });
     tools_->setCheckedWhen(RUnused, [this] { return unusedOnly_; });
     tools_->setEnabledWhen(RPlay, [this] {
         const auto* r = doc_->project.resource(selectedResource());
@@ -281,6 +283,28 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
             case RRename: if (sel && hosts_.rename) hosts_.rename(sel); break;
             case RFolder: (void)folders_->newFolder(); break;
             case RDelete:
+                // 1.24.0 : plusieurs ressources (ou dossiers) - une question si l'une est citee (comme une seule), un Ctrl+Z.
+                if (folders_->selectedCount() > 1) {
+                    several::Batch b;
+                    b.noun = "ressource";
+                    b.nouns = "ressources";
+                    b.feminine = true;
+                    std::vector<std::string> cited;
+                    for (const auto id : folders_->selectedItems())
+                        if (const auto* r = doc_->project.resource(id))
+                            if (const auto n = hmi::citations(doc_->project, r->name).size())
+                                cited.push_back(r->name + " (" + std::to_string(n) + " fois)");
+                    b.ask = static_cast<bool>(hosts_.remove) && !cited.empty();
+                    if (!cited.empty())
+                        b.warning = "Encore cit\xC3\xA9" "es : " + several::names(cited, 3)
+                                  + " - ces objets les montreront absentes et G\xC3\xA9n\xC3\xA9rer le signalera.";
+                    folders_->fillBatch(b, [this](Id id) { const auto* r = doc_->project.resource(id); return r ? r->name : std::string("?"); },
+                                        [this](Id id, std::string*) { return deleteResource(id); });
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!sel) {
                     if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);
                     break;
@@ -708,18 +732,20 @@ HmiFilesPane::HmiFilesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools->add(FPart, HmiGlyph::View, "Choisir l'onglet (Excel) ou la table (SQLite)", "Onglet / table");
     tools->add(FRemove, HmiGlyph::Delete, "Retirer le lien (le fichier n'est pas touch\xC3\xA9)", "Retirer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(FRelink, [this] { return selectedFile() != kNoId; });
+    // 1.24.0 : plusieurs liens choisis - Retirer les retire tous (une question, un Ctrl+Z) ; Relier, Onglet : un a la fois.
+    tools_->setEnabledWhen(FRelink, [this] { return selectedFile() != kNoId && table_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(FRemove, [this] { return selectedFile() != kNoId; });
+    tools_->setLabelWhen(FRemove, [this] { return several::label("Retirer", table_ ? several::chosen(*table_, order_).size() : 0); });
     tools_->setEnabledWhen(FPart, [this] {
         const auto* f = doc_->project.externalFile(selectedFile());
-        return f && (f->kind == hmi::ExternalKind::Excel || f->kind == hmi::ExternalKind::Sqlite);
+        return f && (f->kind == hmi::ExternalKind::Excel || f->kind == hmi::ExternalKind::Sqlite) && table_->selectedModelRows().size() <= 1;
     });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".split");
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Nom", 170.f}, {"Type", 150.f}, {"Chemin", 380.f}, {"Date", 170.f},
                        {"Taille", 90.f, 60.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 130.f}, {"Utilis\xC3\xA9 par", 260.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs liens a retirer d'un coup
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.42f, 120.f));
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
     tools_->bindListKeys(*table_, {FRemove});
@@ -735,6 +761,32 @@ HmiFilesPane::HmiFilesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             case FRelink: (void)relinkSelected(); break;
             case FPart: if (sel && hosts_.choosePart) hosts_.choosePart(sel); break;
             case FRemove:
+                // 1.24.0 : plusieurs liens - une question si l'un est la source d'objets (comme un seul), un Ctrl+Z.
+                if (const auto ids = several::chosen(*table_, order_); ids.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "lien";
+                    b.nouns = "liens";
+                    std::vector<Id> doomed;
+                    std::vector<std::string> sources;
+                    for (const auto id : ids)
+                        if (const auto* f = doc_->project.externalFile(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(f->name);
+                            if (const auto n = hmi::externalCitations(doc_->project, f->name).size())
+                                sources.push_back(f->name + " (" + std::to_string(n) + " objet" + (n > 1 ? "s)" : ")"));
+                        }
+                    b.ask = static_cast<bool>(hosts_.remove) && !sources.empty();
+                    b.warning = "Les fichiers eux-m\xC3\xAAmes ne sont pas touch\xC3\xA9s.";
+                    if (!sources.empty())
+                        b.warning = "Encore source de : " + several::names(sources, 3)
+                                  + " - ils n'afficheront plus rien et G\xC3\xA9n\xC3\xA9rer le signalera. " + b.warning;
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return removeFile(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text + " (les fichiers ne sont pas touch\xC3\xA9s)", warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!sel) break;
                 if (hosts_.remove) hosts_.remove(sel);
                 else (void)removeSelected();

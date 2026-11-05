@@ -46,6 +46,7 @@
 namespace app {
 
 class FolderRowsModel;
+namespace several { struct Batch; }   // 1.24.0 : HmiPanels.hpp
 
 class HmiFolderTable {
 public:
@@ -104,6 +105,16 @@ public:
     [[nodiscard]] hmi::Id selectedItem() const;              // le premier element choisi (kNoId : aucun)
     [[nodiscard]] std::string selectedFolder() const;        // une ligne de dossier choisie ("" : aucune)
     [[nodiscard]] std::string targetFolder() const;          // ou va un nouvel element : ce dossier, ou celui de l'element choisi
+    // 1.24.0 (supprimer plusieurs d'un coup) : les dossiers choisis (sans ceux deja dans un autre choisi) ; combien de
+    // lignes choisies comptent (elements et dossiers, sans les lignes depliees) - << Supprimer les 5 >>, Renommer : une a
+    // la fois.
+    [[nodiscard]] std::vector<std::string> selectedFolders() const;
+    [[nodiscard]] std::size_t selectedCount() const;
+    // Le geste commun (several::run) : les elements choisis (leurs noms par `nameOf`, retires par `removeItem` ; faux :
+    // refuse, `why`) puis les dossiers choisis (leurs elements remontent d'un cran). Avec un dossier, les lignes se
+    // comptent en << lignes >>.
+    void fillBatch(several::Batch& b, const std::function<std::string(hmi::Id)>& nameOf,
+                   std::function<bool(hmi::Id, std::string*)> removeItem);
     [[nodiscard]] std::size_t itemCount() const noexcept { return items_; }
     [[nodiscard]] std::size_t folderCount() const noexcept { return rows_.size() - items_ - details_; }
     [[nodiscard]] std::size_t detailCount() const noexcept { return details_; }   // 1.16.1 : les lignes depliees

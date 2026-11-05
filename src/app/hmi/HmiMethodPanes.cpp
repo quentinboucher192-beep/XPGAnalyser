@@ -339,13 +339,16 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         const auto* m = selectedInherited() ? current() : nullptr;
         return m && m->isVirtual;
     });
-    tools_->setEnabledWhen(ADuplicate, [this] { return selectedMethod() != kNoId; });
+    // 1.24.0 : plusieurs methodes choisies - Supprimer les retire toutes (un Ctrl+Z) ; le reste : une a la fois.
+    const auto one = [this] { return !table_ || table_->selectedModelRows().size() <= 1; };
+    tools_->setEnabledWhen(ADuplicate, [this, one] { return selectedMethod() != kNoId && one(); });
     tools_->setEnabledWhen(ADelete, [this] { return selectedMethod() != kNoId; });
-    tools_->setEnabledWhen(AUp, [this] { return selectedMethod() != kNoId && selectedRow_ > 0; });
-    tools_->setEnabledWhen(ADown, [this] {
-        return selectedMethod() != kNoId && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) + 1 < ownCount();
+    tools_->setLabelWhen(ADelete, [this] { return several::label("Supprimer", table_ ? table_->selectedModelRows().size() : 0); });
+    tools_->setEnabledWhen(AUp, [this, one] { return selectedMethod() != kNoId && selectedRow_ > 0 && one(); });
+    tools_->setEnabledWhen(ADown, [this, one] {
+        return selectedMethod() != kNoId && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) + 1 < ownCount() && one();
     });
-    tools_->setEnabledWhen(ACompile, [this] { return selectedMethod() != kNoId; });
+    tools_->setEnabledWhen(ACompile, [this, one] { return selectedMethod() != kNoId && one(); });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -356,7 +359,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         const float retour = std::max(70.f, std::ceil(ui::measureWidth("Retour", gfx::FontId{16}) * 1.08f) + 58.f);
         table->setColumns({{"M\xC3\xA9thode", 120.f, 60.f}, {"", 30.f, 24.f}, {"Genre", 72.f, 40.f}, {"Origine", 170.f, 60.f},
                            {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", retour, 40.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs methodes a supprimer d'un coup
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_, HmiToolStrip::ListKeys{ADelete, ADuplicate, AAdd, AUp, ADown, 0});
         listPanel_ = panel.get();
@@ -403,9 +406,38 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             case ADuplicate:
                 if (sel && duplicateMethod(sel, &why) == kNoId) say("Refus\xC3\xA9 : " + why, true);
                 break;
-            case ADelete:
+            case ADelete: {
+                // 1.24.0 : plusieurs methodes choisies - d'un coup, un seul Ctrl+Z ; une heritee reste (celle du parent).
+                auto picked = table_->selectedModelRows();
+                std::sort(picked.begin(), picked.end());
+                if (picked.size() > 1) {
+                    several::Batch b;
+                    b.noun = "m\xC3\xA9thode";
+                    b.nouns = "m\xC3\xA9thodes";
+                    b.feminine = true;
+                    std::vector<Id> ids;
+                    for (const auto r : picked)
+                        if (r < rows_.size()) {
+                            const hmi::HmiType* owner = nullptr;
+                            const auto* m = hmi::methodById(doc_->project, rows_[r].id, &owner);
+                            b.names.push_back(m ? m->name : std::string("?"));
+                            ids.push_back(rows_[r].own ? rows_[r].id : kNoId);
+                        }
+                    b.remove = [this, ids](std::size_t i, std::string* reason) {
+                        if (ids[i] == kNoId) {
+                            if (reason) *reason = "h\xC3\xA9rit\xC3\xA9" "e : elle se supprime dans son type";
+                            return false;
+                        }
+                        return deleteMethod(ids[i], reason);
+                    };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (sel && !deleteMethod(sel, &why)) say("Refus\xC3\xA9 : " + why, true);
                 break;
+            }
             case AUp: if (sel) (void)moveMethod(sel, -1); break;
             case ADown: if (sel) (void)moveMethod(sel, 1); break;
             case ACompile: (void)compileCurrent(); break;

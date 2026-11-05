@@ -38,8 +38,10 @@ HmiSymbolPopupsPane::HmiSymbolPopupsPane(std::string id, hmi::DocumentPtr doc, I
     tools->add(TOpen, HmiGlyph::Popup, "Ouvrir le dessin de la popup (un onglet, comme une vue)", "Ouvrir le dessin");
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer la popup (Ctrl+Z la rend)", "Supprimer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(TOpen, [this] { return selectedPopup() != kNoId; });
+    // 1.24.0 : plusieurs popups choisies - Supprimer les retire toutes (un Ctrl+Z) ; Ouvrir le dessin : une a la fois.
+    tools_->setEnabledWhen(TOpen, [this] { return selectedPopup() != kNoId && table_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedPopup() != kNoId; });
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", table_ ? several::chosen(*table_, order_).size() : 0); });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     {
@@ -47,7 +49,7 @@ HmiSymbolPopupsPane::HmiSymbolPopupsPane(std::string id, hmi::DocumentPtr doc, I
         auto panel = std::make_unique<HmiTitledPanel>(base + ".listPanel", "POPUPS DE " + (sym ? sym->name : std::string("?")));
         auto table = std::make_unique<ui::TableView>(base + ".popups");
         table->setColumns({{"Nom", 190.f}, {"Taille", 100.f}, {"Param\xC3\xA8tres propres", 170.f}, {"Ouverte par", 150.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs popups a supprimer d'un coup
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_);   // 1.12.27 : Suppr, Inser (comme les boutons)
         split->addPane(std::move(panel), 0.55f, 260.f);
@@ -68,7 +70,27 @@ HmiSymbolPopupsPane::HmiSymbolPopupsPane(std::string id, hmi::DocumentPtr doc, I
         switch (a) {
             case TNew: (void)addPopup(); break;
             case TOpen: if (sel && openView) openView(sel); break;
-            case TDelete: if (sel) (void)deletePopup(sel); break;
+            case TDelete:
+                // 1.24.0 : plusieurs popups - d'un coup, un seul Ctrl+Z (sans question, comme une seule).
+                if (const auto ids = several::chosen(*table_, order_); ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "popup";
+                    b.nouns = "popups";
+                    b.feminine = true;
+                    std::vector<Id> doomed;
+                    for (const auto id : ids)
+                        if (const auto* v = doc_->project.view(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(v->name);
+                        }
+                    b.remove = [this, doomed](std::size_t i, std::string*) { return deletePopup(doomed[i]); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (sel) (void)deletePopup(sel);
+                break;
             default: break;
         }
     });

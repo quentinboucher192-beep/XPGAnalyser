@@ -359,10 +359,13 @@ HmiFunctionTestsPage::HmiFunctionTestsPage(std::string id, hmi::DocumentPtr doc,
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto hasFn = [this] { return fn() != nullptr; };
     const auto hasCase = [this] { return test(selectedCase()) != nullptr; };
+    // 1.24.0 : plusieurs cas choisis - Supprimer les retire tous (un Ctrl+Z) ; Dupliquer, Lancer : un a la fois.
+    const auto oneCase = [this, hasCase] { return hasCase() && (!cases_ || cases_->selectedModelRows().size() <= 1); };
     tools_->setEnabledWhen(TNew, hasFn);
-    tools_->setEnabledWhen(TDuplicate, hasCase);
+    tools_->setEnabledWhen(TDuplicate, oneCase);
     tools_->setEnabledWhen(TDelete, hasCase);
-    tools_->setEnabledWhen(TRun, hasCase);
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", cases_ ? several::chosen(*cases_, order_).size() : 0); });
+    tools_->setEnabledWhen(TRun, oneCase);
     tools_->setEnabledWhen(TRunAll, [this] { const auto* f = fn(); return f && !f->tests.empty(); });
     tools_->setVisibleWhen(TReportXlsx, [this] { return static_cast<bool>(hosts_.exportFile); });
     tools_->setVisibleWhen(TReportPdf, [this] { return static_cast<bool>(hosts_.exportFile); });
@@ -372,7 +375,7 @@ HmiFunctionTestsPage::HmiFunctionTestsPage(std::string id, hmi::DocumentPtr doc,
     auto table = std::make_unique<ui::TableView>(base + ".cases");
     table->setColumns({{"Cas", 170.f, 60.f, true, false}, {"Arguments", 190.f, 60.f, true, false}, {"Attendu", 110.f, 50.f, true, false},
                        {"Tol\xC3\xA9rance", 90.f, 40.f, true, false}, {"Verdict", 100.f, 60.f, true, false}, {"D\xC3\xA9tail", 320.f, 60.f, true, false}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs cas a supprimer d'un coup
     table->setDoubleClickEdits(false);        // 1.13.0 (seconde passe) : un double-clic lance le cas, F2 edite
     cases_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     tools_->bindListKeys(*cases_, {TDelete, TDuplicate, TNew});
@@ -434,7 +437,26 @@ HmiFunctionTestsPage::HmiFunctionTestsPage(std::string id, hmi::DocumentPtr doc,
                 else if (addCase(&why) == kNoId) say(why, true);
                 break;
             case TDuplicate: if (sel != kNoId && duplicateCase(sel, &why) == kNoId) say(why, true); break;
-            case TDelete: if (sel != kNoId && !removeCase(sel, &why)) say(why, true); break;
+            case TDelete:
+                // 1.24.0 : plusieurs cas - d'un coup, un seul Ctrl+Z (sans question, comme un seul).
+                if (const auto ids = several::chosen(*cases_, order_); ids.size() > 1) {
+                    several::Batch b;
+                    b.noun = "cas";
+                    b.nouns = "cas";
+                    std::vector<Id> doomed;
+                    for (const auto id : ids)
+                        if (const auto* t = test(id)) {
+                            doomed.push_back(id);
+                            b.names.push_back(t->name);
+                        }
+                    b.remove = [this, doomed](std::size_t i, std::string* reason) { return removeCase(doomed[i], reason); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (sel != kNoId && !removeCase(sel, &why)) say(why, true);
+                break;
             case TRun: if (sel != kNoId) (void)runCase(sel); break;
             case TRunAll: (void)runAll(); break;
             case TReportXlsx:

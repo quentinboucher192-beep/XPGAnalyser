@@ -75,15 +75,17 @@ HmiReportsPane::HmiReportsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(CNow, HmiGlyph::Play, "G\xC3\xA9n\xC3\xA9rer maintenant : la p\xC3\xA9riode en cours, jusqu'\xC3\xA0 maintenant (demande o\xC3\xB9 : exports/ propos\xC3\xA9)", "G\xC3\xA9n\xC3\xA9rer maintenant");
     tools->add(CLast, HmiGlyph::Refresh, "La derni\xC3\xA8re p\xC3\xA9riode compl\xC3\xA8te (hier, la semaine pass\xC3\xA9" "e...) : demande o\xC3\xB9 (exports/ propos\xC3\xA9)", "Derni\xC3\xA8re p\xC3\xA9riode");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    // 1.24.0 : plusieurs rapports choisis - Retirer les retire tous (un Ctrl+Z) ; Generer : un a la fois.
     tools_->setEnabledWhen(CRemove, [this] { return !selectedReport().empty(); });
-    tools_->setEnabledWhen(CNow, [this] { return !selectedReport().empty() && hosts_.write; });
-    tools_->setEnabledWhen(CLast, [this] { return !selectedReport().empty() && hosts_.write; });
+    tools_->setLabelWhen(CRemove, [this] { return several::label("Retirer", table_ ? several::chosen(*table_, order_).size() : 0); });
+    tools_->setEnabledWhen(CNow, [this] { return !selectedReport().empty() && hosts_.write && table_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(CLast, [this] { return !selectedReport().empty() && hosts_.write && table_->selectedModelRows().size() <= 1; });
 
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
     auto table = std::make_unique<ui::TableView>(base + ".reports");
     table->setColumns({{"Rapport", 190.f}, {"Quand", 230.f}, {"Format", 70.f}, {"Contenu", 280.f}, {"Destinataires", 200.f}, {"Prochain", 140.f},
                        {"Actif", 60.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs rapports a retirer d'un coup
     auto files = std::make_unique<ui::TableView>(base + ".files");
     files->setColumns({{"Fichier", 380.f}, {"\xC3\x89" "crit le", 160.f}, {"Taille", 90.f}});
     table_ = static_cast<ui::TableView*>(table.get());
@@ -99,7 +101,22 @@ HmiReportsPane::HmiReportsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     links_ += tools_->triggered->connect([this](int a) {
         switch (a) {
             case CAdd: (void)addReport(); break;
-            case CRemove: if (!selectedReport().empty()) (void)removeReport(selectedReport()); break;
+            case CRemove:
+                // 1.24.0 : plusieurs rapports - d'un coup, un seul Ctrl+Z (sans question, comme un seul).
+                if (const auto names = several::chosen(*table_, order_); names.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "rapport";
+                    b.nouns = "rapports";
+                    b.names = names;
+                    b.remove = [this, names](std::size_t i, std::string* why) { return removeReport(names[i], why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text + " (les fichiers d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crits restent)", warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                if (!selectedReport().empty()) (void)removeReport(selectedReport());
+                break;
             case CNow: case CLast: {
                 // ---- Lot API 8 : les exports qui demandent ou ----
                 // OU l'ecrire se demande, comme les autres exports d'un clic

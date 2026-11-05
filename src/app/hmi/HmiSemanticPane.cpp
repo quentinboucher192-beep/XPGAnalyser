@@ -58,12 +58,18 @@ HmiSemanticColorsPane::HmiSemanticColorsPane(std::string id, hmi::DocumentPtr do
     tools->add(ActRemove, HmiGlyph::Delete,
                "Retirer la couleur choisie (Suppr) : ce qui la cite garde sa couleur, \xC3\xA9" "crite en dur", "Retirer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(ActDuplicate, [this] { return !selectedName().empty(); });
+    // 1.24.0 : plusieurs couleurs choisies - Retirer retire les tiennes (une fournie reste, dite) ; Dupliquer : une a la fois.
+    tools_->setEnabledWhen(ActDuplicate, [this] { return !selectedName().empty() && table_->selectedModelRows().size() <= 1; });
     tools_->setEnabledWhen(ActCopy, [this] { return !selectedName().empty(); });
-    tools_->setEnabledWhen(ActRemove, [this] { return selectedColor() != kNoId; });
+    tools_->setEnabledWhen(ActRemove, [this] {
+        for (const auto& n : several::chosen(*table_, order_))
+            if (const auto* c = sem::find(doc_->project, n); c && !c->builtin) return true;
+        return false;
+    });
+    tools_->setLabelWhen(ActRemove, [this] { return several::label("Retirer", table_ ? several::chosen(*table_, order_).size() : 0); });
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Nom (\xC3\xA0 citer)", 210.f}, {"Couleur", 150.f}, {"Description", 360.f}, {"Cit\xC3\xA9" "e", 70.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs couleurs a retirer d'un coup
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     tools_->bindListKeys(*table_, {ActRemove, ActDuplicate, ActAdd});
     grid_ = &static_cast<PG&>(addChild(std::make_unique<PG>(base + ".grid")));
@@ -432,8 +438,16 @@ std::vector<ui::PopupMenu::Item> HmiSemanticColorsPane::contextItems() const {
     ui::PopupMenu::Item sep;
     sep.separator = true;
     items.push_back(sep);
-    add(ActRemove, "Retirer", "Suppr", ui::Icon::Delete, selectedColor() != kNoId,
+    // 1.24.0 : plusieurs couleurs - << Retirer les 3 >> (les fournies restent, le compte rendu le dit).
+    const std::size_t chosen = several::chosen(*table_, order_).size();
+    add(ActRemove, several::label("Retirer", chosen), "Suppr", ui::Icon::Delete, tools_->isEnabled(ActRemove),
         locked() ? "une couleur fournie ne se retire pas" : "choisis une couleur \xC3\xA0 toi");
+    if (chosen > 1)
+        for (auto& it : items)
+            if (it.id == ActDuplicate && it.enabled) {
+                it.enabled = false;
+                it.disabledReason = several::kOneAtATime;
+            }
     return items;
 }
 
@@ -452,6 +466,31 @@ void HmiSemanticColorsPane::runAction(int action) {
             }
             break;
         case ActRemove:
+            // 1.24.0 : plusieurs - les tiennes partent en un seul Ctrl+Z (sans question, comme une seule) ; une fournie reste.
+            if (const auto names = several::chosen(*table_, order_); names.size() > 1) {
+                several::Batch b;
+                b.verb = "Retirer";
+                b.noun = "couleur";
+                b.nouns = "couleurs";
+                b.feminine = true;
+                std::vector<Id> ids;
+                for (const auto& n : names) {
+                    const auto* c = sem::find(doc_->project, n);
+                    b.names.push_back("@" + n);
+                    ids.push_back(c && !c->builtin ? c->id : kNoId);
+                }
+                b.remove = [this, ids](std::size_t i, std::string* why) {
+                    if (ids[i] == kNoId) {
+                        if (why) *why = "fournie, elle ne se retire pas";
+                        return false;
+                    }
+                    return removeColor(ids[i], why);
+                };
+                b.report = [this](const std::string& text, bool warning) { say(text + " (ce qui les cite garde leur couleur, \xC3\xA9" "crite en dur)", warning); };
+                b.alive = tools_->triggered;
+                several::run(std::move(b));
+                break;
+            }
             if (selectedColor() != kNoId) (void)removeColor(selectedColor());
             else if (!name.empty()) say("@" + name + " est fournie : elle ne se retire pas.", true);
             break;

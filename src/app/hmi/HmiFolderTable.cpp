@@ -1,4 +1,5 @@
 #include "HmiFolderTable.hpp"
+#include "HmiPanels.hpp"   // 1.24.0 : several::Batch (supprimer plusieurs d'un coup)
 
 #include "../../hmi/HmiTypes.hpp"
 
@@ -365,6 +366,48 @@ std::string HmiFolderTable::selectedFolder() const {
     for (const auto r : table_.selectedModelRows())
         if (const auto* row = this->row(r); row && row->folder) return row->path;
     return {};
+}
+
+std::vector<std::string> HmiFolderTable::selectedFolders() const {
+    std::vector<std::string> all;
+    for (const auto r : table_.selectedModelRows())
+        if (const auto* row = this->row(r); row && row->folder) all.push_back(row->path);
+    std::vector<std::string> out;
+    for (const auto& f : all) {
+        const bool under = std::any_of(all.begin(), all.end(), [&](const std::string& g) { return !fold::sameFolder(f, g) && fold::inside(f, g); });
+        const bool twice = std::any_of(out.begin(), out.end(), [&](const std::string& g) { return fold::sameFolder(f, g); });
+        if (!under && !twice) out.push_back(f);
+    }
+    return out;
+}
+
+std::size_t HmiFolderTable::selectedCount() const {
+    std::size_t n = selectedFolders().size();
+    std::vector<hmi::Id> seen;
+    for (const auto r : table_.selectedModelRows())
+        if (const auto* row = this->row(r); row && !row->folder && std::find(seen.begin(), seen.end(), row->id) == seen.end()) {
+            seen.push_back(row->id);
+            ++n;
+        }
+    return n;
+}
+
+void HmiFolderTable::fillBatch(several::Batch& b, const std::function<std::string(hmi::Id)>& nameOf,
+                               std::function<bool(hmi::Id, std::string*)> removeItem) {
+    const auto items = selectedItems();
+    const auto folders = selectedFolders();
+    for (const auto id : items) b.names.push_back(nameOf ? nameOf(id) : std::to_string(id));
+    for (const auto& f : folders) b.names.push_back("dossier " + f);
+    if (!folders.empty()) {
+        b.noun = "ligne";
+        b.nouns = "lignes";
+        b.feminine = true;
+    }
+    b.remove = [this, items, folders, removeItem = std::move(removeItem)](std::size_t i, std::string* why) {
+        if (i < items.size()) return removeItem && removeItem(items[i], why);
+        const std::size_t k = i - items.size();
+        return k < folders.size() && deleteFolder(folders[k]);
+    };
 }
 
 std::string HmiFolderTable::targetFolder() const {

@@ -996,12 +996,17 @@ HmiSymbolAlarmsPane::HmiSymbolAlarmsPane(std::string id, hmi::DocumentPtr doc, h
     tools->add(SAUp, HmiGlyph::Up, "Monter l'alarme", "Monter");
     tools->add(SADown, HmiGlyph::Down, "Descendre l'alarme", "Descendre");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    for (int a : {SADup, SADel, SAUp, SADown}) tools_->setEnabledWhen(a, [this] { return !selectedAlarm().empty(); });
+    // 1.24.0 : plusieurs alarmes choisies - Supprimer les retire toutes (un Ctrl+Z) ; Dupliquer, Monter : une a la fois.
+    for (int a : {SADup, SAUp, SADown})
+        tools_->setEnabledWhen(a, [this] { return !selectedAlarm().empty() && table_->selectedModelRows().size() <= 1; });
+    tools_->setEnabledWhen(SADel, [this] { return !selectedAlarm().empty(); });
+    tools_->setLabelWhen(SADel, [this] { return several::label("Supprimer", table_ ? several::chosen(*table_, names_).size() : 0); });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Alarme", 170.f}, {"Condition", 240.f}, {"Message", 240.f}, {"Priorit\xC3\xA9", 110.f}, {"Cat\xC3\xA9gorie", 110.f},
                        {"D\xC3\xA9lai (ms)", 90.f, 50.f, true, true, true, ui::Align::End}});
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs alarmes a supprimer d'un coup
     table->setIconPainter(&objalarms::paintFx);   // decision 7 : la pastille fx des conditions
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.66f, 320.f));
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
@@ -1048,7 +1053,24 @@ HmiSymbolAlarmsPane::HmiSymbolAlarmsPane(std::string id, hmi::DocumentPtr doc, h
                 }
                 break;
             case SADup: made = objalarms::duplicateSymbolAlarm(doc_, apply_, symbol_, cur); break;
-            case SADel: (void)objalarms::deleteSymbolAlarm(doc_, apply_, symbol_, cur); break;
+            case SADel:
+                // 1.24.0 : plusieurs alarmes du symbole - d'un coup, un seul Ctrl+Z (sans question, comme une seule).
+                if (const auto names = several::chosen(*table_, names_); names.size() > 1) {
+                    several::Batch b;
+                    b.noun = "alarme";
+                    b.nouns = "alarmes";
+                    b.feminine = true;
+                    b.names = names;
+                    b.remove = [this, names](std::size_t i, std::string*) { return objalarms::deleteSymbolAlarm(doc_, apply_, symbol_, names[i]); };
+                    b.report = [this](const std::string& text, bool warning) {
+                        status_->setTransientMessage(text, 8.0, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+                    };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
+                (void)objalarms::deleteSymbolAlarm(doc_, apply_, symbol_, cur);
+                break;
             case SAUp: (void)objalarms::moveSymbolAlarm(doc_, apply_, symbol_, cur, -1); made = cur; break;
             case SADown: (void)objalarms::moveSymbolAlarm(doc_, apply_, symbol_, cur, +1); made = cur; break;
             default: break;

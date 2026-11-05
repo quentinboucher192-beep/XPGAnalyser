@@ -463,6 +463,13 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         if (static_cast<int>(tabs_->currentIndex()) == TNetwork && portSide_) return false;
         return !equipment_.empty() && equipment_ != kPlcKey;
     });
+    tools_->setLabelWhen(CRemoveEquip, [this] {   // 1.24.0 : << Supprimer les 3 >> (plusieurs equipements choisis)
+        std::size_t chosen = 0;
+        if (equipTable_ && static_cast<int>(tabs_->currentIndex()) == TEquipments)
+            for (const auto r : equipTable_->selectedModelRows())
+                chosen += r < equipRows_.size() && !equipRows_[r].slave && equipRows_[r].equipment != kPlcKey ? 1u : 0u;
+        return several::label("Supprimer", chosen);
+    });
     tools_->setEnabledWhen(CTestEquip, [this] { return !equipment_.empty(); });
     tools_->setEnabledWhen(CUnbind, [this] { return !bound_.empty(); });
     tools_->setEnabledWhen(CScanStart, [this] { return !scanning(); });
@@ -495,7 +502,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     auto equip = std::make_unique<ui::TableView>(base + ".equipments");
     equip->setColumns({{"\xC3\x89quipement", 250.f}, {"Type", 120.f}, {"Adresse", 250.f}, {"\xC3\x89tat", 200.f},
                        {"L'IHM lit", 220.f}, {"Var.", 54.f}, {"Zones m\xC3\xA9moire", 230.f}, {"Description", 220.f}});
-    equip->setSelectionMode(ui::SelectionMode::Single);
+    equip->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs equipements a supprimer d'un coup
     // 1.9 : les icones des lignes simulees (la fiole, le coude et le cadenas, le point).
     equip->setIconPainter([](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color color) {
         if (icon == kIconFlask) {
@@ -632,9 +639,38 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             case CRefreshNet: refreshNetwork(); break;
             case CTestAll: testAll(); break;
             case CAddEquip: (void)addEquipment(); break;
-            case CRemoveEquip:
+            case CRemoveEquip: {
+                // 1.24.0 : plusieurs equipements choisis - UNE question (leurs variables IHM restent, deliees ; leurs esclaves
+                // simules partent avec eux, comme le choix d'office d'un seul), un seul Ctrl+Z. L'automate reste.
+                std::vector<std::string> names;
+                if (static_cast<int>(tabs_->currentIndex()) == TEquipments)
+                    for (const auto r : equipTable_->selectedModelRows())
+                        if (r < equipRows_.size() && !equipRows_[r].slave && equipRows_[r].equipment != kPlcKey
+                            && std::find(names.begin(), names.end(), equipRows_[r].equipment) == names.end())
+                            names.push_back(equipRows_[r].equipment);
+                if (names.size() > 1) {
+                    several::Batch b;
+                    b.noun = "\xC3\xA9quipement";
+                    b.nouns = "\xC3\xA9quipements";
+                    b.ask = true;
+                    b.names = names;
+                    std::size_t vars = 0, twins = 0;
+                    for (const auto& n : names)
+                        if (const auto* e = doc_->project.equipmentByName(n)) {
+                            vars += hmi::equip::boundVariables(doc_->project, *e).size();
+                            twins += e->twin && !e->simulated ? 1 : 0;
+                        }
+                    if (vars) b.warning = "Leurs " + std::to_string(vars) + " variable(s) IHM restent, d\xC3\xA9li\xC3\xA9" "es (des variables IHM locales).";
+                    if (twins) b.warning += (b.warning.empty() ? "" : " ") + std::to_string(twins) + " esclave(s) simul\xC3\xA9(s) partent avec eux.";
+                    b.remove = [this, names](std::size_t i, std::string* why) { return deleteEquipment(names[i], {}, true, why); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!equipment_.empty() && equipment_ != kPlcKey && !askDeleteEquipment(equipment_) && !hosts_.ask) (void)deleteEquipment(equipment_);
                 break;
+            }
             // Lot 17.
             case CAddVirtual: (void)addVirtualSlave(); break;
             case CCreateTwin: if (!equipment_.empty()) (void)createTwin(equipment_); break;
@@ -782,7 +818,17 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         items.push_back(ui::cmd::separator());
         items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1));   // la table : copier la ligne
         items.push_back(ui::cmd::separator());
-        auto del = tool(CRemoveEquip, "Supprimer", "Suppr");
+        // 1.24.0 : plusieurs equipements choisis - << Supprimer les 3 >> ; le reste vise un equipement a la fois.
+        std::size_t chosen = 0;
+        for (const auto r : equipTable_->selectedModelRows())
+            chosen += r < equipRows_.size() && !equipRows_[r].slave && equipRows_[r].equipment != kPlcKey ? 1u : 0u;
+        if (chosen > 1)
+            for (auto& it : items)
+                if (it.id > 1000 && it.enabled) {
+                    it.enabled = false;
+                    it.disabledReason = several::kOneAtATime;
+                }
+        auto del = tool(CRemoveEquip, several::label("Supprimer", chosen), "Suppr");
         del.icon = ui::Icon::Delete;
         items.push_back(std::move(del));
         return items;

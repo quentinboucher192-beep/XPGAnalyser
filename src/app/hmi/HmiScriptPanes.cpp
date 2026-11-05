@@ -405,10 +405,13 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     std::unique_ptr<ScriptsPage> page = general() ? std::make_unique<ScriptsPage>(base + ".page") : nullptr;
     ui::Widget& host = page ? static_cast<ui::Widget&>(*page) : static_cast<ui::Widget&>(*this);
     tools_ = &static_cast<HmiToolStrip&>(host.addChild(std::move(tools)));
-    tools_->setEnabledWhen(TRename, [this] { return selectedScript() != kNoId; });
+    // 1.24.0 : plusieurs scripts choisis (Ctrl+clic, Maj+clic) - Supprimer les retire tous ; Renommer, Compiler : un a la fois.
+    const auto oneScript = [this] { return selectedScript() != kNoId && (!folders_ || folders_->selectedCount() <= 1); };
+    tools_->setEnabledWhen(TRename, oneScript);
     tools_->setEnabledWhen(TDelete, [this] { return selectedScript() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", folders_ ? folders_->selectedCount() : 0); });
     tools_->setEnabledWhen(TClear, [this] { return selectedScript() != kNoId; });
-    tools_->setEnabledWhen(TCompile, [this] { return selectedScript() != kNoId; });     // 1.11.17 : rien a compiler
+    tools_->setEnabledWhen(TCompile, oneScript);     // 1.11.17 : rien a compiler
     tools_->setEnabledWhen(TEditVar, [this] { return selectedVariable() != kNoId; });
     tools_->setEnabledWhen(TDeleteVar, [this] { return selectedVariable() != kNoId; });
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
@@ -418,7 +421,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     });
     for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
         tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
-        if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedScript() != kNoId; });
+        if (a != TBuildState) tools_->setEnabledWhen(a, oneScript);
     }
     if (general()) {   // 1.11.2 (decision 174) : seulement avec un hote (l'ecran)
         tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
@@ -563,6 +566,35 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                 }
                 break;
             case TDelete:
+                // 1.24.0 : plusieurs scripts (ou dossiers) choisis - UNE question (comme un seul : qui les appelle), un Ctrl+Z.
+                if (folders_ && folders_->selectedCount() > 1) {
+                    several::Batch b;
+                    b.noun = "script";
+                    b.nouns = "scripts";
+                    b.ask = static_cast<bool>(hosts_.remove) && !folders_->selectedItems().empty();
+                    std::vector<std::string> called;
+                    for (const auto id : folders_->selectedItems())
+                        if (const auto* sc = doc_->project.script(id)) {
+                            std::size_t n = 0;
+                            for (const auto& v : doc_->project.views) {
+                                for (const auto& act : v.actions) n += act.operation == hmi::Operation::CallScript && act.target == sc->name;
+                                for (const auto& o : v.objects)
+                                    for (const auto& act : o.actions) n += act.operation == hmi::Operation::CallScript && act.target == sc->name;
+                            }
+                            for (const auto& other : doc_->project.programs.scripts)
+                                if (other.id != sc->id)
+                                    for (const auto& c : hmi::scriptCalls(other.body)) n += c == sc->name;
+                            if (n) called.push_back(sc->name + " (" + std::to_string(n) + (n > 1 ? " appels)" : " appel)"));
+                        }
+                    if (!called.empty())
+                        b.warning = "Encore appel\xC3\xA9s : " + several::names(called, 3) + " - ces appels \xC3\xA9" "choueront et Compiler les signalera.";
+                    folders_->fillBatch(b, [this](Id id) { const auto* sc = doc_->project.script(id); return sc ? sc->name : std::string("?"); },
+                                        [this](Id id, std::string*) { return deleteScript(id); });
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (!sel && folders_) {
                     if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);
                     break;

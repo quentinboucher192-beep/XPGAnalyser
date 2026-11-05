@@ -1109,7 +1109,12 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
     tools_->setEnabledWhen(AUnit, [this] { return !selectedFamily().empty(); });
     tools_->setEnabledWhen(ARemove, [this] {
         if (focusFamily_) return !selectedFamily().empty() && !builtinFamily(selectedFamily());
-        return !selectedUnit().empty() && !builtinUnit(selectedUnit());
+        for (const auto& u : several::chosen(*units_, unitSymbols_))   // 1.24.0 : plusieurs unites - une du projet suffit
+            if (!builtinUnit(u)) return true;
+        return false;
+    });
+    tools_->setLabelWhen(ARemove, [this] {
+        return several::label("Retirer", !focusFamily_ && units_ ? several::chosen(*units_, unitSymbols_).size() : 0);
     });
     strict_ = &static_cast<ui::Checkbox&>(host.addChild(std::make_unique<ui::Checkbox>(
         "Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige EN(\xE2\x80\xA6)", base + ".strict")));
@@ -1128,7 +1133,7 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
         auto table = std::make_unique<ui::TableView>(base + ".units");
         table->setColumns({{"Unit\xC3\xA9", 90.f}, {"Nom", 200.f}, {"Conversion", 280.f}, {"Provenance", 110.f},
                            {"Emplois", 100.f, 40.f, true, true, true, ui::Align::End}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs unites a retirer d'un coup
         units_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         unitsPanel_ = &static_cast<HmiTitledPanel&>(host.addChild(std::move(panel)));
     }
@@ -1177,6 +1182,21 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
                 break;
             }
             case ARemove:
+                // 1.24.0 : plusieurs unites choisies - retirees d'un coup, un seul Ctrl+Z ; une unite fournie ou employee
+                // reste (comme seule), le compte rendu dit laquelle et pourquoi.
+                if (const auto symbols = several::chosen(*units_, unitSymbols_); !focusFamily_ && symbols.size() > 1) {
+                    several::Batch b;
+                    b.verb = "Retirer";
+                    b.noun = "unit\xC3\xA9";
+                    b.nouns = "unit\xC3\xA9s";
+                    b.feminine = true;
+                    b.names = symbols;
+                    b.remove = [this, symbols](std::size_t i, std::string* reason) { return removeUnit(symbols[i], reason); };
+                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+                    b.alive = tools_->triggered;
+                    several::run(std::move(b));
+                    break;
+                }
                 if (focusFamily_) {
                     if (!removeFamily(selectedFamily(), &why)) say(why, true);
                 } else if (!removeUnit(selectedUnit(), &why)) {

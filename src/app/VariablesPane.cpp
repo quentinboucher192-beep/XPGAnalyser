@@ -9,6 +9,7 @@
 #include "../project/RenameCommands.hpp"
 #include "../project/MacroSpec.hpp"
 #include "../project/ApiCommands.hpp"
+#include "../project/DeleteCommands.hpp"   // 1.24.0 : supprimer plusieurs variables d'un coup
 #include "RenameDialog.hpp"               // lot 7 : requestRename (le dialogue qui montre tout)
 #include "../ui/Commands.hpp"                   // 1.12.18 : le menu d'une variable (cmd::heading)
 #include "../ui/Icons.hpp"
@@ -435,7 +436,8 @@ VariablesPane::VariablesPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(std::move(copyName));
         items.push_back(ui::cmd::separator());
         items.push_back(tool(ARename, "Renommer\xE2\x80\xA6", ui::Icon::Rename, "F2", !locked.empty() ? locked : one ? "pas ici" : "une variable \xC3\xA0 la fois"));
-        items.push_back(tool(ADelete, "Supprimer", ui::Icon::Delete, "Suppr", !locked.empty() ? locked : one ? "pas ici" : "une variable \xC3\xA0 la fois"));
+        items.push_back(tool(ADelete, several::label("Supprimer", selectedInfos().size()), ui::Icon::Delete, "Suppr",   // 1.24.0 : plusieurs d'un coup
+                             !locked.empty() ? locked : one ? "pas ici" : "choisis des variables (un membre ne se supprime pas seul)"));
         return items;
     });
     links_ += table_->contextAction->connect([this](int a) {
@@ -489,7 +491,9 @@ void VariablesPane::attach(ApiFrame& frame) {
     };
     t.setEnabledWhen(AAdd, editable);
     t.setEnabledWhen(ARename, [editable, one] { return editable() && one(); });
-    t.setEnabledWhen(ADelete, [editable, one] { return editable() && one(); });
+    // 1.24.0 : plusieurs variables choisies - Supprimer les retire toutes (un Ctrl+Z) ; Renommer : une a la fois.
+    t.setEnabledWhen(ADelete, [this, editable, one] { return editable() && (one() || selectedInfos().size() > 1); });
+    t.setLabelWhen(ADelete, [this] { return several::label("Supprimer", selectedInfos().size()); });
     t.setEnabledWhen(AAddToTable, [this, editable] { return editable() && !selectedPaths().empty(); });
     t.setEnabledWhen(AUsages, [this] { return usageInfo() != nullptr; });
     t.setEnabledWhen(AExportCsv, [this] { return !infos_.empty(); });
@@ -1118,6 +1122,44 @@ void VariablesPane::openTableMenu() {
 }
 
 void VariablesPane::runAction(int action) {
+    // 1.24.0 : SUPPRIMER PLUSIEURS VARIABLES D'UN COUP - les variables choisies (pas leurs membres), de la derniere a la
+    // premiere (les rangs restent justes) ; UNE question si l'une emporte quelque chose avec elle (comme une seule) ; un
+    // seul Ctrl+Z ; une refusee seule l'est aussi parmi d'autres, le compte rendu dit laquelle et pourquoi.
+    if (const auto many = selectedInfos(); action == ADelete && many.size() > 1) {
+        auto doc = hosts_.project ? hosts_.project() : nullptr;
+        if (!doc || !hosts_.apply) return;
+        std::vector<std::pair<domain::Index, std::string>> picked;
+        for (const auto* i : many) picked.emplace_back(i->index, i->name);
+        std::sort(picked.begin(), picked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        several::Batch b;
+        b.noun = "variable";
+        b.nouns = "variables";
+        b.feminine = true;
+        std::vector<domain::Index> indices;
+        std::size_t damage = 0;
+        for (const auto& [index, name] : picked) {
+            indices.push_back(index);
+            b.names.push_back(name);
+            damage += project::RemoveEntityCommand(doc, domain::EntityKind::Variable, index).collateralDamage().size();
+        }
+        b.ask = damage > 0;
+        if (b.ask) b.warning = "Part aussi : " + std::to_string(damage) + " \xC3\xA9l\xC3\xA9ment(s) qui les emploient (sections, entr\xC3\xA9" "es de tables).";
+        b.remove = [this, indices](std::size_t k, std::string* why) {
+            auto target = hosts_.project ? hosts_.project() : nullptr;
+            if (!target || !hosts_.apply) return false;
+            const project::RemoveEntityCommand probe(target, domain::EntityKind::Variable, indices[k]);
+            if (const auto no = probe.refusalReason(); !no) {
+                if (why) *why = no.error().context.empty() ? no.error().message() : no.error().context;
+                return false;
+            }
+            hosts_.apply(std::make_unique<project::RemoveEntityCommand>(target, domain::EntityKind::Variable, indices[k]));
+            return true;
+        };
+        b.report = [this](const std::string& text, bool) { if (hosts_.status) hosts_.status(text); };
+        b.alive = table_->selectionChanged;
+        several::run(std::move(b));
+        return;
+    }
     // Renommer, Supprimer : une seule ligne, et une variable (lot API 7 : un
     // membre choisi avec elle ne compte pas pour elle).
     auto sel = selectedInfos();
