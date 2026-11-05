@@ -591,6 +591,65 @@ std::size_t adopt(Project& p) {
     return n;
 }
 
+// ========================================================== le style choisi par une formule ===
+bool chosenByFormula(const Object& o) { return drivenByExpression(o, "namedStyle"); }
+
+std::vector<std::string> formulaStyleNames(const Object& o) {
+    std::vector<std::string> out;
+    const Prop* pr = o.find("namedStyle");
+    if (!pr || pr->expr.empty()) return out;
+    const std::string& e = pr->expr;
+    for (std::size_t i = 0; i < e.size(); ++i) {
+        const char q = e[i];
+        if (q != '\'' && q != '"') continue;
+        std::string lit;
+        std::size_t j = i + 1;
+        for (; j < e.size(); ++j) {
+            if (e[j] == '$' && j + 1 < e.size()) { lit += e[++j]; continue; }   // $' $$ : le caractere lui-meme
+            if (e[j] == q) break;
+            lit += e[j];
+        }
+        if (j >= e.size()) break;
+        const std::string name = trim(lit);
+        if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(name);
+        i = j;
+    }
+    return out;
+}
+
+std::size_t applyLive(const Project& p, Object& shown, std::string_view design, std::string_view live) {
+    const std::string liveName = roles::nameOf(live), designName = roles::nameOf(design);
+    if (liveName.empty() || sameName(liveName, designName)) return 0;
+    const Style* s = find(p, liveName);
+    if (!s) return 0;
+    const Style* d = designName.empty() ? nullptr : find(p, designName);
+    std::map<std::string, std::string> designValues;
+    if (d)
+        for (const auto& pr : valuesFor(p, *d, shown)) designValues[pr.key] = pr.value;
+    const auto broken = brokenKeys(shown);
+    std::size_t n = 0;
+    for (const auto& pr : valuesFor(p, *s, shown)) {
+        if (drivenByExpression(shown, pr.key)) continue;
+        if (std::find(broken.begin(), broken.end(), pr.key) != broken.end()) continue;
+        const auto now = valueOf(p, shown, pr.key);
+        if (!now) continue;
+        if (const auto it = designValues.find(pr.key); it != designValues.end() && *now != it->second) continue;   // brisee d'office
+        if (*now != pr.value && writeValue(p, shown, pr.key, pr.value)) ++n;
+    }
+    return n;
+}
+
+std::size_t applyLive(const Project& p, const View& source, View& shown) {
+    std::size_t n = 0;
+    for (auto& o : shown.objects) {
+        if (!chosenByFormula(o)) continue;
+        const Object* src = source.object(o.id);
+        const std::string design = src ? src->text("namedStyle") : std::string{};
+        n += applyLive(p, o, design, o.text("namedStyle")) > 0 ? 1u : 0u;
+    }
+    return n;
+}
+
 // ======================================================================= faire un style ===
 bool nameFree(const Project& p, std::string_view name, Id except) {
     const std::string n = trim(name);

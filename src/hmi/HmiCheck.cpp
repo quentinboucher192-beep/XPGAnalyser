@@ -3803,6 +3803,15 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
             // Un style nomme inconnu.
             if (const auto* st = o.find("namedStyle"); st && !roles::nameOf(st->value).empty() && !styles::find(p, roles::nameOf(st->value)))
                 issue(S::Warning, "namedStyle", "style '" + roles::nameOf(st->value) + "' introuvable (IHM > Styles)");
+            // 1.23.1 : un Style nomme en fx - chaque nom de style ecrit dans la formule doit exister ; sans nom ecrit (un nom
+            // calcule), on ne peut pas le savoir avant la marche.
+            if (styles::chosenByFormula(o)) {
+                const auto names = styles::formulaStyleNames(o);
+                if (names.empty())
+                    issue(S::Info, "namedStyle", "style choisi par une formule sans nom de style \xC3\xA9" "crit ('ISA-101') : il ne se v\xC3\xA9rifie qu'en marche");
+                for (const auto& n : names)
+                    if (!styles::find(p, n)) issue(S::Warning, "namedStyle", "la formule du style nomm\xC3\xA9 cite '" + n + "' : style introuvable (IHM > Styles)");
+            }
             switch (o.kind) {
                 case Kind::NavBar: {
                     std::vector<std::string> names;

@@ -1,4 +1,5 @@
 #include "HmiSimulation.hpp"
+#include "../../hmi/HmiStyles.hpp"   // 1.23.1 : le Style nomme en fx, applique en marche
 #include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 #include "HmiDebugPane.hpp"          // 1.13.0 (lot J2) : Simulation > Debogage
 #include "../Disposition.hpp"
@@ -5160,6 +5161,7 @@ std::vector<HmiLiveLayer> HmiLayerBuilder::build(hmi::Runtime& runtime_, const h
         std::vector<hmi::LiveValue> local;
         // Lot 8 : les parametres de la vue (une popup ouverte pour Pompes[3]).
         auto shown = it->second.evaluate(env, values ? values : &local, runtime_.viewScope(viewId), now_ - runtime_.startedAt());
+        (void)hmi::styles::applyLive(project, it->second.source(), shown);   // 1.23.1 : un Style nomme en fx
         for (const auto& lv : values ? *values : local) if (lv.error) errors.push_back(lv.object);
         travel_[viewId].observe(shown, now_);   // 1.14.1 : l'Ordre des fins de course pas suivi a temps
         return shown;
@@ -6157,6 +6159,7 @@ void HmiSimulationPane::refreshWhy() {
     auto& env = runtime_.environment();
     const auto* scope = runtime_.viewScope(whyView_);
     auto shown = whyLive_.evaluate(env, &values, scope, now_ - runtime_.startedAt());
+    if (const hmi::Project* pr = runtime_.project()) (void)hmi::styles::applyLive(*pr, whyLive_.source(), shown);   // 1.23.1
     layers_.markOverdue(whyView_, shown);   // 1.14.1 : le chrono des fins de course, celui de l'ecran
     const hmi::Object* o = shown.object(whyObject_);
     whyReport_ = hmi::why::explain(o ? *o : *source, values, env, scope);

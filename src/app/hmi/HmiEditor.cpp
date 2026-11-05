@@ -1692,7 +1692,9 @@ void HmiEditor::markStyleValues(const hmi::View& v, std::vector<ui::PropertyGrid
                 row.type = PG::ValueType::ReadOnly;
                 row.value = std::to_string(imposed.size()) + (imposed.size() > 1 ? " impos\xC3\xA9" "es" : " impos\xC3\xA9" "e")
                           + (brokenCount ? ", " + std::to_string(brokenCount) + (brokenCount > 1 ? " bris\xC3\xA9" "es" : " bris\xC3\xA9" "e")
-                                         : std::string{});
+                                         : std::string{})
+                          // 1.23.1 : le style choisi par une formule - ici celui de la conception, en marche celui de la formule.
+                          + (st::chosenByFormula(*o) ? std::string(" \xC2\xB7 fx : le style de la formule en marche") : std::string{});
                 row.description = "Le style " + quoted + (style->builtin ? " (fourni)" : "") + " impose ses valeurs : le carr\xC3\xA9 O. "
                                   "Son menu en brise une \xC3\xA0 la fois (elle reprend sa valeur d'avant le style) ; une valeur bris\xC3\xA9" "e "
                                   "porte BRIS\xC3\x89" "E et se r\xC3\xA9tablit par la fl\xC3\xA8" "che au bout de sa ligne. Le filtre O Style ne "

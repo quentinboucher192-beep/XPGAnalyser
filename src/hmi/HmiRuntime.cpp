@@ -1,4 +1,5 @@
 #include "HmiRuntime.hpp"
+#include "HmiStyles.hpp"   // 1.23.1 : le Style nomme en fx, applique en marche
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
@@ -2563,9 +2564,13 @@ std::optional<std::string> Runtime::jokerText(std::string_view formula, Id view)
 
 void Runtime::evaluateProps(Id view, Object& o) const {
     if (!env_) return;
+    // 1.23.1 : un Style nomme en fx - le style de la conception (sa valeur ecrite), avant que la formule ne la remplace.
+    const bool styleFx = styles::chosenByFormula(o);
+    const std::string design = styleFx ? o.text("namedStyle") : std::string{};
     for (auto& p : o.props)
         if (!p.expr.empty())
             if (auto text = evaluatedProp(view, o.kind, p)) p.value = std::move(*text);
+    if (styleFx && project_) (void)styles::applyLive(*project_, o, design, o.text("namedStyle"));
     roles::plainProps(o);   // 1.12.6 (lot C) : ses noms, ses listes, ses etats sans les $ de leurs reperes
 }
 

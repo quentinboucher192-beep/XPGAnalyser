@@ -306,6 +306,49 @@ void makeAndPreview() {
     check(st::problems(b.p, s).empty(), "un style bien forme : aucun probleme");
 }
 
+// 1.23.1 : le Style nomme choisi par une formule, applique en marche.
+void byFormula() {
+    std::printf("[8] le style choisi par une formule (en marche)\n");
+    Bench b;
+    hmi::View& v = *b.p.view(b.view);
+    Object& p1 = b.obj(b.pump1);
+    (void)st::apply(b.p, p1, *st::builtin("ISA-101"));          // le style de la conception
+    (void)st::breakKey(b.p, p1, "textColor", false);             // une valeur brisee
+    p1.setExpr("namedStyle", "SEL(Defaut_P1, 'Contraste \xC3\xA9lev\xC3\xA9', 'ISA-101')");
+    check(st::chosenByFormula(p1) && st::citedStyle(p1) == "ISA-101", "la formule : la valeur reste le style de la conception");
+    const auto names = st::formulaStyleNames(p1);
+    check(names.size() == 2 && names[0] == "Contraste \xC3\xA9lev\xC3\xA9" && names[1] == "ISA-101", "les noms ecrits dans la formule");
+    check(st::imposes(b.p, p1, "colorOn"), "dans l'editeur : le style de la conception reste impose (O)");
+    // La vue montree : la formule a donne << Contraste eleve >> (LiveView ecrit son resultat dans la valeur).
+    hmi::View shown = v;
+    Object* s1 = shown.object(b.pump1);
+    s1->set("namedStyle", "Contraste \xC3\xA9lev\xC3\xA9");
+    check(st::applyLive(b.p, v, shown) == 1, "une vue : un objet suit le style de la formule");
+    check(s1->text("colorOn") == "#FFFFFF" && s1->text("colorFault") == "#FF3B30", "en marche : les valeurs de Contraste eleve");
+    check(s1->text("textColor") == p1.text("textColor") && s1->text("textColor") == "#C8D0DC", "une valeur brisee garde la sienne");
+    check(p1.text("colorOn") == "#4D4D4D", "l'objet du projet ne change pas (seule la copie montree)");
+    // La formule rend le style de la conception : rien a faire.
+    hmi::View same = v;
+    same.object(b.pump1)->set("namedStyle", "ISA-101");
+    check(st::applyLive(b.p, v, same) == 0 && same.object(b.pump1)->text("colorOn") == "#4D4D4D", "le meme style : rien ne change");
+    // Une valeur changee a la main (brisee d'office) garde la sienne ; une expression aussi.
+    Object o2 = p1;
+    o2.set("colorOff", "#123456");
+    o2.setExpr("stroke", "SEL(X, '#000000', '#FFFFFF')");
+    o2.set("namedStyle", "Clair");
+    (void)st::applyLive(b.p, o2, "ISA-101", "Clair");
+    check(o2.text("colorOff") == "#123456" && o2.text("colorOn") == "#1C7A3A", "brisee d'office : gardee ; les autres : Clair");
+    check(o2.expr("stroke") == "SEL(X, '#000000', '#FFFFFF')", "une expression garde la main");
+    // Un style inconnu : rien ; Generer le dit.
+    Object o3 = p1;
+    check(st::applyLive(b.p, o3, "ISA-101", "Inconnu") == 0, "un style inconnu en marche : rien");
+    Project bad = b.p;
+    bad.view(b.view)->object(b.pump1)->setExpr("namedStyle", "SEL(A, 'Inexistant', 'ISA-101')");
+    const auto issues = hmi::generate(bad, [](std::string_view) { return false; });
+    check(std::any_of(issues.begin(), issues.end(), [](const hmi::Issue& i) { return i.message.find("'Inexistant' : style introuvable") != std::string::npos; }),
+          "Generer : un nom de style de la formule introuvable");
+}
+
 } // namespace
 
 int main() {
@@ -317,6 +360,7 @@ int main() {
     symbolParam();
     storeAndCheck();
     makeAndPreview();
+    byFormula();
     std::printf("styles_types_test : %d verifications, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

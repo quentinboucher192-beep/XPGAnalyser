@@ -139,6 +139,20 @@ std::size_t forget(Project&, std::string_view name);
 // brisee ; adopt() ecrit cet etat (pour Briser : reprendre la valeur d'un objet neuf).
 std::size_t adopt(Project&);
 
+// ---- 1.23.1 : LE STYLE CHOISI PAR UNE FORMULE, EN MARCHE --------------------------------------------------------------------
+// << Style nomme >> peut etre une formule (fx : =SEL(Defaut_P1, 'Alarme', 'ISA-101')). Sa VALEUR reste le style de la
+// conception (applique dans l'editeur, ses carres O) ; en marche, la formule calculee donne le style a montrer.
+[[nodiscard]] bool chosenByFormula(const Object&);                       // "namedStyle" a une expression
+// Les noms de style ecrits entre apostrophes dans la formule ('Alarme', 'ISA-101') - ce que Generer verifie.
+[[nodiscard]] std::vector<std::string> formulaStyleNames(const Object&);
+// LA COPIE MONTREE d'un objet (la formule deja calculee dans sa valeur) : les cles que le style `live` porte prennent sa
+// valeur, sauf une cle pilotee par une expression, une cle brisee (dans la liste, ou d'office : sa valeur differe de
+// celle du style de la conception `design`). Le meme style que la conception : rien. Rend le nombre de valeurs changees.
+std::size_t applyLive(const Project&, Object& shown, std::string_view design, std::string_view live);
+// TOUTE UNE VUE MONTREE (LiveView::evaluate) : chaque objet dont << Style nomme >> est une formule - le style de la
+// conception lu dans `source` (la vue avant le calcul), le style vivant dans `shown`. Rend le nombre d'objets touches.
+std::size_t applyLive(const Project&, const View& source, View& shown);
+
 // ---- faire un style ------------------------------------------------------------------------------------------------------
 // Le style fait d'un objet (<< Creer un style >>) : la cible de son type, avec ses valeurs d'apparence (styleKeys) qu'une
 // expression ne pilote pas. Identifiant attribue, nom unique.
