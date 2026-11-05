@@ -7,6 +7,7 @@
 //              a corpus of customer exports, and what lets the import pipeline
 //              be regression-tested without a display server.
 // =============================================================================
+#include "hmi/HmiFontLibrary.hpp"   // 1.26.0 : le dossier des polices fournies
 #include "app/App.hpp"
 #include "app/CrashDialogs.hpp"   // 1.10.2 (CR) : la fenetre de blocage de l'appli
 #include "app/Dossiers.hpp"
@@ -430,6 +431,12 @@ int main(int argc, char** argv) {
             project::SharedLibrary::setDefaultRoot(
                 app::dossiers::cheminDe(app::dossiers::actif(app::dossiers::Cle::Bibliotheque)).string());
         for (const auto& m : folders.messages) std::fprintf(stderr, "dossiers : %s\n", m.c_str());
+        // 1.26.0 : LES POLICES FOURNIES sont a cote de l'exe (resources\polices) : la version installee travaille dans
+        // son dossier des donnees, pas dans celui de l'exe (vu sous Wine : la bibliotheque de polices etait vide).
+        if (!exe.empty() && fs::is_directory(exe / "resources" / "polices", ec)) {
+            const auto u8 = (exe / "resources" / "polices").u8string();
+            hmi::fontlib::setNativeFolder(std::string(u8.begin(), u8.end()));
+        }
     }
 
     // 1.10.2 (CR) : le rapport de plantage et de blocage, dans crashs/ a cote des

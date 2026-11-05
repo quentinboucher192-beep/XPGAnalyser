@@ -63,12 +63,22 @@ std::string safeName(std::string s) {
     return s.empty() ? std::string("Police") : s;
 }
 
-// Les glyphes d'une couverture (0..255) en une image blanche (la couverture dans l'alpha) : teintee au dessin.
-gfx::TextureId textureOf(gfx::IRenderer& r, const std::vector<std::uint8_t>& cov, int w, int h) {
+// Une couverture (0..255) en une image de la couleur `col`, la couverture dans l'alpha (dessinee par drawImage : vu sous
+// Wine, drawTexture ne tient pas compte de l'alpha d'une image - des paves pleins).
+gfx::TextureId textureOf(gfx::IRenderer& r, const std::vector<std::uint8_t>& cov, int w, int h, gfx::Color col) {
     if (w <= 0 || h <= 0) return {};
-    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 255);
-    for (std::size_t i = 0; i < cov.size(); ++i) rgba[i * 4 + 3] = cov[i];
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
+    for (std::size_t i = 0; i < cov.size(); ++i) {
+        rgba[i * 4 + 0] = col.r;
+        rgba[i * 4 + 1] = col.g;
+        rgba[i * 4 + 2] = col.b;
+        rgba[i * 4 + 3] = static_cast<std::uint8_t>(cov[i] * col.a / 255);
+    }
     return r.createImage(rgba.data(), w, h);
+}
+
+std::uint32_t colorKey(gfx::Color c) {
+    return (static_cast<std::uint32_t>(c.r) << 24) | (static_cast<std::uint32_t>(c.g) << 16) | (static_cast<std::uint32_t>(c.b) << 8) | c.a;
 }
 
 bool isAccent(std::uint32_t c) { return (c >= 0xC0 && c <= 0x24F && c != 0xD7 && c != 0xF7) || (c >= 0x1E00 && c <= 0x1EFF); }
@@ -480,16 +490,17 @@ void HmiGlyphGrid::onPaint(const ui::PaintContext& ctx) {
             ctx.r.fillRect(r, sel ? c.selectionBg : c.inputBg);
             ctx.r.strokeRect(r, sel ? c.accent : c.gridLine, sel ? 2.f : 1.f);
             auto& cell = cells_[g];
-            if (cell.revision != pane_.revision_ || cell.tex.v == 0) {
+            if (cell.revision != pane_.revision_ || cell.tex.v == 0 || cell.color != colorKey(c.text)) {
                 if (cell.tex.v != 0) ctx.r.releaseImage(cell.tex);
-                const int w = static_cast<int>(cw) - 4;
+                const int w = static_cast<int>(std::floor(cw)) - 4;
                 const int adv = tt::advanceOf(f, g);
                 const double ox = (w - adv * s) / 2.0;
                 const auto cov = tt::raster(tt::outline(f, g), s, ox, f.ascent * s + 2, w, boxH + 6);
-                cell.tex = textureOf(ctx.r, cov, w, boxH + 6);
+                cell.tex = textureOf(ctx.r, cov, w, boxH + 6, c.text);
                 cell.revision = pane_.revision_;
+                cell.color = colorKey(c.text);
             }
-            if (cell.tex.v != 0) ctx.r.drawTexture({r.x + 2, r.y + 3, cw - 4, static_cast<float>(boxH + 6)}, cell.tex, c.text);
+            if (cell.tex.v != 0) ctx.r.drawImage(cell.tex, {r.x + 2, r.y + 3, std::floor(cw) - 4, static_cast<float>(boxH + 6)});
             const auto& gl = f.glyphs[static_cast<std::size_t>(g)];
             char code[16];
             if (gl.codes.empty()) std::snprintf(code, sizeof code, "#%d", g);
@@ -539,7 +550,7 @@ void HmiFontLivePreview::onPaint(const ui::PaintContext& ctx) {
     if (!pane_.hasFont()) return;
     const auto bytes = pane_.liveBytes();
     if (!bytes) return;
-    const std::uint64_t key = reinterpret_cast<std::uintptr_t>(bytes.get()) ^ std::hash<std::string>{}(pane_.sample());
+    const std::uint64_t key = reinterpret_cast<std::uintptr_t>(bytes.get()) ^ std::hash<std::string>{}(pane_.sample()) ^ (static_cast<std::uint64_t>(colorKey(c.text)) << 7);
     if (renderer_ != &ctx.r || key != key_) {
         for (auto& [px, l] : lines_)
             if (l.tex.v != 0 && renderer_) renderer_->releaseImage(l.tex);
@@ -550,6 +561,12 @@ void HmiFontLivePreview::onPaint(const ui::PaintContext& ctx) {
             hmi::Rgba img;
             Line l;
             if (!pane_.sample().empty() && hmi::renderFontText(*bytes, pane_.sample(), static_cast<float>(px), img)) {
+                // Blanc, la couverture dans l'alpha : la couleur du texte du theme.
+                for (std::size_t i = 0; i + 3 < img.pixels.size(); i += 4) {
+                    img.pixels[i] = c.text.r;
+                    img.pixels[i + 1] = c.text.g;
+                    img.pixels[i + 2] = c.text.b;
+                }
                 l.tex = ctx.r.createImage(img.pixels.data(), img.width, img.height);
                 l.w = img.width;
                 l.h = img.height;
@@ -564,7 +581,7 @@ void HmiFontLivePreview::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({x, b.y + b.h / 2 - 7}, intText(px), ctx.theme.font.caption, c.textMuted);
         x += 24;
         if (l.tex.v != 0) {
-            ctx.r.drawTexture({x, b.y + (b.h - l.h) / 2, static_cast<float>(l.w), static_cast<float>(l.h)}, l.tex, c.text);
+            ctx.r.drawImage(l.tex, {x, b.y + (b.h - l.h) / 2, static_cast<float>(l.w), static_cast<float>(l.h)});
             x += static_cast<float>(l.w) + 24;
         } else x += 40;
         if (x > b.x + b.w) break;
@@ -610,21 +627,8 @@ HmiFontEditorPane::HmiFontEditorPane(std::string id, hmi::DocumentPtr doc, Apply
     // ---- a gauche : chercher, filtrer, la grille
     searchField_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(base + ".search", "a, \xC3\xA9, U+00E9\xE2\x80\xA6",
                                                                                            "Un caract\xC3\xA8re, plusieurs, ou un code (U+00E9)")));
-    auto filters = std::make_unique<HmiToolStrip>(base + ".filters");
-    filters->add(FilterAll, HmiGlyph::None, "Tous les glyphes", "Tout");
-    filters->add(FilterModified, HmiGlyph::None, "Ceux modifi\xC3\xA9s depuis l'ouverture", "Modifi\xC3\xA9s");
-    filters->add(FilterUpper, HmiGlyph::None, "Les majuscules A \xC3\xA0 Z", "A\xE2\x80\x93Z");
-    filters->add(FilterLower, HmiGlyph::None, "Les minuscules a \xC3\xA0 z", "a\xE2\x80\x93z");
-    filters->add(FilterDigits, HmiGlyph::None, "Les chiffres", "0\xE2\x80\x93" "9");
-    filters->add(FilterAccents, HmiGlyph::None, "Les lettres accentu\xC3\xA9" "es", "Accents");
-    filters->add(FilterSymbols, HmiGlyph::None, "Le reste : signes, symboles, glyphes sans caract\xC3\xA8re", "Symboles");
-    filters_ = &static_cast<HmiToolStrip&>(addChild(std::move(filters)));
-    for (int a = FilterAll; a <= FilterSymbols; ++a) filters_->setCheckedWhen(a, [this, a] { return filter_ == a; });
-    filters_->setLabelWhen(FilterModified, [this] {
-        std::size_t n = 0;
-        for (int g : touched_) n += glyphModified(g);
-        return n ? "Modifi\xC3\xA9s " + std::to_string(n) : std::string("Modifi\xC3\xA9s");
-    });
+    // Les filtres : une liste deroulante (une rangee de boutons ne tient pas dans la colonne : vu sous Wine).
+    filterBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".filter")));
     grid_ = &static_cast<HmiGlyphGrid&>(addChild(std::make_unique<HmiGlyphGrid>(base + ".grid", *this)));
 
     // ---- au milieu : les outils, la vue de travail
@@ -687,7 +691,9 @@ HmiFontEditorPane::HmiFontEditorPane(std::string id, hmi::DocumentPtr doc, Apply
         invalidate();
     };
     links_ += tools_->triggered->connect(run);
-    links_ += filters_->triggered->connect(run);
+    links_ += filterBox_->selectionChanged->connect([this](int i) {
+        if (!refreshing_ && i >= 0 && i <= FilterSymbols - FilterAll && FilterAll + i != filter_) setFilter(FilterAll + i);
+    });
     links_ += toolbox_->triggered->connect(run);
     links_ += liveTools_->triggered->connect(run);
     links_ += menu_->itemChosen->connect([this](int i) {
@@ -911,6 +917,21 @@ void HmiFontEditorPane::rebuildShown() {
         if (keep(g, code, true)) shown_.push_back(g);
     for (int g : other)
         if (keep(g, 0, false)) shown_.push_back(g);
+    if (filterBox_) {
+        std::size_t modifiedCount = 0;
+        for (int g : touched_) modifiedCount += glyphModified(g);
+        const bool was = refreshing_;
+        refreshing_ = true;
+        filterBox_->setItems({{"Tous les glyphes", "tout"},
+                              {modifiedCount ? "Modifi\xC3\xA9s (" + std::to_string(modifiedCount) + ")" : std::string("Modifi\xC3\xA9s"), "modifies"},
+                              {"Majuscules A\xE2\x80\x93Z", "AZ"},
+                              {"Minuscules a\xE2\x80\x93z", "az"},
+                              {"Chiffres 0\xE2\x80\x93" "9", "09"},
+                              {"Lettres accentu\xC3\xA9" "es", "accents"},
+                              {"Signes et symboles", "symboles"}});
+        filterBox_->setSelectedIndex(filter_ - FilterAll);
+        refreshing_ = was;
+    }
     if (grid_) grid_->invalidate();
 }
 
@@ -1672,13 +1693,13 @@ void HmiFontEditorPane::rebuildSettings() {
 void HmiFontEditorPane::onLayout() {
     const auto b = bounds();
     const float bar = 36.f, statusH = 24.f, liveH = 110.f;
-    const float leftW = std::clamp(b.w * 0.22f, 220.f, 310.f), rightW = std::clamp(b.w * 0.22f, 240.f, 300.f);
+    const float leftW = std::clamp(b.w * 0.24f, 250.f, 330.f), rightW = std::clamp(b.w * 0.24f, 250.f, 320.f);
     tools_->setBounds({b.x, b.y, b.w, bar});
     const float top = b.y + bar, bottom = b.y + b.h - statusH - liveH;
     const float h = std::max(0.f, bottom - top);
     gridHead_ = {b.x, top, leftW, 24.f};
     searchField_->setBounds({b.x + 6, top + 26, leftW - 12, 26});
-    filters_->setBounds({b.x, top + 54, leftW, 30});
+    filterBox_->setBounds({b.x + 6, top + 56, leftW - 12, 26});
     grid_->setBounds({b.x, top + 86, leftW, std::max(0.f, h - 86)});
     const float cx = b.x + leftW + 1.f, cw = std::max(0.f, b.w - leftW - rightW - 2.f);
     toolbox_->setBounds({cx, top, cw, 30});

@@ -286,14 +286,19 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         hmi::soundlib::setUserFolder(std::string(u8.begin(), u8.end()));
     }
     // 1.26.0 : MES POLICES, la part de l'utilisateur dans la bibliotheque de polices - un fichier par police dans
-    // "polices/", a cote de Mes sons ; et les polices fournies, resources/polices (le dossier courant est celui de l'exe).
+    // "polices/", a cote de Mes sons ; et les polices fournies, resources/polices.
     {
         const auto fontsDir = std::filesystem::path(Settings::sharedFolder()) / "polices";
         const auto u8 = fontsDir.u8string();
         hmi::fontlib::setUserFolder(std::string(u8.begin(), u8.end()));
+        // Celles du dossier de travail s'il les a (les essais, une version non installee) ; sinon celles que main a
+        // trouvees a cote de l'exe (la version installee travaille dans son dossier des donnees).
         std::error_code ec;
-        const auto native = std::filesystem::absolute(std::filesystem::path("resources") / "polices", ec).u8string();
-        hmi::fontlib::setNativeFolder(std::string(native.begin(), native.end()));
+        const auto nativePath = std::filesystem::absolute(std::filesystem::path("resources") / "polices", ec);
+        if (std::filesystem::is_directory(nativePath, ec)) {
+            const auto native = nativePath.u8string();
+            hmi::fontlib::setNativeFolder(std::string(native.begin(), native.end()));
+        }
     }
     // 1.14.2 (Assistant IA) : LE DOSSIER IA/ (app/ai/AiPaths.hpp, le contrat de l'Assistant et du centre de
     // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet : conversations,

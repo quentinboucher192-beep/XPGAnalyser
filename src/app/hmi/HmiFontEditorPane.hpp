@@ -113,6 +113,7 @@ private:
     struct Cell {
         gfx::TextureId tex{};
         std::uint64_t  revision{0};
+        std::uint32_t  color{0};
     };
     std::map<int, Cell> cells_;
     gfx::IRenderer*     renderer_{nullptr};
@@ -330,7 +331,7 @@ private:
 
     HmiToolStrip*            tools_{nullptr};
     HmiToolStrip*            toolbox_{nullptr};
-    HmiToolStrip*            filters_{nullptr};
+    ui::DropDown*            filterBox_{nullptr};
     HmiToolStrip*            liveTools_{nullptr};
     ui::SearchField*         searchField_{nullptr};
     HmiGlyphGrid*            grid_{nullptr};
