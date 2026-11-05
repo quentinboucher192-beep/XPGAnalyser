@@ -1183,6 +1183,9 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"legende-explorateur", "arbre:IHM"},                                  // 1.11.23 : la legende de l'explorateur
     {"fenetres", "arbre:IHM"},                                             // 1.12.27 : plusieurs fenetres
     {"chercher-fichiers", "arbre:IHM"},                                    // 1.14.0 (lot M5) : Projet > Chercher des fichiers sur ce PC
+    // 1.24.0 : supprimer plusieurs d'un coup (des vues choisies dans l'arbre), les chemins de fichiers (les tableaux
+    // des Ressources), la bibliotheque de sons (IHM > Ressources > Bibliotheque de sons ; son lieu << sons >> n'a pas de ligne).
+    {"supprimer-plusieurs", "arbre:IHM/Vues"}, {"chemins", "arbre:IHM/Ressources"}, {"bibliotheque-sons", "arbre:IHM/Ressources"},
     // 1.12.30 : le zoom d'une page (un tableau), les regles de l'editeur de vues, les langues cote a cote
     // (Configuration > Langues, son bouton Cote a cote).
     {"zoom", "arbre:IHM/Programmation/Variables IHM"}, {"regles-guides", "arbre:IHM/Vues"},

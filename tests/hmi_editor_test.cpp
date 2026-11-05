@@ -19880,9 +19880,9 @@ void centreAide111() {
     // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
     // 1.12.28 : le didacticiel dans l'aide - Demarrer > Le didacticiel, sa page et les 6 des parcours (27).
     // 1.12.30 : + Le zoom des pages (28) ; L'automate gagne echanges-api (l'archive .xapi et la page web du programme) : 17.
-    // 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (29).
-    check(ix.count(hc::Chapter::Start) == 29 && ix.count(hc::Chapter::Plc) == 17,
-          "centre : Demarrer 29 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28 ; le zoom, 1.12.30 ; chercher des fichiers, 1.14.0) et L'automate 17 (1.12.30 : echanges-api)");
+    // 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (29). 1.24.0 : + Supprimer plusieurs d'un coup, Les chemins de fichiers (31).
+    check(ix.count(hc::Chapter::Start) == 31 && ix.count(hc::Chapter::Plc) == 17,
+          "centre : Demarrer 31 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28 ; le zoom, 1.12.30 ; chercher des fichiers, 1.14.0 ; supprimer plusieurs et les chemins, 1.24.0) et L'automate 17 (1.12.30 : echanges-api)");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
@@ -39489,8 +39489,8 @@ void didacticielAide11228() {
     const auto start = ix.ofChapter(hc::Chapter::Start);
     std::size_t enBas = 0;
     for (std::size_t i = start.size() >= 7 ? start.size() - 7 : 0; i < start.size(); ++i) enBas += start[i]->sub == "Le didacticiel" ? 1u : 0u;
-    // 1.12.30 : + Le zoom des pages (14 pages). 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (15 pages).
-    check(start.size() == 22 && enBas == 7, "centre : IHM Studio, Demarrer a 15 pages et Le didacticiel (7), en bas ("
+    // 1.12.30 : + Le zoom des pages (14 pages). 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC (15 pages). 1.24.0 : + 2 (17 pages).
+    check(start.size() == 24 && enBas == 7, "centre : IHM Studio, Demarrer a 17 pages et Le didacticiel (7), en bas ("
                                                 + std::to_string(start.size()) + ")");
     hc::TreeState st;
     st.current = "parcours-symbole";
