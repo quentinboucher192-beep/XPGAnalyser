@@ -33602,6 +33602,15 @@ void enumsInspecteur1121() {
                     seen.insert({std::string(info.key), pr.key});
                     seenKeys.insert(pr.key);
                 }
+                // 1.26.0 : la case Police montre des etiquettes (Police par defaut (X), Police des valeurs (Y), les polices du
+                // projet, la bibliotheque) ; ses deux premieres valent Sans et Mono, les mots de POLICE (une formule les recoit).
+                if (pr.key == "font" && want) {
+                    const auto first = pr.enumValues.size() > 1 ? hmi::fontlib::fromLabel(b.doc->project, pr.enumValues[0]) : std::nullopt;
+                    const auto second = pr.enumValues.size() > 1 ? hmi::fontlib::fromLabel(b.doc->project, pr.enumValues[1]) : std::nullopt;
+                    if (!first || first->value != "Sans" || !second || second->value != "Mono")
+                        wrong += " " + std::string(info.key) + ".font (Police par d\xC3\xA9" "faut / des valeurs : pas Sans / Mono)";
+                    continue;
+                }
                 if (want != got) {
                     std::string words;
                     for (const auto& w : pr.enumValues) words += (words.empty() ? "" : "|") + w;
