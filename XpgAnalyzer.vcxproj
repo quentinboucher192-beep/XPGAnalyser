@@ -266,6 +266,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiDesign.cpp" />
     <ClCompile Include="src\hmi\HmiStyles.cpp" />
     <ClCompile Include="src\hmi\HmiSemanticColors.cpp" />
+    <ClCompile Include="src\hmi\HmiSoundLibrary.cpp" />
     <ClCompile Include="src\hmi\HmiDisplay.cpp" />
     <ClCompile Include="src\hmi\HmiDossier.cpp" />
     <ClCompile Include="src\hmi\HmiEdit.cpp" />
@@ -874,6 +875,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiDesign.hpp" />
     <ClInclude Include="src\hmi\HmiStyles.hpp" />
     <ClInclude Include="src\hmi\HmiSemanticColors.hpp" />
+    <ClInclude Include="src\hmi\HmiSoundLibrary.hpp" />
     <ClInclude Include="src\core\SemanticColors.hpp" />
     <ClInclude Include="src\hmi\HmiDisplay.hpp" />
     <ClInclude Include="src\hmi\HmiDossier.hpp" />

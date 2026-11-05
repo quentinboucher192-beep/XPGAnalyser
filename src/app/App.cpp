@@ -46,6 +46,7 @@
 #include "../hmi/HmiNetInfo.hpp"
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
 #include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
+#include "../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : le dossier de Mes sons (la bibliotheque de sons)
 #include "ai/AiPaths.hpp"           // 1.14.2 (Assistant IA) : le dossier IA/ de l'utilisateur
 #include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
 #include "ai/AiAssistant.hpp"       // 1.20.0 : l'IA choisie analyse les incidents
@@ -275,6 +276,13 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         const auto imagesDir = std::filesystem::path(Settings::sharedFolder()) / "images";
         const auto u8 = imagesDir.u8string();
         hmi::imagelib::setUserFolder(std::string(u8.begin(), u8.end()));
+    }
+    // 1.24.0 : MES SONS, la part de l'utilisateur dans la bibliotheque de sons - un fichier par son dans "sons/", a cote
+    // de Mes images (hors des projets : ils le suivent d'un projet a l'autre).
+    {
+        const auto soundsDir = std::filesystem::path(Settings::sharedFolder()) / "sons";
+        const auto u8 = soundsDir.u8string();
+        hmi::soundlib::setUserFolder(std::string(u8.begin(), u8.end()));
     }
     // 1.14.2 (Assistant IA) : LE DOSSIER IA/ (app/ai/AiPaths.hpp, le contrat de l'Assistant et du centre de
     // memoire) - a cote de Mes images, dans les reglages de l'utilisateur, jamais dans un projet : conversations,

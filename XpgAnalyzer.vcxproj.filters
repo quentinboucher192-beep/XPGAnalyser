@@ -304,6 +304,9 @@
     <ClCompile Include="src\hmi\HmiSemanticColors.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiSoundLibrary.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDisplay.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2135,6 +2138,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiSemanticColors.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSoundLibrary.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDisplay.hpp">
