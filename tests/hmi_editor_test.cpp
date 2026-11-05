@@ -73,6 +73,7 @@
 #include "../src/hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
 #include "../src/hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques
 #include "../src/core/SemanticColors.hpp"
+#include "../src/app/hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
@@ -38700,6 +38701,62 @@ void paletteSemantique1231() {
     ui::ColorPalette::recent() = recentBefore;
 }
 
+// 1.23.1 : IHM > STYLES > COULEURS SEMANTIQUES - la liste (les tiennes, puis les fournies au cadenas), la fiche, la barre et
+// le clic droit ; dupliquer une fournie, renommer (ce qui la cite suit), une boucle refusee, retirer (la couleur reste en
+// dur), Ctrl+Z.
+void couleursSemantiques1231() {
+    std::printf("== 1.23.1 : IHM > Styles > Couleurs semantiques ==\n");
+    using P = app::HmiSemanticColorsPane;
+    Bench b;
+    P pane("sem1231", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    pane.setBounds({0, 0, 1200, 700});
+    pane.layout();
+    check(pane.shownNames().size() == 12 && pane.shownNames().front() == "Fond", "un projet neuf : les 12 fournies");
+    check(pane.select("@alarme") && pane.selectedName() == "Alarme" && pane.locked() && pane.selectedColor() == kNoId,
+          "choisir @Alarme : fournie, verrouill\xC3\xA9" "e");
+    check(!pane.tools().isEnabled(P::ActRemove) && pane.tools().isEnabled(P::ActDuplicate), "fournie : Retirer gris\xC3\xA9, Dupliquer actif");
+    std::string why;
+    check(!pane.setValue(kNoId, "#000000", &why) && !why.empty(), "une fournie ne se modifie pas");
+    // Le clic droit.
+    {
+        const auto items = pane.contextItems();
+        const auto has = [&](int id, bool enabled) {
+            return std::any_of(items.begin(), items.end(), [&](const ui::PopupMenu::Item& it) { return it.id == id && it.enabled == enabled; });
+        };
+        check(!items.empty() && items.front().heading && items.front().label == "@Alarme", "le menu : son titre, la couleur");
+        check(has(P::ActAdd, true) && has(P::ActDuplicate, true) && has(P::ActCopy, true) && has(P::ActRemove, false),
+              "le menu : Nouvelle, Dupliquer, Copier ; Retirer gris\xC3\xA9 (fournie)");
+    }
+    pane.runAction(P::ActCopy);
+    check(pane.message().find("@Alarme") != std::string::npos, "Copier \xC2\xAB @Alarme \xC2\xBB");
+    // Dupliquer a partir d'une fournie : une couleur a soi, choisie.
+    const Id mine = pane.duplicateFrom("Alarme");
+    check(mine != kNoId && pane.selectedName() == "Alarme (copie)" && !pane.locked() && b.doc->project.semanticColors.size() == 1,
+          "Dupliquer \xC3\xA0 partir de @Alarme : une couleur \xC3\xA0 toi");
+    check(pane.shownNames().front() == "Alarme (copie)", "les tiennes en t\xC3\xAAte");
+    check(pane.tools().isEnabled(P::ActRemove), "la tienne : Retirer actif");
+    // Un objet la cite ; renommer : il suit.
+    const Id rect = edit::add(b.doc->project, b.v(), Kind::Rectangle, 10, 10);
+    b.v().object(rect)->set("fill", "@Alarme (copie)");
+    b.doc->changed->emit(kNoId);
+    check(pane.renameColor(mine, "Alarme process") && b.v().object(rect)->text("fill") == "@Alarme process",
+          "renommer : l'objet qui la cite suit");
+    check(!pane.renameColor(mine, "Marche", &why) && why.find("fournie") != std::string::npos, "le nom d'une fournie : refus\xC3\xA9");
+    check(pane.setValue(mine, "#112233") && hmi::semantic::find(b.doc->project, "Alarme process")->value == "#112233", "sa couleur");
+    check(!pane.setValue(mine, "rouge", &why) && !pane.setValue(mine, "@Alarme process", &why), "illisible, ou elle-m\xC3\xAAme : refus\xC3\xA9");
+    const Id eau = pane.addColor("Eau", "@Alarme process");
+    check(eau != kNoId && pane.selectedName() == "Eau", "Nouvelle : @Eau, qui cite @Alarme process");
+    check(!pane.setValue(mine, "@Eau", &why) && why.find("rond") != std::string::npos, "une boucle (@Eau vaut @Alarme process) : refus\xC3\xA9" "e");
+    check(pane.setField(eau, "description", "Les conduites") && hmi::semantic::find(b.doc->project, "Eau")->description == "Les conduites",
+          "sa description");
+    // Retirer : ce qui la cite garde sa couleur, en dur ; Ctrl+Z la rend.
+    check(pane.removeColor(mine) && b.v().object(rect)->text("fill") == "#112233", "retirer : l'objet garde sa couleur, \xC3\xA9" "crite en dur");
+    check(hmi::semantic::find(b.doc->project, "Eau")->value == "#112233", "... et la couleur qui la citait aussi");
+    (void)b.stack.undo();
+    check(hmi::semantic::find(b.doc->project, "Alarme process") && b.v().object(rect)->text("fill") == "@Alarme process",
+          "Ctrl+Z : la couleur et ses citations reviennent");
+}
+
 
 // 1.12.28 : « j'aimerais combiner le didacticiel de l'ihm avec l'aide F1 ». Le catalogue des parcours
 // (help/Trails), leurs pages du guide (Demarrer > Le didacticiel), le sous-chapitre du centre, en bas
@@ -45167,6 +45224,7 @@ int main(int argc, char** argv) {
         stylesParType1230();
         arbreStyles1231();
         paletteSemantique1231();
+        couleursSemantiques1231();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -45683,6 +45741,7 @@ int main(int argc, char** argv) {
     stylesParType1230();                    // 1.23.0 : l'onglet Styles par type d'objet
     arbreStyles1231();                      // 1.23.1 : IHM > Styles deplie (styles, couleurs semantiques, cadenas et personne)
     paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
+    couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

@@ -70,5 +70,7 @@ struct Citation {
     std::string key;
 };
 [[nodiscard]] std::vector<Citation> unknownReferences(const Project&);
+// 1.23.1 : ou une couleur est citee (meme forme) - la fiche de la couleur dans IHM > Styles > Couleurs semantiques.
+[[nodiscard]] std::vector<Citation> citations(const Project&, std::string_view name);
 
 } // namespace hmi::semantic

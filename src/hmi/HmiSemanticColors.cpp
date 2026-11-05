@@ -323,4 +323,13 @@ std::vector<Citation> unknownReferences(const Project& p) {
     return out;
 }
 
+std::vector<Citation> citations(const Project& p, std::string_view name) {
+    std::vector<Citation> out;
+    visitTexts(p, [&](const std::string& text, bool formula, const Loc& at) {
+        for (const auto& r : refsIn(text, formula))
+            if (sameName(r.name, name)) out.push_back({at.label(), bare(r.name), at.view, at.object, at.key});
+    });
+    return out;
+}
+
 } // namespace hmi::semantic

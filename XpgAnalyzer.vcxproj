@@ -162,6 +162,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiContentPanel.cpp" />
     <ClCompile Include="src\app\hmi\HmiControlsPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSemanticPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiEditor.cpp" />
     <ClCompile Include="src\app\hmi\HmiEquipmentHost.cpp" />
@@ -239,6 +240,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ViewModels.cpp" />
     <ClCompile Include="src\core\AtomicFile.cpp" />
     <ClCompile Include="src\core\Error.cpp" />
+    <ClCompile Include="src\core\SemanticColors.cpp" />
     <ClCompile Include="src\domain\ExecutionOrder.cpp" />
     <ClCompile Include="src\domain\ProjectModel.cpp" />
     <ClCompile Include="src\domain\Reindex.cpp" />
@@ -263,6 +265,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiCrypto.cpp" />
     <ClCompile Include="src\hmi\HmiDesign.cpp" />
     <ClCompile Include="src\hmi\HmiStyles.cpp" />
+    <ClCompile Include="src\hmi\HmiSemanticColors.cpp" />
     <ClCompile Include="src\hmi\HmiDisplay.cpp" />
     <ClCompile Include="src\hmi\HmiDossier.cpp" />
     <ClCompile Include="src\hmi\HmiEdit.cpp" />
@@ -778,6 +781,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiCommPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiContentPanel.hpp" />
     <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSemanticPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiEditor.hpp" />
     <ClInclude Include="src\app\hmi\HmiEquipmentHost.hpp" />
@@ -869,6 +873,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiCrypto.hpp" />
     <ClInclude Include="src\hmi\HmiDesign.hpp" />
     <ClInclude Include="src\hmi\HmiStyles.hpp" />
+    <ClInclude Include="src\hmi\HmiSemanticColors.hpp" />
+    <ClInclude Include="src\core\SemanticColors.hpp" />
     <ClInclude Include="src\hmi\HmiDisplay.hpp" />
     <ClInclude Include="src\hmi\HmiDossier.hpp" />
     <ClInclude Include="src\hmi\HmiEdit.hpp" />

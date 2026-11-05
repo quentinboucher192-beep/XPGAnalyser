@@ -229,6 +229,9 @@
     <ClCompile Include="src\core\Error.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\SemanticColors.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\widgets\DataViews.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
@@ -296,6 +299,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiStyles.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiSemanticColors.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDisplay.cpp">
@@ -530,6 +536,9 @@
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDesignPanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiSemanticPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp">
@@ -2038,6 +2047,9 @@
     <ClInclude Include="src\core\AtomicFile.hpp">
       <Filter>core</Filter>
     </ClInclude>
+    <ClInclude Include="src\core\SemanticColors.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
     <ClInclude Include="src\core\Command.hpp">
       <Filter>core</Filter>
     </ClInclude>
@@ -2120,6 +2132,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiStyles.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiSemanticColors.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDisplay.hpp">
@@ -2321,6 +2336,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDesignPanes.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiSemanticPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp">
