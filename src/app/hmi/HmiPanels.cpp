@@ -1,4 +1,5 @@
 #include "HmiPanels.hpp"
+#include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les styles fournis dans la liste Style nomme
 #include "../../hmi/HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe de l'Enregistreur)
 #include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 #include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
@@ -4441,7 +4442,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     // 1.10.4 (K3) : le clignotement, pour tout objet (il etait dans Animation, meme absent).
     if (!o->find("blink")) allProps.push_back({"blink", "FALSE", ""});
     // Lot 12 : le style nomme, des que le projet en a (choisi : ses valeurs s'appliquent).
-    if (project && !project->styles.empty() && !o->find("namedStyle")) allProps.push_back({"namedStyle", "", ""});
+    // 1.23.0 : toujours (les styles fournis : ISA-101, Sombre d'origine, Clair, Contraste eleve).
+    if (project && !o->find("namedStyle")) allProps.push_back({"namedStyle", "", ""});
     // Lot 13 : l'unite et le format de la variable (Configuration > Unites et
     // formats) - pour les objets qui montrent une variable avec une unite ou un format.
     {
@@ -4707,10 +4709,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     if (form != hmi::typeform::Form::Simple && form != hmi::typeform::Form::Tuple) p.enumValues.push_back(var.name);
                 }
             } else if (prop.key == "namedStyle" && project) {
-                // Lot 12 : les styles nommes du projet.
+                // Lot 12 : les styles nommes du projet ; 1.23.0 : puis les styles fournis (hmi::styles::all).
                 p.type = PG::ValueType::Enum;
                 p.enumValues = {""};
-                for (const auto& st : project->styles) p.enumValues.push_back(st.name);
+                for (const auto* st : hmi::styles::all(*project)) p.enumValues.push_back(st->name);
             } else if (prop.key == "group" && (o->kind == hmi::Kind::History || hmi::kindIsAlarmView(o->kind) || o->kind == hmi::Kind::Marquee)
                        && project) {   // 1.12.12 (lot H) : le texte defilant des alarmes en cours
                 p.type = PG::ValueType::Enum;
@@ -5178,6 +5180,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 prm.type = hmi::params::boundType(shape, prm0.type, &generics);   // 1.12.20 (lot G) : T devenu REAL
                 PG::Property a;
                 a.name = prm.name + " \xC2\xB7 " + (prm.type.empty() ? std::string("ANY") : prm.type);
+                a.key = "param:" + prm.name;   // 1.23.0 : la cle d'un style (hmi::styles::kParamPrefix) - le carre O
                 a.type = PG::ValueType::Text;
                 // 1.11.3 (le fx qu'on ne voyait plus ; Voiture refuse) : l'argument tel que le moteur
                 // le prend. Une constante ('Voiture', 50, TRUE) se montre sans fx ni apostrophes ; un

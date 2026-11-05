@@ -4167,7 +4167,7 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
     // 1.9 : une valeur surchargee montre la valeur d'origine (celle du symbole).
     if (p->overridden) {
         if (!tip.empty()) tip += "\n";
-        tip += "Surcharg\xC3\xA9 sur cet objet\n";
+        tip += (p->overrideNote.empty() ? std::string("Surcharg\xC3\xA9 sur cet objet") : p->overrideNote) + "\n";
         tip += (p->overrideFrom.empty() ? std::string("Valeur du symbole") : p->overrideFrom) + " : "
              + (p->overrideDefault.empty() ? std::string("(vide)") : p->overrideDefault);
         if (p->revert) tip += "\n\xE2\x86\xBA au bout de la ligne : revenir \xC3\xA0 cette valeur";
@@ -4220,6 +4220,7 @@ gfx::Color legendColor(PropertyGrid::LegendStyle st, bool dark) noexcept {
         case S::System:   return dark ? gfx::Color{242, 168, 62, 255} : gfx::Color{158, 88, 0, 255};
         case S::Local:    return dark ? gfx::Color{186, 149, 255, 255} : gfx::Color{109, 65, 195, 255};
         case S::Error:    return dark ? gfx::Color{255, 103, 103, 255} : gfx::Color{196, 39, 39, 255};
+        case S::Style:    return dark ? gfx::Color{236, 112, 196, 255} : gfx::Color{168, 36, 124, 255};   // 1.23.0 : le << O >>
         case S::Formula:
         case S::Markers:  return dark ? gfx::Color{160, 166, 176, 255} : gfx::Color{79, 86, 97, 255};
         case S::Constant:
@@ -4322,7 +4323,8 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
         if (p.overridden) {
             ctx.r.fillRect({split + 1.f, r.y, r.right() - split - 1.f, rowH}, c.accent.withAlpha(26));
             ctx.r.fillRect({split + 1.f, r.y + 1.f, 3.f, rowH - 2.f}, c.accentHover);
-            static const std::string tag = "SURCHARG\xC3\x89";
+            static const std::string surcharge = "SURCHARG\xC3\x89";
+            const std::string& tag = p.overrideTag.empty() ? surcharge : p.overrideTag;   // 1.23.0 : BRISEE (un style)
             const float tagW = ctx.r.measure(tag, ctx.theme.font.caption).width + 14.f;
             // 1.9 finale : une case a cocher (Active d'une alarme) ne demande que sa case ;
             // un texte, 60 px - l'etiquette se voit aussi dans un volet etroit.
