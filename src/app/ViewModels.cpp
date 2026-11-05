@@ -12,6 +12,7 @@
 #include "../hmi/HmiSemanticColors.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles > Styles (les fournis compris)
 #include "../hmi/HmiSoundLibrary.hpp"     // 1.25.0 : Ressources > Bibliotheque de sons, depliee
+#include "../hmi/HmiFontLibrary.hpp"      // 1.26.0 : Ressources > Bibliotheque de polices, depliee
 #include "../hmi/HmiAssets.hpp"           // 1.25.0 : Ressources > Bibliotheque d'images, depliee (hmi::imagelib)
 #include "../ui/widgets/ColorPalette.hpp"   // 1.23.1 : la teinte d'une couleur semantique
 #include "../hmi/HmiFolders.hpp"      // lot 21 : les listes rangees en dossiers
@@ -464,6 +465,32 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 if (s.category == folders[folder]) out.push_back(&s);
             return out;
         }
+        // 1.26.0 : la bibliotheque de polices, par familles (Mes polices, puis les fournies) - relue seulement quand Mes
+        // polices ont change (hmi::fontlib::userRevision) ou qu'un dossier a change.
+        struct FontTreeCache {
+            std::uint64_t                      revision{~std::uint64_t{0}};
+            std::string                        folders;
+            std::vector<hmi::fontlib::Family>  all;
+        };
+        const std::vector<hmi::fontlib::Family>& fontFamilies() {
+            static FontTreeCache cache;
+            const auto rev = hmi::fontlib::userRevision();
+            const std::string folders = hmi::fontlib::userFolder() + "|" + hmi::fontlib::nativeFolder();
+            if (cache.revision != rev || cache.folders != folders) {
+                cache.all = hmi::fontlib::families();
+                cache.revision = rev;
+                cache.folders = folders;
+            }
+            return cache.all;
+        }
+        std::vector<const hmi::fontlib::Family*> familiesOfFolder(std::size_t folder) {
+            std::vector<const hmi::fontlib::Family*> out;
+            const auto folders = hmi::fontlib::categories();
+            if (folder >= folders.size()) return out;
+            for (const auto& f : fontFamilies())
+                if (f.category == folders[folder]) out.push_back(&f);
+            return out;
+        }
         // Lot 8 : le role des vues d'un dossier de Modeles (0 ecrans modeles, 1 en-tetes, 2 pieds).
         std::string_view templateRoleOf(std::uint64_t k) { return k == 0 ? "modele" : k == 1 ? "entete" : "pied"; }
         // L'objet d'une surcharge : les 20 bits hauts du sous-index.
@@ -871,6 +898,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         return i < folders.size() ? folders[i] : std::string{};
     }
 
+    // 1.26.0 : la bibliotheque de polices depliee.
+    std::string ProjectTreeModel::fontFolderOf(ui::NodeId n) {
+        const auto k = kindOf(n);
+        if (k != NodeKind::HmiFontGroup && k != NodeKind::HmiFontItem) return {};
+        const auto folders = hmi::fontlib::categories();
+        const auto i = static_cast<std::size_t>(indexOf(n));
+        return i < folders.size() ? folders[i] : std::string{};
+    }
+
+    std::string ProjectTreeModel::fontIdOf(ui::NodeId n) {
+        if (kindOf(n) != NodeKind::HmiFontItem) return {};
+        const auto fams = familiesOfFolder(static_cast<std::size_t>(indexOf(n)));
+        const auto at = static_cast<std::size_t>(subOf(n));
+        return at < fams.size() ? fams[at]->regular().id : std::string{};
+    }
+
     std::string ProjectTreeModel::imageIdOf(ui::NodeId n) {
         if (kindOf(n) != NodeKind::HmiImageItem) return {};
         const auto images = imagesOfFolder(static_cast<std::size_t>(indexOf(n)));
@@ -1017,7 +1060,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
         case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements ; 1.22.9 : - Unites de mesure (un onglet d Unites et formats)
-        case NodeKind::HmiResources:        return hmi_ ? 4 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents ; 1.24.0 : Sons ; 1.25.0 : Images
+        case NodeKind::HmiResources:        return hmi_ ? 5 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents ; 1.24.0 : Sons ; 1.25.0 : Images ; 1.26.0 : Polices
+        case NodeKind::HmiFontLibrary:      return hmi_ ? hmi::fontlib::categories().size() : 0;   // 1.26.0 : ses dossiers
+        case NodeKind::HmiFontGroup:        return hmi_ ? familiesOfFolder(i).size() : 0;          // 1.26.0 : ses familles
         case NodeKind::HmiImageLibrary:     return hmi_ ? imageFolders().size() : 0;     // 1.25.0 : ses dossiers
         case NodeKind::HmiImageGroup:       return hmi_ ? imagesOfFolder(i).size() : 0;   // 1.25.0 : ses images
         case NodeKind::HmiSoundLibrary:     return hmi_ ? soundFolders().size() : 0;    // 1.25.0 : ses dossiers
@@ -1516,7 +1561,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
         case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements ; 1.20.0 : les incidents
-            if (!hmi_ || k > 3) return ui::kInvalidNode;
+            if (!hmi_ || k > 4) return ui::kInvalidNode;
+            if (k == 4) return pack(NodeKind::HmiFontLibrary, 0);    // 1.26.0 : la bibliotheque de polices
             if (k == 2) return pack(NodeKind::HmiSoundLibrary, 0);   // 1.24.0 : la bibliotheque de sons
             if (k == 3) return pack(NodeKind::HmiImageLibrary, 0);   // 1.25.0 : la bibliotheque d'images
             return pack(k == 0 ? NodeKind::HmiRecordings : NodeKind::HmiIncidents, 0);
@@ -1527,6 +1573,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiImageGroup:     // 1.25.0 : les images du dossier
             return hmi_ && k < imagesOfFolder(i).size() && k <= 0xFFFF ? pack(NodeKind::HmiImageItem, i, static_cast<Index>(k))
                                                                       : ui::kInvalidNode;
+        case NodeKind::HmiFontLibrary:    // 1.26.0 : Mes polices, Sans empattement, Avec empattement, Chasse fixe
+            return hmi_ && k < hmi::fontlib::categories().size() ? pack(NodeKind::HmiFontGroup, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::HmiFontGroup:      // 1.26.0 : les familles du dossier
+            return hmi_ && k < familiesOfFolder(i).size() && k <= 0xFFFF ? pack(NodeKind::HmiFontItem, i, static_cast<Index>(k))
+                                                                         : ui::kInvalidNode;
         case NodeKind::HmiSoundLibrary:   // 1.25.0 : Mes sons, Alarmes, Notifications, Interface, Procede
             return hmi_ && k < soundFolders().size() ? pack(NodeKind::HmiSoundGroup, static_cast<Index>(k)) : ui::kInvalidNode;
         case NodeKind::HmiSoundGroup:     // 1.25.0 : les sons du dossier
@@ -2086,6 +2137,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiStyleGroup:                                        // 1.23.1
             case NK::HmiSoundLibrary: case NK::HmiSoundGroup:              // 1.25.0 : les sons, deplies
             case NK::HmiImageLibrary: case NK::HmiImageGroup:              // 1.25.0 : les images, depliees
+            case NK::HmiFontLibrary: case NK::HmiFontGroup:                // 1.26.0 : les polices, depliees
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
@@ -2152,7 +2204,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem       // 1.23.1
                 || k == NK::HmiSoundLibrary                                                          // 1.24.0
                 || k == NK::HmiSoundGroup || k == NK::HmiSoundItem                                   // 1.25.0
-                || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem;      // 1.25.0
+                || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem       // 1.25.0
+                || k == NK::HmiFontLibrary || k == NK::HmiFontGroup || k == NK::HmiFontItem;         // 1.26.0
         }
     } // namespace
 
@@ -2841,6 +2894,17 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             std::size_t n = 0;
             for (std::size_t f = 0; hmi_ && f < imageFolders().size(); ++f) n += imagesOfFolder(f).size();
             return "Biblioth\xC3\xA8que d'images" + countTag(n);
+        }
+        case NodeKind::HmiFontLibrary:                                                                               // 1.26.0 : ses familles
+            return "Biblioth\xC3\xA8que de polices" + countTag(hmi_ ? fontFamilies().size() : 0u);
+        case NodeKind::HmiFontGroup: {                                                                               // 1.26.0
+            const auto folders = hmi::fontlib::categories();
+            return i < folders.size() ? folders[i] + countTag(familiesOfFolder(i).size()) : std::string{};
+        }
+        case NodeKind::HmiFontItem: {                                                                                // 1.26.0
+            const auto fams = familiesOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            return at < fams.size() ? fams[at]->label : std::string{};
         }
         case NodeKind::HmiImageGroup: {                                                                              // 1.25.0
             const auto folders = imageFolders();
@@ -4019,6 +4083,23 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSoundLibrary:  s.icon = ui::Icon::Play; s.iconTone = ui::Tone::Accent; break;   // 1.24.0 : les sons
         case NodeKind::HmiImageLibrary:  s.icon = ui::Icon::Image; s.iconTone = ui::Tone::Accent; break;     // 1.25.0 : les images
         case NodeKind::HmiImageGroup:    s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;   // 1.25.0
+        case NodeKind::HmiFontLibrary:   s.icon = ui::Icon::Document; s.iconTone = ui::Tone::Accent; break;  // 1.26.0 : les polices
+        case NodeKind::HmiFontGroup:                                                                          // 1.26.0 : a toi, ou fournies
+            s.icon = i == 0 ? ui::Icon::User : ui::Icon::Lock;
+            s.iconTone = i == 0 ? ui::Tone::Accent : ui::Tone::Warning;
+            break;
+        case NodeKind::HmiFontItem: {                                                                         // 1.26.0
+            // Un cadenas pour une fournie, une personne pour une des tiennes ; ses styles apres le nom.
+            const auto fams = familiesOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            if (at < fams.size()) {
+                const bool mine = fams[at]->mine();
+                s.icon = mine ? ui::Icon::User : ui::Icon::Lock;
+                s.iconTone = mine ? ui::Tone::Accent : ui::Tone::Muted;
+                s.hint = fams[at]->stylesText();
+            }
+            break;
+        }
         case NodeKind::HmiImageItem: {                                                                        // 1.25.0
             // Un cadenas pour une image de la bibliotheque, une personne pour une des tiennes ; son format et sa taille.
             const auto images = imagesOfFolder(i);

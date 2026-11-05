@@ -1369,6 +1369,9 @@
     <ClCompile Include="src\app\hmi\HmiExprPageView.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiFontLibraryPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiFunctionDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1604,6 +1607,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiExprGuide.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiFontLibrary.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiFunctionTests.cpp">
@@ -3043,6 +3049,9 @@
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiFontLibraryPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiFunctionDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3284,6 +3293,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiExprGuide.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiFontLibrary.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiFunctionTests.hpp">

@@ -194,6 +194,15 @@ std::vector<Citation> citations(const Project& p, std::string_view name) {
     for (std::size_t k = 0; k < p.alarmSettings.sounds.size(); ++k)
         if (p.alarmSettings.sounds[k] == name)
             out.push_back({kNoId, kNoId, "alarmes : son de la priorit\xC3\xA9 " + std::to_string(k + 1), false});
+    // 1.26.0 : les polices du theme (Configuration > Affichage) et la Police d'un style.
+    if (p.config.defaultFont == name) out.push_back({kNoId, kNoId, "th\xC3\xA8me : police par d\xC3\xA9" "faut", false});
+    if (p.config.valueFont == name) out.push_back({kNoId, kNoId, "th\xC3\xA8me : police des valeurs", false});
+    for (const auto& st : p.styles) {
+        bool cites = std::any_of(st.props.begin(), st.props.end(), [&](const Prop& x) { return x.key == "font" && x.value == name; });
+        for (const auto& t : st.targets)
+            cites = cites || std::any_of(t.props.begin(), t.props.end(), [&](const Prop& x) { return x.key == "font" && x.value == name; });
+        if (cites) out.push_back({kNoId, kNoId, "style " + st.name, false});
+    }
     return out;
 }
 
@@ -241,6 +250,16 @@ bool renameResource(Project& p, Id id, const std::string& newName, std::size_t* 
     for (auto& sc : p.programs.scripts) n += replaceQuoted(sc.body, old, newName);
     for (auto& snd : p.alarmSettings.sounds)          // lot 11 : les sons des alarmes suivent
         if (snd == old) { snd = newName; ++n; }
+    // 1.26.0 : les polices du theme et la Police des styles suivent.
+    if (p.config.defaultFont == old) { p.config.defaultFont = newName; ++n; }
+    if (p.config.valueFont == old) { p.config.valueFont = newName; ++n; }
+    for (auto& st : p.styles) {
+        for (auto& x : st.props)
+            if (x.key == "font" && x.value == old) { x.value = newName; ++n; }
+        for (auto& t : st.targets)
+            for (auto& x : t.props)
+                if (x.key == "font" && x.value == old) { x.value = newName; ++n; }
+    }
     r->name = newName;
     if (updated) *updated = n;
     return true;

@@ -226,6 +226,7 @@ void HmiCanvas::leaveGroup() {
 
 void HmiCanvas::setPlaceKind(std::optional<hmi::Kind> kind) {
     placeKind_ = kind;
+    dropOnObject_ = {};           // 1.26.0
     placeSymbol_.clear();
     placeVariable_.reset();
     placeImage_.reset();          // 1.14.1 (lot N6)
@@ -240,6 +241,7 @@ void HmiCanvas::setPlaceVariant(hmi::Kind kind, std::string variant) {
 
 void HmiCanvas::setPlaceSymbol(std::string symbol) {
     placeVariant_.clear();
+    dropOnObject_ = {};           // 1.26.0
     placeSymbol_ = std::move(symbol);
     placeKind_ = placeSymbol_.empty() ? std::nullopt : std::optional<hmi::Kind>(hmi::Kind::SymbolInstance);
     placeVariable_.reset();
@@ -249,6 +251,7 @@ void HmiCanvas::setPlaceSymbol(std::string symbol) {
 
 void HmiCanvas::setPlaceVariable(std::optional<hmi::design::VarInfo> variable) {
     placeSymbol_.clear();
+    dropOnObject_ = {};           // 1.26.0
     placeImage_.reset();          // 1.14.1 (lot N6)
     placeVariant_.clear();
     placeVariable_ = std::move(variable);
@@ -259,6 +262,7 @@ void HmiCanvas::setPlaceVariable(std::optional<hmi::design::VarInfo> variable) {
 // 1.14.1 (lot N6) : une image de la bibliotheque d'images, au clic suivant (ou la ou on la lache).
 void HmiCanvas::setPlaceImage(std::optional<PlaceImage> image) {
     placeSymbol_.clear();
+    dropOnObject_ = {};           // 1.26.0
     placeVariable_.reset();
     placeVariant_.clear();        // 1.14.1 : une variante (N4) ne reste pas accrochee a une image (N6)
     placeImage_ = std::move(image);
@@ -871,8 +875,38 @@ void HmiCanvas::addGuide(bool vertical) {
 // ---- 1.12.18 : ce que fait le menu du clic droit, au point du clic ----------------------
 hmi::edit::Pt HmiCanvas::contextPoint() const { return toView(contextScreen_); }
 
+// 1.26.0 : une police glissee depuis le sous-onglet Polices - l'objet vise la recoit (la commande de l'editeur).
+void HmiCanvas::setDropOnObject(std::function<void(hmi::Id)> fn, std::string hint) {
+    if (fn) {
+        placeKind_.reset();
+        placeSymbol_.clear();
+        placeVariable_.reset();
+        placeImage_.reset();
+        placeVariant_.clear();
+    }
+    dropOnObject_ = std::move(fn);
+    dropHint_ = std::move(hint);
+    invalidate();
+}
+
+bool HmiCanvas::fireDropOnObject(gfx::Point at) {
+    const auto* v = view();
+    if (!v || !dropOnObject_) return false;
+    const auto p = toView(at);
+    const hmi::Id hit = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_);
+    auto fn = std::move(dropOnObject_);
+    dropOnObject_ = {};
+    dropHint_.clear();
+    fn(hit);
+    placed->emit();
+    invalidate();
+    return true;
+}
+
 void HmiCanvas::cancelPlacement() {
-    const bool was = placeKind_.has_value() || traceMap_ != kNoId;
+    const bool was = placeKind_.has_value() || traceMap_ != kNoId || static_cast<bool>(dropOnObject_);
+    dropOnObject_ = {};           // 1.26.0
+    dropHint_.clear();
     if (traceMap_ != kNoId) { traceMap_ = kNoId; trace_.clear(); }
     placeKind_.reset();
     placeSymbol_.clear();
@@ -1192,7 +1226,9 @@ void HmiCanvas::emitStatus(gfx::Point s) {
         }
     }
     if (insideGroup_ != kNoId) if (const auto* g = v->object(insideGroup_)) text += "   |   dans " + g->name;
-    if (placeImage_)              // 1.14.1 (lot N6)
+    if (dropOnObject_)            // 1.26.0
+        text += "   |   " + dropHint_;
+    else if (placeImage_)         // 1.14.1 (lot N6)
         text += "   |   clic : poser l'image " + placeImage_->image.label;
     else if (placeKind_)
         text += placeSymbol_.empty() ? "   |   clic : poser un(e) " + std::string(hmi::kindLabel(*placeKind_))
@@ -1341,7 +1377,7 @@ std::optional<ui::cursor::Shape> HmiCanvas::cursorAt(gfx::Point s) const {
         return ruler == 1 ? Shape::ResizeNS : Shape::ResizeEW;   // le guide qu'on en tire
     }
     if (spaceDown_) return Shape::Move;                          // Espace + glisser : faire defiler
-    if (placeKind_ || traceMap_ != kNoId) return Shape::Crosshair;
+    if (placeKind_ || traceMap_ != kNoId || dropOnObject_) return Shape::Crosshair;
     const Pt p = toView(s);
     if (const auto t = vertexTarget(); t.valid() && hmi::vertices::vertexAt(*v, t, p, (kVertex + 3.0) / zoom_) >= 0)
         return Shape::Move;
@@ -2032,7 +2068,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         // est sous le pointeur (HmiCanvas.hpp, « ce que vise le clic droit »).
         if (m->button == ui::MouseButton::Right) {
             // Une pose ou un trace en cours : le clic droit l'annule, comme Echap, sans menu.
-            if (placeKind_ || traceMap_ != kNoId) {
+            if (placeKind_ || traceMap_ != kNoId || dropOnObject_) {
                 cancelPlacement();
                 return ui::EventResult::Consumed;
             }
@@ -2059,6 +2095,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         }
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
 
+        if (dropOnObject_ && fireDropOnObject(m->pos)) return ui::EventResult::Consumed;   // 1.26.0 : la police, au clic
         if (placeKind_) {
             placeAt(m->pos, shift);
             return ui::EventResult::Consumed;
@@ -2371,6 +2408,12 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         // Lot 12 : un lacher venu d'ailleurs (une tuile ou une variable glissee
         // depuis la bibliotheque) : l'objet se pose la.
         const bool dropped = !downHere_ && placeKind_ && m->button == ui::MouseButton::Left && bounds().contains(m->pos);
+        // 1.26.0 : une police lachee sur la vue - l'objet sous le pointeur la recoit.
+        if (!downHere_ && dropOnObject_ && m->button == ui::MouseButton::Left && bounds().contains(m->pos)) {
+            downHere_ = false;
+            (void)fireDropOnObject(m->pos);
+            return ui::EventResult::Consumed;
+        }
         downHere_ = false;
         if (dropped) {
             placeAt(m->pos, false);
@@ -2503,7 +2546,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 // 1.12.12 (lot H) : la zone qui se trace s'abandonne ; un sommet choisi se laisse.
                 if (traceMap_ != kNoId) cancelPlacement();
                 else if (vertex_ >= 0) selectVertex(-1);
-                else if (placeKind_) cancelPlacement();
+                else if (placeKind_ || dropOnObject_) cancelPlacement();
                 else if (insideGroup_ != kNoId) leaveGroup();
                 else setSelection({});
                 return ui::EventResult::Consumed;

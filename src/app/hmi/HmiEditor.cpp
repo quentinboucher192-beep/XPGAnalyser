@@ -1,4 +1,5 @@
 #include "HmiSoundLibraryPane.hpp"   // 1.25.0 : le sous-onglet Sons de la bibliotheque
+#include "HmiFontLibraryPane.hpp"    // 1.26.0 : le sous-onglet Polices de la bibliotheque
 #include "HmiEditor.hpp"
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les valeurs imposees par un style (le carre O)
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
@@ -415,6 +416,13 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         };
         sounds->setHosts(std::move(soundHosts));
         palette_->setSoundsPane(std::move(sounds));
+        // 1.26.0 : le sous-onglet Polices - << Du projet >>, puis la bibliotheque ; une police glissee sur un objet, ou
+        // donnee a la selection (double-clic, Entree), une commande. L'editeur de polices : l'ecran (fontsPane()->hosts()).
+        auto fonts = std::make_unique<HmiFontLibraryPane>(base + ".fonts", doc_, [this](core::CommandPtr c) { apply_(std::move(c)); });
+        fonts->hosts().give = [this](const HmiFontPick& pick, std::string* why) -> std::size_t {
+            return giveFont(canvas_ ? canvas_->selection() : std::vector<hmi::Id>{}, pick.resource, pick.font ? &*pick.font : nullptr, why);
+        };
+        palette_->setFontsPane(std::move(fonts));
         right->addPane(std::move(panel), 0.42f, 120.f);
     }
     split->addPane(std::move(right), 0.26f, 200.f);
@@ -689,6 +697,27 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += palette_->imageMessage->connect([this](const std::string& m) {
         statusBar_->setTransientMessage(m, 6.0, ui::StatusBar::Severity::Success);
     });
+    // 1.26.0 : LE SOUS-ONGLET POLICES - appuyer sur une police arme le lacher : lachee sur un objet de la vue (ou un clic
+    // dessus), il la prend (importee si besoin), une commande. Le double-clic et Entree : la selection la prend (give).
+    if (auto* fonts = palette_->fontsPane())
+        links_ += fonts->picked->connect([this](const HmiFontPick& pick) {
+            if (!pick.valid()) return;
+            const HmiFontPick copy = pick;
+            canvas_->setDropOnObject(
+                [this, copy](hmi::Id hit) {
+                    std::string why;
+                    if (hit == kNoId) {
+                        statusBar_->setTransientMessage("L\xC3\xA2" "che la police sur un objet (un texte, un bouton, un afficheur...).", 6.0,
+                                                        ui::StatusBar::Severity::Warning);
+                        return;
+                    }
+                    if (giveFont({hit}, copy.resource, copy.font ? &*copy.font : nullptr, &why) == 0 && !why.empty())
+                        statusBar_->setTransientMessage(why, 6.0, ui::StatusBar::Severity::Warning);
+                },
+                "l\xC3\xA2" "cher (ou cliquer) sur un objet : il prend la police " + copy.label);
+            statusBar_->setMessage("Glisse " + copy.label + " sur un objet de la vue (ou clique dessus) : il la prend. "
+                                   "Double-clic : la s\xC3\xA9lection la prend. \xC3\x89" "chap : annuler.");
+        });
     // Lot 12 : l'onglet Variables de la bibliotheque - lues a l'ouverture de
     // l'onglet (le programme a pu changer) ; une variable choisie se pose au
     // clic suivant, ou la ou on la lache.
@@ -1327,9 +1356,80 @@ void HmiEditor::applyPropertyFilters(const hmi::View& v, std::vector<ui::Propert
     cats.erase(std::remove_if(cats.begin(), cats.end(), [&](PG::Category& c) { return !keep(c); }), cats.end());
 }
 
+// 1.26.0 : LA POLICE DONNEE - aux objets qui ont un texte (un groupe : a ses objets qui en ont), une de la bibliotheque
+// importee dans le meme pas : une seule commande.
+std::size_t HmiEditor::giveFont(const std::vector<hmi::Id>& objects, const std::string& resource, const hmi::fontlib::Font* library,
+                                std::string* why) {
+    const auto fail = [&](std::string m) -> std::size_t {
+        statusBar_->setTransientMessage(m, 6.0, ui::StatusBar::Severity::Warning);
+        if (why) *why = std::move(m);
+        return 0;
+    };
+    const auto* v = doc_->project.view(viewId_);
+    if (!v) return fail("Ouvre une vue pour lui donner une police.");
+    if (objects.empty()) return fail("Choisis d'abord un objet dans la vue : il prendra la police.");
+    if (resource.empty() && !library) return fail("Choisis une police.");
+    // Les objets vises : ceux qui ont une Police ; un groupe, un conteneur : ses objets (a toute profondeur) qui en ont.
+    std::vector<Id> targets;
+    const auto add = [&](Id id) {
+        if (std::find(targets.begin(), targets.end(), id) == targets.end()) targets.push_back(id);
+    };
+    for (const Id id : objects) {
+        const auto* o = v->object(id);
+        if (!o) continue;
+        if (o->find("font")) add(o->id);
+        for (const auto& x : v->objects) {
+            if (!x.find("font")) continue;
+            for (Id up = x.parent; up != kNoId;) {
+                if (up == id) {
+                    add(x.id);
+                    break;
+                }
+                const auto* parent = v->object(up);
+                up = parent ? parent->parent : kNoId;
+            }
+        }
+    }
+    if (targets.empty()) return fail("Cet objet n'a pas de texte : pas de police \xC3\xA0 lui donner.");
+    const std::optional<hmi::fontlib::Font> lib = library ? std::optional<hmi::fontlib::Font>(*library) : std::nullopt;
+    const std::string shown = lib ? lib->fullName() : hmi::fontlib::fieldLabel(doc_->project, resource);
+    std::string name = resource;
+    bool imported = false;
+    std::size_t done = 0;
+    const bool changed = canvas_->edit("Police " + shown, [&](hmi::Project& pr, hmi::View& vv) {
+        if (lib) {
+            const auto made = hmi::fontlib::importFont(pr, *lib);
+            name = made.name;
+            imported = !made.reused;
+        }
+        if (name.empty()) return;
+        for (const Id id : targets)
+            if (auto* o = vv.object(id)) {
+                o->set("font", name);
+                ++done;
+            }
+    });
+    if (!changed) {
+        statusBar_->setTransientMessage(std::to_string(targets.size()) + " objet(s) avaient d\xC3\xA9j\xC3\xA0 la police " + shown + ".", 6.0,
+                                        ui::StatusBar::Severity::Info);
+        return targets.size();
+    }
+    statusBar_->setTransientMessage((done == 1 ? std::string("L'objet prend") : std::to_string(done) + " objets prennent") + " la police " + shown
+                                        + (imported ? " (import\xC3\xA9" "e : la ressource " + name + ")" : std::string{}) + ". Ctrl+Z l'annule.",
+                                    8.0, ui::StatusBar::Severity::Success);
+    return done;
+}
+
 bool HmiEditor::commitProp(const std::string& key, const std::string& value, bool expr) {
     const auto sel = canvas_->selection();
     if (sel.empty()) return false;
+    // 1.26.0 : UNE POLICE DE LA BIBLIOTHEQUE choisie dans la case Police (son libelle << Bibliotheque > ... >>) : importee
+    // et donnee aux objets choisis - une seule commande (un Ctrl+Z annule l'import et le choix).
+    if (key == "font" && !expr)
+        if (const hmi::fontlib::Font* lib = hmi::fontlib::fromChoice(value)) {
+            const hmi::fontlib::Font copy = *lib;
+            return giveFont(sel, {}, &copy) > 0;
+        }
     // Lot 12 : un style nomme choisi - ses valeurs s'appliquent aux objets choisis,
     // qui le citent ; vide : ils ne le citent plus (et gardent leurs valeurs).
     if (key == "namedStyle" && !expr) {

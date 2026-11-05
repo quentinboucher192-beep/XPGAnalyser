@@ -580,6 +580,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiEquipmentLinkPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiExprPageView.cpp" />
+    <ClCompile Include="src\app\hmi\HmiFontLibraryPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiFunctionDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiFunctionPicker.cpp" />
     <ClCompile Include="src\app\hmi\HmiInitDialog.cpp" />
@@ -659,6 +660,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiEquipmentLink.cpp" />
     <ClCompile Include="src\hmi\HmiExprBench.cpp" />
     <ClCompile Include="src\hmi\HmiExprGuide.cpp" />
+    <ClCompile Include="src\hmi\HmiFontLibrary.cpp" />
     <ClCompile Include="src\hmi\HmiFunctionTests.cpp" />
     <ClCompile Include="src\hmi\HmiIncident.cpp" />
     <ClCompile Include="src\hmi\HmiLibrary.cpp" />
@@ -1144,6 +1146,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiEquipmentLinkPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiExprPageView.hpp" />
+    <ClInclude Include="src\app\hmi\HmiFontLibraryPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiFunctionDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiFunctionPicker.hpp" />
     <ClInclude Include="src\app\hmi\HmiInitModel.hpp" />
@@ -1225,6 +1228,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiEquipmentLink.hpp" />
     <ClInclude Include="src\hmi\HmiExprBench.hpp" />
     <ClInclude Include="src\hmi\HmiExprGuide.hpp" />
+    <ClInclude Include="src\hmi\HmiFontLibrary.hpp" />
     <ClInclude Include="src\hmi\HmiFunctionTests.hpp" />
     <ClInclude Include="src\hmi\HmiIncident.hpp" />
     <ClInclude Include="src\hmi\HmiKeys.hpp" />

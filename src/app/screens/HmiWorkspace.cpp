@@ -52,6 +52,8 @@
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiIncidentsPane.hpp"              // 1.20.0 : Ressources > Incidents
 #include "../hmi/HmiSoundLibraryPane.hpp"           // 1.24.0 : Ressources > Bibliotheque de sons
+#include "../hmi/HmiFontLibraryPane.hpp"            // 1.26.0 : Ressources > Bibliotheque de polices
+#include "../FilePreview.hpp"                       // 1.26.0 : la licence d'une police (preview::openWithSystem)
 #include "../FileFinder.hpp"                         // 1.24.0 : revealInExplorer (Mes sons dans l explorateur)
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
@@ -431,7 +433,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem   // 1.23.1 : Styles deplie
         || k == NK::HmiSoundLibrary                                                    // 1.24.0 : la bibliotheque de sons
         || k == NK::HmiSoundGroup || k == NK::HmiSoundItem                             // 1.25.0 : ses dossiers, ses sons
-        || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem;   // 1.25.0 : la bibliotheque d'images
+        || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem    // 1.25.0 : la bibliotheque d'images
+        || k == NK::HmiFontLibrary || k == NK::HmiFontGroup || k == NK::HmiFontItem;      // 1.26.0 : la bibliotheque de polices
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -784,6 +787,15 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
             if (auto* pane = dynamic_cast<HmiSoundLibraryPane*>(hmiTab("sons"))) {
                 if (const auto folder = ProjectTreeModel::soundFolderOf(n); !folder.empty()) pane->setCategoryOpen(folder, true);
                 if (const auto id = ProjectTreeModel::soundIdOf(n); !id.empty()) (void)pane->select(id);
+            }
+            break;
+        case NK::HmiFontLibrary:                                                     // 1.26.0 : la bibliotheque de polices,
+        case NK::HmiFontGroup:                                                       // le dossier deplie,
+        case NK::HmiFontItem:                                                        // la famille choisie
+            openHmiPane("polices");
+            if (auto* pane = dynamic_cast<HmiFontLibraryPane*>(hmiTab("polices"))) {
+                if (const auto folder = ProjectTreeModel::fontFolderOf(n); !folder.empty()) pane->setCategoryOpen(folder, true);
+                if (const auto id = ProjectTreeModel::fontIdOf(n); !id.empty()) (void)pane->select(id);
             }
             break;
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
@@ -2176,6 +2188,22 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Biblioth\xC3\xA8que de sons";
         icon = Icon::Play;
+    } else if (key == "polices") {
+        // 1.26.0 : Ressources > Bibliotheque de polices - les fournies et Mes polices ; l'apercu, importer dans le projet.
+        // L'editeur de polices (Nouvelle police, Dupliquer a partir de..., Modifier) : pane->hosts() newFont, duplicateFont,
+        // editFont, editGlyph - non branches : leurs boutons sont grises.
+        auto pane = std::make_unique<HmiFontLibraryPane>("hmi.fonts", doc, apply);
+        HmiFontLibraryPane::Hosts hosts;
+        hosts.openResource = [this](hmi::Id r) {
+            openHmiPane("ressources");
+            if (auto* res = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"))) res->selectResource(r);
+        };
+        hosts.reveal = [](const std::string& path) { return finder::revealInExplorer(path); };
+        hosts.openFile = [](const std::string& path) { return preview::openWithSystem(path); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Biblioth\xC3\xA8que de polices";
+        icon = Icon::Document;
     } else if (key == "incidents") {
         // 1.20.0 : Ressources > Incidents - les dossiers d'incident de la surveillance (IncidentsWorkspace.cpp).
         page = buildHmiIncidentsPane();
@@ -4392,6 +4420,7 @@ std::string placeOfNode(NK kind) {
         case NK::HmiIncidents:     return "incidents";                // 1.20.0
         case NK::HmiSoundLibrary:  return "sons";                     // 1.24.0
         case NK::HmiSoundGroup: case NK::HmiSoundItem: return "sons";   // 1.25.0
+        case NK::HmiFontLibrary: case NK::HmiFontGroup: case NK::HmiFontItem: return "polices";   // 1.26.0
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

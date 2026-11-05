@@ -3,6 +3,7 @@
 #include "../../hmi/HmiMigrate.hpp"   // 1.11.18 (lot 5) : des blocs VAR a migrer ?
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.4 : "Remplacer..." ; 1.11 (REP) : le constat d'un repere qui n'est pas une variable
 #include "../../hmi/HmiDesign.hpp"
+#include "../../hmi/HmiFontLibrary.hpp"   // 1.26.0 : les polices du theme (Configuration > Affichage)
 #include "../../hmi/HmiTemplates.hpp"
 
 #include "HmiImages.hpp"
@@ -529,6 +530,40 @@ void HmiConfigPane::rebuild() {
                                     "Nuit : les couleurs de la conception. Jour : les fonds sombres deviennent clairs et les textes "
                                     "sombres, les couleurs franches restent - pour un \xC3\xA9" "cran en plein jour (SYS.Theme, le S\xC3\xA9lecteur de th\xC3\xA8me).",
                                     {"nuit", "jour"}));
+    // 1.26.0 : LES POLICES DU THEME - la police par defaut (les objets sur << Police par defaut >> : ceux de la
+    // bibliotheque, boutons, voyants, afficheurs, y arrivent) et la police des valeurs (sur << Police des valeurs >>).
+    // Celle de l'IHM (vide) : comme avant. Une police de la bibliotheque s'importe en la choisissant (une commande).
+    {
+        const auto fontProp = [&](const std::string& title, bool values) {
+            std::vector<std::string> labels;
+            for (const auto& ch : hmi::fontlib::fieldChoices(p, true)) labels.push_back(ch.label);
+            const std::string current = values ? cfg.valueFont : cfg.defaultFont;
+            return prop(title, hmi::fontlib::fieldLabel(p, current, true), P::ValueType::Enum,
+                        [this, title, values](std::string_view s) {
+                            const auto ch = hmi::fontlib::fromLabel(doc_->project, s, true);
+                            if (!ch) return false;
+                            std::optional<hmi::fontlib::Font> lib;
+                            if (!ch->libraryId.empty())
+                                if (const hmi::fontlib::Font* f = hmi::fontlib::findFont(ch->libraryId)) lib = *f;
+                            if (!ch->libraryId.empty() && !lib) return false;
+                            const std::string value = ch->value;
+                            auto cmd = hmi::changeProject(doc_, title, [&](hmi::Project& pp) {
+                                const std::string name = lib ? hmi::fontlib::importFont(pp, *lib).name : value;
+                                (values ? pp.config.valueFont : pp.config.defaultFont) = name;
+                            });
+                            if (cmd) apply_(std::move(cmd));
+                            return true;
+                        },
+                        values ? std::string("Celle des objets sur \xC2\xAB Police des valeurs \xC2\xBB (Mono) : les afficheurs, les valeurs. "
+                                             "Celle de l'IHM : la chasse fixe de l'IHM, comme avant.")
+                               : std::string("Tout objet sur \xC2\xAB Police par d\xC3\xA9" "faut \xC2\xBB (Sans) la prend : la changer ici change toute "
+                                             "l'IHM. Les objets de la biblioth\xC3\xA8que (boutons, voyants, afficheurs...) arrivent sur "
+                                             "\xC2\xAB Police par d\xC3\xA9" "faut \xC2\xBB. Celle de l'IHM : comme avant."),
+                        std::move(labels));
+        };
+        shown.properties.push_back(fontProp("Police par d\xC3\xA9" "faut", false));
+        shown.properties.push_back(fontProp("Police des valeurs", true));
+    }
     cats.push_back(std::move(shown));
 
     const auto st = p.statistics();

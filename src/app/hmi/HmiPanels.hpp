@@ -393,6 +393,7 @@ struct HmiKeyInfo {
 // 1.14.0 (captures finales) : ce que montre, en gris, le Mot de passe vide de l'Enregistreur (avant : "{variable}").
 inline constexpr const char* kNoPasswordInvite = "aucun (en clair)";
 class HmiSoundLibraryPane;   // 1.25.0 : le sous-onglet Sons (HmiSoundLibraryPane.hpp)
+class HmiFontLibraryPane;    // 1.26.0 : le sous-onglet Polices (HmiFontLibraryPane.hpp)
 
 class HmiPalette final : public ui::Widget {
 public:
@@ -438,9 +439,14 @@ public:
     // entre Objets et Variables).
     // 1.25.0 : Sons (le client : << ajouter un sous-onglet sons >>), en dernier aussi ; il se montre entre Images et
     // Variables. Le volet de la bibliotheque de sons en etroit (HmiSoundLibraryPane::setCompact), pose par l'editeur.
-    enum class Mode : std::uint8_t { Objects, Variables, Images, Sounds };
+    // 1.26.0 : Polices (le client : << onglet Polices dans bibliotheques editeur de vue >>), en dernier aussi ; il se montre
+    // entre Sons et Variables. La bibliotheque de polices en etroit (HmiFontLibraryPane::setCompact) : Du projet, puis
+    // la bibliotheque ; une police glissee sur un objet lui est donnee (l'editeur).
+    enum class Mode : std::uint8_t { Objects, Variables, Images, Sounds, Fonts };
     void setSoundsPane(std::unique_ptr<HmiSoundLibraryPane> pane);
     [[nodiscard]] HmiSoundLibraryPane* soundsPane() noexcept { return sounds_; }
+    void setFontsPane(std::unique_ptr<HmiFontLibraryPane> pane);
+    [[nodiscard]] HmiFontLibraryPane* fontsPane() noexcept { return fonts_; }
     void setMode(Mode m);
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
     void setVariables(std::vector<hmi::design::VarInfo> vars) { variables_ = std::move(vars); invalidate(); }
@@ -517,6 +523,7 @@ protected:
 private:
     HmiApiVarsView*                            apiTree_{nullptr};     // R1111-6
     HmiSoundLibraryPane*                       sounds_{nullptr};      // 1.25.0 : le sous-onglet Sons
+    HmiFontLibraryPane*                        fonts_{nullptr};       // 1.26.0 : le sous-onglet Polices
     std::string                                rawFilter_;            // 1.25.0 : la recherche telle que tapee (les sons)
     std::shared_ptr<const hmi::apivars::Model> apiModel_;
     std::optional<hmi::design::VarInfo>        treeChoice_;           // la variable choisie dans l'arbre (l'aide en bas)

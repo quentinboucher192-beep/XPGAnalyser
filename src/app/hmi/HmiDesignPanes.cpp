@@ -5,6 +5,7 @@
 #include "HmiSemanticPane.hpp"              // 1.23.1 : l'onglet Couleurs semantiques
 #include "HmiSimMarks.hpp"                 // 1.12.27 : fitText (l'apercu des styles)
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiFontLibrary.hpp"    // 1.26.0 : la colonne Police (le theme, le projet, la bibliotheque)
 #include "../../hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
 #include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : le compte de l onglet Couleurs semantiques
 #include "../../hmi/HmiSymbols.hpp"
@@ -1540,6 +1541,14 @@ void HmiStylesPane::rebuildProperties() {
                             k.choices);
             one.key = key;
             one.locked = fixed;
+            // 1.26.0 : LA POLICE D'UN STYLE - comme la case Police de l'inspecteur : << Police par defaut (Carlito) >>,
+            // << Police des valeurs (...) >>, les polices du projet, la bibliotheque (importee en la choisissant).
+            if (key == "font") {
+                one.type = fixed ? PG::ValueType::ReadOnly : PG::ValueType::Enum;
+                one.enumValues.clear();
+                for (const auto& ch : hmi::fontlib::fieldChoices(p)) one.enumValues.push_back(ch.label);
+                one.value = hmi::fontlib::fieldLabel(p, pr.value);
+            }
             look.properties.push_back(std::move(one));
         }
         cats.push_back(std::move(look));
@@ -2088,10 +2097,26 @@ bool HmiStylesPane::setTypeValue(Id style, const std::string& type, const std::s
     const KeyKind k = keyKindOf(doc_->project, type, key);
     const std::string label = propertyName(type, key);
     std::string bad;
-    if (!cleanValue(k, key, value, bad)) return fail(label + " : " + bad);
+    // 1.26.0 : la Police - son etiquette ecrit sa valeur (Sans, Mono, une ressource) ; une police de la bibliotheque est
+    // importee dans la meme commande (un Ctrl+Z annule l'import et le choix).
+    std::optional<hmi::fontlib::Font> library;
+    if (key == "font") {
+        const auto ch = hmi::fontlib::fromLabel(doc_->project, value);
+        if (!ch) return fail(label + " : Police par d\xC3\xA9" "faut, Police des valeurs, une police du projet ou de la biblioth\xC3\xA8que");
+        if (!ch->libraryId.empty()) {
+            const hmi::fontlib::Font* f = hmi::fontlib::findFont(ch->libraryId);
+            if (!f) return fail(label + " : police introuvable");
+            library = *f;
+        } else {
+            value = ch->value;
+        }
+    } else if (!cleanValue(k, key, value, bad)) {
+        return fail(label + " : " + bad);
+    }
     const std::string name = current->name;
     std::size_t followed = 0, kept = 0;
     auto cmd = hmi::changeProject(doc_, "Style " + name + " : " + label, [&](hmi::Project& p) {
+        if (library) value = hmi::fontlib::importFont(p, *library).name;
         hmi::Style* s = styleById(p, style);
         if (!s) return;
         const hmi::Style before = *s;
