@@ -198,6 +198,8 @@ def main():
         shutil.copy2(os.path.join(ROOT, "resources", f), os.path.join(st, "resources", f))
         n_res += 1
     n_res += copy_tree(os.path.join(ROOT, "resources", "fonts"), os.path.join(st, "resources", "fonts"))
+    # 1.26.0 : les polices fournies des IHM (TrueType libres, et leurs licences) - pas celles de l interface.
+    n_res += copy_tree(os.path.join(ROOT, "resources", "polices"), os.path.join(st, "resources", "polices"))
     n_libs = copy_tree(os.path.join(ROOT, "libs"), os.path.join(st, "libs"), exclude=("*.bak", "*~", "~$*"))
     m = os.path.join(st, "maintenance")
     os.makedirs(os.path.join(m, "lib"))

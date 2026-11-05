@@ -70,7 +70,7 @@ public:
         const auto* info = rp::partInfo(parts_[r].key);
         if (!info) return parts_[r].key;
         if (c == 0) return std::string(info->label);
-        if (parts_[r].key == "courbes") return "PDF seulement";
+        if (parts_[r].key == "courbes") return "graphique (Excel : valeurs)";
         return info->table ? std::string("tableau") : parts_[r].key == "synthese" ? std::string("les chiffres") : std::string("graphique");
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
@@ -174,12 +174,20 @@ void HmiReportPreview::onPaint(const ui::PaintContext& ctx) {
             case rp::DrawOp::Kind::Text: {
                 const int px = static_cast<int>(std::lround(o.size * s));
                 if (px < 3) {   // trop petit pour se lire : un trait gris a sa place
-                    const float w = static_cast<float>(rp::textWidth(doc_->font, o.text, o.size, o.bold) * s);
+                    const float w = static_cast<float>(rp::textWidth(*doc_, o.text, o.size, o.bold) * s);
                     ctx.r.fillRect({X(o.x), Y(o.y) - 1.f, std::max(1.f, w), 1.f}, rgbOf(o.color).withAlpha(120));
                     break;
                 }
-                const gfx::FontId f{static_cast<std::uint16_t>(std::clamp(px, 5, 72))};
+                gfx::FontId f{static_cast<std::uint16_t>(std::clamp(px, 5, 72))};
                 const std::string text = rp::fromWinAnsi(o.text);
+                // 1.25.1 : la police de l'ecran n'a pas les chasses du PDF - le texte garde la place qu'il aura dans le PDF
+                // (une taille plus petite s'il deborderait).
+                const float want = static_cast<float>(rp::textWidth(*doc_, o.text, o.size, o.bold) * s);
+                for (int tries = 0; tries < 3 && f.v > 5; ++tries) {
+                    const float got = ctx.r.measure(text, f).width;
+                    if (got <= want * 1.02f + 1.f) break;
+                    f.v = static_cast<std::uint16_t>(std::max(5, static_cast<int>(std::floor(static_cast<float>(f.v) * want / got))));
+                }
                 const float lh = ctx.r.lineHeight(f);
                 const gfx::Point at{X(o.x), Y(o.y) - lh * 0.8f};
                 ctx.r.drawText(at, text, f, rgbOf(o.color));
@@ -714,9 +722,11 @@ bool HmiReportLayoutPane::setField(const std::string& key, const std::string& ra
     }
     if (key == "police") return editDraft([&](hmi::ReportLayout& l) { l.font = v; }, why);
     if (key == "accent") return editDraft([&](hmi::ReportLayout& l) { l.accent = v; }, why);
-    if (key == "visa" || key == "lignes_alternees" || key == "entete_repete") {
+    if (key == "visa" || key == "lignes_alternees" || key == "entete_repete" || key == "titres_accent") {
         const bool on = yes(v);
-        return editDraft([&](hmi::ReportLayout& l) { (key == "visa" ? l.visa : key == "lignes_alternees" ? l.zebra : l.repeatHeader) = on; }, why);
+        return editDraft([&](hmi::ReportLayout& l) {
+            (key == "visa" ? l.visa : key == "lignes_alternees" ? l.zebra : key == "entete_repete" ? l.repeatHeader : l.accentTitles) = on;
+        }, why);
     }
     if (key == "nom") return editDraft([&](hmi::ReportLayout& l) { l.name = v; }, why);
     if (key == "titre") return editDraft([&](hmi::ReportLayout& l) { l.title = v; }, why);
@@ -870,7 +880,10 @@ void HmiReportLayoutPane::rebuildSettings() {
         c.properties.push_back(P("Titre", l.title, PG::ValueType::Text, "titre", "{Titre} : le titre du rapport (son Titre, sinon \xC2\xAB Rapport journalier \xE2\x80\x94 le projet \xC2\xBB)." + holes));
         c.properties.push_back(P("Sous-titre", l.subtitle, PG::ValueType::Text, "sous_titre", "{SousTitre} : la p\xC3\xA9riode, le rapport, quand il est \xC3\xA9" "crit." + holes));
         c.properties.push_back(P("Couleur d'accent", l.accent, PG::ValueType::Color, "accent",
-                                 "Le titre, les intertitres, le trait sous l'en-t\xC3\xAAte, les courbes : #RRGGBB, ou @Nom (une couleur s\xC3\xA9mantique)."));
+                                 "Le trait sous l'en-t\xC3\xAAte, l'en-t\xC3\xAAte des tableaux, les courbes (et les titres, si coch\xC3\xA9) : #RRGGBB, ou @Nom "
+                                 "(une couleur s\xC3\xA9mantique)."));
+        c.properties.push_back(P("Titres en couleur d'accent", tf(l.accentTitles), PG::ValueType::Boolean, "titres_accent",
+                                 "Le titre et les intertitres dans la couleur d'accent ; d\xC3\xA9" "coch\xC3\xA9 : en noir (Standard, comme avant)."));
         cats.push_back(std::move(c));
     }
     {
@@ -897,7 +910,10 @@ void HmiReportLayoutPane::rebuildSettings() {
         PG::Category c;
         c.name = "Texte";
         c.expanded = false;
-        c.properties.push_back(P("Police", l.font, PG::ValueType::Enum, "police", "Les polices de tout PDF : rien \xC3\xA0 installer.", {"Helvetica", "Times", "Courier"}));
+        c.properties.push_back(P("Police", l.font, PG::ValueType::Enum, "police",
+                                 "Helvetica, Times, Courier : les polices de tout PDF. Ou une police TrueType (TTF) des ressources : int\xC3\xA9gr\xC3\xA9" "e au PDF "
+                                 "(l'aper\xC3\xA7u la montre dans la police de l'\xC3\xA9" "cran, \xC3\xA0 la m\xC3\xAAme place).",
+                                 rp::fontChoices(doc_->project)));
         c.properties.push_back(P("Titre (pt)", numberText(l.titleSize), PG::ValueType::Real, "taille_titre", "De 8 \xC3\xA0 32 pt."));
         c.properties.push_back(P("Corps (pt)", numberText(l.bodySize), PG::ValueType::Real, "taille_corps", "De 6 \xC3\xA0 16 pt : la synth\xC3\xA8se, les intertitres (3 pt de plus)."));
         cats.push_back(std::move(c));

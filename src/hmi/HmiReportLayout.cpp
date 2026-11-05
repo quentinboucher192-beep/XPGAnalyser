@@ -65,6 +65,36 @@ std::string number(double v, int decimals) {
     return s;
 }
 
+// Le point de code d'un octet WinAnsi (0 : aucun).
+std::uint32_t unicodeOfWinAnsi(unsigned char c) {
+    static const std::uint16_t k80[32] = {0x20AC, 0,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160,
+                                          0x2039, 0x0152, 0,      0x017D, 0,      0,      0x2018, 0x2019, 0x201C, 0x201D, 0x2022,
+                                          0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0,      0x017E, 0x0178};
+    if (c >= 0x80 && c < 0xA0) return k80[c - 0x80];
+    return c;
+}
+
+// 1.25.1 : une police TrueType des ressources, lisible (ses chasses pour les octets WinAnsi 0..255).
+bool trueTypeOf(const Project& p, std::string_view name, const Resource*& res, FontMetrics& m) {
+    res = p.resourceByName(name);
+    if (!res || !res->data || res->kind() != MediaKind::Font) return false;
+    std::vector<std::uint32_t> codes(256, 0);
+    for (int c = 32; c < 256; ++c) codes[static_cast<std::size_t>(c)] = unicodeOfWinAnsi(static_cast<unsigned char>(c));
+    return fontMetrics(*res->data, codes, m);
+}
+
+// Un nom PostScript : lettres, chiffres, tirets.
+std::string postScriptName(std::string_view family, std::string_view fallback) {
+    std::string out;
+    for (const char ch : family.empty() ? fallback : family) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) out += ch;
+        else if (!out.empty() && out.back() != '-') out += '-';
+        if (out.size() >= 60) break;
+    }
+    while (!out.empty() && out.back() == '-') out.pop_back();
+    return out.empty() ? std::string("Police") : out;
+}
+
 std::string fontKey(std::string_view f) {
     if (sameText(f, "Times")) return "Times";
     if (sameText(f, "Courier")) return "Courier";
@@ -74,6 +104,7 @@ std::string fontKey(std::string_view f) {
 ReportLayout makeStandard() {
     ReportLayout l;
     l.name = std::string(kStandard);
+    l.accentTitles = false;   // 1.25.1 : les titres comme avant la 1.25.0 (en noir)
     return l;
 }
 
@@ -107,7 +138,7 @@ const std::vector<PartInfo>& partInfos() {
         {"alarmes", "Alarmes de la p\xC3\xA9riode", "Un tableau : chaque apparition, acquitt\xC3\xA9" "e par qui, sa dur\xC3\xA9" "e.", true},
         {"frequentes", "Alarmes les plus fr\xC3\xA9quentes", "Un tableau : les 20 plus fr\xC3\xA9quentes et leur dur\xC3\xA9" "e cumul\xC3\xA9" "e.", true},
         {"mesures", "Mesures (min, moyenne, max)", "Un tableau : chaque mesure du rapport.", true},
-        {"courbes", "Courbes des mesures", "Une courbe par mesure, sur la p\xC3\xA9riode (PDF seulement).", false},
+        {"courbes", "Courbes des mesures", "Une courbe par mesure, sur la p\xC3\xA9riode (en Excel : la feuille de leurs valeurs).", false},
         {"production", "Production", "Un tableau : bons, rebuts, cadence, TRS (si le rapport recueille la production).", true},
         {"evenements", "\xC3\x89v\xC3\xA9nements", "Un tableau : connexions, recettes, \xC3\xA9" "critures (si le rapport les recueille).", true},
     };
@@ -244,7 +275,12 @@ std::vector<std::string> problems(const Project& p, const ReportLayout& l) {
     if (!(l.titleSize >= 8 && l.titleSize <= 32)) out.emplace_back("le titre : de 8 \xC3\xA0 32 pt");
     if (!(l.bodySize >= 6 && l.bodySize <= 16)) out.emplace_back("le corps : de 6 \xC3\xA0 16 pt");
     if (!(l.tableSize >= 5 && l.tableSize <= 14)) out.emplace_back("les tableaux : de 5 \xC3\xA0 14 pt");
-    if (fontKey(l.font) != l.font) out.emplace_back("la police : Helvetica, Times ou Courier");
+    if (!isStandardFont(l.font)) {
+        const Resource* res = nullptr;
+        FontMetrics m;
+        if (!trueTypeOf(p, l.font, res, m))
+            out.push_back("la police \xC2\xAB " + l.font + " \xC2\xBB : Helvetica, Times, Courier, ou une police TrueType (TTF) des ressources");
+    }
     {
         const std::string resolved = semantic::resolve(p, l.accent);
         std::uint8_t r = 0, g = 0, b = 0, a = 0;
@@ -322,14 +358,11 @@ std::string expand(std::string_view pattern, const std::vector<std::pair<std::st
 
 // ================================================================= WinAnsi ===
 std::string fromWinAnsi(std::string_view w) {
-    static const std::uint16_t k80[32] = {0x20AC, 0,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160,
-                                          0x2039, 0x0152, 0,      0x017D, 0,      0,      0x2018, 0x2019, 0x201C, 0x201D, 0x2022,
-                                          0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0,      0x017E, 0x0178};
     std::string out;
     for (const char ch : w) {
         const auto c = static_cast<unsigned char>(ch);
-        std::uint32_t u = c;
-        if (c >= 0x80 && c < 0xA0) u = k80[c - 0x80] ? k80[c - 0x80] : 0x3F;
+        std::uint32_t u = unicodeOfWinAnsi(c);
+        if (u == 0) u = 0x3F;
         if (u < 0x80) {
             out += static_cast<char>(u);
         } else if (u < 0x800) {
@@ -349,6 +382,27 @@ double textWidth(std::string_view font, std::string_view winAnsi, double size, b
     return pdfTextWidth(winAnsi, size, bold);
 }
 
+double textWidth(const PageDoc& d, std::string_view winAnsi, double size, bool bold) {
+    if (d.widths.size() < 256) return textWidth(d.font, winAnsi, size, bold);
+    double w = 0;
+    for (const char ch : winAnsi) w += d.widths[static_cast<unsigned char>(ch)];
+    // Le gras d'une TrueType est simule (le contour epaissi) : un peu plus large.
+    return w / 1000.0 * size * (bold ? 1.03 : 1.0) + (bold ? size * 0.03 : 0.0);
+}
+
+bool isStandardFont(std::string_view name) noexcept { return name == "Helvetica" || name == "Times" || name == "Courier"; }
+
+std::vector<std::string> fontChoices(const Project& p) {
+    std::vector<std::string> out{"Helvetica", "Times", "Courier"};
+    for (const auto& r : p.assets.resources)
+        if (r.kind() == MediaKind::Font && r.data) {
+            const Resource* res = nullptr;
+            FontMetrics m;
+            if (trueTypeOf(p, r.name, res, m)) out.push_back(r.name);
+        }
+    return out;
+}
+
 // ============================================================ la pagination ===
 PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
     PageDoc d;
@@ -356,13 +410,31 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
     d.width = W;
     d.height = H;
     d.font = fontKey(L.font);
+    // 1.25.1 : une police TrueType des ressources - ses chasses, ses mesures, son fichier (integre au PDF).
+    if (!isStandardFont(L.font)) {
+        const Resource* res = nullptr;
+        FontMetrics m;
+        if (trueTypeOf(p, L.font, res, m) && m.widths.size() == 256) {
+            d.font = "TrueType";
+            d.fontName = postScriptName(m.family, res->name);
+            d.fontData = res->data;
+            d.widths = m.widths;
+            for (int c = 32; c < 256; ++c)   // un caractere absent de la police : la largeur d'une espace (ou d'un demi-cadratin)
+                if (d.widths[static_cast<std::size_t>(c)] <= 0) d.widths[static_cast<std::size_t>(c)] = d.widths[32] > 0 ? d.widths[32] : 500;
+            d.ascent = m.ascent;
+            d.descent = m.descent;
+            d.capHeight = m.capHeight;
+            for (int k = 0; k < 4; ++k) d.bbox[k] = m.bbox[k];
+        }
+    }
     const double ML = std::clamp(L.marginLeft, 3.0, 60.0) * kMm, MR = std::clamp(L.marginRight, 3.0, 60.0) * kMm;
     const double MT = std::clamp(L.marginTop, 3.0, 60.0) * kMm, MB = std::clamp(L.marginBottom, 3.0, 60.0) * kMm;
     const double avail = std::max(60.0, W - ML - MR);
     const double body = std::clamp(L.bodySize, 6.0, 16.0), titleSz = std::clamp(L.titleSize, 8.0, 32.0);
     const double ts = std::clamp(L.tableSize, 5.0, 14.0), head2 = body + 3;
     const std::uint32_t accent = accentOf(p, L), ink = 0x262626, gray = 0x666666, tint = towardWhite(accent, 0.82);
-    const std::string& font = d.font;
+    // 1.25.1 : le titre et les intertitres - dans la couleur d'accent, ou en noir (Standard : comme avant la 1.25.0).
+    const std::uint32_t titleInk = L.accentTitles ? accent : 0x1A1A1A, headInk = L.accentTitles ? accent : 0x262626;
 
     // ---- le logo : une image des ressources, decodee, posee sur du blanc
     int logo = -1;
@@ -437,9 +509,9 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
     const auto fit = [&](const std::string& winAnsi, double size, bool bold, double maxW) {
         // Un peu de marge : une colonne a la largeur exacte de son texte ne le coupe pas pour un arrondi.
         maxW += 0.01;
-        if (textWidth(font, winAnsi, size, bold) <= maxW) return winAnsi;
+        if (textWidth(d, winAnsi, size, bold) <= maxW) return winAnsi;
         std::string t = winAnsi;
-        while (!t.empty() && textWidth(font, t + "...", size, bold) > maxW) t.pop_back();
+        while (!t.empty() && textWidth(d, t + "...", size, bold) > maxW) t.pop_back();
         return t + "...";
     };
     const auto logoBox = [&](double maxH) {
@@ -471,7 +543,7 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
                 }
                 tw = avail - lw - 10;
             }
-            text(tx, top - titleSz, fit(titleText, titleSz, true, tw), titleSz, true, accent);
+            text(tx, top - titleSz, fit(titleText, titleSz, true, tw), titleSz, true, titleInk);
             if (!subtitleText.empty()) text(tx, top - titleSz - body - 6, fit(subtitleText, body, false, tw), body, false, gray);
             const double hh = std::max(lh, titleSz + (subtitleText.empty() ? 0.0 : body + 6) + 2) + 8;
             line(ML, top - hh, W - MR, top - hh, accent, 1.5);
@@ -487,7 +559,7 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
                 }
                 tw = avail - lw - 8;
             }
-            text(tx, top - body - 1, fit(titleText, body, true, tw), body, true, accent);
+            text(tx, top - body - 1, fit(titleText, body, true, tw), body, true, titleInk);
             const double hh = std::max(lh, body + 4) + 5;
             line(ML, top - hh, W - MR, top - hh, accent, 0.8);
             y = top - hh - 16;
@@ -496,7 +568,7 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
     const double bottom = MB + 6;
     const auto room = [&](double h) { return y - h >= bottom; };
     const auto heading = [&](const std::string& utf8) {
-        text(ML, y - head2, fit(toWinAnsi(utf8), head2, true, avail), head2, true, accent);
+        text(ML, y - head2, fit(toWinAnsi(utf8), head2, true, avail), head2, true, headInk);
         y -= head2 + 8;
     };
 
@@ -575,8 +647,8 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
                 stroke(bx, by, bw, chartH, 0xBBBBBB, 0.5);
                 const int dec = (hi - lo) >= 100 ? 0 : (hi - lo) >= 10 ? 1 : 2;
                 const std::string top = number(hi, dec), low = number(lo, dec);
-                text(bx - 4 - textWidth(font, top, ts, false), by + chartH - ts, top, ts, false, gray);
-                text(bx - 4 - textWidth(font, low, ts, false), by + 1, low, ts, false, gray);
+                text(bx - 4 - textWidth(d, top, ts, false), by + chartH - ts, top, ts, false, gray);
+                text(bx - 4 - textWidth(d, low, ts, false), by + 1, low, ts, false, gray);
                 double t0 = c.from, t1 = c.to;
                 if (!(t1 > t0) && !cv.points.empty()) {
                     t0 = cv.points.front().first;
@@ -585,7 +657,7 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
                 if (!(t1 > t0)) t1 = t0 + 1;
                 const std::string a = stampOf(t0), b = stampOf(t1);
                 text(bx, by - ts - 3, a, ts, false, gray);
-                text(bx + bw - textWidth(font, b, ts, false), by - ts - 3, b, ts, false, gray);
+                text(bx + bw - textWidth(d, b, ts, false), by - ts - 3, b, ts, false, gray);
                 DrawOp poly;
                 poly.kind = DrawOp::Kind::Polyline;
                 poly.color = accent;
@@ -615,8 +687,8 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
             }
             std::vector<double> widths(ncol, ts * 3.3);
             for (std::size_t k = 0; k < ncol; ++k) {
-                widths[k] = std::max(widths[k], textWidth(font, heads[k], ts, true) + 8);
-                for (const auto& r : rows) widths[k] = std::max(widths[k], std::min(avail * 0.42, textWidth(font, r[k], ts, false) + 8));
+                widths[k] = std::max(widths[k], textWidth(d, heads[k], ts, true) + 8);
+                for (const auto& r : rows) widths[k] = std::max(widths[k], std::min(avail * 0.42, textWidth(d, r[k], ts, false) + 8));
             }
             // Trop large : les colonnes longues (un message) retrecissent d'abord, les courtes gardent leur largeur.
             double total = 0;
@@ -700,11 +772,11 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
         if (left.empty() && center.empty() && right.empty()) continue;
         line(ML, footY + 10, W - MR, footY + 10, 0xD0D0D0, 0.4);
         const double third = avail / 3.0;
-        const double rw = textWidth(font, right, 8, false);
+        const double rw = textWidth(d, right, 8, false);
         if (!right.empty()) text(W - MR - std::min(rw, avail), footY, fit(right, 8, false, avail), 8, false, 0x737373);
         if (!center.empty()) {
             const std::string cfit = fit(center, 8, false, third);
-            text(ML + (avail - textWidth(font, cfit, 8, false)) * 0.5, footY, cfit, 8, false, 0x737373);
+            text(ML + (avail - textWidth(d, cfit, 8, false)) * 0.5, footY, cfit, 8, false, 0x737373);
         }
         if (!left.empty()) {
             const double leftRoom = (center.empty() ? avail - std::min(rw, avail) - 12 : third - 8);
@@ -716,6 +788,7 @@ PageDoc paginate(const Project& p, const Content& c, const ReportLayout& L) {
 
 // ====================================================================== PDF ===
 Bytes toPdf(const PageDoc& d) {
+    const bool trueType = d.widths.size() == 256 && d.fontData && !d.fontData->empty();
     const auto rgb = [](std::uint32_t c, bool strokeColor) {
         return pdfNumber(r8(c)) + " " + pdfNumber(g8(c)) + " " + pdfNumber(b8(c)) + (strokeColor ? " RG " : " rg ");
     };
@@ -725,8 +798,12 @@ Bytes toPdf(const PageDoc& d) {
         for (const auto& o : ops) {
             switch (o.kind) {
                 case DrawOp::Kind::Text:
-                    s += "BT /" + std::string(o.bold ? "F2 " : "F1 ") + pdfNumber(o.size) + " Tf " + rgb(o.color, false) + pdfNumber(o.x) + " "
-                       + pdfNumber(o.y) + " Td " + pdfLiteral(o.text) + " Tj ET\n";
+                    if (trueType && o.bold)   // 1.25.1 : le gras d'une TrueType - le contour epaissi (le mode 2 : remplir et tracer)
+                        s += "q BT /F1 " + pdfNumber(o.size) + " Tf " + rgb(o.color, false) + rgb(o.color, true) + "2 Tr " + pdfNumber(o.size * 0.03)
+                           + " w " + pdfNumber(o.x) + " " + pdfNumber(o.y) + " Td " + pdfLiteral(o.text) + " Tj ET Q\n";
+                    else
+                        s += "BT /" + std::string(o.bold ? "F2 " : "F1 ") + pdfNumber(o.size) + " Tf " + rgb(o.color, false) + pdfNumber(o.x) + " "
+                           + pdfNumber(o.y) + " Td " + pdfLiteral(o.text) + " Tj ET\n";
                     break;
                 case DrawOp::Kind::Fill:
                     s += rgb(o.color, false) + pdfNumber(o.x) + " " + pdfNumber(o.y) + " " + pdfNumber(o.w) + " " + pdfNumber(o.h) + " re f\n";
@@ -758,13 +835,31 @@ Bytes toPdf(const PageDoc& d) {
     const std::string bold = d.font == "Times" ? "Times-Bold" : d.font == "Courier" ? "Courier-Bold" : "Helvetica-Bold";
     std::vector<std::string> objects;
     const std::size_t count = contents.size();
-    const std::size_t firstImage = 5, firstPage = firstImage + d.images.size();
+    // 1, 2 : le catalogue, les pages ; 3, 4 : les polices (F1, F2) ; une TrueType : 5 sa description, 6 son fichier ;
+    // puis les images, puis chaque page et son contenu.
+    const std::size_t firstImage = trueType ? 7 : 5, firstPage = firstImage + d.images.size();
     objects.push_back("<< /Type /Catalog /Pages 2 0 R >>");
     std::string kids;
     for (std::size_t p = 0; p < count; ++p) kids += std::to_string(firstPage + 2 * p) + " 0 R ";
     objects.push_back("<< /Type /Pages /Kids [ " + kids + "] /Count " + std::to_string(count) + " >>");
-    objects.push_back("<< /Type /Font /Subtype /Type1 /BaseFont /" + regular + " /Encoding /WinAnsiEncoding >>");
-    objects.push_back("<< /Type /Font /Subtype /Type1 /BaseFont /" + bold + " /Encoding /WinAnsiEncoding >>");
+    if (trueType) {
+        std::string widths;
+        for (int c = 32; c < 256; ++c) widths += std::to_string(static_cast<long>(std::lround(d.widths[static_cast<std::size_t>(c)]))) + " ";
+        const std::string font = "<< /Type /Font /Subtype /TrueType /BaseFont /" + d.fontName + " /FirstChar 32 /LastChar 255 /Widths [ " + widths
+                               + "] /FontDescriptor 5 0 R /Encoding /WinAnsiEncoding >>";
+        objects.push_back(font);
+        objects.push_back(font);
+        objects.push_back("<< /Type /FontDescriptor /FontName /" + d.fontName + " /Flags 32 /FontBBox [" + std::to_string(d.bbox[0]) + " "
+                          + std::to_string(d.bbox[1]) + " " + std::to_string(d.bbox[2]) + " " + std::to_string(d.bbox[3]) + "] /ItalicAngle 0 /Ascent "
+                          + std::to_string(static_cast<long>(std::lround(d.ascent))) + " /Descent " + std::to_string(static_cast<long>(std::lround(d.descent)))
+                          + " /CapHeight " + std::to_string(static_cast<long>(std::lround(d.capHeight))) + " /StemV 80 /FontFile2 6 0 R >>");
+        const auto& data = *d.fontData;
+        objects.push_back("<< /Length " + std::to_string(data.size()) + " /Length1 " + std::to_string(data.size()) + " >>\nstream\n"
+                          + std::string(data.begin(), data.end()) + "\nendstream");
+    } else {
+        objects.push_back("<< /Type /Font /Subtype /Type1 /BaseFont /" + regular + " /Encoding /WinAnsiEncoding >>");
+        objects.push_back("<< /Type /Font /Subtype /Type1 /BaseFont /" + bold + " /Encoding /WinAnsiEncoding >>");
+    }
     std::string xobjects;
     for (std::size_t i = 0; i < d.images.size(); ++i) {
         const auto& img = d.images[i];
@@ -819,6 +914,36 @@ Bytes renderXlsx(const Content& c, const ReportLayout& l) {
         if (!part.on) continue;
         if (part.key == "synthese") {
             sheets.push_back(summarySheet());
+            continue;
+        }
+        if (part.key == "courbes") {
+            // 1.25.1 : les courbes des mesures en Excel - une feuille de leurs valeurs dans le temps : une ligne par instant
+            // (tous ceux des courbes, dans l'ordre), une colonne par mesure (son unite) ; une case vide : pas de valeur la.
+            if (c.curves.empty()) continue;
+            ExportTable t;
+            t.title = "Courbes des mesures";
+            t.subtitle = c.title + " \xE2\x80\x94 " + c.subtitle;
+            t.headers.push_back("Heure");
+            std::vector<double> times;
+            for (const auto& cv : c.curves) {
+                t.headers.push_back(cv.name + (cv.unit.empty() ? std::string{} : " (" + cv.unit + ")"));
+                for (const auto& pt : cv.points) times.push_back(pt.first);
+            }
+            std::sort(times.begin(), times.end());
+            times.erase(std::unique(times.begin(), times.end(), [](double a, double b) { return std::fabs(a - b) < 0.0005; }), times.end());
+            std::vector<std::size_t> at(c.curves.size(), 0);
+            for (const double time : times) {
+                std::vector<std::string> row{stampOf(time, true)};
+                for (std::size_t k = 0; k < c.curves.size(); ++k) {
+                    const auto& pts = c.curves[k].points;
+                    while (at[k] < pts.size() && pts[at[k]].first < time - 0.0005) ++at[k];
+                    const double span = std::fabs(c.curves[k].hi - c.curves[k].lo);
+                    const int dec = span >= 100 ? 1 : span >= 10 ? 2 : 3;
+                    row.push_back(at[k] < pts.size() && std::fabs(pts[at[k]].first - time) < 0.0005 ? number(pts[at[k]].second, dec) : std::string{});
+                }
+                t.rows.push_back(std::move(row));
+            }
+            sheets.push_back(std::move(t));
             continue;
         }
         const auto* info = partInfo(part.key);

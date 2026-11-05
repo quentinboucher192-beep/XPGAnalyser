@@ -12588,6 +12588,9 @@ void notificationsLot14() {
 // 1.25.0 : LA MISE EN PAGE DES RAPPORTS (le client, maquette validee le 05/11) - les fournies, celles du projet, les trous,
 // la page calculee (l'apercu et le PDF la partagent), l'ordre des parties, les courbes, les cases de visa, le logo, les
 // polices, Excel, l'enregistrement, le moteur qui ecrit avec la mise en page du rapport (ou celle choisie).
+// 1.25.1 : le dossier des echantillons (tests/fixtures/ihm), pose par main quand le .XPG d'essai est donne.
+fs::path gSamples1251;
+
 void miseEnPage1250() {
     std::printf("[1.25.0 : la mise en page des rapports]\n");
     namespace rp = hmi::report;
@@ -12743,6 +12746,21 @@ void miseEnPage1250() {
     check(allText(std1).find("Courbes des mesures") == std::string::npos && countKind(std1, rp::DrawOp::Kind::Polyline) == 0,
           "Standard : pas de courbes");
     {
+        // 1.25.1 : Standard garde ses titres en noir (comme avant la 1.25.0) ; coche Titres en couleur d'accent : en bleu.
+        std::uint32_t titleColor = 0, headColor = 0;
+        for (const auto& o : std1.pages[0])
+            if (o.kind == rp::DrawOp::Kind::Text && rp::fromWinAnsi(o.text).find("Rapport journalier") == 0 && titleColor == 0) titleColor = o.color;
+            else if (o.kind == rp::DrawOp::Kind::Text && rp::fromWinAnsi(o.text) == "Synth\xC3\xA8se") headColor = o.color;
+        ReportLayout blue = builtIn[0];
+        blue.accentTitles = true;
+        const auto bd = rp::paginate(p, sample, blue);
+        std::uint32_t blueTitle = 0;
+        for (const auto& o : bd.pages[0])
+            if (o.kind == rp::DrawOp::Kind::Text && rp::fromWinAnsi(o.text).find("Rapport journalier") == 0) { blueTitle = o.color; break; }
+        check(!builtIn[0].accentTitles && titleColor == 0x1A1A1A && headColor == 0x262626 && blueTitle == 0x3373D9 && builtIn[1].accentTitles,
+              "Standard : les titres en noir, comme avant ; Titres en couleur d'accent : en bleu (Compacte l'a)");
+    }
+    {
         ReportLayout order = mine;
         order.parts = {{"mesures", true}, {"synthese", true}, {"graphique", false}, {"alarmes", false}, {"frequentes", false},
                        {"courbes", true}, {"production", false}, {"evenements", false}};
@@ -12871,6 +12889,45 @@ void miseEnPage1250() {
               "Excel : les mesures puis les alarmes, sans la synth\xC3\xA8se d\xC3\xA9" "coch\xC3\xA9" "e (2 feuilles)");
         const auto st = rp::renderXlsx(sample, builtIn[0]);
         check(std::string(st.begin(), st.end()).find("xl/worksheets/sheet6.xml") != std::string::npos, "Excel en Standard : six feuilles, comme avant");
+        // 1.25.1 : les courbes en Excel - une feuille de leurs valeurs (Heure, puis une colonne par mesure).
+        ReportLayout withCurves = mine;
+        withCurves.parts = {{"courbes", true}, {"synthese", false}};
+        const auto cx = rp::renderXlsx(sample, withCurves);
+        const std::string ct(cx.begin(), cx.end());
+        check(ct.find("<sheet name=\"Courbes des mesures\"") != std::string::npos && ct.find("Pression (bar)") != std::string::npos
+                  && ct.find("2026-11-04 06:10:00") != std::string::npos && ct.find("xl/worksheets/sheet2.xml") == std::string::npos,
+              "Excel : la feuille Courbes des mesures (l'heure, une colonne par mesure)");
+    }
+    {
+        // 1.25.1 : une police TrueType des ressources, integree au PDF (ses chasses, sa description, son fichier).
+        const fs::path ttfPath = gSamples1251 / "industrie_bold.ttf";
+        std::error_code fe;
+        if (gSamples1251.empty() || !fs::exists(ttfPath, fe)) {
+            std::printf("  (police d'essai absente : %s)\n", ttfPath.string().c_str());
+        } else {
+            Resource font;
+            font.id = p.allocate();
+            font.name = "industrie_bold.ttf";
+            font.format = "TTF";
+            font.data = fileBytes(ttfPath);
+            p.assets.resources.push_back(font);
+            ReportLayout tt = mine;
+            tt.font = "industrie_bold.ttf";
+            const auto choices = rp::fontChoices(p);
+            check(rp::problems(p, tt).empty() && choices.size() == 4 && choices.back() == "industrie_bold.ttf",
+                  "la police : une TrueType des ressources se choisit");
+            const auto d = rp::paginate(p, sample, tt);
+            const auto pdf = rp::toPdf(d);
+            const std::string pt(pdf.begin(), pdf.end());
+            check(d.widths.size() == 256 && d.widths['A'] > 0 && pt.find("/Subtype /TrueType") != std::string::npos
+                      && pt.find("/FontFile2 6 0 R") != std::string::npos && pt.find("/Length1 " + std::to_string(font.data->size())) != std::string::npos
+                      && pt.find("2 Tr") != std::string::npos && pt.find("/FirstChar 32 /LastChar 255") != std::string::npos,
+                  "la TrueType dans le PDF : ses chasses, sa description, son fichier ; le gras simul\xC3\xA9");
+            check(rp::textWidth(d, "WWWW", 10, false) != rp::textWidth("Helvetica", "WWWW", 10, false), "les largeurs : celles de la police");
+            ReportLayout bad = mine;
+            bad.font = "absente.ttf";
+            check(!rp::problems(p, bad).empty() && rp::problems(p, bad).front().find("TrueType") != std::string::npos, "une police absente : refus\xC3\xA9" "e");
+        }
     }
 
     // ---- l'enregistrement
@@ -33020,6 +33077,7 @@ void explorateur1141() {
 }
 
 int main(int argc, char** argv) {
+    if (argc > 1) gSamples1251 = argc > 2 ? fs::path(argv[2]) : fs::path(argv[1]).parent_path() / "ihm";   // 1.25.1
     // 1.14.1 (lot N4) : HMI_TEST_1141=1 - la Calculatrice, seule.
     if (const char* only = std::getenv("HMI_TEST_1141"); only && *only == '1') {
         calculatrice1141();

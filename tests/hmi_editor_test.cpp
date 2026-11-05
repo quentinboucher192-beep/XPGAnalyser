@@ -46679,6 +46679,10 @@ void rapportsSonsImages1250() {
     check(L.statusText().find("modifi\xC3\xA9" "e (non enregistr\xC3\xA9" "e)") != std::string::npos, "le bas : modifi\xC3\xA9" "e (non enregistr\xC3\xA9" "e)");
     check(!L.setField("marge_haut", "1", &why) && why.find("de 3") != std::string::npos, "une marge de 1 mm : refus\xC3\xA9" "e (de 3 \xC3\xA0 60)");
     check(L.setField("marge_gauche", "20 mm") && L.current().marginLeft == 20, "une marge : 20 mm (l'unit\xC3\xA9 tap\xC3\xA9" "e se lit)");
+    // 1.25.1 : une copie de Standard a ses titres en noir ; la case Titres en couleur d'accent les colore ; une police inconnue
+    // est refusee.
+    check(!L.current().accentTitles && L.setField("titres_accent", "oui") && L.current().accentTitles, "Titres en couleur d'accent : coch\xC3\xA9" "e");
+    check(!L.setField("police", "Absente.ttf", &why) && why.find("TrueType") != std::string::npos, "une police qui n'est pas dans les ressources : refus\xC3\xA9" "e");
     check(L.setPart("courbes", true) && L.movePart("mesures", 0) && rp::partsOf(L.current())[0].key == "mesures"
               && L.parts().model()->cellText(0, 0) == "Mesures (min, moyenne, max)",
           "les parties : les courbes coch\xC3\xA9" "es, les mesures en t\xC3\xAA" "te");

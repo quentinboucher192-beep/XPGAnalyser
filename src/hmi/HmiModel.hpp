@@ -2144,6 +2144,7 @@ struct ReportLayout {
     std::string title{"{Titre}"};
     std::string subtitle{"{SousTitre}"};
     std::string accent{"#3373D9"};      // #RRGGBB ou @Nom (une couleur semantique)
+    bool        accentTitles{true};     // 1.25.1 : le titre et les intertitres dans la couleur d'accent (Standard : non, comme avant)
     std::string footLeft{"IHM Studio - {Titre}"}, footCenter, footRight{"Page {Page} / {Pages}"};
     bool        visa{false};            // les cases de visa, en fin de rapport
     std::string visaLabels{"\xC3\x89tabli par; V\xC3\xA9rifi\xC3\xA9 par"};
@@ -2151,7 +2152,7 @@ struct ReportLayout {
     double      tableSize{8.5};         // pt
     bool        zebra{true};            // les lignes alternees
     bool        repeatHeader{true};     // l'en-tete d'un tableau repete a chaque page
-    std::string font{"Helvetica"};      // Helvetica, Times, Courier
+    std::string font{"Helvetica"};      // Helvetica, Times, Courier ; 1.25.1 : ou une police TrueType des ressources (son nom)
     double      titleSize{16}, bodySize{9};
     bool operator==(const ReportLayout&) const = default;
 };

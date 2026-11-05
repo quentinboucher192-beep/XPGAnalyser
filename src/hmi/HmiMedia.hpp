@@ -146,6 +146,17 @@ void applyGain(Pcm&, double gain);
 // Du texte ecrit avec une police TTF/OTF : blanc, la couverture dans l'alpha.
 // C'est l'apercu d'une police importee, et ce qui dessine un texte qui l'utilise.
 [[nodiscard]] bool renderFontText(const Bytes& font, std::string_view utf8, float pixelHeight, Rgba& out);
+// 1.25.1 (la mise en page des rapports : une police TrueType des ressources dans le PDF) : ses mesures, en millemes de
+// cadratin - la chasse de chaque point de code de `codes` (0 : absent de la police), la hauteur au-dessus et au-dessous
+// de la ligne, celle des capitales, la boite de tous les dessins. Faux : pas une police lisible (ou sans table de dessins
+// TrueType, une OTF a contours CFF : elle ne s'integre pas ainsi).
+struct FontMetrics {
+    double              ascent{800}, descent{-200}, capHeight{700};
+    int                 bbox[4]{0, -200, 1000, 900};
+    std::vector<double> widths;          // une par point de code demande
+    std::string         family;          // le nom de la famille (table name), s'il se lit
+};
+[[nodiscard]] bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, FontMetrics& out);
 
 // "12,4 Ko", "3,1 Mo" : le poids d'un fichier, lisible.
 [[nodiscard]] std::string formatBytes(std::uint64_t bytes);

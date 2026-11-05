@@ -927,6 +927,47 @@ bool decodePcm(const Bytes& d, std::string_view format, Pcm& out) {
     return false;
 }
 
+bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, FontMetrics& out) {
+    if (font.size() < 12) return false;
+    const int offset = stbtt_GetFontOffsetForIndex(font.data(), 0);
+    if (offset < 0) return false;
+    stbtt_fontinfo info;
+    if (!stbtt_InitFont(&info, font.data(), offset)) return false;
+    if (info.glyf == 0) return false;   // des contours CFF (une OTF) : pas une TrueType a integrer telle quelle
+    const float perEm = stbtt_ScaleForMappingEmToPixels(&info, 1.f);
+    if (!(perEm > 0.f)) return false;
+    const double k = 1000.0 * static_cast<double>(perEm);   // unites de la police -> millemes de cadratin
+    int ascent = 0, descent = 0, gap = 0;
+    stbtt_GetFontVMetrics(&info, &ascent, &descent, &gap);
+    out.ascent = ascent * k;
+    out.descent = descent * k;
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    stbtt_GetFontBoundingBox(&info, &x0, &y0, &x1, &y1);
+    out.bbox[0] = static_cast<int>(std::lround(x0 * k));
+    out.bbox[1] = static_cast<int>(std::lround(y0 * k));
+    out.bbox[2] = static_cast<int>(std::lround(x1 * k));
+    out.bbox[3] = static_cast<int>(std::lround(y1 * k));
+    out.capHeight = out.ascent * 0.7;
+    if (stbtt_FindGlyphIndex(&info, 'H') != 0 && stbtt_GetCodepointBox(&info, 'H', &x0, &y0, &x1, &y1)) out.capHeight = y1 * k;
+    out.widths.clear();
+    out.widths.reserve(codes.size());
+    for (const auto c : codes) {
+        const int g = c ? stbtt_FindGlyphIndex(&info, static_cast<int>(c)) : 0;
+        int advance = 0, lsb = 0;
+        if (g != 0) stbtt_GetGlyphHMetrics(&info, g, &advance, &lsb);
+        out.widths.push_back(g != 0 ? advance * k : 0.0);
+    }
+    int length = 0;
+    // Le nom de la famille (Windows, anglais US), en UTF-16 gros-boutiste : les caracteres ASCII seulement.
+    if (const char* name = stbtt_GetFontNameString(&info, &length, STBTT_PLATFORM_ID_MICROSOFT, STBTT_MS_EID_UNICODE_BMP, STBTT_MS_LANG_ENGLISH, 1);
+        name && length > 0) {
+        out.family.clear();
+        for (int i = 0; i + 1 < length; i += 2)
+            if (name[i] == 0 && name[i + 1] > 0x20 && name[i + 1] < 0x7F) out.family += name[i + 1];
+    }
+    return true;
+}
+
 bool renderFontText(const Bytes& font, std::string_view utf8, float pixelHeight, Rgba& out) {
     if (font.empty() || utf8.empty() || pixelHeight <= 1.f) return false;
     stbtt_fontinfo info;

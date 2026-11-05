@@ -1568,7 +1568,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + fieldBare("marge_haut", formatNumber(l.marginTop)) + fieldBare("marge_bas", formatNumber(l.marginBottom))
                + fieldBare("marge_gauche", formatNumber(l.marginLeft)) + fieldBare("marge_droite", formatNumber(l.marginRight))
                + field("logo", l.logo) + fieldBool("logo_droite", l.logoRight) + field("titre", l.title) + field("sous_titre", l.subtitle)
-               + field("accent", l.accent) + field("pied_gauche", l.footLeft) + field("pied_centre", l.footCenter)
+               + field("accent", l.accent) + fieldBool("titres_accent", l.accentTitles) + field("pied_gauche", l.footLeft) + field("pied_centre", l.footCenter)
                + field("pied_droite", l.footRight) + fieldBool("visa", l.visa) + field("visas", l.visaLabels) + field("parties", parts)
                + fieldBare("taille_tableaux", formatNumber(l.tableSize)) + fieldBool("lignes_alternees", l.zebra)
                + fieldBool("entete_repete", l.repeatHeader) + field("police", l.font) + fieldBare("taille_titre", formatNumber(l.titleSize))
@@ -2317,6 +2317,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             l.title = r.get("titre") ? toStr(r.get("titre")) : def.title;
             l.subtitle = r.get("sous_titre") ? toStr(r.get("sous_titre")) : def.subtitle;
             l.accent = r.get("accent") ? toStr(r.get("accent")) : def.accent;
+            l.accentTitles = toBool(r.get("titres_accent"), true);   // 1.25.1 (une 1.25.0 : en couleur d'accent)
             l.footLeft = r.get("pied_gauche") ? toStr(r.get("pied_gauche")) : def.footLeft;
             l.footCenter = r.get("pied_centre") ? toStr(r.get("pied_centre")) : def.footCenter;
             l.footRight = r.get("pied_droite") ? toStr(r.get("pied_droite")) : def.footRight;

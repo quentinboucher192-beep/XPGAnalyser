@@ -17,7 +17,8 @@
 //                   les plus frequentes, les mesures, les courbes des mesures, la
 //                   production, les evenements ;
 //    les tableaux   leur taille, les lignes alternees, l'en-tete repete ;
-//    le texte       la police (Helvetica, Times, Courier), titre et corps.
+//    le texte       la police (Helvetica, Times, Courier ; 1.25.1 : ou une TrueType des ressources, integree au PDF),
+//                   titre et corps ; le titre et les intertitres dans la couleur d'accent, ou non (Standard).
 //
 //  TROIS SONT FOURNIES, verrouillees : Standard (celle d'avant la 1.25.0, la
 //  mise en page par defaut), Compacte (A4 paysage, petits caracteres, avec les
@@ -119,6 +120,13 @@ struct PageDoc {
     std::string                       font{"Helvetica"};
     std::vector<std::vector<DrawOp>>  pages;
     std::vector<Rgba>                 images;   // le logo (decode, sans transparence : sur du blanc)
+    // 1.25.1 : une police TrueType des ressources - son nom, son fichier, la chasse de chaque octet WinAnsi (en millemes
+    // de cadratin ; vide : une des trois polices de tout PDF), ses mesures (le PDF les ecrit).
+    std::string                       fontName;
+    BlobPtr                           fontData;
+    std::vector<double>               widths;
+    double                            ascent{800}, descent{-200}, capHeight{700};
+    int                               bbox[4]{0, -200, 1000, 900};
 };
 // La page : l'en-tete, les parties, les cases de visa, le pied de chaque page.
 [[nodiscard]] PageDoc paginate(const Project&, const Content&, const ReportLayout&);
@@ -127,6 +135,11 @@ struct PageDoc {
 [[nodiscard]] std::string fromWinAnsi(std::string_view winAnsi);
 // La largeur d'un texte WinAnsi dans la police de la mise en page (Times : celle d'Helvetica, plus large, jamais trop courte).
 [[nodiscard]] double textWidth(std::string_view font, std::string_view winAnsi, double size, bool bold);
+// 1.25.1 : dans la police de la page calculee (une TrueType des ressources : ses chasses).
+[[nodiscard]] double textWidth(const PageDoc&, std::string_view winAnsi, double size, bool bold);
+// Les polices proposees : Helvetica, Times, Courier, puis les polices TrueType des ressources du projet.
+[[nodiscard]] bool isStandardFont(std::string_view name) noexcept;
+[[nodiscard]] std::vector<std::string> fontChoices(const Project&);
 
 // ---- le fichier ----
 [[nodiscard]] Bytes renderPdf(const Project&, const Content&, const ReportLayout&);
