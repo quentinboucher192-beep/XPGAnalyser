@@ -38513,10 +38513,12 @@ void stylesParType1230() {
           "les types \xC3\xA0 ajouter : la biblioth\xC3\xA8que (Jauge...), puis mes symboles (Sym_Moteur) ; pas Pompe ni Bouton (d\xC3\xA9j\xC3\xA0 l\xC3\xA0)");
     styles.addTypeButton().clicked->emit();
     const auto lines = styles.chooser().shownLines();
-    check(styles.chooser().isOpen() && styles.chooser().title() == "AJOUTER UN TYPE" && !lines.empty() && lines.front() == "# BIBLIOTH\xC3\x88QUE"
-              && std::find(lines.begin(), lines.end(), "# MES SYMBOLES") != lines.end()
-              && std::find(lines.begin(), lines.end(), "\xE2\x97\x86 Sym_Moteur") != lines.end(),
-          "+ Ajouter un type\xE2\x80\xA6 : BIBLIOTH\xC3\x88QUE, puis MES SYMBOLES (\xE2\x97\x86 Sym_Moteur)");
+    // 1.23.1 : les categories de la bibliotheque en dossiers (Formes seul deplie), puis Mes symboles (replie).
+    check(styles.chooser().isOpen() && styles.chooser().title() == "AJOUTER UN TYPE" && !lines.empty()
+              && lines.front().rfind("# \xE2\x96\xBE Formes (", 0) == 0
+              && std::find(lines.begin(), lines.end(), "# \xE2\x96\xB8 Mes symboles (1)") != lines.end()
+              && std::find(lines.begin(), lines.end(), "Sym_Moteur") == lines.end(),
+          "+ Ajouter un type\xE2\x80\xA6 : les cat\xC3\xA9gories de la biblioth\xC3\xA8que (Formes d\xC3\xA9pli\xC3\xA9), puis Mes symboles (repli\xC3\xA9)");
     styles.chooser().setSearch("sym_mot");
     check(styles.chooser().shownValues() == std::vector<std::string>{"symbole:Sym_Moteur"} && styles.chooser().highlighted() == "symbole:Sym_Moteur",
           "chercher \xC2\xAB sym_mot \xC2\xBB : le symbole seul, en surbrillance");
@@ -38525,7 +38527,7 @@ void stylesParType1230() {
               && styles.chooser().isOpen() && styles.chooser().title().find("Sym_Moteur") != std::string::npos,
           "Entr\xC3\xA9" "e : le symbole ajout\xC3\xA9 et choisi ; le choix des propri\xC3\xA9t\xC3\xA9s s'ouvre aussit\xC3\xB4t");
     const auto symLines = styles.chooser().shownLines();
-    check(std::find(symLines.begin(), symLines.end(), "# PARAM\xC3\x88TRES DU SYMBOLE") != symLines.end()
+    check(std::find(symLines.begin(), symLines.end(), "# \xE2\x96\xBE Param\xC3\xA8tres du symbole (1)") != symLines.end()
               && hasChoice(styles.propertyChoices(), "param:Couleur"),
           "ses propri\xC3\xA9t\xC3\xA9s : celles d'une instance, puis les param\xC3\xA8tres du symbole (Couleur)");
     check(styles.chooser().choose("param:Couleur") && st::target(*p.style(mine), "symbole:Sym_Moteur")->props.size() == 1
@@ -38757,6 +38759,566 @@ void couleursSemantiques1231() {
           "Ctrl+Z : la couleur et ses citations reviennent");
 }
 
+
+// 1.23.1 : LE CLIENT (05/11), SUR LA PAGE STYLES - << ajuster le menu contextuel sur clic droit >> : un menu propre a
+// chaque liste (les styles, les types, les proprietes imposees) a la place du menu commun des tableaux (Copier, Coller,
+// Tout choisir) ; << la liste Ajouter un type : deballer / reduire, des dossiers par categories, de petites icones a
+// droite >> ; << pareil pour Ajouter une propriete, avec le type de valeur, sans icone >>. HMI_TEST_STY=1 : avec les
+// essais des styles.
+void menusStyles1231() {
+    std::printf("== 1.23.1 : les menus du clic droit des Styles, les dossiers des choix ==\n");
+    namespace st = hmi::styles;
+    using Pane = app::HmiStylesPane;
+    using Item = ui::PopupMenu::Item;
+    struct Rec final : gfx::IRenderer {   // retient les textes et ou l'on trace (traits, cadres, triangles)
+        std::vector<std::string> texts;
+        std::vector<gfx::Point> marks;
+        void beginFrame(gfx::Color) override {}
+        void endFrame() override {}
+        void pushClip(const gfx::Rect&) override {}
+        void popClip() override {}
+        void fillRect(const gfx::Rect&, gfx::Color) override {}
+        void strokeRect(const gfx::Rect& r, gfx::Color, float) override {
+            marks.push_back({r.x + r.w / 2.f, r.y + r.h / 2.f});
+        }
+        void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+        void line(gfx::Point a, gfx::Point b, gfx::Color, float) override {
+            marks.push_back(a);
+            marks.push_back(b);
+        }
+        void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+        void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+        void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
+            for (std::size_t i = 0; i < n; ++i) marks.push_back(v[i].pos);
+        }
+        gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {8.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+        float lineHeight(gfx::FontId) const override { return 16.f; }
+        gfx::Size surfaceSize() const override { return {1600.f, 900.f}; }
+        float dpiScale() const override { return 1.f; }
+        std::size_t fitCharacters(std::string_view t, gfx::FontId, float w) const override {
+            return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w) / 8.f));
+        }
+        bool drewIn(const gfx::Rect& r) const {
+            return std::any_of(marks.begin(), marks.end(), [&](const gfx::Point& q) { return r.contains(q); });
+        }
+        bool wrote(std::string_view part) const {
+            return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(part) != std::string::npos; });
+        }
+        void clear() { texts.clear(); marks.clear(); }
+    };
+    Bench b;
+    installerPressePapiers();      // Copier le nom
+    auto& p = b.doc->project;
+    {
+        View sym = makeView(p, "Sym_Vanne");
+        sym.role = "symbole";
+        sym.width = 40;
+        sym.height = 40;
+        ViewParam ouvert;
+        ouvert.name = "Ouvert";
+        ouvert.type = "BOOL";
+        ouvert.defaultValue = "FALSE";
+        sym.params.push_back(ouvert);
+        p.views.push_back(sym);
+    }
+    Pane styles("sty1231", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    styles.search().setText("");
+    styles.setBounds({0, 0, 1400, 760});
+    Rec rec;
+    const auto theme = ui::Theme::dark();
+    std::vector<ui::Widget*> overlays;
+    const ui::PaintContext ctx{rec, theme, {0, 0, 1400, 760}, 0.0, &overlays};
+    const auto paint = [&] {
+        rec.clear();
+        styles.layout();
+        styles.render(ctx);
+    };
+    const auto itemOf = [](const ui::PopupMenu* m, int id) -> const Item* {
+        if (!m) return nullptr;
+        for (const auto& it : m->items()) {
+            if (it.id == id) return &it;
+            for (const auto& ch : it.children)
+                if (ch.id == id) return &ch;
+        }
+        return nullptr;
+    };
+    const auto labels = [](const ui::PopupMenu* m) {
+        std::vector<std::string> out;
+        if (m)
+            for (const auto& it : m->items())
+                if (!it.separator && !it.heading) out.push_back(it.label);
+        return out;
+    };
+    const auto headingOf = [](const ui::PopupMenu* m) -> std::string {
+        if (m)
+            for (const auto& it : m->items())
+                if (it.heading) return it.label + " | " + it.shortcut;
+        return {};
+    };
+    const auto enabled = [&](const ui::PopupMenu* m, int id) {
+        const Item* it = itemOf(m, id);
+        return it && it->enabled;
+    };
+    const auto greyedWhy = [&](const ui::PopupMenu* m, int id) -> std::string {
+        const Item* it = itemOf(m, id);
+        return it && !it->enabled ? it->disabledReason : std::string{};
+    };
+    // Le clic droit sur une ligne d'une table (le rang du modele) ; vrai : son menu est ouvert. Un menu encore ouvert
+    // se ferme d'abord (Echap) : sinon le clic, hors de lui, le fermerait seulement.
+    const auto rightClick = [&](ui::TableView& t, std::size_t modelRow) {
+        if (auto* open = t.contextMenu(); open && open->isOpen()) open->close();
+        paint();
+        gfx::Rect r{};
+        const int vr = ligneDeVue(t, static_cast<int>(modelRow));
+        if (vr < 0 || !t.rowRect(static_cast<std::size_t>(vr), r)) return false;
+        const gfx::Point at{r.x + 40.f, r.y + r.h / 2.f};
+        t.dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        t.dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        return t.contextMenu() && t.contextMenu()->isOpen();
+    };
+    // Comme un clic sur une entree : le menu se ferme, puis l'entree agit.
+    const auto pick = [](ui::PopupMenu* m, int id) {
+        if (!m) return;
+        m->close();
+        m->itemChosen->emit(id);
+    };
+    const auto rowOfName = [](ui::TableView& t, const std::string& name) -> int {
+        const auto m = t.model();
+        for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+            if (m->cellText(r, 0) == name) return static_cast<int>(r);
+        return -1;
+    };
+
+    // ---- 1. LE MENU DES STYLES FOURNIS : le clic droit choisit la ligne ; Renommer, Retirer, Ranger grises
+    auto& fixed = styles.builtinTable();
+    const int clairRow = rowOfName(fixed, "Clair");
+    check(clairRow >= 0 && !styles.currentStyle(), "1.23.1 : la ligne Clair (fourni), rien de choisi");
+    check(rightClick(fixed, static_cast<std::size_t>(clairRow)) && styles.currentStyle() && styles.currentStyle()->name == "Clair" && styles.locked(),
+          "clic droit sur Clair : la ligne est choisie d'abord, puis le menu s'ouvre");
+    const ui::PopupMenu* fm = fixed.contextMenu();
+    const std::vector<std::string> wanted{"Nouveau style", "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6", "Renommer\xE2\x80\xA6", "Retirer",
+                                          "Ranger dans un dossier", "Copier le nom"};
+    check(labels(fm) == wanted, "le menu des styles : Nouveau style, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6, Renommer\xE2\x80\xA6, Retirer, Ranger dans un dossier, Copier le nom");
+    {
+        const auto ls = labels(fm);
+        check(std::none_of(ls.begin(), ls.end(), [](const std::string& l) { return l == "Copier" || l.rfind("Coller", 0) == 0 || l == "Tout choisir"; }),
+              "plus le menu commun des tableaux (Copier, Coller, Tout choisir)");
+        bool ruleBeforeCopy = false;
+        const auto& its = fm->items();
+        for (std::size_t i = 1; i < its.size(); ++i)
+            if (its[i].id == Pane::MenuCopyName) ruleBeforeCopy = its[i - 1].separator;
+        check(ruleBeforeCopy, "un trait avant Copier le nom");
+    }
+    check(headingOf(fm) == "Clair | style fourni", "son en-t\xC3\xAAte : Clair, style fourni");
+    check(itemOf(fm, Pane::MenuNew) && itemOf(fm, Pane::MenuNew)->shortcut == "Inser" && itemOf(fm, Pane::MenuDuplicate)->shortcut == "Ctrl+D"
+              && itemOf(fm, Pane::MenuRename)->shortcut == "F2" && itemOf(fm, Pane::MenuRemove)->shortcut == "Suppr" && ui::cmd::badShortcuts(fm->items()).empty(),
+          "les touches : Inser, Ctrl+D, F2, Suppr");
+    check(enabled(fm, Pane::MenuNew) && enabled(fm, Pane::MenuDuplicate) && enabled(fm, Pane::MenuCopyName),
+          "fourni : Nouveau style, Dupliquer \xC3\xA0 partir de\xE2\x80\xA6, Copier le nom actifs");
+    check(greyedWhy(fm, Pane::MenuRename).find("fourni ne se renomme pas") != std::string::npos
+              && greyedWhy(fm, Pane::MenuRemove).find("fourni ne se retire pas") != std::string::npos
+              && greyedWhy(fm, Pane::MenuFolder).find("fourni") != std::string::npos,
+          "fourni : Renommer, Retirer, Ranger dans un dossier gris\xC3\xA9s, chacun dit pourquoi (" + greyedWhy(fm, Pane::MenuRename) + ")");
+    pick(fixed.contextMenu(), Pane::MenuCopyName);
+    check(essaiPressePapiers() == "Clair" && styles.message().find("Clair") != std::string::npos, "Copier le nom : \xC2\xAB Clair \xC2\xBB dans le presse-papiers");
+    pick(fixed.contextMenu(), Pane::MenuRename);
+    check(styles.message().find("ne se renomme pas") != std::string::npos && p.styles.empty(), "Renommer (par un script) : refus\xC3\xA9, dit pourquoi");
+    pick(fixed.contextMenu(), Pane::MenuRemove);
+    check(styles.message().find("ne se retire pas") != std::string::npos, "Retirer (par un script) : refus\xC3\xA9, dit pourquoi");
+    std::size_t done = b.stack.done().size();
+    pick(fixed.contextMenu(), Pane::MenuDuplicate);
+    const hmi::Style* copy = p.styleByName("Clair (copie)");
+    check(copy && styles.selectedStyle() == copy->id && b.stack.done().size() == done + 1 && styles.table().cellEditing(),
+          "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 : \xC2\xAB Clair (copie) \xC2\xBB (une commande), choisi, son nom se tape");
+    styles.table().finishCellEdit(true, "Mon clair");
+    const Id mine = copy ? copy->id : kNoId;
+    check(p.style(mine) && p.style(mine)->name == "Mon clair", "... tap\xC3\xA9 : Mon clair");
+
+    // ---- 2. LE MENU D'UN STYLE DU PROJET : tout actif ; Renommer, Ranger dans un dossier (un nouveau, un existant, la racine)
+    auto& own = styles.table();
+    check(rightClick(own, static_cast<std::size_t>(rowOfName(own, "Mon clair"))) && styles.selectedStyle() == mine,
+          "clic droit sur Mon clair : choisi, le menu s'ouvre");
+    const ui::PopupMenu* om = own.contextMenu();
+    check(labels(om) == wanted && headingOf(om) == "Mon clair | du projet", "le m\xC3\xAAme menu ; en-t\xC3\xAAte : Mon clair, du projet");
+    check(enabled(om, Pane::MenuRename) && enabled(om, Pane::MenuRemove) && enabled(om, Pane::MenuFolder),
+          "un style du projet : Renommer, Retirer, Ranger dans un dossier actifs");
+    {
+        const Item* put = itemOf(om, Pane::MenuFolder);
+        std::vector<std::string> sub;
+        for (const auto& ch : put ? put->children : std::vector<Item>{})
+            if (!ch.separator) sub.push_back(ch.label);
+        const Item* root = itemOf(om, Pane::MenuFolderRoot);
+        check(sub == std::vector<std::string>{"\xC3\x80 la racine", "Nouveau dossier\xE2\x80\xA6"} && root && root->checked && !root->enabled
+                  && root->disabledReason.find("d\xC3\xA9j\xC3\xA0") != std::string::npos,
+              "Ranger dans un dossier > \xC3\x80 la racine (coch\xC3\xA9 : il y est d\xC3\xA9j\xC3\xA0), Nouveau dossier\xE2\x80\xA6");
+    }
+    pick(own.contextMenu(), Pane::MenuRename);
+    check(own.cellEditing(), "Renommer : le nom se tape dans sa case (F2)");
+    own.finishCellEdit(true, "Exploitation claire");
+    check(p.style(mine)->name == "Exploitation claire", "... renomm\xC3\xA9 Exploitation claire");
+    (void)rightClick(own, static_cast<std::size_t>(rowOfName(own, "Exploitation claire")));
+    done = b.stack.done().size();
+    pick(own.contextMenu(), Pane::MenuFolderNew);
+    check(p.style(mine)->folder == "Nouveau dossier" && b.stack.done().size() == done + 1 && styles.selectedStyle() == mine && own.cellEditing(),
+          "Ranger > Nouveau dossier\xE2\x80\xA6 : un dossier cr\xC3\xA9\xC3\xA9 avec le style dedans (une commande), son nom se tape");
+    own.finishCellEdit(true, "Exploitation");
+    check(p.style(mine)->folder == "Exploitation", "... nomm\xC3\xA9 Exploitation : le style y est");
+    (void)b.stack.undo();
+    (void)b.stack.undo();
+    check(p.style(mine)->folder.empty() && hmi::fold::allFolders(p, hmi::fold::List::Styles).empty(), "Ctrl+Z, Ctrl+Z : plus de dossier, le style \xC3\xA0 la racine");
+    (void)b.stack.redo();
+    (void)b.stack.redo();
+    check(p.style(mine)->folder == "Exploitation", "Ctrl+Y, Ctrl+Y : de nouveau dans Exploitation");
+    // Un second style, range dans le dossier existant par le menu, puis remis a la racine.
+    styles.refresh();
+    (void)rightClick(own, static_cast<std::size_t>(std::max(0, rowOfName(own, "Exploitation claire"))));
+    const std::size_t nStyles = p.styles.size();
+    pick(own.contextMenu(), Pane::MenuNew);
+    const Id other = styles.selectedStyle();
+    check(p.styles.size() == nStyles + 1 && other != kNoId && other != mine && own.cellEditing(), "Nouveau style (le menu) : un style vide, choisi, son nom se tape");
+    own.finishCellEdit(true, "Alarme");
+    check(p.style(other) && p.style(other)->name == "Alarme", "... nomm\xC3\xA9 Alarme");
+    check(rightClick(own, static_cast<std::size_t>(rowOfName(own, "Alarme"))) && styles.selectedStyle() == other, "clic droit sur Alarme");
+    {
+        const Item* there = itemOf(own.contextMenu(), Pane::MenuFolderAt);
+        check(there && there->label == "Exploitation" && there->enabled && !there->checked, "Ranger dans un dossier > Exploitation (le dossier existant)");
+    }
+    pick(own.contextMenu(), Pane::MenuFolderAt);
+    check(p.style(other)->folder == "Exploitation" && styles.selectedStyle() == other, "choisi : Alarme y est rang\xC3\xA9, toujours choisi");
+    (void)rightClick(own, static_cast<std::size_t>(rowOfName(own, "Alarme")));
+    check(itemOf(own.contextMenu(), Pane::MenuFolderAt) && itemOf(own.contextMenu(), Pane::MenuFolderAt)->checked
+              && enabled(own.contextMenu(), Pane::MenuFolderRoot),
+          "son menu : Exploitation coch\xC3\xA9, \xC3\x80 la racine actif");
+    pick(own.contextMenu(), Pane::MenuFolderRoot);
+    check(p.style(other)->folder.empty(), "\xC3\x80 la racine : Alarme revient en haut");
+    // Retirer (le menu) : un style du projet s'en va (Ctrl+Z le rend).
+    (void)rightClick(own, static_cast<std::size_t>(rowOfName(own, "Alarme")));
+    pick(own.contextMenu(), Pane::MenuRemove);
+    check(!p.styleByName("Alarme"), "Retirer : Alarme retir\xC3\xA9");
+    (void)b.stack.undo();
+    check(p.styleByName("Alarme") != nullptr, "Ctrl+Z : il revient");
+    // Une ligne de dossier : Renommer le dossier, Retirer le dossier ; ni Dupliquer ni Ranger (pourquoi).
+    styles.refresh();
+    int folderRow = -1;
+    for (std::size_t i = 0; i < styles.folders().rows().size(); ++i)
+        if (styles.folders().rows()[i].folder) folderRow = static_cast<int>(i);
+    check(folderRow >= 0 && rightClick(own, static_cast<std::size_t>(folderRow)) && styles.folders().selectedFolder() == "Exploitation"
+              && !styles.currentStyle(),
+          "clic droit sur le dossier Exploitation : le dossier choisi");
+    const ui::PopupMenu* dm = own.contextMenu();
+    check(headingOf(dm) == "Exploitation | dossier" && itemOf(dm, Pane::MenuRename) && itemOf(dm, Pane::MenuRename)->label == "Renommer le dossier"
+              && enabled(dm, Pane::MenuRename) && itemOf(dm, Pane::MenuRemove)->label == "Retirer le dossier" && enabled(dm, Pane::MenuRemove),
+          "son menu : Renommer le dossier, Retirer le dossier");
+    check(greyedWhy(dm, Pane::MenuDuplicate).find("dossier") != std::string::npos && greyedWhy(dm, Pane::MenuFolder).find("glissant") != std::string::npos,
+          "Dupliquer et Ranger gris\xC3\xA9s pour un dossier, avec la raison");
+    pick(own.contextMenu(), Pane::MenuCopyName);
+    check(essaiPressePapiers() == "Exploitation", "Copier le nom d'un dossier : Exploitation");
+    pick(own.contextMenu(), Pane::MenuRename);
+    check(own.cellEditing(), "Renommer le dossier : son nom se tape");
+    own.finishCellEdit(true, "Ligne 1");
+    check(p.style(mine)->folder == "Ligne 1", "le dossier renomm\xC3\xA9 Ligne 1 : son style suit");
+    // Le clavier : Ctrl+D, Suppr (les entrees disent ces touches) agissent toujours dans la liste.
+    styles.selectStyle(other);
+    own.takeFocus();
+    own.dispatch(ui::KeyDown{ui::Key::D, ui::KeyMods{true, false, false, false}, false});
+    check(p.styleByName("Alarme (copie)") != nullptr, "Ctrl+D dans la liste : Alarme (copie)");
+    if (own.cellEditing()) own.finishCellEdit(false, {});
+
+    // ---- 3. LE MENU DES TYPES : le clic droit choisit le type ; Ajouter, Retirer, Choisir pour l'apercu
+    styles.selectStyle(mine);
+    auto& types = styles.typesTable();
+    const auto shown = styles.shownTypes();
+    check(shown.size() >= 2, "Mon clair vise plusieurs types (" + std::to_string(shown.size()) + ")");
+    const std::string second = shown.size() >= 2 ? shown[1] : std::string{};
+    check(rightClick(types, 1) && styles.selectedType() == second, "clic droit sur la deuxi\xC3\xA8me ligne des types : " + st::typeLabel(second) + " choisi");
+    const ui::PopupMenu* tm = types.contextMenu();
+    check(labels(tm) == std::vector<std::string>{"Ajouter un type\xE2\x80\xA6", "Retirer le type", "Choisir pour l'aper\xC3\xA7u"}
+              && headingOf(tm) == st::typeLabel(second) + " | Exploitation claire",
+          "le menu des types : Ajouter un type\xE2\x80\xA6, Retirer le type, Choisir pour l'aper\xC3\xA7u (en-t\xC3\xAAte : le type, le style)");
+    check(itemOf(tm, Pane::MenuAddType)->shortcut == "Inser" && itemOf(tm, Pane::MenuRemoveType)->shortcut == "Suppr" && enabled(tm, Pane::MenuAddType)
+              && enabled(tm, Pane::MenuRemoveType) && ui::cmd::badShortcuts(tm->items()).empty(),
+          "Inser, Suppr ; actifs pour un style du projet");
+    check(itemOf(tm, Pane::MenuPreviewType)->checkable && itemOf(tm, Pane::MenuPreviewType)->checked && styles.previewType() == second,
+          "Choisir pour l'aper\xC3\xA7u : coch\xC3\xA9 (le type choisi y est d\xC3\xA9j\xC3\xA0)");
+    styles.setPreviewType("Gauge");
+    (void)rightClick(types, 1);
+    check(!itemOf(types.contextMenu(), Pane::MenuPreviewType)->checked && enabled(types.contextMenu(), Pane::MenuPreviewType),
+          "l'aper\xC3\xA7u montre une jauge : plus coch\xC3\xA9");
+    pick(types.contextMenu(), Pane::MenuPreviewType);
+    check(styles.previewType() == second, "Choisir pour l'aper\xC3\xA7u : l'aper\xC3\xA7u montre " + st::typeLabel(second));
+    done = b.stack.done().size();
+    (void)rightClick(types, 1);
+    pick(types.contextMenu(), Pane::MenuRemoveType);
+    const auto after = styles.shownTypes();
+    check(std::find(after.begin(), after.end(), second) == after.end() && b.stack.done().size() == done + 1,
+          "Retirer le type : il quitte le style (une commande)");
+    (void)b.stack.undo();
+    (void)rightClick(types, 0);
+    pick(types.contextMenu(), Pane::MenuAddType);
+    check(styles.chooser().isOpen() && styles.chooser().title() == "AJOUTER UN TYPE", "Ajouter un type\xE2\x80\xA6 : le choix s'ouvre");
+    styles.chooser().close();
+    // Un style fourni : Ajouter et Retirer grises (pourquoi) ; l'apercu, lui, se choisit.
+    (void)styles.selectBuiltin("ISA-101");
+    check(rightClick(types, 1), "ISA-101 : clic droit sur un type");
+    tm = types.contextMenu();
+    check(greyedWhy(tm, Pane::MenuAddType).find("fourni") != std::string::npos && greyedWhy(tm, Pane::MenuRemoveType).find("fourni") != std::string::npos
+              && enabled(tm, Pane::MenuPreviewType),
+          "fourni : Ajouter un type et Retirer le type gris\xC3\xA9s (un style fourni ne se modifie pas), l'aper\xC3\xA7u actif");
+    const std::size_t isaTypes = st::builtin("ISA-101")->targets.size();
+    pick(types.contextMenu(), Pane::MenuRemoveType);
+    check(st::builtin("ISA-101")->targets.size() == isaTypes && styles.message().find("fourni") != std::string::npos,
+          "Retirer le type (par un script) : refus\xC3\xA9, rien ne change");
+
+    // ---- 4. LE MENU DES PROPRIETES IMPOSEES : Ajouter une propriete..., Retirer la propriete
+    styles.selectStyle(mine);
+    styles.selectType("Pump");
+    if (!st::target(*p.style(mine), "Pump")) (void)styles.addType("Pump");
+    if (st::target(*p.style(mine), "Pump")->props.empty()) (void)styles.addProperty("colorOn");
+    const std::string firstKey = st::target(*p.style(mine), "Pump")->props.front().key;
+    const std::string firstName = Pane::propertyName("Pump", firstKey);
+    paint();
+    (void)styles.properties().revealValue(firstName);
+    paint();
+    gfx::Rect pr{};
+    check(styles.properties().valueRect(firstName, pr), "la ligne de " + firstName + " \xC3\xA0 l'\xC3\xA9" "cran");
+    styles.selectProperty({});
+    styles.properties().dispatch(ui::MouseDown{{styles.properties().bounds().x + 12.f, pr.y + pr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+    styles.properties().dispatch(ui::MouseUp{{styles.properties().bounds().x + 12.f, pr.y + pr.h / 2.f}, ui::MouseButton::Right, {}});
+    const ui::PopupMenu* gm = &styles.propertyMenu();
+    check(styles.selectedProperty() == firstKey && gm->isOpen(), "clic droit sur " + firstName + " : la propri\xC3\xA9t\xC3\xA9 choisie, le menu s'ouvre");
+    check(labels(gm) == std::vector<std::string>{"Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6", "Retirer la propri\xC3\xA9t\xC3\xA9"}
+              && headingOf(gm) == firstName + " | Pompe" && itemOf(gm, Pane::MenuAddProperty)->shortcut == "Inser"
+              && itemOf(gm, Pane::MenuRemoveProperty)->shortcut == "Suppr" && enabled(gm, Pane::MenuAddProperty) && enabled(gm, Pane::MenuRemoveProperty),
+          "le menu des propri\xC3\xA9t\xC3\xA9s : Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6 (Inser), Retirer la propri\xC3\xA9t\xC3\xA9 (Suppr) - pas celui des cases");
+    done = b.stack.done().size();
+    pick(&styles.propertyMenu(), Pane::MenuRemoveProperty);
+    {
+        const auto* t = st::target(*p.style(mine), "Pump");
+        check((!t || std::none_of(t->props.begin(), t->props.end(), [&](const Prop& x) { return x.key == firstKey; })) && b.stack.done().size() == done + 1
+                  && !styles.propertyMenu().isOpen(),
+              "Retirer la propri\xC3\xA9t\xC3\xA9 : le style ne l'impose plus (une commande), le menu ferm\xC3\xA9");
+    }
+    (void)b.stack.undo();
+    // Le clic droit sur le Nom du style : aucune propriete visee, Retirer grise (pourquoi).
+    styles.selectProperty(firstKey);
+    paint();
+    gfx::Rect nameRow{};
+    (void)styles.properties().revealValue("Nom");
+    paint();
+    check(styles.properties().valueRect("Nom", nameRow), "la ligne Nom de la fiche");
+    styles.properties().dispatch(ui::MouseDown{{styles.properties().bounds().x + 12.f, nameRow.y + nameRow.h / 2.f}, ui::MouseButton::Right, 1, {}});
+    check(styles.selectedProperty().empty() && styles.propertyMenu().isOpen()
+              && greyedWhy(&styles.propertyMenu(), Pane::MenuRemoveProperty).find("clic droit") != std::string::npos
+              && enabled(&styles.propertyMenu(), Pane::MenuAddProperty),
+          "clic droit sur Nom : aucune propri\xC3\xA9t\xC3\xA9 vis\xC3\xA9" "e, Retirer gris\xC3\xA9 (un clic droit sur une propri\xC3\xA9t\xC3\xA9 la vise)");
+    pick(&styles.propertyMenu(), Pane::MenuAddProperty);
+    check(styles.chooser().isOpen() && styles.chooser().title().find("AJOUTER UNE PROPRI") != std::string::npos,
+          "Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6 : le choix des propri\xC3\xA9t\xC3\xA9s s'ouvre");
+    styles.chooser().close();
+    // Un style fourni : les deux grises.
+    (void)styles.selectBuiltin("ISA-101");
+    styles.selectType("Pump");
+    styles.openPropertyMenu({styles.properties().bounds().x + 20.f, styles.properties().bounds().y + 40.f});
+    check(greyedWhy(&styles.propertyMenu(), Pane::MenuAddProperty).find("fourni") != std::string::npos
+              && greyedWhy(&styles.propertyMenu(), Pane::MenuRemoveProperty).find("fourni") != std::string::npos,
+          "fourni : Ajouter une propri\xC3\xA9t\xC3\xA9 et Retirer la propri\xC3\xA9t\xC3\xA9 gris\xC3\xA9" "es, avec la raison");
+    styles.propertyMenu().close();
+
+    // ---- 5. AJOUTER UN TYPE : les categories de la bibliotheque en dossiers, la premiere seule depliee ; les icones
+    styles.selectStyle(mine);
+    const auto* sm = p.style(mine);
+    const auto cats = app::hmiPaletteCategories();
+    check(!cats.empty() && cats.front().name == "Formes" && cats[1].name == "Commandes", "la biblioth\xC3\xA8que : Formes, Commandes...");
+    // Ce que chaque dossier doit contenir : les genres de la categorie que le style ne vise pas encore.
+    const auto expect = [&](const app::HmiPaletteCategory& c) {
+        std::size_t n = 0;
+        for (const auto k : c.kinds) n += st::target(*sm, std::string(hmi::kKindInfos[static_cast<std::size_t>(k)].key)) ? 0u : 1u;
+        return n;
+    };
+    const auto tchoices = styles.typeChoices();
+    {
+        const app::HmiStyleChooser::Entry* pump = nullptr;
+        const app::HmiStyleChooser::Entry* vanne = nullptr;
+        bool allGlyphs = true;
+        for (const auto& e : tchoices) {
+            if (e.value == "Pump") pump = &e;
+            if (e.value == "symbole:Sym_Vanne") vanne = &e;
+            allGlyphs = allGlyphs && e.glyph.has_value();
+        }
+        check(allGlyphs && vanne && vanne->group == "Mes symboles" && vanne->label == "Sym_Vanne" && vanne->glyph == app::HmiGlyph::Symbol,
+              "chaque type a son ic\xC3\xB4ne ; Sym_Vanne : dans Mes symboles, le glyphe des symboles");
+        check(!pump || (pump->group == "Synoptique" && pump->glyph == app::glyphFor(Kind::Pump)),
+              "la pompe : dans Synoptique, le glyphe de sa tuile");
+    }
+    styles.openTypeChooser();
+    auto& ch = styles.chooser();
+    const auto groups = ch.groups();
+    check(groups.size() >= 3 && groups.front() == "Formes" && groups.back() == "Mes symboles"
+              && (std::find(groups.begin(), groups.end(), "Autres") == groups.end() || groups[groups.size() - 2] == "Autres"),
+          "les dossiers : Formes d'abord, ... (Autres), Mes symboles en dernier");
+    bool sameOrder = true;
+    {
+        std::size_t g = 0;
+        for (const auto& c : cats)
+            if (expect(c) > 0) {
+                sameOrder = sameOrder && g < groups.size() && groups[g] == c.name;
+                ++g;
+            }
+    }
+    check(sameOrder, "dans l'ordre de la biblioth\xC3\xA8que");
+    bool onlyFirst = ch.groupOpen("Formes");
+    for (std::size_t i = 1; i < groups.size(); ++i) onlyFirst = onlyFirst && !ch.groupOpen(groups[i]);
+    check(onlyFirst, "au d\xC3\xA9part : Formes d\xC3\xA9pli\xC3\xA9, les autres repli\xC3\xA9s");
+    const auto lines0 = ch.shownLines();
+    const std::string formes = "# \xE2\x96\xBE Formes (" + std::to_string(expect(cats[0])) + ")";
+    const std::string commandes = "# \xE2\x96\xB8 Commandes (" + std::to_string(expect(cats[1])) + ")";
+    check(!lines0.empty() && lines0.front() == formes && std::find(lines0.begin(), lines0.end(), commandes) != lines0.end(),
+          "chaque dossier : son chevron et son compte (" + formes + ", " + commandes + ")");
+    const auto values0 = ch.shownValues();
+    check(values0.size() == expect(cats[0]) && std::find(values0.begin(), values0.end(), "Slider") == values0.end(),
+          "seuls les types de Formes sont montr\xC3\xA9s (le Curseur de Commandes est cach\xC3\xA9)");
+    check(!values0.empty() && ch.highlighted() == values0.front(), "la surbrillance : le premier type de Formes");
+    // Le clavier : Haut va au dossier ; Bas passe les lignes, puis le dossier suivant, puis saute ce qu'il cache.
+    ch.dispatch(ui::KeyDown{ui::Key::Up, {}, false});
+    check(ch.highlightedGroup() == "Formes" && ch.highlighted().empty(), "Haut : la ligne du dossier Formes");
+    for (std::size_t i = 0; i <= values0.size(); ++i) ch.dispatch(ui::KeyDown{ui::Key::Down, {}, false});
+    check(ch.highlightedGroup() == "Commandes", "Bas apr\xC3\xA8s le dernier type de Formes : le dossier Commandes");
+    ch.dispatch(ui::KeyDown{ui::Key::Down, {}, false});
+    check(ch.highlightedGroup() == groups[2], "Bas encore : le dossier suivant (" + groups[2] + ") - les types de Commandes, repli\xC3\xA9, sont saut\xC3\xA9s");
+    ch.dispatch(ui::KeyDown{ui::Key::Up, {}, false});
+    ch.dispatch(ui::KeyDown{ui::Key::Right, {}, false});
+    check(ch.groupOpen("Commandes") && ch.highlightedGroup() == "Commandes", "Droite sur Commandes : d\xC3\xA9pli\xC3\xA9 (la surbrillance reste)");
+    ch.dispatch(ui::KeyDown{ui::Key::Right, {}, false});
+    const std::string firstCommand = ch.highlighted();
+    check(!firstCommand.empty() && hmi::kindFromKey(firstCommand) && app::hmiPaletteFamily(*hmi::kindFromKey(firstCommand)) == "Commandes",
+          "Droite encore : son premier type (" + firstCommand + ")");
+    ch.dispatch(ui::KeyDown{ui::Key::Left, {}, false});
+    check(!ch.groupOpen("Commandes") && ch.highlightedGroup() == "Commandes", "Gauche sur un type : son dossier se replie, la surbrillance y remonte");
+    ch.dispatch(ui::KeyDown{ui::Key::Plus, ui::KeyMods{false, true, false, false}, false});
+    ch.field().dispatch(ui::TextInput{"+"});
+    check(ch.groupOpen("Commandes") && ch.searchText().empty(), "+ : d\xC3\xA9pli\xC3\xA9 (le + ne s'\xC3\xA9" "crit pas dans la recherche)");
+    ch.dispatch(ui::KeyDown{ui::Key::Minus, {}, false});
+    check(!ch.groupOpen("Commandes"), "- : repli\xC3\xA9");
+    ch.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    check(ch.isOpen() && ch.groupOpen("Commandes") && ch.highlightedGroup() == "Commandes", "Entr\xC3\xA9" "e sur un dossier : il se d\xC3\xA9plie, rien n'est choisi");
+    ch.dispatch(ui::KeyDown{ui::Key::Left, {}, false});
+    check(!ch.groupOpen("Commandes"), "Gauche sur le dossier : repli\xC3\xA9");
+    // La souris : un clic sur la ligne d'un dossier le deplie, un autre le replie.
+    paint();
+    gfx::Rect gr{};
+    check(ch.groupRect(groups[2], gr), "la ligne du dossier " + groups[2] + " \xC3\xA0 l'\xC3\xA9" "cran");
+    ch.dispatch(ui::MouseDown{{gr.x + 60.f, gr.y + gr.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    ch.dispatch(ui::MouseUp{{gr.x + 60.f, gr.y + gr.h / 2.f}, ui::MouseButton::Left, {}});
+    check(ch.isOpen() && ch.groupOpen(groups[2]), "un clic sur la ligne de " + groups[2] + " : d\xC3\xA9pli\xC3\xA9");
+    (void)ch.groupRect(groups[2], gr);
+    ch.dispatch(ui::MouseDown{{gr.x + 60.f, gr.y + gr.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    check(ch.isOpen() && !ch.groupOpen(groups[2]), "un autre clic : repli\xC3\xA9");
+    // Les icones : a droite d'une ligne de type, dessinees (le choix seul : rien d'autre dessous).
+    const auto paintChooser = [&] {
+        rec.clear();
+        ch.render(ctx);
+    };
+    paintChooser();
+    gfx::Rect ic{}, row0{};
+    check(ch.iconRect(values0.front(), ic) && ch.rowRect(values0.front(), row0) && ic.x > row0.x + row0.w * 0.8f && ic.w >= 14.f,
+          "la petite ic\xC3\xB4ne d'un type : \xC3\xA0 droite de sa ligne");
+    check(rec.drewIn(ic), "... dessin\xC3\xA9" "e (le glyphe de la biblioth\xC3\xA8que)");
+    ch.setGroupOpen("Mes symboles", true);
+    paintChooser();
+    gfx::Rect icSym{};
+    check(ch.iconRect("symbole:Sym_Vanne", icSym) || [&] {   // tout en bas : la liste defile jusqu'a lui
+        ch.dispatch(ui::MouseWheel{{ch.bounds().x + 20.f, ch.bounds().y + 80.f}, 0.f, -40.f, {}});
+        paintChooser();
+        return ch.iconRect("symbole:Sym_Vanne", icSym);
+    }(), "Mes symboles d\xC3\xA9pli\xC3\xA9 : Sym_Vanne et son ic\xC3\xB4ne");
+    check(rec.drewIn(icSym), "... dessin\xC3\xA9" "e");
+    // La recherche deplie ce qui a un resultat ; effacee, les dossiers reviennent comme avant.
+    const bool affichageBefore = ch.groupOpen("Affichage");
+    ch.setSearch("jauge");
+    const auto found = ch.shownLines();
+    const auto foundValues = ch.shownValues();
+    check(ch.groupOpen("Affichage") && std::find(found.begin(), found.end(), "# \xE2\x96\xBE Affichage (1)") != found.end()
+              && foundValues == std::vector<std::string>{"Gauge"} && ch.highlighted() == "Gauge"
+              && std::none_of(found.begin(), found.end(), [](const std::string& l) { return l.find("Commandes") != std::string::npos; }),
+          "chercher \xC2\xAB jauge \xC2\xBB : Affichage d\xC3\xA9pli\xC3\xA9 (1), la Jauge en surbrillance ; Commandes (sans r\xC3\xA9sultat) absent");
+    ch.setGroupOpen("Affichage", false);
+    check(!ch.groupOpen("Affichage") && ch.shownValues().empty() && ch.highlightedGroup() == "Affichage", "pendant la recherche, un dossier se replie aussi");
+    ch.setSearch("jaug");
+    check(ch.groupOpen("Affichage") && ch.highlighted() == "Gauge", "une frappe de plus : de nouveau d\xC3\xA9pli\xC3\xA9");
+    ch.setSearch("");
+    check(ch.groupOpen("Affichage") == affichageBefore && ch.groupOpen("Formes") && ch.groupOpen("Mes symboles"),
+          "la recherche effac\xC3\xA9" "e : les dossiers comme avant");
+    // Le choix au clavier marche toujours : Entree sur un type l'ajoute.
+    ch.setSearch("jauge");
+    done = b.stack.done().size();
+    ch.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    check(st::target(*p.style(mine), "Gauge") && b.stack.done().size() == done + 1 && styles.selectedType() == "Gauge",
+          "Entr\xC3\xA9" "e sur la Jauge : ajout\xC3\xA9" "e (une commande), choisie");
+
+    // ---- 6. AJOUTER UNE PROPRIETE : les categories de l'inspecteur, toutes depliees ; le genre de valeur ; pas d'icone
+    if (ch.isOpen()) ch.close();
+    styles.selectType("Pump");
+    const auto pchoices = styles.propertyChoices();
+    const auto entryOf = [&](std::string_view key) -> const app::HmiStyleChooser::Entry* {
+        for (const auto& e : pchoices)
+            if (e.value == key) return &e;
+        return nullptr;
+    };
+    check(std::none_of(pchoices.begin(), pchoices.end(), [](const app::HmiStyleChooser::Entry& e) { return e.glyph.has_value(); }),
+          "les propri\xC3\xA9t\xC3\xA9s : aucune ic\xC3\xB4ne");
+    const auto* w = entryOf("w");
+    check(w && w->group == "Position et taille" && w->detail == "nombre" && w->extra == "90",
+          "Largeur : dans Position et taille (comme l'inspecteur), \xC2\xAB nombre \xC2\xBB, la valeur d'une pompe neuve (90)");
+    const auto* lp = entryOf("labelPosition");
+    check(!lp || (lp->group == "Pompe" && lp->detail == "choix"), "Place du libell\xC3\xA9 : dans la section Pompe, \xC2\xAB choix \xC2\xBB");
+    const auto* anim = entryOf("animate");
+    check(!anim || (anim->group == "Pompe" && anim->detail == "bool\xC3\xA9" "en"), "Animer en marche : \xC2\xAB bool\xC3\xA9" "en \xC2\xBB");
+    const auto* opacity = entryOf("opacity");
+    check(opacity && opacity->group == "Apparence" && opacity->detail == "nombre", "Opacit\xC3\xA9 : dans Apparence, \xC2\xAB nombre \xC2\xBB");
+    {
+        // Une couleur que le style n'impose pas encore (la jauge, ajoutee plus haut) : << couleur >>.
+        styles.selectType("Gauge");
+        const auto gauge = styles.propertyChoices();
+        check(std::any_of(gauge.begin(), gauge.end(),
+                          [](const app::HmiStyleChooser::Entry& e) { return e.detail == "couleur" && e.extra.rfind("#", 0) == 0; }),
+              "une jauge : ses couleurs disent \xC2\xAB couleur \xC2\xBB (et leur valeur #RRGGBB)");
+        styles.selectType("Pump");
+    }
+    styles.openPropertyChooser();
+    const auto pgroups = ch.groups();
+    bool allOpen = !pgroups.empty();
+    for (const auto& g : pgroups) allOpen = allOpen && ch.groupOpen(g);
+    const auto posAt = std::find(pgroups.begin(), pgroups.end(), "Position et taille");
+    const auto lookAt = std::find(pgroups.begin(), pgroups.end(), "Apparence");
+    const auto pumpAt = std::find(pgroups.begin(), pgroups.end(), "Pompe");
+    check(allOpen && posAt != pgroups.end() && lookAt != pgroups.end() && pumpAt != pgroups.end() && posAt < lookAt && lookAt < pumpAt
+              && (std::find(pgroups.begin(), pgroups.end(), "Autres") == pgroups.end() || pgroups.back() == "Autres"),
+          "les dossiers : Position et taille, Apparence, Pompe... dans l'ordre de l'inspecteur (Autres en dernier), tous d\xC3\xA9pli\xC3\xA9s");
+    check(!ch.shownLines().empty() && ch.shownLines().front() == "# \xE2\x96\xBE Position et taille (7)" && ch.highlighted() == "x",
+          "la premi\xC3\xA8re ligne : \xE2\x96\xBE Position et taille (7) ; X en surbrillance");
+    gfx::Rect noIcon{};
+    check(!ch.iconRect("w", noIcon) && ch.rowRect("w", noIcon), "Largeur : sa ligne, sans ic\xC3\xB4ne");
+    paintChooser();
+    gfx::Rect wRow{};
+    (void)ch.rowRect("w", wRow);
+    const gfx::Rect iconSpot{wRow.right() - 26.f, wRow.y, 16.f, wRow.h};
+    check(rec.wrote("nombre") && rec.wrote("bool\xC3\xA9" "en") && rec.wrote("90") && !rec.drewIn(iconSpot),
+          "dessin\xC3\xA9" "es : \xC2\xAB nombre \xC2\xBB, \xC2\xAB bool\xC3\xA9" "en \xC2\xBB, la valeur d'une pompe neuve (90) ; rien \xC3\xA0 la place d'une ic\xC3\xB4ne");
+    ch.setGroupOpen("Apparence", false);
+    const auto pl = ch.shownLines();
+    const auto pv = ch.shownValues();
+    check(std::any_of(pl.begin(), pl.end(), [](const std::string& l) { return l.rfind("# \xE2\x96\xB8 Apparence (", 0) == 0; })
+              && std::find(pv.begin(), pv.end(), "opacity") == pv.end() && std::find(pv.begin(), pv.end(), "w") != pv.end(),
+          "ses dossiers se replient aussi (Apparence : ses propri\xC3\xA9t\xC3\xA9s cach\xC3\xA9" "es)");
+    ch.close();
+    // Un symbole : ses parametres dans Parametres du symbole (une bascule : booleen).
+    check(styles.addType("symbole:Sym_Vanne"), "Sym_Vanne ajout\xC3\xA9 au style");
+    if (ch.isOpen()) ch.close();
+    const auto sym = styles.propertyChoices();
+    const auto ouvert = std::find_if(sym.begin(), sym.end(), [](const app::HmiStyleChooser::Entry& e) { return e.value == "param:Ouvert"; });
+    check(ouvert != sym.end() && ouvert->group == "Param\xC3\xA8tres du symbole" && ouvert->detail == "bool\xC3\xA9" "en" && ouvert->extra == "FALSE",
+          "param:Ouvert : dans Param\xC3\xA8tres du symbole, \xC2\xAB bool\xC3\xA9" "en \xC2\xBB, FALSE");
+}
 
 // 1.12.28 : « j'aimerais combiner le didacticiel de l'ihm avec l'aide F1 ». Le catalogue des parcours
 // (help/Trails), leurs pages du guide (Demarrer > Le didacticiel), le sous-chapitre du centre, en bas
@@ -45225,6 +45787,7 @@ int main(int argc, char** argv) {
         arbreStyles1231();
         paletteSemantique1231();
         couleursSemantiques1231();
+        menusStyles1231();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -45742,6 +46305,7 @@ int main(int argc, char** argv) {
     arbreStyles1231();                      // 1.23.1 : IHM > Styles deplie (styles, couleurs semantiques, cadenas et personne)
     paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
     couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
+    menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

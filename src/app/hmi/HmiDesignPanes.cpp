@@ -6,13 +6,18 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../hmi/HmiTypes.hpp"          // 1.23.1 : folderLeaf (le nom d'un dossier de styles)
+#include "../../ui/Commands.hpp"          // 1.23.1 : les entrees des menus du clic droit
 #include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Containers.hpp"
+#include "../../ui/widgets/ExprField.hpp"   // 1.23.1 : le genre de valeur d'une case (expectOf)
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <map>
 #include <set>
+#include <tuple>
 
 namespace app {
 
@@ -288,14 +293,31 @@ std::set<Id> brokenOn(const hmi::Project& p, std::string_view styleName, std::st
 class StylePropertyGrid final : public ui::PropertyGrid {
 public:
     explicit StylePropertyGrid(std::string id) : ui::PropertyGrid(std::move(id)) {}
-    std::function<void(gfx::Point)> picked;
+    std::function<bool(gfx::Point)> picked;          // vrai : une propriete imposee etait sous le clic
     std::function<std::string()>    chosenName;
     std::function<bool()>           removeChosen;
     std::function<bool()>           addOne;
+    // 1.23.1 : le clic droit (ou la touche Menu) - le menu du volet, pas celui des cases (`hit` : sur une propriete
+    // imposee, alors choisie).
+    std::function<void(gfx::Point, bool hit)> menuAt;
 protected:
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right && bounds().contains(d->pos) && menuAt) {
+            grabFocus();               // une case ouverte est validee (elle perd la main), comme avant le menu des cases
+            const bool hit = picked && picked(d->pos);
+            menuAt(d->pos, hit);
+            return ui::EventResult::Consumed;
+        }
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !editing() && ui::isContextMenuKey(*k) && menuAt) {
+            const std::string name = chosenName ? chosenName() : std::string{};
+            gfx::Rect r{};
+            const auto b = bounds();
+            if (!name.empty() && valueRect(name, r)) menuAt({b.x + 40.f, r.y + r.h / 2.f}, true);
+            else menuAt({b.x + 40.f, b.y + 30.f}, !name.empty());
+            return ui::EventResult::Consumed;
+        }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && bounds().contains(d->pos) && picked)
-            picked(d->pos);
+            (void)picked(d->pos);
         if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !editing() && k->mods.none()) {
             if (k->key == ui::Key::Delete && removeChosen && removeChosen()) return ui::EventResult::Consumed;
             if (k->key == ui::Key::Insert && addOne && addOne()) return ui::EventResult::Consumed;
@@ -398,24 +420,95 @@ private:
     ui::DropDown*        list_{nullptr};
 };
 
-// Le choix avec recherche : ses mesures.
-constexpr float kChooserTitle = 26.f, kChooserField = 30.f, kChooserRow = 24.f;
+// 1.23.1 : les dossiers des choix qui ne viennent ni de la bibliotheque ni de l'inspecteur.
+constexpr const char* kGroupOthers = "Autres";
+constexpr const char* kGroupSymbols = "Mes symboles";
+constexpr const char* kGroupParams = "Param\xC3\xA8tres du symbole";
+
+// 1.23.1 : LE GENRE DE VALEUR D'UNE CASE, le mot que l'inspecteur ecrit au bout de son nom (DataViews : la meme table) ;
+// une case qui n'en dit pas : d'apres son genre de case.
+std::string kindWord(PG::ValueType t) {
+    switch (t) {
+        case PG::ValueType::Boolean: return "bool\xC3\xA9" "en";
+        case PG::ValueType::Integer:
+        case PG::ValueType::Real: return "nombre";
+        case PG::ValueType::Color: return "couleur";
+        case PG::ValueType::Enum: return "choix";
+        case PG::ValueType::Text:
+        case PG::ValueType::Address: return "texte";
+        case PG::ValueType::ReadOnly: break;
+    }
+    return {};
+}
+std::string inspectorWord(const PG::Property& p) {
+    using E = ui::exprfield::Expect;
+    if (p.type == PG::ValueType::Boolean) return kindWord(p.type);
+    switch (ui::exprfield::expectOf(p)) {
+        case E::Bool: return "bool\xC3\xA9" "en";
+        case E::Number: return "nombre";
+        case E::Text:
+        case E::Template: return "texte";
+        case E::Color: return "couleur";
+        case E::View: return "vue";
+        case E::List: return "choix";
+        case E::Time: return "dur\xC3\xA9" "e";
+        case E::Value: break;
+    }
+    // Un texte qui n'en dit pas plus (un parametre de symbole ANY, BOOL...) : rien - le genre de la case du style le dira.
+    return p.type == PG::ValueType::Text ? std::string{} : kindWord(p.type);
+}
+// Le libelle d'une case sans ce que l'inspecteur lui ajoute (sa formule : "  \xC6\x92 ...").
+std::string plainLabel(std::string_view name) {
+    if (const auto at = name.find("  \xC6\x92"); at != std::string_view::npos) name = name.substr(0, at);
+    return std::string(name);
+}
+
+// Le choix avec recherche : ses mesures (1.23.1 : la petite icone d'une ligne).
+constexpr float kChooserTitle = 26.f, kChooserField = 30.f, kChooserRow = 24.f, kChooserIcon = 16.f;
 constexpr int kChooserRows = 12;
+
+// 1.23.1 : LE CHAMP DE RECHERCHE DU CHOIX - Droite, Gauche, +, - vont d'abord aux dossiers (HmiStyleChooser::foldKey) ;
+// un + ou un - pris par un dossier ne s'ecrit pas (son TextInput suit le KeyDown).
+class ChooserField final : public ui::InputText {
+public:
+    ChooserField(std::string id, HmiStyleChooser& owner) : ui::InputText(std::move(id)), owner_(owner) {}
+protected:
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused()) {
+            swallow_ = false;
+            if (owner_.foldKey(*k)) {
+                swallow_ = k->key != ui::Key::Left && k->key != ui::Key::Right;
+                return ui::EventResult::Consumed;
+            }
+        }
+        if (std::holds_alternative<ui::TextInput>(ev) && swallow_) {
+            swallow_ = false;
+            return ui::EventResult::Consumed;
+        }
+        return ui::InputText::onEvent(ev);
+    }
+private:
+    HmiStyleChooser& owner_;
+    bool             swallow_{false};
+};
 
 } // namespace
 
 // ===================================================== 1.23.0 : le choix avec recherche ===
 HmiStyleChooser::HmiStyleChooser(std::string id) : ui::Widget(std::move(id)) {
-    auto f = std::make_unique<ui::InputText>(this->id() + ".search");
+    auto f = std::make_unique<ChooserField>(this->id() + ".search", *this);
     f->setPlaceholder("Rechercher\xE2\x80\xA6");
     field_ = &static_cast<ui::InputText&>(addChild(std::move(f)));
     setVisibility(ui::Visibility::Hidden);
+    // 1.23.1 : chaque frappe deplie de nouveau tout ce qui a un resultat.
     links_ += field_->textChanged->connect([this](const std::string&) {
-        filter();
+        closedInSearch_.clear();
+        scroll_ = 0.f;
+        filter(highlighted(), {});
         invalidate();
     });
-    // Entree : la ligne en surbrillance. Le champ finit aussi sa saisie quand il perd la main (Echap, un clic ailleurs) :
-    // il ne l'a alors plus - rien n'est choisi.
+    // Entree : la ligne en surbrillance (un dossier : il se deplie ou se replie). Le champ finit aussi sa saisie quand
+    // il perd la main (Echap, un clic ailleurs) : il ne l'a alors plus - rien n'est choisi.
     links_ += field_->editingDone->connect([this](const std::string&) {
         if (field_->focused()) (void)chooseHighlighted();
     });
@@ -425,22 +518,28 @@ HmiStyleChooser::HmiStyleChooser(std::string id) : ui::Widget(std::move(id)) {
     });
 }
 
-void HmiStyleChooser::open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area) {
+void HmiStyleChooser::open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area, Folding folding) {
     title_ = std::move(title);
     // Les lignes et la surbrillance d'avant designent l'ancienne liste : effacees AVANT de la remplacer (setText refiltre
     // et relit la surbrillance - un rang hors de la nouvelle liste lisait n'importe quoi).
     lines_.clear();
     hot_ = -1;
     entries_ = std::move(entries);
+    folding_ = std::move(folding);
     area_ = area;
     open_ = true;
+    // 1.23.1 : les dossiers - le premier seul deplie, ou tous.
+    closed_.clear();
+    closedInSearch_.clear();
+    const auto names = groups();
+    if (folding_.firstOnly)
+        for (std::size_t i = 1; i < names.size(); ++i) closed_.insert(names[i]);
     setVisibility(ui::Visibility::Visible);
     field_->setText({});
-    filter();
-    std::set<std::string> groups;
-    for (const auto& e : entries_) groups.insert(e.group);
-    const int lines = std::clamp(static_cast<int>(entries_.size() + groups.size()), 3, kChooserRows);
-    const float w = std::min(area.w, std::max(anchor.w, 280.f));
+    scroll_ = 0.f;
+    filter({}, {});
+    const int lines = std::clamp(static_cast<int>(entries_.size() + names.size()), 3, kChooserRows);
+    const float w = std::min(area.w, std::max(anchor.w, 340.f));   // 1.23.1 : la place du genre et de la valeur
     const float h = std::min(area.h, kChooserTitle + kChooserField + 8.f + kChooserRow * static_cast<float>(lines) + 6.f);
     const float x = std::clamp(anchor.x, area.x, std::max(area.x, area.right() - w));
     float y = anchor.bottom() + 2.f;
@@ -463,35 +562,88 @@ void HmiStyleChooser::setSearch(const std::string& text) { field_->setText(text)
 
 const std::string& HmiStyleChooser::searchText() const { return field_->text(); }
 
-void HmiStyleChooser::filter() {
-    const std::string keep = highlighted();
+std::vector<std::string> HmiStyleChooser::groups() const {
+    std::vector<std::string> out;
+    for (const auto& e : entries_)
+        if (!e.group.empty() && std::find(out.begin(), out.end(), e.group) == out.end()) out.push_back(e.group);
+    return out;
+}
+
+bool HmiStyleChooser::groupOpen(std::string_view group) const {
+    const bool searching = field_ && !ui::SearchQuery(field_->text()).empty();
+    const auto& closed = searching ? closedInSearch_ : closed_;
+    return closed.find(std::string(group)) == closed.end();
+}
+
+void HmiStyleChooser::setGroupOpen(std::string_view group, bool on) {
+    const auto all = groups();
+    if (std::find(all.begin(), all.end(), group) == all.end()) return;
+    const bool searching = field_ && !ui::SearchQuery(field_->text()).empty();
+    auto& closed = searching ? closedInSearch_ : closed_;
+    if (on) closed.erase(std::string(group));
+    else closed.insert(std::string(group));
+    refilter();
+    invalidate();
+}
+
+void HmiStyleChooser::toggleGroup(std::string_view group) { setGroupOpen(group, !groupOpen(group)); }
+
+void HmiStyleChooser::refilter() {
+    std::string value, group;
+    if (hot_ >= 0 && static_cast<std::size_t>(hot_) < lines_.size()) {
+        const auto& l = lines_[static_cast<std::size_t>(hot_)];
+        if (!l.group) value = entries_[l.entry].value;
+        group = entries_[l.entry].group;     // une ligne cachee par son dossier replie : la surbrillance va au dossier
+    }
+    const float keepScroll = scroll_;
+    filter(value, group);
+    const auto list = listRect();
+    scroll_ = std::clamp(keepScroll, 0.f, std::max(0.f, static_cast<float>(lines_.size()) * kChooserRow - list.h));
+    reveal(hot_);
+}
+
+void HmiStyleChooser::filter(const std::string& keepValue, const std::string& keepGroup) {
     lines_.clear();
     const ui::SearchQuery q(field_ ? field_->text() : std::string{});
     std::string group;
     bool first = true;
+    int head = -1;             // la ligne du dossier en cours (-1 : des lignes sans dossier)
     for (std::size_t i = 0; i < entries_.size(); ++i) {
         const auto& e = entries_[i];
-        if (!q.empty() && !q.matches({std::string_view(e.label), std::string_view(e.value), std::string_view(e.detail), std::string_view(e.group)}))
+        if (!q.empty()
+            && !q.matches({std::string_view(e.label), std::string_view(e.value), std::string_view(e.detail), std::string_view(e.extra),
+                           std::string_view(e.group)}))
             continue;
         if (first || e.group != group) {
-            if (!e.group.empty()) lines_.push_back({true, i});
             group = e.group;
             first = false;
+            head = -1;
+            if (!e.group.empty()) {
+                lines_.push_back({true, i, 0});
+                head = static_cast<int>(lines_.size()) - 1;
+            }
         }
-        lines_.push_back({false, i});
+        if (head >= 0) ++lines_[static_cast<std::size_t>(head)].count;
+        if (head < 0 || groupOpen(e.group)) lines_.push_back({false, i, 0});
     }
     hot_ = -1;
-    for (std::size_t k = 0; k < lines_.size() && hot_ < 0; ++k)
-        if (!lines_[k].group && !keep.empty() && entries_[lines_[k].entry].value == keep) hot_ = static_cast<int>(k);
+    for (std::size_t k = 0; k < lines_.size() && hot_ < 0 && !keepValue.empty(); ++k)
+        if (!lines_[k].group && entries_[lines_[k].entry].value == keepValue) hot_ = static_cast<int>(k);
+    for (std::size_t k = 0; k < lines_.size() && hot_ < 0 && !keepGroup.empty(); ++k)
+        if (lines_[k].group && entries_[lines_[k].entry].group == keepGroup) hot_ = static_cast<int>(k);
     for (std::size_t k = 0; k < lines_.size() && hot_ < 0; ++k)
         if (!lines_[k].group) hot_ = static_cast<int>(k);
-    scroll_ = 0.f;
+    if (hot_ < 0 && !lines_.empty()) hot_ = 0;     // tout est replie : le premier dossier
     reveal(hot_);
 }
 
 std::vector<std::string> HmiStyleChooser::shownLines() const {
     std::vector<std::string> out;
-    for (const auto& l : lines_) out.push_back(l.group ? "# " + entries_[l.entry].group : entries_[l.entry].label);
+    for (const auto& l : lines_) {
+        const auto& e = entries_[l.entry];
+        if (!l.group) out.push_back(e.label);
+        else out.push_back(std::string("# ") + (groupOpen(e.group) ? "\xE2\x96\xBE " : "\xE2\x96\xB8 ") + e.group + " (" + std::to_string(l.count) + ")");
+    }
     return out;
 }
 
@@ -502,23 +654,27 @@ std::vector<std::string> HmiStyleChooser::shownValues() const {
     return out;
 }
 
+bool HmiStyleChooser::hotIsGroup() const {
+    return hot_ >= 0 && static_cast<std::size_t>(hot_) < lines_.size() && lines_[static_cast<std::size_t>(hot_)].group;
+}
+
 std::string HmiStyleChooser::highlighted() const {
     if (hot_ < 0 || static_cast<std::size_t>(hot_) >= lines_.size() || lines_[static_cast<std::size_t>(hot_)].group) return {};
     const std::size_t e = lines_[static_cast<std::size_t>(hot_)].entry;
     return e < entries_.size() ? entries_[e].value : std::string{};
 }
 
+std::string HmiStyleChooser::highlightedGroup() const {
+    return hotIsGroup() ? entries_[lines_[static_cast<std::size_t>(hot_)].entry].group : std::string{};
+}
+
 void HmiStyleChooser::moveHighlight(int delta) {
-    if (lines_.empty()) return;
-    int k = hot_ < 0 ? (delta > 0 ? -1 : static_cast<int>(lines_.size())) : hot_;
-    const int step = delta > 0 ? 1 : -1;
-    for (int n = std::abs(delta); n > 0; --n) {
-        int next = k + step;
-        while (next >= 0 && next < static_cast<int>(lines_.size()) && lines_[static_cast<std::size_t>(next)].group) next += step;
-        if (next < 0 || next >= static_cast<int>(lines_.size())) break;
-        k = next;
-    }
-    if (k >= 0 && k < static_cast<int>(lines_.size()) && !lines_[static_cast<std::size_t>(k)].group) hot_ = k;
+    if (lines_.empty() || delta == 0) return;
+    // 1.23.1 : les lignes des dossiers se choisissent aussi (Droite, Gauche, Entree les deplient) ; ce qu'un dossier
+    // replie contient n'est pas dans la liste.
+    const int last = static_cast<int>(lines_.size()) - 1;
+    const int from = hot_ < 0 ? (delta > 0 ? -1 : last + 1) : hot_;
+    hot_ = std::clamp(from + delta, 0, last);
     reveal(hot_);
     invalidate();
 }
@@ -533,11 +689,47 @@ bool HmiStyleChooser::choose(std::string_view value) {
 }
 
 bool HmiStyleChooser::chooseHighlighted() {
+    if (!open_) return false;
+    if (hotIsGroup()) {        // 1.23.1 : Entree sur un dossier - il se deplie ou se replie, rien n'est choisi
+        toggleGroup(highlightedGroup());
+        return false;
+    }
     const std::string value = highlighted();
-    if (value.empty() || !open_) return false;
+    if (value.empty()) return false;
     close();                   // d'abord : le volet peut en rouvrir une (le type ajoute : ses proprietes)
     chosen->emit(value);
     return true;
+}
+
+bool HmiStyleChooser::foldKey(const ui::KeyDown& k) {
+    if (!open_ || k.mods.ctrl || k.mods.alt || k.mods.super) return false;
+    const bool plus = k.key == ui::Key::Plus || k.layout == ui::Key::Plus;
+    const bool minus = k.key == ui::Key::Minus || k.layout == ui::Key::Minus;
+    const bool right = k.key == ui::Key::Right && !k.mods.shift;
+    const bool left = k.key == ui::Key::Left && !k.mods.shift;
+    if ((!plus && !minus && !right && !left) || hot_ < 0 || static_cast<std::size_t>(hot_) >= lines_.size()) return false;
+    const Line l = lines_[static_cast<std::size_t>(hot_)];
+    const std::string group = entries_[l.entry].group;
+    if (l.group) {
+        const bool on = groupOpen(group);
+        if (right && on) {     // deja deplie : Droite va a sa premiere ligne
+            if (static_cast<std::size_t>(hot_) + 1 < lines_.size() && !lines_[static_cast<std::size_t>(hot_) + 1].group) moveHighlight(1);
+            return true;
+        }
+        if (right || plus) {
+            if (!on) setGroupOpen(group, true);
+            return true;
+        }
+        if (on) setGroupOpen(group, false);     // Gauche, -
+        return true;
+    }
+    // Une ligne, rien de tape : Gauche replie son dossier (la surbrillance y remonte). Sinon : le curseur du champ, ou le
+    // + / - tape (le - exclut un mot de la recherche).
+    if (left && !group.empty() && field_->text().empty()) {
+        setGroupOpen(group, false);
+        return true;
+    }
+    return false;
 }
 
 gfx::Rect HmiStyleChooser::listRect() const {
@@ -551,6 +743,12 @@ int HmiStyleChooser::lineAt(gfx::Point p) const {
     if (!list.contains(p)) return -1;
     const int k = static_cast<int>((p.y - list.y + scroll_) / kChooserRow);
     return k >= 0 && k < static_cast<int>(lines_.size()) ? k : -1;
+}
+
+int HmiStyleChooser::groupLine(std::string_view group) const {
+    for (std::size_t k = 0; k < lines_.size(); ++k)
+        if (lines_[k].group && entries_[lines_[k].entry].group == group) return static_cast<int>(k);
+    return -1;
 }
 
 void HmiStyleChooser::reveal(int line) {
@@ -567,6 +765,26 @@ bool HmiStyleChooser::rowRect(std::string_view value, gfx::Rect& out) const {
         if (!lines_[k].group && entries_[lines_[k].entry].value == value) {
             out = {list.x, list.y + static_cast<float>(k) * kChooserRow - scroll_, list.w, kChooserRow};
             return out.y >= list.y - 0.5f && out.bottom() <= list.bottom() + 0.5f;
+        }
+    return false;
+}
+
+bool HmiStyleChooser::groupRect(std::string_view group, gfx::Rect& out) const {
+    const int k = groupLine(group);
+    if (k < 0) return false;
+    const auto list = listRect();
+    out = {list.x, list.y + static_cast<float>(k) * kChooserRow - scroll_, list.w, kChooserRow};
+    return out.y >= list.y - 0.5f && out.bottom() <= list.bottom() + 0.5f;
+}
+
+bool HmiStyleChooser::iconRect(std::string_view value, gfx::Rect& out) const {
+    gfx::Rect row{};
+    if (!rowRect(value, row)) return false;
+    for (const auto& l : lines_)
+        if (!l.group && entries_[l.entry].value == value) {
+            if (!entries_[l.entry].glyph) return false;
+            out = {row.right() - 10.f - kChooserIcon, row.y + (row.h - kChooserIcon) / 2.f, kChooserIcon, kChooserIcon};
+            return true;
         }
     return false;
 }
@@ -594,24 +812,64 @@ void HmiStyleChooser::onPaint(const ui::PaintContext& ctx) {
     }
     ctx.r.pushClip(list);
     const float textDy = (kChooserRow - ctx.r.lineHeight(ctx.theme.font.ui)) / 2.f;
+    const float smallDy = (kChooserRow - ctx.r.lineHeight(ctx.theme.font.smallUi)) / 2.f;
+    const bool folders = std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return !e.group.empty(); });
     for (std::size_t k = 0; k < lines_.size(); ++k) {
         const float y = list.y + static_cast<float>(k) * kChooserRow - scroll_;
         if (y + kChooserRow < list.y || y > list.bottom()) continue;
         const auto& e = entries_[lines_[k].entry];
-        if (lines_[k].group) {
-            ctx.r.drawText({list.x + 10.f, y + 6.f}, e.group, ctx.theme.font.smallUi, c.textMuted);
-            continue;
-        }
         const bool hot = static_cast<int>(k) == hot_;
         if (hot) ctx.r.fillRect({list.x, y, list.w, kChooserRow}, c.selectionBg);
         const gfx::Color ink = hot ? c.selectionText : c.text;
-        float detailW = 0.f;
-        if (!e.detail.empty()) {
-            const std::string d = simmark::fitText(ctx.r, e.detail, ctx.theme.font.smallUi, list.w * 0.4f);
-            detailW = ctx.r.measure(d, ctx.theme.font.smallUi).width;
-            ctx.r.drawText({list.right() - 10.f - detailW, y + 6.f}, d, ctx.theme.font.smallUi, hot ? ink : c.textMuted);
+        const gfx::Color muted = hot ? c.selectionText : c.textMuted;
+        if (lines_[k].group) {
+            // 1.23.1 : LE DOSSIER - son chevron (vers le bas : deplie), son dossier, son nom, combien il contient.
+            const bool on = groupOpen(e.group);
+            const float ax = list.x + 12.f, ay = y + kChooserRow * 0.5f;
+            if (on) {
+                ctx.r.line({ax - 4.f, ay - 2.f}, {ax, ay + 2.f}, muted, 1.5f);
+                ctx.r.line({ax, ay + 2.f}, {ax + 4.f, ay - 2.f}, muted, 1.5f);
+            } else {
+                ctx.r.line({ax - 2.f, ay - 4.f}, {ax + 2.f, ay}, muted, 1.5f);
+                ctx.r.line({ax + 2.f, ay}, {ax - 2.f, ay + 4.f}, muted, 1.5f);
+            }
+            ui::drawIcon(ctx.r, on ? ui::Icon::FolderOpen : ui::Icon::Folder, {list.x + 22.f, y + (kChooserRow - 14.f) / 2.f, 14.f, 14.f},
+                         hot ? ink : c.warning);
+            const std::size_t n = lines_[k].count;
+            std::string count = std::to_string(n);
+            if (const std::string& noun = n > 1 ? folding_.many : folding_.one; !noun.empty()) count += " " + noun;
+            const float cw = ctx.r.measure(count, ctx.theme.font.smallUi).width;
+            ctx.r.drawText({list.right() - 10.f - cw, y + smallDy}, count, ctx.theme.font.smallUi, muted);
+            ctx.r.drawText({list.x + 42.f, y + textDy}, simmark::fitText(ctx.r, e.group, ctx.theme.font.uiBold, list.w - 62.f - cw),
+                           ctx.theme.font.uiBold, ink);
+            continue;
         }
-        ctx.r.drawText({list.x + 14.f, y + textDy}, simmark::fitText(ctx.r, e.label, ctx.theme.font.ui, list.w - 34.f - detailW),
+        // Une ligne : sous le nom de son dossier ; a droite, sa petite icone, son genre, sa valeur d'objet neuf.
+        const float left = list.x + (folders && !e.group.empty() ? 42.f : 14.f);
+        float right = list.right() - 10.f;
+        if (e.glyph) {
+            drawHmiGlyph(ctx.r, *e.glyph, {right - kChooserIcon, y + (kChooserRow - kChooserIcon) / 2.f, kChooserIcon, kChooserIcon},
+                         hot ? ink : c.accent);
+            right -= kChooserIcon + 8.f;
+        }
+        if (!e.detail.empty()) {
+            const std::string d = simmark::fitText(ctx.r, e.detail, ctx.theme.font.smallUi, list.w * 0.3f);
+            const float dw = ctx.r.measure(d, ctx.theme.font.smallUi).width;
+            ctx.r.drawText({right - dw, y + smallDy}, d, ctx.theme.font.smallUi, muted);
+            right -= dw + 10.f;
+        }
+        const float labelW = ctx.r.measure(e.label, ctx.theme.font.ui).width;
+        if (!e.extra.empty()) {
+            // Plus discrete : seulement si le libelle garde sa place.
+            const float room = std::min(list.w * 0.28f, right - left - std::min(labelW, list.w * 0.45f) - 12.f);
+            if (room >= 28.f) {
+                const std::string x = simmark::fitText(ctx.r, e.extra, ctx.theme.font.smallUi, room);
+                const float xw = ctx.r.measure(x, ctx.theme.font.smallUi).width;
+                ctx.r.drawText({right - xw, y + smallDy}, x, ctx.theme.font.smallUi, muted.withAlpha(hot ? 200 : 140));
+                right -= xw + 10.f;
+            }
+        }
+        ctx.r.drawText({left, y + textDy}, simmark::fitText(ctx.r, e.label, ctx.theme.font.ui, std::max(0.f, right - left - 4.f)),
                        ctx.theme.font.ui, ink);
     }
     ctx.r.popClip();
@@ -632,15 +890,16 @@ ui::EventResult HmiStyleChooser::onEvent(const ui::InputEvent& ev) {
             close();
             return ui::EventResult::Consumed;
         }
-        if (const int at = lineAt(d->pos); at >= 0 && !lines_[static_cast<std::size_t>(at)].group) {
+        if (const int at = lineAt(d->pos); at >= 0 && d->button == ui::MouseButton::Left) {
             hot_ = at;
-            (void)chooseHighlighted();
+            (void)chooseHighlighted();     // 1.23.1 : un dossier se deplie ou se replie
+            invalidate();
         }
         return ui::EventResult::Consumed;
     }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         if (!b.contains(m->pos)) return ui::EventResult::Ignored;
-        if (const int at = lineAt(m->pos); at >= 0 && at != hot_ && !lines_[static_cast<std::size_t>(at)].group) {
+        if (const int at = lineAt(m->pos); at >= 0 && at != hot_) {
             hot_ = at;
             invalidate();
         }
@@ -656,6 +915,7 @@ ui::EventResult HmiStyleChooser::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+        if (foldKey(*k)) return ui::EventResult::Consumed;
         switch (k->key) {
             case ui::Key::Down: moveHighlight(1); return ui::EventResult::Consumed;
             case ui::Key::Up: moveHighlight(-1); return ui::EventResult::Consumed;
@@ -796,7 +1056,9 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     previewTypes_ = &static_cast<ui::DropDown&>(preview_->addChild(std::make_unique<ui::DropDown>(base + ".previewType")));
     spv->setList(previewTypes_);
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
-    chooser_ = &static_cast<HmiStyleChooser&>(addChild(std::make_unique<HmiStyleChooser>(base + ".chooser")));   // le dernier : au-dessus
+    chooser_ = &static_cast<HmiStyleChooser&>(addChild(std::make_unique<HmiStyleChooser>(base + ".chooser")));   // au-dessus
+    // 1.23.1 : le menu du clic droit des proprietes imposees (les tables ont le leur) - le dernier : au-dessus de tout.
+    propMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".propMenu")));
     // Lot 21 : les styles ranges en dossiers ; glisser une ou plusieurs lignes. 1.23.0 : le nom se change dans sa case.
     folders_ = std::make_unique<HmiFolderTable>(*table_, doc_, apply_);
     folders_->setItemEditing([](Id, std::size_t c) { return c == 0; }, [this](Id style, std::size_t c, const std::string& text) {
@@ -805,6 +1067,21 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     });
     links_ += folders_->message->connect([this](const std::string& text) { say(text); });
     links_ += folders_->relayout->connect([this] { refresh(); });
+    // 1.23.1 : LES MENUS DU CLIC DROIT - un par liste, a la place du menu commun des tableaux (Copier, Coller...). La
+    // table choisit d'abord la ligne cliquee (selectionChanged), puis demande ses entrees.
+    for (ui::TableView* t : {builtins_, table_}) {
+        t->setExtraContextOnly(true);
+        t->setExtraContextItems([this] { return styleMenuItems(); });
+        links_ += t->contextAction->connect([this](int a) { menuChosen(a); });
+    }
+    types_->setExtraContextOnly(true);
+    types_->setExtraContextItems([this] { return typeMenuItems(); });
+    links_ += types_->contextAction->connect([this](int a) { menuChosen(a); });
+    links_ += propMenu_->itemChosen->connect([this](int a) {
+        propMenu_->close();        // choisi d'ailleurs (un script, un essai) : ferme aussi
+        menuChosen(a);
+    });
+    links_ += propMenu_->dismissed->connect([this] { grid_->takeFocus(); });
 
     links_ += tools_->triggered->connect([this](int a) {
         const Id sel = selectedStyle();
@@ -868,14 +1145,21 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     sg->picked = [this](gfx::Point at) {
         const hmi::Style* s = currentStyle();
         const auto* props = s ? propsOf(*s, type_) : nullptr;
-        if (!props) return;
+        if (!props) return false;
         for (const auto& pr : *props) {
             gfx::Rect r{};
             if (grid_->valueRect(propertyName(type_, pr.key), r) && at.y >= r.y && at.y < r.y + r.h) {
                 selectProperty(pr.key);
-                return;
+                return true;
             }
         }
+        return false;
+    };
+    // 1.23.1 : le clic droit sur la fiche - le menu des proprietes imposees ; ailleurs que sur l'une d'elles (le nom du
+    // style, un titre), il ne vise aucune propriete.
+    sg->menuAt = [this](gfx::Point at, bool hit) {
+        if (!hit && !prop_.empty()) selectProperty({});
+        openPropertyMenu(at);
     };
     sg->chosenName = [this] { return prop_.empty() ? std::string{} : propertyName(type_, prop_); };
     sg->removeChosen = [this] { return removeProp_->enabled() && removeProperty(prop_); };
@@ -1256,13 +1540,47 @@ std::vector<HmiStyleChooser::Entry> HmiStylesPane::typeChoices() const {
     std::vector<HmiStyleChooser::Entry> out;
     const hmi::Style* s = currentStyle();
     if (!s) return out;
+    // 1.23.1 : RANGES COMME LA BIBLIOTHEQUE - ses categories dans son ordre (Formes, Commandes, Affichage...), chacune
+    // dans l'ordre de ses tuiles ; un genre qu'aucune ne montre : Autres ; puis Mes symboles. Chacun sa petite icone (le
+    // glyphe de sa tuile ; un symbole : celui des symboles).
+    const auto cats = hmiPaletteCategories();
+    std::map<hmi::Kind, std::pair<std::size_t, std::size_t>> place;   // le rang de sa categorie, son rang dedans
+    for (std::size_t c = 0; c < cats.size(); ++c)
+        for (std::size_t k = 0; k < cats[c].kinds.size(); ++k) place.emplace(cats[c].kinds[k], std::make_pair(c, k));
+    struct Ranked {
+        std::size_t            cat, pos, order;
+        HmiStyleChooser::Entry entry;
+    };
+    std::vector<Ranked> ranked;
+    std::size_t order = 0;
     for (const auto& t : styles::availableTypes(doc_->project)) {
+        ++order;
         if (styles::target(*s, t)) continue;     // deja au style
-        if (styles::isSymbolType(t)) out.push_back({t, "\xE2\x97\x86 " + styles::symbolName(t), "MES SYMBOLES", {}});
-        else out.push_back({t, styles::typeLabel(t), "BIBLIOTH\xC3\x88QUE", {}});
+        HmiStyleChooser::Entry e;
+        e.value = t;
+        if (styles::isSymbolType(t)) {
+            e.label = styles::symbolName(t);
+            e.group = kGroupSymbols;
+            e.glyph = HmiGlyph::Symbol;
+            ranked.push_back({cats.size() + 1, 0, order, std::move(e)});
+            continue;
+        }
+        e.label = styles::typeLabel(t);
+        const auto kind = hmi::kindFromKey(t);
+        if (kind) e.glyph = glyphFor(*kind);
+        const auto at = kind ? place.find(*kind) : place.end();
+        if (at != place.end()) {
+            e.group = cats[at->second.first].name;
+            ranked.push_back({at->second.first, at->second.second, order, std::move(e)});
+        } else {
+            e.group = kGroupOthers;
+            ranked.push_back({cats.size(), 0, order, std::move(e)});
+        }
     }
-    // Les symboles apres la bibliotheque (availableTypes les rend deja ainsi : on le garantit).
-    std::stable_partition(out.begin(), out.end(), [](const HmiStyleChooser::Entry& e) { return !styles::isSymbolType(e.value); });
+    std::stable_sort(ranked.begin(), ranked.end(), [](const Ranked& a, const Ranked& b) {
+        return std::tie(a.cat, a.pos, a.order) < std::tie(b.cat, b.pos, b.order);
+    });
+    for (auto& r : ranked) out.push_back(std::move(r.entry));
     return out;
 }
 
@@ -1270,15 +1588,78 @@ std::vector<HmiStyleChooser::Entry> HmiStylesPane::propertyChoices() const {
     std::vector<HmiStyleChooser::Entry> out;
     const hmi::Style* s = currentStyle();
     if (!s || type_.empty()) return out;
+    const auto& p = doc_->project;
     const auto* props = propsOf(*s, type_);
-    for (const auto& c : styles::propertiesOf(doc_->project, type_)) {
+    // 1.23.1 (le client : << pareil ici avec type variable mais sans icone >>) : RANGEES COMME L'INSPECTEUR RANGE UN OBJET
+    // NEUF DE CE TYPE - ses categories, dans son ordre (Position et taille, Apparence, la section du genre, Parametres
+    // du symbole...) ; une cle qu'il ne montre pas : Autres. A droite, le genre de valeur qu'il ecrit au bout du nom
+    // (nombre, couleur, booleen...), puis, plus discrete, la valeur d'un objet neuf.
+    struct Seen {
+        std::size_t cat, pos;
+        std::string word;
+    };
+    std::vector<std::string> catNames;
+    std::map<std::string, Seen> byKey, byName;
+    if (const auto kind = kindOfType(type_)) {
+        hmi::View tmp;
+        hmi::Layer layer;
+        layer.id = 1;
+        tmp.layers.push_back(layer);
+        hmi::Object o = hmi::makeObject(*kind, 1, {}, 0, 0, layer.id);
+        if (styles::isSymbolType(type_)) o.set("symbol", styles::symbolName(type_));
+        tmp.objects.push_back(std::move(o));
+        std::size_t pos = 0;
+        const std::function<void(const PG::Category&, std::size_t)> walk = [&](const PG::Category& c, std::size_t at) {
+            for (const auto& pr : c.properties) {
+                const Seen seen{at, pos++, inspectorWord(pr)};
+                if (!pr.key.empty()) byKey.emplace(pr.key, seen);
+                byName.emplace(plainLabel(pr.name), seen);
+            }
+            for (const auto& child : c.children) walk(child, at);
+        };
+        for (const auto& c : hmiPropertyCategories(tmp, {1}, nullptr, HmiPropertyCommits{}, &p.assets, &p)) {
+            catNames.push_back(c.name);
+            walk(c, catNames.size() - 1);
+        }
+    }
+    const auto paramsAt = std::find(catNames.begin(), catNames.end(), std::string(kGroupParams));
+    struct Ranked {
+        std::size_t            cat, pos, order;
+        HmiStyleChooser::Entry entry;
+    };
+    std::vector<Ranked> ranked;
+    std::size_t order = 0;
+    for (const auto& c : styles::propertiesOf(p, type_)) {
+        ++order;
         if (props && std::any_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == c.key; })) continue;
         const bool param = c.key.substr(0, styles::kParamPrefix.size()) == styles::kParamPrefix;
-        out.push_back({c.key, propertyName(type_, c.key), param ? "PARAM\xC3\x88TRES DU SYMBOLE" : "PROPRI\xC3\x89T\xC3\x89S", c.defaultValue});
+        HmiStyleChooser::Entry e;
+        e.value = c.key;
+        e.label = propertyName(type_, c.key);
+        e.extra = c.defaultValue;
+        const Seen* seen = nullptr;
+        if (const auto k = byKey.find(c.key); k != byKey.end()) seen = &k->second;
+        else if (const auto n = byName.find(plainLabel(e.label)); n != byName.end()) seen = &n->second;
+        std::size_t cat = catNames.size() + 1, pos = 0;
+        if (seen) {
+            e.group = catNames[seen->cat];
+            e.detail = seen->word;
+            cat = seen->cat;
+            pos = seen->pos;
+        } else if (param) {
+            e.group = kGroupParams;
+            cat = paramsAt != catNames.end() ? static_cast<std::size_t>(paramsAt - catNames.begin()) : catNames.size();
+            pos = static_cast<std::size_t>(-1);
+        } else {
+            e.group = kGroupOthers;
+        }
+        if (e.detail.empty()) e.detail = kindWord(keyKindOf(p, type_, c.key).type);
+        ranked.push_back({cat, pos, order, std::move(e)});
     }
-    std::stable_partition(out.begin(), out.end(), [](const HmiStyleChooser::Entry& e) {
-        return e.value.substr(0, styles::kParamPrefix.size()) != styles::kParamPrefix;
+    std::stable_sort(ranked.begin(), ranked.end(), [](const Ranked& a, const Ranked& b) {
+        return std::tie(a.cat, a.pos, a.order) < std::tie(b.cat, b.pos, b.order);
     });
+    for (auto& r : ranked) out.push_back(std::move(r.entry));
     return out;
 }
 
@@ -1295,7 +1676,9 @@ void HmiStylesPane::openTypeChooser() {
     }
     chooserFor_ = 1;
     const auto b = bounds();
-    chooser_->open("AJOUTER UN TYPE", std::move(entries), addType_->bounds(), {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)});
+    // 1.23.1 : les categories en dossiers, la premiere seule depliee.
+    chooser_->open("AJOUTER UN TYPE", std::move(entries), addType_->bounds(), {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)},
+                   {true, "type", "types"});
 }
 
 void HmiStylesPane::openPropertyChooser() {
@@ -1315,8 +1698,212 @@ void HmiStylesPane::openPropertyChooser() {
     }
     chooserFor_ = 2;
     const auto b = bounds();
+    // 1.23.1 : les categories de l'inspecteur en dossiers, toutes depliees (une propriete se cherche vite).
     chooser_->open("AJOUTER UNE PROPRI\xC3\x89T\xC3\x89 \xE2\x80\x94 " + styles::typeLabel(type_), std::move(entries), addProp_->bounds(),
-                   {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)});
+                   {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)}, {false, "propri\xC3\xA9t\xC3\xA9", "propri\xC3\xA9t\xC3\xA9s"});
+}
+
+// ============================================== 1.23.1 : les menus du clic droit ===
+std::vector<ui::PopupMenu::Item> HmiStylesPane::styleMenuItems() const {
+    namespace cmd = ui::cmd;
+    namespace fold = hmi::fold;
+    std::vector<ui::PopupMenu::Item> items;
+    const hmi::Style* s = currentStyle();
+    const bool fixed = s && s->builtin;
+    const std::string folder = !s && builtin_.empty() ? folders_->selectedFolder() : std::string{};
+    const std::string none = "choisis d'abord un style (un clic droit sur sa ligne)";
+    if (s) items.push_back(cmd::heading(s->name, fixed ? std::string("style fourni") : s->folder.empty() ? std::string("du projet") : s->folder));
+    else if (!folder.empty()) items.push_back(cmd::heading(hmi::types::folderLeaf(folder), "dossier"));
+    else items.push_back(cmd::heading("Styles"));
+    items.push_back(cmd::item(cmd::Id::Ajouter, MenuNew, true, {}, "Nouveau style"));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, MenuDuplicate, s != nullptr,
+                              folder.empty() ? none : std::string("un dossier ne se duplique pas : choisis un de ses styles"),
+                              "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6"));
+    const bool own = s && !fixed;
+    items.push_back(cmd::item(cmd::Id::Renommer, MenuRename, own || !folder.empty(),
+                              fixed ? std::string("un style fourni ne se renomme pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait "
+                                                  "une copie \xC3\xA0 toi")
+                                    : none,
+                              folder.empty() ? std::string{} : std::string("Renommer le dossier")));
+    items.push_back(cmd::item(cmd::Id::Retirer, MenuRemove, own || !folder.empty(),
+                              fixed ? std::string("un style fourni ne se retire pas : il n'est pas dans le projet, et reste verrouill\xC3\xA9") : none,
+                              folder.empty() ? std::string{} : std::string("Retirer le dossier")));
+    // Ranger dans un dossier > la racine, chaque dossier des styles (celui du style coche), Nouveau dossier...
+    ui::PopupMenu::Item put;
+    put.label = "Ranger dans un dossier";
+    put.icon = ui::Icon::Folder;
+    put.id = MenuFolder;
+    menuFolders_.clear();
+    if (own) {
+        const auto& p = doc_->project;
+        const std::string at = fold::folderOf(p, fold::List::Styles, s->id);
+        const auto entry = [&](std::string label, int id, bool here) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.id = id;
+            it.radio = true;
+            it.checked = here;
+            it.enabled = !here;
+            if (here) it.disabledReason = "le style y est d\xC3\xA9j\xC3\xA0";
+            return it;
+        };
+        put.children.push_back(entry("\xC3\x80 la racine", MenuFolderRoot, at.empty()));
+        menuFolders_ = fold::allFolders(p, fold::List::Styles);
+        for (std::size_t i = 0; i < menuFolders_.size(); ++i)
+            put.children.push_back(entry(menuFolders_[i], MenuFolderAt + static_cast<int>(i), fold::sameFolder(menuFolders_[i], at)));
+        put.children.push_back(cmd::separator());
+        ui::PopupMenu::Item fresh;
+        fresh.label = "Nouveau dossier\xE2\x80\xA6";
+        fresh.icon = ui::Icon::Plus;
+        fresh.id = MenuFolderNew;
+        put.children.push_back(std::move(fresh));
+    } else {
+        put.enabled = false;
+        put.disabledReason = fixed ? std::string("un style fourni reste en t\xC3\xAAte de la liste, hors des dossiers")
+                           : !folder.empty() ? std::string("un dossier se range en le glissant sur un autre")
+                                             : none;
+    }
+    items.push_back(std::move(put));
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::CopierNom, MenuCopyName, s != nullptr || !folder.empty(), none));
+    return items;
+}
+
+std::vector<ui::PopupMenu::Item> HmiStylesPane::typeMenuItems() const {
+    namespace cmd = ui::cmd;
+    std::vector<ui::PopupMenu::Item> items;
+    const hmi::Style* s = currentStyle();
+    std::string why;
+    const bool can = editable(&why) != nullptr;
+    items.push_back(cmd::heading(type_.empty() ? std::string("Types d'objets") : styles::typeLabel(type_), s ? s->name : std::string{}));
+    items.push_back(cmd::item(cmd::Id::Ajouter, MenuAddType, can, why, "Ajouter un type\xE2\x80\xA6"));
+    items.push_back(cmd::item(cmd::Id::Retirer, MenuRemoveType, can && !type_.empty(), can ? std::string("choisis d'abord un type") : why,
+                              "Retirer le type"));
+    // L'apercu ne change pas le style : un style fourni aussi. Coche : le type y est deja.
+    ui::PopupMenu::Item look;
+    look.label = "Choisir pour l'aper\xC3\xA7u";
+    look.id = MenuPreviewType;
+    look.checkable = true;
+    look.checked = !type_.empty() && previewType_ == type_;
+    look.enabled = !type_.empty() && type_ != styles::kAnyType && styles::knownType(doc_->project, type_);
+    if (!look.enabled)
+        look.disabledReason = type_.empty() ? std::string("choisis d'abord un type")
+                            : type_ == styles::kAnyType
+                                ? std::string("\xC2\xAB Tous les objets \xC2\xBB ne se dessine pas : choisis un type dans la liste Type :")
+                                : std::string("type inconnu (un symbole supprim\xC3\xA9 ?) : il ne se dessine pas");
+    items.push_back(std::move(look));
+    return items;
+}
+
+std::vector<ui::PopupMenu::Item> HmiStylesPane::propertyMenuItems() const {
+    namespace cmd = ui::cmd;
+    std::vector<ui::PopupMenu::Item> items;
+    std::string why;
+    const bool can = editable(&why) != nullptr;
+    const bool typed = !type_.empty() && styles::knownType(doc_->project, type_);
+    items.push_back(cmd::heading(prop_.empty() ? std::string("Propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es") : propertyName(type_, prop_),
+                                 type_.empty() ? std::string{} : styles::typeLabel(type_)));
+    items.push_back(cmd::item(cmd::Id::Ajouter, MenuAddProperty, can && typed,
+                              !can ? why : std::string("choisis d'abord un type d'objet du style (ou ajoute-en un)"),
+                              "Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6"));
+    items.push_back(cmd::item(cmd::Id::Retirer, MenuRemoveProperty, can && !type_.empty() && !prop_.empty(),
+                              !can ? why : std::string("un clic droit sur une propri\xC3\xA9t\xC3\xA9 impos\xC3\xA9" "e la vise"),
+                              "Retirer la propri\xC3\xA9t\xC3\xA9"));
+    return items;
+}
+
+void HmiStylesPane::openPropertyMenu(gfx::Point at) {
+    propMenu_->setItems(propertyMenuItems());
+    propMenu_->openInWindow(at);
+}
+
+void HmiStylesPane::menuChosen(int id) {
+    const Id sel = selectedStyle();
+    const hmi::Style* s = currentStyle();
+    switch (id) {
+        case MenuNew: tools_->triggered->emit(ActNew); return;
+        case MenuDuplicate:
+            if (s) tools_->triggered->emit(ActDuplicate);
+            return;
+        case MenuRename:
+            if (sel != kNoId) beginRename(sel);
+            else if (s && s->builtin) tools_->triggered->emit(ActRename);      // il dit pourquoi
+            else if (builtin_.empty() && !folders_->selectedFolder().empty()) renameFolderRow(folders_->selectedFolder());
+            return;
+        case MenuRemove:
+            if (s && s->builtin) say("Un style fourni ne se retire pas : il n'est pas dans le projet, et reste verrouill\xC3\xA9.", true);
+            else if (tools_->isEnabled(ActRemove)) tools_->triggered->emit(ActRemove);
+            return;
+        case MenuCopyName: {
+            const std::string name = s ? s->name : builtin_.empty() ? hmi::types::folderLeaf(folders_->selectedFolder()) : std::string{};
+            if (name.empty()) return;
+            ui::setClipboardText(name);
+            say("Nom copi\xC3\xA9 : " + name);
+            return;
+        }
+        case MenuAddType: openTypeChooser(); return;
+        case MenuRemoveType: (void)removeType(type_); return;
+        case MenuPreviewType:
+            if (!type_.empty() && type_ != styles::kAnyType && styles::knownType(doc_->project, type_)) {
+                setPreviewType(type_);
+                say("Aper\xC3\xA7u : " + styles::typeLabel(type_) + ".");
+            }
+            return;
+        case MenuAddProperty: openPropertyChooser(); return;
+        case MenuRemoveProperty: (void)removeProperty(prop_); return;
+        case MenuFolderRoot:
+            if (sel != kNoId && folders_->moveItems({sel}, {})) selectStyle(sel);
+            return;
+        case MenuFolderNew:
+            if (sel != kNoId) (void)newFolderWith(sel);
+            return;
+        default: break;
+    }
+    if (id >= MenuFolderAt && sel != kNoId) {
+        const auto i = static_cast<std::size_t>(id - MenuFolderAt);
+        if (i < menuFolders_.size() && folders_->moveItems({sel}, menuFolders_[i])) selectStyle(sel);
+    }
+}
+
+bool HmiStylesPane::newFolderWith(Id style) {
+    namespace fold = hmi::fold;
+    const auto& p = doc_->project;
+    const hmi::Style* s = p.style(style);
+    if (!s) return false;
+    const std::string name = s->name;
+    // Dans le dossier du style (comme le bouton Dossier) : "Nouveau dossier", "Nouveau dossier 2"...
+    const std::string parent = fold::folderOf(p, fold::List::Styles, style);
+    const auto all = fold::allFolders(p, fold::List::Styles);
+    std::string path;
+    for (int i = 1; i < 1000; ++i) {
+        const std::string leaf = i == 1 ? std::string("Nouveau dossier") : "Nouveau dossier " + std::to_string(i);
+        path = parent.empty() ? leaf : parent + "/" + leaf;
+        if (std::none_of(all.begin(), all.end(), [&](const std::string& f) { return fold::sameFolder(f, path); })) break;
+    }
+    bool ok = false;
+    std::string why;
+    auto cmd = hmi::changeProject(doc_, "Ranger " + name + " dans un nouveau dossier", [&](hmi::Project& pr) {
+        ok = fold::addFolder(pr, fold::List::Styles, path, &why) && fold::moveToFolder(pr, fold::List::Styles, {style}, path) > 0;
+    });
+    if (!ok) {
+        say("Dossier non cr\xC3\xA9\xC3\xA9 : " + (why.empty() ? std::string("rien n'a chang\xC3\xA9") : why), true);
+        return false;
+    }
+    if (cmd) apply_(std::move(cmd));
+    selectStyle(style);
+    renameFolderRow(path);
+    say("\xC2\xAB " + name + " \xC2\xBB rang\xC3\xA9 dans \xC2\xAB " + path + " \xC2\xBB : tape le nom du dossier (Entr\xC3\xA9" "e) - Ctrl+Z d\xC3\xA9" "fait tout.");
+    return true;
+}
+
+// Le nom d'un dossier se tape dans sa case (le choix ne bouge pas : le style range reste choisi).
+void HmiStylesPane::renameFolderRow(const std::string& path) {
+    const auto& rows = folders_->rows();
+    for (std::size_t i = 0; i < rows.size(); ++i)
+        if (rows[i].folder && hmi::fold::sameFolder(rows[i].path, path)) {
+            (void)table_->beginCellEdit(static_cast<ui::RowIndex>(i), 0);
+            return;
+        }
 }
 
 Id HmiStylesPane::addStyle(const std::string& name) {

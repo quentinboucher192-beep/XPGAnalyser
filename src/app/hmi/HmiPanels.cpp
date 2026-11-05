@@ -2162,6 +2162,12 @@ std::string hmiPaletteFamily(hmi::Kind kind) {
     return {};
 }
 
+std::vector<HmiPaletteCategory> hmiPaletteCategories() {
+    std::vector<HmiPaletteCategory> out;
+    for (const auto& c : categories()) out.push_back({c.name, c.kinds});
+    return out;
+}
+
 // ================================================== 1.14.1 (lot N6) : l'onglet Images ===
 namespace {
 namespace il = hmi::imagelib;
