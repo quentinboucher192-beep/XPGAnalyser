@@ -9154,13 +9154,16 @@ void lot12_conception() {
     styles.layout();
     const Id sid = b.doc->project.styles[0].id;
     styles.selectStyle(sid);
-    check(styles.selectedStyle() == sid && gridValue(styles.properties().categories(), "Objets qui le citent") == "3"
+    // 1.23.0 : le style fait d'un bouton vise le type Bouton (sa cible) - la fiche montre ce qu'il impose aux boutons.
+    check(styles.selectedStyle() == sid && styles.selectedType() == "Button"
+              && gridValue(styles.properties().categories(), "Objets qui le citent") == "3"
               && gridValue(styles.properties().categories(), "Remplissage") == "#2F6FD6",
-          "la fiche du style : 3 objets le citent, son remplissage");
-    check(styles.setStyleField(sid, "fill", "#1FA35A"), "le remplissage du style : vert");
+          "la fiche du style : 3 objets le citent ; il vise les boutons, son remplissage");
+    check(styles.setTypeValue(sid, "Button", "fill", "#1FA35A"), "le remplissage impos\xC3\xA9 aux boutons : vert");
+    const auto broken3 = hmi::styles::brokenKeys(*b.v().object(bouton3));
     check(b.v().object(bouton)->text("fill") == "#1FA35A" && b.v().object(bouton2)->text("fill") == "#1FA35A"
-              && b.v().object(bouton3)->text("fill") == "#AA3300",
-          "les deux boutons suivent ; le troisi\xC3\xA8me garde son rouge (chang\xC3\xA9 par lui-m\xC3\xAAme)");
+              && b.v().object(bouton3)->text("fill") == "#AA3300" && std::find(broken3.begin(), broken3.end(), "fill") != broken3.end(),
+          "les deux boutons suivent ; le troisi\xC3\xA8me garde son rouge (chang\xC3\xA9 par lui-m\xC3\xAAme : bris\xC3\xA9)");
     check(styles.message().find("2 objet(s) suivent") != std::string::npos, "le volet dit : 2 objets suivent (" + styles.message() + ")");
     check(!styles.setStyleField(sid, "fontSize", "gros", &why) && !why.empty(), "une taille qui n'est pas un nombre : refus\xC3\xA9" "e");
     const Id other = styles.addStyle("Alarme");

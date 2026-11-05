@@ -414,7 +414,11 @@ HmiStyleChooser::HmiStyleChooser(std::string id) : ui::Widget(std::move(id)) {
         filter();
         invalidate();
     });
-    links_ += field_->editingDone->connect([this](const std::string&) { (void)chooseHighlighted(); });
+    // Entree : la ligne en surbrillance. Le champ finit aussi sa saisie quand il perd la main (Echap, un clic ailleurs) :
+    // il ne l'a alors plus - rien n'est choisi.
+    links_ += field_->editingDone->connect([this](const std::string&) {
+        if (field_->focused()) (void)chooseHighlighted();
+    });
     // Echap (le champ rend la main), ou la main donnee ailleurs : la liste se ferme.
     links_ += field_->focusLost->connect([this] {
         if (open_) close();
@@ -824,7 +828,10 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     links_ += builtins_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
         const auto rows = builtins_->selectedModelRows();
         builtin_ = !rows.empty() && rows.front() < builtinRows_.size() ? builtinRows_[rows.front()] : std::string{};
-        if (!builtin_.empty()) table_->selectModelRows({}, false);
+        if (!builtin_.empty()) {
+            table_->selectModelRows({}, false);
+            projectSel_ = kNoId;
+        }
         styleChanged();
     });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
@@ -832,6 +839,7 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
             builtin_.clear();
             builtins_->selectModelRows({}, false);
         }
+        projectSel_ = folders_->selectedItem();
         styleChanged();
     });
     links_ += types_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
@@ -937,6 +945,7 @@ void HmiStylesPane::selectStyle(Id id) {
     builtin_.clear();
     builtins_->selectModelRows({}, false);
     table_->selectModelRows({}, false);
+    projectSel_ = id;
     folders_->selectItem(id);
     styleChanged();
 }
@@ -947,6 +956,7 @@ bool HmiStylesPane::selectBuiltin(std::string_view name) {
     if (std::find(builtinRows_.begin(), builtinRows_.end(), s->name) == builtinRows_.end() && !search_->text().empty())
         search_->setText("");       // -> refresh()
     builtin_ = s->name;
+    projectSel_ = kNoId;
     table_->selectModelRows({}, false);
     for (std::size_t i = 0; i < builtinRows_.size(); ++i)
         if (builtinRows_[i] == builtin_) builtins_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
@@ -1046,6 +1056,10 @@ void HmiStylesPane::refresh() {
         status_->setMessage(std::to_string(p.styles.size()) + " style(s) du projet, " + std::to_string(styles::builtins().size())
                             + " fournis. Un objet cite un style par sa propri\xC3\xA9t\xC3\xA9 \xC2\xAB Style nomm\xC3\xA9 \xC2\xBB ; le style "
                               "impose ses propri\xC3\xA9t\xC3\xA9s aux objets de ses types.");
+    // Le style du projet choisi, cache par la recherche puis remontre : de nouveau choisi.
+    if (builtin_.empty() && projectSel_ != kNoId && folders_->selectedItem() == kNoId && folders_->selectedFolder().empty())
+        if (const int row = folders_->rowOfItem(projectSel_); row >= 0) table_->selectModelRows({static_cast<ui::RowIndex>(row)}, false);
+    if (!p.style(projectSel_)) projectSel_ = kNoId;
     styleKey_.clear();          // le style a pu changer sous le meme nom : ses types sont relus (le type choisi reste)
     styleChanged();
 }
@@ -1079,6 +1093,7 @@ void HmiStylesPane::styleChanged() {
         if (!props || std::none_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == prop_; })) prop_.clear();
     }
     if (previewType_.empty() || !styles::knownType(doc_->project, previewType_) || previewType_ == styles::kAnyType) previewType_ = "Button";
+    invalidateLayout();         // le bandeau d'un style fourni, la hauteur des fournis (la recherche)
     rebuildTypes();
     rebuildProperties();
     rebuildPreviewTypes();

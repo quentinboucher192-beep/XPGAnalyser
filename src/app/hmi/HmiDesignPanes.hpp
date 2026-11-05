@@ -223,6 +223,7 @@ private:
     std::vector<std::string> builtinRows_;      // les noms des styles fournis montres
     std::vector<std::string> typeRows_;         // les types montres
     std::string           builtin_;             // le style fourni choisi ("" : un style du projet, ou aucun)
+    hmi::Id               projectSel_{hmi::kNoId};   // le style du projet choisi (rechoisi quand la recherche le remontre)
     std::string           styleKey_;            // le style dont le volet montre les types (pour garder le type choisi)
     std::string           type_, prop_, previewType_;
     // La mise en page (onLayout) : les trois colonnes, leurs titres, le bandeau d'un style fourni.
