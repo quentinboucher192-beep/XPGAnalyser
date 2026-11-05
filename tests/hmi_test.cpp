@@ -12755,7 +12755,8 @@ void miseEnPage1250() {
         const std::string t = allText(d);
         const auto mes = t.find("\nMesures\n"), syn = t.find("Synth\xC3\xA8se\n");
         check(mes != std::string::npos && syn != std::string::npos && mes < syn && t.find("Alarmes par priorit") == std::string::npos
-                  && t.find("Alarmes les plus") == std::string::npos && t.find("\xC3\x89v\xC3\xA9nements\n") == std::string::npos,
+                  && t.find("Alarmes les plus") == std::string::npos && t.find("\nUtilisateur\n") == std::string::npos
+                  && t.find("\nAcquitt\xC3\xA9" "e\n") == std::string::npos,
               "l'ordre et les parties : les mesures avant la synth\xC3\xA8se ; le graphique, les alarmes, les \xC3\xA9v\xC3\xA9nements d\xC3\xA9" "coch\xC3\xA9s : absents");
         check(countKind(d, rp::DrawOp::Kind::Polyline) == 3 && t.find("Pression (bar)") != std::string::npos,
               "les courbes des mesures : une par mesure, son unit\xC3\xA9");
@@ -12892,6 +12893,21 @@ void miseEnPage1250() {
             return false;
         };
         auto back = parseProject(reader);
+        if (!back) std::printf("  (relu : rien)\n");
+        else if (!(back->reportLayouts == q.reportLayouts)) {
+            std::printf("  (relu : %zu mises en page sur %zu)\n", back->reportLayouts.size(), q.reportLayouts.size());
+            if (!back->reportLayouts.empty() && !q.reportLayouts.empty()) {
+                const auto& a = back->reportLayouts[0];
+                const auto& b = q.reportLayouts[0];
+                std::printf("  (nom %d papier %d marges %d logo %d titres %d accent %d pieds %d visa %d parties %d (%zu/%zu) tableaux %d police %d tailles %d)\n",
+                            a.name == b.name, a.paper == b.paper && a.landscape == b.landscape,
+                            a.marginTop == b.marginTop && a.marginBottom == b.marginBottom && a.marginLeft == b.marginLeft && a.marginRight == b.marginRight,
+                            a.logo == b.logo && a.logoRight == b.logoRight, a.title == b.title && a.subtitle == b.subtitle, a.accent == b.accent,
+                            a.footLeft == b.footLeft && a.footCenter == b.footCenter && a.footRight == b.footRight, a.visa == b.visa && a.visaLabels == b.visaLabels,
+                            a.parts == b.parts, a.parts.size(), b.parts.size(), a.tableSize == b.tableSize && a.zebra == b.zebra && a.repeatHeader == b.repeatHeader,
+                            a.font == b.font, a.titleSize == b.titleSize && a.bodySize == b.bodySize);
+            }
+        }
         check(back && back->reportLayouts == q.reportLayouts && back->reportLayoutDefault == "Compacte" && back->reports.size() == 2
                   && back->reports[1].layout == "Exploitation" && back->reports[0].layout.empty(),
               "enregistr\xC3\xA9" "e puis relue : la mise en page, celle par d\xC3\xA9" "faut, celle de chaque rapport");

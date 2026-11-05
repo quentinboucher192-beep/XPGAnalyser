@@ -2322,7 +2322,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             l.footRight = r.get("pied_droite") ? toStr(r.get("pied_droite")) : def.footRight;
             l.visa = toBool(r.get("visa"), false);
             l.visaLabels = r.get("visas") ? toStr(r.get("visas")) : def.visaLabels;
-            for (std::string_view rest = toStr(r.get("parties")); !rest.empty();) {
+            const std::string partsText = toStr(r.get("parties"));
+            for (std::string_view rest = partsText; !rest.empty();) {
                 const auto comma = rest.find(',');
                 std::string_view one = rest.substr(0, comma);
                 rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);

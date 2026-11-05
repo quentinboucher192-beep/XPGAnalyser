@@ -46550,6 +46550,7 @@ void rapportsSonsImages1250() {
     std::string why;
     auto doc = std::make_shared<Document>();
     core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);   // plusieurs d'un coup : un seul Ctrl+Z
     const auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
     doc->project.config.name = "Usine_Test";
     hmi::NotifyRecipient chef;
@@ -46703,6 +46704,7 @@ void rapportsSonsImages1250() {
     sh.layoutBox().setSelectedIndex(static_cast<int>(sh.layoutChoices().size()));
     sh.layoutBox().selectionChanged->emit(static_cast<int>(sh.layoutChoices().size()));
     check(!sh.isOpen() && reports.tabs().currentIndex() == 2, "\xC2\xAB Modifier les mises en page\xE2\x80\xA6 \xC2\xBB : l'onglet Mise en page");
+    core::CommandGroupScope::registerStack(nullptr);
     fs::remove_all(work, ec);
 
     // ---- le sous-onglet Sons de la BIBLIOTHEQUE de l'editeur de vues

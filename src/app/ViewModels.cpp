@@ -2084,6 +2084,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiRecordings:                                        // 1.14.0 (M4)
             case NK::HmiIncidents:                                         // 1.20.0
             case NK::HmiStyleGroup:                                        // 1.23.1
+            case NK::HmiSoundLibrary: case NK::HmiSoundGroup:              // 1.25.0 : les sons, deplies
+            case NK::HmiImageLibrary: case NK::HmiImageGroup:              // 1.25.0 : les images, depliees
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
